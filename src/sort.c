@@ -7,6 +7,7 @@
 #include "ndarray.h"   /* ndt_get for NDArray canonical ordering */
 #include "ndstruct.h"  /* ndstruct_sort NDArray fast path */
 #include "pack.h"      /* pack_offer — a sorted machine list packs */
+#include "common.h"    /* builtin_arg_error */
 #include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
@@ -933,4 +934,22 @@ Expr* builtin_orderedq(Expr* res) {
     current_sort_p = old_p;
     
     return expr_new_symbol(ordered ? "True" : "False");
+}
+
+/* Order[e1, e2] -- the user-facing surface of the canonical comparator that
+ * every sorting routine (Sort, SortBy, OrderedQ, ...) is built on. Returns 1 if
+ * e1 is before e2 in canonical order, -1 if after, 0 if identical. Compares
+ * structurally, not by numerical value: Order[6, Pi] is 1 (Integer before the
+ * symbol Pi) whereas Order[6, N[Pi]] is -1 (two numeric atoms, by value).
+ *
+ * expr_compare returns negative when e1 sorts before e2; Order's convention is
+ * +1 in that case, so the sign is inverted. */
+Expr* builtin_order(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) {
+        return builtin_arg_error("Order",
+            res->type == EXPR_FUNCTION ? res->data.function.arg_count : 0, 2, 2);
+    }
+    int cmp = expr_compare(res->data.function.args[0],
+                           res->data.function.args[1]);
+    return expr_new_integer(cmp < 0 ? 1 : (cmp > 0 ? -1 : 0));
 }

@@ -20,6 +20,31 @@ void test_cf_integer(void) {
     assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, a b - b][6, 7]", "35", 0);
 }
 
+/* Order[a,b] -> the canonical comparison {1,0,-1}, lowered as Sign[b - a] from
+ * the existing SUB + SIGN opcodes. Always an Integer result, matching the
+ * interpreter's Order (result-HEAD parity), for real, integer and mixed args. */
+void test_cf_order(void) {
+    /* Real args: 1 when a<b, -1 when a>b, 0 when equal. */
+    assert_eval_eq("Compile[{{a, _Real}, {b, _Real}}, Order[a, b]][1., 2.]", "1", 0);
+    assert_eval_eq("Compile[{{a, _Real}, {b, _Real}}, Order[a, b]][2., 1.]", "-1", 0);
+    assert_eval_eq("Compile[{{a, _Real}, {b, _Real}}, Order[a, b]][1., 1.]", "0", 0);
+    /* Integer args. */
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Order[a, b]][3, 7]", "1", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Order[a, b]][7, 3]", "-1", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Order[a, b]][5, 5]", "0", 0);
+    /* Mixed Integer/Real args unify to Real. */
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Real}}, Order[a, b]][2, 3.5]", "1", 0);
+    /* The body really lowers -- guards against the silent interpreter-bail cliff. */
+    assert_eval_eq("Lookup[CompileDiagnostics[{{a, _Real}, {b, _Real}}, Order[a, b]], "
+                   "\"Compiled\"]", "True", 0);
+    /* Result-HEAD parity: the compiled result is an Integer, not a Real. */
+    assert_eval_eq("Head[Compile[{{a, _Real}, {b, _Real}}, Order[a, b]][1., 2.]]",
+                   "Integer", 0);
+    /* Agreement with the interpreter on numeric args. */
+    assert_eval_eq("Compile[{{a, _Real}, {b, _Real}}, Order[a, b]][3., 2.] === Order[3., 2.]",
+                   "True", 0);
+}
+
 /* Real path, default (bare-symbol) type, and a machine-precision identity. */
 void test_cf_real(void) {
     assert_eval_eq("Compile[{{x, _Real}}, x^2 + 1][3.0] == 10", "True", 0);
@@ -862,6 +887,7 @@ int main(void) {
     core_init();
 
     TEST(test_cf_integer);
+    TEST(test_cf_order);
     TEST(test_cf_real);
     TEST(test_cf_complex);
     TEST(test_cf_symbolic_fallback);

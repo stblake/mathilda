@@ -65,18 +65,66 @@ void test_orderedq() {
     run_test("OrderedQ[{4, 3, 3, 1}, GreaterEqual]", "True");
 }
 
+void test_order() {
+    /* Basics: the defining triple. */
+    run_test("Order[a, a]", "0");
+    run_test("Order[a, b]", "1");
+    run_test("Order[b, a]", "-1");
+    run_test("{Order[a, a], Order[a, b], Order[b, a]}", "List[0, 1, -1]");
+
+    /* Structural, NOT numerical: Integer sorts before the symbol Pi, but two
+     * numeric atoms compare by value. */
+    run_test("Order[6, Pi]", "1");
+    run_test("Order[6, N[Pi]]", "-1");
+
+    /* The Order@@@ example from the spec, over the 9 tuples of {0,1,2}.
+     * Uses the explicit tuple list (what Tuples[{0,1,2},2] yields) so the sort
+     * test binary's leak surface does not pull in an unrelated pre-existing
+     * Tuples allocation; the literal `Order @@@ Tuples[{0,1,2},2]` form is
+     * exercised in the REPL smoke test. */
+    run_test("Order @@@ {{0,0},{0,1},{0,2},{1,0},{1,1},{1,2},{2,0},{2,1},{2,2}}",
+             "List[0, 1, 1, -1, 0, 1, -1, -1, 0]");
+
+    /* Numeric tier: by value, mixed Integer/Real. */
+    run_test("Order[1, 2]", "1");
+    run_test("Order[2, 1]", "-1");
+    run_test("Order[1, 1.5]", "1");
+    run_test("Order[2, 1.5]", "-1");
+    run_test("Order[3, 3]", "0");
+
+    /* Cross-tier ordering (numeric < string < symbol < compound), matching
+     * Sort's canonical order. */
+    run_test("Order[5, \"a\"]", "1");        /* number before string */
+    run_test("Order[\"a\", x]", "1");        /* string before symbol */
+    run_test("Order[\"a\", \"b\"]", "1");    /* strings lexicographic */
+    run_test("Order[x, f[x]]", "1");         /* bare symbol before compound */
+    run_test("Order[x, x^2]", "1");          /* x before x^2 (polynomial order) */
+    run_test("Order[x^2, x]", "-1");
+
+    /* Lists compare element-wise; identical compounds give 0. */
+    run_test("Order[{1, 2}, {1, 3}]", "1");
+    run_test("Order[{1, 3}, {1, 2}]", "-1");
+    run_test("Order[f[a, b], f[a, b]]", "0");
+    run_test("Order[f[a], f[a, b]]", "1");   /* shorter before longer */
+
+    /* Arity: wrong argument count leaves Order unevaluated. */
+    run_test("Order[a]", "Order[a]");
+    run_test("Order[a, b, c]", "Order[a, b, c]");
+}
+
 int main() {
     symtab_init();
     core_init();
-    
+
     // Define Pi and E for numerical tests if needed
     // symtab_add_own_value("Pi", expr_new_symbol("Pi"), expr_new_real(3.141592653589793));
     // symtab_get_def("Pi")->attributes |= ATTR_NUMERICFUNCTION;
-    
+
     TEST(test_sort_canonical);
     TEST(test_sort_custom);
     TEST(test_orderedq);
-    
+    TEST(test_order);
+
     printf("All sort tests passed!\n");
     return 0;
 }

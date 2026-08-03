@@ -374,6 +374,27 @@ In[2]:= Split[{1, 2, 3, 4, 3, 2, 1}, Less]
 Out[2]= {{1, 2, 3, 4}, {3}, {2}, {1}}
 ```
 
+## Order
+- `Order[e1, e2]`: Gives `1` if `e1` is before `e2` in canonical order, `-1` if `e1` is after `e2`, and `0` if `e1` is identical to `e2`.
+
+**Features**:
+- `Protected`.
+- Uses the same internal canonical comparison (`expr_compare`) as `Sort` and `OrderedQ` — see the canonical-order rules under `Sort` below.
+- Compares **structurally**, not by numerical value: `Order[6, Pi]` is `1` (the Integer `6` sorts before the symbol `Pi`), whereas `Order[6, N[Pi]]` is `-1` (two numeric atoms, compared by value).
+- Compilable inside `Compile[]` and auto-compiled by `Plot`/`Table`/`NIntegrate`: over machine numbers it lowers to `Sign[e2 - e1]`, returning the Integer `{1, 0, -1}` (matching the interpreter's head). Complex/array arguments fall back to the interpreter.
+- Requires exactly two arguments; otherwise it stays unevaluated.
+
+```mathematica
+In[1]:= {Order[a, a], Order[a, b], Order[b, a]}
+Out[1]= {0, 1, -1}
+
+In[2]:= {Order[6, Pi], Order[6, N[Pi]]}
+Out[2]= {1, -1}
+
+In[3]:= Order @@@ Tuples[{0, 1, 2}, 2]
+Out[3]= {0, 1, 1, -1, 0, 1, -1, -1, 0}
+```
+
 ## OrderedQ
 - `OrderedQ[expr]`: Gives `True` if the elements of `expr` are in canonical order, and `False` otherwise.
 - `OrderedQ[expr, p]`: Uses the ordering function `p` to determine whether each pair of elements is in order.

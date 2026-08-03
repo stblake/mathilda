@@ -397,6 +397,7 @@ extern const char* SYM_OptionValue;
 extern const char* SYM_SetOptions;
 extern const char* SYM_ZeroTest;
 extern const char* SYM_Or;
+extern const char* SYM_Order;
 extern const char* SYM_Orderless;
 extern const char* SYM_Overflow;
 extern const char* SYM_ParameterVariables;

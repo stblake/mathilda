@@ -1456,6 +1456,10 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         return false;
     }
     if (na == 2 && (!strcmp(h, "Less") || !strcmp(h, "LessEqual") || !strcmp(h, "Greater") || !strcmp(h, "GreaterEqual") || !strcmp(h, "Equal") || !strcmp(h, "Unequal"))) { *out = CT_BOOL; return true; }
+    /* Order[a,b] is the canonical comparison {1,0,-1}: always the INTEGER, like
+     * Sign.  Only ordered scalars (Integer/Real, unified) compile; complex,
+     * boolean and array args fall back to the interpreter. */
+    if (na == 2 && !strcmp(h, "Order")) { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0 || ta == CT_COMPLEX || CT_IS_ARRAY(ta)) return false; *out = CT_INT; return true; }
     if (!strcmp(h, "And") || !strcmp(h, "Or") || !strcmp(h, "Xor") || !strcmp(h, "Not")) { *out = CT_BOOL; return true; }
     if (strcmp(h, "If") == 0 && na == 3) {
         CompileType tt, te; if (!infer_type(c, A[1], &tt) || !infer_type(c, A[2], &te)) return false;
@@ -3364,6 +3368,21 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             if (!op) { c->ok = false; return false; }   /* ordering of complex */
             *out = binop(c, op, a, b, CT_BOOL); return c->ok;
         }
+    }
+    /* Order[a,b] -> Sign[b - a]: +1 when a sorts before b (a < b), -1 when after,
+     * 0 when equal.  Built from the existing SUB + SIGN opcodes; SIGN_* writes
+     * the integer slot, so the result is the Integer {-1,0,1} that the
+     * interpreter's Order returns (result-HEAD parity).  Mixed int/real args
+     * unify to real; complex/array/bool args are rejected above in infer_type
+     * and here, sending the call to the interpreter. */
+    if (strcmp(h, "Order") == 0 && na == 2) {
+        Val a, b; if (!emit(c, A[0], &a) || !emit(c, A[1], &b)) return false;
+        CompileType t = num_common(a.type, b.type);
+        if ((int)t < 0 || t == CT_COMPLEX || CT_IS_ARRAY(t)) { c->ok = false; return false; }
+        coerce(c, &a, t); coerce(c, &b, t);
+        Val d = binop(c, t == CT_INT ? OP_SUB_I : OP_SUB_R, b, a, t);   /* b - a */
+        *out = unop(c, t == CT_INT ? OP_SIGN_I : OP_SIGN_R, d, CT_INT);
+        return c->ok;
     }
     /* boolean logic */
     if ((strcmp(h, "And") == 0 || strcmp(h, "Or") == 0 || strcmp(h, "Xor") == 0) && na >= 1) {
