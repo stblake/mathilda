@@ -2072,6 +2072,7 @@ static void tuples_rec(Expr** lists, size_t num_lists, size_t curr_list, Expr** 
         Expr** t_args = malloc(sizeof(Expr*) * num_lists);
         for(size_t i=0; i<num_lists; i++) t_args[i] = expr_copy(current_tuple[i]);
         Expr* t = expr_new_function(expr_copy(head), t_args, num_lists);
+        free(t_args);  /* expr_new_function copies the array; free the container */
         if (*res_count >= *res_cap) {
             *res_cap = (*res_cap == 0) ? 16 : (*res_cap * 2);
             *results = realloc(*results, sizeof(Expr*) * (*res_cap));
@@ -2135,8 +2136,9 @@ Expr* builtin_tuples(Expr* res) {
         
         tuples_rec(lists, num_lists, 0, current_tuple, head, &results, &res_count, &res_cap);
         free(current_tuple);
-        
+
         Expr* final_res = expr_new_function(expr_copy(head), results, res_count);
+        free(results);  /* expr_new_function copied the pointers into its own storage */
         return final_res;
     } else {
         Expr* list = res->data.function.args[0];
@@ -2163,8 +2165,10 @@ Expr* builtin_tuples(Expr* res) {
             tuples_rec(lists, n, 0, current_tuple, head, &results, &res_count, &res_cap);
             free(current_tuple);
             free(lists);
-            
-            return expr_new_function(expr_new_symbol(SYM_List), results, res_count);
+
+            Expr* out = expr_new_function(expr_new_symbol(SYM_List), results, res_count);
+            free(results);
+            return out;
         } else if (n_expr->type == EXPR_FUNCTION && expr_eq(n_expr->data.function.head, head)) {
             size_t dims_count = n_expr->data.function.arg_count;
             int64_t total_elements = 1;
@@ -2203,7 +2207,9 @@ Expr* builtin_tuples(Expr* res) {
             }
             
             free(dims);
-            return expr_new_function(expr_new_symbol(SYM_List), results, res_count);
+            Expr* out = expr_new_function(expr_new_symbol(SYM_List), results, res_count);
+            free(results);
+            return out;
         }
     }
     return expr_copy(res);
