@@ -609,6 +609,49 @@ void test_eigenvalues_method_combines_with_k_and_cubics(void) {
         "2, Cubics -> True]");
 }
 
+/* Eigenvectors for an eigenvalue whose minimal polynomial is an irreducible
+ * cubic (casus irreducibilis: three real roots, expressible in radicals only
+ * through complex cube roots).
+ *
+ * The null space came from RowReduce[m - lambda I], whose pivot test is
+ * is_zero_poly -- a polynomial-IDENTITY test that treats each distinct radical
+ * as an independent generator.  The algebraic relations among the nested cube
+ * roots are invisible to it, so an entry that is genuinely zero read as a legal
+ * pivot, the residual came back full rank, no column was free, and every
+ * eigenvalue was padded with a ZERO vector.  Eigenvectors of the most-typed
+ * test matrix there is returned {{0,0,0},{0,0,0},{0,0,0}}.
+ *
+ * A zero vector is never an eigenvector, so this is a WRONG ANSWER, not a
+ * limitation -- and it is silent.  Assert both halves: the vectors are nonzero,
+ * and they satisfy m.v == lambda v.  Checking only the defining identity would
+ * pass on the zero vector, which satisfies it trivially. */
+static void test_eigenvectors_irreducible_cubic(void) {
+    /* Nonzero: the failure mode was exactly a zero vector. */
+    run_check_true("FreeQ[Eigenvectors[{{1,2,3},{4,5,6},{7,8,10}}], "
+                   "{0, 0, 0}]");
+    /* m.v == lambda v for all three pairs. */
+    run_check_true(
+        "Module[{m = {{1,2,3},{4,5,6},{7,8,10}}, l, v}, "
+        "l = Eigenvalues[m]; v = Eigenvectors[m]; "
+        "Max[Table[Abs[N[Max[Abs[m . v[[i]] - l[[i]] v[[i]]]]]], "
+        "{i, 1, 3}]] < 10^-20]");
+    /* Same defect at degree 4, and on a symmetric matrix (the gram that
+     * SingularValueDecomposition builds). */
+    run_check_true("FreeQ[Eigenvectors[{{0,0,0,1},{1,0,0,1},{0,1,0,0},"
+                   "{0,0,1,0}}], {0, 0, 0, 0}]");
+    run_check_true("FreeQ[Eigenvectors[{{66,78,97},{78,93,116},"
+                   "{97,116,145}}], {0, 0, 0}]");
+}
+
+/* The zero-vector PADDING itself is correct and must survive: a defective
+ * matrix has fewer eigenvectors than eigenvalues, and Mathematica pads the
+ * shortfall with zero vectors too.  The fix above is gated on the null space
+ * coming back completely EMPTY (never legal), so this case must be untouched. */
+static void test_eigenvectors_defective_zero_pad(void) {
+    run_test("Eigenvectors[{{1, 1}, {0, 1}}]",
+             "List[List[1, 0], List[0, 0]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -675,6 +718,8 @@ int main(void) {
     TEST(test_eigenvalues_method_ignored_for_symbolic);
     TEST(test_eigenvalues_method_value_list_with_suboptions);
     TEST(test_eigenvectors_method_fallback);
+    TEST(test_eigenvectors_irreducible_cubic);
+    TEST(test_eigenvectors_defective_zero_pad);
     TEST(test_eigenvalues_method_combines_with_k_and_cubics);
 
     printf("All eigen tests passed!\n");

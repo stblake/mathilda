@@ -517,6 +517,198 @@ Expr** eigen_null_space(Expr* M, int n, size_t* count_out) {
     return basis;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Exact eigenvectors for an irrational algebraic eigenvalue.          *
+ *                                                                      *
+ *  eigen_null_space above row-reduces m - λI with λ already            *
+ *  substituted as a radical expression, and decides pivots with        *
+ *  is_zero_poly.  That test is a polynomial-IDENTITY test: it treats   *
+ *  each distinct radical as an independent generator, so the algebraic *
+ *  relations among the nested cube roots of a casus-irreducibilis      *
+ *  eigenvalue are invisible to it.  An entry that is genuinely zero    *
+ *  then reads as a legal pivot, RowReduce answers with the identity,   *
+ *  no column is free, and the eigenvalue gets no eigenvector at all --  *
+ *  Eigenvectors[{{1,2,3},{4,5,6},{7,8,10}}] was three zero vectors.    *
+ *                                                                      *
+ *  The fix does not strengthen the zero test; it removes the need for  *
+ *  one.  Over the number field Q[x]/(q), q the minimal polynomial of   *
+ *  λ, the adjugate identity                                            *
+ *                                                                      *
+ *      M(x) . adj(M(x)) = det(M(x)) . I  ==  0   (mod q)               *
+ *                                                                      *
+ *  says every COLUMN of adj(M) is a null vector of M -- and adj is     *
+ *  built from cofactor determinants, i.e. pure polynomial arithmetic   *
+ *  with no division and no pivoting, so nothing has to be decided      *
+ *  zero while it is computed.  The one test that remains ("is this     *
+ *  column identically zero?") is applied AFTER reduction mod q, where  *
+ *  the operand is a univariate polynomial over Q and is_zero_poly is   *
+ *  exact and complete: p(λ) = 0 <=> q | p <=> p mod q == 0, because q  *
+ *  is irreducible.                                                     *
+ *                                                                      *
+ *  Scope: a simple root, where rank(M) = n-1 and adj(M) != 0.  A       *
+ *  repeated irrational eigenvalue drops the rank to n-2 or below, the  *
+ *  whole adjugate vanishes, and this returns NULL so the caller keeps  *
+ *  its existing behaviour.                                             *
+ * ------------------------------------------------------------------ */
+
+/* Determinant of the (n-1)x(n-1) minor of `flat` (row-major n x n) with
+ * row `dr` and column `dc` deleted. */
+static Expr* eigen_minor_det(Expr** flat, int n, int dr, int dc) {
+    int s = n - 1;
+    if (s <= 0) return expr_new_integer(1);
+    Expr** sub = malloc(sizeof(Expr*) * (size_t)s * (size_t)s);
+    int ri = 0;
+    for (int i = 0; i < n; i++) {
+        if (i == dr) continue;
+        int cj = 0;
+        for (int j = 0; j < n; j++) {
+            if (j == dc) continue;
+            sub[ri * s + cj] = expr_copy(flat[i * n + j]);
+            cj++;
+        }
+        ri++;
+    }
+    int* cols = malloc(sizeof(int) * (size_t)s);
+    for (int i = 0; i < s; i++) cols[i] = i;
+    Expr* d = laplace_det(sub, s, s, 0, cols);
+    free(cols);
+    for (int i = 0; i < s * s; i++) expr_free(sub[i]);
+    free(sub);
+    return d;
+}
+
+/* Expand `e` (STOLEN) and reduce it modulo `q` in the variable `var`. */
+static Expr* eigen_poly_mod(Expr* e, Expr* q, const char* var) {
+    Expr* ex = eval_and_free(expr_new_function(
+        expr_new_symbol(SYM_Expand), (Expr*[]){ e }, 1));
+    return eval_and_free(expr_new_function(
+        expr_new_symbol(SYM_PolynomialRemainder),
+        (Expr*[]){ ex, expr_copy(q), expr_new_symbol(var) }, 3));
+}
+
+/* True iff `q` is a usable minimal polynomial: a polynomial in `var` of
+ * degree >= 2.  Degree 0/1 means the eigenvalue is rational, which the
+ * ordinary RowReduce path already handles exactly (and more cheaply). */
+static bool eigen_minpoly_is_usable(Expr* q, const char* var) {
+    if (!q) return false;
+    Expr* deg = eval_and_free(expr_new_function(
+        expr_new_symbol(SYM_Exponent),
+        (Expr*[]){ expr_copy(q), expr_new_symbol(var) }, 2));
+    bool ok = (deg->type == EXPR_INTEGER && deg->data.integer >= 2);
+    expr_free(deg);
+    return ok;
+}
+
+/* Minimal polynomial of the eigenvalue `val`, in the variable `var`.
+ *
+ * MinimalPolynomial[val, x] is the general answer but runs qqbar over the
+ * eigenvalue's RADICAL form, and a casus-irreducibilis cube root is a large
+ * expression: 15.9 s per eigenvalue on the 3x3 that motivated this code,
+ * paid once per eigenvalue.  The characteristic polynomial `p` gives it for
+ * free in the case that matters.  val is an eigenvalue, so p(val) = 0; if p
+ * is irreducible over Q then p IS the minimal polynomial of every one of its
+ * roots (up to a rational scalar, which changes neither divisibility nor the
+ * remainder's zero-ness).  IrreduciblePolynomialQ decides that in 0.16 ms.
+ *
+ * A reducible p means val is a root of one of several factors and we would
+ * have to identify WHICH -- so that case keeps the general call. */
+static Expr* eigen_minpoly_for_eigenvalue(Expr* m, Expr* a_or_null, Expr* val,
+                                          int n, const char* var) {
+    Expr* p = NULL;
+    if (!a_or_null) p = eigen_char_poly_faddeev(m, var, n);
+    if (!p) {
+        Expr* M = eigen_build_lambda_matrix(m, a_or_null, var, (int64_t)n);
+        p = eigen_compute_det(M, n);
+        expr_free(M);
+    }
+    if (p) {
+        p = eval_and_free(expr_new_function(
+            expr_new_symbol(SYM_Expand), (Expr*[]){ p }, 1));
+        Expr* irr = eval_and_free(expr_new_function(
+            expr_new_symbol(SYM_IrreduciblePolynomialQ),
+            (Expr*[]){ expr_copy(p) }, 1));
+        bool is_irr = (irr->type == EXPR_SYMBOL
+                       && irr->data.symbol.name == SYM_True);
+        expr_free(irr);
+        if (is_irr) return p;
+        expr_free(p);
+    }
+    return eval_and_free(expr_new_function(
+        expr_new_symbol(SYM_MinimalPolynomial),
+        (Expr*[]){ expr_copy(val), expr_new_symbol(var) }, 2));
+}
+
+Expr** eigen_null_space_algebraic(Expr* m, Expr* a_or_null, Expr* val,
+                                  int n, size_t* count_out) {
+    *count_out = 0;
+    if (!m || !val || n < 2) return NULL;
+
+    const char* lam = eigen_lambda_name();
+
+    /* 1. Minimal polynomial of the eigenvalue.  Fails (returns a
+     *    non-polynomial) for free symbolic content -- then we decline. */
+    Expr* q = eigen_minpoly_for_eigenvalue(m, a_or_null, val, n, lam);
+    if (!eigen_minpoly_is_usable(q, lam)) {
+        if (q) expr_free(q);
+        return NULL;
+    }
+
+    /* 2. M(x) = m - x*I  (or m - x*a), entries linear in x. */
+    Expr* M = eigen_build_lambda_matrix(m, a_or_null, lam, (int64_t)n);
+    Expr** flat = malloc(sizeof(Expr*) * (size_t)n * (size_t)n);
+    size_t idx = 0;
+    flatten_tensor(M, flat, &idx);
+    expr_free(M);
+    if ((int)idx != n * n) {
+        for (size_t i = 0; i < idx; i++) expr_free(flat[i]);
+        free(flat);
+        expr_free(q);
+        return NULL;
+    }
+
+    /* 3. Walk the columns of adj(M); the first one that does not vanish
+     *    identically mod q is an eigenvector.  adj[i][j] is the (j,i)
+     *    cofactor, so column j is v[i] = (-1)^(i+j) * minor(j, i). */
+    Expr** basis = NULL;
+    Expr** vec = malloc(sizeof(Expr*) * (size_t)n);
+    for (int j = 0; j < n && !basis; j++) {
+        bool nonzero = false;
+        for (int i = 0; i < n; i++) {
+            Expr* mn = eigen_minor_det(flat, n, j, i);
+            if (((i + j) & 1) != 0) {
+                mn = eval_and_free(expr_new_function(
+                    expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(-1), mn }, 2));
+            }
+            vec[i] = eigen_poly_mod(mn, q, lam);
+            if (!is_zero_poly(vec[i])) nonzero = true;
+        }
+        if (nonzero) {
+            /* Substitute x -> val to land back in the caller's radical
+             * form, then keep the vector as the one-element basis. */
+            for (int i = 0; i < n; i++) {
+                Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                    (Expr*[]){ expr_new_symbol(lam), expr_copy(val) }, 2);
+                vec[i] = eval_and_free(expr_new_function(
+                    expr_new_symbol(SYM_ReplaceAll),
+                    (Expr*[]){ vec[i], rule }, 2));
+            }
+            basis = malloc(sizeof(Expr*));
+            basis[0] = expr_new_function(expr_new_symbol(SYM_List),
+                                         vec, (size_t)n);
+            *count_out = 1;
+        } else {
+            for (int i = 0; i < n; i++) expr_free(vec[i]);
+        }
+    }
+    free(vec);
+
+    for (int i = 0; i < n * n; i++) expr_free(flat[i]);
+    free(flat);
+    expr_free(q);
+    return basis;
+}
+
 /* Detect inexact (Real / MPFR) leaves anywhere in a matrix. */
 bool eigen_matrix_is_inexact(Expr* m) {
     if (!m) return false;

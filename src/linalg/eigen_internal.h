@@ -78,6 +78,14 @@ bool        eigen_matrix_is_inexact(Expr* m);
 Expr*       eigen_chop(Expr* val);
 void        eigen_sort_by_abs_desc(Expr** vals, size_t n);
 Expr**      eigen_null_space(Expr* M, int n, size_t* count_out);
+/* Eigenvector of an irrational algebraic eigenvalue, via a column of
+ * adj(m - x*a) reduced modulo the minimal polynomial of `val`.  Used when
+ * eigen_null_space finds NO eigenvector for `val` -- always a failure of
+ * its is_zero_poly pivot test, since every eigenvalue has one.  Returns a
+ * one-element basis, or NULL when the eigenvalue is rational, carries free
+ * symbolic content, or is repeated (adjugate vanishes identically). */
+Expr**      eigen_null_space_algebraic(Expr* m, Expr* a_or_null, Expr* val,
+                                        int n, size_t* count_out);
 const char* eigen_lambda_name(void);
 Expr*       eigen_build_lambda_matrix(Expr* m, Expr* a_or_null,
                                        const char* lambda_name, int64_t n);

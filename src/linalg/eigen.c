@@ -430,6 +430,20 @@ Expr* builtin_eigenvectors(Expr* res) {
         Expr** basis = eigen_null_space(residual, (int)n, &basis_count);
         expr_free(residual);
 
+        /* No eigenvector at all for this eigenvalue is never a legal
+         * answer -- an eigenvalue has one by definition.  It means the
+         * RowReduce pivot test could not prove an entry zero (nested
+         * radicals from an irreducible cubic / quartic) and reported the
+         * residual as full rank.  Recover it exactly over Q[x]/(minpoly)
+         * where no such test is needed.  Guarded on basis_count == 0 so a
+         * genuinely defective eigenvalue keeps its zero-vector padding,
+         * which is what Mathematica emits too. */
+        if (basis_count == 0 && !is_inf) {
+            free(basis);
+            basis = eigen_null_space_algebraic(m, a, val, (int)n,
+                                               &basis_count);
+        }
+
         /* Take up to `mult` vectors. */
         size_t take = (basis_count < (size_t)mult) ? basis_count : (size_t)mult;
         for (size_t k = 0; k < take && vc < (size_t)n; k++) {

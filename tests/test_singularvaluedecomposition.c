@@ -295,6 +295,115 @@ static void test_exact_rational_shape(void) {
         2, 2,  2, 2,  2, 2);
 }
 
+/* A RANK-DEFICIENT exact matrix used to HANG, and it is the matrix everyone
+ * types first: `SingularValueDecomposition[{{1,2,3},{4,5,6},{7,8,9}}]` never
+ * returned. Found by tools/nd_fastpath_sweep.py, whose discovery phase
+ * bisected a timed-out batch down to exactly this call.
+ *
+ * The cause was step 9 of svd_symbolic_core. Rank deficiency leaves the
+ * secondary basis short of columns, and the completion augmented the built
+ * columns -- which are (1/sigma) m v_i, sigma a nested Sqrt -- with an
+ * identity and ran qr_symbolic_core over the lot. That routine applies
+ * Together to every inner product, and step 5 of the SAME function already
+ * says in a comment that doing so on nested-Sqrt entries "explodes
+ * combinatorially". It was right, and step 9 did it anyway.
+ *
+ * The missing columns span the complement of range(m), which is null(m^H) by
+ * definition -- and m is rational, so that null space is RATIONAL. No radical
+ * enters it.
+ *
+ * What is pinned is not merely "it terminates": reconstruction alone would
+ * still pass if the completion returned a wrong basis, because the appended
+ * columns multiply the ZERO singular values and vanish from U.S.V^T. The
+ * orthonormality of U is what the completion is actually responsible for, so
+ * that is checked separately. */
+static void test_rank_deficient_exact_terminates(void) {
+    assert_reconstructs("{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}");   /* nullity 1 */
+    assert_reconstructs("{{1, 2}, {2, 4}}");                    /* rank 1    */
+    assert_reconstructs("{{2, 3, 4, 5}, {3, 5, 7, 9}, "
+                        "{4, 7, 10, 13}, {5, 9, 13, 17}}");     /* nullity 2 */
+
+    /* U^T U == I -- the property reconstruction cannot see. */
+    Expr* orth = run(
+        "Chop[N[Transpose[#[[1]]] . #[[1]] - IdentityMatrix[3]]] &["
+        "SingularValueDecomposition[{{1,2,3},{4,5,6},{7,8,9}}]]");
+    if (!all_zero_tensor(orth)) {
+        char* t = expr_to_string(orth);
+        fprintf(stderr, "FAIL: U is not orthonormal\n  residual: %s\n", t);
+        free(t);
+        expr_free(orth);
+        ASSERT(0);
+    }
+    expr_free(orth);
+    printf("  PASS: U orthonormal for a rank-deficient exact matrix\n");
+
+    /* Nullity 2 exercises the within-group Gram-Schmidt: two appended vectors
+     * have to be orthogonalised against EACH OTHER, not merely appended. */
+    Expr* orth4 = run(
+        "Chop[N[Transpose[#[[1]]] . #[[1]] - IdentityMatrix[4]]] &["
+        "SingularValueDecomposition[{{2,3,4,5},{3,5,7,9},"
+        "{4,7,10,13},{5,9,13,17}}]]");
+    if (!all_zero_tensor(orth4)) {
+        char* t = expr_to_string(orth4);
+        fprintf(stderr, "FAIL: U not orthonormal at nullity 2\n  residual: %s\n", t);
+        free(t);
+        expr_free(orth4);
+        ASSERT(0);
+    }
+    expr_free(orth4);
+    printf("  PASS: U orthonormal at nullity 2\n");
+
+    /* The zero singular value stays EXACTLY zero, not a rounded radical.
+     * (Part, not Diagonal -- Mathilda has no Diagonal builtin.) */
+    Expr* z = run("SingularValueDecomposition["
+                  "{{1,2,3},{4,5,6},{7,8,9}}][[2, 3, 3]]");
+    ASSERT(z->type == EXPR_INTEGER && z->data.integer == 0);
+    expr_free(z);
+    printf("  PASS: the zero singular value is exact\n");
+}
+
+/* A FULL-rank exact matrix whose gram has an irreducible cubic characteristic
+ * polynomial.  Its eigenvalues are casus irreducibilis -- three real roots that
+ * only radical form can express through complex cube roots -- and RowReduce's
+ * is_zero_poly pivot test cannot prove those nested radicals zero.  It reported
+ * m - lambda I as full rank, Eigenvectors handed back three ZERO vectors, and
+ * the SVD's per-vector normalisation divided by a zero norm and declined: the
+ * whole call came back unevaluated.  See eigen_null_space_algebraic.
+ *
+ * Rank deficiency is NOT the trigger here (that is the test above); radical
+ * depth is.  Guard both the shape and the two properties, since an unevaluated
+ * result and a wrong basis fail in different places. */
+static void test_full_rank_irreducible_cubic(void) {
+    Expr* head = run("Head[SingularValueDecomposition["
+                     "{{1,2,3},{4,5,6},{7,8,10}}]]");
+    if (!(head->type == EXPR_SYMBOL
+          && strcmp(head->data.symbol.name, "List") == 0)) {
+        char* s = expr_to_string(head);
+        fprintf(stderr, "FAIL: SVD of a full-rank irreducible-cubic matrix "
+                        "did not evaluate\n  head: %s\n", s);
+        free(s);
+        expr_free(head);
+        ASSERT(0);
+    }
+    expr_free(head);
+    printf("  PASS: full-rank irreducible-cubic SVD evaluates\n");
+
+    assert_reconstructs("{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}");
+
+    /* Orthonormality of BOTH factors.  U and V come from different code
+     * paths -- V from the gram's eigenvectors, U from (1/sigma) m v -- so a
+     * broken eigenvector basis can leave one of them intact. */
+    Expr* ou = run("Chop[N[Transpose[#[[1]]] . #[[1]] - IdentityMatrix[3]]] &["
+                   "SingularValueDecomposition[{{1,2,3},{4,5,6},{7,8,10}}]]");
+    ASSERT(all_zero_tensor(ou));
+    expr_free(ou);
+    Expr* ov = run("Chop[N[Transpose[#[[3]]] . #[[3]] - IdentityMatrix[3]]] &["
+                   "SingularValueDecomposition[{{1,2,3},{4,5,6},{7,8,10}}]]");
+    ASSERT(all_zero_tensor(ov));
+    expr_free(ov);
+    printf("  PASS: U and V orthonormal for the irreducible-cubic matrix\n");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -321,6 +430,8 @@ int main(void) {
     test_generalized_numeric_passthrough();
     test_generalized_rational_complex_passthrough();
     test_generalized_free_symbol_nogsymb();
+    test_rank_deficient_exact_terminates();
+    test_full_rank_irreducible_cubic();
 
     test_exact_rational_shape();
 

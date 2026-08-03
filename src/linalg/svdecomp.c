@@ -459,6 +459,28 @@ static Expr* sv_matrix_from_flat(Expr** flat, int rows, int cols) {
     return m;
 }
 
+/* m^H as a p x n List-of-Lists, from the row-major n x p flat buffer.
+ * Only sv_nullspace_columns needs it: the complement of range(m) is null(m^H),
+ * and NullSpace wants the matrix, not a transposed view. */
+static Expr* sv_hermitian_transpose(Expr** flat, int rows, int cols,
+                                    bool use_conj) {
+    Expr** row_exprs = (Expr**)malloc(sizeof(Expr*) * (size_t)cols);
+    for (int i = 0; i < cols; i++) {
+        Expr** elems = (Expr**)malloc(sizeof(Expr*) * (size_t)rows);
+        for (int j = 0; j < rows; j++) {
+            Expr* e = expr_copy(flat[j * cols + i]);
+            elems[j] = use_conj ? sv_conjugate(e) : e;
+        }
+        row_exprs[i] = expr_new_function(
+            expr_new_symbol(SYM_List), elems, (size_t)rows);
+        free(elems);
+    }
+    Expr* m = expr_new_function(
+        expr_new_symbol(SYM_List), row_exprs, (size_t)cols);
+    free(row_exprs);
+    return m;
+}
+
 /* Build B = A^H . A (when use_AHA) or A . A^H (otherwise) by going
  * through the evaluator.  Caller owns the result. */
 static Expr* sv_gram(Expr* A_expr, bool use_AHA, bool use_conj) {
@@ -557,6 +579,104 @@ static Expr* sv_identity_entry(int row, int col) {
  * Returns false on allocation failure or QR rank insufficiency
  * (shouldn't happen when the trailing identity is appended).  Caller
  * frees the entries with expr_free and the array with free. */
+/* Complete the secondary basis from the RATIONAL null space, not by QR.
+ *
+ * When the matrix is rank deficient, the secondary side (U if the primary is V)
+ * is short of `sec_dim - built` columns, and they have to span the orthogonal
+ * complement of the ones already built.  sv_orthonormal_complete below does
+ * that by augmenting the built columns with a full identity and running
+ * qr_symbolic_core over the lot -- which is the path that HANGS, for the reason
+ * step 5 of svd_symbolic_core already writes down about the same routine: it
+ * calls Together on every inner product, and the built columns are (1/sigma) m
+ * v_i with sigma a nested Sqrt, so the intermediate expressions square in size
+ * at every step.  `SingularValueDecomposition[{{1,2,3},{4,5,6},{7,8,9}}]` --
+ * the most-typed test matrix in linear algebra -- never returned.
+ *
+ * The fix is to stop computing the complement and start naming it. The built
+ * columns are (1/sigma_i) m v_i, so they span range(m); the complement of
+ * range(m) is null(m^H) BY DEFINITION, and m is rational, so **that null space
+ * is rational**. No radical ever enters. Mathilda's own NullSpace returns
+ * {{1, -2, 1}} for the matrix above, in under a millisecond.
+ *
+ * Orthogonality to the built columns is automatic (range(m) ⊥ null(m^H)), so
+ * only the new vectors need orthonormalising among themselves, and that is
+ * Gram-Schmidt over rationals -- exact and cheap.
+ *
+ * `mat` is m^H when the secondary is U, m when it is V; `dim` is the length of
+ * a secondary column. Returns a freshly-owned column-major block of exactly
+ * `want - existing` orthonormal columns, or NULL if the null space is not the
+ * expected dimension (in which case the caller falls back to the QR route). */
+static Expr** sv_nullspace_columns(Expr* mat, int dim, int need, bool use_conj) {
+    if (need <= 0) return NULL;
+    Expr* ns = eval_and_free(expr_new_function(
+        expr_new_symbol(SYM_NullSpace), (Expr*[]){ mat }, 1));
+    if (!ns || !head_is(ns, SYM_List)
+        || (int)ns->data.function.arg_count != need) {
+        if (ns) expr_free(ns);
+        return NULL;
+    }
+    /* Every basis vector must be a length-`dim` list, or this is not the null
+     * space of the matrix we think it is. */
+    for (int j = 0; j < need; j++) {
+        Expr* row = ns->data.function.args[j];
+        if (!head_is(row, SYM_List) || (int)row->data.function.arg_count != dim) {
+            expr_free(ns);
+            return NULL;
+        }
+    }
+
+    Expr** cols = (Expr**)malloc(sizeof(Expr*) * (size_t)dim * (size_t)need);
+    if (!cols) { expr_free(ns); return NULL; }
+    int made = 0;
+    for (int j = 0; j < need; j++) {
+        /* w = the j-th basis vector, minus its projection onto the previous
+         * (already orthonormal) ones. */
+        Expr** w = (Expr**)malloc(sizeof(Expr*) * (size_t)dim);
+        for (int k = 0; k < dim; k++)
+            w[k] = expr_copy(ns->data.function.args[j]->data.function.args[k]);
+        for (int q = 0; q < made; q++) {
+            Expr* dot = expr_new_integer(0);
+            for (int k = 0; k < dim; k++) {
+                Expr* lhs = use_conj ? sv_conjugate(expr_copy(cols[k + q * dim]))
+                                     : expr_copy(cols[k + q * dim]);
+                dot = sv_plus(dot, sv_times(lhs, expr_copy(w[k])));
+            }
+            dot = sv_together(dot);
+            for (int k = 0; k < dim; k++)
+                w[k] = sv_together(sv_plus(w[k],
+                          sv_times(expr_new_integer(-1),
+                                   sv_times(expr_copy(dot),
+                                            expr_copy(cols[k + q * dim])))));
+            expr_free(dot);
+        }
+        /* Normalise. A dependent vector cannot occur -- NullSpace returns a
+         * basis -- but a zero here would divide by zero, so check. */
+        Expr* nsq = expr_new_integer(0);
+        for (int k = 0; k < dim; k++) {
+            Expr* lhs = use_conj ? sv_conjugate(expr_copy(w[k])) : expr_copy(w[k]);
+            nsq = sv_plus(nsq, sv_times(lhs, expr_copy(w[k])));
+        }
+        nsq = sv_together(nsq);
+        if (sv_is_zero(nsq)) {
+            expr_free(nsq);
+            for (int k = 0; k < dim; k++) expr_free(w[k]);
+            free(w);
+            for (int t = 0; t < made * dim; t++) expr_free(cols[t]);
+            free(cols);
+            expr_free(ns);
+            return NULL;
+        }
+        Expr* inv = sv_power(sv_sqrt(nsq), expr_new_integer(-1));
+        for (int k = 0; k < dim; k++)
+            cols[k + made * dim] = sv_together(sv_times(w[k], expr_copy(inv)));
+        expr_free(inv);
+        free(w);
+        made++;
+    }
+    expr_free(ns);
+    return cols;
+}
+
 static bool sv_orthonormal_complete(Expr** cols_data, int n, int existing,
                                     int want, bool use_conj,
                                     Expr*** out_row_major) {
@@ -826,9 +946,40 @@ bool svd_symbolic_core(Expr** A_flat, int n, int p, bool use_conj,
             }
         }
     } else {
-        bool oc_ok = sv_orthonormal_complete(secondary_cols_cm, sec_dim,
-                                             built, sec_dim, use_conj,
-                                             &secondary_full);
+        /* Rank deficient. Try the rational null space first -- see
+         * sv_nullspace_columns. The QR route below it is correct and is kept
+         * as the fallback, but it is also the one that does not terminate once
+         * the built columns carry nested radicals, so it must not be the
+         * route a singular integer matrix takes. */
+        bool oc_ok = false;
+        {
+            int need = sec_dim - built;
+            /* The complement of range(m) is null(m^H); of range(m^H) is
+             * null(m). `use_AHA` says the secondary is U, so it is the first. */
+            Expr* mat = use_AHA ? sv_hermitian_transpose(A_flat, n, p, use_conj)
+                                : sv_matrix_from_flat(A_flat, n, p);
+            Expr** extra = mat ? sv_nullspace_columns(mat, sec_dim, need, use_conj)
+                               : NULL;
+            if (extra) {
+                secondary_full = (Expr**)malloc(sizeof(Expr*)
+                                   * (size_t)sec_dim * (size_t)sec_dim);
+                for (int i = 0; i < sec_dim; i++) {
+                    for (int j = 0; j < built; j++)
+                        secondary_full[i * sec_dim + j] =
+                            expr_copy(secondary_cols_cm[i + j * sec_dim]);
+                    for (int j = 0; j < need; j++)
+                        secondary_full[i * sec_dim + built + j] =
+                            expr_copy(extra[i + j * sec_dim]);
+                }
+                for (int t = 0; t < sec_dim * need; t++) expr_free(extra[t]);
+                free(extra);
+                oc_ok = true;
+            }
+        }
+        if (!oc_ok)
+            oc_ok = sv_orthonormal_complete(secondary_cols_cm, sec_dim,
+                                            built, sec_dim, use_conj,
+                                            &secondary_full);
         for (int i = 0; i < sec_dim * built; i++) expr_free(secondary_cols_cm[i]);
         if (!oc_ok) {
             free(secondary_cols_cm);

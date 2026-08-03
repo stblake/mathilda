@@ -1472,6 +1472,17 @@ Gives the singular value decomposition of a matrix.
     `secondary = m . v_i / sigma_i`, and orthonormal-complete the
     smaller side via the existing `qr_symbolic_core` Gram-Schmidt
     pipeline.
+
+    Because the kernel is an eigendecomposition, it inherits
+    `Eigenvectors`' handling of irrational algebraic eigenvalues. A
+    full-rank exact matrix whose gram has an **irreducible cubic**
+    characteristic polynomial — `{{1,2,3},{4,5,6},{7,8,10}}`, for
+    instance — used to come back unevaluated: the gram's eigenvalues are
+    *casus irreducibilis*, `Eigenvectors` returned zero vectors, and
+    normalising divided by a zero norm. Fixed 2026-08-03 by the adjugate
+    route documented under `Eigenvectors`; it now reconstructs to
+    `1.7e-34` in 0.81 s. **Radical depth, not rank deficiency, was the
+    trigger** — that is a separate failure, fixed 2026-08-02.
   - When BLAS/LAPACK is unavailable at build time (`USE_LAPACK=0`),
     machine-precision inputs transparently route to the symbolic
     kernel; similarly `USE_MPFR=0` routes MPFR inputs to symbolic.
@@ -2155,6 +2166,24 @@ Gives a list of the eigenvectors of a square matrix.
   `i`-th eigenvector still corresponds positionally to the `i`-th
   eigenvalue.
 - The returned list always has length `n` for an `n×n` matrix.
+- **Irrational algebraic eigenvalues** bypass `RowReduce` entirely. Its
+  pivot test (`is_zero_poly`) is a polynomial-*identity* test that treats
+  each distinct radical as an independent generator, so for a *casus
+  irreducibilis* eigenvalue — three real roots expressible in radicals
+  only through complex cube roots — it cannot prove a genuinely-zero
+  entry zero, and reports `m - lambda I` as full rank. When the null
+  space comes back **empty** (never a legal answer: every eigenvalue has
+  an eigenvector), the eigenvector is instead read off a column of
+  `adj(m - x I)` reduced modulo the minimal polynomial `q` of `lambda`.
+  The adjugate is built from cofactor determinants — no division, no
+  pivoting — so nothing must be decided zero while it is computed, and
+  the surviving "is this column zero?" test runs on a univariate
+  polynomial over `Q`, where it is exact and complete. `q` is the
+  characteristic polynomial itself when that is irreducible (checked
+  with `IrreduciblePolynomialQ`), else `MinimalPolynomial[lambda, x]`.
+  A *repeated* irrational eigenvalue drops the rank to `n-2` or below,
+  vanishing the whole adjugate; the routine then declines rather than
+  guessing, and the zero-vector padding above applies.
 - For approximate matrices the result is computed in the rationalised
   domain, then numericalized and normalised to unit `Norm`. Exact /
   symbolic matrices return un-normalised eigenvectors.
@@ -2180,5 +2209,11 @@ Out[3]= {1.0, 1.0}
 
 In[4]:= Norm /@ Eigenvectors[{{1, 2}, {2, 1}}]
 Out[4]= {Sqrt[2], Sqrt[2]}
+
+(* Irreducible cubic characteristic polynomial: the eigenvector entries
+   are polynomials in the eigenvalue.  Returned {{0,0,0},{0,0,0},{0,0,0}}
+   before 2026-08-03. *)
+In[5]:= FreeQ[Eigenvectors[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}], {0, 0, 0}]
+Out[5]= True
 ```
 
