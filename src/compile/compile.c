@@ -1417,16 +1417,21 @@ static CompileType nd_fn_result(const NdFnSpec* s, CompileType ta) {
  * is a cliff.
  *
  * `rank2`: the result rank as a function of the operand ranks (ra, rb):
- *   R2_DOT   ra + rb - 2  (matrix.matrix -> 2, matrix.vector -> 1,
- *            vector.vector -> 0 == a SCALAR, which the emitter routes to V_NDFN2)
- *   R2_SOLVE result rank = rb, requires ra == 2  (LinearSolve, LeastSquares)
- *   R2_VEC   requires ra == rb == 1, result rank 1  (Cross, ListConvolve/Correlate)
- *   R2_JOIN  requires ra == rb, result rank = ra
+ *   R2_DOT    ra + rb - 2  (matrix.matrix -> 2, matrix.vector -> 1,
+ *             vector.vector -> 0 == a SCALAR, which the emitter routes to V_NDFN2)
+ *   R2_SOLVE  result rank = rb, requires ra == 2  (LinearSolve, LeastSquares)
+ *   R2_VEC    requires ra == rb == 1, result rank 1  (Cross, ListConvolve/Correlate)
+ *   R2_JOIN   requires ra == rb, result rank = ra
+ *   R2_MATRIX requires ra == rb == 1, result rank 2  (the two-vector matrix
+ *             PRODUCERS HankelMatrix[c, r] / ToeplitzMatrix[c, r] — a rank-1
+ *             column and a rank-1 row build a rank-2 matrix; COMPILE_MISSING.md §5)
  * `elem`: the result element type: PROMOTE (complex iff either operand is
  *   complex, else real) for the numeric contractions; SAME (require equal
- *   operand dtypes, preserve) for the structural Join.  `elems` gates BOTH
- *   operands exactly as NdFnSpec.elems gates the one. */
-typedef enum { R2_DOT, R2_SOLVE, R2_VEC, R2_JOIN } NdFn2Rank;
+ *   operand dtypes, preserve) for the structural Join and the matrix producers
+ *   (int+int -> int64, real+real -> real; a mixed int/real pair declines to the
+ *   interpreter, which coerces it exactly).  `elems` gates BOTH operands exactly
+ *   as NdFnSpec.elems gates the one. */
+typedef enum { R2_DOT, R2_SOLVE, R2_VEC, R2_JOIN, R2_MATRIX } NdFn2Rank;
 typedef enum { NDF2_PROMOTE, NDF2_SAME } NdFn2Elem;
 
 typedef struct {
@@ -1445,6 +1450,15 @@ static const NdFn2Spec ND_FN2S[] = {
     { "ListConvolve",  builtin_list_convolve,  NDF_REAL | NDF_CPLX,           R2_VEC,   NDF2_PROMOTE },
     { "ListCorrelate", builtin_list_correlate, NDF_REAL | NDF_CPLX,           R2_VEC,   NDF2_PROMOTE },
     { "Join",          ndstruct_join,          NDF_INT | NDF_REAL | NDF_CPLX, R2_JOIN,  NDF2_SAME },
+    /* COMPILE_MISSING.md §5, two-vector form: HankelMatrix[c, r] /
+     * ToeplitzMatrix[c, r] build a rank-2 matrix from a rank-1 column and a
+     * rank-1 row.  Delegated to the builtins (which delist the two NDArrays to
+     * the two-vector form and write the result buffer directly — see hk_build /
+     * tz_build).  Gated NDF_INT|NDF_REAL and NDF2_SAME to match the single-vector
+     * rows: int+int -> int64, real+real -> real; a mixed int/real pair declines
+     * to the interpreter (which coerces to real), and a complex pair likewise. */
+    { "HankelMatrix",   builtin_hankelmatrix,   NDF_INT | NDF_REAL, R2_MATRIX, NDF2_SAME },
+    { "ToeplitzMatrix", builtin_toeplitzmatrix, NDF_INT | NDF_REAL, R2_MATRIX, NDF2_SAME },
 };
 
 /* Name accessor for the disassembler; see compile_internal.h. */
@@ -1482,6 +1496,7 @@ static CompileType nd_fn2_result(const NdFn2Spec* s, CompileType ta, CompileType
         case R2_SOLVE: if (ra != 2 || rb < 1 || rb > 2) return CT_ERR; rr = rb; break;
         case R2_VEC:   if (ra != 1 || rb != 1) return CT_ERR; rr = 1; break;
         case R2_JOIN:  if (ra != rb) return CT_ERR; rr = ra; break;
+        case R2_MATRIX: if (ra != 1 || rb != 1) return CT_ERR; rr = 2; break;  /* Hankel/Toeplitz[c, r] */
         default: return CT_ERR;
     }
     if (rr < 0 || rr > CT_MAX_RANK) return CT_ERR;

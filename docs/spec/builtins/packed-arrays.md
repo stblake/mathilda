@@ -491,7 +491,7 @@ point, so the compiled answer is bit-identical, rounding included:
 | array → complex array | `Fourier` `InverseFourier` (real/int in, complex out) |
 | vector → matrix | `DiagonalMatrix` `HankelMatrix` `ToeplitzMatrix` `VandermondeMatrix` (rank 1 → rank 2) |
 | array → scalar | `Total` `Length` `Mean` `Median` `Variance` `StandardDeviation` `RootMeanSquare` `Max` `Min` `Tr` `Det` `MatrixRank` `Norm` |
-| two arrays → array | `Dot` (matrix) `LinearSolve` `Cross` `LeastSquares` `ListConvolve` `ListCorrelate` `Join` |
+| two arrays → array | `Dot` (matrix) `LinearSolve` `Cross` `LeastSquares` `ListConvolve` `ListCorrelate` `Join` `HankelMatrix` (`[c, r]`) `ToeplitzMatrix` (`[c, r]`) |
 | two arrays → scalar | `Dot` (vector·vector inner product) |
 | elementwise | every registered kernel, including the narrowing ones (`Floor`, `Ceiling`, `Round`, `Sign`, `IntegerPart`, `UnitStep`) and the exact-integer ones (`Mod`, `Quotient`, `GCD`, `LCM`, `DivisorSigma`, `MoebiusMu`, `EulerPhi`, `IntegerLength`) |
 

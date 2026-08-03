@@ -156,9 +156,14 @@ through `ND_FNS` / `A_NDFN` with a new `rank_rule 5` (rank 1 → rank 2). No
 producing opcode was needed: `A_NDFN` stores whatever NDArray the delegate
 returns, so the rank-2 shape is the interpreter builtin's at run time; only the
 static rank rule lives in the compiler. Gated `NDF_INT | NDF_REAL` (a complex
-operand keeps the interpreter's exact delist path). Single-vector form only
-(`H[v]`) — the two-vector `Hankel`/`Toeplitz[c, r]` form is a rank-1 × rank-1 →
-rank-2 `A_NDFN2` lowering, still open.
+operand keeps the interpreter's exact delist path).
+
+The two-vector `HankelMatrix[c, r]` / `ToeplitzMatrix[c, r]` form (a rank-1
+column and a rank-1 row → a rank-2 matrix) lowers through `ND_FN2S` / `A_NDFN2`
+with a new `R2_MATRIX` rank rule and `NDF2_SAME` (int+int → int64, real+real →
+real; a mixed int/real or complex pair declines to the interpreter, which coerces
+it exactly). It delegates to the same builtins, which delist the two arrays and
+write the result buffer directly (`hk_build`/`tz_build`).
 
 The producers also gained a **direct rank-2 machine-buffer output** in the
 interpreter (`hk_build`/`tz_build`/`vm_build` in `src/linalg/`): an all-integer

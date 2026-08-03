@@ -146,6 +146,51 @@ static void test_cf_toeplitzmatrix(void) {
                 " === Normal[ToeplitzMatrix[NDArray[{5, 6, 7}, DataType -> \"int64\"]]]");
 }
 
+/* Two-vector forms HankelMatrix[c, r] / ToeplitzMatrix[c, r]: rank 1 x rank 1
+ * -> rank 2, via ND_FN2S / A_NDFN2 with R2_MATRIX + NDF2_SAME.  Corners are kept
+ * matching (c_last == r_first for Hankel, c_first == r_first for Toeplitz) so no
+ * ::crs warning fires. */
+static void test_cf_hankelmatrix_2vec(void) {
+    assert_lowers("CompileDiagnostics[{{c, _Real, 1}, {r, _Real, 1}}, HankelMatrix[c, r]]");
+    assert_true("Normal[Compile[{{c, _Real, 1}, {r, _Real, 1}}, HankelMatrix[c, r]]"
+                "[{1., 2., 3.}, {3., 4., 5.}]]"
+                " === Normal[HankelMatrix[NDArray[{1., 2., 3.}], NDArray[{3., 4., 5.}]]]");
+    /* rectangular: a length-5 column and a length-3 row -> a 5x3 matrix. */
+    assert_true("Normal[Compile[{{c, _Real, 1}, {r, _Real, 1}}, HankelMatrix[c, r]]"
+                "[{1., 2., 3., 4., 5.}, {5., 6., 7.}]]"
+                " === Normal[HankelMatrix[NDArray[{1., 2., 3., 4., 5.}], NDArray[{5., 6., 7.}]]]");
+    /* int + int -> int64 (NDF2_SAME preserves; the reference must be int64). */
+    assert_true("Normal[Compile[{{c, _Integer, 1}, {r, _Integer, 1}}, HankelMatrix[c, r]]"
+                "[{1, 2, 3}, {3, 4, 5}]]"
+                " === Normal[HankelMatrix[NDArray[{1, 2, 3}, DataType -> \"int64\"],"
+                " NDArray[{3, 4, 5}, DataType -> \"int64\"]]]");
+    /* cliff: Tr of the produced matrix compiles whole. */
+    assert_lowers("CompileDiagnostics[{{c, _Real, 1}, {r, _Real, 1}}, Tr[HankelMatrix[c, r]]]");
+    /* mixed int/real declines (SAME needs equal dtypes) -> interpreter coerces. */
+    assert_true("Lookup[CompileDiagnostics[{{c, _Integer, 1}, {r, _Real, 1}}, HankelMatrix[c, r]],"
+                " \"Compiled\"] === False");
+    /* a rank-2 first operand is not the two-vector form -> declines. */
+    assert_true("Lookup[CompileDiagnostics[{{c, _Real, 2}, {r, _Real, 1}}, HankelMatrix[c, r]],"
+                " \"Compiled\"] === False");
+}
+
+static void test_cf_toeplitzmatrix_2vec(void) {
+    assert_lowers("CompileDiagnostics[{{c, _Real, 1}, {r, _Real, 1}}, ToeplitzMatrix[c, r]]");
+    assert_true("Normal[Compile[{{c, _Real, 1}, {r, _Real, 1}}, ToeplitzMatrix[c, r]]"
+                "[{1., 2., 3.}, {1., 4., 5.}]]"
+                " === Normal[ToeplitzMatrix[NDArray[{1., 2., 3.}], NDArray[{1., 4., 5.}]]]");
+    /* rectangular: a length-5 column and a length-3 row -> a 5x3 matrix. */
+    assert_true("Normal[Compile[{{c, _Real, 1}, {r, _Real, 1}}, ToeplitzMatrix[c, r]]"
+                "[{1., 2., 3., 4., 5.}, {1., 6., 7.}]]"
+                " === Normal[ToeplitzMatrix[NDArray[{1., 2., 3., 4., 5.}], NDArray[{1., 6., 7.}]]]");
+    assert_true("Normal[Compile[{{c, _Integer, 1}, {r, _Integer, 1}}, ToeplitzMatrix[c, r]]"
+                "[{1, 2, 3}, {1, 4, 5}]]"
+                " === Normal[ToeplitzMatrix[NDArray[{1, 2, 3}, DataType -> \"int64\"],"
+                " NDArray[{1, 4, 5}, DataType -> \"int64\"]]]");
+    assert_true("Lookup[CompileDiagnostics[{{c, _Complex, 1}, {r, _Complex, 1}}, ToeplitzMatrix[c, r]],"
+                " \"Compiled\"] === False");
+}
+
 static void test_cf_vandermondematrix(void) {
     assert_lowers("CompileDiagnostics[{{v, _Real, 1}}, VandermondeMatrix[v]]");
     assert_true("Normal[Compile[{{v, _Real, 1}}, VandermondeMatrix[v]][{1., 2., 3.}]]"
@@ -205,6 +250,9 @@ static void test_repeated_evaluation_does_not_corrupt(void) {
                     " === Normal[DiagonalMatrix[NDArray[{1., 2., 3.}]]]");
         assert_true("Normal[Compile[{{v, _Real, 1}}, VandermondeMatrix[v]][{1., 2., 3.}]]"
                     " === Normal[VandermondeMatrix[NDArray[{1., 2., 3.}]]]");
+        assert_true("Normal[Compile[{{c, _Real, 1}, {r, _Real, 1}}, HankelMatrix[c, r]]"
+                    "[{1., 2., 3.}, {3., 4., 5.}]]"
+                    " === Normal[HankelMatrix[NDArray[{1., 2., 3.}], NDArray[{3., 4., 5.}]]]");
         assert_true("Compile[{{v, _Real, 1}}, Total[Abs[Fourier[v]]]][{1., 2., 3., 4.}]"
                     " === Total[Abs[Fourier[NDArray[{1., 2., 3., 4.}]]]]");
     }
@@ -222,6 +270,8 @@ int main(void) {
     TEST(test_cf_diagonalmatrix);
     TEST(test_cf_hankelmatrix);
     TEST(test_cf_toeplitzmatrix);
+    TEST(test_cf_hankelmatrix_2vec);
+    TEST(test_cf_toeplitzmatrix_2vec);
     TEST(test_cf_vandermondematrix);
 
     TEST(test_buffer_producers);

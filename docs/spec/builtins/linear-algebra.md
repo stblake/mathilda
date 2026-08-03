@@ -1738,9 +1738,11 @@ processing.
   `HankelMatrix::crs` warning is emitted; the matrix is still produced.
 - An all-integer or all-machine-real argument writes the rank-2 result buffer
   directly (`ndbuild_open`) instead of building `m*n` `Expr` cells — packed out,
-  bit-identical to the boxed path. The single-vector form **compiles**:
-  `Compile[{{v, _Real, 1}}, HankelMatrix[v]]` (rank 1 → rank 2), delegating to
-  this builtin. See [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
+  bit-identical to the boxed path. Both the single-vector form
+  (`Compile[{{v, _Real, 1}}, HankelMatrix[v]]`, rank 1 → rank 2) and the
+  two-vector form (`Compile[{{c, _Real, 1}, {r, _Real, 1}}, HankelMatrix[c, r]]`,
+  rank 1 × rank 1 → rank 2) **compile**, delegating to this builtin. See
+  [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
 
 **Diagnostics**:
 ```
@@ -1794,9 +1796,10 @@ and time series.
   the diagonal as `c_1`) and a `ToeplitzMatrix::crs` warning is emitted; the
   matrix is still produced.
 - An all-integer or all-machine-real argument writes the rank-2 result buffer
-  directly (`ndbuild_open`); the single-vector form **compiles**
-  (`Compile[{{v, _Real, 1}}, ToeplitzMatrix[v]]`, rank 1 → rank 2). See
-  [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
+  directly (`ndbuild_open`); both the single-vector form
+  (`Compile[{{v, _Real, 1}}, ToeplitzMatrix[v]]`, rank 1 → rank 2) and the
+  two-vector form (`ToeplitzMatrix[c, r]`, rank 1 × rank 1 → rank 2)
+  **compile**. See [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
 
 **Diagnostics**:
 ```

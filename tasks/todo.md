@@ -71,5 +71,22 @@ pass (new `test_compile_transforms.c` + existing producer/fourier/compile suites
 Valgrind leak profile byte-identical to a pre-existing suite → zero new leaks.
 `check-array-exactness` run separately.
 
-**Deferred (documented).** The two-vector `Hankel`/`Toeplitz[c, r]` forms
-(rank-1 × rank-1 → rank-2) want an `A_NDFN2` lowering, still in `COMPILE_MISSING.md`.
+**Deferred (documented).** ~~The two-vector `Hankel`/`Toeplitz[c, r]` forms
+(rank-1 × rank-1 → rank-2) want an `A_NDFN2` lowering.~~ **Done** (follow-up).
+
+## Follow-up — two-vector Hankel/Toeplitz A_NDFN2 lowering (2026-08-03)
+
+- `src/compile/compile.c`: new `R2_MATRIX` rank rule (rank 1 × rank 1 → rank 2)
+  in `NdFn2Rank` + `nd_fn2_result`; two `ND_FN2S` rows for `HankelMatrix` /
+  `ToeplitzMatrix` (`NDF_INT|NDF_REAL`, `NDF2_SAME`), delegating to the builtins
+  (which delist the two arrays and write the buffer directly via `hk_build`/
+  `tz_build`, so the O(m·n) output is zero-Expr).
+- int+int → int64, real+real → real; mixed int/real, complex, or a rank-2
+  operand decline cleanly to the interpreter (which coerces exactly).
+- Tests: `test_cf_hankelmatrix_2vec` / `test_cf_toeplitzmatrix_2vec` in
+  `tests/test_compile_transforms.c` (lowers, real/int parity, rectangular,
+  composed `Tr`, clean declines) + a two-vector case in the leak loop.
+- Verified: build clean, `check-c99`, `check-compile-coverage` green; 8 compile/
+  producer suites pass (0 FAILs); valgrind leak profile byte-identical → zero new
+  leaks. Docs updated (`COMPILE_MISSING.md` §5, changelog, `packed-arrays.md`,
+  `linear-algebra.md`).
