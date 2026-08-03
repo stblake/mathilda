@@ -1284,6 +1284,29 @@ static Expr* all_any_none_true(Expr* res, int mode) {
     Expr* coll = res->data.function.args[0];
     Expr* test = res->data.function.args[1];
 
+    /* Bool-buffer fast path: AllTrue/AnyTrue/NoneTrue over a bool array with the
+     * identity-shaped predicate (TrueQ or Identity, both of which return a bool
+     * element unchanged) is a single early-exit scan of the byte buffer -- np.all/
+     * np.any, and the reason a bool dtype closes the sign-predicate -> quantifier
+     * pipeline without materialising 10^6 True/False symbols. Any other predicate
+     * or dtype falls through to the compiled/materialising paths below. */
+    if (is_ndarray(coll) && coll->data.ndarray.dtype == NDT_BOOL &&
+        test->type == EXPR_SYMBOL &&
+        (test->data.symbol.name == SYM_Identity ||
+         strcmp(test->data.symbol.name, "TrueQ") == 0)) {
+        size_t n = ndarray_size(coll);
+        const unsigned char* b = (const unsigned char*)coll->data.ndarray.data;
+        if (mode == 0) {                    /* AllTrue: every byte set? */
+            for (size_t i = 0; i < n; i++)
+                if (!b[i]) return expr_new_symbol(SYM_False);
+            return expr_new_symbol(SYM_True);
+        }
+        bool any = false;                   /* AnyTrue / NoneTrue: any byte set? */
+        for (size_t i = 0; i < n; i++) if (b[i]) { any = true; break; }
+        if (mode == 1) return expr_new_symbol(any ? SYM_True : SYM_False);
+        return expr_new_symbol(any ? SYM_False : SYM_True);      /* NoneTrue */
+    }
+
     /* Compiled-predicate fast path (numloop.h) before the materialising one:
      * this is the head the sweep measured at 416 ms against np.all's 319 us. */
     { Expr* fast = pred_quantify(test, coll, mode); if (fast) return fast; }

@@ -62,6 +62,7 @@ const char* SYM_BlankNullSequence = NULL;
 const char* SYM_BlankSequence = NULL;
 const char* SYM_Block = NULL;
 const char* SYM_Boole = NULL;
+const char* SYM_Boolean = NULL;
 const char* SYM_Booleans = NULL;
 const char* SYM_Break = NULL;
 const char* SYM_Buchberger = NULL;
@@ -880,6 +881,7 @@ void sym_names_init(void) {
     SYM_BlankSequence              = intern_symbol("BlankSequence");
     SYM_Block                      = intern_symbol("Block");
     SYM_Boole                      = intern_symbol("Boole");
+    SYM_Boolean                    = intern_symbol("Boolean");
     SYM_Booleans                   = intern_symbol("Booleans");
     SYM_Break                      = intern_symbol("Break");
     SYM_Buchberger                 = intern_symbol("Buchberger");

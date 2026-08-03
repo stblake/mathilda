@@ -56,15 +56,15 @@ Expr* ndint_powermod(Expr* res);       /* PowerMod[arr, e, m] */
 Expr* ndint_integerdigits(Expr* res);  /* IntegerDigits[arr] */
 
 /* ---- elementwise sign predicates ---------------------------------------- *
- * Positive / Negative / NonNegative / NonPositive. Listable, so the List path
- * answers with a List of True/False — which no dtype holds, there being no
- * boolean buffer (performance.md §13 gap C.1). The fast path is therefore
- * one-sided: the INPUT is read straight off the buffer and the output List of
- * True/False symbols is built in a single pass, with no per-element Expr for
- * the input and no evaluator round-trip per element.
+ * Positive / Negative / NonNegative / NonPositive. Listable, answering with a
+ * List of True/False. Both sides now stay on the buffer: the INPUT is read
+ * straight off it and the OUTPUT is a packed one-byte-per-element NDT_BOOL array
+ * (performance.md §13 gap C.1, now closed), inheriting the input's presentation.
+ * No per-element Expr and no evaluator round-trip on either side.
  *
  * `which` selects the comparison; see NDSignPred. Returns NULL unless the sole
- * argument is a real or int64 NDArray. */
+ * argument is a rank-1 real or int64 NDArray (a complex or Indeterminate element
+ * has no order, so those degrade to the List path element for element). */
 typedef enum {
     NDSP_POSITIVE, NDSP_NEGATIVE, NDSP_NONNEGATIVE, NDSP_NONPOSITIVE
 } NDSignPred;

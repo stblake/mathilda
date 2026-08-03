@@ -64,6 +64,7 @@ extern const char* SYM_BlankNullSequence;
 extern const char* SYM_BlankSequence;
 extern const char* SYM_Block;
 extern const char* SYM_Boole;
+extern const char* SYM_Boolean;
 extern const char* SYM_Booleans;
 extern const char* SYM_Break;
 extern const char* SYM_Buchberger;

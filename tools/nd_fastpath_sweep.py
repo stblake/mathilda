@@ -626,8 +626,10 @@ OFF_BUFFER = {
     # already knows its shape.
     "SquareMatrixQ", "SymmetricMatrixQ", "DiagonalMatrixQ",
     "UpperTriangularMatrixQ", "ArrayFlatten",
-    # Comparisons and same-tests.  The answer is a Boolean or a boolean List, so
-    # this buys the INPUT side only -- there is no bool dtype (§13 gap C.1).
+    # Comparisons and same-tests.  A bool dtype now exists (§13 gap C.1 closed),
+    # but these heads are not Listable and do not thread over an array, so there
+    # is no elementwise bool-array OUTPUT to buffer -- the scan of the input is
+    # all there is (a whole-array SameQ, or a scalar Boolean).
     "Less", "LessEqual", "Greater", "GreaterEqual", "Inequality",
     "Unequal", "SameQ", "UnsameQ",
     # Two ARRAY operands.  ndarray_map_binary broadcasts one array against a

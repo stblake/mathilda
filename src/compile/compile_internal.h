@@ -240,7 +240,9 @@ enum {
     X(A_NDFN2, K_ARR) X(V_NDFN2, K_ARR)                                     \
     X(A_SIZE, K_UN)   X(A_NEWLIKE, K_ARR) X(A_SHAPECHK, K_ASTORE)          \
     X(A_LOAD_R, K_ALOAD) X(A_LOAD_C, K_ALOAD) X(A_LOAD_I, K_ALOAD)         \
+    X(A_LOAD_B, K_ALOAD)                                                    \
     X(A_STORE_R, K_ASTORE) X(A_STORE_C, K_ASTORE) X(A_STORE_I, K_ASTORE)   \
+    X(A_STORE_B, K_ASTORE)                                                  \
     /* Growable append + shrink, for an iteration whose LENGTH is only known    \
      * once it has run (FixedPointList, NestWhileList, and later Select).       \
      * Deliberately separate opcodes rather than a bounds check inside          \

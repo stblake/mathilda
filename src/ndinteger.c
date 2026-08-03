@@ -4,6 +4,7 @@
 #include "ndinteger.h"
 #include "ndarray.h"
 #include "expr.h"
+#include "pack.h"
 #include "symtab.h"
 #include "sym_names.h"
 #include "checked_int.h"
@@ -366,16 +367,24 @@ Expr* ndint_sign_predicate(Expr* res, NDSignPred which) {
     if (a->data.ndarray.rank != 1) return NULL;
 
     size_t sz = ndarray_size(a);
+    if (sz == 0) return NULL;           /* empty: let the List path build {} */
     const void* in = a->data.ndarray.data;
-    Expr** out = malloc(sizeof(Expr*) * (sz ? sz : 1));
+
+    /* The answer is now a one-byte-per-element bool BUFFER, not 10^6 shared
+     * True/False Expr nodes (performance.md §13 gap C.1). It always presents as a
+     * List -- a PACKED bool List, observably identical to the plain List of
+     * True/False the predicate returned before this change, whichever surface the
+     * input came from. (Unlike Sin, which inherits its input's presentation, a
+     * sign predicate has always answered with a List; keeping that is what lets
+     * the visible surface agree with the packed one and preserves the contract
+     * the tests pin.) */
+    void* buf = NULL;
+    int64_t dims[1] = { (int64_t)sz };
+    Expr* out = ndbuild_open_like(a, 1, dims, NDT_BOOL, &buf);
     if (!out) return NULL;
-    /* Two symbol nodes for the whole result, shared by reference. expr_copy is
-     * a refcount bump (expr.c), so this is the difference between 10^6
-     * allocations and 10^6 increments -- worth having, because the output List
-     * is the only per-element cost left once the input is read off the buffer.
-     * Nothing writes through a shared node: True and False are leaves. */
-    Expr* sym_true  = expr_new_symbol(SYM_True);
-    Expr* sym_false = expr_new_symbol(SYM_False);
+    out->data.ndarray.present_as = NDA_HEAD_LIST;   /* always a List, never NDArray[...] */
+    pack_g_any_created = true;                       /* a packed list now exists */
+    uint8_t* ob = (uint8_t*)buf;
     for (size_t i = 0; i < sz; i++) {
         bool val;
         if (dt == NDT_INT64) {
@@ -390,26 +399,15 @@ Expr* ndint_sign_predicate(Expr* res, NDSignPred which) {
             /* An indeterminate element is unordered: Positive[Indeterminate]
              * stays symbolic rather than answering False, so abandon the array
              * and let the List path reproduce that element for element. */
-            if (re != re) {
-                for (size_t j = 0; j < i; j++) expr_free(out[j]);
-                free(out);
-                expr_free(sym_true); expr_free(sym_false);
-                return NULL;
-            }
+            if (re != re) { expr_free(out); return NULL; }
             val = (which == NDSP_POSITIVE)    ? (re > 0.0)
                 : (which == NDSP_NEGATIVE)    ? (re < 0.0)
                 : (which == NDSP_NONNEGATIVE) ? (re >= 0.0)
                                               : (re <= 0.0);
         }
-        out[i] = expr_copy(val ? sym_true : sym_false);
+        ob[i] = val ? 1 : 0;
     }
-    /* Hand off the two originals: each was created with refcount 1 and the loop
-     * added one ref per use, so releasing the constructor's own ref leaves
-     * exactly as many as the List holds. */
-    expr_free(sym_true); expr_free(sym_false);
-    Expr* lst = expr_new_function(expr_new_symbol(SYM_List), out, sz);
-    free(out);
-    return lst;
+    return out;
 }
 
 /* ---- registration ------------------------------------------------------- */

@@ -576,6 +576,43 @@ void test_cf_integer_arrays(void) {
                    " === Table[(i*4000000000)*4000000000, {i, 1, 3}]", "True", 0);
 }
 
+/* Boolean scalars and arrays.  The scalar CT_BOOL machinery already existed; a
+ * `_Boolean` argument is the first thing that DECLARES one, and NDT_BOOL is the
+ * array element type behind CT_ARRAY(CT_BOOL, r). */
+void test_cf_boolean(void) {
+    /* Scalar _Boolean argument, now declarable, feeding an If condition. */
+    assert_eval_eq("Compile[{{b, _Boolean}}, If[b, 10, 20]][True]", "10", 0);
+    assert_eval_eq("Compile[{{b, _Boolean}}, If[b, 10, 20]][False]", "20", 0);
+    assert_eval_eq("\"ResultType\" /. CompileDiagnostics[{{b, _Boolean}}, b]", "\"Boolean\"", 0);
+
+    /* Bool array argument: index it (A_LOAD_B) and combine elements with scalar
+     * boolean logic, yielding a Boolean. */
+    assert_eval_eq("Compile[{{v, _Boolean, 1}}, v[[2]]][{True, False, True}]", "False", 0);
+    assert_eval_eq("Compile[{{v, _Boolean, 1}}, v[[1]] && v[[3]]][{True, False, True}]",
+                   "True", 0);
+    assert_eval_eq("\"ResultType\" /. CompileDiagnostics[{{v, _Boolean, 1}}, v[[1]]]",
+                   "\"Boolean\"", 0);
+
+    /* Return a bool array — Map (packed NDArray result) and Table/ConstantArray
+     * (a plain List, exactly as an integer Table returns).  A_STORE_B on the way
+     * out, and the result equals the interpreter's answer over the same inputs. */
+    assert_eval_eq("Compile[{{v, _Boolean, 1}}, Map[Not, v]][{True, False, True}]"
+                   " === {False, True, False}", "True", 0);
+    assert_eval_eq("DataType[Compile[{{v, _Boolean, 1}}, Map[Not, v]][ToNDArray[{True, False}]]]"
+                   " === \"bool\"", "True", 0);
+    assert_eval_eq("Compile[{{v, _Boolean, 1}}, Table[Not[v[[i]]], {i, Length[v]}]][{True, False}]"
+                   " === {False, True}", "True", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, ConstantArray[True, n]][3]"
+                   " === {True, True, True}", "True", 0);
+    assert_eval_eq("\"ResultType\" /. CompileDiagnostics[{{v, _Boolean, 1}}, Map[Not, v]]",
+                   "\"Array\"", 0);
+
+    /* Build-and-fill a bool local: A_STORE_B on one side, A_LOAD_B on the other. */
+    assert_eval_eq("Compile[{{v, _Boolean, 1}}, Module[{u = v}, "
+                   "Do[u[[i]] = Not[u[[i]]], {i, 1, Length[v]}]; u]][{True, False, True}]"
+                   " === {False, True, False}", "True", 0);
+}
+
 /* ------------------------------------------------------------------ *
  *  CompilePrint / disassembler                                         *
  * ------------------------------------------------------------------ *
@@ -1169,6 +1206,7 @@ int main(void) {
     TEST(test_cf_integer_closed_heads);
     TEST(test_cf_integer_only_heads);
     TEST(test_cf_integer_arrays);
+    TEST(test_cf_boolean);
     TEST(test_cf_delegated_array_heads);
     TEST(test_cf_ordering);
     TEST(test_cf_narrowing_kernels_over_arrays);

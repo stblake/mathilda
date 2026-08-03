@@ -56,13 +56,25 @@ typedef enum {
  * into the interpreter. That containment is what lets the generic ndt_get/ndt_set
  * pair keep its `double` signature: those two are exact only to 2^53, and the
  * exact accessors (ndt_get_i/ndt_set_i) are used everywhere an int64 array is
- * actually read or written. */
+ * actually read or written.
+ *
+ *   NDT_BOOL      uint8_t (0/1)     — no BLAS counterpart.
+ *
+ * NDT_BOOL is one byte per element and materialises as the symbols True/False
+ * (ndarray_buffer_element_to_expr), so a bool array is observably the List of
+ * True/False it packs. Unlike NDT_INT64 it IS reachable from user syntax
+ * (`DataType -> "bool"`/`"Boolean"`), is inferred by the auto-packer from an
+ * all-True/False list, and is produced by the elementwise sign predicates. It is
+ * deliberately NOT numeric: arithmetic over a bool array delists to the symbolic
+ * List (Mathematica leaves `True + True` unevaluated), and the compiler mirrors
+ * this with its "Bool is not numeric" type-lattice invariant. */
 typedef enum {
     NDT_FLOAT64 = 0,
     NDT_FLOAT32,
     NDT_COMPLEX64,
     NDT_COMPLEX32,
-    NDT_INT64
+    NDT_INT64,
+    NDT_BOOL
 } NDType;
 
 /* How an EXPR_NDARRAY presents itself to the user. ONE node type, TWO surfaces.

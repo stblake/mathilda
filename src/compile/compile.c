@@ -641,10 +641,12 @@ static Val arr_real_const(Ctx* c, double x) { Slot s; s.r = x; return emit_const
 
 static bool infer_type(Ctx* c, const Expr* e, CompileType* out);
 
-/* A machine element type an array buffer can hold.  Bool has no buffer form and
- * a nested array is not an element; Int became one when NDT_INT64 arrived. */
+/* A machine element type an array buffer can hold (a nested array is not an
+ * element).  Int became one when NDT_INT64 arrived; Bool when NDT_BOOL did, so a
+ * body that computes a truth value (Table[Not[v[[i]]], ...], ConstantArray[True,
+ * n]) now builds a one-byte bool buffer instead of refusing to lower. */
 static bool ct_is_elem(CompileType t) {
-    return t == CT_INT || t == CT_REAL || t == CT_COMPLEX;
+    return t == CT_INT || t == CT_REAL || t == CT_COMPLEX || t == CT_BOOL;
 }
 
 /* Is `node` (by identity) somewhere inside `root`?  Used only to keep a bail
@@ -1585,11 +1587,13 @@ static CompileType elem_of(CompileType t) { return CT_IS_ARRAY(t) ? CT_ELEM(t) :
 static uint16_t a_load_op(CompileType elem) {
     return elem == CT_COMPLEX ? OP_A_LOAD_C
          : elem == CT_INT     ? OP_A_LOAD_I
+         : elem == CT_BOOL    ? OP_A_LOAD_B
                               : OP_A_LOAD_R;
 }
 static uint16_t a_store_op(CompileType elem) {
     return elem == CT_COMPLEX ? OP_A_STORE_C
          : elem == CT_INT     ? OP_A_STORE_I
+         : elem == CT_BOOL    ? OP_A_STORE_B
                               : OP_A_STORE_R;
 }
 
@@ -5587,10 +5591,11 @@ static bool vm_write_scalar(const Expr* e, unsigned relem, Slot* d) {
  * sized slots.  Arguments may be any dtype — they are only ever read — so the
  * narrowing is done here, at the point ownership begins. */
 /* The buffer dtype a program uses for a given element type.  A program owns only
- * these three — float32 never appears, see nd_own_copy. */
+ * these four — float32 never appears, see nd_own_copy. */
 static NDType ct_elem_ndt(unsigned relem) {
     return relem == (unsigned)CT_COMPLEX ? NDT_COMPLEX64
          : relem == (unsigned)CT_INT     ? NDT_INT64
+         : relem == (unsigned)CT_BOOL    ? NDT_BOOL
                                          : NDT_FLOAT64;
 }
 
@@ -5600,8 +5605,10 @@ static Expr* nd_own_copy(const Expr* x, unsigned relem) {
     NDType sdt = x->data.ndarray.dtype;
     /* An integer-typed program will not silently take a float buffer: the two
      * are different element types to the interpreter as well (`Total` of a
-     * float64 NDArray is a Real), so the call goes back rather than rounding. */
+     * float64 NDArray is a Real), so the call goes back rather than rounding.
+     * Bool is the same kind of distinct type — never coerced to/from a number. */
     if ((dt == NDT_INT64) != (sdt == NDT_INT64)) return NULL;
+    if ((dt == NDT_BOOL)  != (sdt == NDT_BOOL))  return NULL;
     size_t n = ndarray_size(x), esz = ndt_elem_size(dt);
     void* buf = malloc(esz * (n ? n : 1));
     if (!buf) return NULL;
@@ -6308,9 +6315,23 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                 if (A_->dtype != NDT_INT64) goto vm_fail;
                 RD.i = ((const int64_t*)A_->data)[(size_t)RB.i];
             } NEXT();
+            /* Boolean element access.  One byte per element, held as 0/1 in the
+             * integer slot (a compiled boolean is a long long, like True/False).
+             * A program's bool buffers are always NDT_BOOL, so a foreign dtype
+             * means the promised element type was not kept — back to the
+             * interpreter, exactly as A_LOAD_I does for a non-int64 buffer. */
+            OP(A_LOAD_B): {
+                const NDArrayData* A_ = &RA.arr->data.ndarray;
+                if (A_->dtype != NDT_BOOL) goto vm_fail;
+                RD.i = ((const uint8_t*)A_->data)[(size_t)RB.i] ? 1 : 0;
+            } NEXT();
             OP(A_STORE_I): {
                 NDArrayData* A_ = &RD.arr->data.ndarray;
                 ((int64_t*)A_->data)[(size_t)RA.i] = RB.i;
+            } NEXT();
+            OP(A_STORE_B): {
+                NDArrayData* A_ = &RD.arr->data.ndarray;
+                ((uint8_t*)A_->data)[(size_t)RA.i] = RB.i ? 1 : 0;
             } NEXT();
             OP(A_STORE_R): {
                 NDArrayData* A_ = &RD.arr->data.ndarray;

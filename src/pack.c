@@ -64,12 +64,19 @@ size_t pack_min_elements(void) {
  * representation choice may never make.
  * -------------------------------------------------------------------------- */
 
-typedef enum { PK_NONE = 0, PK_INT, PK_REAL } PackClass;
+typedef enum { PK_NONE = 0, PK_INT, PK_REAL, PK_BOOL } PackClass;
 
 static PackClass leaf_class(const Expr* e) {
     if (!e) return PK_NONE;
     if (e->type == EXPR_INTEGER) return PK_INT;
     if (e->type == EXPR_REAL)    return PK_REAL;
+    /* The two boolean literals pack into a one-byte bool buffer; every other
+     * symbol still declines. A bool list round-trips exactly (the buffer
+     * materialises back to True/False), so unlike Complex it is safe to pack
+     * automatically. */
+    if (e->type == EXPR_SYMBOL &&
+        (e->data.symbol.name == SYM_True || e->data.symbol.name == SYM_False))
+        return PK_BOOL;
     /* Everything else declines, and each for a reason:
      *   BigInt / Rational / MPFR  no machine representation
      *   Complex                   materialises as Complex[re, im] even when
@@ -79,7 +86,7 @@ static PackClass leaf_class(const Expr* e) {
      *                             NDArray[..., DataType -> "complex64"] still
      *                             works; packing it is a follow-up that needs
      *                             a presentation-aware zero-imaginary fold.
-     *   symbols / expressions     not machine values at all */
+     *   other symbols / expressions  not machine values at all */
     return PK_NONE;
 }
 
@@ -97,7 +104,8 @@ static int pack_sniff(const Expr* e, int64_t* dims, int maxrank, PackClass* cls)
     if (is_packed_list(e)) {
         int rank = e->data.ndarray.rank;
         if (rank > maxrank) return -1;
-        PackClass c = (e->data.ndarray.dtype == NDT_INT64) ? PK_INT : PK_REAL;
+        PackClass c = (e->data.ndarray.dtype == NDT_BOOL)  ? PK_BOOL
+                    : (e->data.ndarray.dtype == NDT_INT64) ? PK_INT : PK_REAL;
         if (*cls == PK_NONE) *cls = c;
         else if (*cls != c) return -1;          /* mixed exact/inexact */
         for (int i = 0; i < rank; i++) dims[i] = e->data.ndarray.dims[i];
@@ -162,7 +170,9 @@ static void pack_flatten(const Expr* e, void* buf, NDType dt, size_t* k) {
             pack_flatten(e->data.function.args[i], buf, dt, k);
         return;
     }
-    if (dt == NDT_INT64) ndt_set_i(buf, (*k)++, dt, e->data.integer);
+    if (dt == NDT_BOOL)
+        ndt_set_i(buf, (*k)++, dt, e->data.symbol.name == SYM_True ? 1 : 0);
+    else if (dt == NDT_INT64) ndt_set_i(buf, (*k)++, dt, e->data.integer);
     else ndt_set(buf, (*k)++, dt,
                  (e->type == EXPR_INTEGER) ? (double)e->data.integer : e->data.real,
                  0.0);
@@ -182,13 +192,18 @@ static Expr* pack_build(const Expr* list, size_t min_elems,
     for (int i = 0; i < rank; i++) n *= (size_t)dims[i];
     if (n < min_elems) return NULL;      /* declined before any allocation */
 
-    NDType dt = (cls == PK_INT) ? NDT_INT64 : NDT_FLOAT64;
+    NDType dt = (cls == PK_BOOL) ? NDT_BOOL
+              : (cls == PK_INT)  ? NDT_INT64 : NDT_FLOAT64;
     if (have_want) {
         /* An explicit DataType may WIDEN an exact list to a float buffer -- the
          * user asked for that -- but never the reverse: rounding Reals into an
-         * int64 buffer would change values, not just storage. */
+         * int64 buffer would change values, not just storage. A bool buffer is
+         * neither a widening nor a narrowing of a number, so it is only legal
+         * over an all-True/False list (and, conversely, a True/False list only
+         * packs to bool). */
         if (want == NDT_INT64 && cls != PK_INT) return NULL;
         if (ndt_is_complex(want)) return NULL;   /* see leaf_class */
+        if ((want == NDT_BOOL) != (cls == PK_BOOL)) return NULL;
         dt = want;
     }
 
@@ -651,11 +666,15 @@ static void pack_mark_aware_heads(void) {
          * instead of falling out unevaluated. */
         "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu",
         "IntegerLength", "PowerMod", "Prime", "IntegerDigits",
-        /* The elementwise sign predicates. Their answer is a List of True/False
-         * -- there is no boolean dtype (§13 gap C.1) -- so this buys the INPUT
-         * side only: the buffer is read directly instead of being materialised
-         * into 10^6 Reals that are then each compared to zero. */
+        /* The elementwise sign predicates. Now buffer on BOTH sides (§13 gap C.1
+         * closed): the input is read straight off the buffer and the answer is a
+         * packed NDT_BOOL array of True/False, never 10^6 Real comparisons nor
+         * 10^6 True/False Expr nodes (see ndint_sign_predicate). */
         "Positive", "Negative", "NonNegative", "NonPositive",
+        /* Boole maps a bool buffer straight to an int64 one (True -> 1); its
+         * buffer path answers with a single head (Integer), matching Boole of the
+         * List element for element. */
+        "Boole",
         /* ------------------------------------------------------------------
          * The structural batch (src/ndstruct.c, src/random.c, src/assoc.c).
          *

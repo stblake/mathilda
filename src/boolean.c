@@ -3,8 +3,11 @@
 #include "expr.h"
 #include "eval.h"
 #include "sym_names.h"
+#include "ndarray.h"
+#include "pack.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 Expr* builtin_not(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
@@ -122,6 +125,28 @@ Expr* builtin_boole(Expr* res) {
     if (arg->type == EXPR_SYMBOL) {
         if (arg->data.symbol.name == SYM_True)  return expr_new_integer(1);
         if (arg->data.symbol.name == SYM_False) return expr_new_integer(0);
+    }
+    /* A bool array is the natural input to Boole. A VISIBLE bool NDArray is an
+     * atom, so the Listable threading above never fires for it and it would
+     * otherwise stay unevaluated; map it to a packed int64 array (True->1,
+     * False->0) directly off the buffer, inheriting the presentation. (A packed
+     * bool List is threaded elementwise by the Listable step before we get here,
+     * so this reads the visible surface; handling either is harmless.) */
+    if (is_ndarray(arg) && arg->data.ndarray.dtype == NDT_BOOL) {
+        size_t sz = ndarray_size(arg);
+        if (sz == 0) return NULL;
+        const uint8_t* in = (const uint8_t*)arg->data.ndarray.data;
+        void* buf = NULL;
+        Expr* out = ndbuild_open_like(arg, arg->data.ndarray.rank,
+                                      arg->data.ndarray.dims, NDT_INT64, &buf);
+        if (!out) return NULL;
+        /* Present as a List (a packed int64 one), matching Boole of the plain
+         * List of True/False -- same reasoning as the sign predicates. */
+        out->data.ndarray.present_as = NDA_HEAD_LIST;
+        pack_g_any_created = true;
+        int64_t* ob = (int64_t*)buf;
+        for (size_t i = 0; i < sz; i++) ob[i] = in[i] ? 1 : 0;
+        return out;
     }
     return NULL;
 }

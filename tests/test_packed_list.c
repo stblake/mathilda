@@ -191,6 +191,40 @@ void test_int64_matches_plain_integer_lists(void) {
                   "{1000000, 1000000}^{4, 4}");
 }
 
+void test_bool_packing_matches_plain(void) {
+    /* An all-True/False list packs to a one-byte bool buffer and is otherwise
+     * indistinguishable from the plain list. */
+    assert_eval_eq("DataType[ToNDArray[{True, False, True}]]", "\"bool\"", 0);
+    assert_eval_eq("Head[ToNDArray[{True, False}]]", "List", 0);
+    assert_eval_eq("ToNDArray[{True, False, True}] === {True, False, True}", "True", 0);
+    /* A mixed bool/number list cannot form a uniform buffer, so it declines. */
+    assert_eval_eq("NDArrayQ[ToNDArray[{True, 1}]]", "False", 0);
+    assert_eval_eq("NDArrayQ[ToNDArray[{True, x}]]", "False", 0);
+
+    /* Every observable of a packed bool list must equal the plain list's. The
+     * producers (sign predicates) turn a numeric buffer INTO a bool one; the
+     * consumers (Boole, the quantifiers) turn one back or reduce it. */
+    static const char* const BOOL_EXPRS[] = {
+        "%s",             "Head[%s]",       "Length[%s]",   "%s[[2]]",
+        "Boole[%s]",      "Normal[%s]",     "Reverse[%s]",  "First[%s]",
+        "AllTrue[%s, TrueQ]", "AnyTrue[%s, TrueQ]", "NoneTrue[%s, TrueQ]",
+        "And @@ %s",      "Or @@ %s",       "Count[%s, True]",
+    };
+    const char* packed_src = "ToNDArray[{True, False, True}]";
+    const char* plain_src  = "{True, False, True}";
+    char bufp[256], bufl[256];
+    for (size_t i = 0; i < sizeof(BOOL_EXPRS) / sizeof(BOOL_EXPRS[0]); i++) {
+        snprintf(bufp, sizeof(bufp), BOOL_EXPRS[i], packed_src);
+        snprintf(bufl, sizeof(bufl), BOOL_EXPRS[i], plain_src);
+        same_as_plain(bufp, bufl);
+    }
+    /* Sign predicates: a numeric buffer in, a bool buffer out, matching the List
+     * path element for element on both the packed and visible surfaces. */
+    same_as_plain("Positive[ToNDArray[{-2, 0, 3, -1}]]", "Positive[{-2, 0, 3, -1}]");
+    same_as_plain("NonNegative[ToNDArray[{-1., 0., 2.}]]", "NonNegative[{-1., 0., 2.}]");
+    same_as_plain("Boole[Positive[ToNDArray[{-1, 2, -3}]]]", "Boole[Positive[{-1, 2, -3}]]");
+}
+
 void test_declines_what_it_cannot_represent(void) {
     /* Each of these must come back as the ORIGINAL list, unpacked. A mixed
      * exact/inexact list is the important one: a uniform buffer cannot hold an
@@ -2264,6 +2298,7 @@ int main(void) {
     TEST(test_visible_ndarray_unchanged);
     TEST(test_exactness_preserved);
     TEST(test_int64_matches_plain_integer_lists);
+    TEST(test_bool_packing_matches_plain);
     TEST(test_tally_matches_plain_lists);
     TEST(test_setops_match_plain_lists);
     TEST(test_arithmetic_rewrites_match_plain_lists);

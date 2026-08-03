@@ -201,6 +201,24 @@ In[11]:= NDArrayQ[ToNDArray[{1., 2.5}, DataType -> "int64"]]
 Out[11]= False
 ```
 
+An all-`True`/`False` list infers — and packs to — the `"bool"` dtype, one byte
+per element. It behaves exactly like the `List` of `True`/`False` it packs:
+logical and predicate heads run on the buffer, while anything numeric delists to
+the symbolic `List` (Mathematica leaves `Sin[True]` and `True + True`
+unevaluated, and so does a bool array). `"Boolean"` is accepted as a spelling of
+`"bool"` and canonicalises to it.
+
+```mathematica
+In[12]:= DataType[ToNDArray[{True, False, True}]]
+Out[12]= "bool"
+
+In[13]:= Positive[ToNDArray[{-1, 0, 2}]]      (* a numeric buffer -> a bool one *)
+Out[13]= {False, False, True}
+
+In[14]:= Sin[ToNDArray[{True, False}]]        (* not numeric: delists to symbolic *)
+Out[14]= {Sin[True], Sin[False]}
+```
+
 `ToNDArray` on an already-packed list is a no-op; on an `NDArray[...]` it
 restates the same values as a `List`.
 
@@ -255,11 +273,15 @@ special functions (`Sin`, `Exp`, `Gamma`, …), `Total`, `Mean`, `Min`, `Max`,
 `RandomChoice`, and the integer heads `GCD`, `LCM`, `DivisorSigma`, `EulerPhi`,
 `MoebiusMu`, `IntegerLength`, `PowerMod`, `Prime`.
 
-Four more read the buffer without returning one, because their answer is not a
-uniform machine array: `Positive`/`Negative`/`NonNegative`/`NonPositive` answer
-with a list of `True`/`False` (there is no boolean buffer), `IntegerDigits` with
-a ragged list of digit lists, and `Counts` with an `Association`. They still
-read the elements straight out of the buffer rather than materialising it.
+The sign predicates `Positive`/`Negative`/`NonNegative`/`NonPositive` read a
+numeric buffer and return a `"bool"` one — a one-byte-per-element buffer of
+`True`/`False` — so both sides stay on the buffer. `Boole` runs the bridge the
+other way, mapping a `"bool"` buffer to an `int64` one.
+
+Two more read the buffer without returning a uniform machine array, because
+their answer is not one: `IntegerDigits` returns a ragged list of digit lists,
+and `Counts` an `Association`. They still read the elements straight out of the
+buffer rather than materialising it.
 
 `Subtract` and `Divide` are on that list without a buffer path of their own:
 each rewrites to `Plus`/`Times`/`Power` without ever reading an element, so all

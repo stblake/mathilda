@@ -282,6 +282,57 @@ void test_ndarray_mixed_dtype_promotion() {
                    "NDArray[{3, 4}, DataType -> \"float32\"]] === \"float32\"", "True", 0);
 }
 
+/* ---------- Boolean dtype ---------- */
+
+void test_ndarray_bool_construct() {
+    /* Constructs from True/False leaves and round-trips through DataType. */
+    assert_eval_eq("NDArrayQ[NDArray[{True, False, True}, DataType -> \"bool\"]]", "True", 0);
+    assert_eval_eq("DataType[NDArray[{True, False}, DataType -> \"bool\"]] === \"bool\"", "True", 0);
+    /* The "Boolean" alias is accepted on input and canonicalises to "bool". */
+    assert_eval_eq("DataType[NDArray[{True, False}, DataType -> \"Boolean\"]] === \"bool\"", "True", 0);
+    /* A non-True/False leaf declines the bool dtype (stays unevaluated). */
+    assert_eval_eq("NDArrayQ[NDArray[{1, 0}, DataType -> \"bool\"]]", "False", 0);
+}
+
+void test_ndarray_bool_roundtrip() {
+    assert_eval_eq("Normal[NDArray[{True, False, True}, DataType -> \"bool\"]]",
+                   "{True, False, True}", 0);
+    /* Rank-2 bool arrays round-trip too. */
+    assert_eval_eq("Normal[NDArray[{{True, False}, {False, True}}, DataType -> \"bool\"]]",
+                   "{{True, False}, {False, True}}", 0);
+    /* A packed bool list is indistinguishable from the plain list. */
+    assert_eval_eq("ToNDArray[{True, False, True}] === {True, False, True}", "True", 0);
+    assert_eval_eq("DataType[ToNDArray[{True, False, True}]] === \"bool\"", "True", 0);
+    /* Mixed True/number does not pack to bool. */
+    assert_eval_eq("NDArrayQ[ToNDArray[{True, 1, False}]]", "False", 0);
+}
+
+void test_ndarray_bool_not_numeric() {
+    /* Arithmetic and transcendentals over a bool array delist to the symbolic
+     * List, exactly as Mathematica leaves Sin[True] / True + True unevaluated. */
+    assert_eval_eq("Sin[ToNDArray[{True, False}]]", "{Sin[True], Sin[False]}", 0);
+    assert_eval_eq("Sin[ToNDArray[{True, False}]] === Sin[{True, False}]", "True", 0);
+    assert_eval_eq("ToNDArray[{True, False}] + ToNDArray[{True, True}] === "
+                   "{True, False} + {True, True}", "True", 0);
+}
+
+void test_ndarray_bool_producers_consumers() {
+    /* Sign predicates now answer with a packed bool array (gap C.1 closed). */
+    assert_eval_eq("DataType[Positive[ToNDArray[{-1, 0, 2}]]] === \"bool\"", "True", 0);
+    assert_eval_eq("Positive[ToNDArray[{-1, 0, 2}]] === Positive[{-1, 0, 2}]", "True", 0);
+    assert_eval_eq("Negative[ToNDArray[{-1., 0., 2.}]]", "{True, False, False}", 0);
+    /* Boole bridges a bool array back to an int64 one. */
+    assert_eval_eq("DataType[Boole[NDArray[{True, False, True}, DataType -> \"bool\"]]] === \"int64\"",
+                   "True", 0);
+    assert_eval_eq("Normal[Boole[NDArray[{True, False, True}, DataType -> \"bool\"]]]",
+                   "{1, 0, 1}", 0);
+    /* AllTrue/AnyTrue/NoneTrue scan the byte buffer; the whole pipeline stays packed. */
+    assert_eval_eq("AllTrue[Positive[ToNDArray[{1, 2, 3}]], TrueQ]", "True", 0);
+    assert_eval_eq("AllTrue[ToNDArray[{True, False}], TrueQ]", "False", 0);
+    assert_eval_eq("AnyTrue[ToNDArray[{False, False, True}], TrueQ]", "True", 0);
+    assert_eval_eq("NoneTrue[ToNDArray[{False, False}], TrueQ]", "True", 0);
+}
+
 /* ---------- Scalar broadcasting (numpy-style) ---------- */
 
 void test_ndarray_scalar_broadcast_plus() {
@@ -449,6 +500,10 @@ int main() {
     TEST(test_ndarray_dtype_roundtrip);
     TEST(test_ndarray_dtype_narrowing);
     TEST(test_ndarray_dtype_equality_distinguishes);
+    TEST(test_ndarray_bool_construct);
+    TEST(test_ndarray_bool_roundtrip);
+    TEST(test_ndarray_bool_not_numeric);
+    TEST(test_ndarray_bool_producers_consumers);
     TEST(test_ndarray_complex_plus);
     TEST(test_ndarray_mixed_dtype_promotion);
 

@@ -235,14 +235,6 @@ EXEMPT = {
     "SingularValueDecomposition": "returns a triple of matrices",
     "Eigenvectors": "result shape is data-dependent (defective matrices)",
     "Eigenvalues": "may be complex for a real matrix; result type not static",
-    # The elementwise sign predicates answer with a List of True/False, and
-    # there is no boolean array dtype (docs/spec §13, gap C.1).  Their buffer
-    # path buys the INPUT side only, so there is nothing for a compiled ARRAY
-    # form to produce.  Closing this needs the dtype, not a lowering.
-    "Positive": "answers a boolean List; no bool array dtype (§13 C.1)",
-    "Negative": "answers a boolean List; no bool array dtype",
-    "NonNegative": "answers a boolean List; no bool array dtype",
-    "NonPositive": "answers a boolean List; no bool array dtype",
     "PositiveDefiniteMatrixQ": "answers a Boolean; the matrix is the argument",
     "NegativeDefiniteMatrixQ": "answers a Boolean; the matrix is the argument",
     "HypergeometricPFQ": "parameter LISTS, not machine arrays",
@@ -303,6 +295,12 @@ BASELINE = {
     "MoebiusMu", "EulerPhi", "DivisorSigma", "PowerMod",
     # Ternary/n-ary special function with a machine kernel and no lowering.
     "LerchPhi",
+    # The elementwise sign predicates.  Now that NDT_BOOL exists (§13 gap C.1
+    # closed) they produce a packed bool array, so a compiled ARRAY form is
+    # finally possible — an elementwise compare-to-zero writing CT_BOOL elements
+    # (A_STORE_B).  No such lowering yet: they moved here from EXEMPT because the
+    # dtype that blocked them is no longer missing, only the lowering is.
+    "Positive", "Negative", "NonNegative", "NonPositive",
 }
 
 

@@ -961,11 +961,16 @@ Two things about that are worth keeping:
 The sweep's whole output is a work list; the full table is in the experiment.
 The largest items:
 
-1. **No boolean array dtype** — `Map[# > 0.5 &, v]` builds 10⁶ `True`/`False`
-   symbols and every consumer walks a boxed list: **1813×**. `UnitStep[v - 0.5]`
-   is the fast spelling at 3.6 ms, so the *arithmetic* mask works and the
-   *boolean* one does not. Predicate fusion sidesteps it for seven heads;
-   `Pick`, `Count`, `Position` and boolean algebra still pay.
+1. **No boolean array dtype** — *(closed 2026-08-03, gap C.1.)* `Map[# > 0.5 &,
+   v]` built 10⁶ `True`/`False` symbols and every consumer walked a boxed list:
+   **1813×**. `UnitStep[v - 0.5]` was the fast spelling at 3.6 ms, so the
+   *arithmetic* mask worked and the *boolean* one did not. The `"bool"` NDArray
+   dtype (`NDT_BOOL`, one byte per element) now backs a boolean buffer: the sign
+   predicates emit a packed bool array, `Boole` bridges it back to `int64`, and
+   `AllTrue`/`AnyTrue`/`NoneTrue` scan the bytes. It rides through `Compile[]`
+   too (`CT_BOOL` arrays, `A_LOAD_B`/`A_STORE_B`). Remaining consumers that still
+   materialise (`Pick`, `Position`, general boolean algebra) can now take a bool
+   buffer as they are moved onto it.
 2. **`MatrixPower`** runs an exact path on a machine matrix: 18.1 s vs 865 µs.
 3. **The Bessel and `ProductLog` kernels are registered but not reaching machine
    code** — `BesselK` 44 s per 10⁶. Registration is not speed, which is the
@@ -1229,7 +1234,8 @@ paid for itself.
    body with a `CT_INT` iterator and accept only a `CT_INT` result type. See the
    note under §11 of the HPC plan for why `CT_REAL` out of `CT_INT` in must not
    be accepted.
-3. The register's remaining rows: C.1 (boolean dtype), C.6–C.10, C.12.
+3. The register's remaining rows: C.6–C.10, C.12. (C.1, the boolean dtype,
+   closed 2026-08-03.)
 
 ---
 

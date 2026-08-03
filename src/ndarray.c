@@ -52,6 +52,7 @@ int ndt_components(NDType dt) {
 }
 
 size_t ndt_comp_size(NDType dt) {
+    if (dt == NDT_BOOL) return 1;               /* one uint8_t per element */
     if (dt == NDT_INT64) return sizeof(int64_t);
     return (dt == NDT_FLOAT64 || dt == NDT_COMPLEX64) ? sizeof(double)
                                                       : sizeof(float);
@@ -113,6 +114,8 @@ void ndt_get(const void* buf, size_t k, NDType dt, double* re, double* im) {
              * generic dtype-agnostic consumers stay total. */
             nd_int64_lossy_hit("read");
             *re = (double)((const int64_t*)buf)[k]; *im = 0.0; break;
+        case NDT_BOOL:
+            *re = ((const uint8_t*)buf)[k] ? 1.0 : 0.0; *im = 0.0; break;
         default:
             /* Unreachable for a valid dtype, but makes the switch total so the
              * compiler can prove re and im are always written — otherwise every
@@ -136,6 +139,8 @@ void ndt_set(void* buf, size_t k, NDType dt, double re, double im) {
         case NDT_INT64:
             nd_int64_lossy_hit("write");
             ((int64_t*)buf)[k] = (int64_t)re; break;      /* see ndt_set_i */
+        case NDT_BOOL:
+            ((uint8_t*)buf)[k] = (re != 0.0) ? 1 : 0; break;
     }
 }
 
@@ -145,12 +150,14 @@ void ndt_set(void* buf, size_t k, NDType dt, double re, double im) {
  * the VM's array opcodes — uses these. */
 int64_t ndt_get_i(const void* buf, size_t k, NDType dt) {
     if (dt == NDT_INT64) return ((const int64_t*)buf)[k];
+    if (dt == NDT_BOOL)  return ((const uint8_t*)buf)[k] ? 1 : 0;
     double re, im; ndt_get(buf, k, dt, &re, &im); (void)im;
     return (int64_t)re;
 }
 
 void ndt_set_i(void* buf, size_t k, NDType dt, int64_t v) {
     if (dt == NDT_INT64) { ((int64_t*)buf)[k] = v; return; }
+    if (dt == NDT_BOOL)  { ((uint8_t*)buf)[k] = v ? 1 : 0; return; }
     ndt_set(buf, k, dt, (double)v, 0.0);
 }
 
@@ -165,6 +172,12 @@ bool ndt_from_string(const char* s, NDType* out) {
      * infer this dtype from an all-Integer list anyway (see pack.c), so the
      * option adds no reach the system did not already have. */
     if (strcmp(s, "int64") == 0) { *out = NDT_INT64; return true; }
+    /* One byte per element, materialising as True/False. Both the lowercase
+     * "bool" (which ndt_to_string emits, so DataType[x] round-trips) and the
+     * WL-style "Boolean" are accepted. */
+    if (strcmp(s, "bool") == 0 || strcmp(s, "Boolean") == 0) {
+        *out = NDT_BOOL; return true;
+    }
     return false;
 }
 
@@ -175,13 +188,22 @@ const char* ndt_to_string(NDType dt) {
         case NDT_COMPLEX64: return "complex64";
         case NDT_COMPLEX32: return "complex32";
         case NDT_INT64:     return "int64";
+        case NDT_BOOL:      return "bool";
     }
     return "float64";
 }
 
 NDType ndt_promote(NDType a, NDType b) {
-    /* int64 is the weakest dtype: meeting any float type yields that float type,
-     * and int64 with itself stays exact. */
+    /* bool is weaker than int64 and, like numpy, promotes to int64 the moment it
+     * meets arithmetic. This is defensive only: a bool operand makes an arithmetic
+     * head decline its fast path and delist to the symbolic List (True + True is
+     * unevaluated in Mathematica), so bool rarely reaches here. Folding it to int64
+     * keeps ndt_promote total and matches numpy for the paths that do (e.g. a bool
+     * array meeting a float array through a listable numeric kernel). */
+    if (a == NDT_BOOL) a = NDT_INT64;
+    if (b == NDT_BOOL) b = NDT_INT64;
+    /* int64 is the weakest numeric dtype: meeting any float type yields that float
+     * type, and int64 with itself stays exact. */
     if (a == NDT_INT64 && b == NDT_INT64) return NDT_INT64;
     if (a == NDT_INT64) return b;
     if (b == NDT_INT64) return a;
@@ -198,7 +220,7 @@ NDType ndt_promote(NDType a, NDType b) {
  * (numpy value-based casting: a float32 array meeting a complex value stays at
  * float32 components, i.e. our complex32). */
 NDType ndt_as_complex(NDType dt) {
-    if (dt == NDT_INT64) return NDT_COMPLEX64;
+    if (dt == NDT_INT64 || dt == NDT_BOOL) return NDT_COMPLEX64;
     return (ndt_comp_size(dt) == sizeof(double)) ? NDT_COMPLEX64 : NDT_COMPLEX32;
 }
 
@@ -210,6 +232,8 @@ Expr* ndarray_buffer_element_to_expr(const void* buf, size_t k, NDType dt) {
      * Real or a Complex[Real, Real]. */
     if (dt == NDT_INT64)
         return expr_new_integer(ndt_get_i(buf, k, dt));
+    if (dt == NDT_BOOL)
+        return expr_new_symbol(((const uint8_t*)buf)[k] ? SYM_True : SYM_False);
     double re, im;
     ndt_get(buf, k, dt, &re, &im);
     if (ndt_is_complex(dt)) {
@@ -249,6 +273,14 @@ static bool leaf_to_int64(const Expr* e, int64_t* out) {
 }
 
 static bool leaf_to_component(const Expr* e, NDType dt, double* re, double* im) {
+    if (dt == NDT_BOOL) {
+        /* A bool buffer accepts the two symbols True/False and nothing else, so
+         * `NDArray[{1, 0}, DataType -> "bool"]` declines to the interpreter rather
+         * than silently reinterpreting integers as truth values. */
+        if (e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_True)  { *re = 1.0; *im = 0.0; return true; }
+        if (e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_False) { *re = 0.0; *im = 0.0; return true; }
+        return false;
+    }
     if (dt == NDT_INT64) {
         int64_t v;
         if (!leaf_to_int64(e, &v)) return false;
@@ -335,19 +367,12 @@ Expr* ndarray_from_nested_list(const Expr* list, NDType dtype) {
 static Expr* rebuild_level(const int64_t* dims, int rank, int level,
                             const void* data, NDType dt, size_t* idx) {
     if (level == rank) {
-        size_t k = (*idx)++;
-        /* An int64 buffer rebuilds as exact Integers, and through the EXACT
-         * accessor: ndt_get would route the value through a double and lose
-         * anything above 2^53.  This is the path a Compile[] integer-array
-         * result comes back on, so it is where the element HEAD is decided. */
-        if (dt == NDT_INT64) return expr_new_integer(ndt_get_i(data, k, dt));
-        double re, im;
-        ndt_get(data, k, dt, &re, &im);
-        if (ndt_is_complex(dt)) {
-            Expr* cargs[2] = { expr_new_real(re), expr_new_real(im) };
-            return expr_new_function(expr_new_symbol(SYM_Complex), cargs, 2);
-        }
-        return expr_new_real(re);
+        /* The element HEAD is decided in exactly one place so no rebuild path can
+         * drift: an int64 buffer rebuilds as exact Integers (through the EXACT
+         * accessor, since ndt_get loses anything above 2^53), a bool buffer as
+         * True/False, everything else as a Real or Complex[re, im]. This is the
+         * path a Compile[] array result comes back on. */
+        return ndarray_buffer_element_to_expr(data, (*idx)++, dt);
     }
     int64_t len = dims[level];
     Expr** args = malloc(sizeof(Expr*) * (size_t)len);
@@ -748,6 +773,7 @@ Expr* ndarray_dot2(const Expr* a, const Expr* b, bool* shape_error) {
     int64_t Sb = (rankB == 2) ? dimsB[1] : 1;
 
     NDType dta = a->data.ndarray.dtype, dtb = b->data.ndarray.dtype;
+    if (dta == NDT_BOOL || dtb == NDT_BOOL) return NULL;  /* not numeric; see ndarray_map_unary */
     NDType dtc = ndt_promote(dta, dtb);
     const void* pa = a->data.ndarray.data;
     const void* pb = b->data.ndarray.data;
@@ -930,6 +956,14 @@ static Expr* nd_broadcast_to(const Expr* small, const int64_t* dims, int rank) {
 
 Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus) {
     if (n == 0) return NULL;
+
+    /* A bool array is not a numeric operand: {True, False} + {True, True} threads
+     * to a List of unevaluated Plus[...] in Mathematica, it does not add as 1/0.
+     * Decline so the arithmetic head's ndarray_int64_delist_retry (which also
+     * covers bool) delists the operands and the List path reproduces that. */
+    for (size_t i = 0; i < n; i++)
+        if (args[i]->type == EXPR_NDARRAY &&
+            args[i]->data.ndarray.dtype == NDT_BOOL) return NULL;
 
     /* A plain numeric List meeting a buffer: pack it first.
      *
@@ -1216,6 +1250,7 @@ static bool nd_pow_chunk(void* c, size_t lo, size_t hi) {
 Expr* ndarray_elementwise_power(const Expr* a, const Expr* b) {
     if (!is_ndarray(a) || !is_ndarray(b) || !same_shape(a, b)) return NULL;
     NDType dta = a->data.ndarray.dtype, dtb = b->data.ndarray.dtype;
+    if (dta == NDT_BOOL || dtb == NDT_BOOL) return NULL;  /* not numeric; see ndarray_map_unary */
     size_t sz = ndarray_size(a);
 
     if (dta == NDT_INT64 || dtb == NDT_INT64) {
@@ -1256,6 +1291,7 @@ Expr* ndarray_elementwise_power(const Expr* a, const Expr* b) {
 Expr* ndarray_base_scalar_power(double br, double bi, const Expr* exp_arr) {
     if (!is_ndarray(exp_arr)) return NULL;
     NDType dte = exp_arr->data.ndarray.dtype;
+    if (dte == NDT_BOOL) return NULL;      /* not numeric; see ndarray_map_unary */
     size_t sz = ndarray_size(exp_arr);
 
     /* 2^Range[300] is a list of exact Integers, but the base arrives here already
@@ -1287,6 +1323,7 @@ Expr* ndarray_base_scalar_power(double br, double bi, const Expr* exp_arr) {
 Expr* ndarray_scalar_power(const Expr* a, double er, double ei) {
     if (!is_ndarray(a)) return NULL;
     NDType dta = a->data.ndarray.dtype;
+    if (dta == NDT_BOOL) return NULL;      /* not numeric; see ndarray_map_unary */
     size_t sz = ndarray_size(a);
 
     if (dta == NDT_INT64) {
@@ -1594,6 +1631,13 @@ static bool ndu_narrow_chunk(void* c, size_t lo, size_t hi) {
 Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
     if (!is_ndarray(a) || !k) return NULL;
     NDType dta = a->data.ndarray.dtype;
+    /* A bool array is not a numeric one: Sin[True], Floor[False] and the rest are
+     * left unevaluated by Mathematica, not folded to a number. Decline the whole
+     * map (including the to_int narrowing arm below) so the caller degrades to
+     * ndarray_delist_and_reeval, whose answer is exactly Sin[{True, False}] --
+     * i.e. the symbolic List. Every numeric engine in this file takes the same
+     * stance; see the NDT_BOOL guards in ndarray_elementwise / _power / _dot. */
+    if (dta == NDT_BOOL) return NULL;
     const void* in = a->data.ndarray.data;
     size_t sz = ndarray_size(a);
     int rank = a->data.ndarray.rank;
@@ -1749,6 +1793,7 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
     if (!scalar_value(scal, &sre, &sim, &s_cplx)) return NULL;
 
     NDType dta = arr->data.ndarray.dtype;
+    if (dta == NDT_BOOL) return NULL;      /* not numeric; see ndarray_map_unary */
     const void* in = arr->data.ndarray.data;
     size_t sz = ndarray_size(arr);
     int rank = arr->data.ndarray.rank;
@@ -1879,6 +1924,7 @@ Expr* ndarray_map_binary2(const Expr* a0, const Expr* a1, const NDBinaryKernel* 
         if (a1->data.ndarray.dims[d] != dims[d]) return NULL;
 
     NDType dt0 = a0->data.ndarray.dtype, dt1 = a1->data.ndarray.dtype;
+    if (dt0 == NDT_BOOL || dt1 == NDT_BOOL) return NULL;  /* not numeric; see ndarray_map_unary */
     const void* in0 = a0->data.ndarray.data;
     const void* in1 = a1->data.ndarray.data;
     size_t sz = ndarray_size(a0);
@@ -1967,21 +2013,25 @@ Expr* ndarray_delist_and_reeval(const Expr* call) {
     return eval_and_free(rebuilt);
 }
 
-/* An exact-integer operand whose true answer no machine buffer can hold: 5/2 *
+/* An operand whose true answer no machine float buffer can hold: 5/2 *
  * Range[300] is a list of Rationals, Range[300]^(1/2) a list of radicals,
- * Range[300] + I a list of exact Complex. The elementwise fast paths decline
- * those by returning NULL -- and the arithmetic heads' usual degrade for a NULL
- * ("warn that an array met a symbolic operand, leave the call unevaluated") is
- * exactly wrong here, because the List path computes the answer perfectly well.
+ * Range[300] + I a list of exact Complex, and {True, False} + {True, True} a
+ * list of unevaluated Plus[...]. The elementwise fast paths decline those by
+ * returning NULL -- and the arithmetic heads' usual degrade for a NULL ("warn
+ * that an array met a symbolic operand, leave the call unevaluated") is exactly
+ * wrong here, because the List path computes the answer perfectly well.
  *
- * Returns the re-evaluated call when some operand is an integer buffer, else NULL
- * so the caller keeps its existing degrade. Borrows `call`. */
+ * Returns the re-evaluated call when some operand is an int64 OR bool buffer
+ * (neither is a machine float, so both must go to the List path), else NULL so
+ * the caller keeps its existing degrade. Borrows `call`. */
 Expr* ndarray_int64_delist_retry(const Expr* call) {
     if (!call || call->type != EXPR_FUNCTION) return NULL;
     bool any = false;
     for (size_t i = 0; i < call->data.function.arg_count; i++) {
         const Expr* a = call->data.function.args[i];
-        if (a && a->type == EXPR_NDARRAY && a->data.ndarray.dtype == NDT_INT64) {
+        if (a && a->type == EXPR_NDARRAY &&
+            (a->data.ndarray.dtype == NDT_INT64 ||
+             a->data.ndarray.dtype == NDT_BOOL)) {
             any = true;
             break;
         }
@@ -2200,7 +2250,7 @@ Expr* builtin_ndarray(Expr* res) {
     if (bad) {
         ndarray_warn_once("NDArray::dtype: Unknown DataType; expected one of "
                           "\"float64\", \"float32\", \"complex64\", "
-                          "\"complex32\".\n");
+                          "\"complex32\", \"bool\".\n");
         return NULL;
     }
     if (argc != 1) return NULL;
@@ -2255,7 +2305,8 @@ void ndarray_init(void) {
         "\tauto-degrade to an ordinary nested List.\n"
         "NDArray[nested_list, DataType -> \"float32\"]\n"
         "\tPacks at the given element type: \"float64\" (default), \"float32\",\n"
-        "\t\"complex64\", or \"complex32\". DataType[a] gives an array's type.\n"
+        "\t\"complex64\", \"complex32\", or \"bool\" (a list of True/False;\n"
+        "\t\"Boolean\" is accepted too). DataType[a] gives an array's type.\n"
         "\tA ragged (non-rectangular) list is rejected with an\n"
         "\tNDArray::ragged warning; an empty or non-machine-precision\n"
         "\tlist stays unevaluated.");

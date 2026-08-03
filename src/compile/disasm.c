@@ -349,7 +349,8 @@ static CompileType const_type(const CompiledProgram* p, size_t at, bool* dead) {
         bool idx = ((k == K_LOOP || k == K_APAR) && c->a == d)
                 || (k == K_AIDX && c->a == d)
                 || (k == K_ALOAD && c->b == d)
-                || ((c->op == OP_A_STORE_R || c->op == OP_A_STORE_C) && c->a == d)
+                || ((c->op == OP_A_STORE_R || c->op == OP_A_STORE_C
+                     || c->op == OP_A_STORE_B) && c->a == d)
                 || ((c->op == OP_VSETLEN || c->op == OP_VLOAD_R || c->op == OP_VLOAD_C
                      || c->op == OP_VSTORE_R || c->op == OP_VSTORE_C)
                     && (c->a == d || c->b == d));
@@ -708,7 +709,7 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
                     else db_catf(b, "%s = %s[%s, %s]", rd, fn ? fn : "kernel", ra, rb);
                     return;
                 }
-                case OP_A_STORE_R: case OP_A_STORE_C:
+                case OP_A_STORE_R: case OP_A_STORE_C: case OP_A_STORE_B:
                     db_catf(b, "%s[%s] = %s", rd, ra, rb); return;
                 case OP_VSETLEN:
                     db_catf(b, "vlen = min(%s - %s, %d)", rb, ra, VBLOCK); return;

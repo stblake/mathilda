@@ -126,13 +126,22 @@ static CfArgKind cf_kind_join(CfArgKind a, CfArgKind b) {
  * past 2^53 has no exact double, and narrowing a float to int64 is a value
  * change, not a representation change. Both cases leave the interpreter to give
  * the right answer. */
+/* Buffer dtype for a compiled array parameter's element type — the boundary twin
+ * of compile.c's ct_elem_ndt.  A program owns only these four; float32 never
+ * appears (see nd_own_copy). */
+static NDType cf_arg_ndt(CompileType t) {
+    return CT_ELEM(t) == CT_COMPLEX ? NDT_COMPLEX64
+         : CT_ELEM(t) == CT_INT     ? NDT_INT64
+         : CT_ELEM(t) == CT_BOOL    ? NDT_BOOL
+                                    : NDT_FLOAT64;
+}
+
 static Expr* cf_cast_array(const Expr* e, CompileType t) {
-    NDType want = CT_ELEM(t) == CT_COMPLEX ? NDT_COMPLEX64
-                : CT_ELEM(t) == CT_INT     ? NDT_INT64
-                                           : NDT_FLOAT64;
+    NDType want = cf_arg_ndt(t);
     NDType have = e->data.ndarray.dtype;
     if (have == want) return NULL;                  /* caller borrows as-is */
     if (want == NDT_INT64) return NULL;             /* would narrow: decline */
+    if (want == NDT_BOOL) return NULL;              /* a number is not a truth value: decline */
 
     size_t n = ndarray_size(e);
     if (have == NDT_INT64) {
@@ -198,9 +207,7 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out,
             }
             /* No cast wanted, or one that would not be exact. Borrow when the
              * dtypes already agree; otherwise decline so the interpreter runs. */
-            NDType want = CT_ELEM(t) == CT_COMPLEX ? NDT_COMPLEX64
-                        : CT_ELEM(t) == CT_INT     ? NDT_INT64
-                                                   : NDT_FLOAT64;
+            NDType want = cf_arg_ndt(t);
             if (e->data.ndarray.dtype != want) return false;
             out->v.a = (Expr*)e;
             return true;
@@ -208,13 +215,11 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out,
         if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
             && e->data.function.head->data.symbol.name == SYM_List) {
             /* The buffer dtype follows the DECLARED element type, so a
-             * `{v, _Integer, r}` parameter packs into an int64 buffer.  Packing
-             * a List of Integers as float64 and letting the program call it
-             * integral would lose everything above 2^53 before a single
-             * instruction ran. */
-            NDType want = CT_ELEM(t) == CT_COMPLEX ? NDT_COMPLEX64
-                        : CT_ELEM(t) == CT_INT     ? NDT_INT64
-                                                   : NDT_FLOAT64;
+             * `{v, _Integer, r}` parameter packs into an int64 buffer and a
+             * `{v, _Boolean, r}` into a bool one.  Packing a List of Integers as
+             * float64 and letting the program call it integral would lose
+             * everything above 2^53 before a single instruction ran. */
+            NDType want = cf_arg_ndt(t);
             Expr* nd = ndarray_from_nested_list(e, want);
             if (!nd) return false;                       /* ragged or symbolic */
             if (nd->data.ndarray.rank != CT_RANK(t)) { expr_free(nd); return false; }
@@ -254,6 +259,10 @@ static bool typesym_to_ct(const char* nm, CompileType* out) {
     if (nm == SYM_Real)    { *out = CT_REAL;    return true; }
     if (nm == SYM_Integer) { *out = CT_INT;     return true; }
     if (nm == SYM_Complex) { *out = CT_COMPLEX; return true; }
+    /* `Boolean` names the scalar bool the compiler already computes (comparisons,
+     * And/Or/Not); accepting it here is what finally lets a caller DECLARE one, as
+     * a scalar `_Boolean` arg or a `{v, _Boolean, r}` bool array. */
+    if (nm == SYM_Boolean) { *out = CT_BOOL;    return true; }
     return false;
 }
 
@@ -300,9 +309,10 @@ static bool cf_parse_argspec(const Expr* argspec,
                    && el->data.function.args[0]->type == EXPR_SYMBOL
                    && parse_typespec(el->data.function.args[1], &ty)) {
             /* `{v, _Real, r}` — a rank-r machine array, the same third-element
-             * rank spelling Compile[] uses in the Wolfram Language.  All three
+             * rank spelling Compile[] uses in the Wolfram Language.  All four
              * element types are packable: Real and Complex into float64 and
-             * complex64 buffers, Integer into an int64 one (NDT_INT64). */
+             * complex64 buffers, Integer into an int64 one (NDT_INT64), Boolean
+             * into a one-byte NDT_BOOL one. */
             if (el->data.function.arg_count == 3) {
                 const Expr* rk = el->data.function.args[2];
                 if (rk->type != EXPR_INTEGER) { free(names); free(types); return false; }
@@ -310,7 +320,8 @@ static bool cf_parse_argspec(const Expr* argspec,
                 if (r == 0) {
                     /* rank 0 is just the scalar */
                 } else if (r < 1 || r > CT_MAX_RANK
-                           || (ty != CT_REAL && ty != CT_COMPLEX && ty != CT_INT)) {
+                           || (ty != CT_REAL && ty != CT_COMPLEX && ty != CT_INT
+                               && ty != CT_BOOL)) {
                     free(names); free(types); return false;
                 } else {
                     ty = CT_ARRAY(ty, (int)r);
