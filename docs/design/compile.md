@@ -289,6 +289,68 @@ buffer as the operand of array opcodes — no copy, no `Expr`. A `List` of machi
 numbers is packed to an `NDArray` on entry and unpacked (or returned as an
 `NDArray`/`List`) on exit, per the declared result type.
 
+### 8a.1 Delegation, and the two tables that drive it
+
+Most array heads are not re-implemented in the VM. They are **delegated** to the
+interpreter's own NDArray entry point, which takes the whole call and promises
+the List call's answer — so the compiled subset of these heads *is* the
+interpreted one by construction, and the rounding is identical too. Two tables
+in `src/compile/compile.c`:
+
+| table | shape | opcode | heads |
+|---|---|---|---|
+| `ND_FNS` | array → array, plus trailing **integer** arguments | `A_NDFN` | `Reverse` `Sort` `Accumulate` `Flatten` `Transpose` `Take` `Drop` `Differences` `Ratios` `Most` `Rest` `Clip` `RotateLeft` `RotateRight` `MovingAverage` `MovingMedian` `TakeLargest` `TakeSmallest` |
+| `ND_REDS` | array → **scalar** | `V_NDRED` | `Mean` `Median` `Variance` `StandardDeviation` `RootMeanSquare` `Max` `Min` |
+
+`Total` keeps its own `V_TOTAL` because an int64 sum must stay exact past
+2^53; everything in `ND_REDS` is real-valued, so it needs no such split.
+`ND_REDS` entries are **real element type only** — `Mean[{1, 2}]` is `3/2` and
+no machine slot holds a Rational — except `Max` and `Min`, which *select* an
+element and so carry `int_ok`.
+
+Adding a head is one table row when its entry point already has the shape. The
+win is not the operation (it was already a buffer walk) but that a body
+*containing* one no longer bails wholesale.
+
+### 8a.2 The declared element type must match the kernel's
+
+An array opcode's declared element type is what every **downstream** opcode
+reads the destination slot as. If a kernel writes a buffer of a different
+dtype, the consumer does not lose precision — it reinterprets the bits.
+
+The narrowing kernels (`Floor`, `Ceiling`, `Round`, `Sign`, `IntegerPart`,
+`UnitStep`: real in, exact `Integer` out) are where this bit. They declared
+Real and wrote `NDT_INT64`, so `Total[Floor[v]]` returned `2.96439*10^-323` —
+the int64 6 read as a double. `nd_unary_elem` and `nd_binary_elem` now mirror
+`ndarray_map_unary` / `ndarray_map_binary` condition for condition; **the pairs
+must not drift.**
+
+A missing complex arm on a kernel means three different things and the guards
+have to tell them apart:
+
+| `cplx` | `real` | `to_int` | meaning |
+|---|---|---|---|
+| — | — | — | degrade sentinel: no machine kernel, bail |
+| — | — | `to_int_r` | narrowing-only (`UnitStep`, `IntegerPart`): array yes, scalar no |
+| — | — | `to_int_i` | integer-only (`MoebiusMu`, `EulerPhi`, `GCD`): integer array yes |
+| yes | · | · | ordinary kernel |
+
+Keying a guard on `to_int_r` rather than `to_int` reads the integer-only
+kernels as sentinels, which is exactly how `MoebiusMu[v]` stayed uncompilable
+after the narrowing case was fixed.
+
+### 8a.3 The coverage audit
+
+`make check-compile-coverage` (`tools/compile_coverage.py`) joins the kernel
+registry and `pack.c`'s `AWARE` list against `CompileDiagnostics` over every
+typed argument shape. It is a work queue, not a report: the subset is a cliff,
+so a head that quietly falls out of it costs every other head in its body. It
+ratchets against a checked-in `BASELINE`, so a NEW gap fails the build while
+the standing queue is reported.
+
+That queue is written up head by head, grouped by the mechanism that would
+close each group, in [`COMPILE_MISSING.md`](../../COMPILE_MISSING.md).
+
 ---
 
 ## 9. `CompiledFunction` object & calling convention

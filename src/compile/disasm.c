@@ -689,6 +689,11 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
                 case OP_A_SHAPECHK:db_catf(b, "assert dims(%s) == dims(%s)", ra, rb); return;
                 case OP_V_LEN:     db_catf(b, "%s = Length[%s]", rd, ra); return;
                 case OP_V_TOTAL:   db_catf(b, "%s = Total[%s]", rd, ra); return;
+                case OP_V_NDRED: {
+                    const char* hn = nd_red_head_name(c->imm.p);
+                    db_catf(b, "%s = %s[%s]", rd, hn ? hn : "reduce", ra);
+                    return;
+                }
                 case OP_V_EW:      db_catf(b, "%s = %s %s %s", rd, ra,
                                            c->imm.i ? "+" : "*", rb); return;
                 case OP_V_POW:     db_catf(b, "%s = %s^%s", rd, ra, rb); return;
@@ -729,6 +734,16 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
                 db_cat(b, rd);
                 render_partspec(b, p, (const PartSpec*)c->imm.p);
                 db_catf(b, " = %s", rb);
+                return;
+            }
+            if (c->op == OP_A_NDFN) {
+                const char* hn = nd_fn_head_name(c->imm.p);
+                db_catf(b, "%s = %s[%s", rd, hn ? hn : "ndfn", rb);
+                for (unsigned j = 0; j < c->flags; j++) {
+                    char r[24]; reg_name(p, c->a + j, r, sizeof r);
+                    db_catf(b, ", %s", r);
+                }
+                db_cat(b, "]");
                 return;
             }
             db_cat(b, nm);

@@ -852,6 +852,64 @@ static bool unary_math(const char* h, uint16_t* op_r, uint16_t* op_c) {
  * fails the call at runtime so the caller falls back to the interpreter —
  * the array-level form of the scalar "non-finite where the interpreter would be
  * complex" contract. */
+/* The element type `ndarray_map_unary` will ACTUALLY produce for kernel `k`
+ * over an operand whose element type is `ea`, or CT_ERR if it will decline.
+ *
+ * This has to be exact, not conservative.  The declared type is what every
+ * downstream opcode reads the destination slot as, so a kernel that writes an
+ * NDT_INT64 buffer under a CT_REAL declaration does not merely lose precision
+ * — the consumer reinterprets the integer bits as a double.  That was live:
+ *
+ *     Compile[{{v, _Real, 1}}, Total[Floor[v]]][{1.5, 2.5, 3.5}]
+ *
+ * answered 2.96439*10^-323 (the int64 6, read as an IEEE double) where the
+ * interpreter answers 6, and `Floor[v] + 1` came back as Reals where the
+ * interpreter gives exact Integers.  Standalone `Floor[v]` was right, because
+ * the caller re-reads the result buffer's real dtype — only a CONSUMER inside
+ * the same program saw the lie.  Found by tools/compile_coverage.py on
+ * 2026-08-02, which asked which heads compile over an array and made the
+ * narrowing family worth looking at.
+ *
+ * The condition mirrors ndarray_map_unary (src/ndarray.c) line for line; the
+ * two must not drift. */
+static CompileType nd_unary_elem(const NDUnaryKernel* k, CompileType ea) {
+    if (!k) return CT_ERR;
+    if (k->to_int && ea != CT_COMPLEX
+        && (ea == CT_INT ? k->to_int_i != NULL : k->to_int_r != NULL))
+        return CT_INT;
+    /* Neither arm is the degrade sentinel: no machine kernel at all. */
+    if (!k->cplx && !k->real) return CT_ERR;
+    if (ea == CT_COMPLEX && !k->cplx) return CT_ERR;
+    return k->to_real ? CT_REAL : ea;
+}
+
+/* The binary twin of nd_unary_elem: the element type ndarray_map_binary will
+ * produce for kernel `k` over an array of element type `ea` broadcast against a
+ * scalar of type `es`, or CT_ERR if it will decline.
+ *
+ * `es == CT_INT` is exactly the compiler's way of knowing what that function
+ * calls `scal->type == EXPR_INTEGER` -- an EXACT integer, which is what decides
+ * between the exact int64 arm and the double one.
+ *
+ * Without this the array form of every to_int-only binary kernel was refused
+ * outright, because `!k->cplx` reads as the degrade sentinel and Mod, Quotient,
+ * GCD, LCM, IntegerLength and IntegerExponent have no complex arm at all.  Each
+ * has both a working interpreter buffer path AND a compiled SCALAR opcode, so
+ * `Mod[x, 3]` compiled and `Mod[v, 3]` did not -- and being outside the subset
+ * is a cliff, so the array spelling took its whole body to the interpreter.
+ * Mirrors ndarray_map_binary (src/ndarray.c); the two must not drift. */
+static CompileType nd_binary_elem(const NDBinaryKernel* k, CompileType ea,
+                                  CompileType es) {
+    if (!k) return CT_ERR;
+    if (k->to_int && ea != CT_COMPLEX && es != CT_COMPLEX) {
+        bool use_i = (ea == CT_INT) && (es == CT_INT) && k->to_int_i != NULL;
+        bool use_r = !use_i && k->to_int_r != NULL && ea != CT_INT;
+        if (use_i || use_r) return CT_INT;
+    }
+    if (!k->cplx) return CT_ERR;                  /* sentinel: no machine kernel */
+    return k->real_closed ? ea : CT_COMPLEX;
+}
+
 static bool emit_arr_unary(Ctx* c, const char* head, Val a, Val* out) {
     CompileType ea = CT_ELEM(a.type);
     int rank = CT_RANK(a.type);
@@ -863,9 +921,8 @@ static bool emit_arr_unary(Ctx* c, const char* head, Val a, Val* out) {
     }
     SymbolDef* d = symtab_lookup(head);
     const NDUnaryKernel* k = d ? (const NDUnaryKernel*)d->ndarray_unary_kernel : NULL;
-    if (!k || (!k->cplx && !k->real)) { c->ok = false; return false; }   /* degrade sentinel */
-    if (ea == CT_COMPLEX && !k->cplx) { c->ok = false; return false; }
-    CompileType er = k->to_real ? CT_REAL : ea;
+    CompileType er = nd_unary_elem(k, ea);
+    if ((int)er < 0) { c->ok = false; return false; }
     Slot z; z.p = k;
     *out = arr_op(c, OP_V_KERN, a, arr_noop_val(), CT_ARRAY(er, rank), z);
     return c->ok;
@@ -1045,19 +1102,115 @@ typedef struct {
     Expr* (*fn)(Expr*);
     int nextra;        /* trailing INTEGER arguments, passed through as written */
     int rank_rule;
+    bool int_result;   /* result is an int64 array regardless of the operand's
+                        * element type (Ordering: a permutation is integer) */
 } NdFnSpec;
+
+/* ndstruct_rotate / _head_tail / _take_extreme take a second C-level argument
+ * that selects the direction, so each spelling needs its own one-line adapter
+ * to fit the table's `Expr* (*)(Expr*)` shape. */
+static Expr* nd_rotate_left(Expr* r)  { return ndstruct_rotate(r, true); }
+static Expr* nd_rotate_right(Expr* r) { return ndstruct_rotate(r, false); }
+static Expr* nd_most(Expr* r)         { return ndstruct_head_tail(r, ND_MOST); }
+static Expr* nd_rest(Expr* r)         { return ndstruct_head_tail(r, ND_REST); }
+static Expr* nd_take_largest(Expr* r) { return ndstruct_take_extreme(r, true); }
+static Expr* nd_take_smallest(Expr* r){ return ndstruct_take_extreme(r, false); }
 
 static const NdFnSpec ND_FNS[] = {
     { "Reverse",    ndstruct_reverse,   0, 0 },
     { "Sort",       ndstruct_sort,      0, 0 },   /* 1-arg only: a comparator is a
                                                    * function value the ND path
                                                    * cannot call back into */
+    { "Ordering",   ndstruct_ordering,  0, 0, true },  /* argsort -> int64 positions;
+                                                   * int_result forces the CT_INT
+                                                   * element type (a permutation is
+                                                   * integer for any input dtype) */
     { "Accumulate", ndred_accumulate,   0, 0 },
     { "Flatten",    ndstruct_flatten,   0, 1 },
     { "Transpose",  ndstruct_transpose, 0, 2 },
     { "Take",       ndstruct_take,      1, 0 },
     { "Drop",       ndstruct_drop,      1, 0 },
+    /* Added 2026-08-02 by the sixth sweep (tools/compile_coverage.py).  Each
+     * already had a buffer path in the interpreter and no lowering here, which
+     * is the contradiction that audit exists to find: a head fast at the REPL
+     * and slow inside the Compile[] meant to speed it up — and, because the
+     * subset is a cliff, dragging every other head in the body down with it.
+     *
+     * All seven answer with an array of the SAME rank and element type, so
+     * rank_rule 0 covers them.  Where a head is exact-only over integers
+     * (Ratios of an integer vector is a list of Rationals) its ND entry point
+     * already declines by handing back a nested List, which the VM reads as
+     * "not an NDArray" and aborts to the interpreter — the same faithful
+     * degrade the existing seven rely on. */
+    { "Differences",   ndstruct_differences, 0, 0 },
+    { "Ratios",        ndstruct_ratios,      0, 0 },
+    { "Most",          nd_most,              0, 0 },
+    { "Rest",          nd_rest,              0, 0 },
+    { "Clip",          ndstruct_clip,        0, 0 },
+    { "RotateLeft",    nd_rotate_left,       1, 0 },
+    { "RotateRight",   nd_rotate_right,      1, 0 },
+    { "MovingAverage", ndred_moving_average, 1, 0 },
+    { "MovingMedian",  ndred_moving_median,  1, 0 },
+    { "TakeLargest",   nd_take_largest,      1, 0 },
+    { "TakeSmallest",  nd_take_smallest,     1, 0 },
 };
+
+/* ---- delegated array -> scalar reductions ---------------------------------
+ *
+ * The counterpart of ND_FNS for the heads that collapse an array to one
+ * number.  Same contract and the same reason: each entry point takes the whole
+ * call and promises the List call's answer, so the compiled subset is the
+ * interpreted one and the ROUNDING is identical too — a compiled Mean that
+ * summed in its own order would disagree with the interpreter in the last bits
+ * for no benefit.
+ *
+ * Real element type only.  Mean, Variance, StandardDeviation, RootMeanSquare
+ * and Median of an exact-integer vector are Rationals (Mean[{1, 2}] is 3/2,
+ * Variance[Range[10]] is 55/6) and no machine slot holds one; the interpreter
+ * is right to answer exactly, so the compiler declines rather than silently
+ * rounding.  Max and Min are the exceptions — they SELECT an element, so an
+ * integer vector gives an Integer — and carry int_ok to say so. */
+typedef struct {
+    const char* head;
+    Expr* (*fn)(Expr*);
+    bool  int_ok;      /* exact over an int64 array, result CT_INT */
+} NdRedSpec;
+
+static const NdRedSpec ND_REDS[] = {
+    { "Mean",              ndred_mean,     false },
+    { "Median",            ndred_median,   false },
+    { "Variance",          ndred_variance, false },
+    { "StandardDeviation", ndred_std,      false },
+    { "RootMeanSquare",    ndred_rms,      false },
+    { "Max",               ndred_max,      true  },
+    { "Min",               ndred_min,      true  },
+};
+
+/* Name accessors for the disassembler; see compile_internal.h. */
+const char* nd_fn_head_name(const void* imm) {
+    return imm ? ((const NdFnSpec*)imm)->head : NULL;
+}
+const char* nd_red_head_name(const void* imm) {
+    return imm ? ((const NdRedSpec*)imm)->head : NULL;
+}
+
+static const NdRedSpec* nd_red_lookup(const char* h, size_t na) {
+    if (na != 1) return NULL;   /* Max[x, y] is the scalar opcode, not this */
+    for (size_t i = 0; i < sizeof ND_REDS / sizeof ND_REDS[0]; i++)
+        if (strcmp(h, ND_REDS[i].head) == 0) return &ND_REDS[i];
+    return NULL;
+}
+
+/* Scalar result type of a delegated reduction over an operand of type `ta`,
+ * or CT_ERR.  Rank 1 only: at rank 2 the interpreter's Mean is a VECTOR of
+ * column means, not a number, and the two must not disagree. */
+static CompileType nd_red_result(const NdRedSpec* s, CompileType ta) {
+    if (!CT_IS_ARRAY(ta) || CT_RANK(ta) != 1) return CT_ERR;
+    CompileType el = CT_ELEM(ta);
+    if (el == CT_REAL) return CT_REAL;
+    if (el == CT_INT)  return s->int_ok ? CT_INT : CT_ERR;
+    return CT_ERR;                       /* complex: no ND reduction promises it */
+}
 
 static const NdFnSpec* nd_fn_lookup(const char* h, size_t na) {
     for (size_t i = 0; i < sizeof ND_FNS / sizeof ND_FNS[0]; i++)
@@ -1066,13 +1219,17 @@ static const NdFnSpec* nd_fn_lookup(const char* h, size_t na) {
     return NULL;
 }
 
-/* Result type of a delegated head over an operand of type `ta`, or CT_ERR. */
+/* Result type of a delegated head over an operand of type `ta`, or CT_ERR.
+ * `int_result` forces the element type to CT_INT (Ordering returns an int64
+ * permutation whatever the input dtype); otherwise the operand's element type is
+ * preserved, so for every existing head this is identical to returning `ta`. */
 static CompileType nd_fn_result(const NdFnSpec* s, CompileType ta) {
     if (!CT_IS_ARRAY(ta)) return CT_ERR;
     int rank = CT_RANK(ta);
-    if (s->rank_rule == 1) return CT_ARRAY(CT_ELEM(ta), 1);
-    if (s->rank_rule == 2) return rank == 2 ? ta : CT_ERR;
-    return ta;
+    CompileType elem = s->int_result ? CT_INT : CT_ELEM(ta);
+    if (s->rank_rule == 1) return CT_ARRAY(elem, 1);
+    if (s->rank_rule == 2) return rank == 2 ? CT_ARRAY(elem, 2) : CT_ERR;
+    return CT_ARRAY(elem, rank);
 }
 
 /* ---- counted-loop iterator specs -------------------------------------------
@@ -1171,6 +1328,22 @@ static int  nest_fixed_type(Ctx* c, const FnSpec* s, CompileType t0);
 static int  accum_fixed_type(Ctx* c, const FnSpec* s, CompileType t0,
                              const CompileType* rest, int nrest);
 static CompileType vec_elem_type(Ctx* c, const Expr* e);
+
+/* Inference twin of emit_arr_unary: the array type a registered unary kernel
+ * will produce over an operand of array type `ta`.  Both go through
+ * nd_unary_elem, so the two cannot disagree about the element type -- which
+ * they did, and which is what made Total[Floor[v]] answer with reinterpreted
+ * integer bits. */
+static bool infer_arr_unary(Ctx* c, const char* head, CompileType ta,
+                            CompileType* out) {
+    (void)c;
+    SymbolDef* d = symtab_lookup(head);
+    const NDUnaryKernel* k = d ? (const NDUnaryKernel*)d->ndarray_unary_kernel : NULL;
+    CompileType er = nd_unary_elem(k, CT_ELEM(ta));
+    if ((int)er < 0) return false;
+    *out = CT_ARRAY(er, CT_RANK(ta));
+    return true;
+}
 static bool fp_opts(Expr* const* A, size_t na, size_t start,
                     const Expr** max_out, const Expr** same_out);
 
@@ -1298,6 +1471,22 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if (strcmp(h, "Divide") == 0 && na == 2)   { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; if (ta < CT_REAL) ta = CT_REAL; *out = ta; return true; }
     if ((strcmp(h, "Mod") == 0 || strcmp(h, "Quotient") == 0) && na == 2) {
         IT(0, ta); IT(1, tb);
+        /* An array operand is the registered binary kernel's business.  Both
+         * heads have exact int64 arms and no complex one, so this branch used
+         * to be the end of the road for them: Mod[x, 3] compiled and
+         * Mod[v, 3] did not, and being outside the subset costs the whole
+         * body, not just the Mod. */
+        if (CT_IS_ARRAY(ta) || CT_IS_ARRAY(tb)) {
+            if (CT_IS_ARRAY(ta) && CT_IS_ARRAY(tb)) return false;
+            SymbolDef* dk = symtab_lookup(h);
+            const NDBinaryKernel* kb = dk ? (const NDBinaryKernel*)dk->ndarray_binary_kernel : NULL;
+            CompileType ea = CT_IS_ARRAY(ta) ? CT_ELEM(ta) : CT_ELEM(tb);
+            CompileType es = CT_IS_ARRAY(ta) ? tb : ta;
+            CompileType er = nd_binary_elem(kb, ea, es);
+            if ((int)er < 0) return false;
+            *out = CT_ARRAY(er, CT_RANK(CT_IS_ARRAY(ta) ? ta : tb));
+            return true;
+        }
         if (ta == CT_INT && tb == CT_INT) { *out = CT_INT; return true; }
         if (ta <= CT_REAL && tb <= CT_REAL && ta != CT_BOOL && tb != CT_BOOL) {
             /* Real Mod/Quotient: the interpreter evaluates both (Mod[2.5,1.2] is
@@ -1374,13 +1563,20 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
      * complex is z/|z|, which is genuinely complex. */
     if (strcmp(h, "Sign") == 0 && na == 1) {
         IT(0, ta);
-        if (CT_IS_ARRAY(ta)) { *out = ta; return true; }
+        if (CT_IS_ARRAY(ta)) return infer_arr_unary(c, h, ta, out);
         *out = (ta == CT_COMPLEX) ? CT_COMPLEX : CT_INT;
         return true;
     }
     if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 || strcmp(h, "Round") == 0
          || strcmp(h, "IntegerPart") == 0) && na == 1) {
-        IT(0, ta); if (CT_IS_ARRAY(ta)) return false; *out = CT_INT; return true; }
+        IT(0, ta);
+        /* The ARRAY case used to `return false` here, so a narrowing head could
+         * only ever be a whole compiled body and never a subexpression:
+         * Total[Floor[v]] had no inferable type.  It now reports what the
+         * kernel will really produce, which for these four is an int64 buffer
+         * — the same answer emit_arr_unary reaches. */
+        if (CT_IS_ARRAY(ta)) return infer_arr_unary(c, h, ta, out);
+        *out = CT_INT; return true; }
     if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 || strcmp(h, "Arg") == 0) && na == 1) {
         IT(0, ta);
         if (ta == CT_BOOL) return false;
@@ -1419,6 +1615,11 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         *out = CT_REAL; return true;
     }
     if (strcmp(h, "UnitStep") == 0 && na >= 1) {
+        /* One array argument is the kernel's business, not the product-of-
+         * comparisons lowering below: UnitStep's kernel is narrowing-only (no
+         * real and no complex arm at all), so before this the array form had
+         * no lowering and took the whole body down with it. */
+        if (na == 1) { IT(0, ta); if (CT_IS_ARRAY(ta)) return infer_arr_unary(c, h, ta, out); }
         for (size_t i = 0; i < na; i++) { IT(i, ta); if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false; }
         *out = CT_INT; return true;                    /* UnitStep[0.5] is 1, not 1. */
     }
@@ -1440,7 +1641,36 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         }
         *out = CT_REAL; return true;
     }
-    if ((strcmp(h, "Max") == 0 || strcmp(h, "Min") == 0) && na >= 1) { IT(0, ta); for (size_t i = 1; i < na; i++) { IT(i, tb); ta = num_common(ta, tb); if ((int)ta < 0 || ta == CT_COMPLEX) return false; } *out = ta; return true; }
+    /* Max / Min over SCALARS fold pairwise.  An array operand is a different
+     * operation entirely -- Max[v] is the largest ELEMENT, and Max[v, 3] is the
+     * largest of the flattened whole -- so every array spelling is refused
+     * here and left to the delegated reduction below (na == 1) or to the
+     * interpreter (na >= 2).
+     *
+     * Refusing it is a CORRECTNESS fix, not a coverage one.  The pairwise fold
+     * used to accept an array unchecked, so `Max[v]` lowered to the identity
+     * (an empty fold returns its accumulator) and
+     *     Compile[{{v, _Real, 1}}, Max[v] + 1.][{3., 1., 7., 2.}]
+     * answered {4., 2., 8., 3.} where the interpreter answers 8.  Alone,
+     * `Max[v]` happened to be rejected downstream, which is why nothing had
+     * noticed: the wrong answer needed the head to appear inside a larger
+     * expression.  Found by tools/compile_coverage.py on 2026-08-02. */
+    if ((strcmp(h, "Max") == 0 || strcmp(h, "Min") == 0) && na >= 2) {
+        IT(0, ta);
+        if (CT_IS_ARRAY(ta)) return false;
+        for (size_t i = 1; i < na; i++) {
+            IT(i, tb);
+            if (CT_IS_ARRAY(tb)) return false;
+            ta = num_common(ta, tb);
+            if ((int)ta < 0 || ta == CT_COMPLEX) return false;
+        }
+        *out = ta; return true;
+    }
+    if ((strcmp(h, "Max") == 0 || strcmp(h, "Min") == 0) && na == 1) {
+        IT(0, ta);
+        if (!CT_IS_ARRAY(ta)) { *out = ta; return true; }   /* Max[x] is x */
+        /* falls through to the delegated-reduction block below */
+    }
     if (strcmp(h, "ArcTan") == 0) {
         if (na == 1) {
             IT(0, ta);
@@ -1713,7 +1943,22 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         *out = (h[0] == 'L') ? CT_INT : CT_ELEM(ta);
         return true;
     }
-    if (na == 1) { SymbolDef* d = symtab_lookup(h); if (d && d->ndarray_unary_kernel) { const NDUnaryKernel* k = d->ndarray_unary_kernel; if (k->cplx || k->real) { IT(0, ta); if (CT_IS_ARRAY(ta)) { *out = CT_ARRAY(k->to_real ? CT_REAL : CT_ELEM(ta), CT_RANK(ta)); return true; } if (k->to_real) { *out = CT_REAL; return true; } if (ta == CT_COMPLEX) { if (!k->cplx) return false; *out = CT_COMPLEX; return true; } *out = (k->real_closed || k->real) ? CT_REAL : CT_COMPLEX; return true; } } }
+    /* Mean / Median / Variance / StandardDeviation / RootMeanSquare / Max /
+     * Min of a rank-1 array — the delegated reductions, table above. */
+    {
+        const NdRedSpec* nr = nd_red_lookup(h, na);
+        if (nr) {
+            IT(0, ta);
+            CompileType rt = nd_red_result(nr, ta);
+            if ((int)rt < 0) return false;
+            *out = rt; return true;
+        }
+    }
+    if (na == 1) { SymbolDef* d = symtab_lookup(h); if (d && d->ndarray_unary_kernel) { const NDUnaryKernel* k = d->ndarray_unary_kernel; if (k->cplx || k->real) { IT(0, ta); if (CT_IS_ARRAY(ta)) { *out = CT_ARRAY(k->to_real ? CT_REAL : CT_ELEM(ta), CT_RANK(ta)); return true; } if (k->to_real) { *out = CT_REAL; return true; } if (ta == CT_COMPLEX) { if (!k->cplx) return false; *out = CT_COMPLEX; return true; } *out = (k->real_closed || k->real) ? CT_REAL : CT_COMPLEX; return true; }
+        /* Narrowing-only kernel over an array: NDT_INT64 out.  Mirrors the
+         * branch in emit_arr_unary, and must agree with it or a body that
+         * infers here and emits there disagrees about the element type. */
+        if (k->to_int_r) { IT(0, ta); if (CT_IS_ARRAY(ta) && CT_ELEM(ta) != CT_COMPLEX) { *out = CT_ARRAY(CT_INT, CT_RANK(ta)); return true; } } } }
     if (na >= 3 && na <= 8) {
         SymbolDef* d = symtab_lookup(h);
         if (d && d->ndarray_nary_kernel) {
@@ -1731,7 +1976,7 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         SymbolDef* d = symtab_lookup(h);
         if (d && d->ndarray_binary_kernel) {
             const NDBinaryKernel* k = d->ndarray_binary_kernel;
-            if (k->cplx) {
+            if (k->cplx || k->to_int) {
                 IT(0, ta); IT(1, tb);
                 CompileType t = num_common(ta, tb);
                 if ((int)t < 0) return false;
@@ -1741,10 +1986,15 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
                  * layer picks its own result dtype), and becomes a wrong output
                  * buffer as soon as a fused loop is sized from this type. */
                 if (CT_IS_ARRAY(t)) {
-                    CompileType er = CT_ELEM(t);
-                    *out = CT_ARRAY(k->real_closed ? er : CT_COMPLEX, CT_RANK(t));
+                    if (CT_IS_ARRAY(ta) && CT_IS_ARRAY(tb)) return false;
+                    CompileType ea = CT_IS_ARRAY(ta) ? CT_ELEM(ta) : CT_ELEM(tb);
+                    CompileType es = CT_IS_ARRAY(ta) ? tb : ta;
+                    CompileType er = nd_binary_elem(k, ea, es);
+                    if ((int)er < 0) return false;
+                    *out = CT_ARRAY(er, CT_RANK(t));
                     return true;
                 }
+                if (!k->cplx) return false;    /* scalar: no arm to call */
                 *out = (t <= CT_REAL && k->real_closed) ? CT_REAL : CT_COMPLEX;
                 return true;
             }
@@ -1936,9 +2186,20 @@ static bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         SymbolDef* d = symtab_lookup(h);
         if (!d || !d->ndarray_unary_kernel) return false;
         const NDUnaryKernel* k = (const NDUnaryKernel*)d->ndarray_unary_kernel;
-        if (!k->cplx && !k->real) return false;   /* degrade sentinel: no kernel */
+        /* No real and no complex arm is the degrade sentinel -- unless the
+         * kernel is exact-integer-only (to_int), which is a real path over an
+         * ARRAY and no path at all over a scalar.  See emit_arr_unary.
+         *
+         * The test is `to_int`, not `to_int_r`: the integer-only kernels
+         * (MoebiusMu, EulerPhi, IntegerLength) have `to_int_i` and NOTHING
+         * else, since MoebiusMu of a real is not a machine question -- so
+         * keying on the real arm reads exactly the heads this is for as
+         * sentinels.  nd_unary_elem picks the arm per element type. */
+        bool narrowing_only = (!k->cplx && !k->real && k->to_int);
+        if (!k->cplx && !k->real && !narrowing_only) return false;
         Val a; if (!emit(c, A[0], &a)) return false;
         if (CT_IS_ARRAY(a.type)) return emit_arr_unary(c, h, a, out);
+        if (narrowing_only) return false;   /* scalar: leave it to a dedicated opcode */
         if (a.type == CT_COMPLEX) {
             if (!k->cplx) return false;           /* real-only kernel: can't do complex */
             *out = k->to_real ? kern_unop(c, OP_KERN_CR, a, CT_REAL, (const void*)k->cplx)
@@ -1990,20 +2251,34 @@ static bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         SymbolDef* d = symtab_lookup(h);
         if (!d || !d->ndarray_binary_kernel) return false;
         const NDBinaryKernel* k = (const NDBinaryKernel*)d->ndarray_binary_kernel;
-        if (!k->cplx) return false;   /* degrade sentinel: no machine kernel -> bail */
+        /* No complex arm is the degrade sentinel for a SCALAR body -- but not
+         * for an array one, where the exact int64 arms are a real path.  The
+         * cheap static test first, so nothing else changes for the kernels
+         * that have a complex arm. */
+        if (!k->cplx && !k->to_int) return false;
         Val a, b; if (!emit(c, A[0], &a) || !emit(c, A[1], &b)) return false;
         CompileType t = num_common(a.type, b.type); if ((int)t < 0) { c->ok = false; return false; }
         if (CT_IS_ARRAY(t)) {
             /* one array + one broadcast scalar (BesselJ[n,v], ArcTan[v,y], ...);
              * the ND layer has no array-array binary-kernel map. */
             if (CT_IS_ARRAY(a.type) && CT_IS_ARRAY(b.type)) { c->ok = false; return false; }
-            CompileType er = CT_ELEM(t);
-            arr_prep(c, &a, er); arr_prep(c, &b, er);
+            CompileType ea = CT_IS_ARRAY(a.type) ? CT_ELEM(a.type) : CT_ELEM(b.type);
+            CompileType es = CT_IS_ARRAY(a.type) ? b.type : a.type;
+            CompileType er = nd_binary_elem(k, ea, es);
+            if ((int)er < 0) { c->ok = false; return false; }
+            /* Prepare at the COMMON element type, not the result's and not the
+             * array's.  The result's is wrong for a narrowing kernel (CT_INT
+             * out of a Real buffer would round the scalar before the kernel
+             * ran); the array's is wrong for a complex scalar against a real
+             * buffer (`BesselJ[0.5 + I, v]`), where coerce refuses to narrow
+             * and the whole body would bail. */
+            CompileType ep = CT_ELEM(t);
+            arr_prep(c, &a, ep); arr_prep(c, &b, ep);
             Slot z; z.p = k;
-            *out = arr_op(c, OP_V_KERN2, a, b, CT_ARRAY(k->real_closed ? er : CT_COMPLEX,
-                                                        CT_RANK(t)), z);
+            *out = arr_op(c, OP_V_KERN2, a, b, CT_ARRAY(er, CT_RANK(t)), z);
             return c->ok;
         }
+        if (!k->cplx) return false;   /* scalar body, sentinel kernel -> bail */
         if (t <= CT_REAL && k->real_closed) { coerce(c, &a, CT_REAL); coerce(c, &b, CT_REAL); *out = kern_binop(c, OP_KERN2_RR, a, b, CT_REAL, (const void*)k->cplx); }
         else if (t <= CT_REAL)              { coerce(c, &a, CT_REAL); coerce(c, &b, CT_REAL); *out = kern_binop(c, OP_KERN2_RC, a, b, CT_COMPLEX, (const void*)k->cplx); }
         else                                { coerce(c, &a, CT_COMPLEX); coerce(c, &b, CT_COMPLEX); *out = kern_binop(c, OP_KERN2_CC, a, b, CT_COMPLEX, (const void*)k->cplx); }
@@ -2639,6 +2914,13 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
     if ((strcmp(h, "Mod") == 0 || strcmp(h, "Quotient") == 0) && na == 2) {
         CompileType mt, nt;
         if (!infer_type(c, A[0], &mt) || !infer_type(c, A[1], &nt)) { c->ok = false; return false; }
+        /* An array operand goes to the registered binary kernel — see the
+         * matching note in the inference. */
+        if (CT_IS_ARRAY(mt) || CT_IS_ARRAY(nt)) {
+            Val kv;
+            if (try_kernel(c, h, A, na, &kv)) { *out = kv; return c->ok; }
+            c->ok = false; return false;
+        }
         if (mt == CT_INT && nt == CT_INT) {
             Val a, b; if (!emit(c, A[0], &a) || !emit(c, A[1], &b)) return false;
             *out = binop(c, h[0] == 'M' ? OP_MOD_I : OP_QUOT_I, a, b, CT_INT);
@@ -2745,7 +3027,13 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
      * array case here and map the whole buffer in one pass. */
     if (na == 1 && (!strcmp(h, "Abs") || !strcmp(h, "Sign") || !strcmp(h, "Floor")
                     || !strcmp(h, "Ceiling") || !strcmp(h, "Round") || !strcmp(h, "Re")
-                    || !strcmp(h, "Im") || !strcmp(h, "Arg") || !strcmp(h, "Conjugate"))
+                    || !strcmp(h, "Im") || !strcmp(h, "Arg") || !strcmp(h, "Conjugate")
+                    /* IntegerPart and UnitStep were missing from this list --
+                     * the two narrowing heads whose scalar branch is dedicated
+                     * AND whose kernel has no real or complex arm, so neither
+                     * this interception nor try_kernel would take them and the
+                     * array form had no lowering at all. */
+                    || !strcmp(h, "IntegerPart") || !strcmp(h, "UnitStep"))
         && any_array_arg(c, A, na)) {
         Val a; if (!emit(c, A[0], &a)) return false;
         if (!CT_IS_ARRAY(a.type)) { c->ok = false; return false; }
@@ -3052,7 +3340,13 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         return c->ok;
     }
 
-    if ((strcmp(h, "Max") == 0 || strcmp(h, "Min") == 0) && na >= 1) {
+    /* The scalar pairwise fold.  Array operands are refused for the reason
+     * given beside the matching inference block: an array reaching the fold
+     * makes Max[v] lower to the identity, which is a wrong answer rather than
+     * a slow one.  na == 1 over an array falls through to the delegated
+     * reduction further down. */
+    if ((strcmp(h, "Max") == 0 || strcmp(h, "Min") == 0) && na >= 1
+        && !any_array_arg(c, A, na)) {
         bool mx = h[1] == 'a';
         Val acc; if (!emit(c, A[0], &acc)) return false;
         for (size_t i = 1; i < na; i++) {
@@ -3351,6 +3645,21 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         *out = (h[0] == 'L') ? arr_op(c, OP_V_LEN, a, arr_noop_val(), CT_INT, z)
                              : arr_op(c, OP_V_TOTAL, a, arr_noop_val(), CT_ELEM(a.type), z);
         return c->ok;
+    }
+
+    /* Mean / Median / Variance / StandardDeviation / RootMeanSquare / Max /
+     * Min of a rank-1 array, delegated to the interpreter's own reduction so
+     * the compiled answer is bit-identical to the interpreted one. */
+    {
+        const NdRedSpec* nr = nd_red_lookup(h, na);
+        if (nr) {
+            Val a; if (!emit(c, A[0], &a)) return false;
+            CompileType rt = nd_red_result(nr, a.type);
+            if ((int)rt < 0) { c->ok = false; return false; }
+            Slot ip; memset(&ip, 0, sizeof ip); ip.p = nr;
+            *out = arr_op(c, OP_V_NDRED, a, arr_noop_val(), rt, ip);
+            return c->ok;
+        }
     }
 
     /* comparisons (2-arg) -> Bool */
@@ -5266,6 +5575,27 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
             return ok;
         }
 
+        case OP_V_NDRED: {                /* Mean / Median / Variance / Max / ... */
+            const NdRedSpec* rs = (const NdRedSpec*)c->imm.p;
+            if (!a->arr || a->arr->type != EXPR_NDARRAY) return false;
+            /* The entry point takes the whole CALL; expr_copy is a refcount
+             * bump (src/expr.c), so rebuilding it costs two nodes and never
+             * the buffer.  Same shape as OP_A_NDFN above. */
+            Expr* arg  = expr_copy(a->arr);
+            Expr* call = expr_new_function(expr_new_symbol(rs->head), &arg, 1);
+            if (!call) { expr_free(arg); return false; }
+            Expr* s = rs->fn(call);
+            expr_free(call);
+            if (f & AF_FREE_A) { expr_free(a->arr); a->arr = NULL; }
+            /* A form the reduction declines comes back as a materialised List
+             * (ndarray_delist_and_reeval) rather than a number, and
+             * vm_write_scalar refuses it -- which aborts the program and lets
+             * the interpreter answer, exactly as it would have. */
+            bool ok = s && vm_write_scalar(s, AF_R(f), d);
+            expr_free(s);
+            return ok;
+        }
+
         case OP_V_EW: {
             Expr* boxa = (ka == AK_ARR) ? NULL : vm_box_scalar(a, ka);
             Expr* boxb = (kb == AK_ARR) ? NULL : vm_box_scalar(b, kb);
@@ -5645,6 +5975,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(V_KERN):   ARROP();
             OP(V_KERN2):  ARROP();
             OP(V_TOTAL):  ARROP();
+            OP(V_NDRED):  ARROP();
             OP(V_LEN):    ARROP();
             /* ---- fused elementwise loop (M3b) ----------------------------
              * A_LOAD/A_STORE are the whole point of fusion: an elementwise

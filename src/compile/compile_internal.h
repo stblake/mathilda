@@ -225,6 +225,13 @@ enum {
     X(AND, K_BIN)     X(OR, K_BIN)     X(XOR, K_BIN)    X(NOT, K_UN)       \
     X(ARR_FREE, K_ARR) X(V_EW, K_ARR)  X(V_POW, K_ARR)                     \
     X(V_KERN, K_ARR)  X(V_KERN2, K_ARR) X(V_TOTAL, K_ARR) X(V_LEN, K_ARR)  \
+    /* An array -> SCALAR reduction delegated to the interpreter's own entry   \
+     * point (ndred_mean, ndred_variance, ...), the reduction counterpart of   \
+     * A_NDFN below.  Total has its own opcode because an int64 sum must stay  \
+     * exact past 2^53; everything here is real-valued (Mean of an exact       \
+     * integer vector is a Rational, which no machine slot holds) and so needs \
+     * no such split.  imm.p is the NdRedSpec. */                              \
+    X(V_NDRED, K_ARR)                                                       \
     X(A_SIZE, K_UN)   X(A_NEWLIKE, K_ARR) X(A_SHAPECHK, K_ASTORE)          \
     X(A_LOAD_R, K_ALOAD) X(A_LOAD_C, K_ALOAD) X(A_LOAD_I, K_ALOAD)         \
     X(A_STORE_R, K_ASTORE) X(A_STORE_C, K_ASTORE) X(A_STORE_I, K_ASTORE)   \
@@ -440,5 +447,16 @@ extern const unsigned char compile_op_kind[OP__COUNT];
  * instructions.  Returns false only on allocation failure, in which case `code`
  * is left exactly as it was (the caller can still run it). */
 bool compile_optimize(Instr* code, size_t* n, int nreg, int arr_base, int tile_base);
+
+/* The name of the head an A_NDFN / V_NDRED instruction delegates to.
+ *
+ * The two tables (ND_FNS, ND_REDS) live in compile.c and stay there; the
+ * disassembler needs only the NAME out of an entry, so it asks rather than the
+ * tables becoming shared state.  Without these an A_NDFN disassembles as
+ * "A_NDFN" and a V_NDRED as "V_NDRED(V0, V0)", neither of which says WHICH head
+ * was delegated -- and telling Mean from Median in a bytecode dump is the whole
+ * point of having a dump.  `imm` is the instruction's Slot.p; NULL-safe. */
+const char* nd_fn_head_name(const void* imm);
+const char* nd_red_head_name(const void* imm);
 
 #endif /* MATHILDA_COMPILE_INTERNAL_H */

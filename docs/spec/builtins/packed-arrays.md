@@ -243,7 +243,7 @@ and an explicit `NDArray[...]`.
 Operations with a buffer-level implementation keep their result packed;
 everything else produces an ordinary list with the same value.
 
-Packed in, packed out: `Plus`, `Times`, `Power`, `Dot`, the elementary and
+Packed in, packed out: `Plus`, `Times`, `Power`, `Subtract`, `Divide`, `Dot`, the elementary and
 special functions (`Sin`, `Exp`, `Gamma`, …), `Total`, `Mean`, `Min`, `Max`,
 `MinMax`, `Median`, `Variance`, `Accumulate`, `Sort`, `Reverse`, `Transpose`, `Flatten`,
 `Take`, `Drop`, `Partition`, `RotateLeft`/`RotateRight`, `Riffle`, `Join`,
@@ -260,6 +260,19 @@ uniform machine array: `Positive`/`Negative`/`NonNegative`/`NonPositive` answer
 with a list of `True`/`False` (there is no boolean buffer), `IntegerDigits` with
 a ragged list of digit lists, and `Counts` with an `Association`. They still
 read the elements straight out of the buffer rather than materialising it.
+
+`Subtract` and `Divide` are on that list without a buffer path of their own:
+each rewrites to `Plus`/`Times`/`Power` without ever reading an element, so all
+they needed was for the gate to stop firing one step before the head that can
+use the buffer. `Divide` is deliberately *not* exact on an integer buffer —
+`Range[10]/2` is a list of exact `Rational`s, so an integer argument
+materialises and the ordinary list gives them.
+
+A **symbolic** operand no longer costs a packed list its answer. `{1., 2., 3.}
++ x` threads to `{1. + x, 2. + x, 3. + x}` at every length; the same expression
+used to come back unevaluated once the list was long enough to pack. A
+*visible* `NDArray[...]` still declines with `NDArray::sym`, which is its
+contract — naming that head asks for a purely numeric object.
 
 `Ratios` keeps the buffer only for inexact data. `Ratios[{1, 2, 3}]` is
 `{2, 3/2}` — exact `Rational`s, which no buffer holds — so an integer argument
@@ -438,6 +451,35 @@ abandons and promotes to a bigint.
 `RuntimeAttributes -> {Listable}` threads by rank and repacks by re-sniffing the
 element type, so an integer-valued body over a packed integer list comes back as
 `Integer`s.
+
+### Which array heads compile
+
+A head with a buffer path in the interpreter should also have one inside
+`Compile[]`, and the reason is not speed alone: the compilable subset is a
+**cliff**, so a single unlowered head sends the *whole* body to the interpreter
+and takes every other head in it along. `Compile[{{v, _Real, 1}},
+Total[v]/Mean[v]]` used to lose the compiled `Total` because of the `Mean`.
+
+These are **delegated** — the VM calls the interpreter's own NDArray entry
+point, so the compiled answer is bit-identical, rounding included:
+
+| shape | heads |
+|---|---|
+| array → array | `Reverse` `Sort` `Accumulate` `Flatten` `Transpose` `Take` `Drop` `Differences` `Ratios` `Most` `Rest` `Clip` `RotateLeft` `RotateRight` `MovingAverage` `MovingMedian` `TakeLargest` `TakeSmallest` |
+| array → scalar | `Total` `Length` `Mean` `Median` `Variance` `StandardDeviation` `RootMeanSquare` `Max` `Min` |
+| elementwise | every registered kernel, including the narrowing ones (`Floor`, `Ceiling`, `Round`, `Sign`, `IntegerPart`, `UnitStep`) and the exact-integer ones (`Mod`, `Quotient`, `GCD`, `LCM`, `DivisorSigma`, `MoebiusMu`, `EulerPhi`, `IntegerLength`) |
+
+The reductions are **real element type only**, because their exact answer is
+not a machine number: `Mean[{1, 2}]` is `3/2` and `Variance[Range[10]]` is
+`55/6`. An integer vector declines and the interpreter answers exactly. `Max`
+and `Min` are the exceptions — they *select* an element, so an integer vector
+gives an `Integer`.
+
+Anything a delegated head cannot handle comes back as a materialised `List`,
+which the VM reads as "not a buffer" and hands to the interpreter — so
+`Mod[v, 0]` and `Ratios` of an integer vector are as correct compiled as
+interpreted, just not fast. `make check-compile-coverage` reports what is still
+unlowered.
 
 ## Turning it off — `$AutoArrayPacking`
 

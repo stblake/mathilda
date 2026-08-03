@@ -284,6 +284,253 @@ void test_cf_array_argspec(void) {
                    "True", 0);
 }
 
+/* The delegated array heads (src/compile/compile.c, ND_FNS and ND_REDS).
+ *
+ * Each of these has an NDArray entry point in the interpreter and now a
+ * lowering that calls that same entry point from the VM, so the compiled
+ * answer is the interpreted answer by construction — which is exactly what
+ * these assertions pin, element heads included.  The gap they close is not
+ * the speed of the operation (it was already a buffer walk) but that a body
+ * CONTAINING one no longer bails wholesale: the compilable subset is a cliff,
+ * so one unlowerable head used to cost every other head in the body too. */
+static void test_cf_delegated_array_heads(void) {
+    /* Array -> array, one argument. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Differences[v]][{3., 1., 7.}]",
+                   "{-2.0, 6.0}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Ratios[v]][{2., 4., 8.}]",
+                   "{2.0, 2.0}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Most[v]][{3., 1., 7.}]", "{3.0, 1.0}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Rest[v]][{3., 1., 7.}]", "{1.0, 7.0}", 0);
+
+    /* Array -> array with a trailing integer. */
+    assert_eval_eq("Compile[{{v, _Real, 1}, {k, _Integer}}, RotateLeft[v, k]][{1., 2., 3.}, 1]",
+                   "{2.0, 3.0, 1.0}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}, {k, _Integer}}, RotateRight[v, k]][{1., 2., 3.}, 1]",
+                   "{3.0, 1.0, 2.0}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}, {k, _Integer}}, MovingAverage[v, k]][{1., 2., 3.}, 2]",
+                   "{1.5, 2.5}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}, {k, _Integer}}, TakeLargest[v, k]][{3., 1., 7.}, 2]",
+                   "{7.0, 3.0}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}, {k, _Integer}}, TakeSmallest[v, k]][{3., 1., 7.}, 2]",
+                   "{1.0, 3.0}", 0);
+
+    /* The delegated reductions.  Bit-identical to the interpreter because both
+     * run the same summation, which is the reason for delegating rather than
+     * re-implementing the loop in the VM. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Mean[v]][{3., 1., 7., 2., 5.}]"
+                   " === Mean[{3., 1., 7., 2., 5.}]", "True", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Median[v]][{3., 1., 7., 2., 5.}]"
+                   " === Median[{3., 1., 7., 2., 5.}]", "True", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Variance[v]][{3., 1., 7., 2., 5.}]"
+                   " === Variance[{3., 1., 7., 2., 5.}]", "True", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, StandardDeviation[v]][{3., 1., 7., 2.}]"
+                   " === StandardDeviation[{3., 1., 7., 2.}]", "True", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, RootMeanSquare[v]][{3., 1., 7., 2.}]"
+                   " === RootMeanSquare[{3., 1., 7., 2.}]", "True", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Max[v]][{3., 1., 7., 2.}]", "7.0", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Min[v]][{3., 1., 7., 2.}]", "1.0", 0);
+
+    /* THE REGRESSION.  Max/Min used to reach the scalar pairwise fold with an
+     * array operand, and an empty fold returns its accumulator — so Max[v]
+     * lowered to the IDENTITY and Max[v] + 1. answered {4., 2., 8., 3.} where
+     * the interpreter answers 8.  Alone, Max[v] happened to be rejected further
+     * down, which is why this needed the head to sit inside a larger expression
+     * to show.  Found by tools/compile_coverage.py, 2026-08-02. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Max[v] + 1.][{3., 1., 7., 2.}]", "8.0", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Min[v] * 2.][{3., 1., 7., 2.}]", "2.0", 0);
+    assert_eval_eq("Head[Compile[{{v, _Real, 1}}, Max[v] + 1.][{3., 1., 7., 2.}]]",
+                   "Real", 0);
+    /* The scalar fold itself is untouched. */
+    assert_eval_eq("Compile[{{x, _Real}, {y, _Real}}, Max[x, y, 3.]][1., 9.]", "9.0", 0);
+    assert_eval_eq("Compile[{{x, _Integer}, {y, _Integer}}, Min[x, y, 3]][1, 9]", "1", 0);
+
+    /* Max/Min SELECT an element, so an integer vector answers with an Integer;
+     * Mean and friends AVERAGE, so an integer vector answers with a Rational
+     * that no machine slot holds and the body must decline rather than round. */
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, Max[v]][{3, 1, 7}]", "7", 0);
+    assert_eval_eq("Head[Compile[{{v, _Integer, 1}}, Min[v]][{3, 1, 7}]]", "Integer", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, Mean[v]][{1, 2}]", "3/2", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, Ratios[v]][{3, 1, 7}]",
+                   "{1/3, 7}", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, Differences[v]][{3, 1, 7}]",
+                   "{-2, 6}", 0);
+
+    /* Rank 2 is a DIFFERENT operation for the reductions — Mean of a matrix is
+     * the vector of column means — so the rank-1-only rule must hold. */
+    assert_eval_eq("Compile[{{m, _Real, 2}}, Mean[m]][{{1., 2.}, {3., 4.}}]",
+                   "{2.0, 3.0}", 0);
+
+    /* Degenerate shapes the ND path declines: the interpreter answers and the
+     * two still agree. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Most[v]][{4.}]", "{}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Differences[v]][{4.}]", "{}", 0);
+
+    /* And the point of the exercise: a body that MIXES a delegated head with
+     * ordinary arithmetic compiles as one program rather than falling off the
+     * cliff at the first unlowered head. */
+    assert_eval_eq("Lookup[CompileDiagnostics[{{v, _Real, 1}}, "
+                   "(Max[v] - Min[v]) / Mean[v]], \"Compiled\"]", "True", 0);
+    assert_eval_eq("Lookup[CompileDiagnostics[{{v, _Real, 1}}, "
+                   "Total[Differences[Sort[v]]]], \"Compiled\"]", "True", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, (Max[v] - Min[v]) / Mean[v]][{3., 1., 7., 2., 5.}]"
+                   " === (Max[#] - Min[#]) / Mean[#] &[{3., 1., 7., 2., 5.}]", "True", 0);
+}
+
+/* The NARROWING kernels over an array — real in, exact Integer out.
+ *
+ * Two separate defects, both found by tools/compile_coverage.py on 2026-08-02
+ * and both invisible from the head on its own.
+ *
+ * 1. The declared element type LIED.  emit_arr_unary computed the result
+ *    element as "to_real ? Real : the input's", which for Floor over a Real
+ *    array says Real — while ndarray_map_unary, preferring the to_int path,
+ *    writes an NDT_INT64 buffer.  Standalone the caller re-reads the real
+ *    dtype and all is well; a CONSUMER inside the same program reads the slot
+ *    as the declared type and gets the integer's bits back as a double.
+ *    Total[Floor[v]] answered 2.96439*10^-323, which is the int64 6.
+ * 2. IntegerPart and UnitStep had no array lowering at all: both have a
+ *    dedicated scalar branch (so try_kernel is never reached) and a kernel
+ *    with neither a real nor a complex arm (so the array interception list
+ *    skipped them).  Each took its whole enclosing body down to the
+ *    interpreter. */
+/* Ordering[vector] lowers through the same ND_FNS delegation as Sort, with the
+ * one wrinkle that its result element type is int64 whatever the operand's dtype
+ * (a permutation is integer) -- the NdFnSpec.int_result path. */
+static void test_cf_ordering(void) {
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Ordering[v]][{3., 1., 2.}]", "{2, 3, 1}", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, Ordering[v]][{3, 1, 2}]", "{2, 3, 1}", 0);
+    /* The result element is Integer even for a _Real input. */
+    assert_eval_eq("Head[Compile[{{v, _Real, 1}}, Ordering[v]][{3., 1., 2.}][[1]]]",
+                   "Integer", 0);
+    /* Bit-identical to the interpreter, ties (stability) included. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Ordering[v]][{2., 6., 1., 9., 1., 2., 3.}]"
+                   " === Ordering[{2., 6., 1., 9., 1., 2., 3.}]", "True", 0);
+    /* CompileDiagnostics confirms it lowers at a rank-1 array shape. */
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Real, 1}}, Ordering[v]]",
+                   "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}}, Ordering[v]]",
+                   "True", 0);
+    /* As a subexpression of a scalar body: Ordering[v][[1]] is the position of the
+     * minimum (correct whether or not this exact shape compiles). */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Ordering[v][[1]]][{3., 1., 2.}]", "2", 0);
+}
+
+static void test_cf_narrowing_kernels_over_arrays(void) {
+    /* The reinterpretation bug: a narrowing head inside a reduction. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Total[Floor[v]]][{1.5, 2.5, 3.5}]", "6", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Total[Sign[v]]][{1.5, -2.5, 3.5}]", "1", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Total[Ceiling[v]]][{1.5, 2.5}]", "5", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Total[Round[v]]][{1.4, 2.6}]", "4", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Total[IntegerPart[v]]][{1.9, -2.9}]", "-1", 0);
+
+    /* ... and the element HEADS it made wrong: exact Integers, not Reals. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Floor[v] + 1][{1.5, 2.5, 3.5}]",
+                   "{2, 3, 4}", 0);
+    assert_eval_eq("Head[First[Compile[{{v, _Real, 1}}, Floor[v] + 1][{1.5, 2.5}]]]",
+                   "Integer", 0);
+
+    /* The two heads with no array lowering at all. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, UnitStep[v]][{-1.5, 0., 2.5}]",
+                   "{0, 1, 1}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, IntegerPart[v]][{-1.5, 0., 2.5}]",
+                   "{-1, 0, 2}", 0);
+    assert_eval_eq("Lookup[CompileDiagnostics[{{v, _Real, 1}}, UnitStep[v]], \"Compiled\"]",
+                   "True", 0);
+    assert_eval_eq("Lookup[CompileDiagnostics[{{v, _Real, 1}}, IntegerPart[v]], \"Compiled\"]",
+                   "True", 0);
+    /* The scalar and multi-argument UnitStep forms are untouched. */
+    assert_eval_eq("Compile[{{x, _Real}}, UnitStep[x]][-0.5]", "0", 0);
+    assert_eval_eq("Compile[{{x, _Real}, {y, _Real}}, UnitStep[x, y]][1., -1.]", "0", 0);
+
+    /* Abs is `to_int` too, but with only the int64 arm — a real array is a
+     * PROJECTION and must stay Real, so the same rule has to give a different
+     * answer for it than for Floor. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Total[Abs[v]]][{1.5, -2.5}]", "4.0", 0);
+    assert_eval_eq("Head[First[Compile[{{v, _Real, 1}}, Abs[v]][{-1.5, 2.5}]]]", "Real", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, Abs[v]][{-3, 4}]", "{3, 4}", 0);
+
+    /* Every one of them still agrees with the interpreter element for element. */
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Floor[v]][{-1.5, 0., 2.5}]"
+                   " === Floor[{-1.5, 0., 2.5}]", "True", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, Sign[v]][{-1.5, 0., 2.5}]"
+                   " === Sign[{-1.5, 0., 2.5}]", "True", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, UnitStep[v]][{-1.5, 0., 2.5}]"
+                   " === UnitStep[{-1.5, 0., 2.5}]", "True", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, IntegerPart[v]][{-1.5, 0., 2.5}]"
+                   " === IntegerPart[{-1.5, 0., 2.5}]", "True", 0);
+}
+
+/* The exact-integer BINARY kernels over an array — Mod, Quotient, GCD, LCM and
+ * the two-argument ArcTan.
+ *
+ * These have no complex arm at all (Mod and Quotient are narrowing, GCD and LCM
+ * are defined only on Z), and the compiler read a missing complex arm as the
+ * degrade sentinel — so the array spelling had no lowering while the SCALAR one
+ * had a dedicated opcode.  `Mod[x, 3]` compiled and `Mod[v, 3]` did not, and
+ * one unlowered head costs the whole body. */
+static void test_cf_integer_binary_kernels_over_arrays(void) {
+    assert_eval_eq("Compile[{{v, _Real, 1}, {k, _Integer}}, Mod[v, k]][{7.5, -3.5, 10.}, 3]"
+                   " === Mod[{7.5, -3.5, 10.}, 3]", "True", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}, {k, _Integer}}, Mod[v, k]][{7, -3, 10}, 3]",
+                   "{1, 0, 1}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}, {k, _Integer}}, Quotient[v, k]][{7.5, -3.5, 10.}, 3]",
+                   "{2, -2, 3}", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}, {k, _Integer}}, Quotient[v, k]][{7, -3, 10}, 3]",
+                   "{2, -1, 3}", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}, {k, _Integer}}, GCD[v, k]][{12, 18, 25}, 6]",
+                   "{6, 6, 1}", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}, {k, _Integer}}, LCM[v, k]][{4, 6, 9}, 6]",
+                   "{12, 6, 18}", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}, {y, _Real}}, ArcTan[v, y]][{1., -1.}, 2.]"
+                   " === ArcTan[{1., -1.}, 2.]", "True", 0);
+
+    /* Element heads: a real Mod is Real, a real Quotient is an exact Integer. */
+    assert_eval_eq("Head[First[Compile[{{v, _Real, 1}, {k, _Integer}}, Mod[v, k]]"
+                   "[{7.5}, 3]]]", "Real", 0);
+    assert_eval_eq("Head[First[Compile[{{v, _Real, 1}, {k, _Integer}}, Quotient[v, k]]"
+                   "[{7.5}, 3]]]", "Integer", 0);
+
+    /* Nested, which is the point: the head no longer takes its body down. */
+    assert_eval_eq("Lookup[CompileDiagnostics[{{v, _Real, 1}, {k, _Integer}}, "
+                   "Total[Mod[v, k]]], \"Compiled\"]", "True", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}, {k, _Integer}}, Total[Mod[v, k]]]"
+                   "[{7.5, -3.5, 10.}, 3] === Total[Mod[{7.5, -3.5, 10.}, 3]]", "True", 0);
+
+    /* Abandon, never wrap: a zero divisor has no exact int64 answer, so the
+     * kernel declines the WHOLE array and the interpreter answers — with the
+     * unevaluated Mod[k, 0] the interpreter itself gives. */
+    assert_eval_eq("Compile[{{v, _Integer, 1}, {k, _Integer}}, Mod[v, k]][{7, -3}, 0]"
+                   " === Mod[{7, -3}, 0]", "True", 0);
+    /* And exactness past 2^53, where a double round-trip would lie. */
+    assert_eval_eq("Compile[{{v, _Integer, 1}, {k, _Integer}}, Quotient[v, k]]"
+                   "[{9007199254740993}, 2]", "{4503599627370496}", 0);
+
+    /* The scalar forms keep their dedicated opcodes. */
+    assert_eval_eq("Compile[{{x, _Real}, {k, _Integer}}, Mod[x, k]][7.5, 3]", "1.5", 0);
+    assert_eval_eq("Compile[{{x, _Integer}, {k, _Integer}}, Mod[x, k]][7, 3]", "1", 0);
+
+    /* The INTEGER-ONLY unary kernels (MoebiusMu, EulerPhi, IntegerLength) have
+     * `to_int_i` and nothing else -- MoebiusMu of a real is not a machine
+     * question -- so a guard keyed on the REAL narrowing arm read exactly the
+     * heads it was written for as sentinels.  Integer arrays only; a real one
+     * still declines. */
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, MoebiusMu[v]][{6, 12, 30}]",
+                   "{1, 0, -1}", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, EulerPhi[v]][{6, 12, 30}]",
+                   "{2, 4, 8}", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, IntegerLength[v]][{100, 255, 7}]",
+                   "{3, 3, 1}", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, Total[EulerPhi[v]]][{6, 12, 30}]",
+                   "14", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, EulerPhi[v]][{6., 12.}]"
+                   " === EulerPhi[{6., 12.}]", "True", 0);
+
+    /* MovingMedian joins MovingAverage in the delegated table. */
+    assert_eval_eq("Compile[{{v, _Real, 1}, {k, _Integer}}, MovingMedian[v, k]]"
+                   "[{3., 1., 7., 2., 5.}, 3] === MovingMedian[{3., 1., 7., 2., 5.}, 3]",
+                   "True", 0);
+}
+
 /* Integer ARRAYS, built rather than passed in.  Each construct here used to bail
  * for want of an integer dtype, so each is checked against the interpreter
  * evaluating the same expression — element heads included, since that is the
@@ -446,6 +693,26 @@ void test_disasm_arrays(void) {
     has(p, "A_PART", "general Part opcode");
     has(p, "Span[2, 3]", "literal subscript rendered from the PartSpec");
     free(p);
+
+    /* A delegated head must say WHICH head.  Before the name accessors an
+     * A_NDFN rendered as bare "A_NDFN" and a V_NDRED as "V_NDRED(V0, V0)" —
+     * telling Mean from Median is the point of having a dump. */
+    char* n = disasm_of("Compile[{{v, _Real, 1}}, Total[Differences[v]]]");
+    has(n, "A_NDFN", "delegated structural opcode");
+    has(n, "Differences[", "A_NDFN names the head it delegates to");
+    free(n);
+
+    char* r = disasm_of("Compile[{{v, _Real, 1}}, (Max[v] - Min[v])/Mean[v]]");
+    has(r, "V_NDRED", "delegated reduction opcode");
+    has(r, "Max[", "V_NDRED names its head");
+    has(r, "Mean[", "and distinguishes the three reductions in one body");
+    has(r, "Min[", "and distinguishes the three reductions in one body");
+    free(r);
+
+    char* t = disasm_of("Compile[{{v, _Real, 1}, {k, _Integer}}, "
+                        "Total[RotateLeft[v, k]]]");
+    has(t, "RotateLeft[", "A_NDFN renders its trailing integer operands");
+    free(t);
 }
 
 /* A body outside the compilable subset has no bytecode, so the useful
@@ -902,6 +1169,10 @@ int main(void) {
     TEST(test_cf_integer_closed_heads);
     TEST(test_cf_integer_only_heads);
     TEST(test_cf_integer_arrays);
+    TEST(test_cf_delegated_array_heads);
+    TEST(test_cf_ordering);
+    TEST(test_cf_narrowing_kernels_over_arrays);
+    TEST(test_cf_integer_binary_kernels_over_arrays);
     TEST(test_cf_runtime_options);
     TEST(test_compile_diagnostics);
     TEST(test_disasm_scalar);
