@@ -540,6 +540,11 @@ static void pack_mark_aware_heads(void) {
         "Total", "Mean", "Min", "Max", "MinMax", "Median", "Variance",
         "StandardDeviation", "RootMeanSquare", "Quartiles", "Accumulate",
         "MovingAverage", "MovingMedian", "ExponentialMovingAverage",
+        /* RankedMin[v, n] / RankedMax[v, n] — the n-th order statistic, selected
+         * straight off the buffer (ndred_ranked_*): int64 exactly, real by an
+         * O(n) quickselect. Off this list the gate would materialise the whole
+         * vector just to pick one element, the same defect as MinMax above. */
+        "RankedMin", "RankedMax",
         /* Tally is a keyed (irregular) reduction, not a sweep, but the reason it
          * belongs here is the same: ndred_tally hashes the machine words, where
          * materialising boxed one Expr per element just to hash it. */
@@ -819,6 +824,10 @@ static void pack_mark_aware_heads(void) {
          * answer with Integers; Mean and Median build the exact reduced
          * Rational (Mean[Range[10]] is 11/2, Median[Range[300]] is 301/2). */
         "Total", "Mean", "Median", "Max", "Min", "MinMax", "Accumulate",
+        /* RankedMin/RankedMax SELECT an element (like Max/Min), so the r-th order
+         * statistic of an int64 vector is an Integer taken straight off the
+         * buffer -- exact past 2^53, no rounded Real. */
+        "RankedMin", "RankedMax",
         /* Tally keys on the raw int64 word, so two integers past 2^53 stay
          * distinct -- the failure a float64 gather would have introduced -- and
          * each distinct value is rebuilt with expr_new_integer, so no element's

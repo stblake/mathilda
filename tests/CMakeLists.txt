@@ -1237,6 +1237,9 @@ target_include_directories(ratios_tests PRIVATE ../src)
 add_executable(sort_tests test_sort.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(sort_tests PRIVATE ../src)
 
+add_executable(ranked_tests test_ranked.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ranked_tests PRIVATE ../src)
+
 add_executable(backtrack_tests test_backtrack.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(backtrack_tests PRIVATE ../src)
 
@@ -2775,6 +2778,7 @@ if(USE_ECM)
     add_dependencies(foldlist_tests build_ecm)
     add_dependencies(split_tests build_ecm)
     add_dependencies(sort_tests build_ecm)
+    add_dependencies(ranked_tests build_ecm)
     add_dependencies(backtrack_tests build_ecm)
     add_dependencies(poly_tests build_ecm)
     add_dependencies(subresultants_tests build_ecm)

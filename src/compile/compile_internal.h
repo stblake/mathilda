@@ -232,6 +232,11 @@ enum {
      * integer vector is a Rational, which no machine slot holds) and so needs \
      * no such split.  imm.p is the NdRedSpec. */                              \
     X(V_NDRED, K_ARR)                                                       \
+    /* Reduction WITH one trailing integer register: RankedMin[v, n] /          \
+     * RankedMax[v, n], the n-th order statistic.  V_NDRED's scalar write plus   \
+     * A_NDFN's trailing-int read -- c->a is the array, c->b the int n.  imm.p   \
+     * is the NdRedSpec (nextra == 1). */                                        \
+    X(V_NDREDN, K_ARR)                                                      \
     /* Delegated TWO-array heads (COMPILE_MISSING.md §3).  A_NDFN2 reads two    \
      * array registers and produces an array (Dot matrix shapes, LinearSolve,   \
      * Cross, LeastSquares, ListConvolve/Correlate, Join); V_NDFN2 the SCALAR    \

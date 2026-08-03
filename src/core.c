@@ -628,6 +628,10 @@ void core_init(void) {
     symtab_get_def("Order")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Ordering", builtin_ordering);
     symtab_get_def("Ordering")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("RankedMin", builtin_ranked_min);
+    symtab_get_def("RankedMin")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("RankedMax", builtin_ranked_max);
+    symtab_get_def("RankedMax")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("PolynomialQ", builtin_polynomialq);
     symtab_add_builtin("Variables", builtin_variables);
     symtab_add_builtin("Level", builtin_level);

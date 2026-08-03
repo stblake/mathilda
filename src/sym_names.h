@@ -443,6 +443,8 @@ extern const char* SYM_Quit;
 extern const char* SYM_Quotient;
 extern const char* SYM_Radius;
 extern const char* SYM_Range;
+extern const char* SYM_RankedMax;
+extern const char* SYM_RankedMin;
 extern const char* SYM_Rational;
 extern const char* SYM_RationalFunctions;
 extern const char* SYM_Rationals;

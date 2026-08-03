@@ -1319,6 +1319,8 @@ typedef struct {
     int   rank;        /* required operand rank; 0 = any of {1, 2} (Norm) */
     bool  int_result;  /* result is Integer for a REAL operand regardless of the
                         * reduction's numeric kind (MatrixRank: a rank is an int) */
+    int   nextra;      /* trailing INTEGER args past the array (RankedMin/Max: 1),
+                        * passed through as written; 0 for the plain reductions */
 } NdRedSpec;
 
 static const NdRedSpec ND_REDS[] = {
@@ -1329,6 +1331,12 @@ static const NdRedSpec ND_REDS[] = {
     { "RootMeanSquare",    ndred_rms,       false, 1, false },
     { "Max",               ndred_max,       true,  1, false },
     { "Min",               ndred_min,       true,  1, false },
+    /* Order statistics with a trailing rank (nextra 1): RankedMin[v, n] /
+     * RankedMax[v, n] SELECT an element, so an int vector yields an Integer
+     * (int_ok), like Max/Min.  The sign of n is a runtime register value, so it
+     * does not affect the static result type. */
+    { "RankedMin",         ndred_ranked_min, true, 1, false, 1 },
+    { "RankedMax",         ndred_ranked_max, true, 1, false, 1 },
     /* Linalg rank-2 -> scalar reductions (COMPILE_MISSING.md §1), each delegating
      * to its ndla_* interpreter entry point (src/linalg/ndlinalg.h).  Real operand
      * only: an exact-integer Tr / Det / Norm is an exact number no machine slot
@@ -1352,9 +1360,11 @@ const char* nd_red_head_name(const void* imm) {
 }
 
 static const NdRedSpec* nd_red_lookup(const char* h, size_t na) {
-    if (na != 1) return NULL;   /* Max[x, y] is the scalar opcode, not this */
+    /* na == 1 + nextra: the plain reductions take just the array (Max[x, y] is
+     * the scalar opcode, not this); RankedMin/Max take the array plus one int. */
     for (size_t i = 0; i < sizeof ND_REDS / sizeof ND_REDS[0]; i++)
-        if (strcmp(h, ND_REDS[i].head) == 0) return &ND_REDS[i];
+        if (strcmp(h, ND_REDS[i].head) == 0 && na == 1u + (size_t)ND_REDS[i].nextra)
+            return &ND_REDS[i];
     return NULL;
 }
 
@@ -2238,6 +2248,10 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         const NdRedSpec* nr = nd_red_lookup(h, na);
         if (nr) {
             IT(0, ta);
+            if (nr->nextra == 1) {   /* RankedMin/Max: trailing rank must be an Integer */
+                CompileType tk; IT(1, tk);
+                if (tk != CT_INT) return false;
+            }
             CompileType rt = nd_red_result(nr, ta);
             if ((int)rt < 0) return false;
             *out = rt; return true;
@@ -3938,7 +3952,9 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
 
     /* Mean / Median / Variance / StandardDeviation / RootMeanSquare / Max /
      * Min of a rank-1 array, delegated to the interpreter's own reduction so
-     * the compiled answer is bit-identical to the interpreted one. */
+     * the compiled answer is bit-identical to the interpreted one.  RankedMin /
+     * RankedMax (nextra == 1) carry a trailing integer rank in a second
+     * register, emitted exactly as the A_NDFN trailing-int path does. */
     {
         const NdRedSpec* nr = nd_red_lookup(h, na);
         if (nr) {
@@ -3946,7 +3962,13 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
             CompileType rt = nd_red_result(nr, a.type);
             if ((int)rt < 0) { c->ok = false; return false; }
             Slot ip; memset(&ip, 0, sizeof ip); ip.p = nr;
-            *out = arr_op(c, OP_V_NDRED, a, arr_noop_val(), rt, ip);
+            if (nr->nextra == 1) {
+                Val nv; if (!emit(c, A[1], &nv)) return false;
+                if (nv.type != CT_INT) { c->ok = false; return false; }
+                *out = arr_op(c, OP_V_NDREDN, a, nv, rt, ip);   /* c->a=array, c->b=n */
+            } else {
+                *out = arr_op(c, OP_V_NDRED, a, arr_noop_val(), rt, ip);
+            }
             return c->ok;
         }
     }
@@ -5907,6 +5929,24 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
             return ok;
         }
 
+        case OP_V_NDREDN: {               /* RankedMin[v, n] / RankedMax[v, n] */
+            const NdRedSpec* rs = (const NdRedSpec*)c->imm.p;
+            if (!a->arr || a->arr->type != EXPR_NDARRAY) return false;
+            /* V_NDRED's rebuild-and-delegate, plus one trailing integer read from
+             * the b register (A_NDFN's trick).  A runtime-out-of-range n comes
+             * back as a materialised List, which vm_write_scalar refuses -> the
+             * interpreter answers, exactly as it would have. */
+            Expr* args[2] = { expr_copy(a->arr), expr_new_integer((int64_t)b->i) };
+            Expr* call = expr_new_function(expr_new_symbol(rs->head), args, 2);
+            if (!call) { expr_free(args[0]); expr_free(args[1]); return false; }
+            Expr* s = rs->fn(call);
+            expr_free(call);
+            if (f & AF_FREE_A) { expr_free(a->arr); a->arr = NULL; }
+            bool ok = s && vm_write_scalar(s, AF_R(f), d);
+            expr_free(s);
+            return ok;
+        }
+
         case OP_A_NDFN2: {                /* Dot (matrix) / LinearSolve / Cross / Join / ... */
             const NdFn2Spec* fn = (const NdFn2Spec*)c->imm.p;
             if (!a->arr || a->arr->type != EXPR_NDARRAY
@@ -6328,6 +6368,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(V_KERN2):  ARROP();
             OP(V_TOTAL):  ARROP();
             OP(V_NDRED):  ARROP();
+            OP(V_NDREDN): ARROP();
             OP(A_NDFN2):  ARROP();
             OP(V_NDFN2):  ARROP();
             OP(V_LEN):    ARROP();

@@ -666,6 +666,42 @@ In[3]:= Max[Infinity, 5]
 Out[3]= Infinity
 ```
 
+## RankedMin, RankedMax
+Selects the *n*-th smallest or largest element of a list — the order statistics
+between `Min`/`Max`.
+- `RankedMin[list, n]` — the *n*-th **smallest** element; `RankedMin[list, -n]`
+  the *n*-th **largest**.
+- `RankedMax[list, n]` — the *n*-th **largest** element; `RankedMax[list, -n]`
+  the *n*-th **smallest**.
+
+**Features**:
+- `Protected`.
+- `RankedMax[list, k]` is `RankedMin[list, -k]`.
+- `RankedMin[list, 1]` is `Min[list]`; `RankedMin[list, -1]` is `Max[list]`.
+- Yields a definite result whenever every element is a real number, including
+  symbolic real constants (`Pi`, `E`, `Sqrt[2]`, `Pi + E`), which order by value;
+  `Infinity`/`-Infinity` rank as `±∞`. Returns the element in its exact form.
+- Exact for arbitrary-precision integers and rationals; a symbolic non-real
+  element (a free symbol or a non-real complex), an empty list, or `|n|` out of
+  range leaves the call unevaluated.
+- Packed-array fast path (int64 exact, real via O(*n*) quickselect) and a
+  `Compile[]` lowering, so `RankedMin[v, k]`/`RankedMax[v, k]` compile and
+  auto-compile.
+
+```mathematica
+In[1]:= RankedMin[{12, 13, 11}, 2]
+Out[1]= 12
+
+In[2]:= RankedMin[{Pi, Sqrt[2], E, 3}, 3]
+Out[2]= 3
+
+In[3]:= RankedMax[{2.5, E, 12, 15, 485}, -2]
+Out[3]= E
+
+In[4]:= RankedMax[{Infinity, 5, Infinity, -Infinity}, 2]
+Out[4]= Infinity
+```
+
 ## MinMax
 `MinMax[list]` gives `{Min[list], Max[list]}` in one shot — the range of the
 data, handy for plot bounds. Over an association it uses the values. Delegates

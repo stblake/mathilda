@@ -2082,6 +2082,15 @@ int main(void) {
         /* Operand is a temporary, so the result has to slide down into its slot. */
         parity_arr("nd nested",      "Reverse[Sort[v]]",      vn, VT, 1, 17, 0.4, 3.0, 6);
         parity_arr("nd pipeline",    "Total[Take[Sort[v], 3]]", vn, VT, 1, 17, 0.4, 3.0, 6);
+        /* RankedMin/RankedMax — (array, int) -> scalar via the V_NDREDN opcode.
+         * A literal rank (like Take[v, 5]) keeps these in parity_arr; the n-th
+         * order statistic is a scalar, which arr_cmp compares like Total's. */
+        parity_arr("nd RankedMin",   "RankedMin[v, 2]",       vn, VT, 1, 17, 0.4, 3.0, 6);
+        parity_arr("nd RankedMax",   "RankedMax[v, 2]",       vn, VT, 1, 17, 0.4, 3.0, 6);
+        parity_arr("nd RankedMin neg","RankedMin[v, -1]",     vn, VT, 1, 17, 0.4, 3.0, 6);
+        parity_arr("nd RankedMax neg","RankedMax[v, -2]",     vn, VT, 1, 17, 0.4, 3.0, 6);
+        /* Operand a temporary: the scalar result must not disturb the array bank. */
+        parity_arr("nd Ranked nested","RankedMin[Sort[v], 3]",vn, VT, 1, 17, 0.4, 3.0, 6);
         parity_arr("nd with Map",    "Total[Map[Function[u, u^2], Reverse[v]]]",
                                                               vn, VT, 1, 17, 0.4, 3.0, 6);
         { const int64_t d2[2] = { 3, 4 };

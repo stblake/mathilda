@@ -440,6 +440,8 @@ const char* SYM_Quit = NULL;
 const char* SYM_Quotient = NULL;
 const char* SYM_Radius = NULL;
 const char* SYM_Range = NULL;
+const char* SYM_RankedMax = NULL;
+const char* SYM_RankedMin = NULL;
 const char* SYM_Rational = NULL;
 const char* SYM_RationalFunctions = NULL;
 const char* SYM_Rationals = NULL;
@@ -1262,6 +1264,8 @@ void sym_names_init(void) {
     SYM_Quotient                   = intern_symbol("Quotient");
     SYM_Radius                     = intern_symbol("Radius");
     SYM_Range                      = intern_symbol("Range");
+    SYM_RankedMax                  = intern_symbol("RankedMax");
+    SYM_RankedMin                  = intern_symbol("RankedMin");
     SYM_Rational                   = intern_symbol("Rational");
     SYM_RationalFunctions          = intern_symbol("RationalFunctions");
     SYM_Rationals                  = intern_symbol("Rationals");

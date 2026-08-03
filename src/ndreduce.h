@@ -51,6 +51,15 @@ Expr* ndred_rms(Expr* res);         /* RootMeanSquare[a] */
 Expr* ndred_median(Expr* res);      /* Median[a] */
 Expr* ndred_quartiles(Expr* res);   /* Quartiles[a] */
 
+/* RankedMin[v, n] / RankedMax[v, n] — the n-th smallest / largest element of a
+ * rank-1 machine vector (n<0 counts from the other end; RankedMax[v,n] ==
+ * RankedMin[v,-n]). Selects straight off the buffer: int64 exactly, real via an
+ * O(n) quickselect. Also the Compile ND_REDS delegates for the two heads.
+ * Faithful degrade (ndarray_delist_and_reeval) for a complex dtype, rank > 1,
+ * or a non-integer / out-of-range n. */
+Expr* ndred_ranked_min(Expr* res);  /* RankedMin[a, n] */
+Expr* ndred_ranked_max(Expr* res);  /* RankedMax[a, n] */
+
 /* Tally[a] — an IRREGULAR reduction: a scatter-add into a keyed table rather
  * than a fixed-stride sweep. Distinct enough from the reductions above to be
  * worth naming: the win is not vectorising a loop but never boxing the input at

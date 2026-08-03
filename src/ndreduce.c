@@ -479,6 +479,59 @@ Expr* ndred_median(Expr* res) {
     return expr_new_ndarray_like(a, 1, odims, out, odt);
 }
 
+/* ---------------------------------------------------- RankedMin / RankedMax
+ *
+ * RankedMin[v, n] selects the n-th SMALLEST element of the rank-1 machine
+ * vector v (n<0 counts from the largest); RankedMax the n-th LARGEST. The two
+ * differ only by the sign of n (RankedMax[v, n] == RankedMin[v, -n]), so both
+ * reduce to one ASCENDING rank r in [1, m] and the r-th order statistic taken
+ * straight off the buffer: an int64 vector selects EXACTLY (nd_sort_i64_asc, so
+ * the answer is an Integer, never a rounded Real, past 2^53), a real vector via
+ * O(m) quickselect (nd_select_kth). A complex dtype, rank > 1, non-integer or
+ * out-of-range n degrades to ndarray_delist_and_reeval — the List path then
+ * answers, identically. These two entry points are also the Compile ND_REDS
+ * delegates for the heads. */
+static Expr* ndred_ranked(Expr* res, bool is_max) {
+    if (res->data.function.arg_count != 2) return ndarray_delist_and_reeval(res);
+    Expr* a = res->data.function.args[0];
+    Expr* nexpr = res->data.function.args[1];
+    if (nexpr->type != EXPR_INTEGER || nexpr->data.integer == 0)
+        return ndarray_delist_and_reeval(res);
+    NDType dt = a->data.ndarray.dtype;
+    if (ndt_is_complex(dt) || a->data.ndarray.rank != 1)
+        return ndarray_delist_and_reeval(res);
+    size_t m = (size_t)a->data.ndarray.dims[0];
+    if (m == 0) return ndarray_delist_and_reeval(res);
+
+    /* Ascending rank r (1-based). RankedMax negates n first, so both heads
+     * share one formula: n>0 -> r=n, n<0 -> r=m+n+1. */
+    int64_t n = is_max ? -nexpr->data.integer : nexpr->data.integer;
+    int64_t r = (n > 0) ? n : ((int64_t)m + n + 1);
+    if (r < 1 || r > (int64_t)m) return ndarray_delist_and_reeval(res);
+    size_t k = (size_t)(r - 1);   /* 0-based order statistic */
+
+    const void* buf = a->data.ndarray.data;
+    if (dt == NDT_INT64) {
+        const int64_t* p = (const int64_t*)buf;
+        int64_t* t = malloc(sizeof(int64_t) * m);
+        if (!t) return ndarray_delist_and_reeval(res);
+        memcpy(t, p, sizeof(int64_t) * m);
+        nd_sort_i64_asc(t, m);
+        Expr* out = expr_new_integer(t[k]);
+        free(t);
+        return out;
+    }
+    double* s = malloc(sizeof(double) * m);
+    if (!s) return ndarray_delist_and_reeval(res);
+    nd_gather_real(buf, dt, 0, 1, m, s);
+    double val = nd_select_kth(s, m, k);
+    free(s);
+    return expr_new_real(val);
+}
+
+Expr* ndred_ranked_min(Expr* res) { return ndred_ranked(res, false); }
+Expr* ndred_ranked_max(Expr* res) { return ndred_ranked(res, true); }
+
 /* --------------------------------------------------------------- Quartiles */
 
 /* The reductions whose exact integer answer is a Rational or a root -- so no
