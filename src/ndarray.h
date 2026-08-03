@@ -379,6 +379,21 @@ bool ndarray_warn_shape_mismatch(Expr** args, size_t n, const char* verb);
  * mute so it stays quiet inside internal computations. */
 bool ndarray_warn_symbolic(Expr** args, size_t n, const char* verb);
 
+/* Emit `msg` to stderr at most once per evaluation. The name is historical --
+ * this is the system's general once-per-evaluation message primitive, and it
+ * lives here because it keys on the eval clock. Any head that declines and
+ * returns NULL wants it: the fixed-point evaluator revisits the unevaluated
+ * node, so a bare fprintf prints the same warning three to five times. */
+void ndarray_warn_once(const char* msg);
+
+/* A symbolic operand beside an INVISIBLE packed array: materialise and re-run,
+ * so `{1., 2., 3.} + x` threads exactly as an unpacked List does. Returns NULL
+ * when there is nothing to do (no packed List, or no symbolic operand), and the
+ * caller then warns and declines as before -- which is still the right answer
+ * for a VISIBLE NDArray[...], a deliberately numeric-only object. See the note
+ * at the definition. */
+Expr* ndarray_symbolic_delist_retry(const Expr* call);
+
 /* Register NDArray's builtins, attributes, and docstring. */
 void ndarray_init(void);
 

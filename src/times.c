@@ -315,8 +315,11 @@ Expr* builtin_times(Expr* res) {
             if (ndarray_warn_shape_mismatch(res->data.function.args, n, "multiplied"))
                 return NULL;
             /* NDArray combined with a symbolic factor (c * NDArray): purely
-             * numeric, so it can't be multiplied elementwise. Warn, then fall
-             * through to leave the product unevaluated. */
+             * numeric, so it can't be multiplied elementwise. An invisible
+             * packed List threads instead -- see the matching note in
+             * src/plus.c -- and only a visible NDArray[...] declines. */
+            Expr* symretry = ndarray_symbolic_delist_retry(res);
+            if (symretry) return symretry;
             ndarray_warn_symbolic(res->data.function.args, n, "multiplied");
         }
     }

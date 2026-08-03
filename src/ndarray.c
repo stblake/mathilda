@@ -1989,6 +1989,50 @@ Expr* ndarray_int64_delist_retry(const Expr* call) {
     return any ? ndarray_delist_and_reeval(call) : NULL;
 }
 
+/* A symbolic operand beside an INVISIBLE packed array: materialise and re-run.
+ *
+ * `NDArray[{1., 2.}] + x` warning and staying unevaluated is defensible — the
+ * user named a purely numeric object. `{1., 2., 3.} + x` doing it is not: that
+ * is an ordinary List, the List path threads it to `{1. + x, 2. + x, 3. + x}`,
+ * and whether the value happens to be packed is supposed to be invisible.
+ * Packing keys on LENGTH, so the same expression answered differently either
+ * side of the threshold:
+ *
+ *     Range[1., 3.]   + x  ->  {1. + x, 2. + x, 3. + x}
+ *     Range[1., 300.] + x  ->  unevaluated, with NDArray::sym
+ *
+ * This is the same shape as ndarray_int64_delist_retry above and sits beside
+ * it at each call site: return the re-evaluated call when some argument is a
+ * packed LIST (not a visible NDArray) and another is symbolic, else NULL so
+ * the caller warns and declines exactly as before.
+ *
+ * Found on 2026-08-02 by the packed-vs-plain differential, while checking
+ * whether Subtract and Divide could be marked packed-aware — they inherit
+ * Plus/Times/Power's behaviour here, so the bug had to be fixed at the source
+ * rather than propagated to two more heads. */
+Expr* ndarray_symbolic_delist_retry(const Expr* call) {
+    if (!call || call->type != EXPR_FUNCTION) return NULL;
+    bool packed = false, sym = false, visible = false;
+    for (size_t i = 0; i < call->data.function.arg_count; i++) {
+        const Expr* a = call->data.function.args[i];
+        if (!a) continue;
+        if (a->type == EXPR_NDARRAY) {
+            if (is_packed_list(a)) packed = true;
+            else                   visible = true;
+        } else if (!expr_is_numeric_like((Expr*)a)) {
+            sym = true;
+        }
+    }
+    /* One VISIBLE NDArray anywhere in the call vetoes the retry, even when a
+     * packed List is also present.  The alternative was tried and is worse:
+     * `NDArray[{1., 2., 3.}] + packedList + x` would then evaluate while
+     * `NDArray[{1., 2., 3.}] + plainList + x` still declined, which is the
+     * very divergence this function exists to remove, moved rather than
+     * fixed.  A visible NDArray dominates a packed one everywhere else
+     * (ndarray_result_presentation); it dominates here too. */
+    return (packed && sym && !visible) ? ndarray_delist_and_reeval(call) : NULL;
+}
+
 /* Format an NDArray's shape as "{d0, d1, ...}" into buf. */
 static void format_shape(const Expr* a, char* buf, size_t buflen) {
     size_t off = 0;
@@ -2007,7 +2051,7 @@ static void format_shape(const Expr* a, char* buf, size_t buflen) {
  * clock (constant within one evaluate(), bumped between REPL inputs) plus a
  * hash of the message: an identical warning prints once per evaluation but
  * still fires on a later input. Respects the arithmetic-warning mute. */
-static void ndarray_warn_once(const char* msg) {
+void ndarray_warn_once(const char* msg) {
     if (arith_warnings_muted()) return;
     static uint64_t last_clock = 0;
     static uint64_t last_key = 0;

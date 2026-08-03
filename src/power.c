@@ -663,9 +663,13 @@ Expr* builtin_power(Expr* res) {
     }
 
     /* NDArray combined with a symbolic base or exponent (NDArray^n): purely
-     * numeric, so it can't be raised elementwise. Warn, then fall through to
-     * leave the power unevaluated. Same-shape / scalar cases returned above. */
+     * numeric, so it can't be raised elementwise. An invisible packed List
+     * threads instead -- see the matching note in src/plus.c -- and only a
+     * visible NDArray[...] warns and falls through to leave the power
+     * unevaluated. Same-shape / scalar cases returned above. */
     if (is_ndarray(base) || is_ndarray(exp)) {
+        Expr* symretry = ndarray_symbolic_delist_retry(res);
+        if (symretry) return symretry;
         Expr* nd_pair[2] = { base, exp };
         ndarray_warn_symbolic(nd_pair, 2, "raised to a power");
     }

@@ -350,8 +350,16 @@ Expr* builtin_plus(Expr* res) {
             if (ndarray_warn_shape_mismatch(res->data.function.args, n, "added"))
                 return NULL;
             /* NDArray combined with a symbolic term (NDArray + a): purely
-             * numeric, so it can't be added elementwise. Warn, then fall
-             * through to leave the sum unevaluated. */
+             * numeric, so it can't be added elementwise.
+             *
+             * An INVISIBLE packed List is a different case and is handled
+             * first: it is an ordinary List, the List path threads it to
+             * {1. + x, 2. + x, ...}, and leaving it unevaluated made the same
+             * expression answer two ways either side of the packing threshold.
+             * A VISIBLE NDArray[...] still warns and falls through to leave
+             * the sum unevaluated, which is its contract. */
+            Expr* symretry = ndarray_symbolic_delist_retry(res);
+            if (symretry) return symretry;
             ndarray_warn_symbolic(res->data.function.args, n, "added");
         }
     }

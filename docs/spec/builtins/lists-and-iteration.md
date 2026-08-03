@@ -111,9 +111,9 @@ Generates a list of expressions.
   Nested iterators compile too: the outer variables are folded in as the
   constants they currently hold. Calls to a `CompiledFunction` inside the body
   are inlined rather than dispatched per point.
-- **Large machine-number results pack.** A result of 250 or more elements that
-  is a rectangular block of uniformly exact or uniformly inexact machine numbers
-  is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a
+- **Large machine-number results pack.** A result at or above the packing
+  threshold that is a rectangular block of uniformly exact or uniformly inexact
+  machine numbers is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a
   dense buffer, distinguishable only by `NDArrayQ`. A machine-real compiled body writes the
   buffer directly, without building the elements first; every other branch is
   offered for packing once built. `Table[i j, {i, 300}, {j, 300}]` is one rank-2
@@ -211,9 +211,9 @@ Generates an array by applying a function to indices.
 - `Array[f, n]`
 - `Array[f, {n1, n2, ...}]`
 
-- **Large machine-number results pack.** A result of 250 or more elements that
-  is a rectangular block of uniformly exact or uniformly inexact machine numbers
-  is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a
+- **Large machine-number results pack.** A result at or above the packing
+  threshold that is a rectangular block of uniformly exact or uniformly inexact
+  machine numbers is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a
   dense buffer, distinguishable only by `NDArrayQ`. Offered after building, not written directly:
 `Array` evaluates `f[i]` per leaf with no advance knowledge of the result type.
 
@@ -236,9 +236,9 @@ In[2]:= ConstantArray[0, {2, 3}]
 Out[2]= {{0, 0, 0}, {0, 0, 0}}
 ```
 
-- **Large machine-number results pack.** A result of 250 or more elements that
-  is a rectangular block of uniformly exact or uniformly inexact machine numbers
-  is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a
+- **Large machine-number results pack.** A result at or above the packing
+  threshold that is a rectangular block of uniformly exact or uniformly inexact
+  machine numbers is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a
   dense buffer, distinguishable only by `NDArrayQ`. A machine-number `c` over a rectangular shape is
 written straight into the buffer.
 
