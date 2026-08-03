@@ -342,6 +342,7 @@ set(COMMON_SRC
     ../src/list/array_flatten.c
     ../src/list/take_drop.c
     ../src/list/flatten.c
+    ../src/list/flatten_at.c
     ../src/list/partition.c
     ../src/list/pick.c
     ../src/list/rotate.c
@@ -812,6 +813,10 @@ add_test(NAME unit_vector_tests COMMAND unit_vector_tests)
 add_executable(array_flatten_tests test_array_flatten.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(array_flatten_tests PRIVATE ../src)
 add_test(NAME array_flatten_tests COMMAND array_flatten_tests)
+
+add_executable(flatten_at_tests test_flatten_at.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(flatten_at_tests PRIVATE ../src)
+add_test(NAME flatten_at_tests COMMAND flatten_at_tests)
 
 add_executable(rescale_tests test_rescale.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(rescale_tests PRIVATE ../src)

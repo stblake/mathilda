@@ -200,6 +200,7 @@ extern const char* SYM_FindMinimum;
 extern const char* SYM_FindRoot;
 extern const char* SYM_Flat;
 extern const char* SYM_Flatten;
+extern const char* SYM_FlattenAt;
 extern const char* SYM_Floor;
 extern const char* SYM_For;
 extern const char* SYM_FractionalPart;

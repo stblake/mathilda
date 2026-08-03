@@ -1779,6 +1779,16 @@ void info_init(void) {
         "Flatten[list, n, h]\n"
         "\tflattens only sublists whose head matches h, leaving other heads\n"
         "\tin place.");
+    symtab_set_docstring("FlattenAt",
+        "FlattenAt[list, n]\n"
+        "\tflattens out the sublist at position n of list, splicing its elements\n"
+        "\tinto list; a negative n counts from the end.\n"
+        "FlattenAt[expr, {i, j, ...}]\n"
+        "\tflattens out the part of expr at the position {i, j, ...}.\n"
+        "FlattenAt[expr, {{i1, ...}, {i2, ...}, ...}]\n"
+        "\tflattens out the parts of expr at several positions.\n"
+        "\tThe head of the spliced part is removed; FlattenAt works on any head,\n"
+        "\tnot just List.");
     symtab_set_docstring("ArrayFlatten",
         "ArrayFlatten[a]\n"
         "\tcreates a single flattened matrix from a matrix of matrices, forming a\n"

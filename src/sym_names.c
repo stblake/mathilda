@@ -200,6 +200,7 @@ const char* SYM_FindMinimum = NULL;
 const char* SYM_FindRoot = NULL;
 const char* SYM_Flat = NULL;
 const char* SYM_Flatten = NULL;
+const char* SYM_FlattenAt = NULL;
 const char* SYM_Floor = NULL;
 const char* SYM_For = NULL;
 const char* SYM_FractionalPart = NULL;
@@ -1021,6 +1022,7 @@ void sym_names_init(void) {
     SYM_FindRoot                   = intern_symbol("FindRoot");
     SYM_Flat                       = intern_symbol("Flat");
     SYM_Flatten                    = intern_symbol("Flatten");
+    SYM_FlattenAt                  = intern_symbol("FlattenAt");
     SYM_Floor                      = intern_symbol("Floor");
     SYM_For                        = intern_symbol("For");
     SYM_FractionalPart             = intern_symbol("FractionalPart");

@@ -10,6 +10,7 @@ void list_init(void) {
     symtab_add_builtin("Take", builtin_take);
     symtab_add_builtin("Drop", builtin_drop);
     symtab_add_builtin("Flatten", builtin_flatten);
+    symtab_add_builtin("FlattenAt", builtin_flatten_at);
     symtab_add_builtin("Partition", builtin_partition);
     symtab_add_builtin("Pick", builtin_pick);
     symtab_get_def("Pick")->attributes |= ATTR_PROTECTED;
@@ -138,6 +139,7 @@ void list_init(void) {
     symtab_get_def("Take")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Drop")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Flatten")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("FlattenAt")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Partition")->attributes |= ATTR_PROTECTED;
     symtab_get_def("RotateLeft")->attributes |= ATTR_PROTECTED;
     symtab_get_def("RotateRight")->attributes |= ATTR_PROTECTED;

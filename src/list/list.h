@@ -16,6 +16,7 @@
 #include "array_flatten.h"
 #include "take_drop.h"
 #include "flatten.h"
+#include "flatten_at.h"
 #include "partition.h"
 #include "pick.h"
 #include "rotate.h"

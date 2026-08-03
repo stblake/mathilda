@@ -258,6 +258,23 @@ Flattens out nested lists.
 - `Flatten[list, n]`: Flattens up to level `n`.
 - `Flatten[list, n, h]`: Flattens subexpressions with head `h`.
 
+## FlattenAt
+Splices the subexpression at one or more positions into its parent, removing
+that subexpression's head. Works on any head, not just `List`. Position
+resolution (negative indices, single deep path, list of paths) is the shared
+`MapAt`/`ReplaceAt` walker; an out-of-range position leaves the call
+unevaluated. Attribute: `Protected`.
+- `FlattenAt[list, n]`: Flattens the sublist at element `n`; a negative `n`
+  counts from the end. `FlattenAt[{a,{b,c},{d,e},{f}}, 2]` → `{a,b,c,{d,e},{f}}`.
+- `FlattenAt[expr, {i,j,...}]`: Flattens the part at a single deep position.
+- `FlattenAt[expr, {{i1,...},{i2,...},...}]`: Flattens at several positions,
+  each resolved against the original expression.
+  `FlattenAt[{a,{b,c},{d,e},{f}}, {{2},{4}}]` → `{a,b,c,{d,e},f}`.
+
+Because the head at the position is removed, `FlattenAt[{1,{{2},{3}},4}, {2}]`
+gives `{1,{2},{3},4}`; use `MapAt[Flatten, …]` to flatten *within* a part
+instead.
+
 ## ArrayFlatten
 Creates a single flattened matrix from a matrix of matrices (block matrix).
 - `ArrayFlatten[a]`: For a matrix of matrices, yields a matrix whose elements are in the same order as in `MatrixForm[a]`. Equivalent to `Flatten[a, {{1,3},{2,4}}]`.
