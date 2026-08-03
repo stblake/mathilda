@@ -34,7 +34,8 @@ modelled on numpy's `ndarray`.
   `src/linalg/ndlinalg.c`). The heavy/common consumers — `Det`, `Inverse`,
   `LinearSolve`, `MatrixRank`, `Tr`, `Norm`, `Normalize`, `Cross` — take a fast
   C-level path over the flat buffer and return a closed-system `NDArray` (or a
-  scalar `Real`/`Complex`); the real `Det`/`Inverse`/`LinearSolve`/`MatrixRank`
+  scalar `Real`/`Complex`); `Diagonal` (`src/ndstruct.c`) likewise slices the
+  k-th diagonal straight off the buffer; the real `Det`/`Inverse`/`LinearSolve`/`MatrixRank`
   path uses an in-house partial-pivot `double` LU, so `Det[NDArray[...]]` is
   O(n³) even without LAPACK. The factorisations, predicates, constructors, and
   lattice routines (`Eigenvalues`, `QRDecomposition`, `SingularValueDecomposition`,
@@ -733,6 +734,42 @@ Out[3]= {1, 5, 9}
 
 In[4]:= Tr[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, Plus, 1]
 Out[4]= {12, 15, 18}
+```
+
+## Diagonal
+Gives the elements on a diagonal of a matrix.
+- `Diagonal[m]`
+- `Diagonal[m, k]`
+
+**Features**:
+- `Protected`.
+- `Diagonal[m]` gives the leading diagonal `{m[[1,1]], m[[2,2]], ...}`, of length
+  `Min[rows, cols]` — so it works for a non-square `m`.
+- `Diagonal[m, k]` gives the `k`-th diagonal: `k > 0` above the leading diagonal
+  (superdiagonals), `k < 0` below (subdiagonals). An out-of-range `k` gives `{}`.
+- Elements are copied verbatim, so symbolic, exact, machine and complex entries
+  all flow through and an exact-integer diagonal stays exact.
+- Generalises to higher rank: the diagonal of a rank-`n` array is rank-`(n-1)`,
+  since each `m[[i, i+k]]` is itself an `(n-1)`-tensor.
+- Machine-precision matrices (a packed `List` or a visible `NDArray`) slice the
+  diagonal directly off the flat buffer (`ndstruct_diagonal`, `src/ndstruct.c`),
+  and the rank-2 case lowers inside `Compile[]` (`ND_FNS` / `A_NDFN`).
+
+```mathematica
+In[1]:= Diagonal[{{a, b, c}, {d, e, f}, {g, h, i}}]
+Out[1]= {a, e, i}
+
+In[2]:= Diagonal[{{a, b, c}, {d, e, f}, {g, h, i}}, 1]
+Out[2]= {b, f}
+
+In[3]:= Diagonal[{{a, b, c}, {d, e, f}, {g, h, i}}, -1]
+Out[3]= {d, h}
+
+In[4]:= Diagonal[{{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}}]
+Out[4]= {1, 6, 11}
+
+In[5]:= Diagonal[{{a, b, c, d}, {e, f, g, h}, {i, j, k, l}, {m, n, o, p}}, -2]
+Out[5]= {i, n}
 ```
 
 ## Inverse

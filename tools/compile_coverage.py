@@ -266,9 +266,11 @@ BASELINE = {
     # An array x array opcode.  A_NDFN carries one array plus trailing
     # integers, which none of these fit.
     "Dot", "Cross", "Inner", "Outer",
-    "Det", "Inverse", "PseudoInverse", "LinearSolve", "LeastSquares",
-    "RowReduce", "NullSpace", "MatrixRank", "MatrixPower", "Norm", "Tr",
+    "Inverse", "PseudoInverse", "LinearSolve", "LeastSquares",
+    "RowReduce", "NullSpace", "MatrixPower",
     "Normalize",
+    # (Tr, Det, MatrixRank, Norm were the COMPILE_MISSING.md §1 rank-2 -> scalar
+    #  reductions; they now lower via ND_REDS / V_NDRED — src/compile/compile.c.)
     "Fourier", "InverseFourier", "FourierDCT", "FourierDST",
     "ListConvolve", "ListCorrelate",
     # ND_FNS entries whose extra argument is not an integer (a list, a real, a

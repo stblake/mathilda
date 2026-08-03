@@ -14,6 +14,7 @@ Expr* builtin_cross(Expr* res);
 Expr* builtin_norm(Expr* res);
 Expr* builtin_normalize(Expr* res);
 Expr* builtin_tr(Expr* res);
+Expr* builtin_diagonal(Expr* res);
 Expr* builtin_identitymatrix(Expr* res);
 Expr* builtin_diagonalmatrix(Expr* res);
 Expr* builtin_hilbertmatrix(Expr* res);

@@ -688,6 +688,54 @@ Expr* ndstruct_transpose(Expr* res) {
     return expr_new_ndarray_like(a, 2, odims, out, dt);
 }
 
+/* --------------------------------------------------------------- Diagonal */
+
+/* Diagonal[a] / Diagonal[a, k]: the k-th diagonal of a rank-2 buffer, returned
+ * as a fresh rank-1 NDArray. k defaults to 0 (leading diagonal); k > 0 selects a
+ * superdiagonal, k < 0 a subdiagonal. Elements are moved by memcpy (never through
+ * ndt_get), so an int64 buffer stays exact past 2^53 -- a diagonal only MOVES
+ * values, exactly like Transpose.
+ *
+ * Degrades (ndarray_delist_and_reeval) for a non-2-D operand, a non-integer k, an
+ * arity outside {1, 2}, or an EMPTY diagonal (|k| beyond the matrix): the List
+ * path answers {} there, which no rank-1 buffer shape can express. The empty
+ * guard `k <= -R || k >= C` also keeps the -k below from overflowing at k=INT64_MIN. */
+Expr* ndstruct_diagonal(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return ndarray_delist_and_reeval(res);
+    Expr* a = res->data.function.args[0];
+    if (a->data.ndarray.rank != 2) return ndarray_delist_and_reeval(res);
+
+    int64_t k = 0;
+    if (argc == 2) {
+        Expr* ke = res->data.function.args[1];
+        if (ke->type != EXPR_INTEGER) return ndarray_delist_and_reeval(res);
+        k = ke->data.integer;
+    }
+
+    const int64_t* dims = a->data.ndarray.dims;
+    int64_t R = dims[0], C = dims[1];
+    if (k <= -R || k >= C) return ndarray_delist_and_reeval(res);   /* empty diagonal */
+
+    int64_t start_row = (k < 0) ? -k : 0;
+    int64_t start_col = (k > 0) ?  k : 0;
+    int64_t len_r = R - start_row, len_c = C - start_col;
+    int64_t len = (len_r < len_c) ? len_r : len_c;                  /* guaranteed >= 1 */
+
+    NDType dt = a->data.ndarray.dtype;
+    size_t esz = ndt_elem_size(dt);
+    void* out = malloc(esz * (size_t)len);
+    if (!out) return ndarray_delist_and_reeval(res);
+    const char* buf = (const char*)a->data.ndarray.data;
+    for (int64_t t = 0; t < len; t++) {
+        int64_t i = start_row + t, j = start_col + t;
+        memcpy((char*)out + (size_t)t * esz,
+               buf + ((size_t)i * (size_t)C + (size_t)j) * esz, esz);
+    }
+    int64_t odims[1] = { len };
+    return expr_new_ndarray_like(a, 1, odims, out, dt);
+}
+
 /* ---------------------------------------------------------------- Flatten */
 
 /* Flatten[a]: collapse every axis into a single rank-1 array. The buffer is

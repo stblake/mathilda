@@ -1,8 +1,9 @@
 # Heads with a numeric fast path that `Compile[]` cannot lower
 
-**52 of 236.** Recorded 2026-08-02 by `make check-compile-coverage`
+**48 of 236.** Recorded 2026-08-02 by `make check-compile-coverage`
 (`tools/compile_coverage.py`), which joins the NDArray kernel registry and
 `src/pack.c`'s `AWARE` list against the binary's own `CompileDiagnostics`.
+The §1 group (`Tr`, `Det`, `MatrixRank`, `Norm`) closed 2026-08-03.
 
 ## Why this is a defect list and not a wish list
 
@@ -34,7 +35,7 @@ and they are the reason to check rather than assume.
 
 The sections are the compiler-side mechanism that would close the group, and
 heads in a group close together — which is the whole reason to group them
-rather than list 52 names.
+rather than list 48 names.
 
 Two extension points already exist in `src/compile/compile.c`:
 
@@ -50,23 +51,25 @@ shapes yet.
 
 ---
 
-## 1. Nearly free: four scalar reductions blocked only by a rank rule
+## 1. Closed 2026-08-03: the four scalar reductions now lower
 
-`nd_red_result` restricts `ND_REDS` to **rank 1**, because `Mean` of a matrix is
-the vector of column means and the compiled form must not disagree. These four
-are scalar-valued at rank 2, each already has an `Expr* f(Expr*)` entry point
-taking the whole call, and each would be one table row plus a per-entry rank
-rule.
+`Tr`, `Det`, `MatrixRank`, and `Norm` — a rank-2 (`Norm`: rank-1 *or* rank-2)
+array reduced to a **scalar** — now lower through `ND_REDS` / `V_NDRED`, each
+delegating to its `ndla_*` entry point (`src/linalg/ndlinalg.h`). `nd_red_result`
+gained a per-entry `rank` rule (rank 2 for the linalg reductions, `0` = either
+for `Norm`) and an `int_result` flag for `MatrixRank`, whose rank is an Integer.
 
 | head | entry point | result |
 |---|---|---|
-| `Det` | `ndla_det` (`src/linalg/ndlinalg.h`) | Real |
+| `Det` | `ndla_det` | Real |
 | `Tr` | `ndla_tr` | Real |
 | `MatrixRank` | `ndla_matrixrank` | Integer |
 | `Norm` | `ndla_norm` | Real (rank 1 *and* rank 2) |
 
-**Do this one first.** It is the cheapest item on the list and `Det`/`Norm`
-inside a compiled body are ordinary numeric code.
+A **real** matrix already routes through these same `ndla_*` functions in the
+interpreter (all four are on `AWARE`), so the compiled answer is identical by
+construction; an int or complex operand declines to the interpreter, which is
+right to answer the exact number no machine slot holds.
 
 ## 2. Nearly free: array → array with a single array operand
 

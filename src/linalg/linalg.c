@@ -27,6 +27,8 @@ void linalg_init(void) {
     symtab_get_def("Normalize")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Tr", builtin_tr);
     symtab_get_def("Tr")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("Diagonal", builtin_diagonal);
+    symtab_get_def("Diagonal")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("IdentityMatrix", builtin_identitymatrix);
     symtab_get_def("IdentityMatrix")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("DiagonalMatrix", builtin_diagonalmatrix);

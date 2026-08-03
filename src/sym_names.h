@@ -585,6 +585,7 @@ extern const char* SYM_Decrement;
 extern const char* SYM_Default;
 extern const char* SYM_Denominator;
 extern const char* SYM_Det;
+extern const char* SYM_Diagonal;
 extern const char* SYM_DiagonalMatrix;
 extern const char* SYM_Dot;
 extern const char* SYM_Expand;

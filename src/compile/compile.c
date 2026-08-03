@@ -15,7 +15,8 @@
 #include "../attr.h"      /* ATTR_LISTABLE — the gate on elementwise fusion */
 #include "../ndarray.h"    /* NDUnaryKernel / NDBinaryKernel — shared kernel layer */
 #include "../ndreduce.h"   /* ndred_total / ndred_accumulate — array reductions */
-#include "../ndstruct.h"   /* ndstruct_reverse / _sort / ... — delegated structure */
+#include "../ndstruct.h"   /* ndstruct_reverse / _sort / _diagonal — delegated structure */
+#include "../linalg/ndlinalg.h"  /* ndla_tr / _det / _matrixrank / _norm — delegated linalg reductions */
 #include "../ndarray_internal.h"  /* nd_parallel_for — threading the fused map loop */
 #include "../print.h"      /* expr_to_string — printing the node a bail choked on */
 #include "../sym_names.h" /* SYM_All / SYM_Span / SYM_List — Part subscript specs */
@@ -1096,7 +1097,8 @@ static Expr* fn_head_call(const char* head, int n) {
  * buffer walk) but that a body CONTAINING one no longer bails wholesale.
  *
  * `rank_rule`: 0 = same rank as the operand, 1 = rank 1 (Flatten), 2 = rank 2
- * in and out (Transpose).  Every entry preserves the element type. */
+ * in and out (Transpose), 3 = rank 2 in -> rank 1 out (Diagonal: matrix ->
+ * vector).  Every entry preserves the element type. */
 typedef struct {
     const char* head;
     Expr* (*fn)(Expr*);
@@ -1128,6 +1130,11 @@ static const NdFnSpec ND_FNS[] = {
     { "Accumulate", ndred_accumulate,   0, 0 },
     { "Flatten",    ndstruct_flatten,   0, 1 },
     { "Transpose",  ndstruct_transpose, 0, 2 },
+    /* Diagonal[m] and Diagonal[m, k]: a rank-2 buffer to its k-th diagonal (a
+     * rank-1 vector).  Two rows for the two arities nd_fn_lookup keys on
+     * (na == 1 + nextra); the optional k is the trailing integer argument. */
+    { "Diagonal",   ndstruct_diagonal,  0, 3 },
+    { "Diagonal",   ndstruct_diagonal,  1, 3 },
     { "Take",       ndstruct_take,      1, 0 },
     { "Drop",       ndstruct_drop,      1, 0 },
     /* Added 2026-08-02 by the sixth sweep (tools/compile_coverage.py).  Each
@@ -1173,17 +1180,32 @@ static const NdFnSpec ND_FNS[] = {
 typedef struct {
     const char* head;
     Expr* (*fn)(Expr*);
-    bool  int_ok;      /* exact over an int64 array, result CT_INT */
+    bool  int_ok;      /* exact over an int64 array, result CT_INT (Max/Min select) */
+    int   rank;        /* required operand rank; 0 = any of {1, 2} (Norm) */
+    bool  int_result;  /* result is Integer for a REAL operand regardless of the
+                        * reduction's numeric kind (MatrixRank: a rank is an int) */
 } NdRedSpec;
 
 static const NdRedSpec ND_REDS[] = {
-    { "Mean",              ndred_mean,     false },
-    { "Median",            ndred_median,   false },
-    { "Variance",          ndred_variance, false },
-    { "StandardDeviation", ndred_std,      false },
-    { "RootMeanSquare",    ndred_rms,      false },
-    { "Max",               ndred_max,      true  },
-    { "Min",               ndred_min,      true  },
+    { "Mean",              ndred_mean,      false, 1, false },
+    { "Median",            ndred_median,    false, 1, false },
+    { "Variance",          ndred_variance,  false, 1, false },
+    { "StandardDeviation", ndred_std,       false, 1, false },
+    { "RootMeanSquare",    ndred_rms,       false, 1, false },
+    { "Max",               ndred_max,       true,  1, false },
+    { "Min",               ndred_min,       true,  1, false },
+    /* Linalg rank-2 -> scalar reductions (COMPILE_MISSING.md §1), each delegating
+     * to its ndla_* interpreter entry point (src/linalg/ndlinalg.h).  Real operand
+     * only: an exact-integer Tr / Det / Norm is an exact number no machine slot
+     * holds, so int (and complex) operands decline to the interpreter, which is
+     * right to answer exactly.  A real matrix already routes through these same
+     * ndla_* functions in the interpreter (all four are on pack.c's AWARE list),
+     * so the compiled answer is identical by construction.  MatrixRank answers an
+     * Integer for a real matrix (int_result).  Norm accepts rank 1 or 2 (rank 0). */
+    { "Tr",                ndla_tr,         false, 2, false },
+    { "Det",               ndla_det,        false, 2, false },
+    { "Norm",              ndla_norm,       false, 0, false },
+    { "MatrixRank",        ndla_matrixrank, false, 2, true  },
 };
 
 /* Name accessors for the disassembler; see compile_internal.h. */
@@ -1202,11 +1224,17 @@ static const NdRedSpec* nd_red_lookup(const char* h, size_t na) {
 }
 
 /* Scalar result type of a delegated reduction over an operand of type `ta`,
- * or CT_ERR.  Rank 1 only: at rank 2 the interpreter's Mean is a VECTOR of
- * column means, not a number, and the two must not disagree. */
+ * or CT_ERR.  The required rank is per-entry (`s->rank`): the statistics
+ * reductions are rank 1 only — at rank 2 the interpreter's Mean is a VECTOR of
+ * column means, not a number, and the two must not disagree — while the linalg
+ * reductions (Tr / Det / MatrixRank) are rank 2 and Norm is either (rank 0). */
 static CompileType nd_red_result(const NdRedSpec* s, CompileType ta) {
-    if (!CT_IS_ARRAY(ta) || CT_RANK(ta) != 1) return CT_ERR;
+    if (!CT_IS_ARRAY(ta)) return CT_ERR;
+    int rk = CT_RANK(ta);
+    if (s->rank == 0) { if (rk != 1 && rk != 2) return CT_ERR; }  /* Norm: 1 or 2 */
+    else if (rk != s->rank) return CT_ERR;
     CompileType el = CT_ELEM(ta);
+    if (s->int_result) return (el == CT_REAL) ? CT_INT : CT_ERR;  /* MatrixRank: real -> Integer */
     if (el == CT_REAL) return CT_REAL;
     if (el == CT_INT)  return s->int_ok ? CT_INT : CT_ERR;
     return CT_ERR;                       /* complex: no ND reduction promises it */
@@ -1229,6 +1257,7 @@ static CompileType nd_fn_result(const NdFnSpec* s, CompileType ta) {
     CompileType elem = s->int_result ? CT_INT : CT_ELEM(ta);
     if (s->rank_rule == 1) return CT_ARRAY(elem, 1);
     if (s->rank_rule == 2) return rank == 2 ? CT_ARRAY(elem, 2) : CT_ERR;
+    if (s->rank_rule == 3) return rank == 2 ? CT_ARRAY(elem, 1) : CT_ERR;  /* Diagonal */
     return CT_ARRAY(elem, rank);
 }
 

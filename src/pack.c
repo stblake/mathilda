@@ -498,7 +498,7 @@ static void pack_mark_aware_heads(void) {
          * unevaluated -- so it was EXEMPT rather than aware, and a packed
          * 1000x1000 cost 430 ms against NumPy's 2.20 ms. */
         "Reverse", "Sort", "Flatten", "Transpose", "ConjugateTranspose",
-        "Take", "Drop",
+        "Take", "Drop", "Diagonal",
         /* Ordering (src/ndstruct.c) argsorts the buffer and returns the int64
          * permutation of positions -- so, unlike Sort, its result dtype is int64
          * regardless of the input dtype. Still a single-headed (Integer) result,
@@ -822,7 +822,7 @@ static void pack_mark_aware_heads(void) {
          * about. Verified individually in src/ndstruct.c; Reverse also keeps
          * Sort[Reverse[intList]] on the buffer end to end, which was the last
          * measured place where packing was slower than a plain List. */
-        "Reverse", "Flatten", "Take", "Drop",
+        "Reverse", "Flatten", "Take", "Drop", "Diagonal",
         /* The leading-axis slices, added 2026-07-31 with the fourth sweep's
          * ndstruct_head_tail. A rank-1 First/Last is one element through
          * ndarray_element_to_expr, which yields an exact Integer from an int64

@@ -581,6 +581,7 @@ const char* SYM_Decrement = NULL;
 const char* SYM_Default = NULL;
 const char* SYM_Denominator = NULL;
 const char* SYM_Det = NULL;
+const char* SYM_Diagonal = NULL;
 const char* SYM_DiagonalMatrix = NULL;
 const char* SYM_Dot = NULL;
 const char* SYM_Expand = NULL;
@@ -1400,6 +1401,7 @@ void sym_names_init(void) {
     SYM_Default                    = intern_symbol("Default");
     SYM_Denominator                = intern_symbol("Denominator");
     SYM_Det                        = intern_symbol("Det");
+    SYM_Diagonal                   = intern_symbol("Diagonal");
     SYM_DiagonalMatrix             = intern_symbol("DiagonalMatrix");
     SYM_Dot                        = intern_symbol("Dot");
     SYM_Expand                     = intern_symbol("Expand");

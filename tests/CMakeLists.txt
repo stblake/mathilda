@@ -435,6 +435,7 @@ set(COMMON_SRC
     ../src/linalg/normalize.c
     ../src/linalg/tr.c
     ../src/linalg/construct.c
+    ../src/linalg/diagonal.c
     ../src/linalg/hankelmat.c
     ../src/linalg/toeplitzmat.c
     ../src/linalg/vandermondemat.c
@@ -1524,6 +1525,13 @@ if(USE_ECM)
     add_dependencies(hankelmatrix_tests build_ecm)
 endif()
 add_test(NAME hankelmatrix_tests COMMAND hankelmatrix_tests)
+
+add_executable(diagonal_tests test_diagonal.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(diagonal_tests PRIVATE ../src)
+if(USE_ECM)
+    add_dependencies(diagonal_tests build_ecm)
+endif()
+add_test(NAME diagonal_tests COMMAND diagonal_tests)
 
 add_executable(toeplitzmatrix_tests test_toeplitzmatrix.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(toeplitzmatrix_tests PRIVATE ../src)
