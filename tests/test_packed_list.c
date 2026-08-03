@@ -333,6 +333,98 @@ void test_setops_match_plain_lists(void) {
         same_as_plain(CASES[i][0], CASES[i][1]);
 }
 
+/* Subtract and Divide became packed-aware on 2026-08-02, and a symbolic operand
+ * beside an invisible packed array stopped being a wrong answer at the same
+ * time.  Both were found by the gate pass of tools/nd_fastpath_sweep.py.
+ *
+ * The two are one test because the second was uncovered by checking the first:
+ * Subtract and Divide rewrite to Plus/Times/Power, so marking them aware makes
+ * them inherit whatever those heads do with an array — and what those heads did
+ * with `packedArray + x` was WARN AND LEAVE IT UNEVALUATED, where the same short
+ * list threads.  Packing keys on length, so one expression answered two ways:
+ *
+ *     Range[1., 3.]   + x  ->  {1. + x, 2. + x, 3. + x}
+ *     Range[1., 300.] + x  ->  unevaluated, with NDArray::sym
+ *
+ * A visible NDArray[...] still declines, which is its documented contract; only
+ * the invisible surface materialises and re-runs. */
+void test_arithmetic_rewrites_match_plain_lists(void) {
+    static const char* const CASES[][2] = {
+        /* Subtract / Divide: the head the gate used to fire at is one rewrite
+         * away from Plus and Times, which have had buffer paths all along. */
+        { "Take[Range[1., 300.] - 1., 3]",        "Range[1., 3.] - 1." },
+        { "Take[1. - Range[1., 300.], 3]",        "1. - Range[1., 3.]" },
+        { "Take[Range[1., 300.]/2., 3]",          "Range[1., 3.]/2." },
+        { "Take[2./Range[1., 300.], 3]",          "2./Range[1., 3.]" },
+        { "Take[Subtract[Range[1., 300.], 1.], 3]", "Subtract[Range[1., 3.], 1.]" },
+        /* THE WRONG ANSWER.  builtin_divide's Real branch fires when EITHER
+         * operand is Real and then reads the other through scalar type tests
+         * that an array fails all of, defaulting to 0.0 -- so this answered
+         * `0.` for the whole call once the gate stopped materialising. */
+        { "Take[Divide[Range[1., 300.], 2.], 3]", "Divide[Range[1., 3.], 2.]" },
+        { "Head[Divide[Range[1., 300.], 2.]]",    "Head[Divide[Range[1., 3.], 2.]]" },
+        /* Integer buffers: Subtract stays exact, Divide gives Rationals and so
+         * must NOT keep the buffer (it is deliberately absent from INT64_OK). */
+        { "Take[Range[300] - 1, 3]",              "Range[3] - 1" },
+        { "Take[Range[300]/2, 3]",                "Range[3]/2" },
+        { "Head[First[Range[300] - 1]]",          "Head[First[Range[3] - 1]]" },
+        { "Head[First[Range[300]/2]]",            "Head[First[Range[3]/2]]" },
+        /* Array against array, and the degenerate divisor. */
+        { "Take[Range[1., 300.] - Range[1., 300.], 3]", "Range[1., 3.] - Range[1., 3.]" },
+        { "Take[Range[1., 300.]/Range[1., 300.], 3]",   "Range[1., 3.]/Range[1., 3.]" },
+        { "Take[Range[1., 300.]/0, 3]",           "Range[1., 3.]/0" },
+        /* A SYMBOLIC operand must thread, not decline — for every head that
+         * reaches ndarray_symbolic_delist_retry. */
+        { "Take[Range[1., 300.] + x, 3]",         "Range[1., 3.] + x" },
+        { "Take[Range[1., 300.] x, 3]",           "Range[1., 3.] x" },
+        { "Take[Range[1., 300.] - x, 3]",         "Range[1., 3.] - x" },
+        { "Take[Range[1., 300.]/x, 3]",           "Range[1., 3.]/x" },
+        { "Take[Range[1., 300.]^x, 3]",           "Range[1., 3.]^x" },
+        { "Take[x^Range[1., 300.], 3]",           "x^Range[1., 3.]" },
+        { "Take[Range[300] + x, 3]",              "Range[3] + x" },
+        /* An exact irrational is numeric, not symbolic: it must still fold. */
+        { "Take[Range[1., 300.] + Sqrt[2], 3]",   "Range[1., 3.] + Sqrt[2]" },
+        /* Rank 2, nesting, a compound symbolic term, and two symbols — the
+         * materialise-and-re-run has to be the ORDINARY evaluation, not a
+         * special case that only handles a bare symbol at rank 1. */
+        { "Table[i*1., {i, 20}, {j, 20}][[1, 1]] + x", "1. + x" },
+        { "Take[(Range[1., 300.] + x)*2, 3]",     "(Range[1., 3.] + x)*2" },
+        { "Take[Range[1., 300.] + f[y], 3]",      "Range[1., 3.] + f[y]" },
+        { "Take[Range[1., 300.] + x + y, 3]",     "Range[1., 3.] + x + y" },
+        { "Take[Sin[Range[1., 300.] + x], 3]",    "Sin[Range[1., 3.] + x]" },
+    };
+    for (size_t i = 0; i < sizeof(CASES) / sizeof(CASES[0]); i++)
+        same_as_plain(CASES[i][0], CASES[i][1]);
+
+    /* The results still pack — the point of the change was speed, and a fix
+     * that quietly stopped packing would pass every assertion above. */
+    assert_eval_eq("{NDArrayQ[Range[1., 300.] - 1.], NDArrayQ[Range[1., 300.]/2.], "
+                   "NDArrayQ[Range[300] - 1]}", "{True, True, True}", 0);
+
+    /* A VISIBLE NDArray keeps the numeric-only contract: naming the head is
+     * asking for a purely numeric object, and the warning is the answer.  One
+     * visible operand anywhere in the call vetoes the retry, so marking
+     * Subtract and Divide aware cannot leak the new behaviour into a mixed
+     * call -- the alternative was tried, and it moved the divergence instead
+     * of removing it. */
+    assert_eval_eq("Head[NDArray[{1., 2., 3.}] + x]", "Plus", 0);
+    assert_eval_eq("Head[NDArray[{1., 2., 3.}] - x]", "Plus", 0);
+    assert_eval_eq("Head[NDArray[{1., 2., 3.}]/x]", "Times", 0);
+
+    /* KNOWN OPEN, and pre-existing: mixing a VISIBLE NDArray with a list and a
+     * symbol still answers two ways, because Plus is Listable and threads over
+     * a plain List while a packed one is an EXPR_NDARRAY that apply_listable
+     * does not recognise as threadable:
+     *
+     *   NDArray[{1., 2.}] + {1., 2.}                 + x  ->  threads
+     *   NDArray[{1., 2.}] + Take[Range[1., 300.], 2] + x  ->  unevaluated
+     *
+     * Deliberately NOT asserted either way: closing it means deciding what
+     * `NDArray + List + symbol` should mean, which is a semantic question and
+     * not this change's to answer.  Recorded so the next sweep finds it
+     * already known rather than rediscovering it. */
+}
+
 /* Commonest shares Tally's counting routine (ndred_tally / ndred_commonest in
  * src/ndreduce.c), so what needs pinning is the SELECTION: which distinct values
  * a count tie picks, and in what order they come back. Both are decided by

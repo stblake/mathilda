@@ -191,6 +191,22 @@ Expr* builtin_divide(Expr* res) {
     Expr* num = res->data.function.args[0];
     Expr* den = res->data.function.args[1];
 
+    /* A machine array is not a scalar, and the Real branch below cannot be
+     * allowed to think it is.  That branch fires when EITHER operand is Real
+     * and then reads the OTHER through a chain of scalar type tests, falling
+     * back to 0.0 when none matches -- so with an array numerator and a Real
+     * denominator it computed 0.0 / 2.0 and answered `0.` for the whole call.
+     *
+     * Harmless while the transparency gate materialised every packed argument
+     * before this function ran; a live wrong answer the moment Divide was
+     * marked packed-aware on 2026-08-02.  The rewrite at the bottom
+     * (Times[num, Power[den, -1]]) is what handles an array, and it handles it
+     * well -- both of those heads have buffer paths -- so the fix is to reach
+     * it, which is also what makes marking the head aware worth anything.
+     * Found by the packed-vs-plain differential in tests/test_packed_list.c. */
+    if (num->type == EXPR_NDARRAY || den->type == EXPR_NDARRAY)
+        goto rewrite;
+
     if (num->type == EXPR_REAL || den->type == EXPR_REAL) {
         double vnum = (num->type == EXPR_REAL) ? num->data.real : (num->type == EXPR_INTEGER) ? (double)num->data.integer : (num->type == EXPR_BIGINT) ? mpz_get_d(num->data.bigint) : 0.0;
         double vden = (den->type == EXPR_REAL) ? den->data.real : (den->type == EXPR_INTEGER) ? (double)den->data.integer : (den->type == EXPR_BIGINT) ? mpz_get_d(den->data.bigint) : 0.0;
@@ -222,12 +238,15 @@ Expr* builtin_divide(Expr* res) {
         if (r) return r;
     }
 
-    Expr* minus_one = expr_new_integer(-1);
-    Expr* p_args[2] = { expr_copy(den), minus_one };
-    Expr* power = expr_new_function(expr_new_symbol(SYM_Power), p_args, 2);
-    
-    Expr* t_args[2] = { expr_copy(num), power };
-    return expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
+rewrite:
+    {
+        Expr* minus_one = expr_new_integer(-1);
+        Expr* p_args[2] = { expr_copy(den), minus_one };
+        Expr* power = expr_new_function(expr_new_symbol(SYM_Power), p_args, 2);
+
+        Expr* t_args[2] = { expr_copy(num), power };
+        return expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
+    }
 }
 
 bool is_infinity_sym(Expr* e) {
