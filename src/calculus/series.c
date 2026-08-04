@@ -966,12 +966,54 @@ static SeriesObj* so_pow_expr(SeriesObj* s_in, Expr* alpha) {
  * Elementary kernels and function application
  * -------------------------------------------------------------------------- */
 
+/* True if e contains a radical (a Power with a Rational exponent, e.g.
+ * Sqrt[2] = 2^(1/2)). Plain evaluation does not distribute Times over Plus,
+ * so a product like Sqrt[2]*(a + b*Sqrt[2]) is left un-multiplied; when that
+ * pattern recurs through a Horner composition the coefficient nests
+ * exponentially. We detect it so only the affected coefficients pay for the
+ * distributing Expand below -- integer/rational/polynomial coefficients (the
+ * overwhelming majority) keep their exact current handling. */
+static bool expr_contains_radical(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        Expr* ex = e->data.function.args[1];
+        if (ex && ex->type == EXPR_FUNCTION &&
+            ex->data.function.head->type == EXPR_SYMBOL &&
+            ex->data.function.head->data.symbol.name == SYM_Rational)
+            return true;
+    }
+    if (!expr_contains_radical(e->data.function.head)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (expr_contains_radical(e->data.function.args[i])) return true;
+        return false;
+    }
+    return true;
+}
+
+/* Distribute-and-collect any radical-bearing coefficients in place, so they
+ * stay compact (Sqrt[2]*(a+b Sqrt[2]) -> a Sqrt[2] + 2b) instead of nesting
+ * deeper on every composition step (issue #41). Expand performs exactly the
+ * distribution + like-radical collection that evaluation skips. */
+static void so_normalize_radical_coefs(SeriesObj* s) {
+    for (size_t i = 0; i < s->coef_count; i++) {
+        if (expr_contains_radical(s->coefs[i])) {
+            Expr* e = s->coefs[i];
+            s->coefs[i] = simp(mk_fn1("Expand", e));
+        }
+    }
+}
+
 /* Compose sum_k kernel[k] * u^k, where kernel[] is a length-N array of
  * Expr* scalar coefficients and u is a series with u.nmin >= 1. */
 static SeriesObj* so_compose_scalar_kernel(Expr** kernel, size_t N, SeriesObj* u) {
     if (N == 0) {
         return so_from_constant(expr_new_integer(0), u->x, u->x0, u->order, u->den);
     }
+    /* Normalize u's own coefficients so radicals introduced upstream (e.g.
+     * by so_inv of a shifted radical at infinity) don't seed the nesting. */
+    so_normalize_radical_coefs(u);
     SeriesObj* result = so_from_constant(kernel[N - 1], u->x, u->x0, u->order, u->den);
     /* Iterate k = N-2, N-3, ..., 0 using a size_t-safe reverse loop. */
     for (size_t k = N - 1; k-- > 0; ) {
@@ -982,6 +1024,10 @@ static SeriesObj* so_compose_scalar_kernel(Expr** kernel, size_t N, SeriesObj* u
         SeriesObj* sum = so_add(result, c);
         so_free(result); so_free(c);
         result = sum;
+        /* Keep radical coefficients collected between steps so the next
+         * so_mul multiplies compact expressions instead of ever-deeper
+         * nested products (the O(N^2) -> exponential blow-up of issue #41). */
+        so_normalize_radical_coefs(result);
     }
     return result;
 }

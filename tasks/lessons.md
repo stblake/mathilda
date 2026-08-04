@@ -2219,3 +2219,30 @@ Rules:
   reports a clean build and the stale binaries from the last session run
   happily and pass. The targets are `eigen_tests`, not `test_eigen`. Grep the
   build for `No rule` too, or confirm the new test's name appears in the run.
+
+- **A constant that routes around a blow-up is a symptom, not the bug.** Issue
+  #41: `Limit[c ArcTan[Sqrt[-1+x]/Sqrt[2]], x->Infinity]` hung while the bare
+  `ArcTan[...]` worked. Tempting fix: pull the constant out of the limit. But
+  the bare form only worked because `compose_at_infinity` caught it *before* the
+  Series layer; `Series[ArcTan[Sqrt[-1+x]/Sqrt[2]], {x,oo,2}]` hangs on its own,
+  no constant. The constant merely denied the fast path. Always test whether the
+  "working" sibling works for the right reason before declaring the difference
+  the cause. The real bug was general (all bounded kernels over shifted radicals
+  at infinity) and lived in the shared series machinery, not the Limit layer.
+
+- **Horner series composition nests radical coefficients because Times does not
+  distribute over Plus.** `so_compose_scalar_kernel` builds `Σ aₖ uᵏ` by
+  repeated `result = result*u + aₖ`; each step's coefficient becomes
+  `scalar + u_coef*(prev)`, and `simp`/evaluate leaves `Sqrt[2]*(a + b Sqrt[2])`
+  un-multiplied, so depth-N composition nests exponentially. `Expand` performs
+  exactly the missing distribution + like-radical collection
+  (`Sqrt[2]*(a+b Sqrt[2]) -> a Sqrt[2] + 2b`). Fix: normalize radical-bearing
+  coefficients between Horner steps. General across every at-zero kernel.
+
+- **Extracting a square factor from `c^2 * r` must not trial-divide `c`.** The
+  squarefree part is invariant under multiplication by a perfect square, so
+  `squarefree(c^2 * r) == squarefree(r)`: factor only the small radicand, fold
+  `c` into the extracted root, and recover the coefficient<->radicand
+  cross-cancellation with gcds. Folding `c^2` in and re-factoring is O(c) and
+  hangs on large series coefficients. Prove equivalence to the old form
+  exhaustively (a Python model over millions of small inputs) before porting.

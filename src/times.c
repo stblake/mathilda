@@ -14,6 +14,36 @@
 #include <stdbool.h>
 #include <gmp.h>
 
+/* Split the largest perfect-square factor out of a positive integer n.
+ * On return n holds the squarefree residual and *root the square root of
+ * the extracted square, so (n_in) == (*root)^2 * (n_out).  Trial division
+ * is O(sqrt(n)); callers must pass only the small radicand of a Sqrt, never
+ * a large coefficient — folding a big coefficient in here is what made
+ * builtin_times hang on large series terms (issue #41). */
+static void mpz_split_square_part(mpz_t root, mpz_t n) {
+    mpz_set_ui(root, 1);
+    if (mpz_cmp_ui(n, 1) <= 0) return;
+    mpz_t pr, prsq;
+    mpz_inits(pr, prsq, NULL);
+    mpz_set_ui(prsq, 4);                 /* factor out squares of 2 */
+    while (mpz_divisible_p(n, prsq)) {
+        mpz_divexact(n, n, prsq);
+        mpz_mul_ui(root, root, 2);
+    }
+    mpz_set_ui(pr, 3);                   /* odd trial divisors */
+    mpz_set_ui(prsq, 9);
+    while (mpz_cmp(prsq, n) <= 0) {
+        if (mpz_divisible_p(n, prsq)) {
+            mpz_divexact(n, n, prsq);
+            mpz_mul(root, root, pr);
+        } else {
+            mpz_add_ui(pr, pr, 2);
+            mpz_mul(prsq, pr, pr);
+        }
+    }
+    mpz_clears(pr, prsq, NULL);
+}
+
 static bool is_overflow(Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
            e->data.function.head->data.symbol.name == SYM_Overflow;
@@ -981,71 +1011,64 @@ Expr* builtin_times(Expr* res) {
                     mpz_init_set_si(cd, cd_i);
                 }
                 if (sign != 0) {
-                    /* p/q = |c|^2 * r^eps:
-                     *   eps = +1: (cn^2 * rn) / (cd^2 * rd)
-                     *   eps = -1: (cn^2 * rd) / (cd^2 * rn) */
-                    mpz_t p, q, g;
-                    mpz_inits(p, q, g, NULL);
-                    mpz_mul(p, cn, cn);
-                    mpz_mul(p, p, eps_sa > 0 ? rn : rd);
-                    mpz_mul(q, cd, cd);
-                    mpz_mul(q, q, eps_sa > 0 ? rd : rn);
-                    mpz_gcd(g, p, q);
-                    if (mpz_cmp_ui(g, 1) > 0) {
-                        mpz_divexact(p, p, g);
-                        mpz_divexact(q, q, g);
+                    /* Canonicalise |c| * r^eps into (p_sq/q_sq) * Sqrt[p/q]
+                     * where p, q are the squarefree residuals of the radicand.
+                     *
+                     * The obvious route -- fold the coefficient into the
+                     * radicand as (cn^2 * rn)/(cd^2 * rd) and trial-divide out
+                     * the square factors -- is O(cn): a large series
+                     * coefficient sends the trial division to sqrt(cn^2) and
+                     * hangs (issue #41).  But cn^2 is already a perfect square,
+                     * and the squarefree part of a number is invariant under
+                     * multiplication by a perfect square, so the squarefree
+                     * residual of cn^2 * rn equals that of the small radicand
+                     * rn alone.  We therefore factor only rn/rd (bounded by the
+                     * symbolic input), fold their extracted roots into the
+                     * coefficient, and reproduce the gcd cross-cancellation
+                     * that (cn^2 * rn)/(cd^2 * rd) reduction would perform using
+                     * three cheap gcds:
+                     *   - gcd(An, Ad):  reduce the coefficient ratio,
+                     *   - gcd(An, W):   a coefficient-numerator prime shared
+                     *                   with the denominator radicand,
+                     *   - gcd(Ad, U):   a coefficient-denominator prime shared
+                     *                   with the numerator radicand.
+                     * This yields byte-for-byte the same (p_sq, p, q_sq, q) as
+                     * the fold-and-factor form on every case, without ever
+                     * trial-dividing the coefficient. */
+                    mpz_t p, q, p_sq, q_sq;
+                    mpz_inits(p, q, p_sq, q_sq, NULL);
+                    {
+                        mpz_t an, ad, cross;
+                        mpz_inits(an, ad, cross, NULL);
+                        /* radicand oriented by eps: p<-numerator, q<-denominator */
+                        mpz_set(p, eps_sa > 0 ? rn : rd);
+                        mpz_set(q, eps_sa > 0 ? rd : rn);
+                        mpz_split_square_part(an, p);  /* p -> U (squarefree) */
+                        mpz_split_square_part(ad, q);  /* q -> W (squarefree) */
+                        mpz_mul(p_sq, cn, an);         /* An = cn * root(rn) */
+                        mpz_mul(q_sq, cd, ad);         /* Ad = cd * root(rd) */
+                        /* reduce the coefficient ratio first */
+                        mpz_gcd(cross, p_sq, q_sq);
+                        if (mpz_cmp_ui(cross, 1) > 0) {
+                            mpz_divexact(p_sq, p_sq, cross);
+                            mpz_divexact(q_sq, q_sq, cross);
+                        }
+                        /* An shares a prime with the denominator radicand W */
+                        mpz_gcd(cross, p_sq, q);
+                        if (mpz_cmp_ui(cross, 1) > 0) {
+                            mpz_divexact(p_sq, p_sq, cross);
+                            mpz_mul(p, p, cross);
+                            mpz_divexact(q, q, cross);
+                        }
+                        /* Ad shares a prime with the numerator radicand U */
+                        mpz_gcd(cross, q_sq, p);
+                        if (mpz_cmp_ui(cross, 1) > 0) {
+                            mpz_divexact(q_sq, q_sq, cross);
+                            mpz_mul(q, q, cross);
+                            mpz_divexact(p, p, cross);
+                        }
+                        mpz_clears(an, ad, cross, NULL);
                     }
-                    /* Extract square parts in-place from p and q. After the
-                     * call, p holds p_rest and p_sq holds the extracted root
-                     * (similarly for q). Trial-division by primes is O(sqrt)
-                     * which is acceptable here; large bases would be unusual
-                     * in symbolic input. */
-                    mpz_t p_sq, q_sq;
-                    mpz_init_set_ui(p_sq, 1);
-                    mpz_init_set_ui(q_sq, 1);
-                    mpz_t pr_p, pr_psq;
-                    mpz_inits(pr_p, pr_psq, NULL);
-                    /* p */
-                    if (mpz_cmp_ui(p, 1) > 0) {
-                        mpz_set_ui(pr_p, 2);
-                        mpz_set_ui(pr_psq, 4);
-                        while (mpz_divisible_p(p, pr_psq)) {
-                            mpz_divexact(p, p, pr_psq);
-                            mpz_mul(p_sq, p_sq, pr_p);
-                        }
-                        mpz_set_ui(pr_p, 3);
-                        mpz_set_ui(pr_psq, 9);
-                        while (mpz_cmp(pr_psq, p) <= 0) {
-                            if (mpz_divisible_p(p, pr_psq)) {
-                                mpz_divexact(p, p, pr_psq);
-                                mpz_mul(p_sq, p_sq, pr_p);
-                            } else {
-                                mpz_add_ui(pr_p, pr_p, 2);
-                                mpz_mul(pr_psq, pr_p, pr_p);
-                            }
-                        }
-                    }
-                    /* q */
-                    if (mpz_cmp_ui(q, 1) > 0) {
-                        mpz_set_ui(pr_p, 2);
-                        mpz_set_ui(pr_psq, 4);
-                        while (mpz_divisible_p(q, pr_psq)) {
-                            mpz_divexact(q, q, pr_psq);
-                            mpz_mul(q_sq, q_sq, pr_p);
-                        }
-                        mpz_set_ui(pr_p, 3);
-                        mpz_set_ui(pr_psq, 9);
-                        while (mpz_cmp(pr_psq, q) <= 0) {
-                            if (mpz_divisible_p(q, pr_psq)) {
-                                mpz_divexact(q, q, pr_psq);
-                                mpz_mul(q_sq, q_sq, pr_p);
-                            } else {
-                                mpz_add_ui(pr_p, pr_p, 2);
-                                mpz_mul(pr_psq, pr_p, pr_p);
-                            }
-                        }
-                    }
-                    mpz_clears(pr_p, pr_psq, NULL);
 
                     /* Usefulness criteria differ by eps:
                      *   eps=-1: original criterion -- extract a perfect
@@ -1144,7 +1167,7 @@ Expr* builtin_times(Expr* res) {
                         }
                     }
 
-                    mpz_clears(p, q, g, p_sq, q_sq, NULL);
+                    mpz_clears(p, q, p_sq, q_sq, NULL);
                 }
                 mpz_clear(cn); mpz_clear(cd);
                 mpz_clear(rn); mpz_clear(rd);
