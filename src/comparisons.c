@@ -108,7 +108,7 @@ static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
      * side of the scalar (disjoint), so Interval[{5,8}] > Pi -> True. An
      * interval straddling the scalar, or two intervals, stays symbolic. */
     if (is_interval(a) || is_interval(b)) {
-        if (is_interval(a) && is_interval(b)) return 0;   /* both: phase 2 */
+        if (is_interval(a) && is_interval(b)) return interval_compare_intervals(a, b, can_compare);
         if (is_interval(a)) return interval_compare_scalar(a, b, can_compare);
         bool d; int s = interval_compare_scalar(b, a, &d);
         *can_compare = d;

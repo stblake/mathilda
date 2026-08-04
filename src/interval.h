@@ -81,4 +81,19 @@ Expr* interval_from_scalar(const Expr* x);
  * or touches the interval. */
 int interval_compare_scalar(const Expr* iv, Expr* c, bool* decidable);
 
+/* Compare two intervals. Returns the sign of (A - B): -1 if A lies entirely
+ * below B, +1 if entirely above; 0 with *decidable=true only when A and B are
+ * the same single point; *decidable=false (returning 0) otherwise. */
+int interval_compare_intervals(const Expr* A, const Expr* B, bool* decidable);
+
+/* base^Interval for a positive scalar base (monotone in the exponent). */
+Expr* interval_scalar_pow_interval(const Expr* base, const Expr* B);
+/* Interval^Interval for a strictly-positive base interval. */
+Expr* interval_power_interval(const Expr* A, const Expr* B);
+
+/* Companion set-operation builtins. */
+Expr* builtin_intervalunion(Expr* res);
+Expr* builtin_intervalintersection(Expr* res);
+Expr* builtin_intervalmemberq(Expr* res);
+
 #endif /* INTERVAL_H */

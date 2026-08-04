@@ -731,19 +731,141 @@ static Expr* iv_abs(const Expr* iv) {
     return iv_canonicalize_pairs(los, his, n);
 }
 
+/* Cosh: even, with its minimum 1 at 0 (like Abs but with Cosh applied). */
+static Expr* iv_cosh(const Expr* iv) {
+    size_t na = interval_pair_count(iv);
+    IvBuild out; ivb_init(&out);
+    for (size_t i = 0; i < na; i++) {
+        Expr* a = interval_pair_lo(iv, i);
+        Expr* b = interval_pair_hi(iv, i);
+        int sa = iv_sign(a), sb = iv_sign(b);
+        if (sa == -2 || sb == -2) { ivb_free(&out); return NULL; }
+        Expr* lo; Expr* hi;
+        if (sa >= 0) {
+            lo = iv_unary("Cosh", a, RND_DOWN); hi = iv_unary("Cosh", b, RND_UP);
+        } else if (sb <= 0) {
+            lo = iv_unary("Cosh", b, RND_DOWN); hi = iv_unary("Cosh", a, RND_UP);
+        } else {
+            lo = expr_new_integer(1);   /* Cosh[0] = 1, the exact minimum */
+            Expr* ca = iv_unary("Cosh", a, RND_UP);
+            Expr* cb = iv_unary("Cosh", b, RND_UP);
+            hi = (ca && cb) ? iv_max2(ca, cb) : NULL;
+            expr_free(ca); expr_free(cb);
+        }
+        if (!lo || !hi) { expr_free(lo); expr_free(hi); ivb_free(&out); return NULL; }
+        ivb_push(&out, lo, hi);
+    }
+    size_t n = out.n; Expr** los = out.los; Expr** his = out.his;
+    out.los = out.his = NULL; out.n = out.cap = 0;
+    return iv_canonicalize_pairs(los, his, n);
+}
+
 Expr* interval_apply_function(const char* head, const Expr* iv) {
     if (!is_interval(iv)) return NULL;
-    if (strcmp(head, "Sin") == 0) return iv_trig(iv, IV_SIN);
-    if (strcmp(head, "Cos") == 0) return iv_trig(iv, IV_COS);
-    if (strcmp(head, "Tan") == 0) return iv_tan(iv);
-    if (strcmp(head, "Abs") == 0) return iv_abs(iv);
-    if (strcmp(head, "Exp") == 0)     return interval_thread_monotone(iv, IV_INC, "Exp");
-    if (strcmp(head, "Log") == 0)     return interval_thread_monotone(iv, IV_INC, "Log");
-    if (strcmp(head, "Sqrt") == 0)    return interval_thread_monotone(iv, IV_INC, "Sqrt");
-    if (strcmp(head, "ArcTan") == 0)  return interval_thread_monotone(iv, IV_INC, "ArcTan");
-    if (strcmp(head, "Sinh") == 0)    return interval_thread_monotone(iv, IV_INC, "Sinh");
-    if (strcmp(head, "Tanh") == 0)    return interval_thread_monotone(iv, IV_INC, "Tanh");
+    /* non-monotone */
+    if (strcmp(head, "Sin") == 0)  return iv_trig(iv, IV_SIN);
+    if (strcmp(head, "Cos") == 0)  return iv_trig(iv, IV_COS);
+    if (strcmp(head, "Tan") == 0)  return iv_tan(iv);
+    if (strcmp(head, "Abs") == 0)  return iv_abs(iv);
+    if (strcmp(head, "Cosh") == 0) return iv_cosh(iv);
+    /* monotone increasing (domain-invalid endpoints -> complex result -> NULL) */
+    if (strcmp(head, "Exp") == 0)      return interval_thread_monotone(iv, IV_INC, "Exp");
+    if (strcmp(head, "Log") == 0)      return interval_thread_monotone(iv, IV_INC, "Log");
+    if (strcmp(head, "Sqrt") == 0)     return interval_thread_monotone(iv, IV_INC, "Sqrt");
+    if (strcmp(head, "Sinh") == 0)     return interval_thread_monotone(iv, IV_INC, "Sinh");
+    if (strcmp(head, "Tanh") == 0)     return interval_thread_monotone(iv, IV_INC, "Tanh");
+    if (strcmp(head, "ArcTan") == 0)   return interval_thread_monotone(iv, IV_INC, "ArcTan");
+    if (strcmp(head, "ArcSin") == 0)   return interval_thread_monotone(iv, IV_INC, "ArcSin");
+    if (strcmp(head, "ArcSinh") == 0)  return interval_thread_monotone(iv, IV_INC, "ArcSinh");
+    if (strcmp(head, "ArcCosh") == 0)  return interval_thread_monotone(iv, IV_INC, "ArcCosh");
+    if (strcmp(head, "ArcTanh") == 0)  return interval_thread_monotone(iv, IV_INC, "ArcTanh");
+    /* monotone decreasing */
+    if (strcmp(head, "ArcCos") == 0)   return interval_thread_monotone(iv, IV_DEC, "ArcCos");
     return NULL;
+}
+
+int interval_compare_intervals(const Expr* A, const Expr* B, bool* decidable) {
+    *decidable = false;
+    size_t na = interval_pair_count(A), nb = interval_pair_count(B);
+    if (na == 0 || nb == 0) return 0;
+    Expr* loA = interval_pair_lo(A, 0);
+    Expr* hiA = interval_pair_hi(A, na - 1);
+    Expr* loB = interval_pair_lo(B, 0);
+    Expr* hiB = interval_pair_hi(B, nb - 1);
+    bool d;
+    int c = interval_endpoint_cmp(hiA, loB, &d);
+    if (d && c < 0) { *decidable = true; return -1; }   /* A entirely below B */
+    c = interval_endpoint_cmp(loA, hiB, &d);
+    if (d && c > 0) { *decidable = true; return 1; }     /* A entirely above B */
+    /* Equal only when both are the same single point. */
+    if (na == 1 && nb == 1 &&
+        expr_eq(loA, hiA) && expr_eq(loB, hiB) && expr_eq(loA, loB)) {
+        *decidable = true; return 0;
+    }
+    return 0;
+}
+
+/* base^Interval for a positive scalar base: base^x is monotone in x, so the
+ * extremes are at the endpoints. */
+Expr* interval_scalar_pow_interval(const Expr* base, const Expr* B) {
+    if (!is_interval(B)) return NULL;
+    if (iv_sign((Expr*)base) <= 0) return NULL;   /* need base > 0 */
+    size_t nb = interval_pair_count(B);
+    IvBuild out; ivb_init(&out);
+    for (size_t i = 0; i < nb; i++) {
+        Expr* c = interval_pair_lo(B, i);
+        Expr* d = interval_pair_hi(B, i);
+        Expr* pc_lo = iv_binop("Power", (Expr*)base, c, RND_DOWN);
+        Expr* pd_lo = iv_binop("Power", (Expr*)base, d, RND_DOWN);
+        Expr* pc_hi = iv_binop("Power", (Expr*)base, c, RND_UP);
+        Expr* pd_hi = iv_binop("Power", (Expr*)base, d, RND_UP);
+        Expr* lo = (pc_lo && pd_lo) ? iv_min2(pc_lo, pd_lo) : NULL;
+        Expr* hi = (pc_hi && pd_hi) ? iv_max2(pc_hi, pd_hi) : NULL;
+        expr_free(pc_lo); expr_free(pd_lo); expr_free(pc_hi); expr_free(pd_hi);
+        if (!lo || !hi) { expr_free(lo); expr_free(hi); ivb_free(&out); return NULL; }
+        ivb_push(&out, lo, hi);
+    }
+    size_t n = out.n; Expr** los = out.los; Expr** his = out.his;
+    out.los = out.his = NULL; out.n = out.cap = 0;
+    return iv_canonicalize_pairs(los, his, n);
+}
+
+/* Interval^Interval for a strictly-positive base interval: over each pair-pair
+ * the extremes are at the four corners a^c, a^d, b^c, b^d. */
+Expr* interval_power_interval(const Expr* A, const Expr* B) {
+    if (!is_interval(A) || !is_interval(B)) return NULL;
+    if (iv_sign(interval_pair_lo(A, 0)) <= 0) return NULL;   /* need A > 0 */
+    size_t na = interval_pair_count(A), nb = interval_pair_count(B);
+    IvBuild out; ivb_init(&out);
+    for (size_t i = 0; i < na; i++) {
+        for (size_t j = 0; j < nb; j++) {
+            Expr* a = interval_pair_lo(A, i); Expr* b = interval_pair_hi(A, i);
+            Expr* c = interval_pair_lo(B, j); Expr* d = interval_pair_hi(B, j);
+            Expr* corner_lo[4], *corner_hi[4];
+            Expr* xa[4] = { a, a, b, b }; Expr* xe[4] = { c, d, c, d };
+            bool ok = true;
+            for (int k = 0; k < 4; k++) {
+                corner_lo[k] = iv_binop("Power", xa[k], xe[k], RND_DOWN);
+                corner_hi[k] = iv_binop("Power", xa[k], xe[k], RND_UP);
+                if (!corner_lo[k] || !corner_hi[k]) ok = false;
+            }
+            Expr* lo = NULL; Expr* hi = NULL;
+            if (ok) {
+                lo = expr_copy(corner_lo[0]); hi = expr_copy(corner_hi[0]);
+                for (int k = 1; k < 4 && lo && hi; k++) {
+                    Expr* m = iv_min2(lo, corner_lo[k]); expr_free(lo); lo = m;
+                    Expr* x = iv_max2(hi, corner_hi[k]); expr_free(hi); hi = x;
+                }
+                if (!lo || !hi) ok = false;
+            }
+            for (int k = 0; k < 4; k++) { expr_free(corner_lo[k]); expr_free(corner_hi[k]); }
+            if (!ok) { expr_free(lo); expr_free(hi); ivb_free(&out); return NULL; }
+            ivb_push(&out, lo, hi);
+        }
+    }
+    size_t n = out.n; Expr** los = out.los; Expr** his = out.his;
+    out.los = out.his = NULL; out.n = out.cap = 0;
+    return iv_canonicalize_pairs(los, his, n);
 }
 
 /* ---------------------------------------------------------------------------
@@ -765,6 +887,119 @@ int interval_compare_scalar(const Expr* iv, Expr* c, bool* decidable) {
 }
 
 /* ---------------------------------------------------------------------------
+ * Companion set operations: IntervalUnion / IntervalIntersection / MemberQ
+ * ------------------------------------------------------------------------- */
+
+/* Append every pair of `arg` (an interval, or a scalar as a point) to `out`.
+ * Returns false if `arg` is neither. */
+static bool iv_collect(Expr* arg, IvBuild* out) {
+    if (is_interval(arg)) {
+        size_t k = interval_pair_count(arg);
+        for (size_t i = 0; i < k; i++)
+            ivb_push(out, expr_copy(interval_pair_lo(arg, i)), expr_copy(interval_pair_hi(arg, i)));
+        return true;
+    }
+    if (expr_is_numeric_like(arg) || iv_is_inf(arg)) {
+        ivb_push(out, expr_copy(arg), expr_copy(arg));
+        return true;
+    }
+    return false;
+}
+
+Expr* builtin_intervalunion(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t n = res->data.function.arg_count;
+    IvBuild out; ivb_init(&out);
+    for (size_t i = 0; i < n; i++) {
+        if (!iv_collect(res->data.function.args[i], &out)) { ivb_free(&out); return NULL; }
+    }
+    if (out.n == 0) return expr_new_function(expr_new_symbol(SYM_Interval), NULL, 0);
+    size_t m = out.n; Expr** los = out.los; Expr** his = out.his;
+    out.los = out.his = NULL; out.n = out.cap = 0;
+    return iv_canonicalize_pairs(los, his, m);
+}
+
+/* Intersect the pair-list {los,his}[0..n) with one pair [c,d], appending the
+ * overlaps to `dst`. */
+static void iv_intersect_pair(Expr** los, Expr** his, size_t n, Expr* c, Expr* d, IvBuild* dst) {
+    for (size_t i = 0; i < n; i++) {
+        Expr* lo = iv_max2(los[i], c);    /* max of the two lower endpoints */
+        Expr* hi = iv_min2(his[i], d);    /* min of the two upper endpoints */
+        if (lo && hi) {
+            bool dd; int c2 = interval_endpoint_cmp(lo, hi, &dd);
+            if (dd && c2 <= 0) { ivb_push(dst, lo, hi); continue; }  /* non-empty overlap */
+        }
+        expr_free(lo); expr_free(hi);
+    }
+}
+
+Expr* builtin_intervalintersection(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t n = res->data.function.arg_count;
+    if (n == 0) return NULL;
+    /* Accumulator starts as the first interval's pairs. */
+    IvBuild acc; ivb_init(&acc);
+    if (!iv_collect(res->data.function.args[0], &acc)) { ivb_free(&acc); return NULL; }
+    for (size_t i = 1; i < n; i++) {
+        Expr* arg = res->data.function.args[i];
+        IvBuild nextiv; ivb_init(&nextiv);
+        if (!iv_collect(arg, &nextiv)) { ivb_free(&nextiv); ivb_free(&acc); return NULL; }
+        IvBuild result; ivb_init(&result);
+        for (size_t j = 0; j < nextiv.n; j++)
+            iv_intersect_pair(acc.los, acc.his, acc.n, nextiv.los[j], nextiv.his[j], &result);
+        ivb_free(&nextiv);
+        ivb_free(&acc);
+        acc = result;
+    }
+    if (acc.n == 0) { ivb_free(&acc); return expr_new_function(expr_new_symbol(SYM_Interval), NULL, 0); }
+    size_t m = acc.n; Expr** los = acc.los; Expr** his = acc.his;
+    acc.los = acc.his = NULL; acc.n = acc.cap = 0;
+    return iv_canonicalize_pairs(los, his, m);
+}
+
+Expr* builtin_intervalmemberq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* iv = res->data.function.args[0];
+    Expr* x  = res->data.function.args[1];
+    if (!is_interval(iv)) return NULL;
+    size_t n = interval_pair_count(iv);
+
+    if (is_interval(x)) {
+        /* subset test: every pair of x must sit inside some pair of iv */
+        size_t m = interval_pair_count(x);
+        for (size_t j = 0; j < m; j++) {
+            Expr* xl = interval_pair_lo(x, j);
+            Expr* xh = interval_pair_hi(x, j);
+            bool inside = false, undecided = false;
+            for (size_t i = 0; i < n; i++) {
+                bool d1, d2;
+                int c1 = interval_endpoint_cmp(interval_pair_lo(iv, i), xl, &d1);
+                int c2 = interval_endpoint_cmp(xh, interval_pair_hi(iv, i), &d2);
+                if (!d1 || !d2) { undecided = true; continue; }
+                if (c1 <= 0 && c2 <= 0) { inside = true; break; }
+            }
+            if (!inside) {
+                if (undecided) return NULL;         /* can't decide */
+                return expr_new_symbol(SYM_False);  /* this piece escapes iv */
+            }
+        }
+        return expr_new_symbol(SYM_True);
+    }
+
+    /* scalar membership: x in some [lo, hi] */
+    bool undecided = false;
+    for (size_t i = 0; i < n; i++) {
+        bool d1, d2;
+        int c1 = interval_endpoint_cmp(interval_pair_lo(iv, i), x, &d1);
+        int c2 = interval_endpoint_cmp(x, interval_pair_hi(iv, i), &d2);
+        if (!d1 || !d2) { undecided = true; continue; }
+        if (c1 <= 0 && c2 <= 0) return expr_new_symbol(SYM_True);
+    }
+    if (undecided) return NULL;
+    return expr_new_symbol(SYM_False);
+}
+
+/* ---------------------------------------------------------------------------
  * Registration
  * ------------------------------------------------------------------------- */
 
@@ -777,4 +1012,26 @@ void interval_init(void) {
         "max, inclusive. Interval[{a1,b1}, {a2,b2}, ...] is the union of the "
         "ranges. Arithmetic and elementary functions thread through intervals, "
         "producing rigorous enclosures; exact endpoints are kept exact.");
+
+    symtab_add_builtin("IntervalUnion", builtin_intervalunion);
+    def = symtab_get_def("IntervalUnion");
+    if (def) def->attributes |= ATTR_PROTECTED | ATTR_ORDERLESS | ATTR_FLAT;
+    symtab_set_docstring("IntervalUnion",
+        "IntervalUnion[i1, i2, ...] gives the interval representing the union of "
+        "the intervals ij.");
+
+    symtab_add_builtin("IntervalIntersection", builtin_intervalintersection);
+    def = symtab_get_def("IntervalIntersection");
+    if (def) def->attributes |= ATTR_PROTECTED | ATTR_ORDERLESS | ATTR_FLAT;
+    symtab_set_docstring("IntervalIntersection",
+        "IntervalIntersection[i1, i2, ...] gives the interval representing the "
+        "intersection of the intervals ij (Interval[] if they are disjoint).");
+
+    symtab_add_builtin("IntervalMemberQ", builtin_intervalmemberq);
+    def = symtab_get_def("IntervalMemberQ");
+    if (def) def->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("IntervalMemberQ",
+        "IntervalMemberQ[interval, x] gives True if x lies within interval, and "
+        "False otherwise. IntervalMemberQ[interval, other] tests whether the "
+        "interval other is wholly contained in interval.");
 }

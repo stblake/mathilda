@@ -7,6 +7,7 @@
 #include "symtab.h"
 #include "eval.h"
 #include "arithmetic.h"
+#include "interval.h"
 #include "complex.h"
 #include "times.h"
 #include "common.h"
@@ -331,6 +332,8 @@ Expr* builtin_sinh(Expr* res) {
         return builtin_arg_error("Sinh", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Sinh", arg); if (r) return r; }
+
     { Expr* inv = strip_inverse_call(arg, "ArcSinh"); if (inv) return inv; }
 
     // Sinh[ArcCosh[x]] -> Sqrt[x-1]*Sqrt[x+1], Sinh[ArcTanh[x]] -> x/Sqrt[1-x^2]
@@ -373,6 +376,8 @@ Expr* builtin_cosh(Expr* res) {
         return builtin_arg_error("Cosh", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Cosh", arg); if (r) return r; }
+
     { Expr* inv = strip_inverse_call(arg, "ArcCosh"); if (inv) return inv; }
 
     // Cosh[ArcSinh[x]] -> Sqrt[1+x^2], Cosh[ArcTanh[x]] -> 1/Sqrt[1-x^2]
@@ -410,6 +415,8 @@ Expr* builtin_tanh(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("Tanh", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Tanh", arg); if (r) return r; }
 
     { Expr* inv = strip_inverse_call(arg, "ArcTanh"); if (inv) return inv; }
 
@@ -560,6 +567,8 @@ Expr* builtin_arcsinh(Expr* res) {
         return builtin_arg_error("ArcSinh", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("ArcSinh", arg); if (r) return r; }
+
     // ArcSinh is odd: ArcSinh[-x] -> -ArcSinh[x]
     { Expr* f = odd_fold(arg, "ArcSinh"); if (f) return f; }
 
@@ -596,6 +605,8 @@ Expr* builtin_arccosh(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("ArcCosh", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("ArcCosh", arg); if (r) return r; }
     
     if (arg->type == EXPR_INTEGER && arg->data.integer == 1) return expr_new_integer(0);
     if (is_infinity(arg)) return expr_new_symbol(SYM_Infinity);
@@ -627,6 +638,8 @@ Expr* builtin_arctanh(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("ArcTanh", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("ArcTanh", arg); if (r) return r; }
 
     // ArcTanh is odd: ArcTanh[-x] -> -ArcTanh[x]
     { Expr* f = odd_fold(arg, "ArcTanh"); if (f) return f; }

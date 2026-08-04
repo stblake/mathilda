@@ -1089,6 +1089,8 @@ Expr* builtin_arcsin(Expr* res) {
         return builtin_arg_error("ArcSin", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("ArcSin", arg); if (r) return r; }
+
     // ArcSin is odd: ArcSin[-x] -> -ArcSin[x]
     { Expr* f = odd_fold(arg, "ArcSin"); if (f) return f; }
 
@@ -1138,6 +1140,8 @@ Expr* builtin_arccos(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("ArcCos", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("ArcCos", arg); if (r) return r; }
 
     // ArcCos[-x] -> Pi - ArcCos[x]
     { Expr* f = arc_pi_minus_fold(arg, "ArcCos"); if (f) return f; }
@@ -1221,6 +1225,8 @@ Expr* builtin_arctan(Expr* res) {
     // Single argument ArcTan[z]
     if (res->data.function.arg_count == 1) {
         Expr* arg = res->data.function.args[0];
+
+        if (is_interval(arg)) { Expr* r = interval_apply_function("ArcTan", arg); if (r) return r; }
 
         // Infinite arguments. Handle these BEFORE the odd / exact folds:
         // exact_arctan otherwise spuriously matches Tan[-Pi/2] ==

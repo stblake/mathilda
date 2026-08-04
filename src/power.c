@@ -633,13 +633,20 @@ Expr* builtin_power(Expr* res) {
     /* Interval base: integer powers are handled by the interval kernel (even/odd
      * and straddling-zero logic, reciprocal for negative n). Non-integer or
      * interval exponents stay symbolic in this phase. */
+    if (is_interval(base) && is_interval(exp)) {
+        /* Interval^Interval (strictly-positive base interval); else symbolic. */
+        return interval_power_interval(base, exp);
+    }
     if (is_interval(base)) {
         if (exp->type == EXPR_INTEGER) return interval_power_int(base, exp->data.integer);
         /* Positive fractional/real exponent over a non-negative interval (e.g.
          * the parser's Sqrt -> Power[.,1/2]); other cases stay symbolic. */
         return interval_power_pos_exp(base, exp);
     }
-    if (is_interval(exp)) return NULL;
+    if (is_interval(exp)) {
+        /* scalar^Interval for a positive scalar base; else symbolic. */
+        return interval_scalar_pow_interval(base, exp);
+    }
 
     /* NDArray fast path: elementwise A^B (same shape) or A^scalar. Uses raw
      * C-level complex power over the flat buffer; promotes the result dtype to

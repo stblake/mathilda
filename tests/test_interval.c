@@ -89,6 +89,34 @@ int main(void) {
     /* --- N threads over endpoints --- */
     if (!check("N[Interval[{1, 2}]]", "Interval[{1.0, 2.0}]")) failures++;
 
+    /* --- companion set operations --- */
+    if (!check("IntervalUnion[Interval[{1, 3}], Interval[{5, 7}]]", "Interval[{1, 3}, {5, 7}]")) failures++;
+    if (!check("IntervalUnion[Interval[{1, 3}], Interval[{2, 5}]]", "Interval[{1, 5}]")) failures++;
+    if (!check("IntervalIntersection[Interval[{1, 5}], Interval[{3, 8}]]", "Interval[{3, 5}]")) failures++;
+    if (!check("IntervalIntersection[Interval[{1, 2}], Interval[{5, 6}]]", "Interval[]")) failures++;
+    if (!check("IntervalMemberQ[Interval[{1, 5}], 3]", "True")) failures++;
+    if (!check("IntervalMemberQ[Interval[{1, 5}], 7]", "False")) failures++;
+    if (!check("IntervalMemberQ[Interval[{1, 5}], Pi]", "True")) failures++;
+    if (!check("IntervalMemberQ[Interval[{1, 5}], Interval[{2, 3}]]", "True")) failures++;
+
+    /* --- interval vs interval comparisons --- */
+    if (!check("Interval[{1, 2}] < Interval[{5, 6}]", "True")) failures++;
+    if (!check("Interval[{1, 2}] > Interval[{5, 6}]", "False")) failures++;
+    if (!check("Interval[{1, 4}] < Interval[{3, 6}]", "Interval[{1, 4}] < Interval[{3, 6}]")) failures++;
+
+    /* --- more elementary functions --- */
+    if (!check("Sinh[Interval[{0, 1}]]", "Interval[{0, Sinh[1]}]")) failures++;
+    if (!check("Cosh[Interval[{-1, 2}]]", "Interval[{1, Cosh[2]}]")) failures++;      /* even, min 1 at 0 */
+    if (!check("Tanh[Interval[{0, 1}]]", "Interval[{0, Tanh[1]}]")) failures++;
+    if (!check("ArcTan[Interval[{0, 1}]]", "Interval[{0, 1/4 Pi}]")) failures++;
+    if (!check("ArcSin[Interval[{0, 1}]]", "Interval[{0, 1/2 Pi}]")) failures++;
+    if (!check("ArcCos[Interval[{0, 1}]]", "Interval[{0, 1/2 Pi}]")) failures++;       /* decreasing */
+
+    /* --- general power --- */
+    if (!check("2^Interval[{1, 3}]", "Interval[{2, 8}]")) failures++;                  /* scalar^interval */
+    if (!check("(1/2)^Interval[{1, 3}]", "Interval[{1/8, 1/2}]")) failures++;          /* base < 1: decreasing */
+    if (!check("Interval[{2, 3}]^Interval[{1, 2}]", "Interval[{2, 9}]")) failures++;   /* interval^interval */
+
     if (failures == 0) {
         printf("All interval tests passed.\n");
         return 0;

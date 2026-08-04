@@ -1228,10 +1228,22 @@ In[4]:= Interval[{-1, 2}] Interval[{3, 4}]
 Out[4]= Interval[{-4, 8}]
 ```
 
-**Elementary functions.** `Exp`, `Log`, `Sqrt` (monotone) and `Sin`, `Cos`,
-`Tan`, `Abs` (with critical-point range analysis) thread through intervals. The
-range analysis pins an extremum to the exact value `±1` when a crest/trough of
-`Sin`/`Cos` lies inside the interval, and otherwise keeps the endpoint value
+`Power` also covers `scalar^Interval` and `Interval^Interval` (positive base):
+
+```
+In[4b]:= 2^Interval[{1, 3}]
+Out[4b]= Interval[{2, 8}]
+
+In[4c]:= Interval[{2, 3}]^Interval[{1, 2}]
+Out[4c]= Interval[{2, 9}]
+```
+
+**Elementary functions.** `Exp`, `Log`, `Sqrt`, `Sinh`, `Tanh`, `ArcTan`,
+`ArcSin`, `ArcSinh`, `ArcCosh`, `ArcTanh` (monotone increasing), `ArcCos`
+(decreasing), and `Sin`, `Cos`, `Tan`, `Abs`, `Cosh` (non-monotone, with
+critical-point range analysis) thread through intervals. The range analysis pins
+an extremum to the exact value `±1` (or `Cosh`'s minimum `1`) when a
+crest/trough lies inside the interval, and otherwise keeps the endpoint value
 symbolic:
 
 ```
@@ -1264,12 +1276,41 @@ In[11]:= Interval[{1, 4}] > Pi
 Out[11]= Interval[{1, 4}] > Pi
 ```
 
+Interval-vs-interval comparisons decide `True`/`False` when the two intervals
+are disjoint, and stay symbolic when they overlap.
+
+**Companion set operations.**
+
+- `IntervalUnion[i1, i2, ...]` — the merged union (also `Interval`'s multi-argument
+  form). `Flat` and `Orderless`.
+- `IntervalIntersection[i1, i2, ...]` — the intersection, or the empty interval
+  `Interval[]` when the arguments are disjoint. `Flat` and `Orderless`.
+- `IntervalMemberQ[interval, x]` — `True` if the number `x` lies in `interval`;
+  `IntervalMemberQ[interval, other]` tests whether the interval `other` is wholly
+  contained.
+
+```
+In[12]:= IntervalUnion[Interval[{1, 3}], Interval[{2, 5}], Interval[{10, 11}]]
+Out[12]= Interval[{1, 5}, {10, 11}]
+
+In[13]:= IntervalIntersection[Interval[{1, 5}], Interval[{3, 8}]]
+Out[13]= Interval[{3, 5}]
+
+In[14]:= IntervalMemberQ[Interval[{1, 5}], Pi]
+Out[14]= True
+```
+
 **Attributes.** `Interval` is `Protected`. It is deliberately *not*
 `NumericFunction` (an interval is a set, not a scalar) and *not* `Listable`.
 
 Implemented in `src/interval.{c,h}`; the arithmetic hooks live in
 `src/plus.c` (`add_numbers`), `src/times.c` (the collector's interval
-accumulator), and `src/power.c`. Deferred to later phases: general
-`Interval^Interval`, `IntervalUnion`/`IntervalIntersection`/`IntervalMemberQ`,
-interval-vs-interval comparisons, and the automatic conversion of approximate
-numbers to intervals.
+accumulator), and `src/power.c`.
+
+**Not modelled.** Approximate numbers become *point* intervals
+(`Interval[1.]` → `Interval[{1., 1.}]`) — a tight, rigorous enclosure of the
+machine value; Wolfram's half-ULP "uncertainty preloading" of a machine number
+is not replicated, because Mathilda's printer shows full precision and would
+render `[1.−ulp, 1.+ulp]` as `{0.9999…, 1.0000…}` rather than `{1., 1.}`.
+`Interval` is also not (yet) usable as a geometric `Region`, since Mathilda has
+no `RegionMember`/region subsystem.
