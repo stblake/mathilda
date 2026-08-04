@@ -101,6 +101,16 @@ EXEMPT = {
     "DeleteCases": "as Cases",
     "FreeQ": "as Cases, in funcprog.c",
 
+    "FlattenAt": "its is_ndarray in src/list/flatten_at.c is a materialise "
+                 "guard, not a fast path: a visible NDArray is atomic so the "
+                 "position walker cannot descend into it, and flattening one "
+                 "row of a rectangular array yields a RAGGED list that must "
+                 "never be repacked (unlike MapAt, whose result stays "
+                 "rectangular). Must NOT go on AWARE -- it has no buffer path "
+                 "to reach, and opting in would stop the gate materialising a "
+                 "packed-List argument, which is exactly the plain args[] the "
+                 "walker needs",
+
     "Sum": "HoldAll, so a packed value never arrives as a top-level ARGUMENT -- "
            "the gate has nothing to materialise. Its is_ndarray call is a probe "
            "on the already-evaluated body (sum_body_is_array, which decides "
