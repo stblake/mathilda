@@ -68,6 +68,7 @@
 #include "piecewise.h"
 #include "int.h"
 #include "real.h"
+#include "interval.h"
 #include "attr.h"
 #include "purefunc.h"
 #include "modular.h"
@@ -752,6 +753,7 @@ void core_init(void) {
     expr_free(val_I);
     
     comparisons_init();
+    interval_init();
     boolean_init();
     names_init();
     list_init();

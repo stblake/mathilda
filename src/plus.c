@@ -2,6 +2,7 @@
 #include "plus.h"
 #include "arithmetic.h"
 #include "complex.h"
+#include "interval.h"
 #include "eval.h"
 #include "numeric.h"
 #include "sym_names.h"
@@ -64,6 +65,13 @@ static void get_coeff_base(Expr* e, Expr** coeff, Expr** base, bool* allocated_b
         return;
     }
 
+    if (is_interval(e)) {
+        /* Route intervals through the numeric fold (add_numbers handles them). */
+        *coeff = expr_copy(e);
+        *base = NULL;
+        return;
+    }
+
     if (expr_is_numeric_like(e) || is_complex(e, NULL, NULL)) {
         *coeff = expr_copy(e);
         *base = NULL;
@@ -97,6 +105,30 @@ static void get_coeff_base(Expr* e, Expr** coeff, Expr** base, bool* allocated_b
 
 static Expr* add_numbers(Expr* a, Expr* b) {
     if (is_overflow(a) || is_overflow(b)) return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
+
+    /* Interval arithmetic: [a1,a2] + [b1,b2] = [a1+b1, a2+b2], threaded over
+     * unions. A scalar number is promoted to a point interval; a Complex or
+     * non-numeric partner leaves the sum symbolic (return NULL). */
+    if (is_interval(a) || is_interval(b)) {
+        Expr* ia = NULL; Expr* ib = NULL; bool own_a = false, own_b = false;
+        if (is_interval(a)) ia = a;
+        else {
+            if (is_complex(a, NULL, NULL) || !expr_is_numeric_like(a)) return NULL;
+            ia = interval_from_scalar(a); own_a = true;
+        }
+        if (is_interval(b)) ib = b;
+        else {
+            if (is_complex(b, NULL, NULL) || !expr_is_numeric_like(b)) {
+                if (own_a) expr_free(ia);
+                return NULL;
+            }
+            ib = interval_from_scalar(b); own_b = true;
+        }
+        Expr* r = interval_add(ia, ib);
+        if (own_a) expr_free(ia);
+        if (own_b) expr_free(ib);
+        return r;
+    }
 
 #ifdef USE_MPFR
     /* MPFR path: if either operand carries arbitrary precision, fold

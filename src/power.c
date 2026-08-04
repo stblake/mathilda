@@ -1,6 +1,7 @@
 #include "eval.h"
 #include "power.h"
 #include "arithmetic.h"
+#include "interval.h"
 #include "times.h"
 #include "numeric.h"
 #include "common.h"
@@ -628,6 +629,17 @@ Expr* builtin_power(Expr* res) {
 
     Expr* base = res->data.function.args[0];
     Expr* exp = res->data.function.args[1];
+
+    /* Interval base: integer powers are handled by the interval kernel (even/odd
+     * and straddling-zero logic, reciprocal for negative n). Non-integer or
+     * interval exponents stay symbolic in this phase. */
+    if (is_interval(base)) {
+        if (exp->type == EXPR_INTEGER) return interval_power_int(base, exp->data.integer);
+        /* Positive fractional/real exponent over a non-negative interval (e.g.
+         * the parser's Sqrt -> Power[.,1/2]); other cases stay symbolic. */
+        return interval_power_pos_exp(base, exp);
+    }
+    if (is_interval(exp)) return NULL;
 
     /* NDArray fast path: elementwise A^B (same shape) or A^scalar. Uses raw
      * C-level complex power over the flat buffer; promotes the result dtype to
@@ -1869,6 +1881,11 @@ Expr* builtin_sqrt(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("Sqrt", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    /* Programmatic Sqrt[Interval[...]] (parser rewrites surface Sqrt to Power
+     * before this point, so this covers only C-constructed calls). */
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Sqrt", arg); if (r) return r; }
+
     Expr* half = make_rational(1, 2);
     Expr* p_args[2] = { expr_copy(arg), half };
     return expr_new_function(expr_new_symbol(SYM_Power), p_args, 2);

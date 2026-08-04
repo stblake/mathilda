@@ -266,6 +266,7 @@ set(COMMON_SRC
     ../src/plus.c
     ../src/times.c
     ../src/arithmetic.c
+    ../src/interval.c
     ../src/numbertheory/numbertheory.c
     ../src/numbertheory/nt_util.c
     ../src/numbertheory/nt_gaussian.c
@@ -1060,6 +1061,10 @@ add_test(NAME sequence_tests COMMAND sequence_tests)
 
 add_executable(options_tests test_options.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(options_tests PRIVATE ../src)
+
+add_executable(interval_tests test_interval.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(interval_tests PRIVATE ../src)
+add_test(NAME interval_tests COMMAND interval_tests)
 
 add_executable(core_tests test_core.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(core_tests PRIVATE ../src)

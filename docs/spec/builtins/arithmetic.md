@@ -1182,3 +1182,94 @@ Out[3]= 1/2 (z^2 + Conjugate[z]^2)
 In[4]:= ComplexExpand[Tan[x + I y]]
 Out[4]= Sin[2 x]/(Cos[2 x] + Cosh[2 y]) + I Sinh[2 y]/(Cos[2 x] + Cosh[2 y])
 ```
+
+---
+
+## Interval arithmetic
+
+`Interval[{min, max}]` represents the closed range of real values between `min`
+and `max`. The multi-argument form
+`Interval[{min1, max1}, {min2, max2}, ...]` is the union of the ranges. An
+`Interval` is an ordinary expression with head `Interval` (like `Complex[re,im]`
+and `Rational[n,d]`) and participates in arithmetic and elementary functions —
+this is *interval arithmetic*, where every result is a rigorous enclosure of the
+true value.
+
+**Representation and canonical form.** Each argument is a two-element `List`
+`{lo, hi}`; the canonicalizer orders each pair so `lo ≤ hi`, sorts the pairs by
+lower endpoint, and merges overlapping or touching pairs (closed-interval union,
+so `{1,2}` and `{2,3}` merge to `{1,3}`). `Interval[x]` for a single number is
+the point interval `Interval[{x, x}]`. Endpoints may be exact
+(Integer/Rational), `±Infinity`, symbolic numerics (`Sin[2]`, `Pi`), or
+approximate (Real/MPFR). Non-comparable symbolic endpoints are left in place.
+
+**Exactness.** Exact endpoints stay exact/symbolic; only approximate endpoints
+go numeric. Endpoint operations are carried out by the ordinary (correctly
+rounded) kernels, then an inexact result is nudged one ULP *outward* (lower
+bounds down, upper bounds up) so the enclosure stays rigorous — no new
+dependency is required (the widening uses `nextafter` / `mpfr_nextbelow`
+/`mpfr_nextabove`).
+
+**Arithmetic.** `Plus`, `Times`, `Power` (integer and positive-real exponents),
+`Divide`, and `Subtract` thread through intervals, including disjoint-union
+results:
+
+```
+In[1]:= Interval[{1, 6}] + Interval[{0, 2}]
+Out[1]= Interval[{1, 8}]
+
+In[2]:= Interval[{-2, 5}]^2
+Out[2]= Interval[{0, 25}]
+
+In[3]:= 1/Interval[{-2, 5}]
+Out[3]= Interval[{-Infinity, -1/2}, {1/5, Infinity}]
+
+In[4]:= Interval[{-1, 2}] Interval[{3, 4}]
+Out[4]= Interval[{-4, 8}]
+```
+
+**Elementary functions.** `Exp`, `Log`, `Sqrt` (monotone) and `Sin`, `Cos`,
+`Tan`, `Abs` (with critical-point range analysis) thread through intervals. The
+range analysis pins an extremum to the exact value `±1` when a crest/trough of
+`Sin`/`Cos` lies inside the interval, and otherwise keeps the endpoint value
+symbolic:
+
+```
+In[5]:= Sin[Interval[{2, 7}]]
+Out[5]= Interval[{-1, Sin[2]}]
+
+In[6]:= Sin[Interval[{2, 10}]]
+Out[6]= Interval[{-1, 1}]
+
+In[7]:= Sin[Interval[{2.5, 5.5}]]
+Out[7]= Interval[{-1, 0.598472}]
+
+In[8]:= Sqrt[Interval[{4, 9}]]
+Out[8]= Interval[{2, 3}]
+```
+
+**Endpoints and comparisons.** `Min[interval]` and `Max[interval]` return the
+lowest and highest endpoints. Relational operators (`Equal`, `Less`, `Greater`,
+…) yield explicit `True`/`False` when the interval is disjoint from the other
+operand, and stay symbolic otherwise:
+
+```
+In[9]:= Min[Interval[{2, 7}]]
+Out[9]= 2
+
+In[10]:= Interval[{5, 8}] > Pi
+Out[10]= True
+
+In[11]:= Interval[{1, 4}] > Pi
+Out[11]= Interval[{1, 4}] > Pi
+```
+
+**Attributes.** `Interval` is `Protected`. It is deliberately *not*
+`NumericFunction` (an interval is a set, not a scalar) and *not* `Listable`.
+
+Implemented in `src/interval.{c,h}`; the arithmetic hooks live in
+`src/plus.c` (`add_numbers`), `src/times.c` (the collector's interval
+accumulator), and `src/power.c`. Deferred to later phases: general
+`Interval^Interval`, `IntervalUnion`/`IntervalIntersection`/`IntervalMemberQ`,
+interval-vs-interval comparisons, and the automatic conversion of approximate
+numbers to intervals.

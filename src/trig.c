@@ -1,6 +1,7 @@
 #include <complex.h>
 #include "trig.h"
 #include "arithmetic.h"
+#include "interval.h"
 #include "plus.h"
 #include "times.h"
 #include "power.h"
@@ -654,6 +655,8 @@ Expr* builtin_sin(Expr* res) {
         return builtin_arg_error("Sin", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Sin", arg); if (r) return r; }
+
     { Expr* inv = strip_inverse_call(arg, "ArcSin"); if (inv) return inv; }
 
     // Sin[ArcCos[x]] -> Sqrt[1-x^2], Sin[ArcTan[x]] -> x/Sqrt[1+x^2]
@@ -706,6 +709,8 @@ Expr* builtin_cos(Expr* res) {
         return builtin_arg_error("Cos", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Cos", arg); if (r) return r; }
+
     { Expr* inv = strip_inverse_call(arg, "ArcCos"); if (inv) return inv; }
 
     // Cos[ArcSin[x]] -> Sqrt[1-x^2], Cos[ArcTan[x]] -> 1/Sqrt[1+x^2]
@@ -757,6 +762,8 @@ Expr* builtin_tan(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("Tan", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Tan", arg); if (r) return r; }
 
     { Expr* inv = strip_inverse_call(arg, "ArcTan"); if (inv) return inv; }
 

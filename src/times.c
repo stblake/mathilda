@@ -1,6 +1,7 @@
 #include "times.h"
 #include "arithmetic.h"
 #include "complex.h"
+#include "interval.h"
 #include "eval.h"
 #include "numeric.h"
 #include "sym_names.h"
@@ -454,6 +455,7 @@ Expr* builtin_times(Expr* res) {
 
     Expr* num_prod = expr_new_integer(1);
     Expr* complex_val = NULL;
+    Expr* interval_val = NULL;   /* running product of Interval factors */
 
     /* Collector buffers on the stack for the common small product (mirrors
      * builtin_plus): avoids three malloc/free pairs per Times in tight numeric
@@ -483,12 +485,13 @@ Expr* builtin_times(Expr* res) {
         Expr* arg = res->data.function.args[i];
         if (is_overflow(arg)) {
             expr_free(num_prod); if (complex_val) expr_free(complex_val);
+            if (interval_val) expr_free(interval_val);
             for(size_t j=0; j<group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
             if (heap_bufs) { free(groups); free(slot_group); free(slot_hash); }
             return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
         }
 
-        if (expr_is_numeric_like(arg) && !is_complex(arg, NULL, NULL)) {
+        if (expr_is_numeric_like(arg) && !is_complex(arg, NULL, NULL) && !is_interval(arg)) {
             Expr* next = multiply_numbers(num_prod, arg);
             if (next == NULL) {
                 /* Could not fold this numeric factor into num_prod;
@@ -531,6 +534,26 @@ Expr* builtin_times(Expr* res) {
                 expr_free(complex_val); expr_free(c_arg);
                 complex_val = make_complex(re, im);
             }
+        } else if (is_interval(arg)) {
+            /* Accumulate Interval factors: interval_val *= arg. If a product is
+             * undecidable (symbolic endpoints), keep the factor as its own group
+             * so nothing is lost. */
+            if (!interval_val) {
+                interval_val = expr_copy(arg);
+            } else {
+                Expr* prod = interval_multiply(interval_val, arg);
+                if (prod) { expr_free(interval_val); interval_val = prod; }
+                else {
+                    uint64_t hb = expr_hash(arg);
+                    size_t slot = (size_t)hb & ht_mask;
+                    while (slot_group[slot] != -1) slot = (slot + 1) & ht_mask;
+                    slot_group[slot] = (int64_t)group_count;
+                    slot_hash[slot] = hb;
+                    groups[group_count].base = expr_copy(arg);
+                    groups[group_count].exponent = expr_new_integer(1);
+                    group_count++;
+                }
+            }
         } else {
             Expr* base = arg; Expr* exponent;
             if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && arg->data.function.head->data.symbol.name == SYM_Power && arg->data.function.arg_count == 2) {
@@ -565,6 +588,7 @@ Expr* builtin_times(Expr* res) {
 
     if (num_prod->type == EXPR_INTEGER && num_prod->data.integer == 0) {
         if (complex_val) expr_free(complex_val);
+        if (interval_val) expr_free(interval_val);   /* 0 * Interval -> 0 */
         for(size_t j=0; j<group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
         if (heap_bufs) free(groups);
         return num_prod;
@@ -910,7 +934,7 @@ Expr* builtin_times(Expr* res) {
      * The unchanged-form pre-check keeps inputs already in canonical form
      * literally identical -- e.g. 2/Sqrt[3] stays as is because 4/3 has
      * no extractable square beyond the trivial 2/Sqrt[3]. */
-    if (complex_val == NULL && group_count == 1 &&
+    if (complex_val == NULL && interval_val == NULL && group_count == 1 &&
         (expr_is_integer_like(num_prod) || is_rational(num_prod, NULL, NULL)) &&
         !(num_prod->type == EXPR_INTEGER &&
           (num_prod->data.integer == 0 ||
@@ -1175,6 +1199,20 @@ Expr* builtin_times(Expr* res) {
         }
     }
 
+    /* Fold the numeric coefficient into the interval product (num_prod becomes 1
+     * once absorbed). Done before the Complex fold so it also reads a clean
+     * num_prod. If the product is undecidable, num_prod and interval_val stay as
+     * separate factors. */
+    if (interval_val && !(num_prod->type == EXPR_INTEGER && num_prod->data.integer == 1)) {
+        Expr* np_iv = interval_from_scalar(num_prod);
+        Expr* prod = interval_multiply(np_iv, interval_val);
+        expr_free(np_iv);
+        if (prod) {
+            expr_free(interval_val); interval_val = prod;
+            expr_free(num_prod); num_prod = expr_new_integer(1);
+        }
+    }
+
     if (complex_val && !(num_prod->type == EXPR_INTEGER && num_prod->data.integer == 1)) {
         Expr *re, *im; is_complex(complex_val, &re, &im);
         Expr* nr = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(num_prod), expr_copy(re)}, 2));
@@ -1186,12 +1224,14 @@ Expr* builtin_times(Expr* res) {
     size_t final_count = 0;
     if (!(num_prod->type == EXPR_INTEGER && num_prod->data.integer == 1)) final_count++;
     if (complex_val) final_count++;
+    if (interval_val) final_count++;
     for (size_t i = 0; i < group_count; i++) {
         if (!(groups[i].exponent->type == EXPR_INTEGER && groups[i].exponent->data.integer == 0)) final_count++;
     }
 
     if (final_count == 0) {
         expr_free(num_prod); if (complex_val) expr_free(complex_val);
+        if (interval_val) expr_free(interval_val);
         for(size_t j=0; j<group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
         if (heap_bufs) free(groups);
         return expr_new_integer(1);
@@ -1200,13 +1240,14 @@ Expr* builtin_times(Expr* res) {
     /* final_count <= 2 + group_count <= 2 + n; when !heap_bufs, n <= TIMES_SMALL_N,
      * so the result vector fits a stack buffer (expr_new_function memcpys it).
      * Saves a malloc/free per small Times in tight numeric loops. */
-    Expr* final_args_stack[TIMES_SMALL_N + 2];
+    Expr* final_args_stack[TIMES_SMALL_N + 3];
     Expr** final_args = heap_bufs ? malloc(sizeof(Expr*) * final_count)
                                   : final_args_stack;
     size_t idx = 0;
     if (!(num_prod->type == EXPR_INTEGER && num_prod->data.integer == 1)) final_args[idx++] = num_prod;
     else expr_free(num_prod);
     if (complex_val) final_args[idx++] = complex_val;
+    if (interval_val) final_args[idx++] = interval_val;
     for (size_t i = 0; i < group_count; i++) {
         if (groups[i].exponent->type == EXPR_INTEGER && groups[i].exponent->data.integer == 0) {
             expr_free(groups[i].base); expr_free(groups[i].exponent); continue;
