@@ -75,6 +75,9 @@ int main(void) {
     if (!check("Sqrt[Interval[{4, 9}]]", "Interval[{2, 3}]")) failures++;
     if (!check("Interval[{4, 9}]^(1/2)", "Interval[{2, 3}]")) failures++;
     if (!check("Tan[Interval[{0, 1}]]", "Interval[{0, Tan[1]}]")) failures++;
+    if (!check("Abs[Interval[{-2, 1}]]", "Interval[{0, 2}]")) failures++;    /* straddles 0: min 0 */
+    if (!check("Abs[Interval[{-5, -2}]]", "Interval[{2, 5}]")) failures++;   /* all negative */
+    if (!check("Abs[Interval[{2, 5}]]", "Interval[{2, 5}]")) failures++;     /* all positive */
 
     /* --- Min / Max --- */
     if (!check("Min[Interval[{2, 7}]]", "2")) failures++;
