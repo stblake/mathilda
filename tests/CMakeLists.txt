@@ -419,6 +419,7 @@ set(COMMON_SRC
     ../src/stats/median.c
     ../src/stats/quartiles.c
     ../src/stats/variance.c
+    ../src/stats/moment.c
     ../src/stats/central_moment.c
     ../src/stats/skewness.c
     ../src/stats/kurtosis.c

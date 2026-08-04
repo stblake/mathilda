@@ -1,6 +1,6 @@
 # Statistics
 
-**NDArray fast paths.** `Mean`, `Median`, `Variance`, `CentralMoment`,
+**NDArray fast paths.** `Mean`, `Median`, `Variance`, `Moment`, `CentralMoment`,
 `Skewness`, `Kurtosis`, `StandardDeviation`, `RootMeanSquare`, `Quartiles`,
 `MovingAverage`, `MovingMedian`, `ExponentialMovingAverage`, `Covariance` and
 `Correlation` operate directly on an `NDArray`'s flat buffer at C speed,
@@ -112,6 +112,36 @@ Out[1]= 1
 
 In[2]:= Variance[{{5.2, 7}, {5.3, 8}, {5.4, 9}}]
 Out[2]= {0.01, 1}
+```
+
+## Moment
+Gives the raw (power) moment of data.
+- `Moment[data, r]`: the order-`r` raw moment $\mu_r = (1/n) \sum_i x_i^r$ (the sum of `r`-th powers, divided by `n`).
+- `Moment[data, {r_1, ..., r_m}]`: the multivariate mixed raw moment $(1/n) \sum_i \prod_j x_{ij}^{r_j}$.
+
+**Features**:
+- `NHoldAll`, `Protected`.
+- The raw moment is `CentralMoment` without the mean subtraction; `Moment[data, 1]` is `Mean[data]`, and `Moment[data, 0]` is `1`.
+- For a matrix or array the moment is taken columnwise over the first axis (equivalent to `ArrayReduce[Moment[#, r]&, x, 1]`); because there is no mean to subtract, `Mean[data^r]` threads correctly at every rank.
+- Exact input yields exact output; approximate input yields approximate output; symbolic data is handled symbolically.
+- Fast path on `NDArray`/packed real buffers (`ndred_moment`); an integer buffer degrades to the exact `Rational` `List` result, like `Variance`.
+- Lowerable inside `Compile[]` for a real vector and integer order (participates in auto-compilation).
+
+```mathematica
+In[1]:= Moment[{1, 2, 3, 4}, 2]
+Out[1]= 15/2
+
+In[2]:= Moment[{1., 2., 3., 4.}, 2]
+Out[2]= 7.5
+
+In[3]:= Moment[{Pi, E, 2}, 1]
+Out[3]= 1/3 (2 + E + Pi)
+
+In[4]:= Moment[{{1, 2}, {3, 4}, {5, 6}}, 3]
+Out[4]= {51, 96}
+
+In[5]:= Simplify[Moment[{{a, b}, {c, d}}, {1, 2}]]
+Out[5]= 1/2 (a b^2 + c d^2)
 ```
 
 ## CentralMoment

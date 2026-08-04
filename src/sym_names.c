@@ -666,6 +666,7 @@ const char* SYM_Sum = NULL;
 const char* SYM_Together = NULL;
 const char* SYM_Variables = NULL;
 const char* SYM_Variance = NULL;
+const char* SYM_Moment = NULL;
 const char* SYM_CentralMoment = NULL;
 const char* SYM_StandardDeviation = NULL;
 const char* SYM_DollarAborted = NULL;
@@ -1492,6 +1493,7 @@ void sym_names_init(void) {
     SYM_Together                   = intern_symbol("Together");
     SYM_Variables                  = intern_symbol("Variables");
     SYM_Variance                   = intern_symbol("Variance");
+    SYM_Moment                     = intern_symbol("Moment");
     SYM_CentralMoment              = intern_symbol("CentralMoment");
     SYM_StandardDeviation          = intern_symbol("StandardDeviation");
     SYM_DollarAborted              = intern_symbol("$Aborted");

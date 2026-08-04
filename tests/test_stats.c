@@ -321,6 +321,64 @@ void test_exponential_moving_average() {
     assert_eval_eq("MemberQ[Attributes[ExponentialMovingAverage], Protected]", "True", 0);
 }
 
+void test_moment() {
+    /* --- scalar order on an exact vector: exact input -> exact output --- */
+    assert_eval_eq("Moment[{1,2,3,4},2]", "15/2", 0);       /* (1+4+9+16)/4 */
+    assert_eval_eq("Moment[{1,2,3,4},1]", "5/2", 0);        /* r=1 is the Mean */
+    assert_eval_eq("Moment[{1,2,3,4},0]", "1", 0);          /* r=0 -> 1 */
+    assert_eval_eq("Moment[{1,2,3,4},3]", "25", 0);         /* (1+8+27+64)/4 */
+    assert_eval_eq("Moment[Range[10],2]", "77/2", 0);       /* 385/10 */
+
+    /* --- approximate input -> approximate output --- */
+    assert_eval_eq("Moment[{1.,2.,3.,4.},2]", "7.5", 0);
+    /* arbitrary precision is preserved (routes through the MPFR symbolic path):
+     * Moment[.,2] of {1,2,3} is 14/3 = 4.6666..., which shows its digits (unlike
+     * an exact-in-binary value like 7.5, which prints short even at 30 digits). */
+    assert_eval_startswith("Moment[N[{1,2,3},30],2]", "4.6666666666666666666666666");
+
+    /* --- symbolic data --- */
+    assert_eval_eq("Simplify[Moment[{a,b,c},2]]", "1/3 (a^2 + b^2 + c^2)", 0);
+    /* r=1 is the mean, symbolically */
+    assert_eval_eq("Moment[{Pi,E,2},1]", "1/3 (2 + E + Pi)", 0);
+
+    /* --- matrix: columnwise moments --- */
+    assert_eval_eq("Moment[{{1,2},{3,4},{5,6}},3]", "{51, 96}", 0);
+    assert_eval_eq("Simplify[Moment[{{a11,a12},{a21,a22}},2]]",
+                   "{1/2 (a11^2 + a21^2), 1/2 (a12^2 + a22^2)}", 0);
+
+    /* --- rank-3 array: columnwise at the first level --- */
+    assert_eval_eq("Moment[{{{1,2},{3,4}},{{5,6},{7,8}}},2]", "{{13, 20}, {29, 40}}", 0);
+
+    /* --- multivariate (vector) order: sum the r_j-th power in the j-th column --- */
+    assert_eval_eq("Moment[{{1,2},{3,5}},{1,1}]", "17/2", 0);    /* (1*2 + 3*5)/2 */
+    assert_eval_eq("Simplify[Moment[{{a,b},{c,d}},{1,2}]]", "1/2 (a b^2 + c d^2)", 0);
+
+    /* --- Association works on the values --- */
+    assert_eval_eq("Moment[<|1->{1,2},2->{3,4},3->{5,6}|>,2]", "{35/3, 56/3}", 0);
+
+    /* --- NDArray / packed surfaces --- */
+    assert_eval_eq("Moment[NDArray[{1.,2.,3.,4.},DataType->\"float64\"],2]", "7.5", 0);
+    /* a visible int64 buffer degrades to the exact Rational (like Variance) */
+    assert_eval_eq("Moment[NDArray[{1,2,3,4},DataType->\"int64\"],2]", "15/2", 0);
+    /* packed and unpacked agree on the same data */
+    assert_eval_eq("Moment[NDArray[{1.,2.,4.,8.,16.},DataType->\"float64\"],2] "
+                   "== Moment[{1.,2.,4.,8.,16.},2]", "True", 0);
+
+    /* --- Compile[]: lowerable, and the compiled kernel matches the interpreter --- */
+    assert_eval_eq("(CompileDiagnostics[{{v,_Real,1},{k,_Integer}}, Moment[v,k]] "
+                   "/. List -> Association)[\"Compiled\"]", "True", 0);
+    assert_eval_eq("Compile[{{v,_Real,1}}, Moment[v,2]][{1.,2.,4.,8.,16.}] "
+                   "== Moment[{1.,2.,4.,8.,16.},2]", "True", 0);
+
+    /* --- attributes: NHoldAll and Protected --- */
+    assert_eval_eq("MemberQ[Attributes[Moment], NHoldAll]", "True", 0);
+    assert_eval_eq("MemberQ[Attributes[Moment], Protected]", "True", 0);
+
+    /* --- stays unevaluated when it should --- */
+    assert_eval_eq("Moment[x,2]", "Moment[x, 2]", 0);
+    assert_eval_eq("Moment[{1,2,3}]", "Moment[{1, 2, 3}]", 0);
+}
+
 void test_central_moment() {
     /* --- scalar order on an exact vector: exact input -> exact output --- */
     assert_eval_eq("CentralMoment[{1,2,3,4},2]", "5/4", 0);
@@ -506,6 +564,7 @@ int main() {
     TEST(test_mean);
     TEST(test_rootmeansquare);
     TEST(test_variance);
+    TEST(test_moment);
     TEST(test_central_moment);
     TEST(test_skewness);
     TEST(test_kurtosis);

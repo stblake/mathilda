@@ -1519,6 +1519,68 @@ Expr* ndred_central_moment(Expr* res) {
     return nd_central_moment_leading(res);
 }
 
+/* --------------------------------------------------------------- Moment (raw) */
+
+/* One column's r-th RAW moment at (base, stride): Sum[x^r]/blocks. Reuses the
+ * CentralMoment summation with mean = 0 — nd_summoment_strided computes
+ * Sum[(x - mean)^r], so mean = 0 is exactly Sum[x^r]. */
+static double nd_rawmoment_at(const void* buf, NDType dt, size_t base, size_t stride,
+                              size_t blocks, int64_t r) {
+    return nd_summoment_strided(buf, dt, base, stride, blocks, 0.0, r) / (double)blocks;
+}
+
+typedef struct {
+    const void* buf; NDType dt; void* out; NDType odt; size_t T, blocks; int64_t r;
+} nd_rm_ctx;
+static bool nd_rm_cols(void* c, size_t lo, size_t hi) {
+    const nd_rm_ctx* x = (const nd_rm_ctx*)c;
+    for (size_t j = lo; j < hi; j++)
+        ndt_set(x->out, j, x->odt, nd_rawmoment_at(x->buf, x->dt, j, x->T, x->blocks, x->r), 0.0);
+    return true;
+}
+
+/* Moment[a, r]: the r-th raw (power) moment (1/n) Sum[x^r]. A single pass over
+ * the leading axis (CentralMoment with the mean pass removed), dividing by n.
+ * Always a REAL result. Real dtypes and a non-negative integer r only: an int64
+ * buffer (the exact answer is a Rational), a complex buffer (x^r is complex, no
+ * real slot for it), and a list-valued / non-integer / negative r all degrade to
+ * the List path, which answers exactly or symbolically. */
+static Expr* nd_moment_r_leading(Expr* res) {
+    if (res->data.function.arg_count != 2) return ndarray_delist_and_reeval(res);
+    Expr* a = res->data.function.args[0];
+    Expr* rexpr = res->data.function.args[1];
+    if (rexpr->type != EXPR_INTEGER || rexpr->data.integer < 0)
+        return ndarray_delist_and_reeval(res);
+    int64_t r = rexpr->data.integer;
+    if (nd_int64_degrade(a) || ndt_is_complex(a->data.ndarray.dtype))
+        return ndarray_delist_and_reeval(res);
+
+    int rank = a->data.ndarray.rank;
+    const int64_t* dims = a->data.ndarray.dims;
+    NDType dt = a->data.ndarray.dtype;
+    const void* buf = a->data.ndarray.data;
+
+    size_t blocks = (size_t)dims[0];
+    if (blocks < 1u) return ndarray_delist_and_reeval(res);   /* Mean of empty is undefined */
+    size_t T = nd_dim_prod(dims, 1, rank);
+    NDType odt = nd_real_of(dt);
+
+    if (rank == 1) {                             /* vector -> scalar (threaded) */
+        double ss = nd_full_moment(buf, dt, blocks, 0.0, r);
+        return expr_new_real(ss / (double)blocks);
+    }
+
+    void* out = malloc(ndt_elem_size(odt) * T);
+    if (!out) return ndarray_delist_and_reeval(res);
+    nd_rm_ctx c = { buf, dt, out, odt, T, blocks, r };
+    nd_parallel_for(T, nd_rm_cols, &c);
+    return expr_new_ndarray_like(a, rank - 1, dims + 1, out, odt);
+}
+
+Expr* ndred_moment(Expr* res) {
+    return nd_moment_r_leading(res);
+}
+
 /* ------------------------------------------------- Skewness / Kurtosis */
 
 /* A standardized central moment m_p / m_2^(p/2): Skewness is p=3

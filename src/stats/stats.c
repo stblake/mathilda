@@ -17,6 +17,7 @@ void stats_init(void) {
     symtab_add_builtin("Quartiles", builtin_quartiles);
     symtab_get_def("Quartiles")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Variance", builtin_variance);
+    symtab_add_builtin("Moment", builtin_moment);
     symtab_add_builtin("CentralMoment", builtin_central_moment);
     symtab_add_builtin("Skewness", builtin_skewness);
     symtab_add_builtin("Kurtosis", builtin_kurtosis);
@@ -30,6 +31,9 @@ void stats_init(void) {
     symtab_get_def("Mean")->attributes |= ATTR_PROTECTED;
     symtab_get_def("RootMeanSquare")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Variance")->attributes |= ATTR_PROTECTED;
+    /* Moment carries NHoldAll (as Mathematica does) so N does not thread into a
+     * symbolic order or symbolic data; CentralMoment in-tree is Protected only. */
+    symtab_get_def("Moment")->attributes |= (ATTR_PROTECTED | ATTR_NHOLDALL);
     symtab_get_def("CentralMoment")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Skewness")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Kurtosis")->attributes |= ATTR_PROTECTED;

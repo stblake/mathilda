@@ -1349,10 +1349,12 @@ static const NdRedSpec ND_REDS[] = {
      * does not affect the static result type. */
     { "RankedMin",         ndred_ranked_min, true, 1, false, 1 },
     { "RankedMax",         ndred_ranked_max, true, 1, false, 1 },
-    /* CentralMoment[v, r]: the r-th moment about the mean, same array+trailing-int
-     * shape as Ranked* (nextra 1). A real vector answers a Real; an int vector's
-     * exact answer is a Rational no machine slot holds, so it declines (int_ok
-     * false) and the interpreter answers exactly, exactly like Variance/Mean. */
+    /* Moment[v, r] (raw (1/n)Sum[x^r]) and CentralMoment[v, r] (moment about the
+     * mean): the same array+trailing-int shape as Ranked* (nextra 1). A real
+     * vector answers a Real; an int vector's exact answer is a Rational no machine
+     * slot holds, so both decline (int_ok false) and the interpreter answers
+     * exactly, exactly like Variance/Mean. */
+    { "Moment",            ndred_moment,         false, 1, false, 1 },
     { "CentralMoment",     ndred_central_moment, false, 1, false, 1 },
     /* Linalg rank-2 -> scalar reductions (COMPILE_MISSING.md §1), each delegating
      * to its ndla_* interpreter entry point (src/linalg/ndlinalg.h).  Real operand

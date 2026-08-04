@@ -540,14 +540,15 @@ static void pack_mark_aware_heads(void) {
         "Total", "Mean", "Min", "Max", "MinMax", "Median", "Variance",
         "StandardDeviation", "RootMeanSquare", "Quartiles", "Accumulate",
         "MovingAverage", "MovingMedian", "ExponentialMovingAverage",
-        /* CentralMoment[v, r] — the r-th moment about the mean on the buffer
-         * (ndred_central_moment), like Variance but /n and power r. NOT on
-         * INT64_OK: an integer vector's exact central moment is a Rational no
-         * machine slot holds, so it degrades to the exact List path. Skewness /
-         * Kurtosis are standardized central moments on the buffer
-         * (ndred_skewness / ndred_kurtosis); an integer sample's value is a
-         * radical, so they degrade the same way and are likewise not INT64_OK. */
-        "CentralMoment", "Skewness", "Kurtosis",
+        /* Moment[v, r] — the r-th RAW (power) moment on the buffer (ndred_moment),
+         * (1/n)Sum[x^r]. CentralMoment[v, r] — the r-th moment about the mean
+         * (ndred_central_moment), like Variance but /n and power r. NEITHER is on
+         * INT64_OK: an integer vector's exact moment is a Rational no machine slot
+         * holds, so both degrade to the exact List path. Skewness / Kurtosis are
+         * standardized central moments on the buffer (ndred_skewness /
+         * ndred_kurtosis); an integer sample's value is a radical, so they degrade
+         * the same way and are likewise not INT64_OK. */
+        "Moment", "CentralMoment", "Skewness", "Kurtosis",
         /* Covariance / Correlation (src/linalg/ndcorrcov.c). Covariance[v, w] is a
          * threaded centered inner product off the buffer; the matrix forms are a
          * BLAS gram A_c^T B_c. Off this list the gate would materialise both 10^7
