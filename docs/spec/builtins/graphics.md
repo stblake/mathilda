@@ -89,7 +89,7 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 | `Disk[{x,y}, r]` | Filled disk |
 | `Rectangle[{x1,y1},{x2,y2}]` | Axis-aligned filled rectangle |
 | `Polygon[{{x1,y1},…}]` | Filled polygon (any winding order) |
-| `Text[expr, {x,y}]` | String / expression label (Hershey vector font) |
+| `Text[expr, {x,y}]` | String / expression label (system sans-serif font) |
 
 ### Style directives
 
@@ -198,11 +198,17 @@ winding-sensitive but `Polygon[]` itself, like Mathematica's, is not).
 ## Text
 A graphics primitive: `Text[expr, {x,y}]` renders `expr` (a string,
 number, or any expression -- non-strings are stringified the same way
-`ToString[]` would) as text centered at `{x,y}`, drawn with the classic
-Hershey *Roman Simplex* single-stroke vector font (full printable ASCII,
-upper- and lowercase, with proportional advance widths). The glyph data is
-transcribed from the historical Hershey dataset (`tools/hershey.dat`) by
-`tools/gen_hershey.py` into `src/graphics/hershey_glyphs.inc`.
+`ToString[]` would) as text centered at `{x,y}`, drawn with a filled
+sans-serif TrueType font (`src/graphics/label_font.c`) discovered from the
+host system at window-open time -- Arial on macOS, Liberation Sans or
+DejaVu Sans on Linux, Arial on Windows -- falling back to Raylib's embedded
+default bitmap font when none of those are installed (guaranteed on a
+minimal CI/Docker Linux image with no fonts at all). No font is vendored in
+the repository, matching how Raylib/GMP-ECM/LAPACK/FLINT/PCRE2/FFTW are all
+autodetected system dependencies rather than bundled. Every piece of text
+in every Mathilda graphics window -- axis/tick labels, `Text[]`, legends,
+toolbar chrome, and `Animate`/`Manipulate`'s own slider/button UI -- uses
+this same font.
 
 ## RGBColor / GrayLevel / Opacity / Thickness / PointSize
 Style directives. Placed alongside primitives in a `Graphics[]` primitive

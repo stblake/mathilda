@@ -20,6 +20,7 @@
 
 #include "render3d.h"
 #include "render_common.h"
+#include "label_font.h"
 #include "sym_names.h"
 #include "print.h"
 #include <raylib.h>
@@ -316,8 +317,8 @@ static void draw_box3(const Box3D* bb, Color col) {
 
 static void draw_tick_label3(Vector3 world_pos, Camera cam, const char* text, int win_w, int win_h, Color color) {
     Vector2 s = GetWorldToScreenEx(world_pos, cam, win_w, win_h);
-    int tw = MeasureText(text, 14);
-    DrawText(text, (int)s.x - tw / 2, (int)s.y, 14, color);
+    int tw = label_font_measure_px(text, 14);
+    label_font_draw_px(text, (int)s.x - tw / 2, (int)s.y, 14, color);
 }
 
 /* One tick label every nice_step() interval along each of the three box
@@ -333,11 +334,20 @@ static void draw_box_ticks(const Box3D* bb, Camera cam, int win_w, int win_h, Co
         snprintf(buf, sizeof(buf), "%g", x);
         draw_tick_label3(to_v3(x, bb->ymin, bb->zmin), cam, buf, win_w, win_h, col);
     }
+    /* y = ymin is the point (xmax, ymin, zmin) -- the same 3D point (and
+     * therefore the same projected screen position) as the x-loop's
+     * x = xmax tick above. Drawing both would overwrite one label with
+     * the other; skip the y-axis's copy and let the x-axis's tick stand
+     * for that corner. */
     for (double y = ceil(bb->ymin / ystep) * ystep; y <= bb->ymax + 1e-9; y += ystep) {
+        if (fabs(y - bb->ymin) < 1e-9) continue;
         snprintf(buf, sizeof(buf), "%g", y);
         draw_tick_label3(to_v3(bb->xmax, y, bb->zmin), cam, buf, win_w, win_h, col);
     }
+    /* z = zmin is the point (xmin, ymin, zmin) -- the same corner as the
+     * x-loop's x = xmin tick; skip it for the same reason as above. */
     for (double z = ceil(bb->zmin / zstep) * zstep; z <= bb->zmax + 1e-9; z += zstep) {
+        if (fabs(z - bb->zmin) < 1e-9) continue;
         snprintf(buf, sizeof(buf), "%g", z);
         draw_tick_label3(to_v3(bb->xmin, bb->ymin, z), cam, buf, win_w, win_h, col);
     }
@@ -454,14 +464,14 @@ static void draw_toolbar3(int win_w, int hover, bool slicing) {
 
     if (hover >= 0) {
         const char* t = tb3_tip(hover);
-        int tw = MeasureText(t, 12);
+        int tw = label_font_measure_px(t, 12);
         Rectangle r = tb3_rect(hover, win_w);
         float tx = r.x + r.width * 0.5f - (float)tw * 0.5f;
         if (tx + (float)tw + 6 > (float)win_w) tx = (float)win_w - (float)tw - 6;
         if (tx < 4) tx = 4;
         float ty = r.y + r.height + 7;
         DrawRectangle((int)tx - 5, (int)ty - 3, tw + 10, 19, (Color){ 40, 40, 40, 235 });
-        DrawText(t, (int)tx, (int)ty, 12, RAYWHITE);
+        label_font_draw_px(t, (int)tx, (int)ty, 12, RAYWHITE);
     }
 }
 
@@ -636,7 +646,7 @@ static void draw_slice_inset(const SliceSeg* segs, size_t n_segs, int slice_axis
     const char* lbl = slice_axis == 0 ? "y-z cross-section"
                      : slice_axis == 1 ? "x-z cross-section"
                                        : "x-y cross-section";
-    DrawText(lbl, (int)box_x, (int)(box_y - 16), 11, (Color){ 80, 80, 90, 255 });
+    label_font_draw_px(lbl, (int)box_x, (int)(box_y - 16), 11, (Color){ 80, 80, 90, 255 });
 }
 
 /* ---------------- slice control row (axis select + position slider) ---------------- */
@@ -680,7 +690,7 @@ static void draw_slice_row(int win_w, float row_y, int slice_axis, double slice_
     DrawRectangle(0, (int)(row_y + SLICE_ROW_H - 1), win_w, 1, (Color){ 200, 200, 210, 255 });
 
     float mid_y = row_y + SLICE_ROW_H * 0.5f;
-    DrawText("Slice", 6, (int)(mid_y - 7), 13, (Color){ 60, 60, 100, 255 });
+    label_font_draw_px("Slice", 6, (int)(mid_y - 7), 13, (Color){ 60, 60, 100, 255 });
 
     const char* names[3] = { "X", "Y", "Z" };
     for (int k = 0; k < 3; k++) {
@@ -692,8 +702,8 @@ static void draw_slice_row(int win_w, float row_y, int slice_axis, double slice_
                            : (hov ? (Color){ 205, 205, 215, 255 } : (Color){ 222, 222, 228, 255 });
         DrawRectangleRec(r, bg);
         DrawRectangleLinesEx(r, 1.0f, (Color){ 150, 150, 165, 255 });
-        int tw = MeasureText(names[k], 12);
-        DrawText(names[k], (int)(r.x + r.width * 0.5f - (float)tw * 0.5f), (int)(r.y + r.height * 0.5f - 6),
+        int tw = label_font_measure_px(names[k], 12);
+        label_font_draw_px(names[k], (int)(r.x + r.width * 0.5f - (float)tw * 0.5f), (int)(r.y + r.height * 0.5f - 6),
                  12, active ? WHITE : (Color){ 40, 40, 60, 255 });
     }
 
@@ -715,8 +725,8 @@ static void draw_slice_row(int win_w, float row_y, int slice_axis, double slice_
 
     char val[32];
     snprintf(val, sizeof(val), "%.4g", slice_pos);
-    int vw = MeasureText(val, 12);
-    DrawText(val, (int)((float)win_w - SLICE_VALUE_W / 2.0f - (float)vw / 2.0f), (int)(mid_y - 6), 12,
+    int vw = label_font_measure_px(val, 12);
+    label_font_draw_px(val, (int)((float)win_w - SLICE_VALUE_W / 2.0f - (float)vw / 2.0f), (int)(mid_y - 6), 12,
              (Color){ 40, 40, 80, 255 });
 }
 
@@ -751,6 +761,7 @@ void graphics3d_show(const Expr* graphics3d_expr) {
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow((int)opts.width, (int)opts.height, "Mathilda");
     SetTargetFPS(60);
+    label_font_load();
 
     /* Pre-bake the expression tree into flat C arrays before the render loop.
      * This converts every Polygon into (n-2) BakedTri entries and every Line
@@ -921,18 +932,18 @@ void graphics3d_show(const Expr* graphics3d_expr) {
             Vector2 spos = GetWorldToScreenEx(hv_pt, camera, win_w, win_h);
             char lbl[80];
             snprintf(lbl, sizeof(lbl), "(%.4g, %.4g, %.4g)", (double)hv_pt.x, (double)hv_pt.z, (double)hv_pt.y);
-            int tw = MeasureText(lbl, 13);
+            int tw = label_font_measure_px(lbl, 13);
             float lx = spos.x + 10.0f, ly = spos.y - 18.0f;
             DrawRectangle((int)lx - 4, (int)ly - 3, tw + 8, 19, (Color){ 40, 40, 40, 215 });
-            DrawText(lbl, (int)lx, (int)ly, 13, RAYWHITE);
+            label_font_draw_px(lbl, (int)lx, (int)ly, 13, RAYWHITE);
         }
 
         if (opts.axes) draw_box_ticks(&bb, camera, win_w, win_h, axes_color);
         if (opts.plot_label) {
             char* s = expr_to_string((Expr*)opts.plot_label);
             if (s) {
-                int tw = MeasureText(s, 18);
-                DrawText(s, (win_w - tw) / 2, 10, 18, BLACK);
+                int tw = label_font_measure_px(s, 18);
+                label_font_draw_px(s, (win_w - tw) / 2, 10, 18, BLACK);
                 free(s);
             }
         }
@@ -963,7 +974,7 @@ void graphics3d_show(const Expr* graphics3d_expr) {
 
         draw_toolbar3(win_w, tb3_hover, slicing);
 
-        DrawText(slicing
+        label_font_draw_px(slicing
                  ? "drag: rotate   scroll: zoom   right-drag: pan   drag slider: move slice"
                  : "drag: rotate   scroll: zoom   right-drag: pan",
                  10, win_h - 22, 14, GRAY);
@@ -974,6 +985,7 @@ void graphics3d_show(const Expr* graphics3d_expr) {
     done3d:;
 
     bm_free(&mesh);
+    label_font_unload();
     CloseWindow();
 }
 
@@ -1151,18 +1163,18 @@ void graphics3d_render_in_region(const Expr* graphics3d_expr,
         Vector2 spos = GetWorldToScreenEx(hv_pt, camera, want_w, want_h);
         char lbl[80];
         snprintf(lbl, sizeof(lbl), "(%.4g, %.4g, %.4g)", (double)hv_pt.x, (double)hv_pt.z, (double)hv_pt.y);
-        int tw = MeasureText(lbl, 13);
+        int tw = label_font_measure_px(lbl, 13);
         float lx = spos.x + 10.0f, ly = spos.y - 18.0f;
         DrawRectangle((int)lx - 4, (int)ly - 3, tw + 8, 19, (Color){ 40, 40, 40, 215 });
-        DrawText(lbl, (int)lx, (int)ly, 13, RAYWHITE);
+        label_font_draw_px(lbl, (int)lx, (int)ly, 13, RAYWHITE);
     }
 
     if (opts.axes) draw_box_ticks(&bb, camera, want_w, want_h, (Color){ 90, 90, 90, 255 });
     if (opts.plot_label) {
         char* s = expr_to_string((Expr*)opts.plot_label);
         if (s) {
-            int tw = MeasureText(s, 18);
-            DrawText(s, (want_w - tw) / 2, 10, 18, BLACK);
+            int tw = label_font_measure_px(s, 18);
+            label_font_draw_px(s, (want_w - tw) / 2, 10, 18, BLACK);
             free(s);
         }
     }

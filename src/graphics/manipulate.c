@@ -202,6 +202,7 @@ static bool parse_control_spec(const Expr* e, ManipCtrl* out) {
 
 #ifdef USE_GRAPHICS
 #include <raylib.h>
+#include "label_font.h"
 
 #define ROW_H        30.0f   /* height of each control row                 */
 #define FOOTER_H     28.0f   /* Reset button + Esc hint row                */
@@ -240,14 +241,14 @@ static void draw_range_row(const ManipCtrl* c, int win_w, float row_y,
     DrawRectangle(0, (int)row_y, win_w, (int)ROW_H, (Color){235,235,240,255});
     DrawRectangle(0, (int)(row_y + ROW_H - 1), win_w, 1, (Color){200,200,210,255});
 
-    DrawText(c->var->data.symbol.name, 6, (int)(mid_y - 7), 14, (Color){60,60,100,255});
+    label_font_draw_px(c->var->data.symbol.name, 6, (int)(mid_y - 7), 14, (Color){60,60,100,255});
 
     char lo[24], hi[24];
     snprintf(lo, sizeof(lo), "%.4g", c->vmin);
     snprintf(hi, sizeof(hi), "%.4g", c->vmax);
-    int lo_w = MeasureText(lo, 10);
-    DrawText(lo, (int)(track_x0 - lo_w - 3), (int)(mid_y - 5), 10, DARKGRAY);
-    DrawText(hi, (int)(track_x1 + 3),         (int)(mid_y - 5), 10, DARKGRAY);
+    int lo_w = label_font_measure_px(lo, 10);
+    label_font_draw_px(lo, (int)(track_x0 - lo_w - 3), (int)(mid_y - 5), 10, DARKGRAY);
+    label_font_draw_px(hi, (int)(track_x1 + 3),         (int)(mid_y - 5), 10, DARKGRAY);
 
     DrawRectangle((int)track_x0, (int)(mid_y - 2), (int)track_len + 1, 4,
                   (Color){185,185,195,255});
@@ -273,8 +274,8 @@ static void draw_range_row(const ManipCtrl* c, int win_w, float row_y,
 
     char val[32];
     snprintf(val, sizeof(val), "%.5g", c->value);
-    int val_w = MeasureText(val, 12);
-    DrawText(val, (int)((float)win_w - VALUE_W / 2.0f - (float)val_w / 2.0f),
+    int val_w = label_font_measure_px(val, 12);
+    label_font_draw_px(val, (int)((float)win_w - VALUE_W / 2.0f - (float)val_w / 2.0f),
              (int)(mid_y - 6), 12, (Color){40,40,80,255});
 }
 
@@ -314,7 +315,7 @@ static int discrete_row_layout(const ManipCtrl* c, float* out_x, float* out_w) {
     int n = 0;
     for (size_t i = 0; i < c->n_values; i++) {
         char* s = expr_to_string(c->values[i]);
-        int tw = s ? MeasureText(s, 12) : 8;
+        int tw = s ? label_font_measure_px(s, 12) : 8;
         if (s) free(s);
         float w = (float)tw + 2.0f * BTN_PAD_X;
         out_x[n] = x;
@@ -330,7 +331,7 @@ static void draw_discrete_row(const ManipCtrl* c, int win_w, float row_y,
     float mid_y = row_y + ROW_H * 0.5f;
     DrawRectangle(0, (int)row_y, win_w, (int)ROW_H, (Color){235,235,240,255});
     DrawRectangle(0, (int)(row_y + ROW_H - 1), win_w, 1, (Color){200,200,210,255});
-    DrawText(c->var->data.symbol.name, 6, (int)(mid_y - 7), 14, (Color){60,60,100,255});
+    label_font_draw_px(c->var->data.symbol.name, 6, (int)(mid_y - 7), 14, (Color){60,60,100,255});
 
     float bx[MAX_DISCRETE_VALUES], bw[MAX_DISCRETE_VALUES];
     int n = discrete_row_layout(c, bx, bw);
@@ -347,7 +348,7 @@ static void draw_discrete_row(const ManipCtrl* c, int win_w, float row_y,
         DrawRectangleLinesEx((Rectangle){bx[i], by, bw[i], BTN_H}, 1.0f,
                               (Color){150,150,165,255});
         Color txt_col = selected ? WHITE : (Color){40,40,60,255};
-        DrawText(text, (int)(bx[i] + BTN_PAD_X), (int)(mid_y - 6), 12, txt_col);
+        label_font_draw_px(text, (int)(bx[i] + BTN_PAD_X), (int)(mid_y - 6), 12, txt_col);
         if (s) free(s);
     }
 }
@@ -382,6 +383,7 @@ static void graphics_manipulate(const Expr* body, ManipCtrl* ctrls, int n_ctrls)
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(win_w, win_h, "Mathilda - Manipulate");
     SetTargetFPS(60);
+    label_font_load();
 
     int   drag_ctrl  = -1;
     Expr* frame_expr = NULL;
@@ -465,7 +467,7 @@ static void graphics_manipulate(const Expr* body, ManipCtrl* ctrls, int n_ctrls)
             graphics3d_render_in_region(frame_expr, 0.0f, 0.0f, (float)win_w, content_h, cam3d);
         } else if (frame_expr) {
             char* s = expr_to_string(frame_expr);
-            if (s) { DrawText(s, 20, 20, 16, DARKGRAY); free(s); }
+            if (s) { label_font_draw_px(s, 20, 20, 16, DARKGRAY); free(s); }
         }
 
         DrawRectangle(0, (int)content_h, win_w, 1, (Color){170,170,185,255});
@@ -483,10 +485,10 @@ static void graphics_manipulate(const Expr* body, ManipCtrl* ctrls, int n_ctrls)
         DrawRectangleRec((Rectangle){reset_x, reset_y, RESET_BTN_W, RESET_BTN_H}, reset_bg);
         DrawRectangleLinesEx((Rectangle){reset_x, reset_y, RESET_BTN_W, RESET_BTN_H}, 1.0f,
                               (Color){145,145,145,255});
-        DrawText("Reset", (int)(reset_x + 6), (int)(reset_y + 4), 11, BLACK);
+        label_font_draw_px("Reset", (int)(reset_x + 6), (int)(reset_y + 4), 11, BLACK);
         const char* hint = is_3d ? "drag: rotate  scroll: zoom  right-drag: pan   Esc: close"
                                   : "Esc: close";
-        DrawText(hint, (int)(reset_x + RESET_BTN_W + 12), (int)(reset_y + 4), 11,
+        label_font_draw_px(hint, (int)(reset_x + RESET_BTN_W + 12), (int)(reset_y + 4), 11,
                  (Color){130,130,140,255});
 
         EndDrawing();
@@ -494,6 +496,7 @@ static void graphics_manipulate(const Expr* body, ManipCtrl* ctrls, int n_ctrls)
 
     if (frame_expr) { expr_free(frame_expr); frame_expr = NULL; }
     graphics3d_embed_state_free(cam3d);
+    label_font_unload();
     CloseWindow();
 }
 

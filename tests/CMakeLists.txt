@@ -65,7 +65,7 @@ endif()
 # Raylib autodetection for the graphics engine.  Mirrors the makefile's
 # pkg-config probe; degrades to USE_GRAPHICS=OFF (sampling.c and the
 # symbolic Graphics[]/Plot[] construction path are still fully testable —
-# only render.c/hershey_font.c, which need a live display, are excluded).
+# only render.c/label_font.c, which need a live display, are excluded).
 if(USE_GRAPHICS)
     # On macOS, Homebrew installs its .pc files outside the search path used by
     # a MacPorts/system pkg-config, so the probe below fails on a stock shell
@@ -707,13 +707,13 @@ set(COMMON_SRC
     ../src/graph/graphplot.c
 )
 
-# render.c / render3d.c / hershey_font.c need a live Raylib + display; only
+# render.c / render3d.c / label_font.c need a live Raylib + display; only
 # compiled into COMMON_SRC when USE_GRAPHICS actually resolved to ON above.
 if(USE_GRAPHICS)
     list(APPEND COMMON_SRC
         ../src/graphics/render.c
         ../src/graphics/render3d.c
-        ../src/graphics/hershey_font.c
+        ../src/graphics/label_font.c
     )
 endif()
 

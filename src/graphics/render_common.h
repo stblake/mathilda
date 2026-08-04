@@ -35,10 +35,4 @@ const Expr* find_color_bar(const Expr* graphics_expr);
 void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
                     double spd_min, double spd_max, const Expr* cfn);
 
-/* Hershey font helpers (declared here so render3d.c can call them without
- * pulling in the full render.c header). */
-float hershey_text_width(const char* text, float scale);
-void  hershey_draw_text(const char* text, float x, float y, float scale,
-                        float angle, Color col);
-
 #endif /* MATHILDA_GRAPHICS_RENDER_COMMON_H */

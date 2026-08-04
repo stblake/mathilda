@@ -10,7 +10,7 @@
 #include "render.h"
 #include "render_common.h"
 #include "sampling.h"
-#include "hershey_font.h"
+#include "label_font.h"
 #include "primitives.h"
 #include "sym_names.h"
 #include "print.h"
@@ -30,8 +30,6 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-
-#define HERSHEY_CAP_HEIGHT 7.0
 
 /* ---------------- Expr coercion ---------------- */
 
@@ -827,13 +825,24 @@ static void annotate_polyline(const Expr* pts_list, double ysc,
                        is_max ? "max" : "min", is_max ? max_col : min_col);
         }
     }
-    /* Inflection points: sign changes in the discrete second difference. */
+    /* Inflection points: sign changes in the discrete second difference.
+     * d2a is the curvature estimate centered at sample i-1 (from
+     * i-2,i-1,i); d2b at sample i (from i-1,i,i+1). A sign change means
+     * the true zero-curvature point lies between x[i-1] and x[i] -- so
+     * interpolate there the same way roots are interpolated, rather than
+     * reporting the sample index i outright. Without this, an inflection
+     * that's mathematically coincident with a root (e.g. Sin[x] at
+     * x = 0, Pi, 2 Pi, where Sin'' = -Sin) lands one sample over from the
+     * root marker instead of on top of it. */
     for (size_t i = 2; i + 1 < m; i++) {
         double d2a = (ys[i] - ys[i - 1]) - (ys[i - 1] - ys[i - 2]);
         double d2b = (ys[i + 1] - ys[i]) - (ys[i] - ys[i - 1]);
-        if (d2a == 0.0 || d2b == 0.0) continue;
-        if ((d2a > 0.0) != (d2b > 0.0))
-            annot_push(buf, len, cap, (float)xs[i], (float)(-ys[i] * ysc), "infl", infl_col);
+        if ((d2a > 0.0) != (d2b > 0.0) && d2a != d2b) {
+            double f = d2a / (d2a - d2b);
+            double ix = xs[i - 1] + (xs[i] - xs[i - 1]) * f;
+            double iy = ys[i - 1] + (ys[i] - ys[i - 1]) * f;
+            annot_push(buf, len, cap, (float)ix, (float)(-iy * ysc), "infl", infl_col);
+        }
     }
     free(xs); free(ys);
 }
@@ -902,7 +911,7 @@ typedef struct {
     Color color;
     float thickness;  /* world units; <= 0 means hairline */
     float point_size; /* world units (radius) */
-    float text_scale; /* world units per Hershey grid unit, for Text[] */
+    float text_scale; /* world units per label cap-height unit, for Text[] */
     float yscale;     /* data-y -> render-y factor (non-uniform PlotRange/AspectRatio) */
 } DrawState;
 
@@ -1159,14 +1168,9 @@ static void draw_primitive(const Expr* node, DrawState* state) {
             owned = expr_to_string((Expr*)content);
             label = owned ? owned : "";
         }
-        float w = hershey_text_width(label, state->text_scale);
-        /* Stroke thickness in world units: scale proportionally to the glyph
-         * size so caps never balloon to data-range scale.  The 0.5 factor
-         * matches hershey_draw_text_ex's cap_r = thickness*0.5 formula and
-         * keeps caps at ~1/14 of cap height, which is visually tight. */
-        float ws_thick = state->text_scale * 0.5f;
-        hershey_draw_text_ex(label, (float)x - w / 2.0f, (float)(-y * state->yscale),
-                             state->text_scale, 0.0f, state->color, ws_thick);
+        float w = label_font_width(label, state->text_scale);
+        label_font_draw(label, (float)x - w / 2.0f, (float)(-y * state->yscale),
+                        state->text_scale, 0.0f, state->color);
         if (owned) free(owned);
         return;
     }
@@ -1383,8 +1387,8 @@ static void draw_gridlines(const PlotRange2D* range, double ysc, float zoom, con
  *
  * Each label is anchored to the *outer* end of its tick mark (not the axis
  * line) plus a small screen-pixel gap, so the digits sit clear of the ticks
- * instead of overprinting them. The Hershey baseline grows upward by
- * `cap = HERSHEY_CAP_HEIGHT * scale` px, which the offsets account for:
+ * instead of overprinting them. The label baseline grows upward by
+ * `cap = LABEL_FONT_CAP_HEIGHT * scale` px, which the offsets account for:
  * x-labels drop the baseline a full cap-height below the tick so the whole
  * glyph clears it; y-labels recentre vertically on the tick by half a cap. */
 static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange,
@@ -1396,7 +1400,7 @@ static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange
     double xtick = (range->ymax - range->ymin) * 0.015;
     double ytick = (range->xmax - range->xmin) * 0.015;
     const float scale = 1.5f;
-    const float cap = HERSHEY_CAP_HEIGHT * scale;
+    const float cap = LABEL_FONT_CAP_HEIGHT * scale;
     const float gap = 5.0f;
     char buf[64];
 
@@ -1407,8 +1411,8 @@ static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange
         for (int i = 0; i < nt; i++) {
             snprintf(buf, sizeof(buf), "%g", tv[i]);
             Vector2 tip = GetWorldToScreen2D((Vector2){ (float)tw[i], (float)-(oy - xtick) }, camera);
-            float lw = hershey_text_width(buf, scale);
-            hershey_draw_text_ex(buf, tip.x - lw / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
+            float lw = label_font_width(buf, scale);
+            label_font_draw_ex(buf, tip.x - lw / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
         }
     } else {
         double xstep = nice_step(range->xmax - range->xmin, 8);
@@ -1416,8 +1420,8 @@ static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange
             if (fabs(tx) < 1e-9) tx = 0.0;
             snprintf(buf, sizeof(buf), "%g", tx);
             Vector2 tip = GetWorldToScreen2D((Vector2){ (float)tx, (float)-(oy - xtick) }, camera);
-            float lw = hershey_text_width(buf, scale);
-            hershey_draw_text_ex(buf, tip.x - lw / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
+            float lw = label_font_width(buf, scale);
+            label_font_draw_ex(buf, tip.x - lw / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
         }
     }
 
@@ -1428,8 +1432,8 @@ static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange
         for (int i = 0; i < nt; i++) {
             snprintf(buf, sizeof(buf), "%g", tv[i]);
             Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)(-tw[i] * ysc) }, camera);
-            float lw = hershey_text_width(buf, scale);
-            hershey_draw_text_ex(buf, tip.x - lw - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
+            float lw = label_font_width(buf, scale);
+            label_font_draw_ex(buf, tip.x - lw - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
         }
     } else {
         double ystep = nice_step(dymax - dymin, 6);
@@ -1437,8 +1441,8 @@ static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange
             if (fabs(ty) < 1e-9) ty = 0.0;
             snprintf(buf, sizeof(buf), "%g", ty);
             Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)(-ty * ysc) }, camera);
-            float lw = hershey_text_width(buf, scale);
-            hershey_draw_text_ex(buf, tip.x - lw - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
+            float lw = label_font_width(buf, scale);
+            label_font_draw_ex(buf, tip.x - lw - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
         }
     }
 }
@@ -1498,7 +1502,7 @@ static void draw_frame(float rx, float ry, float rw, float rh,
     if (!(xR > xL) || !(dymax > dymin) || !isfinite(xL) || !isfinite(dymax)) return;
 
     const float scale = 1.5f;
-    const float cap = HERSHEY_CAP_HEIGHT * scale;
+    const float cap = LABEL_FONT_CAP_HEIGHT * scale;
     const float gap = 5.0f;
     const float maj = 6.0f, minr = 3.0f; /* inward tick pixel lengths */
     char buf[64];
@@ -1522,9 +1526,9 @@ static void draw_frame(float rx, float ry, float rw, float rh,
                 DrawLineEx((Vector2){ sx, T }, (Vector2){ sx, T + maj }, lw, col);
             if (xlab >= 0) {
                 snprintf(buf, sizeof(buf), "%g", tv[i]);
-                float fw = hershey_text_width(buf, scale);
+                float fw = label_font_width(buf, scale);
                 float baseline = (xlab == FR_BOTTOM) ? (B + gap + cap) : (T - gap);
-                hershey_draw_text_ex(buf, sx - fw / 2.0f, baseline, scale, 0.0f, col, lw);
+                label_font_draw_ex(buf, sx - fw / 2.0f, baseline, scale, 0.0f, col, lw);
             }
         }
     } else {
@@ -1545,9 +1549,9 @@ static void draw_frame(float rx, float ry, float rw, float rh,
                     DrawLineEx((Vector2){ sx, T }, (Vector2){ sx, T + len }, lw, col);
                 if (major && xlab >= 0) {
                     snprintf(buf, sizeof(buf), "%g", fabs(tx) < 1e-9 ? 0.0 : tx);
-                    float fw = hershey_text_width(buf, scale);
+                    float fw = label_font_width(buf, scale);
                     float baseline = (xlab == FR_BOTTOM) ? (B + gap + cap) : (T - gap);
-                    hershey_draw_text_ex(buf, sx - fw / 2.0f, baseline, scale, 0.0f, col, lw);
+                    label_font_draw_ex(buf, sx - fw / 2.0f, baseline, scale, 0.0f, col, lw);
                 }
             }
         }
@@ -1566,9 +1570,9 @@ static void draw_frame(float rx, float ry, float rw, float rh,
                 DrawLineEx((Vector2){ R, sy }, (Vector2){ R - maj, sy }, lw, col);
             if (ylab >= 0) {
                 snprintf(buf, sizeof(buf), "%g", tv[i]);
-                float fw = hershey_text_width(buf, scale);
+                float fw = label_font_width(buf, scale);
                 float ftx = (ylab == FR_LEFT) ? (L - gap - fw) : (R + gap);
-                hershey_draw_text_ex(buf, ftx, sy + cap / 2.0f, scale, 0.0f, col, lw);
+                label_font_draw_ex(buf, ftx, sy + cap / 2.0f, scale, 0.0f, col, lw);
             }
         }
     } else {
@@ -1589,9 +1593,9 @@ static void draw_frame(float rx, float ry, float rw, float rh,
                     DrawLineEx((Vector2){ R, sy }, (Vector2){ R - len, sy }, lw, col);
                 if (major && ylab >= 0) {
                     snprintf(buf, sizeof(buf), "%g", fabs(ty) < 1e-9 ? 0.0 : ty);
-                    float fw = hershey_text_width(buf, scale);
+                    float fw = label_font_width(buf, scale);
                     float ftx = (ylab == FR_LEFT) ? (L - gap - fw) : (R + gap);
-                    hershey_draw_text_ex(buf, ftx, sy + cap / 2.0f, scale, 0.0f, col, lw);
+                    label_font_draw_ex(buf, ftx, sy + cap / 2.0f, scale, 0.0f, col, lw);
                 }
             }
         }
@@ -1609,8 +1613,8 @@ static void draw_frame_label(float rx, float ry, float rw, float rh, const GfxOp
     char* ox = NULL;
     const char* xlabel = (xl->type == EXPR_STRING) ? xl->data.string : (ox = expr_to_string((Expr*)xl));
     if (xlabel) {
-        float w = hershey_text_width(xlabel, 1.8f);
-        hershey_draw_text(xlabel, rx + rw / 2.0f - w / 2.0f, ry + rh + 40.0f, 1.8f, 0.0f, BLACK);
+        float w = label_font_width(xlabel, 1.8f);
+        label_font_draw(xlabel, rx + rw / 2.0f - w / 2.0f, ry + rh + 40.0f, 1.8f, 0.0f, BLACK);
     }
     free(ox);
 
@@ -1618,10 +1622,10 @@ static void draw_frame_label(float rx, float ry, float rw, float rh, const GfxOp
     const char* ylabel = (yl->type == EXPR_STRING) ? yl->data.string : (oy = expr_to_string((Expr*)yl));
     if (ylabel) {
         if (o->rotate_label) {
-            hershey_draw_text(ylabel, rx - 32.0f, ry + rh / 2.0f, 1.8f, 90.0f, BLACK);
+            label_font_draw(ylabel, rx - 32.0f, ry + rh / 2.0f, 1.8f, 90.0f, BLACK);
         } else {
-            float w = hershey_text_width(ylabel, 1.8f);
-            hershey_draw_text(ylabel, rx - 16.0f - w, ry + rh / 2.0f, 1.8f, 0.0f, BLACK);
+            float w = label_font_width(ylabel, 1.8f);
+            label_font_draw(ylabel, rx - 16.0f - w, ry + rh / 2.0f, 1.8f, 0.0f, BLACK);
         }
     }
     free(oy);
@@ -1634,8 +1638,8 @@ static void draw_extra_labels(const GfxOptions* opts, int win_w, int win_h) {
         if (opts->plot_label->type == EXPR_STRING) label = opts->plot_label->data.string;
         else { owned = expr_to_string((Expr*)opts->plot_label); label = owned; }
         if (label) {
-            float w = hershey_text_width(label, 2.0f);
-            hershey_draw_text(label, win_w / 2.0f - w / 2.0f, 28.0f, 2.0f, 0.0f, BLACK);
+            float w = label_font_width(label, 2.0f);
+            label_font_draw(label, win_w / 2.0f - w / 2.0f, 28.0f, 2.0f, 0.0f, BLACK);
         }
         free(owned);
     }
@@ -1646,14 +1650,14 @@ static void draw_extra_labels(const GfxOptions* opts, int win_w, int win_h) {
         char* ox = NULL;
         const char* xlabel = (xl->type == EXPR_STRING) ? xl->data.string : (ox = expr_to_string((Expr*)xl));
         if (xlabel) {
-            float w = hershey_text_width(xlabel, 1.8f);
-            hershey_draw_text(xlabel, win_w / 2.0f - w / 2.0f, win_h - 36.0f, 1.8f, 0.0f, BLACK);
+            float w = label_font_width(xlabel, 1.8f);
+            label_font_draw(xlabel, win_w / 2.0f - w / 2.0f, win_h - 36.0f, 1.8f, 0.0f, BLACK);
         }
         free(ox);
 
         char* oy = NULL;
         const char* ylabel = (yl->type == EXPR_STRING) ? yl->data.string : (oy = expr_to_string((Expr*)yl));
-        if (ylabel) hershey_draw_text(ylabel, 18.0f, (float)win_h / 2.0f, 1.8f, 90.0f, BLACK);
+        if (ylabel) label_font_draw(ylabel, 18.0f, (float)win_h / 2.0f, 1.8f, 90.0f, BLACK);
         free(oy);
     }
 }
@@ -1663,7 +1667,8 @@ static void draw_extra_labels(const GfxOptions* opts, int win_w, int win_h) {
  * A row of icon buttons in the top-right corner whose actions mirror
  * Plotly's 2D modebar. Everything here is screen-space UI chrome drawn
  * after EndMode2D; the icons are hand-drawn vector glyphs (no image
- * assets), in keeping with the Hershey vector font used elsewhere.
+ * assets) drawn directly with line/triangle primitives, independent of
+ * whatever text font is in use elsewhere.
  *
  * Plotly's Box-Select / Lasso-Select are intentionally omitted: Mathilda
  * renders continuous primitives, not a discrete dataset, so there is
@@ -1884,14 +1889,14 @@ static void draw_toolbar(int win_w, int tool, int hover, bool annotate) {
 
     if (hover >= 0) {
         const char* t = tb_tip(hover);
-        int tw = MeasureText(t, 12);
+        int tw = label_font_measure_px(t, 12);
         Rectangle r = tb_rect(hover, win_w);
         float tx = r.x + r.width * 0.5f - tw * 0.5f;
         if (tx + tw + 6 > win_w) tx = (float)win_w - tw - 6;
         if (tx < 4) tx = 4;
         float ty = r.y + r.height + 7;
         DrawRectangle((int)tx - 5, (int)ty - 3, tw + 10, 19, (Color){ 40, 40, 40, 235 });
-        DrawText(t, (int)tx, (int)ty, 12, RAYWHITE);
+        label_font_draw_px(t, (int)tx, (int)ty, 12, RAYWHITE);
     }
 }
 
@@ -1951,12 +1956,12 @@ static void draw_bar_chart_labels(const Expr* bar_labels, Camera2D camera) {
 
     /* tick row: scale=1.5, cap=10.5 px, gap=5 px → tick row bottom ≈ +15 px */
     const float tick_scale = 1.5f;
-    const float tick_cap   = HERSHEY_CAP_HEIGHT * tick_scale; /* ~10.5 px */
+    const float tick_cap   = LABEL_FONT_CAP_HEIGHT * tick_scale; /* ~10.5 px */
     const float tick_gap   = 5.0f;
 
     /* category label row: scale=2.0, cap=14 px */
     const float scale  = 2.0f;
-    const float cap    = HERSHEY_CAP_HEIGHT * scale; /* 14 px */
+    const float cap    = LABEL_FONT_CAP_HEIGHT * scale; /* 14 px */
     const float label_gap = 6.0f;
 
     /* Screen y of the x-axis (world y=0, render y=0). */
@@ -1981,8 +1986,8 @@ static void draw_bar_chart_labels(const Expr* bar_labels, Camera2D camera) {
             text = owned ? owned : "?";
         }
         Vector2 sp = GetWorldToScreen2D((Vector2){ (float)wx, 0.0f }, camera);
-        float w = hershey_text_width(text, scale);
-        hershey_draw_text_ex(text, sp.x - w / 2.0f, label_y, scale, 0.0f, col, 1.5f);
+        float w = label_font_width(text, scale);
+        label_font_draw_ex(text, sp.x - w / 2.0f, label_y, scale, 0.0f, col, 1.5f);
         if (owned) free(owned);
     }
 }
@@ -2060,7 +2065,7 @@ void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
         else
             snprintf(buf, sizeof(buf), "%.1f", spd);
 
-        hershey_draw_text(buf, text_x, ty + 3.0f, scale, 0.0f,
+        label_font_draw(buf, text_x, ty + 3.0f, scale, 0.0f,
                           (Color){ 60, 60, 60, 255 });
     }
 }
@@ -2081,7 +2086,7 @@ static void draw_legend(const Expr* legend_data, int win_w) {
         if (entry->type != EXPR_FUNCTION || entry->data.function.arg_count != 2) continue;
         const Expr* label = entry->data.function.args[1];
         if (label->type != EXPR_STRING) continue;
-        float w = hershey_text_width(label->data.string, scale);
+        float w = label_font_width(label->data.string, scale);
         if (w > max_label_w) max_label_w = w;
     }
     float box_w = swatch_w + pad * 3 + max_label_w;
@@ -2103,7 +2108,7 @@ static void draw_legend(const Expr* legend_data, int win_w) {
 
         const Expr* label = entry->data.function.args[1];
         if (label->type == EXPR_STRING) {
-            hershey_draw_text(label->data.string, box_x + pad * 2 + swatch_w, ry + row_h - 6.0f,
+            label_font_draw(label->data.string, box_x + pad * 2 + swatch_w, ry + row_h - 6.0f,
                                scale, 0.0f, BLACK);
         }
     }
@@ -2200,6 +2205,7 @@ void graphics_show(const Expr* graphics_expr) {
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow((int)opts.width, (int)opts.height, "Mathilda");
     SetTargetFPS(60);
+    label_font_load();
 
     /* Plot region: the rectangle the data is fitted to and clipped against.
      * A frame reserves a margin (~5% of each window dimension) around the
@@ -2313,7 +2319,7 @@ void graphics_show(const Expr* graphics_expr) {
     }
     if (r_px < 0.6) r_px = 0.6;                         /* never sub-pixel-invisible */
     init_state.point_size = (base_zoom > 0) ? (float)(r_px / base_zoom) : (float)r_px;
-    init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / HERSHEY_CAP_HEIGHT);
+    init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / LABEL_FONT_CAP_HEIGHT);
     init_state.yscale = (float)ysc;
 
     int tool = TOOL_PAN;          /* active left-drag tool (toolbar-selected) */
@@ -2547,8 +2553,8 @@ void graphics_show(const Expr* graphics_expr) {
             draw_toolbar((int)opts.width, tool, hover, annotate);
             for (size_t i = 0; i < n_annots; i++) {
                 Vector2 spos = GetWorldToScreen2D((Vector2){ annots[i].x, annots[i].y }, camera);
-                int tw = MeasureText(annots[i].tag, 10);
-                DrawText(annots[i].tag, (int)spos.x - tw / 2, (int)spos.y - 16, 10, annots[i].col);
+                int tw = label_font_measure_px(annots[i].tag, 10);
+                label_font_draw_px(annots[i].tag, (int)spos.x - tw / 2, (int)spos.y - 16, 10, annots[i].col);
             }
             if (hv_found) {
                 Vector2 spos = GetWorldToScreen2D(
@@ -2557,18 +2563,18 @@ void graphics_show(const Expr* graphics_expr) {
                 double dy = scale_invert(opts.sf_y, hv_wy);
                 char lbl[64];
                 snprintf(lbl, sizeof(lbl), "(%.4g, %.4g)", dx, dy);
-                int tw = MeasureText(lbl, 13);
+                int tw = label_font_measure_px(lbl, 13);
                 float lx = spos.x + 10.0f, ly = spos.y - 18.0f;
                 DrawRectangle((int)lx - 4, (int)ly - 3, tw + 8, 19, (Color){ 40, 40, 40, 215 });
-                DrawText(lbl, (int)lx, (int)ly, 13, RAYWHITE);
+                label_font_draw_px(lbl, (int)lx, (int)ly, 13, RAYWHITE);
             }
-            DrawText("drag: pan/zoom per tool   scroll: zoom   right-drag: pan   Q/E: rotate   R: reset   Esc: close",
+            label_font_draw_px("drag: pan/zoom per tool   scroll: zoom   right-drag: pan   Q/E: rotate   R: reset   Esc: close",
                      10, (int)opts.height - 22, 14, GRAY);
             if (toast > 0) {
                 const char* msg = "Saved mathilda_plot.png";
-                int tw = MeasureText(msg, 16);
+                int tw = label_font_measure_px(msg, 16);
                 DrawRectangle(10, 10, tw + 16, 26, (Color){ 40, 40, 40, 220 });
-                DrawText(msg, 18, 15, 16, RAYWHITE);
+                label_font_draw_px(msg, 18, 15, 16, RAYWHITE);
                 toast--;
             }
         }
@@ -2588,6 +2594,7 @@ void graphics_show(const Expr* graphics_expr) {
 
 close_window:
     if (dyn_prims) expr_free(dyn_prims);
+    label_font_unload();
     CloseWindow();
 }
 
@@ -2698,7 +2705,7 @@ void graphics_render_in_region(const Expr* graphics_expr,
     }
     if (r_px < 0.6) r_px = 0.6;
     init_state.point_size = (base_zoom > 0) ? (float)(r_px / base_zoom) : (float)r_px;
-    init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / HERSHEY_CAP_HEIGHT);
+    init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / LABEL_FONT_CAP_HEIGHT);
     init_state.yscale     = (float)ysc;
 
     PlotRange2D visible = { range.xmin, range.xmax, range.ymin * ysc, range.ymax * ysc };
@@ -2736,10 +2743,10 @@ void graphics_render_in_region(const Expr* graphics_expr,
         double dy = scale_invert(opts.sf_y, hv_wy);
         char lbl[64];
         snprintf(lbl, sizeof(lbl), "(%.4g, %.4g)", dx, dy);
-        int tw = MeasureText(lbl, 13);
+        int tw = label_font_measure_px(lbl, 13);
         float lx = spos.x + 10.0f, ly = spos.y - 18.0f;
         DrawRectangle((int)lx - 4, (int)ly - 3, tw + 8, 19, (Color){ 40, 40, 40, 215 });
-        DrawText(lbl, (int)lx, (int)ly, 13, RAYWHITE);
+        label_font_draw_px(lbl, (int)lx, (int)ly, 13, RAYWHITE);
     }
 
     if (opts.axes) draw_axes_labels(&visible, &range, camera, ysc, &opts);
