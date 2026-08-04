@@ -61,8 +61,15 @@
  *
  * Options: Method (Automatic | EulerSum | SequenceLimit), WorkingPrecision (MachinePrecision
  * | digits -> MPFR), Direction (Automatic == -1, or a complex approach vector),
- * Scale (initial step / distance, default 1), Terms (default 7), WynnDegree
- * (default 1).
+ * Scale (initial step / distance, default 1), Terms (default 13), WynnDegree
+ * (default 1).  The default of 13 (not the historical 7) is deliberate: the
+ * accuracy of a branch-point / fractional-power approach is limited by the
+ * *depth of the extrapolation tableau*, not by the arithmetic precision, so a
+ * short sequence starves the extrapolators regardless of WorkingPrecision.
+ * Thirteen samples resolve such tails to ~12 machine digits while leaving
+ * smooth limits at their existing roundoff floor; the extra six evaluations are
+ * sub-millisecond, and the Automatic best-of selector discards any deep tableau
+ * that only adds roundoff, so the larger default never degrades an easy case.
  *
  * Memory: receives `res` owned by the evaluator; returns a fresh Expr* on
  * success or NULL (unevaluated).  Never frees `res`.  Every temporary OwnValue
@@ -140,7 +147,7 @@ static bool nl_accept(double result_mag, double step, double maxsample) {
  *      every ordinary limit costs exactly what it did before.
  *
  *   2. Envelope (only when the screen fires).  Over the default sampling window
- *      of Terms=7 octaves a decaying and a non-decaying envelope are simply not
+ *      of Terms=13 octaves a decaying and a non-decaying envelope are still not
  *      distinguishable, so the diagnosis gets its own, much wider ladder:
  *      NL_OSC_OCTAVES octaves sampled twice, at Scale*2^k and Scale*phi*2^k.
  *      Because 1/2 < phi < 1 the merged sequence is a deterministic alternation
@@ -1032,7 +1039,7 @@ Expr* builtin_nlimit(Expr* res) {
     o.levin_variant = SEQACCEL_LEVIN_U;
     o.direction = NULL;
     o.scale = NULL;
-    o.terms = 7;
+    o.terms = 13;
     o.wynn = 1;
     o.prec_mpfr = false;
     o.bits = 0;

@@ -339,9 +339,9 @@ recovers the limit by sequence acceleration:
   `2 ArcTan[Sqrt[(1+x)/(1-x)]]` as `x -> 1` from larger values -- defeats it but
   is captured by Wynn's epsilon.  Selecting by best self-consistency keeps
   Richardson's accuracy on smooth limits while gaining Wynn's on branch-point /
-  algebraic approaches, so this case now returns `Pi` (imaginary residual
-  `~6e-5` at the default `Terms`, shrinking rapidly with more) instead of the
-  spurious `Pi + 0.08 I` that plain Richardson produced.  Levin's u-transform is
+  algebraic approaches, so this case now returns a real `Pi` (imaginary residual
+  `~3e-14` at the default `Terms -> 13`) instead of the spurious `Pi + 0.08 I`
+  that plain Richardson produced.  Levin's u-transform is
   admitted only when the sample increments are contracting, so a divergent
   sequence cannot let it collapse to a spurious value.
 - **`EulerSum`** -- Richardson / Romberg extrapolation of the sample sequence,
@@ -385,7 +385,7 @@ since the head already names the method.  Attributes are
 | `WorkingPrecision` | `MachinePrecision` | `MachinePrecision`, or digits → MPFR. |
 | `Direction` | `Automatic` (≡ `-1`) | complex approach vector for finite `z0`. |
 | `Scale` | `1` | initial step (finite) / distance from origin (infinite). |
-| `Terms` | `7` | number of sample points / extrapolation depth. |
+| `Terms` | `13` | number of sample points / extrapolation depth.  This, not `WorkingPrecision`, sets the accuracy on a branch-point / fractional-power approach: 13 samples resolve such a tail to ~12 machine digits, where the historical `7` reached only ~3. |
 | `WynnDegree` | `1` | `SequenceLimit` iterations. |
 
 `Direction -> Automatic` (`-1`) approaches a finite point from larger values;
@@ -406,8 +406,8 @@ The check runs in two stages:
 1. *Screen.*  Count the direction reversals of the sample increments
    `S_k − S_{k-1}`.  Monotone and smoothly-converging samples score zero and
    skip stage 2, so an ordinary limit costs exactly what it did before.
-2. *Envelope.*  Over the default `Terms -> 7` sampling window a decaying and a
-   non-decaying envelope are indistinguishable, so the diagnosis uses its own
+2. *Envelope.*  Over the default `Terms -> 13` sampling window a decaying and a
+   non-decaying envelope are still indistinguishable, so the diagnosis uses its own
    much wider ladder: 20 octaves sampled twice, at `Scale 2^k` and
    `Scale φ 2^k` with `φ = (Sqrt[5] - 1)/2`.  The φ offset both doubles the
    resolution and breaks the power-of-two aliasing that would otherwise hide a
