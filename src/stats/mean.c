@@ -5,6 +5,7 @@
 #include "stats_common.h"
 #include "eval.h"
 #include "arithmetic.h"
+#include "checked_int.h"  /* ci_mul_i64 etc: the int64 fast path must decline, not wrap */
 #include "sym_names.h"
 #include "assoc.h"
 #include "ndreduce.h"
@@ -72,9 +73,26 @@ Expr* builtin_mean(Expr* res) {
             }
             return expr_new_real(sum_val / (double)n);
         } else {
-            // Exact rational arithmetic
+            /* Exact rational arithmetic in int64, WITH OVERFLOW DETECTION.
+             *
+             * Every product below can overflow, and unchecked it did: a list of
+             * 10^4 rationals sharing a denominator of 10^4 (exactly what
+             * `data - Mean[data]` produces, so exactly what CentralMoment and
+             * therefore Skewness/Kurtosis feed back in) drove `sum_d * cur_d`
+             * past INT64_MAX and returned a silently wrong mean — 0.0177 where
+             * the answer was 84807.4. The failure was erratic rather than
+             * monotone in n, because whether it overflows depends on how far the
+             * running gcd reduces, which is why a small-denominator list of the
+             * same length was unaffected and hid the bug.
+             *
+             * On overflow we do NOT return: control falls through to the
+             * symbolic path below, which computes `Plus @@ data / n` through the
+             * evaluator and is exact for any magnitude via GMP. The int64 block
+             * is a fast path, and a fast path that cannot represent the answer
+             * must decline, not approximate. */
             int64_t sum_n = 0;
             int64_t sum_d = 1;
+            bool overflow = false;
             for (size_t i = 0; i < n; i++) {
                 Expr* elem = data->data.function.args[i];
                 int64_t cur_n, cur_d;
@@ -85,14 +103,20 @@ Expr* builtin_mean(Expr* res) {
                     is_rational(elem, &cur_n, &cur_d);
                 }
                 // sum = sum_n/sum_d + cur_n/cur_d = (sum_n*cur_d + cur_n*sum_d) / (sum_d*cur_d)
-                int64_t new_n = sum_n * cur_d + cur_n * sum_d;
-                int64_t new_d = sum_d * cur_d;
+                int64_t a, b, new_n, new_d;
+                if (ci_mul_i64(sum_n, cur_d, &a) ||
+                    ci_mul_i64(cur_n, sum_d, &b) ||
+                    ci_add_i64(a, b, &new_n) ||
+                    ci_mul_i64(sum_d, cur_d, &new_d)) { overflow = true; break; }
                 int64_t common = gcd(new_n < 0 ? -new_n : new_n, new_d);
                 sum_n = new_n / common;
                 sum_d = new_d / common;
             }
             // mean = sum / n = sum_n / (sum_d * n)
-            return make_rational(sum_n, sum_d * (int64_t)n);
+            int64_t den;
+            if (!overflow && !ci_mul_i64(sum_d, (int64_t)n, &den)) {
+                return make_rational(sum_n, den);
+            }
         }
     }
 

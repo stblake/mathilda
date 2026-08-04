@@ -1,56 +1,118 @@
-# RankedMin / RankedMax — the n-th order statistic
+# Weekly gap-driven benchmark job: Mathilda vs Python vs Mathematica
 
-Plan: `~/.claude/plans/let-s-implement-rankedmin-and-silly-umbrella.md`
+Branch: `work/2026-08-03`. Plan: `~/.claude/plans/imperative-scribbling-ember.md`.
 
-Core identity: `RankedMax[list, k] ≡ RankedMin[list, -k]`. Select ascending rank `r`.
+## Goal
 
-## Tasks
-- [x] 1. Symbols in `sym_names.c` (defs + init) and `sym_names.h` (extern)
-- [x] 2. NDArray buffer fast path `ndred_ranked_min/max` in `ndreduce.c` + `ndreduce.h`
-- [x] 3. Builtins `builtin_ranked_min/max` + `ranked_select` (numeric-key quickselect) in `sort.c` + `sort.h`
-- [x] 4. Register in `core.c` (Protected)
-- [x] 5. Packing: AWARE + INT64_OK in `pack.c`
-- [x] 6. Compile lowering: `compile.c` (NdRedSpec.nextra, lookup, emit, infer, VM) + `compile_internal.h` (V_NDREDN) + `disasm.c`
-- [x] 7. Docstrings in `info.c`
-- [x] 8. Tests: new `test_ranked.c` (9 groups) + CMake; 5 compile parity cases in `test_compile.c`
-- [x] 9. Docs: `structural-manipulation.md` + changelog `2026-08-03.md`
-- [x] 10. Verify: build, tests, check-compile-coverage, check-c99, valgrind
+A repeatable weekly job built from kept `.m`/`.py` file pairs that runs 31
+experiments in three systems, joins the rows by label, and emits a ranked report
+naming the week's dev work — with *slower* and *absent/incomplete* kept apart so a
+missing algorithm is never averaged into a speed number, plus a coverage % of how
+many probed heads Mathilda actually has.
+
+## Findings that shaped the build (research, before any code)
+
+- [x] The checked-in `Mathilda` binary was **stale and silently emitted nothing**
+      (`-v` printed nothing, exit 0). Rebuilt to `0.024`.
+- [x] Hardcoded tool paths in the existing harnesses are wrong on this host:
+      `HPC_PYTHON=/usr/local/bin/python3.11` absent (python3 is 3.14.3),
+      `wolframscript` at `/usr/local/bin`. `numba 0.65.0` **is** installed, which
+      contradicts a standing caveat in `docs/experiments/README.md`.
+- [x] `Get` resolves against **cwd** (`$InputFileName`/`DirectoryName` absent), and
+      `Get["../harness.m"]` works identically in Mathilda and `wolframscript` —
+      so ONE shared prelude, not 60 copies.
+- [x] Mathilda exits 0 after errors; stdout is line-buffered on redirect
+      (`repl.c:777`). So: classify from parsed rows + stderr, never `$?`; partial
+      rows survive a timeout kill.
+- [x] **`RandomReal[{}, dims]` returns unevaluated in Mathilda; Mathematica
+      supports it.** All 15 WolframMark tests use that spelling — a verbatim port
+      would report fictitious ~0.1 ms wins on 8 tests (Fourier, Eigenvalues, Dot,
+      Transpose, SVD, LinearSolve, matrix arithmetic, elementary functions).
+- [x] Absent heads found so far: `FindFit`, `AccuracyGoal`, `DSolve`, `Reduce`,
+      `SparseArray`, `MatrixExp`, `EllipticK`, `Refine`.
+
+## Build
+
+- [x] 1. `benchmarks/harness.m` + `harness.py` — the ONLY copy of bench/check/require
+- [x] 2. `benchmarks/data.m` + `data.py` — shared seeded input generators
+- [x] 3. `benchmarks/run_all.py` — discover, run, parse, join, classify, rank, render
+- [x] 4. `makefile` target `bench-gap` (+ `.PHONY`)
+- [x] 5. Group D: `31-wolframmark` — the 15 official tests
+- [x] 6. Group A: 01–10 symbolic vs sympy
+- [x] 7. Group B: 11–20 numeric libraries vs scipy
+- [x] 8. Group C: 21–30 open numeric roadmap items
+- [x] 9. Run the full job — 202 rows, 19.7 min three-system (8.0 min without
+      Mathematica), inside the ~15 min budget for the two-system case
+- [x] 10. `benchmarks/README.md` + generated `REPORT.md` / `ABSENT.md`
+- [x] 11. Coverage %: 87.4% (160/183 declared heads present)
+- [x] 12. `SPEC.md` companion-docs pointer + `docs/spec/changelog/2026-08-03.md`
+
+## Harness errors found and fixed before publishing (each would have been a false finding)
+
+- [x] `bench` 2-arity never dispatched: `HoldRest` held `$BenchReps`, so
+      `reps_Integer` could not match. Rows emitted no timing at all.
+- [x] `$BenchReps` as a **Module local** made `Table[..., {reps}]` return
+      unevaluated (a Mathilda bug in its own right — see the changelog). Rows read
+      `0.001 Round[1e+06 Table[0.0, {reps}]]`.
+- [x] `data.m` used `Product[...]`, which legitimately returns an **unexpanded
+      closed form**; `Exponent` then read 30 instead of 20 and `PolynomialGCD`
+      bailed. Looked exactly like a `PolynomialGCD` bug and was not one.
+- [x] Fit/interpolation data written `i/100` is an **exact Rational** in Wolfram,
+      so Mathilda did exact rational linear algebra against numpy float64.
+      Reported 239000× and 70000×; both artifacts. Now `N[]`-pinned.
+- [x] `x^5+x+1` antiderivative carries an unresolved root sum that renders
+      differently per system, breaking the check (not the timing) → `x^4+1`.
+- [x] Convention errors in the Python column, each caught because Mathilda and
+      Mathematica **agreed** and numpy/sympy was the outlier: `ArcTan[x,y]` =
+      `atan2(y,x)`, `ListConvolve` kernel reversal, Wolfram `Fourier`'s
+      `e^{+2πi}` sign and `1/√n` scaling, `Quartiles` quantile definition,
+      numpy views vs materialised copies (`.T`, slices, `reshape`).
 
 ## Review
 
-**What shipped.** `RankedMin[list, n]` / `RankedMax[list, n]` — the n-th smallest /
-largest element (negative n counts from the other end). One routine: `RankedMax`
-negates its rank and both reduce to selecting an ascending rank `r`. So
-`RankedMin[l, 1]`==`Min[l]`, `RankedMin[l, -1]`==`Max[l]`. Interpreter + packed
-buffer fast path + `Compile[]` + auto-compilation.
+**Shipped.** `benchmarks/` — 31 experiments as kept `.m`/`.py` pairs, one shared
+`harness.{m,py}` + `data.{m,py}` (not 62 copies), `run_all.py`, `make bench-gap`.
+202 cases, coverage 87.4% (160/183 heads), 20.2 min for all three systems / 8.0
+min without Mathematica. Outputs: `REPORT.md`, `ABSENT.md`, `history.jsonl`
+(source of truth) + `HISTORY.md` (rendered view), `results/<date>.json`.
 
-**Design — two ordering paths (sort.c).** A definite result needs every element to
-be a real number. One scan chooses: an all-`is_real_numeric` list orders by
-`expr_compare` (BigInt/Rational-exact); otherwise a machine-double key orders
-symbolic reals (`Pi`, `E`, `Sqrt[2]`, `Pi+E` via `numericalize`) and `±Infinity`
-(→`±HUGE_VAL`), bailing to NULL on a free symbol / non-real complex. Both paths
-return the element in its **exact** form and select via an O(m) quickselect over an
-index array (comparator = key/expr_compare, original index stable tiebreak,
-`cmp(i,i)==0`). High-precision reals stay untouched — only their double key is taken.
+**Monitoring.** Time-weighted progress bar with an ETA calibrated from the
+previous run's per-experiment durations — count-based extrapolation was useless
+here (it said 58s at experiment 7 of a 20-minute run) because case costs span
+three orders of magnitude. `-v` for per-system lines, `--from-json` to re-render
+without re-measuring, `--only`/`--system` write `.partial` files and never touch
+the canonical weekly artefacts.
 
-**Compile — first `(array, int) → scalar` lowering.** No existing table fit
-(`ND_REDS` was `na==1`-gated, `ND_FNS` returns an array). Added `NdRedSpec.nextra`
-(existing rows zero-fill to 0), a new opcode `V_NDREDN` = `V_NDRED`'s scalar write +
-`A_NDFN`'s trailing-int read (c->a=array, c->b=n), and `nd_red_lookup` now keys on
-`na == 1 + nextra`. Emitted via `arr_op(c, OP_V_NDREDN, a_array, n_val, ...)` which
-wires both registers and recycles both temps. `CompileDiagnostics[…, RankedMin[v,k]]`
-→ `Compiled -> True` at real & int shapes.
+**Findings, in value order.**
+1. `Mean`/`Variance` int64 overflow — **fixed this pass**, with a regression test.
+2. `Fit` falls off a fast path at 4 basis terms: 3.2 ms → 1035 ms between 3 and 4
+   terms at 500 points; 23.16 s vs Mathematica's 0.078 ms at degree 5.
+3. Graph accessors are O(n²) and do not cache — 10× vertices → 98.8× time, and
+   `EdgeCount` costs the same 5.4 s as `VertexDegree`, so `Graph[…]` is rescanned
+   from its edge list on every call. Mathematica: 0.000 ms.
+4. `Table[e, {k}]` returns unevaluated when `k` is a `Module` local.
+5. `SeriesCoefficient[Series[…], n]` returns unevaluated.
+6. `RandomReal[{}, dims]` returns unevaluated (Mathematica accepts it).
+7. Build trap: FFTW/FLINT/GMP-ECM absent → `Fourier` was O(n²), 1050.9 ms → 1.0 ms
+   at 32768 after installing. `make` alone does not relink; `make clean` required.
 
-**Buffer path (ndreduce.c).** `ndred_ranked_min/max` mirror `ndred_median`: int64
-selects exactly via `nd_sort_i64_asc` (Integer, not a rounded Real), real via
-`nd_select_kth` (O(m)); complex / rank>1 / out-of-range degrade to
-`ndarray_delist_and_reeval`. Shared by the interpreter builtin and the Compile VM.
+**By area** (median ratio, vs Mathematica / vs Python): A symbolic 1.34× / 0.10×,
+B numeric libraries 0.44× / 0.98×, C numeric roadmap 2.12× / 2.33×, D WolframMark
+1.08× / 0.58×. So ~10× ahead of sympy, at parity with scipy, ahead of Mathematica
+on the numeric libraries, and ~2× behind on machine-level array work — which is
+where the eight open roadmap items already pointed.
 
-**Verification.** Clean `-O3 -std=c99` build. `test_ranked.c`: all 9 groups pass
-(every documented example, the identities, infinities, exact BigInt/Rational,
-duplicates, symbolic reals, unevaluated cases, NDArray int64/float64). 5 compile
-parity cases exact (max_rel=0.0). `check-c99` green; `check-compile-coverage` green
-(no new gaps — RankedMin/Max compile at `v_rk`/`v_ik`). sort/stats/compile/coverage
-suites pass. Valgrind: leak profile **byte-identical** to a matched Min/Max/Sort
-baseline (13,376 B / 418 blocks — the macOS objc baseline), none of my functions in
-any leak stack → zero new leaks.
+**Harness errors caught before publishing** (each would have been a false
+finding): `HoldRest` swallowing `$BenchReps`; `Table` with a Module-local count;
+`Product[…]` returning an unexpanded closed form (looked exactly like a
+`PolynomialGCD` bug); `i/100` being an exact Rational so Mathilda did exact
+rational least squares against numpy float64 (reported 239000×, an artifact);
+`wolframscript` rendering `ToString[1/2]` as a 3-line 2-D fraction so the parser
+read `1`; and several Python-side convention errors, each caught because Mathilda
+and Mathematica **agreed** and the Python column was the outlier.
+
+**Not done, deliberately.** `tests/test_stats.c` has 3 pre-existing failures in
+`test_central_moment` (print-form assertions that do not hold in the test binary,
+which does not load the `.m` bootstrap). Verified pre-existing by stashing this
+branch's `src/` changes and reproducing them. Left for a separate change rather
+than repaired inside a benchmarking PR.

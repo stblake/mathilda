@@ -321,6 +321,47 @@ void test_exponential_moving_average() {
     assert_eval_eq("MemberQ[Attributes[ExponentialMovingAverage], Protected]", "True", 0);
 }
 
+/* Regression: the exact int64 rational fast paths in mean.c and variance.c
+ * multiplied without checking for overflow, so a long list whose mean has a
+ * large irreducible denominator returned a SILENTLY WRONG answer.
+ *
+ * Found by benchmarks/19-statistics, where Mathematica and NumPy agreed with
+ * each other and Mathilda did not: Variance came back 0.0176 where the answer is
+ * 84815.8, and some overflowed sums of squares were NEGATIVE, which a variance
+ * cannot be.
+ *
+ * The trap is that friendly data hides it completely: a list whose mean reduces
+ * to a small denominator (999/2, say) never overflows at any length. These cases
+ * use Range[n]/d with d coprime to the sum so the denominator survives gcd
+ * reduction and the accumulator actually grows.
+ *
+ * Each case pins the fast path against the definition computed through the
+ * evaluator (exact via GMP) rather than against a written-down constant that
+ * could be wrong in the same direction as the code. */
+void test_exact_overflow_regression() {
+    /* Mean of rationals with a surviving denominator, at a length that overflowed. */
+    assert_eval_eq("Mean[Range[10000]/10007] == Total[Range[10000]/10007]/10000",
+                   "True", 0);
+    /* Variance squares an n-scaled numerator, so it overflows sooner than Mean. */
+    assert_eval_eq("Variance[Range[4000]/4001] == "
+                   "Total[(Range[4000]/4001 - Mean[Range[4000]/4001])^2]/3999",
+                   "True", 0);
+    /* A sum of squares over a positive count is never negative. */
+    assert_eval_eq("Variance[Range[10000]/10007] > 0", "True", 0);
+    /* The centred-and-powered list is what CentralMoment feeds back into Mean,
+     * which is how Skewness/Kurtosis inherited the bug. */
+    assert_eval_eq("CentralMoment[Range[4000]/4001, 2] == "
+                   "Total[(Range[4000]/4001 - Mean[Range[4000]/4001])^2]/4000",
+                   "True", 0);
+    /* Exactness is preserved, not traded for safety: the fallback is GMP, so the
+     * result is still an exact Rational rather than a Real. */
+    assert_eval_eq("Head[Mean[Range[10000]/10007]]", "Rational", 0);
+    assert_eval_eq("Head[Variance[Range[4000]/4001]]", "Rational", 0);
+    /* Small inputs still take the int64 fast path, unchanged. */
+    assert_eval_eq("Mean[{1/2, 1/3, 1/6}]", "1/3", 0);
+    assert_eval_eq("Variance[{1, 2, 3, 4}]", "5/3", 0);
+}
+
 void test_central_moment() {
     /* --- scalar order on an exact vector: exact input -> exact output --- */
     assert_eval_eq("CentralMoment[{1,2,3,4},2]", "5/4", 0);
@@ -429,6 +470,7 @@ int main() {
     TEST(test_mean);
     TEST(test_rootmeansquare);
     TEST(test_variance);
+    TEST(test_exact_overflow_regression);
     TEST(test_central_moment);
     TEST(test_skewness);
     TEST(test_kurtosis);
