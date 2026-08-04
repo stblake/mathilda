@@ -27,6 +27,10 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+/* The minimum of Gamma (and LogGamma) on (0, inf), at x = 1.4616321449683623;
+ * Gamma is decreasing below it and increasing above it. */
+#define IV_GAMMA_MIN 1.4616321449683623
+
 /* Outward-rounding direction for inexact endpoints. */
 typedef enum { RND_DOWN = 0, RND_UP = 1 } IvRound;
 
@@ -683,7 +687,12 @@ static Expr* iv_trig(const Expr* iv, IvTrigKind kind) {
     return iv_canonicalize_pairs(los, his, n);
 }
 
-static Expr* iv_tan(const Expr* iv) {
+/* Tan (poles at pi/2 + k*pi, increasing between them) and Cot (poles at k*pi,
+ * decreasing between them): a pole inside the pair makes the range unbounded,
+ * otherwise the function is monotone across it. */
+static Expr* iv_tan_cot(const Expr* iv, bool is_cot) {
+    const char* head = is_cot ? "Cot" : "Tan";
+    double pole_phase = is_cot ? 0.0 : (M_PI / 2.0);
     size_t na = interval_pair_count(iv);
     IvBuild out; ivb_init(&out);
     for (size_t i = 0; i < na; i++) {
@@ -691,12 +700,12 @@ static Expr* iv_tan(const Expr* iv) {
         Expr* b = interval_pair_hi(iv, i);
         double la, lb;
         if (!iv_to_double(a, &la) || !iv_to_double(b, &lb)) { ivb_free(&out); return NULL; }
-        /* pole of Tan at pi/2 + k*pi inside the pair -> unbounded */
-        if (iv_crit_in(la, lb, M_PI / 2.0, M_PI)) {
+        if (iv_crit_in(la, lb, pole_phase, M_PI)) {
             ivb_push(&out, iv_neg_inf(), iv_pos_inf());
         } else {
-            Expr* lo = iv_unary("Tan", a, RND_DOWN);
-            Expr* hi = iv_unary("Tan", b, RND_UP);
+            /* Tan increases, Cot decreases, across a pole-free pair. */
+            Expr* lo = iv_unary(head, is_cot ? b : a, RND_DOWN);
+            Expr* hi = iv_unary(head, is_cot ? a : b, RND_UP);
             if (!lo || !hi) { expr_free(lo); expr_free(hi); ivb_free(&out); return NULL; }
             ivb_push(&out, lo, hi);
         }
@@ -760,14 +769,90 @@ static Expr* iv_cosh(const Expr* iv) {
     return iv_canonicalize_pairs(los, his, n);
 }
 
+/* Reciprocal of an owned base interval (frees base); NULL-safe. Used to build
+ * Sec = 1/Cos, Csc = 1/Sin, Sech = 1/Cosh, Csch = 1/Sinh, Coth = 1/Tanh -- the
+ * reciprocal kernel handles the pole (where the base straddles 0) as a disjoint
+ * union, so it captures each function's singular behaviour for free. */
+static Expr* iv_recip_of(Expr* base) {
+    if (!base) return NULL;
+    Expr* r = interval_reciprocal(base);
+    expr_free(base);
+    return r;
+}
+
+/* Evaluate head[x] (or head[prefix, x] when has_prefix), widen inexact outward. */
+static Expr* iv_fn_endpoint(const char* head, int64_t prefix, bool has_prefix,
+                            Expr* x, IvRound dir) {
+    Expr* call;
+    if (has_prefix)
+        call = expr_new_function(expr_new_symbol(head),
+                   (Expr*[]){ expr_new_integer(prefix), expr_copy(x) }, 2);
+    else
+        call = expr_new_function(expr_new_symbol(head), (Expr*[]){ expr_copy(x) }, 1);
+    Expr* r = eval_and_free(call);
+    if (iv_is_inexact(r)) r = iv_widen(r, dir);
+    return r;
+}
+
+/* Thread a function monotone in direction `dir`, but only when every pair's
+ * numeric range lies strictly inside the open region (rlo, rhi) where that
+ * monotonicity holds; else NULL (stays symbolic). This keeps a function threaded
+ * on only part of its domain (Gamma, Zeta, ...) from ever producing a wrong
+ * bound near an extremum or a pole. */
+static Expr* iv_thread_region(const Expr* iv, IvMonotoneDir dir, const char* head,
+                              int64_t prefix, bool has_prefix,
+                              double rlo, double rhi) {
+    size_t na = interval_pair_count(iv);
+    IvBuild out; ivb_init(&out);
+    for (size_t i = 0; i < na; i++) {
+        Expr* a = interval_pair_lo(iv, i);
+        Expr* b = interval_pair_hi(iv, i);
+        double la, lb;
+        if (!iv_to_double(a, &la) || !iv_to_double(b, &lb)) { ivb_free(&out); return NULL; }
+        if (!(la > rlo && lb < rhi)) { ivb_free(&out); return NULL; }
+        Expr* lo; Expr* hi;
+        if (dir == IV_INC) {
+            lo = iv_fn_endpoint(head, prefix, has_prefix, a, RND_DOWN);
+            hi = iv_fn_endpoint(head, prefix, has_prefix, b, RND_UP);
+        } else {
+            lo = iv_fn_endpoint(head, prefix, has_prefix, b, RND_DOWN);
+            hi = iv_fn_endpoint(head, prefix, has_prefix, a, RND_UP);
+        }
+        if (!lo || !hi || iv_is_complex_result(lo) || iv_is_complex_result(hi)) {
+            expr_free(lo); expr_free(hi); ivb_free(&out); return NULL;
+        }
+        ivb_push(&out, lo, hi);
+    }
+    size_t n = out.n; Expr** los = out.los; Expr** his = out.his;
+    out.los = out.his = NULL; out.n = out.cap = 0;
+    return iv_canonicalize_pairs(los, his, n);
+}
+
+/* Gamma / LogGamma: convex on (0, inf) with a minimum at IV_GAMMA_MIN; monotone
+ * decreasing below it and increasing above. Thread on whichever branch the
+ * interval lies safely within (a small margin around the minimum stays
+ * symbolic); intervals reaching <= 0 or straddling the minimum stay symbolic. */
+static Expr* iv_gamma_like(const Expr* iv, const char* head) {
+    Expr* r = iv_thread_region(iv, IV_INC, head, 0, false, IV_GAMMA_MIN + 1e-6, INFINITY);
+    if (r) return r;
+    return iv_thread_region(iv, IV_DEC, head, 0, false, 0.0, IV_GAMMA_MIN - 1e-6);
+}
+
 Expr* interval_apply_function(const char* head, const Expr* iv) {
     if (!is_interval(iv)) return NULL;
-    /* non-monotone */
+    /* non-monotone (range analysis) */
     if (strcmp(head, "Sin") == 0)  return iv_trig(iv, IV_SIN);
     if (strcmp(head, "Cos") == 0)  return iv_trig(iv, IV_COS);
-    if (strcmp(head, "Tan") == 0)  return iv_tan(iv);
+    if (strcmp(head, "Tan") == 0)  return iv_tan_cot(iv, false);
+    if (strcmp(head, "Cot") == 0)  return iv_tan_cot(iv, true);
     if (strcmp(head, "Abs") == 0)  return iv_abs(iv);
     if (strcmp(head, "Cosh") == 0) return iv_cosh(iv);
+    /* reciprocal trig / hyperbolic, built as 1/base (pole handled by reciprocal) */
+    if (strcmp(head, "Sec") == 0)  return iv_recip_of(iv_trig(iv, IV_COS));
+    if (strcmp(head, "Csc") == 0)  return iv_recip_of(iv_trig(iv, IV_SIN));
+    if (strcmp(head, "Sech") == 0) return iv_recip_of(iv_cosh(iv));
+    if (strcmp(head, "Csch") == 0) return iv_recip_of(interval_thread_monotone(iv, IV_INC, "Sinh"));
+    if (strcmp(head, "Coth") == 0) return iv_recip_of(interval_thread_monotone(iv, IV_INC, "Tanh"));
     /* monotone increasing (domain-invalid endpoints -> complex result -> NULL) */
     if (strcmp(head, "Exp") == 0)      return interval_thread_monotone(iv, IV_INC, "Exp");
     if (strcmp(head, "Log") == 0)      return interval_thread_monotone(iv, IV_INC, "Log");
@@ -779,9 +864,27 @@ Expr* interval_apply_function(const char* head, const Expr* iv) {
     if (strcmp(head, "ArcSinh") == 0)  return interval_thread_monotone(iv, IV_INC, "ArcSinh");
     if (strcmp(head, "ArcCosh") == 0)  return interval_thread_monotone(iv, IV_INC, "ArcCosh");
     if (strcmp(head, "ArcTanh") == 0)  return interval_thread_monotone(iv, IV_INC, "ArcTanh");
+    /* monotone increasing on all of R */
+    if (strcmp(head, "Erf") == 0)      return interval_thread_monotone(iv, IV_INC, "Erf");
+    if (strcmp(head, "Sign") == 0)     return interval_thread_monotone(iv, IV_INC, "Sign");
+    if (strcmp(head, "Floor") == 0)    return interval_thread_monotone(iv, IV_INC, "Floor");
+    if (strcmp(head, "Ceiling") == 0)  return interval_thread_monotone(iv, IV_INC, "Ceiling");
     /* monotone decreasing */
     if (strcmp(head, "ArcCos") == 0)   return interval_thread_monotone(iv, IV_DEC, "ArcCos");
+    if (strcmp(head, "Erfc") == 0)     return interval_thread_monotone(iv, IV_DEC, "Erfc");
+    /* monotone only on a sub-region (else symbolic) */
+    if (strcmp(head, "Gamma") == 0)    return iv_gamma_like(iv, "Gamma");
+    if (strcmp(head, "LogGamma") == 0) return iv_gamma_like(iv, "LogGamma");
+    if (strcmp(head, "Zeta") == 0)     return iv_thread_region(iv, IV_DEC, "Zeta", 0, false, 1.0, INFINITY);
     return NULL;
+}
+
+Expr* interval_polygamma(int64_t n, const Expr* iv) {
+    if (!is_interval(iv) || n < 0) return NULL;
+    /* PolyGamma(n, .) is monotone on (0, inf): its derivative is PolyGamma(n+1,.)
+     * with sign (-1)^n, so it increases for even n and decreases for odd n. */
+    IvMonotoneDir dir = (n % 2 == 0) ? IV_INC : IV_DEC;
+    return iv_thread_region(iv, dir, "PolyGamma", n, true, 0.0, INFINITY);
 }
 
 int interval_compare_intervals(const Expr* A, const Expr* B, bool* decidable) {

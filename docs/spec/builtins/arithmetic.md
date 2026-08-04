@@ -1260,6 +1260,30 @@ In[8]:= Sqrt[Interval[{4, 9}]]
 Out[8]= Interval[{2, 3}]
 ```
 
+The threaded set also includes the **reciprocal trig/hyperbolic** functions
+`Cot`, `Sec`, `Csc`, `Coth`, `Sech`, `Csch` (built as `1/base`, so a pole is
+returned as a disjoint union), the **rounding/sign** functions `Sign`, `Floor`,
+`Ceiling` (monotone non-decreasing), and several **special functions** on the
+sub-domain where each is monotone: `Erf`/`Erfc` (all of ℝ), `Gamma`/`LogGamma`
+(increasing above the minimum `x ≈ 1.4616`, decreasing below it), `Zeta` (on
+`x > 1`), and `PolyGamma[n, ·]` (on `x > 0`, increasing for even `n`). Outside a
+known monotone region a special function is left symbolic rather than risk a
+wrong bound:
+
+```
+In[8b]:= Sec[Interval[{1, 2}]]
+Out[8b]= Interval[{-Infinity, Sec[2]}, {Sec[1], Infinity}]
+
+In[8c]:= Gamma[Interval[{2, 3}]]
+Out[8c]= Interval[{1, 2}]
+
+In[8d]:= Zeta[Interval[{2, 3}]]
+Out[8d]= Interval[{Zeta[3], 1/6 Pi^2}]
+
+In[8e]:= Gamma[Interval[{1, 2}]]        (* straddles the minimum: stays symbolic *)
+Out[8e]= Gamma[Interval[{1, 2}]]
+```
+
 **Endpoints and comparisons.** `Min[interval]` and `Max[interval]` return the
 lowest and highest endpoints. Relational operators (`Equal`, `Less`, `Greater`,
 …) yield explicit `True`/`False` when the interval is disjoint from the other

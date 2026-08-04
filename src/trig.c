@@ -818,6 +818,8 @@ Expr* builtin_cot(Expr* res) {
         return builtin_arg_error("Cot", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Cot", arg); if (r) return r; }
+
     { Expr* inv = strip_inverse_call(arg, "ArcCot"); if (inv) return inv; }
 
     // Cot[ArcTan[x]] -> 1/x
@@ -870,6 +872,8 @@ Expr* builtin_sec(Expr* res) {
         return builtin_arg_error("Sec", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Sec", arg); if (r) return r; }
+
     { Expr* inv = strip_inverse_call(arg, "ArcSec"); if (inv) return inv; }
 
     // Sec is even: Sec[-x] -> Sec[x]
@@ -918,6 +922,8 @@ Expr* builtin_csc(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("Csc", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Csc", arg); if (r) return r; }
 
     { Expr* inv = strip_inverse_call(arg, "ArcCsc"); if (inv) return inv; }
 

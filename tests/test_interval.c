@@ -79,6 +79,32 @@ int main(void) {
     if (!check("Abs[Interval[{-5, -2}]]", "Interval[{2, 5}]")) failures++;   /* all negative */
     if (!check("Abs[Interval[{2, 5}]]", "Interval[{2, 5}]")) failures++;     /* all positive */
 
+    /* --- reciprocal trig / hyperbolic (built as 1/base) --- */
+    if (!check("Sec[Interval[{0, 1}]]", "Interval[{1, Sec[1]}]")) failures++;
+    if (!check("Sec[Interval[{1, 2}]]",
+               "Interval[{-Infinity, Sec[2]}, {Sec[1], Infinity}]")) failures++;   /* pole at Pi/2 */
+    if (!check("Sech[Interval[{0, 1}]]", "Interval[{Sech[1], 1}]")) failures++;
+    if (!check("Csch[Interval[{1, 2}]]", "Interval[{Csch[2], Csch[1]}]")) failures++;
+    if (!check("Coth[Interval[{1, 2}]]", "Interval[{Coth[2], Coth[1]}]")) failures++;
+
+    /* --- Sign / Floor / Ceiling (monotone non-decreasing) --- */
+    if (!check("Sign[Interval[{-2, 3}]]", "Interval[{-1, 1}]")) failures++;
+    if (!check("Sign[Interval[{2, 5}]]", "Interval[{1, 1}]")) failures++;
+    if (!check("Floor[Interval[{1.2, 3.8}]]", "Interval[{1, 3}]")) failures++;
+    if (!check("Ceiling[Interval[{1.2, 3.8}]]", "Interval[{2, 4}]")) failures++;
+
+    /* --- special functions (monotone on a region) --- */
+    if (!check("Erf[Interval[{0, 1}]]", "Interval[{0, Erf[1]}]")) failures++;
+    if (!check("Erfc[Interval[{0, 1}]]", "Interval[{Erfc[1], 1}]")) failures++;       /* decreasing */
+    if (!check("Gamma[Interval[{2, 3}]]", "Interval[{1, 2}]")) failures++;            /* increasing branch */
+    if (!check("Gamma[Interval[{1/2, 1}]]", "Interval[{1, Sqrt[Pi]}]")) failures++;   /* decreasing branch */
+    if (!check("Gamma[Interval[{1, 2}]]", "Gamma[Interval[{1, 2}]]")) failures++;     /* straddles min: symbolic */
+    if (!check("LogGamma[Interval[{2, 3}]]", "Interval[{0, Log[2]}]")) failures++;
+    if (!check("Zeta[Interval[{2, 3}]]", "Interval[{Zeta[3], 1/6 Pi^2}]")) failures++; /* decreasing on (1,inf) */
+    if (!check("Zeta[Interval[{1, 2}]]", "Zeta[Interval[{1, 2}]]")) failures++;        /* pole at 1: symbolic */
+    if (!check("PolyGamma[0, Interval[{1, 2}]]", "Interval[{-EulerGamma, 1 - EulerGamma}]")) failures++;
+    if (!check("PolyGamma[1, Interval[{1, 2}]]", "Interval[{-1 + 1/6 Pi^2, 1/6 Pi^2}]")) failures++; /* decreasing */
+
     /* --- Min / Max --- */
     if (!check("Min[Interval[{2, 7}]]", "2")) failures++;
     if (!check("Max[Interval[{2, 7}]]", "7")) failures++;

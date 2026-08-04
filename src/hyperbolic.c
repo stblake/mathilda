@@ -458,6 +458,8 @@ Expr* builtin_coth(Expr* res) {
         return builtin_arg_error("Coth", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Coth", arg); if (r) return r; }
+
     { Expr* inv = strip_inverse_call(arg, "ArcCoth"); if (inv) return inv; }
 
     // Coth[ArcTanh[x]] -> 1/x
@@ -497,6 +499,8 @@ Expr* builtin_sech(Expr* res) {
         return builtin_arg_error("Sech", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Sech", arg); if (r) return r; }
+
     { Expr* inv = strip_inverse_call(arg, "ArcSech"); if (inv) return inv; }
 
     // Sech is even: Sech[-x] -> Sech[x]
@@ -531,6 +535,8 @@ Expr* builtin_csch(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("Csch", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Csch", arg); if (r) return r; }
 
     { Expr* inv = strip_inverse_call(arg, "ArcCsch"); if (inv) return inv; }
 

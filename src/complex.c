@@ -432,6 +432,8 @@ Expr* builtin_sign(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Sign", arg); if (r) return r; }
+
     if (arg->type == EXPR_INTEGER) {
         int64_t v = arg->data.integer;
         return expr_new_integer(v < 0 ? -1 : v > 0 ? 1 : 0);

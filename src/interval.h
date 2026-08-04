@@ -72,6 +72,10 @@ Expr* interval_thread_monotone(const Expr* iv, IvMonotoneDir dir, const char* he
  * not yet supported, so callers fall through to symbolic. */
 Expr* interval_apply_function(const char* head, const Expr* iv);
 
+/* Thread PolyGamma[n, .] over an interval (monotone on (0, inf): increasing for
+ * even n, decreasing for odd n). Returns NULL outside (0, inf) or for n < 0. */
+Expr* interval_polygamma(int64_t n, const Expr* iv);
+
 /* Promote a scalar number to the point interval Interval[{x, x}] (copies x). */
 Expr* interval_from_scalar(const Expr* x);
 
