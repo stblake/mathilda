@@ -33,6 +33,7 @@ For a single iterator the spec is parsed by the shared `iter_spec_parse` (`src/i
 
 - `HoldAll`: `expr` is evaluated once for each step.
 - Supports nested iterators to create matrices.
+- **Machine-real iterators take a compiled fast path.** When the iterator is
 
 **Attributes:** `HoldAll`, `Protected`.
 

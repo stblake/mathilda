@@ -24,7 +24,7 @@ All examples below are verified against the current Mathilda build.
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomSample[{a, b, c, d, e}, 3]
-Out[1]= {b, c, d}
+Out[1]= {e, c, a}
 
 In[2]:= Sort[RandomSample[{1, 2, 3, 4, 5}, 5]]
 Out[2]= {1, 2, 3, 4, 5}

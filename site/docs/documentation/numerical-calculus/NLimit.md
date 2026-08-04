@@ -9,9 +9,11 @@
 NLimit[expr, z -> z0]
     numerically finds the limiting value of expr as z approaches z0.
 
-A geometric sequence of sample points approaching z0 is constructed (z0 may be finite, complex, or an infinite point such as Infinity or I Infinity) and the limit is recovered by sequence acceleration. Method -> Automatic (default) runs both Richardson/Romberg and Wynn's epsilon and keeps the most self-consistent estimate, so branch-point / fractional-power approaches (which Richardson alone mishandles) are resolved accurately (Levin's u-transform also participates when the samples are settling). Method -> EulerSum forces Richardson/Romberg; Method -> SequenceLimit forces Wynn's epsilon; Method -> "Levin" forces Levin's transformation ("LevinU" | "LevinT" | "LevinV" select the u/t/v variant). expr must be numerical when z is numerical. Small spurious residuals are not recognised as zero -- Chop if needed.
+A geometric sequence of sample points approaching z0 is constructed (z0 may be finite, complex, or an infinite point such as Infinity or I Infinity) and the limit is recovered by sequence acceleration. Method -> Automatic (default) runs both Richardson/Romberg and Wynn's epsilon and keeps the most self-consistent estimate, so branch-point / fractional-power approaches (which Richardson alone mishandles) are resolved accurately (Levin's u-transform also participates when the samples are settling). Method -> EulerSum forces Richardson/Romberg; Method -> SequenceLimit forces Wynn's epsilon; Method -> "Levin" forces Levin's transformation ("LevinU" | "LevinT" | "LevinV" select the u/t/v variant). expr must be numerical when z is numerical. Small spurious residuals are not recognised as zero -- Chop if needed. An expression whose sampled values oscillate with a non-decaying envelope has no limit: NLimit::osc is issued and the form is returned unevaluated, rather than reporting the meaningless extrapolant.
 
-Options: Method (Automatic | EulerSum | SequenceLimit | "Levin"), WorkingPrecision (default MachinePrecision), Direction (Automatic == -1, or a complex approach vector), Scale (initial step / distance, default 1), Terms (default 7), WynnDegree (SequenceLimit iterations, default 1).
+Options: Method (Automatic | EulerSum | SequenceLimit | "Levin"), WorkingPrecision (default MachinePrecision), AccuracyGoal (default MachinePrecision), PrecisionGoal, Direction (Automatic == -1, or a complex approach vector), Scale (initial step / distance, default 1), Terms (starting extrapolation depth, default 13, grown adaptively up to meet AccuracyGoal -- the depth, not WorkingPrecision, sets the accuracy on branch-point / fractional-power approaches), WynnDegree (SequenceLimit iterations, default 1).
+
+Each method is also callable directly as NLimit`m[expr, z -> z0]: NLimit`Automatic, NLimit`EulerSum, NLimit`SequenceLimit, NLimit`Levin, NLimit`LevinU, NLimit`LevinT, NLimit`LevinV.
 ```
 
 ## Examples
@@ -29,10 +31,10 @@ In[3]:= NLimit[(1 + I/x)^x, x -> Infinity]
 Out[3]= 0.540302 + 0.841471*I
 
 In[4]:= NLimit[Tanh[Pi x]/(1 + x^2), x -> I] // Chop
-Out[4]= 5.33707e-06 - 1.5708*I
+Out[4]= 0.0 - 1.5708*I
 
 In[5]:= NLimit[(10^x - 1)/x, x -> 0, Terms -> 10, Method -> SequenceLimit]
-Out[5]= 2.30262
+Out[5]= 2.30259
 
 In[6]:= NLimit[z + Conjugate[z]/z, z -> 0, Direction -> -I] // Chop
 Out[6]= -1.0

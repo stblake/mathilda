@@ -44,6 +44,7 @@ Out[3]= {{a + 3 b, 2 a + 4 b}, {c + 3 d, 2 c + 4 d}}
 - Product of two matrices yields a matrix.
 - When arguments are not lists, `Dot` remains unevaluated.
 - Gives an error message `Dot::dotsh` if the shapes of the inputs are not compatible.
+- **Compilable.** Over machine arrays `Dot` lowers inside `Compile[]` and
 
 **Attributes:** `Flat`, `OneIdentity`, `Protected`.
 

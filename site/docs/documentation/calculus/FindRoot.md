@@ -38,7 +38,7 @@ In[4]:= FindRoot[Sin[x], {x, 3}, WorkingPrecision -> 50]
 Out[4]= {x -> 3.14159265358979323846264338328757519744320987120168}
 
 In[5]:= FindRoot[(Cos[z + I] - 2) (z + 2), {z, 1.0 + 0.1 I}]
-Out[5]= {z -> -1.66935e-13 + 0.316958*I}
+Out[5]= {z -> -3.15544e-27 + 0.316958*I}
 
 In[6]:= FindRoot[Cos[x] - x, {x, 0, 1}, Method -> "Brent"]
 Out[6]= {x -> 0.739085}

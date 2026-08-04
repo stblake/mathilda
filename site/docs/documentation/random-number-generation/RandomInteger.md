@@ -27,19 +27,19 @@ In[1]:= SeedRandom[42]; RandomInteger[]
 Out[1]= 1
 
 In[2]:= SeedRandom[42]; RandomInteger[10]
-Out[2]= 9
+Out[2]= 8
 
 In[3]:= SeedRandom[42]; RandomInteger[{1, 6}]
-Out[3]= 2
+Out[3]= 5
 
 In[4]:= SeedRandom[42]; RandomInteger[{0, 9}, 5]
-Out[4]= {9, 9, 7, 1, 9}
+Out[4]= {8, 3, 9, 7, 7}
 
 In[5]:= SeedRandom[42]; Dimensions[RandomInteger[{0, 1}, {3, 4}]]
 Out[5]= {3, 4}
 
 In[6]:= SeedRandom[42]; RandomInteger[{-10, -5}]
-Out[6]= -9
+Out[6]= -6
 
 In[7]:= IntegerQ[RandomInteger[10^20]]
 Out[7]= True
@@ -56,6 +56,7 @@ The `RandomInteger[range, n]` and `RandomInteger[range, {n1, n2, ...}]` forms pr
 - RandomInteger[] gives 0 or 1 with probability 1/2.
 - RandomInteger gives a different sequence of pseudorandom integers whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Returns bignums when the range exceeds 64-bit integer limits.
+- **Large machine-integer results pack.** A list or array of 250 or more values
 
 **Attributes:** `Protected`.
 

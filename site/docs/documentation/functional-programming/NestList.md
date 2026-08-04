@@ -60,7 +60,7 @@ Shares all machinery with `Nest`; `n` must be a non-negative integer.
 - The function `f` may be a symbol, a built-in, or a pure function (`... &`).
 - Each iteration evaluates `f[current]` before proceeding, so numeric computations collapse immediately.
 - Returns unevaluated if `n` is not a non-negative integer or the argument count is wrong.
-- `Last[NestList[f, expr, n]]` is equivalent to `Nest[f, expr, n]`.
+- **Compilable** inside `Compile[]` for a scalar accumulator, with any of the
 
 **Attributes:** `Protected`.
 

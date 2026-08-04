@@ -23,6 +23,11 @@ before the next one.
 All examples below are verified against the current Mathilda build.
 
 ```mathematica
+In[1]:= Fold[Plus, 0., NDArray[{1., 2., 3.}]]
+Out[1]= 6.0
+```
+
+```mathematica
 In[1]:= Fold[f, x, {a, b, c, d}]
 Out[1]= f[f[f[f[x, a], b], c], d]
 
@@ -43,9 +48,6 @@ Out[6]= f[f[f[f[x, a], b], c], d]
 
 In[7]:= Fold[2 #1 + #2 &, 0, {1, 0, 1, 1}]
 Out[7]= 11
-
-In[8]:= Fold[10 #1 + #2 &, 0, {4, 5, 1, 6, 7, 8}]
-Out[8]= 451678
 ```
 
 ## Implementation notes
@@ -68,6 +70,7 @@ buffer. The output preserves the input list's head only in the `FoldList` form.
 - `Fold[f, x, {}]` returns `x` (the function is never applied); `Fold[f, {a}]` returns `a`.
 - `Fold[f, {}]` remains unevaluated (no seed, no elements).
 - Each intermediate application is evaluated before the next one.
+- **NDArray**: a packed argument is folded exactly as the equivalent `List` is —
 
 **Attributes:** `Protected`.
 

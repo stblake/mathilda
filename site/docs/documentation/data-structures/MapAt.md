@@ -12,9 +12,16 @@ MapAt[f, expr, {i, j, ...}]
     applies f to the part of expr at position {i, j, ...}.
 MapAt[f, expr, {{i1, j1, ...}, {i2, j2, ...}, ...}]
     applies f to the parts of expr at each of the listed positions.
+MapAt[f, pos]
+    is the operator form: MapAt[f, pos][expr] == MapAt[f, expr, pos].
 
-Positions may contain All or Span specifications. MapAt[f, expr, 0]
-applies f to the head of expr. Repeated positions apply f repeatedly.
+Positions take the form Position returns, and may contain All or Span
+specifications; 0 targets the head. On an association a position is a
+key, Key[k], or a positional index over the entries, and f is applied
+to the value. Repeated positions apply f repeatedly. MapAt[f, expr, {}]
+is an empty list of positions and maps nothing, while {{}} is the
+position of expr itself. A position that does not exist leaves MapAt
+unevaluated.
 ```
 
 ## Examples
@@ -27,6 +34,15 @@ Out[1]= <|"a" -> 3, "b" -> 16|>
 
 In[2]:= p = <|"a" -> 1, "b" -> 9|>; MapAt[-# &, p, First[Position[p, 9]]]
 Out[2]= <|"a" -> 1, "b" -> -9|>
+
+In[3]:= MapAt[f, <|"a" -> 1, "b" -> 2|>, All]
+Out[3]= <|"a" -> f[1], "b" -> f[2]|>
+
+In[4]:= MapAt[f, <|"a" -> 1, "b" -> 2, "c" -> 3|>, 1 ;; 2]
+Out[4]= <|"a" -> f[1], "b" -> f[2], "c" -> 3|>
+
+In[5]:= ReplaceAt[<|"a" -> 1, "b" -> 2|>, 1 -> 9, Key["a"]]
+Out[5]= <|"a" -> 9, "b" -> 2|>
 ```
 
 ## Implementation notes

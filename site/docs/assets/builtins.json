@@ -8,6 +8,22 @@
     "url": "documentation/simplification/$Assumptions/"
   },
   {
+    "name": "$AutoArrayPacking",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "$AutoArrayPacking",
+    "url": "documentation/other-advanced/$AutoArrayPacking/"
+  },
+  {
+    "name": "$AutoCompilation",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "$AutoCompilation",
+    "url": "documentation/other-advanced/$AutoCompilation/"
+  },
+  {
     "name": "$Context",
     "category": "Scoping Constructs",
     "slug": "scoping-constructs",
@@ -184,6 +200,14 @@
     "url": "documentation/time-and-date/AbsoluteTime/"
   },
   {
+    "name": "AbsoluteTiming",
+    "category": "Time and Date",
+    "slug": "time-and-date",
+    "status": "Experimental",
+    "summary": "AbsoluteTiming[expr] evaluates expr, and returns a list of the absolute number of seconds of elapsed wall-clock time, together with the result obtained.",
+    "url": "documentation/time-and-date/AbsoluteTiming/"
+  },
+  {
     "name": "Accumulate",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -198,6 +222,14 @@
     "status": "Stable",
     "summary": "Accuracy[x]",
     "url": "documentation/arithmetic/Accuracy/"
+  },
+  {
+    "name": "AccuracyGoal",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "AccuracyGoal",
+    "url": "documentation/other-advanced/AccuracyGoal/"
   },
   {
     "name": "AddTo",
@@ -672,6 +704,14 @@
     "url": "documentation/arithmetic/Ceiling/"
   },
   {
+    "name": "CentralMoment",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "CentralMoment[data, r]",
+    "url": "documentation/statistics/CentralMoment/"
+  },
+  {
     "name": "Characters",
     "category": "String Operations",
     "slug": "string-operations",
@@ -768,6 +808,30 @@
     "url": "documentation/statistics/Commonest/"
   },
   {
+    "name": "Compile",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "Compile[{x, ...}, expr] or Compile[{{x, _Real}, ...}, expr] builds a CompiledFunction that evaluates expr over machine numbers (types _Real, _Integer, _Complex; default _Real), falling back to the interpreter for symbolic arguments or non-compilable bodies. With RuntimeAttributes -> Listable the object threads over List arguments; the default is RuntimeAttributes -> {}. RuntimeOptions -> {\"CatchMachineIntegerOverflow\" -> False} (or the shorthand RuntimeOptions -> \"Speed\") lets machine-integer arithmetic wrap instead of falling back to the interpreter, which is faster and gives a different answer from the interpreter once a result leaves the machine-integer range; the default True never does.",
+    "url": "documentation/control-flow/Compile/"
+  },
+  {
+    "name": "CompileDiagnostics",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "CompileDiagnostics[argspec, expr] reports whether expr compiles for the given Compile[] argument specification, and if not, the innermost subexpression that could not be lowered. For a compiled body it also gives the result type and the instruction count with and without the optimiser.",
+    "url": "documentation/control-flow/CompileDiagnostics/"
+  },
+  {
+    "name": "CompilePrint",
+    "category": "Control Flow",
+    "slug": "control-flow",
+    "status": "Stable",
+    "summary": "CompilePrint[cf] prints the bytecode of the CompiledFunction cf: its argument and result registers with their types, the scalar/array/tile register banks, and one line per instruction giving both the raw operands and a readable rendering. For an object whose body did not compile it reports the bail reason instead. Returns Null.",
+    "url": "documentation/control-flow/CompilePrint/"
+  },
+  {
     "name": "Complement",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -803,7 +867,7 @@
     "name": "ComplexPlot",
     "category": "Graphics",
     "slug": "graphics",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "ComplexPlot[f, {z, zmin, zmax}, opts...]",
     "url": "documentation/graphics/ComplexPlot/"
   },
@@ -923,7 +987,7 @@
     "name": "ContourPlot",
     "category": "Graphics",
     "slug": "graphics",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]",
     "url": "documentation/graphics/ContourPlot/"
   },
@@ -958,6 +1022,14 @@
     "status": "Stable",
     "summary": "CoprimeQ[n1, n2, ...]",
     "url": "documentation/number-theory/CoprimeQ/"
+  },
+  {
+    "name": "Correlation",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "Correlation[v, w]",
+    "url": "documentation/statistics/Correlation/"
   },
   {
     "name": "Cos",
@@ -1022,6 +1094,14 @@
     "status": "Stable",
     "summary": "CountsBy[list, f]",
     "url": "documentation/data-structures/CountsBy/"
+  },
+  {
+    "name": "Covariance",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "Covariance[v, w]",
+    "url": "documentation/statistics/Covariance/"
   },
   {
     "name": "Cross",
@@ -1163,7 +1243,7 @@
     "name": "DensityPlot",
     "category": "Graphics",
     "slug": "graphics",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "DensityPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]",
     "url": "documentation/graphics/DensityPlot/"
   },
@@ -1190,6 +1270,14 @@
     "status": "Stable",
     "summary": "Det[m]",
     "url": "documentation/linear-algebra/Det/"
+  },
+  {
+    "name": "Diagonal",
+    "category": "Linear Algebra",
+    "slug": "linear-algebra",
+    "status": "Stable",
+    "summary": "Diagonal[m]",
+    "url": "documentation/linear-algebra/Diagonal/"
   },
   {
     "name": "DiagonalMatrix",
@@ -1278,6 +1366,14 @@
     "status": "Stable",
     "summary": "x / y or Divide[x, y] represents x / y; rewritten by the evaluator to",
     "url": "documentation/arithmetic/Divide/"
+  },
+  {
+    "name": "DivideBy",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "DivideBy[x, dx] or x /= dx",
+    "url": "documentation/assignment-and-rules/DivideBy/"
   },
   {
     "name": "Divisible",
@@ -1912,6 +2008,14 @@
     "url": "documentation/structural-manipulation/Flatten/"
   },
   {
+    "name": "FlattenAt",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "FlattenAt[list, n]",
+    "url": "documentation/structural-manipulation/FlattenAt/"
+  },
+  {
     "name": "Floor",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -2040,6 +2144,22 @@
     "url": "documentation/arithmetic/FromDigits/"
   },
   {
+    "name": "FromNDArray",
+    "category": "Packed arrays",
+    "slug": "packed-arrays",
+    "status": "Stable",
+    "summary": "FromNDArray[expr] returns expr with any dense buffer storage undone: a packed List becomes an ordinary List of separate elements, and an NDArray[...] becomes the nested List of its entries. Anything else is returned unchanged. Inverse of ToNDArray.",
+    "url": "documentation/packed-arrays/FromNDArray/"
+  },
+  {
+    "name": "FromPackedArray",
+    "category": "Packed arrays",
+    "slug": "packed-arrays",
+    "status": "Stable",
+    "summary": "FromPackedArray[expr] is FromNDArray[expr]: it returns expr with any dense buffer storage undone, so a packed List becomes an ordinary List of separate elements and an NDArray[...] becomes the nested List of its entries. Provided under Mathematica's name for the same operation; see FromNDArray.",
+    "url": "documentation/packed-arrays/FromPackedArray/"
+  },
+  {
     "name": "FullForm",
     "category": "Expression Information",
     "slug": "expression-information",
@@ -2070,6 +2190,14 @@
     "status": "Stable",
     "summary": "Gamma[z]",
     "url": "documentation/special-functions/Gamma/"
+  },
+  {
+    "name": "Gather",
+    "category": "Data Structures",
+    "slug": "data-structures",
+    "status": "Stable",
+    "summary": "Gather[list]",
+    "url": "documentation/data-structures/Gather/"
   },
   {
     "name": "GatherBy",
@@ -2560,6 +2688,38 @@
     "url": "documentation/structural-manipulation/Intersection/"
   },
   {
+    "name": "Interval",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "Interval[{min, max}] represents the range of real values between min and max, inclusive. Interval[{a1,b1}, {a2,b2}, ...] is the union of the ranges. Arithmetic and elementary functions thread through intervals, producing rigorous enclosures; exact endpoints are kept exact.",
+    "url": "documentation/other-advanced/Interval/"
+  },
+  {
+    "name": "IntervalIntersection",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "IntervalIntersection[i1, i2, ...] gives the interval representing the intersection of the intervals ij (Interval[] if they are disjoint).",
+    "url": "documentation/other-advanced/IntervalIntersection/"
+  },
+  {
+    "name": "IntervalMemberQ",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "IntervalMemberQ[interval, x] gives True if x lies within interval, and False otherwise. IntervalMemberQ[interval, other] tests whether the interval other is wholly contained in interval.",
+    "url": "documentation/other-advanced/IntervalMemberQ/"
+  },
+  {
+    "name": "IntervalUnion",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "IntervalUnion[i1, i2, ...] gives the interval representing the union of the intervals ij.",
+    "url": "documentation/other-advanced/IntervalUnion/"
+  },
+  {
     "name": "Inverse",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
@@ -2734,6 +2894,14 @@
     "status": "Stable",
     "summary": "Khinchin",
     "url": "documentation/mathematical-constants/Khinchin/"
+  },
+  {
+    "name": "Kurtosis",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "Kurtosis[data]",
+    "url": "documentation/statistics/Kurtosis/"
   },
   {
     "name": "LCM",
@@ -3256,6 +3424,14 @@
     "url": "documentation/number-theory/MoebiusMu/"
   },
   {
+    "name": "Moment",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "Moment[data, r]",
+    "url": "documentation/statistics/Moment/"
+  },
+  {
     "name": "Most",
     "category": "Data Structures",
     "slug": "data-structures",
@@ -3318,6 +3494,14 @@
     "status": "Stable",
     "summary": "NDArrayQ[expr]",
     "url": "documentation/other-advanced/NDArrayQ/"
+  },
+  {
+    "name": "NDSolve",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
+    "status": "Stable",
+    "summary": "NDSolve[eqns, u, {x, xmin, xmax}]",
+    "url": "documentation/numerical-calculus/NDSolve/"
   },
   {
     "name": "NIntegrate",
@@ -3576,12 +3760,28 @@
     "url": "documentation/other-advanced/Orange/"
   },
   {
+    "name": "Order",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "Order[e1, e2] gives 1 if e1 is before e2 in canonical order, -1 if e1 is after e2, and 0 if e1 is identical to e2.",
+    "url": "documentation/structural-manipulation/Order/"
+  },
+  {
     "name": "OrderedQ",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
     "status": "Stable",
     "summary": "OrderedQ[h[e1, e2, ...]] gives True if the elements are in canonical order, and False otherwise.",
     "url": "documentation/structural-manipulation/OrderedQ/"
+  },
+  {
+    "name": "Ordering",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "Ordering[list] gives the positions in list at which each successive element of Sort[list] appears, so that list[[Ordering[list]]] is Sort[list].",
+    "url": "documentation/structural-manipulation/Ordering/"
   },
   {
     "name": "Orderless",
@@ -3635,7 +3835,7 @@
     "name": "ParametricPlot3D",
     "category": "Graphics",
     "slug": "graphics",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "ParametricPlot3D[{fx, fy, fz}, {t, tmin, tmax}, opts...]",
     "url": "documentation/graphics/ParametricPlot3D/"
   },
@@ -3694,6 +3894,14 @@
     "status": "Stable",
     "summary": "Pi",
     "url": "documentation/mathematical-constants/Pi/"
+  },
+  {
+    "name": "Pick",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "Pick[expr, sel]",
+    "url": "documentation/other-advanced/Pick/"
   },
   {
     "name": "Piecewise",
@@ -3755,7 +3963,7 @@
     "name": "PolarPlot",
     "category": "Graphics",
     "slug": "graphics",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "PolarPlot[r, {theta, tmin, tmax}, opts...]",
     "url": "documentation/graphics/PolarPlot/"
   },
@@ -3936,6 +4144,14 @@
     "url": "documentation/arithmetic/Precision/"
   },
   {
+    "name": "PrecisionGoal",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "PrecisionGoal",
+    "url": "documentation/other-advanced/PrecisionGoal/"
+  },
+  {
     "name": "Prepend",
     "category": "Data Structures",
     "slug": "data-structures",
@@ -4096,6 +4312,14 @@
     "url": "documentation/statistics/Quartiles/"
   },
   {
+    "name": "Ramp",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
+    "status": "Stable",
+    "summary": "Ramp[x]",
+    "url": "documentation/elementary-functions/Ramp/"
+  },
+  {
     "name": "RandomChoice",
     "category": "Random Number Generation",
     "slug": "random-number-generation",
@@ -4150,6 +4374,22 @@
     "status": "Stable",
     "summary": "Range[n]",
     "url": "documentation/lists-and-iteration/Range/"
+  },
+  {
+    "name": "RankedMax",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "RankedMax[list, n]",
+    "url": "documentation/structural-manipulation/RankedMax/"
+  },
+  {
+    "name": "RankedMin",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "RankedMin[list, n]",
+    "url": "documentation/structural-manipulation/RankedMin/"
   },
   {
     "name": "RatCanonPrototype",
@@ -4384,6 +4624,14 @@
     "url": "documentation/functional-programming/ReverseSortBy/"
   },
   {
+    "name": "Riffle",
+    "category": "Lists and Iteration",
+    "slug": "lists-and-iteration",
+    "status": "Stable",
+    "summary": "Riffle[list, x]",
+    "url": "documentation/lists-and-iteration/Riffle/"
+  },
+  {
     "name": "Root",
     "category": "Solutions of Equations",
     "slug": "solutions-of-equations",
@@ -4459,7 +4707,7 @@
     "name": "RuleDelayed",
     "category": "Assignment and Rules",
     "slug": "assignment-and-rules",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "lhs :> rhs or RuleDelayed[lhs, rhs]",
     "url": "documentation/assignment-and-rules/RuleDelayed/"
   },
@@ -4696,6 +4944,14 @@
     "url": "documentation/special-functions/SinhIntegral/"
   },
   {
+    "name": "Skewness",
+    "category": "Statistics",
+    "slug": "statistics",
+    "status": "Stable",
+    "summary": "Skewness[data]",
+    "url": "documentation/statistics/Skewness/"
+  },
+  {
     "name": "Slot",
     "category": "Functional Programming",
     "slug": "functional-programming",
@@ -4768,6 +5024,14 @@
     "url": "documentation/structural-manipulation/Split/"
   },
   {
+    "name": "SplitBy",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "SplitBy[list, f]",
+    "url": "documentation/other-advanced/SplitBy/"
+  },
+  {
     "name": "Sqrt",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -4811,7 +5075,7 @@
     "name": "StreamPlot",
     "category": "Graphics",
     "slug": "graphics",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]",
     "url": "documentation/graphics/StreamPlot/"
   },
@@ -4824,12 +5088,36 @@
     "url": "documentation/string-operations/StringCases/"
   },
   {
+    "name": "StringContainsQ",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringContainsQ[\"string\", patt]",
+    "url": "documentation/string-operations/StringContainsQ/"
+  },
+  {
+    "name": "StringCount",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringCount[\"string\", \"sub\"]",
+    "url": "documentation/string-operations/StringCount/"
+  },
+  {
     "name": "StringDrop",
     "category": "String Operations",
     "slug": "string-operations",
     "status": "Stable",
     "summary": "StringDrop[\"string\", n]",
     "url": "documentation/string-operations/StringDrop/"
+  },
+  {
+    "name": "StringEndsQ",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringEndsQ[\"string\", patt]",
+    "url": "documentation/string-operations/StringEndsQ/"
   },
   {
     "name": "StringExpression",
@@ -4846,6 +5134,14 @@
     "status": "Stable",
     "summary": "StringExtract[\"string\", n]",
     "url": "documentation/string-operations/StringExtract/"
+  },
+  {
+    "name": "StringFreeQ",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringFreeQ[\"string\", patt]",
+    "url": "documentation/string-operations/StringFreeQ/"
   },
   {
     "name": "StringInsert",
@@ -4968,6 +5264,14 @@
     "url": "documentation/string-operations/StringSplit/"
   },
   {
+    "name": "StringStartsQ",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringStartsQ[\"string\", patt]",
+    "url": "documentation/string-operations/StringStartsQ/"
+  },
+  {
     "name": "StringTake",
     "category": "String Operations",
     "slug": "string-operations",
@@ -4992,6 +5296,14 @@
     "url": "documentation/other-advanced/StronglyConnectedComponents/"
   },
   {
+    "name": "Subdivide",
+    "category": "Lists and Iteration",
+    "slug": "lists-and-iteration",
+    "status": "Stable",
+    "summary": "Subdivide[n]",
+    "url": "documentation/lists-and-iteration/Subdivide/"
+  },
+  {
     "name": "SubresultantPolynomialRemainders",
     "category": "Calculus",
     "slug": "calculus",
@@ -5014,6 +5326,14 @@
     "status": "Stable",
     "summary": "Subresultants[poly1, poly2, var]",
     "url": "documentation/algebra/Subresultants/"
+  },
+  {
+    "name": "Subsets",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "Subsets[list]",
+    "url": "documentation/other-advanced/Subsets/"
   },
   {
     "name": "Subtract",
@@ -5192,6 +5512,14 @@
     "url": "documentation/arithmetic/Times/"
   },
   {
+    "name": "TimesBy",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "TimesBy[x, dx] or x *= dx",
+    "url": "documentation/assignment-and-rules/TimesBy/"
+  },
+  {
     "name": "Timing",
     "category": "Time and Date",
     "slug": "time-and-date",
@@ -5206,6 +5534,22 @@
     "status": "Stable",
     "summary": "ToExpression[input]",
     "url": "documentation/expression-information/ToExpression/"
+  },
+  {
+    "name": "ToNDArray",
+    "category": "Packed arrays",
+    "slug": "packed-arrays",
+    "status": "Stable",
+    "summary": "ToNDArray[list] returns list stored as a dense machine-precision buffer. The result is still a List -- same Head, same printed form, same elements -- but NDArrayQ gives True for it. ToNDArray[list, DataType -> \"float64\"] forces the element type. Returns list unchanged when it is not rectangular, is empty, or holds anything other than uniformly Integer or uniformly Real machine values. Unlike automatic packing it ignores the size threshold.",
+    "url": "documentation/packed-arrays/ToNDArray/"
+  },
+  {
+    "name": "ToPackedArray",
+    "category": "Packed arrays",
+    "slug": "packed-arrays",
+    "status": "Stable",
+    "summary": "ToPackedArray[list] is ToNDArray[list]: it returns list stored as a dense machine-precision buffer. The result is still a List -- same Head, same printed form, same elements -- but NDArrayQ gives True for it. Provided under Mathematica's name for the same operation; see ToNDArray.",
+    "url": "documentation/packed-arrays/ToPackedArray/"
   },
   {
     "name": "ToRadicals",
@@ -5451,7 +5795,7 @@
     "name": "VectorPlot",
     "category": "Graphics",
     "slug": "graphics",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "VectorPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]",
     "url": "documentation/graphics/VectorPlot/"
   },

@@ -26,10 +26,10 @@ All examples below are verified against the current Mathilda build.
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomChoice[{a, b, c, d, e}]
-Out[1]= b
+Out[1]= e
 
 In[2]:= SeedRandom[42]; RandomChoice[{a, b, c}, 5]
-Out[2]= {b, b, b, a, b}
+Out[2]= {c, a, c, c, c}
 
 In[3]:= SeedRandom[42]; Dimensions[RandomChoice[{1, 2, 3}, {3, 4}]]
 Out[3]= {3, 4}

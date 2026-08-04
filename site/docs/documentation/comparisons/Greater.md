@@ -10,6 +10,7 @@ x > y or Greater[x, y]
     yields True if x is strictly greater than y on numeric inputs,
     False if strictly less or equal, otherwise unevaluated.
 Chained forms become Inequality.
+Per IEEE 754, an Indeterminate argument gives False.
 ```
 
 ## Examples

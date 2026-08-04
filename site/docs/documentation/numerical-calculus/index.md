@@ -1,8 +1,9 @@
 # Numerical Calculus
 
-9 built-in function(s) in this category.
+10 built-in function(s) in this category.
 
 - [`ND`](ND.md) — ND[expr, x, x0]  _(Stable)_
+- [`NDSolve`](NDSolve.md) — NDSolve[eqns, u, {x, xmin, xmax}]  _(Stable)_
 - [`NIntegrate`](NIntegrate.md) — NIntegrate[f, {x, xmin, xmax}]  _(Stable)_
 - [`NLimit`](NLimit.md) — NLimit[expr, z -> z0]  _(Stable)_
 - [`NProduct`](NProduct.md) — NProduct[f, {i, imin, imax}]  _(Stable)_

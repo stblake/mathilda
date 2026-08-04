@@ -35,6 +35,7 @@ _No verified examples yet for this function._
 - Employs exact dynamic iteration identical to `Table` but discards the evaluated results, returning `Null`.
 - Supports explicit break states (`Return`, `Break`, `Continue`, `Throw`, `Abort`, `Quit`).
 - Can execute an infinite loop using `Do[expr, Infinity]`.
+- A body that is machine-numeric throughout takes an automatic fast path
 
 **Attributes:** `HoldAll`, `Protected`.
 

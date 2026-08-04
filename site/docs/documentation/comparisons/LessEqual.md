@@ -9,6 +9,7 @@
 x <= y or LessEqual[x, y]
     yields True if x is less than or equal to y on numeric inputs,
     False if strictly greater, otherwise unevaluated.
+Per IEEE 754, an Indeterminate argument gives False.
 ```
 
 ## Examples
