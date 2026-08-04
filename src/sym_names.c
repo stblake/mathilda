@@ -770,6 +770,8 @@ const char* SYM_StreamPoints = NULL;
 const char* SYM_StreamScale = NULL;
 const char* SYM_StreamStyle = NULL;
 const char* SYM_StreamColorFunction = NULL;
+const char* SYM_StreamAnimate = NULL;
+const char* SYM_AnimatedStreamline = NULL;
 const char* SYM_StreamColorBar = NULL;
 const char* SYM_BarChartLabels = NULL;
 const char* SYM_ScalingFunctions = NULL;
@@ -801,6 +803,9 @@ const char* SYM_AppearanceElements  = NULL;
 const char* SYM_DefaultDuration     = NULL;
 const char* SYM_ControlPlacement    = NULL;
 const char* SYM_RefreshRate         = NULL;
+
+const char* SYM_Manipulate          = NULL;
+
 const char* SYM_Forward             = NULL;
 const char* SYM_Backward            = NULL;
 const char* SYM_ForwardBackward     = NULL;
@@ -1588,6 +1593,8 @@ void sym_names_init(void) {
     SYM_StreamScale                = intern_symbol("StreamScale");
     SYM_StreamStyle                = intern_symbol("StreamStyle");
     SYM_StreamColorFunction        = intern_symbol("StreamColorFunction");
+    SYM_StreamAnimate              = intern_symbol("StreamAnimate");
+    SYM_AnimatedStreamline         = intern_symbol("AnimatedStreamline");
     SYM_StreamColorBar             = intern_symbol("$StreamColorBar");
     SYM_BarChartLabels             = intern_symbol("$BarChartLabels");
     SYM_ScalingFunctions           = intern_symbol("ScalingFunctions");
@@ -1619,6 +1626,9 @@ void sym_names_init(void) {
     SYM_DefaultDuration            = intern_symbol("DefaultDuration");
     SYM_ControlPlacement           = intern_symbol("ControlPlacement");
     SYM_RefreshRate                = intern_symbol("RefreshRate");
+
+    SYM_Manipulate                 = intern_symbol("Manipulate");
+
     SYM_Forward                    = intern_symbol("Forward");
     SYM_Backward                   = intern_symbol("Backward");
     SYM_ForwardBackward            = intern_symbol("ForwardBackward");

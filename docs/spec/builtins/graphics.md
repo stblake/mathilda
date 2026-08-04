@@ -32,6 +32,7 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 | Function | Purpose | Key options |
 |----------|---------|-------------|
 | [`Animate`](#animate) | Animate any expression over a parameter range in an interactive window | `AnimationDirection`, `AnimationRate`, `AnimationRepetitions`, `AnimationRunning`, `AppearanceElements`, `DefaultDuration`, `ControlPlacement`, `RefreshRate` |
+| [`Manipulate`](#manipulate) | Interactively vary one or more parameters (sliders and discrete button sets) driving any expression | — |
 
 ### 2D plotters
 
@@ -45,7 +46,7 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 | [`DensityPlot`](#densityplot) | Heatmap of `f(x,y)` | `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends`, `ScalingFunctions` |
 | [`ComplexPlot`](#complexplot) | Domain-colouring of a complex function `f(z)` | `PlotPoints`, `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends` |
 | [`VectorPlot`](#vectorplot) | Arrow grid for a 2D vector field | `VectorPoints`, `VectorScale`, `VectorStyle`, `ColorFunction`, `RegionFunction`, `ScalingFunctions` |
-| [`StreamPlot`](#streamplot) | RK4-integrated streamlines of a 2D vector field | `StreamPoints`, `StreamScale`, `StreamStyle`, `ColorFunction`, `RegionFunction`, `ScalingFunctions` |
+| [`StreamPlot`](#streamplot) | RK4-integrated streamlines of a 2D vector field | `StreamPoints`, `StreamScale`, `StreamStyle`, `ColorFunction`, `RegionFunction`, `ScalingFunctions`, `StreamAnimate` |
 | [`BarChart`](#barchart) | Vertical bar chart for categorical / grouped data | `ChartStyle`, `ChartLabels`, `BarSpacing` |
 | [`Histogram`](#histogram) | Frequency histogram with flexible bin specs | `ChartStyle`, `BarSpacing`; bin: `k`, `{step}`, `{min,max,step}` |
 
@@ -447,6 +448,46 @@ note at the top). The window blocks the REPL until closed.
 - `Show[graphics, opt -> val, ...]`: merges the given options into
   `graphics`'s option list (a later/explicit option overrides one already
   present) and returns the merged `Graphics[...]`.
+
+### Interactive window controls
+
+These are toolbar/mouse-driven window behaviors, not `Graphics[...]` options
+— there is nothing to pass at the Mathematica-syntax level, they're just
+there once the window is open. Available in the standalone `Show`/`Plot`/
+`Plot3D` windows; a `Show`/`Plot`/`Plot3D` result embedded in `Animate`/
+`Manipulate` gets the always-on items (hover trace, animated streamlines)
+but not the toolbar-toggled ones (no toolbar exists in the embedded content
+region — `Animate`/`Manipulate`'s own controls occupy that space instead).
+
+**2D** (`Show`/`Plot`/`ListPlot`/... windows):
+- **Hover trace** (always on) — mousing over a curve shows a small marker
+  exactly on the curve (linearly interpolated between the bracketing
+  samples, not snapped to the nearest one) plus an `(x, y)` readout.
+  Suppressed while panning/box-zooming or hovering the toolbar.
+- **Toolbar**: save-as-PNG, box-zoom, pan, zoom in/out, autoscale-to-fit,
+  **annotate** (toggle — see below), reset, close.
+- **Annotate** (toolbar toggle, off by default) — marks every detected root
+  (`y = 0` crossing), local extremum, and inflection point on every plotted
+  curve with a small dot and a short tag (`root`/`max`/`min`/`infl`).
+  Detected purely numerically from the rendered sample points (there is no
+  symbolic function available at render time), so it works on any `Line[...]`
+  content, not just `Plot[]` output.
+- Keyboard: `Q`/`E` rotate, `R` reset axes, `Esc` close.
+
+**3D** (`Show`/`Plot3D`/`ParametricPlot3D`/... windows):
+- **Hover trace** (always on) — mousing over the surface shows a small
+  marker at the exact picked point (ray-cast against the rendered mesh) plus
+  an `(x, y, z)` readout. Suppressed while orbiting/panning or hovering the
+  toolbar.
+- **Toolbar**: save-as-PNG, **slice** (toggle — see below), reset view, close.
+- **Cross-section slicing** (toolbar toggle) — an axis-aligned plane (choose
+  X/Y/Z) cuts through the surface; a slider moves it along that axis. Shows
+  the cutting plane and the intersection curve directly on the surface in
+  3D, *and* a small flattened "CT-scan" inset panel in the corner showing
+  just the 2D cross-section. A genuinely new capability — Mathematica has no
+  equivalent.
+- Mouse: drag to orbit, scroll to zoom, right/middle-drag to pan. Keyboard:
+  `R` reset view, `S` save PNG, `Esc` close.
 
 Rendering options (read by `Show`/`Plot`'s renderer, stored as trailing
 `Rule[...]` arguments on the `Graphics[...]` object):
@@ -881,6 +922,17 @@ end), and returns a `Graphics[...]` object (auto-displayed).
 
 `HoldAll`, `Protected`. Options: see **Feature summary** above. Defaults: `Axes -> True`, `AspectRatio -> 1`. `ColorFunction` is an alias for `StreamColorFunction`.
 
+**`StreamAnimate -> True | False`** (default `False`): when `True`, each
+streamline is emitted as `AnimatedStreamline[...]` instead of `Line[...]`.
+The shape draws identically either way, but in an interactive window (a
+`Show`/`StreamPlot` window, or embedded in `Animate`/`Manipulate`) a few
+particle dots additionally flow along each streamline in real time,
+following the field's actual downstream direction — a genuinely new
+capability, not a gap-fill: Mathematica's `StreamPlot` has no equivalent.
+No window-opening call is needed for the animation itself; the interactive
+renderer already redraws continuously, so the dots animate for free the
+moment the result is shown.
+
 ```mathematica
 StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}]
 StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
@@ -920,6 +972,10 @@ Out[8]= -Graphics-
 (* --- Arrow primitive directly --- *)
 In[9]:= Graphics[{Blue, Arrow[{{0,0}, {1,0}, {1,1}}]}]
 Out[9]= -Graphics-
+
+(* --- Animated flow particles --- *)
+In[10]:= StreamPlot[{-y, x}, {x, -2, 2}, {y, -2, 2}, StreamAnimate -> True]
+Out[10]= -Graphics-   (* dots visibly orbit along each circular streamline *)
 ```
 
 ## ContourPlot
@@ -1220,6 +1276,15 @@ Returns `Null` once the window is closed (the animation window is the output).
 
 **Keyboard shortcuts:** `Space` (play/pause), `←`/`→` (step 2%), `R` (reset), `Esc` (close).
 
+**3D content.** `expr` may also evaluate to a `Graphics3D[...]`/`Plot3D[...]` result:
+the content area gets its own persistent orbit camera on top of the playback
+controls — drag to rotate, scroll to zoom, right-drag (or middle-drag) to pan.
+The camera view survives across frames independently of the animated data, and
+`R`/the toolbar's Reset button reset both the animation phase and the camera view.
+The 2D and 3D **hover trace** cursor (see `Show`'s "Interactive window
+controls") is also active here, and a `StreamPlot[..., StreamAnimate -> True]`
+result animates its flow particles with no extra wiring needed.
+
 **Examples:**
 
 ```mathematica
@@ -1249,6 +1314,80 @@ Out[4]= Null
 In[5]:= Animate[Plot[Exp[-t x^2], {x, -3, 3}], {t, 0.1, 5},
           ControlPlacement -> Top,
           AppearanceElements -> {"PlayPauseButton", "ProgressSlider"}]
+Out[5]= Null
+
+(* 3D content -- orbit camera plus playback controls *)
+In[6]:= Animate[Plot3D[Sin[x + t] Cos[y], {x, -3, 3}, {y, -3, 3}], {t, 0, 2 Pi}]
+Out[6]= Null
+```
+
+---
+
+## Manipulate
+
+```
+Manipulate[expr, {u, umin, umax}, ...]
+```
+
+Opens an interactive window with one control row per variable and re-evaluates
+`expr` with each variable bound to its current value whenever a control
+changes. `Manipulate` is `HoldAll` and `Protected`: `expr` is not evaluated
+until the first frame is drawn. Unlike `Animate`, every control is
+independently user-driven from the first frame — there is no animation phase
+or playback transport.
+
+Returns `Null` once the window is closed (the interactive window is the
+output).
+
+**Control specs** (any number of them, one row each):
+
+| Form | Meaning |
+|------|---------|
+| `{u, umin, umax}` | continuous slider, default value `umin` |
+| `{u, umin, umax, du}` | continuous slider with step `du` (snaps) |
+| `{{u, u0}, umin, umax}` | continuous slider, explicit default `u0` |
+| `{{u, u0}, umin, umax, du}` | continuous slider, explicit default + step |
+| `{u, {v1, v2, ...}}` | discrete button set, default `v1` |
+| `{{u, u0}, {v1, v2, ...}}` | discrete button set, explicit default `u0` |
+
+Click-drag a slider handle, or click a button in a discrete row, to change
+that control's value — other controls are unaffected. A **Reset** button in
+the footer restores every control to its default. `Esc` closes the window.
+
+**3D content.** `expr` may also evaluate to a `Graphics3D[...]`/`Plot3D[...]`
+result: the content area gets its own persistent orbit camera — drag to
+rotate, scroll to zoom, right-drag (or middle-drag) to pan — independent of
+the controls below it. The camera view survives across frames even as
+controls reshape the surface, and the **Reset** button restores both the
+control defaults and the camera view. The 2D and 3D **hover trace** cursor
+(see `Show`'s "Interactive window controls") is also active here, and a
+`StreamPlot[..., StreamAnimate -> True]` result animates its flow particles
+with no extra wiring needed.
+
+**Examples:**
+
+```mathematica
+(* Continuous control *)
+In[1]:= Manipulate[Plot[Sin[n x], {x, 0, 2 Pi}], {n, 1, 5}]
+Out[1]= Null
+
+(* Discrete control -- switch between functions *)
+In[2]:= Manipulate[Plot[f, {x, -5, 5}], {f, {Sin[x], Cos[x], x^2}}]
+Out[2]= Null
+
+(* Explicit default + step *)
+In[3]:= Manipulate[
+          Graphics[Disk[{0, 0}, r], PlotRange -> {{-5, 5}, {-5, 5}}],
+          {{r, 2}, 0.5, 5, 0.25}]
+Out[3]= Null
+
+(* Multiple controls, mixing continuous and discrete *)
+In[4]:= Manipulate[Plot[a Sin[x] + b, {x, 0, 2 Pi}],
+          {a, 0, 3}, {b, {-1, 0, 1}}]
+Out[4]= Null
+
+(* 3D content -- orbit camera plus the usual control row *)
+In[5]:= Manipulate[Plot3D[Sin[x + n] Cos[y], {x, -3, 3}, {y, -3, 3}], {n, 0, 3}]
 Out[5]= Null
 ```
 ```

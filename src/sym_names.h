@@ -790,6 +790,8 @@ extern const char* SYM_StreamPoints;   /* seed density/placement */
 extern const char* SYM_StreamScale;    /* stream length control */
 extern const char* SYM_StreamStyle;    /* style directives for streams */
 extern const char* SYM_StreamColorFunction; /* color by position/speed */
+extern const char* SYM_StreamAnimate;  /* True = emit AnimatedStreamline instead of Line */
+extern const char* SYM_AnimatedStreamline; /* AnimatedStreamline[{pts...}] primitive */
 extern const char* SYM_StreamColorBar;      /* internal: color-scale bar metadata */
 extern const char* SYM_BarChartLabels;     /* internal: screen-space bar category labels */
 extern const char* SYM_ScalingFunctions;  /* axis-transform option                        */
@@ -832,6 +834,9 @@ extern const char* SYM_AppearanceElements;   /* list of control elements, All, o
 extern const char* SYM_DefaultDuration;      /* seconds per full loop */
 extern const char* SYM_ControlPlacement;     /* Bottom | Top | Left | Right */
 extern const char* SYM_RefreshRate;          /* target display FPS */
+
+/* Manipulate[expr, {u, umin, umax}, ...] */
+extern const char* SYM_Manipulate;
 /* AnimationDirection values */
 extern const char* SYM_Forward;
 extern const char* SYM_Backward;

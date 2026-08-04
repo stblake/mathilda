@@ -683,6 +683,7 @@ set(COMMON_SRC
     ../src/graphics/polarplot.c
     ../src/graphics/barchart.c
     ../src/graphics/animate.c
+    ../src/graphics/manipulate.c
     ../src/graphics/listplot.c
     ../src/graphics/show.c
     ../src/graph/graph.c
@@ -2390,6 +2391,14 @@ add_test(NAME graphics_tests COMMAND graphics_tests)
 add_executable(plot3d_tests test_plot3d.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(plot3d_tests PRIVATE ../src ../src/graphics)
 add_test(NAME plot3d_tests COMMAND plot3d_tests)
+
+add_executable(manipulate_tests test_manipulate.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(manipulate_tests PRIVATE ../src ../src/graphics)
+add_test(NAME manipulate_tests COMMAND manipulate_tests)
+
+add_executable(streamplot_tests test_streamplot.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(streamplot_tests PRIVATE ../src ../src/graphics)
+add_test(NAME streamplot_tests COMMAND streamplot_tests)
 
 add_executable(parametricplot_tests test_parametricplot.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(parametricplot_tests m)

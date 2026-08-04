@@ -31,6 +31,7 @@
 #include "animate.h"
 #include "show.h"
 #include "render.h"
+#include "render3d.h"
 #include "sym_names.h"
 #include "symtab.h"
 #include "eval.h"
@@ -390,11 +391,17 @@ static double slider_frac_from_mouse(float mx, int win_w) {
 /* Main animation loop                                                  */
 /* ------------------------------------------------------------------ */
 
-static bool is_graphics_expr(const Expr* e) {
+static bool is_graphics2d_expr(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && (e->data.function.head->data.symbol.name == SYM_Graphics
-            || e->data.function.head->data.symbol.name == SYM_Graphics3D)
+        && e->data.function.head->data.symbol.name == SYM_Graphics
+        && e->data.function.arg_count >= 1;
+}
+
+static bool is_graphics3d_expr(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Graphics3D
         && e->data.function.arg_count >= 1;
 }
 
@@ -443,6 +450,7 @@ static void graphics_animate(const Expr* body,
     int  drag_slider = -1;   /* which slider is being dragged (-1 = none) */
 
     Expr* frame_expr = NULL;
+    Graphics3DEmbedState* cam3d = graphics3d_embed_state_new();
 
     /* Button positions (recomputed each frame but constant during a frame). */
     float btn_y    = 0.0f;
@@ -562,6 +570,7 @@ static void graphics_animate(const Expr* body,
                 double span = iters[k].tmax - iters[k].tmin;
                 iters[k].t  = iters[k].tmin + phi * span;
             }
+            graphics3d_embed_state_reset_view(cam3d);
         }
         if (IsKeyPressed(KEY_LEFT)) {
             running = false;
@@ -610,6 +619,7 @@ static void graphics_animate(const Expr* body,
                         double span = iters[k].tmax - iters[k].tmin;
                         iters[k].t  = iters[k].tmin + phi * span;
                     }
+                    graphics3d_embed_state_reset_view(cam3d);
                 }
                 if (opts.show_step_buttons && btn_hit(mouse, step_l_x, btn_y, BTN_SIZE)) {
                     running = false;
@@ -667,9 +677,13 @@ static void graphics_animate(const Expr* body,
         ClearBackground((Color){240,240,245,255});
 
         /* Content area */
-        if (frame_expr && is_graphics_expr(frame_expr)) {
+        bool is_3d = frame_expr && is_graphics3d_expr(frame_expr);
+        if (frame_expr && is_graphics2d_expr(frame_expr)) {
             graphics_render_in_region(frame_expr, 0.0f, content_y,
                                        (float)win_w, content_h);
+        } else if (is_3d) {
+            graphics3d_render_in_region(frame_expr, 0.0f, content_y,
+                                         (float)win_w, content_h, cam3d);
         } else if (frame_expr) {
             char* s = expr_to_string(frame_expr);
             if (s) { DrawText(s, 20, (int)(content_y + 20), 16, DARKGRAY); free(s); }
@@ -727,13 +741,17 @@ static void graphics_animate(const Expr* body,
 
         /* Help text */
         float help_y = btns_y + BTNS_ROW_H + 1.0f;
-        DrawText("Space: play/pause   \xE2\x86\x90/\xE2\x86\x92: step 2%   R: reset   Esc: close",
-                 4, (int)help_y, 10, (Color){130,130,140,255});
+        const char* help = is_3d
+            ? "Space: play/pause   \xE2\x86\x90/\xE2\x86\x92: step 2%   R: reset   Esc: close   "
+              "drag: rotate  scroll: zoom  right-drag: pan"
+            : "Space: play/pause   \xE2\x86\x90/\xE2\x86\x92: step 2%   R: reset   Esc: close";
+        DrawText(help, 4, (int)help_y, 10, (Color){130,130,140,255});
 
         EndDrawing();
     }
 
     if (frame_expr) { expr_free(frame_expr); frame_expr = NULL; }
+    graphics3d_embed_state_free(cam3d);
     CloseWindow();
 }
 

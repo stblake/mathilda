@@ -681,6 +681,189 @@ static void gather_ys(const Expr* node, double** buf, size_t* len, size_t* cap) 
     }
 }
 
+/* Hover trace cursor: given a single Line[] point-list run (world-space
+ * coordinates, i.e. post-ScalingFunctions, pre-yscale -- exactly what
+ * expr_point reads straight off the primitive), find the segment whose x
+ * range brackets `want_x` and linearly interpolate y there. This traces
+ * *along* the curve rather than snapping to the nearest sample point. */
+static bool trace_point_list(const Expr* pts_list, double want_x, double* out_y) {
+    size_t n = pts_list->data.function.arg_count;
+    double px = 0.0, py = 0.0;
+    bool have_prev = false;
+    for (size_t i = 0; i < n; i++) {
+        double x, y;
+        if (!expr_point(pts_list->data.function.args[i], &x, &y)) { have_prev = false; continue; }
+        if (have_prev) {
+            double lo = px < x ? px : x, hi = px < x ? x : px;
+            if (hi > lo && want_x >= lo && want_x <= hi) {
+                double f = (want_x - px) / (x - px);
+                *out_y = py + (y - py) * f;
+                return true;
+            }
+        }
+        px = x; py = y; have_prev = true;
+    }
+    return false;
+}
+
+/* Walk `node` (mirrors draw_primitive's/collect_slopes's List/Line
+ * traversal) and, among every Line[] run whose x-range brackets `want_x`,
+ * return the one whose interpolated y is closest to `want_y` -- i.e. the
+ * curve visually nearest the mouse when several overlap in x (a
+ * multi-function Plot[{f,g,...}]). */
+static bool trace_nearest_curve_point(const Expr* node, double want_x, double want_y,
+                                       double* out_y, bool* have_best, double* best_dy) {
+    if (!node || node->type != EXPR_FUNCTION) return false;
+    const Expr* h = node->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return false;
+    const char* name = h->data.symbol.name;
+    size_t n = node->data.function.arg_count;
+
+    if (name == SYM_List) {
+        for (size_t i = 0; i < n; i++)
+            trace_nearest_curve_point(node->data.function.args[i], want_x, want_y, out_y, have_best, best_dy);
+        return *have_best;
+    }
+    if (name == SYM_Line && n >= 1 && node->data.function.args[0]->type == EXPR_FUNCTION) {
+        const Expr* arg = node->data.function.args[0];
+        size_t m = arg->data.function.arg_count;
+        if (m > 0 && looks_like_point(arg->data.function.args[0])) {
+            double y;
+            if (trace_point_list(arg, want_x, &y)) {
+                double dy = fabs(y - want_y);
+                if (!*have_best || dy < *best_dy) { *have_best = true; *best_dy = dy; *out_y = y; }
+            }
+        } else {
+            for (size_t i = 0; i < m; i++) {
+                const Expr* sub = arg->data.function.args[i];
+                if (sub->type != EXPR_FUNCTION) continue;
+                double y;
+                if (trace_point_list(sub, want_x, &y)) {
+                    double dy = fabs(y - want_y);
+                    if (!*have_best || dy < *best_dy) { *have_best = true; *best_dy = dy; *out_y = y; }
+                }
+            }
+        }
+        return *have_best;
+    }
+    return *have_best;
+}
+
+/* Screen-position hover trace: converts `mouse` to world space via the
+ * active camera, finds the nearest on-curve point, and reports it back in
+ * world space (post-ScalingFunctions, pre-yscale -- ready to feed straight
+ * into DrawCircleV/DrawLineV inside BeginMode2D, or through
+ * GetWorldToScreen2D for a screen-space label). Returns false (leaving
+ * world_x/world_y untouched) when no curve brackets the cursor. */
+static bool hover_trace_find(const Expr* prims, Camera2D camera, double ysc,
+                              Vector2 mouse, double* world_x, double* world_y) {
+    Vector2 w = GetScreenToWorld2D(mouse, camera);
+    double want_x = w.x;
+    double want_y = (ysc > 0.0) ? (-w.y / ysc) : -w.y;
+    double traced_y = 0.0;
+    bool have_best = false;
+    double best_dy = 0.0;
+    if (!trace_nearest_curve_point(prims, want_x, want_y, &traced_y, &have_best, &best_dy))
+        return false;
+    *world_x = want_x;
+    *world_y = traced_y;
+    return true;
+}
+
+/* Auto-annotate: roots, local extrema, and inflection points, detected
+ * purely numerically from a Line[] run's already-rendered samples (there is
+ * no symbolic function available at render time -- see module doc). Each
+ * detection is recorded in render space (x, -y*ysc), the same space
+ * BeginMode2D draws in and GetWorldToScreen2D expects, so the caller can
+ * both plot a dot directly (inside BeginMode2D) and, from the same array,
+ * project a screen-space text label afterward (outside BeginMode2D) --
+ * mirroring how the hover-trace marker/label split works. */
+
+typedef struct { float x, y; const char* tag; Color col; } Annot;
+
+static void annot_push(Annot** buf, size_t* len, size_t* cap,
+                        float x, float y, const char* tag, Color col) {
+    if (*len == *cap) {
+        *cap = *cap ? *cap * 2 : 32;
+        *buf = (Annot*)realloc(*buf, sizeof(Annot) * (*cap));
+    }
+    Annot* a = &(*buf)[(*len)++];
+    a->x = x; a->y = y; a->tag = tag; a->col = col;
+}
+
+static void annotate_polyline(const Expr* pts_list, double ysc,
+                               Annot** buf, size_t* len, size_t* cap) {
+    size_t n = pts_list->data.function.arg_count;
+    if (n < 2) return;
+    double* xs = (double*)malloc(sizeof(double) * n);
+    double* ys = (double*)malloc(sizeof(double) * n);
+    size_t m = 0;
+    for (size_t i = 0; i < n; i++) {
+        double x, y;
+        if (expr_point(pts_list->data.function.args[i], &x, &y)) { xs[m] = x; ys[m] = y; m++; }
+    }
+    const Color root_col = { 20, 140, 20, 255 };
+    const Color max_col  = { 200, 40, 40, 255 };
+    const Color min_col  = { 40, 90, 200, 255 };
+    const Color infl_col = { 160, 100, 20, 255 };
+
+    /* Roots: consecutive samples with a y sign change, x interpolated at y=0. */
+    for (size_t i = 0; i + 1 < m; i++) {
+        bool cross = (ys[i] <= 0.0 && ys[i + 1] > 0.0) || (ys[i] >= 0.0 && ys[i + 1] < 0.0);
+        if (cross && ys[i] != ys[i + 1]) {
+            double f = -ys[i] / (ys[i + 1] - ys[i]);
+            double rx = xs[i] + (xs[i + 1] - xs[i]) * f;
+            annot_push(buf, len, cap, (float)rx, 0.0f, "root", root_col);
+        }
+    }
+    /* Local extrema: consecutive slope-sign changes. */
+    for (size_t i = 1; i + 1 < m; i++) {
+        double s1 = ys[i] - ys[i - 1], s2 = ys[i + 1] - ys[i];
+        if (s1 == 0.0 || s2 == 0.0) continue;
+        bool sign1 = s1 > 0.0, sign2 = s2 > 0.0;
+        if (sign1 != sign2) {
+            bool is_max = sign1 && !sign2;
+            annot_push(buf, len, cap, (float)xs[i], (float)(-ys[i] * ysc),
+                       is_max ? "max" : "min", is_max ? max_col : min_col);
+        }
+    }
+    /* Inflection points: sign changes in the discrete second difference. */
+    for (size_t i = 2; i + 1 < m; i++) {
+        double d2a = (ys[i] - ys[i - 1]) - (ys[i - 1] - ys[i - 2]);
+        double d2b = (ys[i + 1] - ys[i]) - (ys[i] - ys[i - 1]);
+        if (d2a == 0.0 || d2b == 0.0) continue;
+        if ((d2a > 0.0) != (d2b > 0.0))
+            annot_push(buf, len, cap, (float)xs[i], (float)(-ys[i] * ysc), "infl", infl_col);
+    }
+    free(xs); free(ys);
+}
+
+static void collect_annotations(const Expr* node, double ysc,
+                                 Annot** buf, size_t* len, size_t* cap) {
+    if (!node || node->type != EXPR_FUNCTION) return;
+    const Expr* h = node->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return;
+    const char* name = h->data.symbol.name;
+    size_t n = node->data.function.arg_count;
+
+    if (name == SYM_List) {
+        for (size_t i = 0; i < n; i++) collect_annotations(node->data.function.args[i], ysc, buf, len, cap);
+        return;
+    }
+    if (name == SYM_Line && n >= 1 && node->data.function.args[0]->type == EXPR_FUNCTION) {
+        const Expr* arg = node->data.function.args[0];
+        size_t m = arg->data.function.arg_count;
+        if (m > 0 && looks_like_point(arg->data.function.args[0])) {
+            annotate_polyline(arg, ysc, buf, len, cap);
+        } else {
+            for (size_t i = 0; i < m; i++) {
+                const Expr* sub = arg->data.function.args[i];
+                if (sub->type == EXPR_FUNCTION) annotate_polyline(sub, ysc, buf, len, cap);
+            }
+        }
+    }
+}
+
 /* Total number of dots a scatter renders: every coordinate inside a Point[...]
  * primitive (the single-point Point[{x,y}] and the cloud Point[{{x,y},...}]
  * shapes draw_primitive handles), recursing through List wrappers. Mirrors the
@@ -740,6 +923,58 @@ static void draw_polyline(const Expr* pts_list, const DrawState* state) {
     }
 }
 
+/* Draw a handful of dots walking `pts_list` (a List of {x,y} points, same
+ * shape draw_polyline takes) by arc length, phase-driven by GetTime() --
+ * see the SYM_AnimatedStreamline case in draw_primitive. Recomputes arc
+ * length fresh every call; cheap (O(points-per-streamline)) and consistent
+ * with the rest of this render pass never caching across frames. */
+static void draw_stream_particles(const Expr* pts_list, const DrawState* state) {
+    size_t m = pts_list->data.function.arg_count;
+    if (m < 2) return;
+
+    Vector2* rp = (Vector2*)malloc(sizeof(Vector2) * m);
+    size_t rn = 0;
+    for (size_t i = 0; i < m; i++) {
+        double x, y;
+        if (expr_point(pts_list->data.function.args[i], &x, &y))
+            rp[rn++] = (Vector2){ (float)x, (float)(-y * state->yscale) };
+    }
+    if (rn < 2) { free(rp); return; }
+
+    float* cum = (float*)malloc(sizeof(float) * rn);
+    cum[0] = 0.0f;
+    for (size_t i = 1; i < rn; i++) {
+        float dx = rp[i].x - rp[i - 1].x, dy = rp[i].y - rp[i - 1].y;
+        cum[i] = cum[i - 1] + sqrtf(dx * dx + dy * dy);
+    }
+    float total = cum[rn - 1];
+    if (total > 1e-9f) {
+        const int K = 4;              /* particles per streamline */
+        const double speed = 0.15;    /* full traversals per second */
+        double t = GetTime();
+        float radius = (state->point_size > 0.001f) ? state->point_size * 1.4f
+                                                      : total * 0.01f;
+        for (int k = 0; k < K; k++) {
+            double phase = fmod(t * speed + (double)k / (double)K, 1.0);
+            float target = (float)phase * total;
+            size_t seg = 0;
+            while (seg + 1 < rn && cum[seg + 1] < target) seg++;
+            Vector2 p;
+            if (seg + 1 < rn) {
+                float span = cum[seg + 1] - cum[seg];
+                float f = (span > 1e-9f) ? (target - cum[seg]) / span : 0.0f;
+                p.x = rp[seg].x + (rp[seg + 1].x - rp[seg].x) * f;
+                p.y = rp[seg].y + (rp[seg + 1].y - rp[seg].y) * f;
+            } else {
+                p = rp[rn - 1];
+            }
+            DrawCircleV(p, radius, state->color);
+        }
+    }
+    free(cum);
+    free(rp);
+}
+
 static void draw_primitive(const Expr* node, DrawState* state) {
     if (!node || node->type != EXPR_FUNCTION) return;
     const Expr* h = node->data.function.head;
@@ -795,6 +1030,18 @@ static void draw_primitive(const Expr* node, DrawState* state) {
                 if (sub->type == EXPR_FUNCTION) draw_polyline(sub, state);
             }
         }
+        return;
+    }
+    if (name == SYM_AnimatedStreamline && n >= 1 && node->data.function.args[0]->type == EXPR_FUNCTION) {
+        /* AnimatedStreamline[{{x1,y1},...,{xn,yn}}]: draw the shaft exactly
+         * like Line[...], then walk it with a few particle dots advancing
+         * by arc length over time. GetTime() (wall clock since InitWindow)
+         * drives the phase directly -- no per-primitive persistent state,
+         * consistent with this whole draw pass being recomputed every
+         * frame from scratch. */
+        const Expr* arg = node->data.function.args[0];
+        draw_polyline(arg, state);
+        draw_stream_particles(arg, state);
         return;
     }
     if (name == SYM_Rectangle && n >= 2) {
@@ -1426,7 +1673,7 @@ typedef enum { TOOL_PAN = 0, TOOL_ZOOM = 1 } ToolMode;
 
 typedef enum {
     TB_SAVE = 0, TB_ZOOMBOX, TB_PAN, TB_ZOOMIN, TB_ZOOMOUT,
-    TB_AUTOSCALE, TB_RESET, TB_CLOSE, TB_COUNT
+    TB_AUTOSCALE, TB_ANNOTATE, TB_RESET, TB_CLOSE, TB_COUNT
 } ToolButton;
 
 #define TB_BTN    30.0f   /* button edge (px)            */
@@ -1455,6 +1702,7 @@ static const char* tb_tip(int k) {
         case TB_ZOOMIN:    return "Zoom in";
         case TB_ZOOMOUT:   return "Zoom out";
         case TB_AUTOSCALE: return "Autoscale to fit";
+        case TB_ANNOTATE:  return "Toggle roots/extrema/inflection markers";
         case TB_RESET:     return "Reset axes";
         case TB_CLOSE:     return "Close window";
         default:           return "";
@@ -1576,6 +1824,18 @@ static void icon_home(Rectangle b, Color c) {            /* house */
     stroke((Vector2){ dlx, dY }, (Vector2){ drx, dY }, c);
 }
 
+static void icon_target(Rectangle b, Color c) {          /* ring + dot: "mark points" */
+    Vector2 ctr = { b.x + b.width * 0.5f, b.y + b.height * 0.5f };
+    float r = b.width * 0.36f;
+    DrawRing(ctr, r - TB_LW * 0.5f, r + TB_LW * 0.5f, 0.0f, 360.0f, 32, c);
+    DrawCircleV(ctr, b.width * 0.10f, c);
+    float t = r * 1.35f;
+    stroke((Vector2){ ctr.x - t, ctr.y }, (Vector2){ ctr.x - r * 1.05f, ctr.y }, c);
+    stroke((Vector2){ ctr.x + r * 1.05f, ctr.y }, (Vector2){ ctr.x + t, ctr.y }, c);
+    stroke((Vector2){ ctr.x, ctr.y - t }, (Vector2){ ctr.x, ctr.y - r * 1.05f }, c);
+    stroke((Vector2){ ctr.x, ctr.y + r * 1.05f }, (Vector2){ ctr.x, ctr.y + t }, c);
+}
+
 static void icon_close(Rectangle b, Color c) {           /* an X */
     float m = b.width * 0.18f;
     stroke((Vector2){ b.x + m, b.y + m },
@@ -1585,8 +1845,9 @@ static void icon_close(Rectangle b, Color c) {           /* an X */
 }
 
 /* Draw the whole toolbar. `tool` highlights the active mode button;
- * `hover` (a button index or -1) gets a hover background + tooltip. */
-static void draw_toolbar(int win_w, int tool, int hover) {
+ * `hover` (a button index or -1) gets a hover background + tooltip;
+ * `annotate` highlights the roots/extrema/inflection toggle when on. */
+static void draw_toolbar(int win_w, int tool, int hover, bool annotate) {
     float total = TB_COUNT * TB_BTN + (TB_COUNT - 1) * TB_GAP;
     Rectangle panel = { (float)win_w - TB_MARGIN - total - 5.0f, TB_MARGIN - 5.0f,
                         total + 10.0f, TB_BTN + 10.0f };
@@ -1597,7 +1858,8 @@ static void draw_toolbar(int win_w, int tool, int hover) {
     const Color icol = { 90, 90, 90, 255 };
     for (int i = 0; i < TB_COUNT; i++) {
         Rectangle r = tb_rect(i, win_w);
-        bool active = (i == TB_PAN && tool == TOOL_PAN) || (i == TB_ZOOMBOX && tool == TOOL_ZOOM);
+        bool active = (i == TB_PAN && tool == TOOL_PAN) || (i == TB_ZOOMBOX && tool == TOOL_ZOOM)
+                    || (i == TB_ANNOTATE && annotate);
         /* Close gets a red hover tint to flag its destructive action; every
          * other button shares the neutral blue-gray highlight. */
         if (i == hover) {
@@ -1613,6 +1875,7 @@ static void draw_toolbar(int win_w, int tool, int hover) {
             case TB_ZOOMIN:    icon_magnifier(ic, icol, +1); break;
             case TB_ZOOMOUT:   icon_magnifier(ic, icol, -1); break;
             case TB_AUTOSCALE: icon_expand(ic, icol);        break;
+            case TB_ANNOTATE:  icon_target(ic, icol);        break;
             case TB_RESET:     icon_home(ic, icol);          break;
             case TB_CLOSE:     icon_close(ic, (i == hover) ? (Color){ 190, 60, 60, 255 } : icol); break;
             default: break;
@@ -2054,6 +2317,7 @@ void graphics_show(const Expr* graphics_expr) {
     init_state.yscale = (float)ysc;
 
     int tool = TOOL_PAN;          /* active left-drag tool (toolbar-selected) */
+    bool annotate = false;        /* roots/extrema/inflection toggle (toolbar) */
     bool selecting = false;       /* mid box-zoom drag */
     bool left_drag_canvas = false;/* current left drag began on the canvas, not the toolbar */
     Vector2 sel_start = { 0, 0 };
@@ -2102,6 +2366,7 @@ void graphics_show(const Expr* graphics_expr) {
                     case TB_ZOOMIN:    camera.zoom *= 1.3f;          clamp_zoom(&camera, base_zoom); break;
                     case TB_ZOOMOUT:   camera.zoom *= (1.0f / 1.3f); clamp_zoom(&camera, base_zoom); break;
                     case TB_AUTOSCALE: camera = home; break;
+                    case TB_ANNOTATE:  annotate = !annotate; break;
                     case TB_RESET:     camera = home; break;
                     case TB_CLOSE:     goto close_window;
                     default: break;
@@ -2202,6 +2467,22 @@ void graphics_show(const Expr* graphics_expr) {
             }
         }
 
+        /* Hover trace: find the on-curve point under the cursor once per
+         * frame, before drawing, so both the world-space marker (inside
+         * BeginMode2D) and the screen-space label (after EndMode2D) use the
+         * same traced point. Suppressed over the toolbar and mid-gesture so
+         * it doesn't fight box-zoom/pan feedback. */
+        bool hv_found = false;
+        double hv_wx = 0.0, hv_wy = 0.0;
+        if (hover < 0 && !selecting && !panning)
+            hv_found = hover_trace_find(draw_prims, camera, ysc, mouse, &hv_wx, &hv_wy);
+
+        /* Auto-annotate: recomputed fresh each frame draw_prims might change
+         * (live resample on zoom/pan) -- cheap relative to the resample
+         * itself, and only paid when the toolbar toggle is on. */
+        Annot* annots = NULL; size_t n_annots = 0, annot_cap = 0;
+        if (annotate) collect_annotations(draw_prims, ysc, &annots, &n_annots, &annot_cap);
+
         BeginDrawing();
         ClearBackground(to_raylib(opts.background));
 
@@ -2215,6 +2496,16 @@ void graphics_show(const Expr* graphics_expr) {
         DrawState state = init_state;
         draw_primitive(draw_prims, &state);
         if (opts.epilog) { DrawState es = init_state; draw_primitive(opts.epilog, &es); }
+        if (hv_found) {
+            Vector2 mk = { (float)hv_wx, (float)(-hv_wy * ysc) };
+            float r = 4.0f / camera.zoom;
+            DrawCircleV(mk, r, (Color){ 230, 60, 60, 255 });
+            DrawCircleLinesV(mk, r, (Color){ 120, 20, 20, 255 });
+        }
+        for (size_t i = 0; i < n_annots; i++) {
+            float r = 3.5f / camera.zoom;
+            DrawCircleV((Vector2){ annots[i].x, annots[i].y }, r, annots[i].col);
+        }
         EndMode2D();
         if (opts.frame) EndScissorMode();
 
@@ -2253,7 +2544,24 @@ void graphics_show(const Expr* graphics_expr) {
                 DrawRectangleRec(sel, (Color){ 30, 80, 180, 40 });
                 DrawRectangleLinesEx(sel, 1.0f, (Color){ 30, 80, 180, 180 });
             }
-            draw_toolbar((int)opts.width, tool, hover);
+            draw_toolbar((int)opts.width, tool, hover, annotate);
+            for (size_t i = 0; i < n_annots; i++) {
+                Vector2 spos = GetWorldToScreen2D((Vector2){ annots[i].x, annots[i].y }, camera);
+                int tw = MeasureText(annots[i].tag, 10);
+                DrawText(annots[i].tag, (int)spos.x - tw / 2, (int)spos.y - 16, 10, annots[i].col);
+            }
+            if (hv_found) {
+                Vector2 spos = GetWorldToScreen2D(
+                    (Vector2){ (float)hv_wx, (float)(-hv_wy * ysc) }, camera);
+                double dx = scale_invert(opts.sf_x, hv_wx);
+                double dy = scale_invert(opts.sf_y, hv_wy);
+                char lbl[64];
+                snprintf(lbl, sizeof(lbl), "(%.4g, %.4g)", dx, dy);
+                int tw = MeasureText(lbl, 13);
+                float lx = spos.x + 10.0f, ly = spos.y - 18.0f;
+                DrawRectangle((int)lx - 4, (int)ly - 3, tw + 8, 19, (Color){ 40, 40, 40, 215 });
+                DrawText(lbl, (int)lx, (int)ly, 13, RAYWHITE);
+            }
             DrawText("drag: pan/zoom per tool   scroll: zoom   right-drag: pan   Q/E: rotate   R: reset   Esc: close",
                      10, (int)opts.height - 22, 14, GRAY);
             if (toast > 0) {
@@ -2266,6 +2574,7 @@ void graphics_show(const Expr* graphics_expr) {
         }
 
         EndDrawing();
+        free(annots);
 
         /* EndDrawing has swapped buffers, so the chrome-free frame is now
          * presented -- capture it here (raylib's own F12 capture uses this
@@ -2394,6 +2703,16 @@ void graphics_render_in_region(const Expr* graphics_expr,
 
     PlotRange2D visible = { range.xmin, range.xmax, range.ymin * ysc, range.ymax * ysc };
 
+    /* Hover trace: same as graphics_show, gated to the mouse being inside
+     * this content region (there's no toolbar/drag state here to fight --
+     * Animate/Manipulate's own controls live in a spatially disjoint area). */
+    Vector2 mouse = GetMousePosition();
+    bool hv_found = false;
+    double hv_wx = 0.0, hv_wy = 0.0;
+    bool mouse_in_region = mouse.x >= rx && mouse.x <= rx + rw && mouse.y >= ry && mouse.y <= ry + rh;
+    if (mouse_in_region && !IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+        hv_found = hover_trace_find(prims, camera, ysc, mouse, &hv_wx, &hv_wy);
+
     if (opts.frame) BeginScissorMode((int)preg_x, (int)preg_y, (int)preg_w, (int)preg_h);
     BeginMode2D(camera);
     if (opts.prolog) { DrawState ps = init_state; draw_primitive(opts.prolog, &ps); }
@@ -2402,8 +2721,26 @@ void graphics_render_in_region(const Expr* graphics_expr,
     DrawState state = init_state;
     draw_primitive(prims, &state);
     if (opts.epilog) { DrawState es = init_state; draw_primitive(opts.epilog, &es); }
+    if (hv_found) {
+        Vector2 mk = { (float)hv_wx, (float)(-hv_wy * ysc) };
+        float r = 4.0f / camera.zoom;
+        DrawCircleV(mk, r, (Color){ 230, 60, 60, 255 });
+        DrawCircleLinesV(mk, r, (Color){ 120, 20, 20, 255 });
+    }
     EndMode2D();
     if (opts.frame) EndScissorMode();
+
+    if (hv_found) {
+        Vector2 spos = GetWorldToScreen2D((Vector2){ (float)hv_wx, (float)(-hv_wy * ysc) }, camera);
+        double dx = scale_invert(opts.sf_x, hv_wx);
+        double dy = scale_invert(opts.sf_y, hv_wy);
+        char lbl[64];
+        snprintf(lbl, sizeof(lbl), "(%.4g, %.4g)", dx, dy);
+        int tw = MeasureText(lbl, 13);
+        float lx = spos.x + 10.0f, ly = spos.y - 18.0f;
+        DrawRectangle((int)lx - 4, (int)ly - 3, tw + 8, 19, (Color){ 40, 40, 40, 215 });
+        DrawText(lbl, (int)lx, (int)ly, 13, RAYWHITE);
+    }
 
     if (opts.axes) draw_axes_labels(&visible, &range, camera, ysc, &opts);
     if (bar_labels_data) draw_bar_chart_labels(bar_labels_data, camera);
