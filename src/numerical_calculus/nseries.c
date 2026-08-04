@@ -67,6 +67,7 @@
 #include "arithmetic.h"   /* is_complex, make_complex, is_rational */
 #include "attr.h"
 #include "eval.h"
+#include "nc_accuracy.h"  /* shared AccuracyGoal/PrecisionGoal handling */
 #include "numeric.h"
 #include "sym_names.h"
 #include "symtab.h"
@@ -79,7 +80,13 @@ typedef struct {
     double radius;       /* contour radius (default 1)            */
     bool   prec_mpfr;    /* WorkingPrecision selects MPFR         */
     long   bits;         /* MPFR working precision in bits        */
+    double acc_goal;     /* AccuracyGoal digits (nc_accuracy.h)   */
+    double prec_goal;    /* PrecisionGoal digits (nc_accuracy.h)  */
 } NsOpts;
+
+/* Maximum times the sample count N is doubled while chasing the accuracy goal
+ * (bounds the refinement cost; a warning fires if the goal is still unmet). */
+#define NS_MAX_DOUBLINGS 4
 
 static void ns_warn(const char* tag, const char* fmt, ...) {
     va_list ap;
@@ -279,22 +286,17 @@ static Expr* ns_build_seriesdata(const char* varname, Expr* x0_orig,
  *  Machine-precision DFT path                                         *
  * ------------------------------------------------------------------ */
 
-static Expr* ns_compute_machine(NsCtx* ctx, const char* varname, Expr* x0_orig,
-                                double _Complex z0, double r, int n) {
-    int N = ns_sample_count(n);
+/* Compute the 2n+1 Laurent coefficients a_{-n..n} into coefs_out[0..2n] from an
+ * N-point Cauchy DFT. Returns false on a sampling failure. */
+static bool ns_coeffs_machine(NsCtx* ctx, double _Complex z0, double r, int n,
+                              int N, double _Complex* coefs_out) {
     double _Complex* F = malloc(sizeof(double _Complex) * (size_t)N);
-    if (!F) return NULL;
-
+    if (!F) return false;
     for (int j = 0; j < N; j++) {
         double theta = 2.0 * M_PI * (double)j / (double)N;
         double _Complex z = z0 + r * (cos(theta) + I * sin(theta));
-        if (!ns_sample_machine(ctx, z, &F[j])) { free(F); return NULL; }
+        if (!ns_sample_machine(ctx, z, &F[j])) { free(F); return false; }
     }
-
-    size_t cnt = (size_t)(2 * n + 1);
-    Expr** coefs = malloc(sizeof(Expr*) * cnt);
-    if (!coefs) { free(F); return NULL; }
-
     for (int e = -n; e <= n; e++) {
         int k = ((e % N) + N) % N;
         double _Complex acc = 0.0;
@@ -304,10 +306,60 @@ static Expr* ns_compute_machine(NsCtx* ctx, const char* varname, Expr* x0_orig,
         }
         acc /= (double)N;
         acc *= pow(r, -(double)e);        /* a_e = c_k * r^(-e) */
-        coefs[e + n] = ns_from_complex_d(acc);
+        coefs_out[e + n] = acc;
     }
     free(F);
+    return true;
+}
 
+/* Largest coefficient magnitude in a length-cnt complex buffer. */
+static double ns_cmax(const double _Complex* a, int cnt) {
+    double m = 0.0;
+    for (int i = 0; i < cnt; i++) { double v = cabs(a[i]); if (v > m) m = v; }
+    return m;
+}
+
+static Expr* ns_compute_machine(NsCtx* ctx, const char* varname, Expr* x0_orig,
+                                double _Complex z0, double r, int n,
+                                double acc_goal, double prec_goal) {
+    int cnt = 2 * n + 1;
+    double _Complex* cur = malloc(sizeof(double _Complex) * (size_t)cnt);
+    if (!cur) return NULL;
+    int N = ns_sample_count(n);
+    if (!ns_coeffs_machine(ctx, z0, r, n, N, cur)) { free(cur); return NULL; }
+
+    /* Adaptive refinement: double the sample count until the retained
+     * coefficients stop moving within the combined tolerance. The change between
+     * successive sample counts is the aliasing/round-off error estimate. */
+    bool goal_active = !(isinf(acc_goal) && isinf(prec_goal));
+    double err = 0.0;
+    if (goal_active) {
+        double _Complex* fine = malloc(sizeof(double _Complex) * (size_t)cnt);
+        if (fine) {
+            for (int d = 0; d < NS_MAX_DOUBLINGS; d++) {
+                if (!ns_coeffs_machine(ctx, z0, r, n, 2 * N, fine)) break;
+                double e_max = 0.0;
+                for (int i = 0; i < cnt; i++) {
+                    double de = cabs(fine[i] - cur[i]);
+                    if (de > e_max) e_max = de;
+                }
+                for (int i = 0; i < cnt; i++) cur[i] = fine[i];   /* adopt the finer */
+                N *= 2; err = e_max;
+                double tol = nc_combined_tol(acc_goal, prec_goal, ns_cmax(cur, cnt),
+                                             NUMERIC_MACHINE_PRECISION_DIGITS);
+                if (err <= tol) break;
+            }
+            free(fine);
+        }
+        double tol = nc_combined_tol(acc_goal, prec_goal, ns_cmax(cur, cnt),
+                                     NUMERIC_MACHINE_PRECISION_DIGITS);
+        if (err > tol) nc_warn_goal("NSeries", err, tol);
+    }
+
+    Expr** coefs = malloc(sizeof(Expr*) * (size_t)cnt);
+    if (!coefs) { free(cur); return NULL; }
+    for (int i = 0; i < cnt; i++) coefs[i] = ns_from_complex_d(cur[i]);
+    free(cur);
     Expr* sd = ns_build_seriesdata(varname, x0_orig, coefs, n);
     free(coefs);
     return sd;
@@ -318,15 +370,14 @@ static Expr* ns_compute_machine(NsCtx* ctx, const char* varname, Expr* x0_orig,
  * ------------------------------------------------------------------ */
 
 #ifdef USE_MPFR
-static Expr* ns_compute_mpfr(NsCtx* ctx, const char* varname, Expr* x0_orig,
-                             const mpfr_t z0r, const mpfr_t z0i,
-                             double r, long bits, int n) {
-    int N = ns_sample_count(n);
-
-    /* Sample arrays: real and imaginary parts of f(z_j). */
+/* Fill pre-initialised mpfr coefficient buffers coefs_re/im[0..2n] from an
+ * N-point Cauchy DFT. Returns false on a sampling failure. */
+static bool ns_coeffs_mpfr(NsCtx* ctx, const mpfr_t z0r, const mpfr_t z0i,
+                           double r, long bits, int n, int N,
+                           mpfr_t* coefs_re, mpfr_t* coefs_im) {
     mpfr_t* Fr = malloc(sizeof(mpfr_t) * (size_t)N);
     mpfr_t* Fi = malloc(sizeof(mpfr_t) * (size_t)N);
-    if (!Fr || !Fi) { free(Fr); free(Fi); return NULL; }
+    if (!Fr || !Fi) { free(Fr); free(Fi); return false; }
 
     mpfr_t pi2, theta, s, c, zr, zi, rr;
     mpfr_inits2(bits, pi2, theta, s, c, zr, zi, rr, (mpfr_ptr)0);
@@ -337,66 +388,127 @@ static Expr* ns_compute_mpfr(NsCtx* ctx, const char* varname, Expr* x0_orig,
     bool ok = true;
     int filled = 0;
     for (int j = 0; j < N && ok; j++) {
-        /* theta = 2*pi*j/N */
-        mpfr_mul_si(theta, pi2, j, MPFR_RNDN);
+        mpfr_mul_si(theta, pi2, j, MPFR_RNDN);          /* theta = 2*pi*j/N */
         mpfr_div_si(theta, theta, N, MPFR_RNDN);
         mpfr_sin_cos(s, c, theta, MPFR_RNDN);
-        /* z = z0 + r*(cos + i sin) */
-        mpfr_fma(zr, rr, c, z0r, MPFR_RNDN);
+        mpfr_fma(zr, rr, c, z0r, MPFR_RNDN);            /* z = z0 + r*(cos+i sin) */
         mpfr_fma(zi, rr, s, z0i, MPFR_RNDN);
-
         mpfr_init2(Fr[j], bits);
         mpfr_init2(Fi[j], bits);
         filled = j + 1;
         if (!ns_sample_mpfr(ctx, zr, zi, Fr[j], Fi[j])) ok = false;
     }
 
-    Expr* sd = NULL;
     if (ok) {
-        size_t cnt = (size_t)(2 * n + 1);
-        Expr** coefs = malloc(sizeof(Expr*) * cnt);
-        if (coefs) {
-            mpfr_t accr, acci, ang, wc, ws, t1, t2, scale;
-            mpfr_inits2(bits, accr, acci, ang, wc, ws, t1, t2, scale, (mpfr_ptr)0);
-
-            for (int e = -n; e <= n; e++) {
-                int k = ((e % N) + N) % N;
-                mpfr_set_zero(accr, 1);
-                mpfr_set_zero(acci, 1);
-                for (int j = 0; j < N; j++) {
-                    /* twiddle = cos(ang) + i sin(ang), ang = -2*pi*j*k/N */
-                    mpfr_mul_si(ang, pi2, j, MPFR_RNDN);
-                    mpfr_mul_si(ang, ang, k, MPFR_RNDN);
-                    mpfr_div_si(ang, ang, N, MPFR_RNDN);
-                    mpfr_neg(ang, ang, MPFR_RNDN);
-                    mpfr_sin_cos(ws, wc, ang, MPFR_RNDN);
-                    /* acc += F[j] * twiddle */
-                    mpfr_mul(t1, Fr[j], wc, MPFR_RNDN);
-                    mpfr_mul(t2, Fi[j], ws, MPFR_RNDN);
-                    mpfr_sub(t1, t1, t2, MPFR_RNDN);
-                    mpfr_add(accr, accr, t1, MPFR_RNDN);
-                    mpfr_mul(t1, Fr[j], ws, MPFR_RNDN);
-                    mpfr_mul(t2, Fi[j], wc, MPFR_RNDN);
-                    mpfr_add(t1, t1, t2, MPFR_RNDN);
-                    mpfr_add(acci, acci, t1, MPFR_RNDN);
-                }
-                /* c_k = acc / N ; a_e = c_k * r^(-e) */
-                mpfr_div_si(accr, accr, N, MPFR_RNDN);
-                mpfr_div_si(acci, acci, N, MPFR_RNDN);
-                mpfr_pow_si(scale, rr, -e, MPFR_RNDN);
-                mpfr_mul(accr, accr, scale, MPFR_RNDN);
-                mpfr_mul(acci, acci, scale, MPFR_RNDN);
-                coefs[e + n] = ns_from_complex_mpfr(accr, acci);
+        mpfr_t accr, acci, ang, wc, ws, t1, t2, scale;
+        mpfr_inits2(bits, accr, acci, ang, wc, ws, t1, t2, scale, (mpfr_ptr)0);
+        for (int e = -n; e <= n; e++) {
+            int k = ((e % N) + N) % N;
+            mpfr_set_zero(accr, 1);
+            mpfr_set_zero(acci, 1);
+            for (int j = 0; j < N; j++) {
+                mpfr_mul_si(ang, pi2, j, MPFR_RNDN);    /* ang = -2*pi*j*k/N */
+                mpfr_mul_si(ang, ang, k, MPFR_RNDN);
+                mpfr_div_si(ang, ang, N, MPFR_RNDN);
+                mpfr_neg(ang, ang, MPFR_RNDN);
+                mpfr_sin_cos(ws, wc, ang, MPFR_RNDN);
+                mpfr_mul(t1, Fr[j], wc, MPFR_RNDN);     /* acc += F[j]*twiddle */
+                mpfr_mul(t2, Fi[j], ws, MPFR_RNDN);
+                mpfr_sub(t1, t1, t2, MPFR_RNDN);
+                mpfr_add(accr, accr, t1, MPFR_RNDN);
+                mpfr_mul(t1, Fr[j], ws, MPFR_RNDN);
+                mpfr_mul(t2, Fi[j], wc, MPFR_RNDN);
+                mpfr_add(t1, t1, t2, MPFR_RNDN);
+                mpfr_add(acci, acci, t1, MPFR_RNDN);
             }
-            mpfr_clears(accr, acci, ang, wc, ws, t1, t2, scale, (mpfr_ptr)0);
-            sd = ns_build_seriesdata(varname, x0_orig, coefs, n);
-            free(coefs);
+            mpfr_div_si(accr, accr, N, MPFR_RNDN);      /* c_k = acc/N; a_e = c_k*r^-e */
+            mpfr_div_si(acci, acci, N, MPFR_RNDN);
+            mpfr_pow_si(scale, rr, -e, MPFR_RNDN);
+            mpfr_mul(accr, accr, scale, MPFR_RNDN);
+            mpfr_mul(acci, acci, scale, MPFR_RNDN);
+            mpfr_set(coefs_re[e + n], accr, MPFR_RNDN);
+            mpfr_set(coefs_im[e + n], acci, MPFR_RNDN);
         }
+        mpfr_clears(accr, acci, ang, wc, ws, t1, t2, scale, (mpfr_ptr)0);
     }
 
     for (int j = 0; j < filled; j++) { mpfr_clear(Fr[j]); mpfr_clear(Fi[j]); }
     free(Fr); free(Fi);
     mpfr_clears(pi2, theta, s, c, zr, zi, rr, (mpfr_ptr)0);
+    return ok;
+}
+
+/* Largest |coef| over an mpfr coefficient buffer, as a double. */
+static double ns_cmax_mpfr(mpfr_t* re, mpfr_t* im, int cnt) {
+    double m = 0.0;
+    for (int i = 0; i < cnt; i++) {
+        double v = hypot(mpfr_get_d(re[i], MPFR_RNDN), mpfr_get_d(im[i], MPFR_RNDN));
+        if (v > m) m = v;
+    }
+    return m;
+}
+
+static Expr* ns_compute_mpfr(NsCtx* ctx, const char* varname, Expr* x0_orig,
+                             const mpfr_t z0r, const mpfr_t z0i,
+                             double r, long bits, int n,
+                             double acc_goal, double prec_goal) {
+    int cnt = 2 * n + 1;
+    mpfr_t* cur_re = malloc(sizeof(mpfr_t) * (size_t)cnt);
+    mpfr_t* cur_im = malloc(sizeof(mpfr_t) * (size_t)cnt);
+    if (!cur_re || !cur_im) { free(cur_re); free(cur_im); return NULL; }
+    for (int i = 0; i < cnt; i++) { mpfr_init2(cur_re[i], bits); mpfr_init2(cur_im[i], bits); }
+
+    int N = ns_sample_count(n);
+    Expr* sd = NULL;
+    if (ns_coeffs_mpfr(ctx, z0r, z0i, r, bits, n, N, cur_re, cur_im)) {
+        /* Adaptive refinement: double N until the coefficients stop moving within
+         * the combined tolerance (measured on double approximations). */
+        bool goal_active = !(isinf(acc_goal) && isinf(prec_goal));
+        double err = 0.0;
+        if (goal_active) {
+            mpfr_t* f_re = malloc(sizeof(mpfr_t) * (size_t)cnt);
+            mpfr_t* f_im = malloc(sizeof(mpfr_t) * (size_t)cnt);
+            if (f_re && f_im) {
+                for (int i = 0; i < cnt; i++) { mpfr_init2(f_re[i], bits); mpfr_init2(f_im[i], bits); }
+                for (int d = 0; d < NS_MAX_DOUBLINGS; d++) {
+                    if (!ns_coeffs_mpfr(ctx, z0r, z0i, r, bits, n, 2 * N, f_re, f_im)) break;
+                    double e_max = 0.0;
+                    for (int i = 0; i < cnt; i++) {
+                        double dr = mpfr_get_d(f_re[i], MPFR_RNDN) - mpfr_get_d(cur_re[i], MPFR_RNDN);
+                        double di = mpfr_get_d(f_im[i], MPFR_RNDN) - mpfr_get_d(cur_im[i], MPFR_RNDN);
+                        double de = hypot(dr, di);
+                        if (de > e_max) e_max = de;
+                    }
+                    for (int i = 0; i < cnt; i++) {
+                        mpfr_set(cur_re[i], f_re[i], MPFR_RNDN);
+                        mpfr_set(cur_im[i], f_im[i], MPFR_RNDN);
+                    }
+                    N *= 2; err = e_max;
+                    double tol = nc_combined_tol(acc_goal, prec_goal,
+                                                 ns_cmax_mpfr(cur_re, cur_im, cnt),
+                                                 numeric_bits_to_digits(bits));
+                    if (err <= tol) break;
+                }
+                for (int i = 0; i < cnt; i++) { mpfr_clear(f_re[i]); mpfr_clear(f_im[i]); }
+            }
+            free(f_re); free(f_im);
+            double tol = nc_combined_tol(acc_goal, prec_goal,
+                                         ns_cmax_mpfr(cur_re, cur_im, cnt),
+                                         numeric_bits_to_digits(bits));
+            if (err > tol) nc_warn_goal("NSeries", err, tol);
+        }
+
+        Expr** coefs = malloc(sizeof(Expr*) * (size_t)cnt);
+        if (coefs) {
+            for (int i = 0; i < cnt; i++)
+                coefs[i] = ns_from_complex_mpfr(cur_re[i], cur_im[i]);
+            sd = ns_build_seriesdata(varname, x0_orig, coefs, n);
+            free(coefs);
+        }
+    }
+
+    for (int i = 0; i < cnt; i++) { mpfr_clear(cur_re[i]); mpfr_clear(cur_im[i]); }
+    free(cur_re); free(cur_im);
     return sd;
 }
 #endif
@@ -406,7 +518,8 @@ static Expr* ns_compute_mpfr(NsCtx* ctx, const char* varname, Expr* x0_orig,
  * ------------------------------------------------------------------ */
 
 static bool ns_is_known_option(const char* s) {
-    return s == SYM_Radius || s == SYM_WorkingPrecision;
+    return s == SYM_Radius || s == SYM_WorkingPrecision
+        || s == SYM_AccuracyGoal || s == SYM_PrecisionGoal;
 }
 
 static bool ns_is_option_arg(Expr* e) {
@@ -455,6 +568,22 @@ static bool ns_apply_option(Expr* rule, NsOpts* o) {
         }
         return true;
     }
+    if (name == SYM_AccuracyGoal) {
+        if (!nc_parse_goal(rhs, &o->acc_goal)) {
+            ns_warn("badopt", "AccuracyGoal must be a positive number, "
+                              "Automatic, Infinity or MachinePrecision");
+            return false;
+        }
+        return true;
+    }
+    if (name == SYM_PrecisionGoal) {
+        if (!nc_parse_goal(rhs, &o->prec_goal)) {
+            ns_warn("badopt", "PrecisionGoal must be a positive number, "
+                              "Automatic, Infinity or MachinePrecision");
+            return false;
+        }
+        return true;
+    }
     return false;
 }
 
@@ -482,6 +611,8 @@ Expr* builtin_nseries(Expr* res) {
     opts.radius = 1.0;        /* default radius 1 */
     opts.prec_mpfr = false;
     opts.bits = 0;
+    opts.acc_goal = NC_GOAL_MACHINE;  /* AccuracyGoal -> MachinePrecision */
+    opts.prec_goal = NC_GOAL_AUTO;                     /* PrecisionGoal -> Automatic */
     for (size_t i = pos_end; i < argc; i++) {
         if (!ns_apply_option(res->data.function.args[i], &opts)) return NULL;
     }
@@ -544,7 +675,8 @@ Expr* builtin_nseries(Expr* res) {
             ns_warn("nnum", "x0 is not numeric");
         } else {
             result = ns_compute_mpfr(&ctx, var->data.symbol.name, x0_orig,
-                                     z0r, z0i, opts.radius, opts.bits, n);
+                                     z0r, z0i, opts.radius, opts.bits, n,
+                                     opts.acc_goal, opts.prec_goal);
             if (!result)
                 ns_warn("nnum", "f could not be evaluated to a number on the contour");
         }
@@ -557,7 +689,8 @@ Expr* builtin_nseries(Expr* res) {
             ns_warn("nnum", "x0 is not numeric");
         } else {
             result = ns_compute_machine(&ctx, var->data.symbol.name, x0_orig,
-                                        z0c, opts.radius, n);
+                                        z0c, opts.radius, n,
+                                        opts.acc_goal, opts.prec_goal);
             if (!result)
                 ns_warn("nnum", "f could not be evaluated to a number on the contour");
         }

@@ -381,7 +381,7 @@ void options_register_defaults(void) {
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));
     ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
-    ob_add(&b, r_sym("AccuracyGoal", "Automatic"));
+    ob_add(&b, r_sym("AccuracyGoal", "MachinePrecision"));
     ob_add(&b, r_sym("PrecisionGoal", "Automatic"));
     ob_add(&b, r_sym("MaxRecursion", "Automatic"));
     ob_add(&b, r_int("MinRecursion", 0));
@@ -424,7 +424,7 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("NSumExtraTerms", "Automatic"));
     ob_add(&b, r_int("WynnDegree", 1));
     ob_add(&b, r_sym("VerifyConvergence", "True"));
-    ob_add(&b, r_sym("AccuracyGoal", "Infinity"));
+    ob_add(&b, r_sym("AccuracyGoal", "MachinePrecision"));
     ob_add(&b, r_sym("PrecisionGoal", "Automatic"));
     ob_commit(&b, "NSum");
 
@@ -435,11 +435,14 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("NProductExtraFactors", "Automatic"));
     ob_add(&b, r_int("WynnDegree", 1));
     ob_add(&b, r_sym("VerifyConvergence", "True"));
+    ob_add(&b, r_sym("AccuracyGoal", "MachinePrecision"));
+    ob_add(&b, r_sym("PrecisionGoal", "Automatic"));
     ob_commit(&b, "NProduct");
 
     ob_init(&b);
     ob_add(&b, r_real("Radius", 0.01));
     ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
+    ob_add(&b, r_sym("AccuracyGoal", "MachinePrecision"));
     ob_add(&b, r_sym("PrecisionGoal", "Automatic"));
     ob_add(&b, r_int("MaxRecursion", 10));
     ob_add(&b, r_sym("Method", "Automatic"));
@@ -449,9 +452,11 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("Method", "EulerSum"));
     ob_add(&b, r_sym("Direction", "Automatic"));
     ob_add(&b, r_sym("Scale", "Automatic"));
-    ob_add(&b, r_int("Terms", 7));
+    ob_add(&b, r_int("Terms", 13));
     ob_add(&b, r_int("WynnDegree", 1));
     ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
+    ob_add(&b, r_sym("AccuracyGoal", "MachinePrecision"));
+    ob_add(&b, r_sym("PrecisionGoal", "Automatic"));
     ob_commit(&b, "NLimit");
 
     ob_init(&b);
@@ -459,11 +464,15 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("Scale", "Automatic"));
     ob_add(&b, r_int("Terms", 7));
     ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
+    ob_add(&b, r_sym("AccuracyGoal", "MachinePrecision"));
+    ob_add(&b, r_sym("PrecisionGoal", "Automatic"));
     ob_commit(&b, "ND");
 
     ob_init(&b);
     ob_add(&b, r_real("Radius", 1.0));
     ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
+    ob_add(&b, r_sym("AccuracyGoal", "MachinePrecision"));
+    ob_add(&b, r_sym("PrecisionGoal", "Automatic"));
     ob_commit(&b, "NSeries");
 
     /* ---- Numerical root-finding / solving ---- */
@@ -471,7 +480,7 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("Method", "Automatic"));
     ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
     ob_add(&b, r_int("MaxIterations", 100));
-    ob_add(&b, r_sym("AccuracyGoal", "Automatic"));
+    ob_add(&b, r_sym("AccuracyGoal", "MachinePrecision"));
     ob_add(&b, r_sym("PrecisionGoal", "Automatic"));
     ob_add(&b, r_real("DampingFactor", 1.0));
     ob_add(&b, r_sym("Jacobian", "Automatic"));
@@ -504,6 +513,7 @@ void options_register_defaults(void) {
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));
     ob_add(&b, r_sym("MaxIterations", "Automatic"));
+    ob_add(&b, r_sym("AccuracyGoal", "MachinePrecision"));
     ob_add(&b, r_sym("PrecisionGoal", "Automatic"));
     ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
     ob_commit(&b, "NRoots");
@@ -513,6 +523,7 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("MaxRoots", "Automatic"));
     ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
     ob_add(&b, r_sym("VerifySolutions", "Automatic"));
+    ob_add(&b, r_sym("AccuracyGoal", "MachinePrecision"));
     ob_add(&b, r_sym("PrecisionGoal", "Automatic"));
     ob_commit(&b, "NSolve");
 

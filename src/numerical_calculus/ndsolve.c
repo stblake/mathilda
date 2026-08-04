@@ -12,6 +12,7 @@
 #include "../attr.h"
 #include "../common.h"
 #include "../numeric.h"
+#include "../nc_accuracy.h"   /* shared AccuracyGoal/PrecisionGoal handling */
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -94,14 +95,15 @@ static bool nd_is_option(const Expr* e) {
     return e->data.function.arg_count == 2 && e->data.function.args[0]->type == EXPR_SYMBOL;
 }
 
-/* Parse a goal option value: Integer/Real digits, Infinity, or Automatic. */
+/* Parse a goal option value.  Delegates to the shared parser (nc_accuracy.h):
+ * Automatic -> NC_GOAL_AUTO (-1), Infinity -> NC_GOAL_OFF (+Inf ==
+ * HUGE_VAL), MachinePrecision -> ~15.95 digits (the newly-accepted setting),
+ * positive number -> itself.  On any unrecognised value *out is left untouched,
+ * keeping the caller's default.  The sole consumer, nd_resolve_tol, already
+ * treats `>= HUGE_VAL` as Infinity (criterion disabled) and `< 0` as Automatic
+ * (-> WorkingPrecision/2), so the +Inf sentinel disables exactly as before. */
 static void nd_parse_goal(Expr* v, double* out) {
-    if (v->type == EXPR_SYMBOL) {
-        if (v->data.symbol.name == SYM_Infinity) { *out = HUGE_VAL; return; }
-        *out = -1.0; return;   /* Automatic or anything else */
-    }
-    double d;
-    if (nd_to_double(v, &d)) *out = d; else *out = -1.0;
+    nc_parse_goal(v, out);
 }
 
 static void nd_apply_option(const Expr* opt, NdOpts* o) {
@@ -203,6 +205,10 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
 
     /* ---- options (trailing) ---- */
     NdOpts o; nd_opts_default(&o);
+    /* Default AccuracyGoal -> MachinePrecision (a ~15.95-digit absolute-error
+     * floor); PrecisionGoal stays Automatic (-> WorkingPrecision/2).  Set before
+     * option parsing so an explicit AccuracyGoal-> still overrides it. */
+    o.acc_goal = NUMERIC_MACHINE_PRECISION_DIGITS;
     size_t pos_end = argc;
     while (pos_end > 3 && nd_is_option(A[pos_end - 1])) pos_end--;
     /* allow exactly 3 positional args; options after */
@@ -434,7 +440,17 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
         /* restore bindings before building the result (uses x, u symbolically) */
         nd_bind_restore(&P.bind_t);
         for (size_t i = 0; i < P.d; i++) nd_bind_restore(&P.bind_y[i]);
-        if (st == ND_ERR_MAXSTEPS) nd_warn("mxst", "maximum number of steps reached; returning partial solution");
+        if (st == ND_ERR_MAXSTEPS) {
+            /* Ran out of the step budget before reaching the endpoint: the
+             * returned solution is truncated, so its error over the requested
+             * interval is unbounded.  Report the shortfall against the documented
+             * combined tolerance at unit solution scale (NDSolve's error control
+             * is scale-relative) and return the partial (best) solution. */
+            double wp = o.wp_bits > 0 ? numeric_bits_to_digits(o.wp_bits)
+                                      : NUMERIC_MACHINE_PRECISION_DIGITS;
+            nc_warn_goal("NDSolve", HUGE_VAL,
+                         nc_combined_tol(o.acc_goal, o.prec_goal, 1.0, wp));
+        }
         else if (st == ND_ERR_STEPSIZE) nd_warn("ndsz", "step size effectively zero; singularity or stiffness suspected");
         else if (st == ND_ERR_NONCONV) nd_warn("ndcf", "corrector failed to converge");
         else if (st == ND_ERR_SAMPLE) nd_warn("nrnum", "right-hand side did not evaluate to a number");

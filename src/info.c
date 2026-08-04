@@ -257,8 +257,8 @@ void info_init(void) {
         "zero -- Chop the result when needed; returns an incorrect value if the contour "
         "encloses another singularity or crosses a branch cut.\n\n"
         "Options: Radius (contour radius, default 1/100, or Automatic), WorkingPrecision, "
-        "PrecisionGoal, MaxRecursion (max contour refinements, default 10), "
-        "Method ('Trapezoidal').");
+        "AccuracyGoal (default MachinePrecision), PrecisionGoal, MaxRecursion (max "
+        "contour refinements, default 10), Method ('Trapezoidal').");
     symtab_set_docstring("Residue",
         "Residue[f, {z, z0}]\n"
         "\tgives the residue of f at the isolated singularity z = z0 -- the "
@@ -282,8 +282,9 @@ void info_init(void) {
         "NResidue (needs expr analytic near x0; allows fractional/complex order). "
         "ND cannot recognize small numbers that should be zero -- Chop if needed.\n\n"
         "Options: Method (EulerSum | NIntegrate), Scale (step size / contour radius / "
-        "complex direction, default 1), Terms (EulerSum extrapolation terms, default 7), "
-        "WorkingPrecision, PrecisionGoal, MaxRecursion.");
+        "complex direction, default 1), Terms (EulerSum starting extrapolation depth, "
+        "default 7; grown adaptively to meet AccuracyGoal), WorkingPrecision, "
+        "AccuracyGoal (default MachinePrecision), PrecisionGoal, MaxRecursion.");
     symtab_set_docstring("NSeries",
         "NSeries[f, {x, x0, n}]\n"
         "\tgives a numerical approximation to the series expansion of f about "
@@ -298,9 +299,13 @@ void info_init(void) {
         "centred at x0 contains a branch cut of f; for a Laurent series the "
         "SeriesData neglects higher-order poles. No effort is made to justify "
         "the precision of the coefficients, and small spurious residuals are "
-        "not recognised as zero -- Chop the result when needed.\n\n"
+        "not recognised as zero. The sample count is grown adaptively (doubling "
+        "the DFT size) until the coefficients settle within AccuracyGoal, and a "
+        "NSeries::accgl warning is issued if the goal is not reached; Chop the "
+        "result when needed.\n\n"
         "Options: Radius (radius of the sampled circle, default 1), "
-        "WorkingPrecision (default MachinePrecision).");
+        "WorkingPrecision (default MachinePrecision), AccuracyGoal (default "
+        "MachinePrecision), PrecisionGoal.");
     symtab_set_docstring("NLimit",
         "NLimit[expr, z -> z0]\n"
         "\tnumerically finds the limiting value of expr as z approaches z0.\n\n"
@@ -320,10 +325,12 @@ void info_init(void) {
         "envelope has no limit: NLimit::osc is issued and the form is returned "
         "unevaluated, rather than reporting the meaningless extrapolant.\n\n"
         "Options: Method (Automatic | EulerSum | SequenceLimit | \"Levin\"), WorkingPrecision (default "
-        "MachinePrecision), Direction (Automatic == -1, or a complex approach "
-        "vector), Scale (initial step / distance, default 1), Terms (default 13; "
-        "the extrapolation depth, which -- not WorkingPrecision -- sets the "
-        "accuracy on branch-point / fractional-power approaches), "
+        "MachinePrecision), AccuracyGoal (default MachinePrecision), PrecisionGoal, "
+        "Direction (Automatic == -1, or a complex approach "
+        "vector), Scale (initial step / distance, default 1), Terms (starting "
+        "extrapolation depth, default 13, grown adaptively up to meet AccuracyGoal -- "
+        "the depth, not WorkingPrecision, sets the accuracy on branch-point / "
+        "fractional-power approaches), "
         "WynnDegree (SequenceLimit iterations, default 1).\n\n"
         "Each method is also callable directly as NLimit`m[expr, z -> z0]: "
         "NLimit`Automatic, NLimit`EulerSum, NLimit`SequenceLimit, NLimit`Levin, "
@@ -433,7 +440,9 @@ void info_init(void) {
         "\"JenkinsTraub\" uses the three-stage Jenkins-Traub algorithm.\n\n"
         "Options: Method (Automatic | \"Aberth\" | \"CompanionMatrix\" | "
         "\"JenkinsTraub\"), PrecisionGoal (Automatic = machine; a digit count "
-        "selects arbitrary precision), MaxIterations, StepMonitor.");
+        "selects arbitrary precision), AccuracyGoal (default MachinePrecision; a "
+        "root whose residual exceeds the goal triggers an NRoots::accgl warning), "
+        "MaxIterations, StepMonitor.");
     symtab_set_docstring("NSolve",
         "NSolve[expr, vars]\n"
         "\tgives numerical approximations to the solutions of the equation or "
@@ -451,7 +460,8 @@ void info_init(void) {
         "FindRoot seeding. Integer, real, and complex coefficients are handled "
         "at machine and arbitrary precision.\n\n"
         "Options: MaxRoots, Method (Automatic | \"EndomorphismMatrix\" | "
-        "\"Homotopy\" | \"Symbolic\"), WorkingPrecision, VerifySolutions, "
+        "\"Homotopy\" | \"Symbolic\"), WorkingPrecision, AccuracyGoal (default "
+        "MachinePrecision, forwarded to NRoots), PrecisionGoal, VerifySolutions, "
         "RandomSeeding.");
     symtab_set_docstring("Factorial",
         "n! or Factorial[n]\n"
@@ -3764,6 +3774,49 @@ void info_init(void) {
         "\n"
         "Reads back False in a session started with the environment variable\n"
         "MATHILDA_NO_PACK set. Only True or False is accepted.");
+
+    // Numerical option keywords shared by the numerical-calculus operations.
+    symtab_set_docstring("AccuracyGoal",
+        "AccuracyGoal\n"
+        "\tis an option for numerical operations (NLimit, NSum, NProduct,\n"
+        "\tNIntegrate, NDSolve, NResidue, ND, NSeries, FindRoot, NRoots,\n"
+        "\tNSolve) specifying how many digits of ABSOLUTE accuracy to seek.\n"
+        "\n"
+        "With AccuracyGoal -> a and PrecisionGoal -> p, Mathilda seeks a result\n"
+        "whose numerical error in a value of size x is below 10^-a + |x| 10^-p:\n"
+        "a is the absolute term, p the relative term, of the combined tolerance.\n"
+        "AccuracyGoal effectively bounds the absolute error.\n"
+        "\n"
+        "AccuracyGoal -> MachinePrecision (the default) seeks ~$MachinePrecision\n"
+        "(about 15.95) digits. AccuracyGoal -> Automatic seeks near-full working\n"
+        "precision (two digits below WorkingPrecision). AccuracyGoal -> Infinity\n"
+        "disables the absolute criterion, leaving PrecisionGoal to govern\n"
+        "termination.\n"
+        "\n"
+        "Each operation refines adaptively -- growing its term count, sampling,\n"
+        "or recursion up to a resource cap -- until the goal is met. If it\n"
+        "cannot be met at the cap, a Head::accgl message is issued and the best\n"
+        "approximation obtained is returned. Set WorkingPrecision at least as\n"
+        "large as AccuracyGoal; otherwise the result may fall well short of it.");
+    symtab_set_docstring("PrecisionGoal",
+        "PrecisionGoal\n"
+        "\tis an option for numerical operations (NIntegrate, NDSolve, NLimit,\n"
+        "\tNSum, and the others accepting AccuracyGoal) specifying how many\n"
+        "\tdigits of RELATIVE precision to seek.\n"
+        "\n"
+        "With PrecisionGoal -> p and AccuracyGoal -> a, Mathilda seeks a result\n"
+        "whose numerical error in a value of size x is below 10^-a + |x| 10^-p;\n"
+        "p is the relative term of that combined tolerance and effectively\n"
+        "bounds the relative error.\n"
+        "\n"
+        "PrecisionGoal -> Automatic (the default) seeks near-full working\n"
+        "precision (two digits below WorkingPrecision). PrecisionGoal -> Infinity\n"
+        "disables the relative criterion, leaving AccuracyGoal to govern\n"
+        "termination.\n"
+        "\n"
+        "When the goal cannot be met the operation issues a Head::accgl message\n"
+        "and returns its best approximation. Set WorkingPrecision at least as\n"
+        "large as PrecisionGoal.");
 
     // System floating-point constants (registered in core.c).
     symtab_set_docstring("$MachinePrecision",

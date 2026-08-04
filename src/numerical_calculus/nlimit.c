@@ -97,6 +97,7 @@
 #include "attr.h"
 #include "common.h"       /* common_method_alias -- the NLimit`m heads */
 #include "eval.h"
+#include "nc_accuracy.h"  /* shared AccuracyGoal/PrecisionGoal handling */
 #include "numeric.h"
 #include "seqaccel.h"     /* shared Richardson + Wynn-epsilon kernels */
 #include "sym_names.h"
@@ -105,6 +106,16 @@
 /* Hard cap on Terms: 2^(Terms-1) must stay an exact double for the machine
  * Richardson denominator, and any larger tableau is numerical nonsense. */
 #define NL_MAX_TERMS 50
+
+/* Adaptive-refinement guards.  Growing the sample count past the point where
+ * roundoff/cancellation dominates does not improve a machine-precision limit --
+ * it starts producing extrapolants with a spuriously small residual but a
+ * garbage value.  A refinement is therefore accepted only if it moves the
+ * estimate by no more than NL_REFINE_JUMP times the current error estimate (a
+ * genuine improvement cannot jump further than that), and growth stops after
+ * NL_REFINE_STALL consecutive samples that yield no accepted improvement. */
+#define NL_REFINE_JUMP  8.0
+#define NL_REFINE_STALL 3
 
 /* Convergence / noise gate.  Measured against the *sample scale* (the largest
  * |S_k|), not the result, so that genuine near-zero limits are not mistaken for
@@ -569,10 +580,12 @@ typedef struct {
     int         levin_variant; /* SeqaccelLevinVariant when method == SYM_Levin (default u) */
     Expr*       direction; /* borrowed Direction value (NULL => Automatic) */
     Expr*       scale;     /* borrowed Scale value (NULL => 1)             */
-    int         terms;     /* sample count / tableau depth (default 7)     */
+    int         terms;     /* starting sample count / tableau depth        */
     int         wynn;      /* WynnDegree (default 1)                       */
     bool        prec_mpfr; /* WorkingPrecision selects MPFR                */
     long        bits;      /* MPFR working precision in bits               */
+    double      acc_goal;  /* AccuracyGoal digits (nc_accuracy.h sentinels) */
+    double      prec_goal; /* PrecisionGoal digits (nc_accuracy.h sentinels)*/
 } NlOpts;
 
 static bool nl_is_known_option(const char* s) {
@@ -581,7 +594,9 @@ static bool nl_is_known_option(const char* s) {
         || s == SYM_Scale
         || s == SYM_Terms
         || s == SYM_WynnDegree
-        || s == SYM_WorkingPrecision;
+        || s == SYM_WorkingPrecision
+        || s == SYM_AccuracyGoal
+        || s == SYM_PrecisionGoal;
 }
 
 static bool nl_is_option_arg(Expr* e) {
@@ -680,6 +695,22 @@ static bool nl_apply_option(Expr* rule, NlOpts* o) {
         }
         return true;
     }
+    if (name == SYM_AccuracyGoal) {
+        if (!nc_parse_goal(rhs, &o->acc_goal)) {
+            nl_warn("badopt", "AccuracyGoal must be a positive number, "
+                              "Automatic, Infinity or MachinePrecision");
+            return false;
+        }
+        return true;
+    }
+    if (name == SYM_PrecisionGoal) {
+        if (!nc_parse_goal(rhs, &o->prec_goal)) {
+            nl_warn("badopt", "PrecisionGoal must be a positive number, "
+                              "Automatic, Infinity or MachinePrecision");
+            return false;
+        }
+        return true;
+    }
     return false;
 }
 
@@ -739,68 +770,125 @@ static bool nl_auto_machine(const double _Complex* S, int terms,
  *  Sequence construction + dispatch                                   *
  * ------------------------------------------------------------------ */
 
-/* Machine path: build S[0..terms-1], extrapolate, return result Expr or NULL. */
+/* Dispatch the chosen extrapolation Method over S[0..terms-1]. */
+static bool nl_extrapolate(const double _Complex* S, int terms, const NlOpts* o,
+                           double _Complex* result, double* step) {
+    if (o->method == SYM_SequenceLimit)
+        return seqaccel_wynn_machine(S, terms, o->wynn, result, step);
+    if (o->method == SYM_EulerSum)
+        return seqaccel_richardson_machine(S, terms, result, step);
+    if (o->method == SYM_Levin)
+        return seqaccel_levin_machine(S, terms, o->levin_variant, 1.0, result, step);
+    return nl_auto_machine(S, terms, result, step);        /* Automatic */
+}
+
+/* True unless BOTH goals are Infinity, i.e. accuracy is not used as a
+ * termination criterion at all (in which case Terms is honoured verbatim). */
+static bool nl_goal_active(const NlOpts* o) {
+    return !(isinf(o->acc_goal) && isinf(o->prec_goal));
+}
+
+/* Machine path.  Samples an octave-spaced sequence and accelerates it, growing
+ * the sample count from o->terms up to NL_MAX_TERMS until the combined
+ * AccuracyGoal/PrecisionGoal tolerance is met, keeping the estimate with the
+ * smallest internal residual.  On a genuine non-limit (divergent / noise-
+ * dominated) it returns NULL as before; when a limit is recognised but the goal
+ * is not reached at the cap, it warns and returns the best approximation. */
 static Expr* nl_run_machine(Expr* expr, const char* var, double _Complex z0,
                             double _Complex dir, double _Complex scale,
                             bool infinite, NlOpts* o) {
-    int terms = o->terms;
-    double _Complex* S = malloc(sizeof(double _Complex) * (size_t)terms);
+    const double wp_digits = NUMERIC_MACHINE_PRECISION_DIGITS;
+    const bool goal_active = nl_goal_active(o);
+    int start = o->terms; if (start < 2) start = 2;
+    int cap = goal_active ? NL_MAX_TERMS : start;
+    if (cap < start) cap = start;
+
+    double _Complex* S = malloc(sizeof(double _Complex) * (size_t)cap);
     if (!S) return NULL;
 
     NlBind bind; nl_bind_snapshot(&bind, var);
     NlCtx ctx; ctx.f = expr; ctx.bind = &bind; ctx.spec = numeric_machine_spec();
 
+    /* Sample the starting prefix. */
+    int filled = 0;
     bool ok = true;
-    for (int k = 0; k < terms; k++) {
+    for (; filled < start; filled++) {
         double _Complex z;
-        if (infinite) z = dir * scale * ldexp(1.0, k);     /* u * Scale * 2^k */
-        else          z = z0 - dir * scale * ldexp(1.0, -k); /* z0 - d*Scale*2^-k */
-        if (!nl_sample_machine(&ctx, z, &S[k])) { ok = false; break; }
+        if (infinite) z = dir * scale * ldexp(1.0, filled);     /* u * Scale * 2^k */
+        else          z = z0 - dir * scale * ldexp(1.0, -filled); /* z0 - d*Scale*2^-k */
+        if (!nl_sample_machine(&ctx, z, &S[filled])) { ok = false; break; }
     }
     /* The oscillation diagnosis samples expr too, so it must run while the
      * variable is still bound -- before nl_bind_restore, not after. */
     bool oscillatory = ok
-        && nl_count_reversals(S, terms) >= NL_OSC_MIN_REVERSALS
+        && nl_count_reversals(S, filled) >= NL_OSC_MIN_REVERSALS
         && nl_oscillates_machine(&ctx, z0, dir, scale, infinite);
+
+    /* Adaptive refinement: extrapolate at the current prefix, keep the estimate
+     * with the smallest residual, grow the sample count until the goal is met
+     * or the cap is reached. */
+    double _Complex best_r = 0.0; double best_step = INFINITY;
+    double best_maxsample = 0.0; bool have_best = false;
+    if (ok && !oscillatory) {
+        int terms = filled;
+        int stall = 0;
+        for (;;) {
+            double maxsample = 0.0;
+            for (int k = 0; k < terms; k++) {
+                double v = cabs(S[k]);
+                if (v > maxsample) maxsample = v;
+            }
+            double _Complex result; double step = 0.0;
+            bool improved = false;
+            if (nl_extrapolate(S, terms, o, &result, &step)
+                && isfinite(creal(result)) && isfinite(cimag(result))
+                && step < best_step
+                && (!have_best
+                    || cabs(result - best_r) <= NL_REFINE_JUMP * best_step + 1e-300)) {
+                best_r = result; best_step = step;
+                best_maxsample = maxsample; have_best = true; improved = true;
+            }
+            if (!goal_active) break;             /* honour Terms verbatim */
+            if (have_best) {
+                double tol = nc_combined_tol(o->acc_goal, o->prec_goal,
+                                             cabs(best_r), wp_digits);
+                if (best_step <= tol
+                    && nl_accept(cabs(best_r), best_step, best_maxsample))
+                    break;                       /* goal met and accepted */
+            }
+            stall = improved ? 0 : (stall + 1);
+            if (stall >= NL_REFINE_STALL) break; /* refinement no longer helping */
+            if (terms >= cap) break;             /* out of refinement budget */
+            double _Complex z;                   /* grow by one octave */
+            if (infinite) z = dir * scale * ldexp(1.0, terms);
+            else          z = z0 - dir * scale * ldexp(1.0, -terms);
+            if (!nl_sample_machine(&ctx, z, &S[terms])) break;  /* can't extend */
+            terms++; filled = terms;
+        }
+    }
     nl_bind_restore(&bind);
+    free(S);
+
     if (!ok) {
-        free(S);
         nl_warn("notnum", "the expression is not numerical at a sample point");
         return NULL;
     }
-    if (oscillatory) {
-        free(S);
-        nl_warn("osc", NL_OSC_MESSAGE);
-        return NULL;
-    }
+    if (oscillatory) { nl_warn("osc", NL_OSC_MESSAGE); return NULL; }
+    if (!have_best) { nl_warn("ndterm", "not enough Terms for the chosen Method"); return NULL; }
 
-    double maxsample = 0.0;
-    for (int k = 0; k < terms; k++) {
-        double v = cabs(S[k]);
-        if (v > maxsample) maxsample = v;
-    }
-
-    double _Complex result;
-    double step = 0.0;
-    bool got;
-    if (o->method == SYM_SequenceLimit)
-        got = seqaccel_wynn_machine(S, terms, o->wynn, &result, &step);
-    else if (o->method == SYM_EulerSum)
-        got = seqaccel_richardson_machine(S, terms, &result, &step);
-    else if (o->method == SYM_Levin)
-        got = seqaccel_levin_machine(S, terms, o->levin_variant, 1.0, &result, &step);
-    else
-        got = nl_auto_machine(S, terms, &result, &step);   /* Automatic */
-    free(S);
-    if (!got) { nl_warn("ndterm", "not enough Terms for the chosen Method"); return NULL; }
-
-    if (!nl_accept(cabs(result), step, maxsample)) {
+    /* Divergent / noise-dominated extrapolant: no limiting value recognised. */
+    if (!nl_accept(cabs(best_r), best_step, best_maxsample)) {
         nl_warn("noise", "Cannot recognize a limiting value. This may be due to "
                          "noise from roundoff; try higher WorkingPrecision, fewer "
                          "Terms, or a different Scale.");
         return NULL;
     }
-    return nl_from_complex_d(result);
+    /* Accepted, but possibly short of the requested accuracy. */
+    if (goal_active) {
+        double tol = nc_combined_tol(o->acc_goal, o->prec_goal, cabs(best_r), wp_digits);
+        if (best_step > tol) nc_warn_goal("NLimit", best_step, tol);
+    }
+    return nl_from_complex_d(best_r);
 }
 
 #ifdef USE_MPFR
@@ -871,10 +959,45 @@ static bool nl_auto_mpfr(const mpfr_t* Sr, const mpfr_t* Si, int terms,
     return have || have_first;
 }
 
+/* Dispatch the chosen extrapolation Method over the MPFR prefix Sr/Si[0..terms). */
+static bool nl_extrapolate_mpfr(const mpfr_t* Sr, const mpfr_t* Si, int terms,
+                                long bits, const NlOpts* o,
+                                mpfr_t rr, mpfr_t ri, double* step, bool* finite) {
+    if (o->method == SYM_SequenceLimit)
+        return seqaccel_wynn_mpfr(Sr, Si, terms, o->wynn, bits, rr, ri, step, finite);
+    if (o->method == SYM_EulerSum)
+        return seqaccel_richardson_mpfr(Sr, Si, terms, bits, rr, ri, step, finite);
+    if (o->method == SYM_Levin)
+        return seqaccel_levin_mpfr(Sr, Si, terms, o->levin_variant, 1.0, bits, rr, ri, step, finite);
+    return nl_auto_mpfr(Sr, Si, terms, bits, rr, ri, step, finite);   /* Automatic */
+}
+
+/* Sample expr at octave index k into (Srk, Sik); mirrors the machine path's
+ * z_k formula.  zr/zi/hk are caller-owned scratch at working precision. */
+static bool nl_sample_index_mpfr(NlCtx* ctx, int k, bool infinite,
+                                 const mpfr_t z0r, const mpfr_t z0i,
+                                 const mpfr_t dsr, const mpfr_t dsi,
+                                 mpfr_t zr, mpfr_t zi, mpfr_t hk,
+                                 mpfr_t Srk, mpfr_t Sik) {
+    if (infinite) {
+        mpfr_set_ui(hk, 1, MPFR_RNDN);
+        mpfr_mul_2ui(hk, hk, (unsigned long)k, MPFR_RNDN);   /* 2^k */
+        mpfr_mul(zr, dsr, hk, MPFR_RNDN);
+        mpfr_mul(zi, dsi, hk, MPFR_RNDN);
+    } else {
+        mpfr_set_ui(hk, 1, MPFR_RNDN);
+        mpfr_div_2ui(hk, hk, (unsigned long)k, MPFR_RNDN);   /* 2^-k */
+        mpfr_mul(zr, dsr, hk, MPFR_RNDN);
+        mpfr_mul(zi, dsi, hk, MPFR_RNDN);
+        mpfr_sub(zr, z0r, zr, MPFR_RNDN);                    /* z0 - d*Scale*2^-k */
+        mpfr_sub(zi, z0i, zi, MPFR_RNDN);
+    }
+    return nl_sample_mpfr(ctx, zr, zi, Srk, Sik);
+}
+
 static Expr* nl_run_mpfr(Expr* expr, const char* var, Expr* z0_expr,
                          Expr* dir_expr, Expr* scale_expr, bool infinite,
                          Expr* ray_expr, NlOpts* o) {
-    int terms = o->terms;
     long bits = o->bits;
     mpfr_prec_t p = (mpfr_prec_t)bits;
     NumericSpec spec;
@@ -915,9 +1038,15 @@ static Expr* nl_run_mpfr(Expr* expr, const char* var, Expr* z0_expr,
         return NULL;
     }
 
-    mpfr_t* Sr = malloc(sizeof(mpfr_t) * (size_t)terms);
-    mpfr_t* Si = malloc(sizeof(mpfr_t) * (size_t)terms);
-    for (int k = 0; k < terms; k++) { mpfr_init2(Sr[k], p); mpfr_init2(Si[k], p); }
+    const bool goal_active = nl_goal_active(o);
+    const double wp_digits = numeric_bits_to_digits(bits);
+    int start = o->terms; if (start < 2) start = 2;
+    int cap = goal_active ? NL_MAX_TERMS : start;
+    if (cap < start) cap = start;
+
+    mpfr_t* Sr = malloc(sizeof(mpfr_t) * (size_t)cap);
+    mpfr_t* Si = malloc(sizeof(mpfr_t) * (size_t)cap);
+    for (int k = 0; k < cap; k++) { mpfr_init2(Sr[k], p); mpfr_init2(Si[k], p); }
     /* scratch for the point and the d*Scale product */
     mpfr_t dsr, dsi, zr, zi, hk;
     mpfr_inits2(p, dsr, dsi, zr, zi, hk, (mpfr_ptr)0);
@@ -926,74 +1055,94 @@ static Expr* nl_run_mpfr(Expr* expr, const char* var, Expr* z0_expr,
     NlBind bind; nl_bind_snapshot(&bind, var);
     NlCtx ctx; ctx.f = expr; ctx.bind = &bind; ctx.spec = spec;
 
+    /* Sample the starting prefix. */
+    int filled = 0;
     bool ok = true;
-    for (int k = 0; ok && k < terms; k++) {
-        if (infinite) {
-            mpfr_set_ui(hk, 1, MPFR_RNDN);
-            mpfr_mul_2ui(hk, hk, (unsigned long)k, MPFR_RNDN);   /* 2^k */
-            mpfr_mul(zr, dsr, hk, MPFR_RNDN);
-            mpfr_mul(zi, dsi, hk, MPFR_RNDN);
-        } else {
-            mpfr_set_ui(hk, 1, MPFR_RNDN);
-            mpfr_div_2ui(hk, hk, (unsigned long)k, MPFR_RNDN);   /* 2^-k */
-            mpfr_mul(zr, dsr, hk, MPFR_RNDN);
-            mpfr_mul(zi, dsi, hk, MPFR_RNDN);
-            mpfr_sub(zr, z0r, zr, MPFR_RNDN);    /* z0 - d*Scale*2^-k */
-            mpfr_sub(zi, z0i, zi, MPFR_RNDN);
-        }
-        if (!nl_sample_mpfr(&ctx, zr, zi, Sr[k], Si[k])) ok = false;
+    while (filled < start) {
+        if (!nl_sample_index_mpfr(&ctx, filled, infinite, z0r, z0i, dsr, dsi,
+                                  zr, zi, hk, Sr[filled], Si[filled])) { ok = false; break; }
+        filled++;
     }
     /* Same ordering constraint as the machine path: diagnose before unbinding.
      * The reversal screen is a sign test, so it reads the samples as doubles. */
     bool oscillatory = false;
     if (ok) {
         double _Complex Sd[NL_MAX_TERMS];
-        for (int k = 0; k < terms; k++)
+        for (int k = 0; k < filled; k++)
             Sd[k] = mpfr_get_d(Sr[k], MPFR_RNDN)
                   + mpfr_get_d(Si[k], MPFR_RNDN) * I;
-        oscillatory = nl_count_reversals(Sd, terms) >= NL_OSC_MIN_REVERSALS
+        oscillatory = nl_count_reversals(Sd, filled) >= NL_OSC_MIN_REVERSALS
                    && nl_oscillates_mpfr(&ctx, z0r, z0i, dsr, dsi, infinite, bits);
+    }
+
+    /* Adaptive refinement: keep the smallest-residual estimate, grow the sample
+     * count until the combined goal tolerance is met or the cap is reached. */
+    mpfr_t best_re, best_im, rr, ri;
+    mpfr_init2(best_re, p); mpfr_init2(best_im, p);
+    mpfr_init2(rr, p);      mpfr_init2(ri, p);
+    double best_step = INFINITY, best_maxsample = 0.0;
+    bool have_best = false;
+    if (ok && !oscillatory) {
+        int terms = filled;
+        int stall = 0;
+        for (;;) {
+            double maxsample = 0.0;
+            for (int k = 0; k < terms; k++) {
+                double v = nl_l1_d(Sr[k], Si[k]);
+                if (v > maxsample) maxsample = v;
+            }
+            double step = 0.0; bool finite = false;
+            bool improved = false;
+            if (nl_extrapolate_mpfr(Sr, Si, terms, bits, o, rr, ri, &step, &finite)
+                && finite && isfinite(step) && step < best_step) {
+                double jump = 0.0;               /* value-consistency guard */
+                if (have_best)
+                    jump = hypot(mpfr_get_d(rr, MPFR_RNDN) - mpfr_get_d(best_re, MPFR_RNDN),
+                                 mpfr_get_d(ri, MPFR_RNDN) - mpfr_get_d(best_im, MPFR_RNDN));
+                if (!have_best || jump <= NL_REFINE_JUMP * best_step + 1e-300) {
+                    mpfr_set(best_re, rr, MPFR_RNDN); mpfr_set(best_im, ri, MPFR_RNDN);
+                    best_step = step; best_maxsample = maxsample;
+                    have_best = true; improved = true;
+                }
+            }
+            if (!goal_active) break;
+            if (have_best) {
+                double bmag = nl_l1_d(best_re, best_im);
+                double tol = nc_combined_tol(o->acc_goal, o->prec_goal, bmag, wp_digits);
+                if (best_step <= tol && nl_accept(bmag, best_step, best_maxsample))
+                    break;
+            }
+            stall = improved ? 0 : (stall + 1);
+            if (stall >= NL_REFINE_STALL) break;
+            if (terms >= cap) break;
+            if (!nl_sample_index_mpfr(&ctx, terms, infinite, z0r, z0i, dsr, dsi,
+                                      zr, zi, hk, Sr[terms], Si[terms])) break;
+            terms++; filled = terms;
+        }
     }
     nl_bind_restore(&bind);
 
-    double maxsample = 0.0;
-    if (ok) {
-        for (int k = 0; k < terms; k++) {
-            double v = nl_l1_d(Sr[k], Si[k]);
-            if (v > maxsample) maxsample = v;
-        }
-    }
-
     Expr* out = NULL;
-    if (ok && oscillatory) {
-        nl_warn("osc", NL_OSC_MESSAGE);
-    } else if (ok) {
-        mpfr_t rr, ri;
-        mpfr_init2(rr, p); mpfr_init2(ri, p);
-        double step = 0.0;
-        bool finite = false, got;
-        if (o->method == SYM_SequenceLimit)
-            got = seqaccel_wynn_mpfr(Sr, Si, terms, o->wynn, bits, rr, ri, &step, &finite);
-        else if (o->method == SYM_EulerSum)
-            got = seqaccel_richardson_mpfr(Sr, Si, terms, bits, rr, ri, &step, &finite);
-        else if (o->method == SYM_Levin)
-            got = seqaccel_levin_mpfr(Sr, Si, terms, o->levin_variant, 1.0, bits, rr, ri, &step, &finite);
-        else
-            got = nl_auto_mpfr(Sr, Si, terms, bits, rr, ri, &step, &finite);  /* Automatic */
-        bool converged = got && finite && nl_accept(nl_l1_d(rr, ri), step, maxsample);
-        if (converged) {
-            out = nl_from_complex_mpfr(rr, ri);
-        } else {
-            nl_warn("noise", "Cannot recognize a limiting value. This may be due "
-                             "to noise from roundoff; try higher WorkingPrecision, "
-                             "fewer Terms, or a different Scale.");
-        }
-        mpfr_clear(rr); mpfr_clear(ri);
-    } else {
+    if (!ok) {
         nl_warn("notnum", "the expression is not numerical at a sample point");
+    } else if (oscillatory) {
+        nl_warn("osc", NL_OSC_MESSAGE);
+    } else if (have_best
+               && nl_accept(nl_l1_d(best_re, best_im), best_step, best_maxsample)) {
+        if (goal_active) {
+            double bmag = nl_l1_d(best_re, best_im);
+            double tol = nc_combined_tol(o->acc_goal, o->prec_goal, bmag, wp_digits);
+            if (best_step > tol) nc_warn_goal("NLimit", best_step, tol);
+        }
+        out = nl_from_complex_mpfr(best_re, best_im);
+    } else {
+        nl_warn("noise", "Cannot recognize a limiting value. This may be due "
+                         "to noise from roundoff; try higher WorkingPrecision, "
+                         "fewer Terms, or a different Scale.");
     }
 
-    for (int k = 0; k < terms; k++) { mpfr_clear(Sr[k]); mpfr_clear(Si[k]); }
+    mpfr_clear(best_re); mpfr_clear(best_im); mpfr_clear(rr); mpfr_clear(ri);
+    for (int k = 0; k < cap; k++) { mpfr_clear(Sr[k]); mpfr_clear(Si[k]); }
     free(Sr); free(Si);
     mpfr_clears(z0r, z0i, dr, di, sr, si, mag, dsr, dsi, zr, zi, hk, (mpfr_ptr)0);
     return out;
@@ -1039,10 +1188,12 @@ Expr* builtin_nlimit(Expr* res) {
     o.levin_variant = SEQACCEL_LEVIN_U;
     o.direction = NULL;
     o.scale = NULL;
-    o.terms = 13;
+    o.terms = 13;                                  /* starting sample count */
     o.wynn = 1;
     o.prec_mpfr = false;
     o.bits = 0;
+    o.acc_goal = NC_GOAL_MACHINE; /* AccuracyGoal -> MachinePrecision */
+    o.prec_goal = NC_GOAL_AUTO;                    /* PrecisionGoal -> Automatic */
     for (size_t i = pos_end; i < argc; i++) {
         if (!nl_apply_option(res->data.function.args[i], &o)) return NULL;
     }

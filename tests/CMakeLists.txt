@@ -646,6 +646,7 @@ set(COMMON_SRC
     ../src/zero_test.c
     ../src/numeric_complex.c
     ../src/flint_num_bridge.c
+    ../src/nc_accuracy.c
     ../src/numerical_calculus/quadrature.c
     ../src/numerical_calculus/seqaccel.c
     ../src/numerical_calculus/dequad.c
@@ -1081,6 +1082,9 @@ add_test(NAME nlimit_tests COMMAND nlimit_tests)
 
 add_executable(nsum_tests test_nsum.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(nsum_tests PRIVATE ../src ../src/numerical_calculus)
+
+add_executable(accuracygoal_tests test_accuracygoal.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(accuracygoal_tests PRIVATE ../src ../src/numerical_calculus)
 
 add_executable(nprod_tests test_nprod.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(nprod_tests PRIVATE ../src ../src/numerical_calculus)

@@ -54,6 +54,7 @@
 #include "attr.h"
 #include "sym_names.h"
 #include "numeric.h"         /* numeric_digits_to_bits, NumericSpec */
+#include "nc_accuracy.h"     /* shared AccuracyGoal/PrecisionGoal handling */
 #include "common.h"          /* common_numericalize_result, rationalize_input */
 #include "arithmetic.h"      /* is_number, is_rational */
 #include "poly/poly.h"       /* is_polynomial */
@@ -192,12 +193,15 @@ typedef struct {
     NSolveMethod method;       /* polynomial-system method                     */
     int          verify;       /* -1 auto (=on), 0 off, 1 on                   */
     unsigned long seed;        /* RandomSeeding for the generic form           */
+    double       acc_goal;     /* AccuracyGoal digits (nc_accuracy.h sentinels);
+                                  default MachinePrecision                      */
+    bool         acc_goal_set; /* true once the user supplies AccuracyGoal      */
 } NSolveOpts;
 
 static bool nsolve_is_known_option(const char* s) {
     return s == SYM_MaxRoots || s == SYM_Method || s == SYM_WorkingPrecision
         || s == SYM_VerifySolutions || s == SYM_RandomSeeding
-        || s == SYM_PrecisionGoal || s == SYM_MaxIterations;
+        || s == SYM_PrecisionGoal || s == SYM_AccuracyGoal || s == SYM_MaxIterations;
 }
 
 static bool nsolve_is_option_arg(const Expr* e) {
@@ -255,7 +259,20 @@ static void nsolve_apply_option(const Expr* rule, NSolveOpts* o) {
             o->seed = (unsigned long)rhs->data.integer;
         return;
     }
+    if (name == SYM_AccuracyGoal) {
+        double g;
+        if (nc_parse_goal(rhs, &g)) { o->acc_goal = g; o->acc_goal_set = true; }
+        return;
+    }
     /* MaxIterations: accepted, no effect on the polynomial engine. */
+}
+
+/* Build the option value Expr for a shared goal (nc_accuracy sentinels): the
+ * Automatic / Infinity symbol for the two sentinels, else the digit count. */
+static Expr* nsolve_goal_to_expr(double g) {
+    if (isinf(g)) return expr_new_symbol(SYM_Infinity);
+    if (g < 0.0)  return expr_new_symbol(SYM_Automatic);
+    return expr_new_real(g);
 }
 
 /* ------------------------------------------------------------------ *
@@ -377,20 +394,26 @@ static Expr* nsolve_polynomial(Expr* expr, Expr* var,
     expr_free(residual);
     if (!is_poly) return NULL;
 
-    /* Assemble  NRoots[eqn, var, PrecisionGoal -> digits]  and call the engine
-     * directly (NRoots never frees its argument). */
+    /* Assemble  NRoots[eqn, var, PrecisionGoal -> digits, AccuracyGoal -> a]  and
+     * call the engine directly (NRoots never frees its argument).  The goals are
+     * forwarded so the NRoots root-polishing accuracy contract governs NSolve's
+     * polynomial roots; NRoots emits any accuracy-shortfall warning. */
     Expr* eqn = as_equation(expr);
-    Expr* nrexpr;
+    Expr* nargs[4];
+    size_t na = 0;
+    nargs[na++] = eqn;
+    nargs[na++] = expr_copy(var);
     if (o->prec_digits > 0.0) {
-        Expr* pg = expr_new_function(expr_new_symbol(SYM_Rule),
-                       (Expr*[]){ expr_new_symbol(SYM_PrecisionGoal),
-                                  expr_new_real(o->prec_digits) }, 2);
-        nrexpr = expr_new_function(expr_new_symbol(SYM_NRoots),
-                     (Expr*[]){ eqn, expr_copy(var), pg }, 3);
-    } else {
-        nrexpr = expr_new_function(expr_new_symbol(SYM_NRoots),
-                     (Expr*[]){ eqn, expr_copy(var) }, 2);
+        nargs[na++] = expr_new_function(expr_new_symbol(SYM_Rule),
+                          (Expr*[]){ expr_new_symbol(SYM_PrecisionGoal),
+                                     expr_new_real(o->prec_digits) }, 2);
     }
+    if (o->acc_goal_set) {
+        nargs[na++] = expr_new_function(expr_new_symbol(SYM_Rule),
+                          (Expr*[]){ expr_new_symbol(SYM_AccuracyGoal),
+                                     nsolve_goal_to_expr(o->acc_goal) }, 2);
+    }
+    Expr* nrexpr = expr_new_function(expr_new_symbol(SYM_NRoots), nargs, na);
 
     Expr* nr = builtin_nroots(nrexpr);
     expr_free(nrexpr);
@@ -780,7 +803,8 @@ Expr* builtin_nsolve(Expr* res) {
     }
     if (pos_end < 1 || pos_end > 4) return NULL;
 
-    NSolveOpts opts = { -1, -1.0, NSM_AUTOMATIC, -1, 1234UL };
+    NSolveOpts opts = { -1, -1.0, NSM_AUTOMATIC, -1, 1234UL,
+                        NUMERIC_MACHINE_PRECISION_DIGITS, false };
     for (size_t i = pos_end; i < argc; i++)
         nsolve_apply_option(res->data.function.args[i], &opts);
 

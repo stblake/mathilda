@@ -46,6 +46,7 @@
 #include "arithmetic.h"   /* is_complex, make_complex, is_rational */
 #include "attr.h"
 #include "eval.h"
+#include "nc_accuracy.h"  /* shared AccuracyGoal/PrecisionGoal handling */
 #include "numeric.h"
 #include "sym_names.h"
 #include "symtab.h"
@@ -61,6 +62,7 @@ typedef struct {
     long   bits;               /* MPFR working precision in bits       */
     int    max_recursion;      /* default 10                           */
     double prec_goal_digits;   /* < 0 => derive from WorkingPrecision  */
+    double acc_goal_digits;    /* AccuracyGoal (nc_accuracy.h sentinels) */
 } NrOpts;
 
 static void nr_warn(const char* tag, const char* fmt, ...) {
@@ -227,6 +229,7 @@ static bool nr_is_known_option(const char* s) {
     return s == SYM_Radius
         || s == SYM_WorkingPrecision
         || s == SYM_PrecisionGoal
+        || s == SYM_AccuracyGoal
         || s == SYM_MaxRecursion
         || s == SYM_Method;
 }
@@ -256,13 +259,10 @@ static bool nr_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
     return true;
 }
 
+/* AccuracyGoal / PrecisionGoal parsing is shared (accepts MachinePrecision and
+ * distinguishes Automatic from Infinity — see nc_accuracy.h). */
 static bool nr_parse_goal(Expr* val, double* digits_out) {
-    if (val->type == EXPR_SYMBOL) {
-        if (val->data.symbol.name == SYM_Automatic) { *digits_out = -1.0;      return true; }
-        if (val->data.symbol.name == SYM_Infinity)  { *digits_out = INFINITY;  return true; }
-        return false;
-    }
-    return nr_to_double_real(val, digits_out);
+    return nc_parse_goal(val, digits_out);
 }
 
 static bool nr_apply_option(Expr* rule, NrOpts* o) {
@@ -289,6 +289,7 @@ static bool nr_apply_option(Expr* rule, NrOpts* o) {
         return true;
     }
     if (name == SYM_PrecisionGoal) return nr_parse_goal(rhs, &o->prec_goal_digits);
+    if (name == SYM_AccuracyGoal)  return nr_parse_goal(rhs, &o->acc_goal_digits);
     if (name == SYM_MaxRecursion) {
         if (rhs->type == EXPR_INTEGER && rhs->data.integer >= 0) {
             o->max_recursion = (int)rhs->data.integer; return true;
@@ -333,14 +334,23 @@ static Expr* nr_thread_over_list(Expr* res) {
  *  Result-status reporting shared by both precision paths             *
  * ------------------------------------------------------------------ */
 
-static Expr* nr_report(QdStatus status, int n_used, Expr* value /*owned*/) {
+/* result_mag is |computed residue|; acc_goal_digits is the resolved AccuracyGoal
+ * (absolute floor). When PrecisionGoal (relative) is not reached but the residue
+ * is smaller than 10^-AccuracyGoal, the combined tolerance is met anyway, so the
+ * result is accepted without a warning. */
+static Expr* nr_report(QdStatus status, int n_used, double result_mag,
+                       double acc_goal_digits, Expr* value /*owned*/) {
     switch (status) {
         case QD_OK:
             return value;
-        case QD_NOCONV:
+        case QD_NOCONV: {
+            double abstol = isinf(acc_goal_digits) ? 0.0 : pow(10.0, -acc_goal_digits);
+            if (isfinite(result_mag) && result_mag <= abstol)
+                return value;                 /* absolute AccuracyGoal met */
             nr_warn("ncvi", "failed to converge to prescribed accuracy after %d "
                             "sample points; result may be inaccurate", n_used);
             return value;
+        }
         case QD_BRANCHCUT:
             nr_warn("bcut", "the integrand does not appear analytic on the contour "
                             "(possible branch cut); result is unreliable");
@@ -390,7 +400,8 @@ Expr* builtin_nresidue(Expr* res) {
     opts.prec_mpfr = false;
     opts.bits = 0;
     opts.max_recursion = 10;
-    opts.prec_goal_digits = -1.0;  /* derive */
+    opts.prec_goal_digits = NC_GOAL_AUTO;                     /* PrecisionGoal -> Automatic */
+    opts.acc_goal_digits  = NC_GOAL_MACHINE; /* AccuracyGoal -> MachinePrecision */
     for (size_t i = pos_end; i < argc; i++) {
         if (!nr_apply_option(res->data.function.args[i], &opts)) return NULL;
     }
@@ -417,6 +428,7 @@ Expr* builtin_nresidue(Expr* res) {
     if (prec_goal < 0.0)        prec_goal = wp_digits - 2.0;   /* two guard digits */
     if (prec_goal > wp_digits)  prec_goal = wp_digits;
     if (prec_goal < 1.0)        prec_goal = 1.0;
+    double acc_goal = nc_resolve_goal(opts.acc_goal_digits, wp_digits);
 
     NumericSpec spec_num;
 #ifdef USE_MPFR
@@ -458,9 +470,10 @@ Expr* builtin_nresidue(Expr* res) {
                                                      z0r, z0i, radius_arg, opts.bits,
                                                      prec_goal, opts.max_recursion,
                                                      outr, outi);
+            double rmag = hypot(mpfr_get_d(outr, MPFR_RNDN), mpfr_get_d(outi, MPFR_RNDN));
             Expr* value = (R.status == QD_NONNUMERIC) ? NULL
                                                       : nr_from_complex_mpfr(outr, outi);
-            result = nr_report(R.status, R.n_used, value);
+            result = nr_report(R.status, R.n_used, rmag, acc_goal, value);
         }
         mpfr_clears(z0r, z0i, outr, outi, (mpfr_ptr)0);
     } else
@@ -474,7 +487,7 @@ Expr* builtin_nresidue(Expr* res) {
                                                            z0c, radius_arg,
                                                            prec_goal, opts.max_recursion);
             Expr* value = (R.status == QD_NONNUMERIC) ? NULL : nr_from_complex_d(R.value);
-            result = nr_report(R.status, R.n_used, value);
+            result = nr_report(R.status, R.n_used, cabs(R.value), acc_goal, value);
         }
     }
 

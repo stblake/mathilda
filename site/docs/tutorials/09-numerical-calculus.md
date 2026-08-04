@@ -239,6 +239,30 @@ Out[1]= 1.0
 Choosing the contour `Radius` is the main control here: it must enclose the
 target singularity and no other, and stay on one side of any branch cut.
 
+## Controlling accuracy
+
+Every routine in this tutorial shares two options that decide *when* an estimate
+is good enough. `AccuracyGoal` (default `MachinePrecision`) is the absolute-error
+target in digits and `PrecisionGoal` (default `Automatic`) the relative-error
+target; a result is accepted once the estimated error drops below the combined
+tolerance `10^-AccuracyGoal + |x| · 10^-PrecisionGoal`. The default goals both
+*track* `WorkingPrecision` rather than stopping at a fixed 16 digits, so asking
+for more precision automatically raises the accuracy target too. That is why the
+30-digit `NSum` further up returns about 28 correct digits, and a numerical limit
+sharpens the same way:
+
+```mathematica
+In[1]:= NLimit[Sin[x]/x, x -> 0, WorkingPrecision -> 30]
+Out[1]= 0.9999999999999999999999999999976
+```
+
+That is `sin(x)/x → 1` resolved to ~28 nines — the default `MachinePrecision`
+accuracy goal followed `WorkingPrecision -> 30` upward, instead of halting at
+machine precision. When a goal genuinely cannot be reached within a routine's
+internal work budget, the routine does *not* fail: it prints a `Head::accgl`
+warning (for example `NLimit::accgl`) and returns its best approximation, so you
+always get a number back to inspect.
+
 ## Where to next
 
 You have now met Mathilda's full numerical-calculus toolkit: integration

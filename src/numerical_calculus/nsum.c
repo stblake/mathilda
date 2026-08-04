@@ -40,6 +40,7 @@
 #include "attr.h"
 #include "compile/autocompile.h"   /* machine fast path for the summand */
 #include "eval.h"
+#include "nc_accuracy.h"  /* shared AccuracyGoal/PrecisionGoal handling */
 #include "numeric.h"
 #include "seqaccel.h"
 #include "dequad.h"
@@ -377,14 +378,26 @@ static bool ns_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
     return true;
 }
 
+/* AccuracyGoal / PrecisionGoal parsing is shared (accepts MachinePrecision and
+ * distinguishes Automatic from Infinity — see nc_accuracy.h). */
 static bool ns_parse_goal(Expr* v, double* out) {
-    if (v->type == EXPR_SYMBOL
-        && (v->data.symbol.name == SYM_Infinity || v->data.symbol.name == SYM_Automatic)) {
-        *out = -1.0; return true;
+    return nc_parse_goal(v, out);
+}
+
+/* Working precision in decimal digits for the active mode. */
+static double ns_wp_digits(const NsOpts* o) {
+#ifdef USE_MPFR
+    if (o->prec_mpfr) {
+        long b = o->target_bits > 0 ? o->target_bits : o->bits;
+        if (b > 0) return numeric_bits_to_digits(b);
     }
-    double d;
-    if (ns_to_double_real(v, &d) && d > 0.0) { *out = d; return true; }
-    return false;
+#endif
+    return NUMERIC_MACHINE_PRECISION_DIGITS;
+}
+
+/* True unless both goals are Infinity (accuracy not used as a criterion). */
+static bool ns_goal_active(const NsOpts* o) {
+    return !(isinf(o->acc_goal) && isinf(o->prec_goal));
 }
 
 static bool ns_apply_option(Expr* rule, NsOpts* o) {
@@ -538,6 +551,10 @@ static Expr* ns_wynn_machine(NsCtx* c, long count, const NsOpts* o) {
         ns_warn("ncvg", "failed to converge; try more NSumExtraTerms or higher WorkingPrecision");
         return NULL;
     }
+    if (ns_goal_active(o)) {
+        double tol = nc_combined_tol(o->acc_goal, o->prec_goal, cabs(result), ns_wp_digits(o));
+        if (step > tol) nc_warn_goal("NSum", step, tol);
+    }
     return ns_from_complex_d(result);
 }
 
@@ -582,9 +599,13 @@ static Expr* ns_wynn_mpfr(NsCtx* c, long count, const NsOpts* o) {
         mpfr_t rr, ri; mpfr_init2(rr, p); mpfr_init2(ri, p);
         double step = 0.0; bool finite = false;
         bool got = seqaccel_wynn_mpfr(Pr, Pi, L, o->wynn, bits, rr, ri, &step, &finite);
-        if (got && finite && ns_accept(ns_l1_d(rr, ri), step, maxsample))
+        if (got && finite && ns_accept(ns_l1_d(rr, ri), step, maxsample)) {
+            if (ns_goal_active(o)) {
+                double tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_l1_d(rr, ri), ns_wp_digits(o));
+                if (step > tol) nc_warn_goal("NSum", step, tol);
+            }
             out = ns_from_complex_mpfr(rr, ri);
-        else
+        } else
             ns_warn("ncvg", "failed to converge; try more NSumExtraTerms or higher WorkingPrecision");
         mpfr_clear(rr); mpfr_clear(ri);
     } else {
@@ -641,6 +662,10 @@ static Expr* ns_levin_machine(NsCtx* c, long count, const NsOpts* o) {
         ns_warn("ncvg", "failed to converge; try more NSumExtraTerms or higher WorkingPrecision");
         return NULL;
     }
+    if (ns_goal_active(o)) {
+        double tol = nc_combined_tol(o->acc_goal, o->prec_goal, cabs(result), ns_wp_digits(o));
+        if (step > tol) nc_warn_goal("NSum", step, tol);
+    }
     return ns_from_complex_d(result);
 }
 
@@ -685,9 +710,13 @@ static Expr* ns_levin_mpfr(NsCtx* c, long count, const NsOpts* o) {
         mpfr_t rr, ri; mpfr_init2(rr, p); mpfr_init2(ri, p);
         double step = 0.0; bool finite = false;
         bool got = seqaccel_levin_mpfr(Pr, Pi, L, o->levin_variant, 1.0, bits, rr, ri, &step, &finite);
-        if (got && finite && ns_accept(ns_l1_d(rr, ri), step, maxsample))
+        if (got && finite && ns_accept(ns_l1_d(rr, ri), step, maxsample)) {
+            if (ns_goal_active(o)) {
+                double tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_l1_d(rr, ri), ns_wp_digits(o));
+                if (step > tol) nc_warn_goal("NSum", step, tol);
+            }
             out = ns_from_complex_mpfr(rr, ri);
-        else
+        } else
             ns_warn("ncvg", "failed to converge; try more NSumExtraTerms or higher WorkingPrecision");
         mpfr_clear(rr); mpfr_clear(ri);
     } else {
@@ -979,8 +1008,9 @@ static Expr* ns_em_machine(NsCtx* c, const char* var, NsOpts* o, long settle) {
     bool ballooned = false;
     int napplied = 0;
     double prev_mag = INFINITY;
-    double goal = (o->prec_goal > 0 ? o->prec_goal : NUMERIC_MACHINE_PRECISION_DIGITS - 2);
-    double tol = pow(10.0, -goal) * (cabs(H + tail) + 1.0);
+    double tol = nc_combined_tol(o->acc_goal, o->prec_goal, cabs(H + tail),
+                                 NUMERIC_MACHINE_PRECISION_DIGITS);
+    bool met = false;
     double dipow = ddi;                          /* di^(2j-1): di^1, ·= di^2 each step */
     for (int j = 1; j <= J; j++) {
         int ord = 2 * j - 1;
@@ -1000,7 +1030,8 @@ static Expr* ns_em_machine(NsCtx* c, const char* var, NsOpts* o, long settle) {
                 corr = ns_em_coeff_machine(j) * dipow * dval;   /* B/(2j)!·di·f^(ord) */
                 have_corr = true;
             } else if (!dcur) {
-                break;                            /* derivative vanished: done */
+                met = true;                       /* derivative vanished: EM exact */
+                break;
             }
         }
         if (!have_corr) {                         /* symbolic failed/ballooned */
@@ -1024,9 +1055,11 @@ static Expr* ns_em_machine(NsCtx* c, const char* var, NsOpts* o, long settle) {
         tail -= corr;
         napplied++;
         prev_mag = mag;
-        if (mag < tol) break;
+        if (mag < tol) { met = true; break; }
         dipow *= ddi * ddi;
     }
+    if (ns_goal_active(o) && !met && napplied > 0 && isfinite(prev_mag) && prev_mag > tol)
+        nc_warn_goal("NSum", prev_mag, tol);
     free(a);
     expr_free(dcur);
     expr_free(Nval);
@@ -1252,9 +1285,10 @@ static Expr* ns_em_mpfr(NsCtx* c, const char* var, NsOpts* o, long settle) {
         bool a_tried = false, a_ok = false;
         mpfr_set(dipow, ddi_m, MPFR_RNDN);          /* di^1 */
         double prev_mag = INFINITY;
-        double goal = (o->prec_goal > 0 ? o->prec_goal : digits - 2);
-        double tol = pow(10.0, -goal)
-                     * (ns_l1_d(Hr, Hi) + ns_l1_d(tail_r, tail_i) + 1.0);
+        double tol = nc_combined_tol(o->acc_goal, o->prec_goal,
+                                     ns_l1_d(Hr, Hi) + ns_l1_d(tail_r, tail_i),
+                                     ns_wp_digits(o));
+        bool met = false;
         ns_bind_clear_temp(symtab_get_def(var));
         Expr* dcur = expr_copy(c->body);
         int cur = 0;
@@ -1279,7 +1313,8 @@ static Expr* ns_em_mpfr(NsCtx* c, const char* var, NsOpts* o, long settle) {
                     mpfr_mul(cr, cr, dvr, MPFR_RNDN);        /* corr real          */
                     have_corr = true;
                 } else if (!dcur) {
-                    break;                          /* derivative vanished: done */
+                    met = true;                     /* derivative vanished: EM exact */
+                    break;
                 }
             }
             if (!have_corr) {                       /* symbolic failed/ballooned */
@@ -1311,7 +1346,7 @@ static Expr* ns_em_mpfr(NsCtx* c, const char* var, NsOpts* o, long settle) {
             mpfr_sub(tail_i, tail_i, ci, MPFR_RNDN);
             napplied++;
             prev_mag = mag;
-            if (mag < tol) break;
+            if (mag < tol) { met = true; break; }
             mpfr_mul(dipow, dipow, ddi_m, MPFR_RNDN);
             mpfr_mul(dipow, dipow, ddi_m, MPFR_RNDN);
         }
@@ -1329,6 +1364,8 @@ static Expr* ns_em_mpfr(NsCtx* c, const char* var, NsOpts* o, long settle) {
                 if (fabs(mpfr_get_d(ti, MPFR_RNDN)) < thr) mpfr_set_zero(ti, 1);
             }
             out = ns_from_complex_mpfr(tr, ti);
+            if (ns_goal_active(o) && !met && napplied > 0 && isfinite(prev_mag) && prev_mag > tol)
+                nc_warn_goal("NSum", prev_mag, tol);
         }
     }
 
@@ -1738,8 +1775,8 @@ Expr* builtin_nsum(Expr* res) {
     o.prec_mpfr = false;
     o.bits = 0;
     o.target_bits = 0;
-    o.acc_goal = -1.0;
-    o.prec_goal = -1.0;
+    o.acc_goal = NC_GOAL_MACHINE; /* AccuracyGoal -> MachinePrecision */
+    o.prec_goal = NC_GOAL_AUTO;                    /* PrecisionGoal -> Automatic */
     for (size_t i = pos_end; i < argc; i++)
         if (!ns_apply_option(res->data.function.args[i], &o)) return NULL;
 

@@ -42,6 +42,7 @@
 #include "arithmetic.h"   /* is_complex, make_complex, is_rational */
 #include "attr.h"
 #include "eval.h"
+#include "nc_accuracy.h"  /* shared AccuracyGoal/PrecisionGoal handling */
 #include "numeric.h"
 #include "sym_names.h"
 #include "symtab.h"
@@ -468,8 +469,8 @@ typedef struct {
     bool   prec_mpfr;       /* WorkingPrecision selects MPFR                 */
     long   bits;            /* MPFR internal working precision (guarded)      */
     long   target_bits;     /* user-requested precision; result rounded back  */
-    double acc_goal;        /* AccuracyGoal digits (-1 => Infinity)          */
-    double prec_goal;       /* PrecisionGoal digits (-1 => Automatic)        */
+    double acc_goal;        /* AccuracyGoal digits (nc_accuracy.h sentinels)  */
+    double prec_goal;       /* PrecisionGoal digits (nc_accuracy.h sentinels) */
     int    max_recursion;   /* -1 => Automatic                                */
     int    min_recursion;   /* default 0                                      */
     long   max_points;      /* -1 => Automatic                                */
@@ -538,14 +539,16 @@ static bool ni_parse_working_precision(Expr* val, bool* mpfr, long* bits) {
     return true;
 }
 
+/* Delegates to the shared parser (nc_accuracy.h): Automatic -> NC_GOAL_AUTO
+ * (-1), Infinity -> NC_GOAL_OFF (+Inf), MachinePrecision -> ~15.95 digits,
+ * positive number -> itself, else false.  MachinePrecision is the newly-accepted
+ * setting the old parser rejected.  The Infinity sentinel changed from -1 to
+ * +Inf, but every consumer of acc_goal/prec_goal below still disables the
+ * criterion for it: each computes its term as `(goal > 0) ? 10^-goal : 0` (and
+ * pow(10, -Inf) == 0) or resolves `goal < 0` (Automatic) to a default, so +Inf
+ * drops the term exactly as the old -1 did for Infinity. */
 static bool ni_parse_goal(Expr* v, double* out) {
-    if (v->type == EXPR_SYMBOL
-        && (v->data.symbol.name == SYM_Infinity || v->data.symbol.name == SYM_Automatic)) {
-        *out = -1.0; return true;
-    }
-    double d;
-    if (ni_to_double_real(v, &d) && d > 0.0) { *out = d; return true; }
-    return false;
+    return nc_parse_goal(v, out);
 }
 
 static bool ni_parse_int(Expr* v, int* out, bool allow_auto) {
@@ -660,6 +663,28 @@ static void ni_machine_tols(const NiOpts* o, double* reltol, double* abstol) {
     *reltol = pow(10.0, -pg);
     if (*reltol < 1e-14) *reltol = 1e-14;
     *abstol = (o->acc_goal > 0.0) ? pow(10.0, -o->acc_goal) : 0.0;
+}
+
+/* Working precision of the run in decimal digits (machine, or the requested
+ * MPFR target). */
+static double ni_wp_digits(const NiOpts* o) {
+    if (o->prec_mpfr) {
+        long bits = o->target_bits > 0 ? o->target_bits : o->bits;
+        return numeric_bits_to_digits(bits);
+    }
+    return NUMERIC_MACHINE_PRECISION_DIGITS;
+}
+
+/* Standard AccuracyGoal/PrecisionGoal shortfall warning (nc_accuracy.h).  Warns
+ * only when the achieved error estimate actually exceeds the combined tolerance
+ * 10^-a + |result| 10^-p, and stays silent under an enclosing numeric probe's
+ * warning mute (as ni_warn does), so an inner iterated integral's convergence
+ * noise never reaches the user.  The caller keeps returning its best estimate. */
+static void ni_warn_goal(const NiOpts* o, double achieved_err, double result_mag) {
+    if (arith_warnings_muted()) return;
+    double tol = nc_combined_tol(o->acc_goal, o->prec_goal, result_mag,
+                                 ni_wp_digits(o));
+    if (achieved_err > tol) nc_warn_goal("NIntegrate", achieved_err, tol);
 }
 
 /* Map MaxRecursion to a tanh-sinh / sinh-sinh level count. */
@@ -1268,12 +1293,11 @@ static Expr* ni_run_1d_finite_real(Expr* body, const char* var,
         }
         if (sign < 0) { mpfr_neg(re, re, MPFR_RNDN); mpfr_neg(im, im, MPFR_RNDN); }
         ni_bind_restore(&bind);
+        double rmag = hypot(mpfr_get_d(re, MPFR_RNDN), mpfr_get_d(im, MPFR_RNDN));
         Expr* out = (mpfr_number_p(re) && mpfr_number_p(im))
                   ? ni_mpfr_build(re, im, o->target_bits) : NULL;
         mpfr_clears(am, bm, re, im, (mpfr_ptr)0);
-        if (out && !conv)
-            ni_warn("ncvb", "high-precision integral did not converge "
-                    "(error estimate %.3g)", abserr);
+        if (out && !conv) ni_warn_goal(o, abserr, rmag);
         return out;
     }
 #endif
@@ -1283,9 +1307,7 @@ static Expr* ni_run_1d_finite_real(Expr* body, const char* var,
     autocompiled_free(ctx.ac);
 
     if (!best.have) return NULL;        /* no numeric estimate at all */
-    if (!best.conv)
-        ni_warn("ncvb", "failed to converge to prescribed accuracy "
-                "(error estimate %.3g)", best.err);
+    if (!best.conv) ni_warn_goal(o, best.err, cabs(best.val));
     return ni_from_complex_d(best.val * sign);
 }
 
@@ -1304,6 +1326,7 @@ static Expr* ni_run_contour(Expr* body, const char* var,
     ni_ctx_init(&ctx, body, &bind, numeric_machine_spec());
 
     double _Complex total = 0.0;
+    double total_err = 0.0;
     bool all_conv = true, any_fail = false;
     for (int i = 0; i < nnodes - 1; i++) {
         double _Complex z0 = nodes[i], z1 = nodes[i + 1];
@@ -1313,13 +1336,13 @@ static Expr* ni_run_contour(Expr* body, const char* var,
         NiAtt a = ni_core_finite(&ctx, 0.0, 1.0, o);
         if (!a.have) { any_fail = true; break; }
         total += (z1 - z0) * a.val;
+        total_err += cabs(z1 - z0) * a.err;     /* segment error scaled like its value */
         if (!a.conv) all_conv = false;
     }
     ni_bind_restore(&bind);
 
     if (any_fail) return NULL;
-    if (!all_conv)
-        ni_warn("ncvb", "contour integral did not converge to prescribed accuracy");
+    if (!all_conv) ni_warn_goal(o, total_err, cabs(total));
     return ni_from_complex_d(total);
 }
 
@@ -1344,9 +1367,7 @@ static Expr* ni_run_ray(Expr* body, const char* var, double _Complex z0,
 
     val *= dir * sign;
     if (!isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
-    if (!conv)
-        ni_warn("ncvb", "complex-ray integral did not converge "
-                "(error estimate %.3g)", abserr);
+    if (!conv) ni_warn_goal(o, abserr, cabs(val));
     return ni_from_complex_d(val);
 }
 
@@ -1420,12 +1441,11 @@ static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
         }
         if (sign < 0) { mpfr_neg(re, re, MPFR_RNDN); mpfr_neg(im, im, MPFR_RNDN); }
         ni_bind_restore(&bind);
+        double rmag = hypot(mpfr_get_d(re, MPFR_RNDN), mpfr_get_d(im, MPFR_RNDN));
         Expr* out = (mpfr_number_p(re) && mpfr_number_p(im))
                   ? ni_mpfr_build(re, im, o->target_bits) : NULL;
         mpfr_clears(am, re, im, (mpfr_ptr)0);
-        if (out && !conv)
-            ni_warn("ncvb", "high-precision semi-infinite integral did not "
-                    "converge (error estimate %.3g)", abserr);
+        if (out && !conv) ni_warn_goal(o, abserr, rmag);
         return out;
     }
 #endif
@@ -1455,9 +1475,7 @@ static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
     autocompiled_free(ctx.ac);
 
     if (!isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
-    if (!conv)
-        ni_warn("ncvb", "semi-infinite integral did not converge "
-                "(error estimate %.3g)", abserr);
+    if (!conv) ni_warn_goal(o, abserr, cabs(val));
     return ni_from_complex_d(val * sign);
 }
 
@@ -1483,12 +1501,11 @@ static Expr* ni_run_1d_wholeline(Expr* body, const char* var, double sign,
                                          re, im, &abserr);
         if (sign < 0) { mpfr_neg(re, re, MPFR_RNDN); mpfr_neg(im, im, MPFR_RNDN); }
         ni_bind_restore(&bind);
+        double rmag = hypot(mpfr_get_d(re, MPFR_RNDN), mpfr_get_d(im, MPFR_RNDN));
         Expr* out = (mpfr_number_p(re) && mpfr_number_p(im))
                   ? ni_mpfr_build(re, im, o->target_bits) : NULL;
         mpfr_clears(re, im, (mpfr_ptr)0);
-        if (out && !conv)
-            ni_warn("ncvb", "high-precision doubly-infinite integral did not "
-                    "converge (error estimate %.3g)", abserr);
+        if (out && !conv) ni_warn_goal(o, abserr, rmag);
         return out;
     }
 #endif
@@ -1522,9 +1539,7 @@ static Expr* ni_run_1d_wholeline(Expr* body, const char* var, double sign,
     autocompiled_free(ctx.ac);
 
     if (!isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
-    if (!conv)
-        ni_warn("ncvb", "doubly-infinite integral did not converge "
-                "(error estimate %.3g)", abserr);
+    if (!conv) ni_warn_goal(o, abserr, cabs(val));
     return ni_from_complex_d(val * sign);
 }
 
@@ -1698,9 +1713,7 @@ static Expr* ni_try_cubature(Expr* body, Expr** specs, size_t d, const NiOpts* o
 
     if (st == CUB_NONNUMERIC) return NULL;   /* fall back to iterated quadrature */
     if (!isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
-    if (st == CUB_NOCONV)
-        ni_warn("ncvb", "cubature did not reach the accuracy goal "
-                "(error estimate %.3g)", abserr);
+    if (st == CUB_NOCONV) ni_warn_goal(o, abserr, cabs(val));
     return ni_from_complex_d(val);
 }
 
@@ -1936,9 +1949,7 @@ static Expr* ni_try_levin_nd(Expr* body, Expr** specs, size_t nspecs,
         expr_free(g); expr_free(amp); expr_free(gp);
 
         if (!have || !isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
-        if (!conv)
-            ni_warn("ncvb", "multivariate Levin did not reach the accuracy goal "
-                    "(error estimate %.3g)", err);
+        if (!conv) ni_warn_goal(o, err, cabs(val));
         return ni_from_complex_d(val);
     }
     return NULL;   /* no reducible axis — fall back to iterated quadrature */
@@ -2146,7 +2157,11 @@ Expr* builtin_nintegrate(Expr* res) {
     o.method = NI_AUTO;
     o.method_name = NULL;
     o.prec_mpfr = false; o.bits = 0; o.target_bits = 0;
-    o.acc_goal = -1.0; o.prec_goal = -1.0;
+    /* Default AccuracyGoal -> MachinePrecision (a ~15.95-digit absolute-error
+     * floor); PrecisionGoal stays Automatic (-> WorkingPrecision/2).  The floor
+     * only relaxes the combined tolerance 10^-a + |x| 10^-p, since a finite a
+     * adds a positive term where the old Automatic contributed none. */
+    o.acc_goal = NUMERIC_MACHINE_PRECISION_DIGITS; o.prec_goal = -1.0;
     o.max_recursion = -1; o.min_recursion = 0; o.max_points = -1;
     o.exclusions = NULL;
     o.rule_type = 0; o.romberg = true; o.nc_points = 3;

@@ -18,6 +18,21 @@ These functions complement the symbolic [`calculus`](calculus.md) routines
 (`Series`): use the symbolic form when a closed form is wanted and the numerical
 form when only a number is needed or the symbolic engine gives up.
 
+### Accuracy control (shared)
+
+Most of these routines share a common accuracy contract set by two options.
+`AccuracyGoal` (default `MachinePrecision`) is the absolute-error target in
+decimal digits and `PrecisionGoal` (default `Automatic`) the relative-error
+target; a result is accepted once the estimated error meets the combined
+tolerance `10^-AccuracyGoal + |x|·10^-PrecisionGoal`. `MachinePrecision` and
+`Automatic` both track `WorkingPrecision` — about two digits below it, so a high
+`WorkingPrecision` reaches full precision rather than a fixed 16 digits — and
+`Infinity` disables the corresponding term. Refinement grows adaptively up to
+each routine's resource cap; if the goal still cannot be met a `Head::accgl`
+warning is written to stderr and the best approximation is returned (never
+`$Failed` or an unevaluated form). `NDSolve` uses the same two options but
+resolves `Automatic` to `WorkingPrecision/2` (see its section).
+
 ## NResidue
 
 Numerical residue by contour integration.  `NResidue[expr, {z, z0}]`
@@ -62,7 +77,8 @@ when `WorkingPrecision` requests it, in MPFR complex arithmetic.
 |--------|---------|---------|
 | `Radius`           | `1/100`         | Contour radius, or `Automatic` for an adaptive (Fornberg/Bornemann-style) search that favours fast-converging radii. |
 | `WorkingPrecision` | `MachinePrecision` | Machine doubles, or MPFR at the requested decimal precision. |
-| `PrecisionGoal`    | `WorkingPrecision - 2` | Target accuracy (decimal digits). |
+| `AccuracyGoal`     | `MachinePrecision` | Absolute-error target (digits); combines with PrecisionGoal as 10^-a + \|x\|10^-p.  Automatic/MachinePrecision track WorkingPrecision; Infinity disables. |
+| `PrecisionGoal`    | `Automatic`     | Relative-error target (digits) in the same combined tolerance. |
 | `MaxRecursion`     | `10`            | Maximum number of `N`-doublings. |
 | `Method`           | `Trapezoidal`   | Only the trapezoidal rule is implemented. |
 
@@ -176,7 +192,8 @@ and silently returns the derivative of the analytic continuation otherwise
 | `Scale` | `1` | EulerSum: step size / complex direction.  NIntegrate: contour radius. |
 | `Terms` | `7` | EulerSum extrapolation depth. |
 | `WorkingPrecision` | `MachinePrecision` | machine `double` or, for a digit count, MPFR. |
-| `PrecisionGoal` | `Automatic` | target accuracy (NIntegrate). |
+| `AccuracyGoal` | `MachinePrecision` | Absolute-error target (digits); combines with PrecisionGoal as 10^-a + \|x\|10^-p.  Automatic/MachinePrecision track WorkingPrecision; Infinity disables. |
+| `PrecisionGoal` | `Automatic` | Relative-error target (digits) in the same combined tolerance. |
 | `MaxRecursion` | `10` | max contour refinements (NIntegrate). |
 
 | Message | When |
@@ -274,6 +291,8 @@ real (`Real`/MPFR) when their imaginary part is exactly zero, else
 |--------|---------|---------|
 | `Radius`           | `1`             | Radius of the sampled circle; picks the annulus within which a Laurent series converges. |
 | `WorkingPrecision` | `MachinePrecision` | Machine doubles, or MPFR at the requested decimal precision (also shrinks spurious imaginary residuals). |
+| `AccuracyGoal`     | `MachinePrecision` | Absolute-error target (digits); combines with PrecisionGoal as 10^-a + \|x\|10^-p.  Automatic/MachinePrecision track WorkingPrecision; Infinity disables. |
+| `PrecisionGoal`    | `Automatic`     | Relative-error target (digits) in the same combined tolerance. |
 
 ### Diagnostics (stderr)
 
@@ -385,8 +404,10 @@ since the head already names the method.  Attributes are
 | `WorkingPrecision` | `MachinePrecision` | `MachinePrecision`, or digits → MPFR. |
 | `Direction` | `Automatic` (≡ `-1`) | complex approach vector for finite `z0`. |
 | `Scale` | `1` | initial step (finite) / distance from origin (infinite). |
-| `Terms` | `13` | number of sample points / extrapolation depth.  This, not `WorkingPrecision`, sets the accuracy on a branch-point / fractional-power approach: 13 samples resolve such a tail to ~12 machine digits, where the historical `7` reached only ~3. |
+| `Terms` | `13` | *starting* number of sample points / extrapolation depth, grown adaptively to meet `AccuracyGoal`.  This, not `WorkingPrecision`, sets the accuracy on a branch-point / fractional-power approach: 13 samples resolve such a tail to ~12 machine digits, where the historical `7` reached only ~3. |
 | `WynnDegree` | `1` | `SequenceLimit` iterations. |
+| `AccuracyGoal` | `MachinePrecision` | Absolute-error target (digits); combines with PrecisionGoal as 10^-a + \|x\|10^-p.  Automatic/MachinePrecision track WorkingPrecision; Infinity disables. |
+| `PrecisionGoal` | `Automatic` | Relative-error target (digits) in the same combined tolerance. |
 
 `Direction -> Automatic` (`-1`) approaches a finite point from larger values;
 `Direction -> 1` from smaller; complex rays such as `-Exp[225 Degree I]` select
@@ -569,7 +590,7 @@ A **large finite** sum is evaluated as the difference of two infinite tails,
 | `NSumExtraTerms` | auto | length of the Wynn partial-sum sequence. |
 | `WynnDegree` | `1` | `WynnEpsilon` iterations. |
 | `VerifyConvergence` | `True` | ratio-test divergence check (infinite sums). |
-| `AccuracyGoal` / `PrecisionGoal` | `Infinity` / `Automatic` | target tolerances. |
+| `AccuracyGoal` / `PrecisionGoal` | `MachinePrecision` / `Automatic` | absolute / relative error targets in the combined tolerance (see intro). |
 
 ### Convergence
 
@@ -901,7 +922,10 @@ All three methods agree to tolerance on the same polynomials. Aberth is the
 default: it is precision- and complex-agnostic and returns clustered multiple
 roots directly.
 
-Options: `Method`, `PrecisionGoal` (`Automatic` ⇒ machine precision; a digit
+Options: `Method`, `AccuracyGoal` (default `MachinePrecision`; the absolute
+residual a returned root must meet, combined with `PrecisionGoal` as
+10^-a + |x|10^-p — a root exceeding the goal triggers an `NRoots::accgl`
+warning), `PrecisionGoal` (`Automatic` ⇒ machine precision; a digit
 count selects arbitrary precision via MPFR), `MaxIterations` (caps the Aberth
 sweep; `Automatic` ⇒ `100 + 20·degree`), `StepMonitor` (accepted for
 compatibility). Diagnostics: `NRoots::neqn` (not an equation),
@@ -992,8 +1016,11 @@ falls back to grid-seeding for any real roots.
 
 Options: `MaxRoots` (cap on the count), `Method`
 (`Automatic | "EndomorphismMatrix" | "Homotopy" | "Symbolic"`),
-`WorkingPrecision`, `VerifySolutions`, `RandomSeeding` (seeds the generic
-linear form). The four methods agree on the same solution set.
+`WorkingPrecision`, `AccuracyGoal` (default `MachinePrecision`) and
+`PrecisionGoal` (default `Automatic`) — the absolute / relative residual a
+solution must meet in the combined tolerance — `VerifySolutions`,
+`RandomSeeding` (seeds the generic linear form). The four methods agree on the
+same solution set.
 
 ### Beyond / unlike Mathematica's NSolve
 
