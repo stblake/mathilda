@@ -103,7 +103,9 @@ bool matsol_is_inexact(const Expr* e) {
     if (!e) return false;
     switch (e->type) {
         case EXPR_REAL: return true;
+#ifdef USE_MPFR
         case EXPR_MPFR: return true;
+#endif
         case EXPR_FUNCTION:
             /* Complex[re, im], and any nested List row. */
             for (size_t i = 0; i < e->data.function.arg_count; i++)

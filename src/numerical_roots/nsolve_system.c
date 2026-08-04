@@ -127,6 +127,7 @@ static double value_magnitude(const Expr* e) {
     return INFINITY; /* unevaluated / symbolic -> treat as non-zero */
 }
 
+#ifdef USE_MPFR
 /* Build a Complex[Real,Real] (or Real) Expr from an ncpx at machine precision,
  * for substitution into residuals. */
 static Expr* ncpx_to_expr_machine(const ncpx* z) {
@@ -136,6 +137,7 @@ static Expr* ncpx_to_expr_machine(const ncpx* z) {
     return expr_new_function(expr_new_symbol(SYM_Complex),
                (Expr*[]){ expr_new_real(re), expr_new_real(im) }, 2);
 }
+#endif
 
 /* Max |f_i| after applying the rule-list `rulelist` (borrowed) to each poly. */
 static double residual_with_rules(Expr** polys, int npoly, Expr* rulelist) {
@@ -154,6 +156,7 @@ static double residual_with_rules(Expr** polys, int npoly, Expr* rulelist) {
     return worst;
 }
 
+#ifdef USE_MPFR
 static double system_residual(Expr** polys, int npoly, Expr** vars, int nvar,
                               const ncpx* vals) {
     Expr** rules = (Expr**)malloc(sizeof(Expr*) * (size_t)nvar);
@@ -493,6 +496,19 @@ Expr* nsolve_polynomial_system(Expr** polys, int npoly, Expr** vars, int nvar,
     free(sols);
     return out;
 }
+#else /* !USE_MPFR */
+/* Without MPFR the ncpx (arbitrary-precision complex) eigenvalue engine is
+ * unavailable; return NULL so the caller falls back to the elimination method. */
+Expr* nsolve_polynomial_system(Expr** polys, int npoly, Expr** vars, int nvar,
+                               NSysMethod method, bool reals_only,
+                               bool want_machine, long bits, long max_roots,
+                               int verify, unsigned long seed) {
+    (void)polys; (void)npoly; (void)vars; (void)nvar; (void)method;
+    (void)reals_only; (void)want_machine; (void)bits; (void)max_roots;
+    (void)verify; (void)seed;
+    return NULL;
+}
+#endif /* USE_MPFR */
 
 /* ================================================================== *
  *  Elimination / triangular method (Method -> "Symbolic"; also the

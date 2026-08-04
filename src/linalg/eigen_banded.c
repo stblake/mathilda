@@ -1123,11 +1123,15 @@ Expr* banded_dispatch(Expr* m, Expr* a, int64_t n,
     banded_parse_subopts(method_value, &opts);
 
     CommonInexactInfo info = common_scan_inexact(m);
+#ifdef USE_MPFR
     if (info.has_inexact && info.min_bits > 53) {
         Expr* out = banded_dispatch_mpfr(m, a, n,
                                            (mpfr_prec_t)info.min_bits,
                                            want, k_spec, &opts);
         if (out) return out;
     }
+#else
+    (void)info;
+#endif
     return banded_dispatch_machine(m, a, n, want, k_spec, &opts);
 }

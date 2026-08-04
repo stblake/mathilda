@@ -1735,6 +1735,7 @@ struct Expr* gb_to_expr(const GBPoly* p, struct Expr** vars) {
  * MPFR real, matching Mathematica's approximate-arithmetic output
  * (`1.00000000000000000 a y^4`, `0.666... x`).  The caller owns the
  * returned Expr*. */
+#ifdef USE_MPFR
 struct Expr* gb_to_expr_inexact(const GBPoly* p, struct Expr** vars,
                                 mpfr_prec_t bits) {
     if (p->n_terms == 0) return expr_new_mpfr_bits(bits);   /* 0.0 */
@@ -1787,3 +1788,4 @@ struct Expr* gb_to_expr_inexact(const GBPoly* p, struct Expr** vars,
     gb_poly_free(m);
     return out;
 }
+#endif /* USE_MPFR */

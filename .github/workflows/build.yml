@@ -109,3 +109,49 @@ jobs:
             echo "::error::PolynomialExtendedGCD wrong — check the FLINT xgcd compat shim"
             exit 1
           }
+
+  # MPFR is on by default (USE_MPFR=1) and arbitrary-precision reals (EXPR_MPFR)
+  # are used across ~130 files, so the `make USE_MPFR=0` graceful-degrade config
+  # rots easily: a new unguarded EXPR_MPFR case or *_dispatch_mpfr branch builds
+  # fine locally (default USE_MPFR=1) and only breaks the no-MPFR build. This job
+  # is the backstop. FLINT transitively pulls in mpfr.h, which masks a subset of
+  # unguarded uses (bare mpfr_prec_t) — so the build below turns FLINT OFF too,
+  # making it a true no-MPFR compile. The stricter local check is
+  # `make USE_MPFR=0 USE_FLINT=0`.
+  build-no-mpfr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgmp-dev libreadline-dev libpcre2-dev libfftw3-dev
+
+      - name: Report toolchain
+        run: make print-cc
+
+      # Build the whole tree with MPFR (and FLINT, to avoid mpfr leakage) off.
+      - name: Build (USE_MPFR=0)
+        run: make -j"$(nproc)" USE_MPFR=0 USE_FLINT=0 USE_ECM=0 USE_LAPACK=0 USE_GRAPHICS=0
+
+      # Confirm the no-MPFR binary runs and degrades gracefully: N[Pi, 50] must
+      # not crash — it falls back to machine precision with an N::prec warning.
+      - name: Smoke test
+        run: |
+          out=$(printf '%s\n' \
+            '{"id": 1, "expr": "2 + 3"}' \
+            '{"id": 2, "expr": "Factor[x^2 - 1]"}' \
+            '{"id": 3, "expr": "N[Pi, 50]"}' \
+            '{"type": "quit"}' | ./Mathilda)
+          echo "$out"
+          echo "$out" | grep -q '"payload":"5"' || {
+            echo "::error::no-MPFR binary did not evaluate 2 + 3"
+            exit 1
+          }
+          # N[Pi, 50] must degrade gracefully to machine precision, not crash.
+          echo "$out" | grep -q '"payload":"3.14159"' || {
+            echo "::error::no-MPFR N[Pi, 50] did not fall back to machine precision"
+            exit 1
+          }

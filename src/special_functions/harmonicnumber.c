@@ -237,11 +237,13 @@ static Expr* hn_numeric(const Expr* n, const Expr* r) {
 
     /* Force numericization (so Constant n such as E resolve too).  Use the
      * input precision: machine -> N[reduction]; MPFR -> N[reduction, digits]. */
+    long bits = 0;
+#ifdef USE_MPFR
     long bn = numeric_min_inexact_bits(n);
     long br = numeric_min_inexact_bits(r);
-    long bits = 0;
     if (bn > 0) bits = bn;
     if (br > 0 && (bits == 0 || br < bits)) bits = br;
+#endif
 
     Expr* ncall;
     if (bits > 53) {

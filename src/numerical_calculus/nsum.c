@@ -1848,12 +1848,14 @@ Expr* builtin_nsum(Expr* res) {
         out = ns_run_single(eff_body, var, imin, imax_e, di, infinite, count, &o);
 
     /* Round the guarded internal result back to the requested precision. */
+#ifdef USE_MPFR
     if (out && o.prec_mpfr && o.target_bits > 0) {
         NumericSpec ts; ts.mode = NUMERIC_MODE_MPFR; ts.bits = o.target_bits;
         ts.preserve_inexact = false;
         Expr* rounded = numericalize(out, ts);
         if (rounded) { expr_free(out); out = rounded; }
     }
+#endif
 
     expr_free(imin);
     expr_free(di);

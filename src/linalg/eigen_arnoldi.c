@@ -82,7 +82,9 @@ static double arnoldi_coerce_double(Expr* e) {
     if (!e) return NAN;
     if (e->type == EXPR_INTEGER) return (double)e->data.integer;
     if (e->type == EXPR_REAL)    return e->data.real;
+#ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    return mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+#endif
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_Rational
@@ -1455,6 +1457,7 @@ Expr* arnoldi_dispatch(Expr* m, Expr* a, int64_t n,
     arnoldi_parse_subopts(method_value, &opts);
 
     CommonInexactInfo info = common_scan_inexact(m);
+#ifdef USE_MPFR
     if (info.has_inexact && info.min_bits > 53) {
         Expr* out = arnoldi_dispatch_mpfr(m, a, n,
                                            (mpfr_prec_t)info.min_bits,
@@ -1463,5 +1466,8 @@ Expr* arnoldi_dispatch(Expr* m, Expr* a, int64_t n,
         /* MPFR Arnoldi failed -- fall through to the machine kernel,
          * which will coerce MPFR cells to doubles via matD_load. */
     }
+#else
+    (void)info;   /* no MPFR: always use the machine kernel */
+#endif
     return arnoldi_dispatch_machine(m, a, n, want, k_spec, &opts);
 }

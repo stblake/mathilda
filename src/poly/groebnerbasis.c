@@ -839,12 +839,19 @@ Expr* builtin_groebner_basis(Expr* res) {
      * exponent slot. */
     Expr** items = (out_n > 0) ? (Expr**)malloc(sizeof(Expr*) * out_n) : NULL;
     if (opt.domain == GB_DOM_INEXACT) {
+#ifdef USE_MPFR
         /* Approximate-arithmetic output: monic, MPFR coefficients at the
          * requested decimal precision.  bits = ceil(prec * log2(10)). */
         mpfr_prec_t bits = (mpfr_prec_t)((opt.inexact_prec * 33219L) / 10000L) + 1;
         for (size_t i = 0; i < out_n; i++) {
             items[i] = gb_to_expr_inexact(G[i], all_vars, bits);
         }
+#else
+        /* No MPFR: fall back to the exact rendering of the basis. */
+        for (size_t i = 0; i < out_n; i++) {
+            items[i] = gb_to_expr(G[i], all_vars);
+        }
+#endif
     } else {
         for (size_t i = 0; i < out_n; i++) {
             items[i] = gb_to_expr(G[i], all_vars);

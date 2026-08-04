@@ -107,7 +107,9 @@ static double feast_coerce_double(Expr* e) {
     if (!e) return NAN;
     if (e->type == EXPR_INTEGER) return (double)e->data.integer;
     if (e->type == EXPR_REAL)    return e->data.real;
+#ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    return mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+#endif
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_Rational
@@ -3084,11 +3086,15 @@ Expr* feast_dispatch(Expr* m, Expr* a, int64_t n,
     if (!opts.interval_given) return NULL;
 
     CommonInexactInfo info = common_scan_inexact(m);
+#ifdef USE_MPFR
     if (info.has_inexact && info.min_bits > 53) {
         Expr* out = feast_dispatch_mpfr(m, a, n,
                                           (mpfr_prec_t)info.min_bits,
                                           want, k_spec, &opts);
         if (out) return out;
     }
+#else
+    (void)info;
+#endif
     return feast_dispatch_machine(m, a, n, want, k_spec, &opts);
 }
