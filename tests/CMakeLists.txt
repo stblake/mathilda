@@ -419,6 +419,7 @@ set(COMMON_SRC
     ../src/stats/median.c
     ../src/stats/quartiles.c
     ../src/stats/variance.c
+    ../src/stats/central_moment.c
     ../src/stats/standarddeviation.c
     ../src/stats/movingaverage.c
     ../src/stats/movingmedian.c

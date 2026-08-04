@@ -540,6 +540,11 @@ static void pack_mark_aware_heads(void) {
         "Total", "Mean", "Min", "Max", "MinMax", "Median", "Variance",
         "StandardDeviation", "RootMeanSquare", "Quartiles", "Accumulate",
         "MovingAverage", "MovingMedian", "ExponentialMovingAverage",
+        /* CentralMoment[v, r] — the r-th moment about the mean on the buffer
+         * (ndred_central_moment), like Variance but /n and power r. NOT on
+         * INT64_OK: an integer vector's exact central moment is a Rational no
+         * machine slot holds, so it degrades to the exact List path. */
+        "CentralMoment",
         /* RankedMin[v, n] / RankedMax[v, n] — the n-th order statistic, selected
          * straight off the buffer (ndred_ranked_*): int64 exactly, real by an
          * O(n) quickselect. Off this list the gate would materialise the whole

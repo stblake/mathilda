@@ -675,6 +675,7 @@ extern const char* SYM_Sum;
 extern const char* SYM_Together;
 extern const char* SYM_Variables;
 extern const char* SYM_Variance;
+extern const char* SYM_CentralMoment;
 extern const char* SYM_DollarAborted;
 extern const char* SYM_DollarAssumptions;
 extern const char* SYM_DollarEpilog;

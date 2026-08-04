@@ -1,12 +1,12 @@
 # Statistics
 
-**NDArray fast paths.** `Mean`, `Median`, `Variance`, `StandardDeviation`,
-`RootMeanSquare`, `Quartiles`, `MovingAverage`, `MovingMedian` and
-`ExponentialMovingAverage` operate directly on an `NDArray`'s flat buffer at C
-speed, returning a scalar or a lower-rank `NDArray` (matrix reductions are
-columnwise). Cases outside the fast domain (complex order statistics, weighted
-moving-average specs, …) fall back to the exact `List` result. See
-`src/ndreduce.c`.
+**NDArray fast paths.** `Mean`, `Median`, `Variance`, `CentralMoment`,
+`StandardDeviation`, `RootMeanSquare`, `Quartiles`, `MovingAverage`,
+`MovingMedian` and `ExponentialMovingAverage` operate directly on an `NDArray`'s
+flat buffer at C speed, returning a scalar or a lower-rank `NDArray` (matrix
+reductions are columnwise). Cases outside the fast domain (complex order
+statistics, weighted moving-average specs, …) fall back to the exact `List`
+result. See `src/ndreduce.c`.
 
 
 ## Median
@@ -108,6 +108,33 @@ Out[1]= 1
 
 In[2]:= Variance[{{5.2, 7}, {5.3, 8}, {5.4, 9}}]
 Out[2]= {0.01, 1}
+```
+
+## CentralMoment
+Gives the central moment (moment about the mean) of data.
+- `CentralMoment[data, r]`: the order-`r` central moment $\tilde{\mu}_r = (1/n) \sum_i (x_i - \hat{\mu}_1)^r$, where $\hat{\mu}_1$ is `Mean[data]`.
+- `CentralMoment[data, {r_1, ..., r_m}]`: the multivariate mixed central moment $(1/n) \sum_i \prod_j (x_{ij} - \hat{\mu}_{1,j})^{r_j}$.
+
+**Features**:
+- `Protected`.
+- A central moment is `Variance` without the $n/(n-1)$ bias correction: it divides by `n` (not `n-1`), raises to the power `r` (not a square), and needs only `n >= 1`.
+- For a matrix or array the moment is taken columnwise over the first axis (equivalent to `ArrayReduce[CentralMoment[#, r]&, x, 1]`).
+- Exact input yields exact output; approximate input yields approximate output; symbolic data is handled symbolically.
+- Fast path on `NDArray`/packed real buffers (`ndred_central_moment`); an integer buffer degrades to the exact `Rational` `List` result, like `Variance`.
+- Lowerable inside `Compile[]` for a real vector and integer order (participates in auto-compilation).
+
+```mathematica
+In[1]:= CentralMoment[{1, 2, 3, 4}, 4]
+Out[1]= 41/16
+
+In[2]:= CentralMoment[{1., 2., 3., 4.}, 2]
+Out[2]= 1.25
+
+In[3]:= CentralMoment[{{1, 2}, {3, 4}, {5, 6}}, 2]
+Out[3]= {8/3, 8/3}
+
+In[4]:= Simplify[CentralMoment[{{a, b}, {c, d}}, {2, 2}]]
+Out[4]= 1/16 (a - c)^2 (b - d)^2
 ```
 
 ## StandardDeviation

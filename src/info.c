@@ -1873,6 +1873,11 @@ void info_init(void) {
     symtab_set_docstring("Mean", "Mean[data] gives the mean estimate of the elements in data.");
     symtab_set_docstring("RootMeanSquare", "RootMeanSquare[list] gives the root mean square of values in list.");
     symtab_set_docstring("Variance", "Variance[data] gives the unbiased variance estimate of the elements in data.");
+    symtab_set_docstring("CentralMoment",
+        "CentralMoment[data, r]\n"
+        "\tgives the r-th central moment (moment about the mean) of data, (1/n) Sum[(x_i - Mean[data])^r].\n"
+        "CentralMoment[data, {r_1, ..., r_m}]\n"
+        "\tgives the multivariate central moment of data. For a matrix or array the moment is taken columnwise over the first axis.");
     symtab_set_docstring("StandardDeviation", "StandardDeviation[data] gives the standard deviation estimate of the elements in data.");
     symtab_set_docstring("MovingAverage",
         "MovingAverage[list, r]\n"

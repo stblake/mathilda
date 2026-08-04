@@ -17,6 +17,7 @@ void stats_init(void) {
     symtab_add_builtin("Quartiles", builtin_quartiles);
     symtab_get_def("Quartiles")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Variance", builtin_variance);
+    symtab_add_builtin("CentralMoment", builtin_central_moment);
     symtab_add_builtin("StandardDeviation", builtin_standard_deviation);
     symtab_add_builtin("MovingAverage", builtin_moving_average);
     symtab_add_builtin("MovingMedian", builtin_moving_median);
@@ -25,6 +26,7 @@ void stats_init(void) {
     symtab_get_def("Mean")->attributes |= ATTR_PROTECTED;
     symtab_get_def("RootMeanSquare")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Variance")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("CentralMoment")->attributes |= ATTR_PROTECTED;
     symtab_get_def("StandardDeviation")->attributes |= ATTR_PROTECTED;
     symtab_get_def("MovingAverage")->attributes |= ATTR_PROTECTED;
     symtab_get_def("MovingMedian")->attributes |= ATTR_PROTECTED;

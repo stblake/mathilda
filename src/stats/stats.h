@@ -8,6 +8,7 @@ Expr* builtin_rootmeansquare(Expr* res);
 Expr* builtin_median(Expr* res);
 Expr* builtin_quartiles(Expr* res);
 Expr* builtin_variance(Expr* res);
+Expr* builtin_central_moment(Expr* res);
 Expr* builtin_standard_deviation(Expr* res);
 Expr* builtin_moving_average(Expr* res);
 Expr* builtin_moving_median(Expr* res);

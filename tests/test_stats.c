@@ -321,6 +321,60 @@ void test_exponential_moving_average() {
     assert_eval_eq("MemberQ[Attributes[ExponentialMovingAverage], Protected]", "True", 0);
 }
 
+void test_central_moment() {
+    /* --- scalar order on an exact vector: exact input -> exact output --- */
+    assert_eval_eq("CentralMoment[{1,2,3,4},2]", "5/4", 0);
+    assert_eval_eq("CentralMoment[{1,2,3,4},4]", "41/16", 0);
+    assert_eval_eq("CentralMoment[Range[10],2]", "33/4", 0);
+    assert_eval_eq("CentralMoment[{2,4,4,4,5,5,7,9},2]", "4", 0);
+    assert_eval_eq("CentralMoment[{1,2,3,4},0]", "1", 0);   /* r=0 -> 1 */
+    assert_eval_eq("CentralMoment[{1,2,3,4},1]", "0", 0);   /* first central moment is 0 */
+    assert_eval_eq("CentralMoment[{1,2,3,4},3]", "0", 0);   /* odd moment of symmetric data */
+
+    /* --- approximate input -> approximate output --- */
+    assert_eval_eq("CentralMoment[{1.,2.,3.,4.},2]", "1.25", 0);
+    /* arbitrary precision is preserved (routes through the MPFR symbolic path) */
+    assert_eval_startswith("CentralMoment[N[{1,2,3},30],2]", "0.66666666666666666666666666666");
+
+    /* --- symbolic data --- */
+    assert_eval_eq("Simplify[CentralMoment[{a,b},2]]", "1/4 (a - b)^2", 0);
+    assert_eval_eq("Together[CentralMoment[{Pi,E,2},2]]",
+                   "1/9 (8 - 4 E + 2 E^2 - 4 Pi - 2 E Pi + 2 Pi^2)", 0);
+
+    /* --- matrix: columnwise moments --- */
+    assert_eval_eq("CentralMoment[{{1,2},{3,4},{5,6}},2]", "{8/3, 8/3}", 0);
+    assert_eval_eq("Simplify[CentralMoment[{{a11,a12},{a21,a22}},4]]",
+                   "{1/16 (a11 - a21)^4, 1/16 (a12 - a22)^4}", 0);
+
+    /* --- rank-3 array: columnwise at the first level --- */
+    assert_eval_eq("CentralMoment[{{{1,2},{3,4}},{{5,6},{7,8}}},2]", "{{4, 4}, {4, 4}}", 0);
+
+    /* --- multivariate (vector) order --- */
+    assert_eval_eq("CentralMoment[{{1,2},{3,5}},{1,1}]", "3/2", 0);
+    assert_eval_eq("Simplify[CentralMoment[{{a,b},{c,d}},{2,2}]]", "1/16 (a - c)^2 (b - d)^2", 0);
+
+    /* --- Association works on the values --- */
+    assert_eval_eq("CentralMoment[<|1->{1,2},2->{3,4},3->{5,6}|>,2]", "{8/3, 8/3}", 0);
+
+    /* --- NDArray / packed surfaces --- */
+    assert_eval_eq("CentralMoment[NDArray[{1.,2.,3.,4.},DataType->\"float64\"],2]", "1.25", 0);
+    /* a visible int64 buffer degrades to the exact Rational (like Variance) */
+    assert_eval_eq("CentralMoment[NDArray[{1,2,3,4},DataType->\"int64\"],2]", "5/4", 0);
+    /* packed and unpacked agree on the same data */
+    assert_eval_eq("CentralMoment[NDArray[{1.,2.,4.,8.,16.},DataType->\"float64\"],2] "
+                   "== CentralMoment[{1.,2.,4.,8.,16.},2]", "True", 0);
+
+    /* --- Compile[]: lowerable, and the compiled kernel matches the interpreter --- */
+    assert_eval_eq("(CompileDiagnostics[{{v,_Real,1},{k,_Integer}}, CentralMoment[v,k]] "
+                   "/. List -> Association)[\"Compiled\"]", "True", 0);
+    assert_eval_eq("Compile[{{v,_Real,1}}, CentralMoment[v,2]][{1.,2.,4.,8.,16.}] "
+                   "== CentralMoment[{1.,2.,4.,8.,16.},2]", "True", 0);
+
+    /* --- stays unevaluated when it should --- */
+    assert_eval_eq("CentralMoment[x,2]", "CentralMoment[x, 2]", 0);
+    assert_eval_eq("CentralMoment[{1,2,3}]", "CentralMoment[{1, 2, 3}]", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -330,6 +384,7 @@ int main() {
     TEST(test_mean);
     TEST(test_rootmeansquare);
     TEST(test_variance);
+    TEST(test_central_moment);
     TEST(test_standard_deviation);
     TEST(test_moving_average);
     TEST(test_moving_median);
