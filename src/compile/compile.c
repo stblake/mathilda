@@ -1327,6 +1327,10 @@ static const NdRedSpec ND_REDS[] = {
     { "Mean",              ndred_mean,      false, 1, false },
     { "Median",            ndred_median,    false, 1, false },
     { "Variance",          ndred_variance,  false, 1, false },
+    /* Standardized central moments (real vector -> Real scalar; an int vector's
+     * value is a radical, so it declines to the interpreter, like Variance). */
+    { "Skewness",          ndred_skewness,  false, 1, false },
+    { "Kurtosis",          ndred_kurtosis,  false, 1, false },
     { "StandardDeviation", ndred_std,       false, 1, false },
     { "RootMeanSquare",    ndred_rms,       false, 1, false },
     { "Max",               ndred_max,       true,  1, false },

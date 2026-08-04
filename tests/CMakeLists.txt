@@ -420,6 +420,8 @@ set(COMMON_SRC
     ../src/stats/quartiles.c
     ../src/stats/variance.c
     ../src/stats/central_moment.c
+    ../src/stats/skewness.c
+    ../src/stats/kurtosis.c
     ../src/stats/standarddeviation.c
     ../src/stats/movingaverage.c
     ../src/stats/movingmedian.c

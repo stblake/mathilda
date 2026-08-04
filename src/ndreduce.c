@@ -1519,6 +1519,71 @@ Expr* ndred_central_moment(Expr* res) {
     return nd_central_moment_leading(res);
 }
 
+/* ------------------------------------------------- Skewness / Kurtosis */
+
+/* A standardized central moment m_p / m_2^(p/2): Skewness is p=3
+ * (m_3 / m_2^(3/2)), Kurtosis is p=4 (m_4 / m_2^2). Three passes over the
+ * leading axis (mean, then m_2 and m_p about it), reusing the CentralMoment
+ * summation helpers. Real dtypes only; int64 / complex degrade to the exact
+ * List path (an integer sample's standardized moment is a radical, e.g.
+ * Skewness[{1,2,3,10}] = 18 Sqrt[2]/25 — no machine slot holds it). */
+static double nd_stdmoment_at(const void* buf, NDType dt, size_t base, size_t stride,
+                              size_t blocks, int p, double half_p) {
+    double sr, si;
+    nd_sum_strided(buf, dt, base, stride, blocks, &sr, &si);
+    double mean = sr / (double)blocks;
+    double m2 = nd_summoment_strided(buf, dt, base, stride, blocks, mean, 2) / (double)blocks;
+    double mp = nd_summoment_strided(buf, dt, base, stride, blocks, mean, p) / (double)blocks;
+    return mp / pow(m2, half_p);
+}
+
+typedef struct {
+    const void* buf; NDType dt; void* out; NDType odt; size_t T, blocks; int p; double half_p;
+} nd_sm_ctx;
+static bool nd_sm_cols(void* c, size_t lo, size_t hi) {
+    const nd_sm_ctx* x = (const nd_sm_ctx*)c;
+    for (size_t j = lo; j < hi; j++)
+        ndt_set(x->out, j, x->odt,
+                nd_stdmoment_at(x->buf, x->dt, j, x->T, x->blocks, x->p, x->half_p), 0.0);
+    return true;
+}
+
+static Expr* nd_stdmoment_leading(Expr* res, int p) {
+    if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
+    Expr* a = res->data.function.args[0];
+    if (nd_int64_degrade(a) || ndt_is_complex(a->data.ndarray.dtype))
+        return ndarray_delist_and_reeval(res);
+
+    int rank = a->data.ndarray.rank;
+    const int64_t* dims = a->data.ndarray.dims;
+    NDType dt = a->data.ndarray.dtype;
+    const void* buf = a->data.ndarray.data;
+
+    size_t blocks = (size_t)dims[0];
+    if (blocks < 1u) return ndarray_delist_and_reeval(res);
+    size_t T = nd_dim_prod(dims, 1, rank);
+    NDType odt = nd_real_of(dt);
+    double half_p = (double)p / 2.0;
+
+    if (rank == 1) {
+        double sr, si;
+        nd_full_sum(buf, dt, blocks, &sr, &si);
+        double mean = sr / (double)blocks;
+        double m2 = nd_full_moment(buf, dt, blocks, mean, 2) / (double)blocks;
+        double mp = nd_full_moment(buf, dt, blocks, mean, p) / (double)blocks;
+        return expr_new_real(mp / pow(m2, half_p));
+    }
+
+    void* out = malloc(ndt_elem_size(odt) * T);
+    if (!out) return ndarray_delist_and_reeval(res);
+    nd_sm_ctx c = { buf, dt, out, odt, T, blocks, p, half_p };
+    nd_parallel_for(T, nd_sm_cols, &c);
+    return expr_new_ndarray_like(a, rank - 1, dims + 1, out, odt);
+}
+
+Expr* ndred_skewness(Expr* res) { return nd_stdmoment_leading(res, 3); }
+Expr* ndred_kurtosis(Expr* res) { return nd_stdmoment_leading(res, 4); }
+
 /* --------------------------------------------------------------- Max / Min */
 
 /* Extreme of the flat range [lo, hi): *best gets the max/min, *sawnan is set if

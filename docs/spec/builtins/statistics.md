@@ -1,12 +1,12 @@
 # Statistics
 
 **NDArray fast paths.** `Mean`, `Median`, `Variance`, `CentralMoment`,
-`StandardDeviation`, `RootMeanSquare`, `Quartiles`, `MovingAverage`,
-`MovingMedian` and `ExponentialMovingAverage` operate directly on an `NDArray`'s
-flat buffer at C speed, returning a scalar or a lower-rank `NDArray` (matrix
-reductions are columnwise). Cases outside the fast domain (complex order
-statistics, weighted moving-average specs, …) fall back to the exact `List`
-result. See `src/ndreduce.c`.
+`Skewness`, `Kurtosis`, `StandardDeviation`, `RootMeanSquare`, `Quartiles`,
+`MovingAverage`, `MovingMedian` and `ExponentialMovingAverage` operate directly
+on an `NDArray`'s flat buffer at C speed, returning a scalar or a lower-rank
+`NDArray` (matrix reductions are columnwise). Cases outside the fast domain
+(complex order statistics, weighted moving-average specs, …) fall back to the
+exact `List` result. See `src/ndreduce.c`.
 
 
 ## Median
@@ -135,6 +135,44 @@ Out[3]= {8/3, 8/3}
 
 In[4]:= Simplify[CentralMoment[{{a, b}, {c, d}}, {2, 2}]]
 Out[4]= 1/16 (a - c)^2 (b - d)^2
+```
+
+## Skewness
+Gives the coefficient of skewness (a measure of asymmetry) for the elements in data.
+- `Skewness[data]`
+
+**Features**:
+- `Protected`.
+- Equivalent to `CentralMoment[data, 3] / CentralMoment[data, 2]^(3/2)`.
+- For a matrix, gives the columnwise skewnesses.
+- Handles numerical and symbolic data; exact input gives exact output (a radical in general).
+- Fast path on `NDArray`/packed real buffers (`ndred_skewness`) and lowerable inside `Compile[]`; an integer buffer degrades to the exact `List` result.
+
+```mathematica
+In[1]:= Skewness[{1, 2, 3, 10}]
+Out[1]= 18/25 Sqrt[2]
+
+In[2]:= Skewness[{1., 2., 3., 4., 5.}]
+Out[2]= 0.
+```
+
+## Kurtosis
+Gives the coefficient of kurtosis (peak/tail versus flank concentration) for the elements in data.
+- `Kurtosis[data]`
+
+**Features**:
+- `Protected`.
+- Equivalent to `CentralMoment[data, 4] / CentralMoment[data, 2]^2` (Pearson kurtosis, not the excess form).
+- For a matrix, gives the columnwise kurtoses.
+- Handles numerical and symbolic data; exact input gives exact output.
+- Fast path on `NDArray`/packed real buffers (`ndred_kurtosis`) and lowerable inside `Compile[]`; an integer buffer degrades to the exact `List` result.
+
+```mathematica
+In[1]:= Kurtosis[{1, 2, 3, 4, 5}]
+Out[1]= 17/10
+
+In[2]:= Kurtosis[{1, 2, 4, 8}]
+Out[2]= 25141/13225
 ```
 
 ## StandardDeviation

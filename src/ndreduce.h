@@ -49,6 +49,8 @@ Expr* ndred_variance(Expr* res);    /* Variance[a] */
 Expr* ndred_std(Expr* res);         /* StandardDeviation[a] */
 Expr* ndred_rms(Expr* res);         /* RootMeanSquare[a] */
 Expr* ndred_central_moment(Expr* res); /* CentralMoment[a, r] (integer r; Compile ND_REDS delegate) */
+Expr* ndred_skewness(Expr* res);    /* Skewness[a]  = m_3 / m_2^(3/2) (Compile ND_REDS delegate) */
+Expr* ndred_kurtosis(Expr* res);    /* Kurtosis[a]  = m_4 / m_2^2     (Compile ND_REDS delegate) */
 Expr* ndred_median(Expr* res);      /* Median[a] */
 Expr* ndred_quartiles(Expr* res);   /* Quartiles[a] */
 

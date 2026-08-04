@@ -2,10 +2,12 @@
  * Split from stats.c; see stats.h and stats_common.h for the subsystem layout. */
 
 #include "stats_common.h"
-#include "arithmetic.h"   /* is_rational */
+#include "arithmetic.h"   /* is_rational, make_rational */
 #include "complex.h"      /* is_complex */
-#include "eval.h"         /* evaluate */
+#include "eval.h"         /* evaluate, eval_and_free */
 #include "sym_names.h"    /* SYM_* */
+#include "assoc.h"        /* is_association, assoc_apply_over_values */
+#include "ndreduce.h"     /* ndred_call_has_ndarray, ndred_skewness, ndred_kurtosis */
 
 bool stats_is_numeric(Expr* e, double* val, bool* out_complex) {
     if (e->type == EXPR_INTEGER) {
@@ -49,6 +51,45 @@ Expr* stats_apply_columnwise(const char* func_name, Expr* matrix) {
     Expr* result = evaluate(map_call);
     expr_free(map_call);
     return result;
+}
+
+/* True when e is a function call with the given symbol head. */
+static bool stats_head_is(const Expr* e, const char* sym) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == sym;
+}
+
+Expr* stats_standardized_moment(Expr* res, int p) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* data = res->data.function.args[0];
+
+    /* Skewness[assoc] / Kurtosis[assoc] work on the association's values. */
+    if (is_association(data)) { Expr* r = assoc_apply_over_values(res); if (r) return r; }
+
+    /* NDArray / packed fast path (see ndreduce.c). */
+    if (ndred_call_has_ndarray(res))
+        return (p == 3) ? ndred_skewness(res) : ndred_kurtosis(res);
+
+    /* m_p = CentralMoment[data, p] and m_2 = CentralMoment[data, 2]. Both reduce
+     * for any list/vector/matrix/array (numeric, exact, or symbolic); if either
+     * stays a CentralMoment[...] the data was not reducible, so leave the caller's
+     * head unevaluated too. */
+    Expr* mp = eval_and_free(expr_new_function(expr_new_symbol(SYM_CentralMoment),
+                   (Expr*[]){ expr_copy(data), expr_new_integer(p) }, 2));
+    Expr* m2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_CentralMoment),
+                   (Expr*[]){ expr_copy(data), expr_new_integer(2) }, 2));
+    if (stats_head_is(mp, SYM_CentralMoment) || stats_head_is(m2, SYM_CentralMoment)) {
+        expr_free(mp); expr_free(m2);
+        return NULL;
+    }
+
+    /* result = m_p / m_2^(p/2). Power and Divide thread, so a columnwise vector
+     * of moments yields a columnwise vector of standardized moments. */
+    Expr* denom = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ m2, make_rational(p, 2) }, 2));
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Divide),
+               (Expr*[]){ mp, denom }, 2));
 }
 
 bool stats_is_real_numeric(Expr* e) {

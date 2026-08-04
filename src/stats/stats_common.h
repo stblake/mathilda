@@ -22,4 +22,12 @@ Expr* stats_apply_columnwise(const char* func_name, Expr* matrix);
 /* True iff e is NumericQ and free of the imaginary unit I (a real number). */
 bool stats_is_real_numeric(Expr* e);
 
+/* Standardized central moment m_p / m_2^(p/2), the shared body of Skewness
+ * (p=3) and Kurtosis (p=4). Builds CentralMoment[data, p] / CentralMoment[data,
+ * 2]^(p/2), which threads columnwise over matrices/arrays and stays exact or
+ * symbolic through the evaluator; an NDArray argument takes the buffer fast path
+ * (ndred_skewness / ndred_kurtosis). Returns NULL — leaving the caller's head
+ * unevaluated — when the data does not reduce (a bare symbol, an empty list). */
+Expr* stats_standardized_moment(Expr* res, int p);
+
 #endif

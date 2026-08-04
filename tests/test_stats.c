@@ -375,6 +375,51 @@ void test_central_moment() {
     assert_eval_eq("CentralMoment[{1,2,3}]", "CentralMoment[{1, 2, 3}]", 0);
 }
 
+void test_skewness() {
+    /* Skewness = CentralMoment[.,3] / CentralMoment[.,2]^(3/2) */
+    assert_eval_eq("Skewness[{1,2,3,4,5}]", "0", 0);              /* symmetric */
+    assert_eval_eq("Skewness[{1,2,3,10}]", "18/25 Sqrt[2]", 0);  /* exact radical */
+    assert_eval_eq("Skewness[{1.,2.,3.,10.}]", "1.01823", 0);    /* approximate */
+    assert_eval_eq("Simplify[Skewness[{a,b}]]", "0", 0);         /* two-point is symmetric */
+    /* matrix: columnwise */
+    assert_eval_eq("Skewness[{{1,2},{2,4},{3,6},{4,8},{5,10}}]", "{0, 0}", 0);
+    /* equivalent to the CentralMoment ratio */
+    assert_eval_eq("Skewness[{1,2,3,10}] == CentralMoment[{1,2,3,10},3]/CentralMoment[{1,2,3,10},2]^(3/2)",
+                   "True", 0);
+    /* Association works on the values */
+    assert_eval_eq("Skewness[<|\"a\"->{1,2},\"b\"->{2,4},\"c\"->{3,6},\"d\"->{4,8},\"e\"->{5,10}|>]",
+                   "{0, 0}", 0);
+    /* NDArray: real fast path, and an int64 buffer degrades to the exact radical */
+    assert_eval_eq("Skewness[NDArray[{1.,2.,3.,10.},DataType->\"float64\"]]", "1.01823", 0);
+    assert_eval_eq("Skewness[NDArray[{1,2,3,10},DataType->\"int64\"]]", "18/25 Sqrt[2]", 0);
+    /* Compile: lowerable, and the compiled kernel matches the interpreter */
+    assert_eval_eq("(CompileDiagnostics[{{v,_Real,1}}, Skewness[v]] /. List -> Association)[\"Compiled\"]",
+                   "True", 0);
+    assert_eval_eq("Compile[{{v,_Real,1}}, Skewness[v]][{1.,2.,4.,8.,16.,3.,7.}] "
+                   "== Skewness[{1.,2.,4.,8.,16.,3.,7.}]", "True", 0);
+    /* unevaluated when it should be */
+    assert_eval_eq("Skewness[x]", "Skewness[x]", 0);
+    assert_eval_eq("Skewness[{}]", "Skewness[{}]", 0);
+}
+
+void test_kurtosis() {
+    /* Kurtosis = CentralMoment[.,4] / CentralMoment[.,2]^2 (Pearson, not excess) */
+    assert_eval_eq("Kurtosis[{1,2,3,4,5}]", "17/10", 0);
+    assert_eval_eq("Kurtosis[{1,2,4,8}]", "25141/13225", 0);     /* exact Rational */
+    assert_eval_eq("Kurtosis[{1.,2.,3.,4.,5.}]", "1.7", 0);
+    assert_eval_eq("Simplify[Kurtosis[{a,b}]]", "1", 0);         /* two-point is flat */
+    assert_eval_eq("Kurtosis[{{1,2},{2,4},{3,6},{4,8},{5,10}}]", "{17/10, 17/10}", 0);
+    assert_eval_eq("Kurtosis[{1,2,4,8}] == CentralMoment[{1,2,4,8},4]/CentralMoment[{1,2,4,8},2]^2",
+                   "True", 0);
+    assert_eval_eq("Kurtosis[NDArray[{1.,2.,3.,4.,5.},DataType->\"float64\"]]", "1.7", 0);
+    assert_eval_eq("Kurtosis[NDArray[{1,2,3,4,5},DataType->\"int64\"]]", "17/10", 0);
+    assert_eval_eq("(CompileDiagnostics[{{v,_Real,1}}, Kurtosis[v]] /. List -> Association)[\"Compiled\"]",
+                   "True", 0);
+    assert_eval_eq("Compile[{{v,_Real,1}}, Kurtosis[v]][{1.,2.,4.,8.,16.,3.,7.}] "
+                   "== Kurtosis[{1.,2.,4.,8.,16.,3.,7.}]", "True", 0);
+    assert_eval_eq("Kurtosis[x]", "Kurtosis[x]", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -385,6 +430,8 @@ int main() {
     TEST(test_rootmeansquare);
     TEST(test_variance);
     TEST(test_central_moment);
+    TEST(test_skewness);
+    TEST(test_kurtosis);
     TEST(test_standard_deviation);
     TEST(test_moving_average);
     TEST(test_moving_median);

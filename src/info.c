@@ -1878,6 +1878,12 @@ void info_init(void) {
         "\tgives the r-th central moment (moment about the mean) of data, (1/n) Sum[(x_i - Mean[data])^r].\n"
         "CentralMoment[data, {r_1, ..., r_m}]\n"
         "\tgives the multivariate central moment of data. For a matrix or array the moment is taken columnwise over the first axis.");
+    symtab_set_docstring("Skewness",
+        "Skewness[data]\n"
+        "\tgives the coefficient of skewness (a measure of asymmetry) of data, equivalent to CentralMoment[data, 3] / CentralMoment[data, 2]^(3/2). For a matrix it is taken columnwise.");
+    symtab_set_docstring("Kurtosis",
+        "Kurtosis[data]\n"
+        "\tgives the coefficient of kurtosis (peak/tail vs flank concentration) of data, equivalent to CentralMoment[data, 4] / CentralMoment[data, 2]^2. For a matrix it is taken columnwise.");
     symtab_set_docstring("StandardDeviation", "StandardDeviation[data] gives the standard deviation estimate of the elements in data.");
     symtab_set_docstring("MovingAverage",
         "MovingAverage[list, r]\n"
