@@ -69,7 +69,7 @@ Out[8]= {{a, xx}, {a, xx}}
 - On an `Association` a position is a key, `Key[k]`, or a positional index over the entries, and the rules are tried against the *value*; `All`, `Span` and `0` work there too.
 - The position list uses the same form as is returned by `Position`. `ReplaceAt[expr, rules, {}]` is an **empty list of positions** and replaces nothing; the position of the whole expression is the empty path, `{{}}`.
 - A position that does not exist — an out-of-range index, an absent key, a malformed `Span`, or a path that runs into an atom — leaves `ReplaceAt` unevaluated, as `Part` does for `{a, b, c}[[99]]`.
-- Position resolution is shared with [`MapAt`](functional-programming.md#mapat) via one walker (`expr_apply_at_path`, `src/part.c`), so the two agree on every position spec by construction.
+- Position resolution is shared with [`MapAt`](../data-structures/MapAt.md) via one walker (`expr_apply_at_path`, `src/part.c`), so the two agree on every position spec by construction.
 
 **Attributes:** `Protected`.
 

@@ -56,7 +56,7 @@ Out[8]= {5, 8}
 - `MatrixPower[m, 0]` returns `IdentityMatrix[Length[m]]`.
 - `MatrixPower` works only on square matrices.
 - Uses binary exponentiation (repeated squaring) for efficient computation.
-- **A machine-real matrix stays a [packed list](packed-arrays.md) throughout**,
+- **A machine-real matrix stays a [packed list](../packed-arrays/index.md) throughout**,
 
 **Attributes:** `Protected`.
 

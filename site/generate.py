@@ -354,6 +354,39 @@ def slugify(title):
     return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
 
 
+# Relative links mined from docs/spec/builtins/<slug>.md assume those files are
+# siblings (e.g. `[packed list](packed-arrays.md)`), which holds in the spec tree
+# but not on the site, where each category is a folder of per-builtin pages. Left
+# unrewritten they dangle and abort `mkdocs build --strict`, blocking the whole
+# deploy. Match only bare, same-directory `<slug>.md[#anchor]` targets — absolute
+# URLs and already-relative (`../`) links are excluded by the lookahead.
+_SPEC_LINK_RE = re.compile(
+    r"\]\((?!https?://|/|\.{1,2}/)([a-z0-9][a-z0-9-]*)\.md(#[A-Za-z0-9._-]+)?\)")
+
+
+def rewrite_spec_links(text, cat_slugs, anchor_to_cat):
+    """Rewrite spec-relative category links into site-relative links.
+
+    Every generated page lives at ``documentation/<category>/<Name>.md``, so a
+    category index is ``../<slug>/index.md`` and a specific builtin's page is
+    ``../<its-category>/<Name>.md``. An anchor (``#mapat``) that names a builtin
+    is resolved to that builtin's page — the spec keeps a whole category in one
+    file with per-function headings, whereas the site splits them out — otherwise
+    it degrades to the category index. Targets that are not a known category file
+    (``cat_slugs``) are left untouched."""
+    def repl(m):
+        slug, anchor = m.group(1), m.group(2)
+        if slug not in cat_slugs:
+            return m.group(0)
+        if anchor:
+            hit = anchor_to_cat.get(anchor[1:].lower())
+            if hit:
+                cat, disp = hit
+                return f"](../{cat}/{disp}.md)"
+        return f"](../{slug}/index.md)"
+    return _SPEC_LINK_RE.sub(repl, text)
+
+
 def parse_spec_files():
     """Return (categories, sections).
     categories: ordered list of (slug, title, spec_rel_path).
@@ -556,20 +589,30 @@ def render_examples(blocks):
     return "\n\n".join(out)
 
 
-def render_impl_notes(name, attrs, section_body, impl_body=None):
+def render_impl_notes(name, attrs, section_body, impl_body=None,
+                      cat_slugs=None, anchor_to_cat=None):
     """Assemble the "Implementation notes" section.
 
     When a hand-authored, source-grounded summary exists in ``site/impl/<Name>.md``
     it leads the section. The ``**Features**`` bullets mined from the spec (which
     describe user-facing capabilities, complementary to the algorithm prose) follow,
     and the attribute list closes it. Without an impl file the behaviour is the
-    original Features + Attributes rendering."""
+    original Features + Attributes rendering.
+
+    ``cat_slugs``/``anchor_to_cat`` (when supplied) rewrite the spec-relative
+    category links in the mined bullets to site-relative ones — see
+    ``rewrite_spec_links``. The mined prose is the only spec-authored content that
+    reaches a page as live Markdown (docstrings are inert fenced text), so it is
+    the only place those links need fixing."""
     notes = []
     if impl_body:
         notes.append(impl_body.strip())
     feat = re.search(r"\*\*Features\*\*:?\s*\n((?:[ \t]*-.*\n?)+)", section_body or "")
     if feat:
-        notes.append(feat.group(1).rstrip())
+        bullets = feat.group(1).rstrip()
+        if cat_slugs is not None:
+            bullets = rewrite_spec_links(bullets, cat_slugs, anchor_to_cat or {})
+        notes.append(bullets)
     if attrs:
         notes.append(f"**Attributes:** {', '.join(f'`{a}`' for a in attrs)}.")
     else:
@@ -751,6 +794,18 @@ def main():
     pages = {}
     verified_examples = 0
 
+    # Link-rewrite context for the spec-mined bullets (see rewrite_spec_links).
+    # A builtin's display category is fixed by CATEGORY_OVERRIDES / spec section /
+    # OTHER_SLUG — computable up front, so `#anchor` links naming a builtin resolve
+    # to that builtin's page even though `pages` is not fully built yet.
+    cat_slugs = {slug for slug, _, _ in categories}
+
+    def _cat_of(nm):
+        sec = sections.get(nm)
+        return CATEGORY_OVERRIDES.get(nm) or (sec["category"] if sec else None) or OTHER_SLUG
+
+    anchor_to_cat = {nm.lower(): (_cat_of(nm), nm) for nm in names}
+
     print("Building + verifying pages ...")
     for name in names:
         sec = sections.get(name)
@@ -789,7 +844,8 @@ def main():
         refs = build_references(name, source_module, cat, spec_rel)
         if impl_refs:
             refs = impl_refs + refs
-        notes = render_impl_notes(name, attrs.get(name, []), body, impl_body)
+        notes = render_impl_notes(name, attrs.get(name, []), body, impl_body,
+                                  cat_slugs, anchor_to_cat)
 
         overlay = load_overlay(name)
         overlay_body = None
