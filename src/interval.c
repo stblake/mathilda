@@ -17,6 +17,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "arithmetic.h"
+#include "numeric.h"
 #include "sym_names.h"
 
 #include <math.h>
@@ -97,21 +98,34 @@ static bool iv_to_double(Expr* e, double* out) {
     return ok;
 }
 
-/* Evaluate a two-argument predicate head (Less/Greater/Equal) on a,b.
- * Returns 1 for True, 0 for False, -1 for unresolved. */
-static int iv_eval_pred(const char* head, Expr* a, Expr* b) {
-    Expr* call = expr_new_function(expr_new_symbol(head),
-                                   (Expr*[]){ expr_copy(a), expr_copy(b) }, 2);
-    Expr* r = eval_and_free(call);
-    int res = -1;
-    if (r && r->type == EXPR_SYMBOL) {
-        if (r->data.symbol.name == SYM_True) res = 1;
-        else if (r->data.symbol.name == SYM_False) res = 0;
+#ifdef USE_MPFR
+/* Numericalize an endpoint into `out` (already mpfr_init2'd). Handles numeric
+ * endpoints directly and symbolic-numerics (Pi, Sin[2], ...) via N[e, 40].
+ * Returns false for genuinely non-numeric (a free variable). */
+static bool iv_endpoint_to_mpfr(Expr* e, mpfr_t out) {
+    mpfr_t im; mpfr_init2(im, mpfr_get_prec(out));
+    bool ok = get_approx_mpfr(e, out, im, NULL) && mpfr_zero_p(im) && mpfr_number_p(out);
+    if (!ok) {
+        Expr* ne = eval_and_free(expr_new_function(expr_new_symbol("N"),
+                       (Expr*[]){ expr_copy(e), expr_new_integer(40) }, 2));
+        if (ne) {
+            ok = get_approx_mpfr(ne, out, im, NULL) && mpfr_zero_p(im) && mpfr_number_p(out);
+            expr_free(ne);
+        }
     }
-    expr_free(r);
-    return res;
+    mpfr_clear(im);
+    return ok;
 }
+#endif
 
+/* Compare two interval endpoints. Returns the sign of (a - b): -1, 0, or +1,
+ * and sets *decidable to whether the comparison resolved.
+ *
+ * This comparison must be EXACT (bit-for-bit on the numeric values), NOT the
+ * ~2^-46 relative-tolerance comparison the Less/Greater/Equal heads use for
+ * machine reals: the outward-rounded min/max in the kernels rely on it to pick
+ * the truly outermost of several endpoints that differ by only a ULP or two, so
+ * a tolerant "equal" there would silently break the enclosure guarantee. */
 int interval_endpoint_cmp(Expr* a, Expr* b, bool* decidable) {
     *decidable = true;
     bool a_ni = iv_is_neg_inf(a), a_pi = iv_is_pos_inf(a);
@@ -124,10 +138,22 @@ int interval_endpoint_cmp(Expr* a, Expr* b, bool* decidable) {
     if (b_pi) return -1;          /* a < +Inf */
     if (expr_eq(a, b)) return 0;
 
-    int lt = iv_eval_pred("Less", a, b);    if (lt == 1) return -1;
-    int gt = iv_eval_pred("Greater", a, b); if (gt == 1) return 1;
-    int eq = iv_eval_pred("Equal", a, b);   if (eq == 1) return 0;
-
+#ifdef USE_MPFR
+    {
+        /* Exact comparison at high precision — 200 bits dwarfs a double's 53,
+         * so endpoints separated by a ULP compare with their true sign. */
+        mpfr_t ma, mb;
+        mpfr_inits2((mpfr_prec_t)200, ma, mb, (mpfr_ptr)0);
+        bool oka = iv_endpoint_to_mpfr(a, ma);
+        bool okb = oka && iv_endpoint_to_mpfr(b, mb);
+        int c = (oka && okb) ? mpfr_cmp(ma, mb) : 0;
+        bool both = oka && okb;
+        mpfr_clears(ma, mb, (mpfr_ptr)0);
+        if (both) return c < 0 ? -1 : (c > 0 ? 1 : 0);
+    }
+#endif
+    /* No MPFR (or a symbolic endpoint MPFR couldn't reach): exact double
+     * comparison via N[]. This is still tolerance-free. */
     double da, db;
     if (iv_to_double(a, &da) && iv_to_double(b, &db)) {
         if (da < db) return -1;

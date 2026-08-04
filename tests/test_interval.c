@@ -122,6 +122,19 @@ int main(void) {
     if (!check("ArcSin[Interval[{2, 3}]]", "ArcSin[Interval[{2, 3}]]")) failures++;
     if (!check("Log[Interval[{-2, -1}]]", "Log[Interval[{-2, -1}]]")) failures++;
 
+    /* --- rigor / containment regression (interval_endpoint_cmp tolerance bug) ---
+     * The outward-rounded min/max in the kernels compares endpoints that differ
+     * by only a ULP or two; a tolerant comparison there let it pick the INNER
+     * endpoint, so the computed interval excluded the true value. Each of these
+     * returned False before the exact-comparison fix. */
+    if (!check("IntervalMemberQ[4 Interval[0.5] (1 - Interval[0.5]), 1]", "True")) failures++;
+    if (!check("IntervalMemberQ[Nest[4 # (1 - #) &, Interval[0.5], 2], 0]", "True")) failures++;
+    if (!check("IntervalMemberQ[Nest[4 # (1 - #) &, Interval[0.5], 3], 0]", "True")) failures++;
+    if (!check("IntervalMemberQ[Interval[{0.3, 0.3}] - Interval[{0.3, 0.3}], 0]", "True")) failures++;
+    if (!check("IntervalMemberQ[Sqrt[Interval[{2.0, 2.0}]]^2, 2.0]", "True")) failures++;
+    if (!check("IntervalMemberQ[Exp[Log[Interval[{3.0, 3.0}]]], 3.0]", "True")) failures++;
+    if (!check("IntervalMemberQ[Interval[{1.0, 1.0}] Interval[{3.0, 3.0}], 3.0]", "True")) failures++;
+
     /* --- Min / Max --- */
     if (!check("Min[Interval[{2, 7}]]", "2")) failures++;
     if (!check("Max[Interval[{2, 7}]]", "7")) failures++;

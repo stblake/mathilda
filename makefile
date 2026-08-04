@@ -403,6 +403,13 @@ docs-serve:
 check-c99:
 	python3 tools/check_c99_portability.py
 
+# `make check-interval` — randomised stress test of Interval[] arithmetic against
+# the inclusion (containment) guarantee, plus exactness and determinism. Needs a
+# built ./Mathilda and python3, so it is not part of `all` (same status as
+# check-c99). See tools/interval_fuzz.py.
+check-interval:
+	python3 tools/interval_fuzz.py
+
 # `make check-packed-aware` — does every head with an NDArray fast path opt in
 # to it? The packing gate materialises for any head NOT on src/pack.c's AWARE
 # list, so a missing opt-in is correct, silent, and 30x-658x slow. That has
@@ -496,7 +503,7 @@ print-cc:
 	@echo "CC = $(CC)"
 	@$(CC) --version 2>/dev/null | head -1
 
-.PHONY: all clean docs docs-build docs-serve check-c99 check-packed-aware \
+.PHONY: all clean docs docs-build docs-serve check-c99 check-interval check-packed-aware \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-fastpath-sweep print-cc
 
