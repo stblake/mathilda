@@ -26,16 +26,16 @@
    "group": "A symbolic (sympy)",
    "label": "integrate rational, squarefree deg 6",
    "times": {
-    "mathilda": 1.38,
-    "wolfram": 13.256,
-    "python": 290.678
+    "mathilda": 1.502,
+    "wolfram": 12.947,
+    "python": 308.795
    },
    "checks": {
     "mathilda": "252355046",
     "wolfram": "252355046",
     "python": "252355046"
    },
-   "ratio": 0.10410380205190102,
+   "ratio": 0.11601143121958755,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -45,16 +45,16 @@
    "group": "A symbolic (sympy)",
    "label": "integrate rational, repeated deg 4",
    "times": {
-    "mathilda": 2.256,
-    "wolfram": 7.86,
-    "python": 34.096
+    "mathilda": 2.311,
+    "wolfram": 8.347,
+    "python": 37.831
    },
    "checks": {
     "mathilda": "26542632",
     "wolfram": "26542632",
     "python": "26542632"
    },
-   "ratio": 0.28702290076335873,
+   "ratio": 0.27686593985863184,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -64,16 +64,16 @@
    "group": "A symbolic (sympy)",
    "label": "integrate rational, irreducible quartic",
    "times": {
-    "mathilda": 0.968,
-    "wolfram": 1.479,
-    "python": 11.167
+    "mathilda": 1.018,
+    "wolfram": 1.472,
+    "python": 12.738
    },
    "checks": {
     "mathilda": "70221",
     "wolfram": "70221",
     "python": "70221"
    },
-   "ratio": 0.6544962812711291,
+   "ratio": 0.6915760869565217,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -83,16 +83,16 @@
    "group": "A symbolic (sympy)",
    "label": "integrate polynomial, deg 40",
    "times": {
-    "mathilda": 0.178,
-    "wolfram": 0.05,
-    "python": 0.616
+    "mathilda": 0.184,
+    "wolfram": 0.051,
+    "python": 0.682
    },
    "checks": {
     "mathilda": "24416271",
     "wolfram": "24416271",
     "python": "24416271"
    },
-   "ratio": 3.5599999999999996,
+   "ratio": 3.607843137254902,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -102,16 +102,16 @@
    "group": "A symbolic (sympy)",
    "label": "Apart, squarefree deg 8",
    "times": {
-    "mathilda": 0.219,
-    "wolfram": 0.133,
-    "python": 10.228
+    "mathilda": 0.229,
+    "wolfram": 0.138,
+    "python": 11.28
    },
    "checks": {
     "mathilda": "182253578",
     "wolfram": "182253578",
     "python": "182253578"
    },
-   "ratio": 1.6466165413533833,
+   "ratio": 1.6594202898550723,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -121,16 +121,16 @@
    "group": "A symbolic (sympy)",
    "label": "Together, 8 summands",
    "times": {
-    "mathilda": 1.914,
-    "wolfram": 0.184,
-    "python": 1.822
+    "mathilda": 1.989,
+    "wolfram": 0.191,
+    "python": 1.933
    },
    "checks": {
     "mathilda": "2161248",
     "wolfram": "2161248",
     "python": "2161248"
    },
-   "ratio": 10.402173913043478,
+   "ratio": 10.413612565445026,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -140,16 +140,16 @@
    "group": "A symbolic (sympy)",
    "label": "integrate x Exp[x^2]",
    "times": {
-    "mathilda": 0.566,
-    "wolfram": 0.076,
-    "python": 4.12
+    "mathilda": 0.691,
+    "wolfram": 0.122,
+    "python": 4.793
    },
    "checks": {
     "mathilda": "345280",
     "wolfram": "345280",
     "python": "345280"
    },
-   "ratio": 7.447368421052631,
+   "ratio": 5.663934426229508,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -159,16 +159,16 @@
    "group": "A symbolic (sympy)",
    "label": "integrate Log[x]^3",
    "times": {
-    "mathilda": 1.593,
-    "wolfram": 1.847,
-    "python": 10.342
+    "mathilda": 1.563,
+    "wolfram": 2.722,
+    "python": 12.664
    },
    "checks": {
     "mathilda": "361348",
     "wolfram": "361348",
     "python": "361348"
    },
-   "ratio": 0.8624796968056307,
+   "ratio": 0.5742101396032329,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -178,16 +178,16 @@
    "group": "A symbolic (sympy)",
    "label": "integrate Sin[x] Exp[x]",
    "times": {
-    "mathilda": 6.497,
-    "wolfram": 0.692,
-    "python": 5.212
+    "mathilda": 7.125,
+    "wolfram": 0.976,
+    "python": 5.478
    },
    "checks": {
     "mathilda": "2404945",
     "wolfram": "2404945",
     "python": "2404945"
    },
-   "ratio": 9.388728323699423,
+   "ratio": 7.3002049180327875,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -197,16 +197,16 @@
    "group": "A symbolic (sympy)",
    "label": "integrate Tan[x]^3",
    "times": {
-    "mathilda": 4.286,
-    "wolfram": 0.155,
-    "python": 3.593
+    "mathilda": 4.277,
+    "wolfram": 0.323,
+    "python": 3.84
    },
    "checks": {
     "mathilda": "17620",
     "wolfram": "17620",
     "python": "17620"
    },
-   "ratio": 27.651612903225804,
+   "ratio": 13.241486068111454,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -216,16 +216,16 @@
    "group": "A symbolic (sympy)",
    "label": "integrate 1/(1+Exp[x])",
    "times": {
-    "mathilda": 2.372,
-    "wolfram": 0.11,
-    "python": 3.309
+    "mathilda": 2.638,
+    "wolfram": 0.134,
+    "python": 3.938
    },
    "checks": {
     "mathilda": "272664",
     "wolfram": "272664",
     "python": "272664"
    },
-   "ratio": 21.563636363636363,
+   "ratio": 19.686567164179102,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -235,16 +235,16 @@
    "group": "A symbolic (sympy)",
    "label": "integrate Exp[x]/x (non-elementary)",
    "times": {
-    "mathilda": 5.564,
-    "wolfram": 0.289,
-    "python": 33.927
+    "mathilda": 5.77,
+    "wolfram": 0.412,
+    "python": 38.344
    },
    "checks": {
     "mathilda": "3772480",
     "wolfram": "3772480",
     "python": "3772480"
    },
-   "ratio": 19.252595155709344,
+   "ratio": 14.004854368932039,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -254,16 +254,16 @@
    "group": "A symbolic (sympy)",
    "label": "Simplify trig Pythagorean",
    "times": {
-    "mathilda": 0.045,
-    "wolfram": 0.003,
-    "python": 5.173
+    "mathilda": 0.055,
+    "wolfram": 0.004,
+    "python": 3.861
    },
    "checks": {
     "mathilda": "1000000",
     "wolfram": "1000000",
     "python": "1000000"
    },
-   "ratio": 15.0,
+   "ratio": 13.75,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -273,16 +273,16 @@
    "group": "A symbolic (sympy)",
    "label": "Simplify quartic-to-Cos[4x]",
    "times": {
-    "mathilda": 2.056,
+    "mathilda": 2.595,
     "wolfram": 0.004,
-    "python": 7.515
+    "python": 7.818
    },
    "checks": {
     "mathilda": "235238",
     "wolfram": "235238",
     "python": "235238"
    },
-   "ratio": 514.0,
+   "ratio": 648.75,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -292,16 +292,16 @@
    "group": "A symbolic (sympy)",
    "label": "Cancel removable singularity",
    "times": {
-    "mathilda": 0.008,
-    "wolfram": 0.021,
-    "python": 0.252
+    "mathilda": 0.01,
+    "wolfram": 0.02,
+    "python": 0.265
    },
    "checks": {
     "mathilda": "9750000",
     "wolfram": "9750000",
     "python": "9750000"
    },
-   "ratio": 0.38095238095238093,
+   "ratio": 0.5,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -311,16 +311,16 @@
    "group": "A symbolic (sympy)",
    "label": "FullSimplify nested radical",
    "times": {
-    "mathilda": 0.196,
+    "mathilda": 0.206,
     "wolfram": 0.003,
-    "python": 1.36
+    "python": 1.392
    },
    "checks": {
     "mathilda": "2414214",
     "wolfram": "2414214",
     "python": "2414214"
    },
-   "ratio": 65.33333333333333,
+   "ratio": 68.66666666666666,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -330,16 +330,16 @@
    "group": "A symbolic (sympy)",
    "label": "Simplify log-exp collapse",
    "times": {
-    "mathilda": 0.056,
+    "mathilda": 0.061,
     "wolfram": 0.003,
-    "python": 1.337
+    "python": 1.412
    },
    "checks": {
     "mathilda": "3500000",
     "wolfram": "3500000",
     "python": "3500000"
    },
-   "ratio": 18.666666666666668,
+   "ratio": 20.333333333333332,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -349,16 +349,16 @@
    "group": "A symbolic (sympy)",
    "label": "TrigReduce product of 4 sines",
    "times": {
-    "mathilda": 0.852,
-    "wolfram": 0.138,
-    "python": 16.813
+    "mathilda": 0.97,
+    "wolfram": 0.144,
+    "python": 18.071
    },
    "checks": {
     "mathilda": "165475",
     "wolfram": "165475",
     "python": "165475"
    },
-   "ratio": 6.17391304347826,
+   "ratio": 6.736111111111112,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -368,16 +368,16 @@
    "group": "A symbolic (sympy)",
    "label": "Solve factorable sextic",
    "times": {
-    "mathilda": 0.46,
-    "wolfram": 0.798,
-    "python": 1.576
+    "mathilda": 0.53,
+    "wolfram": 0.786,
+    "python": 1.548
    },
    "checks": {
     "mathilda": "6",
     "wolfram": "6",
     "python": "6"
    },
-   "ratio": 0.5764411027568922,
+   "ratio": 0.6743002544529262,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -387,16 +387,16 @@
    "group": "A symbolic (sympy)",
    "label": "Solve quartic with radicals",
    "times": {
-    "mathilda": 0.067,
-    "wolfram": 0.409,
-    "python": 1.704
+    "mathilda": 0.074,
+    "wolfram": 0.366,
+    "python": 1.652
    },
    "checks": {
     "mathilda": "4",
     "wolfram": "4",
     "python": "4"
    },
-   "ratio": 0.1638141809290954,
+   "ratio": 0.20218579234972678,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -406,16 +406,16 @@
    "group": "A symbolic (sympy)",
    "label": "Solve 2x2 polynomial system",
    "times": {
-    "mathilda": 0.093,
-    "wolfram": 0.712,
-    "python": 1.272
+    "mathilda": 0.108,
+    "wolfram": 0.594,
+    "python": 1.244
    },
    "checks": {
     "mathilda": "2",
     "wolfram": "2",
     "python": "2"
    },
-   "ratio": 0.1306179775280899,
+   "ratio": 0.18181818181818182,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -425,16 +425,16 @@
    "group": "A symbolic (sympy)",
    "label": "Solve 3x3 linear system",
    "times": {
-    "mathilda": 0.046,
-    "wolfram": 0.072,
-    "python": 0.642
+    "mathilda": 0.053,
+    "wolfram": 0.051,
+    "python": 0.652
    },
    "checks": {
     "mathilda": "1",
     "wolfram": "1",
     "python": "1"
    },
-   "ratio": 0.638888888888889,
+   "ratio": 1.0392156862745099,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -444,16 +444,16 @@
    "group": "A symbolic (sympy)",
    "label": "NSolve degree 40",
    "times": {
-    "mathilda": 8.658,
-    "wolfram": 0.894,
-    "python": 339.625
+    "mathilda": 10.204,
+    "wolfram": 0.758,
+    "python": 385.974
    },
    "checks": {
     "mathilda": "40",
     "wolfram": "40",
     "python": "40"
    },
-   "ratio": 9.684563758389261,
+   "ratio": 13.461741424802112,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -463,16 +463,16 @@
    "group": "A symbolic (sympy)",
    "label": "Solve sextic, root sum",
    "times": {
-    "mathilda": 0.432,
-    "wolfram": 0.804,
-    "python": 1.465
+    "mathilda": 0.504,
+    "wolfram": 0.77,
+    "python": 1.695
    },
    "checks": {
     "mathilda": "21",
     "wolfram": "21",
     "python": "21"
    },
-   "ratio": 0.5373134328358209,
+   "ratio": 0.6545454545454545,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -482,16 +482,16 @@
    "group": "A symbolic (sympy)",
    "label": "Factor product of 8 quadratics",
    "times": {
-    "mathilda": 0.29,
-    "wolfram": 0.187,
-    "python": 3.7
+    "mathilda": 0.307,
+    "wolfram": 0.19,
+    "python": 3.625
    },
    "checks": {
     "mathilda": "10",
     "wolfram": "10",
     "python": "10"
    },
-   "ratio": 1.5508021390374331,
+   "ratio": 1.6157894736842104,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -501,16 +501,16 @@
    "group": "A symbolic (sympy)",
    "label": "Factor product of 16 quadratics",
    "times": {
-    "mathilda": 1.01,
-    "wolfram": 0.751,
-    "python": 29.492
+    "mathilda": 1.077,
+    "wolfram": 0.731,
+    "python": 30.519
    },
    "checks": {
     "mathilda": "18",
     "wolfram": "18",
     "python": "18"
    },
-   "ratio": 1.3448735019973368,
+   "ratio": 1.4733242134062927,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -520,16 +520,16 @@
    "group": "A symbolic (sympy)",
    "label": "Factor x^120 - 1",
    "times": {
-    "mathilda": 5.829,
-    "wolfram": 0.048,
-    "python": 4.078
+    "mathilda": 6.419,
+    "wolfram": 0.047,
+    "python": 4.104
    },
    "checks": {
     "mathilda": "17",
     "wolfram": "17",
     "python": "17"
    },
-   "ratio": 121.43749999999999,
+   "ratio": 136.57446808510636,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -539,16 +539,16 @@
    "group": "A symbolic (sympy)",
    "label": "Factor sparse degree 60",
    "times": {
-    "mathilda": 0.502,
-    "wolfram": 0.568,
-    "python": 10.17
+    "mathilda": 0.527,
+    "wolfram": 0.541,
+    "python": 9.055
    },
    "checks": {
     "mathilda": "5",
     "wolfram": "5",
     "python": "5"
    },
-   "ratio": 0.8838028169014085,
+   "ratio": 0.9741219963031423,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -558,16 +558,16 @@
    "group": "A symbolic (sympy)",
    "label": "Factor dense degree 60",
    "times": {
-    "mathilda": 2.107,
-    "wolfram": 0.599,
-    "python": 28.184
+    "mathilda": 2.229,
+    "wolfram": 0.607,
+    "python": 28.008
    },
    "checks": {
     "mathilda": "2",
     "wolfram": "2",
     "python": "2"
    },
-   "ratio": 3.517529215358932,
+   "ratio": 3.672158154859967,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -577,16 +577,16 @@
    "group": "A symbolic (sympy)",
    "label": "PolynomialGCD of two deg-20 polys",
    "times": {
-    "mathilda": 0.035,
-    "wolfram": 0.028,
-    "python": 0.173
+    "mathilda": 0.036,
+    "wolfram": 0.025,
+    "python": 0.19
    },
    "checks": {
     "mathilda": "12",
     "wolfram": "12",
     "python": "12"
    },
-   "ratio": 1.25,
+   "ratio": 1.4399999999999997,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -596,8 +596,8 @@
    "group": "A symbolic (sympy)",
    "label": "Expand (x+y+z+i), 6 factors",
    "times": {
-    "mathilda": 0.272,
-    "wolfram": 0.074,
+    "mathilda": 0.245,
+    "wolfram": 0.067,
     "python": 0.009
    },
    "checks": {
@@ -605,7 +605,7 @@
     "wolfram": "84",
     "python": "84"
    },
-   "ratio": 30.222222222222225,
+   "ratio": 27.222222222222225,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -615,35 +615,35 @@
    "group": "A symbolic (sympy)",
    "label": "Factor 3-var, 6 factors",
    "times": {
-    "mathilda": 0.488,
-    "wolfram": 0.323,
-    "python": 12.675
+    "mathilda": 0.377,
+    "wolfram": 0.344,
+    "python": 13.553
    },
    "checks": {
     "mathilda": "7",
     "wolfram": "7",
     "python": "7"
    },
-   "ratio": 1.5108359133126934,
+   "ratio": 1.0959302325581397,
    "note": "",
    "best_other": "wolfram",
-   "klass": "SLOWER"
+   "klass": "AHEAD"
   },
   {
    "experiment": "06-factor-multivariate",
    "group": "A symbolic (sympy)",
    "label": "Factor 5-var, 4 factors",
    "times": {
-    "mathilda": 0.524,
-    "wolfram": 0.616,
-    "python": 21.459
+    "mathilda": 0.48,
+    "wolfram": 0.475,
+    "python": 20.934
    },
    "checks": {
     "mathilda": "5",
     "wolfram": "5",
     "python": "5"
    },
-   "ratio": 0.8506493506493507,
+   "ratio": 1.0105263157894737,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -654,15 +654,15 @@
    "label": "Factor irreducible 3-var cubic",
    "times": {
     "mathilda": 0.02,
-    "wolfram": 0.019,
-    "python": 0.737
+    "wolfram": 0.02,
+    "python": 0.675
    },
    "checks": {
     "mathilda": "2",
     "wolfram": "2",
     "python": "2"
    },
-   "ratio": 1.0526315789473684,
+   "ratio": 1.0,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -672,16 +672,16 @@
    "group": "A symbolic (sympy)",
    "label": "Expand (x+y+z)^12",
    "times": {
-    "mathilda": 0.305,
-    "wolfram": 0.072,
-    "python": 0.003
+    "mathilda": 0.308,
+    "wolfram": 0.076,
+    "python": 0.002
    },
    "checks": {
     "mathilda": "91",
     "wolfram": "91",
     "python": "91"
    },
-   "ratio": 101.66666666666666,
+   "ratio": 154.0,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -691,16 +691,16 @@
    "group": "A symbolic (sympy)",
    "label": "Factor x^24 - y^24",
    "times": {
-    "mathilda": 0.3,
-    "wolfram": 0.695,
-    "python": 139.221
+    "mathilda": 0.32,
+    "wolfram": 0.845,
+    "python": 138.691
    },
    "checks": {
     "mathilda": "9",
     "wolfram": "9",
     "python": "9"
    },
-   "ratio": 0.43165467625899284,
+   "ratio": 0.37869822485207105,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -710,16 +710,16 @@
    "group": "A symbolic (sympy)",
    "label": "GroebnerBasis cyclic-3",
    "times": {
-    "mathilda": 0.036,
-    "wolfram": 0.071,
-    "python": 0.175
+    "mathilda": 0.03,
+    "wolfram": 0.07,
+    "python": 0.182
    },
    "checks": {
     "mathilda": "3",
     "wolfram": "3",
     "python": "3"
    },
-   "ratio": 0.5070422535211268,
+   "ratio": 0.4285714285714285,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -729,16 +729,16 @@
    "group": "A symbolic (sympy)",
    "label": "GroebnerBasis cyclic-4",
    "times": {
-    "mathilda": 0.18,
-    "wolfram": 0.461,
-    "python": 1.059
+    "mathilda": 0.177,
+    "wolfram": 0.395,
+    "python": 1.034
    },
    "checks": {
     "mathilda": "6",
     "wolfram": "6",
     "python": "6"
    },
-   "ratio": 0.3904555314533622,
+   "ratio": 0.44810126582278476,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -748,16 +748,16 @@
    "group": "A symbolic (sympy)",
    "label": "GroebnerBasis cyclic-5",
    "times": {
-    "mathilda": 52.698,
-    "wolfram": 18.191,
-    "python": 8967.356
+    "mathilda": 44.525,
+    "wolfram": 19.086,
+    "python": 9502.606
    },
    "checks": {
     "mathilda": "11",
     "wolfram": "11",
     "python": "11"
    },
-   "ratio": 2.8969270518388215,
+   "ratio": 2.332861783506235,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -767,16 +767,16 @@
    "group": "A symbolic (sympy)",
    "label": "GroebnerBasis 3-var quadratic system",
    "times": {
-    "mathilda": 0.05,
-    "wolfram": 0.221,
-    "python": 0.336
+    "mathilda": 0.053,
+    "wolfram": 0.24,
+    "python": 0.358
    },
    "checks": {
     "mathilda": "4",
     "wolfram": "4",
     "python": "4"
    },
-   "ratio": 0.22624434389140272,
+   "ratio": 0.22083333333333333,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -786,16 +786,16 @@
    "group": "A symbolic (sympy)",
    "label": "Eliminate 2 vars from 3",
    "times": {
-    "mathilda": 0.001,
-    "wolfram": 0.023,
-    "python": 0.304
+    "mathilda": 0.008,
+    "wolfram": 0.021,
+    "python": 0.299
    },
    "checks": {
     "mathilda": "0",
     "wolfram": "0",
     "python": "0"
    },
-   "ratio": 0.043478260869565216,
+   "ratio": 0.38095238095238093,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -805,16 +805,16 @@
    "group": "A symbolic (sympy)",
    "label": "Resultant of two deg-8 polys",
    "times": {
-    "mathilda": 0.079,
-    "wolfram": 0.737,
-    "python": 0.69
+    "mathilda": 0.082,
+    "wolfram": 0.766,
+    "python": 0.67
    },
    "checks": {
     "mathilda": "8",
     "wolfram": "8",
     "python": "8"
    },
-   "ratio": 0.11449275362318842,
+   "ratio": 0.12238805970149254,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -863,14 +863,14 @@
    "group": "A symbolic (sympy)",
    "label": "Limit Sin[x]/x at 0",
    "times": {
-    "mathilda": 0.963,
-    "wolfram": 1.364
+    "mathilda": 1.081,
+    "wolfram": 1.535
    },
    "checks": {
     "mathilda": "1",
     "wolfram": "1"
    },
-   "ratio": 0.7060117302052785,
+   "ratio": 0.7042345276872964,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -880,14 +880,14 @@
    "group": "A symbolic (sympy)",
    "label": "Limit (Exp[x]-1-x)/x^2 at 0",
    "times": {
-    "mathilda": 0.226,
-    "wolfram": 1.535
+    "mathilda": 0.265,
+    "wolfram": 1.792
    },
    "checks": {
     "mathilda": "1/2",
     "wolfram": "1/2"
    },
-   "ratio": 0.1472312703583062,
+   "ratio": 0.1478794642857143,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -897,14 +897,14 @@
    "group": "A symbolic (sympy)",
    "label": "Limit x (Log[x+1]-Log[x]) at Infinity",
    "times": {
-    "mathilda": 1.231,
-    "wolfram": 2.124
+    "mathilda": 1.398,
+    "wolfram": 2.221
    },
    "checks": {
     "mathilda": "1",
     "wolfram": "1"
    },
-   "ratio": 0.5795668549905838,
+   "ratio": 0.629446195407474,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -915,15 +915,15 @@
    "label": "Sum k^5 to n, closed form",
    "times": {
     "mathilda": 0.132,
-    "wolfram": 0.031,
-    "python": 0.113
+    "wolfram": 0.03,
+    "python": 0.137
    },
    "checks": {
     "mathilda": "220825",
     "wolfram": "220825",
     "python": "220825"
    },
-   "ratio": 4.258064516129033,
+   "ratio": 4.4,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -933,16 +933,16 @@
    "group": "A symbolic (sympy)",
    "label": "Sum 1/k^2 to Infinity",
    "times": {
-    "mathilda": 0.115,
+    "mathilda": 0.117,
     "wolfram": 0.045,
-    "python": 1.523
+    "python": 1.431
    },
    "checks": {
     "mathilda": "1644934",
     "wolfram": "1644934",
     "python": "1644934"
    },
-   "ratio": 2.555555555555556,
+   "ratio": 2.6,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -952,16 +952,16 @@
    "group": "A symbolic (sympy)",
    "label": "Sum r^k to n, symbolic ratio",
    "times": {
-    "mathilda": 0.032,
-    "wolfram": 0.033,
-    "python": 0.227
+    "mathilda": 0.034,
+    "wolfram": 0.034,
+    "python": 0.278
    },
    "checks": {
     "mathilda": "1093",
     "wolfram": "1093",
     "python": "1093"
    },
-   "ratio": 0.9696969696969697,
+   "ratio": 1.0,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -972,8 +972,8 @@
    "label": "Sum Binomial[n,k] over k",
    "times": {
     "mathilda": 0.0,
-    "wolfram": 0.035,
-    "python": 23.481
+    "wolfram": 0.034,
+    "python": 25.011
    },
    "checks": {
     "mathilda": "4096",
@@ -990,16 +990,16 @@
    "group": "A symbolic (sympy)",
    "label": "Sum 1/(k(k+1)) to n",
    "times": {
-    "mathilda": 0.29,
-    "wolfram": 0.031,
-    "python": 1.077
+    "mathilda": 0.292,
+    "wolfram": 0.033,
+    "python": 1.117
    },
    "checks": {
     "mathilda": "909091",
     "wolfram": "909091",
     "python": "909091"
    },
-   "ratio": 9.354838709677418,
+   "ratio": 8.848484848484848,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -1009,16 +1009,16 @@
    "group": "A symbolic (sympy)",
    "label": "Product (1+1/k) to n",
    "times": {
-    "mathilda": 0.021,
-    "wolfram": 0.045,
-    "python": 0.287
+    "mathilda": 0.02,
+    "wolfram": 0.058,
+    "python": 0.296
    },
    "checks": {
     "mathilda": "11",
     "wolfram": "11",
     "python": "11"
    },
-   "ratio": 0.46666666666666673,
+   "ratio": 0.3448275862068965,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1028,16 +1028,16 @@
    "group": "A symbolic (sympy)",
    "label": "PolynomialGCD, shared deg-20 factor",
    "times": {
-    "mathilda": 0.1,
+    "mathilda": 0.099,
     "wolfram": 0.072,
-    "python": 0.764
+    "python": 0.796
    },
    "checks": {
     "mathilda": "20",
     "wolfram": "20",
     "python": "20"
    },
-   "ratio": 1.388888888888889,
+   "ratio": 1.3750000000000002,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1047,16 +1047,16 @@
    "group": "A symbolic (sympy)",
    "label": "PolynomialGCD, coprime deg 40",
    "times": {
-    "mathilda": 0.241,
+    "mathilda": 0.246,
     "wolfram": 0.095,
-    "python": 0.337
+    "python": 0.355
    },
    "checks": {
     "mathilda": "0",
     "wolfram": "0",
     "python": "0"
    },
-   "ratio": 2.536842105263158,
+   "ratio": 2.5894736842105264,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -1066,16 +1066,16 @@
    "group": "A symbolic (sympy)",
    "label": "Discriminant of deg 20",
    "times": {
-    "mathilda": 2.531,
-    "wolfram": 0.074,
-    "python": 0.193
+    "mathilda": 2.52,
+    "wolfram": 0.073,
+    "python": 0.18
    },
    "checks": {
     "mathilda": "960365",
     "wolfram": "960365",
     "python": "960365"
    },
-   "ratio": 34.20270270270271,
+   "ratio": 34.52054794520548,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -1085,16 +1085,16 @@
    "group": "A symbolic (sympy)",
    "label": "Cancel deg-60 over deg-58",
    "times": {
-    "mathilda": 0.36,
-    "wolfram": 0.585,
-    "python": 7.33
+    "mathilda": 0.388,
+    "wolfram": 0.549,
+    "python": 7.429
    },
    "checks": {
     "mathilda": "1157713",
     "wolfram": "1157713",
     "python": "1157713"
    },
-   "ratio": 0.6153846153846154,
+   "ratio": 0.7067395264116575,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1104,16 +1104,16 @@
    "group": "A symbolic (sympy)",
    "label": "PolynomialQuotient deg 60 / deg 20",
    "times": {
-    "mathilda": 0.072,
-    "wolfram": 0.209,
-    "python": 0.961
+    "mathilda": 0.083,
+    "wolfram": 0.201,
+    "python": 0.984
    },
    "checks": {
     "mathilda": "40",
     "wolfram": "40",
     "python": "40"
    },
-   "ratio": 0.34449760765550236,
+   "ratio": 0.4129353233830846,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1123,8 +1123,8 @@
    "group": "A symbolic (sympy)",
    "label": "Expand (1+x)^400",
    "times": {
-    "mathilda": 0.426,
-    "wolfram": 0.107,
+    "mathilda": 0.436,
+    "wolfram": 0.102,
     "python": 0.003
    },
    "checks": {
@@ -1132,7 +1132,7 @@
     "wolfram": "102952500135414432972975880320401986757210925381077648234849059575923332372651958598336595518976492951564048597506774120",
     "python": "102952500135414432972975880320401986757210925381077648234849059575923332372651958598336595518976492951564048597506774120"
    },
-   "ratio": 142.0,
+   "ratio": 145.33333333333334,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -1142,16 +1142,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Gamma over 10^6",
    "times": {
-    "mathilda": 1.104,
-    "wolfram": 1.413,
-    "python": 7.534
+    "mathilda": 1.163,
+    "wolfram": 1.757,
+    "python": 8.92
    },
    "checks": {
     "mathilda": "886227",
     "wolfram": "886227",
     "python": "886227"
    },
-   "ratio": 0.7813163481953291,
+   "ratio": 0.6619237336368811,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1161,16 +1161,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Erf over 10^6",
    "times": {
-    "mathilda": 0.959,
-    "wolfram": 1.257,
-    "python": 7.559
+    "mathilda": 1.327,
+    "wolfram": 1.519,
+    "python": 8.639
    },
    "checks": {
     "mathilda": "520500",
     "wolfram": "520500",
     "python": "520500"
    },
-   "ratio": 0.7629276054097057,
+   "ratio": 0.8736010533245556,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1180,16 +1180,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "BesselJ[0, .] over 10^6",
    "times": {
-    "mathilda": 3363.86,
-    "wolfram": 1715.06,
-    "python": 53.592
+    "mathilda": 4152.62,
+    "wolfram": 2143.17,
+    "python": 59.975
    },
    "checks": {
     "mathilda": "938470",
     "wolfram": "938470",
     "python": "938470"
    },
-   "ratio": 62.76795044036424,
+   "ratio": 69.23918299291371,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -1199,16 +1199,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "LogGamma over 10^6",
    "times": {
-    "mathilda": 0.773,
-    "wolfram": 1.019,
-    "python": 11.567
+    "mathilda": 0.866,
+    "wolfram": 1.39,
+    "python": 12.473
    },
    "checks": {
     "mathilda": "-120782",
     "wolfram": "-120782",
     "python": "-120782"
    },
-   "ratio": 0.7585868498527969,
+   "ratio": 0.623021582733813,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1218,16 +1218,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "PolyGamma[0, .] over 10^6",
    "times": {
-    "mathilda": 1.559,
-    "wolfram": 155.387,
-    "python": 7.962
+    "mathilda": 1.749,
+    "wolfram": 195.631,
+    "python": 8.802
    },
    "checks": {
     "mathilda": "36490",
     "wolfram": "36490",
     "python": "36490"
    },
-   "ratio": 0.19580507410198442,
+   "ratio": 0.1987048398091343,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1237,16 +1237,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "AiryAi over 10^6",
    "times": {
-    "mathilda": 3.193,
-    "wolfram": 108.31,
-    "python": 59.516
+    "mathilda": 4.192,
+    "wolfram": 129.733,
+    "python": 63.087
    },
    "checks": {
     "mathilda": "231694",
     "wolfram": "231694",
     "python": "231694"
    },
-   "ratio": 0.0536494388063714,
+   "ratio": 0.06644792112479592,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1256,16 +1256,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Zeta over 10^6",
    "times": {
-    "mathilda": 8.429,
-    "wolfram": 4314.76,
-    "python": 5.946
+    "mathilda": 9.274,
+    "wolfram": 4984.71,
+    "python": 6.682
    },
    "checks": {
     "mathilda": "1341487",
     "wolfram": "1341487",
     "python": "1341487"
    },
-   "ratio": 1.4175916582576522,
+   "ratio": 1.3879078120323254,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1276,7 +1276,7 @@
    "label": "NIntegrate Sin[x] on [0,Pi]",
    "times": {
     "mathilda": 0.001,
-    "wolfram": 1.052,
+    "wolfram": 1.272,
     "python": 0.002
    },
    "checks": {
@@ -1294,16 +1294,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "NIntegrate 1/Sqrt[x] on [0,1]",
    "times": {
-    "mathilda": 0.028,
-    "wolfram": 0.677,
-    "python": 0.015
+    "mathilda": 0.032,
+    "wolfram": 0.821,
+    "python": 0.014
    },
    "checks": {
     "mathilda": "20000",
     "wolfram": "20000",
     "python": "20000"
    },
-   "ratio": 1.8666666666666667,
+   "ratio": 2.2857142857142856,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -1313,8 +1313,8 @@
    "group": "B numeric libraries (scipy)",
    "label": "NIntegrate Sin[40 x] on [0,Pi]",
    "times": {
-    "mathilda": 0.367,
-    "wolfram": 4.031,
+    "mathilda": 0.401,
+    "wolfram": 4.996,
     "python": 0.002
    },
    "checks": {
@@ -1322,7 +1322,7 @@
     "wolfram": "0",
     "python": "0"
    },
-   "ratio": 183.5,
+   "ratio": 200.5,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -1333,15 +1333,15 @@
    "label": "NIntegrate narrow Gaussian",
    "times": {
     "mathilda": 0.01,
-    "wolfram": 1.062,
-    "python": 0.019
+    "wolfram": 1.06,
+    "python": 0.02
    },
    "checks": {
     "mathilda": "56050",
     "wolfram": "56050",
     "python": "56050"
    },
-   "ratio": 0.5263157894736842,
+   "ratio": 0.5,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1351,16 +1351,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "NIntegrate 2-D smooth",
    "times": {
-    "mathilda": 0.034,
-    "wolfram": 1.436,
-    "python": 0.063
+    "mathilda": 0.037,
+    "wolfram": 1.632,
+    "python": 0.064
    },
    "checks": {
     "mathilda": "20000",
     "wolfram": "20000",
     "python": "20000"
    },
-   "ratio": 0.5396825396825398,
+   "ratio": 0.578125,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1371,7 +1371,7 @@
    "label": "NIntegrate Exp[-x^2] on [0,Infinity]",
    "times": {
     "mathilda": 0.007,
-    "wolfram": 0.901,
+    "wolfram": 1.2,
     "python": 0.008
    },
    "checks": {
@@ -1389,16 +1389,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "NDSolve y'=-y on [0,10]",
    "times": {
-    "mathilda": 0.022,
-    "wolfram": 0.16,
-    "python": 2.414
+    "mathilda": 0.024,
+    "wolfram": 0.18,
+    "python": 2.866
    },
    "checks": {
     "mathilda": "0",
     "wolfram": "0",
     "python": "0"
    },
-   "ratio": 0.13749999999999998,
+   "ratio": 0.13333333333333333,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1408,16 +1408,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "NDSolve harmonic oscillator",
    "times": {
-    "mathilda": 0.095,
-    "wolfram": 0.216,
-    "python": 7.585
+    "mathilda": 0.1,
+    "wolfram": 0.329,
+    "python": 8.7
    },
    "checks": {
     "mathilda": "4081",
     "wolfram": "4081",
     "python": "4081"
    },
-   "ratio": 0.4398148148148148,
+   "ratio": 0.303951367781155,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1427,16 +1427,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "NDSolve Van der Pol mu=10",
    "times": {
-    "mathilda": 0.226,
-    "wolfram": 0.587,
-    "python": 3.334
+    "mathilda": 0.232,
+    "wolfram": 0.719,
+    "python": 3.955
    },
    "checks": {
     "mathilda": "19394",
     "wolfram": "19394",
     "python": "19394"
    },
-   "ratio": 0.3850085178875639,
+   "ratio": 0.32267037552155775,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1446,16 +1446,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "NDSolve y'=y^2 t nonlinear",
    "times": {
-    "mathilda": 0.021,
-    "wolfram": 0.135,
-    "python": 0.296
+    "mathilda": 0.024,
+    "wolfram": 0.209,
+    "python": 0.345
    },
    "checks": {
     "mathilda": "6667",
     "wolfram": "6667",
     "python": "6667"
    },
-   "ratio": 0.15555555555555556,
+   "ratio": 0.11483253588516747,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1466,15 +1466,15 @@
    "label": "NDSolve long horizon, t to 200",
    "times": {
     "mathilda": 0.028,
-    "wolfram": 0.153,
-    "python": 2.922
+    "wolfram": 0.168,
+    "python": 3.259
    },
    "checks": {
     "mathilda": "0",
     "wolfram": "0",
     "python": "0"
    },
-   "ratio": 0.18300653594771243,
+   "ratio": 0.16666666666666666,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1485,7 +1485,7 @@
    "label": "FindRoot Cos[x]==x",
    "times": {
     "mathilda": 0.006,
-    "wolfram": 0.044,
+    "wolfram": 0.046,
     "python": 0.004
    },
    "checks": {
@@ -1504,7 +1504,7 @@
    "label": "FindRoot x^3-2x-5",
    "times": {
     "mathilda": 0.009,
-    "wolfram": 0.045,
+    "wolfram": 0.068,
     "python": 0.005
    },
    "checks": {
@@ -1522,16 +1522,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "FindRoot 2x2 nonlinear system",
    "times": {
-    "mathilda": 0.017,
-    "wolfram": 0.049,
-    "python": 0.014
+    "mathilda": 0.016,
+    "wolfram": 0.098,
+    "python": 0.017
    },
    "checks": {
     "mathilda": "1931852",
     "wolfram": "1931852",
     "python": "1931852"
    },
-   "ratio": 1.2142857142857144,
+   "ratio": 0.9411764705882353,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1541,16 +1541,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "NSolve all roots, degree 50",
    "times": {
-    "mathilda": 14.041,
-    "wolfram": 0.842,
-    "python": 0.166
+    "mathilda": 15.713,
+    "wolfram": 0.939,
+    "python": 0.182
    },
    "checks": {
     "mathilda": "50",
     "wolfram": "50",
     "python": "50"
    },
-   "ratio": 84.58433734939759,
+   "ratio": 86.33516483516483,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -1561,7 +1561,7 @@
    "label": "FindRoot Tan[x]==x near 4.5",
    "times": {
     "mathilda": 0.005,
-    "wolfram": 0.043,
+    "wolfram": 0.049,
     "python": 0.005
    },
    "checks": {
@@ -1580,15 +1580,15 @@
    "label": "FindMinimum quadratic",
    "times": {
     "mathilda": 0.009,
-    "wolfram": 0.061,
-    "python": 0.159
+    "wolfram": 0.058,
+    "python": 0.167
    },
    "checks": {
     "mathilda": "2000000",
     "wolfram": "2000000",
     "python": "2000000"
    },
-   "ratio": 0.14754098360655737,
+   "ratio": 0.15517241379310343,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1598,16 +1598,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "FindMinimum Rosenbrock 2-D",
    "times": {
-    "mathilda": 0.114,
-    "wolfram": 0.164,
-    "python": 3.406
+    "mathilda": 0.113,
+    "wolfram": 0.162,
+    "python": 3.428
    },
    "checks": {
     "mathilda": "0",
     "wolfram": "0",
     "python": "0"
    },
-   "ratio": 0.6951219512195121,
+   "ratio": 0.6975308641975309,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1618,15 +1618,15 @@
    "label": "FindMinimum x Sin[x] on [2,6]",
    "times": {
     "mathilda": 0.004,
-    "wolfram": 0.279,
-    "python": 1.097
+    "wolfram": 0.267,
+    "python": 1.129
    },
    "checks": {
     "mathilda": "-48145",
     "wolfram": "-48145",
     "python": "-48145"
    },
-   "ratio": 0.014336917562724013,
+   "ratio": 0.0149812734082397,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -1636,16 +1636,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Fit linear, 200 points",
    "times": {
-    "mathilda": 0.782,
+    "mathilda": 0.795,
     "wolfram": 0.017,
-    "python": 0.016
+    "python": 0.015
    },
    "checks": {
     "mathilda": "21000000",
     "wolfram": "21000000",
     "python": "21000000"
    },
-   "ratio": 48.875,
+   "ratio": 53.00000000000001,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -1655,8 +1655,8 @@
    "group": "B numeric libraries (scipy)",
    "label": "Fit degree-5 polynomial, 500 points",
    "times": {
-    "mathilda": 23156.3,
-    "wolfram": 0.078,
+    "mathilda": 25910.1,
+    "wolfram": 0.08,
     "python": 0.035
    },
    "checks": {
@@ -1664,7 +1664,7 @@
     "wolfram": "50000",
     "python": "50000"
    },
-   "ratio": 661608.5714285714,
+   "ratio": 740288.5714285714,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -1674,16 +1674,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Interpolation build, 2000 knots",
    "times": {
-    "mathilda": 0.024,
-    "wolfram": 0.778,
-    "python": 0.079
+    "mathilda": 0.021,
+    "wolfram": 0.764,
+    "python": 0.081
    },
    "checks": {
     "mathilda": "2000",
     "wolfram": "2000",
     "python": "2000"
    },
-   "ratio": 0.3037974683544304,
+   "ratio": 0.25925925925925924,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1693,16 +1693,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Interpolation evaluate, 20000 points",
    "times": {
-    "mathilda": 17.871,
-    "wolfram": 18.225,
-    "python": 0.06
+    "mathilda": 18.09,
+    "wolfram": 18.233,
+    "python": 0.059
    },
    "checks": {
     "mathilda": "598472",
     "wolfram": "598472",
     "python": "598472"
    },
-   "ratio": 297.84999999999997,
+   "ratio": 306.6101694915254,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -1712,16 +1712,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Interpolation over 10^5 array",
    "times": {
-    "mathilda": 2.594,
-    "wolfram": 4.687,
-    "python": 4.34
+    "mathilda": 2.641,
+    "wolfram": 4.965,
+    "python": 4.397
    },
    "checks": {
     "mathilda": "938000",
     "wolfram": "938000",
     "python": "938000"
    },
-   "ratio": 0.5976958525345621,
+   "ratio": 0.6006367978166932,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1731,7 +1731,7 @@
    "group": "B numeric libraries (scipy)",
    "label": "Interpolation order 1 (linear) build",
    "times": {
-    "wolfram": 0.782,
+    "wolfram": 0.775,
     "python": 0.013
    },
    "checks": {
@@ -1748,8 +1748,8 @@
    "group": "B numeric libraries (scipy)",
    "label": "ListInterpolation 2-D 60x60",
    "times": {
-    "wolfram": 0.857,
-    "python": 0.92
+    "wolfram": 0.871,
+    "python": 0.926
    },
    "checks": {
     "wolfram": "420735",
@@ -1765,16 +1765,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Fourier 2^18 (262144)",
    "times": {
-    "mathilda": 3.425,
-    "wolfram": 2.827,
-    "python": 2.425
+    "mathilda": 3.471,
+    "wolfram": 3.002,
+    "python": 2.555
    },
    "checks": {
     "mathilda": "12727922",
     "wolfram": "12727922",
     "python": "12727922"
    },
-   "ratio": 1.4123711340206186,
+   "ratio": 1.3585127201565557,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1784,18 +1784,18 @@
    "group": "B numeric libraries (scipy)",
    "label": "Fourier 1200000 (mixed radix)",
    "times": {
-    "mathilda": 13.361,
-    "wolfram": 9.937,
-    "python": 10.872
+    "mathilda": 13.373,
+    "wolfram": 11.8,
+    "python": 9.808
    },
    "checks": {
     "mathilda": "-1414214",
     "wolfram": "-1414214",
     "python": "-1414214"
    },
-   "ratio": 1.344570796014894,
+   "ratio": 1.3634787928221859,
    "note": "",
-   "best_other": "wolfram",
+   "best_other": "python",
    "klass": "AHEAD"
   },
   {
@@ -1803,16 +1803,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Fourier 262143 (awkward size)",
    "times": {
-    "mathilda": 5.955,
-    "wolfram": 5.205,
-    "python": 5.017
+    "mathilda": 6.283,
+    "wolfram": 5.866,
+    "python": 4.581
    },
    "checks": {
     "mathilda": "3414214",
     "wolfram": "3414214",
     "python": "3414214"
    },
-   "ratio": 1.1869643213075542,
+   "ratio": 1.3715345994324384,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1822,18 +1822,18 @@
    "group": "B numeric libraries (scipy)",
    "label": "InverseFourier 2^18",
    "times": {
-    "mathilda": 3.42,
-    "wolfram": 2.812,
-    "python": 2.841
+    "mathilda": 3.528,
+    "wolfram": 2.854,
+    "python": 2.51
    },
    "checks": {
     "mathilda": "1000000",
     "wolfram": "1000000",
     "python": "1000000"
    },
-   "ratio": 1.2162162162162162,
+   "ratio": 1.405577689243028,
    "note": "",
-   "best_other": "wolfram",
+   "best_other": "python",
    "klass": "AHEAD"
   },
   {
@@ -1841,16 +1841,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "ListConvolve 100000 x 2048",
    "times": {
-    "mathilda": 9.812,
-    "wolfram": 1.101,
-    "python": 11.562
+    "mathilda": 9.996,
+    "wolfram": 1.198,
+    "python": 10.694
    },
    "checks": {
     "mathilda": "10000000",
     "wolfram": "10000000",
     "python": "10000000"
    },
-   "ratio": 8.911898274296094,
+   "ratio": 8.34390651085142,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -1860,16 +1860,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "ListCorrelate 100000 x 2048",
    "times": {
-    "mathilda": 9.784,
-    "wolfram": 1.104,
-    "python": 11.59
+    "mathilda": 10.174,
+    "wolfram": 1.216,
+    "python": 10.512
    },
    "checks": {
     "mathilda": "11000000",
     "wolfram": "11000000",
     "python": "11000000"
    },
-   "ratio": 8.86231884057971,
+   "ratio": 8.366776315789474,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -1879,16 +1879,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Dot 600x600",
    "times": {
-    "mathilda": 0.843,
-    "wolfram": 1.68,
-    "python": 0.828
+    "mathilda": 0.829,
+    "wolfram": 1.714,
+    "python": 0.829
    },
    "checks": {
     "mathilda": "1174720184",
     "wolfram": "1174720184",
     "python": "1174720184"
    },
-   "ratio": 1.0181159420289856,
+   "ratio": 1.0,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1898,16 +1898,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "LinearSolve 600x600",
    "times": {
-    "mathilda": 1.197,
-    "wolfram": 2.765,
-    "python": 1.223
+    "mathilda": 1.185,
+    "wolfram": 2.907,
+    "python": 1.208
    },
    "checks": {
     "mathilda": "2973030",
     "wolfram": "2973030",
     "python": "2973030"
    },
-   "ratio": 0.9787408013082584,
+   "ratio": 0.9809602649006623,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1917,16 +1917,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Inverse 600x600",
    "times": {
-    "mathilda": 2.493,
-    "wolfram": 6.83,
-    "python": 2.849
+    "mathilda": 2.539,
+    "wolfram": 6.775,
+    "python": 2.861
    },
    "checks": {
     "mathilda": "660673",
     "wolfram": "660673",
     "python": "660673"
    },
-   "ratio": 0.8750438750438749,
+   "ratio": 0.8874519398811604,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1936,16 +1936,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Det 600x600",
    "times": {
-    "mathilda": 1.121,
-    "wolfram": 2.89,
-    "python": 1.145
+    "mathilda": 1.101,
+    "wolfram": 2.83,
+    "python": 1.069
    },
    "checks": {
     "mathilda": "972702367261",
     "wolfram": "972702367261",
     "python": "972702367261"
    },
-   "ratio": 0.9790393013100437,
+   "ratio": 1.029934518241347,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -1955,16 +1955,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Eigenvalues 600x600 (general)",
    "times": {
-    "mathilda": 273.597,
-    "wolfram": 175.319,
-    "python": 78.278
+    "mathilda": 282.993,
+    "wolfram": 179.359,
+    "python": 77.78
    },
    "checks": {
     "mathilda": "800000",
     "wolfram": "800000",
     "python": "800000"
    },
-   "ratio": 3.495196606964919,
+   "ratio": 3.6383774749292876,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -1974,16 +1974,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "SingularValueDecomposition 400x400",
    "times": {
-    "mathilda": 23.201,
-    "wolfram": 55.326,
-    "python": 9.09
+    "mathilda": 22.798,
+    "wolfram": 53.916,
+    "python": 8.752
    },
    "checks": {
     "mathilda": "800000",
     "wolfram": "800000",
     "python": "800000"
    },
-   "ratio": 2.5523652365236527,
+   "ratio": 2.6048903107861054,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -1993,16 +1993,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "QRDecomposition 400x400",
    "times": {
-    "mathilda": 8.052,
-    "wolfram": 21.843,
-    "python": 2.523
+    "mathilda": 7.885,
+    "wolfram": 19.925,
+    "python": 2.5
    },
    "checks": {
     "mathilda": "766068",
     "wolfram": "766068",
     "python": "766068"
    },
-   "ratio": 3.191438763376932,
+   "ratio": 3.154,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -2012,16 +2012,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Mean over 2x10^6",
    "times": {
-    "mathilda": 0.151,
-    "wolfram": 0.074,
-    "python": 0.225
+    "mathilda": 0.142,
+    "wolfram": 0.081,
+    "python": 0.223
    },
    "checks": {
     "mathilda": "503673600",
     "wolfram": "503673600",
     "python": "503673600"
    },
-   "ratio": 2.040540540540541,
+   "ratio": 1.7530864197530862,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2030,45 +2030,55 @@
    "experiment": "19-statistics",
    "group": "B numeric libraries (scipy)",
    "label": "Variance over 2x10^6",
-   "times": {},
+   "times": {
+    "mathilda": 0.282,
+    "wolfram": 0.289,
+    "python": 0.935
+   },
    "checks": {
-    "mathilda": "18",
+    "mathilda": "84815833",
     "wolfram": "84815833",
     "python": "84815833"
    },
-   "ratio": null,
-   "note": "check disagreement: Mathilda=18; Python=84815833; Mathematica=84815833",
-   "klass": "CHECK-FAIL"
+   "ratio": 0.9757785467128027,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
   },
   {
    "experiment": "19-statistics",
    "group": "B numeric libraries (scipy)",
    "label": "StandardDeviation over 2x10^6",
-   "times": {},
+   "times": {
+    "mathilda": 0.296,
+    "wolfram": 0.317,
+    "python": 0.938
+   },
    "checks": {
-    "mathilda": "1328",
+    "mathilda": "2912316",
     "wolfram": "2912316",
     "python": "2912316"
    },
-   "ratio": null,
-   "note": "check disagreement: Mathilda=1328; Python=2912316; Mathematica=2912316",
-   "klass": "CHECK-FAIL"
+   "ratio": 0.9337539432176656,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
   },
   {
    "experiment": "19-statistics",
    "group": "B numeric libraries (scipy)",
    "label": "Median over 2x10^6",
    "times": {
-    "mathilda": 14.635,
-    "wolfram": 8.362,
-    "python": 13.969
+    "mathilda": 12.957,
+    "wolfram": 8.322,
+    "python": 13.992
    },
    "checks": {
     "mathilda": "5110000",
     "wolfram": "5110000",
     "python": "5110000"
    },
-   "ratio": 1.7501793829227457,
+   "ratio": 1.5569574621485223,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2078,15 +2088,15 @@
    "group": "B numeric libraries (scipy)",
    "label": "Quartiles over 2x10^6",
    "times": {
-    "mathilda": 17.944,
-    "wolfram": 17.676,
-    "python": 18.435
+    "mathilda": 17.814,
+    "wolfram": 17.189,
+    "python": 18.512
    },
    "checks": {
     "mathilda": "15175000",
     "wolfram": "15175000"
    },
-   "ratio": 1.015161801312514,
+   "ratio": 1.036360463086858,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -2095,45 +2105,55 @@
    "experiment": "19-statistics",
    "group": "B numeric libraries (scipy)",
    "label": "Skewness over 2x10^6",
-   "times": {},
+   "times": {
+    "mathilda": 0.572,
+    "wolfram": 0.479,
+    "python": 3.525
+   },
    "checks": {
-    "mathilda": "-1487825",
+    "mathilda": "-200",
     "wolfram": "-200",
     "python": "-200"
    },
-   "ratio": null,
-   "note": "check disagreement: Mathilda=-1487825; Python=-200; Mathematica=-200",
-   "klass": "CHECK-FAIL"
+   "ratio": 1.1941544885177453,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
   },
   {
    "experiment": "19-statistics",
    "group": "B numeric libraries (scipy)",
    "label": "Kurtosis over 2x10^6",
-   "times": {},
+   "times": {
+    "mathilda": 0.614,
+    "wolfram": 0.575,
+    "python": 3.322
+   },
    "checks": {
-    "mathilda": "408149067546966464",
+    "mathilda": "17789",
     "wolfram": "17789",
     "python": "17789"
    },
-   "ratio": null,
-   "note": "check disagreement: Mathilda=408149067546966464; Python=17789; Mathematica=17789",
-   "klass": "CHECK-FAIL"
+   "ratio": 1.0678260869565217,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
   },
   {
    "experiment": "19-statistics",
    "group": "B numeric libraries (scipy)",
    "label": "RootMeanSquare over 2x10^6",
    "times": {
-    "mathilda": 0.152,
-    "wolfram": 0.12,
-    "python": 0.497
+    "mathilda": 0.164,
+    "wolfram": 0.122,
+    "python": 0.507
    },
    "checks": {
     "mathilda": "5818028",
     "wolfram": "5818028",
     "python": "5818028"
    },
-   "ratio": 1.2666666666666666,
+   "ratio": 1.3442622950819674,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -2143,16 +2163,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "MovingAverage window 100",
    "times": {
-    "mathilda": 20.97,
-    "wolfram": 2.064,
-    "python": 4.616
+    "mathilda": 17.4,
+    "wolfram": 2.132,
+    "python": 4.593
    },
    "checks": {
     "mathilda": "49855794600",
     "wolfram": "49855794600",
     "python": "49855794600"
    },
-   "ratio": 10.159883720930232,
+   "ratio": 8.161350844277672,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2162,16 +2182,16 @@
    "group": "B numeric libraries (scipy)",
    "label": "Fit linear, 5000 points",
    "times": {
-    "mathilda": 24.065,
-    "wolfram": 0.287,
-    "python": 0.103
+    "mathilda": 23.974,
+    "wolfram": 0.281,
+    "python": 0.1
    },
    "checks": {
     "mathilda": "230000",
     "wolfram": "230000",
     "python": "230000"
    },
-   "ratio": 233.64077669902915,
+   "ratio": 239.73999999999998,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -2181,24 +2201,26 @@
    "group": "B numeric libraries (scipy)",
    "label": "Fit quadratic, 5000 points",
    "times": {
-    "wolfram": 0.465,
-    "python": 0.139
+    "mathilda": 58171.5,
+    "wolfram": 0.421,
+    "python": 0.136
    },
    "checks": {
     "wolfram": "70000",
     "python": "70000"
    },
-   "ratio": null,
-   "note": "timed out",
-   "klass": "INCOMPLETE"
+   "ratio": 427731.6176470588,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
   },
   {
    "experiment": "20-curve-fitting",
    "group": "B numeric libraries (scipy)",
    "label": "Fit degree-8 polynomial, 5000 points",
    "times": {
-    "wolfram": 1.733,
-    "python": 0.322
+    "wolfram": 1.286,
+    "python": 0.317
    },
    "checks": {
     "wolfram": "700",
@@ -2213,8 +2235,8 @@
    "group": "B numeric libraries (scipy)",
    "label": "LeastSquares 2000x20",
    "times": {
-    "wolfram": 0.777,
-    "python": 0.292
+    "wolfram": 0.655,
+    "python": 0.278
    },
    "checks": {
     "wolfram": "29730",
@@ -2229,8 +2251,8 @@
    "group": "B numeric libraries (scipy)",
    "label": "Fit trig basis, 5000 points",
    "times": {
-    "wolfram": 0.464,
-    "python": 0.093
+    "wolfram": 0.421,
+    "python": 0.091
    },
    "checks": {
     "wolfram": "7164",
@@ -2245,16 +2267,16 @@
    "group": "C array substrate (numpy)",
    "label": "Transpose 2000x2000",
    "times": {
-    "mathilda": 2.044,
-    "wolfram": 0.784,
-    "python": 3.045
+    "mathilda": 1.752,
+    "wolfram": 0.773,
+    "python": 3.11
    },
    "checks": {
     "mathilda": "21",
     "wolfram": "21",
     "python": "21"
    },
-   "ratio": 2.607142857142857,
+   "ratio": 2.2664941785252264,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2264,16 +2286,16 @@
    "group": "C array substrate (numpy)",
    "label": "Transpose then Dot (fused?)",
    "times": {
-    "mathilda": 42.963,
-    "wolfram": 74.205,
-    "python": 22.307
+    "mathilda": 39.427,
+    "wolfram": 69.379,
+    "python": 20.216
    },
    "checks": {
     "mathilda": "5667128",
     "wolfram": "5667128",
     "python": "5667128"
    },
-   "ratio": 1.9259873582283589,
+   "ratio": 1.9502869014641866,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -2283,16 +2305,16 @@
    "group": "C array substrate (numpy)",
    "label": "Partition window 8, offset 1",
    "times": {
-    "mathilda": 2.566,
-    "wolfram": 35.981,
-    "python": 6.104
+    "mathilda": 2.482,
+    "wolfram": 36.457,
+    "python": 5.503
    },
    "checks": {
     "mathilda": "3",
     "wolfram": "3",
     "python": "3"
    },
-   "ratio": 0.42038007863695936,
+   "ratio": 0.4510267127021625,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -2302,16 +2324,16 @@
    "group": "C array substrate (numpy)",
    "label": "Take rows 1;;1000 of 2000x2000",
    "times": {
-    "mathilda": 0.249,
-    "wolfram": 0.317,
-    "python": 0.271
+    "mathilda": 0.229,
+    "wolfram": 0.326,
+    "python": 0.223
    },
    "checks": {
     "mathilda": "1000",
     "wolfram": "1000",
     "python": "1000"
    },
-   "ratio": 0.9188191881918818,
+   "ratio": 1.0269058295964126,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -2340,8 +2362,8 @@
    "group": "C array substrate (numpy)",
    "label": "ArrayReshape 2x10^6 to 1000x2000",
    "times": {
-    "wolfram": 0.102,
-    "python": 0.262
+    "wolfram": 0.125,
+    "python": 0.223
    },
    "checks": {
     "wolfram": "21",
@@ -2357,16 +2379,16 @@
    "group": "C array substrate (numpy)",
    "label": "Inverse 6x6 x 2000",
    "times": {
-    "mathilda": 572.996,
-    "wolfram": 2.816,
-    "python": 3.707
+    "mathilda": 561.072,
+    "wolfram": 2.837,
+    "python": 3.633
    },
    "checks": {
     "mathilda": "617813",
     "wolfram": "617813",
     "python": "617813"
    },
-   "ratio": 203.4786931818182,
+   "ratio": 197.7694747973211,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2376,16 +2398,16 @@
    "group": "C array substrate (numpy)",
    "label": "Det 6x6 x 5000",
    "times": {
-    "mathilda": 1266.56,
-    "wolfram": 6.126,
-    "python": 5.31
+    "mathilda": 1228.51,
+    "wolfram": 6.003,
+    "python": 5.042
    },
    "checks": {
     "mathilda": "2547788555",
     "wolfram": "2547788555",
     "python": "2547788555"
    },
-   "ratio": 238.5235404896422,
+   "ratio": 243.65529551765172,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -2395,16 +2417,16 @@
    "group": "C array substrate (numpy)",
    "label": "LinearSolve 6x6 x 2000",
    "times": {
-    "mathilda": 523.556,
-    "wolfram": 3.558,
-    "python": 4.242
+    "mathilda": 494.98,
+    "wolfram": 3.671,
+    "python": 3.929
    },
    "checks": {
     "mathilda": "2162345",
     "wolfram": "2162345",
     "python": "2162345"
    },
-   "ratio": 147.14896008993819,
+   "ratio": 134.8351947698175,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2414,16 +2436,16 @@
    "group": "C array substrate (numpy)",
    "label": "Dot 6x6 x 6x6 x 10000",
    "times": {
-    "mathilda": 324.789,
-    "wolfram": 6.424,
-    "python": 4.016
+    "mathilda": 316.782,
+    "wolfram": 6.428,
+    "python": 3.877
    },
    "checks": {
     "mathilda": "5667128",
     "wolfram": "5667128",
     "python": "5667128"
    },
-   "ratio": 80.87375498007968,
+   "ratio": 81.70802166623677,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -2433,16 +2455,16 @@
    "group": "C array substrate (numpy)",
    "label": "Inverse 3x3 x 5000",
    "times": {
-    "mathilda": 175.538,
-    "wolfram": 5.228,
-    "python": 8.239
+    "mathilda": 167.925,
+    "wolfram": 4.751,
+    "python": 7.66
    },
    "checks": {
     "mathilda": "509554",
     "wolfram": "509554",
     "python": "509554"
    },
-   "ratio": 33.576511094108646,
+   "ratio": 35.345190486213426,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2452,16 +2474,16 @@
    "group": "C array substrate (numpy)",
    "label": "Eigenvalues 6x6 x 500",
    "times": {
-    "mathilda": 0.761,
-    "wolfram": 1.093,
-    "python": 3.085
+    "mathilda": 0.685,
+    "wolfram": 1.007,
+    "python": 3.022
    },
    "checks": {
     "mathilda": "480000",
     "wolfram": "480000",
     "python": "480000"
    },
-   "ratio": 0.696248856358646,
+   "ratio": 0.6802383316782523,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -2471,16 +2493,16 @@
    "group": "C array substrate (numpy)",
    "label": "1 op on 10^6 elements",
    "times": {
-    "mathilda": 0.114,
-    "wolfram": 0.053,
-    "python": 0.111
+    "mathilda": 0.103,
+    "wolfram": 0.052,
+    "python": 0.112
    },
    "checks": {
     "mathilda": "55000000",
     "wolfram": "55000000",
     "python": "55000000"
    },
-   "ratio": 2.150943396226415,
+   "ratio": 1.9807692307692308,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2490,16 +2512,16 @@
    "group": "C array substrate (numpy)",
    "label": "1000 ops on 10^3 elements",
    "times": {
-    "mathilda": 0.152,
-    "wolfram": 0.247,
-    "python": 0.453
+    "mathilda": 0.142,
+    "wolfram": 0.236,
+    "python": 0.444
    },
    "checks": {
     "mathilda": "55000000",
     "wolfram": "55000000",
     "python": "55000000"
    },
-   "ratio": 0.6153846153846154,
+   "ratio": 0.6016949152542372,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -2509,16 +2531,16 @@
    "group": "C array substrate (numpy)",
    "label": "100000 ops on 10 elements",
    "times": {
-    "mathilda": 5.624,
-    "wolfram": 20.117,
-    "python": 36.188
+    "mathilda": 5.485,
+    "wolfram": 18.936,
+    "python": 33.366
    },
    "checks": {
     "mathilda": "55000000",
     "wolfram": "55000000",
     "python": "55000000"
    },
-   "ratio": 0.2795645473977233,
+   "ratio": 0.28965990705534433,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -2528,16 +2550,16 @@
    "group": "C array substrate (numpy)",
    "label": "1 elementwise op on 10^6",
    "times": {
-    "mathilda": 0.173,
-    "wolfram": 0.055,
-    "python": 0.145
+    "mathilda": 0.169,
+    "wolfram": 0.061,
+    "python": 0.135
    },
    "checks": {
     "mathilda": "110000000",
     "wolfram": "110000000",
     "python": "110000000"
    },
-   "ratio": 3.145454545454545,
+   "ratio": 2.7704918032786887,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2547,16 +2569,16 @@
    "group": "C array substrate (numpy)",
    "label": "10000 elementwise ops on 10^2",
    "times": {
-    "mathilda": 1.796,
-    "wolfram": 1.572,
-    "python": 2.001
+    "mathilda": 1.718,
+    "wolfram": 1.487,
+    "python": 1.705
    },
    "checks": {
     "mathilda": "110000000",
     "wolfram": "110000000",
     "python": "110000000"
    },
-   "ratio": 1.1424936386768447,
+   "ratio": 1.1553463349024882,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -2566,16 +2588,16 @@
    "group": "C array substrate (numpy)",
    "label": "100000 scalar additions",
    "times": {
-    "mathilda": 0.403,
-    "wolfram": 12.098,
-    "python": 1.327
+    "mathilda": 0.393,
+    "wolfram": 11.323,
+    "python": 1.169
    },
    "checks": {
     "mathilda": "1",
     "wolfram": "1",
     "python": "1"
    },
-   "ratio": 0.3036925395629239,
+   "ratio": 0.3361847733105218,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -2585,16 +2607,16 @@
    "group": "C array substrate (numpy)",
    "label": "return {real, real}, then Total",
    "times": {
-    "mathilda": 1.102,
-    "wolfram": 0.238,
-    "python": 0.247
+    "mathilda": 0.868,
+    "wolfram": 0.205,
+    "python": 0.243
    },
    "checks": {
     "mathilda": "650000",
     "wolfram": "650000",
     "python": "650000"
    },
-   "ratio": 4.630252100840337,
+   "ratio": 4.234146341463415,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2604,16 +2626,16 @@
    "group": "C array substrate (numpy)",
    "label": "return {real, int}, then Total",
    "times": {
-    "mathilda": 64.903,
-    "wolfram": 0.269,
-    "python": 0.425
+    "mathilda": 57.673,
+    "wolfram": 0.326,
+    "python": 0.415
    },
    "checks": {
     "mathilda": "550000",
     "wolfram": "550000",
     "python": "550000"
    },
-   "ratio": 241.275092936803,
+   "ratio": 176.91104294478527,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2623,16 +2645,16 @@
    "group": "C array substrate (numpy)",
    "label": "return {real, int, mask}, then Total",
    "times": {
-    "mathilda": 92.206,
-    "wolfram": 0.407,
-    "python": 1.131
+    "mathilda": 87.089,
+    "wolfram": 0.402,
+    "python": 1.104
    },
    "checks": {
     "mathilda": "60000",
     "wolfram": "60000",
     "python": "60000"
    },
-   "ratio": 226.55036855036857,
+   "ratio": 216.63930348258705,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2642,16 +2664,16 @@
    "group": "C array substrate (numpy)",
    "label": "return {real, int, mask}, discarded",
    "times": {
-    "mathilda": 43.753,
-    "wolfram": 0.27,
-    "python": 1.009
+    "mathilda": 39.862,
+    "wolfram": 0.255,
+    "python": 0.984
    },
    "checks": {
     "mathilda": "3",
     "wolfram": "3",
     "python": "3"
    },
-   "ratio": 162.04814814814813,
+   "ratio": 156.32156862745097,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2661,16 +2683,16 @@
    "group": "C array substrate (numpy)",
    "label": "return ragged {n, 1000, 100}, then Total",
    "times": {
-    "mathilda": 33.417,
-    "wolfram": 0.037,
-    "python": 0.063
+    "mathilda": 29.545,
+    "wolfram": 0.032,
+    "python": 0.058
    },
    "checks": {
     "mathilda": "3",
     "wolfram": "3",
     "python": "3"
    },
-   "ratio": 903.1621621621623,
+   "ratio": 923.28125,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2680,16 +2702,16 @@
    "group": "C array substrate (numpy)",
    "label": "Sin over 4x10^6",
    "times": {
-    "mathilda": 1.371,
-    "wolfram": 0.659,
-    "python": 14.9
+    "mathilda": 1.967,
+    "wolfram": 0.615,
+    "python": 14.756
    },
    "checks": {
     "mathilda": "479426",
     "wolfram": "479426",
     "python": "479426"
    },
-   "ratio": 2.0804248861911985,
+   "ratio": 3.1983739837398377,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2699,16 +2721,16 @@
    "group": "C array substrate (numpy)",
    "label": "Exp over 4x10^6",
    "times": {
-    "mathilda": 1.004,
-    "wolfram": 1.57,
-    "python": 6.143
+    "mathilda": 1.361,
+    "wolfram": 1.21,
+    "python": 6.051
    },
    "checks": {
     "mathilda": "1648721",
     "wolfram": "1648721",
     "python": "1648721"
    },
-   "ratio": 0.6394904458598726,
+   "ratio": 1.124793388429752,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -2718,16 +2740,16 @@
    "group": "C array substrate (numpy)",
    "label": "Log over 4x10^6",
    "times": {
-    "mathilda": 3.89,
-    "wolfram": 2.289,
-    "python": 12.875
+    "mathilda": 4.023,
+    "wolfram": 2.337,
+    "python": 12.54
    },
    "checks": {
     "mathilda": "405465",
     "wolfram": "405465",
     "python": "405465"
    },
-   "ratio": 1.6994320664045435,
+   "ratio": 1.7214377406931962,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2737,16 +2759,16 @@
    "group": "C array substrate (numpy)",
    "label": "Sqrt over 4x10^6",
    "times": {
-    "mathilda": 5.968,
-    "wolfram": 0.403,
-    "python": 1.012
+    "mathilda": 5.618,
+    "wolfram": 0.42,
+    "python": 0.989
    },
    "checks": {
     "mathilda": "1224745",
     "wolfram": "1224745",
     "python": "1224745"
    },
-   "ratio": 14.808933002481389,
+   "ratio": 13.376190476190477,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2756,16 +2778,16 @@
    "group": "C array substrate (numpy)",
    "label": "Tan over 4x10^6",
    "times": {
-    "mathilda": 1.674,
-    "wolfram": 0.691,
-    "python": 17.021
+    "mathilda": 1.665,
+    "wolfram": 0.664,
+    "python": 16.063
    },
    "checks": {
     "mathilda": "546302",
     "wolfram": "546302",
     "python": "546302"
    },
-   "ratio": 2.422575976845152,
+   "ratio": 2.5075301204819276,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2775,16 +2797,16 @@
    "group": "C array substrate (numpy)",
    "label": "ArcTan 2-arg over 4x10^6",
    "times": {
-    "mathilda": 4.17,
-    "wolfram": 7.765,
-    "python": 36.734
+    "mathilda": 3.679,
+    "wolfram": 7.191,
+    "python": 34.036
    },
    "checks": {
     "mathilda": "1249046",
     "wolfram": "1249046",
     "python": "1249046"
    },
-   "ratio": 0.5370251126851255,
+   "ratio": 0.5116117368933388,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -2794,35 +2816,35 @@
    "group": "C array substrate (numpy)",
    "label": "Sin[Exp[Log[v]]] fused?",
    "times": {
-    "mathilda": 8.16,
-    "wolfram": 6.269,
-    "python": 45.253
+    "mathilda": 9.856,
+    "wolfram": 6.143,
+    "python": 43.161
    },
    "checks": {
     "mathilda": "997495",
     "wolfram": "997495",
     "python": "997495"
    },
-   "ratio": 1.3016430052639973,
+   "ratio": 1.604427804004558,
    "note": "",
    "best_other": "wolfram",
-   "klass": "AHEAD"
+   "klass": "SLOWER"
   },
   {
    "experiment": "25-vector-transcendentals",
    "group": "C array substrate (numpy)",
    "label": "v^2.5 over 4x10^6",
    "times": {
-    "mathilda": 7.704,
-    "wolfram": 4.115,
-    "python": 19.545
+    "mathilda": 7.501,
+    "wolfram": 3.922,
+    "python": 18.364
    },
    "checks": {
     "mathilda": "2755676",
     "wolfram": "2755676",
     "python": "2755676"
    },
-   "ratio": 1.8721749696233292,
+   "ratio": 1.91254462009179,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2832,16 +2854,16 @@
    "group": "C array substrate (numpy)",
    "label": "Reverse 4x10^6",
    "times": {
-    "mathilda": 5.765,
-    "wolfram": 0.327,
-    "python": 1.015
+    "mathilda": 6.398,
+    "wolfram": 0.303,
+    "python": 0.941
    },
    "checks": {
     "mathilda": "55",
     "wolfram": "55",
     "python": "55"
    },
-   "ratio": 17.629969418960243,
+   "ratio": 21.115511551155116,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2851,16 +2873,16 @@
    "group": "C array substrate (numpy)",
    "label": "RotateLeft 4x10^6 by 1000",
    "times": {
-    "mathilda": 0.972,
-    "wolfram": 0.257,
-    "python": 0.495
+    "mathilda": 0.899,
+    "wolfram": 0.247,
+    "python": 0.467
    },
    "checks": {
     "mathilda": "55",
     "wolfram": "55",
     "python": "55"
    },
-   "ratio": 3.782101167315175,
+   "ratio": 3.639676113360324,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2870,16 +2892,16 @@
    "group": "C array substrate (numpy)",
    "label": "gather v[[idx]], 4x10^6",
    "times": {
-    "mathilda": 35.829,
-    "wolfram": 7.14,
-    "python": 15.359
+    "mathilda": 27.7,
+    "wolfram": 7.238,
+    "python": 10.452
    },
    "checks": {
     "mathilda": "12",
     "wolfram": "12",
     "python": "12"
    },
-   "ratio": 5.018067226890756,
+   "ratio": 3.827024039789997,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2889,16 +2911,16 @@
    "group": "C array substrate (numpy)",
    "label": "Join two 2x10^6",
    "times": {
-    "mathilda": 1.225,
-    "wolfram": 0.519,
-    "python": 0.464
+    "mathilda": 0.913,
+    "wolfram": 0.564,
+    "python": 0.428
    },
    "checks": {
     "mathilda": "30",
     "wolfram": "30",
     "python": "30"
    },
-   "ratio": 2.6400862068965516,
+   "ratio": 2.133177570093458,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -2908,16 +2930,16 @@
    "group": "C array substrate (numpy)",
    "label": "Take first half of 4x10^6",
    "times": {
-    "mathilda": 0.237,
-    "wolfram": 0.078,
-    "python": 0.224
+    "mathilda": 0.223,
+    "wolfram": 0.098,
+    "python": 0.21
    },
    "checks": {
     "mathilda": "15",
     "wolfram": "15",
     "python": "15"
    },
-   "ratio": 3.0384615384615383,
+   "ratio": 2.2755102040816326,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -2927,16 +2949,16 @@
    "group": "C array substrate (numpy)",
    "label": "Sort 4x10^6",
    "times": {
-    "mathilda": 46.362,
-    "wolfram": 74.977,
-    "python": 117.097
+    "mathilda": 44.461,
+    "wolfram": 71.115,
+    "python": 124.281
    },
    "checks": {
     "mathilda": "797",
     "wolfram": "797",
     "python": "797"
    },
-   "ratio": 0.6183496272190139,
+   "ratio": 0.6251986219503621,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -2946,16 +2968,16 @@
    "group": "C array substrate (numpy)",
    "label": "Union of 4x10^6 integers",
    "times": {
-    "mathilda": 12.705,
-    "wolfram": 75.596,
-    "python": 569.263
+    "mathilda": 12.645,
+    "wolfram": 74.35,
+    "python": 553.605
    },
    "checks": {
     "mathilda": "3",
     "wolfram": "3",
     "python": "3"
    },
-   "ratio": 0.16806444785438382,
+   "ratio": 0.17007397444519168,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -2965,16 +2987,16 @@
    "group": "C array substrate (numpy)",
    "label": "a + b over 4x10^6",
    "times": {
-    "mathilda": 0.399,
-    "wolfram": 0.527,
-    "python": 0.808
+    "mathilda": 0.365,
+    "wolfram": 0.432,
+    "python": 0.803
    },
    "checks": {
     "mathilda": "30",
     "wolfram": "30",
     "python": "30"
    },
-   "ratio": 0.7571157495256167,
+   "ratio": 0.8449074074074074,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -2984,16 +3006,16 @@
    "group": "C array substrate (numpy)",
    "label": "a * b over 4x10^6",
    "times": {
-    "mathilda": 0.398,
+    "mathilda": 0.394,
     "wolfram": 0.498,
-    "python": 0.809
+    "python": 0.788
    },
    "checks": {
     "mathilda": "55",
     "wolfram": "55",
     "python": "55"
    },
-   "ratio": 0.7991967871485944,
+   "ratio": 0.7911646586345382,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -3003,16 +3025,16 @@
    "group": "C array substrate (numpy)",
    "label": "MapThread[Min] over 4x10^6",
    "times": {
-    "mathilda": 15.576,
-    "wolfram": 721.538,
-    "python": 0.832
+    "mathilda": 15.468,
+    "wolfram": 683.641,
+    "python": 0.795
    },
    "checks": {
     "mathilda": "6",
     "wolfram": "6",
     "python": "6"
    },
-   "ratio": 18.721153846153847,
+   "ratio": 19.456603773584906,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -3022,16 +3044,16 @@
    "group": "C array substrate (numpy)",
    "label": "MapThread[Max] over 4x10^6",
    "times": {
-    "mathilda": 15.418,
-    "wolfram": 744.824,
-    "python": 0.846
+    "mathilda": 15.302,
+    "wolfram": 692.05,
+    "python": 0.802
    },
    "checks": {
     "mathilda": "15",
     "wolfram": "15",
     "python": "15"
    },
-   "ratio": 18.224586288416074,
+   "ratio": 19.079800498753116,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -3041,16 +3063,16 @@
    "group": "C array substrate (numpy)",
    "label": "Clip to [0.25, 0.75] over 4x10^6",
    "times": {
-    "mathilda": 798.398,
-    "wolfram": 3.062,
-    "python": 1.015
+    "mathilda": 740.383,
+    "wolfram": 1.98,
+    "python": 0.96
    },
    "checks": {
     "mathilda": "1500000",
     "wolfram": "1500000",
     "python": "1500000"
    },
-   "ratio": 786.5990147783252,
+   "ratio": 771.2322916666667,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -3060,16 +3082,16 @@
    "group": "C array substrate (numpy)",
    "label": "a b + a over 4x10^6",
    "times": {
-    "mathilda": 0.816,
-    "wolfram": 1.014,
-    "python": 1.484
+    "mathilda": 0.797,
+    "wolfram": 0.875,
+    "python": 1.442
    },
    "checks": {
     "mathilda": "70",
     "wolfram": "70",
     "python": "70"
    },
-   "ratio": 0.8047337278106508,
+   "ratio": 0.9108571428571429,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -3079,16 +3101,16 @@
    "group": "C array substrate (numpy)",
    "label": "integer Mod over 4x10^6",
    "times": {
-    "mathilda": 4.073,
-    "wolfram": 0.526,
-    "python": 3.577
+    "mathilda": 3.868,
+    "wolfram": 0.508,
+    "python": 3.349
    },
    "checks": {
     "mathilda": "5",
     "wolfram": "5",
     "python": "5"
    },
-   "ratio": 7.743346007604563,
+   "ratio": 7.6141732283464565,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -3098,16 +3120,16 @@
    "group": "C array substrate (numpy)",
    "label": "span v[[1;;n;;2]]",
    "times": {
-    "mathilda": 3.57,
-    "wolfram": 0.296,
-    "python": 0.483
+    "mathilda": 3.513,
+    "wolfram": 0.226,
+    "python": 0.494
    },
    "checks": {
     "mathilda": "25",
     "wolfram": "25",
     "python": "25"
    },
-   "ratio": 12.06081081081081,
+   "ratio": 15.544247787610619,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -3117,16 +3139,16 @@
    "group": "C array substrate (numpy)",
    "label": "span v[[1;;n;;7]]",
    "times": {
-    "mathilda": 1.023,
-    "wolfram": 0.237,
-    "python": 0.391
+    "mathilda": 1.02,
+    "wolfram": 0.188,
+    "python": 0.338
    },
    "checks": {
     "mathilda": "24",
     "wolfram": "24",
     "python": "24"
    },
-   "ratio": 4.3164556962025316,
+   "ratio": 5.425531914893617,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -3136,16 +3158,16 @@
    "group": "C array substrate (numpy)",
    "label": "span v[[2;;n;;2]] (offset)",
    "times": {
-    "mathilda": 3.568,
-    "wolfram": 0.2,
-    "python": 0.567
+    "mathilda": 3.427,
+    "wolfram": 0.189,
+    "python": 0.482
    },
    "checks": {
     "mathilda": "30",
     "wolfram": "30",
     "python": "30"
    },
-   "ratio": 17.84,
+   "ratio": 18.132275132275133,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -3155,16 +3177,16 @@
    "group": "C array substrate (numpy)",
    "label": "contiguous span v[[1;;n/2]]",
    "times": {
-    "mathilda": 0.912,
-    "wolfram": 0.132,
-    "python": 0.241
+    "mathilda": 0.855,
+    "wolfram": 0.106,
+    "python": 0.222
    },
    "checks": {
     "mathilda": "15",
     "wolfram": "15",
     "python": "15"
    },
-   "ratio": 6.909090909090909,
+   "ratio": 8.066037735849056,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -3174,16 +3196,16 @@
    "group": "C array substrate (numpy)",
    "label": "Range[1, 4x10^6, 3]",
    "times": {
-    "mathilda": 0.084,
-    "wolfram": 0.08,
-    "python": 0.111
+    "mathilda": 0.082,
+    "wolfram": 0.078,
+    "python": 0.11
    },
    "checks": {
     "mathilda": "70",
     "wolfram": "70",
     "python": "70"
    },
-   "ratio": 1.05,
+   "ratio": 1.0512820512820513,
    "note": "",
    "best_other": "wolfram",
    "klass": "AHEAD"
@@ -3193,8 +3215,8 @@
    "group": "C array substrate (numpy)",
    "label": "sieve to 200000 (strided writes)",
    "times": {
-    "wolfram": 249.941,
-    "python": 0.185
+    "wolfram": 236.074,
+    "python": 0.177
    },
    "checks": {
     "wolfram": "25",
@@ -3209,16 +3231,16 @@
    "group": "D uncovered subsystems",
    "label": "Graph construction, 40000 edges",
    "times": {
-    "mathilda": 11696.0,
-    "wolfram": 4.495,
-    "python": 15.125
+    "mathilda": 11355.7,
+    "wolfram": 4.222,
+    "python": 15.748
    },
    "checks": {
     "mathilda": "40000",
     "wolfram": "40000",
     "python": "40000"
    },
-   "ratio": 2602.0022246941044,
+   "ratio": 2689.649455234486,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -3228,16 +3250,16 @@
    "group": "D uncovered subsystems",
    "label": "VertexDegree, 20000 vertices",
    "times": {
-    "mathilda": 6017.23,
-    "wolfram": 0.044,
-    "python": 0.961
+    "mathilda": 5722.8,
+    "wolfram": 0.045,
+    "python": 0.985
    },
    "checks": {
     "mathilda": "6",
     "wolfram": "6",
     "python": "6"
    },
-   "ratio": 136755.22727272726,
+   "ratio": 127173.33333333334,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -3247,16 +3269,16 @@
    "group": "D uncovered subsystems",
    "label": "EdgeCount",
    "times": {
-    "mathilda": 6027.59,
+    "mathilda": 6099.52,
     "wolfram": 0.0,
-    "python": 1.087
+    "python": 1.109
    },
    "checks": {
     "mathilda": "3",
     "wolfram": "3",
     "python": "3"
    },
-   "ratio": 5545.160993560258,
+   "ratio": 5500.018034265104,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -3266,16 +3288,16 @@
    "group": "D uncovered subsystems",
    "label": "ConnectedComponents",
    "times": {
-    "mathilda": 6097.09,
+    "mathilda": 5970.76,
     "wolfram": 0.001,
-    "python": 5.165
+    "python": 6.649
    },
    "checks": {
     "mathilda": "2",
     "wolfram": "2",
     "python": "2"
    },
-   "ratio": 6097090.0,
+   "ratio": 5970760.0,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -3285,16 +3307,16 @@
    "group": "D uncovered subsystems",
    "label": "GraphDistance from vertex 1",
    "times": {
-    "mathilda": 6038.48,
-    "wolfram": 10471.2,
-    "python": 3.517
+    "mathilda": 6243.99,
+    "wolfram": 11822.2,
+    "python": 4.193
    },
    "checks": {
     "mathilda": "2",
     "wolfram": "2",
     "python": "2"
    },
-   "ratio": 1716.9405743531418,
+   "ratio": 1489.1461960410209,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -3304,8 +3326,8 @@
    "group": "D uncovered subsystems",
    "label": "FindShortestPath 1 to 10000",
    "times": {
-    "mathilda": 6209.19,
-    "wolfram": 0.639,
+    "mathilda": 6250.91,
+    "wolfram": 0.653,
     "python": 0.057
    },
    "checks": {
@@ -3313,7 +3335,7 @@
     "wolfram": "3",
     "python": "3"
    },
-   "ratio": 108933.15789473683,
+   "ratio": 109665.08771929824,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -3323,16 +3345,16 @@
    "group": "D uncovered subsystems",
    "label": "AdjacencyMatrix, 20000 vertices",
    "times": {
-    "mathilda": 6022.17,
-    "wolfram": 0.609,
-    "python": 9.49
+    "mathilda": 6328.23,
+    "wolfram": 0.622,
+    "python": 13.684
    },
    "checks": {
     "mathilda": "3",
     "wolfram": "3",
     "python": "3"
    },
-   "ratio": 9888.620689655172,
+   "ratio": 10174.003215434082,
    "note": "",
    "best_other": "wolfram",
    "klass": "SLOWER"
@@ -3342,7 +3364,7 @@
    "group": "D uncovered subsystems",
    "label": "StringLength of 200k chars",
    "times": {
-    "mathilda": 0.003,
+    "mathilda": 0.004,
     "wolfram": 0.0,
     "python": 0.0
    },
@@ -3360,35 +3382,35 @@
    "group": "D uncovered subsystems",
    "label": "StringReplace literal, 200k chars",
    "times": {
-    "mathilda": 0.231,
-    "wolfram": 1.084,
-    "python": 0.176
+    "mathilda": 0.237,
+    "wolfram": 1.175,
+    "python": 0.131
    },
    "checks": {
     "mathilda": "43",
     "wolfram": "43",
     "python": "43"
    },
-   "ratio": 1.3125000000000002,
+   "ratio": 1.8091603053435112,
    "note": "",
    "best_other": "python",
-   "klass": "AHEAD"
+   "klass": "SLOWER"
   },
   {
    "experiment": "30-string-ops",
    "group": "D uncovered subsystems",
    "label": "StringSplit on space, 200k chars",
    "times": {
-    "mathilda": 2.775,
-    "wolfram": 4.196,
-    "python": 0.535
+    "mathilda": 2.637,
+    "wolfram": 4.374,
+    "python": 0.538
    },
    "checks": {
     "mathilda": "9",
     "wolfram": "9",
     "python": "9"
    },
-   "ratio": 5.186915887850467,
+   "ratio": 4.901486988847584,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -3398,16 +3420,16 @@
    "group": "D uncovered subsystems",
    "label": "StringCount substring, 200k chars",
    "times": {
-    "mathilda": 0.171,
+    "mathilda": 0.172,
     "wolfram": 0.365,
-    "python": 0.05
+    "python": 0.054
    },
    "checks": {
     "mathilda": "2",
     "wolfram": "2",
     "python": "2"
    },
-   "ratio": 3.42,
+   "ratio": 3.185185185185185,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -3417,16 +3439,16 @@
    "group": "D uncovered subsystems",
    "label": "StringReverse 200k chars",
    "times": {
-    "mathilda": 0.012,
-    "wolfram": 0.355,
-    "python": 0.076
+    "mathilda": 0.013,
+    "wolfram": 0.412,
+    "python": 0.052
    },
    "checks": {
     "mathilda": "44",
     "wolfram": "44",
     "python": "44"
    },
-   "ratio": 0.15789473684210528,
+   "ratio": 0.25,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -3436,16 +3458,16 @@
    "group": "D uncovered subsystems",
    "label": "StringCases regex, 200k chars",
    "times": {
-    "mathilda": 2.078,
-    "wolfram": 3.654,
-    "python": 2.508
+    "mathilda": 2.022,
+    "wolfram": 3.779,
+    "python": 2.524
    },
    "checks": {
     "mathilda": "10",
     "wolfram": "10",
     "python": "10"
    },
-   "ratio": 0.8285486443381179,
+   "ratio": 0.8011093502377178,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -3455,16 +3477,16 @@
    "group": "D uncovered subsystems",
    "label": "StringReplace regex, 200k chars",
    "times": {
-    "mathilda": 1.812,
-    "wolfram": 4.723,
-    "python": 2.638
+    "mathilda": 1.755,
+    "wolfram": 4.877,
+    "python": 2.674
    },
    "checks": {
     "mathilda": "44",
     "wolfram": "44",
     "python": "44"
    },
-   "ratio": 0.6868840030326006,
+   "ratio": 0.656320119670905,
    "note": "",
    "best_other": "python",
    "klass": "AHEAD"
@@ -3474,16 +3496,16 @@
    "group": "D uncovered subsystems",
    "label": "Characters of 200k chars",
    "times": {
-    "mathilda": 3.648,
-    "wolfram": 2.476,
-    "python": 0.386
+    "mathilda": 3.828,
+    "wolfram": 2.49,
+    "python": 0.335
    },
    "checks": {
     "mathilda": "44",
     "wolfram": "44",
     "python": "44"
    },
-   "ratio": 9.450777202072539,
+   "ratio": 11.42686567164179,
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
@@ -3667,23 +3689,18 @@
   "RegularExpression": "present",
   "StringMatchQ": "present",
   "ToUpperCase": "absent",
-  "Characters": "present",
-  "DiagonalMatrix": "present",
-  "SeedRandom": "present",
-  "RandomReal": "present",
-  "RandomInteger": "present",
-  "N": "present"
+  "Characters": "present"
  },
  "raw": {
   "01-integrate-rational": {
    "mathilda": {
     "bench": {
-     "integrate rational, squarefree deg 6": 1.38,
-     "integrate rational, repeated deg 4": 2.256,
-     "integrate rational, irreducible quartic": 0.968,
-     "integrate polynomial, deg 40": 0.178,
-     "Apart, squarefree deg 8": 0.219,
-     "Together, 8 summands": 1.914
+     "integrate rational, squarefree deg 6": 1.502,
+     "integrate rational, repeated deg 4": 2.311,
+     "integrate rational, irreducible quartic": 1.018,
+     "integrate polynomial, deg 40": 0.184,
+     "Apart, squarefree deg 8": 0.229,
+     "Together, 8 summands": 1.989
     },
     "check": {
      "integrate rational, squarefree deg 6": "252355046",
@@ -3708,12 +3725,12 @@
    },
    "wolfram": {
     "bench": {
-     "integrate rational, squarefree deg 6": 13.256,
-     "integrate rational, repeated deg 4": 7.86,
-     "integrate rational, irreducible quartic": 1.479,
-     "integrate polynomial, deg 40": 0.05,
-     "Apart, squarefree deg 8": 0.133,
-     "Together, 8 summands": 0.184
+     "integrate rational, squarefree deg 6": 12.947,
+     "integrate rational, repeated deg 4": 8.347,
+     "integrate rational, irreducible quartic": 1.472,
+     "integrate polynomial, deg 40": 0.051,
+     "Apart, squarefree deg 8": 0.138,
+     "Together, 8 summands": 0.191
     },
     "check": {
      "integrate rational, squarefree deg 6": "252355046",
@@ -3738,12 +3755,12 @@
    },
    "python": {
     "bench": {
-     "integrate rational, squarefree deg 6": 290.678,
-     "integrate rational, repeated deg 4": 34.096,
-     "integrate rational, irreducible quartic": 11.167,
-     "integrate polynomial, deg 40": 0.616,
-     "Apart, squarefree deg 8": 10.228,
-     "Together, 8 summands": 1.822
+     "integrate rational, squarefree deg 6": 308.795,
+     "integrate rational, repeated deg 4": 37.831,
+     "integrate rational, irreducible quartic": 12.738,
+     "integrate polynomial, deg 40": 0.682,
+     "Apart, squarefree deg 8": 11.28,
+     "Together, 8 summands": 1.933
     },
     "check": {
      "integrate rational, squarefree deg 6": "252355046",
@@ -3769,12 +3786,12 @@
   "02-integrate-transcendental": {
    "mathilda": {
     "bench": {
-     "integrate x Exp[x^2]": 0.566,
-     "integrate Log[x]^3": 1.593,
-     "integrate Sin[x] Exp[x]": 6.497,
-     "integrate Tan[x]^3": 4.286,
-     "integrate 1/(1+Exp[x])": 2.372,
-     "integrate Exp[x]/x (non-elementary)": 5.564
+     "integrate x Exp[x^2]": 0.691,
+     "integrate Log[x]^3": 1.563,
+     "integrate Sin[x] Exp[x]": 7.125,
+     "integrate Tan[x]^3": 4.277,
+     "integrate 1/(1+Exp[x])": 2.638,
+     "integrate Exp[x]/x (non-elementary)": 5.77
     },
     "check": {
      "integrate x Exp[x^2]": "345280",
@@ -3801,12 +3818,12 @@
    },
    "wolfram": {
     "bench": {
-     "integrate x Exp[x^2]": 0.076,
-     "integrate Log[x]^3": 1.847,
-     "integrate Sin[x] Exp[x]": 0.692,
-     "integrate Tan[x]^3": 0.155,
-     "integrate 1/(1+Exp[x])": 0.11,
-     "integrate Exp[x]/x (non-elementary)": 0.289
+     "integrate x Exp[x^2]": 0.122,
+     "integrate Log[x]^3": 2.722,
+     "integrate Sin[x] Exp[x]": 0.976,
+     "integrate Tan[x]^3": 0.323,
+     "integrate 1/(1+Exp[x])": 0.134,
+     "integrate Exp[x]/x (non-elementary)": 0.412
     },
     "check": {
      "integrate x Exp[x^2]": "345280",
@@ -3833,12 +3850,12 @@
    },
    "python": {
     "bench": {
-     "integrate x Exp[x^2]": 4.12,
-     "integrate Log[x]^3": 10.342,
-     "integrate Sin[x] Exp[x]": 5.212,
-     "integrate Tan[x]^3": 3.593,
-     "integrate 1/(1+Exp[x])": 3.309,
-     "integrate Exp[x]/x (non-elementary)": 33.927
+     "integrate x Exp[x^2]": 4.793,
+     "integrate Log[x]^3": 12.664,
+     "integrate Sin[x] Exp[x]": 5.478,
+     "integrate Tan[x]^3": 3.84,
+     "integrate 1/(1+Exp[x])": 3.938,
+     "integrate Exp[x]/x (non-elementary)": 38.344
     },
     "check": {
      "integrate x Exp[x^2]": "345280",
@@ -3863,12 +3880,12 @@
   "03-simplify": {
    "mathilda": {
     "bench": {
-     "Simplify trig Pythagorean": 0.045,
-     "Simplify quartic-to-Cos[4x]": 2.056,
-     "Cancel removable singularity": 0.008,
-     "FullSimplify nested radical": 0.196,
-     "Simplify log-exp collapse": 0.056,
-     "TrigReduce product of 4 sines": 0.852
+     "Simplify trig Pythagorean": 0.055,
+     "Simplify quartic-to-Cos[4x]": 2.595,
+     "Cancel removable singularity": 0.01,
+     "FullSimplify nested radical": 0.206,
+     "Simplify log-exp collapse": 0.061,
+     "TrigReduce product of 4 sines": 0.97
     },
     "check": {
      "Simplify trig Pythagorean": "1000000",
@@ -3896,12 +3913,12 @@
    },
    "wolfram": {
     "bench": {
-     "Simplify trig Pythagorean": 0.003,
+     "Simplify trig Pythagorean": 0.004,
      "Simplify quartic-to-Cos[4x]": 0.004,
-     "Cancel removable singularity": 0.021,
+     "Cancel removable singularity": 0.02,
      "FullSimplify nested radical": 0.003,
      "Simplify log-exp collapse": 0.003,
-     "TrigReduce product of 4 sines": 0.138
+     "TrigReduce product of 4 sines": 0.144
     },
     "check": {
      "Simplify trig Pythagorean": "1000000",
@@ -3929,12 +3946,12 @@
    },
    "python": {
     "bench": {
-     "Simplify trig Pythagorean": 5.173,
-     "Simplify quartic-to-Cos[4x]": 7.515,
-     "Cancel removable singularity": 0.252,
-     "FullSimplify nested radical": 1.36,
-     "Simplify log-exp collapse": 1.337,
-     "TrigReduce product of 4 sines": 16.813
+     "Simplify trig Pythagorean": 3.861,
+     "Simplify quartic-to-Cos[4x]": 7.818,
+     "Cancel removable singularity": 0.265,
+     "FullSimplify nested radical": 1.392,
+     "Simplify log-exp collapse": 1.412,
+     "TrigReduce product of 4 sines": 18.071
     },
     "check": {
      "Simplify trig Pythagorean": "1000000",
@@ -3961,12 +3978,12 @@
   "04-solve": {
    "mathilda": {
     "bench": {
-     "Solve factorable sextic": 0.46,
-     "Solve quartic with radicals": 0.067,
-     "Solve 2x2 polynomial system": 0.093,
-     "Solve 3x3 linear system": 0.046,
-     "NSolve degree 40": 8.658,
-     "Solve sextic, root sum": 0.432
+     "Solve factorable sextic": 0.53,
+     "Solve quartic with radicals": 0.074,
+     "Solve 2x2 polynomial system": 0.108,
+     "Solve 3x3 linear system": 0.053,
+     "NSolve degree 40": 10.204,
+     "Solve sextic, root sum": 0.504
     },
     "check": {
      "Solve factorable sextic": "6",
@@ -3991,12 +4008,12 @@
    },
    "wolfram": {
     "bench": {
-     "Solve factorable sextic": 0.798,
-     "Solve quartic with radicals": 0.409,
-     "Solve 2x2 polynomial system": 0.712,
-     "Solve 3x3 linear system": 0.072,
-     "NSolve degree 40": 0.894,
-     "Solve sextic, root sum": 0.804
+     "Solve factorable sextic": 0.786,
+     "Solve quartic with radicals": 0.366,
+     "Solve 2x2 polynomial system": 0.594,
+     "Solve 3x3 linear system": 0.051,
+     "NSolve degree 40": 0.758,
+     "Solve sextic, root sum": 0.77
     },
     "check": {
      "Solve factorable sextic": "6",
@@ -4021,12 +4038,12 @@
    },
    "python": {
     "bench": {
-     "Solve factorable sextic": 1.576,
-     "Solve quartic with radicals": 1.704,
-     "Solve 2x2 polynomial system": 1.272,
-     "Solve 3x3 linear system": 0.642,
-     "NSolve degree 40": 339.625,
-     "Solve sextic, root sum": 1.465
+     "Solve factorable sextic": 1.548,
+     "Solve quartic with radicals": 1.652,
+     "Solve 2x2 polynomial system": 1.244,
+     "Solve 3x3 linear system": 0.652,
+     "NSolve degree 40": 385.974,
+     "Solve sextic, root sum": 1.695
     },
     "check": {
      "Solve factorable sextic": "6",
@@ -4052,12 +4069,12 @@
   "05-factor-univariate": {
    "mathilda": {
     "bench": {
-     "Factor product of 8 quadratics": 0.29,
-     "Factor product of 16 quadratics": 1.01,
-     "Factor x^120 - 1": 5.829,
-     "Factor sparse degree 60": 0.502,
-     "Factor dense degree 60": 2.107,
-     "PolynomialGCD of two deg-20 polys": 0.035
+     "Factor product of 8 quadratics": 0.307,
+     "Factor product of 16 quadratics": 1.077,
+     "Factor x^120 - 1": 6.419,
+     "Factor sparse degree 60": 0.527,
+     "Factor dense degree 60": 2.229,
+     "PolynomialGCD of two deg-20 polys": 0.036
     },
     "check": {
      "Factor product of 8 quadratics": "10",
@@ -4083,12 +4100,12 @@
    },
    "wolfram": {
     "bench": {
-     "Factor product of 8 quadratics": 0.187,
-     "Factor product of 16 quadratics": 0.751,
-     "Factor x^120 - 1": 0.048,
-     "Factor sparse degree 60": 0.568,
-     "Factor dense degree 60": 0.599,
-     "PolynomialGCD of two deg-20 polys": 0.028
+     "Factor product of 8 quadratics": 0.19,
+     "Factor product of 16 quadratics": 0.731,
+     "Factor x^120 - 1": 0.047,
+     "Factor sparse degree 60": 0.541,
+     "Factor dense degree 60": 0.607,
+     "PolynomialGCD of two deg-20 polys": 0.025
     },
     "check": {
      "Factor product of 8 quadratics": "10",
@@ -4114,12 +4131,12 @@
    },
    "python": {
     "bench": {
-     "Factor product of 8 quadratics": 3.7,
-     "Factor product of 16 quadratics": 29.492,
-     "Factor x^120 - 1": 4.078,
-     "Factor sparse degree 60": 10.17,
-     "Factor dense degree 60": 28.184,
-     "PolynomialGCD of two deg-20 polys": 0.173
+     "Factor product of 8 quadratics": 3.625,
+     "Factor product of 16 quadratics": 30.519,
+     "Factor x^120 - 1": 4.104,
+     "Factor sparse degree 60": 9.055,
+     "Factor dense degree 60": 28.008,
+     "PolynomialGCD of two deg-20 polys": 0.19
     },
     "check": {
      "Factor product of 8 quadratics": "10",
@@ -4145,12 +4162,12 @@
   "06-factor-multivariate": {
    "mathilda": {
     "bench": {
-     "Expand (x+y+z+i), 6 factors": 0.272,
-     "Factor 3-var, 6 factors": 0.488,
-     "Factor 5-var, 4 factors": 0.524,
+     "Expand (x+y+z+i), 6 factors": 0.245,
+     "Factor 3-var, 6 factors": 0.377,
+     "Factor 5-var, 4 factors": 0.48,
      "Factor irreducible 3-var cubic": 0.02,
-     "Expand (x+y+z)^12": 0.305,
-     "Factor x^24 - y^24": 0.3
+     "Expand (x+y+z)^12": 0.308,
+     "Factor x^24 - y^24": 0.32
     },
     "check": {
      "Expand (x+y+z+i), 6 factors": "84",
@@ -4175,12 +4192,12 @@
    },
    "wolfram": {
     "bench": {
-     "Expand (x+y+z+i), 6 factors": 0.074,
-     "Factor 3-var, 6 factors": 0.323,
-     "Factor 5-var, 4 factors": 0.616,
-     "Factor irreducible 3-var cubic": 0.019,
-     "Expand (x+y+z)^12": 0.072,
-     "Factor x^24 - y^24": 0.695
+     "Expand (x+y+z+i), 6 factors": 0.067,
+     "Factor 3-var, 6 factors": 0.344,
+     "Factor 5-var, 4 factors": 0.475,
+     "Factor irreducible 3-var cubic": 0.02,
+     "Expand (x+y+z)^12": 0.076,
+     "Factor x^24 - y^24": 0.845
     },
     "check": {
      "Expand (x+y+z+i), 6 factors": "84",
@@ -4206,11 +4223,11 @@
    "python": {
     "bench": {
      "Expand (x+y+z+i), 6 factors": 0.009,
-     "Factor 3-var, 6 factors": 12.675,
-     "Factor 5-var, 4 factors": 21.459,
-     "Factor irreducible 3-var cubic": 0.737,
-     "Expand (x+y+z)^12": 0.003,
-     "Factor x^24 - y^24": 139.221
+     "Factor 3-var, 6 factors": 13.553,
+     "Factor 5-var, 4 factors": 20.934,
+     "Factor irreducible 3-var cubic": 0.675,
+     "Expand (x+y+z)^12": 0.002,
+     "Factor x^24 - y^24": 138.691
     },
     "check": {
      "Expand (x+y+z+i), 6 factors": "84",
@@ -4236,12 +4253,12 @@
   "07-groebner": {
    "mathilda": {
     "bench": {
-     "GroebnerBasis cyclic-3": 0.036,
-     "GroebnerBasis cyclic-4": 0.18,
-     "GroebnerBasis cyclic-5": 52.698,
-     "GroebnerBasis 3-var quadratic system": 0.05,
-     "Eliminate 2 vars from 3": 0.001,
-     "Resultant of two deg-8 polys": 0.079
+     "GroebnerBasis cyclic-3": 0.03,
+     "GroebnerBasis cyclic-4": 0.177,
+     "GroebnerBasis cyclic-5": 44.525,
+     "GroebnerBasis 3-var quadratic system": 0.053,
+     "Eliminate 2 vars from 3": 0.008,
+     "Resultant of two deg-8 polys": 0.082
     },
     "check": {
      "GroebnerBasis cyclic-3": "3",
@@ -4265,12 +4282,12 @@
    },
    "wolfram": {
     "bench": {
-     "GroebnerBasis cyclic-3": 0.071,
-     "GroebnerBasis cyclic-4": 0.461,
-     "GroebnerBasis cyclic-5": 18.191,
-     "GroebnerBasis 3-var quadratic system": 0.221,
-     "Eliminate 2 vars from 3": 0.023,
-     "Resultant of two deg-8 polys": 0.737
+     "GroebnerBasis cyclic-3": 0.07,
+     "GroebnerBasis cyclic-4": 0.395,
+     "GroebnerBasis cyclic-5": 19.086,
+     "GroebnerBasis 3-var quadratic system": 0.24,
+     "Eliminate 2 vars from 3": 0.021,
+     "Resultant of two deg-8 polys": 0.766
     },
     "check": {
      "GroebnerBasis cyclic-3": "3",
@@ -4294,12 +4311,12 @@
    },
    "python": {
     "bench": {
-     "GroebnerBasis cyclic-3": 0.175,
-     "GroebnerBasis cyclic-4": 1.059,
-     "GroebnerBasis cyclic-5": 8967.356,
-     "GroebnerBasis 3-var quadratic system": 0.336,
-     "Eliminate 2 vars from 3": 0.304,
-     "Resultant of two deg-8 polys": 0.69
+     "GroebnerBasis cyclic-3": 0.182,
+     "GroebnerBasis cyclic-4": 1.034,
+     "GroebnerBasis cyclic-5": 9502.606,
+     "GroebnerBasis 3-var quadratic system": 0.358,
+     "Eliminate 2 vars from 3": 0.299,
+     "Resultant of two deg-8 polys": 0.67
     },
     "check": {
      "GroebnerBasis cyclic-3": "3",
@@ -4324,12 +4341,12 @@
   "08-series-limit": {
    "mathilda": {
     "bench": {
-     "Series Exp[Sin[x]] to order 20": 11.345,
-     "Series 1/(1-x-x^2) to order 60": 0.142,
-     "Series Log[1+Sin[x]] to order 24": 15.057,
-     "Limit Sin[x]/x at 0": 0.963,
-     "Limit (Exp[x]-1-x)/x^2 at 0": 0.226,
-     "Limit x (Log[x+1]-Log[x]) at Infinity": 1.231
+     "Series Exp[Sin[x]] to order 20": 11.569,
+     "Series 1/(1-x-x^2) to order 60": 0.125,
+     "Series Log[1+Sin[x]] to order 24": 15.538,
+     "Limit Sin[x]/x at 0": 1.081,
+     "Limit (Exp[x]-1-x)/x^2 at 0": 0.265,
+     "Limit x (Log[x+1]-Log[x]) at Infinity": 1.398
     },
     "check": {
      "Series Exp[Sin[x]] to order 20": "SeriesCoefficient[Series[Exp[Sin[x]], {x, 0, 20}], 12]",
@@ -4356,11 +4373,11 @@
    "wolfram": {
     "bench": {
      "Series Exp[Sin[x]] to order 20": 0.004,
-     "Series 1/(1-x-x^2) to order 60": 0.004,
+     "Series 1/(1-x-x^2) to order 60": 0.005,
      "Series Log[1+Sin[x]] to order 24": 0.004,
-     "Limit Sin[x]/x at 0": 1.364,
-     "Limit (Exp[x]-1-x)/x^2 at 0": 1.535,
-     "Limit x (Log[x+1]-Log[x]) at Infinity": 2.124
+     "Limit Sin[x]/x at 0": 1.535,
+     "Limit (Exp[x]-1-x)/x^2 at 0": 1.792,
+     "Limit x (Log[x+1]-Log[x]) at Infinity": 2.221
     },
     "check": {
      "Series Exp[Sin[x]] to order 20": "181/14515200",
@@ -4404,11 +4421,11 @@
    "mathilda": {
     "bench": {
      "Sum k^5 to n, closed form": 0.132,
-     "Sum 1/k^2 to Infinity": 0.115,
-     "Sum r^k to n, symbolic ratio": 0.032,
+     "Sum 1/k^2 to Infinity": 0.117,
+     "Sum r^k to n, symbolic ratio": 0.034,
      "Sum Binomial[n,k] over k": 0.0,
-     "Sum 1/(k(k+1)) to n": 0.29,
-     "Product (1+1/k) to n": 0.021
+     "Sum 1/(k(k+1)) to n": 0.292,
+     "Product (1+1/k) to n": 0.02
     },
     "check": {
      "Sum k^5 to n, closed form": "220825",
@@ -4435,12 +4452,12 @@
    },
    "wolfram": {
     "bench": {
-     "Sum k^5 to n, closed form": 0.031,
+     "Sum k^5 to n, closed form": 0.03,
      "Sum 1/k^2 to Infinity": 0.045,
-     "Sum r^k to n, symbolic ratio": 0.033,
-     "Sum Binomial[n,k] over k": 0.035,
-     "Sum 1/(k(k+1)) to n": 0.031,
-     "Product (1+1/k) to n": 0.045
+     "Sum r^k to n, symbolic ratio": 0.034,
+     "Sum Binomial[n,k] over k": 0.034,
+     "Sum 1/(k(k+1)) to n": 0.033,
+     "Product (1+1/k) to n": 0.058
     },
     "check": {
      "Sum k^5 to n, closed form": "220825",
@@ -4467,12 +4484,12 @@
    },
    "python": {
     "bench": {
-     "Sum k^5 to n, closed form": 0.113,
-     "Sum 1/k^2 to Infinity": 1.523,
-     "Sum r^k to n, symbolic ratio": 0.227,
-     "Sum Binomial[n,k] over k": 23.481,
-     "Sum 1/(k(k+1)) to n": 1.077,
-     "Product (1+1/k) to n": 0.287
+     "Sum k^5 to n, closed form": 0.137,
+     "Sum 1/k^2 to Infinity": 1.431,
+     "Sum r^k to n, symbolic ratio": 0.278,
+     "Sum Binomial[n,k] over k": 25.011,
+     "Sum 1/(k(k+1)) to n": 1.117,
+     "Product (1+1/k) to n": 0.296
     },
     "check": {
      "Sum k^5 to n, closed form": "220825",
@@ -4499,12 +4516,12 @@
   "10-polynomial-algebra": {
    "mathilda": {
     "bench": {
-     "PolynomialGCD, shared deg-20 factor": 0.1,
-     "PolynomialGCD, coprime deg 40": 0.241,
-     "Discriminant of deg 20": 2.531,
-     "Cancel deg-60 over deg-58": 0.36,
-     "PolynomialQuotient deg 60 / deg 20": 0.072,
-     "Expand (1+x)^400": 0.426
+     "PolynomialGCD, shared deg-20 factor": 0.099,
+     "PolynomialGCD, coprime deg 40": 0.246,
+     "Discriminant of deg 20": 2.52,
+     "Cancel deg-60 over deg-58": 0.388,
+     "PolynomialQuotient deg 60 / deg 20": 0.083,
+     "Expand (1+x)^400": 0.436
     },
     "check": {
      "PolynomialGCD, shared deg-20 factor": "20",
@@ -4536,10 +4553,10 @@
     "bench": {
      "PolynomialGCD, shared deg-20 factor": 0.072,
      "PolynomialGCD, coprime deg 40": 0.095,
-     "Discriminant of deg 20": 0.074,
-     "Cancel deg-60 over deg-58": 0.585,
-     "PolynomialQuotient deg 60 / deg 20": 0.209,
-     "Expand (1+x)^400": 0.107
+     "Discriminant of deg 20": 0.073,
+     "Cancel deg-60 over deg-58": 0.549,
+     "PolynomialQuotient deg 60 / deg 20": 0.201,
+     "Expand (1+x)^400": 0.102
     },
     "check": {
      "PolynomialGCD, shared deg-20 factor": "20",
@@ -4569,11 +4586,11 @@
    },
    "python": {
     "bench": {
-     "PolynomialGCD, shared deg-20 factor": 0.764,
-     "PolynomialGCD, coprime deg 40": 0.337,
-     "Discriminant of deg 20": 0.193,
-     "Cancel deg-60 over deg-58": 7.33,
-     "PolynomialQuotient deg 60 / deg 20": 0.961,
+     "PolynomialGCD, shared deg-20 factor": 0.796,
+     "PolynomialGCD, coprime deg 40": 0.355,
+     "Discriminant of deg 20": 0.18,
+     "Cancel deg-60 over deg-58": 7.429,
+     "PolynomialQuotient deg 60 / deg 20": 0.984,
      "Expand (1+x)^400": 0.003
     },
     "check": {
@@ -4602,13 +4619,13 @@
   "11-special-functions": {
    "mathilda": {
     "bench": {
-     "Gamma over 10^6": 1.104,
-     "Erf over 10^6": 0.959,
-     "BesselJ[0, .] over 10^6": 3363.86,
-     "LogGamma over 10^6": 0.773,
-     "PolyGamma[0, .] over 10^6": 1.559,
-     "AiryAi over 10^6": 3.193,
-     "Zeta over 10^6": 8.429
+     "Gamma over 10^6": 1.163,
+     "Erf over 10^6": 1.327,
+     "BesselJ[0, .] over 10^6": 4152.62,
+     "LogGamma over 10^6": 0.866,
+     "PolyGamma[0, .] over 10^6": 1.749,
+     "AiryAi over 10^6": 4.192,
+     "Zeta over 10^6": 9.274
     },
     "check": {
      "Gamma over 10^6": "886227",
@@ -4641,13 +4658,13 @@
    },
    "wolfram": {
     "bench": {
-     "Gamma over 10^6": 1.413,
-     "Erf over 10^6": 1.257,
-     "BesselJ[0, .] over 10^6": 1715.06,
-     "LogGamma over 10^6": 1.019,
-     "PolyGamma[0, .] over 10^6": 155.387,
-     "AiryAi over 10^6": 108.31,
-     "Zeta over 10^6": 4314.76
+     "Gamma over 10^6": 1.757,
+     "Erf over 10^6": 1.519,
+     "BesselJ[0, .] over 10^6": 2143.17,
+     "LogGamma over 10^6": 1.39,
+     "PolyGamma[0, .] over 10^6": 195.631,
+     "AiryAi over 10^6": 129.733,
+     "Zeta over 10^6": 4984.71
     },
     "check": {
      "Gamma over 10^6": "886227",
@@ -4680,13 +4697,13 @@
    },
    "python": {
     "bench": {
-     "Gamma over 10^6": 7.534,
-     "Erf over 10^6": 7.559,
-     "BesselJ[0, .] over 10^6": 53.592,
-     "LogGamma over 10^6": 11.567,
-     "PolyGamma[0, .] over 10^6": 7.962,
-     "AiryAi over 10^6": 59.516,
-     "Zeta over 10^6": 5.946
+     "Gamma over 10^6": 8.92,
+     "Erf over 10^6": 8.639,
+     "BesselJ[0, .] over 10^6": 59.975,
+     "LogGamma over 10^6": 12.473,
+     "PolyGamma[0, .] over 10^6": 8.802,
+     "AiryAi over 10^6": 63.087,
+     "Zeta over 10^6": 6.682
     },
     "check": {
      "Gamma over 10^6": "886227",
@@ -4717,10 +4734,10 @@
    "mathilda": {
     "bench": {
      "NIntegrate Sin[x] on [0,Pi]": 0.001,
-     "NIntegrate 1/Sqrt[x] on [0,1]": 0.028,
-     "NIntegrate Sin[40 x] on [0,Pi]": 0.367,
+     "NIntegrate 1/Sqrt[x] on [0,1]": 0.032,
+     "NIntegrate Sin[40 x] on [0,Pi]": 0.401,
      "NIntegrate narrow Gaussian": 0.01,
-     "NIntegrate 2-D smooth": 0.034,
+     "NIntegrate 2-D smooth": 0.037,
      "NIntegrate Exp[-x^2] on [0,Infinity]": 0.007
     },
     "check": {
@@ -4747,12 +4764,12 @@
    },
    "wolfram": {
     "bench": {
-     "NIntegrate Sin[x] on [0,Pi]": 1.052,
-     "NIntegrate 1/Sqrt[x] on [0,1]": 0.677,
-     "NIntegrate Sin[40 x] on [0,Pi]": 4.031,
-     "NIntegrate narrow Gaussian": 1.062,
-     "NIntegrate 2-D smooth": 1.436,
-     "NIntegrate Exp[-x^2] on [0,Infinity]": 0.901
+     "NIntegrate Sin[x] on [0,Pi]": 1.272,
+     "NIntegrate 1/Sqrt[x] on [0,1]": 0.821,
+     "NIntegrate Sin[40 x] on [0,Pi]": 4.996,
+     "NIntegrate narrow Gaussian": 1.06,
+     "NIntegrate 2-D smooth": 1.632,
+     "NIntegrate Exp[-x^2] on [0,Infinity]": 1.2
     },
     "check": {
      "NIntegrate Sin[x] on [0,Pi]": "2000000",
@@ -4779,10 +4796,10 @@
    "python": {
     "bench": {
      "NIntegrate Sin[x] on [0,Pi]": 0.002,
-     "NIntegrate 1/Sqrt[x] on [0,1]": 0.015,
+     "NIntegrate 1/Sqrt[x] on [0,1]": 0.014,
      "NIntegrate Sin[40 x] on [0,Pi]": 0.002,
-     "NIntegrate narrow Gaussian": 0.019,
-     "NIntegrate 2-D smooth": 0.063,
+     "NIntegrate narrow Gaussian": 0.02,
+     "NIntegrate 2-D smooth": 0.064,
      "NIntegrate Exp[-x^2] on [0,Infinity]": 0.008
     },
     "check": {
@@ -4807,10 +4824,10 @@
   "13-ode-integration": {
    "mathilda": {
     "bench": {
-     "NDSolve y'=-y on [0,10]": 0.022,
-     "NDSolve harmonic oscillator": 0.095,
-     "NDSolve Van der Pol mu=10": 0.226,
-     "NDSolve y'=y^2 t nonlinear": 0.021,
+     "NDSolve y'=-y on [0,10]": 0.024,
+     "NDSolve harmonic oscillator": 0.1,
+     "NDSolve Van der Pol mu=10": 0.232,
+     "NDSolve y'=y^2 t nonlinear": 0.024,
      "NDSolve long horizon, t to 200": 0.028
     },
     "check": {
@@ -4835,11 +4852,11 @@
    },
    "wolfram": {
     "bench": {
-     "NDSolve y'=-y on [0,10]": 0.16,
-     "NDSolve harmonic oscillator": 0.216,
-     "NDSolve Van der Pol mu=10": 0.587,
-     "NDSolve y'=y^2 t nonlinear": 0.135,
-     "NDSolve long horizon, t to 200": 0.153
+     "NDSolve y'=-y on [0,10]": 0.18,
+     "NDSolve harmonic oscillator": 0.329,
+     "NDSolve Van der Pol mu=10": 0.719,
+     "NDSolve y'=y^2 t nonlinear": 0.209,
+     "NDSolve long horizon, t to 200": 0.168
     },
     "check": {
      "NDSolve y'=-y on [0,10]": "0",
@@ -4863,11 +4880,11 @@
    },
    "python": {
     "bench": {
-     "NDSolve y'=-y on [0,10]": 2.414,
-     "NDSolve harmonic oscillator": 7.585,
-     "NDSolve Van der Pol mu=10": 3.334,
-     "NDSolve y'=y^2 t nonlinear": 0.296,
-     "NDSolve long horizon, t to 200": 2.922
+     "NDSolve y'=-y on [0,10]": 2.866,
+     "NDSolve harmonic oscillator": 8.7,
+     "NDSolve Van der Pol mu=10": 3.955,
+     "NDSolve y'=y^2 t nonlinear": 0.345,
+     "NDSolve long horizon, t to 200": 3.259
     },
     "check": {
      "NDSolve y'=-y on [0,10]": "0",
@@ -4891,8 +4908,8 @@
     "bench": {
      "FindRoot Cos[x]==x": 0.006,
      "FindRoot x^3-2x-5": 0.009,
-     "FindRoot 2x2 nonlinear system": 0.017,
-     "NSolve all roots, degree 50": 14.041,
+     "FindRoot 2x2 nonlinear system": 0.016,
+     "NSolve all roots, degree 50": 15.713,
      "FindRoot Tan[x]==x near 4.5": 0.005
     },
     "check": {
@@ -4917,11 +4934,11 @@
    },
    "wolfram": {
     "bench": {
-     "FindRoot Cos[x]==x": 0.044,
-     "FindRoot x^3-2x-5": 0.045,
-     "FindRoot 2x2 nonlinear system": 0.049,
-     "NSolve all roots, degree 50": 0.842,
-     "FindRoot Tan[x]==x near 4.5": 0.043
+     "FindRoot Cos[x]==x": 0.046,
+     "FindRoot x^3-2x-5": 0.068,
+     "FindRoot 2x2 nonlinear system": 0.098,
+     "NSolve all roots, degree 50": 0.939,
+     "FindRoot Tan[x]==x near 4.5": 0.049
     },
     "check": {
      "FindRoot Cos[x]==x": "739085",
@@ -4947,8 +4964,8 @@
     "bench": {
      "FindRoot Cos[x]==x": 0.004,
      "FindRoot x^3-2x-5": 0.005,
-     "FindRoot 2x2 nonlinear system": 0.014,
-     "NSolve all roots, degree 50": 0.166,
+     "FindRoot 2x2 nonlinear system": 0.017,
+     "NSolve all roots, degree 50": 0.182,
      "FindRoot Tan[x]==x near 4.5": 0.005
     },
     "check": {
@@ -4974,10 +4991,10 @@
    "mathilda": {
     "bench": {
      "FindMinimum quadratic": 0.009,
-     "FindMinimum Rosenbrock 2-D": 0.114,
+     "FindMinimum Rosenbrock 2-D": 0.113,
      "FindMinimum x Sin[x] on [2,6]": 0.004,
-     "Fit linear, 200 points": 0.782,
-     "Fit degree-5 polynomial, 500 points": 23156.3
+     "Fit linear, 200 points": 0.795,
+     "Fit degree-5 polynomial, 500 points": 25910.1
     },
     "check": {
      "FindMinimum quadratic": "2000000",
@@ -5003,11 +5020,11 @@
    },
    "wolfram": {
     "bench": {
-     "FindMinimum quadratic": 0.061,
-     "FindMinimum Rosenbrock 2-D": 0.164,
-     "FindMinimum x Sin[x] on [2,6]": 0.279,
+     "FindMinimum quadratic": 0.058,
+     "FindMinimum Rosenbrock 2-D": 0.162,
+     "FindMinimum x Sin[x] on [2,6]": 0.267,
      "Fit linear, 200 points": 0.017,
-     "Fit degree-5 polynomial, 500 points": 0.078
+     "Fit degree-5 polynomial, 500 points": 0.08
     },
     "check": {
      "FindMinimum quadratic": "2000000",
@@ -5033,10 +5050,10 @@
    },
    "python": {
     "bench": {
-     "FindMinimum quadratic": 0.159,
-     "FindMinimum Rosenbrock 2-D": 3.406,
-     "FindMinimum x Sin[x] on [2,6]": 1.097,
-     "Fit linear, 200 points": 0.016,
+     "FindMinimum quadratic": 0.167,
+     "FindMinimum Rosenbrock 2-D": 3.428,
+     "FindMinimum x Sin[x] on [2,6]": 1.129,
+     "Fit linear, 200 points": 0.015,
      "Fit degree-5 polynomial, 500 points": 0.035
     },
     "check": {
@@ -5061,9 +5078,9 @@
   "16-interpolation": {
    "mathilda": {
     "bench": {
-     "Interpolation build, 2000 knots": 0.024,
-     "Interpolation evaluate, 20000 points": 17.871,
-     "Interpolation over 10^5 array": 2.594
+     "Interpolation build, 2000 knots": 0.021,
+     "Interpolation evaluate, 20000 points": 18.09,
+     "Interpolation over 10^5 array": 2.641
     },
     "check": {
      "Interpolation build, 2000 knots": "2000",
@@ -5088,11 +5105,11 @@
    },
    "wolfram": {
     "bench": {
-     "Interpolation build, 2000 knots": 0.778,
-     "Interpolation evaluate, 20000 points": 18.225,
-     "Interpolation order 1 (linear) build": 0.782,
-     "ListInterpolation 2-D 60x60": 0.857,
-     "Interpolation over 10^5 array": 4.687
+     "Interpolation build, 2000 knots": 0.764,
+     "Interpolation evaluate, 20000 points": 18.233,
+     "Interpolation order 1 (linear) build": 0.775,
+     "ListInterpolation 2-D 60x60": 0.871,
+     "Interpolation over 10^5 array": 4.965
     },
     "check": {
      "Interpolation build, 2000 knots": "2000",
@@ -5116,11 +5133,11 @@
    },
    "python": {
     "bench": {
-     "Interpolation build, 2000 knots": 0.079,
-     "Interpolation evaluate, 20000 points": 0.06,
+     "Interpolation build, 2000 knots": 0.081,
+     "Interpolation evaluate, 20000 points": 0.059,
      "Interpolation order 1 (linear) build": 0.013,
-     "ListInterpolation 2-D 60x60": 0.92,
-     "Interpolation over 10^5 array": 4.34
+     "ListInterpolation 2-D 60x60": 0.926,
+     "Interpolation over 10^5 array": 4.397
     },
     "check": {
      "Interpolation build, 2000 knots": "2000",
@@ -5144,12 +5161,12 @@
   "17-fft-and-signal": {
    "mathilda": {
     "bench": {
-     "Fourier 2^18 (262144)": 3.425,
-     "Fourier 1200000 (mixed radix)": 13.361,
-     "Fourier 262143 (awkward size)": 5.955,
-     "InverseFourier 2^18": 3.42,
-     "ListConvolve 100000 x 2048": 9.812,
-     "ListCorrelate 100000 x 2048": 9.784
+     "Fourier 2^18 (262144)": 3.471,
+     "Fourier 1200000 (mixed radix)": 13.373,
+     "Fourier 262143 (awkward size)": 6.283,
+     "InverseFourier 2^18": 3.528,
+     "ListConvolve 100000 x 2048": 9.996,
+     "ListCorrelate 100000 x 2048": 10.174
     },
     "check": {
      "Fourier 2^18 (262144)": "12727922",
@@ -5175,12 +5192,12 @@
    },
    "wolfram": {
     "bench": {
-     "Fourier 2^18 (262144)": 2.827,
-     "Fourier 1200000 (mixed radix)": 9.937,
-     "Fourier 262143 (awkward size)": 5.205,
-     "InverseFourier 2^18": 2.812,
-     "ListConvolve 100000 x 2048": 1.101,
-     "ListCorrelate 100000 x 2048": 1.104
+     "Fourier 2^18 (262144)": 3.002,
+     "Fourier 1200000 (mixed radix)": 11.8,
+     "Fourier 262143 (awkward size)": 5.866,
+     "InverseFourier 2^18": 2.854,
+     "ListConvolve 100000 x 2048": 1.198,
+     "ListCorrelate 100000 x 2048": 1.216
     },
     "check": {
      "Fourier 2^18 (262144)": "12727922",
@@ -5206,12 +5223,12 @@
    },
    "python": {
     "bench": {
-     "Fourier 2^18 (262144)": 2.425,
-     "Fourier 1200000 (mixed radix)": 10.872,
-     "Fourier 262143 (awkward size)": 5.017,
-     "InverseFourier 2^18": 2.841,
-     "ListConvolve 100000 x 2048": 11.562,
-     "ListCorrelate 100000 x 2048": 11.59
+     "Fourier 2^18 (262144)": 2.555,
+     "Fourier 1200000 (mixed radix)": 9.808,
+     "Fourier 262143 (awkward size)": 4.581,
+     "InverseFourier 2^18": 2.51,
+     "ListConvolve 100000 x 2048": 10.694,
+     "ListCorrelate 100000 x 2048": 10.512
     },
     "check": {
      "Fourier 2^18 (262144)": "12727922",
@@ -5238,13 +5255,13 @@
   "18-dense-linalg-drivers": {
    "mathilda": {
     "bench": {
-     "Dot 600x600": 0.843,
-     "LinearSolve 600x600": 1.197,
-     "Inverse 600x600": 2.493,
-     "Det 600x600": 1.121,
-     "Eigenvalues 600x600 (general)": 273.597,
-     "SingularValueDecomposition 400x400": 23.201,
-     "QRDecomposition 400x400": 8.052
+     "Dot 600x600": 0.829,
+     "LinearSolve 600x600": 1.185,
+     "Inverse 600x600": 2.539,
+     "Det 600x600": 1.101,
+     "Eigenvalues 600x600 (general)": 282.993,
+     "SingularValueDecomposition 400x400": 22.798,
+     "QRDecomposition 400x400": 7.885
     },
     "check": {
      "Dot 600x600": "1174720184",
@@ -5277,13 +5294,13 @@
    },
    "wolfram": {
     "bench": {
-     "Dot 600x600": 1.68,
-     "LinearSolve 600x600": 2.765,
-     "Inverse 600x600": 6.83,
-     "Det 600x600": 2.89,
-     "Eigenvalues 600x600 (general)": 175.319,
-     "SingularValueDecomposition 400x400": 55.326,
-     "QRDecomposition 400x400": 21.843
+     "Dot 600x600": 1.714,
+     "LinearSolve 600x600": 2.907,
+     "Inverse 600x600": 6.775,
+     "Det 600x600": 2.83,
+     "Eigenvalues 600x600 (general)": 179.359,
+     "SingularValueDecomposition 400x400": 53.916,
+     "QRDecomposition 400x400": 19.925
     },
     "check": {
      "Dot 600x600": "1174720184",
@@ -5316,13 +5333,13 @@
    },
    "python": {
     "bench": {
-     "Dot 600x600": 0.828,
-     "LinearSolve 600x600": 1.223,
-     "Inverse 600x600": 2.849,
-     "Det 600x600": 1.145,
-     "Eigenvalues 600x600 (general)": 78.278,
-     "SingularValueDecomposition 400x400": 9.09,
-     "QRDecomposition 400x400": 2.523
+     "Dot 600x600": 0.829,
+     "LinearSolve 600x600": 1.208,
+     "Inverse 600x600": 2.861,
+     "Det 600x600": 1.069,
+     "Eigenvalues 600x600 (general)": 77.78,
+     "SingularValueDecomposition 400x400": 8.752,
+     "QRDecomposition 400x400": 2.5
     },
     "check": {
      "Dot 600x600": "1174720184",
@@ -5352,24 +5369,24 @@
   "19-statistics": {
    "mathilda": {
     "bench": {
-     "Mean over 2x10^6": 0.151,
-     "Variance over 2x10^6": 0.295,
-     "StandardDeviation over 2x10^6": 0.289,
-     "Median over 2x10^6": 14.635,
-     "Quartiles over 2x10^6": 17.944,
-     "Skewness over 2x10^6": 0.562,
-     "Kurtosis over 2x10^6": 0.59,
-     "RootMeanSquare over 2x10^6": 0.152,
-     "MovingAverage window 100": 20.97
+     "Mean over 2x10^6": 0.142,
+     "Variance over 2x10^6": 0.282,
+     "StandardDeviation over 2x10^6": 0.296,
+     "Median over 2x10^6": 12.957,
+     "Quartiles over 2x10^6": 17.814,
+     "Skewness over 2x10^6": 0.572,
+     "Kurtosis over 2x10^6": 0.614,
+     "RootMeanSquare over 2x10^6": 0.164,
+     "MovingAverage window 100": 17.4
     },
     "check": {
      "Mean over 2x10^6": "503673600",
-     "Variance over 2x10^6": "18",
-     "StandardDeviation over 2x10^6": "1328",
+     "Variance over 2x10^6": "84815833",
+     "StandardDeviation over 2x10^6": "2912316",
      "Median over 2x10^6": "5110000",
      "Quartiles over 2x10^6": "15175000",
-     "Skewness over 2x10^6": "-1487825",
-     "Kurtosis over 2x10^6": "408149067546966464",
+     "Skewness over 2x10^6": "-200",
+     "Kurtosis over 2x10^6": "17789",
      "RootMeanSquare over 2x10^6": "5818028",
      "MovingAverage window 100": "49855794600"
     },
@@ -5398,15 +5415,15 @@
    },
    "wolfram": {
     "bench": {
-     "Mean over 2x10^6": 0.074,
-     "Variance over 2x10^6": 0.299,
-     "StandardDeviation over 2x10^6": 0.286,
-     "Median over 2x10^6": 8.362,
-     "Quartiles over 2x10^6": 17.676,
-     "Skewness over 2x10^6": 0.526,
-     "Kurtosis over 2x10^6": 0.501,
-     "RootMeanSquare over 2x10^6": 0.12,
-     "MovingAverage window 100": 2.064
+     "Mean over 2x10^6": 0.081,
+     "Variance over 2x10^6": 0.289,
+     "StandardDeviation over 2x10^6": 0.317,
+     "Median over 2x10^6": 8.322,
+     "Quartiles over 2x10^6": 17.189,
+     "Skewness over 2x10^6": 0.479,
+     "Kurtosis over 2x10^6": 0.575,
+     "RootMeanSquare over 2x10^6": 0.122,
+     "MovingAverage window 100": 2.132
     },
     "check": {
      "Mean over 2x10^6": "503673600",
@@ -5444,15 +5461,15 @@
    },
    "python": {
     "bench": {
-     "Mean over 2x10^6": 0.225,
-     "Variance over 2x10^6": 0.944,
-     "StandardDeviation over 2x10^6": 0.919,
-     "Median over 2x10^6": 13.969,
-     "Quartiles over 2x10^6": 18.435,
-     "Skewness over 2x10^6": 3.612,
-     "Kurtosis over 2x10^6": 3.241,
-     "RootMeanSquare over 2x10^6": 0.497,
-     "MovingAverage window 100": 4.616
+     "Mean over 2x10^6": 0.223,
+     "Variance over 2x10^6": 0.935,
+     "StandardDeviation over 2x10^6": 0.938,
+     "Median over 2x10^6": 13.992,
+     "Quartiles over 2x10^6": 18.512,
+     "Skewness over 2x10^6": 3.525,
+     "Kurtosis over 2x10^6": 3.322,
+     "RootMeanSquare over 2x10^6": 0.507,
+     "MovingAverage window 100": 4.593
     },
     "check": {
      "Mean over 2x10^6": "503673600",
@@ -5483,7 +5500,8 @@
   "20-curve-fitting": {
    "mathilda": {
     "bench": {
-     "Fit linear, 5000 points": 24.065
+     "Fit linear, 5000 points": 23.974,
+     "Fit quadratic, 5000 points": 58171.5
     },
     "check": {
      "Fit linear, 5000 points": "230000"
@@ -5503,11 +5521,11 @@
    },
    "wolfram": {
     "bench": {
-     "Fit linear, 5000 points": 0.287,
-     "Fit quadratic, 5000 points": 0.465,
-     "Fit degree-8 polynomial, 5000 points": 1.733,
-     "LeastSquares 2000x20": 0.777,
-     "Fit trig basis, 5000 points": 0.464
+     "Fit linear, 5000 points": 0.281,
+     "Fit quadratic, 5000 points": 0.421,
+     "Fit degree-8 polynomial, 5000 points": 1.286,
+     "LeastSquares 2000x20": 0.655,
+     "Fit trig basis, 5000 points": 0.421
     },
     "check": {
      "Fit linear, 5000 points": "230000",
@@ -5531,11 +5549,11 @@
    },
    "python": {
     "bench": {
-     "Fit linear, 5000 points": 0.103,
-     "Fit quadratic, 5000 points": 0.139,
-     "Fit degree-8 polynomial, 5000 points": 0.322,
-     "LeastSquares 2000x20": 0.292,
-     "Fit trig basis, 5000 points": 0.093
+     "Fit linear, 5000 points": 0.1,
+     "Fit quadratic, 5000 points": 0.136,
+     "Fit degree-8 polynomial, 5000 points": 0.317,
+     "LeastSquares 2000x20": 0.278,
+     "Fit trig basis, 5000 points": 0.091
     },
     "check": {
      "Fit linear, 5000 points": "230000",
@@ -5559,10 +5577,10 @@
   "21-strided-views": {
    "mathilda": {
     "bench": {
-     "Transpose 2000x2000": 2.044,
-     "Transpose then Dot (fused?)": 42.963,
-     "Partition window 8, offset 1": 2.566,
-     "Take rows 1;;1000 of 2000x2000": 0.249,
+     "Transpose 2000x2000": 1.752,
+     "Transpose then Dot (fused?)": 39.427,
+     "Partition window 8, offset 1": 2.482,
+     "Take rows 1;;1000 of 2000x2000": 0.229,
      "column slice m[[All, 1]]": 0.005
     },
     "check": {
@@ -5592,11 +5610,11 @@
    },
    "wolfram": {
     "bench": {
-     "Transpose 2000x2000": 0.784,
-     "Transpose then Dot (fused?)": 74.205,
-     "Partition window 8, offset 1": 35.981,
-     "ArrayReshape 2x10^6 to 1000x2000": 0.102,
-     "Take rows 1;;1000 of 2000x2000": 0.317,
+     "Transpose 2000x2000": 0.773,
+     "Transpose then Dot (fused?)": 69.379,
+     "Partition window 8, offset 1": 36.457,
+     "ArrayReshape 2x10^6 to 1000x2000": 0.125,
+     "Take rows 1;;1000 of 2000x2000": 0.326,
      "column slice m[[All, 1]]": 0.008
     },
     "check": {
@@ -5625,11 +5643,11 @@
    },
    "python": {
     "bench": {
-     "Transpose 2000x2000": 3.045,
-     "Transpose then Dot (fused?)": 22.307,
-     "Partition window 8, offset 1": 6.104,
-     "ArrayReshape 2x10^6 to 1000x2000": 0.262,
-     "Take rows 1;;1000 of 2000x2000": 0.271,
+     "Transpose 2000x2000": 3.11,
+     "Transpose then Dot (fused?)": 20.216,
+     "Partition window 8, offset 1": 5.503,
+     "ArrayReshape 2x10^6 to 1000x2000": 0.223,
+     "Take rows 1;;1000 of 2000x2000": 0.223,
      "column slice m[[All, 1]]": 0.001
     },
     "check": {
@@ -5655,12 +5673,12 @@
   "22-small-matrix-lapack": {
    "mathilda": {
     "bench": {
-     "Inverse 6x6 x 2000": 572.996,
-     "Det 6x6 x 5000": 1266.56,
-     "LinearSolve 6x6 x 2000": 523.556,
-     "Dot 6x6 x 6x6 x 10000": 324.789,
-     "Inverse 3x3 x 5000": 175.538,
-     "Eigenvalues 6x6 x 500": 0.761
+     "Inverse 6x6 x 2000": 561.072,
+     "Det 6x6 x 5000": 1228.51,
+     "LinearSolve 6x6 x 2000": 494.98,
+     "Dot 6x6 x 6x6 x 10000": 316.782,
+     "Inverse 3x3 x 5000": 167.925,
+     "Eigenvalues 6x6 x 500": 0.685
     },
     "check": {
      "Inverse 6x6 x 2000": "617813",
@@ -5686,12 +5704,12 @@
    },
    "wolfram": {
     "bench": {
-     "Inverse 6x6 x 2000": 2.816,
-     "Det 6x6 x 5000": 6.126,
-     "LinearSolve 6x6 x 2000": 3.558,
-     "Dot 6x6 x 6x6 x 10000": 6.424,
-     "Inverse 3x3 x 5000": 5.228,
-     "Eigenvalues 6x6 x 500": 1.093
+     "Inverse 6x6 x 2000": 2.837,
+     "Det 6x6 x 5000": 6.003,
+     "LinearSolve 6x6 x 2000": 3.671,
+     "Dot 6x6 x 6x6 x 10000": 6.428,
+     "Inverse 3x3 x 5000": 4.751,
+     "Eigenvalues 6x6 x 500": 1.007
     },
     "check": {
      "Inverse 6x6 x 2000": "617813",
@@ -5717,12 +5735,12 @@
    },
    "python": {
     "bench": {
-     "Inverse 6x6 x 2000": 3.707,
-     "Det 6x6 x 5000": 5.31,
-     "LinearSolve 6x6 x 2000": 4.242,
-     "Dot 6x6 x 6x6 x 10000": 4.016,
-     "Inverse 3x3 x 5000": 8.239,
-     "Eigenvalues 6x6 x 500": 3.085
+     "Inverse 6x6 x 2000": 3.633,
+     "Det 6x6 x 5000": 5.042,
+     "LinearSolve 6x6 x 2000": 3.929,
+     "Dot 6x6 x 6x6 x 10000": 3.877,
+     "Inverse 3x3 x 5000": 7.66,
+     "Eigenvalues 6x6 x 500": 3.022
     },
     "check": {
      "Inverse 6x6 x 2000": "617813",
@@ -5748,12 +5766,12 @@
   "23-per-operation-constant": {
    "mathilda": {
     "bench": {
-     "1 op on 10^6 elements": 0.114,
-     "1000 ops on 10^3 elements": 0.152,
-     "100000 ops on 10 elements": 5.624,
-     "1 elementwise op on 10^6": 0.173,
-     "10000 elementwise ops on 10^2": 1.796,
-     "100000 scalar additions": 0.403
+     "1 op on 10^6 elements": 0.103,
+     "1000 ops on 10^3 elements": 0.142,
+     "100000 ops on 10 elements": 5.485,
+     "1 elementwise op on 10^6": 0.169,
+     "10000 elementwise ops on 10^2": 1.718,
+     "100000 scalar additions": 0.393
     },
     "check": {
      "1 op on 10^6 elements": "55000000",
@@ -5779,12 +5797,12 @@
    },
    "wolfram": {
     "bench": {
-     "1 op on 10^6 elements": 0.053,
-     "1000 ops on 10^3 elements": 0.247,
-     "100000 ops on 10 elements": 20.117,
-     "1 elementwise op on 10^6": 0.055,
-     "10000 elementwise ops on 10^2": 1.572,
-     "100000 scalar additions": 12.098
+     "1 op on 10^6 elements": 0.052,
+     "1000 ops on 10^3 elements": 0.236,
+     "100000 ops on 10 elements": 18.936,
+     "1 elementwise op on 10^6": 0.061,
+     "10000 elementwise ops on 10^2": 1.487,
+     "100000 scalar additions": 11.323
     },
     "check": {
      "1 op on 10^6 elements": "55000000",
@@ -5810,12 +5828,12 @@
    },
    "python": {
     "bench": {
-     "1 op on 10^6 elements": 0.111,
-     "1000 ops on 10^3 elements": 0.453,
-     "100000 ops on 10 elements": 36.188,
-     "1 elementwise op on 10^6": 0.145,
-     "10000 elementwise ops on 10^2": 2.001,
-     "100000 scalar additions": 1.327
+     "1 op on 10^6 elements": 0.112,
+     "1000 ops on 10^3 elements": 0.444,
+     "100000 ops on 10 elements": 33.366,
+     "1 elementwise op on 10^6": 0.135,
+     "10000 elementwise ops on 10^2": 1.705,
+     "100000 scalar additions": 1.169
     },
     "check": {
      "1 op on 10^6 elements": "55000000",
@@ -5839,11 +5857,11 @@
   "24-heterogeneous-return": {
    "mathilda": {
     "bench": {
-     "return {real, real}, then Total": 1.102,
-     "return {real, int}, then Total": 64.903,
-     "return {real, int, mask}, then Total": 92.206,
-     "return {real, int, mask}, discarded": 43.753,
-     "return ragged {n, 1000, 100}, then Total": 33.417
+     "return {real, real}, then Total": 0.868,
+     "return {real, int}, then Total": 57.673,
+     "return {real, int, mask}, then Total": 87.089,
+     "return {real, int, mask}, discarded": 39.862,
+     "return ragged {n, 1000, 100}, then Total": 29.545
     },
     "check": {
      "return {real, real}, then Total": "650000",
@@ -5869,11 +5887,11 @@
    },
    "wolfram": {
     "bench": {
-     "return {real, real}, then Total": 0.238,
-     "return {real, int}, then Total": 0.269,
-     "return {real, int, mask}, then Total": 0.407,
-     "return {real, int, mask}, discarded": 0.27,
-     "return ragged {n, 1000, 100}, then Total": 0.037
+     "return {real, real}, then Total": 0.205,
+     "return {real, int}, then Total": 0.326,
+     "return {real, int, mask}, then Total": 0.402,
+     "return {real, int, mask}, discarded": 0.255,
+     "return ragged {n, 1000, 100}, then Total": 0.032
     },
     "check": {
      "return {real, real}, then Total": "650000",
@@ -5899,11 +5917,11 @@
    },
    "python": {
     "bench": {
-     "return {real, real}, then Total": 0.247,
-     "return {real, int}, then Total": 0.425,
-     "return {real, int, mask}, then Total": 1.131,
-     "return {real, int, mask}, discarded": 1.009,
-     "return ragged {n, 1000, 100}, then Total": 0.063
+     "return {real, real}, then Total": 0.243,
+     "return {real, int}, then Total": 0.415,
+     "return {real, int, mask}, then Total": 1.104,
+     "return {real, int, mask}, discarded": 0.984,
+     "return ragged {n, 1000, 100}, then Total": 0.058
     },
     "check": {
      "return {real, real}, then Total": "650000",
@@ -5926,14 +5944,14 @@
   "25-vector-transcendentals": {
    "mathilda": {
     "bench": {
-     "Sin over 4x10^6": 1.371,
-     "Exp over 4x10^6": 1.004,
-     "Log over 4x10^6": 3.89,
-     "Sqrt over 4x10^6": 5.968,
-     "Tan over 4x10^6": 1.674,
-     "ArcTan 2-arg over 4x10^6": 4.17,
-     "Sin[Exp[Log[v]]] fused?": 8.16,
-     "v^2.5 over 4x10^6": 7.704
+     "Sin over 4x10^6": 1.967,
+     "Exp over 4x10^6": 1.361,
+     "Log over 4x10^6": 4.023,
+     "Sqrt over 4x10^6": 5.618,
+     "Tan over 4x10^6": 1.665,
+     "ArcTan 2-arg over 4x10^6": 3.679,
+     "Sin[Exp[Log[v]]] fused?": 9.856,
+     "v^2.5 over 4x10^6": 7.501
     },
     "check": {
      "Sin over 4x10^6": "479426",
@@ -5964,14 +5982,14 @@
    },
    "wolfram": {
     "bench": {
-     "Sin over 4x10^6": 0.659,
-     "Exp over 4x10^6": 1.57,
-     "Log over 4x10^6": 2.289,
-     "Sqrt over 4x10^6": 0.403,
-     "Tan over 4x10^6": 0.691,
-     "ArcTan 2-arg over 4x10^6": 7.765,
-     "Sin[Exp[Log[v]]] fused?": 6.269,
-     "v^2.5 over 4x10^6": 4.115
+     "Sin over 4x10^6": 0.615,
+     "Exp over 4x10^6": 1.21,
+     "Log over 4x10^6": 2.337,
+     "Sqrt over 4x10^6": 0.42,
+     "Tan over 4x10^6": 0.664,
+     "ArcTan 2-arg over 4x10^6": 7.191,
+     "Sin[Exp[Log[v]]] fused?": 6.143,
+     "v^2.5 over 4x10^6": 3.922
     },
     "check": {
      "Sin over 4x10^6": "479426",
@@ -6002,14 +6020,14 @@
    },
    "python": {
     "bench": {
-     "Sin over 4x10^6": 14.9,
-     "Exp over 4x10^6": 6.143,
-     "Log over 4x10^6": 12.875,
-     "Sqrt over 4x10^6": 1.012,
-     "Tan over 4x10^6": 17.021,
-     "ArcTan 2-arg over 4x10^6": 36.734,
-     "Sin[Exp[Log[v]]] fused?": 45.253,
-     "v^2.5 over 4x10^6": 19.545
+     "Sin over 4x10^6": 14.756,
+     "Exp over 4x10^6": 6.051,
+     "Log over 4x10^6": 12.54,
+     "Sqrt over 4x10^6": 0.989,
+     "Tan over 4x10^6": 16.063,
+     "ArcTan 2-arg over 4x10^6": 34.036,
+     "Sin[Exp[Log[v]]] fused?": 43.161,
+     "v^2.5 over 4x10^6": 18.364
     },
     "check": {
      "Sin over 4x10^6": "479426",
@@ -6040,13 +6058,13 @@
   "26-structural-ops": {
    "mathilda": {
     "bench": {
-     "Reverse 4x10^6": 5.765,
-     "RotateLeft 4x10^6 by 1000": 0.972,
-     "gather v[[idx]], 4x10^6": 35.829,
-     "Join two 2x10^6": 1.225,
-     "Take first half of 4x10^6": 0.237,
-     "Sort 4x10^6": 46.362,
-     "Union of 4x10^6 integers": 12.705
+     "Reverse 4x10^6": 6.398,
+     "RotateLeft 4x10^6 by 1000": 0.899,
+     "gather v[[idx]], 4x10^6": 27.7,
+     "Join two 2x10^6": 0.913,
+     "Take first half of 4x10^6": 0.223,
+     "Sort 4x10^6": 44.461,
+     "Union of 4x10^6 integers": 12.645
     },
     "check": {
      "Reverse 4x10^6": "55",
@@ -6078,13 +6096,13 @@
    },
    "wolfram": {
     "bench": {
-     "Reverse 4x10^6": 0.327,
-     "RotateLeft 4x10^6 by 1000": 0.257,
-     "gather v[[idx]], 4x10^6": 7.14,
-     "Join two 2x10^6": 0.519,
-     "Take first half of 4x10^6": 0.078,
-     "Sort 4x10^6": 74.977,
-     "Union of 4x10^6 integers": 75.596
+     "Reverse 4x10^6": 0.303,
+     "RotateLeft 4x10^6 by 1000": 0.247,
+     "gather v[[idx]], 4x10^6": 7.238,
+     "Join two 2x10^6": 0.564,
+     "Take first half of 4x10^6": 0.098,
+     "Sort 4x10^6": 71.115,
+     "Union of 4x10^6 integers": 74.35
     },
     "check": {
      "Reverse 4x10^6": "55",
@@ -6116,13 +6134,13 @@
    },
    "python": {
     "bench": {
-     "Reverse 4x10^6": 1.015,
-     "RotateLeft 4x10^6 by 1000": 0.495,
-     "gather v[[idx]], 4x10^6": 15.359,
-     "Join two 2x10^6": 0.464,
-     "Take first half of 4x10^6": 0.224,
-     "Sort 4x10^6": 117.097,
-     "Union of 4x10^6 integers": 569.263
+     "Reverse 4x10^6": 0.941,
+     "RotateLeft 4x10^6 by 1000": 0.467,
+     "gather v[[idx]], 4x10^6": 10.452,
+     "Join two 2x10^6": 0.428,
+     "Take first half of 4x10^6": 0.21,
+     "Sort 4x10^6": 124.281,
+     "Union of 4x10^6 integers": 553.605
     },
     "check": {
      "Reverse 4x10^6": "55",
@@ -6150,13 +6168,13 @@
   "27-elementwise-binary": {
    "mathilda": {
     "bench": {
-     "a + b over 4x10^6": 0.399,
-     "a * b over 4x10^6": 0.398,
-     "MapThread[Min] over 4x10^6": 15.576,
-     "MapThread[Max] over 4x10^6": 15.418,
-     "Clip to [0.25, 0.75] over 4x10^6": 798.398,
-     "a b + a over 4x10^6": 0.816,
-     "integer Mod over 4x10^6": 4.073
+     "a + b over 4x10^6": 0.365,
+     "a * b over 4x10^6": 0.394,
+     "MapThread[Min] over 4x10^6": 15.468,
+     "MapThread[Max] over 4x10^6": 15.302,
+     "Clip to [0.25, 0.75] over 4x10^6": 740.383,
+     "a b + a over 4x10^6": 0.797,
+     "integer Mod over 4x10^6": 3.868
     },
     "check": {
      "a + b over 4x10^6": "30",
@@ -6187,13 +6205,13 @@
    },
    "wolfram": {
     "bench": {
-     "a + b over 4x10^6": 0.527,
+     "a + b over 4x10^6": 0.432,
      "a * b over 4x10^6": 0.498,
-     "MapThread[Min] over 4x10^6": 721.538,
-     "MapThread[Max] over 4x10^6": 744.824,
-     "Clip to [0.25, 0.75] over 4x10^6": 3.062,
-     "a b + a over 4x10^6": 1.014,
-     "integer Mod over 4x10^6": 0.526
+     "MapThread[Min] over 4x10^6": 683.641,
+     "MapThread[Max] over 4x10^6": 692.05,
+     "Clip to [0.25, 0.75] over 4x10^6": 1.98,
+     "a b + a over 4x10^6": 0.875,
+     "integer Mod over 4x10^6": 0.508
     },
     "check": {
      "a + b over 4x10^6": "30",
@@ -6224,13 +6242,13 @@
    },
    "python": {
     "bench": {
-     "a + b over 4x10^6": 0.808,
-     "a * b over 4x10^6": 0.809,
-     "MapThread[Min] over 4x10^6": 0.832,
-     "MapThread[Max] over 4x10^6": 0.846,
-     "Clip to [0.25, 0.75] over 4x10^6": 1.015,
-     "a b + a over 4x10^6": 1.484,
-     "integer Mod over 4x10^6": 3.577
+     "a + b over 4x10^6": 0.803,
+     "a * b over 4x10^6": 0.788,
+     "MapThread[Min] over 4x10^6": 0.795,
+     "MapThread[Max] over 4x10^6": 0.802,
+     "Clip to [0.25, 0.75] over 4x10^6": 0.96,
+     "a b + a over 4x10^6": 1.442,
+     "integer Mod over 4x10^6": 3.349
     },
     "check": {
      "a + b over 4x10^6": "30",
@@ -6257,11 +6275,11 @@
   "28-span-selector": {
    "mathilda": {
     "bench": {
-     "span v[[1;;n;;2]]": 3.57,
-     "span v[[1;;n;;7]]": 1.023,
-     "span v[[2;;n;;2]] (offset)": 3.568,
-     "contiguous span v[[1;;n/2]]": 0.912,
-     "Range[1, 4x10^6, 3]": 0.084
+     "span v[[1;;n;;2]]": 3.513,
+     "span v[[1;;n;;7]]": 1.02,
+     "span v[[2;;n;;2]] (offset)": 3.427,
+     "contiguous span v[[1;;n/2]]": 0.855,
+     "Range[1, 4x10^6, 3]": 0.082
     },
     "check": {
      "span v[[1;;n;;2]]": "25",
@@ -6287,12 +6305,12 @@
    },
    "wolfram": {
     "bench": {
-     "span v[[1;;n;;2]]": 0.296,
-     "span v[[1;;n;;7]]": 0.237,
-     "span v[[2;;n;;2]] (offset)": 0.2,
-     "contiguous span v[[1;;n/2]]": 0.132,
-     "Range[1, 4x10^6, 3]": 0.08,
-     "sieve to 200000 (strided writes)": 249.941
+     "span v[[1;;n;;2]]": 0.226,
+     "span v[[1;;n;;7]]": 0.188,
+     "span v[[2;;n;;2]] (offset)": 0.189,
+     "contiguous span v[[1;;n/2]]": 0.106,
+     "Range[1, 4x10^6, 3]": 0.078,
+     "sieve to 200000 (strided writes)": 236.074
     },
     "check": {
      "span v[[1;;n;;2]]": "25",
@@ -6319,12 +6337,12 @@
    },
    "python": {
     "bench": {
-     "span v[[1;;n;;2]]": 0.483,
-     "span v[[1;;n;;7]]": 0.391,
-     "span v[[2;;n;;2]] (offset)": 0.567,
-     "contiguous span v[[1;;n/2]]": 0.241,
-     "Range[1, 4x10^6, 3]": 0.111,
-     "sieve to 200000 (strided writes)": 0.185
+     "span v[[1;;n;;2]]": 0.494,
+     "span v[[1;;n;;7]]": 0.338,
+     "span v[[2;;n;;2]] (offset)": 0.482,
+     "contiguous span v[[1;;n/2]]": 0.222,
+     "Range[1, 4x10^6, 3]": 0.11,
+     "sieve to 200000 (strided writes)": 0.177
     },
     "check": {
      "span v[[1;;n;;2]]": "25",
@@ -6347,13 +6365,13 @@
   "29-graph-ops": {
    "mathilda": {
     "bench": {
-     "Graph construction, 40000 edges": 11696.0,
-     "VertexDegree, 20000 vertices": 6017.23,
-     "EdgeCount": 6027.59,
-     "ConnectedComponents": 6097.09,
-     "GraphDistance from vertex 1": 6038.48,
-     "FindShortestPath 1 to 10000": 6209.19,
-     "AdjacencyMatrix, 20000 vertices": 6022.17
+     "Graph construction, 40000 edges": 11355.7,
+     "VertexDegree, 20000 vertices": 5722.8,
+     "EdgeCount": 6099.52,
+     "ConnectedComponents": 5970.76,
+     "GraphDistance from vertex 1": 6243.99,
+     "FindShortestPath 1 to 10000": 6250.91,
+     "AdjacencyMatrix, 20000 vertices": 6328.23
     },
     "check": {
      "Graph construction, 40000 edges": "40000",
@@ -6386,13 +6404,13 @@
    },
    "wolfram": {
     "bench": {
-     "Graph construction, 40000 edges": 4.495,
-     "VertexDegree, 20000 vertices": 0.044,
+     "Graph construction, 40000 edges": 4.222,
+     "VertexDegree, 20000 vertices": 0.045,
      "EdgeCount": 0.0,
      "ConnectedComponents": 0.001,
-     "GraphDistance from vertex 1": 10471.2,
-     "FindShortestPath 1 to 10000": 0.639,
-     "AdjacencyMatrix, 20000 vertices": 0.609
+     "GraphDistance from vertex 1": 11822.2,
+     "FindShortestPath 1 to 10000": 0.653,
+     "AdjacencyMatrix, 20000 vertices": 0.622
     },
     "check": {
      "Graph construction, 40000 edges": "40000",
@@ -6425,13 +6443,13 @@
    },
    "python": {
     "bench": {
-     "Graph construction, 40000 edges": 15.125,
-     "VertexDegree, 20000 vertices": 0.961,
-     "EdgeCount": 1.087,
-     "ConnectedComponents": 5.165,
-     "GraphDistance from vertex 1": 3.517,
+     "Graph construction, 40000 edges": 15.748,
+     "VertexDegree, 20000 vertices": 0.985,
+     "EdgeCount": 1.109,
+     "ConnectedComponents": 6.649,
+     "GraphDistance from vertex 1": 4.193,
      "FindShortestPath 1 to 10000": 0.057,
-     "AdjacencyMatrix, 20000 vertices": 9.49
+     "AdjacencyMatrix, 20000 vertices": 13.684
     },
     "check": {
      "Graph construction, 40000 edges": "40000",
@@ -6457,14 +6475,14 @@
   "30-string-ops": {
    "mathilda": {
     "bench": {
-     "StringLength of 200k chars": 0.003,
-     "StringReplace literal, 200k chars": 0.231,
-     "StringSplit on space, 200k chars": 2.775,
-     "StringCount substring, 200k chars": 0.171,
-     "StringReverse 200k chars": 0.012,
-     "StringCases regex, 200k chars": 2.078,
-     "StringReplace regex, 200k chars": 1.812,
-     "Characters of 200k chars": 3.648
+     "StringLength of 200k chars": 0.004,
+     "StringReplace literal, 200k chars": 0.237,
+     "StringSplit on space, 200k chars": 2.637,
+     "StringCount substring, 200k chars": 0.172,
+     "StringReverse 200k chars": 0.013,
+     "StringCases regex, 200k chars": 2.022,
+     "StringReplace regex, 200k chars": 1.755,
+     "Characters of 200k chars": 3.828
     },
     "check": {
      "StringLength of 200k chars": "44",
@@ -6501,13 +6519,13 @@
    "wolfram": {
     "bench": {
      "StringLength of 200k chars": 0.0,
-     "StringReplace literal, 200k chars": 1.084,
-     "StringSplit on space, 200k chars": 4.196,
+     "StringReplace literal, 200k chars": 1.175,
+     "StringSplit on space, 200k chars": 4.374,
      "StringCount substring, 200k chars": 0.365,
-     "StringReverse 200k chars": 0.355,
-     "StringCases regex, 200k chars": 3.654,
-     "StringReplace regex, 200k chars": 4.723,
-     "Characters of 200k chars": 2.476
+     "StringReverse 200k chars": 0.412,
+     "StringCases regex, 200k chars": 3.779,
+     "StringReplace regex, 200k chars": 4.877,
+     "Characters of 200k chars": 2.49
     },
     "check": {
      "StringLength of 200k chars": "44",
@@ -6544,13 +6562,13 @@
    "python": {
     "bench": {
      "StringLength of 200k chars": 0.0,
-     "StringReplace literal, 200k chars": 0.176,
-     "StringSplit on space, 200k chars": 0.535,
-     "StringCount substring, 200k chars": 0.05,
-     "StringReverse 200k chars": 0.076,
-     "StringCases regex, 200k chars": 2.508,
-     "StringReplace regex, 200k chars": 2.638,
-     "Characters of 200k chars": 0.386
+     "StringReplace literal, 200k chars": 0.131,
+     "StringSplit on space, 200k chars": 0.538,
+     "StringCount substring, 200k chars": 0.054,
+     "StringReverse 200k chars": 0.052,
+     "StringCases regex, 200k chars": 2.524,
+     "StringReplace regex, 200k chars": 2.674,
+     "Characters of 200k chars": 0.335
     },
     "check": {
      "StringLength of 200k chars": "44",
@@ -6574,38 +6592,38 @@
    }
   }
  },
- "elapsed_s": 1213.7927329540253,
+ "elapsed_s": 1184.1360960006714,
  "durations": {
-  "01-integrate-rational": 3.7718279361724854,
-  "02-integrate-transcendental": 2.1965079307556152,
-  "03-simplify": 1.8124973773956299,
-  "04-solve": 3.498867988586426,
-  "05-factor-univariate": 2.320646047592163,
-  "06-factor-multivariate": 2.7048933506011963,
-  "07-groebner": 28.831314086914062,
-  "08-series-limit": 241.53798174858093,
-  "09-sum-product": 1.8650591373443604,
-  "10-polynomial-algebra": 1.7801289558410645,
-  "11-special-functions": 41.491766691207886,
-  "12-quadrature": 1.7786049842834473,
-  "13-ode-integration": 1.7987709045410156,
-  "14-root-finding": 1.9445099830627441,
-  "15-optimization": 118.01673197746277,
-  "16-interpolation": 2.09358811378479,
-  "17-fft-and-signal": 2.6150271892547607,
-  "18-dense-linalg-drivers": 3.130437135696411,
-  "19-statistics": 2.7365968227386475,
-  "20-curve-fitting": 241.77656888961792,
-  "21-strided-views": 2.2516391277313232,
-  "22-small-matrix-lapack": 13.269225120544434,
-  "23-per-operation-constant": 1.8811609745025635,
-  "24-heterogeneous-return": 2.4755382537841797,
-  "25-vector-transcendentals": 2.3782927989959717,
-  "26-structural-ops": 4.0096681118011475,
-  "27-elementwise-binary": 11.690186977386475,
-  "28-span-selector": 242.10812902450562,
-  "29-graph-ops": 170.23977279663086,
-  "30-string-ops": 1.4299030303955078
+  "01-integrate-rational": 3.82912278175354,
+  "02-integrate-transcendental": 2.5480599403381348,
+  "03-simplify": 1.7874276638031006,
+  "04-solve": 3.832537889480591,
+  "05-factor-univariate": 2.0503170490264893,
+  "06-factor-multivariate": 2.5583932399749756,
+  "07-groebner": 30.023559093475342,
+  "08-series-limit": 241.36048102378845,
+  "09-sum-product": 2.040914297103882,
+  "10-polynomial-algebra": 1.7885150909423828,
+  "11-special-functions": 52.33303093910217,
+  "12-quadrature": 2.557730197906494,
+  "13-ode-integration": 2.042222023010254,
+  "14-root-finding": 2.036555051803589,
+  "15-optimization": 132.0325529575348,
+  "16-interpolation": 2.0329880714416504,
+  "17-fft-and-signal": 2.5533859729766846,
+  "18-dense-linalg-drivers": 2.8140928745269775,
+  "19-statistics": 2.7989089488983154,
+  "20-curve-fitting": 241.44445490837097,
+  "21-strided-views": 2.042072057723999,
+  "22-small-matrix-lapack": 12.707849025726318,
+  "23-per-operation-constant": 1.528850793838501,
+  "24-heterogeneous-return": 2.2987380027770996,
+  "25-vector-transcendentals": 2.0422940254211426,
+  "26-structural-ops": 3.5551090240478516,
+  "27-elementwise-binary": 10.423963785171509,
+  "28-span-selector": 241.95617771148682,
+  "29-graph-ops": 170.3555519580841,
+  "30-string-ops": 1.538527011871338
  },
  "partial": false,
  "label_problems": [
@@ -6626,7 +6644,6 @@
    [],
    [
     "Fit degree-8 polynomial, 5000 points",
-    "Fit quadratic, 5000 points",
     "Fit trig basis, 5000 points",
     "LeastSquares 2000x20"
    ]

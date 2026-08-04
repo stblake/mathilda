@@ -10,7 +10,7 @@ Medians, not means — one 600000× case would make a mean meaningless.
 
 | date | commit | cases | coverage | slower | ahead | absent | incomplete | vs Mathematica | vs Python | wall |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 2026-08-04 | `028308bc` | 186 | 87.4% | 88 | 83 | 3 | 12 | 1.05× | 0.72× | 20.2 min |
+| 2026-08-04 | `6911e788` | 186 | 87.1% | 90 | 86 | 3 | 7 | 1.06× | 0.65× | 19.7 min |
 
 ## By area, over time
 
@@ -18,5 +18,5 @@ Median ratio per area. The question this answers is which subsystem is actually 
 
 | date | A symbolic (sympy)<br>(vs W / vs Py) | B numeric libraries (scipy)<br>(vs W / vs Py) | C array substrate (numpy)<br>(vs W / vs Py) | D uncovered subsystems<br>(vs W / vs Py) |
 |---|---|---|---|---|
-| 2026-08-04 | 1.34× / 0.10× | 0.44× / 0.98× | 2.36× / 1.19× | 0.66× / 322.02× |
+| 2026-08-04 | 1.38× / 0.10× | 0.53× / 0.93× | 2.27× / 1.25× | 0.60× / 236.94× |
 

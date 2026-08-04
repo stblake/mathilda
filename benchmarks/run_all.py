@@ -170,6 +170,16 @@ def fmt_dur(s):
 
 BAR_W = 26
 
+# How often the poll loop redraws. 0.25 s is smooth to the eye and costs nothing
+# next to subprocesses that run for seconds to minutes.
+TICK_S = 0.25
+
+# When output is NOT a tty (piped to tee, redirected to a log, captured by CI)
+# carriage returns are useless -- they would collapse into one unreadable line.
+# Instead emit a fresh heartbeat line this often, so a long experiment still
+# shows movement in the log rather than appearing hung for four minutes.
+HEARTBEAT_S = 15.0
+
 
 def bar(frac):
     """A 26-cell block bar. frac is clamped to [0, 1]."""
@@ -178,33 +188,111 @@ def bar(frac):
     return "\u2588" * full + "\u2591" * (BAR_W - full)
 
 
-def progress(i, total, slug, elapsed, rem, prev, exps, done_names, final=False):
-    """One progress line: bar, percent, elapsed, ETA, current experiment.
+class Progress:
+    """Draws the one-line bar, and keeps drawing it while a subprocess runs.
+
+    Two output modes, chosen by whether stderr is a terminal:
+
+      tty      redraw in place with \r every TICK_S -- a smoothly moving bar.
+      not tty  a fresh line every HEARTBEAT_S. Carriage returns in a log file
+               collapse into a single unreadable line, but a log that shows
+               nothing for the four minutes of a timeout experiment looks hung,
+               so it still has to move -- just more slowly, and by appending.
 
     The bar is weighted by TIME, not by experiment count, whenever a previous
-    run is available to weight with.  Counting experiments would show 90% while
-    the two 4-minute timeout experiments were still to come -- the costs here
-    span three orders of magnitude, so an unweighted bar is actively misleading.
-
-    Writes in place with \r on a tty, and one line per experiment when the
-    output is a pipe or a log file (where \r would produce one unreadable line).
+    run is available to weight with. Counting experiments would show 87% while
+    the two four-minute timeout experiments were still to come.
     """
-    if prev:
-        tot = sum(prev.get(e["name"], 0) for e in exps) or 1
-        frac = sum(prev.get(n, 0) for n in done_names) / tot
-    else:
-        frac = (i - 1) / float(total)
-    if final:
-        frac = 1.0
-    txt = "  %s %3d%%  %2d/%d  %-7s  %-9s %s" % (
-        bar(frac), round(100 * frac), i, total, fmt_dur(elapsed),
-        ("ETA " + fmt_dur(rem)) if rem is not None else "ETA --",
-        slug[:24])
-    if sys.stderr.isatty() and not final:
-        sys.stderr.write("\r" + txt + " " * 6)
-        sys.stderr.flush()
-    else:
-        print(txt, file=sys.stderr)
+
+    def __init__(self, total, exps, prev, verbose):
+        self.total, self.exps, self.prev = total, exps, prev
+        self.verbose = verbose
+        self.tty = sys.stderr.isatty()
+        self.t_start = None
+        self.i, self.slug = 0, ""
+        self.done_names = []
+        self.sys_label = ""
+        self.last_emit = 0.0
+        self.dirty = False
+
+    def start(self, t_start):
+        self.t_start = t_start
+
+    def begin(self, i, slug):
+        """A new experiment: always visible, in either mode."""
+        self.i, self.slug = i, slug
+        self.sys_label = ""
+        self.draw(boundary=True)
+
+    def system(self, name):
+        """Which of the three systems is running. Redraws on a tty; in a log it
+        rides the heartbeat, since three extra lines per experiment would treble
+        the noise for no information a heartbeat does not already carry."""
+        self.sys_label = name
+        self.draw()
+
+    def finish_experiment(self, name):
+        self.done_names.append(name)
+
+    def _frac_and_eta(self):
+        import time as _t
+        elapsed = _t.time() - self.t_start
+        remaining = [x["name"] for x in self.exps[self.i - 1:]] if self.i else \
+            [x["name"] for x in self.exps]
+        rem = eta(self.done_names, remaining, elapsed, self.prev)
+        if self.prev:
+            tot = sum(self.prev.get(e["name"], 0) for e in self.exps) or 1
+            done = sum(self.prev.get(n, 0) for n in self.done_names)
+            # Creep through the in-flight experiment too, so the bar keeps
+            # moving during a single long one instead of stepping at the end.
+            cur = self.prev.get(self.exps[self.i - 1]["name"], 0) if self.i else 0
+            spent_here = elapsed - sum(self.prev.get(n, 0) for n in self.done_names) \
+                * (elapsed / done if done else 1)
+            partial = min(cur, max(0.0, spent_here)) if cur else 0.0
+            frac = (done + partial) / tot
+        else:
+            frac = (self.i - 1) / float(self.total) if self.total else 0.0
+        return min(0.999, max(0.0, frac)), elapsed, rem
+
+    def draw(self, boundary=False, final=False):
+        import time as _t
+        if self.t_start is None:
+            return
+        now = _t.time()
+        if final:
+            frac, elapsed, rem = 1.0, now - self.t_start, 0
+        else:
+            frac, elapsed, rem = self._frac_and_eta()
+
+        line = "  %s %3d%%  %2d/%d  %-7s  %-9s %s%s" % (
+            bar(frac), round(100 * frac), self.i, self.total, fmt_dur(elapsed),
+            ("ETA " + fmt_dur(rem)) if rem is not None else "ETA --",
+            (self.slug if not final else "done")[:24],
+            ("  [%s]" % self.sys_label) if self.sys_label and not final else "")
+
+        if self.tty and not final:
+            sys.stderr.write("\r" + line + " " * 8)
+            sys.stderr.flush()
+        else:
+            # An experiment boundary always prints; ticks in between are
+            # rate-limited so a log shows movement without filling with it.
+            if not (boundary or final) and (now - self.last_emit) < HEARTBEAT_S:
+                return
+            self.last_emit = now
+            print(line, file=sys.stderr, flush=True)
+
+    def note(self, text):
+        """A line that must survive the bar (a timeout, a per-system count)."""
+        if self.tty:
+            sys.stderr.write("\r" + " " * 78 + "\r")
+        print(text, file=sys.stderr, flush=True)
+        self.last_emit = 0.0
+
+    def close(self):
+        self.draw(final=True)
+        if self.tty:
+            sys.stderr.write("\n")
+            sys.stderr.flush()
 
 
 def load_prev_durations():
@@ -253,7 +341,7 @@ def eta(done_names, remaining_names, elapsed, prev):
     return None
 
 
-def run_one(system, exp, timeout):
+def run_one(system, exp, timeout, tick=None):
     """Launch one file and parse its tagged lines.
 
     cwd is the experiment folder, which is what makes `Get["../harness.m"]`
@@ -274,24 +362,48 @@ def run_one(system, exp, timeout):
             return None
         cmd = [PYTHON, exp["py"]]
 
+    # Poll rather than block, so the caller can animate while this runs.
+    #
+    # subprocess.run() blocks until exit, which froze the progress bar for the
+    # whole of a 240 s experiment -- the display only moved at experiment
+    # boundaries, which is exactly when you least need it. Polling lets `tick`
+    # redraw a few times a second.
+    #
+    # Output goes to TEMPORARY FILES rather than PIPE. With PIPE, a child that
+    # fills the 64 KiB pipe buffer blocks forever unless someone drains it, and
+    # draining it concurrently means threads. Files cannot deadlock, and these
+    # children already write line-buffered output we only read at the end.
+    import tempfile
+    import time as _time
+
     timed_out = False
+    fo = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
+    fe = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
     try:
-        p = subprocess.run(cmd, cwd=exp["dir"], capture_output=True, text=True,
-                           timeout=timeout)
-        out, err, rc = p.stdout, p.stderr, p.returncode
-    except subprocess.TimeoutExpired as e:
-        # Keep whatever was emitted before the kill; the case in flight is the
-        # one that hung, and later cases never ran.
-        out = e.stdout or ""
-        err = (e.stderr or "")
-        if isinstance(out, bytes):
-            out = out.decode("utf-8", "replace")
-        if isinstance(err, bytes):
-            err = err.decode("utf-8", "replace")
-        rc, timed_out = None, True
+        proc = subprocess.Popen(cmd, cwd=exp["dir"], stdout=fo, stderr=fe,
+                                text=True)
     except OSError as e:
+        fo.close(); fe.close()
         return {"error": str(e), "bench": {}, "check": {}, "require": {},
                 "skip": {}, "stderr": "", "timed_out": False, "rc": None}
+
+    t0 = _time.time()
+    while True:
+        rc = proc.poll()
+        if rc is not None:
+            break
+        if _time.time() - t0 > timeout:
+            proc.kill()
+            proc.wait()
+            rc, timed_out = None, True
+            break
+        if tick:
+            tick()
+        _time.sleep(TICK_S)
+
+    fo.seek(0); fe.seek(0)
+    out, err = fo.read(), fe.read()
+    fo.close(); fe.close()
 
     res = {"bench": {}, "check": {}, "require": {}, "skip": {},
            "stderr": err.strip(), "timed_out": timed_out, "rc": rc,
@@ -1152,34 +1264,34 @@ def main():
     t_start = _t.time()
     host = host_block()
     all_rows, all_requires, label_problems, raw = [], {}, [], {}
-    durations, done_names = {}, []
+    durations, done_names = {}, []   # done_names also feeds eta()
+
+    bar_ui = Progress(total, exps, prev, verbose)
+    bar_ui.start(t_start)
 
     for i, e in enumerate(exps, 1):
         t_exp = _t.time()
-        elapsed = t_exp - t_start
-        rem = eta(done_names, [x["name"] for x in exps[i - 1:]], elapsed, prev)
-        progress(i, total, e["slug"], elapsed, rem, prev, exps, done_names)
+        bar_ui.begin(i, e["slug"])
         if verbose:
-            print("[%2d/%d] %s" % (i, total, e["slug"]), file=sys.stderr)
+            bar_ui.note("[%2d/%d] %s" % (i, total, e["slug"]))
         runs = {}
         for sysname in SYSTEMS:
             if sysname not in want:
                 continue
             t_sys = _t.time()
-            r = run_one(sysname, e, args.timeout)
+            bar_ui.system(sysname)
+            r = run_one(sysname, e, args.timeout, tick=bar_ui.draw)
             if r is None:
                 continue
             runs[sysname] = r
             n = len(r["bench"])
             extra = " TIMEOUT" if r["timed_out"] else ""
             if verbose or r["timed_out"]:
-                if not verbose and sys.stderr.isatty():
-                    sys.stderr.write("\n")
-                print("        %-11s %3d cases %7s%s"
-                      % (sysname, n, fmt_dur(_t.time() - t_sys), extra),
-                      file=sys.stderr)
+                bar_ui.note("        %-11s %3d cases %7s%s"
+                            % (sysname, n, fmt_dur(_t.time() - t_sys), extra))
         durations[e["name"]] = _t.time() - t_exp
         done_names.append(e["name"])
+        bar_ui.finish_experiment(e["name"])
 
         # Mathilda's require[] lines are what the coverage percentage counts:
         # the question is what MATHILDA has, not what sympy has.
@@ -1200,8 +1312,7 @@ def main():
         raw[e["name"]] = {s: runs[s] for s in runs}
 
     elapsed = _t.time() - t_start
-    progress(total, total, "done", elapsed, 0, prev, exps, done_names,
-             final=True)
+    bar_ui.close()
 
     # A PARTIAL RUN MUST NOT CLOBBER THE WEEKLY REPORT.  `--only` / `--system`
     # produce a subset, and the first time this was used for a 3-experiment
