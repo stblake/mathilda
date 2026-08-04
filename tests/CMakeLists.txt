@@ -196,6 +196,7 @@ include_directories(../src/linalg)
 include_directories(../src/numbertheory)
 include_directories(../src/poly)
 include_directories(../src/simp)
+include_directories(../src/stats)
 include_directories(../src/calculus)
 include_directories(../src/sum)
 include_directories(../src/special_functions)
@@ -411,7 +412,17 @@ set(COMMON_SRC
     ../src/modular.c
     ../src/sort.c
     ../src/sowreap.c
-    ../src/stats.c
+    ../src/stats/stats.c
+    ../src/stats/stats_common.c
+    ../src/stats/mean.c
+    ../src/stats/rootmeansquare.c
+    ../src/stats/median.c
+    ../src/stats/quartiles.c
+    ../src/stats/variance.c
+    ../src/stats/standarddeviation.c
+    ../src/stats/movingaverage.c
+    ../src/stats/movingmedian.c
+    ../src/stats/exponentialmovingaverage.c
     ../src/fit.c
     ../src/info.c
     ../src/expand.c

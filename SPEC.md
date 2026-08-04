@@ -68,7 +68,7 @@ src/
   comparisons.c / boolean.c / cond.c / iter.c
   funcprog.c / purefunc.c / patterns.c
   rat.c / parfrac.c / expand.c
-  modular.c / facint.c / piecewise.c / stats.c
+  modular.c / facint.c / piecewise.c
   load.c / info.c / datetime.c
   ndarray.{c,h}     Dense machine-precision array: storage, dtypes, the
                     element-wise kernel maps, Dot/Power/elementwise
@@ -84,6 +84,11 @@ src/
                     algebraic-number factoring, polynomial solving)
   linalg/           Dense linear algebra; eigen kernels split by algorithm
   simp/             Simplify, trig simplification, trig rationalisation
+  stats/            Descriptive statistics: Mean, RootMeanSquare, Median,
+                    Quartiles, Variance, StandardDeviation, MovingAverage,
+                    MovingMedian, ExponentialMovingAverage (one builtin per
+                    file; shared helpers in stats_common.c/.h; stats.c is the
+                    registration hub)
   calculus/         D / Dt / Derivative, Series, Limit, Integrate, Risch-Norman
   special_functions/ Higher transcendental & special functions: Gamma, LogGamma,
                     PolyGamma, Pochhammer, Zeta, StieltjesGamma, EulerGamma,
