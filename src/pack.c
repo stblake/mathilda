@@ -548,6 +548,13 @@ static void pack_mark_aware_heads(void) {
          * (ndred_skewness / ndred_kurtosis); an integer sample's value is a
          * radical, so they degrade the same way and are likewise not INT64_OK. */
         "CentralMoment", "Skewness", "Kurtosis",
+        /* Covariance / Correlation (src/linalg/ndcorrcov.c). Covariance[v, w] is a
+         * threaded centered inner product off the buffer; the matrix forms are a
+         * BLAS gram A_c^T B_c. Off this list the gate would materialise both 10^7
+         * vectors just to walk them elementwise. NOT int64_ok: an integer sample's
+         * covariance is a Rational no float64 slot holds, so an integer buffer
+         * degrades to the exact List path, exactly like Variance. */
+        "Covariance", "Correlation",
         /* RankedMin[v, n] / RankedMax[v, n] — the n-th order statistic, selected
          * straight off the buffer (ndred_ranked_*): int64 exactly, real by an
          * O(n) quickselect. Off this list the gate would materialise the whole

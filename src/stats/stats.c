@@ -21,6 +21,8 @@ void stats_init(void) {
     symtab_add_builtin("Skewness", builtin_skewness);
     symtab_add_builtin("Kurtosis", builtin_kurtosis);
     symtab_add_builtin("StandardDeviation", builtin_standard_deviation);
+    symtab_add_builtin("Covariance", builtin_covariance);
+    symtab_add_builtin("Correlation", builtin_correlation);
     symtab_add_builtin("MovingAverage", builtin_moving_average);
     symtab_add_builtin("MovingMedian", builtin_moving_median);
     symtab_add_builtin("ExponentialMovingAverage", builtin_exponential_moving_average);
@@ -32,6 +34,8 @@ void stats_init(void) {
     symtab_get_def("Skewness")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Kurtosis")->attributes |= ATTR_PROTECTED;
     symtab_get_def("StandardDeviation")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("Covariance")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("Correlation")->attributes |= ATTR_PROTECTED;
     symtab_get_def("MovingAverage")->attributes |= ATTR_PROTECTED;
     symtab_get_def("MovingMedian")->attributes |= ATTR_PROTECTED;
     symtab_get_def("ExponentialMovingAverage")->attributes |= ATTR_PROTECTED;

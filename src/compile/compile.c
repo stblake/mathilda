@@ -1295,6 +1295,14 @@ static const NdFnSpec ND_FNS[] = {
     { "HankelMatrix",       builtin_hankelmatrix,      0, 5, false, NDF_INT | NDF_REAL },
     { "ToeplitzMatrix",     builtin_toeplitzmatrix,    0, 5, false, NDF_INT | NDF_REAL },
     { "VandermondeMatrix",  builtin_vandermondematrix, 0, 5, false, NDF_INT | NDF_REAL },
+    /* Covariance[a] / Correlation[a]: the one-argument auto form, a rank-2 real
+     * matrix to its p x p (co)variance matrix (rank_rule 2 = rank 2 in and out;
+     * the n x p -> p x p dim change is fine, the register tracks only rank).  The
+     * two-argument forms are the R2_DOT rows in ND_FN2S below.  NDF_REAL only: an
+     * integer matrix's covariance is a matrix of Rationals no float slot holds, so
+     * it declines to the interpreter's exact path (nd_covariance delists). */
+    { "Covariance",         nd_covariance,             0, 2, false, NDF_REAL },
+    { "Correlation",        nd_correlation,            0, 2, false, NDF_REAL },
 };
 
 /* ---- delegated array -> scalar reductions ---------------------------------
@@ -1478,6 +1486,16 @@ static const NdFn2Spec ND_FN2S[] = {
      * to the interpreter (which coerces to real), and a complex pair likewise. */
     { "HankelMatrix",   builtin_hankelmatrix,   NDF_INT | NDF_REAL, R2_MATRIX, NDF2_SAME },
     { "ToeplitzMatrix", builtin_toeplitzmatrix, NDF_INT | NDF_REAL, R2_MATRIX, NDF2_SAME },
+    /* Covariance[v, w] / Covariance[a, b] (and Correlation): the rank arithmetic
+     * is exactly Dot's — two rank-1 vectors give a scalar (R2_DOT rr = 0 -> a
+     * V_NDFN2 scalar), two rank-2 matrices give a rank-2 matrix (rr = 2 -> an
+     * A_NDFN2 array), so R2_DOT covers both without a bespoke rank rule.  The
+     * n x p -> p x q dim change is invisible to the register.  NDF_REAL only (a
+     * complex or integer pair keeps the interpreter's exact/complex path); the fn
+     * is the same nd_covariance / nd_correlation the REPL uses, so the compiled
+     * answer is identical by construction. */
+    { "Covariance",     nd_covariance,          NDF_REAL,           R2_DOT,    NDF2_PROMOTE },
+    { "Correlation",    nd_correlation,         NDF_REAL,           R2_DOT,    NDF2_PROMOTE },
 };
 
 /* Name accessor for the disassembler; see compile_internal.h. */

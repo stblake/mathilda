@@ -423,6 +423,7 @@ set(COMMON_SRC
     ../src/stats/skewness.c
     ../src/stats/kurtosis.c
     ../src/stats/standarddeviation.c
+    ../src/stats/corrcov.c
     ../src/stats/movingaverage.c
     ../src/stats/movingmedian.c
     ../src/stats/exponentialmovingaverage.c
@@ -474,6 +475,7 @@ set(COMMON_SRC
     ../src/linalg/lapack.c
     ../src/linalg/numarray.c
     ../src/linalg/ndlinalg.c
+    ../src/linalg/ndcorrcov.c
     ../src/linalg/blas_bridge.c
     ../src/linalg/lapack_bridge.c
     ../src/linalg/posdef_q.c

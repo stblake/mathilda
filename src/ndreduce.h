@@ -54,6 +54,18 @@ Expr* ndred_kurtosis(Expr* res);    /* Kurtosis[a]  = m_4 / m_2^2     (Compile N
 Expr* ndred_median(Expr* res);      /* Median[a] */
 Expr* ndred_quartiles(Expr* res);   /* Quartiles[a] */
 
+/* Covariance / Correlation buffer kernels (implemented in src/linalg/ndcorrcov.c
+ * — declared here because both the stats builtins and the Compile[] tables in
+ * src/compile/compile.c already include this header). Each takes the whole call
+ * and handles Covariance[v,w] / Covariance[a] / Covariance[a,b] (and the
+ * Correlation counterparts): the two-vector form is a threaded centered inner
+ * product -> Real scalar, the matrix forms are a BLAS gram A_c^T B_c -> matrix.
+ * Faithful degrade (ndarray_delist_and_reeval) for int64/complex buffers, shape
+ * mismatches, and zero-variance Correlation columns. Not a leading-axis
+ * reduction, hence named nd_* rather than ndred_*. */
+Expr* nd_covariance(Expr* res);     /* Covariance[v,w] / [a] / [a,b] */
+Expr* nd_correlation(Expr* res);    /* Correlation[v,w] / [a] / [a,b] */
+
 /* RankedMin[v, n] / RankedMax[v, n] — the n-th smallest / largest element of a
  * rank-1 machine vector (n<0 counts from the other end; RankedMax[v,n] ==
  * RankedMin[v,-n]). Selects straight off the buffer: int64 exactly, real via an

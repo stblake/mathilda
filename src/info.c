@@ -1885,6 +1885,20 @@ void info_init(void) {
         "Kurtosis[data]\n"
         "\tgives the coefficient of kurtosis (peak/tail vs flank concentration) of data, equivalent to CentralMoment[data, 4] / CentralMoment[data, 2]^2. For a matrix it is taken columnwise.");
     symtab_set_docstring("StandardDeviation", "StandardDeviation[data] gives the standard deviation estimate of the elements in data.");
+    symtab_set_docstring("Covariance",
+        "Covariance[v, w]\n"
+        "\tgives the unbiased covariance estimate between the vectors v and w, (1/(n-1)) Sum[(v_i - Mean[v]) Conjugate[w_i - Mean[w]]].\n"
+        "Covariance[a, b]\n"
+        "\tgives the p*q cross-covariance matrix between the columns of the matrices a and b.\n"
+        "Covariance[a]\n"
+        "\tgives the auto-covariance matrix of the columns of the matrix a, i.e. Covariance[a, a].");
+    symtab_set_docstring("Correlation",
+        "Correlation[v, w]\n"
+        "\tgives the correlation between the vectors v and w, Covariance[v, w] / (StandardDeviation[v] StandardDeviation[w]).\n"
+        "Correlation[a, b]\n"
+        "\tgives the p*q cross-correlation matrix between the columns of the matrices a and b.\n"
+        "Correlation[a]\n"
+        "\tgives the auto-correlation matrix of the columns of the matrix a; it is symmetric with a unit diagonal.");
     symtab_set_docstring("MovingAverage",
         "MovingAverage[list, r]\n"
         "\tgives the moving average of list, computed by averaging runs of r elements.\n"

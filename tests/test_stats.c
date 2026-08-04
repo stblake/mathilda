@@ -420,6 +420,83 @@ void test_kurtosis() {
     assert_eval_eq("Kurtosis[x]", "Kurtosis[x]", 0);
 }
 
+void test_covariance() {
+    /* Exact input yields exact output. */
+    assert_eval_eq("Covariance[{1,3/2},{2,11}]", "9/4", 0);
+    /* Approximate input yields approximate output. */
+    assert_eval_eq("Covariance[{1.5,3,5,10},{2,1.25,15,8}]", "11.2604", 0);
+    /* Symbolic (real transcendentals) reduces to the closed form. */
+    assert_eval_eq("Simplify[Covariance[{1,Pi},{E,2}]]", "-1/2 (2 - E) (1 - Pi)", 0);
+    /* Complex vectors: the conjugate lands on the SECOND argument. */
+    assert_eval_eq("Covariance[{2+I,3-2I,5+4I},{I,1+2I,10-5I}]", "-7/3 + 56/3*I", 0);
+    /* Auto-covariance matrix, exact. */
+    assert_eval_eq("Covariance[{{1,2},{3,4},{5,7}}]", "{{4, 5}, {5, 19/3}}", 0);
+    /* Cross-covariance matrix is p x q. */
+    assert_eval_eq("Covariance[{{a,b},{c,d}},{{x},{y}}] // Dimensions", "{2, 1}", 0);
+    /* NDArray / packed fast paths agree with the List path. */
+    assert_eval_eq("Covariance[NDArray[{1.,2.,3.,4.}],NDArray[{2.,1.,4.,3.}]] "
+                   "== Covariance[{1.,2.,3.,4.},{2.,1.,4.,3.}]", "True", 0);
+    assert_eval_eq("Chop[Normal[Covariance[NDArray[{{1.,5.},{3.,9.},{5.,6.}}]]] "
+                   "- Covariance[{{1.,5.},{3.,9.},{5.,6.}}]]", "{{0, 0}, {0, 0}}", 0);
+    /* An integer NDArray covariance is exact (a Rational), so it degrades. */
+    assert_eval_eq("Covariance[NDArray[{1,2,3,4},DataType->\"int64\"],"
+                   "NDArray[{2,1,4,3},DataType->\"int64\"]]", "1", 0);
+    /* Packed >= 250-element vectors take the buffer path. */
+    assert_eval_eq("Covariance[Range[1.,300.],Range[300.,1.,-1.]] "
+                   "== Covariance[Table[N[i],{i,300}],Table[N[301-i],{i,300}]]", "True", 0);
+    /* Compile[] lowering, standalone and inside a larger body (the subset cliff). */
+    assert_eval_eq("(CompileDiagnostics[{{v,_Real,1},{w,_Real,1}}, Covariance[v,w]] "
+                   "/. List -> Association)[\"Compiled\"]", "True", 0);
+    assert_eval_eq("Compile[{{v,_Real,1},{w,_Real,1}}, Covariance[v,w]]"
+                   "[{1.5,3.,5.,10.},{2.,1.25,15.,8.}] "
+                   "== Covariance[{1.5,3.,5.,10.},{2.,1.25,15.,8.}]", "True", 0);
+    assert_eval_eq("Compile[{{v,_Real,1},{w,_Real,1}}, Covariance[v,w]+1.0]"
+                   "[{1.5,3.,5.,10.},{2.,1.25,15.,8.}]", "12.2604", 0);
+    /* Errors / unevaluated forms. */
+    assert_eval_eq("Covariance[]", "Covariance[]", 0);                    /* argb -> unevaluated */
+    assert_eval_eq("Covariance[{1,2,3}]", "Covariance[{1, 2, 3}]", 0);    /* single vector */
+    assert_eval_eq("Covariance[x,y]", "Covariance[x, y]", 0);             /* non-list args */
+}
+
+void test_correlation() {
+    /* Exact input yields exact output. */
+    assert_eval_eq("Correlation[{5,3/4,1},{2,1/2,1}]", "2 Sqrt[3/13]", 0);
+    /* Approximate input yields approximate output. */
+    assert_eval_eq("Correlation[{1.5,3,5,10},{2,1.25,15,8}]", "0.475976", 0);
+    /* Symbolic (real transcendentals) closed form. */
+    assert_eval_eq("Simplify[Correlation[{1,Pi,2},{2,2,1}]]",
+                   "(1/2 (-3 + Pi))/Sqrt[3 - 3 Pi + Pi^2]", 0);
+    /* Complex vectors. */
+    assert_eval_eq("Correlation[{2+I,3-2I,5+4I},{I,1+2I,10-5I}]", "(-7/2 + 28*I)/Sqrt[1139]", 0);
+    /* Auto-correlation diagonal is exactly 1 for exact/symbolic data ... */
+    assert_eval_eq("Correlation[{{a,b},{c,d}}][[1,1]]", "1", 0);
+    assert_eval_eq("Correlation[{{a,b},{c,d}}][[2,2]]", "1", 0);
+    /* ... and the real 1. for real data, keeping the matrix uniform and symmetric. */
+    assert_eval_eq("Correlation[{{1.,2.},{3.,4.},{5.,7.}}][[1,1]]", "1.0", 0);
+    assert_eval_eq("SymmetricMatrixQ[Correlation[{{1.,5.,2.},{3.,9.,1.},"
+                   "{5.,6.,8.},{2.,3.,4.},{7.,1.,0.}}]]", "True", 0);
+    /* A correlation matrix is the covariance scaled by the standard deviations. */
+    assert_eval_eq("Module[{d={{1.,5.,2.},{3.,9.,1.},{5.,6.,8.},{2.,3.,4.},{7.,1.,0.}},s}, "
+                   "s=DiagonalMatrix[1/StandardDeviation[d]]; "
+                   "Chop[Correlation[d] - s.Covariance[d].s]]",
+                   "{{0, 0, 0}, {0, 0, 0}, {0, 0, 0}}", 0);
+    /* NDArray auto-correlation matches the List path. */
+    assert_eval_eq("Chop[Normal[Correlation[NDArray[{{1.,5.,2.},{3.,9.,1.},"
+                   "{5.,6.,8.},{2.,3.,4.},{7.,1.,0.}}]]] - Correlation[{{1.,5.,2.},{3.,9.,1.},"
+                   "{5.,6.,8.},{2.,3.,4.},{7.,1.,0.}}]]", "{{0, 0, 0}, {0, 0, 0}, {0, 0, 0}}", 0);
+    /* NDArray / Compile vector correlation. */
+    assert_eval_eq("Correlation[NDArray[{1.,2.,3.,4.}],NDArray[{2.,1.,4.,3.}]] "
+                   "== Correlation[{1.,2.,3.,4.},{2.,1.,4.,3.}]", "True", 0);
+    assert_eval_eq("(CompileDiagnostics[{{v,_Real,1},{w,_Real,1}}, Correlation[v,w]] "
+                   "/. List -> Association)[\"Compiled\"]", "True", 0);
+    assert_eval_eq("Compile[{{v,_Real,1},{w,_Real,1}}, Correlation[v,w]]"
+                   "[{1.5,3.,5.,10.},{2.,1.25,15.,8.}] "
+                   "== Correlation[{1.5,3.,5.,10.},{2.,1.25,15.,8.}]", "True", 0);
+    /* Errors / unevaluated forms. */
+    assert_eval_eq("Correlation[]", "Correlation[]", 0);
+    assert_eval_eq("Correlation[{1,2,3}]", "Correlation[{1, 2, 3}]", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -433,6 +510,8 @@ int main() {
     TEST(test_skewness);
     TEST(test_kurtosis);
     TEST(test_standard_deviation);
+    TEST(test_covariance);
+    TEST(test_correlation);
     TEST(test_moving_average);
     TEST(test_moving_median);
     TEST(test_exponential_moving_average);

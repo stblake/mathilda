@@ -2,11 +2,15 @@
 
 **NDArray fast paths.** `Mean`, `Median`, `Variance`, `CentralMoment`,
 `Skewness`, `Kurtosis`, `StandardDeviation`, `RootMeanSquare`, `Quartiles`,
-`MovingAverage`, `MovingMedian` and `ExponentialMovingAverage` operate directly
-on an `NDArray`'s flat buffer at C speed, returning a scalar or a lower-rank
-`NDArray` (matrix reductions are columnwise). Cases outside the fast domain
-(complex order statistics, weighted moving-average specs, …) fall back to the
-exact `List` result. See `src/ndreduce.c`.
+`MovingAverage`, `MovingMedian`, `ExponentialMovingAverage`, `Covariance` and
+`Correlation` operate directly on an `NDArray`'s flat buffer at C speed,
+returning a scalar or a lower-rank `NDArray` (matrix reductions are columnwise).
+`Covariance` / `Correlation` reduce two vectors to a scalar with a threaded
+centered inner product and the matrix forms to a `p×q` matrix with a BLAS gram
+($A_c^\top B_c$ via `cblas_dsyrk` / `cblas_dgemm`); they are also lowered inside
+`Compile[]`. Cases outside the fast domain (complex order statistics, weighted
+moving-average specs, integer/complex covariance, …) fall back to the exact
+`List` result. See `src/ndreduce.c` and `src/linalg/ndcorrcov.c`.
 
 
 ## Median
@@ -187,6 +191,54 @@ Gives the standard deviation estimate of the elements in data.
 ```mathematica
 In[1]:= StandardDeviation[{1, 2, 3}]
 Out[1]= 1
+```
+
+## Covariance
+Gives the covariance between vectors, or the cross/auto-covariance matrix of matrices.
+- `Covariance[v, w]`: covariance between the vectors `v` and `w` (a scalar).
+- `Covariance[a, b]`: `p×q` cross-covariance matrix between the columns of the `n×p` and `n×q` matrices `a` and `b`.
+- `Covariance[a]`: `p×p` auto-covariance matrix of the columns of `a`, i.e. `Covariance[a, a]`.
+
+**Features**:
+- `Protected`.
+- For vectors, the unbiased estimate $\hat{\sigma}_{vw} = \frac{1}{n-1}\sum_i (v_i - \hat{\mu}_v)\overline{(w_i - \hat{\mu}_w)}$; the conjugate is on the **second** argument, so exact / complex / symbolic inputs yield exact / complex / symbolic output.
+- For matrices, element $(i,j)$ is the covariance of column $i$ of `a` with column $j$ of `b`; `Covariance[a]` is symmetric.
+- NDArray / packed real data uses a threaded centered inner product (vectors) or a BLAS gram (matrices); an integer sample degrades to the exact `List` path. Lowered inside `Compile[]`.
+- Stays unevaluated for a single vector, mismatched shapes, or fewer than two observations. `Covariance[]` reports `Covariance::argb`.
+
+```mathematica
+In[1]:= Covariance[{1, 3/2}, {2, 11}]
+Out[1]= 9/4
+
+In[2]:= Covariance[{2 + I, 3 - 2 I, 5 + 4 I}, {I, 1 + 2 I, 10 - 5 I}]
+Out[2]= -7/3 + (56 I)/3
+
+In[3]:= Covariance[{{1, 2}, {3, 4}, {5, 7}}]
+Out[3]= {{4, 5}, {5, 19/3}}
+```
+
+## Correlation
+Gives the correlation between vectors, or the cross/auto-correlation matrix of matrices.
+- `Correlation[v, w]`: correlation between the vectors `v` and `w` (a scalar).
+- `Correlation[a, b]`: `p×q` cross-correlation matrix between the columns of `a` and `b`.
+- `Correlation[a]`: `p×p` auto-correlation matrix of the columns of `a`.
+
+**Features**:
+- `Protected`.
+- A normalized covariance, $\rho_{vw} = \sigma_{vw} / (\sigma_v\,\sigma_w)$ with $\sigma_{vw} = \mathtt{Covariance}[v,w]$ and $\sigma_v = \mathtt{StandardDeviation}[v]$; $-1 \le \rho_{vw} \le 1$ for real data.
+- The auto-correlation matrix `Correlation[a]` is symmetric with a unit diagonal (exact `1` for exact/symbolic data, `1.` for real data).
+- Shares `Covariance`'s NDArray / packed / `Compile[]` fast paths.
+- Stays unevaluated for a single vector, mismatched shapes, or fewer than two observations. `Correlation[]` reports `Correlation::argb`.
+
+```mathematica
+In[1]:= Correlation[{5, 3/4, 1}, {2, 1/2, 1}]
+Out[1]= 2 Sqrt[3/13]
+
+In[2]:= Correlation[{1.5, 3, 5, 10}, {2, 1.25, 15, 8}]
+Out[2]= 0.475976
+
+In[3]:= Correlation[{{a, b}, {c, d}}][[1, 1]]
+Out[3]= 1
 ```
 
 ## MovingAverage
