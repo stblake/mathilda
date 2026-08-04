@@ -16,7 +16,7 @@ What Mathilda **does not have**, kept strictly apart from what Mathilda has and 
 | `Design` | _declared, not yet a row_ |
 | `Direction` | _declared, not yet a row_ |
 | `EllipticK` | _declared, not yet a row_ |
-| `FindFit` | Data Fitting |
+| `FindFit` | _declared, not yet a row_ |
 | `InterpolationOrder` | Interpolation order 1 (linear) build |
 | `ListInterpolation` | ListInterpolation 2-D 60x60 |
 | `MaxSteps` | _declared, not yet a row_ |
@@ -41,7 +41,6 @@ What Mathilda **does not have**, kept strictly apart from what Mathilda has and 
 | `16-interpolation` | Interpolation order 1 (linear) build | `InterpolationOrder` |
 | `16-interpolation` | ListInterpolation 2-D 60x60 | `ListInterpolation` |
 | `21-strided-views` | ArrayReshape 2x10^6 to 1000x2000 | `ArrayReshape` |
-| `31-wolframmark` | Data Fitting | `FindFit` |
 
 ## Incomplete — the head exists but the case did not finish
 

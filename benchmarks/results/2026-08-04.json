@@ -2242,7 +2242,7 @@
   },
   {
    "experiment": "21-strided-views",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Transpose 2000x2000",
    "times": {
     "mathilda": 2.044,
@@ -2261,7 +2261,7 @@
   },
   {
    "experiment": "21-strided-views",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Transpose then Dot (fused?)",
    "times": {
     "mathilda": 42.963,
@@ -2280,7 +2280,7 @@
   },
   {
    "experiment": "21-strided-views",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Partition window 8, offset 1",
    "times": {
     "mathilda": 2.566,
@@ -2299,7 +2299,7 @@
   },
   {
    "experiment": "21-strided-views",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Take rows 1;;1000 of 2000x2000",
    "times": {
     "mathilda": 0.249,
@@ -2318,7 +2318,7 @@
   },
   {
    "experiment": "21-strided-views",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "column slice m[[All, 1]]",
    "times": {
     "mathilda": 0.005,
@@ -2337,7 +2337,7 @@
   },
   {
    "experiment": "21-strided-views",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "ArrayReshape 2x10^6 to 1000x2000",
    "times": {
     "wolfram": 0.102,
@@ -2354,7 +2354,7 @@
   },
   {
    "experiment": "22-small-matrix-lapack",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Inverse 6x6 x 2000",
    "times": {
     "mathilda": 572.996,
@@ -2373,7 +2373,7 @@
   },
   {
    "experiment": "22-small-matrix-lapack",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Det 6x6 x 5000",
    "times": {
     "mathilda": 1266.56,
@@ -2392,7 +2392,7 @@
   },
   {
    "experiment": "22-small-matrix-lapack",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "LinearSolve 6x6 x 2000",
    "times": {
     "mathilda": 523.556,
@@ -2411,7 +2411,7 @@
   },
   {
    "experiment": "22-small-matrix-lapack",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Dot 6x6 x 6x6 x 10000",
    "times": {
     "mathilda": 324.789,
@@ -2430,7 +2430,7 @@
   },
   {
    "experiment": "22-small-matrix-lapack",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Inverse 3x3 x 5000",
    "times": {
     "mathilda": 175.538,
@@ -2449,7 +2449,7 @@
   },
   {
    "experiment": "22-small-matrix-lapack",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Eigenvalues 6x6 x 500",
    "times": {
     "mathilda": 0.761,
@@ -2468,7 +2468,7 @@
   },
   {
    "experiment": "23-per-operation-constant",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "1 op on 10^6 elements",
    "times": {
     "mathilda": 0.114,
@@ -2487,7 +2487,7 @@
   },
   {
    "experiment": "23-per-operation-constant",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "1000 ops on 10^3 elements",
    "times": {
     "mathilda": 0.152,
@@ -2506,7 +2506,7 @@
   },
   {
    "experiment": "23-per-operation-constant",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "100000 ops on 10 elements",
    "times": {
     "mathilda": 5.624,
@@ -2525,7 +2525,7 @@
   },
   {
    "experiment": "23-per-operation-constant",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "1 elementwise op on 10^6",
    "times": {
     "mathilda": 0.173,
@@ -2544,7 +2544,7 @@
   },
   {
    "experiment": "23-per-operation-constant",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "10000 elementwise ops on 10^2",
    "times": {
     "mathilda": 1.796,
@@ -2563,7 +2563,7 @@
   },
   {
    "experiment": "23-per-operation-constant",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "100000 scalar additions",
    "times": {
     "mathilda": 0.403,
@@ -2582,7 +2582,7 @@
   },
   {
    "experiment": "24-heterogeneous-return",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "return {real, real}, then Total",
    "times": {
     "mathilda": 1.102,
@@ -2601,7 +2601,7 @@
   },
   {
    "experiment": "24-heterogeneous-return",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "return {real, int}, then Total",
    "times": {
     "mathilda": 64.903,
@@ -2620,7 +2620,7 @@
   },
   {
    "experiment": "24-heterogeneous-return",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "return {real, int, mask}, then Total",
    "times": {
     "mathilda": 92.206,
@@ -2639,7 +2639,7 @@
   },
   {
    "experiment": "24-heterogeneous-return",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "return {real, int, mask}, discarded",
    "times": {
     "mathilda": 43.753,
@@ -2658,7 +2658,7 @@
   },
   {
    "experiment": "24-heterogeneous-return",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "return ragged {n, 1000, 100}, then Total",
    "times": {
     "mathilda": 33.417,
@@ -2677,7 +2677,7 @@
   },
   {
    "experiment": "25-vector-transcendentals",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Sin over 4x10^6",
    "times": {
     "mathilda": 1.371,
@@ -2696,7 +2696,7 @@
   },
   {
    "experiment": "25-vector-transcendentals",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Exp over 4x10^6",
    "times": {
     "mathilda": 1.004,
@@ -2715,7 +2715,7 @@
   },
   {
    "experiment": "25-vector-transcendentals",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Log over 4x10^6",
    "times": {
     "mathilda": 3.89,
@@ -2734,7 +2734,7 @@
   },
   {
    "experiment": "25-vector-transcendentals",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Sqrt over 4x10^6",
    "times": {
     "mathilda": 5.968,
@@ -2753,7 +2753,7 @@
   },
   {
    "experiment": "25-vector-transcendentals",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Tan over 4x10^6",
    "times": {
     "mathilda": 1.674,
@@ -2772,7 +2772,7 @@
   },
   {
    "experiment": "25-vector-transcendentals",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "ArcTan 2-arg over 4x10^6",
    "times": {
     "mathilda": 4.17,
@@ -2791,7 +2791,7 @@
   },
   {
    "experiment": "25-vector-transcendentals",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Sin[Exp[Log[v]]] fused?",
    "times": {
     "mathilda": 8.16,
@@ -2810,7 +2810,7 @@
   },
   {
    "experiment": "25-vector-transcendentals",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "v^2.5 over 4x10^6",
    "times": {
     "mathilda": 7.704,
@@ -2829,7 +2829,7 @@
   },
   {
    "experiment": "26-structural-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Reverse 4x10^6",
    "times": {
     "mathilda": 5.765,
@@ -2848,7 +2848,7 @@
   },
   {
    "experiment": "26-structural-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "RotateLeft 4x10^6 by 1000",
    "times": {
     "mathilda": 0.972,
@@ -2867,7 +2867,7 @@
   },
   {
    "experiment": "26-structural-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "gather v[[idx]], 4x10^6",
    "times": {
     "mathilda": 35.829,
@@ -2886,7 +2886,7 @@
   },
   {
    "experiment": "26-structural-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Join two 2x10^6",
    "times": {
     "mathilda": 1.225,
@@ -2905,7 +2905,7 @@
   },
   {
    "experiment": "26-structural-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Take first half of 4x10^6",
    "times": {
     "mathilda": 0.237,
@@ -2924,7 +2924,7 @@
   },
   {
    "experiment": "26-structural-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Sort 4x10^6",
    "times": {
     "mathilda": 46.362,
@@ -2943,7 +2943,7 @@
   },
   {
    "experiment": "26-structural-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Union of 4x10^6 integers",
    "times": {
     "mathilda": 12.705,
@@ -2962,7 +2962,7 @@
   },
   {
    "experiment": "27-elementwise-binary",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "a + b over 4x10^6",
    "times": {
     "mathilda": 0.399,
@@ -2981,7 +2981,7 @@
   },
   {
    "experiment": "27-elementwise-binary",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "a * b over 4x10^6",
    "times": {
     "mathilda": 0.398,
@@ -3000,7 +3000,7 @@
   },
   {
    "experiment": "27-elementwise-binary",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "MapThread[Min] over 4x10^6",
    "times": {
     "mathilda": 15.576,
@@ -3019,7 +3019,7 @@
   },
   {
    "experiment": "27-elementwise-binary",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "MapThread[Max] over 4x10^6",
    "times": {
     "mathilda": 15.418,
@@ -3038,7 +3038,7 @@
   },
   {
    "experiment": "27-elementwise-binary",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Clip to [0.25, 0.75] over 4x10^6",
    "times": {
     "mathilda": 798.398,
@@ -3057,7 +3057,7 @@
   },
   {
    "experiment": "27-elementwise-binary",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "a b + a over 4x10^6",
    "times": {
     "mathilda": 0.816,
@@ -3076,7 +3076,7 @@
   },
   {
    "experiment": "27-elementwise-binary",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "integer Mod over 4x10^6",
    "times": {
     "mathilda": 4.073,
@@ -3095,7 +3095,7 @@
   },
   {
    "experiment": "28-span-selector",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "span v[[1;;n;;2]]",
    "times": {
     "mathilda": 3.57,
@@ -3114,7 +3114,7 @@
   },
   {
    "experiment": "28-span-selector",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "span v[[1;;n;;7]]",
    "times": {
     "mathilda": 1.023,
@@ -3133,7 +3133,7 @@
   },
   {
    "experiment": "28-span-selector",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "span v[[2;;n;;2]] (offset)",
    "times": {
     "mathilda": 3.568,
@@ -3152,7 +3152,7 @@
   },
   {
    "experiment": "28-span-selector",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "contiguous span v[[1;;n/2]]",
    "times": {
     "mathilda": 0.912,
@@ -3171,7 +3171,7 @@
   },
   {
    "experiment": "28-span-selector",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "Range[1, 4x10^6, 3]",
    "times": {
     "mathilda": 0.084,
@@ -3190,7 +3190,7 @@
   },
   {
    "experiment": "28-span-selector",
-   "group": "C numeric roadmap (numpy)",
+   "group": "C array substrate (numpy)",
    "label": "sieve to 200000 (strided writes)",
    "times": {
     "wolfram": 249.941,
@@ -3206,7 +3206,7 @@
   },
   {
    "experiment": "29-graph-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "Graph construction, 40000 edges",
    "times": {
     "mathilda": 11696.0,
@@ -3225,7 +3225,7 @@
   },
   {
    "experiment": "29-graph-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "VertexDegree, 20000 vertices",
    "times": {
     "mathilda": 6017.23,
@@ -3244,7 +3244,7 @@
   },
   {
    "experiment": "29-graph-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "EdgeCount",
    "times": {
     "mathilda": 6027.59,
@@ -3263,7 +3263,7 @@
   },
   {
    "experiment": "29-graph-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "ConnectedComponents",
    "times": {
     "mathilda": 6097.09,
@@ -3282,7 +3282,7 @@
   },
   {
    "experiment": "29-graph-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "GraphDistance from vertex 1",
    "times": {
     "mathilda": 6038.48,
@@ -3301,7 +3301,7 @@
   },
   {
    "experiment": "29-graph-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "FindShortestPath 1 to 10000",
    "times": {
     "mathilda": 6209.19,
@@ -3320,7 +3320,7 @@
   },
   {
    "experiment": "29-graph-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "AdjacencyMatrix, 20000 vertices",
    "times": {
     "mathilda": 6022.17,
@@ -3339,7 +3339,7 @@
   },
   {
    "experiment": "30-string-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "StringLength of 200k chars",
    "times": {
     "mathilda": 0.003,
@@ -3357,7 +3357,7 @@
   },
   {
    "experiment": "30-string-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "StringReplace literal, 200k chars",
    "times": {
     "mathilda": 0.231,
@@ -3376,7 +3376,7 @@
   },
   {
    "experiment": "30-string-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "StringSplit on space, 200k chars",
    "times": {
     "mathilda": 2.775,
@@ -3395,7 +3395,7 @@
   },
   {
    "experiment": "30-string-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "StringCount substring, 200k chars",
    "times": {
     "mathilda": 0.171,
@@ -3414,7 +3414,7 @@
   },
   {
    "experiment": "30-string-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "StringReverse 200k chars",
    "times": {
     "mathilda": 0.012,
@@ -3433,7 +3433,7 @@
   },
   {
    "experiment": "30-string-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "StringCases regex, 200k chars",
    "times": {
     "mathilda": 2.078,
@@ -3452,7 +3452,7 @@
   },
   {
    "experiment": "30-string-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "StringReplace regex, 200k chars",
    "times": {
     "mathilda": 1.812,
@@ -3471,7 +3471,7 @@
   },
   {
    "experiment": "30-string-ops",
-   "group": "C numeric roadmap (numpy)",
+   "group": "D uncovered subsystems",
    "label": "Characters of 200k chars",
    "times": {
     "mathilda": 3.648,
@@ -3487,300 +3487,6 @@
    "note": "",
    "best_other": "python",
    "klass": "SLOWER"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "RandomReal empty-range form",
-   "times": {},
-   "checks": {
-    "mathilda": "False",
-    "wolfram": "True",
-    "python": "True"
-   },
-   "ratio": null,
-   "note": "check disagreement: Mathilda=False; Python=True; Mathematica=True",
-   "klass": "CHECK-FAIL"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Digits of Pi",
-   "times": {
-    "mathilda": 338.658,
-    "wolfram": 64.638,
-    "python": 6624.02
-   },
-   "checks": {
-    "mathilda": "14159265358979323846",
-    "wolfram": "14159265358979323846",
-    "python": "14159265358979323846"
-   },
-   "ratio": 5.239301958600204,
-   "note": "",
-   "best_other": "wolfram",
-   "klass": "SLOWER"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Discrete Fourier Transform",
-   "times": {
-    "mathilda": 153.479,
-    "wolfram": 120.203,
-    "python": 115.821
-   },
-   "checks": {
-    "mathilda": "12727922",
-    "wolfram": "12727922",
-    "python": "12727922"
-   },
-   "ratio": 1.3251396551575276,
-   "note": "",
-   "best_other": "python",
-   "klass": "AHEAD"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Eigenvalues of a Matrix",
-   "times": {
-    "mathilda": 492.001,
-    "wolfram": 329.212,
-    "python": 83.565
-   },
-   "checks": {
-    "mathilda": "1878211",
-    "wolfram": "1878211",
-    "python": "1878211"
-   },
-   "ratio": 5.887644348710585,
-   "note": "",
-   "best_other": "python",
-   "klass": "SLOWER"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Elementary Functions",
-   "times": {
-    "mathilda": 137.43,
-    "wolfram": 230.576,
-    "python": 1298.557
-   },
-   "checks": {
-    "mathilda": "3377193",
-    "wolfram": "3377193",
-    "python": "3377193"
-   },
-   "ratio": 0.5960290750121435,
-   "note": "",
-   "best_other": "wolfram",
-   "klass": "AHEAD"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Gamma Function",
-   "times": {
-    "mathilda": 135.219,
-    "wolfram": 125.726,
-    "python": 3178.331
-   },
-   "checks": {
-    "mathilda": "2432902008176640000",
-    "wolfram": "2432902008176640000",
-    "python": "2432902008176640000"
-   },
-   "ratio": 1.0755054642635573,
-   "note": "",
-   "best_other": "wolfram",
-   "klass": "AHEAD"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Large Integer Multiplication",
-   "times": {
-    "mathilda": 116.42,
-    "wolfram": 110.972,
-    "python": 7634.177
-   },
-   "checks": {
-    "mathilda": "2",
-    "wolfram": "2",
-    "python": "2"
-   },
-   "ratio": 1.0490934650182029,
-   "note": "",
-   "best_other": "wolfram",
-   "klass": "AHEAD"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Matrix Arithmetic",
-   "times": {
-    "mathilda": 58.696,
-    "wolfram": 27.007,
-    "python": 169.851
-   },
-   "checks": {
-    "mathilda": "3135958818031",
-    "wolfram": "3135958818031",
-    "python": "3135958818031"
-   },
-   "ratio": 2.1733624615840337,
-   "note": "",
-   "best_other": "wolfram",
-   "klass": "SLOWER"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Matrix Multiplication",
-   "times": {
-    "mathilda": 71.263,
-    "wolfram": 110.957,
-    "python": 74.957
-   },
-   "checks": {
-    "mathilda": "1174720184",
-    "wolfram": "1174720184",
-    "python": "1174720184"
-   },
-   "ratio": 0.9507184118894835,
-   "note": "",
-   "best_other": "python",
-   "klass": "AHEAD"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Matrix Transpose",
-   "times": {
-    "mathilda": 78.656,
-    "wolfram": 37.275,
-    "python": 155.41
-   },
-   "checks": {
-    "mathilda": "21",
-    "wolfram": "21",
-    "python": "21"
-   },
-   "ratio": 2.1101542588866535,
-   "note": "",
-   "best_other": "wolfram",
-   "klass": "SLOWER"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Numerical Integration",
-   "times": {
-    "mathilda": 21.848,
-    "wolfram": 872.252,
-    "python": 33.337
-   },
-   "checks": {
-    "mathilda": "20000",
-    "wolfram": "20000",
-    "python": "20000"
-   },
-   "ratio": 0.6553679095299516,
-   "note": "",
-   "best_other": "python",
-   "klass": "AHEAD"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Polynomial Expansion",
-   "times": {
-    "mathilda": 24.239,
-    "wolfram": 22.352,
-    "python": 25209.365
-   },
-   "checks": {
-    "mathilda": "37",
-    "wolfram": "37",
-    "python": "37"
-   },
-   "ratio": 1.0844219756621332,
-   "note": "",
-   "best_other": "wolfram",
-   "klass": "AHEAD"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Random Number Sort",
-   "times": {
-    "mathilda": 142.659,
-    "wolfram": 100.488,
-    "python": 145.291
-   },
-   "checks": {
-    "mathilda": "797",
-    "wolfram": "797",
-    "python": "797"
-   },
-   "ratio": 1.4196620491999044,
-   "note": "",
-   "best_other": "wolfram",
-   "klass": "AHEAD"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Singular Value Decomposition",
-   "times": {
-    "mathilda": 265.383,
-    "wolfram": 438.555,
-    "python": 99.713
-   },
-   "checks": {
-    "mathilda": "480000",
-    "wolfram": "480000",
-    "python": "480000"
-   },
-   "ratio": 2.6614684143491822,
-   "note": "",
-   "best_other": "python",
-   "klass": "SLOWER"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Solving a Linear System",
-   "times": {
-    "mathilda": 138.444,
-    "wolfram": 146.606,
-    "python": 119.446
-   },
-   "checks": {
-    "mathilda": "2973030",
-    "wolfram": "2973030",
-    "python": "2973030"
-   },
-   "ratio": 1.15905095189458,
-   "note": "",
-   "best_other": "python",
-   "klass": "AHEAD"
-  },
-  {
-   "experiment": "31-wolframmark",
-   "group": "D WolframMark",
-   "label": "Data Fitting",
-   "times": {
-    "wolfram": 69.282,
-    "python": 15.817
-   },
-   "checks": {},
-   "ratio": null,
-   "note": "Mathilda has no FindFit",
-   "klass": "ABSENT",
-   "missing": "FindFit"
   }
  ],
  "requires": {
@@ -6866,187 +6572,6 @@
     "rc": 0,
     "error": null
    }
-  },
-  "31-wolframmark": {
-   "mathilda": {
-    "bench": {
-     "RandomReal empty-range form": 0.0,
-     "Digits of Pi": 338.658,
-     "Discrete Fourier Transform": 153.479,
-     "Eigenvalues of a Matrix": 492.001,
-     "Elementary Functions": 137.43,
-     "Gamma Function": 135.219,
-     "Large Integer Multiplication": 116.42,
-     "Matrix Arithmetic": 58.696,
-     "Matrix Multiplication": 71.263,
-     "Matrix Transpose": 78.656,
-     "Numerical Integration": 21.848,
-     "Polynomial Expansion": 24.239,
-     "Random Number Sort": 142.659,
-     "Singular Value Decomposition": 265.383,
-     "Solving a Linear System": 138.444
-    },
-    "check": {
-     "RandomReal empty-range form": "False",
-     "Digits of Pi": "14159265358979323846",
-     "Discrete Fourier Transform": "12727922",
-     "Eigenvalues of a Matrix": "1878211",
-     "Elementary Functions": "3377193",
-     "Gamma Function": "2432902008176640000",
-     "Large Integer Multiplication": "2",
-     "Matrix Arithmetic": "3135958818031",
-     "Matrix Multiplication": "1174720184",
-     "Matrix Transpose": "21",
-     "Numerical Integration": "20000",
-     "Polynomial Expansion": "37",
-     "Random Number Sort": "797",
-     "Singular Value Decomposition": "480000",
-     "Solving a Linear System": "2973030"
-    },
-    "require": {
-     "FindFit": "absent",
-     "AccuracyGoal": "absent",
-     "Fourier": "present",
-     "Eigenvalues": "present",
-     "DiagonalMatrix": "present",
-     "SingularValueDecomposition": "present",
-     "LinearSolve": "present",
-     "NIntegrate": "present",
-     "Expand": "present",
-     "Sort": "present",
-     "Transpose": "present",
-     "Gamma": "present",
-     "ArcTan": "present",
-     "SeedRandom": "present",
-     "RandomReal": "present",
-     "RandomInteger": "present",
-     "Do": "present",
-     "N": "present"
-    },
-    "skip": {
-     "Data Fitting": "FindFit"
-    },
-    "stderr": "NIntegrate::ncvb: cubature did not reach the accuracy goal (error estimate 0.000803)",
-    "timed_out": false,
-    "rc": 0,
-    "error": null
-   },
-   "wolfram": {
-    "bench": {
-     "RandomReal empty-range form": 0.356,
-     "Data Fitting": 69.282,
-     "Digits of Pi": 64.638,
-     "Discrete Fourier Transform": 120.203,
-     "Eigenvalues of a Matrix": 329.212,
-     "Elementary Functions": 230.576,
-     "Gamma Function": 125.726,
-     "Large Integer Multiplication": 110.972,
-     "Matrix Arithmetic": 27.007,
-     "Matrix Multiplication": 110.957,
-     "Matrix Transpose": 37.275,
-     "Numerical Integration": 872.252,
-     "Polynomial Expansion": 22.352,
-     "Random Number Sort": 100.488,
-     "Singular Value Decomposition": 438.555,
-     "Solving a Linear System": 146.606
-    },
-    "check": {
-     "RandomReal empty-range form": "True",
-     "Digits of Pi": "14159265358979323846",
-     "Discrete Fourier Transform": "12727922",
-     "Eigenvalues of a Matrix": "1878211",
-     "Elementary Functions": "3377193",
-     "Gamma Function": "2432902008176640000",
-     "Large Integer Multiplication": "2",
-     "Matrix Arithmetic": "3135958818031",
-     "Matrix Multiplication": "1174720184",
-     "Matrix Transpose": "21",
-     "Numerical Integration": "20000",
-     "Polynomial Expansion": "37",
-     "Random Number Sort": "797",
-     "Singular Value Decomposition": "480000",
-     "Solving a Linear System": "2973030"
-    },
-    "require": {
-     "FindFit": "present",
-     "AccuracyGoal": "present",
-     "Fourier": "present",
-     "Eigenvalues": "present",
-     "DiagonalMatrix": "present",
-     "SingularValueDecomposition": "present",
-     "LinearSolve": "present",
-     "NIntegrate": "present",
-     "Expand": "present",
-     "Sort": "present",
-     "Transpose": "present",
-     "Gamma": "present",
-     "ArcTan": "present",
-     "SeedRandom": "present",
-     "RandomReal": "present",
-     "RandomInteger": "present",
-     "Do": "present",
-     "N": "present"
-    },
-    "skip": {},
-    "stderr": "",
-    "timed_out": false,
-    "rc": 0,
-    "error": null
-   },
-   "python": {
-    "bench": {
-     "RandomReal empty-range form": 0.32,
-     "Data Fitting": 15.817,
-     "Digits of Pi": 6624.02,
-     "Discrete Fourier Transform": 115.821,
-     "Eigenvalues of a Matrix": 83.565,
-     "Elementary Functions": 1298.557,
-     "Gamma Function": 3178.331,
-     "Large Integer Multiplication": 7634.177,
-     "Matrix Arithmetic": 169.851,
-     "Matrix Multiplication": 74.957,
-     "Matrix Transpose": 155.41,
-     "Numerical Integration": 33.337,
-     "Polynomial Expansion": 25209.365,
-     "Random Number Sort": 145.291,
-     "Singular Value Decomposition": 99.713,
-     "Solving a Linear System": 119.446
-    },
-    "check": {
-     "RandomReal empty-range form": "True",
-     "Digits of Pi": "14159265358979323846",
-     "Discrete Fourier Transform": "12727922",
-     "Eigenvalues of a Matrix": "1878211",
-     "Elementary Functions": "3377193",
-     "Gamma Function": "2432902008176640000",
-     "Large Integer Multiplication": "2",
-     "Matrix Arithmetic": "3135958818031",
-     "Matrix Multiplication": "1174720184",
-     "Matrix Transpose": "21",
-     "Numerical Integration": "20000",
-     "Polynomial Expansion": "37",
-     "Random Number Sort": "797",
-     "Singular Value Decomposition": "480000",
-     "Solving a Linear System": "2973030"
-    },
-    "require": {
-     "numpy": "present",
-     "scipy:optimize": "present",
-     "scipy.optimize:curve_fit": "present",
-     "sympy": "present",
-     "mpmath": "present",
-     "scipy.integrate:dblquad": "present",
-     "numpy.fft:fft": "present",
-     "numpy.linalg:eigvals": "present",
-     "numpy.linalg:svd": "present",
-     "numpy.linalg:solve": "present"
-    },
-    "skip": {},
-    "stderr": "",
-    "timed_out": false,
-    "rc": 0,
-    "error": null
-   }
   }
  },
  "elapsed_s": 1213.7927329540253,
@@ -7080,8 +6605,7 @@
   "27-elementwise-binary": 11.690186977386475,
   "28-span-selector": 242.10812902450562,
   "29-graph-ops": 170.23977279663086,
-  "30-string-ops": 1.4299030303955078,
-  "31-wolframmark": 52.93672204017639
+  "30-string-ops": 1.4299030303955078
  },
  "partial": false,
  "label_problems": [

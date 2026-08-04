@@ -37,10 +37,13 @@ many probed heads Mathilda actually has.
 - [x] 2. `benchmarks/data.m` + `data.py` — shared seeded input generators
 - [x] 3. `benchmarks/run_all.py` — discover, run, parse, join, classify, rank, render
 - [x] 4. `makefile` target `bench-gap` (+ `.PHONY`)
-- [x] 5. Group D: `31-wolframmark` — the 15 official tests
+- [x] 5. Group D: `29-graph-ops`, `30-string-ops` — subsystems nothing had timed
+      (a WolframMark group was built, then removed: it is a *hardware*
+      benchmark, not a CAS one — it earned its keep by exposing the
+      `RandomReal[{}, dims]` incompatibility and was retired)
 - [x] 6. Group A: 01–10 symbolic vs sympy
 - [x] 7. Group B: 11–20 numeric libraries vs scipy
-- [x] 8. Group C: 21–30 open numeric roadmap items
+- [x] 8. Group C: 21–28 the array substrate (the eight open roadmap items)
 - [x] 9. Run the full job — 202 rows, 19.7 min three-system (8.0 min without
       Mathematica), inside the ~15 min budget for the two-system case
 - [x] 10. `benchmarks/README.md` + generated `REPORT.md` / `ABSENT.md`
@@ -72,8 +75,8 @@ many probed heads Mathilda actually has.
 
 **Shipped.** `benchmarks/` — 31 experiments as kept `.m`/`.py` pairs, one shared
 `harness.{m,py}` + `data.{m,py}` (not 62 copies), `run_all.py`, `make bench-gap`.
-202 cases, coverage 87.4% (160/183 heads), 20.2 min for all three systems / 8.0
-min without Mathematica. Outputs: `REPORT.md`, `ABSENT.md`, `history.jsonl`
+186 cases across four areas, coverage 87.4%, 20.2 min for all three systems /
+8.0 min without Mathematica. Outputs: `REPORT.md`, `ABSENT.md`, `history.jsonl`
 (source of truth) + `HISTORY.md` (rendered view), `results/<date>.json`.
 
 **Monitoring.** Time-weighted progress bar with an ETA calibrated from the
@@ -97,10 +100,13 @@ the canonical weekly artefacts.
    at 32768 after installing. `make` alone does not relink; `make clean` required.
 
 **By area** (median ratio, vs Mathematica / vs Python): A symbolic 1.34× / 0.10×,
-B numeric libraries 0.44× / 0.98×, C numeric roadmap 2.12× / 2.33×, D WolframMark
-1.08× / 0.58×. So ~10× ahead of sympy, at parity with scipy, ahead of Mathematica
-on the numeric libraries, and ~2× behind on machine-level array work — which is
-where the eight open roadmap items already pointed.
+B numeric libraries 0.44× / 0.98×, C array substrate 2.36× / 1.19×, D uncovered
+subsystems 0.66× / 322×. So ~10× ahead of sympy, at parity with scipy and ahead of
+Mathematica on the numeric libraries, ~2.4× behind Mathematica on the array
+substrate — where the roadmap already pointed — and on the untimed subsystems
+*ahead* of Mathematica while hundreds of times behind Python. Splitting graph and
+string out of C is what made that last split visible; mixed in, both areas read as
+a flat 2.1×/2.3× that said nothing.
 
 **Harness errors caught before publishing** (each would have been a false
 finding): `HoldRest` swallowing `$BenchReps`; `Table` with a Module-local count;

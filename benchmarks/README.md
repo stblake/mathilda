@@ -1,10 +1,10 @@
 # `benchmarks/` — the weekly gap-driven benchmark job
 
-Thirty-one experiments, each a kept `.m`/`.py` pair, run in three systems and
+Thirty experiments, each a kept `.m`/`.py` pair, run in three systems and
 joined into a ranked report that names the week's dev work.
 
 The unit of measurement is a **case**: one named kernel, timed in every system
-and joined across them by its label. There are 202 of them.
+and joined across them by its label. There are 186 of them.
 
 ## How to run it
 
@@ -16,10 +16,10 @@ That is the only command you need weekly. It prints a live progress bar with a
 calibrated ETA and writes four files. While it runs:
 
 ```
-31 experiments x mathilda+wolfram+python  (timeout 240s/file)
+30 experiments x mathilda+wolfram+python  (timeout 240s/file)
 last run's total for these: 20m12s — that is the ETA basis
 
-  ██████████████░░░░░░░░░░░░  54%  19/31  7m40s    ETA 5m32s   statistics
+  ██████████████░░░░░░░░░░░░  54%  19/30  7m40s    ETA 5m32s   statistics
 ```
 
 The bar is weighted by **time**, not by experiment count — costs here span three
@@ -232,8 +232,8 @@ benchmarks/
 ```
 
 The existing corpus duplicates its reporting helpers into every file ("shared
-reporting helpers (identical in every experiment file)"). With 31 experiments
-that would be 62 copies to keep in step, so this directory shares them instead:
+reporting helpers (identical in every experiment file)"). With 30 experiments
+that would be 60 copies to keep in step, so this directory shares them instead:
 
 - **`.m` side**: `Get["../harness.m"]`. Mathilda's `Get` resolves against **cwd**
   (`$InputFileName` and `DirectoryName` do not exist), so `run_all.py` sets cwd to
@@ -278,23 +278,23 @@ are already expensive on their own use `benchOnce` — one timed run, no warm-up
 
 ## The RandomReal bug — why the value gate is not optional
 
-All fifteen WolframMark tests spell their data `RandomReal[{}, dims]` — an empty
-range, which Mathematica reads as the default `{0, 1}`. **Mathilda returns that
-form unevaluated.**
+`RandomReal[{}, dims]` — an empty range, which Mathematica reads as the default
+`{0, 1}` — **returns unevaluated in Mathilda**.
 
-A verbatim port therefore hands a symbolic `RandomReal[{}, {1050, 1050}]` to
-`Dot`, `Fourier`, `Eigenvalues`, `Transpose`, `SingularValueDecomposition` and
-`LinearSolve` — all of which return in ~0.1 ms having computed nothing. Eight of
-the fifteen tests would have reported a fictitious 10–100× win over Mathematica.
+This was found by porting Wolfram's WolframMark suite, every one of whose fifteen
+tests spells its data that way. A verbatim port hands a symbolic
+`RandomReal[{}, {1050, 1050}]` to `Dot`, `Fourier`, `Eigenvalues`, `Transpose`,
+`SingularValueDecomposition` and `LinearSolve` — all of which return in ~0.1 ms
+having computed nothing. Eight of the fifteen tests would have reported a
+fictitious 10–100× win over Mathematica.
 
 Nothing about the timings looks wrong. The only thing that catches it is the
 check value, which is why `CHECK-FAIL` outranks every timing in this job.
-`31-wolframmark` keeps that bug as its own labelled case, and the timed cases use
-`rand01[dims]` from the harness — the one spelling both systems agree on.
 
----
+(The WolframMark experiment itself was removed — see *Why there is no WolframMark
+group* below. The bug it exposed is real and outlives it.)
 
-## The 31 experiments
+## The 30 experiments
 
 **Group A — symbolic, baseline `sympy`.** The half of the system that had no
 external baseline before this directory existed.
@@ -327,9 +327,9 @@ external baseline before this directory existed.
 | 19 | `statistics` | `src/stats/` |
 | 20 | `curve-fitting` | `src/fit.c`, `src/linalg/lstsq.c` |
 
-**Group C — the open numeric roadmap, re-measured every week.** Eight of these
-target items already ranked in `docs/experiments/README.md`, so the job tracks
-them continuously instead of once.
+**Group C — the array substrate.** Exactly the eight open roadmap items ranked in
+`docs/experiments/README.md`, so the job tracks them continuously instead of once.
+These are not algorithms: a gap here is packing, dispatch, or per-call overhead.
 
 | # | experiment | roadmap item |
 |---|---|---|
@@ -341,35 +341,36 @@ them continuously instead of once.
 | 26 | `structural-ops` | #9 threading `Reverse`/`RotateLeft`/`Part` |
 | 27 | `elementwise-binary` | #10 `MapThread[Min]` 7.7 vs 48 GB/s |
 | 28 | `span-selector` | #6 `start/step/n` without a position array |
-| 29 | `graph-ops` | uncovered: `src/graph/` (19 files, never timed) |
-| 30 | `string-ops` | uncovered: `src/strings/` (28 files, never timed) |
 
-**Group D — WolframMark.**
+**Group D — uncovered subsystems.** Neither roadmap items nor numeric, which is
+why they are not folded into C.
 
-| # | experiment | why |
-|---|---|---|
-| 31 | `wolframmark` | Wolfram's own 15-test suite, at its official sizes. |
+| # | experiment | why | baseline |
+|---|---|---|---|
+| 29 | `graph-ops` | `src/graph/` — 19 files, never timed by anything | networkx (pure Python) |
+| 30 | `string-ops` | `src/strings/` + `regex/` — 28 files, never timed | `re` (compiled C) |
 
-**Read group D with a caveat.** WolframMark is a **hardware** benchmark: it holds
-Mathematica constant and varies the machine, scoring against a reference system.
-It answers *"how fast is this laptop at running Mathematica"*, not *"how good is
-this CAS"*. Using it cross-implementation is a repurposing, so:
+Read D's two median columns apart, not together — they disagree violently and the
+disagreement is the finding. Ahead of Mathematica, hundreds of times behind
+Python, because the graph accessors are O(n²) and rescan the edge list on every
+call while the string operations are fine. A single median over the group would
+hide both facts.
 
-- It is **not a coverage measure** — the tests probe hardware dimensions (FPU,
-  memory bandwidth, cache, bignum), not a CAS's functionality. Groups A–C do that.
-- Its **sizes encode Mathematica's performance profile**, tuned so each test takes
-  ~1 s in Mathematica on reference hardware. That says nothing about the same work
-  in another implementation: the 1.2M-point × 11 DFT is a ~1 s test in Mathematica
-  and would have taken roughly **forty hours** against Mathilda's pre-FFTW O(n²)
-  `Fourier` fallback.
-- The aggregate **WolframMark score is meaningless across implementations** and is
-  deliberately not computed. Group D contributes 16 ordinary cases, nothing summed.
+### Why there is no WolframMark group
 
-What it is genuinely good for: the workload *selection* is a third party's and
-predates this project, so unlike groups A–C it cannot be accused of having been
-picked to flatter us.
+There was one, and it was removed. WolframMark is a **hardware** benchmark: it
+holds Mathematica constant and varies the machine, scoring against a reference
+system. It answers *"how fast is this laptop at running Mathematica"*, not *"how
+good is this CAS"* — so it is not a coverage measure, its sizes encode
+Mathematica's performance profile (the 1.2M-point × 11 DFT is a ~1 s test there
+and would have taken roughly forty hours against Mathilda's pre-FFTW O(n²)
+fallback), and its aggregate score is meaningless across implementations.
 
----
+It did earn its keep once: it surfaced that `RandomReal[{}, dims]` returns
+unevaluated in Mathilda where Mathematica reads it as the default `{0,1}` range —
+which would have produced fictitious ~0.1 ms "wins" on eight of its fifteen tests
+while computing nothing. That finding is recorded in the changelog; a guard for it
+belongs in `tests/`, not in a timing job.
 
 ## Reading a group A case correctly
 

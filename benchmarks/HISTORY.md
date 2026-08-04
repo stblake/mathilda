@@ -10,13 +10,13 @@ Medians, not means — one 600000× case would make a mean meaningless.
 
 | date | commit | cases | coverage | slower | ahead | absent | incomplete | vs Mathematica | vs Python | wall |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 2026-08-04 | `068b46c1` | 202 | 87.4% | 93 | 92 | 4 | 13 | 1.05× | 0.69× | 20.2 min |
+| 2026-08-04 | `028308bc` | 186 | 87.4% | 88 | 83 | 3 | 12 | 1.05× | 0.72× | 20.2 min |
 
 ## By area, over time
 
 Median ratio per area. The question this answers is which subsystem is actually closing, as opposed to which one got attention.
 
-| date | A symbolic (sympy)<br>(vs W / vs Py) | B numeric libraries (scipy)<br>(vs W / vs Py) | C numeric roadmap (numpy)<br>(vs W / vs Py) | D WolframMark<br>(vs W / vs Py) |
+| date | A symbolic (sympy)<br>(vs W / vs Py) | B numeric libraries (scipy)<br>(vs W / vs Py) | C array substrate (numpy)<br>(vs W / vs Py) | D uncovered subsystems<br>(vs W / vs Py) |
 |---|---|---|---|---|
-| 2026-08-04 | 1.34× / 0.10× | 0.44× / 0.98× | 2.12× / 2.33× | 1.08× / 0.58× |
+| 2026-08-04 | 1.34× / 0.10× | 0.44× / 0.98× | 2.36× / 1.19× | 0.66× / 322.02× |
 

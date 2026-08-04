@@ -124,13 +124,29 @@ def discover(only=None):
 
 
 def group_of(num):
+    """Experiment number -> area. 01-10 / 11-20 / 21-30 by construction.
+
+    C is exactly the eight open roadmap items from docs/experiments/README.md —
+    the array substrate: packing, dispatch, per-call overhead. D is the two
+    subsystems (src/graph/, src/strings/) that nothing in the corpus had ever
+    timed; they are neither roadmap items nor numeric, so folding them into C
+    would have mislabelled both.
+
+    There was a different group D holding Wolfram's WolframMark suite. It was dropped:
+    WolframMark is a HARDWARE benchmark — it holds Mathematica constant and
+    varies the machine, scoring against a reference system — so its sizes encode
+    Mathematica's performance profile rather than the workloads' intrinsic cost,
+    and it measures nothing about a CAS's quality or coverage. Its one durable
+    finding (RandomReal[{}, dims] returns unevaluated in Mathilda where
+    Mathematica reads it as the default {0,1} range) is recorded in the changelog;
+    a guard for it belongs in tests/, not in a timing job."""
     if 1 <= num <= 10:
         return "A symbolic (sympy)"
     if 11 <= num <= 20:
         return "B numeric libraries (scipy)"
-    if 21 <= num <= 30:
-        return "C numeric roadmap (numpy)"
-    return "D WolframMark"
+    if 21 <= num <= 28:
+        return "C array substrate (numpy)"
+    return "D uncovered subsystems"
 
 
 # --------------------------------------------------------------------------
