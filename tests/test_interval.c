@@ -105,6 +105,23 @@ int main(void) {
     if (!check("PolyGamma[0, Interval[{1, 2}]]", "Interval[{-EulerGamma, 1 - EulerGamma}]")) failures++;
     if (!check("PolyGamma[1, Interval[{1, 2}]]", "Interval[{-1 + 1/6 Pi^2, 1/6 Pi^2}]")) failures++; /* decreasing */
 
+    /* --- inverse-reciprocal functions (built as inverse_base(1/x)) --- */
+    if (!check("ArcCot[Interval[{1, 2}]]", "Interval[{ArcTan[1/2], 1/4 Pi}]")) failures++;
+    if (!check("ArcCot[Interval[{-1, 1}]]",
+               "Interval[{-1/2 Pi, -1/4 Pi}, {1/4 Pi, 1/2 Pi}]")) failures++;   /* discontinuity at 0 */
+    if (!check("ArcSec[Interval[{2, 3}]]", "Interval[{1/3 Pi, ArcCos[1/3]}]")) failures++;
+    if (!check("ArcCsc[Interval[{2, 3}]]", "Interval[{ArcSin[1/3], 1/6 Pi}]")) failures++;
+    if (!check("ArcCoth[Interval[{2, 3}]]", "Interval[{ArcTanh[1/3], ArcTanh[1/2]}]")) failures++;
+    if (!check("ArcSech[Interval[{1/2, 1}]]", "Interval[{0, ArcCosh[2]}]")) failures++;
+    if (!check("ArcCsch[Interval[{1, 2}]]", "Interval[{ArcSinh[1/2], ArcSinh[1]}]")) failures++;
+    if (!check("ArcCsch[Interval[{-2, 3}]]",
+               "Interval[{-Infinity, -ArcSinh[1/2]}, {ArcSinh[1/3], Infinity}]")) failures++;
+
+    /* --- domain guard: out-of-domain intervals stay symbolic (not complex) --- */
+    if (!check("ArcSec[Interval[{1/5, 1/2}]]", "ArcSec[Interval[{1/5, 1/2}]]")) failures++;
+    if (!check("ArcSin[Interval[{2, 3}]]", "ArcSin[Interval[{2, 3}]]")) failures++;
+    if (!check("Log[Interval[{-2, -1}]]", "Log[Interval[{-2, -1}]]")) failures++;
+
     /* --- Min / Max --- */
     if (!check("Min[Interval[{2, 7}]]", "2")) failures++;
     if (!check("Max[Interval[{2, 7}]]", "7")) failures++;

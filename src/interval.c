@@ -606,8 +606,32 @@ Expr* interval_power_pos_exp(const Expr* A, const Expr* p) {
  * Unary function threading
  * ------------------------------------------------------------------------- */
 
+/* True if an endpoint is not a real value -- used to reject a monotone thread
+ * when a function is applied outside its real domain. An explicit Complex[re,im]
+ * is caught directly; a symbolic result (ArcCos[5], Log[-2] = Log[2] + I Pi, ...)
+ * that is really complex is caught by numericalizing and testing the imaginary
+ * part. Real number kinds and +/-Infinity short-circuit as real. */
 static bool iv_is_complex_result(Expr* e) {
-    return is_complex(e, NULL, NULL);
+    if (!e) return false;
+    if (is_complex(e, NULL, NULL)) return true;
+    if (iv_is_pos_inf(e) || iv_is_neg_inf(e)) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT) return false;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return false;
+#endif
+    { int64_t nn, dd; if (is_rational(e, &nn, &dd)) return false; }
+    /* Symbolic: numericalize and inspect the imaginary part. */
+    Expr* n = eval_and_free(expr_new_function(expr_new_symbol("N"),
+                                              (Expr*[]){ expr_copy(e) }, 1));
+    bool nonreal = false;
+    Expr *re, *im;
+    if (n && is_complex(n, &re, &im)) {
+        double iv2;
+        if (iv_to_double(im, &iv2)) nonreal = (iv2 > 1e-9 || iv2 < -1e-9);
+        else nonreal = true;
+    }
+    expr_free(n);
+    return nonreal;
 }
 
 Expr* interval_thread_monotone(const Expr* iv, IvMonotoneDir dir, const char* head) {
@@ -780,6 +804,21 @@ static Expr* iv_recip_of(Expr* base) {
     return r;
 }
 
+/* Inverse-reciprocal functions are inverse_base(1/x): ArcCot = ArcTan(1/x),
+ * ArcSec = ArcCos(1/x), ArcCsc = ArcSin(1/x), ArcCoth = ArcTanh(1/x),
+ * ArcSech = ArcCosh(1/x), ArcCsch = ArcSinh(1/x). Composing the (already
+ * threaded) inverse base with the reciprocal kernel handles every subtlety for
+ * free: reciprocal turns a straddling interval into a disjoint union (the
+ * discontinuity of ArcCot / ArcCsch), and the inverse base's [-1,1] / [1,inf)
+ * domain check sends out-of-domain intervals to symbolic. */
+static Expr* iv_apply_of_recip(const Expr* iv, const char* inv_head) {
+    Expr* rec = interval_reciprocal(iv);
+    if (!rec) return NULL;
+    Expr* r = interval_apply_function(inv_head, rec);
+    expr_free(rec);
+    return r;
+}
+
 /* Evaluate head[x] (or head[prefix, x] when has_prefix), widen inexact outward. */
 static Expr* iv_fn_endpoint(const char* head, int64_t prefix, bool has_prefix,
                             Expr* x, IvRound dir) {
@@ -869,6 +908,13 @@ Expr* interval_apply_function(const char* head, const Expr* iv) {
     if (strcmp(head, "Sign") == 0)     return interval_thread_monotone(iv, IV_INC, "Sign");
     if (strcmp(head, "Floor") == 0)    return interval_thread_monotone(iv, IV_INC, "Floor");
     if (strcmp(head, "Ceiling") == 0)  return interval_thread_monotone(iv, IV_INC, "Ceiling");
+    /* inverse-reciprocal = inverse_base(1/x) */
+    if (strcmp(head, "ArcCot") == 0)   return iv_apply_of_recip(iv, "ArcTan");
+    if (strcmp(head, "ArcSec") == 0)   return iv_apply_of_recip(iv, "ArcCos");
+    if (strcmp(head, "ArcCsc") == 0)   return iv_apply_of_recip(iv, "ArcSin");
+    if (strcmp(head, "ArcCoth") == 0)  return iv_apply_of_recip(iv, "ArcTanh");
+    if (strcmp(head, "ArcSech") == 0)  return iv_apply_of_recip(iv, "ArcCosh");
+    if (strcmp(head, "ArcCsch") == 0)  return iv_apply_of_recip(iv, "ArcSinh");
     /* monotone decreasing */
     if (strcmp(head, "ArcCos") == 0)   return interval_thread_monotone(iv, IV_DEC, "ArcCos");
     if (strcmp(head, "Erfc") == 0)     return interval_thread_monotone(iv, IV_DEC, "Erfc");

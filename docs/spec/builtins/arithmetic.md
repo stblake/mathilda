@@ -1262,9 +1262,13 @@ Out[8]= Interval[{2, 3}]
 
 The threaded set also includes the **reciprocal trig/hyperbolic** functions
 `Cot`, `Sec`, `Csc`, `Coth`, `Sech`, `Csch` (built as `1/base`, so a pole is
-returned as a disjoint union), the **rounding/sign** functions `Sign`, `Floor`,
-`Ceiling` (monotone non-decreasing), and several **special functions** on the
-sub-domain where each is monotone: `Erf`/`Erfc` (all of ℝ), `Gamma`/`LogGamma`
+returned as a disjoint union), the **inverse-reciprocal** functions `ArcCot`,
+`ArcSec`, `ArcCsc`, `ArcCoth`, `ArcSech`, `ArcCsch` (built as
+`inverse_base(1/x)`, so a discontinuity such as `ArcCot`'s at 0 becomes a
+disjoint union and an out-of-domain interval stays symbolic), the
+**rounding/sign** functions `Sign`, `Floor`, `Ceiling` (monotone
+non-decreasing), and several **special functions** on the sub-domain where each
+is monotone: `Erf`/`Erfc` (all of ℝ), `Gamma`/`LogGamma`
 (increasing above the minimum `x ≈ 1.4616`, decreasing below it), `Zeta` (on
 `x > 1`), and `PolyGamma[n, ·]` (on `x > 0`, increasing for even `n`). Outside a
 known monotone region a special function is left symbolic rather than risk a

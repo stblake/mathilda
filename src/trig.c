@@ -1357,6 +1357,8 @@ Expr* builtin_arccot(Expr* res) {
         return builtin_arg_error("ArcCot", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("ArcCot", arg); if (r) return r; }
+
     // ArcCot is odd (Mathematica convention): ArcCot[-x] -> -ArcCot[x]
     { Expr* f = odd_fold(arg, "ArcCot"); if (f) return f; }
 
@@ -1401,6 +1403,8 @@ Expr* builtin_arcsec(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("ArcSec", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("ArcSec", arg); if (r) return r; }
 
     // ArcSec[-x] -> Pi - ArcSec[x]
     { Expr* f = arc_pi_minus_fold(arg, "ArcSec"); if (f) return f; }
@@ -1450,6 +1454,8 @@ Expr* builtin_arccsc(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("ArcCsc", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("ArcCsc", arg); if (r) return r; }
 
     // ArcCsc is odd: ArcCsc[-x] -> -ArcCsc[x]
     { Expr* f = odd_fold(arg, "ArcCsc"); if (f) return f; }
