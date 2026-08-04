@@ -13,5 +13,6 @@ nav:
   - computing-limits-gruntz.md
   - 09-numerical-calculus.md
   - 10-special-functions.md
+  - 15-interval-arithmetic.md
   - 11-symbolic-summation.md
   - 12-infinite-products.md

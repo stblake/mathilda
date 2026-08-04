@@ -74,6 +74,13 @@ Work through them in order if you're new — each one builds on the last.
     `PolyLog`, the Bernoulli and Euler numbers, and the hypergeometric family —
     with their exact reductions and numerical values.
 
+-   :material-arrow-expand-horizontal: __[Interval arithmetic](15-interval-arithmetic.md)__
+
+    Rigorous enclosures that never lie: exact and symbolic endpoints, the
+    dependency problem, functions with poles and discontinuities, and validated
+    numerics — proving a root exists, guaranteed bounds, and rounding error made
+    visible.
+
 -   :material-sigma: __[11. Symbolic summation](11-symbolic-summation.md)__
 
     Close infinite series into constants with `Sum`: telescoping and Gosper's
