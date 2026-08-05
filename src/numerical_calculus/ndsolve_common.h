@@ -137,6 +137,14 @@ struct NdProblem {
     NdCompiled* compiled;   /* compiled nonlinear RHS fast path, or NULL      */
     bool     compile_failed;/* nonlinear RHS could not be compiled (use eval) */
 
+    /* MPFR (high-WorkingPrecision) RHS fast path: one autocompiled program per
+     * reduced component, built lazily in nd_rhs_mpfr.  ac_prec_tried gates the
+     * one-shot build; ac_prec_ok means every component compiled (and no
+     * EvaluationMonitor is attached, matching the machine path). */
+    struct AutoCompiled** ac_prec;   /* array[d] or NULL (owned) */
+    bool     ac_prec_tried;
+    bool     ac_prec_ok;
+
     /* Jacobian (implicit steppers only; built lazily, owned) */
     Expr***  jac;           /* jac[i][j] = D[f_i, y_j], or NULL entry -> FD    */
     bool     jac_built;
@@ -173,6 +181,10 @@ struct NdProblem {
 /* Evaluate the reduced RHS at (t, Y): writes out[0..d-1] = f(t, Y).
  * Returns false if any component fails to numericalize to a finite double. */
 bool nd_rhs_real(NdProblem* P, double t, const double* Y, double* out);
+
+/* Free the MPFR RHS compiled fast path (P->ac_prec[0..d-1]).  Safe on NULL and
+ * idempotent; called from every NdProblem teardown site (ndsolve.c + MoL). */
+void nd_ac_prec_free(NdProblem* P);
 
 /* Evaluate the Jacobian J[i*d+j] = df_i/dY_j at (t, Y) into a dense row-major
  * buffer (d*d doubles).  Uses the symbolic Jacobian where available and a

@@ -14,6 +14,8 @@
 #include "../eval.h"
 #include "../common.h"
 #include "../arithmetic.h"
+#include "../compile/autocompile.h"   /* autocompile_new_prec / autocompiled_eval_mpfr */
+#include "../sym_intern.h"            /* expr_new_symbol for the independent variable */
 #include <math.h>
 #include <float.h>
 #include <stdlib.h>
@@ -32,9 +34,79 @@ static void mp_vec_free(mpfr_t* v, size_t n) {
     free(v);
 }
 
+void nd_ac_prec_free(NdProblem* P) {
+    if (!P || !P->ac_prec) return;
+    for (size_t i = 0; i < P->d; i++)
+        if (P->ac_prec[i]) autocompiled_free(P->ac_prec[i]);
+    free(P->ac_prec);
+    P->ac_prec = NULL;
+}
+
+/* One-shot lazy compile of the reduced RHS in MPFR: one program per component as
+ * a function of {y_0, ..., y_{d-1}, t}.  All components must compile (a partial
+ * compile is discarded), and — matching the machine path — nothing is compiled
+ * when an EvaluationMonitor is attached.  Compiled at `bits` (the guard-padded
+ * working precision), so the compiled result carries the same guard digits the
+ * interpreter path produces and the two agree before the final truncation. */
+static void nd_rhs_mpfr_compile(NdProblem* P, long bits) {
+    P->ac_prec_ok = false;
+    if (P->eval_monitor) return;
+    size_t d = P->d;
+    struct AutoCompiled** acs = calloc(d ? d : 1, sizeof *acs);
+    const Expr** vars = malloc((d + 1) * sizeof *vars);
+    if (!acs || !vars) { free(acs); free(vars); return; }
+    for (size_t i = 0; i < d; i++) vars[i] = P->ysym[i];   /* borrowed EXPR_SYMBOLs */
+    Expr* tsym = expr_new_symbol(P->tvar);
+    vars[d] = tsym;
+    bool all = true;
+    for (size_t i = 0; i < d; i++) {
+        acs[i] = autocompile_new_prec(P->f[i], vars, d + 1, bits);
+        if (!acs[i]) { all = false; break; }
+    }
+    expr_free(tsym);
+    free(vars);
+    if (!all) {
+        for (size_t i = 0; i < d; i++) if (acs[i]) autocompiled_free(acs[i]);
+        free(acs);
+        return;
+    }
+    P->ac_prec = acs;
+    P->ac_prec_ok = true;
+}
+
 /* Evaluate the reduced RHS at (t, Y) in MPFR: out[i] = f_i(t, Y). */
 static bool nd_rhs_mpfr(NdProblem* P, const mpfr_t t, mpfr_t* Y, mpfr_t* out, long bits) {
     size_t d = P->d;
+
+    if (!P->ac_prec_tried) { P->ac_prec_tried = true; nd_rhs_mpfr_compile(P, bits); }
+
+    /* Compiled fast path: every component compiled (implies no EvaluationMonitor).
+     * The RHS state (t, Y) is wrapped into EXPR_MPFR sample points — the same
+     * wrap the interpreter path does for binding — and each component's compiled
+     * program returns f_i at the working precision.  A component that returns NULL
+     * (the interpreter would go complex / hit a pole there) drops the whole call
+     * to the interpreter below, which supplies that value. */
+    if (P->ac_prec_ok) {
+        Expr** xs = malloc((d + 1) * sizeof *xs);
+        if (xs) {
+            for (size_t i = 0; i < d; i++) xs[i] = expr_new_mpfr_copy(Y[i]);
+            xs[d] = expr_new_mpfr_copy(t);
+            mpfr_t im; mpfr_init2(im, bits);
+            bool ok = true;
+            for (size_t i = 0; i < d && ok; i++) {
+                Expr* r = autocompiled_eval_mpfr(P->ac_prec[i], (const Expr* const*)xs);
+                bool inexact;
+                if (!r || !get_approx_mpfr(r, out[i], im, &inexact) || !mpfr_number_p(out[i]))
+                    ok = false;
+                expr_free(r);
+            }
+            mpfr_clear(im);
+            for (size_t i = 0; i <= d; i++) expr_free(xs[i]);
+            free(xs);
+            if (ok) return true;   /* else fall through to the interpreter */
+        }
+    }
+
     nd_bind_set(&P->bind_t, expr_new_mpfr_copy(t));
     for (size_t i = 0; i < d; i++) nd_bind_set(&P->bind_y[i], expr_new_mpfr_copy(Y[i]));
     eval_clock_bump();

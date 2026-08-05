@@ -176,6 +176,7 @@ static void nd_apply_option(const Expr* opt, NdOpts* o) {
 static void nd_problem_free(NdProblem* P) {
     nd_operator_free(P->op);
     nd_compiled_free(P->compiled);
+    nd_ac_prec_free(P);
     if (P->f) { for (size_t i = 0; i < P->d; i++) expr_free(P->f[i]); free(P->f); }
     if (P->ysym) { for (size_t i = 0; i < P->d; i++) expr_free(P->ysym[i]); free(P->ysym); }
     if (P->jac) {
