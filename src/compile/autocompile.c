@@ -59,7 +59,7 @@ bool autocompile_enabled(void) {
 void autocompile_set_enabled(bool on) { g_autocompile_enabled = on ? 1 : 0; }
 
 static AutoCompiled* ac_make(const Expr* body, const Expr* const* vars, size_t nvars,
-                             CompileType argt) {
+                             CompileType argt, long prec_bits) {
     if (!body || nvars == 0) return NULL;
     /* Off: every caller sees the same NULL it sees for a body outside the
      * compilable subset, so each keeps its interpreter path with no other
@@ -92,7 +92,7 @@ static AutoCompiled* ac_make(const Expr* body, const Expr* const* vars, size_t n
      * USER-facing Compile[] only, and if the two are ever wired together this
      * line still refuses to let the auto-compiled path inherit it. */
     unsigned ac_flags = COMPILE_FOLD_GLOBALS & ~COMPILE_WRAP_INT;
-    CompiledProgram* prog = compile_expr_ex(body, names, types, nvars, ac_flags);
+    CompiledProgram* prog = compile_expr_prec(body, names, types, nvars, ac_flags, prec_bits);
     free(names); free(types);
     if (!prog) { ac_report_bail(body); return NULL; }
 
@@ -108,11 +108,17 @@ static AutoCompiled* ac_make(const Expr* body, const Expr* const* vars, size_t n
 }
 
 AutoCompiled* autocompile_new(const Expr* body, const Expr* const* vars, size_t nvars) {
-    return ac_make(body, vars, nvars, CT_REAL);
+    return ac_make(body, vars, nvars, CT_REAL, 0);
 }
 
 AutoCompiled* autocompile_new_z(const Expr* body, const Expr* const* vars, size_t nvars) {
-    return ac_make(body, vars, nvars, CT_COMPLEX);
+    return ac_make(body, vars, nvars, CT_COMPLEX, 0);
+}
+
+AutoCompiled* autocompile_new_prec(const Expr* body, const Expr* const* vars,
+                                   size_t nvars, long prec_bits) {
+    if (prec_bits <= 0) return NULL;   /* use autocompile_new for the machine path */
+    return ac_make(body, vars, nvars, CT_BIGREAL, prec_bits);
 }
 
 size_t autocompiled_num_vars(const AutoCompiled* ac) { return ac->nvars; }
@@ -195,6 +201,20 @@ bool autocompiled_eval_z(const AutoCompiled* ac, const double _Complex* zs,
         case CT_COMPLEX: *out = o.v.z;         return true;
         default:         return false;         /* BOOL / array: not a sample value */
     }
+}
+
+Expr* autocompiled_eval_mpfr(const AutoCompiled* ac, const Expr* const* xs) {
+    if (!ac || !CT_IS_MANAGED(ac->arg_type) || ac->nvars > AC_MAX_VARS) return NULL;
+    CompileValue args[AC_MAX_VARS], o;
+    for (size_t i = 0; i < ac->nvars; i++) {
+        if (!xs[i]) return NULL;
+        args[i].type = ac->arg_type;
+        args[i].v.a = (Expr*)xs[i];   /* borrowed numeric Expr; load_arg sets the container */
+    }
+    if (!compiled_eval(ac->prog, args, &o)) return NULL;   /* false ⇒ non-finite / non-numeric */
+    /* A managed result is a NEW Expr (EXPR_MPFR / Complex[MPFR,MPFR]) the caller
+     * owns; on any non-managed result the caller should interpret. */
+    return CT_IS_MANAGED(o.type) ? o.v.a : NULL;
 }
 
 void autocompiled_free(AutoCompiled* ac) {

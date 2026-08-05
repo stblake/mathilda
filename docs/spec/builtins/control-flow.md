@@ -691,6 +691,45 @@ wave equation, verified against an exact discrete solution and benchmarked
 against the interpreter, Wolfram Language and `NDSolve` — is summarised in
 [`docs/design/compile_state.md`](../../design/compile_state.md).
 
+### Arbitrary precision (opt-in)
+
+By default a `CompiledFunction` runs over machine numbers. Two options opt a
+function into arbitrary precision; both are **off by default**, so the machine
+path (and its speed) is unchanged when neither is given.
+
+- **`WorkingPrecision -> n`** — a numeric `n` (decimal digits) compiles
+  real/complex arithmetic in MPFR at that precision, held **fixed for the whole
+  function** (this sidesteps precision-contagion and keeps the internal
+  containers warm). `MachinePrecision` (the default) is the ordinary machine
+  path. The compilable subset here is straight-line arithmetic —
+  `Plus`/`Times`/`Subtract`/`Divide`/`Power` and the unary elementary functions
+  (`Sin`, `Cos`, `Tan`, `Exp`, `Log`, `Sqrt`, `Sinh`, …) — over `_Real`,
+  `_Complex` and `_Integer` (integers lift to reals); anything else (control
+  flow, arrays, an unsupported head like `Gamma`) transparently falls back to
+  the interpreter *at that precision*, so the answer is always what
+  `N[expr, n]` of the substituted body would give.
+- **`"BigIntegers" -> True`** — integer arithmetic (`Plus`/`Times`/`Subtract`/
+  non-negative `Power`) is exact GMP instead of int64, so a result past the
+  machine-integer range is computed exactly rather than routed to the
+  interpreter. Independent of `WorkingPrecision` (integers have no precision).
+
+```
+In[1]:= f = Compile[{{x, _Real}}, Sin[x] Cos[x] + x^3, WorkingPrecision -> 40];
+        f[N[7/5, 40]]
+Out[1]= 2.887293159352105...              (* = the interpreter's N[.,40] of the same body *)
+
+In[2]:= Compile[{{n, _Integer}}, n^20, "BigIntegers" -> True][99]
+Out[2]= 8179069375972308708891986605443361898001
+
+In[3]:= Compile[{{z, _Complex}}, Exp[z] + z^2, WorkingPrecision -> 45][N[1/2 + I/3, 45]]
+Out[3]= 1.28... + 1.14...*I
+```
+
+Deferred (see [`docs/design/compile-arbitrary-precision.md`](../../design/compile-arbitrary-precision.md)):
+arbitrary-precision *arrays*, control flow / procedural constructs in a managed
+body, and the warm thread-local container arena (a speed follow-up; correctness
+and the machine-path guarantee do not depend on it).
+
 ## CompileDiagnostics
 
 `CompileDiagnostics[argspec, expr]` reports whether `expr` compiles for the given

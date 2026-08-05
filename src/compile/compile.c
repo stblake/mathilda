@@ -27,6 +27,9 @@
 #include "../print.h"      /* expr_to_string — printing the node a bail choked on */
 #include "../sym_names.h" /* SYM_All / SYM_Span / SYM_List — Part subscript specs */
 #include "../sym_intern.h" /* intern_symbol — the FN_HEAD placeholder parameters */
+#ifdef USE_MPFR
+#include "../numeric_complex.h"  /* ncpx — arbitrary-precision complex containers */
+#endif
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -177,6 +180,18 @@ typedef struct {
      * deepest cause) and rolled back with speculative lowering.  Borrowed: the
      * body outlives the compile. */
     const Expr* bail_node;
+
+    /* Arbitrary precision (see emit_mgd).  Both zero/false for a machine program,
+     * in which case none of the managed machinery below is ever touched and the
+     * machine emit path (emit_node) is used unchanged. */
+    long prec_bits;         /* MPFR working precision in bits, or 0 (machine)   */
+    bool allow_bigint;      /* "BigIntegers" -> True                            */
+    int  mgd_top, mgd_max;  /* managed-bank alloc (bump-only; never popped, so   *
+                             * a physical managed register has ONE container type)*/
+    CompileType* mgd_type;  /* [mgd_max] container type per managed vreg index    */
+    int  mgd_type_cap;
+    MgdConst* mgd_consts;   /* program-owned literal containers; handed to program*/
+    int  nmgd_consts, mgd_consts_cap;
 } Ctx;
 
 /* The caller's argument symbols are NOT in scope inside an inlined
@@ -643,6 +658,439 @@ static void arr_prep(Ctx* c, Val* v, CompileType elem) {
 
 /* A Real constant in a fresh scalar temp (exponents / negation factors). */
 static Val arr_real_const(Ctx* c, double x) { Slot s; s.r = x; return emit_const(c, s, CT_REAL); }
+
+/* ================================================================== *
+ *  Arbitrary precision — the managed-scalar emitter (emit_mgd)        *
+ * ================================================================== *
+ * A self-contained lowering for arbitrary-precision scalar bodies, kept
+ * ENTIRELY SEPARATE from the machine emit_node so the machine path is provably
+ * unchanged (the machine emitter is not touched at all).  A program that reaches
+ * here has prec_bits > 0 (MPFR reals/complex at that precision) or allow_bigint
+ * (GMP integers), and the whole body is lowered in that one domain.  v1 scope:
+ * straight-line arithmetic — literals, declared args, Plus/Times/Power/Subtract
+ * and the unary elementary functions.  Anything else bails to the interpreter,
+ * exactly like an unsupported head on the machine path.  Managed programs force
+ * COMPILE_NO_OPT | COMPILE_NO_CSE, so the optimiser never sees a managed
+ * register.  See docs/design/compile-arbitrary-precision.md. */
+
+/* Complex op selectors carried in imm.i of MG_CBIN / MG_CUN (ncpx kernels have
+ * heterogeneous signatures, so a selector is cleaner than a function pointer;
+ * the working precision is read from the output container). */
+enum { MGC_ADD = 0, MGC_SUB, MGC_MUL, MGC_DIV, MGC_POW,          /* binary */
+       MGC_NEG, MGC_EXP, MGC_LOG, MGC_SIN, MGC_COS, MGC_SQRT,    /* -> complex */
+       MGC_ABS, MGC_ARG };                                       /* -> real   */
+
+/* Allocate a fresh managed register of container type `t`.  Bump-only: a managed
+ * register is never popped, so each physical managed slot has exactly ONE
+ * container type for the whole program, which is what lets frame entry allocate
+ * the right container by register number.  Managed bodies are scalar loops with
+ * modest temp counts, so the wasted registers are cheap. */
+static int alloc_mgd(Ctx* c, CompileType t) {
+    if (c->mgd_top >= c->mgd_type_cap) {
+        int nc = c->mgd_type_cap ? c->mgd_type_cap * 2 : 32;
+        CompileType* nt = realloc(c->mgd_type, (size_t)nc * sizeof *nt);
+        if (!nt) { c->ok = false; return MGD_VREG; }
+        c->mgd_type = nt; c->mgd_type_cap = nc;
+    }
+    int idx = c->mgd_top;
+    c->mgd_type[idx] = t;
+    c->mgd_top++;
+    if (c->mgd_top > c->mgd_max) c->mgd_max = c->mgd_top;
+    return MGD_VREG + idx;
+}
+
+/* Free one program-owned literal container (used on the bail path and by
+ * compiled_free). */
+static void mgd_const_free(MgdConst* mc) {
+    if (!mc || !mc->ptr) return;
+    switch (mc->kind) {
+        case 1: mpz_clear((mpz_ptr)mc->ptr); break;
+#ifdef USE_MPFR
+        case 0: mpfr_clear((mpfr_ptr)mc->ptr); break;
+        case 2: ncpx_clear((ncpx*)mc->ptr); break;
+#endif
+        default: break;
+    }
+    free(mc->ptr);
+    mc->ptr = NULL;
+}
+
+/* Record a program-owned literal container; its stable pointer rides in an
+ * instruction immediate and ownership transfers to the program at finalize. */
+static bool ctx_add_mgd_const(Ctx* c, int kind, void* ptr) {
+    if (c->nmgd_consts == c->mgd_consts_cap) {
+        int nc = c->mgd_consts_cap ? c->mgd_consts_cap * 2 : 8;
+        MgdConst* nb = realloc(c->mgd_consts, (size_t)nc * sizeof *nb);
+        if (!nb) { c->ok = false; return false; }
+        c->mgd_consts = nb; c->mgd_consts_cap = nc;
+    }
+    c->mgd_consts[c->nmgd_consts].kind = kind;
+    c->mgd_consts[c->nmgd_consts].ptr  = ptr;
+    c->nmgd_consts++;
+    return true;
+}
+
+/* An integer-valued exponent that fits a machine long (Power fast path). */
+static bool mgd_small_int(const Expr* e, long* n) {
+    if (e->type == EXPR_INTEGER) { *n = (long)e->data.integer; return true; }
+    if (e->type == EXPR_BIGINT && mpz_fits_slong_p(e->data.bigint)) {
+        *n = mpz_get_si(e->data.bigint); return true;
+    }
+    return false;
+}
+
+static bool emit_mgd_int(Ctx* c, const Expr* e, Val* out);
+
+/* ---- GMP (bignum) constant materialisation ---- */
+static bool mgd_mpz_from_expr(mpz_ptr z, const Expr* e) {
+    if (e->type == EXPR_INTEGER) { mpz_set_si(z, (long)e->data.integer); return true; }
+    if (e->type == EXPR_BIGINT)  { mpz_set(z, e->data.bigint); return true; }
+    return false;   /* Real / Rational are not exact integers */
+}
+static int mgd_new_mpz_const(Ctx* c, const Expr* lit) {
+    mpz_ptr z = malloc(sizeof *z);
+    if (!z) { c->ok = false; return -1; }
+    mpz_init(z);
+    if (!mgd_mpz_from_expr(z, lit) || !ctx_add_mgd_const(c, 1, z)) {
+        mpz_clear(z); free(z); return -1;
+    }
+    Slot k; memset(&k, 0, sizeof k); k.p = z;
+    int dst = alloc_mgd(c, CT_BIGINT);
+    ins(c, OP_MG_ZCONST, (uint32_t)dst, 0, 0, k);
+    return dst;
+}
+
+#ifdef USE_MPFR
+/* ---- MPFR (real) constant materialisation ---- */
+static bool mgd_mpfr_from_expr(mpfr_ptr m, const Expr* e) {
+    switch (e->type) {
+        case EXPR_INTEGER: mpfr_set_si(m, (long)e->data.integer, MPFR_RNDN); return true;
+        case EXPR_REAL:    mpfr_set_d (m, e->data.real,          MPFR_RNDN); return true;
+        case EXPR_BIGINT:  mpfr_set_z (m, e->data.bigint,        MPFR_RNDN); return true;
+        case EXPR_MPFR:    mpfr_set   (m, e->data.mpfr,          MPFR_RNDN); return true;
+        default: break;
+    }
+    int64_t nn, dd;
+    if (is_rational(e, &nn, &dd) && dd != 0) {
+        mpfr_t den; mpfr_init2(den, mpfr_get_prec(m));
+        mpfr_set_si(m, (long)nn, MPFR_RNDN);
+        mpfr_set_si(den, (long)dd, MPFR_RNDN);
+        mpfr_div(m, m, den, MPFR_RNDN);
+        mpfr_clear(den);
+        return true;
+    }
+    return false;
+}
+/* A named real constant (Pi, E, ...) at working precision. */
+static bool mgd_mpfr_from_const(mpfr_ptr m, const char* nm) {
+    if (strcmp(nm, "Pi") == 0)         { mpfr_const_pi(m, MPFR_RNDN); return true; }
+    if (strcmp(nm, "E") == 0)          { mpfr_set_ui(m, 1, MPFR_RNDN); mpfr_exp(m, m, MPFR_RNDN); return true; }
+    if (strcmp(nm, "EulerGamma") == 0) { mpfr_const_euler(m, MPFR_RNDN); return true; }
+    if (strcmp(nm, "Catalan") == 0)    { mpfr_const_catalan(m, MPFR_RNDN); return true; }
+    if (strcmp(nm, "Degree") == 0)     { mpfr_const_pi(m, MPFR_RNDN); mpfr_div_ui(m, m, 180, MPFR_RNDN); return true; }
+    return false;
+}
+static int mgd_new_mpfr_const_expr(Ctx* c, const Expr* lit) {
+    mpfr_ptr m = malloc(sizeof *m);
+    if (!m) { c->ok = false; return -1; }
+    mpfr_init2(m, c->prec_bits);
+    if (!mgd_mpfr_from_expr(m, lit) || !ctx_add_mgd_const(c, 0, m)) {
+        mpfr_clear(m); free(m); return -1;
+    }
+    Slot k; memset(&k, 0, sizeof k); k.p = m;
+    int dst = alloc_mgd(c, CT_BIGREAL);
+    ins(c, OP_MG_RCONST, (uint32_t)dst, 0, 0, k);
+    return dst;
+}
+static int mgd_new_mpfr_const_named(Ctx* c, const char* nm) {
+    mpfr_ptr m = malloc(sizeof *m);
+    if (!m) { c->ok = false; return -1; }
+    mpfr_init2(m, c->prec_bits);
+    if (!mgd_mpfr_from_const(m, nm) || !ctx_add_mgd_const(c, 0, m)) {
+        mpfr_clear(m); free(m); return -1;
+    }
+    Slot k; memset(&k, 0, sizeof k); k.p = m;
+    int dst = alloc_mgd(c, CT_BIGREAL);
+    ins(c, OP_MG_RCONST, (uint32_t)dst, 0, 0, k);
+    return dst;
+}
+/* ---- ncpx (complex) constant materialisation ---- */
+static int mgd_new_ncpx_const(Ctx* c, const Expr* re, const Expr* im) {
+    ncpx* z = malloc(sizeof *z);
+    if (!z) { c->ok = false; return -1; }
+    ncpx_init(z, c->prec_bits);
+    if (!mgd_mpfr_from_expr(z->re, re) || !mgd_mpfr_from_expr(z->im, im)
+        || !ctx_add_mgd_const(c, 2, z)) {
+        ncpx_clear(z); free(z); return -1;
+    }
+    Slot k; memset(&k, 0, sizeof k); k.p = z;
+    int dst = alloc_mgd(c, CT_BIGCOMPLEX);
+    ins(c, OP_MG_CCONST, (uint32_t)dst, 0, 0, k);
+    return dst;
+}
+
+/* Lift a managed real value to a managed complex one (zero imaginary part). */
+static Val mgd_to_complex(Ctx* c, Val v) {
+    if (v.type == CT_BIGCOMPLEX) return v;
+    Slot k; memset(&k, 0, sizeof k); k.i = 0;
+    int dst = alloc_mgd(c, CT_BIGCOMPLEX);
+    ins(c, OP_MG_CFROM_R, (uint32_t)dst, (uint32_t)v.reg, 0, k);
+    Val r = { dst, true, CT_BIGCOMPLEX, false };
+    return r;
+}
+
+/* Real elementary-function head -> mpfr unary function pointer, or NULL. */
+static const void* mgd_real_unary_fn(const char* h) {
+    if (strcmp(h, "Sqrt") == 0) return (const void*)mpfr_sqrt;
+    if (strcmp(h, "Exp")  == 0) return (const void*)mpfr_exp;
+    if (strcmp(h, "Log")  == 0) return (const void*)mpfr_log;
+    if (strcmp(h, "Sin")  == 0) return (const void*)mpfr_sin;
+    if (strcmp(h, "Cos")  == 0) return (const void*)mpfr_cos;
+    if (strcmp(h, "Tan")  == 0) return (const void*)mpfr_tan;
+    if (strcmp(h, "Sinh") == 0) return (const void*)mpfr_sinh;
+    if (strcmp(h, "Cosh") == 0) return (const void*)mpfr_cosh;
+    if (strcmp(h, "Tanh") == 0) return (const void*)mpfr_tanh;
+    if (strcmp(h, "ArcSin") == 0) return (const void*)mpfr_asin;
+    if (strcmp(h, "ArcCos") == 0) return (const void*)mpfr_acos;
+    if (strcmp(h, "ArcTan") == 0) return (const void*)mpfr_atan;
+    if (strcmp(h, "Abs")  == 0) return (const void*)mpfr_abs;
+    return NULL;
+}
+/* Complex elementary-function head -> MG_CUN selector, or -1.  The result of Abs
+ * is real, reported via `*to_real`. */
+static int mgd_complex_unary_sel(const char* h, bool* to_real) {
+    *to_real = false;
+    if (strcmp(h, "Exp")  == 0) return MGC_EXP;
+    if (strcmp(h, "Log")  == 0) return MGC_LOG;
+    if (strcmp(h, "Sin")  == 0) return MGC_SIN;
+    if (strcmp(h, "Cos")  == 0) return MGC_COS;
+    if (strcmp(h, "Sqrt") == 0) return MGC_SQRT;
+    if (strcmp(h, "Abs")  == 0) { *to_real = true; return MGC_ABS; }
+    if (strcmp(h, "Arg")  == 0) { *to_real = true; return MGC_ARG; }
+    return -1;
+}
+
+static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out);
+
+/* Combine two managed-real/complex operands with a real mpfr binary fn or its
+ * complex selector, promoting a real operand to complex when the other is. */
+static Val mgd_bin(Ctx* c, Val a, Val b, const void* real_fn, int cplx_sel) {
+    if (a.type == CT_BIGCOMPLEX || b.type == CT_BIGCOMPLEX) {
+        a = mgd_to_complex(c, a); b = mgd_to_complex(c, b);
+        Slot k; memset(&k, 0, sizeof k); k.i = cplx_sel;
+        int dst = alloc_mgd(c, CT_BIGCOMPLEX);
+        ins(c, OP_MG_CBIN, (uint32_t)dst, (uint32_t)a.reg, (uint32_t)b.reg, k);
+        Val r = { dst, true, CT_BIGCOMPLEX, false };
+        return r;
+    }
+    Slot k; memset(&k, 0, sizeof k); k.p = real_fn;
+    int dst = alloc_mgd(c, CT_BIGREAL);
+    ins(c, OP_MG_RBIN, (uint32_t)dst, (uint32_t)a.reg, (uint32_t)b.reg, k);
+    Val r = { dst, true, CT_BIGREAL, false };
+    return r;
+}
+
+/* base^n for a machine-int exponent n. */
+static Val mgd_powi(Ctx* c, Val base, long n) {
+    Slot k; memset(&k, 0, sizeof k); k.i = (long long)n;
+    if (base.type == CT_BIGCOMPLEX) {
+        int dst = alloc_mgd(c, CT_BIGCOMPLEX);
+        ins(c, OP_MG_CPOWI, (uint32_t)dst, (uint32_t)base.reg, 0, k);
+        Val r = { dst, true, CT_BIGCOMPLEX, false };
+        return r;
+    }
+    int dst = alloc_mgd(c, CT_BIGREAL);
+    ins(c, OP_MG_RPOWI, (uint32_t)dst, (uint32_t)base.reg, 0, k);
+    Val r = { dst, true, CT_BIGREAL, false };
+    return r;
+}
+
+/* The MPFR real/complex domain. */
+static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out) {
+    if (!c->ok) return false;
+    /* leaf: declared argument */
+    if (e->type == EXPR_SYMBOL) {
+        int reg = arg_find(c, e->data.symbol.name);
+        if (reg >= 0) {
+            CompileType t = c->arg_types[reg];
+            if (t == CT_BIGREAL || t == CT_BIGCOMPLEX) {
+                Val v = { reg, false, t, false }; *out = v; return true;
+            }
+            return false;
+        }
+        int cst = mgd_new_mpfr_const_named(c, e->data.symbol.name);
+        if (cst < 0) return false;
+        Val v = { cst, true, CT_BIGREAL, false }; *out = v; return true;
+    }
+    /* leaf: numeric literal */
+    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT
+#ifdef USE_MPFR
+        || e->type == EXPR_MPFR
+#endif
+       ) {
+        int cst = mgd_new_mpfr_const_expr(c, e);
+        if (cst < 0) return false;
+        Val v = { cst, true, CT_BIGREAL, false }; *out = v; return true;
+    }
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    Expr* const* a = e->data.function.args;
+    size_t n = e->data.function.arg_count;
+
+    /* Complex[re, im] literal (both parts numeric) */
+    if (strcmp(h, "Complex") == 0 && n == 2) {
+        int cst = mgd_new_ncpx_const(c, a[0], a[1]);
+        if (cst < 0) return false;
+        Val v = { cst, true, CT_BIGCOMPLEX, false }; *out = v; return true;
+    }
+    /* rational literal Rational[p, q] */
+    { int64_t nn, dd; if (is_rational(e, &nn, &dd)) {
+        int cst = mgd_new_mpfr_const_expr(c, e);
+        if (cst < 0) return false;
+        Val v = { cst, true, CT_BIGREAL, false }; *out = v; return true;
+    } }
+
+    if (strcmp(h, "Plus") == 0 && n >= 1) {
+        Val acc; if (!emit_mgd_real(c, a[0], &acc)) return false;
+        for (size_t i = 1; i < n; i++) {
+            Val v; if (!emit_mgd_real(c, a[i], &v)) return false;
+            acc = mgd_bin(c, acc, v, (const void*)mpfr_add, MGC_ADD);
+        }
+        *out = acc; return c->ok;
+    }
+    if (strcmp(h, "Times") == 0 && n >= 1) {
+        Val acc; if (!emit_mgd_real(c, a[0], &acc)) return false;
+        for (size_t i = 1; i < n; i++) {
+            Val v; if (!emit_mgd_real(c, a[i], &v)) return false;
+            acc = mgd_bin(c, acc, v, (const void*)mpfr_mul, MGC_MUL);
+        }
+        *out = acc; return c->ok;
+    }
+    if (strcmp(h, "Subtract") == 0 && n == 2) {
+        Val x, y; if (!emit_mgd_real(c, a[0], &x) || !emit_mgd_real(c, a[1], &y)) return false;
+        *out = mgd_bin(c, x, y, (const void*)mpfr_sub, MGC_SUB); return c->ok;
+    }
+    if (strcmp(h, "Divide") == 0 && n == 2) {
+        Val x, y; if (!emit_mgd_real(c, a[0], &x) || !emit_mgd_real(c, a[1], &y)) return false;
+        *out = mgd_bin(c, x, y, (const void*)mpfr_div, MGC_DIV); return c->ok;
+    }
+    if (strcmp(h, "Power") == 0 && n == 2) {
+        Val base; if (!emit_mgd_real(c, a[0], &base)) return false;
+        long ni;
+        if (mgd_small_int(a[1], &ni)) { *out = mgd_powi(c, base, ni); return c->ok; }
+        Val ex; if (!emit_mgd_real(c, a[1], &ex)) return false;
+        *out = mgd_bin(c, base, ex, (const void*)mpfr_pow, MGC_POW); return c->ok;
+    }
+    if (strcmp(h, "Minus") == 0 && n == 1) {
+        Val x; if (!emit_mgd_real(c, a[0], &x)) return false;
+        if (x.type == CT_BIGCOMPLEX) {
+            Slot k; memset(&k, 0, sizeof k); k.i = MGC_NEG;
+            int dst = alloc_mgd(c, CT_BIGCOMPLEX);
+            ins(c, OP_MG_CUN, (uint32_t)dst, (uint32_t)x.reg, 0, k);
+            Val r = { dst, true, CT_BIGCOMPLEX, false }; *out = r; return c->ok;
+        }
+        Slot k; memset(&k, 0, sizeof k); k.p = (const void*)mpfr_neg;
+        int dst = alloc_mgd(c, CT_BIGREAL);
+        ins(c, OP_MG_RUN, (uint32_t)dst, (uint32_t)x.reg, 0, k);
+        Val r = { dst, true, CT_BIGREAL, false }; *out = r; return c->ok;
+    }
+    /* unary elementary functions */
+    if (n == 1) {
+        Val x; if (!emit_mgd_real(c, a[0], &x)) return false;
+        if (x.type == CT_BIGCOMPLEX) {
+            bool to_real; int sel = mgd_complex_unary_sel(h, &to_real);
+            if (sel < 0) return false;
+            Slot k; memset(&k, 0, sizeof k); k.i = sel;
+            CompileType rt = to_real ? CT_BIGREAL : CT_BIGCOMPLEX;
+            int dst = alloc_mgd(c, rt);
+            ins(c, OP_MG_CUN, (uint32_t)dst, (uint32_t)x.reg, 0, k);
+            Val r = { dst, true, rt, false }; *out = r; return c->ok;
+        }
+        const void* fn = mgd_real_unary_fn(h);
+        if (!fn) return false;
+        Slot k; memset(&k, 0, sizeof k); k.p = fn;
+        int dst = alloc_mgd(c, CT_BIGREAL);
+        ins(c, OP_MG_RUN, (uint32_t)dst, (uint32_t)x.reg, 0, k);
+        Val r = { dst, true, CT_BIGREAL, false }; *out = r; return c->ok;
+    }
+    return false;
+}
+#else
+static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out) {
+    (void)c; (void)e; (void)out; return false;
+}
+#endif /* USE_MPFR */
+
+/* The GMP (bignum) integer domain: exact Plus/Times/Subtract/Minus and
+ * non-negative integer Power.  Division is a Rational, which no managed-int
+ * container holds, so it bails. */
+static bool emit_mgd_int(Ctx* c, const Expr* e, Val* out) {
+    if (!c->ok) return false;
+    if (e->type == EXPR_SYMBOL) {
+        int reg = arg_find(c, e->data.symbol.name);
+        if (reg >= 0 && c->arg_types[reg] == CT_BIGINT) {
+            Val v = { reg, false, CT_BIGINT, false }; *out = v; return true;
+        }
+        return false;
+    }
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) {
+        int cst = mgd_new_mpz_const(c, e);
+        if (cst < 0) return false;
+        Val v = { cst, true, CT_BIGINT, false }; *out = v; return true;
+    }
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    Expr* const* a = e->data.function.args;
+    size_t n = e->data.function.arg_count;
+
+    if ((strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) && n >= 1) {
+        uint16_t op = (h[0] == 'P') ? OP_MG_ZADD : OP_MG_ZMUL;
+        Val acc; if (!emit_mgd_int(c, a[0], &acc)) return false;
+        for (size_t i = 1; i < n; i++) {
+            Val v; if (!emit_mgd_int(c, a[i], &v)) return false;
+            Slot z; memset(&z, 0, sizeof z);
+            int dst = alloc_mgd(c, CT_BIGINT);
+            ins(c, op, (uint32_t)dst, (uint32_t)acc.reg, (uint32_t)v.reg, z);
+            Val r = { dst, true, CT_BIGINT, false }; acc = r;
+        }
+        *out = acc; return c->ok;
+    }
+    if (strcmp(h, "Subtract") == 0 && n == 2) {
+        Val x, y; if (!emit_mgd_int(c, a[0], &x) || !emit_mgd_int(c, a[1], &y)) return false;
+        Slot z; memset(&z, 0, sizeof z);
+        int dst = alloc_mgd(c, CT_BIGINT);
+        ins(c, OP_MG_ZSUB, (uint32_t)dst, (uint32_t)x.reg, (uint32_t)y.reg, z);
+        Val r = { dst, true, CT_BIGINT, false }; *out = r; return c->ok;
+    }
+    if (strcmp(h, "Minus") == 0 && n == 1) {
+        Val x; if (!emit_mgd_int(c, a[0], &x)) return false;
+        Slot z; memset(&z, 0, sizeof z);
+        int dst = alloc_mgd(c, CT_BIGINT);
+        ins(c, OP_MG_ZNEG, (uint32_t)dst, (uint32_t)x.reg, 0, z);
+        Val r = { dst, true, CT_BIGINT, false }; *out = r; return c->ok;
+    }
+    if (strcmp(h, "Power") == 0 && n == 2) {
+        long ni;
+        if (!mgd_small_int(a[1], &ni) || ni < 0) return false;   /* negative -> Rational */
+        Val base; if (!emit_mgd_int(c, a[0], &base)) return false;
+        Slot k; memset(&k, 0, sizeof k); k.i = (long long)ni;
+        int dst = alloc_mgd(c, CT_BIGINT);
+        ins(c, OP_MG_ZPOWI, (uint32_t)dst, (uint32_t)base.reg, 0, k);
+        Val r = { dst, true, CT_BIGINT, false }; *out = r; return c->ok;
+    }
+    return false;
+}
+
+/* Managed emit entry: route to the domain the program was compiled for, and
+ * record the innermost failing node for the bail diagnostic (first writer wins,
+ * mirroring the machine emit wrapper). */
+static bool emit_mgd(Ctx* c, const Expr* e, Val* out) {
+    bool ok = (c->prec_bits > 0) ? emit_mgd_real(c, e, out)
+            : c->allow_bigint    ? emit_mgd_int(c, e, out)
+            : false;
+    if ((!ok || !c->ok) && !c->bail_node) c->bail_node = e;
+    return ok && c->ok;
+}
 
 /* ------------------------------------------------------------------ *
  *  Indexed Part (M3c)                                                 *
@@ -7207,6 +7655,173 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(OR):  RD.i = RA.i || RB.i; NEXT();
             OP(XOR): RD.i = (!!RA.i) ^ (!!RB.i); NEXT();
             OP(NOT): RD.i = !RA.i; NEXT();
+            /* Arbitrary-precision managed scalars.  R[dst].p / R[a].p / R[b].p
+             * are container POINTERS bound at frame entry; the op writes THROUGH
+             * R[dst].p (never reassigns it) so the binding survives.  The real and
+             * complex opcodes need MPFR; without it they can only appear in a
+             * program that was never built (the option degrades), so they abort. */
+            OP(MG_RCONST):
+#ifdef USE_MPFR
+                mpfr_set((mpfr_ptr)RD.p, (mpfr_srcptr)c->imm.p, MPFR_RNDN);
+#else
+                goto vm_fail;
+#endif
+                NEXT();
+            OP(MG_RMOV):
+#ifdef USE_MPFR
+                mpfr_set((mpfr_ptr)RD.p, (mpfr_srcptr)RA.p, MPFR_RNDN);
+#else
+                goto vm_fail;
+#endif
+                NEXT();
+            OP(MG_RFROM_I):
+#ifdef USE_MPFR
+                mpfr_set_si((mpfr_ptr)RD.p, (long)RA.i, MPFR_RNDN);
+#else
+                goto vm_fail;
+#endif
+                NEXT();
+            OP(MG_RFROM_D):
+#ifdef USE_MPFR
+                mpfr_set_d((mpfr_ptr)RD.p, RA.r, MPFR_RNDN);
+#else
+                goto vm_fail;
+#endif
+                NEXT();
+            OP(MG_RUN):
+#ifdef USE_MPFR
+                ((int(*)(mpfr_ptr, mpfr_srcptr, mpfr_rnd_t))c->imm.p)
+                    ((mpfr_ptr)RD.p, (mpfr_srcptr)RA.p, MPFR_RNDN);
+#else
+                goto vm_fail;
+#endif
+                NEXT();
+            OP(MG_RBIN):
+#ifdef USE_MPFR
+                ((int(*)(mpfr_ptr, mpfr_srcptr, mpfr_srcptr, mpfr_rnd_t))c->imm.p)
+                    ((mpfr_ptr)RD.p, (mpfr_srcptr)RA.p, (mpfr_srcptr)RB.p, MPFR_RNDN);
+#else
+                goto vm_fail;
+#endif
+                NEXT();
+            OP(MG_RPOWI):
+#ifdef USE_MPFR
+                mpfr_pow_si((mpfr_ptr)RD.p, (mpfr_srcptr)RA.p, (long)c->imm.i, MPFR_RNDN);
+#else
+                goto vm_fail;
+#endif
+                NEXT();
+            OP(MG_RCMP):
+#ifdef USE_MPFR
+                {
+                    mpfr_srcptr x = (mpfr_srcptr)RA.p, y = (mpfr_srcptr)RB.p;
+                    switch ((long)c->imm.i) {
+                        case 0: RD.i = mpfr_less_p(x, y);         break;
+                        case 1: RD.i = mpfr_lessequal_p(x, y);    break;
+                        case 2: RD.i = mpfr_greater_p(x, y);      break;
+                        case 3: RD.i = mpfr_greaterequal_p(x, y); break;
+                        case 4: RD.i = mpfr_equal_p(x, y);        break;
+                        default: RD.i = !mpfr_equal_p(x, y);      break;
+                    }
+                }
+#else
+                goto vm_fail;
+#endif
+                NEXT();
+            OP(MG_ZCONST): mpz_set((mpz_ptr)RD.p, (mpz_srcptr)c->imm.p); NEXT();
+            OP(MG_ZMOV):   mpz_set((mpz_ptr)RD.p, (mpz_srcptr)RA.p); NEXT();
+            OP(MG_ZFROM_I): mpz_set_si((mpz_ptr)RD.p, (long)RA.i); NEXT();
+            OP(MG_ZADD): mpz_add((mpz_ptr)RD.p, (mpz_srcptr)RA.p, (mpz_srcptr)RB.p); NEXT();
+            OP(MG_ZSUB): mpz_sub((mpz_ptr)RD.p, (mpz_srcptr)RA.p, (mpz_srcptr)RB.p); NEXT();
+            OP(MG_ZMUL): mpz_mul((mpz_ptr)RD.p, (mpz_srcptr)RA.p, (mpz_srcptr)RB.p); NEXT();
+            OP(MG_ZNEG): mpz_neg((mpz_ptr)RD.p, (mpz_srcptr)RA.p); NEXT();
+            OP(MG_ZPOWI): mpz_pow_ui((mpz_ptr)RD.p, (mpz_srcptr)RA.p, (unsigned long)c->imm.i); NEXT();
+            OP(MG_ZCMP): {
+                int cmp = mpz_cmp((mpz_srcptr)RA.p, (mpz_srcptr)RB.p);
+                switch ((long)c->imm.i) {
+                    case 0: RD.i = cmp <  0; break; case 1: RD.i = cmp <= 0; break;
+                    case 2: RD.i = cmp >  0; break; case 3: RD.i = cmp >= 0; break;
+                    case 4: RD.i = cmp == 0; break; default: RD.i = cmp != 0; break;
+                }
+            } NEXT();
+            OP(MG_CCONST):
+#ifdef USE_MPFR
+                ncpx_set((ncpx*)RD.p, (const ncpx*)c->imm.p);
+#else
+                goto vm_fail;
+#endif
+                NEXT();
+            OP(MG_CMOV):
+#ifdef USE_MPFR
+                ncpx_set((ncpx*)RD.p, (const ncpx*)RA.p);
+#else
+                goto vm_fail;
+#endif
+                NEXT();
+            OP(MG_CFROM_R):
+#ifdef USE_MPFR
+                {
+                    ncpx* d = (ncpx*)RD.p;
+                    mpfr_set(d->re, (mpfr_srcptr)RA.p, MPFR_RNDN);
+                    mpfr_set_ui(d->im, 0, MPFR_RNDN);
+                }
+#else
+                goto vm_fail;
+#endif
+                NEXT();
+            OP(MG_CUN):
+#ifdef USE_MPFR
+                {
+                    const ncpx* x = (const ncpx*)RA.p;
+                    long sel = (long)c->imm.i;
+                    if (sel == MGC_ABS)      ncpx_abs((mpfr_ptr)RD.p, x);
+                    else if (sel == MGC_ARG) ncpx_arg((mpfr_ptr)RD.p, x);
+                    else {
+                        ncpx* d = (ncpx*)RD.p; mpfr_prec_t wp = mpfr_get_prec(d->re);
+                        switch (sel) {
+                            case MGC_NEG:  ncpx_neg(d, x);       break;
+                            case MGC_EXP:  ncpx_exp(d, x, wp);   break;
+                            case MGC_LOG:  ncpx_log(d, x, wp);   break;
+                            case MGC_SIN:  ncpx_sin(d, x, wp);   break;
+                            case MGC_COS:  ncpx_cos(d, x, wp);   break;
+                            case MGC_SQRT: ncpx_sqrt(d, x, wp);  break;
+                            default: goto vm_fail;
+                        }
+                    }
+                }
+#else
+                goto vm_fail;
+#endif
+                NEXT();
+            OP(MG_CBIN):
+#ifdef USE_MPFR
+                {
+                    ncpx* d = (ncpx*)RD.p;
+                    const ncpx* x = (const ncpx*)RA.p; const ncpx* y = (const ncpx*)RB.p;
+                    mpfr_prec_t wp = mpfr_get_prec(d->re);
+                    switch ((long)c->imm.i) {
+                        case MGC_ADD: ncpx_add(d, x, y);     break;
+                        case MGC_SUB: ncpx_sub(d, x, y);     break;
+                        case MGC_MUL: ncpx_mul(d, x, y, wp); break;
+                        case MGC_DIV: ncpx_div(d, x, y, wp); break;
+                        case MGC_POW: ncpx_pow(d, x, y, wp); break;
+                        default: goto vm_fail;
+                    }
+                }
+#else
+                goto vm_fail;
+#endif
+                NEXT();
+            OP(MG_CPOWI):
+#ifdef USE_MPFR
+                {
+                    ncpx* d = (ncpx*)RD.p; const ncpx* x = (const ncpx*)RA.p;
+                    ncpx_pow_d(d, x, (double)(long)c->imm.i, mpfr_get_prec(d->re));
+                }
+#else
+                goto vm_fail;
+#endif
+                NEXT();
             /* Array ops are out of line: they allocate, they can fail, and
              * keeping them out of the scalar cases costs the scalar path
              * nothing. */
@@ -7872,10 +8487,20 @@ static void extract_par_loops(CompiledProgram* p) {
     }
 }
 
-static uint32_t patch_reg(uint32_t r, int arr_base, int tile_base) {
-    if (r >= (uint32_t)ARR_VREG)  return (uint32_t)arr_base  + (r - (uint32_t)ARR_VREG);
-    if (r >= (uint32_t)TILE_VREG) return (uint32_t)tile_base + (r - (uint32_t)TILE_VREG);
+static uint32_t patch_reg(uint32_t r, int arr_base, int tile_base, int managed_base) {
+    if (r >= (uint32_t)ARR_VREG)  return (uint32_t)arr_base     + (r - (uint32_t)ARR_VREG);
+    if (r >= (uint32_t)TILE_VREG) return (uint32_t)tile_base    + (r - (uint32_t)TILE_VREG);
+    if (r >= (uint32_t)MGD_VREG)  return (uint32_t)managed_base + (r - (uint32_t)MGD_VREG);
     return r;
+}
+
+/* Free the emit-time managed state on the BAIL path (the literal containers have
+ * not yet been transferred to a program).  On the success path only mgd_type is
+ * freed here; the containers become the program's. */
+static void ctx_free_managed(Ctx* c) {
+    free(c->mgd_type); c->mgd_type = NULL;
+    for (int i = 0; i < c->nmgd_consts; i++) mgd_const_free(&c->mgd_consts[i]);
+    free(c->mgd_consts); c->mgd_consts = NULL;
 }
 
 /* ------------------------------------------------------------------ *
@@ -7939,9 +8564,22 @@ CompiledProgram* compile_expr(const Expr* body, const char* const* arg_names,
 CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
                                  const CompileType* arg_types, size_t nargs,
                                  unsigned flags) {
+    return compile_expr_prec(body, arg_names, arg_types, nargs, flags, 0);
+}
+
+CompiledProgram* compile_expr_prec(const Expr* body, const char* const* arg_names,
+                                   const CompileType* arg_types, size_t nargs,
+                                   unsigned flags, long prec_bits) {
     bail_clear();
     if (!body) { g_bail_reason = "empty body"; return NULL; }
     Ctx c; memset(&c, 0, sizeof(c));
+    /* A managed body (arbitrary precision) is lowered by the separate emit_mgd
+     * and must skip the optimiser, Expr-CSE, fusion and parallelism, so the
+     * optimiser never sees a managed register and the machine path is unchanged. */
+    bool managed = (prec_bits > 0) || (flags & COMPILE_BIGINT);
+    if (managed) flags |= COMPILE_NO_OPT | COMPILE_NO_CSE | COMPILE_NO_FUSE | COMPILE_NO_PAR;
+    c.prec_bits = prec_bits;
+    c.allow_bigint = (flags & COMPILE_BIGINT) != 0;
     for (size_t k = 0; k < nargs; k++)
         if (CT_IS_ARRAY(arg_types[k])) {
             /* Rank is bounded only by the packed type encoding: the fused
@@ -7968,7 +8606,7 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     if (!(flags & COMPILE_NO_CSE)) cse_plan(&c, body);
 
     Val res;
-    bool ok = emit(&c, body, &res) && c.ok;
+    bool ok = (managed ? emit_mgd(&c, body, &res) : emit(&c, body, &res)) && c.ok;
     /* A borrowed argument array — or association (B3) — cannot be the result:
      * the caller owns what it gets back, and freeing an argument would corrupt
      * the caller's value.  A PRODUCED association (KeyDrop/KeyTake) is a tmp and
@@ -7999,33 +8637,37 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
         free(c.assocs);
         for (int i = 0; i < c.ncallees; i++) compile_assoccallee_free(c.callees[i]);
         free(c.callees);
+        ctx_free_managed(&c);
         free(c.code); free(c.argdep); return NULL;
     }
 
-    /* Three contiguous banks: scalars, then array handles, then strip-mining
-     * tiles.  A slot therefore has one kind for the whole life of the program,
-     * so teardown can never mistake a double for a pointer, and each bank is a
-     * range sweep. */
-    int arr_base  = c.maxreg;
-    int tile_base = arr_base + c.arr_max;
-    int nreg      = tile_base + c.tile_max;
+    /* Four contiguous banks: scalars, then array handles, then strip-mining
+     * tiles, then arbitrary-precision managed containers.  A slot therefore has
+     * one kind for the whole life of the program, so teardown can never mistake a
+     * double for a pointer, and each bank is a range sweep.  A machine program has
+     * managed_base == nreg (empty managed bank). */
+    int arr_base     = c.maxreg;
+    int tile_base    = arr_base + c.arr_max;
+    int managed_base = tile_base + c.tile_max;
+    int nreg         = managed_base + c.mgd_max;
     for (size_t i = 0; i < c.n; i++) {
-        c.code[i].dst = patch_reg(c.code[i].dst, arr_base, tile_base);
-        c.code[i].a   = patch_reg(c.code[i].a, arr_base, tile_base);
+        c.code[i].dst = patch_reg(c.code[i].dst, arr_base, tile_base, managed_base);
+        c.code[i].a   = patch_reg(c.code[i].a, arr_base, tile_base, managed_base);
         /* `b` is a branch TARGET on the jumping kinds and a register everywhere
          * else.  Asking the kind table rather than listing the opcodes means a
          * new branch opcode cannot have its target silently relocated into the
          * array bank — which is a corruption with no symptom until it jumps. */
         int bk = compile_op_kind[c.code[i].op];
         if (bk != K_JMP && bk != K_JZ && bk != K_LOOP && bk != K_APAR)
-            c.code[i].b = patch_reg(c.code[i].b, arr_base, tile_base);
+            c.code[i].b = patch_reg(c.code[i].b, arr_base, tile_base, managed_base);
     }
-    int result_reg = (int)patch_reg((uint32_t)res.reg, arr_base, tile_base);
+    int result_reg = (int)patch_reg((uint32_t)res.reg, arr_base, tile_base, managed_base);
 
     /* Optimise the emitted bytecode.  Runs after patch_reg so the array bank is
      * already at its final place and `arr_base` means what the optimiser expects.
      * Register numbers are preserved, so `result_reg` stays valid.  A failure
-     * here is non-fatal: the unoptimised code is still correct. */
+     * here is non-fatal: the unoptimised code is still correct.  Managed programs
+     * force COMPILE_NO_OPT, so the optimiser never sees a managed register. */
     if (!(flags & COMPILE_NO_OPT)) compile_optimize(c.code, &c.n, nreg, arr_base, tile_base);
 
     CompiledProgram* p = calloc(1, sizeof(*p));
@@ -8036,6 +8678,7 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
         free(c.assocs);
         for (int i = 0; i < c.ncallees; i++) compile_assoccallee_free(c.callees[i]);
         free(c.callees);
+        ctx_free_managed(&c);
         free(c.code); free(c.argdep); return NULL;
     }
     /* The general-Part subscript lists become the program's: their literal specs
@@ -8056,9 +8699,44 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     memcpy(p->arg_types, arg_types, nargs * sizeof(CompileType));
     p->all_real = (res.type == CT_REAL) && c.arr_max == 0;
     for (size_t k = 0; k < nargs; k++) if (arg_types[k] != CT_REAL) p->all_real = false;
+
+    /* Managed (arbitrary-precision) wiring.  A managed register needs a container
+     * allocated at frame entry: enumerate every one — the managed ARGUMENT
+     * registers (which live in the scalar-bank arg range) and every register of
+     * the managed bank — with its container type, and hand the program its
+     * literal containers.  Zero of this runs for a machine program. */
+    p->prec_bits = prec_bits;
+    p->managed_base = managed_base;
+    p->mgd_consts = c.mgd_consts; p->nmgd_consts = c.nmgd_consts;  /* ownership moves */
+    {
+        int nmanaged_args = 0;
+        for (size_t k = 0; k < nargs; k++) if (CT_IS_MANAGED(arg_types[k])) nmanaged_args++;
+        int total = nmanaged_args + c.mgd_max;
+        if (total > 0) {
+            p->mgd_slots = malloc((size_t)total * sizeof(MgdSlot));
+            if (!p->mgd_slots) { free(c.mgd_type); compiled_free(p); return NULL; }
+            int j = 0;
+            for (size_t k = 0; k < nargs; k++)
+                if (CT_IS_MANAGED(arg_types[k])) {
+                    p->mgd_slots[j].reg = (int)k;
+                    p->mgd_slots[j].type = arg_types[k];
+                    j++;
+                }
+            for (int i = 0; i < c.mgd_max; i++) {
+                p->mgd_slots[j].reg = managed_base + i;
+                p->mgd_slots[j].type = c.mgd_type[i];
+                j++;
+            }
+            p->nmgd_slots = total;
+        }
+    }
+    free(c.mgd_type);   /* types now live in p->mgd_slots */
+
     extract_par_loops(p);
     return p;
 }
+
+long compiled_prec_bits(const CompiledProgram* p) { return p ? p->prec_bits : 0; }
 
 CompileType compiled_result_type(const CompiledProgram* p) { return p->result_type; }
 bool        compiled_result_built(const CompiledProgram* p) { return p && p->result_built; }
@@ -8072,6 +8750,10 @@ size_t compiled_arg_deps(const CompiledProgram* p, int* deps, size_t cap) {
     for (size_t k = 0; k < p->nargs && n < cap; k++) if (p->argdep[k]) deps[n++] = (int)k;
     return n;
 }
+
+#ifdef USE_MPFR
+static bool mgd_ncpx_set_from_expr(ncpx* z, const Expr* e);   /* defined below */
+#endif
 
 /* Bind one boxed argument to its register.  Returns false if the value does not
  * match the declared type, so the caller can fall back to the interpreter.
@@ -8092,6 +8774,19 @@ static bool load_arg(Slot* s, const CompileValue* v, CompileType want) {
         if (!x || !is_association(x)) return false;
         s->arr = x;
         return true;
+    }
+    if (CT_IS_MANAGED(want)) {
+        /* The container is already bound in s->p by managed_frame_enter (which
+         * runs before load_arg); set its VALUE from the boxed numeric Expr in
+         * v.a, rounded to the container's fixed working precision. */
+        const Expr* e = v->v.a;
+        if (!e) return false;
+        if (want == CT_BIGINT) return mgd_mpz_from_expr((mpz_ptr)s->p, e);
+#ifdef USE_MPFR
+        if (want == CT_BIGREAL) return mgd_mpfr_from_expr((mpfr_ptr)s->p, e);
+        if (want == CT_BIGCOMPLEX) return mgd_ncpx_set_from_expr((ncpx*)s->p, e);
+#endif
+        return false;
     }
     if (CT_IS_ARRAY(v->type) || CT_IS_ASSOC(v->type)) return false;
     /* coerce the boxed arg to the register's declared type */
@@ -8150,6 +8845,86 @@ static void arr_sweep(const CompiledProgram* p, Slot* R) {
         if (R[r].arr) { expr_free(R[r].arr); R[r].arr = NULL; }
 }
 
+/* ---- Arbitrary-precision container lifecycle (per call) ----
+ * A managed register's Slot holds a pointer to a heap container (mpz_t / mpfr_t
+ * / ncpx) that needs init/clear.  These bind them at frame entry and release
+ * them at exit — the container analogue of arr_reset/arr_sweep.  Every path is
+ * gated on nmgd_slots, so a machine program (nmgd_slots == 0) never enters here:
+ * the machine path pays nothing.
+ *
+ * NOTE (v1): correctness-first per-call allocation.  The warm thread-local
+ * precision-keyed arena of the design doc (§7) is a follow-up optimisation; it
+ * affects only the MPFR path's speed, never the machine path, so it does not gate
+ * the zero-regression contract. */
+#ifdef USE_MPFR
+static bool mgd_ncpx_set_from_expr(ncpx* z, const Expr* e) {
+    Expr *re, *im;
+    if (is_complex((Expr*)e, &re, &im))
+        return mgd_mpfr_from_expr(z->re, re) && mgd_mpfr_from_expr(z->im, im);
+    if (!mgd_mpfr_from_expr(z->re, e)) return false;  /* a real value */
+    mpfr_set_ui(z->im, 0, MPFR_RNDN);
+    return true;
+}
+#endif
+
+static void managed_frame_exit(const CompiledProgram* p, Slot* R) {
+    for (int i = 0; i < p->nmgd_slots; i++) {
+        void* ptr = (void*)R[p->mgd_slots[i].reg].p;
+        if (!ptr) continue;
+        switch ((int)p->mgd_slots[i].type) {
+            case CT_BIGINT: mpz_clear((mpz_ptr)ptr); break;
+#ifdef USE_MPFR
+            case CT_BIGREAL: mpfr_clear((mpfr_ptr)ptr); break;
+            case CT_BIGCOMPLEX: ncpx_clear((ncpx*)ptr); break;
+#endif
+            default: break;
+        }
+        free(ptr);
+        R[p->mgd_slots[i].reg].p = NULL;
+    }
+}
+static bool managed_frame_enter(const CompiledProgram* p, Slot* R) {
+    for (int i = 0; i < p->nmgd_slots; i++) R[p->mgd_slots[i].reg].p = NULL;
+    for (int i = 0; i < p->nmgd_slots; i++) {
+        void* ptr = NULL;
+        switch ((int)p->mgd_slots[i].type) {
+            case CT_BIGINT: { mpz_ptr z = malloc(sizeof *z); if (z) mpz_init(z); ptr = z; break; }
+#ifdef USE_MPFR
+            case CT_BIGREAL: { mpfr_ptr m = malloc(sizeof *m); if (m) mpfr_init2(m, (mpfr_prec_t)p->prec_bits); ptr = m; break; }
+            case CT_BIGCOMPLEX: { ncpx* z = malloc(sizeof *z); if (z) ncpx_init(z, (mpfr_prec_t)p->prec_bits); ptr = z; break; }
+#endif
+            default: break;
+        }
+        if (!ptr) { managed_frame_exit(p, R); return false; }
+        R[p->mgd_slots[i].reg].p = ptr;
+    }
+    return true;
+}
+
+/* Build the result Expr from a managed result container, or NULL on a non-finite
+ * value (mirrors the finite_result gate — the caller then interprets). */
+static Expr* managed_result_expr(const CompiledProgram* p, const Slot* r) {
+    switch ((int)p->result_type) {
+        case CT_BIGINT: {
+            Expr* e = expr_new_bigint_from_mpz((mpz_srcptr)r->p);
+            return expr_bigint_normalize(e);
+        }
+#ifdef USE_MPFR
+        case CT_BIGREAL: {
+            mpfr_srcptr m = (mpfr_srcptr)r->p;
+            if (!mpfr_number_p(m)) return NULL;   /* nan/inf -> fall back */
+            return expr_new_mpfr_copy(m);
+        }
+        case CT_BIGCOMPLEX: {
+            ncpx* z = (ncpx*)r->p;
+            if (!mpfr_number_p(z->re) || !mpfr_number_p(z->im)) return NULL;
+            return numeric_mpfr_make_complex(z->re, z->im);
+        }
+#endif
+        default: return NULL;
+    }
+}
+
 /* Depth guard for OP_CALL.  Frames live on the C stack, so unbounded nesting
  * would overflow it rather than fail cleanly; a compiled program that recurses
  * past this simply fails and the caller falls back to the interpreter. */
@@ -8163,6 +8938,10 @@ static VM_TLS int vm_call_depth = 0;
 static bool vm_call(const CompiledProgram* cp, const Slot* argv, unsigned nargs, Slot* dst) {
     if (!cp || cp->nargs != (size_t)nargs) return false;
     if (vm_call_depth >= VM_MAX_CALL_DEPTH) return false;
+    /* A managed (arbitrary-precision) callee is not reachable in v1 — emit_mgd
+     * never emits OP_CALL, and the raw-Slot calling convention here cannot carry
+     * container-typed arguments — so decline rather than misread a container. */
+    if (cp->nmgd_slots) return false;
 
     Slot stackframe[VM_STACK_SLOTS];
     Slot* heap = NULL;
@@ -8200,9 +8979,13 @@ bool compiled_eval(const CompiledProgram* p, const CompileValue* args, CompileVa
         R = heap;
     }
     if (p->ntiles) frame_bind_tiles(p, R);
+    if (p->nmgd_slots && !managed_frame_enter(p, R)) { free(heap); return false; }
 
     for (size_t k = 0; k < p->nargs; k++)
-        if (!load_arg(&R[k], &args[k], p->arg_types[k])) { free(heap); return false; }
+        if (!load_arg(&R[k], &args[k], p->arg_types[k])) {
+            if (p->nmgd_slots) managed_frame_exit(p, R);
+            free(heap); return false;
+        }
     arr_reset(p, R);
     bool failed = false;
     vm_run(p->code, p->n, R, &failed);
@@ -8214,8 +8997,19 @@ bool compiled_eval(const CompiledProgram* p, const CompileValue* args, CompileVa
         out->v.a = failed ? NULL : r->arr;
         if (!failed) r->arr = NULL;    /* ownership transfers to the caller */
         arr_sweep(p, R);
+        if (p->nmgd_slots) managed_frame_exit(p, R);
         free(heap);
         return !failed && out->v.a != NULL;
+    }
+    /* An arbitrary-precision result is COPIED out of its container into a fresh
+     * Expr before the containers are cleared; the caller owns it, as for arrays. */
+    if (CT_IS_MANAGED(p->result_type)) {
+        Expr* rv = failed ? NULL : managed_result_expr(p, r);
+        out->v.a = rv;
+        arr_sweep(p, R);
+        managed_frame_exit(p, R);
+        free(heap);
+        return rv != NULL;
     }
     switch (p->result_type) {
         case CT_BOOL: out->v.b = (unsigned char)(r->i != 0); break;
@@ -8226,6 +9020,7 @@ bool compiled_eval(const CompiledProgram* p, const CompileValue* args, CompileVa
     }
     arr_sweep(p, R);
     bool good = !failed && finite_result(r, p->result_type);
+    if (p->nmgd_slots) managed_frame_exit(p, R);
     free(heap);
     return good;
 }
@@ -8295,6 +9090,9 @@ void compiled_free(CompiledProgram* p) {
     free(p->assocs);
     for (int i = 0; i < p->ncallees; i++) compile_assoccallee_free(p->callees[i]);
     free(p->callees);
+    for (int i = 0; i < p->nmgd_consts; i++) mgd_const_free(&p->mgd_consts[i]);
+    free(p->mgd_consts);
+    free(p->mgd_slots);
     free(p->code); free(p->arg_types); free(p->argdep);
     free(p);
 }

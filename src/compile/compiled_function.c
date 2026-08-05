@@ -13,6 +13,7 @@
 #include "../sym_intern.h"     /* intern_symbol */
 #include "../sym_names.h"      /* SYM_Real / SYM_Integer / SYM_Complex / ... */
 #include "../ndarray.h"        /* ndarray_from_nested_list — packing a List argument */
+#include "../numeric.h"        /* numeric_digits_to_bits — WorkingPrecision -> MPFR bits */
 #include "../assoc.h"          /* is_association / assoc_prebuild_index — _Association bag */
 #include "../pack.h"           /* pack_offer / pack_repack_like — the packed boundary */
 #include "../checked_int.h"    /* ci_fits_double — decline an inexact int64 cast */
@@ -193,6 +194,19 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out,
         }
         default: break;
     }
+    if (CT_IS_MANAGED(t)) {
+        /* An arbitrary-precision argument is BORROWED as its numeric Expr: the
+         * program never frees it, and load_arg sets the (already-bound) container
+         * from it at the program's working precision.  Validate the value is a
+         * numeric atom of the right kind so a symbolic arg falls back instead. */
+        double a, b;
+        bool ok = (t == CT_BIGINT)  ? (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT)
+                : (t == CT_BIGREAL) ? cf_to_double(e, &a)
+                :                     cf_to_complex(e, &a, &b);
+        if (!ok) return false;
+        out->v.a = (Expr*)e;
+        return true;
+    }
     if (CT_IS_ASSOC(t)) {
         /* A read-only Association bag is BORROWED, exactly like an NDArray
          * argument: the program never frees it and `owned` stays false.  Build
@@ -258,6 +272,9 @@ static Expr* cf_unbox(const CompileValue* v) {
         }
         default: break;
     }
+    /* An arbitrary-precision result is a NEW Expr (EXPR_MPFR / bignum Integer /
+     * Complex[MPFR,MPFR]) that compiled_eval built and the caller owns. */
+    if (CT_IS_MANAGED(v->type)) return v->v.a;
     /* compiled_eval hands back a NEW EXPR_NDARRAY that the caller owns, so it
      * becomes the result directly — no copy, no conversion to a nested List. */
     if (CT_IS_ARRAY(v->type)) return v->v.a;
@@ -387,11 +404,29 @@ static bool cf_parse_argspec(const Expr* argspec,
     return true;
 }
 
+/* Rewrite declared argument types for an arbitrary-precision compile.  With a
+ * numeric WorkingPrecision, real/integer become MPFR reals and complex becomes
+ * MPFR complex (integers lift to reals — a WorkingPrecision body is a float
+ * body).  With "BigIntegers" alone, integers become GMP bignums. */
+static void cf_apply_precision_types(CompileType* types, size_t n,
+                                     long prec_bits, bool bigint) {
+    for (size_t i = 0; i < n; i++) {
+        if (prec_bits > 0) {
+            if (types[i] == CT_REAL || types[i] == CT_INT) types[i] = CT_BIGREAL;
+            else if (types[i] == CT_COMPLEX)               types[i] = CT_BIGCOMPLEX;
+        } else if (bigint && types[i] == CT_INT) {
+            types[i] = CT_BIGINT;
+        }
+    }
+}
+
 CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body,
-                                        uint32_t runtime_attrs, unsigned compile_flags) {
+                                        uint32_t runtime_attrs, unsigned compile_flags,
+                                        long prec_bits) {
     if (!body) return NULL;
     const char** names; CompileType* types; size_t n;
     if (!cf_parse_argspec(argspec, &names, &types, &n)) return NULL;
+    cf_apply_precision_types(types, n, prec_bits, (compile_flags & COMPILE_BIGINT) != 0);
 
     CompiledFunction* cf = calloc(1, sizeof *cf);
     if (!cf) { free(names); free(types); return NULL; }
@@ -403,7 +438,7 @@ CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body,
     /* NULL ⇒ fallback only.  COMPILE_FOLD_GLOBALS is deliberately NOT passed: a
      * Compile[] object outlives the scope that defined it, so folding a global's
      * current value into it would go stale (see compile.h). */
-    cf->prog      = compile_expr_ex(cf->body, names, types, n, compile_flags);
+    cf->prog      = compile_expr_prec(cf->body, names, types, n, compile_flags, prec_bits);
     cf->runtime_attrs = runtime_attrs;
     return cf;
 }
@@ -873,6 +908,50 @@ static bool cf_match_runtime_options_opt(const Expr* e, unsigned* out, bool* ok)
     return true;
 }
 
+/* `WorkingPrecision -> MachinePrecision | n`.  A numeric n (decimal digits)
+ * compiles real/complex scalars in MPFR at numeric_digits_to_bits(n) bits;
+ * MachinePrecision (the default) leaves *prec_bits at 0 (machine path). */
+static bool cf_match_working_precision_opt(const Expr* e, long* prec_bits, bool* ok) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
+        || e->data.function.arg_count != 2)
+        return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
+    const Expr* lhs = e->data.function.args[0];
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_WorkingPrecision) return false;
+    const Expr* val = e->data.function.args[1];
+    *ok = false;
+    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_MachinePrecision) {
+        *prec_bits = 0; *ok = true; return true;
+    }
+    double d;
+    if (cf_to_double(val, &d) && d > 0.0 && d <= 1.0e9) {
+        long bits = numeric_digits_to_bits(d);
+        *prec_bits = bits < 2 ? 2 : bits;
+        *ok = true;
+    }
+    return true;   /* recognised the option (lhs); *ok says whether the value was valid */
+}
+
+/* `"BigIntegers" -> True | False`.  Sets or clears COMPILE_BIGINT.  The key is a
+ * string (the design's spelling); a bare symbol of the same name is also taken. */
+static bool cf_match_bigintegers_opt(const Expr* e, unsigned* flags, bool* ok) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
+        || e->data.function.arg_count != 2)
+        return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
+    const Expr* lhs = e->data.function.args[0];
+    bool is_bi = (lhs->type == EXPR_STRING && strcmp(lhs->data.string, "BigIntegers") == 0)
+              || (lhs->type == EXPR_SYMBOL && strcmp(lhs->data.symbol.name, "BigIntegers") == 0);
+    if (!is_bi) return false;
+    const Expr* val = e->data.function.args[1];
+    *ok = false;
+    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_True)  { *flags |=  COMPILE_BIGINT; *ok = true; }
+    else if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_False) { *flags &= ~COMPILE_BIGINT; *ok = true; }
+    return true;
+}
+
 /* Compile[argspec, body, opts] (HoldAll).  Never evaluates the body; the raw
  * held body is compiled, and any non-arg symbol it references simply routes that
  * call through the interpreter fallback.
@@ -904,16 +983,23 @@ static Expr* builtin_compile(Expr* res) {
      * option this function has no meaning for — an unknown name, or a
      * RuntimeAttributes value that is not a supported attribute — leaves
      * Compile[...] unevaluated rather than being quietly ignored. */
-    bool explicit_attrs = false, explicit_opts = false;
+    long prec_bits = 0;
+    bool explicit_attrs = false, explicit_opts = false, explicit_wp = false, explicit_bi = false;
     while (argc > 2) {
         const Expr* o = a[argc - 1];
-        uint32_t v; unsigned f = cflags; bool ok = false;
+        uint32_t v; unsigned f = cflags; long pb = prec_bits; bool ok = false;
         if (cf_match_runtime_attrs_opt(o, &v, &ok)) {
             if (!ok) return NULL;
             if (!explicit_attrs) { rattrs = v; explicit_attrs = true; }
         } else if (cf_match_runtime_options_opt(o, &f, &ok)) {
             if (!ok) return NULL;
             if (!explicit_opts) { cflags = f; explicit_opts = true; }
+        } else if (cf_match_working_precision_opt(o, &pb, &ok)) {
+            if (!ok) return NULL;
+            if (!explicit_wp) { prec_bits = pb; explicit_wp = true; }
+        } else if (cf_match_bigintegers_opt(o, &f, &ok)) {
+            if (!ok) return NULL;
+            if (!explicit_bi) { cflags = f; explicit_bi = true; }
         } else {
             return NULL;
         }
@@ -921,7 +1007,7 @@ static Expr* builtin_compile(Expr* res) {
     }
     if (argc != 2) return NULL;
 
-    CompiledFunction* cf = compiled_function_new(a[0], a[1], rattrs, cflags);
+    CompiledFunction* cf = compiled_function_new(a[0], a[1], rattrs, cflags, prec_bits);
     if (!cf) return NULL;   /* malformed argspec ⇒ leave Compile[...] unevaluated */
     return expr_new_compiled(cf);
 }
@@ -1035,7 +1121,12 @@ void compiled_function_init(void) {
         "shorthand RuntimeOptions -> \"Speed\") lets machine-integer arithmetic "
         "wrap instead of falling back to the interpreter, which is faster and "
         "gives a different answer from the interpreter once a result leaves the "
-        "machine-integer range; the default True never does.");
+        "machine-integer range; the default True never does. "
+        "WorkingPrecision -> n compiles real/complex arithmetic in MPFR at n "
+        "decimal digits (one fixed precision for the whole function), for the "
+        "straight-line arithmetic + elementary-function subset; MachinePrecision "
+        "(the default) keeps the machine path unchanged. \"BigIntegers\" -> True "
+        "makes integer arithmetic exact (GMP) instead of int64.");
     symtab_add_builtin("CompileDiagnostics", builtin_compile_diagnostics);
     SymbolDef* dd = symtab_get_def("CompileDiagnostics");
     if (dd) dd->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;

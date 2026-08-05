@@ -60,6 +60,22 @@ AutoCompiled* autocompile_new(const Expr* body, const Expr* const* vars, size_t 
  * autocompiled_eval_z. */
 AutoCompiled* autocompile_new_z(const Expr* body, const Expr* const* vars, size_t nvars);
 
+/* As autocompile_new, but compiles the body in MPFR at `prec_bits` bits (real
+ * inputs), for a sampler running at a high WorkingPrecision.  The compilable
+ * subset is the arbitrary-precision one (straight-line arithmetic + elementary
+ * functions; see docs/design/compile-arbitrary-precision.md).  Returns NULL for
+ * prec_bits <= 0 (use autocompile_new for the machine path) or a non-compilable
+ * body.  Read back with autocompiled_eval_mpfr. */
+AutoCompiled* autocompile_new_prec(const Expr* body, const Expr* const* vars,
+                                   size_t nvars, long prec_bits);
+
+/* Evaluate a program built by autocompile_new_prec at the numeric sample points
+ * `xs[nvars]` (each an EXPR_MPFR / Integer / Real / Rational, borrowed).  Returns
+ * a freshly allocated result Expr (EXPR_MPFR, or Complex[MPFR,MPFR]) the caller
+ * owns, or NULL when the caller should interpret this point (non-finite result,
+ * or a non-managed program). */
+Expr* autocompiled_eval_mpfr(const AutoCompiled* ac, const Expr* const* xs);
+
 size_t autocompiled_num_vars(const AutoCompiled* ac);
 
 /* True when the program has an all-real SIGNATURE and a CT_REAL result type, so

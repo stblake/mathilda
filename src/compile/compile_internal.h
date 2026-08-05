@@ -334,6 +334,35 @@ enum {
     X(VKERN_RR, K_KERN1)  X(VKERN_R2R, K_KERN1) X(VKERN_RC, K_KERN1)       \
     X(VKERN_CC, K_KERN1)  X(VKERN_CR, K_KERN1)                             \
     X(VKERN2_RR, K_KERN2) X(VKERN2_RC, K_KERN2) X(VKERN2_CC, K_KERN2)      \
+    /* Arbitrary-precision managed scalars — opt-in (WorkingPrecision -> n /   \
+     * "BigIntegers" -> True; see docs/design/compile-arbitrary-precision.md).  \
+     * A managed register's Slot holds a POINTER to its per-call container      \
+     * (mpfr_t for MG_R*, mpz_t for MG_Z*, ncpx for MG_C*), bound once at frame  \
+     * entry; the opcode supplies the type, so the container is type-erased in   \
+     * the Slot exactly as an array handle is.  MG_R{BIN,UN} carry a raw mpfr_*  \
+     * function pointer in imm.p (K_BIN/K_UN, so disasm renders no immediate and \
+     * never dereferences it as a kernel).  A program using any of these forces  \
+     * COMPILE_NO_OPT | COMPILE_NO_CSE, so the optimiser and Expr-CSE never see  \
+     * a managed register and the machine path is provably untouched.            \
+     * MG_RFROM_I/MG_RFROM_D lift a machine int/real operand into a managed real;\
+     * MG_RCMP writes a Bool (imm.i selects the predicate, as LT_R..NE_R).       */ \
+    X(MG_RCONST, K_CONST) X(MG_RMOV, K_MOVE)                                \
+    X(MG_RFROM_I, K_UN)   X(MG_RFROM_D, K_UN)                              \
+    X(MG_RUN, K_UN)       X(MG_RBIN, K_BIN)   X(MG_RPOWI, K_POWI)          \
+    X(MG_RCMP, K_BIN)                                                       \
+    /* Bignum (GMP mpz_t) integer scalars.  MG_ZCONST loads a program-owned    \
+     * mpz constant (imm.p); MG_Z{ADD,SUB,MUL} are exact; MG_ZPOWI raises to a   \
+     * non-negative machine-int power (imm.i); MG_ZFROM_I lifts a machine int64; \
+     * MG_ZCMP writes a Bool.  No division opcode: exact integer division is a   \
+     * Rational, which no managed-int container holds, so it bails at emit. */    \
+    X(MG_ZCONST, K_CONST) X(MG_ZMOV, K_MOVE)  X(MG_ZFROM_I, K_UN)          \
+    X(MG_ZADD, K_BIN)     X(MG_ZSUB, K_BIN)   X(MG_ZMUL, K_BIN)            \
+    X(MG_ZNEG, K_UN)      X(MG_ZPOWI, K_POWI) X(MG_ZCMP, K_BIN)            \
+    /* Arbitrary-precision complex (ncpx = pair of mpfr_t).  MG_CBIN/MG_CUN     \
+     * dispatch an ncpx_* kernel in imm.p; MG_CFROM_R lifts a managed real (zero \
+     * imaginary part).  MG_CPOWI is an integer power. */                        \
+    X(MG_CCONST, K_CONST) X(MG_CMOV, K_MOVE)  X(MG_CFROM_R, K_UN)          \
+    X(MG_CUN, K_UN)       X(MG_CBIN, K_BIN)   X(MG_CPOWI, K_POWI)          \
     X(RET, K_RET)
 
 /* The opcode enum, generated from OPLIST so the two cannot drift apart. */
@@ -484,6 +513,18 @@ typedef struct {
     int      nreg, tile_base, ntiles;
 } ParLoop;
 
+/* One managed register: its final (relocated) register number and its container
+ * type.  Enumerated at finalize over both managed ARGUMENT registers (an arg
+ * declared _Real under WorkingPrecision, which lives in the scalar-bank arg
+ * range) and every register of the managed bank, so frame entry/exit can init
+ * and clear exactly the containers a call needs. */
+typedef struct { int reg; CompileType type; } MgdSlot;
+
+/* A program-owned arbitrary-precision literal container, pointed at from an
+ * instruction immediate (MG_*CONST).  `kind`: 0 = mpfr_t, 1 = mpz_t, 2 = ncpx.
+ * Freed at compiled_free. */
+typedef struct { int kind; void* ptr; } MgdConst;
+
 struct CompiledProgram {
     Instr*      code;
     size_t      n;
@@ -512,6 +553,17 @@ struct CompiledProgram {
      * same body returns a List however the arguments were spelled.  See Val.built
      * in compile.c and the result-kind decision in compiled_function.c. */
     bool        result_built;
+
+    /* Arbitrary precision (managed scalars).  prec_bits == 0 for a machine
+     * program, in which case every field below is zero/NULL and every managed
+     * mechanism is inert — the machine path never enters the arena, never sizes
+     * it, and vm_run's hot loop is unchanged. */
+    long        prec_bits;      /* MPFR working precision in bits, or 0        */
+    int         managed_base;   /* managed bank is [managed_base, nreg)        */
+    MgdSlot*    mgd_slots;      /* every managed register (args + bank)        */
+    int         nmgd_slots;
+    MgdConst*   mgd_consts;     /* program-owned literal containers            */
+    int         nmgd_consts;
 };
 
 /* Array and tile temporaries are allocated into virtual ranges and relocated to
@@ -520,6 +572,12 @@ struct CompiledProgram {
  * mistake a double for a pointer. */
 #define ARR_VREG  0x40000000
 #define TILE_VREG 0x20000000
+/* Managed (arbitrary-precision) register bank.  Relocated at finalize into the
+ * fourth contiguous bank, ABOVE the tile bank: scalars, arrays, tiles, managed.
+ * Its slots hold container pointers, so patch_reg treats it like the array/tile
+ * banks (see compile.c).  Below TILE_VREG so patch_reg's descending threshold
+ * tests stay well ordered. */
+#define MGD_VREG  0x10000000
 
 /* Kind of each opcode, indexed by opcode.  Defined in optimize.c. */
 extern const unsigned char compile_op_kind[OP__COUNT];

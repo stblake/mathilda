@@ -34,9 +34,12 @@ typedef struct CompiledFunction CompiledFunction;
  * Listable symbol does — see compiled_function_apply.
  *
  * `compile_flags` are compile-engine flags (compile.h) from the `RuntimeOptions`
- * option — currently only COMPILE_WRAP_INT.  Pass 0 for the defaults. */
+ * option (COMPILE_WRAP_INT) and the `"BigIntegers"` option (COMPILE_BIGINT).
+ * `prec_bits` is the MPFR working precision from `WorkingPrecision -> n` (0 for
+ * the default machine precision).  Pass 0 flags / 0 prec_bits for the defaults. */
 CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body,
-                                        uint32_t runtime_attrs, unsigned compile_flags);
+                                        uint32_t runtime_attrs, unsigned compile_flags,
+                                        long prec_bits);
 
 CompiledFunction* compiled_function_ref(CompiledFunction* cf);
 void              compiled_function_free(CompiledFunction* cf);

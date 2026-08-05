@@ -1119,6 +1119,9 @@ target_include_directories(compiledfunction_tests PRIVATE ../src ../src/compile)
 add_executable(autocompile_tests test_autocompile.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(autocompile_tests PRIVATE ../src ../src/compile)
 
+add_executable(compile_arbprec_tests test_compile_arbprec.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(compile_arbprec_tests PRIVATE ../src ../src/compile)
+
 add_executable(levincoll_tests test_levincoll.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(levincoll_tests PRIVATE ../src ../src/numerical_calculus)
 
