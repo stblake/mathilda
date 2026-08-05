@@ -498,6 +498,33 @@ Expr* assoc_key_select(const Expr* assoc, const Expr* karg, bool take) {
     return result;
 }
 
+/* Functional key set (compiled B5): a fresh Association equal to `assoc` with
+ * `key` mapped to `newval` — the value replaced IN PLACE (order preserved) if the
+ * key is already present, else a new entry appended at the end.  Borrows `assoc`
+ * and `key`; ADOPTS `newval` (used exactly once).  Owned result, or NULL if
+ * `assoc` is not an association (then the caller must free `newval`). */
+Expr* assoc_set_key(const Expr* assoc, const Expr* key, Expr* newval) {
+    if (!is_association(assoc)) return NULL;
+    size_t n = assoc->data.function.arg_count;
+    Expr** rules = malloc((n + 1) * sizeof(Expr*));
+    if (!rules) return NULL;
+    size_t m = 0;
+    bool replaced = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* entry = assoc->data.function.args[i];
+        if (!replaced && is_rule2(entry) && expr_eq(rule_key(entry), key)) {
+            rules[m++] = assoc_entry_with_value(entry, newval);   /* adopts newval */
+            replaced = true;
+        } else {
+            rules[m++] = expr_copy(entry);
+        }
+    }
+    if (!replaced) rules[m++] = make_rule(expr_copy((Expr*)key), newval);  /* adopts newval */
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), rules, m);
+    free(rules);
+    return result;
+}
+
 static Expr* key_drop_take(Expr* res, bool take) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];

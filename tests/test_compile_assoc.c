@@ -349,6 +349,45 @@ static void test_higher_order(void) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  B5 — functional update: Append[assoc, key -> value]                *
+ * ------------------------------------------------------------------ */
+
+static void test_functional_update(void) {
+    /* append a NEW key with a runtime value; parity with the interpreter */
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"c\" -> x]]");
+    assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"c\" -> x]]"
+                "[<|\"a\" -> 1., \"b\" -> 2.|>, 3.] === Append[<|\"a\" -> 1., \"b\" -> 2.|>, \"c\" -> 3.]");
+    assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"c\" -> x]]"
+                "[<|\"a\" -> 1., \"b\" -> 2.|>, 3.] === <|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>");
+
+    /* REPLACE an existing key — value updated in place, order preserved */
+    assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"b\" -> x]]"
+                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 9.] === <|\"a\" -> 1., \"b\" -> 9., \"c\" -> 3.|>");
+
+    /* the value can be any compiled machine expression */
+    assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[p, \"sum\" -> Lookup[p, \"a\"] + x]]"
+                "[<|\"a\" -> 10.|>, 5.] === <|\"a\" -> 10., \"sum\" -> 15.|>");
+    /* integer / integer keys */
+    assert_true("Compile[{{p, _Association, _Integer}, {n, _Integer}}, Append[p, 7 -> n * n]]"
+                "[<|1 -> 1|>, 4] === <|1 -> 1, 7 -> 16|>");
+
+    /* composition: Append onto a produced (KeyDrop) association */
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}, {x, _Real}}, Append[KeyDrop[p, \"b\"], \"z\" -> x]]");
+    assert_true("Compile[{{p, _Association, _Real}, {x, _Real}}, Append[KeyDrop[p, \"b\"], \"z\" -> x]]"
+                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 7.] === <|\"a\" -> 1., \"c\" -> 3., \"z\" -> 7.|>");
+
+    /* the mutating AssociateTo[sym, …] is a deliberate boundary: it rebinds a
+     * symbol's OwnValue (a side effect the register VM does not model) and so is
+     * NOT compiled — the interpreter handles it. */
+    assert_not_lowers("CompileDiagnostics[{{p, _Association, _Real}, {x, _Real}}, AssociateTo[p, \"c\" -> x]]");
+    /* Append[array, elem] is a different head/shape that the base compiler does
+     * not lower; the assoc path does not hijack it — it still falls through and
+     * the interpreter answers correctly. */
+    assert_not_lowers("CompileDiagnostics[{{v, _Real, 1}, {x, _Real}}, Append[v, x]]");
+    assert_true("Compile[{{v, _Real, 1}, {x, _Real}}, Append[v, x]][{1., 2.}, 3.] === {1., 2., 3.}");
+}
+
+/* ------------------------------------------------------------------ *
  *  Leak / double-free surface — build, apply, free in a loop          *
  * ------------------------------------------------------------------ */
 
@@ -414,6 +453,15 @@ static void test_repeated_eval_no_leak(void) {
         ASSERT_STR_EQ(s, "<|\"b\" -> 3.0, \"c\" -> 5.0|>");
         free(s); expr_free(r);
     }
+    /* B5 functional update: Append onto a produced source, result freed each iter. */
+    for (int i = 0; i < 50; i++) {
+        Expr* r = eval_and_free(parse_expression(
+            "Compile[{{p, _Association, _Real}, {x, _Real}}, Append[KeyDrop[p, \"b\"], \"z\" -> x]]"
+            "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, 7.]"));
+        char* s = expr_to_string(r);
+        ASSERT_STR_EQ(s, "<|\"a\" -> 1.0, \"c\" -> 3.0, \"z\" -> 7.0|>");
+        free(s); expr_free(r);
+    }
 }
 
 int main(void) {
@@ -437,8 +485,9 @@ int main(void) {
     TEST(test_composition);
     TEST(test_counts);
     TEST(test_higher_order);
+    TEST(test_functional_update);
     TEST(test_repeated_eval_no_leak);
 
-    printf("All Compile[] Association (B1-B4) tests passed!\n");
+    printf("All Compile[] Association (B1-B5) tests passed!\n");
     return 0;
 }

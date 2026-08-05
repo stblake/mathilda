@@ -79,4 +79,15 @@ shippable with no regression (an unsupported construct just bails to the interpr
       evaluator); program-owned `AssocCalleeSpec` pool. Keys copied through, type-changing
       callees ok, composes over B3 producers (`Map[f, KeyDrop[…]]`). **Deferred:** consuming
       a Map/Select result mid-body, and the grouping family (`Merge`/`GroupBy`/`CountsBy`).
-- [ ] **B5** Functional key-update; symbol-rebinding `AssociateTo` bails.
+- [x] **B5** Functional update — DONE (2026-08-05). `Append[assoc, key -> value]` (`ASSOC_SET`)
+      produces a new association with the key set (replace-in-place preserving order, else
+      append), value = any compiled machine expression coerced to the bag type; native
+      `assoc_set_key`, no evaluator; composes over producers. Mutating `AssociateTo[sym, …]`
+      is NOT compiled (rebinds a symbol OwnValue — a side effect the register VM does not
+      model) and stays in the interpreter, by design.
+
+**Part B COMPLETE** — Compile[]/auto-compilation handle the Association surface across
+B1 (read-only bag) → B2 (runtime keys) → B3 (owned set-algebra values) → B4 (higher-order
+via compiled callee) → B5 (functional update), no evaluate() at runtime; unsupported
+constructs bail cleanly. Deferred niceties: consuming a Map/Select result mid-body, the
+grouping family (Merge/GroupBy/CountsBy), KeyUnion/PositionIndex (non-scalar shapes).

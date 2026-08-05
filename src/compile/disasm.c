@@ -301,7 +301,7 @@ static ImmKind imm_kind(uint16_t op) {
         /* Wins over the K_KERN1 -> IMM_KERNEL / K_ARR -> IMM_NONE fallthroughs:
          * these carry a program-owned AssocSpec, not a kernel pointer. */
         case OP_ASSOC_LOOKUP: case OP_ASSOC_HASKEY: case OP_ASSOC_VALUES:
-        case OP_ASSOC_LOOKUP_DYN: case OP_ASSOC_KEYSEL:  return IMM_ASSOC;
+        case OP_ASSOC_LOOKUP_DYN: case OP_ASSOC_KEYSEL: case OP_ASSOC_SET:  return IMM_ASSOC;
         case OP_A_AXIS: case OP_A_NEW: case OP_V_EW: return IMM_INT;
         case OP_V_KERN: case OP_V_KERN2:  return IMM_KERNEL;
         default: break;
@@ -636,6 +636,12 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
     if (c->op == OP_ASSOC_COUNTS) { db_catf(b, "%s = Counts[%s]", rd, ra); return; }
     if (c->op == OP_ASSOC_MAP)    { db_catf(b, "%s = Map[<fn>, %s]", rd, ra); return; }
     if (c->op == OP_ASSOC_SELECT) { db_catf(b, "%s = Select[%s, <fn>]", rd, ra); return; }
+    if (c->op == OP_ASSOC_SET) {
+        db_catf(b, "%s = Append[%s, ", rd, ra);
+        render_imm(b, p, i, L);
+        db_catf(b, " -> %s]", rb);
+        return;
+    }
     if (c->op == OP_ASSOC_LOOKUP_DYN) { db_catf(b, "%s = Lookup[%s, %s]", rd, ra, rb); return; }
     if (c->op == OP_ASSOC_KEYSEL) {
         db_catf(b, "%s = %s[%s, ", rd, (c->flags & 1u) ? "KeyTake" : "KeyDrop", ra);

@@ -57,6 +57,11 @@ Expr* assoc_key_select(const Expr* assoc, const Expr* karg, bool take);
  * Borrows `arr`; owned association result, or NULL. */
 Expr* assoc_counts_ndarray(const Expr* arr);
 
+/* Functional key set (compiled B5): a fresh Association with `key` -> `newval`
+ * (replaced in place preserving order, else appended).  Borrows assoc/key, ADOPTS
+ * newval; owned result, or NULL (then the caller frees newval). */
+Expr* assoc_set_key(const Expr* assoc, const Expr* key, Expr* newval);
+
 /* Build a canonical Association from `count` Rule[k,v] nodes.  The rules are
  * copied (the caller keeps ownership of `rules`).  Duplicate keys collapse
  * with last-value-wins while preserving first-occurrence order.  O(count). */

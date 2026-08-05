@@ -958,8 +958,9 @@ static bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out)
     bool is_counts  = strcmp(h, "Counts") == 0 && na == 1;
     bool is_map     = strcmp(h, "Map") == 0 && na == 2;      /* Map[f, assoc]     */
     bool is_select  = strcmp(h, "Select") == 0 && na == 2;   /* Select[assoc, p]  */
+    bool is_append  = strcmp(h, "Append") == 0 && na == 2;   /* Append[assoc,k->v]*/
     if (!is_lookup && !is_exists && !is_free && !is_len && !is_values
-        && !is_keydrop && !is_keytake && !is_counts && !is_map && !is_select) return false;
+        && !is_keydrop && !is_keytake && !is_counts && !is_map && !is_select && !is_append) return false;
 
     /* B4: Map[f, assoc] / Select[assoc, pred] — a higher-order transform via a
      * compiled callee (the embedded function, one machine value in).  Map's
@@ -1024,9 +1025,9 @@ static bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out)
     AssocOperand ao; resolve_assoc_operand(c, A[0], &ao);
     if (ao.kind == ASSOC_NONE) {
         /* Lookup / KeyExistsQ / KeyMemberQ / KeyFreeQ / KeyDrop / KeyTake are
-         * association-only: bail.  Length / Values are shared with the array
-         * path — let it try. */
-        if (is_len || is_values) return false;
+         * association-only: bail.  Length / Values / Append are shared with the
+         * array path — let it try. */
+        if (is_len || is_values || is_append) return false;
         c->ok = false; return true;
     }
 
@@ -1059,6 +1060,43 @@ static bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out)
         } else areg = (uint32_t)src_reg;                  /* borrowed argument bag */
         int dst = alloc_arr(c);
         ins_f(c, OP_ASSOC_KEYSEL, f, (uint32_t)dst, areg, 0, ip);
+        out->reg = dst; out->tmp = true; out->type = CT_ASSOC_TYPE(src_valtype); out->built = true;
+        return true;
+    }
+
+    /* B5: Append[assoc, key -> value] -> a new OWNED association with the key set
+     * (functional insert/replace).  The key is a compile-time constant; the value
+     * is a runtime machine scalar coerced to the bag's value type (so the result
+     * keeps that type).  The mutating AssociateTo[sym, …] is deliberately NOT
+     * compiled — rebinding a symbol's OwnValue is a side effect the register VM
+     * does not model — and stays in the interpreter. */
+    if (is_append) {
+        const Expr* rule = A[1];
+        if (!(rule->type == EXPR_FUNCTION && rule->data.function.head->type == EXPR_SYMBOL
+              && rule->data.function.head->data.symbol.name == SYM_Rule
+              && rule->data.function.arg_count == 2)) { c->ok = false; return true; }
+        const Expr* key = rule->data.function.args[0];
+        if (!expr_is_compile_const(c, key)) { c->ok = false; return true; }
+        Val vv;
+        if (!emit(c, rule->data.function.args[1], &vv)) { c->ok = false; return true; }
+        coerce(c, &vv, src_valtype);   /* value keeps the bag's value type */
+        if (!c->ok) return true;
+        if (src_valtype != CT_INT && src_valtype != CT_REAL && src_valtype != CT_COMPLEX) {
+            pop_tmp(c, vv); c->ok = false; return true;
+        }
+        AssocSpec* sp = emit_assocspec(c, key, NULL, src_cst);
+        if (!sp) { pop_tmp(c, vv); return true; }
+        Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
+        uint16_t f = (uint16_t)((unsigned)src_valtype);
+        pop_tmp(c, vv);
+        uint32_t areg;
+        if (src_cst) areg = 0;
+        else if (src_owned) {
+            Val sv = { src_reg, true, CT_ASSOC_TYPE(src_valtype), false };
+            pop_tmp(c, sv); f |= 0x100u; areg = (uint32_t)src_reg;
+        } else areg = (uint32_t)src_reg;
+        int dst = alloc_arr(c);
+        ins_f(c, OP_ASSOC_SET, f, (uint32_t)dst, areg, (uint32_t)vv.reg, ip);
         out->reg = dst; out->tmp = true; out->type = CT_ASSOC_TYPE(src_valtype); out->built = true;
         return true;
     }
@@ -6501,6 +6539,24 @@ static bool vm_assoc_higher(const Instr* c, Slot* R, bool select) {
     return true;
 }
 
+/* Append[assoc, key -> value] (B5) -> a new OWNED association with key set
+ * (replaced in place, else appended).  Native (assoc_set_key), no evaluator.
+ * R[a] = source, R[b] = machine value; flags = value_type | free-source<<8. */
+static bool vm_assoc_set(const Instr* c, Slot* R) {
+    const AssocSpec* sp = (const AssocSpec*)c->imm.p;
+    Expr* src = sp->assoc ? sp->assoc : R[c->a].arr;
+    if (!src || !is_association(src)) return false;
+    Expr* nv = assoc_slot_to_value(R[c->b], (CompileType)(c->flags & 0xFu));
+    if (!nv) return false;
+    Expr* r = assoc_set_key(src, sp->key, nv);      /* adopts nv */
+    if (!r) { expr_free(nv); return false; }
+    assoc_prebuild_index(r);
+    if ((c->flags & 0x100u) && !sp->assoc) { expr_free(R[c->a].arr); R[c->a].arr = NULL; }
+    expr_free(R[c->dst].arr);
+    R[c->dst].arr = r;
+    return true;
+}
+
 /* Counts[machine array] (B3) -> an OWNED association of element->count.  Native
  * (assoc_counts_ndarray via Tally, no evaluator).  flags bit0 = free the source
  * array temp (a produced array consumed here). */
@@ -7338,6 +7394,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(ASSOC_COUNTS): do { if (!vm_assoc_counts(c, R)) goto vm_fail; } while (0); NEXT();
             OP(ASSOC_MAP):    do { if (!vm_assoc_higher(c, R, false)) goto vm_fail; } while (0); NEXT();
             OP(ASSOC_SELECT): do { if (!vm_assoc_higher(c, R, true))  goto vm_fail; } while (0); NEXT();
+            OP(ASSOC_SET):    do { if (!vm_assoc_set(c, R)) goto vm_fail; } while (0); NEXT();
             OP(ASSOC_LOOKUP_DYN): {          /* B2: runtime int/real key in R[b] */
                 const AssocSpec* sp = (const AssocSpec*)c->imm.p;
                 Expr* assoc = sp->assoc ? sp->assoc : RA.arr;

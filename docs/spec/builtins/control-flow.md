@@ -503,9 +503,13 @@ expression would.
   through), `Select[assoc, pred]` filters by value — `f`/`pred` may be a pure
   function (`#^2 &`), a `Function[…]`, or a bare head, and a `Map`/`Select` may
   itself consume a produced association (`Map[f, KeyDrop[p, k]]`). A callee
-  outside the compilable subset makes the whole body fall back. `KeyUnion` (a key
-  list), `PositionIndex` (list-valued entries) and the grouping family
-  (`Merge`/`GroupBy`) are not in the subset and fall back to the interpreter.
+  outside the compilable subset makes the whole body fall back. Compiled code can
+  also functionally **update** an association: `Append[assoc, key -> value]`
+  returns a new association with the key set (replaced in place, else appended),
+  the value being any compiled machine expression. The mutating `AssociateTo[sym,
+  …]` is not compiled (it rebinds a symbol) and stays in the interpreter, as do
+  `KeyUnion` (a key list), `PositionIndex` (list-valued entries) and the grouping
+  family (`Merge`/`GroupBy`).
 - **Counted iterators** in `Do`/`Sum`/`Product` accept every integer-bounded
   spelling the interpreter does: `Do[body, n]` and `Do[body, {n}]` (repeat n
   times), `{i, hi}`, `{i, lo, hi}`, and `{i, lo, hi, di}` with a nonzero integer

@@ -253,6 +253,12 @@ enum {
      * value satisfies the (Bool) callee.  vm_call per entry, no evaluator.        \
      */                                                                            \
     X(ASSOC_MAP, K_ARR) X(ASSOC_SELECT, K_ARR)                            \
+    /* B5 functional update: Append[assoc, key -> value] -> a new OWNED           \
+     * association with key set (replaced in place, else appended).  imm.p =       \
+     * AssocSpec (key + optional const source); R[a] source, R[b] machine value;   \
+     * flags = value_type | free-source<<8.                                        \
+     */                                                                            \
+    X(ASSOC_SET, K_ARR)                                                   \
     /* An array -> SCALAR reduction delegated to the interpreter's own entry   \
      * point (ndred_mean, ndred_variance, ...), the reduction counterpart of   \
      * A_NDFN below.  Total has its own opcode because an int64 sum must stay  \
