@@ -197,6 +197,9 @@ typedef struct {
      * tree-walk.  Same faithful-degrade contract as `ac` (NULL result ⇒ interpret
      * that term). */
     AutoCompiled* ac_prec;
+    /* Complex-input variant, for the Euler–Maclaurin derivative step, which
+     * evaluates the summand on a Cauchy contour (Complex[MPFR,MPFR] points). */
+    AutoCompiled* ac_prec_z;
 } NsCtx;
 
 /* The actual index value x_k = imin + k·di as a fresh evaluated number. */
@@ -1100,6 +1103,20 @@ static bool ns_sample_x_mpfr(void* vc, const mpfr_t x, mpfr_t out_re, mpfr_t out
 
 /* Evaluate `e` at the index value (consumed) -> (re,im) MPFR. */
 static bool ns_eval_complex_mpfr(NsCtx* c, Expr* e, Expr* value, mpfr_t re, mpfr_t im) {
+    /* Compiled complex-input fast path — only for the summand itself (e ==
+     * c->body); a symbolic derivative body (dcur) keeps the interpreter.  The
+     * contour point `value` is a Complex[MPFR,MPFR] (or real); the compiled body
+     * returns f[value] at the working precision, or NULL to interpret. */
+    if (c->ac_prec_z && e == c->body && c->spec.mode == NUMERIC_MODE_MPFR) {
+        Expr* r = autocompiled_eval_mpfr(c->ac_prec_z, (const Expr* const*)&value);
+        if (r) {
+            bool inexact, ok = get_approx_mpfr(r, re, im, &inexact);
+            if (ok && (!mpfr_number_p(re) || !mpfr_number_p(im))) ok = false;
+            expr_free(r);
+            expr_free(value);
+            return ok;
+        }
+    }
     Expr* num = ns_eval_expr_at(c, e, value);
     if (!num) return false;
     bool inexact, ok = get_approx_mpfr(num, re, im, &inexact);
@@ -1689,7 +1706,7 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
     NsBind bind; ns_bind_snapshot(&bind, var);
     NsCtx ctx;
     ctx.body = body; ctx.imin = imin; ctx.di = di; ctx.bind = &bind;
-    ctx.ac = NULL; ctx.ac_prec = NULL;
+    ctx.ac = NULL; ctx.ac_prec = NULL; ctx.ac_prec_z = NULL;
 #ifdef USE_MPFR
     if (o->prec_mpfr) { ctx.spec.mode = NUMERIC_MODE_MPFR; ctx.spec.bits = o->bits; ctx.spec.preserve_inexact = false; }
     else ctx.spec = numeric_machine_spec();
@@ -1710,7 +1727,9 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
         }
 #ifdef USE_MPFR
         else if (o->bits > 0) {
-            ctx.ac_prec = autocompile_new_prec(body, vs, 1, (long)o->bits);
+            ctx.ac_prec   = autocompile_new_prec(body, vs, 1, (long)o->bits);
+            /* Complex-input variant for the Euler–Maclaurin contour derivative. */
+            ctx.ac_prec_z = autocompile_new_prec_z(body, vs, 1, (long)o->bits);
         }
 #endif
         expr_free(vsym);
@@ -1753,6 +1772,7 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
 
     autocompiled_free(ctx.ac);
     autocompiled_free(ctx.ac_prec);
+    autocompiled_free(ctx.ac_prec_z);
     ns_bind_restore(&bind);
     return out;
 }

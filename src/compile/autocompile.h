@@ -69,6 +69,15 @@ AutoCompiled* autocompile_new_z(const Expr* body, const Expr* const* vars, size_
 AutoCompiled* autocompile_new_prec(const Expr* body, const Expr* const* vars,
                                    size_t nvars, long prec_bits);
 
+/* As autocompile_new_prec, but the variables are declared COMPLEX (MPFR): the
+ * program takes complex INPUTS at `prec_bits` bits.  For a sampler that evaluates
+ * the body on a contour in the plane at high precision (e.g. NSum's
+ * Euler–Maclaurin derivative-by-Cauchy step).  Compiles a strictly smaller set of
+ * bodies than the real version (a head needs a complex ncpx kernel).  Read back
+ * with autocompiled_eval_mpfr, passing Complex[MPFR,MPFR] / real sample points. */
+AutoCompiled* autocompile_new_prec_z(const Expr* body, const Expr* const* vars,
+                                     size_t nvars, long prec_bits);
+
 /* Evaluate a program built by autocompile_new_prec at the numeric sample points
  * `xs[nvars]` (each an EXPR_MPFR / Integer / Real / Rational, borrowed).  Returns
  * a freshly allocated result Expr (EXPR_MPFR, or Complex[MPFR,MPFR]) the caller

@@ -121,6 +121,12 @@ AutoCompiled* autocompile_new_prec(const Expr* body, const Expr* const* vars,
     return ac_make(body, vars, nvars, CT_BIGREAL, prec_bits);
 }
 
+AutoCompiled* autocompile_new_prec_z(const Expr* body, const Expr* const* vars,
+                                     size_t nvars, long prec_bits) {
+    if (prec_bits <= 0) return NULL;
+    return ac_make(body, vars, nvars, CT_BIGCOMPLEX, prec_bits);
+}
+
 size_t autocompiled_num_vars(const AutoCompiled* ac) { return ac->nvars; }
 
 bool autocompiled_result_is_real(const AutoCompiled* ac) {
