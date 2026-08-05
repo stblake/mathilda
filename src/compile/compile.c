@@ -8852,10 +8852,15 @@ static void arr_sweep(const CompiledProgram* p, Slot* R) {
  * gated on nmgd_slots, so a machine program (nmgd_slots == 0) never enters here:
  * the machine path pays nothing.
  *
- * NOTE (v1): correctness-first per-call allocation.  The warm thread-local
- * precision-keyed arena of the design doc (§7) is a follow-up optimisation; it
- * affects only the MPFR path's speed, never the machine path, so it does not gate
- * the zero-regression contract. */
+ * The containers live in a WARM thread-local arena (design doc §7): frame entry
+ * ACQUIRES a run of cells (initialising a cell lazily, or re-initialising it on a
+ * type/precision change) and frame exit RETREATS the arena stack pointer WITHOUT
+ * clearing, so the containers — and their heap limb buffers — stay allocated for
+ * the next call.  After warm-up a per-call cost is O(nmgd) pointer binds, no
+ * malloc/init/clear/free, which is what makes the per-sample sampler path fast at
+ * high precision.  Per-thread, so reentrancy nests through the stack pointer and
+ * worker threads never share; gated on nmgd_slots, so the machine path (which has
+ * none) never touches any of it. */
 #ifdef USE_MPFR
 static bool mgd_ncpx_set_from_expr(ncpx* z, const Expr* e) {
     Expr *re, *im;
@@ -8867,37 +8872,92 @@ static bool mgd_ncpx_set_from_expr(ncpx* z, const Expr* e) {
 }
 #endif
 
-static void managed_frame_exit(const CompiledProgram* p, Slot* R) {
-    for (int i = 0; i < p->nmgd_slots; i++) {
-        void* ptr = (void*)R[p->mgd_slots[i].reg].p;
-        if (!ptr) continue;
-        switch ((int)p->mgd_slots[i].type) {
-            case CT_BIGINT: mpz_clear((mpz_ptr)ptr); break;
+/* One warm arena cell: a container of a known kind and (for MPFR/ncpx) precision,
+ * kept alive across calls. `kind`: -1 unused, 0 mpfr, 1 mpz, 2 ncpx. */
+typedef struct { int kind; long prec; void* ptr; } MgdCell;
+typedef struct { MgdCell* cells; int cap; int sp; } MgdArena;
+static VM_TLS MgdArena g_mgd_arena;
+
+static int mgd_kind_of(CompileType t) {
+    return t == CT_BIGINT ? 1 : t == CT_BIGCOMPLEX ? 2 : 0;
+}
+static void* mgd_cell_alloc(int kind, long prec) {
+    (void)prec;
+    switch (kind) {
+        case 1: { mpz_ptr z = malloc(sizeof *z); if (z) mpz_init(z); return z; }
 #ifdef USE_MPFR
-            case CT_BIGREAL: mpfr_clear((mpfr_ptr)ptr); break;
-            case CT_BIGCOMPLEX: ncpx_clear((ncpx*)ptr); break;
+        case 0: { mpfr_ptr m = malloc(sizeof *m); if (m) mpfr_init2(m, (mpfr_prec_t)prec); return m; }
+        case 2: { ncpx* z = malloc(sizeof *z); if (z) ncpx_init(z, (mpfr_prec_t)prec); return z; }
 #endif
-            default: break;
-        }
-        free(ptr);
-        R[p->mgd_slots[i].reg].p = NULL;
+        default: return NULL;
     }
 }
-static bool managed_frame_enter(const CompiledProgram* p, Slot* R) {
-    for (int i = 0; i < p->nmgd_slots; i++) R[p->mgd_slots[i].reg].p = NULL;
-    for (int i = 0; i < p->nmgd_slots; i++) {
-        void* ptr = NULL;
-        switch ((int)p->mgd_slots[i].type) {
-            case CT_BIGINT: { mpz_ptr z = malloc(sizeof *z); if (z) mpz_init(z); ptr = z; break; }
+static void mgd_cell_free(int kind, void* ptr) {
+    if (!ptr) return;
+    switch (kind) {
+        case 1: mpz_clear((mpz_ptr)ptr); break;
 #ifdef USE_MPFR
-            case CT_BIGREAL: { mpfr_ptr m = malloc(sizeof *m); if (m) mpfr_init2(m, (mpfr_prec_t)p->prec_bits); ptr = m; break; }
-            case CT_BIGCOMPLEX: { ncpx* z = malloc(sizeof *z); if (z) ncpx_init(z, (mpfr_prec_t)p->prec_bits); ptr = z; break; }
+        case 0: mpfr_clear((mpfr_ptr)ptr); break;
+        case 2: ncpx_clear((ncpx*)ptr); break;
 #endif
-            default: break;
-        }
-        if (!ptr) { managed_frame_exit(p, R); return false; }
-        R[p->mgd_slots[i].reg].p = ptr;
+        default: break;
     }
+    free(ptr);
+}
+/* Set the precision of an already-allocated MPFR/ncpx cell (kept struct, resized
+ * limb buffer) — cheap when the precision is stable, which is the common case. */
+static void mgd_cell_reprec(int kind, void* ptr, long prec) {
+    (void)kind; (void)ptr; (void)prec;
+#ifdef USE_MPFR
+    if (kind == 0) mpfr_set_prec((mpfr_ptr)ptr, (mpfr_prec_t)prec);
+    else if (kind == 2) {
+        ncpx* z = (ncpx*)ptr;
+        mpfr_set_prec(z->re, (mpfr_prec_t)prec);
+        mpfr_set_prec(z->im, (mpfr_prec_t)prec);
+    }
+#endif
+}
+
+static void managed_frame_exit(const CompiledProgram* p, Slot* R) {
+    /* Retreat the arena stack pointer; the containers stay warm for the next
+     * call.  Null the frame slots so a stale pointer into the arena is never read
+     * (the frame is per-call C-stack storage, so this is belt-and-braces). */
+    g_mgd_arena.sp -= p->nmgd_slots;
+    if (g_mgd_arena.sp < 0) g_mgd_arena.sp = 0;
+    for (int i = 0; i < p->nmgd_slots; i++) R[p->mgd_slots[i].reg].p = NULL;
+}
+static bool managed_frame_enter(const CompiledProgram* p, Slot* R) {
+    MgdArena* a = &g_mgd_arena;
+    int base = a->sp;
+    int need = base + p->nmgd_slots;
+    if (need > a->cap) {
+        int nc = a->cap ? a->cap * 2 : 16;
+        while (nc < need) nc *= 2;
+        MgdCell* nb = realloc(a->cells, (size_t)nc * sizeof *nb);
+        if (!nb) return false;
+        for (int i = a->cap; i < nc; i++) { nb[i].kind = -1; nb[i].prec = 0; nb[i].ptr = NULL; }
+        a->cells = nb; a->cap = nc;
+    }
+    for (int i = 0; i < p->nmgd_slots; i++) {
+        MgdCell* cell = &a->cells[base + i];
+        int  want_kind = mgd_kind_of(p->mgd_slots[i].type);
+        long want_prec = p->prec_bits;
+        if (cell->ptr == NULL) {                     /* first use of this cell */
+            cell->ptr = mgd_cell_alloc(want_kind, want_prec);
+            if (!cell->ptr) { a->sp = base; return false; }
+            cell->kind = want_kind; cell->prec = want_prec;
+        } else if (cell->kind != want_kind) {        /* reused as a different type */
+            mgd_cell_free(cell->kind, cell->ptr);
+            cell->ptr = mgd_cell_alloc(want_kind, want_prec);
+            if (!cell->ptr) { cell->kind = -1; a->sp = base; return false; }
+            cell->kind = want_kind; cell->prec = want_prec;
+        } else if (want_kind != 1 && cell->prec != want_prec) {  /* precision change */
+            mgd_cell_reprec(want_kind, cell->ptr, want_prec);
+            cell->prec = want_prec;
+        }
+        R[p->mgd_slots[i].reg].p = cell->ptr;
+    }
+    a->sp = base + p->nmgd_slots;
     return true;
 }
 
