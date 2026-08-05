@@ -18,6 +18,7 @@
 #include "deriv.h"
 #include "sym_names.h"
 #include "sym_intern.h"
+#include "assoc.h"                  /* assoc_lookup_value — O(1) <|...|>[key] */
 #include "interp.h"
 #include "compile/compiled_function.h"
 #include "compile/autocompile.h"   /* $AutoCompilation */
@@ -101,6 +102,100 @@ void eval_reset_recursion_depth(int n) {
 static uint64_t g_eval_clock = 1;
 uint64_t eval_clock_get(void) { return g_eval_clock; }
 void     eval_clock_bump(void) { g_eval_clock++; }
+
+/* --- Ground fixed-point epoch (loop-invariant re-evaluation) ---------------
+ * The eval clock is a single global epoch: ANY symbol-table mutation bumps it
+ * and invalidates every cached fixed point. That is correct but coarse -- a
+ * Do/Table/Fold loop rebinds its iterator (an OwnValue write) every iteration,
+ * so a large loop-invariant value bound to a symbol gets fully re-canonicalised
+ * O(size) each step even though nothing it depends on changed.
+ *
+ * `g_last_rule_change_clock` is a SECOND, finer epoch: the clock value at the
+ * most recent mutation that can change how a *head* evaluates -- a DownValue
+ * add, an attribute/Protect change, a Clear/Remove. Ordinary OwnValue bindings
+ * (iterator variables, `x = 5`, numeric temp-bindings) bump only the eval clock
+ * and leave this one alone. A GROUND node (see is_ground_* below: a fixed point
+ * built solely from literals under the six pure structural constructors) can be
+ * re-validated as a fixed point whenever `stamp >= g_last_rule_change_clock`,
+ * regardless of the eval clock -- because it references none of the mutable
+ * state an OwnValue binding touches. This is what lifts a loop-invariant
+ * association/list from O(size)-per-iteration back to O(1). It only ever
+ * advances (monotone), so a ground short-circuit is never taken stale. */
+static uint64_t g_last_rule_change_clock = 1;
+uint64_t eval_rule_epoch_get(void)  { return g_last_rule_change_clock; }
+/* Mark the CURRENT clock as a rule change (caller already bumped the clock). */
+void     eval_rule_epoch_mark(void) { g_last_rule_change_clock = g_eval_clock; }
+/* Bump the clock AND record it as a rule change (attribute/Protect sites). */
+void     eval_rule_epoch_bump(void) { g_eval_clock++; g_last_rule_change_clock = g_eval_clock; }
+
+/* The top bit of `last_evaluated_at` is a benign GROUND flag: the clock is a
+ * monotone counter that will never reach 2^63, so this steals no range. The
+ * low 63 bits remain the fixed-point stamp; every comparison against the eval
+ * clock masks the flag off first. See is_ground_now() / node_compute_ground(). */
+#define EVAL_GROUND_BIT  (UINT64_C(1) << 63)
+#define EVAL_STAMP_MASK  (~EVAL_GROUND_BIT)
+static inline uint64_t eval_stamp_of(const Expr* e) {
+    return e->last_evaluated_at & EVAL_STAMP_MASK;
+}
+static inline bool eval_ground_of(const Expr* e) {
+    return (e->last_evaluated_at & EVAL_GROUND_BIT) != 0;
+}
+/* A FUNCTION node whose GROUND bit is set is a valid fixed point iff no rule
+ * change has occurred since it was stamped -- the straddle-safe predicate used
+ * identically at short-circuit time and when a parent consumes a child's bit. */
+static inline bool eval_ground_valid(const Expr* e) {
+    return eval_ground_of(e) && eval_stamp_of(e) >= g_last_rule_change_clock;
+}
+/* A FUNCTION node is a re-usable fixed point if it was stamped under the live
+ * clock (exact hit) OR it is a still-valid ground node (survives OwnValue churn). */
+static inline bool eval_fixed_point_reusable(const Expr* e) {
+    return eval_stamp_of(e) == g_eval_clock || eval_ground_valid(e);
+}
+
+/* Public, mask-aware accessors for tests (the raw field now carries the flag). */
+uint64_t eval_node_stamp(const Expr* e)   { return e ? eval_stamp_of(e) : 0; }
+bool     eval_node_is_ground(const Expr* e) { return e ? eval_ground_of(e) : false; }
+
+/* The six pure structural constructors. Their canonical form is a total,
+ * side-effect-free function of their arguments -- they read no mutable global
+ * state -- so a fixed point built only from these heads over literal leaves is
+ * immutable until one of the heads is itself redefined (which advances the rule
+ * epoch). Heads WITH a value-computing builtin (Plus, Sin, RandomReal, ...) are
+ * deliberately excluded: they never reach a stamped fixed point AS themselves
+ * when reducible, but even a symbolic residue could in principle depend on
+ * global state, so we do not trust them. */
+static inline bool ground_head(const Expr* h) {
+    if (!h || h->type != EXPR_SYMBOL) return false;
+    const char* n = h->data.symbol.name;
+    return n == SYM_List || n == SYM_Association || n == SYM_Rule
+        || n == SYM_RuleDelayed || n == SYM_Complex || n == SYM_Rational;
+}
+/* Is `a` ground *right now*? For a FUNCTION we trust its cached bit only if it
+ * is still valid (eval_ground_valid); atoms are decided structurally. This is
+ * the recurrence used bottom-up when stamping a parent -- O(arity), not O(size). */
+static inline bool is_ground_now(const Expr* a) {
+    switch (a->type) {
+        case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT: case EXPR_STRING:
+            return true;
+        case EXPR_FUNCTION:
+            return eval_ground_valid(a);
+        default:            /* bare SYMBOL, NDARRAY, COMPILED, MPFR: conservative */
+            return false;
+    }
+}
+/* Compute the GROUND bit for a FUNCTION node reaching a fixed point: a
+ * whitelisted head and every argument ground. Non-FUNCTION nodes are never
+ * marked (their stamp is never read by the short-circuits). */
+static bool node_compute_ground(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (!ground_head(e->data.function.head)) return false;
+    size_t n = e->data.function.arg_count;
+    Expr* const* args = e->data.function.args;
+    for (size_t i = 0; i < n; i++) {
+        if (!args[i] || !is_ground_now(args[i])) return false;
+    }
+    return true;
+}
 
 /* ---- Trace collector (nested) --------------------------------------------
  * Trace[expr] returns a list that mirrors the *structure* of expr's
@@ -1684,15 +1779,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     keyarg->data.function.arg_count == 1) {
                     lookup_key = keyarg->data.function.args[0];
                 }
-                Expr* found = NULL;
-                for (size_t i = 0; i < head->data.function.arg_count; i++) {
-                    Expr* rule = head->data.function.args[i];
-                    if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
-                        expr_eq(rule->data.function.args[0], lookup_key)) {
-                        found = rule->data.function.args[1];
-                        break;
-                    }
-                }
+                Expr* found = assoc_lookup_value(head, lookup_key);  /* O(1) via key index */
                 Expr* out;
                 if (found) {
                     out = expr_copy(found);
@@ -1729,15 +1816,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * SortBy[records, Key["field"]] work. */
                 Expr* key   = head->data.function.args[0];
                 Expr* assoc = res->data.function.args[0];
-                Expr* found = NULL;
-                for (size_t i = 0; i < assoc->data.function.arg_count; i++) {
-                    Expr* rule = assoc->data.function.args[i];
-                    if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
-                        expr_eq(rule->data.function.args[0], key)) {
-                        found = rule->data.function.args[1];
-                        break;
-                    }
-                }
+                Expr* found = assoc_lookup_value(assoc, key);   /* O(1) via key index */
                 Expr* out;
                 if (found) {
                     out = expr_copy(found);
@@ -1951,7 +2030,7 @@ Expr* evaluate(Expr* e) {
      * pre-check to FUNCTION nodes -- both to avoid an extra branch on
      * the common atom path and because atoms are never expensive to
      * "re-evaluate" anyway. */
-    if (e->type == EXPR_FUNCTION && e->last_evaluated_at == g_eval_clock) {
+    if (e->type == EXPR_FUNCTION && eval_fixed_point_reusable(e)) {
         return expr_copy(e);
     }
 
@@ -2001,6 +2080,30 @@ Expr* evaluate(Expr* e) {
          * sigsetjmp; no further cleanup runs here, exactly matching
          * the signal-handler path. */
         tc_check_deadline();
+
+        /* In-loop timestamp fixed-point exit.  The entry short-circuit at the top
+         * of evaluate() only catches an ALREADY-stamped INPUT; a stamped FUNCTION
+         * can also become `current` MID-loop — most importantly a canonical
+         * value (e.g. an Association) reached through an OwnValue symbol
+         * (`a = <|...|>; ... a ...`).  There evaluate(a) rewrites the symbol to
+         * its stored value and then, without this check, evaluate_step would
+         * rebuild that value O(tree size) every time — re-canonicalising the
+         * association and discarding its cached key index — even though it is
+         * already at a fixed point.  If `current` is a FUNCTION fully evaluated
+         * under the current clock, stop here.  Same invariant as the entry check
+         * (a stamp is set only on a clean fixed-point exit and is invalidated by
+         * any symbol-table mutation via the clock), so this is a pure speedup. */
+        if (current->type == EXPR_FUNCTION && eval_fixed_point_reusable(current)) {
+            eval_recursion_depth--;
+            if (trace_here) { trace_clear_pending(); trace_frame_pop(); }
+            if (is_top_level && eval_is_inflight_throw(current))
+                current = eval_report_uncaught_throw(current);
+            else if (is_top_level && eval_is_inflight_goto(current))
+                current = eval_report_uncaught_goto(current);
+            else if (is_top_level && eval_is_inflight_break_continue(current))
+                current = eval_report_uncaught_break_continue(current);
+            return current;
+        }
 
         bool step_changed = false;
         uint64_t gate_mark = g_pack_gate_ticks;
@@ -2057,7 +2160,12 @@ Expr* evaluate(Expr* e) {
              * write is benign metadata, so it is safe even when
              * `current` is shared (refcount > 1). */
             if (!eval_overflow) {
-                current->last_evaluated_at = g_eval_clock;
+                /* Stamp with the live clock, plus the GROUND flag when this is a
+                 * whitelisted-constructor node over ground args -- so a later
+                 * evaluate() can re-validate it as a fixed point even after the
+                 * eval clock has churned (loop-invariant O(1) re-check). */
+                current->last_evaluated_at = g_eval_clock
+                    | (node_compute_ground(current) ? EVAL_GROUND_BIT : 0);
             }
             eval_recursion_depth--;
             /* Trace: the last step didn't rewrite; drop its reassembled

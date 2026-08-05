@@ -819,17 +819,31 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement) {
 void symtab_add_own_value(const char* symbol_name, Expr* pattern, Expr* replacement) {
     SymbolDef* def = symtab_get_def(symbol_name);
     add_rule(&def->own_values, pattern, replacement);
+    /* An OwnValue binding is "soft": add_rule bumps only the eval clock, leaving
+     * the rule epoch alone so a loop-invariant GROUND value survives an iterator
+     * rebinding (the whole point of this path staying cheap). The one exception
+     * is a Protected target: one of the pure constructor heads a GROUND node is
+     * built from could in principle be bound by internal code, which would change
+     * those nodes' meaning -- advance the rule epoch defensively so they
+     * re-evaluate. (User Set on a Protected symbol never reaches here; it errors
+     * first.) */
+    if (get_attributes_def(def) & ATTR_PROTECTED) eval_rule_epoch_mark();
 }
 
 void symtab_add_down_value(const char* symbol_name, Expr* pattern, Expr* replacement) {
     SymbolDef* def = symtab_get_def(symbol_name);
     add_rule(&def->down_values, pattern, replacement);
+    /* A DownValue changes how this head evaluates -- advance the rule epoch so
+     * any GROUND node that uses it as a head is re-checked (add_rule already
+     * bumped the eval clock). */
+    eval_rule_epoch_mark();
 }
 
 void symtab_clear_symbol(const char* symbol_name) {
-    /* Removing rules invalidates cached evaluations that might have
-     * relied on them; bump the eval clock unconditionally. */
-    eval_clock_bump();
+    /* Removing rules invalidates cached evaluations that might have relied on
+     * them; bump the eval clock unconditionally. This also removes DownValues,
+     * which changes how the head evaluates, so advance the rule epoch too. */
+    eval_rule_epoch_bump();
 
     SymbolDef* def = symtab_get_def(symbol_name);
     Rule* curr = def->own_values;
@@ -857,8 +871,9 @@ void symtab_remove_symbol(const char* symbol_name) {
     SymbolDef* d = node_find(symbol_name);
     if (!d || !d->has_def) return;   /* nothing materialized to remove */
     /* Removing the definition invalidates any cached evaluation that referenced
-     * this symbol's rules. */
-    eval_clock_bump();
+     * this symbol's rules, including its DownValues/attributes -- advance the
+     * rule epoch as well. */
+    eval_rule_epoch_bump();
     /* Reset to interned-only. The node and its name string remain in the table
      * so a later reference recreates a fresh, empty definition and, crucially,
      * any live Expr (and SYM_*) that already hold the interned name pointer stay

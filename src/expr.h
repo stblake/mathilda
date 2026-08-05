@@ -155,7 +155,15 @@ typedef struct Expr {
      * SetAttributes, ClearAttributes), so any user definition change
      * cleanly invalidates every cached evaluation in one shot. The
      * field is benign metadata and is intentionally NOT considered by
-     * `expr_eq` / `expr_hash`; updating it on a shared node is safe. */
+     * `expr_eq` / `expr_hash`; updating it on a shared node is safe.
+     *
+     * The TOP bit (1<<63) is a benign GROUND flag (see eval.c): set on a
+     * fixed point built solely from literals under the six pure structural
+     * constructors, it lets the node be re-validated as a fixed point after
+     * the eval clock churns (loop-invariant O(1) re-check). The clock is a
+     * monotone counter that never reaches 2^63, so the low 63 bits are the
+     * stamp; every eval-clock comparison masks the flag off. Read the field
+     * through eval_node_stamp() / eval_node_is_ground(), not directly. */
     uint64_t last_evaluated_at;
     union {
         int64_t integer;
@@ -178,6 +186,14 @@ typedef struct Expr {
             struct Expr* head;
             struct Expr** args;
             size_t arg_count;
+            /* Persistent key->position hash index, non-NULL ONLY for canonical
+             * Association nodes (built at canonicalisation; see assoc_index.h).
+             * Benign acceleration metadata: NULL for every other function node,
+             * ignored by expr_eq/expr_hash/expr_compare, freed with the node,
+             * and reset to NULL on any physical copy (expr_unshare). Occupies
+             * the union's existing slack (NDArrayData/mpfr_t are larger), so
+             * sizeof(Expr) is unchanged. */
+            struct AssocIndex* index;
         } function;
         mpz_t bigint;
         NDArrayData ndarray;

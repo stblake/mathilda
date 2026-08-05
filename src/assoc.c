@@ -9,6 +9,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "assoc.h"
+#include "assoc_index.h"
 #include "ndreduce.h"
 #include "ndarray.h"
 #include "sym_names.h"
@@ -158,7 +159,7 @@ Expr* assoc_from_rules(Expr** rules, size_t count) {
         }
     }
 
-    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
+    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association),out, nout);
     free(out);
     free(keys);
     free(value_slot);
@@ -223,6 +224,11 @@ Expr* builtin_association(Expr* res) {
 
     if (!changed) {
         expr_free(result);
+        /* Already canonical: leave `res` as-is. We do NOT attach an index here —
+         * evaluate()'s fixed-point step keeps the ORIGINAL node and discards this
+         * rebuilt `res`, so an index built here would be thrown away. The index
+         * is instead attached lazily by the first single-key read
+         * (assoc_lookup_value), on whichever node actually survives. */
         return NULL;
     }
     return result;
@@ -280,6 +286,69 @@ static Expr* assoc_scan(const Expr* assoc, const Expr* key) {
         if (is_rule2(r) && expr_eq(rule_key(r), key)) return rule_val(r);
     }
     return NULL;
+}
+
+/* Borrowed value stored under `key`, or NULL if absent.  O(1) amortised when
+ * the association carries a persistent index (built at canonicalisation), else
+ * the O(n) assoc_scan.  Never mutates `assoc`: no lazy index build on a
+ * borrowed/shared node, which keeps single-key reads pure and race-free under
+ * the parallel compiled evaluator.  Also accepts a bare List of rules (index
+ * absent -> scan), matching the callers that take is_assoc_or_rule_list. */
+Expr* assoc_lookup_value(const Expr* assoc, const Expr* key) {
+    AssocIndex* idx = assoc->data.function.index;
+    if (!idx && is_association(assoc) && assoc->data.function.arg_count > 0) {
+        /* Lazily build and cache the index on the FIRST single-key read. Eager
+         * attachment at canonicalisation does not survive: evaluate()'s
+         * fixed-point step keeps the original association node and frees the
+         * rebuilt one an eager index would have been attached to. The reader,
+         * by contrast, sees the surviving node — and evaluate()'s in-loop
+         * timestamp short-circuit keeps that node stable across a Do/Table/Sum
+         * loop, so this O(n) build happens once and every later probe is O(1).
+         *
+         * Mutating a `const` node is deliberate: the index is benign
+         * acceleration metadata on an immutable association (the same discipline
+         * as last_evaluated_at), and the interpreter is single-threaded. The
+         * compiled evaluator pre-builds the index at its marshalling boundary,
+         * so a shared association never reaches this lazy path from a worker
+         * thread. assoc_index_build returns NULL for a non-canonical node
+         * (an entry that is not a 2-arg rule), leaving the scan below correct. */
+        idx = assoc_index_build(assoc->data.function.args, assoc->data.function.arg_count);
+        ((Expr*)assoc)->data.function.index = idx;
+    }
+    if (idx) {
+        int64_t e = assoc_index_lookup(idx, assoc->data.function.args, key);
+        return e < 0 ? NULL : rule_val(assoc->data.function.args[e]);
+    }
+    return assoc_scan(assoc, key);
+}
+
+/* Build and cache the single-key index NOW.  The compiled evaluator calls this
+ * at its marshalling boundary (cf_box), where evaluation is single-threaded, so
+ * a subsequent parallel VM run never triggers assoc_lookup_value's lazy index
+ * build — which mutates the shared node — from a worker thread.  Idempotent;
+ * a no-op if the index already exists, the node is empty, or it is not a
+ * canonical association (assoc_index_build returns NULL for a non-2-arg entry). */
+void assoc_prebuild_index(const Expr* assoc) {
+    if (!assoc || assoc->data.function.index) return;
+    if (!is_association(assoc) || assoc->data.function.arg_count == 0) return;
+    ((Expr*)assoc)->data.function.index =
+        assoc_index_build(assoc->data.function.args, assoc->data.function.arg_count);
+}
+
+/* Machine-scalar key lookup for the compiled evaluator (B2 runtime keys).
+ * Probes the index (O(1)) with a STACK Expr so a `Lookup[a, i]`-in-a-loop pays
+ * no per-iteration malloc.  assoc_lookup_value reads only the key's type and
+ * numeric payload (via expr_eq / expr_hash), never its refcount or metadata, so
+ * a zeroed stack node is safe.  Returns a borrowed value pointer or NULL. */
+Expr* assoc_lookup_value_i64(const Expr* assoc, int64_t key) {
+    Expr k; memset(&k, 0, sizeof k);
+    k.type = EXPR_INTEGER; k.refcount = 1; k.data.integer = key;
+    return assoc_lookup_value(assoc, &k);
+}
+Expr* assoc_lookup_value_real(const Expr* assoc, double key) {
+    Expr k; memset(&k, 0, sizeof k);
+    k.type = EXPR_REAL; k.refcount = 1; k.data.real = key;
+    return assoc_lookup_value(assoc, &k);
 }
 
 /* Lookup / KeyExistsQ accept an association or a bare list of rules (like
@@ -351,7 +420,7 @@ Expr* builtin_lookup(Expr* res) {
         return list;
     }
 
-    Expr* v = assoc_scan(assoc, key);
+    Expr* v = assoc_lookup_value(assoc, key);
     if (v) return expr_copy(v);
     return deflt ? expr_copy(deflt) : make_missing(key);
 }
@@ -364,7 +433,7 @@ Expr* builtin_keyexistsq(Expr* res) {
     Expr* assoc = res->data.function.args[0];
     Expr* key   = res->data.function.args[1];
     if (!is_assoc_or_rule_list(assoc)) return NULL;
-    return expr_new_symbol(assoc_scan(assoc, key) ? SYM_True : SYM_False);
+    return expr_new_symbol(assoc_lookup_value(assoc, key) ? SYM_True : SYM_False);
 }
 
 /* KeyMemberQ[assoc, key] == KeyExistsQ; KeyFreeQ[assoc, key] is its complement.
@@ -373,20 +442,62 @@ Expr* builtin_keymemberq(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
     if (!is_assoc_or_rule_list(assoc)) return NULL;
-    return expr_new_symbol(assoc_scan(assoc, res->data.function.args[1]) ? SYM_True : SYM_False);
+    return expr_new_symbol(assoc_lookup_value(assoc, res->data.function.args[1]) ? SYM_True : SYM_False);
 }
 
 Expr* builtin_keyfreeq(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
     if (!is_assoc_or_rule_list(assoc)) return NULL;
-    return expr_new_symbol(assoc_scan(assoc, res->data.function.args[1]) ? SYM_False : SYM_True);
+    return expr_new_symbol(assoc_lookup_value(assoc, res->data.function.args[1]) ? SYM_False : SYM_True);
 }
 
 /* ======================================================================
  * KeyDrop[assoc, key|{keys}] / KeyTake[assoc, key|{keys}].
  * Both preserve association order; a drop/keep set is indexed once.
  * ====================================================================== */
+
+/* Native single-association core: a fresh Association with the keys in `karg`
+ * (a key or a List of keys) dropped (take=false) or kept (take=true).  Borrows
+ * `assoc` and `karg`; returns an owned node, or NULL if `assoc` is not an
+ * association.  The compiled evaluator (B3) calls this directly — no evaluator,
+ * no call-node round-trip — and the result carries no index yet (the caller
+ * prebuilds one when the result feeds further O(1) reads). */
+Expr* assoc_key_select(const Expr* assoc, const Expr* karg, bool take) {
+    if (!is_association(assoc)) return NULL;
+
+    /* Normalise the key argument to an array of key pointers. */
+    Expr** wanted; size_t nwanted;
+    if (head_is(karg, SYM_List)) {
+        nwanted = karg->data.function.arg_count;
+        wanted = karg->data.function.args;
+    } else {
+        nwanted = 1;
+        wanted = (Expr**)&karg;
+    }
+
+    KeyIndex ki;
+    if (!ki_init(&ki, nwanted)) return NULL;
+    Expr** wk = malloc(sizeof(Expr*) * (nwanted ? nwanted : 1));
+    for (size_t i = 0; i < nwanted; i++) {
+        size_t slot, idx = ki_lookup(&ki, wk, wanted[i], &slot);
+        if (idx == SIZE_MAX) { wk[i] = wanted[i]; ki_insert(&ki, slot, i); }
+    }
+
+    size_t na = assoc->data.function.arg_count;
+    Expr** out = malloc(sizeof(Expr*) * (na ? na : 1));
+    size_t nout = 0;
+    for (size_t i = 0; i < na; i++) {
+        Expr* r = assoc->data.function.args[i];
+        size_t slot;
+        bool present = ki_lookup(&ki, wk, rule_key(r), &slot) != SIZE_MAX;
+        if (present == take) out[nout++] = expr_copy(r);
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
+    free(out); free(wk); ki_free(&ki);
+    return result;
+}
+
 static Expr* key_drop_take(Expr* res, bool take) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* assoc = res->data.function.args[0];
@@ -416,38 +527,7 @@ static Expr* key_drop_take(Expr* res, bool take) {
         }
     }
 
-    if (!is_association(assoc)) return NULL;
-
-    /* Normalise the key argument to an array of key pointers. */
-    Expr** wanted; size_t nwanted;
-    if (head_is(karg, SYM_List)) {
-        nwanted = karg->data.function.arg_count;
-        wanted = karg->data.function.args;
-    } else {
-        nwanted = 1;
-        wanted = &karg;
-    }
-
-    KeyIndex ki;
-    if (!ki_init(&ki, nwanted)) return NULL;
-    Expr** wk = malloc(sizeof(Expr*) * (nwanted ? nwanted : 1));
-    for (size_t i = 0; i < nwanted; i++) {
-        size_t slot, idx = ki_lookup(&ki, wk, wanted[i], &slot);
-        if (idx == SIZE_MAX) { wk[i] = wanted[i]; ki_insert(&ki, slot, i); }
-    }
-
-    size_t na = assoc->data.function.arg_count;
-    Expr** out = malloc(sizeof(Expr*) * (na ? na : 1));
-    size_t nout = 0;
-    for (size_t i = 0; i < na; i++) {
-        Expr* r = assoc->data.function.args[i];
-        size_t slot;
-        bool present = ki_lookup(&ki, wk, rule_key(r), &slot) != SIZE_MAX;
-        if (present == take) out[nout++] = expr_copy(r);
-    }
-    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
-    free(out); free(wk); ki_free(&ki);
-    return result;
+    return assoc_key_select(assoc, karg, take);
 }
 
 Expr* builtin_keydrop(Expr* res) { return key_drop_take(res, false); }
@@ -517,7 +597,7 @@ Expr* builtin_keyunion(Expr* res) {
             Expr* rargs[2] = { expr_copy(k), val };
             entries[u] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
         }
-        outer[j] = expr_new_function(expr_new_symbol(SYM_Association), entries, nu);
+        outer[j] = expr_new_function(expr_new_symbol(SYM_Association),entries, nu);
         free(entries); free(jkeys); ki_free(&jki);
     }
     Expr* result = expr_new_function(expr_new_symbol(SYM_List), outer, m);
@@ -632,7 +712,7 @@ static Expr* counts_from_ndarray(Expr* list) {
         }
         rules[i] = make_rule(key, cnt);
     }
-    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), rules, nd);
+    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association),rules, nd);
     free(rules);
     expr_free(tally);
     return assoc;
@@ -681,7 +761,7 @@ Expr* builtin_counts(Expr* res) {
     Expr** rules = malloc(sizeof(Expr*) * (ndistinct ? ndistinct : 1));
     for (size_t i = 0; i < ndistinct; i++)
         rules[i] = make_rule(expr_copy(keys[i]), expr_new_integer(cnt[i]));
-    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), rules, ndistinct);
+    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association),rules, ndistinct);
     free(rules); free(keys); free(cnt); ki_free(&ki);
     return assoc;
 }
@@ -761,7 +841,7 @@ Expr* builtin_groupby(Expr* res) {
     for (size_t i = 0; i < ngroups; i++) {
         /* Each group is a sub-association for an association input, else a list. */
         Expr* group_list = assoc_in
-            ? expr_new_function(expr_new_symbol(SYM_Association), groups[i], gcnt[i])
+            ? expr_new_function(expr_new_symbol(SYM_Association),groups[i], gcnt[i])
             : make_list(groups[i], gcnt[i]);
         /* GroupBy[list, f, g] applies the reducer g to each group; the
          * g[{group}] application is left for the evaluator to reduce. */
@@ -771,7 +851,7 @@ Expr* builtin_groupby(Expr* res) {
         rules[i] = make_rule(keys[i], value); /* adopts key + value */
         free(groups[i]);
     }
-    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), rules, ngroups);
+    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association),rules, ngroups);
     free(rules); free(keys); free(groups); free(gcap); free(gcnt); ki_free(&ki);
     return assoc;
 }
@@ -833,7 +913,7 @@ Expr* assoc_gather_core(Expr* list, Expr* f) {
     Expr** outer = malloc(sizeof(Expr*) * (ng ? ng : 1));
     for (size_t i = 0; i < ng; i++) {
         outer[i] = assoc_in
-            ? expr_new_function(expr_new_symbol(SYM_Association), groups[i], gcnt[i])
+            ? expr_new_function(expr_new_symbol(SYM_Association),groups[i], gcnt[i])
             : make_list(groups[i], gcnt[i]);
         expr_free(keys[i]);   /* the groups are returned bare; keys are dropped */
         free(groups[i]);
@@ -918,7 +998,7 @@ Expr* builtin_merge(Expr* res) {
         rules[i] = make_rule(expr_copy(keys[i]), fapp);
         free(vals[i]);
     }
-    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), rules, ndistinct);
+    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association),rules, ndistinct);
     free(rules); free(keys); free(vals); free(vcap); free(vcnt); ki_free(&ki);
     return assoc;
 }
@@ -990,7 +1070,7 @@ Expr* assoc_map_values(Expr* f, const Expr* assoc) {
         Expr* fv = expr_new_function(expr_copy(f), &fv_arg, 1); /* f[v], evaluated later */
         out[i] = make_rule(expr_copy(rule_key(r)), fv);
     }
-    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association),out, n);
     free(out);
     return result;
 }
@@ -1007,7 +1087,7 @@ Expr* assoc_select_values(Expr* pred, const Expr* assoc, int64_t max) {
             out[nout++] = expr_copy(r);
         expr_free(verdict);
     }
-    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association),out, nout);
     free(out);
     return result;
 }
@@ -1057,7 +1137,7 @@ Expr* assoc_rekey_from_list(const Expr* assoc, const Expr* values) {
         Expr* rargs[2] = { expr_copy(key), expr_copy(values->data.function.args[i]) };
         entries[i] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
     }
-    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), entries, nres);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association),entries, nres);
     free(entries);
     return result;
 }
@@ -1102,7 +1182,7 @@ Expr* assoc_sort_by_value(const Expr* assoc) {
     qsort(pairs, n, sizeof(RuleWithIndex), rule_value_stable_cmp);
     Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) out[i] = expr_copy(pairs[i].rule);
-    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association),out, n);
     free(out); free(pairs);
     return result;
 }
@@ -1123,7 +1203,7 @@ Expr* assoc_delete_cases(const Expr* assoc, Expr* pattern) {
         expr_free(verdict);
         if (!matches) out[nout++] = expr_copy(r);
     }
-    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association),out, nout);
     free(out);
     return result;
 }
@@ -1151,7 +1231,7 @@ Expr* assoc_delete_duplicate_values(const Expr* assoc) {
             out[nout++] = expr_copy(r);
         }
     }
-    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association),out, nout);
     free(out);
     free(seen);
     ki_free(&ki);
@@ -1175,7 +1255,7 @@ Expr* builtin_keysort(Expr* res) {
     Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) out[i] = expr_copy(assoc->data.function.args[i]);
     qsort(out, n, sizeof(Expr*), rule_key_cmp);   /* keys are distinct: total order */
-    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association),out, n);
     free(out);
     return result;
 }
@@ -1204,7 +1284,7 @@ Expr* builtin_keysortby(Expr* res) {
     }
     for (size_t i = 0; i < n; i++) expr_free(fkey[i]);
     free(fkey);
-    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association),out, n);
     free(out);
     return result;
 }
@@ -1249,7 +1329,7 @@ Expr* builtin_keyselect(Expr* res) {
             out[nout++] = expr_copy(r);
         expr_free(verdict);
     }
-    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association),out, nout);
     free(out);
     return result;
 }
@@ -1279,7 +1359,7 @@ Expr* builtin_countsby(Expr* res) {
     }
     Expr** rules = malloc(sizeof(Expr*) * (nd ? nd : 1));
     for (size_t i = 0; i < nd; i++) rules[i] = make_rule(keys[i], expr_new_integer(cnt[i]));
-    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), rules, nd);
+    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association),rules, nd);
     free(rules); free(keys); free(cnt); ki_free(&ki);
     return assoc;
 }
@@ -1317,7 +1397,7 @@ Expr* builtin_positionindex(Expr* res) {
         rules[i] = make_rule(expr_copy(keys[i]), plist);
         free(pos[i]);
     }
-    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), rules, nd);
+    Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association),rules, nd);
     free(rules); free(keys); free(pos); free(pcap); free(pcnt); ki_free(&ki);
     return assoc;
 }

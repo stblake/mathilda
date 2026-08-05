@@ -255,6 +255,7 @@ set(COMMON_SRC
     ../src/part.c
     ../src/vectors.c
     ../src/assoc.c
+    ../src/assoc_index.c
     ../src/ndarray.c
     ../src/ndinteger.c
     ../src/ndkernels.c
@@ -1580,6 +1581,13 @@ if(USE_ECM)
     add_dependencies(compile_transforms_tests build_ecm)
 endif()
 add_test(NAME compile_transforms_tests COMMAND compile_transforms_tests)
+
+add_executable(compile_assoc_tests test_compile_assoc.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(compile_assoc_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(compile_assoc_tests build_ecm)
+endif()
+add_test(NAME compile_assoc_tests COMMAND compile_assoc_tests)
 
 add_executable(toeplitzmatrix_tests test_toeplitzmatrix.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(toeplitzmatrix_tests PRIVATE ../src)

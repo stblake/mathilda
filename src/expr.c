@@ -3,6 +3,7 @@
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "ndarray.h"   /* ndt_elem_size for dtype-aware copy/eq/hash */
+#include "assoc_index.h" /* assoc_index_free — the cached Association key index */
 #include <stdbool.h>
 #include <math.h>
 #include <ctype.h>
@@ -255,6 +256,11 @@ Expr* expr_new_function(Expr* head, Expr** args, size_t arg_count) {
         e->data.function.args = NULL;
     }
     e->data.function.arg_count = arg_count;
+    /* No cached Association index yet. MUST be set: expr_alloc_node recycles
+     * pooled nodes through this same union arm (data.function.head), so the
+     * slot holds garbage until initialised. assoc_from_rules attaches an index
+     * to canonical associations after construction. */
+    e->data.function.index = NULL;
     return e;
 }
 
@@ -513,6 +519,12 @@ Expr* expr_unshare(Expr* e) {
             break;
 #endif
         case EXPR_FUNCTION:
+            /* A physical copy is a distinct object: do NOT alias the source's
+             * cached Association index (that would double-free), and do not
+             * rebuild it here — unshare precedes an in-place mutation, after
+             * which any index would be stale. Absent index => O(n) scan, always
+             * correct. */
+            fresh->data.function.index = NULL;
             fresh->data.function.head = expr_copy(e->data.function.head);
             fresh->data.function.arg_count = e->data.function.arg_count;
             if (e->data.function.arg_count > 0) {
@@ -560,6 +572,9 @@ void expr_free(Expr* e) {
             if (e->data.string) free(e->data.string);
             break;
         case EXPR_FUNCTION:
+            /* Free the cached Association index (NULL for every non-association
+             * function node; assoc_index_free is a no-op on NULL). */
+            assoc_index_free(e->data.function.index);
             if (e->data.function.head) expr_free(e->data.function.head);
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (e->data.function.args && e->data.function.args[i]) {

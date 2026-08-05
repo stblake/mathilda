@@ -1,5 +1,32 @@
 # Lessons learned
 
+## A coarse global cache key needs a finer *rule* epoch, not a rewrite (2026-08-05)
+
+The evaluator memoizes fixed points against one global clock; every symbol-table
+mutation bumps it, so an iterator's OwnValue rebind invalidated *all* cached
+values and re-canonicalised loop-invariant data O(n) per step. The instinct is
+"add dependency tracking" — a large, risky evaluator change. The elegant fix was
+much smaller: a **second, finer epoch** (`g_last_rule_change_clock`) that advances
+only on mutations which change how a *head* evaluates, plus a per-node "this value
+depends on nothing mutable" flag (GROUND) stolen from a spare bit of an existing
+field. A node that is GROUND and stamped after the last rule change is still a
+fixed point regardless of the coarse clock.
+
+Two rules this crystallised:
+- **Correctness came from a whitelist, not a predicate.** "Any Protected head with
+  no rules" *looks* safe but is unsound — `Plus`/`RandomReal` are Protected yet
+  their builtins can read mutable global state, so a naive predicate could freeze
+  a value that isn't actually constant. Restricting GROUND to six inert structural
+  constructors (`List`/`Association`/`Rule`/`RuleDelayed`/`Complex`/`Rational`)
+  whose canonical form is a pure function of args is what makes the freeze provably
+  correct. When a "clever" predicate almost works, ask what mutable state each
+  admitted case can secretly read.
+- **Steal a bit before growing the struct.** The flag rode in the top bit of a
+  64-bit monotone clock (unreachable 2^63), so `sizeof(Expr)` stayed 48 B on a
+  system with millions of nodes. A new `uint8_t` field would have cost 8 B/node to
+  alignment. The zero-cost encoding was worth updating the three comparison sites
+  to mask.
+
 ## "Aware and slow" is a category the audit cannot see (2026-08-01)
 
 `tools/check_packed_aware.py` answers one question: *does every head with an
@@ -2246,3 +2273,37 @@ Rules:
   cross-cancellation with gcds. Folding `c^2` in and re-factoring is O(c) and
   hangs on large series coefficients. Prove equivalence to the old form
   exhaustively (a Python model over millions of small inputs) before porting.
+
+- **A node-cached memoization index survives only if the node is stable, and the
+  eval clock decides that.** Caching a key→position index on an Association node
+  (in `EXPR_FUNCTION` union slack, so `sizeof(Expr)` is unchanged) makes the
+  lookup PRIMITIVE O(1), but the interpreter re-*builds* function nodes from
+  evaluated args every `evaluate_step` (`eval.c:1197`), so an eagerly-attached
+  index lands on the node the fixed-point logic then DISCARDS (it keeps the
+  original `current`, frees the structurally-equal rebuilt `next`). Two things
+  fix it: (1) attach the index LAZILY in the reader, on the node that actually
+  survives; (2) add an in-loop timestamp short-circuit in `evaluate()` (mirroring
+  the entry check at `eval.c:1939`) so a value already stamped under the current
+  clock is not re-canonicalised each time it is reached mid-loop. Verify O(1) on
+  the PRIMITIVE (direct C calls), never through a loop — see next.
+
+- **`Do`/`Table`/`Fold` bump the global eval clock every iteration; `Map` does
+  not.** Iterator binding goes through `symtab_add_own_value` (`iter.c:417,442`),
+  a symbol-table mutation that bumps the clock, invalidating ALL `last_evaluated_at`
+  memoization each step — so a large loop-invariant value (an association) is
+  re-evaluated O(n) per iteration regardless of any node-cached index. `Map` with
+  a pure function binds no named symbol, so the clock is stable across its
+  elements and the memoization/index holds. Consequence: benchmark an "O(1)
+  lookup" claim on the primitive or on `Map`, not on `Do[Lookup[a,k],{...}]`
+  (which measures O(n) re-canonicalisation, not the lookup). A `Do`-loop timing
+  that looks O(n) after an "O(1)" change is this, not a broken index.
+
+- **Immutable-by-convention is the precondition for any node-attached cache.**
+  Before caching anything on a shared expression node, audit that nothing mutates
+  it in place after construction (`grep` every `data.function.args[i] =` and
+  `expr_unshare` site). Associations passed the audit — every update rebuilds via
+  `assoc_from_rules`/`assoc_entry_with_value` — except one latent aliasing bug
+  (`part.c` `delete_path` wrote a refcount-shared entry's value in place). The
+  cache was safe; the bug was orthogonal but real. `expr_copy` is a refcount
+  bump, so a "copy" shares the node and its cache; only a physical copy
+  (`expr_unshare`) must null the cache pointer to avoid a double free.

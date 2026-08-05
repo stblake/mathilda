@@ -651,11 +651,8 @@ static Expr* assoc_part_single(Expr* assoc, Expr* idx, Expr** rest, size_t nrest
         Expr* rule = assoc->data.function.args[pos - 1];
         return expr_part(rule->data.function.args[1], rest, nrest);
     }
-    for (size_t i = 0; i < na; i++) {
-        Expr* rule = assoc->data.function.args[i];
-        if (expr_eq(rule->data.function.args[0], lookup_key))
-            return expr_part(rule->data.function.args[1], rest, nrest);
-    }
+    Expr* v = assoc_lookup_value(assoc, lookup_key);   /* O(1) via the key index */
+    if (v) return expr_part(v, rest, nrest);
     /* Key absent. */
     Expr* margs[2] = { expr_new_string("KeyAbsent"), expr_copy(lookup_key) };
     return expr_new_function(expr_new_symbol(SYM_Missing), margs, 2);
@@ -1086,10 +1083,14 @@ static Expr* delete_path(Expr* expr, Expr** path, size_t path_len) {
         }
         Expr** na = malloc(sizeof(Expr*) * len);
         for (size_t i = 0; i < len; i++) na[i] = expr_copy(expr->data.function.args[i]);
+        /* na[t] is a refcount-bumped share of the source entry, so writing its
+         * args[1] in place would corrupt every other holder (the exact aliasing
+         * bug assoc_entry_with_value exists to prevent — cf. path_descend_child).
+         * Rebuild the entry around the recursed value instead. */
         Expr* rule = na[t];
         Expr* nv = delete_path(rule->data.function.args[1], path + 1, path_len - 1);
-        expr_free(rule->data.function.args[1]);
-        rule->data.function.args[1] = nv;
+        na[t] = assoc_entry_with_value(rule, nv);   /* fresh entry: copies key+head, adopts nv */
+        expr_free(rule);                            /* drop our ref on the shared entry */
         Expr* result = expr_new_function(expr_copy(expr->data.function.head), na, len);
         free(na);
         return result;

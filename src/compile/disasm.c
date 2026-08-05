@@ -289,7 +289,7 @@ static const char* kernel_name(const void* target) {
  * ------------------------------------------------------------------ */
 typedef enum {
     IMM_NONE, IMM_INT, IMM_REAL, IMM_KERNEL, IMM_CALL, IMM_PLOOP,
-    IMM_PARTSPEC, IMM_CONST
+    IMM_PARTSPEC, IMM_CONST, IMM_ASSOC
 } ImmKind;
 
 static ImmKind imm_kind(uint16_t op) {
@@ -298,6 +298,10 @@ static ImmKind imm_kind(uint16_t op) {
         case OP_CALL:                     return IMM_CALL;
         case OP_APAR:                     return IMM_PLOOP;
         case OP_A_PART: case OP_A_PARTSET:return IMM_PARTSPEC;
+        /* Wins over the K_KERN1 -> IMM_KERNEL / K_ARR -> IMM_NONE fallthroughs:
+         * these carry a program-owned AssocSpec, not a kernel pointer. */
+        case OP_ASSOC_LOOKUP: case OP_ASSOC_HASKEY: case OP_ASSOC_VALUES:
+        case OP_ASSOC_LOOKUP_DYN: case OP_ASSOC_KEYSEL:  return IMM_ASSOC;
         case OP_A_AXIS: case OP_A_NEW: case OP_V_EW: return IMM_INT;
         case OP_V_KERN: case OP_V_KERN2:  return IMM_KERNEL;
         default: break;
@@ -438,6 +442,27 @@ static void render_partspec(DBuf* b, const CompiledProgram* p, const PartSpec* p
     db_cat(b, "]]");
 }
 
+/* Renders an AssocSpec immediate as `[key -> default | assoc]`, whichever
+ * fields are present — the Association read-op counterpart of render_partspec. */
+static void render_assocspec(DBuf* b, const AssocSpec* sp) {
+    if (!sp) { db_cat(b, "<spec>"); return; }
+    db_cat(b, "[");
+    bool any = false;
+    if (sp->key) {
+        char* s = expr_to_string(sp->key); db_cat(b, s ? s : "?"); free(s); any = true;
+    }
+    if (sp->deflt) {
+        char* s = expr_to_string(sp->deflt);
+        db_cat(b, " -> "); db_cat(b, s ? s : "?"); free(s); any = true;
+    }
+    if (sp->assoc) {
+        char* s = expr_to_string(sp->assoc);
+        if (any) db_cat(b, " | ");
+        db_cat(b, s ? s : "?"); free(s);
+    }
+    db_cat(b, "]");
+}
+
 /* Writes the immediate of instruction `i`.  Returns false when the opcode has
  * no immediate, so the caller can skip the separator. */
 static bool render_imm(DBuf* b, const CompiledProgram* p, size_t i, ProgList* L) {
@@ -465,6 +490,9 @@ static bool render_imm(DBuf* b, const CompiledProgram* p, size_t i, ProgList* L)
         }
         case IMM_PARTSPEC:
             render_partspec(b, p, (const PartSpec*)c->imm.p);
+            return true;
+        case IMM_ASSOC:
+            render_assocspec(b, (const AssocSpec*)c->imm.p);
             return true;
         case IMM_CONST: {
             bool dead = false;
@@ -591,6 +619,27 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
     reg_name(p, c->dst, rd, sizeof rd);
     reg_name(p, c->a, ra, sizeof ra);
     reg_name(p, c->b, rb, sizeof rb);
+
+    /* Association read ops (B1) carry an AssocSpec, not a kernel pointer, so the
+     * by-kind branches below (K_KERN1 -> kernel_name, K_ARR -> delegate) would
+     * mislabel them.  Render them by head explicitly. */
+    if (c->op == OP_ASSOC_LOOKUP || c->op == OP_ASSOC_HASKEY || c->op == OP_ASSOC_VALUES) {
+        const char* verb = c->op == OP_ASSOC_LOOKUP ? "Lookup"
+                         : c->op == OP_ASSOC_HASKEY ? (c->flags ? "KeyFreeQ" : "KeyExistsQ")
+                         : "Values";
+        db_catf(b, "%s = %s[%s, ", rd, verb, ra);
+        render_imm(b, p, i, L);
+        db_cat(b, "]");
+        return;
+    }
+    if (c->op == OP_ASSOC_LEN) { db_catf(b, "%s = Length[%s]", rd, ra); return; }
+    if (c->op == OP_ASSOC_LOOKUP_DYN) { db_catf(b, "%s = Lookup[%s, %s]", rd, ra, rb); return; }
+    if (c->op == OP_ASSOC_KEYSEL) {
+        db_catf(b, "%s = %s[%s, ", rd, (c->flags & 1u) ? "KeyTake" : "KeyDrop", ra);
+        render_imm(b, p, i, L);
+        db_cat(b, "]");
+        return;
+    }
 
     switch (k) {
         case K_NOP:   db_cat(b, "(removed)"); return;

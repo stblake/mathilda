@@ -14,6 +14,7 @@
 #include "../symtab.h"
 #include "../attr.h"      /* ATTR_LISTABLE — the gate on elementwise fusion */
 #include "../ndarray.h"    /* NDUnaryKernel / NDBinaryKernel — shared kernel layer */
+#include "../assoc.h"      /* is_association / assoc_lookup_value / assoc_values_list — B1 */
 #include "../ndreduce.h"   /* ndred_total / ndred_accumulate — array reductions */
 #include "../ndstruct.h"   /* ndstruct_reverse / _sort / _diagonal / _join — delegated structure */
 #include "../linalg/ndlinalg.h"  /* ndla_tr / _det / _matrixrank / _norm / _inverse / _linearsolve / _cross ... */
@@ -148,6 +149,12 @@ typedef struct {
      * handed to the program at finalize; freed here if the compile bails. */
     PartSpec** parts;
     int        nparts, parts_cap;
+
+    /* Association read-op specs (see AssocSpec).  Same lifetime as `parts`:
+     * built while emitting, handed to the program at finalize, freed here on a
+     * bail. */
+    AssocSpec** assocs;
+    int         nassocs, assocs_cap;
 
     /* Expr-level CSE (see cse_plan).  A chosen repeated subtree is computed once
      * into a register reserved below the temp stack, so no temp allocation and
@@ -320,7 +327,10 @@ static bool val_is_tile(Val v) { return reg_is_tile(v.reg); }
  * happens after the operand has been read. */
 static void pop_tmp(Ctx* c, Val v) {
     if (!v.tmp) return;
-    if (CT_IS_ARRAY(v.type)) c->arr_top--;
+    /* An owned association temp (B3) lives in the array bank exactly like an
+     * array temp — a borrowed-argument association is tmp==false and never
+     * reaches here — so both pop the array bank. */
+    if (CT_IS_ARRAY(v.type) || CT_IS_ASSOC(v.type)) c->arr_top--;
     else if (val_is_tile(v)) c->tile_top--;
     else c->temp_top--;
 }
@@ -329,7 +339,9 @@ static void pop_tmp(Ctx* c, Val v) {
  * teardown) would accumulate one buffer per iteration. */
 static void free_if_tmp(Ctx* c, Val v) {
     if (!v.tmp) return;
-    if (CT_IS_ARRAY(v.type)) {
+    /* Owned association temps free through the same OP_ARR_FREE as array temps
+     * (expr_free handles any Expr in the .arr slot). */
+    if (CT_IS_ARRAY(v.type) || CT_IS_ASSOC(v.type)) {
         Slot z = { 0 };
         ins(c, OP_ARR_FREE, (uint32_t)v.reg, 0, 0, z);
         c->arr_top--;
@@ -342,6 +354,9 @@ static void free_if_tmp(Ctx* c, Val v) {
  * arrays must agree on rank; element types widen exactly as scalars do. */
 static CompileType num_common(CompileType a, CompileType b) {
     if (a == CT_BOOL || b == CT_BOOL) return CT_ERR;
+    /* An Association bag is never a numeric operand; without this it would fall
+     * through to `a > b ? a : b` and be returned as a bogus "wider scalar". */
+    if (CT_IS_ASSOC(a) || CT_IS_ASSOC(b)) return CT_ERR;
     if (CT_IS_ARRAY(a) || CT_IS_ARRAY(b)) {
         CompileType ea = CT_IS_ARRAY(a) ? CT_ELEM(a) : a;
         CompileType eb = CT_IS_ARRAY(b) ? CT_ELEM(b) : b;
@@ -359,6 +374,7 @@ static CompileType num_common(CompileType a, CompileType b) {
 static void coerce(Ctx* c, Val* v, CompileType target) {
     if (!c->ok || v->type == target) return;
     if (CT_IS_ARRAY(v->type) || CT_IS_ARRAY(target)) { c->ok = false; return; }
+    if (CT_IS_ASSOC(v->type) || CT_IS_ASSOC(target)) { c->ok = false; return; }
     if (val_is_tile(*v)) {
         /* Tiles only ever hold Real or Complex elements, so the single widening
          * that can arise is real -> complex. */
@@ -392,6 +408,9 @@ static int cse_lookup(const Ctx* c, const Expr* e);
  * instead of silently reinterpreting a handle as a double. */
 static bool scalar_only(Ctx* c, CompileType a, CompileType b, CompileType r) {
     if (CT_IS_ARRAY(a) || CT_IS_ARRAY(b) || CT_IS_ARRAY(r)) { c->ok = false; return false; }
+    /* Same guard for an Association handle: it is not a machine scalar, so any
+     * scalar op that receives one must bail rather than read it as a double. */
+    if (CT_IS_ASSOC(a) || CT_IS_ASSOC(b) || CT_IS_ASSOC(r)) { c->ok = false; return false; }
     return true;
 }
 
@@ -684,6 +703,382 @@ static bool ctx_own_partspec(Ctx* c, PartSpec* p) {
     }
     c->parts[c->nparts++] = p;
     return true;
+}
+
+/* ================================================================== *
+ *  Association read-only parameter bag (Compile[] B1)                 *
+ * ================================================================== */
+
+/* NDType for a packed vector of Association values of element type `e`. */
+static NDType assoc_elem_ndt(CompileType e) {
+    return e == CT_COMPLEX ? NDT_COMPLEX64 : e == CT_INT ? NDT_INT64 : NDT_FLOAT64;
+}
+
+/* True when `e` contains no argument / local (scope) symbol — i.e. it is a
+ * compile-time constant.  Association keys and Lookup defaults must be constant
+ * in B1 (a runtime-varying key is B2); this is the gate. */
+static bool expr_is_compile_const(const Ctx* c, const Expr* e) {
+    if (!e) return true;
+    switch (e->type) {
+        case EXPR_SYMBOL: {
+            const char* nm = e->data.symbol.name;
+            CompileType st;
+            if (scope_find(c, nm, &st, NULL) >= 0) return false;   /* a local  */
+            if (arg_find(c, nm) >= 0)             return false;   /* an arg   */
+            return true;                                          /* global   */
+        }
+        case EXPR_FUNCTION: {
+            if (!expr_is_compile_const(c, e->data.function.head)) return false;
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (!expr_is_compile_const(c, e->data.function.args[i])) return false;
+            return true;
+        }
+        default: return true;   /* Integer / Real / String / BigInt / ... */
+    }
+}
+
+/* Common machine element type across a constant association's VALUES, via the
+ * same numeric classifier the whole compiler uses (literal).  Fails on an empty,
+ * non-canonical, or non-numeric-valued association. */
+static bool assoc_const_values_elem(const Expr* assoc, CompileType* out) {
+    size_t n = assoc->data.function.arg_count;
+    if (n == 0) return false;
+    CompileType elem = CT_INT;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* entry = assoc->data.function.args[i];
+        if (entry->type != EXPR_FUNCTION || entry->data.function.arg_count != 2) return false;
+        Slot imm; CompileType vt;
+        if (!literal(entry->data.function.args[1], &imm, &vt)) return false;
+        elem = num_common(elem, vt);
+        if ((int)elem < 0 || CT_IS_ARRAY(elem) || CT_IS_ASSOC(elem)) return false;
+    }
+    *out = elem;
+    return true;
+}
+
+/* Under COMPILE_FOLD_GLOBALS, a non-argument symbol whose current OwnValue is an
+ * association (`g = <|...|>`) — the mirror of global_const for association bags. */
+static const Expr* global_assoc(const Ctx* c, const char* nm) {
+    if (!(c->flags & COMPILE_FOLD_GLOBALS)) return NULL;
+    for (Rule* r = symtab_get_own_values(nm); r; r = r->next) {
+        if (!r->pattern || r->pattern->type != EXPR_SYMBOL) continue;
+        if (strcmp(r->pattern->data.symbol.name, nm) != 0) continue;
+        return (r->replacement && is_association(r->replacement)) ? r->replacement : NULL;
+    }
+    return NULL;
+}
+
+typedef enum { ASSOC_NONE, ASSOC_ARG, ASSOC_CONST } AssocOpKind;
+typedef struct {
+    AssocOpKind kind;
+    int         reg;      /* ASSOC_ARG: the operand register             */
+    CompileType valtype;  /* ASSOC_ARG: declared value element type      */
+    const Expr* assoc;    /* ASSOC_CONST: the constant association node   */
+} AssocOperand;
+
+/* THE shared resolver — used by both infer_type and emit_node so they can never
+ * disagree about what an association operand is.  A declared `_Association`
+ * argument -> ASSOC_ARG (register + value type); a literal `<|...|>` or a folded
+ * global -> ASSOC_CONST; anything else -> ASSOC_NONE (the head bails, or, for a
+ * head shared with the array lowerings, falls through to them). */
+static void resolve_assoc_operand(Ctx* c, const Expr* e, AssocOperand* o) {
+    o->kind = ASSOC_NONE; o->reg = -1; o->valtype = CT_REAL; o->assoc = NULL;
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        CompileType st;
+        if (scope_find(c, nm, &st, NULL) >= 0) return;   /* a local is not a bag */
+        int k = arg_find(c, nm);
+        if (k >= 0) {
+            if (CT_IS_ASSOC(c->arg_types[k])) {
+                o->kind = ASSOC_ARG; o->reg = k;
+                o->valtype = CT_ASSOC_VALTYPE(c->arg_types[k]);
+                c->argdep[k] = 1;
+            }
+            return;   /* an arg of another type is not an association bag */
+        }
+        const Expr* g = global_assoc(c, nm);
+        if (g) { o->kind = ASSOC_CONST; o->assoc = g; }
+        return;
+    }
+    if (is_association(e)) { o->kind = ASSOC_CONST; o->assoc = e; }
+}
+
+/* Program-owned AssocSpec, freed in compiled_free (declared in compile_internal.h). */
+void compile_assocspec_free(AssocSpec* p) {
+    if (!p) return;
+    expr_free(p->key); expr_free(p->deflt); expr_free(p->assoc);
+    free(p);
+}
+
+static bool expr_eq_or_null(const Expr* a, const Expr* b) {
+    if (!a && !b) return true;
+    return a && b && expr_eq(a, b);
+}
+static bool assocspec_eq(const AssocSpec* a, const AssocSpec* b) {
+    return expr_eq_or_null(a->key, b->key)
+        && expr_eq_or_null(a->deflt, b->deflt)
+        && expr_eq_or_null(a->assoc, b->assoc);
+}
+
+static bool ctx_own_assocspec(Ctx* c, AssocSpec* p) {
+    if (c->nassocs == c->assocs_cap) {
+        int nc = c->assocs_cap ? c->assocs_cap * 2 : 4;
+        AssocSpec** np = realloc(c->assocs, (size_t)nc * sizeof *np);
+        if (!np) { compile_assocspec_free(p); c->ok = false; return false; }
+        c->assocs = np; c->assocs_cap = nc;
+    }
+    c->assocs[c->nassocs++] = p;
+    return true;
+}
+
+/* Build (or reuse) a program-owned AssocSpec.  The three Exprs are ref-counted
+ * keep-alives (expr_copy) so the spec outlives the body; identical specs are
+ * interned so two identical lookups share one pointer and thus CSE (K_KERN1's
+ * imm_eq compares imm.p).  Returns NULL and sets c->ok=false on failure. */
+static AssocSpec* emit_assocspec(Ctx* c, const Expr* key, const Expr* deflt, const Expr* assoc) {
+    AssocSpec* sp = calloc(1, sizeof *sp);
+    if (!sp) { c->ok = false; return NULL; }
+    if (key)   sp->key   = expr_copy((Expr*)key);
+    if (deflt) sp->deflt = expr_copy((Expr*)deflt);
+    if (assoc) sp->assoc = expr_copy((Expr*)assoc);
+    if ((key && !sp->key) || (deflt && !sp->deflt) || (assoc && !sp->assoc)) {
+        compile_assocspec_free(sp); c->ok = false; return NULL;
+    }
+    for (int i = 0; i < c->nassocs; i++)
+        if (assocspec_eq(c->assocs[i], sp)) { compile_assocspec_free(sp); return c->assocs[i]; }
+    if (!ctx_own_assocspec(c, sp)) return NULL;   /* frees sp, sets c->ok */
+    return sp;
+}
+
+/* Emit the Association read ops (B1).  Returns true if `h` is an association op
+ * that was HANDLED — lowered (out set) or cleanly bailed (c->ok=false).  Returns
+ * false if `h` is not one, or is a head shared with the array lowerings
+ * (Length/Values) whose operand is not an association — so the caller keeps
+ * looking. */
+static bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
+    bool is_lookup  = strcmp(h, "Lookup") == 0 && (na == 2 || na == 3);
+    bool is_exists  = (strcmp(h, "KeyExistsQ") == 0 || strcmp(h, "KeyMemberQ") == 0) && na == 2;
+    bool is_free    = strcmp(h, "KeyFreeQ") == 0 && na == 2;
+    bool is_len     = strcmp(h, "Length") == 0 && na == 1;
+    bool is_values  = strcmp(h, "Values") == 0 && na == 1;
+    bool is_keydrop = strcmp(h, "KeyDrop") == 0 && na == 2;
+    bool is_keytake = strcmp(h, "KeyTake") == 0 && na == 2;
+    if (!is_lookup && !is_exists && !is_free && !is_len && !is_values
+        && !is_keydrop && !is_keytake) return false;
+
+    AssocOperand ao; resolve_assoc_operand(c, A[0], &ao);
+    if (ao.kind == ASSOC_NONE) {
+        /* Lookup / KeyExistsQ / KeyMemberQ / KeyFreeQ / KeyDrop / KeyTake are
+         * association-only: bail.  Length / Values are shared with the array
+         * path — let it try. */
+        if (is_len || is_values) return false;
+        c->ok = false; return true;
+    }
+
+    /* B3: KeyDrop / KeyTake -> an OWNED association (array bank).  Source is an
+     * argument bag or a constant association (nesting a produced association as
+     * the source is deferred); the key(s) are compile-time constant. */
+    if (is_keydrop || is_keytake) {
+        const Expr* keyspec = A[1];
+        if (!expr_is_compile_const(c, keyspec)) { c->ok = false; return true; }
+        CompileType valtype = (ao.kind == ASSOC_ARG) ? ao.valtype : CT_REAL;
+        if (ao.kind == ASSOC_CONST && !assoc_const_values_elem(ao.assoc, &valtype))
+            valtype = CT_REAL;   /* a non-numeric-valued source is fine for KeyDrop */
+        AssocSpec* sp = emit_assocspec(c, keyspec, NULL, ao.kind == ASSOC_CONST ? ao.assoc : NULL);
+        if (!sp) return true;
+        Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
+        uint16_t f = (uint16_t)(is_keytake ? 1u : 0u);   /* bit0 = take */
+        uint32_t areg = (ao.kind == ASSOC_ARG) ? (uint32_t)ao.reg : 0;
+        int dst = alloc_arr(c);
+        ins_f(c, OP_ASSOC_KEYSEL, f, (uint32_t)dst, areg, 0, ip);
+        out->reg = dst; out->tmp = true; out->type = CT_ASSOC_TYPE(valtype); out->built = true;
+        return true;
+    }
+
+    if (is_lookup) {
+        const Expr* key   = A[1];
+        const Expr* deflt = (na == 3) ? A[2] : NULL;
+        if (deflt && !expr_is_compile_const(c, deflt)) { c->ok = false; return true; }
+
+        if (!expr_is_compile_const(c, key)) {
+            /* B2: a runtime-varying INTEGER or REAL key.  Emit the key as a
+             * machine scalar and probe Part A's index at runtime (O(1)); the op
+             * is pure (K_KERN2) so it CSEs by (bag, key, spec) and is hoisted
+             * only when the key register is itself loop-invariant. */
+            Val kv;
+            if (!emit(c, key, &kv)) { c->ok = false; return true; }
+            CompileType kt = kv.type;
+            if (kt != CT_INT && kt != CT_REAL) { pop_tmp(c, kv); c->ok = false; return true; }
+            CompileType rt = CT_ERR;
+            if (ao.kind == ASSOC_ARG) rt = ao.valtype;
+            else if (!assoc_const_values_elem(ao.assoc, &rt)) { pop_tmp(c, kv); c->ok = false; return true; }
+            if (deflt) {
+                Slot d; CompileType dt;
+                if (!literal(deflt, &d, &dt)) { pop_tmp(c, kv); c->ok = false; return true; }
+                rt = num_common(rt, dt);
+                if ((int)rt < 0 || CT_IS_ARRAY(rt) || CT_IS_ASSOC(rt)) { pop_tmp(c, kv); c->ok = false; return true; }
+            }
+            if (rt != CT_INT && rt != CT_REAL && rt != CT_COMPLEX) { pop_tmp(c, kv); c->ok = false; return true; }
+            AssocSpec* sp = emit_assocspec(c, NULL, deflt, ao.kind == ASSOC_CONST ? ao.assoc : NULL);
+            if (!sp) { pop_tmp(c, kv); return true; }
+            Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
+            uint16_t f = (uint16_t)((unsigned)rt | ((unsigned)kt << 4));
+            /* For an argument bag `a` is the operand register; for a constant bag
+             * the handle is in the spec and `a` is a harmless read of the key. */
+            uint32_t bagreg = (ao.kind == ASSOC_ARG) ? (uint32_t)ao.reg : (uint32_t)kv.reg;
+            pop_tmp(c, kv);
+            int dst = alloc_temp(c);
+            ins_f(c, OP_ASSOC_LOOKUP_DYN, f, (uint32_t)dst, bagreg, (uint32_t)kv.reg, ip);
+            out->reg = dst; out->tmp = true; out->type = rt; out->built = false;
+            return true;
+        }
+        if (ao.kind == ASSOC_CONST) {
+            /* Fold at compile time via the native helper (never evaluate()). */
+            Expr* v = assoc_lookup_value(ao.assoc, key);
+            if (!v) v = (Expr*)deflt;
+            Slot imm; CompileType vt;
+            if (!v || !literal(v, &imm, &vt)) { c->ok = false; return true; }
+            *out = emit_const(c, imm, vt);
+            return true;
+        }
+        CompileType rt = ao.valtype;
+        if (deflt) {
+            Slot d; CompileType dt;
+            if (!literal(deflt, &d, &dt)) { c->ok = false; return true; }
+            rt = num_common(rt, dt);
+            if ((int)rt < 0 || CT_IS_ARRAY(rt) || CT_IS_ASSOC(rt)) { c->ok = false; return true; }
+        }
+        if (rt != CT_INT && rt != CT_REAL && rt != CT_COMPLEX) { c->ok = false; return true; }
+        AssocSpec* sp = emit_assocspec(c, key, deflt, NULL);
+        if (!sp) return true;   /* c->ok already false */
+        Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
+        int dst = alloc_temp(c);
+        ins_f(c, OP_ASSOC_LOOKUP, (uint16_t)rt, (uint32_t)dst, (uint32_t)ao.reg, 0, ip);
+        out->reg = dst; out->tmp = true; out->type = rt; out->built = false;
+        return true;
+    }
+
+    if (is_exists || is_free) {
+        const Expr* key = A[1];
+        if (!expr_is_compile_const(c, key)) { c->ok = false; return true; }
+        if (ao.kind == ASSOC_CONST) {
+            int present = assoc_lookup_value(ao.assoc, key) != NULL;
+            Slot imm; imm.i = is_free ? !present : present;
+            *out = emit_const(c, imm, CT_BOOL);
+            return true;
+        }
+        AssocSpec* sp = emit_assocspec(c, key, NULL, NULL);
+        if (!sp) return true;
+        Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
+        int dst = alloc_temp(c);
+        ins_f(c, OP_ASSOC_HASKEY, (uint16_t)(is_free ? 1 : 0), (uint32_t)dst, (uint32_t)ao.reg, 0, ip);
+        out->reg = dst; out->tmp = true; out->type = CT_BOOL; out->built = false;
+        return true;
+    }
+
+    if (is_len) {
+        if (ao.kind == ASSOC_CONST) {
+            Slot imm; imm.i = (long long)ao.assoc->data.function.arg_count;
+            *out = emit_const(c, imm, CT_INT);
+            return true;
+        }
+        Slot z; memset(&z, 0, sizeof z);
+        int dst = alloc_temp(c);
+        ins(c, OP_ASSOC_LEN, (uint32_t)dst, (uint32_t)ao.reg, 0, z);
+        out->reg = dst; out->tmp = true; out->type = CT_INT; out->built = false;
+        return true;
+    }
+
+    /* Values: an owned packed vector.  For a constant association the node rides
+     * in the spec (there is no array-constant opcode); for an argument the handle
+     * is read from the operand register. */
+    {
+        CompileType elem;
+        if (ao.kind == ASSOC_ARG) elem = ao.valtype;
+        else if (!assoc_const_values_elem(ao.assoc, &elem)) { c->ok = false; return true; }
+        if (elem != CT_INT && elem != CT_REAL && elem != CT_COMPLEX) { c->ok = false; return true; }
+        AssocSpec* sp = emit_assocspec(c, NULL, NULL, ao.kind == ASSOC_CONST ? ao.assoc : NULL);
+        if (!sp) return true;
+        Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
+        int dst = alloc_arr(c);
+        uint32_t areg = (ao.kind == ASSOC_ARG) ? (uint32_t)ao.reg : 0;
+        ins_f(c, OP_ASSOC_VALUES, (uint16_t)elem, (uint32_t)dst, areg, 0, ip);
+        out->reg = dst; out->tmp = true; out->type = CT_ARRAY(elem, 1); out->built = true;
+        return true;
+    }
+}
+
+/* infer_type twin of try_emit_assoc: returns true and sets *out when `h` is an
+ * association op with an association operand whose result type is known; false
+ * otherwise (so a shared head falls through to the array branch, and an
+ * association-only head with no valid operand ultimately bails). */
+static bool try_infer_assoc(Ctx* c, const char* h, Expr** A, size_t na, CompileType* out) {
+    bool is_lookup = strcmp(h, "Lookup") == 0 && (na == 2 || na == 3);
+    bool is_exists = (strcmp(h, "KeyExistsQ") == 0 || strcmp(h, "KeyMemberQ") == 0
+                      || strcmp(h, "KeyFreeQ") == 0) && na == 2;
+    bool is_len    = strcmp(h, "Length") == 0 && na == 1;
+    bool is_values = strcmp(h, "Values") == 0 && na == 1;
+    bool is_keysel = (strcmp(h, "KeyDrop") == 0 || strcmp(h, "KeyTake") == 0) && na == 2;
+    if (!is_lookup && !is_exists && !is_len && !is_values && !is_keysel) return false;
+
+    AssocOperand ao; resolve_assoc_operand(c, A[0], &ao);
+    if (ao.kind == ASSOC_NONE) return false;
+
+    if (is_exists) { *out = CT_BOOL; return true; }
+    if (is_len)    { *out = CT_INT;  return true; }
+    if (is_keysel) {
+        if (!expr_is_compile_const(c, A[1])) return false;
+        CompileType vt = (ao.kind == ASSOC_ARG) ? ao.valtype : CT_REAL;
+        if (ao.kind == ASSOC_CONST && !assoc_const_values_elem(ao.assoc, &vt)) vt = CT_REAL;
+        *out = CT_ASSOC_TYPE(vt); return true;
+    }
+    if (is_lookup) {
+        const Expr* key   = A[1];
+        const Expr* deflt = (na == 3) ? A[2] : NULL;
+        if (deflt && !expr_is_compile_const(c, deflt)) return false;
+        if (!expr_is_compile_const(c, key)) {
+            /* B2 runtime key: an int/real machine scalar; result is the value type
+             * (widened by the default), regardless of the specific key. */
+            CompileType kt;
+            if (!infer_type(c, key, &kt) || (kt != CT_INT && kt != CT_REAL)) return false;
+            CompileType rt = CT_ERR;
+            if (ao.kind == ASSOC_ARG) rt = ao.valtype;
+            else if (!assoc_const_values_elem(ao.assoc, &rt)) return false;
+            if (deflt) {
+                Slot d; CompileType dt;
+                if (!literal(deflt, &d, &dt)) return false;
+                rt = num_common(rt, dt);
+                if ((int)rt < 0 || CT_IS_ARRAY(rt) || CT_IS_ASSOC(rt)) return false;
+            }
+            if (rt != CT_INT && rt != CT_REAL && rt != CT_COMPLEX) return false;
+            *out = rt; return true;
+        }
+        if (ao.kind == ASSOC_CONST) {
+            Expr* v = assoc_lookup_value(ao.assoc, key);
+            if (!v) v = (Expr*)deflt;
+            Slot imm; CompileType vt;
+            if (!v || !literal(v, &imm, &vt)) return false;
+            *out = vt; return true;
+        }
+        CompileType rt = ao.valtype;
+        if (deflt) {
+            Slot d; CompileType dt;
+            if (!literal(deflt, &d, &dt)) return false;
+            rt = num_common(rt, dt);
+            if ((int)rt < 0 || CT_IS_ARRAY(rt) || CT_IS_ASSOC(rt)) return false;
+        }
+        if (rt != CT_INT && rt != CT_REAL && rt != CT_COMPLEX) return false;
+        *out = rt; return true;
+    }
+    /* Values */
+    {
+        CompileType elem;
+        if (ao.kind == ASSOC_ARG) elem = ao.valtype;
+        else if (!assoc_const_values_elem(ao.assoc, &elem)) return false;
+        if (elem != CT_INT && elem != CT_REAL && elem != CT_COMPLEX) return false;
+        *out = CT_ARRAY(elem, 1); return true;
+    }
 }
 
 /* A subscript that is a compile-time constant spec rather than a value to be
@@ -1772,6 +2167,9 @@ static bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
      * falls through and fails, which is right: the interpreter would leave that
      * Slot unsubstituted, so its answer is not a machine number either. */
     if (h == SYM_Slot) { int k = fn_slot_index(c, A, na); if (k >= 0) { *out = c->slot[k].type; return true; } }
+    /* Association read ops (B1): typed by the shared resolver.  Returns false for
+     * a non-association Length/Values so the array branch below still handles it. */
+    { CompileType at; if (try_infer_assoc(c, h, A, na, &at)) { *out = at; return true; } }
     CompileType ta, tb;
     #define IT(idx, dst) do { if (!infer_type(c, A[idx], &dst)) return false; } while (0)
     if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
@@ -3164,6 +3562,13 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         if (k >= 0) { out->reg = c->slot[k].reg; out->tmp = false; out->type = c->slot[k].type; return true; }
         c->ok = false; return false;
     }
+
+    /* Association read ops (B1), before fusion and the array lowerings: an
+     * association-only head (Lookup/KeyExistsQ/...) is handled or bails here; a
+     * head shared with the array path (Length/Values) is handled only when its
+     * operand is an association, else try_emit_assoc returns false and the
+     * ordinary lowering below takes it. */
+    if (try_emit_assoc(c, h, A, na, out)) return c->ok;
 
     /* Elementwise fusion, tried before the delegated array lowering below.  The
      * `array_args` gate keeps this free for the overwhelmingly common scalar
@@ -5752,6 +6157,40 @@ static void ps_free_indices(const PartSpec* ps, Expr** idx) {
 
 /* The array opcodes whose operands are a RUN of registers, so they need the
  * whole frame rather than three slots.  Same abort contract as vm_array_op. */
+/* Values[assoc] -> owned packed vector (B1).  The source is the spec's constant
+ * association or, for an argument bag, the borrowed handle in R[c->a].  Declines
+ * (returns false -> interpreter) on a non-numeric / ragged value list. */
+static bool vm_assoc_values(const Instr* c, Slot* R) {
+    const AssocSpec* sp = (const AssocSpec*)c->imm.p;
+    Expr* assoc = sp->assoc ? sp->assoc : R[c->a].arr;
+    if (!assoc) return false;
+    Expr* vals = assoc_values_list(assoc);        /* owned List of the values */
+    if (!vals) return false;
+    Expr* nd = ndarray_from_nested_list(vals, assoc_elem_ndt((CompileType)c->flags));
+    expr_free(vals);
+    if (!nd) return false;                         /* non-numeric -> decline    */
+    expr_free(R[c->dst].arr);                      /* release any stale handle  */
+    R[c->dst].arr = nd;
+    return true;
+}
+
+/* KeyDrop/KeyTake (B3) -> an OWNED association (array bank).  Native: builds the
+ * filtered association directly (assoc_key_select), no evaluator, no call node.
+ * The result carries Part A's index so a downstream read stays O(1).  flags bit0
+ * = take; bit1 = free the source temp (a produced association consumed here). */
+static bool vm_assoc_keysel(const Instr* c, Slot* R) {
+    const AssocSpec* sp = (const AssocSpec*)c->imm.p;
+    Expr* src = sp->assoc ? sp->assoc : R[c->a].arr;
+    if (!src) return false;
+    Expr* r = assoc_key_select(src, sp->key, (c->flags & 1u) != 0);
+    if (!r || !is_association(r)) { expr_free(r); return false; }
+    assoc_prebuild_index(r);
+    if ((c->flags & 2u) && !sp->assoc) { expr_free(R[c->a].arr); R[c->a].arr = NULL; }
+    expr_free(R[c->dst].arr);
+    R[c->dst].arr = r;
+    return true;
+}
+
 static bool vm_range_array_op(const Instr* c, Slot* R) {
     switch (c->op) {
         case OP_A_NEW: {                  /* ConstantArray[0, {d1, ..., dr}] */
@@ -6535,6 +6974,60 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(A_PARTSET): do { if (!vm_range_array_op(c, R)) goto vm_fail; } while (0); NEXT();
             OP(A_NDFN):    do { if (!vm_range_array_op(c, R)) goto vm_fail; } while (0); NEXT();
 
+            /* ---- Association read ops (B1) --------------------------------
+             * `imm.p` is a program-owned AssocSpec; `flags` carries the result
+             * element type (LOOKUP) / the KeyFreeQ negation (HASKEY) / the packed
+             * dtype (VALUES).  The bag is the spec's constant association, or the
+             * borrowed handle in the operand register R[c->a].  A value that does
+             * not fit the declared type, or an absent key with no default,
+             * declines to the interpreter (goto vm_fail) — the faithful degrade. */
+            OP(ASSOC_LOOKUP): {
+                const AssocSpec* sp = (const AssocSpec*)c->imm.p;
+                Expr* assoc = sp->assoc ? sp->assoc : RA.arr;
+                if (!assoc) goto vm_fail;
+                Expr* v = assoc_lookup_value(assoc, sp->key);
+                if (!v) v = sp->deflt;
+                if (!v) goto vm_fail;                      /* absent, no default */
+                switch (c->flags) {
+                    case CT_INT:  { long long x; if (!cf_to_ll(v, &x)) goto vm_fail; RD.i = x; } break;
+                    case CT_REAL: { double x;    if (!cf_to_double(v, &x)) goto vm_fail; RD.r = x; } break;
+                    case CT_COMPLEX: { double re, im; if (!cf_to_complex(v, &re, &im)) goto vm_fail;
+                                       RD.z = re + im * I; } break;
+                    default: goto vm_fail;
+                }
+            } NEXT();
+            OP(ASSOC_HASKEY): {
+                const AssocSpec* sp = (const AssocSpec*)c->imm.p;
+                Expr* assoc = sp->assoc ? sp->assoc : RA.arr;
+                if (!assoc) goto vm_fail;
+                long long present = assoc_lookup_value(assoc, sp->key) != NULL;
+                RD.i = c->flags ? !present : present;      /* flags=1 => KeyFreeQ */
+            } NEXT();
+            OP(ASSOC_LEN): {
+                Expr* assoc = RA.arr;
+                if (!assoc) goto vm_fail;
+                RD.i = (long long)assoc->data.function.arg_count;
+            } NEXT();
+            OP(ASSOC_VALUES): do { if (!vm_assoc_values(c, R)) goto vm_fail; } while (0); NEXT();
+            OP(ASSOC_KEYSEL): do { if (!vm_assoc_keysel(c, R)) goto vm_fail; } while (0); NEXT();
+            OP(ASSOC_LOOKUP_DYN): {          /* B2: runtime int/real key in R[b] */
+                const AssocSpec* sp = (const AssocSpec*)c->imm.p;
+                Expr* assoc = sp->assoc ? sp->assoc : RA.arr;
+                if (!assoc) goto vm_fail;
+                Expr* v = ((unsigned)(c->flags >> 4) & 0xF) == (unsigned)CT_INT
+                        ? assoc_lookup_value_i64(assoc, RB.i)
+                        : assoc_lookup_value_real(assoc, RB.r);
+                if (!v) v = sp->deflt;
+                if (!v) goto vm_fail;
+                switch ((unsigned)c->flags & 0xF) {
+                    case CT_INT:  { long long x; if (!cf_to_ll(v, &x)) goto vm_fail; RD.i = x; } break;
+                    case CT_REAL: { double x;    if (!cf_to_double(v, &x)) goto vm_fail; RD.r = x; } break;
+                    case CT_COMPLEX: { double re, im; if (!cf_to_complex(v, &re, &im)) goto vm_fail;
+                                       RD.z = re + im * I; } break;
+                    default: goto vm_fail;
+                }
+            } NEXT();
+
             /* ---- strip-mined tile ops (M5b) -------------------------------
              * One opcode, VBLOCK elements, in a loop shaped so the C compiler
              * can vectorise it.  Arithmetic always covers the FULL tile: the
@@ -7091,11 +7584,13 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
 
     Val res;
     bool ok = emit(&c, body, &res) && c.ok;
-    /* A borrowed argument array cannot be the result: the caller owns what it
-     * gets back, and freeing an argument would corrupt the caller's value. */
-    if (ok && CT_IS_ARRAY(res.type) && !res.tmp) {
+    /* A borrowed argument array — or association (B3) — cannot be the result:
+     * the caller owns what it gets back, and freeing an argument would corrupt
+     * the caller's value.  A PRODUCED association (KeyDrop/KeyTake) is a tmp and
+     * is allowed. */
+    if (ok && (CT_IS_ARRAY(res.type) || CT_IS_ASSOC(res.type)) && !res.tmp) {
         ok = false;
-        c.bail_node = body;   /* the whole body is a borrowed argument array */
+        c.bail_node = body;   /* the whole body is a borrowed argument handle */
     }
     /* A statement-shaped head lowers to the integer 0 where the interpreter
      * answers Null, so it may only appear where its VALUE is discarded.  Inside
@@ -7115,6 +7610,8 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
         bail_record(&c);
         for (int i = 0; i < c.nparts; i++) compile_partspec_free(c.parts[i]);
         free(c.parts);
+        for (int i = 0; i < c.nassocs; i++) compile_assocspec_free(c.assocs[i]);
+        free(c.assocs);
         free(c.code); free(c.argdep); return NULL;
     }
 
@@ -7148,11 +7645,14 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     if (!p) {
         for (int i = 0; i < c.nparts; i++) compile_partspec_free(c.parts[i]);
         free(c.parts);
+        for (int i = 0; i < c.nassocs; i++) compile_assocspec_free(c.assocs[i]);
+        free(c.assocs);
         free(c.code); free(c.argdep); return NULL;
     }
     /* The general-Part subscript lists become the program's: their literal specs
      * are pointed at from instruction immediates and must outlive the body. */
     p->parts = c.parts; p->nparts = c.nparts;
+    p->assocs = c.assocs; p->nassocs = c.nassocs;   /* AssocSpecs, likewise (B1) */
     p->code = c.code; p->n = c.n; p->nreg = nreg; p->arr_base = arr_base;
     p->tile_base = tile_base;
     p->result_reg = result_reg; p->result_type = res.type; p->ncse = c.ncse;
@@ -7194,7 +7694,16 @@ static bool load_arg(Slot* s, const CompileValue* v, CompileType want) {
         s->arr = x;
         return true;
     }
-    if (CT_IS_ARRAY(v->type)) return false;
+    if (CT_IS_ASSOC(want)) {
+        /* A read-only Association bag rides in `.arr` of a SCALAR-bank argument
+         * register (arg registers are < arr_base), so arr_sweep — which only
+         * walks [arr_base, tile_base) — never frees this borrowed handle. */
+        Expr* x = CT_IS_ASSOC(v->type) ? v->v.a : NULL;
+        if (!x || !is_association(x)) return false;
+        s->arr = x;
+        return true;
+    }
+    if (CT_IS_ARRAY(v->type) || CT_IS_ASSOC(v->type)) return false;
     /* coerce the boxed arg to the register's declared type */
     switch (v->type) {
         case CT_BOOL: s->i = v->v.b ? 1 : 0; return true;
@@ -7309,7 +7818,9 @@ bool compiled_eval(const CompiledProgram* p, const CompileValue* args, CompileVa
     vm_run(p->code, p->n, R, &failed);
     Slot* r = &R[p->result_reg];
     out->type = p->result_type;
-    if (CT_IS_ARRAY(p->result_type)) {
+    /* An array OR an owned association result (B3) lives in the .arr slot; both
+     * transfer ownership to the caller and both leave the array bank to sweep. */
+    if (CT_IS_ARRAY(p->result_type) || CT_IS_ASSOC(p->result_type)) {
         out->v.a = failed ? NULL : r->arr;
         if (!failed) r->arr = NULL;    /* ownership transfers to the caller */
         arr_sweep(p, R);
@@ -7390,6 +7901,8 @@ void compiled_free(CompiledProgram* p) {
     free(p->ploops);
     for (int i = 0; i < p->nparts; i++) compile_partspec_free(p->parts[i]);
     free(p->parts);
+    for (int i = 0; i < p->nassocs; i++) compile_assocspec_free(p->assocs[i]);
+    free(p->assocs);
     free(p->code); free(p->arg_types); free(p->argdep);
     free(p);
 }

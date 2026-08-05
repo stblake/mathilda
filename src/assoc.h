@@ -31,6 +31,28 @@
 /* True when `e` is an Association[...] node (head == SYM_Association). */
 bool is_association(const Expr* e);
 
+/* The value stored under `key` (a BORROWED pointer into `assoc`), or NULL if the
+ * key is absent.  O(1) amortised when `assoc` carries its persistent key index
+ * (every canonical association built through this module does), else an O(n)
+ * scan.  Accepts an association or a bare List of rules.  Does not mutate
+ * `assoc`.  This is the single-key lookup primitive shared by Lookup,
+ * KeyExistsQ/KeyMemberQ/KeyFreeQ, Part, and the <|...|>[key] accessor. */
+Expr* assoc_lookup_value(const Expr* assoc, const Expr* key);
+
+/* Eagerly build + cache the single-key index (compiled marshalling boundary).
+ * Idempotent; keeps the parallel VM off assoc_lookup_value's lazy build. */
+void assoc_prebuild_index(const Expr* assoc);
+
+/* Machine-scalar key lookup (compiled B2 runtime keys) — O(1), no per-call
+ * malloc (probes with a stack Expr).  Borrowed value pointer, or NULL. */
+Expr* assoc_lookup_value_i64(const Expr* assoc, int64_t key);
+Expr* assoc_lookup_value_real(const Expr* assoc, double key);
+
+/* KeyDrop/KeyTake native core (compiled B3): a fresh Association with the keys in
+ * `karg` (a key or a List of keys) dropped (take=false) or kept (take=true).
+ * Borrows both operands; owned result, or NULL if `assoc` is not an association. */
+Expr* assoc_key_select(const Expr* assoc, const Expr* karg, bool take);
+
 /* Build a canonical Association from `count` Rule[k,v] nodes.  The rules are
  * copied (the caller keeps ownership of `rules`).  Duplicate keys collapse
  * with last-value-wins while preserving first-occurrence order.  O(count). */

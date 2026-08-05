@@ -1093,7 +1093,7 @@ static void core_clear_all_one(const char* name) {
     SymbolDef* def = symtab_get_def(name);
     if (def->attributes != 0) {         /* attributes */
         def->attributes = 0;
-        eval_clock_bump();
+        eval_rule_epoch_bump();
     }
     if (def->docstring) {               /* usage / messages */
         free(def->docstring);
@@ -1119,7 +1119,7 @@ static bool core_protect_one(const char* name) {
     if (def->attributes & ATTR_LOCKED) return false;
     if (def->attributes & ATTR_PROTECTED) return false;
     def->attributes |= ATTR_PROTECTED;
-    eval_clock_bump();
+    eval_rule_epoch_bump();
     return true;
 }
 
@@ -1131,7 +1131,7 @@ static bool core_unprotect_one(const char* name) {
     if (def->attributes & ATTR_LOCKED) return false;
     if (!(def->attributes & ATTR_PROTECTED)) return false;
     def->attributes &= ~ATTR_PROTECTED;
-    eval_clock_bump();
+    eval_rule_epoch_bump();
     return true;
 }
 

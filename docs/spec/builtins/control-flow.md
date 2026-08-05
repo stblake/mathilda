@@ -478,6 +478,26 @@ expression would.
   - Not in the subset: array-valued `If` branches, `Sum` accumulators or `Nest`
     state (each would duplicate a handle without duplicating ownership), and
     `Table` as an array constructor.
+- **Association parameter bags (read-only).** An argument spec `{p, _Association}`
+  (value element type defaults `_Real`) or `{p, _Association, _Real|_Integer|_Complex}`
+  declares a read-only association parameter. The bag is borrowed — the program
+  reads it and never mutates or frees it. Inside a body: `Lookup[p, key]`,
+  `Lookup[p, key, default]`, `KeyExistsQ`/`KeyMemberQ`/`KeyFreeQ`, `Length[p]` and
+  `Values[p]` (a packed vector). The default must be literal; a **constant-key**
+  `Lookup` is O(1) and, being pure, is hoisted out of an enclosing loop and
+  computed once. A **runtime-varying integer or real key** — the `Lookup[p, i]`-in-
+  a-loop pattern — also compiles (O(1) per probe, no per-iteration allocation); a
+  key past the machine-scalar boundary (a string, an array) makes the whole body
+  fall back to the interpreter. A looked-up value that does not fit the
+  declared type, or an absent key with no default, cleanly declines to the
+  interpreter. A **constant** association (a literal `<|…|>`, or a global captured
+  under auto-compilation) is folded at compile time, so a `Table`/`Plot` body that
+  reads a captured global association compiles. Compiled code can also **produce**
+  an association: `KeyDrop[p, keys]` and `KeyTake[p, keys]` (keys literal) build a
+  new association the compiled function can return — `Compile[{{p, _Association}},
+  KeyDrop[p, "secret"]]`. Consuming such a produced association again inside the
+  same body (e.g. `Lookup[KeyDrop[p, k], j]`) is not yet in the subset and falls
+  back to the interpreter.
 - **Counted iterators** in `Do`/`Sum`/`Product` accept every integer-bounded
   spelling the interpreter does: `Do[body, n]` and `Do[body, {n}]` (repeat n
   times), `{i, hi}`, `{i, lo, hi}`, and `{i, lo, hi, di}` with a nonzero integer

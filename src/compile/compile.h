@@ -46,9 +46,22 @@ typedef enum {
 /* Highest rank the packed encoding supports (M3a implements rank 1 only). */
 #define CT_MAX_RANK 8
 #define CT_ARRAY(elem, rank) ((CompileType)((int)CT_ARR + 4 * ((rank) - 1) + (int)(elem)))
-#define CT_IS_ARRAY(t)       ((int)(t) >= (int)CT_ARR)
+/* Array encodings occupy [CT_ARR, CT_ASSOC); the tightened test keeps CT_ASSOC
+ * (a read-only Association parameter bag, B1) from being mis-read as an array. */
+#define CT_IS_ARRAY(t)       ((int)(t) >= (int)CT_ARR && (int)(t) < (int)CT_ASSOC)
 #define CT_ELEM(t)           ((CompileType)(((int)(t) - (int)CT_ARR) & 3))
 #define CT_RANK(t)           ((((int)(t) - (int)CT_ARR) >> 2) + 1)
+
+/* Read-only Association parameter bag (Compile[] B1). Encoded ABOVE every array
+ * rank as `CT_ASSOC + value_elem` (value element type in the low 2 bits), so the
+ * scalar comparisons and the array test above stay well defined and an
+ * association never aliases an array encoding. The bag is a BORROWED handle: the
+ * program reads it (Lookup/KeyExistsQ/Length/Values) and never frees it, exactly
+ * like a borrowed argument array. */
+#define CT_ASSOC             ((CompileType)((int)CT_ARR + 4 * CT_MAX_RANK))   /* = 36 */
+#define CT_ASSOC_TYPE(elem)  ((CompileType)((int)CT_ASSOC + (int)(elem)))
+#define CT_IS_ASSOC(t)       ((int)(t) >= (int)CT_ASSOC && (int)(t) < (int)CT_ASSOC + 4)
+#define CT_ASSOC_VALTYPE(t)  ((CompileType)(((int)(t) - (int)CT_ASSOC) & 3))
 
 /* A boxed value (compile-time-known type).  For an array type `a` holds an
  * EXPR_NDARRAY node: BORROWED when passed in as an argument (the program never

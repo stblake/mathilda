@@ -225,6 +225,24 @@ enum {
     X(AND, K_BIN)     X(OR, K_BIN)     X(XOR, K_BIN)    X(NOT, K_UN)       \
     X(ARR_FREE, K_ARR) X(V_EW, K_ARR)  X(V_POW, K_ARR)                     \
     X(V_KERN, K_ARR)  X(V_KERN2, K_ARR) X(V_TOTAL, K_ARR) X(V_LEN, K_ARR)  \
+    /* Association read-only parameter bag (B1).  Lookup / KeyExistsQ|MemberQ|   \
+     * FreeQ are pure K_KERN1 (CSE + LICM hoist a loop-invariant constant-key    \
+     * probe so it runs once); Length is a pure unary read of the handle;        \
+     * Values delegates to a packed builder (K_ARR, owned result).               \
+     * imm.p borrows a program-owned AssocSpec; flags carries the result CT. */  \
+    X(ASSOC_LOOKUP, K_KERN1) X(ASSOC_HASKEY, K_KERN1)                      \
+    X(ASSOC_LEN, K_UN) X(ASSOC_VALUES, K_ARR)                             \
+    /* B2 runtime-varying (integer/real) key: reads the bag in R[a] and the      \
+     * machine key in R[b]; pure K_KERN2, so it CSEs by (a,b,spec) and hoists     \
+     * only when the key register is loop-invariant.  flags = result_ct |         \
+     * (key_ct << 4). */                                                          \
+    X(ASSOC_LOOKUP_DYN, K_KERN2)                                          \
+    /* B3 pure set-algebra: KeyDrop / KeyTake produce an OWNED association in the  \
+     * array bank (K_ARR, never moved/removed).  flags bit0 = take, bit1 = free    \
+     * the source temp.  imm.p is an AssocSpec whose `key` is the drop/keep key(s) \
+     * and `assoc` is the constant source (else the bag is R[a]).                   \
+     */                                                                            \
+    X(ASSOC_KEYSEL, K_ARR)                                                \
     /* An array -> SCALAR reduction delegated to the interpreter's own entry   \
      * point (ndred_mean, ndred_variance, ...), the reduction counterpart of   \
      * A_NDFN below.  Total has its own opcode because an int64 sum must stay  \
@@ -387,6 +405,30 @@ typedef struct {
 
 void compile_partspec_free(PartSpec* p);
 
+/* Program-owned Association read-op spec (Compile[] B1).  Mirrors PartSpec's
+ * ownership EXACTLY: the three Exprs are DEEP COPIES taken at emit (the program
+ * can outlive the body it was compiled from), the program owns every AssocSpec
+ * and frees them in compiled_free, and an instruction's `imm.p` borrows one.
+ * `assoc` is non-NULL only for a CONSTANT-association operand (a literal
+ * `<|...|>`, or a global folded under COMPILE_FOLD_GLOBALS); for a declared
+ * `_Association` argument it is NULL and the borrowed handle is read from the
+ * operand register instead. */
+typedef struct {
+    Expr* key;      /* Lookup / membership key (literal), or NULL for Length/Values */
+    Expr* deflt;    /* Lookup[a,k,default]'s default value, or NULL */
+    Expr* assoc;    /* constant association operand, or NULL for an argument bag */
+} AssocSpec;
+
+void compile_assocspec_free(AssocSpec* p);
+
+/* Scalar coercions defined in compiled_function.c and shared with the
+ * Association opcodes (compile.c) so a looked-up value is coerced to a machine
+ * scalar IDENTICALLY to how a scalar argument is boxed by cf_box — that
+ * identity is the compiled/interpreted parity guarantee. */
+bool cf_to_double(const Expr* e, double* out);
+bool cf_to_ll(const Expr* e, long long* out);
+bool cf_to_complex(const Expr* e, double* re, double* im);
+
 /* ------------------------------------------------------------------ *
  *  The finished program                                               *
  * ------------------------------------------------------------------ *
@@ -420,6 +462,8 @@ struct CompiledProgram {
     int         nploops;
     PartSpec**  parts;        /* [nparts] general-Part subscript lists */
     int         nparts;
+    AssocSpec** assocs;       /* [nassocs] Association read-op specs (B1) */
+    int         nassocs;
     int         nreg;
     int         arr_base;     /* array registers are [arr_base, tile_base) */
     int         tile_base;    /* tile registers are [tile_base, nreg) */

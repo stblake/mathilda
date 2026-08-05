@@ -190,8 +190,9 @@ void set_attributes(const char* symbol_name, uint32_t attrs) {
             /* Attribute changes (Hold*, Listable, Flat, Orderless,
              * NumericFunction, Protected, OneIdentity, ...) all change
              * how the evaluator handles a head, so a cached evaluation
-             * could be stale. Bump the global eval clock to invalidate. */
-            eval_clock_bump();
+             * could be stale. Advance the rule epoch (and eval clock) to
+             * invalidate -- including any GROUND node using this head. */
+            eval_rule_epoch_bump();
         }
     }
 }
@@ -227,8 +228,9 @@ static void remove_single_attribute(SymbolDef* def, Expr* attr_expr) {
         uint32_t bit = string_to_attribute(attr_name);
         if (bit != ATTR_NONE && (def->attributes & bit)) {
             def->attributes &= ~bit;
-            /* Real attribute change -- invalidate cached evaluations. */
-            eval_clock_bump();
+            /* Real attribute change -- invalidate cached evaluations (and any
+             * GROUND node using this head) by advancing the rule epoch. */
+            eval_rule_epoch_bump();
         }
     }
 }
@@ -242,8 +244,9 @@ static void add_single_attribute(SymbolDef* def, Expr* attr_expr) {
         uint32_t bit = string_to_attribute(attr_name);
         if (bit != ATTR_NONE && !(def->attributes & bit)) {
             def->attributes |= bit;
-            /* Real attribute change -- invalidate cached evaluations. */
-            eval_clock_bump();
+            /* Real attribute change -- invalidate cached evaluations (and any
+             * GROUND node using this head) by advancing the rule epoch. */
+            eval_rule_epoch_bump();
         }
     }
 }

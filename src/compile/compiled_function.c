@@ -13,6 +13,7 @@
 #include "../sym_intern.h"     /* intern_symbol */
 #include "../sym_names.h"      /* SYM_Real / SYM_Integer / SYM_Complex / ... */
 #include "../ndarray.h"        /* ndarray_from_nested_list — packing a List argument */
+#include "../assoc.h"          /* is_association / assoc_prebuild_index — _Association bag */
 #include "../pack.h"           /* pack_offer / pack_repack_like — the packed boundary */
 #include "../checked_int.h"    /* ci_fits_double — decline an inexact int64 cast */
 #include "../symtab.h"         /* symtab_add_builtin / _set_docstring / _get_def */
@@ -35,8 +36,9 @@ struct CompiledFunction {
  *  Numeric boxing / unboxing                                          *
  * ------------------------------------------------------------------ */
 
-/* Concrete real value of a numeric atom (Integer/BigInt/Real/MPFR/Rational). */
-static bool cf_to_double(const Expr* e, double* out) {
+/* Concrete real value of a numeric atom (Integer/BigInt/Real/MPFR/Rational).
+ * Exposed via compile_internal.h so the Association opcodes coerce identically. */
+bool cf_to_double(const Expr* e, double* out) {
     if (!e) return false;
     switch (e->type) {
         case EXPR_INTEGER: *out = (double)e->data.integer;          return true;
@@ -63,7 +65,7 @@ static bool cf_to_double(const Expr* e, double* out) {
     return false;
 }
 
-static bool cf_to_ll(const Expr* e, long long* out) {
+bool cf_to_ll(const Expr* e, long long* out) {
     if (e->type == EXPR_INTEGER) { *out = (long long)e->data.integer; return true; }
     if (e->type == EXPR_BIGINT) {
         if (!mpz_fits_slong_p(e->data.bigint)) return false;
@@ -72,7 +74,7 @@ static bool cf_to_ll(const Expr* e, long long* out) {
     return false;
 }
 
-static bool cf_to_complex(const Expr* e, double* re, double* im) {
+bool cf_to_complex(const Expr* e, double* re, double* im) {
     Expr *r, *i;
     if (is_complex((Expr*)e, &r, &i)) {
         double a, b;
@@ -191,6 +193,17 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out,
         }
         default: break;
     }
+    if (CT_IS_ASSOC(t)) {
+        /* A read-only Association bag is BORROWED, exactly like an NDArray
+         * argument: the program never frees it and `owned` stays false.  Build
+         * the single-key index HERE, at the single-threaded marshalling
+         * boundary, so a parallel VM run never triggers the lazy build (which
+         * mutates the shared node) from a worker thread. */
+        if (!is_association(e)) return false;
+        assoc_prebuild_index(e);
+        out->v.a = (Expr*)e;
+        return true;
+    }
     if (CT_IS_ARRAY(t)) {
         /* An NDArray argument is BORROWED — the program never frees it, and the
          * caller still owns the node it passed in.  A plain nested List is
@@ -248,6 +261,10 @@ static Expr* cf_unbox(const CompileValue* v) {
     /* compiled_eval hands back a NEW EXPR_NDARRAY that the caller owns, so it
      * becomes the result directly — no copy, no conversion to a nested List. */
     if (CT_IS_ARRAY(v->type)) return v->v.a;
+    /* An owned association result (B3) is returned as-is — a canonical
+     * Association node the caller owns.  It carries no packed form, so the
+     * CT_IS_ARRAY presentation logic in cf_apply is deliberately skipped. */
+    if (CT_IS_ASSOC(v->type)) return v->v.a;
     return NULL;
 }
 
@@ -277,6 +294,17 @@ static bool parse_typespec(const Expr* ts, CompileType* out) {
     return false;
 }
 
+/* `_Association` (Blank[Association]) or the bare `Association` symbol — the type
+ * head of a read-only Association parameter bag (B1). */
+static bool is_assoc_typespec(const Expr* ts) {
+    if (ts->type == EXPR_SYMBOL) return ts->data.symbol.name == SYM_Association;
+    return ts->type == EXPR_FUNCTION && ts->data.function.head->type == EXPR_SYMBOL
+        && ts->data.function.head->data.symbol.name == SYM_Blank
+        && ts->data.function.arg_count == 1
+        && ts->data.function.args[0]->type == EXPR_SYMBOL
+        && ts->data.function.args[0]->data.symbol.name == SYM_Association;
+}
+
 /* ------------------------------------------------------------------ *
  *  Lifecycle                                                          *
  * ------------------------------------------------------------------ */
@@ -303,6 +331,24 @@ static bool cf_parse_argspec(const Expr* argspec,
         const char* nm = NULL; CompileType ty = CT_REAL;
         if (el->type == EXPR_SYMBOL) {
             nm = el->data.symbol.name;
+        } else if (el->type == EXPR_FUNCTION && el->data.function.head->type == EXPR_SYMBOL
+                   && el->data.function.head->data.symbol.name == SYM_List
+                   && (el->data.function.arg_count == 2 || el->data.function.arg_count == 3)
+                   && el->data.function.args[0]->type == EXPR_SYMBOL
+                   && is_assoc_typespec(el->data.function.args[1])) {
+            /* `{p, _Association}` or `{p, _Association, _Real|_Integer|_Complex}`
+             * — a read-only Association parameter bag (B1).  The value element
+             * type (how a looked-up value is boxed into a machine scalar)
+             * defaults to Real; the optional third element overrides it. */
+            CompileType valty = CT_REAL;
+            if (el->data.function.arg_count == 3) {
+                if (!parse_typespec(el->data.function.args[2], &valty)
+                    || (valty != CT_REAL && valty != CT_INT && valty != CT_COMPLEX)) {
+                    free(names); free(types); return false;
+                }
+            }
+            ty = CT_ASSOC_TYPE(valty);
+            nm = el->data.function.args[0]->data.symbol.name;
         } else if (el->type == EXPR_FUNCTION && el->data.function.head->type == EXPR_SYMBOL
                    && el->data.function.head->data.symbol.name == SYM_List
                    && (el->data.function.arg_count == 2 || el->data.function.arg_count == 3)
