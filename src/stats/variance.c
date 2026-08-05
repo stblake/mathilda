@@ -5,6 +5,7 @@
 #include "stats_common.h"
 #include "eval.h"
 #include "arithmetic.h"
+#include "checked_int.h"  /* ci_mul_i64 etc: the int64 fast path must decline, not wrap */
 #include "sym_names.h"
 #include "assoc.h"
 #include "ndreduce.h"
@@ -74,18 +75,36 @@ Expr* builtin_variance(Expr* res) {
             }
             return expr_new_real(s / (double)(n - 1));
         } else {
-            // Exact calculation for Variance
-            // Var = (Sum[x^2] - n*Mean[x]^2) / (n-1)
-            // Using Sum[(n*x_i - Sum[x_j])^2] / (n^2 * (n-1))
+            /* Exact calculation for Variance, WITH OVERFLOW DETECTION.
+             * Var = (Sum[x^2] - n*Mean[x]^2) / (n-1)
+             * Using Sum[(n*x_i - Sum[x_j])^2] / (n^2 * (n-1))
+             *
+             * This squares an already-scaled numerator: term_n is ~n*value, so
+             * term_n^2 is ~(n*value)^2, and the running accumulator is then
+             * multiplied by that square. Unchecked, a 10^4-element integer list
+             * overflowed and returned 0.0176 where the answer was 84815.8 —
+             * and, being an overflowed sum of squares, sometimes returned a
+             * NEGATIVE variance, which is impossible by construction. The
+             * erratic-in-n behaviour (n=4096 wrong, n=4097 right) is the
+             * signature: whether it overflows depends on how far each gcd
+             * reduces, not on n alone.
+             *
+             * On overflow we fall through to the symbolic path below, which is
+             * exact for any magnitude via GMP. A fast path that cannot
+             * represent the answer must decline, not approximate. */
             int64_t sum_n = 0;
             int64_t sum_d = 1;
-            for (size_t i = 0; i < n; i++) {
+            bool overflow = false;
+            for (size_t i = 0; i < n && !overflow; i++) {
                 Expr* elem = data->data.function.args[i];
                 int64_t cur_n, cur_d;
                 if (elem->type == EXPR_INTEGER) { cur_n = elem->data.integer; cur_d = 1; }
                 else is_rational(elem, &cur_n, &cur_d);
-                int64_t new_n = sum_n * cur_d + cur_n * sum_d;
-                int64_t new_d = sum_d * cur_d;
+                int64_t a, b, new_n, new_d;
+                if (ci_mul_i64(sum_n, cur_d, &a) ||
+                    ci_mul_i64(cur_n, sum_d, &b) ||
+                    ci_add_i64(a, b, &new_n) ||
+                    ci_mul_i64(sum_d, cur_d, &new_d)) { overflow = true; break; }
                 int64_t common = gcd(new_n < 0 ? -new_n : new_n, new_d);
                 sum_n = new_n / common;
                 sum_d = new_d / common;
@@ -93,7 +112,7 @@ Expr* builtin_variance(Expr* res) {
             // Now sum_n/sum_d is the sum of elements
             int64_t sq_sum_n = 0;
             int64_t sq_sum_d = 1;
-            for (size_t i = 0; i < n; i++) {
+            for (size_t i = 0; i < n && !overflow; i++) {
                 Expr* elem = data->data.function.args[i];
                 int64_t cur_n, cur_d;
                 if (elem->type == EXPR_INTEGER) { cur_n = elem->data.integer; cur_d = 1; }
@@ -101,22 +120,36 @@ Expr* builtin_variance(Expr* res) {
 
                 // (x - mean)^2 = (cur_n/cur_d - sum_n/(n*sum_d))^2
                 // = ( (cur_n * n * sum_d - sum_n * cur_d) / (n * sum_d * cur_d) )^2
-                int64_t term_n = cur_n * (int64_t)n * sum_d - sum_n * cur_d;
-                int64_t term_d = (int64_t)n * sum_d * cur_d;
+                int64_t t1, t2, t3, term_n, term_d;
+                if (ci_mul_i64(cur_n, (int64_t)n, &t1) ||
+                    ci_mul_i64(t1, sum_d, &t2) ||
+                    ci_mul_i64(sum_n, cur_d, &t3) ||
+                    ci_sub_i64(t2, t3, &term_n) ||
+                    ci_mul_i64((int64_t)n, sum_d, &t1) ||
+                    ci_mul_i64(t1, cur_d, &term_d)) { overflow = true; break; }
                 int64_t common = gcd(term_n < 0 ? -term_n : term_n, term_d);
                 term_n /= common; term_d /= common;
 
-                int64_t term_sq_n = term_n * term_n;
-                int64_t term_sq_d = term_d * term_d;
+                int64_t term_sq_n, term_sq_d;
+                if (ci_mul_i64(term_n, term_n, &term_sq_n) ||
+                    ci_mul_i64(term_d, term_d, &term_sq_d)) { overflow = true; break; }
 
-                int64_t new_sq_sum_n = sq_sum_n * term_sq_d + term_sq_n * sq_sum_d;
-                int64_t new_sq_sum_d = sq_sum_d * term_sq_d;
+                int64_t a, b, new_sq_sum_n, new_sq_sum_d;
+                if (ci_mul_i64(sq_sum_n, term_sq_d, &a) ||
+                    ci_mul_i64(term_sq_n, sq_sum_d, &b) ||
+                    ci_add_i64(a, b, &new_sq_sum_n) ||
+                    ci_mul_i64(sq_sum_d, term_sq_d, &new_sq_sum_d)) {
+                    overflow = true; break;
+                }
                 common = gcd(new_sq_sum_n < 0 ? -new_sq_sum_n : new_sq_sum_n, new_sq_sum_d);
                 sq_sum_n = new_sq_sum_n / common;
                 sq_sum_d = new_sq_sum_d / common;
             }
             // Variance = sq_sum / (n-1)
-            return make_rational(sq_sum_n, sq_sum_d * ((int64_t)n - 1));
+            int64_t den;
+            if (!overflow && !ci_mul_i64(sq_sum_d, (int64_t)n - 1, &den)) {
+                return make_rational(sq_sum_n, den);
+            }
         }
     }
 

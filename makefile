@@ -493,6 +493,27 @@ check-compile-coverage:
 check-fastpath-sweep:
 	python3 tools/nd_fastpath_sweep.py --gate-only
 
+# `make bench-gap` — the weekly gap-driven benchmark job.
+#
+# Runs all 31 `benchmarks/NN-slug/` experiments in Mathilda, in Python
+# (numpy/scipy/sympy/networkx) and — when wolframscript is installed — in
+# Mathematica, joins the rows by label, and writes a ranked report naming the
+# week's work: benchmarks/REPORT.md, benchmarks/ABSENT.md, and the raw rows to
+# benchmarks/results/<date>.json.
+#
+# Distinct from the check-* gates above: those answer "did anything regress",
+# this answers "where is Mathilda behind, and is it behind because a kernel is
+# slow or because a function does not exist". Those two are reported separately
+# and never pooled — a `SLOWER` row carries a ratio, an `ABSENT` row never does.
+#
+# Minutes, not seconds. Needs ./Mathilda; run `make` first.
+#
+#   make bench-gap                                   # everything
+#   python3 benchmarks/run_all.py --only 31           # one experiment
+#   python3 benchmarks/run_all.py --system mathilda,python
+bench-gap:
+	python3 benchmarks/run_all.py
+
 # Report the compiler the build will ACTUALLY use. `gcc --version` does not
 # answer that: the autodetection above prefers a versioned `gcc-NN` over the
 # plain name, so on a host with both, a bare `gcc --version` names one compiler
@@ -505,7 +526,7 @@ print-cc:
 
 .PHONY: all clean docs docs-build docs-serve check-c99 check-interval check-packed-aware \
         check-array-exactness check-nd-surfaces check-compile-coverage \
-        check-fastpath-sweep print-cc
+        check-fastpath-sweep bench-gap print-cc
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first

@@ -44,6 +44,16 @@ PICOMATH-80.
   Experiments 1–19 are workload-driven; experiment 20 is the coverage sweep,
   which enumerates all 676 builtins instead of choosing kernels, and is what
   `tools/numeric_coverage.py` and `tools/numeric_sweep.py` re-run.
+- [`benchmarks/`](benchmarks/) — the weekly gap-driven benchmark **job** (as
+  opposed to `docs/experiments/`, which is the narrative record). 30 experiments
+  kept as `.m`/`.py` pairs, run in Mathilda, Python (numpy/scipy/sympy/networkx)
+  and Mathematica, joined by case label and classified: `SLOWER` (kernel work,
+  carries a ratio), `ABSENT` (feature work, never carries a ratio), `INCOMPLETE`,
+  `CHECK-FAIL`. Four areas: A symbolic (the first external baseline those
+  subsystems have ever had), B numeric libraries, C the array substrate (the open
+  roadmap items), D previously-untimed subsystems. Re-run at the end of each week
+  with `make bench-gap`; `benchmarks/history.jsonl` is the machine-readable arc
+  and the diff of `benchmarks/REPORT.md` is the week's progress.
 - [`CLAUDE.md`](CLAUDE.md) — contributor workflow.
 
 ---
