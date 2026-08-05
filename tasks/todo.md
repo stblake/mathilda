@@ -72,5 +72,11 @@ shippable with no regression (an unsupported construct just bails to the interpr
       via `materialize_assoc_src` + free-source discipline (in-instruction for array-producers,
       free_if_tmp for scalar readers). **Deferred:** `KeyUnion` (→list), `PositionIndex`
       (list-valued) — don't fit the machine-scalar value model.
-- [ ] **B4** Higher-order transforms (`Merge`/`GroupBy`/…) via a compiled callee.
+- [x] **B4** Higher-order transforms via a compiled callee — DONE (2026-08-05, core).
+      `Map[f, assoc]` (`ASSOC_MAP`) and `Select[assoc, pred]` (`ASSOC_SELECT`) compile the
+      embedded function into a self-contained callee (`compile_value_callee` extracts the
+      fn body — pure fn / `Function[]` / bare head), invoked per value via `vm_call` (no
+      evaluator); program-owned `AssocCalleeSpec` pool. Keys copied through, type-changing
+      callees ok, composes over B3 producers (`Map[f, KeyDrop[…]]`). **Deferred:** consuming
+      a Map/Select result mid-body, and the grouping family (`Merge`/`GroupBy`/`CountsBy`).
 - [ ] **B5** Functional key-update; symbol-rebinding `AssociateTo` bails.

@@ -300,6 +300,55 @@ static void test_counts(void) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  B4 — higher-order transforms via a compiled callee                 *
+ * ------------------------------------------------------------------ */
+
+static void test_higher_order(void) {
+    /* Map[f, assoc] applies the compiled callee to each VALUE; keys (any type)
+     * are copied through.  Pure-function, lambda and type-changing callees. */
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, Map[#^2 &, p]]");
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, Map[Function[x, x^2], p]]");
+    assert_true("Compile[{{p, _Association, _Real}}, Map[#^2 &, p]][<|\"a\" -> 2., \"b\" -> 3.|>]"
+                " === Map[#^2 &, <|\"a\" -> 2., \"b\" -> 3.|>]");
+    assert_true("Compile[{{p, _Association, _Real}}, Map[Function[x, x + 1], p]][<|\"a\" -> 2., \"b\" -> 3.|>]"
+                " === <|\"a\" -> 3., \"b\" -> 4.|>");
+    /* string keys preserved through the transform */
+    assert_true("Compile[{{p, _Association, _Real}}, Map[#^2 &, p]][<|\"alpha\" -> 2., \"beta\" -> 3.|>]"
+                " === <|\"alpha\" -> 4., \"beta\" -> 9.|>");
+    /* type-changing callee: an integer bag mapped to reals */
+    assert_true("Compile[{{p, _Association, _Integer}}, Map[# * 1.5 &, p]][<|\"a\" -> 2, \"b\" -> 4|>]"
+                " === <|\"a\" -> 3., \"b\" -> 6.|>");
+
+    /* Select[assoc, pred] keeps entries whose VALUE the Bool callee accepts. */
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, Select[p, # > 2.5 &]]");
+    assert_true("Compile[{{p, _Association, _Real}}, Select[p, # > 2.5 &]][<|\"a\" -> 1., \"b\" -> 3., \"c\" -> 5.|>]"
+                " === Select[<|\"a\" -> 1., \"b\" -> 3., \"c\" -> 5.|>, # > 2.5 &]");
+    assert_true("Compile[{{p, _Association, _Integer}}, Select[p, # > 0 &]][<|\"a\" -> -1, \"b\" -> 2, \"c\" -> -3|>]"
+                " === <|\"b\" -> 2|>");
+
+    /* the compiled result is a genuine association the interpreter can then use */
+    assert_true("Total[Values[Compile[{{p, _Association, _Real}}, Map[#^2 &, p]][<|\"a\" -> 2., \"b\" -> 3.|>]]] === 13.");
+    assert_true("Length[Compile[{{p, _Association, _Real}}, Select[p, # > 2.5 &]][<|\"a\" -> 1., \"b\" -> 3., \"c\" -> 5.|>]] === 2");
+
+    /* composition WITHIN the compiled body: Map/Select consuming a produced (B3)
+     * association (KeyDrop/KeyTake) — the whole transform chain compiles. */
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, Map[# * 10 &, KeyDrop[p, \"b\"]]]");
+    assert_true("Compile[{{p, _Association, _Real}}, Map[# * 10 &, KeyDrop[p, \"b\"]]]"
+                "[<|\"a\" -> 1., \"b\" -> 99., \"c\" -> 3.|>] === <|\"a\" -> 10., \"c\" -> 30.|>");
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, Select[KeyTake[p, {\"a\", \"b\", \"c\"}], # > 1.5 &]]");
+    assert_true("Compile[{{p, _Association, _Real}}, Select[KeyTake[p, {\"a\", \"b\", \"c\"}], # > 1.5 &]]"
+                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3., \"d\" -> 0.|>] === <|\"b\" -> 2., \"c\" -> 3.|>");
+
+    /* a callee outside the compilable subset makes the whole body fall back to
+     * the interpreter — which still answers correctly. */
+    assert_not_lowers("CompileDiagnostics[{{p, _Association, _Real}}, Map[zzUndef, p]]");
+    assert_true("Compile[{{p, _Association, _Real}}, Map[Function[x, x + 1], p]][<|\"a\" -> 5.|>] === <|\"a\" -> 6.|>");
+    /* a Bool callee is rejected for Map (values must stay numeric) but fine for
+     * Select — Map[pred, assoc] therefore does not lower. */
+    assert_not_lowers("CompileDiagnostics[{{p, _Association, _Real}}, Map[# > 0 &, p]]");
+}
+
+/* ------------------------------------------------------------------ *
  *  Leak / double-free surface — build, apply, free in a loop          *
  * ------------------------------------------------------------------ */
 
@@ -346,6 +395,25 @@ static void test_repeated_eval_no_leak(void) {
         ASSERT_STR_EQ(s, "3");
         free(s); expr_free(r);
     }
+    /* B4: a compiled callee invoked per value, over a produced (KeyDrop) source,
+     * result association built + freed each iteration. */
+    for (int i = 0; i < 50; i++) {
+        Expr* r = eval_and_free(parse_expression(
+            "Compile[{{p, _Association, _Real}}, Map[#^2 &, KeyDrop[p, \"b\"]]]"
+            "[<|\"a\" -> 2., \"b\" -> 3., \"c\" -> 4.|>]"));
+        char* s = expr_to_string(r);
+        ASSERT_STR_EQ(s, "<|\"a\" -> 4.0, \"c\" -> 16.0|>");
+        free(s); expr_free(r);
+    }
+    /* B4 Select likewise. */
+    for (int i = 0; i < 50; i++) {
+        Expr* r = eval_and_free(parse_expression(
+            "Compile[{{p, _Association, _Real}}, Select[p, # > 2.5 &]]"
+            "[<|\"a\" -> 1., \"b\" -> 3., \"c\" -> 5.|>]"));
+        char* s = expr_to_string(r);
+        ASSERT_STR_EQ(s, "<|\"b\" -> 3.0, \"c\" -> 5.0|>");
+        free(s); expr_free(r);
+    }
 }
 
 int main(void) {
@@ -368,8 +436,9 @@ int main(void) {
     TEST(test_keysel_boundaries);
     TEST(test_composition);
     TEST(test_counts);
+    TEST(test_higher_order);
     TEST(test_repeated_eval_no_leak);
 
-    printf("All Compile[] Association (B1/B2/B3) tests passed!\n");
+    printf("All Compile[] Association (B1-B4) tests passed!\n");
     return 0;
 }

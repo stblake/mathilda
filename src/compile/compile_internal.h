@@ -247,6 +247,12 @@ enum {
      * flags bit0 = free the source array temp.  No imm.                          \
      */                                                                            \
     X(ASSOC_COUNTS, K_ARR)                                                \
+    /* B4 higher-order transforms via a compiled callee (imm.p = AssocCalleeSpec, \
+     * flags = in_valtype | out_type<<4 | free-source<<8): ASSOC_MAP applies the   \
+     * callee to each value -> new association; ASSOC_SELECT keeps entries whose   \
+     * value satisfies the (Bool) callee.  vm_call per entry, no evaluator.        \
+     */                                                                            \
+    X(ASSOC_MAP, K_ARR) X(ASSOC_SELECT, K_ARR)                            \
     /* An array -> SCALAR reduction delegated to the interpreter's own entry   \
      * point (ndred_mean, ndred_variance, ...), the reduction counterpart of   \
      * A_NDFN below.  Total has its own opcode because an int64 sum must stay  \
@@ -425,6 +431,19 @@ typedef struct {
 
 void compile_assocspec_free(AssocSpec* p);
 
+/* B4 higher-order transform spec: a program-owned compiled CALLEE (the embedded
+ * function, compiled as `f[value]` — one machine scalar in, one out) plus an
+ * optional constant source association.  Freed in compiled_free (the callee via
+ * compiled_free, the assoc via expr_free); an instruction's imm.p borrows one.
+ * Unlike PartSpec/AssocSpec the callee needs no Expr deep-copy — a
+ * CompiledProgram is self-contained. */
+typedef struct {
+    struct CompiledProgram* callee;  /* compiled f[value]; owned */
+    Expr* assoc;                     /* constant source association, or NULL */
+} AssocCalleeSpec;
+
+void compile_assoccallee_free(AssocCalleeSpec* p);
+
 /* Scalar coercions defined in compiled_function.c and shared with the
  * Association opcodes (compile.c) so a looked-up value is coerced to a machine
  * scalar IDENTICALLY to how a scalar argument is boxed by cf_box — that
@@ -468,6 +487,8 @@ struct CompiledProgram {
     int         nparts;
     AssocSpec** assocs;       /* [nassocs] Association read-op specs (B1) */
     int         nassocs;
+    AssocCalleeSpec** callees; /* [ncallees] B4 higher-order transform specs */
+    int         ncallees;
     int         nreg;
     int         arr_base;     /* array registers are [arr_base, tile_base) */
     int         tile_base;    /* tile registers are [tile_base, nreg) */

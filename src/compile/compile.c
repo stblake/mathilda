@@ -156,6 +156,10 @@ typedef struct {
     AssocSpec** assocs;
     int         nassocs, assocs_cap;
 
+    /* B4 higher-order transform callees (see AssocCalleeSpec), same lifetime. */
+    AssocCalleeSpec** callees;
+    int         ncallees, callees_cap;
+
     /* Expr-level CSE (see cse_plan).  A chosen repeated subtree is computed once
      * into a register reserved below the temp stack, so no temp allocation and
      * none of the explicit temp_top resets in the loop lowerings can reach it. */
@@ -891,6 +895,53 @@ static AssocSpec* emit_assocspec(Ctx* c, const Expr* key, const Expr* deflt, con
     return sp;
 }
 
+/* --- B4 higher-order transform callee pool ------------------------------- */
+void compile_assoccallee_free(AssocCalleeSpec* p) {
+    if (!p) return;
+    compiled_free(p->callee);   /* the callee is a self-contained program */
+    expr_free(p->assoc);
+    free(p);
+}
+static bool ctx_own_assoccallee(Ctx* c, AssocCalleeSpec* p) {
+    if (c->ncallees == c->callees_cap) {
+        int nc = c->callees_cap ? c->callees_cap * 2 : 4;
+        AssocCalleeSpec** np = realloc(c->callees, (size_t)nc * sizeof *np);
+        if (!np) { compile_assoccallee_free(p); c->ok = false; return false; }
+        c->callees = np; c->callees_cap = nc;
+    }
+    c->callees[c->ncallees++] = p;
+    return true;
+}
+
+/* B4 higher-order callee compiler: turns an embedded one-arg function into a
+ * standalone callee program.  Defined below fn_resolve (which it needs);
+ * forward-declared here for try_emit_assoc. */
+static struct CompiledProgram* compile_value_callee(Ctx* c, const Expr* fn, CompileType in);
+
+/* Coerce an association value Expr to a machine Slot of type `t` (the same
+ * coercions cf_box uses for a scalar argument).  False if it does not fit. */
+static bool assoc_value_to_slot(const Expr* v, CompileType t, Slot* out) {
+    switch (t) {
+        case CT_INT:     return cf_to_ll(v, &out->i);
+        case CT_REAL:    return cf_to_double(v, &out->r);
+        case CT_COMPLEX: { double re, im; if (!cf_to_complex(v, &re, &im)) return false;
+                           out->z = re + im * I; return true; }
+        default: return false;
+    }
+}
+/* Box a machine Slot result of type `t` back to an Expr (mirrors cf_unbox). */
+static Expr* assoc_slot_to_value(Slot s, CompileType t) {
+    switch (t) {
+        case CT_INT:  return expr_new_integer((int64_t)s.i);
+        case CT_REAL: return expr_new_real(s.r);
+        case CT_COMPLEX: {
+            double re = creal(s.z), im = cimag(s.z);
+            return im == 0.0 ? expr_new_real(re) : make_complex(expr_new_real(re), expr_new_real(im));
+        }
+        default: return NULL;
+    }
+}
+
 /* Emit the Association read ops (B1).  Returns true if `h` is an association op
  * that was HANDLED — lowered (out set) or cleanly bailed (c->ok=false).  Returns
  * false if `h` is not one, or is a head shared with the array lowerings
@@ -905,8 +956,53 @@ static bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out)
     bool is_keydrop = strcmp(h, "KeyDrop") == 0 && na == 2;
     bool is_keytake = strcmp(h, "KeyTake") == 0 && na == 2;
     bool is_counts  = strcmp(h, "Counts") == 0 && na == 1;
+    bool is_map     = strcmp(h, "Map") == 0 && na == 2;      /* Map[f, assoc]     */
+    bool is_select  = strcmp(h, "Select") == 0 && na == 2;   /* Select[assoc, p]  */
     if (!is_lookup && !is_exists && !is_free && !is_len && !is_values
-        && !is_keydrop && !is_keytake && !is_counts) return false;
+        && !is_keydrop && !is_keytake && !is_counts && !is_map && !is_select) return false;
+
+    /* B4: Map[f, assoc] / Select[assoc, pred] — a higher-order transform via a
+     * compiled callee (the embedded function, one machine value in).  Map's
+     * association operand is A[1], Select's is A[0].  Handled before the
+     * association-operand resolver; if the operand is NOT an association we
+     * return false so the ordinary array Map/Select lowering takes it. */
+    if (is_map || is_select) {
+        const Expr* fn_expr    = is_map ? A[0] : A[1];
+        const Expr* assoc_expr = is_map ? A[1] : A[0];
+        AssocOperand mo; resolve_assoc_operand(c, assoc_expr, &mo);
+        if (mo.kind == ASSOC_NONE) return false;     /* not an assoc -> array path */
+        AssocSrc s;
+        if (!materialize_assoc_src(c, &mo, &s)) { c->ok = false; return true; }
+        struct CompiledProgram* callee = compile_value_callee(c, fn_expr, s.valtype);
+        if (!callee) { c->ok = false; return true; }
+        CompileType rtype = compiled_result_type(callee);
+        bool ok_result = is_map ? (rtype == CT_INT || rtype == CT_REAL || rtype == CT_COMPLEX)
+                                : (rtype == CT_BOOL);
+        if (!ok_result || compiled_num_args(callee) != 1) {
+            compiled_free(callee); c->ok = false; return true;
+        }
+        AssocCalleeSpec* sp = calloc(1, sizeof *sp);
+        if (!sp) { compiled_free(callee); c->ok = false; return true; }
+        sp->callee = callee;
+        if (s.cst) {
+            sp->assoc = expr_copy((Expr*)s.cst);
+            if (!sp->assoc) { compile_assoccallee_free(sp); c->ok = false; return true; }
+        }
+        if (!ctx_own_assoccallee(c, sp)) return true;    /* frees sp+callee, sets c->ok */
+        CompileType out_valtype = is_map ? rtype : s.valtype;   /* Select keeps values */
+        uint16_t f = (uint16_t)((unsigned)s.valtype | ((unsigned)rtype << 4));
+        uint32_t areg;
+        if (s.cst) areg = 0;
+        else if (s.owned) {
+            Val sv = { s.reg, true, CT_ASSOC_TYPE(s.valtype), false };
+            pop_tmp(c, sv); f |= 0x100u; areg = (uint32_t)s.reg;
+        } else areg = (uint32_t)s.reg;
+        Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
+        int dst = alloc_arr(c);
+        ins_f(c, is_map ? OP_ASSOC_MAP : OP_ASSOC_SELECT, f, (uint32_t)dst, areg, 0, ip);
+        out->reg = dst; out->tmp = true; out->type = CT_ASSOC_TYPE(out_valtype); out->built = true;
+        return true;
+    }
 
     /* Counts is the one association op whose OPERAND is a machine array, not an
      * association -> <|element -> count|> (integer values).  Handled before the
@@ -1545,6 +1641,80 @@ static bool fn_resolve(const Expr* f, int want_arity, FnSpec* out) {
      * (apply_pure_function, src/purefunc.c:271), so the interpreter's answer is
      * not a machine number and the compiled path must not produce one. */
     return out->nparams == want_arity;
+}
+
+/* Replace the single implicit slot (# = Slot[1] / Slot[]) of a one-argument pure
+ * function with the named parameter `pn`, so an FN_SLOTS body compiles as a
+ * standalone function of one machine argument.  Returns NULL (bail) if the body
+ * references a higher slot (#2, …) or a named slot — i.e. more than one param. */
+static Expr* subst_slot1(const Expr* e, const char* pn) {
+    if (!e) return NULL;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Slot) {
+        size_t na = e->data.function.arg_count;
+        if (na == 0) return expr_new_symbol(pn);                       /* #        */
+        if (na == 1 && e->data.function.args[0]->type == EXPR_INTEGER
+            && e->data.function.args[0]->data.integer == 1) return expr_new_symbol(pn);  /* #1 */
+        return NULL;                                                   /* #2+ / #x */
+    }
+    if (e->type == EXPR_FUNCTION) {
+        Expr* head = subst_slot1(e->data.function.head, pn);
+        if (!head) return NULL;
+        size_t na = e->data.function.arg_count;
+        Expr** args = malloc((na ? na : 1) * sizeof(Expr*));
+        if (!args) { expr_free(head); return NULL; }
+        for (size_t i = 0; i < na; i++) {
+            args[i] = subst_slot1(e->data.function.args[i], pn);
+            if (!args[i]) { for (size_t j = 0; j < i; j++) expr_free(args[j]); free(args); expr_free(head); return NULL; }
+        }
+        Expr* r = expr_new_function(head, args, na);
+        free(args);
+        return r;
+    }
+    return expr_copy((Expr*)e);
+}
+
+/* Compile an embedded one-argument function `fn` — one machine-scalar value of
+ * type `in` in, one machine result out — into a self-contained callee program, so
+ * a B4 kernel can invoke it per entry with vm_call (no evaluator).  Handles the
+ * three function forms: `Function[u, body]` (compile body of u), `#…&`
+ * (substitute the slot for a named param), and a bare head `h` (compile
+ * h[param]); Identity is the trivial pass-through.  Returns NULL if the function
+ * shape is unsupported or its body is outside the compilable subset (the caller
+ * then bails).  Inherits the parent's global-folding flag; the callee is
+ * throwaway (freed with the program), so folding is lifetime-safe. */
+static struct CompiledProgram* compile_value_callee(Ctx* c, const Expr* fn, CompileType in) {
+    FnSpec s;
+    if (!fn_resolve(fn, 1, &s)) return NULL;
+    const char* pn = intern_symbol("$b4value");
+    const char* names[1];
+    CompileType types[1] = { in };
+    Expr* body_owned = NULL;
+    const Expr* body;
+    switch (s.kind) {
+        case FN_IDENTITY:
+            names[0] = pn; body_owned = expr_new_symbol(pn); body = body_owned; break;
+        case FN_HEAD: {
+            names[0] = pn;
+            Expr* argsym = expr_new_symbol(pn);
+            Expr* aargs[1] = { argsym };
+            body_owned = expr_new_function(expr_new_symbol(s.head), aargs, 1);   /* head[param] */
+            body = body_owned; break;
+        }
+        case FN_SLOTS:
+            names[0] = pn;
+            body_owned = subst_slot1(s.body, pn);
+            if (!body_owned) return NULL;
+            body = body_owned; break;
+        case FN_LAMBDA:
+            if (s.nparams != 1) return NULL;
+            names[0] = s.pname[0]; body = s.body; break;   /* body borrowed from fn */
+        default: return NULL;   /* FN_COMPOSE, multi-param, … */
+    }
+    struct CompiledProgram* cp =
+        compile_expr_ex(body, names, types, 1, c->flags & COMPILE_FOLD_GLOBALS);
+    if (body_owned) expr_free(body_owned);
+    return cp;
 }
 
 /* `Slot[k]` (`#`, `#k`) resolved against the live slot frame, or -1.  Shared by
@@ -6287,6 +6457,50 @@ static bool vm_assoc_keysel(const Instr* c, Slot* R) {
     return true;
 }
 
+static bool vm_call(const CompiledProgram* cp, const Slot* argv, unsigned nargs, Slot* dst);
+
+/* B4: Map[f, assoc] -> a new OWNED association, same keys, each value replaced by
+ * the compiled callee's result.  Select[assoc, pred] keeps the entries whose value
+ * the Bool callee accepts.  The callee runs per entry via vm_call — machine value
+ * in, machine result out, NO evaluator.  flags = in_valtype | out_type<<4 |
+ * free-source<<8. */
+static bool vm_assoc_higher(const Instr* c, Slot* R, bool select) {
+    const AssocCalleeSpec* sp = (const AssocCalleeSpec*)c->imm.p;
+    Expr* src = sp->assoc ? sp->assoc : R[c->a].arr;
+    if (!src || !is_association(src)) return false;
+    CompileType in_t  = (CompileType)(c->flags & 0xFu);
+    CompileType out_t = (CompileType)((c->flags >> 4) & 0xFu);
+    size_t n = src->data.function.arg_count;
+    Expr** out = malloc((n ? n : 1) * sizeof(Expr*));
+    if (!out) return false;
+    size_t nout = 0;
+    bool ok = true;
+    for (size_t i = 0; i < n; i++) {
+        Expr* entry = src->data.function.args[i];
+        if (!is_rule2(entry)) { ok = false; break; }
+        Slot arg;
+        if (!assoc_value_to_slot(entry->data.function.args[1], in_t, &arg)) { ok = false; break; }
+        Slot res;
+        if (!vm_call(sp->callee, &arg, 1, &res)) { ok = false; break; }
+        if (select) {
+            if (res.i) out[nout++] = expr_copy(entry);            /* keep entry     */
+        } else {
+            Expr* nv = assoc_slot_to_value(res, out_t);
+            if (!nv) { ok = false; break; }
+            out[nout++] = assoc_entry_with_value(entry, nv);      /* same key, new v */
+        }
+    }
+    if (!ok) { for (size_t j = 0; j < nout; j++) expr_free(out[j]); free(out); return false; }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Association), out, nout);
+    free(out);
+    if (!result) return false;
+    assoc_prebuild_index(result);
+    if ((c->flags & 0x100u) && !sp->assoc) { expr_free(R[c->a].arr); R[c->a].arr = NULL; }
+    expr_free(R[c->dst].arr);
+    R[c->dst].arr = result;
+    return true;
+}
+
 /* Counts[machine array] (B3) -> an OWNED association of element->count.  Native
  * (assoc_counts_ndarray via Tally, no evaluator).  flags bit0 = free the source
  * array temp (a produced array consumed here). */
@@ -7122,6 +7336,8 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(ASSOC_VALUES): do { if (!vm_assoc_values(c, R)) goto vm_fail; } while (0); NEXT();
             OP(ASSOC_KEYSEL): do { if (!vm_assoc_keysel(c, R)) goto vm_fail; } while (0); NEXT();
             OP(ASSOC_COUNTS): do { if (!vm_assoc_counts(c, R)) goto vm_fail; } while (0); NEXT();
+            OP(ASSOC_MAP):    do { if (!vm_assoc_higher(c, R, false)) goto vm_fail; } while (0); NEXT();
+            OP(ASSOC_SELECT): do { if (!vm_assoc_higher(c, R, true))  goto vm_fail; } while (0); NEXT();
             OP(ASSOC_LOOKUP_DYN): {          /* B2: runtime int/real key in R[b] */
                 const AssocSpec* sp = (const AssocSpec*)c->imm.p;
                 Expr* assoc = sp->assoc ? sp->assoc : RA.arr;
@@ -7724,6 +7940,8 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
         free(c.parts);
         for (int i = 0; i < c.nassocs; i++) compile_assocspec_free(c.assocs[i]);
         free(c.assocs);
+        for (int i = 0; i < c.ncallees; i++) compile_assoccallee_free(c.callees[i]);
+        free(c.callees);
         free(c.code); free(c.argdep); return NULL;
     }
 
@@ -7759,12 +7977,15 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
         free(c.parts);
         for (int i = 0; i < c.nassocs; i++) compile_assocspec_free(c.assocs[i]);
         free(c.assocs);
+        for (int i = 0; i < c.ncallees; i++) compile_assoccallee_free(c.callees[i]);
+        free(c.callees);
         free(c.code); free(c.argdep); return NULL;
     }
     /* The general-Part subscript lists become the program's: their literal specs
      * are pointed at from instruction immediates and must outlive the body. */
     p->parts = c.parts; p->nparts = c.nparts;
     p->assocs = c.assocs; p->nassocs = c.nassocs;   /* AssocSpecs, likewise (B1) */
+    p->callees = c.callees; p->ncallees = c.ncallees;   /* B4 callees */
     p->code = c.code; p->n = c.n; p->nreg = nreg; p->arr_base = arr_base;
     p->tile_base = tile_base;
     p->result_reg = result_reg; p->result_type = res.type; p->ncse = c.ncse;
@@ -8015,6 +8236,8 @@ void compiled_free(CompiledProgram* p) {
     free(p->parts);
     for (int i = 0; i < p->nassocs; i++) compile_assocspec_free(p->assocs[i]);
     free(p->assocs);
+    for (int i = 0; i < p->ncallees; i++) compile_assoccallee_free(p->callees[i]);
+    free(p->callees);
     free(p->code); free(p->arg_types); free(p->argdep);
     free(p);
 }

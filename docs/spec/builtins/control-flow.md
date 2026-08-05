@@ -497,9 +497,15 @@ expression would.
   literal) and `Counts[v]` (a machine array to an `element -> count` association)
   build a new association the compiled function can return, feed to any reader
   (`Lookup[KeyDrop[p, "x"], "y"]`, `Total[Values[Counts[v]]]`), or chain through
-  another transform (`KeyTake[KeyDrop[p, a], b]`) to any depth. `KeyUnion` (a key
-  list) and `PositionIndex` (list-valued entries) are not in the subset and fall
-  back to the interpreter.
+  another transform (`KeyTake[KeyDrop[p, a], b]`) to any depth. Higher-order
+  transforms compile the embedded function into a callee run per value (no
+  interpreter at runtime): `Map[f, assoc]` transforms each value (keys copied
+  through), `Select[assoc, pred]` filters by value — `f`/`pred` may be a pure
+  function (`#^2 &`), a `Function[…]`, or a bare head, and a `Map`/`Select` may
+  itself consume a produced association (`Map[f, KeyDrop[p, k]]`). A callee
+  outside the compilable subset makes the whole body fall back. `KeyUnion` (a key
+  list), `PositionIndex` (list-valued entries) and the grouping family
+  (`Merge`/`GroupBy`) are not in the subset and fall back to the interpreter.
 - **Counted iterators** in `Do`/`Sum`/`Product` accept every integer-bounded
   spelling the interpreter does: `Do[body, n]` and `Do[body, {n}]` (repeat n
   times), `{i, hi}`, `{i, lo, hi}`, and `{i, lo, hi, di}` with a nonzero integer
