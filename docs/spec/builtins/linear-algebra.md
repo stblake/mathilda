@@ -2065,7 +2065,22 @@ response vector `v`.
   machine and MPFR arithmetic. Malformed data (ragged rows, a variable count
   that does not match the data coordinates, empty data) issues a `Fit::...`
   message and returns unevaluated.
-- Attribute `Protected`. Lives in `src/fit.c`.
+- **Machine fast path.** When the data is fully numeric and `WorkingPrecision`
+  resolves to machine precision, the design matrix is built column-wise — each
+  basis function is evaluated once with the variables bound to the packed
+  coordinate *vectors*, reusing the packed elementwise kernels — and assembled
+  as a packed `float64` array, so the solve reaches LAPACK. This accepts a
+  packed array or a visible `NDArray[...]` as `data` (previously an `NDArray`
+  errored) and takes a 100k-point quadratic fit from ~3.6 s to ~7 ms. Exact
+  (`WorkingPrecision -> Infinity`), MPFR, and symbolic-basis fits fall back to
+  the general path unchanged.
+- **Conditioning.** The plain-L2 path column-scales the design matrix
+  (numpy.polyfit-style equilibration) before the solve and unscales the
+  coefficients afterwards, which keeps a high-degree monomial fit accurate where
+  the raw Vandermonde is ill-conditioned. A basis that is still nearly
+  rank-deficient after scaling issues `Fit::cond`; a basis function that is
+  numerically zero over the data gets coefficient exactly `0`.
+- Attribute `Protected` (and packed-array aware). Lives in `src/fit.c`.
 
 ```mathematica
 In[1]:= Fit[{{0,1},{1,0},{3,2},{5,4}}, {1, x}, x]
@@ -2082,7 +2097,7 @@ Out[4]= 0.8 - 0.5 x + 0.5 y
 
 In[5]:= Fit[{{0.,0.},{0.001,1},{0.01,1}}, {1, x, x^2}, x,
             FitRegularization -> {"Tikhonov", 1}]
-Out[5]= 0.499985 + 0.00549961 x + 4.9996e-05 x^2
+Out[5]= 0.499985 + 0.00549961 x + 5.0496e-05 x^2
 
 In[6]:= Fit[{{0,1},{1,0},{3,2},{5,4}}, {1, x}, x,
             NormFunction -> Function[Norm[#, 1]]]
@@ -2093,9 +2108,11 @@ Out[6]= -1.0 + 1.0 x
 
 `DesignMatrix[data, {f1, ..., fn}, vars]` gives the design matrix with entries
 `f_i` evaluated at the data coordinates — the matrix `Fit` forms internally. The
-data shapes are identical to `Fit`. By default the entries are kept exact; the
+data shapes are identical to `Fit`, and `data` may be a nested `List`, a packed
+array, or a visible `NDArray[...]`. By default the entries are kept exact; the
 `WorkingPrecision` option (`MachinePrecision` or a digit count) converts them to
-approximate numbers. Attribute `Protected`. Lives in `src/fit.c`.
+approximate numbers. Attribute `Protected` (and packed-array aware). Lives in
+`src/fit.c`.
 
 ```mathematica
 In[1]:= DesignMatrix[{{0,1},{1,0},{3,2},{5,4}}, {1, x}, x]

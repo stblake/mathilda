@@ -107,17 +107,17 @@ void test_fit_design_form_hilbert(void) {
 void test_fit_tikhonov(void) {
     assert_eval_eq("Fit[{{0.,0.},{0.001,1},{0.01,1}}, {1, x, x^2}, x, "
                    "FitRegularization -> {\"Tikhonov\", 1}]",
-                   "0.499985 + 0.00549961 x + 4.9996e-05 x^2", 0);
+                   "0.499985 + 0.00549961 x + 5.0496e-05 x^2", 0);
 }
 
 void test_fit_ridge_aliases(void) {
     /* "L2" and "RidgeRegression" are aliases of "Tikhonov". */
     assert_eval_eq("Fit[{{0.,0.},{0.001,1},{0.01,1}}, {1, x, x^2}, x, "
                    "FitRegularization -> {\"L2\", 1}]",
-                   "0.499985 + 0.00549961 x + 4.9996e-05 x^2", 0);
+                   "0.499985 + 0.00549961 x + 5.0496e-05 x^2", 0);
     assert_eval_eq("Fit[{{0.,0.},{0.001,1},{0.01,1}}, {1, x, x^2}, x, "
                    "FitRegularization -> {\"RidgeRegression\", 1}]",
-                   "0.499985 + 0.00549961 x + 4.9996e-05 x^2", 0);
+                   "0.499985 + 0.00549961 x + 5.0496e-05 x^2", 0);
 }
 
 void test_fit_lasso_sparsity(void) {
@@ -158,6 +158,53 @@ void test_designmatrix_univariate(void) {
 void test_designmatrix_bivariate(void) {
     assert_eval_eq("DesignMatrix[{{0,0,0},{1,0,1},{0,1,2}}, {1, x, y}, {x, y}]",
                    "{{1, 0, 0}, {1, 1, 0}, {1, 0, 1}}", 0);
+}
+
+/* ---- NDArray / packed-array input (machine fast path) ---- */
+
+void test_fit_ndarray_input(void) {
+    /* A visible NDArray[...] as data used to error with Fit::notdata; it now
+     * fits exactly like the equivalent nested List. */
+    assert_eval_eq("Fit[NDArray[{{0.,1.},{1.,0.},{3.,2.},{5.,4.}}], {1, x}, x]",
+                   "0.186441 + 0.694915 x", 0);
+}
+
+void test_fit_surfaces_agree(void) {
+    /* Plain List, packed List (Transpose of packed columns) and a visible
+     * NDArray must all give the same coefficients. */
+    const char* expect = "2.0 + 3.0 x + 0.5 x^2";
+    assert_eval_eq("Fit[Table[{i*1.0, 2.0+3.0*i+0.5*i^2}, {i,1,40}], {1,x,x^2}, x]",
+                   expect, 0);
+    assert_eval_eq("Fit[Transpose[{Range[40]*1.0, 2.0+3.0*Range[40]*1.0+0.5*(Range[40]*1.0)^2}], "
+                   "{1,x,x^2}, x]", expect, 0);
+    assert_eval_eq("Fit[NDArray[Transpose[{Range[40]*1.0, "
+                   "2.0+3.0*Range[40]*1.0+0.5*(Range[40]*1.0)^2}]], {1,x,x^2}, x]", expect, 0);
+}
+
+void test_fit_design_form_ndarray(void) {
+    /* Fit[{m, v}] with an NDArray design matrix and response. */
+    assert_eval_eq("Fit[{NDArray[{{1.,1.},{1.,2.},{1.,3.}}], NDArray[{1.,2.,3.}]}]",
+                   "{0.0, 1.0}", 0);
+}
+
+/* ---- High-degree conditioning (column scaling keeps the fit accurate) ---- */
+
+void test_fit_high_degree_accuracy(void) {
+    /* Degree-20 monomial fit to a quadratic over x in (0, 10): column scaling
+     * keeps the fitted value at x=5 equal to the true 1 - 5 + 25 = 21. */
+    assert_eval_startswith(
+        "Round[Fit[Table[{i/500., 1.0 - (i/500.) + (i/500.)^2}, {i,1,4000}], "
+        "Table[x^k, {k,0,20}], x] /. x -> 5.0, 0.0001]",
+        "21.");
+}
+
+/* ---- Buffer-fed L1 / LASSO agree with the boxed path ---- */
+
+void test_fit_l1_packed(void) {
+    /* Same LAD fit as test_fit_l1_norm but over packed real data. */
+    assert_eval_eq("Fit[N[{{0,1},{1,0},{3,2},{5,4}}], {1, x}, x, "
+                   "NormFunction -> Function[Norm[#, 1]]]",
+                   "-1.0 + 1.0 x", 0);
 }
 
 /* ---- Attributes ---- */
@@ -202,6 +249,11 @@ int main(void) {
     TEST(test_fit_lasso_sparsity);
     TEST(test_fit_lasso_monotone);
     TEST(test_fit_l1_norm);
+    TEST(test_fit_ndarray_input);
+    TEST(test_fit_surfaces_agree);
+    TEST(test_fit_design_form_ndarray);
+    TEST(test_fit_high_degree_accuracy);
+    TEST(test_fit_l1_packed);
     TEST(test_designmatrix_univariate);
     TEST(test_designmatrix_bivariate);
     TEST(test_fit_protected);

@@ -672,6 +672,17 @@ static void pack_mark_aware_heads(void) {
         "DiagonalMatrix", "HankelMatrix", "ToeplitzMatrix", "VandermondeMatrix",
         "PositiveDefiniteMatrixQ", "NegativeDefiniteMatrixQ",
         "LatticeReduce", "FindIntegerNullVector",
+        /* Fit reads its data straight off the buffer (fit_read_numeric in
+         * src/fit.c) and builds a packed float64 design matrix column-wise, so
+         * the gate must not materialise a packed data matrix into 2*npts boxed
+         * Exprs first. A fit is inherently a machine-real computation, so an
+         * int64 data buffer gives the same float coefficients as materialising
+         * would (see INT64_OK); WorkingPrecision -> Infinity bails from the fast
+         * path and re-delists for the exact rational solve.  DesignMatrix accepts
+         * the NDArray surface too (fit_normalize_data delists it) and so is aware
+         * for the same reason -- it keeps its exact List output, it just no
+         * longer errors on a packed/NDArray argument. */
+        "Fit", "DesignMatrix",
         /* ------------------------------------------------------------------
          * The integer domain (src/ndinteger.c). Every one of these answered a
          * packed List with one Expr per element and a visible NDArray with the
@@ -830,6 +841,11 @@ static void pack_mark_aware_heads(void) {
          * Integer from an int64 buffer, so no element's head changes. */
         "Part", "Extract", "Normal", "ToNDArray", "FromNDArray",
         "ToPackedArray", "FromPackedArray",
+        /* Fit reads an int64 data buffer through ndt_get exactly as it would the
+         * materialised integers, and a least-squares fit is a machine-real
+         * computation either way, so the float coefficients are identical -- the
+         * flag only spares an int64 data matrix from materialising. */
+        "Fit",
         /* Move the value without inspecting it. */
         "Set", "SetDelayed", "CompoundExpression", "If", "Which", "Module",
         "Block", "With", "Return", "Print", "Echo",
