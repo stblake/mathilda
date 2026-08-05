@@ -59,6 +59,11 @@ after changing report wording or a threshold, rather than paying 20 minutes agai
 | `HISTORY.md` | a rendered *view* of `history.jsonl`. Never edit it; it is regenerated |
 | `results/<YYYY-MM-DD>.json` | every raw case, plus the host and version block |
 
+A second full run on the same day **archives** the first as
+`results/<date>.1.json` rather than overwriting it — otherwise re-running to
+check a fix would destroy the before-picture the trend needs. The trend then
+compares against that archive, so same-day iteration works.
+
 `history.jsonl` is data, not prose, because the arc is the thing you will want to
 query and plot — not re-parse out of markdown. One object per line means it diffs
 cleanly in git and reads without a parser:

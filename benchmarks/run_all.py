@@ -211,6 +211,9 @@ class Progress:
         self.t_start = None
         self.i, self.slug = 0, ""
         self.done_names = []
+        self.settled = 0.0        # elapsed as of the last COMPLETED experiment
+        self.t_exp = None         # when the in-flight experiment began
+        self.cap = None           # most one unfinished experiment can still owe
         self.sys_label = ""
         self.last_emit = 0.0
         self.dirty = False
@@ -220,8 +223,10 @@ class Progress:
 
     def begin(self, i, slug):
         """A new experiment: always visible, in either mode."""
+        import time as _t
         self.i, self.slug = i, slug
         self.sys_label = ""
+        self.t_exp = _t.time()
         self.draw(boundary=True)
 
     def system(self, name):
@@ -232,14 +237,19 @@ class Progress:
         self.draw()
 
     def finish_experiment(self, name):
+        import time as _t
         self.done_names.append(name)
+        self.settled = _t.time() - self.t_start   # ratio basis: completed only
+        self.t_exp = None
 
     def _frac_and_eta(self):
         import time as _t
         elapsed = _t.time() - self.t_start
         remaining = [x["name"] for x in self.exps[self.i - 1:]] if self.i else \
             [x["name"] for x in self.exps]
-        rem = eta(self.done_names, remaining, elapsed, self.prev)
+        in_flight = (_t.time() - self.t_exp) if self.t_exp else None
+        rem = eta(self.done_names, remaining, elapsed, self.prev,
+                  settled=self.settled, in_flight=in_flight, cap=self.cap)
         if self.prev:
             tot = sum(self.prev.get(e["name"], 0) for e in self.exps) or 1
             done = sum(self.prev.get(n, 0) for n in self.done_names)
@@ -309,11 +319,11 @@ def load_prev_durations():
     outdir = os.path.join(BENCH, "results")
     if not os.path.isdir(outdir):
         return {}
-    for name in sorted(os.listdir(outdir), reverse=True):
-        if not name.endswith(".json"):
-            continue
+    cands = [os.path.join(outdir, n) for n in os.listdir(outdir)
+             if n.endswith(".json")]
+    for path in sorted(cands, key=lambda q: -os.path.getmtime(q)):
         try:
-            with open(os.path.join(outdir, name)) as f:
+            with open(path) as f:
                 d = json.load(f)
             if d.get("durations") and not d.get("partial"):
                 return d["durations"]
@@ -322,23 +332,52 @@ def load_prev_durations():
     return {}
 
 
-def eta(done_names, remaining_names, elapsed, prev):
-    """Seconds remaining. Replays `prev` where it covers the remaining work."""
+def eta(done_names, remaining_names, elapsed, prev, settled=None,
+        in_flight=None, cap=None):
+    """Seconds remaining. Replays `prev`, rescaled by how this run is tracking.
+
+    `settled` is the elapsed time as of the last COMPLETED experiment, and it is
+    what the tracking ratio is computed from. Using total `elapsed` instead lets
+    time spent inside the in-flight experiment inflate the ratio, which is
+    catastrophic during a timeout: stuck four minutes into `series-limit`, the
+    ratio tripled and the ETA climbed 25m -> 1h53m while the true remainder was
+    unchanged. A stall must shrink the current experiment's own estimate toward
+    zero, never re-scale the twenty experiments behind it.
+
+    `in_flight` is time already spent in the current experiment, subtracted from
+    that experiment's own predicted cost (floored at zero). `cap` bounds what a
+    single unfinished experiment can still owe — a hung one cannot exceed its
+    timeout budget, so the ETA stops growing rather than running away.
+    """
+    if settled is None:
+        settled = elapsed
     known = [n for n in remaining_names if n in prev]
-    if known and done_names:
-        # How is this run tracking against the previous one on what we have
-        # already run? Rescale the remainder by that ratio.
-        prev_done = sum(prev[n] for n in done_names if n in prev)
-        if prev_done > 0:
-            ratio = elapsed / prev_done
-            return sum(prev[n] for n in known) * ratio + \
-                sum(elapsed / max(1, len(done_names))
-                    for n in remaining_names if n not in prev)
-    if known:
-        return sum(prev[n] for n in known)
+    unknown = [n for n in remaining_names if n not in prev]
+
     if done_names:
-        return elapsed / len(done_names) * len(remaining_names)
-    return None
+        prev_done = sum(prev.get(n, 0) for n in done_names)
+        ratio = (settled / prev_done) if prev_done > 0 else 1.0
+        # A single slow experiment should not swing the whole projection.
+        ratio = min(3.0, max(0.33, ratio))
+    else:
+        ratio = 1.0
+
+    if not known and not unknown:
+        return 0.0
+
+    total = 0.0
+    for idx, n in enumerate(remaining_names):
+        pred = prev.get(n)
+        if pred is None:
+            pred = (settled / len(done_names)) if done_names else 0.0
+        else:
+            pred *= ratio
+        if idx == 0 and in_flight is not None:
+            pred = max(0.0, pred - in_flight)
+            if cap is not None:
+                pred = min(pred, max(0.0, cap - in_flight))
+        total += pred
+    return total
 
 
 def run_one(system, exp, timeout, tick=None):
@@ -682,13 +721,18 @@ def load_prev_run(today):
     outdir = os.path.join(BENCH, "results")
     if not os.path.isdir(outdir):
         return None
-    for name in sorted(os.listdir(outdir), reverse=True):
-        if not name.endswith(".json") or "partial" in name:
-            continue
-        if name.startswith(today):
+    cur = os.path.join(outdir, "%s.json" % today)
+    cands = [os.path.join(outdir, n) for n in os.listdir(outdir)
+             if n.endswith(".json") and "partial" not in n]
+    # By MODIFICATION TIME, not filename: "2026-08-04.1.json" sorts BEFORE
+    # "2026-08-04.json" lexically ('.' < 'j'), so name order picks the wrong one.
+    # Excluding today's canonical file means a same-day re-run compares against
+    # the archived earlier run rather than against itself.
+    for path in sorted(cands, key=lambda q: -os.path.getmtime(q)):
+        if os.path.abspath(path) == os.path.abspath(cur):
             continue
         try:
-            with open(os.path.join(outdir, name)) as f:
+            with open(path) as f:
                 d = json.load(f)
             if d.get("rows"):
                 return d
@@ -1267,6 +1311,7 @@ def main():
     durations, done_names = {}, []   # done_names also feeds eta()
 
     bar_ui = Progress(total, exps, prev, verbose)
+    bar_ui.cap = args.timeout * len(want)   # a hung experiment's ceiling
     bar_ui.start(t_start)
 
     for i, e in enumerate(exps, 1):
@@ -1325,6 +1370,19 @@ def main():
     outdir = os.path.join(BENCH, "results")
     os.makedirs(outdir, exist_ok=True)
     jpath = args.json or os.path.join(outdir, "%s%s.json" % (host["date"], suffix))
+
+    # A second full run on the same day used to OVERWRITE the first, destroying
+    # the very run the trend should diff against — so re-running to check a fix
+    # silently cost you the before-picture. Rotate the old one aside instead.
+    # `<date>.json` stays the canonical latest; `<date>.1.json` and up are the
+    # earlier runs of that day, newest-highest.
+    if not partial and not args.json and os.path.exists(jpath):
+        k = 1
+        while os.path.exists(os.path.join(outdir, "%s.%d.json" % (host["date"], k))):
+            k += 1
+        os.rename(jpath, os.path.join(outdir, "%s.%d.json" % (host["date"], k)))
+        print("  previous run of today archived as results/%s.%d.json"
+              % (host["date"], k), file=sys.stderr)
     with open(jpath, "w") as f:
         json.dump({"host": host, "rows": all_rows, "requires": all_requires,
                    "raw": raw, "elapsed_s": elapsed,
