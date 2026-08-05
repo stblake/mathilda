@@ -245,13 +245,58 @@ static void test_keysel_boundaries(void) {
     assert_not_lowers("CompileDiagnostics[{{p, _Association, _Real}, {k, _Integer}}, KeyDrop[p, k]]");
     /* KeyDrop on a non-association operand is not an association op -> bails */
     assert_not_lowers("CompileDiagnostics[{{v, _Real, 1}}, KeyDrop[v, 1]]");
-    /* composition (a produced association consumed mid-body) is DEFERRED: it does
-     * not lower, but the interpreter fallback still gives the right answer. */
-    assert_not_lowers("CompileDiagnostics[{{p, _Association, _Real}}, Lookup[KeyDrop[p, \"b\"], \"a\"]]");
-    assert_true("Compile[{{p, _Association, _Real}}, Lookup[KeyDrop[p, \"b\"], \"a\"]][<|\"a\" -> 5., \"b\" -> 9.|>] === 5.");
-    assert_not_lowers("CompileDiagnostics[{{p, _Association, _Real}}, KeyTake[KeyDrop[p, \"a\"], {\"b\"}]]");
+}
+
+/* ------------------------------------------------------------------ *
+ *  B3 composition — a produced association is a first-class operand   *
+ * ------------------------------------------------------------------ */
+
+static void test_composition(void) {
+    /* a scalar reader over a produced association */
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, Lookup[KeyDrop[p, \"b\"], \"a\"]]");
+    assert_true("Compile[{{p, _Association, _Real}}, Lookup[KeyDrop[p, \"b\"], \"a\"]]"
+                "[<|\"a\" -> 5., \"b\" -> 9., \"c\" -> 3.|>] === 5.");
+    /* nested transforms — chained filtering, returns an association */
+    assert_lowers("CompileDiagnostics[{{p, _Association, _Real}}, KeyTake[KeyDrop[p, \"a\"], {\"b\"}]]");
     assert_true("Compile[{{p, _Association, _Real}}, KeyTake[KeyDrop[p, \"a\"], {\"b\"}]]"
-                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>] === <|\"b\" -> 2.|>");
+                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>]"
+                " === KeyTake[KeyDrop[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>, \"a\"], {\"b\"}]");
+    /* Values of a produced association, aggregated */
+    assert_true("Compile[{{p, _Association, _Real}}, Total[Values[KeyDrop[p, \"b\"]]]]"
+                "[<|\"a\" -> 1., \"b\" -> 99., \"c\" -> 3.|>] === 4.");
+    /* Length / membership over a produced association */
+    assert_true("Compile[{{p, _Association, _Real}}, Length[KeyDrop[KeyTake[p, {\"a\", \"b\", \"c\"}], \"b\"]]]"
+                "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3., \"d\" -> 4.|>] === 2");
+    assert_true("Compile[{{p, _Association, _Real}}, KeyExistsQ[KeyDrop[p, \"a\"], \"a\"]]"
+                "[<|\"a\" -> 1., \"b\" -> 2.|>] === False");
+    /* a runtime (B2) key over a produced association */
+    assert_true("Compile[{{p, _Association, _Real}, {i, _Integer}}, Lookup[KeyDrop[p, 2], i, -1.]]"
+                "[<|1 -> 10., 2 -> 20., 3 -> 30.|>, 3] === 30.");
+    assert_true("Compile[{{p, _Association, _Real}, {i, _Integer}}, Lookup[KeyDrop[p, 2], i, -1.]]"
+                "[<|1 -> 10., 2 -> 20., 3 -> 30.|>, 2] === -1.");
+}
+
+/* ------------------------------------------------------------------ *
+ *  B3 — Counts[machine array] -> an association of element -> count    *
+ * ------------------------------------------------------------------ */
+
+static void test_counts(void) {
+    assert_lowers("CompileDiagnostics[{{v, _Integer, 1}}, Counts[v]]");
+    /* parity vs interpreter, integer and real element arrays */
+    assert_true("Compile[{{v, _Integer, 1}}, Counts[v]][{1, 2, 1, 3, 1, 2}]"
+                " === Counts[{1, 2, 1, 3, 1, 2}]");
+    assert_true("Compile[{{v, _Real, 1}}, Counts[v]][{1., 2., 2., 3.}] === Counts[{1., 2., 2., 3.}]");
+
+    /* composition: look a count up (values are integers, default 0 for absent) */
+    assert_true("Compile[{{v, _Integer, 1}, {k, _Integer}}, Lookup[Counts[v], k, 0]][{1, 2, 1, 3, 1}, 1] === 3");
+    assert_true("Compile[{{v, _Integer, 1}, {k, _Integer}}, Lookup[Counts[v], k, 0]][{1, 2, 1}, 9] === 0");
+
+    /* Length[Counts] = number of distinct elements; Total[Values[Counts]] = Length[v] */
+    assert_true("Compile[{{v, _Real, 1}}, Length[Counts[v]]][{1., 2., 2., 3., 3., 3.}] === 3");
+    assert_true("Compile[{{v, _Integer, 1}}, Total[Values[Counts[v]]]][{5, 5, 7, 9, 9}] === 5");
+
+    /* a rank-2 (non-vector) operand is outside the subset -> the body falls back */
+    assert_not_lowers("CompileDiagnostics[{{m, _Integer, 2}}, Counts[m]]");
 }
 
 /* ------------------------------------------------------------------ *
@@ -283,6 +328,24 @@ static void test_repeated_eval_no_leak(void) {
         ASSERT_STR_EQ(s, "<|\"a\" -> 1.0, \"c\" -> 3.0|>");
         free(s); expr_free(r);
     }
+    /* B3 composition: a produced association is consumed AND freed each iteration
+     * (a leak or double-free in the free-source discipline shows up here). */
+    for (int i = 0; i < 50; i++) {
+        Expr* r = eval_and_free(parse_expression(
+            "Compile[{{p, _Association, _Real}}, Total[Values[KeyTake[KeyDrop[p, \"a\"], {\"b\", \"c\"}]]]]"
+            "[<|\"a\" -> 1., \"b\" -> 2., \"c\" -> 3.|>]"));
+        char* s = expr_to_string(r);
+        ASSERT_STR_EQ(s, "5.0");
+        free(s); expr_free(r);
+    }
+    /* B3 Counts: array -> association built and freed each iteration. */
+    for (int i = 0; i < 50; i++) {
+        Expr* r = eval_and_free(parse_expression(
+            "Compile[{{v, _Integer, 1}, {k, _Integer}}, Lookup[Counts[v], k, 0]][{1, 2, 1, 3, 1}, 1]"));
+        char* s = expr_to_string(r);
+        ASSERT_STR_EQ(s, "3");
+        free(s); expr_free(r);
+    }
 }
 
 int main(void) {
@@ -303,6 +366,8 @@ int main(void) {
     TEST(test_autocompile_global);
     TEST(test_keydrop_keytake);
     TEST(test_keysel_boundaries);
+    TEST(test_composition);
+    TEST(test_counts);
     TEST(test_repeated_eval_no_leak);
 
     printf("All Compile[] Association (B1/B2/B3) tests passed!\n");

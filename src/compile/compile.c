@@ -768,21 +768,33 @@ static const Expr* global_assoc(const Ctx* c, const char* nm) {
     return NULL;
 }
 
-typedef enum { ASSOC_NONE, ASSOC_ARG, ASSOC_CONST } AssocOpKind;
+typedef enum { ASSOC_NONE, ASSOC_ARG, ASSOC_CONST, ASSOC_EXPR } AssocOpKind;
 typedef struct {
     AssocOpKind kind;
     int         reg;      /* ASSOC_ARG: the operand register             */
     CompileType valtype;  /* ASSOC_ARG: declared value element type      */
     const Expr* assoc;    /* ASSOC_CONST: the constant association node   */
+    const Expr* expr;     /* ASSOC_EXPR: a produced-association subexpr   */
 } AssocOperand;
+
+/* A head that PRODUCES an association value from an association-typed body, so a
+ * `KeyDrop[p, k]` / `Counts[v]` may itself be the operand of another association
+ * op (composition). */
+static bool assoc_producer_head(const char* h, size_t na) {
+    if ((strcmp(h, "KeyDrop") == 0 || strcmp(h, "KeyTake") == 0) && na == 2) return true;
+    if (strcmp(h, "Counts") == 0 && na == 1) return true;
+    return false;
+}
 
 /* THE shared resolver — used by both infer_type and emit_node so they can never
  * disagree about what an association operand is.  A declared `_Association`
  * argument -> ASSOC_ARG (register + value type); a literal `<|...|>` or a folded
- * global -> ASSOC_CONST; anything else -> ASSOC_NONE (the head bails, or, for a
- * head shared with the array lowerings, falls through to them). */
+ * global -> ASSOC_CONST; a produced-association subexpression (KeyDrop/Counts/…)
+ * -> ASSOC_EXPR (emitted/inferred by the caller); anything else -> ASSOC_NONE
+ * (the head bails, or, for a head shared with the array lowerings, falls through
+ * to them). */
 static void resolve_assoc_operand(Ctx* c, const Expr* e, AssocOperand* o) {
-    o->kind = ASSOC_NONE; o->reg = -1; o->valtype = CT_REAL; o->assoc = NULL;
+    o->kind = ASSOC_NONE; o->reg = -1; o->valtype = CT_REAL; o->assoc = NULL; o->expr = NULL;
     if (!e) return;
     if (e->type == EXPR_SYMBOL) {
         const char* nm = e->data.symbol.name;
@@ -801,7 +813,35 @@ static void resolve_assoc_operand(Ctx* c, const Expr* e, AssocOperand* o) {
         if (g) { o->kind = ASSOC_CONST; o->assoc = g; }
         return;
     }
-    if (is_association(e)) { o->kind = ASSOC_CONST; o->assoc = e; }
+    if (is_association(e)) { o->kind = ASSOC_CONST; o->assoc = e; return; }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && assoc_producer_head(e->data.function.head->data.symbol.name, e->data.function.arg_count)) {
+        o->kind = ASSOC_EXPR; o->expr = e;
+    }
+}
+
+/* Materialise an association SOURCE operand for a consumer: a borrowed argument
+ * register, a constant node (carried in the spec), or a freshly EMITTED produced
+ * association (an owned array-bank temp).  Returns false (bailing via c->ok) if
+ * `e` is not an association.  `*owned` is true only for a produced temp — the
+ * consumer must free it (an array-producer via its free-source flag with LIFO
+ * slot reuse; a scalar reader via free_if_tmp after the read). */
+typedef struct { int reg; bool owned; const Expr* cst; CompileType valtype; } AssocSrc;
+static bool materialize_assoc_src(Ctx* c, const AssocOperand* ao, AssocSrc* s) {
+    s->reg = -1; s->owned = false; s->cst = NULL; s->valtype = CT_REAL;
+    if (ao->kind == ASSOC_ARG)  { s->reg = ao->reg; s->valtype = ao->valtype; return true; }
+    if (ao->kind == ASSOC_CONST) {
+        s->cst = ao->assoc;
+        if (!assoc_const_values_elem(ao->assoc, &s->valtype)) s->valtype = CT_REAL;
+        return true;
+    }
+    if (ao->kind == ASSOC_EXPR) {
+        Val av;
+        if (!emit(c, ao->expr, &av) || !CT_IS_ASSOC(av.type)) { c->ok = false; return false; }
+        s->reg = av.reg; s->owned = av.tmp; s->valtype = CT_ASSOC_VALTYPE(av.type);
+        return true;
+    }
+    return false;
 }
 
 /* Program-owned AssocSpec, freed in compiled_free (declared in compile_internal.h). */
@@ -864,8 +904,26 @@ static bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out)
     bool is_values  = strcmp(h, "Values") == 0 && na == 1;
     bool is_keydrop = strcmp(h, "KeyDrop") == 0 && na == 2;
     bool is_keytake = strcmp(h, "KeyTake") == 0 && na == 2;
+    bool is_counts  = strcmp(h, "Counts") == 0 && na == 1;
     if (!is_lookup && !is_exists && !is_free && !is_len && !is_values
-        && !is_keydrop && !is_keytake) return false;
+        && !is_keydrop && !is_keytake && !is_counts) return false;
+
+    /* Counts is the one association op whose OPERAND is a machine array, not an
+     * association -> <|element -> count|> (integer values).  Handled before the
+     * association-operand resolver below. */
+    if (is_counts) {
+        Val av;
+        if (!emit(c, A[0], &av)) { c->ok = false; return true; }
+        if (!CT_IS_ARRAY(av.type) || CT_RANK(av.type) != 1) { c->ok = false; return true; }
+        uint16_t f = 0;
+        uint32_t areg = (uint32_t)av.reg;
+        if (av.tmp) { pop_tmp(c, av); f |= 1u; }   /* free the produced array temp */
+        Slot z; memset(&z, 0, sizeof z);
+        int dst = alloc_arr(c);
+        ins_f(c, OP_ASSOC_COUNTS, f, (uint32_t)dst, areg, 0, z);
+        out->reg = dst; out->tmp = true; out->type = CT_ASSOC_TYPE(CT_INT); out->built = true;
+        return true;
+    }
 
     AssocOperand ao; resolve_assoc_operand(c, A[0], &ao);
     if (ao.kind == ASSOC_NONE) {
@@ -876,23 +934,36 @@ static bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out)
         c->ok = false; return true;
     }
 
-    /* B3: KeyDrop / KeyTake -> an OWNED association (array bank).  Source is an
-     * argument bag or a constant association (nesting a produced association as
-     * the source is deferred); the key(s) are compile-time constant. */
+    /* Unified source resolution.  A produced-association operand (ASSOC_EXPR:
+     * `KeyDrop[p,k]`, `Counts[v]`, …) is EMITTED here into an owned array-bank
+     * temp; an argument bag stays a borrowed register; a constant rides in the
+     * spec.  From here every consumer works off (src_reg | src_cst) + src_owned. */
+    AssocSrc src;
+    if (!materialize_assoc_src(c, &ao, &src)) { c->ok = false; return true; }
+    int         src_reg   = src.reg;      /* ARG / produced register, else -1     */
+    const Expr* src_cst   = src.cst;      /* constant source node, else NULL      */
+    bool        src_owned = src.owned;    /* produced temp — this op must free it  */
+    CompileType src_valtype = src.valtype;
+
+    /* B3: KeyDrop / KeyTake -> an OWNED association (array bank).  An owned
+     * produced source is consumed in place: pop it so the result reuses its slot
+     * and set the free-source flag (bit1) so the VM frees R[a] after reading it. */
     if (is_keydrop || is_keytake) {
         const Expr* keyspec = A[1];
         if (!expr_is_compile_const(c, keyspec)) { c->ok = false; return true; }
-        CompileType valtype = (ao.kind == ASSOC_ARG) ? ao.valtype : CT_REAL;
-        if (ao.kind == ASSOC_CONST && !assoc_const_values_elem(ao.assoc, &valtype))
-            valtype = CT_REAL;   /* a non-numeric-valued source is fine for KeyDrop */
-        AssocSpec* sp = emit_assocspec(c, keyspec, NULL, ao.kind == ASSOC_CONST ? ao.assoc : NULL);
+        AssocSpec* sp = emit_assocspec(c, keyspec, NULL, src_cst);
         if (!sp) return true;
         Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
         uint16_t f = (uint16_t)(is_keytake ? 1u : 0u);   /* bit0 = take */
-        uint32_t areg = (ao.kind == ASSOC_ARG) ? (uint32_t)ao.reg : 0;
+        uint32_t areg;
+        if (src_cst) areg = 0;                            /* source in the spec   */
+        else if (src_owned) {
+            Val sv = { src_reg, true, CT_ASSOC_TYPE(src_valtype), false };
+            pop_tmp(c, sv); f |= 2u; areg = (uint32_t)src_reg;   /* free-source, reuse slot */
+        } else areg = (uint32_t)src_reg;                  /* borrowed argument bag */
         int dst = alloc_arr(c);
         ins_f(c, OP_ASSOC_KEYSEL, f, (uint32_t)dst, areg, 0, ip);
-        out->reg = dst; out->tmp = true; out->type = CT_ASSOC_TYPE(valtype); out->built = true;
+        out->reg = dst; out->tmp = true; out->type = CT_ASSOC_TYPE(src_valtype); out->built = true;
         return true;
     }
 
@@ -910,9 +981,8 @@ static bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out)
             if (!emit(c, key, &kv)) { c->ok = false; return true; }
             CompileType kt = kv.type;
             if (kt != CT_INT && kt != CT_REAL) { pop_tmp(c, kv); c->ok = false; return true; }
-            CompileType rt = CT_ERR;
-            if (ao.kind == ASSOC_ARG) rt = ao.valtype;
-            else if (!assoc_const_values_elem(ao.assoc, &rt)) { pop_tmp(c, kv); c->ok = false; return true; }
+            CompileType rt = src_valtype;
+            if (src_cst && !assoc_const_values_elem(src_cst, &rt)) { pop_tmp(c, kv); c->ok = false; return true; }
             if (deflt) {
                 Slot d; CompileType dt;
                 if (!literal(deflt, &d, &dt)) { pop_tmp(c, kv); c->ok = false; return true; }
@@ -920,29 +990,30 @@ static bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out)
                 if ((int)rt < 0 || CT_IS_ARRAY(rt) || CT_IS_ASSOC(rt)) { pop_tmp(c, kv); c->ok = false; return true; }
             }
             if (rt != CT_INT && rt != CT_REAL && rt != CT_COMPLEX) { pop_tmp(c, kv); c->ok = false; return true; }
-            AssocSpec* sp = emit_assocspec(c, NULL, deflt, ao.kind == ASSOC_CONST ? ao.assoc : NULL);
+            AssocSpec* sp = emit_assocspec(c, NULL, deflt, src_cst);
             if (!sp) { pop_tmp(c, kv); return true; }
             Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
             uint16_t f = (uint16_t)((unsigned)rt | ((unsigned)kt << 4));
-            /* For an argument bag `a` is the operand register; for a constant bag
-             * the handle is in the spec and `a` is a harmless read of the key. */
-            uint32_t bagreg = (ao.kind == ASSOC_ARG) ? (uint32_t)ao.reg : (uint32_t)kv.reg;
+            /* For a register bag `a` is that register; for a constant bag the
+             * handle is in the spec and `a` is a harmless read of the key. */
+            uint32_t bagreg = src_cst ? (uint32_t)kv.reg : (uint32_t)src_reg;
             pop_tmp(c, kv);
             int dst = alloc_temp(c);
             ins_f(c, OP_ASSOC_LOOKUP_DYN, f, (uint32_t)dst, bagreg, (uint32_t)kv.reg, ip);
+            if (src_owned) free_if_tmp(c, (Val){ src_reg, true, CT_ASSOC_TYPE(src_valtype), false });
             out->reg = dst; out->tmp = true; out->type = rt; out->built = false;
             return true;
         }
-        if (ao.kind == ASSOC_CONST) {
+        if (src_cst) {
             /* Fold at compile time via the native helper (never evaluate()). */
-            Expr* v = assoc_lookup_value(ao.assoc, key);
+            Expr* v = assoc_lookup_value(src_cst, key);
             if (!v) v = (Expr*)deflt;
             Slot imm; CompileType vt;
             if (!v || !literal(v, &imm, &vt)) { c->ok = false; return true; }
             *out = emit_const(c, imm, vt);
             return true;
         }
-        CompileType rt = ao.valtype;
+        CompileType rt = src_valtype;
         if (deflt) {
             Slot d; CompileType dt;
             if (!literal(deflt, &d, &dt)) { c->ok = false; return true; }
@@ -954,7 +1025,8 @@ static bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out)
         if (!sp) return true;   /* c->ok already false */
         Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
         int dst = alloc_temp(c);
-        ins_f(c, OP_ASSOC_LOOKUP, (uint16_t)rt, (uint32_t)dst, (uint32_t)ao.reg, 0, ip);
+        ins_f(c, OP_ASSOC_LOOKUP, (uint16_t)rt, (uint32_t)dst, (uint32_t)src_reg, 0, ip);
+        if (src_owned) free_if_tmp(c, (Val){ src_reg, true, CT_ASSOC_TYPE(src_valtype), false });
         out->reg = dst; out->tmp = true; out->type = rt; out->built = false;
         return true;
     }
@@ -962,8 +1034,8 @@ static bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out)
     if (is_exists || is_free) {
         const Expr* key = A[1];
         if (!expr_is_compile_const(c, key)) { c->ok = false; return true; }
-        if (ao.kind == ASSOC_CONST) {
-            int present = assoc_lookup_value(ao.assoc, key) != NULL;
+        if (src_cst) {
+            int present = assoc_lookup_value(src_cst, key) != NULL;
             Slot imm; imm.i = is_free ? !present : present;
             *out = emit_const(c, imm, CT_BOOL);
             return true;
@@ -972,38 +1044,45 @@ static bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out)
         if (!sp) return true;
         Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
         int dst = alloc_temp(c);
-        ins_f(c, OP_ASSOC_HASKEY, (uint16_t)(is_free ? 1 : 0), (uint32_t)dst, (uint32_t)ao.reg, 0, ip);
+        ins_f(c, OP_ASSOC_HASKEY, (uint16_t)(is_free ? 1 : 0), (uint32_t)dst, (uint32_t)src_reg, 0, ip);
+        if (src_owned) free_if_tmp(c, (Val){ src_reg, true, CT_ASSOC_TYPE(src_valtype), false });
         out->reg = dst; out->tmp = true; out->type = CT_BOOL; out->built = false;
         return true;
     }
 
     if (is_len) {
-        if (ao.kind == ASSOC_CONST) {
-            Slot imm; imm.i = (long long)ao.assoc->data.function.arg_count;
+        if (src_cst) {
+            Slot imm; imm.i = (long long)src_cst->data.function.arg_count;
             *out = emit_const(c, imm, CT_INT);
             return true;
         }
         Slot z; memset(&z, 0, sizeof z);
         int dst = alloc_temp(c);
-        ins(c, OP_ASSOC_LEN, (uint32_t)dst, (uint32_t)ao.reg, 0, z);
+        ins(c, OP_ASSOC_LEN, (uint32_t)dst, (uint32_t)src_reg, 0, z);
+        if (src_owned) free_if_tmp(c, (Val){ src_reg, true, CT_ASSOC_TYPE(src_valtype), false });
         out->reg = dst; out->tmp = true; out->type = CT_INT; out->built = false;
         return true;
     }
 
-    /* Values: an owned packed vector.  For a constant association the node rides
-     * in the spec (there is no array-constant opcode); for an argument the handle
-     * is read from the operand register. */
+    /* Values: an owned packed vector.  A constant source rides in the spec; a
+     * produced source is consumed in place (pop + reuse slot + free-source flag,
+     * bit 0x100), an argument bag stays borrowed. */
     {
-        CompileType elem;
-        if (ao.kind == ASSOC_ARG) elem = ao.valtype;
-        else if (!assoc_const_values_elem(ao.assoc, &elem)) { c->ok = false; return true; }
+        CompileType elem = src_valtype;
+        if (src_cst && !assoc_const_values_elem(src_cst, &elem)) { c->ok = false; return true; }
         if (elem != CT_INT && elem != CT_REAL && elem != CT_COMPLEX) { c->ok = false; return true; }
-        AssocSpec* sp = emit_assocspec(c, NULL, NULL, ao.kind == ASSOC_CONST ? ao.assoc : NULL);
+        AssocSpec* sp = emit_assocspec(c, NULL, NULL, src_cst);
         if (!sp) return true;
         Slot ip; memset(&ip, 0, sizeof ip); ip.p = sp;
+        uint16_t f = (uint16_t)elem;
+        uint32_t areg;
+        if (src_cst) areg = 0;
+        else if (src_owned) {
+            Val sv = { src_reg, true, CT_ASSOC_TYPE(src_valtype), false };
+            pop_tmp(c, sv); f |= 0x100u; areg = (uint32_t)src_reg;   /* free-source, reuse slot */
+        } else areg = (uint32_t)src_reg;
         int dst = alloc_arr(c);
-        uint32_t areg = (ao.kind == ASSOC_ARG) ? (uint32_t)ao.reg : 0;
-        ins_f(c, OP_ASSOC_VALUES, (uint16_t)elem, (uint32_t)dst, areg, 0, ip);
+        ins_f(c, OP_ASSOC_VALUES, f, (uint32_t)dst, areg, 0, ip);
         out->reg = dst; out->tmp = true; out->type = CT_ARRAY(elem, 1); out->built = true;
         return true;
     }
@@ -1020,17 +1099,35 @@ static bool try_infer_assoc(Ctx* c, const char* h, Expr** A, size_t na, CompileT
     bool is_len    = strcmp(h, "Length") == 0 && na == 1;
     bool is_values = strcmp(h, "Values") == 0 && na == 1;
     bool is_keysel = (strcmp(h, "KeyDrop") == 0 || strcmp(h, "KeyTake") == 0) && na == 2;
-    if (!is_lookup && !is_exists && !is_len && !is_values && !is_keysel) return false;
+    bool is_counts = strcmp(h, "Counts") == 0 && na == 1;
+    if (!is_lookup && !is_exists && !is_len && !is_values && !is_keysel && !is_counts) return false;
+
+    if (is_counts) {
+        CompileType t;
+        if (!infer_type(c, A[0], &t) || !CT_IS_ARRAY(t) || CT_RANK(t) != 1) return false;
+        *out = CT_ASSOC_TYPE(CT_INT); return true;
+    }
 
     AssocOperand ao; resolve_assoc_operand(c, A[0], &ao);
     if (ao.kind == ASSOC_NONE) return false;
+
+    /* Unified source resolution (type-only twin of materialize_assoc_src). */
+    CompileType src_valtype = CT_REAL;
+    const Expr* src_cst = NULL;
+    if (ao.kind == ASSOC_ARG) src_valtype = ao.valtype;
+    else if (ao.kind == ASSOC_CONST) src_cst = ao.assoc;   /* valtype computed per-op */
+    else { /* ASSOC_EXPR */
+        CompileType t;
+        if (!infer_type(c, ao.expr, &t) || !CT_IS_ASSOC(t)) return false;
+        src_valtype = CT_ASSOC_VALTYPE(t);
+    }
 
     if (is_exists) { *out = CT_BOOL; return true; }
     if (is_len)    { *out = CT_INT;  return true; }
     if (is_keysel) {
         if (!expr_is_compile_const(c, A[1])) return false;
-        CompileType vt = (ao.kind == ASSOC_ARG) ? ao.valtype : CT_REAL;
-        if (ao.kind == ASSOC_CONST && !assoc_const_values_elem(ao.assoc, &vt)) vt = CT_REAL;
+        CompileType vt = src_valtype;
+        if (src_cst && !assoc_const_values_elem(src_cst, &vt)) vt = CT_REAL;
         *out = CT_ASSOC_TYPE(vt); return true;
     }
     if (is_lookup) {
@@ -1042,9 +1139,8 @@ static bool try_infer_assoc(Ctx* c, const char* h, Expr** A, size_t na, CompileT
              * (widened by the default), regardless of the specific key. */
             CompileType kt;
             if (!infer_type(c, key, &kt) || (kt != CT_INT && kt != CT_REAL)) return false;
-            CompileType rt = CT_ERR;
-            if (ao.kind == ASSOC_ARG) rt = ao.valtype;
-            else if (!assoc_const_values_elem(ao.assoc, &rt)) return false;
+            CompileType rt = src_valtype;
+            if (src_cst && !assoc_const_values_elem(src_cst, &rt)) return false;
             if (deflt) {
                 Slot d; CompileType dt;
                 if (!literal(deflt, &d, &dt)) return false;
@@ -1054,14 +1150,14 @@ static bool try_infer_assoc(Ctx* c, const char* h, Expr** A, size_t na, CompileT
             if (rt != CT_INT && rt != CT_REAL && rt != CT_COMPLEX) return false;
             *out = rt; return true;
         }
-        if (ao.kind == ASSOC_CONST) {
-            Expr* v = assoc_lookup_value(ao.assoc, key);
+        if (src_cst) {
+            Expr* v = assoc_lookup_value(src_cst, key);
             if (!v) v = (Expr*)deflt;
             Slot imm; CompileType vt;
             if (!v || !literal(v, &imm, &vt)) return false;
             *out = vt; return true;
         }
-        CompileType rt = ao.valtype;
+        CompileType rt = src_valtype;
         if (deflt) {
             Slot d; CompileType dt;
             if (!literal(deflt, &d, &dt)) return false;
@@ -1073,9 +1169,8 @@ static bool try_infer_assoc(Ctx* c, const char* h, Expr** A, size_t na, CompileT
     }
     /* Values */
     {
-        CompileType elem;
-        if (ao.kind == ASSOC_ARG) elem = ao.valtype;
-        else if (!assoc_const_values_elem(ao.assoc, &elem)) return false;
+        CompileType elem = src_valtype;
+        if (src_cst && !assoc_const_values_elem(src_cst, &elem)) return false;
         if (elem != CT_INT && elem != CT_REAL && elem != CT_COMPLEX) return false;
         *out = CT_ARRAY(elem, 1); return true;
     }
@@ -6166,9 +6261,10 @@ static bool vm_assoc_values(const Instr* c, Slot* R) {
     if (!assoc) return false;
     Expr* vals = assoc_values_list(assoc);        /* owned List of the values */
     if (!vals) return false;
-    Expr* nd = ndarray_from_nested_list(vals, assoc_elem_ndt((CompileType)c->flags));
+    Expr* nd = ndarray_from_nested_list(vals, assoc_elem_ndt((CompileType)(c->flags & 0xFFu)));
     expr_free(vals);
     if (!nd) return false;                         /* non-numeric -> decline    */
+    if ((c->flags & 0x100u) && !sp->assoc) { expr_free(R[c->a].arr); R[c->a].arr = NULL; }  /* free produced src */
     expr_free(R[c->dst].arr);                      /* release any stale handle  */
     R[c->dst].arr = nd;
     return true;
@@ -6186,6 +6282,21 @@ static bool vm_assoc_keysel(const Instr* c, Slot* R) {
     if (!r || !is_association(r)) { expr_free(r); return false; }
     assoc_prebuild_index(r);
     if ((c->flags & 2u) && !sp->assoc) { expr_free(R[c->a].arr); R[c->a].arr = NULL; }
+    expr_free(R[c->dst].arr);
+    R[c->dst].arr = r;
+    return true;
+}
+
+/* Counts[machine array] (B3) -> an OWNED association of element->count.  Native
+ * (assoc_counts_ndarray via Tally, no evaluator).  flags bit0 = free the source
+ * array temp (a produced array consumed here). */
+static bool vm_assoc_counts(const Instr* c, Slot* R) {
+    Expr* arr = R[c->a].arr;
+    if (!arr) return false;
+    Expr* r = assoc_counts_ndarray(arr);
+    if (!r || !is_association(r)) { expr_free(r); return false; }
+    assoc_prebuild_index(r);
+    if (c->flags & 1u) { expr_free(R[c->a].arr); R[c->a].arr = NULL; }
     expr_free(R[c->dst].arr);
     R[c->dst].arr = r;
     return true;
@@ -7010,6 +7121,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             } NEXT();
             OP(ASSOC_VALUES): do { if (!vm_assoc_values(c, R)) goto vm_fail; } while (0); NEXT();
             OP(ASSOC_KEYSEL): do { if (!vm_assoc_keysel(c, R)) goto vm_fail; } while (0); NEXT();
+            OP(ASSOC_COUNTS): do { if (!vm_assoc_counts(c, R)) goto vm_fail; } while (0); NEXT();
             OP(ASSOC_LOOKUP_DYN): {          /* B2: runtime int/real key in R[b] */
                 const AssocSpec* sp = (const AssocSpec*)c->imm.p;
                 Expr* assoc = sp->assoc ? sp->assoc : RA.arr;

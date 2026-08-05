@@ -243,6 +243,10 @@ enum {
      * and `assoc` is the constant source (else the bag is R[a]).                   \
      */                                                                            \
     X(ASSOC_KEYSEL, K_ARR)                                                \
+    /* Counts[machine array] -> an OWNED association of element->count (K_ARR).   \
+     * flags bit0 = free the source array temp.  No imm.                          \
+     */                                                                            \
+    X(ASSOC_COUNTS, K_ARR)                                                \
     /* An array -> SCALAR reduction delegated to the interpreter's own entry   \
      * point (ndred_mean, ndred_variance, ...), the reduction counterpart of   \
      * A_NDFN below.  Total has its own opcode because an int64 sum must stay  \

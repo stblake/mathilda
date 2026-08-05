@@ -64,11 +64,13 @@ shippable with no regression (an unsupported construct just bails to the interpr
       (K_KERN2, pure); key emitted as a machine scalar in `R[b]`, `flags = result_ct|key_ct<<4`;
       malloc-free `assoc_lookup_value_i64`/`_real` probe Part A's index with a stack `Expr`
       (2 M probes / 20 k bag ≈ 130 ms). Array/string runtime keys still bail.
-- [x] **B3** Associations as first-class VM values — DONE (2026-08-05, core). `KeyDrop`/
-      `KeyTake` produce an OWNED association (`ASSOC_KEYSEL`, K_ARR) in the array bank;
-      `cf_unbox`/result-extraction return it; `assoc_key_select` native core (no evaluator).
-      Source = arg/const, keys literal. **Deferred:** consuming a produced association
-      mid-body (composition), and `Counts`/`PositionIndex`/`KeyUnion` (different shapes) —
-      the owned-value infra is in place for them.
+- [x] **B3** Associations as first-class VM values — DONE (2026-08-05). `KeyDrop`/`KeyTake`
+      (`ASSOC_KEYSEL`) and `Counts` (`ASSOC_COUNTS`, array→assoc) produce OWNED associations
+      in the array bank; `cf_unbox`/result-extraction return them; native cores
+      (`assoc_key_select`, `assoc_counts_ndarray`, no evaluator). **Composition** works to
+      any depth (`Lookup[KeyDrop[p,k],j]`, `KeyTake[KeyDrop[…]]`, `Total[Values[Counts[v]]]`)
+      via `materialize_assoc_src` + free-source discipline (in-instruction for array-producers,
+      free_if_tmp for scalar readers). **Deferred:** `KeyUnion` (→list), `PositionIndex`
+      (list-valued) — don't fit the machine-scalar value model.
 - [ ] **B4** Higher-order transforms (`Merge`/`GroupBy`/…) via a compiled callee.
 - [ ] **B5** Functional key-update; symbol-rebinding `AssociateTo` bails.

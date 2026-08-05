@@ -718,6 +718,14 @@ static Expr* counts_from_ndarray(Expr* list) {
     return assoc;
 }
 
+/* Counts over a machine array -> <|element -> count|>, native (via ndred_tally,
+ * no evaluator).  Borrows `arr`; owned result, or NULL if `arr` is not an
+ * NDArray or the tally could not be formed.  Exposed for the compiled evaluator. */
+Expr* assoc_counts_ndarray(const Expr* arr) {
+    if (!arr || !is_ndarray(arr)) return NULL;
+    return counts_from_ndarray((Expr*)arr);
+}
+
 Expr* builtin_counts(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
     Expr* list = res->data.function.args[0];

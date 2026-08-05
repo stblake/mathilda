@@ -633,6 +633,7 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
         return;
     }
     if (c->op == OP_ASSOC_LEN) { db_catf(b, "%s = Length[%s]", rd, ra); return; }
+    if (c->op == OP_ASSOC_COUNTS) { db_catf(b, "%s = Counts[%s]", rd, ra); return; }
     if (c->op == OP_ASSOC_LOOKUP_DYN) { db_catf(b, "%s = Lookup[%s, %s]", rd, ra, rb); return; }
     if (c->op == OP_ASSOC_KEYSEL) {
         db_catf(b, "%s = %s[%s, ", rd, (c->flags & 1u) ? "KeyTake" : "KeyDrop", ra);

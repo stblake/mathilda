@@ -493,10 +493,12 @@ expression would.
   interpreter. A **constant** association (a literal `<|…|>`, or a global captured
   under auto-compilation) is folded at compile time, so a `Table`/`Plot` body that
   reads a captured global association compiles. Compiled code can also **produce**
-  an association: `KeyDrop[p, keys]` and `KeyTake[p, keys]` (keys literal) build a
-  new association the compiled function can return — `Compile[{{p, _Association}},
-  KeyDrop[p, "secret"]]`. Consuming such a produced association again inside the
-  same body (e.g. `Lookup[KeyDrop[p, k], j]`) is not yet in the subset and falls
+  associations as first-class values: `KeyDrop[p, keys]`, `KeyTake[p, keys]` (keys
+  literal) and `Counts[v]` (a machine array to an `element -> count` association)
+  build a new association the compiled function can return, feed to any reader
+  (`Lookup[KeyDrop[p, "x"], "y"]`, `Total[Values[Counts[v]]]`), or chain through
+  another transform (`KeyTake[KeyDrop[p, a], b]`) to any depth. `KeyUnion` (a key
+  list) and `PositionIndex` (list-valued entries) are not in the subset and fall
   back to the interpreter.
 - **Counted iterators** in `Do`/`Sum`/`Product` accept every integer-bounded
   spelling the interpreter does: `Do[body, n]` and `Do[body, {n}]` (repeat n

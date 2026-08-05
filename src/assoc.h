@@ -53,6 +53,10 @@ Expr* assoc_lookup_value_real(const Expr* assoc, double key);
  * Borrows both operands; owned result, or NULL if `assoc` is not an association. */
 Expr* assoc_key_select(const Expr* assoc, const Expr* karg, bool take);
 
+/* Counts[machine array] -> <|element -> count|> (compiled B3), native via Tally.
+ * Borrows `arr`; owned association result, or NULL. */
+Expr* assoc_counts_ndarray(const Expr* arr);
+
 /* Build a canonical Association from `count` Rule[k,v] nodes.  The rules are
  * copied (the caller keeps ownership of `rules`).  Duplicate keys collapse
  * with last-value-wins while preserving first-occurrence order.  O(count). */
