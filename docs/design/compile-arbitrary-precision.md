@@ -1,16 +1,24 @@
 # `Compile[]` arbitrary precision — GMP bignum & MPFR real/complex in compiled code
 
-Status: **implemented (P1–P2, P3 substrate); sampler wiring remaining**. Author: (this doc).
+Status: **implemented (P1–P3)**. Author: (this doc).
 
-Implemented as of 2026-08-05: the managed-scalar engine (GMP bignum, MPFR real,
-MPFR complex) behind `Compile[]`'s `WorkingPrecision -> n` and
-`"BigIntegers" -> True` options (P1+P2), plus the precision-aware
-auto-compilation entry point `autocompile_new_prec` / `autocompiled_eval_mpfr`
-(the P3 substrate). Remaining: wiring the individual numeric samplers
-(`NIntegrate`/`Plot`/`FindRoot`/`NDSolve`) to call that entry at high
-`WorkingPrecision`, managed arrays, managed control flow, and the warm
-thread-local container arena (a speed follow-up; §7 notes the v1 uses
-correctness-first per-call allocation, which never touches the machine path).
+Implemented: the managed-scalar engine (GMP bignum, MPFR real, MPFR complex)
+behind `Compile[]`'s `WorkingPrecision -> n` and `"BigIntegers" -> True` options
+(P1+P2); the precision-aware auto-compilation entries `autocompile_new_prec` /
+`autocompile_new_prec_z` / `autocompiled_eval_mpfr`; the samplers `NIntegrate`,
+`NSum`, `FindRoot` and `NDSolve` wired to compile their held body in MPFR at high
+`WorkingPrecision`; and the warm thread-local container arena (§7). Speedups:
+NDSolve ~2.4× (the RHS dominates ODE integration), NIntegrate ~1.9×, FindRoot
+~1.2×, NSum ~6–14%.
+
+`Plot` is deliberately **not** wired: it samples `f[x]` to position pixels at
+screen resolution, so machine precision is always more than sufficient and
+compiling the body in MPFR would be pure overhead with no visual benefit —
+high-precision plotting is not a meaningful workload.
+
+Remaining (out of Phase 3 scope): managed arrays and managed control flow. The
+lowering-coverage guard is in place (§13: `CompileDiagnostics` is precision-aware
+and `test_compile_arbprec.c` asserts the managed subset lowers).
 
 Supersedes the non-goal in [`compile.md`](compile.md) §2 ("Arbitrary precision
 (MPFR) inside compiled code — compiled code is machine precision by definition;
@@ -372,11 +380,25 @@ lowers only at machine precision looks fully covered (false negative), and if an
 MPFR kernel ever counts as a "fast path", a machine-only head flips to a spurious
 new gap (false positive).
 
-Add a third **precision family** alongside `scalar`/`array` (`FAMILIES`): probe
-shapes carrying a `WorkingPrecision` declaration, tracked and ratcheted as a
-separate column, with an explicit exemption block (mirroring `EXEMPT`) so partial
-precision coverage is a recorded judgement, not a silent signal. **Ship this in
-the same change as the first code (Phase 1) or the audit rots.**
+**Resolution (revised after implementation).** Neither false-signal actually
+arises: arbitrary precision registers **no** new machine fast path (no ND kernel,
+no `AWARE` entry), so `compile_coverage.py`'s machine audit never sees an MPFR
+kernel and is unaffected by this work. And the machine audit's model —
+"a head with a numeric fast path must have a `Compile` lowering" — does not map to
+arbitrary precision, where the managed subset (`emit_mgd`: straight-line
+arithmetic + the elementary functions) is **deliberately narrow**, not an
+attempt at full-head coverage; a head-enumeration precision family would just
+ratchet noise about the intentional subset.
+
+What genuinely prevents rot is verifying that the *known* managed subset keeps
+**lowering** (a value check cannot: a bailed body still answers correctly through
+the interpreter fallback). So `CompileDiagnostics` was made precision-aware — it
+takes the same `WorkingPrecision -> n` / `"BigIntegers" -> True` options and
+reports `Compiled -> True`/`False`, the bailing `Subexpression`, and the
+`ResultType` (`MPFRReal`/`MPFRComplex`/`BigInteger`) — and `test_compile_arbprec.c`
+asserts the managed real/complex/bignum subset lowers and an unsupported head
+(`Gamma`) reports the bail. That is the anti-rot guard, in the test suite rather
+than in the machine coverage tool.
 
 ## 14. Memory management and leaks
 

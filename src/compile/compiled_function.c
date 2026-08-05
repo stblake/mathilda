@@ -1017,11 +1017,14 @@ static Expr* builtin_compile(Expr* res) {
  * ------------------------------------------------------------------ */
 
 static const char* ct_name(CompileType t) {
-    switch (t) {
-        case CT_BOOL:    return "Boolean";
-        case CT_INT:     return "Integer";
-        case CT_REAL:    return "Real";
-        case CT_COMPLEX: return "Complex";
+    switch ((int)t) {
+        case CT_BOOL:       return "Boolean";
+        case CT_INT:        return "Integer";
+        case CT_REAL:       return "Real";
+        case CT_COMPLEX:    return "Complex";
+        case CT_BIGINT:     return "BigInteger";
+        case CT_BIGREAL:    return "MPFRReal";
+        case CT_BIGCOMPLEX: return "MPFRComplex";
         default: break;
     }
     return CT_IS_ARRAY(t) ? "Array" : "Unknown";
@@ -1044,14 +1047,39 @@ static Expr* diag_rule(const char* key, Expr* value) {
  * On success it also reports the instruction count with and without the
  * optimiser, which is the cheapest way to see what code generation did. */
 static Expr* builtin_compile_diagnostics(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-    const Expr* argspec = res->data.function.args[0];
-    const Expr* body    = res->data.function.args[1];
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    size_t argc = res->data.function.arg_count;
+    Expr** a = res->data.function.args;
+
+    /* Trailing WorkingPrecision / "BigIntegers" options make CompileDiagnostics
+     * report the ARBITRARY-PRECISION lowering (does the managed subset compile?),
+     * which a value check cannot — a bailed body still answers correctly through
+     * the interpreter fallback. */
+    unsigned cflags = 0u; long prec_bits = 0;
+    bool ewp = false, ebi = false;
+    while (argc > 2) {
+        const Expr* o = a[argc - 1];
+        unsigned f = cflags; long pb = prec_bits; bool ok = false;
+        if (cf_match_working_precision_opt(o, &pb, &ok)) {
+            if (!ok) return NULL;
+            if (!ewp) { prec_bits = pb; ewp = true; }
+        } else if (cf_match_bigintegers_opt(o, &f, &ok)) {
+            if (!ok) return NULL;
+            if (!ebi) { cflags = f; ebi = true; }
+        } else {
+            return NULL;
+        }
+        argc--;
+    }
+    if (argc != 2) return NULL;
+    const Expr* argspec = a[0];
+    const Expr* body    = a[1];
 
     const char** names; CompileType* types; size_t n;
     if (!cf_parse_argspec(argspec, &names, &types, &n)) return NULL;
+    cf_apply_precision_types(types, n, prec_bits, (cflags & COMPILE_BIGINT) != 0);
 
-    CompiledProgram* p = compile_expr(body, names, types, n);
+    CompiledProgram* p = compile_expr_prec(body, names, types, n, cflags, prec_bits);
 
     Expr* items[6];
     size_t ni = 0;
@@ -1066,7 +1094,8 @@ static Expr* builtin_compile_diagnostics(Expr* res) {
         /* Recompiling with the optimiser off is the honest way to report what it
          * removed: the passes rewrite in place, so the pre-pass count is gone by
          * the time anyone can ask for it. */
-        CompiledProgram* raw = compile_expr_ex(body, names, types, n, COMPILE_NO_OPT);
+        CompiledProgram* raw = compile_expr_prec(body, names, types, n,
+                                                 cflags | COMPILE_NO_OPT, prec_bits);
         if (raw) {
             items[ni++] = diag_rule("InstructionsUnoptimized",
                                     expr_new_integer((int64_t)compiled_num_instructions(raw)));
@@ -1133,7 +1162,11 @@ void compiled_function_init(void) {
     symtab_set_docstring("CompileDiagnostics",
         "CompileDiagnostics[argspec, expr] reports whether expr compiles for the "
         "given Compile[] argument specification, and if not, the innermost "
-        "subexpression that could not be lowered. For a compiled body it also "
+        "subexpression that could not be lowered. Accepts the same "
+        "WorkingPrecision -> n / \"BigIntegers\" -> True options as Compile[], so it "
+        "also reports whether the arbitrary-precision subset lowers (ResultType "
+        "MPFRReal/MPFRComplex/BigInteger). "
+        "For a compiled body it also "
         "gives the result type and the instruction count with and without the "
         "optimiser.");
 

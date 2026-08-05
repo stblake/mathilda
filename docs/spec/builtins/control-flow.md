@@ -749,6 +749,12 @@ that would have compiled.
   the number of `"CommonSubexpressions"` the optimiser hoisted, and
   `"InstructionsUnoptimized"` — the same body compiled with the optimiser off,
   so what code generation actually removed is visible.
+- **Arbitrary precision.** It accepts the same `WorkingPrecision -> n` and
+  `"BigIntegers" -> True` options as `Compile[]`, so it reports whether the
+  *arbitrary-precision* subset lowers — the `"ResultType"` is then `"MPFRReal"`,
+  `"MPFRComplex"`, or `"BigInteger"`. This is the only way to tell that the
+  managed path actually compiled rather than silently falling back (a bailed body
+  still returns the correct value through the interpreter).
 - **On failure** it gives `"Compiled" -> False`, a `"Reason"`, and the
   `"Subexpression"` — the **innermost** node the emitter could not lower, which
   is the actual cause rather than the construct that happens to contain it.

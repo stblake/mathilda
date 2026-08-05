@@ -105,6 +105,21 @@ int main(void) {
     run("mB = Compile[{{x, _Real}}, x^2, WorkingPrecision -> MachinePrecision]");
     check_true("Head[mB[3.0]] === Real", "machine: WorkingPrecision->MachinePrecision stays machine");
 
+    /* CompileDiagnostics: verify the managed subset actually LOWERS (Compiled ->
+     * True) rather than silently falling back — a value check cannot see this,
+     * since a bailed body still answers correctly through the interpreter.  This
+     * is the regression guard against the managed subset rotting. */
+    check_true("(\"Compiled\" /. CompileDiagnostics[{{x, _Real}}, Sin[x]*Cos[x] + x^3, WorkingPrecision -> 40]) === True",
+               "diag: managed real subset lowers");
+    check_true("(\"ResultType\" /. CompileDiagnostics[{{x, _Real}}, x + 1, WorkingPrecision -> 40]) === \"MPFRReal\"",
+               "diag: managed result type is MPFRReal");
+    check_true("(\"Compiled\" /. CompileDiagnostics[{{z, _Complex}}, Exp[z] + z^2, WorkingPrecision -> 40]) === True",
+               "diag: managed complex subset lowers");
+    check_true("(\"Compiled\" /. CompileDiagnostics[{{n, _Integer}}, n^4 - 2 n, \"BigIntegers\" -> True]) === True",
+               "diag: bignum subset lowers");
+    check_true("(\"Compiled\" /. CompileDiagnostics[{{x, _Real}}, Gamma[x], WorkingPrecision -> 40]) === False",
+               "diag: unsupported head reports the bail");
+
     /* Phase 3 substrate: precision-aware auto-compilation (the entry a sampler
      * running at high WorkingPrecision uses).  Compile Sin[x]+x^2 in MPFR, feed
      * one MPFR sample point, and require the result to equal the interpreter's. */
