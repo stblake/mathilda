@@ -93,6 +93,13 @@ Work through them in order if you're new — each one builds on the last.
     Wallis/Viète trigonometric factorizations, Euler prime products for `ζ`,
     and the exponential products for `e`, `γ`, and Glaisher's constant.
 
+-   :material-cog-play: __[Compilation & auto-compilation](16-compilation.md)__
+
+    Run numeric work at machine speed: `Compile[]` for ints, reals, arrays and
+    associations; automatic compilation (`$AutoCompilation`) and packed arrays
+    (`$AutoArrayPacking`) that you get for free; the compilable-subset cliff and
+    how to see it — measured against Python 3.11 + NumPy at every step.
+
 -   :material-grid: __[13. BLAS kernels](13-blas.md)__
 
     Call the machine-precision BLAS kernels directly through the `` BLAS` ``

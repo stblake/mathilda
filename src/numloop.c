@@ -14,6 +14,7 @@
 #include "arithmetic.h"
 #include "pack.h"
 #include "ndarray.h"   /* is_packed_list — Map over a packed List */
+#include "checked_int.h"  /* ci_*_i64: overflow-checked int64 for exact loops */
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -1072,6 +1073,116 @@ static void numblock_writeback(NumBlock* b) {
             writeback_symbol(b->syms[i], expr_new_real(b->regs[i]));
 }
 
+/* ---- int64 execution of a scalar block (exact-integer loops) -----------
+ *
+ * The double VM cannot run an exact-integer loop such as Do[s = s + i, {i, n}]
+ * with `s` seeded to the exact Integer 0: its result would be a Real where the
+ * interpreter gives an Integer, and it cannot see the overflow into a bignum
+ * that the interpreter handles by promoting to GMP. So a block with no inexact
+ * leaf (forces_real == false) used to bail straight to the interpreter.
+ *
+ * When every operation is integer-closed the SAME compiled bytecode runs in
+ * int64 with overflow-checked arithmetic: exact by construction, and on the
+ * first overflow -- or the first op that is not integer-closed (a division,
+ * a transcendental, a non-integer constant) -- the whole attempt bails and the
+ * interpreter re-runs from untouched state. So the answer is always the
+ * interpreter's, exactly as an explicit Compile[] of an _Integer body behaves,
+ * overflow-then-fall-back included. The addition is strictly a fast path: a
+ * block that reaches here already had the interpreter as its only outcome. */
+
+/* Widest double that is an exact integer (2^53). A constant beyond it cannot be
+ * recovered losslessly, so the int64 run declines rather than guess. */
+#define NL_I64_CONST_MAX 9007199254740992.0
+
+/* Run one statement program in int64. Returns true on success (*out set);
+ * false means the computation is not exact-integer -- overflow, division, a
+ * transcendental, an array load, or an out-of-range / non-integer constant --
+ * and the caller abandons the int64 attempt for the interpreter. */
+static bool numprog_run_i64(const NumProg* p, const int64_t* regs,
+                            int64_t* stack, int64_t* out) {
+    size_t sp = 0;
+    const NInsn* c = p->code;
+    for (size_t i = 0; i < p->ncode; i++) {
+        switch (c[i].op) {
+            case OP_CONST: {
+                double d = p->consts[c[i].a];
+                /* Only an exact, in-range integer constant is representable. A
+                 * folded rational (1/2 -> 0.5) is fractional and rejected here,
+                 * which is what makes an exact-rational loop decline. */
+                if (!isfinite(d) || d != rint(d)
+                    || d < -NL_I64_CONST_MAX || d > NL_I64_CONST_MAX)
+                    return false;
+                stack[sp++] = (int64_t)d;
+                break;
+            }
+            case OP_VAR: stack[sp++] = regs[c[i].a]; break;
+            case OP_ADD: { int64_t b = stack[--sp], a = stack[--sp], r;
+                           if (ci_add_i64(a, b, &r)) return false;
+                           stack[sp++] = r; break; }
+            case OP_SUB: { int64_t b = stack[--sp], a = stack[--sp], r;
+                           if (ci_sub_i64(a, b, &r)) return false;
+                           stack[sp++] = r; break; }
+            case OP_MUL: { int64_t b = stack[--sp], a = stack[--sp], r;
+                           if (ci_mul_i64(a, b, &r)) return false;
+                           stack[sp++] = r; break; }
+            case OP_NEG: { int64_t a = stack[--sp], r;
+                           if (ci_neg_i64(a, &r)) return false;
+                           stack[sp++] = r; break; }
+            case OP_ABS: { int64_t a = stack[--sp], r;
+                           if (ci_abs_i64(a, &r)) return false;
+                           stack[sp++] = r; break; }
+            case OP_POW: { int64_t e = stack[--sp], b = stack[--sp], r;
+                           if (e < 0) return false;   /* 1/b^|e| is a Rational */
+                           if (ci_powi_i64(b, e, &r)) return false;
+                           stack[sp++] = r; break; }
+            /* OP_DIV is a Rational unless it divides evenly, and the interpreter
+             * returns that exact Rational; OP_SIN..OP_ARCTAN / OP_SQRT / OP_LOG /
+             * OP_EXP leave the integers; OP_LOAD reads a float64 buffer. All of
+             * them mean "not an exact-integer loop" -- decline. */
+            default: return false;
+        }
+    }
+    *out = stack[sp - 1];
+    return true;
+}
+
+/* Seed int64 registers from the block variables' integer OwnValues. Returns
+ * false if any seeded variable is not a plain machine Integer -- a BigInt or
+ * Rational seed cannot be trusted to int64, so the interpreter runs instead. An
+ * assigned-before-read temporary has no seed and starts at 0; pass 2 guarantees
+ * it is written before it is read, so that 0 is never observed. */
+static bool numblock_seed_i64(const NumBlock* b, int64_t* iregs) {
+    for (size_t i = 0; i < b->nvars; i++) {
+        iregs[i] = 0;
+        if ((int)i == b->counter_idx) continue;   /* set per iteration */
+        if (!b->seeded[i]) continue;              /* temporary: starts 0 */
+        Expr* cur = evaluate((Expr*)b->syms[i]);
+        bool ok = cur && cur->type == EXPR_INTEGER;
+        if (ok) iregs[i] = cur->data.integer;
+        expr_free(cur);
+        if (!ok) return false;
+    }
+    return true;
+}
+
+/* Run one pass of the block in int64. Returns false (decline) on the first
+ * statement that is not exact-integer. */
+static bool numblock_step_i64(const NumBlock* b, int64_t* iregs, int64_t* stack) {
+    for (size_t i = 0; i < b->nstmts; i++) {
+        int64_t v;
+        if (!numprog_run_i64(&b->progs[i], iregs, stack, &v)) return false;
+        iregs[b->lhs[i]] = v;
+    }
+    return true;
+}
+
+/* Write every assigned variable's final int64 value back as an exact Integer. */
+static void numblock_writeback_i64(const NumBlock* b, const int64_t* iregs) {
+    for (size_t i = 0; i < b->nvars; i++)
+        if (b->assigned[i])
+            writeback_symbol(b->syms[i], expr_new_integer(iregs[i]));
+}
+
 /* ---- Array-mode block: all variables are same-shape float64 NDArrays ---- */
 
 /* Build an array block from an imperative body (no loop counter). Every LHS
@@ -1349,7 +1460,21 @@ Expr* numloop_do_count(const Expr* body, int64_t n) {
     }
 
     if (!numblock_build(&b, body, NULL, 0.0)) return NULL;
-    if (!b.forces_real) { numblock_free(&b); return NULL; }
+
+    if (!b.forces_real) {
+        /* Exact-integer loop: run the block in int64, overflow-checked. */
+        int64_t* iregs  = malloc(b.nvars * sizeof(int64_t));
+        int64_t* istack = malloc((b.max_stack ? b.max_stack : 1) * sizeof(int64_t));
+        if (!iregs || !istack || !numblock_seed_i64(&b, iregs)) {
+            free(iregs); free(istack); numblock_free(&b); return NULL;
+        }
+        bool ibail = false;
+        for (int64_t k = 0; k < n; k++)
+            if (!numblock_step_i64(&b, iregs, istack)) { ibail = true; break; }
+        if (!ibail) numblock_writeback_i64(&b, iregs);   /* vars untouched on bail */
+        free(iregs); free(istack); numblock_free(&b);
+        return ibail ? NULL : expr_new_symbol(SYM_Null);
+    }
 
     double* stack = malloc(b.max_stack * sizeof(double));
     if (!stack) { numblock_free(&b); return NULL; }
@@ -1391,7 +1516,23 @@ Expr* numloop_do_range(const Expr* body, const Expr* var,
 
     NumBlock b;
     if (!numblock_build(&b, body, var, (double)imin)) return NULL;
-    if (!b.forces_real) { numblock_free(&b); return NULL; }
+
+    if (!b.forces_real) {
+        /* Exact-integer loop: run the block in int64, overflow-checked. */
+        int64_t* iregs  = malloc(b.nvars * sizeof(int64_t));
+        int64_t* istack = malloc((b.max_stack ? b.max_stack : 1) * sizeof(int64_t));
+        if (!iregs || !istack || !numblock_seed_i64(&b, iregs)) {
+            free(iregs); free(istack); numblock_free(&b); return NULL;
+        }
+        bool ibail = false;
+        for (int64_t i = imin; (di > 0) ? (i <= imax) : (i >= imax); i += di) {
+            iregs[b.counter_idx] = i;
+            if (!numblock_step_i64(&b, iregs, istack)) { ibail = true; break; }
+        }
+        if (!ibail) numblock_writeback_i64(&b, iregs);   /* vars untouched on bail */
+        free(iregs); free(istack); numblock_free(&b);
+        return ibail ? NULL : expr_new_symbol(SYM_Null);
+    }
 
     double* stack = malloc(b.max_stack * sizeof(double));
     if (!stack) { numblock_free(&b); return NULL; }
@@ -1490,7 +1631,30 @@ Expr* numloop_for(const Expr* start, const Expr* test,
 
     NumBlock b;
     if (!numblock_build(&b, body, ivar, (double)i0)) return NULL;
-    if (!b.forces_real) { numblock_free(&b); return NULL; }
+
+    if (!b.forces_real) {
+        /* Exact-integer loop: run the block in int64, overflow-checked. The
+         * trip count uses the same (double)i vs bound test as the double path,
+         * so the two agree on how many iterations run. */
+        int64_t* iregs  = malloc(b.nvars * sizeof(int64_t));
+        int64_t* istack = malloc((b.max_stack ? b.max_stack : 1) * sizeof(int64_t));
+        if (!iregs || !istack || !numblock_seed_i64(&b, iregs)) {
+            free(iregs); free(istack); numblock_free(&b); return NULL;
+        }
+        bool ibail = false;
+        int64_t ii = i0;
+        while (cmp_eval((double)ii, bound, op)) {
+            iregs[b.counter_idx] = ii;
+            if (!numblock_step_i64(&b, iregs, istack)) { ibail = true; break; }
+            ii++;
+        }
+        if (!ibail) {
+            numblock_writeback_i64(&b, iregs);
+            writeback_symbol(ivar, expr_new_integer(ii));   /* For keeps its counter */
+        }
+        free(iregs); free(istack); numblock_free(&b);
+        return ibail ? NULL : expr_new_symbol(SYM_Null);
+    }
 
     double* stack = malloc(b.max_stack * sizeof(double));
     if (!stack) { numblock_free(&b); return NULL; }

@@ -31,26 +31,47 @@ OUTLINE_RE = re.compile(r"^Out\[(\d+)\]=\s?(.*)$")
 FENCE_RE = re.compile(r"^```")
 
 
-def run_session(lines, timeout=120):
-    inp = "\n".join(lines) + "\n"
-    proc = subprocess.run([str(MATHILDA)], input=inp, capture_output=True,
-                          text=True, timeout=timeout)
-    outs = []
-    sl = proc.stdout.splitlines()
-    i = 0
-    while i < len(sl):
-        m = OUT_RE.match(sl[i])
-        if m:
-            buf = [m.group(1)]
-            i += 1
-            while (i < len(sl) and sl[i].strip() != ""
-                   and not sl[i].startswith("Out[") and not sl[i].startswith("In[")):
-                buf.append(sl[i])
-                i += 1
-            outs.append("\n".join(buf).rstrip())
-        else:
-            i += 1
-    return outs
+def run_session(lines, timeout=180):
+    """Evaluate `lines` in one Mathilda session and return one output string per
+    line, in order.
+
+    Mathilda serves a non-tty stdin with a line-based NDJSON protocol (see
+    src/repl.c pipe_mode_loop), NOT the interactive In[]/Out[] transcript — so
+    each expression is sent as {"id": k, "expr": ...} and its result read back
+    from the matching {"id": k, "type": "expr", "payload": ...} line. The
+    payload is exactly the OutputForm string the REPL would print as Out[k]=.
+    Matching by id keeps a `;`-suppressed line (payload "Null") and any raw
+    Print output from confusing the alignment."""
+    import json
+    proc = subprocess.Popen([str(MATHILDA)], stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                            text=True, bufsize=1)
+    payloads = {}
+    try:
+        for k, e in enumerate(lines, 1):
+            proc.stdin.write(json.dumps({"id": k, "expr": e}) + "\n")
+        proc.stdin.write('{"type":"quit"}\n')
+        proc.stdin.flush()
+        proc.stdin.close()
+        for line in proc.stdout:
+            line = line.strip()
+            if not (line.startswith("{") and '"type"' in line):
+                continue  # raw Print/CompilePrint output, or a blank line
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            if msg.get("type") == "expr" and "id" in msg:
+                payloads.setdefault(msg["id"], msg.get("payload", ""))
+            elif msg.get("type") == "error" and "id" in msg:
+                payloads.setdefault(msg["id"], msg.get("message", ""))
+        proc.wait(timeout=timeout)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    # One entry per input line, in order; missing (e.g. a bare-Null with no
+    # emit) becomes "" so the position still lines up with `lines`.
+    return [payloads.get(k, "") for k in range(1, len(lines) + 1)]
 
 
 def extract_inputs(md_text):

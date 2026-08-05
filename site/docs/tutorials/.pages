@@ -16,3 +16,4 @@ nav:
   - 15-interval-arithmetic.md
   - 11-symbolic-summation.md
   - 12-infinite-products.md
+  - 16-compilation.md

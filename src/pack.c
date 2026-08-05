@@ -815,6 +815,15 @@ static void pack_mark_aware_heads(void) {
         /* Read rank/dims/dtype only, never an element. */
         "Length", "Dimensions", "Depth", "Head", "ByteCount",
         "NDArrayQ", "DataType",
+        /* N reads every element, but its answer on an int64 buffer IS a real
+         * array -- the machine reals the interpreter's N gives element by
+         * element -- so nothing truncates and no element's head changes. Its
+         * EXPR_NDARRAY case in numericalize_rec (src/numeric.c) widens the
+         * whole buffer to float64 in one pass, inheriting presentation, so
+         * N[Range[10^6]] stays a packed array instead of materialising to a
+         * list of boxed reals. The (double) cast rounds int64 past 2^53 exactly
+         * as N does to the same integer scalar, so the surfaces agree. */
+        "N",
         /* Materialise or index through the exact accessors. Extract joined
          * 2026-08-01 with its buffer gather: it is Part's own selector, so the
          * justification is Part's -- ndarray_element_to_expr yields an exact

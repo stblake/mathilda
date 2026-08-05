@@ -22,6 +22,14 @@ Evaluates an expression sequentially over an iteration range.
   runs interpreted, so `expr` is evaluated exactly as many times as the iterator
   specifies and its side effects fire exactly that often. The same rule governs
   `For`, `While`, `Nest`, `NestWhile`, `FixedPoint`, `Fold` and `Map`.
+- An **exact-integer** counter body (`Do[s = s + i, {i, 1, n}]`, `For[...]`, no
+  inexact leaf) takes the same fast path in overflow-checked `int64` and returns
+  an exact `Integer` — the double stack is used only when the body is inexact. On
+  an `int64` overflow, or a step that is not integer-closed (a `Rational` from a
+  division, a transcendental), the whole run bails to the interpreter, so the
+  answer is always the interpreter's: `Do[p = p*i, {i, 1, 25}]` is the full `25!`
+  bignum, `Do[s = s + i/2, {i, 1, 10}]` is `55/2`, never a wrapped machine
+  integer.
 
 ```mathematica
 In[1]:= Do[Print[i], {i, 3}]

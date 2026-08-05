@@ -16,6 +16,8 @@
 #include "symtab.h"
 #include "sym_names.h"
 #include "root_numeric.h"
+#include "ndarray.h"    /* ndt_get_i / ndarray_to_nested_list: N over a packed
+                         * integer buffer widens it to float64 in place. */
 
 #include <limits.h>
 #include <math.h>
@@ -763,7 +765,49 @@ static Expr* numericalize_rec(const Expr* e, NumericSpec spec) {
 #endif
             return expr_new_real(e->data.real);
         case EXPR_STRING:  return expr_copy((Expr*)e);
-        case EXPR_NDARRAY:  return expr_copy((Expr*)e); /* already machine-precision */
+        case EXPR_NDARRAY:
+            /* A machine (real/complex) buffer is already numeric and passes
+             * through. An INTEGER buffer still has to be numericalized: N of a
+             * packed integer array must give a packed float64 array -- the same
+             * machine reals the interpreter's N gives element by element -- not
+             * the int64 buffer copied verbatim, and not an unpacked list of
+             * boxed reals. Widen the whole buffer in one pass, inheriting the
+             * source's presentation (a packed List stays a packed List; a
+             * visible NDArray stays visible). This is what lets N claim
+             * packed_int64_ok (src/pack.c): the transparency gate no longer
+             * materialises N's integer argument, so control reaches here rather
+             * than the element-by-element rebuild in numericalize_function. */
+            if (e->data.ndarray.dtype == NDT_INT64) {
+                if (spec.mode == NUMERIC_MODE_MACHINE) {
+                    const int rank = e->data.ndarray.rank;
+                    const int64_t* dims = e->data.ndarray.dims;
+                    size_t sz = 1;
+                    for (int i = 0; i < rank; i++) sz *= (size_t)dims[i];
+                    double* out = (double*)malloc(sz * sizeof(double));
+                    if (out) {
+                        const void* in = e->data.ndarray.data;
+                        /* Exact for |v| < 2^53; larger int64 values round to the
+                         * nearest double -- which is exactly what N does to the
+                         * same integer as a scalar, so the two surfaces agree. */
+                        for (size_t i = 0; i < sz; i++)
+                            out[i] = (double)ndt_get_i(in, i, NDT_INT64);
+                        return expr_new_ndarray_like(e, rank, dims, out,
+                                                     NDT_FLOAT64);
+                    }
+                    /* Out of memory: fall through to the verbatim copy. */
+                } else {
+                    /* Precision request N[arr, p]: MPFR is not a machine dtype,
+                     * so there is no packed answer. Materialise and numericalize
+                     * element by element -- exactly the path the gate used to
+                     * force by materialising an int64 argument for a head
+                     * without the int64 claim, so the answer is unchanged. */
+                    Expr* nested = ndarray_to_nested_list(e);
+                    Expr* r = numericalize_rec(nested, spec);
+                    expr_free(nested);
+                    return r;
+                }
+            }
+            return expr_copy((Expr*)e); /* already machine-precision */
         case EXPR_COMPILED: return expr_copy((Expr*)e); /* opaque object; N[] is a no-op */
         case EXPR_SYMBOL:  return numericalize_symbol(e, spec);
         case EXPR_FUNCTION: return numericalize_function(e, spec);

@@ -2307,3 +2307,42 @@ Rules:
   cache was safe; the bug was orthogonal but real. `expr_copy` is a refcount
   bump, so a "copy" shares the node and its cache; only a physical copy
   (`expr_unshare`) must null the cache pointer to avoid a double free.
+
+## Verify that your verification tool actually verifies (2026-08-05)
+
+`site/verify_tutorial.py` piped a tutorial's `In[]` lines into `./Mathilda` and
+parsed the stdout for `Out[]=` lines. But Mathilda serves a **non-tty stdin over
+the NDJSON pipe protocol** (`src/repl.c pipe_mode_loop`), not the interactive
+`In[]/Out[]` transcript — so the tool matched **zero** `Out[]` lines,
+`zip(pairs, [])` iterated nothing, and it printed `OK` for **every** tutorial,
+forever. "Verified against the binary" was aspirational, not enforced.
+
+- **Rule**: a checker that can pass with an empty result set is not a checker.
+  Before trusting one, feed it a deliberately-wrong expectation and confirm it
+  FAILS. (One `MISMATCH` from the fixed tool is worth more than a hundred green
+  runs from the broken one.)
+- **How to drive Mathilda headlessly**: send `{"id": k, "expr": "..."}` lines on
+  stdin, read `{"id": k, "type": "expr", "payload": ...}` back; the payload is
+  the exact `OutputForm` a REPL user sees as `Out[k]=`. Match by id, not by
+  position, so a `;`-suppressed line (payload `"Null"`) and raw `Print` /
+  `CompilePrint` stdout can't shift the alignment.
+- **Tutorial `In[k]:=` expressions must be single-line.** The pipe protocol (and
+  the verifier) send one line per expression; a wrapped `Compile[...]` across two
+  markdown lines truncates to the first line, and the definition silently never
+  binds. Caught only because the fixed verifier flagged `logistic[0.5, 20]`
+  coming back unevaluated.
+
+## A packed-int64 buffer materialises for any aware head lacking `packed_int64_ok` (2026-08-05)
+
+`N[Range[10^6]]` unpacked to a list of boxed reals while `N[Range[1., 10^6]]`
+stayed packed. Root cause is NOT in `N`: `eval.c`'s transparency gate
+materialises an `int64` packed buffer to a nested `List` for any packed-aware
+head that has not claimed `packed_int64_ok` (the `Sin[int64]={0,0,0}` guard
+class), so `N` received a plain list and `numericalize`'s element rebuild dropped
+packing. Real buffers skip the gate branch and pass through untouched — hence the
+asymmetry between the same operation on int vs real data. Fix = claim
+`packed_int64_ok` (so the buffer reaches the builtin) AND make the builtin
+actually handle the buffer (`numericalize_rec`'s `EXPR_NDARRAY` case widens
+int64→float64 via `expr_new_ndarray_like`, inheriting presentation). One without
+the other is incomplete: the claim alone would hand `N` an int64 array it copies
+verbatim (wrong: int, not real); the widening alone is never reached.

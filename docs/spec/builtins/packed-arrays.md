@@ -460,6 +460,12 @@ packed however short it is, and a compiled call is no different. A body that
 **builds** its array (`ConstantArray`, `Table`, `NestList`) has nothing to inherit
 and follows the producer rule instead — the threshold and `$AutoArrayPacking`.
 
+`N` is a derived-rule operation on this axis: `N[Range[10^6]]` widens the packed
+`int64` buffer to a packed `float64` one in a single pass and keeps the
+presentation (`NDArrayQ[N[Range[10^6]]]` is `True`), rather than materialising a
+list of boxed reals. The `(double)` widening rounds an `int64` past 2^53 exactly
+as `N` does to the same integer scalar, so the packed and unpacked answers agree.
+
 A **complex** result is never packed, for the same reason automatic packing
 refuses complex lists: `Complex[re, 0.]` is not a form the evaluator produces.
 

@@ -1,93 +1,51 @@
-# O(1) Associations + Compile[]/auto-compile support
+# Advanced tutorial: Compilation & auto-compilation (+ two enabling fixes)
 
-Full plan: `/Users/user/.claude/plans/i-would-like-to-twinkly-umbrella.md`
+## Fixes made first (both verified, unit-tested)
 
-## Part A — Core interpreter: O(1) Associations (DONE)
+- [x] **N over a packed integer array** now stays packed. `N[Range[10^6]]` used
+      to unpack to a list of boxed reals (the gate handed the int64 buffer to N
+      as a plain list; the element-by-element rebuild dropped packing). Fix:
+      `N` claims `packed_int64_ok` (src/pack.c INT64_OK) + `numericalize_rec`'s
+      EXPR_NDARRAY case widens an int64 buffer to float64 in one pass, inheriting
+      presentation (src/numeric.c). Test: `test_n_over_integer_packs`.
+- [x] **Integer auto-compiled loops** now run at machine speed. numloop's double
+      VM refused an exact-integer accumulator (Real result, no overflow guard).
+      Added an int64 twin execution of the imperative block (overflow-checked
+      ci_*_i64; bail -> interpreter on overflow/rational/transcendental), wired
+      into do_count / do_range / For. `Do[s=s+i,{i,1,10^7}]`: 6.2 s -> 0.070 s
+      (89x), exact Integer, overflow -> bignum. Test: `test_int64_exact_loops`.
 
-- [x] `src/assoc_index.{c,h}`: persistent key→position hash index (`AssocIndex`)
-- [x] `src/expr.h`: add `index` pointer to the `EXPR_FUNCTION` union arm (free slack; `sizeof(Expr)` unchanged at 48)
-- [x] `src/expr.c`: init NULL in `expr_new_function` + `expr_unshare`; free in `expr_free`
-- [x] `src/assoc.c`: `assoc_lookup_value` with lazy index build; route `Lookup`/`KeyExistsQ`/`KeyMemberQ`/`KeyFreeQ`
-- [x] `src/part.c`: route `assoc_part_single`; fix `delete_path` in-place aliasing bug
-- [x] `src/eval.c`: route `<|…|>[key]` and `Key[k][assoc]` accessors; **in-loop timestamp fixed-point exit** (node stability so the index persists)
-- [x] `tests/bench_assoc.c`: C-level O(1) primitive gate + interpreter `Map[Lookup]` gate; `assoc_index.c` added to `COMMON_SRC`
-- [x] docs: `data-structures.md` + changelog `2026-08-03.md`; lessons captured
+## Tutorial
 
-### Review — Part A
+- [x] Research: compile facilities, $AutoCompilation, $AutoArrayPacking, pipe
+      protocol, verifier, machine = i9-9880H, Python 3.11.15 + NumPy 2.4.4.
+- [x] All measurements taken (integer/double-recurrence/array/association),
+      parity checked vs interpreter and vs NumPy/Python.
+- [x] Write site/docs/tutorials/16-compilation.md (verified In/Out + measured tables).
+- [x] Fix verify_tutorial.py (was vacuous — pipe mode emits NDJSON, 0 Out[]; now
+      drives the pipe protocol and matches by id).
+- [x] Verify the tutorial: `OK: 45 inputs, 0 mismatch(es)`.
+- [x] Wire into .pages + index.md.
+- [x] Build the site: `mkdocs build --strict` clean, no link warnings.
+- [x] Changelog + docs/spec notes (control-flow.md, packed-arrays.md).
 
-- **Result:** single-key lookup is amortised **O(1)** (was O(n) scan). Primitive
-  gate: hit ratio 1.04, miss 0.88 across a 2× size doubling. Interpreter
-  `Total[Map[Lookup[a,#]&, keys]]`: **>100×** faster on 10⁴ entries, O(1) per probe.
-- **Cost:** `sizeof(Expr)` unchanged; numeric hot loops perf-neutral (logistic map
-  ~16 ns/iter, unchanged); no memory leaks (valgrind identical to baseline; 2000-cycle
-  stress flat).
-- **Tests:** association + eval-timestamp/eager-exit/sharing + list/patterns/match/iter/
-  replace/sort/funcprog/packed/unevaluated suites all pass; `make check-c99` clean.
-- ~~**Known limitation:** `Do`/`Table`/`Fold` re-evaluate a loop-invariant value
-  O(n) per step (eval-clock churn).~~ **FIXED (Part A′, 2026-08-05)** — see below.
+## Review
 
-## Part A′ — Loop-invariant eval-clock churn fix (DONE)
+- **Both fixes verified end to end.** check-c99, check-packed-aware,
+  check-array-exactness (0 MIXED) all clean; suites numeric, iter, association,
+  packed_list (+new N test), ndarray*, eval_timestamps, compile_assoc, numloop
+  (+new int64 test), autocompile, eval, compile, compiledfunction all pass.
+- **Integer auto-compile**: `Do[s=s+i,{i,1,10^7}]` 6.2 s → 0.070 s (89×), exact
+  Integer, overflow → bignum, rational → interpreter. int64 twin runner reuses
+  the existing bytecode; strictly additive.
+- **N packing**: `N[Range[10^6]]` now packed float64, values exact, MPFR path
+  and real/complex buffers unchanged, `$AutoArrayPacking=False` respected.
+- **Tutorial**: 45 verified transcripts; every perf claim measured vs NumPy 2.4.4
+  / Python 3.11 on the i9-9880H. The verifier itself was broken (silently passing
+  everything) and is now real.
 
-The Part A caveat is resolved: `Do`/`Table`/`Fold` over a loop-invariant literal
-value are now **O(1) per iteration**, general (lists/matrices/nested data, not just
-associations).
-
-- [x] `src/eval.c`: `g_last_rule_change_clock` finer epoch + `eval_rule_epoch_*`;
-      GROUND flag in `last_evaluated_at` top bit (zero `sizeof(Expr)` cost);
-      `ground_head` (six pure constructors) + `node_compute_ground`; short-circuits
-      + stamp site; `eval_node_stamp`/`eval_node_is_ground` accessors.
-- [x] `src/symtab.c` (down-value/clear/remove mark epoch; own-value soft unless
-      Protected), `src/attr.c` + `src/core.c` (attribute/Protect sites → rule epoch).
-- [x] `tests/bench_assoc.c` Do-loop O(1) gate (ratio 1.04); `tests/test_eval_timestamps.c`
-      GROUND correctness (flag present/absent, survives soft bump, invalidated by
-      rule change, delayed symbolic assoc never stale).
-- [x] Verified: 20+ evaluator/pattern/rule suites pass; `make check-c99` clean;
-      valgrind byte-identical to baseline (zero new allocations).
-- **Soundness:** GROUND is restricted to six inert structural constructors whose
-  canonical form is a pure function of args; straddle-safe consumption of child
-  bits; a wrong answer would need redefining a constructor head without advancing
-  the rule epoch, which no mutation path does. Details in changelog 2026-08-03.md.
-
-## Part B — Compile[] & auto-compilation for Associations (NOT STARTED)
-
-Built on Part A. Staged milestones; the compiler "cliff" means each is independently
-shippable with no regression (an unsupported construct just bails to the interpreter).
-
-- [x] **B1** Read-only parameter bag — DONE (2026-08-05). `CT_ASSOC` type + tightened
-      `CT_IS_ARRAY`; `{p, _Association[, _valtype]}` argspec; borrowed handle in a
-      scalar-bank register (index pre-built at marshalling); `ASSOC_LOOKUP`/`HASKEY`
-      (K_KERN1, pure → CSE/LICM-hoisted), `ASSOC_LEN`, `ASSOC_VALUES`; program-owned
-      `AssocSpec` pool (interned for CSE); const-fold of literal/global associations
-      (auto-compile story); runtime-varying key bails (= B2). `tests/test_compile_assoc.c`
-      (13 tests), valgrind = baseline, check-c99 + compile-coverage clean.
-- [x] **B2** Runtime-varying (integer/real) keys — DONE (2026-08-05). `ASSOC_LOOKUP_DYN`
-      (K_KERN2, pure); key emitted as a machine scalar in `R[b]`, `flags = result_ct|key_ct<<4`;
-      malloc-free `assoc_lookup_value_i64`/`_real` probe Part A's index with a stack `Expr`
-      (2 M probes / 20 k bag ≈ 130 ms). Array/string runtime keys still bail.
-- [x] **B3** Associations as first-class VM values — DONE (2026-08-05). `KeyDrop`/`KeyTake`
-      (`ASSOC_KEYSEL`) and `Counts` (`ASSOC_COUNTS`, array→assoc) produce OWNED associations
-      in the array bank; `cf_unbox`/result-extraction return them; native cores
-      (`assoc_key_select`, `assoc_counts_ndarray`, no evaluator). **Composition** works to
-      any depth (`Lookup[KeyDrop[p,k],j]`, `KeyTake[KeyDrop[…]]`, `Total[Values[Counts[v]]]`)
-      via `materialize_assoc_src` + free-source discipline (in-instruction for array-producers,
-      free_if_tmp for scalar readers). **Deferred:** `KeyUnion` (→list), `PositionIndex`
-      (list-valued) — don't fit the machine-scalar value model.
-- [x] **B4** Higher-order transforms via a compiled callee — DONE (2026-08-05, core).
-      `Map[f, assoc]` (`ASSOC_MAP`) and `Select[assoc, pred]` (`ASSOC_SELECT`) compile the
-      embedded function into a self-contained callee (`compile_value_callee` extracts the
-      fn body — pure fn / `Function[]` / bare head), invoked per value via `vm_call` (no
-      evaluator); program-owned `AssocCalleeSpec` pool. Keys copied through, type-changing
-      callees ok, composes over B3 producers (`Map[f, KeyDrop[…]]`). **Deferred:** consuming
-      a Map/Select result mid-body, and the grouping family (`Merge`/`GroupBy`/`CountsBy`).
-- [x] **B5** Functional update — DONE (2026-08-05). `Append[assoc, key -> value]` (`ASSOC_SET`)
-      produces a new association with the key set (replace-in-place preserving order, else
-      append), value = any compiled machine expression coerced to the bag type; native
-      `assoc_set_key`, no evaluator; composes over producers. Mutating `AssociateTo[sym, …]`
-      is NOT compiled (rebinds a symbol OwnValue — a side effect the register VM does not
-      model) and stays in the interpreter, by design.
-
-**Part B COMPLETE** — Compile[]/auto-compilation handle the Association surface across
-B1 (read-only bag) → B2 (runtime keys) → B3 (owned set-algebra values) → B4 (higher-order
-via compiled callee) → B5 (functional update), no evaluate() at runtime; unsupported
-constructs bail cleanly. Deferred niceties: consuming a Map/Select result mid-body, the
-grouping family (Merge/GroupBy/CountsBy), KeyUnion/PositionIndex (non-scalar shapes).
+## Lessons captured
+- A "verification" tool that never sees output passes everything — verify the
+  verifier. (verify_tutorial.py drove In[]/Out[]; the binary serves NDJSON.)
+- Tutorial `In[k]:=` expressions must be single-line: the pipe protocol (and the
+  verifier) send one line per expression; a wrapped `Compile[...]` truncates.
