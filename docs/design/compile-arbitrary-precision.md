@@ -423,9 +423,15 @@ The arena is the primary leak surface. Contract:
   `mpz_*` opcodes; `ncpx` complex opcodes (selector-dispatched) + boxing to
   `Complex[MPFR,MPFR]` via `numeric_mpfr_make_complex`.
 - **P3 — auto-compilation + samplers.** Substrate ✅ (`autocompile_new_prec` /
-  `autocompiled_eval_mpfr`); **wiring the samplers** (`NIntegrate`/`NSum`/
-  `FindRoot`/`Plot`/NDSolve to call it at high `WorkingPrecision`) and the
-  end-to-end benchmarks remain.
+  `autocompiled_eval_mpfr`). ✅ **`NIntegrate`, `NSum`, `FindRoot` wired** — each
+  compiles the held body in MPFR at high `WorkingPrecision` and evaluates each
+  sample point / summand term / Newton step through it, with the same per-point
+  faithful-degrade fallback as the machine path (results identical to the
+  interpreter; leak-free; existing suites pass). Measured: NIntegrate ~1.5× on
+  arithmetic-heavy bodies, FindRoot ~1.2×; NSum benefits less (its
+  Euler–Maclaurin contour-derivative path is complex-input). Remaining:
+  complex-input autocompile (`autocompile_new_prec_z`) for the NSum contour path
+  and complex samplers, `Plot`/`NDSolve`, and end-to-end benchmarks.
 
 **Known-remaining, tracked here so it does not rot:** (a) the coverage-audit
 precision family (§13) — not yet added; the existing machine audit is unaffected

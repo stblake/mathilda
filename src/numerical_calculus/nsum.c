@@ -192,6 +192,11 @@ typedef struct {
      * them.  Only built for a machine-precision request: the MPFR path needs
      * more than 53 bits per term and must keep the interpreter. */
     AutoCompiled* ac;
+    /* Compiled MPFR fast path for a high-WorkingPrecision sum: the compiled body
+     * evaluates the summand at the working precision, replacing the per-term
+     * tree-walk.  Same faithful-degrade contract as `ac` (NULL result ⇒ interpret
+     * that term). */
+    AutoCompiled* ac_prec;
 } NsCtx;
 
 /* The actual index value x_k = imin + k·di as a fresh evaluated number. */
@@ -226,6 +231,15 @@ static Expr* ns_eval_expr_at(NsCtx* c, Expr* e, Expr* value) {
 
 /* Evaluate the summand at the index value (consumed). */
 static Expr* ns_eval_at(NsCtx* c, Expr* value) {
+#ifdef USE_MPFR
+    /* Compiled MPFR fast path: the index value is already a numeric Expr and the
+     * compiled body returns the summand at the working precision, or NULL to
+     * interpret this term. */
+    if (c->ac_prec && c->spec.mode == NUMERIC_MODE_MPFR) {
+        Expr* r = autocompiled_eval_mpfr(c->ac_prec, (const Expr* const*)&value);
+        if (r) { expr_free(value); return r; }
+    }
+#endif
     return ns_eval_expr_at(c, c->body, value);
 }
 
@@ -1071,10 +1085,12 @@ static Expr* ns_em_machine(NsCtx* c, const char* var, NsOpts* o, long settle) {
 }
 
 #ifdef USE_MPFR
-/* f at a continuous real x, MPFR. */
+/* f at a continuous real x, MPFR.  Routes through ns_eval_at (not
+ * ns_eval_expr_at) so the Euler–Maclaurin tail integral also takes the compiled
+ * MPFR fast path when the summand compiled. */
 static bool ns_sample_x_mpfr(void* vc, const mpfr_t x, mpfr_t out_re, mpfr_t out_im) {
     NsCtx* c = vc;
-    Expr* num = ns_eval_expr_at(c, c->body, expr_new_mpfr_copy(x));
+    Expr* num = ns_eval_at(c, expr_new_mpfr_copy(x));
     if (!num) return false;
     bool inexact, ok = get_approx_mpfr(num, out_re, out_im, &inexact);
     if (ok && (!mpfr_number_p(out_re) || !mpfr_number_p(out_im))) ok = false;
@@ -1673,7 +1689,7 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
     NsBind bind; ns_bind_snapshot(&bind, var);
     NsCtx ctx;
     ctx.body = body; ctx.imin = imin; ctx.di = di; ctx.bind = &bind;
-    ctx.ac = NULL;
+    ctx.ac = NULL; ctx.ac_prec = NULL;
 #ifdef USE_MPFR
     if (o->prec_mpfr) { ctx.spec.mode = NUMERIC_MODE_MPFR; ctx.spec.bits = o->bits; ctx.spec.preserve_inexact = false; }
     else ctx.spec = numeric_machine_spec();
@@ -1686,10 +1702,17 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
      * index is bound here through the symbol table, so an inner NSum's body
      * (which sees the outer index only as a symbol) is left to the interpreter
      * by the usual bail — no special case needed. */
-    if (!o->prec_mpfr) {
+    {
         Expr* vsym = expr_new_symbol(var);
         const Expr* vs[1] = { vsym };
-        ctx.ac = autocompile_new(body, vs, 1);
+        if (!o->prec_mpfr) {
+            ctx.ac = autocompile_new(body, vs, 1);
+        }
+#ifdef USE_MPFR
+        else if (o->bits > 0) {
+            ctx.ac_prec = autocompile_new_prec(body, vs, 1, (long)o->bits);
+        }
+#endif
         expr_free(vsym);
     }
 
@@ -1729,6 +1752,7 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
     }
 
     autocompiled_free(ctx.ac);
+    autocompiled_free(ctx.ac_prec);
     ns_bind_restore(&bind);
     return out;
 }

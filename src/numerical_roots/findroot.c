@@ -105,6 +105,11 @@ typedef struct {
      * a symbolic derivative or a finite-difference of some other body). */
     Expr*         main_f;        /* borrowed; the function ac_f compiles */
     AutoCompiled* ac_f;          /* owned; NULL unless scalar/machine/real */
+    /* Compiled MPFR fast path for a high-WorkingPrecision scalar solve: the
+     * compiled main function (and, through the same funnel, its finite-difference
+     * derivative) is evaluated at the working precision instead of interpreted per
+     * Newton step.  NULL unless scalar/MPFR/real.  Same faithful-degrade contract. */
+    AutoCompiled* ac_f_prec;
 } FrOpts;
 
 /* Per-variable temporary OwnValue snapshot, restored on exit. */
@@ -521,6 +526,15 @@ static Expr* fr_eval_with_bindings(Expr* f, FrVarBind* binds,
     if (f == opts->main_f) {
         Expr* c = fr_try_compiled(opts->ac_f, values, n, spec);
         if (c) return c;
+#ifdef USE_MPFR
+        /* Compiled MPFR fast path: `values` are numeric Exprs (EXPR_MPFR); the
+         * compiled body returns f at the working precision, or NULL to interpret. */
+        if (opts->ac_f_prec && spec.mode == NUMERIC_MODE_MPFR
+            && n == autocompiled_num_vars(opts->ac_f_prec)) {
+            Expr* cm = autocompiled_eval_mpfr(opts->ac_f_prec, (const Expr* const*)values);
+            if (cm) return cm;
+        }
+#endif
     }
     for (size_t i = 0; i < n; i++) {
         fr_bind_set(&binds[i], values[i]);
@@ -1500,7 +1514,7 @@ Expr* builtin_findroot(Expr* res) {
     opts.step_monitor = NULL;
     opts.eval_monitor = NULL;
     opts.main_f = NULL;
-    opts.ac_f = NULL;
+    opts.ac_f = NULL; opts.ac_f_prec = NULL;
 
     for (size_t i = pos_end; i < argc; i++) {
         if (!fr_apply_option(res->data.function.args[i], &opts)) return NULL;
@@ -1632,10 +1646,18 @@ Expr* builtin_findroot(Expr* res) {
     /* Auto-compile the function for the scalar, machine-precision, real path.
      * The compiled program has real inputs, so complex/MPFR searches never use
      * it (fr_eval_with_bindings guards on spec.mode and a real argument). */
-    if (!want_complex && opts.prec_mode == FR_PREC_MACHINE) {
+    if (!want_complex) {
         const Expr* vs[1] = { var };
-        opts.ac_f = autocompile_new(fnorm, vs, 1);
-        opts.main_f = fnorm;
+        if (opts.prec_mode == FR_PREC_MACHINE) {
+            opts.ac_f = autocompile_new(fnorm, vs, 1);
+            opts.main_f = fnorm;
+        }
+#ifdef USE_MPFR
+        else if (opts.prec_mode == FR_PREC_MPFR && opts.wp_bits > 0) {
+            opts.ac_f_prec = autocompile_new_prec(fnorm, vs, 1, (long)opts.wp_bits);
+            opts.main_f = fnorm;
+        }
+#endif
     }
 
     if (method == FR_METHOD_BRENT) {
@@ -1714,6 +1736,7 @@ Expr* builtin_findroot(Expr* res) {
 scalar_cleanup:
     fr_bind_restore(&bind);
     autocompiled_free(opts.ac_f);
+    autocompiled_free(opts.ac_f_prec);
     expr_free(fnorm);
     expr_free(x0_e); expr_free(x1_e); expr_free(xmin_e); expr_free(xmax_e);
 

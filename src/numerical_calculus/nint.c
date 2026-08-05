@@ -203,13 +203,17 @@ typedef struct {
     bool          ac_enabled;
     bool          ac_tried;
     AutoCompiled* ac;
+    /* Compiled MPFR fast path for a high-WorkingPrecision integral: the compiled
+     * body evaluates f[x] at the working precision, avoiding the per-sample
+     * tree-walk.  Same lazy-compile / faithful-degrade contract as `ac`. */
+    AutoCompiled* ac_prec;
 } NiCtx;
 
 static void ni_ctx_init(NiCtx* c, Expr* body, NiBind* bind, NumericSpec spec) {
     c->body = body; c->bind = bind; c->spec = spec;
     c->x_scale = 1.0; c->x_shift = 0.0;
     c->map_mode = NI_MAP_AFFINE; c->end_a = 0.0; c->span = 0.0;
-    c->ac_enabled = false; c->ac_tried = false; c->ac = NULL;
+    c->ac_enabled = false; c->ac_tried = false; c->ac = NULL; c->ac_prec = NULL;
 }
 
 /* Point a (value-copied) context at a different body.  The lazily-compiled `ac`
@@ -219,7 +223,7 @@ static void ni_ctx_init(NiCtx* c, Expr* body, NiBind* bind, NumericSpec spec) {
  * there is nothing to free on the copy. */
 static void ni_ctx_rebody(NiCtx* c, Expr* body) {
     c->body = body;
-    c->ac_enabled = false; c->ac_tried = false; c->ac = NULL;
+    c->ac_enabled = false; c->ac_tried = false; c->ac = NULL; c->ac_prec = NULL;
 }
 
 /* Build the numeric leaf the variable is bound to from an affine-mapped
@@ -247,13 +251,28 @@ static Expr* ni_eval_at(NiCtx* c, Expr* value) {
      * the interpreter, which supplies that contribution. */
     if (c->ac_enabled && !c->ac_tried) {
         c->ac_tried = true;
+        Expr* vsym = expr_new_symbol(c->bind->name);
+        const Expr* vs[1] = { vsym };
         if (c->spec.mode == NUMERIC_MODE_MACHINE) {
-            Expr* vsym = expr_new_symbol(c->bind->name);
-            const Expr* vs[1] = { vsym };
             c->ac = autocompile_new(c->body, vs, 1);
-            expr_free(vsym);
         }
+#ifdef USE_MPFR
+        else if (c->spec.mode == NUMERIC_MODE_MPFR && c->spec.bits > 0) {
+            c->ac_prec = autocompile_new_prec(c->body, vs, 1, (long)c->spec.bits);
+        }
+#endif
+        expr_free(vsym);
     }
+#ifdef USE_MPFR
+    /* Compiled MPFR fast path: the abscissa `value` is already an EXPR_MPFR, and
+     * the compiled body returns f[value] at the working precision — or NULL to
+     * interpret this point (non-finite, or the interpreter would go complex where
+     * a real was expected), exactly the machine path's contract below. */
+    if (c->ac_prec) {
+        Expr* r = autocompiled_eval_mpfr(c->ac_prec, (const Expr* const*)&value);
+        if (r) { expr_free(value); return r; }
+    }
+#endif
     if (c->ac) {
         double xin;
         if (ni_to_double_real(value, &xin)) {
@@ -1298,6 +1317,8 @@ static Expr* ni_run_1d_finite_real(Expr* body, const char* var,
                   ? ni_mpfr_build(re, im, o->target_bits) : NULL;
         mpfr_clears(am, bm, re, im, (mpfr_ptr)0);
         if (out && !conv) ni_warn_goal(o, abserr, rmag);
+        autocompiled_free(ctx.ac);        /* MPFR branch returns here, before the */
+        autocompiled_free(ctx.ac_prec);   /* machine-path free at the function end */
         return out;
     }
 #endif
@@ -1305,6 +1326,7 @@ static Expr* ni_run_1d_finite_real(Expr* body, const char* var,
     NiAtt best = ni_core_finite(&ctx, a, b, o);
     ni_bind_restore(&bind);
     autocompiled_free(ctx.ac);
+    autocompiled_free(ctx.ac_prec);
 
     if (!best.have) return NULL;        /* no numeric estimate at all */
     if (!best.conv) ni_warn_goal(o, best.err, cabs(best.val));
@@ -1446,6 +1468,8 @@ static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
                   ? ni_mpfr_build(re, im, o->target_bits) : NULL;
         mpfr_clears(am, re, im, (mpfr_ptr)0);
         if (out && !conv) ni_warn_goal(o, abserr, rmag);
+        autocompiled_free(ctx.ac);        /* MPFR branch returns here, before the */
+        autocompiled_free(ctx.ac_prec);   /* machine-path free at the function end */
         return out;
     }
 #endif
@@ -1473,6 +1497,7 @@ static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
     }
     ni_bind_restore(&bind);
     autocompiled_free(ctx.ac);
+    autocompiled_free(ctx.ac_prec);
 
     if (!isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
     if (!conv) ni_warn_goal(o, abserr, cabs(val));
@@ -1506,6 +1531,8 @@ static Expr* ni_run_1d_wholeline(Expr* body, const char* var, double sign,
                   ? ni_mpfr_build(re, im, o->target_bits) : NULL;
         mpfr_clears(re, im, (mpfr_ptr)0);
         if (out && !conv) ni_warn_goal(o, abserr, rmag);
+        autocompiled_free(ctx.ac);        /* MPFR branch returns here, before the */
+        autocompiled_free(ctx.ac_prec);   /* machine-path free at the function end */
         return out;
     }
 #endif
@@ -1537,6 +1564,7 @@ static Expr* ni_run_1d_wholeline(Expr* body, const char* var, double sign,
 
     ni_bind_restore(&bind);
     autocompiled_free(ctx.ac);
+    autocompiled_free(ctx.ac_prec);
 
     if (!isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
     if (!conv) ni_warn_goal(o, abserr, cabs(val));
