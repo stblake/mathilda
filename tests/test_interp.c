@@ -611,6 +611,30 @@ static void test_periodic_mpfr(void) {
     run_mpfr(buf, 0.582256125203642, 1e-9);
 }
 
+/* Vectorised application ifn[{x1,...}] / ifn[NDArray[...]] (the scipy cs(array)
+ * equivalent) and NDArray/packed data tables. */
+static void test_vectorized_apply(void) {
+    /* y = 2x+1, reproduced exactly by the cubic; batch application threads. */
+    const char* g = "InterpolatingFunction[{{0,3}},{{0,1},{1,3},{2,5},{3,7}}]";
+    char buf[256];
+    snprintf(buf, sizeof buf, "%s[{0.5, 1.5, 2.5}]", g);
+    run_vec(buf, (double[]){2.0, 4.0, 6.0}, 3, 1e-9);            /* List arg */
+    snprintf(buf, sizeof buf, "Normal[%s[NDArray[{0.5, 1.5, 2.5}]]]", g);
+    run_vec(buf, (double[]){2.0, 4.0, 6.0}, 3, 1e-9);            /* NDArray arg */
+    snprintf(buf, sizeof buf, "%s[1.25]", g);
+    run_close(buf, 3.5, 1e-9);                                  /* scalar unaffected */
+    snprintf(buf, sizeof buf, "Derivative[1][%s][{0.5, 2.5}]", g);
+    run_vec(buf, (double[]){2.0, 2.0}, 2, 1e-9);                /* derivative threads */
+
+    /* Spline, vectorised: exact-node queries return the stored values. */
+    run_vec("Interpolation[{{0.,0.},{1.,1.},{2.,4.},{3.,9.}}, Method->\"Spline\"][{1., 2.}]",
+            (double[]){1.0, 4.0}, 2, 1e-9);
+
+    /* NDArray / packed data table builds the same interpolant (was unevaluated). */
+    run_close("Interpolation[NDArray[{{0,1},{1,3},{2,5},{3,7}}]][1.25]", 3.5, 1e-9);
+    run_close("Interpolation[NDArray[N[Range[10]^2]]][3.5]", 12.25, 1e-9);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -650,6 +674,7 @@ int main(void) {
     test_vector_mpfr();
     test_periodic();
     test_periodic_mpfr();
+    test_vectorized_apply();
 
     symtab_clear();
     printf("\nAll InterpolatingFunction and Interpolation tests passed.\n");

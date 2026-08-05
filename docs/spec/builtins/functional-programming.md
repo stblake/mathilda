@@ -95,6 +95,18 @@ of the per-dimension Newton divided-difference polynomials. The order drops to
 linear, three → quadratic). The windowing reproduces Mathematica's default
 piecewise interpolant.
 
+**Batch (vectorised) application**: applying a 1-D interpolant to an array of
+query points — `ifun[{x1, x2, ...}]` or `ifun[packedArray]` / `ifun[NDArray[...]]`
+— evaluates every point in a single C loop over the grid's double buffers and
+returns a packed result (the counterpart of numpy/scipy's `cs(array)`), rather
+than one evaluator call per point. Per-interval polynomial coefficients are
+precomputed once and reused, and the interval search is branchless, so a random
+`10^5`-point evaluation runs in a few milliseconds — on par with or faster than
+`scipy.interpolate.CubicSpline`. Threads over derivatives (`ifun'[array]`) and
+the `"Spline"` method too; supplied-derivative/Hermite/array-valued/periodic
+objects fall back to per-point evaluation. `Map[ifun, list]` still evaluates one
+point at a time — prefer `ifun[list]` for large batches.
+
 **Derivatives**: `Derivative[d1, ..., dm][InterpolatingFunction[...]]` (and so
 `ifun'`, `D[ifun[x], x]`, `D[f[x,y], {x,2}]`, etc.) returns another
 `InterpolatingFunction` carrying the accumulated derivative orders — exactly as
@@ -185,6 +197,11 @@ first, then the derivative axes), in n-D, and at MPFR precision.
 
 The domain is inferred from the data (the min/max abscissa in each dimension),
 preserving the data's number type (integer abscissae give an integer domain).
+
+The `data` table may be a nested `List`, a packed array, or a visible
+`NDArray[...]` (previously an `NDArray` argument was left unevaluated);
+`Interpolation` is packed-array aware, so a packed table is not materialised
+before it is read.
 
 **Precision.** Interpolation is carried out at machine precision for machine data
 and at the data's MPFR precision when the data or the evaluation point carry

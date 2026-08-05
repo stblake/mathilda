@@ -1463,6 +1463,18 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * it declines, cf_fallback re-runs the body through the
                  * evaluator, where every head inside is gated on the next pass. */
                 bool compiled_head = head->type == EXPR_COMPILED;
+                /* An InterpolatingFunction object applied to a packed array of
+                 * query points is aware for the same reason a CompiledFunction
+                 * is: interp_apply's vectorised 1-D path reads the buffer
+                 * directly (a batch ifn[array] is scipy's cs(array)), so
+                 * materialising the points into 10^5 boxed Exprs first is pure
+                 * loss.  Integer query points are read exactly (ndt_get to 2^53)
+                 * and give the same real result as materialising, so int64 is
+                 * fine too. */
+                bool interp_head = head->type == EXPR_FUNCTION &&
+                                   head->data.function.head->type == EXPR_SYMBOL &&
+                                   head->data.function.head->data.symbol.name ==
+                                       SYM_InterpolatingFunction;
                 /* MIXED PACKED/PLAIN: pack the List UP, do not unpack the buffer
                  * DOWN.
                  *
@@ -1491,7 +1503,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                                             hdef->packed_int64_ok != 0, changed);
                 bool listable_mixed = (attrs & ATTR_LISTABLE) && has_list_arg(res);
                 bool aware = ((hdef && hdef->packed_aware && !hdef->down_values)
-                              || pure_fn || compiled_head
+                              || pure_fn || compiled_head || interp_head
                               || dv_binds_opaquely(hdef)) && !listable_mixed;
                 /* A head that binds opaquely is exact on an int64 buffer for
                  * exactly the reason it is aware at all: it reads no element.
@@ -1504,7 +1516,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * the vectorised Game of Life benchmark, whose grid is integer:
                  * `probe[q_] := NDArrayQ[q]` answered False for a packed integer
                  * argument while answering True for a real one. */
-                bool int64_ok = pure_fn || compiled_head ||
+                bool int64_ok = pure_fn || compiled_head || interp_head ||
                                 (hdef && hdef->packed_int64_ok) ||
                                 dv_binds_opaquely(hdef);
                 for (size_t i = 0; i < res->data.function.arg_count; i++) {

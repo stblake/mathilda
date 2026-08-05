@@ -683,6 +683,14 @@ static void pack_mark_aware_heads(void) {
          * for the same reason -- it keeps its exact List output, it just no
          * longer errors on a packed/NDArray argument. */
         "Fit", "DesignMatrix",
+        /* Interpolation reads a packed/NDArray data table straight through
+         * ndarray_to_nested_list (src/interp.c) instead of erroring, so the gate
+         * must not pre-materialise it.  Separately, applying the resulting
+         * InterpolatingFunction to a packed array of query points is kept off
+         * this gate by the interp_head branch in eval.c (the head is the object,
+         * not a symbol), where the vectorised evaluator reads the point buffer
+         * directly. */
+        "Interpolation",
         /* ------------------------------------------------------------------
          * The integer domain (src/ndinteger.c). Every one of these answered a
          * packed List with one Expr per element and a visible NDArray with the
