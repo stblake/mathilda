@@ -2659,6 +2659,23 @@ void info_init(void) {
         "Vector- or array-valued samples (f_i a list) are interpolated\n"
         "component-wise and return an array of the same shape.\n"
         "Works at machine or arbitrary (MPFR) precision, matching the data.");
+    symtab_set_docstring("InterpolatingPolynomial",
+        "InterpolatingPolynomial[{f1, f2, ...}, x]\n"
+        "\tgives the single polynomial in x reproducing the values fi at\n"
+        "\tx = 1, 2, ..., in nested (Horner) form. With n values the degree is\n"
+        "\tn-1.\n"
+        "InterpolatingPolynomial[{{x1, f1}, {x2, f2}, ...}, x]\n"
+        "\tinterpolates the values fi at the abscissae xi (arbitrary real,\n"
+        "\tcomplex, or -- in 1-D -- symbolic).\n"
+        "InterpolatingPolynomial[{{{x1, y1, ...}, f1}, ...}, {x, y, ...}]\n"
+        "\tgives the multidimensional interpolating polynomial of lowest total\n"
+        "\tdegree.\n"
+        "InterpolatingPolynomial[{{xi, fi, dfi, ...}, ...}, x]\n"
+        "\treproduces derivatives as well as values (the n-th derivative in m-D\n"
+        "\tis a tensor shaped like D[f, {{x, ...}, n}]).\n"
+        "A value or derivative given as Automatic is filled in from the other\n"
+        "conditions. The option Modulus -> n finds the polynomial over the\n"
+        "integers modulo n. Exact data give an exact polynomial.");
     symtab_set_docstring("Piecewise",
         "Piecewise[{{val_1, cond_1}, {val_2, cond_2}, ...}]\n"
         "\trepresents a piecewise function with values val_i in the regions\n"

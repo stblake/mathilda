@@ -245,6 +245,65 @@ In[8]:= (* periodic: f[x] wraps with period = data span (5) *)
 Out[8]= {0.557674, 0.557674, 0.557674}
 ```
 
+## InterpolatingPolynomial
+- `InterpolatingPolynomial[{f1, f2, …}, x]` gives the single polynomial in `x`
+  that reproduces the values `fi` at `x = 1, 2, …`, in nested (Horner) form.
+  With `n` values the degree is `n-1`.
+- `InterpolatingPolynomial[{{x1, f1}, {x2, f2}, …}, x]` interpolates the values
+  `fi` at the abscissae `xi`. Abscissae and values may be arbitrary real or
+  complex numbers, and in 1-D arbitrary symbolic expressions.
+- `InterpolatingPolynomial[{{{x1, y1, …}, f1}, …}, {x, y, …}]` gives the
+  multidimensional interpolating polynomial of **lowest total degree**.
+- Derivatives as well as values: an entry `{xi, fi, dfi, …}` (1-D) or
+  `{{coords}, fi, ti1, ti2, …}` (m-D) reproduces the supplied derivatives, where
+  the order-`k` tensor `tik` is shaped like `D[f, {{x, …}, k}]` (`ti1` = gradient,
+  `ti2` = Hessian, …). 1-D confluent data uses Newton–Hermite divided differences.
+- Any value or derivative given as `Automatic` is filled in from the remaining
+  conditions by the minimal-degree solve.
+- Unlike `Interpolation`, the result is an ordinary polynomial expression (no
+  `InterpolatingFunction` object).
+
+**Engines.** 1-D with all values present uses Newton (confluent) divided
+differences and prints the exact nested Newton–Horner form. The multivariate
+case and any `Automatic` case use a minimal-total-degree solve over a graded
+monomial basis: the degree is raised until the interpolation system is
+**consistent** (not necessarily full-rank — a redundant condition still yields a
+lower-degree fit), capped at the degree `d` with `Binomial[d+m, m] ≥ N` (`N`
+known conditions, `m` variables). Exact rational input gives an exact rational
+polynomial; the arithmetic is done through the CAS heads so a symbolic
+right-hand side (e.g. a symbolic value `a`) flows through.
+
+**Diagnostics.** When no interpolant of the expected total degree exists,
+`InterpolatingPolynomial::noipf` (1-D) or `::poised` (multi-D, degenerate point
+configuration) is emitted and the call is left unevaluated.
+
+**Option `Modulus -> n`** finds the interpolating polynomial over the integers
+modulo `n` (exact integer data; `n` prime is the well-behaved case).
+
+**NDArray / packed arrays.** A packed or visible `NDArray` data table is read
+directly (int64 data stays exact; float64 data gives a numeric polynomial), so
+`InterpolatingPolynomial` is packed-aware.
+
+```mathematica
+In[1]:= InterpolatingPolynomial[{1, 4, 9, 16}, x]
+Out[1]= 1 + (-1 + x) (1 + x)
+
+In[2]:= InterpolatingPolynomial[{4, 7, 2, {8, 0}, 9}, x]   (* value 8, slope 0 at x=4 *)
+Out[2]= 4 + (-1 + x) (3 + (-2 + x) (-4 + (-3 + x) (19/6 + (-4 + x) (-107/36 + 109/72 (-4 + x)))))
+
+In[3]:= Expand[InterpolatingPolynomial[
+          {{{0, 0}, 1}, {{1, 0}, 7}, {{0, 1}, 10}, {{2, 1}, 40},
+           {{3, 3}, 151}, {{1, 2}, 47}}, {x, y}]]
+Out[3]= 1 + 2 x + 4 x^2 + 3 y + 5 x y + 6 y^2
+
+In[4]:= Expand[InterpolatingPolynomial[
+          {{-1, Automatic, 0}, {0, 1, 1}, {1, Automatic, 0}}, x]]
+Out[4]= 1 + x - x^3/3
+
+In[5]:= InterpolatingPolynomial[{1, 4, 9, 16}, x, Modulus -> 7]
+Out[5]= x^2
+```
+
 ## Map (/@)
 - `f /@ expr` or `Map[f, expr]` applies `f` to each element at level 1;
   `Map[f, expr, levelspec]` maps at the parts selected by `levelspec`.

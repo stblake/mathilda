@@ -691,6 +691,10 @@ static void pack_mark_aware_heads(void) {
          * not a symbol), where the vectorised evaluator reads the point buffer
          * directly. */
         "Interpolation",
+        /* InterpolatingPolynomial reads a packed/NDArray data table straight
+         * through ndarray_to_nested_list (src/interp.c) as well, so the gate
+         * must not pre-materialise it. */
+        "InterpolatingPolynomial",
         /* ------------------------------------------------------------------
          * The integer domain (src/ndinteger.c). Every one of these answered a
          * packed List with one Expr per element and a visible NDArray with the
@@ -854,6 +858,10 @@ static void pack_mark_aware_heads(void) {
          * computation either way, so the float coefficients are identical -- the
          * flag only spares an int64 data matrix from materialising. */
         "Fit",
+        /* InterpolatingPolynomial reads int64 data exactly and, on exact data,
+         * returns an exact polynomial -- so an int64 buffer needs no
+         * materialisation and the result is identical. */
+        "InterpolatingPolynomial",
         /* Move the value without inspecting it. */
         "Set", "SetDelayed", "CompoundExpression", "If", "Which", "Module",
         "Block", "With", "Return", "Print", "Echo",

@@ -54,9 +54,13 @@
 #include "attr.h"
 #include "arithmetic.h"
 #include "sym_names.h"
+#include "eval.h"         /* eval_and_free */
+#include "zero_test.h"    /* zero_test_decide (Engine B consistency) */
+#include "common.h"       /* builtin_arg_error */
+#include "print.h"        /* expr_to_string (::poised message) */
+#include <gmp.h>          /* Modulus path: exact modular linear solve */
 #ifdef USE_MPFR
 #include "numeric.h"
-#include "common.h"
 #endif
 
 /* Interpolation methods. */
@@ -1799,6 +1803,740 @@ static Expr* builtin_interpolation(Expr* res) {
     return builtin_interpolation_impl(res);
 }
 
+/* ===================================================================== *
+ *  InterpolatingPolynomial
+ *
+ *  Exact single-polynomial interpolant (unlike InterpolatingFunction, which
+ *  is a piecewise-spline object).  Two engines share one condition model:
+ *
+ *    Engine A  (1-D, all values present) -- Newton confluent divided
+ *              differences -> nested Newton-Horner form.  Exact/symbolic via
+ *              the CAS arithmetic heads; a double fast path for inexact data.
+ *
+ *    Engine B  (multivariate, OR 1-D with Automatic) -- minimal-total-degree
+ *              solve over a graded monomial basis by exact Expr Gauss-Jordan
+ *              (matrix numeric, RHS may be symbolic).  Success gate is
+ *              CONSISTENCY (not full column rank); the degree loop is capped
+ *              at d_sq = min d with C(d+m,m) >= N so noipf/poised fire at the
+ *              Mathematica-correct degree.
+ *
+ *    Modulus->n -- the same graded solve done in Z/nZ (ip_solve_modular).
+ * ===================================================================== */
+
+/* Small consuming Expr-arithmetic helpers: each ADOPTS its arguments (they are
+ * folded into the built node and freed with it) and returns a fresh evaluated
+ * result -- the eval_and_free contract, as in central_moment.c. */
+static Expr* ip_add(Expr* a, Expr* b) {
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                                           (Expr*[]){ a, b }, 2));
+}
+static Expr* ip_mul(Expr* a, Expr* b) {
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                           (Expr*[]){ a, b }, 2));
+}
+static Expr* ip_sub(Expr* a, Expr* b) {  /* a - b */
+    Expr* nb = expr_new_function(expr_new_symbol(SYM_Times),
+                                 (Expr*[]){ expr_new_integer(-1), b }, 2);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                                           (Expr*[]){ a, nb }, 2));
+}
+static Expr* ip_div(Expr* a, Expr* b) {  /* a / b */
+    Expr* ib = expr_new_function(expr_new_symbol(SYM_Power),
+                                 (Expr*[]){ b, expr_new_integer(-1) }, 2);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                           (Expr*[]){ a, ib }, 2));
+}
+static Expr* ip_pow_i(Expr* base, int e) {  /* base^e, e >= 1 */
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                                           (Expr*[]){ base, expr_new_integer(e) }, 2));
+}
+
+/* True when e is the symbol Automatic. */
+static bool ip_is_automatic(const Expr* e) {
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Automatic;
+}
+
+/* Integer falling factorial e*(e-1)*...*(e-a+1): 0 if a>e, 1 if a==0. */
+static int64_t ip_falling_i(int e, int a) {
+    if (a > e) return 0;
+    int64_t r = 1;
+    for (int i = 0; i < a; i++) r *= (int64_t)(e - i);
+    return r;
+}
+static int64_t ip_factorial_i(int j) {
+    int64_t r = 1;
+    for (int i = 2; i <= j; i++) r *= (int64_t)i;
+    return r;
+}
+
+/* ---- condition model ---- */
+/* Each known interpolation condition is D^alpha P(point) = value. Automatic
+ * conditions are dropped at collection time, so `n` counts KNOWN conditions.
+ * Points/values are OWNED copies; IPData owns and frees everything. */
+typedef struct {
+    size_t m;               /* number of variables */
+    size_t n, cap;          /* known conditions */
+    Expr**  pE;             /* n*m owned coord Exprs   (pE[i*m + k]) */
+    double* pD;             /* n*m coord doubles       (pD[i*m + k]) */
+    int*    alpha;          /* n*m multi-indices       (alpha[i*m + k]) */
+    Expr**  val;            /* n owned value Exprs */
+    bool    any_automatic;  /* any Automatic seen (routes 1-D to Engine B) */
+    bool    coords_numeric; /* every coord node_to_double-convertible */
+} IPData;
+
+static void ipdata_free(IPData* D) {
+    if (D->pE)  { for (size_t t = 0; t < D->n * D->m; t++) expr_free(D->pE[t]); free(D->pE); }
+    if (D->val) { for (size_t t = 0; t < D->n; t++) expr_free(D->val[t]); free(D->val); }
+    free(D->pD); free(D->alpha);
+    memset(D, 0, sizeof(*D));
+}
+
+/* Append one condition. coordE[k] borrowed (copied here); value borrowed
+ * (copied). alpha copied. */
+static bool ip_push(IPData* D, Expr** coordE, const double* coordD,
+                    const int* alpha, Expr* value) {
+    if (D->n == D->cap) {
+        size_t nc = D->cap ? D->cap * 2 : 8;
+        Expr**  npE = realloc(D->pE,    nc * D->m * sizeof(Expr*));
+        double* npD = realloc(D->pD,    nc * D->m * sizeof(double));
+        int*    na  = realloc(D->alpha, nc * D->m * sizeof(int));
+        Expr**  nv  = realloc(D->val,   nc * sizeof(Expr*));
+        if (!npE || !npD || !na || !nv) { free(npE); free(npD); free(na); free(nv); return false; }
+        D->pE = npE; D->pD = npD; D->alpha = na; D->val = nv; D->cap = nc;
+    }
+    size_t i = D->n;
+    for (size_t k = 0; k < D->m; k++) {
+        D->pE[i * D->m + k]    = expr_copy(coordE[k]);
+        D->pD[i * D->m + k]    = coordD[k];
+        D->alpha[i * D->m + k] = alpha[k];
+    }
+    D->val[i] = expr_copy(value);
+    D->n++;
+    return true;
+}
+
+/* Navigate a rank-`len` derivative tensor by the index sequence seq[0..len-1];
+ * returns the borrowed leaf, or NULL if the shape does not match. */
+static Expr* ip_tensor_at(Expr* t, const int* seq, int len) {
+    for (int d = 0; d < len; d++) {
+        if (!interp_is_list(t)) return NULL;
+        if (seq[d] < 0 || (size_t)seq[d] >= t->data.function.arg_count) return NULL;
+        t = t->data.function.args[seq[d]];
+    }
+    return t;
+}
+
+/* Enumerate weak compositions of `g` into `m` parts (first part slowest),
+ * invoking cb(comp) for each. Used both for the order-g derivative tensor
+ * multi-indices and for the graded monomial basis. */
+typedef void (*ip_comp_cb)(const int* comp, void* ctx);
+static void ip_comps_rec(int g, size_t m, size_t pos, int* cur, ip_comp_cb cb, void* ctx) {
+    if (pos == m - 1) { cur[pos] = g; cb(cur, ctx); return; }
+    for (int v = g; v >= 0; v--) { cur[pos] = v; ip_comps_rec(g - v, m, pos + 1, cur, cb, ctx); }
+}
+
+/* Collection context for one entry's tensor of order k. */
+typedef struct { IPData* D; Expr** coordE; double* coordD; Expr* tensor; size_t m; bool ok; } IPTensorCtx;
+static void ip_tensor_cb(const int* alpha, void* vctx) {
+    IPTensorCtx* c = (IPTensorCtx*)vctx;
+    if (!c->ok) return;
+    /* sorted index sequence for alpha: axis 0 alpha_0 times, axis 1 ... */
+    int seq[64]; int len = 0;
+    for (size_t k = 0; k < c->m; k++) for (int r = 0; r < alpha[k]; r++) seq[len++] = (int)k;
+    Expr* el = ip_tensor_at(c->tensor, seq, len);
+    if (!el) return;                 /* malformed tensor: skip this component */
+    if (ip_is_automatic(el)) { c->D->any_automatic = true; return; }
+    if (!ip_push(c->D, c->coordE, c->coordD, alpha, el)) c->ok = false;
+}
+
+/* Parse `data`/`vars` into the condition list. Returns false on malformed data
+ * (caller leaves the call unevaluated). */
+static bool ip_collect(Expr* data, size_t m, IPData* D) {
+    memset(D, 0, sizeof(*D));
+    D->m = m;
+    D->coords_numeric = true;
+    if (!interp_is_list(data) || data->data.function.arg_count < 1) return false;
+    size_t npts = data->data.function.arg_count;
+
+    if (m == 1) {
+        /* value-form if any top-level element is a scalar; else pairs-form. */
+        bool all_lists = true;
+        for (size_t i = 0; i < npts; i++)
+            if (!interp_is_list(data->data.function.args[i])) { all_lists = false; break; }
+
+        if (!all_lists) {
+            /* value form: point = i+1; scalar -> value; list -> {f, df, ...}. */
+            for (size_t i = 0; i < npts; i++) {
+                Expr* e = data->data.function.args[i];
+                double xd = (double)(i + 1);
+                Expr* xE = expr_new_integer((int64_t)(i + 1));
+                Expr* coordE[1] = { xE }; double coordD[1] = { xd };
+                if (interp_is_list(e)) {
+                    size_t L = e->data.function.arg_count;
+                    if (L < 1) { expr_free(xE); return false; }
+                    for (size_t k = 0; k < L; k++) {
+                        Expr* v = e->data.function.args[k];
+                        if (ip_is_automatic(v)) { D->any_automatic = true; continue; }
+                        int a[1] = { (int)k };
+                        if (!ip_push(D, coordE, coordD, a, v)) { expr_free(xE); return false; }
+                    }
+                } else {
+                    int a[1] = { 0 };
+                    if (!ip_push(D, coordE, coordD, a, e)) { expr_free(xE); return false; }
+                }
+                expr_free(xE);
+            }
+        } else {
+            /* pairs form: entry = {x, f, df, ...}. x may be symbolic. */
+            for (size_t i = 0; i < npts; i++) {
+                Expr* e = data->data.function.args[i];
+                if (e->data.function.arg_count < 2) return false;
+                Expr* xE = e->data.function.args[0];
+                double xd = 0.0;
+                if (!node_to_double(xE, &xd)) D->coords_numeric = false;
+                Expr* coordE[1] = { xE }; double coordD[1] = { xd };
+                size_t L = e->data.function.arg_count;
+                for (size_t k = 0; k + 1 < L; k++) {
+                    Expr* v = e->data.function.args[1 + k];
+                    if (ip_is_automatic(v)) { D->any_automatic = true; continue; }
+                    int a[1] = { (int)k };
+                    if (!ip_push(D, coordE, coordD, a, v)) return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /* m >= 2: entry = {{x1,...,xm}, f, t1, t2, ...} with tk the order-k tensor. */
+    if (m > 64) return false;
+    for (size_t i = 0; i < npts; i++) {
+        Expr* e = data->data.function.args[i];
+        if (!interp_is_list(e) || e->data.function.arg_count < 2) return false;
+        Expr* coord = e->data.function.args[0];
+        if (!interp_is_list(coord) || coord->data.function.arg_count != m) return false;
+        Expr* coordE[64]; double coordD[64];
+        for (size_t k = 0; k < m; k++) {
+            coordE[k] = coord->data.function.args[k];
+            if (!node_to_double(coordE[k], &coordD[k])) { D->coords_numeric = false; coordD[k] = 0.0; }
+        }
+        size_t L = e->data.function.arg_count;
+        for (size_t k = 0; k + 1 < L; k++) {          /* k = derivative order */
+            Expr* tk = e->data.function.args[1 + k];
+            if (k == 0) {
+                if (ip_is_automatic(tk)) { D->any_automatic = true; continue; }
+                int a0[64]; for (size_t q = 0; q < m; q++) a0[q] = 0;
+                if (!ip_push(D, coordE, coordD, a0, tk)) return false;
+            } else {
+                IPTensorCtx c = { D, coordE, coordD, tk, m, true };
+                int cur[64];
+                ip_comps_rec((int)k, m, 0, cur, ip_tensor_cb, &c);
+                if (!c.ok) return false;
+            }
+        }
+    }
+    return true;
+}
+
+/* ---- Engine A: 1-D Newton (confluent) divided differences ---- */
+
+/* Build the interpolant from Newton coefficients c[0..M-1] and nodes z[0..M-1]
+ * (both borrowed): P = c0 + (x-z0)(c1 + (x-z1)(... )). Consumes nothing. */
+static Expr* ip_newton_horner(Expr** c, Expr** z, size_t M, Expr* xvar) {
+    Expr* P = expr_copy(c[M - 1]);
+    for (size_t ii = M - 1; ii-- > 0; ) {
+        Expr* xm = ip_sub(expr_copy(xvar), expr_copy(z[ii]));
+        P = ip_add(expr_copy(c[ii]), ip_mul(xm, P));
+    }
+    return P;
+}
+
+/* Engine A. Returns the interpolating polynomial, or NULL only on a degenerate
+ * table (which routes to the general engine). 1-D, no Automatic. */
+static Expr* ip_newton_1d(IPData* D, Expr* xvar) {
+    size_t N = D->n;
+    if (N == 0) return NULL;
+
+    /* Group conditions into distinct nodes (first-appearance order); collect
+     * per-node derivative values indexed by order alpha[0]. */
+    Expr** nodeX  = malloc(N * sizeof(Expr*));      /* distinct node coord (borrowed) */
+    int*   nodeMx = calloc(N, sizeof(int));         /* max order + 1 at node */
+    Expr** deriv  = calloc(N * N, sizeof(Expr*));   /* deriv[node*N + order] borrowed */
+    if (!nodeX || !nodeMx || !deriv) { free(nodeX); free(nodeMx); free(deriv); return NULL; }
+    size_t nnodes = 0;
+    bool numeric_nodes = true, any_confluent = false;
+    for (size_t i = 0; i < N; i++) {
+        Expr* x = D->pE[i * 1 + 0];
+        int   ord = D->alpha[i * 1 + 0];
+        size_t ni = nnodes;
+        for (size_t t = 0; t < nnodes; t++) if (expr_eq(nodeX[t], x)) { ni = t; break; }
+        if (ni == nnodes) { nodeX[nnodes] = x; nnodes++; }
+        if (ord + 1 > nodeMx[ni]) nodeMx[ni] = ord + 1;
+        if (ord > 0) any_confluent = true;
+        deriv[ni * N + ord] = D->val[i];
+        double t; if (!node_to_double(x, &t)) numeric_nodes = false;
+    }
+
+    /* Double fast path: non-confluent, numeric nodes, at least one inexact
+     * value -> compute divided differences in machine doubles. */
+    bool any_inexact = false, all_real = true;
+    for (size_t i = 0; i < N; i++) {
+        Expr* v = D->val[i];
+        if (v->type == EXPR_REAL) any_inexact = true;
+        double tmp; if (!node_to_double(v, &tmp)) all_real = false;
+    }
+    if (!any_confluent && numeric_nodes && all_real && any_inexact && nnodes == N) {
+        double* xs = malloc(N * sizeof(double));
+        double* ys = malloc(N * sizeof(double));
+        if (xs && ys) {
+            for (size_t i = 0; i < N; i++) { node_to_double(nodeX[i], &xs[i]); node_to_double(deriv[i * N + 0], &ys[i]); }
+            for (size_t j = 1; j < N; j++)
+                for (size_t i = N; i-- > j; )
+                    ys[i] = (ys[i] - ys[i - 1]) / (xs[i] - xs[i - j]);
+            /* Drop trailing zero Newton coefficients: a zero top coefficient
+             * means the data lie on a lower-degree polynomial, so the minimal
+             * (Mathematica-matching) degree is used -- e.g. {1.,4.,9.,16.} is
+             * degree 2, not a cubic with a dangling 0. (x-z_i) term. */
+            size_t Meff = N;
+            while (Meff > 1 && ys[Meff - 1] == 0.0) Meff--;
+            Expr** cE = malloc(Meff * sizeof(Expr*));
+            Expr** zE = malloc(Meff * sizeof(Expr*));
+            for (size_t i = 0; i < Meff; i++) { cE[i] = expr_new_real(ys[i]); zE[i] = expr_new_real(xs[i]); }
+            Expr* P = ip_newton_horner(cE, zE, Meff, xvar);
+            for (size_t i = 0; i < Meff; i++) { expr_free(cE[i]); expr_free(zE[i]); }
+            free(cE); free(zE); free(xs); free(ys);
+            free(nodeX); free(nodeMx); free(deriv);
+            return P;
+        }
+        free(xs); free(ys);
+    }
+
+    /* Exact / symbolic confluent path. Expand nodes with multiplicity into z[]. */
+    size_t M = 0;
+    for (size_t t = 0; t < nnodes; t++) M += (size_t)nodeMx[t];
+    Expr** z    = malloc(M * sizeof(Expr*));   /* borrowed node Exprs */
+    int*   znode = malloc(M * sizeof(int));    /* distinct-node index of each row */
+    Expr** Q    = calloc(M * M, sizeof(Expr*));/* owned divided-difference table */
+    if (!z || !znode || !Q) { free(z); free(znode); free(Q); free(nodeX); free(nodeMx); free(deriv); return NULL; }
+    size_t row = 0;
+    for (size_t t = 0; t < nnodes; t++)
+        for (int r = 0; r < nodeMx[t]; r++) { z[row] = nodeX[t]; znode[row] = (int)t; row++; }
+
+    for (size_t i = 0; i < M; i++) Q[i * M + 0] = expr_copy(deriv[znode[i] * N + 0]);
+    for (size_t j = 1; j < M; j++) {
+        for (size_t i = j; i < M; i++) {
+            if (znode[i] == znode[i - j]) {                /* coincident run of length j+1 */
+                Expr* dv = expr_copy(deriv[znode[i] * N + (int)j]);
+                Q[i * M + j] = ip_div(dv, expr_new_integer(ip_factorial_i((int)j)));
+            } else {
+                Expr* num = ip_sub(expr_copy(Q[i * M + (j - 1)]), expr_copy(Q[(i - 1) * M + (j - 1)]));
+                Expr* den = ip_sub(expr_copy(z[i]), expr_copy(z[i - j]));
+                Q[i * M + j] = ip_div(num, den);
+            }
+        }
+    }
+    Expr** c = malloc(M * sizeof(Expr*));
+    for (size_t k = 0; k < M; k++) c[k] = Q[k * M + k];   /* borrow the diagonal */
+    Expr* P = ip_newton_horner(c, z, M, xvar);
+    free(c);
+    for (size_t t = 0; t < M * M; t++) expr_free(Q[t]);
+    free(Q); free(z); free(znode);
+    free(nodeX); free(nodeMx); free(deriv);
+    return P;
+}
+
+/* ---- Engine B: minimal-total-degree graded solve ---- */
+
+/* C(a, b) as int64 (small arguments). */
+static int64_t ip_binom(int a, int b) {
+    if (b < 0 || b > a) return 0;
+    int64_t r = 1;
+    for (int i = 0; i < b; i++) { r = r * (a - i) / (i + 1); }
+    return r;
+}
+
+/* Monomial collection (graded). */
+typedef struct { int* E; size_t m; size_t cnt; } IPMonos;
+static void ip_mono_cb(const int* comp, void* vctx) {
+    IPMonos* M = (IPMonos*)vctx;
+    for (size_t k = 0; k < M->m; k++) M->E[M->cnt * M->m + k] = comp[k];
+    M->cnt++;
+}
+/* All exponent vectors of total degree <= d, graded. Returns malloc'd E
+ * (count*m) and sets *count. */
+static int* ip_monomials(int d, size_t m, size_t* count) {
+    int64_t total = 0;
+    for (int g = 0; g <= d; g++) total += ip_binom(g + (int)m - 1, (int)m - 1);
+    int* E = malloc((size_t)total * m * sizeof(int));
+    if (!E) { *count = 0; return NULL; }
+    IPMonos M = { E, m, 0 };
+    int* cur = malloc(m * sizeof(int));
+    for (int g = 0; g <= d; g++) ip_comps_rec(g, m, 0, cur, ip_mono_cb, &M);
+    free(cur);
+    *count = M.cnt;
+    return E;
+}
+
+/* A[i][j] = D^{alpha_i}(x^{E_j})(p_i), as a fresh numeric Expr. 0^0 == 1. */
+static Expr* ip_entry(IPData* D, size_t i, const int* Ej) {
+    int64_t coeff = 1;
+    for (size_t k = 0; k < D->m; k++) {
+        coeff *= ip_falling_i(Ej[k], D->alpha[i * D->m + k]);
+        if (coeff == 0) return expr_new_integer(0);
+    }
+    Expr* e = expr_new_integer(coeff);
+    for (size_t k = 0; k < D->m; k++) {
+        int exp = Ej[k] - D->alpha[i * D->m + k];
+        if (exp > 0) e = ip_mul(e, ip_pow_i(expr_copy(D->pE[i * D->m + k]), exp));
+    }
+    return e;
+}
+
+/* Recursive Horner-by-variable over the terms `idxs` (indices into E/C),
+ * factoring variable `k`. */
+static Expr* ip_horner(const int* E, Expr** C, const int* idxs, size_t nid,
+                       size_t m, size_t k, Expr** vars) {
+    if (k == m) {
+        Expr* s = expr_new_integer(0);
+        for (size_t t = 0; t < nid; t++) s = ip_add(s, expr_copy(C[idxs[t]]));
+        return s;
+    }
+    int pmax = 0;
+    for (size_t t = 0; t < nid; t++) if (E[idxs[t] * m + k] > pmax) pmax = E[idxs[t] * m + k];
+    Expr* result = NULL;
+    int* grp = malloc(nid * sizeof(int));
+    for (int p = pmax; p >= 0; p--) {
+        size_t ng = 0;
+        for (size_t t = 0; t < nid; t++) if (E[idxs[t] * m + k] == p) grp[ng++] = idxs[t];
+        Expr* sub = ng ? ip_horner(E, C, grp, ng, m, k + 1, vars) : expr_new_integer(0);
+        result = result ? ip_add(ip_mul(result, expr_copy(vars[k])), sub) : sub;
+    }
+    free(grp);
+    return result;
+}
+
+/* Build the polynomial from coefficients C[0..L-1] over monomials E. */
+static Expr* ip_build_poly(const int* E, Expr** C, size_t L, size_t m, Expr** vars) {
+    int* idxs = malloc(L * sizeof(int));
+    size_t nid = 0;
+    for (size_t j = 0; j < L; j++)
+        if (zero_test_decide(C[j]) != ZERO_TEST_TRUE) idxs[nid++] = (int)j;
+    Expr* P = nid ? ip_horner(E, C, idxs, nid, m, 0, vars) : expr_new_integer(0);
+    free(idxs);
+    return P;
+}
+
+/* Solve the interpolation system at total degree d. On success returns the
+ * polynomial; on an INCONSISTENT system returns NULL with *consistent=false so
+ * the caller raises d. */
+static Expr* ip_solve_degree(IPData* D, int d, Expr** vars, bool* consistent) {
+    size_t m = D->m, N = D->n, L = 0;
+    int* E = ip_monomials(d, m, &L);
+    if (!E) { *consistent = false; return NULL; }
+
+    Expr** A = malloc(N * L * sizeof(Expr*));
+    Expr** f = malloc(N * sizeof(Expr*));
+    int64_t* pivrow = malloc(L * sizeof(int64_t));
+    for (size_t j = 0; j < L; j++) pivrow[j] = -1;
+    for (size_t i = 0; i < N; i++) {
+        f[i] = expr_copy(D->val[i]);
+        for (size_t j = 0; j < L; j++) A[i * L + j] = ip_entry(D, i, &E[j * m]);
+    }
+
+    /* Gauss-Jordan; the matrix A is numeric so pivots are exact. */
+    size_t prow = 0;
+    for (size_t j = 0; j < L && prow < N; j++) {
+        size_t piv = N;
+        for (size_t r = prow; r < N; r++)
+            if (zero_test_decide(A[r * L + j]) != ZERO_TEST_TRUE) { piv = r; break; }
+        if (piv == N) continue;
+        if (piv != prow) {
+            for (size_t jj = 0; jj < L; jj++) { Expr* t = A[piv * L + jj]; A[piv * L + jj] = A[prow * L + jj]; A[prow * L + jj] = t; }
+            Expr* tf = f[piv]; f[piv] = f[prow]; f[prow] = tf;
+        }
+        Expr* pivc = expr_copy(A[prow * L + j]);
+        for (size_t jj = j; jj < L; jj++) A[prow * L + jj] = ip_div(A[prow * L + jj], expr_copy(pivc));
+        f[prow] = ip_div(f[prow], expr_copy(pivc));
+        expr_free(pivc);
+        for (size_t r = 0; r < N; r++) {
+            if (r == prow) continue;
+            if (zero_test_decide(A[r * L + j]) == ZERO_TEST_TRUE) continue;
+            Expr* facc = expr_copy(A[r * L + j]);
+            for (size_t jj = j; jj < L; jj++)
+                A[r * L + jj] = ip_sub(A[r * L + jj], ip_mul(expr_copy(facc), expr_copy(A[prow * L + jj])));
+            f[r] = ip_sub(f[r], ip_mul(expr_copy(facc), expr_copy(f[prow])));
+            expr_free(facc);
+        }
+        pivrow[j] = (int64_t)prow;
+        prow++;
+    }
+
+    bool ok = true;
+    for (size_t r = prow; r < N; r++)
+        if (zero_test_decide(f[r]) != ZERO_TEST_TRUE) { ok = false; break; }
+
+    Expr* result = NULL;
+    if (ok) {
+        Expr** C = malloc(L * sizeof(Expr*));
+        for (size_t j = 0; j < L; j++)
+            C[j] = (pivrow[j] >= 0) ? expr_copy(f[pivrow[j]]) : expr_new_integer(0);
+        result = ip_build_poly(E, C, L, m, vars);
+        for (size_t j = 0; j < L; j++) expr_free(C[j]);
+        free(C);
+    }
+
+    for (size_t t = 0; t < N * L; t++) expr_free(A[t]);
+    for (size_t i = 0; i < N; i++) expr_free(f[i]);
+    free(A); free(f); free(pivrow); free(E);
+    *consistent = ok;
+    return result;
+}
+
+/* Emit the ::poised / ::noipf diagnostic and return NULL (unevaluated). */
+static Expr* ip_fail(IPData* D, int d_sq) {
+    if (D->m == 1) {
+        fprintf(stderr, "InterpolatingPolynomial::noipf: Unable to find an "
+                        "interpolating polynomial of total degree %d.\n", d_sq);
+        return NULL;
+    }
+    /* Distinct abscissae in input order, for the message. */
+    Expr** pts = malloc(D->n * sizeof(Expr*));
+    size_t np = 0;
+    for (size_t i = 0; i < D->n; i++) {
+        Expr* coord;
+        if (D->m == 1) coord = expr_copy(D->pE[i]);
+        else {
+            Expr** cs = malloc(D->m * sizeof(Expr*));
+            for (size_t k = 0; k < D->m; k++) cs[k] = expr_copy(D->pE[i * D->m + k]);
+            coord = make_list(cs, D->m); free(cs);
+        }
+        bool dup = false;
+        for (size_t t = 0; t < np; t++) if (expr_eq(pts[t], coord)) { dup = true; break; }
+        if (dup) { expr_free(coord); continue; }
+        pts[np++] = coord;
+    }
+    Expr* lst = make_list(pts, np);   /* adopts pts[] elements (no refcount bump) */
+    free(pts);
+    char* s = expr_to_string(lst);
+    expr_free(lst);
+    fprintf(stderr, "InterpolatingPolynomial::poised: The interpolation points %s "
+                    "are not poised, so an interpolating polynomial of total "
+                    "degree %d could not be found.\n", s ? s : "{}", d_sq);
+    free(s);
+    return NULL;
+}
+
+/* Engine B driver: raise the degree to d_sq; return the first consistent
+ * interpolant, else the poised/noipf diagnostic. */
+static Expr* ip_solve_general(IPData* D, Expr** vars) {
+    size_t N = D->n, m = D->m;
+    int d_sq = 0;
+    int64_t count = 0;
+    while (count < (int64_t)N) { count += ip_binom(d_sq + (int)m - 1, (int)m - 1); if (count >= (int64_t)N) break; d_sq++; }
+    for (int d = 0; d <= d_sq; d++) {
+        bool consistent = false;
+        Expr* r = ip_solve_degree(D, d, vars, &consistent);
+        if (consistent) return r;   /* r may be a valid polynomial (incl. 0) */
+    }
+    return ip_fail(D, d_sq);
+}
+
+/* ---- driver + option parsing ---- */
+
+static Expr* ip_solve_modular(IPData* D, Expr** vars, const mpz_t n);  /* below */
+
+static Expr* ip_impl(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+
+    /* Separate positional args from option rules (only Modulus is recognised). */
+    Expr* pos[2] = { NULL, NULL };
+    size_t npos = 0;
+    mpz_t modulus; mpz_init_set_ui(modulus, 0);
+    for (size_t i = 0; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        if (a->type == EXPR_FUNCTION && a->data.function.arg_count == 2
+            && a->data.function.head->type == EXPR_SYMBOL
+            && (a->data.function.head->data.symbol.name == SYM_Rule
+                || a->data.function.head->data.symbol.name == SYM_RuleDelayed)
+            && a->data.function.args[0]->type == EXPR_SYMBOL
+            && a->data.function.args[0]->data.symbol.name == SYM_Modulus) {
+            Expr* rhs = a->data.function.args[1];
+            if (rhs->type == EXPR_INTEGER) mpz_set_si(modulus, rhs->data.integer);
+            else if (rhs->type == EXPR_BIGINT) mpz_set(modulus, rhs->data.bigint);
+            else { mpz_clear(modulus); return NULL; }
+            continue;
+        }
+        if (npos < 2) pos[npos] = a;
+        npos++;
+    }
+    if (npos != 2) { mpz_clear(modulus); return builtin_arg_error("InterpolatingPolynomial", argc, 2, 2); }
+
+    Expr* data = pos[0];
+    Expr* vars = pos[1];
+    size_t m;
+    Expr** varr;
+    if (vars->type == EXPR_SYMBOL) { m = 1; varr = &vars; }
+    else if (interp_is_list(vars) && vars->data.function.arg_count >= 1) {
+        m = vars->data.function.arg_count;
+        varr = vars->data.function.args;
+        for (size_t k = 0; k < m; k++) if (varr[k]->type != EXPR_SYMBOL) { mpz_clear(modulus); return NULL; }
+    } else { mpz_clear(modulus); return NULL; }
+
+    IPData D;
+    if (!ip_collect(data, m, &D)) { ipdata_free(&D); mpz_clear(modulus); return NULL; }
+
+    Expr* result;
+    if (mpz_sgn(modulus) > 0) {
+        result = ip_solve_modular(&D, varr, modulus);
+    } else if (m == 1 && !D.any_automatic) {
+        result = ip_newton_1d(&D, varr[0]);
+        if (!result) result = ip_solve_general(&D, varr);   /* degenerate fallback */
+    } else {
+        result = ip_solve_general(&D, varr);
+    }
+    ipdata_free(&D);
+    mpz_clear(modulus);
+    return result;
+}
+
+/* NDArray / packed intake: delist a packed or visible NDArray data table once,
+ * then process it as a List (mirrors builtin_interpolation). */
+static Expr* builtin_interpolatingpolynomial(Expr* res) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1
+        && is_ndarray(res->data.function.args[0])) {
+        Expr* orig = res->data.function.args[0];
+        Expr* lst = ndarray_to_nested_list(orig);
+        res->data.function.args[0] = lst;
+        Expr* r = ip_impl(res);
+        res->data.function.args[0] = orig;
+        expr_free(lst);
+        return r;
+    }
+    return ip_impl(res);
+}
+
+/* ---- Modulus->n path: the graded solve done exactly in Z/nZ ---- */
+
+/* mpz residue in [0,n) -> Expr integer (or bigint). */
+static Expr* ip_mpz_to_expr(const mpz_t z) {
+    if (mpz_fits_slong_p(z)) return expr_new_integer((int64_t)mpz_get_si(z));
+    return expr_new_bigint_from_mpz(z);
+}
+
+/* Reduce an exact value (Integer/BigInt/int64-Rational) mod n. Returns 1 on
+ * success, 0 for an inexact/symbolic value or a non-invertible denominator. */
+static int ip_mod_value(const Expr* v, const mpz_t n, mpz_t out) {
+    if (v->type == EXPR_INTEGER) { mpz_set_si(out, (long)v->data.integer); mpz_mod(out, out, n); return 1; }
+    if (v->type == EXPR_BIGINT)  { mpz_mod(out, v->data.bigint, n); return 1; }
+    int64_t pn, pd;
+    if (is_rational(v, &pn, &pd)) {
+        mpz_t p, q, qi; mpz_init_set_si(p, (long)pn); mpz_init_set_si(q, (long)pd); mpz_init(qi);
+        mpz_mod(q, q, n);
+        int ok = mpz_invert(qi, q, n);
+        if (ok) { mpz_mul(out, p, qi); mpz_mod(out, out, n); }
+        mpz_clears(p, q, qi, NULL);
+        return ok;
+    }
+    return 0;
+}
+
+static Expr* ip_solve_modular(IPData* D, Expr** vars, const mpz_t n) {
+    size_t m = D->m, N = D->n;
+
+    /* Coordinate and value residues (Modulus requires exact integer data). */
+    mpz_t* pres = malloc(N * m * sizeof(mpz_t));
+    mpz_t* bres = malloc(N * sizeof(mpz_t));
+    bool bad = false;
+    for (size_t t = 0; t < N * m; t++) mpz_init(pres[t]);
+    for (size_t i = 0; i < N; i++) mpz_init(bres[i]);
+    for (size_t i = 0; i < N && !bad; i++) {
+        if (!ip_mod_value(D->val[i], n, bres[i])) bad = true;
+        for (size_t k = 0; k < m; k++)
+            if (!ip_mod_value(D->pE[i * m + k], n, pres[i * m + k])) bad = true;
+    }
+    if (bad) {
+        for (size_t t = 0; t < N * m; t++) mpz_clear(pres[t]);
+        for (size_t i = 0; i < N; i++) mpz_clear(bres[i]);
+        free(pres); free(bres);
+        return NULL;
+    }
+
+    int d_sq = 0; int64_t count = 0;
+    while (count < (int64_t)N) { count += ip_binom(d_sq + (int)m - 1, (int)m - 1); if (count >= (int64_t)N) break; d_sq++; }
+
+    Expr* result = NULL; bool solved = false;
+    mpz_t inv, fac, prod, tpow; mpz_inits(inv, fac, prod, tpow, NULL);
+    for (int d = 0; d <= d_sq && !solved; d++) {
+        size_t L = 0;
+        int* E = ip_monomials(d, m, &L);
+        mpz_t* A = malloc(N * L * sizeof(mpz_t));
+        mpz_t* b = malloc(N * sizeof(mpz_t));
+        int64_t* pivrow = malloc(L * sizeof(int64_t));
+        for (size_t t = 0; t < N * L; t++) mpz_init(A[t]);
+        for (size_t i = 0; i < N; i++) { mpz_init(b[i]); mpz_set(b[i], bres[i]); }
+        for (size_t j = 0; j < L; j++) pivrow[j] = -1;
+
+        for (size_t i = 0; i < N; i++) {
+            for (size_t j = 0; j < L; j++) {
+                int64_t coeff = 1;
+                for (size_t k = 0; k < m; k++) { coeff *= ip_falling_i(E[j * m + k], D->alpha[i * m + k]); if (coeff == 0) break; }
+                mpz_t* aij = &A[i * L + j];
+                if (coeff == 0) { mpz_set_ui(*aij, 0); continue; }
+                mpz_set_si(*aij, (long)coeff); mpz_mod(*aij, *aij, n);
+                for (size_t k = 0; k < m; k++) {
+                    int e = E[j * m + k] - D->alpha[i * m + k];
+                    if (e > 0) { mpz_powm_ui(tpow, pres[i * m + k], (unsigned long)e, n); mpz_mul(*aij, *aij, tpow); mpz_mod(*aij, *aij, n); }
+                }
+            }
+        }
+
+        size_t prow = 0;
+        for (size_t j = 0; j < L && prow < N; j++) {
+            size_t piv = N;
+            for (size_t r = prow; r < N; r++)
+                if (mpz_sgn(A[r * L + j]) != 0 && mpz_invert(inv, A[r * L + j], n)) { piv = r; break; }
+            if (piv == N) continue;
+            if (piv != prow) {
+                for (size_t jj = 0; jj < L; jj++) mpz_swap(A[piv * L + jj], A[prow * L + jj]);
+                mpz_swap(b[piv], b[prow]);
+            }
+            mpz_invert(inv, A[prow * L + j], n);
+            for (size_t jj = j; jj < L; jj++) { mpz_mul(A[prow * L + jj], A[prow * L + jj], inv); mpz_mod(A[prow * L + jj], A[prow * L + jj], n); }
+            mpz_mul(b[prow], b[prow], inv); mpz_mod(b[prow], b[prow], n);
+            for (size_t r = 0; r < N; r++) {
+                if (r == prow || mpz_sgn(A[r * L + j]) == 0) continue;
+                mpz_set(fac, A[r * L + j]);
+                for (size_t jj = j; jj < L; jj++) { mpz_mul(prod, fac, A[prow * L + jj]); mpz_sub(A[r * L + jj], A[r * L + jj], prod); mpz_mod(A[r * L + jj], A[r * L + jj], n); }
+                mpz_mul(prod, fac, b[prow]); mpz_sub(b[r], b[r], prod); mpz_mod(b[r], b[r], n);
+            }
+            pivrow[j] = (int64_t)prow; prow++;
+        }
+
+        bool ok = true;
+        for (size_t r = prow; r < N; r++) if (mpz_sgn(b[r]) != 0) { ok = false; break; }
+        if (ok) {
+            Expr** C = malloc(L * sizeof(Expr*));
+            for (size_t j = 0; j < L; j++)
+                C[j] = (pivrow[j] >= 0) ? ip_mpz_to_expr(b[pivrow[j]]) : expr_new_integer(0);
+            result = ip_build_poly(E, C, L, m, vars);
+            for (size_t j = 0; j < L; j++) expr_free(C[j]);
+            free(C);
+            solved = true;
+        }
+
+        for (size_t t = 0; t < N * L; t++) mpz_clear(A[t]);
+        for (size_t i = 0; i < N; i++) mpz_clear(b[i]);
+        free(A); free(b); free(pivrow); free(E);
+    }
+    mpz_clears(inv, fac, prod, tpow, NULL);
+    for (size_t t = 0; t < N * m; t++) mpz_clear(pres[t]);
+    for (size_t i = 0; i < N; i++) mpz_clear(bres[i]);
+    free(pres); free(bres);
+
+    if (!solved) result = ip_fail(D, d_sq);
+    return result;
+}
+
 /* --- registration ------------------------------------------------------ */
 
 void interp_init(void) {
@@ -1816,4 +2554,13 @@ void interp_init(void) {
     symtab_add_builtin("Interpolation", builtin_interpolation);
     SymbolDef* idef = symtab_get_def("Interpolation");
     idef->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("InterpolatingPolynomial", builtin_interpolatingpolynomial);
+    SymbolDef* pdef = symtab_get_def("InterpolatingPolynomial");
+    pdef->attributes |= ATTR_PROTECTED;
+    /* Options[InterpolatingPolynomial] = {Modulus -> 0}. */
+    Expr* mrule = expr_new_function(expr_new_symbol(SYM_Rule),
+                     (Expr*[]){ expr_new_symbol(SYM_Modulus), expr_new_integer(0) }, 2);
+    Expr* popts = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ mrule }, 1);
+    symtab_set_options("InterpolatingPolynomial", popts);
 }
