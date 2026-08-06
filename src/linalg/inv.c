@@ -547,6 +547,17 @@ static Expr* inverse_cofactor(Expr* arg, int n) {
 Expr* builtin_inverse(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (linalg_call_has_ndarray(res)) return ndla_inverse(res);
+
+    /* Small machine-real matrix: pack and take the same path. See
+     * linalg_pack_machine_operand -- a 6x6 is below the packing threshold, so
+     * "is it already a buffer" misses it and the generic path runs. */
+    Expr* packed_call = linalg_pack_machine_call1(res);
+    if (packed_call) {
+        Expr* fast = ndla_inverse(packed_call);
+        expr_free(packed_call);
+        if (fast) return fast;
+    }
+
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
 

@@ -1105,6 +1105,17 @@ Expr* builtin_rowreduce(Expr* res) {
 Expr* builtin_linearsolve(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (linalg_call_has_ndarray(res)) return ndla_linearsolve(res);
+
+    /* Small machine-real system: pack both operands and take the same path.
+     * See linalg_pack_machine_operand -- a 6x6 sits below the packing
+     * threshold, so the "already a buffer" guard never fires for it. */
+    Expr* packed_call = linalg_pack_machine_call2(res);
+    if (packed_call) {
+        Expr* fast = ndla_linearsolve(packed_call);
+        expr_free(packed_call);
+        if (fast) return fast;
+    }
+
     size_t argc = res->data.function.arg_count;
     if (argc < 2 || argc > 3) return NULL;
 
