@@ -194,6 +194,28 @@ bool nd_jacobian_real(NdProblem* P, double t, const double* Y, double* Jout);
 /* ------------------------------------------------------------------ *
  *  Options                                                            *
  * ------------------------------------------------------------------ */
+/* Step budget used when MaxSteps is Automatic, i.e. when the user did not ask
+ * for a wall. It is a runaway backstop, NOT a resolution knob.
+ *
+ * It used to be 10000, and that number silently produced WRONG ANSWERS on any
+ * routine long-horizon solve. A harmonic oscillator over {t, 0, 1000} at the
+ * default 8-digit goal needs ~60000 adaptive steps; the driver stopped at
+ * 10000, returned an InterpolatingFunction covering only the part it reached,
+ * and evaluating at t = 1000 then EXTRAPOLATED off the end -- x[1000] came back
+ * as 1.78e6 where Cos[1000] = 0.5624. Both scipy and Mathematica answer 0.5624.
+ * The failure is invisible in a timing: quitting early is fast.
+ *
+ * A large backstop is safe here because exhausting it is not how a divergent
+ * problem ends. The driver has an independent step-size-underflow guard
+ * (ND_ERR_STEPSIZE / ND_ERR_NONCONV) that fires when the controller collapses,
+ * which is what actually catches a blow-up or a Newton failure. MaxSteps is
+ * only reached by a problem that is making real progress and simply needs more
+ * steps than a fixed guess allowed.
+ *
+ * An EXPLICIT MaxSteps -> n stays a hard wall, exactly as before: a user who
+ * names a budget is asking to be stopped at it. */
+#define ND_AUTO_MAX_STEPS ((int64_t)2000000)
+
 typedef struct {
     const char* method;        /* interned method name, or NULL = Automatic   */
     Expr*       method_subopts;/* borrowed List of Rule suboptions, or NULL   */
@@ -201,7 +223,7 @@ typedef struct {
     long        wp_bits;       /* working precision in bits (MPFR)            */
     double      acc_goal;      /* digits; -1 = Automatic; HUGE_VAL = Infinity  */
     double      prec_goal;     /* digits; -1 = Automatic; HUGE_VAL = Infinity  */
-    int64_t     max_steps;     /* -1 = Automatic                             */
+    int64_t     max_steps;     /* -1 = Automatic (see ND_AUTO_MAX_STEPS)     */
     double      max_step_size; /* <= 0 => unbounded                          */
     double      max_step_fraction; /* default 1/10                           */
     double      starting_step; /* <= 0 => automatic (Hairer)                 */
