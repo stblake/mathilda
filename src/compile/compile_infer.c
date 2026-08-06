@@ -421,6 +421,19 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         && A[0]->type == EXPR_SYMBOL) {
         CompileType vt; if (scope_find(c, A[0]->data.symbol.name, &vt, NULL) < 0) return false; *out = vt; return true;
     }
+    /* Threaded list assignment {a, b, ...} = scalar: its value is the RHS (which
+     * emit_list_thread broadcasts to each target). A List RHS (destructuring) or
+     * an array RHS is not lowered -- report non-compilable so the whole body
+     * bails to the interpreter, matching emit_ctrl. */
+    if (!strcmp(h, "Set") && na == 2 && A[0]->type == EXPR_FUNCTION
+        && A[0]->data.function.head->type == EXPR_SYMBOL
+        && !strcmp(A[0]->data.function.head->data.symbol.name, "List")) {
+        if (A[1]->type == EXPR_FUNCTION && A[1]->data.function.head->type == EXPR_SYMBOL
+            && !strcmp(A[1]->data.function.head->data.symbol.name, "List")) return false;
+        CompileType vt;
+        if (!infer_type(c, A[1], &vt) || CT_IS_ARRAY(vt)) return false;
+        *out = vt; return true;
+    }
     if ((!strcmp(h, "Increment") || !strcmp(h, "Decrement")) && na == 1 && A[0]->type == EXPR_SYMBOL) {
         CompileType vt; if (scope_find(c, A[0]->data.symbol.name, &vt, NULL) < 0) return false; *out = vt; return true;
     }

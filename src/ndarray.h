@@ -142,6 +142,16 @@ Expr* ndarray_from_nested_list_like(const Expr* src, const Expr* list, NDType dt
  * List[...] tree from an NDArray's flat buffer. Caller owns the result. */
 Expr* ndarray_to_nested_list(const Expr* a);
 
+/* One-level unpack: `List[a[[1]], a[[2]], ..., a[[dims[0]]]]`. Unlike
+ * ndarray_to_nested_list, which fully materialises to a nested List of boxed
+ * scalars, this keeps each top-level slice PACKED: a rank-1 source yields exact
+ * scalar leaves (Integer / Real / Complex / True|False), a rank>=2 source
+ * yields packed sub-arrays inheriting `a`'s presentation. This is what lets
+ * list destructuring ({x, y} = <rank-2 buffer>) bind packed vectors instead of
+ * exploding a buffer into one Expr per element. Returns NULL if `a` is not an
+ * ndarray or on allocation failure. Caller owns the result. */
+Expr* ndarray_unpack_top_level(const Expr* a);
+
 /* Native Part[a, i1, ..., iN] over a leading run of plain-integer subscripts,
  * operating directly on the flat buffer (no full materialization). N == rank
  * yields a scalar leaf (Real or Complex[re,im]); N < rank yields a contiguous

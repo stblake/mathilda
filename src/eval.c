@@ -843,6 +843,31 @@ static const char* assignment_target_symbol(Expr* lhs) {
 }
 
 /*
+ * lhs_matches_nd_shape:
+ * Validate a (possibly nested) List LHS against the rectangular shape of a
+ * packed array, starting at axis `axis`. A packed array is always a rectangular
+ * block of numbers, so the only thing that can be malformed in `{...} = <array>`
+ * is the LHS -- which this checks from the shape alone, materialising nothing.
+ * A symbol binds the whole remaining sub-array (or scalar); a non-List function
+ * head is a DownValue target and is accepted; a List LHS must line up
+ * element-for-element with `axis`'s extent and recurse one axis deeper; anything
+ * else (a literal on the LHS, or a List deeper than the array's rank) is not an
+ * assignable target.
+ */
+static bool lhs_matches_nd_shape(const Expr* lhs, const Expr* nd, int axis) {
+    if (!lhs) return false;
+    if (lhs->type == EXPR_SYMBOL) return true;
+    if (lhs->type != EXPR_FUNCTION) return false;
+    if (lhs->data.function.head->type != EXPR_SYMBOL) return false;
+    if (lhs->data.function.head->data.symbol.name != SYM_List) return true;
+    if (axis >= nd->data.ndarray.rank) return false;
+    if ((int64_t)lhs->data.function.arg_count != nd->data.ndarray.dims[axis]) return false;
+    for (size_t i = 0; i < lhs->data.function.arg_count; i++)
+        if (!lhs_matches_nd_shape(lhs->data.function.args[i], nd, axis + 1)) return false;
+    return true;
+}
+
+/*
  * is_assignable_lhs:
  * Validate that `lhs` shaped against `rhs` is a structurally legal target
  * for a Set/SetDelayed, including all destructured sub-elements. Used as a
@@ -858,16 +883,29 @@ static bool is_assignable_lhs(Expr* lhs, Expr* rhs) {
     const char* h = lhs->data.function.head->data.symbol.name;
     if (h != SYM_List) return true; /* downvalue / part / etc. handled in apply_assignment */
 
-    if (rhs->type != EXPR_FUNCTION ||
-        rhs->data.function.head->type != EXPR_SYMBOL ||
-        rhs->data.function.head->data.symbol.name != SYM_List) {
-        return false;
-    }
-    if (lhs->data.function.arg_count != rhs->data.function.arg_count) return false;
-    for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
-        if (!is_assignable_lhs(lhs->data.function.args[i], rhs->data.function.args[i])) {
-            return false;
+    /* A packed-list RHS (an EXPR_NDARRAY presenting as List) destructures like
+     * the List it stands for -- see apply_assignment. Validate the LHS against
+     * the array's rectangular shape without materialising any element. */
+    if (is_packed_list(rhs)) return lhs_matches_nd_shape(lhs, rhs, 0);
+
+    if (rhs->type == EXPR_FUNCTION &&
+        rhs->data.function.head->type == EXPR_SYMBOL &&
+        rhs->data.function.head->data.symbol.name == SYM_List) {
+        /* List RHS: destructure element-wise -- lengths must match. */
+        if (lhs->data.function.arg_count != rhs->data.function.arg_count) return false;
+        for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
+            if (!is_assignable_lhs(lhs->data.function.args[i], rhs->data.function.args[i])) {
+                return false;
+            }
         }
+        return true;
+    }
+
+    /* Non-List RHS: Set threads it over the targets ({a, b} = c binds a = c,
+     * b = c), so every element must be assignable against the WHOLE rhs. A
+     * nested List element threads recursively. */
+    for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
+        if (!is_assignable_lhs(lhs->data.function.args[i], rhs)) return false;
     }
     return true;
 }
@@ -962,34 +1000,64 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             expr_free(probe);
         }
         return true;
-    } else if (lhs->type == EXPR_FUNCTION) {
-        if (lhs->data.function.head->type == EXPR_SYMBOL &&
-            lhs->data.function.head->data.symbol.name == SYM_List &&
-            rhs->type == EXPR_FUNCTION &&
-            rhs->data.function.head->type == EXPR_SYMBOL &&
-            rhs->data.function.head->data.symbol.name == SYM_List) {
-            
-            /* List destructuring: match lengths and recurse. Pre-flight every
-             * element so a malformed child (e.g. a literal integer on the LHS)
-             * fails the whole destructuring before any sibling is assigned --
-             * partial assignments would otherwise leak past the failure. */
-            if (lhs->data.function.arg_count != rhs->data.function.arg_count) {
-                return false;
-            }
-            for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
-                if (!is_assignable_lhs(lhs->data.function.args[i], rhs->data.function.args[i])) {
-                    return false;
-                }
-            }
+    } else if (lhs->type == EXPR_FUNCTION &&
+               lhs->data.function.head->type == EXPR_SYMBOL &&
+               lhs->data.function.head->data.symbol.name == SYM_List) {
+        /* A List LHS is either DESTRUCTURED (a List RHS of matching length,
+         * element for element) or THREADED (any other RHS is broadcast to each
+         * target: {a, b} = c binds a = c, b = c -- Wolfram Set semantics). It
+         * NEVER installs a DownValue on List, so this branch always returns
+         * here rather than falling through below.
+         *
+         * A packed-array RHS is an EXPR_NDARRAY (present_as List), not a List
+         * node. Set is a packed-aware head so a whole-value binding
+         * (x = Range[10^6]) keeps its argument packed; but destructuring is the
+         * one assignment path that reads the RHS *structure*, and the
+         * transparency gate leaves a packed argument intact for an aware head.
+         * So normalise a packed RHS to a List of its top-level slices first --
+         * slices stay packed, so {xc, yc} = {Range[m], Range[n]} binds packed
+         * vectors rather than materialising one Expr per element. */
+        Expr* rhs_ds = rhs;
+        bool own_rhs_ds = false;
+        if (is_packed_list(rhs)) {
+            Expr* sliced = ndarray_unpack_top_level(rhs);
+            if (sliced) { rhs_ds = sliced; own_rhs_ds = true; }
+        }
 
-            bool all_ok = true;
-            for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
-                if (!apply_assignment(lhs->data.function.args[i], rhs->data.function.args[i], is_delayed)) {
+        bool rhs_is_list = (rhs_ds->type == EXPR_FUNCTION &&
+                            rhs_ds->data.function.head->type == EXPR_SYMBOL &&
+                            rhs_ds->data.function.head->data.symbol.name == SYM_List);
+
+        /* Pre-flight every element so a malformed target (e.g. a literal
+         * integer on the LHS) fails the whole assignment before any sibling is
+         * bound -- partial assignments would otherwise leak past the failure.
+         * In the threaded case each element pairs with the whole rhs; in the
+         * destructured case with the matching rhs element. */
+        bool all_ok = true;
+        size_t n = lhs->data.function.arg_count;
+        if (rhs_is_list && n != rhs_ds->data.function.arg_count) {
+            all_ok = false;                         /* length mismatch: leave unevaluated */
+        } else {
+            for (size_t i = 0; i < n; i++) {
+                Expr* rhs_i = rhs_is_list ? rhs_ds->data.function.args[i] : rhs_ds;
+                if (!is_assignable_lhs(lhs->data.function.args[i], rhs_i)) {
                     all_ok = false;
+                    break;
                 }
             }
-            return all_ok;
-        } else if (lhs->data.function.head->type == EXPR_SYMBOL && lhs->data.function.head->data.symbol.name == SYM_Part) {
+            if (all_ok) {
+                for (size_t i = 0; i < n; i++) {
+                    Expr* rhs_i = rhs_is_list ? rhs_ds->data.function.args[i] : rhs_ds;
+                    if (!apply_assignment(lhs->data.function.args[i], rhs_i, is_delayed)) {
+                        all_ok = false;
+                    }
+                }
+            }
+        }
+        if (own_rhs_ds) expr_free(rhs_ds);
+        return all_ok;
+    } else if (lhs->type == EXPR_FUNCTION) {
+        if (lhs->data.function.head->type == EXPR_SYMBOL && lhs->data.function.head->data.symbol.name == SYM_Part) {
             Expr* expr_part_assign(Expr* lhs, Expr* rhs); // Forward declare or include part.h
             Expr* assigned = expr_part_assign(lhs, rhs);
             if (assigned) {

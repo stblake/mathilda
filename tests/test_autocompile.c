@@ -233,6 +233,42 @@ void test_table_real_complex_fallback(void) {
     assert_eval_eq("Chop[Table[Sqrt[x], {x, -1., 1., 1.}] - {I, 0., 1.}] == {0, 0, 0}", "True", 0);
 }
 
+/* list-LHS Set threading ({a, b} = c binds a = c, b = c) must AUTO-COMPILE
+ * through the very API Table uses -- agreement via the interpreter fallback would
+ * be vacuous. A destructuring List RHS is not lowered and must decline (NULL),
+ * falling back to the interpreter that handles it. */
+void test_list_thread_autocompiles(void) {
+    Expr* xs = parse_expression("x");
+    struct { const char* body; int compiles; } cases[] = {
+        { "Module[{a = 0., b = 0.}, {a, b} = x; a + b]",                  1 },
+        { "Module[{a = 0., b = 0., c = 0.}, {a, {b, c}} = x; a + b + c]", 1 },
+        { "Module[{a = 0., b = 0.}, {a, b} = {x, 2 x}; a + b]",           0 }, /* destructure */
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        Expr* b = parse_expression(cases[i].body);
+        AutoCompiled* ac = autocompile_new(b, (const Expr* const*)&xs, 1);
+        if (cases[i].compiles && !ac)
+            fprintf(stderr, "FAIL: list-thread body did not auto-compile: %s\n", cases[i].body);
+        if (!cases[i].compiles && ac)
+            fprintf(stderr, "FAIL: destructure body must decline auto-compile: %s\n", cases[i].body);
+        assert((cases[i].compiles != 0) == (ac != NULL));
+        if (ac) autocompiled_free(ac);
+        expr_free(b);
+    }
+    expr_free(xs);
+}
+
+/* End-to-end: threaded assignment inside an auto-compiled Table body (real
+ * iterator) gives the same values as the interpreter. */
+void test_list_thread_table_parity(void) {
+    assert_eval_eq(
+        "Table[Module[{a = 0., b = 0.}, {a, b} = x; a + b], {x, 1., 4.}] == {2., 4., 6., 8.}",
+        "True", 0);
+    assert_eval_eq(
+        "Table[Module[{a = 0., b = 0., c = 0.}, {a, {b, c}} = x; a + b + c], {x, 1., 3.}] == {3., 6., 9.}",
+        "True", 0);
+}
+
 /* NIntegrate: finite / half-line / whole-line agree with the interpreter; the
  * oscillatory sub-method (which re-bodies a copied context) stays correct; a
  * body that goes complex falls back per-sample; uncompilable bodies still work. */
@@ -533,6 +569,8 @@ int main(void) {
     TEST(test_table_multiline_loop_body);
     TEST(test_table_inlines_multiline_callee);
     TEST(test_table_real_complex_fallback);
+    TEST(test_list_thread_autocompiles);          /* precondition: threading DOES compile */
+    TEST(test_list_thread_table_parity);
     TEST(test_nintegrate_parity);
     TEST(test_nintegrate_multidim);
     TEST(test_nintegrate_oscillatory);

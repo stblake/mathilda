@@ -641,8 +641,14 @@ static void pack_mark_aware_heads(void) {
          * a live wrong answer in it (see reverse_top_level in src/sort.c). */
         "AtomQ", "MatrixQ", "VectorQ", "N", "TeXForm", "Extract",
         "QuotientRemainder", "AllTrue", "AnyTrue", "NoneTrue", "ReverseSort",
-        /* Pass-through: never inspect the value's structure, they only move it
-         * around, so a packed list survives assignment and control flow. */
+        /* Pass-through: the value is moved, not inspected, so a packed list
+         * survives assignment and control flow. The one place assignment reads
+         * the RHS *structure* is list destructuring ({a, b} = {...}); leaving
+         * Set aware would strand a packed RHS there, so apply_assignment
+         * (src/eval.c) normalises it to a List of its (still-packed) top-level
+         * slices before destructuring. Without that, {xc, yc} = {Range[m],
+         * Range[n]} silently bound nothing once the RHS packed to a rank-2
+         * buffer. */
         "Set", "SetDelayed", "CompoundExpression", "If", "Which", "Module",
         "Block", "With", "Return", "Print", "Echo",
         /* ------------------------------------------------------------------
@@ -862,7 +868,10 @@ static void pack_mark_aware_heads(void) {
          * returns an exact polynomial -- so an int64 buffer needs no
          * materialisation and the result is identical. */
         "InterpolatingPolynomial",
-        /* Move the value without inspecting it. */
+        /* Move the value without inspecting it. (List destructuring is the one
+         * exception -- apply_assignment reads an int64 slice back as an exact
+         * Integer via ndarray_part, so {a, b, c, d} = Range[4] binds exact
+         * Integers, not coerced Reals; see src/eval.c.) */
         "Set", "SetDelayed", "CompoundExpression", "If", "Which", "Module",
         "Block", "With", "Return", "Print", "Echo",
         /* Exact int64 arithmetic (src/ndarray.c): the accumulate uses ci_*_i64

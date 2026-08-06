@@ -11,6 +11,37 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* Thread an already-emitted scalar `val` into every target of a (possibly
+ * nested) List LHS -- Wolfram Set semantics for a non-List RHS: {a, b} = c
+ * binds a = c and b = c, and {a, {b, c}} = c recurses. Each leaf target must be
+ * a scoped numeric local. `val` is BORROWED (left intact) so the caller can
+ * return it as the Set's value and free it exactly once; the per-target widening
+ * copy is coerced into its own temp and freed here (LIFO). Returns false with
+ * c->ok = false on any target that is not a compilable local, so the whole body
+ * bails to the interpreter (which threads correctly). */
+static bool emit_list_thread(Ctx* c, const Expr* lhs, Val val) {
+    Slot z; memset(&z, 0, sizeof z);
+    for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
+        const Expr* t = lhs->data.function.args[i];
+        if (t->type == EXPR_SYMBOL) {
+            CompileType vt;
+            int vreg = scope_find(c, t->data.symbol.name, &vt, NULL);
+            if (vreg < 0 || vt == CT_BOOL) { c->ok = false; return false; }
+            Val cp = { val.reg, false, val.type, false };
+            coerce(c, &cp, vt);                 /* widen a borrowed copy to the target */
+            if (!c->ok) return false;
+            ins(c, OP_MOVE, (uint32_t)vreg, (uint32_t)cp.reg, 0, z);
+            if (cp.reg != val.reg) c->temp_top--;   /* free the coercion temp */
+        } else if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL
+                   && strcmp(t->data.function.head->data.symbol.name, "List") == 0) {
+            if (!emit_list_thread(c, t, val)) return false;
+        } else {
+            c->ok = false; return false;         /* not a compilable target */
+        }
+    }
+    return true;
+}
+
 int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out) {
     (void)e;
     /*
@@ -318,6 +349,26 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
              * it reports 0 and is only useful inside a CompoundExpression. */
             Slot k0; memset(&k0, 0, sizeof k0); k0.i = 0;
             *out = emit_const(c, k0, CT_INT);
+            return c->ok ? 1 : -1;
+        }
+
+        /* List LHS {a, b, ...} = rhs.  A non-List RHS THREADS (Wolfram Set
+         * semantics: {a, b} = c binds a = c, b = c); this is lowered here. A
+         * List RHS is DESTRUCTURING and an array RHS is the same shape -- neither
+         * is lowered, so bail and let the interpreter (which handles both) take
+         * the whole body. Only plain `Set` threads; AddTo/... on a list LHS is
+         * not a Wolfram form. */
+        if (kind == 0 && na == 2 && A[0]->type == EXPR_FUNCTION
+            && A[0]->data.function.head->type == EXPR_SYMBOL
+            && strcmp(A[0]->data.function.head->data.symbol.name, "List") == 0) {
+            if (A[1]->type == EXPR_FUNCTION && A[1]->data.function.head->type == EXPR_SYMBOL
+                && strcmp(A[1]->data.function.head->data.symbol.name, "List") == 0) {
+                c->ok = false; return -1;            /* destructuring -> interpreter */
+            }
+            Val val; if (!emit(c, A[1], &val)) return -1;
+            if (CT_IS_ARRAY(val.type)) { free_if_tmp(c, val); c->ok = false; return -1; }
+            if (!emit_list_thread(c, A[0], val)) { free_if_tmp(c, val); return -1; }
+            *out = val;                              /* Set returns the RHS value */
             return c->ok ? 1 : -1;
         }
 
