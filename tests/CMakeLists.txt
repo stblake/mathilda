@@ -2669,6 +2669,9 @@ target_include_directories(coshintegral_tests PRIVATE ../src)
 add_executable(fresnelc_tests test_fresnelc.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(fresnelc_tests PRIVATE ../src)
 
+add_executable(numeric_domain_tests test_numeric_domain.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(numeric_domain_tests PRIVATE ../src)
+
 add_executable(fresnels_tests test_fresnels.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(fresnels_tests PRIVATE ../src)
 

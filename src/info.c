@@ -388,15 +388,19 @@ void info_init(void) {
     symtab_set_docstring("Hyperfactorial",
         "Hyperfactorial[n]\n"
         "\tgives the hyperfactorial prod_{k=1}^{n} k^k.\n"
-        "Exact (GMP) for a non-negative integer n; other orders stay symbolic. "
-        "Listable, NumericFunction.");
+        "Exact (GMP) for a non-negative integer n. A non-integer numeric order "
+        "(under N) evaluates via Gamma[n+1]^n / BarnesG[n+1] (real, complex, "
+        "arbitrary precision); symbolic orders stay unevaluated. Listable, "
+        "NumericFunction.");
     symtab_set_docstring("BarnesG",
         "BarnesG[z]\n"
         "\tgives the Barnes G-function.\n"
         "G(z+1) = Gamma[z] G(z) with G(1)=G(2)=1; for a positive integer n, "
         "G(n+1) = prod_{k=1}^{n-1} k! (exact via GMP), and G(m)=0 for "
-        "non-positive integer m. Non-integer orders stay symbolic. Listable, "
-        "NumericFunction.");
+        "non-positive integer m. A non-integer numeric order (under N) evaluates "
+        "from the Barnes asymptotic expansion plus the Gamma recurrence (real, "
+        "complex, arbitrary precision); symbolic orders stay unevaluated. "
+        "Listable, NumericFunction.");
     symtab_set_docstring("QPochhammer",
         "QPochhammer[a, q, n]\n"
         "\tgives the q-Pochhammer symbol prod_{k=0}^{n-1} (1 - a q^k).\n"
@@ -469,7 +473,8 @@ void info_init(void) {
         "For non-negative integers, n! is computed exactly via GMP's mpz_fac_ui.\n"
         "For half-integers (n = m/2 with m odd) it reduces to Sqrt[Pi] times a\n"
         "rational from the Gamma functional equation. Negative integers give\n"
-        "ComplexInfinity. Other inputs stay unevaluated.");
+        "ComplexInfinity. A complex numeric argument (under N) evaluates as\n"
+        "Gamma[n+1]. Other inputs stay unevaluated.");
     symtab_set_docstring("Gamma",
         "Gamma[z]\n"
         "\tis the Euler gamma function Gamma(z).\n"
@@ -871,7 +876,7 @@ void info_init(void) {
         "It is a mathematical constant: it has attributes Constant and Protected,\n"
         "NumericQ[Khinchin] is True, and D[Khinchin, x] is 0. N[Khinchin, prec]\n"
         "evaluates it to any precision.");
-    symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nFactorial2 stays unevaluated on symbolic arguments.");
+    symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nA non-integer numeric argument (under N) evaluates via 2^(n/2) (Pi/2)^((Cos[n Pi]-1)/4) Gamma[n/2+1] (real, complex, arbitrary precision).\nFactorial2 stays unevaluated on symbolic arguments.");
     symtab_set_docstring("Fibonacci",
         "Fibonacci[n]\n"
         "\tgives the nth Fibonacci number F_n.\n"
@@ -898,8 +903,12 @@ void info_init(void) {
         "\tgives the binomial coefficient C(n, m) = n! / (m! (n-m)!).\n"
         "For non-negative integer arguments, computed exactly via GMP's\n"
         "mpz_bin_uiui. Generalised forms (negative or symbolic n, half-integer\n"
-        "m) reduce through the Gamma functional equation; non-decidable forms\n"
-        "stay unevaluated.");
+        "m) reduce through the Gamma functional equation. Rational, real, and\n"
+        "complex operands evaluate numerically as\n"
+        "Gamma[n+1]/(Gamma[m+1] Gamma[n-m+1]): machine precision when an argument\n"
+        "is a machine real, and arbitrary precision under N[Binomial[..], p];\n"
+        "complex arguments reuse the complex Gamma. Non-decidable forms stay\n"
+        "symbolic.");
 
     symtab_set_docstring("HypergeometricPFQ",
         "HypergeometricPFQ[{a1, ...}, {b1, ...}, z]\n"

@@ -966,6 +966,9 @@ Falling factorial. `FactorialPower[n, k]` = $n (n-1) (n-2) \cdots (n - k + 1)$.
 - For symbolic $n$ with concrete $k \le 32$: expands to an explicit product
   `Times[n, n - 1, ..., n - k + 1]` so `Expand` and `D` can act on it.
 - Equivalent to $n! / (n - k)!$ when both arguments are non-negative integers.
+- For a **non-integer numeric** $k$ (under `N`), evaluates the generalised form
+  $\Gamma(n+1)/\Gamma(n-k+1)$ (real, complex, arbitrary precision); exact
+  non-integer $k$ stays symbolic.
 - Used as the symbolic-order derivative of a power: $D[x^n, \{x, k\}] = \mathrm{FactorialPower}[n, k]\, x^{n-k}$.
 
 ```mathematica
@@ -994,7 +997,11 @@ $\Gamma(n+1)/(\Gamma(m+1)\,\Gamma(n-m+1))$.
 - Exact integer/integer path uses GMP (`mpz_bin_ui`), including the
   Pascal extension `Binomial[n, m] = (-1)^m Binomial[m-n-1, m]` for
   negative `n`.
-- Machine-precision real branch via `tgamma`.
+- Machine-precision real branch via `tgamma`. Fires when either operand
+  is a machine real; the other may be any real-numeric leaf (integer,
+  bigint, rational, MPFR) — so `Binomial[2.5, 1/5] → 1.34885`. If an
+  operand is symbolic the branch declines and the form stays symbolic
+  (`Binomial[2.5, x]`) rather than reading the sibling as `0`.
 - Symmetric identity: when `n - m` simplifies to a non-negative
   integer `k ≤ 32`, reduces to `Binomial[n, k]` and expands as a
   falling-factorial polynomial. This catches `Binomial[n, n - 1] → n`,
@@ -1004,6 +1011,22 @@ $\Gamma(n+1)/(\Gamma(m+1)\,\Gamma(n-m+1))$.
   rational, complex, …) expands to the falling-factorial polynomial
   `n (n-1) (n-2) ... (n-m+1) / m!`, which the `Times`/`Plus` folders
   then simplify.
+- Arbitrary-precision real branch via MPFR (`mpfr_gamma`), evaluating the
+  Gamma quotient at the working precision. It leaves the exact rational
+  form symbolic — `Binomial[7/3, 1/5]` stays `Binomial[7/3, 1/5]`, as in
+  Mathematica — but supplies a value under `N[Binomial[7/3, 1/5], p]`.
+  Placed after the integer-`m` branch so an integer `m` keeps the exact
+  falling-factorial form. The working precision follows the usual
+  contagion rule (minimum precision among the inexact operands, floored
+  at machine 53).
+- Complex numeric branch: when an operand is a `Complex[..]` value with an
+  inexact part (i.e. under `N`), the Gamma quotient is built as an
+  expression and evaluated, reusing `Gamma`'s complex kernels (machine
+  Lanczos, and the arbitrary-precision Spouge path under MPFR) and the
+  complex-arithmetic folders — so `N[Binomial[1/2 + I/3, 1/4]]` and
+  `N[Binomial[1/2 + I/3, 1/4], 25]` both evaluate. The result is accepted
+  only if it is numeric, so a pole or a symbolic operand leaves the form
+  symbolic. Exact Gaussian operands (`Binomial[1 + I, 1/2]`) stay symbolic.
 
 ```mathematica
 In[1]:= Binomial[10, 3]
@@ -1026,6 +1049,27 @@ Out[6]= -1/12 - I/12
 
 In[7]:= Binomial[0, 1]
 Out[7]= 0
+
+In[8]:= Binomial[7/3, 1/5]
+Out[8]= Binomial[7/3, 1/5]
+
+In[9]:= N[Binomial[7/3, 1/5]]
+Out[9]= 1.33313
+
+In[10]:= N[Binomial[7/3, 1/5], 25]
+Out[10]= 1.3331254244650286522359229
+
+In[11]:= Binomial[2.5, 1/5]
+Out[11]= 1.34885
+
+In[12]:= Binomial[1/2 + I/3, 1/4]
+Out[12]= Binomial[1/2 + I/3, 1/4]
+
+In[13]:= N[Binomial[1/2 + I/3, 1/4]]
+Out[13]= 1.08987 + 0.0929283 I
+
+In[14]:= N[Binomial[1/2 + I/3, 1/4], 25]
+Out[14]= 1.0898678407199392604353272 + 0.092928304677202434313313055 I
 ```
 
 ## Fibonacci

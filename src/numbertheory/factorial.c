@@ -126,5 +126,24 @@ Expr* builtin_factorial(Expr* res) {
         }
     }
 
+    /* Complex numeric argument (a Complex[..] with an inexact part, i.e. under
+     * N): Factorial[z] = Gamma[z + 1], reusing Gamma's complex kernels.  Exact
+     * Gaussian arguments stay symbolic, matching Mathematica. */
+    {
+        Expr *re, *im;
+        if (is_complex(arg, &re, &im) &&
+            (re->type == EXPR_REAL || im->type == EXPR_REAL
+#ifdef USE_MPFR
+             || re->type == EXPR_MPFR || im->type == EXPR_MPFR
+#endif
+            )) {
+            Expr* zp1 = expr_new_function(expr_new_symbol(SYM_Plus),
+                (Expr*[]){ expr_copy(arg), expr_new_integer(1) }, 2);
+            Expr* g = eval_and_free(expr_new_function(expr_new_symbol(SYM_Gamma), &zp1, 1));
+            if (g && expr_is_numeric_like(g)) return g;
+            expr_free(g);
+        }
+    }
+
     return NULL;
 }

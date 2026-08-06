@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <gmp.h>
 
 /* FactorialPower[n, k] -- the falling factorial (Pochhammer-style).
@@ -38,13 +39,58 @@
  * Anything else (k symbolic, or both arguments symbolic): NULL --
  * stays as `FactorialPower[n, k]` until more information is supplied.
  */
+/* True for an inexact numeric leaf: a machine/MPFR real, or a Complex[..] with
+ * an inexact part.  Gates the analytic (Gamma) path so a non-integer k gets a
+ * value under N while exact args stay symbolic. */
+static bool fp_is_inexact(const Expr* e) {
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    Expr *re, *im;
+    if (is_complex((Expr*)e, &re, &im)) return fp_is_inexact(re) || fp_is_inexact(im);
+    return false;
+}
+
+/* Generalised falling factorial for non-integer k, built as an expression and
+ * evaluated (reusing Gamma and its complex + MPFR kernels):
+ *
+ *     FactorialPower[n, k] = Gamma[n + 1] / Gamma[n - k + 1].
+ */
+static Expr* fp_gamma_quotient(Expr* n, Expr* k) {
+    Expr* np1 = expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_copy(n), expr_new_integer(1) }, 2);
+    Expr* gn  = expr_new_function(expr_new_symbol(SYM_Gamma), &np1, 1);
+
+    Expr* negk = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ expr_new_integer(-1), expr_copy(k) }, 2);
+    Expr* nmk1 = expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_copy(n), negk, expr_new_integer(1) }, 3);   /* n - k + 1 */
+    Expr* gnmk = expr_new_function(expr_new_symbol(SYM_Gamma), &nmk1, 1);
+    Expr* inv  = expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ gnmk, expr_new_integer(-1) }, 2);
+
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ gn, inv }, 2);
+    return eval_and_free(prod);
+}
+
 Expr* builtin_factorialpower(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* n_arg = res->data.function.args[0];
     Expr* k_arg = res->data.function.args[1];
 
-    /* k must be a concrete non-negative integer for any reduction. */
-    if (k_arg->type != EXPR_INTEGER) return NULL;
+    /* k must be a concrete non-negative integer for the exact product path.
+     * A non-integer k with an inexact operand (under N) takes the generalised
+     * Gamma quotient; otherwise the expression stays symbolic. */
+    if (k_arg->type != EXPR_INTEGER) {
+        if (fp_is_inexact(n_arg) || fp_is_inexact(k_arg)) {
+            Expr* val = fp_gamma_quotient(n_arg, k_arg);
+            if (val && expr_is_numeric_like(val)) return val;
+            expr_free(val);
+        }
+        return NULL;
+    }
     int64_t k = k_arg->data.integer;
     if (k < 0) return NULL;
     if (k == 0) return expr_new_integer(1);

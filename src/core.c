@@ -2549,6 +2549,46 @@ static Expr* mod_quot_mpq_to_expr(const mpq_t q) {
     return expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
 }
 
+/* Coerce a real-numeric leaf (Integer/BigInt/Real/MPFR/Rational) to a double
+ * for Mod's machine path.  Returns false for symbolic / complex operands so the
+ * path declines rather than silently reading a Rational sibling as 0 -- the bug
+ * that turned Mod[7/3, 0.5] into 0.0 and Mod[2.5, 1/3] into unevaluated. */
+static bool mod_operand_to_double(const Expr* e, double* out) {
+    int64_t n, d;
+    switch (e->type) {
+        case EXPR_INTEGER: *out = (double)e->data.integer;   return true;
+        case EXPR_REAL:    *out = e->data.real;              return true;
+        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return true;
+#ifdef USE_MPFR
+        case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
+#endif
+        default: break;
+    }
+    if (is_rational(e, &n, &d)) { *out = (double)n / (double)d; return true; }
+    return false;
+}
+
+#ifdef USE_MPFR
+/* Set an already-init2'd mpfr from a real-numeric leaf, Rational included.
+ * Returns false for symbolic / complex operands. */
+static bool mod_set_mpfr(mpfr_t out, const Expr* e) {
+    int64_t n, d;
+    switch (e->type) {
+        case EXPR_INTEGER: mpfr_set_si(out, (long)e->data.integer, MPFR_RNDN); return true;
+        case EXPR_BIGINT:  mpfr_set_z (out, e->data.bigint,        MPFR_RNDN); return true;
+        case EXPR_REAL:    mpfr_set_d (out, e->data.real,          MPFR_RNDN); return true;
+        case EXPR_MPFR:    mpfr_set   (out, e->data.mpfr,          MPFR_RNDN); return true;
+        default: break;
+    }
+    if (is_rational(e, &n, &d)) {
+        mpfr_set_si(out, (long)n, MPFR_RNDN);
+        mpfr_div_si(out, out, (long)d, MPFR_RNDN);
+        return true;
+    }
+    return false;
+}
+#endif
+
 Expr* builtin_mod(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 2 && res->data.function.arg_count != 3)) {
         return NULL;
@@ -2584,14 +2624,12 @@ Expr* builtin_mod(Expr* res) {
             mpfr_init2(n, prec);
             mpfr_init2(q, prec);
             mpfr_init2(r, prec);
-            if (m_is_mpfr) mpfr_set(m, m_expr->data.mpfr, MPFR_RNDN);
-            else if (m_expr->type == EXPR_INTEGER) mpfr_set_si(m, (long)m_expr->data.integer, MPFR_RNDN);
-            else if (m_expr->type == EXPR_BIGINT) mpfr_set_z(m, m_expr->data.bigint, MPFR_RNDN);
-            else /* EXPR_REAL */ mpfr_set_d(m, m_expr->data.real, MPFR_RNDN);
-            if (n_is_mpfr) mpfr_set(n, n_expr->data.mpfr, MPFR_RNDN);
-            else if (n_expr->type == EXPR_INTEGER) mpfr_set_si(n, (long)n_expr->data.integer, MPFR_RNDN);
-            else if (n_expr->type == EXPR_BIGINT) mpfr_set_z(n, n_expr->data.bigint, MPFR_RNDN);
-            else /* EXPR_REAL */ mpfr_set_d(n, n_expr->data.real, MPFR_RNDN);
+            /* Load both operands, Rational included; a Complex operand makes
+             * mod_set_mpfr fail and we leave the expression symbolic. */
+            if (!mod_set_mpfr(m, m_expr) || !mod_set_mpfr(n, n_expr)) {
+                mpfr_clears(m, n, q, r, (mpfr_ptr)0);
+                return NULL;
+            }
             if (mpfr_zero_p(n)) {
                 mpfr_clears(m, n, q, r, (mpfr_ptr)0);
                 return NULL;
@@ -2650,8 +2688,9 @@ Expr* builtin_mod(Expr* res) {
             mpq_clears(m, n, qmpq, prod, rmpq, NULL);
             return out;
         } else if (m_expr->type == EXPR_BIGINT || n_expr->type == EXPR_BIGINT || m_expr->type == EXPR_INTEGER || n_expr->type == EXPR_INTEGER || m_expr->type == EXPR_REAL || n_expr->type == EXPR_REAL) {
-            double m_val = (m_expr->type == EXPR_REAL) ? m_expr->data.real : (m_expr->type == EXPR_INTEGER) ? (double)m_expr->data.integer : (m_expr->type == EXPR_BIGINT) ? mpz_get_d(m_expr->data.bigint) : 0.0;
-            double n_val = (n_expr->type == EXPR_REAL) ? n_expr->data.real : (n_expr->type == EXPR_INTEGER) ? (double)n_expr->data.integer : (n_expr->type == EXPR_BIGINT) ? mpz_get_d(n_expr->data.bigint) : 0.0;
+            double m_val, n_val;
+            if (!mod_operand_to_double(m_expr, &m_val) || !mod_operand_to_double(n_expr, &n_val))
+                return NULL;
             if (n_val == 0.0) return NULL;
             double result = m_val - n_val * floor(m_val / n_val);
             return expr_new_real(result);
@@ -2710,9 +2749,10 @@ Expr* builtin_mod(Expr* res) {
             mpq_clears(m, n, d, diff, qmpq, prod, rmpq, NULL);
             return out;
         } else if (m_expr->type == EXPR_BIGINT || n_expr->type == EXPR_BIGINT || d_expr->type == EXPR_BIGINT || m_expr->type == EXPR_INTEGER || n_expr->type == EXPR_INTEGER || d_expr->type == EXPR_INTEGER || m_expr->type == EXPR_REAL || n_expr->type == EXPR_REAL || d_expr->type == EXPR_REAL) {
-            double m_val = (m_expr->type == EXPR_REAL) ? m_expr->data.real : (m_expr->type == EXPR_INTEGER) ? (double)m_expr->data.integer : (m_expr->type == EXPR_BIGINT) ? mpz_get_d(m_expr->data.bigint) : 0.0;
-            double n_val = (n_expr->type == EXPR_REAL) ? n_expr->data.real : (n_expr->type == EXPR_INTEGER) ? (double)n_expr->data.integer : (n_expr->type == EXPR_BIGINT) ? mpz_get_d(n_expr->data.bigint) : 0.0;
-            double d_val = (d_expr->type == EXPR_REAL) ? d_expr->data.real : (d_expr->type == EXPR_INTEGER) ? (double)d_expr->data.integer : (d_expr->type == EXPR_BIGINT) ? mpz_get_d(d_expr->data.bigint) : 0.0;
+            double m_val, n_val, d_val;
+            if (!mod_operand_to_double(m_expr, &m_val) || !mod_operand_to_double(n_expr, &n_val) ||
+                !mod_operand_to_double(d_expr, &d_val))
+                return NULL;
             if (n_val == 0.0) return NULL;
             double m_minus_d = m_val - d_val;
             double mod_val = m_minus_d - n_val * floor(m_minus_d / n_val);
