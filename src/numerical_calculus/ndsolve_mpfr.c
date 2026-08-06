@@ -674,7 +674,7 @@ static NdStatus mpfr_integrate(NdProblem* P, const NdOpts* o, const NdStepper* S
     else {
         P->tol.rtol = tol.rtol; P->tol.atol = tol.atol;
         mpsol_push(sol, t0m, Y0, f0);
-        int64_t budget = (o->max_steps > 0) ? o->max_steps : 10000;
+        int64_t budget = (o->max_steps > 0) ? o->max_steps : ND_AUTO_MAX_STEPS;
         if (P->tmax > P->t0)
             st = implicit ? mpfr_bdf_dir(P, o, sol, tol, P->tmax, bits, &budget)
                           : mpfr_dir(P, o, sol, tol, adaptive, P->tmax, bits, &budget);

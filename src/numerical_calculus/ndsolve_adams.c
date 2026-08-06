@@ -136,7 +136,7 @@ NdStatus nd_multistep_adams(NdProblem* P, const NdOpts* o, NdSolution* sol) {
     if (!nd_rhs_real(P, P->t0, P->Y0, f0)) { free(f0); return ND_ERR_SAMPLE; }
     nd_solution_push(sol, P->t0, P->Y0, f0);
     free(f0);
-    int64_t budget = (o->max_steps > 0) ? o->max_steps : 10000;
+    int64_t budget = (o->max_steps > 0) ? o->max_steps : ND_AUTO_MAX_STEPS;
     NdStatus st = ND_OK;
     if (P->tmax > P->t0) st = adams_dir(P, o, sol, tol, P->tmax, &budget);
     if (P->tmin < P->t0) { NdStatus s2 = adams_dir(P, o, sol, tol, P->tmin, &budget);
