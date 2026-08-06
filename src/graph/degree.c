@@ -59,11 +59,45 @@ static Expr* degree_dispatch(Expr* res, int mode) {
         return expr_new_integer(degree_of(g, v, mode));
     }
 
+    /* All degrees at once: one pass over the edges, accumulating into per-vertex
+     * counters, rather than one O(E) scan per vertex (which was O(V*E) -- ~5 s
+     * for 20000 vertices and 40000 edges). The per-edge rules below are the same
+     * ones degree_of applies, just pushed to the endpoints instead of pulled. */
     size_t nv = verts->data.function.arg_count;
     Expr** out = (nv > 0) ? calloc(nv, sizeof(Expr*)) : NULL;
     if (nv > 0 && !out) return NULL;
+
+    int64_t* deg = (nv > 0) ? calloc(nv, sizeof(int64_t)) : NULL;
+    GraphVIdx* ix = graph_vidx_new(nv);
+    if ((nv > 0 && !deg) || !ix) { free(out); free(deg); graph_vidx_free(ix); return NULL; }
     for (size_t i = 0; i < nv; i++)
-        out[i] = expr_new_integer(degree_of(g, verts->data.function.args[i], mode));
+        graph_vidx_put(ix, verts->data.function.args[i], (int)i);
+
+    const Expr* edges = g->data.function.args[1];
+    for (size_t k = 0; k < edges->data.function.arg_count; k++) {
+        const Expr* e = edges->data.function.args[k];
+        const char* kind = graph_edge_kind(e);
+        int ia = graph_vidx_get(ix, e->data.function.args[0]);
+        int ib = graph_vidx_get(ix, e->data.function.args[1]);
+        if (ia < 0 || ib < 0) continue;                 /* validated: cannot happen */
+        if (kind == SYM_UndirectedEdge) {
+            /* Incident to both ends, and in == out == total. No self-loops, so
+             * the two ends are distinct and neither is double-counted. */
+            deg[ia]++; deg[ib]++;
+        } else if (mode == DEG_IN)  { deg[ib]++; }
+        else if (mode == DEG_OUT)   { deg[ia]++; }
+        else                        { deg[ia]++; deg[ib]++; }   /* total */
+    }
+
+    /* Read through the index so that a repeated vertex reports the degree of its
+     * first occurrence -- what the per-vertex expr_eq scan did. */
+    for (size_t i = 0; i < nv; i++) {
+        int at = graph_vidx_get(ix, verts->data.function.args[i]);
+        out[i] = expr_new_integer(deg[at >= 0 ? at : (int)i]);
+    }
+    graph_vidx_free(ix);
+    free(deg);
+
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), out, nv);
     free(out);
     return list;
