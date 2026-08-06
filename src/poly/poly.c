@@ -1689,7 +1689,9 @@ static Expr* polynomialdivrem_with_extension(Expr* p, Expr* q, Expr* x,
     return result;
 }
 
+#ifdef USE_FLINT
 static int64_t poly_max_int_exponent(const Expr* e);   /* fwd: high-degree FLINT gate */
+#endif
 
 Expr* builtin_polynomialquotient(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
@@ -2264,6 +2266,7 @@ static Expr* expr_rebuild_call(const Expr* original, Expr** args,
  * structural proxy for "this polynomial is high enough degree that the
  * classical int64 pseudo-remainder GCD path risks coefficient overflow"
  * — catches both the factored (x+2)^102 and its expanded x^102 term. */
+#ifdef USE_FLINT   /* only the FLINT high-degree gate above calls this */
 static int64_t poly_max_int_exponent(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return 0;
     int64_t best = 0;
@@ -2282,6 +2285,7 @@ static int64_t poly_max_int_exponent(const Expr* e) {
     if (hv > best) best = hv;
     return best;
 }
+#endif
 
 /* True iff `e` carries no bare symbol — a numeric constant (integer, bigint,
  * rational, real).  Used to tell a genuine variable-carrying rational-function

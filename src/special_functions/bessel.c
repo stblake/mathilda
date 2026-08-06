@@ -90,6 +90,12 @@ static bool bj_is_inexact_leaf(const Expr* e) {
     return false;
 }
 
+/* bj_is_inexact / bj_is_real_numeric / bj_order_is_long below are consulted only
+ * on the MPFR numeric path (which continues past #define BRND), so fold them into
+ * that same guard; without MPFR they are unused (-Werror=unused-function).
+ * bj_is_inexact_leaf above stays outside — bessel_classify_order calls it on the
+ * machine (no-MPFR) path too. */
+#ifdef USE_MPFR
 /* True if `e` is inexact, descending one level into Complex[re, im]. */
 static bool bj_is_inexact(const Expr* e) {
     if (bj_is_inexact_leaf(e)) return true;
@@ -130,7 +136,6 @@ static bool bj_order_is_long(const Expr* e, long* out) {
     return false;
 }
 
-#ifdef USE_MPFR
 #define BRND MPFR_RNDN
 
 /* Set an already-init2'd real mpfr from an exact-or-real leaf. */

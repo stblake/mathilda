@@ -41,7 +41,9 @@
 #include <math.h>
 
 #include <gmp.h>
+#ifdef USE_MPFR
 #include <mpfr.h>
+#endif
 
 #include "expr.h"
 #include "eval.h"
@@ -84,6 +86,10 @@ static bool gb_set_degree_ok(GBPoly* const* F, int nF) {
  *  Monomial helpers (exponent vectors are int[nvar]).
  * ================================================================== */
 
+/* These monomial helpers serve only the MPFR polynomial-system solver below, so
+ * they are compiled with MPFR only; otherwise they are unused
+ * (-Werror=unused-function). */
+#ifdef USE_MPFR
 static bool mono_divides(const int* a, const int* b, int n) {
     /* a | b ? */
     for (int k = 0; k < n; k++) if (a[k] > b[k]) return false;
@@ -100,6 +106,7 @@ static int mono_index(const int* B, int dB, int n, const int* e) {
     }
     return -1;
 }
+#endif
 
 /* ================================================================== *
  *  Verification: max |f_i(point)| over the residual polynomials.

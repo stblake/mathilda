@@ -25,7 +25,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <gmp.h>
-#include <mpfr.h>
+#ifdef USE_MPFR
+#include <mpfr.h>   /* only gb_to_expr_inexact() needs it, itself USE_MPFR-only */
+#endif
 
 #ifdef __cplusplus
 extern "C" {

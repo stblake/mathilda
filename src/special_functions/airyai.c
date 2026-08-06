@@ -88,15 +88,17 @@ static bool ai_is_symbol(const Expr* e, const char* name) {
     return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 
+/* Consulted only on the MPFR numeric path, so compiled with MPFR only;
+ * otherwise unused (-Werror=unused-function). */
+#ifdef USE_MPFR
 /* True if `e` is an inexact numeric leaf (Real or MPFR). */
 static bool ai_is_inexact(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_REAL) return true;
-#ifdef USE_MPFR
     if (e->type == EXPR_MPFR) return true;
-#endif
     return false;
 }
+#endif
 
 /* True if `e` is -Infinity, represented as Times[-1, Infinity]. */
 static bool ai_is_neg_infinity(const Expr* e) {

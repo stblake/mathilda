@@ -66,17 +66,17 @@
 /* Small predicates / coercions                                        */
 /* ------------------------------------------------------------------ */
 
+/* Consulted only on the MPFR numeric path (which opens immediately below), so
+ * fold it into that guard; without MPFR it is unused (-Werror=unused-function). */
+#ifdef USE_MPFR
 /* True if `e` is an inexact numeric leaf (Real or MPFR). */
 static bool pl_is_inexact(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_REAL) return true;
-#ifdef USE_MPFR
     if (e->type == EXPR_MPFR) return true;
-#endif
     return false;
 }
 
-#ifdef USE_MPFR
 /* True if `e` is an inexact numeric leaf, or a Complex[..] with an inexact
  * part -- i.e. its presence makes a PolyLog call numeric. */
 static bool pl_inexact_anywhere(Expr* e) {

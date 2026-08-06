@@ -51,9 +51,18 @@ endif
 # whatever GCC the runner ships (13 at the time of writing), where these are
 # warnings that pass the build; promoting them here makes that job a real gate
 # no matter which compiler version it lands on.
+#
+# `-Werror=unused-function`: a static function used only inside an `#ifdef
+# USE_FLINT` / `USE_MPFR` block but defined unconditionally is dead code in the
+# degrade config, where -Wall reports it as "defined but not used" / "declared
+# static but never defined". Those warnings scroll past a -j build unnoticed on
+# the dev machine (which has the optional deps) and only ever appear in the
+# no-FLINT / no-MPFR CI job — the one place nobody reads the warning stream.
+# Promote it so that job fails loudly instead: the fix is always to guard the
+# definition with the same `#ifdef` as its caller.
 CFLAGS = -O3 -std=c99 -Wall -Wextra -Werror=implicit-function-declaration \
          -Werror=incompatible-pointer-types -Werror=int-conversion \
-         -Werror=implicit-int -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/stats -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/ffi -I/usr/include -I/usr/local/include
+         -Werror=implicit-int -Werror=unused-function -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/stats -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/ffi -I/usr/include -I/usr/local/include
 
 # Readline is available on macOS and Linux but not on Windows (MinGW).
 # Build with USE_READLINE=0 to disable it explicitly (e.g. for cross-builds

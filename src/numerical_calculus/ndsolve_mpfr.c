@@ -20,6 +20,21 @@
 #include <float.h>
 #include <stdlib.h>
 
+/* nd_ac_prec_free frees the (optional) MPFR RHS autocompiled fast path on an
+ * NdProblem. It is declared unconditionally in ndsolve_common.h and called from
+ * every teardown site (ndsolve.c + MoL), all compiled in every config, so it
+ * must be defined unconditionally too: the ac_prec field and autocompiled_free()
+ * both exist without MPFR, where it is simply a null-checked no-op. It used to
+ * live inside the file-wide #ifdef USE_MPFR below, leaving it undefined on the
+ * no-MPFR build — a link error that surfaced only once that build compiled. */
+void nd_ac_prec_free(NdProblem* P) {
+    if (!P || !P->ac_prec) return;
+    for (size_t i = 0; i < P->d; i++)
+        if (P->ac_prec[i]) autocompiled_free(P->ac_prec[i]);
+    free(P->ac_prec);
+    P->ac_prec = NULL;
+}
+
 #ifdef USE_MPFR
 
 /* ---- mpfr vector helpers ---- */
@@ -32,14 +47,6 @@ static void mp_vec_free(mpfr_t* v, size_t n) {
     if (!v) return;
     for (size_t i = 0; i < n; i++) mpfr_clear(v[i]);
     free(v);
-}
-
-void nd_ac_prec_free(NdProblem* P) {
-    if (!P || !P->ac_prec) return;
-    for (size_t i = 0; i < P->d; i++)
-        if (P->ac_prec[i]) autocompiled_free(P->ac_prec[i]);
-    free(P->ac_prec);
-    P->ac_prec = NULL;
 }
 
 /* One-shot lazy compile of the reduced RHS in MPFR: one program per component as

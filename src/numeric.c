@@ -885,6 +885,14 @@ static Expr* numericalize_rec(const Expr* e, NumericSpec spec) {
  *  64 bits matches the existing convention in bessel.c and contfrac.c.
  * ---------------------------------------------------------------------- */
 
+/* The whole working-precision scan below — ExactScan and its helpers
+ * (i64_lossy_bits, mpz_lossy_bits, scan_rational, scan_exact_leaves) plus
+ * numeric_plan_working_spec / numeric_round_result — exists only to drive the
+ * arbitrary-precision retry path, which is compiled only when MPFR is present.
+ * Without MPFR every leaf is a machine double and there is nothing to scan, so
+ * the entire cluster is guarded; otherwise it is dead code that trips
+ * -Werror=unused-function on the no-MPFR build. */
+#ifdef USE_MPFR
 #define NUMERIC_GUARD_BITS 64
 
 typedef struct {
@@ -1051,7 +1059,6 @@ static void scan_exact_leaves(const Expr* e, ExactScan* s) {
     }
 }
 
-#ifdef USE_MPFR
 /* Decide the working precision. Returns true (and fills *work) when the
  * evaluation must be raised, meaning the caller has to round the result
  * back down afterwards. */

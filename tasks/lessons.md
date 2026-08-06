@@ -2346,3 +2346,22 @@ actually handle the buffer (`numericalize_rec`'s `EXPR_NDARRAY` case widens
 int64→float64 via `expr_new_ndarray_like`, inheriting presentation). One without
 the other is incomplete: the claim alone would hand `N` an int64 array it copies
 verbatim (wrong: int, not real); the widening alone is never reached.
+
+## A reported build warning can be the visible tip of a chronically-broken degrade config (2026-08-06)
+
+A handful of `-Wunused-function` warnings in `rat.c`/`rootreduce.c` (plus a
+failing Linux CI email) turned out to sit on top of a no-MPFR/no-FLINT config
+that had been broken far past the reported symptoms: `groebner.h` +
+`nsolve_system.c` included `<mpfr.h>` unguarded (the actual CI compile failure),
+`nd_ac_prec_free` was defined inside a file-wide `#ifdef USE_MPFR` yet called
+unconditionally (a *link* error), and **17** static functions were dead code in
+the degrade config. The CI `build-no-mpfr` job had only ever reached the compile
+stage — it aborted early on the mpfr.h include — so its green-until-now history
+never covered the link or the tail of the file list. Lessons: (1) when a
+degrade-config warning appears, fix the whole *class*, not the two files that
+happened to be reported, and add a gate (`-Werror=unused-function`) so it can't
+silently return; (2) macOS masks this entire class because `mpfr.h` is on the
+include path — reproduce the Linux build locally with a **poison stub `mpfr.h`**
+(`#error`) injected via `CC="gcc-NN -I<dir>"` ahead of `-I/usr/local/include`,
+and `make -k` to enumerate the whole backlog in one pass rather than iterating
+through CI one failure at a time. See [[project_use_mpfr_zero_build]].

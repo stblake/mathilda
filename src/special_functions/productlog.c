@@ -72,13 +72,14 @@ static bool pl_is_symbol(const Expr* e, const char* name) {
     return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
 }
 
+/* These inexactness predicates are consulted only on the MPFR numeric path, so
+ * they are compiled with MPFR only; otherwise unused (-Werror=unused-function). */
+#ifdef USE_MPFR
 /* True if `e` is an inexact numeric leaf (Real or MPFR). */
 static bool pl_is_inexact_leaf(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_REAL) return true;
-#ifdef USE_MPFR
     if (e->type == EXPR_MPFR) return true;
-#endif
     return false;
 }
 
@@ -90,6 +91,7 @@ static bool pl_is_inexact(const Expr* e) {
         return pl_is_inexact_leaf(re) || pl_is_inexact_leaf(im);
     return false;
 }
+#endif
 
 /* Construct the (already-evaluated) expression `Times[-1, Power[E, -1]]` = -1/E. */
 static Expr* pl_make_neg_inv_e(void) {

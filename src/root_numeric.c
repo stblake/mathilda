@@ -48,6 +48,10 @@
 /* ====================================================================
  *  Diagnostics
  * ================================================================== */
+/* root_warn and everything below belong to the arbitrary-precision root
+ * solver, compiled only with MPFR; guard the diagnostic too so it is not a lone
+ * unused static on the no-MPFR build (-Werror=unused-function). */
+#ifdef USE_MPFR
 static void root_warn(const char* tag, const char* fmt, ...) {
     va_list ap;
     fprintf(stderr, "Root::%s: ", tag);
@@ -56,8 +60,6 @@ static void root_warn(const char* tag, const char* fmt, ...) {
     va_end(ap);
     fputc('\n', stderr);
 }
-
-#ifdef USE_MPFR
 
 /* ====================================================================
  *  Step 1: extract polynomial and k from Root[Function[poly_in_slot], k]
