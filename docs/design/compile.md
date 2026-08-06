@@ -66,6 +66,29 @@ Decisions already taken (2026-07-26): small lattice; internal engine **and** use
 
 ---
 
+## 2b. Source layout
+
+The engine lives in `src/compile/`, split by phase behind two internal headers:
+`compile_internal.h` is the finished-program surface (opcodes, `Instr`,
+`CompiledProgram`, the ND spec structs) shared with the optimiser and
+disassembler; `compile_emit.h` is the **emitter-only** surface — the `Ctx`
+builder, `Val`, and the register/instruction/lowering primitives — that the VM
+never sees.
+
+| file | role |
+|---|---|
+| `compile.c` | the driver: `Ctx` allocation, `emit`/`emit_node` dispatch, fusion probe, CSE planning, finalize (`patch_reg`, `extract_par_loops`), bail diagnostics, and the public `compile_expr*` entry points |
+| `compile_emit_{arith,mathfn,int,array,logic,ctrl,iter}.c` | the per-category head lowerings `emit_node` dispatches to |
+| `compile_infer.c` | bottom-up type inference (`infer_type` + the functional/integer-head type helpers) |
+| `compile_assoc.c` | Association B1–B5 emit + inference support |
+| `compile_mgd.c` | arbitrary-precision managed-scalar emitter |
+| `compile_ndtables.c` | the delegated `ND_FNS`/`ND_REDS`/`ND_FN2S` dispatch tables |
+| `compile_vm.c` | the bytecode VM: scalar/array/association runtime, `vm_run`/`vm_call`, the managed arena, and the public `compiled_eval*`/`compiled_free` |
+| `optimize.c` / `disasm.c` | bytecode optimiser / disassembler (`CompilePrint`) |
+| `compiled_function.c` / `autocompile.c` | the user-facing `CompiledFunction` wrapper and the auto-compile adapter |
+
+---
+
 ## 3. Prior art: the NDSolve compiler (what we reuse)
 
 `ndsolve_compile.c` already gives us, in miniature:
@@ -295,7 +318,8 @@ Most array heads are not re-implemented in the VM. They are **delegated** to the
 interpreter's own NDArray entry point, which takes the whole call and promises
 the List call's answer — so the compiled subset of these heads *is* the
 interpreted one by construction, and the rounding is identical too. Two tables
-in `src/compile/compile.c`:
+in `src/compile/compile_ndtables.c` (with a third, `ND_FN2S`, for the two-array
+heads):
 
 | table | shape | opcode | heads |
 |---|---|---|---|

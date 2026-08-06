@@ -679,6 +679,18 @@ set(COMMON_SRC
     ../src/numerical_calculus/ndsolve_operator.c
     ../src/numerical_calculus/ndsolve_compile.c
     ../src/compile/compile.c
+    ../src/compile/compile_ndtables.c
+    ../src/compile/compile_mgd.c
+    ../src/compile/compile_assoc.c
+    ../src/compile/compile_vm.c
+    ../src/compile/compile_infer.c
+    ../src/compile/compile_emit_arith.c
+    ../src/compile/compile_emit_mathfn.c
+    ../src/compile/compile_emit_int.c
+    ../src/compile/compile_emit_array.c
+    ../src/compile/compile_emit_logic.c
+    ../src/compile/compile_emit_ctrl.c
+    ../src/compile/compile_emit_iter.c
     ../src/compile/optimize.c
     ../src/compile/disasm.c
     ../src/compile/compiled_function.c

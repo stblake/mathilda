@@ -20,6 +20,16 @@
 #include "../checked_int.h"   /* ci_add / ci_sub / ci_mul / ci_neg / ci_abs / ci_powi */
 #include "compile.h"      /* CompileType, CompiledProgram — completed below */
 
+/* Thread-local storage for the VM's per-thread state (compile_vm.c: the
+ * call-depth counter and the managed arena).  `_Thread_local` is C11 and
+ * `__thread` a GNU extension, so both stay behind a guard; without either the
+ * storage is a plain global, still correct for the single-threaded default. */
+#if defined(MATHILDA_THREADS) && (defined(__GNUC__) || defined(__clang__))
+#define VM_TLS __thread
+#else
+#define VM_TLS
+#endif
+
 /* A register (or an instruction's immediate).  `p` carries a machine-kernel
  * function pointer in an immediate; `arr` carries the OWNED EXPR_NDARRAY handle
  * of an array register (M3a).  The opcode says which member is live. */
@@ -579,6 +589,35 @@ struct CompiledProgram {
  * tests stay well ordered. */
 #define MGD_VREG  0x10000000
 
+/* Managed arbitrary-precision constant helpers: materialised on the emit side
+ * (compile_mgd.c) and read on the run side (compile_vm.c's load_arg /
+ * mgd_ncpx_set_from_expr box a boxed argument into its container).  mpz is
+ * unconditional (GMP is a hard dependency); mpfr rides the USE_MPFR guard. */
+void mgd_const_free(MgdConst* mc);
+bool mgd_mpz_from_expr(mpz_ptr z, const Expr* e);
+#ifdef USE_MPFR
+#include <mpfr.h>
+bool mgd_mpfr_from_expr(mpfr_ptr m, const Expr* e);
+#endif
+
+/* Complex op selectors carried in imm.i of MG_CBIN / MG_CUN (ncpx kernels have
+ * heterogeneous signatures, so a selector is cleaner than a function pointer;
+ * the working precision is read from the output container).  Set by the emitter
+ * (compile_mgd.c) and switched on by the VM (compile_vm.c), so it is shared. */
+enum { MGC_ADD = 0, MGC_SUB, MGC_MUL, MGC_DIV, MGC_POW,          /* binary */
+       MGC_NEG, MGC_EXP, MGC_LOG, MGC_SIN, MGC_COS, MGC_SQRT,    /* -> complex */
+       MGC_ABS, MGC_ARG };                                       /* -> real   */
+
+/* Association value <-> machine-scalar coercions, shared between the emit side
+ * (compile_assoc.c) and the VM (compile_vm.c: vm_assoc_values builds a packed
+ * vector, vm_assoc_higher/_set box entry values).  assoc_value_to_slot /
+ * assoc_slot_to_value coerce a value IDENTICALLY to how a scalar argument is
+ * boxed, which is the compiled/interpreted parity guarantee; assoc_elem_ndt
+ * picks the packed dtype for a vector of values of a given element type. */
+NDType assoc_elem_ndt(CompileType e);
+bool   assoc_value_to_slot(const Expr* v, CompileType t, Slot* out);
+Expr*  assoc_slot_to_value(Slot s, CompileType t);
+
 /* Kind of each opcode, indexed by opcode.  Defined in optimize.c. */
 extern const unsigned char compile_op_kind[OP__COUNT];
 
@@ -594,17 +633,78 @@ extern const unsigned char compile_op_kind[OP__COUNT];
  * is left exactly as it was (the caller can still run it). */
 bool compile_optimize(Instr* code, size_t* n, int nreg, int arr_base, int tile_base);
 
-/* The name of the head an A_NDFN / V_NDRED instruction delegates to.
- *
- * The two tables (ND_FNS, ND_REDS) live in compile.c and stay there; the
- * disassembler needs only the NAME out of an entry, so it asks rather than the
- * tables becoming shared state.  Without these an A_NDFN disassembles as
- * "A_NDFN" and a V_NDRED as "V_NDRED(V0, V0)", neither of which says WHICH head
- * was delegated -- and telling Mean from Median in a bytecode dump is the whole
- * point of having a dump.  `imm` is the instruction's Slot.p; NULL-safe. */
+/* ------------------------------------------------------------------ *
+ *  Delegated ND dispatch tables                                       *
+ * ------------------------------------------------------------------ *
+ * The tables themselves (ND_FNS / ND_REDS / ND_FN2S) and their lookup/result
+ * helpers live in compile_ndtables.c.  The SPEC STRUCTS are declared here
+ * because three phases meet on them: the inference pass and the emitter build
+ * and read them at compile time (nd_fn_lookup / nd_fn_result, ...), the
+ * disassembler renders their head name (nd_*_head_name), and the VM
+ * DEREFERENCES one through an instruction immediate (imm.p) at run time
+ * (A_NDFN / V_NDRED / A_NDFN2). */
+
+/* Allowed OPERAND element types, one bit per CompileType element (CT_INT etc.).
+ * `elems == 0` means "any element type".  A head whose fast path CONVERTS a
+ * dtype must exclude that type here, because A_NDFN carries no result-dtype
+ * field to catch a promise/result mismatch at run time. */
+#define NDF_INT   (1u << (unsigned)CT_INT)
+#define NDF_REAL  (1u << (unsigned)CT_REAL)
+#define NDF_CPLX  (1u << (unsigned)CT_COMPLEX)
+
+typedef struct {
+    const char* head;
+    Expr* (*fn)(Expr*);
+    int nextra;        /* trailing INTEGER arguments, passed through as written */
+    int rank_rule;
+    bool int_result;   /* result is an int64 array regardless of the operand's
+                        * element type (Ordering: a permutation is integer) */
+    unsigned elems;    /* allowed operand element types (NDF_* bits); 0 = any */
+    bool complex_result; /* result is a complex array from a REAL/INT operand
+                          * (Fourier / InverseFourier: real in, complex out).
+                          * The delegate must ALWAYS return NDT_COMPLEX64 (its
+                          * fourier_compile wrapper does) so the buffer matches
+                          * the CT_COMPLEX register the compiler promises here. */
+} NdFnSpec;
+
+typedef struct {
+    const char* head;
+    Expr* (*fn)(Expr*);
+    bool  int_ok;      /* exact over an int64 array, result CT_INT (Max/Min select) */
+    int   rank;        /* required operand rank; 0 = any of {1, 2} (Norm) */
+    bool  int_result;  /* result is Integer for a REAL operand regardless of the
+                        * reduction's numeric kind (MatrixRank: a rank is an int) */
+    int   nextra;      /* trailing INTEGER args past the array (RankedMin/Max: 1),
+                        * passed through as written; 0 for the plain reductions */
+} NdRedSpec;
+
+typedef enum { R2_DOT, R2_SOLVE, R2_VEC, R2_JOIN, R2_MATRIX } NdFn2Rank;
+typedef enum { NDF2_PROMOTE, NDF2_SAME } NdFn2Elem;
+
+typedef struct {
+    const char* head;
+    Expr* (*fn)(Expr*);
+    unsigned  elems;      /* allowed operand element types (NDF_* bits), both operands */
+    NdFn2Rank rank2;
+    NdFn2Elem elem;
+} NdFn2Spec;
+
+/* Table lookup + static result-type resolution.  Used by the inference pass and
+ * the emitter; `na` is the call's argument count (array + trailing ints). */
+const NdFnSpec*  nd_fn_lookup(const char* h, size_t na);
+CompileType      nd_fn_result(const NdFnSpec* s, CompileType ta);
+const NdRedSpec* nd_red_lookup(const char* h, size_t na);
+CompileType      nd_red_result(const NdRedSpec* s, CompileType ta);
+const NdFn2Spec* nd_fn2_lookup(const char* h, size_t na);
+CompileType      nd_fn2_result(const NdFn2Spec* s, CompileType ta, CompileType tb);
+
+/* The name of the head an instruction delegates to, for the disassembler.
+ * Without these an A_NDFN disassembles as "A_NDFN" and a V_NDRED as
+ * "V_NDRED(V0, V0)", neither of which says WHICH head was delegated -- and
+ * telling Mean from Median in a bytecode dump is the whole point of having a
+ * dump.  `imm` is the instruction's Slot.p; NULL-safe. */
 const char* nd_fn_head_name(const void* imm);
 const char* nd_red_head_name(const void* imm);
-/* The head an A_NDFN2 / V_NDFN2 delegates to (ND_FN2S in compile.c). */
 const char* nd_fn2_head_name(const void* imm);
 
 #endif /* MATHILDA_COMPILE_INTERNAL_H */
