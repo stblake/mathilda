@@ -301,6 +301,32 @@ static Expr* ni_eval_at(NiCtx* c, Expr* value) {
     return num;
 }
 
+/* The compiled machine path WITHOUT the Expr round-trip.
+ *
+ * The general path builds an Expr for the abscissa, and ni_eval_at unboxes it
+ * straight back to a double for the compiled body, boxes the result, and the
+ * caller unboxes that again -- two allocations and two frees per sample point,
+ * spent only to pass doubles through an Expr-shaped interface. On an
+ * oscillatory integrand, which samples thousands of points per call, that
+ * churn is most of the cost: expr_new_real, expr_free and _free dominate the
+ * profile of NIntegrate[Sin[200 x], {x, 0, Pi}].
+ *
+ * Declining (false) leaves the caller on the general path, so every fallback
+ * the interpreter provides is preserved unchanged -- in particular a non-finite
+ * compiled result still routes to the interpreter, which supplies that
+ * contribution (e.g. where the compiled body would go complex).
+ *
+ * c->ac is NULL until ni_eval_at has lazily built it, so the first sample of a
+ * call takes the general path (building it) and the rest are fast. */
+static bool ni_sample_compiled(NiCtx* c, double w, double _Complex* out) {
+    if (!c->ac) return false;
+    double _Complex z;
+    if (!autocompiled_eval_complex(c->ac, &w, &z)) return false;
+    if (!isfinite(creal(z)) || !isfinite(cimag(z))) return false;
+    *out = z;
+    return true;
+}
+
 /* Machine sample callback: f at a (possibly mapped) real abscissa x. */
 static bool ni_sample_machine(void* vctx, double x, double _Complex* out) {
     NiCtx* c = (NiCtx*)vctx;
@@ -318,6 +344,10 @@ static bool ni_sample_machine(void* vctx, double x, double _Complex* out) {
          * (1 − tiny == 1) otherwise.  Evaluating the integrand there raises a
          * spurious 1/0; the tail past this horizon is negligible, so truncate. */
         if (w == c->end_a || !(jac > 0.0)) return false;
+        if (ni_sample_compiled(c, w, out)) {
+            *out *= jac;
+            return isfinite(creal(*out)) && isfinite(cimag(*out));
+        }
         Expr* num = ni_eval_at(c, expr_new_real(w));
         if (!num) return false;
         bool ok = ni_to_complex(num, out);
@@ -327,6 +357,11 @@ static bool ni_sample_machine(void* vctx, double x, double _Complex* out) {
         if (!isfinite(creal(*out)) || !isfinite(cimag(*out))) return false;
         return true;
     }
+    /* Same affine map ni_abscissa_expr applies; a real abscissa is the only one
+     * the compiled body accepts, and a complex contour point falls through. */
+    double _Complex wz = c->x_scale * x + c->x_shift;
+    if (cimag(wz) == 0.0 && ni_sample_compiled(c, creal(wz), out)) return true;
+
     Expr* num = ni_eval_at(c, ni_abscissa_expr(c, x));
     if (!num) return false;
     bool ok = ni_to_complex(num, out);
