@@ -65,7 +65,10 @@ sudo apt-get install -y \
 sudo apt-get install -y libmpfr-dev
 
 # Optional: FLINT (>= 3.0) for fast, rigorous algebraic-extension arithmetic
-sudo apt-get install -y libflint-dev    # needs >= 3.0 (Ubuntu 24.04+/Debian Bookworm+)
+sudo apt-get install -y libflint-dev    # >= 3.0 only on Ubuntu 24.04+/Debian Bookworm+
+# On Ubuntu 22.04 (apt ships FLINT 2.x, which the >= 3.0 gate rejects), install
+# 3.x from source instead — see ./tools/install-flint.sh and the FLINT note in
+# the Troubleshooting section below. Without it Mathilda still builds (USE_FLINT=0).
 
 # Optional: GMP-ECM for advanced integer factorization
 sudo apt-get install -y libecm-dev
@@ -222,14 +225,46 @@ links `-lmpfr` automatically when `USE_MPFR=1`. Omit it by passing
 `USE_MPFR=0` (disables arbitrary-precision numerics with a runtime warning).
 
 **FLINT not detected / builds without the accelerated paths**
-Mathilda needs **FLINT ≥ 3.0** (the release that merged ANTIC for number-field
-arithmetic). If `pkg-config --exists 'flint >= 3.0'` fails, the makefile prints a
-warning and continues with `USE_FLINT=0`, using the classical (slower but still
-rigorous) algebraic-extension code. Install a recent FLINT:
-- macOS: `brew install flint`
-- Ubuntu 24.04+/Debian Bookworm+: `sudo apt-get install libflint-dev`
-- Older distros ship FLINT 2.x, which lacks ANTIC — build FLINT ≥ 3.0 from source
-  or use a backport. Confirm with `pkg-config --modversion flint`.
+Mathilda needs **FLINT ≥ 3.0** — the release that merged ANTIC, Arb, and Calcium
+into FLINT and added the generic-ring `gr` layer. Everything Mathilda accelerates
+through FLINT (multivariate GCD/factoring over ℚ, number-field arithmetic over
+ℚ(α), `RootReduce` via `qqbar`, rigorous `acb` numerics) depends on subsystems
+that **did not exist in FLINT 2.x**, so 2.x cannot be used as a partial backend.
+If `pkg-config --exists 'flint >= 3.0'` fails, the makefile prints a warning and
+continues with `USE_FLINT=0`, using the classical (slower but still rigorous)
+code — **no feature is lost, only speed**. Install a recent FLINT:
+
+- **macOS:** `brew install flint`
+- **Ubuntu 24.04+ / Debian Bookworm+:** `sudo apt-get install libflint-dev`
+- **Ubuntu 22.04 / Debian Bullseye and older** ship FLINT **2.x** through apt,
+  which the `>= 3.0` gate correctly rejects. Two easy ways to get 3.x without
+  waiting for a distro upgrade:
+
+  1. **Build from source** (Ubuntu 22.04 already ships GMP 6.2.1 + MPFR 4.1.0,
+     which meet FLINT 3's minimums, so this is quick and clean):
+
+     ```bash
+     ./tools/install-flint.sh            # into /usr/local (uses sudo)
+     # or a user-local install with no sudo:
+     PREFIX="$HOME/.local" ./tools/install-flint.sh
+     ```
+
+     The script downloads a FLINT 3.x release, `./configure && make && make
+     install`s it, refreshes `ldconfig`, and verifies `pkg-config` can see it.
+     Override the version with `FLINT_VERSION=3.1.3 ./tools/install-flint.sh`.
+     If you installed to a non-system prefix, export the `PKG_CONFIG_PATH` the
+     script prints before rebuilding Mathilda.
+
+  2. **conda-forge** (no compilation, no sudo):
+
+     ```bash
+     conda install -c conda-forge libflint pkg-config
+     ```
+
+     With the conda env active, `pkg-config` finds the conda FLINT automatically.
+
+Either way, rebuild Mathilda with `make` and the FLINT paths light up on their
+own. Confirm the version pkg-config sees with `pkg-config --modversion flint`.
 
 **make: command not found (Windows)**
 Ensure `C:\msys64\usr\bin` is on your Windows `PATH` so the MSYS2 `make`

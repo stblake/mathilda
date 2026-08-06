@@ -263,8 +263,9 @@ ifeq ($(USE_FLINT), 1)
     LDFLAGS   += $(FLINT_LIBS)
   else
     $(warning FLINT >= 3.0 not detected; building with USE_FLINT=0 (algebraic-extension GCD/Factor use the classical fallback))
-    $(warning   macOS (Homebrew): brew install flint)
-    $(warning   Ubuntu/Debian:    sudo apt install libflint-dev   (needs >= 3.0 for ANTIC))
+    $(warning   macOS (Homebrew):      brew install flint)
+    $(warning   Ubuntu 24.04+/Debian:  sudo apt install libflint-dev   (needs >= 3.0 for ANTIC))
+    $(warning   Ubuntu 22.04 (apt has 2.x): ./tools/install-flint.sh   (builds 3.x from source; see docs/building.md))
     override USE_FLINT := 0
   endif
 endif
