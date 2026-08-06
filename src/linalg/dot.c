@@ -193,11 +193,32 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
      * one pointer test. */
     Expr* tmp_a = NULL;
     Expr* tmp_b = NULL;
-    if (pack_any_created()) {
-        if (a->type == EXPR_NDARRAY && b->type != EXPR_NDARRAY)
+    if (a->type == EXPR_NDARRAY && b->type != EXPR_NDARRAY) {
+        if (pack_any_created()) tmp_b = dot_pack_operand(b);
+    } else if (b->type == EXPR_NDARRAY && a->type != EXPR_NDARRAY) {
+        if (pack_any_created()) tmp_a = dot_pack_operand(a);
+    } else if (a->type != EXPR_NDARRAY && b->type != EXPR_NDARRAY) {
+        /* NEITHER operand is packed, which is every product of matrices small
+         * enough to sit below the packing threshold. A 6x6 is 36 elements, so
+         * `m . m` on one ran the Times/Plus-per-element loop: 216 symbolic
+         * multiplies per product, 334 ms over 10000 repeats against 3.8 ms for
+         * the same product in numpy.
+         *
+         * Deliberately NOT behind pack_any_created(). That guard spares a
+         * session which never packs anything from paying a probe, but here
+         * nothing has been packed BY DEFINITION -- a session doing small-matrix
+         * algebra never trips it, so the guard would permanently disable the
+         * very path it is meant to protect. Declining is still O(1): pack_force's
+         * sniff bails at the first element that is not a machine number, so a
+         * symbolic Dot costs one pointer test.
+         *
+         * Both operands must pack or neither is used, so a mixed machine/exact
+         * pair keeps the exact path and the exact answer that goes with it. */
+        tmp_a = dot_pack_operand(a);
+        if (tmp_a) {
             tmp_b = dot_pack_operand(b);
-        else if (b->type == EXPR_NDARRAY && a->type != EXPR_NDARRAY)
-            tmp_a = dot_pack_operand(a);
+            if (!tmp_b) { expr_free(tmp_a); tmp_a = NULL; }
+        }
     }
     Expr* fa = tmp_a ? tmp_a : a;
     Expr* fb = tmp_b ? tmp_b : b;
