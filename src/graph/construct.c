@@ -94,18 +94,23 @@ static Expr* try_build_canonical(Expr* res) {
         for (size_t i = 0; i < nv; i++)
             verts[i] = expr_copy(verts_in->data.function.args[i]);
     } else {
-        /* At most 2 distinct new vertices per edge. */
+        /* At most 2 distinct new vertices per edge. First-appearance order is
+         * preserved by appending on first sight; membership goes through a hash
+         * index, because the linear expr_eq rescan it replaces made deriving the
+         * vertex list O(E*V) -- seconds for a 40000-edge graph. */
         verts = (ne > 0) ? calloc(ne * 2, sizeof(Expr*)) : NULL;
         if (ne > 0 && !verts) goto fail_edges;
+        GraphVIdx* seen = graph_vidx_new(ne * 2);
+        if (!seen) { free(verts); goto fail_edges; }
         for (size_t i = 0; i < ne; i++) {
             for (int k = 0; k < 2; k++) {
                 Expr* ep = edges[i]->data.function.args[k];
-                int seen = 0;
-                for (size_t j = 0; j < nv; j++)
-                    if (expr_eq(verts[j], ep)) { seen = 1; break; }
-                if (!seen) verts[nv++] = expr_copy(ep);
+                /* Keys borrow `ep`, which lives in edges[i] until ownership
+                 * moves into the result below -- outliving the index. */
+                if (graph_vidx_put(seen, ep, (int)nv)) verts[nv++] = expr_copy(ep);
             }
         }
+        graph_vidx_free(seen);
     }
 
     /* 3. Assemble candidate Graph[List verts, List edges] (moves ownership). */
