@@ -2394,3 +2394,37 @@ the rationale, the more it is worth the one call to check. Same
 round-half-to-**even** (`Quotient[5 + 3 I, 2] == 2 + 2 I`, ratio `2.5 + 1.5 I`),
 so the fix reused a `round_half_even` helper, not C `round()` (ties away from
 zero).
+
+## One logical bug lives in every layer that reimplements the loop (2026-08-07)
+
+Issue #52 was "Table/Do terminate on a `double` comparison, so they run away
+near 2^63." The reported symptom was one builtin, but the same loop is
+open-coded in **four** interpreter sites (`builtin_do`, `builtin_table`, Sum's
+and Product's `expand_range`) *and* re-implemented twice more for speed — the
+auto-compile fast path (`numloop_do_range`, a raw `int64 i += di` that overflows
+and wraps) and the `Compile[]` VM (a counter register, checked by default but
+*unchecked* under `RuntimeOptions -> "Speed"`, where the general path hung and
+the unit path under-ran). Fixing only the interpreter would have left
+`Do[s=s+1, {i, n-2, n}]` (which auto-compiles) still hanging. Lessons:
+
+1. **When a bug is in a hot loop, grep for every reimplementation of that loop
+   before declaring it fixed.** A perf fast path is a copy of the logic with the
+   safety filed off; the same boundary bug is there by construction. Here one
+   `grep "val <= max_val"` found the four interpreter copies, and asking "what
+   *else* runs this loop" found the two compiled ones.
+2. **Verify the compiled/auto-compiled layers empirically, one binary rebuild at
+   a time.** My first "Compile hangs" reading was a *stale binary* (the
+   subagent caught it: `iter.o` rebuilt, `numloop.o` not). After a clean rebuild
+   the default `Compile[]` path was already correct — it bails on the checked
+   overflow to the now-fixed interpreter. Only opt-in wrap mode still needed a
+   code change.
+3. **A hang is never acceptable, even in an opt-in "Speed" mode.** Wrapping a
+   *value* is a coherent Speed-mode answer; wrapping a *loop counter* is a
+   non-terminating loop. The fix (`IF_FORCECHK`) keeps only loop-control
+   arithmetic checked, so value arithmetic still wraps.
+4. **A fix that adds a per-iteration call to a hot loop must be measured against
+   a same-machine baseline** (`git stash` the change, rebuild, time it — don't
+   trust the PR's number from another machine). The extern helper cost ~19% on
+   `Do[Null,{i,200000}]`; inlining the int64 fast path (BigInt arm out-of-line)
+   put it back to flat. See [[project_numloop_integer_int64_path]],
+   [[feedback_rebuild_main_binary_after_git_stash]].

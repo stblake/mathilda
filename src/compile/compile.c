@@ -186,7 +186,8 @@ void ins_f(Ctx* c, uint16_t op, uint16_t flags,
     /* The overflow-checking choice is stamped onto each integer instruction here
      * — the one place every instruction passes through — rather than threaded
      * to the two dozen sites that emit integer arithmetic. */
-    if ((c->flags & COMPILE_WRAP_INT) && op_is_checked_int(op)) flags |= IF_NOCHK;
+    if ((c->flags & COMPILE_WRAP_INT) && op_is_checked_int(op)
+        && !(flags & IF_FORCECHK)) flags |= IF_NOCHK;
     c->code[c->n].op = op; c->code[c->n].flags = flags; c->code[c->n].dst = dst;
     c->code[c->n].a = a; c->code[c->n].b = b; c->code[c->n].imm = imm;
     c->n++;

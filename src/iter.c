@@ -210,6 +210,21 @@ Expr* iter_step_add(const Expr* curr, const Expr* step) {
     return NULL;
 }
 
+/* Slow path of iter_range_continue (declared inline in iter.h): a BigInt is
+ * involved, so compare with GMP. curr_e overflowed int64 on the last advance, or
+ * a bound is itself big; either way this is only reached at the 2^63 boundary,
+ * so the per-step mpz alloc/compare never touches a normal loop. The int64 fast
+ * path, the real double path, and the is_inf short-circuit all stay inline. */
+bool iter_range_continue_bigint(const Expr* curr_e, const Expr* imax_e, double di_val) {
+    mpz_t a, b;
+    mpz_init(a); mpz_init(b);
+    expr_to_mpz(curr_e, a);
+    expr_to_mpz(imax_e, b);
+    int c = mpz_cmp(a, b);
+    mpz_clears(a, b, NULL);
+    return (di_val > 0) ? (c <= 0) : (c >= 0);
+}
+
 Rule* iter_spec_shadow(Expr* var) {
     if (!var || var->type != EXPR_SYMBOL) return NULL;
     SymbolDef* def = symtab_get_def(var->data.symbol.name);
@@ -463,7 +478,7 @@ Expr* builtin_do(Expr* res) {
          */
         double val = min_val;
         Expr* curr_e = expr_copy(imin_e);
-        while (is_inf || (di_val > 0 && val <= max_val + 1e-14) || (di_val < 0 && val >= max_val - 1e-14)) {
+        while (iter_range_continue(is_real, is_inf, curr_e, imax_e, val, max_val, di_val)) {
             Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
             symtab_add_own_value(var_sym->data.symbol.name, var_sym, i_val);
 

@@ -118,6 +118,13 @@ Generates a list of expressions.
   buffer directly, without building the elements first; every other branch is
   offered for packing once built. `Table[i j, {i, 300}, {j, 300}]` is one rank-2
   packed array, not a list of packed rows.
+- **Exact termination and a real element backstop.** An integer range terminates
+  on an exact comparison of the running value against the bound, so it is correct
+  anywhere in the `int64` range — `Table[i, {i, 9223372036854775805, 9223372036854775807}]`
+  is the three-element list, not a runaway. A range longer than
+  `100000000` elements (matching `Sum`/`Product`) returns `Table[…]` unevaluated
+  rather than silently truncating; an exact-integer range is rejected up front,
+  before any element is allocated.
 
 ```mathematica
 In[1]:= Table[i^2, {i, 4}]

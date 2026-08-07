@@ -1,39 +1,41 @@
-# Task: Implement StringQ
+# Issue #52 — iterator termination in double precision (+ Table cap)
 
-`StringQ[expr]` → True if expr is a string, False otherwise.
-`StringQ[]` (wrong arity) → `StringQ::argx` message, left unevaluated.
+## Root cause
+Table/Do/Sum/Product drive loop termination on a `double val <= double max_val`
+test. Near 2^63, consecutive int64 values collapse to the same `double` (ULP of
+2^63 is 2048 > a unit step), so the test never fires:
+- **Do** infinite-loops; **Sum/Product** run to their 10^8 term cap; **Table**
+  runs to a **10^6** cap and *silently truncates*.
+The exact running value `curr_e` is maintained alongside but never consulted for
+termination. Separately, Table's 10^6 cap truncates *legitimate* tables > 1M
+(`Table[i,{i,1,2000000}]` -> 1000001), and truncates silently unlike Sum/Product
+which return unevaluated.
 
-## Plan
-- [x] sym_names.h: declare `SYM_StringQ`
-- [x] sym_names.c: define + intern `SYM_StringQ`
-- [x] core.h: declare `builtin_stringq`
-- [x] core.c: implement `builtin_stringq` (arg_error on argc != 1); register + ATTR_PROTECTED
-- [x] info.c: docstring (no examples)
-- [x] docs/spec/builtins/expression-information.md: document StringQ
-- [x] docs/spec/changelog/2026-08-03.md: changelog entry
-- [x] tests/test_core.c: `test_stringq`, register in main
-- [x] Build main + core_tests, run, check no leaks
+## Fix
+- [x] `iter_range_continue()` shared helper (iter.c/iter.h): int64 fast path
+      (exact, no GMP — preserves PR #50 loop perf), GMP compare when a BigInt is
+      involved, double test for real / rational-exact, `is_inf` short-circuit.
+- [x] Do — replace while-condition (iter.c).
+- [x] Table — replace fill + pre-count conditions; raise cap 10^6 -> 10^8;
+      return unevaluated on overflow (align with Sum/Product).
+- [x] Sum — replace loop condition (sum.c expand_range).
+- [x] Product — replace loop condition (product.c expand_range).
+- [x] Auto-compile: numloop_do_range's three int64 loops advance with the
+      overflow-checked ci_add_i64 (stop at the edge instead of wrapping).
+- [x] Compile[]: default mode already bails to the (now-fixed) interpreter;
+      wrap mode ("Speed") kept loop-control arithmetic checked via new
+      IF_FORCECHK bit (compile_internal.h + compile.c funnel + 3 emit sites).
+- [x] Perf: iter_range_continue inlined (BigInt arm out-of-line) so the tight
+      loop is flat vs baseline (0.0081 vs 0.0079 on Do[Null,{i,200000}]).
+- [x] Extensive unit tests: 6 fns in test_iter.c + test_cf_loop_counter_boundary.
+- [x] Build clean, check-c99 clean, 13-suite regression sweep green, changelog + docs.
 
 ## Review
-Implemented `StringQ[expr]` following the existing `*Q` predicate pattern
-(modelled on `NumberQ`/`IntegerQ`/`AtomQ`).
-
-- **Behaviour** (verified against the spec in the task):
-  `StringQ["AbC"]`, `StringQ[""]`, `StringQ["123"]` → `True`;
-  `StringQ[123]`, `StringQ[1.5]`, `StringQ[x]`, `StringQ[Pi]`,
-  `StringQ[{"a","b"}]` → `False`. Argument is evaluated first
-  (`StringQ[If[True,"yes",0]]` → `True`). `StringQ[]` emits
-  `StringQ::argx: StringQ called with 0 arguments; 1 argument is expected.`
-  and leaves the call unevaluated.
-- **Definite boolean**, never symbolic (the `*Q` contract) except the
-  documented malformed-arity carve-out, which uses the shared
-  `builtin_arg_error` helper.
-- **Not Listable** — only `Protected`, matching Mathematica.
-- **Verification:** `core_tests` "All core tests passed"; `leaks` = 0 leaks /
-  0 bytes over a 20,000-iteration all-paths loop; `make check-c99` exit 0;
-  docstring registered and viewable via `Information[StringQ]`.
-- **Docs:** `docs/spec/builtins/expression-information.md` (worked examples) +
-  changelog entry in `docs/spec/changelog/2026-08-03.md`.
-
-Files touched: `src/core.{c,h}`, `src/sym_names.{c,h}`, `src/info.c`,
-`tests/test_core.c`, the two docs files.
+Fixed across all three layers (interpreter, auto-compile, Compile[]) plus the
+separate Table 10^6-truncation bug the investigation surfaced. Verified:
+- `Table[i,{i,9223372036854775805,9223372036854775807}]` -> 3 elements ✓
+- `Do`/`Sum`/`Product` same span terminate ✓
+- `Table[i,{i,1,2000000}]` -> 2,000,000 (cap no longer truncates) ✓
+- over-cap exact range -> unevaluated instantly ✓
+- Compile default + "Speed" boundary -> correct (was hang / under-run) ✓
+- exactness unchanged; no perf regression ✓

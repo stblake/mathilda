@@ -1505,8 +1505,12 @@ Expr* numloop_do_range(const Expr* body, const Expr* var,
             ac.buf[0] = pl.buf; ac.rank[0] = pl.rank; ac.dims[0] = pl.dims;
             double regs[1];
             bool bail = false;
-            for (int64_t i = imin; (di > 0) ? (i <= imax) : (i >= imax); i += di)
+            for (int64_t i = imin; (di > 0) ? (i <= imax) : (i >= imax); ) {
                 if (!partloop_step(&pl, i, regs, stack, &ac)) { bail = true; break; }
+                int64_t inext;
+                if (ci_add_i64(i, di, &inext)) break;   /* i == imax at the int64 edge */
+                i = inext;
+            }
             free(stack);
             if (bail) { partloop_free(&pl); return NULL; }
             partloop_writeback(&pl);   /* iterator stays localised; only `a` persists */
@@ -1525,9 +1529,12 @@ Expr* numloop_do_range(const Expr* body, const Expr* var,
             free(iregs); free(istack); numblock_free(&b); return NULL;
         }
         bool ibail = false;
-        for (int64_t i = imin; (di > 0) ? (i <= imax) : (i >= imax); i += di) {
+        for (int64_t i = imin; (di > 0) ? (i <= imax) : (i >= imax); ) {
             iregs[b.counter_idx] = i;
             if (!numblock_step_i64(&b, iregs, istack)) { ibail = true; break; }
+            int64_t inext;
+            if (ci_add_i64(i, di, &inext)) break;   /* i == imax at the int64 edge */
+            i = inext;
         }
         if (!ibail) numblock_writeback_i64(&b, iregs);   /* vars untouched on bail */
         free(iregs); free(istack); numblock_free(&b);
@@ -1538,9 +1545,12 @@ Expr* numloop_do_range(const Expr* body, const Expr* var,
     if (!stack) { numblock_free(&b); return NULL; }
 
     bool bail = false;
-    for (int64_t i = imin; (di > 0) ? (i <= imax) : (i >= imax); i += di) {
+    for (int64_t i = imin; (di > 0) ? (i <= imax) : (i >= imax); ) {
         b.regs[b.counter_idx] = (double)i;
         if (!numblock_step(&b, stack)) { bail = true; break; }
+        int64_t inext;
+        if (ci_add_i64(i, di, &inext)) break;   /* i == imax at the int64 edge */
+        i = inext;
     }
     free(stack);
     if (bail) { numblock_free(&b); return NULL; }

@@ -263,6 +263,100 @@ void test_while_has_docstring() {
     expr_free(r);
 }
 
+/* =====================================================================
+ *  Iterator termination near the int64 boundary and past the old caps
+ *  (regression suite for GitHub issue #52).
+ *
+ *  The loops used to terminate on a double comparison (`val <= max_val`);
+ *  near 2^63 consecutive int64 values collapse to the same double, so Do
+ *  never stopped, Sum/Product ran to their term cap, and Table ran to a
+ *  1000000 cap and silently truncated. The fix compares the exact running
+ *  value against the exact bound (iter_range_continue), raises Table's cap
+ *  to match Sum/Product (100000000, decline instead of truncate), and makes
+ *  the auto-compiled loops (numloop_do_range) increment overflow-safe.
+ * ===================================================================== */
+
+/* Table / Sum / Do terminate correctly when the bounds sit at the very top of
+ * the int64 range — the exact case in issue #52. */
+void test_iter_int64_boundary_ascending() {
+    assert_eval_eq("Length[Table[i, {i, 9223372036854775805, 9223372036854775807}]]", "3", 0);
+    assert_eval_eq("Table[i, {i, 9223372036854775805, 9223372036854775807}]",
+                   "{9223372036854775805, 9223372036854775806, 9223372036854775807}", 0);
+    /* step > 1 landing exactly on the bound */
+    assert_eval_eq("Table[i, {i, 9223372036854775803, 9223372036854775807, 2}]",
+                   "{9223372036854775803, 9223372036854775805, 9223372036854775807}", 0);
+    /* Sum/Do over the same top-of-range span */
+    assert_eval_eq("Sum[i, {i, 9223372036854775805, 9223372036854775807}]",
+                   "27670116110564327418", 0);
+    assert_eval_eq("Sum[1, {i, 9223372036854775805, 9223372036854775807}]", "3", 0);
+    assert_eval_eq("Product[1, {i, 9223372036854775805, 9223372036854775807}]", "1", 0);
+}
+
+/* Descending near the top, and ascending off the very bottom (INT64_MIN). */
+void test_iter_int64_boundary_descending_and_min() {
+    assert_eval_eq("Table[i, {i, 9223372036854775807, 9223372036854775805, -1}]",
+                   "{9223372036854775807, 9223372036854775806, 9223372036854775805}", 0);
+    assert_eval_eq("Table[i, {i, -9223372036854775808, -9223372036854775806}]",
+                   "{-9223372036854775808, -9223372036854775807, -9223372036854775806}", 0);
+    assert_eval_eq("Length[Table[i, {i, -9223372036854775808, -9223372036854775806}]]", "3", 0);
+}
+
+/* The auto-compiled Do path (numloop_do_range) must also terminate at the
+ * boundary rather than overflow int64 into a ~2^63-iteration wrap. Bodies that
+ * assign a machine-numeric accumulator take that path. */
+void test_iter_autocompiled_boundary() {
+    /* integer accumulator */
+    assert_eval_eq("Module[{s=0}, Do[s=s+1, {i, 9223372036854775805, 9223372036854775807}]; s]",
+                   "3", 0);
+    /* the summed values promote out of int64 exactly */
+    assert_eval_eq("Module[{s=0}, Do[s=s+i, {i, 9223372036854775805, 9223372036854775807}]; s]",
+                   "27670116110564327418", 0);
+    /* real accumulator (the double-block loop) */
+    assert_eval_eq("Module[{s=0.}, Do[s=s+1., {i, 9223372036854775805, 9223372036854775807}]; s]",
+                   "3.", 0);
+    /* in-place Part-assignment loop (partloop) */
+    assert_eval_eq("a=ConstantArray[0,3]; Do[a[[i-9223372036854775804]]=i, "
+                   "{i, 9223372036854775805, 9223372036854775807}]; a",
+                   "{9223372036854775805, 9223372036854775806, 9223372036854775807}", 0);
+}
+
+/* Table must not truncate a legitimate range longer than the old 1000000 cap.
+ * `Table[i, {i, 1, 2000000}]` used to come back with 1000001 elements. */
+void test_table_no_million_truncation() {
+    assert_eval_eq("Length[Table[i, {i, 1, 2000000}]]", "2000000", 0);
+    assert_eval_eq("Last[Table[i, {i, 1, 1500000}]]", "1500000", 0);
+    assert_eval_eq("Table[i, {i, 999999, 1000002}]", "{999999, 1000000, 1000001, 1000002}", 0);
+    /* Do never truncated but must stay correct at that size */
+    assert_eval_eq("Module[{s=0}, Do[s=s+1, {i, 1, 2000000}]; s]", "2000000", 0);
+    assert_eval_eq("Sum[1, {i, 1, 2000000}]", "2000000", 0);
+}
+
+/* A range whose exact element count exceeds the backstop (100000000) returns
+ * Table[...] unevaluated — and does so at once (O(1) length check), not after
+ * allocating a hundred million elements. */
+void test_table_overcap_declines() {
+    assert_eval_eq("Head[Table[i, {i, 1, 200000000}]]", "Table", 0);
+    /* exactly at a workable size below the cap still evaluates to a list */
+    assert_eval_eq("Head[Table[i, {i, 1, 5}]]", "List", 0);
+}
+
+/* The exact/inexact semantics of the running value are unchanged by the fix:
+ * mixed Integer/Rational stays exact, Real steps stay Real, descending works. */
+void test_iter_exactness_preserved() {
+    assert_eval_eq("Table[i, {i, 0, 1, 1/3}]", "{0, 1/3, 2/3, 1}", 0);
+    assert_eval_eq("Table[i, {i, 0., 1., 0.25}]", "{0., 0.25, 0.5, 0.75, 1.}", 0);
+    assert_eval_eq("Table[i, {i, 5, 1, -1}]", "{5, 4, 3, 2, 1}", 0);
+    assert_eval_eq("Table[i, {i, 1, 2, 0.5}]", "{1., 1.5, 2.}", 0);
+    assert_eval_eq("Sum[1/i, {i, 1, 5}]", "137/60", 0);
+    assert_eval_eq("Sum[i, {i, 0, 1, 1/4}]", "5/2", 0);
+    assert_eval_eq("Product[i, {i, 1, 6}]", "720", 0);
+    /* The exact running value promotes to BigInt on the last advance (807 + 1)
+     * while the bound is still int64, exercising the helper's GMP compare and
+     * stopping at the bound rather than continuing into the BigInt. */
+    assert_eval_eq("Table[i, {i, 9223372036854775806, 9223372036854775807}]",
+                   "{9223372036854775806, 9223372036854775807}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -297,6 +391,14 @@ int main() {
     TEST(test_while_test_becomes_false);
     TEST(test_while_return_escapes_innermost_loop);
     TEST(test_while_has_docstring);
+
+    /* Issue #52: int64-boundary termination + past-the-old-cap ranges. */
+    TEST(test_iter_int64_boundary_ascending);
+    TEST(test_iter_int64_boundary_descending_and_min);
+    TEST(test_iter_autocompiled_boundary);
+    TEST(test_table_no_million_truncation);
+    TEST(test_table_overcap_declines);
+    TEST(test_iter_exactness_preserved);
 
     printf("All iter tests passed!\n");
     symtab_clear();

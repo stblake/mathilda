@@ -1140,6 +1140,41 @@ void test_cf_runtime_options(void) {
                    "Compile[{{a, _Integer}}, a*a][4000000000] === 4000000000^2", "True", 0);
 }
 
+/* A compiled loop whose counter sits at the top of the int64 range must
+ * terminate correctly (GitHub issue #52). In the DEFAULT (checked) mode the
+ * loop-control add overflows, bails to the interpreter, and the fixed
+ * interpreter answers. Under "Speed"/wrap mode the loop-control arithmetic is
+ * force-checked (IF_FORCECHK) so it bails too, rather than hanging (di != 1) or
+ * under-running (di == 1) -- while value arithmetic in the body still wraps. */
+void test_cf_loop_counter_boundary(void) {
+    /* Default mode: unit and non-unit step, Do and Sum, all land on the exact
+     * count near INT64_MAX (n-2..n is 3 iterations, n-4..n step 2 is 3). */
+    assert_eval_eq("Compile[{{n, _Integer}}, Module[{s = 0}, "
+                   "Do[s = s + 1, {i, n - 2, n}]; s]][9223372036854775807]", "3", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Module[{s = 0}, "
+                   "Do[s = s + 1, {i, n - 4, n, 2}]; s]][9223372036854775807]", "3", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Sum[1, {i, n - 2, n}]]"
+                   "[9223372036854775807]", "3", 0);
+    /* Same values away from the boundary are unaffected. */
+    assert_eval_eq("Compile[{{n, _Integer}}, Module[{s = 0}, "
+                   "Do[s = s + 1, {i, n - 2, n}]; s]][100]", "3", 0);
+
+    /* Wrap mode ("Speed"): the loop still terminates on the exact count (it
+     * bails on the boundary), even though value arithmetic elsewhere wraps. */
+    assert_eval_eq("Compile[{{n, _Integer}}, Module[{s = 0}, "
+                   "Do[s = s + 1, {i, n - 2, n}]; s], RuntimeOptions -> \"Speed\"]"
+                   "[9223372036854775807]", "3", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Module[{s = 0}, "
+                   "Do[s = s + 1, {i, n - 4, n, 2}]; s], RuntimeOptions -> \"Speed\"]"
+                   "[9223372036854775807]", "3", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Sum[1, {i, n - 2, n}], "
+                   "RuntimeOptions -> \"Speed\"][9223372036854775807]", "3", 0);
+    /* Value arithmetic under Speed still wraps -- the fix is scoped to the
+     * counter only: (2^63-1)^2 mod 2^64 == 1. */
+    assert_eval_eq("Compile[{{x, _Integer}}, x*x, RuntimeOptions -> \"Speed\"]"
+                   "[9223372036854775807]", "1", 0);
+}
+
 /* Threading and the ARRAY signature meet in one place: a rank-r parameter
  * consumes r levels, so threading is over the levels above it — and a packed
  * NDArray must answer the same as the List it packs, or the object would
@@ -1212,6 +1247,7 @@ int main(void) {
     TEST(test_cf_narrowing_kernels_over_arrays);
     TEST(test_cf_integer_binary_kernels_over_arrays);
     TEST(test_cf_runtime_options);
+    TEST(test_cf_loop_counter_boundary);
     TEST(test_compile_diagnostics);
     TEST(test_disasm_scalar);
     TEST(test_disasm_kernel_names);

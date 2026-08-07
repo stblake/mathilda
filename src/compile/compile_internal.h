@@ -416,6 +416,17 @@ enum { AK_ARR = 0, AK_REAL = 1, AK_COMPLEX = 2, AK_INT = 3 };
  * the path it would take with the option on. */
 #define IF_NOCHK      0x8000u
 
+/* Force an integer instruction to STAY overflow-checked even under
+ * COMPILE_WRAP_INT ("Speed" / CatchMachineIntegerOverflow -> False). Wrap mode
+ * is a coherent choice for value arithmetic in the body, but a loop's own
+ * counter/bound arithmetic is control flow: wrapping it turns the INT64_MAX
+ * boundary into a non-terminating loop (Do[..,{i,n-4,n,2}]) or an under-run
+ * (unit-step Do returning too few iterations), not just "a different answer".
+ * The three loop-control emit sites in compile_emit_ctrl.c carry this bit so
+ * they bail to the (correct) interpreter at the boundary instead. Read only by
+ * the funnel in compile.c; the VM never sees it (it checks IF_NOCHK alone). */
+#define IF_FORCECHK   0x4000u
+
 /* The opcodes IF_NOCHK applies to: the ARITHMETIC ones, whose only failure is
  * overflow.  Kept as one predicate so the emitter, the optimiser and the
  * disassembler cannot disagree about which instructions carry the bit.

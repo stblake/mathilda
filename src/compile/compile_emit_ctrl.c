@@ -143,7 +143,9 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
                             : (T == CT_INT ? OP_ADD_I : T == CT_REAL ? OP_ADD_R : OP_ADD_C);
         ins(c, acc, (uint32_t)racc, (uint32_t)racc, (uint32_t)rb.reg, z);
         free_if_tmp(c, rb);
-        Slot step; step.i = s.di; ins(c, OP_INC_I, (uint32_t)ri, 0, 0, step);
+        /* Force-check the counter step (Sum/Product), same reason as Do: a
+         * wrapped counter at the int64 edge never terminates. IF_FORCECHK. */
+        Slot step; step.i = s.di; ins_f(c, OP_INC_I, IF_FORCECHK, (uint32_t)ri, 0, 0, step);
         ins(c, OP_JMP, 0, 0, (uint32_t)L, z);
         if (c->ok) c->code[jz].b = (uint32_t)c->n;               /* loop-exit label */
         c->nscope--;
@@ -458,9 +460,12 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
              * would otherwise run the body a first time. */
             ins(c, OP_LE_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rhi, z);
             size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
-            /* OP_LOOP compares `++i < a`, so the bound register holds hi + 1. */
+            /* OP_LOOP compares `++i < a`, so the bound register holds hi + 1.
+             * Force-check this add: if hi is INT64_MAX, hi + 1 overflows, and a
+             * wrapped bound (INT64_MIN) would make the loop under-run. Bail to
+             * the interpreter instead (see IF_FORCECHK). */
             ins(c, OP_CONST, (uint32_t)rc, 0, 0, one);
-            ins(c, OP_ADD_I, (uint32_t)rend, (uint32_t)rhi, (uint32_t)rc, z);
+            ins_f(c, OP_ADD_I, IF_FORCECHK, (uint32_t)rend, (uint32_t)rhi, (uint32_t)rc, z);
             size_t Lb = c->n;
             Val bod; if (!emit(c, A[0], &bod)) { c->nscope -= pushed; return -1; }
             free_if_tmp(c, bod);
@@ -474,7 +479,10 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
             size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z); c->temp_top--;
             Val bod; if (!emit(c, A[0], &bod)) { c->nscope -= pushed; return -1; }
             free_if_tmp(c, bod);
-            Slot step; step.i = s.di; ins(c, OP_INC_I, (uint32_t)ri, 0, 0, step);
+            /* Force-check the counter step: in wrap mode i += di at the int64
+             * edge would wrap and the `i <= hi` test never fails -> non-
+             * terminating loop. Bail to the interpreter instead (IF_FORCECHK). */
+            Slot step; step.i = s.di; ins_f(c, OP_INC_I, IF_FORCECHK, (uint32_t)ri, 0, 0, step);
             ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
             if (c->ok) c->code[jz].b = (uint32_t)c->n;
         }

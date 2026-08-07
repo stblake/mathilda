@@ -30,6 +30,16 @@ Evaluates an expression sequentially over an iteration range.
   answer is always the interpreter's: `Do[p = p*i, {i, 1, 25}]` is the full `25!`
   bignum, `Do[s = s + i/2, {i, 1, 10}]` is `55/2`, never a wrapped machine
   integer.
+- An **integer range** terminates on an exact comparison of the running value
+  against the bound, so a span anywhere in the `int64` range is correct — including
+  at the very top, where consecutive values differ by less than the `double`
+  spacing: `Do[…, {i, 9223372036854775805, 9223372036854775807}]` runs exactly 3
+  times. This holds on all three paths — interpreter, the `numloop.c` fast path
+  (whose counter increment is overflow-checked so it stops at the edge rather than
+  wrapping), and `Compile[]` (whose loop-control arithmetic stays overflow-checked
+  even under `RuntimeOptions -> "Speed"`, bailing to the interpreter at the
+  boundary; only *value* arithmetic wraps in that mode). `Sum`, `Product` and
+  `Table` share the same termination.
 
 ```mathematica
 In[1]:= Do[Print[i], {i, 3}]
