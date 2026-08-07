@@ -1,6 +1,7 @@
 #include "list_common.h"
 #include "table.h"
 #include "compile/autocompile.h"
+#include "iter.h"
 #include "../pack.h"
 
 Expr* builtin_table(Expr* res) {
@@ -148,10 +149,13 @@ Expr* builtin_table(Expr* res) {
             results[results_count++] = eval_expr;
 
             if (!ac) {   /* advance the exact running value (unused when compiling) */
-                Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
-                Expr* next_expr = expr_new_function(expr_new_symbol(SYM_Plus), next_args, 2);
-                Expr* next_e = evaluate(next_expr);
-                expr_free(next_expr);
+                Expr* next_e = iter_step_add(curr_e, di_e);
+                if (!next_e) {
+                    Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
+                    Expr* next_expr = expr_new_function(expr_new_symbol(SYM_Plus), next_args, 2);
+                    next_e = evaluate(next_expr);
+                    expr_free(next_expr);
+                }
                 expr_free(curr_e);
                 curr_e = next_e;
             }

@@ -73,4 +73,15 @@ bool iter_spec_resolve_numeric(const IterSpec* s, bool allow_inf,
 Rule* iter_spec_shadow(Expr* var);
 void  iter_spec_restore(Expr* var, Rule* saved_own);
 
+/* curr + step for a machine-numeric iterator, without going through the
+ * evaluator. Advancing by building Plus[curr, step] and calling evaluate() costs
+ * three Expr allocations and a full evaluator dispatch per step, to compute i+1;
+ * on `Do[Null, {i, 200000}]` that was 0.0251 s against 0.0034 s for the add.
+ *
+ * Returns NULL -- meaning "use the evaluator" -- for BigInt, Rational, MPFR or a
+ * symbolic step, so those keep bit-identical values, and for an integer sum that
+ * would overflow, leaving BigInt promotion to that path. Borrows both operands;
+ * the result is owned by the caller. */
+Expr* iter_step_add(const Expr* curr, const Expr* step);
+
 #endif
