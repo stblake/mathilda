@@ -645,6 +645,7 @@ void core_init(void) {
     symtab_add_builtin("CompoundExpression", builtin_compoundexpression);
     symtab_add_builtin("NumberQ", builtin_numberq);
     symtab_add_builtin("NumericQ", builtin_numericq);
+    symtab_add_builtin("StringQ", builtin_stringq);
     symtab_add_builtin("Positive", builtin_positive);
     symtab_add_builtin("Negative", builtin_negative);
     symtab_add_builtin("NonNegative", builtin_nonnegative);
@@ -678,6 +679,7 @@ void core_init(void) {
     symtab_get_def("AtomQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("NumberQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("NumericQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("StringQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Positive")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("Negative")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("NonNegative")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
@@ -2160,6 +2162,18 @@ Expr* builtin_numberq(Expr* res) {
     }
 
     return expr_new_symbol(SYM_False);
+}
+
+Expr* builtin_stringq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
+        /* Wrong arity is a malformed call shape: emit the Wolfram-style
+         * StringQ::argx diagnostic and leave the expression unevaluated. */
+        size_t argc = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
+        return builtin_arg_error("StringQ", argc, 1, 1);
+    }
+
+    Expr* arg = res->data.function.args[0];
+    return expr_new_symbol(arg->type == EXPR_STRING ? SYM_True : SYM_False);
 }
 
 static bool is_numeric_quantity(Expr* e) {

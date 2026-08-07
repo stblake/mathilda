@@ -2125,6 +2125,11 @@ void info_init(void) {
     symtab_set_docstring("MachineNumberQ",
         "MachineNumberQ[expr] gives True if expr is a machine-precision real or complex number, and False otherwise.");
     symtab_set_docstring("NumericQ", "NumericQ[expr] gives True if expr is a numeric quantity, and False otherwise.\nAn expression is considered a numeric quantity if it is either an explicit number or a mathematical constant such as Pi, or is a function that has attribute NumericFunction and all of whose arguments are numeric quantities.");
+    symtab_set_docstring("StringQ",
+        "StringQ[expr]\n"
+        "\tgives True if expr is a string, and False otherwise. The empty\n"
+        "string \"\" gives True. Called with any number of arguments other\n"
+        "than one it leaves the expression unevaluated (StringQ::argx).");
     symtab_set_docstring("Positive",
         "Positive[x]\n"
         "\tgives True if x is a positive real number, and False if x is a\n"

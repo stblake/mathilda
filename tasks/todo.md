@@ -1,29 +1,39 @@
-# Fix "Binomial-class" numeric failures across Mathilda
+# Task: Implement StringQ
 
-## Group 1 — silently-wrong coercion (correctness bugs)
-- [x] `Mod` — fixed (mod_operand_to_double + mod_set_mpfr); 2-arg/3-arg/MPFR all correct
-- [x] `Divide` — fixed (guard machine path to machine-real operands; else exact rewrite)
-- [x] `QuotientRemainder` — auto-fixed via `builtin_mod`; verified
+`StringQ[expr]` → True if expr is a string, False otherwise.
+`StringQ[]` (wrong arity) → `StringQ::argx` message, left unevaluated.
 
-## Group 2 — missing complex path
-- [x] `Factorial` — complex arg → `Gamma[z+1]`
-
-## Group 3 — no numeric path for non-integer args (existing functions)
-- [x] `Factorial2`  = 2^(z/2) (Pi/2)^((Cos[z Pi]-1)/4) Gamma[z/2+1]
-- [x] `FactorialPower[x,n]` = Gamma[x+1]/Gamma[x-n+1] (non-integer n)
-- [x] `BarnesG` — asymptotic + recurrence as expression (real/complex/MPFR); coeff = B_{2k+2}/((2k)(2k+2))
-- [x] `Hyperfactorial` = Gamma[z+1]^z / BarnesG[z+1]
-- [n/a] `CatalanNumber`/`Multinomial`/`Subfactorial` — NOT implemented at all (missing features, out of scope)
-
-## Cross-cutting
-- [x] Thorough unit tests: tests/test_numeric_domain.c (12 groups, CMake-registered)
-- [x] valgrind clean (identical to baseline); C99 gate passes; docstrings + spec + changelog
+## Plan
+- [x] sym_names.h: declare `SYM_StringQ`
+- [x] sym_names.c: define + intern `SYM_StringQ`
+- [x] core.h: declare `builtin_stringq`
+- [x] core.c: implement `builtin_stringq` (arg_error on argc != 1); register + ATTR_PROTECTED
+- [x] info.c: docstring (no examples)
+- [x] docs/spec/builtins/expression-information.md: document StringQ
+- [x] docs/spec/changelog/2026-08-03.md: changelog entry
+- [x] tests/test_core.c: `test_stringq`, register in main
+- [x] Build main + core_tests, run, check no leaks
 
 ## Review
-All Group 1 correctness bugs (Mod/Divide/QuotientRemainder) and Group 2/3 numeric
-continuations (Factorial complex, Factorial2, FactorialPower, BarnesG, Hyperfactorial)
-are implemented, each built as an expression reusing Gamma's complex+MPFR kernels.
-BarnesG required a numerically-verified coefficient correction
-(B_{2k+2}/((2k)(2k+2)), not the textbook (2k)(2k+1)(2k+2)). Exact/integer inputs
-unchanged. CatalanNumber/Multinomial/Subfactorial excluded (not implemented at all).
-Tests: numeric_domain_tests + core/bigint/modular all pass; valgrind clean; c99 gate green.
+Implemented `StringQ[expr]` following the existing `*Q` predicate pattern
+(modelled on `NumberQ`/`IntegerQ`/`AtomQ`).
+
+- **Behaviour** (verified against the spec in the task):
+  `StringQ["AbC"]`, `StringQ[""]`, `StringQ["123"]` → `True`;
+  `StringQ[123]`, `StringQ[1.5]`, `StringQ[x]`, `StringQ[Pi]`,
+  `StringQ[{"a","b"}]` → `False`. Argument is evaluated first
+  (`StringQ[If[True,"yes",0]]` → `True`). `StringQ[]` emits
+  `StringQ::argx: StringQ called with 0 arguments; 1 argument is expected.`
+  and leaves the call unevaluated.
+- **Definite boolean**, never symbolic (the `*Q` contract) except the
+  documented malformed-arity carve-out, which uses the shared
+  `builtin_arg_error` helper.
+- **Not Listable** — only `Protected`, matching Mathematica.
+- **Verification:** `core_tests` "All core tests passed"; `leaks` = 0 leaks /
+  0 bytes over a 20,000-iteration all-paths loop; `make check-c99` exit 0;
+  docstring registered and viewable via `Information[StringQ]`.
+- **Docs:** `docs/spec/builtins/expression-information.md` (worked examples) +
+  changelog entry in `docs/spec/changelog/2026-08-03.md`.
+
+Files touched: `src/core.{c,h}`, `src/sym_names.{c,h}`, `src/info.c`,
+`tests/test_core.c`, the two docs files.

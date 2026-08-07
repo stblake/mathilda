@@ -655,6 +655,7 @@ extern const char* SYM_StringContainsQ;
 extern const char* SYM_StringFreeQ;
 extern const char* SYM_StringStartsQ;
 extern const char* SYM_StringEndsQ;
+extern const char* SYM_StringQ;
 /* String-pattern (StringExpression) heads and the IgnoreCase option, used by the
  * regex string family (StringSplit / StringCases / StringCount / StringReplace /
  * StringMatchQ). */

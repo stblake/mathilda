@@ -127,6 +127,30 @@ void test_numberq(void) {
     }
 }
 
+void test_stringq(void) {
+    /* Strings -> True, including the empty string and numeric-looking text. */
+    assert_eval_eq("StringQ[\"AbC\"]", "True", 0);
+    assert_eval_eq("StringQ[\"\"]", "True", 0);
+    assert_eval_eq("StringQ[\"123\"]", "True", 0);
+
+    /* Non-strings -> False (never symbolic, never NULL). */
+    assert_eval_eq("StringQ[123]", "False", 0);
+    assert_eval_eq("StringQ[1.5]", "False", 0);
+    assert_eval_eq("StringQ[x]", "False", 0);
+    assert_eval_eq("StringQ[Pi]", "False", 0);
+
+    /* A list is not a string, and StringQ is not Listable, so it does not
+     * thread element-wise -- the whole list is classified as non-string. */
+    assert_eval_eq("StringQ[{\"a\", \"b\"}]", "False", 0);
+
+    /* The argument is evaluated before classification. */
+    assert_eval_eq("StringQ[If[True, \"yes\", 0]]", "True", 0);
+    assert_eval_eq("StringQ[If[False, \"yes\", 0]]", "False", 0);
+
+    /* Wrong arity: emit StringQ::argx on stderr and leave unevaluated. */
+    assert_eval_eq("StringQ[]", "StringQ[]", 0);
+}
+
 void test_atomq(void) {
     // Test case 1: AtomQ[x] -> True
     Expr* e1 = parse_expression("AtomQ[x]");
@@ -1230,6 +1254,7 @@ int main(void) {
 
     TEST(test_numberq);
     TEST(test_numericq);
+    TEST(test_stringq);
     TEST(test_atomq);
     TEST(test_integerq);
     TEST(test_valueq);

@@ -48,11 +48,32 @@ In[12]:= Attributes[g]
 Out[12]= {}
 ```
 
-## AtomQ, NumberQ, IntegerQ, MachineNumberQ
+## AtomQ, NumberQ, IntegerQ, StringQ, MachineNumberQ
 Predicates for testing expression types.
 - `AtomQ[expr]`: `True` if the expression has no parts.
 - `NumberQ[expr]`: `True` if the expression is a numeric type (Integer, Real, Rational, Complex).
 - `IntegerQ[expr]`: `True` if the expression is an Integer.
+- `StringQ[expr]`: `True` if the expression is a string, and `False` otherwise.
+  The empty string `""` gives `True`. `StringQ` is not `Listable`, so
+  `StringQ[{"a", "b"}]` is `False` (a list is not a string) rather than
+  threading. Any arity other than one leaves the call unevaluated with a
+  `StringQ::argx` message. Attributes: `Protected`.
+
+```mathematica
+In[1]:= StringQ["AbC"]
+Out[1]= True
+
+In[2]:= StringQ[""]
+Out[2]= True
+
+In[3]:= StringQ[123]
+Out[3]= False
+
+In[4]:= StringQ[]
+StringQ::argx: StringQ called with 0 arguments; 1 argument is expected.
+Out[4]= StringQ[]
+```
+
 - `MachineNumberQ[expr]`: `True` if `expr` is a machine-precision (IEEE
   double) real, or a `Complex` of two finite machine-precision reals.
   Returns `False` for exact numbers (Integer, BigInt, Rational), for

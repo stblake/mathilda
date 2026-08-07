@@ -649,6 +649,7 @@ const char* SYM_StringContainsQ = NULL;
 const char* SYM_StringFreeQ = NULL;
 const char* SYM_StringStartsQ = NULL;
 const char* SYM_StringEndsQ = NULL;
+const char* SYM_StringQ = NULL;
 const char* SYM_StringExpression = NULL;
 const char* SYM_Whitespace = NULL;
 const char* SYM_WhitespaceCharacter = NULL;
@@ -1476,6 +1477,7 @@ void sym_names_init(void) {
     SYM_StringFreeQ                = intern_symbol("StringFreeQ");
     SYM_StringStartsQ              = intern_symbol("StringStartsQ");
     SYM_StringEndsQ                = intern_symbol("StringEndsQ");
+    SYM_StringQ                    = intern_symbol("StringQ");
     SYM_StringExpression           = intern_symbol("StringExpression");
     SYM_Whitespace                 = intern_symbol("Whitespace");
     SYM_WhitespaceCharacter        = intern_symbol("WhitespaceCharacter");
