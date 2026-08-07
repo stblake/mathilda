@@ -2771,6 +2771,9 @@ target_include_directories(possiblezeroq_assumptions_tests PRIVATE ../src)
 add_executable(possiblezeroq_stress_tests test_possiblezeroq_stress.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(possiblezeroq_stress_tests PRIVATE ../src)
 
+add_executable(limit_stress_tests test_limit_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(limit_stress_tests PRIVATE ../src)
+
 add_executable(element_tests test_element.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(element_tests PRIVATE ../src)
 

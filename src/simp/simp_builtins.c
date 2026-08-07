@@ -35,7 +35,7 @@
 /* builtin_simplify                                                        */
 /* ----------------------------------------------------------------------- */
 
-static Expr* read_dollar_assumptions(void) {
+Expr* read_dollar_assumptions(void) {
     /* Read the OwnValue directly. We must NOT evaluate $Assumptions, because
      * once an assumption like Element[x, Reals] becomes the bound value, our
      * own Element evaluator would recurse on it (Element reads $Assumptions

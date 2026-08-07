@@ -91,6 +91,37 @@ static void ctx_walk(AssumeCtx* ctx, const Expr* a) {
             }
             return;
         }
+        /* Chained comparisons -- a < b < c, or the mixed a <= b < c which
+         * parses to Inequality[a, LessEqual, b, Less, c] -- are shorthand
+         * for the conjunction of the pairwise relations. The pairwise 2-arg
+         * facts are what every fact_implies_* helper matches on; the chained
+         * n-ary / Inequality forms match none of them. Split so a single
+         * symbol in the middle picks up both of its bounds. */
+        if ((h == SYM_Less || h == SYM_Greater ||
+             h == SYM_LessEqual || h == SYM_GreaterEqual) &&
+            a->data.function.arg_count >= 3) {
+            for (size_t i = 0; i + 1 < a->data.function.arg_count; i++) {
+                Expr* pair[2] = { expr_copy(a->data.function.args[i]),
+                                  expr_copy(a->data.function.args[i + 1]) };
+                Expr* fact = expr_new_function(expr_new_symbol(h), pair, 2);
+                ctx_push(ctx, fact);
+                expr_free(fact);
+            }
+            return;
+        }
+        if (h == SYM_Inequality && a->data.function.arg_count >= 5 &&
+            (a->data.function.arg_count % 2) == 1) {
+            for (size_t i = 0; i + 2 < a->data.function.arg_count; i += 2) {
+                const Expr* op = a->data.function.args[i + 1];
+                if (op->type != EXPR_SYMBOL) continue;
+                Expr* pair[2] = { expr_copy(a->data.function.args[i]),
+                                  expr_copy(a->data.function.args[i + 2]) };
+                Expr* fact = expr_new_function(expr_copy((Expr*)op), pair, 2);
+                ctx_push(ctx, fact);
+                expr_free(fact);
+            }
+            return;
+        }
     }
     ctx_push(ctx, a);
 }
@@ -484,6 +515,11 @@ bool prov_pos(const AssumeCtx* ctx, const Expr* x) {
     if (!x) return false;
     if (numeric_sign(x) == 1) return true;
     if (fact_directly_positive(ctx, x)) return true;
+    /* Element[x, PositiveIntegers] => x > 0. */
+    if (ctx) {
+        for (size_t i = 0; i < ctx->count; i++)
+            if (fact_in_domain(ctx->facts[i], x, "PositiveIntegers")) return true;
+    }
     if (x->type == EXPR_SYMBOL && is_positive_constant_symbol(x->data.symbol.name)) return true;
     if (x->type == EXPR_FUNCTION &&
         x->data.function.head &&
@@ -546,6 +582,12 @@ bool prov_nn(const AssumeCtx* ctx, const Expr* x) {
     if (s == 1 || s == 0) return true;
     if (prov_pos(ctx, x)) return true;
     if (fact_directly_nonneg(ctx, x)) return true;
+    /* Element[x, {Positive,Nonnegative}Integers] => x >= 0. */
+    if (ctx) {
+        for (size_t i = 0; i < ctx->count; i++)
+            if (fact_in_domain(ctx->facts[i], x, "PositiveIntegers") ||
+                fact_in_domain(ctx->facts[i], x, "NonnegativeIntegers")) return true;
+    }
     if (x->type == EXPR_FUNCTION &&
         x->data.function.head &&
         x->data.function.head->type == EXPR_SYMBOL) {
@@ -579,6 +621,11 @@ bool prov_neg(const AssumeCtx* ctx, const Expr* x) {
     if (!x) return false;
     if (numeric_sign(x) == -1) return true;
     if (fact_directly_negative(ctx, x)) return true;
+    /* Element[x, NegativeIntegers] => x < 0. */
+    if (ctx) {
+        for (size_t i = 0; i < ctx->count; i++)
+            if (fact_in_domain(ctx->facts[i], x, "NegativeIntegers")) return true;
+    }
     /* Times: even number of negatives among factors, with the rest positive,
      * gives positive (not negative). For "negative" we need an odd number of
      * negative factors and the rest positive. v1 keeps this simple. */
@@ -595,6 +642,12 @@ bool prov_np(const AssumeCtx* ctx, const Expr* x) {
     if (s == -1 || s == 0) return true;
     if (prov_neg(ctx, x)) return true;
     if (fact_directly_nonpos(ctx, x)) return true;
+    /* Element[x, {Negative,Nonpositive}Integers] => x <= 0. */
+    if (ctx) {
+        for (size_t i = 0; i < ctx->count; i++)
+            if (fact_in_domain(ctx->facts[i], x, "NegativeIntegers") ||
+                fact_in_domain(ctx->facts[i], x, "NonpositiveIntegers")) return true;
+    }
     return false;
 }
 
@@ -689,4 +742,133 @@ bool assume_known_negative(const AssumeCtx* ctx, const Expr* x) { return prov_ne
 bool assume_known_nonpos  (const AssumeCtx* ctx, const Expr* x) { return prov_np (ctx, x); }
 bool assume_known_integer (const AssumeCtx* ctx, const Expr* x) { return prov_int(ctx, x); }
 bool assume_known_real    (const AssumeCtx* ctx, const Expr* x) { return prov_re (ctx, x); }
+
+/* ----------------------------------------------------------------------- */
+/* Threshold comparisons                                                   */
+/*                                                                         */
+/* The provenance predicates above answer only "what is the sign of x?".   */
+/* Ordering a parameter against a nonzero constant (a > 1, so Log[a] > 0)  */
+/* or against another parameter (n > m, so x^n dominates x^m) needs a      */
+/* separate query, because the v1 fact matcher compares a query            */
+/* structurally against a fact's LHS: the fact `a > 1` proves              */
+/* assume_known_positive(a) but NOT assume_known_positive(a - 1). These    */
+/* helpers scan for an inequality directly relating `expr` to a bound,     */
+/* staying sound (a decision only on a direct entailment, no transitive    */
+/* chaining across facts).                                                 */
+/* ----------------------------------------------------------------------- */
+
+/* Numeric value of a literal (Integer / Real / Bigint / positive-or-negative
+ * Rational). Returns false when `e` is not a plain numeric literal. */
+static bool assume_num_value(const Expr* e, double* out) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
+    if (e->type == EXPR_REAL)    { *out = e->data.real;            return true; }
+    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint); return true; }
+    if (head_is((Expr*)e, SYM_Rational) && e->data.function.arg_count == 2) {
+        double n, d;
+        if (assume_num_value(e->data.function.args[0], &n) &&
+            assume_num_value(e->data.function.args[1], &d) && d != 0.0) {
+            *out = n / d;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Extract a one-sided numeric bound on `expr` from a single 2-arg relation
+ * fact. On success sets *bound and *lower (true => expr > / >= bound; false
+ * => expr < / <= bound) and *strict, and returns true. Equal[expr, c] yields
+ * a pinned value reported as both bounds via two calls at the use sites. */
+static bool fact_numeric_bound(const Expr* f, const Expr* expr,
+                               double* bound, bool* lower, bool* strict) {
+    if (!f || f->type != EXPR_FUNCTION || f->data.function.arg_count != 2) return false;
+    if (f->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = f->data.function.head->data.symbol.name;
+    Expr* a = f->data.function.args[0];
+    Expr* b = f->data.function.args[1];
+    double cv;
+    /* expr on the left. */
+    if (expr_eq(a, expr) && assume_num_value(b, &cv)) {
+        if (h == SYM_Greater)      { *bound = cv; *lower = true;  *strict = true;  return true; }
+        if (h == SYM_GreaterEqual) { *bound = cv; *lower = true;  *strict = false; return true; }
+        if (h == SYM_Less)         { *bound = cv; *lower = false; *strict = true;  return true; }
+        if (h == SYM_LessEqual)    { *bound = cv; *lower = false; *strict = false; return true; }
+    }
+    /* expr on the right (bound on the left). */
+    if (expr_eq(b, expr) && assume_num_value(a, &cv)) {
+        if (h == SYM_Less)         { *bound = cv; *lower = true;  *strict = true;  return true; }
+        if (h == SYM_LessEqual)    { *bound = cv; *lower = true;  *strict = false; return true; }
+        if (h == SYM_Greater)      { *bound = cv; *lower = false; *strict = true;  return true; }
+        if (h == SYM_GreaterEqual) { *bound = cv; *lower = false; *strict = false; return true; }
+    }
+    return false;
+}
+
+/* Does the fact set entail expr > k?  (k a numeric literal.) A strict lower
+ * bound c with c >= k gives expr > c >= k; a nonstrict bound needs c > k. An
+ * Equal[expr, c] with c > k pins it. */
+bool assume_known_gt(const AssumeCtx* ctx, const Expr* expr, const Expr* k) {
+    if (!ctx || ctx->inconsistent || !expr || !k) return false;
+    double kv;
+    if (!assume_num_value(k, &kv)) return false;
+    for (size_t i = 0; i < ctx->count; i++) {
+        const Expr* f = ctx->facts[i];
+        double c; bool lower, strict;
+        if (fact_numeric_bound(f, expr, &c, &lower, &strict) && lower) {
+            if (strict ? (c >= kv) : (c > kv)) return true;
+        }
+        /* Equal[expr, c] with c > k. */
+        if (fact_is_function(f, "Equal", 2)) {
+            Expr* a = f->data.function.args[0];
+            Expr* b = f->data.function.args[1];
+            double cv;
+            if ((expr_eq(a, expr) && assume_num_value(b, &cv)) ||
+                (expr_eq(b, expr) && assume_num_value(a, &cv))) {
+                if (cv > kv) return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* Does the fact set entail expr < k?  Symmetric with assume_known_gt. */
+bool assume_known_lt(const AssumeCtx* ctx, const Expr* expr, const Expr* k) {
+    if (!ctx || ctx->inconsistent || !expr || !k) return false;
+    double kv;
+    if (!assume_num_value(k, &kv)) return false;
+    for (size_t i = 0; i < ctx->count; i++) {
+        const Expr* f = ctx->facts[i];
+        double c; bool lower, strict;
+        if (fact_numeric_bound(f, expr, &c, &lower, &strict) && !lower) {
+            if (strict ? (c <= kv) : (c < kv)) return true;
+        }
+        if (fact_is_function(f, "Equal", 2)) {
+            Expr* a = f->data.function.args[0];
+            Expr* b = f->data.function.args[1];
+            double cv;
+            if ((expr_eq(a, expr) && assume_num_value(b, &cv)) ||
+                (expr_eq(b, expr) && assume_num_value(a, &cv))) {
+                if (cv < kv) return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* Does the fact set entail A > B for two (possibly symbolic) expressions?
+ * Matches a direct strict fact Greater[A, B] or Less[B, A] only. */
+bool assume_known_gt_expr(const AssumeCtx* ctx, const Expr* A, const Expr* B) {
+    if (!ctx || ctx->inconsistent || !A || !B) return false;
+    for (size_t i = 0; i < ctx->count; i++) {
+        const Expr* f = ctx->facts[i];
+        if (f->type != EXPR_FUNCTION || f->data.function.arg_count != 2) continue;
+        if (f->data.function.head->type != EXPR_SYMBOL) continue;
+        const char* h = f->data.function.head->data.symbol.name;
+        Expr* a = f->data.function.args[0];
+        Expr* b = f->data.function.args[1];
+        if (h == SYM_Greater && expr_eq(a, A) && expr_eq(b, B)) return true;
+        if (h == SYM_Less    && expr_eq(a, B) && expr_eq(b, A)) return true;
+    }
+    return false;
+}
 

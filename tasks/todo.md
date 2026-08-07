@@ -1,41 +1,51 @@
-# Issue #52 — iterator termination in double precision (+ Table cap)
+# Assumption-aware Limit — todo
 
-## Root cause
-Table/Do/Sum/Product drive loop termination on a `double val <= double max_val`
-test. Near 2^63, consecutive int64 values collapse to the same `double` (ULP of
-2^63 is 2048 > a unit step), so the test never fires:
-- **Do** infinite-loops; **Sum/Product** run to their 10^8 term cap; **Table**
-  runs to a **10^6** cap and *silently truncates*.
-The exact running value `curr_e` is maintained alongside but never consulted for
-termination. Separately, Table's 10^6 cap truncates *legitimate* tables > 1M
-(`Table[i,{i,1,2000000}]` -> 1000001), and truncates silently unlike Sum/Product
-which return unevaluated.
+Plan: /Users/user/.claude/plans/in-the-same-way-encapsulated-minsky.md
 
-## Fix
-- [x] `iter_range_continue()` shared helper (iter.c/iter.h): int64 fast path
-      (exact, no GMP — preserves PR #50 loop perf), GMP compare when a BigInt is
-      involved, double test for real / rational-exact, `is_inf` short-circuit.
-- [x] Do — replace while-condition (iter.c).
-- [x] Table — replace fill + pre-count conditions; raise cap 10^6 -> 10^8;
-      return unevaluated on overflow (align with Sum/Product).
-- [x] Sum — replace loop condition (sum.c expand_range).
-- [x] Product — replace loop condition (product.c expand_range).
-- [x] Auto-compile: numloop_do_range's three int64 loops advance with the
-      overflow-checked ci_add_i64 (stop at the edge instead of wrapping).
-- [x] Compile[]: default mode already bails to the (now-fixed) interpreter;
-      wrap mode ("Speed") kept loop-control arithmetic checked via new
-      IF_FORCECHK bit (compile_internal.h + compile.c funnel + 3 emit sites).
-- [x] Perf: iter_range_continue inlined (BigInt arm out-of-line) so the tight
-      loop is flat vs baseline (0.0081 vs 0.0079 on Do[Null,{i,200000}]).
-- [x] Extensive unit tests: 6 fns in test_iter.c + test_cf_loop_counter_boundary.
-- [x] Build clean, check-c99 clean, 13-suite regression sweep green, changelog + docs.
+## Phase 0 — Stress corpus (fitness function) ✅
+- [x] New tests/test_limit_stress.c (62 cases, 11 categories)
+- [x] Extend tests/test_limit_assumptions.c (2 wiring functions)
+- [x] Wire tests/CMakeLists.txt (limit_stress_tests)
+- [x] Build + confirm [C] pass, [N] FAIL (46 failing: 41 stress + 5 assumptions)
+
+## Phase 1 — Wiring + generalized early dispatch ✅
+- [x] #include simp.h; add const AssumeCtx* assume to LimitCtx (+ 13 brace ctors)
+- [x] limit_effective_assumptions (option + ambient; Automatic-as-none; inconsistent->NULL)
+- [x] single-exit assume_ctx_free (goto cleanup); thread into run_iterated
+- [x] de-static read_dollar_assumptions (simp_builtins.c + simp.h)
+- [x] limit_real_base_power via assume_known_gt/lt(ctx, base, 1)
+
+## Phase 2 — Sign oracle ✅
+- [x] assume_known_gt/lt/gt_expr in simp_assume.c + simp.h (+ Inequality decomposition)
+- [x] literal_sign_ctx in limit.c; ctx Log[b] arm; exponent_sign_ctx difference arm
+- [x] rewire read_leading_term_limit + layer3_rational
+
+## Phase 3 — Growth exponent + monomial handler ✅
+- [x] layer_param_power (x^exp monomial) as a compute_limit LAYER (runs first)
+- [x] layer_param_monomial_substitute (t = x^a) for rational functions of x^a
+- [note] growth_exponent_upper threading NOT needed — bounded envelope resolves
+  x^(-p) via layer_param_power on the recursive compute_limit
+
+## Phase 4 — Compose-at-infinity direction ✅
+- [x] falls out of Phase 2: sub-limit c x returns signed Infinity, ArcTan/Tanh fold
+
+## Phase 5 — Domain -> sign polish ✅
+- [x] PositiveIntegers/NonnegativeIntegers/NegativeIntegers/NonpositiveIntegers => sign
+
+## Docs & verification ✅
+- [x] docs/spec/builtins/calculus.md Limit Assumptions bullet + examples
+- [x] docs/spec/changelog/2026-08-03.md feature summary
+- [x] Limit docstring refresh (in limit.c, verified via ?Limit)
+- [x] make check-c99 clean; all suites 0 FAIL; valgrind: no leak stack touches new code
 
 ## Review
-Fixed across all three layers (interpreter, auto-compile, Compile[]) plus the
-separate Table 10^6-truncation bug the investigation surfaced. Verified:
-- `Table[i,{i,9223372036854775805,9223372036854775807}]` -> 3 elements ✓
-- `Do`/`Sum`/`Product` same span terminate ✓
-- `Table[i,{i,1,2000000}]` -> 2,000,000 (cap no longer truncates) ✓
-- over-cap exact range -> unevaluated instantly ✓
-- Compile default + "Speed" boundary -> correct (was hang / under-run) ✓
-- exactness unchanged; no perf regression ✓
+- Corpus: 62-case tests/test_limit_stress.c (11 categories) + 2 wiring functions in
+  test_limit_assumptions.c. Started 46 FAIL -> 0 FAIL.
+- Development landed as: shared simp_assume additions (threshold predicates,
+  chained-inequality decomposition, domain->sign); a borrowed AssumeCtx threaded
+  through LimitCtx; literal_sign_ctx / exponent_sign_ctx; two new cascade layers
+  (layer_param_power, layer_param_monomial_substitute).
+- Regressions: limit/gruntz/oscillatory/possiblezeroq(x2)/simplify/element/series/
+  powerexpand/fullsimplify(x2)/nlimit/integrate(newton-leibniz,dispatch) all 0 FAIL.
+- Sound-only: NULL ctx == legacy path byte-for-byte; verdicts only on entailment.
+- Not commited (awaiting user).

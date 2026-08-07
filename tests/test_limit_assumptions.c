@@ -85,6 +85,32 @@ static void test_passthrough_no_assumption(void) {
     assert_eval_eq("Limit[(1/2)^n, n -> Infinity]", "0", 0);
 }
 
+/* --- General assumption wiring (option + ambient Assuming[]/$Assumptions),
+ *     added when Limit was connected to the shared AssumeCtx solver. --- */
+static void test_wiring_ambient_and_option(void) {
+    /* Ambient Assuming[] reaches Limit's parameter reasoning. */
+    assert_eval_eq("Assuming[a > 1, Limit[a^x, x -> Infinity]]", "Infinity", 0);
+    /* Direct (Block-scoped) $Assumptions is honoured too. */
+    assert_eval_eq("Block[{$Assumptions = c > 0}, Limit[c x, x -> Infinity]]",
+                   "Infinity", 0);
+    /* The option overrides the ambient assumption (matches PossibleZeroQ). */
+    assert_eval_eq("Assuming[c < 0, Limit[c x, x -> Infinity, Assumptions -> c > 0]]",
+                   "Infinity", 0);
+    /* A NULL/uninformative assumption must not perturb the legacy result. */
+    assert_eval_eq("Limit[c x, x -> Infinity]", "DirectedInfinity[c]", 0);
+    assert_eval_eq("Limit[c x, x -> Infinity, Assumptions -> True]",
+                   "DirectedInfinity[c]", 0);
+}
+
+/* Real base > 1 -> Infinity is a different theorem from Abs[base] > 1 ->
+ * ComplexInfinity (unknown phase). Both must hold. */
+static void test_real_base_vs_abs_magnitude(void) {
+    assert_eval_eq("Limit[a^x, x -> Infinity, Assumptions -> a > 1]", "Infinity", 0);
+    assert_eval_eq("Limit[a^x, x -> Infinity, Assumptions -> a > 0 && a < 1]", "0", 0);
+    assert_eval_eq("Limit[a^x, x -> Infinity, Assumptions -> Abs[a] > 1]",
+                   "ComplexInfinity", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -94,6 +120,8 @@ int main(void) {
     TEST(test_neg_infinity_inversion);
     TEST(test_boundary_abs_eq_one);
     TEST(test_passthrough_no_assumption);
+    TEST(test_wiring_ambient_and_option);
+    TEST(test_real_base_vs_abs_magnitude);
 
     printf("All limit_assumptions tests passed!\n");
     return 0;
