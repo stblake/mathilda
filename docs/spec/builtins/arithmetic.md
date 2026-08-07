@@ -418,12 +418,15 @@ seconds (`Sqrt[3141592653589793238]` took 24 s while
 ## Mod, Quotient, QuotientRemainder
 
 - `Mod[n, m]`: Remainder of `n/m`.
-- `Quotient[n, m]`: `Floor[n/m]` — floored, not truncated or rounded, so
-  `Quotient[-5.5, 3.]` is `-2`. The three-argument form `Quotient[n, m, d]` is
-  `Floor[(n - d)/m]`. Complex arguments are handled componentwise on the
-  quotient (`Quotient[10 + 2 I, 3 + I]` is `3 - I`) and agree with
-  `Floor[n/m]`; before 2026-07-27 the complex branch rounded instead of
-  flooring and disagreed with both the real branch and `Floor`.
+- `Quotient[n, m]`: for **real** `n, m`, `Floor[n/m]` — floored, not truncated or
+  rounded, so `Quotient[-5.5, 3.]` is `-2`. The three-argument form
+  `Quotient[n, m, d]` is `Floor[(n - d)/m]`. For **complex** `n` or `m` it is
+  Gaussian-integer division: the ratio's real and imaginary parts are each
+  **rounded to the nearest integer** (ties to even, like `Round[]`), giving the
+  quotient of least remainder norm. So `Quotient[10 + 2 I, 3 + I]` is `3`,
+  `Quotient[17.5 + 6 I, 1 + 2 I]` is `6 - 6 I`, and `Quotient[5 + 3 I, 2]` is
+  `2 + 2 I`. The two branches deliberately differ — an imaginary part changes
+  which integer is nearest — and both match Mathematica.
 - `QuotientRemainder[n, m]`: Returns `{Quotient[n, m], Mod[n, m]}`.
 
 Over a list, both run on the machine buffer and keep the result packed. Their

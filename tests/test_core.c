@@ -353,10 +353,26 @@ void test_quotient(void) {
     assert_eval_eq("Quotient[111/4, 5/4]", "22", 0);
     assert_eval_eq("Quotient[144.144, 11.12]", "12", 0);
 
-    // Complex test (rounds to nearest integer)
+    /* Complex arguments: Quotient is Gaussian-integer division, so it ROUNDS
+     * each part of the ratio to the nearest integer (ties to even, like Round[]),
+     * NOT Floor as the real path does. Matches Mathematica. Ratio 5.9 - 5.8 I. */
     char* s_complex = expr_to_string_fullform(eval_and_free(parse_expression("Quotient[17.5+6I, 1+2I]")));
     assert(strcmp(s_complex, "Complex[6, -6]") == 0);
     free(s_complex);
+
+    /* Regression guards for the round-vs-floor distinction (a prior change
+     * floored these, giving 1 - I, 1 and 2 + I). */
+    char* s_c2 = expr_to_string_fullform(eval_and_free(parse_expression("Quotient[10.4 + 8I, 4. + 5I]")));
+    assert(strcmp(s_c2, "2") == 0);                 /* ratio ~1.99 - 0.49 I -> 2 */
+    free(s_c2);
+    char* s_c3 = expr_to_string_fullform(eval_and_free(parse_expression("Quotient[5.5 + 1. I, 3.]")));
+    assert(strcmp(s_c3, "2") == 0);                 /* ratio 1.83 + 0.33 I -> 2 */
+    free(s_c3);
+    /* Ties-to-even specifically: ratio 2.5 + 1.5 I -> 2 + 2 I (both .5 round to
+     * the even 2). Plain round() (ties away from zero) would give 3 + 2 I. */
+    char* s_c4 = expr_to_string_fullform(eval_and_free(parse_expression("Quotient[5+3I, 2]")));
+    assert(strcmp(s_c4, "Complex[2, 2]") == 0);
+    free(s_c4);
 
     // 3-argument tests
     assert_eval_eq("Quotient[11, 3, 1]", "3", 0);

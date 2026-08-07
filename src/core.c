@@ -2864,7 +2864,22 @@ static bool get_numeric_as_complex(Expr* e, Cplx* out) {
         *out = (Cplx){ .re = re_c.re, .im = im_c.re };
         return true;
     }
-    return false; 
+    return false;
+}
+
+/* Banker's rounding (round half to even), matching Round[] exactly. Duplicated
+ * from piecewise.c's static round_half_even (as ndkernels.c also does) rather
+ * than exported, to keep the change local. Needed by the complex Quotient path:
+ * Mathematica rounds the Gaussian quotient to the NEAREST integer with ties to
+ * even, so Quotient[5 + 3 I, 2] is 2 + 2 I (ratio 2.5 + 1.5 I -> both halves to
+ * the even 2), which plain C round() (ties away from zero) would get wrong. */
+static double quot_round_half_even(double x) {
+    double f = floor(x);
+    double r = x - f;
+    if (r < 0.5) return f;
+    if (r > 0.5) return f + 1.0;
+    if (fmod(fabs(f), 2.0) == 0.0) return f;   /* exactly .5: pick the even one */
+    return f + 1.0;
 }
 
 Expr* builtin_quotient(Expr* res) {
@@ -2894,13 +2909,22 @@ Expr* builtin_quotient(Expr* res) {
             .im = (m_minus_d.im * n.re - m_minus_d.re * n.im) / n_norm_sq
         };
 
-        /* FLOOR, not round.  Quotient[m, n, d] is Floor[(m - d)/n] by definition,
-         * and every other branch of this function agrees — the integer path uses
-         * mpz_fdiv_q and the real path uses floor().  This one rounded, so
-         * Quotient[5.5 + 1. I, 3.] came back 2 while Floor[(5.5 + 1. I)/3.] gave
-         * 1, and the complex result disagreed with the real result for the same
-         * quotient. */
-        Cplx result_cplx = { floor(z.re), floor(z.im) };
+        /* ROUND to the nearest Gaussian integer, NOT floor. Floor[(m-d)/n] is
+         * the definition only for REAL arguments; for complex m or n, Quotient
+         * is Gaussian-integer division — the quotient that minimises the norm of
+         * the remainder — which rounds each part of the ratio to the nearest
+         * integer (ties to even, like Round[]). This is what Mathematica does
+         * and what the real path deliberately does not:
+         *   Quotient[17.5 + 6 I, 1 + 2 I] == 6 - 6 I   (ratio 5.9 - 5.8 I)
+         *   Quotient[10.4 + 8 I, 4. + 5 I] == 2        (ratio ~1.99 - 0.49 I)
+         *   Quotient[5 + 3 I, 2]           == 2 + 2 I  (ratio 2.5 + 1.5 I)
+         * A prior change floored this to "agree with the real branch", but the
+         * two branches are supposed to differ: the presence of an imaginary part
+         * changes which integer is nearest. floor gave 5 - 6 I, 1 - I and
+         * 2 + I respectively — all wrong. (The compiler declines complex
+         * Mod/Quotient in compile_infer.c, so there is no compiled twin to keep
+         * in step; the real path it compiles still floors.) */
+        Cplx result_cplx = { quot_round_half_even(z.re), quot_round_half_even(z.im) };
 
         if (result_cplx.im == 0.0) {
             return expr_new_integer((int64_t)result_cplx.re);

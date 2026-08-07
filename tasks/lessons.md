@@ -2365,3 +2365,32 @@ include path — reproduce the Linux build locally with a **poison stub `mpfr.h`
 (`#error`) injected via `CC="gcc-NN -I<dir>"` ahead of `-I/usr/local/include`,
 and `make -k` to enumerate the whole backlog in one pass rather than iterating
 through CI one failure at a time. See [[project_use_mpfr_zero_build]].
+
+## A failing test can be right and a deliberate code change wrong (2026-08-07)
+
+`test_quotient` had failed since 2026-07-27: it expected
+`Quotient[17.5 + 6 I, 1 + 2 I] == Complex[6, -6]` but the code returned
+`Complex[5, -6]`. The tempting read is "stale test, update the expectation to
+match the code" — especially because the code change that broke it (commit
+`c0c8dcb`) came with a *detailed justification comment*: complex `Quotient` was
+switched from `round` to `floor` to "agree with the real branch", on the premise
+that `Quotient` is `Floor[(m-d)/n]` by definition.
+
+The premise was false. That is the definition for **real** arguments only; for
+complex arguments `Quotient` is Gaussian-integer division, which rounds each
+part of the ratio to the nearest integer. One `wolframscript` batch settled it —
+and *every* example the commit cited as support was wrong against Mathematica
+(`Quotient[5.5 + 1. I, 3.]` is `2` not `1`, `Quotient[10 + 2 I, 3 + I]` is `3`
+not `3 - I`). The test had been correct all along.
+
+Rules: (1) when a test and the code disagree, **the test is a hypothesis about
+ground truth, not automatically the stale side** — check the authority (here the
+local Mathematica kernel) before deciding which to change; the direction of the
+fix is the whole question. (2) A confident justification comment is not
+evidence; it is exactly what a `wolframscript` probe is for — the more detailed
+the rationale, the more it is worth the one call to check. Same
+`/Applications/Mathematica.app/Contents/MacOS/wolframscript` pattern as the
+`DiagonalMatrix` lesson above. (3) The Mathematica-faithful "nearest" is
+round-half-to-**even** (`Quotient[5 + 3 I, 2] == 2 + 2 I`, ratio `2.5 + 1.5 I`),
+so the fix reused a `round_half_even` helper, not C `round()` (ties away from
+zero).
