@@ -196,6 +196,30 @@ void test_hyperfactorial_numeric(void) {
     assert_eval_eq("Hyperfactorial[4]", "27648", 0);
 }
 
+void test_binomial_complex_numeric(void) {
+    /* Class-B continuation for Binomial: an inexact operand alongside a
+     * complex operand must evaluate through the Gamma quotient, with the
+     * exact Gaussian sibling carried along by the Times/Plus numeric
+     * contagion.  Both were previously left unevaluated (or, before the
+     * binomial_to_double fix, returned nan.0). */
+    /* Exact Gaussian n, machine-real m: Binomial[1 + I, 5] = -1/12 - I/12. */
+    assert_complex_close("Binomial[1 + I, 5.]", -1.0 / 12.0, -1.0 / 12.0, 1e-9);
+    /* Inexact-complex n, exact-Gaussian m. */
+    assert_complex_close("Binomial[2. + I, 7 - 3 I]",
+                         -75.4683473822230435511, 106.815265970790547809, 1e-4);
+    /* Machine-real n, exact-Gaussian m -- the mirror direction. */
+    assert_complex_close("Binomial[5., 1 + I]", 3.89232, 6.48720, 1e-3);
+    /* Existing inexact-complex path is unchanged. */
+    assert_complex_close("N[Binomial[1/2 + I/3, 1/4]]",
+                         1.08986784071993926042, 0.0929283046772024343122, 1e-9);
+
+    /* Guards: no inexact operand => stays symbolic (Mathematica-faithful). */
+    assert_eval_eq("Head[Binomial[1 + I, 2 + I]]", "Binomial", 0);  /* both exact complex */
+    assert_eval_eq("Binomial[1 + I, 5]", "-1/12 - 1/12*I", 0);      /* exact int m: polynomial */
+    assert_eval_eq("Head[Binomial[x, 5.]]", "Binomial", 0);         /* symbolic n, no complex */
+    assert_eval_eq("Head[Binomial[7/3, 1/5]]", "Binomial", 0);      /* exact rationals */
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -212,6 +236,7 @@ int main(void) {
     TEST(test_barnesg_numeric);
     TEST(test_barnesg_recurrence);
     TEST(test_hyperfactorial_numeric);
+    TEST(test_binomial_complex_numeric);
 
     printf("All numeric-domain tests passed.\n");
     return 0;

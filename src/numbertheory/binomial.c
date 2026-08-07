@@ -175,14 +175,30 @@ static bool binomial_is_inexact(const Expr* e) {
 
 /* True when e is a Complex[..] value carrying at least one inexact part --
  * i.e. a numeric complex produced by N[..], as opposed to an exact Gaussian
- * like 1 + I.  Exact complex operands are left symbolic (matching
- * Mathematica), so only the inexact ones trigger the numeric complex path. */
+ * like 1 + I. */
 static bool binomial_inexact_complex(Expr* e) {
     Expr *re, *im;
     if (is_complex(e, &re, &im)) {
         return binomial_is_inexact(re) || binomial_is_inexact(im);
     }
     return false;
+}
+
+/* True for any Complex[..] operand, exact (1 + I) or inexact (2. + I). */
+static bool binomial_is_complex(Expr* e) {
+    Expr *re, *im;
+    return is_complex(e, &re, &im);
+}
+
+/* True for an operand that makes the whole Binomial a numeric computation: an
+ * inexact real (machine or MPFR) or a Complex[..] carrying an inexact part.
+ * When either operand forces numeric AND a complex operand is present, the
+ * generalised binomial is evaluated through the Gamma quotient (path 6) -- an
+ * exact Gaussian sibling (1 + I) is then carried along by the Times/Plus
+ * numeric contagion, so Binomial[1 + I, 5.] evaluates rather than falling
+ * through to symbolic. */
+static bool binomial_forces_numeric(Expr* e) {
+    return binomial_is_inexact(e) || binomial_inexact_complex(e);
 }
 
 /* Build and evaluate  Gamma[n+1] / (Gamma[m+1] Gamma[n-m+1])  as an
@@ -340,12 +356,19 @@ Expr* builtin_binomial(Expr* res) {
     }
 #endif
 
-    /* --- (6) complex numeric path.  Fires when an operand is a Complex[..]
-     * value with an inexact part (i.e. under N[Binomial[1/2 + I/3, 1/4], ..]);
-     * evaluates the Gamma quotient, reusing Gamma's machine-Lanczos / MPFR-
-     * Spouge complex kernels.  Accepts the result only if it is numeric, so a
-     * pole or a symbolic operand leaves Binomial symbolic. --- */
-    if (binomial_inexact_complex(arg_n) || binomial_inexact_complex(arg_m)) {
+    /* --- (6) complex numeric path.  Fires when the computation is numeric --
+     * an inexact operand is present (machine real 5., MPFR, or a Complex with
+     * an inexact part) -- AND a complex operand is present, so the real-only
+     * machine path (2) has already declined.  Evaluates the Gamma quotient,
+     * reusing Gamma's machine-Lanczos / MPFR-Spouge complex kernels; any exact
+     * complex operand (1 + I, 7 - 3 I) is numericalised by the Times/Plus
+     * numeric contagion as the quotient folds.  So Binomial[1 + I, 5.] and
+     * Binomial[2. + I, 7 - 3 I] both evaluate, while an exact Gaussian pair
+     * (Binomial[1 + I, 2 + I]) has no inexact operand and stays symbolic.
+     * Accepts the result only if it is numeric, so a pole or a symbolic
+     * operand leaves Binomial symbolic. --- */
+    if ((binomial_forces_numeric(arg_n) || binomial_forces_numeric(arg_m)) &&
+        (binomial_is_complex(arg_n) || binomial_is_complex(arg_m))) {
         Expr* val = binomial_gamma_quotient(arg_n, arg_m);
         if (val && expr_is_numeric_like(val)) return val;
         expr_free(val);

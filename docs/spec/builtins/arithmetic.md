@@ -1019,14 +1019,19 @@ $\Gamma(n+1)/(\Gamma(m+1)\,\Gamma(n-m+1))$.
   falling-factorial form. The working precision follows the usual
   contagion rule (minimum precision among the inexact operands, floored
   at machine 53).
-- Complex numeric branch: when an operand is a `Complex[..]` value with an
-  inexact part (i.e. under `N`), the Gamma quotient is built as an
+- Complex numeric branch: fires when the computation is numeric — an
+  inexact operand is present (a machine or MPFR real, or a `Complex[..]`
+  with an inexact part) — **and** a complex operand is present, so the
+  real-only machine branch has declined. The Gamma quotient is built as an
   expression and evaluated, reusing `Gamma`'s complex kernels (machine
   Lanczos, and the arbitrary-precision Spouge path under MPFR) and the
-  complex-arithmetic folders — so `N[Binomial[1/2 + I/3, 1/4]]` and
-  `N[Binomial[1/2 + I/3, 1/4], 25]` both evaluate. The result is accepted
-  only if it is numeric, so a pole or a symbolic operand leaves the form
-  symbolic. Exact Gaussian operands (`Binomial[1 + I, 1/2]`) stay symbolic.
+  complex-arithmetic folders; any exact Gaussian sibling (`1 + I`,
+  `7 - 3 I`) is carried along by the `Times`/`Plus` numeric contagion as the
+  quotient folds. So `Binomial[1 + I, 5.]`, `Binomial[2. + I, 7 - 3 I]`,
+  `N[Binomial[1/2 + I/3, 1/4]]` and `N[Binomial[1/2 + I/3, 1/4], 25]` all
+  evaluate. The result is accepted only if it is numeric, so a pole or a
+  symbolic operand leaves the form symbolic. A pair of **exact** Gaussians
+  with no inexact operand (`Binomial[1 + I, 2 + I]`) stays symbolic.
 
 ```mathematica
 In[1]:= Binomial[10, 3]
@@ -1070,6 +1075,12 @@ Out[13]= 1.08987 + 0.0929283 I
 
 In[14]:= N[Binomial[1/2 + I/3, 1/4], 25]
 Out[14]= 1.0898678407199392604353272 + 0.092928304677202434313313055 I
+
+In[15]:= Binomial[1 + I, 5.]
+Out[15]= -0.0833333 - 0.0833333 I
+
+In[16]:= Binomial[2. + I, 7 - 3 I]
+Out[16]= -75.4683 + 106.815 I
 ```
 
 ## Fibonacci
