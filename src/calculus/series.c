@@ -33,6 +33,8 @@
 #include "rationalize.h"
 #include "sym_names.h"
 #include "ndarray.h"
+#include "simp.h"          /* AssumeCtx + assume_known_* / apply_assumption_rules:
+                            * assumption-aware sign-of-x and coefficient cleanup. */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -297,6 +299,11 @@ typedef struct {
     Expr*   pending_add_const;
     Expr*   pending_log_coef;
     Expr*   pending_discriminator;
+    /* Borrowed assumption context (from the Assumptions option or ambient
+     * $Assumptions / Assuming[]); NULL == legacy assumption-free path. Never
+     * freed by the recursion -- built and freed once in builtin_series. It
+     * propagates for free because every recursive call reuses the same ctx. */
+    const AssumeCtx* assume;
 } SeriesCtx;
 
 static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx);
@@ -2383,6 +2390,67 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
     if (e->type == EXPR_FUNCTION) {
         const char* head = (e->data.function.head->type == EXPR_SYMBOL)
                                ? e->data.function.head->data.symbol.name : NULL;
+        /* ---- Non-analytic heads under a sign/reality assumption ----
+         * Abs, Sign, UnitStep, Conjugate of an x-dependent argument have no
+         * Taylor series, but collapse to an analytic expression once the
+         * assumptions pin the argument's sign (Abs[g]->±g, Sign[g]->±1,
+         * UnitStep[g]->1/0) or reality (Conjugate[g]->g). Guarded on
+         * ctx->assume: with no assumption these fall through to Taylor-via-D
+         * exactly as before (byte-for-byte legacy). */
+        if (ctx->assume && head && e->data.function.arg_count == 1) {
+            Expr* arg = e->data.function.args[0];
+            bool argpos = assume_known_positive(ctx->assume, arg);
+            bool argneg = assume_known_negative(ctx->assume, arg);
+            if (strcmp(head, "Abs") == 0) {
+                if (argpos) return series_expand_nested(arg, ctx);
+                if (argneg) {
+                    Expr* neg = simp(mk_times(expr_new_integer(-1), expr_copy(arg)));
+                    SeriesObj* r = series_expand_nested(neg, ctx);
+                    expr_free(neg);
+                    return r;
+                }
+            } else if (strcmp(head, "Sign") == 0 || strcmp(head, "UnitStep") == 0) {
+                /* Sign: +1 / -1; UnitStep: 1 / 0. */
+                bool is_sign = (strcmp(head, "Sign") == 0);
+                if (argpos || argneg) {
+                    int64_t v = argpos ? 1 : (is_sign ? -1 : 0);
+                    Expr* c = expr_new_integer(v);
+                    SeriesObj* r = so_from_constant(c, ctx->x, ctx->x0, ctx->order, 1);
+                    expr_free(c);
+                    return r;
+                }
+            } else if (strcmp(head, "Conjugate") == 0) {
+                if (assume_known_real(ctx->assume, arg))
+                    return series_expand_nested(arg, ctx);
+            }
+        }
+        /* Sqrt[g^2] == Abs[g]: the generic Power handler below picks the
+         * principal +g root regardless of assumptions, so resolve the sign
+         * here when g's sign is known (mirrors the Abs kernel above). Only
+         * fires for a provably-signed g, so Sqrt[g^2] = ±g holds identically. */
+        if (ctx->assume && head && strcmp(head, "Power") == 0 &&
+            e->data.function.arg_count == 2) {
+            Expr* b  = e->data.function.args[0];
+            Expr* ex = e->data.function.args[1];
+            if (has_symbol_head(b, "Power") && b->data.function.arg_count == 2 &&
+                b->data.function.args[1]->type == EXPR_INTEGER &&
+                b->data.function.args[1]->data.integer == 2 &&
+                has_symbol_head(ex, "Rational") && ex->data.function.arg_count == 2 &&
+                ex->data.function.args[0]->type == EXPR_INTEGER &&
+                ex->data.function.args[0]->data.integer == 1 &&
+                ex->data.function.args[1]->type == EXPR_INTEGER &&
+                ex->data.function.args[1]->data.integer == 2) {
+                Expr* g = b->data.function.args[0];
+                if (assume_known_positive(ctx->assume, g))
+                    return series_expand_nested(g, ctx);
+                if (assume_known_negative(ctx->assume, g)) {
+                    Expr* neg = simp(mk_times(expr_new_integer(-1), expr_copy(g)));
+                    SeriesObj* r = series_expand_nested(neg, ctx);
+                    expr_free(neg);
+                    return r;
+                }
+            }
+        }
         /* ---- Plus ---- */
         if (head && strcmp(head, "Plus") == 0) {
             SeriesObj* acc = NULL;
@@ -2963,6 +3031,7 @@ static SeriesObj* operand_to_series(Expr* op, Expr* x, Expr* x0,
             /* pending_add_const  */ NULL,
             /* pending_log_coef   */ NULL,
             /* pending_discriminator */ NULL,
+            /* assume */ NULL,  /* SeriesData arithmetic layer carries no option. */
         };
         s = series_expand(op, &ctx);
         if (!s) { *incompatible = true; return NULL; }
@@ -3194,66 +3263,39 @@ Expr* builtin_normal(Expr* res) {
  * Series builtin
  * -------------------------------------------------------------------------- */
 
-/* Sign of a recognizable real numeric literal: -1, 0, +1; or 2 ("unknown")
- * for anything that is not an obvious real number. Used to interpret the
- * Assumptions option of Series (e.g. the bound in `x < 0`). */
-static int lit_real_sign(Expr* e) {
-    if (!e) return 2;
-    switch (e->type) {
-        case EXPR_INTEGER:
-            return e->data.integer < 0 ? -1 : (e->data.integer > 0 ? 1 : 0);
-        case EXPR_REAL:
-            return e->data.real < 0.0 ? -1 : (e->data.real > 0.0 ? 1 : 0);
-        case EXPR_BIGINT:
-            return mpz_sgn(e->data.bigint);
-#ifdef USE_MPFR
-        case EXPR_MPFR:
-            return mpfr_sgn(e->data.mpfr) < 0 ? -1
-                 : (mpfr_sgn(e->data.mpfr) > 0 ? 1 : 0);
-#endif
-        default: break;
+/* Build the effective AssumeCtx for a Series call, mirroring
+ * limit_effective_assumptions (limit.c). The Assumptions option (when present
+ * and not Automatic) overrides the ambient $Assumptions; otherwise the ambient
+ * assumptions -- set by an enclosing Assuming[...] or a direct $Assumptions
+ * assignment -- are used. Series is HoldAll, so the option RHS arrives
+ * UNEVALUATED and must be evaluated before parsing; the ambient $Assumptions
+ * is read unevaluated (per read_dollar_assumptions's contract, since its own
+ * Element evaluator would recurse). Returns NULL when the assumption set is
+ * non-informative (True / Automatic / empty) or inconsistent, so a NULL ctx
+ * reproduces the legacy path byte-for-byte. Caller owns the result. */
+static AssumeCtx* series_effective_assumptions(Expr* assm_option) {
+    Expr* effective;
+    if (assm_option && !(assm_option->type == EXPR_SYMBOL &&
+                         strcmp(assm_option->data.symbol.name, "Automatic") == 0)) {
+        effective = eval_and_free(expr_copy(assm_option));   /* held option: evaluate */
+    } else {
+        effective = read_dollar_assumptions();               /* owned; True when unset */
     }
-    /* Rational[p, q] has q > 0 by construction, so its sign is sign of p. */
-    if (has_symbol_head(e, "Rational") && e->data.function.arg_count == 2)
-        return lit_real_sign(e->data.function.args[0]);
-    return 2;
-}
-
-/* Interpret a Series Assumptions option as the sign of the expansion
- * variable `x`. Returns -1 if the assumption forces x < 0, +1 if it forces
- * x > 0, and 0 if it says nothing definite about x's sign. Recognizes the
- * ordering of x against a real numeric bound (Less/LessEqual/Greater/
- * GreaterEqual, in either argument order) and conjunctions (And) thereof.
- * Series uses this to choose the principal branch of Log[x] in the
- * logarithmic expansions of ExpIntegralEi / LogIntegral at x = 0. */
-static int assumption_sign_of(Expr* assm, Expr* x) {
-    if (!assm || assm->type != EXPR_FUNCTION) return 0;
-    size_t ac = assm->data.function.arg_count;
-    /* And[...]: the first component with a definite sign wins. */
-    if (has_symbol_head(assm, "And")) {
-        for (size_t i = 0; i < ac; i++) {
-            int s = assumption_sign_of(assm->data.function.args[i], x);
-            if (s) return s;
-        }
-        return 0;
+    if (!effective) return NULL;
+    if (effective->type == EXPR_SYMBOL &&
+        (strcmp(effective->data.symbol.name, "True") == 0 ||
+         strcmp(effective->data.symbol.name, "Automatic") == 0)) {
+        expr_free(effective);
+        return NULL;
     }
-    bool less    = has_symbol_head(assm, "Less")    || has_symbol_head(assm, "LessEqual");
-    bool greater = has_symbol_head(assm, "Greater") || has_symbol_head(assm, "GreaterEqual");
-    if ((!less && !greater) || ac != 2) return 0;
-
-    Expr* a = assm->data.function.args[0];
-    Expr* b = assm->data.function.args[1];
-    Expr* bound; bool x_on_left;
-    if (expr_eq(a, x))      { bound = b; x_on_left = true;  }
-    else if (expr_eq(b, x)) { bound = a; x_on_left = false; }
-    else return 0;
-
-    int bs = lit_real_sign(bound);
-    if (bs == 2) return 0;
-    /* Normalize "a REL b" with x on one side into "x < bound" vs "x > bound". */
-    bool x_less_than_bound = (x_on_left && less) || (!x_on_left && greater);
-    if (x_less_than_bound) return (bs <= 0) ? -1 : 0;  /* x < (<=0) => x < 0 */
-    else                   return (bs >= 0) ?  1 : 0;  /* x > (>=0) => x > 0 */
+    AssumeCtx* ctx = assume_ctx_from_expr(effective);
+    expr_free(effective);
+    if (!ctx) return NULL;
+    if (ctx->inconsistent || ctx->count == 0) {
+        assume_ctx_free(ctx);
+        return NULL;
+    }
+    return ctx;
 }
 
 /* Parse a single spec argument, accepting either `{x, x0, n}` (full form)
@@ -5540,9 +5582,22 @@ static Expr* try_series_productlog_at_infinity(Expr* f, Expr* x, int64_t n) {
     return series;
 }
 
-/* Expand f around x=x0 to order n and return SeriesData expression. */
+/* Expand f around x=x0 to order n and return SeriesData expression. The
+ * borrowed `assume` context (NULL == legacy path) drives the sign of the
+ * expansion variable (Log-branch selection at x = 0), the non-analytic
+ * kernels (Abs/Sign/... of x), and the final-coefficient cleanup. */
 static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leading_only,
-                              int x_sign) {
+                              const AssumeCtx* assume) {
+    /* Sign of the expansion variable under the assumptions: -1 forces the
+     * Log[-x] branch, +1 (and 0, "unknown") the principal Log[x] branch, in
+     * the LogIntegral / ExpIntegralEi / CosIntegral / CoshIntegral handlers
+     * at x = 0. Derived on the user variable, before the x -> 1/u remap. */
+    int x_sign = 0;
+    if (assume) {
+        if      (assume_known_negative(assume, x)) x_sign = -1;
+        else if (assume_known_positive(assume, x)) x_sign = +1;
+    }
+
     /* Evaluate f with the series context implicit. Since Series has
      * HoldAll, f has not been evaluated yet; we evaluate now. */
     Expr* f_eval = eval_and_free(expr_copy(f));
@@ -5910,6 +5965,7 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
         /* pending_add_const  */ NULL,
         /* pending_log_coef   */ NULL,
         /* pending_discriminator */ NULL,
+        /* assume */ assume,
     };
     SeriesObj* s = series_expand(f_use, &ctx);
     Expr* result = NULL;
@@ -5967,6 +6023,23 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
                 s->coefs[ci] = simp_c;
             }
             expr_free(u_to_inv_x);
+        }
+        /* Assumption-aware cleanup of the final, user-visible coefficients:
+         * Sqrt[a^2] -> a, Abs[a] -> a, Log[a^p] -> p Log[a], etc. under the
+         * assumptions. Guarded on ctx.assume, and apply_assumption_rules only
+         * rewrites subterms keyed on symbols the ctx proves positive/negative/
+         * real/integer/even -- a coefficient free of such symbols (the entire
+         * no-assumption case) is returned structurally unchanged, so the legacy
+         * path is byte-for-byte identical. Intermediate coefficient arithmetic
+         * is deliberately NOT touched; only the emitted coefficients are cleaned. */
+        if (ctx.assume) {
+            for (size_t ci = 0; ci < s->coef_count; ci++) {
+                Expr* cleaned = apply_assumption_rules(s->coefs[ci], ctx.assume);
+                if (cleaned) {
+                    expr_free(s->coefs[ci]);
+                    s->coefs[ci] = cleaned;
+                }
+            }
         }
         result = so_to_expr(s);
         so_free(s);
@@ -6076,6 +6149,11 @@ Expr* builtin_series(Expr* res) {
     }
     if (spec_count == 0) { free(specs); return NULL; }
 
+    /* Build the effective assumption context once (Assumptions option, else
+     * ambient $Assumptions / Assuming[]). NULL == legacy assumption-free path.
+     * Freed on every path below that returns after this point. */
+    AssumeCtx* actx = series_effective_assumptions(assm);
+
     /* Multivariate: process right-to-left. Expand f first in the rightmost
      * variable, which produces a series whose coefficients are themselves
      * expressions in the remaining variables. Then expand each coefficient
@@ -6083,11 +6161,11 @@ Expr* builtin_series(Expr* res) {
     if (spec_count == 1) {
         Expr* x_arg; Expr* x0_arg; int64_t n_val; bool leading;
         if (!parse_series_spec(specs[0], &x_arg, &x0_arg, &n_val, &leading)) {
-            free(specs); return NULL;
+            free(specs); assume_ctx_free(actx); return NULL;
         }
-        int x_sign = assm ? assumption_sign_of(assm, x_arg) : 0;
-        Expr* out = do_series_single(f, x_arg, x0_arg, n_val, leading, x_sign);
+        Expr* out = do_series_single(f, x_arg, x0_arg, n_val, leading, actx);
         free(specs);
+        assume_ctx_free(actx);
         return out;
     }
 
@@ -6097,17 +6175,17 @@ Expr* builtin_series(Expr* res) {
      * expand each coef in y. */
     Expr* x_arg; Expr* x0_arg; int64_t n_val; bool leading;
     if (!parse_series_spec(specs[0], &x_arg, &x0_arg, &n_val, &leading)) {
-        free(specs); return NULL;
+        free(specs); assume_ctx_free(actx); return NULL;
     }
-    int x_sign = assm ? assumption_sign_of(assm, x_arg) : 0;
-    Expr* outer = do_series_single(f, x_arg, x0_arg, n_val, leading, x_sign);
-    if (!outer) { free(specs); return NULL; }
+    Expr* outer = do_series_single(f, x_arg, x0_arg, n_val, leading, actx);
+    if (!outer) { free(specs); assume_ctx_free(actx); return NULL; }
 
     /* outer is SeriesData[x, x0, {a0, a1, ...}, 0, n+1, 1]. Recurse on
      * each coefficient with the remaining specs (forwarding the Assumptions
      * option so the inner variables see it too). */
     if (!has_symbol_head(outer, "SeriesData") || outer->data.function.arg_count != 6) {
         free(specs);
+        assume_ctx_free(actx);
         return outer;
     }
     Expr* coefs = outer->data.function.args[2];
@@ -6129,6 +6207,7 @@ Expr* builtin_series(Expr* res) {
         coefs->data.function.args[i] = expanded;
     }
     free(specs);
+    assume_ctx_free(actx);
     return outer;
 }
 

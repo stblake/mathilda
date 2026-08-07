@@ -88,4 +88,12 @@ bool assume_known_gt_expr(const AssumeCtx* ctx, const Expr* A, const Expr* B);
  * (Simplify, PossibleZeroQ, Limit). */
 Expr* read_dollar_assumptions(void);
 
+/* Apply the assumption-derived rewrite rules (Sqrt[x^2]->x, Abs[x]->±x,
+ * Log[x^p]->p Log[x], Sign[x]->±1, Conjugate[x]->x for real x, even/integer
+ * and Equal[] substitutions) to `input` via ReplaceRepeated. Returns a newly
+ * owned expression, or NULL when ctx is NULL or no rule was generated (so a
+ * NULL return means "unchanged"). The input is not consumed. Shared by
+ * Simplify's assumption seeds and by Series's coefficient cleanup. */
+Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx);
+
 #endif /* MATHILDA_SIMP_H */

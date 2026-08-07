@@ -3156,6 +3156,11 @@ void info_init(void) {
         "\texpansions, as well as logarithmic and symbolic-exponent cases such as x^x\n"
         "\tand (1+x)^n.\n"
         "Series[f, {x, Infinity, n}] expands around x = Infinity by substituting x -> 1/u.\n"
+        "The Assumptions -> assm option (also read from an ambient Assuming[...] scope or\n"
+        "\t$Assumptions) uses the sign/reality/domain of parameters and the expansion\n"
+        "\tvariable to simplify coefficients (Sqrt[a^2] -> a, Abs[a] -> a, Log[a^p] ->\n"
+        "\tp Log[a] for a > 0), pick the Log branch of the integral family at x = 0, and\n"
+        "\texpand non-analytic heads (Abs[x], Sign[x], UnitStep[x], Conjugate[x]).\n"
         "The result of Series is a SeriesData object; use Normal to convert it back to\n"
         "\tan ordinary expression by dropping the O-term.\n"
         "Series is Protected and HoldAll so the expansion variable is not evaluated.");

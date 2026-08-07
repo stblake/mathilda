@@ -49,3 +49,19 @@ Plan: /Users/user/.claude/plans/in-the-same-way-encapsulated-minsky.md
   powerexpand/fullsimplify(x2)/nlimit/integrate(newton-leibniz,dispatch) all 0 FAIL.
 - Sound-only: NULL ctx == legacy path byte-for-byte; verdicts only on entailment.
 - Not commited (awaiting user).
+
+## Series honours Assumptions / Assuming[] (2026-08-07)
+- Goal: replicate the Limit-Assumptions work for Series + a 100+ case stress corpus.
+- Done: `series_effective_assumptions` (HoldAll → eval option first) + borrowed
+  `const AssumeCtx*` threaded through SeriesCtx/do_series_single/series_expand;
+  sign-of-x from ctx (dropped assumption_sign_of/lit_real_sign + int x_sign);
+  non-analytic kernels (Abs/Sign/UnitStep/Conjugate of x, and Sqrt[g^2]→±g);
+  final-coefficient cleanup via apply_assumption_rules (published in simp.h; added
+  (x^2)^r→x^(2r) both signs, Sign/Conjugate rules).
+- Corpus: tests/test_series_stress.c (110 cases, 10 cats) + test_series_assumptions.c
+  (wiring) — every expected verified against the binary. All 0 FAIL.
+- Regressions: series/series_twoterm/nseries/limit_stress/limit_assumptions/
+  possiblezeroq_stress/assuming all 0 FAIL; simplify has 1 pre-existing cosmetic
+  FAIL (x^2^(3/2) stale baseline, unrelated). check-c99 clean. NULL ctx == legacy
+  byte-for-byte. No new leaks (valgrind: my funcs never allocate a lost block).
+- Not committed (awaiting user).
