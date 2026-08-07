@@ -1637,6 +1637,58 @@ Expr* builtin_clip(Expr* res) {
         && x->data.function.head->data.symbol.name == SYM_List) {
         size_t n = x->data.function.arg_count;
         Expr** out = (n > 0) ? malloc(sizeof(Expr*) * n) : NULL;
+
+        /* Fast path for the overwhelmingly common shape: Clip[reals, {lo, hi}]
+         * with finite real bounds. The general loop below builds a whole
+         * Clip[x_i, {lo,hi}] call per element -- deep-copying the bounds List
+         * for every one -- and runs the evaluator on it. Over 4x10^6 elements
+         * that is the difference between 0.12 s and machine-speed, and the
+         * benchmark's own row uses EXACT bounds {1/4, 3/4}, which is precisely
+         * the case that cannot reach the packed ndstruct_clip path above.
+         *
+         * Semantics are preserved exactly, including the part that makes the
+         * buffer path unavailable: a clamped element becomes a COPY OF THE
+         * BOUND, so Clip[{0.1,0.5,0.9},{1/4,3/4}] still returns
+         * {1/4, 0.5, 3/4} with the Rationals intact, not {0.25, 0.5, 0.75}.
+         *
+         * Deliberately narrow. Only argc == 2 (no vmin/vmax replacements), only
+         * EXPR_REAL elements (an exact element could compare differently
+         * against a rational bound once both are doubles), and only bounds that
+         * are finite reals -- Infinity, complex and symbolic bounds all fall
+         * through to the general path, which handles them. */
+        if (argc == 2 && n > 0) {
+            Expr* iv = res->data.function.args[1];
+            double lo, hi;
+            if (iv->type == EXPR_FUNCTION
+                && iv->data.function.head->type == EXPR_SYMBOL
+                && iv->data.function.head->data.symbol.name == SYM_List
+                && iv->data.function.arg_count == 2
+                && clip_classify_infinity(iv->data.function.args[0]) == 0
+                && clip_classify_infinity(iv->data.function.args[1]) == 0
+                && clip_to_double_value(iv->data.function.args[0], &lo)
+                && clip_to_double_value(iv->data.function.args[1], &hi)
+                && lo <= hi) {
+                Expr* lo_e = iv->data.function.args[0];
+                Expr* hi_e = iv->data.function.args[1];
+                size_t i = 0;
+                for (; i < n; i++) {
+                    Expr* el = x->data.function.args[i];
+                    if (el->type != EXPR_REAL) break;      /* exact: general path */
+                    double v = el->data.real;
+                    out[i] = (v < lo) ? expr_copy(lo_e)
+                           : (v > hi) ? expr_copy(hi_e)
+                                      : expr_copy(el);
+                }
+                if (i == n) {
+                    Expr* fast = expr_new_function(expr_new_symbol(SYM_List), out, n);
+                    free(out);
+                    return fast;
+                }
+                /* Bailed part-way: discard and let the general loop redo it. */
+                for (size_t k = 0; k < i; k++) expr_free(out[k]);
+            }
+        }
+
         for (size_t i = 0; i < n; i++) {
             Expr** call_args = malloc(sizeof(Expr*) * argc);
             call_args[0] = expr_copy(x->data.function.args[i]);
