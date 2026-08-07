@@ -42,6 +42,7 @@
 #include "numeric.h"
 #include "poly/poly.h"
 #include "random.h"
+#include "simp.h"
 #include "simp_trigexp_zero.h"
 #include "sym_names.h"
 #include "symtab.h"
@@ -146,8 +147,14 @@ static ZeroTestResult decide_structural(const Expr* e);
 static ZeroTestResult decide_rational(const Expr* e);
 static ZeroTestResult decide_numeric(const Expr* e);
 static ZeroTestResult decide_schwartz_zippel(const Expr* e);
+static ZeroTestResult decide_schwartz_zippel_assuming(const Expr* e, const AssumeCtx* ctx);
 static bool           has_free_symbols(const Expr* e);
 static bool           is_known_constant(const char* sym_name);
+
+/* From src/simp/simp_util.c (declared in the module-internal simp_internal.h,
+ * which pulls in the whole simplifier). Matches Rule/RuleDelayed[lhs, _] whose
+ * LHS is the named symbol — reused here to parse the Assumptions option. */
+extern bool is_rule_with_lhs(const Expr* e, const char* lhs_symbol);
 
 /* ------------------------------------------------------------------ */
 /*  Symbol-set helper (linear set of interned pointers)               */
@@ -693,6 +700,25 @@ static Expr* numericalize_at(const Expr* e, long bits) {
 #endif
 }
 
+/* True iff `e` is a definite infinity — the symbols Infinity / ComplexInfinity
+ * or a DirectedInfinity[...]. A point that numericalizes to one of these is
+ * definitively NON-zero (a pole, e.g. Gamma at a non-positive integer), so the
+ * sampler must settle it FALSE rather than leaving it UNKNOWN (which would
+ * collapse to True). A *cancellation* of infinities such as Gamma[x] - Gamma[x]
+ * numericalizes to Indeterminate, not Infinity, so it is correctly NOT caught
+ * here and stays UNKNOWN -> True. */
+static bool expr_is_infinity(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name == SYM_Infinity ||
+               e->data.symbol.name == SYM_ComplexInfinity;
+    if (e->type == EXPR_FUNCTION && e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_DirectedInfinity)
+        return true;
+    return false;
+}
+
 /* True iff `e` has finished numericalizing to a definite numeric value
  * (Integer, Real, BigInt, MPFR, Complex of same). False if any symbolic
  * residue remains. */
@@ -786,6 +812,14 @@ static ZeroTestResult evaluate_rung(const Expr* e, long bits,
     if (out_scale) *out_scale = 1.0;
     Expr* z = numericalize_at(e, bits);
     if (!z) return ZERO_TEST_UNKNOWN;
+    if (expr_is_infinity(z)) {
+        /* A pole: definitively non-zero. Report an infinite residual so every
+         * caller's "obvious non-zero" gate settles it FALSE. */
+        expr_free(z);
+        *out_mag = INFINITY;
+        if (out_scale) *out_scale = 1.0;
+        return ZERO_TEST_FALSE;
+    }
     if (!is_pure_numeric(z)) { expr_free(z); return ZERO_TEST_UNKNOWN; }
     double mag = 0.0;
     bool ok = expr_abs_double(z, &mag);
@@ -939,6 +973,242 @@ static Expr* sample_random_value(void) {
     return expr_new_real(val);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Assumption-aware sampling                                          */
+/*                                                                     */
+/*  PossibleZeroQ[expr, Assumptions -> a] (and an ambient Assuming[] / */
+/*  $Assumptions scope) restricts the Schwartz–Zippel draw to the      */
+/*  assumed region.  An identity that holds only there — Sin[n Pi] for */
+/*  integer n, Sqrt[x^2]-x for x>=0, Log[Exp[z]]-z on the principal    */
+/*  strip — is genuinely non-zero at a generic real point, so the      */
+/*  plain sampler correctly reports FALSE; conforming the samples is   */
+/*  exactly what turns those into the intended TRUE.                   */
+/*                                                                     */
+/*  Correctness here is SOUNDNESS-only: a spec may sample any SUBSET   */
+/*  of the assumed region (over-restriction is always safe); the one   */
+/*  bug to avoid is drawing a point OUTSIDE it, which would misreport  */
+/*  a genuine identity as non-zero.  No Simplify is ever invoked — by  */
+/*  design PossibleZeroQ is a self-contained numeric/structural test.  */
+/* ------------------------------------------------------------------ */
+
+typedef enum { SDOM_REAL, SDOM_INT, SDOM_CPLX } SampleDomain;
+
+/* One draw channel — a real value, or the real / imaginary part of a complex
+ * value.  `sign` is -1 / 0 / +1; strict vs. non-strict is irrelevant because
+ * the unconstrained magnitude draw keeps |v| >= 1 and so never lands on 0.
+ * A finite two-sided [lo, hi] range takes precedence and disables the |v|>=1
+ * shell (a range such as (-1, 1) lies entirely inside it, and theta near 0
+ * must be sampleable). */
+typedef struct {
+    bool   has_lo, has_hi;
+    double lo, hi;
+    int    sign;
+} Channel;
+
+typedef struct {
+    SampleDomain domain;
+    Channel val;      /* value channel (REAL/INT) or real-part channel (CPLX) */
+    Channel im;       /* imaginary-part channel (CPLX only)                    */
+} SampleSpec;
+
+static void channel_init(Channel* c) {
+    c->has_lo = false; c->has_hi = false; c->lo = 0.0; c->hi = 0.0; c->sign = 0;
+}
+
+/* Numericalize a (possibly symbolic-constant) bound such as Pi/2 or -1 to a
+ * double.  Plain numeric leaves are read directly; anything else is run
+ * through machine-precision numericalize first. */
+static bool bound_to_double(const Expr* e, double* out) {
+    if (expr_signed_double(e, out)) return true;
+    Expr* n = numericalize(e, numeric_machine_spec());
+    if (!n) return false;
+    bool ok = expr_signed_double(n, out);
+    expr_free(n);
+    return ok;
+}
+
+/* Uniform double in [0, 1) drawn from the internal integer stream. */
+static double draw_unit(void) {
+    int64_t gran = (int64_t)1 << ZT_DENOMINATOR_BITS;
+    return (double)draw_int_range(0, gran - 1) / (double)gran;
+}
+
+/* Draw one real value honouring `c`.  `integer` rounds to the integer grid. */
+static double sample_channel(const Channel* c, bool integer) {
+    if (c->has_lo && c->has_hi) {
+        /* Two-sided finite range: sample inside it (shell dropped). */
+        double lo = c->lo, hi = c->hi;
+        if (hi < lo) { double t = lo; lo = hi; hi = t; }
+        if (integer) {
+            int64_t ilo = (int64_t)ceil(lo);
+            int64_t ihi = (int64_t)floor(hi);
+            if (ihi < ilo) return (double)ilo;         /* empty grid: clamp */
+            return (double)draw_int_range(ilo, ihi);
+        }
+        return lo + (hi - lo) * draw_unit();
+    }
+    /* Unconstrained magnitude: |v| >= 1, moderate, sign-honoured. */
+    int64_t num_bound = (int64_t)1 << ZT_NUMERATOR_BITS;
+    double v;
+    if (integer) {
+        v = (double)draw_int_range(1, num_bound);
+    } else {
+        int64_t den_bound = (int64_t)1 << ZT_DENOMINATOR_BITS;
+        int64_t whole  = draw_int_range(1, num_bound);
+        int64_t frac_n = draw_int_range(0, den_bound - 1);
+        v = (double)whole + (double)frac_n / (double)den_bound;
+    }
+    if (c->sign < 0) v = -v;
+    else if (c->sign == 0 && draw_int_range(0, 1)) v = -v;
+    return v;
+}
+
+/* Draw a conforming sample value for one free symbol.  spec == NULL restores
+ * the legacy real-only draw byte-for-byte (see sample_random_value). */
+static Expr* sample_random_value_spec(const SampleSpec* spec) {
+    if (!spec) return sample_random_value();
+    if (spec->domain == SDOM_INT)
+        return expr_new_integer((int64_t)sample_channel(&spec->val, true));
+    if (spec->domain == SDOM_CPLX) {
+        double re = sample_channel(&spec->val, false);
+        double im = sample_channel(&spec->im, false);
+        Expr* parts[2] = { expr_new_real(re), expr_new_real(im) };
+        return expr_new_function(expr_new_symbol(SYM_Complex), parts, 2);
+    }
+    return expr_new_real(sample_channel(&spec->val, false));
+}
+
+/* Which channel a fact's variable operand refers to, for free symbol `sym`:
+ * 0 = the bare symbol, 1 = Re[sym], 2 = Im[sym], -1 = not this symbol. */
+static int channel_of_operand(const Expr* e, const char* sym) {
+    if (!e) return -1;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == sym ? 0 : -1;
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 1 &&
+        e->data.function.head && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        const Expr* a = e->data.function.args[0];
+        if (a && a->type == EXPR_SYMBOL && a->data.symbol.name == sym) {
+            if (h == SYM_Re) return 1;
+            if (h == SYM_Im) return 2;
+        }
+    }
+    return -1;
+}
+
+/* Intersect two channel constraints (b tightens a). */
+static Channel merge_channel(Channel a, Channel b) {
+    Channel r = a;
+    if (b.has_lo && (!r.has_lo || b.lo > r.lo)) { r.has_lo = true; r.lo = b.lo; }
+    if (b.has_hi && (!r.has_hi || b.hi < r.hi)) { r.has_hi = true; r.hi = b.hi; }
+    if (r.sign == 0) r.sign = b.sign;
+    return r;
+}
+
+/* Resolve a one-sided bound into either the signed magnitude shell (bound at
+ * 0 — keeps |v| >= 1, avoids reintroducing the small-magnitude shell that
+ * manufactures polynomial false positives) or an explicit range (nonzero
+ * bound). A two-sided range is left as-is. */
+static void finalize_channel(Channel* c) {
+    double span = (double)((int64_t)2 << ZT_NUMERATOR_BITS);
+    if (c->has_lo && c->has_hi) return;
+    if (c->has_lo && !c->has_hi) {
+        if (c->lo == 0.0) { c->sign = 1; c->has_lo = false; }
+        else { c->has_hi = true; c->hi = c->lo + span; }
+    } else if (c->has_hi && !c->has_lo) {
+        if (c->hi == 0.0) { c->sign = -1; c->has_hi = false; }
+        else { c->has_lo = true; c->lo = c->hi - span; }
+    }
+}
+
+/* Build a SampleSpec for `sym` by scanning the assumption fact set.  Handles
+ * Element[_, Domain], the binary relations (Greater/GreaterEqual/Less/
+ * LessEqual/Equal), and Inequality[a, op, MID, op, b], where the constrained
+ * operand may be the bare symbol, Re[sym], or Im[sym].  Facts it does not
+ * recognise (Unequal, Or, ...) are ignored — a generic sample satisfies them
+ * with probability 1. */
+static SampleSpec extract_spec(const AssumeCtx* ctx, const char* sym) {
+    Channel ch_bare, ch_re, ch_im;
+    channel_init(&ch_bare); channel_init(&ch_re); channel_init(&ch_im);
+    bool seen_int = false, seen_cplx = false;
+    bool seen_re = false, seen_im = false, seen_im_zero = false;
+
+    for (size_t i = 0; ctx && i < ctx->count; ++i) {
+        const Expr* f = ctx->facts[i];
+        if (!f || f->type != EXPR_FUNCTION || !f->data.function.head ||
+            f->data.function.head->type != EXPR_SYMBOL) continue;
+        const char* h = f->data.function.head->data.symbol.name;
+        size_t argc = f->data.function.arg_count;
+
+        if (h == SYM_Element && argc == 2) {
+            if (channel_of_operand(f->data.function.args[0], sym) != 0) continue;
+            const Expr* dom = f->data.function.args[1];
+            if (!dom || dom->type != EXPR_SYMBOL) continue;
+            const char* dn = dom->data.symbol.name;
+            if      (strcmp(dn, "Integers") == 0)            seen_int = true;
+            else if (strcmp(dn, "PositiveIntegers") == 0)    { seen_int = true; ch_bare.has_lo = true; ch_bare.lo = 0.0; }
+            else if (strcmp(dn, "NonnegativeIntegers") == 0) { seen_int = true; ch_bare.has_lo = true; ch_bare.lo = 0.0; }
+            else if (strcmp(dn, "NegativeIntegers") == 0)    { seen_int = true; ch_bare.has_hi = true; ch_bare.hi = 0.0; }
+            else if (strcmp(dn, "NonpositiveIntegers") == 0) { seen_int = true; ch_bare.has_hi = true; ch_bare.hi = 0.0; }
+            else if (strcmp(dn, "Complexes") == 0)           seen_cplx = true;
+            /* Reals / Rationals / Algebraics confirm the REAL default. */
+            continue;
+        }
+
+        if ((h == SYM_Greater || h == SYM_GreaterEqual ||
+             h == SYM_Less    || h == SYM_LessEqual   || h == SYM_Equal) && argc == 2) {
+            int ch; const Expr* cst; bool var_left;
+            ch = channel_of_operand(f->data.function.args[0], sym);
+            if (ch >= 0) { cst = f->data.function.args[1]; var_left = true; }
+            else { ch = channel_of_operand(f->data.function.args[1], sym); cst = f->data.function.args[0]; var_left = false; }
+            if (ch < 0) continue;
+            double c;
+            if (!bound_to_double(cst, &c)) continue;
+            if (ch == 1) seen_re = true;
+            if (ch == 2) seen_im = true;
+            Channel* tgt = (ch == 1) ? &ch_re : (ch == 2) ? &ch_im : &ch_bare;
+            if (h == SYM_Equal) {
+                if (ch == 2 && c == 0.0) seen_im_zero = true;
+                tgt->has_lo = true; tgt->lo = c; tgt->has_hi = true; tgt->hi = c;
+                continue;
+            }
+            bool ge = (h == SYM_Greater || h == SYM_GreaterEqual);
+            bool lower = var_left ? ge : !ge;   /* does this lower-bound the var? */
+            if (lower) { tgt->has_lo = true; tgt->lo = c; }
+            else       { tgt->has_hi = true; tgt->hi = c; }
+            continue;
+        }
+
+        if (h == SYM_Inequality && argc == 5) {
+            int ch = channel_of_operand(f->data.function.args[2], sym);
+            if (ch < 0) continue;
+            if (ch == 1) seen_re = true;
+            if (ch == 2) seen_im = true;
+            Channel* tgt = (ch == 1) ? &ch_re : (ch == 2) ? &ch_im : &ch_bare;
+            double a, b;
+            if (bound_to_double(f->data.function.args[0], &a)) { tgt->has_lo = true; tgt->lo = a; }
+            if (bound_to_double(f->data.function.args[4], &b)) { tgt->has_hi = true; tgt->hi = b; }
+            continue;
+        }
+        /* Unequal / Or / everything else: generic samples satisfy them. */
+    }
+
+    SampleSpec spec;
+    if (seen_int)                                    spec.domain = SDOM_INT;
+    else if (seen_im_zero)                           spec.domain = SDOM_REAL;
+    else if (seen_cplx || seen_re || seen_im)        spec.domain = SDOM_CPLX;
+    else                                             spec.domain = SDOM_REAL;
+
+    channel_init(&spec.val); channel_init(&spec.im);
+    /* For REAL/INT (incl. Im[s]==0) the real value IS the real part, so fold
+     * bare + Re[s] constraints together. For CPLX, Re[s] drives the real part
+     * and Im[s] the imaginary part. */
+    spec.val = merge_channel(ch_bare, ch_re);
+    if (spec.domain == SDOM_CPLX) spec.im = ch_im;
+    finalize_channel(&spec.val);
+    if (spec.domain == SDOM_CPLX) finalize_channel(&spec.im);
+    return spec;
+}
+
 /* Substitute every free symbol in `e` with an entry from `(syms, vals)`,
  * returning a fresh expression. Walks the tree directly so we don't pay
  * the pattern-matcher overhead of building rules. */
@@ -982,10 +1252,12 @@ static Expr* substitute_symbols(const Expr* e, const char** syms, Expr** vals, s
  *     the point is still classified rather than silently passing the screen.
  *   - screen == false: climb the full precision ladder (decide_numeric) to
  *     reject cancellation-hidden small non-zeros. */
-static ZeroTestResult sz_trial(const Expr* e, const char** syms, size_t nsyms,
+static ZeroTestResult sz_trial(const Expr* e, const char** syms,
+                               const SampleSpec* specs, size_t nsyms,
                                bool screen) {
     Expr** vals = malloc(sizeof(Expr*) * nsyms);
-    for (size_t i = 0; i < nsyms; ++i) vals[i] = sample_random_value();
+    for (size_t i = 0; i < nsyms; ++i)
+        vals[i] = sample_random_value_spec(specs ? &specs[i] : NULL);
 
     Expr* sub = substitute_symbols(e, syms, vals, nsyms);
 
@@ -1012,12 +1284,23 @@ static ZeroTestResult sz_trial(const Expr* e, const char** syms, size_t nsyms,
  * re-tuned later (bump the salt) without colliding with any cached behaviour. */
 #define ZT_SEED_SALT 0x5A3D9E1Bull
 
-static ZeroTestResult decide_schwartz_zippel(const Expr* e) {
+/* Shared engine for the plain and assumption-aware samplers. When `ctx` is
+ * non-NULL a per-symbol SampleSpec restricts each draw to the assumed region;
+ * ctx == NULL reproduces the legacy unconstrained real-only draw exactly. */
+static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx* ctx) {
     SymPtrSet syms; sps_init(&syms);
     collect_free(e, &syms);
     if (syms.count == 0) {
         sps_free(&syms);
         return ZERO_TEST_UNKNOWN;
+    }
+
+    SampleSpec* specs = NULL;
+    if (ctx) {
+        specs = malloc(sizeof(SampleSpec) * syms.count);
+        if (specs)
+            for (size_t i = 0; i < syms.count; ++i)
+                specs[i] = extract_spec(ctx, syms.items[i]);
     }
 
     /* Seed the draw stream deterministically from the input's structural hash
@@ -1032,7 +1315,7 @@ static ZeroTestResult decide_schwartz_zippel(const Expr* e) {
      * branch-dependent non-zeros. A single decisively non-zero point settles
      * the whole test. */
     for (int trial = 0; trial < ZT_SCREEN_SAMPLES; ++trial) {
-        ZeroTestResult r = sz_trial(e, syms.items, syms.count, true);
+        ZeroTestResult r = sz_trial(e, syms.items, specs, syms.count, true);
         if (r == ZERO_TEST_FALSE)   { verdict = ZERO_TEST_FALSE;   goto done; }
         if (r == ZERO_TEST_UNKNOWN) { verdict = ZERO_TEST_UNKNOWN; goto done; }
         /* r == TRUE: zero-ish at machine precision, keep screening. */
@@ -1042,15 +1325,24 @@ static ZeroTestResult decide_schwartz_zippel(const Expr* e) {
      * ladder on a few fresh points to reject cancellation-hidden small
      * non-zeros before declaring a genuine identity. */
     for (int trial = 0; trial < ZT_CONFIRM_SAMPLES; ++trial) {
-        ZeroTestResult r = sz_trial(e, syms.items, syms.count, false);
+        ZeroTestResult r = sz_trial(e, syms.items, specs, syms.count, false);
         if (r == ZERO_TEST_FALSE)   { verdict = ZERO_TEST_FALSE;   goto done; }
         if (r == ZERO_TEST_UNKNOWN) { verdict = ZERO_TEST_UNKNOWN; goto done; }
     }
 
 done:
     random_pop_seed();
+    free(specs);
     sps_free(&syms);
     return verdict;
+}
+
+static ZeroTestResult decide_schwartz_zippel(const Expr* e) {
+    return decide_schwartz_zippel_core(e, NULL);
+}
+
+static ZeroTestResult decide_schwartz_zippel_assuming(const Expr* e, const AssumeCtx* ctx) {
+    return decide_schwartz_zippel_core(e, ctx);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1105,23 +1397,157 @@ ZeroTestResult zero_test_decide(const Expr* e) {
     return decide_schwartz_zippel(e);
 }
 
+ZeroTestResult zero_test_decide_assuming(const Expr* e, const struct AssumeCtx* ctx) {
+    /* No usable assumptions → the legacy path, byte-for-byte. */
+    if (!ctx || ctx->count == 0) return zero_test_decide(e);
+
+    /* A structurally decided literal (0, a non-zero constant, Complex[0,0], …)
+     * is unconditional, so its verdict holds under any assumption. */
+    ZeroTestResult r = decide_structural(e);
+    if (r != ZERO_TEST_UNKNOWN) return r;
+
+    /* Algebraic-constant guard (mirrors zero_test_decide): a Sqrt / rational
+     * power over free symbols must skip Together ∘ Cancel and go straight to
+     * constrained sampling. */
+    if (has_free_symbols(e) && expr_has_algebraic_constant(e))
+        return decide_schwartz_zippel_assuming(e, ctx);
+
+    /* Trust ONLY the TRUE verdict from the unconditional exact stages. An
+     * unconditional FALSE can be wrong under an assumption — trigexp proves
+     * Exp[2 Pi I k] - 1 nonzero as a function of a continuous k, yet it is
+     * identically zero for integer k. So the exact stages may fast-path a
+     * genuine identity to TRUE, but constrained sampling is the SOLE arbiter
+     * of FALSE (and UNKNOWN) once assumptions are in play. */
+    if (decide_rational(e) == ZERO_TEST_TRUE) return ZERO_TEST_TRUE;
+    if (trigexp_rational_is_zero(e) == TRIGEXP_ZERO_TRUE) return ZERO_TEST_TRUE;
+
+    if (has_free_symbols(e))
+        return decide_schwartz_zippel_assuming(e, ctx);
+
+    /* Closed-form constant: assumptions are irrelevant to a definite number. */
+    return decide_numeric(e);
+}
+
+/* Read the $Assumptions OwnValue WITHOUT evaluating it (mirrors the reader in
+ * simp_builtins.c): evaluating would make Element recurse through the very
+ * OwnValue we are reading. Returns an owned copy, or True if unset. */
+static Expr* pzq_read_dollar_assumptions(void) {
+    Rule* r = symtab_get_own_values("$Assumptions");
+    if (!r || !r->replacement) return expr_new_symbol(SYM_True);
+    return expr_copy(r->replacement);
+}
+
+/* And-combine two owned assumption expressions and evaluate (canonicalises
+ * And[True, x] -> x, flattens nested And). Both inputs are consumed. */
+static Expr* pzq_combine_with_and(Expr* a, Expr* b) {
+    Expr* args[2] = { a, b };
+    Expr* call = expr_new_function(expr_new_symbol(SYM_And), args, 2);
+    Expr* out = evaluate(call);
+    expr_free(call);
+    return out;
+}
+
+/* True when the effective assumption carries no usable facts (literal True or
+ * an empty context). */
+static bool assumption_is_trivial(const Expr* a) {
+    return !a || (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_True);
+}
+
+/* Collapse a ZeroTestResult to the PossibleZeroQ public boolean: only a
+ * proven/strongly-believed non-zero is False; UNKNOWN collapses to True, the
+ * documented "assume zero when uncertain" behaviour. */
+static Expr* pzq_bool(ZeroTestResult r) {
+    return expr_new_symbol(r == ZERO_TEST_FALSE ? SYM_False : SYM_True);
+}
+
 Expr* builtin_possible_zero_q(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
-    if (res->data.function.arg_count != 1) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1) return NULL;
 
     Expr* arg = res->data.function.args[0];
-    ZeroTestResult r = zero_test_decide(arg);
 
-    /* Mathematica's documented behaviour: when uncertain, *assume* zero
-     * and emit a PossibleZeroQ::ztest1 message. Mathilda currently has
-     * no general message channel; we silently collapse UNKNOWN to True
-     * to preserve the documented public-facing return value. */
-    if (r == ZERO_TEST_FALSE) return expr_new_symbol(SYM_False);
-    return expr_new_symbol(SYM_True);
+    /* Manual threading over the FIRST argument only (PossibleZeroQ is no longer
+     * ATTR_LISTABLE, so the assumption argument is never mis-threaded): a list
+     * first argument maps element-wise while every option/assumption argument
+     * is broadcast unchanged. */
+    if (arg->type == EXPR_FUNCTION && arg->data.function.head &&
+        arg->data.function.head->type == EXPR_SYMBOL &&
+        arg->data.function.head->data.symbol.name == SYM_List) {
+        size_t n = arg->data.function.arg_count;
+        Expr** out = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+        for (size_t i = 0; i < n; ++i) {
+            /* Rebuild PossibleZeroQ[elem, <rest>] and evaluate so each element
+             * re-enters this builtin with the same options. */
+            Expr** call_args = malloc(sizeof(Expr*) * argc);
+            call_args[0] = expr_copy(arg->data.function.args[i]);
+            for (size_t j = 1; j < argc; ++j)
+                call_args[j] = expr_copy(res->data.function.args[j]);
+            Expr* call = expr_new_function(expr_new_symbol(SYM_PossibleZeroQ),
+                                           call_args, argc);
+            free(call_args);
+            out[i] = evaluate(call);
+            expr_free(call);
+        }
+        Expr* list = expr_new_function(expr_new_symbol(SYM_List), out, n);
+        free(out);
+        return list;
+    }
+
+    /* Parse the trailing arguments: a Rule[Assumptions, X] option (which
+     * overrides $Assumptions) and/or a single positional assumption (which is
+     * And-combined with $Assumptions). */
+    Expr* opt_assumptions = NULL;
+    Expr* positional_assum = NULL;
+    for (size_t i = 1; i < argc; ++i) {
+        Expr* a = res->data.function.args[i];
+        if (is_rule_with_lhs(a, "Assumptions")) {
+            opt_assumptions = a->data.function.args[1];
+        } else if (positional_assum == NULL) {
+            positional_assum = a;
+        }
+    }
+
+    /* Effective assumption: option overrides; else positional && $Assumptions;
+     * else $Assumptions. A list assumption is normalised to a conjunction by
+     * assume_ctx_from_expr / And evaluation. */
+    Expr* effective;
+    if (opt_assumptions) {
+        if (positional_assum) {
+            effective = pzq_combine_with_and(expr_copy(positional_assum),
+                                             expr_copy(opt_assumptions));
+        } else {
+            /* evaluate() borrows its argument (does an internal copy and never
+             * frees it), so the copy must be freed here or it leaks. */
+            Expr* oc = expr_copy(opt_assumptions);
+            effective = evaluate(oc);
+            expr_free(oc);
+        }
+    } else {
+        Expr* dollar = pzq_read_dollar_assumptions();
+        if (positional_assum)
+            effective = pzq_combine_with_and(expr_copy(positional_assum), dollar);
+        else
+            effective = dollar;
+    }
+
+    if (assumption_is_trivial(effective)) {
+        expr_free(effective);
+        return pzq_bool(zero_test_decide(arg));   /* legacy path, no ctx */
+    }
+
+    AssumeCtx* ctx = assume_ctx_from_expr(effective);
+    expr_free(effective);
+    ZeroTestResult r = zero_test_decide_assuming(arg, ctx);
+    assume_ctx_free(ctx);                          /* safe no-op if ctx == NULL */
+    return pzq_bool(r);
 }
 
 void zero_test_init(void) {
     symtab_add_builtin("PossibleZeroQ", builtin_possible_zero_q);
     SymbolDef* def = symtab_get_def("PossibleZeroQ");
-    if (def) def->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
+    /* NOT ATTR_LISTABLE: the first argument is threaded manually inside the
+     * builtin so a positional list assumption is treated as one conjunction
+     * rather than mis-threaded against the expression list. */
+    if (def) def->attributes |= ATTR_PROTECTED;
 }

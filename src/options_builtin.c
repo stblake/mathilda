@@ -681,6 +681,10 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("Assumptions", "Automatic"));
     ob_commit(&b, "PowerExpand");
 
+    ob_init(&b);
+    ob_add(&b, r_sym("Assumptions", "Automatic"));
+    ob_commit(&b, "PossibleZeroQ");
+
     /* ---- Polynomial algebra ---- */
     ob_init(&b);
     ob_add(&b, r_sym("MonomialOrder", "Lexicographic"));

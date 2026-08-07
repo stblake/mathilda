@@ -2765,6 +2765,12 @@ target_include_directories(factorial_simplify_tests PRIVATE ../src)
 add_executable(assuming_tests test_assuming.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(assuming_tests PRIVATE ../src)
 
+add_executable(possiblezeroq_assumptions_tests test_possiblezeroq_assumptions.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(possiblezeroq_assumptions_tests PRIVATE ../src)
+
+add_executable(possiblezeroq_stress_tests test_possiblezeroq_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(possiblezeroq_stress_tests PRIVATE ../src)
+
 add_executable(element_tests test_element.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(element_tests PRIVATE ../src)
 
@@ -2896,6 +2902,8 @@ if(USE_ECM)
     add_dependencies(simplify_tests build_ecm)
     add_dependencies(factorial_simplify_tests build_ecm)
     add_dependencies(assuming_tests build_ecm)
+    add_dependencies(possiblezeroq_assumptions_tests build_ecm)
+    add_dependencies(possiblezeroq_stress_tests build_ecm)
     add_dependencies(element_tests build_ecm)
     add_dependencies(logexp_simplify_tests build_ecm)
     add_dependencies(simp_log_tests build_ecm)

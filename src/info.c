@@ -2193,6 +2193,11 @@ void info_init(void) {
     symtab_set_docstring("PossibleZeroQ",
         "PossibleZeroQ[expr] gives True if symbolic and numerical methods suggest "
         "that expr has value zero, and False otherwise.\n"
+        "PossibleZeroQ[expr, Assumptions -> assum] tests under the assumptions "
+        "assum; it also respects an ambient Assuming[] / $Assumptions scope. "
+        "Assumptions restrict the numeric sampler to the assumed region (integer, "
+        "real or complex domain, sign, range, and Re/Im-part constraints), so "
+        "identities that hold only there are recognised.\n"
         "The general problem of deciding whether an expression is zero is "
         "undecidable; PossibleZeroQ is a quick but not always accurate test.");
     symtab_set_docstring("PolynomialQ",

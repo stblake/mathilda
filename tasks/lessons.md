@@ -1,5 +1,29 @@
 # Lessons learned
 
+## `PossibleZeroQ` is a self-contained numeric/structural test — never call `Simplify` (2026-08-07)
+
+Adding `Assumptions` support to `PossibleZeroQ`, my first design used an
+assumption-aware `Simplify[expr, Assumptions -> a] === 0` rescue as a symbolic
+fast path. The user corrected this: **`PossibleZeroQ` must not use `Simplify` —
+it is a core design principle that it stays a self-contained numeric/structural
+zero-test.** The elegant, more general fix was to make the existing
+Schwartz–Zippel sampler *assumption-aware* — draw only values that conform to
+the assumed region (integer/real/complex domain, sign, finite range, Re/Im-part
+constraints) — so an identity that holds only there is recognised with no
+symbolic layer at all. It also covers strictly more cases than `Simplify` did
+(branch cuts, `Conjugate`/`Re`/`Im`, `BesselJ`/`Zeta`/`Gamma`).
+
+Two rules this crystallised:
+- **Under assumptions, trust only a `True` verdict from the unconditional exact
+  stages; never their `False`.** `trigexp_rational_is_zero(Exp[2 Pi I k] - 1)`
+  rigorously returns `False` (nonzero as a function of *continuous* `k`) yet the
+  expression is identically zero for integer `k`. Constrained sampling must be
+  the sole arbiter of `False` once assumptions are in play.
+- **Correctness is soundness-only: never sample outside the assumed region.**
+  Over-restricting a sample spec is always safe (an identity on a region holds
+  on any subset); the one bug is drawing a non-conforming point, which
+  misreports a genuine identity as non-zero. See [[project_possiblezeroq_decay_false_positive]].
+
 ## A coarse global cache key needs a finer *rule* epoch, not a rewrite (2026-08-05)
 
 The evaluator memoizes fixed points against one global clock; every symbol-table
