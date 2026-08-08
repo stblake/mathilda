@@ -2452,3 +2452,21 @@ the unit path under-ran). Fixing only the interpreter would have left
    `Do[Null,{i,200000}]`; inlining the int64 fast path (BigInt arm out-of-line)
    put it back to flat. See [[project_numloop_integer_int64_path]],
    [[feedback_rebuild_main_binary_after_git_stash]].
+
+## Build/verify (2026-08-08, pattern-matcher work)
+- **The cmake test build lacks `-Werror=unused-function`; the top-level makefile has it.**
+  A dead static helper (get_expr_head_borrowed, is_atom after refactor) let
+  `match_stress_corpus_tests` build+pass via cmake while `make` (the main ./Mathilda)
+  FAILED to compile match.o. Result: ./Mathilda stayed STALE and probes showed old
+  behavior. ALWAYS `make -j` the top-level binary (not just the cmake test) after a
+  src change, and remove now-unused statics. Verify the fix in ./Mathilda, not only
+  in a cmake test binary.
+- **bench_pack/bench_match are load-sensitive for sub-100us ops.** `Total int64`
+  read 4.1x baseline while a concurrent valgrind+ctest+build ran; 1.4x (PASS) on a
+  quiet machine. Don't run perf gates concurrently with heavy jobs, and re-run a
+  bench "failure" isolated before treating it as a regression.
+- **Encode expected values from real WL semantics, not intuition.** `Plus[x__]`
+  auto-evaluates to `x__` (Plus of one arg), so `a+b+c /. Plus[x__] :> {x}` is
+  `{a+b+c}`, not `{a,b,c}` — use `HoldPattern[Plus[x__]]` to capture summands.
+  The "greedy vs shortest" default for leading `__` is shortest-first (WL-correct);
+  Mathilda already matched. Put ordering-sensitive cases in an observations tier.

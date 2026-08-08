@@ -553,6 +553,8 @@ const char* SYM_UpperTriangularMatrixQ = NULL;
 const char* SYM_VandermondeMatrix = NULL;
 const char* SYM_VectorQ = NULL;
 const char* SYM_Verbatim = NULL;
+const char* SYM_PatternSequence = NULL;
+const char* SYM_OrderlessPatternSequence = NULL;
 const char* SYM_VerifySolutions = NULL;
 const char* SYM_Which = NULL;
 const char* SYM_While = NULL;
@@ -1382,6 +1384,8 @@ void sym_names_init(void) {
     SYM_VandermondeMatrix          = intern_symbol("VandermondeMatrix");
     SYM_VectorQ                    = intern_symbol("VectorQ");
     SYM_Verbatim                   = intern_symbol("Verbatim");
+    SYM_PatternSequence            = intern_symbol("PatternSequence");
+    SYM_OrderlessPatternSequence   = intern_symbol("OrderlessPatternSequence");
     SYM_VerifySolutions            = intern_symbol("VerifySolutions");
     SYM_Which                      = intern_symbol("Which");
     SYM_While                      = intern_symbol("While");

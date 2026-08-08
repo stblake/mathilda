@@ -1016,6 +1016,14 @@ target_link_libraries(bench_pack m)
 target_include_directories(bench_pack PRIVATE ../src)
 add_test(NAME bench_pack COMMAND bench_pack)
 
+# Pattern-matcher scaling gate: fails if a per-element matcher path (Cases,
+# Count, Position, ReplaceAll, DownValue dispatch) scales worse than O(n)
+# (doubling-ratio check; machine-independent).
+add_executable(bench_match bench_match.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(bench_match m)
+target_include_directories(bench_match PRIVATE ../src)
+add_test(NAME bench_match COMMAND bench_match)
+
 # Compile[] engine gate: asserts every benchmarked body actually COMPILES (a
 # silent bail costs 10-40x and looks exactly like success), and that the
 # optimiser never makes a body slower than the code it started from.
@@ -3194,6 +3202,24 @@ else()
 endif()
 add_test(NAME fullsimplify_corpus_tests
          COMMAND fullsimplify_corpus_tests ../fullsimplify_corpus.m)
+
+# Pattern-matcher conformance + robustness stress corpus. Loads
+# tests/match_stress_corpus.m ({inputString, expected} pairs) and checks each
+# evaluated result is structurally equal to the documented Wolfram-Language
+# value. Fork-per-case isolation (like test_crc_corpus.c) so a pattern that
+# hangs or overflows the C stack is reported, not fatal to the run. The
+# observations corpus holds the ordering-sensitive / genuinely-subtle cases
+# and runs report-only (--observe: prints MATCH/DIVERGE, always exits 0).
+add_executable(match_stress_corpus_tests test_match_stress_corpus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(match_stress_corpus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(match_stress_corpus_tests gmp m ${ECM_LIB})
+    add_dependencies(match_stress_corpus_tests build_ecm)
+else()
+    target_link_libraries(match_stress_corpus_tests gmp m)
+endif()
+add_test(NAME match_stress_corpus_tests
+         COMMAND match_stress_corpus_tests ../match_stress_corpus.m)
 
 # ratcanon SPEC: canonical output-form contract for the Together/Cancel rewrite
 # (RATCANON_REWRITE_PLAN.md). Pins the WL-faithful forms + prototype correctness.
