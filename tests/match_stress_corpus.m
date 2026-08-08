@@ -335,5 +335,57 @@
 
     (* ---- 30. Plus[x__] collapses to x__ (Plus of one arg), so the whole sum
        matches as a length-1 sequence; use HoldPattern to capture summands. ---- *)
-    {"a + b + c /. Plus[x__] :> {x}",             {a + b + c}}
+    {"a + b + c /. Plus[x__] :> {x}",             {a + b + c}},
+
+    (* ---- 31. Flat / Orderless / Optional / Flat+PatternTest (self-contained) ----
+       Under Flat+Orderless, three BlankNullSequences partition the args with no
+       blowup. Flat + Optional defaults bind. The Flat+PatternTest case is False:
+       `##` in the test is the single bound value (position 1 = 1), never > 10. *)
+    {"(ClearAll[f]; SetAttributes[f, {Flat, Orderless}]; MatchQ[f @@ Range[12], f[a___, b___, c___]])", True},
+    {"(ClearAll[g]; SetAttributes[g, Flat]; MatchQ[g @@ Range[10], g[x_: 1, y_: 2, z_: 3, w___]])", True},
+    {"(ClearAll[h]; SetAttributes[h, Flat]; MatchQ[h @@ Range[15], h[x_ ? (Total[{##}] > 10 &), y___]])", False},
+
+    (* ---- 32. OrderlessPatternSequence in a list; nonlinear duplicate search ---- *)
+    {"MatchQ[Range[15], {___, OrderlessPatternSequence[2, 4, 6, 8, a___, b___], ___}]", True},
+    {"MatchQ[Join[Range[100], {50}, Range[101, 200]], {___, x_, ___, x_, ___}]", True},
+    {"MatchQ[Join[Range[100], Range[101, 200]], {___, x_, ___, x_, ___}]", False},
+
+    (* ---- 33. Top-level & nested Repeated / RepeatedNull ----
+       A `p..`/`p...` at the top level matches the single subject as a length-1
+       sequence (MatchQ[a, a..] is True). Nested `Repeated[RepeatedNull[...]]`
+       matches. A List is one expression, so it does not match a bare
+       alternative; a literal Repeated[a] does not match the inner pattern `a`. *)
+    {"MatchQ[a, a ..]",                           True},
+    {"MatchQ[a, _ ..]",                           True},
+    {"MatchQ[a, a ...]",                          True},
+    {"MatchQ[{a, a, a}, {(a ...) ..}]",           True},
+    {"MatchQ[{a, a, a}, {((a ...) ...) ..}]",     True},
+    {"MatchQ[{a, a, a}, {(x : a ...) ..}]",       True},
+    {"MatchQ[Table[a, {20}], {(((x : a ...) ...) ..)}]", True},
+    {"MatchQ[{a, b, a}, (a | b) ..]",             False},
+    {"MatchQ[Repeated[a], a ..]",                 False},
+
+    (* ---- 34. Four BlankNullSequences + trailing typed blank (no blowup);
+       side-effecting Condition backtracks minimally (steps stays small). ---- *)
+    {"MatchQ[Append[Table[a, {1000}], 1], {a___, b___, c___, d___, x_Integer}]", True},
+    {"(steps = 0; MatchQ[Range[100], {___, x_ /; (steps++; EvenQ[x]), ___, y_ /; (steps++; OddQ[y]), ___}])", True},
+    {"(steps = 0; MatchQ[Range[100], {___, x_ /; (steps++; EvenQ[x]), ___, y_ /; (steps++; OddQ[y]), ___}]; steps <= 10)", True},
+
+    (* ---- 35. HoldAll head: the Condition forces evaluation of the held
+       argument (2+3 -> 5 > 0 True; 2-5 -> -3 > 0 False). Deep identical trees
+       match nonlinearly via structural equality; distinct trees do not. ---- *)
+    {"(ClearAll[hf]; SetAttributes[hf, HoldAll]; MatchQ[hf[2 + 3], hf[x_] /; x > 0])", True},
+    {"(ClearAll[hf]; SetAttributes[hf, HoldAll]; MatchQ[hf[2 - 5], hf[x_] /; x > 0])", False},
+    {"(tree = Nest[List[#, #] &, x, 15]; MatchQ[{tree, tree}, {a_, a_}])", True},
+    {"(t1 = Nest[List[#, #] &, x, 10]; t2 = Nest[List[#, #] &, y, 10]; MatchQ[{t1, t2}, {a_, a_}])", False},
+
+    (* ---- 36. Unique mints fresh, distinct, Temporary Symbols; Except + a
+       head-typed named blank over 1000 of them matches. ---- *)
+    {"Head[Unique[\"q\"]]",                       Symbol},
+    {"MatchQ[Unique[\"q\"], _Symbol]",            True},
+    {"Length[Unique[{aa, bb, cc}]]",              3},
+    {"Head[Unique[]]",                            Symbol},
+    {"(symbols = Table[Unique[\"sym\"], {1000}]; MatchQ[symbols, {___, Except[_Integer | _String, x_Symbol], ___}])", True},
+    {"(symbols = Table[Unique[\"sym\"], {50}]; Length[Cases[symbols, _Symbol]])", 50},
+    {"MatchQ[Table[RandomChoice[{a, b, c, d}], {50}], ((a | b) | (c | d)) ...]", False}
 }

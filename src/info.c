@@ -2961,6 +2961,7 @@ void info_init(void) {
     symtab_set_docstring("Module", "Module[{x, y, ...}, expr] specifies that x, y, ... are local variables.");
     symtab_set_docstring("Block", "Block[{x, y, ...}, expr] evaluates expr with local values for x, y, ....");
     symtab_set_docstring("With", "With[{x = x0, ...}, expr] specifies that x should be replaced by x0 throughout expr.");
+    symtab_set_docstring("Unique", "Unique[] generates a new symbol; Unique[\"x\"] or Unique[x] uses a name prefix; Unique[{x, ...}] gives a list of fresh symbols. Each is Temporary and never previously used.");
     symtab_set_docstring("Return",
         "Return[expr]\n"
         "\treturns the value expr from a function.\n"

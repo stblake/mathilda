@@ -32,6 +32,13 @@
   `Sequence`.
 - `Longest[p]` / `Shortest[p]`: prefer the longest / shortest match for a
   sequence pattern `p`; transparent at a non-sequence position.
+- A sequence pattern used at the **top level** matches the single subject as a
+  length-1 sequence: `MatchQ[a, a..]`, `MatchQ[a, _..]` and `MatchQ[a, a...]`
+  are all `True` (as are `__`/`___` there). A `List` is one expression, so it
+  is not decomposed against a bare top-level sequence pattern —
+  `MatchQ[{a, b}, (a | b)..]` is `False` (use `{(a | b)..}`). Nested repeats
+  such as `Repeated[RepeatedNull[a]]` (`(a...)..`) are matched by routing each
+  repetition through this top-level rule.
 
 The matcher's recursion depth is bounded by the same user-visible
 `$RecursionLimit` the evaluator uses (default `1024`): a subject or pattern

@@ -348,12 +348,18 @@ static bool next_combination(int* comb, int n, int k) {
     return true;
 }
 
+/* Split `exprs` into the `comb`-selected `subset` and the `remainder`. `subset`
+ * may be NULL: callers that only consume the remainder (an unnamed, untyped
+ * sequence blank -- a plain `__`/`___` whose matched elements are never
+ * inspected) pass NULL to skip the copy while the comb index still advances so
+ * the remainder is partitioned correctly. */
 static void extract_subset(Expr** exprs, size_t n_exprs, int* comb, int k, Expr** subset, Expr** remainder) {
     int c_idx = 0;
     int r_idx = 0;
     for (int i = 0; i < (int)n_exprs; i++) {
         if (c_idx < k && comb[c_idx] == i) {
-            subset[c_idx++] = exprs[i];
+            if (subset) subset[c_idx] = exprs[i];
+            c_idx++;
         } else {
             remainder[r_idx++] = exprs[i];
         }
@@ -654,6 +660,28 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
         if (min_len > 1) return false;
         if (blank_head_matches(expr, b_head)) return call_parent(env, parent);
         return false;
+    }
+
+    /* Top-level Repeated / RepeatedNull. A `p..` / `p...` pattern matches a
+     * sequence; at the top level the single subject `expr` is a length-1
+     * sequence, so it matches iff 1 is within the [min, max] repeat bounds and
+     * `expr` matches the inner pattern. Without this, `MatchQ[a, a..]` was
+     * False (should be True), and nested repeats routed through here --
+     * `Repeated[RepeatedNull[a]]` checks each element with a top-level
+     * `match_internal(elem, RepeatedNull[a])` -- also failed. */
+    {
+        Expr* rep_pat = NULL;
+        int rmin = 0, rmax = -1;
+        if (is_repeated(pattern, &rep_pat, &rmin, &rmax)) {
+            if (rmin <= 1 && (rmax == -1 || rmax >= 1)) {
+                size_t saved = env->count;
+                if (match_internal(expr, rep_pat, env, NULL)) {
+                    return call_parent(env, parent);
+                }
+                env_rollback(env, saved);
+            }
+            return false;
+        }
     }
 
     Expr* p_sym = NULL;
@@ -1210,12 +1238,19 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                 for (int i = 0; i < (int)k; i++) comb[i] = i;
             }
 
+        /* The matched elements of a plain, unnamed, untyped sequence blank
+         * (`__`/`___` with no bound name, head restriction, or per-element
+         * test, and not a Repeated) are never read -- only the remainder is
+         * recursed into. Skip allocating and filling `subset` in that case; for
+         * a leading `___` scanned across a long list this halves the per-attempt
+         * memory traffic (e.g. the duplicate-search `{___, x_, ___, x_, ___}`). */
+        bool need_subset = !(is_seq && !b_head && !seq_test && !p_sym);
         do {
             Expr** subset = NULL;
             Expr** remainder = NULL;
-            if (k > 0) subset = malloc(k * sizeof(Expr*));
+            if (k > 0 && need_subset) subset = malloc(k * sizeof(Expr*));
             if (n_exprs - k > 0) remainder = malloc((n_exprs - k) * sizeof(Expr*));
-            
+
             extract_subset(exprs, n_exprs, comb, (int)k, subset, remainder);
 
             size_t saved_env = env->count;

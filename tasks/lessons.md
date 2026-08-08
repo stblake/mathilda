@@ -2470,3 +2470,21 @@ the unit path under-ran). Fixing only the interpreter would have left
   `{a+b+c}`, not `{a,b,c}` — use `HoldPattern[Plus[x__]]` to capture summands.
   The "greedy vs shortest" default for leading `__` is shortest-first (WL-correct);
   Mathilda already matched. Put ordering-sensitive cases in an observations tier.
+- **An unexpected MatchQ `False` may be a missing INPUT builtin, not a matcher
+  bug.** `MatchQ[Table[Unique["s"],{n}], {___, _Symbol, ___}]` was False because
+  `Unique` was unimplemented, so elements had head `Unique`, not `Symbol`.
+  Diagnose the SUBJECT first (`Head /@ subject`, `Head[expr]`) before touching the
+  matcher — the pattern was correct all along.
+- **Top-level sequence-pattern coverage is per-construct.** `__`/`___` matched at
+  the top level but `Repeated`/`RepeatedNull` (`p..`/`p...`) did not, and nested
+  repeats route each repetition through the top-level path — so one gap silently
+  broke `MatchQ[a, a..]` AND `{(a...)..}`. When adding a top-level pattern case,
+  cover the whole family.
+- **`AbsoluteTiming[f[x]]` on a non-Hold wrapper times nothing.** A `runCase[l,e]`
+  helper evaluates `e` before the body runs, so timings read ~2µs (constant).
+  `SetAttributes[runCase, HoldRest]` (or wrap the expr in `{ }` inside a Hold) to
+  measure the actual work.
+- **macOS valgrind "definitely lost: ~13,440B/420 blocks" is the libobjc baseline,
+  not a leak.** Confirm the stacks are `realizeClassWithoutSwift` and that NO frame
+  names our src before spending time; a heavy `Unique`/`Repeated` workload still
+  matched the baseline byte-for-byte.
