@@ -87,6 +87,15 @@ void list_init(void) {
     symtab_set_docstring("MinMax",
         "MinMax[list]\n\tGives {Min[list], Max[list]}. Over an association, uses\n"
         "\tthe values.");
+    symtab_add_builtin("Nearest", builtin_nearest);
+    symtab_get_def("Nearest")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Nearest",
+        "Nearest[list, x]\n\tGives the element of list closest to x, as a list.\n"
+        "\tAll elements tied at the minimum distance Abs[element - x] are\n"
+        "\treturned, in their original order; an empty list gives {}.\n"
+        "\tReturns unevaluated unless every distance is a real number, so a\n"
+        "\tsymbolic element or target leaves the expression unchanged rather\n"
+        "\tthan dropping it from the result.");
     symtab_add_builtin("ListQ", builtin_listq);
     symtab_add_builtin("VectorQ", builtin_vectorq);
     symtab_add_builtin("MatrixQ", builtin_matrixq);

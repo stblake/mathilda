@@ -962,6 +962,106 @@ void test_subdivide() {
     }
 }
 
+void test_nearest() {
+    struct {
+        const char* input;
+        const char* expected;
+    } tests[] = {
+        /* ALL tied elements are returned, not a single minimum. Both 1 and 5
+         * sit at distance 2 from 3. This is the row the whole design turns on:
+         * a quickselect-style tiebreak (RankedMin's ranked_cmp, sort.c:932)
+         * exists to make ties impossible and would answer {1}. */
+        {"Nearest[{1, 5, 10}, 3]", "{1, 5}"},
+        {"Nearest[{4}, 100]", "{4}"},
+
+        /* Ties come back in INPUT order, not sorted order. */
+        {"Nearest[{5, 1, 10}, 3]", "{5, 1}"},
+        {"Nearest[{-5, 5}, 0]", "{-5, 5}"},
+        /* Exact rational tie: both distances are exactly 1/6. A float-keyed
+         * comparison could miss this. */
+        {"Nearest[{1/3, 2/3}, 1/2]", "{1/3, 2/3}"},
+
+        /* MIXED-TYPE TIES. Distances equal in VALUE but of different ExprType
+         * must still tie. These are the rows that fail if the comparison is
+         * expr_compare: its canonical order breaks a value tie on the type
+         * enum (sort.c:376), so Integer beats Real beats Rational and only one
+         * of the tied elements survives. */
+        {"Nearest[{0, 2.0}, 1]", "{0, 2.0}"},        /* dists 1 and 1.0   */
+        {"Nearest[{3, 1.0}, 2]", "{3, 1.0}"},        /* dists 1 and 1.0   */
+        {"Nearest[{-1, 1.0}, 0]", "{-1, 1.0}"},      /* dists 1 and 1.0   */
+        {"Nearest[{1.5, 5/2}, 2]", "{1.5, 5/2}"},    /* dists 0.5 and 1/2 */
+
+        /* The opposite direction: distances that differ below double
+         * resolution must NOT tie. expr_compare falls back to comparing
+         * get_numeric_value() doubles for atoms that are not both
+         * integer-like (sort.c:372-377), which would report both as nearest. */
+        {"Nearest[{1/3, 1/3 + 1/10^18}, 0]", "{1/3}"},
+
+        /* Bigint elements order exactly. */
+        {"Nearest[{10^25, 1}, 0]", "{1}"},
+        /* Duplicates are distinct by position, as in Subsets. */
+        {"Nearest[{1, 1, 2}, 1]", "{1, 1}"},
+        /* An exact hit does not short-circuit: a later element could still tie
+         * at distance 0, so the collect pass always runs to the end. */
+        {"Nearest[{2, 4, 6}, 4]", "{4}"},
+
+        /* Unique nearest. */
+        {"Nearest[{1, 2}, 1.4]", "{1}"},
+        {"Nearest[{10, 20, 30}, 100]", "{30}"},
+        /* Abs of a complex difference is its modulus, so the complex case
+         * falls out of the composition: 5 versus 1. */
+        {"Nearest[{3 + 4 I, 1}, 0]", "{1}"},
+
+        /* Empty in, empty out -- checked before the numeric gate, so a
+         * symbolic target on an empty list is still {}. */
+        {"Nearest[{}, 3]", "{}"},
+        {"Nearest[{}, a]", "{}"},
+
+        /* THE GATE. A non-real distance means no definite answer, so the whole
+         * call stays unevaluated. Note MinimalBy[{1, a, 3}, Abs[# - 2] &] gives
+         * {1, 3} -- expr_compare orders symbols after all numbers, so it drops
+         * the symbolic element and answers anyway. That plausible wrong answer
+         * is what this row exists to prevent. */
+        {"Nearest[{1, a, 3}, 2]", "Nearest[{1, a, 3}, 2]"},
+        {"Nearest[{1, 2, 3}, a]", "Nearest[{1, 2, 3}, a]"},
+        /* A symbolic REAL is rejected too: Abs[Pi - 3] stays as Abs[-3 + Pi].
+         * Numericalizing it (as RankedMin's ranked_numeric_key would) is a
+         * deliberate follow-up, not current behaviour. */
+        {"Nearest[{Pi, 4}, 3]", "Nearest[{Pi, 4}, 3]"},
+        /* A rational with a BIGINT component declines, for a reason that is
+         * not Nearest's: builtin_abs does not evaluate one, so the distance
+         * comes back as an unevaluated Abs[...] and the numeric gate rejects
+         * it. Abs[1/1000] is 1/1000 but Abs[1/10^25] is Abs[1/10^25], and
+         * Sign has the same gap. Pinned here so this row flips the day
+         * builtin_abs is fixed, rather than the limitation going unnoticed. */
+        {"Nearest[{1/10^25, 1}, 0]",
+         "Nearest[{1/10000000000000000000000000, 1}, 0]"},
+
+        /* Arity. The 3-argument n-nearest form is a follow-up and is inert. */
+        {"Nearest[{1, 5, 10}]", "Nearest[{1, 5, 10}]"},
+        {"Nearest[{1, 5}, 3, 2]", "Nearest[{1, 5}, 3, 2]"},
+        {"Nearest[3, 1]", "Nearest[3, 1]"},
+        /* Non-List head follows RankedMin (sort.c:1014), not MinimalBy, which
+         * accepts and preserves any head. */
+        {"Nearest[f[1, 5], 3]", "Nearest[f[1, 5], 3]"},
+        /* A visible NDArray is never materialised by the transparency gate, so
+         * is_listq is the only guard against a silently truncated answer.
+         * Unevaluated is the correct conservative result. */
+        {"Nearest[NDArray[{1., 5., 10.}], 3.]",
+         "Nearest[NDArray[{1.0, 5.0, 10.0}], 3.0]"},
+
+        /* A PACKED list, by contrast, is materialised on the way in because
+         * Nearest is not on pack.c's AWARE list. */
+        {"Nearest[Range[5], 3]", "{3}"},
+
+        {"Attributes[Nearest]", "{Protected}"},
+    };
+
+    for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
+        assert_eval_eq(tests[i].input, tests[i].expected, 0);
+    }
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1016,6 +1116,7 @@ int main() {
     TEST(test_riffle);
     TEST(test_gather);
     TEST(test_subdivide);
+    TEST(test_nearest);
 
     printf("All list tests passed!\n");
     return 0;

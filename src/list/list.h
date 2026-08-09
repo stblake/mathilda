@@ -35,6 +35,7 @@
 #include "listpredicates.h"
 #include "matrixq.h"
 #include "minmax.h"
+#include "nearest.h"
 #include "join.h"
 #include "subsets.h"
 #include "riffle.h"
