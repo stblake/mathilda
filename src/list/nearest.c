@@ -42,8 +42,6 @@
 #include "internal.h"
 #include "nearest.h"
 
-#include <math.h>       /* isnan -- C99, needs no feature-test macro */
-
 /* Abs[e - x], fully evaluated. Caller owns the result.
  *
  * internal_call_impl (internal.c:189-211) consumes the argument array, and when
@@ -59,156 +57,12 @@ static Expr* nearest_distance(Expr* e, Expr* x) {
     return eval_and_free(internal_abs(abs_args, 1));
 }
 
-/* True for a real number this file can order exactly.
- *
- * Deliberately NOT list_common.h's is_real_numeric: that routes rationals
- * through is_rational (arithmetic.c:105-117), which requires int64 numerator
- * AND denominator, so an ordinary exact input like 1/10^25 -- a
- * Rational[1, BigInt] -- is rejected and the whole call declines. is_rational_like
- * (arithmetic.c:125) is the bigint-aware predicate. */
-static bool nearest_is_real_number(Expr* e) {
-    if (!e) return false;
-    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
-    if (e->type == EXPR_REAL) return !isnan(e->data.real);
-#ifdef USE_MPFR
-    if (e->type == EXPR_MPFR) return !mpfr_nan_p(e->data.mpfr);
-#endif
-    return is_rational_like(e);
-}
-
-/* Sign of a real number: -1, 0, +1. Sets *ok false for anything this file
- * cannot read a sign from, which the caller turns into an unevaluated result.
- *
- * The *ok flag is the whole point. expr_numeric_sign (arithmetic.c) returns a
- * bare 0 both for "genuinely zero" and for "I do not recognise this", and it
- * recognises neither MPFR nor a bigint-component Rational -- so using it here
- * would silently report a tie for two distances it simply could not read. */
-static int nearest_sign(Expr* e, bool* ok) {
-    *ok = true;
-    if (!e) { *ok = false; return 0; }
-    if (e->type == EXPR_INTEGER)
-        return (e->data.integer > 0) - (e->data.integer < 0);
-    if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint);
-    if (e->type == EXPR_REAL) {
-        if (isnan(e->data.real)) { *ok = false; return 0; }
-        return (e->data.real > 0.0) - (e->data.real < 0.0);
-    }
-#ifdef USE_MPFR
-    if (e->type == EXPR_MPFR) {
-        if (mpfr_nan_p(e->data.mpfr)) { *ok = false; return 0; }
-        return mpfr_sgn(e->data.mpfr);
-    }
-#endif
-    /* Rational[num, den], bigint components included. The denominator is
-     * conventionally positive, but both signs are read so a hand-built
-     * Rational with a negative denominator still orders correctly. */
-    if (is_rational_like(e) && e->type == EXPR_FUNCTION) {
-        bool ok_n = true, ok_d = true;
-        int sn = nearest_sign(e->data.function.args[0], &ok_n);
-        int sd = nearest_sign(e->data.function.args[1], &ok_d);
-        if (!ok_n || !ok_d) { *ok = false; return 0; }
-        return sn * sd;
-    }
-    *ok = false;
-    return 0;
-}
-
-/* Lift an exactly-representable real into a canonical mpq. Handles Integer,
- * BigInt, bigint-component Rational, and -- the point of this helper -- Real,
- * via mpq_set_d, which is exact: a double IS a rational, m * 2^e.
- *
- * Shaped after mod_quot_expr_to_mpq (core.c:2569), which is static there and
- * has no Real case. */
-static bool nearest_to_mpq(const Expr* e, mpq_t out) {
-    mpq_init(out);
-    if (e->type == EXPR_INTEGER) { mpq_set_si(out, (long)e->data.integer, 1UL); return true; }
-    if (e->type == EXPR_BIGINT)  { mpq_set_z(out, e->data.bigint); return true; }
-    if (e->type == EXPR_REAL) {
-        if (isnan(e->data.real) || isinf(e->data.real)) { mpq_clear(out); return false; }
-        mpq_set_d(out, e->data.real);          /* exact */
-        return true;
-    }
-    if (is_rational_like(e) && e->type == EXPR_FUNCTION) {
-        mpz_t num, den;
-        mpz_init(num); mpz_init(den);
-        expr_to_mpz(e->data.function.args[0], num);
-        expr_to_mpz(e->data.function.args[1], den);
-        if (mpz_sgn(den) == 0) { mpz_clears(num, den, NULL); mpq_clear(out); return false; }
-        mpq_set_num(out, num);
-        mpq_set_den(out, den);
-        mpq_canonicalize(out);
-        mpz_clears(num, den, NULL);
-        return true;
-    }
-    mpq_clear(out);
-    return false;
-}
-
-/* Order two distances by NUMERIC VALUE: -1, 0, +1. Sets *ok false when the
- * comparison cannot be decided.
- *
- * NOT expr_compare, which is a canonical total order and is wrong here in both
- * directions. It breaks a value tie between different ExprTypes on the type
- * enum (sort.c:376), so Nearest[{0, 2.0}, 1] would drop the 2.0 -- distances 1
- * and 1.0 are equal in value but Integer sorts before Real -- defeating the
- * all-ties contract this file exists to honour. And for atoms that are not both
- * integer-like it falls back to comparing get_numeric_value() doubles
- * (sort.c:372-377), so two exact rationals differing below double resolution
- * compare equal and a strictly-farther element is reported as tied.
- *
- * Subtracting instead is exact where it must be and inexact only where the
- * input already was: 1 - 1.0 is 0.0 (a real tie, as Mathematica has it), while
- * 1/3 - (1/3 + 1/10^18) is the exact Rational[-1, 10^18]. */
-static int nearest_cmp(Expr* a, Expr* b, bool* ok) {
-    *ok = true;
-    /* Same-type fast paths for the two common cases, avoiding an allocation and
-     * two evaluator passes per comparison. Both are exact for their type. */
-    if (a->type == EXPR_INTEGER && b->type == EXPR_INTEGER)
-        return (a->data.integer > b->data.integer) - (a->data.integer < b->data.integer);
-    if (a->type == EXPR_REAL && b->type == EXPR_REAL) {
-        if (isnan(a->data.real) || isnan(b->data.real)) { *ok = false; return 0; }
-        return (a->data.real > b->data.real) - (a->data.real < b->data.real);
-    }
-    /* MIXED EXACT / INEXACT: compare as exact rationals, never by subtracting.
-     *
-     * Subtraction here loses the exact operand's precision, because
-     * internal_subtract widens the pair to a double. That is not merely
-     * imprecise, it makes the comparator INTRANSITIVE, and an intransitive
-     * comparator feeding a sort produces order-dependent output. With plain
-     * int64 values:
-     *
-     *     a = 2^60, b = 2.0^60, c = 2^60 + 1
-     *     a - b -> 0.0   so a == b
-     *     c - b -> 0.0   so c == b
-     *     a - c -> -1    so a <  c
-     *
-     * A double is exactly a rational, so lifting both sides with mpq and
-     * comparing is exact and total. It also matches Mathematica on the two
-     * cases that pin the semantics: 1 and 1.0 still tie (1.0 lifts to exactly
-     * 1), while 0.1 and 1/10 no longer do -- and Mathematica's
-     * Nearest[{0.9, 11/10}, 1] is {0.9}, not both. */
-    bool a_exact = (a->type != EXPR_REAL);
-    bool b_exact = (b->type != EXPR_REAL);
-    if (a_exact != b_exact) {
-        mpq_t qa, qb;
-        if (nearest_to_mpq(a, qa)) {
-            if (nearest_to_mpq(b, qb)) {
-                int r = mpq_cmp(qa, qb);
-                mpq_clear(qa); mpq_clear(qb);
-                return (r > 0) - (r < 0);
-            }
-            mpq_clear(qa);
-        }
-        /* Not liftable -- an MPFR operand, or a non-finite Real. Fall through
-         * to the subtraction path, which is what handled these before. */
-    }
-
-    Expr* sub_args[2] = { expr_copy(a), expr_copy(b) };
-    Expr* diff = eval_and_free(internal_subtract(sub_args, 2));
-    int s = nearest_sign(diff, ok);
-    expr_free(diff);
-    return s;
-}
+/* The numeric gate and the value comparator used below --
+ * list_real_number_q / list_numeric_cmp -- live in list_common.{c,h}. They
+ * were written here for Nearest and were promoted when FindClusters became a
+ * second caller; the block comment in list_common.h records why neither
+ * expr_compare nor expr_numeric_sign can serve in their place, and why the
+ * mixed exact/inexact path must not go through a subtraction. */
 
 Expr* builtin_nearest(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
@@ -237,20 +91,20 @@ Expr* builtin_nearest(Expr* res) {
      * means there is no definite answer: free what we built and decline. */
     for (size_t i = 0; i < n; i++) {
         dist[i] = nearest_distance(elem[i], x);
-        if (!nearest_is_real_number(dist[i])) {
+        if (!list_real_number_q(dist[i])) {
             for (size_t j = 0; j <= i; j++) expr_free(dist[j]);
             free(dist);
             return NULL;
         }
     }
 
-    /* Two passes over nearest_cmp: find the minimum, then collect every
+    /* Two passes over list_numeric_cmp: find the minimum, then collect every
      * distance equal to it. An undecidable comparison declines the whole call
      * rather than guessing a tie. */
     bool ok = true;
     size_t best = 0;
     for (size_t i = 1; i < n && ok; i++)
-        if (nearest_cmp(dist[i], dist[best], &ok) < 0 && ok) best = i;
+        if (list_numeric_cmp(dist[i], dist[best], &ok) < 0 && ok) best = i;
 
     Expr** out = ok ? malloc(sizeof(Expr*) * n) : NULL;
     if (!out) {
@@ -262,7 +116,7 @@ Expr* builtin_nearest(Expr* res) {
     /* Ascending index order is what preserves input order among ties. */
     size_t nout = 0;
     for (size_t i = 0; i < n && ok; i++)
-        if (nearest_cmp(dist[i], dist[best], &ok) == 0 && ok)
+        if (list_numeric_cmp(dist[i], dist[best], &ok) == 0 && ok)
             out[nout++] = expr_copy(elem[i]);
 
     for (size_t i = 0; i < n; i++) expr_free(dist[i]);

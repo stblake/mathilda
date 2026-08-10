@@ -385,3 +385,99 @@ Out[2]= {30}
 In[3]:= Nearest[{1, a, 3}, 2]
 Out[3]= Nearest[{1, a, 3}, 2]
 ```
+
+## FindClusters
+Partitions a 1D numeric list into clusters of nearby elements.
+- `FindClusters[list]`: partitions `list`, choosing the number of clusters automatically.
+- `FindClusters[list, n]`: gives **exactly** `n` clusters.
+- `FindClusters[list, UpTo[n]]`: gives **at most** `n` clusters, and fewer when the data suggests fewer.
+
+**Features**:
+- `Protected`.
+- The result is a list of lists. Clusters appear in order of the first
+  occurrence of any member; elements keep their input order within a cluster.
+- `n` is capped at the number of distinct values — no method can separate two
+  equal elements, so `FindClusters[{1, 2, 3}, 5]` gives three clusters and
+  `FindClusters[{7, 7, 7, 7}, 3]` gives one.
+- The distinction between the two count forms is real:
+  `FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 4]` forces a fourth cluster by
+  splitting `{10, 12, 13}`, while `UpTo[4]` returns the natural three.
+- **Exact input is ordered exactly.** The sort and the fixed-count gap selection
+  compare the elements themselves, so rationals with bigint components work:
+  `FindClusters[{1/10^25, 2/10^25, 1}, 2]` is
+  `{{1/10000000000000000000000000, 1/5000000000000000000000000}, {1}}`.
+- Returns unevaluated for an empty list, a non-`List` argument, a nested list, a
+  visible `NDArray`, a non-numeric element, a count that is not a positive
+  integer or `UpTo[k]`, or a method incompatible with the count mode.
+- **Symbolic elements are declined**, not clustered. Mathematica treats them as
+  nominal features and answers `FindClusters[{1, a, 3}, 2]` with `{{a}, {1, 3}}`;
+  this implementation is numeric-only.
+- **The output is not expected to match Mathematica's.** Mathematica
+  auto-selects a distance function and preprocesses the data by unpublished
+  rules, so even single-linkage with an explicit count differs, and its
+  `Automatic` cluster count is an internal index rather than a gap rule. The
+  algorithms below are the textbook ones with the semantics stated here.
+
+**Method** — `Method -> m`, or `Method -> {m, subopt -> value}`:
+
+| Method | `Automatic` | `UpTo[n]` | `n` |
+|---|:---:|:---:|:---:|
+| `"Agglomerate"` (single linkage) | yes | yes | yes |
+| `"SpanningTree"` (minimum spanning tree) | yes | yes | yes |
+| `"KMeans"` | no | yes | yes |
+| `"KMedoids"` | no | yes | yes |
+| `"Spectral"` | yes | yes | no |
+| `"DBSCAN"` | yes | no | no |
+| `"GaussianMixture"` | yes | no | no |
+| `"JarvisPatrick"` | yes | no | no |
+| `"MeanShift"` | yes | no | no |
+| `"NeighborhoodContraction"` | yes | no | no |
+
+- `Automatic` (the default) currently means `"Agglomerate"`. It is not a
+  criterion-driven search across methods.
+- **`"Agglomerate"` and `"SpanningTree"` are the same computation in 1D**, and
+  share one implementation. Single-linkage clustering equals cutting the widest
+  edges of the minimum spanning tree, and on a line the spanning tree is the
+  sorted adjacency chain.
+- With `Automatic`, the gap methods cut every sorted-adjacent gap wider than
+  three times the median gap; uniform spacing therefore gives a single cluster.
+- Suboptions: `"NeighborhoodRadius"` (`"DBSCAN"`, `"MeanShift"`,
+  `"NeighborhoodContraction"`), `"MinPoints"` (`"DBSCAN"`), `"NeighborCount"`
+  (`"JarvisPatrick"`). An unrecognised suboption leaves the call unevaluated.
+- `"DBSCAN"` returns noise points as singleton clusters, so the result is always
+  a partition of the input.
+- `"KMedoids"` is Voronoi iteration, not PAM, so it can settle on a worse
+  partition than a swap-based search would.
+- `"Spectral"` builds an n×n similarity matrix and declines above 2000 elements.
+  In 1D its embedding largely recovers the sorted order, so it rarely differs
+  much from `"Agglomerate"`.
+
+**DistanceFunction** — accepts `Automatic`, `EuclideanDistance`,
+`ManhattanDistance` and `SquaredEuclideanDistance`. On a line these are monotone
+transforms of one another, so **all four give the same partition** for every
+method that only ranks distances; the option is accepted for compatibility
+rather than offering four behaviours. Any other value leaves the call
+unevaluated.
+
+**CriterionFunction** and **PerformanceGoal** are accepted and currently have no
+effect.
+
+```mathematica
+In[1]:= FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}]
+Out[1]= {{1, 2, 3, 1}, {10, 12, 13}, {25}}
+
+In[2]:= FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 4]
+Out[2]= {{1, 2, 3, 1}, {10}, {12, 13}, {25}}
+
+In[3]:= FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[4]]
+Out[3]= {{1, 2, 3, 1}, {10, 12, 13}, {25}}
+
+In[4]:= FindClusters[{1, 2, 3, 5, 8, 9, 10}, 2]
+Out[4]= {{1, 2, 3, 5}, {8, 9, 10}}
+
+In[5]:= FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> "KMeans"]
+Out[5]= {{1, 2, 3, 1}, {10, 12, 13}, {25}}
+
+In[6]:= FindClusters[{1, a, 3}, 2]
+Out[6]= FindClusters[{1, a, 3}, 2]
+```

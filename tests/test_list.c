@@ -1080,6 +1080,341 @@ void test_nearest() {
     }
 }
 
+/* FindClusters. Every expected value below was produced by the built binary and
+ * pasted in -- none is hand-predicted. The Nearest table was written the other
+ * way for its mixed-type rows, and that is exactly where a high-severity bug
+ * survived 22 passing tests. */
+void test_find_clusters() {
+    struct {
+        const char* input;
+        const char* expected;
+    } tests[] = {
+
+        /* COUNT MODES. The exact/bounded distinction: n forces exactly n
+         * clusters, UpTo[n] gives the natural count when that is already at or
+         * below n. Both are capped at the distinct-value count -- no method can
+         * separate two equal elements. */
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}]", "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 4]",
+          "{{1, 2, 3, 1}, {10}, {12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[4]]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[2]]",
+          "{{1, 2, 10, 12, 3, 1, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 2]", "{{1, 2, 10, 12, 3, 1, 13}, {25}}"},
+        {"FindClusters[{1, 2, 3}, 5]", "{{1}, {2}, {3}}"},
+        {"FindClusters[{1, 2, 3}, UpTo[5]]", "{{1, 2, 3}}"},
+        {"FindClusters[{7, 7, 7, 7}, 3]", "{{7, 7, 7, 7}}"},
+        {"FindClusters[{1, 2, 3}, 1]", "{{1, 2, 3}}"},
+        {"FindClusters[{1, 2, 3, 5, 8, 9, 10}, 2]", "{{1, 2, 3, 5}, {8, 9, 10}}"},
+        {"FindClusters[{1, 2, 3, 5, 8, 9, 10}, 3]", "{{1, 2, 3}, {5}, {8, 9, 10}}"},
+        {"FindClusters[{1, 2, 3, 5, 8, 9, 10}, 4]", "{{1}, {2, 3}, {5}, {8, 9, 10}}"},
+
+        /* A count spec this builtin does not understand leaves the whole call
+         * alone rather than guessing. */
+        {"FindClusters[{1, 2, 3}, 0]", "FindClusters[{1, 2, 3}, 0]"},
+        {"FindClusters[{1, 2, 3}, -1]", "FindClusters[{1, 2, 3}, -1]"},
+        {"FindClusters[{1, 2, 3}, x]", "FindClusters[{1, 2, 3}, x]"},
+        {"FindClusters[{1, 2, 3}, UpTo[0]]", "FindClusters[{1, 2, 3}, UpTo[0]]"},
+        {"FindClusters[{1, 2, 3}, 2.5]", "FindClusters[{1, 2, 3}, 2.5]"},
+
+        /* THE 10 x 3 CAPABILITY MATRIX, one row per cell. KMeans and KMedoids
+         * need a count; the five density methods need Automatic; Spectral takes
+         * Automatic and UpTo[n] but not a bare n. Transcribed from the
+         * allowed-lists in Mathematica's three error messages, which contradict
+         * its own documentation bullets on Spectral -- the runtime wins. */
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> \"Agglomerate\"]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"Agglomerate\"]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"Agglomerate\"]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> \"SpanningTree\"]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"SpanningTree\"]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"SpanningTree\"]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> \"KMeans\"]",
+          "FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> \"KMeans\"]"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"KMeans\"]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"KMeans\"]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> \"KMedoids\"]",
+          "FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> \"KMedoids\"]"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"KMedoids\"]",
+          "{{1, 2, 3, 1}, {10}, {12, 13, 25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"KMedoids\"]",
+          "{{1, 2, 3, 1}, {10}, {12, 13, 25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> \"Spectral\"]",
+          "{{1, 2, 3, 1}, {10}, {12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"Spectral\"]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"Spectral\"]",
+          "FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"Spectral\"]"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> \"DBSCAN\"]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"DBSCAN\"]",
+          "FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"DBSCAN\"]"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"DBSCAN\"]",
+          "FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"DBSCAN\"]"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> \"GaussianMixture\"]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"GaussianMixture\"]",
+          "FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"GaussianMixture\"]"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"GaussianMixture\"]",
+          "FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"GaussianMixture\"]"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> \"JarvisPatrick\"]",
+          "{{1, 2, 10, 12, 3, 1, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"JarvisPatrick\"]",
+          "FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"JarvisPatrick\"]"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"JarvisPatrick\"]",
+          "FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"JarvisPatrick\"]"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> \"MeanShift\"]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"MeanShift\"]",
+          "FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"MeanShift\"]"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"MeanShift\"]",
+          "FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"MeanShift\"]"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> \"NeighborhoodContraction\"]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"NeighborhoodContraction\"]",
+          "FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, UpTo[3], Method -> \"NeighborhoodContraction\"]"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"NeighborhoodContraction\"]",
+          "FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, 3, Method -> \"NeighborhoodContraction\"]"},
+
+        /* Method plumbing: Automatic, an unknown name, suboptions, and the
+         * options accepted for compatibility. */
+        {"FindClusters[{1, 2, 3}, Method -> \"Nonsense\"]",
+          "FindClusters[{1, 2, 3}, Method -> \"Nonsense\"]"},
+        {"FindClusters[{1, 2, 3}, Method -> Automatic]", "{{1, 2, 3}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> {\"DBSCAN\", \"NeighborhoodRadius\" -> 0.5}]",
+          "{{1, 1}, {2}, {10}, {12}, {3}, {13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> {\"DBSCAN\", \"MinPoints\" -> 3}]",
+          "{{1, 2, 3, 1}, {10, 12, 13}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12, 3, 1, 13, 25}, Method -> {\"JarvisPatrick\", \"NeighborCount\" -> 2}]",
+          "{{1, 2, 1}, {10, 12, 13}, {3}, {25}}"},
+        {"FindClusters[{1, 2, 10, 12}, Method -> {\"DBSCAN\", \"Bogus\" -> 2}]",
+          "FindClusters[{1, 2, 10, 12}, Method -> {\"DBSCAN\", \"Bogus\" -> 2}]"},
+        {"FindClusters[{1, 2, 10, 12}, DistanceFunction -> EuclideanDistance]",
+          "{{1, 2}, {10, 12}}"},
+        {"FindClusters[{1, 2, 10, 12}, DistanceFunction -> ManhattanDistance]",
+          "{{1, 2}, {10, 12}}"},
+        {"FindClusters[{1, 2, 10, 12}, DistanceFunction -> Sin]",
+          "FindClusters[{1, 2, 10, 12}, DistanceFunction -> Sin]"},
+        {"FindClusters[{1, 2, 10, 12}, CriterionFunction -> \"Silhouette\"]",
+          "{{1, 2}, {10, 12}}"},
+        {"FindClusters[{1, 2, 10, 12}, PerformanceGoal -> \"Speed\"]", "{{1, 2}, {10, 12}}"},
+
+        /* The Automatic cluster count -- gaps wider than FC_GAP_FACTOR times
+         * the median gap are cut. Uniform spacing and identical elements must
+         * NOT be split. */
+        {"FindClusters[{1, 2, 3, 100, 101, 102}]", "{{1, 2, 3}, {100, 101, 102}}"},
+        {"FindClusters[{1, 2, 3, 20, 21, 22, 500}]", "{{1, 2, 3}, {20, 21, 22}, {500}}"},
+        {"FindClusters[{1, 2, 3, 4, 5, 6, 7, 8}]", "{{1, 2, 3, 4, 5, 6, 7, 8}}"},
+        {"FindClusters[{7, 7, 7, 7}]", "{{7, 7, 7, 7}}"},
+        {"FindClusters[{5}]", "{{5}}"},
+        {"FindClusters[{-10, -9, 5, 6}]", "{{-10, -9}, {5, 6}}"},
+
+        /* DELIBERATE DIVERGENCES FROM MATHEMATICA, pinned so they surface as a
+         * diff if anyone changes them. Mathematica's Automatic count is an
+         * unpublished internal index, not a gap rule: it splits {1,4,9,16,25,36}
+         * three ways and {5,6} into two singletons. It also clusters symbolic
+         * elements as nominal features; we are numeric-only and decline. */
+        {"FindClusters[{1, 4, 9, 16, 25, 36}]", "{{1, 4, 9, 16, 25, 36}}"},
+        {"FindClusters[{5, 6}]", "{{5, 6}}"},
+        {"FindClusters[{1, a, 3}, 2]", "FindClusters[{1, a, 3}, 2]"},
+
+        /* EXACT ARITHMETIC. Ordering and fixed-count gap selection run on the
+         * elements themselves via list_numeric_cmp, never on a double
+         * projection, so bigint-component rationals work -- Nearest cannot do
+         * this, because it routes its distance through Abs, which declines on
+         * one (complex.c:418-421). The sub-double row fails if the comparison
+         * ever degrades to doubles; the 1/10^25 row fails if a gap is ever
+         * rewritten as Abs[b - a]. */
+        {"FindClusters[{1/3, 2/3, 10, 31/3}, 2]", "{{1/3, 2/3}, {10, 31/3}}"},
+        {"FindClusters[{1/10^25, 2/10^25, 1}, 2]",
+          "{{1/10000000000000000000000000, 1/5000000000000000000000000}, {1}}"},
+        {"FindClusters[{1/3, 1/3 + 1/10^18, 5}, 2]",
+          "{{1/3, 1000000000000000003/3000000000000000000}, {5}}"},
+        {"FindClusters[{1, 2.0, 10, 11.0}, 2]", "{{1, 2.0}, {10, 11.0}}"},
+        {"FindClusters[{10^25, 1, 2}, 2]", "{{10000000000000000000000000}, {1, 2}}"},
+
+        /* EXACTLY-n WITH HEAVY TIES. Quantile seeding over raw sorted
+         * positions puts two centroids on the same value when the data is
+         * tie-heavy, and a centroid that never wins a point leaves an empty
+         * cluster -- so KMeans and KMedoids returned FEWER clusters than
+         * asked for, on data whose distinct count was not the limit.
+         * Measured before the fix: {1,1,1,1,2,3} with n=3 gave two clusters.
+         * The partition invariant below cannot catch this -- no element is
+         * lost, only the promised count is wrong -- so these rows and the
+         * exactly-n loop that follows are the guard. */
+        {"FindClusters[{1, 1, 1, 1, 2, 3}, 3, Method -> \"KMeans\"]",
+          "{{1, 1, 1, 1}, {2}, {3}}"},
+        {"FindClusters[{1, 1, 1, 1, 2, 3}, 3, Method -> \"KMedoids\"]",
+          "{{1, 1, 1, 1}, {2}, {3}}"},
+        {"FindClusters[{1, 1, 1, 1, 2, 3}, 3]", "{{1, 1, 1, 1}, {2}, {3}}"},
+        {"FindClusters[{5, 5, 5, 6, 7}, 3, Method -> \"KMeans\"]", "{{5, 5, 5}, {6}, {7}}"},
+        {"FindClusters[{1, 1, 2, 2, 3, 3}, 3, Method -> \"KMeans\"]",
+          "{{1, 1}, {2, 2}, {3, 3}}"},
+        {"FindClusters[{2, 2, 2, 2, 2, 9}, 2, Method -> \"KMedoids\"]",
+          "{{2, 2, 2, 2, 2}, {9}}"},
+
+        /* THE ORDER CONTRACT: clusters by first occurrence, elements in input
+         * order. These fail if anyone sorts the output. */
+        {"FindClusters[{10, 1, 11, 2}]", "{{10, 11}, {1, 2}}"},
+        {"FindClusters[{3, 1, 2}, 1]", "{{3, 1, 2}}"},
+        {"FindClusters[{1, 1, 2}, 2]", "{{1, 1}, {2}}"},
+
+        /* REGRESSION ROWS FROM CODE REVIEW. Each of these returned a wrong
+         * answer before the fix named beside it; none was reachable from the
+         * rows above, which is why the review found them and the table did
+         * not.
+         *
+         * Equal elements must never be separated -- JarvisPatrick returned
+         * four clusters for nine copies of 7, and DBSCAN split a duplicated
+         * pair whenever MinPoints exceeded its multiplicity. Now enforced
+         * centrally on exact zero gaps, so no method can reintroduce it.
+         *
+         * Exactly-n must hold at scales the double projection cannot see:
+         * 2^60 and 2^60+1 are distinct but project to one double, and the
+         * repair loop hunted boundaries in double space, so KMeans returned
+         * ONE cluster for three distinct values.
+         *
+         * The Automatic threshold took the mean of the two middle gaps for
+         * an even-length list, which makes a split arithmetically impossible
+         * for two or three elements: the largest gap is itself one of the
+         * values averaged. {0, 1, 10^12} was a single cluster. The lower
+         * median fixes it, and computing it on the gap Exprs removes the
+         * double projection -- and with it the scale cliff where 10^25
+         * worked and 10^400 did not. The 10^25 and 10^400 rows now agree,
+         * which is the point: one cluster there is the median rule, not an
+         * overflow.
+         *
+         * MeanShift fragmented evenly spaced data into near-singletons
+         * (Range[40] gave 34 clusters) because every interior point of a
+         * flat density is stationary and the merge tolerance was tied to the
+         * bandwidth. UpTo[n] was identical to a bare n for KMeans/KMedoids,
+         * collapsing the three-mode design to two for four methods. And the
+         * two quadratic methods now decline rather than appearing to hang. */
+        {"FindClusters[{7, 7, 7, 7, 7, 7, 7, 7, 7}, Method -> \"JarvisPatrick\"]",
+          "{{7, 7, 7, 7, 7, 7, 7, 7, 7}}"},
+        {"FindClusters[{7, 7, 100}, Method -> {\"JarvisPatrick\", \"NeighborCount\" -> 1}]",
+          "{{7, 7}, {100}}"},
+        {"FindClusters[{7, 7}, Method -> {\"DBSCAN\", \"NeighborhoodRadius\" -> 10.0, \"MinPoints\" -> 5}]",
+          "{{7, 7}}"},
+        {"FindClusters[{1, 1, 100, 101, 102, 103}, Method -> {\"DBSCAN\", \"MinPoints\" -> 3}]",
+          "{{1, 1}, {100, 101, 102, 103}}"},
+        {"FindClusters[{2^60, 2^60 + 1, 2^60 + 2}, 3, Method -> \"KMeans\"]",
+          "{{1152921504606846976}, {1152921504606846977}, {1152921504606846978}}"},
+        {"FindClusters[{2^60, 2^60 + 1, 2^60 + 2}, 3, Method -> \"KMedoids\"]",
+          "{{1152921504606846976}, {1152921504606846977}, {1152921504606846978}}"},
+        {"FindClusters[{1/3, 1/3 + 1/10^18, 5}, 3, Method -> \"KMeans\"]",
+          "{{1/3}, {1000000000000000003/3000000000000000000}, {5}}"},
+        {"FindClusters[{0, 1, 10^12}]", "{{0, 1}, {1000000000000}}"},
+        {"FindClusters[{1, 2, 1000000}]", "{{1, 2}, {1000000}}"},
+        {"FindClusters[{0, 1, 10^25, 2*10^25}]",
+          "{{0, 1, 10000000000000000000000000, 20000000000000000000000000}}"},
+        {"Length[FindClusters[{0, 1, 10^400, 2*10^400}]]", "1"},
+        {"Length[FindClusters[Range[40], Method -> \"MeanShift\"]]", "1"},
+        {"FindClusters[{1, 1, 1, 1, 100}, Method -> \"MeanShift\"]", "{{1, 1, 1, 1}, {100}}"},
+        {"FindClusters[{1, 1, 1, 1, 100}, Method -> \"NeighborhoodContraction\"]",
+          "{{1, 1, 1, 1}, {100}}"},
+        {"FindClusters[{1, 2, 3, 4, 5, 6, 7, 8}, UpTo[3], Method -> \"KMeans\"]",
+          "{{1, 2, 3, 4, 5, 6, 7, 8}}"},
+        {"FindClusters[{1, 2, 3}, UpTo[5], Method -> \"KMeans\"]", "{{1, 2, 3}}"},
+        {"Options[FindClusters]",
+          "{Method -> Automatic, DistanceFunction -> Automatic, CriterionFunction -> Automatic, PerformanceGoal -> Automatic}"},
+        {"Head[FindClusters[Range[5000], Method -> \"MeanShift\"]]", "FindClusters"},
+        {"Head[FindClusters[Range[5000], Method -> \"NeighborhoodContraction\"]]",
+          "FindClusters"},
+        {"Head[FindClusters[Range[3000], Method -> \"Spectral\"]]", "FindClusters"},
+        {"Length[FindClusters[Range[1000], Method -> \"MeanShift\"]]", "1"},
+
+        /* Shape guards. A visible NDArray is not a List and is never
+         * materialised by the transparency gate, so it declines rather than
+         * being silently truncated; a packed list is materialised on the way in. */
+        {"FindClusters[{}]", "FindClusters[{}]"},
+        {"FindClusters[5]", "FindClusters[5]"},
+        {"FindClusters[f[1, 2, 3]]", "FindClusters[f[1, 2, 3]]"},
+        {"FindClusters[{{1, 2}, {3, 4}}]", "FindClusters[{{1, 2}, {3, 4}}]"},
+        {"FindClusters[NDArray[{1., 2., 10.}]]", "FindClusters[NDArray[{1.0, 2.0, 10.0}]]"},
+        {"FindClusters[Range[10]]", "{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}"},
+        {"FindClusters[]", "FindClusters[]"},
+        {"Attributes[FindClusters]", "{Protected}"},
+    };
+
+    for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
+        assert_eval_eq(tests[i].input, tests[i].expected, 0);
+    }
+
+    /* The partition invariant, as a loop rather than a table: for every method
+     * in a mode it accepts, the clusters must together be a permutation of the
+     * input -- no element lost, none duplicated. One assertion covering a whole
+     * class of bug across ten independent implementations, and the check that
+     * would catch a scatter/remap error no single expected-string row would. */
+    static const char* auto_methods[] = {
+        "Agglomerate", "SpanningTree", "Spectral", "DBSCAN",
+        "GaussianMixture", "JarvisPatrick", "MeanShift", "NeighborhoodContraction"
+    };
+    static const char* counted_methods[] = {
+        "Agglomerate", "SpanningTree", "KMeans", "KMedoids"
+    };
+    char buf[256];
+    for (int i = 0; i < (int)(sizeof(auto_methods) / sizeof(auto_methods[0])); i++) {
+        snprintf(buf, sizeof buf,
+                 "Sort[Flatten[FindClusters[{1,2,10,12,3,1,13,25}, Method -> \"%s\"]]] "
+                 "=== Sort[{1,2,10,12,3,1,13,25}]", auto_methods[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    for (int i = 0; i < (int)(sizeof(counted_methods) / sizeof(counted_methods[0])); i++) {
+        snprintf(buf, sizeof buf,
+                 "Sort[Flatten[FindClusters[{1,2,10,12,3,1,13,25}, 3, Method -> \"%s\"]]] "
+                 "=== Sort[{1,2,10,12,3,1,13,25}]", counted_methods[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* The exactly-n contract, as a loop: for a fixed count, every method that
+     * accepts one must return exactly Min[n, distinct] clusters. Tie-heavy data
+     * is the case that breaks it, and no single expected-string row generalises
+     * across methods and counts the way this does. */
+    static const char* fixed_methods[] = {
+        "Agglomerate", "SpanningTree", "KMeans", "KMedoids"
+    };
+    static const char* tie_data[] = {
+        "{1,1,1,1,2,3}", "{5,5,5,6,7}", "{1,1,2,2,3,3}", "{2,2,2,2,2,9}", "{1,1,1,2}"
+    };
+    for (int m = 0; m < (int)(sizeof(fixed_methods) / sizeof(fixed_methods[0])); m++) {
+        for (int dsi = 0; dsi < (int)(sizeof(tie_data) / sizeof(tie_data[0])); dsi++) {
+            for (int nn = 1; nn <= 4; nn++) {
+                snprintf(buf, sizeof buf,
+                         "Length[FindClusters[%s, %d, Method -> \"%s\"]] == "
+                         "Min[%d, Length[Union[%s]]]",
+                         tie_data[dsi], nn, fixed_methods[m], nn, tie_data[dsi]);
+                assert_eval_eq(buf, "True", 0);
+            }
+        }
+    }
+    /* The equal-elements invariant, as a loop. Two methods violated it and a
+     * third could have; it is now enforced centrally, and this is what keeps it
+     * enforced. No method may return more clusters than the input has distinct
+     * values -- which is exactly the statement that identical elements are
+     * never separated. */
+    static const char* tie_probe[] = {
+        "{7,7,7,7,7,7,7,7,7}", "{7,7}", "{1,1,100,101,102,103}",
+        "{5,5,5,6,7}", "{2,2,2,2,2,9}"
+    };
+    for (int m = 0; m < (int)(sizeof(auto_methods) / sizeof(auto_methods[0])); m++) {
+        for (int dsi = 0; dsi < (int)(sizeof(tie_probe) / sizeof(tie_probe[0])); dsi++) {
+            snprintf(buf, sizeof buf,
+                     "Length[FindClusters[%s, Method -> \"%s\"]] <= "
+                     "Length[Union[%s]]",
+                     tie_probe[dsi], auto_methods[m], tie_probe[dsi]);
+            assert_eval_eq(buf, "True", 0);
+        }
+    }
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1135,6 +1470,7 @@ int main() {
     TEST(test_gather);
     TEST(test_subdivide);
     TEST(test_nearest);
+    TEST(test_find_clusters);
 
     printf("All list tests passed!\n");
     return 0;
