@@ -1037,6 +1037,24 @@ void test_nearest() {
         {"Nearest[{1/10^25, 1}, 0]",
          "Nearest[{1/10000000000000000000000000, 1}, 0]"},
 
+        /* MIXED EXACT / INEXACT DISTANCES are compared as exact rationals,
+         * not by subtracting. Subtraction widens the pair to a double and
+         * loses the exact operand, which made the comparator INTRANSITIVE
+         * with plain int64 values: for a = 2^60, b = 2.0^60, c = 2^60 + 1,
+         * a - b and c - b both gave 0.0 while a - c gave -1, so a == b,
+         * c == b and a < c all held at once. An intransitive comparator
+         * feeding a sort yields order-dependent output.
+         *
+         * A double is exactly a rational, so lifting both sides with mpq is
+         * exact and total. The two rows below pin the semantics against
+         * Mathematica, which agrees on both: 1 and 1.0 tie (1.0 lifts to
+         * exactly 1), 0.1 and 1/10 do not, and Nearest[{0.9, 11/10}, 1] is
+         * {0.9} there too. */
+        {"Nearest[{2^60, 2.0^60}, 2^60]", "{1152921504606846976, 1.15292e+18}"},
+        {"Nearest[{2^60 + 1, 2.0^60}, 2^60]", "{1.15292e+18}"},
+        {"Nearest[{0.9, 11/10}, 1]", "{0.9}"},
+        {"Nearest[{1/10, 0.1}, 0]", "{1/10}"},
+
         /* Arity. The 3-argument n-nearest form is a follow-up and is inert. */
         {"Nearest[{1, 5, 10}]", "Nearest[{1, 5, 10}]"},
         {"Nearest[{1, 5}, 3, 2]", "Nearest[{1, 5}, 3, 2]"},

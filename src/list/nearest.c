@@ -113,6 +113,37 @@ static int nearest_sign(Expr* e, bool* ok) {
     return 0;
 }
 
+/* Lift an exactly-representable real into a canonical mpq. Handles Integer,
+ * BigInt, bigint-component Rational, and -- the point of this helper -- Real,
+ * via mpq_set_d, which is exact: a double IS a rational, m * 2^e.
+ *
+ * Shaped after mod_quot_expr_to_mpq (core.c:2569), which is static there and
+ * has no Real case. */
+static bool nearest_to_mpq(const Expr* e, mpq_t out) {
+    mpq_init(out);
+    if (e->type == EXPR_INTEGER) { mpq_set_si(out, (long)e->data.integer, 1UL); return true; }
+    if (e->type == EXPR_BIGINT)  { mpq_set_z(out, e->data.bigint); return true; }
+    if (e->type == EXPR_REAL) {
+        if (isnan(e->data.real) || isinf(e->data.real)) { mpq_clear(out); return false; }
+        mpq_set_d(out, e->data.real);          /* exact */
+        return true;
+    }
+    if (is_rational_like(e) && e->type == EXPR_FUNCTION) {
+        mpz_t num, den;
+        mpz_init(num); mpz_init(den);
+        expr_to_mpz(e->data.function.args[0], num);
+        expr_to_mpz(e->data.function.args[1], den);
+        if (mpz_sgn(den) == 0) { mpz_clears(num, den, NULL); mpq_clear(out); return false; }
+        mpq_set_num(out, num);
+        mpq_set_den(out, den);
+        mpq_canonicalize(out);
+        mpz_clears(num, den, NULL);
+        return true;
+    }
+    mpq_clear(out);
+    return false;
+}
+
 /* Order two distances by NUMERIC VALUE: -1, 0, +1. Sets *ok false when the
  * comparison cannot be decided.
  *
@@ -138,6 +169,40 @@ static int nearest_cmp(Expr* a, Expr* b, bool* ok) {
         if (isnan(a->data.real) || isnan(b->data.real)) { *ok = false; return 0; }
         return (a->data.real > b->data.real) - (a->data.real < b->data.real);
     }
+    /* MIXED EXACT / INEXACT: compare as exact rationals, never by subtracting.
+     *
+     * Subtraction here loses the exact operand's precision, because
+     * internal_subtract widens the pair to a double. That is not merely
+     * imprecise, it makes the comparator INTRANSITIVE, and an intransitive
+     * comparator feeding a sort produces order-dependent output. With plain
+     * int64 values:
+     *
+     *     a = 2^60, b = 2.0^60, c = 2^60 + 1
+     *     a - b -> 0.0   so a == b
+     *     c - b -> 0.0   so c == b
+     *     a - c -> -1    so a <  c
+     *
+     * A double is exactly a rational, so lifting both sides with mpq and
+     * comparing is exact and total. It also matches Mathematica on the two
+     * cases that pin the semantics: 1 and 1.0 still tie (1.0 lifts to exactly
+     * 1), while 0.1 and 1/10 no longer do -- and Mathematica's
+     * Nearest[{0.9, 11/10}, 1] is {0.9}, not both. */
+    bool a_exact = (a->type != EXPR_REAL);
+    bool b_exact = (b->type != EXPR_REAL);
+    if (a_exact != b_exact) {
+        mpq_t qa, qb;
+        if (nearest_to_mpq(a, qa)) {
+            if (nearest_to_mpq(b, qb)) {
+                int r = mpq_cmp(qa, qb);
+                mpq_clear(qa); mpq_clear(qb);
+                return (r > 0) - (r < 0);
+            }
+            mpq_clear(qa);
+        }
+        /* Not liftable -- an MPFR operand, or a non-finite Real. Fall through
+         * to the subtraction path, which is what handled these before. */
+    }
+
     Expr* sub_args[2] = { expr_copy(a), expr_copy(b) };
     Expr* diff = eval_and_free(internal_subtract(sub_args, 2));
     int s = nearest_sign(diff, ok);
