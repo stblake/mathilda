@@ -59,12 +59,20 @@ MatchEnv* env_new(void) {
     return env;
 }
 
+/* KEY OWNERSHIP: env BORROWS the symbol-name pointer, it does not own it.
+ * Every env_set caller passes either an interned symbol name (permanent, owned
+ * by the interner) or a string literal ("$OptionsPattern$") -- both outlive any
+ * MatchEnv, which is per-match-attempt. So the key is stored directly with no
+ * strdup, and env_free / env_rollback never free it. That removes one malloc +
+ * one free per binding (millions in recursive rewriting), on top of the struct
+ * pool above. Comparison is pointer-first (interned keys hit immediately -- the
+ * hot path, since the matcher and replace_bindings both pass
+ * sym->data.symbol.name) with a strcmp fallback so the literal callers, whose
+ * pointer differs per translation unit, still match correctly. */
 void env_free(MatchEnv* env) {
     if (!env) return;
-    for (size_t i = 0; i < env->count; i++) {
-        free(env->symbols[i]);
-        expr_free(env->values[i]);
-    }
+    for (size_t i = 0; i < env->count; i++)
+        expr_free(env->values[i]);            /* keys are borrowed -- never freed */
     env->count = 0;
     if (g_env_pool_len < ENV_POOL_CAP) {
         g_env_pool[g_env_pool_len++] = env;   /* recycle struct + arrays */
@@ -77,7 +85,7 @@ void env_free(MatchEnv* env) {
 
 void env_set(MatchEnv* env, const char* symbol, Expr* value) {
     for (size_t i = 0; i < env->count; i++) {
-        if (strcmp(env->symbols[i], symbol) == 0) {
+        if (env->symbols[i] == symbol || strcmp(env->symbols[i], symbol) == 0) {
             expr_free(env->values[i]);
             env->values[i] = expr_copy(value);
             return;
@@ -88,7 +96,7 @@ void env_set(MatchEnv* env, const char* symbol, Expr* value) {
         env->symbols = realloc(env->symbols, sizeof(char*) * env->capacity);
         env->values = realloc(env->values, sizeof(Expr*) * env->capacity);
     }
-    env->symbols[env->count] = mathilda_strdup(symbol);
+    env->symbols[env->count] = (char*)symbol;   /* borrowed; see note above */
     env->values[env->count] = expr_copy(value);
     env->count++;
 }
@@ -96,14 +104,13 @@ void env_set(MatchEnv* env, const char* symbol, Expr* value) {
 static void env_rollback(MatchEnv* env, size_t saved_count) {
     while (env->count > saved_count) {
         env->count--;
-        free(env->symbols[env->count]);
-        expr_free(env->values[env->count]);
+        expr_free(env->values[env->count]);   /* keys are borrowed -- never freed */
     }
 }
 
 Expr* env_get(MatchEnv* env, const char* symbol) {
     for (size_t i = 0; i < env->count; i++) {
-        if (strcmp(env->symbols[i], symbol) == 0) {
+        if (env->symbols[i] == symbol || strcmp(env->symbols[i], symbol) == 0) {
             return env->values[i];
         }
     }
