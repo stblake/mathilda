@@ -8,6 +8,7 @@
 #include "trig_canon.h"
 #include "series.h"
 #include "ndarray.h"
+#include "checked_int.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -323,6 +324,28 @@ Expr* builtin_times(Expr* res) {
     size_t n = res->data.function.arg_count;
     if (n == 0) return expr_new_integer(1);
     if (n == 1) return expr_copy(res->data.function.args[0]);
+
+    /* Machine-integer fast path: Times of all int64 args is just their product,
+     * with no symbolic factors to collect. Skips the NDArray / SeriesData /
+     * inexact-contagion / (base,exp) grouping scans below -- the hot case in
+     * integer arithmetic (Case B's coefficient products, integer loop bodies).
+     * A leading 0 short-circuits. On overflow we fall through to the generic
+     * path, which promotes to bigint; correctness is unchanged. */
+    {
+        bool all_int = true;
+        for (size_t i = 0; i < n; i++)
+            if (res->data.function.args[i]->type != EXPR_INTEGER) { all_int = false; break; }
+        if (all_int) {
+            int64_t acc = 1;
+            bool overflow = false;
+            for (size_t i = 0; i < n; i++) {
+                int64_t v = res->data.function.args[i]->data.integer;
+                if (v == 0) { acc = 0; overflow = false; break; }
+                if (ci_mul_i64(acc, v, &acc)) { overflow = true; break; }
+            }
+            if (!overflow) return expr_new_integer(acc);
+        }
+    }
 
     /* NDArray fast path: same-shape NDArray operands multiply elementwise over
      * raw buffers, with numpy-style broadcasting of numeric scalars (3 * NDArray;

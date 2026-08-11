@@ -8,6 +8,7 @@
 #include "sym_names.h"
 #include "series.h"
 #include "ndarray.h"
+#include "checked_int.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -360,6 +361,27 @@ Expr* builtin_plus(Expr* res) {
     size_t n = res->data.function.arg_count;
     if (n == 0) return expr_new_integer(0);
     if (n == 1) return expr_copy(res->data.function.args[0]);
+
+    /* Machine-integer fast path: Plus of all int64 args is just their sum, with
+     * no symbolic terms to collect. Skips the NDArray / neg-plus / SeriesData /
+     * inexact-contagion / (coeff,base) grouping scans below -- this is the hot
+     * case in recursive integer code (fib[n-1]+fib[n-2]) and integer loop
+     * accumulators. On overflow we fall through to the generic path, which
+     * promotes to bigint; correctness is therefore unchanged. */
+    {
+        bool all_int = true;
+        for (size_t i = 0; i < n; i++)
+            if (res->data.function.args[i]->type != EXPR_INTEGER) { all_int = false; break; }
+        if (all_int) {
+            int64_t acc = 0;
+            bool overflow = false;
+            for (size_t i = 0; i < n; i++)
+                if (ci_add_i64(acc, res->data.function.args[i]->data.integer, &acc)) {
+                    overflow = true; break;
+                }
+            if (!overflow) return expr_new_integer(acc);
+        }
+    }
 
     /* NDArray fast path: same-shape NDArray operands add elementwise over raw
      * buffers, with numpy-style broadcasting of numeric scalars (1 + NDArray).
