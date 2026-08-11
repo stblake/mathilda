@@ -352,3 +352,36 @@ In[6]:= Riffle[f[a, b], x]
 Out[6]= f[a, x, b]
 ```
 
+## Nearest
+Gives the element of a list closest to a target value.
+- `Nearest[list, x]`: gives the element of `list` closest to `x`, as a list.
+
+**Features**:
+- `Protected`.
+- Distance is `Abs[element - x]`, so a complex element uses its modulus.
+- **All** elements tied at the minimum distance are returned, in their original
+  order: `Nearest[{1, 5, 10}, 3]` gives `{1, 5}`, not `{1}`.
+- Distances are compared by numeric value, so exact and inexact distances of
+  equal value tie: `Nearest[{0, 2.0}, 1]` gives `{0, 2.0}`.
+- An empty list gives `{}`.
+- Returns unevaluated unless every distance is a real number. A symbolic element
+  or target leaves the expression unchanged rather than being dropped from the
+  result — unlike
+  [`MinimalBy`](functional-programming.md#maximalby-minimalby), which orders
+  symbolic keys after all numbers and so silently omits them.
+- A rational with a bigint component declines, because `Abs` does not evaluate
+  one: `Nearest[{1/10^25, 1}, 0]` stays unevaluated.
+- Only the two-argument form is implemented. The `n`-nearest, radius, rule, and
+  all-pairs forms, the `NearestTo` operator form, and the `DistanceFunction`
+  option are not yet available.
+
+```mathematica
+In[1]:= Nearest[{1, 5, 10}, 3]
+Out[1]= {1, 5}
+
+In[2]:= Nearest[{10, 20, 30}, 100]
+Out[2]= {30}
+
+In[3]:= Nearest[{1, a, 3}, 2]
+Out[3]= Nearest[{1, a, 3}, 2]
+```

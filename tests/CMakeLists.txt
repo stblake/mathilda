@@ -370,6 +370,7 @@ set(COMMON_SRC
     ../src/list/riffle.c
     ../src/list/gather.c
     ../src/list/subdivide.c
+    ../src/list/nearest.c
     ../src/patterns.c
     ../src/patterns.c
     ../src/replace.c
