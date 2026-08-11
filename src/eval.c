@@ -616,6 +616,7 @@ static bool eval_flatten_args_interned(Expr* e, const char* head_name) {
     free(e->data.function.args);
     e->data.function.args = new_args;
     e->data.function.arg_count = new_count;
+    expr_invalidate_hash(e);   /* args rewritten in place: drop memoized hash */
     return true;
 }
 
@@ -1163,6 +1164,7 @@ static bool flatten_sequences(Expr* e) {
     free(e->data.function.args);
     e->data.function.args = new_args;
     e->data.function.arg_count = new_count;
+    expr_invalidate_hash(e);   /* Sequence splice rewrote args in place */
     return true;
 }
 
@@ -1688,6 +1690,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     }
                     if (!already_sorted) {
                         qsort(res->data.function.args, res->data.function.arg_count, sizeof(Expr*), eval_compare_expr_ptrs);
+                        expr_invalidate_hash(res);   /* args reordered in place */
                         *changed = true;
                     }
                 }

@@ -924,6 +924,10 @@ static void alpha_collect_names(const Expr* p, const char** names, int* n) {
  * is freed and the placeholder is itself interned for expr_eq identity. */
 static void alpha_rename(Expr* p, const char** names, int n) {
     if (!p) return;
+    /* This rewrites symbol names in place; every node on the path down to a
+     * renamed leaf has its structural hash changed, so drop each visited node's
+     * memoized hash (cold path: pattern setup, once per rule). */
+    expr_invalidate_hash(p);
     if (p->type == EXPR_SYMBOL) {
         for (int i = 0; i < n; i++) {
             if (p->data.symbol.name == names[i]) {

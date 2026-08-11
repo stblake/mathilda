@@ -138,10 +138,12 @@ typedef struct Expr {
     /* Reference count for shared-ownership / copy-on-write semantics
      * (M3 milestone). Every successful expr_new_* / expr_copy returns a
      * node with refcount == 1; expr_ref bumps it; expr_free decrements
-     * and only physically frees on transition to 0. Atoms are eligible
-     * to be shared today (see expr_copy); compound (FUNCTION) nodes
-     * remain deep-copied for now and therefore always have refcount==1
-     * in current code paths. */
+     * and only physically frees on transition to 0. Atoms AND compound
+     * (FUNCTION) nodes alike are shared by inc-ref in expr_copy today; a
+     * node with refcount > 1 is immutable, so any mutator calls
+     * expr_unshare() to obtain a private (refcount==1) copy before
+     * rewriting fields in place. That immutable-while-shared invariant is
+     * what makes the cached hash below safe. */
     unsigned refcount;
     /* M3 phase-3 evaluation timestamp. The value of `eval_clock_get()` at
      * the moment this node was last evaluated to a fixed point. Fresh
@@ -165,6 +167,19 @@ typedef struct Expr {
      * stamp; every eval-clock comparison masks the flag off. Read the field
      * through eval_node_stamp() / eval_node_is_ground(), not directly. */
     uint64_t last_evaluated_at;
+    /* Lazily-memoized structural hash (== expr_hash(this) recomputed fresh).
+     * 0 means "not yet computed" (a genuine hash of 0 simply never cache-hits,
+     * which is harmless — the value returned is always the true hash). expr_hash
+     * fills it on first call and reuses it thereafter, turning the per-element
+     * subtree walks in Plus/Times grouping, Association indexing and set ops into
+     * O(1) reads. Like last_evaluated_at / symbol.def it is benign metadata NOT
+     * considered by expr_eq/expr_compare, and — because the cache is a function
+     * of the node's STRUCTURE — it MUST be reset to 0 (expr_invalidate_hash)
+     * anywhere a live node's head/args/arg_count/payload is rewritten in place.
+     * Fresh nodes get 0 from expr_alloc_node; expr_unshare's private copy starts
+     * at 0. The MATHILDA_HASH_VERIFY build recomputes and asserts every hit to
+     * catch a missed invalidation deterministically. */
+    uint64_t hash_cache;
     union {
         int64_t integer;
         double real;
@@ -242,6 +257,12 @@ Expr* expr_unshare(Expr* e);
 bool expr_eq(const Expr* a, const Expr* b);
 int expr_compare(const Expr* a, const Expr* b);
 uint64_t expr_hash(const Expr* e);
+
+/* Drop a node's memoized structural hash. MUST be called by any code that
+ * rewrites a live node's head/args/arg_count/scalar payload IN PLACE (rather
+ * than building a fresh node), so a later expr_hash recomputes instead of
+ * returning the pre-mutation value. A no-op on NULL and on nodes never hashed. */
+static inline void expr_invalidate_hash(Expr* e) { if (e) e->hash_cache = 0; }
 
 /* BigInt constructors */
 Expr* expr_new_bigint_from_mpz(const mpz_t val);

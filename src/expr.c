@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>   /* MATHILDA_HASH_VERIFY diagnostic */
 
 /* EXPR_COMPILED payload lifecycle — implemented in compile/compiled_function.c.
  * Forward-declared here so the core Expr node can adopt / share / release the
@@ -81,13 +82,16 @@ static Expr* expr_alloc_node(void) {
     if (e) {
         g_expr_pool = e->data.function.head;   /* pop */
         g_expr_pool_size--;
+        e->hash_cache = 0;   /* recycled node: drop any stale memoized hash */
         return e;
     }
     if (!g_expr_pool_atexit_registered) {
         g_expr_pool_atexit_registered = true;
         atexit(expr_pool_free_all);
     }
-    return (Expr*)malloc(sizeof(Expr));
+    e = (Expr*)malloc(sizeof(Expr));
+    if (e) e->hash_cache = 0;   /* fresh node: "not yet hashed" */
+    return e;
 }
 
 /* Return a physically-dead node to the pool, or to the OS once the pool is at
@@ -865,6 +869,13 @@ static uint64_t hash_packed_level(const Expr* a, int level, size_t* idx) {
 
 uint64_t expr_hash(const Expr* e) {
     if (!e) return 0;
+#ifndef MATHILDA_HASH_VERIFY
+    /* Memoized: the hash is a pure function of the node's structure, filled on
+     * first call and invalidated (expr_invalidate_hash) at every in-place
+     * mutation. A cached 0 is indistinguishable from "unhashed" and simply
+     * recomputes — harmless, since the recomputed value is identical. */
+    if (e->hash_cache) return e->hash_cache;
+#endif
     uint64_t h = 14695981039346656037ULL;
     const uint64_t prime = 1099511628211ULL;
 
@@ -921,7 +932,10 @@ uint64_t expr_hash(const Expr* e) {
              * two. See hash_packed_level. */
             if (e->data.ndarray.present_as == NDA_HEAD_LIST) {
                 size_t idx = 0;
-                return hash_packed_level(e, 0, &idx);
+                /* Mirrors the materialised List's hash exactly; fall through to
+                 * the shared cache-write tail rather than returning raw. */
+                h = hash_packed_level(e, 0, &idx);
+                break;
             }
             h ^= (uint64_t)e->data.ndarray.rank;
             h *= prime;
@@ -960,6 +974,21 @@ uint64_t expr_hash(const Expr* e) {
         }
 #endif
     }
+#ifdef MATHILDA_HASH_VERIFY
+    /* Recompute-and-compare: if a cache value survives here it must equal the
+     * freshly-computed hash, or an in-place mutation failed to invalidate. */
+    if (e->hash_cache && e->hash_cache != h) {
+        fprintf(stderr,
+                "MATHILDA_HASH_VERIFY: stale hash_cache on node type %d: "
+                "cached %llu != computed %llu\n",
+                (int)e->type, (unsigned long long)e->hash_cache,
+                (unsigned long long)h);
+        abort();
+    }
+#endif
+    /* Benign mutable-cache write (like symbol.def / last_evaluated_at): store
+     * the memoized hash so the next call is O(1). */
+    ((Expr*)e)->hash_cache = h;
     return h;
 }
 
