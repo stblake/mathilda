@@ -734,8 +734,27 @@ Expr* builtin_plus(Expr* res) {
     } else {
         /* Canonically order the collapsed terms here (group count is small)
          * so the evaluator need not sort the raw input. The leading numeric
-         * term still sorts first (numbers precede symbols/powers). */
-        qsort(final_args, idx, sizeof(Expr*), plus_cmp_ptrs);
+         * term still sorts first (numbers precede symbols/powers).
+         *
+         * Skip the O(n log n) qsort when the terms are ALREADY canonically
+         * ordered -- an O(n) scan of expr_compare instead. This is the common
+         * case and the one that dominated a large symbolic sum: `Plus @@
+         * Table[c[k] x, {k, n}]` arrives in order (c[1] x < c[2] x < ...), and
+         * every re-evaluation of an already-sorted sum re-sorts terms that
+         * never moved. Profiling `Plus @@ Table[c[k] x, {k, 2000}]` put ~50%
+         * of the time in qsort/expr_compare; the pre-check turns ~n log n
+         * comparisons into n. When the scan finds a descent it falls straight
+         * through to qsort (with at most one wasted O(n) partial pass).
+         * Mirrors the Orderless already-sorted fast path in evaluate_step. */
+        bool already_sorted = true;
+        for (size_t j = 1; j < idx; j++) {
+            if (plus_cmp_ptrs(&final_args[j - 1], &final_args[j]) > 0) {
+                already_sorted = false;
+                break;
+            }
+        }
+        if (!already_sorted)
+            qsort(final_args, idx, sizeof(Expr*), plus_cmp_ptrs);
         final_res = expr_new_function(expr_new_symbol(SYM_Plus), final_args, idx);
     }
     if (heap_bufs) free(final_args);
