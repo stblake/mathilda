@@ -1328,6 +1328,27 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                         if (held_uneval) held_uneval[held_uneval_count++] = new_args[i];
                     }
                 } else {
+                    /* Atom fast path. A raw atom (number/string/ndarray/
+                     * compiled) always evaluates to itself -- evaluate() would
+                     * just expr_copy it after paying the recursion-depth, trace,
+                     * deadline-check and fixed-point-loop overhead per call.
+                     * Skipping straight to expr_copy is exactly equivalent (same
+                     * pointer, so `*changed` stays false, and an atom is never an
+                     * in-flight Throw/Goto so the sentinel check is moot). This
+                     * is the hot path when a large List of numbers is
+                     * re-evaluated -- e.g. every pass of `list //. rule` re-walks
+                     * the whole (mostly unchanged) list. SYMBOL is excluded: it
+                     * may carry an OwnValue and must go through evaluate(). */
+                    switch (orig_arg->type) {
+                        case EXPR_INTEGER: case EXPR_REAL: case EXPR_STRING:
+                        case EXPR_BIGINT: case EXPR_NDARRAY: case EXPR_COMPILED:
+#ifdef USE_MPFR
+                        case EXPR_MPFR:
+#endif
+                            new_args[i] = expr_copy(orig_arg);
+                            continue;   /* atoms are never Throw/Goto sentinels */
+                        default: break;
+                    }
                     new_args[i] = evaluate(orig_arg);
                     arg_evaluated = true;
                     if (new_args[i] != orig_arg) *changed = true;
