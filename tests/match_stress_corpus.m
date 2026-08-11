@@ -387,5 +387,22 @@
     {"Head[Unique[]]",                            Symbol},
     {"(symbols = Table[Unique[\"sym\"], {1000}]; MatchQ[symbols, {___, Except[_Integer | _String, x_Symbol], ___}])", True},
     {"(symbols = Table[Unique[\"sym\"], {50}]; Length[Cases[symbols, _Symbol]])", 50},
-    {"MatchQ[Table[RandomChoice[{a, b, c, d}], {50}], ((a | b) | (c | d)) ...]", False}
+    {"MatchQ[Table[RandomChoice[{a, b, c, d}], {50}], ((a | b) | (c | d)) ...]", False},
+
+    (* ---- 37. Condition wrapping a SEQUENCE blank (x__ /; t, x___ /; t). The
+       guard is evaluated once, after the sequence is bound, so it may span 0 or
+       MANY elements -- not only the width-1 case that a BlankSequence also
+       matches. Nested guards (/; a /; b) evaluate the inner one first; an outer
+       name c:(b__/;t) binds the whole matched sequence too. ---- *)
+    {"MatchQ[{5, 10}, {b__ /; True}]",                                             True},
+    {"MatchQ[{}, {b___ /; True}]",                                                 True},
+    {"MatchQ[{5, 10}, {__ /; True}]",                                              True},
+    {"MatchQ[{5, 10}, {b__ /; Total[{b}] == 15}]",                                 True},
+    {"MatchQ[{5, 10}, {b__ /; Total[{b}] == 99}]",                                 False},
+    {"MatchQ[{1, 2, 3}, {b__ /; Length[{b}] == 3}]",                               True},
+    {"MatchQ[{1, 2, 3}, {b___ /; Total[{b}] == 0}]",                               False},
+    {"MatchQ[{5, 10}, {b__ /; Length[{b}] > 0 /; Total[{b}] == 15}]",              True},
+    {"ReplaceList[{5, 10, 3, 12}, {___, b__ /; Total[{b}] == 15, ___} :> Total[{b}]]", {15, 15}},
+    {"MatchQ[{12, 1, 2}, {c : (b__ /; Total[{b}] == 15)} /; Length[{c}] == 3]",    True},
+    {"ReplaceList[{1, 2, 1, 2}, {___, a__ /; Total[{a}] == 3, b__ /; Total[{b}] == 3, ___} :> {a, b}]", {{1, 2, 1, 2}}}
 }
