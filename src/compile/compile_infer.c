@@ -200,7 +200,9 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
          * abandons the call when the exponent turns out negative, because 2^-3
          * is the Rational 1/8 and no machine type holds it. */
         if (ta == CT_INT) { *out = CT_INT; return true; }
-        if (ta < CT_REAL) ta = CT_REAL; *out = ta; return true;
+        if (ta < CT_REAL) ta = CT_REAL;
+        *out = ta;
+        return true;
     }
     uint16_t or_, oc_;
     if (na == 1 && (unary_math(h, &or_, &oc_) || strcmp(h, "Tanh") == 0)) {

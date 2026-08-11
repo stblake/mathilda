@@ -4184,8 +4184,10 @@ static Expr* try_series_polygamma_at_infinity(Expr* f, Expr* x, int64_t n) {
     /* m >= 1: pure Laurent, leading power x^-m. */
     int64_t sgn = (m % 2 == 1) ? 1 : -1;
     if (n < m) {
-        /* Whole series is beyond the requested order: pure O[1/x]^(n+1). */
-        return build_recip_seriesdata(x, calloc(0, sizeof(Expr*)), 0, n + 1, n);
+        /* Whole series is beyond the requested order: pure O[1/x]^(n+1).
+         * len == 0, so no coefficient array is needed; build_recip_seriesdata
+         * ignores the pointer (free(NULL) is a no-op). */
+        return build_recip_seriesdata(x, NULL, 0, n + 1, n);
     }
     size_t ncoef = (size_t)(n - m + 1);                   /* exponents m..n */
     Expr** coefs = calloc(ncoef, sizeof(Expr*));

@@ -1508,14 +1508,18 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                 double _Complex* d_ = TD_C;
                 switch (A_->dtype) {
                     case NDT_FLOAT64: { const double* s_ = (const double*)A_->data + off;
-                        for (int k_ = 0; k_ < vlen; k_++) d_[k_] = s_[k_]; break; }
+                        for (int k_ = 0; k_ < vlen; k_++) d_[k_] = s_[k_];
+                        break; }
                     case NDT_FLOAT32: { const float* s_ = (const float*)A_->data + off;
-                        for (int k_ = 0; k_ < vlen; k_++) d_[k_] = (double)s_[k_]; break; }
+                        for (int k_ = 0; k_ < vlen; k_++) d_[k_] = (double)s_[k_];
+                        break; }
                     case NDT_COMPLEX64: { const double* s_ = (const double*)A_->data + 2 * off;
-                        for (int k_ = 0; k_ < vlen; k_++) d_[k_] = s_[2*k_] + s_[2*k_+1] * I; break; }
+                        for (int k_ = 0; k_ < vlen; k_++) d_[k_] = s_[2*k_] + s_[2*k_+1] * I;
+                        break; }
                     default: { const float* s_ = (const float*)A_->data + 2 * off;
                         for (int k_ = 0; k_ < vlen; k_++)
-                            d_[k_] = (double)s_[2*k_] + (double)s_[2*k_+1] * I; break; }
+                            d_[k_] = (double)s_[2*k_] + (double)s_[2*k_+1] * I;
+                        break; }
                 }
                 for (int k_ = vlen; k_ < VBLOCK; k_++) d_[k_] = 1.0;
             } NEXT();

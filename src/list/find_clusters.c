@@ -1029,8 +1029,9 @@ static bool fc_method_gaussianmixture(const FcData* d, FcCount spec, const FcOpt
     if (!sv) return false;
 
     /* Zero spread means every point is identical and one component is the only
-     * sensible answer -- and the variance floor below would be zero. */
-    double spread = sv[n - 1] - sv[0];
+     * sensible answer -- and the variance floor below would be zero. An empty
+     * input (n == 0) has no sv[n-1] to read, so it folds into the same branch. */
+    double spread = (n > 0) ? sv[n - 1] - sv[0] : 0.0;
     if (spread <= 0.0) {
         size_t* id0 = calloc(n, sizeof(size_t));
         if (!id0) { free(sv); return false; }

@@ -220,7 +220,8 @@ Expr* builtin_densityplot(Expr* res) {
     double* grid = malloc(sizeof(double) * (size_t)(N + 1) * (size_t)(N + 1));
     if (!grid) {
         iter_spec_free(&xspec); iter_spec_free(&yspec);
-        for (size_t i = 0; i < pt_n; i++) expr_free(pt[i]); free(pt);
+        for (size_t i = 0; i < pt_n; i++) expr_free(pt[i]);
+        free(pt);
         return NULL;
     }
 

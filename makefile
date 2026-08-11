@@ -334,8 +334,22 @@ CMAKE_TEST_BINARIES = comparisons_tests eval_tests expr_tests match_tests match_
 
 all: $(TARGET)
 
+# --- Link-flag de-duplication -------------------------------------------------
+# pkg-config for FLINT (and GMP-ECM) re-lists -lgmp/-lmpfr that the base LDFLAGS
+# already carry, so the raw link line repeats them and macOS ld warns "ignoring
+# duplicate libraries". Collapse each -l flag to a single copy while keeping its
+# LAST occurrence, so a provider (e.g. -lgmp) still follows every consumer
+# (-lflint, -lmpfr, -lecm) — the right-to-left order a static archive link needs,
+# and exactly why FLINT_LIBS is appended after the base -lgmp above. Only -l
+# library words are de-duplicated: -L search paths, -pthread, and two-word
+# "-framework X" tokens pass through untouched, ahead of the libraries.
+ld_reverse    = $(if $(1),$(call ld_reverse,$(wordlist 2,$(words $(1)),$(1))) $(firstword $(1)))
+ld_uniq_first = $(if $(1),$(firstword $(1)) $(call ld_uniq_first,$(filter-out $(firstword $(1)),$(1))))
+ld_uniq_last  = $(call ld_reverse,$(call ld_uniq_first,$(call ld_reverse,$(1))))
+LDFLAGS_DEDUP  = $(filter-out -l%,$(LDFLAGS)) $(call ld_uniq_last,$(filter -l%,$(LDFLAGS)))
+
 $(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(EXTRA_LIBS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS_DEDUP) $(EXTRA_LIBS)
 
 # ---------------------------------------------------------------------------
 # Static library for embedding the kernel in-process (mobile hosts, FFI tests).
