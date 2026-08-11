@@ -274,7 +274,12 @@ static bool guard_all_true(Expr* g) {
         return guard_all_true(g->data.function.args[0])
             && guard_all_true(g->data.function.args[1]);
     }
-    Expr* leaf = evaluate(expr_copy(g));
+    /* evaluate() borrows its argument (it copies internally), so the temporary
+     * we hand it is ours to free -- keep it in a variable rather than inlining
+     * expr_copy(g), which would orphan one node per non-True guard leaf. */
+    Expr* gc = expr_copy(g);
+    Expr* leaf = evaluate(gc);
+    expr_free(gc);
     bool t = leaf && leaf->type == EXPR_SYMBOL && leaf->data.symbol.name == SYM_True;
     if (leaf) expr_free(leaf);
     return t;
@@ -288,6 +293,28 @@ static bool eval_guard_true(Expr* guard, MatchEnv* env) {
     bool ok = guard_all_true(result);
     expr_free(result);
     return ok;
+}
+
+/* Evaluate the guard chain of a Condition-wrapped SEQUENCE pattern element such
+ * as `block___ /; c1 /; c2`, i.e. Condition[Condition[base, c1], c2] where the
+ * innermost `base` is the (possibly named) sequence blank / Repeated -- NOT a
+ * guard.  eval_guard_true cannot be handed the whole node (its guard_all_true
+ * would try to evaluate `base` as a boolean leaf and fail); instead we descend
+ * args[0] to skip the base and evaluate only the args[1] guards.  Mathematica's
+ * `p /; c1 /; c2` checks the inner guard first, so we recurse before evaluating
+ * this layer's guard, short-circuiting on the first failure (this is what makes
+ * `block___ /; Length[{block}] > 0 /; Total[{block}] == k` test the cheap length
+ * guard before the sum).  Bindings for the sequence variable must already be in
+ * `env`.  Returns true once the base (a non-Condition) is reached. */
+static bool eval_seq_conditions(Expr* p, MatchEnv* env) {
+    if (p && p->type == EXPR_FUNCTION && p->data.function.head
+        && p->data.function.head->type == EXPR_SYMBOL
+        && p->data.function.head->data.symbol.name == SYM_Condition
+        && p->data.function.arg_count == 2) {
+        return eval_seq_conditions(p->data.function.args[0], env)   /* inner /; first */
+            && eval_guard_true(p->data.function.args[1], env);
+    }
+    return true;   /* reached the base pattern: no guards left */
 }
 
 #include "part.h" // for expr_head
@@ -987,6 +1014,47 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
         }
     }
 
+    /* block___ /; c   (also nested  block___ /; c1 /; c2,  and named
+     * x:(block___ /; c)):  a Condition wrapping a SEQUENCE blank / Repeated.
+     * match_internal's Condition handler can only gate a single matched element,
+     * so a multi-element `x__ /; test` silently failed to match (only the
+     * width-1 case slipped through, because a BlankSequence also matches one
+     * element).  Strip the Condition layer(s) here -- leaving the bare (possibly
+     * named) sequence blank / Repeated for the machinery below -- and remember
+     * the guard chain in `seq_cond`; it is evaluated once, after the sequence is
+     * bound, at each commit point.  Left intact when the inner pattern is NOT a
+     * sequence blank / Repeated, so the well-tested single-element `x_ /; test`
+     * path is unchanged.  A surviving inner name under an already-peeled outer
+     * name (x:(block___ /; c) binds both x and block to the same sequence) is
+     * remembered in `extra_bind_sym`. */
+    Expr* seq_cond = NULL;
+    Expr* extra_bind_sym = NULL;
+    if (opt_pat->type == EXPR_FUNCTION && opt_pat->data.function.head->type == EXPR_SYMBOL
+        && opt_pat->data.function.head->data.symbol.name == SYM_Condition
+        && opt_pat->data.function.arg_count == 2) {
+        Expr* base = opt_pat;
+        while (base->type == EXPR_FUNCTION && base->data.function.head->type == EXPR_SYMBOL
+               && base->data.function.head->data.symbol.name == SYM_Condition
+               && base->data.function.arg_count == 2) {
+            base = base->data.function.args[0];
+        }
+        Expr* iname = NULL, *ipat = NULL;
+        Expr* seqcheck = base;
+        if (is_pattern(base, &iname, &ipat)) seqcheck = ipat;
+        Expr* dh = NULL; int dml = 0;
+        Expr* drp = NULL; int drmin = 0, drmax = -1;
+        if (is_sequence_blank(seqcheck, &dh, &dml)
+            || is_repeated(seqcheck, &drp, &drmin, &drmax)) {
+            seq_cond = opt_pat;              /* guard chain, evaluated at commit */
+            if (iname && bind_sym) {         /* x:(block___ /; c): two names, one seq */
+                extra_bind_sym = iname;
+                opt_pat = seqcheck;          /* bare blank/Repeated; outer name is p_sym */
+            } else {
+                opt_pat = base;              /* bare, or single inner-named Pattern[b,..] */
+            }
+        }
+    }
+
     /* Named PatternSequence: x:PatternSequence[q1..qm] binds x to the Sequence
      * of the arguments consumed by q1..qm.  (The unnamed form is spliced away
      * before the reorder block; this handles the bound form, which the peeling
@@ -1280,22 +1348,29 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                     if (p_sym) {
                         Expr* seq_val = expr_new_function(expr_new_symbol(SYM_Sequence), NULL, k);
                         for (size_t i = 0; i < k; i++) seq_val->data.function.args[i] = expr_copy(subset[i]);
+                        /* Bind the sequence name(s); a name already bound (nonlinear
+                         * reuse, or the outer/inner names of x:(b___/;c)) must agree.
+                         * New bindings added here are undone by the env_rollback at
+                         * the end of this combination iteration on failure. */
+                        bool bound_ok = true;
                         Expr* existing = env_get(env, p_sym->data.symbol.name);
-                        if (existing) {
-                            if (expr_eq(seq_val, existing)) {
-                                if (match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
-                                    expr_free(seq_val); { if (subset) free(subset); if (remainder) free(remainder); if (comb) free(comb); return true; }
-                                }
-                            }
-                        } else {
-                            env_set(env, p_sym->data.symbol.name, seq_val);
-                            if (match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
-                                expr_free(seq_val); { if (subset) free(subset); if (remainder) free(remainder); if (comb) free(comb); return true; }
-                            }
+                        if (existing) { if (!expr_eq(seq_val, existing)) bound_ok = false; }
+                        else env_set(env, p_sym->data.symbol.name, seq_val);
+                        if (bound_ok && extra_bind_sym) {
+                            Expr* ex2 = env_get(env, extra_bind_sym->data.symbol.name);
+                            if (ex2) { if (!expr_eq(seq_val, ex2)) bound_ok = false; }
+                            else env_set(env, extra_bind_sym->data.symbol.name, seq_val);
+                        }
+                        /* Element-level Condition guard (block___ /; ...): evaluated
+                         * once, now that the sequence variable is bound. */
+                        if (bound_ok && (!seq_cond || eval_seq_conditions(seq_cond, env))
+                            && match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
+                            expr_free(seq_val); { if (subset) free(subset); if (remainder) free(remainder); if (comb) free(comb); return true; }
                         }
                         expr_free(seq_val);
                     } else {
-                        if (match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
+                        if ((!seq_cond || eval_seq_conditions(seq_cond, env))
+                            && match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
                             { if (subset) free(subset); if (remainder) free(remainder); if (comb) free(comb); return true; }
                         }
                     }
