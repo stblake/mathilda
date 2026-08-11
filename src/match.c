@@ -1333,8 +1333,12 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             size_t k = is_longest ? (max_k - step) : (min_k + step);
             if (k > n_exprs) continue;
             
+            /* comb (the index combination) is only consumed by extract_subset
+             * and advanced by next_combination -- both Orderless-only below.
+             * For an ordered head the consumed run is always the prefix, so skip
+             * allocating and filling it entirely. */
             int* comb = NULL;
-            if (k > 0) {
+            if (k > 0 && is_orderless) {
                 comb = malloc(k * sizeof(int));
                 for (int i = 0; i < (int)k; i++) comb[i] = i;
             }
@@ -1347,12 +1351,32 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
          * memory traffic (e.g. the duplicate-search `{___, x_, ___, x_, ___}`). */
         bool need_subset = !(is_seq && !b_head && !seq_test && !p_sym);
         do {
+            /* For an ordered (non-Orderless) head the do-while runs exactly once
+             * with comb = [0..k-1] (next_combination is gated on is_orderless
+             * below): the consumed elements are the contiguous prefix
+             * exprs[0..k-1] and the remainder is the contiguous suffix exprs[k..].
+             * Borrow both as slices of the caller's array instead of
+             * malloc+extract_subset -- this removes the O(n) remainder copy paid
+             * at EVERY pattern element, which (once atomic re-eval became cheap)
+             * dominated `list //. {a_, b_, r___}`. The borrowed arrays are
+             * read-only here (type checks, and expr_copy into seq_val/matched_val)
+             * and in the recursive callee, so sharing is safe. `_owned` holds the
+             * heap copies to free; they stay NULL in the borrow case, so the
+             * free sites below are no-ops. Only the Orderless path still copies. */
             Expr** subset = NULL;
             Expr** remainder = NULL;
-            if (k > 0 && need_subset) subset = malloc(k * sizeof(Expr*));
-            if (n_exprs - k > 0) remainder = malloc((n_exprs - k) * sizeof(Expr*));
-
-            extract_subset(exprs, n_exprs, comb, (int)k, subset, remainder);
+            Expr** subset_owned = NULL;
+            Expr** remainder_owned = NULL;
+            if (!is_orderless) {
+                subset = exprs;                 /* only [0..k-1] are read */
+                remainder = exprs + k;          /* contiguous suffix */
+            } else {
+                if (k > 0 && need_subset) subset_owned = malloc(k * sizeof(Expr*));
+                if (n_exprs - k > 0) remainder_owned = malloc((n_exprs - k) * sizeof(Expr*));
+                extract_subset(exprs, n_exprs, comb, (int)k, subset_owned, remainder_owned);
+                subset = subset_owned;
+                remainder = remainder_owned;
+            }
 
             size_t saved_env = env->count;
 
@@ -1398,13 +1422,13 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                          * once, now that the sequence variable is bound. */
                         if (bound_ok && (!seq_cond || eval_seq_conditions(seq_cond, env))
                             && match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
-                            expr_free(seq_val); { if (subset) free(subset); if (remainder) free(remainder); if (comb) free(comb); return true; }
+                            expr_free(seq_val); { if (subset_owned) free(subset_owned); if (remainder_owned) free(remainder_owned); if (comb) free(comb); return true; }
                         }
                         expr_free(seq_val);
                     } else {
                         if ((!seq_cond || eval_seq_conditions(seq_cond, env))
                             && match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
-                            { if (subset) free(subset); if (remainder) free(remainder); if (comb) free(comb); return true; }
+                            { if (subset_owned) free(subset_owned); if (remainder_owned) free(remainder_owned); if (comb) free(comb); return true; }
                         }
                     }
                 }
@@ -1427,18 +1451,18 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                             if (existing) {
                                 if (expr_eq(matched_val, existing)) {
                                     if (match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
-                                        expr_free(matched_val); { if (subset) free(subset); if (remainder) free(remainder); if (comb) free(comb); return true; }
+                                        expr_free(matched_val); { if (subset_owned) free(subset_owned); if (remainder_owned) free(remainder_owned); if (comb) free(comb); return true; }
                                     }
                                 }
                             } else {
                                 env_set(env, p_sym->data.symbol.name, matched_val);
                                 if (match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
-                                    expr_free(matched_val); { if (subset) free(subset); if (remainder) free(remainder); if (comb) free(comb); return true; }
+                                    expr_free(matched_val); { if (subset_owned) free(subset_owned); if (remainder_owned) free(remainder_owned); if (comb) free(comb); return true; }
                                 }
                             }
                         } else {
                             if (match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
-                                expr_free(matched_val); { if (subset) free(subset); if (remainder) free(remainder); if (comb) free(comb); return true; }
+                                expr_free(matched_val); { if (subset_owned) free(subset_owned); if (remainder_owned) free(remainder_owned); if (comb) free(comb); return true; }
                             }
                         }
                     }
@@ -1449,8 +1473,8 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             }
 
             env_rollback(env, saved_env);
-            if (subset) free(subset);
-            if (remainder) free(remainder);
+            if (subset_owned) free(subset_owned);
+            if (remainder_owned) free(remainder_owned);
 
         } while (is_orderless && next_combination(comb, n_exprs, (int)k));
         
