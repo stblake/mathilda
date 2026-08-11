@@ -27,7 +27,28 @@ static bool mo_is_list(const Expr* e) {
         && e->data.function.head->data.symbol.name == SYM_List;
 }
 
+/* Bounded free-list pool of MatchEnv objects. The DownValue dispatch path
+ * (apply_down_values_def) allocates and frees one env per candidate rule, so a
+ * recursive program like fib[n_]:=fib[n-1]+fib[n-2] churns millions of them.
+ * env_new's three mallocs dominated that path; recycling the whole struct
+ * INCLUDING its symbols/values arrays across matches makes reuse allocation-free
+ * after warm-up. Single-threaded REPL, so a plain static free-list is safe and
+ * reentrant (nested matches just draw more from the pool). Mirrors the bounded
+ * Expr node pool in expr.c; pooled envs are program-lifetime "still reachable",
+ * not leaked. env_free preserves its per-binding cleanup (the strdup'd keys and
+ * the value refs are still released); only the arrays and the struct are kept. */
+#define ENV_POOL_CAP 256
+static MatchEnv* g_env_pool[ENV_POOL_CAP];
+static size_t    g_env_pool_len = 0;
+
 MatchEnv* env_new(void) {
+    if (g_env_pool_len > 0) {
+        MatchEnv* env = g_env_pool[--g_env_pool_len];
+        env->count = 0;                 /* arrays + capacity retained */
+        env->callback = NULL;
+        env->callback_data = NULL;
+        return env;
+    }
     MatchEnv* env = malloc(sizeof(MatchEnv));
     env->count = 0;
     env->capacity = 8;
@@ -43,6 +64,11 @@ void env_free(MatchEnv* env) {
     for (size_t i = 0; i < env->count; i++) {
         free(env->symbols[i]);
         expr_free(env->values[i]);
+    }
+    env->count = 0;
+    if (g_env_pool_len < ENV_POOL_CAP) {
+        g_env_pool[g_env_pool_len++] = env;   /* recycle struct + arrays */
+        return;
     }
     free(env->symbols);
     free(env->values);
