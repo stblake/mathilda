@@ -36,6 +36,7 @@
 #include "matrixq.h"
 #include "minmax.h"
 #include "nearest.h"
+#include "find_clusters.h"
 #include "join.h"
 #include "subsets.h"
 #include "riffle.h"
