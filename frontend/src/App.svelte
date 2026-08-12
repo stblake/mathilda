@@ -13,15 +13,30 @@
   import KernelStatus from './lib/KernelStatus.svelte';
   import { kernelStatus } from './lib/notebook';
   import { pingKernel, restartKernel, saveLibrary, loadLibrary, setWindowTitle as setTitleCmd } from './lib/ipc';
-  import { serializeLibrary, loadLibraryData } from './lib/canvas';
+  import { serializeLibrary, loadLibraryData, canvasState, focusedActions, setFocused } from './lib/canvas';
+  /* Imported for its side effect: installs the document-level Cmd+click
+     handler that opens a symbol's reference page. Importing it here rather
+     than relying on a cell to pull it in means the gesture works from the
+     moment the app loads. */
+  import './lib/refpages';
 
   // ---------------------------------------------------------------------------
   // Dark mode (default to dark — canvas is always dark)
 
   const darkMode = writable(true);
-  // :root = dark defaults; add 'light' class when user switches to light mode
-  $: if (typeof document !== 'undefined')
+  /* Set BOTH classes, not just .light: app.css keys its palette off
+     :root:not(.light) inside the dark media query and :root.dark outside it,
+     so an explicit choice has to be stated in whichever direction it differs
+     from the OS. Toggling only .light left OS-light + app-dark unstyled. */
+  $: if (typeof document !== 'undefined') {
     document.documentElement.classList.toggle('light', !$darkMode);
+    document.documentElement.classList.toggle('dark', $darkMode);
+  }
+
+  /* Title of the notebook currently filling the window, for the app bar. */
+  $: focusedTitle = $canvasState.focusedId
+    ? ($canvasState.notebooks.find(n => n.id === $canvasState.focusedId)?.title ?? '')
+    : '';
 
   // ---------------------------------------------------------------------------
   // Kernel init
@@ -137,8 +152,35 @@
 <!-- Full-viewport canvas -->
 <Canvas />
 
-<!-- Floating corner: dark mode toggle only (no kernel status badge) -->
-<div class="corner-overlay">
+<!-- App bar: owns the app name, the focused notebook's name, and the theme
+     toggle. The toggle used to float over the canvas at top-right, which put
+     it on top of a full-screen card's own toolbar. -->
+<div class="app-bar">
+  {#if $canvasState.focusedId}
+    <!-- The full-screen card's controls. Same icons in the same order as a
+         card's own toolbar on the canvas, so the row does not reshuffle when a
+         notebook is zoomed in; only the full-screen icon flips to its inverse,
+         because that is the one action whose meaning reverses. -->
+    <button class="tb-btn tb-run-all" title="Run all cells"
+            on:click={() => $focusedActions?.runAll()}>▶▶</button>
+    <button class="tb-btn"
+            title={$focusedActions?.horizontal ? 'Vertical layout' : 'Horizontal layout'}
+            on:click={() => $focusedActions?.toggleLayout()}
+    >{$focusedActions?.horizontal ? '↕' : '⇄'}</button>
+    <button class="tb-btn" title="Rename"
+            on:click={() => $focusedActions?.rename()}>✎</button>
+    <button class="tb-btn tb-focus" title="Back to canvas (pinch out)"
+            on:click={() => setFocused(null)}>⤡</button>
+    <button class="tb-btn" title="Collapse / expand"
+            on:click={() => $focusedActions?.toggleCollapse()}
+    >{$focusedActions?.collapsed ? '⊟' : '⊞'}</button>
+    <button class="tb-btn tb-close" title="Close"
+            on:click={() => $focusedActions?.close()}>✕</button>
+  {:else}
+    <span class="app-bar-name">Mathilda</span>
+  {/if}
+  {#if focusedTitle}<span class="app-bar-focus">{focusedTitle}</span>{/if}
+  <span class="dark-toggle-spacer"></span>
   <button
     class="dark-toggle"
     title="Toggle dark mode"
@@ -202,17 +244,62 @@
   }
 
   /* ---- Corner overlay ---- */
-  .corner-overlay {
+  .app-bar {
     position: fixed;
-    /* Clear the status bar / notch on mobile (env() is 0 on desktop). */
-    top: calc(8px + env(safe-area-inset-top, 0px));
-    right: calc(12px + env(safe-area-inset-right, 0px));
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--appbar-h, 34px);
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.75rem;
+    padding: 0 0.75rem;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
     z-index: 200;
-    pointer-events: auto;
+    /* Nothing here should swallow a drag meant for the window chrome. */
+    user-select: none;
+    -webkit-user-select: none;
   }
+
+  .app-bar-name {
+    font: 600 0.78rem/1 var(--sans);
+    color: var(--text-h);
+    letter-spacing: 0.01em;
+  }
+
+  /* Centred independently of the flanking items, so the notebook name sits in
+     the middle of the WINDOW rather than the middle of the leftover space. */
+  .app-bar-focus {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font: 500 0.78rem/1 var(--sans);
+    color: var(--text);
+    max-width: 50vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Same visual language as the card toolbar these came from. */
+  .app-bar .tb-btn {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: var(--text);
+    font-size: 0.8rem;
+    line-height: 1;
+    padding: 0.18rem 0.36rem;
+    cursor: pointer;
+  }
+  .app-bar .tb-btn:hover { background: var(--surface-2); color: var(--text-h); }
+  .app-bar .tb-run-all { color: var(--ok, #4ade80); }
+  /* Match the card toolbar's accents rather than position-based ones. */
+  .app-bar .tb-focus { color: var(--accent, #89b4fa); }
+  .app-bar .tb-close:hover { color: #f38ba8; }
+
+  .dark-toggle-spacer { flex: 1; }
 
   .dark-toggle {
     background: rgba(128,128,128,0.1);

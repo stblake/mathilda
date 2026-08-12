@@ -419,6 +419,28 @@ static void json_escape(const char* s, char* out, size_t outlen) {
     out[i] = '\0';
 }
 
+/* `?x` may sit at the end of a CompoundExpression -- `a = 5; ?Sin` -- whose
+ * value IS that last element, so the head to test is the final one, not the
+ * top-level CompoundExpression. Without unwrapping, `D[x,x]; ?Find*` fell
+ * through to the ordinary expression path and the front end tried to typeset a
+ * help result as mathematics. */
+static Expr* pipe_final_expr(Expr* e) {
+    while (e && e->type == EXPR_FUNCTION && e->data.function.head
+           && e->data.function.head->type == EXPR_SYMBOL
+           && e->data.function.head->data.symbol.name == SYM_CompoundExpression
+           && e->data.function.arg_count > 0) {
+        e = e->data.function.args[e->data.function.arg_count - 1];
+    }
+    return e;
+}
+
+static bool pipe_is_info_query(Expr* parsed) {
+    Expr* e = pipe_final_expr(parsed);
+    return e && e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Information;
+}
+
 static void pipe_process_input(const char* input, int id) {
     Expr* parsed = parse_expression(input);
     if (!parsed) {
@@ -453,6 +475,14 @@ static void pipe_process_input(const char* input, int id) {
         return;
     }
 
+    /* `?sym` / Information[sym] yields the raw docstring as a String, and a
+     * usage message is not an expression: it must not be quoted, InputForm
+     * escaped, or handed to the front end's math renderer. Captured from the
+     * *input* head before `parsed` is freed, exactly as the interactive REPL
+     * does above, so only help queries take this path and an ordinary string
+     * result still comes back quoted. */
+    bool info_query = pipe_is_info_query(parsed);
+
     Expr* evaluated = evaluate(parsed);
     expr_free(parsed);
 
@@ -460,6 +490,69 @@ static void pipe_process_input(const char* input, int id) {
         char buf[64];
         snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
         pipe_emit(buf);
+        return;
+    }
+
+    /* `?Pat*` evaluates to the LIST of matching names. Emit it as its own
+     * message so the notebook can lay it out as a grid; as a plain expression
+     * it would be a single long braced line run through the math renderer. */
+    if (info_query && evaluated->type == EXPR_FUNCTION
+        && evaluated->data.function.head
+        && evaluated->data.function.head->type == EXPR_SYMBOL
+        && evaluated->data.function.head->data.symbol.name == SYM_List) {
+        size_t n = evaluated->data.function.arg_count;
+        size_t cap = 64;
+        for (size_t i = 0; i < n; i++) {
+            Expr* e = evaluated->data.function.args[i];
+            if (e->type == EXPR_STRING) cap += strlen(e->data.string) * 6 + 8;
+        }
+        char* buf = malloc(cap);
+        if (buf) {
+            int off = snprintf(buf, cap, "{\"id\":%d,\"type\":\"names\",\"payload\":[", id);
+            bool first = true;
+            for (size_t i = 0; i < n && off > 0 && (size_t)off < cap; i++) {
+                Expr* e = evaluated->data.function.args[i];
+                if (e->type != EXPR_STRING) continue;
+                size_t ecap = strlen(e->data.string) * 6 + 8;
+                char* esc = malloc(ecap);
+                if (!esc) break;
+                json_escape(e->data.string, esc, ecap);
+                off += snprintf(buf + off, cap - (size_t)off, "%s\"%s\"",
+                                first ? "" : ",", esc);
+                free(esc);
+                first = false;
+            }
+            if (off > 0 && (size_t)off < cap) snprintf(buf + off, cap - (size_t)off, "]}");
+            pipe_emit(buf);
+            free(buf);
+        }
+        expr_free(evaluated);
+        char done[64];
+        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(done);
+        return;
+    }
+
+    if (info_query && evaluated->type == EXPR_STRING) {
+        const char* doc = evaluated->data.string;
+        size_t cap = strlen(doc) * 6 + 8;
+        char* esc = malloc(cap);
+        if (esc) {
+            json_escape(doc, esc, cap);
+            size_t bcap = cap + 64;
+            char* buf = malloc(bcap);
+            if (buf) {
+                snprintf(buf, bcap,
+                    "{\"id\":%d,\"type\":\"usage\",\"payload\":\"%s\"}", id, esc);
+                pipe_emit(buf);
+                free(buf);
+            }
+            free(esc);
+        }
+        expr_free(evaluated);
+        char done[64];
+        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(done);
         return;
     }
 

@@ -5,6 +5,8 @@ import { Channel } from '@tauri-apps/api/core';
 
 export type OutputMessage =
   | { id: number; type: 'expr';   payload: string }
+  | { id: number; type: 'usage';  payload: string }
+  | { id: number; type: 'names';  payload: string[] }
   | { id: number; type: 'error';  message: string }
   | { id: number; type: 'stream'; text: string }
   | { id: number; type: 'plot';   payload: object }
@@ -69,4 +71,15 @@ export async function loadLibrary(path: string): Promise<string> {
 
 export async function setWindowTitle(title: string): Promise<void> {
   await invoke<void>("set_window_title", { title });
+}
+
+/** Open a URL in the user's real browser, not the app's webview.
+ *
+ * Reference pages link out to GitHub source and to the published site; letting
+ * those navigate the webview would replace the notebook with a web page and
+ * leave no way back. Imported lazily so the shell plugin is only pulled in if a
+ * link is actually clicked. */
+export async function openUrl(url: string): Promise<void> {
+  const { open } = await import('@tauri-apps/plugin-shell');
+  await open(url);
 }

@@ -18,8 +18,8 @@
     • kernelStatus store from notebook.ts for status display
 -->
 <script lang="ts">
-  import { onMount, tick, createEventDispatcher } from 'svelte';
-  import { setFocused, setNotebookWidth, setNotebookHeight } from './canvas';
+  import { onMount, onDestroy, tick, createEventDispatcher } from 'svelte';
+  import { setFocused, setNotebookWidth, setNotebookHeight, addQueryNotebook, openRefpage, focusedActions } from './canvas';
   const dispatch = createEventDispatcher();
   import { get } from 'svelte/store';
   import CellShell from './CellShell.svelte';
@@ -62,6 +62,16 @@
   let mounted = false;
   onMount(() => {
     requestAnimationFrame(() => { mounted = true; });
+    /* A card opened to answer a query arrives with its cell already filled;
+     * evaluate it once so the answer is there when the card appears. */
+    if (nb.autoRun) {
+      nb.autoRun = false;
+      tick().then(() => {
+        const rows = get(nb.store);
+        const first = rows.find(r => r.cells[0]?.source.trim());
+        if (first) runCell(first.cells[0].id, first.cells[0].source);
+      });
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -334,6 +344,29 @@
     await tick(); cellFocusFns[id]?.();
   }
 
+  /* `mathilda-refpage` is a custom DOM event bubbled up from the name grid in
+     Output.svelte, so the grid needs no prop threaded down through CellShell
+     and CodeCell. Attached as an action rather than `on:mathilda-refpage`
+     because Svelte's element typings only know standard DOM events. */
+  function nameQueryListener(node: HTMLElement) {
+    const handler = (e: Event) => onNameQuery(e);
+    node.addEventListener('mathilda-refpage', handler);
+    return { destroy() { node.removeEventListener('mathilda-refpage', handler); } };
+  }
+
+  /* A name in a `?pat*` result was clicked: open its documentation as a new
+     card to the right. Appending a cell to this notebook instead put the answer
+     at the very bottom, which in a long notebook is off-screen and reads as the
+     click having done nothing. */
+  async function onNameQuery(e: Event) {
+    const name = (e as CustomEvent<{ name: string }>).detail?.name;
+    if (!name) return;
+    /* The full generated reference page, not `?name`: the terse docstring is
+       what the ? query already gives, and a click asking for documentation
+       should land on the examples and notes. */
+    openRefpage(nb.id, name);
+  }
+
   async function addCellLeft(e: CustomEvent<{ rowId: string; cellIdx: number }>) {
     const id = nb.store.insertCellInRow(e.detail.rowId, e.detail.cellIdx);
     await tick(); cellFocusFns[id]?.();
@@ -394,6 +427,8 @@
   function msgToOutputItem(msg: OutputMessage): OutputItem | null {
     switch (msg.type) {
       case 'expr':   return { kind: 'expr', text: msg.payload, latex: (msg as any).latex };
+      case 'usage':  return { kind: 'usage',  text: msg.payload };
+      case 'names':  return { kind: 'names',  names: (msg as any).payload ?? [] };
       case 'error':  return { kind: 'error',  text: msg.message };
       case 'stream': return { kind: 'stream', text: (msg as any).text ?? '' };
       case 'plot':   return { kind: 'plot',   data: msg.payload };
@@ -505,11 +540,31 @@
       await tick(); cellFocusFns[id]?.();
     }
   }
+
+  /* Hand this card's controls to the app bar while it is full-screen, and take
+     them back when it is not. onDestroy covers the card being closed while
+     focused, which no reactive statement would otherwise see. */
+  $: focusedActions.set(
+    focused
+      ? {
+          runAll,
+          toggleLayout: () => { horizontal = !horizontal; },
+          horizontal,
+          rename: startRename,
+          toggleCollapse: onToggleCollapse,
+          close: () => removeNotebook(nb.id),
+          collapsed: !!nb.collapsed,
+        }
+      : null
+  );
+  onDestroy(() => { if (focused) focusedActions.set(null); });
+
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
   class="nb-card"
+  use:nameQueryListener
   class:mounted
   class:collapsed={nb.collapsed}
   class:focused-card={focused}
@@ -524,19 +579,14 @@
 >
   <!-- Title bar — only pointerdown here; move/up handled by cardEl after setPointerCapture -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <!-- In focused mode this bar is not rendered at all: its four controls and
+       its title move up into the app bar, which would otherwise sit directly
+       on top of it showing the same notebook name twice. -->
+  {#if !focused}
   <div
     class="card-titlebar"
     on:pointerdown={onTitlePointerDown}
   >
-    <!-- Back to canvas button — only in focused full-screen mode -->
-    {#if focused}
-      <button
-        class="tb-btn tb-back"
-        title="Back to canvas (pinch out)"
-        on:click|stopPropagation={() => setFocused(null)}
-      >⤡</button>
-    {/if}
-
     {#if renaming}
       <!-- In-place editable title — looks identical to the plain title -->
       <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -578,6 +628,7 @@
       {/if}
     </div>
   </div>
+  {/if}
 
   <!-- Right-edge resize handle -->
   {#if !focused}
@@ -866,16 +917,6 @@
   .tb-run-all:hover { background: rgba(166,227,161,0.22) !important; }
   .tb-close:hover { color: #f38ba8; }
   .tb-focus:hover { color: var(--accent, #89b4fa); }
-  /* ⤡ contract icon — mirrors ⤢ expand icon */
-  .tb-back {
-    font-size: 0.9rem;
-    padding: 2px 5px;
-    color: var(--accent, #89b4fa);
-    border: none;
-    margin-right: 2px;
-  }
-  .tb-back:hover { background: rgba(137,180,250,0.12) !important; border-color: var(--accent, #89b4fa); }
-
   /* ---- Collapse wrapper ---- */
   .collapse-wrapper {
     overflow: hidden;

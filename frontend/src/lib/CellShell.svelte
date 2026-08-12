@@ -16,6 +16,7 @@
   import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
   import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
   import Output from './Output.svelte';
+  import RefPage from './RefPage.svelte';
   import type { Cell, CellType, OutputItem } from './notebook';
   import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection } from './notebook';
 
@@ -59,6 +60,12 @@
   }>();
 
   $: selected = $selectedCells.has(cell.id);
+
+  /* Anchor for a reference page's table of contents. Must match slug() in
+     RefPage.svelte and tocSlug() in refpages.ts. */
+  $: headingId = (cell.type === 'section' || cell.type === 'subsection')
+    ? 'ref-' + cell.source.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    : undefined;
 
   // ---- CodeMirror editor ----
   let editorContainer: HTMLElement;
@@ -302,7 +309,11 @@
 
     {:else if cell.type === 'section'}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- The id lets a reference page's table of contents scroll here. Headings
+           are cells now (so they fold the rows beneath them), so they are no
+           longer rendered by RefPage and cannot carry ids from the Markdown. -->
       <h1
+        id={headingId}
         class="heading-cell"
         contenteditable="true"
         bind:this={proseEl}
@@ -311,9 +322,14 @@
         on:click|stopPropagation
       ></h1>
 
+    {:else if cell.type === 'ref'}
+      <!-- Read-only generated reference page; `source` is the symbol name. -->
+      <RefPage markdown={cell.source} />
+
     {:else if cell.type === 'subsection'}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
       <h2
+        id={headingId}
         class="heading-cell"
         contenteditable="true"
         bind:this={proseEl}

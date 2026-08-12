@@ -1,6 +1,47 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+
+
+  /* The Mathilda symbol at the cursor, for the F1 documentation hotkey.
+   *
+   * Not CodeMirror's own `state.wordAt`: its word characters do not include
+   * `$`, so `$Assumptions` and `$AutoArrayPacking` would come back clipped to
+   * the part after the sigil and match no symbol. Scans the line instead.
+   *
+   * A non-empty selection wins over the cursor, so selecting part of a longer
+   * expression asks about exactly what was selected. With the caret resting
+   * immediately AFTER a name (the usual position once you finish typing one)
+   * that name is still the answer. */
+  function symbolAt(v: EditorView, pos: number): string | null {
+    const line = v.state.doc.lineAt(pos);
+    const col = pos - line.from;
+    for (const m of line.text.matchAll(/[A-Za-z$][A-Za-z0-9$]*/g)) {
+      const start = m.index ?? 0;
+      const end = start + m[0].length;
+      if (col >= start && col <= end) return m[0];   /* <= end: caret just after */
+    }
+    return null;
+  }
+
+  function symbolAtCursor(v: EditorView): string | null {
+    const sel = v.state.selection.main;
+    if (!sel.empty) {
+      const picked = v.state.sliceDoc(sel.from, sel.to).trim();
+      return /^[A-Za-z$][A-Za-z0-9$]*$/.test(picked) ? picked : null;
+    }
+    return symbolAt(v, sel.head);
+  }
+
+  /* Fire the documentation event for `name` if it has a reference page.
+     Returns whether the gesture was consumed. */
+  function openDocsFor(v: EditorView, name: string | null): boolean {
+    if (!name || !hasRefpage(name)) return false;
+    v.dom.dispatchEvent(new CustomEvent('mathilda-refpage',
+      { detail: { name }, bubbles: true }));
+    return true;
+  }
   import { EditorView, keymap } from '@codemirror/view';
+  import { hasRefpage } from './refpages';
   import { EditorState, EditorSelection } from '@codemirror/state';
   import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
   import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
@@ -43,8 +84,38 @@
             autocapitalize: 'off',
             spellcheck: 'false',
           }),
+          /* Cmd/Ctrl+click a symbol to open its reference page -- the
+             "go to definition" gesture, and the one gesture the OS cannot
+             intercept. F1 is bound too but macOS claims it for brightness
+             unless the user has enabled standard function keys, which is why
+             a key alone was not enough. */
+          EditorView.domEventHandlers({
+            mousedown(event, v) {
+              if (!event.metaKey && !event.ctrlKey) return false;
+              const pos = v.posAtCoords({ x: event.clientX, y: event.clientY });
+              if (pos == null) return false;
+              if (!openDocsFor(v, symbolAt(v, pos))) return false;
+              event.preventDefault();
+              return true;
+            },
+          }),
           keymap.of([
             { key: 'Shift-Enter', run() { dispatch('run', { id: cellId }); return true; } },
+            /* F1 opens the reference page for the symbol under the cursor --
+               the same key Mathematica binds to help. Bubbled as a DOM event so
+               this component needs no canvas import; NotebookCard listens and
+               opens the card. Returning false when there is no symbol lets the
+               keypress fall through rather than silently doing nothing. */
+            /* Cmd/Ctrl+Shift+D is the alias that actually works out of the box
+               on a Mac, where F1 is brightness-down unless the user has turned
+               on "Use F1, F2 etc. as standard function keys". */
+            ...['F1', 'Mod-Shift-d', 'Mod-i'].map(key => ({
+              key,
+              /* Falls through unless the symbol really has documentation, so
+                 the key on your own `x` or `myVar` stays unhandled rather than
+                 opening a card that only says the page is missing. */
+              run: (v: EditorView) => openDocsFor(v, symbolAtCursor(v)),
+            })),
             { key: 'Mod-Enter',   run() { dispatch('run', { id: cellId }); dispatch('addBelow', { id: cellId }); return true; } },
             // Arrow navigation at cell boundaries
             {
