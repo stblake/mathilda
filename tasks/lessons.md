@@ -2488,3 +2488,64 @@ the unit path under-ran). Fixing only the interpreter would have left
   not a leak.** Confirm the stacks are `realizeClassWithoutSwift` and that NO frame
   names our src before spending time; a heavy `Unique`/`Repeated` workload still
   matched the baseline byte-for-byte.
+
+## Matcher: Condition-over-sequence-blank fix, its leak, and the WL head-to-head (2026-08-11)
+
+- **`Condition` wrapping a sequence blank was matcher-broken.** `x__ /; test`,
+  `x___ /; test`, nested `b___ /; c1 /; c2`, and `c:(b__ /; t)` matched ONLY a
+  width-1 sequence — `MatchQ[{5,10},{b__/;Total[{b}]==15}]` was `False` (WL:
+  `True`). `match_args_internal` peels Pattern/Shortest/Longest/Optional and
+  strips PatternTest for sequence slots but never handled `Condition[seqblank,g]`
+  → fell to the single-element path (`min_k=max_k=1`). Fix mirrors the PatternTest
+  strip: strip Condition for a sequence/Repeated inner, evaluate the guard chain
+  (`eval_seq_conditions`, inner `/;` first) once after binding. When adding a
+  sequence-slot wrapper, check EVERY wrapper the peel loop handles.
+- **`evaluate(expr_copy(x))` with the copy inlined LEAKS.** `evaluate()` borrows
+  its arg (copies internally at eval.c:2148), so the temporary is orphaned.
+  `guard_all_true` did this — leaking ~1 node per FAILED guard, i.e. per failed
+  `/;` everywhere (matching/Cases/ReplaceAll/DownValues). Hold the copy in a var
+  and free it. A per-attempt leak is invisible in correctness tests — **valgrind
+  any new hot backtracking path**; watch the per-eval slope, not the total (the
+  ~13.5KB/422-block libobjc baseline is constant).
+- **`which wolframscript` returning nothing ≠ Mathematica absent.** It lives
+  inside the app bundle: `/Applications/Mathematica.app/Contents/MacOS/wolframscript`
+  (also `Mathematica_13_2.app`), not on PATH. Search app bundles before declaring
+  a tool unavailable — I nearly shipped Case M as "Mathilda-only" when a full WL
+  14.0 head-to-head was one `find /Applications` away.
+- **The equal-sum-partition "stress test" IS exponential — in Mathematica.** WL
+  14.0 goes geometric (reader's verbatim pattern 6.75s at N=20; distinct-block
+  38s at N=120, 9s at m=6); Mathilda prunes it to polynomial/constant, 100×–
+  135,000× faster, identical counts. Kill runaway `WolframKernel`/`MathKernel`
+  with `pkill -9 -f` — a detached `&` wolframscript survives the Bash-tool 2-min
+  timeout and its kernel children outlive `pkill -f wolframscript`.
+
+## Evaluator: the four level-walkers share one overhead; the perf doc is untracked (2026-08-12)
+
+- **`funcprog.c` has FOUR level-walkers with the same overhead: fix them as a
+  family.** `apply_at_level`, `map_at_level`, `scan_at_level`, `mi_at_level` all
+  (a) call `get_depth` per node — needed ONLY by a negative-level bound — and
+  (b) descend the whole tree even when the spec targets shallow levels, so
+  `f @@ l` / `f /@ l` / `Scan[f,l]` / `MapIndexed[f,l]` cost grew with element
+  *depth*. The one fix for all: with a non-negative spec skip `get_depth`, and once
+  `level > spec.max` share the subtree by an O(1) refcount bump (Expr trees are
+  immutable) instead of descending + rebuilding. Map/Scan/`@@` then *beat* WL 14.0;
+  MapIndexed lands ~1.2× (it also builds a `{position}` + 2-arg wrapper per element,
+  which no short-circuit removes). When you optimise one walker, check the other
+  three — they were all built the same way. The tell is a benchmark whose cost
+  rises with element depth though `f` only touches level 1.
+- **`spec.min >= 0` lets you drop the negative-depth OR-term entirely.** For a
+  non-negative spec, `(-depth in [min,max])` is provably always false (depth ≥ 1 ⇒
+  −depth ≤ −1 < 0 ≤ min), so the membership test collapses to the positive range and
+  `get_depth` becomes dead — the safe guard for every one of these fast paths.
+- **When the user says a working doc "should be untracked," keep it untracked —
+  and it still gets updated.** `MATHILDA_EVALUATOR_PERFORMANCE.md` (and
+  `benchmarks/52-*`) live in the tree unversioned on purpose; I add rows/results to
+  them each turn for reference but never `git add` them, and commit only the code +
+  `test_core_algebra.c` + the weekly changelog. Stage by explicit path, never
+  `git add -A`, when the tree carries prior-session/untracked files.
+- **WolframKernel is the head-to-head engine when wolframscript is absent.**
+  `/Applications/Mathematica.app/Contents/MacOS/WolframKernel -noprompt -script f.m`
+  runs WL 14.0 directly. Its `-script` `Print` quotes/`\`-escapes string literals
+  and re-formats — emit **bare numbers in a fixed order** (both engines print those
+  cleanly) and map them to labels by position; `Round[1.*^6 t]` gives integer µs
+  with no float noise.
