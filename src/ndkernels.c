@@ -137,7 +137,11 @@ UK_ESC_RECIP_FLIP(ArcCoth, catanh(1.0 / z));
 UK_ESC(ArcSech, cacosh(1.0 / z));
 
 /* ---- projections & sign ------------------------------------------------- */
-UK_PROJ(Abs, hypot(ar, ai));
+/* Abs: written by hand (not UK_PROJ) so it leaves no unused projection
+ * descriptor -- the registered kernel is NDKU_AbsInt below, which reuses this
+ * ndk_Abs_c for the real/complex magnitude and adds the integer arm. */
+static bool ndk_Abs_c(double ar, double ai, double* rr, double* ri) {
+    (void)ar; (void)ai; double v = hypot(ar, ai); *rr = v; *ri = 0.0; return isfinite(v); }
 /* Abs of an EXACT integer is an exact integer, and hypot() is not that: a
  * projection kernel writes a real dtype, so Abs[{-1, 2}] would be {1., 2.}
  * where the List path gives {1, 2}. The integer arm below makes the buffer
@@ -156,7 +160,21 @@ static bool ndk_Abs_ii(int64_t x, int64_t* o) {
 static const NDUnaryKernel NDKU_AbsInt =
     { ndk_Abs_c, NULL, false, true, NULL, ndk_Abs_ii, true };
 UK_PROJ(Re,  ar);
-UK_PROJ(Im,  ai);
+/* Im: the imaginary part. Written by hand rather than via UK_PROJ because it
+ * needs a NARROWING pair and must not leave an unused projection descriptor.
+ * Real -- or exact-integer -- input is the exact Integer 0, so the narrowing arm
+ * writes an NDT_INT64 zero buffer to match the List path (Im left pack.c's
+ * NOT_AWARE list on 2026-08-12, where it had cost ~22x an aware head). It is
+ * unconditionally 0: the imaginary part of any real value is 0, finite or not,
+ * so unlike Sign there is nothing to reject. COMPLEX input takes ndk_Im_c (the
+ * imaginary part, a Real), which ndarray_map_unary's narrowing branch skips for
+ * complex dtypes -- exactly as Sign and Abs do. */
+static bool ndk_Im_c(double ar, double ai, double* rr, double* ri) {
+    (void)ar; *rr = ai; *ri = 0.0; return isfinite(ai); }
+static bool ndk_Im_ir(double x, int64_t* o) { (void)x; *o = 0; return true; }
+static bool ndk_Im_ii(int64_t x, int64_t* o) { (void)x; *o = 0; return true; }
+static const NDUnaryKernel NDKU_ImInt =
+    { ndk_Im_c, NULL, false, true, ndk_Im_ir, ndk_Im_ii, true };
 UK_PROJ(Arg, atan2(ai, ar));
 UK_CLOSED(Conjugate, x, conj(z));
 /* Sign: real -> {-1,0,1}; complex -> z/|z| (0 at the origin). */
@@ -654,7 +672,7 @@ void ndkernels_init(void) {
     REG_U(ArcSinh); REG_U(ArcCosh); REG_U(ArcTanh);
     REG_U(ArcCoth); REG_U(ArcSech); REG_U(ArcCsch);
     symtab_set_ndarray_unary_kernel("Abs", &NDKU_AbsInt);
-    REG_U(Re); REG_U(Im); REG_U(Arg);
+    REG_U(Re); symtab_set_ndarray_unary_kernel("Im", &NDKU_ImInt); REG_U(Arg);
     REG_U(Conjugate); REG_U(Sign);
     REG_U(UnitStep); REG_U(Ramp);
     REG_U(Floor); REG_U(Ceiling); REG_U(Round);

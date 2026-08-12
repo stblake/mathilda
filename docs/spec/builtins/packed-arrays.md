@@ -171,8 +171,10 @@ Out[11]= NDArray[{1, 2, 3}]
 Before 2026-08-01 the second rule was missing and `Out[10]` was
 `NDArray[{0, 0, 0}]` — the double result truncated into the integer slot. Every
 `real_closed` kernel did it. `Mod`, `Quotient`, `Floor`, `Ceiling`, `Round`,
-`IntegerPart`, `Sign`, `UnitStep` and `Abs` have exact integer arms and keep
-their buffer fast path.
+`IntegerPart`, `Sign`, `UnitStep`, `Im` and `Abs` have exact integer arms and
+keep their buffer fast path. (`Im` gained one on 2026-08-12: `Im` of any real is
+the exact `Integer 0`, so its buffer now writes an `int64` zero array instead of
+materialising to the List path at ~22× the cost.)
 
 ## `ToNDArray`
 
@@ -499,7 +501,7 @@ point, so the compiled answer is bit-identical, rounding included:
 | array → scalar | `Total` `Length` `Mean` `Median` `Variance` `StandardDeviation` `RootMeanSquare` `Max` `Min` `Tr` `Det` `MatrixRank` `Norm` |
 | two arrays → array | `Dot` (matrix) `LinearSolve` `Cross` `LeastSquares` `ListConvolve` `ListCorrelate` `Join` `HankelMatrix` (`[c, r]`) `ToeplitzMatrix` (`[c, r]`) |
 | two arrays → scalar | `Dot` (vector·vector inner product) |
-| elementwise | every registered kernel, including the narrowing ones (`Floor`, `Ceiling`, `Round`, `Sign`, `IntegerPart`, `UnitStep`) and the exact-integer ones (`Mod`, `Quotient`, `GCD`, `LCM`, `DivisorSigma`, `MoebiusMu`, `EulerPhi`, `IntegerLength`) |
+| elementwise | every registered kernel, including the narrowing ones (`Floor`, `Ceiling`, `Round`, `Sign`, `IntegerPart`, `UnitStep`, `Im`) and the exact-integer ones (`Mod`, `Quotient`, `GCD`, `LCM`, `DivisorSigma`, `MoebiusMu`, `EulerPhi`, `IntegerLength`) |
 
 The statistics reductions are **real element type only**, because their exact
 answer is not a machine number: `Mean[{1, 2}]` is `3/2` and `Variance[Range[10]]`
