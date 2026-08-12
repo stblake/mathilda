@@ -10,6 +10,7 @@ void list_init(void) {
     symtab_add_builtin("Take", builtin_take);
     symtab_add_builtin("Drop", builtin_drop);
     symtab_add_builtin("Flatten", builtin_flatten);
+    symtab_add_builtin("FlattenAt", builtin_flatten_at);
     symtab_add_builtin("Partition", builtin_partition);
     symtab_add_builtin("Pick", builtin_pick);
     symtab_get_def("Pick")->attributes |= ATTR_PROTECTED;
@@ -86,6 +87,50 @@ void list_init(void) {
     symtab_set_docstring("MinMax",
         "MinMax[list]\n\tGives {Min[list], Max[list]}. Over an association, uses\n"
         "\tthe values.");
+    symtab_add_builtin("Nearest", builtin_nearest);
+    symtab_get_def("Nearest")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Nearest",
+        "Nearest[list, x]\n\tGives the element of list closest to x, as a list.\n"
+        "\tAll elements tied at the minimum distance Abs[element - x] are\n"
+        "\treturned, in their original order; an empty list gives {}.\n"
+        "\tReturns unevaluated unless every distance is a real number, so a\n"
+        "\tsymbolic element or target leaves the expression unchanged rather\n"
+        "\tthan dropping it from the result.");
+    symtab_add_builtin("FindClusters", builtin_find_clusters);
+    symtab_get_def("FindClusters")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("FindClusters",
+        "FindClusters[list]\n\tPartitions a 1D numeric list into clusters of\n"
+        "\tnearby elements, as a list of lists. Clusters appear in order of the\n"
+        "\tfirst occurrence of a member; elements keep their input order.\n"
+        "FindClusters[list, n]\n\tGives exactly n clusters, capped at the number\n"
+        "\tof distinct values.\n"
+        "FindClusters[list, UpTo[n]]\n\tGives at most n clusters, and fewer when\n"
+        "\tthe data suggests fewer.\n"
+        "FindClusters[list, spec, Method -> m]\n\tUses algorithm m: Agglomerate,\n"
+        "\tSpanningTree, KMeans, KMedoids, Spectral, DBSCAN, GaussianMixture,\n"
+        "\tJarvisPatrick, MeanShift or NeighborhoodContraction. KMeans and\n"
+        "\tKMedoids require a count; the density methods require Automatic.\n"
+        "\tOptions: Method, DistanceFunction (Automatic, EuclideanDistance,\n"
+        "\tManhattanDistance or SquaredEuclideanDistance -- all equivalent in\n"
+        "\t1D), CriterionFunction and PerformanceGoal (accepted, no effect).\n"
+        "\tReturns unevaluated for a non-numeric element, an empty list, a\n"
+        "\tmethod incompatible with the count mode, or a list too large for the\n"
+        "\tchosen method (Spectral above 2000 elements, MeanShift and\n"
+        "\tNeighborhoodContraction above 4000, both being quadratic).");
+    /* Defaults surfaced by Options[FindClusters]. Without this the option
+     * machinery reports none, even though four are accepted. */
+    {
+        Expr* rules[4];
+        const char* keys[4];
+        keys[0] = SYM_Method; keys[1] = SYM_DistanceFunction;
+        keys[2] = SYM_CriterionFunction; keys[3] = SYM_PerformanceGoal;
+        for (int i = 0; i < 4; i++) {
+            Expr* ra[2] = { expr_new_symbol(keys[i]), expr_new_symbol(SYM_Automatic) };
+            rules[i] = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
+        }
+        symtab_set_options("FindClusters",
+                           expr_new_function(expr_new_symbol(SYM_List), rules, 4));
+    }
     symtab_add_builtin("ListQ", builtin_listq);
     symtab_add_builtin("VectorQ", builtin_vectorq);
     symtab_add_builtin("MatrixQ", builtin_matrixq);
@@ -138,6 +183,7 @@ void list_init(void) {
     symtab_get_def("Take")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Drop")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Flatten")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("FlattenAt")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Partition")->attributes |= ATTR_PROTECTED;
     symtab_get_def("RotateLeft")->attributes |= ATTR_PROTECTED;
     symtab_get_def("RotateRight")->attributes |= ATTR_PROTECTED;

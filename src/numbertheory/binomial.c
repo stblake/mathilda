@@ -15,7 +15,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <math.h>
 #include <gmp.h>
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 
 /* Binomial[n, k] expanded as a falling-factorial polynomial for a small
  * non-negative integer k and arbitrary n (symbolic, rational, complex,
@@ -77,6 +82,156 @@ static Expr* binomial_polynomial(Expr* n, int64_t k) {
     return eval_and_free(product);
 }
 
+/* Convert a real-numeric leaf (integer, bigint, rational, machine real, or
+ * MPFR real) to a double.  Returns false for symbolic or complex operands, so
+ * the machine Binomial path can decline rather than silently reading a
+ * non-convertible operand (e.g. an exact Rational) as 0. */
+static bool binomial_to_double(const Expr* e, double* out) {
+    int64_t n, d;
+    switch (e->type) {
+        case EXPR_INTEGER: *out = (double)e->data.integer;    return true;
+        case EXPR_REAL:    *out = e->data.real;               return true;
+        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint);  return true;
+#ifdef USE_MPFR
+        case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
+#endif
+        default: break;
+    }
+    if (is_rational(e, &n, &d)) { *out = (double)n / (double)d; return true; }
+    return false;
+}
+
+#ifdef USE_MPFR
+/* Set an already-init2'd mpfr from a real-numeric leaf (integer, bigint,
+ * rational, machine real, MPFR).  Returns false for symbolic / complex. */
+static bool binomial_set_mpfr(mpfr_t out, const Expr* e) {
+    int64_t n, d;
+    switch (e->type) {
+        case EXPR_INTEGER: mpfr_set_si(out, (long)e->data.integer, MPFR_RNDN); return true;
+        case EXPR_BIGINT:  mpfr_set_z (out, e->data.bigint,        MPFR_RNDN); return true;
+        case EXPR_REAL:    mpfr_set_d (out, e->data.real,          MPFR_RNDN); return true;
+        case EXPR_MPFR:    mpfr_set   (out, e->data.mpfr,          MPFR_RNDN); return true;
+        default: break;
+    }
+    if (is_rational(e, &n, &d)) {
+        mpfr_set_si(out, (long)n, MPFR_RNDN);
+        mpfr_div_si(out, out, (long)d, MPFR_RNDN);
+        return true;
+    }
+    return false;
+}
+
+/* Arbitrary-precision generalised binomial via the Gamma quotient
+ *
+ *     Binomial[n, m] = Gamma[n+1] / (Gamma[m+1] Gamma[n-m+1]),
+ *
+ * evaluated in MPFR when at least one operand is an MPFR real (i.e. under
+ * N[Binomial[..], prec]).  The working precision follows Mathematica's
+ * contagion rule -- the minimum precision among the inexact operands, floored
+ * at machine (53).  Returns NULL when an operand is not real-numeric, or when
+ * the quotient overflows / is indeterminate, leaving the expression symbolic. */
+static Expr* binomial_mpfr(const Expr* arg_n, const Expr* arg_m) {
+    mpfr_prec_t out_prec = 0;
+    if (arg_n->type == EXPR_MPFR) out_prec = mpfr_get_prec(arg_n->data.mpfr);
+    if (arg_m->type == EXPR_MPFR) {
+        mpfr_prec_t p = mpfr_get_prec(arg_m->data.mpfr);
+        if (out_prec == 0 || p < out_prec) out_prec = p;
+    }
+    if (out_prec < 53) out_prec = 53;
+    mpfr_prec_t wp = out_prec + 64;                 /* guard bits */
+
+    mpfr_t nv, mv, g1, g2, g3, den;
+    mpfr_inits2(wp, nv, mv, g1, g2, g3, den, (mpfr_ptr)0);
+    if (!binomial_set_mpfr(nv, arg_n) || !binomial_set_mpfr(mv, arg_m)) {
+        mpfr_clears(nv, mv, g1, g2, g3, den, (mpfr_ptr)0);
+        return NULL;
+    }
+    mpfr_add_ui(g1, nv, 1, MPFR_RNDN);  mpfr_gamma(g1, g1, MPFR_RNDN);   /* Gamma[n+1]   */
+    mpfr_add_ui(g2, mv, 1, MPFR_RNDN);  mpfr_gamma(g2, g2, MPFR_RNDN);   /* Gamma[m+1]   */
+    mpfr_sub(g3, nv, mv, MPFR_RNDN);
+    mpfr_add_ui(g3, g3, 1, MPFR_RNDN);  mpfr_gamma(g3, g3, MPFR_RNDN);   /* Gamma[n-m+1] */
+    mpfr_mul(den, g2, g3, MPFR_RNDN);
+
+    Expr* out = expr_new_mpfr_bits(out_prec);
+    mpfr_div(out->data.mpfr, g1, den, MPFR_RNDN);
+    mpfr_clears(nv, mv, g1, g2, g3, den, (mpfr_ptr)0);
+
+    if (mpfr_nan_p(out->data.mpfr) || mpfr_inf_p(out->data.mpfr)) {
+        expr_free(out);
+        return NULL;
+    }
+    return out;
+}
+#endif /* USE_MPFR */
+
+/* True for an inexact real leaf (machine or MPFR). */
+static bool binomial_is_inexact(const Expr* e) {
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    return false;
+}
+
+/* True when e is a Complex[..] value carrying at least one inexact part --
+ * i.e. a numeric complex produced by N[..], as opposed to an exact Gaussian
+ * like 1 + I. */
+static bool binomial_inexact_complex(Expr* e) {
+    Expr *re, *im;
+    if (is_complex(e, &re, &im)) {
+        return binomial_is_inexact(re) || binomial_is_inexact(im);
+    }
+    return false;
+}
+
+/* True for any Complex[..] operand, exact (1 + I) or inexact (2. + I). */
+static bool binomial_is_complex(Expr* e) {
+    Expr *re, *im;
+    return is_complex(e, &re, &im);
+}
+
+/* True for an operand that makes the whole Binomial a numeric computation: an
+ * inexact real (machine or MPFR) or a Complex[..] carrying an inexact part.
+ * When either operand forces numeric AND a complex operand is present, the
+ * generalised binomial is evaluated through the Gamma quotient (path 6) -- an
+ * exact Gaussian sibling (1 + I) is then carried along by the Times/Plus
+ * numeric contagion, so Binomial[1 + I, 5.] evaluates rather than falling
+ * through to symbolic. */
+static bool binomial_forces_numeric(Expr* e) {
+    return binomial_is_inexact(e) || binomial_inexact_complex(e);
+}
+
+/* Build and evaluate  Gamma[n+1] / (Gamma[m+1] Gamma[n-m+1])  as an
+ * expression.  This reuses Gamma's complex kernels (machine Lanczos and, under
+ * USE_MPFR, the arbitrary-precision Spouge path) and the complex-arithmetic
+ * folders rather than reimplementing complex Gamma here.  Returns the
+ * evaluated expression; the caller checks it is actually numeric before
+ * accepting it (a pole or a still-symbolic operand leaves an unevaluated
+ * Gamma, which is rejected). */
+static Expr* binomial_gamma_quotient(Expr* n, Expr* m) {
+    Expr* np1 = expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_copy(n), expr_new_integer(1) }, 2);
+    Expr* mp1 = expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_copy(m), expr_new_integer(1) }, 2);
+    Expr* negm = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ expr_new_integer(-1), expr_copy(m) }, 2);
+    Expr* nmm1 = expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_copy(n), negm, expr_new_integer(1) }, 3);
+
+    Expr* gn  = expr_new_function(expr_new_symbol(SYM_Gamma), &np1,  1);
+    Expr* gm  = expr_new_function(expr_new_symbol(SYM_Gamma), &mp1,  1);
+    Expr* gnm = expr_new_function(expr_new_symbol(SYM_Gamma), &nmm1, 1);
+
+    Expr* inv_gm  = expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ gm,  expr_new_integer(-1) }, 2);
+    Expr* inv_gnm = expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ gnm, expr_new_integer(-1) }, 2);
+
+    Expr* quotient = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ gn, inv_gm, inv_gnm }, 3);
+    return eval_and_free(quotient);
+}
+
 /* Binomial[n, m] -- generalised binomial coefficient
  *
  *     Binomial[n, m] = Gamma[n+1] / (Gamma[m+1] * Gamma[n - m + 1])
@@ -94,7 +249,13 @@ static Expr* binomial_polynomial(Expr* n, int64_t k) {
  *      Binomial[n, m] as a falling-factorial polynomial.  Handles
  *      Binomial[n, 4] -> n(n-1)(n-2)(n-3)/24 and lets the Times/Plus
  *      folders simplify complex / rational n (Binomial[1+I, 5]
- *      -> -1/12 - I/12). */
+ *      -> -1/12 - I/12).
+ *   5. Arbitrary-precision real (MPFR) operand: the Gamma quotient in MPFR,
+ *      so N[Binomial[7/3, 1/5], p] evaluates while the exact form stays
+ *      symbolic.
+ *   6. Complex numeric operand (a Complex[..] with an inexact part): the
+ *      Gamma quotient evaluated as an expression, reusing Gamma's complex
+ *      kernels -- N[Binomial[1/2 + I/3, 1/4]]. */
 Expr* builtin_binomial(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* arg_n = res->data.function.args[0];
@@ -141,15 +302,16 @@ Expr* builtin_binomial(Expr* res) {
         return out;
     }
 
-    /* --- (2) machine real path via tgamma. --- */
+    /* --- (2) machine real path via tgamma.  Fires when either operand is a
+     * machine real; the other may be any real-numeric leaf (integer, bigint,
+     * rational, MPFR).  If an operand is symbolic/complex the path declines --
+     * so Binomial[2.5, 1/5] evaluates numerically but Binomial[2.5, x] is left
+     * symbolic, rather than both reading the sibling as 0. --- */
     if (arg_n->type == EXPR_REAL || arg_m->type == EXPR_REAL) {
-        double nv = (arg_n->type == EXPR_REAL)    ? arg_n->data.real :
-                    (arg_n->type == EXPR_INTEGER) ? (double)arg_n->data.integer :
-                    (arg_n->type == EXPR_BIGINT)  ? mpz_get_d(arg_n->data.bigint) : 0.0;
-        double mv = (arg_m->type == EXPR_REAL)    ? arg_m->data.real :
-                    (arg_m->type == EXPR_INTEGER) ? (double)arg_m->data.integer :
-                    (arg_m->type == EXPR_BIGINT)  ? mpz_get_d(arg_m->data.bigint) : 0.0;
-        return expr_new_real(tgamma(nv + 1.0) / (tgamma(mv + 1.0) * tgamma(nv - mv + 1.0)));
+        double nv, mv;
+        if (binomial_to_double(arg_n, &nv) && binomial_to_double(arg_m, &mv)) {
+            return expr_new_real(tgamma(nv + 1.0) / (tgamma(mv + 1.0) * tgamma(nv - mv + 1.0)));
+        }
     }
 
     /* --- (3) symmetric identity: reduce when n - m is a small non-neg int.
@@ -182,6 +344,34 @@ Expr* builtin_binomial(Expr* res) {
     if (arg_m->type == EXPR_INTEGER && arg_m->data.integer >= 0 &&
         arg_m->data.integer <= 32) {
         return binomial_polynomial(arg_n, arg_m->data.integer);
+    }
+
+#ifdef USE_MPFR
+    /* --- (5) arbitrary-precision real path via the Gamma quotient.  Placed
+     * after (3)/(4) so an integer m keeps the exact falling-factorial form;
+     * fires for N[Binomial[7/3, 1/5], prec] where both operands are MPFR. --- */
+    if (arg_n->type == EXPR_MPFR || arg_m->type == EXPR_MPFR) {
+        Expr* out = binomial_mpfr(arg_n, arg_m);
+        if (out) return out;
+    }
+#endif
+
+    /* --- (6) complex numeric path.  Fires when the computation is numeric --
+     * an inexact operand is present (machine real 5., MPFR, or a Complex with
+     * an inexact part) -- AND a complex operand is present, so the real-only
+     * machine path (2) has already declined.  Evaluates the Gamma quotient,
+     * reusing Gamma's machine-Lanczos / MPFR-Spouge complex kernels; any exact
+     * complex operand (1 + I, 7 - 3 I) is numericalised by the Times/Plus
+     * numeric contagion as the quotient folds.  So Binomial[1 + I, 5.] and
+     * Binomial[2. + I, 7 - 3 I] both evaluate, while an exact Gaussian pair
+     * (Binomial[1 + I, 2 + I]) has no inexact operand and stays symbolic.
+     * Accepts the result only if it is numeric, so a pole or a symbolic
+     * operand leaves Binomial symbolic. --- */
+    if ((binomial_forces_numeric(arg_n) || binomial_forces_numeric(arg_m)) &&
+        (binomial_is_complex(arg_n) || binomial_is_complex(arg_m))) {
+        Expr* val = binomial_gamma_quotient(arg_n, arg_m);
+        if (val && expr_is_numeric_like(val)) return val;
+        expr_free(val);
     }
 
     return NULL;

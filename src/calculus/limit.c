@@ -44,6 +44,9 @@
                           * internal probes would otherwise emit while poking
                           * at candidate sub-expressions. */
 #include "sym_names.h"
+#include "simp.h"         /* AssumeCtx + assume_known_* : assumption-aware
+                          * parameter sign/magnitude reasoning (Limit[x^n, ...,
+                          * Assumptions -> n > 0], ambient Assuming[]/$Assumptions) */
 #include "gruntz.h"       /* Gruntz mrv-algorithm limit engine (layer_gruntz) */
 #include "limit_osc.h"    /* oscillatory normal form (layer_oscillatory)     */
 /* Note: Series and D are invoked symbolically (through the evaluator),
@@ -131,6 +134,9 @@ typedef struct {
     int   dir;     /* one of LIMIT_DIR_* */
     int   depth;   /* recursion depth guard */
     int   method;  /* one of LIMIT_M_*; enforced only at depth==1 */
+    const AssumeCtx* assume;  /* borrowed; NULL when no informative
+                              * assumption. Propagates for free through the
+                              * `LimitCtx sub = *ctx` copies every layer makes. */
 } LimitCtx;
 
 /* ---------------------------------------------------------------------- */
@@ -340,6 +346,7 @@ static Expr* magnitude_upper_bound(Expr* e, Expr* x, bool var_abs);
 static bool  contains_bounded_head(Expr* e);
 static bool  contains_head_symbol(Expr* e, const char* head_sym);
 static Expr* layer_maxmin_bounded(Expr* f, LimitCtx* ctx);
+static Expr* layer_param_power(Expr* f, LimitCtx* ctx);
 #define LIMIT_UNKNOWN_GROWTH INT64_MAX
 static int64_t growth_exponent_upper(Expr* e, Expr* x);
 
@@ -780,6 +787,91 @@ static int literal_sign(Expr* e) {
     return 0;
 }
 
+/* Assumption-aware sign oracle. Falls back to the numeric `literal_sign`
+ * first (so a NULL ctx reproduces it byte-for-byte), then consults the
+ * assumption fact set for the symbolic cases it leaves at 0:
+ *   - a bare symbol or general expression whose sign a fact pins
+ *     (Limit[c x, ..., Assumptions -> c > 0]);
+ *   - Log[b], whose sign is Sign[b - 1] (Limit[x Log[a], ..., a > 1]) -- this
+ *     is exactly the shape layer5_log_reduction leaves behind for a^x;
+ *   - Times / Plus, recursively, so a product/sum with one assumption-signed
+ *     factor is decided (-c with c>0, c x^2 + x with c<0).
+ * Sound: every arm only fires on an entailed fact. */
+static int literal_sign_ctx(Expr* e, const AssumeCtx* ctx) {
+    int s = literal_sign(e);
+    if (s != 0 || !ctx || !e) return s;
+
+    /* Times: product of the ctx-aware signs of every factor. */
+    if (head_is(e, SYM_Times) && e->data.function.arg_count > 0) {
+        int prod = 1;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            int sf = literal_sign_ctx(e->data.function.args[i], ctx);
+            if (sf == 0) { prod = 0; break; }
+            prod *= sf;
+        }
+        if (prod != 0) return prod;
+    }
+    /* Plus: decidable only when every summand shares one nonzero sign. */
+    if (head_is(e, SYM_Plus) && e->data.function.arg_count > 0) {
+        int common = 0;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            int sf = literal_sign_ctx(e->data.function.args[i], ctx);
+            if (sf == 0) { common = 0; break; }
+            if (common == 0) common = sf;
+            else if (common != sf) { common = 0; break; }
+        }
+        if (common != 0) return common;
+    }
+    /* Log[b]: sign follows b vs 1. */
+    if (head_is(e, SYM_Log) && e->data.function.arg_count == 1) {
+        Expr* b = e->data.function.args[0];
+        Expr* one = expr_new_integer(1);
+        int r = 0;
+        if (assume_known_gt(ctx, b, one)) r = +1;
+        else if (assume_known_positive(ctx, b) && assume_known_lt(ctx, b, one)) r = -1;
+        expr_free(one);
+        if (r != 0) return r;
+    }
+    /* Bare symbol / general expression: sign pinned directly by a fact. */
+    if (assume_known_positive(ctx, e)) return +1;
+    if (assume_known_negative(ctx, e)) return -1;
+    return 0;
+}
+
+/* If `t` is the negation Times[-1, mag] of a single magnitude, return `mag`
+ * (borrowed from `t`); otherwise NULL. Used to read an exponent difference
+ * A - B written as Plus[A, Times[-1, B]]. */
+static Expr* neg_term_magnitude(Expr* t) {
+    if (!head_is(t, SYM_Times) || t->data.function.arg_count != 2) return NULL;
+    Expr* c0 = t->data.function.args[0];
+    if (c0->type == EXPR_INTEGER && c0->data.integer == -1)
+        return t->data.function.args[1];
+    return NULL;
+}
+
+/* Sign of an exponent expression under ctx. Extends literal_sign_ctx with a
+ * two-term difference arm A - B (parsed as Plus[A, Times[-1, B]] or the
+ * reverse), decided via a direct A > B / B > A ordering fact -- this is what
+ * ranks x^n against x^m once n^m simplifies to the single power x^(n-m). */
+static int exponent_sign_ctx(Expr* e, const AssumeCtx* ctx) {
+    int s = literal_sign_ctx(e, ctx);
+    if (s != 0 || !ctx) return s;
+    if (head_is(e, SYM_Plus) && e->data.function.arg_count == 2) {
+        Expr* a0 = e->data.function.args[0];
+        Expr* a1 = e->data.function.args[1];
+        Expr* mag0 = neg_term_magnitude(a0);   /* a0 == -mag0 */
+        Expr* mag1 = neg_term_magnitude(a1);   /* a1 == -mag1 */
+        if (!mag0 && mag1) {                    /* A - B, A=a0, B=mag1 */
+            if (assume_known_gt_expr(ctx, a0, mag1)) return +1;
+            if (assume_known_gt_expr(ctx, mag1, a0)) return -1;
+        } else if (mag0 && !mag1) {             /* -A + B = B - A */
+            if (assume_known_gt_expr(ctx, a1, mag0)) return +1;
+            if (assume_known_gt_expr(ctx, mag0, a1)) return -1;
+        }
+    }
+    return 0;
+}
+
 /* Produce +Infinity or -Infinity from a sign. */
 static Expr* signed_infinity(int sign) {
     if (sign >= 0) return mk_sym("Infinity");
@@ -1156,7 +1248,7 @@ static Expr* read_leading_term_limit(Expr* s, LimitCtx* ctx) {
          * For 0-, multiply by (-1)^leading_num (when integer); if the
          * exponent has a nontrivial denominator the side is complex and
          * we only answer if the direction is FromAbove. */
-        int coef_sign = literal_sign(leading_coef);
+        int coef_sign = literal_sign_ctx(leading_coef, ctx->assume);
         if (coef_sign == 0) {
             /* Unknown sign -- only meaningful when the coefficient is a
              * pure constant (no residual limit variable). If x survived
@@ -1274,7 +1366,7 @@ static Expr* layer2_series(Expr* f, LimitCtx* ctx) {
             (Expr*[]){ expr_copy(x_use), expr_copy(x0_use), mk_int(k) }, 3);
         Expr* call = mk_fn2("Series", expr_copy(f_use), spec);
         Expr* s    = simp(call);
-        LimitCtx leaf = { x_use, x0_use, effective_dir, ctx->depth, ctx->method };
+        LimitCtx leaf = { x_use, x0_use, effective_dir, ctx->depth, ctx->method, ctx->assume };
         result = read_leading_term_limit(s, &leaf);
         /* A genuine limit value is free of the expansion variable. If the
          * leading-term reader handed back something that still depends on it
@@ -1373,8 +1465,8 @@ static Expr* layer3_rational(Expr* f, LimitCtx* ctx) {
             Expr* ln = poly_leading_coeff(num, ctx->x);
             Expr* ld = poly_leading_coeff(den, ctx->x);
             if (!ln || !ld) { if (ln) expr_free(ln); if (ld) expr_free(ld); goto done; }
-            int sn = literal_sign(ln);
-            int sd = literal_sign(ld);
+            int sn = literal_sign_ctx(ln, ctx->assume);
+            int sd = literal_sign_ctx(ld, ctx->assume);
             int parity = 1;
             if (is_neg_infinity(ctx->point)) {
                 /* As x -> -infty, sign of x^(dn-dd) depends on parity of dn-dd. */
@@ -2487,9 +2579,55 @@ static Expr* layer_atom_substitute(Expr* f, LimitCtx* ctx) {
      * (e.g. Infinity or 0) driven by the direction on x, but once we're
      * asking for Limit in u the approach is along the real line of u
      * itself. */
-    LimitCtx sub2 = { u_sym, atom_lim, LIMIT_DIR_TWOSIDED, ctx->depth, ctx->method };
+    LimitCtx sub2 = { u_sym, atom_lim, LIMIT_DIR_TWOSIDED, ctx->depth, ctx->method, ctx->assume };
     Expr* result = compute_limit(f_sub, &sub2);
     expr_free(f_sub); expr_free(u_sym); expr_free(atom_lim);
+    return result;
+}
+
+/* Find a Power[x, a] atom -- x in the base, a free of x and provably positive
+ * under the assumptions, so x^a -> +Infinity. The mirror of find_mrv_power
+ * (which wants x in the exponent). */
+static Expr* find_positive_param_power(Expr* e, Expr* x, const AssumeCtx* assume) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp  = e->data.function.args[1];
+        if (expr_eq(base, x) && free_of(exp, x) &&
+            assume_known_positive(assume, exp))
+            return e;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        Expr* r = find_positive_param_power(e->data.function.args[i], x, assume);
+        if (r) return r;
+    }
+    return NULL;
+}
+
+/* Limit at x -> +Infinity of a function built from a single divergent
+ * parametric monomial x^a (a > 0 known): substitute t = x^a, which -> +Infinity,
+ * and recurse -- x^a/(x^a + 1) -> t/(t + 1) -> 1. The substitution is a valid
+ * change of variable because x^a is increasing to +Infinity for a > 0; it is
+ * sound only when x occurs nowhere outside the atom, which is exactly the
+ * condition that the substituted body is free of x. Assumption-gated, so it is
+ * inert on the legacy (no-assumption) path. */
+static Expr* layer_param_monomial_substitute(Expr* f, LimitCtx* ctx) {
+    if (!ctx->assume) return NULL;
+    if (!is_infinity_sym(ctx->point)) return NULL;
+    Expr* atom = find_positive_param_power(f, ctx->x, ctx->assume);
+    if (!atom) return NULL;
+
+    Expr* u_sym = mk_sym("$LimitAtomU$");
+    Expr* f_sub = subst_eval(f, atom, u_sym);
+    if (!f_sub || expr_contains(f_sub, ctx->x)) {
+        if (f_sub) expr_free(f_sub);
+        expr_free(u_sym);
+        return NULL;
+    }
+    Expr* inf = mk_sym("Infinity");
+    LimitCtx sub = { u_sym, inf, LIMIT_DIR_TWOSIDED, ctx->depth + 1, ctx->method, ctx->assume };
+    Expr* result = compute_limit(f_sub, &sub);
+    expr_free(f_sub); expr_free(u_sym); expr_free(inf);
     return result;
 }
 
@@ -2564,7 +2702,7 @@ static int sign_at_finite_zero(Expr* g, LimitCtx* ctx) {
  * to 0 (undetermined) when the inner limit cannot be resolved or the
  * value still depends on x. */
 static int sign_via_inner_limit(Expr* g, LimitCtx* ctx) {
-    LimitCtx sub = { ctx->x, ctx->point, ctx->dir, ctx->depth, ctx->method };
+    LimitCtx sub = { ctx->x, ctx->point, ctx->dir, ctx->depth, ctx->method, ctx->assume };
     Expr* g_lim = compute_limit(g, &sub);
     if (!g_lim) return 0;
     int sgn = 0;
@@ -2674,7 +2812,7 @@ static Expr* layer_abs_rewrite(Expr* f, LimitCtx* ctx) {
      * intermediate -g that the rest of the pipeline cannot simplify. */
     if (head_is(f, SYM_Abs) && f->data.function.arg_count == 1 &&
         expr_contains(f->data.function.args[0], ctx->x)) {
-        LimitCtx sub = { ctx->x, ctx->point, ctx->dir, ctx->depth, ctx->method };
+        LimitCtx sub = { ctx->x, ctx->point, ctx->dir, ctx->depth, ctx->method, ctx->assume };
         Expr* g_lim = compute_limit(f->data.function.args[0], &sub);
         if (g_lim) {
             if (is_infinity_sym(g_lim) || is_neg_infinity(g_lim) ||
@@ -2714,8 +2852,8 @@ static Expr* layer_abs_rewrite(Expr* f, LimitCtx* ctx) {
      * don't reroute every two-sided limit through the disagree pair. */
     if (ctx->dir == LIMIT_DIR_TWOSIDED || ctx->dir == LIMIT_DIR_REALS) {
         if (ctx->depth > LIMIT_MAX_DEPTH - 4) return NULL;
-        LimitCtx left  = { ctx->x, ctx->point, LIMIT_DIR_FROMBELOW, ctx->depth, ctx->method };
-        LimitCtx right = { ctx->x, ctx->point, LIMIT_DIR_FROMABOVE, ctx->depth, ctx->method };
+        LimitCtx left  = { ctx->x, ctx->point, LIMIT_DIR_FROMBELOW, ctx->depth, ctx->method, ctx->assume };
+        LimitCtx right = { ctx->x, ctx->point, LIMIT_DIR_FROMABOVE, ctx->depth, ctx->method, ctx->assume };
         Expr* L = compute_limit(f, &left);
         if (!L) return NULL;
         if (expr_contains(L, ctx->x) || is_indeterminate(L)) {
@@ -2754,8 +2892,8 @@ static Expr* layer_onesided_disagree(Expr* f, LimitCtx* ctx) {
      * direction, so the early dir!=TWOSIDED check above prevents re-entry. */
     if (ctx->depth > 3) return NULL;
 
-    LimitCtx left  = { ctx->x, ctx->point, LIMIT_DIR_FROMBELOW, ctx->depth, ctx->method };
-    LimitCtx right = { ctx->x, ctx->point, LIMIT_DIR_FROMABOVE, ctx->depth, ctx->method };
+    LimitCtx left  = { ctx->x, ctx->point, LIMIT_DIR_FROMBELOW, ctx->depth, ctx->method, ctx->assume };
+    LimitCtx right = { ctx->x, ctx->point, LIMIT_DIR_FROMABOVE, ctx->depth, ctx->method, ctx->assume };
 
     Expr* L = compute_limit(f, &left);
     if (!L) return NULL;
@@ -2877,7 +3015,7 @@ static Expr* osc_at_finite_side(Expr* f, LimitCtx* ctx, int side) {
     expr_free(xsub);
 
     Expr* inf = mk_sym("Infinity");
-    LimitCtx sub = { t_sym, inf, LIMIT_DIR_TWOSIDED, ctx->depth, LIMIT_M_AUTOMATIC };
+    LimitCtx sub = { t_sym, inf, LIMIT_DIR_TWOSIDED, ctx->depth, LIMIT_M_AUTOMATIC, ctx->assume };
     Expr* r = limit_oscillatory(g, t_sym, inf, osc_sublimit, &sub);
     expr_free(g);
     expr_free(inf);
@@ -2996,6 +3134,13 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
             if (r) { expr_free(f); ctx->depth--; return r; }     \
         } } while (0)
 
+    /* Assumption-parametrised power limits (x^n with Sign[n] known, a^x with
+     * |a| vs 1 known). Runs first: it only fires when an assumption is in
+     * scope and f is exactly a power, and it must pre-empt the continuous-
+     * substitution fast path, which would otherwise return the useless husk
+     * 0^n for x^n at x -> 0. Inert (NULL) when no assumption is present. */
+    TRY(LIMIT_M_SUBSTITUTION, layer_param_power(f, ctx));
+
     /* Layer 1: structural fast paths, including continuous substitution. */
     TRY(LIMIT_M_SUBSTITUTION, layer1_fast_paths(f, ctx));
 
@@ -3078,6 +3223,10 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
      * hits the essential singularity but the ratio is polynomial-in-u. */
     TRY(LIMIT_M_SUBSTITUTION, layer_atom_substitute(f, ctx));
 
+    /* Function of a single divergent parametric monomial x^a (a > 0), e.g.
+     * x^a/(x^a + 1) -> 1, via the t = x^a substitution. Assumption-gated. */
+    TRY(LIMIT_M_SUBSTITUTION, layer_param_monomial_substitute(f, ctx));
+
     /* Constant-factor linearity: Limit[c f, x->a] = c Limit[f, x->a]. Runs
      * late so it only rescues shapes the analytic layers left unresolved
      * (e.g. 2 ArcTan[g] where compose-at-infinity can't see through the
@@ -3125,6 +3274,41 @@ static Expr* find_assumptions_opt(Expr** opts, size_t nopts) {
         }
     }
     return NULL;
+}
+
+/* Build the effective AssumeCtx for a Limit call, mirroring how PossibleZeroQ
+ * and Simplify gather assumptions. The Assumptions option (when present and
+ * not Automatic) overrides the ambient $Assumptions; otherwise the ambient
+ * assumptions -- set by an enclosing Assuming[...] or a direct $Assumptions
+ * assignment -- are used. The option value has already been evaluated by the
+ * time Limit runs (Limit is not a Hold* head), so it is copied, not
+ * re-evaluated.
+ *
+ * Returns NULL when there is no informative assumption (True / Automatic /
+ * empty) or the fact set is inconsistent. In every NULL case Limit falls
+ * through to the assumption-free machinery, so a NULL ctx reproduces today's
+ * behaviour byte-for-byte. The caller owns the result (assume_ctx_free). */
+static AssumeCtx* limit_effective_assumptions(Expr** opts, size_t nopts) {
+    Expr* opt = find_assumptions_opt(opts, nopts);   /* borrowed */
+    Expr* effective;
+    if (opt && !is_sym(opt, "Automatic")) {
+        effective = expr_copy(opt);
+    } else {
+        effective = read_dollar_assumptions();       /* owned; True when unset */
+    }
+    if (!effective) return NULL;
+    if (is_sym(effective, "True") || is_sym(effective, "Automatic")) {
+        expr_free(effective);
+        return NULL;
+    }
+    AssumeCtx* ctx = assume_ctx_from_expr(effective);
+    expr_free(effective);
+    if (!ctx) return NULL;
+    if (ctx->inconsistent || ctx->count == 0) {
+        assume_ctx_free(ctx);
+        return NULL;
+    }
+    return ctx;
 }
 
 /* Parse an Abs-comparison assumption clause:
@@ -3279,6 +3463,83 @@ static Expr* limit_power_under_abs_assumption(Expr* f, Expr* lim_var,
     return mk_sym("Indeterminate");                /* boundary |B|==1 */
 }
 
+/* Dispatch Limit[Power[base, var], var -> ±Infinity] for a REAL base whose
+ * magnitude relative to 1 is pinned by assumptions. Distinct from the
+ * Abs[base] R c dispatch above: a base known to be a real number > 1 gives a
+ * real +Infinity (not ComplexInfinity -- the phase is known), and a base in
+ * (0, 1) gives 0. Returns NULL when the base's real magnitude is undetermined.
+ *
+ *   var -> +Infinity:  base > 1 -> Infinity,  0 < base < 1 -> 0
+ *   var -> -Infinity:  inverted.
+ */
+static Expr* limit_real_base_power(Expr* f, Expr* lim_var, Expr* point,
+                                   const AssumeCtx* actx) {
+    if (!actx) return NULL;
+    Expr* base = NULL;
+    if (!match_power_in_var(f, lim_var, &base)) return NULL;
+    bool to_pos = is_infinity_sym(point);
+    bool to_neg = is_neg_infinity(point);
+    if (!to_pos && !to_neg) return NULL;
+
+    Expr* one = mk_int(1);
+    int mag = 0;                       /* +1: base>1 ; -1: 0<base<1 ; 0: n/a */
+    if (assume_known_gt(actx, base, one)) mag = +1;
+    else if (assume_known_positive(actx, base) && assume_known_lt(actx, base, one)) mag = -1;
+    expr_free(one);
+    if (mag == 0) return NULL;
+
+    bool blows_up = (mag == +1);       /* magnitude grows at +Infinity */
+    if (to_neg) blows_up = !blows_up;
+    return blows_up ? mk_sym("Infinity") : mk_int(0);
+}
+
+/* Dispatch Limit[Power[var, exp], var -> {±Infinity, 0}] with exp free of var
+ * and its sign pinned by assumptions. exp may be a bare symbol (n > 0), a
+ * domain-constrained symbol (Element[n, PositiveIntegers]), or a two-term
+ * difference n - m carried by an ordering fact (from x^n / x^m).
+ *
+ *   var -> +Infinity:            exp > 0 -> Infinity, exp < 0 -> 0
+ *   var -> 0, Direction FromAbove: exp > 0 -> 0,      exp < 0 -> Infinity
+ *   var -> -Infinity:            only when exp is a known even integer
+ *                                (exp > 0 -> Infinity); otherwise the negative
+ *                                base makes the value complex -> bail (sound).
+ */
+static Expr* limit_var_power(Expr* f, Expr* lim_var, Expr* point, int dir,
+                             const AssumeCtx* actx) {
+    if (!actx) return NULL;
+    if (!head_is(f, SYM_Power) || f->data.function.arg_count != 2) return NULL;
+    Expr* b   = f->data.function.args[0];
+    Expr* exp = f->data.function.args[1];
+    if (!expr_eq(b, lim_var)) return NULL;
+    if (!free_of(exp, lim_var)) return NULL;
+
+    int es = exponent_sign_ctx(exp, actx);
+    if (es == 0) return NULL;
+
+    if (is_infinity_sym(point)) {
+        return (es > 0) ? mk_sym("Infinity") : mk_int(0);
+    }
+    if (is_lit_zero(point) && dir == LIMIT_DIR_FROMABOVE) {
+        return (es > 0) ? mk_int(0) : mk_sym("Infinity");
+    }
+    if (is_neg_infinity(point)) {
+        if (es > 0 && assume_known_even(actx, exp)) return mk_sym("Infinity");
+        return NULL;
+    }
+    return NULL;
+}
+
+/* Cascade layer wrapping the two assumption-parametrised power dispatches so
+ * they run for recursive sub-limits too (e.g. the 1/x^p the bounded envelope
+ * hands back for Sin[x]/x^p), not only at the top level. Inert without an
+ * assumption in scope. */
+static Expr* layer_param_power(Expr* f, LimitCtx* ctx) {
+    if (!ctx->assume) return NULL;
+    Expr* r = limit_var_power(f, ctx->x, ctx->point, ctx->dir, ctx->assume);
+    if (r) return r;
+    return limit_real_base_power(f, ctx->x, ctx->point, ctx->assume);
+}
+
 /* Extract the `Direction -> ...` option (if any) from a list of option
  * arguments. Returns the raw option value (borrowed from opts) or NULL
  * when no Direction option was supplied. */
@@ -3314,14 +3575,15 @@ static Expr* find_method_opt(Expr** opts, size_t nopts) {
 
 /* Handle Limit[f, {x1 -> a1, ..., xn -> an}] by iterated right-to-left
  * folding: the innermost (rightmost) rule's Limit is computed first. */
-static Expr* run_iterated(Expr* f, Expr* rule_list, int dir, int method, int depth) {
+static Expr* run_iterated(Expr* f, Expr* rule_list, int dir, int method, int depth,
+                          const AssumeCtx* assume) {
     Expr* current = expr_copy(f);
     size_t n = rule_list->data.function.arg_count;
     for (size_t i = n; i-- > 0; ) {
         Expr* rule = rule_list->data.function.args[i];
         Expr *var, *point;
         if (!split_rule(rule, &var, &point)) { expr_free(current); return NULL; }
-        LimitCtx ctx = { var, point, dir, depth, method };
+        LimitCtx ctx = { var, point, dir, depth, method, assume };
         Expr* next = compute_limit(current, &ctx);
         expr_free(current);
         if (!next) return NULL;
@@ -3359,7 +3621,8 @@ static bool all_points_are(Expr* points, int kind) {
  * NULL if the inner limit cannot be resolved. */
 static Expr* limit_r_fromabove(Expr* f_polar, Expr* r_sym, int kind) {
     Expr* point = (kind == 0) ? mk_int(0) : mk_sym("Infinity");
-    LimitCtx sub = { r_sym, point, LIMIT_DIR_FROMABOVE, 0, LIMIT_M_AUTOMATIC };
+    /* Multivariate/polar path does not yet thread parameter assumptions. */
+    LimitCtx sub = { r_sym, point, LIMIT_DIR_FROMABOVE, 0, LIMIT_M_AUTOMATIC, NULL };
     Expr* res = compute_limit(f_polar, &sub);
     expr_free(point);
     return res;
@@ -3494,7 +3757,7 @@ static Expr* sample_joint_limit(Expr* f, Expr** vars, size_t n, int kind) {
         if (!skip) {
             Expr* f_path = subst_all(f, vars, values, n);
             Expr* point = (kind == 0) ? mk_int(0) : mk_sym("Infinity");
-            LimitCtx sub = { t_sym, point, LIMIT_DIR_FROMABOVE, 0, LIMIT_M_AUTOMATIC };
+            LimitCtx sub = { t_sym, point, LIMIT_DIR_FROMABOVE, 0, LIMIT_M_AUTOMATIC, NULL };
             Expr* v = compute_limit(f_path, &sub);
             expr_free(point);
             expr_free(f_path);
@@ -3856,19 +4119,25 @@ static Expr* builtin_limit_impl(Expr* res) {
         return NULL;
     }
 
-    /* Targeted Assumptions support: Limit[Power[B, var], var -> ±Infinity,
-     * Assumptions -> Abs[B] R c]. The standard Limit machinery doesn't
-     * carry assumption context, so we dispatch this specific (but useful)
-     * shape here before the general pipeline. Falls through to the
-     * standard machinery on no-match. */
-    Expr* assumptions_opt = find_assumptions_opt(opts, nopts);
-    if (assumptions_opt && head_is(spec, SYM_Rule) &&
-        spec->data.function.arg_count == 2) {
-        Expr* lvar  = spec->data.function.args[0];
-        Expr* lpoint = spec->data.function.args[1];
-        Expr* dispatched = limit_power_under_abs_assumption(f, lvar, lpoint,
-                                                            assumptions_opt);
-        if (dispatched) return dispatched;
+    /* Effective assumptions: the Assumptions option overrides an ambient
+     * Assuming[]/$Assumptions; NULL means "no informative assumption" and
+     * reproduces the legacy path. Built once and threaded through the whole
+     * cascade via LimitCtx.assume; freed at the single cleanup exit below. */
+    AssumeCtx* actx = limit_effective_assumptions(opts, nopts);
+    Expr* out = NULL;
+
+    /* Abs[B] R c option form -> 0 / ComplexInfinity / Indeterminate. This one
+     * reads the raw option (not the AssumeCtx) and stays a pre-pass; the ctx-
+     * based power dispatches (x^n, a^x) run inside compute_limit as
+     * layer_param_power so recursive sub-limits reach them too. */
+    if (head_is(spec, SYM_Rule) && spec->data.function.arg_count == 2) {
+        Expr* assumptions_opt = find_assumptions_opt(opts, nopts);
+        if (assumptions_opt) {
+            out = limit_power_under_abs_assumption(f, spec->data.function.args[0],
+                                                   spec->data.function.args[1],
+                                                   assumptions_opt);
+            if (out) goto cleanup;
+        }
     }
 
     /* --- Form A: Limit[f, x -> a]
@@ -3876,11 +4145,12 @@ static Expr* builtin_limit_impl(Expr* res) {
     if (head_is(spec, SYM_Rule) && spec->data.function.arg_count == 2) {
         if (head_is(spec->data.function.args[0], SYM_List) &&
             head_is(spec->data.function.args[1], SYM_List)) {
-            return run_multivariate(f, spec->data.function.args[0],
-                                       spec->data.function.args[1]);
+            out = run_multivariate(f, spec->data.function.args[0],
+                                      spec->data.function.args[1]);
+            goto cleanup;
         }
         Expr *var = NULL, *point = NULL;
-        if (!split_rule(spec, &var, &point)) return NULL;
+        if (!split_rule(spec, &var, &point)) goto cleanup;
         /* Compute the base (principal-branch) limit first. The complex
          * directions (LIMIT_DIR_IMAGINARY, LIMIT_DIR_COMPLEX) are
          * routed through LIMIT_DIR_TWOSIDED for the analytic layers --
@@ -3890,9 +4160,9 @@ static Expr* builtin_limit_impl(Expr* res) {
         if (inner_dir == LIMIT_DIR_IMAGINARY || inner_dir == LIMIT_DIR_COMPLEX) {
             inner_dir = LIMIT_DIR_TWOSIDED;
         }
-        LimitCtx ctx = { var, point, inner_dir, 0, method };
+        LimitCtx ctx = { var, point, inner_dir, 0, method, actx };
         Expr* base = compute_limit(f, &ctx);
-        if (!base) return NULL;
+        if (!base) goto cleanup;
 
         /* Branch-cut post-pass:
          *   Direction -> I        flips the imaginary part (the "other"
@@ -3904,9 +4174,9 @@ static Expr* builtin_limit_impl(Expr* res) {
          *                         the branch cut). Poles continue to
          *                         return ComplexInfinity via Layer 2. */
         if (dir == LIMIT_DIR_IMAGINARY && contains_imaginary_unit(base)) {
-            Expr* flipped = conjugate_imaginary(base);
+            out = conjugate_imaginary(base);
             expr_free(base);
-            return flipped;
+            goto cleanup;
         }
         if (dir == LIMIT_DIR_COMPLEX) {
             /* Radial approach interpretation: any pole is ComplexInfinity
@@ -3916,27 +4186,33 @@ static Expr* builtin_limit_impl(Expr* res) {
              * complex approach direction). */
             if (is_infinity_sym(base) || is_neg_infinity(base)) {
                 expr_free(base);
-                return mk_sym("ComplexInfinity");
+                out = mk_sym("ComplexInfinity");
+                goto cleanup;
             }
             if (contains_imaginary_unit(base) && !is_complex_infinity(base)) {
                 expr_free(base);
-                return mk_sym("Indeterminate");
+                out = mk_sym("Indeterminate");
+                goto cleanup;
             }
         }
-        return base;
+        out = base;
+        goto cleanup;
     }
 
     /* --- Form B: Limit[f, {x1 -> a1, ..., xn -> an}] iterated --- */
     if (head_is(spec, SYM_List)) {
         size_t n = spec->data.function.arg_count;
-        if (n == 0) return NULL;
+        if (n == 0) goto cleanup;
         for (size_t i = 0; i < n; i++) {
-            if (!head_is(spec->data.function.args[i], SYM_Rule)) return NULL;
+            if (!head_is(spec->data.function.args[i], SYM_Rule)) goto cleanup;
         }
-        return run_iterated(f, spec, dir, method, 0);
+        out = run_iterated(f, spec, dir, method, 0, actx);
+        goto cleanup;
     }
 
-    return NULL;
+cleanup:
+    assume_ctx_free(actx);
+    return out;
 }
 
 /* Public entry point. Wraps the implementation with the arithmetic-warning
@@ -4044,6 +4320,13 @@ void limit_init(void) {
         "\t  \"Gruntz\"           -- Gruntz mrv algorithm for exp-log towers\n"
         "\tA named method leaves Limit unevaluated when it does not apply.\n"
         "\tEach method is also callable directly as Limit`m[f, x -> a].\n"
+        "Limit[f, x -> a, Assumptions -> assum]\n"
+        "\tuses the sign, magnitude, or domain of a symbolic parameter (also\n"
+        "\tread from an ambient Assuming[...] / $Assumptions; the option wins)\n"
+        "\tto decide otherwise-indeterminate parametric limits, e.g.\n"
+        "\tLimit[x^n, x -> Infinity, Assumptions -> n > 0] = Infinity and\n"
+        "\tLimit[a^x, x -> Infinity, Assumptions -> a > 1] = Infinity. With no\n"
+        "\tinformative assumption the result is the ordinary one.\n"
         "\n"
         "May return a finite value, Infinity, -Infinity, ComplexInfinity,\n"
         "Indeterminate, Interval[{lo, hi}], or the original unevaluated\n"

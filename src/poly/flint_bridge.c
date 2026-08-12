@@ -3282,7 +3282,10 @@ static int ga_find_or_add(GADetect* st, int is_rou, long q, Expr* base_exp) {
 /* Walk `e` collecting the algebraic generators and marking out-of-scope forms. */
 static void ga_walk(const Expr* e, GADetect* st) {
     if (st->bad || !e) return;
-    if (e->type == EXPR_REAL || e->type == EXPR_MPFR) { st->bad = 1; return; }
+    if (e->type == EXPR_REAL) { st->bad = 1; return; }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) { st->bad = 1; return; }
+#endif
     if (e->type != EXPR_FUNCTION) return;   /* integers / symbols / strings: fine */
     const char* h = fn_head_name(e);
     if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {

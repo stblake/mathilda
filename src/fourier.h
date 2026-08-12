@@ -27,6 +27,15 @@ Expr* builtin_inverse_fourier(Expr* res);
 Expr* builtin_fourier_dct(Expr* res);
 Expr* builtin_fourier_dst(Expr* res);
 
+/* Compile[] delegation entry points (COMPILE_MISSING.md §4). Given a rebuilt
+ * `Fourier[ndarray]` / `InverseFourier[ndarray]` call, transform the packed
+ * machine buffer and return a fresh NDT_COMPLEX64 NDArray, or NULL to decline.
+ * They always build a complex result (see fourier.c) so the answer matches the
+ * compiler's statically-typed CT_COMPLEX result register. FourierDCT/FourierDST
+ * are delegated to their builtins directly (real->real for real input). */
+Expr* fourier_compile(Expr* call);
+Expr* inverse_fourier_compile(Expr* call);
+
 void fourier_init(void);
 
 /* ---------------------------------------------------------------------------

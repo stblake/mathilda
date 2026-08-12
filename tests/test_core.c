@@ -127,6 +127,30 @@ void test_numberq(void) {
     }
 }
 
+void test_stringq(void) {
+    /* Strings -> True, including the empty string and numeric-looking text. */
+    assert_eval_eq("StringQ[\"AbC\"]", "True", 0);
+    assert_eval_eq("StringQ[\"\"]", "True", 0);
+    assert_eval_eq("StringQ[\"123\"]", "True", 0);
+
+    /* Non-strings -> False (never symbolic, never NULL). */
+    assert_eval_eq("StringQ[123]", "False", 0);
+    assert_eval_eq("StringQ[1.5]", "False", 0);
+    assert_eval_eq("StringQ[x]", "False", 0);
+    assert_eval_eq("StringQ[Pi]", "False", 0);
+
+    /* A list is not a string, and StringQ is not Listable, so it does not
+     * thread element-wise -- the whole list is classified as non-string. */
+    assert_eval_eq("StringQ[{\"a\", \"b\"}]", "False", 0);
+
+    /* The argument is evaluated before classification. */
+    assert_eval_eq("StringQ[If[True, \"yes\", 0]]", "True", 0);
+    assert_eval_eq("StringQ[If[False, \"yes\", 0]]", "False", 0);
+
+    /* Wrong arity: emit StringQ::argx on stderr and leave unevaluated. */
+    assert_eval_eq("StringQ[]", "StringQ[]", 0);
+}
+
 void test_atomq(void) {
     // Test case 1: AtomQ[x] -> True
     Expr* e1 = parse_expression("AtomQ[x]");
@@ -329,10 +353,26 @@ void test_quotient(void) {
     assert_eval_eq("Quotient[111/4, 5/4]", "22", 0);
     assert_eval_eq("Quotient[144.144, 11.12]", "12", 0);
 
-    // Complex test (rounds to nearest integer)
+    /* Complex arguments: Quotient is Gaussian-integer division, so it ROUNDS
+     * each part of the ratio to the nearest integer (ties to even, like Round[]),
+     * NOT Floor as the real path does. Matches Mathematica. Ratio 5.9 - 5.8 I. */
     char* s_complex = expr_to_string_fullform(eval_and_free(parse_expression("Quotient[17.5+6I, 1+2I]")));
     assert(strcmp(s_complex, "Complex[6, -6]") == 0);
     free(s_complex);
+
+    /* Regression guards for the round-vs-floor distinction (a prior change
+     * floored these, giving 1 - I, 1 and 2 + I). */
+    char* s_c2 = expr_to_string_fullform(eval_and_free(parse_expression("Quotient[10.4 + 8I, 4. + 5I]")));
+    assert(strcmp(s_c2, "2") == 0);                 /* ratio ~1.99 - 0.49 I -> 2 */
+    free(s_c2);
+    char* s_c3 = expr_to_string_fullform(eval_and_free(parse_expression("Quotient[5.5 + 1. I, 3.]")));
+    assert(strcmp(s_c3, "2") == 0);                 /* ratio 1.83 + 0.33 I -> 2 */
+    free(s_c3);
+    /* Ties-to-even specifically: ratio 2.5 + 1.5 I -> 2 + 2 I (both .5 round to
+     * the even 2). Plain round() (ties away from zero) would give 3 + 2 I. */
+    char* s_c4 = expr_to_string_fullform(eval_and_free(parse_expression("Quotient[5+3I, 2]")));
+    assert(strcmp(s_c4, "Complex[2, 2]") == 0);
+    free(s_c4);
 
     // 3-argument tests
     assert_eval_eq("Quotient[11, 3, 1]", "3", 0);
@@ -1230,6 +1270,7 @@ int main(void) {
 
     TEST(test_numberq);
     TEST(test_numericq);
+    TEST(test_stringq);
     TEST(test_atomq);
     TEST(test_integerq);
     TEST(test_valueq);

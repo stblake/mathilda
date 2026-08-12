@@ -20,6 +20,16 @@
 #include "../checked_int.h"   /* ci_add / ci_sub / ci_mul / ci_neg / ci_abs / ci_powi */
 #include "compile.h"      /* CompileType, CompiledProgram — completed below */
 
+/* Thread-local storage for the VM's per-thread state (compile_vm.c: the
+ * call-depth counter and the managed arena).  `_Thread_local` is C11 and
+ * `__thread` a GNU extension, so both stay behind a guard; without either the
+ * storage is a plain global, still correct for the single-threaded default. */
+#if defined(MATHILDA_THREADS) && (defined(__GNUC__) || defined(__clang__))
+#define VM_TLS __thread
+#else
+#define VM_TLS
+#endif
+
 /* A register (or an instruction's immediate).  `p` carries a machine-kernel
  * function pointer in an immediate; `arr` carries the OWNED EXPR_NDARRAY handle
  * of an array register (M3a).  The opcode says which member is live. */
@@ -225,6 +235,40 @@ enum {
     X(AND, K_BIN)     X(OR, K_BIN)     X(XOR, K_BIN)    X(NOT, K_UN)       \
     X(ARR_FREE, K_ARR) X(V_EW, K_ARR)  X(V_POW, K_ARR)                     \
     X(V_KERN, K_ARR)  X(V_KERN2, K_ARR) X(V_TOTAL, K_ARR) X(V_LEN, K_ARR)  \
+    /* Association read-only parameter bag (B1).  Lookup / KeyExistsQ|MemberQ|   \
+     * FreeQ are pure K_KERN1 (CSE + LICM hoist a loop-invariant constant-key    \
+     * probe so it runs once); Length is a pure unary read of the handle;        \
+     * Values delegates to a packed builder (K_ARR, owned result).               \
+     * imm.p borrows a program-owned AssocSpec; flags carries the result CT. */  \
+    X(ASSOC_LOOKUP, K_KERN1) X(ASSOC_HASKEY, K_KERN1)                      \
+    X(ASSOC_LEN, K_UN) X(ASSOC_VALUES, K_ARR)                             \
+    /* B2 runtime-varying (integer/real) key: reads the bag in R[a] and the      \
+     * machine key in R[b]; pure K_KERN2, so it CSEs by (a,b,spec) and hoists     \
+     * only when the key register is loop-invariant.  flags = result_ct |         \
+     * (key_ct << 4). */                                                          \
+    X(ASSOC_LOOKUP_DYN, K_KERN2)                                          \
+    /* B3 pure set-algebra: KeyDrop / KeyTake produce an OWNED association in the  \
+     * array bank (K_ARR, never moved/removed).  flags bit0 = take, bit1 = free    \
+     * the source temp.  imm.p is an AssocSpec whose `key` is the drop/keep key(s) \
+     * and `assoc` is the constant source (else the bag is R[a]).                   \
+     */                                                                            \
+    X(ASSOC_KEYSEL, K_ARR)                                                \
+    /* Counts[machine array] -> an OWNED association of element->count (K_ARR).   \
+     * flags bit0 = free the source array temp.  No imm.                          \
+     */                                                                            \
+    X(ASSOC_COUNTS, K_ARR)                                                \
+    /* B4 higher-order transforms via a compiled callee (imm.p = AssocCalleeSpec, \
+     * flags = in_valtype | out_type<<4 | free-source<<8): ASSOC_MAP applies the   \
+     * callee to each value -> new association; ASSOC_SELECT keeps entries whose   \
+     * value satisfies the (Bool) callee.  vm_call per entry, no evaluator.        \
+     */                                                                            \
+    X(ASSOC_MAP, K_ARR) X(ASSOC_SELECT, K_ARR)                            \
+    /* B5 functional update: Append[assoc, key -> value] -> a new OWNED           \
+     * association with key set (replaced in place, else appended).  imm.p =       \
+     * AssocSpec (key + optional const source); R[a] source, R[b] machine value;   \
+     * flags = value_type | free-source<<8.                                        \
+     */                                                                            \
+    X(ASSOC_SET, K_ARR)                                                   \
     /* An array -> SCALAR reduction delegated to the interpreter's own entry   \
      * point (ndred_mean, ndred_variance, ...), the reduction counterpart of   \
      * A_NDFN below.  Total has its own opcode because an int64 sum must stay  \
@@ -232,6 +276,11 @@ enum {
      * integer vector is a Rational, which no machine slot holds) and so needs \
      * no such split.  imm.p is the NdRedSpec. */                              \
     X(V_NDRED, K_ARR)                                                       \
+    /* Reduction WITH one trailing integer register: RankedMin[v, n] /          \
+     * RankedMax[v, n], the n-th order statistic.  V_NDRED's scalar write plus   \
+     * A_NDFN's trailing-int read -- c->a is the array, c->b the int n.  imm.p   \
+     * is the NdRedSpec (nextra == 1). */                                        \
+    X(V_NDREDN, K_ARR)                                                      \
     /* Delegated TWO-array heads (COMPILE_MISSING.md §3).  A_NDFN2 reads two    \
      * array registers and produces an array (Dot matrix shapes, LinearSolve,   \
      * Cross, LeastSquares, ListConvolve/Correlate, Join); V_NDFN2 the SCALAR    \
@@ -295,6 +344,35 @@ enum {
     X(VKERN_RR, K_KERN1)  X(VKERN_R2R, K_KERN1) X(VKERN_RC, K_KERN1)       \
     X(VKERN_CC, K_KERN1)  X(VKERN_CR, K_KERN1)                             \
     X(VKERN2_RR, K_KERN2) X(VKERN2_RC, K_KERN2) X(VKERN2_CC, K_KERN2)      \
+    /* Arbitrary-precision managed scalars — opt-in (WorkingPrecision -> n /   \
+     * "BigIntegers" -> True; see docs/design/compile-arbitrary-precision.md).  \
+     * A managed register's Slot holds a POINTER to its per-call container      \
+     * (mpfr_t for MG_R*, mpz_t for MG_Z*, ncpx for MG_C*), bound once at frame  \
+     * entry; the opcode supplies the type, so the container is type-erased in   \
+     * the Slot exactly as an array handle is.  MG_R{BIN,UN} carry a raw mpfr_*  \
+     * function pointer in imm.p (K_BIN/K_UN, so disasm renders no immediate and \
+     * never dereferences it as a kernel).  A program using any of these forces  \
+     * COMPILE_NO_OPT | COMPILE_NO_CSE, so the optimiser and Expr-CSE never see  \
+     * a managed register and the machine path is provably untouched.            \
+     * MG_RFROM_I/MG_RFROM_D lift a machine int/real operand into a managed real;\
+     * MG_RCMP writes a Bool (imm.i selects the predicate, as LT_R..NE_R).       */ \
+    X(MG_RCONST, K_CONST) X(MG_RMOV, K_MOVE)                                \
+    X(MG_RFROM_I, K_UN)   X(MG_RFROM_D, K_UN)                              \
+    X(MG_RUN, K_UN)       X(MG_RBIN, K_BIN)   X(MG_RPOWI, K_POWI)          \
+    X(MG_RCMP, K_BIN)                                                       \
+    /* Bignum (GMP mpz_t) integer scalars.  MG_ZCONST loads a program-owned    \
+     * mpz constant (imm.p); MG_Z{ADD,SUB,MUL} are exact; MG_ZPOWI raises to a   \
+     * non-negative machine-int power (imm.i); MG_ZFROM_I lifts a machine int64; \
+     * MG_ZCMP writes a Bool.  No division opcode: exact integer division is a   \
+     * Rational, which no managed-int container holds, so it bails at emit. */    \
+    X(MG_ZCONST, K_CONST) X(MG_ZMOV, K_MOVE)  X(MG_ZFROM_I, K_UN)          \
+    X(MG_ZADD, K_BIN)     X(MG_ZSUB, K_BIN)   X(MG_ZMUL, K_BIN)            \
+    X(MG_ZNEG, K_UN)      X(MG_ZPOWI, K_POWI) X(MG_ZCMP, K_BIN)            \
+    /* Arbitrary-precision complex (ncpx = pair of mpfr_t).  MG_CBIN/MG_CUN     \
+     * dispatch an ncpx_* kernel in imm.p; MG_CFROM_R lifts a managed real (zero \
+     * imaginary part).  MG_CPOWI is an integer power. */                        \
+    X(MG_CCONST, K_CONST) X(MG_CMOV, K_MOVE)  X(MG_CFROM_R, K_UN)          \
+    X(MG_CUN, K_UN)       X(MG_CBIN, K_BIN)   X(MG_CPOWI, K_POWI)          \
     X(RET, K_RET)
 
 /* The opcode enum, generated from OPLIST so the two cannot drift apart. */
@@ -337,6 +415,17 @@ enum { AK_ARR = 0, AK_REAL = 1, AK_COMPLEX = 2, AK_INT = 3 };
  * no-overflow path — every iteration of every real program — is byte for byte
  * the path it would take with the option on. */
 #define IF_NOCHK      0x8000u
+
+/* Force an integer instruction to STAY overflow-checked even under
+ * COMPILE_WRAP_INT ("Speed" / CatchMachineIntegerOverflow -> False). Wrap mode
+ * is a coherent choice for value arithmetic in the body, but a loop's own
+ * counter/bound arithmetic is control flow: wrapping it turns the INT64_MAX
+ * boundary into a non-terminating loop (Do[..,{i,n-4,n,2}]) or an under-run
+ * (unit-step Do returning too few iterations), not just "a different answer".
+ * The three loop-control emit sites in compile_emit_ctrl.c carry this bit so
+ * they bail to the (correct) interpreter at the boundary instead. Read only by
+ * the funnel in compile.c; the VM never sees it (it checks IF_NOCHK alone). */
+#define IF_FORCECHK   0x4000u
 
 /* The opcodes IF_NOCHK applies to: the ARITHMETIC ones, whose only failure is
  * overflow.  Kept as one predicate so the emitter, the optimiser and the
@@ -382,6 +471,43 @@ typedef struct {
 
 void compile_partspec_free(PartSpec* p);
 
+/* Program-owned Association read-op spec (Compile[] B1).  Mirrors PartSpec's
+ * ownership EXACTLY: the three Exprs are DEEP COPIES taken at emit (the program
+ * can outlive the body it was compiled from), the program owns every AssocSpec
+ * and frees them in compiled_free, and an instruction's `imm.p` borrows one.
+ * `assoc` is non-NULL only for a CONSTANT-association operand (a literal
+ * `<|...|>`, or a global folded under COMPILE_FOLD_GLOBALS); for a declared
+ * `_Association` argument it is NULL and the borrowed handle is read from the
+ * operand register instead. */
+typedef struct {
+    Expr* key;      /* Lookup / membership key (literal), or NULL for Length/Values */
+    Expr* deflt;    /* Lookup[a,k,default]'s default value, or NULL */
+    Expr* assoc;    /* constant association operand, or NULL for an argument bag */
+} AssocSpec;
+
+void compile_assocspec_free(AssocSpec* p);
+
+/* B4 higher-order transform spec: a program-owned compiled CALLEE (the embedded
+ * function, compiled as `f[value]` — one machine scalar in, one out) plus an
+ * optional constant source association.  Freed in compiled_free (the callee via
+ * compiled_free, the assoc via expr_free); an instruction's imm.p borrows one.
+ * Unlike PartSpec/AssocSpec the callee needs no Expr deep-copy — a
+ * CompiledProgram is self-contained. */
+typedef struct {
+    struct CompiledProgram* callee;  /* compiled f[value]; owned */
+    Expr* assoc;                     /* constant source association, or NULL */
+} AssocCalleeSpec;
+
+void compile_assoccallee_free(AssocCalleeSpec* p);
+
+/* Scalar coercions defined in compiled_function.c and shared with the
+ * Association opcodes (compile.c) so a looked-up value is coerced to a machine
+ * scalar IDENTICALLY to how a scalar argument is boxed by cf_box — that
+ * identity is the compiled/interpreted parity guarantee. */
+bool cf_to_double(const Expr* e, double* out);
+bool cf_to_ll(const Expr* e, long long* out);
+bool cf_to_complex(const Expr* e, double* re, double* im);
+
 /* ------------------------------------------------------------------ *
  *  The finished program                                               *
  * ------------------------------------------------------------------ *
@@ -408,6 +534,18 @@ typedef struct {
     int      nreg, tile_base, ntiles;
 } ParLoop;
 
+/* One managed register: its final (relocated) register number and its container
+ * type.  Enumerated at finalize over both managed ARGUMENT registers (an arg
+ * declared _Real under WorkingPrecision, which lives in the scalar-bank arg
+ * range) and every register of the managed bank, so frame entry/exit can init
+ * and clear exactly the containers a call needs. */
+typedef struct { int reg; CompileType type; } MgdSlot;
+
+/* A program-owned arbitrary-precision literal container, pointed at from an
+ * instruction immediate (MG_*CONST).  `kind`: 0 = mpfr_t, 1 = mpz_t, 2 = ncpx.
+ * Freed at compiled_free. */
+typedef struct { int kind; void* ptr; } MgdConst;
+
 struct CompiledProgram {
     Instr*      code;
     size_t      n;
@@ -415,6 +553,10 @@ struct CompiledProgram {
     int         nploops;
     PartSpec**  parts;        /* [nparts] general-Part subscript lists */
     int         nparts;
+    AssocSpec** assocs;       /* [nassocs] Association read-op specs (B1) */
+    int         nassocs;
+    AssocCalleeSpec** callees; /* [ncallees] B4 higher-order transform specs */
+    int         ncallees;
     int         nreg;
     int         arr_base;     /* array registers are [arr_base, tile_base) */
     int         tile_base;    /* tile registers are [tile_base, nreg) */
@@ -432,6 +574,17 @@ struct CompiledProgram {
      * same body returns a List however the arguments were spelled.  See Val.built
      * in compile.c and the result-kind decision in compiled_function.c. */
     bool        result_built;
+
+    /* Arbitrary precision (managed scalars).  prec_bits == 0 for a machine
+     * program, in which case every field below is zero/NULL and every managed
+     * mechanism is inert — the machine path never enters the arena, never sizes
+     * it, and vm_run's hot loop is unchanged. */
+    long        prec_bits;      /* MPFR working precision in bits, or 0        */
+    int         managed_base;   /* managed bank is [managed_base, nreg)        */
+    MgdSlot*    mgd_slots;      /* every managed register (args + bank)        */
+    int         nmgd_slots;
+    MgdConst*   mgd_consts;     /* program-owned literal containers            */
+    int         nmgd_consts;
 };
 
 /* Array and tile temporaries are allocated into virtual ranges and relocated to
@@ -440,6 +593,41 @@ struct CompiledProgram {
  * mistake a double for a pointer. */
 #define ARR_VREG  0x40000000
 #define TILE_VREG 0x20000000
+/* Managed (arbitrary-precision) register bank.  Relocated at finalize into the
+ * fourth contiguous bank, ABOVE the tile bank: scalars, arrays, tiles, managed.
+ * Its slots hold container pointers, so patch_reg treats it like the array/tile
+ * banks (see compile.c).  Below TILE_VREG so patch_reg's descending threshold
+ * tests stay well ordered. */
+#define MGD_VREG  0x10000000
+
+/* Managed arbitrary-precision constant helpers: materialised on the emit side
+ * (compile_mgd.c) and read on the run side (compile_vm.c's load_arg /
+ * mgd_ncpx_set_from_expr box a boxed argument into its container).  mpz is
+ * unconditional (GMP is a hard dependency); mpfr rides the USE_MPFR guard. */
+void mgd_const_free(MgdConst* mc);
+bool mgd_mpz_from_expr(mpz_ptr z, const Expr* e);
+#ifdef USE_MPFR
+#include <mpfr.h>
+bool mgd_mpfr_from_expr(mpfr_ptr m, const Expr* e);
+#endif
+
+/* Complex op selectors carried in imm.i of MG_CBIN / MG_CUN (ncpx kernels have
+ * heterogeneous signatures, so a selector is cleaner than a function pointer;
+ * the working precision is read from the output container).  Set by the emitter
+ * (compile_mgd.c) and switched on by the VM (compile_vm.c), so it is shared. */
+enum { MGC_ADD = 0, MGC_SUB, MGC_MUL, MGC_DIV, MGC_POW,          /* binary */
+       MGC_NEG, MGC_EXP, MGC_LOG, MGC_SIN, MGC_COS, MGC_SQRT,    /* -> complex */
+       MGC_ABS, MGC_ARG };                                       /* -> real   */
+
+/* Association value <-> machine-scalar coercions, shared between the emit side
+ * (compile_assoc.c) and the VM (compile_vm.c: vm_assoc_values builds a packed
+ * vector, vm_assoc_higher/_set box entry values).  assoc_value_to_slot /
+ * assoc_slot_to_value coerce a value IDENTICALLY to how a scalar argument is
+ * boxed, which is the compiled/interpreted parity guarantee; assoc_elem_ndt
+ * picks the packed dtype for a vector of values of a given element type. */
+NDType assoc_elem_ndt(CompileType e);
+bool   assoc_value_to_slot(const Expr* v, CompileType t, Slot* out);
+Expr*  assoc_slot_to_value(Slot s, CompileType t);
 
 /* Kind of each opcode, indexed by opcode.  Defined in optimize.c. */
 extern const unsigned char compile_op_kind[OP__COUNT];
@@ -456,17 +644,78 @@ extern const unsigned char compile_op_kind[OP__COUNT];
  * is left exactly as it was (the caller can still run it). */
 bool compile_optimize(Instr* code, size_t* n, int nreg, int arr_base, int tile_base);
 
-/* The name of the head an A_NDFN / V_NDRED instruction delegates to.
- *
- * The two tables (ND_FNS, ND_REDS) live in compile.c and stay there; the
- * disassembler needs only the NAME out of an entry, so it asks rather than the
- * tables becoming shared state.  Without these an A_NDFN disassembles as
- * "A_NDFN" and a V_NDRED as "V_NDRED(V0, V0)", neither of which says WHICH head
- * was delegated -- and telling Mean from Median in a bytecode dump is the whole
- * point of having a dump.  `imm` is the instruction's Slot.p; NULL-safe. */
+/* ------------------------------------------------------------------ *
+ *  Delegated ND dispatch tables                                       *
+ * ------------------------------------------------------------------ *
+ * The tables themselves (ND_FNS / ND_REDS / ND_FN2S) and their lookup/result
+ * helpers live in compile_ndtables.c.  The SPEC STRUCTS are declared here
+ * because three phases meet on them: the inference pass and the emitter build
+ * and read them at compile time (nd_fn_lookup / nd_fn_result, ...), the
+ * disassembler renders their head name (nd_*_head_name), and the VM
+ * DEREFERENCES one through an instruction immediate (imm.p) at run time
+ * (A_NDFN / V_NDRED / A_NDFN2). */
+
+/* Allowed OPERAND element types, one bit per CompileType element (CT_INT etc.).
+ * `elems == 0` means "any element type".  A head whose fast path CONVERTS a
+ * dtype must exclude that type here, because A_NDFN carries no result-dtype
+ * field to catch a promise/result mismatch at run time. */
+#define NDF_INT   (1u << (unsigned)CT_INT)
+#define NDF_REAL  (1u << (unsigned)CT_REAL)
+#define NDF_CPLX  (1u << (unsigned)CT_COMPLEX)
+
+typedef struct {
+    const char* head;
+    Expr* (*fn)(Expr*);
+    int nextra;        /* trailing INTEGER arguments, passed through as written */
+    int rank_rule;
+    bool int_result;   /* result is an int64 array regardless of the operand's
+                        * element type (Ordering: a permutation is integer) */
+    unsigned elems;    /* allowed operand element types (NDF_* bits); 0 = any */
+    bool complex_result; /* result is a complex array from a REAL/INT operand
+                          * (Fourier / InverseFourier: real in, complex out).
+                          * The delegate must ALWAYS return NDT_COMPLEX64 (its
+                          * fourier_compile wrapper does) so the buffer matches
+                          * the CT_COMPLEX register the compiler promises here. */
+} NdFnSpec;
+
+typedef struct {
+    const char* head;
+    Expr* (*fn)(Expr*);
+    bool  int_ok;      /* exact over an int64 array, result CT_INT (Max/Min select) */
+    int   rank;        /* required operand rank; 0 = any of {1, 2} (Norm) */
+    bool  int_result;  /* result is Integer for a REAL operand regardless of the
+                        * reduction's numeric kind (MatrixRank: a rank is an int) */
+    int   nextra;      /* trailing INTEGER args past the array (RankedMin/Max: 1),
+                        * passed through as written; 0 for the plain reductions */
+} NdRedSpec;
+
+typedef enum { R2_DOT, R2_SOLVE, R2_VEC, R2_JOIN, R2_MATRIX } NdFn2Rank;
+typedef enum { NDF2_PROMOTE, NDF2_SAME } NdFn2Elem;
+
+typedef struct {
+    const char* head;
+    Expr* (*fn)(Expr*);
+    unsigned  elems;      /* allowed operand element types (NDF_* bits), both operands */
+    NdFn2Rank rank2;
+    NdFn2Elem elem;
+} NdFn2Spec;
+
+/* Table lookup + static result-type resolution.  Used by the inference pass and
+ * the emitter; `na` is the call's argument count (array + trailing ints). */
+const NdFnSpec*  nd_fn_lookup(const char* h, size_t na);
+CompileType      nd_fn_result(const NdFnSpec* s, CompileType ta);
+const NdRedSpec* nd_red_lookup(const char* h, size_t na);
+CompileType      nd_red_result(const NdRedSpec* s, CompileType ta);
+const NdFn2Spec* nd_fn2_lookup(const char* h, size_t na);
+CompileType      nd_fn2_result(const NdFn2Spec* s, CompileType ta, CompileType tb);
+
+/* The name of the head an instruction delegates to, for the disassembler.
+ * Without these an A_NDFN disassembles as "A_NDFN" and a V_NDRED as
+ * "V_NDRED(V0, V0)", neither of which says WHICH head was delegated -- and
+ * telling Mean from Median in a bytecode dump is the whole point of having a
+ * dump.  `imm` is the instruction's Slot.p; NULL-safe. */
 const char* nd_fn_head_name(const void* imm);
 const char* nd_red_head_name(const void* imm);
-/* The head an A_NDFN2 / V_NDFN2 delegates to (ND_FN2S in compile.c). */
 const char* nd_fn2_head_name(const void* imm);
 
 #endif /* MATHILDA_COMPILE_INTERNAL_H */

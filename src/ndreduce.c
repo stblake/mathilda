@@ -479,6 +479,59 @@ Expr* ndred_median(Expr* res) {
     return expr_new_ndarray_like(a, 1, odims, out, odt);
 }
 
+/* ---------------------------------------------------- RankedMin / RankedMax
+ *
+ * RankedMin[v, n] selects the n-th SMALLEST element of the rank-1 machine
+ * vector v (n<0 counts from the largest); RankedMax the n-th LARGEST. The two
+ * differ only by the sign of n (RankedMax[v, n] == RankedMin[v, -n]), so both
+ * reduce to one ASCENDING rank r in [1, m] and the r-th order statistic taken
+ * straight off the buffer: an int64 vector selects EXACTLY (nd_sort_i64_asc, so
+ * the answer is an Integer, never a rounded Real, past 2^53), a real vector via
+ * O(m) quickselect (nd_select_kth). A complex dtype, rank > 1, non-integer or
+ * out-of-range n degrades to ndarray_delist_and_reeval — the List path then
+ * answers, identically. These two entry points are also the Compile ND_REDS
+ * delegates for the heads. */
+static Expr* ndred_ranked(Expr* res, bool is_max) {
+    if (res->data.function.arg_count != 2) return ndarray_delist_and_reeval(res);
+    Expr* a = res->data.function.args[0];
+    Expr* nexpr = res->data.function.args[1];
+    if (nexpr->type != EXPR_INTEGER || nexpr->data.integer == 0)
+        return ndarray_delist_and_reeval(res);
+    NDType dt = a->data.ndarray.dtype;
+    if (ndt_is_complex(dt) || a->data.ndarray.rank != 1)
+        return ndarray_delist_and_reeval(res);
+    size_t m = (size_t)a->data.ndarray.dims[0];
+    if (m == 0) return ndarray_delist_and_reeval(res);
+
+    /* Ascending rank r (1-based). RankedMax negates n first, so both heads
+     * share one formula: n>0 -> r=n, n<0 -> r=m+n+1. */
+    int64_t n = is_max ? -nexpr->data.integer : nexpr->data.integer;
+    int64_t r = (n > 0) ? n : ((int64_t)m + n + 1);
+    if (r < 1 || r > (int64_t)m) return ndarray_delist_and_reeval(res);
+    size_t k = (size_t)(r - 1);   /* 0-based order statistic */
+
+    const void* buf = a->data.ndarray.data;
+    if (dt == NDT_INT64) {
+        const int64_t* p = (const int64_t*)buf;
+        int64_t* t = malloc(sizeof(int64_t) * m);
+        if (!t) return ndarray_delist_and_reeval(res);
+        memcpy(t, p, sizeof(int64_t) * m);
+        nd_sort_i64_asc(t, m);
+        Expr* out = expr_new_integer(t[k]);
+        free(t);
+        return out;
+    }
+    double* s = malloc(sizeof(double) * m);
+    if (!s) return ndarray_delist_and_reeval(res);
+    nd_gather_real(buf, dt, 0, 1, m, s);
+    double val = nd_select_kth(s, m, k);
+    free(s);
+    return expr_new_real(val);
+}
+
+Expr* ndred_ranked_min(Expr* res) { return ndred_ranked(res, false); }
+Expr* ndred_ranked_max(Expr* res) { return ndred_ranked(res, true); }
+
 /* --------------------------------------------------------------- Quartiles */
 
 /* The reductions whose exact integer answer is a Rational or a root -- so no
@@ -1351,6 +1404,247 @@ Expr* ndred_rms(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     return nd_moment_leading(res, 2);
 }
+
+/* ------------------------------------------------------------- CentralMoment */
+
+/* Integer power by squaring on a double (exponent >= 0). */
+static double nd_ipow(double b, int64_t e) {
+    double r = 1.0;
+    while (e > 0) { if (e & 1) r *= b; b *= b; e >>= 1; }
+    return r;
+}
+
+/* Pairwise Sum[(x - mean)^r] over the strided range (real component only; the
+ * leading kernel degrades int64/complex before ever calling this). The pairwise
+ * split mirrors nd_sumsq_strided so the accumulation order — hence rounding —
+ * matches the other reductions across the packed / visible / List surfaces. */
+static double nd_summoment_strided(const void* buf, NDType dt, size_t base,
+                                   size_t stride, size_t count, double mean, int64_t r) {
+    if (count <= ND_PAIRWISE_BLOCK) {
+        double s = 0.0;
+        if (dt == NDT_FLOAT64 && stride == 1) {          /* contiguous real */
+            const double* p = (const double*)buf + base;
+            for (size_t i = 0; i < count; i++) s += nd_ipow(p[i] - mean, r);
+            return s;
+        }
+        for (size_t i = 0; i < count; i++) {
+            double re, im;
+            ndt_get(buf, base + i * stride, dt, &re, &im);
+            s += nd_ipow(re - mean, r);
+        }
+        return s;
+    }
+    size_t half = count / 2;
+    return nd_summoment_strided(buf, dt, base, stride, half, mean, r) +
+           nd_summoment_strided(buf, dt, base + half * stride, stride, count - half, mean, r);
+}
+
+typedef struct { const void* buf; NDType dt; double mean; int64_t r; } nd_cmfull_ctx;
+static void nd_cm_reduce(void* c, size_t lo, size_t hi, double* slot) {
+    const nd_cmfull_ctx* x = (const nd_cmfull_ctx*)c;
+    slot[0] = nd_summoment_strided(x->buf, x->dt, lo, 1, hi - lo, x->mean, x->r);
+}
+/* Sum[(x - mean)^r] over `n` contiguous elements, threaded (rank-1 path). */
+static double nd_full_moment(const void* buf, NDType dt, size_t n, double mean, int64_t r) {
+    nd_cmfull_ctx c = { buf, dt, mean, r };
+    double slots[NDARRAY_MAX_THREADS];
+    int k = nd_parallel_reduce(n, nd_cm_reduce, &c, 1, slots);
+    double s = 0.0;
+    for (int t = 0; t < k; t++) s += slots[t];
+    return s;
+}
+
+/* One column's r-th central moment at (base, stride) over `blocks` summands. */
+static double nd_cm_at(const void* buf, NDType dt, size_t base, size_t stride,
+                       size_t blocks, int64_t r) {
+    double sr, si;
+    nd_sum_strided(buf, dt, base, stride, blocks, &sr, &si);
+    double mean = sr / (double)blocks;
+    return nd_summoment_strided(buf, dt, base, stride, blocks, mean, r) / (double)blocks;
+}
+
+typedef struct {
+    const void* buf; NDType dt; void* out; NDType odt; size_t T, blocks; int64_t r;
+} nd_cm_ctx;
+static bool nd_cm_cols(void* c, size_t lo, size_t hi) {
+    const nd_cm_ctx* x = (const nd_cm_ctx*)c;
+    for (size_t j = lo; j < hi; j++)
+        ndt_set(x->out, j, x->odt, nd_cm_at(x->buf, x->dt, j, x->T, x->blocks, x->r), 0.0);
+    return true;
+}
+
+/* CentralMoment[a, r]: the r-th moment about the mean. Two passes (mean, then
+ * Sum[(x-mean)^r]) over the leading axis, dividing by n — like Variance but /n
+ * (not n-1), power r (not a square), no Conjugate, n >= 1. Always a REAL result.
+ * Real dtypes and a non-negative integer r only: an int64 buffer (the exact
+ * answer is a Rational), a complex buffer ((x-mu)^r is complex, no real slot for
+ * it), and a list-valued / non-integer / negative r all degrade to the List path,
+ * which answers exactly or symbolically. */
+static Expr* nd_central_moment_leading(Expr* res) {
+    if (res->data.function.arg_count != 2) return ndarray_delist_and_reeval(res);
+    Expr* a = res->data.function.args[0];
+    Expr* rexpr = res->data.function.args[1];
+    if (rexpr->type != EXPR_INTEGER || rexpr->data.integer < 0)
+        return ndarray_delist_and_reeval(res);
+    int64_t r = rexpr->data.integer;
+    if (nd_int64_degrade(a) || ndt_is_complex(a->data.ndarray.dtype))
+        return ndarray_delist_and_reeval(res);
+
+    int rank = a->data.ndarray.rank;
+    const int64_t* dims = a->data.ndarray.dims;
+    NDType dt = a->data.ndarray.dtype;
+    const void* buf = a->data.ndarray.data;
+
+    size_t blocks = (size_t)dims[0];
+    if (blocks < 1u) return ndarray_delist_and_reeval(res);   /* Mean of empty is undefined */
+    size_t T = nd_dim_prod(dims, 1, rank);
+    NDType odt = nd_real_of(dt);
+
+    if (rank == 1) {                             /* vector -> scalar (threaded) */
+        double sr, si;
+        nd_full_sum(buf, dt, blocks, &sr, &si);
+        double mean = sr / (double)blocks;
+        double ss = nd_full_moment(buf, dt, blocks, mean, r);
+        return expr_new_real(ss / (double)blocks);
+    }
+
+    void* out = malloc(ndt_elem_size(odt) * T);
+    if (!out) return ndarray_delist_and_reeval(res);
+    nd_cm_ctx c = { buf, dt, out, odt, T, blocks, r };
+    nd_parallel_for(T, nd_cm_cols, &c);
+    return expr_new_ndarray_like(a, rank - 1, dims + 1, out, odt);
+}
+
+Expr* ndred_central_moment(Expr* res) {
+    return nd_central_moment_leading(res);
+}
+
+/* --------------------------------------------------------------- Moment (raw) */
+
+/* One column's r-th RAW moment at (base, stride): Sum[x^r]/blocks. Reuses the
+ * CentralMoment summation with mean = 0 — nd_summoment_strided computes
+ * Sum[(x - mean)^r], so mean = 0 is exactly Sum[x^r]. */
+static double nd_rawmoment_at(const void* buf, NDType dt, size_t base, size_t stride,
+                              size_t blocks, int64_t r) {
+    return nd_summoment_strided(buf, dt, base, stride, blocks, 0.0, r) / (double)blocks;
+}
+
+typedef struct {
+    const void* buf; NDType dt; void* out; NDType odt; size_t T, blocks; int64_t r;
+} nd_rm_ctx;
+static bool nd_rm_cols(void* c, size_t lo, size_t hi) {
+    const nd_rm_ctx* x = (const nd_rm_ctx*)c;
+    for (size_t j = lo; j < hi; j++)
+        ndt_set(x->out, j, x->odt, nd_rawmoment_at(x->buf, x->dt, j, x->T, x->blocks, x->r), 0.0);
+    return true;
+}
+
+/* Moment[a, r]: the r-th raw (power) moment (1/n) Sum[x^r]. A single pass over
+ * the leading axis (CentralMoment with the mean pass removed), dividing by n.
+ * Always a REAL result. Real dtypes and a non-negative integer r only: an int64
+ * buffer (the exact answer is a Rational), a complex buffer (x^r is complex, no
+ * real slot for it), and a list-valued / non-integer / negative r all degrade to
+ * the List path, which answers exactly or symbolically. */
+static Expr* nd_moment_r_leading(Expr* res) {
+    if (res->data.function.arg_count != 2) return ndarray_delist_and_reeval(res);
+    Expr* a = res->data.function.args[0];
+    Expr* rexpr = res->data.function.args[1];
+    if (rexpr->type != EXPR_INTEGER || rexpr->data.integer < 0)
+        return ndarray_delist_and_reeval(res);
+    int64_t r = rexpr->data.integer;
+    if (nd_int64_degrade(a) || ndt_is_complex(a->data.ndarray.dtype))
+        return ndarray_delist_and_reeval(res);
+
+    int rank = a->data.ndarray.rank;
+    const int64_t* dims = a->data.ndarray.dims;
+    NDType dt = a->data.ndarray.dtype;
+    const void* buf = a->data.ndarray.data;
+
+    size_t blocks = (size_t)dims[0];
+    if (blocks < 1u) return ndarray_delist_and_reeval(res);   /* Mean of empty is undefined */
+    size_t T = nd_dim_prod(dims, 1, rank);
+    NDType odt = nd_real_of(dt);
+
+    if (rank == 1) {                             /* vector -> scalar (threaded) */
+        double ss = nd_full_moment(buf, dt, blocks, 0.0, r);
+        return expr_new_real(ss / (double)blocks);
+    }
+
+    void* out = malloc(ndt_elem_size(odt) * T);
+    if (!out) return ndarray_delist_and_reeval(res);
+    nd_rm_ctx c = { buf, dt, out, odt, T, blocks, r };
+    nd_parallel_for(T, nd_rm_cols, &c);
+    return expr_new_ndarray_like(a, rank - 1, dims + 1, out, odt);
+}
+
+Expr* ndred_moment(Expr* res) {
+    return nd_moment_r_leading(res);
+}
+
+/* ------------------------------------------------- Skewness / Kurtosis */
+
+/* A standardized central moment m_p / m_2^(p/2): Skewness is p=3
+ * (m_3 / m_2^(3/2)), Kurtosis is p=4 (m_4 / m_2^2). Three passes over the
+ * leading axis (mean, then m_2 and m_p about it), reusing the CentralMoment
+ * summation helpers. Real dtypes only; int64 / complex degrade to the exact
+ * List path (an integer sample's standardized moment is a radical, e.g.
+ * Skewness[{1,2,3,10}] = 18 Sqrt[2]/25 — no machine slot holds it). */
+static double nd_stdmoment_at(const void* buf, NDType dt, size_t base, size_t stride,
+                              size_t blocks, int p, double half_p) {
+    double sr, si;
+    nd_sum_strided(buf, dt, base, stride, blocks, &sr, &si);
+    double mean = sr / (double)blocks;
+    double m2 = nd_summoment_strided(buf, dt, base, stride, blocks, mean, 2) / (double)blocks;
+    double mp = nd_summoment_strided(buf, dt, base, stride, blocks, mean, p) / (double)blocks;
+    return mp / pow(m2, half_p);
+}
+
+typedef struct {
+    const void* buf; NDType dt; void* out; NDType odt; size_t T, blocks; int p; double half_p;
+} nd_sm_ctx;
+static bool nd_sm_cols(void* c, size_t lo, size_t hi) {
+    const nd_sm_ctx* x = (const nd_sm_ctx*)c;
+    for (size_t j = lo; j < hi; j++)
+        ndt_set(x->out, j, x->odt,
+                nd_stdmoment_at(x->buf, x->dt, j, x->T, x->blocks, x->p, x->half_p), 0.0);
+    return true;
+}
+
+static Expr* nd_stdmoment_leading(Expr* res, int p) {
+    if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
+    Expr* a = res->data.function.args[0];
+    if (nd_int64_degrade(a) || ndt_is_complex(a->data.ndarray.dtype))
+        return ndarray_delist_and_reeval(res);
+
+    int rank = a->data.ndarray.rank;
+    const int64_t* dims = a->data.ndarray.dims;
+    NDType dt = a->data.ndarray.dtype;
+    const void* buf = a->data.ndarray.data;
+
+    size_t blocks = (size_t)dims[0];
+    if (blocks < 1u) return ndarray_delist_and_reeval(res);
+    size_t T = nd_dim_prod(dims, 1, rank);
+    NDType odt = nd_real_of(dt);
+    double half_p = (double)p / 2.0;
+
+    if (rank == 1) {
+        double sr, si;
+        nd_full_sum(buf, dt, blocks, &sr, &si);
+        double mean = sr / (double)blocks;
+        double m2 = nd_full_moment(buf, dt, blocks, mean, 2) / (double)blocks;
+        double mp = nd_full_moment(buf, dt, blocks, mean, p) / (double)blocks;
+        return expr_new_real(mp / pow(m2, half_p));
+    }
+
+    void* out = malloc(ndt_elem_size(odt) * T);
+    if (!out) return ndarray_delist_and_reeval(res);
+    nd_sm_ctx c = { buf, dt, out, odt, T, blocks, p, half_p };
+    nd_parallel_for(T, nd_sm_cols, &c);
+    return expr_new_ndarray_like(a, rank - 1, dims + 1, out, odt);
+}
+
+Expr* ndred_skewness(Expr* res) { return nd_stdmoment_leading(res, 3); }
+Expr* ndred_kurtosis(Expr* res) { return nd_stdmoment_leading(res, 4); }
 
 /* --------------------------------------------------------------- Max / Min */
 

@@ -257,8 +257,8 @@ void info_init(void) {
         "zero -- Chop the result when needed; returns an incorrect value if the contour "
         "encloses another singularity or crosses a branch cut.\n\n"
         "Options: Radius (contour radius, default 1/100, or Automatic), WorkingPrecision, "
-        "PrecisionGoal, MaxRecursion (max contour refinements, default 10), "
-        "Method ('Trapezoidal').");
+        "AccuracyGoal (default MachinePrecision), PrecisionGoal, MaxRecursion (max "
+        "contour refinements, default 10), Method ('Trapezoidal').");
     symtab_set_docstring("Residue",
         "Residue[f, {z, z0}]\n"
         "\tgives the residue of f at the isolated singularity z = z0 -- the "
@@ -282,8 +282,9 @@ void info_init(void) {
         "NResidue (needs expr analytic near x0; allows fractional/complex order). "
         "ND cannot recognize small numbers that should be zero -- Chop if needed.\n\n"
         "Options: Method (EulerSum | NIntegrate), Scale (step size / contour radius / "
-        "complex direction, default 1), Terms (EulerSum extrapolation terms, default 7), "
-        "WorkingPrecision, PrecisionGoal, MaxRecursion.");
+        "complex direction, default 1), Terms (EulerSum starting extrapolation depth, "
+        "default 7; grown adaptively to meet AccuracyGoal), WorkingPrecision, "
+        "AccuracyGoal (default MachinePrecision), PrecisionGoal, MaxRecursion.");
     symtab_set_docstring("NSeries",
         "NSeries[f, {x, x0, n}]\n"
         "\tgives a numerical approximation to the series expansion of f about "
@@ -298,9 +299,13 @@ void info_init(void) {
         "centred at x0 contains a branch cut of f; for a Laurent series the "
         "SeriesData neglects higher-order poles. No effort is made to justify "
         "the precision of the coefficients, and small spurious residuals are "
-        "not recognised as zero -- Chop the result when needed.\n\n"
+        "not recognised as zero. The sample count is grown adaptively (doubling "
+        "the DFT size) until the coefficients settle within AccuracyGoal, and a "
+        "NSeries::accgl warning is issued if the goal is not reached; Chop the "
+        "result when needed.\n\n"
         "Options: Radius (radius of the sampled circle, default 1), "
-        "WorkingPrecision (default MachinePrecision).");
+        "WorkingPrecision (default MachinePrecision), AccuracyGoal (default "
+        "MachinePrecision), PrecisionGoal.");
     symtab_set_docstring("NLimit",
         "NLimit[expr, z -> z0]\n"
         "\tnumerically finds the limiting value of expr as z approaches z0.\n\n"
@@ -320,8 +325,12 @@ void info_init(void) {
         "envelope has no limit: NLimit::osc is issued and the form is returned "
         "unevaluated, rather than reporting the meaningless extrapolant.\n\n"
         "Options: Method (Automatic | EulerSum | SequenceLimit | \"Levin\"), WorkingPrecision (default "
-        "MachinePrecision), Direction (Automatic == -1, or a complex approach "
-        "vector), Scale (initial step / distance, default 1), Terms (default 7), "
+        "MachinePrecision), AccuracyGoal (default MachinePrecision), PrecisionGoal, "
+        "Direction (Automatic == -1, or a complex approach "
+        "vector), Scale (initial step / distance, default 1), Terms (starting "
+        "extrapolation depth, default 13, grown adaptively up to meet AccuracyGoal -- "
+        "the depth, not WorkingPrecision, sets the accuracy on branch-point / "
+        "fractional-power approaches), "
         "WynnDegree (SequenceLimit iterations, default 1).\n\n"
         "Each method is also callable directly as NLimit`m[expr, z -> z0]: "
         "NLimit`Automatic, NLimit`EulerSum, NLimit`SequenceLimit, NLimit`Levin, "
@@ -379,15 +388,19 @@ void info_init(void) {
     symtab_set_docstring("Hyperfactorial",
         "Hyperfactorial[n]\n"
         "\tgives the hyperfactorial prod_{k=1}^{n} k^k.\n"
-        "Exact (GMP) for a non-negative integer n; other orders stay symbolic. "
-        "Listable, NumericFunction.");
+        "Exact (GMP) for a non-negative integer n. A non-integer numeric order "
+        "(under N) evaluates via Gamma[n+1]^n / BarnesG[n+1] (real, complex, "
+        "arbitrary precision); symbolic orders stay unevaluated. Listable, "
+        "NumericFunction.");
     symtab_set_docstring("BarnesG",
         "BarnesG[z]\n"
         "\tgives the Barnes G-function.\n"
         "G(z+1) = Gamma[z] G(z) with G(1)=G(2)=1; for a positive integer n, "
         "G(n+1) = prod_{k=1}^{n-1} k! (exact via GMP), and G(m)=0 for "
-        "non-positive integer m. Non-integer orders stay symbolic. Listable, "
-        "NumericFunction.");
+        "non-positive integer m. A non-integer numeric order (under N) evaluates "
+        "from the Barnes asymptotic expansion plus the Gamma recurrence (real, "
+        "complex, arbitrary precision); symbolic orders stay unevaluated. "
+        "Listable, NumericFunction.");
     symtab_set_docstring("QPochhammer",
         "QPochhammer[a, q, n]\n"
         "\tgives the q-Pochhammer symbol prod_{k=0}^{n-1} (1 - a q^k).\n"
@@ -431,7 +444,9 @@ void info_init(void) {
         "\"JenkinsTraub\" uses the three-stage Jenkins-Traub algorithm.\n\n"
         "Options: Method (Automatic | \"Aberth\" | \"CompanionMatrix\" | "
         "\"JenkinsTraub\"), PrecisionGoal (Automatic = machine; a digit count "
-        "selects arbitrary precision), MaxIterations, StepMonitor.");
+        "selects arbitrary precision), AccuracyGoal (default MachinePrecision; a "
+        "root whose residual exceeds the goal triggers an NRoots::accgl warning), "
+        "MaxIterations, StepMonitor.");
     symtab_set_docstring("NSolve",
         "NSolve[expr, vars]\n"
         "\tgives numerical approximations to the solutions of the equation or "
@@ -449,7 +464,8 @@ void info_init(void) {
         "FindRoot seeding. Integer, real, and complex coefficients are handled "
         "at machine and arbitrary precision.\n\n"
         "Options: MaxRoots, Method (Automatic | \"EndomorphismMatrix\" | "
-        "\"Homotopy\" | \"Symbolic\"), WorkingPrecision, VerifySolutions, "
+        "\"Homotopy\" | \"Symbolic\"), WorkingPrecision, AccuracyGoal (default "
+        "MachinePrecision, forwarded to NRoots), PrecisionGoal, VerifySolutions, "
         "RandomSeeding.");
     symtab_set_docstring("Factorial",
         "n! or Factorial[n]\n"
@@ -457,7 +473,8 @@ void info_init(void) {
         "For non-negative integers, n! is computed exactly via GMP's mpz_fac_ui.\n"
         "For half-integers (n = m/2 with m odd) it reduces to Sqrt[Pi] times a\n"
         "rational from the Gamma functional equation. Negative integers give\n"
-        "ComplexInfinity. Other inputs stay unevaluated.");
+        "ComplexInfinity. A complex numeric argument (under N) evaluates as\n"
+        "Gamma[n+1]. Other inputs stay unevaluated.");
     symtab_set_docstring("Gamma",
         "Gamma[z]\n"
         "\tis the Euler gamma function Gamma(z).\n"
@@ -859,7 +876,7 @@ void info_init(void) {
         "It is a mathematical constant: it has attributes Constant and Protected,\n"
         "NumericQ[Khinchin] is True, and D[Khinchin, x] is 0. N[Khinchin, prec]\n"
         "evaluates it to any precision.");
-    symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nFactorial2 stays unevaluated on symbolic arguments.");
+    symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nA non-integer numeric argument (under N) evaluates via 2^(n/2) (Pi/2)^((Cos[n Pi]-1)/4) Gamma[n/2+1] (real, complex, arbitrary precision).\nFactorial2 stays unevaluated on symbolic arguments.");
     symtab_set_docstring("Fibonacci",
         "Fibonacci[n]\n"
         "\tgives the nth Fibonacci number F_n.\n"
@@ -886,8 +903,12 @@ void info_init(void) {
         "\tgives the binomial coefficient C(n, m) = n! / (m! (n-m)!).\n"
         "For non-negative integer arguments, computed exactly via GMP's\n"
         "mpz_bin_uiui. Generalised forms (negative or symbolic n, half-integer\n"
-        "m) reduce through the Gamma functional equation; non-decidable forms\n"
-        "stay unevaluated.");
+        "m) reduce through the Gamma functional equation. Rational, real, and\n"
+        "complex operands evaluate numerically as\n"
+        "Gamma[n+1]/(Gamma[m+1] Gamma[n-m+1]): machine precision when an argument\n"
+        "is a machine real, and arbitrary precision under N[Binomial[..], p];\n"
+        "complex arguments reuse the complex Gamma. Non-decidable forms stay\n"
+        "symbolic.");
 
     symtab_set_docstring("HypergeometricPFQ",
         "HypergeometricPFQ[{a1, ...}, {b1, ...}, z]\n"
@@ -1779,6 +1800,16 @@ void info_init(void) {
         "Flatten[list, n, h]\n"
         "\tflattens only sublists whose head matches h, leaving other heads\n"
         "\tin place.");
+    symtab_set_docstring("FlattenAt",
+        "FlattenAt[list, n]\n"
+        "\tflattens out the sublist at position n of list, splicing its elements\n"
+        "\tinto list; a negative n counts from the end.\n"
+        "FlattenAt[expr, {i, j, ...}]\n"
+        "\tflattens out the part of expr at the position {i, j, ...}.\n"
+        "FlattenAt[expr, {{i1, ...}, {i2, ...}, ...}]\n"
+        "\tflattens out the parts of expr at several positions.\n"
+        "\tThe head of the spliced part is removed; FlattenAt works on any head,\n"
+        "\tnot just List.");
     symtab_set_docstring("ArrayFlatten",
         "ArrayFlatten[a]\n"
         "\tcreates a single flattened matrix from a matrix of matrices, forming a\n"
@@ -1861,7 +1892,37 @@ void info_init(void) {
     symtab_set_docstring("Mean", "Mean[data] gives the mean estimate of the elements in data.");
     symtab_set_docstring("RootMeanSquare", "RootMeanSquare[list] gives the root mean square of values in list.");
     symtab_set_docstring("Variance", "Variance[data] gives the unbiased variance estimate of the elements in data.");
+    symtab_set_docstring("Moment",
+        "Moment[data, r]\n"
+        "\tgives the r-th raw (power) moment of data, (1/n) Sum[x_i^r].\n"
+        "Moment[data, {r_1, ..., r_m}]\n"
+        "\tgives the multivariate raw moment of data. For a matrix or array the moment is taken columnwise over the first axis.");
+    symtab_set_docstring("CentralMoment",
+        "CentralMoment[data, r]\n"
+        "\tgives the r-th central moment (moment about the mean) of data, (1/n) Sum[(x_i - Mean[data])^r].\n"
+        "CentralMoment[data, {r_1, ..., r_m}]\n"
+        "\tgives the multivariate central moment of data. For a matrix or array the moment is taken columnwise over the first axis.");
+    symtab_set_docstring("Skewness",
+        "Skewness[data]\n"
+        "\tgives the coefficient of skewness (a measure of asymmetry) of data, equivalent to CentralMoment[data, 3] / CentralMoment[data, 2]^(3/2). For a matrix it is taken columnwise.");
+    symtab_set_docstring("Kurtosis",
+        "Kurtosis[data]\n"
+        "\tgives the coefficient of kurtosis (peak/tail vs flank concentration) of data, equivalent to CentralMoment[data, 4] / CentralMoment[data, 2]^2. For a matrix it is taken columnwise.");
     symtab_set_docstring("StandardDeviation", "StandardDeviation[data] gives the standard deviation estimate of the elements in data.");
+    symtab_set_docstring("Covariance",
+        "Covariance[v, w]\n"
+        "\tgives the unbiased covariance estimate between the vectors v and w, (1/(n-1)) Sum[(v_i - Mean[v]) Conjugate[w_i - Mean[w]]].\n"
+        "Covariance[a, b]\n"
+        "\tgives the p*q cross-covariance matrix between the columns of the matrices a and b.\n"
+        "Covariance[a]\n"
+        "\tgives the auto-covariance matrix of the columns of the matrix a, i.e. Covariance[a, a].");
+    symtab_set_docstring("Correlation",
+        "Correlation[v, w]\n"
+        "\tgives the correlation between the vectors v and w, Covariance[v, w] / (StandardDeviation[v] StandardDeviation[w]).\n"
+        "Correlation[a, b]\n"
+        "\tgives the p*q cross-correlation matrix between the columns of the matrices a and b.\n"
+        "Correlation[a]\n"
+        "\tgives the auto-correlation matrix of the columns of the matrix a; it is symmetric with a unit diagonal.");
     symtab_set_docstring("MovingAverage",
         "MovingAverage[list, r]\n"
         "\tgives the moving average of list, computed by averaging runs of r elements.\n"
@@ -2064,6 +2125,11 @@ void info_init(void) {
     symtab_set_docstring("MachineNumberQ",
         "MachineNumberQ[expr] gives True if expr is a machine-precision real or complex number, and False otherwise.");
     symtab_set_docstring("NumericQ", "NumericQ[expr] gives True if expr is a numeric quantity, and False otherwise.\nAn expression is considered a numeric quantity if it is either an explicit number or a mathematical constant such as Pi, or is a function that has attribute NumericFunction and all of whose arguments are numeric quantities.");
+    symtab_set_docstring("StringQ",
+        "StringQ[expr]\n"
+        "\tgives True if expr is a string, and False otherwise. The empty\n"
+        "string \"\" gives True. Called with any number of arguments other\n"
+        "than one it leaves the expression unevaluated (StringQ::argx).");
     symtab_set_docstring("Positive",
         "Positive[x]\n"
         "\tgives True if x is a positive real number, and False if x is a\n"
@@ -2127,6 +2193,11 @@ void info_init(void) {
     symtab_set_docstring("PossibleZeroQ",
         "PossibleZeroQ[expr] gives True if symbolic and numerical methods suggest "
         "that expr has value zero, and False otherwise.\n"
+        "PossibleZeroQ[expr, Assumptions -> assum] tests under the assumptions "
+        "assum; it also respects an ambient Assuming[] / $Assumptions scope. "
+        "Assumptions restrict the numeric sampler to the assumed region (integer, "
+        "real or complex domain, sign, range, and Re/Im-part constraints), so "
+        "identities that hold only there are recognised.\n"
         "The general problem of deciding whether an expression is zero is "
         "undecidable; PossibleZeroQ is a quick but not always accurate test.");
     symtab_set_docstring("PolynomialQ",
@@ -2607,6 +2678,23 @@ void info_init(void) {
         "Vector- or array-valued samples (f_i a list) are interpolated\n"
         "component-wise and return an array of the same shape.\n"
         "Works at machine or arbitrary (MPFR) precision, matching the data.");
+    symtab_set_docstring("InterpolatingPolynomial",
+        "InterpolatingPolynomial[{f1, f2, ...}, x]\n"
+        "\tgives the single polynomial in x reproducing the values fi at\n"
+        "\tx = 1, 2, ..., in nested (Horner) form. With n values the degree is\n"
+        "\tn-1.\n"
+        "InterpolatingPolynomial[{{x1, f1}, {x2, f2}, ...}, x]\n"
+        "\tinterpolates the values fi at the abscissae xi (arbitrary real,\n"
+        "\tcomplex, or -- in 1-D -- symbolic).\n"
+        "InterpolatingPolynomial[{{{x1, y1, ...}, f1}, ...}, {x, y, ...}]\n"
+        "\tgives the multidimensional interpolating polynomial of lowest total\n"
+        "\tdegree.\n"
+        "InterpolatingPolynomial[{{xi, fi, dfi, ...}, ...}, x]\n"
+        "\treproduces derivatives as well as values (the n-th derivative in m-D\n"
+        "\tis a tensor shaped like D[f, {{x, ...}, n}]).\n"
+        "A value or derivative given as Automatic is filled in from the other\n"
+        "conditions. The option Modulus -> n finds the polynomial over the\n"
+        "integers modulo n. Exact data give an exact polynomial.");
     symtab_set_docstring("Piecewise",
         "Piecewise[{{val_1, cond_1}, {val_2, cond_2}, ...}]\n"
         "\trepresents a piecewise function with values val_i in the regions\n"
@@ -2809,6 +2897,9 @@ void info_init(void) {
         "from Default[f] at the call site.");
     symtab_set_docstring("Longest", "Longest[p] is a pattern object that matches the longest sequence consistent with the pattern p.");
     symtab_set_docstring("Shortest", "Shortest[p] is a pattern object that matches the shortest sequence consistent with the pattern p.");
+    symtab_set_docstring("Verbatim", "Verbatim[expr] is a pattern object that matches expr taken literally: the pattern constructs inside expr (Blank, Pattern, ...) are not interpreted, so Verbatim[x_] matches only the literal expression x_.");
+    symtab_set_docstring("PatternSequence", "PatternSequence[p1, p2, ...] is a pattern object that matches a sequence of arguments, each in turn matching p1, p2, ....\nx:PatternSequence[...] binds x to the matched sequence.\nPatternSequence[] matches an empty (zero-length) sequence of arguments.");
+    symtab_set_docstring("OrderlessPatternSequence", "OrderlessPatternSequence[p1, p2, ...] is a pattern object that matches a sequence of arguments, in any order, that together match p1, p2, ....");
     symtab_set_docstring("Repeated", "p.. or Repeated[p] is a pattern object that represents a sequence of one or more expressions, each matching p.\nRepeated[p, max] represents from 1 to max expressions matching p.\nRepeated[p, {min, max}] represents between min and max expressions matching p.\nRepeated[p, {n}] represents exactly n expressions matching p.");
     symtab_set_docstring("RepeatedNull", "p... or RepeatedNull[p] is a pattern object that represents a sequence of zero or more expressions, each matching p.\nRepeatedNull[p, max] represents from 0 to max expressions matching p.\nRepeatedNull[p, {min, max}] represents between min and max expressions matching p.\nRepeatedNull[p, {n}] represents exactly n expressions matching p.");
     symtab_set_docstring("Blank", "_ or Blank[] represents any single expression.\n_h or Blank[h] represents any single expression with head h.");
@@ -2870,6 +2961,7 @@ void info_init(void) {
     symtab_set_docstring("Module", "Module[{x, y, ...}, expr] specifies that x, y, ... are local variables.");
     symtab_set_docstring("Block", "Block[{x, y, ...}, expr] evaluates expr with local values for x, y, ....");
     symtab_set_docstring("With", "With[{x = x0, ...}, expr] specifies that x should be replaced by x0 throughout expr.");
+    symtab_set_docstring("Unique", "Unique[] generates a new symbol; Unique[\"x\"] or Unique[x] uses a name prefix; Unique[{x, ...}] gives a list of fresh symbols. Each is Temporary and never previously used.");
     symtab_set_docstring("Return",
         "Return[expr]\n"
         "\treturns the value expr from a function.\n"
@@ -3068,6 +3160,11 @@ void info_init(void) {
         "\texpansions, as well as logarithmic and symbolic-exponent cases such as x^x\n"
         "\tand (1+x)^n.\n"
         "Series[f, {x, Infinity, n}] expands around x = Infinity by substituting x -> 1/u.\n"
+        "The Assumptions -> assm option (also read from an ambient Assuming[...] scope or\n"
+        "\t$Assumptions) uses the sign/reality/domain of parameters and the expansion\n"
+        "\tvariable to simplify coefficients (Sqrt[a^2] -> a, Abs[a] -> a, Log[a^p] ->\n"
+        "\tp Log[a] for a > 0), pick the Log branch of the integral family at x = 0, and\n"
+        "\texpand non-analytic heads (Abs[x], Sign[x], UnitStep[x], Conjugate[x]).\n"
         "The result of Series is a SeriesData object; use Normal to convert it back to\n"
         "\tan ordinary expression by dropping the O-term.\n"
         "Series is Protected and HoldAll so the expansion variable is not evaluated.");
@@ -3641,6 +3738,8 @@ void info_init(void) {
     symtab_set_docstring("Permutations", "Permutations[list]\n\tgenerates a list of all possible permutations of the elements in list.\nPermutations[list,n]\n\tgives all permutations containing at most n elements.\nPermutations[list,{n}]\n\tgives all permutations containing exactly n elements.");
     symtab_set_docstring("Min", "Min[x1, x2, ...]\n\tyields the numerically smallest of the xi.\nMin[{x1, x2, ...}, {y1, ...}, ...]\n\tyields the smallest element of any of the lists.");
     symtab_set_docstring("Max", "Max[x1, x2, ...]\n\tyields the numerically largest of the xi.\nMax[{x1, x2, ...}, {y1, ...}, ...]\n\tyields the largest element of any of the lists.");
+    symtab_set_docstring("RankedMin", "RankedMin[list, n]\n\tgives the n-th smallest element of list.\nRankedMin[list, -n]\n\tgives the n-th largest element of list.\n\tRankedMin[list, 1] is Min[list] and RankedMin[list, -1] is Max[list]. Yields a definite result when every element is a real number; +-Infinity are ordered as +-infinity. Has a packed-array fast path and is compilable.");
+    symtab_set_docstring("RankedMax", "RankedMax[list, n]\n\tgives the n-th largest element of list.\nRankedMax[list, -n]\n\tgives the n-th smallest element of list.\n\tRankedMax[list, n] is RankedMin[list, -n]; RankedMax[list, 1] is Max[list] and RankedMax[list, -1] is Min[list]. Yields a definite result when every element is a real number. Has a packed-array fast path and is compilable.");
     symtab_set_docstring("Median", "Median[data]\n\tgives the median estimate of the elements in data.\nMedian[dist]\n\tgives the median of the distribution dist.");
 
     symtab_set_docstring("Quartiles", "Quartiles[data]\n\tgives the {q_1/4, q_2/4, q_3/4} quantile estimates of the elements in data.\nQuartiles[data,{{a,b},{c,d}}]\n\tuses the quantile definition specified by parameters a, b, c, d.\nQuartiles[dist]\n\tgives the {q_1/4, q_2/4, q_3/4} quantiles of the distribution dist.");
@@ -3720,6 +3819,49 @@ void info_init(void) {
         "\n"
         "Reads back False in a session started with the environment variable\n"
         "MATHILDA_NO_PACK set. Only True or False is accepted.");
+
+    // Numerical option keywords shared by the numerical-calculus operations.
+    symtab_set_docstring("AccuracyGoal",
+        "AccuracyGoal\n"
+        "\tis an option for numerical operations (NLimit, NSum, NProduct,\n"
+        "\tNIntegrate, NDSolve, NResidue, ND, NSeries, FindRoot, NRoots,\n"
+        "\tNSolve) specifying how many digits of ABSOLUTE accuracy to seek.\n"
+        "\n"
+        "With AccuracyGoal -> a and PrecisionGoal -> p, Mathilda seeks a result\n"
+        "whose numerical error in a value of size x is below 10^-a + |x| 10^-p:\n"
+        "a is the absolute term, p the relative term, of the combined tolerance.\n"
+        "AccuracyGoal effectively bounds the absolute error.\n"
+        "\n"
+        "AccuracyGoal -> MachinePrecision (the default) seeks ~$MachinePrecision\n"
+        "(about 15.95) digits. AccuracyGoal -> Automatic seeks near-full working\n"
+        "precision (two digits below WorkingPrecision). AccuracyGoal -> Infinity\n"
+        "disables the absolute criterion, leaving PrecisionGoal to govern\n"
+        "termination.\n"
+        "\n"
+        "Each operation refines adaptively -- growing its term count, sampling,\n"
+        "or recursion up to a resource cap -- until the goal is met. If it\n"
+        "cannot be met at the cap, a Head::accgl message is issued and the best\n"
+        "approximation obtained is returned. Set WorkingPrecision at least as\n"
+        "large as AccuracyGoal; otherwise the result may fall well short of it.");
+    symtab_set_docstring("PrecisionGoal",
+        "PrecisionGoal\n"
+        "\tis an option for numerical operations (NIntegrate, NDSolve, NLimit,\n"
+        "\tNSum, and the others accepting AccuracyGoal) specifying how many\n"
+        "\tdigits of RELATIVE precision to seek.\n"
+        "\n"
+        "With PrecisionGoal -> p and AccuracyGoal -> a, Mathilda seeks a result\n"
+        "whose numerical error in a value of size x is below 10^-a + |x| 10^-p;\n"
+        "p is the relative term of that combined tolerance and effectively\n"
+        "bounds the relative error.\n"
+        "\n"
+        "PrecisionGoal -> Automatic (the default) seeks near-full working\n"
+        "precision (two digits below WorkingPrecision). PrecisionGoal -> Infinity\n"
+        "disables the relative criterion, leaving AccuracyGoal to govern\n"
+        "termination.\n"
+        "\n"
+        "When the goal cannot be met the operation issues a Head::accgl message\n"
+        "and returns its best approximation. Set WorkingPrecision at least as\n"
+        "large as PrecisionGoal.");
 
     // System floating-point constants (registered in core.c).
     symtab_set_docstring("$MachinePrecision",

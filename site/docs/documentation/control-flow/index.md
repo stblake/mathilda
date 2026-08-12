@@ -1,6 +1,6 @@
 # Control Flow
 
-23 built-in function(s) in this category.
+26 built-in function(s) in this category.
 
 - [`$Epilog`]($Epilog.md) — $Epilog  _(Stable)_
 - [`$Post`]($Post.md) — $Post  _(Stable)_
@@ -11,6 +11,9 @@
 - [`Boole`](Boole.md) — Boole[expr]  _(Stable)_
 - [`Break`](Break.md) — Break[] exits the nearest enclosing Do, For, or While loop.  _(Stable)_
 - [`Catch`](Catch.md) — Catch[expr]  _(Stable)_
+- [`Compile`](Compile.md) — Compile[{x, ...}, expr] or Compile[{{x, _Real}, ...}, expr] builds a CompiledFunction that evaluates expr over machine numbers (types _Real, _Integer, _Complex; default _Real), falling back to the interpreter for symbolic arguments or non-compilable bodies. With RuntimeAttributes -> Listable the object threads over List arguments; the default is RuntimeAttributes -> {}. RuntimeOptions -> {"CatchMachineIntegerOverflow" -> False} (or the shorthand RuntimeOptions -> "Speed") lets machine-integer arithmetic wrap instead of falling back to the interpreter, which is faster and gives a different answer from the interpreter once a result leaves the machine-integer range; the default True never does.  _(Stable)_
+- [`CompileDiagnostics`](CompileDiagnostics.md) — CompileDiagnostics[argspec, expr] reports whether expr compiles for the given Compile[] argument specification, and if not, the innermost subexpression that could not be lowered. For a compiled body it also gives the result type and the instruction count with and without the optimiser.  _(Stable)_
+- [`CompilePrint`](CompilePrint.md) — CompilePrint[cf] prints the bytecode of the CompiledFunction cf: its argument and result registers with their types, the scalar/array/tile register banks, and one line per instruction giving both the raw operands and a readable rendering. For an object whose body did not compile it reports the bail reason instead. Returns Null.  _(Stable)_
 - [`ConditionalExpression`](ConditionalExpression.md) — ConditionalExpression[expr, cond]  _(Stable)_
 - [`Continue`](Continue.md) — Continue[] proceeds to the next iteration of the nearest enclosing Do, For, or While loop.  _(Stable)_
 - [`Do`](Do.md) — Do[expr, n] evaluates expr n times.  _(Stable)_

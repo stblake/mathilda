@@ -7,6 +7,7 @@
 #include "symtab.h"
 #include "eval.h"
 #include "arithmetic.h"
+#include "interval.h"
 #include "complex.h"
 #include "numeric.h"
 #include "numeric_complex.h"
@@ -153,6 +154,8 @@ Expr* builtin_log(Expr* res) {
     // Log[z] - Natural logarithm
     if (argc == 1) {
         Expr* z = res->data.function.args[0];
+
+        if (is_interval(z)) { Expr* r = interval_apply_function("Log", z); if (r) return r; }
 
         // Exact evaluations for special constants
         if (z->type == EXPR_INTEGER && z->data.integer == 0) {
@@ -399,6 +402,8 @@ Expr* builtin_exp(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("Exp", res->data.function.arg_count, 1, 1);
     Expr* z = res->data.function.args[0];
+
+    if (is_interval(z)) { Expr* r = interval_apply_function("Exp", z); if (r) return r; }
 
     // Exact evaluations for special constants
     if (z->type == EXPR_INTEGER && z->data.integer == 0) {

@@ -54,6 +54,7 @@
 #include "eval.h"
 #include "expr.h"
 #include "numeric.h"
+#include "nc_accuracy.h"  /* shared AccuracyGoal/PrecisionGoal handling */
 #include "compile/autocompile.h"
 #include "sym_names.h"
 #include "symtab.h"
@@ -104,6 +105,11 @@ typedef struct {
      * a symbolic derivative or a finite-difference of some other body). */
     Expr*         main_f;        /* borrowed; the function ac_f compiles */
     AutoCompiled* ac_f;          /* owned; NULL unless scalar/machine/real */
+    /* Compiled MPFR fast path for a high-WorkingPrecision scalar solve: the
+     * compiled main function (and, through the same funnel, its finite-difference
+     * derivative) is evaluated at the working precision instead of interpreted per
+     * Newton step.  NULL unless scalar/MPFR/real.  Same faithful-degrade contract. */
+    AutoCompiled* ac_f_prec;
 } FrOpts;
 
 /* Per-variable temporary OwnValue snapshot, restored on exit. */
@@ -253,16 +259,13 @@ static bool fr_parse_working_precision(Expr* val,
 #endif
 }
 
-/* Decode an AccuracyGoal / PrecisionGoal value to a digit count.
- * Special values: Automatic → -1 (caller fills in WP/2), Infinity →
- * +∞ (caller can treat as relaxed criterion). */
+/* Decode an AccuracyGoal / PrecisionGoal value to a digit count.  Delegates to
+ * the shared parser so the whole numerical-function family agrees on the goal
+ * grammar: Automatic → NC_GOAL_AUTO (-1, caller fills in WP/2), Infinity →
+ * NC_GOAL_OFF (+∞, criterion disabled), MachinePrecision →
+ * NUMERIC_MACHINE_PRECISION_DIGITS, positive number → itself. */
 static bool fr_parse_goal(Expr* val, double* digits_out) {
-    if (val->type == EXPR_SYMBOL) {
-        if (val->data.symbol.name == SYM_Automatic) { *digits_out = -1.0; return true; }
-        if (val->data.symbol.name == SYM_Infinity)  { *digits_out = INFINITY; return true; }
-        return false;
-    }
-    return fr_expr_to_double_real(val, digits_out);
+    return nc_parse_goal(val, digits_out);
 }
 
 /* Apply a recognised Rule[opt, val] to `opts`. Returns false if the
@@ -466,6 +469,26 @@ static NumericSpec fr_numeric_spec(const FrOpts* opts) {
     return numeric_machine_spec();
 }
 
+/* Working precision of the current run in decimal digits, used to resolve the
+ * shared AccuracyGoal/PrecisionGoal tolerance (nc_combined_tol). */
+static double fr_wp_digits(const FrOpts* opts) {
+#ifdef USE_MPFR
+    if (opts->prec_mode == FR_PREC_MPFR) return numeric_bits_to_digits(opts->wp_bits);
+#endif
+    (void)opts;
+    return NUMERIC_MACHINE_PRECISION_DIGITS;
+}
+
+/* On a MaxIterations shortfall, emit the shared "goal not met" warning for the
+ * best iterate `x_mag` with error estimate `resid` (the residual |f| / step /
+ * bracket width the solver last measured). Returns the best iterate unchanged;
+ * this only decides whether the diagnostic fires. */
+static void fr_warn_goal(const FrOpts* opts, double resid, double x_mag) {
+    double tol = nc_combined_tol(opts->acc_goal_digits, opts->prec_goal_digits,
+                                 x_mag, fr_wp_digits(opts));
+    if (resid > tol) nc_warn_goal("FindRoot", resid, tol);
+}
+
 /* Evaluate `f` after temporarily setting the variable bindings to the
  * given values. The result is numericalized at the requested precision
  * so that exact subexpressions like `Power[E, 1.0]` collapse to a
@@ -503,6 +526,15 @@ static Expr* fr_eval_with_bindings(Expr* f, FrVarBind* binds,
     if (f == opts->main_f) {
         Expr* c = fr_try_compiled(opts->ac_f, values, n, spec);
         if (c) return c;
+#ifdef USE_MPFR
+        /* Compiled MPFR fast path: `values` are numeric Exprs (EXPR_MPFR); the
+         * compiled body returns f at the working precision, or NULL to interpret. */
+        if (opts->ac_f_prec && spec.mode == NUMERIC_MODE_MPFR
+            && n == autocompiled_num_vars(opts->ac_f_prec)) {
+            Expr* cm = autocompiled_eval_mpfr(opts->ac_f_prec, (const Expr* const*)values);
+            if (cm) return cm;
+        }
+#endif
     }
     for (size_t i = 0; i < n; i++) {
         fr_bind_set(&binds[i], values[i]);
@@ -690,6 +722,7 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
                                 FrVarBind* bind, double x0,
                                 const FrOpts* opts) {
     double x = x0;
+    double resid = INFINITY;    /* last |f(x)|, the goal-shortfall error estimate */
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
 
@@ -703,6 +736,7 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
         bool ok_f = fr_expr_to_double_real(fv_expr, &fv);
         expr_free(fv_expr);
         if (!ok_f) { fr_warn("nlnum", "non-real f during iteration"); return NULL; }
+        resid = fabs(fv);
         /* Pre-step convergence check: if we are already at the root, stop.
          * Also avoids the f'(x*) = 0 case for repeated roots. */
         if (fabs(fv) < tol_acc) return expr_new_real(x);
@@ -732,6 +766,7 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
     }
     fr_warn("cvmit", "failed to converge within %lld iterations",
             (long long)opts->max_iter);
+    fr_warn_goal(opts, resid, fabs(x));
     return expr_new_real(x);
 }
 
@@ -743,6 +778,7 @@ static Expr* fr_run_newton_complex(Expr* f, Expr* df,
                                    FrVarBind* bind, double complex z0,
                                    const FrOpts* opts) {
     double complex z = z0;
+    double resid = INFINITY;    /* last |f(z)|, the goal-shortfall error estimate */
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
 
@@ -756,6 +792,7 @@ static Expr* fr_run_newton_complex(Expr* f, Expr* df,
         bool ok_f = fr_expr_to_complex(fv_expr, &fv);
         expr_free(fv_expr);
         if (!ok_f) { fr_warn("nlnum", "non-numeric value"); return NULL; }
+        resid = cabs(fv);
         if (cabs(fv) < tol_acc) return fr_expr_from_complex_d(z);
 
         double complex dv;
@@ -787,6 +824,7 @@ static Expr* fr_run_newton_complex(Expr* f, Expr* df,
     }
     fr_warn("cvmit", "failed to converge within %lld iterations",
             (long long)opts->max_iter);
+    fr_warn_goal(opts, resid, cabs(z));
     return fr_expr_from_complex_d(z);
 }
 
@@ -800,6 +838,7 @@ static Expr* fr_run_secant_real(Expr* f, FrVarBind* bind,
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
     double xa = x0, xb = x1;
+    double resid = INFINITY;    /* last |f(xb)|, the goal-shortfall error estimate */
     Expr* xv0 = expr_new_real(xa);
     Expr* a0[1] = { xv0 };
     Expr* fa_e = fr_eval_with_bindings(f, bind, a0, 1, opts);
@@ -820,6 +859,7 @@ static Expr* fr_run_secant_real(Expr* f, FrVarBind* bind,
             expr_free(fb_e); fr_warn("nlnum", "non-real f during iteration"); return NULL;
         }
         expr_free(fb_e);
+        resid = fabs(fb);
         double denom = fb - fa;
         if (denom == 0.0) { fr_warn("noconv", "secant denominator vanished"); return NULL; }
         double step = opts->damping * fb * (xb - xa) / denom;
@@ -835,6 +875,7 @@ static Expr* fr_run_secant_real(Expr* f, FrVarBind* bind,
     }
     fr_warn("cvmit", "failed to converge within %lld iterations",
             (long long)opts->max_iter);
+    fr_warn_goal(opts, resid, fabs(xb));
     return expr_new_real(xb);
 }
 
@@ -915,6 +956,7 @@ static Expr* fr_run_brent_real(Expr* f, FrVarBind* bind,
     }
     fr_warn("cvmit", "failed to converge within %lld iterations",
             (long long)opts->max_iter);
+    fr_warn_goal(opts, fabs(fb), fabs(xb));
     return expr_new_real(xb);
 }
 
@@ -959,6 +1001,7 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
 
     Expr* result = NULL;
     bool converged = false;
+    double resid = INFINITY;    /* last |f(x)|, the goal-shortfall error estimate */
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* xv = expr_new_mpfr_copy(x);
@@ -980,6 +1023,7 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
         }
         /* Pre-step convergence check. */
         mpfr_abs(tmp, fv, MPFR_RNDN);
+        resid = mpfr_get_d(tmp, MPFR_RNDN);
         if (mpfr_cmp(tmp, tol_acc) < 0) {
             result = expr_new_mpfr_copy(x);
             converged = true;
@@ -1032,6 +1076,8 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
         fr_warn("cvmit", "failed to converge within %lld iterations",
                 (long long)opts->max_iter);
         result = expr_new_mpfr_copy(x);
+        mpfr_abs(tmp, x, MPFR_RNDN);
+        fr_warn_goal(opts, resid, mpfr_get_d(tmp, MPFR_RNDN));
     }
 cleanup:
     mpfr_clears(x, fv, dv, step, tmp, tol_acc, tol_prec, (mpfr_ptr)0);
@@ -1117,6 +1163,7 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
     }
     Expr* result = NULL;
     bool converged = false;
+    double resid = INFINITY;    /* last |f(z)|, the goal-shortfall error estimate */
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* zv = fr_expr_from_complex_mpfr(zr, zi);
@@ -1137,6 +1184,7 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
         mpfr_mul(tmp2, fi, fi, MPFR_RNDN);
         mpfr_add(tmp1, tmp1, tmp2, MPFR_RNDN);
         mpfr_sqrt(tmp1, tmp1, MPFR_RNDN);
+        resid = mpfr_get_d(tmp1, MPFR_RNDN);
         if (mpfr_cmp(tmp1, tol_acc) < 0) {
             result = fr_expr_from_complex_mpfr(zr, zi);
             converged = true;
@@ -1190,6 +1238,8 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
         fr_warn("cvmit", "failed to converge within %lld iterations",
                 (long long)opts->max_iter);
         result = fr_expr_from_complex_mpfr(zr, zi);
+        mpfr_hypot(tmp1, zr, zi, MPFR_RNDN);
+        fr_warn_goal(opts, resid, mpfr_get_d(tmp1, MPFR_RNDN));
     }
 cleanup:
     mpfr_clears(zr, zi, fr_, fi, dr, di, step_r, step_i,
@@ -1257,6 +1307,8 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
 
     Expr* result = NULL;
     bool converged = false;
+    double resid = INFINITY;    /* last residual norm max_i |f_i|, goal estimate */
+    double xmag  = 0.0;         /* last max_i |x_i|, for the relative tolerance   */
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr** xv = malloc(sizeof(Expr*) * n);
@@ -1381,6 +1433,8 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
         free(dx);
 
         fr_fire_monitor(opts->step_monitor);
+        resid = max_f;
+        xmag  = max_x;
         bool acc_ok = (max_f < tol_acc) && (max_step < tol_acc);
         bool prec_ok = (max_step < (max_x + 1e-300) * tol_prec);
         if (acc_ok || prec_ok) {
@@ -1391,6 +1445,7 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
     if (!converged) {
         fr_warn("cvmit", "failed to converge within %lld iterations",
                 (long long)opts->max_iter);
+        fr_warn_goal(opts, resid, xmag);
     }
     /* Build the result list of Rules (own the new value Exprs). */
     Expr** vals = malloc(sizeof(Expr*) * n);
@@ -1449,20 +1504,24 @@ Expr* builtin_findroot(Expr* res) {
     opts.prec_mode = FR_PREC_MACHINE;
     opts.wp_bits = 0;
     opts.max_iter = 100;
-    opts.acc_goal_digits = -1.0;
-    opts.prec_goal_digits = -1.0;
+    /* Uniform numerical-function contract: AccuracyGoal defaults to
+     * MachinePrecision, PrecisionGoal to Automatic (== WorkingPrecision/2,
+     * filled in below). */
+    opts.acc_goal_digits = NUMERIC_MACHINE_PRECISION_DIGITS;
+    opts.prec_goal_digits = NC_GOAL_AUTO;
     opts.damping = 1.0;
     opts.jacobian = NULL;
     opts.step_monitor = NULL;
     opts.eval_monitor = NULL;
     opts.main_f = NULL;
-    opts.ac_f = NULL;
+    opts.ac_f = NULL; opts.ac_f_prec = NULL;
 
     for (size_t i = pos_end; i < argc; i++) {
         if (!fr_apply_option(res->data.function.args[i], &opts)) return NULL;
     }
 
-    /* Fill goal defaults: half of working precision in decimal digits. */
+    /* Resolve any Automatic (NC_GOAL_AUTO) goal to half the working precision in
+     * decimal digits; MachinePrecision / explicit / Infinity goals pass through. */
     double wp_digits;
     if (opts.prec_mode == FR_PREC_MACHINE) wp_digits = NUMERIC_MACHINE_PRECISION_DIGITS;
     else                                    wp_digits = numeric_bits_to_digits(opts.wp_bits);
@@ -1587,10 +1646,18 @@ Expr* builtin_findroot(Expr* res) {
     /* Auto-compile the function for the scalar, machine-precision, real path.
      * The compiled program has real inputs, so complex/MPFR searches never use
      * it (fr_eval_with_bindings guards on spec.mode and a real argument). */
-    if (!want_complex && opts.prec_mode == FR_PREC_MACHINE) {
+    if (!want_complex) {
         const Expr* vs[1] = { var };
-        opts.ac_f = autocompile_new(fnorm, vs, 1);
-        opts.main_f = fnorm;
+        if (opts.prec_mode == FR_PREC_MACHINE) {
+            opts.ac_f = autocompile_new(fnorm, vs, 1);
+            opts.main_f = fnorm;
+        }
+#ifdef USE_MPFR
+        else if (opts.prec_mode == FR_PREC_MPFR && opts.wp_bits > 0) {
+            opts.ac_f_prec = autocompile_new_prec(fnorm, vs, 1, (long)opts.wp_bits);
+            opts.main_f = fnorm;
+        }
+#endif
     }
 
     if (method == FR_METHOD_BRENT) {
@@ -1669,6 +1736,7 @@ Expr* builtin_findroot(Expr* res) {
 scalar_cleanup:
     fr_bind_restore(&bind);
     autocompiled_free(opts.ac_f);
+    autocompiled_free(opts.ac_f_prec);
     expr_free(fnorm);
     expr_free(x0_e); expr_free(x1_e); expr_free(xmin_e); expr_free(xmax_e);
 

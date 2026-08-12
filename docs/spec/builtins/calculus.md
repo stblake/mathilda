@@ -353,6 +353,41 @@ Out[8]= 6 a b^2
     unevaluated — it has no limit), and `Max`/`Min` of a bounded oscillation
     against a dominating definite limit, e.g. `Max[Sin[x], 2] -> 2`,
     `Max[Sin[x], x] -> Infinity`, `Min[Cos[x], -x] -> -Infinity`.
+- **Assumptions** carry the sign, magnitude, or domain of a symbolic
+  parameter into the limit, so shapes that are indeterminate in the parameter
+  resolve. The assumption is read from the `Assumptions -> ...` option, an
+  enclosing `Assuming[...]`, or `$Assumptions` — the option wins over the
+  ambient value — and is threaded through the whole cascade via the shared
+  assumption engine (the same `AssumeCtx` `Simplify` and `PossibleZeroQ` use).
+  With no informative assumption the result is byte-for-byte the
+  assumption-free one. Reasoning is sound-only: a verdict is emitted just when
+  the facts *entail* it; an unknown sign leaves `Limit` on its ordinary path.
+  Decided shapes:
+  - **exponent sign** — `Limit[x^n, x -> Infinity, Assumptions -> n > 0] =
+    Infinity`, `n < 0 -> 0`; at `x -> 0` from above the two invert;
+    `x -> -Infinity` resolves only for a known *even* exponent
+    (`Element[n, Evens] && n > 0 -> Infinity`).
+  - **real base magnitude** — `Limit[a^x, x -> Infinity, Assumptions -> a > 1]
+    = Infinity`, `0 < a < 1 -> 0`, inverted at `x -> -Infinity`. A *real* base
+    `> 1` gives a real `Infinity`, distinct from the
+    `Assumptions -> Abs[a] > 1 -> ComplexInfinity` verdict (unknown phase).
+  - **coefficient / log sign** — the leading coefficient of a `Plus` or
+    rational, or `Sign[Log[b]]` for a symbolic base, is read from the facts:
+    `Limit[c x, x -> Infinity, Assumptions -> c > 0] = Infinity` (`-Infinity`
+    for `c < 0`), `Limit[x Log[a], x -> Infinity, Assumptions -> a > 1] =
+    Infinity`, and the compose / one-sided-pole cases follow
+    (`Limit[Tanh[c x], x -> Infinity, Assumptions -> c < 0] = -1`,
+    `Limit[c/x, x -> 0, Direction -> "FromBelow", Assumptions -> c < 0] =
+    Infinity`).
+  - **growth ordering / divergent monomial** — a strict order fact ranks powers
+    (`Limit[x^n/x^m, x -> Infinity, Assumptions -> n > m] = Infinity`), and a
+    function of one divergent parametric monomial `x^a` (`a > 0`) is closed by
+    the substitution `t = x^a` (`Limit[x^a/(x^a + 1), x -> Infinity,
+    Assumptions -> a > 0] = 1`), which also feeds the bounded envelope
+    (`Limit[Sin[x]/x^p, x -> Infinity, Assumptions -> p > 0] = 0`).
+  - domain facts imply signs (`Element[n, PositiveIntegers]` gives `n > 0`), and
+    the pre-existing `Assumptions -> Abs[B] R c` power dispatch (`|B| < 1 -> 0`,
+    `|B| > 1 -> ComplexInfinity`, `|B| == 1 -> Indeterminate`) is unchanged.
 - **Every method is also a head.** `Limit`Series[f, x -> a]` is exactly
   `Limit[f, x -> a, Method -> "Series"]`, so a strategy can be named without
   threading an option through — the natural way to ask "does *this* layer
@@ -442,6 +477,15 @@ Out[20]= Limit`RationalFunction[Sin[x]/x, x -> 0]
 
 In[21]:= Limit`Gruntz[x (E^(1/x) - 1), x -> Infinity]
 Out[21]= 1
+
+In[22]:= Limit[x^n, x -> Infinity, Assumptions -> n > 0]
+Out[22]= Infinity
+
+In[23]:= Assuming[a > 1, Limit[a^x, x -> Infinity]]
+Out[23]= Infinity
+
+In[24]:= Limit[x^a/(x^a + 1), x -> Infinity, Assumptions -> a > 0]
+Out[24]= 1
 ```
 
 ## Residue

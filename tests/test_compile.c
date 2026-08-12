@@ -1588,6 +1588,54 @@ int main(void) {
         }
     }
 
+    /* ---- list-LHS Set: thread a scalar RHS over the targets (Wolfram Set
+     * semantics, {a, b} = c binds a = c and b = c; nested LHS recurses). This
+     * must LOWER, not bail -- the interpreter fix made {a,b}=c thread, and the
+     * compiler/auto-compiler have to agree. A destructuring List RHS is not
+     * lowered and must bail to the interpreter (which handles it). Bodies are
+     * parsed UNEVALUATED so the Module survives to the compiler. ---- */
+    {
+        const char* in1[1] = { intern_symbol("x") };
+        CompileType ty1[1] = { CT_REAL };
+        struct { const char* nm; const char* body; int compiles; } tc[] = {
+            { "list Set thread scalar", "Module[{a = 0., b = 0.}, {a, b} = x; a + b]",                 1 },
+            { "list Set thread nested", "Module[{a = 0., b = 0., c = 0.}, {a, {b, c}} = x; a + b + c]", 1 },
+            { "list Set thread expr",   "Module[{a = 0., b = 0.}, {a, b} = x + 1.; a b]",              1 },
+            { "list Set returns rhs",   "Module[{a = 0., b = 0., r = 0.}, r = ({a, b} = x); r]",       1 },
+            { "list Set destructure bails", "Module[{a = 0., b = 0.}, {a, b} = {x, 2 x}; a + b]",       0 },
+        };
+        for (size_t k = 0; k < sizeof tc / sizeof tc[0]; k++) {
+            Expr* b = parse_expression(tc[k].body);
+            CompiledProgram* p = compile_expr(b, in1, ty1, 1);
+            if (!tc[k].compiles) {
+                if (p) { printf("FAIL: %-30s -> compiled but must bail\n", tc[k].nm); failures++; compiled_free(p); }
+                else printf("ok:   %-30s bails (interpreter handles destructure)\n", tc[k].nm);
+                expr_free(b); continue;
+            }
+            if (!p) { printf("FAIL: %-30s -> did not compile\n", tc[k].nm); failures++; expr_free(b); continue; }
+            double maxerr = 0; int cmp = 0;
+            for (int t = 0; t < 150; t++) {
+                double x = urand(0.5, 3.0);
+                CompileValue av[1] = { { CT_REAL, { .r = x } } }, o;
+                if (!compiled_eval(p, av, &o)) continue;
+                double got = (o.type == CT_INT) ? (double)o.v.i : o.v.r, ref = 0;
+                switch (k) {
+                    case 0: ref = 2.0 * x; break;               /* a=b=x -> a+b */
+                    case 1: ref = 3.0 * x; break;               /* a=b=c=x -> sum */
+                    case 2: ref = (x + 1.0) * (x + 1.0); break; /* a=b=x+1 -> a b */
+                    case 3: ref = x; break;                     /* r = ({a,b}=x) == x */
+                    default: break;
+                }
+                double err = fabs(got - ref) / (1.0 + fabs(ref));
+                if (err > maxerr) maxerr = err;
+                cmp++;
+            }
+            if (cmp < 40 || maxerr > 1e-9) { printf("FAIL: %-30s -> max_rel=%.2e (%d)\n", tc[k].nm, maxerr, cmp); failures++; }
+            else printf("ok:   %-30s max_rel=%.1e (%d cmps)\n", tc[k].nm, maxerr, cmp);
+            compiled_free(p); expr_free(b);
+        }
+    }
+
     /* ---- Counted iterator spellings.  Do accepts every form the interpreter's
      * iter_spec_parse does; Sum/Product require a named iterator because the
      * interpreter rejects a bare count for them.  A missing form here is not a
@@ -2082,6 +2130,15 @@ int main(void) {
         /* Operand is a temporary, so the result has to slide down into its slot. */
         parity_arr("nd nested",      "Reverse[Sort[v]]",      vn, VT, 1, 17, 0.4, 3.0, 6);
         parity_arr("nd pipeline",    "Total[Take[Sort[v], 3]]", vn, VT, 1, 17, 0.4, 3.0, 6);
+        /* RankedMin/RankedMax — (array, int) -> scalar via the V_NDREDN opcode.
+         * A literal rank (like Take[v, 5]) keeps these in parity_arr; the n-th
+         * order statistic is a scalar, which arr_cmp compares like Total's. */
+        parity_arr("nd RankedMin",   "RankedMin[v, 2]",       vn, VT, 1, 17, 0.4, 3.0, 6);
+        parity_arr("nd RankedMax",   "RankedMax[v, 2]",       vn, VT, 1, 17, 0.4, 3.0, 6);
+        parity_arr("nd RankedMin neg","RankedMin[v, -1]",     vn, VT, 1, 17, 0.4, 3.0, 6);
+        parity_arr("nd RankedMax neg","RankedMax[v, -2]",     vn, VT, 1, 17, 0.4, 3.0, 6);
+        /* Operand a temporary: the scalar result must not disturb the array bank. */
+        parity_arr("nd Ranked nested","RankedMin[Sort[v], 3]",vn, VT, 1, 17, 0.4, 3.0, 6);
         parity_arr("nd with Map",    "Total[Map[Function[u, u^2], Reverse[v]]]",
                                                               vn, VT, 1, 17, 0.4, 3.0, 6);
         { const int64_t d2[2] = { 3, 4 };

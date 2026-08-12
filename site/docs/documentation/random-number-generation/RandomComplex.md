@@ -31,7 +31,7 @@ In[1]:= SeedRandom[42]; Head[RandomComplex[]]
 Out[1]= Complex
 
 In[2]:= SeedRandom[42]; RandomComplex[2 + 3 I]
-Out[2]= 1.7311 + 1.32662*I
+Out[2]= 1.62861 + 0.956463*I
 
 In[3]:= SeedRandom[42]; Length[RandomComplex[{0, 1 + I}, 5]]
 Out[3]= 5

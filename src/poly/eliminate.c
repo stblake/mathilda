@@ -80,7 +80,9 @@ static bool is_const_atom(const Expr* e) {
             return true;
         default: break;
     }
+#ifdef USE_MPFR
     if (e->type == EXPR_MPFR) return true;
+#endif
     if (e->type == EXPR_SYMBOL) {
         const char* s = e->data.symbol.name;
         return s == SYM_True || s == SYM_False

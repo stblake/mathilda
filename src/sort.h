@@ -11,6 +11,8 @@ Expr* builtin_take_largest(Expr* res);
 Expr* builtin_take_smallest(Expr* res);
 Expr* builtin_take_largest_by(Expr* res);
 Expr* builtin_take_smallest_by(Expr* res);
+Expr* builtin_ranked_min(Expr* res);
+Expr* builtin_ranked_max(Expr* res);
 Expr* builtin_reverse_sort(Expr* res);
 Expr* builtin_reverse_sort_by(Expr* res);
 Expr* builtin_orderedq(Expr* res);

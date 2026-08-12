@@ -1,6 +1,6 @@
 # Data Structures
 
-60 built-in function(s) in this category.
+61 built-in function(s) in this category.
 
 - [`Append`](Append.md) — Append[expr, elem] adds elem to the end of expr.  _(Stable)_
 - [`Apply`](Apply.md) — f @@ expr or Apply[f, expr]  _(Stable)_
@@ -21,6 +21,7 @@
 - [`Drop`](Drop.md) — Drop[list, n]  _(Stable)_
 - [`First`](First.md) — First[expr] gives the first element of expr.  _(Stable)_
 - [`FoldList`](FoldList.md) — FoldList[f, x, list]  _(Stable)_
+- [`Gather`](Gather.md) — Gather[list]  _(Stable)_
 - [`GatherBy`](GatherBy.md) — GatherBy[list, f]  _(Stable)_
 - [`GroupBy`](GroupBy.md) — GroupBy[list, f]  _(Stable)_
 - [`Join`](Join.md) — Join[list1, list2, ...]  _(Stable)_

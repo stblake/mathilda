@@ -142,11 +142,19 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Power[Power[%s, 2], Rational[1, 2]] :> %s", x, x);
         SEP(); EMIT("Power[Power[%s, -1], Rational[1, 2]] :> Power[%s, Rational[-1, 2]]", x, x);
         SEP(); EMIT("Power[Power[%s, -2], Rational[1, 2]] :> Power[%s, -1]", x, x);
+        /* General (x^2)^r -> x^(2r) for x > 0 (valid for any rational r, since
+         * x^2 > 0): covers 1/Sqrt[x^2] = (x^2)^(-1/2) -> 1/x and the
+         * (x^2)^(3/2) -> x^3 that arise from Laurent/fractional radical powers. */
+        SEP(); EMIT("Power[Power[%s, 2], r_] :> Power[%s, 2 r]", x, x);
         /* Sqrt[x^2 * rest] -> x * Sqrt[rest] for x > 0; lets multi-factor
          * radicals like Sqrt[x^2 y^2] reduce one symbol at a time. */
         SEP(); EMIT("Power[Times[Power[%s, 2], rest___], Rational[1, 2]] :> %s Power[Times[rest], Rational[1, 2]]", x, x);
         /* Abs[x] -> x  for x > 0 */
         SEP(); EMIT("Abs[%s] :> %s", x, x);
+        /* Sign[x] -> 1  for x > 0 */
+        SEP(); EMIT("Sign[%s] :> 1", x);
+        /* Conjugate[x] -> x  for x > 0 (x is real) */
+        SEP(); EMIT("Conjugate[%s] :> %s", x, x);
         /* Log[x^p] -> p Log[x]  for x > 0 (any real p; v1 accepts symbolic p too) */
         SEP(); EMIT("Log[Power[%s, p_]] :> p Log[%s]", x, x);
         /* Inverse-trig sum identity: ArcTan[x] + ArcTan[1/x] -> Pi/2  for x > 0.
@@ -169,8 +177,15 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         const char* x = negatives[i];
         /* Abs[x] -> -x  for x < 0 */
         SEP(); EMIT("Abs[%s] :> -%s", x, x);
+        /* Sign[x] -> -1  for x < 0 */
+        SEP(); EMIT("Sign[%s] :> -1", x);
+        /* Conjugate[x] -> x  for x < 0 (x is real) */
+        SEP(); EMIT("Conjugate[%s] :> %s", x, x);
         /* Sqrt[x^2] -> -x  for x < 0  (Power[Power[x,2], 1/2]) */
         SEP(); EMIT("Power[Power[%s, 2], Rational[1, 2]] :> -%s", x, x);
+        /* General (x^2)^r -> (-x)^(2r) for x < 0 (x^2 = (-x)^2, -x > 0):
+         * covers 1/Sqrt[x^2] = (x^2)^(-1/2) -> 1/(-x) and (x^2)^(3/2) -> -x^3. */
+        SEP(); EMIT("Power[Power[%s, 2], r_] :> Power[Times[-1, %s], 2 r]", x, x);
         /* Sqrt[x^2 * rest] -> -x * Sqrt[rest] for x < 0. */
         SEP(); EMIT("Power[Times[Power[%s, 2], rest___], Rational[1, 2]] :> -%s Power[Times[rest], Rational[1, 2]]", x, x);
         /* Mirror of the x > 0 inverse-trig sum: ArcTan[x] + ArcTan[1/x]
@@ -188,6 +203,8 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Power[Power[%s, 2], Rational[1, 2]] :> Abs[%s]", x, x);
         /* Sqrt[x^2 * rest] -> Abs[x] * Sqrt[rest] for real x. */
         SEP(); EMIT("Power[Times[Power[%s, 2], rest___], Rational[1, 2]] :> Abs[%s] Power[Times[rest], Rational[1, 2]]", x, x);
+        /* Conjugate[x] -> x  for real x. */
+        SEP(); EMIT("Conjugate[%s] :> %s", x, x);
     }
 
     /* Sin[n Pi] -> 0, Cos[n Pi] -> (-1)^n, Tan[n Pi] -> 0 for integer n.

@@ -502,6 +502,33 @@ static void test_list_nonfinite_falls_back(void) {
                 "List[0.0, 1e+308, inf.0]");
 }
 
+/* The int64 exact-loop fast path (src/numloop.c): a counter loop with an integer
+ * accumulator and no inexact leaf now runs in overflow-checked int64 rather than
+ * bailing to the interpreter. The result is an exact Integer, and on overflow or
+ * a non-integer-closed step the whole run bails so the answer is still the
+ * interpreter's exact one (bignum / Rational). */
+static void test_int64_exact_loops(void) {
+    /* Large exact sum -- the fast path, and an Integer (not a Real) result. */
+    expect_full("Module[{s = 0}, Do[s = s + i, {i, 1, 100000}]; s]", "5000050000");
+    expect_full("Module[{s = 0}, Do[s = s - i, {i, 1, 100}]; s]", "-5050");
+    /* i^2 in the body compiles to POWI and stays integer. */
+    expect_full("Module[{s = 0}, Do[s = s + i^2, {i, 1, 100}]; s]", "338350");
+    /* A product that overflows int64 -> bail -> the interpreter's exact bignum
+     * (25! > 2^63). This is the parity crux: never a wrapped int64. */
+    expect_full("Module[{p = 1}, Do[p = p*i, {i, 1, 25}]; p]",
+                "15511210043330985984000000");
+    /* Additive overflow just past INT64_MAX -> bail -> exact bignum. */
+    expect_full("Module[{s = 9223372036854775800}, Do[s = s + i, {i, 1, 10}]; s]",
+                "9223372036854775855");
+    /* A rational step is not integer-closed -> bail -> exact Rational. */
+    expect_full("Module[{s = 0}, Do[s = s + i/2, {i, 1, 10}]; s]", "Rational[55, 2]");
+    /* For with an integer accumulator and counter. */
+    expect_full("Module[{s = 0, i = 0}, For[i = 1, i <= 100, i++, s = s + i]; s]",
+                "5050");
+    /* A bare-count Do reading a free symbol stays symbolic (declines the path). */
+    expect_full("Module[{s = 0}, Do[s = s + a, {5}]; s]", "Times[5, a]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -562,6 +589,7 @@ int main(void) {
     TEST(test_fallback_fixedpoint_exact);
     TEST(test_fallback_do_compound_symbolic);
     TEST(test_fallback_do_compound_nonset);
+    TEST(test_int64_exact_loops);
 
     /* The list-producing heads */
     TEST(test_diff_nestlist_logistic);

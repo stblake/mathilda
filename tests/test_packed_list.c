@@ -1782,6 +1782,31 @@ void test_producers_pack(void) {
     assert_eval_eq("NDArrayQ[Array[Sqrt[#] &, 300]]", "False", 0);
 }
 
+/* N over a packed integer array widens the whole buffer to a packed float64
+ * array (numericalize_rec's EXPR_NDARRAY case + N's packed_int64_ok claim). The
+ * regression: N[Range[10^6]] used to materialise to a list of boxed reals -- the
+ * gate handed the int64 buffer to N as a plain list, and the element-by-element
+ * rebuild dropped packing -- so every consumer downstream fell off the buffer. */
+void test_n_over_integer_packs(void) {
+    assert_eval_eq("NDArrayQ[N[Range[300]]]", "True", 0);
+    assert_eval_eq("DataType[N[Range[300]]]", "\"float64\"", 0);
+    assert_eval_eq("Head[N[Range[300]][[1]]]", "Real", 0);
+    /* Values agree with the arithmetic int->real route, which always packed. */
+    assert_eval_eq("N[Range[300]] === Range[1., 300.]", "True", 0);
+    assert_eval_eq("Total[N[Range[300]]] == Total[Range[1., 300.]]", "True", 0);
+    /* A visible integer NDArray converts to a visible float64 NDArray. */
+    assert_eval_eq("DataType[N[NDArray[{1, 2, 3}, DataType -> \"int64\"]]]",
+                   "\"float64\"", 0);
+    assert_eval_eq("Head[N[NDArray[{1, 2, 3}, DataType -> \"int64\"]]]", "NDArray", 0);
+    /* A real buffer is already machine-precision and passes through packed. */
+    assert_eval_eq("NDArrayQ[N[Range[1., 300.]]]", "True", 0);
+    /* With packing off the flag is respected: the source is unpacked, so is N's
+     * result. (The restore runs inside the evaluated expression regardless.) */
+    assert_eval_eq("Module[{r}, $AutoArrayPacking = False; "
+                   "r = NDArrayQ[N[Range[300]]]; $AutoArrayPacking = True; r]",
+                   "False", 0);
+}
+
 void test_threshold_is_not_observable(void) {
     /* 249 is under the threshold and 250 over it, so the two run through
      * different representations. Every observable except NDArrayQ must agree.
@@ -2324,6 +2349,7 @@ int main(void) {
     TEST(test_visible_stays_visible);
     TEST(test_kill_switch);
     TEST(test_producers_pack);
+    TEST(test_n_over_integer_packs);
     TEST(test_threshold_is_not_observable);
     TEST(test_exact_int64_arithmetic_on_a_buffer);
     TEST(test_regressions_automatic_packing_exposed);

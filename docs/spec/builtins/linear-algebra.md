@@ -1647,7 +1647,9 @@ Generates a matrix with specified elements on a diagonal.
   [packed list](packed-arrays.md) written directly, without building the
   elements — which is what the exactness rule above buys: a matrix of two heads
   fits no buffer, and the exact zeros used to cost a `Real` diagonal 320×
-  against NumPy's `np.diag`.
+  against NumPy's `np.diag`. The single-vector form **compiles**
+  (`Compile[{{v, _Real, 1}}, DiagonalMatrix[v]]`, rank 1 → rank 2). See
+  [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
 
 ```mathematica
 In[1]:= DiagonalMatrix[{a, b, c}]
@@ -1734,6 +1736,13 @@ processing.
 - The shared corner element `c_m` must equal `r_1`. If they differ, the
   column element `c_m` is used (the formula never reads `r_1`) and a
   `HankelMatrix::crs` warning is emitted; the matrix is still produced.
+- An all-integer or all-machine-real argument writes the rank-2 result buffer
+  directly (`ndbuild_open`) instead of building `m*n` `Expr` cells — packed out,
+  bit-identical to the boxed path. Both the single-vector form
+  (`Compile[{{v, _Real, 1}}, HankelMatrix[v]]`, rank 1 → rank 2) and the
+  two-vector form (`Compile[{{c, _Real, 1}, {r, _Real, 1}}, HankelMatrix[c, r]]`,
+  rank 1 × rank 1 → rank 2) **compile**, delegating to this builtin. See
+  [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
 
 **Diagnostics**:
 ```
@@ -1786,6 +1795,11 @@ and time series.
   column element `c_1` is used (the formula never reads `r_1`, which sits on
   the diagonal as `c_1`) and a `ToeplitzMatrix::crs` warning is emitted; the
   matrix is still produced.
+- An all-integer or all-machine-real argument writes the rank-2 result buffer
+  directly (`ndbuild_open`); both the single-vector form
+  (`Compile[{{v, _Real, 1}}, ToeplitzMatrix[v]]`, rank 1 → rank 2) and the
+  two-vector form (`ToeplitzMatrix[c, r]`, rank 1 × rank 1 → rank 2)
+  **compile**. See [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
 
 **Diagnostics**:
 ```
@@ -1833,6 +1847,13 @@ in computing moments in the monomial basis.
   recovers the coefficients `{a0, a1, ...}` of the polynomial
   `p(x) = a0 + a1 x + ...` through the points `{xi, bi}`. The determinant is the
   product of node differences `prod_{i<j} (xj - xi)`.
+- An all-integer or all-machine-real node list writes the rank-2 result buffer
+  directly. The integer path uses checked powers and falls back to the exact
+  bignum path on `int64` overflow, so `VandermondeMatrix[{2, 100}, 20]` is still
+  exact. (A *mixed* int+real list keeps its unpacked, two-head result, since the
+  `Power` cells of an integer node stay exact beside a real one.) The
+  single-vector form **compiles** (`Compile[{{v, _Real, 1}}, VandermondeMatrix[v]]`,
+  rank 1 → rank 2). See [`packed-arrays.md`](packed-arrays.md#which-array-heads-compile).
 
 **Diagnostics**:
 ```
@@ -2044,7 +2065,22 @@ response vector `v`.
   machine and MPFR arithmetic. Malformed data (ragged rows, a variable count
   that does not match the data coordinates, empty data) issues a `Fit::...`
   message and returns unevaluated.
-- Attribute `Protected`. Lives in `src/fit.c`.
+- **Machine fast path.** When the data is fully numeric and `WorkingPrecision`
+  resolves to machine precision, the design matrix is built column-wise — each
+  basis function is evaluated once with the variables bound to the packed
+  coordinate *vectors*, reusing the packed elementwise kernels — and assembled
+  as a packed `float64` array, so the solve reaches LAPACK. This accepts a
+  packed array or a visible `NDArray[...]` as `data` (previously an `NDArray`
+  errored) and takes a 100k-point quadratic fit from ~3.6 s to ~7 ms. Exact
+  (`WorkingPrecision -> Infinity`), MPFR, and symbolic-basis fits fall back to
+  the general path unchanged.
+- **Conditioning.** The plain-L2 path column-scales the design matrix
+  (numpy.polyfit-style equilibration) before the solve and unscales the
+  coefficients afterwards, which keeps a high-degree monomial fit accurate where
+  the raw Vandermonde is ill-conditioned. A basis that is still nearly
+  rank-deficient after scaling issues `Fit::cond`; a basis function that is
+  numerically zero over the data gets coefficient exactly `0`.
+- Attribute `Protected` (and packed-array aware). Lives in `src/fit.c`.
 
 ```mathematica
 In[1]:= Fit[{{0,1},{1,0},{3,2},{5,4}}, {1, x}, x]
@@ -2061,7 +2097,7 @@ Out[4]= 0.8 - 0.5 x + 0.5 y
 
 In[5]:= Fit[{{0.,0.},{0.001,1},{0.01,1}}, {1, x, x^2}, x,
             FitRegularization -> {"Tikhonov", 1}]
-Out[5]= 0.499985 + 0.00549961 x + 4.9996e-05 x^2
+Out[5]= 0.499985 + 0.00549961 x + 5.0496e-05 x^2
 
 In[6]:= Fit[{{0,1},{1,0},{3,2},{5,4}}, {1, x}, x,
             NormFunction -> Function[Norm[#, 1]]]
@@ -2072,9 +2108,11 @@ Out[6]= -1.0 + 1.0 x
 
 `DesignMatrix[data, {f1, ..., fn}, vars]` gives the design matrix with entries
 `f_i` evaluated at the data coordinates — the matrix `Fit` forms internally. The
-data shapes are identical to `Fit`. By default the entries are kept exact; the
+data shapes are identical to `Fit`, and `data` may be a nested `List`, a packed
+array, or a visible `NDArray[...]`. By default the entries are kept exact; the
 `WorkingPrecision` option (`MachinePrecision` or a digit count) converts them to
-approximate numbers. Attribute `Protected`. Lives in `src/fit.c`.
+approximate numbers. Attribute `Protected` (and packed-array aware). Lives in
+`src/fit.c`.
 
 ```mathematica
 In[1]:= DesignMatrix[{{0,1},{1,0},{3,2},{5,4}}, {1, x}, x]

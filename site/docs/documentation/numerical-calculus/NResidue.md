@@ -13,7 +13,7 @@ NResidue[{e1, e2, ...}, {z, z0}]
 
 Works for essential singularities where the symbolic Residue (which needs a power series) cannot. Cannot distinguish a tiny spurious residual from a true zero -- Chop the result when needed; returns an incorrect value if the contour encloses another singularity or crosses a branch cut.
 
-Options: Radius (contour radius, default 1/100, or Automatic), WorkingPrecision, PrecisionGoal, MaxRecursion (max contour refinements, default 10), Method ('Trapezoidal').
+Options: Radius (contour radius, default 1/100, or Automatic), WorkingPrecision, AccuracyGoal (default MachinePrecision), PrecisionGoal, MaxRecursion (max contour refinements, default 10), Method ('Trapezoidal').
 ```
 
 ## Examples

@@ -18,10 +18,10 @@ All examples below are verified against the current Mathilda build.
 
 ```mathematica
 In[1]:= SeedRandom[42]; {RandomInteger[], RandomInteger[], RandomInteger[]}
-Out[1]= {1, 1, 1}
+Out[1]= {1, 1, 0}
 
 In[2]:= SeedRandom[42]; {RandomInteger[], RandomInteger[], RandomInteger[]}
-Out[2]= {1, 1, 1}
+Out[2]= {1, 1, 0}
 ```
 
 ## Implementation notes

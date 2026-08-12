@@ -63,7 +63,19 @@ bool seqaccel_wynn_machine(const double _Complex* S, int terms, int degree,
         for (int n = 0; n < len; n++) {
             double _Complex d = SA_E(c - 1, n + 1) - SA_E(c - 1, n);
             double _Complex recip;
-            if (cabs(d) <= 0.0) recip = 1e300;          /* singular bridge */
+            /* A zero difference is a singular bridge (two adjacent ε values
+             * coincide).  Propagate it as a non-finite reciprocal, NOT a huge
+             * finite sentinel: when the sampled sequence saturates to a machine
+             * constant its tail is a *run* of coincidences, and a finite
+             * sentinel (e.g. 1e300) both leaks into the even estimate column and
+             * makes adjacent polluted entries subtract to exactly zero -- which
+             * the "best agreement" reader below then selects as a spurious
+             * near-1e300 result.  An infinite reciprocal instead makes those
+             * entries non-finite, so the finite-guarded reader skips them and
+             * takes the estimate from the well-conditioned part of the table.
+             * On an isolated coincidence the two choices give the same even-
+             * column value; they differ only on a saturated run. */
+            if (cabs(d) <= 0.0) recip = INFINITY;
             else                recip = 1.0 / d;
             SA_E(c, n) = SA_E(c - 2, n + 1) + recip;
         }
@@ -257,7 +269,11 @@ bool seqaccel_wynn_mpfr(const mpfr_t* Sr, const mpfr_t* Si, int terms,
             mpfr_sub(dr, SA_ER(c - 1, n + 1), SA_ER(c - 1, n), MPFR_RNDN);
             mpfr_sub(di, SA_EI(c - 1, n + 1), SA_EI(c - 1, n), MPFR_RNDN);
             if (mpfr_zero_p(dr) && mpfr_zero_p(di)) {
-                mpfr_set_d(rr, 1e300, MPFR_RNDN);
+                /* Singular bridge: propagate as +Inf, not a finite sentinel, so
+                 * that a saturated tail's polluted even-column entries become
+                 * non-finite and the finite-guarded reader below skips them
+                 * (see the machine-precision twin for the full rationale). */
+                mpfr_set_inf(rr, 1);
                 mpfr_set_ui(ri, 0, MPFR_RNDN);
             } else {
                 mpfr_complex_div(rr, ri, one, zero, dr, di);

@@ -161,12 +161,14 @@ static Expr* builtin_ratcanon_prototype(Expr* res) {
  * ======================================================================== */
 
 static int64_t rcp_igcd(int64_t a, int64_t b) {
-    if (a < 0) a = -a; if (b < 0) b = -b;
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
     while (b) { int64_t t = a % b; a = b; b = t; }
     return a ? a : 1;
 }
 static int64_t rcp_ilcm(int64_t a, int64_t b) {
-    if (a < 0) a = -a; if (b < 0) b = -b;
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
     if (!a || !b) return 1;
     return a / rcp_igcd(a, b) * b;
 }

@@ -3961,6 +3961,7 @@ Expr* direct_dispatch(Expr* m, Expr* a, int64_t n,
         if (ia.has_inexact && (!info.has_inexact || ia.min_bits < info.min_bits))
             info = ia;
     }
+#ifdef USE_MPFR
     if (info.has_inexact && info.min_bits > 53) {
         Expr* out = direct_dispatch_mpfr(m, a, n, (mpfr_prec_t)info.min_bits,
                                           want, k_spec);
@@ -3970,6 +3971,9 @@ Expr* direct_dispatch(Expr* m, Expr* a, int64_t n,
          * coerce the MPFR cells to doubles via eigen_leaf_to_double,
          * which is the closest behaviour-preserving fallback. */
     }
+#else
+    (void)info;
+#endif
     return direct_dispatch_machine(m, a, n, want, k_spec);
 }
 

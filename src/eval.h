@@ -101,6 +101,30 @@ void eval_init(void);
 uint64_t eval_clock_get(void);
 void     eval_clock_bump(void);
 
+/* Ground fixed-point epoch (see the long comment in eval.c). The clock above
+ * is coarse -- every mutation invalidates every cached fixed point, so an
+ * iterator rebinding re-canonicalises loop-invariant values O(size) per step.
+ * `g_last_rule_change_clock` is a finer epoch advanced ONLY by mutations that
+ * change how a head evaluates (DownValue add, attribute/Protect change, Clear/
+ * Remove). A node built solely from literals under the six pure structural
+ * constructors (List/Association/Rule/RuleDelayed/Complex/Rational) carries a
+ * GROUND flag in the top bit of `last_evaluated_at` and re-validates as a fixed
+ * point whenever its stamp >= this epoch -- surviving ordinary OwnValue churn.
+ *   - eval_rule_epoch_get():  read the epoch.
+ *   - eval_rule_epoch_mark(): record the CURRENT clock as a rule change (caller
+ *                             has already bumped the clock, e.g. via add_rule).
+ *   - eval_rule_epoch_bump(): bump the clock AND mark it (attribute sites). */
+uint64_t eval_rule_epoch_get(void);
+void     eval_rule_epoch_mark(void);
+void     eval_rule_epoch_bump(void);
+
+/* Mask-aware views of `last_evaluated_at` for tests/tools (the raw field now
+ * carries the GROUND flag in its top bit; read it through these, not directly).
+ *   - eval_node_stamp():     the fixed-point stamp, flag masked off.
+ *   - eval_node_is_ground(): true iff the GROUND flag is set. */
+uint64_t eval_node_stamp(const Expr* e);
+bool     eval_node_is_ground(const Expr* e);
+
 // Helper to evaluate and free the input expression
 static inline Expr* eval_and_free(Expr* e) {
     if (!e) return NULL;

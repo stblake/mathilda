@@ -4,9 +4,46 @@
 - `__`: `BlankSequence[]`.
 - `___`: `BlankNullSequence[]`.
 - `x_`: `Pattern[x, _]`.
-- `_h`: Matches expression with head `h`.
-- `p ? test`: `PatternTest[p, test]`.
-- `lhs /; condition`: Conditional matching.
+- `_h`: Matches expression with head `h`. Head-typed blanks cover the atomic
+  numeric heads too: `_Rational` matches `1/2` (`Rational[1, 2]`), `_Complex`
+  matches `3 + 4 I` (`Complex[3, 4]`), and `_Integer` matches an arbitrary-size
+  bigint.
+- `p ? test`: `PatternTest[p, test]`. On a sequence blank (`__?test`,
+  `___?test`) the predicate is applied to every matched element.
+- `lhs /; condition`: Conditional matching. Chained `/;` nests right, i.e.
+  `p /; c1 /; c2` is `Condition[p, Condition[c1, c2]]`, and every leaf condition
+  must hold (`Condition` is `HoldAll`, so the leaves are evaluated individually).
+- `p1 | p2 | ...`: `Alternatives`, matches any one of the `pi`.
+- `Except[c]`, `Except[c, p]`: matches anything not matching `c` (and, in the
+  two-argument form, also matching `p`).
+- `HoldPattern[p]`: matches as `p` but keeps `p` unevaluated when the rule is
+  formed (so e.g. `x_ + x_` is preserved as a sum pattern rather than
+  collapsing to `2 x_`).
+- `Verbatim[expr]`: matches `expr` taken literally — the pattern constructs
+  inside `expr` are not interpreted, so `Verbatim[x_]` matches only the literal
+  `x_` (`Pattern[x, Blank[]]`).
+- `PatternSequence[p1, ..., pm]`: matches a run of arguments each matching
+  `p1..pm`; `PatternSequence[]` matches zero arguments, and `x:PatternSequence[
+  ...]` binds `x` to the matched `Sequence`.
+- `OrderlessPatternSequence[p1, ..., pm]`: matches any subset of the arguments,
+  in any order and position (even under a non-`Orderless` head) — each `pi` binds
+  a distinct argument; the remaining pattern elements match the leftover
+  arguments in order. `x:OrderlessPatternSequence[...]` binds `x` to the matched
+  `Sequence`.
+- `Longest[p]` / `Shortest[p]`: prefer the longest / shortest match for a
+  sequence pattern `p`; transparent at a non-sequence position.
+- A sequence pattern used at the **top level** matches the single subject as a
+  length-1 sequence: `MatchQ[a, a..]`, `MatchQ[a, _..]` and `MatchQ[a, a...]`
+  are all `True` (as are `__`/`___` there). A `List` is one expression, so it
+  is not decomposed against a bare top-level sequence pattern —
+  `MatchQ[{a, b}, (a | b)..]` is `False` (use `{(a | b)..}`). Nested repeats
+  such as `Repeated[RepeatedNull[a]]` (`(a...)..`) are matched by routing each
+  repetition through this top-level rule.
+
+The matcher's recursion depth is bounded by the same user-visible
+`$RecursionLimit` the evaluator uses (default `1024`): a subject or pattern
+nested deeper than that yields a graceful non-match rather than overflowing the
+C stack. Raise `$RecursionLimit` to match deeper structures.
 
 ## Cases
 Gives a list of elements that match a pattern.

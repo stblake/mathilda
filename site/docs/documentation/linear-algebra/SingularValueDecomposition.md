@@ -64,7 +64,7 @@ All examples below are verified against the current Mathilda build.
 
 ```mathematica
 In[1]:= SingularValueDecomposition[{{1, 2}, {1, 2}}]
-Out[1]= {{{1/Sqrt[2], 1/Sqrt[2]}, {1/Sqrt[2], -1/Sqrt[2]}}, {{Sqrt[10], 0}, {0, 0}}, {{1/Sqrt[5], -2/Sqrt[5]}, {2/Sqrt[5], 1/Sqrt[5]}}}
+Out[1]= {{{1/Sqrt[2], -1/Sqrt[2]}, {1/Sqrt[2], 1/Sqrt[2]}}, {{Sqrt[10], 0}, {0, 0}}, {{1/Sqrt[5], -2/Sqrt[5]}, {2/Sqrt[5], 1/Sqrt[5]}}}
 
 In[2]:= SingularValueDecomposition[{{1.1, 2, 5}, {3, -11, 4.2}}, 1]
 Out[2]= {{{0.0195749}, {0.999808}}, {{12.1526}}, {{0.248586}, {-0.901763}, {0.353593}}}

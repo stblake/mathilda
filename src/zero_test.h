@@ -35,6 +35,16 @@ typedef enum {
  * distinguish "unknown" from "true zero" should use this entry. */
 ZeroTestResult zero_test_decide(const Expr* e);
 
+/* Assumption-aware variant. `ctx` is a normalized fact set (see simp.h); a
+ * NULL or empty ctx reproduces zero_test_decide(e) exactly. With facts, the
+ * Schwartz–Zippel sampler draws only values that conform to the assumed region
+ * (integer / real / complex domain, sign, finite range, Re/Im-part
+ * constraints), so identities that hold only there are recognised. Only TRUE
+ * from the unconditional exact stages is trusted; constrained sampling is the
+ * sole arbiter of a non-zero verdict. Never invokes Simplify. */
+struct AssumeCtx;
+ZeroTestResult zero_test_decide_assuming(const Expr* e, const struct AssumeCtx* ctx);
+
 /* PossibleZeroQ[expr] builtin. Follows the standard Mathilda contract:
  *   - Consumes ownership of `res` indirectly (evaluator frees it).
  *   - Returns a fresh True/False symbol, or NULL on arity mismatch.

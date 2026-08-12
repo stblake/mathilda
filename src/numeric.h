@@ -246,6 +246,13 @@ bool get_approx_mpfr(const Expr* e,
  * (may be stack-allocated). */
 bool numeric_contagion_args(Expr* const* args, size_t n, Expr** out);
 
+/* True iff `e` is (or contains, inside Complex[...]) an inexact numeric leaf —
+ * an EXPR_REAL or, under USE_MPFR, an EXPR_MPFR value. This is exactly the
+ * predicate numeric_contagion_args scans for, exported so a caller can cheaply
+ * pre-detect whether the inexact-contagion pass could do anything before paying
+ * for it (e.g. Plus's fused special-case guard). */
+bool arg_is_inexact(const Expr* e);
+
 /* Builtin entry points */
 Expr* builtin_n(Expr* res);
 

@@ -74,6 +74,13 @@ Work through them in order if you're new — each one builds on the last.
     `PolyLog`, the Bernoulli and Euler numbers, and the hypergeometric family —
     with their exact reductions and numerical values.
 
+-   :material-arrow-expand-horizontal: __[Interval arithmetic](15-interval-arithmetic.md)__
+
+    Rigorous enclosures that never lie: exact and symbolic endpoints, the
+    dependency problem, functions with poles and discontinuities, and validated
+    numerics — proving a root exists, guaranteed bounds, and rounding error made
+    visible.
+
 -   :material-sigma: __[11. Symbolic summation](11-symbolic-summation.md)__
 
     Close infinite series into constants with `Sum`: telescoping and Gosper's
@@ -85,6 +92,13 @@ Work through them in order if you're new — each one builds on the last.
     Evaluate infinite products with `Product`: rational telescoping, the
     Wallis/Viète trigonometric factorizations, Euler prime products for `ζ`,
     and the exponential products for `e`, `γ`, and Glaisher's constant.
+
+-   :material-cog-play: __[Compilation & auto-compilation](16-compilation.md)__
+
+    Run numeric work at machine speed: `Compile[]` for ints, reals, arrays and
+    associations; automatic compilation (`$AutoCompilation`) and packed arrays
+    (`$AutoArrayPacking`) that you get for free; the compilable-subset cliff and
+    how to see it — measured against Python 3.11 + NumPy at every step.
 
 -   :material-grid: __[13. BLAS kernels](13-blas.md)__
 

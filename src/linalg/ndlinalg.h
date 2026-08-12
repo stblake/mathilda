@@ -39,6 +39,23 @@ extern "C" {
  * that is an EXPR_NDARRAY. This is the cheap predicate each builtin guards on. */
 bool linalg_call_has_ndarray(const Expr* res);
 
+/* Pack a plain List of machine REALS into an f64 buffer, so a small matrix --
+ * below the packing threshold, hence never "already a buffer" -- still reaches
+ * the NDArray fast paths. Declines (NULL) for anything already packed,
+ * unpackable, or not sniffing to NDT_FLOAT64, which keeps exact Integer and
+ * Rational matrices on the exact paths they are owed. The caller owns the
+ * result; the argument is neither mutated nor freed. */
+Expr* linalg_pack_machine_operand(const Expr* arg);
+
+/* linalg_pack_machine_operand for a one-argument call: returns a rebuilt
+ * `head[packed]` to hand to an ndla_* fast path, or NULL to decline. */
+Expr* linalg_pack_machine_call1(const Expr* res);
+
+/* Two-argument form (LinearSolve[m, v], Dot[a, b]). Declines unless BOTH
+ * operands are machine-real, so a mixed exact/machine call keeps its exact
+ * path rather than being half-converted. */
+Expr* linalg_pack_machine_call2(const Expr* res);
+
 /* Universal fallback: rebuild `res` with every top-level NDArray argument
  * replaced by its nested-List form and evaluate the result. Returns a freshly
  * owned Expr* (the evaluated call), or NULL if the rebuilt call cannot be

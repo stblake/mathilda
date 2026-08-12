@@ -12,6 +12,8 @@ lhs == rhs or Equal[lhs, rhs]
     precision tolerance); structurally identical symbolic forms decide
     True; otherwise the call stays unevaluated as a symbolic equation.
 Equal threads over Lists pairwise; chained Equal becomes Inequality.
+Following IEEE 754 / ISO 60559, Indeterminate is unordered with every
+value including itself, so any Indeterminate argument gives False.
 ```
 
 ## Examples

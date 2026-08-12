@@ -342,7 +342,9 @@ static double eigen_part_to_double(Expr* e) {
     if (e->type == EXPR_REAL) return e->data.real;
     if (e->type == EXPR_INTEGER) return (double)e->data.integer;
     if (e->type == EXPR_BIGINT) return mpz_get_d(e->data.bigint);
+#ifdef USE_MPFR
     if (e->type == EXPR_MPFR) return mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+#endif
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_Rational
@@ -396,8 +398,10 @@ static bool eigen_abs_to_double(Expr* val, double* out) {
     if (n_abs->type == EXPR_REAL) d = n_abs->data.real;
     else if (n_abs->type == EXPR_INTEGER) d = (double)n_abs->data.integer;
     else if (n_abs->type == EXPR_BIGINT) d = mpz_get_d(n_abs->data.bigint);
+#ifdef USE_MPFR
     else if (n_abs->type == EXPR_MPFR)
         d = mpfr_get_d(n_abs->data.mpfr, MPFR_RNDN);
+#endif
     else ok = false;
     expr_free(n_abs);
     *out = d;
@@ -713,7 +717,9 @@ Expr** eigen_null_space_algebraic(Expr* m, Expr* a_or_null, Expr* val,
 bool eigen_matrix_is_inexact(Expr* m) {
     if (!m) return false;
     if (m->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
     if (m->type == EXPR_MPFR) return true;
+#endif
     if (m->type != EXPR_FUNCTION) return false;
     if (eigen_matrix_is_inexact(m->data.function.head)) return true;
     for (size_t i = 0; i < m->data.function.arg_count; i++) {
@@ -866,7 +872,9 @@ static bool eigen_leaf_to_double(Expr* e, double* out_re, double* out_im) {
     if (e->type == EXPR_REAL)    { *out_re = e->data.real;                return true; }
     if (e->type == EXPR_INTEGER) { *out_re = (double)e->data.integer;     return true; }
     if (e->type == EXPR_BIGINT)  { *out_re = mpz_get_d(e->data.bigint);   return true; }
+#ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    { *out_re = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true; }
+#endif
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol.name;

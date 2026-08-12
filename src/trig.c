@@ -1,6 +1,7 @@
 #include <complex.h>
 #include "trig.h"
 #include "arithmetic.h"
+#include "interval.h"
 #include "plus.h"
 #include "times.h"
 #include "power.h"
@@ -654,6 +655,8 @@ Expr* builtin_sin(Expr* res) {
         return builtin_arg_error("Sin", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Sin", arg); if (r) return r; }
+
     { Expr* inv = strip_inverse_call(arg, "ArcSin"); if (inv) return inv; }
 
     // Sin[ArcCos[x]] -> Sqrt[1-x^2], Sin[ArcTan[x]] -> x/Sqrt[1+x^2]
@@ -706,6 +709,8 @@ Expr* builtin_cos(Expr* res) {
         return builtin_arg_error("Cos", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Cos", arg); if (r) return r; }
+
     { Expr* inv = strip_inverse_call(arg, "ArcCos"); if (inv) return inv; }
 
     // Cos[ArcSin[x]] -> Sqrt[1-x^2], Cos[ArcTan[x]] -> 1/Sqrt[1+x^2]
@@ -757,6 +762,8 @@ Expr* builtin_tan(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("Tan", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Tan", arg); if (r) return r; }
 
     { Expr* inv = strip_inverse_call(arg, "ArcTan"); if (inv) return inv; }
 
@@ -811,6 +818,8 @@ Expr* builtin_cot(Expr* res) {
         return builtin_arg_error("Cot", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Cot", arg); if (r) return r; }
+
     { Expr* inv = strip_inverse_call(arg, "ArcCot"); if (inv) return inv; }
 
     // Cot[ArcTan[x]] -> 1/x
@@ -863,6 +872,8 @@ Expr* builtin_sec(Expr* res) {
         return builtin_arg_error("Sec", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Sec", arg); if (r) return r; }
+
     { Expr* inv = strip_inverse_call(arg, "ArcSec"); if (inv) return inv; }
 
     // Sec is even: Sec[-x] -> Sec[x]
@@ -911,6 +922,8 @@ Expr* builtin_csc(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("Csc", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Csc", arg); if (r) return r; }
 
     { Expr* inv = strip_inverse_call(arg, "ArcCsc"); if (inv) return inv; }
 
@@ -1082,6 +1095,8 @@ Expr* builtin_arcsin(Expr* res) {
         return builtin_arg_error("ArcSin", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("ArcSin", arg); if (r) return r; }
+
     // ArcSin is odd: ArcSin[-x] -> -ArcSin[x]
     { Expr* f = odd_fold(arg, "ArcSin"); if (f) return f; }
 
@@ -1131,6 +1146,8 @@ Expr* builtin_arccos(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("ArcCos", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("ArcCos", arg); if (r) return r; }
 
     // ArcCos[-x] -> Pi - ArcCos[x]
     { Expr* f = arc_pi_minus_fold(arg, "ArcCos"); if (f) return f; }
@@ -1214,6 +1231,8 @@ Expr* builtin_arctan(Expr* res) {
     // Single argument ArcTan[z]
     if (res->data.function.arg_count == 1) {
         Expr* arg = res->data.function.args[0];
+
+        if (is_interval(arg)) { Expr* r = interval_apply_function("ArcTan", arg); if (r) return r; }
 
         // Infinite arguments. Handle these BEFORE the odd / exact folds:
         // exact_arctan otherwise spuriously matches Tan[-Pi/2] ==
@@ -1338,6 +1357,8 @@ Expr* builtin_arccot(Expr* res) {
         return builtin_arg_error("ArcCot", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
 
+    if (is_interval(arg)) { Expr* r = interval_apply_function("ArcCot", arg); if (r) return r; }
+
     // ArcCot is odd (Mathematica convention): ArcCot[-x] -> -ArcCot[x]
     { Expr* f = odd_fold(arg, "ArcCot"); if (f) return f; }
 
@@ -1382,6 +1403,8 @@ Expr* builtin_arcsec(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("ArcSec", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("ArcSec", arg); if (r) return r; }
 
     // ArcSec[-x] -> Pi - ArcSec[x]
     { Expr* f = arc_pi_minus_fold(arg, "ArcSec"); if (f) return f; }
@@ -1431,6 +1454,8 @@ Expr* builtin_arccsc(Expr* res) {
     if (res->data.function.arg_count != 1)
         return builtin_arg_error("ArcCsc", res->data.function.arg_count, 1, 1);
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("ArcCsc", arg); if (r) return r; }
 
     // ArcCsc is odd: ArcCsc[-x] -> -ArcCsc[x]
     { Expr* f = odd_fold(arg, "ArcCsc"); if (f) return f; }

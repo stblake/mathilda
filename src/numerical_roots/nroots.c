@@ -35,6 +35,7 @@
 #include "expr.h"
 #include "eval.h"
 #include "numeric.h"
+#include "nc_accuracy.h"    /* shared AccuracyGoal/PrecisionGoal handling */
 #include "sym_names.h"
 #include "symtab.h"
 #include "attr.h"
@@ -635,6 +636,63 @@ static Expr* nr_root_to_expr(const ncpx* z, int isreal, long target_bits,
     return e;
 }
 
+/* ------------------------------------------------------------------ *
+ *  AccuracyGoal / PrecisionGoal acceptance check
+ * ------------------------------------------------------------------ */
+
+/* Estimate each root's error as the Newton correction |p(z)/p'(z)| and compare
+ * it to the combined tolerance  10^-a + |z| 10^-p  (nc_combined_tol).  The
+ * engines already polish to the working precision that PrecisionGoal drives, so
+ * this is a post-solve acceptance gate rather than a change to the polisher's
+ * own stopping tolerance: it decides only whether the goal was met.
+ *
+ * Roots sitting at a stationary point (|p'(z)| ~ 0 — a multiple or clustered
+ * root, which the exact squarefree path already solves as a well-conditioned
+ * factor) are accurate by construction, so they are skipped; this keeps a
+ * well-conditioned polynomial from ever raising a spurious warning.
+ *
+ * Returns true and sets *worst_err / *worst_tol for the root that most exceeds
+ * its tolerance; false when every checked root meets its goal. */
+static bool nr_goal_shortfall(const NrPoly* p, const ncpx* roots, int n,
+                              double acc_goal, double prec_goal, double wp_digits,
+                              mpfr_prec_t wp, double* worst_err, double* worst_tol) {
+    ncpx val, der;
+    ncpx_init(&val, wp); ncpx_init(&der, wp);
+    mpfr_t maxc, negl, dm, vm, zm, t;
+    mpfr_init2(maxc, wp); mpfr_init2(negl, wp); mpfr_init2(dm, wp);
+    mpfr_init2(vm, wp); mpfr_init2(zm, wp); mpfr_init2(t, wp);
+
+    mpfr_set_zero(maxc, 1);
+    for (int i = 0; i <= p->deg; i++) {
+        ncpx_abs(t, &p->c[i]);
+        if (mpfr_cmp(t, maxc) > 0) mpfr_set(maxc, t, MPFR_RNDN);
+    }
+    /* |p'| below maxc * 2^-(wp/2) signals a multiple / clustered root. */
+    mpfr_set(negl, maxc, MPFR_RNDN);
+    mpfr_div_2si(negl, negl, (long)wp / 2, MPFR_RNDN);
+
+    bool shortfall = false;
+    double we = 0.0, wt = 0.0;
+    for (int i = 0; i < n; i++) {
+        nr_poly_eval(p, &roots[i], &val, &der, wp);
+        ncpx_abs(dm, &der);
+        if (mpfr_cmp(dm, negl) <= 0) continue;         /* multiple/clustered: skip */
+        ncpx_abs(vm, &val);
+        mpfr_div(t, vm, dm, MPFR_RNDN);                /* |p/p'| ~ error in the root */
+        double err = mpfr_get_d(t, MPFR_RNDN);
+        ncpx_abs(zm, &roots[i]);
+        double tol = nc_combined_tol(acc_goal, prec_goal,
+                                     mpfr_get_d(zm, MPFR_RNDN), wp_digits);
+        if (err > tol && (err - tol) > (we - wt)) { we = err; wt = tol; shortfall = true; }
+    }
+
+    ncpx_clear(&val); ncpx_clear(&der);
+    mpfr_clear(maxc); mpfr_clear(negl); mpfr_clear(dm);
+    mpfr_clear(vm); mpfr_clear(zm); mpfr_clear(t);
+    *worst_err = we; *worst_tol = wt;
+    return shortfall;
+}
+
 #endif /* USE_MPFR */
 
 /* ================================================================== *
@@ -643,13 +701,17 @@ static Expr* nr_root_to_expr(const ncpx* z, int isreal, long target_bits,
 typedef struct {
     NrMethod   method;
     const char* method_name;  /* requested name, for diagnostics; NULL = auto */
-    double     prec_goal;     /* digits; -1 => Automatic                       */
+    double     prec_goal;     /* digits; -1 => Automatic. Drives working prec.  */
     int        max_iter;      /* -1 => Automatic                               */
+    double     acc_goal;      /* AccuracyGoal digits (nc_accuracy.h sentinels);
+                                 default MachinePrecision. Feeds the per-root
+                                 goal tolerance, not the working precision.     */
 } NrOpts;
 
 static bool nr_is_known_option(const char* s) {
     return s == SYM_Method || s == SYM_MaxIterations
-        || s == SYM_PrecisionGoal || s == SYM_StepMonitor;
+        || s == SYM_PrecisionGoal || s == SYM_AccuracyGoal
+        || s == SYM_StepMonitor;
 }
 
 static bool nr_is_option_arg(Expr* e) {
@@ -721,6 +783,14 @@ static bool nr_apply_option(Expr* rule, NrOpts* o) {
         if (nr_to_double_real(rhs, &v) && v > 0.0) { o->prec_goal = v; return true; }
         nr_warn("badopt", "invalid PrecisionGoal value."); return false;
     }
+    if (name == SYM_AccuracyGoal) {
+        if (!nc_parse_goal(rhs, &o->acc_goal)) {
+            nr_warn("badopt", "AccuracyGoal must be a positive number, "
+                              "Automatic, Infinity or MachinePrecision.");
+            return false;
+        }
+        return true;
+    }
     if (name == SYM_MaxIterations) {
         if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) { o->max_iter = -1; return true; }
         if (rhs->type == EXPR_INTEGER && rhs->data.integer > 0) { o->max_iter = (int)rhs->data.integer; return true; }
@@ -757,7 +827,7 @@ Expr* builtin_nroots(Expr* res) {
         return NULL;
     }
 
-    NrOpts opts = { NR_AUTO, NULL, -1.0, -1 };
+    NrOpts opts = { NR_AUTO, NULL, -1.0, -1, NUMERIC_MACHINE_PRECISION_DIGITS };
     for (size_t i = pos_end; i < argc; i++) {
         if (!nr_apply_option(res->data.function.args[i], &opts)) return NULL;
     }
@@ -809,6 +879,18 @@ Expr* builtin_nroots(Expr* res) {
         rc = nr_solve(p, opts.method, max_iter, wp, roots);
         poly_is_real = p->is_real;
     }
+
+    /* Goal acceptance: check the raw roots against the AccuracyGoal/PrecisionGoal
+     * tolerance while p is still alive.  On a shortfall we still return the best
+     * roots (accuracy is never a reason to leave NRoots unevaluated). */
+    bool goal_short = false;
+    double goal_err = 0.0, goal_tol = 0.0;
+    if (rc == 0) {
+        goal_short = nr_goal_shortfall(p, roots, d, opts.acc_goal, opts.prec_goal,
+                                       numeric_bits_to_digits(target_bits), wp,
+                                       &goal_err, &goal_tol);
+    }
+
     if (zp) zupoly_free(zp);
     nr_poly_free(p);
 
@@ -818,6 +900,9 @@ Expr* builtin_nroots(Expr* res) {
         free(roots);
         return NULL;
     }
+
+    if (goal_short && !arith_warnings_muted())
+        nc_warn_goal("NRoots", goal_err, goal_tol);
 
     int* realf = (int*)malloc(sizeof(int) * (size_t)d);
     nr_postprocess(roots, realf, d, poly_is_real, wp, target_bits);

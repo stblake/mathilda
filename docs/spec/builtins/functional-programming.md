@@ -95,6 +95,18 @@ of the per-dimension Newton divided-difference polynomials. The order drops to
 linear, three → quadratic). The windowing reproduces Mathematica's default
 piecewise interpolant.
 
+**Batch (vectorised) application**: applying a 1-D interpolant to an array of
+query points — `ifun[{x1, x2, ...}]` or `ifun[packedArray]` / `ifun[NDArray[...]]`
+— evaluates every point in a single C loop over the grid's double buffers and
+returns a packed result (the counterpart of numpy/scipy's `cs(array)`), rather
+than one evaluator call per point. Per-interval polynomial coefficients are
+precomputed once and reused, and the interval search is branchless, so a random
+`10^5`-point evaluation runs in a few milliseconds — on par with or faster than
+`scipy.interpolate.CubicSpline`. Threads over derivatives (`ifun'[array]`) and
+the `"Spline"` method too; supplied-derivative/Hermite/array-valued/periodic
+objects fall back to per-point evaluation. `Map[ifun, list]` still evaluates one
+point at a time — prefer `ifun[list]` for large batches.
+
 **Derivatives**: `Derivative[d1, ..., dm][InterpolatingFunction[...]]` (and so
 `ifun'`, `D[ifun[x], x]`, `D[f[x,y], {x,2}]`, etc.) returns another
 `InterpolatingFunction` carrying the accumulated derivative orders — exactly as
@@ -186,6 +198,11 @@ first, then the derivative axes), in n-D, and at MPFR precision.
 The domain is inferred from the data (the min/max abscissa in each dimension),
 preserving the data's number type (integer abscissae give an integer domain).
 
+The `data` table may be a nested `List`, a packed array, or a visible
+`NDArray[...]` (previously an `NDArray` argument was left unevaluated);
+`Interpolation` is packed-array aware, so a packed table is not materialised
+before it is read.
+
 **Precision.** Interpolation is carried out at machine precision for machine data
 and at the data's MPFR precision when the data or the evaluation point carry
 arbitrary precision; the result is an `EXPR_MPFR` real in that case. All methods
@@ -226,6 +243,65 @@ In[8]:= (* periodic: f[x] wraps with period = data span (5) *)
         fp = Interpolation[Table[{x, N[Sin[2 Pi x/5]]}, {x, 0, 5}], PeriodicInterpolation -> True];
         {fp[0.5], fp[5.5], fp[-4.5]}
 Out[8]= {0.557674, 0.557674, 0.557674}
+```
+
+## InterpolatingPolynomial
+- `InterpolatingPolynomial[{f1, f2, …}, x]` gives the single polynomial in `x`
+  that reproduces the values `fi` at `x = 1, 2, …`, in nested (Horner) form.
+  With `n` values the degree is `n-1`.
+- `InterpolatingPolynomial[{{x1, f1}, {x2, f2}, …}, x]` interpolates the values
+  `fi` at the abscissae `xi`. Abscissae and values may be arbitrary real or
+  complex numbers, and in 1-D arbitrary symbolic expressions.
+- `InterpolatingPolynomial[{{{x1, y1, …}, f1}, …}, {x, y, …}]` gives the
+  multidimensional interpolating polynomial of **lowest total degree**.
+- Derivatives as well as values: an entry `{xi, fi, dfi, …}` (1-D) or
+  `{{coords}, fi, ti1, ti2, …}` (m-D) reproduces the supplied derivatives, where
+  the order-`k` tensor `tik` is shaped like `D[f, {{x, …}, k}]` (`ti1` = gradient,
+  `ti2` = Hessian, …). 1-D confluent data uses Newton–Hermite divided differences.
+- Any value or derivative given as `Automatic` is filled in from the remaining
+  conditions by the minimal-degree solve.
+- Unlike `Interpolation`, the result is an ordinary polynomial expression (no
+  `InterpolatingFunction` object).
+
+**Engines.** 1-D with all values present uses Newton (confluent) divided
+differences and prints the exact nested Newton–Horner form. The multivariate
+case and any `Automatic` case use a minimal-total-degree solve over a graded
+monomial basis: the degree is raised until the interpolation system is
+**consistent** (not necessarily full-rank — a redundant condition still yields a
+lower-degree fit), capped at the degree `d` with `Binomial[d+m, m] ≥ N` (`N`
+known conditions, `m` variables). Exact rational input gives an exact rational
+polynomial; the arithmetic is done through the CAS heads so a symbolic
+right-hand side (e.g. a symbolic value `a`) flows through.
+
+**Diagnostics.** When no interpolant of the expected total degree exists,
+`InterpolatingPolynomial::noipf` (1-D) or `::poised` (multi-D, degenerate point
+configuration) is emitted and the call is left unevaluated.
+
+**Option `Modulus -> n`** finds the interpolating polynomial over the integers
+modulo `n` (exact integer data; `n` prime is the well-behaved case).
+
+**NDArray / packed arrays.** A packed or visible `NDArray` data table is read
+directly (int64 data stays exact; float64 data gives a numeric polynomial), so
+`InterpolatingPolynomial` is packed-aware.
+
+```mathematica
+In[1]:= InterpolatingPolynomial[{1, 4, 9, 16}, x]
+Out[1]= 1 + (-1 + x) (1 + x)
+
+In[2]:= InterpolatingPolynomial[{4, 7, 2, {8, 0}, 9}, x]   (* value 8, slope 0 at x=4 *)
+Out[2]= 4 + (-1 + x) (3 + (-2 + x) (-4 + (-3 + x) (19/6 + (-4 + x) (-107/36 + 109/72 (-4 + x)))))
+
+In[3]:= Expand[InterpolatingPolynomial[
+          {{{0, 0}, 1}, {{1, 0}, 7}, {{0, 1}, 10}, {{2, 1}, 40},
+           {{3, 3}, 151}, {{1, 2}, 47}}, {x, y}]]
+Out[3]= 1 + 2 x + 4 x^2 + 3 y + 5 x y + 6 y^2
+
+In[4]:= Expand[InterpolatingPolynomial[
+          {{-1, Automatic, 0}, {0, 1, 1}, {1, Automatic, 0}}, x]]
+Out[4]= 1 + x - x^3/3
+
+In[5]:= InterpolatingPolynomial[{1, 4, 9, 16}, x, Modulus -> 7]
+Out[5]= x^2
 ```
 
 ## Map (/@)

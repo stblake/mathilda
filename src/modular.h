@@ -6,6 +6,7 @@
 Expr* builtin_module(Expr* res);
 Expr* builtin_block(Expr* res);
 Expr* builtin_with(Expr* res);
+Expr* builtin_unique(Expr* res);
 
 void modular_init(void);
 

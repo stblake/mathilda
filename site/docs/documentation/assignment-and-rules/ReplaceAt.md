@@ -15,8 +15,13 @@ ReplaceAt[expr, rules, {{i1, j1, ...}, {i2, j2, ...}, ...}]
 
 Rules may be a single Rule/RuleDelayed or a list of them; rules are tried
 in order and the first match wins. Negative indices count from the end;
-0 targets the head. All and Span specifications are supported. Repeated
-positions cause rules to be applied repeatedly to that part.
+0 targets the head. All and Span specifications are supported. On an
+association a position is a key, Key[k], or a positional index over the
+entries, and the rules are tried against the value. Repeated positions
+cause rules to be applied repeatedly to that part. ReplaceAt[expr, rules,
+{}] is an empty list of positions and replaces nothing, while {{}} is the
+position of expr itself. A position that does not exist leaves ReplaceAt
+unevaluated.
 ```
 
 ## Examples
@@ -59,9 +64,12 @@ Out[8]= {{a, xx}, {a, xx}}
 - `rules` may be a single `Rule` (`->`), `RuleDelayed` (`:>`), or a list of such rules. The rules are tried in order; the first one that applies wins. If no rule matches at a targeted position, the part is left unchanged.
 - For `RuleDelayed`, the right-hand side is evaluated separately for each match after substituting bound pattern variables.
 - Negative integer indices count from the end. The literal index `0` targets the head of an expression.
-- Path components may be integers, the symbol `All` (selects every child at that level), or `Span` expressions such as `i ;; j` or `i ;; j ;; k`.
+- Path components may be integers, the symbol `All` (selects every child at that level), or `Span` expressions such as `i ;; j` or `i ;; j ;; k` (including `UpTo[n]` bounds).
 - Works on expressions with any head (not just `List`); after substitution the evaluator re-applies canonical ordering for `Orderless` heads such as `Plus` and `Times`.
-- The position list uses the same form as is returned by `Position`. `ReplaceAt[expr, rules, {}]` applies the rules to the whole expression.
+- On an `Association` a position is a key, `Key[k]`, or a positional index over the entries, and the rules are tried against the *value*; `All`, `Span` and `0` work there too.
+- The position list uses the same form as is returned by `Position`. `ReplaceAt[expr, rules, {}]` is an **empty list of positions** and replaces nothing; the position of the whole expression is the empty path, `{{}}`.
+- A position that does not exist — an out-of-range index, an absent key, a malformed `Span`, or a path that runs into an atom — leaves `ReplaceAt` unevaluated, as `Part` does for `{a, b, c}[[99]]`.
+- Position resolution is shared with [`MapAt`](../data-structures/MapAt.md) via one walker (`expr_apply_at_path`, `src/part.c`), so the two agree on every position spec by construction.
 
 **Attributes:** `Protected`.
 

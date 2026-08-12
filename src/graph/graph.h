@@ -53,8 +53,32 @@ const char* graph_edge_kind(const Expr* e);
  * no parallel/duplicate edges, and every edge endpoint appears in verts. */
 int graph_is_valid(const Expr* g);
 
-/* Index of vertex v within List `verts` (linear expr_eq scan), or -1. */
+/* Index of vertex v within List `verts` (linear expr_eq scan), or -1. Fine for a
+ * single lookup; for a whole pass over the edges, build a GraphVIdx instead. */
 int graph_vertex_index(const Expr* verts, const Expr* v);
+
+/* ---- Vertex index (src/graph/graph_util.c) --------------------------------
+ * A hash index from vertex expression to an int, keyed on expr_hash/expr_eq.
+ * It exists so that passes over the edge list -- validation, adjacency building,
+ * deriving a vertex list from edges -- resolve endpoints in O(1) rather than by
+ * a linear expr_eq scan, which is what made those passes O(E*V).
+ *
+ * Keys are BORROWED: the index stores the vertex pointers, so the expressions
+ * must outlive it. Nothing is copied and nothing is freed but the table. */
+typedef struct GraphVIdx GraphVIdx;
+
+/* Table sized so `hint` entries fit without a resize. NULL on allocation
+ * failure. Grows automatically if more are added. */
+GraphVIdx* graph_vidx_new(size_t hint);
+void       graph_vidx_free(GraphVIdx* ix);
+
+/* Value stored for `v`, or -1 when absent. */
+int graph_vidx_get(const GraphVIdx* ix, const Expr* v);
+
+/* Insert `v` with value `index` if no expr_eq-equal key is present. Returns 1 if
+ * inserted, 0 if it was already there (whose value is left untouched, so the
+ * first insert of a repeated vertex wins). */
+int graph_vidx_put(GraphVIdx* ix, const Expr* v, int index);
 
 /* ---- Phase 2: query / representation builtins ----------------------------- */
 Expr* builtin_vertex_list(Expr* res);      /* VertexList[g]                    */

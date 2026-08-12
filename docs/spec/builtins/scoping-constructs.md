@@ -42,6 +42,25 @@ In[1]:= x = 10; With[{x = 5}, x^2]
 Out[1]= 25
 ```
 
+## Unique
+Generates fresh symbols that have never been used before.
+- `Unique[]` — a new symbol named `$nnn`.
+- `Unique["x"]` or `Unique[x]` — a new symbol whose name is the prefix `x`
+  followed by a number (`x1`, `x2`, …).
+- `Unique[{x, y, ...}]` — a list of fresh symbols, all sharing one number.
+
+**Features**:
+- `Protected`.
+- The numeric suffix is drawn from the shared `$ModuleNumber` counter (the same
+  source `Module` uses), advanced until the generated name is unused, so every
+  result is genuinely fresh and distinct.
+- Created symbols have the `Temporary` attribute.
+
+```mathematica
+In[1]:= {Unique[], Unique["x"], Unique[{a, b}]}
+Out[1]= {$1, x2, {a3, b3}}
+```
+
 ## Scoping and pure functions
 
 `Module` / `Block` / `With` reach into the body of a nested pure function, so a

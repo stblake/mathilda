@@ -1173,6 +1173,7 @@ static Expr* nd_mol_solve_system(Expr* res, const NdOpts* o0, const char* forced
 
     nd_operator_free(P.op);
     nd_compiled_free(P.compiled);
+    nd_ac_prec_free(&P);
     for (size_t i = 0; i < d; i++) { expr_free(P.f[i]); expr_free(P.ysym[i]); }
     free(P.f); free(P.ysym); free(P.Y0); free(P.bind_y);
     if (P.jac) {
@@ -1659,6 +1660,7 @@ Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
     /* ---- cleanup (P.ysym/P.f may have been replaced by realification) ---- */
     nd_operator_free(P.op);
     nd_compiled_free(P.compiled);
+    nd_ac_prec_free(&P);
     for (size_t i = 0; i < d; i++) { expr_free(P.f[i]); expr_free(P.ysym[i]); }
     free(P.f); free(P.ysym); free(P.Y0); free(P.bind_y);
     (void)ysym;
@@ -2282,6 +2284,7 @@ static Expr* nd_mol_solve_2d(Expr* res, const NdOpts* o0, const char* forced_met
 
     nd_operator_free(P.op);
     nd_compiled_free(P.compiled);
+    nd_ac_prec_free(&P);
     for (size_t i = 0; i < d; i++) { expr_free(P.f[i]); expr_free(ysym[i]); }
     free(P.f); free(ysym); free(P.Y0); free(P.bind_y);
     if (P.jac) {

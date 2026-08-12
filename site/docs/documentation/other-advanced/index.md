@@ -1,10 +1,13 @@
 # Other & Advanced
 
-85 built-in function(s) in this category.
+96 built-in function(s) in this category.
 
+- [`$AutoArrayPacking`]($AutoArrayPacking.md) — $AutoArrayPacking  _(Stable)_
+- [`$AutoCompilation`]($AutoCompilation.md) — $AutoCompilation  _(Stable)_
 - [`$PlotLegendData`]($PlotLegendData.md) — $PlotLegendData[{color1, label1}, ...]  _(Stable)_
 - [`$PlotResample`]($PlotResample.md) — $PlotResample[var, {f...}, {plotPoints, maxRecursion, maxPlotPoints, mesh, regionFunction, exclusions, colorFunction, colorFunctionScaling, filling, fillingStyle}]  _(Experimental)_
 - [`$StreamColorBar`]($StreamColorBar.md) — $StreamColorBar[speed_min, speed_max]  _(Experimental)_
+- [`AccuracyGoal`](AccuracyGoal.md) — AccuracyGoal  _(Experimental)_
 - [`AdjacencyGraph`](AdjacencyGraph.md) — AdjacencyGraph[m] builds a graph on vertices 1..n from a 0/1 adjacency matrix m (undirected if m is symmetric, else directed).  _(Stable)_
 - [`AdjacencyList`](AdjacencyList.md) — AdjacencyList[g] gives the adjacency list of g; AdjacencyList[g,v] gives the vertices adjacent to v (successors for directed edges).  _(Stable)_
 - [`AdjacencyMatrix`](AdjacencyMatrix.md) — AdjacencyMatrix[g] gives the 0/1 adjacency matrix of g (symmetric for undirected graphs).  _(Stable)_
@@ -47,6 +50,10 @@
 - [`HoldRest`](HoldRest.md) — HoldRest  _(Experimental)_
 - [`ImageSize`](ImageSize.md) — ImageSize  _(Experimental)_
 - [`IncidenceMatrix`](IncidenceMatrix.md) — IncidenceMatrix[g] gives the vertex-edge incidence matrix of g (oriented: -1 tail, +1 head for directed edges).  _(Stable)_
+- [`Interval`](Interval.md) — Interval[{min, max}] represents the range of real values between min and max, inclusive. Interval[{a1,b1}, {a2,b2}, ...] is the union of the ranges. Arithmetic and elementary functions thread through intervals, producing rigorous enclosures; exact endpoints are kept exact.  _(Stable)_
+- [`IntervalIntersection`](IntervalIntersection.md) — IntervalIntersection[i1, i2, ...] gives the interval representing the intersection of the intervals ij (Interval[] if they are disjoint).  _(Stable)_
+- [`IntervalMemberQ`](IntervalMemberQ.md) — IntervalMemberQ[interval, x] gives True if x lies within interval, and False otherwise. IntervalMemberQ[interval, other] tests whether the interval other is wholly contained in interval.  _(Stable)_
+- [`IntervalUnion`](IntervalUnion.md) — IntervalUnion[i1, i2, ...] gives the interval representing the union of the intervals ij.  _(Stable)_
 - [`LightBlue`](LightBlue.md) — LightBlue  _(Experimental)_
 - [`LightBrown`](LightBrown.md) — LightBrown  _(Experimental)_
 - [`LightCyan`](LightCyan.md) — LightCyan  _(Experimental)_
@@ -64,8 +71,10 @@
 - [`NDArrayQ`](NDArrayQ.md) — NDArrayQ[expr]  _(Stable)_
 - [`Orange`](Orange.md) — Orange  _(Experimental)_
 - [`PathGraph`](PathGraph.md) — PathGraph[n] gives the path on n vertices; PathGraph[{v1,...}] the path over the given vertices.  _(Stable)_
+- [`Pick`](Pick.md) — Pick[expr, sel]  _(Stable)_
 - [`Pink`](Pink.md) — Pink  _(Experimental)_
 - [`PolynomialSqrt`](PolynomialSqrt.md) — PolynomialSqrt[p] gives a polynomial s with s^2 == p when p is a perfect square (every non-constant irreducible factor has even multiplicity; the numeric content is carried through Sqrt), and $Failed otherwise. PolynomialSqrt[p, x] treats p as a polynomial in x.  _(Stable)_
+- [`PrecisionGoal`](PrecisionGoal.md) — PrecisionGoal  _(Experimental)_
 - [`Purple`](Purple.md) — Purple  _(Experimental)_
 - [`RandomGraph`](RandomGraph.md) — RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges.  _(Stable)_
 - [`RatCanonPrototype`](RatCanonPrototype.md) — RatCanonPrototype[expr] (Phase-1 prototype) reduces a rational function over the differential/algebraic tower of expr via one FLINT reduction.  _(Stable)_
@@ -73,8 +82,10 @@
 - [`Red`](Red.md) — Red  _(Experimental)_
 - [`ScalingFunctions`](ScalingFunctions.md) — ScalingFunctions  _(Experimental)_
 - [`Sow`](Sow.md) — Sow[e]  _(Stable)_
+- [`SplitBy`](SplitBy.md) — SplitBy[list, f]  _(Stable)_
 - [`StringExpression`](StringExpression.md) — StringExpression[p1, p2, ...] or p1 ~~ p2 ~~ ...  _(Stable)_
 - [`StronglyConnectedComponents`](StronglyConnectedComponents.md) — StronglyConnectedComponents[g] gives the strongly connected components of g (following edge directions).  _(Stable)_
+- [`Subsets`](Subsets.md) — Subsets[list]  _(Stable)_
 - [`VectorPoints`](VectorPoints.md) — VectorPoints  _(Experimental)_
 - [`VectorScale`](VectorScale.md) — VectorScale  _(Experimental)_
 - [`VectorStyle`](VectorStyle.md) — VectorStyle  _(Experimental)_

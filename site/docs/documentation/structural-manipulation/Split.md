@@ -37,6 +37,7 @@ accumulated run is emitted. Output is a list of run sublists.
 - `Protected`.
 - Uses `SameQ` as the default test.
 - Result has the same head as the input.
+- Only *adjacent* elements are grouped. To collect equal elements from anywhere
 
 **Attributes:** `Protected`.
 

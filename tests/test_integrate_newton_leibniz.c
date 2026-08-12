@@ -99,6 +99,12 @@ static void test_improper(void) {
     check_eq("Integrate[1/(1 + x^2), {x, 0, Infinity}]", "1/2 Pi");
     check_eq("Integrate[E^(-x), {x, 0, Infinity}]",      "1");
     check_eq("Integrate[1/x^2, {x, 1, Infinity}]",       "1");
+    /* Issue #41: endpoint singularity (x=1) AND infinite upper bound at once.
+     * Antiderivative is Sqrt[2] ArcTan[Sqrt[-1+x]/Sqrt[2]]; the endpoint value
+     * Limit[Sqrt[2] ArcTan[Sqrt[-1+x]/Sqrt[2]], x -> Infinity] = Pi/Sqrt[2]
+     * used to hang the whole integral. */
+    check_eq("Integrate[1/((x + 1) Sqrt[x - 1]), {x, 1, Infinity}]",
+             "Pi/Sqrt[2]");
 }
 
 /* ------------------------------------------------------------------ */

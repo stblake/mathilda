@@ -60,6 +60,7 @@ rest. `Nest` and `NestList` are the same `nest_impl`, differing only in the
 - The function `f` may be a symbol, a built-in, or a pure function (`... &`).
 - Each iteration evaluates `f[current]` before proceeding, so numeric computations collapse immediately.
 - Returns unevaluated if `n` is not a non-negative integer or the argument count is wrong.
+- **Compilable** inside `Compile[]` for a scalar accumulator, with any of the
 
 **Attributes:** `Protected`.
 

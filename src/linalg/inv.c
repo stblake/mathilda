@@ -41,6 +41,7 @@
 
 #include "inv.h"
 #include "pack.h"
+#include "ndarray.h"
 #include "linalg.h"
 #include "ndlinalg.h"
 #include "linsolve.h"
@@ -547,6 +548,17 @@ static Expr* inverse_cofactor(Expr* arg, int n) {
 Expr* builtin_inverse(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (linalg_call_has_ndarray(res)) return ndla_inverse(res);
+
+    /* Small machine-real matrix: pack and take the same path. See
+     * linalg_pack_machine_operand -- a 6x6 is below the packing threshold, so
+     * "is it already a buffer" misses it and the generic path runs. */
+    Expr* packed_call = linalg_pack_machine_call1(res);
+    if (packed_call) {
+        Expr* fast = ndla_inverse(packed_call);
+        expr_free(packed_call);
+        if (fast) return fast;
+    }
+
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
 
@@ -934,11 +946,47 @@ Expr* builtin_pseudoinverse(Expr* res) {
      * approximate matrices yield approximate answers at the input precision
      * while still benefiting from a well-defined rank in the row reduction. */
     CommonInexactInfo info = common_scan_inexact(arg);
-    Expr* a_rat = NULL;
     long prec_bits = 53;
+    if (info.has_inexact) prec_bits = info.min_bits ? info.min_bits : 53;
+
+    /* A machine matrix that arrived as a plain List-of-Lists is packed here and
+     * sent down the same SVD path, instead of into the exact pipeline below.
+     * The note above says that pipeline is unusable for a machine matrix, but
+     * the guard for it recognised only an ALREADY-packed argument -- so every
+     * machine matrix built structurally (DesignMatrix, Table, Transpose, a
+     * literal) missed it and rationalised anyway: LeastSquares on a 5000x3
+     * float64 design matrix spent 58 s multiplying rationals in GMP.
+     * pack_offer never changes a value and declines cheaply, so a matrix that
+     * cannot pack simply falls through.
+     *
+     * Machine precision only. Above 53 bits the exact pipeline is what carries
+     * the extra digits, and an f64 SVD would silently drop them. */
+    if (info.has_inexact && prec_bits <= 53) {
+        /* Numericalise before offering: packing refuses a MIXED Integer/Real
+         * list, and a design matrix is exactly that -- the constant basis
+         * function contributes an exact Integer 1 column beside Real ones.
+         * Widening those to Reals is the contagion this computation already
+         * performs (the exact pipeline's own result is numericalised at the
+         * same prec_bits), so no value changes. pack_offer keeps the usual
+         * threshold, leaving matrices too small to pack on the exact path with
+         * results identical to before. */
+        Expr* mach = common_numericalize_result(arg, prec_bits);
+        if (mach) {
+            Expr* packed = pack_offer(mach);           /* consumes `mach` */
+            if (is_ndarray(packed)) {
+                Expr* fast = ndla_pseudoinverse_direct(packed, tol_automatic,
+                                                       tol_value);
+                expr_free(packed);
+                if (fast) return fast;
+            } else {
+                expr_free(packed);
+            }
+        }
+    }
+
+    Expr* a_rat = NULL;
     Expr* matrix_to_use = arg;
     if (info.has_inexact) {
-        prec_bits = info.min_bits ? info.min_bits : 53;
         a_rat = common_rationalize_input(arg, prec_bits);
         matrix_to_use = a_rat;
     }

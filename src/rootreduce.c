@@ -110,7 +110,10 @@ static Expr* bool_expr(int v) { return expr_new_symbol(v ? "True" : "False"); }
  * coefficient) via qqbar, leaving the free-variable structure intact. Cheap —
  * flint_qqbar_canonical returns NULL immediately for anything carrying a free
  * symbol. Returns a newly-built, *unevaluated* tree; the caller evaluates once
- * so that e.g. Times[0, x^2] collapses and vanishing coefficients drop out. */
+ * so that e.g. Times[0, x^2] collapses and vanishing coefficients drop out.
+ * Only the FLINT branch of builtin_rootreduce calls this, so it is guarded to
+ * match — otherwise it is unused on the no-FLINT build (-Werror=unused-function). */
+#ifdef USE_FLINT
 static Expr* rr_thread_coeffs(const Expr* e, QQBarMethod method) {
     Expr* q = flint_qqbar_canonical(e, method);
     if (q) return q;                                   /* maximal const-algebraic */
@@ -123,6 +126,7 @@ static Expr* rr_thread_coeffs(const Expr* e, QQBarMethod method) {
     free(args);
     return out;
 }
+#endif
 
 /* Thread RootReduce over a relational/logical head. For a binary
  * (in)equality of constant algebraic numbers, decide it exactly via qqbar;

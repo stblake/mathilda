@@ -543,8 +543,10 @@ Expr* builtin_complexplot(Expr* res) {
 
             double re_sc = (re_avg - re_min) / re_span;
             double im_sc = (im_avg - im_min) / im_span;
-            if (re_sc < 0.0) re_sc = 0.0; if (re_sc > 1.0) re_sc = 1.0;
-            if (im_sc < 0.0) im_sc = 0.0; if (im_sc > 1.0) im_sc = 1.0;
+            if (re_sc < 0.0) re_sc = 0.0;
+            if (re_sc > 1.0) re_sc = 1.0;
+            if (im_sc < 0.0) im_sc = 0.0;
+            if (im_sc > 1.0) im_sc = 1.0;
 
             prims[np++] = cp_color(opts.color_function, opts.color_function_scaling,
                                     re_avg, im_avg, re_sc, im_sc);
@@ -654,8 +656,10 @@ Expr* builtin_complexplot3d(Expr* res) {
 
             double re_sc = (re_avg - re_min) / re_span;
             double im_sc = (im_avg - im_min) / im_span;
-            if (re_sc < 0.0) re_sc = 0.0; if (re_sc > 1.0) re_sc = 1.0;
-            if (im_sc < 0.0) im_sc = 0.0; if (im_sc > 1.0) im_sc = 1.0;
+            if (re_sc < 0.0) re_sc = 0.0;
+            if (re_sc > 1.0) re_sc = 1.0;
+            if (im_sc < 0.0) im_sc = 0.0;
+            if (im_sc > 1.0) im_sc = 1.0;
 
             /* For 3D, the default color uses arg of the center but without
              * modulus-brightness attenuation (same visual weight as Plot3D). */

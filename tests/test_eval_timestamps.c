@@ -597,6 +597,131 @@ static void test_random_assign_evaluate_walk(void) {
     }
 }
 
+/* ================================================================== */
+/* GROUND fixed-point flag: loop-invariant literal data survives the   */
+/* eval-clock churn that Do/Table/Fold cause when rebinding iterators. */
+/* ================================================================== */
+
+/* 16. A fixed point built from the six pure structural constructors over
+ *     literal leaves carries the GROUND flag; one with a value-computing head
+ *     (Plus/Sin) or a symbolic leaf does not. */
+static void test_ground_flag_on_constructors(void) {
+    const char* ground_srcs[] = {
+        "{1, 2, 3}",                 /* List of ints           */
+        "<|\"a\" -> 1, \"b\" -> 2|>",/* Association            */
+        "3/4",                        /* Rational               */
+        "2 + 3 I",                    /* Complex                */
+        "{1, {2, 3}, <|\"k\" -> 4|>}" /* nested constructors    */
+    };
+    for (size_t i = 0; i < sizeof(ground_srcs)/sizeof(ground_srcs[0]); i++) {
+        Expr* p = parse_expression(ground_srcs[i]);
+        Expr* r = evaluate(p);
+        expr_free(p);
+        ASSERT_MSG(r->type == EXPR_FUNCTION, "expected a FUNCTION result");
+        ASSERT_MSG(eval_node_is_ground(r), "constructor result must be GROUND");
+        /* stamp (flag masked) equals the live clock right after evaluation */
+        ASSERT(eval_node_stamp(r) == eval_clock_get());
+        expr_free(r);
+    }
+
+    /* Non-ground: a symbolic Plus, and a List with a bare-symbol leaf. */
+    const char* nonground_srcs[] = { "Sin[q] + Cos[q]", "{1, q, 3}" };
+    for (size_t i = 0; i < sizeof(nonground_srcs)/sizeof(nonground_srcs[0]); i++) {
+        Expr* p = parse_expression(nonground_srcs[i]);
+        Expr* r = evaluate(p);
+        expr_free(p);
+        if (r->type == EXPR_FUNCTION)
+            ASSERT_MSG(!eval_node_is_ground(r), "symbolic result must NOT be GROUND");
+        expr_free(r);
+    }
+}
+
+/* 17. A GROUND node survives a SOFT clock bump (binding an unrelated symbol):
+ *     re-evaluating it takes the ground short-circuit, NOT the exact-clock one,
+ *     which we prove by the stamp staying at its OLD value (< the live clock). */
+static void test_ground_survives_soft_clock_bump(void) {
+    Expr* p = parse_expression("{10, 20, 30}");
+    Expr* g = evaluate(p);
+    expr_free(p);
+    ASSERT(eval_node_is_ground(g));
+    uint64_t stamp = eval_node_stamp(g);
+    ASSERT(stamp == eval_clock_get());
+    uint64_t epoch = eval_rule_epoch_get();
+
+    /* Bind an unrelated NON-Protected symbol: bumps the eval clock (soft) but
+     * must leave the rule epoch untouched (this is what iterator churn does). */
+    Expr* set = parse_expression("zzgnd = 5");
+    expr_free(evaluate(set));
+    expr_free(set);
+    ASSERT_MSG(eval_clock_get() > stamp, "Set must bump the eval clock");
+    ASSERT_MSG(eval_rule_epoch_get() == epoch, "OwnValue binding must NOT bump the rule epoch");
+
+    /* Re-evaluate the SAME node. Exact-clock can't fire (stamp < clock); the
+     * ground path must -- so the node is returned unchanged and NOT re-stamped. */
+    Expr* g2 = evaluate(g);
+    ASSERT(expr_eq(g, g2));
+    ASSERT_MSG(eval_node_is_ground(g2), "still GROUND after re-eval");
+    ASSERT_MSG(eval_node_stamp(g2) == stamp,
+               "ground short-circuit must not re-stamp (stamp stayed at old value)");
+    ASSERT_MSG(eval_node_stamp(g2) < eval_clock_get(),
+               "and the old stamp is strictly behind the churned clock");
+
+    expr_free(g);
+    expr_free(g2);
+}
+
+/* 18. A rule-epoch bump (here an attribute change on an unrelated symbol)
+ *     DOES invalidate a GROUND node: re-evaluating it goes through the full
+ *     fixed-point loop and re-stamps to the live clock. */
+static void test_ground_invalidated_by_rule_epoch(void) {
+    Expr* p = parse_expression("{7, 8, 9}");
+    Expr* g = evaluate(p);
+    expr_free(p);
+    ASSERT(eval_node_is_ground(g));
+    uint64_t stamp = eval_node_stamp(g);
+
+    /* SetAttributes advances the rule epoch (attribute changes can alter how a
+     * head evaluates, so they must invalidate GROUND nodes conservatively). */
+    Expr* sa = parse_expression("SetAttributes[grnd18, Orderless]");
+    expr_free(evaluate(sa));
+    expr_free(sa);
+    ASSERT_MSG(eval_rule_epoch_get() > stamp, "SetAttributes must bump the rule epoch");
+
+    /* Re-evaluate: ground path can't fire (stamp < rule epoch); it re-canonises
+     * and re-stamps to the live clock. Value is unchanged and still ground. */
+    Expr* g2 = evaluate(g);
+    ASSERT(expr_eq(g, g2));
+    ASSERT_MSG(eval_node_stamp(g2) == eval_clock_get(),
+               "invalidated ground node must be re-stamped to the live clock");
+    ASSERT(eval_node_is_ground(g2));
+
+    expr_free(g);
+    expr_free(g2);
+}
+
+/* 19. The correctness backstop: a symbolic-valued association bound by
+ *     SetDelayed still reflects a later change to the symbol it references --
+ *     the ground freeze must never serve a stale value. */
+static void test_symbolic_valued_assoc_updates_after_set(void) {
+    /* eval_and_free (eval.h) evaluates AND frees the parsed input -- evaluate()
+     * only borrows its argument, so a bare evaluate(parse_expression(...)) leaks. */
+    expr_free(eval_and_free(parse_expression("Clear[zz19]")));
+    expr_free(eval_and_free(parse_expression("zz19 = 10")));
+    expr_free(eval_and_free(parse_expression("ga19 := <|\"x\" -> zz19 + 1|>")));
+
+    Expr* r1 = eval_and_free(parse_expression("Lookup[ga19, \"x\"]"));
+    char* s1 = expr_to_string(r1);
+    ASSERT_STR_EQ(s1, "11");
+    free(s1); expr_free(r1);
+
+    expr_free(eval_and_free(parse_expression("zz19 = 20")));
+
+    Expr* r2 = eval_and_free(parse_expression("Lookup[ga19, \"x\"]"));
+    char* s2 = expr_to_string(r2);
+    ASSERT_MSG(strcmp(s2, "21") == 0, "delayed symbolic-valued association went stale");
+    free(s2); expr_free(r2);
+}
+
 /* ------------------------------------------------------------------ */
 
 int main(void) {
@@ -619,6 +744,10 @@ int main(void) {
     TEST(test_interleaved_set_invalidates_subexpressions);
     TEST(test_cached_subexpr_in_fresh_outer);
     TEST(test_random_assign_evaluate_walk);
+    TEST(test_ground_flag_on_constructors);
+    TEST(test_ground_survives_soft_clock_bump);
+    TEST(test_ground_invalidated_by_rule_epoch);
+    TEST(test_symbolic_valued_assoc_updates_after_set);
 
     printf("All eval-timestamp tests passed!\n");
     return 0;

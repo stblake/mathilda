@@ -1,11 +1,12 @@
 # Linear Algebra
 
-40 built-in function(s) in this category.
+41 built-in function(s) in this category.
 
 - [`ConjugateTranspose`](ConjugateTranspose.md) — ConjugateTranspose[m]  _(Stable)_
 - [`Cross`](Cross.md) — Cross[a, b]  _(Stable)_
 - [`DesignMatrix`](DesignMatrix.md) — DesignMatrix[data, {f1, ..., fn}, vars] gives the design matrix with entries f_i evaluated at the data coordinates.  _(Stable)_
 - [`Det`](Det.md) — Det[m]  _(Stable)_
+- [`Diagonal`](Diagonal.md) — Diagonal[m]  _(Stable)_
 - [`DiagonalMatrix`](DiagonalMatrix.md) — DiagonalMatrix[list] gives a matrix with the elements of list on the leading diagonal, and zero elsewhere.  _(Stable)_
 - [`DiagonalMatrixQ`](DiagonalMatrixQ.md) — DiagonalMatrixQ[m]  _(Stable)_
 - [`Dot`](Dot.md) — a . b . c or Dot[a, b, c]  _(Stable)_

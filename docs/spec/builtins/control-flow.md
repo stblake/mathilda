@@ -22,6 +22,24 @@ Evaluates an expression sequentially over an iteration range.
   runs interpreted, so `expr` is evaluated exactly as many times as the iterator
   specifies and its side effects fire exactly that often. The same rule governs
   `For`, `While`, `Nest`, `NestWhile`, `FixedPoint`, `Fold` and `Map`.
+- An **exact-integer** counter body (`Do[s = s + i, {i, 1, n}]`, `For[...]`, no
+  inexact leaf) takes the same fast path in overflow-checked `int64` and returns
+  an exact `Integer` — the double stack is used only when the body is inexact. On
+  an `int64` overflow, or a step that is not integer-closed (a `Rational` from a
+  division, a transcendental), the whole run bails to the interpreter, so the
+  answer is always the interpreter's: `Do[p = p*i, {i, 1, 25}]` is the full `25!`
+  bignum, `Do[s = s + i/2, {i, 1, 10}]` is `55/2`, never a wrapped machine
+  integer.
+- An **integer range** terminates on an exact comparison of the running value
+  against the bound, so a span anywhere in the `int64` range is correct — including
+  at the very top, where consecutive values differ by less than the `double`
+  spacing: `Do[…, {i, 9223372036854775805, 9223372036854775807}]` runs exactly 3
+  times. This holds on all three paths — interpreter, the `numloop.c` fast path
+  (whose counter increment is overflow-checked so it stops at the edge rather than
+  wrapping), and `Compile[]` (whose loop-control arithmetic stays overflow-checked
+  even under `RuntimeOptions -> "Speed"`, bailing to the interpreter at the
+  boundary; only *value* arithmetic wraps in that mode). `Sum`, `Product` and
+  `Table` share the same termination.
 
 ```mathematica
 In[1]:= Do[Print[i], {i, 3}]
@@ -478,6 +496,38 @@ expression would.
   - Not in the subset: array-valued `If` branches, `Sum` accumulators or `Nest`
     state (each would duplicate a handle without duplicating ownership), and
     `Table` as an array constructor.
+- **Association parameter bags (read-only).** An argument spec `{p, _Association}`
+  (value element type defaults `_Real`) or `{p, _Association, _Real|_Integer|_Complex}`
+  declares a read-only association parameter. The bag is borrowed — the program
+  reads it and never mutates or frees it. Inside a body: `Lookup[p, key]`,
+  `Lookup[p, key, default]`, `KeyExistsQ`/`KeyMemberQ`/`KeyFreeQ`, `Length[p]` and
+  `Values[p]` (a packed vector). The default must be literal; a **constant-key**
+  `Lookup` is O(1) and, being pure, is hoisted out of an enclosing loop and
+  computed once. A **runtime-varying integer or real key** — the `Lookup[p, i]`-in-
+  a-loop pattern — also compiles (O(1) per probe, no per-iteration allocation); a
+  key past the machine-scalar boundary (a string, an array) makes the whole body
+  fall back to the interpreter. A looked-up value that does not fit the
+  declared type, or an absent key with no default, cleanly declines to the
+  interpreter. A **constant** association (a literal `<|…|>`, or a global captured
+  under auto-compilation) is folded at compile time, so a `Table`/`Plot` body that
+  reads a captured global association compiles. Compiled code can also **produce**
+  associations as first-class values: `KeyDrop[p, keys]`, `KeyTake[p, keys]` (keys
+  literal) and `Counts[v]` (a machine array to an `element -> count` association)
+  build a new association the compiled function can return, feed to any reader
+  (`Lookup[KeyDrop[p, "x"], "y"]`, `Total[Values[Counts[v]]]`), or chain through
+  another transform (`KeyTake[KeyDrop[p, a], b]`) to any depth. Higher-order
+  transforms compile the embedded function into a callee run per value (no
+  interpreter at runtime): `Map[f, assoc]` transforms each value (keys copied
+  through), `Select[assoc, pred]` filters by value — `f`/`pred` may be a pure
+  function (`#^2 &`), a `Function[…]`, or a bare head, and a `Map`/`Select` may
+  itself consume a produced association (`Map[f, KeyDrop[p, k]]`). A callee
+  outside the compilable subset makes the whole body fall back. Compiled code can
+  also functionally **update** an association: `Append[assoc, key -> value]`
+  returns a new association with the key set (replaced in place, else appended),
+  the value being any compiled machine expression. The mutating `AssociateTo[sym,
+  …]` is not compiled (it rebinds a symbol) and stays in the interpreter, as do
+  `KeyUnion` (a key list), `PositionIndex` (list-valued entries) and the grouping
+  family (`Merge`/`GroupBy`).
 - **Counted iterators** in `Do`/`Sum`/`Product` accept every integer-bounded
   spelling the interpreter does: `Do[body, n]` and `Do[body, {n}]` (repeat n
   times), `{i, hi}`, `{i, lo, hi}`, and `{i, lo, hi, di}` with a nonzero integer
@@ -651,6 +701,45 @@ wave equation, verified against an exact discrete solution and benchmarked
 against the interpreter, Wolfram Language and `NDSolve` — is summarised in
 [`docs/design/compile_state.md`](../../design/compile_state.md).
 
+### Arbitrary precision (opt-in)
+
+By default a `CompiledFunction` runs over machine numbers. Two options opt a
+function into arbitrary precision; both are **off by default**, so the machine
+path (and its speed) is unchanged when neither is given.
+
+- **`WorkingPrecision -> n`** — a numeric `n` (decimal digits) compiles
+  real/complex arithmetic in MPFR at that precision, held **fixed for the whole
+  function** (this sidesteps precision-contagion and keeps the internal
+  containers warm). `MachinePrecision` (the default) is the ordinary machine
+  path. The compilable subset here is straight-line arithmetic —
+  `Plus`/`Times`/`Subtract`/`Divide`/`Power` and the unary elementary functions
+  (`Sin`, `Cos`, `Tan`, `Exp`, `Log`, `Sqrt`, `Sinh`, …) — over `_Real`,
+  `_Complex` and `_Integer` (integers lift to reals); anything else (control
+  flow, arrays, an unsupported head like `Gamma`) transparently falls back to
+  the interpreter *at that precision*, so the answer is always what
+  `N[expr, n]` of the substituted body would give.
+- **`"BigIntegers" -> True`** — integer arithmetic (`Plus`/`Times`/`Subtract`/
+  non-negative `Power`) is exact GMP instead of int64, so a result past the
+  machine-integer range is computed exactly rather than routed to the
+  interpreter. Independent of `WorkingPrecision` (integers have no precision).
+
+```
+In[1]:= f = Compile[{{x, _Real}}, Sin[x] Cos[x] + x^3, WorkingPrecision -> 40];
+        f[N[7/5, 40]]
+Out[1]= 2.887293159352105...              (* = the interpreter's N[.,40] of the same body *)
+
+In[2]:= Compile[{{n, _Integer}}, n^20, "BigIntegers" -> True][99]
+Out[2]= 8179069375972308708891986605443361898001
+
+In[3]:= Compile[{{z, _Complex}}, Exp[z] + z^2, WorkingPrecision -> 45][N[1/2 + I/3, 45]]
+Out[3]= 1.28... + 1.14...*I
+```
+
+Deferred (see [`docs/design/compile-arbitrary-precision.md`](../../design/compile-arbitrary-precision.md)):
+arbitrary-precision *arrays*, control flow / procedural constructs in a managed
+body, and the warm thread-local container arena (a speed follow-up; correctness
+and the machine-path guarantee do not depend on it).
+
 ## CompileDiagnostics
 
 `CompileDiagnostics[argspec, expr]` reports whether `expr` compiles for the given
@@ -670,6 +759,12 @@ that would have compiled.
   the number of `"CommonSubexpressions"` the optimiser hoisted, and
   `"InstructionsUnoptimized"` — the same body compiled with the optimiser off,
   so what code generation actually removed is visible.
+- **Arbitrary precision.** It accepts the same `WorkingPrecision -> n` and
+  `"BigIntegers" -> True` options as `Compile[]`, so it reports whether the
+  *arbitrary-precision* subset lowers — the `"ResultType"` is then `"MPFRReal"`,
+  `"MPFRComplex"`, or `"BigInteger"`. This is the only way to tell that the
+  managed path actually compiled rather than silently falling back (a bailed body
+  still returns the correct value through the interpreter).
 - **On failure** it gives `"Compiled" -> False`, a `"Reason"`, and the
   `"Subexpression"` — the **innermost** node the emitter could not lower, which
   is the actual cause rather than the construct that happens to contain it.

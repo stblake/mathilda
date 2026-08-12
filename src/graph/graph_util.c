@@ -7,14 +7,18 @@
  * where each edge is a 2-argument DirectedEdge[u, v] or UndirectedEdge[u, v].
  * Nothing here allocates or mutates; ownership contracts live in the callers.
  *
- * The MVP vertex-membership test is a linear expr_eq scan (O(V) per lookup).
- * That is fine for pico-CAS graph sizes; an expr_hash-based index is the
- * documented upgrade path when profiling warrants it.
+ * Vertex membership resolves through an expr_hash index (GraphVIdx below), built once
+ * per validation or adjacency pass. The MVP did a linear expr_eq scan per
+ * lookup, which made validation O(E*V) and parallel-edge detection O(E^2): a
+ * 20000-vertex, 40000-edge graph spent ~14 s inside Graph[], and paid it again
+ * in every accessor, since they all begin with graph_is_valid. Both passes are
+ * now O(V + E) expected.
  */
 
 #include "graph.h"
 #include "expr.h"
 #include "sym_names.h"
+#include <stdint.h>
 #include <stdlib.h>
 
 /* True iff e is a function node whose head is the interned symbol `sym`. */
@@ -37,12 +41,144 @@ const char* graph_edge_kind(const Expr* e) {
     return NULL;
 }
 
-/* True iff `v` is structurally equal to some element of List `list`. */
-static int vertex_in_list(const Expr* list, const Expr* v) {
-    for (size_t i = 0; i < list->data.function.arg_count; i++) {
-        if (expr_eq(list->data.function.args[i], v)) return 1;
+/* ---- Vertex index --------------------------------------------------------- *
+ * Maps a vertex Expr to its position in the canonical vertex List. Vertices are
+ * arbitrary expressions, so equality is expr_eq and the hash must therefore be
+ * expr_hash -- the two agree by contract (see the "identity trio" note in
+ * src/expr.c). Open addressing with linear probing, kept at load factor <= 0.5.
+ *
+ * Keys are borrowed pointers into the graph's vertex List; the index is only
+ * ever used within a single call, while that graph is alive.
+ *
+ * A repeated vertex keeps its FIRST index, matching the linear scan in
+ * graph_vertex_index that this replaces. */
+struct GraphVIdx {
+    const Expr** key;   /* NULL slot = empty; keys are borrowed               */
+    int*         idx;
+    size_t       mask;  /* capacity - 1; capacity is a power of two           */
+    size_t       count;
+};
+
+void graph_vidx_free(GraphVIdx* ix) {
+    if (!ix) return;
+    free(ix->key);
+    free(ix->idx);
+    free(ix);
+}
+
+/* Allocate a table sized so that `hint` entries stay at load factor <= 0.5. */
+static int vidx_alloc(GraphVIdx* ix, size_t hint) {
+    size_t cap = 16;
+    while (cap < (hint | 1) * 2) cap <<= 1;
+    ix->key = calloc(cap, sizeof(const Expr*));
+    ix->idx = calloc(cap, sizeof(int));
+    if (!ix->key || !ix->idx) { free(ix->key); free(ix->idx); return 0; }
+    ix->mask = cap - 1;
+    return 1;
+}
+
+GraphVIdx* graph_vidx_new(size_t hint) {
+    GraphVIdx* ix = calloc(1, sizeof(GraphVIdx));
+    if (!ix) return NULL;
+    if (!vidx_alloc(ix, hint)) { free(ix); return NULL; }
+    return ix;
+}
+
+/* Slot holding `v`, or the empty slot where it belongs. */
+static size_t vidx_slot(const GraphVIdx* ix, const Expr* v) {
+    size_t s = (size_t)expr_hash(v) & ix->mask;
+    while (ix->key[s] && !expr_eq(ix->key[s], v)) s = (s + 1) & ix->mask;
+    return s;
+}
+
+int graph_vidx_get(const GraphVIdx* ix, const Expr* v) {
+    size_t s = vidx_slot(ix, v);
+    return ix->key[s] ? ix->idx[s] : -1;
+}
+
+/* Double the table and reinsert. Keys are borrowed, so this only moves slots. */
+static int vidx_grow(GraphVIdx* ix) {
+    GraphVIdx bigger;
+    bigger.count = ix->count;
+    if (!vidx_alloc(&bigger, (ix->mask + 1) * 2)) return 0;
+    for (size_t s = 0; s <= ix->mask; s++) {
+        if (!ix->key[s]) continue;
+        size_t d = vidx_slot(&bigger, ix->key[s]);
+        bigger.key[d] = ix->key[s];
+        bigger.idx[d] = ix->idx[s];
     }
-    return 0;
+    free(ix->key);
+    free(ix->idx);
+    ix->key = bigger.key;
+    ix->idx = bigger.idx;
+    ix->mask = bigger.mask;
+    return 1;
+}
+
+int graph_vidx_put(GraphVIdx* ix, const Expr* v, int index) {
+    size_t s = vidx_slot(ix, v);
+    if (ix->key[s]) return 0;                             /* already present */
+    ix->key[s] = v;
+    ix->idx[s] = index;
+    ix->count++;
+    if (ix->count * 2 > ix->mask + 1) {
+        /* Keep the load factor bounded. A failed grow leaves the table valid,
+         * just fuller -- correctness does not depend on the resize. */
+        (void)vidx_grow(ix);
+    }
+    return 1;
+}
+
+/* Index every vertex of a canonical vertex List by position. A repeated vertex
+ * keeps its FIRST index, matching the linear graph_vertex_index scan. */
+static GraphVIdx* vidx_build(const Expr* verts) {
+    size_t n = verts->data.function.arg_count;
+    GraphVIdx* ix = graph_vidx_new(n);
+    if (!ix) return NULL;
+    for (size_t i = 0; i < n; i++)
+        graph_vidx_put(ix, verts->data.function.args[i], (int)i);
+    return ix;
+}
+
+/* ---- Edge-key set -------------------------------------------------------- *
+ * Parallel-edge detection in O(E). Two normalized edges are "parallel" when
+ * they connect the same endpoints in a way the graph cannot distinguish:
+ *   - directed:   same head and the same ordered   pair (u, v);
+ *   - undirected: same head and the same unordered pair {u, v}.
+ * Directed a->b and b->a are distinct; that is allowed.
+ *
+ * Once both endpoints are vertex indices, an edge collapses to a 64-bit key --
+ * the ordered pair when directed, the sorted pair when undirected -- so the old
+ * pairwise expr_eq comparison becomes a single hashed insert. Insert returns 0
+ * when the key is already present, i.e. exactly when the old test found a
+ * parallel edge. */
+typedef struct { uint64_t k; unsigned char directed; unsigned char used; } EKSlot;
+typedef struct { EKSlot* slot; size_t mask; } EKSet;
+
+static int ekset_init(EKSet* t, size_t ne) {
+    size_t cap = 16;
+    while (cap < (ne | 1) * 2) cap <<= 1;
+    t->slot = calloc(cap, sizeof(EKSlot));
+    if (!t->slot) return 0;
+    t->mask = cap - 1;
+    return 1;
+}
+
+static int ekset_insert(EKSet* t, int ia, int ib, int directed) {
+    uint64_t a = (uint32_t)ia, b = (uint32_t)ib;
+    if (!directed && a > b) { uint64_t tmp = a; a = b; b = tmp; }
+    uint64_t k = (a << 32) | b;
+    /* Mix, so that consecutive vertex indices do not probe in long runs. */
+    size_t s = (size_t)((k * 0x9E3779B97F4A7C15ULL) >> 32) & t->mask;
+    while (t->slot[s].used) {
+        if (t->slot[s].k == k && t->slot[s].directed == (unsigned char)directed)
+            return 0;                                        /* parallel edge */
+        s = (s + 1) & t->mask;
+    }
+    t->slot[s].used = 1;
+    t->slot[s].k = k;
+    t->slot[s].directed = (unsigned char)directed;
+    return 1;
 }
 
 int graph_vertex_index(const Expr* verts, const Expr* v) {
@@ -55,6 +191,10 @@ int graph_vertex_index(const Expr* verts, const Expr* v) {
 
 /* ---- Phase 5: adjacency scaffolding --------------------------------------- */
 
+/* Validation over an already-built vertex index; defined with graph_is_valid
+ * below, and shared with graph_build_adj so the index is built only once. */
+static int graph_check(const Expr* g, const GraphVIdx* ix);
+
 void graph_adj_free(GraphAdj* a) {
     if (!a) return;
     for (int i = 0; i < a->n; i++) { free(a->out[i]); free(a->in[i]); }
@@ -64,14 +204,22 @@ void graph_adj_free(GraphAdj* a) {
 }
 
 GraphAdj* graph_build_adj(const Expr* g) {
-    if (!graph_is_valid(g)) return NULL;
+    /* Validate and index in one pass: graph_is_valid would build and throw away
+     * the same vertex index, and the two fill passes below need it anyway. */
+    if (!head_is_sym(g, SYM_Graph) || g->data.function.arg_count != 2) return NULL;
     const Expr* verts = g->data.function.args[0];
     const Expr* edges = g->data.function.args[1];
+    if (!graph_is_list(verts) || !graph_is_list(edges)) return NULL;
+
+    GraphVIdx* ix = vidx_build(verts);
+    if (!ix) return NULL;
+    if (!graph_check(g, ix)) { graph_vidx_free(ix); return NULL; }
+
     int n = (int)verts->data.function.arg_count;
     size_t ne = edges->data.function.arg_count;
 
     GraphAdj* a = calloc(1, sizeof(GraphAdj));
-    if (!a) return NULL;
+    if (!a) { graph_vidx_free(ix); return NULL; }
     a->n = n;
     a->verts = verts;
     a->outdeg = calloc((size_t)(n > 0 ? n : 1), sizeof(int));
@@ -83,8 +231,8 @@ GraphAdj* graph_build_adj(const Expr* g) {
     for (size_t k = 0; k < ne; k++) {
         const Expr* e = edges->data.function.args[k];
         const char* kind = graph_edge_kind(e);
-        int ia = graph_vertex_index(verts, e->data.function.args[0]);
-        int ib = graph_vertex_index(verts, e->data.function.args[1]);
+        int ia = graph_vidx_get(ix, e->data.function.args[0]);
+        int ib = graph_vidx_get(ix, e->data.function.args[1]);
         a->outdeg[ia]++; a->indeg[ib]++;
         if (kind == SYM_UndirectedEdge) { a->outdeg[ib]++; a->indeg[ia]++; }
     }
@@ -99,14 +247,15 @@ GraphAdj* graph_build_adj(const Expr* g) {
     for (size_t k = 0; k < ne; k++) {
         const Expr* e = edges->data.function.args[k];
         const char* kind = graph_edge_kind(e);
-        int ia = graph_vertex_index(verts, e->data.function.args[0]);
-        int ib = graph_vertex_index(verts, e->data.function.args[1]);
+        int ia = graph_vidx_get(ix, e->data.function.args[0]);
+        int ib = graph_vidx_get(ix, e->data.function.args[1]);
         a->out[ia][oc[ia]++] = ib;  a->in[ib][ic[ib]++] = ia;
         if (kind == SYM_UndirectedEdge) {
             a->out[ib][oc[ib]++] = ia;  a->in[ia][ic[ia]++] = ib;
         }
     }
     free(oc); free(ic);
+    graph_vidx_free(ix);
     return a;
 }
 
@@ -142,22 +291,37 @@ int graph_count_components(const GraphAdj* a, const char* removed, int* active_o
     return comps;
 }
 
-/* Two normalized edges are "parallel" (duplicates) when they connect the same
- * endpoints in a way the graph cannot distinguish:
- *   - directed:   same head and same ordered (u, v);
- *   - undirected: same head and the same unordered pair {u, v}.
- * Directed a->b and b->a are distinct; that is allowed. */
-static int edges_parallel(const Expr* e1, const Expr* e2) {
-    const char* k1 = graph_edge_kind(e1);
-    const char* k2 = graph_edge_kind(e2);
-    if (!k1 || k1 != k2) return 0;
-    const Expr* a1 = e1->data.function.args[0];
-    const Expr* b1 = e1->data.function.args[1];
-    const Expr* a2 = e2->data.function.args[0];
-    const Expr* b2 = e2->data.function.args[1];
-    if (expr_eq(a1, a2) && expr_eq(b1, b2)) return 1;
-    if (k1 == SYM_UndirectedEdge && expr_eq(a1, b2) && expr_eq(b1, a2)) return 1;
-    return 0;
+/* The validation body, given a vertex index already built over g's vertex List.
+ * Callers have checked g's outer shape (Graph head, two List arguments).
+ *
+ * Rejects, in the order the MVP did: an un-normalized or 3-argument edge, a
+ * self-loop, an endpoint absent from the vertex list, and a parallel edge. */
+static int graph_check(const Expr* g, const GraphVIdx* ix) {
+    const Expr* edges = g->data.function.args[1];
+    size_t ne = edges->data.function.arg_count;
+
+    EKSet seen;
+    if (!ekset_init(&seen, ne)) return 0;
+
+    int ok = 1;
+    for (size_t i = 0; i < ne && ok; i++) {
+        const Expr* edge = edges->data.function.args[i];
+        const char* kind = graph_edge_kind(edge);
+        if (!kind) { ok = 0; break; }              /* un-normalized / 3-arg    */
+
+        const Expr* u = edge->data.function.args[0];
+        const Expr* v = edge->data.function.args[1];
+        if (expr_eq(u, v)) { ok = 0; break; }      /* self-loop                */
+
+        int ia = graph_vidx_get(ix, u);
+        int ib = graph_vidx_get(ix, v);
+        if (ia < 0 || ib < 0) { ok = 0; break; }   /* endpoint not a vertex    */
+
+        if (!ekset_insert(&seen, ia, ib, kind == SYM_DirectedEdge)) ok = 0;
+    }
+
+    free(seen.slot);
+    return ok;
 }
 
 int graph_is_valid(const Expr* g) {
@@ -168,20 +332,9 @@ int graph_is_valid(const Expr* g) {
     const Expr* edges = g->data.function.args[1];
     if (!graph_is_list(verts) || !graph_is_list(edges)) return 0;
 
-    size_t ne = edges->data.function.arg_count;
-    for (size_t i = 0; i < ne; i++) {
-        const Expr* edge = edges->data.function.args[i];
-        if (!graph_edge_kind(edge)) return 0;              /* un-normalized/3-arg */
-
-        const Expr* u = edge->data.function.args[0];
-        const Expr* v = edge->data.function.args[1];
-        if (expr_eq(u, v)) return 0;                        /* self-loop */
-        if (!vertex_in_list(verts, u)) return 0;            /* endpoint not a vertex */
-        if (!vertex_in_list(verts, v)) return 0;
-
-        for (size_t j = 0; j < i; j++) {
-            if (edges_parallel(edge, edges->data.function.args[j])) return 0;
-        }
-    }
-    return 1;
+    GraphVIdx* ix = vidx_build(verts);
+    if (!ix) return 0;                  /* cannot index => cannot validate */
+    int ok = graph_check(g, ix);
+    graph_vidx_free(ix);
+    return ok;
 }

@@ -2,6 +2,7 @@
 #include "symtab.h"
 #include "eval.h"
 #include "arithmetic.h"
+#include "interval.h"
 #include "numeric.h"
 #include "common.h"
 #include "sym_names.h"
@@ -313,6 +314,9 @@ Expr* builtin_reim(Expr* res) {
 Expr* builtin_abs(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Abs", arg); if (r) return r; }
+
     Expr *re, *im;
     bool from_complex = is_complex(arg, &re, &im);
     Expr* re_owned = NULL;
@@ -427,6 +431,8 @@ Expr* builtin_abs(Expr* res) {
 Expr* builtin_sign(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+
+    if (is_interval(arg)) { Expr* r = interval_apply_function("Sign", arg); if (r) return r; }
 
     if (arg->type == EXPR_INTEGER) {
         int64_t v = arg->data.integer;

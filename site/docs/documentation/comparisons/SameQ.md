@@ -10,6 +10,8 @@ lhs === rhs or SameQ[lhs, rhs]
     yields True if lhs and rhs are structurally identical (head-by-head,
     argument-by-argument), and False otherwise.  Numerically equal but
     distinct heads (e.g. 1 and 1.) are NOT considered same.
+SameQ tests structure, not value, so unlike Equal it holds for
+Indeterminate === Indeterminate.
 ```
 
 ## Examples

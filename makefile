@@ -51,9 +51,18 @@ endif
 # whatever GCC the runner ships (13 at the time of writing), where these are
 # warnings that pass the build; promoting them here makes that job a real gate
 # no matter which compiler version it lands on.
+#
+# `-Werror=unused-function`: a static function used only inside an `#ifdef
+# USE_FLINT` / `USE_MPFR` block but defined unconditionally is dead code in the
+# degrade config, where -Wall reports it as "defined but not used" / "declared
+# static but never defined". Those warnings scroll past a -j build unnoticed on
+# the dev machine (which has the optional deps) and only ever appear in the
+# no-FLINT / no-MPFR CI job — the one place nobody reads the warning stream.
+# Promote it so that job fails loudly instead: the fix is always to guard the
+# definition with the same `#ifdef` as its caller.
 CFLAGS = -O3 -std=c99 -Wall -Wextra -Werror=implicit-function-declaration \
          -Werror=incompatible-pointer-types -Werror=int-conversion \
-         -Werror=implicit-int -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/ffi -I/usr/include -I/usr/local/include
+         -Werror=implicit-int -Werror=unused-function -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/stats -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/ffi -I/usr/include -I/usr/local/include
 
 # Readline is available on macOS and Linux but not on Windows (MinGW).
 # Build with USE_READLINE=0 to disable it explicitly (e.g. for cross-builds
@@ -254,8 +263,9 @@ ifeq ($(USE_FLINT), 1)
     LDFLAGS   += $(FLINT_LIBS)
   else
     $(warning FLINT >= 3.0 not detected; building with USE_FLINT=0 (algebraic-extension GCD/Factor use the classical fallback))
-    $(warning   macOS (Homebrew): brew install flint)
-    $(warning   Ubuntu/Debian:    sudo apt install libflint-dev   (needs >= 3.0 for ANTIC))
+    $(warning   macOS (Homebrew):      brew install flint)
+    $(warning   Ubuntu 24.04+/Debian:  sudo apt install libflint-dev   (needs >= 3.0 for ANTIC))
+    $(warning   Ubuntu 22.04 (apt has 2.x): ./tools/install-flint.sh   (builds 3.x from source; see docs/building.md))
     override USE_FLINT := 0
   endif
 endif
@@ -300,7 +310,7 @@ ifeq ($(USE_FFTW), 1)
 endif
 
 SRC_DIR = src
-SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/numbertheory/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/compile/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c) $(wildcard $(SRC_DIR)/graphics/*.c) $(wildcard $(SRC_DIR)/graph/*.c) $(wildcard $(SRC_DIR)/strings/*.c) $(wildcard $(SRC_DIR)/strings/regex/*.c)
+SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/numbertheory/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/stats/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/compile/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c) $(wildcard $(SRC_DIR)/graphics/*.c) $(wildcard $(SRC_DIR)/graph/*.c) $(wildcard $(SRC_DIR)/strings/*.c) $(wildcard $(SRC_DIR)/strings/regex/*.c)
 ifneq ($(USE_GRAPHICS), 1)
 SRC := $(filter-out $(SRC_DIR)/graphics/render.c $(SRC_DIR)/graphics/render3d.c $(SRC_DIR)/graphics/label_font.c, $(SRC))
 endif
@@ -324,8 +334,22 @@ CMAKE_TEST_BINARIES = comparisons_tests eval_tests expr_tests match_tests match_
 
 all: $(TARGET)
 
+# --- Link-flag de-duplication -------------------------------------------------
+# pkg-config for FLINT (and GMP-ECM) re-lists -lgmp/-lmpfr that the base LDFLAGS
+# already carry, so the raw link line repeats them and macOS ld warns "ignoring
+# duplicate libraries". Collapse each -l flag to a single copy while keeping its
+# LAST occurrence, so a provider (e.g. -lgmp) still follows every consumer
+# (-lflint, -lmpfr, -lecm) — the right-to-left order a static archive link needs,
+# and exactly why FLINT_LIBS is appended after the base -lgmp above. Only -l
+# library words are de-duplicated: -L search paths, -pthread, and two-word
+# "-framework X" tokens pass through untouched, ahead of the libraries.
+ld_reverse    = $(if $(1),$(call ld_reverse,$(wordlist 2,$(words $(1)),$(1))) $(firstword $(1)))
+ld_uniq_first = $(if $(1),$(firstword $(1)) $(call ld_uniq_first,$(filter-out $(firstword $(1)),$(1))))
+ld_uniq_last  = $(call ld_reverse,$(call ld_uniq_first,$(call ld_reverse,$(1))))
+LDFLAGS_DEDUP  = $(filter-out -l%,$(LDFLAGS)) $(call ld_uniq_last,$(filter -l%,$(LDFLAGS)))
+
 $(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(EXTRA_LIBS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS_DEDUP) $(EXTRA_LIBS)
 
 # ---------------------------------------------------------------------------
 # Static library for embedding the kernel in-process (mobile hosts, FFI tests).
@@ -395,6 +419,13 @@ docs-serve:
 # a real Linux build — see .github/workflows/build.yml.
 check-c99:
 	python3 tools/check_c99_portability.py
+
+# `make check-interval` — randomised stress test of Interval[] arithmetic against
+# the inclusion (containment) guarantee, plus exactness and determinism. Needs a
+# built ./Mathilda and python3, so it is not part of `all` (same status as
+# check-c99). See tools/interval_fuzz.py.
+check-interval:
+	python3 tools/interval_fuzz.py
 
 # `make check-packed-aware` — does every head with an NDArray fast path opt in
 # to it? The packing gate materialises for any head NOT on src/pack.c's AWARE
@@ -479,6 +510,27 @@ check-compile-coverage:
 check-fastpath-sweep:
 	python3 tools/nd_fastpath_sweep.py --gate-only
 
+# `make bench-gap` — the weekly gap-driven benchmark job.
+#
+# Runs all 31 `benchmarks/NN-slug/` experiments in Mathilda, in Python
+# (numpy/scipy/sympy/networkx) and — when wolframscript is installed — in
+# Mathematica, joins the rows by label, and writes a ranked report naming the
+# week's work: benchmarks/REPORT.md, benchmarks/ABSENT.md, and the raw rows to
+# benchmarks/results/<date>.json.
+#
+# Distinct from the check-* gates above: those answer "did anything regress",
+# this answers "where is Mathilda behind, and is it behind because a kernel is
+# slow or because a function does not exist". Those two are reported separately
+# and never pooled — a `SLOWER` row carries a ratio, an `ABSENT` row never does.
+#
+# Minutes, not seconds. Needs ./Mathilda; run `make` first.
+#
+#   make bench-gap                                   # everything
+#   python3 benchmarks/run_all.py --only 31           # one experiment
+#   python3 benchmarks/run_all.py --system mathilda,python
+bench-gap:
+	python3 benchmarks/run_all.py
+
 # Report the compiler the build will ACTUALLY use. `gcc --version` does not
 # answer that: the autodetection above prefers a versioned `gcc-NN` over the
 # plain name, so on a host with both, a bare `gcc --version` names one compiler
@@ -489,9 +541,9 @@ print-cc:
 	@echo "CC = $(CC)"
 	@$(CC) --version 2>/dev/null | head -1
 
-.PHONY: all clean docs docs-build docs-serve check-c99 check-packed-aware \
+.PHONY: all clean docs docs-build docs-serve check-c99 check-interval check-packed-aware \
         check-array-exactness check-nd-surfaces check-compile-coverage \
-        check-fastpath-sweep print-cc
+        check-fastpath-sweep bench-gap print-cc
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first

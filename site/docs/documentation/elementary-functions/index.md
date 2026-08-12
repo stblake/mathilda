@@ -1,6 +1,6 @@
 # Elementary Functions
 
-22 built-in function(s) in this category.
+23 built-in function(s) in this category.
 
 - [`ArcCos`](ArcCos.md) — ArcCos[z]  _(Stable)_
 - [`ArcSin`](ArcSin.md) — ArcSin[z]  _(Stable)_
@@ -14,6 +14,7 @@
 - [`Exp`](Exp.md) — Exp[z]  _(Stable)_
 - [`ExpToTrig`](ExpToTrig.md) — ExpToTrig[expr]  _(Stable)_
 - [`Log`](Log.md) — Log[z]  _(Stable)_
+- [`Ramp`](Ramp.md) — Ramp[x]  _(Stable)_
 - [`Sec`](Sec.md) — Sec[z]  _(Stable)_
 - [`Sin`](Sin.md) — Sin[z]  _(Stable)_
 - [`Sinh`](Sinh.md) — Sinh[z]  _(Stable)_

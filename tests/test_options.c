@@ -49,7 +49,8 @@ int main(void) {
 
     /* ---- registered builtin defaults (comprehensive sweep) ---- */
     chk("Options[LinearSolve]", "{Method -> Automatic, Modulus -> 0, ZeroTest -> Automatic}");
-    chk("Options[NSeries]", "{Radius -> 1.0, WorkingPrecision -> MachinePrecision}");
+    chk("Options[NSeries]", "{Radius -> 1.0, WorkingPrecision -> MachinePrecision, "
+                            "AccuracyGoal -> MachinePrecision, PrecisionGoal -> Automatic}");
     /* Symbolic builtins now carry their honored options (was empty {}). */
     chk("Options[Integrate]", "{Method -> Automatic}");
     chk("Options[Limit]", "{Direction -> Automatic, Assumptions -> Automatic, Method -> Automatic}");

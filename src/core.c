@@ -68,6 +68,7 @@
 #include "piecewise.h"
 #include "int.h"
 #include "real.h"
+#include "interval.h"
 #include "attr.h"
 #include "purefunc.h"
 #include "modular.h"
@@ -628,6 +629,10 @@ void core_init(void) {
     symtab_get_def("Order")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Ordering", builtin_ordering);
     symtab_get_def("Ordering")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("RankedMin", builtin_ranked_min);
+    symtab_get_def("RankedMin")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("RankedMax", builtin_ranked_max);
+    symtab_get_def("RankedMax")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("PolynomialQ", builtin_polynomialq);
     symtab_add_builtin("Variables", builtin_variables);
     symtab_add_builtin("Level", builtin_level);
@@ -640,6 +645,7 @@ void core_init(void) {
     symtab_add_builtin("CompoundExpression", builtin_compoundexpression);
     symtab_add_builtin("NumberQ", builtin_numberq);
     symtab_add_builtin("NumericQ", builtin_numericq);
+    symtab_add_builtin("StringQ", builtin_stringq);
     symtab_add_builtin("Positive", builtin_positive);
     symtab_add_builtin("Negative", builtin_negative);
     symtab_add_builtin("NonNegative", builtin_nonnegative);
@@ -673,6 +679,7 @@ void core_init(void) {
     symtab_get_def("AtomQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("NumberQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("NumericQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("StringQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Positive")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("Negative")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("NonNegative")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
@@ -748,6 +755,7 @@ void core_init(void) {
     expr_free(val_I);
     
     comparisons_init();
+    interval_init();
     boolean_init();
     names_init();
     list_init();
@@ -1087,7 +1095,7 @@ static void core_clear_all_one(const char* name) {
     SymbolDef* def = symtab_get_def(name);
     if (def->attributes != 0) {         /* attributes */
         def->attributes = 0;
-        eval_clock_bump();
+        eval_rule_epoch_bump();
     }
     if (def->docstring) {               /* usage / messages */
         free(def->docstring);
@@ -1113,7 +1121,7 @@ static bool core_protect_one(const char* name) {
     if (def->attributes & ATTR_LOCKED) return false;
     if (def->attributes & ATTR_PROTECTED) return false;
     def->attributes |= ATTR_PROTECTED;
-    eval_clock_bump();
+    eval_rule_epoch_bump();
     return true;
 }
 
@@ -1125,7 +1133,7 @@ static bool core_unprotect_one(const char* name) {
     if (def->attributes & ATTR_LOCKED) return false;
     if (!(def->attributes & ATTR_PROTECTED)) return false;
     def->attributes &= ~ATTR_PROTECTED;
-    eval_clock_bump();
+    eval_rule_epoch_bump();
     return true;
 }
 
@@ -1629,6 +1637,58 @@ Expr* builtin_clip(Expr* res) {
         && x->data.function.head->data.symbol.name == SYM_List) {
         size_t n = x->data.function.arg_count;
         Expr** out = (n > 0) ? malloc(sizeof(Expr*) * n) : NULL;
+
+        /* Fast path for the overwhelmingly common shape: Clip[reals, {lo, hi}]
+         * with finite real bounds. The general loop below builds a whole
+         * Clip[x_i, {lo,hi}] call per element -- deep-copying the bounds List
+         * for every one -- and runs the evaluator on it. Over 4x10^6 elements
+         * that is the difference between 0.12 s and machine-speed, and the
+         * benchmark's own row uses EXACT bounds {1/4, 3/4}, which is precisely
+         * the case that cannot reach the packed ndstruct_clip path above.
+         *
+         * Semantics are preserved exactly, including the part that makes the
+         * buffer path unavailable: a clamped element becomes a COPY OF THE
+         * BOUND, so Clip[{0.1,0.5,0.9},{1/4,3/4}] still returns
+         * {1/4, 0.5, 3/4} with the Rationals intact, not {0.25, 0.5, 0.75}.
+         *
+         * Deliberately narrow. Only argc == 2 (no vmin/vmax replacements), only
+         * EXPR_REAL elements (an exact element could compare differently
+         * against a rational bound once both are doubles), and only bounds that
+         * are finite reals -- Infinity, complex and symbolic bounds all fall
+         * through to the general path, which handles them. */
+        if (argc == 2 && n > 0) {
+            Expr* iv = res->data.function.args[1];
+            double lo, hi;
+            if (iv->type == EXPR_FUNCTION
+                && iv->data.function.head->type == EXPR_SYMBOL
+                && iv->data.function.head->data.symbol.name == SYM_List
+                && iv->data.function.arg_count == 2
+                && clip_classify_infinity(iv->data.function.args[0]) == 0
+                && clip_classify_infinity(iv->data.function.args[1]) == 0
+                && clip_to_double_value(iv->data.function.args[0], &lo)
+                && clip_to_double_value(iv->data.function.args[1], &hi)
+                && lo <= hi) {
+                Expr* lo_e = iv->data.function.args[0];
+                Expr* hi_e = iv->data.function.args[1];
+                size_t i = 0;
+                for (; i < n; i++) {
+                    Expr* el = x->data.function.args[i];
+                    if (el->type != EXPR_REAL) break;      /* exact: general path */
+                    double v = el->data.real;
+                    out[i] = (v < lo) ? expr_copy(lo_e)
+                           : (v > hi) ? expr_copy(hi_e)
+                                      : expr_copy(el);
+                }
+                if (i == n) {
+                    Expr* fast = expr_new_function(expr_new_symbol(SYM_List), out, n);
+                    free(out);
+                    return fast;
+                }
+                /* Bailed part-way: discard and let the general loop redo it. */
+                for (size_t k = 0; k < i; k++) expr_free(out[k]);
+            }
+        }
+
         for (size_t i = 0; i < n; i++) {
             Expr** call_args = malloc(sizeof(Expr*) * argc);
             call_args[0] = expr_copy(x->data.function.args[i]);
@@ -2156,6 +2216,18 @@ Expr* builtin_numberq(Expr* res) {
     return expr_new_symbol(SYM_False);
 }
 
+Expr* builtin_stringq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
+        /* Wrong arity is a malformed call shape: emit the Wolfram-style
+         * StringQ::argx diagnostic and leave the expression unevaluated. */
+        size_t argc = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
+        return builtin_arg_error("StringQ", argc, 1, 1);
+    }
+
+    Expr* arg = res->data.function.args[0];
+    return expr_new_symbol(arg->type == EXPR_STRING ? SYM_True : SYM_False);
+}
+
 static bool is_numeric_quantity(Expr* e) {
     if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT) return true;
 #ifdef USE_MPFR
@@ -2543,6 +2615,46 @@ static Expr* mod_quot_mpq_to_expr(const mpq_t q) {
     return expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
 }
 
+/* Coerce a real-numeric leaf (Integer/BigInt/Real/MPFR/Rational) to a double
+ * for Mod's machine path.  Returns false for symbolic / complex operands so the
+ * path declines rather than silently reading a Rational sibling as 0 -- the bug
+ * that turned Mod[7/3, 0.5] into 0.0 and Mod[2.5, 1/3] into unevaluated. */
+static bool mod_operand_to_double(const Expr* e, double* out) {
+    int64_t n, d;
+    switch (e->type) {
+        case EXPR_INTEGER: *out = (double)e->data.integer;   return true;
+        case EXPR_REAL:    *out = e->data.real;              return true;
+        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return true;
+#ifdef USE_MPFR
+        case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
+#endif
+        default: break;
+    }
+    if (is_rational(e, &n, &d)) { *out = (double)n / (double)d; return true; }
+    return false;
+}
+
+#ifdef USE_MPFR
+/* Set an already-init2'd mpfr from a real-numeric leaf, Rational included.
+ * Returns false for symbolic / complex operands. */
+static bool mod_set_mpfr(mpfr_t out, const Expr* e) {
+    int64_t n, d;
+    switch (e->type) {
+        case EXPR_INTEGER: mpfr_set_si(out, (long)e->data.integer, MPFR_RNDN); return true;
+        case EXPR_BIGINT:  mpfr_set_z (out, e->data.bigint,        MPFR_RNDN); return true;
+        case EXPR_REAL:    mpfr_set_d (out, e->data.real,          MPFR_RNDN); return true;
+        case EXPR_MPFR:    mpfr_set   (out, e->data.mpfr,          MPFR_RNDN); return true;
+        default: break;
+    }
+    if (is_rational(e, &n, &d)) {
+        mpfr_set_si(out, (long)n, MPFR_RNDN);
+        mpfr_div_si(out, out, (long)d, MPFR_RNDN);
+        return true;
+    }
+    return false;
+}
+#endif
+
 Expr* builtin_mod(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 2 && res->data.function.arg_count != 3)) {
         return NULL;
@@ -2578,14 +2690,12 @@ Expr* builtin_mod(Expr* res) {
             mpfr_init2(n, prec);
             mpfr_init2(q, prec);
             mpfr_init2(r, prec);
-            if (m_is_mpfr) mpfr_set(m, m_expr->data.mpfr, MPFR_RNDN);
-            else if (m_expr->type == EXPR_INTEGER) mpfr_set_si(m, (long)m_expr->data.integer, MPFR_RNDN);
-            else if (m_expr->type == EXPR_BIGINT) mpfr_set_z(m, m_expr->data.bigint, MPFR_RNDN);
-            else /* EXPR_REAL */ mpfr_set_d(m, m_expr->data.real, MPFR_RNDN);
-            if (n_is_mpfr) mpfr_set(n, n_expr->data.mpfr, MPFR_RNDN);
-            else if (n_expr->type == EXPR_INTEGER) mpfr_set_si(n, (long)n_expr->data.integer, MPFR_RNDN);
-            else if (n_expr->type == EXPR_BIGINT) mpfr_set_z(n, n_expr->data.bigint, MPFR_RNDN);
-            else /* EXPR_REAL */ mpfr_set_d(n, n_expr->data.real, MPFR_RNDN);
+            /* Load both operands, Rational included; a Complex operand makes
+             * mod_set_mpfr fail and we leave the expression symbolic. */
+            if (!mod_set_mpfr(m, m_expr) || !mod_set_mpfr(n, n_expr)) {
+                mpfr_clears(m, n, q, r, (mpfr_ptr)0);
+                return NULL;
+            }
             if (mpfr_zero_p(n)) {
                 mpfr_clears(m, n, q, r, (mpfr_ptr)0);
                 return NULL;
@@ -2644,8 +2754,9 @@ Expr* builtin_mod(Expr* res) {
             mpq_clears(m, n, qmpq, prod, rmpq, NULL);
             return out;
         } else if (m_expr->type == EXPR_BIGINT || n_expr->type == EXPR_BIGINT || m_expr->type == EXPR_INTEGER || n_expr->type == EXPR_INTEGER || m_expr->type == EXPR_REAL || n_expr->type == EXPR_REAL) {
-            double m_val = (m_expr->type == EXPR_REAL) ? m_expr->data.real : (m_expr->type == EXPR_INTEGER) ? (double)m_expr->data.integer : (m_expr->type == EXPR_BIGINT) ? mpz_get_d(m_expr->data.bigint) : 0.0;
-            double n_val = (n_expr->type == EXPR_REAL) ? n_expr->data.real : (n_expr->type == EXPR_INTEGER) ? (double)n_expr->data.integer : (n_expr->type == EXPR_BIGINT) ? mpz_get_d(n_expr->data.bigint) : 0.0;
+            double m_val, n_val;
+            if (!mod_operand_to_double(m_expr, &m_val) || !mod_operand_to_double(n_expr, &n_val))
+                return NULL;
             if (n_val == 0.0) return NULL;
             double result = m_val - n_val * floor(m_val / n_val);
             return expr_new_real(result);
@@ -2704,9 +2815,10 @@ Expr* builtin_mod(Expr* res) {
             mpq_clears(m, n, d, diff, qmpq, prod, rmpq, NULL);
             return out;
         } else if (m_expr->type == EXPR_BIGINT || n_expr->type == EXPR_BIGINT || d_expr->type == EXPR_BIGINT || m_expr->type == EXPR_INTEGER || n_expr->type == EXPR_INTEGER || d_expr->type == EXPR_INTEGER || m_expr->type == EXPR_REAL || n_expr->type == EXPR_REAL || d_expr->type == EXPR_REAL) {
-            double m_val = (m_expr->type == EXPR_REAL) ? m_expr->data.real : (m_expr->type == EXPR_INTEGER) ? (double)m_expr->data.integer : (m_expr->type == EXPR_BIGINT) ? mpz_get_d(m_expr->data.bigint) : 0.0;
-            double n_val = (n_expr->type == EXPR_REAL) ? n_expr->data.real : (n_expr->type == EXPR_INTEGER) ? (double)n_expr->data.integer : (n_expr->type == EXPR_BIGINT) ? mpz_get_d(n_expr->data.bigint) : 0.0;
-            double d_val = (d_expr->type == EXPR_REAL) ? d_expr->data.real : (d_expr->type == EXPR_INTEGER) ? (double)d_expr->data.integer : (d_expr->type == EXPR_BIGINT) ? mpz_get_d(d_expr->data.bigint) : 0.0;
+            double m_val, n_val, d_val;
+            if (!mod_operand_to_double(m_expr, &m_val) || !mod_operand_to_double(n_expr, &n_val) ||
+                !mod_operand_to_double(d_expr, &d_val))
+                return NULL;
             if (n_val == 0.0) return NULL;
             double m_minus_d = m_val - d_val;
             double mod_val = m_minus_d - n_val * floor(m_minus_d / n_val);
@@ -2752,7 +2864,22 @@ static bool get_numeric_as_complex(Expr* e, Cplx* out) {
         *out = (Cplx){ .re = re_c.re, .im = im_c.re };
         return true;
     }
-    return false; 
+    return false;
+}
+
+/* Banker's rounding (round half to even), matching Round[] exactly. Duplicated
+ * from piecewise.c's static round_half_even (as ndkernels.c also does) rather
+ * than exported, to keep the change local. Needed by the complex Quotient path:
+ * Mathematica rounds the Gaussian quotient to the NEAREST integer with ties to
+ * even, so Quotient[5 + 3 I, 2] is 2 + 2 I (ratio 2.5 + 1.5 I -> both halves to
+ * the even 2), which plain C round() (ties away from zero) would get wrong. */
+static double quot_round_half_even(double x) {
+    double f = floor(x);
+    double r = x - f;
+    if (r < 0.5) return f;
+    if (r > 0.5) return f + 1.0;
+    if (fmod(fabs(f), 2.0) == 0.0) return f;   /* exactly .5: pick the even one */
+    return f + 1.0;
 }
 
 Expr* builtin_quotient(Expr* res) {
@@ -2782,13 +2909,22 @@ Expr* builtin_quotient(Expr* res) {
             .im = (m_minus_d.im * n.re - m_minus_d.re * n.im) / n_norm_sq
         };
 
-        /* FLOOR, not round.  Quotient[m, n, d] is Floor[(m - d)/n] by definition,
-         * and every other branch of this function agrees — the integer path uses
-         * mpz_fdiv_q and the real path uses floor().  This one rounded, so
-         * Quotient[5.5 + 1. I, 3.] came back 2 while Floor[(5.5 + 1. I)/3.] gave
-         * 1, and the complex result disagreed with the real result for the same
-         * quotient. */
-        Cplx result_cplx = { floor(z.re), floor(z.im) };
+        /* ROUND to the nearest Gaussian integer, NOT floor. Floor[(m-d)/n] is
+         * the definition only for REAL arguments; for complex m or n, Quotient
+         * is Gaussian-integer division — the quotient that minimises the norm of
+         * the remainder — which rounds each part of the ratio to the nearest
+         * integer (ties to even, like Round[]). This is what Mathematica does
+         * and what the real path deliberately does not:
+         *   Quotient[17.5 + 6 I, 1 + 2 I] == 6 - 6 I   (ratio 5.9 - 5.8 I)
+         *   Quotient[10.4 + 8 I, 4. + 5 I] == 2        (ratio ~1.99 - 0.49 I)
+         *   Quotient[5 + 3 I, 2]           == 2 + 2 I  (ratio 2.5 + 1.5 I)
+         * A prior change floored this to "agree with the real branch", but the
+         * two branches are supposed to differ: the presence of an imaginary part
+         * changes which integer is nearest. floor gave 5 - 6 I, 1 - I and
+         * 2 + I respectively — all wrong. (The compiler declines complex
+         * Mod/Quotient in compile_infer.c, so there is no compiled twin to keep
+         * in step; the real path it compiles still floors.) */
+        Cplx result_cplx = { quot_round_half_even(z.re), quot_round_half_even(z.im) };
 
         if (result_cplx.im == 0.0) {
             return expr_new_integer((int64_t)result_cplx.re);

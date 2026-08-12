@@ -14,6 +14,7 @@
 #include "symtab.h"
 #include "eval.h"
 #include "arithmetic.h"
+#include "interval.h"
 #include "complex.h"
 #include "numeric.h"
 #include "sym_names.h"
@@ -591,8 +592,21 @@ Expr* builtin_ramp(Expr* res) {
     return expr_new_integer(0);
 }
 
-Expr* builtin_floor(Expr* res) { return do_piecewise(res, OP_FLOOR, "Floor", true); }
-Expr* builtin_ceiling(Expr* res) { return do_piecewise(res, OP_CEILING, "Ceiling", true); }
+/* Floor / Ceiling thread through intervals (monotone non-decreasing). */
+static Expr* piecewise_interval(Expr* res, const char* name) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1 &&
+        is_interval(res->data.function.args[0]))
+        return interval_apply_function(name, res->data.function.args[0]);
+    return NULL;
+}
+Expr* builtin_floor(Expr* res) {
+    Expr* iv = piecewise_interval(res, "Floor"); if (iv) return iv;
+    return do_piecewise(res, OP_FLOOR, "Floor", true);
+}
+Expr* builtin_ceiling(Expr* res) {
+    Expr* iv = piecewise_interval(res, "Ceiling"); if (iv) return iv;
+    return do_piecewise(res, OP_CEILING, "Ceiling", true);
+}
 Expr* builtin_round(Expr* res) { return do_piecewise(res, OP_ROUND, "Round", true); }
 Expr* builtin_integerpart(Expr* res) { return do_piecewise(res, OP_INTPART, "IntegerPart", false); }
 Expr* builtin_fractionalpart(Expr* res) { return do_piecewise(res, OP_FRACPART, "FractionalPart", false); }

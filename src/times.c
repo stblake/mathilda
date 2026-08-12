@@ -1,18 +1,50 @@
 #include "times.h"
 #include "arithmetic.h"
 #include "complex.h"
+#include "interval.h"
 #include "eval.h"
 #include "numeric.h"
 #include "sym_names.h"
 #include "trig_canon.h"
 #include "series.h"
 #include "ndarray.h"
+#include "checked_int.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <gmp.h>
+
+/* Split the largest perfect-square factor out of a positive integer n.
+ * On return n holds the squarefree residual and *root the square root of
+ * the extracted square, so (n_in) == (*root)^2 * (n_out).  Trial division
+ * is O(sqrt(n)); callers must pass only the small radicand of a Sqrt, never
+ * a large coefficient — folding a big coefficient in here is what made
+ * builtin_times hang on large series terms (issue #41). */
+static void mpz_split_square_part(mpz_t root, mpz_t n) {
+    mpz_set_ui(root, 1);
+    if (mpz_cmp_ui(n, 1) <= 0) return;
+    mpz_t pr, prsq;
+    mpz_inits(pr, prsq, NULL);
+    mpz_set_ui(prsq, 4);                 /* factor out squares of 2 */
+    while (mpz_divisible_p(n, prsq)) {
+        mpz_divexact(n, n, prsq);
+        mpz_mul_ui(root, root, 2);
+    }
+    mpz_set_ui(pr, 3);                   /* odd trial divisors */
+    mpz_set_ui(prsq, 9);
+    while (mpz_cmp(prsq, n) <= 0) {
+        if (mpz_divisible_p(n, prsq)) {
+            mpz_divexact(n, n, prsq);
+            mpz_mul(root, root, pr);
+        } else {
+            mpz_add_ui(pr, pr, 2);
+            mpz_mul(prsq, pr, pr);
+        }
+    }
+    mpz_clears(pr, prsq, NULL);
+}
 
 static bool is_overflow(Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
@@ -293,6 +325,52 @@ Expr* builtin_times(Expr* res) {
     if (n == 0) return expr_new_integer(1);
     if (n == 1) return expr_copy(res->data.function.args[0]);
 
+    /* Machine-integer fast path: Times of all int64 args is just their product,
+     * with no symbolic factors to collect. Skips the NDArray / SeriesData /
+     * inexact-contagion / (base,exp) grouping scans below -- the hot case in
+     * integer arithmetic (Case B's coefficient products, integer loop bodies).
+     * A leading 0 short-circuits. On overflow we fall through to the generic
+     * path, which promotes to bigint; correctness is unchanged. */
+    {
+        bool all_int = true;
+        for (size_t i = 0; i < n; i++)
+            if (res->data.function.args[i]->type != EXPR_INTEGER) { all_int = false; break; }
+        if (all_int) {
+            int64_t acc = 1;
+            bool overflow = false;
+            for (size_t i = 0; i < n; i++) {
+                int64_t v = res->data.function.args[i]->data.integer;
+                if (v == 0) { acc = 0; overflow = false; break; }
+                if (ci_mul_i64(acc, v, &acc)) { overflow = true; break; }
+            }
+            if (!overflow) return expr_new_integer(acc);
+        }
+    }
+
+    /* Fused special-case guard (mirrors builtin_plus). The NDArray, SeriesData,
+     * inexact-contagion and Infinity/Indeterminate pre-scans below each traverse
+     * the whole factor list, and for an ordinary symbolic or rational product --
+     * the dominant case, e.g. every `c[k] x` term a symbolic Table builds -- all
+     * find nothing. One detection pass replaces those traversals (and the size-n
+     * contagion malloc): if no factor could trip any pre-scan we jump straight to
+     * the (base, exponent) collector. The predicate is a provably-correct superset
+     * of "some pass would act" -- NDArray needs is_ndarray, series needs
+     * is_series_data, contagion mutates only when arg_is_inexact holds, and the
+     * infinity block acts only on an Infinity/ComplexInfinity/Indeterminate factor
+     * -- so skipping the passes when it is false is exactly equivalent. */
+    {
+        bool needs_prescan = false;
+        for (size_t i = 0; i < n; i++) {
+            Expr* a = res->data.function.args[i];
+            if (is_ndarray(a) || is_series_data(a) || arg_is_inexact(a) ||
+                is_indeterminate_sym(a) || is_complex_infinity_sym(a) || is_infinity_sym(a)) {
+                needs_prescan = true;
+                break;
+            }
+        }
+        if (!needs_prescan) goto times_grouping;
+    }
+
     /* NDArray fast path: same-shape NDArray operands multiply elementwise over
      * raw buffers, with numpy-style broadcasting of numeric scalars (3 * NDArray;
      * this is also how -NDArray and NDArray - NDArray reduce). If the array
@@ -422,8 +500,10 @@ Expr* builtin_times(Expr* res) {
         }
     }
 
+    times_grouping:;   /* fused special-case guard jumps here for an ordinary product */
     Expr* num_prod = expr_new_integer(1);
     Expr* complex_val = NULL;
+    Expr* interval_val = NULL;   /* running product of Interval factors */
 
     /* Collector buffers on the stack for the common small product (mirrors
      * builtin_plus): avoids three malloc/free pairs per Times in tight numeric
@@ -453,12 +533,13 @@ Expr* builtin_times(Expr* res) {
         Expr* arg = res->data.function.args[i];
         if (is_overflow(arg)) {
             expr_free(num_prod); if (complex_val) expr_free(complex_val);
+            if (interval_val) expr_free(interval_val);
             for(size_t j=0; j<group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
             if (heap_bufs) { free(groups); free(slot_group); free(slot_hash); }
             return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
         }
 
-        if (expr_is_numeric_like(arg) && !is_complex(arg, NULL, NULL)) {
+        if (expr_is_numeric_like(arg) && !is_complex(arg, NULL, NULL) && !is_interval(arg)) {
             Expr* next = multiply_numbers(num_prod, arg);
             if (next == NULL) {
                 /* Could not fold this numeric factor into num_prod;
@@ -501,6 +582,26 @@ Expr* builtin_times(Expr* res) {
                 expr_free(complex_val); expr_free(c_arg);
                 complex_val = make_complex(re, im);
             }
+        } else if (is_interval(arg)) {
+            /* Accumulate Interval factors: interval_val *= arg. If a product is
+             * undecidable (symbolic endpoints), keep the factor as its own group
+             * so nothing is lost. */
+            if (!interval_val) {
+                interval_val = expr_copy(arg);
+            } else {
+                Expr* prod = interval_multiply(interval_val, arg);
+                if (prod) { expr_free(interval_val); interval_val = prod; }
+                else {
+                    uint64_t hb = expr_hash(arg);
+                    size_t slot = (size_t)hb & ht_mask;
+                    while (slot_group[slot] != -1) slot = (slot + 1) & ht_mask;
+                    slot_group[slot] = (int64_t)group_count;
+                    slot_hash[slot] = hb;
+                    groups[group_count].base = expr_copy(arg);
+                    groups[group_count].exponent = expr_new_integer(1);
+                    group_count++;
+                }
+            }
         } else {
             Expr* base = arg; Expr* exponent;
             if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && arg->data.function.head->data.symbol.name == SYM_Power && arg->data.function.arg_count == 2) {
@@ -535,6 +636,7 @@ Expr* builtin_times(Expr* res) {
 
     if (num_prod->type == EXPR_INTEGER && num_prod->data.integer == 0) {
         if (complex_val) expr_free(complex_val);
+        if (interval_val) expr_free(interval_val);   /* 0 * Interval -> 0 */
         for(size_t j=0; j<group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
         if (heap_bufs) free(groups);
         return num_prod;
@@ -880,7 +982,7 @@ Expr* builtin_times(Expr* res) {
      * The unchanged-form pre-check keeps inputs already in canonical form
      * literally identical -- e.g. 2/Sqrt[3] stays as is because 4/3 has
      * no extractable square beyond the trivial 2/Sqrt[3]. */
-    if (complex_val == NULL && group_count == 1 &&
+    if (complex_val == NULL && interval_val == NULL && group_count == 1 &&
         (expr_is_integer_like(num_prod) || is_rational(num_prod, NULL, NULL)) &&
         !(num_prod->type == EXPR_INTEGER &&
           (num_prod->data.integer == 0 ||
@@ -981,71 +1083,64 @@ Expr* builtin_times(Expr* res) {
                     mpz_init_set_si(cd, cd_i);
                 }
                 if (sign != 0) {
-                    /* p/q = |c|^2 * r^eps:
-                     *   eps = +1: (cn^2 * rn) / (cd^2 * rd)
-                     *   eps = -1: (cn^2 * rd) / (cd^2 * rn) */
-                    mpz_t p, q, g;
-                    mpz_inits(p, q, g, NULL);
-                    mpz_mul(p, cn, cn);
-                    mpz_mul(p, p, eps_sa > 0 ? rn : rd);
-                    mpz_mul(q, cd, cd);
-                    mpz_mul(q, q, eps_sa > 0 ? rd : rn);
-                    mpz_gcd(g, p, q);
-                    if (mpz_cmp_ui(g, 1) > 0) {
-                        mpz_divexact(p, p, g);
-                        mpz_divexact(q, q, g);
+                    /* Canonicalise |c| * r^eps into (p_sq/q_sq) * Sqrt[p/q]
+                     * where p, q are the squarefree residuals of the radicand.
+                     *
+                     * The obvious route -- fold the coefficient into the
+                     * radicand as (cn^2 * rn)/(cd^2 * rd) and trial-divide out
+                     * the square factors -- is O(cn): a large series
+                     * coefficient sends the trial division to sqrt(cn^2) and
+                     * hangs (issue #41).  But cn^2 is already a perfect square,
+                     * and the squarefree part of a number is invariant under
+                     * multiplication by a perfect square, so the squarefree
+                     * residual of cn^2 * rn equals that of the small radicand
+                     * rn alone.  We therefore factor only rn/rd (bounded by the
+                     * symbolic input), fold their extracted roots into the
+                     * coefficient, and reproduce the gcd cross-cancellation
+                     * that (cn^2 * rn)/(cd^2 * rd) reduction would perform using
+                     * three cheap gcds:
+                     *   - gcd(An, Ad):  reduce the coefficient ratio,
+                     *   - gcd(An, W):   a coefficient-numerator prime shared
+                     *                   with the denominator radicand,
+                     *   - gcd(Ad, U):   a coefficient-denominator prime shared
+                     *                   with the numerator radicand.
+                     * This yields byte-for-byte the same (p_sq, p, q_sq, q) as
+                     * the fold-and-factor form on every case, without ever
+                     * trial-dividing the coefficient. */
+                    mpz_t p, q, p_sq, q_sq;
+                    mpz_inits(p, q, p_sq, q_sq, NULL);
+                    {
+                        mpz_t an, ad, cross;
+                        mpz_inits(an, ad, cross, NULL);
+                        /* radicand oriented by eps: p<-numerator, q<-denominator */
+                        mpz_set(p, eps_sa > 0 ? rn : rd);
+                        mpz_set(q, eps_sa > 0 ? rd : rn);
+                        mpz_split_square_part(an, p);  /* p -> U (squarefree) */
+                        mpz_split_square_part(ad, q);  /* q -> W (squarefree) */
+                        mpz_mul(p_sq, cn, an);         /* An = cn * root(rn) */
+                        mpz_mul(q_sq, cd, ad);         /* Ad = cd * root(rd) */
+                        /* reduce the coefficient ratio first */
+                        mpz_gcd(cross, p_sq, q_sq);
+                        if (mpz_cmp_ui(cross, 1) > 0) {
+                            mpz_divexact(p_sq, p_sq, cross);
+                            mpz_divexact(q_sq, q_sq, cross);
+                        }
+                        /* An shares a prime with the denominator radicand W */
+                        mpz_gcd(cross, p_sq, q);
+                        if (mpz_cmp_ui(cross, 1) > 0) {
+                            mpz_divexact(p_sq, p_sq, cross);
+                            mpz_mul(p, p, cross);
+                            mpz_divexact(q, q, cross);
+                        }
+                        /* Ad shares a prime with the numerator radicand U */
+                        mpz_gcd(cross, q_sq, p);
+                        if (mpz_cmp_ui(cross, 1) > 0) {
+                            mpz_divexact(q_sq, q_sq, cross);
+                            mpz_mul(q, q, cross);
+                            mpz_divexact(p, p, cross);
+                        }
+                        mpz_clears(an, ad, cross, NULL);
                     }
-                    /* Extract square parts in-place from p and q. After the
-                     * call, p holds p_rest and p_sq holds the extracted root
-                     * (similarly for q). Trial-division by primes is O(sqrt)
-                     * which is acceptable here; large bases would be unusual
-                     * in symbolic input. */
-                    mpz_t p_sq, q_sq;
-                    mpz_init_set_ui(p_sq, 1);
-                    mpz_init_set_ui(q_sq, 1);
-                    mpz_t pr_p, pr_psq;
-                    mpz_inits(pr_p, pr_psq, NULL);
-                    /* p */
-                    if (mpz_cmp_ui(p, 1) > 0) {
-                        mpz_set_ui(pr_p, 2);
-                        mpz_set_ui(pr_psq, 4);
-                        while (mpz_divisible_p(p, pr_psq)) {
-                            mpz_divexact(p, p, pr_psq);
-                            mpz_mul(p_sq, p_sq, pr_p);
-                        }
-                        mpz_set_ui(pr_p, 3);
-                        mpz_set_ui(pr_psq, 9);
-                        while (mpz_cmp(pr_psq, p) <= 0) {
-                            if (mpz_divisible_p(p, pr_psq)) {
-                                mpz_divexact(p, p, pr_psq);
-                                mpz_mul(p_sq, p_sq, pr_p);
-                            } else {
-                                mpz_add_ui(pr_p, pr_p, 2);
-                                mpz_mul(pr_psq, pr_p, pr_p);
-                            }
-                        }
-                    }
-                    /* q */
-                    if (mpz_cmp_ui(q, 1) > 0) {
-                        mpz_set_ui(pr_p, 2);
-                        mpz_set_ui(pr_psq, 4);
-                        while (mpz_divisible_p(q, pr_psq)) {
-                            mpz_divexact(q, q, pr_psq);
-                            mpz_mul(q_sq, q_sq, pr_p);
-                        }
-                        mpz_set_ui(pr_p, 3);
-                        mpz_set_ui(pr_psq, 9);
-                        while (mpz_cmp(pr_psq, q) <= 0) {
-                            if (mpz_divisible_p(q, pr_psq)) {
-                                mpz_divexact(q, q, pr_psq);
-                                mpz_mul(q_sq, q_sq, pr_p);
-                            } else {
-                                mpz_add_ui(pr_p, pr_p, 2);
-                                mpz_mul(pr_psq, pr_p, pr_p);
-                            }
-                        }
-                    }
-                    mpz_clears(pr_p, pr_psq, NULL);
 
                     /* Usefulness criteria differ by eps:
                      *   eps=-1: original criterion -- extract a perfect
@@ -1144,11 +1239,25 @@ Expr* builtin_times(Expr* res) {
                         }
                     }
 
-                    mpz_clears(p, q, g, p_sq, q_sq, NULL);
+                    mpz_clears(p, q, p_sq, q_sq, NULL);
                 }
                 mpz_clear(cn); mpz_clear(cd);
                 mpz_clear(rn); mpz_clear(rd);
             }
+        }
+    }
+
+    /* Fold the numeric coefficient into the interval product (num_prod becomes 1
+     * once absorbed). Done before the Complex fold so it also reads a clean
+     * num_prod. If the product is undecidable, num_prod and interval_val stay as
+     * separate factors. */
+    if (interval_val && !(num_prod->type == EXPR_INTEGER && num_prod->data.integer == 1)) {
+        Expr* np_iv = interval_from_scalar(num_prod);
+        Expr* prod = interval_multiply(np_iv, interval_val);
+        expr_free(np_iv);
+        if (prod) {
+            expr_free(interval_val); interval_val = prod;
+            expr_free(num_prod); num_prod = expr_new_integer(1);
         }
     }
 
@@ -1163,12 +1272,14 @@ Expr* builtin_times(Expr* res) {
     size_t final_count = 0;
     if (!(num_prod->type == EXPR_INTEGER && num_prod->data.integer == 1)) final_count++;
     if (complex_val) final_count++;
+    if (interval_val) final_count++;
     for (size_t i = 0; i < group_count; i++) {
         if (!(groups[i].exponent->type == EXPR_INTEGER && groups[i].exponent->data.integer == 0)) final_count++;
     }
 
     if (final_count == 0) {
         expr_free(num_prod); if (complex_val) expr_free(complex_val);
+        if (interval_val) expr_free(interval_val);
         for(size_t j=0; j<group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
         if (heap_bufs) free(groups);
         return expr_new_integer(1);
@@ -1177,13 +1288,14 @@ Expr* builtin_times(Expr* res) {
     /* final_count <= 2 + group_count <= 2 + n; when !heap_bufs, n <= TIMES_SMALL_N,
      * so the result vector fits a stack buffer (expr_new_function memcpys it).
      * Saves a malloc/free per small Times in tight numeric loops. */
-    Expr* final_args_stack[TIMES_SMALL_N + 2];
+    Expr* final_args_stack[TIMES_SMALL_N + 3];
     Expr** final_args = heap_bufs ? malloc(sizeof(Expr*) * final_count)
                                   : final_args_stack;
     size_t idx = 0;
     if (!(num_prod->type == EXPR_INTEGER && num_prod->data.integer == 1)) final_args[idx++] = num_prod;
     else expr_free(num_prod);
     if (complex_val) final_args[idx++] = complex_val;
+    if (interval_val) final_args[idx++] = interval_val;
     for (size_t i = 0; i < group_count; i++) {
         if (groups[i].exponent->type == EXPR_INTEGER && groups[i].exponent->data.integer == 0) {
             expr_free(groups[i].base); expr_free(groups[i].exponent); continue;

@@ -67,6 +67,7 @@
 #include "arithmetic.h"   /* is_complex, make_complex, is_rational */
 #include "attr.h"
 #include "eval.h"
+#include "nc_accuracy.h"  /* shared AccuracyGoal/PrecisionGoal handling */
 #include "numeric.h"
 #include "sym_names.h"
 #include "symtab.h"
@@ -74,6 +75,15 @@
 /* Hard cap on Terms: 2^(Terms-1) must stay an exact double for the machine
  * Richardson denominator, and any larger tableau is numerical nonsense. */
 #define ND_MAX_TERMS 50
+
+/* Adaptive-refinement guards (see the identical rationale in nlimit.c).  Halving
+ * the finite-difference step past the round-off floor amplifies cancellation --
+ * e.g. ND[Exp[x], {x, 2}, 0] collapses toward 0 -- and can yield a tableau with
+ * a spuriously small residual but a garbage value.  A refinement is accepted
+ * only if it moves the estimate by at most ND_REFINE_JUMP times the current
+ * error, and growth stops after ND_REFINE_STALL samples with no improvement. */
+#define ND_REFINE_JUMP  8.0
+#define ND_REFINE_STALL 3
 
 static void nd_warn(const char* tag, const char* fmt, ...) {
     va_list ap;
@@ -251,8 +261,10 @@ static bool nd_numeric_complex_machine(Expr* e, double _Complex* out) {
  * ------------------------------------------------------------------ */
 
 static Expr* nd_eulersum_machine(Expr* expr, const char* var, int n,
-                                 Expr* x0_expr, Expr* scale_expr, int terms) {
+                                 Expr* x0_expr, Expr* scale_expr, int terms,
+                                 double* err_out) {
     NumericSpec spec = numeric_machine_spec();
+    if (err_out) *err_out = INFINITY;
 
     double _Complex x0, s;
     {
@@ -300,6 +312,10 @@ static Expr* nd_eulersum_machine(Expr* expr, const char* var, int n,
             }
         }
         result = T[(size_t)(terms - 1) * terms + (terms - 1)];
+        /* Error estimate: last two diagonal (corner) entries disagree by roughly
+         * the extrapolation's remaining error. */
+        if (terms >= 2 && err_out)
+            *err_out = cabs(result - T[(size_t)(terms - 2) * terms + (terms - 2)]);
     }
 
     free(T);
@@ -334,7 +350,8 @@ static void nd_cmul(mpfr_t out_re, mpfr_t out_im,
 
 static Expr* nd_eulersum_mpfr(Expr* expr, const char* var, int n,
                               Expr* x0_expr, Expr* scale_expr,
-                              int terms, long bits) {
+                              int terms, long bits, double* err_out) {
+    if (err_out) *err_out = INFINITY;
     NumericSpec spec;
     spec.mode = NUMERIC_MODE_MPFR;
     spec.bits = bits;
@@ -450,6 +467,13 @@ static Expr* nd_eulersum_mpfr(Expr* expr, const char* var, int n,
     if (ok) {
         size_t last = (size_t)(terms - 1) * terms + (terms - 1);
         result = nd_from_complex_mpfr(Tr[last], Ti[last]);
+        /* Error estimate: disagreement of the last two corner entries. */
+        if (terms >= 2 && err_out) {
+            size_t prev = (size_t)(terms - 2) * terms + (terms - 2);
+            double dr = mpfr_get_d(Tr[last], MPFR_RNDN) - mpfr_get_d(Tr[prev], MPFR_RNDN);
+            double di = mpfr_get_d(Ti[last], MPFR_RNDN) - mpfr_get_d(Ti[prev], MPFR_RNDN);
+            *err_out = hypot(dr, di);
+        }
     }
 
     nd_bind_restore(&bind);
@@ -498,7 +522,10 @@ typedef struct {
     long        bits;          /* MPFR working precision in bits           */
     Expr*       wp_val;        /* borrowed WorkingPrecision (passthrough)  */
     Expr*       pg_val;        /* borrowed PrecisionGoal (passthrough)     */
+    Expr*       ag_val;        /* borrowed AccuracyGoal (passthrough)      */
     Expr*       mr_val;        /* borrowed MaxRecursion (passthrough)      */
+    double      acc_goal;      /* AccuracyGoal digits (EulerSum path)      */
+    double      prec_goal;     /* PrecisionGoal digits (EulerSum path)     */
 } NdOpts;
 
 static bool nd_is_known_option(const char* s) {
@@ -507,6 +534,7 @@ static bool nd_is_known_option(const char* s) {
         || s == SYM_Terms
         || s == SYM_WorkingPrecision
         || s == SYM_PrecisionGoal
+        || s == SYM_AccuracyGoal
         || s == SYM_MaxRecursion;
 }
 
@@ -571,7 +599,24 @@ static bool nd_apply_option(Expr* rule, NdOpts* o) {
         o->wp_val = rhs;
         return true;
     }
-    if (name == SYM_PrecisionGoal) { o->pg_val = rhs; return true; }
+    if (name == SYM_PrecisionGoal) {
+        o->pg_val = rhs;
+        if (!nc_parse_goal(rhs, &o->prec_goal)) {
+            nd_warn("badopt", "PrecisionGoal must be a positive number, "
+                              "Automatic, Infinity or MachinePrecision");
+            return false;
+        }
+        return true;
+    }
+    if (name == SYM_AccuracyGoal) {
+        o->ag_val = rhs;
+        if (!nc_parse_goal(rhs, &o->acc_goal)) {
+            nd_warn("badopt", "AccuracyGoal must be a positive number, "
+                              "Automatic, Infinity or MachinePrecision");
+            return false;
+        }
+        return true;
+    }
     if (name == SYM_MaxRecursion) {
         if (rhs->type != EXPR_INTEGER || rhs->data.integer < 0) {
             nd_warn("badopt", "MaxRecursion must be a non-negative integer");
@@ -601,11 +646,14 @@ static Expr* nd_nintegrate(Expr* expr, const char* var, Expr* n_expr,
         ? mk2("Rule", expr_new_symbol(SYM_Radius), mk1("Abs", expr_copy(o->scale)))
         : mk2("Rule", expr_new_symbol(SYM_Radius), expr_new_integer(1));
 
-    int extra = (o->wp_val ? 1 : 0) + (o->pg_val ? 1 : 0) + (o->mr_val ? 1 : 0);
+    int extra = (o->wp_val ? 1 : 0) + (o->pg_val ? 1 : 0)
+              + (o->ag_val ? 1 : 0) + (o->mr_val ? 1 : 0);
     int cnt = 3 + extra;
     Expr** a = malloc(sizeof(Expr*) * (size_t)cnt);
     a[0] = integrand; a[1] = speclist; a[2] = radius;
     int idx = 3;
+    if (o->ag_val)
+        a[idx++] = mk2("Rule", expr_new_symbol(SYM_AccuracyGoal), expr_copy(o->ag_val));
     if (o->wp_val)
         a[idx++] = mk2("Rule", expr_new_symbol(SYM_WorkingPrecision), expr_copy(o->wp_val));
     if (o->pg_val)
@@ -655,6 +703,21 @@ static Expr* nd_thread_over_list(Expr* res) {
     return eval_and_free(out);
 }
 
+/* Magnitude of a numeric ND result (real or Complex[...]); 0 if not numeric. */
+static double nd_mag_of(Expr* e) {
+    double _Complex c;
+    if (e && nd_to_complex(e, &c)) return cabs(c);
+    return 0.0;
+}
+
+/* |value(a) - value(b)| for two numeric ND results; +Inf if either is not
+ * numeric (so an incomparable candidate is treated as a value jump). */
+static double nd_value_jump(Expr* a, Expr* b) {
+    double _Complex va, vb;
+    if (a && b && nd_to_complex(a, &va) && nd_to_complex(b, &vb)) return cabs(va - vb);
+    return INFINITY;
+}
+
 /* ------------------------------------------------------------------ *
  *  Entry point                                                        *
  * ------------------------------------------------------------------ */
@@ -690,7 +753,9 @@ Expr* builtin_nd(Expr* res) {
     o.terms = 7;
     o.prec_mpfr = false;
     o.bits = 0;
-    o.wp_val = o.pg_val = o.mr_val = NULL;
+    o.wp_val = o.pg_val = o.ag_val = o.mr_val = NULL;
+    o.acc_goal = NC_GOAL_MACHINE;   /* AccuracyGoal -> MachinePrecision */
+    o.prec_goal = NC_GOAL_AUTO;                      /* PrecisionGoal -> Automatic */
     for (size_t i = pos_end; i < argc; i++) {
         if (!nd_apply_option(res->data.function.args[i], &o)) return NULL;
     }
@@ -729,12 +794,48 @@ Expr* builtin_nd(Expr* res) {
                            "order; use Method -> NIntegrate for fractional order");
         } else {
             int n = (int)n_expr->data.integer;
+            /* Adaptive refinement: grow the Richardson tableau depth from Terms up
+             * to ND_MAX_TERMS until the combined AccuracyGoal/PrecisionGoal
+             * tolerance is met, keeping the estimate with the smallest tableau
+             * residual; warn + return best on shortfall. */
+            double wp_digits = o.prec_mpfr ? numeric_bits_to_digits(o.bits)
+                                           : NUMERIC_MACHINE_PRECISION_DIGITS;
+            bool goal_active = !(isinf(o.acc_goal) && isinf(o.prec_goal));
+            int start = o.terms; if (start < 1) start = 1;
+            int cap = goal_active ? ND_MAX_TERMS : start;
+            if (cap < start) cap = start;
+            Expr* best = NULL; double best_err = INFINITY;
+            int stall = 0;
+            for (int t = start; t <= cap; t++) {
+                double err = INFINITY;
+                Expr* cand;
 #ifdef USE_MPFR
-            if (o.prec_mpfr)
-                result = nd_eulersum_mpfr(expr, var, n, x0_expr, o.scale, o.terms, o.bits);
-            else
+                if (o.prec_mpfr)
+                    cand = nd_eulersum_mpfr(expr, var, n, x0_expr, o.scale, t, o.bits, &err);
+                else
 #endif
-                result = nd_eulersum_machine(expr, var, n, x0_expr, o.scale, o.terms);
+                    cand = nd_eulersum_machine(expr, var, n, x0_expr, o.scale, t, &err);
+                if (!cand) break;                 /* sampling failure: keep best-so-far */
+                bool improved = false;
+                if (!best) {
+                    best = cand; best_err = err; improved = true;
+                } else if (err < best_err
+                           && nd_value_jump(cand, best) <= ND_REFINE_JUMP * best_err + 1e-300) {
+                    expr_free(best); best = cand; best_err = err; improved = true;
+                } else {
+                    expr_free(cand);              /* reject noise-driven estimate */
+                }
+                if (!goal_active) break;
+                double tol = nc_combined_tol(o.acc_goal, o.prec_goal, nd_mag_of(best), wp_digits);
+                if (best_err <= tol) break;       /* goal met */
+                stall = improved ? 0 : (stall + 1);
+                if (stall >= ND_REFINE_STALL) break;  /* refinement no longer helping */
+            }
+            result = best;
+            if (result && goal_active) {
+                double tol = nc_combined_tol(o.acc_goal, o.prec_goal, nd_mag_of(result), wp_digits);
+                if (best_err > tol) nc_warn_goal("ND", best_err, tol);
+            }
         }
     }
 

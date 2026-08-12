@@ -460,6 +460,12 @@ packed however short it is, and a compiled call is no different. A body that
 **builds** its array (`ConstantArray`, `Table`, `NestList`) has nothing to inherit
 and follows the producer rule instead — the threshold and `$AutoArrayPacking`.
 
+`N` is a derived-rule operation on this axis: `N[Range[10^6]]` widens the packed
+`int64` buffer to a packed `float64` one in a single pass and keeps the
+presentation (`NDArrayQ[N[Range[10^6]]]` is `True`), rather than materialising a
+list of boxed reals. The `(double)` widening rounds an `int64` past 2^53 exactly
+as `N` does to the same integer scalar, so the packed and unpacked answers agree.
+
 A **complex** result is never packed, for the same reason automatic packing
 refuses complex lists: `Complex[re, 0.]` is not a form the evaluator produces.
 
@@ -487,9 +493,11 @@ point, so the compiled answer is bit-identical, rounding included:
 
 | shape | heads |
 |---|---|
-| array → array | `Reverse` `Sort` `Ordering` `Accumulate` `Flatten` `Transpose` `Diagonal` `Take` `Drop` `Differences` `Ratios` `Most` `Rest` `Clip` `RotateLeft` `RotateRight` `MovingAverage` `MovingMedian` `TakeLargest` `TakeSmallest` `Inverse` `Normalize` `MatrixPower` `ReverseSort` `ConjugateTranspose` `PseudoInverse` |
+| array → array | `Reverse` `Sort` `Ordering` `Accumulate` `Flatten` `Transpose` `Diagonal` `Take` `Drop` `Differences` `Ratios` `Most` `Rest` `Clip` `RotateLeft` `RotateRight` `MovingAverage` `MovingMedian` `TakeLargest` `TakeSmallest` `Inverse` `Normalize` `MatrixPower` `ReverseSort` `ConjugateTranspose` `PseudoInverse` `FourierDCT` `FourierDST` |
+| array → complex array | `Fourier` `InverseFourier` (real/int in, complex out) |
+| vector → matrix | `DiagonalMatrix` `HankelMatrix` `ToeplitzMatrix` `VandermondeMatrix` (rank 1 → rank 2) |
 | array → scalar | `Total` `Length` `Mean` `Median` `Variance` `StandardDeviation` `RootMeanSquare` `Max` `Min` `Tr` `Det` `MatrixRank` `Norm` |
-| two arrays → array | `Dot` (matrix) `LinearSolve` `Cross` `LeastSquares` `ListConvolve` `ListCorrelate` `Join` |
+| two arrays → array | `Dot` (matrix) `LinearSolve` `Cross` `LeastSquares` `ListConvolve` `ListCorrelate` `Join` `HankelMatrix` (`[c, r]`) `ToeplitzMatrix` (`[c, r]`) |
 | two arrays → scalar | `Dot` (vector·vector inner product) |
 | elementwise | every registered kernel, including the narrowing ones (`Floor`, `Ceiling`, `Round`, `Sign`, `IntegerPart`, `UnitStep`) and the exact-integer ones (`Mod`, `Quotient`, `GCD`, `LCM`, `DivisorSigma`, `MoebiusMu`, `EulerPhi`, `IntegerLength`) |
 
@@ -503,6 +511,13 @@ real or complex (an int matrix inverse is exact Rationals → declines);
 `LeastSquares`/`PseudoInverse` are real only; `ReverseSort`/`ConjugateTranspose`/
 `Join` preserve any dtype. `Dot` delegates through a BLAS-first path
 (`dgemm`/`dgemv`/`ddot`), so a compiled matrix product is as fast as the REPL's.
+`Fourier`/`InverseFourier` always answer a **complex** array (a compiled register
+has a static type, so the interpreter's data-dependent collapse-to-real on
+symmetric input is not available — the values are the same); `FourierDCT`/
+`FourierDST` are real→real and gated to a real operand. The matrix producers
+(`DiagonalMatrix`/`HankelMatrix`/`ToeplitzMatrix`/`VandermondeMatrix`) take a
+rank-1 int or real vector and answer a packed rank-2 matrix, delegating to the
+interpreter builtin, which fills the result buffer directly.
 
 Anything a delegated head cannot handle comes back as a materialised `List`,
 which the VM reads as "not a buffer" and hands to the interpreter — so

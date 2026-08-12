@@ -24,6 +24,9 @@ Out[2]= {{0, a, 0}, {0, 0, b}, {0, 0, 0}}
 
 In[3]:= DiagonalMatrix[{1, 2, 3}, 0, {3, 5}]
 Out[3]= {{1, 0, 0, 0, 0}, {0, 2, 0, 0, 0}, {0, 0, 3, 0, 0}}
+
+In[4]:= DiagonalMatrix[{1., 2., 3.}]
+Out[4]= {{1.0, 0.0, 0.0}, {0.0, 2.0, 0.0}, {0.0, 0.0, 3.0}}
 ```
 
 ## Implementation notes
@@ -34,6 +37,7 @@ Out[3]= {{1, 0, 0, 0, 0}, {0, 2, 0, 0, 0}, {0, 0, 3, 0, 0}}
 - For `k > 0`, places elements `k` positions above the leading diagonal.
 - For `k < 0`, places elements `k` positions below the leading diagonal.
 - By default, size is optimally bounded to fit the full array cleanly. Extraneous elements are dropped if manual constraints fall short of required lengths.
+- **The zeros take the diagonal's exactness.** A machine `Real` anywhere on the
 
 **Attributes:** `Protected`.
 

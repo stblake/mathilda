@@ -35,6 +35,7 @@
  */
 #include "polygamma.h"
 #include "sym_names.h"
+#include "interval.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -746,6 +747,9 @@ Expr* builtin_polygamma(Expr* res) {
         /* PolyGamma[z] -> PolyGamma[0, z] (re-evaluated to a fixed point). */
         Expr* pg_args[2] = { expr_new_integer(0), expr_copy(args[0]) };
         return expr_new_function(expr_new_symbol(SYM_PolyGamma), pg_args, 2);
+    }
+    if (argc == 2 && args[0]->type == EXPR_INTEGER && is_interval(args[1])) {
+        Expr* r = interval_polygamma(args[0]->data.integer, args[1]); if (r) return r;
     }
     if (argc == 2) return polygamma_two_arg(args[0], args[1]);
     return pg_emit_argt(argc);

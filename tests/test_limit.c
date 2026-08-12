@@ -310,6 +310,19 @@ static void test_bessel_maxmin_bounded(void) {
 /* ----------------------------------------------------------------- */
 static void test_arctan_infinity(void) {
     check_equiv("Limit[ArcTan[x^2 - x^4], x -> Infinity]", "-Pi/2");
+
+    /* Issue #41: a constant multiple of ArcTan of a *shifted* radical
+     * argument at Infinity used to hang. The bare form always worked
+     * (compose_at_infinity), but any coefficient routed it into the Series
+     * layer, whose kernel composition over the shifted Sqrt exploded on
+     * ever-nesting radical coefficients. Fixed by keeping the series
+     * coefficients collected (Expand) during composition; these lock the
+     * antiderivative-at-both-endpoints values from the report. */
+    check_equiv("Limit[ArcTan[Sqrt[-1 + x]/Sqrt[2]], x -> Infinity]", "Pi/2");
+    check_equiv("Limit[2 ArcTan[Sqrt[-1 + x]/Sqrt[2]], x -> Infinity]", "Pi");
+    check_equiv("Limit[Sqrt[2] ArcTan[Sqrt[-1 + x]/Sqrt[2]], x -> Infinity]",
+                "Pi/Sqrt[2]");
+    check_equiv("Limit[Sqrt[2] ArcTan[Sqrt[-1 + x]/Sqrt[2]], x -> 1]", "0");
 }
 
 /* ----------------------------------------------------------------- */

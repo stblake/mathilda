@@ -19,7 +19,15 @@ and the expression is left unevaluated.
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= q = 5; q *= 3; q
+Out[1]= 15
+
+In[2]:= w = {1., 2., 3.}; w[[3]] /= 4.; w
+Out[2]= {1.0, 2.0, 0.75}
+```
 
 ## Implementation notes
 

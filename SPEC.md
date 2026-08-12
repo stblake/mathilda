@@ -10,7 +10,7 @@ built-in mathematical functions. The name pays homage to David Stoutemyer's
 PICOMATH-80.
 
 **Key characteristics:**
-- ~294 kLoC of C99 across ~433 source modules.
+- ~294 kLoC of C99 across ~500 source modules.
 - Arbitrary-precision integers via GMP.
 - Interactive REPL with GNU Readline support.
 - Mathematica-compatible surface syntax and evaluation semantics.
@@ -44,6 +44,16 @@ PICOMATH-80.
   Experiments 1–19 are workload-driven; experiment 20 is the coverage sweep,
   which enumerates all 676 builtins instead of choosing kernels, and is what
   `tools/numeric_coverage.py` and `tools/numeric_sweep.py` re-run.
+- [`benchmarks/`](benchmarks/) — the weekly gap-driven benchmark **job** (as
+  opposed to `docs/experiments/`, which is the narrative record). 30 experiments
+  kept as `.m`/`.py` pairs, run in Mathilda, Python (numpy/scipy/sympy/networkx)
+  and Mathematica, joined by case label and classified: `SLOWER` (kernel work,
+  carries a ratio), `ABSENT` (feature work, never carries a ratio), `INCOMPLETE`,
+  `CHECK-FAIL`. Four areas: A symbolic (the first external baseline those
+  subsystems have ever had), B numeric libraries, C the array substrate (the open
+  roadmap items), D previously-untimed subsystems. Re-run at the end of each week
+  with `make bench-gap`; `benchmarks/history.jsonl` is the machine-readable arc
+  and the diff of `benchmarks/REPORT.md` is the week's progress.
 - [`CLAUDE.md`](CLAUDE.md) — contributor workflow.
 
 ---
@@ -68,7 +78,7 @@ src/
   comparisons.c / boolean.c / cond.c / iter.c
   funcprog.c / purefunc.c / patterns.c
   rat.c / parfrac.c / expand.c
-  modular.c / facint.c / piecewise.c / stats.c
+  modular.c / facint.c / piecewise.c
   load.c / info.c / datetime.c
   ndarray.{c,h}     Dense machine-precision array: storage, dtypes, the
                     element-wise kernel maps, Dot/Power/elementwise
@@ -84,6 +94,11 @@ src/
                     algebraic-number factoring, polynomial solving)
   linalg/           Dense linear algebra; eigen kernels split by algorithm
   simp/             Simplify, trig simplification, trig rationalisation
+  stats/            Descriptive statistics: Mean, RootMeanSquare, Median,
+                    Quartiles, Variance, StandardDeviation, MovingAverage,
+                    MovingMedian, ExponentialMovingAverage (one builtin per
+                    file; shared helpers in stats_common.c/.h; stats.c is the
+                    registration hub)
   calculus/         D / Dt / Derivative, Series, Limit, Integrate, Risch-Norman
   special_functions/ Higher transcendental & special functions: Gamma, LogGamma,
                     PolyGamma, Pochhammer, Zeta, StieltjesGamma, EulerGamma,

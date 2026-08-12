@@ -1,5 +1,56 @@
 # Lessons learned
 
+## `PossibleZeroQ` is a self-contained numeric/structural test — never call `Simplify` (2026-08-07)
+
+Adding `Assumptions` support to `PossibleZeroQ`, my first design used an
+assumption-aware `Simplify[expr, Assumptions -> a] === 0` rescue as a symbolic
+fast path. The user corrected this: **`PossibleZeroQ` must not use `Simplify` —
+it is a core design principle that it stays a self-contained numeric/structural
+zero-test.** The elegant, more general fix was to make the existing
+Schwartz–Zippel sampler *assumption-aware* — draw only values that conform to
+the assumed region (integer/real/complex domain, sign, finite range, Re/Im-part
+constraints) — so an identity that holds only there is recognised with no
+symbolic layer at all. It also covers strictly more cases than `Simplify` did
+(branch cuts, `Conjugate`/`Re`/`Im`, `BesselJ`/`Zeta`/`Gamma`).
+
+Two rules this crystallised:
+- **Under assumptions, trust only a `True` verdict from the unconditional exact
+  stages; never their `False`.** `trigexp_rational_is_zero(Exp[2 Pi I k] - 1)`
+  rigorously returns `False` (nonzero as a function of *continuous* `k`) yet the
+  expression is identically zero for integer `k`. Constrained sampling must be
+  the sole arbiter of `False` once assumptions are in play.
+- **Correctness is soundness-only: never sample outside the assumed region.**
+  Over-restricting a sample spec is always safe (an identity on a region holds
+  on any subset); the one bug is drawing a non-conforming point, which
+  misreports a genuine identity as non-zero. See [[project_possiblezeroq_decay_false_positive]].
+
+## A coarse global cache key needs a finer *rule* epoch, not a rewrite (2026-08-05)
+
+The evaluator memoizes fixed points against one global clock; every symbol-table
+mutation bumps it, so an iterator's OwnValue rebind invalidated *all* cached
+values and re-canonicalised loop-invariant data O(n) per step. The instinct is
+"add dependency tracking" — a large, risky evaluator change. The elegant fix was
+much smaller: a **second, finer epoch** (`g_last_rule_change_clock`) that advances
+only on mutations which change how a *head* evaluates, plus a per-node "this value
+depends on nothing mutable" flag (GROUND) stolen from a spare bit of an existing
+field. A node that is GROUND and stamped after the last rule change is still a
+fixed point regardless of the coarse clock.
+
+Two rules this crystallised:
+- **Correctness came from a whitelist, not a predicate.** "Any Protected head with
+  no rules" *looks* safe but is unsound — `Plus`/`RandomReal` are Protected yet
+  their builtins can read mutable global state, so a naive predicate could freeze
+  a value that isn't actually constant. Restricting GROUND to six inert structural
+  constructors (`List`/`Association`/`Rule`/`RuleDelayed`/`Complex`/`Rational`)
+  whose canonical form is a pure function of args is what makes the freeze provably
+  correct. When a "clever" predicate almost works, ask what mutable state each
+  admitted case can secretly read.
+- **Steal a bit before growing the struct.** The flag rode in the top bit of a
+  64-bit monotone clock (unreachable 2^63), so `sizeof(Expr)` stayed 48 B on a
+  system with millions of nodes. A new `uint8_t` field would have cost 8 B/node to
+  alignment. The zero-cost encoding was worth updating the three comparison sites
+  to mask.
+
 ## "Aware and slow" is a category the audit cannot see (2026-08-01)
 
 `tools/check_packed_aware.py` answers one question: *does every head with an
@@ -2219,3 +2270,221 @@ Rules:
   reports a clean build and the stale binaries from the last session run
   happily and pass. The targets are `eigen_tests`, not `test_eigen`. Grep the
   build for `No rule` too, or confirm the new test's name appears in the run.
+
+- **A constant that routes around a blow-up is a symptom, not the bug.** Issue
+  #41: `Limit[c ArcTan[Sqrt[-1+x]/Sqrt[2]], x->Infinity]` hung while the bare
+  `ArcTan[...]` worked. Tempting fix: pull the constant out of the limit. But
+  the bare form only worked because `compose_at_infinity` caught it *before* the
+  Series layer; `Series[ArcTan[Sqrt[-1+x]/Sqrt[2]], {x,oo,2}]` hangs on its own,
+  no constant. The constant merely denied the fast path. Always test whether the
+  "working" sibling works for the right reason before declaring the difference
+  the cause. The real bug was general (all bounded kernels over shifted radicals
+  at infinity) and lived in the shared series machinery, not the Limit layer.
+
+- **Horner series composition nests radical coefficients because Times does not
+  distribute over Plus.** `so_compose_scalar_kernel` builds `Σ aₖ uᵏ` by
+  repeated `result = result*u + aₖ`; each step's coefficient becomes
+  `scalar + u_coef*(prev)`, and `simp`/evaluate leaves `Sqrt[2]*(a + b Sqrt[2])`
+  un-multiplied, so depth-N composition nests exponentially. `Expand` performs
+  exactly the missing distribution + like-radical collection
+  (`Sqrt[2]*(a+b Sqrt[2]) -> a Sqrt[2] + 2b`). Fix: normalize radical-bearing
+  coefficients between Horner steps. General across every at-zero kernel.
+
+- **Extracting a square factor from `c^2 * r` must not trial-divide `c`.** The
+  squarefree part is invariant under multiplication by a perfect square, so
+  `squarefree(c^2 * r) == squarefree(r)`: factor only the small radicand, fold
+  `c` into the extracted root, and recover the coefficient<->radicand
+  cross-cancellation with gcds. Folding `c^2` in and re-factoring is O(c) and
+  hangs on large series coefficients. Prove equivalence to the old form
+  exhaustively (a Python model over millions of small inputs) before porting.
+
+- **A node-cached memoization index survives only if the node is stable, and the
+  eval clock decides that.** Caching a key→position index on an Association node
+  (in `EXPR_FUNCTION` union slack, so `sizeof(Expr)` is unchanged) makes the
+  lookup PRIMITIVE O(1), but the interpreter re-*builds* function nodes from
+  evaluated args every `evaluate_step` (`eval.c:1197`), so an eagerly-attached
+  index lands on the node the fixed-point logic then DISCARDS (it keeps the
+  original `current`, frees the structurally-equal rebuilt `next`). Two things
+  fix it: (1) attach the index LAZILY in the reader, on the node that actually
+  survives; (2) add an in-loop timestamp short-circuit in `evaluate()` (mirroring
+  the entry check at `eval.c:1939`) so a value already stamped under the current
+  clock is not re-canonicalised each time it is reached mid-loop. Verify O(1) on
+  the PRIMITIVE (direct C calls), never through a loop — see next.
+
+- **`Do`/`Table`/`Fold` bump the global eval clock every iteration; `Map` does
+  not.** Iterator binding goes through `symtab_add_own_value` (`iter.c:417,442`),
+  a symbol-table mutation that bumps the clock, invalidating ALL `last_evaluated_at`
+  memoization each step — so a large loop-invariant value (an association) is
+  re-evaluated O(n) per iteration regardless of any node-cached index. `Map` with
+  a pure function binds no named symbol, so the clock is stable across its
+  elements and the memoization/index holds. Consequence: benchmark an "O(1)
+  lookup" claim on the primitive or on `Map`, not on `Do[Lookup[a,k],{...}]`
+  (which measures O(n) re-canonicalisation, not the lookup). A `Do`-loop timing
+  that looks O(n) after an "O(1)" change is this, not a broken index.
+
+- **Immutable-by-convention is the precondition for any node-attached cache.**
+  Before caching anything on a shared expression node, audit that nothing mutates
+  it in place after construction (`grep` every `data.function.args[i] =` and
+  `expr_unshare` site). Associations passed the audit — every update rebuilds via
+  `assoc_from_rules`/`assoc_entry_with_value` — except one latent aliasing bug
+  (`part.c` `delete_path` wrote a refcount-shared entry's value in place). The
+  cache was safe; the bug was orthogonal but real. `expr_copy` is a refcount
+  bump, so a "copy" shares the node and its cache; only a physical copy
+  (`expr_unshare`) must null the cache pointer to avoid a double free.
+
+## Verify that your verification tool actually verifies (2026-08-05)
+
+`site/verify_tutorial.py` piped a tutorial's `In[]` lines into `./Mathilda` and
+parsed the stdout for `Out[]=` lines. But Mathilda serves a **non-tty stdin over
+the NDJSON pipe protocol** (`src/repl.c pipe_mode_loop`), not the interactive
+`In[]/Out[]` transcript — so the tool matched **zero** `Out[]` lines,
+`zip(pairs, [])` iterated nothing, and it printed `OK` for **every** tutorial,
+forever. "Verified against the binary" was aspirational, not enforced.
+
+- **Rule**: a checker that can pass with an empty result set is not a checker.
+  Before trusting one, feed it a deliberately-wrong expectation and confirm it
+  FAILS. (One `MISMATCH` from the fixed tool is worth more than a hundred green
+  runs from the broken one.)
+- **How to drive Mathilda headlessly**: send `{"id": k, "expr": "..."}` lines on
+  stdin, read `{"id": k, "type": "expr", "payload": ...}` back; the payload is
+  the exact `OutputForm` a REPL user sees as `Out[k]=`. Match by id, not by
+  position, so a `;`-suppressed line (payload `"Null"`) and raw `Print` /
+  `CompilePrint` stdout can't shift the alignment.
+- **Tutorial `In[k]:=` expressions must be single-line.** The pipe protocol (and
+  the verifier) send one line per expression; a wrapped `Compile[...]` across two
+  markdown lines truncates to the first line, and the definition silently never
+  binds. Caught only because the fixed verifier flagged `logistic[0.5, 20]`
+  coming back unevaluated.
+
+## A packed-int64 buffer materialises for any aware head lacking `packed_int64_ok` (2026-08-05)
+
+`N[Range[10^6]]` unpacked to a list of boxed reals while `N[Range[1., 10^6]]`
+stayed packed. Root cause is NOT in `N`: `eval.c`'s transparency gate
+materialises an `int64` packed buffer to a nested `List` for any packed-aware
+head that has not claimed `packed_int64_ok` (the `Sin[int64]={0,0,0}` guard
+class), so `N` received a plain list and `numericalize`'s element rebuild dropped
+packing. Real buffers skip the gate branch and pass through untouched — hence the
+asymmetry between the same operation on int vs real data. Fix = claim
+`packed_int64_ok` (so the buffer reaches the builtin) AND make the builtin
+actually handle the buffer (`numericalize_rec`'s `EXPR_NDARRAY` case widens
+int64→float64 via `expr_new_ndarray_like`, inheriting presentation). One without
+the other is incomplete: the claim alone would hand `N` an int64 array it copies
+verbatim (wrong: int, not real); the widening alone is never reached.
+
+## A reported build warning can be the visible tip of a chronically-broken degrade config (2026-08-06)
+
+A handful of `-Wunused-function` warnings in `rat.c`/`rootreduce.c` (plus a
+failing Linux CI email) turned out to sit on top of a no-MPFR/no-FLINT config
+that had been broken far past the reported symptoms: `groebner.h` +
+`nsolve_system.c` included `<mpfr.h>` unguarded (the actual CI compile failure),
+`nd_ac_prec_free` was defined inside a file-wide `#ifdef USE_MPFR` yet called
+unconditionally (a *link* error), and **17** static functions were dead code in
+the degrade config. The CI `build-no-mpfr` job had only ever reached the compile
+stage — it aborted early on the mpfr.h include — so its green-until-now history
+never covered the link or the tail of the file list. Lessons: (1) when a
+degrade-config warning appears, fix the whole *class*, not the two files that
+happened to be reported, and add a gate (`-Werror=unused-function`) so it can't
+silently return; (2) macOS masks this entire class because `mpfr.h` is on the
+include path — reproduce the Linux build locally with a **poison stub `mpfr.h`**
+(`#error`) injected via `CC="gcc-NN -I<dir>"` ahead of `-I/usr/local/include`,
+and `make -k` to enumerate the whole backlog in one pass rather than iterating
+through CI one failure at a time. See [[project_use_mpfr_zero_build]].
+
+## A failing test can be right and a deliberate code change wrong (2026-08-07)
+
+`test_quotient` had failed since 2026-07-27: it expected
+`Quotient[17.5 + 6 I, 1 + 2 I] == Complex[6, -6]` but the code returned
+`Complex[5, -6]`. The tempting read is "stale test, update the expectation to
+match the code" — especially because the code change that broke it (commit
+`c0c8dcb`) came with a *detailed justification comment*: complex `Quotient` was
+switched from `round` to `floor` to "agree with the real branch", on the premise
+that `Quotient` is `Floor[(m-d)/n]` by definition.
+
+The premise was false. That is the definition for **real** arguments only; for
+complex arguments `Quotient` is Gaussian-integer division, which rounds each
+part of the ratio to the nearest integer. One `wolframscript` batch settled it —
+and *every* example the commit cited as support was wrong against Mathematica
+(`Quotient[5.5 + 1. I, 3.]` is `2` not `1`, `Quotient[10 + 2 I, 3 + I]` is `3`
+not `3 - I`). The test had been correct all along.
+
+Rules: (1) when a test and the code disagree, **the test is a hypothesis about
+ground truth, not automatically the stale side** — check the authority (here the
+local Mathematica kernel) before deciding which to change; the direction of the
+fix is the whole question. (2) A confident justification comment is not
+evidence; it is exactly what a `wolframscript` probe is for — the more detailed
+the rationale, the more it is worth the one call to check. Same
+`/Applications/Mathematica.app/Contents/MacOS/wolframscript` pattern as the
+`DiagonalMatrix` lesson above. (3) The Mathematica-faithful "nearest" is
+round-half-to-**even** (`Quotient[5 + 3 I, 2] == 2 + 2 I`, ratio `2.5 + 1.5 I`),
+so the fix reused a `round_half_even` helper, not C `round()` (ties away from
+zero).
+
+## One logical bug lives in every layer that reimplements the loop (2026-08-07)
+
+Issue #52 was "Table/Do terminate on a `double` comparison, so they run away
+near 2^63." The reported symptom was one builtin, but the same loop is
+open-coded in **four** interpreter sites (`builtin_do`, `builtin_table`, Sum's
+and Product's `expand_range`) *and* re-implemented twice more for speed — the
+auto-compile fast path (`numloop_do_range`, a raw `int64 i += di` that overflows
+and wraps) and the `Compile[]` VM (a counter register, checked by default but
+*unchecked* under `RuntimeOptions -> "Speed"`, where the general path hung and
+the unit path under-ran). Fixing only the interpreter would have left
+`Do[s=s+1, {i, n-2, n}]` (which auto-compiles) still hanging. Lessons:
+
+1. **When a bug is in a hot loop, grep for every reimplementation of that loop
+   before declaring it fixed.** A perf fast path is a copy of the logic with the
+   safety filed off; the same boundary bug is there by construction. Here one
+   `grep "val <= max_val"` found the four interpreter copies, and asking "what
+   *else* runs this loop" found the two compiled ones.
+2. **Verify the compiled/auto-compiled layers empirically, one binary rebuild at
+   a time.** My first "Compile hangs" reading was a *stale binary* (the
+   subagent caught it: `iter.o` rebuilt, `numloop.o` not). After a clean rebuild
+   the default `Compile[]` path was already correct — it bails on the checked
+   overflow to the now-fixed interpreter. Only opt-in wrap mode still needed a
+   code change.
+3. **A hang is never acceptable, even in an opt-in "Speed" mode.** Wrapping a
+   *value* is a coherent Speed-mode answer; wrapping a *loop counter* is a
+   non-terminating loop. The fix (`IF_FORCECHK`) keeps only loop-control
+   arithmetic checked, so value arithmetic still wraps.
+4. **A fix that adds a per-iteration call to a hot loop must be measured against
+   a same-machine baseline** (`git stash` the change, rebuild, time it — don't
+   trust the PR's number from another machine). The extern helper cost ~19% on
+   `Do[Null,{i,200000}]`; inlining the int64 fast path (BigInt arm out-of-line)
+   put it back to flat. See [[project_numloop_integer_int64_path]],
+   [[feedback_rebuild_main_binary_after_git_stash]].
+
+## Build/verify (2026-08-08, pattern-matcher work)
+- **The cmake test build lacks `-Werror=unused-function`; the top-level makefile has it.**
+  A dead static helper (get_expr_head_borrowed, is_atom after refactor) let
+  `match_stress_corpus_tests` build+pass via cmake while `make` (the main ./Mathilda)
+  FAILED to compile match.o. Result: ./Mathilda stayed STALE and probes showed old
+  behavior. ALWAYS `make -j` the top-level binary (not just the cmake test) after a
+  src change, and remove now-unused statics. Verify the fix in ./Mathilda, not only
+  in a cmake test binary.
+- **bench_pack/bench_match are load-sensitive for sub-100us ops.** `Total int64`
+  read 4.1x baseline while a concurrent valgrind+ctest+build ran; 1.4x (PASS) on a
+  quiet machine. Don't run perf gates concurrently with heavy jobs, and re-run a
+  bench "failure" isolated before treating it as a regression.
+- **Encode expected values from real WL semantics, not intuition.** `Plus[x__]`
+  auto-evaluates to `x__` (Plus of one arg), so `a+b+c /. Plus[x__] :> {x}` is
+  `{a+b+c}`, not `{a,b,c}` — use `HoldPattern[Plus[x__]]` to capture summands.
+  The "greedy vs shortest" default for leading `__` is shortest-first (WL-correct);
+  Mathilda already matched. Put ordering-sensitive cases in an observations tier.
+- **An unexpected MatchQ `False` may be a missing INPUT builtin, not a matcher
+  bug.** `MatchQ[Table[Unique["s"],{n}], {___, _Symbol, ___}]` was False because
+  `Unique` was unimplemented, so elements had head `Unique`, not `Symbol`.
+  Diagnose the SUBJECT first (`Head /@ subject`, `Head[expr]`) before touching the
+  matcher — the pattern was correct all along.
+- **Top-level sequence-pattern coverage is per-construct.** `__`/`___` matched at
+  the top level but `Repeated`/`RepeatedNull` (`p..`/`p...`) did not, and nested
+  repeats route each repetition through the top-level path — so one gap silently
+  broke `MatchQ[a, a..]` AND `{(a...)..}`. When adding a top-level pattern case,
+  cover the whole family.
+- **`AbsoluteTiming[f[x]]` on a non-Hold wrapper times nothing.** A `runCase[l,e]`
+  helper evaluates `e` before the body runs, so timings read ~2µs (constant).
+  `SetAttributes[runCase, HoldRest]` (or wrap the expr in `{ }` inside a Hold) to
+  measure the actual work.
+- **macOS valgrind "definitely lost: ~13,440B/420 blocks" is the libobjc baseline,
+  not a leak.** Confirm the stacks are `realizeClassWithoutSwift` and that NO frame
+  names our src before spending time; a heavy `Unique`/`Repeated` workload still
+  matched the baseline byte-for-byte.

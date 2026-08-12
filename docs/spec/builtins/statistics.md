@@ -1,12 +1,16 @@
 # Statistics
 
-**NDArray fast paths.** `Mean`, `Median`, `Variance`, `StandardDeviation`,
-`RootMeanSquare`, `Quartiles`, `MovingAverage`, `MovingMedian` and
-`ExponentialMovingAverage` operate directly on an `NDArray`'s flat buffer at C
-speed, returning a scalar or a lower-rank `NDArray` (matrix reductions are
-columnwise). Cases outside the fast domain (complex order statistics, weighted
-moving-average specs, …) fall back to the exact `List` result. See
-`src/ndreduce.c`.
+**NDArray fast paths.** `Mean`, `Median`, `Variance`, `Moment`, `CentralMoment`,
+`Skewness`, `Kurtosis`, `StandardDeviation`, `RootMeanSquare`, `Quartiles`,
+`MovingAverage`, `MovingMedian`, `ExponentialMovingAverage`, `Covariance` and
+`Correlation` operate directly on an `NDArray`'s flat buffer at C speed,
+returning a scalar or a lower-rank `NDArray` (matrix reductions are columnwise).
+`Covariance` / `Correlation` reduce two vectors to a scalar with a threaded
+centered inner product and the matrix forms to a `p×q` matrix with a BLAS gram
+($A_c^\top B_c$ via `cblas_dsyrk` / `cblas_dgemm`); they are also lowered inside
+`Compile[]`. Cases outside the fast domain (complex order statistics, weighted
+moving-average specs, integer/complex covariance, …) fall back to the exact
+`List` result. See `src/ndreduce.c` and `src/linalg/ndcorrcov.c`.
 
 
 ## Median
@@ -110,6 +114,101 @@ In[2]:= Variance[{{5.2, 7}, {5.3, 8}, {5.4, 9}}]
 Out[2]= {0.01, 1}
 ```
 
+## Moment
+Gives the raw (power) moment of data.
+- `Moment[data, r]`: the order-`r` raw moment $\mu_r = (1/n) \sum_i x_i^r$ (the sum of `r`-th powers, divided by `n`).
+- `Moment[data, {r_1, ..., r_m}]`: the multivariate mixed raw moment $(1/n) \sum_i \prod_j x_{ij}^{r_j}$.
+
+**Features**:
+- `NHoldAll`, `Protected`.
+- The raw moment is `CentralMoment` without the mean subtraction; `Moment[data, 1]` is `Mean[data]`, and `Moment[data, 0]` is `1`.
+- For a matrix or array the moment is taken columnwise over the first axis (equivalent to `ArrayReduce[Moment[#, r]&, x, 1]`); because there is no mean to subtract, `Mean[data^r]` threads correctly at every rank.
+- Exact input yields exact output; approximate input yields approximate output; symbolic data is handled symbolically.
+- Fast path on `NDArray`/packed real buffers (`ndred_moment`); an integer buffer degrades to the exact `Rational` `List` result, like `Variance`.
+- Lowerable inside `Compile[]` for a real vector and integer order (participates in auto-compilation).
+
+```mathematica
+In[1]:= Moment[{1, 2, 3, 4}, 2]
+Out[1]= 15/2
+
+In[2]:= Moment[{1., 2., 3., 4.}, 2]
+Out[2]= 7.5
+
+In[3]:= Moment[{Pi, E, 2}, 1]
+Out[3]= 1/3 (2 + E + Pi)
+
+In[4]:= Moment[{{1, 2}, {3, 4}, {5, 6}}, 3]
+Out[4]= {51, 96}
+
+In[5]:= Simplify[Moment[{{a, b}, {c, d}}, {1, 2}]]
+Out[5]= 1/2 (a b^2 + c d^2)
+```
+
+## CentralMoment
+Gives the central moment (moment about the mean) of data.
+- `CentralMoment[data, r]`: the order-`r` central moment $\tilde{\mu}_r = (1/n) \sum_i (x_i - \hat{\mu}_1)^r$, where $\hat{\mu}_1$ is `Mean[data]`.
+- `CentralMoment[data, {r_1, ..., r_m}]`: the multivariate mixed central moment $(1/n) \sum_i \prod_j (x_{ij} - \hat{\mu}_{1,j})^{r_j}$.
+
+**Features**:
+- `Protected`.
+- A central moment is `Variance` without the $n/(n-1)$ bias correction: it divides by `n` (not `n-1`), raises to the power `r` (not a square), and needs only `n >= 1`.
+- For a matrix or array the moment is taken columnwise over the first axis (equivalent to `ArrayReduce[CentralMoment[#, r]&, x, 1]`).
+- Exact input yields exact output; approximate input yields approximate output; symbolic data is handled symbolically.
+- Fast path on `NDArray`/packed real buffers (`ndred_central_moment`); an integer buffer degrades to the exact `Rational` `List` result, like `Variance`.
+- Lowerable inside `Compile[]` for a real vector and integer order (participates in auto-compilation).
+
+```mathematica
+In[1]:= CentralMoment[{1, 2, 3, 4}, 4]
+Out[1]= 41/16
+
+In[2]:= CentralMoment[{1., 2., 3., 4.}, 2]
+Out[2]= 1.25
+
+In[3]:= CentralMoment[{{1, 2}, {3, 4}, {5, 6}}, 2]
+Out[3]= {8/3, 8/3}
+
+In[4]:= Simplify[CentralMoment[{{a, b}, {c, d}}, {2, 2}]]
+Out[4]= 1/16 (a - c)^2 (b - d)^2
+```
+
+## Skewness
+Gives the coefficient of skewness (a measure of asymmetry) for the elements in data.
+- `Skewness[data]`
+
+**Features**:
+- `Protected`.
+- Equivalent to `CentralMoment[data, 3] / CentralMoment[data, 2]^(3/2)`.
+- For a matrix, gives the columnwise skewnesses.
+- Handles numerical and symbolic data; exact input gives exact output (a radical in general).
+- Fast path on `NDArray`/packed real buffers (`ndred_skewness`) and lowerable inside `Compile[]`; an integer buffer degrades to the exact `List` result.
+
+```mathematica
+In[1]:= Skewness[{1, 2, 3, 10}]
+Out[1]= 18/25 Sqrt[2]
+
+In[2]:= Skewness[{1., 2., 3., 4., 5.}]
+Out[2]= 0.
+```
+
+## Kurtosis
+Gives the coefficient of kurtosis (peak/tail versus flank concentration) for the elements in data.
+- `Kurtosis[data]`
+
+**Features**:
+- `Protected`.
+- Equivalent to `CentralMoment[data, 4] / CentralMoment[data, 2]^2` (Pearson kurtosis, not the excess form).
+- For a matrix, gives the columnwise kurtoses.
+- Handles numerical and symbolic data; exact input gives exact output.
+- Fast path on `NDArray`/packed real buffers (`ndred_kurtosis`) and lowerable inside `Compile[]`; an integer buffer degrades to the exact `List` result.
+
+```mathematica
+In[1]:= Kurtosis[{1, 2, 3, 4, 5}]
+Out[1]= 17/10
+
+In[2]:= Kurtosis[{1, 2, 4, 8}]
+Out[2]= 25141/13225
+```
+
 ## StandardDeviation
 Gives the standard deviation estimate of the elements in data.
 - `StandardDeviation[data]`
@@ -122,6 +221,54 @@ Gives the standard deviation estimate of the elements in data.
 ```mathematica
 In[1]:= StandardDeviation[{1, 2, 3}]
 Out[1]= 1
+```
+
+## Covariance
+Gives the covariance between vectors, or the cross/auto-covariance matrix of matrices.
+- `Covariance[v, w]`: covariance between the vectors `v` and `w` (a scalar).
+- `Covariance[a, b]`: `p×q` cross-covariance matrix between the columns of the `n×p` and `n×q` matrices `a` and `b`.
+- `Covariance[a]`: `p×p` auto-covariance matrix of the columns of `a`, i.e. `Covariance[a, a]`.
+
+**Features**:
+- `Protected`.
+- For vectors, the unbiased estimate $\hat{\sigma}_{vw} = \frac{1}{n-1}\sum_i (v_i - \hat{\mu}_v)\overline{(w_i - \hat{\mu}_w)}$; the conjugate is on the **second** argument, so exact / complex / symbolic inputs yield exact / complex / symbolic output.
+- For matrices, element $(i,j)$ is the covariance of column $i$ of `a` with column $j$ of `b`; `Covariance[a]` is symmetric.
+- NDArray / packed real data uses a threaded centered inner product (vectors) or a BLAS gram (matrices); an integer sample degrades to the exact `List` path. Lowered inside `Compile[]`.
+- Stays unevaluated for a single vector, mismatched shapes, or fewer than two observations. `Covariance[]` reports `Covariance::argb`.
+
+```mathematica
+In[1]:= Covariance[{1, 3/2}, {2, 11}]
+Out[1]= 9/4
+
+In[2]:= Covariance[{2 + I, 3 - 2 I, 5 + 4 I}, {I, 1 + 2 I, 10 - 5 I}]
+Out[2]= -7/3 + (56 I)/3
+
+In[3]:= Covariance[{{1, 2}, {3, 4}, {5, 7}}]
+Out[3]= {{4, 5}, {5, 19/3}}
+```
+
+## Correlation
+Gives the correlation between vectors, or the cross/auto-correlation matrix of matrices.
+- `Correlation[v, w]`: correlation between the vectors `v` and `w` (a scalar).
+- `Correlation[a, b]`: `p×q` cross-correlation matrix between the columns of `a` and `b`.
+- `Correlation[a]`: `p×p` auto-correlation matrix of the columns of `a`.
+
+**Features**:
+- `Protected`.
+- A normalized covariance, $\rho_{vw} = \sigma_{vw} / (\sigma_v\,\sigma_w)$ with $\sigma_{vw} = \mathtt{Covariance}[v,w]$ and $\sigma_v = \mathtt{StandardDeviation}[v]$; $-1 \le \rho_{vw} \le 1$ for real data.
+- The auto-correlation matrix `Correlation[a]` is symmetric with a unit diagonal (exact `1` for exact/symbolic data, `1.` for real data).
+- Shares `Covariance`'s NDArray / packed / `Compile[]` fast paths.
+- Stays unevaluated for a single vector, mismatched shapes, or fewer than two observations. `Correlation[]` reports `Correlation::argb`.
+
+```mathematica
+In[1]:= Correlation[{5, 3/4, 1}, {2, 1/2, 1}]
+Out[1]= 2 Sqrt[3/13]
+
+In[2]:= Correlation[{1.5, 3, 5, 10}, {2, 1.25, 15, 8}]
+Out[2]= 0.475976
+
+In[3]:= Correlation[{{a, b}, {c, d}}][[1, 1]]
+Out[3]= 1
 ```
 
 ## MovingAverage

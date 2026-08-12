@@ -13,6 +13,7 @@ void modular_init(void) {
     symtab_add_builtin("Module", builtin_module);
     symtab_add_builtin("Block", builtin_block);
     symtab_add_builtin("With", builtin_with);
+    symtab_add_builtin("Unique", builtin_unique);
 
     // Initial value for $ModuleNumber
     Expr* mn = expr_new_integer(module_number);
@@ -226,6 +227,101 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
     }
 
     return res;
+}
+
+/* Re-register the user-visible $ModuleNumber OwnValue from the static counter,
+ * mirroring builtin_module so Unique and Module share one monotone source. */
+static void unique_sync_module_number(void) {
+    Expr* mn_sym = expr_new_symbol(SYM_DollarModuleNumber);
+    Expr* val = expr_new_integer(module_number);
+    symtab_add_own_value("$ModuleNumber", mn_sym, val);
+    expr_free(mn_sym);
+    expr_free(val);
+}
+
+/* A Unique name-prefix source: a Symbol contributes its name, a String its
+ * characters; Unique[] (no source) uses "$". Anything else -> NULL. */
+static const char* unique_prefix_of(Expr* e) {
+    if (!e) return "$";
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name;
+    if (e->type == EXPR_STRING) return e->data.string;
+    return NULL;
+}
+
+/* Build a batch of fresh symbols, one per prefix, all sharing a single counter
+ * value chosen so that none of prefix<n> already names a symbol -- guaranteeing
+ * the whole batch is fresh and distinct (distinct prefixes, or distinct via the
+ * uniqueness scan). Each is registered Temporary. Returns count on success, or
+ * -1 if any prefix is unusable (caller then returns NULL to leave unevaluated).
+ * out[] must have room for `count` Expr*. */
+static int unique_make_batch(const char** prefixes, size_t count, Expr** out) {
+    char buf[512];
+    for (size_t i = 0; i < count; i++) {
+        if (!prefixes[i]) return -1;
+    }
+    /* Advance the shared counter until this value is clear for every prefix. */
+    for (;;) {
+        int64_t n = module_number;
+        bool clash = false;
+        for (size_t i = 0; i < count && !clash; i++) {
+            snprintf(buf, sizeof(buf), "%s%lld", prefixes[i], (long long)n);
+            if (symtab_lookup(buf) != NULL) clash = true;
+        }
+        if (!clash) break;
+        module_number++;
+    }
+    int64_t n = module_number++;
+    for (size_t i = 0; i < count; i++) {
+        snprintf(buf, sizeof(buf), "%s%lld", prefixes[i], (long long)n);
+        out[i] = expr_new_symbol(buf);
+        symtab_get_def(buf)->attributes |= ATTR_TEMPORARY;
+    }
+    unique_sync_module_number();
+    return (int)count;
+}
+
+/* Unique[] / Unique["x"] / Unique[x] / Unique[{a, b, ...}] -- generate one or
+ * more fresh, never-before-used symbols with the Temporary attribute, drawing
+ * their numeric suffix from the shared $ModuleNumber counter. A list argument
+ * yields a list of symbols sharing one suffix (Wolfram behaviour). */
+Expr* builtin_unique(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+
+    /* Unique[] -> a single "$"<n> symbol. */
+    if (argc == 0) {
+        const char* pfx = "$";
+        Expr* out[1];
+        if (unique_make_batch(&pfx, 1, out) < 0) return NULL;
+        return out[0];
+    }
+    if (argc != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+
+    /* Unique[{a, b, ...}] -> list of fresh symbols, one per element. */
+    if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL
+        && arg->data.function.head->data.symbol.name == SYM_List) {
+        size_t n = arg->data.function.arg_count;
+        const char** prefixes = malloc(n * sizeof(char*));
+        for (size_t i = 0; i < n; i++) {
+            prefixes[i] = unique_prefix_of(arg->data.function.args[i]);
+        }
+        Expr** syms = malloc(n * sizeof(Expr*));
+        int made = unique_make_batch(prefixes, n, syms);
+        free(prefixes);
+        if (made < 0) { free(syms); return NULL; }
+        Expr* list = expr_new_function(expr_new_symbol(SYM_List), NULL, n);
+        for (size_t i = 0; i < n; i++) list->data.function.args[i] = syms[i];
+        free(syms);
+        return list;
+    }
+
+    /* Unique["x"] / Unique[x] -> one fresh symbol. */
+    const char* pfx = unique_prefix_of(arg);
+    if (!pfx) return NULL;
+    Expr* out[1];
+    if (unique_make_batch(&pfx, 1, out) < 0) return NULL;
+    return out[0];
 }
 
 Expr* builtin_module(Expr* res) {

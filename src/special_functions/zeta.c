@@ -33,6 +33,7 @@
  */
 #include "zeta.h"
 #include "sym_names.h"
+#include "interval.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -728,6 +729,9 @@ Expr* builtin_zeta(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
+    if (argc == 1 && is_interval(args[0])) {
+        Expr* r = interval_apply_function("Zeta", args[0]); if (r) return r;
+    }
     if (argc == 1) return zeta_one_arg(args[0]);
     if (argc == 2) return zeta_two_arg(args[0], args[1]);
     return zeta_emit_argt(argc);

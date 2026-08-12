@@ -10,6 +10,7 @@ x < y or Less[x, y]
     yields True if x is strictly less than y on numeric inputs, False
     if strictly greater or equal, otherwise unevaluated.
 Chained forms (x < y < z) become Inequality, decided pairwise.
+Per IEEE 754, an Indeterminate argument gives False.
 ```
 
 ## Examples

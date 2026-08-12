@@ -1,51 +1,83 @@
-# Task: Boolean NDArray dtype + Compile support
+# Pattern-Matcher Stress Test & Refinement
 
-Full plan: `~/.claude/plans/let-s-extend-ndarray-to-memoized-stonebraker.md`
-
-## Plan (checklist)
-
-- [x] **Phase 1** — `NDT_BOOL` storage dtype (`src/expr.h`, `src/ndarray.c`): the
-  ~13 `ndt_*` choke points, string↔enum, element→Expr → `True`/`False`,
-  `leaf_to_component`, constructor error/docstring. Numeric engines DECLINE bool
-  (delist to symbolic).
-- [x] **Phase 2** — auto-packing of `True`/`False` lists (`src/pack.c`: `PK_BOOL`).
-- [x] **Phase 3** — producers/consumers (gap C.1): sign predicates → packed bool
-  array (`ndint_sign_predicate`), `Boole` → int64, `AllTrue`/`AnyTrue`/`NoneTrue`
-  byte-scan (`funcprog.c`). `Boole` added to `pack.c` AWARE.
-- [x] **Phase 4** — `Compile[]` bool arrays: `SYM_Boolean`, argspec, boundary
-  marshalling, `A_LOAD_B`/`A_STORE_B` opcodes, `ct_elem_ndt`, `ct_is_elem`.
-- [x] **Phase 5** — tests, docs, audit baselines.
+## Plan
+- [x] Explore matcher, test infra, edge cases (3 Explore agents)
+- [x] Build stress-test harness (fork-per-case corpus runner)
+- [ ] Write ~230 asserted + ~25 observational stress cases (documented WL semantics)
+- [ ] Run corpus, triage failures (correctness / missing-construct / robustness / perf)
+- [ ] Fix: Verbatim, PatternSequence, top-level Longest/Shortest
+- [ ] Fix: correctness divergences surfaced by asserted tier
+- [ ] Fix: recursion-depth robustness (graceful, no false no-match)
+- [ ] Fix: heap-allocate reorder storage (drop MATCH_REORDER_CAP 64); widen eval_guard_true stack
+- [ ] Add bench_match.c (doubling-ratio perf gate)
+- [ ] Docs: docs/spec/builtins + weekly changelog; re-run pre-existing matcher suites; valgrind
 
 ## Review
+(to fill in at end)
 
-**What shipped.** A `"bool"` NDArray dtype (`"Boolean"` alias), 1 byte/element,
-storable/printable/constructible/auto-packable. Sign predicates now emit packed
-bool arrays (closing performance.md §13 gap C.1); `Boole`/`AllTrue`/`AnyTrue`/
-`NoneTrue` consume them off the buffer. `Compile[]` takes/returns/indexes bool
-arrays and declares `_Boolean` scalars (which were internally `CT_BOOL` but had
-no argspec spelling until now).
+## Review (2026-08-08)
 
-**Two load-bearing design decisions.**
-1. *Bool is not numeric.* Arithmetic/transcendentals over a bool array return
-   `NULL` from every numeric engine and delist to the symbolic `List`
-   (`Sin[True]`, `True + True` unevaluated — Mathematica-faithful; mirrors the
-   compiler's existing "Bool is not numeric" `num_common` invariant).
-   `ndarray_int64_delist_retry` was broadened to also delist bool so Plus/Times/
-   Power thread correctly.
-2. *Bool producer results present as a `List`, not the input's presentation.* The
-   sign predicates have always answered with a `List`; `test_ndarray_functions.c`
-   pins it. So the result is a PACKED bool List (observably identical, now on a
-   buffer), unlike `Sin` which inherits its input's presentation. Same for `Boole`.
+Built a 228-case asserted conformance corpus + ~20-case observations corpus for
+the pattern matcher, ran it, triaged, and fixed everything the asserted tier
+surfaced (207/228 -> 228/228):
 
-**Verification.** Clean build (`-std=c99 -O3`), `make check-c99` green.
-`check-compile-coverage` green (sign predicates moved EXEMPT→BASELINE — a bool
-lowering is now *possible*, only undone). `check-packed-aware` green
-(`Boole` added to AWARE). `check-array-exactness` green on the final binary
-(0 MIXED). 21+ test suites pass, including new bool cases in `test_ndarray.c`,
-`test_packed_list.c`, `test_compiledfunction.c`. `check-nd-surfaces` /
-`check-fastpath-sweep` deliberately NOT run (slow; per project guidance).
+Correctness fixes (src/match.c):
+- `_Rational`/`_Complex`/`_Integer`-bigint head-typed blanks (blank_head_matches)
+- nested `Condition` guard eval (eval_guard_true recurses + evals leaves; drops 64 cap)
+- `__?test`/`___?test` per-element PatternTest on sequence blanks
 
-**Deferred / non-goals (as agreed).** Comparison operators do not thread over
-arrays (not Listable in WL). No fused whole-array logical ops in Compile. No bool
-arithmetic. A Compile *array* lowering for the sign predicates is now possible but
-undone (tracked in `compile_coverage.py` BASELINE).
+New constructs:
+- `Verbatim[p]` (literal match), `PatternSequence[...]` named+unnamed,
+  top-level `Longest`/`Shortest`. `OrderlessPatternSequence` interned+documented,
+  not yet implemented (rare).
+
+Robustness / perf:
+- match recursion bounded by $RecursionLimit -> graceful non-match, no SIGSEGV
+- reorder storage heap fallback removes the 64-element MATCH_REORDER_CAP
+- bench_match.c doubling-ratio gate (all ops ~2.0, O(n))
+
+Verification: asserted 228/228; pre-existing match/patterns/replace/rule_dispatch
+suites pass; bench_match + bench_pack pass on a quiet machine; valgrind +48B over
+baseline (one-time symbol interning, no per-call leak); make check-c99 clean.
+
+Symbols/attrs/docs: sym_names (+2), attr.c (Protected x3), info.c docstrings,
+docs/spec/builtins/pattern-matching.md, changelog 2026-08-03.md.
+
+## Review addendum (2026-08-08, part 2)
+
+Took on both remaining gaps + promoted all cases to gating unit tests:
+- Implemented `OrderlessPatternSequence` (ops_unwrap/ops_assign backtracking;
+  first-OPS-to-front; named binding; preds + trailing ___). 10 new asserted cases.
+- Fixed the Orderless x two-sequence-blank blowup: last pattern element forced to
+  k=n_exprs (must consume all) -> Plus[x__,y__] over 200 terms >10s -> ~0.5ms.
+- Merged the report-only observations tier into the asserted corpus (deleted
+  match_stress_observations.m + its ctest entry). Corpus now 258/258 GATING.
+
+Verified: 258/258; all pre-existing matcher suites pass; bench_match + bench_pack
+pass quiet; valgrind byte-identical to baseline over OPS/blowup paths (0 leaks);
+docs (pattern-matching.md, changelog) + memory updated.
+
+## Review addendum (2026-08-08, part 3) — 12 new user stress cases
+
+Ran 12 fresh adversarial cases; all now match documented WL, all efficient
+(<7ms; no exponential blowup). Findings & fixes:
+- Cases 8 (Flat + `x_?(Total[{##}]>10&)`) and 11 (top-level `(a|b|c|d)...` over a
+  50-elt List) were ALREADY correct at `False` — `##` in the test is the single
+  bound value, and a List is one expression, not a bare alternative.
+- **Case 5 & the latent root of 11 — top-level `Repeated`/`RepeatedNull`.**
+  `MatchQ[a, a..]` was False (should be True). Added an `is_repeated` handler at
+  the top of `match_internal`, matching the single subject as a length-1 seq.
+  This also fixes nested `(a...)..` and `{(((x:a...)...)..)}` (routed per-repetition
+  through the same path). Case 5 -> True.
+- **Case 12 — `Unique` was unimplemented** (`Table[Unique["sym"],{n}]` stayed
+  head-`Unique`, so `x_Symbol` correctly failed). Implemented `Unique[]` /
+  `["x"]` / `[x]` / `[{...}]` in src/modular.c (shared `$ModuleNumber`, fresh via
+  `symtab_lookup`, `Temporary`). Case 12 -> True.
+- **Perf:** trimmed a dead `subset` malloc+copy for plain unnamed/untyped
+  `__`/`___` (only remainder recurses). ~15-20% on the duplicate-search pattern.
+
+Corpus 258 -> 287 (sections 31-36, +29 gating cases). Verified: 287/287; all
+pre-existing matcher/replace/dispatch suites pass; bench_match linear (~2.0);
+valgrind definitely-lost == macOS libobjc baseline (13,440B/420 blocks), zero
+frames from our code. Docs (scoping-constructs.md +Unique, pattern-matching.md
+top-level-Repeated note, changelog) + memory updated.

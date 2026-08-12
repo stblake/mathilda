@@ -811,6 +811,10 @@ double nd_fixed_step(NdProblem* P, const NdOpts* o, NdTol tol, double dir) {
      * of steps before reaching the endpoint and the result extrapolates). */
     double digits = (tol.rtol > 0.0) ? -log10(tol.rtol) : 8.0;
     double target = 500.0 * pow(10.0, digits / 4.0);   /* grows with accuracy */
+    /* Deliberately NOT ND_AUTO_MAX_STEPS. This budget picks the fixed step for
+     * the multistep march -- a resolution knob -- and widening it here would
+     * silently multiply the node count of every Adams/BDF solve. The runaway
+     * wall is separate, and is the one that moved. */
     double budget = (o->max_steps > 0) ? (double)o->max_steps : 10000.0;
     double budget_cap = 0.9 * budget;                  /* leave headroom       */
     if (target < 500.0) target = 500.0;
@@ -833,7 +837,7 @@ NdStatus nd_integrate(NdProblem* P, const NdStepper* S, const NdOpts* o, NdSolut
         nd_solution_sort(sol);
         return ms;
     }
-    int64_t max_steps = (o->max_steps > 0) ? o->max_steps : 10000;
+    int64_t max_steps = (o->max_steps > 0) ? o->max_steps : ND_AUTO_MAX_STEPS;
 
     double* Y0 = malloc(sizeof(double) * d);
     double* f0 = malloc(sizeof(double) * d);

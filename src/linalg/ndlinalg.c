@@ -20,6 +20,7 @@
 #include "ndlinalg.h"
 #include "numarray.h"
 #include "ndarray.h"
+#include "pack.h"
 #include "lapack.h"
 #include "eval.h"
 #include "print.h"
@@ -40,6 +41,65 @@ bool linalg_call_has_ndarray(const Expr* res)
         if (is_ndarray(res->data.function.args[i])) return true;
     }
     return false;
+}
+
+/* Pack a plain List operand of machine reals, so that a call assembled from
+ * SMALL matrices still reaches the NDArray path.
+ *
+ * linalg_call_has_ndarray asks "is this already a buffer", and a matrix below
+ * the packing threshold never is: a 6x6 is 36 elements, well under it, so it
+ * stays a nested List and the generic symbolic path runs. That is the whole of
+ * the gap in benchmarks/ experiment 22 -- Det on a 6x6 costs 1.28 s over 5000
+ * repeats unpacked and 0.0012 s packed, for the identical value. The question
+ * worth asking is "is this a matrix of machine numbers", which is this.
+ *
+ * Deliberately REAL machine buffers only: pack_force sniffs the dtype, and an
+ * all-Integer or all-Rational matrix would either pack to an int64 buffer or
+ * decline, in both cases putting an exact matrix on a floating-point path whose
+ * answer is not the exact one Det and Inverse owe it. Anything that does not
+ * sniff to NDT_FLOAT64 is handed back unpacked.
+ *
+ * Returns a freshly owned copy of `arg` as a packed array, or NULL to decline.
+ * Never mutates or frees `arg`. */
+Expr* linalg_pack_machine_operand(const Expr* arg)
+{
+    if (!arg || is_ndarray(arg)) return NULL;
+    Expr* packed = pack_force(expr_copy((Expr*)arg), false, NDT_FLOAT64);
+    if (!packed) return NULL;
+    if (!is_ndarray(packed) || packed->data.ndarray.dtype != NDT_FLOAT64) {
+        expr_free(packed);
+        return NULL;
+    }
+    return packed;
+}
+
+/* The same, for a whole one-argument call: returns a rebuilt `head[packed]`
+ * ready to hand to an ndla_* fast path, or NULL to decline. The caller owns the
+ * result and frees it; `res` is untouched. */
+Expr* linalg_pack_machine_call1(const Expr* res)
+{
+    if (!res || res->type != EXPR_FUNCTION || res->data.function.arg_count != 1)
+        return NULL;
+    Expr* packed = linalg_pack_machine_operand(res->data.function.args[0]);
+    if (!packed) return NULL;
+    Expr* args[1] = { packed };
+    return expr_new_function(expr_copy((Expr*)res->data.function.head), args, 1);
+}
+
+/* Two-argument form, for LinearSolve[m, v] and Dot[a, b]. BOTH operands must be
+ * machine-real -- a mixed call (one packed, one exact) would hand the fast path
+ * an operand pair whose natural result is not the exact one the generic path
+ * would produce, so it is declined rather than half-converted. */
+Expr* linalg_pack_machine_call2(const Expr* res)
+{
+    if (!res || res->type != EXPR_FUNCTION || res->data.function.arg_count != 2)
+        return NULL;
+    Expr* a = linalg_pack_machine_operand(res->data.function.args[0]);
+    if (!a) return NULL;
+    Expr* b = linalg_pack_machine_operand(res->data.function.args[1]);
+    if (!b) { expr_free(a); return NULL; }
+    Expr* args[2] = { a, b };
+    return expr_new_function(expr_copy((Expr*)res->data.function.head), args, 2);
 }
 
 /*

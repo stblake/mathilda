@@ -53,6 +53,9 @@ static SymbolAttr builtin_attrs[] = {
     {"MatchQ", ATTR_PROTECTED},
     {"Pattern", ATTR_HOLDFIRST | ATTR_PROTECTED},
     {"PatternTest", ATTR_HOLDREST | ATTR_PROTECTED},
+    {"PatternSequence", ATTR_PROTECTED},
+    {"OrderlessPatternSequence", ATTR_PROTECTED},
+    {"Verbatim", ATTR_PROTECTED},
     {"Condition", ATTR_HOLDREST | ATTR_PROTECTED},
     {"Rule", ATTR_PROTECTED | ATTR_SEQUENCEHOLD},
     {"RuleDelayed", ATTR_HOLDREST | ATTR_PROTECTED | ATTR_SEQUENCEHOLD},
@@ -74,6 +77,7 @@ static SymbolAttr builtin_attrs[] = {
     {"Module", ATTR_HOLDALL | ATTR_PROTECTED},
     {"Block", ATTR_HOLDALL | ATTR_PROTECTED},
     {"With", ATTR_HOLDALL | ATTR_PROTECTED},
+    {"Unique", ATTR_PROTECTED},
     {"Range", ATTR_LISTABLE | ATTR_PROTECTED},
     {"Return", ATTR_PROTECTED},
     {"Array", ATTR_PROTECTED},
@@ -83,6 +87,7 @@ static SymbolAttr builtin_attrs[] = {
     {"Drop", ATTR_NHOLDREST | ATTR_PROTECTED},
     {"Extract", ATTR_NHOLDREST | ATTR_PROTECTED},
     {"Flatten", ATTR_PROTECTED},
+    {"FlattenAt", ATTR_PROTECTED},
     {"Partition", ATTR_PROTECTED},
     {"RotateLeft", ATTR_PROTECTED},
     {"RotateRight", ATTR_PROTECTED},
@@ -95,7 +100,7 @@ static SymbolAttr builtin_attrs[] = {
     {"LCM", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_FLAT | ATTR_ORDERLESS | ATTR_ONEIDENTITY},
     {"ExtendedGCD", ATTR_PROTECTED | ATTR_LISTABLE},
     {"PrimeQ", ATTR_PROTECTED | ATTR_LISTABLE},
-    {"PossibleZeroQ", ATTR_PROTECTED | ATTR_LISTABLE},
+    {"PossibleZeroQ", ATTR_PROTECTED},
     {"PrimePi", ATTR_PROTECTED | ATTR_LISTABLE},
     {"FactorInteger", ATTR_PROTECTED | ATTR_LISTABLE},
     {"NextPrime", ATTR_LISTABLE | ATTR_PROTECTED | ATTR_READPROTECTED},
@@ -189,8 +194,9 @@ void set_attributes(const char* symbol_name, uint32_t attrs) {
             /* Attribute changes (Hold*, Listable, Flat, Orderless,
              * NumericFunction, Protected, OneIdentity, ...) all change
              * how the evaluator handles a head, so a cached evaluation
-             * could be stale. Bump the global eval clock to invalidate. */
-            eval_clock_bump();
+             * could be stale. Advance the rule epoch (and eval clock) to
+             * invalidate -- including any GROUND node using this head. */
+            eval_rule_epoch_bump();
         }
     }
 }
@@ -226,8 +232,9 @@ static void remove_single_attribute(SymbolDef* def, Expr* attr_expr) {
         uint32_t bit = string_to_attribute(attr_name);
         if (bit != ATTR_NONE && (def->attributes & bit)) {
             def->attributes &= ~bit;
-            /* Real attribute change -- invalidate cached evaluations. */
-            eval_clock_bump();
+            /* Real attribute change -- invalidate cached evaluations (and any
+             * GROUND node using this head) by advancing the rule epoch. */
+            eval_rule_epoch_bump();
         }
     }
 }
@@ -241,8 +248,9 @@ static void add_single_attribute(SymbolDef* def, Expr* attr_expr) {
         uint32_t bit = string_to_attribute(attr_name);
         if (bit != ATTR_NONE && !(def->attributes & bit)) {
             def->attributes |= bit;
-            /* Real attribute change -- invalidate cached evaluations. */
-            eval_clock_bump();
+            /* Real attribute change -- invalidate cached evaluations (and any
+             * GROUND node using this head) by advancing the rule epoch. */
+            eval_rule_epoch_bump();
         }
     }
 }

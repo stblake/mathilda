@@ -73,4 +73,49 @@ bool iter_spec_resolve_numeric(const IterSpec* s, bool allow_inf,
 Rule* iter_spec_shadow(Expr* var);
 void  iter_spec_restore(Expr* var, Rule* saved_own);
 
+/* curr + step for a machine-numeric iterator, without going through the
+ * evaluator. Advancing by building Plus[curr, step] and calling evaluate() costs
+ * three Expr allocations and a full evaluator dispatch per step, to compute i+1;
+ * on `Do[Null, {i, 200000}]` that was 0.0251 s against 0.0034 s for the add.
+ *
+ * Returns NULL -- meaning "use the evaluator" -- for BigInt, Rational, MPFR or a
+ * symbolic step, so those keep bit-identical values, and for an integer sum that
+ * would overflow, leaving BigInt promotion to that path. Borrows both operands;
+ * the result is owned by the caller. */
+Expr* iter_step_add(const Expr* curr, const Expr* step);
+
+/* Out-of-line slow path of iter_range_continue: an exact compare when a BigInt
+ * is involved (curr_e overflowed int64 on the last advance, or a bound is big).
+ * Only reached at the 2^63 boundary, so it stays off the hot loop. */
+bool iter_range_continue_bigint(const Expr* curr_e, const Expr* imax_e, double di_val);
+
+/* Loop-continuation test for an arithmetic-progression iterator, shared by
+ * Table / Do / Sum / Product. Returns true while the loop should keep running.
+ *
+ * Real iteration compares the double running value `val` against `max_val` (with
+ * the historical 1e-14 slack). EXACT integer iteration compares the exact
+ * running value `curr_e` against the exact bound `imax_e` — an int64 compare, or
+ * GMP when a BigInt is involved — because int64 values near 2^63 collapse to the
+ * same double and the double test can no longer terminate the loop (issue #52).
+ * `di_val`'s sign gives the direction; `is_inf` short-circuits to true.
+ *
+ * Kept inline (with only the BigInt arm out-of-line) so the common int64 loop
+ * pays a single register compare per step, not a call — the microbenchmark PR
+ * #50 tuned (Do[Null, {i, n}]) must not regress. */
+static inline bool iter_range_continue(bool is_real, bool is_inf,
+                                       const Expr* curr_e, const Expr* imax_e,
+                                       double val, double max_val, double di_val) {
+    if (is_inf) return true;
+    if (!is_real && curr_e && imax_e) {
+        if (curr_e->type == EXPR_INTEGER && imax_e->type == EXPR_INTEGER) {
+            int64_t a = curr_e->data.integer, b = imax_e->data.integer;
+            return (di_val > 0) ? (a <= b) : (a >= b);
+        }
+        if (expr_is_integer_like(curr_e) && expr_is_integer_like(imax_e))
+            return iter_range_continue_bigint(curr_e, imax_e, di_val);
+    }
+    return (di_val > 0 && val <= max_val + 1e-14)
+        || (di_val < 0 && val >= max_val - 1e-14);
+}
+
 #endif

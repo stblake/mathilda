@@ -309,32 +309,41 @@ static void nd_gather_interleaved(const void* data, NDType dt, int64_t N,
  * a visible change of head from an invisible optimisation. A 200-case
  * differential sweep failed 148 of them on exactly that. */
 static Expr* machine_build_ndarray(double* out, int64_t N, const int64_t* dims,
-                                   int rank, const Expr* src) {
-    /* Magnitude proxy max(|re|, |im|), NOT hypot. This scan touches every
-     * element, and hypot() is a careful ~20-40 ns libm call (it avoids
-     * intermediate overflow in re^2 + im^2) -- on a 2^20 transform that alone
-     * was tens of milliseconds, comparable to the FFT it is checking.
-     *
-     * Nothing here needs a true modulus. The test below is
-     * `max_im <= tol * max_mag` with tol = 16 N eps, i.e. "is the imaginary
-     * part negligible against the scale of the result". The proxy is within a
-     * factor of sqrt(2) of the modulus, which against a tolerance of that shape
-     * is not a distinction -- and it is exact, overflow-free and branch-light. */
-    double max_mag = 0.0, max_im = 0.0;
-    for (int64_t o = 0; o < N; o++) {
-        double re = fabs(out[2 * o]), im = fabs(out[2 * o + 1]);
-        double mag = (re > im) ? re : im;
-        if (mag > max_mag) max_mag = mag;
-        if (im > max_im) max_im = im;
-    }
-    double tol = 16.0 * (double)N * DBL_EPSILON;
-    bool real_only = (max_mag == 0.0) || (max_im <= tol * max_mag);
-    if (real_only) {
-        double* rout = malloc((size_t)N * sizeof(double));
-        for (int64_t o = 0; o < N; o++) rout[o] = out[2 * o];
-        free(out);
-        return src ? expr_new_ndarray_like(src, rank, dims, rout, NDT_FLOAT64)
-                   : expr_new_ndarray_raw(rank, dims, rout, NDT_FLOAT64);
+                                   int rank, const Expr* src, bool force_complex) {
+    /* `force_complex` skips the real-collapse entirely and always returns an
+     * NDT_COMPLEX64 array. It is set only by the Compile[] entry points
+     * (fourier_compile / inverse_fourier_compile): a compiled register is typed
+     * with a STATIC element type, and the collapse below is data-dependent, so a
+     * register the compiler typed CT_COMPLEX must always receive a complex
+     * buffer or a downstream opcode would reinterpret its bits. The interpreter
+     * paths keep the collapse (their result head is chosen at run time). */
+    if (!force_complex) {
+        /* Magnitude proxy max(|re|, |im|), NOT hypot. This scan touches every
+         * element, and hypot() is a careful ~20-40 ns libm call (it avoids
+         * intermediate overflow in re^2 + im^2) -- on a 2^20 transform that alone
+         * was tens of milliseconds, comparable to the FFT it is checking.
+         *
+         * Nothing here needs a true modulus. The test below is
+         * `max_im <= tol * max_mag` with tol = 16 N eps, i.e. "is the imaginary
+         * part negligible against the scale of the result". The proxy is within a
+         * factor of sqrt(2) of the modulus, which against a tolerance of that shape
+         * is not a distinction -- and it is exact, overflow-free and branch-light. */
+        double max_mag = 0.0, max_im = 0.0;
+        for (int64_t o = 0; o < N; o++) {
+            double re = fabs(out[2 * o]), im = fabs(out[2 * o + 1]);
+            double mag = (re > im) ? re : im;
+            if (mag > max_mag) max_mag = mag;
+            if (im > max_im) max_im = im;
+        }
+        double tol = 16.0 * (double)N * DBL_EPSILON;
+        bool real_only = (max_mag == 0.0) || (max_im <= tol * max_mag);
+        if (real_only) {
+            double* rout = malloc((size_t)N * sizeof(double));
+            for (int64_t o = 0; o < N; o++) rout[o] = out[2 * o];
+            free(out);
+            return src ? expr_new_ndarray_like(src, rank, dims, rout, NDT_FLOAT64)
+                       : expr_new_ndarray_raw(rank, dims, rout, NDT_FLOAT64);
+        }
     }
     return src ? expr_new_ndarray_like(src, rank, dims, out, NDT_COMPLEX64)
                : expr_new_ndarray_raw(rank, dims, out, NDT_COMPLEX64);
@@ -452,7 +461,7 @@ static Expr* machine_path(const Expr* nested, const int64_t* dims, int rank,
     expr_free(nnum);
 
     double* out = machine_transform_buf(buf, dims, rank, a, b, base_sign);
-    Expr* nd = machine_build_ndarray(out, N, dims, rank, NULL);
+    Expr* nd = machine_build_ndarray(out, N, dims, rank, NULL, false);
     Expr* lst = ndarray_to_nested_list(nd);
     expr_free(nd);
     return lst;
@@ -473,7 +482,61 @@ static Expr* machine_path_ndarray(const Expr* nd, double a, long b, int base_sig
     nd_gather_interleaved(nd->data.ndarray.data, dt, N, buf);
 
     double* out = machine_transform_buf(buf, dims, rank, a, b, base_sign);
-    return machine_build_ndarray(out, N, dims, rank, nd);
+    return machine_build_ndarray(out, N, dims, rank, nd, false);
+}
+
+/* ---------------------------------------------------------------------------
+ * Compile[] delegation entry points (COMPILE_MISSING.md §4).
+ *
+ * These are the call-shaped `Expr* (*)(Expr*)` delegates the compiler's ND_FNS
+ * / A_NDFN opcode invokes: given the rebuilt call `Fourier[ndarray]` /
+ * `InverseFourier[ndarray]`, transform the packed buffer and hand back a fresh
+ * NDArray, or NULL to decline (which drops the compiled body to the
+ * interpreter). Only the bare no-option form (a rank>=1 machine array, default
+ * FourierParameters {0, 1}) lowers; a 2-argument call has arity != 1 and never
+ * reaches here (nd_fn_lookup keys on na == 1 + nextra, nextra == 0).
+ *
+ * They build an NDT_COMPLEX64 result UNCONDITIONALLY (force_complex): the
+ * compiler types the result register CT_COMPLEX up front, so the data-dependent
+ * real-collapse the interpreter performs would leave a real buffer in a slot a
+ * downstream opcode reads as complex. Values are identical to the interpreter's
+ * complex answer; only the interpreter's cosmetic collapse-to-real (symmetric
+ * input) differs, which a static type cannot express. FourierDCT / FourierDST
+ * need no such wrapper: builtin_fourier_dct/_dst already dispatch an NDArray
+ * operand to the machine path and return a real array deterministically for real
+ * input, so the compiler delegates to them directly. */
+static Expr* fourier_compile_core(const Expr* nd, int base_sign) {
+    if (nd->data.ndarray.rank > FOURIER_MAX_RANK) return NULL;
+    int rank = nd->data.ndarray.rank;
+    const int64_t* dims = nd->data.ndarray.dims;
+    NDType dt = nd->data.ndarray.dtype;
+    int64_t N = 1;
+    for (int i = 0; i < rank; i++) N *= dims[i];
+    if (N <= 0) return NULL;
+
+    double* buf = malloc((size_t)N * 2 * sizeof(double));
+    if (!buf) return NULL;
+    nd_gather_interleaved(nd->data.ndarray.data, dt, N, buf);
+
+    /* Default FourierParameters {a, b} = {0, 1}. */
+    double* out = machine_transform_buf(buf, dims, rank, 0.0, 1, base_sign);
+    return machine_build_ndarray(out, N, dims, rank, nd, /*force_complex=*/true);
+}
+
+Expr* fourier_compile(Expr* call) {
+    if (!call || call->type != EXPR_FUNCTION || call->data.function.arg_count != 1)
+        return NULL;
+    Expr* nd = call->data.function.args[0];
+    if (!nd || nd->type != EXPR_NDARRAY) return NULL;
+    return fourier_compile_core(nd, +1);
+}
+
+Expr* inverse_fourier_compile(Expr* call) {
+    if (!call || call->type != EXPR_FUNCTION || call->data.function.arg_count != 1)
+        return NULL;
+    Expr* nd = call->data.function.args[0];
+    if (!nd || nd->type != EXPR_NDARRAY) return NULL;
+    return fourier_compile_core(nd, -1);
 }
 
 /* ==================================================================== *
@@ -1143,7 +1206,7 @@ static Expr* dct_machine_path(const Expr* nested, const int64_t* dims, int rank,
 
     double* out = dct_transform_buf(buf, dims, rank, type, sine);
     if (!out) return NULL;
-    Expr* nd = machine_build_ndarray(out, N, dims, rank, NULL);
+    Expr* nd = machine_build_ndarray(out, N, dims, rank, NULL, false);
     Expr* lst = ndarray_to_nested_list(nd);
     expr_free(nd);
     return lst;
@@ -1164,7 +1227,7 @@ static Expr* dct_machine_path_ndarray(const Expr* nd, int type, bool sine) {
 
     double* out = dct_transform_buf(buf, dims, rank, type, sine);
     if (!out) return NULL;
-    return machine_build_ndarray(out, N, dims, rank, nd);
+    return machine_build_ndarray(out, N, dims, rank, nd, false);
 }
 
 #ifdef USE_MPFR

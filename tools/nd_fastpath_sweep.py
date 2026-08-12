@@ -622,6 +622,14 @@ OFF_BUFFER = {
     # shape as the Tally/DeleteDuplicates work already done in ndreduce.c.
     "Split", "Gather", "GatherBy", "PositionIndex", "Lookup", "OrderedQ",
     "MinimalBy", "ReverseSortBy",
+    # FindClusters (added 2026-08-09 with the builtin). Its ordering and its
+    # fixed-count gap selection are deliberately EXACT -- they compare the
+    # element Exprs, not a double projection, which is what lets it cluster
+    # bigint-component rationals that Nearest cannot. A buffer path would serve
+    # only the all-machine-number case and has to coexist with that exact path
+    # rather than replace it, so it is a real piece of work, not a missing
+    # dispatch line. Recorded here rather than half-built.
+    "FindClusters",
     # Shape predicates: they read the dims, or at most one pass, and the buffer
     # already knows its shape.
     "SquareMatrixQ", "SymmetricMatrixQ", "DiagonalMatrixQ",

@@ -27,7 +27,10 @@ Limit[f, x -> a, Method -> m]
       "LHospital"        -- L'Hospital's rule for 0/0 and Inf/Inf
       "Asymptotic"       -- dominant-term / log / exp reductions
       "Bounded"          -- squeeze and bounded-oscillation Interval
+      "Oscillatory"      -- normal form c0 + Sum cj E^(I thetaj) at +-Inf
+      "Gruntz"           -- Gruntz mrv algorithm for exp-log towers
     A named method leaves Limit unevaluated when it does not apply.
+    Each method is also callable directly as Limit`m[f, x -> a].
 
 May return a finite value, Infinity, -Infinity, ComplexInfinity,
 Indeterminate, Interval[{lo, hi}], or the original unevaluated

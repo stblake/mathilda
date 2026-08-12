@@ -18,6 +18,7 @@
 #include "deriv.h"
 #include "sym_names.h"
 #include "sym_intern.h"
+#include "assoc.h"                  /* assoc_lookup_value — O(1) <|...|>[key] */
 #include "interp.h"
 #include "compile/compiled_function.h"
 #include "compile/autocompile.h"   /* $AutoCompilation */
@@ -101,6 +102,100 @@ void eval_reset_recursion_depth(int n) {
 static uint64_t g_eval_clock = 1;
 uint64_t eval_clock_get(void) { return g_eval_clock; }
 void     eval_clock_bump(void) { g_eval_clock++; }
+
+/* --- Ground fixed-point epoch (loop-invariant re-evaluation) ---------------
+ * The eval clock is a single global epoch: ANY symbol-table mutation bumps it
+ * and invalidates every cached fixed point. That is correct but coarse -- a
+ * Do/Table/Fold loop rebinds its iterator (an OwnValue write) every iteration,
+ * so a large loop-invariant value bound to a symbol gets fully re-canonicalised
+ * O(size) each step even though nothing it depends on changed.
+ *
+ * `g_last_rule_change_clock` is a SECOND, finer epoch: the clock value at the
+ * most recent mutation that can change how a *head* evaluates -- a DownValue
+ * add, an attribute/Protect change, a Clear/Remove. Ordinary OwnValue bindings
+ * (iterator variables, `x = 5`, numeric temp-bindings) bump only the eval clock
+ * and leave this one alone. A GROUND node (see is_ground_* below: a fixed point
+ * built solely from literals under the six pure structural constructors) can be
+ * re-validated as a fixed point whenever `stamp >= g_last_rule_change_clock`,
+ * regardless of the eval clock -- because it references none of the mutable
+ * state an OwnValue binding touches. This is what lifts a loop-invariant
+ * association/list from O(size)-per-iteration back to O(1). It only ever
+ * advances (monotone), so a ground short-circuit is never taken stale. */
+static uint64_t g_last_rule_change_clock = 1;
+uint64_t eval_rule_epoch_get(void)  { return g_last_rule_change_clock; }
+/* Mark the CURRENT clock as a rule change (caller already bumped the clock). */
+void     eval_rule_epoch_mark(void) { g_last_rule_change_clock = g_eval_clock; }
+/* Bump the clock AND record it as a rule change (attribute/Protect sites). */
+void     eval_rule_epoch_bump(void) { g_eval_clock++; g_last_rule_change_clock = g_eval_clock; }
+
+/* The top bit of `last_evaluated_at` is a benign GROUND flag: the clock is a
+ * monotone counter that will never reach 2^63, so this steals no range. The
+ * low 63 bits remain the fixed-point stamp; every comparison against the eval
+ * clock masks the flag off first. See is_ground_now() / node_compute_ground(). */
+#define EVAL_GROUND_BIT  (UINT64_C(1) << 63)
+#define EVAL_STAMP_MASK  (~EVAL_GROUND_BIT)
+static inline uint64_t eval_stamp_of(const Expr* e) {
+    return e->last_evaluated_at & EVAL_STAMP_MASK;
+}
+static inline bool eval_ground_of(const Expr* e) {
+    return (e->last_evaluated_at & EVAL_GROUND_BIT) != 0;
+}
+/* A FUNCTION node whose GROUND bit is set is a valid fixed point iff no rule
+ * change has occurred since it was stamped -- the straddle-safe predicate used
+ * identically at short-circuit time and when a parent consumes a child's bit. */
+static inline bool eval_ground_valid(const Expr* e) {
+    return eval_ground_of(e) && eval_stamp_of(e) >= g_last_rule_change_clock;
+}
+/* A FUNCTION node is a re-usable fixed point if it was stamped under the live
+ * clock (exact hit) OR it is a still-valid ground node (survives OwnValue churn). */
+static inline bool eval_fixed_point_reusable(const Expr* e) {
+    return eval_stamp_of(e) == g_eval_clock || eval_ground_valid(e);
+}
+
+/* Public, mask-aware accessors for tests (the raw field now carries the flag). */
+uint64_t eval_node_stamp(const Expr* e)   { return e ? eval_stamp_of(e) : 0; }
+bool     eval_node_is_ground(const Expr* e) { return e ? eval_ground_of(e) : false; }
+
+/* The six pure structural constructors. Their canonical form is a total,
+ * side-effect-free function of their arguments -- they read no mutable global
+ * state -- so a fixed point built only from these heads over literal leaves is
+ * immutable until one of the heads is itself redefined (which advances the rule
+ * epoch). Heads WITH a value-computing builtin (Plus, Sin, RandomReal, ...) are
+ * deliberately excluded: they never reach a stamped fixed point AS themselves
+ * when reducible, but even a symbolic residue could in principle depend on
+ * global state, so we do not trust them. */
+static inline bool ground_head(const Expr* h) {
+    if (!h || h->type != EXPR_SYMBOL) return false;
+    const char* n = h->data.symbol.name;
+    return n == SYM_List || n == SYM_Association || n == SYM_Rule
+        || n == SYM_RuleDelayed || n == SYM_Complex || n == SYM_Rational;
+}
+/* Is `a` ground *right now*? For a FUNCTION we trust its cached bit only if it
+ * is still valid (eval_ground_valid); atoms are decided structurally. This is
+ * the recurrence used bottom-up when stamping a parent -- O(arity), not O(size). */
+static inline bool is_ground_now(const Expr* a) {
+    switch (a->type) {
+        case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT: case EXPR_STRING:
+            return true;
+        case EXPR_FUNCTION:
+            return eval_ground_valid(a);
+        default:            /* bare SYMBOL, NDARRAY, COMPILED, MPFR: conservative */
+            return false;
+    }
+}
+/* Compute the GROUND bit for a FUNCTION node reaching a fixed point: a
+ * whitelisted head and every argument ground. Non-FUNCTION nodes are never
+ * marked (their stamp is never read by the short-circuits). */
+static bool node_compute_ground(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (!ground_head(e->data.function.head)) return false;
+    size_t n = e->data.function.arg_count;
+    Expr* const* args = e->data.function.args;
+    for (size_t i = 0; i < n; i++) {
+        if (!args[i] || !is_ground_now(args[i])) return false;
+    }
+    return true;
+}
 
 /* ---- Trace collector (nested) --------------------------------------------
  * Trace[expr] returns a list that mirrors the *structure* of expr's
@@ -521,6 +616,7 @@ static bool eval_flatten_args_interned(Expr* e, const char* head_name) {
     free(e->data.function.args);
     e->data.function.args = new_args;
     e->data.function.arg_count = new_count;
+    expr_invalidate_hash(e);   /* args rewritten in place: drop memoized hash */
     return true;
 }
 
@@ -748,6 +844,31 @@ static const char* assignment_target_symbol(Expr* lhs) {
 }
 
 /*
+ * lhs_matches_nd_shape:
+ * Validate a (possibly nested) List LHS against the rectangular shape of a
+ * packed array, starting at axis `axis`. A packed array is always a rectangular
+ * block of numbers, so the only thing that can be malformed in `{...} = <array>`
+ * is the LHS -- which this checks from the shape alone, materialising nothing.
+ * A symbol binds the whole remaining sub-array (or scalar); a non-List function
+ * head is a DownValue target and is accepted; a List LHS must line up
+ * element-for-element with `axis`'s extent and recurse one axis deeper; anything
+ * else (a literal on the LHS, or a List deeper than the array's rank) is not an
+ * assignable target.
+ */
+static bool lhs_matches_nd_shape(const Expr* lhs, const Expr* nd, int axis) {
+    if (!lhs) return false;
+    if (lhs->type == EXPR_SYMBOL) return true;
+    if (lhs->type != EXPR_FUNCTION) return false;
+    if (lhs->data.function.head->type != EXPR_SYMBOL) return false;
+    if (lhs->data.function.head->data.symbol.name != SYM_List) return true;
+    if (axis >= nd->data.ndarray.rank) return false;
+    if ((int64_t)lhs->data.function.arg_count != nd->data.ndarray.dims[axis]) return false;
+    for (size_t i = 0; i < lhs->data.function.arg_count; i++)
+        if (!lhs_matches_nd_shape(lhs->data.function.args[i], nd, axis + 1)) return false;
+    return true;
+}
+
+/*
  * is_assignable_lhs:
  * Validate that `lhs` shaped against `rhs` is a structurally legal target
  * for a Set/SetDelayed, including all destructured sub-elements. Used as a
@@ -763,16 +884,29 @@ static bool is_assignable_lhs(Expr* lhs, Expr* rhs) {
     const char* h = lhs->data.function.head->data.symbol.name;
     if (h != SYM_List) return true; /* downvalue / part / etc. handled in apply_assignment */
 
-    if (rhs->type != EXPR_FUNCTION ||
-        rhs->data.function.head->type != EXPR_SYMBOL ||
-        rhs->data.function.head->data.symbol.name != SYM_List) {
-        return false;
-    }
-    if (lhs->data.function.arg_count != rhs->data.function.arg_count) return false;
-    for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
-        if (!is_assignable_lhs(lhs->data.function.args[i], rhs->data.function.args[i])) {
-            return false;
+    /* A packed-list RHS (an EXPR_NDARRAY presenting as List) destructures like
+     * the List it stands for -- see apply_assignment. Validate the LHS against
+     * the array's rectangular shape without materialising any element. */
+    if (is_packed_list(rhs)) return lhs_matches_nd_shape(lhs, rhs, 0);
+
+    if (rhs->type == EXPR_FUNCTION &&
+        rhs->data.function.head->type == EXPR_SYMBOL &&
+        rhs->data.function.head->data.symbol.name == SYM_List) {
+        /* List RHS: destructure element-wise -- lengths must match. */
+        if (lhs->data.function.arg_count != rhs->data.function.arg_count) return false;
+        for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
+            if (!is_assignable_lhs(lhs->data.function.args[i], rhs->data.function.args[i])) {
+                return false;
+            }
         }
+        return true;
+    }
+
+    /* Non-List RHS: Set threads it over the targets ({a, b} = c binds a = c,
+     * b = c), so every element must be assignable against the WHOLE rhs. A
+     * nested List element threads recursively. */
+    for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
+        if (!is_assignable_lhs(lhs->data.function.args[i], rhs)) return false;
     }
     return true;
 }
@@ -867,34 +1001,64 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             expr_free(probe);
         }
         return true;
-    } else if (lhs->type == EXPR_FUNCTION) {
-        if (lhs->data.function.head->type == EXPR_SYMBOL &&
-            lhs->data.function.head->data.symbol.name == SYM_List &&
-            rhs->type == EXPR_FUNCTION &&
-            rhs->data.function.head->type == EXPR_SYMBOL &&
-            rhs->data.function.head->data.symbol.name == SYM_List) {
-            
-            /* List destructuring: match lengths and recurse. Pre-flight every
-             * element so a malformed child (e.g. a literal integer on the LHS)
-             * fails the whole destructuring before any sibling is assigned --
-             * partial assignments would otherwise leak past the failure. */
-            if (lhs->data.function.arg_count != rhs->data.function.arg_count) {
-                return false;
-            }
-            for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
-                if (!is_assignable_lhs(lhs->data.function.args[i], rhs->data.function.args[i])) {
-                    return false;
-                }
-            }
+    } else if (lhs->type == EXPR_FUNCTION &&
+               lhs->data.function.head->type == EXPR_SYMBOL &&
+               lhs->data.function.head->data.symbol.name == SYM_List) {
+        /* A List LHS is either DESTRUCTURED (a List RHS of matching length,
+         * element for element) or THREADED (any other RHS is broadcast to each
+         * target: {a, b} = c binds a = c, b = c -- Wolfram Set semantics). It
+         * NEVER installs a DownValue on List, so this branch always returns
+         * here rather than falling through below.
+         *
+         * A packed-array RHS is an EXPR_NDARRAY (present_as List), not a List
+         * node. Set is a packed-aware head so a whole-value binding
+         * (x = Range[10^6]) keeps its argument packed; but destructuring is the
+         * one assignment path that reads the RHS *structure*, and the
+         * transparency gate leaves a packed argument intact for an aware head.
+         * So normalise a packed RHS to a List of its top-level slices first --
+         * slices stay packed, so {xc, yc} = {Range[m], Range[n]} binds packed
+         * vectors rather than materialising one Expr per element. */
+        Expr* rhs_ds = rhs;
+        bool own_rhs_ds = false;
+        if (is_packed_list(rhs)) {
+            Expr* sliced = ndarray_unpack_top_level(rhs);
+            if (sliced) { rhs_ds = sliced; own_rhs_ds = true; }
+        }
 
-            bool all_ok = true;
-            for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
-                if (!apply_assignment(lhs->data.function.args[i], rhs->data.function.args[i], is_delayed)) {
+        bool rhs_is_list = (rhs_ds->type == EXPR_FUNCTION &&
+                            rhs_ds->data.function.head->type == EXPR_SYMBOL &&
+                            rhs_ds->data.function.head->data.symbol.name == SYM_List);
+
+        /* Pre-flight every element so a malformed target (e.g. a literal
+         * integer on the LHS) fails the whole assignment before any sibling is
+         * bound -- partial assignments would otherwise leak past the failure.
+         * In the threaded case each element pairs with the whole rhs; in the
+         * destructured case with the matching rhs element. */
+        bool all_ok = true;
+        size_t n = lhs->data.function.arg_count;
+        if (rhs_is_list && n != rhs_ds->data.function.arg_count) {
+            all_ok = false;                         /* length mismatch: leave unevaluated */
+        } else {
+            for (size_t i = 0; i < n; i++) {
+                Expr* rhs_i = rhs_is_list ? rhs_ds->data.function.args[i] : rhs_ds;
+                if (!is_assignable_lhs(lhs->data.function.args[i], rhs_i)) {
                     all_ok = false;
+                    break;
                 }
             }
-            return all_ok;
-        } else if (lhs->data.function.head->type == EXPR_SYMBOL && lhs->data.function.head->data.symbol.name == SYM_Part) {
+            if (all_ok) {
+                for (size_t i = 0; i < n; i++) {
+                    Expr* rhs_i = rhs_is_list ? rhs_ds->data.function.args[i] : rhs_ds;
+                    if (!apply_assignment(lhs->data.function.args[i], rhs_i, is_delayed)) {
+                        all_ok = false;
+                    }
+                }
+            }
+        }
+        if (own_rhs_ds) expr_free(rhs_ds);
+        return all_ok;
+    } else if (lhs->type == EXPR_FUNCTION) {
+        if (lhs->data.function.head->type == EXPR_SYMBOL && lhs->data.function.head->data.symbol.name == SYM_Part) {
             Expr* expr_part_assign(Expr* lhs, Expr* rhs); // Forward declare or include part.h
             Expr* assigned = expr_part_assign(lhs, rhs);
             if (assigned) {
@@ -1000,6 +1164,7 @@ static bool flatten_sequences(Expr* e) {
     free(e->data.function.args);
     e->data.function.args = new_args;
     e->data.function.arg_count = new_count;
+    expr_invalidate_hash(e);   /* Sequence splice rewrote args in place */
     return true;
 }
 
@@ -1165,6 +1330,27 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                         if (held_uneval) held_uneval[held_uneval_count++] = new_args[i];
                     }
                 } else {
+                    /* Atom fast path. A raw atom (number/string/ndarray/
+                     * compiled) always evaluates to itself -- evaluate() would
+                     * just expr_copy it after paying the recursion-depth, trace,
+                     * deadline-check and fixed-point-loop overhead per call.
+                     * Skipping straight to expr_copy is exactly equivalent (same
+                     * pointer, so `*changed` stays false, and an atom is never an
+                     * in-flight Throw/Goto so the sentinel check is moot). This
+                     * is the hot path when a large List of numbers is
+                     * re-evaluated -- e.g. every pass of `list //. rule` re-walks
+                     * the whole (mostly unchanged) list. SYMBOL is excluded: it
+                     * may carry an OwnValue and must go through evaluate(). */
+                    switch (orig_arg->type) {
+                        case EXPR_INTEGER: case EXPR_REAL: case EXPR_STRING:
+                        case EXPR_BIGINT: case EXPR_NDARRAY: case EXPR_COMPILED:
+#ifdef USE_MPFR
+                        case EXPR_MPFR:
+#endif
+                            new_args[i] = expr_copy(orig_arg);
+                            continue;   /* atoms are never Throw/Goto sentinels */
+                        default: break;
+                    }
                     new_args[i] = evaluate(orig_arg);
                     arg_evaluated = true;
                     if (new_args[i] != orig_arg) *changed = true;
@@ -1368,6 +1554,18 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * it declines, cf_fallback re-runs the body through the
                  * evaluator, where every head inside is gated on the next pass. */
                 bool compiled_head = head->type == EXPR_COMPILED;
+                /* An InterpolatingFunction object applied to a packed array of
+                 * query points is aware for the same reason a CompiledFunction
+                 * is: interp_apply's vectorised 1-D path reads the buffer
+                 * directly (a batch ifn[array] is scipy's cs(array)), so
+                 * materialising the points into 10^5 boxed Exprs first is pure
+                 * loss.  Integer query points are read exactly (ndt_get to 2^53)
+                 * and give the same real result as materialising, so int64 is
+                 * fine too. */
+                bool interp_head = head->type == EXPR_FUNCTION &&
+                                   head->data.function.head->type == EXPR_SYMBOL &&
+                                   head->data.function.head->data.symbol.name ==
+                                       SYM_InterpolatingFunction;
                 /* MIXED PACKED/PLAIN: pack the List UP, do not unpack the buffer
                  * DOWN.
                  *
@@ -1396,7 +1594,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                                             hdef->packed_int64_ok != 0, changed);
                 bool listable_mixed = (attrs & ATTR_LISTABLE) && has_list_arg(res);
                 bool aware = ((hdef && hdef->packed_aware && !hdef->down_values)
-                              || pure_fn || compiled_head
+                              || pure_fn || compiled_head || interp_head
                               || dv_binds_opaquely(hdef)) && !listable_mixed;
                 /* A head that binds opaquely is exact on an int64 buffer for
                  * exactly the reason it is aware at all: it reads no element.
@@ -1409,7 +1607,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * the vectorised Game of Life benchmark, whose grid is integer:
                  * `probe[q_] := NDArrayQ[q]` answered False for a packed integer
                  * argument while answering True for a real one. */
-                bool int64_ok = pure_fn || compiled_head ||
+                bool int64_ok = pure_fn || compiled_head || interp_head ||
                                 (hdef && hdef->packed_int64_ok) ||
                                 dv_binds_opaquely(hdef);
                 for (size_t i = 0; i < res->data.function.arg_count; i++) {
@@ -1492,6 +1690,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     }
                     if (!already_sorted) {
                         qsort(res->data.function.args, res->data.function.arg_count, sizeof(Expr*), eval_compare_expr_ptrs);
+                        expr_invalidate_hash(res);   /* args reordered in place */
                         *changed = true;
                     }
                 }
@@ -1684,15 +1883,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     keyarg->data.function.arg_count == 1) {
                     lookup_key = keyarg->data.function.args[0];
                 }
-                Expr* found = NULL;
-                for (size_t i = 0; i < head->data.function.arg_count; i++) {
-                    Expr* rule = head->data.function.args[i];
-                    if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
-                        expr_eq(rule->data.function.args[0], lookup_key)) {
-                        found = rule->data.function.args[1];
-                        break;
-                    }
-                }
+                Expr* found = assoc_lookup_value(head, lookup_key);  /* O(1) via key index */
                 Expr* out;
                 if (found) {
                     out = expr_copy(found);
@@ -1729,15 +1920,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * SortBy[records, Key["field"]] work. */
                 Expr* key   = head->data.function.args[0];
                 Expr* assoc = res->data.function.args[0];
-                Expr* found = NULL;
-                for (size_t i = 0; i < assoc->data.function.arg_count; i++) {
-                    Expr* rule = assoc->data.function.args[i];
-                    if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
-                        expr_eq(rule->data.function.args[0], key)) {
-                        found = rule->data.function.args[1];
-                        break;
-                    }
-                }
+                Expr* found = assoc_lookup_value(assoc, key);   /* O(1) via key index */
                 Expr* out;
                 if (found) {
                     out = expr_copy(found);
@@ -1951,7 +2134,7 @@ Expr* evaluate(Expr* e) {
      * pre-check to FUNCTION nodes -- both to avoid an extra branch on
      * the common atom path and because atoms are never expensive to
      * "re-evaluate" anyway. */
-    if (e->type == EXPR_FUNCTION && e->last_evaluated_at == g_eval_clock) {
+    if (e->type == EXPR_FUNCTION && eval_fixed_point_reusable(e)) {
         return expr_copy(e);
     }
 
@@ -2001,6 +2184,30 @@ Expr* evaluate(Expr* e) {
          * sigsetjmp; no further cleanup runs here, exactly matching
          * the signal-handler path. */
         tc_check_deadline();
+
+        /* In-loop timestamp fixed-point exit.  The entry short-circuit at the top
+         * of evaluate() only catches an ALREADY-stamped INPUT; a stamped FUNCTION
+         * can also become `current` MID-loop — most importantly a canonical
+         * value (e.g. an Association) reached through an OwnValue symbol
+         * (`a = <|...|>; ... a ...`).  There evaluate(a) rewrites the symbol to
+         * its stored value and then, without this check, evaluate_step would
+         * rebuild that value O(tree size) every time — re-canonicalising the
+         * association and discarding its cached key index — even though it is
+         * already at a fixed point.  If `current` is a FUNCTION fully evaluated
+         * under the current clock, stop here.  Same invariant as the entry check
+         * (a stamp is set only on a clean fixed-point exit and is invalidated by
+         * any symbol-table mutation via the clock), so this is a pure speedup. */
+        if (current->type == EXPR_FUNCTION && eval_fixed_point_reusable(current)) {
+            eval_recursion_depth--;
+            if (trace_here) { trace_clear_pending(); trace_frame_pop(); }
+            if (is_top_level && eval_is_inflight_throw(current))
+                current = eval_report_uncaught_throw(current);
+            else if (is_top_level && eval_is_inflight_goto(current))
+                current = eval_report_uncaught_goto(current);
+            else if (is_top_level && eval_is_inflight_break_continue(current))
+                current = eval_report_uncaught_break_continue(current);
+            return current;
+        }
 
         bool step_changed = false;
         uint64_t gate_mark = g_pack_gate_ticks;
@@ -2057,7 +2264,12 @@ Expr* evaluate(Expr* e) {
              * write is benign metadata, so it is safe even when
              * `current` is shared (refcount > 1). */
             if (!eval_overflow) {
-                current->last_evaluated_at = g_eval_clock;
+                /* Stamp with the live clock, plus the GROUND flag when this is a
+                 * whitelisted-constructor node over ground args -- so a later
+                 * evaluate() can re-validate it as a fixed point even after the
+                 * eval clock has churned (loop-invariant O(1) re-check). */
+                current->last_evaluated_at = g_eval_clock
+                    | (node_compute_ground(current) ? EVAL_GROUND_BIT : 0);
             }
             eval_recursion_depth--;
             /* Trace: the last step didn't rewrite; drop its reassembled

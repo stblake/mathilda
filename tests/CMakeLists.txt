@@ -196,6 +196,7 @@ include_directories(../src/linalg)
 include_directories(../src/numbertheory)
 include_directories(../src/poly)
 include_directories(../src/simp)
+include_directories(../src/stats)
 include_directories(../src/calculus)
 include_directories(../src/sum)
 include_directories(../src/special_functions)
@@ -254,6 +255,7 @@ set(COMMON_SRC
     ../src/part.c
     ../src/vectors.c
     ../src/assoc.c
+    ../src/assoc_index.c
     ../src/ndarray.c
     ../src/ndinteger.c
     ../src/ndkernels.c
@@ -265,6 +267,7 @@ set(COMMON_SRC
     ../src/plus.c
     ../src/times.c
     ../src/arithmetic.c
+    ../src/interval.c
     ../src/numbertheory/numbertheory.c
     ../src/numbertheory/nt_util.c
     ../src/numbertheory/nt_gaussian.c
@@ -342,6 +345,7 @@ set(COMMON_SRC
     ../src/list/array_flatten.c
     ../src/list/take_drop.c
     ../src/list/flatten.c
+    ../src/list/flatten_at.c
     ../src/list/partition.c
     ../src/list/pick.c
     ../src/list/rotate.c
@@ -366,6 +370,8 @@ set(COMMON_SRC
     ../src/list/riffle.c
     ../src/list/gather.c
     ../src/list/subdivide.c
+    ../src/list/nearest.c
+    ../src/list/find_clusters.c
     ../src/patterns.c
     ../src/patterns.c
     ../src/replace.c
@@ -410,7 +416,22 @@ set(COMMON_SRC
     ../src/modular.c
     ../src/sort.c
     ../src/sowreap.c
-    ../src/stats.c
+    ../src/stats/stats.c
+    ../src/stats/stats_common.c
+    ../src/stats/mean.c
+    ../src/stats/rootmeansquare.c
+    ../src/stats/median.c
+    ../src/stats/quartiles.c
+    ../src/stats/variance.c
+    ../src/stats/moment.c
+    ../src/stats/central_moment.c
+    ../src/stats/skewness.c
+    ../src/stats/kurtosis.c
+    ../src/stats/standarddeviation.c
+    ../src/stats/corrcov.c
+    ../src/stats/movingaverage.c
+    ../src/stats/movingmedian.c
+    ../src/stats/exponentialmovingaverage.c
     ../src/fit.c
     ../src/info.c
     ../src/expand.c
@@ -459,6 +480,7 @@ set(COMMON_SRC
     ../src/linalg/lapack.c
     ../src/linalg/numarray.c
     ../src/linalg/ndlinalg.c
+    ../src/linalg/ndcorrcov.c
     ../src/linalg/blas_bridge.c
     ../src/linalg/lapack_bridge.c
     ../src/linalg/posdef_q.c
@@ -628,6 +650,7 @@ set(COMMON_SRC
     ../src/zero_test.c
     ../src/numeric_complex.c
     ../src/flint_num_bridge.c
+    ../src/nc_accuracy.c
     ../src/numerical_calculus/quadrature.c
     ../src/numerical_calculus/seqaccel.c
     ../src/numerical_calculus/dequad.c
@@ -658,6 +681,18 @@ set(COMMON_SRC
     ../src/numerical_calculus/ndsolve_operator.c
     ../src/numerical_calculus/ndsolve_compile.c
     ../src/compile/compile.c
+    ../src/compile/compile_ndtables.c
+    ../src/compile/compile_mgd.c
+    ../src/compile/compile_assoc.c
+    ../src/compile/compile_vm.c
+    ../src/compile/compile_infer.c
+    ../src/compile/compile_emit_arith.c
+    ../src/compile/compile_emit_mathfn.c
+    ../src/compile/compile_emit_int.c
+    ../src/compile/compile_emit_array.c
+    ../src/compile/compile_emit_logic.c
+    ../src/compile/compile_emit_ctrl.c
+    ../src/compile/compile_emit_iter.c
     ../src/compile/optimize.c
     ../src/compile/disasm.c
     ../src/compile/compiled_function.c
@@ -738,6 +773,10 @@ target_include_directories(parse_tests PRIVATE ../src)
 add_executable(eval_tests test_eval.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(eval_tests PRIVATE ../src)
 
+add_executable(core_algebra_tests test_core_algebra.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(core_algebra_tests PRIVATE ../src)
+add_test(NAME core_algebra_tests COMMAND core_algebra_tests)
+
 add_executable(trace_tests test_trace.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(trace_tests PRIVATE ../src)
 
@@ -813,6 +852,10 @@ add_test(NAME unit_vector_tests COMMAND unit_vector_tests)
 add_executable(array_flatten_tests test_array_flatten.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(array_flatten_tests PRIVATE ../src)
 add_test(NAME array_flatten_tests COMMAND array_flatten_tests)
+
+add_executable(flatten_at_tests test_flatten_at.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(flatten_at_tests PRIVATE ../src)
+add_test(NAME flatten_at_tests COMMAND flatten_at_tests)
 
 add_executable(rescale_tests test_rescale.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(rescale_tests PRIVATE ../src)
@@ -980,6 +1023,14 @@ target_link_libraries(bench_pack m)
 target_include_directories(bench_pack PRIVATE ../src)
 add_test(NAME bench_pack COMMAND bench_pack)
 
+# Pattern-matcher scaling gate: fails if a per-element matcher path (Cases,
+# Count, Position, ReplaceAll, DownValue dispatch) scales worse than O(n)
+# (doubling-ratio check; machine-independent).
+add_executable(bench_match bench_match.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(bench_match m)
+target_include_directories(bench_match PRIVATE ../src)
+add_test(NAME bench_match COMMAND bench_match)
+
 # Compile[] engine gate: asserts every benchmarked body actually COMPILES (a
 # silent bail costs 10-40x and looks exactly like success), and that the
 # optimiser never makes a body slower than the code it started from.
@@ -1039,6 +1090,10 @@ add_test(NAME sequence_tests COMMAND sequence_tests)
 add_executable(options_tests test_options.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(options_tests PRIVATE ../src)
 
+add_executable(interval_tests test_interval.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(interval_tests PRIVATE ../src)
+add_test(NAME interval_tests COMMAND interval_tests)
+
 add_executable(core_tests test_core.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(core_tests PRIVATE ../src)
 
@@ -1060,6 +1115,9 @@ add_test(NAME nlimit_tests COMMAND nlimit_tests)
 
 add_executable(nsum_tests test_nsum.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(nsum_tests PRIVATE ../src ../src/numerical_calculus)
+
+add_executable(accuracygoal_tests test_accuracygoal.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(accuracygoal_tests PRIVATE ../src ../src/numerical_calculus)
 
 add_executable(nprod_tests test_nprod.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(nprod_tests PRIVATE ../src ../src/numerical_calculus)
@@ -1087,6 +1145,9 @@ target_include_directories(compiledfunction_tests PRIVATE ../src ../src/compile)
 
 add_executable(autocompile_tests test_autocompile.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(autocompile_tests PRIVATE ../src ../src/compile)
+
+add_executable(compile_arbprec_tests test_compile_arbprec.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(compile_arbprec_tests PRIVATE ../src ../src/compile)
 
 add_executable(levincoll_tests test_levincoll.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(levincoll_tests PRIVATE ../src ../src/numerical_calculus)
@@ -1237,6 +1298,9 @@ target_include_directories(ratios_tests PRIVATE ../src)
 
 add_executable(sort_tests test_sort.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(sort_tests PRIVATE ../src)
+
+add_executable(ranked_tests test_ranked.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ranked_tests PRIVATE ../src)
 
 add_executable(backtrack_tests test_backtrack.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(backtrack_tests PRIVATE ../src)
@@ -1541,6 +1605,20 @@ if(USE_ECM)
 endif()
 add_test(NAME compile_linalg_tests COMMAND compile_linalg_tests)
 
+add_executable(compile_transforms_tests test_compile_transforms.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(compile_transforms_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(compile_transforms_tests build_ecm)
+endif()
+add_test(NAME compile_transforms_tests COMMAND compile_transforms_tests)
+
+add_executable(compile_assoc_tests test_compile_assoc.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(compile_assoc_tests PRIVATE ../src ../src/compile)
+if(USE_ECM)
+    add_dependencies(compile_assoc_tests build_ecm)
+endif()
+add_test(NAME compile_assoc_tests COMMAND compile_assoc_tests)
+
 add_executable(toeplitzmatrix_tests test_toeplitzmatrix.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(toeplitzmatrix_tests PRIVATE ../src)
 if(USE_ECM)
@@ -1604,6 +1682,16 @@ else()
     target_link_libraries(interp_tests gmp m)
 endif()
 add_test(NAME interp_tests COMMAND interp_tests)
+
+add_executable(interp_poly_tests test_interp_poly.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(interp_poly_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(interp_poly_tests gmp m ${ECM_LIB})
+    add_dependencies(interp_poly_tests build_ecm)
+else()
+    target_link_libraries(interp_poly_tests gmp m)
+endif()
+add_test(NAME interp_poly_tests COMMAND interp_poly_tests)
 
 add_executable(findintegernullvector_tests test_findintegernullvector.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(findintegernullvector_tests PRIVATE ../src)
@@ -2501,6 +2589,9 @@ target_include_directories(series_tests PRIVATE ../src)
 add_executable(series_twoterm_tests test_series_twoterm.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(series_twoterm_tests PRIVATE ../src)
 
+add_executable(series_assumptions_tests test_series_assumptions.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(series_assumptions_tests PRIVATE ../src)
+
 add_executable(deriv_tests test_deriv.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(deriv_tests PRIVATE ../src)
 
@@ -2604,6 +2695,9 @@ target_include_directories(coshintegral_tests PRIVATE ../src)
 add_executable(fresnelc_tests test_fresnelc.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(fresnelc_tests PRIVATE ../src)
 
+add_executable(numeric_domain_tests test_numeric_domain.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(numeric_domain_tests PRIVATE ../src)
+
 add_executable(fresnels_tests test_fresnels.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(fresnels_tests PRIVATE ../src)
 
@@ -2697,6 +2791,15 @@ target_include_directories(factorial_simplify_tests PRIVATE ../src)
 add_executable(assuming_tests test_assuming.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(assuming_tests PRIVATE ../src)
 
+add_executable(possiblezeroq_assumptions_tests test_possiblezeroq_assumptions.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(possiblezeroq_assumptions_tests PRIVATE ../src)
+
+add_executable(possiblezeroq_stress_tests test_possiblezeroq_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(possiblezeroq_stress_tests PRIVATE ../src)
+
+add_executable(limit_stress_tests test_limit_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(limit_stress_tests PRIVATE ../src)
+
 add_executable(element_tests test_element.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(element_tests PRIVATE ../src)
 
@@ -2777,6 +2880,7 @@ if(USE_ECM)
     add_dependencies(foldlist_tests build_ecm)
     add_dependencies(split_tests build_ecm)
     add_dependencies(sort_tests build_ecm)
+    add_dependencies(ranked_tests build_ecm)
     add_dependencies(backtrack_tests build_ecm)
     add_dependencies(poly_tests build_ecm)
     add_dependencies(subresultants_tests build_ecm)
@@ -2816,6 +2920,7 @@ if(USE_ECM)
     add_dependencies(stringriffle_tests build_ecm)
     add_dependencies(series_tests build_ecm)
     add_dependencies(series_twoterm_tests build_ecm)
+    add_dependencies(series_assumptions_tests build_ecm)
     add_dependencies(deriv_tests build_ecm)
     add_dependencies(limit_tests build_ecm)
     add_dependencies(radical_fusion_tests build_ecm)
@@ -2827,6 +2932,8 @@ if(USE_ECM)
     add_dependencies(simplify_tests build_ecm)
     add_dependencies(factorial_simplify_tests build_ecm)
     add_dependencies(assuming_tests build_ecm)
+    add_dependencies(possiblezeroq_assumptions_tests build_ecm)
+    add_dependencies(possiblezeroq_stress_tests build_ecm)
     add_dependencies(element_tests build_ecm)
     add_dependencies(logexp_simplify_tests build_ecm)
     add_dependencies(simp_log_tests build_ecm)
@@ -3110,6 +3217,24 @@ else()
 endif()
 add_test(NAME fullsimplify_corpus_tests
          COMMAND fullsimplify_corpus_tests ../fullsimplify_corpus.m)
+
+# Pattern-matcher conformance + robustness stress corpus. Loads
+# tests/match_stress_corpus.m ({inputString, expected} pairs) and checks each
+# evaluated result is structurally equal to the documented Wolfram-Language
+# value. Fork-per-case isolation (like test_crc_corpus.c) so a pattern that
+# hangs or overflows the C stack is reported, not fatal to the run. The
+# observations corpus holds the ordering-sensitive / genuinely-subtle cases
+# and runs report-only (--observe: prints MATCH/DIVERGE, always exits 0).
+add_executable(match_stress_corpus_tests test_match_stress_corpus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(match_stress_corpus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(match_stress_corpus_tests gmp m ${ECM_LIB})
+    add_dependencies(match_stress_corpus_tests build_ecm)
+else()
+    target_link_libraries(match_stress_corpus_tests gmp m)
+endif()
+add_test(NAME match_stress_corpus_tests
+         COMMAND match_stress_corpus_tests ../match_stress_corpus.m)
 
 # ratcanon SPEC: canonical output-form contract for the Together/Cancel rewrite
 # (RATCANON_REWRITE_PLAN.md). Pins the WL-faithful forms + prototype correctness.

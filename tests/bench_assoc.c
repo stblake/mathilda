@@ -29,6 +29,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "core.h"
+#include "assoc.h"    /* assoc_lookup_value — the single-key lookup primitive */
 
 #define N_TRIALS   5
 #define N_SMALL    20000
@@ -36,6 +37,27 @@
 /* An O(n) op doubles to ~2.0; allow generous noise headroom but stay well under
  * the 4.0 an accidental O(n^2) would produce. */
 #define RATIO_MAX  3.3
+
+/* Single-key gate: a FIXED number of single-key probes over an association of
+ * size n vs 2n.  With the persistent key index each probe is O(1), so the total
+ * is independent of n and the doubling ratio is ~1.0; the pre-index O(n) linear
+ * scan made each probe O(n), so a regression back to scanning shows up as ratio
+ * ~2.0.  The generous RATIO_MAX above would wave that through, so this half uses
+ * its own tight threshold — the machine-independent proof that single-key
+ * Lookup / KeyExistsQ / Part are genuinely O(1). */
+#define SINGLE_KEY_REPS  1000000
+#define SINGLE_KEY_RATIO_MAX 1.6
+
+/* Loop-invariant gate: a FIXED number of Do-loop iterations, each looking a key
+ * up in a large loop-invariant association, at size n vs 2n.  Do rebinds its
+ * iterator every step, bumping the eval clock; pre-fix that invalidated the
+ * association's cached fixed point so each iteration re-canonicalised it O(n)
+ * and the whole loop was O(reps*n) -- ratio ~2.  The GROUND fixed-point flag
+ * lets the loop-invariant value survive iterator churn, making the loop O(reps)
+ * -- ratio ~1.  This is the direct regression guard for the eval-clock-churn
+ * fix (distinct from the Map gate, which never binds a named iterator). */
+#define DO_LOOP_REPS      20000
+#define DO_LOOP_RATIO_MAX 1.6
 
 static double now_ns(void) {
     struct timespec ts;
@@ -135,6 +157,49 @@ static Op OPS[] = {
 };
 #define N_OPS ((int)(sizeof(OPS) / sizeof(OPS[0])))
 
+/* Evaluate `src`, returning its OWNED result (caller frees). */
+static Expr* eval_to_expr(const char* src) {
+    Expr* parsed = parse_expression(src);
+    if (!parsed) { fprintf(stderr, "parse failed: %s\n", src); exit(2); }
+    Expr* res = evaluate(parsed);
+    expr_free(parsed);
+    return res;
+}
+
+/* Median ns per single-key lookup on an n-entry association, measured on the
+ * lookup PRIMITIVE (assoc_lookup_value) directly.
+ *
+ * This deliberately bypasses evaluate(): a Lookup[a, k] inside a Do/Table loop
+ * re-evaluates the whole association O(n) every iteration (iterator binding
+ * bumps the eval clock, invalidating the value's timestamp), so a loop measures
+ * that re-evaluation, not the lookup.  The primitive is what "O(1) lookup"
+ * actually means, and the index it lazily builds is exactly what a real caller
+ * hits once the association is a stable value.  First call warms (builds the
+ * index); the timed calls are the steady state. */
+static double single_key_ns(int n, int reps, int hit) {
+    char buf[128];
+    snprintf(buf, sizeof(buf), "Association @@ Table[k -> Mod[k, 100], {k, %d}]", n);
+    Expr* a = eval_to_expr(buf);
+    Expr* key = expr_new_integer(hit ? (n / 2) : (-1));   /* present : absent */
+
+    (void)assoc_lookup_value(a, key);                     /* warm: build index */
+
+    double best = 1e30;
+    volatile uintptr_t sink = 0;                          /* defeat DCE, portably */
+    for (int t = 0; t < N_TRIALS; t++) {
+        double t0 = now_ns();
+        for (int i = 0; i < reps; i++)
+            sink ^= (uintptr_t)assoc_lookup_value(a, key);
+        double t1 = now_ns();
+        double per = (t1 - t0) / (double)reps;
+        if (per < best) best = per;
+    }
+    (void)sink;
+    expr_free(key);
+    expr_free(a);
+    return best;
+}
+
 /* Fill `out` with the op expression for size n (handles the 1- and 2-%d fmts). */
 static void format_op(char* out, size_t cap, const char* fmt, int n) {
     /* All fmts use the same n for every %d, so a plain vsnprintf-style call with
@@ -184,6 +249,100 @@ int main(void) {
         return 1;
     }
     printf("PASS: all operations scaled linearly (ratio < %.1f)\n\n", RATIO_MAX);
+
+    /* ---- Single-key O(1) gate -------------------------------------------------
+     * The one that motivated the persistent index. Measured on the lookup
+     * PRIMITIVE (assoc_lookup_value), size n vs 2n: O(1) => ratio ~1, the
+     * pre-index O(n) scan => ratio ~2. See single_key_ns for why this bypasses
+     * evaluate(). */
+    printf("Single-key lookup primitive: %d probes on an association of size n vs 2n\n",
+           SINGLE_KEY_REPS);
+    printf("  ratio must stay < %.1f  (O(1) ~ 1.0; an O(n) scan regression ~ 2.0)\n\n",
+           SINGLE_KEY_RATIO_MAX);
+    printf("%-14s %12s %12s %6s\n", "case", "n=20k(ns)", "n=40k(ns)", "ratio");
+    printf("--------------------------------------------------------------------\n");
+    int sk_fail = 0;
+    const struct { const char* label; int hit; } sk_cases[] = { {"hit", 1}, {"miss", 0} };
+    for (int i = 0; i < 2; i++) {
+        double ns_small = single_key_ns(N_SMALL, SINGLE_KEY_REPS, sk_cases[i].hit);
+        double ns_large = single_key_ns(N_LARGE, SINGLE_KEY_REPS, sk_cases[i].hit);
+        double ratio = (ns_small > 0.0) ? ns_large / ns_small : 0.0;
+        int bad = (ratio > SINGLE_KEY_RATIO_MAX);
+        printf("%-14s %12.2f %12.2f %6.2f%s\n",
+               sk_cases[i].label, ns_small, ns_large, ratio,
+               bad ? "  <== O(n) SCAN?" : "");
+        if (bad) sk_fail++;
+    }
+    printf("--------------------------------------------------------------------\n");
+    if (sk_fail) {
+        printf("FAIL: %d single-key case(s) scaled with n (ratio > %.1f) -- lookup is not O(1)\n",
+               sk_fail, SINGLE_KEY_RATIO_MAX);
+        return 1;
+    }
+    printf("PASS: single-key lookup is O(1) (ratio < %.1f)\n", SINGLE_KEY_RATIO_MAX);
+
+    /* End-to-end interpreter check: Total[Map[Lookup[a, #]&, keys]] over an
+     * association of size n vs 2n. Map does not bind a named iterator, so the
+     * eval clock is stable across its elements; evaluate()'s in-loop timestamp
+     * short-circuit then keeps `a` from being re-canonicalised each element, and
+     * the lazily-built key index makes every probe O(1). Ratio ~1 proves the
+     * whole interpreter path (not just the C primitive) is O(1); a regression in
+     * either the index or the short-circuit shows up as ratio ~2. */
+    {
+        char e[96];
+        snprintf(e, sizeof(e), "Total[Map[Lookup[assoc%d, #] &, keys%d]]", N_SMALL, N_SMALL);
+        double us_small = median_us(e);
+        snprintf(e, sizeof(e), "Total[Map[Lookup[assoc%d, #] &, keys%d]]", N_LARGE, N_LARGE);
+        /* keys<N_LARGE> is Range[N_LARGE]; the map is over 2x as many keys, so
+         * normalise the ratio by the key count to isolate per-probe scaling. */
+        double us_large = median_us(e);
+        double ratio = (us_small > 0.0) ? (us_large / 2.0) / us_small : 0.0;
+        /* A looser bound than the C primitive: this path also pays evaluator and
+         * list-building overhead with more run-to-run variance. It still cleanly
+         * separates O(1) (~1.2) from an O(n) re-canonicalisation regression (~2). */
+        const double interp_max = 1.8;
+        int bad = (ratio > interp_max);
+        printf("Interpreter Map[Lookup]: n=%d %.0fus, n=%d %.0fus (per-key ratio %.2f)%s\n",
+               N_SMALL, us_small, N_LARGE, us_large, ratio, bad ? "  <== NOT O(1)" : "");
+        if (bad) {
+            printf("FAIL: interpreter repeated Lookup is not O(1) (per-key ratio > %.1f)\n",
+                   interp_max);
+            return 1;
+        }
+    }
+    printf("PASS: interpreter repeated Lookup is O(1)\n\n");
+
+    /* ---- Loop-invariant O(1) gate (the eval-clock-churn fix) -----------------
+     * The Map gate above never binds a named iterator, so the eval clock is
+     * stable across its elements.  This gate uses a Do loop, which DOES rebind
+     * its iterator every step and bumps the clock -- the exact churn that made a
+     * loop-invariant association re-canonicalise O(n) per iteration before the
+     * GROUND fixed-point flag.  A fixed rep count timed at n vs 2n gives ratio
+     * ~1 when the value survives the churn (O(reps)) and ~2 if it does not
+     * (O(reps*n)).  `assoc<n>` is the global set up above; the key varies
+     * (exercises the index) while the association stays invariant. */
+    {
+        char e[160];
+        snprintf(e, sizeof(e),
+            "Module[{s = 0}, Do[s = s + Lookup[assoc%d, Mod[i, 100] + 1, 0], {i, 1, %d}]; s]",
+            N_SMALL, DO_LOOP_REPS);
+        double us_small = median_us(e);
+        snprintf(e, sizeof(e),
+            "Module[{s = 0}, Do[s = s + Lookup[assoc%d, Mod[i, 100] + 1, 0], {i, 1, %d}]; s]",
+            N_LARGE, DO_LOOP_REPS);
+        double us_large = median_us(e);
+        double ratio = (us_small > 0.0) ? us_large / us_small : 0.0;
+        int bad = (ratio > DO_LOOP_RATIO_MAX);
+        printf("Do-loop Lookup (loop-invariant assoc): n=%d %.0fus, n=%d %.0fus (ratio %.2f)%s\n",
+               N_SMALL, us_small, N_LARGE, us_large, ratio, bad ? "  <== NOT O(1)" : "");
+        if (bad) {
+            printf("FAIL: Do-loop over a loop-invariant association is not O(1) "
+                   "(ratio > %.1f) -- eval-clock churn re-canonicalises it each iteration\n",
+                   DO_LOOP_RATIO_MAX);
+            return 1;
+        }
+    }
+    printf("PASS: Do-loop over a loop-invariant association is O(1)\n\n");
 
     /* ---- Absolute-cost check (machine-normalized) ----------------------------
      * Calibrate against a plain list sum of the same size, then express each op's

@@ -1968,6 +1968,341 @@ static void test_series_plus_mpfr(void) {
         "SeriesData[x, 0, List[2.0, 1, Rational[1, 2]], 0, 3, 1]");
 }
 
+/* ------------------------------------------------------------------------- */
+/* Series-under-Assumptions stress corpus (110 cases across 10 categories).   */
+/* Each case is fixed only by an assumption on the sign/reality/domain of the */
+/* expansion variable or a coefficient parameter; regression anchors pin the  */
+/* no-assumption behaviour. Companion wiring tests: test_series_assumptions.c. */
+/* ------------------------------------------------------------------------- */
+
+/* Cat 1 -- expansion-variable sign selects the Log branch of the integral
+ * family (ExpIntegralEi / LogIntegral / CosIntegral / CoshIntegral) at x = 0.
+ * The option form was supported before; the ambient (Assuming[] / $Assumptions /
+ * Element) forms are new. x > 0 reproduces the no-assumption principal branch. */
+static void test_series_stress_00(void) {
+    setup_full();
+    assert_fullform("Series[ExpIntegralEi[x], {x, 0, 2}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, List[Plus[EulerGamma, Log[Times[-1, x]]], 1, Rational[1, 4]], 0, 3, 1]");
+    assert_fullform("Series[ExpIntegralEi[x], {x, 0, 2}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[Plus[EulerGamma, Log[x]], 1, Rational[1, 4]], 0, 3, 1]");
+    assert_fullform("Series[LogIntegral[x], {x, 0, 2}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, List[Times[Complex[0, 1], Pi], Times[Power[Log[Times[-1, x]], -6], "
+        "Plus[120, Power[Log[Times[-1, x]], 4], Power[Log[Times[-1, x]], 5], "
+        "Times[2, Power[Log[Times[-1, x]], 3]], Times[6, Power[Log[Times[-1, x]], 2]], "
+        "Times[24, Log[Times[-1, x]]]]], 0], 0, 3, 1]");
+    assert_fullform("Series[CosIntegral[x], {x, 0, 4}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, List[Plus[EulerGamma, Log[Times[-1, x]]], 0, Rational[-1, 4], 0, Rational[1, 96]], 0, 5, 1]");
+    assert_fullform("Series[CoshIntegral[x], {x, 0, 4}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, List[Plus[EulerGamma, Log[Times[-1, x]]], 0, Rational[1, 4], 0, Rational[1, 96]], 0, 5, 1]");
+    /* NEW: ambient delivery reaches the same branch decision. */
+    assert_fullform("Assuming[x < 0, Series[ExpIntegralEi[x], {x, 0, 2}]]",
+        "SeriesData[x, 0, List[Plus[EulerGamma, Log[Times[-1, x]]], 1, Rational[1, 4]], 0, 3, 1]");
+    assert_fullform("Block[{$Assumptions = x < 0}, Series[LogIntegral[x], {x, 0, 2}]]",
+        "SeriesData[x, 0, List[Times[Complex[0, 1], Pi], Times[Power[Log[Times[-1, x]], -6], "
+        "Plus[120, Power[Log[Times[-1, x]], 4], Power[Log[Times[-1, x]], 5], "
+        "Times[2, Power[Log[Times[-1, x]], 3]], Times[6, Power[Log[Times[-1, x]], 2]], "
+        "Times[24, Log[Times[-1, x]]]]], 0], 0, 3, 1]");
+    assert_fullform("Series[ExpIntegralEi[x], {x, 0, 2}, Assumptions -> Element[x, Reals] && x < 0]",
+        "SeriesData[x, 0, List[Plus[EulerGamma, Log[Times[-1, x]]], 1, Rational[1, 4]], 0, 3, 1]");
+    assert_fullform("Assuming[x < 0, Series[CosIntegral[x], {x, 0, 4}]]",
+        "SeriesData[x, 0, List[Plus[EulerGamma, Log[Times[-1, x]]], 0, Rational[-1, 4], 0, Rational[1, 96]], 0, 5, 1]");
+    assert_fullform("Series[CoshIntegral[x], {x, 0, 4}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[Plus[EulerGamma, Log[x]], 0, Rational[1, 4], 0, Rational[1, 96]], 0, 5, 1]");
+}
+
+/* Cat 2a -- non-analytic heads of the expansion variable collapse under a sign
+ * or reality assumption: Abs[x] -> ±x, Sign[x] -> ±1, UnitStep[x] -> 1/0,
+ * Sqrt[x^2] -> ±x, Conjugate[x] -> x for real x. */
+static void test_series_stress_01(void) {
+    setup_full();
+    assert_fullform("Series[Abs[x], {x, 0, 3}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[0, 1, 0, 0], 0, 4, 1]");
+    assert_fullform("Series[Abs[x], {x, 0, 3}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, List[0, -1, 0, 0], 0, 4, 1]");
+    assert_fullform("Series[Sign[x], {x, 0, 3}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[1, 0, 0, 0], 0, 4, 1]");
+    assert_fullform("Series[Sign[x], {x, 0, 3}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, List[-1, 0, 0, 0], 0, 4, 1]");
+    assert_fullform("Series[UnitStep[x], {x, 0, 2}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[1, 0, 0], 0, 3, 1]");
+    assert_fullform("Series[UnitStep[x], {x, 0, 2}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, List[0, 0, 0], 0, 3, 1]");
+    assert_fullform("Series[Conjugate[x], {x, 0, 2}, Assumptions -> Element[x, Reals]]",
+        "SeriesData[x, 0, List[0, 1, 0], 0, 3, 1]");
+    assert_fullform("Series[x Abs[x], {x, 0, 3}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[0, 0, 1, 0], 0, 4, 1]");
+    assert_fullform("Series[Abs[x]^3, {x, 0, 4}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[0, 0, 0, 1, 0], 0, 5, 1]");
+    assert_fullform("Series[Sign[x] x^2, {x, 0, 3}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[0, 0, 1, 0], 0, 4, 1]");
+    assert_fullform("Series[Conjugate[x], {x, 0, 2}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[0, 1, 0], 0, 3, 1]");
+    assert_fullform("Assuming[x > 0, Series[Abs[x], {x, 0, 3}]]",
+        "SeriesData[x, 0, List[0, 1, 0, 0], 0, 4, 1]");
+    assert_fullform("Series[UnitStep[x], {x, 0, 2}, Assumptions -> Element[x, Reals] && x > 0]",
+        "SeriesData[x, 0, List[1, 0, 0], 0, 3, 1]");
+    /* regression: with no assumption Abs[x] stays a symbolic Derivative Taylor row. */
+    assert_fullform("Series[Abs[x], {x, 0, 3}]",
+        "SeriesData[x, 0, List[0, Derivative[1][Abs][0], Times[Rational[1, 2], Derivative[2][Abs][0]], "
+        "Times[Rational[1, 6], Derivative[3][Abs][0]]], 0, 4, 1]");
+}
+
+/* Cat 2b -- more non-analytic-of-x shapes: scaled argument, ratios that cancel
+ * to a constant, additive cancellation, and products with an analytic factor. */
+static void test_series_stress_02(void) {
+    setup_full();
+    assert_fullform("Series[Abs[2 x], {x, 0, 3}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[0, 2, 0, 0], 0, 4, 1]");
+    assert_fullform("Series[Abs[x]/x, {x, 0, 2}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[0, 1, 0, 0], -1, 3, 1]");
+    assert_fullform("Series[x/Abs[x], {x, 0, 2}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, List[0, -1, 0, 0], -1, 3, 1]");
+    assert_fullform("Series[Abs[x] + x, {x, 0, 2}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, List[0, 0, 0], 0, 3, 1]");
+    assert_fullform("Series[Sqrt[x^2], {x, 0, 3}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, List[0, -1, 0, 0], 0, 4, 1]");
+    assert_fullform("Series[UnitStep[x] Cos[x], {x, 0, 2}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[1, 0, Rational[-1, 2]], 0, 3, 1]");
+    assert_fullform("Series[Sign[x] Exp[x], {x, 0, 2}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, List[-1, -1, Rational[-1, 2]], 0, 3, 1]");
+    assert_fullform("Series[Conjugate[x]^2, {x, 0, 3}, Assumptions -> Element[x, Reals]]",
+        "SeriesData[x, 0, List[0, 0, 1, 0], 0, 4, 1]");
+    assert_fullform("Series[Abs[a x], {x, 0, 2}, Assumptions -> a > 0 && x > 0]",
+        "SeriesData[x, 0, List[0, a, 0], 0, 3, 1]");
+}
+
+/* Cat 3 -- parametric radical leading/coefficient: Sqrt[a^2] -> a for a > 0,
+ * -a for a < 0, Abs[a] for real unknown sign; (a^2)^r -> a^(2r); factored forms
+ * Sqrt[c^2 a^2] -> c a. Compare to the no-assumption Sqrt[a^2] husk (regression). */
+static void test_series_stress_03(void) {
+    setup_full();
+    assert_fullform("Series[Sqrt[a^2 + x], {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[a, Times[Rational[1, 2], Power[a, -1]], Times[Rational[-1, 8], Power[a, -3]]], 0, 3, 1]");
+    assert_fullform("Series[Sqrt[a^2 + x], {x, 0, 2}, Assumptions -> a < 0]",
+        "SeriesData[x, 0, List[Times[-1, a], Times[Rational[-1, 2], Power[a, -1]], Times[Rational[1, 8], Power[a, -3]]], 0, 3, 1]");
+    assert_fullform("Series[Sqrt[a^2 + x^2], {x, 0, 4}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[a, 0, Times[Rational[1, 2], Power[a, -1]], 0, Times[Rational[-1, 8], Power[a, -3]]], 0, 5, 1]");
+    assert_fullform("Series[1/Sqrt[a^2 - x], {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[Power[a, -1], Times[Rational[1, 2], Power[a, -3]], Times[Rational[3, 8], Power[a, -5]]], 0, 3, 1]");
+    assert_fullform("Series[(a^2 + x)^(3/2), {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[Power[a, 3], Times[Rational[3, 2], a], Times[Rational[3, 8], Power[a, -1]]], 0, 3, 1]");
+    /* regression: no assumption keeps the Sqrt[a^2] leading coefficient. */
+    assert_fullform("Series[Sqrt[a^2 + x], {x, 0, 2}]",
+        "SeriesData[x, 0, List[Power[Power[a, 2], Rational[1, 2]], "
+        "Times[Rational[1, 2], Power[a, -2], Power[Power[a, 2], Rational[1, 2]]], "
+        "Times[Rational[-1, 8], Power[a, -4], Power[Power[a, 2], Rational[1, 2]]]], 0, 3, 1]");
+    /* mixed guard: only Sqrt[a^2] is touched; the Cos coefficients are untouched. */
+    assert_fullform("Series[Sqrt[a^2] + Cos[x], {x, 0, 4}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[Plus[1, a], 0, Rational[-1, 2], 0, Rational[1, 24]], 0, 5, 1]");
+    assert_fullform("Assuming[a > 0, Series[Sqrt[a^2 + x], {x, 0, 1}]]",
+        "SeriesData[x, 0, List[a, Times[Rational[1, 2], Power[a, -1]]], 0, 2, 1]");
+    assert_fullform("Block[{$Assumptions = a > 0}, Series[Sqrt[a^2 + x], {x, 0, 1}]]",
+        "SeriesData[x, 0, List[a, Times[Rational[1, 2], Power[a, -1]]], 0, 2, 1]");
+    assert_fullform("Series[Sqrt[a^2 + x], {x, 0, 2}, Assumptions -> Element[a, Reals]]",
+        "SeriesData[x, 0, List[Abs[a], Times[Rational[1, 2], Power[a, -2], Abs[a]], "
+        "Times[Rational[-1, 8], Power[a, -4], Abs[a]]], 0, 3, 1]");
+    assert_fullform("Series[Sqrt[b^2 + x], {x, 0, 1}, Assumptions -> b > 0]",
+        "SeriesData[x, 0, List[b, Times[Rational[1, 2], Power[b, -1]]], 0, 2, 1]");
+    assert_fullform("Series[Sqrt[4 a^2 + x], {x, 0, 1}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[Times[2, a], Times[Rational[1, 4], Power[a, -1]]], 0, 2, 1]");
+    assert_fullform("Series[Sqrt[a^2 + x^2], {x, 0, 2}, Assumptions -> a < 0]",
+        "SeriesData[x, 0, List[Times[-1, a], 0, Times[Rational[-1, 2], Power[a, -1]]], 0, 3, 1]");
+    assert_fullform("Series[Sqrt[a^2 b^2 + x], {x, 0, 1}, Assumptions -> a > 0 && b > 0]",
+        "SeriesData[x, 0, List[Times[a, b], Times[Rational[1, 2], Power[a, -1], Power[b, -1]]], 0, 2, 1]");
+    assert_fullform("Series[Sqrt[9 a^2 + x], {x, 0, 1}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[Times[3, a], Times[Rational[1, 6], Power[a, -1]]], 0, 2, 1]");
+    assert_fullform("Series[(a^2 + x)^(5/2), {x, 0, 1}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[Power[a, 5], Times[Rational[5, 2], Power[a, 3]]], 0, 2, 1]");
+    assert_fullform("Series[1/(a^2 + x)^(1/2), {x, 0, 1}, Assumptions -> a < 0]",
+        "SeriesData[x, 0, List[Times[-1, Power[a, -1]], Times[Rational[1, 2], Power[a, -3]]], 0, 2, 1]");
+}
+
+/* Cat 4 -- Abs / powers of a parameter appearing inside coefficients, cleaned
+ * by the final-coefficient pass: Abs[a] -> ±a in Exp/Sin/Cos/... expansions. */
+static void test_series_stress_04(void) {
+    setup_full();
+    assert_fullform("Series[Exp[Abs[a] x], {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[1, a, Times[Rational[1, 2], Power[a, 2]]], 0, 3, 1]");
+    assert_fullform("Series[Exp[Abs[a] x], {x, 0, 2}, Assumptions -> a < 0]",
+        "SeriesData[x, 0, List[1, Times[-1, a], Times[Rational[1, 2], Power[a, 2]]], 0, 3, 1]");
+    assert_fullform("Series[1/(1 - Abs[a] x), {x, 0, 2}, Assumptions -> a < 0]",
+        "SeriesData[x, 0, List[1, Times[-1, a], Power[a, 2]], 0, 3, 1]");
+    assert_fullform("Series[Log[1 + Sqrt[a^2] x], {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[0, a, Times[Rational[-1, 2], Power[a, 2]]], 0, 3, 1]");
+    assert_fullform("Series[Abs[a] Cos[x], {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[a, 0, Times[Rational[-1, 2], a]], 0, 3, 1]");
+    assert_fullform("Series[Sin[Abs[a] x], {x, 0, 3}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[0, a, 0, Times[Rational[-1, 6], Power[a, 3]]], 0, 4, 1]");
+    /* regression: no assumption keeps Abs[a] in the coefficients. */
+    assert_fullform("Series[Exp[Abs[a] x], {x, 0, 2}]",
+        "SeriesData[x, 0, List[1, Abs[a], Times[Rational[1, 2], Power[Abs[a], 2]]], 0, 3, 1]");
+    assert_fullform("Series[Cos[Abs[a] x], {x, 0, 4}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[1, 0, Times[Rational[-1, 2], Power[a, 2]], 0, Times[Rational[1, 24], Power[a, 4]]], 0, 5, 1]");
+    assert_fullform("Series[Abs[a]^2 x, {x, 0, 1}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[0, Power[a, 2]], 0, 2, 1]");
+    assert_fullform("Series[1/(1 + Abs[a] x), {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[1, Times[-1, a], Power[a, 2]], 0, 3, 1]");
+    assert_fullform("Series[Sqrt[1 + Abs[a] x], {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[1, Times[Rational[1, 2], a], Times[Rational[-1, 8], Power[a, 2]]], 0, 3, 1]");
+    assert_fullform("Series[Sinh[Abs[a] x], {x, 0, 3}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[0, a, 0, Times[Rational[1, 6], Power[a, 3]]], 0, 4, 1]");
+    assert_fullform("Series[Cosh[Abs[a] x], {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[1, 0, Times[Rational[1, 2], Power[a, 2]]], 0, 3, 1]");
+    assert_fullform("Series[ArcTan[Abs[a] x], {x, 0, 3}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[0, a, 0, Times[Rational[-1, 3], Power[a, 3]]], 0, 4, 1]");
+    assert_fullform("Series[Exp[-Abs[a] x], {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[1, Times[-1, a], Times[Rational[1, 2], Power[a, 2]]], 0, 3, 1]");
+    assert_fullform("Series[Sqrt[Abs[a] + x], {x, 0, 1}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[Power[a, Rational[1, 2]], Times[Rational[1, 2], Power[a, Rational[-1, 2]]]], 0, 2, 1]");
+}
+
+/* Cat 5 -- Log[a^p] -> p Log[a] for a > 0 in coefficients (also Log[Sqrt[a^2]]
+ * -> Log[a]). The no-assumption case keeps Log[a^2]. */
+static void test_series_stress_05(void) {
+    setup_full();
+    assert_fullform("Series[Log[a^2 + x], {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[Times[2, Log[a]], Power[a, -2], Times[Rational[-1, 2], Power[a, -4]]], 0, 3, 1]");
+    /* regression: no assumption keeps Log[a^2]. */
+    assert_fullform("Series[Log[a^2 + x], {x, 0, 2}]",
+        "SeriesData[x, 0, List[Log[Power[a, 2]], Power[a, -2], Times[Rational[-1, 2], Power[a, -4]]], 0, 3, 1]");
+    assert_fullform("Series[Exp[Log[a^2] x], {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[1, Times[2, Log[a]], Times[2, Power[Log[a], 2]]], 0, 3, 1]");
+    assert_fullform("Series[Log[a^3 + x], {x, 0, 1}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[Times[3, Log[a]], Power[a, -3]], 0, 2, 1]");
+    assert_fullform("Series[Log[Sqrt[a^2] + x], {x, 0, 1}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[Log[a], Power[a, -1]], 0, 2, 1]");
+    assert_fullform("Series[Log[a^4 + x], {x, 0, 1}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[Times[4, Log[a]], Power[a, -4]], 0, 2, 1]");
+    assert_fullform("Series[Log[a^2 x + a^2], {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[Times[2, Log[a]], 1, Rational[-1, 2]], 0, 3, 1]");
+}
+
+/* Cat 6 -- integer / parity domain facts in coefficients: Cos[n Pi] -> (-1)^n,
+ * Sin[n Pi] -> 0, ((-1)^n)^2 -> 1 (integer n), (-1)^n -> 1 (even n). */
+static void test_series_stress_06(void) {
+    setup_full();
+    assert_fullform("Series[Cos[n Pi] + x, {x, 0, 1}, Assumptions -> Element[n, Integers]]",
+        "SeriesData[x, 0, List[Power[-1, n], 1], 0, 2, 1]");
+    assert_fullform("Series[Exp[Cos[n Pi] x], {x, 0, 2}, Assumptions -> Element[n, Integers]]",
+        "SeriesData[x, 0, List[1, Power[-1, n], Rational[1, 2]], 0, 3, 1]");
+    assert_fullform("Series[(-1)^n + x, {x, 0, 1}, Assumptions -> Element[n, Evens]]",
+        "SeriesData[x, 0, List[1, 1], 0, 2, 1]");
+    /* regression: no assumption keeps Cos[n Pi]. */
+    assert_fullform("Series[Cos[n Pi] + x, {x, 0, 1}]",
+        "SeriesData[x, 0, List[Cos[Times[Pi, n]], 1], 0, 2, 1]");
+    assert_fullform("Series[Sin[n Pi] + x, {x, 0, 1}, Assumptions -> Element[n, Integers]]",
+        "SeriesData[x, 0, List[0, 1], 0, 2, 1]");
+    assert_fullform("Series[Cos[n Pi]^2 + x, {x, 0, 1}, Assumptions -> Element[n, Integers]]",
+        "SeriesData[x, 0, List[1, 1], 0, 2, 1]");
+}
+
+/* Cat 7 -- the three assumption-delivery channels and their precedence:
+ * ambient Assuming[...] (incl. nested), direct $Assumptions via Block[], and the
+ * option overriding an ambient scope. */
+static void test_series_stress_07(void) {
+    setup_full();
+    assert_fullform("Block[{$Assumptions = a > 0}, Series[Exp[Abs[a] x], {x, 0, 2}]]",
+        "SeriesData[x, 0, List[1, a, Times[Rational[1, 2], Power[a, 2]]], 0, 3, 1]");
+    assert_fullform("Assuming[a > 0, Assuming[a < 10, Series[Sqrt[a^2 + x], {x, 0, 1}]]]",
+        "SeriesData[x, 0, List[a, Times[Rational[1, 2], Power[a, -1]]], 0, 2, 1]");
+    /* option overrides an ambient scope with the opposite sign. */
+    assert_fullform("Assuming[a < 0, Series[Sqrt[a^2 + x], {x, 0, 1}, Assumptions -> a > 0]]",
+        "SeriesData[x, 0, List[a, Times[Rational[1, 2], Power[a, -1]]], 0, 2, 1]");
+    assert_fullform("Assuming[Element[x, Reals], Series[Conjugate[x], {x, 0, 2}]]",
+        "SeriesData[x, 0, List[0, 1, 0], 0, 3, 1]");
+    assert_fullform("Assuming[a > 0, Series[Abs[a] Cos[x], {x, 0, 2}]]",
+        "SeriesData[x, 0, List[a, 0, Times[Rational[-1, 2], a]], 0, 3, 1]");
+    assert_fullform("Assuming[a > 0, Series[Log[a^2 + x], {x, 0, 2}]]",
+        "SeriesData[x, 0, List[Times[2, Log[a]], Power[a, -2], Times[Rational[-1, 2], Power[a, -4]]], 0, 3, 1]");
+    assert_fullform("Block[{$Assumptions = x < 0}, Series[Abs[x], {x, 0, 2}]]",
+        "SeriesData[x, 0, List[0, -1, 0], 0, 3, 1]");
+    assert_fullform("Assuming[a < 0, Series[Exp[Abs[a] x], {x, 0, 2}]]",
+        "SeriesData[x, 0, List[1, Times[-1, a], Times[Rational[1, 2], Power[a, 2]]], 0, 3, 1]");
+    assert_fullform("Assuming[Element[n, Integers], Series[Cos[n Pi] + x, {x, 0, 1}]]",
+        "SeriesData[x, 0, List[Power[-1, n], 1], 0, 2, 1]");
+    assert_fullform("Assuming[a > 0 && b > 0, Series[Sqrt[a^2 b^2 + x], {x, 0, 1}]]",
+        "SeriesData[x, 0, List[Times[a, b], Times[Rational[1, 2], Power[a, -1], Power[b, -1]]], 0, 2, 1]");
+    assert_fullform("Block[{$Assumptions = a > 0}, Series[Log[a^2 + x], {x, 0, 1}]]",
+        "SeriesData[x, 0, List[Times[2, Log[a]], Power[a, -2]], 0, 2, 1]");
+    assert_fullform("Assuming[x > 0, Series[Sign[x] x, {x, 0, 2}]]",
+        "SeriesData[x, 0, List[0, 1, 0], 0, 3, 1]");
+    assert_fullform("Assuming[a > 0, Series[Sqrt[a^2 + x^2], {x, 0, 2}]]",
+        "SeriesData[x, 0, List[a, 0, Times[Rational[1, 2], Power[a, -1]]], 0, 3, 1]");
+    assert_fullform("Assuming[Element[a, Reals], Series[Sqrt[a^2 + x], {x, 0, 1}]]",
+        "SeriesData[x, 0, List[Abs[a], Times[Rational[1, 2], Power[a, -2], Abs[a]]], 0, 2, 1]");
+}
+
+/* Cat 8 -- passthrough / regression. NO informative assumption (or an
+ * uninformative / inconsistent one, or one that names an unrelated symbol) must
+ * reproduce today's behaviour exactly; a NULL AssumeCtx is the legacy path. */
+static void test_series_stress_08(void) {
+    setup_full();
+    assert_fullform("Series[Exp[x], {x, 0, 3}]",
+        "SeriesData[x, 0, List[1, 1, Rational[1, 2], Rational[1, 6]], 0, 4, 1]");
+    assert_fullform("Series[Sqrt[a^2 + x], {x, 0, 1}, Assumptions -> True]",
+        "SeriesData[x, 0, List[Power[Power[a, 2], Rational[1, 2]], "
+        "Times[Rational[1, 2], Power[a, -2], Power[Power[a, 2], Rational[1, 2]]]], 0, 2, 1]");
+    assert_fullform("Series[Sqrt[a^2 + x], {x, 0, 1}, Assumptions -> Automatic]",
+        "SeriesData[x, 0, List[Power[Power[a, 2], Rational[1, 2]], "
+        "Times[Rational[1, 2], Power[a, -2], Power[Power[a, 2], Rational[1, 2]]]], 0, 2, 1]");
+    assert_fullform("Series[Sqrt[a^2 + x], {x, 0, 1}, Assumptions -> False]",
+        "SeriesData[x, 0, List[Power[Power[a, 2], Rational[1, 2]], "
+        "Times[Rational[1, 2], Power[a, -2], Power[Power[a, 2], Rational[1, 2]]]], 0, 2, 1]");
+    assert_fullform("Series[1/(1 - x), {x, 0, 4}]",
+        "SeriesData[x, 0, List[1, 1, 1, 1, 1], 0, 5, 1]");
+    /* assumption names an unrelated symbol -> the a-coefficients are untouched. */
+    assert_fullform("Series[Sqrt[a^2 + x], {x, 0, 1}, Assumptions -> b > 0]",
+        "SeriesData[x, 0, List[Power[Power[a, 2], Rational[1, 2]], "
+        "Times[Rational[1, 2], Power[a, -2], Power[Power[a, 2], Rational[1, 2]]]], 0, 2, 1]");
+    /* x > 0 says nothing about a, so Log[a^2] stays. */
+    assert_fullform("Series[Log[a^2 + x], {x, 0, 2}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[Log[Power[a, 2]], Power[a, -2], Times[Rational[-1, 2], Power[a, -4]]], 0, 3, 1]");
+    assert_fullform("Series[Cos[x], {x, 0, 5}]",
+        "SeriesData[x, 0, List[1, 0, Rational[-1, 2], 0, Rational[1, 24], 0], 0, 6, 1]");
+    assert_fullform("Series[Abs[a] + x, {x, 0, 1}]",
+        "SeriesData[x, 0, List[Abs[a], 1], 0, 2, 1]");
+    /* Complexes: a could be complex, so Sqrt[a^2] must NOT collapse to a. */
+    assert_fullform("Series[Sqrt[a^2 + x], {x, 0, 1}, Assumptions -> Element[a, Complexes]]",
+        "SeriesData[x, 0, List[Power[Power[a, 2], Rational[1, 2]], "
+        "Times[Rational[1, 2], Power[a, -2], Power[Power[a, 2], Rational[1, 2]]]], 0, 2, 1]");
+    assert_fullform("Series[Log[1 + x], {x, 0, 4}]",
+        "SeriesData[x, 0, List[0, 1, Rational[-1, 2], Rational[1, 3], Rational[-1, 4]], 0, 5, 1]");
+    assert_fullform("Series[Tan[x], {x, 0, 5}]",
+        "SeriesData[x, 0, List[0, 1, 0, Rational[1, 3], 0, Rational[2, 15]], 0, 6, 1]");
+    assert_fullform("Series[Sinh[x], {x, 0, 4}]",
+        "SeriesData[x, 0, List[0, 1, 0, Rational[1, 6], 0], 0, 5, 1]");
+    assert_fullform("Series[Sqrt[a^2 + x], {x, 0, 1}, Assumptions -> c < 0]",
+        "SeriesData[x, 0, List[Power[Power[a, 2], Rational[1, 2]], "
+        "Times[Rational[1, 2], Power[a, -2], Power[Power[a, 2], Rational[1, 2]]]], 0, 2, 1]");
+}
+
+/* Cat 9/10 -- multivariate forwarding (the assumption reaches the inner-variable
+ * recursion) and a sign-dependent expansion at a shifted radical: near x = 0 with
+ * a > 0, Sqrt[(x - a)^2] = a - x. */
+static void test_series_stress_09(void) {
+    setup_full();
+    assert_fullform("Series[Sqrt[a^2] + x + y, {x, 0, 1}, {y, 0, 1}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[SeriesData[y, 0, List[a, 1], 0, 2, 1], 1], 0, 2, 1]");
+    assert_fullform("Series[Sqrt[a^2]*x + y, {x, 0, 1}, {y, 0, 1}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[SeriesData[y, 0, List[0, 1], 0, 2, 1], a], 0, 2, 1]");
+    assert_fullform("Series[Sqrt[(x - a)^2], {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[a, -1, 0], 0, 3, 1]");
+}
+
+/* Deferred (documented; NOT asserted):
+ *   Series[UnitStep[-x], {x, 0, 2}, Assumptions -> x > 0]
+ *       -- a negated compound argument (-x) is not proven negative by the
+ *          predicate, so the kernel does not fire; stays unevaluated. The
+ *          Abs[x] / Sign[x] / UnitStep[x] surface forms work.
+ *   Series[Log[a b + a b x], {x, 0, 2}, Assumptions -> a > 0 && b > 0]
+ *       -- general Log[a b] -> Log[a] + Log[b] splitting of a product of two
+ *          positive parameters is not performed (only Log[a^p] -> p Log[a]).
+ *   Branch-discriminator wrapper removal: the (-1)^Floor[(Pi/2 - Arg[x-x0])/(2Pi)]
+ *       wrapper at a radical branch point is not dropped under a real-x assumption.
+ *   Parametric pole-vs-regular classification (whether a denominator vanishes at
+ *       x0 under an assumption like a != 0) is still decided by bare evaluation.
+ */
+
 int main(void) {
     TEST(test_series_taylor_exp);
     TEST(test_series_sin_cos);
@@ -2128,6 +2463,18 @@ int main(void) {
     TEST(test_series_subtract);
     TEST(test_series_plus_real_contagion);
     TEST(test_series_plus_mpfr);
+
+    /* Series-under-Assumptions stress corpus (110 cases). */
+    TEST(test_series_stress_00);
+    TEST(test_series_stress_01);
+    TEST(test_series_stress_02);
+    TEST(test_series_stress_03);
+    TEST(test_series_stress_04);
+    TEST(test_series_stress_05);
+    TEST(test_series_stress_06);
+    TEST(test_series_stress_07);
+    TEST(test_series_stress_08);
+    TEST(test_series_stress_09);
 
     printf("All series tests passed.\n");
     return 0;

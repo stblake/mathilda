@@ -48,8 +48,33 @@ Expr* ndred_accumulate(Expr* res);  /* Accumulate[a] */
 Expr* ndred_variance(Expr* res);    /* Variance[a] */
 Expr* ndred_std(Expr* res);         /* StandardDeviation[a] */
 Expr* ndred_rms(Expr* res);         /* RootMeanSquare[a] */
+Expr* ndred_moment(Expr* res);      /* Moment[a, r] — raw moment (1/n)Sum[x^r] (integer r; Compile ND_REDS delegate) */
+Expr* ndred_central_moment(Expr* res); /* CentralMoment[a, r] (integer r; Compile ND_REDS delegate) */
+Expr* ndred_skewness(Expr* res);    /* Skewness[a]  = m_3 / m_2^(3/2) (Compile ND_REDS delegate) */
+Expr* ndred_kurtosis(Expr* res);    /* Kurtosis[a]  = m_4 / m_2^2     (Compile ND_REDS delegate) */
 Expr* ndred_median(Expr* res);      /* Median[a] */
 Expr* ndred_quartiles(Expr* res);   /* Quartiles[a] */
+
+/* Covariance / Correlation buffer kernels (implemented in src/linalg/ndcorrcov.c
+ * — declared here because both the stats builtins and the Compile[] tables in
+ * src/compile/compile.c already include this header). Each takes the whole call
+ * and handles Covariance[v,w] / Covariance[a] / Covariance[a,b] (and the
+ * Correlation counterparts): the two-vector form is a threaded centered inner
+ * product -> Real scalar, the matrix forms are a BLAS gram A_c^T B_c -> matrix.
+ * Faithful degrade (ndarray_delist_and_reeval) for int64/complex buffers, shape
+ * mismatches, and zero-variance Correlation columns. Not a leading-axis
+ * reduction, hence named nd_* rather than ndred_*. */
+Expr* nd_covariance(Expr* res);     /* Covariance[v,w] / [a] / [a,b] */
+Expr* nd_correlation(Expr* res);    /* Correlation[v,w] / [a] / [a,b] */
+
+/* RankedMin[v, n] / RankedMax[v, n] — the n-th smallest / largest element of a
+ * rank-1 machine vector (n<0 counts from the other end; RankedMax[v,n] ==
+ * RankedMin[v,-n]). Selects straight off the buffer: int64 exactly, real via an
+ * O(n) quickselect. Also the Compile ND_REDS delegates for the two heads.
+ * Faithful degrade (ndarray_delist_and_reeval) for a complex dtype, rank > 1,
+ * or a non-integer / out-of-range n. */
+Expr* ndred_ranked_min(Expr* res);  /* RankedMin[a, n] */
+Expr* ndred_ranked_max(Expr* res);  /* RankedMax[a, n] */
 
 /* Tally[a] — an IRREGULAR reduction: a scatter-add into a keyed table rather
  * than a fixed-stride sweep. Distinct enough from the reductions above to be

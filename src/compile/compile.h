@@ -46,9 +46,37 @@ typedef enum {
 /* Highest rank the packed encoding supports (M3a implements rank 1 only). */
 #define CT_MAX_RANK 8
 #define CT_ARRAY(elem, rank) ((CompileType)((int)CT_ARR + 4 * ((rank) - 1) + (int)(elem)))
-#define CT_IS_ARRAY(t)       ((int)(t) >= (int)CT_ARR)
+/* Array encodings occupy [CT_ARR, CT_ASSOC); the tightened test keeps CT_ASSOC
+ * (a read-only Association parameter bag, B1) from being mis-read as an array. */
+#define CT_IS_ARRAY(t)       ((int)(t) >= (int)CT_ARR && (int)(t) < (int)CT_ASSOC)
 #define CT_ELEM(t)           ((CompileType)(((int)(t) - (int)CT_ARR) & 3))
 #define CT_RANK(t)           ((((int)(t) - (int)CT_ARR) >> 2) + 1)
+
+/* Read-only Association parameter bag (Compile[] B1). Encoded ABOVE every array
+ * rank as `CT_ASSOC + value_elem` (value element type in the low 2 bits), so the
+ * scalar comparisons and the array test above stay well defined and an
+ * association never aliases an array encoding. The bag is a BORROWED handle: the
+ * program reads it (Lookup/KeyExistsQ/Length/Values) and never frees it, exactly
+ * like a borrowed argument array. */
+#define CT_ASSOC             ((CompileType)((int)CT_ARR + 4 * CT_MAX_RANK))   /* = 36 */
+#define CT_ASSOC_TYPE(elem)  ((CompileType)((int)CT_ASSOC + (int)(elem)))
+#define CT_IS_ASSOC(t)       ((int)(t) >= (int)CT_ASSOC && (int)(t) < (int)CT_ASSOC + 4)
+#define CT_ASSOC_VALTYPE(t)  ((CompileType)(((int)(t) - (int)CT_ASSOC) & 3))
+
+/* Arbitrary-precision SCALAR types (opt-in; see docs/design/compile-arbitrary-precision.md).
+ *
+ * Placed ABOVE the whole array/assoc encoding window [4,40) so array/assoc math
+ * is untouched, and — critically — so every existing machine scalar gate
+ * (`t == CT_REAL`, `t < CT_REAL`, `t <= CT_COMPLEX`, CT_IS_ARRAY, CT_IS_ASSOC)
+ * already REJECTS a managed type: each machine fast path bails on one until
+ * explicitly taught, so managed handling is purely additive and the machine path
+ * never changes meaning.  A managed register's value is not a machine number in a
+ * Slot but an INDEX into the per-call managed container arena (mpz_t / mpfr_t /
+ * ncpx); see compile.c. */
+#define CT_BIGINT            ((CompileType)40)   /* GMP mpz_t                */
+#define CT_BIGREAL           ((CompileType)41)   /* MPFR mpfr_t             */
+#define CT_BIGCOMPLEX        ((CompileType)42)   /* ncpx = { mpfr_t re,im } */
+#define CT_IS_MANAGED(t)     ((int)(t) >= (int)CT_BIGINT && (int)(t) <= (int)CT_BIGCOMPLEX)
 
 /* A boxed value (compile-time-known type).  For an array type `a` holds an
  * EXPR_NDARRAY node: BORROWED when passed in as an argument (the program never
@@ -108,6 +136,30 @@ CompiledProgram* compile_expr_ex(const Expr* body,
                                  const char* const* arg_names,
                                  const CompileType* arg_types, size_t nargs,
                                  unsigned flags);
+
+/* Allow integer-typed registers to be GMP bignums instead of int64 (the
+ * overflow-bail is replaced by exact arithmetic).  Opt-in via Compile[]'s
+ * "BigIntegers" -> True.  Independent of prec_bits (integers have no precision).
+ * Never inferred: the compiler cannot know at compile time whether an int64
+ * register overflows, so bignum is a user-requested type, not an autocompile
+ * feature. */
+#define COMPILE_BIGINT       0x40u
+
+/* Compile with an arbitrary-precision working precision.  `prec_bits == 0` is
+ * the ordinary machine path (identical to compile_expr_ex).  `prec_bits > 0`
+ * makes real/complex scalars MPFR at that many bits — one FIXED precision for
+ * the whole program (see docs/design/compile-arbitrary-precision.md §5), which
+ * sidesteps precision-contagion and lets the container arena stay warm.  The
+ * COMPILE_BIGINT flag independently turns integer scalars into GMP bignums.
+ * compile_expr / compile_expr_ex delegate here with prec_bits = 0. */
+CompiledProgram* compile_expr_prec(const Expr* body,
+                                   const char* const* arg_names,
+                                   const CompileType* arg_types, size_t nargs,
+                                   unsigned flags, long prec_bits);
+
+/* Working precision (in MPFR bits) baked into this program, or 0 for a machine
+ * program.  Used by the boxing boundary and by autocompile read-back. */
+long compiled_prec_bits(const CompiledProgram* p);
 
 /* Why the most recent compile_expr[_ex] call bailed.
  *

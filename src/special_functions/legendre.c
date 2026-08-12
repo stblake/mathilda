@@ -90,13 +90,14 @@ static bool leg_is_int_one(const Expr* e) {
     return e && e->type == EXPR_INTEGER && e->data.integer == 1;
 }
 
+/* These inexactness predicates are consulted only on the MPFR numeric path, so
+ * they are compiled with MPFR only; otherwise unused (-Werror=unused-function). */
+#ifdef USE_MPFR
 /* True if `e` is an inexact numeric leaf (Real or MPFR). */
 static bool leg_is_inexact_leaf(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_REAL) return true;
-#ifdef USE_MPFR
     if (e->type == EXPR_MPFR) return true;
-#endif
     return false;
 }
 
@@ -108,6 +109,7 @@ static bool leg_is_inexact(const Expr* e) {
         return leg_is_inexact_leaf(re) || leg_is_inexact_leaf(im);
     return false;
 }
+#endif
 
 /* Build a canonical Integer/BigInt from an mpz. */
 static Expr* leg_expr_from_mpz(const mpz_t z) {

@@ -78,4 +78,6 @@ docs/compile_example/
 docs/experiments/**/__pycache__/
 tools/__pycache__/
 comparisons/__pycache__/
+benchmarks/__pycache__/
 docs/experiments/**/*.pyc
+benchmarks/**/*.pyc

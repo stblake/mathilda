@@ -1592,8 +1592,10 @@ Out[2]= 1/2 (BesselY[-1 + n, x] - BesselY[1 + n, x])
 ## Hyperfactorial
 
 `Hyperfactorial[n]` gives the hyperfactorial `prod_{k=1}^{n} k^k`
-(`H(0) = H(1) = 1`).  Exact via GMP for a non-negative integer `n`;
-non-positive-integer, non-integer or symbolic orders are left
+(`H(0) = H(1) = 1`).  Exact via GMP for a non-negative integer `n`.  A
+non-integer **numeric** order (under `N`) evaluates via
+`Hyperfactorial[z] = Gamma[z+1]^z / BarnesG[z+1]`, reusing the Barnes-G
+continuation (real, complex, arbitrary precision); symbolic orders are left
 unevaluated.  Used by `Product` to recognise `Product[k^k, {k, 1, n}]`.
 
 Attributes: `Listable`, `NumericFunction`, `Protected`.
@@ -1601,6 +1603,12 @@ Attributes: `Listable`, `NumericFunction`, `Protected`.
 ```mathematica
 In[1]:= Hyperfactorial[4]
 Out[1]= 27648
+
+In[2]:= N[Hyperfactorial[5.0]]
+Out[2]= 8.64*10^7
+
+In[3]:= N[Hyperfactorial[7/2], 30]
+Out[3]= 1282.122099453457459415422713168
 ```
 
 ## BarnesG
@@ -1608,15 +1616,32 @@ Out[1]= 27648
 `BarnesG[z]`, the Barnes G-function, with `G(1) = G(2) = 1` and
 `G(z+1) = Gamma[z] G(z)`.  For a positive integer `n`,
 `G(n+1) = prod_{k=1}^{n-1} k!` (the superfactorial, exact via GMP), and
-`G(m) = 0` for non-positive integer `m`.  Non-integer orders are left
-unevaluated.  Used by `Product` to recognise
+`G(m) = 0` for non-positive integer `m`.  Used by `Product` to recognise
 `Product[Gamma[i], {i, 1, n-1}]` → `BarnesG[n]`.
+
+Exact non-integer orders are left symbolic, but a non-integer **numeric**
+order (i.e. under `N`) is evaluated from the Barnes asymptotic expansion
+combined with the recurrence `G(w+1) = Gamma[w] G(w)`, assembled as an
+expression so it inherits `Gamma`/`Log`/`Exp`'s complex and MPFR kernels and
+the Glaisher–Kinkelin constant at full precision. The series carries 12
+Bernoulli terms with coefficient `B_{2k+2}/((2k)(2k+2))`, and the recurrence
+shift scales with the requested precision. Real, complex, and arbitrary
+precision are all supported.
 
 Attributes: `Listable`, `NumericFunction`, `Protected`.
 
 ```mathematica
 In[1]:= BarnesG[5]
 Out[1]= 12
+
+In[2]:= N[BarnesG[6.0]]
+Out[2]= 288.
+
+In[3]:= N[BarnesG[13/2], 30]
+Out[3]= 2548.745769568498989735906104648
+
+In[4]:= N[BarnesG[2.5 + 1.0 I]]
+Out[4]= 0.743798 - 0.0953168 I
 ```
 
 ## QPochhammer

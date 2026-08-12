@@ -17,7 +17,8 @@ NDArray[nested_list]
     auto-degrade to an ordinary nested List.
 NDArray[nested_list, DataType -> "float32"]
     Packs at the given element type: "float64" (default), "float32",
-    "complex64", or "complex32". DataType[a] gives an array's type.
+    "complex64", "complex32", or "bool" (a list of True/False;
+    "Boolean" is accepted too). DataType[a] gives an array's type.
     A ragged (non-rectangular) list is rejected with an
     NDArray::ragged warning; an empty or non-machine-precision
     list stays unevaluated.

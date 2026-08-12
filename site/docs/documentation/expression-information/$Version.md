@@ -16,10 +16,10 @@ All examples below are verified against the current Mathilda build.
 
 ```mathematica
 In[1]:= $VersionNumber
-Out[1]= 0.017
+Out[1]= 0.032
 
 In[2]:= $Version
-Out[2]= "Mathilda 0.017 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)"
+Out[2]= "Mathilda 0.032 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)"
 ```
 
 ## Implementation notes

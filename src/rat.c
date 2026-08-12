@@ -1561,9 +1561,12 @@ static Expr* flint_cancel_fraction(Expr* arg) {
 #endif
 
 /* rat_canon_normalize (src/poly/ratcanon.c) is the primary Together/Cancel path;
- * MATHILDA_RATCANON=off reverts to the pure classical cascade below. */
-static Expr* flint_gaussian_together(const Expr* arg);   /* defined below */
-
+ * MATHILDA_RATCANON=off reverts to the pure classical cascade below. Only the
+ * FLINT dispatch reads this flag, so it is guarded to match — without FLINT it is
+ * dead code and trips -Werror=unused-function on the no-FLINT build. (The stray
+ * forward declaration of flint_gaussian_together that used to sit here was
+ * redundant: it is defined ahead of its sole caller and needed no prototype.) */
+#ifdef USE_FLINT
 static bool rat_canon_enabled(void) {
     static int en = -1;
     if (en < 0) {
@@ -1572,6 +1575,7 @@ static bool rat_canon_enabled(void) {
     }
     return en;
 }
+#endif
 
 static Expr* builtin_cancel_compute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;

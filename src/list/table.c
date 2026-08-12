@@ -1,7 +1,17 @@
 #include "list_common.h"
 #include "table.h"
 #include "compile/autocompile.h"
+#include "iter.h"
 #include "../pack.h"
+
+/* Element backstop for a finite Table range, matching Sum's SUM_MAX_FINITE_TERMS
+ * and Product's PRODUCT_MAX_FINITE_TERMS. Reaching it returns Table[...]
+ * unevaluated rather than silently truncating (the old 1000000 cap did the
+ * latter, and at a hundredth of this size — so Table[i,{i,1,2000000}] came back
+ * with 1000001 elements). With the exact termination test in iter_range_continue
+ * a well-formed finite range terminates on its own; this only guards a range
+ * whose element count genuinely exceeds the limit. */
+#define TABLE_MAX_FINITE_ELEMENTS 100000000LL
 
 Expr* builtin_table(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
@@ -58,6 +68,33 @@ Expr* builtin_table(Expr* res) {
     size_t results_cap = 16;
     size_t results_count = 0;
     Expr** results = malloc(sizeof(Expr*) * results_cap);
+    bool overflow = false;   /* element count exceeded TABLE_MAX_FINITE_ELEMENTS */
+
+    /* Exact-integer range longer than the backstop: decline up front, before
+     * allocating a single element. The in-loop guard below (and Sum/Product)
+     * only discover the overflow mid-fill; for an integer range the length is
+     * O(1) to compute, so Table[i, {i, 1, 10^9}] returns unevaluated at once
+     * instead of allocating a hundred million Exprs and then giving up. Real and
+     * rational ranges fall through to the in-loop backstop. */
+    if (!is_n_times && !is_list_iter && !is_real
+        && expr_is_integer_like(imin_e) && expr_is_integer_like(imax_e)
+        && di_e && expr_is_integer_like(di_e)) {
+        mpz_t lo, hi, step, span;
+        mpz_inits(lo, hi, step, span, NULL);
+        expr_to_mpz(imin_e, lo);
+        expr_to_mpz(imax_e, hi);
+        expr_to_mpz(di_e, step);
+        mpz_sub(span, hi, lo);                    /* imax - imin */
+        bool decline = false;
+        if (mpz_sgn(span) != 0 && mpz_sgn(span) == mpz_sgn(step)) {
+            mpz_abs(span, span);
+            mpz_abs(step, step);
+            mpz_fdiv_q(span, span, step);         /* q = floor(|span|/|step|); count = q + 1 */
+            decline = mpz_cmp_si(span, (long)TABLE_MAX_FINITE_ELEMENTS) >= 0;  /* count > cap */
+        }
+        mpz_clears(lo, hi, step, span, NULL);
+        if (decline) { free(results); iter_spec_free(&s); return NULL; }
+    }
 
     Rule* old_own = iter_spec_shadow(var_sym);
 
@@ -86,7 +123,6 @@ Expr* builtin_table(Expr* res) {
          * per-element evaluate(Plus[...]) advance is skipped too. */
         AutoCompiled* ac = is_real ? autocompile_new(expr, (const Expr* const*)&var_sym, 1) : NULL;
         double val = min_val;
-        int steps = 0;
         Expr* curr_e = ac ? NULL : expr_copy(imin_e);
 
         /* Packed fast path: a compiled body whose result type is CT_REAL emits
@@ -103,13 +139,16 @@ Expr* builtin_table(Expr* res) {
         if (ac && autocompiled_result_is_real(ac)) {
             size_t total = 0;
             double v = min_val;
-            while ((di_val > 0 && v <= max_val + 1e-14) || (di_val < 0 && v >= max_val - 1e-14)) {
+            /* Real packed path: is_real is true here, so the count uses the same
+             * double recurrence as the fill below (no curr_e). */
+            while (iter_range_continue(is_real, /*is_inf=*/false, NULL, NULL,
+                                       v, max_val, di_val)) {
+                if ((int64_t)total >= TABLE_MAX_FINITE_ELEMENTS) { overflow = true; break; }
                 total++;
                 v += di_val;
-                if (total > 1000000) break;
             }
             double* buf = NULL;
-            Expr* packed = ndbuild_open_f64((int64_t)total, &buf);
+            Expr* packed = overflow ? NULL : ndbuild_open_f64((int64_t)total, &buf);
             if (packed) {
                 size_t i = 0;
                 while (i < total && autocompiled_eval_real(ac, &val, &buf[i])) {
@@ -130,11 +169,12 @@ Expr* builtin_table(Expr* res) {
                 }
                 ndbuild_abandon(packed, i, results);
                 results_count = i;
-                steps = (int)i;
             }
         }
 
-        while ((di_val > 0 && val <= max_val + 1e-14) || (di_val < 0 && val >= max_val - 1e-14)) {
+        while (iter_range_continue(is_real, /*is_inf=*/false, curr_e, imax_e,
+                                   val, max_val, di_val)) {
+            if ((int64_t)results_count >= TABLE_MAX_FINITE_ELEMENTS) { overflow = true; break; }
             /* Boxed (not _eval_real) so an integer-valued body stays an Integer
              * — the element type is user-visible in the returned list. */
             Expr* eval_expr = ac ? autocompiled_eval_boxed(ac, &val) : NULL;
@@ -148,20 +188,32 @@ Expr* builtin_table(Expr* res) {
             results[results_count++] = eval_expr;
 
             if (!ac) {   /* advance the exact running value (unused when compiling) */
-                Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
-                Expr* next_expr = expr_new_function(expr_new_symbol(SYM_Plus), next_args, 2);
-                Expr* next_e = evaluate(next_expr);
-                expr_free(next_expr);
+                Expr* next_e = iter_step_add(curr_e, di_e);
+                if (!next_e) {
+                    Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
+                    Expr* next_expr = expr_new_function(expr_new_symbol(SYM_Plus), next_args, 2);
+                    next_e = evaluate(next_expr);
+                    expr_free(next_expr);
+                }
                 expr_free(curr_e);
                 curr_e = next_e;
             }
 
             val += di_val;
-            steps++;
-            if (steps > 1000000) break;
         }
         if (curr_e) expr_free(curr_e);
         autocompiled_free(ac);
+    }
+
+    /* A finite range whose element count exceeded the backstop: free what was
+     * collected and leave Table[...] unevaluated, as Sum/Product do on overflow,
+     * rather than returning a silently-truncated list. */
+    if (overflow) {
+        for (size_t i = 0; i < results_count; i++) expr_free(results[i]);
+        free(results);
+        iter_spec_restore(var_sym, old_own);
+        iter_spec_free(&s);
+        return NULL;
     }
 
     iter_spec_restore(var_sym, old_own);

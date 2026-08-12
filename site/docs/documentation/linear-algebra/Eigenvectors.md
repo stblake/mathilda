@@ -96,6 +96,9 @@ Out[3]= {1.0, 1.0}
 
 In[4]:= Norm /@ Eigenvectors[{{1, 2}, {2, 1}}]
 Out[4]= {Sqrt[2], Sqrt[2]}
+
+In[5]:= FreeQ[Eigenvectors[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}], {0, 0, 0}]
+Out[5]= True
 ```
 
 ## Implementation notes

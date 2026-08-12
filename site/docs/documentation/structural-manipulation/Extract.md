@@ -31,6 +31,7 @@ _No verified examples yet for this function._
 - `Extract[expr, {i, j, ...}]` is equivalent to `Part[expr, i, j, ...]`.
 - `pos` can be of the more general form `{part1, part2, ...}` where `parti` are `Part` specifications such as an integer `i`, `All` or `Span`.
 - You can use `Extract[expr, ..., Hold]` to extract parts without evaluation.
+- Reads a [packed list](../packed-arrays/index.md) through the buffer, the same gather
 
 **Attributes:** `NHoldRest`, `Protected`.
 

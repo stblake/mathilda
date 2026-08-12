@@ -28,6 +28,7 @@
  */
 #include "erf.h"
 #include "sym_names.h"
+#include "interval.h"
 
 #include <complex.h>
 #include <math.h>
@@ -476,6 +477,9 @@ Expr* builtin_erf(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
+    if (argc == 1 && is_interval(args[0])) {
+        Expr* r = interval_apply_function("Erf", args[0]); if (r) return r;
+    }
     if (argc == 1) return erf_one_arg(args[0]);
     if (argc == 2) return erf_two_arg(args[0], args[1]);
     return erf_emit_argt(argc);

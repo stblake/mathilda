@@ -418,12 +418,15 @@ seconds (`Sqrt[3141592653589793238]` took 24 s while
 ## Mod, Quotient, QuotientRemainder
 
 - `Mod[n, m]`: Remainder of `n/m`.
-- `Quotient[n, m]`: `Floor[n/m]` — floored, not truncated or rounded, so
-  `Quotient[-5.5, 3.]` is `-2`. The three-argument form `Quotient[n, m, d]` is
-  `Floor[(n - d)/m]`. Complex arguments are handled componentwise on the
-  quotient (`Quotient[10 + 2 I, 3 + I]` is `3 - I`) and agree with
-  `Floor[n/m]`; before 2026-07-27 the complex branch rounded instead of
-  flooring and disagreed with both the real branch and `Floor`.
+- `Quotient[n, m]`: for **real** `n, m`, `Floor[n/m]` — floored, not truncated or
+  rounded, so `Quotient[-5.5, 3.]` is `-2`. The three-argument form
+  `Quotient[n, m, d]` is `Floor[(n - d)/m]`. For **complex** `n` or `m` it is
+  Gaussian-integer division: the ratio's real and imaginary parts are each
+  **rounded to the nearest integer** (ties to even, like `Round[]`), giving the
+  quotient of least remainder norm. So `Quotient[10 + 2 I, 3 + I]` is `3`,
+  `Quotient[17.5 + 6 I, 1 + 2 I]` is `6 - 6 I`, and `Quotient[5 + 3 I, 2]` is
+  `2 + 2 I`. The two branches deliberately differ — an imaginary part changes
+  which integer is nearest — and both match Mathematica.
 - `QuotientRemainder[n, m]`: Returns `{Quotient[n, m], Mod[n, m]}`.
 
 Over a list, both run on the machine buffer and keep the result packed. Their
@@ -966,6 +969,9 @@ Falling factorial. `FactorialPower[n, k]` = $n (n-1) (n-2) \cdots (n - k + 1)$.
 - For symbolic $n$ with concrete $k \le 32$: expands to an explicit product
   `Times[n, n - 1, ..., n - k + 1]` so `Expand` and `D` can act on it.
 - Equivalent to $n! / (n - k)!$ when both arguments are non-negative integers.
+- For a **non-integer numeric** $k$ (under `N`), evaluates the generalised form
+  $\Gamma(n+1)/\Gamma(n-k+1)$ (real, complex, arbitrary precision); exact
+  non-integer $k$ stays symbolic.
 - Used as the symbolic-order derivative of a power: $D[x^n, \{x, k\}] = \mathrm{FactorialPower}[n, k]\, x^{n-k}$.
 
 ```mathematica
@@ -994,7 +1000,11 @@ $\Gamma(n+1)/(\Gamma(m+1)\,\Gamma(n-m+1))$.
 - Exact integer/integer path uses GMP (`mpz_bin_ui`), including the
   Pascal extension `Binomial[n, m] = (-1)^m Binomial[m-n-1, m]` for
   negative `n`.
-- Machine-precision real branch via `tgamma`.
+- Machine-precision real branch via `tgamma`. Fires when either operand
+  is a machine real; the other may be any real-numeric leaf (integer,
+  bigint, rational, MPFR) — so `Binomial[2.5, 1/5] → 1.34885`. If an
+  operand is symbolic the branch declines and the form stays symbolic
+  (`Binomial[2.5, x]`) rather than reading the sibling as `0`.
 - Symmetric identity: when `n - m` simplifies to a non-negative
   integer `k ≤ 32`, reduces to `Binomial[n, k]` and expands as a
   falling-factorial polynomial. This catches `Binomial[n, n - 1] → n`,
@@ -1004,6 +1014,27 @@ $\Gamma(n+1)/(\Gamma(m+1)\,\Gamma(n-m+1))$.
   rational, complex, …) expands to the falling-factorial polynomial
   `n (n-1) (n-2) ... (n-m+1) / m!`, which the `Times`/`Plus` folders
   then simplify.
+- Arbitrary-precision real branch via MPFR (`mpfr_gamma`), evaluating the
+  Gamma quotient at the working precision. It leaves the exact rational
+  form symbolic — `Binomial[7/3, 1/5]` stays `Binomial[7/3, 1/5]`, as in
+  Mathematica — but supplies a value under `N[Binomial[7/3, 1/5], p]`.
+  Placed after the integer-`m` branch so an integer `m` keeps the exact
+  falling-factorial form. The working precision follows the usual
+  contagion rule (minimum precision among the inexact operands, floored
+  at machine 53).
+- Complex numeric branch: fires when the computation is numeric — an
+  inexact operand is present (a machine or MPFR real, or a `Complex[..]`
+  with an inexact part) — **and** a complex operand is present, so the
+  real-only machine branch has declined. The Gamma quotient is built as an
+  expression and evaluated, reusing `Gamma`'s complex kernels (machine
+  Lanczos, and the arbitrary-precision Spouge path under MPFR) and the
+  complex-arithmetic folders; any exact Gaussian sibling (`1 + I`,
+  `7 - 3 I`) is carried along by the `Times`/`Plus` numeric contagion as the
+  quotient folds. So `Binomial[1 + I, 5.]`, `Binomial[2. + I, 7 - 3 I]`,
+  `N[Binomial[1/2 + I/3, 1/4]]` and `N[Binomial[1/2 + I/3, 1/4], 25]` all
+  evaluate. The result is accepted only if it is numeric, so a pole or a
+  symbolic operand leaves the form symbolic. A pair of **exact** Gaussians
+  with no inexact operand (`Binomial[1 + I, 2 + I]`) stays symbolic.
 
 ```mathematica
 In[1]:= Binomial[10, 3]
@@ -1026,6 +1057,33 @@ Out[6]= -1/12 - I/12
 
 In[7]:= Binomial[0, 1]
 Out[7]= 0
+
+In[8]:= Binomial[7/3, 1/5]
+Out[8]= Binomial[7/3, 1/5]
+
+In[9]:= N[Binomial[7/3, 1/5]]
+Out[9]= 1.33313
+
+In[10]:= N[Binomial[7/3, 1/5], 25]
+Out[10]= 1.3331254244650286522359229
+
+In[11]:= Binomial[2.5, 1/5]
+Out[11]= 1.34885
+
+In[12]:= Binomial[1/2 + I/3, 1/4]
+Out[12]= Binomial[1/2 + I/3, 1/4]
+
+In[13]:= N[Binomial[1/2 + I/3, 1/4]]
+Out[13]= 1.08987 + 0.0929283 I
+
+In[14]:= N[Binomial[1/2 + I/3, 1/4], 25]
+Out[14]= 1.0898678407199392604353272 + 0.092928304677202434313313055 I
+
+In[15]:= Binomial[1 + I, 5.]
+Out[15]= -0.0833333 - 0.0833333 I
+
+In[16]:= Binomial[2. + I, 7 - 3 I]
+Out[16]= -75.4683 + 106.815 I
 ```
 
 ## Fibonacci
@@ -1182,3 +1240,163 @@ Out[3]= 1/2 (z^2 + Conjugate[z]^2)
 In[4]:= ComplexExpand[Tan[x + I y]]
 Out[4]= Sin[2 x]/(Cos[2 x] + Cosh[2 y]) + I Sinh[2 y]/(Cos[2 x] + Cosh[2 y])
 ```
+
+---
+
+## Interval arithmetic
+
+`Interval[{min, max}]` represents the closed range of real values between `min`
+and `max`. The multi-argument form
+`Interval[{min1, max1}, {min2, max2}, ...]` is the union of the ranges. An
+`Interval` is an ordinary expression with head `Interval` (like `Complex[re,im]`
+and `Rational[n,d]`) and participates in arithmetic and elementary functions —
+this is *interval arithmetic*, where every result is a rigorous enclosure of the
+true value.
+
+**Representation and canonical form.** Each argument is a two-element `List`
+`{lo, hi}`; the canonicalizer orders each pair so `lo ≤ hi`, sorts the pairs by
+lower endpoint, and merges overlapping or touching pairs (closed-interval union,
+so `{1,2}` and `{2,3}` merge to `{1,3}`). `Interval[x]` for a single number is
+the point interval `Interval[{x, x}]`. Endpoints may be exact
+(Integer/Rational), `±Infinity`, symbolic numerics (`Sin[2]`, `Pi`), or
+approximate (Real/MPFR). Non-comparable symbolic endpoints are left in place.
+
+**Exactness.** Exact endpoints stay exact/symbolic; only approximate endpoints
+go numeric. Endpoint operations are carried out by the ordinary (correctly
+rounded) kernels, then an inexact result is nudged one ULP *outward* (lower
+bounds down, upper bounds up) so the enclosure stays rigorous — no new
+dependency is required (the widening uses `nextafter` / `mpfr_nextbelow`
+/`mpfr_nextabove`).
+
+**Arithmetic.** `Plus`, `Times`, `Power` (integer and positive-real exponents),
+`Divide`, and `Subtract` thread through intervals, including disjoint-union
+results:
+
+```
+In[1]:= Interval[{1, 6}] + Interval[{0, 2}]
+Out[1]= Interval[{1, 8}]
+
+In[2]:= Interval[{-2, 5}]^2
+Out[2]= Interval[{0, 25}]
+
+In[3]:= 1/Interval[{-2, 5}]
+Out[3]= Interval[{-Infinity, -1/2}, {1/5, Infinity}]
+
+In[4]:= Interval[{-1, 2}] Interval[{3, 4}]
+Out[4]= Interval[{-4, 8}]
+```
+
+`Power` also covers `scalar^Interval` and `Interval^Interval` (positive base):
+
+```
+In[4b]:= 2^Interval[{1, 3}]
+Out[4b]= Interval[{2, 8}]
+
+In[4c]:= Interval[{2, 3}]^Interval[{1, 2}]
+Out[4c]= Interval[{2, 9}]
+```
+
+**Elementary functions.** `Exp`, `Log`, `Sqrt`, `Sinh`, `Tanh`, `ArcTan`,
+`ArcSin`, `ArcSinh`, `ArcCosh`, `ArcTanh` (monotone increasing), `ArcCos`
+(decreasing), and `Sin`, `Cos`, `Tan`, `Abs`, `Cosh` (non-monotone, with
+critical-point range analysis) thread through intervals. The range analysis pins
+an extremum to the exact value `±1` (or `Cosh`'s minimum `1`) when a
+crest/trough lies inside the interval, and otherwise keeps the endpoint value
+symbolic:
+
+```
+In[5]:= Sin[Interval[{2, 7}]]
+Out[5]= Interval[{-1, Sin[2]}]
+
+In[6]:= Sin[Interval[{2, 10}]]
+Out[6]= Interval[{-1, 1}]
+
+In[7]:= Sin[Interval[{2.5, 5.5}]]
+Out[7]= Interval[{-1, 0.598472}]
+
+In[8]:= Sqrt[Interval[{4, 9}]]
+Out[8]= Interval[{2, 3}]
+```
+
+The threaded set also includes the **reciprocal trig/hyperbolic** functions
+`Cot`, `Sec`, `Csc`, `Coth`, `Sech`, `Csch` (built as `1/base`, so a pole is
+returned as a disjoint union), the **inverse-reciprocal** functions `ArcCot`,
+`ArcSec`, `ArcCsc`, `ArcCoth`, `ArcSech`, `ArcCsch` (built as
+`inverse_base(1/x)`, so a discontinuity such as `ArcCot`'s at 0 becomes a
+disjoint union and an out-of-domain interval stays symbolic), the
+**rounding/sign** functions `Sign`, `Floor`, `Ceiling` (monotone
+non-decreasing), and several **special functions** on the sub-domain where each
+is monotone: `Erf`/`Erfc` (all of ℝ), `Gamma`/`LogGamma`
+(increasing above the minimum `x ≈ 1.4616`, decreasing below it), `Zeta` (on
+`x > 1`), and `PolyGamma[n, ·]` (on `x > 0`, increasing for even `n`). Outside a
+known monotone region a special function is left symbolic rather than risk a
+wrong bound:
+
+```
+In[8b]:= Sec[Interval[{1, 2}]]
+Out[8b]= Interval[{-Infinity, Sec[2]}, {Sec[1], Infinity}]
+
+In[8c]:= Gamma[Interval[{2, 3}]]
+Out[8c]= Interval[{1, 2}]
+
+In[8d]:= Zeta[Interval[{2, 3}]]
+Out[8d]= Interval[{Zeta[3], 1/6 Pi^2}]
+
+In[8e]:= Gamma[Interval[{1, 2}]]        (* straddles the minimum: stays symbolic *)
+Out[8e]= Gamma[Interval[{1, 2}]]
+```
+
+**Endpoints and comparisons.** `Min[interval]` and `Max[interval]` return the
+lowest and highest endpoints. Relational operators (`Equal`, `Less`, `Greater`,
+…) yield explicit `True`/`False` when the interval is disjoint from the other
+operand, and stay symbolic otherwise:
+
+```
+In[9]:= Min[Interval[{2, 7}]]
+Out[9]= 2
+
+In[10]:= Interval[{5, 8}] > Pi
+Out[10]= True
+
+In[11]:= Interval[{1, 4}] > Pi
+Out[11]= Interval[{1, 4}] > Pi
+```
+
+Interval-vs-interval comparisons decide `True`/`False` when the two intervals
+are disjoint, and stay symbolic when they overlap.
+
+**Companion set operations.**
+
+- `IntervalUnion[i1, i2, ...]` — the merged union (also `Interval`'s multi-argument
+  form). `Flat` and `Orderless`.
+- `IntervalIntersection[i1, i2, ...]` — the intersection, or the empty interval
+  `Interval[]` when the arguments are disjoint. `Flat` and `Orderless`.
+- `IntervalMemberQ[interval, x]` — `True` if the number `x` lies in `interval`;
+  `IntervalMemberQ[interval, other]` tests whether the interval `other` is wholly
+  contained.
+
+```
+In[12]:= IntervalUnion[Interval[{1, 3}], Interval[{2, 5}], Interval[{10, 11}]]
+Out[12]= Interval[{1, 5}, {10, 11}]
+
+In[13]:= IntervalIntersection[Interval[{1, 5}], Interval[{3, 8}]]
+Out[13]= Interval[{3, 5}]
+
+In[14]:= IntervalMemberQ[Interval[{1, 5}], Pi]
+Out[14]= True
+```
+
+**Attributes.** `Interval` is `Protected`. It is deliberately *not*
+`NumericFunction` (an interval is a set, not a scalar) and *not* `Listable`.
+
+Implemented in `src/interval.{c,h}`; the arithmetic hooks live in
+`src/plus.c` (`add_numbers`), `src/times.c` (the collector's interval
+accumulator), and `src/power.c`.
+
+**Not modelled.** Approximate numbers become *point* intervals
+(`Interval[1.]` → `Interval[{1., 1.}]`) — a tight, rigorous enclosure of the
+machine value; Wolfram's half-ULP "uncertainty preloading" of a machine number
+is not replicated, because Mathilda's printer shows full precision and would
+render `[1.−ulp, 1.+ulp]` as `{0.9999…, 1.0000…}` rather than `{1., 1.}`.
+`Interval` is also not (yet) usable as a geometric `Region`, since Mathilda has
+no `RegionMember`/region subsystem.

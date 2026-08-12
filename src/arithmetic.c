@@ -207,9 +207,18 @@ Expr* builtin_divide(Expr* res) {
     if (num->type == EXPR_NDARRAY || den->type == EXPR_NDARRAY)
         goto rewrite;
 
-    if (num->type == EXPR_REAL || den->type == EXPR_REAL) {
-        double vnum = (num->type == EXPR_REAL) ? num->data.real : (num->type == EXPR_INTEGER) ? (double)num->data.integer : (num->type == EXPR_BIGINT) ? mpz_get_d(num->data.bigint) : 0.0;
-        double vden = (den->type == EXPR_REAL) ? den->data.real : (den->type == EXPR_INTEGER) ? (double)den->data.integer : (den->type == EXPR_BIGINT) ? mpz_get_d(den->data.bigint) : 0.0;
+    /* The machine-Real fast path may only claim operands it can actually read
+     * as a machine real (Real / Integer / BigInt).  A Rational, MPFR, or Complex
+     * sibling of a machine real would otherwise be misread as 0 -- e.g.
+     * Divide[2.5, 1/3] -> ComplexInfinity, Divide[N[1/4,30], 2.0] -> 0.,
+     * Divide[2.0, 1+I] -> ComplexInfinity.  For those, fall through to the exact
+     * Times[num, Power[den, -1]] rewrite below (Power/Times handle rational,
+     * arbitrary-precision, and complex operands correctly). */
+    bool num_mreal = (num->type == EXPR_REAL || num->type == EXPR_INTEGER || num->type == EXPR_BIGINT);
+    bool den_mreal = (den->type == EXPR_REAL || den->type == EXPR_INTEGER || den->type == EXPR_BIGINT);
+    if ((num->type == EXPR_REAL || den->type == EXPR_REAL) && num_mreal && den_mreal) {
+        double vnum = (num->type == EXPR_REAL) ? num->data.real : (num->type == EXPR_INTEGER) ? (double)num->data.integer : mpz_get_d(num->data.bigint);
+        double vden = (den->type == EXPR_REAL) ? den->data.real : (den->type == EXPR_INTEGER) ? (double)den->data.integer : mpz_get_d(den->data.bigint);
         if (vden == 0.0) {
             if (!arith_warnings_muted())
                 fprintf(stderr, "Power::infy: Infinite expression 1/0 encountered.\n");

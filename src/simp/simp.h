@@ -74,4 +74,26 @@ bool assume_known_real    (const AssumeCtx* ctx, const Expr* x);
 bool assume_known_integer (const AssumeCtx* ctx, const Expr* x);
 bool assume_known_even    (const AssumeCtx* ctx, const Expr* x);
 
+/* Threshold queries. `assume_known_gt/lt` decide entailment of expr vs a
+ * numeric literal k (a > 1 so Log[a] > 0); `assume_known_gt_expr` decides a
+ * strict ordering A > B of two expressions (n > m so x^n dominates x^m).
+ * Sound: a decision only on a direct entailing fact, no transitive chaining. */
+bool assume_known_gt     (const AssumeCtx* ctx, const Expr* expr, const Expr* k);
+bool assume_known_lt     (const AssumeCtx* ctx, const Expr* expr, const Expr* k);
+bool assume_known_gt_expr(const AssumeCtx* ctx, const Expr* A, const Expr* B);
+
+/* Read the ambient $Assumptions (its OwnValue, unevaluated -- evaluating it
+ * would recurse through Element); returns the symbol True when unset. The
+ * caller owns the result. Shared by builtins that honour ambient assumptions
+ * (Simplify, PossibleZeroQ, Limit). */
+Expr* read_dollar_assumptions(void);
+
+/* Apply the assumption-derived rewrite rules (Sqrt[x^2]->x, Abs[x]->±x,
+ * Log[x^p]->p Log[x], Sign[x]->±1, Conjugate[x]->x for real x, even/integer
+ * and Equal[] substitutions) to `input` via ReplaceRepeated. Returns a newly
+ * owned expression, or NULL when ctx is NULL or no rule was generated (so a
+ * NULL return means "unchanged"). The input is not consumed. Shared by
+ * Simplify's assumption seeds and by Series's coefficient cleanup. */
+Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx);
+
 #endif /* MATHILDA_SIMP_H */

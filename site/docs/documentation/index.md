@@ -2,7 +2,7 @@
 
 Every public built-in function in Mathilda, grouped by category. Each page follows the same shape: **Description** (the function's docstring), **Examples** (verified against the current build), **Implementation notes**, **Implementation status**, and **References**.
 
-_700 functions across 32 categories. Use the search box (press `/`) to jump to any function._
+_743 functions across 33 categories. Use the search box (press `/`) to jump to any function._
 
 ## Categories
 
@@ -16,7 +16,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 
 ### [Assignment and Rules](assignment-and-rules/index.md)
 
-[`AddTo`](assignment-and-rules/AddTo.md)  [`Clear`](assignment-and-rules/Clear.md)  [`ClearAll`](assignment-and-rules/ClearAll.md)  [`CompoundExpression`](assignment-and-rules/CompoundExpression.md)  [`Decrement`](assignment-and-rules/Decrement.md)  [`DownValues`](assignment-and-rules/DownValues.md)  [`Increment`](assignment-and-rules/Increment.md)  [`OptionValue`](assignment-and-rules/OptionValue.md)  [`Options`](assignment-and-rules/Options.md)  [`OwnValues`](assignment-and-rules/OwnValues.md)  [`PreDecrement`](assignment-and-rules/PreDecrement.md)  [`PreIncrement`](assignment-and-rules/PreIncrement.md)  [`Protect`](assignment-and-rules/Protect.md)  [`Remove`](assignment-and-rules/Remove.md)  [`Replace`](assignment-and-rules/Replace.md)  [`ReplaceAll`](assignment-and-rules/ReplaceAll.md)  [`ReplaceAt`](assignment-and-rules/ReplaceAt.md)  [`ReplaceList`](assignment-and-rules/ReplaceList.md)  [`ReplaceRepeated`](assignment-and-rules/ReplaceRepeated.md)  [`Rule`](assignment-and-rules/Rule.md)  [`RuleDelayed`](assignment-and-rules/RuleDelayed.md)  [`Set`](assignment-and-rules/Set.md)  [`SetDelayed`](assignment-and-rules/SetDelayed.md)  [`SetOptions`](assignment-and-rules/SetOptions.md)  [`SubtractFrom`](assignment-and-rules/SubtractFrom.md)  [`Unprotect`](assignment-and-rules/Unprotect.md)  [`Unset`](assignment-and-rules/Unset.md)
+[`AddTo`](assignment-and-rules/AddTo.md)  [`Clear`](assignment-and-rules/Clear.md)  [`ClearAll`](assignment-and-rules/ClearAll.md)  [`CompoundExpression`](assignment-and-rules/CompoundExpression.md)  [`Decrement`](assignment-and-rules/Decrement.md)  [`DivideBy`](assignment-and-rules/DivideBy.md)  [`DownValues`](assignment-and-rules/DownValues.md)  [`Increment`](assignment-and-rules/Increment.md)  [`OptionValue`](assignment-and-rules/OptionValue.md)  [`Options`](assignment-and-rules/Options.md)  [`OwnValues`](assignment-and-rules/OwnValues.md)  [`PreDecrement`](assignment-and-rules/PreDecrement.md)  [`PreIncrement`](assignment-and-rules/PreIncrement.md)  [`Protect`](assignment-and-rules/Protect.md)  [`Remove`](assignment-and-rules/Remove.md)  [`Replace`](assignment-and-rules/Replace.md)  [`ReplaceAll`](assignment-and-rules/ReplaceAll.md)  [`ReplaceAt`](assignment-and-rules/ReplaceAt.md)  [`ReplaceList`](assignment-and-rules/ReplaceList.md)  [`ReplaceRepeated`](assignment-and-rules/ReplaceRepeated.md)  [`Rule`](assignment-and-rules/Rule.md)  [`RuleDelayed`](assignment-and-rules/RuleDelayed.md)  [`Set`](assignment-and-rules/Set.md)  [`SetDelayed`](assignment-and-rules/SetDelayed.md)  [`SetOptions`](assignment-and-rules/SetOptions.md)  [`SubtractFrom`](assignment-and-rules/SubtractFrom.md)  [`TimesBy`](assignment-and-rules/TimesBy.md)  [`Unprotect`](assignment-and-rules/Unprotect.md)  [`Unset`](assignment-and-rules/Unset.md)
 
 ### [Calculus](calculus/index.md)
 
@@ -28,15 +28,15 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 
 ### [Control Flow](control-flow/index.md)
 
-[`$Epilog`](control-flow/$Epilog.md)  [`$Post`](control-flow/$Post.md)  [`$Pre`](control-flow/$Pre.md)  [`$PrePrint`](control-flow/$PrePrint.md)  [`$PreRead`](control-flow/$PreRead.md)  [`$RecursionLimit`](control-flow/$RecursionLimit.md)  [`Boole`](control-flow/Boole.md)  [`Break`](control-flow/Break.md)  [`Catch`](control-flow/Catch.md)  [`ConditionalExpression`](control-flow/ConditionalExpression.md)  [`Continue`](control-flow/Continue.md)  [`Do`](control-flow/Do.md)  [`For`](control-flow/For.md)  [`Goto`](control-flow/Goto.md)  [`If`](control-flow/If.md)  [`Label`](control-flow/Label.md)  [`Piecewise`](control-flow/Piecewise.md)  [`Return`](control-flow/Return.md)  [`Switch`](control-flow/Switch.md)  [`Throw`](control-flow/Throw.md)  [`TrueQ`](control-flow/TrueQ.md)  [`Which`](control-flow/Which.md)  [`While`](control-flow/While.md)
+[`$Epilog`](control-flow/$Epilog.md)  [`$Post`](control-flow/$Post.md)  [`$Pre`](control-flow/$Pre.md)  [`$PrePrint`](control-flow/$PrePrint.md)  [`$PreRead`](control-flow/$PreRead.md)  [`$RecursionLimit`](control-flow/$RecursionLimit.md)  [`Boole`](control-flow/Boole.md)  [`Break`](control-flow/Break.md)  [`Catch`](control-flow/Catch.md)  [`Compile`](control-flow/Compile.md)  [`CompileDiagnostics`](control-flow/CompileDiagnostics.md)  [`CompilePrint`](control-flow/CompilePrint.md)  [`ConditionalExpression`](control-flow/ConditionalExpression.md)  [`Continue`](control-flow/Continue.md)  [`Do`](control-flow/Do.md)  [`For`](control-flow/For.md)  [`Goto`](control-flow/Goto.md)  [`If`](control-flow/If.md)  [`Label`](control-flow/Label.md)  [`Piecewise`](control-flow/Piecewise.md)  [`Return`](control-flow/Return.md)  [`Switch`](control-flow/Switch.md)  [`Throw`](control-flow/Throw.md)  [`TrueQ`](control-flow/TrueQ.md)  [`Which`](control-flow/Which.md)  [`While`](control-flow/While.md)
 
 ### [Data Structures](data-structures/index.md)
 
-[`Append`](data-structures/Append.md)  [`Apply`](data-structures/Apply.md)  [`AssociateTo`](data-structures/AssociateTo.md)  [`Association`](data-structures/Association.md)  [`AssociationMap`](data-structures/AssociationMap.md)  [`AssociationQ`](data-structures/AssociationQ.md)  [`AssociationThread`](data-structures/AssociationThread.md)  [`Cases`](data-structures/Cases.md)  [`Count`](data-structures/Count.md)  [`Counts`](data-structures/Counts.md)  [`CountsBy`](data-structures/CountsBy.md)  [`Delete`](data-structures/Delete.md)  [`DeleteCases`](data-structures/DeleteCases.md)  [`DeleteDuplicates`](data-structures/DeleteDuplicates.md)  [`DeleteDuplicatesBy`](data-structures/DeleteDuplicatesBy.md)  [`DeleteMissing`](data-structures/DeleteMissing.md)  [`Drop`](data-structures/Drop.md)  [`First`](data-structures/First.md)  [`FoldList`](data-structures/FoldList.md)  [`GatherBy`](data-structures/GatherBy.md)  [`GroupBy`](data-structures/GroupBy.md)  [`Join`](data-structures/Join.md)  [`KeyDrop`](data-structures/KeyDrop.md)  [`KeyExistsQ`](data-structures/KeyExistsQ.md)  [`KeyFreeQ`](data-structures/KeyFreeQ.md)  [`KeyMap`](data-structures/KeyMap.md)  [`KeyMemberQ`](data-structures/KeyMemberQ.md)  [`KeySelect`](data-structures/KeySelect.md)  [`KeySort`](data-structures/KeySort.md)  [`KeySortBy`](data-structures/KeySortBy.md)  [`KeyTake`](data-structures/KeyTake.md)  [`KeyUnion`](data-structures/KeyUnion.md)  [`KeyValueMap`](data-structures/KeyValueMap.md)  [`KeyValuePattern`](data-structures/KeyValuePattern.md)  [`Keys`](data-structures/Keys.md)  [`Last`](data-structures/Last.md)  [`LengthWhile`](data-structures/LengthWhile.md)  [`Lookup`](data-structures/Lookup.md)  [`Map`](data-structures/Map.md)  [`MapAt`](data-structures/MapAt.md)  [`Max`](data-structures/Max.md)  [`Mean`](data-structures/Mean.md)  [`Median`](data-structures/Median.md)  [`Merge`](data-structures/Merge.md)  [`Min`](data-structures/Min.md)  [`MinMax`](data-structures/MinMax.md)  [`Most`](data-structures/Most.md)  [`Position`](data-structures/Position.md)  [`PositionIndex`](data-structures/PositionIndex.md)  [`Prepend`](data-structures/Prepend.md)  [`Rest`](data-structures/Rest.md)  [`Select`](data-structures/Select.md)  [`Sort`](data-structures/Sort.md)  [`SortBy`](data-structures/SortBy.md)  [`StandardDeviation`](data-structures/StandardDeviation.md)  [`Take`](data-structures/Take.md)  [`TakeWhile`](data-structures/TakeWhile.md)  [`Tally`](data-structures/Tally.md)  [`Values`](data-structures/Values.md)  [`Variance`](data-structures/Variance.md)
+[`Append`](data-structures/Append.md)  [`Apply`](data-structures/Apply.md)  [`AssociateTo`](data-structures/AssociateTo.md)  [`Association`](data-structures/Association.md)  [`AssociationMap`](data-structures/AssociationMap.md)  [`AssociationQ`](data-structures/AssociationQ.md)  [`AssociationThread`](data-structures/AssociationThread.md)  [`Cases`](data-structures/Cases.md)  [`Count`](data-structures/Count.md)  [`Counts`](data-structures/Counts.md)  [`CountsBy`](data-structures/CountsBy.md)  [`Delete`](data-structures/Delete.md)  [`DeleteCases`](data-structures/DeleteCases.md)  [`DeleteDuplicates`](data-structures/DeleteDuplicates.md)  [`DeleteDuplicatesBy`](data-structures/DeleteDuplicatesBy.md)  [`DeleteMissing`](data-structures/DeleteMissing.md)  [`Drop`](data-structures/Drop.md)  [`First`](data-structures/First.md)  [`FoldList`](data-structures/FoldList.md)  [`Gather`](data-structures/Gather.md)  [`GatherBy`](data-structures/GatherBy.md)  [`GroupBy`](data-structures/GroupBy.md)  [`Join`](data-structures/Join.md)  [`KeyDrop`](data-structures/KeyDrop.md)  [`KeyExistsQ`](data-structures/KeyExistsQ.md)  [`KeyFreeQ`](data-structures/KeyFreeQ.md)  [`KeyMap`](data-structures/KeyMap.md)  [`KeyMemberQ`](data-structures/KeyMemberQ.md)  [`KeySelect`](data-structures/KeySelect.md)  [`KeySort`](data-structures/KeySort.md)  [`KeySortBy`](data-structures/KeySortBy.md)  [`KeyTake`](data-structures/KeyTake.md)  [`KeyUnion`](data-structures/KeyUnion.md)  [`KeyValueMap`](data-structures/KeyValueMap.md)  [`KeyValuePattern`](data-structures/KeyValuePattern.md)  [`Keys`](data-structures/Keys.md)  [`Last`](data-structures/Last.md)  [`LengthWhile`](data-structures/LengthWhile.md)  [`Lookup`](data-structures/Lookup.md)  [`Map`](data-structures/Map.md)  [`MapAt`](data-structures/MapAt.md)  [`Max`](data-structures/Max.md)  [`Mean`](data-structures/Mean.md)  [`Median`](data-structures/Median.md)  [`Merge`](data-structures/Merge.md)  [`Min`](data-structures/Min.md)  [`MinMax`](data-structures/MinMax.md)  [`Most`](data-structures/Most.md)  [`Position`](data-structures/Position.md)  [`PositionIndex`](data-structures/PositionIndex.md)  [`Prepend`](data-structures/Prepend.md)  [`Rest`](data-structures/Rest.md)  [`Select`](data-structures/Select.md)  [`Sort`](data-structures/Sort.md)  [`SortBy`](data-structures/SortBy.md)  [`StandardDeviation`](data-structures/StandardDeviation.md)  [`Take`](data-structures/Take.md)  [`TakeWhile`](data-structures/TakeWhile.md)  [`Tally`](data-structures/Tally.md)  [`Values`](data-structures/Values.md)  [`Variance`](data-structures/Variance.md)
 
 ### [Elementary Functions](elementary-functions/index.md)
 
-[`ArcCos`](elementary-functions/ArcCos.md)  [`ArcSin`](elementary-functions/ArcSin.md)  [`ArcTan`](elementary-functions/ArcTan.md)  [`Chop`](elementary-functions/Chop.md)  [`Clip`](elementary-functions/Clip.md)  [`Cos`](elementary-functions/Cos.md)  [`Cosh`](elementary-functions/Cosh.md)  [`Cot`](elementary-functions/Cot.md)  [`Csc`](elementary-functions/Csc.md)  [`Exp`](elementary-functions/Exp.md)  [`ExpToTrig`](elementary-functions/ExpToTrig.md)  [`Log`](elementary-functions/Log.md)  [`Sec`](elementary-functions/Sec.md)  [`Sin`](elementary-functions/Sin.md)  [`Sinh`](elementary-functions/Sinh.md)  [`Tan`](elementary-functions/Tan.md)  [`Tanh`](elementary-functions/Tanh.md)  [`TrigExpand`](elementary-functions/TrigExpand.md)  [`TrigFactor`](elementary-functions/TrigFactor.md)  [`TrigReduce`](elementary-functions/TrigReduce.md)  [`TrigToExp`](elementary-functions/TrigToExp.md)  [`UnitStep`](elementary-functions/UnitStep.md)
+[`ArcCos`](elementary-functions/ArcCos.md)  [`ArcSin`](elementary-functions/ArcSin.md)  [`ArcTan`](elementary-functions/ArcTan.md)  [`Chop`](elementary-functions/Chop.md)  [`Clip`](elementary-functions/Clip.md)  [`Cos`](elementary-functions/Cos.md)  [`Cosh`](elementary-functions/Cosh.md)  [`Cot`](elementary-functions/Cot.md)  [`Csc`](elementary-functions/Csc.md)  [`Exp`](elementary-functions/Exp.md)  [`ExpToTrig`](elementary-functions/ExpToTrig.md)  [`Log`](elementary-functions/Log.md)  [`Ramp`](elementary-functions/Ramp.md)  [`Sec`](elementary-functions/Sec.md)  [`Sin`](elementary-functions/Sin.md)  [`Sinh`](elementary-functions/Sinh.md)  [`Tan`](elementary-functions/Tan.md)  [`Tanh`](elementary-functions/Tanh.md)  [`TrigExpand`](elementary-functions/TrigExpand.md)  [`TrigFactor`](elementary-functions/TrigFactor.md)  [`TrigReduce`](elementary-functions/TrigReduce.md)  [`TrigToExp`](elementary-functions/TrigToExp.md)  [`UnitStep`](elementary-functions/UnitStep.md)
 
 ### [Expression Information](expression-information/index.md)
 
@@ -64,11 +64,11 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 
 ### [Linear Algebra](linear-algebra/index.md)
 
-[`ConjugateTranspose`](linear-algebra/ConjugateTranspose.md)  [`Cross`](linear-algebra/Cross.md)  [`DesignMatrix`](linear-algebra/DesignMatrix.md)  [`Det`](linear-algebra/Det.md)  [`DiagonalMatrix`](linear-algebra/DiagonalMatrix.md)  [`DiagonalMatrixQ`](linear-algebra/DiagonalMatrixQ.md)  [`Dot`](linear-algebra/Dot.md)  [`Eigenvalues`](linear-algebra/Eigenvalues.md)  [`Eigenvectors`](linear-algebra/Eigenvectors.md)  [`FindIntegerNullVector`](linear-algebra/FindIntegerNullVector.md)  [`Fit`](linear-algebra/Fit.md)  [`HankelMatrix`](linear-algebra/HankelMatrix.md)  [`HermitianMatrixQ`](linear-algebra/HermitianMatrixQ.md)  [`HilbertMatrix`](linear-algebra/HilbertMatrix.md)  [`IdentityMatrix`](linear-algebra/IdentityMatrix.md)  [`Inner`](linear-algebra/Inner.md)  [`Inverse`](linear-algebra/Inverse.md)  [`LUDecomposition`](linear-algebra/LUDecomposition.md)  [`LatticeReduce`](linear-algebra/LatticeReduce.md)  [`LeastSquares`](linear-algebra/LeastSquares.md)  [`LinearSolve`](linear-algebra/LinearSolve.md)  [`MatrixPower`](linear-algebra/MatrixPower.md)  [`MatrixRank`](linear-algebra/MatrixRank.md)  [`NDArray`](linear-algebra/NDArray.md)  [`NegativeDefiniteMatrixQ`](linear-algebra/NegativeDefiniteMatrixQ.md)  [`Norm`](linear-algebra/Norm.md)  [`Normalize`](linear-algebra/Normalize.md)  [`NullSpace`](linear-algebra/NullSpace.md)  [`Outer`](linear-algebra/Outer.md)  [`PositiveDefiniteMatrixQ`](linear-algebra/PositiveDefiniteMatrixQ.md)  [`PseudoInverse`](linear-algebra/PseudoInverse.md)  [`QRDecomposition`](linear-algebra/QRDecomposition.md)  [`RowReduce`](linear-algebra/RowReduce.md)  [`SingularValueDecomposition`](linear-algebra/SingularValueDecomposition.md)  [`SquareMatrixQ`](linear-algebra/SquareMatrixQ.md)  [`SymmetricMatrixQ`](linear-algebra/SymmetricMatrixQ.md)  [`ToeplitzMatrix`](linear-algebra/ToeplitzMatrix.md)  [`Tr`](linear-algebra/Tr.md)  [`UpperTriangularMatrixQ`](linear-algebra/UpperTriangularMatrixQ.md)  [`VandermondeMatrix`](linear-algebra/VandermondeMatrix.md)
+[`ConjugateTranspose`](linear-algebra/ConjugateTranspose.md)  [`Cross`](linear-algebra/Cross.md)  [`DesignMatrix`](linear-algebra/DesignMatrix.md)  [`Det`](linear-algebra/Det.md)  [`Diagonal`](linear-algebra/Diagonal.md)  [`DiagonalMatrix`](linear-algebra/DiagonalMatrix.md)  [`DiagonalMatrixQ`](linear-algebra/DiagonalMatrixQ.md)  [`Dot`](linear-algebra/Dot.md)  [`Eigenvalues`](linear-algebra/Eigenvalues.md)  [`Eigenvectors`](linear-algebra/Eigenvectors.md)  [`FindIntegerNullVector`](linear-algebra/FindIntegerNullVector.md)  [`Fit`](linear-algebra/Fit.md)  [`HankelMatrix`](linear-algebra/HankelMatrix.md)  [`HermitianMatrixQ`](linear-algebra/HermitianMatrixQ.md)  [`HilbertMatrix`](linear-algebra/HilbertMatrix.md)  [`IdentityMatrix`](linear-algebra/IdentityMatrix.md)  [`Inner`](linear-algebra/Inner.md)  [`Inverse`](linear-algebra/Inverse.md)  [`LUDecomposition`](linear-algebra/LUDecomposition.md)  [`LatticeReduce`](linear-algebra/LatticeReduce.md)  [`LeastSquares`](linear-algebra/LeastSquares.md)  [`LinearSolve`](linear-algebra/LinearSolve.md)  [`MatrixPower`](linear-algebra/MatrixPower.md)  [`MatrixRank`](linear-algebra/MatrixRank.md)  [`NDArray`](linear-algebra/NDArray.md)  [`NegativeDefiniteMatrixQ`](linear-algebra/NegativeDefiniteMatrixQ.md)  [`Norm`](linear-algebra/Norm.md)  [`Normalize`](linear-algebra/Normalize.md)  [`NullSpace`](linear-algebra/NullSpace.md)  [`Outer`](linear-algebra/Outer.md)  [`PositiveDefiniteMatrixQ`](linear-algebra/PositiveDefiniteMatrixQ.md)  [`PseudoInverse`](linear-algebra/PseudoInverse.md)  [`QRDecomposition`](linear-algebra/QRDecomposition.md)  [`RowReduce`](linear-algebra/RowReduce.md)  [`SingularValueDecomposition`](linear-algebra/SingularValueDecomposition.md)  [`SquareMatrixQ`](linear-algebra/SquareMatrixQ.md)  [`SymmetricMatrixQ`](linear-algebra/SymmetricMatrixQ.md)  [`ToeplitzMatrix`](linear-algebra/ToeplitzMatrix.md)  [`Tr`](linear-algebra/Tr.md)  [`UpperTriangularMatrixQ`](linear-algebra/UpperTriangularMatrixQ.md)  [`VandermondeMatrix`](linear-algebra/VandermondeMatrix.md)
 
 ### [Lists and Iteration](lists-and-iteration/index.md)
 
-[`Array`](lists-and-iteration/Array.md)  [`ConstantArray`](lists-and-iteration/ConstantArray.md)  [`Permutations`](lists-and-iteration/Permutations.md)  [`Range`](lists-and-iteration/Range.md)  [`Rescale`](lists-and-iteration/Rescale.md)  [`Table`](lists-and-iteration/Table.md)  [`Tuples`](lists-and-iteration/Tuples.md)  [`UnitVector`](lists-and-iteration/UnitVector.md)
+[`Array`](lists-and-iteration/Array.md)  [`ConstantArray`](lists-and-iteration/ConstantArray.md)  [`Permutations`](lists-and-iteration/Permutations.md)  [`Range`](lists-and-iteration/Range.md)  [`Rescale`](lists-and-iteration/Rescale.md)  [`Riffle`](lists-and-iteration/Riffle.md)  [`Subdivide`](lists-and-iteration/Subdivide.md)  [`Table`](lists-and-iteration/Table.md)  [`Tuples`](lists-and-iteration/Tuples.md)  [`UnitVector`](lists-and-iteration/UnitVector.md)
 
 ### [Mathematical Constants](mathematical-constants/index.md)
 
@@ -80,7 +80,11 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 
 ### [Numerical Calculus](numerical-calculus/index.md)
 
-[`ND`](numerical-calculus/ND.md)  [`NIntegrate`](numerical-calculus/NIntegrate.md)  [`NLimit`](numerical-calculus/NLimit.md)  [`NProduct`](numerical-calculus/NProduct.md)  [`NResidue`](numerical-calculus/NResidue.md)  [`NRoots`](numerical-calculus/NRoots.md)  [`NSeries`](numerical-calculus/NSeries.md)  [`NSolve`](numerical-calculus/NSolve.md)  [`NSum`](numerical-calculus/NSum.md)
+[`ND`](numerical-calculus/ND.md)  [`NDSolve`](numerical-calculus/NDSolve.md)  [`NIntegrate`](numerical-calculus/NIntegrate.md)  [`NLimit`](numerical-calculus/NLimit.md)  [`NProduct`](numerical-calculus/NProduct.md)  [`NResidue`](numerical-calculus/NResidue.md)  [`NRoots`](numerical-calculus/NRoots.md)  [`NSeries`](numerical-calculus/NSeries.md)  [`NSolve`](numerical-calculus/NSolve.md)  [`NSum`](numerical-calculus/NSum.md)
+
+### [Packed arrays](packed-arrays/index.md)
+
+[`FromNDArray`](packed-arrays/FromNDArray.md)  [`FromPackedArray`](packed-arrays/FromPackedArray.md)  [`ToNDArray`](packed-arrays/ToNDArray.md)  [`ToPackedArray`](packed-arrays/ToPackedArray.md)
 
 ### [Pattern Matching](pattern-matching/index.md)
 
@@ -112,23 +116,23 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 
 ### [Statistics](statistics/index.md)
 
-[`Commonest`](statistics/Commonest.md)  [`ExponentialMovingAverage`](statistics/ExponentialMovingAverage.md)  [`MovingAverage`](statistics/MovingAverage.md)  [`MovingMedian`](statistics/MovingMedian.md)  [`Quartiles`](statistics/Quartiles.md)  [`RootMeanSquare`](statistics/RootMeanSquare.md)
+[`CentralMoment`](statistics/CentralMoment.md)  [`Commonest`](statistics/Commonest.md)  [`Correlation`](statistics/Correlation.md)  [`Covariance`](statistics/Covariance.md)  [`ExponentialMovingAverage`](statistics/ExponentialMovingAverage.md)  [`Kurtosis`](statistics/Kurtosis.md)  [`Moment`](statistics/Moment.md)  [`MovingAverage`](statistics/MovingAverage.md)  [`MovingMedian`](statistics/MovingMedian.md)  [`Quartiles`](statistics/Quartiles.md)  [`RootMeanSquare`](statistics/RootMeanSquare.md)  [`Skewness`](statistics/Skewness.md)
 
 ### [String Operations](string-operations/index.md)
 
-[`Characters`](string-operations/Characters.md)  [`RegularExpression`](string-operations/RegularExpression.md)  [`StringCases`](string-operations/StringCases.md)  [`StringDrop`](string-operations/StringDrop.md)  [`StringExtract`](string-operations/StringExtract.md)  [`StringInsert`](string-operations/StringInsert.md)  [`StringJoin`](string-operations/StringJoin.md)  [`StringLength`](string-operations/StringLength.md)  [`StringMatchQ`](string-operations/StringMatchQ.md)  [`StringPadLeft`](string-operations/StringPadLeft.md)  [`StringPadRight`](string-operations/StringPadRight.md)  [`StringPart`](string-operations/StringPart.md)  [`StringPartition`](string-operations/StringPartition.md)  [`StringPosition`](string-operations/StringPosition.md)  [`StringRepeat`](string-operations/StringRepeat.md)  [`StringReplace`](string-operations/StringReplace.md)  [`StringReplacePart`](string-operations/StringReplacePart.md)  [`StringReverse`](string-operations/StringReverse.md)  [`StringRiffle`](string-operations/StringRiffle.md)  [`StringSplit`](string-operations/StringSplit.md)  [`StringTake`](string-operations/StringTake.md)  [`StringTrim`](string-operations/StringTrim.md)
+[`Characters`](string-operations/Characters.md)  [`RegularExpression`](string-operations/RegularExpression.md)  [`StringCases`](string-operations/StringCases.md)  [`StringContainsQ`](string-operations/StringContainsQ.md)  [`StringCount`](string-operations/StringCount.md)  [`StringDrop`](string-operations/StringDrop.md)  [`StringEndsQ`](string-operations/StringEndsQ.md)  [`StringExtract`](string-operations/StringExtract.md)  [`StringFreeQ`](string-operations/StringFreeQ.md)  [`StringInsert`](string-operations/StringInsert.md)  [`StringJoin`](string-operations/StringJoin.md)  [`StringLength`](string-operations/StringLength.md)  [`StringMatchQ`](string-operations/StringMatchQ.md)  [`StringPadLeft`](string-operations/StringPadLeft.md)  [`StringPadRight`](string-operations/StringPadRight.md)  [`StringPart`](string-operations/StringPart.md)  [`StringPartition`](string-operations/StringPartition.md)  [`StringPosition`](string-operations/StringPosition.md)  [`StringRepeat`](string-operations/StringRepeat.md)  [`StringReplace`](string-operations/StringReplace.md)  [`StringReplacePart`](string-operations/StringReplacePart.md)  [`StringReverse`](string-operations/StringReverse.md)  [`StringRiffle`](string-operations/StringRiffle.md)  [`StringSplit`](string-operations/StringSplit.md)  [`StringStartsQ`](string-operations/StringStartsQ.md)  [`StringTake`](string-operations/StringTake.md)  [`StringTrim`](string-operations/StringTrim.md)
 
 ### [Structural Manipulation](structural-manipulation/index.md)
 
-[`ArrayFlatten`](structural-manipulation/ArrayFlatten.md)  [`Catenate`](structural-manipulation/Catenate.md)  [`Complement`](structural-manipulation/Complement.md)  [`Dimensions`](structural-manipulation/Dimensions.md)  [`ExpandAll`](structural-manipulation/ExpandAll.md)  [`Exponent`](structural-manipulation/Exponent.md)  [`Extract`](structural-manipulation/Extract.md)  [`FactorList`](structural-manipulation/FactorList.md)  [`Flatten`](structural-manipulation/Flatten.md)  [`Head`](structural-manipulation/Head.md)  [`Insert`](structural-manipulation/Insert.md)  [`Intersection`](structural-manipulation/Intersection.md)  [`Length`](structural-manipulation/Length.md)  [`Level`](structural-manipulation/Level.md)  [`OrderedQ`](structural-manipulation/OrderedQ.md)  [`PadLeft`](structural-manipulation/PadLeft.md)  [`PadRight`](structural-manipulation/PadRight.md)  [`Part`](structural-manipulation/Part.md)  [`Partition`](structural-manipulation/Partition.md)  [`Reverse`](structural-manipulation/Reverse.md)  [`RotateLeft`](structural-manipulation/RotateLeft.md)  [`RotateRight`](structural-manipulation/RotateRight.md)  [`Span`](structural-manipulation/Span.md)  [`Split`](structural-manipulation/Split.md)  [`Transpose`](structural-manipulation/Transpose.md)  [`Union`](structural-manipulation/Union.md)  [`UpTo`](structural-manipulation/UpTo.md)
+[`ArrayFlatten`](structural-manipulation/ArrayFlatten.md)  [`Catenate`](structural-manipulation/Catenate.md)  [`Complement`](structural-manipulation/Complement.md)  [`Dimensions`](structural-manipulation/Dimensions.md)  [`ExpandAll`](structural-manipulation/ExpandAll.md)  [`Exponent`](structural-manipulation/Exponent.md)  [`Extract`](structural-manipulation/Extract.md)  [`FactorList`](structural-manipulation/FactorList.md)  [`Flatten`](structural-manipulation/Flatten.md)  [`FlattenAt`](structural-manipulation/FlattenAt.md)  [`Head`](structural-manipulation/Head.md)  [`Insert`](structural-manipulation/Insert.md)  [`Intersection`](structural-manipulation/Intersection.md)  [`Length`](structural-manipulation/Length.md)  [`Level`](structural-manipulation/Level.md)  [`Order`](structural-manipulation/Order.md)  [`OrderedQ`](structural-manipulation/OrderedQ.md)  [`Ordering`](structural-manipulation/Ordering.md)  [`PadLeft`](structural-manipulation/PadLeft.md)  [`PadRight`](structural-manipulation/PadRight.md)  [`Part`](structural-manipulation/Part.md)  [`Partition`](structural-manipulation/Partition.md)  [`RankedMax`](structural-manipulation/RankedMax.md)  [`RankedMin`](structural-manipulation/RankedMin.md)  [`Reverse`](structural-manipulation/Reverse.md)  [`RotateLeft`](structural-manipulation/RotateLeft.md)  [`RotateRight`](structural-manipulation/RotateRight.md)  [`Span`](structural-manipulation/Span.md)  [`Split`](structural-manipulation/Split.md)  [`Transpose`](structural-manipulation/Transpose.md)  [`Union`](structural-manipulation/Union.md)  [`UpTo`](structural-manipulation/UpTo.md)
 
 ### [Time and Date](time-and-date/index.md)
 
-[`AbsoluteTime`](time-and-date/AbsoluteTime.md)  [`RepeatedTiming`](time-and-date/RepeatedTiming.md)  [`TimeConstrained`](time-and-date/TimeConstrained.md)  [`Timing`](time-and-date/Timing.md)
+[`AbsoluteTime`](time-and-date/AbsoluteTime.md)  [`AbsoluteTiming`](time-and-date/AbsoluteTiming.md)  [`RepeatedTiming`](time-and-date/RepeatedTiming.md)  [`TimeConstrained`](time-and-date/TimeConstrained.md)  [`Timing`](time-and-date/Timing.md)
 
 ### [Other & Advanced](other-advanced/index.md)
 
-[`$PlotLegendData`](other-advanced/$PlotLegendData.md)  [`$PlotResample`](other-advanced/$PlotResample.md)  [`$StreamColorBar`](other-advanced/$StreamColorBar.md)  [`AdjacencyGraph`](other-advanced/AdjacencyGraph.md)  [`AdjacencyList`](other-advanced/AdjacencyList.md)  [`AdjacencyMatrix`](other-advanced/AdjacencyMatrix.md)  [`AiryAiPrime`](other-advanced/AiryAiPrime.md)  [`AiryBiPrime`](other-advanced/AiryBiPrime.md)  [`AspectRatio`](other-advanced/AspectRatio.md)  [`BarSpacing`](other-advanced/BarSpacing.md)  [`BesselJZero`](other-advanced/BesselJZero.md)  [`Black`](other-advanced/Black.md)  [`Blue`](other-advanced/Blue.md)  [`Brown`](other-advanced/Brown.md)  [`ChartLabels`](other-advanced/ChartLabels.md)  [`ChartStyle`](other-advanced/ChartStyle.md)  [`CompleteGraph`](other-advanced/CompleteGraph.md)  [`ConnectedComponents`](other-advanced/ConnectedComponents.md)  [`ConnectedGraphQ`](other-advanced/ConnectedGraphQ.md)  [`ContourLabels`](other-advanced/ContourLabels.md)  [`ContourShading`](other-advanced/ContourShading.md)  [`ContourStyle`](other-advanced/ContourStyle.md)  [`Contours`](other-advanced/Contours.md)  [`Cyan`](other-advanced/Cyan.md)  [`CycleGraph`](other-advanced/CycleGraph.md)  [`DataType`](other-advanced/DataType.md)  [`DirectedGraphQ`](other-advanced/DirectedGraphQ.md)  [`EdgeCount`](other-advanced/EdgeCount.md)  [`EdgeList`](other-advanced/EdgeList.md)  [`FindShortestPath`](other-advanced/FindShortestPath.md)  [`FindSpanningTree`](other-advanced/FindSpanningTree.md)  [`FourierParameters`](other-advanced/FourierParameters.md)  [`Frame`](other-advanced/Frame.md)  [`FrameStyle`](other-advanced/FrameStyle.md)  [`FrameTicks`](other-advanced/FrameTicks.md)  [`FresnelC`](other-advanced/FresnelC.md)  [`FresnelS`](other-advanced/FresnelS.md)  [`GraphDistance`](other-advanced/GraphDistance.md)  [`GraphPlot`](other-advanced/GraphPlot.md)  [`Gray`](other-advanced/Gray.md)  [`Green`](other-advanced/Green.md)  [`HoldFirst`](other-advanced/HoldFirst.md)  [`HoldRest`](other-advanced/HoldRest.md)  [`ImageSize`](other-advanced/ImageSize.md)  [`IncidenceMatrix`](other-advanced/IncidenceMatrix.md)  [`LightBlue`](other-advanced/LightBlue.md)  [`LightBrown`](other-advanced/LightBrown.md)  [`LightCyan`](other-advanced/LightCyan.md)  [`LightGray`](other-advanced/LightGray.md)  [`LightGreen`](other-advanced/LightGreen.md)  [`LightMagenta`](other-advanced/LightMagenta.md)  [`LightOrange`](other-advanced/LightOrange.md)  [`LightPink`](other-advanced/LightPink.md)  [`LightPurple`](other-advanced/LightPurple.md)  [`LightRed`](other-advanced/LightRed.md)  [`LightYellow`](other-advanced/LightYellow.md)  [`Lighting`](other-advanced/Lighting.md)  [`List`](other-advanced/List.md)  [`Magenta`](other-advanced/Magenta.md)  [`NDArrayQ`](other-advanced/NDArrayQ.md)  [`Orange`](other-advanced/Orange.md)  [`PathGraph`](other-advanced/PathGraph.md)  [`Pink`](other-advanced/Pink.md)  [`PolynomialSqrt`](other-advanced/PolynomialSqrt.md)  [`Purple`](other-advanced/Purple.md)  [`RandomGraph`](other-advanced/RandomGraph.md)  [`RatCanonPrototype`](other-advanced/RatCanonPrototype.md)  [`Reap`](other-advanced/Reap.md)  [`Red`](other-advanced/Red.md)  [`ScalingFunctions`](other-advanced/ScalingFunctions.md)  [`Sow`](other-advanced/Sow.md)  [`StringExpression`](other-advanced/StringExpression.md)  [`StronglyConnectedComponents`](other-advanced/StronglyConnectedComponents.md)  [`VectorPoints`](other-advanced/VectorPoints.md)  [`VectorScale`](other-advanced/VectorScale.md)  [`VectorStyle`](other-advanced/VectorStyle.md)  [`VertexConnectivity`](other-advanced/VertexConnectivity.md)  [`VertexCount`](other-advanced/VertexCount.md)  [`VertexDegree`](other-advanced/VertexDegree.md)  [`VertexInDegree`](other-advanced/VertexInDegree.md)  [`VertexList`](other-advanced/VertexList.md)  [`VertexOutDegree`](other-advanced/VertexOutDegree.md)  [`WeaklyConnectedComponents`](other-advanced/WeaklyConnectedComponents.md)  [`White`](other-advanced/White.md)  [`Yellow`](other-advanced/Yellow.md)
+[`$AutoArrayPacking`](other-advanced/$AutoArrayPacking.md)  [`$AutoCompilation`](other-advanced/$AutoCompilation.md)  [`$PlotLegendData`](other-advanced/$PlotLegendData.md)  [`$PlotResample`](other-advanced/$PlotResample.md)  [`$StreamColorBar`](other-advanced/$StreamColorBar.md)  [`AccuracyGoal`](other-advanced/AccuracyGoal.md)  [`AdjacencyGraph`](other-advanced/AdjacencyGraph.md)  [`AdjacencyList`](other-advanced/AdjacencyList.md)  [`AdjacencyMatrix`](other-advanced/AdjacencyMatrix.md)  [`AiryAiPrime`](other-advanced/AiryAiPrime.md)  [`AiryBiPrime`](other-advanced/AiryBiPrime.md)  [`AspectRatio`](other-advanced/AspectRatio.md)  [`BarSpacing`](other-advanced/BarSpacing.md)  [`BesselJZero`](other-advanced/BesselJZero.md)  [`Black`](other-advanced/Black.md)  [`Blue`](other-advanced/Blue.md)  [`Brown`](other-advanced/Brown.md)  [`ChartLabels`](other-advanced/ChartLabels.md)  [`ChartStyle`](other-advanced/ChartStyle.md)  [`CompleteGraph`](other-advanced/CompleteGraph.md)  [`ConnectedComponents`](other-advanced/ConnectedComponents.md)  [`ConnectedGraphQ`](other-advanced/ConnectedGraphQ.md)  [`ContourLabels`](other-advanced/ContourLabels.md)  [`ContourShading`](other-advanced/ContourShading.md)  [`ContourStyle`](other-advanced/ContourStyle.md)  [`Contours`](other-advanced/Contours.md)  [`Cyan`](other-advanced/Cyan.md)  [`CycleGraph`](other-advanced/CycleGraph.md)  [`DataType`](other-advanced/DataType.md)  [`DirectedGraphQ`](other-advanced/DirectedGraphQ.md)  [`EdgeCount`](other-advanced/EdgeCount.md)  [`EdgeList`](other-advanced/EdgeList.md)  [`FindShortestPath`](other-advanced/FindShortestPath.md)  [`FindSpanningTree`](other-advanced/FindSpanningTree.md)  [`FourierParameters`](other-advanced/FourierParameters.md)  [`Frame`](other-advanced/Frame.md)  [`FrameStyle`](other-advanced/FrameStyle.md)  [`FrameTicks`](other-advanced/FrameTicks.md)  [`FresnelC`](other-advanced/FresnelC.md)  [`FresnelS`](other-advanced/FresnelS.md)  [`GraphDistance`](other-advanced/GraphDistance.md)  [`GraphPlot`](other-advanced/GraphPlot.md)  [`Gray`](other-advanced/Gray.md)  [`Green`](other-advanced/Green.md)  [`HoldFirst`](other-advanced/HoldFirst.md)  [`HoldRest`](other-advanced/HoldRest.md)  [`ImageSize`](other-advanced/ImageSize.md)  [`IncidenceMatrix`](other-advanced/IncidenceMatrix.md)  [`Interval`](other-advanced/Interval.md)  [`IntervalIntersection`](other-advanced/IntervalIntersection.md)  [`IntervalMemberQ`](other-advanced/IntervalMemberQ.md)  [`IntervalUnion`](other-advanced/IntervalUnion.md)  [`LightBlue`](other-advanced/LightBlue.md)  [`LightBrown`](other-advanced/LightBrown.md)  [`LightCyan`](other-advanced/LightCyan.md)  [`LightGray`](other-advanced/LightGray.md)  [`LightGreen`](other-advanced/LightGreen.md)  [`LightMagenta`](other-advanced/LightMagenta.md)  [`LightOrange`](other-advanced/LightOrange.md)  [`LightPink`](other-advanced/LightPink.md)  [`LightPurple`](other-advanced/LightPurple.md)  [`LightRed`](other-advanced/LightRed.md)  [`LightYellow`](other-advanced/LightYellow.md)  [`Lighting`](other-advanced/Lighting.md)  [`List`](other-advanced/List.md)  [`Magenta`](other-advanced/Magenta.md)  [`NDArrayQ`](other-advanced/NDArrayQ.md)  [`Orange`](other-advanced/Orange.md)  [`PathGraph`](other-advanced/PathGraph.md)  [`Pick`](other-advanced/Pick.md)  [`Pink`](other-advanced/Pink.md)  [`PolynomialSqrt`](other-advanced/PolynomialSqrt.md)  [`PrecisionGoal`](other-advanced/PrecisionGoal.md)  [`Purple`](other-advanced/Purple.md)  [`RandomGraph`](other-advanced/RandomGraph.md)  [`RatCanonPrototype`](other-advanced/RatCanonPrototype.md)  [`Reap`](other-advanced/Reap.md)  [`Red`](other-advanced/Red.md)  [`ScalingFunctions`](other-advanced/ScalingFunctions.md)  [`Sow`](other-advanced/Sow.md)  [`SplitBy`](other-advanced/SplitBy.md)  [`StringExpression`](other-advanced/StringExpression.md)  [`StronglyConnectedComponents`](other-advanced/StronglyConnectedComponents.md)  [`Subsets`](other-advanced/Subsets.md)  [`VectorPoints`](other-advanced/VectorPoints.md)  [`VectorScale`](other-advanced/VectorScale.md)  [`VectorStyle`](other-advanced/VectorStyle.md)  [`VertexConnectivity`](other-advanced/VertexConnectivity.md)  [`VertexCount`](other-advanced/VertexCount.md)  [`VertexDegree`](other-advanced/VertexDegree.md)  [`VertexInDegree`](other-advanced/VertexInDegree.md)  [`VertexList`](other-advanced/VertexList.md)  [`VertexOutDegree`](other-advanced/VertexOutDegree.md)  [`WeaklyConnectedComponents`](other-advanced/WeaklyConnectedComponents.md)  [`White`](other-advanced/White.md)  [`Yellow`](other-advanced/Yellow.md)
 
 ### [FLINT context](flint/index.md)
 
@@ -137,6 +141,8 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 ## Alphabetical index
 
 - [`$Assumptions`](simplification/$Assumptions.md)
+- [`$AutoArrayPacking`](other-advanced/$AutoArrayPacking.md)
+- [`$AutoCompilation`](other-advanced/$AutoCompilation.md)
 - [`$Context`](scoping-constructs/$Context.md)
 - [`$ContextPath`](scoping-constructs/$ContextPath.md)
 - [`$Epilog`](control-flow/$Epilog.md)
@@ -159,8 +165,10 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`$VersionNumber`](expression-information/$VersionNumber.md)
 - [`Abs`](arithmetic/Abs.md)
 - [`AbsoluteTime`](time-and-date/AbsoluteTime.md)
+- [`AbsoluteTiming`](time-and-date/AbsoluteTiming.md)
 - [`Accumulate`](arithmetic/Accumulate.md)
 - [`Accuracy`](arithmetic/Accuracy.md)
+- [`AccuracyGoal`](other-advanced/AccuracyGoal.md)
 - [`AddTo`](assignment-and-rules/AddTo.md)
 - [`AdjacencyGraph`](other-advanced/AdjacencyGraph.md)
 - [`AdjacencyList`](other-advanced/AdjacencyList.md)
@@ -220,6 +228,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`Catch`](control-flow/Catch.md)
 - [`Catenate`](structural-manipulation/Catenate.md)
 - [`Ceiling`](arithmetic/Ceiling.md)
+- [`CentralMoment`](statistics/CentralMoment.md)
 - [`Characters`](string-operations/Characters.md)
 - [`ChartLabels`](other-advanced/ChartLabels.md)
 - [`ChartStyle`](other-advanced/ChartStyle.md)
@@ -232,6 +241,9 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`CoefficientList`](algebra/CoefficientList.md)
 - [`Collect`](algebra/Collect.md)
 - [`Commonest`](statistics/Commonest.md)
+- [`Compile`](control-flow/Compile.md)
+- [`CompileDiagnostics`](control-flow/CompileDiagnostics.md)
+- [`CompilePrint`](control-flow/CompilePrint.md)
 - [`Complement`](structural-manipulation/Complement.md)
 - [`CompleteGraph`](other-advanced/CompleteGraph.md)
 - [`Complex`](arithmetic/Complex.md)
@@ -256,6 +268,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`ContourStyle`](other-advanced/ContourStyle.md)
 - [`Contours`](other-advanced/Contours.md)
 - [`CoprimeQ`](number-theory/CoprimeQ.md)
+- [`Correlation`](statistics/Correlation.md)
 - [`Cos`](elementary-functions/Cos.md)
 - [`CosIntegral`](special-functions/CosIntegral.md)
 - [`Cosh`](elementary-functions/Cosh.md)
@@ -264,6 +277,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`Count`](data-structures/Count.md)
 - [`Counts`](data-structures/Counts.md)
 - [`CountsBy`](data-structures/CountsBy.md)
+- [`Covariance`](statistics/Covariance.md)
 - [`Cross`](linear-algebra/Cross.md)
 - [`Csc`](elementary-functions/Csc.md)
 - [`Cubics`](solutions-of-equations/Cubics.md)
@@ -285,6 +299,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`Derivative`](calculus/Derivative.md)
 - [`DesignMatrix`](linear-algebra/DesignMatrix.md)
 - [`Det`](linear-algebra/Det.md)
+- [`Diagonal`](linear-algebra/Diagonal.md)
 - [`DiagonalMatrix`](linear-algebra/DiagonalMatrix.md)
 - [`DiagonalMatrixQ`](linear-algebra/DiagonalMatrixQ.md)
 - [`DifferenceDelta`](calculus/DifferenceDelta.md)
@@ -296,6 +311,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`Discriminant`](algebra/Discriminant.md)
 - [`Distribute`](functional-programming/Distribute.md)
 - [`Divide`](arithmetic/Divide.md)
+- [`DivideBy`](assignment-and-rules/DivideBy.md)
 - [`Divisible`](number-theory/Divisible.md)
 - [`DivisorSigma`](number-theory/DivisorSigma.md)
 - [`Divisors`](number-theory/Divisors.md)
@@ -375,6 +391,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`FixedPointList`](functional-programming/FixedPointList.md)
 - [`Flat`](expression-information/Flat.md)
 - [`Flatten`](structural-manipulation/Flatten.md)
+- [`FlattenAt`](structural-manipulation/FlattenAt.md)
 - [`Floor`](arithmetic/Floor.md)
 - [`Fold`](functional-programming/Fold.md)
 - [`FoldList`](data-structures/FoldList.md)
@@ -391,10 +408,13 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`FresnelS`](other-advanced/FresnelS.md)
 - [`FromContinuedFraction`](number-theory/FromContinuedFraction.md)
 - [`FromDigits`](arithmetic/FromDigits.md)
+- [`FromNDArray`](packed-arrays/FromNDArray.md)
+- [`FromPackedArray`](packed-arrays/FromPackedArray.md)
 - [`FullForm`](expression-information/FullForm.md)
 - [`Function`](functional-programming/Function.md)
 - [`GCD`](number-theory/GCD.md)
 - [`Gamma`](special-functions/Gamma.md)
+- [`Gather`](data-structures/Gather.md)
 - [`GatherBy`](data-structures/GatherBy.md)
 - [`GeneratedParameters`](solutions-of-equations/GeneratedParameters.md)
 - [`Get`](file-io/Get.md)
@@ -456,6 +476,10 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`InterpolatingFunction`](functional-programming/InterpolatingFunction.md)
 - [`Interpolation`](functional-programming/Interpolation.md)
 - [`Intersection`](structural-manipulation/Intersection.md)
+- [`Interval`](other-advanced/Interval.md)
+- [`IntervalIntersection`](other-advanced/IntervalIntersection.md)
+- [`IntervalMemberQ`](other-advanced/IntervalMemberQ.md)
+- [`IntervalUnion`](other-advanced/IntervalUnion.md)
 - [`Inverse`](linear-algebra/Inverse.md)
 - [`InverseErf`](special-functions/InverseErf.md)
 - [`InverseErfc`](special-functions/InverseErfc.md)
@@ -478,6 +502,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`KeyValuePattern`](data-structures/KeyValuePattern.md)
 - [`Keys`](data-structures/Keys.md)
 - [`Khinchin`](mathematical-constants/Khinchin.md)
+- [`Kurtosis`](statistics/Kurtosis.md)
 - [`LCM`](number-theory/LCM.md)
 - [`LUDecomposition`](linear-algebra/LUDecomposition.md)
 - [`Label`](control-flow/Label.md)
@@ -543,6 +568,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`MinimalPolynomial`](algebra/MinimalPolynomial.md)
 - [`Module`](scoping-constructs/Module.md)
 - [`MoebiusMu`](number-theory/MoebiusMu.md)
+- [`Moment`](statistics/Moment.md)
 - [`Most`](data-structures/Most.md)
 - [`MovingAverage`](statistics/MovingAverage.md)
 - [`MovingMedian`](statistics/MovingMedian.md)
@@ -551,6 +577,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`ND`](numerical-calculus/ND.md)
 - [`NDArray`](linear-algebra/NDArray.md)
 - [`NDArrayQ`](other-advanced/NDArrayQ.md)
+- [`NDSolve`](numerical-calculus/NDSolve.md)
 - [`NIntegrate`](numerical-calculus/NIntegrate.md)
 - [`NLimit`](numerical-calculus/NLimit.md)
 - [`NProduct`](numerical-calculus/NProduct.md)
@@ -583,7 +610,9 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`Optional`](pattern-matching/Optional.md)
 - [`Options`](assignment-and-rules/Options.md)
 - [`Orange`](other-advanced/Orange.md)
+- [`Order`](structural-manipulation/Order.md)
 - [`OrderedQ`](structural-manipulation/OrderedQ.md)
+- [`Ordering`](structural-manipulation/Ordering.md)
 - [`Orderless`](expression-information/Orderless.md)
 - [`Outer`](linear-algebra/Outer.md)
 - [`OwnValues`](assignment-and-rules/OwnValues.md)
@@ -598,6 +627,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`PathGraph`](other-advanced/PathGraph.md)
 - [`Permutations`](lists-and-iteration/Permutations.md)
 - [`Pi`](mathematical-constants/Pi.md)
+- [`Pick`](other-advanced/Pick.md)
 - [`Piecewise`](control-flow/Piecewise.md)
 - [`Pink`](other-advanced/Pink.md)
 - [`Plot`](graphics/Plot.md)
@@ -628,6 +658,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`PreDecrement`](assignment-and-rules/PreDecrement.md)
 - [`PreIncrement`](assignment-and-rules/PreIncrement.md)
 - [`Precision`](arithmetic/Precision.md)
+- [`PrecisionGoal`](other-advanced/PrecisionGoal.md)
 - [`Prepend`](data-structures/Prepend.md)
 - [`Prime`](number-theory/Prime.md)
 - [`PrimeNu`](number-theory/PrimeNu.md)
@@ -648,6 +679,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`QRDecomposition`](linear-algebra/QRDecomposition.md)
 - [`Quartics`](solutions-of-equations/Quartics.md)
 - [`Quartiles`](statistics/Quartiles.md)
+- [`Ramp`](elementary-functions/Ramp.md)
 - [`RandomChoice`](random-number-generation/RandomChoice.md)
 - [`RandomComplex`](random-number-generation/RandomComplex.md)
 - [`RandomGraph`](other-advanced/RandomGraph.md)
@@ -655,6 +687,8 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`RandomReal`](random-number-generation/RandomReal.md)
 - [`RandomSample`](random-number-generation/RandomSample.md)
 - [`Range`](lists-and-iteration/Range.md)
+- [`RankedMax`](structural-manipulation/RankedMax.md)
+- [`RankedMin`](structural-manipulation/RankedMin.md)
 - [`RatCanonPrototype`](other-advanced/RatCanonPrototype.md)
 - [`Rational`](arithmetic/Rational.md)
 - [`Rationalize`](arithmetic/Rationalize.md)
@@ -684,6 +718,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`Reverse`](structural-manipulation/Reverse.md)
 - [`ReverseSort`](functional-programming/ReverseSort.md)
 - [`ReverseSortBy`](functional-programming/ReverseSortBy.md)
+- [`Riffle`](lists-and-iteration/Riffle.md)
 - [`Root`](solutions-of-equations/Root.md)
 - [`RootMeanSquare`](statistics/RootMeanSquare.md)
 - [`RootReduce`](algebra/RootReduce.md)
@@ -723,6 +758,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`SingularValueDecomposition`](linear-algebra/SingularValueDecomposition.md)
 - [`Sinh`](elementary-functions/Sinh.md)
 - [`SinhIntegral`](special-functions/SinhIntegral.md)
+- [`Skewness`](statistics/Skewness.md)
 - [`Slot`](functional-programming/Slot.md)
 - [`SlotSequence`](functional-programming/SlotSequence.md)
 - [`Solve`](solutions-of-equations/Solve.md)
@@ -732,6 +768,7 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`Sow`](other-advanced/Sow.md)
 - [`Span`](structural-manipulation/Span.md)
 - [`Split`](structural-manipulation/Split.md)
+- [`SplitBy`](other-advanced/SplitBy.md)
 - [`Sqrt`](arithmetic/Sqrt.md)
 - [`SquareFreeQ`](number-theory/SquareFreeQ.md)
 - [`SquareMatrixQ`](linear-algebra/SquareMatrixQ.md)
@@ -739,9 +776,13 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`StieltjesGamma`](special-functions/StieltjesGamma.md)
 - [`StreamPlot`](graphics/StreamPlot.md)
 - [`StringCases`](string-operations/StringCases.md)
+- [`StringContainsQ`](string-operations/StringContainsQ.md)
+- [`StringCount`](string-operations/StringCount.md)
 - [`StringDrop`](string-operations/StringDrop.md)
+- [`StringEndsQ`](string-operations/StringEndsQ.md)
 - [`StringExpression`](other-advanced/StringExpression.md)
 - [`StringExtract`](string-operations/StringExtract.md)
+- [`StringFreeQ`](string-operations/StringFreeQ.md)
 - [`StringInsert`](string-operations/StringInsert.md)
 - [`StringJoin`](string-operations/StringJoin.md)
 - [`StringLength`](string-operations/StringLength.md)
@@ -757,12 +798,15 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`StringReverse`](string-operations/StringReverse.md)
 - [`StringRiffle`](string-operations/StringRiffle.md)
 - [`StringSplit`](string-operations/StringSplit.md)
+- [`StringStartsQ`](string-operations/StringStartsQ.md)
 - [`StringTake`](string-operations/StringTake.md)
 - [`StringTrim`](string-operations/StringTrim.md)
 - [`StronglyConnectedComponents`](other-advanced/StronglyConnectedComponents.md)
+- [`Subdivide`](lists-and-iteration/Subdivide.md)
 - [`SubresultantPolynomialRemainders`](calculus/SubresultantPolynomialRemainders.md)
 - [`SubresultantPolynomials`](algebra/SubresultantPolynomials.md)
 - [`Subresultants`](algebra/Subresultants.md)
+- [`Subsets`](other-advanced/Subsets.md)
 - [`Subtract`](arithmetic/Subtract.md)
 - [`SubtractFrom`](assignment-and-rules/SubtractFrom.md)
 - [`Sum`](calculus/Sum.md)
@@ -785,8 +829,11 @@ _700 functions across 32 categories. Use the search box (press `/`) to jump to a
 - [`Throw`](control-flow/Throw.md)
 - [`TimeConstrained`](time-and-date/TimeConstrained.md)
 - [`Times`](arithmetic/Times.md)
+- [`TimesBy`](assignment-and-rules/TimesBy.md)
 - [`Timing`](time-and-date/Timing.md)
 - [`ToExpression`](expression-information/ToExpression.md)
+- [`ToNDArray`](packed-arrays/ToNDArray.md)
+- [`ToPackedArray`](packed-arrays/ToPackedArray.md)
 - [`ToRadicals`](solutions-of-equations/ToRadicals.md)
 - [`ToString`](expression-information/ToString.md)
 - [`ToeplitzMatrix`](linear-algebra/ToeplitzMatrix.md)

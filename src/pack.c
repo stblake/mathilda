@@ -540,6 +540,27 @@ static void pack_mark_aware_heads(void) {
         "Total", "Mean", "Min", "Max", "MinMax", "Median", "Variance",
         "StandardDeviation", "RootMeanSquare", "Quartiles", "Accumulate",
         "MovingAverage", "MovingMedian", "ExponentialMovingAverage",
+        /* Moment[v, r] — the r-th RAW (power) moment on the buffer (ndred_moment),
+         * (1/n)Sum[x^r]. CentralMoment[v, r] — the r-th moment about the mean
+         * (ndred_central_moment), like Variance but /n and power r. NEITHER is on
+         * INT64_OK: an integer vector's exact moment is a Rational no machine slot
+         * holds, so both degrade to the exact List path. Skewness / Kurtosis are
+         * standardized central moments on the buffer (ndred_skewness /
+         * ndred_kurtosis); an integer sample's value is a radical, so they degrade
+         * the same way and are likewise not INT64_OK. */
+        "Moment", "CentralMoment", "Skewness", "Kurtosis",
+        /* Covariance / Correlation (src/linalg/ndcorrcov.c). Covariance[v, w] is a
+         * threaded centered inner product off the buffer; the matrix forms are a
+         * BLAS gram A_c^T B_c. Off this list the gate would materialise both 10^7
+         * vectors just to walk them elementwise. NOT int64_ok: an integer sample's
+         * covariance is a Rational no float64 slot holds, so an integer buffer
+         * degrades to the exact List path, exactly like Variance. */
+        "Covariance", "Correlation",
+        /* RankedMin[v, n] / RankedMax[v, n] — the n-th order statistic, selected
+         * straight off the buffer (ndred_ranked_*): int64 exactly, real by an
+         * O(n) quickselect. Off this list the gate would materialise the whole
+         * vector just to pick one element, the same defect as MinMax above. */
+        "RankedMin", "RankedMax",
         /* Tally is a keyed (irregular) reduction, not a sweep, but the reason it
          * belongs here is the same: ndred_tally hashes the machine words, where
          * materialising boxed one Expr per element just to hash it. */
@@ -620,8 +641,14 @@ static void pack_mark_aware_heads(void) {
          * a live wrong answer in it (see reverse_top_level in src/sort.c). */
         "AtomQ", "MatrixQ", "VectorQ", "N", "TeXForm", "Extract",
         "QuotientRemainder", "AllTrue", "AnyTrue", "NoneTrue", "ReverseSort",
-        /* Pass-through: never inspect the value's structure, they only move it
-         * around, so a packed list survives assignment and control flow. */
+        /* Pass-through: the value is moved, not inspected, so a packed list
+         * survives assignment and control flow. The one place assignment reads
+         * the RHS *structure* is list destructuring ({a, b} = {...}); leaving
+         * Set aware would strand a packed RHS there, so apply_assignment
+         * (src/eval.c) normalises it to a List of its (still-packed) top-level
+         * slices before destructuring. Without that, {xc, yc} = {Range[m],
+         * Range[n]} silently bound nothing once the RHS packed to a rank-2
+         * buffer. */
         "Set", "SetDelayed", "CompoundExpression", "If", "Which", "Module",
         "Block", "With", "Return", "Print", "Echo",
         /* ------------------------------------------------------------------
@@ -651,6 +678,29 @@ static void pack_mark_aware_heads(void) {
         "DiagonalMatrix", "HankelMatrix", "ToeplitzMatrix", "VandermondeMatrix",
         "PositiveDefiniteMatrixQ", "NegativeDefiniteMatrixQ",
         "LatticeReduce", "FindIntegerNullVector",
+        /* Fit reads its data straight off the buffer (fit_read_numeric in
+         * src/fit.c) and builds a packed float64 design matrix column-wise, so
+         * the gate must not materialise a packed data matrix into 2*npts boxed
+         * Exprs first. A fit is inherently a machine-real computation, so an
+         * int64 data buffer gives the same float coefficients as materialising
+         * would (see INT64_OK); WorkingPrecision -> Infinity bails from the fast
+         * path and re-delists for the exact rational solve.  DesignMatrix accepts
+         * the NDArray surface too (fit_normalize_data delists it) and so is aware
+         * for the same reason -- it keeps its exact List output, it just no
+         * longer errors on a packed/NDArray argument. */
+        "Fit", "DesignMatrix",
+        /* Interpolation reads a packed/NDArray data table straight through
+         * ndarray_to_nested_list (src/interp.c) instead of erroring, so the gate
+         * must not pre-materialise it.  Separately, applying the resulting
+         * InterpolatingFunction to a packed array of query points is kept off
+         * this gate by the interp_head branch in eval.c (the head is the object,
+         * not a symbol), where the vectorised evaluator reads the point buffer
+         * directly. */
+        "Interpolation",
+        /* InterpolatingPolynomial reads a packed/NDArray data table straight
+         * through ndarray_to_nested_list (src/interp.c) as well, so the gate
+         * must not pre-materialise it. */
+        "InterpolatingPolynomial",
         /* ------------------------------------------------------------------
          * The integer domain (src/ndinteger.c). Every one of these answered a
          * packed List with one Expr per element and a visible NDArray with the
@@ -794,13 +844,34 @@ static void pack_mark_aware_heads(void) {
         /* Read rank/dims/dtype only, never an element. */
         "Length", "Dimensions", "Depth", "Head", "ByteCount",
         "NDArrayQ", "DataType",
+        /* N reads every element, but its answer on an int64 buffer IS a real
+         * array -- the machine reals the interpreter's N gives element by
+         * element -- so nothing truncates and no element's head changes. Its
+         * EXPR_NDARRAY case in numericalize_rec (src/numeric.c) widens the
+         * whole buffer to float64 in one pass, inheriting presentation, so
+         * N[Range[10^6]] stays a packed array instead of materialising to a
+         * list of boxed reals. The (double) cast rounds int64 past 2^53 exactly
+         * as N does to the same integer scalar, so the surfaces agree. */
+        "N",
         /* Materialise or index through the exact accessors. Extract joined
          * 2026-08-01 with its buffer gather: it is Part's own selector, so the
          * justification is Part's -- ndarray_element_to_expr yields an exact
          * Integer from an int64 buffer, so no element's head changes. */
         "Part", "Extract", "Normal", "ToNDArray", "FromNDArray",
         "ToPackedArray", "FromPackedArray",
-        /* Move the value without inspecting it. */
+        /* Fit reads an int64 data buffer through ndt_get exactly as it would the
+         * materialised integers, and a least-squares fit is a machine-real
+         * computation either way, so the float coefficients are identical -- the
+         * flag only spares an int64 data matrix from materialising. */
+        "Fit",
+        /* InterpolatingPolynomial reads int64 data exactly and, on exact data,
+         * returns an exact polynomial -- so an int64 buffer needs no
+         * materialisation and the result is identical. */
+        "InterpolatingPolynomial",
+        /* Move the value without inspecting it. (List destructuring is the one
+         * exception -- apply_assignment reads an int64 slice back as an exact
+         * Integer via ndarray_part, so {a, b, c, d} = Range[4] binds exact
+         * Integers, not coerced Reals; see src/eval.c.) */
         "Set", "SetDelayed", "CompoundExpression", "If", "Which", "Module",
         "Block", "With", "Return", "Print", "Echo",
         /* Exact int64 arithmetic (src/ndarray.c): the accumulate uses ci_*_i64
@@ -819,6 +890,10 @@ static void pack_mark_aware_heads(void) {
          * answer with Integers; Mean and Median build the exact reduced
          * Rational (Mean[Range[10]] is 11/2, Median[Range[300]] is 301/2). */
         "Total", "Mean", "Median", "Max", "Min", "MinMax", "Accumulate",
+        /* RankedMin/RankedMax SELECT an element (like Max/Min), so the r-th order
+         * statistic of an int64 vector is an Integer taken straight off the
+         * buffer -- exact past 2^53, no rounded Real. */
+        "RankedMin", "RankedMax",
         /* Tally keys on the raw int64 word, so two integers past 2^53 stay
          * distinct -- the failure a float64 gather would have introduced -- and
          * each distinct value is rebuilt with expr_new_integer, so no element's

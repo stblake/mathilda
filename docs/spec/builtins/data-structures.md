@@ -6,6 +6,19 @@ first occurrence fixes a key's position, the last occurrence its value), and
 bulk operations are backed by a hash index for amortised `O(n)` construction,
 grouping and lookup.
 
+**Single-key access is amortised `O(1)`.** A persistent key→position hash index
+is cached on the association (see `src/assoc_index.h`) and built on first
+single-key read, so `Lookup[a, k]`, `KeyExistsQ`/`KeyMemberQ`/`KeyFreeQ`,
+`a[[key]]`, `a[key]` and `Key[k][a]` do not scan. The index reuses spare space in
+the expression node, so it costs no extra memory per non-association value, and it
+is transparent — `SameQ`, `Union` and `Sort` see the association exactly as
+before. Repeated access to a bound association stays `O(1)` per probe — including
+inside `Do`/`Table`/`Fold`: a loop-invariant association (or any value built from
+literals under `List`/`Association`/`Rule`/`Complex`/`Rational`) is a GROUND fixed
+point that survives the iterator rebinding's eval-clock churn, so it is re-checked
+in `O(1)` per iteration rather than re-canonicalised in `O(n)` (see the
+evaluator's rule-epoch / GROUND-flag mechanism in `src/eval.c`).
+
 ### The association toolchain at a glance
 
 | Category | Operations |

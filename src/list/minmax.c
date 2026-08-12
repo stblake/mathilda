@@ -3,6 +3,7 @@
 #include "assoc.h"
 #include "ndarray.h"
 #include "ndreduce.h"
+#include "interval.h"
 
 /* MinMax[list] gives {Min[list], Max[list]} in the natural single pass a caller
  * would otherwise write by hand. Over an association it uses the values (Min and
@@ -50,6 +51,13 @@ Expr* builtin_min(Expr* res) {
 
     /* Min[ndarray] scans the flat buffer (see ndreduce.c). */
     if (n == 1 && is_ndarray(res->data.function.args[0])) return ndred_min(res);
+
+    /* Min[Interval[{a,b}, ...]] is the lowest lower endpoint (the first pair's
+     * lower endpoint after canonical sorting). */
+    if (n == 1 && is_interval(res->data.function.args[0])) {
+        Expr* iv = res->data.function.args[0];
+        return expr_copy(interval_pair_lo(iv, 0));
+    }
 
     // Check for List arguments to flatten
     bool has_list = false;
@@ -178,6 +186,13 @@ Expr* builtin_max(Expr* res) {
 
     /* Max[ndarray] scans the flat buffer (see ndreduce.c). */
     if (n == 1 && is_ndarray(res->data.function.args[0])) return ndred_max(res);
+
+    /* Max[Interval[..., {a,b}]] is the highest upper endpoint (the last pair's
+     * upper endpoint after canonical sorting). */
+    if (n == 1 && is_interval(res->data.function.args[0])) {
+        Expr* iv = res->data.function.args[0];
+        return expr_copy(interval_pair_hi(iv, interval_pair_count(iv) - 1));
+    }
 
     // Check for List arguments to flatten
     bool has_list = false;

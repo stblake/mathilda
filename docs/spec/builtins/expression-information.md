@@ -48,11 +48,32 @@ In[12]:= Attributes[g]
 Out[12]= {}
 ```
 
-## AtomQ, NumberQ, IntegerQ, MachineNumberQ
+## AtomQ, NumberQ, IntegerQ, StringQ, MachineNumberQ
 Predicates for testing expression types.
 - `AtomQ[expr]`: `True` if the expression has no parts.
 - `NumberQ[expr]`: `True` if the expression is a numeric type (Integer, Real, Rational, Complex).
 - `IntegerQ[expr]`: `True` if the expression is an Integer.
+- `StringQ[expr]`: `True` if the expression is a string, and `False` otherwise.
+  The empty string `""` gives `True`. `StringQ` is not `Listable`, so
+  `StringQ[{"a", "b"}]` is `False` (a list is not a string) rather than
+  threading. Any arity other than one leaves the call unevaluated with a
+  `StringQ::argx` message. Attributes: `Protected`.
+
+```mathematica
+In[1]:= StringQ["AbC"]
+Out[1]= True
+
+In[2]:= StringQ[""]
+Out[2]= True
+
+In[3]:= StringQ[123]
+Out[3]= False
+
+In[4]:= StringQ[]
+StringQ::argx: StringQ called with 0 arguments; 1 argument is expected.
+Out[4]= StringQ[]
+```
+
 - `MachineNumberQ[expr]`: `True` if `expr` is a machine-precision (IEEE
   double) real, or a `Complex` of two finite machine-precision reals.
   Returns `False` for exact numbers (Integer, BigInt, Rational), for
@@ -182,7 +203,48 @@ Pipeline (each stage exits early on a definite verdict):
    distinct on some complex branch (e.g. `Log[Exp[x]] - x` off the
    principal strip) reads `True` under these real-variable semantics.
 
-Attributes: `Listable`, `Protected`.
+**Assumptions.** `PossibleZeroQ[expr, Assumptions -> assum]` tests `expr`
+under `assum`, and an ambient `Assuming[...]` / `$Assumptions` scope is
+honoured even for the one-argument form. Assumptions do **not** invoke
+`Simplify` (`PossibleZeroQ` stays a self-contained numeric/structural test);
+instead they **restrict the Schwartz–Zippel sampler to the assumed region**,
+so an identity that holds only there is recognised. Per free symbol the
+sampler reads a domain (`Element[n, Integers]` → integer draws,
+`Element[z, Complexes]` or any `Re`/`Im` fact → complex draws, otherwise
+real), a sign (`x > 0`, `x <= 0`), a finite range
+(`-Pi/2 <= theta <= Pi/2`, which also lifts the usual `|value| >= 1` shell so
+values near `0` are sampled), and real/imaginary-part constraints
+(`Re[z] > 0`, `Im[z] == 0`). Facts it does not model (`!=`, `||`) are ignored
+— a generic sample satisfies them almost surely. Correctness is
+soundness-only: the region may be under-sampled (over-restriction is always
+safe) but never over-sampled, so a genuine non-zero on the assumed region is
+still reported `False` (`PossibleZeroQ[Sin[n Pi] + 1, Assumptions ->
+Element[n, Integers]]` is `False`). Only a `True` verdict from the exact
+`Q(x)` / trig-exp stages is trusted under assumptions — an unconditional
+`False` can be wrong on the restricted region (`Exp[2 Pi I k] - 1` is
+non-zero for continuous `k` yet zero for integer `k`), so constrained
+sampling is the sole arbiter of `False`.
+
+A sampled point that numericalizes to a pole (`Gamma` at a non-positive
+integer → `ComplexInfinity`) is treated as a definite non-zero (`False`), not
+`Unknown` — an infinite value is never zero. A *cancellation* of infinities
+(`Gamma[x] - Gamma[x]` → `Indeterminate`) is not a pole and stays `True`.
+
+*Assumption limitations.* The per-symbol sampler cannot express (i) a relation
+*between two symbols* (`x >= y`, `x == y`), (ii) a constraint on a
+*subexpression* rather than a bare symbol or its `Re`/`Im` part
+(`Re[z^2] > 0`), or (iii) an identity in a special function whose value comes
+from an integer-order *auto-evaluation the sampler does not trigger*
+(`LegendreP`/`ChebyshevT`/`HermiteH` of a symbolic integer order — a
+pre-existing sampler property, `True` even without assumptions). In each of
+these the unmodelled fact is ignored, so the verdict falls back to the
+unconstrained result.
+
+Attributes: `Protected` (**not** `Listable`). The first argument is threaded
+over a list manually, so `PossibleZeroQ[{a, b}, Assumptions -> assum]` maps
+`assum` over each element while a *positional list* assumption
+`PossibleZeroQ[expr, {x > 0, y > 0}]` is treated as a single conjunction
+rather than being mis-threaded against the expression list.
 
 ```mathematica
 In[1]:= PossibleZeroQ[E^(I Pi/4) - (-1)^(1/4)]
@@ -205,6 +267,21 @@ Out[6]= False    (* fails for negative x or complex x off the cut *)
 
 In[7]:= PossibleZeroQ[Sin[x]^2 + Cos[x]^2 - 1]
 Out[7]= True
+
+In[8]:= PossibleZeroQ[Sqrt[x^2] - x, Assumptions -> x >= 0]
+Out[8]= True
+
+In[9]:= PossibleZeroQ[Sin[n Pi], Assumptions -> Element[n, Integers]]
+Out[9]= True
+
+In[10]:= Assuming[Re[x] > 0, PossibleZeroQ[-x + Sqrt[x^2]]]
+Out[10]= True
+
+In[11]:= PossibleZeroQ[Log[Exp[z]] - z, Assumptions -> -Pi < Im[z] <= Pi]
+Out[11]= True
+
+In[12]:= PossibleZeroQ[Cos[n Pi], Assumptions -> Element[n, Integers]]
+Out[12]= False    (* Cos[n Pi] == (-1)^n, never zero on the integers *)
 ```
 
 ## $MachinePrecision, $MachineEpsilon, $MinMachineNumber, $MaxMachineNumber, $MaxNumber, $MinNumber

@@ -15,7 +15,7 @@ ND[{e1, e2, ...}, x, x0]
 
 Default Method -> EulerSum uses Richardson extrapolation of forward, direction-Scale finite differences (works for non-analytic expr; needs integer n >= 0). Method -> NIntegrate uses Cauchy's integral formula via NResidue (needs expr analytic near x0; allows fractional/complex order). ND cannot recognize small numbers that should be zero -- Chop if needed.
 
-Options: Method (EulerSum | NIntegrate), Scale (step size / contour radius / complex direction, default 1), Terms (EulerSum extrapolation terms, default 7), WorkingPrecision, PrecisionGoal, MaxRecursion.
+Options: Method (EulerSum | NIntegrate), Scale (step size / contour radius / complex direction, default 1), Terms (EulerSum starting extrapolation depth, default 7; grown adaptively to meet AccuracyGoal), WorkingPrecision, AccuracyGoal (default MachinePrecision), PrecisionGoal, MaxRecursion.
 ```
 
 ## Examples
@@ -30,7 +30,7 @@ In[2]:= ND[Cos[x]^3, {x, 2}, 0]
 Out[2]= -3.0
 
 In[3]:= ND[Sin[x], x, Pi I]
-Out[3]= 11.592 + 1.32527e-10*I
+Out[3]= 11.592 + 2.15751e-13*I
 
 In[4]:= ND[{Exp[x], Sin[x]}, x, 1]
 Out[4]= {2.71828, 0.540302}

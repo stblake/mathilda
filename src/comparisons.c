@@ -13,6 +13,7 @@
 #include "eval.h"
 #include "numeric.h"
 #include "internal.h"
+#include "interval.h"
 #include "zero_test.h"
 #include <stdio.h>
 #include <gmp.h>
@@ -102,6 +103,17 @@ static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
     bool exact_a, exact_b;
 
     *can_compare = false;
+
+    /* Interval vs scalar: decide only when the interval lies entirely on one
+     * side of the scalar (disjoint), so Interval[{5,8}] > Pi -> True. An
+     * interval straddling the scalar, or two intervals, stays symbolic. */
+    if (is_interval(a) || is_interval(b)) {
+        if (is_interval(a) && is_interval(b)) return interval_compare_intervals(a, b, can_compare);
+        if (is_interval(a)) return interval_compare_scalar(a, b, can_compare);
+        bool d; int s = interval_compare_scalar(b, a, &d);
+        *can_compare = d;
+        return -s;
+    }
 
     /* Exact integer-like comparison via GMP. Avoids precision loss when
      * either operand is a BigInt whose magnitude exceeds 2^53 (the limit

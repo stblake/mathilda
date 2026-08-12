@@ -7,6 +7,7 @@
 
 ```text
 Timing[expr] evaluates expr, and returns a list of the time in seconds used, together with the result obtained.
+Timing reports CPU time summed over threads; use AbsoluteTiming to measure elapsed time.
 ```
 
 ## Examples
@@ -19,7 +20,7 @@ _No verified examples yet for this function._
 
 - `HoldAll`, `Protected`, `SequenceHold`.
 - Returns `{timing, result}`.
-- Includes only CPU time spent evaluating the expression.
+- Includes only CPU time spent evaluating the expression, **summed over threads**.
 
 **Attributes:** `HoldAll`, `Protected`, `SequenceHold`.
 

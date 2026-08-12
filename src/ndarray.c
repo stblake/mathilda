@@ -397,6 +397,32 @@ Expr* ndarray_to_nested_list(const Expr* a) {
                           a->data.ndarray.data, a->data.ndarray.dtype, &idx);
 }
 
+Expr* ndarray_unpack_top_level(const Expr* a) {
+    if (!is_ndarray(a) || a->data.ndarray.rank < 1) return NULL;
+    int64_t n = a->data.ndarray.dims[0];
+    Expr** rows = malloc(sizeof(Expr*) * (n > 0 ? (size_t)n : 1));
+    if (!rows) return NULL;
+    for (int64_t i = 0; i < n; i++) {
+        /* a[[i+1]]: 1-based; a scalar leaf for rank 1, else a packed sub-array
+         * inheriting `a`'s presentation (ndarray_part builds through
+         * expr_new_ndarray_like). No non-integer subscript, so *degrade is only
+         * ever set on an internal failure -- treated the same as NULL below. */
+        Expr* idx = expr_new_integer(i + 1);
+        bool degrade = false;
+        Expr* row = ndarray_part(a, &idx, 1, &degrade);
+        expr_free(idx);
+        if (!row) {
+            for (int64_t j = 0; j < i; j++) expr_free(rows[j]);
+            free(rows);
+            return NULL;
+        }
+        rows[i] = row;
+    }
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)(n > 0 ? n : 0));
+    free(rows);
+    return list;
+}
+
 /* Per-axis index selection for ndarray_part's general (sliced) path. `keep` is
  * false for an integer subscript (the axis is dropped from the result) and true
  * for All / Span / a List of positions (the axis survives with `n` selected

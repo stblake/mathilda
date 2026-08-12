@@ -29,14 +29,23 @@ Expr* builtin_adjacency_matrix(Expr* res) {
     int* grid = (n > 0) ? calloc(n * n, sizeof(int)) : NULL;
     if (n > 0 && !grid) return NULL;
 
+    /* Endpoints resolve through a hash index; the linear scan this replaces made
+     * filling the grid O(E*V) on top of the unavoidable O(n^2) matrix. */
+    GraphVIdx* ix = graph_vidx_new(n);
+    if (!ix) { free(grid); return NULL; }
+    for (size_t i = 0; i < n; i++)
+        graph_vidx_put(ix, verts->data.function.args[i], (int)i);
+
     for (size_t k = 0; k < edges->data.function.arg_count; k++) {
         const Expr* e = edges->data.function.args[k];
         const char* kind = graph_edge_kind(e);
-        int ia = graph_vertex_index(verts, e->data.function.args[0]);
-        int ib = graph_vertex_index(verts, e->data.function.args[1]);
+        int ia = graph_vidx_get(ix, e->data.function.args[0]);
+        int ib = graph_vidx_get(ix, e->data.function.args[1]);
+        if (ia < 0 || ib < 0) continue;              /* validated: cannot happen */
         grid[(size_t)ia * n + (size_t)ib] = 1;
         if (kind == SYM_UndirectedEdge) grid[(size_t)ib * n + (size_t)ia] = 1;
     }
+    graph_vidx_free(ix);
 
     Expr** rows = (n > 0) ? calloc(n, sizeof(Expr*)) : NULL;
     for (size_t i = 0; i < n; i++) {

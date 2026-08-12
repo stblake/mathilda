@@ -248,7 +248,6 @@ static Expr* expand_list(Expr* f, Expr* var, Expr* list) {
 static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
                           double min_val, double max_val, double di_val,
                           bool is_real) {
-    (void)imax;
     size_t cap = 16, count = 0;
     Expr** terms = malloc(sizeof(Expr*) * cap);
 
@@ -257,8 +256,8 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
     Expr* curr_e = expr_copy(imin);
     bool overflow = false;
 
-    while ((di_val > 0 && val <= max_val + 1e-14) ||
-           (di_val < 0 && val >= max_val - 1e-14)) {
+    while (iter_range_continue(is_real, /*is_inf=*/false, curr_e, imax,
+                               val, max_val, di_val)) {
         if ((int64_t)count >= PRODUCT_MAX_FINITE_TERMS) { overflow = true; break; }
 
         Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);

@@ -25,7 +25,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <gmp.h>
-#include <mpfr.h>
+#ifdef USE_MPFR
+#include <mpfr.h>   /* only gb_to_expr_inexact() needs it, itself USE_MPFR-only */
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -245,8 +247,10 @@ struct Expr* gb_to_expr(const GBPoly* p, struct Expr** vars);
 /* Convert a GBPoly to Expr form for the InexactNumbers coefficient
  * domain: the polynomial is made monic and every coefficient is rendered
  * as a `bits`-bit MPFR real.  The caller owns the returned Expr*. */
+#ifdef USE_MPFR
 struct Expr* gb_to_expr_inexact(const GBPoly* p, struct Expr** vars,
                                 mpfr_prec_t bits);
+#endif
 
 #ifdef __cplusplus
 }

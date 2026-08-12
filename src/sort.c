@@ -9,6 +9,9 @@
 #include "pack.h"      /* pack_offer — a sorted machine list packs */
 #include "common.h"    /* builtin_arg_error */
 #include "take_drop.h" /* get_seq_spec_indices — Ordering[list, seq] reuses Take's spec */
+#include "list/list_common.h" /* is_real_numeric / is_infinity / is_minus_infinity / is_listq */
+#include "ndreduce.h"  /* ndred_ranked_min / ndred_ranked_max — NDArray order-statistic path */
+#include "numeric.h"   /* numericalize / numeric_machine_spec — key for symbolic reals */
 #include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
@@ -882,6 +885,148 @@ Expr* builtin_take_smallest_by(Expr* res) {
     Expr* nexpr = res->data.function.args[2];
     if (nexpr->type != EXPR_INTEGER) return NULL;
     return take_extreme(res->data.function.args[0], res->data.function.args[1], nexpr->data.integer, false);
+}
+
+/* ------------------- RankedMin / RankedMax ------------------- */
+
+/* A machine-double sort key for one real element, for the mixed / symbolic
+ * ordering path: +/-HUGE_VAL for +/-Infinity, the exact value for a real atom,
+ * else the numericalized value of a symbolic real (Pi, E, Sqrt[2], Pi + E, ...).
+ * Returns false when e is not a real number -- a free symbol or a non-real
+ * complex -- which is the signal that RankedMin has no definite result and must
+ * stay unevaluated. */
+static bool ranked_numeric_key(Expr* e, double* out) {
+    if (is_infinity(e)) { *out = HUGE_VAL; return true; }
+    if (is_minus_infinity(e)) { *out = -HUGE_VAL; return true; }
+    /* A real atom (incl. a real-valued Complex[re, 0]) reads its value directly;
+     * a symbolic real is numericalized to machine precision first. The giant
+     * high-precision reals stay untouched -- only their double key is taken. */
+    Expr* nv = is_real_numeric(e) ? NULL : numericalize(e, numeric_machine_spec());
+    Expr* v = nv ? nv : e;
+    bool ok = false;
+    if (is_real_numeric(v)) {
+        Expr* re; Expr* im;
+        *out = is_complex(v, &re, &im) ? get_numeric_value(re) : get_numeric_value(v);
+        ok = true;
+    }
+    if (nv) expr_free(nv);
+    return ok;
+}
+
+/* Context + comparator for the index quickselect. Exactly one of `keys` (the
+ * approximate double-key path) and expr_compare (the exact path, keys == NULL)
+ * decides order; the original index is the stable tiebreak, so the result is a
+ * strict total order over distinct indices either way. cmp(i, i) == 0 so the
+ * Hoare partition treats an element as equal to itself. */
+typedef struct { Expr** elem; const double* keys; } RankedCtx;
+
+static int ranked_cmp(const RankedCtx* c, size_t i, size_t j) {
+    if (i == j) return 0;
+    if (c->keys) {
+        if (c->keys[i] < c->keys[j]) return -1;
+        if (c->keys[i] > c->keys[j]) return 1;
+    } else {
+        int r = expr_compare(c->elem[i], c->elem[j]);
+        if (r != 0) return r;
+    }
+    return (i < j) ? -1 : 1;   /* stable: original position breaks value ties */
+}
+
+/* Quickselect the k-th (0-based) position of idx[0..m) under ranked_cmp, so that
+ * idx[k] names the k-th smallest element. O(m) average; middle pivot as in
+ * nd_select_kth (ndreduce.c). Only idx[k] is guaranteed settled on return. */
+static void ranked_select_idx(size_t* idx, size_t m, size_t k, const RankedCtx* c) {
+    size_t lo = 0, hi = m - 1;
+    while (lo < hi) {
+        size_t pivot = idx[lo + (hi - lo) / 2];
+        size_t i = lo, j = hi;
+        while (i <= j) {                                  /* Hoare partition */
+            while (ranked_cmp(c, idx[i], pivot) < 0) i++;
+            while (ranked_cmp(c, idx[j], pivot) > 0) j--;
+            if (i <= j) {
+                size_t t = idx[i]; idx[i] = idx[j]; idx[j] = t;
+                i++;
+                if (j == 0) break;                        /* size_t underflow guard */
+                j--;
+            }
+        }
+        if (k <= j) hi = j;
+        else if (k >= i) lo = i;
+        else break;                                       /* j < k < i: idx[k] settled */
+    }
+}
+
+/* RankedMin[list, n] core (RankedMax delegates with is_max = true, which negates
+ * n). Selects and returns the EXACT r-th ascending element, or NULL to leave the
+ * call unevaluated (empty list, |n| out of range, or a non-real element -- a
+ * definite result needs every element to be a real number). */
+static Expr* ranked_select(Expr* list, int64_t n0, bool is_max) {
+    size_t m = list->data.function.arg_count;
+    if (m == 0) return NULL;
+
+    int64_t n = is_max ? -n0 : n0;
+    int64_t r = (n > 0) ? n : ((int64_t)m + n + 1);       /* ascending rank, 1-based */
+    if (r < 1 || r > (int64_t)m) return NULL;             /* |n| out of range */
+
+    Expr** elem = list->data.function.args;
+
+    /* One scan chooses the path: exact (expr_compare, BigInt/Rational-safe) when
+     * every element is a real numeric atom, else the double-key path (which also
+     * validates that every element is a real number). */
+    bool all_exact = true;
+    for (size_t i = 0; i < m; i++)
+        if (!is_real_numeric(elem[i])) { all_exact = false; break; }
+
+    double* keys = NULL;
+    if (!all_exact) {
+        keys = malloc(sizeof(double) * m);
+        if (!keys) return NULL;
+        for (size_t i = 0; i < m; i++)
+            if (!ranked_numeric_key(elem[i], &keys[i])) { free(keys); return NULL; }
+    }
+
+    size_t* idx = malloc(sizeof(size_t) * m);
+    if (!idx) { free(keys); return NULL; }
+    for (size_t i = 0; i < m; i++) idx[i] = i;
+
+    RankedCtx ctx = { elem, keys };
+    ranked_select_idx(idx, m, (size_t)(r - 1), &ctx);
+    Expr* out = expr_copy(elem[idx[r - 1]]);
+
+    free(idx);
+    free(keys);
+    return out;
+}
+
+/* RankedMin[list, n] -- the n-th smallest element (n<0: the n-th largest).
+ * RankedMin[list, 1] == Min[list], RankedMin[list, -1] == Max[list]. Yields a
+ * definite result iff every element is a real number; +/-Infinity rank as
+ * +/-inf. An NDArray argument takes the buffer fast path (ndreduce.c). Returns
+ * NULL (unevaluated) for a non-integer / out-of-range n or a symbolic element. */
+Expr* builtin_ranked_min(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2)
+        return builtin_arg_error("RankedMin",
+            res->type == EXPR_FUNCTION ? res->data.function.arg_count : 0, 2, 2);
+    Expr* list  = res->data.function.args[0];
+    Expr* nexpr = res->data.function.args[1];
+    if (nexpr->type != EXPR_INTEGER || nexpr->data.integer == 0) return NULL;
+    if (is_ndarray(list)) return ndred_ranked_min(res);
+    if (!is_listq(list)) return NULL;
+    return ranked_select(list, nexpr->data.integer, false);
+}
+
+/* RankedMax[list, n] -- the n-th largest element (n<0: the n-th smallest);
+ * RankedMax[list, n] == RankedMin[list, -n]. See builtin_ranked_min. */
+Expr* builtin_ranked_max(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2)
+        return builtin_arg_error("RankedMax",
+            res->type == EXPR_FUNCTION ? res->data.function.arg_count : 0, 2, 2);
+    Expr* list  = res->data.function.args[0];
+    Expr* nexpr = res->data.function.args[1];
+    if (nexpr->type != EXPR_INTEGER || nexpr->data.integer == 0) return NULL;
+    if (is_ndarray(list)) return ndred_ranked_max(res);
+    if (!is_listq(list)) return NULL;
+    return ranked_select(list, nexpr->data.integer, true);
 }
 
 Expr* builtin_orderedq(Expr* res) {

@@ -2,11 +2,13 @@
 #include "plus.h"
 #include "arithmetic.h"
 #include "complex.h"
+#include "interval.h"
 #include "eval.h"
 #include "numeric.h"
 #include "sym_names.h"
 #include "series.h"
 #include "ndarray.h"
+#include "checked_int.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -64,6 +66,13 @@ static void get_coeff_base(Expr* e, Expr** coeff, Expr** base, bool* allocated_b
         return;
     }
 
+    if (is_interval(e)) {
+        /* Route intervals through the numeric fold (add_numbers handles them). */
+        *coeff = expr_copy(e);
+        *base = NULL;
+        return;
+    }
+
     if (expr_is_numeric_like(e) || is_complex(e, NULL, NULL)) {
         *coeff = expr_copy(e);
         *base = NULL;
@@ -97,6 +106,30 @@ static void get_coeff_base(Expr* e, Expr** coeff, Expr** base, bool* allocated_b
 
 static Expr* add_numbers(Expr* a, Expr* b) {
     if (is_overflow(a) || is_overflow(b)) return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
+
+    /* Interval arithmetic: [a1,a2] + [b1,b2] = [a1+b1, a2+b2], threaded over
+     * unions. A scalar number is promoted to a point interval; a Complex or
+     * non-numeric partner leaves the sum symbolic (return NULL). */
+    if (is_interval(a) || is_interval(b)) {
+        Expr* ia = NULL; Expr* ib = NULL; bool own_a = false, own_b = false;
+        if (is_interval(a)) ia = a;
+        else {
+            if (is_complex(a, NULL, NULL) || !expr_is_numeric_like(a)) return NULL;
+            ia = interval_from_scalar(a); own_a = true;
+        }
+        if (is_interval(b)) ib = b;
+        else {
+            if (is_complex(b, NULL, NULL) || !expr_is_numeric_like(b)) {
+                if (own_a) expr_free(ia);
+                return NULL;
+            }
+            ib = interval_from_scalar(b); own_b = true;
+        }
+        Expr* r = interval_add(ia, ib);
+        if (own_a) expr_free(ia);
+        if (own_b) expr_free(ib);
+        return r;
+    }
 
 #ifdef USE_MPFR
     /* MPFR path: if either operand carries arbitrary precision, fold
@@ -329,6 +362,54 @@ Expr* builtin_plus(Expr* res) {
     if (n == 0) return expr_new_integer(0);
     if (n == 1) return expr_copy(res->data.function.args[0]);
 
+    /* Machine-integer fast path: Plus of all int64 args is just their sum, with
+     * no symbolic terms to collect. Skips the NDArray / neg-plus / SeriesData /
+     * inexact-contagion / (coeff,base) grouping scans below -- this is the hot
+     * case in recursive integer code (fib[n-1]+fib[n-2]) and integer loop
+     * accumulators. On overflow we fall through to the generic path, which
+     * promotes to bigint; correctness is therefore unchanged. */
+    {
+        bool all_int = true;
+        for (size_t i = 0; i < n; i++)
+            if (res->data.function.args[i]->type != EXPR_INTEGER) { all_int = false; break; }
+        if (all_int) {
+            int64_t acc = 0;
+            bool overflow = false;
+            for (size_t i = 0; i < n; i++)
+                if (ci_add_i64(acc, res->data.function.args[i]->data.integer, &acc)) {
+                    overflow = true; break;
+                }
+            if (!overflow) return expr_new_integer(acc);
+        }
+    }
+
+    /* Fused special-case guard. Each of the five pre-scans below (NDArray,
+     * neg-Plus distribution, SeriesData, inexact contagion, Infinity/
+     * Indeterminate) traverses the whole arg list, and for an ordinary symbolic
+     * or rational sum -- the dominant case -- every one finds nothing. A single
+     * detection pass replaces those five traversals (and the size-n contagion
+     * malloc) with one: if no arg could trip any pre-scan we jump straight to
+     * term grouping. The predicate is a provably-correct superset of "some pass
+     * would act" -- the NDArray block needs is_ndarray, neg-Plus needs
+     * is_neg_of_plus, series needs is_series_data, contagion mutates only when
+     * arg_is_inexact holds (numeric_contagion_args's own trigger), and the
+     * Infinity block returns only when classify_plus_term != 0 -- so skipping
+     * the passes when it is false is exactly equivalent. The wrapped passes are
+     * otherwise unchanged; on any special arg we run them verbatim. */
+    {
+        bool needs_prescan = false;
+        for (size_t i = 0; i < n; i++) {
+            Expr* a = res->data.function.args[i];
+            Expr* inner_tmp;
+            if (is_ndarray(a) || is_neg_of_plus(a, &inner_tmp) || is_series_data(a) ||
+                arg_is_inexact(a) || classify_plus_term(a) != 0) {
+                needs_prescan = true;
+                break;
+            }
+        }
+        if (!needs_prescan) goto plus_grouping;
+    }
+
     /* NDArray fast path: same-shape NDArray operands add elementwise over raw
      * buffers, with numpy-style broadcasting of numeric scalars (1 + NDArray).
      * If the array operands disagree in shape, warn (NDArray::shape) and leave
@@ -495,6 +576,7 @@ Expr* builtin_plus(Expr* res) {
         }
     }
 
+    plus_grouping:;   /* fused special-case guard jumps here for an ordinary sum */
     Expr* num_sum = expr_new_integer(0);
     
     typedef struct {
@@ -680,8 +762,27 @@ Expr* builtin_plus(Expr* res) {
     } else {
         /* Canonically order the collapsed terms here (group count is small)
          * so the evaluator need not sort the raw input. The leading numeric
-         * term still sorts first (numbers precede symbols/powers). */
-        qsort(final_args, idx, sizeof(Expr*), plus_cmp_ptrs);
+         * term still sorts first (numbers precede symbols/powers).
+         *
+         * Skip the O(n log n) qsort when the terms are ALREADY canonically
+         * ordered -- an O(n) scan of expr_compare instead. This is the common
+         * case and the one that dominated a large symbolic sum: `Plus @@
+         * Table[c[k] x, {k, n}]` arrives in order (c[1] x < c[2] x < ...), and
+         * every re-evaluation of an already-sorted sum re-sorts terms that
+         * never moved. Profiling `Plus @@ Table[c[k] x, {k, 2000}]` put ~50%
+         * of the time in qsort/expr_compare; the pre-check turns ~n log n
+         * comparisons into n. When the scan finds a descent it falls straight
+         * through to qsort (with at most one wasted O(n) partial pass).
+         * Mirrors the Orderless already-sorted fast path in evaluate_step. */
+        bool already_sorted = true;
+        for (size_t j = 1; j < idx; j++) {
+            if (plus_cmp_ptrs(&final_args[j - 1], &final_args[j]) > 0) {
+                already_sorted = false;
+                break;
+            }
+        }
+        if (!already_sorted)
+            qsort(final_args, idx, sizeof(Expr*), plus_cmp_ptrs);
         final_res = expr_new_function(expr_new_symbol(SYM_Plus), final_args, idx);
     }
     if (heap_bufs) free(final_args);
