@@ -499,12 +499,19 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
 - **Only `Automatic`, `"Agglomerate"` and `"SpanningTree"` accept non-numeric
   elements or vectors.** The other seven methods read a sorted one-dimensional
   projection and decline rather than run on data for which it is meaningless.
-- **Vectors and strings are capped at 2000 elements.** Both make the
-  neighbourhood work quadratic -- a sort makes it linear only on a line -- and a
-  larger input is declined rather than silently taking minutes. Measured: 2-D
-  clustering is 95 ms at 500 points, 1.5 s at 2000, growing fourfold per
-  doubling. One-dimensional input has no such cap and does 10^6 elements in
-  about 2.3 s.
+- **Two spanning-tree builders, and therefore two ceilings.** Points whose
+  every coordinate is already a machine number take a double-precision Prim,
+  since such input carries no precision that exact arithmetic would preserve;
+  points with a `Rational`, bigint or MPFR coordinate keep the exact builder,
+  which is the only one that can order them correctly. Distinctness is decided by
+  comparing the *elements* exactly on both paths, so `{{1/3, 1/7}, {1/3, 1/7 +
+  1/10^20}}` stays together either way.
+  - machine points: **capped at 20000**. Measured 6.8 ms at 2000, 0.17 s at
+    10000, 0.81 s at 20000.
+  - exact points and strings: **capped at 2000**, at roughly 1.5 s there.
+  - Both are quadratic -- a sort makes neighbourhood work linear only on a line
+    -- so a larger input is declined rather than silently taking minutes. One
+    dimension has no cap and does 10^6 elements in about 2.3 s.
 - `n` is capped at the number of distinct values — no method can separate two
   equal elements, so `FindClusters[{1, 2, 3}, 5]` gives three clusters and
   `FindClusters[{7, 7, 7, 7}, 3]` gives one.

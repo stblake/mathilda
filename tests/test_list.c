@@ -1545,6 +1545,37 @@ void test_distance_functions() {
                    "EuclideanDistance[{0, 0}, {2, 2}]", "True", 0);
 }
 
+/* The two spanning-tree builders must agree.
+ *
+ * Machine-precision points take a double Prim (over two orders of magnitude
+ * faster: 2000 2-D points went from 1.49 s to 6.8 ms) while exact points keep the
+ * Expr-arithmetic builder, which is the only one that can order a Rational or a
+ * bigint correctly. Two code paths for one definition is a standing risk, so the
+ * same points are clustered both ways -- as integers, which are machine, and
+ * divided by a constant, which makes them exact -- and the partitions must
+ * match. */
+void test_find_clusters_builder_agreement() {
+    assert_eval_eq(
+        "FindClusters[{{1, 1}, {1, 2}, {9, 9}, {9, 8}, {50, 50}, {2, 1}}, 3] === "
+        "3 * FindClusters[{{1, 1}, {1, 2}, {9, 9}, {9, 8}, {50, 50}, {2, 1}}/3, 3]",
+        "True", 0);
+    assert_eval_eq(
+        "Module[{p = Table[{RandomInteger[1000], RandomInteger[1000]}, {400}]},"
+        " FindClusters[p, 5] === 2 * FindClusters[p/2, 5]]", "True", 0);
+
+    /* Exactness is not lost on either path: two vectors differing by 1/10^20
+     * stay together, which a double projection of the ELEMENTS would collapse.
+     * (The distances may be computed in double; distinctness never is.) */
+    assert_eval_eq("FindClusters[{{1/3, 1/7}, {1/3, 1/7 + 1/10^20}, {5, 5}}]",
+                   "{{{1/3, 1/7}, {1/3, 100000000000000000007/700000000000000000000}}, {{5, 5}}}", 0);
+
+    /* Each builder has its own ceiling, because their constants differ. */
+    assert_eval_eq("Head[FindClusters[Partition[RandomReal[{0, 1}, 2 * 20001], 2]]]",
+                   "FindClusters", 0);
+    assert_eval_eq("Head[FindClusters[Table[{RandomInteger[10^6]/7, RandomInteger[10^6]/11}, {2001}]]]",
+                   "FindClusters", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1602,6 +1633,7 @@ int main() {
     TEST(test_nearest);
     TEST(test_find_clusters);
     TEST(test_distance_functions);
+    TEST(test_find_clusters_builder_agreement);
 
     printf("All list tests passed!\n");
     return 0;

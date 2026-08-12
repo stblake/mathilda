@@ -97,6 +97,11 @@
  * makes linear on a line), so it carries the same order of cap as the other
  * quadratic methods. */
 #define FC_NDIM_MAX_N        2000
+/* The machine-precision point builder is over two orders of magnitude faster
+ * than the exact one -- 2000 2-D points went from 1.49 s to 6.8 ms -- so it
+ * earns a correspondingly larger ceiling. Still quadratic: 20000 points is
+ * roughly 0.7 s. */
+#define FC_NDIM_MACHINE_MAX_N 20000
 
 /* Merge tolerance for the shift methods, in units of the data scale (one
  * median gap). Strictly 1.0 is too tight: on evenly spaced data the interior
@@ -443,6 +448,94 @@ static void fc_merge_sort(size_t* idx, size_t n, FcSortCtx* c) {
  * needs. Ties between equal-weight edges therefore break by insertion order --
  * deterministic for a given input, and with no prior behaviour to preserve since
  * higher dimensions were previously rejected outright. */
+/* Is every coordinate already a machine number?
+ *
+ * If so, the input carries no precision beyond a double, and computing its
+ * distances through exact Expr arithmetic preserves nothing -- it just allocates
+ * n^2 expressions to reach the same answer a double would. An exact Rational, a
+ * bigint or an MPFR value is different: there the exact path is the only one that
+ * can order the points correctly, and it is kept.
+ *
+ * Integers are required to be within 2^53 so that squaring differences stays
+ * exact in a double; beyond that, doubles start losing integers and the fast path
+ * would silently disagree with the exact one. */
+static bool fc_all_machine(const FcData* d) {
+    for (size_t i = 0; i < d->n; i++) {
+        for (size_t c = 0; c < d->dim; c++) {
+            Expr* e = fc_comp(d, i, c);
+            if (e->type == EXPR_REAL) continue;
+            if (e->type == EXPR_INTEGER) {
+                int64_t v = e->data.integer;
+                if (v > -9007199254740992LL && v < 9007199254740992LL) continue;
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+/* Squared Euclidean distance over the machine projection. */
+static double fc_sqdist(const FcData* d, size_t i, size_t j) {
+    const double* a = d->coord + i * d->dim;
+    const double* b = d->coord + j * d->dim;
+    double s = 0.0;
+    for (size_t c = 0; c < d->dim; c++) {
+        double t = a[c] - b[c];
+        s += t * t;
+    }
+    return s;
+}
+
+/* Prim over doubles, for input that is machine-precision to begin with.
+ *
+ * Same algorithm and the same O(n^2) comparison count as the exact builder; the
+ * difference is that a distance costs a few flops instead of allocating and
+ * evaluating a chain of expressions. Only the n-1 chosen edge weights become
+ * Exprs, so allocation drops from O(n^2) to O(n).
+ *
+ * Everything downstream is unaffected: bnd[] and n_distinct are derived by
+ * comparing the ELEMENTS with the exact comparator, never these weights, so
+ * distinctness stays exact on this path too. */
+static bool fc_build_mst_machine(FcData* d) {
+    size_t n = d->n;
+    double* best = malloc(sizeof(double) * n);
+    size_t* from = malloc(sizeof(size_t) * n);
+    bool*   in   = calloc(n, sizeof(bool));
+    if (!best || !from || !in) { free(best); free(from); free(in); return false; }
+
+    in[0] = true;
+    for (size_t i = 1; i < n; i++) { best[i] = fc_sqdist(d, 0, i); from[i] = 0; }
+
+    bool ok = true;
+    for (size_t added = 1; added < n; added++) {
+        size_t pick = SIZE_MAX;
+        double bw = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            if (in[i]) continue;
+            if (pick == SIZE_MAX || best[i] < bw) { pick = i; bw = best[i]; }
+        }
+        if (pick == SIZE_MAX || isnan(bw)) { ok = false; break; }
+
+        in[pick] = true;
+        size_t j = added - 1;
+        d->eu[j] = from[pick];
+        d->ev[j] = pick;
+        d->gap[j] = expr_new_real(bw);
+        if (!d->gap[j]) { ok = false; break; }
+
+        for (size_t i = 0; i < n; i++) {
+            if (in[i]) continue;
+            double cand = fc_sqdist(d, pick, i);
+            if (cand < best[i]) { best[i] = cand; from[i] = pick; }
+        }
+    }
+
+    free(best);
+    free(from);
+    free(in);
+    return ok;
+}
+
 static bool fc_build_mst(FcData* d) {
     size_t n = d->n;
     Expr** best = calloc(n, sizeof(Expr*));    /* exact weight to the tree */
@@ -1702,7 +1795,15 @@ Expr* builtin_find_clusters(Expr* res) {
     /* Vector work is quadratic (Prim, and the neighbourhood queries that a sort
      * makes linear in 1D), so it is capped the way the other quadratic methods
      * already are. */
-    if (d.kind != FC_KIND_SCALAR && n > FC_NDIM_MAX_N) return NULL;
+    /* Which point builder will run, decided here because it sets the ceiling:
+     * both are quadratic, but their constants differ by more than two orders of
+     * magnitude. Machine-precision input carries no precision a double would
+     * lose, so nothing is given up by taking the fast path. */
+    bool machine_points = (d.kind == FC_KIND_POINT) && fc_all_machine(&d);
+    if (d.kind != FC_KIND_SCALAR) {
+        size_t cap = machine_points ? FC_NDIM_MACHINE_MAX_N : FC_NDIM_MAX_N;
+        if (n > cap) return NULL;
+    }
 
     if (d.n_gap) {
         d.gap = calloc(d.n_gap, sizeof(Expr*));
@@ -1754,7 +1855,14 @@ Expr* builtin_find_clusters(Expr* res) {
                     d.coord[i * d.dim + c] = fc_to_double(fc_comp(&d, i, c));
         }
 
-        if (d.n_gap && !fc_build_mst(&d)) { fc_data_free(&d); return NULL; }
+        /* Machine-precision points take the double builder; exact ones (a
+         * Rational, a bigint, an MPFR value) keep the exact builder, which is the
+         * only one that can order them correctly. */
+        if (d.n_gap && !(machine_points ? fc_build_mst_machine(&d)
+                                        : fc_build_mst(&d))) {
+            fc_data_free(&d);
+            return NULL;
+        }
     }
 
     /* Exact boundary flags and the distinct count, one pass over the tree edges.
