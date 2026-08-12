@@ -383,6 +383,33 @@ Expr* builtin_plus(Expr* res) {
         }
     }
 
+    /* Fused special-case guard. Each of the five pre-scans below (NDArray,
+     * neg-Plus distribution, SeriesData, inexact contagion, Infinity/
+     * Indeterminate) traverses the whole arg list, and for an ordinary symbolic
+     * or rational sum -- the dominant case -- every one finds nothing. A single
+     * detection pass replaces those five traversals (and the size-n contagion
+     * malloc) with one: if no arg could trip any pre-scan we jump straight to
+     * term grouping. The predicate is a provably-correct superset of "some pass
+     * would act" -- the NDArray block needs is_ndarray, neg-Plus needs
+     * is_neg_of_plus, series needs is_series_data, contagion mutates only when
+     * arg_is_inexact holds (numeric_contagion_args's own trigger), and the
+     * Infinity block returns only when classify_plus_term != 0 -- so skipping
+     * the passes when it is false is exactly equivalent. The wrapped passes are
+     * otherwise unchanged; on any special arg we run them verbatim. */
+    {
+        bool needs_prescan = false;
+        for (size_t i = 0; i < n; i++) {
+            Expr* a = res->data.function.args[i];
+            Expr* inner_tmp;
+            if (is_ndarray(a) || is_neg_of_plus(a, &inner_tmp) || is_series_data(a) ||
+                arg_is_inexact(a) || classify_plus_term(a) != 0) {
+                needs_prescan = true;
+                break;
+            }
+        }
+        if (!needs_prescan) goto plus_grouping;
+    }
+
     /* NDArray fast path: same-shape NDArray operands add elementwise over raw
      * buffers, with numpy-style broadcasting of numeric scalars (1 + NDArray).
      * If the array operands disagree in shape, warn (NDArray::shape) and leave
@@ -549,6 +576,7 @@ Expr* builtin_plus(Expr* res) {
         }
     }
 
+    plus_grouping:;   /* fused special-case guard jumps here for an ordinary sum */
     Expr* num_sum = expr_new_integer(0);
     
     typedef struct {

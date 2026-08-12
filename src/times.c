@@ -347,6 +347,30 @@ Expr* builtin_times(Expr* res) {
         }
     }
 
+    /* Fused special-case guard (mirrors builtin_plus). The NDArray, SeriesData,
+     * inexact-contagion and Infinity/Indeterminate pre-scans below each traverse
+     * the whole factor list, and for an ordinary symbolic or rational product --
+     * the dominant case, e.g. every `c[k] x` term a symbolic Table builds -- all
+     * find nothing. One detection pass replaces those traversals (and the size-n
+     * contagion malloc): if no factor could trip any pre-scan we jump straight to
+     * the (base, exponent) collector. The predicate is a provably-correct superset
+     * of "some pass would act" -- NDArray needs is_ndarray, series needs
+     * is_series_data, contagion mutates only when arg_is_inexact holds, and the
+     * infinity block acts only on an Infinity/ComplexInfinity/Indeterminate factor
+     * -- so skipping the passes when it is false is exactly equivalent. */
+    {
+        bool needs_prescan = false;
+        for (size_t i = 0; i < n; i++) {
+            Expr* a = res->data.function.args[i];
+            if (is_ndarray(a) || is_series_data(a) || arg_is_inexact(a) ||
+                is_indeterminate_sym(a) || is_complex_infinity_sym(a) || is_infinity_sym(a)) {
+                needs_prescan = true;
+                break;
+            }
+        }
+        if (!needs_prescan) goto times_grouping;
+    }
+
     /* NDArray fast path: same-shape NDArray operands multiply elementwise over
      * raw buffers, with numpy-style broadcasting of numeric scalars (3 * NDArray;
      * this is also how -NDArray and NDArray - NDArray reduce). If the array
@@ -476,6 +500,7 @@ Expr* builtin_times(Expr* res) {
         }
     }
 
+    times_grouping:;   /* fused special-case guard jumps here for an ordinary product */
     Expr* num_prod = expr_new_integer(1);
     Expr* complex_val = NULL;
     Expr* interval_val = NULL;   /* running product of Interval factors */

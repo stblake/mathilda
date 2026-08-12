@@ -148,20 +148,47 @@ static void parse_options(Expr* res, size_t start_idx, LevelSpec* spec) {
 
 /* ------------------- Apply ------------------- */
 
+static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec spec);
+
+/* Recurse into one child at the next level down, but short-circuit the common
+ * case where a non-negative spec has already passed its maximum: no application
+ * can occur in the child or any deeper node, so refcount-share it (O(1)) instead
+ * of paying a recursive apply_at_level that would do exactly that after
+ * re-checking. This is what makes a wide MapApply (`f @@@ list`) cheap -- every
+ * element's arguments sit one level past max and would otherwise each cost a
+ * recursive call that only shares. Inlined by the compiler at -O3. */
+static Expr* apply_child(Expr* f, Expr* child, int64_t child_level, LevelSpec spec) {
+    if (spec.min >= 0 && child_level > spec.max)
+        return expr_copy(child);
+    return apply_at_level(f, child, child_level, spec);
+}
+
 static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec spec) {
     if (expr->type != EXPR_FUNCTION) {
         return expr_copy(expr);
     }
 
-    int64_t d = get_depth(expr);
-    bool should_apply = (current_level >= spec.min && current_level <= spec.max) ||
-                        (-d >= spec.min && -d <= spec.max);
+    /* With a non-negative level spec the negative-depth branch of should_apply
+     * can never fire, so get_depth's full-subtree traversal is dead weight.
+     * Moreover, once we are past the maximum level no application can occur here
+     * or at any deeper node (levels only increase with depth), so the whole
+     * subtree passes through unchanged -- an O(1) refcount bump instead of a
+     * structural clone. Only the negative-spec case still needs get_depth. */
+    bool should_apply;
+    if (spec.min >= 0) {
+        if (current_level > spec.max) return expr_copy(expr);
+        should_apply = (current_level >= spec.min && current_level <= spec.max);
+    } else {
+        int64_t d = get_depth(expr);
+        should_apply = (current_level >= spec.min && current_level <= spec.max) ||
+                       (-d >= spec.min && -d <= spec.max);
+    }
 
     if (should_apply) {
         size_t count = expr->data.function.arg_count;
         Expr** args = malloc(sizeof(Expr*) * count);
         for (size_t i = 0; i < count; i++) {
-            args[i] = apply_at_level(f, expr->data.function.args[i], current_level + 1, spec);
+            args[i] = apply_child(f, expr->data.function.args[i], current_level + 1, spec);
         }
         Expr* new_func = expr_new_function(expr_copy(f), args, count);
         free(args);
@@ -173,7 +200,7 @@ static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpe
     size_t count = expr->data.function.arg_count;
     Expr** new_args = malloc(sizeof(Expr*) * count);
     for (size_t i = 0; i < count; i++) {
-        new_args[i] = apply_at_level(f, expr->data.function.args[i], current_level + 1, spec);
+        new_args[i] = apply_child(f, expr->data.function.args[i], current_level + 1, spec);
     }
     
     Expr* new_head = NULL;
@@ -208,6 +235,29 @@ Expr* builtin_apply(Expr* res) {
             vargs[i] = expr_copy(expr->data.function.args[i]->data.function.args[1]);
         Expr* call = expr_new_function(expr_copy(f), vargs, n);
         free(vargs);
+        Expr* r = evaluate(call);
+        expr_free(call);
+        return r;
+    }
+
+    /* Specialised top-level fast path for `f @@ expr` (the default, no explicit
+     * level spec). Applying at level 0 only rewrites the head, so `f @@ g[a,b,c]`
+     * is exactly `evaluate(f[a,b,c])` with every element untouched. The general
+     * apply_at_level below would instead call get_depth over the whole tree (its
+     * only consumer is the negative-level branch a default spec never takes) and
+     * structurally clone every element subtree. Here we build f[elements...] by
+     * refcount-sharing each element (Expr trees are immutable; expr_copy is an
+     * O(1) refcount bump) and evaluate once -- no traversal, no per-subtree clone.
+     * Provably equivalent to apply_at_level(f, expr, 0, {0,0}). Mirrors the
+     * association fast path above. Explicit `0`/`{0}`/`{0,0}` parse to non-default
+     * specs and keep the general path, so only the ls == NULL form lands here. */
+    if (ls == NULL && expr->type == EXPR_FUNCTION) {
+        size_t count = expr->data.function.arg_count;
+        Expr** args = malloc(sizeof(Expr*) * (count ? count : 1));
+        for (size_t i = 0; i < count; i++)
+            args[i] = expr_copy(expr->data.function.args[i]);
+        Expr* call = expr_new_function(expr_copy(f), args, count);
+        free(args);
         Expr* r = evaluate(call);
         expr_free(call);
         return r;

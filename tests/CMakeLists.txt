@@ -772,6 +772,10 @@ target_include_directories(parse_tests PRIVATE ../src)
 add_executable(eval_tests test_eval.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(eval_tests PRIVATE ../src)
 
+add_executable(core_algebra_tests test_core_algebra.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(core_algebra_tests PRIVATE ../src)
+add_test(NAME core_algebra_tests COMMAND core_algebra_tests)
+
 add_executable(trace_tests test_trace.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(trace_tests PRIVATE ../src)
 

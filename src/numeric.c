@@ -1234,7 +1234,7 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
  *  heads can opt in with one call.
  * ---------------------------------------------------------------------- */
 
-static bool arg_is_inexact(const Expr* e) {
+bool arg_is_inexact(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_REAL) return true;
 #ifdef USE_MPFR

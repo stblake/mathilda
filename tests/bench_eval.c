@@ -118,7 +118,14 @@ typedef struct { const char* label; const char* expr; double baseline_norm; } Be
  *     tripped on any bad day. This one is worth a look on its own: it is the
  *     only matcher-bound row, so a matcher or expr_compare regression is the
  *     likely cause. Not investigated here -- flagged, not fixed.
- * The other four rows moved by only the ~6% the calibration change accounts for. */
+ * The other four rows moved by only the ~6% the calibration change accounts for.
+ *
+ * 2026-08-12  Added the three flagship rows (fib 24, Case B, Plus 2000) mandated
+ * by MATHILDA_EVALUATOR_PERFORMANCE.md, recorded alongside the Apply/Plus/Times
+ * throughput work. These three baselines were taken on the x86-64 host used for
+ * that doc, not the M-series host of the rows above; the norm is machine-
+ * normalised but not perfectly portable, so they may read a little lower on
+ * M-series (extra gate slack, never a false fail). */
 static Bench BENCHES[] = {
     /* 8000 structurally DISTINCT undefined nodes hh[k, k] (k differs each row),
      * so no eval-clock cache hit or refcount DAG-sharing collapses them. No rule
@@ -148,6 +155,24 @@ static Bench BENCHES[] = {
     /* 3000 sequential Plus re-evaluations (each Nest step re-evaluates the
      * running sum). Exercises Flat/Orderless combination on every pass. */
     { "nested plus collapse (3k)", "Nest[# + a &, x, 3000] /. a -> 0", 0.35 },
+
+    /* Naive fib[24]: exponential DownValue dispatch on a trivial body -- the
+     * flagship per-call dispatch signal from MATHILDA_EVALUATOR_PERFORMANCE.md.
+     * Definition installed in main(). */
+    { "naive recursion (fib 24)", "fib[24]", 13.5 },
+
+    /* Case B (typed): the matcher per-attempt constant. Both engines walk the
+     * identical search space, so the row isolates the evaluator constant behind
+     * each guard evaluation (Length/Plus/Equal per attempt). */
+    { "matcher constant (Case B)",
+      "MatchQ[Range[500], {xx : Repeated[_Integer], yy : Repeated[_Integer], "
+      "zz : Repeated[_Integer]} /; 3 Length[{xx}] + 5 Length[{yy}] == Length[{zz}]]", 1.05 },
+
+    /* Orderless canonicalisation of a 2000-term symbolic sum built via Apply --
+     * the arithmetic sentinel this optimisation targeted (Table build + Apply +
+     * Plus grouping). The 1200-term sibling above tracks the same shape; this
+     * pins the doc's headline size. */
+    { "orderless sort (Plus 2000)", "Length[Plus @@ Table[c[k] x, {k, 2000}]]", 0.40 },
 };
 #define N_BENCH ((int)(sizeof(BENCHES) / sizeof(BENCHES[0])))
 
@@ -155,8 +180,16 @@ int main(void) {
     symtab_init();
     core_init();
 
-    /* Untimed setup: the one workload that needs a definition. */
+    /* Untimed setup: the workloads that need a definition. */
     eval_discard("g[x_] := x + 1");
+    /* Naive Fibonacci: the cleanest DownValue-dispatch signal (a trivial body,
+     * so the row measures almost nothing but per-call pattern lookup + MatchEnv
+     * + rebuild). The evaluator doc uses fib[28]; fib[24] is the identical code
+     * path at a gate-friendly size (~0.1 s vs ~0.85 s) so the median-of-5 run
+     * stays within this harness's "second or two" budget. */
+    eval_discard("fib[0] = 0");
+    eval_discard("fib[1] = 1");
+    eval_discard("fib[n_] := fib[n - 1] + fib[n - 2]");
 
     printf("Evaluator baseline benchmark (median of %d trials)\n", N_TRIALS);
     printf("  norm = workload_us / calibration_us (machine-independent)\n");
