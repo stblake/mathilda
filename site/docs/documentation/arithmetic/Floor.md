@@ -5,38 +5,26 @@
 
 ## Description
 
-```text
-Floor[x]
-    gives the greatest integer less than or equal to x.
-Floor[x, a]
-    gives the greatest multiple of a less than or equal to x.
-Floor is Listable. Exact (Integer / BigInt / Rational) inputs return
-exact integers; Real / MPFR inputs are rounded toward -Infinity at
-the input precision; symbolic inputs stay unevaluated.
-```
+**`Floor[x]`**
 
-## Examples
+gives the greatest integer less than or equal to x.
 
-_No verified examples yet for this function._
+**`Floor[x, a]`**
 
-## Implementation notes
+gives the greatest multiple of a less than or equal to x.
 
-`builtin_floor` calls the shared `do_piecewise(res, OP_FLOOR, "Floor", true)` dispatcher (the `true` enables the two-argument `Floor[x, a]` → `a Floor[x/a]` unit-quantization form). The per-element kernel `do_piecewise_1` handles each numeric type exactly: `EXPR_INTEGER`/`EXPR_BIGINT` are already integers and pass through; rationals are floored exactly via GMP; `EXPR_REAL` uses C `floor()` cast to `int64_t`; `EXPR_MPFR` uses `mpfr_floor` then `mpfr_get_z` into an `mpz_t` (normalized to int/bigint) so arbitrarily large values never silently truncate; `±Infinity` pass through. `Floor` is registered `LISTABLE | NUMERICFUNCTION | PROTECTED`, so threading over lists is handled by the generic evaluator before the builtin runs. Non-numeric arguments return NULL (left symbolic).
+<details>
+<summary>Notes</summary>
 
-**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+Floor is Listable. Exact (Integer / BigInt / Rational) inputs return exact integers; Real / MPFR inputs are rounded toward -Infinity at the input precision; symbolic inputs stay unevaluated.
 
-## Implementation status
+</details>
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+## Examples (5)
 
-## References
+Every input below was run against the current Mathilda build and its output recorded.
 
-- Source: [`src/piecewise.c`](https://github.com/stblake/mathilda/blob/main/src/piecewise.c)
-- Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= Floor[7/2]
@@ -62,6 +50,23 @@ Out[1]= {2, -3, 2, 3}
 In[1]:= Floor[N[Pi, 40] 10^20]
 Out[1]= 314159265358979323846
 ```
+
+## Implementation notes
+
+`builtin_floor` calls the shared `do_piecewise(res, OP_FLOOR, "Floor", true)` dispatcher (the `true` enables the two-argument `Floor[x, a]` → `a Floor[x/a]` unit-quantization form). The per-element kernel `do_piecewise_1` handles each numeric type exactly: `EXPR_INTEGER`/`EXPR_BIGINT` are already integers and pass through; rationals are floored exactly via GMP; `EXPR_REAL` uses C `floor()` cast to `int64_t`; `EXPR_MPFR` uses `mpfr_floor` then `mpfr_get_z` into an `mpz_t` (normalized to int/bigint) so arbitrarily large values never silently truncate; `±Infinity` pass through. `Floor` is registered `LISTABLE | NUMERICFUNCTION | PROTECTED`, so threading over lists is handled by the generic evaluator before the builtin runs. Non-numeric arguments return NULL (left symbolic).
+
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+
+## References
+
+- Source: [`src/piecewise.c`](https://github.com/stblake/mathilda/blob/main/src/piecewise.c)
+- Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_coverage.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_coverage.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_complement.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complement.c)
+
+## Notes & additional examples
 
 ### Notes
 

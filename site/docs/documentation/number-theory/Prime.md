@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-Prime[n] gives the nth prime number. Listable. Small n is read from a sieve table; large n inverts PrimePi via an asymptotic estimate refined against the exact prime counter. Defined for positive integers up to n ~ 1.4*10^12; non-positive-integer arguments give Prime::intpp.
-```
+**`Prime[n] gives the nth prime number. Listable. Small n is read from a sieve table; large n inverts PrimePi via an asymptotic estimate refined against the exact prime counter. Defined for positive integers up to n ~ 1.4*10^12; non-positive-integer arguments give Prime::intpp.`**
 
-## Examples
+## Examples (6)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Prime[100]
@@ -23,6 +23,48 @@ Out[2]= {2, 5, 7, 29}
 In[3]:= Prime[10^10]
 Out[3]= 252097800623
 ```
+
+### Applications (3)
+
+```mathematica
+In[1]:= Prime[100]
+Out[1]= 541
+```
+
+`Prime` is `Listable`, so it threads over a list of indices:
+
+```mathematica
+In[1]:= Prime[{1, 3, 4, 10}]
+Out[1]= {2, 5, 7, 29}
+```
+
+It reaches well beyond the small-prime table by inverting `PrimePi`:
+
+```mathematica
+In[1]:= Prime[10^10]
+Out[1]= 252097800623
+```
+
+## Options & behaviour
+
+> **Packed arrays.** `Prime[list]` over an `int64` buffer is one **sieve** to
+> the largest requested index followed by a gather, rather than a separate
+> prime count per element — so the whole array costs about what its largest
+> single index used to.
+
+## Algorithm
+
+prime.c -- Prime[n] (the nth prime) and PrimePi[x] (the prime-counting function).
+
+The prime-counting algorithms live in primecount.c; this file holds the two
+
+```text
+builtins.  PrimePi[x] accepts a Method option selecting the algorithm:
+  Automatic (default), "Sieve", "Legendre", "Meissel", "Lehmer", "LMO",
+  "DelegliseRivat", "LucyHedgehog".
+```
+
+Prime[n] is the functional inverse of PrimePi: small n are read straight from the sieve table; large n are found by seeding Cipolla's asymptotic estimate, refining it with a Newton step driven by the exact counter, then walking with GMP's nextprime/prevprime to land exactly on p_n.
 
 ## Implementation notes
 
@@ -59,41 +101,29 @@ exceed that bound, the call is left unevaluated.
 - `Listable`, `Protected`.
 - Small `n` is read directly from a sieve table of the primes below $10^6$.
 - Large `n` inverts `PrimePi`: a Cipolla asymptotic estimate for $p_n$ is refined
+  by a Newton step against the exact prime counter, then `NextPrime`/`PrevPrime`
+  steps land exactly on $p_n$.  Exact for `n` up to about $1.4 \times 10^{12}$
+  ($p_n \le 5 \times 10^{13}$); beyond that the call is left unevaluated.
+- A non-positive-integer argument emits `Prime::intpp`; a wrong argument count
+  emits `Prime::argx`; both leave the call unevaluated.
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[PrimePi](../../number-theory/PrimePi/), [NextPrime](../../number-theory/NextPrime/)
 
 ## References
 
 - M. Cipolla, "La determinazione assintotica dell'n-esimo numero primo", Rend. Accad. Sci. Fis. Mat. Napoli 8 (1902), 132–166.
 - Source: [`src/numbertheory/prime.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory/prime.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_jacobisymbol.c`](https://github.com/stblake/mathilda/blob/main/tests/test_jacobisymbol.c)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
+- Tests: [`tests/test_prime.c`](https://github.com/stblake/mathilda/blob/main/tests/test_prime.c)
+- Tests: [`tests/test_primitive_root.c`](https://github.com/stblake/mathilda/blob/main/tests/test_primitive_root.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Prime[100]
-Out[1]= 541
-```
-
-`Prime` is `Listable`, so it threads over a list of indices:
-
-```mathematica
-In[1]:= Prime[{1, 3, 4, 10}]
-Out[1]= {2, 5, 7, 29}
-```
-
-It reaches well beyond the small-prime table by inverting `PrimePi`:
-
-```mathematica
-In[1]:= Prime[10^10]
-Out[1]= 252097800623
-```
 
 ### Notes
 

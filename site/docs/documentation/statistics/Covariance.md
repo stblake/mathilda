@@ -5,18 +5,23 @@
 
 ## Description
 
-```text
-Covariance[v, w]
-    gives the unbiased covariance estimate between the vectors v and w, (1/(n-1)) Sum[(v_i - Mean[v]) Conjugate[w_i - Mean[w]]].
-Covariance[a, b]
-    gives the p*q cross-covariance matrix between the columns of the matrices a and b.
-Covariance[a]
-    gives the auto-covariance matrix of the columns of the matrix a, i.e. Covariance[a, a].
-```
+**`Covariance[v, w]`**
 
-## Examples
+gives the unbiased covariance estimate between the vectors v and w, (1/(n-1)) Sum\[(v\_i - Mean\[v\]) Conjugate\[w\_i - Mean\[w\]\]\].
 
-All examples below are verified against the current Mathilda build.
+**`Covariance[a, b]`**
+
+gives the p\*q cross-covariance matrix between the columns of the matrices a and b.
+
+**`Covariance[a]`**
+
+gives the auto-covariance matrix of the columns of the matrix a, i.e. Covariance\[a, a\].
+
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Covariance[{1, 3/2}, {2, 11}]
@@ -29,6 +34,29 @@ In[3]:= Covariance[{{1, 2}, {3, 4}, {5, 7}}]
 Out[3]= {{4, 5}, {5, 19/3}}
 ```
 
+## Algorithm
+
+corrcov.c -- Covariance[] and Correlation[].
+
+```text
+Covariance[v, w]   covariance between two length-n vectors (a scalar)
+Covariance[a, b]   p x q cross-covariance of the columns of two n-row matrices
+Covariance[a]      p x p auto-covariance of a matrix, i.e. Covariance[a, a]
+Correlation[...]   the same three shapes, normalized by the standard deviations
+```
+
+For length-n vectors the covariance is
+
+```text
+  (1/(n-1)) Sum_i (v_i - Mean[v]) Conjugate[w_i - Mean[w]]
+```
+
+(the conjugate is on the SECOND argument), and the correlation divides that by StandardDeviation[v] StandardDeviation[w] (the (n-1) factors cancel). The matrix forms apply the vector definition to each pair of columns.
+
+Following variance.c, the exact/complex/symbolic work is built as sub-expressions and evaluated, so exact input yields exact output, complex yields complex, and symbolic yields symbolic — with no int64-overflow risk. A fast machine-double path covers real numeric vectors; an NDArray / packed-array argument takes the buffer fast path in src/linalg/ndcorrcov.c.
+
+See stats.h and stats_common.h for the subsystem layout.
+
 ## Implementation notes
 
 - `Protected`.
@@ -39,11 +67,12 @@ Out[3]= {{4, 5}, {5, 19/3}}
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[List](../../other-advanced/List/)
 
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)
+- Tests: [`tests/test_stats.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stats.c)

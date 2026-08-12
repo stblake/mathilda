@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-LeafCount[expr] gives the total number of indivisible subexpressions in expr.
-```
+**`LeafCount[expr] gives the total number of indivisible subexpressions in expr.`**
 
-## Examples
+## Examples (8)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= LeafCount[1 + a + b^2]
@@ -24,29 +24,7 @@ In[3]:= LeafCount[{1/2, 1 + I}]
 Out[3]= 7
 ```
 
-## Implementation notes
-
-`builtin_leafcount` (`src/core.c`) returns `leaf_count_internal`, which counts 1 per non-`EXPR_FUNCTION` (atomic) node and recurses into function arguments. By default heads are counted too; the option `Heads -> False` suppresses head counting.
-
-- `Protected`.
-- Counts the number of subexpressions in `expr` that correspond to "leaves" on the expression tree.
-- By default `Heads -> True` includes the head of expressions and their parts. With `Heads -> False`, it excludes them.
-- Evaluates atoms like `Rational` and `Complex` based on their structural representation as functions.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
-- Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= LeafCount[x + y]
@@ -80,6 +58,30 @@ Mapped over a list, it ranks expressions by structural weight:
 In[1]:= Map[LeafCount, {1, 1/2, x, f[x], {a, b, c}}]
 Out[1]= {1, 3, 1, 2, 4}
 ```
+
+## Implementation notes
+
+`builtin_leafcount` (`src/core.c`) returns `leaf_count_internal`, which counts 1 per non-`EXPR_FUNCTION` (atomic) node and recurses into function arguments. By default heads are counted too; the option `Heads -> False` suppresses head counting.
+
+- `Protected`.
+- Counts the number of subexpressions in `expr` that correspond to "leaves" on the expression tree.
+- By default `Heads -> True` includes the head of expressions and their parts. With `Heads -> False`, it excludes them.
+- Evaluates atoms like `Rational` and `Complex` based on their structural representation as functions.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
+
+## References
+
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
+- Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+
+## Notes & additional examples
 
 ### Notes
 

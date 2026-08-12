@@ -5,19 +5,22 @@
 
 ## Description
 
-```text
-ExpandDenominator[expr]
-    expands out products and powers that appear as denominators in expr.
-ExpandDenominator works only on negative integer powers.
-ExpandDenominator applies only to the top level in expr.
-ExpandDenominator leaves the numerator unexpanded.
-ExpandDenominator automatically threads over lists, as well as equations,
-    inequalities, and logic functions.
-```
+**`ExpandDenominator[expr]`**
 
-## Examples
+expands out products and powers that appear as denominators in expr.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+ExpandDenominator works only on negative integer powers. ExpandDenominator applies only to the top level in expr. ExpandDenominator leaves the numerator unexpanded. ExpandDenominator automatically threads over lists, as well as equations, inequalities, and logic functions.
+
+</details>
+
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= ExpandDenominator[(x-1)(x-2)/((x-3)(x-4))]
@@ -28,6 +31,23 @@ Out[2]= 1/(1 + x) + 2/(1 + 2 x + x^2) + 3/(1 + 3 x + 3 x^2 + x^3)
 
 In[3]:= ExpandDenominator[(a+b)(a-b)/((c+d)(c-d))]
 Out[3]= ((a + b) (a - b))/(c^2 - d^2)
+```
+
+### Applications (3)
+
+```mathematica
+In[1]:= ExpandDenominator[(a + b)^2 / (c + d)^2]
+Out[1]= (a + b)^2/(c^2 + 2 c d + d^2)
+```
+
+```mathematica
+In[1]:= ExpandDenominator[1 / ((x + 1)(x + 2)(x + 3))]
+Out[1]= 1/(6 + 11 x + 6 x^2 + x^3)
+```
+
+```mathematica
+In[1]:= ExpandDenominator[((x + 1)(x + 2)) / (y (y + 1))]
+Out[1]= ((1 + x) (2 + x))/(y + y^2)
 ```
 
 ## Implementation notes
@@ -45,33 +65,17 @@ Out[3]= ((a + b) (a - b))/(c^2 - d^2)
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[Times](../../arithmetic/Times/), [List](../../other-advanced/List/), [Equal](../../comparisons/Equal/), [Unequal](../../comparisons/Unequal/), [Less](../../comparisons/Less/), [LessEqual](../../comparisons/LessEqual/), [Greater](../../comparisons/Greater/), [GreaterEqual](../../comparisons/GreaterEqual/)
 
 ## References
 
 - Source: [`src/expand.c`](https://github.com/stblake/mathilda/blob/main/src/expand.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_expandfrac.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expandfrac.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= ExpandDenominator[(a + b)^2 / (c + d)^2]
-Out[1]= (a + b)^2/(c^2 + 2 c d + d^2)
-```
-
-```mathematica
-In[1]:= ExpandDenominator[1 / ((x + 1)(x + 2)(x + 3))]
-Out[1]= 1/(6 + 11 x + 6 x^2 + x^3)
-```
-
-```mathematica
-In[1]:= ExpandDenominator[((x + 1)(x + 2)) / (y (y + 1))]
-Out[1]= ((1 + x) (2 + x))/(y + y^2)
-```
 
 ### Notes
 

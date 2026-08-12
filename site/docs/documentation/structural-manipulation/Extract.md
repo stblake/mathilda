@@ -5,48 +5,34 @@
 
 ## Description
 
-```text
-Extract[expr, pos]
-    extracts the part of expr at the position specified by pos.
-Extract[expr, {pos1, pos2, ...}]
-    extracts a list of parts of expr.
-Extract[expr, pos, h]
-    extracts parts of expr, wrapping each of them with head h before evaluation.
-Extract[pos]
-    represents an operator form of Extract that can be applied to an expression.
+**`Extract[expr, pos]`**
 
-The position pos has the same form as a Position result: a list of indices {i1, i2, ...} that descends i1 into expr, then i2, etc. A scalar index n is treated as the path {n}, so Extract[expr, n] is equivalent to Extract[expr, {n}]; in particular Extract[expr, 0] gives Head[expr].
-Indices are 1-based and may be negative; index 0 selects the head. Extract is treated as atomic on Integer, Real, String, Symbol, Rational[n, d], and Complex[re, im].
-```
+extracts the part of expr at the position specified by pos.
 
-## Examples
+**`Extract[expr, {pos1, pos2, ...}]`**
 
-_No verified examples yet for this function._
+extracts a list of parts of expr.
 
-## Implementation notes
+**`Extract[expr, pos, h]`**
 
-`builtin_extract` (in `src/part.c`) reads `Extract[expr, pos]` (optionally with a held wrapper head as a third argument). If `pos` is a list-of-positions (a `List` whose elements are themselves `List`s), it extracts each position via the helper `extract_single` and returns the results in a `List`; otherwise it treats `pos` as a single position path. The 1-arg operator form returns a `Function[Extract[#, pos]]` closure.
+extracts parts of expr, wrapping each of them with head h before evaluation.
 
-- Position specifications have the same form as those returned by `Position`.
-- `Extract[expr, {i, j, ...}]` is equivalent to `Part[expr, i, j, ...]`.
-- `pos` can be of the more general form `{part1, part2, ...}` where `parti` are `Part` specifications such as an integer `i`, `All` or `Span`.
-- You can use `Extract[expr, ..., Hold]` to extract parts without evaluation.
-- Reads a [packed list](../packed-arrays/index.md) through the buffer, the same gather
+**`Extract[pos]`**
 
-**Attributes:** `NHoldRest`, `Protected`.
+represents an operator form of Extract that can be applied to an expression.
 
-## Implementation status
+<details>
+<summary>Notes</summary>
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+The position pos has the same form as a Position result: a list of indices {i1, i2, ...} that descends i1 into expr, then i2, etc. A scalar index n is treated as the path {n}, so Extract\[expr, n\] is equivalent to Extract\[expr, {n}\]; in particular Extract\[expr, 0\] gives Head\[expr\]. Indices are 1-based and may be negative; index 0 selects the head. Extract is treated as atomic on Integer, Real, String, Symbol, Rational\[n, d\], and Complex\[re, im\].
 
-## References
+</details>
 
-- Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
-- Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+## Examples (5)
 
-## Notes & additional examples
+Every input below was run against the current Mathilda build and its output recorded.
 
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= Extract[{a,b,c},2]
@@ -68,6 +54,37 @@ Out[1]= Plus
 In[1]:= Extract[x^4 + 2 x^2 + 1, Position[x^4 + 2 x^2 + 1, x]]
 Out[1]= {x, x}
 ```
+
+## Implementation notes
+
+`builtin_extract` (in `src/part.c`) reads `Extract[expr, pos]` (optionally with a held wrapper head as a third argument). If `pos` is a list-of-positions (a `List` whose elements are themselves `List`s), it extracts each position via the helper `extract_single` and returns the results in a `List`; otherwise it treats `pos` as a single position path. The 1-arg operator form returns a `Function[Extract[#, pos]]` closure.
+
+- Position specifications have the same form as those returned by `Position`.
+- `Extract[expr, {i, j, ...}]` is equivalent to `Part[expr, i, j, ...]`.
+- `pos` can be of the more general form `{part1, part2, ...}` where `parti` are `Part` specifications such as an integer `i`, `All` or `Span`.
+- You can use `Extract[expr, ..., Hold]` to extract parts without evaluation.
+- Reads a [packed list](../packed-arrays/index.md) through the buffer, the same gather
+  `Part` uses, so pulling three elements out of a 10^6-element array costs three
+  reads rather than a materialisation of the whole array. An element from an
+  integer buffer comes back as an exact `Integer`. `Extract[expr, {0}]` is head
+  extraction and is unaffected.
+
+**Attributes:** `NHoldRest`, `Protected`.
+
+## See also
+
+[Position](../../data-structures/Position/), [Part](../../structural-manipulation/Part/), [Span](../../structural-manipulation/Span/)
+
+## References
+
+- Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
+- Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_mapindexed.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mapindexed.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+- Tests: [`tests/test_part.c`](https://github.com/stblake/mathilda/blob/main/tests/test_part.c)
+
+## Notes & additional examples
 
 ### Notes
 

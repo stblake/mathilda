@@ -5,46 +5,30 @@
 
 ## Description
 
-```text
-body & or Function[body]
-    represents a pure function with formal parameters #, #1, #2, ... and ##, ##1, ##2, ... for sequences of arguments.
-Function[x, body] or Function[{x1, x2, ...}, body]
-    represents a pure function with named formal parameters x or x1, x2, ....
-Function[params, body, attrs]
-    is a pure function that is treated as having attributes attrs for purposes of evaluation.
-    attrs can be a single attribute or a list of attributes; recognised attributes include HoldFirst, HoldRest, HoldAll, HoldAllComplete, Listable, Flat, Orderless, OneIdentity, NumericFunction, SequenceHold, and NHoldRest.
-Function[Null, body, attrs]
-    represents a function in which the parameters in body are given using # etc.
+**`Function[x, body] or Function[{x1, x2, ...}, body]`**
 
-Parameter binding is lexical: named parameters are substituted into the body before evaluation. Nested Function expressions shadow their own parameters.
-By default Function has no Hold attributes; the arguments are evaluated before substitution. Adding HoldAll (or HoldFirst / HoldRest / HoldAllComplete) in the 3-arg form holds arguments in the chosen positions.
-```
+represents a pure function with named formal parameters x or x1, x2, ....
 
-## Examples
+**`Function[params, body, attrs]`**
 
-_No verified examples yet for this function._
+is a pure function that is treated as having attributes attrs for purposes of evaluation. attrs can be a single attribute or a list of attributes; recognised attributes include HoldFirst, HoldRest, HoldAll, HoldAllComplete, Listable, Flat, Orderless, OneIdentity, NumericFunction, SequenceHold, and NHoldRest.
 
-## Implementation notes
+**`Function[Null, body, attrs]`**
 
-**Algorithm.** `Function` is held as an inert head; the real work is `apply_pure_function` (called from `eval.c` when the evaluator sees `Function[...][args]`). Application is by **lexical substitution**, never by mutating the symbol table — this keeps `Unevaluated`-wrapped references correct and avoids variable capture (nested `Function`s are treated as opaque). Supported shapes: `Function[body]` and `Function[Null, body, attrs]` use the Slot form — `substitute_slots` replaces `#`/`#n` (`Slot`) and `##`/`##n` (`SlotSequence`) with the supplied arguments; `Function[x, body]` and `Function[{x1,…}, body]` use named parameters — `substitute_names` replaces each parameter symbol with its bound argument (missing arguments stay symbolic). The substituted body is then `evaluate`d, and `trap_return` strips a `Return[v]` targeting this `Function` boundary.
+represents a function in which the parameters in body are given using # etc.
 
-**Attributes.** By default `Function` has no Hold attributes, so its call arguments are evaluated before substitution. The 3-arg form `Function[params, body, attrs]` opts into attributes: `pure_function_attributes` maps the attribute spec (a symbol or `List` of symbols) onto the standard `ATTR_*` bits (`HoldAll`/`HoldFirst`/`HoldRest`/`HoldAllComplete`, plus `Listable`/`Flat`/`Orderless`/`OneIdentity`/`NumericFunction`/…), which the evaluator consults when preparing the arguments.
+<details>
+<summary>Notes</summary>
 
-**Attributes:** `HoldAll`, `Protected`.
+body & or Function\[body\] represents a pure function with formal parameters #, #1, #2, ... and ##, ##1, ##2, ... for sequences of arguments. Parameter binding is lexical: named parameters are substituted into the body before evaluation. Nested Function expressions shadow their own parameters. By default Function has no Hold attributes; the arguments are evaluated before substitution. Adding HoldAll (or HoldFirst / HoldRest / HoldAllComplete) in the 3-arg form holds arguments in the chosen positions.
 
-## Implementation status
+</details>
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+## Examples (8)
 
-## References
+Every input below was run against the current Mathilda build and its output recorded.
 
-- Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §1.3.2 (lambda; constructing procedures).
-- Source: [`src/purefunc.c`](https://github.com/stblake/mathilda/blob/main/src/purefunc.c)
-- Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (8)
 
 ```mathematica
 In[1]:= (# + 1 &)[10]
@@ -85,6 +69,26 @@ Out[1]= 1234
 In[1]:= (## &)[a, b, c]
 Out[1]= Sequence[a, b, c]
 ```
+
+## Implementation notes
+
+**Algorithm.** `Function` is held as an inert head; the real work is `apply_pure_function` (called from `eval.c` when the evaluator sees `Function[...][args]`). Application is by **lexical substitution**, never by mutating the symbol table — this keeps `Unevaluated`-wrapped references correct and avoids variable capture (nested `Function`s are treated as opaque). Supported shapes: `Function[body]` and `Function[Null, body, attrs]` use the Slot form — `substitute_slots` replaces `#`/`#n` (`Slot`) and `##`/`##n` (`SlotSequence`) with the supplied arguments; `Function[x, body]` and `Function[{x1,…}, body]` use named parameters — `substitute_names` replaces each parameter symbol with its bound argument (missing arguments stay symbolic). The substituted body is then `evaluate`d, and `trap_return` strips a `Return[v]` targeting this `Function` boundary.
+
+**Attributes.** By default `Function` has no Hold attributes, so its call arguments are evaluated before substitution. The 3-arg form `Function[params, body, attrs]` opts into attributes: `pure_function_attributes` maps the attribute spec (a symbol or `List` of symbols) onto the standard `ATTR_*` bits (`HoldAll`/`HoldFirst`/`HoldRest`/`HoldAllComplete`, plus `Listable`/`Flat`/`Orderless`/`OneIdentity`/`NumericFunction`/…), which the evaluator consults when preparing the arguments.
+
+**Attributes:** `HoldAll`, `Protected`.
+
+## References
+
+- Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §1.3.2 (lambda; constructing procedures).
+- Source: [`src/purefunc.c`](https://github.com/stblake/mathilda/blob/main/src/purefunc.c)
+- Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+
+## Notes & additional examples
 
 ### Notes
 

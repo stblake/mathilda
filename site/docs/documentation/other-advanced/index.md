@@ -1,6 +1,6 @@
 # Other & Advanced
 
-96 built-in function(s) in this category.
+99 built-in function(s) in this category.
 
 - [`$AutoArrayPacking`]($AutoArrayPacking.md) — $AutoArrayPacking  _(Stable)_
 - [`$AutoCompilation`]($AutoCompilation.md) — $AutoCompilation  _(Stable)_
@@ -70,7 +70,9 @@
 - [`Magenta`](Magenta.md) — Magenta  _(Experimental)_
 - [`NDArrayQ`](NDArrayQ.md) — NDArrayQ[expr]  _(Stable)_
 - [`Orange`](Orange.md) — Orange  _(Experimental)_
+- [`OrderlessPatternSequence`](OrderlessPatternSequence.md) — OrderlessPatternSequence[p1, p2, ...] is a pattern object that matches a sequence of arguments, in any order, that together match p1, p2, ....  _(Experimental)_
 - [`PathGraph`](PathGraph.md) — PathGraph[n] gives the path on n vertices; PathGraph[{v1,...}] the path over the given vertices.  _(Stable)_
+- [`PatternSequence`](PatternSequence.md) — PatternSequence[p1, p2, ...] is a pattern object that matches a sequence of arguments, each in turn matching p1, p2, ....  _(Experimental)_
 - [`Pick`](Pick.md) — Pick[expr, sel]  _(Stable)_
 - [`Pink`](Pink.md) — Pink  _(Experimental)_
 - [`PolynomialSqrt`](PolynomialSqrt.md) — PolynomialSqrt[p] gives a polynomial s with s^2 == p when p is a perfect square (every non-constant irreducible factor has even multiplicity; the numeric content is carried through Sqrt), and $Failed otherwise. PolynomialSqrt[p, x] treats p as a polynomial in x.  _(Stable)_
@@ -89,6 +91,7 @@
 - [`VectorPoints`](VectorPoints.md) — VectorPoints  _(Experimental)_
 - [`VectorScale`](VectorScale.md) — VectorScale  _(Experimental)_
 - [`VectorStyle`](VectorStyle.md) — VectorStyle  _(Experimental)_
+- [`Verbatim`](Verbatim.md) — Verbatim[expr] is a pattern object that matches expr taken literally: the pattern constructs inside expr (Blank, Pattern, ...) are not interpreted, so Verbatim[x_] matches only the literal expression x_.  _(Experimental)_
 - [`VertexConnectivity`](VertexConnectivity.md) — VertexConnectivity[g] gives the minimum number of vertices whose removal disconnects g.  _(Stable)_
 - [`VertexCount`](VertexCount.md) — VertexCount[g] gives the number of vertices in the graph g.  _(Stable)_
 - [`VertexDegree`](VertexDegree.md) — VertexDegree[g] gives the list of vertex degrees; VertexDegree[g,v] gives the degree of vertex v.  _(Stable)_

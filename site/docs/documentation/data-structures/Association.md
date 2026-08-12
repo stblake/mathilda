@@ -5,16 +5,15 @@
 
 ## Description
 
-```text
-Association[key1 -> val1, key2 -> val2, ...]  (also written <|...|>)
-    Represents an association mapping keys to values with unique,
-    insertion-ordered keys (last value wins on duplicates).
-    Arguments may be rules, lists of rules, or other associations.
-```
+**`Association[key1 -> val1, key2 -> val2, ...]  (also written <|...|>)`**
 
-## Examples
+Represents an association mapping keys to values with unique, insertion-ordered keys (last value wins on duplicates). Arguments may be rules, lists of rules, or other associations.
 
-All examples below are verified against the current Mathilda build.
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= <|"a" -> 1, "b" -> 2|>
@@ -37,11 +36,11 @@ Out[5]= 5
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/assoc.c`](https://github.com/stblake/mathilda/blob/main/src/assoc.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_mapat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mapat.c)
+- Tests: [`tests/test_mapindexed.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mapindexed.c)
+- Tests: [`tests/test_replaceat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_replaceat.c)

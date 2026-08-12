@@ -5,43 +5,26 @@
 
 ## Description
 
-```text
-PutAppend[expr, "filename"] or expr >>> "filename"
-    appends expr to the end of the file, creating the file if it does not exist.
-PutAppend[expr1, expr2, ..., "filename"]
-    appends a sequence of expressions, one per line.
-PutAppend works the same as Put, except that it preserves any existing
-contents of the file rather than truncating them.
-expr >>> filename is equivalent to expr >>> "filename".
-Returns Null on success and $Failed if the file cannot be opened.
-```
+**`PutAppend[expr, "filename"] or expr >>> "filename"`**
 
-## Examples
+appends expr to the end of the file, creating the file if it does not exist.
 
-_No verified examples yet for this function._
+**`PutAppend[expr1, expr2, ..., "filename"]`**
 
-## Implementation notes
+appends a sequence of expressions, one per line.
 
-`builtin_putappend` shares `put_common` with `Put`, differing only in fopen mode: it opens the (last-argument) filename in `"a"` mode, appending each preceding expression — serialized via `expr_to_string` (the standard printer) plus a trailing `\n` — to the end of the file, creating it if absent and never truncating an existing one. `PutAppend["file"]` writes nothing. Open failure prints `PutAppend::noopen` and returns `$Failed`; success returns `Null`. `ATTR_PROTECTED`. The infix `expr >>> "file"` lowers to `PutAppend[expr, "file"]`.
+<details>
+<summary>Notes</summary>
 
-- `Protected`.
-- Creates the file if it does not exist; otherwise preserves prior contents and appends new lines.
-- Returns `Null` on success and `$Failed` on I/O error.
+PutAppend works the same as Put, except that it preserves any existing contents of the file rather than truncating them. expr \>\>\> filename is equivalent to expr \>\>\> "filename". Returns Null on success and $Failed if the file cannot be opened.
 
-**Attributes:** `Protected`.
+</details>
 
-## Implementation status
+## Examples (3)
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+Every input below was run against the current Mathilda build and its output recorded.
 
-## References
-
-- Source: [`src/readwrite.c`](https://github.com/stblake/mathilda/blob/main/src/readwrite.c)
-- Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (3)
 
 ```mathematica
 In[1]:= Put[x^2 + 1, "/tmp/mathilda_demo.m"]
@@ -55,6 +38,46 @@ In[3]:= FilePrint["/tmp/mathilda_demo.m"]
 y
 Out[3]= Null
 ```
+
+## Options & behaviour
+
+### Example
+
+## Algorithm
+
+readwrite.c - File I/O builtins (Get, Put).
+
+Get reads Mathilda source from a file and evaluates each expression, returning the last value (used by the REPL bootstrap to load the internal .m initialization files).
+
+Put writes one or more expressions to a file in InputForm so the
+
+```text
+output can be read back with Get.  The parser also recognises the
+```
+
+infix shorthand `expr >> "file"` and lowers it to `Put[expr, "file"]`.
+
+## Implementation notes
+
+`builtin_putappend` shares `put_common` with `Put`, differing only in fopen mode: it opens the (last-argument) filename in `"a"` mode, appending each preceding expression — serialized via `expr_to_string` (the standard printer) plus a trailing `\n` — to the end of the file, creating it if absent and never truncating an existing one. `PutAppend["file"]` writes nothing. Open failure prints `PutAppend::noopen` and returns `$Failed`; success returns `Null`. `ATTR_PROTECTED`. The infix `expr >>> "file"` lowers to `PutAppend[expr, "file"]`.
+
+- `Protected`.
+- Creates the file if it does not exist; otherwise preserves prior contents and appends new lines.
+- Returns `Null` on success and `$Failed` on I/O error.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[Put](../../file-io/Put/)
+
+## References
+
+- Source: [`src/readwrite.c`](https://github.com/stblake/mathilda/blob/main/src/readwrite.c)
+- Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
+- Tests: [`tests/test_readwrite.c`](https://github.com/stblake/mathilda/blob/main/tests/test_readwrite.c)
+
+## Notes & additional examples
 
 ### Notes
 

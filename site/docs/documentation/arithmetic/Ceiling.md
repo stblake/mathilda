@@ -5,39 +5,26 @@
 
 ## Description
 
-```text
-Ceiling[x]
-    gives the smallest integer greater than or equal to x.
-Ceiling[x, a]
-    gives the smallest multiple of a greater than or equal to x.
-Ceiling is Listable. Exact inputs return exact integers; Real / MPFR
-inputs are rounded toward +Infinity at the input precision.
-```
+**`Ceiling[x]`**
 
-## Examples
+gives the smallest integer greater than or equal to x.
 
-_No verified examples yet for this function._
+**`Ceiling[x, a]`**
 
-## Implementation notes
+gives the smallest multiple of a greater than or equal to x.
 
-**Algorithm.** `builtin_ceiling` (`src/piecewise.c`) is a thin wrapper over `do_piecewise(res, OP_CEILING, ...)`, shared with Floor/Round/IntegerPart/FractionalPart. The 1-arg form dispatches to `do_piecewise_1`, which handles each exact kind directly: integers/bigints pass through; `EXPR_REAL` uses C `ceil`; `EXPR_MPFR` uses `mpfr_ceil`; exact `Rational[p,q]` (including bigint components) uses GMP `mpz_cdiv_q` for an exact integer result; `Complex[re,im]` recurses componentwise. For an exact-but-symbolic real numeric that the leaf branches cannot resolve, `do_piecewise_numeric_exact` numericalizes to MPFR at doubling precision (256 up to 2^16 bits) and accepts the ceiling only once two successive precisions agree — an interval-style certification that avoids mis-rounding values near an integer boundary, returning `NULL` rather than a wrong answer if it cannot converge. The 2-arg `Ceiling[x, a]` rewrites to `a * Ceiling[x/a]`.
+<details>
+<summary>Notes</summary>
 
-**Data structures.** `Expr*` leaves plus GMP `mpz_t`/`mpq` arithmetic and MPFR `mpfr_t` for the precision-escalation certification.
+Ceiling is Listable. Exact inputs return exact integers; Real / MPFR inputs are rounded toward +Infinity at the input precision.
 
-**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+</details>
 
-## Implementation status
+## Examples (6)
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+Every input below was run against the current Mathilda build and its output recorded.
 
-## References
-
-- Source: [`src/piecewise.c`](https://github.com/stblake/mathilda/blob/main/src/piecewise.c)
-- Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (6)
 
 ```mathematica
 In[1]:= Ceiling[7/2]
@@ -64,6 +51,25 @@ Out[1]= 8
 In[1]:= Ceiling[100/7, 5]
 Out[1]= 15
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_ceiling` (`src/piecewise.c`) is a thin wrapper over `do_piecewise(res, OP_CEILING, ...)`, shared with Floor/Round/IntegerPart/FractionalPart. The 1-arg form dispatches to `do_piecewise_1`, which handles each exact kind directly: integers/bigints pass through; `EXPR_REAL` uses C `ceil`; `EXPR_MPFR` uses `mpfr_ceil`; exact `Rational[p,q]` (including bigint components) uses GMP `mpz_cdiv_q` for an exact integer result; `Complex[re,im]` recurses componentwise. For an exact-but-symbolic real numeric that the leaf branches cannot resolve, `do_piecewise_numeric_exact` numericalizes to MPFR at doubling precision (256 up to 2^16 bits) and accepts the ceiling only once two successive precisions agree — an interval-style certification that avoids mis-rounding values near an integer boundary, returning `NULL` rather than a wrong answer if it cannot converge. The 2-arg `Ceiling[x, a]` rewrites to `a * Ceiling[x/a]`.
+
+**Data structures.** `Expr*` leaves plus GMP `mpz_t`/`mpq` arithmetic and MPFR `mpfr_t` for the precision-escalation certification.
+
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+
+## References
+
+- Source: [`src/piecewise.c`](https://github.com/stblake/mathilda/blob/main/src/piecewise.c)
+- Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_interval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_interval.c)
+- Tests: [`tests/test_limit.c`](https://github.com/stblake/mathilda/blob/main/tests/test_limit.c)
+
+## Notes & additional examples
 
 ### Notes
 

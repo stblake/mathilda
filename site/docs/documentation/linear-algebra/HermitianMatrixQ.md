@@ -5,55 +5,42 @@
 
 ## Description
 
-```text
-HermitianMatrixQ[m]
-    gives True if m is explicitly Hermitian (m == ConjugateTranspose[m]),
-    and False otherwise.
+**`HermitianMatrixQ[m]`**
 
-Options:
-    SameTest  -> Automatic   function used to test equality of entries.
-    Tolerance -> Automatic   numeric tolerance for approximate matrices.
+gives True if m is explicitly Hermitian (m == ConjugateTranspose\[m\]), and False otherwise.
 
-With SameTest -> f, entries m[i,j] and Conjugate[m[j,i]] are taken to be
-equal when f[m[i,j], Conjugate[m[j,i]]] gives True.  With Tolerance -> t,
-entries are accepted when Abs[m[i,j] - Conjugate[m[j,i]]] <= t.
-Diagonal entries must satisfy the same test (i.e. be purely real for
-numeric matrices).
-```
+<details>
+<summary>Notes</summary>
 
-## Examples
+Options: SameTest  -\> Automatic   function used to test equality of entries. Tolerance -\> Automatic   numeric tolerance for approximate matrices. With SameTest -\> f, entries m\[i,j\] and Conjugate\[m\[j,i\]\] are taken to be equal when f\[m\[i,j\], Conjugate\[m\[j,i\]\]\] gives True.  With Tolerance -\> t, entries are accepted when Abs\[m\[i,j\] - Conjugate\[m\[j,i\]\]\] \<= t. Diagonal entries must satisfy the same test (i.e. be purely real for numeric matrices).
 
-All examples below are verified against the current Mathilda build.
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= HermitianMatrixQ[{{1, 3 + 4 I}, {3 - 4 I, 2}}]
 Out[1]= True
 
-In[2]:= HermitianMatrixQ[{{1, 2 I}, {2 I, 3}}]
-Out[2]= False
+In[2]:= HermitianMatrixQ[{{0, a, b}, {Conjugate[a], 1, c}, {Conjugate[b], Conjugate[c], -1}}]
+Out[2]= True
+
+In[3]:= HermitianMatrixQ[{{1, 2 I}, {2 I, 3}}]
+Out[3]= False
 ```
 
-## Implementation notes
+### Options (1)
 
-`builtin_hermitian_matrix_q` tests whether a matrix equals its conjugate transpose, i.e. `m[i,j] == Conjugate[m[j,i]]`. After validating that the argument is a non-empty square `List` of `List`s with no deeper nesting (returning `False` otherwise), it walks the upper triangle including the diagonal (the pair test is symmetric under `(i,j)↔(j,i)`) and checks each pair with one of three predicates: the default structural test (`hermitian_pair_structural`, exact for symbolic/exact-numeric entries), a user `SameTest -> f`, or `Tolerance -> t` (accepting pairs with `Abs[a - Conjugate[b]] <= t`). `SameTest`/`Tolerance` of `Automatic` fall through to the structural test; any unrecognised option leaves the call unevaluated. Returns `True`/`False`.
+```mathematica
+In[4]:= HermitianMatrixQ[{{1.0, 2.0 + 0.01 I}, {2.0 - 0.02 I, 1.5}}, Tolerance -> 0.1]
+Out[4]= True
+```
 
-- `Protected`.
-- Default test is structural: it accepts (Conjugate[a], a) / (a, Conjugate[a])
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
-- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (6)
 
 ```mathematica
 In[1]:= HermitianMatrixQ[{{1, I}, {-I, 1}}]
@@ -84,6 +71,33 @@ Out[1]= True
 In[2]:= HermitianMatrixQ[{{1, I}, {-I, 2.0000001}}, Tolerance -> 0.001]
 Out[2]= True
 ```
+
+## Implementation notes
+
+`builtin_hermitian_matrix_q` tests whether a matrix equals its conjugate transpose, i.e. `m[i,j] == Conjugate[m[j,i]]`. After validating that the argument is a non-empty square `List` of `List`s with no deeper nesting (returning `False` otherwise), it walks the upper triangle including the diagonal (the pair test is symmetric under `(i,j)↔(j,i)`) and checks each pair with one of three predicates: the default structural test (`hermitian_pair_structural`, exact for symbolic/exact-numeric entries), a user `SameTest -> f`, or `Tolerance -> t` (accepting pairs with `Abs[a - Conjugate[b]] <= t`). `SameTest`/`Tolerance` of `Automatic` fall through to the structural test; any unrecognised option leaves the call unevaluated. Returns `True`/`False`.
+
+- `Protected`.
+- Default test is structural: it accepts (Conjugate[a], a) / (a, Conjugate[a])
+  symbolic pairs without requiring our `Conjugate` builtin to fold
+  `Conjugate[Conjugate[x]] -> x`.
+- Returns `False` (rather than leaving unevaluated) on non-matrix, non-square,
+  ragged, empty, or higher-rank tensor inputs.
+- Unknown options and non-Rule trailing arguments leave the call unevaluated.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[Conjugate](../../arithmetic/Conjugate/)
+
+## References
+
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_hermitian_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hermitian_matrix_q.c)
+- Tests: [`tests/test_symmetric_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_symmetric_matrix_q.c)
+
+## Notes & additional examples
 
 ### Notes
 

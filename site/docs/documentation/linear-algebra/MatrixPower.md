@@ -5,18 +5,15 @@
 
 ## Description
 
-```text
-MatrixPower[m, n]
-    gives the n-th matrix power of the square matrix m.
-    MatrixPower[m, n, v] gives the n-th matrix power of the matrix m applied to the vector v.
-    When n is negative, MatrixPower finds powers of the inverse of the matrix m.
-    MatrixPower[m, 0] gives IdentityMatrix[Length[m]].
-    Fractional matrix powers are not currently supported.
-```
+**`MatrixPower[m, n]`**
 
-## Examples
+gives the n-th matrix power of the square matrix m. MatrixPower\[m, n, v\] gives the n-th matrix power of the matrix m applied to the vector v. When n is negative, MatrixPower finds powers of the inverse of the matrix m. MatrixPower\[m, 0\] gives IdentityMatrix\[Length\[m\]\]. Fractional matrix powers are not currently supported.
 
-All examples below are verified against the current Mathilda build.
+## Examples (15)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= MatrixPower[{{a, b}, {c, d}}, 2]
@@ -44,36 +41,7 @@ In[8]:= MatrixPower[{{1, 1}, {1, 2}}, 3, {1, 0}]
 Out[8]= {5, 8}
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_matrixpower` computes `MatrixPower[m, e]` (and `MatrixPower[m, e, v]`) for integer exponents by binary exponentiation (square-and-multiply). After validating that `m` is a non-empty square rank-2 tensor (`MatrixPower::matsq`) and that the exponent is an Integer or BigInt that fits in `int64_t`, it loops over the bits of `|e|`, accumulating the product and repeatedly squaring the running matrix; each matrix product goes through `dot2` (the `Dot` kernel, via the local `mat_dot` wrapper) followed by a full `evaluate` pass so entries simplify. `e == 0` returns `IdentityMatrix[n]`. Negative exponents first compute `Inverse[m]` (in `inv.c`) as the base; if `Inverse` returns unevaluated (singular), the call is abandoned. If a third vector argument is supplied, the final matrix is dotted with it.
-
-**Data structures / limits.** Operates directly on `Expr*` `List`-of-`List` matrices; no dense numeric buffer. Fractional exponents (`Rational` or `Real`) are explicitly unsupported — they emit `MatrixPower::fract` and return unevaluated rather than going through an eigendecomposition; symbolic and BigInt-too-large exponents also return unevaluated. Cost is O(log|e|) matrix multiplies.
-
-- `Protected`.
-- `MatrixPower[m, n]` effectively evaluates the product of a matrix with itself `n` times.
-- When `n` is negative, `MatrixPower` finds powers of the inverse of the matrix `m`.
-- `MatrixPower[m, 0]` returns `IdentityMatrix[Length[m]]`.
-- `MatrixPower` works only on square matrices.
-- Uses binary exponentiation (repeated squaring) for efficient computation.
-- **A machine-real matrix stays a [packed list](../packed-arrays/index.md) throughout**,
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- R. A. Horn and C. R. Johnson, *Matrix Analysis*, 2nd ed., Cambridge University Press, 2013 — powers of matrices.
-- G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — repeated multiplication and inversion.
-- Source: [`src/linalg/matpow.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/matpow.c)
-- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (7)
 
 ```mathematica
 In[1]:= MatrixPower[{{1, 1}, {0, 1}}, 3]
@@ -107,6 +75,44 @@ Out[1]= {{34, 55}, {55, 89}}
 In[2]:= MatrixPower[{{0, 1}, {1, 1}}, 10][[1, 2]] == Fibonacci[10]
 Out[2]= True
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_matrixpower` computes `MatrixPower[m, e]` (and `MatrixPower[m, e, v]`) for integer exponents by binary exponentiation (square-and-multiply). After validating that `m` is a non-empty square rank-2 tensor (`MatrixPower::matsq`) and that the exponent is an Integer or BigInt that fits in `int64_t`, it loops over the bits of `|e|`, accumulating the product and repeatedly squaring the running matrix; each matrix product goes through `dot2` (the `Dot` kernel, via the local `mat_dot` wrapper) followed by a full `evaluate` pass so entries simplify. `e == 0` returns `IdentityMatrix[n]`. Negative exponents first compute `Inverse[m]` (in `inv.c`) as the base; if `Inverse` returns unevaluated (singular), the call is abandoned. If a third vector argument is supplied, the final matrix is dotted with it.
+
+**Data structures / limits.** Operates directly on `Expr*` `List`-of-`List` matrices; no dense numeric buffer. Fractional exponents (`Rational` or `Real`) are explicitly unsupported — they emit `MatrixPower::fract` and return unevaluated rather than going through an eigendecomposition; symbolic and BigInt-too-large exponents also return unevaluated. Cost is O(log|e|) matrix multiplies.
+
+- `Protected`.
+- `MatrixPower[m, n]` effectively evaluates the product of a matrix with itself `n` times.
+- When `n` is negative, `MatrixPower` finds powers of the inverse of the matrix `m`.
+- `MatrixPower[m, 0]` returns `IdentityMatrix[Length[m]]`.
+- `MatrixPower` works only on square matrices.
+- Uses binary exponentiation (repeated squaring) for efficient computation.
+- **A machine-real matrix stays a [packed list](../packed-arrays/index.md) throughout**,
+  so each squaring is one `Dot` and reaches BLAS `dgemm`: `MatrixPower[A, 4]` on
+  a 300 x 300 costs 0.69 ms, the two matrix products it is. An *integer* matrix
+  is materialised first and stays exact, because the exact fourth power of an
+  integer matrix is an integer matrix and a float64 buffer cannot hold one past
+  2^53.
+- Fractional matrix powers are not currently supported and generate a warning.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[Dot](../../linear-algebra/Dot/)
+
+## References
+
+- R. A. Horn and C. R. Johnson, *Matrix Analysis*, 2nd ed., Cambridge University Press, 2013 — powers of matrices.
+- G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — repeated multiplication and inversion.
+- Source: [`src/linalg/matpow.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/matpow.c)
+- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_compile_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_linalg.c)
+- Tests: [`tests/test_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linalg.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+
+## Notes & additional examples
 
 ### Notes
 

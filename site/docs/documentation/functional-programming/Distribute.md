@@ -5,21 +5,27 @@
 
 ## Description
 
-```text
-Distribute[f[x1, x2, ...]]
-    distributes f over Plus appearing in any of the xi, building the sum
-    of f applied to every Cartesian-product selection of summands.
-Distribute[expr, g]
-    distributes over the head g instead of Plus.
-Distribute[expr, g, f]
-    performs the distribution only if the head of expr is f.
-Distribute[expr, g, f, gp, fp]
-    gives gp and fp in place of g and f respectively in the result.
-```
+**`Distribute[f[x1, x2, ...]]`**
 
-## Examples
+distributes f over Plus appearing in any of the xi, building the sum of f applied to every Cartesian-product selection of summands.
 
-All examples below are verified against the current Mathilda build.
+**`Distribute[expr, g]`**
+
+distributes over the head g instead of Plus.
+
+**`Distribute[expr, g, f]`**
+
+performs the distribution only if the head of expr is f.
+
+**`Distribute[expr, g, f, gp, fp]`**
+
+gives gp and fp in place of g and f respectively in the result.
+
+## Examples (9)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Distribute[(a + b) . (x + y + z)]
@@ -36,6 +42,28 @@ Out[4]= {{a, x, s}, {a, x, t}, {a, y, s}, {a, y, t}, {a, z, s}, {a, z, t}, {b, x
 
 In[5]:= Distribute[{{}, {a}}, {{}, {b}}, {{}, {c}}, List, List, List, Join]
 Out[5]= Distribute[{{}, {a}}, {{}, {b}}, {{}, {c}}, List, List, List, Join]
+```
+
+### Applications (4)
+
+```mathematica
+In[1]:= Distribute[(a + b)(c + d)]
+Out[1]= a c + b c + a d + b d
+```
+
+```mathematica
+In[1]:= Distribute[f[a + b, c + d]]
+Out[1]= f[a, c] + f[b, c] + f[a, d] + f[b, d]
+```
+
+```mathematica
+In[1]:= Distribute[And[a, Or[b, c]], Or, And]
+Out[1]= a && b || a && c
+```
+
+```mathematica
+In[1]:= Distribute[f[a + b + c], Plus, f, Plus, g]
+Out[1]= g[a] + g[b] + g[c]
 ```
 
 ## Implementation notes
@@ -70,38 +98,17 @@ expansion is genuinely combinatorial.
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[Plus](../../arithmetic/Plus/), [Expand](../../algebra/Expand/)
 
 ## References
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_distribute.c`](https://github.com/stblake/mathilda/blob/main/tests/test_distribute.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Distribute[(a + b)(c + d)]
-Out[1]= a c + b c + a d + b d
-```
-
-```mathematica
-In[1]:= Distribute[f[a + b, c + d]]
-Out[1]= f[a, c] + f[b, c] + f[a, d] + f[b, d]
-```
-
-```mathematica
-In[1]:= Distribute[And[a, Or[b, c]], Or, And]
-Out[1]= a && b || a && c
-```
-
-```mathematica
-In[1]:= Distribute[f[a + b + c], Plus, f, Plus, g]
-Out[1]= g[a] + g[b] + g[c]
-```
 
 ### Notes
 

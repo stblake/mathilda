@@ -5,16 +5,22 @@
 
 ## Description
 
-```text
-ValueQ[expr]
-    gives True if a value has been defined for expr, False otherwise.
-HoldAll: inspects the symbol itself, not its evaluated value. A bare
-symbol tests OwnValues; f[...] tests whether head f has any DownValues.
-```
+**`ValueQ[expr]`**
 
-## Examples
+gives True if a value has been defined for expr, False otherwise.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+HoldAll: inspects the symbol itself, not its evaluated value. A bare symbol tests OwnValues; f\[...\] tests whether head f has any DownValues.
+
+</details>
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= ValueQ[x]
@@ -37,11 +43,12 @@ Out[5]= {True, False}
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[HoldAll](../../expression-information/HoldAll/)
 
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)

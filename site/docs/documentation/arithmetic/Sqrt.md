@@ -5,39 +5,22 @@
 
 ## Description
 
-```text
-Sqrt[z]
-    represents the principal square root of z.
-Sqrt is Listable. Sqrt[z] is canonicalised to Power[z, 1/2]; perfect
-integer / rational squares reduce to exact form, negative real inputs
-yield I * Sqrt[-x], and numeric inputs (Real / MPFR / Complex) are
-evaluated directly. Branch cut along the negative real axis.
-```
+**`Sqrt[z]`**
 
-## Examples
+represents the principal square root of z.
 
-_No verified examples yet for this function._
+<details>
+<summary>Notes</summary>
 
-## Implementation notes
+Sqrt is Listable. Sqrt\[z\] is canonicalised to Power\[z, 1/2\]; perfect integer / rational squares reduce to exact form, negative real inputs yield I \* Sqrt\[-x\], and numeric inputs (Real / MPFR / Complex) are evaluated directly. Branch cut along the negative real axis.
 
-`builtin_sqrt` is a thin wrapper: it rewrites `Sqrt[x]` to `Power[x, Rational[1, 2]]` (via `make_rational(1, 2)`) and returns that, letting the full `Power` machinery handle all simplification (exact perfect squares, `Sqrt[8] -> 2 Sqrt[2]` radical extraction, numeric/MPFR evaluation, infinity algebra). `Sqrt` carries `LISTABLE | NUMERICFUNCTION | PROTECTED`.
+</details>
 
-**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+## Examples (8)
 
-## Implementation status
+Every input below was run against the current Mathilda build and its output recorded.
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on square-free factorization and radical simplification.
-- Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on integer square roots.
-- Source: [`src/power.c`](https://github.com/stblake/mathilda/blob/main/src/power.c)
-- Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (8)
 
 ```mathematica
 In[1]:= Sqrt[50]
@@ -82,6 +65,42 @@ The Puiseux series of `Sqrt[1 + x]` is delivered exactly:
 In[1]:= Series[Sqrt[1 + x], {x, 0, 5}]
 Out[1]= 1 + 1/2 x - 1/8 x^2 + 1/16 x^3 - 5/128 x^4 + 7/256 x^5 + O[x]^6
 ```
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| NI 50-digit Gaussian | 6.87 s | 2.11 s | 1.1 s |
+| NI 2-D ridge | 2.54 s | 43.5 s | 0.685 s |
+| NI oscillatory k=40 | 0.515 s | 4.05 s | 0.002 s |
+| NI oscillatory k=200 | 0.477 s | 21.5 s | 0.002 s |
+| NI oscillatory k=1000 | 0.389 s | 140 s | 0.002 s |
+| NI oscillatory k=1001 nonzero | 0.382 s | 1.03 s | 0.626 s |
+
+## Implementation notes
+
+`builtin_sqrt` is a thin wrapper: it rewrites `Sqrt[x]` to `Power[x, Rational[1, 2]]` (via `make_rational(1, 2)`) and returns that, letting the full `Power` machinery handle all simplification (exact perfect squares, `Sqrt[8] -> 2 Sqrt[2]` radical extraction, numeric/MPFR evaluation, infinity algebra). `Sqrt` carries `LISTABLE | NUMERICFUNCTION | PROTECTED`.
+
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+
+## See also
+
+[FactorInteger](../../number-theory/FactorInteger/)
+
+## References
+
+- Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on square-free factorization and radical simplification.
+- Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on integer square roots.
+- Source: [`src/power.c`](https://github.com/stblake/mathilda/blob/main/src/power.c)
+- Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_airyai.c`](https://github.com/stblake/mathilda/blob/main/tests/test_airyai.c)
+- Tests: [`tests/test_airybi.c`](https://github.com/stblake/mathilda/blob/main/tests/test_airybi.c)
+- Tests: [`tests/test_arc_exact.c`](https://github.com/stblake/mathilda/blob/main/tests/test_arc_exact.c)
+- Tests: [`tests/test_assuming.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assuming.c)
+
+## Notes & additional examples
 
 ### Notes
 

@@ -5,17 +5,26 @@
 
 ## Description
 
-```text
-ToString[expr]
-    gives the printed form of expr (as InputForm) as a String.
-ToString[expr, form]
-    uses the specified output form.
+**`ToString[expr]`**
+
+gives the printed form of expr (as InputForm) as a String.
+
+**`ToString[expr, form]`**
+
+uses the specified output form.
+
+<details>
+<summary>Notes</summary>
+
 Supported forms: InputForm (default), FullForm, TeXForm.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= ToString[x^2 + y^3]
@@ -37,11 +46,14 @@ Out[3]= "x^{2}+y^{3}"
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[InputForm](../../expression-information/InputForm/), [FullForm](../../expression-information/FullForm/), [TeXForm](../../expression-information/TeXForm/)
 
 ## References
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_blas.c`](https://github.com/stblake/mathilda/blob/main/tests/test_blas.c)
+- Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
+- Tests: [`tests/test_tostring_toexpression.c`](https://github.com/stblake/mathilda/blob/main/tests/test_tostring_toexpression.c)

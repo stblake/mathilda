@@ -5,22 +5,27 @@
 
 ## Description
 
-```text
-StringPart["string", n]
-    Gives the nth character in "string".
-StringPart["string", {n1, n2, ...}]
-    Gives a list of the ni-th characters.
-StringPart["string", m;;n;;s]
-    Gives characters m through n in steps of s.
-StringPart[{s1, s2, ...}, spec]
-    Gives the list of results for each si.
+**`StringPart["string", n]`**
 
-    Negative indices count from the end.
-```
+Gives the nth character in "string".
 
-## Examples
+**`StringPart["string", {n1, n2, ...}]`**
 
-All examples below are verified against the current Mathilda build.
+Gives a list of the ni-th characters.
+
+**`StringPart["string", m;;n;;s]`**
+
+Gives characters m through n in steps of s.
+
+**`StringPart[{s1, s2, ...}, spec]`**
+
+Gives the list of results for each si. Negative indices count from the end.
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= StringPart["abcdefghijklm", 6]
@@ -54,11 +59,8 @@ Out[8]= {{"a", "d"}, {"e", "h"}, {"i", "m"}}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/picostrings.c`](https://github.com/stblake/mathilda/blob/main/src/picostrings.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_strings.c`](https://github.com/stblake/mathilda/blob/main/tests/test_strings.c)

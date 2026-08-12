@@ -5,18 +5,22 @@
 
 ## Description
 
-```text
-$MachineEpsilon
-    gives the difference between 1.0 and the next-nearest number
-    representable as a machine-precision number.
+**`$MachineEpsilon`**
 
-Equals the platform's DBL_EPSILON; measures the granularity of
-machine-precision numbers.
-```
+gives the difference between 1.0 and the next-nearest number representable as a machine-precision number.
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+Equals the platform's DBL\_EPSILON; measures the granularity of machine-precision numbers.
+
+</details>
+
+## Examples (4)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= $MachinePrecision
@@ -38,9 +42,9 @@ A read-only system constant bound as an OwnValue in `system_constants_init` (`sr
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[$MachinePrecision](../../expression-information/$MachinePrecision/), [$MinMachineNumber](../../expression-information/$MinMachineNumber/), [$MaxMachineNumber](../../expression-information/$MaxMachineNumber/), [$MaxNumber](../../expression-information/$MaxNumber/), [$MinNumber](../../expression-information/$MinNumber/)
 
 ## References
 

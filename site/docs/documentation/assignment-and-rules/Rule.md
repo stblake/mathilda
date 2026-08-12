@@ -5,34 +5,13 @@
 
 ## Description
 
-```text
-lhs -> rhs or Rule[lhs, rhs]
-    represents an immediate rewrite rule: rhs is evaluated when the
-    rule object is constructed, then matched against lhs at use.
-```
+lhs -\> rhs or Rule\[lhs, rhs\] represents an immediate rewrite rule: rhs is evaluated when the rule object is constructed, then matched against lhs at use.
 
-## Examples
+## Examples (5)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
 
-## Implementation notes
-
-`Rule[lhs, rhs]` (`->`) is a passive rewrite-rule object, not a computation — it has no builtin handler. Because `Rule` carries no `Hold` attributes, the evaluator evaluates `rhs` (and `lhs`) when the rule expression is constructed; this is what makes `->` *immediate*. The rule engine (`is_rule` in `src/replace.c`) recognises `Rule`-headed nodes and, on a match in `ReplaceAll`/`Replace`/etc., substitutes the pattern bindings into the already-evaluated `rhs`. Contrast `RuleDelayed`. Attribute: `ATTR_PROTECTED`.
-
-**Attributes:** `Protected`, `SequenceHold`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
-- Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= x /. x -> 2
@@ -61,6 +40,23 @@ point. Here `D[...]` is taken symbolically, then `x -> 5` substitutes the value:
 In[1]:= D[x^3 + 2 x, x] /. x -> 5
 Out[1]= 77
 ```
+
+## Implementation notes
+
+`Rule[lhs, rhs]` (`->`) is a passive rewrite-rule object, not a computation — it has no builtin handler. Because `Rule` carries no `Hold` attributes, the evaluator evaluates `rhs` (and `lhs`) when the rule expression is constructed; this is what makes `->` *immediate*. The rule engine (`is_rule` in `src/replace.c`) recognises `Rule`-headed nodes and, on a match in `ReplaceAll`/`Replace`/etc., substitutes the pattern bindings into the already-evaluated `rhs`. Contrast `RuleDelayed`. Attribute: `ATTR_PROTECTED`.
+
+**Attributes:** `Protected`, `SequenceHold`.
+
+## References
+
+- Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
+- Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
+- Tests: [`tests/test_fixedpoint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fixedpoint.c)
+- Tests: [`tests/test_fixedpointlist.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fixedpointlist.c)
+
+## Notes & additional examples
 
 ### Notes
 

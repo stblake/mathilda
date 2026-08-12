@@ -5,34 +5,24 @@
 
 ## Description
 
-```text
-Sinc[z]
-    gives the cardinal sine Sin[z]/z, with Sinc[0] = 1.
-An entire, even function. Sinc[+-Infinity] = 0. Real and complex inputs
-evaluate numerically at machine or arbitrary (MPFR) precision;
-D[Sinc[z], z] = Cos[z]/z - Sin[z]/z^2. Listable.
-```
+**`Sinc[z]`**
 
-## Examples
+gives the cardinal sine Sin\[z\]/z, with Sinc\[0\] = 1.
 
-_No verified examples yet for this function._
+**`D[Sinc[z], z] = Cos[z]/z - Sin[z]/z^2. Listable.`**
 
-## Implementation notes
+<details>
+<summary>Notes</summary>
 
-**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+An entire, even function. Sinc\[+-Infinity\] = 0. Real and complex inputs evaluate numerically at machine or arbitrary (MPFR) precision;
 
-## Implementation status
+</details>
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+## Examples (6)
 
-## References
+Every input below was run against the current Mathilda build and its output recorded.
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
-- Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (6)
 
 ```mathematica
 In[1]:= Sinc[0]
@@ -63,6 +53,43 @@ Out[1]= Cos[x]/x - Sin[x]/x^2
 In[1]:= Series[Sinc[x], {x, 0, 6}]
 Out[1]= 1 - x^2/6 + x^4/120 - x^6/5040 + O[x]^7
 ```
+
+## Algorithm
+
+```text
+ Mathilda -- the cardinal sine  Sinc[z] = Sin[z]/z  (Sinc[0] = 1).
+```
+
+Sinc is entire and even, with a removable singularity at the origin. Each kind of argument takes the cheapest route:
+
+```text
+  exact special values   ->  1 (at 0), 0 (at +-Infinity), Indeterminate
+  machine real           ->  libm sin(x)/x
+  arbitrary real (MPFR)  ->  mpfr_sin(x)/x at the input precision
+  complex (any prec)     ->  sin(z)/z via the shared ncpx toolkit
+  everything else        ->  stays symbolic (return NULL)
+```
+
+Attributes: Listable, NumericFunction, Protected.
+
+## Implementation notes
+
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+
+## See also
+
+[SinIntegral](../../special-functions/SinIntegral/)
+
+## References
+
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_numeric_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numeric_stress.c)
+- Tests: [`tests/test_sinc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sinc.c)
+- Tests: [`tests/test_sinintegral.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sinintegral.c)
+
+## Notes & additional examples
 
 ### Notes
 

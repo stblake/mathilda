@@ -5,17 +5,22 @@
 
 ## Description
 
-```text
-$MaxMachineNumber
-    gives the largest machine-precision number that can be used on
-    this computer system.
+**`$MaxMachineNumber`**
 
-Equals the platform's DBL_MAX.
-```
+gives the largest machine-precision number that can be used on this computer system.
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+Equals the platform's DBL\_MAX.
+
+</details>
+
+## Examples (4)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= $MachinePrecision
@@ -37,9 +42,9 @@ A Protected OwnValue set in `system_constants_init` (`src/core.c`) to `expr_new_
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[$MachinePrecision](../../expression-information/$MachinePrecision/), [$MachineEpsilon](../../expression-information/$MachineEpsilon/), [$MinMachineNumber](../../expression-information/$MinMachineNumber/), [$MaxNumber](../../expression-information/$MaxNumber/), [$MinNumber](../../expression-information/$MinNumber/)
 
 ## References
 

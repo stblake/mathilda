@@ -5,30 +5,31 @@
 
 ## Description
 
-```text
-$VersionNumber
-    gives the Mathilda version number as a real number.
-```
+**`$VersionNumber`**
 
-## Examples
+gives the Mathilda version number as a real number.
 
-All examples below are verified against the current Mathilda build.
+## Examples (2)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= $VersionNumber
-Out[1]= 0.032
+Out[1]= 0.036
 
 In[2]:= $Version
-Out[2]= "Mathilda 0.032 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)"
+Out[2]= "Mathilda 0.036 (Apple LLVM 21.0.0 (clang-2100.1.1.101), GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)"
 ```
 
 ## Implementation notes
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[$Version](../../expression-information/$Version/)
 
 ## References
 

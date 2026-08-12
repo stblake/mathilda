@@ -5,18 +5,23 @@
 
 ## Description
 
-```text
-Outer[f,list1,list2,...]
-    gives the generalized outer product of the listi, forming all possible combinations of the lowest-level elements in each of them, and feeding them as arguments to f.
-Outer[f,list1,list2,...,n]
-    treats as separate elements only sublists at level n in the listi.
-Outer[f,list1,list2,...,n1,n2,...]
-    treats as separate elements only sublists at level ni in the corresponding listi.
-```
+**`Outer[f,list1,list2,...]`**
 
-## Examples
+gives the generalized outer product of the listi, forming all possible combinations of the lowest-level elements in each of them, and feeding them as arguments to f.
 
-All examples below are verified against the current Mathilda build.
+**`Outer[f,list1,list2,...,n]`**
+
+treats as separate elements only sublists at level n in the listi.
+
+**`Outer[f,list1,list2,...,n1,n2,...]`**
+
+treats as separate elements only sublists at level ni in the corresponding listi.
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Outer[f, {a, b}, {x, y, z}]
@@ -29,30 +34,7 @@ In[3]:= Outer[g, f[a, b], f[x, y, z]]
 Out[3]= f[f[g[a, x], g[a, y], g[a, z]], f[g[b, x], g[b, y], g[b, z]]]
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_outer` computes the generalised outer product `Outer[f, t1, t2, ..., {n1, ...}]`. It first counts trailing Integer / `Infinity` arguments as per-tensor depth limits (default `INT64_MAX`, i.e. descend to the leaves), leaving the remaining arguments after `f` as the input tensors. The recursive worker `outer_rec` walks each tensor down to its target depth, collecting one atom per tensor into `current_atoms`, and at the deepest level emits `f[a1, a2, ...]`; the assembled tree is then `evaluate`-d once. The result head for the assembled levels is taken from the first function-typed tensor.
-
-**Data structures / limits.** Nested `Expr*` `List`s; per-tensor depths in an `int64_t[]`. With no tensors, `f[]` is returned evaluated. This is the generic functional-programming `Outer`, not a linear-algebra-specific kernel; `KroneckerProduct` and matrix outer products are built on it.
-
-- `Protected`.
-- Applying `Outer` to two tensors of ranks $r$ and $s$ gives a tensor of rank $r+s$.
-- The heads of all `listi` must be the same, but need not necessarily be `List`.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
-- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 The generalized outer product — every pairing of elements fed to `f`:
 
@@ -91,6 +73,32 @@ Outer products of three or more lists nest one level deeper per list:
 In[1]:= Outer[List, {1, 2}, {a, b}, {X, Y}]
 Out[1]= {{{{1, a, X}, {1, a, Y}}, {{1, b, X}, {1, b, Y}}}, {{{2, a, X}, {2, a, Y}}, {{2, b, X}, {2, b, Y}}}}
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_outer` computes the generalised outer product `Outer[f, t1, t2, ..., {n1, ...}]`. It first counts trailing Integer / `Infinity` arguments as per-tensor depth limits (default `INT64_MAX`, i.e. descend to the leaves), leaving the remaining arguments after `f` as the input tensors. The recursive worker `outer_rec` walks each tensor down to its target depth, collecting one atom per tensor into `current_atoms`, and at the deepest level emits `f[a1, a2, ...]`; the assembled tree is then `evaluate`-d once. The result head for the assembled levels is taken from the first function-typed tensor.
+
+**Data structures / limits.** Nested `Expr*` `List`s; per-tensor depths in an `int64_t[]`. With no tensors, `f[]` is returned evaluated. This is the generic functional-programming `Outer`, not a linear-algebra-specific kernel; `KroneckerProduct` and matrix outer products are built on it.
+
+- `Protected`.
+- Applying `Outer` to two tensors of ranks $r$ and $s$ gives a tensor of rank $r+s$.
+- The heads of all `listi` must be the same, but need not necessarily be `List`.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[List](../../other-advanced/List/)
+
+## References
+
+- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
+- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_deriv_array.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv_array.c)
+- Tests: [`tests/test_distribute.c`](https://github.com/stblake/mathilda/blob/main/tests/test_distribute.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+
+## Notes & additional examples
 
 ### Notes
 

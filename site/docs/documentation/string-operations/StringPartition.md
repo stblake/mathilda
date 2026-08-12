@@ -5,22 +5,27 @@
 
 ## Description
 
-```text
-StringPartition["string", n]
-    Partitions string into non-overlapping substrings of length n.
-StringPartition["string", n, d]
-    Generates length-n substrings with offset d (all of length n; some
-    trailing or middle characters may be omitted).
-StringPartition["string", UpTo[n]]
-    Partitions into substrings of length up to n, allowing a shorter
-    final substring so every character appears.
-StringPartition[{s1, s2, ...}, spec]
-    Threads over a list of strings.
-```
+**`StringPartition["string", n]`**
 
-## Examples
+Partitions string into non-overlapping substrings of length n.
 
-All examples below are verified against the current Mathilda build.
+**`StringPartition["string", n, d]`**
+
+Generates length-n substrings with offset d (all of length n; some trailing or middle characters may be omitted).
+
+**`StringPartition["string", UpTo[n]]`**
+
+Partitions into substrings of length up to n, allowing a shorter final substring so every character appears.
+
+**`StringPartition[{s1, s2, ...}, spec]`**
+
+Threads over a list of strings.
+
+## Examples (4)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= StringPartition["123456789123456789", 9]
@@ -36,15 +41,30 @@ In[4]:= StringPartition["ababababab", 3]
 Out[4]= {"aba", "bab", "aba"}
 ```
 
+## Algorithm
+
+stringpartition.c - StringPartition builtin for Mathilda
+
+```text
+StringPartition["string", n]        - non-overlapping length-n blocks
+StringPartition["string", n, d]     - length-n blocks starting every d chars
+StringPartition["string", UpTo[n]]  - length-<=n blocks; final may be shorter
+```
+
+StringPartition[{s1, s2, ...}, spec] - threads over a list of strings
+
+Strings are treated as raw byte arrays (consistent with StringTake/StringDrop across this subsystem); no UTF-8 codepoint decoding is performed.
+
 ## Implementation notes
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[StringTake](../../string-operations/StringTake/), [StringDrop](../../string-operations/StringDrop/)
 
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_stringpartition.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringpartition.c)

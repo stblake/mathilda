@@ -5,37 +5,24 @@
 
 ## Description
 
-```text
-Catalan
-    is Catalan's constant, with numerical value ~= 0.915966.
-Catalan is the sum over k >= 0 of (-1)^k (2 k + 1)^-2. It is a
-mathematical constant: it has attributes Constant and Protected,
-NumericQ[Catalan] is True, and D[Catalan, x] is 0. N[Catalan, prec]
-evaluates it to any precision.
-```
+**`Catalan`**
 
-## Examples
+is Catalan's constant, with numerical value ~= 0.915966.
 
-_No verified examples yet for this function._
+**`NumericQ[Catalan] is True, and D[Catalan, x] is 0. N[Catalan, prec]`**
 
-## Implementation notes
+<details>
+<summary>Notes</summary>
 
-- Attributes `Constant`, `Protected`. `Attributes[Catalan] = {Constant,
+Catalan is the sum over k \>= 0 of (-1)^k (2 k + 1)^-2. It is a mathematical constant: it has attributes Constant and Protected, evaluates it to any precision.
 
-**Attributes:** `Constant`, `Protected`.
+</details>
 
-## Implementation status
+## Examples (5)
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+Every input below was run against the current Mathilda build and its output recorded.
 
-## References
-
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
-- Specification: [`docs/spec/builtins/mathematical-constants.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/mathematical-constants.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= N[Catalan]
@@ -61,6 +48,25 @@ Out[1]= True
 In[1]:= N[8 Catalan, 30]
 Out[1]= 7.32772475341775212043682811946
 ```
+
+## Implementation notes
+
+- Attributes `Constant`, `Protected`. `Attributes[Catalan] = {Constant,
+  Protected}`; the symbol cannot be reassigned.
+- Propagated as an exact, unevaluated symbol; `NumericQ[Catalan]` is `True` and
+  `D[Catalan, x] = 0`.
+- `N[Catalan]` gives the machine value `0.915966`; `N[Catalan, prec]` gives any
+  precision (MPFR `mpfr_const_catalan`), e.g.
+  `N[Catalan, 50] = 0.915965594177219015054603514932384110774149374281673`.
+
+**Attributes:** `Constant`, `Protected`.
+
+## References
+
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Specification: [`docs/spec/builtins/mathematical-constants.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/mathematical-constants.md)
+
+## Notes & additional examples
 
 ### Notes
 

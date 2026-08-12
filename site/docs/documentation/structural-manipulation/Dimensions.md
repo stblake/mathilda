@@ -5,21 +5,26 @@
 
 ## Description
 
-```text
-Dimensions[expr]
-    gives a list of the dimensions of expr.
-Dimensions[expr, n]
-    gives the dimensions of expr down to at most level n.
+**`Dimensions[expr]`**
 
-expr is treated as a full array only at levels where every sub-piece
-shares the same head and length; the walk halts at the first ragged
-level. Dimensions always returns a List, including the empty List {}
-for atomic expressions.
-```
+gives a list of the dimensions of expr.
 
-## Examples
+**`Dimensions[expr, n]`**
 
-All examples below are verified against the current Mathilda build.
+gives the dimensions of expr down to at most level n.
+
+<details>
+<summary>Notes</summary>
+
+expr is treated as a full array only at levels where every sub-piece shares the same head and length; the walk halts at the first ragged level. Dimensions always returns a List, including the empty List {} for atomic expressions.
+
+</details>
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Dimensions[{{1, 2}, {3, 4}}]
@@ -46,11 +51,15 @@ Out[5]= {}
 
 **Attributes:** none registered.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[List](../../other-advanced/List/)
 
 ## References
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_array_flatten.c`](https://github.com/stblake/mathilda/blob/main/tests/test_array_flatten.c)
+- Tests: [`tests/test_eval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval.c)
+- Tests: [`tests/test_hankelmatrix.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hankelmatrix.c)
+- Tests: [`tests/test_hilbertmatrix.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hilbertmatrix.c)

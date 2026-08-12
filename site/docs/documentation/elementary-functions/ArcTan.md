@@ -5,39 +5,26 @@
 
 ## Description
 
-```text
-ArcTan[z]
-    gives the principal inverse tangent of z, in (-Pi/2, Pi/2).
-ArcTan[y, x]
-    gives the argument of the complex number x + I y, in (-Pi, Pi]
-    (two-argument atan2 form).
+**`ArcTan[z]`**
+
+gives the principal inverse tangent of z, in (-Pi/2, Pi/2).
+
+**`ArcTan[y, x]`**
+
+gives the argument of the complex number x + I y, in (-Pi, Pi\] (two-argument atan2 form).
+
+<details>
+<summary>Notes</summary>
+
 ArcTan is Listable.
-```
 
-## Examples
+</details>
 
-_No verified examples yet for this function._
+## Examples (8)
 
-## Implementation notes
+Every input below was run against the current Mathilda build and its output recorded.
 
-**Algorithm.** `builtin_arctan` (`src/trig.c`) handles one- and two-argument forms. For `ArcTan[z]`: (1) `odd_fold` for oddness; (2) `trig_i_fold` for `ArcTan[I y] -> I ArcTanh[y]`; (3) exact inversion via `exact_arctan`, scanning n in `[-d/2, d/2]` for d in {1,2,3,4,5,6,10,12} against `exact_tan(n,d)` and returning `n/d * Pi`; (4) numeric fallback MPFR `mpfr_atan`/`mpfr_complex_atan`, else `get_approx` + C99 `catan`. For the two-argument `ArcTan[x, y]` (argument of x + I y): integer inputs are resolved exactly by quadrant (the axes and the four diagonals `±1` map to `0, ±Pi/2, Pi, ±Pi/4, ±3Pi/4`); real inputs use MPFR `mpfr_atan2` or C99 `atan2`. Indeterminate `ArcTan[0,0]` and unhandled cases return `NULL`.
-
-**Data structures.** `Expr*` trees; the single-arg exact path reuses the forward `exact_tan` table.
-
-**Attributes:** `Listable`, `NumericFunction`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/trig.c`](https://github.com/stblake/mathilda/blob/main/src/trig.c)
-- Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (8)
 
 ```mathematica
 In[1]:= ArcTan[1]
@@ -78,6 +65,25 @@ Machin's 1706 formula then evaluates Pi to 40 digits:
 In[1]:= N[16 ArcTan[1/5] - 4 ArcTan[1/239], 40]
 Out[1]= 3.1415926535897932384626433832795028841975
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_arctan` (`src/trig.c`) handles one- and two-argument forms. For `ArcTan[z]`: (1) `odd_fold` for oddness; (2) `trig_i_fold` for `ArcTan[I y] -> I ArcTanh[y]`; (3) exact inversion via `exact_arctan`, scanning n in `[-d/2, d/2]` for d in {1,2,3,4,5,6,10,12} against `exact_tan(n,d)` and returning `n/d * Pi`; (4) numeric fallback MPFR `mpfr_atan`/`mpfr_complex_atan`, else `get_approx` + C99 `catan`. For the two-argument `ArcTan[x, y]` (argument of x + I y): integer inputs are resolved exactly by quadrant (the axes and the four diagonals `±1` map to `0, ±Pi/2, Pi, ±Pi/4, ±3Pi/4`); real inputs use MPFR `mpfr_atan2` or C99 `atan2`. Indeterminate `ArcTan[0,0]` and unhandled cases return `NULL`.
+
+**Data structures.** `Expr*` trees; the single-arg exact path reuses the forward `exact_tan` table.
+
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+
+## References
+
+- Source: [`src/trig.c`](https://github.com/stblake/mathilda/blob/main/src/trig.c)
+- Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
+- Tests: [`tests/test_arc_exact.c`](https://github.com/stblake/mathilda/blob/main/tests/test_arc_exact.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_complexexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complexexpand.c)
+
+## Notes & additional examples
 
 ### Notes
 

@@ -5,35 +5,41 @@
 
 ## Description
 
-```text
-AtomQ[expr]
-    gives True if expr is an atomic object (Integer, Real, BigInt,
-    Rational, Complex, Symbol, or String), and False if expr is a
-    compound expression of the form head[...].
-```
+**`AtomQ[expr]`**
 
-## Examples
+gives True if expr is an atomic object (Integer, Real, BigInt, Rational, Complex, Symbol, or String), and False if expr is a compound expression of the form head\[...\].
 
-All examples below are verified against the current Mathilda build.
+## Examples (7)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
-In[1]:= MachineNumberQ[Sin[1000.]]
+In[1]:= StringQ["AbC"]
 Out[1]= True
 
-In[2]:= MachineNumberQ[Exp[1000.]]      (* overflows to +inf *)
-Out[2]= False
+In[2]:= StringQ[""]
+Out[2]= True
 
-In[3]:= MachineNumberQ[-29037945.290347]
-Out[3]= True
+In[3]:= StringQ[123]
+Out[3]= False
+```
 
-In[4]:= MachineNumberQ[N[Pi, 30]]       (* MPFR, not machine *)
-Out[4]= False
+### Scope (4)
 
-In[5]:= MachineNumberQ[1.0 + 2.0 I]
-Out[5]= True
+```mathematica
+In[4]:= MachineNumberQ[Sin[1000.]]
+Out[4]= True
 
-In[6]:= MachineNumberQ[1 + 2 I]         (* exact Gaussian integer *)
-Out[6]= False
+In[5]:= MachineNumberQ[Exp[1000.]]      (* overflows to +inf *)
+Out[5]= False
+
+In[6]:= MachineNumberQ[-29037945.290347]
+Out[6]= True
+
+In[7]:= MachineNumberQ[N[Pi, 30]]       (* MPFR, not machine *)
+Out[7]= False
 ```
 
 ## Implementation notes
@@ -42,11 +48,13 @@ Out[6]= False
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[NumberQ](../../expression-information/NumberQ/), [IntegerQ](../../expression-information/IntegerQ/), [StringQ](../../expression-information/StringQ/), [MachineNumberQ](../../expression-information/MachineNumberQ/), [Complex](../../arithmetic/Complex/)
 
 ## References
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)

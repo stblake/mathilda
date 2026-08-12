@@ -5,17 +5,22 @@
 
 ## Description
 
-```text
-HoldComplete[expr]
-    shields expr completely from evaluation.
-HoldComplete has attribute HoldAllComplete: it prevents argument evaluation, Sequence flattening, Unevaluated stripping, and Evaluate from firing.
-Substitution (via ReplaceAll, etc.) still happens inside HoldComplete.
-HoldComplete is removed by one level of ReleaseHold.
-```
+**`HoldComplete[expr]`**
 
-## Examples
+shields expr completely from evaluation.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+HoldComplete has attribute HoldAllComplete: it prevents argument evaluation, Sequence flattening, Unevaluated stripping, and Evaluate from firing. Substitution (via ReplaceAll, etc.) still happens inside HoldComplete. HoldComplete is removed by one level of ReleaseHold.
+
+</details>
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Attributes[HoldComplete]
@@ -46,11 +51,14 @@ Out[5]= Sequence[1, 2]
 
 **Attributes:** `HoldAllComplete`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[Sequence](../../expression-information/Sequence/), [Unevaluated](../../expression-information/Unevaluated/), [Evaluate](../../expression-information/Evaluate/), [HoldAllComplete](../../expression-information/HoldAllComplete/), [ReplaceAll](../../assignment-and-rules/ReplaceAll/), [Replace](../../assignment-and-rules/Replace/), [ReleaseHold](../../expression-information/ReleaseHold/)
 
 ## References
 
 - Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_releasehold.c`](https://github.com/stblake/mathilda/blob/main/tests/test_releasehold.c)
+- Tests: [`tests/test_sequence.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sequence.c)
+- Tests: [`tests/test_unevaluated.c`](https://github.com/stblake/mathilda/blob/main/tests/test_unevaluated.c)

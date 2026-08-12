@@ -5,18 +5,22 @@
 
 ## Description
 
-```text
-TransformationFunctions
-    is an option for Simplify giving the list of functions to apply to try to transform parts of an expression.
-TransformationFunctions -> Automatic uses the built-in collection of transformation functions.
-TransformationFunctions -> {f1, f2, ...} uses only the functions fi.
-TransformationFunctions -> {Automatic, f1, ...} uses the built-in transformation functions together with the fi.
-Each function is applied to the whole expression and to its subexpressions; the lowest-complexity result (per ComplexityFunction) is kept.
-```
+**`TransformationFunctions`**
 
-## Examples
+is an option for Simplify giving the list of functions to apply to try to transform parts of an expression.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+TransformationFunctions -\> Automatic uses the built-in collection of transformation functions. TransformationFunctions -\> {f1, f2, ...} uses only the functions fi. TransformationFunctions -\> {Automatic, f1, ...} uses the built-in transformation functions together with the fi. Each function is applied to the whole expression and to its subexpressions; the lowest-complexity result (per ComplexityFunction) is kept.
+
+</details>
+
+## Examples (7)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Options (2)
 
 ```mathematica
 In[1]:= Simplify[(x^2 - 1)/(x - 1), TransformationFunctions -> {Cancel}]
@@ -26,39 +30,7 @@ In[2]:= Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> {}]
 Out[2]= Cos[x]^2 + Sin[x]^2
 ```
 
-## Implementation notes
-
-**Algorithm.** `TransformationFunctions` is an option symbol for Simplify (it has
-no builtin handler of its own). `builtin_simplify` detects
-`Rule[TransformationFunctions, spec]` among its arguments and resolves it into a
-`(use_builtin, user_funcs[])` pair: `Automatic` (the default) keeps the built-in
-transform pipeline only; `{f1, ...}` suppresses the built-ins and uses only the
-`fi`; `{Automatic, f1, ...}` runs the built-in pipeline *and* the `fi`; a bare
-`f` is treated as the single-function list `{f}`. The `fi` are borrowed pointers
-into the option expression (the evaluator keeps it alive across the call). After
-the built-in search produces `best` (or, when built-ins are suppressed, `best =
-expr_copy(input)`), `simp_apply_transformations` applies each user function to
-the current best and keeps the lowest-complexity result by `score_with_func`.
-
-**Data structures.** No state beyond the parsed option; `user_funcs` is a small
-heap array of borrowed `Expr*` head expressions, freed after the search.
-
-- Each `fi` may be any function — a builtin head such as `Together` or `Cancel`,
-
-**Attributes:** none registered.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/simp/simp_builtins.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp_builtins.c)
-- Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 By default `Simplify` applies its built-in transformations, collapsing the
 Pythagorean identity:
@@ -93,3 +65,40 @@ letting `TrigToExp` participate in the search:
 In[1]:= Simplify[1 + Tan[x]^2, TransformationFunctions -> {Automatic, TrigToExp}]
 Out[1]= Sec[x]^2
 ```
+
+## Implementation notes
+
+**Algorithm.** `TransformationFunctions` is an option symbol for Simplify (it has
+no builtin handler of its own). `builtin_simplify` detects
+`Rule[TransformationFunctions, spec]` among its arguments and resolves it into a
+`(use_builtin, user_funcs[])` pair: `Automatic` (the default) keeps the built-in
+transform pipeline only; `{f1, ...}` suppresses the built-ins and uses only the
+`fi`; `{Automatic, f1, ...}` runs the built-in pipeline *and* the `fi`; a bare
+`f` is treated as the single-function list `{f}`. The `fi` are borrowed pointers
+into the option expression (the evaluator keeps it alive across the call). After
+the built-in search produces `best` (or, when built-ins are suppressed, `best =
+expr_copy(input)`), `simp_apply_transformations` applies each user function to
+the current best and keeps the lowest-complexity result by `score_with_func`.
+
+**Data structures.** No state beyond the parsed option; `user_funcs` is a small
+heap array of borrowed `Expr*` head expressions, freed after the search.
+
+- Each `fi` may be any function — a builtin head such as `Together` or `Cancel`,
+  or a pure function such as `(# /. a -> 0 &)`.
+- Every function is applied to the whole expression and to each of its
+  subexpressions; the candidate of lowest complexity (per `ComplexityFunction`)
+  is kept, in the same minimum-complexity search used for the built-in
+  transforms.
+- The option propagates through `Simplify`'s list / relation threading and
+  through the inexact-input rationalise/numericalise path.
+
+**Attributes:** none registered.
+
+## See also
+
+[Simplify](../../simplification/Simplify/), [Together](../../algebra/Together/), [Cancel](../../algebra/Cancel/)
+
+## References
+
+- Source: [`src/simp/simp_builtins.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp_builtins.c)
+- Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)

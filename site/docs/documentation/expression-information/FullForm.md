@@ -5,37 +5,22 @@
 
 ## Description
 
-```text
-FullForm[expr]
-    prints expr as its raw internal tree (heads written before arguments
-    in functional form, no operator or infix sugar).
-FullForm is a wrapper recognised by Print/Out; when an input evaluates
-to FullForm[expr] the wrapper is consumed by the printer and does not
-appear in the output.
-```
+**`FullForm[expr]`**
 
-## Examples
+prints expr as its raw internal tree (heads written before arguments in functional form, no operator or infix sugar).
 
-_No verified examples yet for this function._
+<details>
+<summary>Notes</summary>
 
-## Implementation notes
+FullForm is a wrapper recognised by Print/Out; when an input evaluates to FullForm\[expr\] the wrapper is consumed by the printer and does not appear in the output.
 
-`FullForm` is an unevaluated display wrapper: the builtin `builtin_fullform` (`src/print.c`) returns `NULL`, leaving `FullForm[expr]` intact. Rendering is done by the printer — `print_standard` detects the `FullForm` head and calls `expr_print_fullform`, which writes the raw tree as `head[arg, ...]` with no infix/operator sugar. `ToString[expr, FullForm]` reuses the same path via `expr_to_string_fullform`.
+</details>
 
-**Attributes:** `Protected`.
+## Examples (5)
 
-## Implementation status
+Every input below was run against the current Mathilda build and its output recorded.
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/print.c`](https://github.com/stblake/mathilda/blob/main/src/print.c)
-- Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= FullForm[a + b]
@@ -61,6 +46,23 @@ Out[1]= Times[a, Power[b, -1]]
 In[1]:= FullForm[x_Integer /; x > 0]
 Out[1]= Condition[Pattern[x, Blank[Integer]], Greater[x, 0]]
 ```
+
+## Implementation notes
+
+`FullForm` is an unevaluated display wrapper: the builtin `builtin_fullform` (`src/print.c`) returns `NULL`, leaving `FullForm[expr]` intact. Rendering is done by the printer — `print_standard` detects the `FullForm` head and calls `expr_print_fullform`, which writes the raw tree as `head[arg, ...]` with no infix/operator sugar. `ToString[expr, FullForm]` reuses the same path via `expr_to_string_fullform`.
+
+**Attributes:** `Protected`.
+
+## References
+
+- Source: [`src/print.c`](https://github.com/stblake/mathilda/blob/main/src/print.c)
+- Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_compile_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_transforms.c)
+- Tests: [`tests/test_graphics.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphics.c)
+- Tests: [`tests/test_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numeric.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+
+## Notes & additional examples
 
 ### Notes
 

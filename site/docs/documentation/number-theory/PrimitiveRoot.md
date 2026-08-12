@@ -5,18 +5,26 @@
 
 ## Description
 
-```text
-PrimitiveRoot[n]
-    gives a primitive root of n.
-PrimitiveRoot[n, k]
-    gives the smallest primitive root of n greater than or equal to k.
+**`PrimitiveRoot[n]`**
+
+gives a primitive root of n.
+
+**`PrimitiveRoot[n, k]`**
+
+gives the smallest primitive root of n greater than or equal to k.
+
+<details>
+<summary>Notes</summary>
 
 A primitive root of n is a generator of the multiplicative group of integers modulo n relatively prime to n.  PrimitiveRoot returns unevaluated unless n is 2, 4, an odd prime power p^k, or twice an odd prime power 2 p^k.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (11)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (6)
 
 ```mathematica
 In[1]:= PrimitiveRoot[9]
@@ -38,31 +46,7 @@ In[6]:= PrimitiveRoot[12]
 Out[6]= PrimitiveRoot[12]
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_primitiveroot` returns the smallest primitive root of `n` ≥ an optional second-argument start (`PrimitiveRoot[n]` / `PrimitiveRoot[n, k]`). It first classifies `n` with `pr_classify` to confirm the unit group `(Z/nZ)*` is cyclic (i.e. `n ∈ {1, 2, 4, p^e, 2p^e}` for odd prime p), then computes `φ(n)` and its distinct prime divisors. `pr_smallest_primitive_root` scans candidates `g`, testing each with `pr_is_primitive_root`: `g` is a primitive root iff `gcd(g, n) = 1` and `g^(φ(n)/q) ≢ 1 (mod n)` for every prime `q | φ(n)` (via `mpz_powm`). Non-integer numeric input emits `PrimitiveRoot::intg`; `n < 2` likewise; wrong arg count emits `PrimitiveRoot::argt`; symbolic input returns unevaluated.
-
-**Data structures.** GMP `mpz_t`; distinct primes of `φ(n)` in a fixed `mpz_t[]` array.
-
-**Complexity / limits.** Primitive-root density is `φ(φ(n))/φ(n)`, so the scan finds one in roughly `O(log log p)` candidates on average; each test is `ω(φ(n))` modular exponentiations.
-
-- `Protected`, `Listable`.
-- Returns unevaluated unless `n` is 2, 4, an odd prime power $p^k$, or
-
-**Attributes:** `Listable`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
-- Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= PrimitiveRoot[7]
@@ -96,6 +80,45 @@ When the multiplicative group is non-cyclic (e.g. `n = 8`), no primitive root ex
 In[1]:= PrimitiveRoot[8]
 Out[1]= PrimitiveRoot[8]
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_primitiveroot` returns the smallest primitive root of `n` ≥ an optional second-argument start (`PrimitiveRoot[n]` / `PrimitiveRoot[n, k]`). It first classifies `n` with `pr_classify` to confirm the unit group `(Z/nZ)*` is cyclic (i.e. `n ∈ {1, 2, 4, p^e, 2p^e}` for odd prime p), then computes `φ(n)` and its distinct prime divisors. `pr_smallest_primitive_root` scans candidates `g`, testing each with `pr_is_primitive_root`: `g` is a primitive root iff `gcd(g, n) = 1` and `g^(φ(n)/q) ≢ 1 (mod n)` for every prime `q | φ(n)` (via `mpz_powm`). Non-integer numeric input emits `PrimitiveRoot::intg`; `n < 2` likewise; wrong arg count emits `PrimitiveRoot::argt`; symbolic input returns unevaluated.
+
+**Data structures.** GMP `mpz_t`; distinct primes of `φ(n)` in a fixed `mpz_t[]` array.
+
+**Complexity / limits.** Primitive-root density is `φ(φ(n))/φ(n)`, so the scan finds one in roughly `O(log log p)` candidates on average; each test is `ω(φ(n))` modular exponentiations.
+
+- `Protected`, `Listable`.
+- Returns unevaluated unless `n` is 2, 4, an odd prime power $p^k$, or
+  twice an odd prime power $2 p^k$ (the moduli for which $(\mathbb{Z}/n\mathbb{Z})^*$
+  is cyclic). For all other `n`, the call is left unevaluated.
+- The 1-argument form returns a canonical primitive root: smallest for
+  $n \in \{2, 4\}$ and odd prime powers; for $n = 2 p^k$ the formula
+  $g$ if $g$ is odd else $g + p^k$ is applied, where $g$ is the smallest
+  primitive root of $p^k$. This matches Mathematica's convention so that,
+  e.g. `PrimitiveRoot[10] == 7` while `PrimitiveRoot[10, 1] == 3`.
+- The 2-argument form walks forward from `k`; if `k > n - 1` the call is
+  left unevaluated.
+- All arithmetic uses GMP `mpz_t`, so machine integers, bignums, and
+  symbolic bignum products like `Prime[1000000]^1000000` are handled
+  uniformly. The prime-power detection iteratively strips prime exponents
+  via `mpz_root`, which runs in $O(\omega(k))$ root extractions.
+- Diagnostics:
+  - `PrimitiveRoot::argt` if not called with 1 or 2 arguments.
+  - `PrimitiveRoot::intg` if `n` (or the 2nd-arg `k` when numeric) is not
+    an integer greater than 1.
+
+**Attributes:** `Listable`, `Protected`.
+
+## References
+
+- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
+- Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_multiplicative_order.c`](https://github.com/stblake/mathilda/blob/main/tests/test_multiplicative_order.c)
+- Tests: [`tests/test_primitive_root.c`](https://github.com/stblake/mathilda/blob/main/tests/test_primitive_root.c)
+
+## Notes & additional examples
 
 ### Notes
 

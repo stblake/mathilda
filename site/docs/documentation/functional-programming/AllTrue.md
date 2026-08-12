@@ -5,15 +5,15 @@
 
 ## Description
 
-```text
-AllTrue[list, test]
-    Gives True if test[e] is True for every element e
-    (True for an empty list). Over an association, tests the values.
-```
+**`AllTrue[list, test]`**
 
-## Examples
+Gives True if test\[e\] is True for every element e (True for an empty list). Over an association, tests the values.
 
-All examples below are verified against the current Mathilda build.
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= AllTrue[{2, 4, 6}, EvenQ]
@@ -30,11 +30,15 @@ Out[3]= True
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[AnyTrue](../../functional-programming/AnyTrue/), [NoneTrue](../../functional-programming/NoneTrue/)
 
 ## References
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_ndarray.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray.c)
+- Tests: [`tests/test_ndarray_selection.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_selection.c)

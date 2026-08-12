@@ -5,19 +5,30 @@
 
 ## Description
 
-```text
-Rescale[x, {min, max}]
-    gives x rescaled to run from 0 to 1 over the range min to max, equivalent to (x - min)/(max - min).
-Rescale[x, {min, max}, {ymin, ymax}]
-    gives x rescaled to run from ymin to ymax over the range min to max.
-Rescale[list]
-    rescales each element of list to run from 0 to 1 over the range Min[list] to Max[list].
+**`Rescale[x, {min, max}]`**
+
+gives x rescaled to run from 0 to 1 over the range min to max, equivalent to (x - min)/(max - min).
+
+**`Rescale[x, {min, max}, {ymin, ymax}]`**
+
+gives x rescaled to run from ymin to ymax over the range min to max.
+
+**`Rescale[list]`**
+
+rescales each element of list to run from 0 to 1 over the range Min\[list\] to Max\[list\].
+
+<details>
+<summary>Notes</summary>
+
 Rescale threads over a list first argument and works with exact, real, complex, and symbolic quantities.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Rescale[2.5, {-10, 10}]
@@ -40,11 +51,15 @@ Out[5]= 3/2 + 1/2*I
 
 **Attributes:** `NumericFunction`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[List](../../other-advanced/List/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/)
 
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_coverage.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_coverage.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+- Tests: [`tests/test_rescale.c`](https://github.com/stblake/mathilda/blob/main/tests/test_rescale.c)

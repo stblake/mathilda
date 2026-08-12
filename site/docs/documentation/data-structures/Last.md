@@ -5,23 +5,27 @@
 
 ## Description
 
-```text
-Last[expr] gives the last element of expr.
-```
+**`Last[expr] gives the last element of expr.`**
 
-## Examples
+## Examples (3)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
-In[1]:= First[<|"a" -> 10, "b" -> 20|>]
-Out[1]= 10
+In[1]:= Rest[<|"a" -> 10, "b" -> 20, "c" -> 30|>]
+Out[1]= <|"b" -> 20, "c" -> 30|>
 
-In[2]:= Rest[<|"a" -> 10, "b" -> 20, "c" -> 30|>]
-Out[2]= <|"b" -> 20, "c" -> 30|>
+In[2]:= Take[<|"a" -> 1, "b" -> 2, "c" -> 3|>, 2]
+Out[2]= <|"a" -> 1, "b" -> 2|>
+```
 
-In[3]:= Take[<|"a" -> 1, "b" -> 2, "c" -> 3|>, 2]
-Out[3]= <|"a" -> 1, "b" -> 2|>
+### Applications (1)
+
+```mathematica
+In[1]:= Last[{a,b,c}]
+Out[1]= c
 ```
 
 ## Implementation notes
@@ -30,23 +34,20 @@ Out[3]= <|"a" -> 1, "b" -> 2|>
 
 **Attributes:** none registered.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[First](../../data-structures/First/), [Rest](../../data-structures/Rest/), [Most](../../data-structures/Most/), [Take](../../data-structures/Take/), [Drop](../../data-structures/Drop/)
 
 ## References
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_divisors.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisors.c)
+- Tests: [`tests/test_eval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Last[{a,b,c}]
-Out[1]= c
-```
 
 ### Notes
 

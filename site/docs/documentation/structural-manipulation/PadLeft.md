@@ -5,25 +5,42 @@
 
 ## Description
 
-```text
-PadLeft[list, n]
-    makes a list of length n by padding list with zeros on the left.
-PadLeft[list, n, x]
-    pads by repeating the element x.
-PadLeft[list, n, {x1, x2, ...}]
-    pads by cyclically repeating the elements xi.
-PadLeft[list, n, padding, m]
-    leaves a margin of m elements of padding on the right.
-PadLeft[list, {n1, n2, ...}]
-    makes a nested list with length ni at level i.
-PadLeft[list]
-    pads a ragged array list with zeros to make it full.
+**`PadLeft[list, n]`**
+
+makes a list of length n by padding list with zeros on the left.
+
+**`PadLeft[list, n, x]`**
+
+pads by repeating the element x.
+
+**`PadLeft[list, n, {x1, x2, ...}]`**
+
+pads by cyclically repeating the elements xi.
+
+**`PadLeft[list, n, padding, m]`**
+
+leaves a margin of m elements of padding on the right.
+
+**`PadLeft[list, {n1, n2, ...}]`**
+
+makes a nested list with length ni at level i.
+
+**`PadLeft[list]`**
+
+pads a ragged array list with zeros to make it full.
+
+<details>
+<summary>Notes</summary>
+
 A negative length pads on the right; a negative margin truncates trailing elements. The head of list need not be List.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (2)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= PadLeft[{a, b, c}, 10, {x, y, z}]
@@ -37,11 +54,12 @@ Out[2]= {{a, b, 0, 0, 0}, {c, 0, 0, 0, 0}, {0, 0, 0, 0, 0}}
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[PadRight](../../structural-manipulation/PadRight/), [List](../../other-advanced/List/)
 
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_padleft.c`](https://github.com/stblake/mathilda/blob/main/tests/test_padleft.c)

@@ -5,35 +5,22 @@
 
 ## Description
 
-```text
-Begin["ctx`"] sets the current context ($Context) to "ctx`", saving
-the previous value for End[] to restore. If the argument starts with a
-backtick it is interpreted relative to the current context:
-Begin["`Private`"] inside "MyPkg`" yields "MyPkg`Private`".
-```
+**`Begin["ctx`"] sets the current context ($Context) to "ctx`", saving`**
 
-## Examples
+**`Begin["`Private`"] inside "MyPkg`" yields "MyPkg`Private`".`**
 
-_No verified examples yet for this function._
+<details>
+<summary>Notes</summary>
 
-## Implementation notes
+the previous value for End\[\] to restore. If the argument starts with a backtick it is interpreted relative to the current context:
 
-`builtin_begin` (`src/context.c`) takes a single string `"ctx`"` and calls `context_begin`, which pushes a `FRAME_BEGIN` onto the internal `g_stack` (snapshotting the current context and search path), then sets `g_current` to the new context. A leading-backtick argument like `"`Private`"` is interpreted relative to the current context (`MyPkg``` + `Private``). `republish_state` refreshes the `$Context`/`$ContextPath` OwnValues, and the new current context string is returned. Invalid (non-backtick-terminated) specs emit `Begin::cxt`. The matching `End[]` (`builtin_end`) pops the frame to restore the saved context.
+</details>
 
-**Attributes:** `Protected`.
+## Examples (5)
 
-## Implementation status
+Every input below was run against the current Mathilda build and its output recorded.
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/context.c`](https://github.com/stblake/mathilda/blob/main/src/context.c)
-- Specification: [`docs/spec/builtins/scoping-constructs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/scoping-constructs.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= $Context
@@ -51,6 +38,21 @@ Out[4]= "foo`"
 In[5]:= $Context
 Out[5]= "Global`"
 ```
+
+## Implementation notes
+
+`builtin_begin` (`src/context.c`) takes a single string `"ctx`"` and calls `context_begin`, which pushes a `FRAME_BEGIN` onto the internal `g_stack` (snapshotting the current context and search path), then sets `g_current` to the new context. A leading-backtick argument like `"`Private`"` is interpreted relative to the current context (`MyPkg``` + `Private``). `republish_state` refreshes the `$Context`/`$ContextPath` OwnValues, and the new current context string is returned. Invalid (non-backtick-terminated) specs emit `Begin::cxt`. The matching `End[]` (`builtin_end`) pops the frame to restore the saved context.
+
+**Attributes:** `Protected`.
+
+## References
+
+- Source: [`src/context.c`](https://github.com/stblake/mathilda/blob/main/src/context.c)
+- Specification: [`docs/spec/builtins/scoping-constructs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/scoping-constructs.md)
+- Tests: [`tests/test_context.c`](https://github.com/stblake/mathilda/blob/main/tests/test_context.c)
+- Tests: [`tests/test_symbol.c`](https://github.com/stblake/mathilda/blob/main/tests/test_symbol.c)
+
+## Notes & additional examples
 
 ### Notes
 

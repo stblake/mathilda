@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-Module[{x, y, ...}, expr] specifies that x, y, ... are local variables.
-```
+**`Module[{x, y, ...}, expr] specifies that x, y, ... are local variables.`**
 
-## Examples
+## Examples (7)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= x = 1; Module[{x = 2}, x + 1]
@@ -21,33 +21,7 @@ In[2]:= x
 Out[2]= 1
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_module` (in `src/modular.c`) implements lexical scoping by **alpha-renaming** locals to unique temporaries. `Module` carries `HoldAll | Protected` (set in `src/attr.c`), so the variable list and body arrive unevaluated. The handler reads (and post-increments) the global `$ModuleNumber` counter and forms a per-invocation suffix; each local `x` (or `x = init`) becomes a fresh symbol `x$<n>` (e.g. `x$7`). Each temporary is tagged `ATTR_TEMPORARY`, and if it had an initializer (evaluated in the outer scope) that value is installed as an `OwnValue` on the renamed symbol.
-
-The rename is applied to the body by `substitute_scoping`, a recursive tree walk over a `ScopingEnv` linked list mapping old name → replacement symbol. Crucially this walk is shadow-aware: when it descends into a *nested* scoping construct (`Module`/`Block`/`With`/`Function`/`Table`) that rebinds one of the same names, that name is dropped from the environment passed downward, so inner bindings are not corrupted; and binding RHSs are substituted with the outer environment (so `With[{q=...}, With[{k=q},...]]` resolves correctly) while binding LHS names are left intact. The renamed body is then `evaluate`d. `Return[v]` (or `Return[v, Module]`) targeting this boundary is trapped via `eval_classify_return`. Finally the `ScopingEnv`, the `VarInfo` temporaries, and the evaluated initializers are freed (the renamed symbols' OwnValues persist in the symbol table).
-
-**Limit.** Body is taken as a single expression (arg_count must be 2).
-
-- `HoldAll`, `Protected`.
-- Variables are renamed to `name$nnn` using `$ModuleNumber`.
-- Created symbols have the `Temporary` attribute.
-
-**Attributes:** `HoldAll`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §3.1 (local state and lexical scoping).
-- Source: [`src/modular.c`](https://github.com/stblake/mathilda/blob/main/src/modular.c)
-- Specification: [`docs/spec/builtins/scoping-constructs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/scoping-constructs.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= Module[{x = 5}, x^2 + 1]
@@ -73,6 +47,48 @@ Out[1]= 720
 In[1]:= Module[{x = 1}, Do[x = x + 1/x, {5}]; x]
 Out[1]= 969581/272890
 ```
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| return {real, int, mask}, then Total | 61.2 s | 0.344 s | 0.983 s |
+| return {real, int}, then Total | 42 s | 0.219 s | 0.41 s |
+| return {real, int, mask}, discarded | 41.5 s | 0.244 s | 0.972 s |
+| return ragged {n, 1000, 100}, then Total | 20.2 s | 0.033 s | 0.051 s |
+| return {real, real}, then Total | 0.89 s | 0.161 s | 0.242 s |
+
+## Implementation notes
+
+**Algorithm.** `builtin_module` (in `src/modular.c`) implements lexical scoping by **alpha-renaming** locals to unique temporaries. `Module` carries `HoldAll | Protected` (set in `src/attr.c`), so the variable list and body arrive unevaluated. The handler reads (and post-increments) the global `$ModuleNumber` counter and forms a per-invocation suffix; each local `x` (or `x = init`) becomes a fresh symbol `x$<n>` (e.g. `x$7`). Each temporary is tagged `ATTR_TEMPORARY`, and if it had an initializer (evaluated in the outer scope) that value is installed as an `OwnValue` on the renamed symbol.
+
+The rename is applied to the body by `substitute_scoping`, a recursive tree walk over a `ScopingEnv` linked list mapping old name → replacement symbol. Crucially this walk is shadow-aware: when it descends into a *nested* scoping construct (`Module`/`Block`/`With`/`Function`/`Table`) that rebinds one of the same names, that name is dropped from the environment passed downward, so inner bindings are not corrupted; and binding RHSs are substituted with the outer environment (so `With[{q=...}, With[{k=q},...]]` resolves correctly) while binding LHS names are left intact. The renamed body is then `evaluate`d. `Return[v]` (or `Return[v, Module]`) targeting this boundary is trapped via `eval_classify_return`. Finally the `ScopingEnv`, the `VarInfo` temporaries, and the evaluated initializers are freed (the renamed symbols' OwnValues persist in the symbol table).
+
+**Limit.** Body is taken as a single expression (arg_count must be 2).
+
+- `HoldAll`, `Protected`.
+- Variables are renamed to `name$nnn` using `$ModuleNumber`.
+- Created symbols have the `Temporary` attribute.
+
+**Attributes:** `HoldAll`, `Protected`.
+
+## See also
+
+[HoldAll](../../expression-information/HoldAll/)
+
+## References
+
+- Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §3.1 (local state and lexical scoping).
+- Source: [`src/modular.c`](https://github.com/stblake/mathilda/blob/main/src/modular.c)
+- Specification: [`docs/spec/builtins/scoping-constructs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/scoping-constructs.md)
+- Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
+
+## Notes & additional examples
 
 ### Notes
 

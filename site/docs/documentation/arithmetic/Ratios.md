@@ -5,21 +5,28 @@
 
 ## Description
 
-```text
-Ratios[list]
-    gives the successive ratios list[[k+1]]/list[[k]] of the elements
-    of list (length l - 1).
-Ratios[list, n] gives the n-th iterated ratios (length l - n); n must
-be a non-negative integer (n = 0 returns list unchanged).
-Ratios[list, {n1, n2, ...}] gives the successive n_k-th ratios at
-level k of a nested list; for a matrix m, Ratios[m, n] (= Ratios[m, {n, 0}]) takes ratios of successive rows.
-FoldList[Times, x, Ratios[list]] inverts Ratios.
-Ratios has the attribute Protected.
-```
+**`Ratios[list]`**
 
-## Examples
+gives the successive ratios list\[\[k+1\]\]/list\[\[k\]\] of the elements of list (length l - 1).
 
-All examples below are verified against the current Mathilda build.
+**`Ratios[list, n] gives the n-th iterated ratios (length l - n); n must`**
+
+**`Ratios[list, {n1, n2, ...}] gives the successive n_k-th ratios at`**
+
+**`FoldList[Times, x, Ratios[list]] inverts Ratios.`**
+
+<details>
+<summary>Notes</summary>
+
+be a non-negative integer (n = 0 returns list unchanged). level k of a nested list; for a matrix m, Ratios\[m, n\] (= Ratios\[m, {n, 0}\]) takes ratios of successive rows. Ratios has the attribute Protected.
+
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Ratios[{a, b, c, d, e}]
@@ -38,32 +45,7 @@ In[5]:= FoldList[Times, a, Ratios[{a, b, c, d, e}]]
 Out[5]= {a, b, c, d, e}
 ```
 
-## Implementation notes
-
-`builtin_ratios` returns successive ratios of list elements: `Ratios[{a, b, c, ...}]` gives `{b/a, c/b, ...}`. `Ratios[list, n]` applies the ratio operation n times (`ratio_n`); `Ratios[list, {n1, n2, ...}]` takes ratios along the given levels (`ratio_levels`). Each ratio is formed as a division, so the usual numeric/symbolic simplification follows. Level/count specs must be non-negative integers; bad shapes return `NULL`.
-
-- `Protected`.
-- `Ratios[list]` divides successive elements by preceding ones, giving `{list[[2]]/list[[1]], list[[3]]/list[[2]], ...}` of length `l - 1`; `Ratios[{x1, x2}]` gives `{x2/x1}`.
-- `Ratios[list, n]` applies the ratio operator `n` times, giving length `l - n`. `n` must be a non-negative integer (`n = 0` returns `list` unchanged).
-- `Ratios[list, {n1, n2, ...}]` gives the successive `nk`-th ratios at level `k` of a nested list, and is equivalent to `Ratios[Ratios[list, n1], {0, n2, ...}]`. Each `nk` must be a non-negative integer.
-- Division threads element-wise over sublists via the `Listable` `Power`/`Times`, so for a matrix `m`, `Ratios[m]` (= `Ratios[m, 1]` = `Ratios[m, {1, 0}]`) takes ratios of successive rows within each column, while `Ratios[m, {0, 1}]` takes ratios of columns within each row.
-- The head of the input is preserved. A list shorter than the reduction yields the empty list. First ratios are constant for a geometric sequence.
-- Works on machine integers, GMP arbitrary-precision integers (exact `Rational` results), machine-precision doubles, and symbolic expressions.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
-- Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= Ratios[{1, 2, 4, 8, 16}]
@@ -92,6 +74,41 @@ Out[1]= {1, 2, 3, 4, 5}
 In[2]:= FoldList[Times, 3, Ratios[{3, 6, 18, 36}]]
 Out[2]= {3, 6, 18, 36}
 ```
+
+## Options & behaviour
+
+> **Packed arrays.** `Ratios[list]` divides in place on a real buffer. An
+> **integer** buffer takes the ordinary path: `Ratios[{1, 2, 3}]` is
+> `{2, 3/2}`, exact `Rational`s that no buffer holds.
+
+## Implementation notes
+
+`builtin_ratios` returns successive ratios of list elements: `Ratios[{a, b, c, ...}]` gives `{b/a, c/b, ...}`. `Ratios[list, n]` applies the ratio operation n times (`ratio_n`); `Ratios[list, {n1, n2, ...}]` takes ratios along the given levels (`ratio_levels`). Each ratio is formed as a division, so the usual numeric/symbolic simplification follows. Level/count specs must be non-negative integers; bad shapes return `NULL`.
+
+- `Protected`.
+- `Ratios[list]` divides successive elements by preceding ones, giving `{list[[2]]/list[[1]], list[[3]]/list[[2]], ...}` of length `l - 1`; `Ratios[{x1, x2}]` gives `{x2/x1}`.
+- `Ratios[list, n]` applies the ratio operator `n` times, giving length `l - n`. `n` must be a non-negative integer (`n = 0` returns `list` unchanged).
+- `Ratios[list, {n1, n2, ...}]` gives the successive `nk`-th ratios at level `k` of a nested list, and is equivalent to `Ratios[Ratios[list, n1], {0, n2, ...}]`. Each `nk` must be a non-negative integer.
+- Division threads element-wise over sublists via the `Listable` `Power`/`Times`, so for a matrix `m`, `Ratios[m]` (= `Ratios[m, 1]` = `Ratios[m, {1, 0}]`) takes ratios of successive rows within each column, while `Ratios[m, {0, 1}]` takes ratios of columns within each row.
+- The head of the input is preserved. A list shorter than the reduction yields the empty list. First ratios are constant for a geometric sequence.
+- Works on machine integers, GMP arbitrary-precision integers (exact `Rational` results), machine-precision doubles, and symbolic expressions.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[Differences](../../arithmetic/Differences/), [Power](../../arithmetic/Power/), [Times](../../arithmetic/Times/), [Rational](../../arithmetic/Rational/)
+
+## References
+
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
+- Tests: [`tests/test_ratios.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ratios.c)
+
+## Notes & additional examples
 
 ### Notes
 

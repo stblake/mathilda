@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-Delete[expr, n] deletes the element at position n in expr.
-```
+**`Delete[expr, n] deletes the element at position n in expr.`**
 
-## Examples
+## Examples (2)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Delete[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {Key["b"]}]
@@ -27,11 +27,14 @@ Out[2]= <|"a" -> <|"y" -> 6|>|>
 
 **Attributes:** none registered.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[KeyDrop](../../data-structures/KeyDrop/)
 
 ## References
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+- Tests: [`tests/test_part.c`](https://github.com/stblake/mathilda/blob/main/tests/test_part.c)

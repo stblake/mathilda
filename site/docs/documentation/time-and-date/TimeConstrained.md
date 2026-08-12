@@ -5,30 +5,46 @@
 
 ## Description
 
-```text
-TimeConstrained[expr, t]
-    evaluates expr, stopping after t seconds.
-TimeConstrained[expr, t, failexpr]
-    returns failexpr if the time constraint is not met.
+**`TimeConstrained[expr, t]`**
 
-TimeConstrained generates an interrupt to abort the evaluation of
-expr if the evaluation is not completed within the specified time.
-TimeConstrained evaluates failexpr only if the evaluation is
-aborted. TimeConstrained returns $Aborted if the evaluation is
-aborted and no failexpr is specified.
+evaluates expr, stopping after t seconds.
 
-TimeConstrained[expr, Infinity] imposes no time constraint.
-TimeConstrained may give different results on different occasions
-within a single session, for example as a result of different
-conditions of internal system caches.
-TimeConstrained takes account only of CPU time spent inside the
-main Mathilda kernel process; it does not include additional
-threads or processes.
+**`TimeConstrained[expr, t, failexpr]`**
+
+returns failexpr if the time constraint is not met.
+
+**`TimeConstrained[expr, Infinity] imposes no time constraint.`**
+
+<details>
+<summary>Notes</summary>
+
+TimeConstrained generates an interrupt to abort the evaluation of expr if the evaluation is not completed within the specified time. TimeConstrained evaluates failexpr only if the evaluation is aborted. TimeConstrained returns $Aborted if the evaluation is aborted and no failexpr is specified. TimeConstrained may give different results on different occasions within a single session, for example as a result of different conditions of internal system caches. TimeConstrained takes account only of CPU time spent inside the main Mathilda kernel process; it does not include additional threads or processes.
+
+</details>
+
+## Examples (4)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (4)
+
+```mathematica
+In[1]:= TimeConstrained[1 + 1, 5]
+Out[1]= 2
+
+In[2]:= TimeConstrained[2^10, 5]
+Out[2]= 1024
 ```
 
-## Examples
+```mathematica
+In[1]:= TimeConstrained[Integrate[x^2 Exp[x], x], 10]
+Out[1]= 2 E^x + x^2 E^x - 2 x E^x
+```
 
-_No verified examples yet for this function._
+```mathematica
+In[1]:= TimeConstrained[Solve[x^2 - 3 x + 2 == 0, x], 10]
+Out[1]= {{x -> 1}, {x -> 2}}
+```
 
 ## Implementation notes
 
@@ -52,36 +68,18 @@ For a finite positive budget it installs a `SIGPROF` handler (`tc_sigprof_handle
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[HoldAll](../../expression-information/HoldAll/), [FactorInteger](../../number-theory/FactorInteger/)
 
 ## References
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/time-and-date.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/time-and-date.md)
+- Tests: [`tests/test_groebner.c`](https://github.com/stblake/mathilda/blob/main/tests/test_groebner.c)
+- Tests: [`tests/test_time_constrained.c`](https://github.com/stblake/mathilda/blob/main/tests/test_time_constrained.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= TimeConstrained[1 + 1, 5]
-Out[1]= 2
-
-In[2]:= TimeConstrained[2^10, 5]
-Out[2]= 1024
-```
-
-```mathematica
-In[1]:= TimeConstrained[Integrate[x^2 Exp[x], x], 10]
-Out[1]= 2 E^x + x^2 E^x - 2 x E^x
-```
-
-```mathematica
-In[1]:= TimeConstrained[Solve[x^2 - 3 x + 2 == 0, x], 10]
-Out[1]= {{x -> 1}, {x -> 2}}
-```
 
 ### Notes
 

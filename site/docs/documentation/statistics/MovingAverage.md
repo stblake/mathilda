@@ -5,17 +5,26 @@
 
 ## Description
 
-```text
-MovingAverage[list, r]
-    gives the moving average of list, computed by averaging runs of r elements.
-MovingAverage[list, {w_1, w_2, ..., w_r}]
-    gives the weighted moving average of list with weights w_i (effective weights w_i / Sum[w_i]).
-MovingAverage returns a list of length Length[list] - r + 1, and stays unevaluated when r < 1 or r > Length[list].
-```
+**`MovingAverage[list, r]`**
 
-## Examples
+gives the moving average of list, computed by averaging runs of r elements.
 
-All examples below are verified against the current Mathilda build.
+**`MovingAverage[list, {w_1, w_2, ..., w_r}]`**
+
+gives the weighted moving average of list with weights w\_i (effective weights w\_i / Sum\[w\_i\]).
+
+<details>
+<summary>Notes</summary>
+
+MovingAverage returns a list of length Length\[list\] - r + 1, and stays unevaluated when r \< 1 or r \> Length\[list\].
+
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (6)
 
 ```mathematica
 In[1]:= MovingAverage[{1, 5, 7, 3, 6, 2}, 3]
@@ -37,30 +46,7 @@ In[6]:= MovingAverage[{1, 2, 3, 4, 5}, 6]
 Out[6]= MovingAverage[{1, 2, 3, 4, 5}, 6]
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_moving_average` takes `(list, r)` where `r` is a positive integer window (`EXPR_INTEGER`/`EXPR_BIGINT`) or a `List` of weights. Output length is `n - r + 1`, and the call stays unevaluated unless `1 <= r <= n`. The unweighted form slides a window of `r` elements, builds a sublist, and delegates to `Mean` per window — so it inherits Mean's exact-rational / real / symbolic handling. The weighted form computes `wsum = Plus[w_k]`, the coefficients `w_k / wsum`, and for each window emits `Plus[Times[coef_k, x_{i+k}], ...]`, letting the evaluator simplify. All intermediate trees are built and reduced with `eval_and_free`. `ATTR_PROTECTED`.
-
-- `Protected`.
-- Output length is `Length[list] - r + 1`.
-- Stays unevaluated when `r < 1`, when `r > Length[list]`, when the second argument is non-integer / non-list, or when the first argument is not a `List`.
-- Exact rational arithmetic for integer / rational data; bignums (arbitrary-precision integers) handled natively. Real-valued data or weights yield approximate output. Symbolic data and weights are supported.
-- The unweighted form delegates to `Mean` for each window, so it inherits `Mean`'s exact / numeric / symbolic dispatch.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
-- Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (4)
 
 ```mathematica
 In[1]:= MovingAverage[{1, 2, 3, 4, 5}, 2]
@@ -81,6 +67,32 @@ Out[1]= {14/3, 29/3, 50/3, 77/3}
 In[1]:= MovingAverage[{a, b, c, d}, {1, 2, 1}]
 Out[1]= {1/4 a + 1/2 b + 1/4 c, 1/4 b + 1/2 c + 1/4 d}
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_moving_average` takes `(list, r)` where `r` is a positive integer window (`EXPR_INTEGER`/`EXPR_BIGINT`) or a `List` of weights. Output length is `n - r + 1`, and the call stays unevaluated unless `1 <= r <= n`. The unweighted form slides a window of `r` elements, builds a sublist, and delegates to `Mean` per window — so it inherits Mean's exact-rational / real / symbolic handling. The weighted form computes `wsum = Plus[w_k]`, the coefficients `w_k / wsum`, and for each window emits `Plus[Times[coef_k, x_{i+k}], ...]`, letting the evaluator simplify. All intermediate trees are built and reduced with `eval_and_free`. `ATTR_PROTECTED`.
+
+- `Protected`.
+- Output length is `Length[list] - r + 1`.
+- Stays unevaluated when `r < 1`, when `r > Length[list]`, when the second argument is non-integer / non-list, or when the first argument is not a `List`.
+- Exact rational arithmetic for integer / rational data; bignums (arbitrary-precision integers) handled natively. Real-valued data or weights yield approximate output. Symbolic data and weights are supported.
+- The unweighted form delegates to `Mean` for each window, so it inherits `Mean`'s exact / numeric / symbolic dispatch.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[List](../../other-advanced/List/), [Mean](../../data-structures/Mean/)
+
+## References
+
+- Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
+- Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_ndarray_reduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_reduce.c)
+- Tests: [`tests/test_stats.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stats.c)
+
+## Notes & additional examples
 
 ### Notes
 

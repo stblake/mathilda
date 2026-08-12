@@ -5,20 +5,22 @@
 
 ## Description
 
-```text
-Divisible[n, m]
-    yields True if n is divisible by m, and False otherwise.
-n is divisible by m when n is an integer multiple of m; this is
-effectively Mod[n, m] == 0.  Works for machine and BigInt integers,
-Gaussian integers, rationals, and exact numeric quantities (the
-quotient n/m must reduce to an integer or Gaussian integer).  Returns
-False unless n and m are manifestly divisible; symbolic, non-numeric
-arguments are left unevaluated.  Listable.
-```
+**`Divisible[n, m]`**
 
-## Examples
+yields True if n is divisible by m, and False otherwise.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+n is divisible by m when n is an integer multiple of m; this is effectively Mod\[n, m\] == 0.  Works for machine and BigInt integers, Gaussian integers, rationals, and exact numeric quantities (the quotient n/m must reduce to an integer or Gaussian integer).  Returns False unless n and m are manifestly divisible; symbolic, non-numeric arguments are left unevaluated.  Listable.
+
+</details>
+
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (6)
 
 ```mathematica
 In[1]:= Divisible[10, 2]
@@ -50,11 +52,11 @@ Out[6]= {False, True, False, True, False, True}
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_divisible.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisible.c)
+- Tests: [`tests/test_divisors.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisors.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)

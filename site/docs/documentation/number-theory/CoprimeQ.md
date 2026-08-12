@@ -5,21 +5,22 @@
 
 ## Description
 
-```text
-CoprimeQ[n1, n2, ...]
-    yields True if the arguments are pairwise relatively prime, and
-    False otherwise.
-Integers are relatively prime when their GCD is 1.  Works for machine
-and BigInt integers.  With GaussianIntegers -> True, or when any
-argument is an exact Gaussian integer, coprimality is tested over the
-Gaussian integers Z[i].  Returns False unless the arguments are
-manifestly coprime; CoprimeQ[] is False and CoprimeQ[n] is True.
-Listable and Orderless.
-```
+**`CoprimeQ[n1, n2, ...]`**
 
-## Examples
+yields True if the arguments are pairwise relatively prime, and False otherwise.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+Integers are relatively prime when their GCD is 1.  Works for machine and BigInt integers.  With GaussianIntegers -\> True, or when any argument is an exact Gaussian integer, coprimality is tested over the Gaussian integers Z\[i\].  Returns False unless the arguments are manifestly coprime; CoprimeQ\[\] is False and CoprimeQ\[n\] is True. Listable and Orderless.
+
+</details>
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= CoprimeQ[8, 11]
@@ -49,11 +50,13 @@ Out[5]= {True, False, False, False, True}
 
 **Attributes:** `Listable`, `Orderless`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[Orderless](../../expression-information/Orderless/)
 
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_coprimeq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_coprimeq.c)
+- Tests: [`tests/test_multiplicative_order.c`](https://github.com/stblake/mathilda/blob/main/tests/test_multiplicative_order.c)

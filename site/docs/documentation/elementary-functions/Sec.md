@@ -5,36 +5,22 @@
 
 ## Description
 
-```text
-Sec[z]
-    gives the secant of z (= 1 / Cos[z]).
+**`Sec[z]`**
+
+gives the secant of z (= 1 / Cos\[z\]).
+
+<details>
+<summary>Notes</summary>
+
 Sec is Listable. Singularities at z = Pi/2 + k Pi yield ComplexInfinity.
-```
 
-## Examples
+</details>
 
-_No verified examples yet for this function._
+## Examples (8)
 
-## Implementation notes
+Every input below was run against the current Mathilda build and its output recorded.
 
-**Algorithm.** `builtin_sec` follows the `src/trig.c` cascade but uses even symmetry: `strip_inverse_call(arg, "ArcSec")` for `Sec[ArcSec[x]] -> x`; `even_fold` for `Sec[-x] -> Sec[x]` when the argument is superficially negative; `trig_i_fold(arg, "Sech", 0)` for `Sec[I y] -> Sech[y]`; and `Sec[0] = 1`. Exact values at rational multiples of `Pi` are recognised by `extract_pi_multiplier` and produced by `exact_sec`.
-
-**Numeric.** MPFR arguments use `numeric_mpfr_apply_unary(..., mpfr_sec)` (complex fallback `mpfr_complex_sec`); otherwise `get_approx` computes `1.0 / ccos(c)` for inexact inputs, yielding `EXPR_REAL` or `Complex`. Symbolic input returns `NULL`. Attributes: `ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED`.
-
-**Attributes:** `Listable`, `NumericFunction`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/trig.c`](https://github.com/stblake/mathilda/blob/main/src/trig.c)
-- Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (8)
 
 ```mathematica
 In[1]:= Sec[Pi/3]
@@ -79,6 +65,25 @@ High-precision evaluation is available through `N`:
 In[1]:= N[Sec[1], 40]
 Out[1]= 1.8508157176809256179117532413986501934704
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_sec` follows the `src/trig.c` cascade but uses even symmetry: `strip_inverse_call(arg, "ArcSec")` for `Sec[ArcSec[x]] -> x`; `even_fold` for `Sec[-x] -> Sec[x]` when the argument is superficially negative; `trig_i_fold(arg, "Sech", 0)` for `Sec[I y] -> Sech[y]`; and `Sec[0] = 1`. Exact values at rational multiples of `Pi` are recognised by `extract_pi_multiplier` and produced by `exact_sec`.
+
+**Numeric.** MPFR arguments use `numeric_mpfr_apply_unary(..., mpfr_sec)` (complex fallback `mpfr_complex_sec`); otherwise `get_approx` computes `1.0 / ccos(c)` for inexact inputs, yielding `EXPR_REAL` or `Complex`. Symbolic input returns `NULL`. Attributes: `ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED`.
+
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+
+## References
+
+- Source: [`src/trig.c`](https://github.com/stblake/mathilda/blob/main/src/trig.c)
+- Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
+- Tests: [`tests/test_complexexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complexexpand.c)
+- Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
+- Tests: [`tests/test_integrate_derivdivides.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_derivdivides.c)
+- Tests: [`tests/test_integrate_dispatch.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_dispatch.c)
+
+## Notes & additional examples
 
 ### Notes
 

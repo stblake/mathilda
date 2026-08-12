@@ -5,18 +5,22 @@
 
 ## Description
 
-```text
-FactorSquareFree[poly]
-    writes poly as a product of pairwise-coprime square-free factors,
-    collecting repeated factors into powers.
-Computed via the Yun / Musser square-free decomposition using
-polynomial GCDs of poly with its derivative; cheaper than full Factor
-and sufficient when only multiplicities are needed.
-```
+**`FactorSquareFree[poly]`**
 
-## Examples
+writes poly as a product of pairwise-coprime square-free factors, collecting repeated factors into powers.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+Computed via the Yun / Musser square-free decomposition using polynomial GCDs of poly with its derivative; cheaper than full Factor and sufficient when only multiplicities are needed.
+
+</details>
+
+## Examples (7)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= FactorSquareFree[x^5 - x^3 - x^2 + 1]
@@ -30,6 +34,23 @@ Out[3]= (x - y)^2 (x^3 + 2 x^2 y + 2 x y^2 + y^3)
 
 In[4]:= FactorSquareFree[{(x^2 - 1)(x - 1), (x^4 - 1)(x^2 - 1)}]
 Out[4]= {(1 + x) (-1 + x)^2, (1 + x^2) (-1 + x^2)^2}
+```
+
+### Applications (3)
+
+```mathematica
+In[1]:= FactorSquareFree[x^5 - x^4 - x + 1]
+Out[1]= (-1 + x)^2 (1 + x + x^2 + x^3)
+```
+
+```mathematica
+In[1]:= FactorSquareFree[(x^2+1)^3 (x-1)^2]
+Out[1]= (-1 + x)^2 (1 + x^2)^3
+```
+
+```mathematica
+In[1]:= FactorSquareFree[x^8 + 4 x^6 + 6 x^4 + 4 x^2 + 1]
+Out[1]= (1 + x^2)^4
 ```
 
 ## Implementation notes
@@ -50,35 +71,17 @@ Out[4]= {(1 + x) (-1 + x)^2, (1 + x^2) (-1 + x^2)^2}
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - D. Y. Y. Yun, "On square-free decomposition algorithms", SYMSAC 1976.
 - K. O. Geddes, S. R. Czapor, G. Labahn, *Algorithms for Computer Algebra* (Kluwer, 1992).
 - Source: [`src/poly/facpoly_squarefree.inc`](https://github.com/stblake/mathilda/blob/main/src/poly/facpoly_squarefree.inc)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_facpoly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_facpoly.c)
+- Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
+- Tests: [`tests/test_inexact_dispatch.c`](https://github.com/stblake/mathilda/blob/main/tests/test_inexact_dispatch.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= FactorSquareFree[x^5 - x^4 - x + 1]
-Out[1]= (-1 + x)^2 (1 + x + x^2 + x^3)
-```
-
-```mathematica
-In[1]:= FactorSquareFree[(x^2+1)^3 (x-1)^2]
-Out[1]= (-1 + x)^2 (1 + x^2)^3
-```
-
-```mathematica
-In[1]:= FactorSquareFree[x^8 + 4 x^6 + 6 x^4 + 4 x^2 + 1]
-Out[1]= (1 + x^2)^4
-```
 
 ### Notes
 

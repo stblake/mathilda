@@ -5,16 +5,15 @@
 
 ## Description
 
-```text
-TakeSmallestBy[list, f, n]
-    Gives the n elements of list for which f is
-    smallest, in ascending order of f. Over an association, ranks by f of
-    each value.
-```
+**`TakeSmallestBy[list, f, n]`**
 
-## Examples
+Gives the n elements of list for which f is smallest, in ascending order of f. Over an association, ranks by f of each value.
 
-All examples below are verified against the current Mathilda build.
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= TakeLargest[{3, 1, 4, 1, 5, 9, 2, 6}, 3]
@@ -31,9 +30,9 @@ Out[3]= {-9, 5}
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[TakeLargest](../../functional-programming/TakeLargest/), [TakeSmallest](../../functional-programming/TakeSmallest/), [TakeLargestBy](../../functional-programming/TakeLargestBy/)
 
 ## References
 

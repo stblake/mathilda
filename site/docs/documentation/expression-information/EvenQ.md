@@ -5,32 +5,13 @@
 
 ## Description
 
-```text
-EvenQ[n] gives True if n is an even integer (Integer or BigInt), False otherwise.
-```
+**`EvenQ[n] gives True if n is an even integer (Integer or BigInt), False otherwise.`**
 
-## Examples
+## Examples (2)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
 
-## Implementation notes
-
-`builtin_evenq` (`src/core.c`) returns `True` for an `EXPR_INTEGER` with `n % 2 == 0`, uses `mpz_even_p` for an `EXPR_BIGINT`, and returns `False` for everything else.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
-- Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (2)
 
 ```mathematica
 In[1]:= EvenQ[4]
@@ -39,6 +20,27 @@ Out[1]= True
 In[2]:= EvenQ[7]
 Out[2]= False
 ```
+
+## Implementation notes
+
+`builtin_evenq` (`src/core.c`) returns `True` for an `EXPR_INTEGER` with `n % 2 == 0`, uses `mpz_even_p` for an `EXPR_BIGINT`, and returns `False` for everything else.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[OddQ](../../expression-information/OddQ/)
+
+## References
+
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
+- Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_backtrack.c`](https://github.com/stblake/mathilda/blob/main/tests/test_backtrack.c)
+- Tests: [`tests/test_bigint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bigint.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+
+## Notes & additional examples
 
 ### Notes
 

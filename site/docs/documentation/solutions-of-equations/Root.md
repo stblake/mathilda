@@ -5,19 +5,15 @@
 
 ## Description
 
-```text
-Root[Function[t, p[t]], k]
-    Represents the k-th root of the univariate polynomial p in the
-    variable t. k is canonical: real roots first ascending, then
-    complex roots ordered by Re ascending, |Im| ascending, with the
-    negative-Im member of each conjugate pair first. N[Root[..]]
-    and N[Root[..], prec] return a numerical approximation via a
-    companion-matrix + Sturm + Newton pipeline.
-```
+**`Root[Function[t, p[t]], k]`**
 
-## Examples
+Represents the k-th root of the univariate polynomial p in the variable t. k is canonical: real roots first ascending, then complex roots ordered by Re ascending, |Im| ascending, with the negative-Im member of each conjugate pair first. N\[Root\[..\]\] and N\[Root\[..\], prec\] return a numerical approximation via a companion-matrix + Sturm + Newton pipeline.
 
-All examples below are verified against the current Mathilda build.
+## Examples (9)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= N[Root[Function[#^3 - 2 # - 5], 1], 30]
@@ -33,28 +29,7 @@ In[4]:= N[Root[Function[#^3 + # + 1], 3], 20]
 Out[4]= 0.341163901914009663686 + 1.16154139999725193609*I
 ```
 
-## Implementation notes
-
-**Algorithm.** `Root` is a held symbolic form. `builtin_root` unconditionally returns `NULL` — the symbol carries `ATTR_HOLDALL | ATTR_PROTECTED`, so by the time the builtin is reached the evaluator has already left the call verbatim, and there is nothing to compute. `Root[Function[t, p[t]], k]` denotes the k-th root of the univariate polynomial p in canonical ordering (real roots first ascending, then complex roots by ascending `Re`, ascending `|Im|`, negative-`Im` member of each conjugate pair first). The useful work happens in callers: `N[Root[..]]` / `N[Root[..], prec]` numericalise via a companion-matrix + Sturm + Newton pipeline (`src/root_numeric.c`); `ToRadicals` (`src/radicals.c`) converts a held `Root` of degree ≤ 4 (or a binomial of higher degree) into closed-form radicals, selecting the k-th root by matching against the numeric value; `D[RootSum[...], x]` threads through the body (`src/deriv.c`); and the rational integrator's `NaiveLogPart` fallback (`src/intrat.c`) constructs `RootSum` nodes when the logarithmic part has no closed-form real expression.
-
-This file also implements the companion head `RootSum`. `builtin_rootsum` is *not* purely held: `rootsum_try_lagrange` recognises the post-differentiation shape `Function[a(#)/(d'(#)(x-#))]` and collapses it via the Hermite/Lagrange interpolation identity `Σ_i a(α_i)/(d'(α_i)(x-α_i)) = a(x)/d(x)` to the closed rational function `a(x)/d(x)`, using `find_x_minus_slot1`, `subst_slot1`, `D`, and `internal_together`/`internal_cancel`. `root_make_rootsum` builds the canonical `Slot[1]` form, rewriting a bound variable to `Slot[1]` throughout.
-
-**Data structures.** `Expr*` trees only. The held form is `Root[Function[poly_in_t], k]`; `RootSum` is `RootSum[Function[poly], Function[body]]` in either `Slot[1]` or 2-arg bound-variable form.
-
-**Attributes:** `HoldAll`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/root.c`](https://github.com/stblake/mathilda/blob/main/src/root.c)
-- Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= Root[#^2 - 2 &, 1]
@@ -78,6 +53,56 @@ Out[1]= {1.259921049894873164767210607278, -0.6299605249474365823836053036392 - 
 In[1]:= {N[Root[#^4 + # + 1 &, 1], 20], N[Root[#^4 + # + 1 &, 2], 20], N[Root[#^4 + # + 1 &, 3], 20], N[Root[#^4 + # + 1 &, 4], 20]}
 Out[1]= {-0.72713608449119683998 - 0.430014288329715776416*I, -0.72713608449119683998 + 0.430014288329715776416*I, 0.72713608449119683998 - 0.934099289460529439642*I, 0.72713608449119683998 + 0.934099289460529439642*I}
 ```
+
+## Algorithm
+
+root.c
+
+```text
+Mathematica-style symbolic Root and RootSum.  See root.h for the
+representation contract.  Both heads are held forms — the C
+```
+
+builtins below intentionally return NULL for every input so the
+
+```text
+evaluator leaves the call exactly as the caller wrote it.  The
+```
+
+useful work happens elsewhere:
+
+```text
+  - src/deriv.c   — D[RootSum[f1, f2], x] threads through the body.
+  - src/intrat.c  — NaiveLogPart constructs RootSum nodes when the
+                    LRT log part has no closed-form real expression.
+```
+
+Splitting this module out of intrat.c keeps the held-symbolic machinery available to any future caller (e.g. Solve, Reduce, factorisation over algebraic extensions) that needs to name the roots of a polynomial without committing to a radical form.
+
+## Implementation notes
+
+**Algorithm.** `Root` is a held symbolic form. `builtin_root` unconditionally returns `NULL` — the symbol carries `ATTR_HOLDALL | ATTR_PROTECTED`, so by the time the builtin is reached the evaluator has already left the call verbatim, and there is nothing to compute. `Root[Function[t, p[t]], k]` denotes the k-th root of the univariate polynomial p in canonical ordering (real roots first ascending, then complex roots by ascending `Re`, ascending `|Im|`, negative-`Im` member of each conjugate pair first). The useful work happens in callers: `N[Root[..]]` / `N[Root[..], prec]` numericalise via a companion-matrix + Sturm + Newton pipeline (`src/root_numeric.c`); `ToRadicals` (`src/radicals.c`) converts a held `Root` of degree ≤ 4 (or a binomial of higher degree) into closed-form radicals, selecting the k-th root by matching against the numeric value; `D[RootSum[...], x]` threads through the body (`src/deriv.c`); and the rational integrator's `NaiveLogPart` fallback (`src/intrat.c`) constructs `RootSum` nodes when the logarithmic part has no closed-form real expression.
+
+This file also implements the companion head `RootSum`. `builtin_rootsum` is *not* purely held: `rootsum_try_lagrange` recognises the post-differentiation shape `Function[a(#)/(d'(#)(x-#))]` and collapses it via the Hermite/Lagrange interpolation identity `Σ_i a(α_i)/(d'(α_i)(x-α_i)) = a(x)/d(x)` to the closed rational function `a(x)/d(x)`, using `find_x_minus_slot1`, `subst_slot1`, `D`, and `internal_together`/`internal_cancel`. `root_make_rootsum` builds the canonical `Slot[1]` form, rewriting a bound variable to `Slot[1]` throughout.
+
+**Data structures.** `Expr*` trees only. The held form is `Root[Function[poly_in_t], k]`; `RootSum` is `RootSum[Function[poly], Function[body]]` in either `Slot[1]` or 2-arg bound-variable form.
+
+**Attributes:** `HoldAll`, `Protected`.
+
+## See also
+
+[Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [Solve](../../solutions-of-equations/Solve/)
+
+## References
+
+- Source: [`src/root.c`](https://github.com/stblake/mathilda/blob/main/src/root.c)
+- Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)
+- Tests: [`tests/test_minimalpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_minimalpolynomial.c)
+- Tests: [`tests/test_radicals.c`](https://github.com/stblake/mathilda/blob/main/tests/test_radicals.c)
+- Tests: [`tests/test_root_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_root_numeric.c)
+- Tests: [`tests/test_rootreduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_rootreduce.c)
+
+## Notes & additional examples
 
 ### Notes
 

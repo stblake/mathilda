@@ -5,24 +5,35 @@
 
 ## Description
 
-```text
-RandomChoice[{e1, e2, ...}]
-    gives a pseudorandom choice of one of the ei.
-RandomChoice[list, n]
-    gives a list of n pseudorandom choices.
-RandomChoice[list, {n1, n2, ...}]
-    gives an n1 x n2 x ... array of pseudorandom choices.
-RandomChoice[{w1, w2, ...} -> {e1, e2, ...}]
-    gives a pseudorandom choice weighted by the wi.
-RandomChoice[wlist -> elist, n]
-    gives a list of n weighted choices.
-RandomChoice[wlist -> elist, {n1, n2, ...}]
-    gives an n1 x n2 x ... array of weighted choices.
-```
+**`RandomChoice[{e1, e2, ...}]`**
 
-## Examples
+gives a pseudorandom choice of one of the ei.
 
-All examples below are verified against the current Mathilda build.
+**`RandomChoice[list, n]`**
+
+gives a list of n pseudorandom choices.
+
+**`RandomChoice[list, {n1, n2, ...}]`**
+
+gives an n1 x n2 x ... array of pseudorandom choices.
+
+**`RandomChoice[{w1, w2, ...} -> {e1, e2, ...}]`**
+
+gives a pseudorandom choice weighted by the wi.
+
+**`RandomChoice[wlist -> elist, n]`**
+
+gives a list of n weighted choices.
+
+**`RandomChoice[wlist -> elist, {n1, n2, ...}]`**
+
+gives an n1 x n2 x ... array of weighted choices.
+
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (6)
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomChoice[{a, b, c, d, e}]
@@ -56,11 +67,9 @@ Out[6]= RandomChoice[x]
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
+- Tests: [`tests/test_random.c`](https://github.com/stblake/mathilda/blob/main/tests/test_random.c)

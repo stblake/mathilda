@@ -5,36 +5,13 @@
 
 ## Description
 
-```text
-ByteCount[expr] gives the number of bytes used internally by Mathilda to store expr.
-```
+**`ByteCount[expr] gives the number of bytes used internally by Mathilda to store expr.`**
 
-## Examples
+## Examples (5)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
 
-## Implementation notes
-
-`builtin_bytecount` (`src/core.c`) recursively sums `byte_count_internal` over the tree: `sizeof(Expr)` per node, plus `strlen+1` for symbol/string payloads and `sizeof(Expr*) * arg_count` for each function's argument array, descending into the head and all arguments. It returns an integer; the count is a structural estimate and does not account for GMP/MPFR limb storage of bigints/reals.
-
-- `Protected`.
-- Uses `sizeof()` in C and measures the internal AST memory allocation boundaries, dynamically capturing sizes of individual strings, symbols, allocated blocks, arrays, and expression structs.
-- Counts the payload of leaf atoms that own out-of-node storage: `EXPR_BIGINT` (GMP limbs), `EXPR_NDARRAY` (the `dims[]` array plus the flat data buffer, sized by element count and dtype width), and `EXPR_MPFR` (significand storage, scaling with precision). For an `NDArray`, the buffer dominates, so `ByteCount` scales with the number of elements and the dtype's bytes-per-element.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
-- Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= ByteCount[5]
@@ -56,6 +33,28 @@ Out[1]= 5701
 In[1]:= ByteCount[Factorial[50]]
 Out[1]= 48
 ```
+
+## Implementation notes
+
+`builtin_bytecount` (`src/core.c`) recursively sums `byte_count_internal` over the tree: `sizeof(Expr)` per node, plus `strlen+1` for symbol/string payloads and `sizeof(Expr*) * arg_count` for each function's argument array, descending into the head and all arguments. It returns an integer; the count is a structural estimate and does not account for GMP/MPFR limb storage of bigints/reals.
+
+- `Protected`.
+- Uses `sizeof()` in C and measures the internal AST memory allocation boundaries, dynamically capturing sizes of individual strings, symbols, allocated blocks, arrays, and expression structs.
+- Counts the payload of leaf atoms that own out-of-node storage: `EXPR_BIGINT` (GMP limbs), `EXPR_NDARRAY` (the `dims[]` array plus the flat data buffer, sized by element count and dtype width), and `EXPR_MPFR` (significand storage, scaling with precision). For an `NDArray`, the buffer dominates, so `ByteCount` scales with the number of elements and the dtype's bytes-per-element.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[NDArray](../../linear-algebra/NDArray/)
+
+## References
+
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
+- Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+
+## Notes & additional examples
 
 ### Notes
 

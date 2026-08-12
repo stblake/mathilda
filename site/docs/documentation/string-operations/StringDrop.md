@@ -5,28 +5,39 @@
 
 ## Description
 
-```text
-StringDrop["string", n]
-    Gives "string" with its first n characters dropped.
-StringDrop["string", -n]
-    Gives "string" with its last n characters dropped.
-StringDrop["string", {n}]
-    Gives "string" with its nth character dropped.
-StringDrop["string", {m, n}]
-    Gives "string" with characters m through n dropped.
-StringDrop["string", {m, n, s}]
-    Drops characters m through n in steps of s.
-StringDrop["string", UpTo[n]]
-    Drops n characters, or as many as are available.
-StringDrop[{s1, s2, ...}, spec]
-    Gives the list of results for each of the si.
+**`StringDrop["string", n]`**
 
-    Negative indices count from the end.
-```
+Gives "string" with its first n characters dropped.
 
-## Examples
+**`StringDrop["string", -n]`**
 
-All examples below are verified against the current Mathilda build.
+Gives "string" with its last n characters dropped.
+
+**`StringDrop["string", {n}]`**
+
+Gives "string" with its nth character dropped.
+
+**`StringDrop["string", {m, n}]`**
+
+Gives "string" with characters m through n dropped.
+
+**`StringDrop["string", {m, n, s}]`**
+
+Drops characters m through n in steps of s.
+
+**`StringDrop["string", UpTo[n]]`**
+
+Drops n characters, or as many as are available.
+
+**`StringDrop[{s1, s2, ...}, spec]`**
+
+Gives the list of results for each of the si. Negative indices count from the end.
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= StringDrop["abcdefghijklm", 4]
@@ -58,11 +69,12 @@ Out[8]= "abcdklm"
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[StringTake](../../string-operations/StringTake/)
 
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_strings.c`](https://github.com/stblake/mathilda/blob/main/tests/test_strings.c)

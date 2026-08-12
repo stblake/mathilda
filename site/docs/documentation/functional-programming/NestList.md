@@ -5,19 +5,22 @@
 
 ## Description
 
-```text
-NestList[f, expr, n]
-    gives a list of the results of applying f to expr 0 through n times.
+**`NestList[f, expr, n]`**
 
-The result is a list of length n+1 whose first element is expr and
-whose (k+1)-th element is f applied k times to expr. n must be a
-non-negative integer. f may be a symbol or a pure function; each
-intermediate application is evaluated before the next one.
-```
+gives a list of the results of applying f to expr 0 through n times.
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+The result is a list of length n+1 whose first element is expr and whose (k+1)-th element is f applied k times to expr. n must be a non-negative integer. f may be a symbol or a pure function; each intermediate application is evaluated before the next one.
+
+</details>
+
+## Examples (12)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= NestList[f, x, 4]
@@ -45,37 +48,7 @@ In[8]:= NestList[#(1 + 0.05) &, 1000, 10]
 Out[8]= {1000, 1050.0, 1102.5, 1157.62, 1215.51, 1276.28, 1340.1, 1407.1, 1477.46, 1551.33, 1628.89}
 ```
 
-## Implementation notes
-
-`builtin_nestlist` is `nest_impl(res, true)`: it returns the full iteration
-history `{expr, f[expr], ..., Nest[f,expr,n]}`. It seeds an `ExprBuf` with a copy
-of `expr` and runs the shared `iter_run` driver with `nest_step` (each step is
-`apply_unary(f, last)` = build `f[last]` and `eval_and_free`). With
-`as_list=true`, `ebuf_finalize` wraps the entire kept history in a `List` head.
-Shares all machinery with `Nest`; `n` must be a non-negative integer.
-
-- `Protected`.
-- Returns a list of length `n + 1` whose first element is `expr` and whose `(k+1)`-th element is `f` applied `k` times to `expr`.
-- `n` must be a non-negative integer; `NestList[f, expr, 0]` returns `{expr}`.
-- The function `f` may be a symbol, a built-in, or a pure function (`... &`).
-- Each iteration evaluates `f[current]` before proceeding, so numeric computations collapse immediately.
-- Returns unevaluated if `n` is not a non-negative integer or the argument count is wrong.
-- **Compilable** inside `Compile[]` for a scalar accumulator, with any of the
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
-- Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (4)
 
 ```mathematica
 In[1]:= NestList[f, x, 3]
@@ -101,6 +74,43 @@ Building the first few convergents of a continued fraction symbolically:
 In[1]:= NestList[1/(1 + #) &, x, 3]
 Out[1]= {x, 1/(1 + x), 1/(1 + 1/(1 + x)), 1/(1 + 1/(1 + 1/(1 + x)))}
 ```
+
+## Options & behaviour
+
+### Examples
+
+## Implementation notes
+
+`builtin_nestlist` is `nest_impl(res, true)`: it returns the full iteration
+history `{expr, f[expr], ..., Nest[f,expr,n]}`. It seeds an `ExprBuf` with a copy
+of `expr` and runs the shared `iter_run` driver with `nest_step` (each step is
+`apply_unary(f, last)` = build `f[last]` and `eval_and_free`). With
+`as_list=true`, `ebuf_finalize` wraps the entire kept history in a `List` head.
+Shares all machinery with `Nest`; `n` must be a non-negative integer.
+
+- `Protected`.
+- Returns a list of length `n + 1` whose first element is `expr` and whose `(k+1)`-th element is `f` applied `k` times to `expr`.
+- `n` must be a non-negative integer; `NestList[f, expr, 0]` returns `{expr}`.
+- The function `f` may be a symbol, a built-in, or a pure function (`... &`).
+- Each iteration evaluates `f[current]` before proceeding, so numeric computations collapse immediately.
+- Returns unevaluated if `n` is not a non-negative integer or the argument count is wrong.
+- **Compilable** inside `Compile[]` for a scalar accumulator, with any of the
+  function spellings listed in [`control-flow.md`](../control-flow/index.md) § Compile.
+  A negative `n` declines there too, since it is unevaluated here.
+- `Last[NestList[f, expr, n]]` is equivalent to `Nest[f, expr, n]`.
+
+**Attributes:** `Protected`.
+
+## References
+
+- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
+- Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_nestlist.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nestlist.c)
+- Tests: [`tests/test_numloop.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numloop.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+
+## Notes & additional examples
 
 ### Notes
 

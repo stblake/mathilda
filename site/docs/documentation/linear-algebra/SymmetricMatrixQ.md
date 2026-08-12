@@ -5,25 +5,22 @@
 
 ## Description
 
-```text
-SymmetricMatrixQ[m]
-    gives True if m is explicitly symmetric (m == Transpose[m]),
-    and False otherwise.
+**`SymmetricMatrixQ[m]`**
 
-Options:
-    SameTest  -> Automatic   function used to test equality of entries.
-    Tolerance -> Automatic   numeric tolerance for approximate matrices.
+gives True if m is explicitly symmetric (m == Transpose\[m\]), and False otherwise.
 
-With SameTest -> f, entries m[i,j] and m[j,i] are taken to be equal
-when f[m[i,j], m[j,i]] gives True.  With Tolerance -> t, entries are
-accepted when Abs[m[i,j] - m[j,i]] <= t.  SymmetricMatrixQ uses the
-definition m^T == m for both real- and complex-valued matrices, so a
-complex symmetric matrix need not be Hermitian.
-```
+<details>
+<summary>Notes</summary>
 
-## Examples
+Options: SameTest  -\> Automatic   function used to test equality of entries. Tolerance -\> Automatic   numeric tolerance for approximate matrices. With SameTest -\> f, entries m\[i,j\] and m\[j,i\] are taken to be equal when f\[m\[i,j\], m\[j,i\]\] gives True.  With Tolerance -\> t, entries are accepted when Abs\[m\[i,j\] - m\[j,i\]\] \<= t.  SymmetricMatrixQ uses the definition m^T == m for both real- and complex-valued matrices, so a complex symmetric matrix need not be Hermitian.
 
-All examples below are verified against the current Mathilda build.
+</details>
+
+## Examples (11)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= SymmetricMatrixQ[{{1, 2}, {2, 3}}]
@@ -39,27 +36,14 @@ In[4]:= SymmetricMatrixQ[{{1, 3 + 4 I}, {3 - 4 I, 2}}]   (* Hermitian, not symme
 Out[4]= False
 ```
 
-## Implementation notes
+### Options (1)
 
-`builtin_symmetric_matrix_q` first applies the same square-matrix shape gate as `SquareMatrixQ`, then walks the strict upper triangle checking `m[i,j] == m[j,i]`. The comparison defaults to structural `expr_eq`, but a `SameTest -> f` option uses `symmetric_pair_sametest` and a `Tolerance -> t` option uses `symmetric_pair_tolerance`. Returns `False` on any shape rejection or mismatch; unrecognised options leave the call unevaluated.
+```mathematica
+In[5]:= SymmetricMatrixQ[{{1, Log[x^2]}, {2 Log[x], 2}}, SameTest -> (Simplify[#1 - #2, x > 0] == 0 &)]
+Out[5]= True
+```
 
-- `Protected`.
-- Default test is structural via `expr_eq`; the diagonal is exempt
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
-- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (6)
 
 ```mathematica
 In[1]:= SymmetricMatrixQ[{{1, 2}, {2, 1}}]
@@ -92,6 +76,37 @@ A custom `SameTest` relaxes equality of off-diagonal entries:
 In[1]:= SymmetricMatrixQ[{{1, 2}, {3, 4}}, SameTest -> (Abs[#1 - #2] <= 1 &)]
 Out[1]= True
 ```
+
+## Implementation notes
+
+`builtin_symmetric_matrix_q` first applies the same square-matrix shape gate as `SquareMatrixQ`, then walks the strict upper triangle checking `m[i,j] == m[j,i]`. The comparison defaults to structural `expr_eq`, but a `SameTest -> f` option uses `symmetric_pair_sametest` and a `Tolerance -> t` option uses `symmetric_pair_tolerance`. Returns `False` on any shape rejection or mismatch; unrecognised options leave the call unevaluated.
+
+- `Protected`.
+- Default test is structural via `expr_eq`; the diagonal is exempt
+  (trivially symmetric).
+- Uses `m^T == m` for both real- and complex-valued matrices, so a
+  complex symmetric matrix need not be Hermitian (and vice versa).
+- Returns `False` (rather than leaving unevaluated) on non-matrix,
+  non-square, ragged, empty, or higher-rank tensor inputs.
+- Unknown options and non-`Rule` trailing arguments leave the call
+  unevaluated.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[Rule](../../assignment-and-rules/Rule/)
+
+## References
+
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_hankelmatrix.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hankelmatrix.c)
+- Tests: [`tests/test_hilbertmatrix.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hilbertmatrix.c)
+- Tests: [`tests/test_stats.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stats.c)
+- Tests: [`tests/test_symmetric_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_symmetric_matrix_q.c)
+
+## Notes & additional examples
 
 ### Notes
 

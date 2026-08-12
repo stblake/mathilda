@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-HoldForm[expr] prints as the expression expr, with expr maintained in an unevaluated form.
-```
+**`HoldForm[expr] prints as the expression expr, with expr maintained in an unevaluated form.`**
 
-## Examples
+## Examples (1)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= HoldForm[1 + 1]
@@ -24,11 +24,15 @@ Out[1]= 1 + 1
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[HoldAll](../../expression-information/HoldAll/)
 
 ## References
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_evaluate.c`](https://github.com/stblake/mathilda/blob/main/tests/test_evaluate.c)
+- Tests: [`tests/test_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numeric.c)
+- Tests: [`tests/test_print.c`](https://github.com/stblake/mathilda/blob/main/tests/test_print.c)
+- Tests: [`tests/test_releasehold.c`](https://github.com/stblake/mathilda/blob/main/tests/test_releasehold.c)

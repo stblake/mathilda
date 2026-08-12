@@ -5,20 +5,30 @@
 
 ## Description
 
-```text
-If[cond, t]
-    gives t if cond evaluates to True; gives Null otherwise.
-If[cond, t, f]
-    gives t if cond is True, f if False, and is left unevaluated
-    if cond is neither.
-If[cond, t, f, u]
-    also supplies u as the result when cond is neither True nor False.
+**`If[cond, t]`**
+
+gives t if cond evaluates to True; gives Null otherwise.
+
+**`If[cond, t, f]`**
+
+gives t if cond is True, f if False, and is left unevaluated if cond is neither.
+
+**`If[cond, t, f, u]`**
+
+also supplies u as the result when cond is neither True nor False.
+
+<details>
+<summary>Notes</summary>
+
 If has attribute HoldRest: only the branch chosen by cond is evaluated.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= If[True, x, y]
@@ -28,28 +38,7 @@ In[2]:= If[a < b, 1, 0, Indeterminate]
 Out[2]= Indeterminate
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_if` accepts 2–4 arguments and is registered with `ATTR_HOLDREST`, so only the condition (arg 0) is evaluated by the standard evaluator before the builtin runs; the branches stay held. The handler inspects the evaluated condition: if it is the interned symbol `True` it returns a copy of arg 1; if it is `False` it returns a copy of arg 2 (the else branch), or `Null` when no else branch was supplied. The returned branch is still "held" data that the outer fixed-point evaluator then reduces. If the condition is neither `True` nor `False`, a 4-argument call returns a copy of the fourth argument (the "neither" / indeterminate branch), and otherwise the call returns `NULL`, leaving `If[...]` unevaluated so a symbolic condition flows through unchanged. Truth testing is pointer equality against `SYM_True`/`SYM_False`, never a string compare.
-
-- `HoldRest`, evaluating only the chosen branch.
-- Remains unevaluated if the condition is undetermined and `u` is not provided.
-- `If[condition, t]` returns `Null` if `condition` evaluates to `False`.
-
-**Attributes:** `HoldRest`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
-- Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (4)
 
 ```mathematica
 In[1]:= If[3 > 2, yes, no]
@@ -70,6 +59,31 @@ Out[1]= b
 In[1]:= If[PrimeQ[7], prime, composite]
 Out[1]= prime
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_if` accepts 2–4 arguments and is registered with `ATTR_HOLDREST`, so only the condition (arg 0) is evaluated by the standard evaluator before the builtin runs; the branches stay held. The handler inspects the evaluated condition: if it is the interned symbol `True` it returns a copy of arg 1; if it is `False` it returns a copy of arg 2 (the else branch), or `Null` when no else branch was supplied. The returned branch is still "held" data that the outer fixed-point evaluator then reduces. If the condition is neither `True` nor `False`, a 4-argument call returns a copy of the fourth argument (the "neither" / indeterminate branch), and otherwise the call returns `NULL`, leaving `If[...]` unevaluated so a symbolic condition flows through unchanged. Truth testing is pointer equality against `SYM_True`/`SYM_False`, never a string compare.
+
+- `HoldRest`, evaluating only the chosen branch.
+- Remains unevaluated if the condition is undetermined and `u` is not provided.
+- `If[condition, t]` returns `Null` if `condition` evaluates to `False`.
+
+**Attributes:** `HoldRest`, `Protected`.
+
+## See also
+
+[HoldRest](../../other-advanced/HoldRest/)
+
+## References
+
+- Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
+- Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+- Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_boolean.c`](https://github.com/stblake/mathilda/blob/main/tests/test_boolean.c)
+- Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_cherry_ei.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_ei.c)
+
+## Notes & additional examples
 
 ### Notes
 

@@ -5,18 +5,22 @@
 
 ## Description
 
-```text
-$MachinePrecision
-    gives the number of decimal digits of precision used for
-    machine-precision numbers.
+**`$MachinePrecision`**
 
-Derived from the platform's DBL_MANT_DIG -- typically 53*Log[10,2]
-(~ 15.9546) on IEEE 754 systems.
-```
+gives the number of decimal digits of precision used for machine-precision numbers.
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+Derived from the platform's DBL\_MANT\_DIG -- typically 53\*Log\[10,2\] (~ 15.9546) on IEEE 754 systems.
+
+</details>
+
+## Examples (4)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= $MachinePrecision
@@ -38,9 +42,9 @@ A Protected OwnValue registered in `system_constants_init` (`src/core.c`) as `ex
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[$MachineEpsilon](../../expression-information/$MachineEpsilon/), [$MinMachineNumber](../../expression-information/$MinMachineNumber/), [$MaxMachineNumber](../../expression-information/$MaxMachineNumber/), [$MaxNumber](../../expression-information/$MaxNumber/), [$MinNumber](../../expression-information/$MinNumber/)
 
 ## References
 

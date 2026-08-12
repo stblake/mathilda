@@ -5,57 +5,33 @@
 
 ## Description
 
-```text
-expr /. rules or ReplaceAll[expr, rules]
-    traverses expr top-down and applies the first matching rule at each
-    subexpression. A matched subexpression is replaced and NOT recursed
-    into further -- ReplaceAll is a single pass, not a fixed point.
-```
+expr /. rules or ReplaceAll\[expr, rules\] traverses expr top-down and applies the first matching rule at each subexpression. A matched subexpression is replaced and NOT recursed into further -- ReplaceAll is a single pass, not a fixed point.
 
-## Examples
+## Examples (10)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= {x, x^2, y, z} /. x -> 1
 Out[1]= {1, 1, y, z}
 
-In[2]:= Sin[x] /. Sin -> Cos
-Out[2]= Cos[x]
-
-In[3]:= {1, 3, 2, x, 6, Pi} /. _?PrimeQ -> "prime"
-Out[3]= {1, "prime", "prime", x, 6, Pi}
-
-In[4]:= {f[2], f[x, y], h[], f[]} /. f[x__] -> "OK"
-Out[4]= {"OK", "OK", h[], f[]}
+In[2]:= {f[2], f[x, y], h[], f[]} /. f[x__] -> "OK"
+Out[2]= {"OK", "OK", h[], f[]}
 ```
 
-## Implementation notes
+### Options (2)
 
-**Algorithm.** `builtin_replace_all` (`/.`, in `src/replace.c`) drives `apply_replace_all_nested`, which first collects the rule(s) into a flat `ReplaceRule[]` (pattern, replacement, delayed flag). A `List` of rules whose first element is *not* itself a `Rule`/`RuleDelayed` is treated as a list of alternative rule-sets and threaded — one result per sub-list. The core traversal is `do_replace_all`: at each node it tries every rule in order via `match(e, rule.pattern, env)` (the structural matcher in `src/match.c`); on the first match it builds the result with `replace_bindings(rule.replacement, env)` and **returns immediately without descending into the matched subexpression** — this is the defining top-down, non-re-entrant `ReplaceAll` semantic. If no rule matches the node, it recurses into the head and every argument and rebuilds the function node. Rule-creation timing (immediate `Rule` vs delayed `RuleDelayed`) is honoured by `replace_bindings`/the surrounding evaluator rather than re-applied here.
+```mathematica
+In[3]:= Sin[x] /. Sin -> Cos
+Out[3]= Cos[x]
 
-**Data structures.** `ReplaceRule` array holding borrowed pointers into the user's rule expressions; a fresh `MatchEnv` (from `env_new`) per match attempt holds the pattern-variable bindings consumed by `replace_bindings`.
+In[4]:= {1, 3, 2, x, 6, Pi} /. _?PrimeQ -> "prime"
+Out[4]= {1, "prime", "prime", x, 6, Pi}
+```
 
-- `Protected`.
-- Evaluates the entire expression top-down. The first rule that applies to a particular part is used; no further rules are tried on that part or on any of its subparts.
-- Applies a rule only once to an expression.
-- Returns `expr` unmodified if no rules apply.
-- Maps across lists of rules appropriately.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
-- Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (6)
 
 ```mathematica
 In[1]:= x + y /. x -> 2
@@ -86,6 +62,30 @@ Out[1]= {4, 6}
 In[1]:= x^4 + 1 /. x -> Sqrt[2]
 Out[1]= 5
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_replace_all` (`/.`, in `src/replace.c`) drives `apply_replace_all_nested`, which first collects the rule(s) into a flat `ReplaceRule[]` (pattern, replacement, delayed flag). A `List` of rules whose first element is *not* itself a `Rule`/`RuleDelayed` is treated as a list of alternative rule-sets and threaded — one result per sub-list. The core traversal is `do_replace_all`: at each node it tries every rule in order via `match(e, rule.pattern, env)` (the structural matcher in `src/match.c`); on the first match it builds the result with `replace_bindings(rule.replacement, env)` and **returns immediately without descending into the matched subexpression** — this is the defining top-down, non-re-entrant `ReplaceAll` semantic. If no rule matches the node, it recurses into the head and every argument and rebuilds the function node. Rule-creation timing (immediate `Rule` vs delayed `RuleDelayed`) is honoured by `replace_bindings`/the surrounding evaluator rather than re-applied here.
+
+**Data structures.** `ReplaceRule` array holding borrowed pointers into the user's rule expressions; a fresh `MatchEnv` (from `env_new`) per match attempt holds the pattern-variable bindings consumed by `replace_bindings`.
+
+- `Protected`.
+- Evaluates the entire expression top-down. The first rule that applies to a particular part is used; no further rules are tried on that part or on any of its subparts.
+- Applies a rule only once to an expression.
+- Returns `expr` unmodified if no rules apply.
+- Maps across lists of rules appropriately.
+
+**Attributes:** `Protected`.
+
+## References
+
+- Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
+- Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
+- Tests: [`tests/test_condition_downvalue.c`](https://github.com/stblake/mathilda/blob/main/tests/test_condition_downvalue.c)
+- Tests: [`tests/test_match_extensive.c`](https://github.com/stblake/mathilda/blob/main/tests/test_match_extensive.c)
+- Tests: [`tests/test_parse.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parse.c)
+
+## Notes & additional examples
 
 ### Notes
 

@@ -5,37 +5,23 @@
 
 ## Description
 
-```text
-Range[n]
-    generates the list {1, 2, 3, ..., n}.
-Range[n, m]
-    generates the list {n, n + 1, ..., m - 1, m}.
-Range[n, m, d]
-    uses step d.
-```
+**`Range[n]`**
 
-## Examples
+generates the list {1, 2, 3, ..., n}.
 
-_No verified examples yet for this function._
+**`Range[n, m]`**
 
-## Implementation notes
+generates the list {n, n + 1, ..., m - 1, m}.
 
-`builtin_range` (in `src/list.c`) generates the arithmetic sequence for `Range[imax]` (origin 1, step 1), `Range[imin, imax]`, and `Range[imin, imax, di]`. Bounds may be integers, reals, or rationals (parsed via `is_rational`); a `double` view of each is used only for the loop-termination test (`val <= max_val + 1e-14`, or the reversed test for negative step, with a 1,000,000-element cap). The element values themselves are built exactly: a running `curr_e` starts at `imin` and is advanced each step by `evaluate(Plus[curr_e, di])`, so integer and rational ranges stay exact while any real bound promotes the elements to `EXPR_REAL`. A zero step, or an empty oriented range, yields `{}`; the result is wrapped as `List[...]`.
+**`Range[n, m, d]`**
 
-**Attributes:** `Listable`, `Protected`.
+uses step d.
 
-## Implementation status
+## Examples (6)
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+Every input below was run against the current Mathilda build and its output recorded.
 
-## References
-
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
-- Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (6)
 
 ```mathematica
 In[1]:= Range[5]
@@ -66,6 +52,40 @@ Out[2]= {1, 4, 9, 16, 25}
 In[3]:= Total[Range[100]]
 Out[3]= 5050
 ```
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| Clip to [0.25, 0.75] over 4x10^6 | 575 s | 1.95 s | 0.953 s |
+| return {real, int, mask}, then Total | 61.2 s | 0.344 s | 0.983 s |
+| Sort 4x10^6 | 42.2 s | 68.7 s | 111 s |
+| return {real, int}, then Total | 42 s | 0.219 s | 0.41 s |
+| return {real, int, mask}, discarded | 41.5 s | 0.244 s | 0.972 s |
+| return ragged {n, 1000, 100}, then Total | 20.2 s | 0.033 s | 0.051 s |
+
+## Implementation notes
+
+`builtin_range` (in `src/list.c`) generates the arithmetic sequence for `Range[imax]` (origin 1, step 1), `Range[imin, imax]`, and `Range[imin, imax, di]`. Bounds may be integers, reals, or rationals (parsed via `is_rational`); a `double` view of each is used only for the loop-termination test (`val <= max_val + 1e-14`, or the reversed test for negative step, with a 1,000,000-element cap). The element values themselves are built exactly: a running `curr_e` starts at `imin` and is advanced each step by `evaluate(Plus[curr_e, di])`, so integer and rational ranges stay exact while any real bound promotes the elements to `EXPR_REAL`. A zero step, or an empty oriented range, yields `{}`; the result is wrapped as `List[...]`.
+
+**Attributes:** `Listable`, `Protected`.
+
+## See also
+
+[List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/)
+
+## References
+
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_backtrack.c`](https://github.com/stblake/mathilda/blob/main/tests/test_backtrack.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_complement.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complement.c)
+
+## Notes & additional examples
 
 ### Notes
 

@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-Insert[expr, elem, n] inserts elem at position n in expr.
-```
+**`Insert[expr, elem, n] inserts elem at position n in expr.`**
 
-## Examples
+## Examples (2)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Insert[{a, b, c}, x, 2]
@@ -30,11 +30,13 @@ Out[2]= {a, c}
 
 **Attributes:** none registered.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[Delete](../../data-structures/Delete/), [Sequence](../../expression-information/Sequence/)
 
 ## References
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+- Tests: [`tests/test_part.c`](https://github.com/stblake/mathilda/blob/main/tests/test_part.c)

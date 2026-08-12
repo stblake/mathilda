@@ -5,36 +5,13 @@
 
 ## Description
 
-```text
-patt:def or Optional[patt, def]
-    is a pattern object that matches patt if it is present; if patt is
-    omitted from the argument sequence, def is used in its place.
-patt_. (sugar for Optional[patt_, Default[f]]) draws the default value
-from Default[f] at the call site.
-```
+patt:def or Optional\[patt, def\] is a pattern object that matches patt if it is present; if patt is omitted from the argument sequence, def is used in its place. patt\_. (sugar for Optional\[patt\_, Default\[f\]\]) draws the default value from Default\[f\] at the call site.
 
-## Examples
+## Examples (10)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
 
-## Implementation notes
-
-`Optional` is a pattern wrapper, not a function. The matcher in `match.c` peels `Optional[p]` / `Optional[p, default]` off a pattern (in the same wrapper-stripping loop that handles `Pattern`, `Shortest`, `Longest`), sets `is_optional`, and records the default. When the optional argument is absent at that position, the bound symbol is filled with the explicit `default` when given (`opt_container->args[1]`), otherwise with `get_default_value(pat_head, pos, total)` — which supplies the head's identity (0 for `Plus`, 1 for `Times`, etc., the head's `Default[]` value). When the argument *is* present it matches `p` normally. This is the mechanism behind the `x_.` / `x_:def` surface syntax. `Optional` is in the set of pattern heads `eval.c` leaves unevaluated.
-
-**Attributes:** none registered.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/match.c`](https://github.com/stblake/mathilda/blob/main/src/match.c)
-- Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (10)
 
 A default-valued parameter: the second argument may be omitted, in which case
 the default is supplied.
@@ -79,6 +56,20 @@ In[1]:= p[x_ + y_.] := {x, y}
 In[2]:= p[a]
 Out[2]= {a, 0}
 ```
+
+## Implementation notes
+
+`Optional` is a pattern wrapper, not a function. The matcher in `match.c` peels `Optional[p]` / `Optional[p, default]` off a pattern (in the same wrapper-stripping loop that handles `Pattern`, `Shortest`, `Longest`), sets `is_optional`, and records the default. When the optional argument is absent at that position, the bound symbol is filled with the explicit `default` when given (`opt_container->args[1]`), otherwise with `get_default_value(pat_head, pos, total)` — which supplies the head's identity (0 for `Plus`, 1 for `Times`, etc., the head's `Default[]` value). When the argument *is* present it matches `p` normally. This is the mechanism behind the `x_.` / `x_:def` surface syntax. `Optional` is in the set of pattern heads `eval.c` leaves unevaluated.
+
+**Attributes:** none registered.
+
+## References
+
+- Source: [`src/match.c`](https://github.com/stblake/mathilda/blob/main/src/match.c)
+- Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
+- Tests: [`tests/test_condition_downvalue.c`](https://github.com/stblake/mathilda/blob/main/tests/test_condition_downvalue.c)
+
+## Notes & additional examples
 
 ### Notes
 

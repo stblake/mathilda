@@ -5,19 +5,30 @@
 
 ## Description
 
-```text
-FileNameJoin[{"name1", "name2", ...}]
-    joins the namei into a file name suitable for your current operating system.
-The namei can be individual names or file paths containing pathname separators.
-FileNameJoin[{"", "name1", ...}] gives an absolute file path beginning with a pathname separator.
-FileNameJoin["name"] canonicalizes name, making pathname separators appropriate for your operating system.
-FileNameJoin[..., OperatingSystem->"os"] yields a file name in the format for the specified operating system; possible choices are "Windows", "MacOSX", and "Unix".
-FileNameJoin just assembles a file name; it does not search for the file specified.
-```
+**`FileNameJoin[{"name1", "name2", ...}]`**
+
+joins the namei into a file name suitable for your current operating system.
+
+**`FileNameJoin[{"", "name1", ...}] gives an absolute file path beginning with a pathname separator.`**
+
+**`FileNameJoin["name"] canonicalizes name, making pathname separators appropriate for your operating system.`**
+
+**`FileNameJoin[..., OperatingSystem->"os"] yields a file name in the format for the specified operating system; possible choices are "Windows", "MacOSX", and "Unix".`**
+
+<details>
+<summary>Notes</summary>
+
+The namei can be individual names or file paths containing pathname separators. FileNameJoin just assembles a file name; it does not search for the file specified.
+
+</details>
 
 ## Examples
 
 _No verified examples yet for this function._
+
+## Options & behaviour
+
+### Example
 
 ## Implementation notes
 
@@ -31,11 +42,8 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
+- Tests: [`tests/test_files.c`](https://github.com/stblake/mathilda/blob/main/tests/test_files.c)

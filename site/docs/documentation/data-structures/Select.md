@@ -5,19 +5,23 @@
 
 ## Description
 
-```text
-Select[list, crit]
-    selects elements e of list for which crit[e] yields True, preserving
-    the head of list.
-Select[list, crit, n]
-    stops after the first n matching elements.
-Select[crit]
-    is the operator form: Select[crit][list] == Select[list, crit].
-```
+**`Select[list, crit]`**
 
-## Examples
+selects elements e of list for which crit\[e\] yields True, preserving the head of list.
 
-All examples below are verified against the current Mathilda build.
+**`Select[list, crit, n]`**
+
+stops after the first n matching elements.
+
+**`Select[crit]`**
+
+is the operator form: Select\[crit\]\[list\] == Select\[list, crit\].
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Map[#^2 &, <|"x" -> 3, "y" -> 4|>]
@@ -27,33 +31,7 @@ In[2]:= Select[<|"a" -> 1, "b" -> 2, "c" -> 3|>, # > 1 &]
 Out[2]= <|"b" -> 2, "c" -> 3|>
 ```
 
-## Implementation notes
-
-`builtin_select` filters the arguments of a compound expression by a predicate.
-It iterates the args of `list` (any head, not only `List`), and for each element
-builds `crit[elem]` and runs `evaluate()`; the element is kept only when the
-result is exactly the symbol `True`. The optional third argument caps the number
-of kept elements (`n_max`), stopping the scan early once reached. The surviving
-elements are reassembled under the original head via `expr_new_function`. Returns
-`NULL` (unevaluated) when the first argument is an atom or when the count
-argument is non-integer. Each predicate test allocates a copied call and frees it
-plus its evaluated result, so memory is bounded per element.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §2.2.3 (sequences as conventional interfaces; filtering).
-- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
-- Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (6)
 
 ```mathematica
 In[1]:= Select[{1, 2, 3, 4, 5, 6}, EvenQ]
@@ -92,6 +70,36 @@ The integers below 20 that are coprime to 20 (a `GCD`-based filter):
 In[1]:= Select[Range[1, 20], GCD[#, 20] == 1 &]
 Out[1]= {1, 3, 7, 9, 11, 13, 17, 19}
 ```
+
+## Implementation notes
+
+`builtin_select` filters the arguments of a compound expression by a predicate.
+It iterates the args of `list` (any head, not only `List`), and for each element
+builds `crit[elem]` and runs `evaluate()`; the element is kept only when the
+result is exactly the symbol `True`. The optional third argument caps the number
+of kept elements (`n_max`), stopping the scan early once reached. The surviving
+elements are reassembled under the original head via `expr_new_function`. Returns
+`NULL` (unevaluated) when the first argument is an atom or when the count
+argument is non-integer. Each predicate test allocates a copied call and frees it
+plus its evaluated result, so memory is bounded per element.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[Map](../../data-structures/Map/)
+
+## References
+
+- Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §2.2.3 (sequences as conventional interfaces; filtering).
+- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
+- Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
+- Tests: [`tests/test_divisors.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisors.c)
+
+## Notes & additional examples
 
 ### Notes
 

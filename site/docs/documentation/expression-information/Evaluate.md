@@ -5,17 +5,22 @@
 
 ## Description
 
-```text
-Evaluate[expr]
-    causes expr to be evaluated even if it appears as the argument of a function whose attributes specify that it should be held unevaluated.
-Evaluate only overrides HoldFirst, HoldRest, and HoldAll attributes when it appears directly as the head of the function argument that would otherwise be held.
-Evaluate does not override HoldAllComplete.
-Evaluate with other than one argument reduces to Sequence: Evaluate[] gives Sequence[] and Evaluate[a, b] gives Sequence[a, b].
-```
+**`Evaluate[expr]`**
 
-## Examples
+causes expr to be evaluated even if it appears as the argument of a function whose attributes specify that it should be held unevaluated.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+Evaluate only overrides HoldFirst, HoldRest, and HoldAll attributes when it appears directly as the head of the function argument that would otherwise be held. Evaluate does not override HoldAllComplete. Evaluate with other than one argument reduces to Sequence: Evaluate\[\] gives Sequence\[\] and Evaluate\[a, b\] gives Sequence\[a, b\].
+
+</details>
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= Evaluate[1+1]
@@ -56,11 +61,13 @@ Out[8]= Hold[3]
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[HoldFirst](../../other-advanced/HoldFirst/), [HoldRest](../../other-advanced/HoldRest/), [HoldAll](../../expression-information/HoldAll/), [HoldAllComplete](../../expression-information/HoldAllComplete/), [Sequence](../../expression-information/Sequence/)
 
 ## References
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_evaluate.c`](https://github.com/stblake/mathilda/blob/main/tests/test_evaluate.c)
+- Tests: [`tests/test_unevaluated.c`](https://github.com/stblake/mathilda/blob/main/tests/test_unevaluated.c)

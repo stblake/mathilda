@@ -5,12 +5,9 @@
 
 ## Description
 
-```text
-PolarAxes
-    PolarPlot option: True requests a polar grid overlay
-    (radial circles + angle labels). Currently accepted but not yet
-    rendered; Cartesian axes are drawn instead.
-```
+**`PolarAxes`**
+
+PolarPlot option: True requests a polar grid overlay (radial circles + angle labels). Currently accepted but not yet rendered; Cartesian axes are drawn instead.
 
 ## Examples
 
@@ -20,9 +17,9 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
+[PolarPlot](../../graphics/PolarPlot/)
 
 ## References
 

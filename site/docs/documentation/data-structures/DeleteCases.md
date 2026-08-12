@@ -5,18 +5,26 @@
 
 ## Description
 
-```text
-DeleteCases[expr, pattern] removes all elements of expr that match pattern.
-DeleteCases[expr, pattern, levelspec] removes all parts of expr on levels specified by levelspec that match pattern.
-DeleteCases[expr, pattern, levelspec, n] removes the first n parts of expr that match pattern.
-DeleteCases[pattern] represents an operator form of DeleteCases that can be applied to an expression.
-The default levelspec is {1}. With Heads -> True, the heads of expressions are also tested; deleting a head is equivalent to applying FlattenAt at that location.
-DeleteCases traverses expr in depth-first post-order (leaves before roots).
-```
+**`DeleteCases[expr, pattern] removes all elements of expr that match pattern.`**
 
-## Examples
+**`DeleteCases[expr, pattern, levelspec] removes all parts of expr on levels specified by levelspec that match pattern.`**
 
-All examples below are verified against the current Mathilda build.
+**`DeleteCases[expr, pattern, levelspec, n] removes the first n parts of expr that match pattern.`**
+
+**`DeleteCases[pattern] represents an operator form of DeleteCases that can be applied to an expression.`**
+
+<details>
+<summary>Notes</summary>
+
+The default levelspec is {1}. With Heads -\> True, the heads of expressions are also tested; deleting a head is equivalent to applying FlattenAt at that location. DeleteCases traverses expr in depth-first post-order (leaves before roots).
+
+</details>
+
+## Examples (7)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Cases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]
@@ -29,26 +37,7 @@ In[3]:= DeleteCases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]
 Out[3]= <|"a" -> 1|>
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_delete_cases` (`src/patterns.c`) returns a copy of the input with every subexpression matching the pattern (within the level-spec) removed. Level-spec, `Heads` option, and an optional deletion-count budget `n` are parsed as in `Cases` (default level `{1,1}`). The worker `do_delete_cases_at_level` is a depth-first **post-order** rebuild ("leaves before roots"): it recursively transforms the head (only if `heads`) and each argument, dropping any child flagged for deletion and splicing any `Sequence[...]` a head-deletion produced, then rebuilds the node. After rebuilding, it tests the **original** node against the pattern via `match`; a match sets the parent's `*delete_me` flag so the node is dropped from its parent's argument list. A matching head (under `Heads -> True`) turns the call into `Sequence[args…]` (FlattenAt-style), which the enclosing loop splices outward. The `n` budget (`count_remaining`: `-1` unlimited, else decremented per deletion) caps the number removed.
-
-**Data structures.** Per-node freshly-allocated `Expr**` argument buffer (grown as needed); a `bool* delete_me` out-parameter threads the removal decision up to the parent; one `MatchEnv` per match test.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
-- Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (4)
 
 ```mathematica
 In[1]:= DeleteCases[{1,2,3,2},2]
@@ -69,6 +58,28 @@ Out[1]= {{a, b}, {3, c}}
 In[1]:= DeleteCases[{a + b, c d, e^2, f}, _Power, Infinity]
 Out[1]= {a + b, c d, f}
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_delete_cases` (`src/patterns.c`) returns a copy of the input with every subexpression matching the pattern (within the level-spec) removed. Level-spec, `Heads` option, and an optional deletion-count budget `n` are parsed as in `Cases` (default level `{1,1}`). The worker `do_delete_cases_at_level` is a depth-first **post-order** rebuild ("leaves before roots"): it recursively transforms the head (only if `heads`) and each argument, dropping any child flagged for deletion and splicing any `Sequence[...]` a head-deletion produced, then rebuilds the node. After rebuilding, it tests the **original** node against the pattern via `match`; a match sets the parent's `*delete_me` flag so the node is dropped from its parent's argument list. A matching head (under `Heads -> True`) turns the call into `Sequence[args…]` (FlattenAt-style), which the enclosing loop splices outward. The `n` budget (`count_remaining`: `-1` unlimited, else decremented per deletion) caps the number removed.
+
+**Data structures.** Per-node freshly-allocated `Expr**` argument buffer (grown as needed); a `bool* delete_me` out-parameter threads the removal decision up to the parent; one `MatchEnv` per match test.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[Cases](../../data-structures/Cases/), [Count](../../data-structures/Count/)
+
+## References
+
+- Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
+- Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
+- Tests: [`tests/test_patterns.c`](https://github.com/stblake/mathilda/blob/main/tests/test_patterns.c)
+
+## Notes & additional examples
 
 ### Notes
 

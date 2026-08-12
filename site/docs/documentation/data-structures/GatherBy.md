@@ -5,15 +5,15 @@
 
 ## Description
 
-```text
-GatherBy[list, f]
-    Gathers elements with equal f[element] into sublists,
-    in first-appearance order: {{group1}, {group2}, ...}.
-```
+**`GatherBy[list, f]`**
 
-## Examples
+Gathers elements with equal f\[element\] into sublists, in first-appearance order: {{group1}, {group2}, ...}.
 
-All examples below are verified against the current Mathilda build.
+## Examples (2)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= GatherBy[{1, 2, 3, 4, 5, 6}, EvenQ]
@@ -27,11 +27,13 @@ Out[2]= {<|"a" -> 1, "c" -> 3|>, <|"b" -> 2, "d" -> 4|>}
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[GroupBy](../../data-structures/GroupBy/)
 
 ## References
 
 - Source: [`src/assoc.c`](https://github.com/stblake/mathilda/blob/main/src/assoc.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)

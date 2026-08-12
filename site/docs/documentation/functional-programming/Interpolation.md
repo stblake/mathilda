@@ -5,36 +5,42 @@
 
 ## Description
 
-```text
-Interpolation[data]
-    constructs an InterpolatingFunction that interpolates data, given
-    as {f1, f2, ...} (values at x = 1, 2, ...), {{x1, f1}, ...} (values
-    at given abscissae), or {{{x1, y1, ...}, f1}, ...} (an m-D tensor
-    grid).
-Interpolation[data, x]
-    builds the interpolating function and evaluates it at x (a number,
-    or a coordinate list in m-D).
-Interpolation[{{{x1,...}, f1, df1, ddf1, ...}, ...}]
-    reproduces supplied derivatives at the nodes (df = gradient, ddf =
-    Hessian, ...) by tensor-product Hermite interpolation.
-Interpolation[data, InterpolationOrder -> n]
-    uses piecewise-polynomial pieces of degree n (default 3; 0 gives a
-    piecewise-constant and 1 a piecewise-linear interpolant).
-Interpolation[data, Method -> m]
-    selects "Spline" (natural/cyclic cubic spline) or "Hermite"
-    (piecewise cubic Hermite with estimated slopes).
-Interpolation[data, PeriodicInterpolation -> True]
-    builds a periodic interpolant (period = the data span; the data must
-    repeat its first sample at the last). A per-dimension {True, False}
-    list selects periodicity per axis.
-Vector- or array-valued samples (f_i a list) are interpolated
-component-wise and return an array of the same shape.
-Works at machine or arbitrary (MPFR) precision, matching the data.
-```
+**`Interpolation[data]`**
 
-## Examples
+constructs an InterpolatingFunction that interpolates data, given as {f1, f2, ...} (values at x = 1, 2, ...), {{x1, f1}, ...} (values at given abscissae), or {{{x1, y1, ...}, f1}, ...} (an m-D tensor grid).
 
-All examples below are verified against the current Mathilda build.
+**`Interpolation[data, x]`**
+
+builds the interpolating function and evaluates it at x (a number, or a coordinate list in m-D).
+
+**`Interpolation[{{{x1,...}, f1, df1, ddf1, ...}, ...}]`**
+
+reproduces supplied derivatives at the nodes (df = gradient, ddf = Hessian, ...) by tensor-product Hermite interpolation.
+
+**`Interpolation[data, InterpolationOrder -> n]`**
+
+uses piecewise-polynomial pieces of degree n (default 3; 0 gives a piecewise-constant and 1 a piecewise-linear interpolant).
+
+**`Interpolation[data, Method -> m]`**
+
+selects "Spline" (natural/cyclic cubic spline) or "Hermite" (piecewise cubic Hermite with estimated slopes).
+
+**`Interpolation[data, PeriodicInterpolation -> True]`**
+
+builds a periodic interpolant (period = the data span; the data must repeat its first sample at the last). A per-dimension {True, False} list selects periodicity per axis.
+
+<details>
+<summary>Notes</summary>
+
+Vector- or array-valued samples (f\_i a list) are interpolated component-wise and return an array of the same shape. Works at machine or arbitrary (MPFR) precision, matching the data.
+
+</details>
+
+## Examples (15)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= f = Interpolation[{1, 2, 3, 5, 8, 5}]
@@ -43,12 +49,112 @@ Out[1]= InterpolatingFunction[{{1, 6}}, <>]
 In[2]:= f[2.5]
 Out[2]= 2.4375
 
-In[3]:= Interpolation[{1, 5, 7, 2, 3, 1}, InterpolationOrder -> 1][2.5]
-Out[3]= 6.0
+In[3]:= (* f = x^3 with f and f' supplied: cubic reproduced exactly *) c = Interpolation[{{{0}, 0, 0}, {{1}, 1, 3}, {{2}, 8, 12}, {{3}, 27, 27}}]; {c[1.5], c'[1.5]}
+Out[3]= {3.375, 6.75}
 
-In[4]:= Interpolation[{1, 4, 9, 16, 25}, Method -> "Hermite"][2.5]  (* x^2 *)
-Out[4]= 6.25
+In[4]:= (* vector-valued: each component interpolated independently *) fv = Interpolation[{{{0.}, {1., 2.}}, {{1.2}, {3., 4.}}, {{2.1}, {5., 4.}}, {{3.}, {0., 4.}}}]; fv[1.5]
+Out[4]= {4.03175, 4.07143}
 ```
+
+### Options (4)
+
+```mathematica
+In[5]:= Interpolation[{1, 5, 7, 2, 3, 1}, InterpolationOrder -> 1][2.5]
+Out[5]= 6.0
+
+In[6]:= Interpolation[{1, 4, 9, 16, 25}, Method -> "Hermite"][2.5]  (* x^2 *)
+Out[6]= 6.25
+
+In[7]:= (* high-precision data -> high-precision result *) Interpolation[N[{1, 2, 3, 5, 8, 5}, 30], Method -> "Spline"][N[5/2, 30]]
+Out[7]= 2.473086124401913875598086124405
+
+In[8]:= (* periodic: f[x] wraps with period = data span (5) *) fp = Interpolation[Table[{x, N[Sin[2 Pi x/5]]}, {x, 0, 5}], PeriodicInterpolation -> True]; {fp[0.5], fp[5.5], fp[-4.5]}
+Out[8]= {0.557674, 0.557674, 0.557674}
+```
+
+### Applications (7)
+
+```mathematica
+In[1]:= f = Interpolation[{1, 4, 9, 16}]
+Out[1]= InterpolatingFunction[{{1, 4}}, <>]
+
+In[2]:= f[2]
+Out[2]= 4
+
+In[3]:= f[2.5]
+Out[3]= 6.25
+```
+
+```mathematica
+In[1]:= g = Interpolation[Table[{x, Sin[x]}, {x, 0., 6., 0.5}]]
+Out[1]= InterpolatingFunction[{{0.0, 6.0}}, <>]
+
+In[2]:= g[1.5]
+Out[2]= 0.997495
+```
+
+```mathematica
+In[1]:= p = Interpolation[{{0, 0}, {1, 1}, {2, 4}, {3, 9}}, InterpolationOrder -> 2]
+Out[1]= InterpolatingFunction[{{0, 3}}, <>]
+
+In[2]:= p[1.5]
+Out[2]= 2.25
+```
+
+## Algorithm
+
+interp.c
+
+InterpolatingFunction --- piecewise-polynomial interpolation of tabulated data on a regular (tensor-product) grid, plus the Interpolation[] builder. Modelled on Mathematica's InterpolatingFunction object.
+
+```text
+  InterpolatingFunction[domain, table]
+  InterpolatingFunction[domain, table, ders]
+  InterpolatingFunction[domain, table, ders, orders]
+  InterpolatingFunction[domain, table, ders, orders, method]
+
+    domain = {{x1min, x1max}, ...}   -- one interval per dimension; the
+             number of intervals m is the dimensionality.
+    table  = {{coord, val}, ...}                     -- value-only data, or
+             {{coord, val, grad, hess, ...}, ...}     -- derivative-supplied.
+             coord is a scalar (1-D value-only) or an {x1,...,xm} list.
+             grad = D[f,{vars,1}] (length-m vector), hess = D[f,{vars,2}]
+             (m x m matrix), etc.
+    ders   = {d1, ..., dm}   -- (optional) derivative-of-interpolant orders.
+    orders = {o1, ..., om}   -- (optional) interpolation order per dimension.
+    method = "Spline" | "Hermite"   -- (optional) interpolation method.
+```
+
+Methods (all evaluate the ders-th mixed derivative so D[ifun[..],..] composes):
+
+```text
+  default  : sliding-window Newton divided-difference (order min(3,n-1) or the
+             requested InterpolationOrder), per dimension, tensor product.
+  "Spline" : natural cubic spline (C2; second derivative 0 at the ends),
+             tensor product over the full grid.
+  "Hermite": tensor-product piecewise cubic Hermite with node slopes estimated
+             by 3-point finite differences.
+  supplied : derivative-annotated data is interpolated by tensor-product
+             Hermite of per-dimension order k = max(K,1) where K is the highest
+             supplied derivative order.  Mixed partials that are not supplied
+             are filled by central finite differences across the grid.
+```
+
+Precision: machine (double) by default; if the data/argument carry MPFR arbitrary precision the MPFR kernels (interp_mpfr.c) are used instead and an EXPR_MPFR is returned.
+
+Builtin ownership: interp_apply / the Interpolation builtin return a fresh Expr* (or NULL to stay unevaluated); inputs are borrowed.
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| Interpolation evaluate, 20000 points | 18.9 s | 18.1 s | 0.073 s |
+| Interpolation over 10^5 array | 1.26 s | 4.57 s | 4.44 s |
+| Interpolation build, 2000 knots | 0.013 s | 0.761 s | 0.092 s |
+| Interpolation order 1 (linear) build | -- | 0.764 s | 0.014 s |
+| ListInterpolation 2-D 60x60 | -- | 0.823 s | 1.02 s |
 
 ## Implementation notes
 
@@ -87,46 +193,18 @@ tensor-product piecewise cubic Hermite.
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[InterpolatingFunction](../../functional-programming/InterpolatingFunction/), [List](../../other-advanced/List/), [NDArray](../../linear-algebra/NDArray/)
 
 ## References
 
 - C. de Boor, *A Practical Guide to Splines*, rev. ed. (Springer, 2001).
 - Source: [`src/interp.c`](https://github.com/stblake/mathilda/blob/main/src/interp.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_interp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_interp.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= f = Interpolation[{1, 4, 9, 16}]
-Out[1]= InterpolatingFunction[{{1, 4}}, <>]
-
-In[2]:= f[2]
-Out[2]= 4
-
-In[3]:= f[2.5]
-Out[3]= 6.25
-```
-
-```mathematica
-In[1]:= g = Interpolation[Table[{x, Sin[x]}, {x, 0., 6., 0.5}]]
-Out[1]= InterpolatingFunction[{{0.0, 6.0}}, <>]
-
-In[2]:= g[1.5]
-Out[2]= 0.997495
-```
-
-```mathematica
-In[1]:= p = Interpolation[{{0, 0}, {1, 1}, {2, 4}, {3, 9}}, InterpolationOrder -> 2]
-Out[1]= InterpolatingFunction[{{0, 3}}, <>]
-
-In[2]:= p[1.5]
-Out[2]= 2.25
-```
 
 ### Notes
 

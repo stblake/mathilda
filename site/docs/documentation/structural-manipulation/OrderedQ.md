@@ -5,14 +5,15 @@
 
 ## Description
 
-```text
-OrderedQ[h[e1, e2, ...]] gives True if the elements are in canonical order, and False otherwise.
-OrderedQ[expr, p] uses the ordering function p to determine whether each pair of elements is in order.
-```
+**`OrderedQ[h[e1, e2, ...]] gives True if the elements are in canonical order, and False otherwise.`**
 
-## Examples
+**`OrderedQ[expr, p] uses the ordering function p to determine whether each pair of elements is in order.`**
 
-All examples below are verified against the current Mathilda build.
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= OrderedQ[{1, 4, 2}]
@@ -31,35 +32,7 @@ In[5]:= OrderedQ[f[b, a, c]]
 Out[5]= False
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_orderedq` scans adjacent element pairs of the list once and returns
-`True` iff every pair is in canonical order. With no ordering function it uses `expr_compare`
-(the canonical order described under `Sort`); with a second argument `p` it evaluates `p[a, b]`
-and treats `True`/`1` as ordered. The first out-of-order pair short-circuits to `False`. Empty
-and single-element lists are trivially `True`. This is the linear-scan predicate corresponding
-to the same comparator that `Sort` uses.
-
-- `Protected`.
-- Uses the same internal canonical comparison logic as `Sort` by default.
-- Custom ordering function `p` may return `1`, `0`, `-1`, `True`, or `False`.
-- `OrderedQ` works with any expression head, not just `List`.
-- Automatically handles 0- and 1-element lists.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/sort.c`](https://github.com/stblake/mathilda/blob/main/src/sort.c)
-- Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 Test whether a list is in canonical order:
 
@@ -96,6 +69,36 @@ in strictly decreasing degree:
 In[1]:= OrderedQ[{x^2, x, 1}, (#1 > #2 &)]
 Out[1]= True
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_orderedq` scans adjacent element pairs of the list once and returns
+`True` iff every pair is in canonical order. With no ordering function it uses `expr_compare`
+(the canonical order described under `Sort`); with a second argument `p` it evaluates `p[a, b]`
+and treats `True`/`1` as ordered. The first out-of-order pair short-circuits to `False`. Empty
+and single-element lists are trivially `True`. This is the linear-scan predicate corresponding
+to the same comparator that `Sort` uses.
+
+- `Protected`.
+- Uses the same internal canonical comparison logic as `Sort` by default.
+- Custom ordering function `p` may return `1`, `0`, `-1`, `True`, or `False`.
+- `OrderedQ` works with any expression head, not just `List`.
+- Automatically handles 0- and 1-element lists.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[Sort](../../data-structures/Sort/), [List](../../other-advanced/List/)
+
+## References
+
+- Source: [`src/sort.c`](https://github.com/stblake/mathilda/blob/main/src/sort.c)
+- Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
+- Tests: [`tests/test_sort.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sort.c)
+
+## Notes & additional examples
 
 ### Notes
 

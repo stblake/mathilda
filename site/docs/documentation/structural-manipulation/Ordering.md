@@ -5,17 +5,26 @@
 
 ## Description
 
-```text
-Ordering[list] gives the positions in list at which each successive element of Sort[list] appears, so that list[[Ordering[list]]] is Sort[list].
-Ordering[list, n] gives the positions of the n smallest elements; Ordering[list, -n] gives the positions of the n largest.
-Ordering[list, seq] is equivalent to Take[Ordering[list], seq], where seq may be an integer n or -n, a {m, n} or {m, n, s} span, UpTo[k], or All.
-Ordering[list, seq, p] orders using the ordering function p, as in Sort[list, p].
+**`Ordering[list] gives the positions in list at which each successive element of Sort[list] appears, so that list[[Ordering[list]]] is Sort[list].`**
+
+**`Ordering[list, n] gives the positions of the n smallest elements; Ordering[list, -n] gives the positions of the n largest.`**
+
+**`Ordering[list, seq] is equivalent to Take[Ordering[list], seq], where seq may be an integer n or -n, a {m, n} or {m, n, s} span, UpTo[k], or All.`**
+
+**`Ordering[list, seq, p] orders using the ordering function p, as in Sort[list, p].`**
+
+<details>
+<summary>Notes</summary>
+
 Ties are broken by original position (Ordering is stable). Ordering works on an expression with any head, and on an Association (ordering its values), always returning a list of integer positions. Ordering has a packed-array fast path and is compilable.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Ordering[{c, a, b}]
@@ -46,11 +55,14 @@ Out[5]= {2, 3, 1}
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[Sort](../../data-structures/Sort/), [List](../../other-advanced/List/), [Association](../../data-structures/Association/)
 
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+- Tests: [`tests/test_sort.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sort.c)

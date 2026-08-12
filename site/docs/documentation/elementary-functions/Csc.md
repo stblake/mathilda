@@ -5,36 +5,22 @@
 
 ## Description
 
-```text
-Csc[z]
-    gives the cosecant of z (= 1 / Sin[z]).
+**`Csc[z]`**
+
+gives the cosecant of z (= 1 / Sin\[z\]).
+
+<details>
+<summary>Notes</summary>
+
 Csc is Listable. Singularities at z = k Pi yield ComplexInfinity.
-```
 
-## Examples
+</details>
 
-_No verified examples yet for this function._
+## Examples (5)
 
-## Implementation notes
+Every input below was run against the current Mathilda build and its output recorded.
 
-**Algorithm.** `builtin_csc` (`src/trig.c`) applies: (1) `strip_inverse_call` folds `Csc[ArcCsc[x]] -> x`. (2) `odd_fold` for oddness `Csc[-x] -> -Csc[x]`. (3) `trig_i_fold` rewrites `Csc[I y] -> -I Csch[y]`. (4) `Csc[0] -> ComplexInfinity`. (5) For a rational multiple of Pi (`extract_pi_multiplier`), `exact_csc` returns the closed-form surd from the table for denominators 1,2,3,4,5,6,10,12. (6) Numeric fallback: MPFR via `mpfr_csc`/`mpfr_complex_csc`, else `get_approx` + `1/csin(c)` for inexact inputs. Otherwise `NULL`. (Unlike Cos/Tan, Csc has no forward-of-inverse fold step.)
-
-**Data structures.** `Expr*` trees via the `make_*` helpers; Pi multiples as `int64_t n, d`.
-
-**Attributes:** `Listable`, `NumericFunction`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/trig.c`](https://github.com/stblake/mathilda/blob/main/src/trig.c)
-- Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= Csc[Pi/6]
@@ -60,6 +46,25 @@ Out[1]= 1/x + 1/6 x + 7/360 x^3 + 31/15120 x^5 + O[x]^6
 In[1]:= Csc[I]
 Out[1]= -I Csch[1]
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_csc` (`src/trig.c`) applies: (1) `strip_inverse_call` folds `Csc[ArcCsc[x]] -> x`. (2) `odd_fold` for oddness `Csc[-x] -> -Csc[x]`. (3) `trig_i_fold` rewrites `Csc[I y] -> -I Csch[y]`. (4) `Csc[0] -> ComplexInfinity`. (5) For a rational multiple of Pi (`extract_pi_multiplier`), `exact_csc` returns the closed-form surd from the table for denominators 1,2,3,4,5,6,10,12. (6) Numeric fallback: MPFR via `mpfr_csc`/`mpfr_complex_csc`, else `get_approx` + `1/csin(c)` for inexact inputs. Otherwise `NULL`. (Unlike Cos/Tan, Csc has no forward-of-inverse fold step.)
+
+**Data structures.** `Expr*` trees via the `make_*` helpers; Pi multiples as `int64_t n, d`.
+
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+
+## References
+
+- Source: [`src/trig.c`](https://github.com/stblake/mathilda/blob/main/src/trig.c)
+- Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
+- Tests: [`tests/test_complexexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complexexpand.c)
+- Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
+- Tests: [`tests/test_gamma_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_gamma_transforms.c)
+- Tests: [`tests/test_integrate_dispatch.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_dispatch.c)
+
+## Notes & additional examples
 
 ### Notes
 

@@ -5,11 +5,9 @@
 
 ## Description
 
-```text
-ChartLabels
-    BarChart option: list of label expressions drawn below
-    each bar on the x-axis.
-```
+**`ChartLabels`**
+
+BarChart option: list of label expressions drawn below each bar on the x-axis.
 
 ## Examples
 
@@ -18,10 +16,6 @@ _No verified examples yet for this function._
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
 
 ## References
 

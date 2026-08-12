@@ -5,18 +5,22 @@
 
 ## Description
 
-```text
-Nest[f, expr, n]
-    gives an expression with f applied n times to expr.
+**`Nest[f, expr, n]`**
 
-n must be a non-negative integer. Nest[f, expr, 0] returns expr. The
-function f may be a symbol or a pure function. Each iteration evaluates
-f applied to the current value before proceeding.
-```
+gives an expression with f applied n times to expr.
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+n must be a non-negative integer. Nest\[f, expr, 0\] returns expr. The function f may be a symbol or a pure function. Each iteration evaluates f applied to the current value before proceeding.
+
+</details>
+
+## Examples (13)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= Nest[f, x, 3]
@@ -44,38 +48,7 @@ In[8]:= Nest[(# + 2/#)/2 &, 1.0, 5]
 Out[8]= 1.41421
 ```
 
-## Implementation notes
-
-`builtin_nest` (via `nest_impl(res, false)`) applies `f` to `expr` exactly `n`
-times and returns the final value; `n` must be a non-negative integer or the
-call stays unevaluated. It seeds a growable history buffer `ExprBuf` with a copy
-of `expr` and drives the shared generic runner `iter_run` with `nest_step`, which
-on each step computes `apply_unary(f, last)` (build `f[last]`, `eval_and_free`).
-`ebuf_finalize(..., as_list=false)` returns the last history element and frees the
-rest. `Nest` and `NestList` are the same `nest_impl`, differing only in the
-`as_list` flag.
-
-- `Protected`.
-- `n` must be a non-negative integer; `Nest[f, expr, 0]` returns `expr` unchanged.
-- The function `f` may be a symbol, a built-in, or a pure function (`... &`).
-- Each iteration evaluates `f[current]` before proceeding, so numeric computations collapse immediately.
-- Returns unevaluated if `n` is not a non-negative integer or the argument count is wrong.
-- **Compilable** inside `Compile[]` for a scalar accumulator, with any of the
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
-- Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= Nest[f, x, 3]
@@ -108,6 +81,43 @@ Nesting a radical builds a finite "nested radical" tower:
 In[1]:= Nest[Sqrt[1 + #] &, x, 2]
 Out[1]= Sqrt[1 + Sqrt[1 + x]]
 ```
+
+## Options & behaviour
+
+### Examples
+
+## Implementation notes
+
+`builtin_nest` (via `nest_impl(res, false)`) applies `f` to `expr` exactly `n`
+times and returns the final value; `n` must be a non-negative integer or the
+call stays unevaluated. It seeds a growable history buffer `ExprBuf` with a copy
+of `expr` and drives the shared generic runner `iter_run` with `nest_step`, which
+on each step computes `apply_unary(f, last)` (build `f[last]`, `eval_and_free`).
+`ebuf_finalize(..., as_list=false)` returns the last history element and frees the
+rest. `Nest` and `NestList` are the same `nest_impl`, differing only in the
+`as_list` flag.
+
+- `Protected`.
+- `n` must be a non-negative integer; `Nest[f, expr, 0]` returns `expr` unchanged.
+- The function `f` may be a symbol, a built-in, or a pure function (`... &`).
+- Each iteration evaluates `f[current]` before proceeding, so numeric computations collapse immediately.
+- Returns unevaluated if `n` is not a non-negative integer or the argument count is wrong.
+- **Compilable** inside `Compile[]` for a scalar accumulator, with any of the
+  function spellings listed in [`control-flow.md`](../control-flow/index.md) § Compile.
+  A negative `n` declines there too, since it is unevaluated here.
+
+**Attributes:** `Protected`.
+
+## References
+
+- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
+- Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_expr_pool.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expr_pool.c)
+
+## Notes & additional examples
 
 ### Notes
 

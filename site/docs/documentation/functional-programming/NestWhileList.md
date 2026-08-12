@@ -5,31 +5,45 @@
 
 ## Description
 
-```text
-NestWhileList[f, expr, test]
-    generates the list {expr, f[expr], f[f[expr]], ...} continuing while
-    test applied to the most recent result yields True.
-NestWhileList[f, expr, test, m]
-    supplies the most recent m results as arguments to test.
-NestWhileList[f, expr, test, All]
-    supplies all results so far as arguments to test.
-NestWhileList[f, expr, test, {mmin, mmax}]
-    delays testing until at least mmin results exist, then passes up to mmax.
-NestWhileList[f, expr, test, m, max]
-    applies f at most max times.
-NestWhileList[f, expr, test, m, max, n]
-    appends n additional applications of f to the list.
-NestWhileList[f, expr, test, m, max, -n]
-    drops the last n elements from the list.
+**`NestWhileList[f, expr, test]`**
 
-NestWhileList[f, expr, UnsameQ, 2] is equivalent to FixedPointList[f, expr].
-NestWhileList[f, expr, test, All] is equivalent to
-NestWhileList[f, expr, test, {1, Infinity}].
-```
+generates the list {expr, f\[expr\], f\[f\[expr\]\], ...} continuing while test applied to the most recent result yields True.
 
-## Examples
+**`NestWhileList[f, expr, test, m]`**
 
-All examples below are verified against the current Mathilda build.
+supplies the most recent m results as arguments to test.
+
+**`NestWhileList[f, expr, test, All]`**
+
+supplies all results so far as arguments to test.
+
+**`NestWhileList[f, expr, test, {mmin, mmax}]`**
+
+delays testing until at least mmin results exist, then passes up to mmax.
+
+**`NestWhileList[f, expr, test, m, max]`**
+
+applies f at most max times.
+
+**`NestWhileList[f, expr, test, m, max, n]`**
+
+appends n additional applications of f to the list.
+
+**`NestWhileList[f, expr, test, m, max, -n]`**
+
+drops the last n elements from the list.
+
+**`NestWhileList[f, expr, UnsameQ, 2] is equivalent to FixedPointList[f, expr].`**
+
+**`NestWhileList[f, expr, test, All] is equivalent to`**
+
+**`NestWhileList[f, expr, test, {1, Infinity}].`**
+
+## Examples (11)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= NestWhileList[#/2 &, 123456, EvenQ]
@@ -57,6 +71,33 @@ In[8]:= NestWhileList[Mod[2 #, 19] &, 2, # != 1 &]
 Out[8]= {2, 4, 8, 16, 13, 7, 14, 9, 18, 17, 15, 11, 3, 6, 12, 5, 10, 1}
 ```
 
+### Applications (3)
+
+```mathematica
+In[1]:= NestWhileList[#/2 &, 256, EvenQ]
+Out[1]= {256, 128, 64, 32, 16, 8, 4, 2, 1}
+```
+
+The full Collatz (3n+1) trajectory starting from 27 — it climbs as high as 9232
+before crashing to 1, taking 112 entries to get there:
+
+```mathematica
+In[1]:= Length[NestWhileList[If[EvenQ[#], #/2, 3 # + 1] &, 27, # > 1 &]]
+Out[1]= 112
+```
+
+With `UnsameQ` and a history of `2`, `NestWhileList` is `FixedPointList`. Here it
+records every Newton convergent of `Sqrt[2]` up to the machine fixed point:
+
+```mathematica
+In[1]:= NestWhileList[(# + 2/#)/2 &, 1.0, UnsameQ, 2]
+Out[1]= {1.0, 1.5, 1.41667, 1.41422, 1.41421, 1.41421, 1.41421}
+```
+
+## Options & behaviour
+
+### Examples
+
 ## Implementation notes
 
 `builtin_nestwhilelist` is `nestwhile_impl(res, true)`: same iteration as
@@ -81,39 +122,20 @@ are guarded by `ITER_SAFETY_CAP`; malformed specs return `NULL`.
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[NestWhile](../../functional-programming/NestWhile/)
 
 ## References
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_fixedpointlist.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fixedpointlist.c)
+- Tests: [`tests/test_nestwhilelist.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nestwhilelist.c)
+- Tests: [`tests/test_numloop.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numloop.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= NestWhileList[#/2 &, 256, EvenQ]
-Out[1]= {256, 128, 64, 32, 16, 8, 4, 2, 1}
-```
-
-The full Collatz (3n+1) trajectory starting from 27 — it climbs as high as 9232
-before crashing to 1, taking 112 entries to get there:
-
-```mathematica
-In[1]:= Length[NestWhileList[If[EvenQ[#], #/2, 3 # + 1] &, 27, # > 1 &]]
-Out[1]= 112
-```
-
-With `UnsameQ` and a history of `2`, `NestWhileList` is `FixedPointList`. Here it
-records every Newton convergent of `Sqrt[2]` up to the machine fixed point:
-
-```mathematica
-In[1]:= NestWhileList[(# + 2/#)/2 &, 1.0, UnsameQ, 2]
-Out[1]= {1.0, 1.5, 1.41667, 1.41422, 1.41421, 1.41421, 1.41421}
-```
 
 ### Notes
 

@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-Attributes[s] gives the list of attributes for s.
-```
+**`Attributes[s] gives the list of attributes for s.`**
 
-## Examples
+## Examples (1)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= Attributes[Plus]
@@ -26,11 +26,15 @@ Out[1]= {Flat, Listable, NumericFunction, OneIdentity, Orderless, Protected}
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [HoldFirst](../../other-advanced/HoldFirst/), [HoldRest](../../other-advanced/HoldRest/), [HoldAll](../../expression-information/HoldAll/)
 
 ## References
 
 - Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_array_flatten.c`](https://github.com/stblake/mathilda/blob/main/tests/test_array_flatten.c)
+- Tests: [`tests/test_chop.c`](https://github.com/stblake/mathilda/blob/main/tests/test_chop.c)
+- Tests: [`tests/test_clearall_remove_protect.c`](https://github.com/stblake/mathilda/blob/main/tests/test_clearall_remove_protect.c)
+- Tests: [`tests/test_clip.c`](https://github.com/stblake/mathilda/blob/main/tests/test_clip.c)

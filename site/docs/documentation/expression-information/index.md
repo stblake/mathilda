@@ -1,6 +1,6 @@
 # Expression Information
 
-57 built-in function(s) in this category.
+58 built-in function(s) in this category.
 
 - [`$MachineEpsilon`]($MachineEpsilon.md) — $MachineEpsilon  _(Stable)_
 - [`$MachinePrecision`]($MachinePrecision.md) — $MachinePrecision  _(Stable)_
@@ -51,6 +51,7 @@
 - [`Sequence`](Sequence.md) — Sequence[e1, e2, ...]  _(Stable)_
 - [`SequenceHold`](SequenceHold.md) — SequenceHold  _(Experimental)_
 - [`SetAttributes`](SetAttributes.md) — SetAttributes[s, attr] sets the attributes for s.  _(Stable)_
+- [`StringQ`](StringQ.md) — StringQ[expr]  _(Stable)_
 - [`Symbol`](Symbol.md) — Symbol["name"]  _(Stable)_
 - [`TeXForm`](TeXForm.md) — TeXForm[expr]  _(Experimental)_
 - [`ToExpression`](ToExpression.md) — ToExpression[input]  _(Stable)_

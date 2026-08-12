@@ -5,13 +5,21 @@
 
 ## Description
 
-```text
 expr1; expr2; ... evaluates its arguments in sequence, returning the last result.
+
+## Examples (2)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (2)
+
+```mathematica
+In[1]:= (a = 2; b = 3; a + b)
+Out[1]= 5
+
+In[2]:= (x = 10; x^2; x + 1)
+Out[2]= 11
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -21,26 +29,16 @@ _No verified examples yet for this function._
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
+- Tests: [`tests/test_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linalg.c)
+- Tests: [`tests/test_linearsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linearsolve.c)
+- Tests: [`tests/test_matinv_methods.c`](https://github.com/stblake/mathilda/blob/main/tests/test_matinv_methods.c)
+- Tests: [`tests/test_matsol_methods.c`](https://github.com/stblake/mathilda/blob/main/tests/test_matsol_methods.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= (a = 2; b = 3; a + b)
-Out[1]= 5
-
-In[2]:= (x = 10; x^2; x + 1)
-Out[2]= 11
-```
 
 ### Notes
 

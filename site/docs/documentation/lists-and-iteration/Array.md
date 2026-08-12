@@ -5,42 +5,23 @@
 
 ## Description
 
-```text
-Array[f, n]
-    generates a list {f[1], f[2], ..., f[n]}.
-Array[f, n, r]
-    generates a list of length n starting from index r.
-Array[f, {n1, n2, ...}]
-    generates an n1 x n2 x ... nested-list array with elements
-    f[i1, i2, ...].
-```
+**`Array[f, n]`**
 
-## Examples
+generates a list {f\[1\], f\[2\], ..., f\[n\]}.
 
-_No verified examples yet for this function._
+**`Array[f, n, r]`**
 
-## Implementation notes
+generates a list of length n starting from index r.
 
-**Algorithm.** `builtin_array` (in `src/list.c`) builds an N-dimensional list of `f[i1, ..., iN]` applications. It accepts `Array[f, n]`, `Array[f, {n1,...,nN}]` (dimensions), and an optional third argument giving the index origin/range per dimension. The handler normalizes the dimension spec into a `dim_count`-length `n_array` of integer counts and a parallel `r_array` of per-dimension range specs (either a shared scalar, a per-dimension list, or `NULL` for the default origin of 1). All counts must be non-negative integers or the builtin returns `NULL` (unevaluated).
+**`Array[f, {n1, n2, ...}]`**
 
-The work is done by the recursive `array_helper`, which descends one dimension per call accumulating index values in `current_args`. At each level it computes the index for slot `i`: for a `{a, b}` range spec it interpolates `a + i*(b-a)/(n-1)` (evaluated symbolically through `Plus`/`Times`/`Divide` so exact rationals survive), otherwise it produces the arithmetic sequence `r_base + i` from the origin. At the deepest level it builds `f[i1, ..., iN]` and calls `evaluate` on it. Each level wraps its children in a `List[...]`.
+generates an n1 x n2 x ... nested-list array with elements f\[i1, i2, ...\].
 
-**Data structures.** Plain `Expr**` working arrays (`n_array`, `r_array`, `current_args`); results assembled bottom-up as nested `List` expressions. Unlike `Table`, `Array` does not bind any iteration symbol — indices are passed positionally as arguments to `f`.
+## Examples (5)
 
-**Attributes:** `Protected`.
+Every input below was run against the current Mathilda build and its output recorded.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
-- Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= Array[f, 5]
@@ -66,6 +47,31 @@ Building the 4x4 Hilbert matrix and taking its determinant gives the famously ti
 In[1]:= Det[Array[1/(#1 + #2 - 1) &, {4, 4}]]
 Out[1]= 1/6048000
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_array` (in `src/list.c`) builds an N-dimensional list of `f[i1, ..., iN]` applications. It accepts `Array[f, n]`, `Array[f, {n1,...,nN}]` (dimensions), and an optional third argument giving the index origin/range per dimension. The handler normalizes the dimension spec into a `dim_count`-length `n_array` of integer counts and a parallel `r_array` of per-dimension range specs (either a shared scalar, a per-dimension list, or `NULL` for the default origin of 1). All counts must be non-negative integers or the builtin returns `NULL` (unevaluated).
+
+The work is done by the recursive `array_helper`, which descends one dimension per call accumulating index values in `current_args`. At each level it computes the index for slot `i`: for a `{a, b}` range spec it interpolates `a + i*(b-a)/(n-1)` (evaluated symbolically through `Plus`/`Times`/`Divide` so exact rationals survive), otherwise it produces the arithmetic sequence `r_base + i` from the origin. At the deepest level it builds `f[i1, ..., iN]` and calls `evaluate` on it. Each level wraps its children in a `List[...]`.
+
+**Data structures.** Plain `Expr**` working arrays (`n_array`, `r_array`, `current_args`); results assembled bottom-up as nested `List` expressions. Unlike `Table`, `Array` does not bind any iteration symbol — indices are passed positionally as arguments to `f`.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/)
+
+## References
+
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)
+- Tests: [`tests/test_array_flatten.c`](https://github.com/stblake/mathilda/blob/main/tests/test_array_flatten.c)
+- Tests: [`tests/test_correlations.c`](https://github.com/stblake/mathilda/blob/main/tests/test_correlations.c)
+- Tests: [`tests/test_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linalg.c)
+- Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
+
+## Notes & additional examples
 
 ### Notes
 

@@ -5,20 +5,22 @@
 
 ## Description
 
-```text
-ExpandNumerator[expr]
-    expands out products and powers that appear in the numerator of expr.
-ExpandNumerator works on terms that have positive integer exponents.
-ExpandNumerator applies only to the top level in expr.
-ExpandNumerator does not separate the fraction; Expand does.
-ExpandNumerator leaves the denominator unexpanded.
-ExpandNumerator automatically threads over lists, as well as equations,
-    inequalities, and logic functions.
-```
+**`ExpandNumerator[expr]`**
 
-## Examples
+expands out products and powers that appear in the numerator of expr.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+ExpandNumerator works on terms that have positive integer exponents. ExpandNumerator applies only to the top level in expr. ExpandNumerator does not separate the fraction; Expand does. ExpandNumerator leaves the denominator unexpanded. ExpandNumerator automatically threads over lists, as well as equations, inequalities, and logic functions.
+
+</details>
+
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= ExpandNumerator[(x-1)(x-2)/((x-3)(x-4))]
@@ -29,6 +31,23 @@ Out[2]= (a^2 + 2 a b + b^2)/x + (c^2 - d^2)/y
 
 In[3]:= ExpandNumerator[x == (a+b)^2/c && y >= (a-b)^2/c]
 Out[3]= x == (a^2 + 2 a b + b^2)/c && y >= (a^2 - 2 a b + b^2)/c
+```
+
+### Applications (3)
+
+```mathematica
+In[1]:= ExpandNumerator[(a + b)^2 / (c + d)^2]
+Out[1]= (a^2 + 2 a b + b^2)/(c + d)^2
+```
+
+```mathematica
+In[1]:= ExpandNumerator[((x + 1)(x + 2)) / (y (y + 1))]
+Out[1]= (2 + 3 x + x^2)/(y (1 + y))
+```
+
+```mathematica
+In[1]:= ExpandNumerator[(1 + x)^3 / x^2 == (1 + y)^2 / y]
+Out[1]= (1 + 3 x + 3 x^2 + x^3)/x^2 == (1 + 2 y + y^2)/y
 ```
 
 ## Implementation notes
@@ -46,33 +65,17 @@ Out[3]= x == (a^2 + 2 a b + b^2)/c && y >= (a^2 - 2 a b + b^2)/c
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[Expand](../../algebra/Expand/), [List](../../other-advanced/List/), [Equal](../../comparisons/Equal/), [Unequal](../../comparisons/Unequal/), [Less](../../comparisons/Less/), [LessEqual](../../comparisons/LessEqual/), [Greater](../../comparisons/Greater/), [GreaterEqual](../../comparisons/GreaterEqual/)
 
 ## References
 
 - Source: [`src/expand.c`](https://github.com/stblake/mathilda/blob/main/src/expand.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_expandfrac.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expandfrac.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= ExpandNumerator[(a + b)^2 / (c + d)^2]
-Out[1]= (a^2 + 2 a b + b^2)/(c + d)^2
-```
-
-```mathematica
-In[1]:= ExpandNumerator[((x + 1)(x + 2)) / (y (y + 1))]
-Out[1]= (2 + 3 x + x^2)/(y (1 + y))
-```
-
-```mathematica
-In[1]:= ExpandNumerator[(1 + x)^3 / x^2 == (1 + y)^2 / y]
-Out[1]= (1 + 3 x + 3 x^2 + x^3)/x^2 == (1 + 2 y + y^2)/y
-```
 
 ### Notes
 

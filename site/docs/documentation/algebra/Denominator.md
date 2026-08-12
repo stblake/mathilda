@@ -5,16 +5,15 @@
 
 ## Description
 
-```text
-Denominator[expr]
-    gives the denominator of expr regarded as a rational expression.
-    Collects factors of expr that carry a superficially negative
-    exponent, inverted; returns 1 when no such factors exist.
-```
+**`Denominator[expr]`**
 
-## Examples
+gives the denominator of expr regarded as a rational expression. Collects factors of expr that carry a superficially negative exponent, inverted; returns 1 when no such factors exist.
 
-All examples below are verified against the current Mathilda build.
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Denominator[(x-1)(x-2)/(x-3)^2]
@@ -24,29 +23,7 @@ In[2]:= Denominator[3/7 + I/11]
 Out[2]= 77
 ```
 
-## Implementation notes
-
-`builtin_denominator` calls `extract_num_den` and returns the denominator part (freeing the numerator). `extract_num_den` recognises `Rational[n, d]` (returns `d`); `Complex` (clears to a common integer denominator); `Power[b, e]`/`Exp[e]` with a superficially-negative exponent or a `Plus` exponent split into positive/negative pieces (the negative-exponent base becomes the denominator); and `Times`, which recurses into each factor and multiplies the collected denominators. A factor with no denominator contributes `1`. `Numerator` in the same file is the symmetric accessor.
-
-- `Protected`, `Listable`.
-- Picks out terms which have superficially negative exponents.
-- Can be used on rational and complex numbers.
-
-**Attributes:** `Listable`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational normal forms.
-- Source: [`src/rat.c`](https://github.com/stblake/mathilda/blob/main/src/rat.c)
-- Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (6)
 
 ```mathematica
 In[1]:= Denominator[6/8]
@@ -77,6 +54,28 @@ Out[1]= (5 + x) (-2 + x)^3
 In[1]:= Denominator[x^(-2) y^3 z^(-1)]
 Out[1]= x^2 z
 ```
+
+## Implementation notes
+
+`builtin_denominator` calls `extract_num_den` and returns the denominator part (freeing the numerator). `extract_num_den` recognises `Rational[n, d]` (returns `d`); `Complex` (clears to a common integer denominator); `Power[b, e]`/`Exp[e]` with a superficially-negative exponent or a `Plus` exponent split into positive/negative pieces (the negative-exponent base becomes the denominator); and `Times`, which recurses into each factor and multiplies the collected denominators. A factor with no denominator contributes `1`. `Numerator` in the same file is the symmetric accessor.
+
+- `Protected`, `Listable`.
+- Picks out terms which have superficially negative exponents.
+- Can be used on rational and complex numbers.
+
+**Attributes:** `Listable`, `Protected`.
+
+## References
+
+- Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational normal forms.
+- Source: [`src/rat.c`](https://github.com/stblake/mathilda/blob/main/src/rat.c)
+- Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
+- Tests: [`tests/test_integrate_newton_leibniz.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_newton_leibniz.c)
+- Tests: [`tests/test_integrate_risch_transcendental.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_risch_transcendental.c)
+- Tests: [`tests/test_rat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_rat.c)
+- Tests: [`tests/test_risch_canonical.c`](https://github.com/stblake/mathilda/blob/main/tests/test_risch_canonical.c)
+
+## Notes & additional examples
 
 ### Notes
 

@@ -5,19 +5,30 @@
 
 ## Description
 
-```text
-Normalize[v]
-    gives the normalized form of a vector v (effectively v / Norm[v]).
-Normalize[z]
-    gives the normalized form of a scalar (incl. complex) z, namely z / Abs[z].
-Normalize[expr, f]
-    normalizes with respect to the norm function f, i.e. expr / f[expr].
+**`Normalize[v]`**
+
+gives the normalized form of a vector v (effectively v / Norm\[v\]).
+
+**`Normalize[z]`**
+
+gives the normalized form of a scalar (incl. complex) z, namely z / Abs\[z\].
+
+**`Normalize[expr, f]`**
+
+normalizes with respect to the norm function f, i.e. expr / f\[expr\].
+
+<details>
+<summary>Notes</summary>
+
 Zero input is returned unchanged.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (11)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (6)
 
 ```mathematica
 In[1]:= Normalize[{1, 5, 1}]
@@ -39,33 +50,7 @@ In[6]:= Normalize[{0, 0, 0}]
 Out[6]= {0, 0, 0}
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_normalize` returns `expr / f[expr]`, where `f` defaults to `Norm` (which itself reduces to `Abs` for scalars). It builds `f[expr]`, evaluates it (`eval_and_free`), then returns `Times[expr, Power[norm_val, -1]]` evaluated. Because `Times` is `Listable`, the single reciprocal threads across every leaf of a vector / matrix / higher-rank tensor, and the same path handles scalars (including complex `z / Abs[z]`).
-
-**Limits.** The zero short-circuit uses *exact* numeric-zero detection (`norm_is_numeric_zero`: literal Integer/Real/BigInt/MPFR `0`) — a zero vector is returned unchanged, but a symbolic norm that merely happens to vanish is left as a symbolic division so the input stays visible. Arity other than 1 or 2 emits `Normalize::argt`.
-
-- `Protected` (not `Listable` — it acts on the whole vector, not element-wise).
-- `Normalize[v]` is `v / Norm[v]` when `v` is a vector or tensor; the empty list `{}` and any all-zero input is returned unchanged.
-- `Normalize[z]` for a scalar (possibly complex) `z` is `z / Abs[z]`, with `Normalize[0]` returning `0`.
-- `Normalize[expr, f]` is `expr / f[expr]`, again with the zero short-circuit.
-- The short-circuit is triggered only by a literal numeric zero (Integer, Real, BigInt, MPFR) in the evaluated norm — a symbolic norm that happens to be zero stays in the symbolic division so the user can see what they wrote.
-- Wrong arity (`0` or `≥ 3` arguments) prints `Normalize::argt` and leaves the call unevaluated.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/linalg/normalize.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/normalize.c)
-- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= Normalize[{3, 4}]
@@ -100,6 +85,65 @@ turns counts into a probability distribution:
 In[1]:= Normalize[{1, 1}, Total]
 Out[1]= {1/2, 1/2}
 ```
+
+## Algorithm
+
+```text
+ Normalize[v]      — v / Norm[v], leaving the zero vector unchanged.
+Normalize[z]      — for a scalar (incl. complex) z, z / Abs[z].
+                    Norm[z] reduces to Abs[z], so the same code path
+                    handles scalars.
+```
+
+Normalize[expr,f] — expr / f[expr], same zero short-circuit.
+
+We delegate the heavy lifting to the evaluator: build
+
+```text
+    Times[expr, Power[f[expr], -1]]
+
+and evaluate it.  Times is Listable, so a single Times call distributes
+```
+
+the scalar reciprocal across every leaf of a vector / matrix / higher-
+
+```text
+rank tensor input.  When the norm evaluates to an exact numeric zero
+```
+
+(Integer 0, Real 0.0, BigInt 0, or MPFR 0) we skip the division and return the input untouched, matching Mathematica's documented behaviour that "zero vectors are returned unchanged."
+
+Arity diagnostics:
+
+```text
+  Normalize[]            -> `Normalize::argt`, call left unevaluated.
+  Normalize[a, b, c, …]  -> same.
+```
+
+## Implementation notes
+
+**Algorithm.** `builtin_normalize` returns `expr / f[expr]`, where `f` defaults to `Norm` (which itself reduces to `Abs` for scalars). It builds `f[expr]`, evaluates it (`eval_and_free`), then returns `Times[expr, Power[norm_val, -1]]` evaluated. Because `Times` is `Listable`, the single reciprocal threads across every leaf of a vector / matrix / higher-rank tensor, and the same path handles scalars (including complex `z / Abs[z]`).
+
+**Limits.** The zero short-circuit uses *exact* numeric-zero detection (`norm_is_numeric_zero`: literal Integer/Real/BigInt/MPFR `0`) — a zero vector is returned unchanged, but a symbolic norm that merely happens to vanish is left as a symbolic division so the input stays visible. Arity other than 1 or 2 emits `Normalize::argt`.
+
+- `Protected` (not `Listable` — it acts on the whole vector, not element-wise).
+- `Normalize[v]` is `v / Norm[v]` when `v` is a vector or tensor; the empty list `{}` and any all-zero input is returned unchanged.
+- `Normalize[z]` for a scalar (possibly complex) `z` is `z / Abs[z]`, with `Normalize[0]` returning `0`.
+- `Normalize[expr, f]` is `expr / f[expr]`, again with the zero short-circuit.
+- The short-circuit is triggered only by a literal numeric zero (Integer, Real, BigInt, MPFR) in the evaluated norm — a symbolic norm that happens to be zero stays in the symbolic division so the user can see what they wrote.
+- Wrong arity (`0` or `≥ 3` arguments) prints `Normalize::argt` and leaves the call unevaluated.
+
+**Attributes:** `Protected`.
+
+## References
+
+- Source: [`src/linalg/normalize.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/normalize.c)
+- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_compile_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_linalg.c)
+- Tests: [`tests/test_ndarray_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_linalg.c)
+- Tests: [`tests/test_normalize.c`](https://github.com/stblake/mathilda/blob/main/tests/test_normalize.c)
+
+## Notes & additional examples
 
 ### Notes
 

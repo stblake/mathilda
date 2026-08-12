@@ -5,19 +5,19 @@
 
 ## Description
 
-```text
-Norm[expr]
-    gives the 2-norm of a number, vector, or matrix (Frobenius norm for
-    matrices).
-Norm[expr, p]
-    gives the p-norm: Abs[expr] for scalars; (Sum |xi|^p)^(1/p) for
-    vectors with 1 <= p < Infinity; Max[Abs[expr]] for p == Infinity;
-    induced operator norm for matrices when p is 1, 2, or Infinity.
-```
+**`Norm[expr]`**
 
-## Examples
+gives the 2-norm of a number, vector, or matrix (Frobenius norm for matrices).
 
-All examples below are verified against the current Mathilda build.
+**`Norm[expr, p]`**
+
+gives the p-norm: Abs\[expr\] for scalars; (Sum |xi|^p)^(1/p) for vectors with 1 \<= p \< Infinity; Max\[Abs\[expr\]\] for p == Infinity; induced operator norm for matrices when p is 1, 2, or Infinity.
+
+## Examples (12)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (6)
 
 ```mathematica
 In[1]:= Norm[{x, y, z}]
@@ -39,33 +39,7 @@ In[6]:= Norm[{{a11, a12}, {a21, a22}}, "Frobenius"]
 Out[6]= Sqrt[Abs[a11]^2 + Abs[a12]^2 + Abs[a21]^2 + Abs[a22]^2]
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_norm` uses `get_tensor_dims` to classify the argument and then builds a symbolic norm expression that it evaluates. A rank-0 scalar reduces to `Abs[x]` (the `p` argument is rejected for scalars). For a rank-1 vector (or any tensor when `p` is the string `"Frobenius"`) it flattens to `Expr**` and assembles: `Norm[v, Infinity]` → `Max[Abs[v_i]]`; otherwise (default `p = 2`, or `"Frobenius"` → 2, or a user `p`) → `Power[Sum[Abs[v_i]^p], 1/p]`. Every `Abs`, `Power`, `Plus`, `Max` is created and run through the evaluator (`eval_and_free`), so exact/symbolic/complex entries produce exact symbolic norms.
-
-**Limits.** Genuine matrix p-norms (e.g. the spectral 2-norm via the largest singular value) are not implemented — a rank-≥2 argument with a non-`"Frobenius"` `p` falls through to NULL and the call stays symbolic. Jagged arrays (`rank < 0`) also return NULL.
-
-- `Protected`.
-- For scalars, `Norm[z]` is `Abs[z]`.
-- For vectors, `Norm[v]` defaults to the 2-norm: `Sqrt[v . Conjugate[v]]`.
-- For vectors, `Norm[v, p]` is `Total[Abs[v]^p]^(1/p)`.
-- For vectors, `Norm[v, Infinity]` is the $\infty$-norm given by `Max[Abs[v]]`.
-- `Norm[m, "Frobenius"]` gives the Frobenius norm of a matrix `m`.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/linalg/norm.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/norm.c)
-- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (6)
 
 ```mathematica
 In[1]:= Norm[{3, 4}]
@@ -100,6 +74,45 @@ The norm of a complex vector, taken to 40 significant digits:
 In[1]:= N[Norm[{1, 2, 3}], 40]
 Out[1]= 3.7416573867739413855837487323165493017559
 ```
+
+## Algorithm
+
+Vector and matrix norms.
+
+```text
+  Norm[x]       scalar  -> Abs[x]
+  Norm[v]       vector  -> 2-norm
+  Norm[v, p]    vector  -> p-norm, also Infinity
+  Norm[m, "Frobenius"]  -> Frobenius norm (works on any tensor rank)
+```
+
+Other matrix norms (SVD-based 2-norm, etc.) are not yet implemented and fall through to NULL so the call stays symbolic.
+
+## Implementation notes
+
+**Algorithm.** `builtin_norm` uses `get_tensor_dims` to classify the argument and then builds a symbolic norm expression that it evaluates. A rank-0 scalar reduces to `Abs[x]` (the `p` argument is rejected for scalars). For a rank-1 vector (or any tensor when `p` is the string `"Frobenius"`) it flattens to `Expr**` and assembles: `Norm[v, Infinity]` → `Max[Abs[v_i]]`; otherwise (default `p = 2`, or `"Frobenius"` → 2, or a user `p`) → `Power[Sum[Abs[v_i]^p], 1/p]`. Every `Abs`, `Power`, `Plus`, `Max` is created and run through the evaluator (`eval_and_free`), so exact/symbolic/complex entries produce exact symbolic norms.
+
+**Limits.** Genuine matrix p-norms (e.g. the spectral 2-norm via the largest singular value) are not implemented — a rank-≥2 argument with a non-`"Frobenius"` `p` falls through to NULL and the call stays symbolic. Jagged arrays (`rank < 0`) also return NULL.
+
+- `Protected`.
+- For scalars, `Norm[z]` is `Abs[z]`.
+- For vectors, `Norm[v]` defaults to the 2-norm: `Sqrt[v . Conjugate[v]]`.
+- For vectors, `Norm[v, p]` is `Total[Abs[v]^p]^(1/p)`.
+- For vectors, `Norm[v, Infinity]` is the $\infty$-norm given by `Max[Abs[v]]`.
+- `Norm[m, "Frobenius"]` gives the Frobenius norm of a matrix `m`.
+
+**Attributes:** `Protected`.
+
+## References
+
+- Source: [`src/linalg/norm.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/norm.c)
+- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_diagonal.c`](https://github.com/stblake/mathilda/blob/main/tests/test_diagonal.c)
+- Tests: [`tests/test_fit.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fit.c)
+- Tests: [`tests/test_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linalg.c)
+
+## Notes & additional examples
 
 ### Notes
 

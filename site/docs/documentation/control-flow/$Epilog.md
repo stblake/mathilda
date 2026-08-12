@@ -5,34 +5,15 @@
 
 ## Description
 
-```text
-$Epilog
-    is a symbol whose value, if any, is evaluated once when the
-    Mathilda session terminates (via Quit[] or EOF).
-```
+**`$Epilog`**
 
-## Examples
+is a symbol whose value, if any, is evaluated once when the Mathilda session terminates (via Quit\[\] or EOF).
 
-_No verified examples yet for this function._
+## Examples (2)
 
-## Implementation notes
+Every input below was run against the current Mathilda build and its output recorded.
 
-A REPL session hook, not a builtin. Registered (docstring only) in `repl_hooks_init` (`src/repl_hooks.c`). Unlike the per-line hooks, `$Epilog` is a bare symbol evaluated once at session teardown: `repl.c` calls `repl_apply_epilog()` on `Quit[]` or EOF, which — if an OwnValue is set — evaluates the symbol `$Epilog` (not a call) for its side effects and discards the result. Unset = no-op.
-
-**Attributes:** none registered.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/repl_hooks.c`](https://github.com/stblake/mathilda/blob/main/src/repl_hooks.c)
-- Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (2)
 
 ```mathematica
 In[1]:= $Epilog := Print["bye"]
@@ -41,6 +22,19 @@ Out[1]= Null
 In[2]:= Quit[]
 "bye"
 ```
+
+## Implementation notes
+
+A REPL session hook, not a builtin. Registered (docstring only) in `repl_hooks_init` (`src/repl_hooks.c`). Unlike the per-line hooks, `$Epilog` is a bare symbol evaluated once at session teardown: `repl.c` calls `repl_apply_epilog()` on `Quit[]` or EOF, which — if an OwnValue is set — evaluates the symbol `$Epilog` (not a call) for its side effects and discards the result. Unset = no-op.
+
+**Attributes:** none registered.
+
+## References
+
+- Source: [`src/repl_hooks.c`](https://github.com/stblake/mathilda/blob/main/src/repl_hooks.c)
+- Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+
+## Notes & additional examples
 
 ### Notes
 

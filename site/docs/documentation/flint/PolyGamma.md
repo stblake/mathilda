@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-FLINT`PolyGamma[n, z] gives the numeric value of the n-th derivative of the digamma function (n = 0 is digamma) via FLINT (acb_polygamma), to the precision of the arguments. Unevaluated for symbolic arguments or at a pole.
-```
+FLINT\`PolyGamma\[n, z\] gives the numeric value of the n-th derivative of the digamma function (n = 0 is digamma) via FLINT (acb\_polygamma), to the precision of the arguments. Unevaluated for symbolic arguments or at a pole.
 
-## Examples
+## Examples (1)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= FLINT`PolyGamma[1, 2]
@@ -21,10 +21,6 @@ Out[1]= 0.6449340668482264
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 

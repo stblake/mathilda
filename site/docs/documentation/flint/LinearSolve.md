@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-FLINT`LinearSolve[m, b] solves the square system m.x == b exactly via FLINT (fmpq_mat_solve) when m is a nonsingular rational matrix and b a rational vector or matrix. Returns unevaluated for a non-square, singular, or non-rational system.
-```
+FLINT\`LinearSolve\[m, b\] solves the square system m.x == b exactly via FLINT (fmpq\_mat\_solve) when m is a nonsingular rational matrix and b a rational vector or matrix. Returns unevaluated for a non-square, singular, or non-rational system.
 
-## Examples
+## Examples (1)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= FLINT`LinearSolve[{{1, 2}, {3, 4}}, {5, 6}]
@@ -21,10 +21,6 @@ Out[1]= {-4, 9/2}
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 

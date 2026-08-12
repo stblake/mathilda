@@ -5,30 +5,26 @@
 
 ## Description
 
-```text
-UpperTriangularMatrixQ[m]
-    gives True if m is upper triangular, and False otherwise.
-UpperTriangularMatrixQ[m, k]
-    gives True if m is upper triangular starting from the k-th
-    diagonal (every entry m[i,j] with j - i < k is zero), and
-    False otherwise.  Positive k refers to superdiagonals above
-    the main diagonal; negative k refers to subdiagonals below it.
-    Works for rectangular as well as square matrices.
+**`UpperTriangularMatrixQ[m]`**
 
-Option:
-    Tolerance -> Automatic   numeric tolerance for approximate matrices.
+gives True if m is upper triangular, and False otherwise.
 
-With Tolerance -> t, sub-diagonal entries e are taken to be zero
-when Abs[e] <= t evaluates to True.  Without a tolerance the test
-is structural: only literal numeric zeros (Integer 0, Real 0.0,
-BigInt 0) count as zero.  Returns False on non-matrix, ragged,
-empty (i.e. {}), or higher-rank tensor inputs; an n-by-0 matrix
-(e.g. {{}, {}}) is vacuously upper triangular.
-```
+**`UpperTriangularMatrixQ[m, k]`**
 
-## Examples
+gives True if m is upper triangular starting from the k-th diagonal (every entry m\[i,j\] with j - i \< k is zero), and False otherwise.  Positive k refers to superdiagonals above the main diagonal; negative k refers to subdiagonals below it. Works for rectangular as well as square matrices.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+Option: Tolerance -\> Automatic   numeric tolerance for approximate matrices. With Tolerance -\> t, sub-diagonal entries e are taken to be zero when Abs\[e\] \<= t evaluates to True.  Without a tolerance the test is structural: only literal numeric zeros (Integer 0, Real 0.0, BigInt 0) count as zero.  Returns False on non-matrix, ragged, empty (i.e. {}), or higher-rank tensor inputs; an n-by-0 matrix (e.g. {{}, {}}) is vacuously upper triangular.
+
+</details>
+
+## Examples (13)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (7)
 
 ```mathematica
 In[1]:= UpperTriangularMatrixQ[{{a, b, c}, {0, e, f}, {0, 0, g}}]
@@ -53,27 +49,14 @@ In[7]:= UpperTriangularMatrixQ[IdentityMatrix[5]]
 Out[7]= True
 ```
 
-## Implementation notes
+### Options (1)
 
-`builtin_upper_triangular_matrix_q` validates that the argument is a non-empty rectangular `List` of equal-length `List`s (no deeper nesting), then returns `True` iff every entry strictly below the `k`-th diagonal (column−row `< k`, default `k = 0`) is zero. The optional second Integer argument selects the diagonal `k`; a `Tolerance -> t` option relaxes the zero test (otherwise a structural zero check is used). Bad arguments/options emit `UpperTriangularMatrixQ::nonopt` / `::argt`; shape rejections return `False`.
+```mathematica
+In[8]:= UpperTriangularMatrixQ[{{1., 2., 3.}, {10^-12, 4., 5.}, {0, 10^-13, 6.}}, Tolerance -> 10^-12]
+Out[8]= True
+```
 
-- `Protected`.
-- Works for rectangular matrices, not only square -- only the entry-zero
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
-- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= UpperTriangularMatrixQ[{{1, 2}, {0, 3}}]
@@ -103,6 +86,51 @@ For approximate matrices, a `Tolerance` lets tiny round-off entries below the di
 In[1]:= UpperTriangularMatrixQ[{{1.0, 2}, {1*10^-15, 3}}, Tolerance -> 10^-10]
 Out[1]= True
 ```
+
+## Implementation notes
+
+`builtin_upper_triangular_matrix_q` validates that the argument is a non-empty rectangular `List` of equal-length `List`s (no deeper nesting), then returns `True` iff every entry strictly below the `k`-th diagonal (column−row `< k`, default `k = 0`) is zero. The optional second Integer argument selects the diagonal `k`; a `Tolerance -> t` option relaxes the zero test (otherwise a structural zero check is used). Bad arguments/options emit `UpperTriangularMatrixQ::nonopt` / `::argt`; shape rejections return `False`.
+
+- `Protected`.
+- Works for rectangular matrices, not only square -- only the entry-zero
+  predicate and the shape constraints matter.
+- Default test is structural: only literal numeric zeros (`Integer 0`,
+  `Real 0.0`, `BigInt 0`) count as zero.  Symbolic sub-diagonal entries
+  fail the test, so the predicate is conservative.
+- Returns `False` (rather than leaving unevaluated) on non-list, scalar,
+  vector, ragged, or higher-rank tensor inputs.  `{}` is rejected; an
+  `n`-by-`0` matrix (e.g. `{{}, {}}`) is vacuously upper triangular and
+  returns `True`.
+- Zero positional arguments emits a Mathematica-compatible
+
+  ```
+  UpperTriangularMatrixQ::argt: UpperTriangularMatrixQ called with 0 arguments; 1 or 2 arguments are expected.
+  ```
+
+  to `stderr` and leaves the call unevaluated.
+
+- More than two positional arguments (or any non-`Rule` junk in the
+  option region) emits
+
+  ```
+  UpperTriangularMatrixQ::nonopt: Options expected (instead of <expr>) beyond position 2 in UpperTriangularMatrixQ[...]. An option must be a rule or a list of rules.
+  ```
+
+  to `stderr` and leaves the call unevaluated.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[Rule](../../assignment-and-rules/Rule/)
+
+## References
+
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_upper_triangular_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_upper_triangular_matrix_q.c)
+
+## Notes & additional examples
 
 ### Notes
 

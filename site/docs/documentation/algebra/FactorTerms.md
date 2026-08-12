@@ -5,20 +5,32 @@
 
 ## Description
 
-```text
-FactorTerms[poly]
-    pulls out any overall numerical factor in poly.
-FactorTerms[poly, x]
-    pulls out any overall factor in poly that does not depend on x.
-FactorTerms[poly, {x1, x2, ...}]
-    pulls out any overall factor in poly that does not depend on any of the xi, then progressively factors with respect to smaller subsets {x1, ..., x_{k-1}}.
-FactorTerms[poly, x] extracts the content of poly with respect to x.
+**`FactorTerms[poly]`**
+
+pulls out any overall numerical factor in poly.
+
+**`FactorTerms[poly, x]`**
+
+pulls out any overall factor in poly that does not depend on x.
+
+**`FactorTerms[poly, {x1, x2, ...}]`**
+
+pulls out any overall factor in poly that does not depend on any of the xi, then progressively factors with respect to smaller subsets {x1, ..., x\_{k-1}}.
+
+**`FactorTerms[poly, x] extracts the content of poly with respect to x.`**
+
+<details>
+<summary>Notes</summary>
+
 FactorTerms automatically threads over lists, equations, inequalities and logic functions.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (11)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= FactorTerms[3 + 6x + 3x^2]
@@ -39,38 +51,14 @@ Out[5]= {5 (-3 + x^2), 7 (-11 + x^4), 8 (-3 + x^8)}
 In[6]:= FactorTerms[1 < 77 x^3 - 21 x + 35 < 2]
 Out[6]= 1 < 7 (5 - 3 x + 11 x^3) < 2
 
-In[7]:= f = 2 x^2 y z + 2 x^2 y + 4 x^2 z + 4 x^2 + 4 y^2 z^2 + 4 z y^2
-Out[7]= 4 x^2 + 2 x^2 y + 4 x^2 z + 2 x^2 y z + 4 y^2 z + 4 y^2 z^2
+In[7]:= f = 2 x^2 y z + 2 x^2 y + 4 x^2 z + 4 x^2 + 4 y^2 z^2 + 4 z y^2 + 8 z^2 y + 2 z y - 6 y - 12 z - 12; FactorTerms[f, x]
+Out[7]= 2 (2 + y + 2 z + y z) (-3 + x^2 + 2 y z)
 
 In[8]:= FactorTerms[f, {x, y}]
-Out[8]= 2 (1 + z) (2 x^2 + x^2 y + 2 y^2 z)
+Out[8]= 2 (2 + y) (1 + z) (-3 + x^2 + 2 y z)
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_factorterms` (in `src/poly/facpoly_factorterms.inc`, compiled into `facpoly.c`) pulls out the content of a polynomial without factoring the polynomial part. It threads over `List`/equation/inequality/logic heads (`ft_is_threading_head`), then calls the shared engine `ft_compute_list` and multiplies the resulting factor list back into a single `Times`.
-
-`ft_compute_list` first `Together`-normalises and splits into numerator/denominator. It collects and sorts the numerator's variables, then: (1) extracts the **numerical content** via `ft_content_wrt_set` (content with respect to *all* variables over an empty ground ring, i.e. the integer GCD of coefficients) and divides it out with `ft_divide_out` (exact polynomial division, falling back to symbolic `Times[poly, content^{-1}]`); (2) for a 2-arg call `FactorTerms[poly, {x_1,…,x_k}]`, peels the content with respect to progressively smaller variable subsets, where `ft_content_wrt_set` recursively computes the multivariate `poly_gcd_internal` of the coefficients of each monomial in the chosen variables over the shrinking ground ring; (3) appends the final residue (re-multiplied by `1/den` to round-trip rational inputs).
-
-**Data structures.** `Expr*` polynomials throughout; `poly_gcd_internal` (multivariate polynomial GCD) is the workhorse for symbolic content; variable lists are `Expr**` sorted with `compare_expr_ptrs`.
-
-- `Protected`.
-- Auto-threads over `List`, `Equal`, `Unequal`, `Less`, `LessEqual`,
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/poly/facpoly_factorterms.inc`](https://github.com/stblake/mathilda/blob/main/src/poly/facpoly_factorterms.inc)
-- Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (3)
 
 ```mathematica
 In[1]:= FactorTerms[6 x^2 + 4 x]
@@ -86,6 +74,40 @@ Out[1]= 2 (1 + 2 x + x^2)
 In[1]:= FactorTerms[3 x^2 y + 6 x y^2, x]
 Out[1]= 3 y (x^2 + 2 x y)
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_factorterms` (in `src/poly/facpoly_factorterms.inc`, compiled into `facpoly.c`) pulls out the content of a polynomial without factoring the polynomial part. It threads over `List`/equation/inequality/logic heads (`ft_is_threading_head`), then calls the shared engine `ft_compute_list` and multiplies the resulting factor list back into a single `Times`.
+
+`ft_compute_list` first `Together`-normalises and splits into numerator/denominator. It collects and sorts the numerator's variables, then: (1) extracts the **numerical content** via `ft_content_wrt_set` (content with respect to *all* variables over an empty ground ring, i.e. the integer GCD of coefficients) and divides it out with `ft_divide_out` (exact polynomial division, falling back to symbolic `Times[poly, content^{-1}]`); (2) for a 2-arg call `FactorTerms[poly, {x_1,…,x_k}]`, peels the content with respect to progressively smaller variable subsets, where `ft_content_wrt_set` recursively computes the multivariate `poly_gcd_internal` of the coefficients of each monomial in the chosen variables over the shrinking ground ring; (3) appends the final residue (re-multiplied by `1/den` to round-trip rational inputs).
+
+**Data structures.** `Expr*` polynomials throughout; `poly_gcd_internal` (multivariate polynomial GCD) is the workhorse for symbolic content; variable lists are `Expr**` sorted with `compare_expr_ptrs`.
+
+- `Protected`.
+- Auto-threads over `List`, `Equal`, `Unequal`, `Less`, `LessEqual`,
+  `Greater`, `GreaterEqual`, `And`, `Or`, `Not`, `Xor`.
+- Together-normalises rational inputs before extracting content from the
+  numerator, then divides the denominator back through, so rational
+  functions round-trip.
+- Numerical content over `Z` is computed via the integer GCD of monomial
+  coefficients. Gaussian-integer content (e.g. `5 I` from `5 I x^2 + ...`)
+  is not extracted as a Gaussian unit; the integer GCD `5` is returned
+  instead, with the leading factor of `I` left inside the residue. The
+  resulting factorization is mathematically equivalent.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[List](../../other-advanced/List/), [Equal](../../comparisons/Equal/), [Unequal](../../comparisons/Unequal/), [Less](../../comparisons/Less/), [LessEqual](../../comparisons/LessEqual/), [Greater](../../comparisons/Greater/), [GreaterEqual](../../comparisons/GreaterEqual/), [I](../../mathematical-constants/I/)
+
+## References
+
+- Source: [`src/poly/facpoly_factorterms.inc`](https://github.com/stblake/mathilda/blob/main/src/poly/facpoly_factorterms.inc)
+- Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_factor_terms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_factor_terms.c)
+
+## Notes & additional examples
 
 ### Notes
 

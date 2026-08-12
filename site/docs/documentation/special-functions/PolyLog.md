@@ -5,25 +5,30 @@
 
 ## Description
 
-```text
-PolyLog[n, z]
-    gives the polylogarithm Li_n(z) = Sum_{k>=1} z^k/k^n.
-PolyLog[n, p, z]
-    gives the Nielsen generalized polylogarithm S_{n,p}(z) (accepted but
-left unevaluated).
-Special arguments reduce in closed form: PolyLog[n, 0] = 0,
-PolyLog[1, z] = -Log[1-z], PolyLog[0, z] = z/(1-z), negative integer
-orders give rational functions, PolyLog[n, 1] = Zeta[n] and
-PolyLog[n, -1] = (2^(1-n)-1) Zeta[n] for integer n >= 2, with exact forms
-for PolyLog[2, 1/2] and PolyLog[3, 1/2]. Inexact real or complex arguments
-evaluate numerically at machine or arbitrary (MPFR) precision via a power
-series or the Jonquiere/zeta expansion. There is a branch cut from 1 to
-Infinity. Listable.
-```
+**`PolyLog[n, z]`**
 
-## Examples
+gives the polylogarithm Li\_n(z) = Sum\_{k\>=1} z^k/k^n.
 
-All examples below are verified against the current Mathilda build.
+**`PolyLog[n, p, z]`**
+
+gives the Nielsen generalized polylogarithm S\_{n,p}(z) (accepted but
+
+**`PolyLog[1, z] = -Log[1-z], PolyLog[0, z] = z/(1-z), negative integer`**
+
+**`PolyLog[n, -1] = (2^(1-n)-1) Zeta[n] for integer n >= 2, with exact forms`**
+
+<details>
+<summary>Notes</summary>
+
+left unevaluated). Special arguments reduce in closed form: PolyLog\[n, 0\] = 0, orders give rational functions, PolyLog\[n, 1\] = Zeta\[n\] and for PolyLog\[2, 1/2\] and PolyLog\[3, 1/2\]. Inexact real or complex arguments evaluate numerically at machine or arbitrary (MPFR) precision via a power series or the Jonquiere/zeta expansion. There is a branch cut from 1 to Infinity. Listable.
+
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= PolyLog[3, 1/2]
@@ -33,22 +38,7 @@ In[2]:= PolyLog[2, 0.9]
 Out[2]= 1.29971
 ```
 
-## Implementation notes
-
-**Attributes:** `Listable`, `NumericFunction`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
-- Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (8)
 
 At `z = 1` the polylogarithm is the Riemann zeta value; `PolyLog[1, z]` is the
 ordinary logarithm:
@@ -93,6 +83,63 @@ Out[1]= 0.58224052646501250590265632015968010874412
 In[2]:= N[PolyLog[3, 1/2 + I/2], 30]
 Out[2]= 0.48615953708556007896672148708 + 0.5700774070887689781956097575898*I
 ```
+
+## Algorithm
+
+Mathilda -- the polylogarithm PolyLog.
+
+```text
+  PolyLog[n, z]     Li_n(z) = Sum_{k>=1} z^k / k^n      (|z| < 1; analytic
+                    continuation elsewhere, branch cut [1, Infinity))
+  PolyLog[n, p, z]  Nielsen generalized polylogarithm S_{n,p}(z).  Accepted
+                    for surface compatibility but left symbolic -- there is
+                    no closed-form / numeric engine for it here.
+```
+
+Evaluation is layered so each kind of argument takes the cheapest exact or fastest numeric route, mirroring src/gamma.c and src/zeta.c:
+
+```text
+  exact special values (any z) ->  closed forms
+      PolyLog[n, 0]  = 0
+      PolyLog[1, z]  = -Log[1 - z]
+      PolyLog[0, z]  = z/(1 - z)
+      PolyLog[-m, z] = Eulerian-number rational function   (m >= 1)
+      PolyLog[n, 1]  = Zeta[n]                              (integer n >= 2)
+      PolyLog[n, -1] = (2^(1-n) - 1) Zeta[n]                (integer n >= 2)
+      PolyLog[2, 1/2] = Pi^2/12 - Log[2]^2/2
+      PolyLog[3, 1/2] = Log[2]^3/6 - Pi^2 Log[2]/12 + 7 Zeta[3]/8
+  numeric (>= 1 inexact operand, all numeric):
+      real s, real -1 < z < 1   -> direct real MPFR power series (fast path)
+      |z| <= 1/2                -> direct power series (complex MPFR)
+      1/2 < |z|, |ln z| < 2 Pi  -> Jonquiere / zeta expansion (DLMF 25.12.11/12)
+      otherwise                 -> stays symbolic
+  everything else -> stays symbolic (return NULL)
+
+The zeta expansion needs zeta(s - k) and Gamma(1 - s).  For real order these
+```
+
+are evaluated directly with MPFR (mpfr_zeta / mpfr_gamma); for the rare complex-order case they are obtained by evaluating the Zeta / Gamma builtins (which carry their own arbitrary-precision complex kernels).
+
+Attributes: Listable, NumericFunction, Protected.
+
+## Implementation notes
+
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+
+## See also
+
+[Gamma](../../special-functions/Gamma/), [Zeta](../../special-functions/Zeta/)
+
+## References
+
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
+- Tests: [`tests/test_cherry_dilog.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_fullsimplify.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fullsimplify.c)
+- Tests: [`tests/test_integrate_diffunderint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_diffunderint.c)
+
+## Notes & additional examples
 
 ### Notes
 

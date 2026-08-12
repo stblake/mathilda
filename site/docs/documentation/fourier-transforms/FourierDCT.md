@@ -5,21 +5,26 @@
 
 ## Description
 
-```text
-FourierDCT[list]
-    gives the Fourier discrete cosine transform (type II) of list.
-FourierDCT[list, m]
-    gives the type-m transform, m one of 1..4 or "I".."IV".
+**`FourierDCT[list]`**
 
-The four real orthonormal types are self/pair-inverse: I and IV invert
-themselves; II and III invert each other. Exact input is numericalised
-with N first; list may be a rectangular nested array (transformed per
-axis). Machine and arbitrary-precision (MPFR) input are both supported.
-```
+gives the Fourier discrete cosine transform (type II) of list.
 
-## Examples
+**`FourierDCT[list, m]`**
 
-All examples below are verified against the current Mathilda build.
+gives the type-m transform, m one of 1..4 or "I".."IV".
+
+<details>
+<summary>Notes</summary>
+
+The four real orthonormal types are self/pair-inverse: I and IV invert themselves; II and III invert each other. Exact input is numericalised with N first; list may be a rectangular nested array (transformed per axis). Machine and arbitrary-precision (MPFR) input are both supported.
+
+</details>
+
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= FourierDCT[{0, 0, 1, 0, 1}]
@@ -36,11 +41,13 @@ Out[3]= {2.0 + 3.0*I, -0.112085 - 1.46508*I, -0.707107 + 0.707107*I, 1.57716 - 1
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[N](../../arithmetic/N/), [NDArray](../../linear-algebra/NDArray/)
 
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/fourier-transforms.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/fourier-transforms.md)
+- Tests: [`tests/test_compile_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_transforms.c)
+- Tests: [`tests/test_fourier.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fourier.c)

@@ -5,14 +5,15 @@
 
 ## Description
 
-```text
-CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.
-CoefficientList[poly, {var1, var2, ...}] gives an array of coefficients of the variables.
-```
+**`CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.`**
 
-## Examples
+**`CoefficientList[poly, {var1, var2, ...}] gives an array of coefficients of the variables.`**
 
-All examples below are verified against the current Mathilda build.
+## Examples (9)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= CoefficientList[1 + 6 x - x^4, x]
@@ -25,32 +26,7 @@ In[3]:= CoefficientList[1 + a x^2 + b x y + c y^2, {x, y}]
 Out[3]= {{1, 0, c}, {0, b, 0}, {a, 0, 0}}
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_coefficientlist` (in `src/poly/poly.c`) returns the dense coefficient array of a polynomial. It `expr_expand`s the input, computes each variable's degree with `get_degree_poly`, then the recursive worker `coeff_list_rec` builds a nested `List` whose shape mirrors the variable order. At each level it pulls all coefficients `c_0..c_d` of the current variable — preferring the bulk extractor `get_all_coeffs_expanded` (single pass over the expanded form) and falling back to `get_coeff_expanded` per degree — and recurses on each coefficient for the next variable.
-
-**Data structures.** A `int* max_degrees` array sizes each axis; coefficients are produced as `Expr*` and assembled into nested `List` nodes. The bulk path avoids the naive (degree+1)-passes-per-level cost.
-
-- `Protected`.
-- Gives an array of coefficients starting with power 0.
-- Returns a full rectangular array for multiple variables. Combinations of powers that do not appear in `poly` give zeros in the array.
-- Automatically expands the polynomial internally.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 3 (dense polynomial coefficient vectors).
-- Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
-- Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (6)
 
 ```mathematica
 In[1]:= CoefficientList[x^2 + 3 x + 2, x]
@@ -81,6 +57,28 @@ Out[1]= {1, 6, 15, 20, 15, 6, 1}
 In[1]:= CoefficientList[Expand[(1 + x + x^2)^4], x]
 Out[1]= {1, 4, 10, 16, 19, 16, 10, 4, 1}
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_coefficientlist` (in `src/poly/poly.c`) returns the dense coefficient array of a polynomial. It `expr_expand`s the input, computes each variable's degree with `get_degree_poly`, then the recursive worker `coeff_list_rec` builds a nested `List` whose shape mirrors the variable order. At each level it pulls all coefficients `c_0..c_d` of the current variable — preferring the bulk extractor `get_all_coeffs_expanded` (single pass over the expanded form) and falling back to `get_coeff_expanded` per degree — and recurses on each coefficient for the next variable.
+
+**Data structures.** A `int* max_degrees` array sizes each axis; coefficients are produced as `Expr*` and assembled into nested `List` nodes. The bulk path avoids the naive (degree+1)-passes-per-level cost.
+
+- `Protected`.
+- Gives an array of coefficients starting with power 0.
+- Returns a full rectangular array for multiple variables. Combinations of powers that do not appear in `poly` give zeros in the array.
+- Automatically expands the polynomial internally.
+
+**Attributes:** `Protected`.
+
+## References
+
+- Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 3 (dense polynomial coefficient vectors).
+- Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
+- Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
+
+## Notes & additional examples
 
 ### Notes
 

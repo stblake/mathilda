@@ -5,15 +5,15 @@
 
 ## Description
 
-```text
-ExpToTrig[expr]
-    rewrites exponentials and logarithms in expr in terms of circular and
-    hyperbolic trigonometric functions when possible.
-```
+**`ExpToTrig[expr]`**
 
-## Examples
+rewrites exponentials and logarithms in expr in terms of circular and hyperbolic trigonometric functions when possible.
 
-All examples below are verified against the current Mathilda build.
+## Examples (7)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= ExpToTrig[Exp[I x]]
@@ -24,6 +24,28 @@ Out[2]= (2*I) ArcTan[x]
 
 In[3]:= ExpToTrig[Exp[I x] == -1]
 Out[3]= Cos[x] + I Sin[x] == -1
+```
+
+### Applications (4)
+
+```mathematica
+In[1]:= ExpToTrig[Exp[x]]
+Out[1]= Cosh[x] + Sinh[x]
+```
+
+```mathematica
+In[1]:= ExpToTrig[Exp[I x]]
+Out[1]= Cos[x] + I Sin[x]
+```
+
+```mathematica
+In[1]:= ExpToTrig[(E^x - E^(-x))/2]
+Out[1]= Sinh[x]
+```
+
+```mathematica
+In[1]:= ExpToTrig[E^(I x) + E^(-I x)]
+Out[1]= 2 Cos[x]
 ```
 
 ## Implementation notes
@@ -52,38 +74,18 @@ other trig builtins.
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[TrigToExp](../../elementary-functions/TrigToExp/)
 
 ## References
 
 - Source: [`src/simp/trigsimp.c`](https://github.com/stblake/mathilda/blob/main/src/simp/trigsimp.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
+- Tests: [`tests/test_simp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_simp.c)
+- Tests: [`tests/test_trigexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_trigexpand.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= ExpToTrig[Exp[x]]
-Out[1]= Cosh[x] + Sinh[x]
-```
-
-```mathematica
-In[1]:= ExpToTrig[Exp[I x]]
-Out[1]= Cos[x] + I Sin[x]
-```
-
-```mathematica
-In[1]:= ExpToTrig[(E^x - E^(-x))/2]
-Out[1]= Sinh[x]
-```
-
-```mathematica
-In[1]:= ExpToTrig[E^(I x) + E^(-I x)]
-Out[1]= 2 Cos[x]
-```
 
 ### Notes
 

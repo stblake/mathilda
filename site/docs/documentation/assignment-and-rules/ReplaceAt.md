@@ -5,28 +5,30 @@
 
 ## Description
 
-```text
-ReplaceAt[expr, rules, n]
-    transforms expr by replacing the n-th element using rules.
-ReplaceAt[expr, rules, {i, j, ...}]
-    replaces the part of expr at position {i, j, ...}.
-ReplaceAt[expr, rules, {{i1, j1, ...}, {i2, j2, ...}, ...}]
-    replaces parts at several positions.
+**`ReplaceAt[expr, rules, n]`**
 
-Rules may be a single Rule/RuleDelayed or a list of them; rules are tried
-in order and the first match wins. Negative indices count from the end;
-0 targets the head. All and Span specifications are supported. On an
-association a position is a key, Key[k], or a positional index over the
-entries, and the rules are tried against the value. Repeated positions
-cause rules to be applied repeatedly to that part. ReplaceAt[expr, rules,
-{}] is an empty list of positions and replaces nothing, while {{}} is the
-position of expr itself. A position that does not exist leaves ReplaceAt
-unevaluated.
-```
+transforms expr by replacing the n-th element using rules.
 
-## Examples
+**`ReplaceAt[expr, rules, {i, j, ...}]`**
 
-All examples below are verified against the current Mathilda build.
+replaces the part of expr at position {i, j, ...}.
+
+**`ReplaceAt[expr, rules, {{i1, j1, ...}, {i2, j2, ...}, ...}]`**
+
+replaces parts at several positions.
+
+<details>
+<summary>Notes</summary>
+
+Rules may be a single Rule/RuleDelayed or a list of them; rules are tried in order and the first match wins. Negative indices count from the end; 0 targets the head. All and Span specifications are supported. On an association a position is a key, Key\[k\], or a positional index over the entries, and the rules are tried against the value. Repeated positions cause rules to be applied repeatedly to that part. ReplaceAt\[expr, rules, {}\] is an empty list of positions and replaces nothing, while {{}} is the position of expr itself. A position that does not exist leaves ReplaceAt unevaluated.
+
+</details>
+
+## Examples (13)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= ReplaceAt[{a, a, a, a}, a -> xx, 2]
@@ -54,37 +56,7 @@ In[8]:= ReplaceAt[{{a, a}, {a, a}}, a -> xx, {All, 2}]
 Out[8]= {{a, xx}, {a, xx}}
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_replace_at` (`src/replace.c`) applies rules at one or more explicit *positions* rather than by structural matching everywhere. It parses the rule(s) with `parse_replace_rules` into a `ReplaceRule[]`, then disambiguates the position argument: a non-empty `List` whose first element is itself a `List` is a list of paths (applied sequentially, repeated positions re-apply the rules); otherwise it is a single path (a bare index or a `List` of indices). Navigation is `replaceat_at_path`, which consumes one index per level: index `0` descends into the head, a positive/negative integer selects an argument (negative counts from the end), `All` recurses into every argument, and a `Span[start, stop, step]` walks a strided slice. When the path is exhausted at a node, the rules are matched against *that node only* via the same `match`/`replace_bindings` machinery used by `Replace`/`ReplaceAll`; the first matching rule's bound replacement is substituted. Sub-trees off the targeted path are deep-copied unchanged.
-
-**Data structures.** `ReplaceRule[]` (borrowed pattern/replacement pointers); the path is an `Expr**` slice advanced by pointer arithmetic (`path + 1`, `plen - 1`) as the recursion descends.
-
-- `Protected`.
-- `rules` may be a single `Rule` (`->`), `RuleDelayed` (`:>`), or a list of such rules. The rules are tried in order; the first one that applies wins. If no rule matches at a targeted position, the part is left unchanged.
-- For `RuleDelayed`, the right-hand side is evaluated separately for each match after substituting bound pattern variables.
-- Negative integer indices count from the end. The literal index `0` targets the head of an expression.
-- Path components may be integers, the symbol `All` (selects every child at that level), or `Span` expressions such as `i ;; j` or `i ;; j ;; k` (including `UpTo[n]` bounds).
-- Works on expressions with any head (not just `List`); after substitution the evaluator re-applies canonical ordering for `Orderless` heads such as `Plus` and `Times`.
-- On an `Association` a position is a key, `Key[k]`, or a positional index over the entries, and the rules are tried against the *value*; `All`, `Span` and `0` work there too.
-- The position list uses the same form as is returned by `Position`. `ReplaceAt[expr, rules, {}]` is an **empty list of positions** and replaces nothing; the position of the whole expression is the empty path, `{{}}`.
-- A position that does not exist — an out-of-range index, an absent key, a malformed `Span`, or a path that runs into an atom — leaves `ReplaceAt` unevaluated, as `Part` does for `{a, b, c}[[99]]`.
-- Position resolution is shared with [`MapAt`](../data-structures/MapAt.md) via one walker (`expr_apply_at_path`, `src/part.c`), so the two agree on every position spec by construction.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
-- Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= ReplaceAt[{a, b, c, d}, x_ -> X, 2]
@@ -110,6 +82,37 @@ Out[1]= 2 + x^2 + x^3
 In[1]:= ReplaceAt[{1, 2, 3, 4, 5}, n_ :> n^2, {2 ;; 4}]
 Out[1]= {1, 4, 9, 16, 5}
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_replace_at` (`src/replace.c`) applies rules at one or more explicit *positions* rather than by structural matching everywhere. It parses the rule(s) with `parse_replace_rules` into a `ReplaceRule[]`, then disambiguates the position argument: a non-empty `List` whose first element is itself a `List` is a list of paths (applied sequentially, repeated positions re-apply the rules); otherwise it is a single path (a bare index or a `List` of indices). Navigation is `replaceat_at_path`, which consumes one index per level: index `0` descends into the head, a positive/negative integer selects an argument (negative counts from the end), `All` recurses into every argument, and a `Span[start, stop, step]` walks a strided slice. When the path is exhausted at a node, the rules are matched against *that node only* via the same `match`/`replace_bindings` machinery used by `Replace`/`ReplaceAll`; the first matching rule's bound replacement is substituted. Sub-trees off the targeted path are deep-copied unchanged.
+
+**Data structures.** `ReplaceRule[]` (borrowed pattern/replacement pointers); the path is an `Expr**` slice advanced by pointer arithmetic (`path + 1`, `plen - 1`) as the recursion descends.
+
+- `Protected`.
+- `rules` may be a single `Rule` (`->`), `RuleDelayed` (`:>`), or a list of such rules. The rules are tried in order; the first one that applies wins. If no rule matches at a targeted position, the part is left unchanged.
+- For `RuleDelayed`, the right-hand side is evaluated separately for each match after substituting bound pattern variables.
+- Negative integer indices count from the end. The literal index `0` targets the head of an expression.
+- Path components may be integers, the symbol `All` (selects every child at that level), or `Span` expressions such as `i ;; j` or `i ;; j ;; k` (including `UpTo[n]` bounds).
+- Works on expressions with any head (not just `List`); after substitution the evaluator re-applies canonical ordering for `Orderless` heads such as `Plus` and `Times`.
+- On an `Association` a position is a key, `Key[k]`, or a positional index over the entries, and the rules are tried against the *value*; `All`, `Span` and `0` work there too.
+- The position list uses the same form as is returned by `Position`. `ReplaceAt[expr, rules, {}]` is an **empty list of positions** and replaces nothing; the position of the whole expression is the empty path, `{{}}`.
+- A position that does not exist — an out-of-range index, an absent key, a malformed `Span`, or a path that runs into an atom — leaves `ReplaceAt` unevaluated, as `Part` does for `{a, b, c}[[99]]`.
+- Position resolution is shared with [`MapAt`](../data-structures/MapAt.md) via one walker (`expr_apply_at_path`, `src/part.c`), so the two agree on every position spec by construction.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[ReplaceAll](../../assignment-and-rules/ReplaceAll/), [Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/), [Span](../../structural-manipulation/Span/), [List](../../other-advanced/List/), [Orderless](../../expression-information/Orderless/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/)
+
+## References
+
+- Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
+- Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
+- Tests: [`tests/test_replaceat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_replaceat.c)
+
+## Notes & additional examples
 
 ### Notes
 

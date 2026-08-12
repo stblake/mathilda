@@ -5,20 +5,15 @@
 
 ## Description
 
-```text
-TrigFactor[expr]
-    factors trigonometric functions in expr.
-    TrigFactor operates on both circular and hyperbolic functions.
-    TrigFactor factors polynomials in trigonometric functions and collapses
-    Pythagorean, angle-addition, and double-angle identities where possible,
-    broadly acting as the inverse of TrigExpand.
-    TrigFactor automatically threads over lists, as well as equations,
-    inequalities, and logic functions.
-```
+**`TrigFactor[expr]`**
 
-## Examples
+factors trigonometric functions in expr. TrigFactor operates on both circular and hyperbolic functions. TrigFactor factors polynomials in trigonometric functions and collapses Pythagorean, angle-addition, and double-angle identities where possible, broadly acting as the inverse of TrigExpand. TrigFactor automatically threads over lists, as well as equations, inequalities, and logic functions.
 
-All examples below are verified against the current Mathilda build.
+## Examples (13)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= TrigFactor[Sin[x]^2 + Cos[x]^2]
@@ -44,6 +39,43 @@ Out[7]= (1 + Cos[x]^2) Tan[x]^2
 
 In[8]:= TrigFactor[Cosh[x]^2 - Cosh[x]^4]
 Out[8]= -Cosh[x]^2 Sinh[x]^2
+```
+
+### Applications (5)
+
+`TrigFactor` collapses an expanded angle-addition expression back to a single
+trigonometric function:
+
+```mathematica
+In[1]:= TrigFactor[Sin[a] Cos[b] + Cos[a] Sin[b]]
+Out[1]= Sin[a + b]
+```
+
+```mathematica
+In[1]:= TrigFactor[Cos[a] Cos[b] - Sin[a] Sin[b]]
+Out[1]= Cos[a + b]
+```
+
+A difference of squares of sine and cosine folds into a double angle:
+
+```mathematica
+In[1]:= TrigFactor[Sin[x]^2 - Cos[x]^2]
+Out[1]= -Cos[2 x]
+```
+
+A full trigonometric perfect square is factored and phase-shifted into a single
+squared sine:
+
+```mathematica
+In[1]:= TrigFactor[Sin[x]^2 + 2 Sin[x] Cos[x] + Cos[x]^2]
+Out[1]= 2 Sin[1/4 Pi + x]^2
+```
+
+It handles hyperbolic functions too, recognising the `cosh` double-angle identity:
+
+```mathematica
+In[1]:= TrigFactor[Sinh[x]^2 + Cosh[x]^2]
+Out[1]= Cosh[2 x]
 ```
 
 ## Implementation notes
@@ -86,53 +118,55 @@ Memoized through the active `FactorMemo` via the `builtin_trigfactor` wrapper.
 
 - `Listable`, `Protected`.
 - Operates on both circular (`Sin`, `Cos`, `Tan`, `Cot`, `Sec`, `Csc`) and
+  hyperbolic (`Sinh`, `Cosh`, `Tanh`, `Coth`, `Sech`, `Csch`) functions.
+- Pipeline:
+  1. Rewrite reciprocal heads (`Tan`, `Cot`, `Sec`, `Csc`, and their
+     hyperbolic analogs) as `Sin`/`Cos`/`Sinh`/`Cosh` ratios so that `Factor`
+     sees the full polynomial structure.
+  2. Combine into a single rational via `Together`.
+  3. Run `Factor` on the resulting rational; trigonometric atoms are treated
+     as independent polynomial variables. The `Factor` pass is skipped when
+     the post-`Together` form contains more than two distinct squared
+     trigonometric atoms (e.g. `Sin[x]^2`, `Cos[x]^2`, `Sinh[y]^2`,
+     `Cosh[y]^2` together): on such dense multivariate polynomials Factor's
+     trial-division loop stalls without producing a useful factorization, and
+     the identity rules in step 4 still match Pythagorean structure that
+     survives in the post-`Together` factored form (e.g.
+     `(Sin[x]^2 + Cos[x]^2)(Cosh[y]^2 - Sinh[y]^2)` collapses directly to
+     `1` via the `Times`-context Pythagorean rules).
+  4. Apply identity collapse rules via `ReplaceRepeated`: Pythagorean
+     identities (`Sin^2 + Cos^2 -> 1`, `Cosh^2 - Sinh^2 -> 1`, with and
+     without arbitrary coefficients), reverse angle-addition
+     (`Sin[a]Cos[b] ± Cos[a]Sin[b] -> Sin[a ± b]`,
+     `Cos[a]Cos[b] ± Sin[a]Sin[b] -> Cos[a ∓ b]`, and hyperbolic analogs),
+     reverse double-angle (`2 Sin Cos -> Sin[2x]`,
+     `Cos^2 - Sin^2 -> Cos[2x]`, `Cosh^2 + Sinh^2 -> Cosh[2x]`), and
+     factored-form variants such as `(Cos - Sin)(Cos + Sin) -> Cos[2x]`,
+     `(Cosh - 1)(Cosh + 1) -> Sinh^2`, and
+     `(Cosh - Sinh)(Cosh + Sinh) -> 1` that arise naturally from `Factor`.
+  5. Restore `Tan`/`Cot`/`Sec`/`Csc` (and hyperbolic analogs) from the
+     `Sin`/`Cos` ratio form so reciprocal heads survive the round-trip.
+- Two paths are tried: the primary pipeline (preserves angle-sum structure)
+  and a fallback that `TrigExpand`s the argument first (catches
+  cancellations that only become visible after the angle-sum is expanded,
+  e.g. `Cos[x + y] + Sin[x] Sin[y] -> Cos[x] Cos[y]`). The fallback runs
+  only when the primary pipeline leaves the expression unchanged, so
+  structurally productive inputs (e.g. `Sin[x + y]^2 + Tan[x + y]`) avoid
+  the expensive expanded-rational path. The final result is the smaller of
+  the two by leaf count; ties favour the primary pipeline.
+- Automatically threads over lists (via `Listable`), as well as equations,
+  inequalities (`Equal`, `Unequal`, `Less`, `LessEqual`, `Greater`,
+  `GreaterEqual`, `SameQ`, `UnsameQ`), and logic functions (`And`, `Or`,
+  `Not`, `Xor`, `Implies`).
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[TrigExpand](../../elementary-functions/TrigExpand/), [Sin](../../elementary-functions/Sin/), [Cos](../../elementary-functions/Cos/), [Tan](../../elementary-functions/Tan/), [Cot](../../elementary-functions/Cot/), [Sec](../../elementary-functions/Sec/), [Csc](../../elementary-functions/Csc/), [Sinh](../../elementary-functions/Sinh/)
 
 ## References
 
 - Source: [`src/simp/trigsimp.c`](https://github.com/stblake/mathilda/blob/main/src/simp/trigsimp.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
-
-## Notes & additional examples
-
-### Worked examples
-
-`TrigFactor` collapses an expanded angle-addition expression back to a single
-trigonometric function:
-
-```mathematica
-In[1]:= TrigFactor[Sin[a] Cos[b] + Cos[a] Sin[b]]
-Out[1]= Sin[a + b]
-```
-
-```mathematica
-In[1]:= TrigFactor[Cos[a] Cos[b] - Sin[a] Sin[b]]
-Out[1]= Cos[a + b]
-```
-
-A difference of squares of sine and cosine folds into a double angle:
-
-```mathematica
-In[1]:= TrigFactor[Sin[x]^2 - Cos[x]^2]
-Out[1]= -Cos[2 x]
-```
-
-A full trigonometric perfect square is factored and phase-shifted into a single
-squared sine:
-
-```mathematica
-In[1]:= TrigFactor[Sin[x]^2 + 2 Sin[x] Cos[x] + Cos[x]^2]
-Out[1]= 2 Sin[1/4 Pi + x]^2
-```
-
-It handles hyperbolic functions too, recognising the `cosh` double-angle identity:
-
-```mathematica
-In[1]:= TrigFactor[Sinh[x]^2 + Cosh[x]^2]
-Out[1]= Cosh[2 x]
-```
+- Tests: [`tests/test_trigfactor.c`](https://github.com/stblake/mathilda/blob/main/tests/test_trigfactor.c)

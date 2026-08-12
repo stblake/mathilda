@@ -5,15 +5,22 @@
 
 ## Description
 
-```text
-ReleaseHold[expr]
-    removes Hold, HoldForm, HoldPattern, and HoldComplete in expr.
+**`ReleaseHold[expr]`**
+
+removes Hold, HoldForm, HoldPattern, and HoldComplete in expr.
+
+<details>
+<summary>Notes</summary>
+
 ReleaseHold removes only one layer of Hold etc.; it does not remove inner occurrences in nested Hold etc. functions.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= Hold[1+1]
@@ -53,11 +60,14 @@ Out[8]= {f[3], g[7]}
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[Hold](../../expression-information/Hold/), [HoldForm](../../expression-information/HoldForm/), [HoldPattern](../../pattern-matching/HoldPattern/), [HoldComplete](../../expression-information/HoldComplete/)
 
 ## References
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_eval_timestamps.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval_timestamps.c)
+- Tests: [`tests/test_releasehold.c`](https://github.com/stblake/mathilda/blob/main/tests/test_releasehold.c)
+- Tests: [`tests/test_unevaluated.c`](https://github.com/stblake/mathilda/blob/main/tests/test_unevaluated.c)

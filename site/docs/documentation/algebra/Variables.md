@@ -5,18 +5,22 @@
 
 ## Description
 
-```text
-Variables[poly]
-    gives the sorted list of independent variables that appear as bases
-    of non-numeric subexpressions in poly.
-Walks the expression tree and collects symbols and compound forms
-(e.g. Sin[x], a[i]) that occur outside numeric arithmetic; duplicates
-are removed via canonical order.
-```
+**`Variables[poly]`**
 
-## Examples
+gives the sorted list of independent variables that appear as bases of non-numeric subexpressions in poly.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+Walks the expression tree and collects symbols and compound forms (e.g. Sin\[x\], a\[i\]) that occur outside numeric arithmetic; duplicates are removed via canonical order.
+
+</details>
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Variables[(x + y)^2 + 3 z^2 - y z + 7]
@@ -29,35 +33,7 @@ In[3]:= Variables[E^x]
 Out[3]= {}
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_variables` walks the expression with `collect_variables`, gathering the
-distinct symbols that occur as polynomial generators (bare symbols and non-numeric bases,
-excluding numeric atoms and known constants), then sorts the collected `Expr*` array with
-`qsort` under `compare_expr_ptrs` (the canonical `expr_compare` order) and wraps the result in a
-`List`. The output is the deduplicated, canonically-ordered list of variables on which the
-input is treated as a polynomial/rational expression.
-
-- `Protected`.
-- Looks for variables only inside `Plus`, `Times`, and `Power` with rational exponents.
-- Returns a sorted `List` of variables.
-- Symbolic constants like `Pi`, `E`, and `I` are not treated as variables.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 3 (multivariate polynomial representation and variable sets).
-- Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
-- Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= Variables[x^2 + y z]
@@ -85,6 +61,38 @@ Fractional powers are treated as polynomial generators in their own right, so ea
 In[1]:= Variables[x^(1/2) + y^(2/3)]
 Out[1]= {x, y}
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_variables` walks the expression with `collect_variables`, gathering the
+distinct symbols that occur as polynomial generators (bare symbols and non-numeric bases,
+excluding numeric atoms and known constants), then sorts the collected `Expr*` array with
+`qsort` under `compare_expr_ptrs` (the canonical `expr_compare` order) and wraps the result in a
+`List`. The output is the deduplicated, canonically-ordered list of variables on which the
+input is treated as a polynomial/rational expression.
+
+- `Protected`.
+- Looks for variables only inside `Plus`, `Times`, and `Power` with rational exponents.
+- Returns a sorted `List` of variables.
+- Symbolic constants like `Pi`, `E`, and `I` are not treated as variables.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/), [List](../../other-advanced/List/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [I](../../mathematical-constants/I/)
+
+## References
+
+- Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 3 (multivariate polynomial representation and variable sets).
+- Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
+- Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_div2.c`](https://github.com/stblake/mathilda/blob/main/tests/test_div2.c)
+- Tests: [`tests/test_integrate_goursat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_goursat.c)
+- Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
+- Tests: [`tests/test_simplify.c`](https://github.com/stblake/mathilda/blob/main/tests/test_simplify.c)
+
+## Notes & additional examples
 
 ### Notes
 

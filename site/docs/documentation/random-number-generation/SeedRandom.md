@@ -5,16 +5,19 @@
 
 ## Description
 
-```text
-SeedRandom[n]
-    seeds the pseudorandom generator with the integer n.
-SeedRandom[]
-    reseeds the pseudorandom generator from system entropy.
-```
+**`SeedRandom[n]`**
 
-## Examples
+seeds the pseudorandom generator with the integer n.
 
-All examples below are verified against the current Mathilda build.
+**`SeedRandom[]`**
+
+reseeds the pseudorandom generator from system entropy.
+
+## Examples (2)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= SeedRandom[42]; {RandomInteger[], RandomInteger[], RandomInteger[]}
@@ -34,11 +37,11 @@ Out[2]= {1, 1, 0}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)
+- Tests: [`tests/test_convolutions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_convolutions.c)
+- Tests: [`tests/test_correlations.c`](https://github.com/stblake/mathilda/blob/main/tests/test_correlations.c)
+- Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)

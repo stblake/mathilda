@@ -5,39 +5,22 @@
 
 ## Description
 
-```text
-LCM[n1, n2, ...]
-    gives the least common multiple of the integers ni.
-Computed via GMP's mpz_lcm folded across the arguments; sign is
-normalised non-negative. Accepts BigInt and Rational inputs.
-```
+**`LCM[n1, n2, ...]`**
 
-## Examples
+gives the least common multiple of the integers ni.
 
-_No verified examples yet for this function._
+<details>
+<summary>Notes</summary>
 
-## Implementation notes
+Computed via GMP's mpz\_lcm folded across the arguments; sign is normalised non-negative. Accepts BigInt and Rational inputs.
 
-**Algorithm.** `builtin_lcm` mirrors `builtin_gcd`. It folds pairwise with `lcm(a,b)=ab/gcd(a,b)`: an `int64` fast path, a GMP path (`mpz_lcm`) when any argument is a `EXPR_BIGINT`, and a rational fold using `lcm(a/b, c/d) = lcm(a,c)/gcd(b,d)` (numerator accumulated with `mpz_lcm`, denominator with `mpz_gcd`). A zero argument zeroes the running LCM (and short-circuits). `LCM[]` is `1`, `LCM[x]` is `|x|`; non-rational arguments return `NULL`.
+</details>
 
-**Data structures.** GMP `mpz_t` accumulators; `expr_bigint_normalize` demotes results that fit in `int64`, and `mpz_pair_to_rational_expr` reduces the rational result. Shares the rational num/den coercion helpers with GCD.
+## Examples (6)
 
-**Attributes:** `Flat`, `Listable`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
+Every input below was run against the current Mathilda build and its output recorded.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on the Euclidean algorithm and least common multiples.
-- von zur Gathen & Gerhard, "Modern Computer Algebra", on GCD/LCM relations.
-- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
-- Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (6)
 
 ```mathematica
 In[1]:= LCM[3, 4, 5]
@@ -72,6 +55,31 @@ Out[1]= 232792560
 In[2]:= LCM[123456789, 987654321]
 Out[2]= 13548070123626141
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_lcm` mirrors `builtin_gcd`. It folds pairwise with `lcm(a,b)=ab/gcd(a,b)`: an `int64` fast path, a GMP path (`mpz_lcm`) when any argument is a `EXPR_BIGINT`, and a rational fold using `lcm(a/b, c/d) = lcm(a,c)/gcd(b,d)` (numerator accumulated with `mpz_lcm`, denominator with `mpz_gcd`). A zero argument zeroes the running LCM (and short-circuits). `LCM[]` is `1`, `LCM[x]` is `|x|`; non-rational arguments return `NULL`.
+
+**Data structures.** GMP `mpz_t` accumulators; `expr_bigint_normalize` demotes results that fit in `int64`, and `mpz_pair_to_rational_expr` reduces the rational result. Shares the rational num/den coercion helpers with GCD.
+
+**Attributes:** `Flat`, `Listable`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
+
+## See also
+
+[GCD](../../number-theory/GCD/)
+
+## References
+
+- Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on the Euclidean algorithm and least common multiples.
+- von zur Gathen & Gerhard, "Modern Computer Algebra", on GCD/LCM relations.
+- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
+- Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_integrate_linrad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_linrad.c)
+- Tests: [`tests/test_integrate_linratiorad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_linratiorad.c)
+
+## Notes & additional examples
 
 ### Notes
 

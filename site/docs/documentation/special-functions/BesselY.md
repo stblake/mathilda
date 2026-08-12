@@ -5,21 +5,22 @@
 
 ## Description
 
-```text
-BesselY[n, z]
-    gives the Bessel function of the second kind Y_n(z), the solution of
-    z^2 y'' + z y' + (z^2 - n^2) y = 0 singular at the origin.
-Y_0(0) = -Infinity, Y_n(0) = ComplexInfinity for integer n != 0; Y_n has
-a logarithmic branch point at 0 and a branch cut along the negative real
-z axis, with Y_{-n} = (-1)^n Y_n for integer n. Real and complex order
-and argument evaluate numerically at machine or arbitrary (MPFR)
-precision; D[BesselY[n, z], z] = (BesselY[n-1, z] - BesselY[n+1, z])/2.
-Listable.
-```
+**`BesselY[n, z]`**
 
-## Examples
+gives the Bessel function of the second kind Y\_n(z), the solution of z^2 y'' + z y' + (z^2 - n^2) y = 0 singular at the origin.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+Y\_0(0) = -Infinity, Y\_n(0) = ComplexInfinity for integer n != 0; Y\_n has a logarithmic branch point at 0 and a branch cut along the negative real z axis, with Y\_{-n} = (-1)^n Y\_n for integer n. Real and complex order and argument evaluate numerically at machine or arbitrary (MPFR) precision; D\[BesselY\[n, z\], z\] = (BesselY\[n-1, z\] - BesselY\[n+1, z\])/2. Listable.
+
+</details>
+
+## Examples (7)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= BesselY[0, 2.5]
@@ -29,22 +30,7 @@ In[2]:= D[BesselY[n, x], x]
 Out[2]= 1/2 (BesselY[-1 + n, x] - BesselY[1 + n, x])
 ```
 
-## Implementation notes
-
-**Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
-- Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= N[BesselY[1, 3.0]]
@@ -74,6 +60,25 @@ Out[1]= 0.127323954473516268615107010698
 In[2]:= N[2/(5 Pi), 30]
 Out[2]= 0.127323954473516268615107010698
 ```
+
+## Implementation notes
+
+**Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+
+## See also
+
+[BesselJ](../../special-functions/BesselJ/), [BesselK](../../special-functions/BesselK/), [BesselI](../../special-functions/BesselI/)
+
+## References
+
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
+- Tests: [`tests/test_bessely.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bessely.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_gruntz.c`](https://github.com/stblake/mathilda/blob/main/tests/test_gruntz.c)
+- Tests: [`tests/test_limit.c`](https://github.com/stblake/mathilda/blob/main/tests/test_limit.c)
+
+## Notes & additional examples
 
 ### Notes
 

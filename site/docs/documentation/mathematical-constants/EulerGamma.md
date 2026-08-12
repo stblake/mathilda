@@ -5,38 +5,24 @@
 
 ## Description
 
-```text
-EulerGamma
-    is Euler's constant gamma, with numerical value ~= 0.5772156649.
-EulerGamma is the Euler-Mascheroni constant, the limit of
-HarmonicNumber[n] - Log[n] as n -> Infinity. It is a mathematical
-constant: it has attributes Constant and Protected, NumericQ[EulerGamma]
-is True, and D[EulerGamma, x] is 0. N[EulerGamma, prec] evaluates it to
-any precision.
-```
+**`EulerGamma`**
 
-## Examples
+is Euler's constant gamma, with numerical value ~= 0.5772156649.
 
-_No verified examples yet for this function._
+**`HarmonicNumber[n] - Log[n] as n -> Infinity. It is a mathematical`**
 
-## Implementation notes
+<details>
+<summary>Notes</summary>
 
-- Attributes `Constant`, `Protected`. `Attributes[EulerGamma] = {Constant,
+EulerGamma is the Euler-Mascheroni constant, the limit of constant: it has attributes Constant and Protected, NumericQ\[EulerGamma\] is True, and D\[EulerGamma, x\] is 0. N\[EulerGamma, prec\] evaluates it to any precision.
 
-**Attributes:** `Constant`, `Protected`.
+</details>
 
-## Implementation status
+## Examples (5)
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+Every input below was run against the current Mathilda build and its output recorded.
 
-## References
-
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
-- Specification: [`docs/spec/builtins/mathematical-constants.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/mathematical-constants.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= N[EulerGamma]
@@ -60,6 +46,34 @@ Out[2]= True
 In[1]:= N[Gamma[1/2] + EulerGamma, 30]
 Out[1]= 2.349669515807048887904679573425
 ```
+
+## Options & behaviour
+
+The constant value lives in the central numeric constant table (`src/numeric.c`);
+the symbol's identity (attributes) is registered in `src/special_functions/eulergamma.c`.
+
+## Implementation notes
+
+- Attributes `Constant`, `Protected`. `Attributes[EulerGamma] = {Constant,
+  Protected}`; the symbol cannot be reassigned.
+- Propagated as an exact, unevaluated symbol; `NumericQ[EulerGamma]` is
+  `True` and `D[EulerGamma, x] = 0`.
+- `N[EulerGamma]` gives the machine value `0.577216`; `N[EulerGamma, prec]`
+  gives any precision (MPFR `mpfr_const_euler`), e.g.
+  `N[EulerGamma, 50] = 0.57721566490153286060651209008240243104215933593992`.
+- Participates in exact numeric work, e.g.
+  `Round[1/EulerGamma^100] = 734833795660954410469466`, and digit/continued-
+  fraction extraction, e.g. `RealDigits[EulerGamma, 10, 50, -10^4]` returns
+  decimal digits 10000–10049.
+
+**Attributes:** `Constant`, `Protected`.
+
+## References
+
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Specification: [`docs/spec/builtins/mathematical-constants.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/mathematical-constants.md)
+
+## Notes & additional examples
 
 ### Notes
 

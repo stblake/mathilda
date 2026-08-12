@@ -5,18 +5,22 @@
 
 ## Description
 
-```text
-Apart[expr] rewrites a rational expression as a sum of terms with minimal denominators.
-Apart[expr, var] treats all variables other than var as constants.
-Option Extension -> alpha factors the denominator over Q(alpha) before
-decomposition, splitting (x^2 - 2) into (x - Sqrt[2])(x + Sqrt[2]) under
-Extension -> Sqrt[2] and producing the corresponding linear-factor
-partial fractions.  Default Extension -> None decomposes over Q.
-```
+**`Apart[expr] rewrites a rational expression as a sum of terms with minimal denominators.`**
 
-## Examples
+**`Apart[expr, var] treats all variables other than var as constants.`**
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+Option Extension -\> alpha factors the denominator over Q(alpha) before decomposition, splitting (x^2 - 2) into (x - Sqrt\[2\])(x + Sqrt\[2\]) under Extension -\> Sqrt\[2\] and producing the corresponding linear-factor partial fractions.  Default Extension -\> None decomposes over Q.
+
+</details>
+
+## Examples (11)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= Apart[1/((1+x)(5+x))]
@@ -30,51 +34,16 @@ Out[3]= -(-1 + y)/((1 + x) (1 + y)^2) + 2 y/((1 + y)^2 (x - y))
 
 In[4]:= Apart[1/(y^(2/3) - 1/y^(1/3))]
 Out[4]= 1/3/(-1 + y^(1/3)) + (1/3 - 1/3 y^(1/3))/(1 + y^(1/3) + y^(2/3))
+```
 
+### Options (1)
+
+```mathematica
 In[5]:= Apart[1/(x^2 - 2), x, Extension -> Sqrt[2]]
 Out[5]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_apart` strips an optional `Extension -> α` (with `Automatic` running `extension_autodetect` for a single algebraic generator) and dispatches to `apart_impl`. Inexact coefficients route through `internal_rationalize_then_numericalize`. The core does an undetermined-coefficients partial-fraction decomposition over `Q` (or `Q(α)`):
-
-1. Thread over `List`/relational/logical heads when the argument is one.
-2. For a radical generator (fractional rational exponents), substitute `u -> g^m`, recurse, and back-substitute (`poly_find_radical_gen` / `poly_subst_radical_*`).
-3. Combine to a single fraction with `Together`, pick the partial-fraction variable (explicit 2nd arg, else the lexicographically-last collected variable), and split into numerator `N` and denominator `D` (bailing back to the `Together`'d form if either is not polynomial in the variable, checked by `PolynomialQ`).
-4. Polynomial-divide `N` by `D` (`PolynomialQuotient`/`PolynomialRemainder`) to get the polynomial part `Q` and proper remainder `R`.
-5. `Factor` the denominator (over the extension if given), separate constant factors into a scalar `C`, and for each irreducible base `b_i` of multiplicity `k_i` set up unknown numerators of degree `deg(b_i)-1` over each power `b_i^j`.
-6. Build the linear system by expanding each basis-times-`var^r` term, reading coefficients with `get_coeff`, and solving via `RowReduce`; assemble the sum `Q + sum A_ij / b_i^j`, factoring each solved coefficient.
-
-**Data structures.** Everything is `Expr` trees driven through `eval_and_free`/`expr_expand`. The linear system is a dense `Expr***` augmented matrix (`S` rows by `S+1` columns, `S = deg(D)`) of coefficient expressions handed to `RowReduce`; factored denominator bases and their exponents are kept in parallel `Expr**`/`int64*` arrays.
-
-**Complexity / limits.** Dominated by `Factor[D]` and the `O(S^3)` `RowReduce` over symbolic entries. Partial fractions are undefined when `N`/`D` are not polynomial in the chosen variable (handled by returning the combined fraction), and the matrix path assumes integer/rational coefficient structure.
-
-- `Protected`, `Listable`.
-- Writes `expr` as a polynomial in `var` together with a sum of ratios of polynomials with minimal denominators.
-- If `var` is not specified, intelligently selects the main polynomial variable natively.
-- Implements exact undetermined coefficients algebraically leveraging row-reduced identity expansions over algebraic inputs avoiding recursive fractional losses natively.
-- **Fast path (plain rationals over Q).** When `var` is a symbol and every coefficient is rational (no other symbol / radical / fractional power), the decomposition runs natively in FLINT `fmpq_poly` (`flint_apart_over_q`): a distinct-factor CRT split (`xgcd`) followed by a `p_i`-adic expansion, replacing the `O(S^2+)` symbolic `RowReduce`. High-degree denominators drop from tens of seconds to sub-second (`Apart[(x-99)/((x+2)^60 (x-3)^40), x]`: ~15.6 s → ~0.74 s). The multivariate / algebraic case declines to the classical elimination path, so output is unchanged.
-- When `Together[expr]` produces a numerator or denominator that is not polynomial in the chosen variable (e.g. fractional-power inputs whose Together'd form is `y^(1/3)/(y - 1)`), the matrix-of-coefficients algorithm cannot apply; Apart returns the `Together` form unchanged rather than synthesising a spurious zero.
-- **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) factors the denominator over `Q(alpha)` before partial-fraction decomposition runs, splitting reducible-over-extension factors (e.g. `x^2 - 2` into `(x - Sqrt[2])(x + Sqrt[2])` under `Extension -> Sqrt[2]`) and producing the corresponding linear-factor partial fractions. The pre-`Together` step is also extension-aware so any algebraic-number cancellations in numerator/denominator fire before splitting.
-
-**Attributes:** `Listable`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on partial fraction decomposition.
-- von zur Gathen & Gerhard, "Modern Computer Algebra", on partial fractions and the extended Euclidean algorithm.
-- K. O. Geddes, S. R. Czapor and G. Labahn, *Algorithms for Computer Algebra* (Kluwer, 1992), ch. on partial-fraction decomposition.
-- Source: [`src/parfrac.c`](https://github.com/stblake/mathilda/blob/main/src/parfrac.c)
-- Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (6)
 
 ```mathematica
 In[1]:= Apart[1/(x (x+1))]
@@ -105,6 +74,49 @@ Out[1]= 1/2/(1 + x)^2 + 3/2/(1 + x) + (1 - 3/2 x)/(1 + x^2)
 In[1]:= Apart[1/(x^2 - 2), Extension -> Sqrt[2]]
 Out[1]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_apart` strips an optional `Extension -> α` (with `Automatic` running `extension_autodetect` for a single algebraic generator) and dispatches to `apart_impl`. Inexact coefficients route through `internal_rationalize_then_numericalize`. The core does an undetermined-coefficients partial-fraction decomposition over `Q` (or `Q(α)`):
+
+1. Thread over `List`/relational/logical heads when the argument is one.
+2. For a radical generator (fractional rational exponents), substitute `u -> g^m`, recurse, and back-substitute (`poly_find_radical_gen` / `poly_subst_radical_*`).
+3. Combine to a single fraction with `Together`, pick the partial-fraction variable (explicit 2nd arg, else the lexicographically-last collected variable), and split into numerator `N` and denominator `D` (bailing back to the `Together`'d form if either is not polynomial in the variable, checked by `PolynomialQ`).
+4. Polynomial-divide `N` by `D` (`PolynomialQuotient`/`PolynomialRemainder`) to get the polynomial part `Q` and proper remainder `R`.
+5. `Factor` the denominator (over the extension if given), separate constant factors into a scalar `C`, and for each irreducible base `b_i` of multiplicity `k_i` set up unknown numerators of degree `deg(b_i)-1` over each power `b_i^j`.
+6. Build the linear system by expanding each basis-times-`var^r` term, reading coefficients with `get_coeff`, and solving via `RowReduce`; assemble the sum `Q + sum A_ij / b_i^j`, factoring each solved coefficient.
+
+**Data structures.** Everything is `Expr` trees driven through `eval_and_free`/`expr_expand`. The linear system is a dense `Expr***` augmented matrix (`S` rows by `S+1` columns, `S = deg(D)`) of coefficient expressions handed to `RowReduce`; factored denominator bases and their exponents are kept in parallel `Expr**`/`int64*` arrays.
+
+**Complexity / limits.** Dominated by `Factor[D]` and the `O(S^3)` `RowReduce` over symbolic entries. Partial fractions are undefined when `N`/`D` are not polynomial in the chosen variable (handled by returning the combined fraction), and the matrix path assumes integer/rational coefficient structure.
+
+- `Protected`, `Listable`.
+- Writes `expr` as a polynomial in `var` together with a sum of ratios of polynomials with minimal denominators.
+- If `var` is not specified, intelligently selects the main polynomial variable natively.
+- Implements exact undetermined coefficients algebraically leveraging row-reduced identity expansions over algebraic inputs avoiding recursive fractional losses natively.
+- **Fast path (plain rationals over Q).** When `var` is a symbol and every coefficient is rational (no other symbol / radical / fractional power), the decomposition runs natively in FLINT `fmpq_poly` (`flint_apart_over_q`): a distinct-factor CRT split (`xgcd`) followed by a `p_i`-adic expansion, replacing the `O(S^2+)` symbolic `RowReduce`. High-degree denominators drop from tens of seconds to sub-second (`Apart[(x-99)/((x+2)^60 (x-3)^40), x]`: ~15.6 s → ~0.74 s). The multivariate / algebraic case declines to the classical elimination path, so output is unchanged.
+- When `Together[expr]` produces a numerator or denominator that is not polynomial in the chosen variable (e.g. fractional-power inputs whose Together'd form is `y^(1/3)/(y - 1)`), the matrix-of-coefficients algorithm cannot apply; Apart returns the `Together` form unchanged rather than synthesising a spurious zero.
+- **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) factors the denominator over `Q(alpha)` before partial-fraction decomposition runs, splitting reducible-over-extension factors (e.g. `x^2 - 2` into `(x - Sqrt[2])(x + Sqrt[2])` under `Extension -> Sqrt[2]`) and producing the corresponding linear-factor partial fractions. The pre-`Together` step is also extension-aware so any algebraic-number cancellations in numerator/denominator fire before splitting.
+
+**Attributes:** `Listable`, `Protected`.
+
+## See also
+
+[RowReduce](../../linear-algebra/RowReduce/), [Together](../../algebra/Together/)
+
+## References
+
+- Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on partial fraction decomposition.
+- von zur Gathen & Gerhard, "Modern Computer Algebra", on partial fractions and the extended Euclidean algorithm.
+- K. O. Geddes, S. R. Czapor and G. Labahn, *Algorithms for Computer Algebra* (Kluwer, 1992), ch. on partial-fraction decomposition.
+- Source: [`src/parfrac.c`](https://github.com/stblake/mathilda/blob/main/src/parfrac.c)
+- Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
+- Tests: [`tests/test_eval_timestamps.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval_timestamps.c)
+- Tests: [`tests/test_expr_sharing.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expr_sharing.c)
+- Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
+- Tests: [`tests/test_extension_options.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_options.c)
+
+## Notes & additional examples
 
 ### Notes
 

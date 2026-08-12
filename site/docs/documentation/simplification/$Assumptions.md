@@ -5,15 +5,22 @@
 
 ## Description
 
-```text
-$Assumptions
-    is the default setting for the Assumptions option used in Simplify and other functions that take assumptions.
+**`$Assumptions`**
+
+is the default setting for the Assumptions option used in Simplify and other functions that take assumptions.
+
+<details>
+<summary>Notes</summary>
+
 $Assumptions defaults to True (no assumptions). Functions like Assuming temporarily extend $Assumptions for the duration of their body.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (1)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= $Assumptions
@@ -38,12 +45,13 @@ symbol table; consumed as an `AssumeCtx` (flat `Expr*` fact array) during
 simplification.
 
 - A system symbol with default `OwnValue` `True` (no assumptions). `Assuming`
+  temporarily extends `$Assumptions` for the duration of its body.
 
 **Attributes:** none registered.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[Simplify](../../simplification/Simplify/), [Assuming](../../simplification/Assuming/)
 
 ## References
 

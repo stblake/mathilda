@@ -5,47 +5,57 @@
 
 ## Description
 
-```text
-PolarPlot[r, {theta, tmin, tmax}, opts...]
-    Plots the polar curve r(theta) by converting to Cartesian
-    coordinates {r*Cos[theta], r*Sin[theta]} and sampling adaptively
-    over [tmin, tmax]. Returns a Graphics[...] object (auto-displayed).
-PolarPlot[{r1, r2, ...}, {theta, tmin, tmax}, opts...]
-    Multiple polar curves in distinct palette colours.
+**`PolarPlot[r, {theta, tmin, tmax}, opts...]`**
 
-    Negative r values are plotted in the opposite direction (standard
-    polar convention). Default AspectRatio -> 1 (equal axes).
+Plots the polar curve r(theta) by converting to Cartesian coordinates {r\*Cos\[theta\], r\*Sin\[theta\]} and sampling adaptively over \[tmin, tmax\]. Returns a Graphics\[...\] object (auto-displayed).
 
-    Options (same as ParametricPlot):
-      PlotPoints          - initial sample count per curve (default 75)
-      MaxRecursion        - adaptive refinement depth (default 6)
-      MaxPlotPoints       - total point cap (default Infinity)
-      Mesh                - All/True: overlay evaluation dots; None (default)
-      ColorFunction       - f[t] or "Rainbow" (sweeps scaled theta)
-      ColorFunctionScaling - True (default): normalise theta to [0,1]
-      RegionFunction      - f[x,y] mask
-      PlotStyle           - color/style directive(s)
-      PlotLegends         - Automatic / "Expressions" / label list
-      PolarAxes           - option keyword (accepted; polar grid overlay
-                            not yet rendered)
-      Standard Graphics options (AspectRatio, Axes, PlotRange,
-      AxesLabel, Frame, GridLines, PlotLabel, Background, ImageSize,
-      Prolog, Epilog) pass through to the Graphics[...] result.
+**`PolarPlot[{r1, r2, ...}, {theta, tmin, tmax}, opts...]`**
+
+Multiple polar curves in distinct palette colours. Negative r values are plotted in the opposite direction (standard polar convention). Default AspectRatio -\> 1 (equal axes). Options (same as ParametricPlot): PlotPoints          - initial sample count per curve (default 75) MaxRecursion        - adaptive refinement depth (default 6) MaxPlotPoints       - total point cap (default Infinity) Mesh                - All/True: overlay evaluation dots; None (default) ColorFunction       - f\[t\] or "Rainbow" (sweeps scaled theta) ColorFunctionScaling - True (default): normalise theta to \[0,1\] RegionFunction      - f\[x,y\] mask PlotStyle           - color/style directive(s) PlotLegends         - Automatic / "Expressions" / label list PolarAxes           - option keyword (accepted; polar grid overlay not yet rendered) Standard Graphics options (AspectRatio, Axes, PlotRange, AxesLabel, Frame, GridLines, PlotLabel, Background, ImageSize, Prolog, Epilog) pass through to the Graphics\[...\] result.
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
+
+```mathematica
+In[1]:= PolarPlot[1, {t, 0, 2Pi}]
+Out[1]= -Graphics-
+
+In[2]:= PolarPlot[Sin[2t], {t, 0, 2Pi}]
+Out[2]= -Graphics-
 ```
 
-## Examples
+### Options (3)
 
-_No verified examples yet for this function._
+```mathematica
+In[3]:= PolarPlot[{1, 2}, {t, 0, 2Pi}, PlotStyle -> {Blue, Red}]
+Out[3]= -Graphics-
+
+In[4]:= PolarPlot[t, {t, 0, 4Pi}, ColorFunction -> "Rainbow"]
+Out[4]= -Graphics-
+
+In[5]:= PolarPlot[Sin[2t], {t, 0, 2Pi}, Mesh -> All, PlotLabel -> "Rose"]
+Out[5]= -Graphics-
+```
+
+## Algorithm
+
+polarplot.c — PolarPlot[r, {theta, tmin, tmax}, opts...]
+
+HoldAll: r and the iterator are unevaluated on entry, exactly like ParametricPlot. The implementation converts the polar body r(theta) into the Cartesian pair {r*Cos[theta], r*Sin[theta]} and delegates to builtin_parametricplot, so all adaptive sampling, option handling, multi-curve paletting, ColorFunction, Mesh, PlotLegends, etc. come for free without duplicating any logic.
 
 ## Implementation notes
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[HoldAll](../../expression-information/HoldAll/), [ParametricPlot](../../graphics/ParametricPlot/)
 
 ## References
 
 - Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)
+- Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)

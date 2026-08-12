@@ -5,21 +5,30 @@
 
 ## Description
 
-```text
-Differences[list]
-    gives the successive differences of the elements of list.
-Differences[list, n] gives the n-th differences (length l - n).
-Differences[list, n, s] takes differences of elements step s apart
-(length l - n |s|).
-Differences[list, {n1, n2, ...}] gives the successive n_k-th differences
-at level k of a nested list; for a matrix m, Differences[m, n] (= Differences[m, {n, 0}]) differences successive rows.
-FoldList[Plus, x, Differences[list]] inverts Differences.
-Differences has the attribute Protected.
-```
+**`Differences[list]`**
 
-## Examples
+gives the successive differences of the elements of list.
 
-All examples below are verified against the current Mathilda build.
+**`Differences[list, n] gives the n-th differences (length l - n).`**
+
+**`Differences[list, n, s] takes differences of elements step s apart`**
+
+**`Differences[list, {n1, n2, ...}] gives the successive n_k-th differences`**
+
+**`FoldList[Plus, x, Differences[list]] inverts Differences.`**
+
+<details>
+<summary>Notes</summary>
+
+(length l - n |s|). at level k of a nested list; for a matrix m, Differences\[m, n\] (= Differences\[m, {n, 0}\]) differences successive rows. Differences has the attribute Protected.
+
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Differences[{a, b, c, d, e}]
@@ -38,33 +47,7 @@ In[5]:= FoldList[Plus, a, Differences[{a, b, c, d, e}]]
 Out[5]= {a, b, c, d, e}
 ```
 
-## Implementation notes
-
-`builtin_differences` computes successive differences, keeping the input head. One pass (`diff_once`) emits `elem[i+s] - elem[i]` for step `s` (reversed for negative `s`), each subtraction built as `Subtract` and reduced via `eval_and_free` so integers, rationals, doubles, symbolics, and matrix rows all combine. `Differences[list, n, s]` applies `diff_once` `n` times with step `s` (`diff_n_step`); `Differences[list, {n1, n2, ...}]` applies per-level first differences recursively into each element (`diff_levels`), e.g. for multidimensional arrays. A list no longer than `|s|` yields the empty list. Non-integer or negative `n`, or step `0`, return `NULL`. This is the additive analog of `Ratios` in the same file.
-
-- `Protected`.
-- `Differences[list]` gives `{list[[2]] - list[[1]], list[[3]] - list[[2]], ...}`, of length `l - 1`.
-- `Differences[list, n]` applies the first-difference operator `n` times, giving length `l - n`. `n` must be a non-negative integer (`n = 0` returns `list` unchanged).
-- `Differences[list, n, s]` takes differences of elements step `s` apart, of length `l - n |s|`. The step `s` is a nonzero integer; for `s < 0` the elements are subtracted in the opposite order.
-- `Differences[list, {n1, n2, ...}]` gives the successive `nk`-th differences at level `k` of a nested list, and is equivalent to `Differences[Differences[list, n1], {0, n2, ...}]`. Each `nk` must be a non-negative integer.
-- Subtraction threads element-wise over sublists via the `Listable` `Plus`/`Times`, so for a matrix `m`, `Differences[m]` (= `Differences[m, 1]` = `Differences[m, {1, 0}]`) differences successive rows within each column, while `Differences[m, {0, 1}]` differences columns within each row.
-- The head of the input is preserved. A list shorter than the reduction yields the empty list.
-- Works on machine integers, GMP arbitrary-precision integers, machine-precision doubles, and symbolic expressions.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
-- Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= Differences[{1, 4, 9, 16, 25}]
@@ -90,6 +73,36 @@ Out[1]= {{3, 4, 5}, {5, 6, 7}}
 In[1]:= FoldList[Plus, 1, Differences[{1, 4, 9, 16, 25}]]
 Out[1]= {1, 4, 9, 16, 25}
 ```
+
+## Implementation notes
+
+`builtin_differences` computes successive differences, keeping the input head. One pass (`diff_once`) emits `elem[i+s] - elem[i]` for step `s` (reversed for negative `s`), each subtraction built as `Subtract` and reduced via `eval_and_free` so integers, rationals, doubles, symbolics, and matrix rows all combine. `Differences[list, n, s]` applies `diff_once` `n` times with step `s` (`diff_n_step`); `Differences[list, {n1, n2, ...}]` applies per-level first differences recursively into each element (`diff_levels`), e.g. for multidimensional arrays. A list no longer than `|s|` yields the empty list. Non-integer or negative `n`, or step `0`, return `NULL`. This is the additive analog of `Ratios` in the same file.
+
+- `Protected`.
+- `Differences[list]` gives `{list[[2]] - list[[1]], list[[3]] - list[[2]], ...}`, of length `l - 1`.
+- `Differences[list, n]` applies the first-difference operator `n` times, giving length `l - n`. `n` must be a non-negative integer (`n = 0` returns `list` unchanged).
+- `Differences[list, n, s]` takes differences of elements step `s` apart, of length `l - n |s|`. The step `s` is a nonzero integer; for `s < 0` the elements are subtracted in the opposite order.
+- `Differences[list, {n1, n2, ...}]` gives the successive `nk`-th differences at level `k` of a nested list, and is equivalent to `Differences[Differences[list, n1], {0, n2, ...}]`. Each `nk` must be a non-negative integer.
+- Subtraction threads element-wise over sublists via the `Listable` `Plus`/`Times`, so for a matrix `m`, `Differences[m]` (= `Differences[m, 1]` = `Differences[m, {1, 0}]`) differences successive rows within each column, while `Differences[m, {0, 1}]` differences columns within each row.
+- The head of the input is preserved. A list shorter than the reduction yields the empty list.
+- Works on machine integers, GMP arbitrary-precision integers, machine-precision doubles, and symbolic expressions.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[Accumulate](../../arithmetic/Accumulate/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/)
+
+## References
+
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_convolutions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_convolutions.c)
+- Tests: [`tests/test_correlations.c`](https://github.com/stblake/mathilda/blob/main/tests/test_correlations.c)
+
+## Notes & additional examples
 
 ### Notes
 

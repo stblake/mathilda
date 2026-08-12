@@ -5,15 +5,17 @@
 
 ## Description
 
-```text
-ClearAttributes[s, attr] removes attr from the list of attributes of s.
-ClearAttributes[s, {attr1, attr2, ...}] removes several attributes at a time.
-ClearAttributes[{s1, s2, ...}, attrs] removes attributes from several symbols at a time.
-```
+**`ClearAttributes[s, attr] removes attr from the list of attributes of s.`**
 
-## Examples
+**`ClearAttributes[s, {attr1, attr2, ...}] removes several attributes at a time.`**
 
-All examples below are verified against the current Mathilda build.
+**`ClearAttributes[{s1, s2, ...}, attrs] removes attributes from several symbols at a time.`**
+
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= f[{1, 2, 3}]
@@ -37,11 +39,13 @@ Out[3]= {Flat, Orderless}
 
 **Attributes:** `HoldFirst`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[HoldFirst](../../other-advanced/HoldFirst/)
 
 ## References
 
 - Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_eval_timestamps.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval_timestamps.c)

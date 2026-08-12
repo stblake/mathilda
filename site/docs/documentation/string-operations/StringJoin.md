@@ -5,16 +5,15 @@
 
 ## Description
 
-```text
-StringJoin["s1", "s2", ...]
-    Concatenates strings together.
-    StringJoin[{"s1", "s2", ...}] flattens all lists.
-    The infix form is "s1" <> "s2" <> ...
-```
+**`StringJoin["s1", "s2", ...]`**
 
-## Examples
+Concatenates strings together. StringJoin\[{"s1", "s2", ...}\] flattens all lists. The infix form is "s1" \<\> "s2" \<\> ...
 
-All examples below are verified against the current Mathilda build.
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (6)
 
 ```mathematica
 In[1]:= StringJoin["abcd", "ABCD", "xyz"]
@@ -42,11 +41,15 @@ Out[6]= "hello"
 
 **Attributes:** `Flat`, `OneIdentity`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[Flat](../../expression-information/Flat/), [OneIdentity](../../expression-information/OneIdentity/)
 
 ## References
 
 - Source: [`src/picostrings.c`](https://github.com/stblake/mathilda/blob/main/src/picostrings.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_files.c`](https://github.com/stblake/mathilda/blob/main/tests/test_files.c)
+- Tests: [`tests/test_repl_hooks.c`](https://github.com/stblake/mathilda/blob/main/tests/test_repl_hooks.c)
+- Tests: [`tests/test_stringfns.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringfns.c)
+- Tests: [`tests/test_strings.c`](https://github.com/stblake/mathilda/blob/main/tests/test_strings.c)

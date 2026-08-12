@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-DifferenceDelta[f, i] gives the forward difference (f /. i -> i+1) - f, the discrete analogue of D. It is the left inverse of indefinite Sum.
-```
+**`DifferenceDelta[f, i] gives the forward difference (f /. i -> i+1) - f, the discrete analogue of D. It is the left inverse of indefinite Sum.`**
 
-## Examples
+## Examples (6)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= DifferenceDelta[i^2, i]
@@ -21,34 +21,7 @@ In[2]:= DifferenceDelta[Sum[k k!, k], k]
 Out[2]= -Factorial[k] + Factorial[1 + k]
 ```
 
-## Implementation notes
-
-**Algorithm.** `DifferenceDelta[f, i]` computes the forward difference
-`(f /. i -> i+1) - f`, the discrete analogue of `D` and the left inverse of
-indefinite `Sum`. `builtin_differencedelta` (src/sum/sum_gosper.c) requires the
-second argument to be a symbol, substitutes `i -> i+1` into `f` (`shift_var`,
-implemented via `ReplaceAll`), subtracts the original `f`, and returns the
-`Expand`-ed result. Returns NULL (unevaluated) unless the variable is a symbol.
-
-**Data structures.** Plain `Expr*` tree manipulation built on the existing
-`ReplaceAll`, subtraction, and `Expand` builtins (`shift_var`, `sum_sub`,
-`sum_eval`). No closed-form machinery — it is a thin structural operator that
-lives alongside Gosper's summation because the two are inverse operations.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/sum/sum_gosper.c`](https://github.com/stblake/mathilda/blob/main/src/sum/sum_gosper.c)
-- Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (4)
 
 ```mathematica
 In[1]:= DifferenceDelta[n^2, n]
@@ -69,6 +42,60 @@ Out[1]= 1 + 3 n + 3 n^2
 In[1]:= DifferenceDelta[Binomial[n, k], n]
 Out[1]= -Binomial[n, k] + Binomial[1 + n, k]
 ```
+
+## Algorithm
+
+sum_gosper.c -- Sum`Gosper: Gosper's indefinite hypergeometric summation, plus the DifferenceDelta forward-difference operator.
+
+Given a hypergeometric term t(i) (one whose term ratio t(i+1)/t(i) is a rational function of i), Gosper's algorithm finds a hypergeometric
+
+```text
+antidifference F with F(i+1)-F(i) = t(i), or proves none exists.  The output
+```
+
+has the shape F = R(i) t(i) with R rational, so no new special functions are needed.
+
+```text
+  1. r(i) = t(i+1)/t(i); require it rational (Simplify reduces factorial
+     ratios, then Together gives num/den polynomials a, b).
+  2. Gosper-Petkovsek normal form r = (a/b)(c(i+1)/c(i)) with
+     gcd(a(i), b(i+h)) = 1 for all integers h >= 0, via the dispersion set
+     (h with deg gcd(a(i), b(i+h)) > 0) and gcd peeling.
+  3. Solve a(i) x(i+1) - b(i-1) x(i) = c(i) for a polynomial x by undetermined
+     coefficients (SolveAlways).  No solution => t is not Gosper-summable.
+  4. Antidifference F(i) = (b(i-1)/c(i)) x(i) t(i).
+
+  Sum`Gosper[f, i]              -> F(i)                 (indefinite)
+  Sum`Gosper[f, i, imin, imax]  -> F(imax+1) - F(imin)  (definite, finite)
+```
+
+## Implementation notes
+
+**Algorithm.** `DifferenceDelta[f, i]` computes the forward difference
+`(f /. i -> i+1) - f`, the discrete analogue of `D` and the left inverse of
+indefinite `Sum`. `builtin_differencedelta` (src/sum/sum_gosper.c) requires the
+second argument to be a symbol, substitutes `i -> i+1` into `f` (`shift_var`,
+implemented via `ReplaceAll`), subtracts the original `f`, and returns the
+`Expand`-ed result. Returns NULL (unevaluated) unless the variable is a symbol.
+
+**Data structures.** Plain `Expr*` tree manipulation built on the existing
+`ReplaceAll`, subtraction, and `Expand` builtins (`shift_var`, `sum_sub`,
+`sum_eval`). No closed-form machinery — it is a thin structural operator that
+lives alongside Gosper's summation because the two are inverse operations.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[D](../../calculus/D/), [Sum](../../calculus/Sum/)
+
+## References
+
+- Source: [`src/sum/sum_gosper.c`](https://github.com/stblake/mathilda/blob/main/src/sum/sum_gosper.c)
+- Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
+- Tests: [`tests/test_sum.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sum.c)
+
+## Notes & additional examples
 
 ### Notes
 

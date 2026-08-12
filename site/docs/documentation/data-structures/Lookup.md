@@ -5,18 +5,23 @@
 
 ## Description
 
-```text
-Lookup[assoc, key]
-    Gives the value for key, or Missing["KeyAbsent", key].
-Lookup[assoc, key, default]
-    Uses default when key is absent.
-Lookup[assoc, {k1, k2, ...}]
-    Looks up several keys at once (O(n+m)).
-```
+**`Lookup[assoc, key]`**
 
-## Examples
+Gives the value for key, or Missing\["KeyAbsent", key\].
 
-All examples below are verified against the current Mathilda build.
+**`Lookup[assoc, key, default]`**
+
+Uses default when key is absent.
+
+**`Lookup[assoc, {k1, k2, ...}]`**
+
+Looks up several keys at once (O(n+m)).
+
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Lookup[<|"a" -> 1, "b" -> 2|>, "b"]
@@ -33,11 +38,15 @@ Out[3]= {1, 3}
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[Keys](../../data-structures/Keys/), [Values](../../data-structures/Values/)
 
 ## References
 
 - Source: [`src/assoc.c`](https://github.com/stblake/mathilda/blob/main/src/assoc.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
+- Tests: [`tests/test_compile_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_linalg.c)
+- Tests: [`tests/test_compile_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_transforms.c)

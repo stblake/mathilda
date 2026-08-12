@@ -5,22 +5,34 @@
 
 ## Description
 
-```text
-RandomSample[{e1, e2, ...}, n]
-    gives a pseudorandom sample of n of the ei, without replacement.
-RandomSample[{w1, w2, ...} -> {e1, e2, ...}, n]
-    gives a weighted pseudorandom sample of n of the ei.
-RandomSample[{e1, e2, ...}]
-    gives a pseudorandom permutation of the ei.
-RandomSample[list, UpTo[n]]
-    gives a sample of n of the ei, or as many as are available.
-RandomSample never samples any element more than once.
-Use SeedRandom to seed the pseudorandom generator for reproducible results.
-```
+**`RandomSample[{e1, e2, ...}, n]`**
 
-## Examples
+gives a pseudorandom sample of n of the ei, without replacement.
 
-All examples below are verified against the current Mathilda build.
+**`RandomSample[{w1, w2, ...} -> {e1, e2, ...}, n]`**
+
+gives a weighted pseudorandom sample of n of the ei.
+
+**`RandomSample[{e1, e2, ...}]`**
+
+gives a pseudorandom permutation of the ei.
+
+**`RandomSample[list, UpTo[n]]`**
+
+gives a sample of n of the ei, or as many as are available.
+
+<details>
+<summary>Notes</summary>
+
+RandomSample never samples any element more than once. Use SeedRandom to seed the pseudorandom generator for reproducible results.
+
+</details>
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomSample[{a, b, c, d, e}, 3]
@@ -48,6 +60,13 @@ In[8]:= Sort[RandomSample[{1, 2, 3} -> {a, b, c}]]
 Out[8]= {a, b, c}
 ```
 
+## Options & behaviour
+
+> **Packed arrays.** `RandomSample` and `RandomChoice` gather from a packed
+> list or an `NDArray` directly, drawing from the **same generator sequence**
+> the ordinary path uses — so `SeedRandom[n]` gives the same answer whether
+> the argument is packed or not.
+
 ## Implementation notes
 
 **Algorithm.** `builtin_randomsample` (in `src/random.c`) selects elements *without replacement*. The uniform form uses `fisher_yates_sample(total, n)`: a partial Fisher–Yates shuffle of an index array `[0..total)` that performs only the first `n` swaps (each swap picks `j` uniformly from the remaining suffix via `random_index`), returning the first `n` shuffled indices. With no count it returns a full random permutation. The size argument may be an integer or `UpTo[n]` (clamped to the list length via `is_upto`).
@@ -65,11 +84,13 @@ The weighted form `RandomSample[{w1,...}->{e1,...}, n]` uses `weighted_sample_wi
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[RandomChoice](../../random-number-generation/RandomChoice/), [NDArray](../../linear-algebra/NDArray/)
 
 ## References
 
 - Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
+- Tests: [`tests/test_random.c`](https://github.com/stblake/mathilda/blob/main/tests/test_random.c)

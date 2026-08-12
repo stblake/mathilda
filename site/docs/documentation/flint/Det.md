@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-FLINT`Det[m] gives the determinant of the square matrix m when every entry is an integer or rational, computed exactly and directly via FLINT (fmpq_mat_det). Returns unevaluated for a matrix with any non-rational entry.
-```
+FLINT\`Det\[m\] gives the determinant of the square matrix m when every entry is an integer or rational, computed exactly and directly via FLINT (fmpq\_mat\_det). Returns unevaluated for a matrix with any non-rational entry.
 
-## Examples
+## Examples (1)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= FLINT`Det[{{1, 2}, {3, 4}}]
@@ -21,10 +21,6 @@ Out[1]= -2
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 

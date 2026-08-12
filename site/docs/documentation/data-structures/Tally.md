@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-Tally[list] counts the number of occurrences of each distinct element in list.
-```
+**`Tally[list] counts the number of occurrences of each distinct element in list.`**
 
-## Examples
+## Examples (5)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Tally[<|"a" -> 1, "b" -> 1, "c" -> 2|>]
@@ -21,28 +21,7 @@ In[2]:= Commonest[<|"a" -> 1, "b" -> 1, "c" -> 2|>]
 Out[2]= {1}
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_tally` counts distinct elements, returning `{element, multiplicity}`
-pairs in first-occurrence order. With the default sameness test it uses a chained hash table
-(`expr_hash` for bucketing, `expr_eq` for equality) for `O(n)` expected counting; with a custom
-two-argument test it falls back to an `O(n²)` linear scan, evaluating `test[a, b]` per
-comparison. Multiplicities are tracked in a parallel `int64_t` array.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
-- Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (3)
 
 ```mathematica
 In[1]:= Tally[{a, b, a, c, b, a}]
@@ -58,6 +37,29 @@ Out[1]= {{0, 5}, {1, 8}, {4, 8}}
 In[1]:= Tally[Table[GCD[n, 12], {n, 1, 12}]]
 Out[1]= {{1, 4}, {2, 2}, {3, 2}, {4, 2}, {6, 1}, {12, 1}}
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_tally` counts distinct elements, returning `{element, multiplicity}`
+pairs in first-occurrence order. With the default sameness test it uses a chained hash table
+(`expr_hash` for bucketing, `expr_eq` for equality) for `O(n)` expected counting; with a custom
+two-argument test it falls back to an `O(n²)` linear scan, evaluating `test[a, b]` per
+comparison. Multiplicities are tracked in a parallel `int64_t` array.
+
+**Attributes:** `Protected`.
+
+## See also
+
+[Commonest](../../statistics/Commonest/), [Counts](../../data-structures/Counts/), [CountsBy](../../data-structures/CountsBy/)
+
+## References
+
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+
+## Notes & additional examples
 
 ### Notes
 

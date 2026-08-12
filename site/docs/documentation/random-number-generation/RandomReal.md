@@ -5,26 +5,35 @@
 
 ## Description
 
-```text
-RandomReal[]
-    gives a pseudorandom real number in the range 0 to 1.
-RandomReal[{xmin, xmax}]
-    gives a pseudorandom real number in the range xmin to xmax.
-RandomReal[xmax]
-    gives a pseudorandom real number in the range 0 to xmax.
-RandomReal[range, n]
-    gives a list of n pseudorandom reals.
-RandomReal[range, {n1, n2, ...}]
-    gives an n1 x n2 x ... array of pseudorandom reals.
-RandomReal[spec, WorkingPrecision -> n]
-    yields reals with n digits of precision.
-    Leading or trailing digits of the generated number can be 0.
-    n may be MachinePrecision (the default) or a positive number of decimal digits.
-```
+**`RandomReal[]`**
 
-## Examples
+gives a pseudorandom real number in the range 0 to 1.
 
-All examples below are verified against the current Mathilda build.
+**`RandomReal[{xmin, xmax}]`**
+
+gives a pseudorandom real number in the range xmin to xmax.
+
+**`RandomReal[xmax]`**
+
+gives a pseudorandom real number in the range 0 to xmax.
+
+**`RandomReal[range, n]`**
+
+gives a list of n pseudorandom reals.
+
+**`RandomReal[range, {n1, n2, ...}]`**
+
+gives an n1 x n2 x ... array of pseudorandom reals.
+
+**`RandomReal[spec, WorkingPrecision -> n]`**
+
+yields reals with n digits of precision. Leading or trailing digits of the generated number can be 0. n may be MachinePrecision (the default) or a positive number of decimal digits.
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (7)
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomReal[]
@@ -47,7 +56,11 @@ Out[6]= {}
 
 In[7]:= RandomReal[x]
 Out[7]= RandomReal[x]
+```
 
+### Options (1)
+
+```mathematica
 In[8]:= SeedRandom[42]; Precision[RandomReal[1, WorkingPrecision -> 40]]
 Out[8]= 40.037
 ```
@@ -63,14 +76,25 @@ When a precision argument requests extended precision, the MPFR path (`randomrea
 - RandomReal gives a different sequence of pseudorandom reals whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Uses 53 bits of randomness for full double-precision mantissa coverage.
 - **Large results pack.** A list or array of 250 or more machine reals is
+  written straight into a dense buffer and returned as a
+  [packed list](../packed-arrays/index.md): an ordinary `List` distinguishable only by
+  `NDArrayQ`. The draw order is unchanged (row-major), so a seeded stream gives
+  the same values either way. Does not apply to `WorkingPrecision` above
+  `MachinePrecision`, which yields MPFR atoms.
+- Accepts integer, real, rational, and bigint range arguments, as well as symbolic-but-numeric bounds that `N[]` can reduce to a machine (or MPFR) number, e.g. `RandomReal[{-Pi, Pi}]` or `RandomReal[{0, Sqrt[2]}]`.
+- `WorkingPrecision -> n` accepts `MachinePrecision` (the default) or a positive number of decimal digits. Digit counts above MachinePrecision route generation through MPFR, so range bounds keep their full working precision and the result is an MPFR atom.
 
 **Attributes:** `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/)
 
 ## References
 
 - Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)
+- Tests: [`tests/test_convolutions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_convolutions.c)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_correlations.c`](https://github.com/stblake/mathilda/blob/main/tests/test_correlations.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)

@@ -5,19 +5,22 @@
 
 ## Description
 
-```text
-Det[m]
-    gives the determinant of the square matrix m.
-Exact integer / rational / symbolic inputs use Bareiss-style
-fraction-free Gaussian elimination; machine-precision Real / Complex
-inputs dispatch to LAPACK LU (dgetrf / zgetrf) and accumulate the
-pivot-signed product of diagonal entries; arbitrary-precision MPFR
-inputs run a Doolittle LU at the input precision.
-```
+**`Det[m]`**
 
-## Examples
+gives the determinant of the square matrix m.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+Exact integer / rational / symbolic inputs use Bareiss-style fraction-free Gaussian elimination; machine-precision Real / Complex inputs dispatch to LAPACK LU (dgetrf / zgetrf) and accumulate the pivot-signed product of diagonal entries; arbitrary-precision MPFR inputs run a Doolittle LU at the input precision.
+
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Det[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
@@ -30,34 +33,7 @@ In[3]:= Det[{{a, b, c}, {d, e, f}, {g, h, i}}]
 Out[3]= c (-e g + d h) - b (-f g + d i) + a (-f h + e i)
 ```
 
-## Implementation notes
-
-**Algorithm.** `builtin_det` validates that the argument is a non-empty square rank-2 tensor (via `get_tensor_dims`; otherwise it emits `Det::matsq` and returns `NULL`), flattens it row-major into an `Expr**`, and computes the determinant by full **Laplace cofactor expansion** along the first row, recursively (`laplace_det`). Each cofactor term is built as `Times[±1, element, minor]` and accumulated with `Plus`, every product/sum being reduced through `eval_and_free`, so cancellation and symbolic simplification happen as the expansion unwinds. This keeps results exact and symbolic for integer, rational, and symbolic matrices.
-
-**Data structures.** The matrix is a flat `Expr**` of `n*n` element pointers; recursion carries an explicit `int* cols` index set and a fixed `row` cursor, deleting one column per level rather than copying submatrices. `laplace_det` is exported via `linalg.h` and reused by `Cross`.
-
-**Complexity / limits.** Cofactor expansion is `O(n!)`, so it is only practical for small `n`. There is no fraction-free Bareiss or LU fast path in this handler — the larger fraction-free Gauss-Jordan machinery lives in `inv.c`/`linsolve.c` for inversion and solving, not in `Det`.
-
-- `Protected`.
-- Evaluates the determinant of a square matrix symbolically or numerically using Laplace expansion.
-- Returns a warning `Det::matsq` if `m` is not a non-empty square matrix.
-- **FLINT acceleration** (when built with FLINT): a matrix whose entries are all integer or rational is computed exactly via `fmpq_mat_det` in polynomial time, avoiding the `O(n!)` Laplace expansion (e.g. a 12×12 Hilbert determinant is instant and exact). Symbolic matrices fall through to Laplace. The same kernel is exposed directly as `` FLINT`Det `` (see the FLINT` context section in *Structural Manipulation*).
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — Gaussian elimination and the LU view of the determinant.
-- Source: [`src/linalg/det.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/det.c)
-- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (7)
 
 ```mathematica
 In[1]:= Det[{{1, 2}, {3, 4}}]
@@ -93,6 +69,33 @@ Out[1]= 1/6048000
 In[1]:= Det[{{N[Pi, 40], 1}, {1, N[E, 40]}}]
 Out[1]= 7.5397342226735670654635508695465744950351
 ```
+
+## Implementation notes
+
+**Algorithm.** `builtin_det` validates that the argument is a non-empty square rank-2 tensor (via `get_tensor_dims`; otherwise it emits `Det::matsq` and returns `NULL`), flattens it row-major into an `Expr**`, and computes the determinant by full **Laplace cofactor expansion** along the first row, recursively (`laplace_det`). Each cofactor term is built as `Times[±1, element, minor]` and accumulated with `Plus`, every product/sum being reduced through `eval_and_free`, so cancellation and symbolic simplification happen as the expansion unwinds. This keeps results exact and symbolic for integer, rational, and symbolic matrices.
+
+**Data structures.** The matrix is a flat `Expr**` of `n*n` element pointers; recursion carries an explicit `int* cols` index set and a fixed `row` cursor, deleting one column per level rather than copying submatrices. `laplace_det` is exported via `linalg.h` and reused by `Cross`.
+
+**Complexity / limits.** Cofactor expansion is `O(n!)`, so it is only practical for small `n`. There is no fraction-free Bareiss or LU fast path in this handler — the larger fraction-free Gauss-Jordan machinery lives in `inv.c`/`linsolve.c` for inversion and solving, not in `Det`.
+
+- `Protected`.
+- Evaluates the determinant of a square matrix symbolically or numerically using Laplace expansion.
+- Returns a warning `Det::matsq` if `m` is not a non-empty square matrix.
+- **FLINT acceleration** (when built with FLINT): a matrix whose entries are all integer or rational is computed exactly via `fmpq_mat_det` in polynomial time, avoiding the `O(n!)` Laplace expansion (e.g. a 12×12 Hilbert determinant is instant and exact). Symbolic matrices fall through to Laplace. The same kernel is exposed directly as `` FLINT`Det `` (see the FLINT` context section in *Structural Manipulation*).
+
+**Attributes:** `Protected`.
+
+## References
+
+- G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — Gaussian elimination and the LU view of the determinant.
+- Source: [`src/linalg/det.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/det.c)
+- Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_diagonal.c`](https://github.com/stblake/mathilda/blob/main/tests/test_diagonal.c)
+- Tests: [`tests/test_eigen.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eigen.c)
+- Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
+- Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
+
+## Notes & additional examples
 
 ### Notes
 

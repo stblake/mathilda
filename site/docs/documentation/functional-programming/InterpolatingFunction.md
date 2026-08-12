@@ -5,25 +5,30 @@
 
 ## Description
 
-```text
-InterpolatingFunction[domain, table]
-    represents an approximate function whose values are found by
-    interpolation. domain is {{x1min, x1max}, ...} with one interval
-    per dimension; table is a list of {coord, value} data points on a
-    full tensor grid (coord is a scalar for 1-D, an {x1, ..., xm} list
-    for m-D).
-InterpolatingFunction[...][x1, ..., xm]
-    gives the interpolated value using tensor-product piecewise-
-    polynomial (default order 3) interpolation. Arguments outside the
-    domain are extrapolated with a warning.
-Derivative[d1, ..., dm][InterpolatingFunction[...]]
-    gives an InterpolatingFunction for the mixed partial derivative.
-In standard output only the domain is shown; the rest is <>.
-```
+**`InterpolatingFunction[domain, table]`**
 
-## Examples
+represents an approximate function whose values are found by interpolation. domain is {{x1min, x1max}, ...} with one interval per dimension; table is a list of {coord, value} data points on a full tensor grid (coord is a scalar for 1-D, an {x1, ..., xm} list for m-D).
 
-All examples below are verified against the current Mathilda build.
+**`InterpolatingFunction[...][x1, ..., xm]`**
+
+gives the interpolated value using tensor-product piecewise- polynomial (default order 3) interpolation. Arguments outside the domain are extrapolated with a warning.
+
+**`Derivative[d1, ..., dm][InterpolatingFunction[...]]`**
+
+gives an InterpolatingFunction for the mixed partial derivative.
+
+<details>
+<summary>Notes</summary>
+
+In standard output only the domain is shown; the rest is \<\>.
+
+</details>
+
+## Examples (11)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= ifun = InterpolatingFunction[{{0, 5}}, {{0,0},{1,1},{2,3},{3,4},{4,3},{5,0}}]
@@ -41,6 +46,45 @@ Out[4]= 1.04167
 In[5]:= Derivative[0, 1][f][1.5, 2.5]
 Out[5]= Derivative[0, 1][f][1.5, 2.5]
 ```
+
+### Applications (6)
+
+```mathematica
+In[1]:= f = Interpolation[{1, 4, 9, 16}]
+Out[1]= InterpolatingFunction[{{1, 4}}, <>]
+
+In[2]:= f[2.5]
+Out[2]= 6.25
+```
+
+```mathematica
+In[1]:= g = Interpolation[Table[{x, Sin[x]}, {x, 0., 6., 0.5}]]
+Out[1]= InterpolatingFunction[{{0.0, 6.0}}, <>]
+
+In[2]:= g[1.5]
+Out[2]= 0.997495
+
+In[3]:= Sin[1.5]
+Out[3]= 0.997495
+```
+
+```mathematica
+In[1]:= d = Interpolation[{1, 4, 9, 16, 25}]; dd = d'; dd[2.5]
+Out[1]= 5.0
+```
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| Interpolation evaluate, 20000 points | 18.9 s | 18.1 s | 0.073 s |
+| NDS Van der Pol mu=1000 | 4.02 s | 0.234 s | 0.362 s |
+| Interpolation over 10^5 array | 1.26 s | 4.57 s | 4.44 s |
+| NDS harmonic t=100 | 0.884 s | 0.475 s | 37.2 s |
+| NDS Van der Pol mu=100 | 0.647 s | 0.271 s | 0.452 s |
+| NDS Lorenz t=5 | 0.337 s | 0.45 s | 14.4 s |
 
 ## Implementation notes
 
@@ -88,9 +132,9 @@ borrowed, owned by the cache).
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[Function](../../functional-programming/Function/), [FullForm](../../expression-information/FullForm/)
 
 ## References
 
@@ -98,34 +142,10 @@ borrowed, owned by the cache).
 - E. H. Neville, "Iterative Interpolation", J. Indian Math. Soc. 1934.
 - Source: [`src/interp.c`](https://github.com/stblake/mathilda/blob/main/src/interp.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_interp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_interp.c)
+- Tests: [`tests/test_ndsolve_pde.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndsolve_pde.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= f = Interpolation[{1, 4, 9, 16}]
-Out[1]= InterpolatingFunction[{{1, 4}}, <>]
-
-In[2]:= f[2.5]
-Out[2]= 6.25
-```
-
-```mathematica
-In[1]:= g = Interpolation[Table[{x, Sin[x]}, {x, 0., 6., 0.5}]]
-Out[1]= InterpolatingFunction[{{0.0, 6.0}}, <>]
-
-In[2]:= g[1.5]
-Out[2]= 0.997495
-
-In[3]:= Sin[1.5]
-Out[3]= 0.997495
-```
-
-```mathematica
-In[1]:= d = Interpolation[{1, 4, 9, 16, 25}]; dd = d'; dd[2.5]
-Out[1]= 5.0
-```
 
 ### Notes
 

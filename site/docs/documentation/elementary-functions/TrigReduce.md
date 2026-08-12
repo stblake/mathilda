@@ -5,21 +5,22 @@
 
 ## Description
 
-```text
-TrigReduce[expr]
-    rewrites products and powers of trigonometric functions in expr in
-    terms of trigonometric functions with combined arguments.
-TrigReduce operates on both circular and hyperbolic functions; given a
-trigonometric polynomial it typically yields a linear expression
-involving trigonometric functions with more complicated arguments
-(broadly the inverse of TrigExpand).
-TrigReduce automatically threads over lists, equations, inequalities,
-and logic functions.
-```
+**`TrigReduce[expr]`**
 
-## Examples
+rewrites products and powers of trigonometric functions in expr in terms of trigonometric functions with combined arguments.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+TrigReduce operates on both circular and hyperbolic functions; given a trigonometric polynomial it typically yields a linear expression involving trigonometric functions with more complicated arguments (broadly the inverse of TrigExpand). TrigReduce automatically threads over lists, equations, inequalities, and logic functions.
+
+</details>
+
+## Examples (13)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= TrigReduce[2 Cos[x]^2]
@@ -46,6 +47,50 @@ Out[7]= 1/8 (3 + Cos[4 x] - 4 Cos[2 x])
 In[8]:= TrigReduce[2 Sin[x + y] Cos[x - y]]
 Out[8]= Sin[2 x] + Sin[2 y]
 ```
+
+### Applications (5)
+
+```mathematica
+In[1]:= TrigReduce[Sin[x] Cos[x]]
+Out[1]= 1/2 Sin[2 x]
+```
+
+A square is linearised through the power-reduction formula:
+
+```mathematica
+In[1]:= TrigReduce[Sin[x]^2]
+Out[1]= 1/2 (1 - Cos[2 x])
+```
+
+Higher powers spread across several harmonics:
+
+```mathematica
+In[1]:= TrigReduce[Cos[x]^3]
+Out[1]= 1/4 (3 Cos[x] + Cos[3 x])
+```
+
+A product of squares reduces to a single fourth harmonic — exactly the
+integrand identity behind `Integrate[Sin[x]^2 Cos[x]^2, x]`:
+
+```mathematica
+In[1]:= TrigReduce[Sin[x]^2 Cos[x]^2]
+Out[1]= 1/8 (1 - Cos[4 x])
+```
+
+The product-to-sum identity for two sines appears directly:
+
+```mathematica
+In[1]:= TrigReduce[2 Sin[x] Sin[y]]
+Out[1]= -Cos[x + y] + Cos[x - y]
+```
+
+## Options & behaviour
+
+`TrigReduce` is also offered as a `Simplify` transform: when the search
+sees an angle-addition expansion such as
+`Sin[a] (Cos[b] − Sin[b]) + Cos[a] (Sin[b] + Cos[b])`, the reduced form
+`Cos[a + b] + Sin[a + b]` has fewer leaves and the score-gate selects
+it.
 
 ## Implementation notes
 
@@ -95,52 +140,39 @@ only one direction of each product-to-sum pair needs to be written. Threads over
 through the active `FactorMemo` via the `builtin_trigreduce` wrapper.
 
 - Applies the classical product-to-sum identities (Sin·Cos, Sin·Sin,
+  Cos·Cos, plus the four hyperbolic analogues) and the power-reduction
+  identities (Sin² → (1 − Cos[2x])/2, etc., extended recursively to
+  any positive integer power).
+- Operates on both circular and hyperbolic functions; rewrites
+  `Tan`/`Cot`/`Sec`/`Csc` (and the hyperbolic reciprocals) as `Sin`/`Cos`
+  ratios before reduction, then restores the reciprocal head where the
+  result has the matching shape.
+- Recognises angle-addition forms produced after `Together`
+  (`Sin[a]·Cos[b] + Cos[a]·Sin[b] → Sin[a + b]` and analogues), with
+  sign variants and hyperbolic counterparts.
+- Includes a sign-cancellation pass for the `Sin[a − b] + Sin[b − a] = 0`
+  shape that arises when the product-to-sum rules bind asymmetrically;
+  the same pass handles the corresponding `Cos`/`Sinh`/`Cosh` parities.
+- Applies an `Expand`/`Together` cleanup at the end so trivial outer
+  fractions (`1/2 (2 X + 2 Y)`) flatten while genuine rationals
+  (`(3 − 4 Cos[2 x] + Cos[4 x])/2`) survive in normalised form.
+- Memoised through the same `FactorMemo` mechanism used by
+  `TrigExpand`/`TrigFactor`/`TrigToExp`, so repeated invocations during
+  `Simplify` candidate-set search amortise.
+- `Listable`, plus explicit threading over `Equal`, `Unequal`, `Less`,
+  `LessEqual`, `Greater`, `GreaterEqual`, `SameQ`, `UnsameQ`, `And`,
+  `Or`, `Not`, `Xor`, `Implies` (mirrors `TrigExpand` / `TrigFactor`).
+- Idempotent on already-reduced inputs and a no-op on non-trig
+  expressions or single trig calls of compound arguments.
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[TrigExpand](../../elementary-functions/TrigExpand/), [Tan](../../elementary-functions/Tan/), [Cot](../../elementary-functions/Cot/), [Sec](../../elementary-functions/Sec/), [Csc](../../elementary-functions/Csc/), [Sin](../../elementary-functions/Sin/), [Cos](../../elementary-functions/Cos/), [Together](../../algebra/Together/)
 
 ## References
 
 - Source: [`src/simp/trigsimp.c`](https://github.com/stblake/mathilda/blob/main/src/simp/trigsimp.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
-
-## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= TrigReduce[Sin[x] Cos[x]]
-Out[1]= 1/2 Sin[2 x]
-```
-
-A square is linearised through the power-reduction formula:
-
-```mathematica
-In[1]:= TrigReduce[Sin[x]^2]
-Out[1]= 1/2 (1 - Cos[2 x])
-```
-
-Higher powers spread across several harmonics:
-
-```mathematica
-In[1]:= TrigReduce[Cos[x]^3]
-Out[1]= 1/4 (3 Cos[x] + Cos[3 x])
-```
-
-A product of squares reduces to a single fourth harmonic — exactly the
-integrand identity behind `Integrate[Sin[x]^2 Cos[x]^2, x]`:
-
-```mathematica
-In[1]:= TrigReduce[Sin[x]^2 Cos[x]^2]
-Out[1]= 1/8 (1 - Cos[4 x])
-```
-
-The product-to-sum identity for two sines appears directly:
-
-```mathematica
-In[1]:= TrigReduce[2 Sin[x] Sin[y]]
-Out[1]= -Cos[x + y] + Cos[x - y]
-```
+- Tests: [`tests/test_trigreduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_trigreduce.c)

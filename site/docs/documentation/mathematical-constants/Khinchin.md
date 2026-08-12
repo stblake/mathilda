@@ -5,40 +5,24 @@
 
 ## Description
 
-```text
-Khinchin
-    is Khinchin's constant K (also Khintchine's constant), with numerical
-    value ~= 2.68545.
-Khinchin's constant is the limiting geometric mean of the partial
-quotients in the continued-fraction expansion of almost every real
-number, given by the product over s >= 1 of (1 + 1/(s (s + 2)))^Log2[s].
-It is a mathematical constant: it has attributes Constant and Protected,
-NumericQ[Khinchin] is True, and D[Khinchin, x] is 0. N[Khinchin, prec]
-evaluates it to any precision.
-```
+**`Khinchin`**
 
-## Examples
+is Khinchin's constant K (also Khintchine's constant), with numerical value ~= 2.68545.
 
-_No verified examples yet for this function._
+**`NumericQ[Khinchin] is True, and D[Khinchin, x] is 0. N[Khinchin, prec]`**
 
-## Implementation notes
+<details>
+<summary>Notes</summary>
 
-- Attributes `Constant`, `Protected`. `Attributes[Khinchin] = {Constant,
+Khinchin's constant is the limiting geometric mean of the partial quotients in the continued-fraction expansion of almost every real number, given by the product over s \>= 1 of (1 + 1/(s (s + 2)))^Log2\[s\]. It is a mathematical constant: it has attributes Constant and Protected, evaluates it to any precision.
 
-**Attributes:** `Constant`, `Protected`.
+</details>
 
-## Implementation status
+## Examples (4)
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+Every input below was run against the current Mathilda build and its output recorded.
 
-## References
-
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
-- Specification: [`docs/spec/builtins/mathematical-constants.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/mathematical-constants.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (4)
 
 ```mathematica
 In[1]:= N[Khinchin]
@@ -61,6 +45,40 @@ Out[1]= True
 In[2]:= D[Khinchin, x]
 Out[2]= 0
 ```
+
+## Options & behaviour
+
+The constant values for `GoldenAngle`, `Glaisher`, and `Khinchin` live in the
+numeric constant table (`src/numeric.c`); their MPFR fillers compute
+`GoldenAngle` from its closed form, and `Glaisher`/`Khinchin` from the series
+above. Their `Constant`/`Protected` attributes are stamped in `numeric_init`.
+
+## Implementation notes
+
+- Attributes `Constant`, `Protected`. `Attributes[Khinchin] = {Constant,
+  Protected}`; the symbol cannot be reassigned.
+- Propagated as an exact, unevaluated symbol; `NumericQ[Khinchin]` is `True`
+  and `D[Khinchin, x] = 0`.
+- `N[Khinchin]` gives the machine value `2.68545`; `N[Khinchin, prec]` gives any
+  precision, e.g.
+  `N[Khinchin, 50] = 2.6854520010653064453097148354817956938203822939945`.
+
+  Arbitrary precision uses the geometrically convergent zeta series
+  `ln K · ln 2 = Σ_{n>=1} (ζ(2n) − 1)/n · Σ_{k=1}^{2n−1} (−1)^(k+1)/k`
+  (the Bailey–Borwein–Crandall form). Verified to 250 digits.
+
+**Attributes:** `Constant`, `Protected`.
+
+## See also
+
+[GoldenAngle](../../mathematical-constants/GoldenAngle/), [Glaisher](../../mathematical-constants/Glaisher/)
+
+## References
+
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Specification: [`docs/spec/builtins/mathematical-constants.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/mathematical-constants.md)
+
+## Notes & additional examples
 
 ### Notes
 

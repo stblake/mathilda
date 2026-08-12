@@ -5,14 +5,15 @@
 
 ## Description
 
-```text
-KeyTake[assoc, {k1, ...}]
-    Gives the association of only the specified keys (order preserved).
-```
+**`KeyTake[assoc, {k1, ...}]`**
 
-## Examples
+Gives the association of only the specified keys (order preserved).
 
-All examples below are verified against the current Mathilda build.
+## Examples (2)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= KeyTake[<|"a" -> 1, "b" -> 2, "c" -> 3|>, {"c", "a"}]
@@ -26,11 +27,9 @@ Out[2]= {<|"a" -> 1|>, <|"a" -> 3|>}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/assoc.c`](https://github.com/stblake/mathilda/blob/main/src/assoc.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)

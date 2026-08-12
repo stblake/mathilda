@@ -5,10 +5,9 @@
 
 ## Description
 
-```text
-ContourLabels
-    ContourPlot option: True draws z-value text labels at the first visible point of each contour level. Default False.
-```
+**`ContourLabels`**
+
+ContourPlot option: True draws z-value text labels at the first visible point of each contour level. Default False.
 
 ## Examples
 
@@ -17,10 +16,6 @@ _No verified examples yet for this function._
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
 
 ## References
 

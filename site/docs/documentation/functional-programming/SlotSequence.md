@@ -5,32 +5,13 @@
 
 ## Description
 
-```text
-## or SlotSequence[n] represents arguments from the n-th onward.
-```
+## or SlotSequence\[n\] represents arguments from the n-th onward.
 
-## Examples
+## Examples (3)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
 
-## Implementation notes
-
-`SlotSequence[n]` (`##`, `##n`) is an inert marker — `builtin_slotsequence` always returns `NULL`. During pure-`Function` application, `substitute_slots` replaces `SlotSequence[n]` with a `Sequence[...]` of copies of arguments `n` through the last (`arg_count − n + 1` of them), which then splices into the surrounding call when the `Sequence` is flattened by the evaluator. Like `Slot`, recursion stops at nested `Function` nodes. `ATTR_PROTECTED`.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/purefunc.c`](https://github.com/stblake/mathilda/blob/main/src/purefunc.c)
-- Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (3)
 
 ```mathematica
 In[1]:= (Plus[##] &)[1, 2, 3]
@@ -42,6 +23,20 @@ Out[2]= f[b, c]
 In[3]:= FullForm[##]
 Out[3]= SlotSequence[1]
 ```
+
+## Implementation notes
+
+`SlotSequence[n]` (`##`, `##n`) is an inert marker — `builtin_slotsequence` always returns `NULL`. During pure-`Function` application, `substitute_slots` replaces `SlotSequence[n]` with a `Sequence[...]` of copies of arguments `n` through the last (`arg_count − n + 1` of them), which then splices into the surrounding call when the `Sequence` is flattened by the evaluator. Like `Slot`, recursion stops at nested `Function` nodes. `ATTR_PROTECTED`.
+
+**Attributes:** `Protected`.
+
+## References
+
+- Source: [`src/purefunc.c`](https://github.com/stblake/mathilda/blob/main/src/purefunc.c)
+- Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_purefunc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_purefunc.c)
+
+## Notes & additional examples
 
 ### Notes
 

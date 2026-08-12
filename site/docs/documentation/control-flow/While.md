@@ -5,18 +5,28 @@
 
 ## Description
 
-```text
-While[test, body] evaluates test, then body, repeatedly, until test first fails to give True.
-While[test] does the loop with a Null body, which is useful when test has side-effects.
+**`While[test, body] evaluates test, then body, repeatedly, until test first fails to give True.`**
+
+**`While[test] does the loop with a Null body, which is useful when test has side-effects.`**
+
+**`Break[] inside body exits the loop.`**
+
+**`Continue[] inside body skips the rest of body and re-evaluates test.`**
+
+**`Return[v] inside body causes While to yield v; otherwise While returns Null.`**
+
+<details>
+<summary>Notes</summary>
+
 While has attribute HoldAll.
-Break[] inside body exits the loop.
-Continue[] inside body skips the rest of body and re-evaluates test.
-Return[v] inside body causes While to yield v; otherwise While returns Null.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= n = 1; While[n < 4, n = n + 1]; n
@@ -43,11 +53,15 @@ Out[3]= 11
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
+## See also
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+[HoldAll](../../expression-information/HoldAll/), [Throw](../../control-flow/Throw/), [Return](../../control-flow/Return/)
 
 ## References
 
 - Source: [`src/iter.c`](https://github.com/stblake/mathilda/blob/main/src/iter.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+- Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_iter.c`](https://github.com/stblake/mathilda/blob/main/tests/test_iter.c)
+- Tests: [`tests/test_mateigen_direct.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mateigen_direct.c)

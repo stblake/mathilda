@@ -5,36 +5,13 @@
 
 ## Description
 
-```text
-NextPrime[x] gives the next prime after x.
-```
+**`NextPrime[x] gives the next prime after x.`**
 
-## Examples
+## Examples (4)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
 
-## Implementation notes
-
-`builtin_nextprime` computes `NextPrime[x]` / `NextPrime[x, k]`. The start point is taken as `⌊x⌋` for Real/Rational and exactly for Integer/BigInt, into a GMP `mpz_t`. `k = 0` returns x unchanged. For `k > 0` it iterates GMP's `mpz_nextprime` k times (the next probable prime strictly greater than the current value). For `k < 0` it iterates `mpz_prevprime` |k| times, returning unevaluated (NULL) if it would step at or below 2 or no previous prime exists. The result is normalised via `expr_bigint_normalize`.
-
-- `Protected`, `ReadProtected`.
-- Supports negative $k$ for finding previous primes.
-- Remains unevaluated if no such prime exists (e.g., `NextPrime[2, -1]`).
-
-**Attributes:** `Listable`, `Protected`, `ReadProtected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/facint.c`](https://github.com/stblake/mathilda/blob/main/src/facint.c)
-- Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (4)
 
 ```mathematica
 In[1]:= NextPrime[100]
@@ -57,6 +34,24 @@ Stepping five primes past `2^31`:
 In[1]:= NextPrime[2^31, 5]
 Out[1]= 2147483777
 ```
+
+## Implementation notes
+
+`builtin_nextprime` computes `NextPrime[x]` / `NextPrime[x, k]`. The start point is taken as `⌊x⌋` for Real/Rational and exactly for Integer/BigInt, into a GMP `mpz_t`. `k = 0` returns x unchanged. For `k > 0` it iterates GMP's `mpz_nextprime` k times (the next probable prime strictly greater than the current value). For `k < 0` it iterates `mpz_prevprime` |k| times, returning unevaluated (NULL) if it would step at or below 2 or no previous prime exists. The result is normalised via `expr_bigint_normalize`.
+
+- `Protected`, `ReadProtected`.
+- Supports negative $k$ for finding previous primes.
+- Remains unevaluated if no such prime exists (e.g., `NextPrime[2, -1]`).
+
+**Attributes:** `Listable`, `Protected`, `ReadProtected`.
+
+## References
+
+- Source: [`src/facint.c`](https://github.com/stblake/mathilda/blob/main/src/facint.c)
+- Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+
+## Notes & additional examples
 
 ### Notes
 
