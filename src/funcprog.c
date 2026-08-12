@@ -1248,6 +1248,16 @@ static Expr* scan_apply(Expr* f, Expr* part) {
  * Heads->True, the head) before the node itself. Returns NULL to continue, or
  * the sentinel/return value to stop and hand back to builtin_scan. */
 static Expr* scan_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec spec) {
+    /* Non-negative upper bound: once past it, neither this node nor any deeper
+     * one can be in range (a visit needs current_level <= max, and the level only
+     * rises with depth), so stop descending. This is what stops the common
+     * Scan[f, list] (default level 1) from walking every element's whole subtree
+     * -- the traversal + per-node get_depth cost was growing with element depth,
+     * though f only ever fires at level 1. Mirrors the Map/Apply short-circuits.
+     * A negative max keeps the full descent (a deeper leaf may still match). */
+    if (spec.max >= 0 && current_level > spec.max)
+        return NULL;
+
     if (expr->type == EXPR_FUNCTION) {
         if (spec.heads) {
             Expr* s = scan_at_level(f, expr->data.function.head, current_level + 1, spec);
@@ -1262,10 +1272,18 @@ static Expr* scan_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec
 
     /* Standard mixed positive/negative level membership: a bound >= 0 is a
      * level counted from the root; a bound < 0 is a negative depth (leaves at
-     * depth 1 have negative level -1). */
-    int64_t d = get_depth(expr);
-    bool lo = (spec.min >= 0) ? (current_level >= spec.min) : (-d >= spec.min);
-    bool hi = (spec.max >= 0) ? (current_level <= spec.max) : (-d <= spec.max);
+     * depth 1 have negative level -1). get_depth is only needed when a bound is
+     * negative; a pure non-negative spec (the common case) skips its full-subtree
+     * traversal entirely. */
+    bool lo, hi;
+    if (spec.min >= 0 && spec.max >= 0) {
+        lo = current_level >= spec.min;
+        hi = current_level <= spec.max;
+    } else {
+        int64_t d = get_depth(expr);
+        lo = (spec.min >= 0) ? (current_level >= spec.min) : (-d >= spec.min);
+        hi = (spec.max >= 0) ? (current_level <= spec.max) : (-d <= spec.max);
+    }
     if (lo && hi)
         return scan_apply(f, expr_copy(expr));   /* visit this node last */
     return NULL;
