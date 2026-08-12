@@ -324,6 +324,35 @@ static void test_cf_norm_list_literal(void) {
                 " \"Compiled\"] === False");
 }
 
+/* ------------------------------------------------------------------ *
+ *  Chop / Clip scalar lowerings (branchless mask-multiply; default bounds)
+ * ------------------------------------------------------------------ *
+ * Chop[x] = x * (Abs[x] >= delta); the chopped value is a machine 0. (a
+ * CompiledFunction returns machine types, the compiled counterpart of the
+ * interpreter's exact Integer 0). Clip[x] fills the default-bounds na==1 gap
+ * as Min[Max[x, -1.], 1.]. */
+static void test_cf_chop(void) {
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Chop[x]]");
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Chop[x, 0.01]]");
+    assert_lowers("CompileDiagnostics[{{n, _Integer}}, Chop[n]]");   /* int never chops */
+    assert_true("Compile[{{x, _Real}}, Chop[x]][1.0*10^-15] === 0.");
+    assert_true("Compile[{{x, _Real}}, Chop[x]][3.5] === 3.5");
+    assert_true("Compile[{{x, _Real}}, Chop[x, 0.01]][0.005] === 0.");
+    assert_true("Compile[{{x, _Real}}, Chop[x, 0.01]][0.5] === 0.5");
+    assert_true("Compile[{{n, _Integer}}, Chop[n]][5] === 5");
+    /* a complex operand has no scalar lowering (chop can drop to real) */
+    assert_true("Lookup[CompileDiagnostics[{{z, _Complex}}, Chop[z]], \"Compiled\"] === False");
+}
+
+static void test_cf_clip_default(void) {
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Clip[x]]");
+    assert_true("Compile[{{x, _Real}}, Clip[x]][1.5] === 1.");
+    assert_true("Compile[{{x, _Real}}, Clip[x]][-2.] === -1.");
+    assert_true("Compile[{{x, _Real}}, Clip[x]][0.5] === 0.5");
+    /* the explicit-bounds scalar form still lowers */
+    assert_true("Compile[{{x, _Real}}, Clip[x, {0., 2.}]][3.0] === 2.");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -345,6 +374,9 @@ int main(void) {
     TEST(test_cf_norm_array_vector);
     TEST(test_cf_norm_array_matrix);
     TEST(test_cf_norm_list_literal);
+
+    TEST(test_cf_chop);
+    TEST(test_cf_clip_default);
 
     TEST(test_repeated_evaluation_does_not_corrupt);
 

@@ -291,12 +291,34 @@ static void test_clip_memory_loop(void) {
 }
 
 /* ------------------------------------------------------------------------
+ *  Packed / NDArray buffer: exact-Integer bounds, three-way scan
+ * ---------------------------------------------------------------------- */
+
+static void test_clip_packed_exact_bounds(void) {
+    /* Every element clips to a finite exact-Integer bound -> a uniform int64
+     * result, value-identical to the List path (the fast all-clip case). */
+    assert_eval_eq("Clip[{1.5, 2.5, 3.5}, {-1, 1}]", "{1, 1, 1}", 0);
+    assert_eval_eq("Clip[{-5.0, 5.0}, {-1, 1}]", "{-1, 1}", 0);
+    assert_eval_eq("Clip[{1.5, 2.5}]", "{1, 1}", 0);          /* default bounds */
+    /* A MIX of clipped (Integer) and unclipped (Real) stays exact and mixed. */
+    assert_eval_eq("Clip[{1.5, 0.5}, {-1, 1}]", "{1, 0.5}", 0);
+    /* Nothing clips: the Real input, unchanged. */
+    assert_eval_eq("Clip[{0.2, 0.5}, {-1, 1}]", "{0.2, 0.5}", 0);
+    /* Rational bounds keep their exact heads via the List path. */
+    assert_eval_eq("Clip[{1.5, 2.5}, {1/4, 3/4}]", "{3/4, 3/4}", 0);
+    /* short == packed: an auto-packing length agrees element-for-element. */
+    assert_eval_eq("Take[Clip[Range[1.5, 300.5], {-1, 1}], 2]", "{1, 1}", 0);
+}
+
+/* ------------------------------------------------------------------------
  *  Main
  * ---------------------------------------------------------------------- */
 
 int main(void) {
     symtab_init();
     core_init();
+
+    TEST(test_clip_packed_exact_bounds);
 
     /* Default interval */
     TEST(test_clip_above_one);

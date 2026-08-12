@@ -676,6 +676,13 @@ default.
 - `delta` may be supplied as `Integer`, `Real`, `Rational[n, d]`,
   BigInt, or (when `USE_MPFR=1`) `MPFR`; its absolute value is the
   effective tolerance.
+- **Packed/NDArray fast path** (packed-aware): a machine buffer is scanned and
+  kept untouched when nothing chops (the common cleanup call); a chopping rank-1
+  buffer builds the exact mixed `{…, 0, …}` result in one pass, else it degrades
+  to the list path. See [packed arrays](packed-arrays.md).
+- **`Compile[]`/auto-compilation**: `Chop[x]` / `Chop[x, δ]` (literal `δ`) lower to
+  the branchless `x * (Abs[x] >= δ)`, returning a machine `0.` where the
+  interpreter gives the exact `Integer 0`; a machine integer is the identity.
 
 **Complex handling**.  `Complex[re, im]` whose components are both
 machine reals is the "machine complex" case and gets Mathematica's
@@ -741,6 +748,13 @@ need not be numeric.
   *finite exact* bound beside `Real` data still returns that exact bound where
   it clips (`Clip[{-2., 0.5}, {0, Infinity}]` gives `{0, 0.5}`), which is why
   the two are gated separately on the packed path.
+- **Packed/NDArray fast path** (packed-aware): `Real` bounds stay on the buffer;
+  against an exact bound a three-way scan keeps a buffer when nothing clips (the
+  `Real` input) or when **everything** clips to a finite exact-`Integer` bound (a
+  uniform `int64` buffer), and degrades to the list path only for a mixture. See
+  [packed arrays](packed-arrays.md).
+- **`Compile[]`/auto-compilation**: `Clip[x]` (default bounds) and
+  `Clip[x, {lo, hi}]` (`Real` bounds) lower to `Min[Max[x, lo], hi]` → `Real`.
 - Complex (non-real) input emits a one-shot `Clip::ncompl` warning and
   the call stays unevaluated.  Use `Re[z]`, `Im[z]` to clip the parts
   separately.

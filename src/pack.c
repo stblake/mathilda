@@ -595,6 +595,12 @@ static void pack_mark_aware_heads(void) {
          * Deliberately not int64_ok: Rescale[Range[10]] is a list of exact
          * Rationals, which no buffer holds. */
         "Rescale",
+        /* Chop joined on 2026-08-12. Like Clip's exact bounds, a chopped element
+         * is the exact Integer 0, which no uniform Real buffer holds -- so
+         * chop_ndarray (src/core.c) scans and keeps the buffer only when NOTHING
+         * chops, degrading to the exact List path otherwise. Before it opted in,
+         * Chop[largeList] materialised at ~40x an aware head. */
+        "Chop",
         /* Note the absentees just below this list -- Precision and Accuracy
          * USED to be here and had to come out. */
         /* Functional heads with packed paths (src/funcprog.c). */

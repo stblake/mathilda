@@ -1509,6 +1509,55 @@ static double chop_extract_delta(Expr* d) {
     return -1.0;
 }
 
+/* Chop over a machine buffer.  A near-zero real chops to the exact Integer 0
+ * (chop_recursive), which no uniform Real buffer holds -- so the buffer path is
+ * safe only when NOTHING chops, where the answer is the input unchanged.  A
+ * chopping array degrades to the exact List path, exactly as ndstruct_clip's
+ * exact-bound scan does; the delisted List is mixed (or plain), never re-packs,
+ * so no recursion forms.  Complex and int64/bool buffers go straight to the List
+ * path (a complex chop can drop to a real or an Integer 0, another non-uniform
+ * result; an exact-integer buffer has no machine real to chop). */
+static Expr* chop_ndarray(Expr* res, double delta) {
+    Expr* a = res->data.function.args[0];
+    NDType dt = a->data.ndarray.dtype;
+    if (ndt_is_complex(dt) || dt == NDT_INT64 || dt == NDT_BOOL)
+        return ndarray_delist_and_reeval(res);
+    size_t sz = ndarray_size(a);
+
+    /* Cheap alloc-free scan first: the overwhelmingly common cleanup call chops
+     * NOTHING, and then the answer is the input buffer untouched. */
+    bool any = false;
+    for (size_t k = 0; k < sz; k++) {
+        double r, im;
+        ndt_get(a->data.ndarray.data, k, dt, &r, &im);
+        if (fabs(r) < delta) { any = true; break; }
+    }
+    if (!any) {
+        void* same = malloc(ndt_elem_size(dt) * (sz ? sz : 1));
+        if (!same) return ndarray_delist_and_reeval(res);
+        memcpy(same, a->data.ndarray.data, ndt_elem_size(dt) * sz);
+        return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims, same, dt);
+    }
+
+    /* Something chops: the result mixes Real with the exact Integer 0, which no
+     * uniform buffer holds. For a rank-1 buffer build that mixed List in ONE pass
+     * straight off the elements (an all-zero result re-packs to int64 downstream)
+     * -- half the work of ndarray_delist_and_reeval's materialise-then-re-Chop,
+     * and value-identical to chop_recursive. Higher ranks (rarely Chopped) take
+     * the general delist, which nests correctly. */
+    if (a->data.ndarray.rank != 1) return ndarray_delist_and_reeval(res);
+    Expr** items = malloc(sizeof(Expr*) * (sz ? sz : 1));
+    if (!items) return ndarray_delist_and_reeval(res);
+    for (size_t k = 0; k < sz; k++) {
+        double r, im;
+        ndt_get(a->data.ndarray.data, k, dt, &r, &im);
+        items[k] = (fabs(r) < delta) ? expr_new_integer(0) : expr_new_real(r);
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, sz);
+    free(items);
+    return out;
+}
+
 /*
  * builtin_chop:
  * Chop[expr]        replaces approximate real numbers in expr that are
@@ -1527,6 +1576,9 @@ Expr* builtin_chop(Expr* res) {
         if (d < 0.0) return NULL;
         delta = d;
     }
+
+    /* Chop[ndarray, ...]: scan the flat buffer, keep it if nothing chops. */
+    if (is_ndarray(res->data.function.args[0])) return chop_ndarray(res, delta);
 
     return chop_recursive(res->data.function.args[0], delta);
 }

@@ -267,7 +267,7 @@ Packed in, packed out: `Plus`, `Times`, `Power`, `Subtract`, `Divide`, `Dot`, th
 special functions (`Sin`, `Exp`, `Gamma`, …), `Total`, `Mean`, `Min`, `Max`,
 `MinMax`, `Median`, `Variance`, `Accumulate`, `Sort`, `Reverse`, `Transpose`, `Flatten`,
 `Take`, `Drop`, `Partition`, `RotateLeft`/`RotateRight`, `Riffle`, `Join`,
-`Differences`, `Ratios`, `Clip`, `Ramp`, `First`, `Last`, `Most`, `Rest`, `Part`,
+`Differences`, `Ratios`, `Clip`, `Chop`, `Ramp`, `First`, `Last`, `Most`, `Rest`, `Part`,
 `Extract`, `Append`, `Prepend`, `Catenate`, `TakeLargest`, `TakeSmallest`,
 `Map`, `Select`, `TakeWhile`, `FoldList`, `Outer`, `MapThread`, `Inner`,
 `Union`, `Intersection`, `Complement`, `Commonest`, `Rescale`, `MatrixPower`,
@@ -342,18 +342,28 @@ In[1]:= v = RandomReal[{0, 1}, 10^6];
 Out[1]= True
 ```
 
-`Clip` keeps the buffer when both bounds are `Real`, and when an exact bound
-clips nothing. It does **not** when an exact bound is actually reached, because
-`Clip` returns the bound itself and the result is then a mixture of exact and
-inexact numbers, which no uniform buffer holds:
+`Clip` keeps the buffer when both bounds are `Real`. Against an exact bound it
+scans three ways: nothing clips → the `Real` input; **everything** clips to a
+finite exact-`Integer` bound → a uniform `int64` buffer (`Clip[N@Range[10^6],
+{-1,1}]` stays packed and fast); a *mixture* of clipped (`Integer` bound) and
+unclipped (`Real`) numbers holds in no uniform buffer and takes the ordinary list
+path:
 
 ```
 In[2]:= Clip[{-2., 0., 2.}, {-1., 1.}]
-Out[2]= {-1., 0., 1.}                     (* packed *)
+Out[2]= {-1., 0., 1.}                     (* Real bounds -> packed *)
 
-In[3]:= Clip[{-2., 0., 2.}, {-1, 1}]
-Out[3]= {-1, 0., 1}                       (* exact bounds reached; ordinary list *)
+In[3]:= Clip[{-2., 2.}, {-1, 1}]
+Out[3]= {-1, 1}                           (* all clip to int bounds -> int64 buffer *)
+
+In[4]:= Clip[{-2., 0., 2.}, {-1, 1}]
+Out[4]= {-1, 0., 1}                       (* mixed exact/inexact -> ordinary list *)
 ```
+
+`Chop` (packed-aware since 2026-08-12) is the same shape: a chopped element is the
+exact `Integer 0`, so the buffer is kept only when nothing chops (the common
+cleanup call); a chopping rank-1 buffer builds the exact `{…, 0, …}` result in one
+pass, and the rest degrades to the list path.
 
 `First` and `Last` of a rank-1 packed array return a scalar with the head the
 element has — an exact `Integer` from an integer buffer — and of a higher-rank

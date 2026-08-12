@@ -315,6 +315,18 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         for (size_t i = 0; i < na; i++) { IT(i, ta); if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false; }
         *out = CT_INT; return true;                    /* UnitStep[0.5] is 1, not 1. */
     }
+    if (strcmp(h, "Chop") == 0 && (na == 1 || na == 2)) {
+        IT(0, ta);
+        if (CT_IS_ARRAY(ta) || ta == CT_BOOL || ta == CT_COMPLEX) return false;
+        if (na == 2 && A[1]->type != EXPR_REAL && A[1]->type != EXPR_INTEGER) return false;
+        *out = ta;   /* CT_INT -> identity; CT_REAL -> Real */
+        return true;
+    }
+    if (strcmp(h, "Clip") == 0 && na == 1) {          /* default bounds {-1, 1} */
+        IT(0, ta);
+        if (CT_IS_ARRAY(ta) || ta == CT_BOOL || ta == CT_COMPLEX) return false;
+        *out = CT_REAL; return true;
+    }
     if ((strcmp(h, "Clip") == 0 || strcmp(h, "Rescale") == 0) && na == 2) {
         const Expr* bnd = A[1];
         if (bnd->type != EXPR_FUNCTION || bnd->data.function.head->type != EXPR_SYMBOL
