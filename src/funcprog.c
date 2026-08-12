@@ -272,31 +272,50 @@ Expr* builtin_apply(Expr* res) {
 /* ------------------- Map ------------------- */
 
 static Expr* map_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec spec) {
+    /* Non-negative spec: once we are past the maximum level, nothing here or at
+     * any deeper node can be mapped, so the whole subtree passes through by an
+     * O(1) refcount bump instead of a full bottom-up descent + rebuild. This is
+     * what stops the common `f /@ list` from walking (and rebuilding) the entire
+     * tree when f only touches level 1 -- cost was growing with element depth.
+     * Only the negative-spec case still needs get_depth below. */
+    if (spec.min >= 0 && current_level > spec.max)
+        return expr_copy(expr);
+
     Expr* intermediate = NULL;
-    if (expr->type == EXPR_FUNCTION) {
+    /* Descend (bottom-up) only while a deeper level can still be mapped. When the
+     * children are all one level past max, none of them maps, so the node is
+     * shared wholesale as `intermediate` -- no per-child recursion and no
+     * structural rebuild -- and f (if it applies at this level) wraps the shared
+     * subtree. */
+    if (expr->type == EXPR_FUNCTION && !(spec.min >= 0 && current_level + 1 > spec.max)) {
         // Recurse first (Bottom-up)
         size_t count = expr->data.function.arg_count;
         Expr** new_args = malloc(sizeof(Expr*) * count);
         for (size_t i = 0; i < count; i++) {
             new_args[i] = map_at_level(f, expr->data.function.args[i], current_level + 1, spec);
         }
-        
+
         Expr* new_head = NULL;
         if (spec.heads) {
             new_head = map_at_level(f, expr->data.function.head, current_level + 1, spec);
         } else {
             new_head = expr_copy(expr->data.function.head);
         }
-        
+
         intermediate = expr_new_function(new_head, new_args, count);
         free(new_args);
     } else {
         intermediate = expr_copy(expr);
     }
 
-    int64_t d = get_depth(intermediate);
-    bool should_map = (current_level >= spec.min && current_level <= spec.max) ||
-                      (-d >= spec.min && -d <= spec.max);
+    bool should_map;
+    if (spec.min >= 0) {
+        should_map = (current_level >= spec.min && current_level <= spec.max);
+    } else {
+        int64_t d = get_depth(intermediate);
+        should_map = (current_level >= spec.min && current_level <= spec.max) ||
+                     (-d >= spec.min && -d <= spec.max);
+    }
 
     if (should_map) {
         /* The f[...] application is left for the evaluator to reduce, so a

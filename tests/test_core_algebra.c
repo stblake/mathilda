@@ -151,6 +151,26 @@ static void test_apply(void) {
     ck("Apply[f, {{a, b}, {c, d}}, {-2}]", "List[f[a, b], f[c, d]]"); /* negative spec path */
 }
 
+/* ------------------------------------------------------------------- Map */
+static void test_map(void) {
+    /* Default level 1 (`/@`): f wraps each element; compound elements are NOT
+     * descended into (the level-past-max refcount-share short-circuit). */
+    ck("f /@ {a, b, c}", "List[f[a], f[b], f[c]]");
+    ck("Map[f, {a, b, c}]", "List[f[a], f[b], f[c]]");
+    ck("f /@ {g[a, b], g[c, d]}", "List[f[g[a, b]], f[g[c, d]]]");
+    ck("f /@ {g[a, {b, c}]}", "List[f[g[a, List[b, c]]]]");   /* {b,c} shared, not mapped */
+    ck("f /@ x", "x");                                        /* atom: nothing to map */
+    /* Explicit level specs */
+    ck("Map[f, g[a, b], {0}]", "f[g[a, b]]");                 /* level 0 = f[expr] */
+    ck("Map[f, {{a, b}, {c, d}}, {2}]", "List[List[f[a], f[b]], List[f[c], f[d]]]");
+    ck("Map[f, {a, b}, {0, 1}]", "f[List[f[a], f[b]]]");
+    ck("Map[f, {{a, b}, {c, d}}, 2]", "List[f[List[f[a], f[b]]], f[List[f[c], f[d]]]]");
+    ck("Map[f, {{a, b}, {c}}, {-1}]", "List[List[f[a], f[b]], List[f[c]]]"); /* leaves */
+    ck("Map[f, {g[a], h[b]}, Infinity]", "List[f[g[f[a]]], f[h[f[b]]]]");
+    /* Map leaves the application unreduced, so a surrounding Hold suppresses it. */
+    ck("Map[f, Hold[1 + 1]]", "Hold[f[Plus[1, 1]]]");
+}
+
 /* ------------------------------------------------------ Length / Dimensions */
 static void test_length_dimensions(void) {
     ck("Length[a + b + c]", "3");
@@ -178,6 +198,7 @@ int main(void) {
     TEST(test_times);
     TEST(test_power_divide_subtract);
     TEST(test_apply);
+    TEST(test_map);
     TEST(test_length_dimensions);
     TEST(test_table);
 
