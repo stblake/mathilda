@@ -483,12 +483,34 @@ static bool mi_is_assoc(const Expr* e) {
  * Heads->True is set, matching Depth[expr, Heads->True]. */
 static Expr* mi_at_level(Expr* f, Expr* expr, int64_t level, LevelSpec spec,
                          const MIPath* path, int64_t* out_depth) {
+    /* Non-negative spec fast path (mirrors map_at_level/scan_at_level). The depth
+     * this function accumulates into *out_depth is consulted ONLY by a negative
+     * level bound (see the membership test below), so with both bounds >= 0 it is
+     * never used; and once past the maximum level nothing here or deeper is
+     * wrapped. So the subtree passes through by an O(1) refcount bump -- no
+     * descent, no rebuild, no depth accumulation. This is what stops
+     * MapIndexed[f, list] (default level 1) from walking every element's whole
+     * subtree; its cost had grown with element depth. Negative-spec calls keep
+     * the full traversal, which is the only case that reads the depth. */
+    if (spec.min >= 0 && spec.max >= 0 && level > spec.max) {
+        *out_depth = 1;                /* unused under a non-negative spec */
+        return expr_copy(expr);
+    }
+
     Expr*   rebuilt;
     int64_t maxpart = 0;               /* depth of the deepest original part */
     int64_t depth   = 1;               /* atoms, NDArray, Rational, Complex */
     size_t  plen = path ? path->len : 0;
 
-    if (mi_is_assoc(expr)) {
+    if (spec.min >= 0 && spec.max >= 0 && level + 1 > spec.max) {
+        /* Deepest level a non-negative spec wraps at: every child (and, with
+         * Heads->True, the head) is one level past max, so none is wrapped and a
+         * rebuild would just reproduce the original node. Share it instead -- no
+         * descent, no rebuild -- and let the membership test below wrap it. This
+         * removes the per-element node rebuild on top of the descent already cut
+         * by the early return above; depth stays 1 (unused under this spec). */
+        rebuilt = expr_copy(expr);
+    } else if (mi_is_assoc(expr)) {
         /* An association's parts are its VALUES, positioned by Key[k]: the
          * Rule wrapper is not a level of its own, which is what makes a
          * two-deep association position {Key[a], Key[b]} rather than four
