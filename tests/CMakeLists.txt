@@ -712,6 +712,7 @@ set(COMMON_SRC
     ../src/graphics/parametricplot3d.c
     ../src/graphics/contourplot.c
     ../src/graphics/densityplot.c
+    ../src/graphics/arrayplot.c
     ../src/graphics/complexplot.c
     ../src/graphics/streamplot.c
     ../src/graphics/vectorplot.c

@@ -14,6 +14,7 @@
 #endif
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 void test_graphics_literal_construction(void) {
     assert_eval_eq("FullForm[Graphics[{Point[{0,0}]}]]",
@@ -374,6 +375,81 @@ void test_densityplot_unscaled_color_function_gets_raw_value(void) {
         "{RGBColor[0.0, 0.0, 0.0]}", 0);
 }
 
+/* ArrayPlot: default ColorFunction is the shared "Greyscale" ramp (white at
+ * the minimum, black at the maximum) -- Mathematica's own ArrayPlot default,
+ * reusing named_color_ramp rather than a bespoke palette. */
+void test_arrayplot_returns_graphics_head(void) {
+    assert_eval_eq("Head[ArrayPlot[{{1,2},{3,4}}]]", "Graphics", 0);
+}
+
+void test_arrayplot_default_greyscale_color(void) {
+    assert_eval_eq(
+        "Union[Cases[ArrayPlot[{{1,2},{3,4}}], GrayLevel[__], Infinity]]",
+        "{GrayLevel[0.0], GrayLevel[0.333333], GrayLevel[0.666667], GrayLevel[1.0]}", 0);
+}
+
+/* A matrix whose entries are already colour literals paints each cell that
+ * colour directly, in row-major order, instead of deriving one from
+ * ColorFunction -- lets ArrayPlot double as a raw pixel-grid renderer. */
+void test_arrayplot_color_matrix_passthrough(void) {
+    assert_eval_eq(
+        "Cases[ArrayPlot[{{Red, Blue}, {Blue, Red}}], RGBColor[__], Infinity]",
+        "{RGBColor[1, 0, 0], RGBColor[0, 0, 1], RGBColor[0, 0, 1], RGBColor[1, 0, 0]}", 0);
+}
+
+/* Numeric and colour cells freely mix within the same array: a cell that is
+ * already a colour literal paints directly (bypassing ColorFunction) while
+ * the rest of the array still follows the normal greyscale heatmap. */
+void test_arrayplot_mixed_numeric_and_color_cells(void) {
+    assert_eval_eq(
+        "Union[Cases[ArrayPlot[{{1, 0, Pink}, {0, 1, Red}}], RGBColor[__], Infinity]]",
+        "{RGBColor[1, 0, 0], RGBColor[1, 0.5, 0.5]}", 0);
+    assert_eval_eq(
+        "Union[Cases[ArrayPlot[{{1, 0, Pink}, {0, 1, Red}}], GrayLevel[__], Infinity]]",
+        "{GrayLevel[0.0], GrayLevel[1.0]}", 0);
+}
+
+void test_arrayplot_invalid_args_stay_unevaluated(void) {
+    assert_eval_eq("ArrayPlot[foo]", "ArrayPlot[foo]", 0);
+    /* A cell that is neither numeric nor a colour literal leaves the whole
+     * call unevaluated, matching the "can't evaluate this" convention. */
+    assert_eval_eq("ArrayPlot[{{1, 2, foo}}]", "ArrayPlot[{{1, 2, foo}}]", 0);
+}
+
+/* Mesh -> All draws (rows+1) horizontal + (cols+1) vertical grid Lines. */
+void test_arrayplot_mesh_option(void) {
+    assert_eval_eq(
+        "Length[Cases[ArrayPlot[{{1,2},{3,4}}, Mesh -> All], Line[__], Infinity]]",
+        "6", 0);
+}
+
+/* AspectRatio defaults to rows/cols so cells render square, unless the
+ * caller overrides it. */
+void test_arrayplot_aspect_ratio_matches_dimensions(void) {
+    assert_eval_eq(
+        "Cases[ArrayPlot[{{1,2,3},{4,5,6}}], Rule[AspectRatio, r_] :> r]",
+        "{0.666667}", 0);
+}
+
+/* ColorRules gives an explicit colour to cells matching a named value,
+ * checked before ColorFunction; cells matching no rule still fall through
+ * to the normal scaled ColorFunction colour (not left grey/uncoloured). */
+void test_arrayplot_color_rules_override_matching_cells(void) {
+    assert_eval_eq(
+        "Union[Cases[ArrayPlot[{{1,0},{0,1}}, ColorRules -> {1 -> Pink, 0 -> Yellow}],"
+        " RGBColor[__], Infinity]]",
+        "{RGBColor[1, 0.5, 0.5], RGBColor[1, 1, 0]}", 0);
+    /* A value with no matching rule keeps the default greyscale mapping. */
+    assert_eval_eq(
+        "Union[Cases[ArrayPlot[{{1,0,0.5},{0,1,0.5}}, ColorRules -> {1 -> Pink, 0 -> Yellow}],"
+        " GrayLevel[__], Infinity]]",
+        "{GrayLevel[0.5]}", 0);
+    /* ColorRules -> None is equivalent to omitting the option. */
+    assert_eval_eq(
+        "ArrayPlot[{{1,2},{3,4}}, ColorRules -> None] === ArrayPlot[{{1,2},{3,4}}]",
+        "True", 0);
+}
+
 void test_region_function_and_exclusions_split_domain(void) {
     /* RegionFunction excludes the middle band -- two disjoint runs. */
     assert_eval_eq(
@@ -553,6 +629,46 @@ void test_window_height_policy(void) {
     ASSERT(gfx_window_height(800, 600, 50.0, false, false, dw, dh) == 2000);
 }
 
+/* Regression test for a real bug (reported via screenshot): ArrayPlot's
+ * default AspectRatio -> rows/cols, combined with Frame's fixed-pixel
+ * margins (not proportional between width and height), made the coloured
+ * grid letterbox inside its own frame instead of filling it edge-to-edge.
+ * gfx_window_height alone sizes the *window* to match the aspect ratio;
+ * gfx_window_height_fit_region additionally corrects for the margins so
+ * the *region* the data actually renders into hits it. */
+void test_window_height_fit_region_no_letterbox(void) {
+    const double dw = 20.0, dh = 8.0;   /* an 8-row x 20-col ArrayPlot */
+    double a = dh / dw;                 /* AspectRatio -> rows/cols = 0.4 */
+    long width = 640;
+
+    long naive_h = gfx_window_height(width, 480, a, false, false, dw, dh);
+    long fit_h   = gfx_window_height_fit_region(width, naive_h, a, false, false,
+                                                dw, dh, /*frame=*/true, /*axes=*/false,
+                                                /*frame_label=*/false);
+
+    float mL, mR, mT, mB;
+    gfx_horizontal_margins((float)width, true, false, false, &mL, &mR);
+    double reg_w = width - mL - mR;
+
+    /* The corrected height's region matches the target ratio closely. */
+    gfx_vertical_margins((float)fit_h, true, false, false, &mT, &mB);
+    double reg_h = fit_h - mT - mB;
+    ASSERT(fabs(reg_h / reg_w - a) < 0.01);
+
+    /* The naive (pre-fix) height's region does not -- confirms this case
+     * actually exercises the bug rather than one margins already got right. */
+    gfx_vertical_margins((float)naive_h, true, false, false, &mT, &mB);
+    double naive_reg_h = naive_h - mT - mB;
+    ASSERT(fabs(naive_reg_h / reg_w - a) > 0.05);
+
+    /* height_pinned / aspect_full: no-op, matching gfx_window_height. */
+    ASSERT(gfx_window_height_fit_region(width, 480, a, true, false, dw, dh, true, false, false) == 480);
+    ASSERT(gfx_window_height_fit_region(width, 480, a, false, true, dw, dh, true, false, false) == 480);
+
+    /* Neither Frame nor Axes: nothing to correct for. */
+    ASSERT(gfx_window_height_fit_region(width, naive_h, a, false, false, dw, dh, false, false, false) == naive_h);
+}
+
 /* Regression test for a real bug: Polygon[] silently rendered nothing for
  * a clockwise vertex list (e.g. {{0,0},{0,1},{1,1},{1,0}}, the natural
  * reading order for a square's corners) because raylib's DrawTriangleFan
@@ -648,6 +764,14 @@ int main(void) {
     TEST(test_filling_splits_at_baseline_crossing);
     TEST(test_plot_legends_metadata);
     TEST(test_densityplot_unscaled_color_function_gets_raw_value);
+    TEST(test_arrayplot_returns_graphics_head);
+    TEST(test_arrayplot_default_greyscale_color);
+    TEST(test_arrayplot_color_matrix_passthrough);
+    TEST(test_arrayplot_mixed_numeric_and_color_cells);
+    TEST(test_arrayplot_invalid_args_stay_unevaluated);
+    TEST(test_arrayplot_mesh_option);
+    TEST(test_arrayplot_aspect_ratio_matches_dimensions);
+    TEST(test_arrayplot_color_rules_override_matching_cells);
     TEST(test_region_function_and_exclusions_split_domain);
     TEST(test_label_style_passthrough);
     TEST(test_listplot_returns_graphics_head);
@@ -664,6 +788,7 @@ int main(void) {
 #ifdef USE_GRAPHICS
     TEST(test_frame_minor_divs_policy);
     TEST(test_window_height_policy);
+    TEST(test_window_height_fit_region_no_letterbox);
     TEST(test_polygon_signed_area_winding_detection);
     TEST(test_cmyk_to_rgb_conversion);
 #endif

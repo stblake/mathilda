@@ -776,6 +776,7 @@ extern const char* SYM_LightPurple;
 extern const char* SYM_Hue;
 extern const char* SYM_ColorFunction;
 extern const char* SYM_ColorFunctionScaling;
+extern const char* SYM_ColorRules;
 extern const char* SYM_Filling;
 extern const char* SYM_FillingStyle;
 extern const char* SYM_Axis;
@@ -818,6 +819,9 @@ extern const char* SYM_ContourShading;  /* True/False/Automatic: fill between co
 
 /* DensityPlot[f, {x,...}, {y,...}, opts...] */
 extern const char* SYM_DensityPlot;
+
+/* ArrayPlot[array, opts...] */
+extern const char* SYM_ArrayPlot;
 
 /* ComplexPlot[f, {z, zmin, zmax}, opts...] / ComplexPlot3D[...] */
 extern const char* SYM_ComplexPlot;

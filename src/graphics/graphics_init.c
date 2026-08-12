@@ -411,6 +411,54 @@ void graphics_init(void) {
         "\t  AxesLabel, GridLines, ImageSize, Background, PlotLabel, …) pass\n"
         "\t  through to the Graphics[...] result.");
 
+    symtab_add_builtin("ArrayPlot", builtin_arrayplot);
+    symtab_get_def("ArrayPlot")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ArrayPlot",
+        "ArrayPlot[array, opts...]\n"
+        "\tRenders a 2D array (nested List or NDArray) as a grid of coloured\n"
+        "\tcells, one per array entry -- a discrete heatmap with no\n"
+        "\tinterpolation between cells. Row 1 of array is drawn at the top,\n"
+        "\tcolumn 1 at the left. Not HoldAll: array is an ordinary evaluated\n"
+        "\texpression. Returns a Graphics[...] object (auto-displayed).\n"
+        "\n"
+        "\tArrayPlot[colorArray, opts...]\n"
+        "\tIf a cell is already a colour literal (RGBColor/GrayLevel/Hue/\n"
+        "\tCMYKColor), it paints that colour directly instead of one derived\n"
+        "\tfrom ColorFunction -- ArrayPlot doubles as a raw pixel-grid\n"
+        "\trenderer, e.g. ArrayPlot[{{Red, Blue}, {Blue, Red}}]. Numeric and\n"
+        "\tcolour cells freely mix within the same array: ArrayPlot[{{1, 0,\n"
+        "\tPink}, {0, 1, Red}}] calls out two cells explicitly while the rest\n"
+        "\tstill follow the normal heatmap.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  ColorFunction        named ramp string or f[t]->color (t in [0,1]).\n"
+        "\t                      Ramps: \"Greyscale\" (default: white low, black\n"
+        "\t                      high -- matches Mathematica's ArrayPlot),\n"
+        "\t                      \"Rainbow\", \"Temperature\", \"CoolTones\",\n"
+        "\t                      \"WarmTones\", all keyed to the normalised entry\n"
+        "\t                      value. Only applies to numeric cells.\n"
+        "\t  ColorFunctionScaling True (default): normalise entries to [0,1]\n"
+        "\t                       before calling ColorFunction; False: raw value\n"
+        "\t  ColorRules           {v1 -> c1, v2 -> c2, ...} (or a single v -> c):\n"
+        "\t                      an explicit colour for numeric cells whose value\n"
+        "\t                      exactly equals v, checked before ColorFunction.\n"
+        "\t                      Cells matching no rule still get the normal\n"
+        "\t                      scaled ColorFunction colour.\n"
+        "\t  Mesh                 All/True: draw grey grid lines between cells;\n"
+        "\t                      None (default): no lines\n"
+        "\t  PlotLegends          Automatic: attach a vertical colour scale bar\n"
+        "\t                      (only when at least one cell is numeric)\n"
+        "\t  Standard Graphics options (Axes, AspectRatio -> rows/cols by\n"
+        "\t  default, Frame, PlotRange, ImageSize, Background, PlotLabel, ...)\n"
+        "\t  pass through to the Graphics[...] result.\n"
+        "\n"
+        "\tExamples:\n"
+        "\t  ArrayPlot[{{1, 0, 1}, {0, 1, 0}, {1, 0, 1}}]\n"
+        "\t  ArrayPlot[RandomReal[1, {20, 20}], ColorFunction -> \"Rainbow\"]\n"
+        "\t  ArrayPlot[Table[Mod[i + j, 2], {i, 10}, {j, 10}], Mesh -> All]\n"
+        "\t  ArrayPlot[{{1, 0}, {0, 1}}, ColorRules -> {1 -> Pink, 0 -> Yellow}]\n"
+        "\t  ArrayPlot[{{1, 0, 0, Pink}, {1, 1, 0, Pink}, {1, 0, 1, Red}}]");
+
     symtab_add_builtin("ComplexPlot", builtin_complexplot);
     symtab_get_def("ComplexPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("ComplexPlot",

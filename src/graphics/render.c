@@ -2114,6 +2114,83 @@ static void draw_legend(const Expr* legend_data, int win_w) {
     }
 }
 
+/* ---------------- Frame/Axes margin policy ---------------- *
+ *
+ * mL/mR depend only on window width, mT/mB only on window height, so the
+ * two axes are computed independently -- shared by the up-front window
+ * sizing below (which needs mT/mB to size the window so the DATA REGION,
+ * not just the outer window, hits the target AspectRatio) and the actual
+ * region layout right after InitWindow. One definition keeps the two from
+ * drifting apart. */
+void gfx_horizontal_margins(float width, bool frame, bool axes,
+                            bool frame_label, float* mL, float* mR) {
+    if (frame) {
+        float labelL = frame_label ? 26.0f : 0.0f;
+        *mL = width * 0.05f; if (*mL < 50.0f + labelL) *mL = 50.0f + labelL;
+        *mR = width * 0.05f; if (*mR < 20.0f) *mR = 20.0f;
+    } else if (axes) {
+        *mL = width * 0.06f; if (*mL < 52.0f) *mL = 52.0f;
+        *mR = width * 0.03f; if (*mR < 22.0f) *mR = 22.0f;
+    } else {
+        *mL = 0.0f; *mR = 0.0f;
+    }
+}
+
+void gfx_vertical_margins(float height, bool frame, bool axes,
+                          bool frame_label, float* mT, float* mB) {
+    if (frame) {
+        float labelB = frame_label ? 26.0f : 0.0f;
+        float mT_floor = TB_MARGIN + TB_BTN + 8.0f;
+        *mT = height * 0.05f; if (*mT < mT_floor) *mT = mT_floor;
+        *mB = height * 0.05f; if (*mB < 48.0f + labelB) *mB = 48.0f + labelB;
+    } else if (axes) {
+        *mT = height * 0.05f; if (*mT < 34.0f) *mT = 34.0f;
+        *mB = height * 0.07f; if (*mB < 52.0f) *mB = 52.0f;
+    } else {
+        *mT = 0.0f; *mB = 0.0f;
+    }
+}
+
+/* gfx_window_height() sizes the OUTER window to the target AspectRatio, but
+ * the frame/axes margins above are fixed pixel amounts (partly floored),
+ * not proportional to the window -- so the margin-reduced DATA REGION ends
+ * up at a different aspect ratio than the window, and AspectRatio-driven
+ * plots (ArrayPlot's rows/cols default, DensityPlot's 1, ...) letterbox
+ * inside their own frame instead of filling it edge-to-edge. This solves
+ * for the height whose REGION (not window) hits the target ratio: reg_w
+ * depends only on width (known already), so reg_h = a * reg_w is the fixed
+ * point of `h = a*reg_w + mT(h) + mB(h)`, a contraction (mT/mB are each
+ * either a height-independent floor or <= 7% of h) that a handful of
+ * iterations converges to float precision. Skipped in the same cases
+ * gfx_window_height itself skips (ImageSize pinned, AspectRatio -> Full),
+ * and whenever there isn't room for both margins to fit. */
+long gfx_window_height_fit_region(long width, long height, double aspect_ratio,
+                                  bool aspect_full, bool height_pinned,
+                                  double data_w, double data_h,
+                                  bool frame, bool axes, bool frame_label) {
+    if (height_pinned || aspect_full) return height;
+    double a = aspect_ratio > 0 ? aspect_ratio : (data_h / data_w);
+    if (!isfinite(a) || a <= 0) return height;
+    if (!frame && !axes) return height;   /* nothing to correct for */
+
+    float mL, mR;
+    gfx_horizontal_margins((float)width, frame, axes, frame_label, &mL, &mR);
+    float reg_w = (float)width - mL - mR;
+    if (reg_w < 40.0f) return height;
+
+    double h = (double)height;
+    for (int iter = 0; iter < 8; iter++) {
+        float mT, mB;
+        gfx_vertical_margins((float)h, frame, axes, frame_label, &mT, &mB);
+        if (mT + mB >= h - 40.0) return height;   /* margins would swallow the window */
+        double h_next = a * (double)reg_w + mT + mB;
+        if (h_next < 100.0) h_next = 100.0;
+        if (h_next > 2000.0) h_next = 2000.0;
+        h = h_next;
+    }
+    return (long)(h + 0.5);
+}
+
 /* ---------------- Main entry point ---------------- */
 
 void graphics_show(const Expr* graphics_expr) {
@@ -2198,6 +2275,14 @@ void graphics_show(const Expr* graphics_expr) {
     opts.height = gfx_window_height(opts.width, opts.height, opts.aspect_ratio,
                                     opts.aspect_full, opts.height_pinned,
                                     data_w, data_h);
+    /* Refine against the margin-reduced DATA REGION rather than the outer
+     * window, so a Frame/Axes plot with an explicit AspectRatio (ArrayPlot's
+     * rows/cols default, DensityPlot's 1, ...) fills its frame edge-to-edge
+     * instead of letterboxing inside it. See gfx_window_height_fit_region. */
+    opts.height = gfx_window_height_fit_region(opts.width, opts.height, opts.aspect_ratio,
+                                               opts.aspect_full, opts.height_pinned,
+                                               data_w, data_h,
+                                               opts.frame, opts.axes, opts.frame_label != NULL);
 
     /* 4x MSAA smooths every vector stroke -- the plot curves, the axes, and
      * the hand-drawn toolbar glyphs all read as crisp anti-aliased lines
@@ -2221,37 +2306,12 @@ void graphics_show(const Expr* graphics_expr) {
      * fits *inside* the region. */
     float reg_x = 0.0f, reg_y = 0.0f;
     float reg_w = (float)opts.width, reg_h = (float)opts.height;
-    if (opts.frame) {
-        /* FrameLabel adds one more text line outside the tick labels, so it
-         * needs extra room past the tick-label minimums above. */
-        float labelL = opts.frame_label ? 26.0f : 0.0f;
-        float labelB = opts.frame_label ? 26.0f : 0.0f;
-        float mL = (float)opts.width  * 0.05f; if (mL < 50.0f + labelL) mL = 50.0f + labelL;
-        float mR = (float)opts.width  * 0.05f; if (mR < 20.0f) mR = 20.0f;
-        /* The top-right toolbar buttons occupy y in [TB_MARGIN, TB_MARGIN +
-         * TB_BTN]; floor the top margin below them (plus a small gap) so the
-         * frame's top edge and its tick labels are never drawn under the
-         * buttons. */
-        float mT_floor = TB_MARGIN + TB_BTN + 8.0f;
-        float mT = (float)opts.height * 0.05f; if (mT < mT_floor) mT = mT_floor;
-        float mB = (float)opts.height * 0.05f; if (mB < 48.0f + labelB) mB = 48.0f + labelB;
+    if (opts.frame || opts.axes) {
+        bool has_label = opts.frame_label != NULL;
+        float mL, mR, mT, mB;
+        gfx_horizontal_margins((float)opts.width, opts.frame, opts.axes, has_label, &mL, &mR);
+        gfx_vertical_margins((float)opts.height, opts.frame, opts.axes, has_label, &mT, &mB);
         /* Never let the margins swallow the whole window. */
-        if (mL + mR < (float)opts.width  - 40.0f && mT + mB < (float)opts.height - 40.0f) {
-            reg_x = mL; reg_y = mT;
-            reg_w = (float)opts.width - mL - mR;
-            reg_h = (float)opts.height - mT - mB;
-        }
-    } else if (opts.axes) {
-        /* Floors sized to the screen-space tick labels (draw_axes_labels):
-         * left clears a multi-digit y label, bottom a one-line x label plus
-         * its gap+cap drop *and* the bottom-of-window help-text line, top a
-         * PlotLabel line, right the overflow of the last x label's half-width.
-         * The bottom is the largest because a 0-off-screen x-axis is pinned to
-         * the region's bottom edge and its labels hang into this margin. */
-        float mL = (float)opts.width  * 0.06f; if (mL < 52.0f) mL = 52.0f;
-        float mR = (float)opts.width  * 0.03f; if (mR < 22.0f) mR = 22.0f;
-        float mT = (float)opts.height * 0.05f; if (mT < 34.0f) mT = 34.0f;
-        float mB = (float)opts.height * 0.07f; if (mB < 52.0f) mB = 52.0f;
         if (mL + mR < (float)opts.width  - 40.0f && mT + mB < (float)opts.height - 40.0f) {
             reg_x = mL; reg_y = mT;
             reg_w = (float)opts.width - mL - mR;

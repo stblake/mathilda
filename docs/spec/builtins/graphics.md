@@ -44,6 +44,7 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 | [`PolarPlot`](#polarplot) | Polar curve `r(θ)` | `ColorFunction`, `PlotStyle`, `RegionFunction` |
 | [`ContourPlot`](#contourplot) | Iso-contour lines / filled contours of `f(x,y)` | `Contours`, `ContourStyle`, `ContourShading`, `ColorFunction`, `ContourLabels`, `ScalingFunctions` |
 | [`DensityPlot`](#densityplot) | Heatmap of `f(x,y)` | `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends`, `ScalingFunctions` |
+| [`ArrayPlot`](#arrayplot) | Grid heatmap of a literal 2D array (no interpolation) — also a raw pixel-grid renderer for a matrix of colours | `ColorFunction`, `ColorFunctionScaling`, `Mesh`, `PlotLegends` |
 | [`ComplexPlot`](#complexplot) | Domain-colouring of a complex function `f(z)` | `PlotPoints`, `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends` |
 | [`VectorPlot`](#vectorplot) | Arrow grid for a 2D vector field | `VectorPoints`, `VectorScale`, `VectorStyle`, `ColorFunction`, `RegionFunction`, `ScalingFunctions` |
 | [`StreamPlot`](#streamplot) | RK4-integrated streamlines of a 2D vector field | `StreamPoints`, `StreamScale`, `StreamStyle`, `ColorFunction`, `RegionFunction`, `ScalingFunctions`, `StreamAnimate` |
@@ -65,9 +66,9 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 | `PlotRange` | all plotters (auto-embedded; user can override) |
 | `PlotPoints` | all function plotters |
 | `PlotStyle` | `Plot`, `ListPlot`, `ParametricPlot`, `PolarPlot`, `Plot3D`, `ParametricPlot3D` |
-| `PlotLegends` | `Plot`, `ListPlot`, `DensityPlot`, `ContourPlot`, `StreamPlot` |
+| `PlotLegends` | `Plot`, `ListPlot`, `DensityPlot`, `ArrayPlot`, `ContourPlot`, `StreamPlot` |
 | `PlotLabel` | all (pass-through to `Graphics`/`Graphics3D`) |
-| `ColorFunction` | `Plot`, `ParametricPlot`, `PolarPlot`, `Plot3D`, `ParametricPlot3D`, `DensityPlot`, `ContourPlot`, `VectorPlot`, `StreamPlot` |
+| `ColorFunction` | `Plot`, `ParametricPlot`, `PolarPlot`, `Plot3D`, `ParametricPlot3D`, `DensityPlot`, `ArrayPlot`, `ContourPlot`, `VectorPlot`, `StreamPlot` |
 | `ColorFunctionScaling` | same set as `ColorFunction` |
 | `RegionFunction` | `Plot`, `ParametricPlot`, `Plot3D`, `ParametricPlot3D`, `DensityPlot`, `ContourPlot`, `VectorPlot`, `StreamPlot` |
 | `Filling` / `FillingStyle` | `Plot`, `ListPlot` |
@@ -346,12 +347,15 @@ Out[12]= -Graphics3D-
 
 ## Named ColorFunction ramps
 
-All gradient-based plotters — `DensityPlot`, `ContourPlot`, `VectorPlot`,
-`StreamPlot`, `Plot`, `Plot3D`, `ParametricPlot`, `ParametricPlot3D` — accept
-`ColorFunction -> "name"` where `name` is one of the following built-in
-string ramps.  Each ramp is a continuous 5-stop RGB gradient parameterised
-by `t ∈ [0,1]` (normalised to the data range when
-`ColorFunctionScaling -> True`, the default).
+All gradient-based plotters — `DensityPlot`, `ArrayPlot`, `ContourPlot`,
+`VectorPlot`, `StreamPlot`, `Plot`, `Plot3D`, `ParametricPlot`,
+`ParametricPlot3D` — accept `ColorFunction -> "name"` where `name` is one of
+the following built-in string ramps.  Each ramp is a continuous 5-stop RGB
+gradient parameterised by `t ∈ [0,1]` (normalised to the data range when
+`ColorFunctionScaling -> True`, the default). `ArrayPlot` is the one plotter
+whose *default* ColorFunction is `"Greyscale"` rather than `"Temperature"`
+(matching Mathematica's own `ArrayPlot` default) — every other plotter here
+defaults to the thermal ramp.
 
 | Name | Aliases | Appearance |
 |------|---------|------------|
@@ -368,6 +372,7 @@ by `t ∈ [0,1]` (normalised to the data range when
 | `Plot`, `ParametricPlot`, `PolarPlot` | position along curve: `(x − xmin)/(xmax − xmin)` |
 | `Plot3D`, `ParametricPlot3D` | z-height: `(z − zmin)/(zmax − zmin)` |
 | `DensityPlot`, `ContourPlot` | cell's normalised function value |
+| `ArrayPlot` | cell's normalised array entry value |
 | `VectorPlot`, `StreamPlot` | field magnitude (speed) |
 
 For custom function forms see the individual plotter's `ColorFunction` option
@@ -1076,6 +1081,75 @@ Out[3]= -Graphics-
 In[4]:= DensityPlot[x^2 + y^2, {x, -3, 3}, {y, -3, 3},
           RegionFunction -> Function[{x,y}, x^2 + y^2 < 4]]
 Out[4]= -Graphics-
+```
+
+---
+
+## ArrayPlot
+
+```
+ArrayPlot[array, opts...]
+```
+
+Renders a 2D array (nested `List` or `NDArray`) as a grid of coloured cells,
+one per entry — a discrete heatmap with **no interpolation** between cells,
+unlike `DensityPlot`'s sampled function grid. Row 1 of `array` is drawn at
+the top, column 1 at the left. Not `HoldAll` — `array` is an ordinary
+already-evaluated expression. An `NDArray` (a dense numeric buffer by
+construction) is ingested via the same `na_load_matrix` loader
+(`src/linalg/numarray.h`) the linear-algebra surface uses; a nested `List`
+is classified cell by cell (see below). `Protected`.
+
+```
+ArrayPlot[colorArray, opts...]
+```
+
+A cell that is already a colour literal (`RGBColor`/`GrayLevel`/`Hue`/
+`CMYKColor`) paints that colour directly instead of one derived from
+`ColorFunction`. Numeric and colour cells freely mix within the same array:
+`ArrayPlot[{{1, 0, Pink}, {0, 1, Red}}]` calls out two cells explicitly
+while the rest still follow the normal heatmap; `ArrayPlot[{{Red, Blue},
+{Blue, Red}}]` (every cell a colour) lets `ArrayPlot` double as a raw
+pixel-grid renderer. A cell that is neither a colour literal nor a plain
+number leaves the whole call unevaluated.
+
+**Options**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `ColorFunction` | `"Greyscale"` | Named ramp string or `f[t] → color` (`t ∈ [0,1]`); see **Named ColorFunction ramps** above. The default is white at the array minimum, black at the maximum — Mathematica's own `ArrayPlot` default, unlike every other plotter here (thermal). Only applies to numeric cells |
+| `ColorFunctionScaling` | `True` | Normalise entries to `[0,1]` before calling `ColorFunction`; `False` passes the raw value |
+| `ColorRules` | `None` | `{v1 -> c1, v2 -> c2, ...}` (or a single `v -> c`): an explicit colour for numeric cells whose value exactly equals `v`, checked before `ColorFunction`. Cells matching no rule still get the normal scaled `ColorFunction` colour |
+| `Mesh` | `None` | `All`/`True`: draw grey (`GrayLevel[0.5]`) grid lines between cells |
+| `PlotLegends` | `None` | `Automatic`: attach a vertical colour scale bar (only when at least one cell is numeric — an all-colour array has no scalar scale to show) |
+| Standard Graphics options | — | `AspectRatio` defaults to `rows/cols` (square cells) rather than `1/GoldenRatio`; `Frame` (default `True`), `Axes` (default `False`), `PlotRange`, `ImageSize`, `Background`, `PlotLabel`, … pass through |
+
+**Examples**
+
+```mathematica
+(* Basic grid heatmap: default Greyscale ramp *)
+In[1]:= ArrayPlot[{{1, 0, 1}, {0, 1, 0}, {1, 0, 1}}]
+Out[1]= -Graphics-
+
+(* Random matrix with a named ramp and cell mesh *)
+In[2]:= ArrayPlot[RandomReal[1, {20, 20}], ColorFunction -> "Rainbow", Mesh -> All]
+Out[2]= -Graphics-
+
+(* Raw pixel grid: cells are colour literals, painted as-is *)
+In[3]:= ArrayPlot[{{Red, Blue}, {Blue, Red}}]
+Out[3]= -Graphics-
+
+(* Legend bar for a numeric array *)
+In[4]:= ArrayPlot[Table[Mod[i + j, 5], {i, 10}, {j, 10}], PlotLegends -> Automatic]
+Out[4]= -Graphics-
+
+(* ColorRules: explicit colours for named values, greyscale elsewhere *)
+In[5]:= ArrayPlot[{{1, 0, 0.5}, {0, 1, 0.5}}, ColorRules -> {1 -> Pink, 0 -> Yellow}]
+Out[5]= -Graphics-
+
+(* Numeric and colour cells mixed freely in the same array *)
+In[6]:= ArrayPlot[{{1, 0, 0, Pink}, {1, 1, 0, Pink}, {1, 0, 1, Red}}]
+Out[6]= -Graphics-
 ```
 
 ---
