@@ -249,6 +249,7 @@ set(COMMON_SRC
     ../src/core.c
     ../src/int.c
     ../src/real.c
+    ../src/numberform.c
     ../src/comparisons.c
     ../src/symtab.c
     ../src/match.c
@@ -1983,6 +1984,16 @@ else()
     target_link_libraries(real_exponent_tests gmp m)
 endif()
 add_test(NAME real_exponent_tests COMMAND real_exponent_tests)
+
+add_executable(numberform_tests test_numberform.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(numberform_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(numberform_tests gmp m ${ECM_LIB})
+    add_dependencies(numberform_tests build_ecm)
+else()
+    target_link_libraries(numberform_tests gmp m)
+endif()
+add_test(NAME numberform_tests COMMAND numberform_tests)
 
 add_executable(parser_precision_tests test_parser_precision.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(parser_precision_tests PRIVATE ../src)

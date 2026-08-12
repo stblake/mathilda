@@ -873,6 +873,8 @@ void core_init(void) {
     void residue_init(void);
     residue_init();
     numeric_init();
+    void numberform_init(void);
+    numberform_init();
     precision_init();
     rationalize_init();
     void root_init(void);

@@ -373,6 +373,22 @@ static Expr* list1(Expr* x) {
     free(a);
     return l;
 }
+/* name -> {"s1", "s2"} (e.g. NumberForm's NumberSigns / NumberPadding). */
+static Expr* r_list2_str(const char* nm, const char* s1, const char* s2) {
+    Expr** a = malloc(2 * sizeof(Expr*));
+    a[0] = expr_new_string(s1); a[1] = expr_new_string(s2);
+    Expr* l = expr_new_function(expr_new_symbol(SYM_List), a, 2);
+    free(a);
+    return rule2(expr_new_symbol(nm), l);
+}
+/* name -> {i1, i2} (e.g. NumberForm's ScientificNotationThreshold). */
+static Expr* r_list2_int(const char* nm, long i1, long i2) {
+    Expr** a = malloc(2 * sizeof(Expr*));
+    a[0] = expr_new_integer(i1); a[1] = expr_new_integer(i2);
+    Expr* l = expr_new_function(expr_new_symbol(SYM_List), a, 2);
+    free(a);
+    return rule2(expr_new_symbol(nm), l);
+}
 
 void options_register_defaults(void) {
     OptBuf b;
@@ -816,6 +832,24 @@ void options_register_defaults(void) {
     ob_init(&b);
     ob_add(&b, r_str("OperatingSystem", "Unix"));
     ob_commit(&b, "FileNameSplit");
+
+    /* ---- NumberForm (numeric-display formatting) ---- The behavioural
+     * default for NumberPadding is {"", ""} (no padding), matching the worked
+     * examples in the reference. */
+    ob_init(&b);
+    ob_add(&b, r_sym("DefaultPrintPrecision", "Automatic"));
+    ob_add(&b, r_sym("DigitBlock", "Infinity"));
+    ob_add(&b, r_sym("ExponentFunction", "Automatic"));
+    ob_add(&b, r_int("ExponentStep", 1));
+    ob_add(&b, r_sym("NumberFormat", "Automatic"));
+    ob_add(&b, r_str("NumberMultiplier", "*"));
+    ob_add(&b, r_list2_str("NumberPadding", "", ""));
+    ob_add(&b, r_str("NumberPoint", "."));
+    ob_add(&b, r_list2_str("NumberSeparator", ",", " "));
+    ob_add(&b, r_list2_str("NumberSigns", "-", ""));
+    ob_add(&b, r_list2_int("ScientificNotationThreshold", -5, 6));
+    ob_add(&b, r_sym("SignPadding", "False"));
+    ob_commit(&b, "NumberForm");
 }
 
 void options_builtin_init(void) {
