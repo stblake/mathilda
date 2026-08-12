@@ -283,6 +283,20 @@ int emit_array(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* o
         return c->ok ? 1 : -1;
     }
 
+    /* Norm[array, p] with a compile-time literal p (Norm[v,1] / Norm[v,Infinity]
+     * / Norm[m,"Frobenius"] / ...): delegate to ndla_norm via V_NORM, the p baked
+     * into imm.r.  A List-literal operand was already expanded to scalar ops in
+     * emit_node, so the operand here is a genuine array; the bare Norm[array]
+     * stays on the reduction table below (nd_red_lookup). */
+    if (strcmp(h, "Norm") == 0 && na == 2) {
+        Val a; if (!emit(c, A[0], &a)) return -1;
+        double immr;
+        if (!nd_norm2_encode(A[1], a.type, &immr)) { c->ok = false; return -1; }
+        Slot ip; memset(&ip, 0, sizeof ip); ip.r = immr;
+        *out = arr_op(c, OP_V_NORM, a, arr_noop_val(), CT_REAL, ip);
+        return c->ok ? 1 : -1;
+    }
+
     /* Mean / Median / Variance / StandardDeviation / RootMeanSquare / Max /
      * Min of a rank-1 array, delegated to the interpreter's own reduction so
      * the compiled answer is bit-identical to the interpreted one.  RankedMin /

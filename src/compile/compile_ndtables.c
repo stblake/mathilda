@@ -24,6 +24,7 @@
 #include "../fourier.h"            /* fourier_compile / inverse_fourier_compile, DCT/DST */
 #include <string.h>
 #include <stddef.h>
+#include <math.h>     /* INFINITY / NAN — the V_NORM p encoding */
 
 /* ---- delegated structural heads -------------------------------------------
  *
@@ -296,6 +297,39 @@ CompileType nd_red_result(const NdRedSpec* s, CompileType ta) {
     if (el == CT_REAL) return CT_REAL;
     if (el == CT_INT)  return s->int_ok ? CT_INT : CT_ERR;
     return CT_ERR;                       /* complex: no ND reduction promises it */
+}
+
+/* Norm[array, p]: is the two-arg form with this compile-time literal p, over an
+ * operand of type `ta`, one that ndla_norm answers as a machine Real?  If so
+ * return true and set *imm_r to the V_NORM encoding of p (opcode doc: +Inf for
+ * Infinity, NaN for "Frobenius", else the positive value).  The validity mirrors
+ * ndla_norm/ndla_matrix_norm_direct exactly (src/linalg/ndlinalg.c):
+ *   - rank 1 (vector): any positive Integer/Real p, or Infinity.
+ *   - rank 2 (matrix): p in {1, 2, Infinity, "Frobenius"} (an Integer, since the
+ *     LAPACK path keys on Integer 1/2; a Real or other integer declines).
+ * Real operand only — an exact-integer or complex Norm is not a machine real, so
+ * it declines to the interpreter, exactly as the bare Norm[array] reduction does. */
+bool nd_norm2_encode(const Expr* p, CompileType ta, double* imm_r) {
+    if (!CT_IS_ARRAY(ta) || CT_ELEM(ta) != CT_REAL) return false;
+    int rank = CT_RANK(ta);
+    if (rank != 1 && rank != 2) return false;
+    if (!p) return false;
+    if (p->type == EXPR_SYMBOL && p->data.symbol.name
+        && strcmp(p->data.symbol.name, "Infinity") == 0) { *imm_r = INFINITY; return true; }
+    if (p->type == EXPR_STRING && p->data.string
+        && strcmp(p->data.string, "Frobenius") == 0) {
+        if (rank != 2) return false;                    /* ndla rank-1 rejects a string p */
+        *imm_r = NAN; return true;
+    }
+    if (p->type == EXPR_INTEGER && p->data.integer > 0) {
+        if (rank == 2 && p->data.integer != 1 && p->data.integer != 2) return false;
+        *imm_r = (double)p->data.integer; return true;
+    }
+    if (p->type == EXPR_REAL && p->data.real > 0.0) {
+        if (rank == 2) return false;                    /* ndla matrix norm: Integer p only */
+        *imm_r = p->data.real; return true;
+    }
+    return false;
 }
 
 const NdFnSpec* nd_fn_lookup(const char* h, size_t na) {

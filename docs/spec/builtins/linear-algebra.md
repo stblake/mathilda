@@ -659,6 +659,19 @@ Gives the norm of a number, vector, or matrix.
 - For vectors, `Norm[v, p]` is `Total[Abs[v]^p]^(1/p)`.
 - For vectors, `Norm[v, Infinity]` is the $\infty$-norm given by `Max[Abs[v]]`.
 - `Norm[m, "Frobenius"]` gives the Frobenius norm of a matrix `m`.
+- **Packed/NDArray fast path**: an inexact vector or matrix routes through the
+  LAPACK-backed `ndla_norm` (`dlange`/`zlange`, and an SVD for the induced
+  matrix 2-norm); `Norm` is on the packed-array `AWARE` list.
+- **`Compile[]`**: both `Norm[v]`/`Norm[m]` and the two-argument forms lower to a
+  machine `Real`. Over a declared array argument the compiled body delegates to
+  `ndla_norm` (the `V_NORM` opcode carries the literal `p`), covering
+  `Norm[v, 1]`, `Norm[v, Infinity]`, `Norm[v, k]`, `Norm[v, 2.5]`, and the matrix
+  `Norm[m, 1]` / `Norm[m, Infinity]` / `Norm[m, "Frobenius"]`. An induced matrix
+  `p`-norm with `p ∉ {1, 2, Infinity}` has no LAPACK path and stays interpreted.
+- **Inline vector**: a `Norm[{e1, …, en}, p]` over a `List` literal (rather than a
+  declared array) compiles by expanding to the scalar arithmetic above
+  (`Sqrt[Σ Abs[ei]^2]`, `Σ Abs[ei]`, `Max[Abs[ei]]`, `(Σ Abs[ei]^p)^(1/p)`), so a
+  `Norm[{f[x], …}]` body auto-compiles inside `Plot`/`Table`/`NIntegrate`/`FindRoot`.
 
 ```mathematica
 In[1]:= Norm[{x, y, z}]

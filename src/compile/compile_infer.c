@@ -139,6 +139,13 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
      * falls through and fails, which is right: the interpreter would leave that
      * Slot unsubstituted, so its answer is not a machine number either. */
     if (h == SYM_Slot) { int k = fn_slot_index(c, A, na); if (k >= 0) { *out = c->slot[k].type; return true; } }
+    /* Norm[{e1,...}, p] over a List literal -> scalar arithmetic: type the same
+     * expansion emit_node lowers, so the two passes agree.  A declared-array
+     * operand yields NULL and drops through to the array/reduction branches. */
+    if (h == SYM_Norm) {
+        Expr* ex = norm_try_expand(e);
+        if (ex) { bool ok = infer_type(c, ex, out); expr_free(ex); return ok; }
+    }
     /* Association read ops (B1): typed by the shared resolver.  Returns false for
      * a non-association Length/Values so the array branch below still handles it. */
     { CompileType at; if (try_infer_assoc(c, h, A, na, &at)) { *out = at; return true; } }
@@ -655,6 +662,14 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (!CT_IS_ARRAY(ta) || (h[0] == 'T' && CT_RANK(ta) != 1)) return false;
         *out = (h[0] == 'L') ? CT_INT : CT_ELEM(ta);
         return true;
+    }
+    /* Norm[array, p] two-arg form (V_NORM): valid literal p over a real array
+     * operand -> Real.  The bare Norm[array] is the reduction below. */
+    if (strcmp(h, "Norm") == 0 && na == 2) {
+        CompileType ta; IT(0, ta);
+        double immr;
+        if (!nd_norm2_encode(A[1], ta, &immr)) return false;
+        *out = CT_REAL; return true;
     }
     /* Mean / Median / Variance / StandardDeviation / RootMeanSquare / Max /
      * Min of a rank-1 array — the delegated reductions, table above. */
