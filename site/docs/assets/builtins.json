@@ -3752,6 +3752,14 @@
     "url": "documentation/linear-algebra/NullSpace/"
   },
   {
+    "name": "NumberForm",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "NumberForm[expr, n] prints approximate real numbers in expr to n-digit",
+    "url": "documentation/expression-information/NumberForm/"
+  },
+  {
     "name": "NumberQ",
     "category": "Expression Information",
     "slug": "expression-information",
@@ -4766,6 +4774,14 @@
     "status": "Stable",
     "summary": "Round[x]",
     "url": "documentation/arithmetic/Round/"
+  },
+  {
+    "name": "Row",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "Row[{e1, e2, ...}] displays the ei concatenated together in a row.",
+    "url": "documentation/expression-information/Row/"
   },
   {
     "name": "RowReduce",

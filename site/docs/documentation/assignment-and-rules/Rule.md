@@ -52,9 +52,9 @@ Out[1]= 77
 - Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_core_algebra.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core_algebra.c)
 - Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
 - Tests: [`tests/test_fixedpoint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fixedpoint.c)
-- Tests: [`tests/test_fixedpointlist.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fixedpointlist.c)
 
 ## Notes & additional examples
 

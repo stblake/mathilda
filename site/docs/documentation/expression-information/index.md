@@ -1,6 +1,6 @@
 # Expression Information
 
-58 built-in function(s) in this category.
+60 built-in function(s) in this category.
 
 - [`$MachineEpsilon`]($MachineEpsilon.md) — $MachineEpsilon  _(Stable)_
 - [`$MachinePrecision`]($MachinePrecision.md) — $MachinePrecision  _(Stable)_
@@ -39,6 +39,7 @@
 - [`Negative`](Negative.md) — Negative[x]  _(Stable)_
 - [`NonNegative`](NonNegative.md) — NonNegative[x]  _(Stable)_
 - [`NonPositive`](NonPositive.md) — NonPositive[x]  _(Stable)_
+- [`NumberForm`](NumberForm.md) — NumberForm[expr, n] prints approximate real numbers in expr to n-digit  _(Stable)_
 - [`NumberQ`](NumberQ.md) — NumberQ[expr]  _(Stable)_
 - [`NumericQ`](NumericQ.md) — NumericQ[expr] gives True if expr is a numeric quantity, and False otherwise.  _(Stable)_
 - [`OddQ`](OddQ.md) — OddQ[n] gives True if n is an odd integer (Integer or BigInt), False otherwise.  _(Stable)_
@@ -48,6 +49,7 @@
 - [`PossibleZeroQ`](PossibleZeroQ.md) — PossibleZeroQ[expr] gives True if symbolic and numerical methods suggest that expr has value zero, and False otherwise.  _(Stable)_
 - [`Print`](Print.md) — Print[expr1, expr2, ...]  _(Stable)_
 - [`ReleaseHold`](ReleaseHold.md) — ReleaseHold[expr]  _(Stable)_
+- [`Row`](Row.md) — Row[{e1, e2, ...}] displays the ei concatenated together in a row.  _(Stable)_
 - [`Sequence`](Sequence.md) — Sequence[e1, e2, ...]  _(Stable)_
 - [`SequenceHold`](SequenceHold.md) — SequenceHold  _(Experimental)_
 - [`SetAttributes`](SetAttributes.md) — SetAttributes[s, attr] sets the attributes for s.  _(Stable)_

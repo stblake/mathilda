@@ -100,17 +100,34 @@ Other matrix norms (SVD-based 2-norm, etc.) are not yet implemented and fall thr
 - For vectors, `Norm[v, p]` is `Total[Abs[v]^p]^(1/p)`.
 - For vectors, `Norm[v, Infinity]` is the $\infty$-norm given by `Max[Abs[v]]`.
 - `Norm[m, "Frobenius"]` gives the Frobenius norm of a matrix `m`.
+- **Packed/NDArray fast path**: an inexact vector or matrix routes through the
+  LAPACK-backed `ndla_norm` (`dlange`/`zlange`, and an SVD for the induced
+  matrix 2-norm); `Norm` is on the packed-array `AWARE` list.
+- **`Compile[]`**: both `Norm[v]`/`Norm[m]` and the two-argument forms lower to a
+  machine `Real`. Over a declared array argument the compiled body delegates to
+  `ndla_norm` (the `V_NORM` opcode carries the literal `p`), covering
+  `Norm[v, 1]`, `Norm[v, Infinity]`, `Norm[v, k]`, `Norm[v, 2.5]`, and the matrix
+  `Norm[m, 1]` / `Norm[m, Infinity]` / `Norm[m, "Frobenius"]`. An induced matrix
+  `p`-norm with `p ∉ {1, 2, Infinity}` has no LAPACK path and stays interpreted.
+- **Inline vector**: a `Norm[{e1, …, en}, p]` over a `List` literal (rather than a
+  declared array) compiles by expanding to the scalar arithmetic above
+  (`Sqrt[Σ Abs[ei]^2]`, `Σ Abs[ei]`, `Max[Abs[ei]]`, `(Σ Abs[ei]^p)^(1/p)`), so a
+  `Norm[{f[x], …}]` body auto-compiles inside `Plot`/`Table`/`NIntegrate`/`FindRoot`.
 
 **Attributes:** `Protected`.
+
+## See also
+
+[List](../../other-advanced/List/), [Plot](../../graphics/Plot/), [Table](../../lists-and-iteration/Table/), [NIntegrate](../../numerical-calculus/NIntegrate/), [FindRoot](../../calculus/FindRoot/)
 
 ## References
 
 - Source: [`src/linalg/norm.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/norm.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_compile_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_transforms.c)
 - Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
 - Tests: [`tests/test_diagonal.c`](https://github.com/stblake/mathilda/blob/main/tests/test_diagonal.c)
 - Tests: [`tests/test_fit.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fit.c)
-- Tests: [`tests/test_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linalg.c)
 
 ## Notes & additional examples
 

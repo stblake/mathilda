@@ -116,6 +116,13 @@ are ever affected; exact integers and rationals are never chopped.
 - `delta` may be supplied as `Integer`, `Real`, `Rational[n, d]`,
   BigInt, or (when `USE_MPFR=1`) `MPFR`; its absolute value is the
   effective tolerance.
+- **Packed/NDArray fast path** (packed-aware): a machine buffer is scanned and
+  kept untouched when nothing chops (the common cleanup call); a chopping rank-1
+  buffer builds the exact mixed `{…, 0, …}` result in one pass, else it degrades
+  to the list path. See [packed arrays](../packed-arrays/index.md).
+- **`Compile[]`/auto-compilation**: `Chop[x]` / `Chop[x, δ]` (literal `δ`) lower to
+  the branchless `x * (Abs[x] >= δ)`, returning a machine `0.` where the
+  interpreter gives the exact `Integer 0`; a machine integer is the identity.
 
 **Attributes:** `Protected`.
 
@@ -129,8 +136,8 @@ are ever affected; exact integers and rationals are never chopped.
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
 - Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
 - Tests: [`tests/test_chop.c`](https://github.com/stblake/mathilda/blob/main/tests/test_chop.c)
+- Tests: [`tests/test_compile_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_transforms.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
-- Tests: [`tests/test_complexexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complexexpand.c)
 
 ## Notes & additional examples
 
