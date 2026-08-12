@@ -373,6 +373,7 @@ set(COMMON_SRC
     ../src/list/subdivide.c
     ../src/list/nearest.c
     ../src/list/find_clusters.c
+    ../src/list/distance.c
     ../src/patterns.c
     ../src/patterns.c
     ../src/replace.c

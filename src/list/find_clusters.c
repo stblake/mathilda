@@ -65,6 +65,7 @@
 #include "list_common.h"
 #include "internal.h"
 #include "find_clusters.h"
+#include "distance.h"
 
 #include <math.h>       /* isnan, fabs, exp, sqrt, log -- all C99 */
 
@@ -92,6 +93,10 @@
  * eps-window mean) they decline above this, the way Spectral already declines
  * above its own limit. Refusing is strictly better than appearing to hang. */
 #define FC_SHIFT_MAX_N       4000
+/* Vector input is quadratic in n (Prim, and the neighbourhood queries a sort
+ * makes linear on a line), so it carries the same order of cap as the other
+ * quadratic methods. */
+#define FC_NDIM_MAX_N        2000
 
 /* Merge tolerance for the shift methods, in units of the data scale (one
  * median gap). Strictly 1.0 is too tight: on evenly spaced data the interior
@@ -173,6 +178,21 @@ typedef struct {
 /* Decoded input                                                             */
 /* ------------------------------------------------------------------------- */
 
+/* What the elements ARE, which decides both the distance and the code path.
+ *
+ *   SCALAR   real numbers. Sorted, so the spanning tree is the adjacency chain
+ *            and edge weights are exact differences. The original path.
+ *   POINT    a List or a colour, i.e. a compound expression whose arguments are
+ *            numeric coordinates. Weights are exact SQUARED distances.
+ *   SEQUENCE strings. Weights are exact integer edit distances. There are no
+ *            coordinates at all, which is fine: the gap methods only ever ask
+ *            for pairwise distances.
+ *
+ * Rational and Complex are also compound expressions, which is why POINT is
+ * restricted to an explicit head list -- treating Rational[1, 2] as a 2-D point
+ * would silently cluster 1/2 by its numerator and denominator. */
+typedef enum { FC_KIND_SCALAR, FC_KIND_POINT, FC_KIND_SEQUENCE } FcKind;
+
 /* Everything the methods share, computed once.
  *
  * `order` is the EXACT sorted permutation and `gap` the EXACT adjacent
@@ -182,17 +202,56 @@ typedef struct {
 typedef struct {
     Expr**  elem;      /* borrowed: the input elements, input order */
     size_t  n;
-    size_t* order;     /* owned: sorted permutation of 0..n-1 */
-    double* val;       /* owned: val[i] is the double projection of elem[i] */
-    Expr**  gap;       /* owned: gap[j] = elem[order[j+1]] - elem[order[j]] */
+    size_t  dim;       /* component count for FC_KIND_POINT; 1 otherwise */
+    FcKind  kind;      /* WHICH code path. Never infer this from `dim`:
+                        * {{1}, {2}, {100}} is a list of 1-component points, so
+                        * dim == 1 while the kind is POINT. Conflating the two
+                        * sent 1-vectors down the scalar path, where the elements
+                        * are still Lists and every arithmetic step threaded over
+                        * them. `dim` only ever counts components. */
+    size_t* order;     /* owned: sorted permutation of 0..n-1. dim == 1 ONLY --
+                        * there is no total order on vectors, so this is NULL in
+                        * higher dimensions and every consumer of it is a
+                        * 1D-only path. */
+    double* val;       /* owned: val[i] is the double projection of elem[i].
+                        * dim == 1 only; see `coord` otherwise. */
+    double* coord;     /* owned: row-major n x dim machine projection, dim > 1 */
+
+    /* THE SPANNING TREE. `gap[j]` is edge j's exact weight and eu/ev its
+     * endpoints. In 1D this is the sorted adjacency chain -- edge j is
+     * (order[j], order[j+1]) weighted by their exact difference, i.e. literally
+     * the adjacent-gap array this field used to be -- because the MST of points
+     * on a line IS that chain. In higher dimensions it is a real MST over exact
+     * SQUARED distances, built by Prim.
+     *
+     * Storing it as edges rather than gaps is what lets one implementation serve
+     * both: single-linkage clustering is "cut the heaviest tree edges", and the
+     * ranking and threshold code below never needs to know which case it is in.
+     *
+     * eu[j] is always the endpoint that was already in the tree when ev[j] joined
+     * (in 1D, the earlier sorted position). Parent-before-child ordering is
+     * relied upon by the equal-elements fold, which would not be transitive
+     * without it. */
+    Expr**  gap;       /* owned: exact weight of edge j */
+    size_t* eu;        /* owned: parent endpoint of edge j */
+    size_t* ev;        /* owned: child endpoint of edge j */
     size_t  n_gap;     /* n - 1, or 0 when n == 0 */
+
+    /* Multiplier for the Automatic threshold, applied to the weights above.
+     * FC_GAP_FACTOR when the weights are plain distances (1D differences), and
+     * its SQUARE when they are squared distances (n-D), which is the same test:
+     * squaring is monotone on non-negatives so the median commutes with it, and
+     * d^2 > 9 * median(d^2) if and only if d > 3 * median(d). Getting this wrong
+     * would silently apply a factor of sqrt(3) in higher dimensions. */
+    size_t  thresh_factor;
+
     size_t  n_distinct;
-    /* owned: bnd[j] is true when gap j is EXACTLY nonzero, i.e. sorted
-     * positions j and j+1 hold different values. Derived from the gap Exprs,
-     * never from the double projection -- `2^60` and `2^60 + 1` are distinct
-     * but project to the same double, and a boundary set computed in double
-     * space silently loses them. Every consumer of "is this a real boundary"
-     * must read this, not compare val[]. */
+    /* owned: bnd[j] is true when edge j's endpoints hold EXACTLY different
+     * values. Derived by comparing the elements themselves, never from the
+     * double projection -- `2^60` and `2^60 + 1` are distinct but project to the
+     * same double, and a boundary set computed in double space silently loses
+     * them. Every consumer of "is this a real boundary" must read this, not
+     * compare val[]. */
     bool*   bnd;
 } FcData;
 
@@ -203,8 +262,12 @@ static void fc_data_free(FcData* d) {
     }
     free(d->order);
     free(d->val);
+    free(d->coord);
+    free(d->eu);
+    free(d->ev);
     free(d->bnd);
     d->gap = NULL; d->order = NULL; d->val = NULL; d->bnd = NULL;
+    d->coord = NULL; d->eu = NULL; d->ev = NULL;
 }
 
 /* Machine projection of a real number. Only for the inexact methods and the
@@ -222,6 +285,104 @@ static double fc_to_double(Expr* e) {
         if (den != 0.0) return num / den;
     }
     return 0.0;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Input shape                                                                */
+/* ------------------------------------------------------------------------- */
+
+/* Component c of element i, treating a scalar as a 1-vector. Borrowed. */
+static Expr* fc_comp(const FcData* d, size_t i, size_t c) {
+    Expr* e = d->elem[i];
+    return (d->kind == FC_KIND_POINT) ? e->data.function.args[c] : e;
+}
+
+/* Heads whose arguments are coordinates. Colours are points in their own space,
+ * which is all clustering needs; RGBColor[r, g, b] is the same shape as a
+ * 3-vector. Deliberately a closed list -- see the FcKind comment for why any
+ * compound head would be wrong. */
+static bool fc_is_point_head(Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL) return false;
+    const char* nm = h->data.symbol.name;
+    return strcmp(nm, "List") == 0 || strcmp(nm, "RGBColor") == 0 ||
+           strcmp(nm, "GrayLevel") == 0 || strcmp(nm, "Hue") == 0 ||
+           strcmp(nm, "CMYKColor") == 0;
+}
+
+/* Exact equality of two whole points. Component-wise through the exact
+ * comparator, so this is the vector generalisation of the 1D distinctness test
+ * and inherits its refusal to decide through doubles. */
+static bool fc_elem_equal(const FcData* d, size_t i, size_t j, bool* ok) {
+    /* Strings have no numeric components; structural equality IS value equality
+     * for them, and it cannot fail to decide. */
+    if (d->kind == FC_KIND_SEQUENCE) {
+        *ok = true;
+        return expr_eq(d->elem[i], d->elem[j]);
+    }
+    for (size_t c = 0; c < d->dim; c++) {
+        if (list_numeric_cmp(fc_comp(d, i, c), fc_comp(d, j, c), ok) != 0) return false;
+        if (!*ok) return false;
+    }
+    return true;
+}
+
+/* Exact distance between two elements, by kind. Caller owns the result; NULL
+ * means the pair is not comparable, which the caller turns into an unevaluated
+ * call rather than a guess. */
+static Expr* fc_pair_distance(const FcData* d, size_t i, size_t j) {
+    if (d->kind == FC_KIND_SEQUENCE) return distance_edit(d->elem[i], d->elem[j]);
+    return distance_squared_euclidean(d->elem[i], d->elem[j]);
+}
+
+/* Decide (n, dim) for the input, or fail.
+ *
+ * Two accepted shapes: every element a real scalar (dim 1, the original path),
+ * or every element a List of the SAME length with every component a real number
+ * (dim k). Everything else declines -- ragged rows, a mix of scalars and
+ * vectors, depth over 2, a non-real component, a visible NDArray (not a List, so
+ * it never reaches here as one). Declining rather than guessing follows the rest
+ * of the file: a symbolic element is not silently dropped or reinterpreted as a
+ * nominal feature. */
+static bool fc_probe_shape(Expr** elem, size_t n, size_t* dim, FcKind* kind) {
+    *dim = 1;
+
+    /* Scalars first, so a Rational -- itself a compound expression -- is read as
+     * the number it is rather than as a pair of coordinates. */
+    if (list_real_number_q(elem[0])) {
+        for (size_t i = 0; i < n; i++)
+            if (!list_real_number_q(elem[i])) return false;
+        *kind = FC_KIND_SCALAR;
+        return true;
+    }
+
+    if (elem[0]->type == EXPR_STRING) {
+        for (size_t i = 0; i < n; i++)
+            if (elem[i]->type != EXPR_STRING) return false;
+        *kind = FC_KIND_SEQUENCE;
+        return true;
+    }
+
+    if (!fc_is_point_head(elem[0])) return false;
+    Expr* head0 = elem[0]->data.function.head;
+    size_t k = elem[0]->data.function.arg_count;
+    if (k == 0) return false;                  /* points of no dimension */
+    for (size_t i = 0; i < n; i++) {
+        if (!fc_is_point_head(elem[i])) return false;                /* mixed */
+        /* One head for the whole list: a red RGBColor and a 3-vector are not
+         * points in a common space, whatever their arity suggests. */
+        if (!expr_eq(elem[i]->data.function.head, head0)) return false;
+        if (elem[i]->data.function.arg_count != k) return false;      /* ragged */
+        for (size_t c = 0; c < k; c++) {
+            Expr* comp = elem[i]->data.function.args[c];
+            if (is_listq(comp)) return false;                         /* depth > 2 */
+            if (!list_real_number_q(comp)) return false;
+        }
+    }
+    *dim = k;
+    *kind = FC_KIND_POINT;
+    return true;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -260,6 +421,81 @@ static void fc_merge_sort(size_t* idx, size_t n, FcSortCtx* c) {
         memcpy(idx, tmp, sizeof(size_t) * n);
     }
     free(tmp);
+}
+
+/* ------------------------------------------------------------------------- */
+/* Exact minimum spanning tree (dim > 1)                                      */
+/* ------------------------------------------------------------------------- */
+
+/* Prim's algorithm over exact SQUARED distances, O(n^2) time and O(n) memory.
+ *
+ * Squared rather than true distance for one reason: it is rational for rational
+ * input, so the whole tree -- and therefore the whole partition -- is decided by
+ * exact comparisons. Squaring is monotone on non-negatives, so the MST of the
+ * squared metric is an MST of the true metric; only the recorded weights differ,
+ * which `thresh_factor` accounts for.
+ *
+ * O(n^2) is the honest cost of general-dimension neighbourhood work; the 1D path
+ * gets an O(n log n) sort instead and never comes here. Callers cap n.
+ *
+ * Edges are emitted in Prim insertion order with eu = the endpoint already in the
+ * tree, which gives the parent-before-child property the equal-elements fold
+ * needs. Ties between equal-weight edges therefore break by insertion order --
+ * deterministic for a given input, and with no prior behaviour to preserve since
+ * higher dimensions were previously rejected outright. */
+static bool fc_build_mst(FcData* d) {
+    size_t n = d->n;
+    Expr** best = calloc(n, sizeof(Expr*));    /* exact weight to the tree */
+    size_t* from = malloc(sizeof(size_t) * n); /* which tree vertex realises it */
+    bool*   in   = calloc(n, sizeof(bool));
+    bool ok = best && from && in;
+
+    if (ok) {
+        in[0] = true;
+        for (size_t i = 1; i < n && ok; i++) {
+            best[i] = fc_pair_distance(d, 0, i);
+            from[i] = 0;
+            if (!best[i] || !list_real_number_q(best[i])) ok = false;
+        }
+    }
+
+    for (size_t added = 1; added < n && ok; added++) {
+        /* Cheapest vertex not yet in the tree, by exact comparison. */
+        size_t pick = SIZE_MAX;
+        for (size_t i = 0; i < n && ok; i++) {
+            if (in[i]) continue;
+            if (pick == SIZE_MAX) { pick = i; continue; }
+            if (list_numeric_cmp(best[i], best[pick], &ok) < 0) pick = i;
+        }
+        if (!ok || pick == SIZE_MAX) { ok = false; break; }
+
+        in[pick] = true;
+        size_t j = added - 1;                  /* this edge's index */
+        d->eu[j] = from[pick];
+        d->ev[j] = pick;
+        d->gap[j] = best[pick];
+        best[pick] = NULL;                     /* ownership moves to d->gap */
+
+        /* Relax: does joining `pick` bring anyone closer to the tree? */
+        for (size_t i = 0; i < n && ok; i++) {
+            if (in[i]) continue;
+            Expr* cand = fc_pair_distance(d, pick, i);
+            if (!cand || !list_real_number_q(cand)) { expr_free(cand); ok = false; break; }
+            if (list_numeric_cmp(cand, best[i], &ok) < 0 && ok) {
+                expr_free(best[i]);
+                best[i] = cand;
+                from[i] = pick;
+            } else {
+                expr_free(cand);
+            }
+        }
+    }
+
+    for (size_t i = 0; i < n; i++) expr_free(best[i]);
+    free(best);
+    free(from);
+    free(in);
+    return ok;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -410,7 +646,7 @@ static size_t fc_automatic_gap_count(const FcData* d, bool* ok) {
     Expr* median = d->gap[gi[(d->n_gap - 1) / 2]];
     free(gi);
 
-    Expr* mul[2] = { expr_new_integer(FC_GAP_FACTOR), expr_copy(median) };
+    Expr* mul[2] = { expr_new_integer((long)d->thresh_factor), expr_copy(median) };
     Expr* thresh = eval_and_free(internal_times(mul, 2));
     if (!list_real_number_q(thresh)) { expr_free(thresh); *ok = false; return 1; }
 
@@ -507,15 +743,55 @@ static bool fc_method_gap(const FcData* d, FcCount spec, const FcOpts* o,
     }
     free(gidx);
 
-    /* Walk the sorted order, opening a new cluster after every cut gap. */
-    size_t id = 0;
-    for (size_t j = 0; j < n; j++) {
-        assign[d->order[j]] = id;
-        if (j + 1 < n && cut[j]) id++;
+    /* Connected components of the tree minus the cut edges.
+     *
+     * This replaces a walk along the sorted chain, which only existed because in
+     * 1D the tree IS a chain and its components are contiguous runs. Union-find
+     * over the surviving edges says the same thing there and is the only version
+     * that also works on a general tree. Component ids come out in an arbitrary
+     * order, which costs nothing: fc_emit_clusters orders clusters by first
+     * occurrence in input order regardless. */
+    size_t* parent = malloc(sizeof(size_t) * n);
+    size_t* rank   = calloc(n ? n : 1, sizeof(size_t));
+    if (!parent || !rank) { free(cut); free(parent); free(rank); return false; }
+    for (size_t i = 0; i < n; i++) parent[i] = i;
+
+    /* Path halving plus union by rank, which is not a micro-optimisation here.
+     * A naive find that walks to the root is O(n) per query when the surviving
+     * edges form one long chain -- exactly the shape of a small cluster count on
+     * sorted 1-D data -- and made the whole method quadratic: an explicit count
+     * of 10 over 100,000 points took 2.24 s against 0.087 s for Automatic on the
+     * same input, and timings grew 4x per doubling. Automatic looked fine only
+     * because many cuts leave many short components. */
+    for (size_t j = 0; j < d->n_gap; j++) {
+        if (cut[j]) continue;
+        size_t a = d->eu[j], b = d->ev[j];
+        while (parent[a] != a) { parent[a] = parent[parent[a]]; a = parent[a]; }
+        while (parent[b] != b) { parent[b] = parent[parent[b]]; b = parent[b]; }
+        if (a == b) continue;
+        if (rank[a] < rank[b]) { size_t t = a; a = b; b = t; }
+        parent[b] = a;
+        if (rank[a] == rank[b]) rank[a]++;
     }
     free(cut);
+    free(rank);
 
-    *k = id + 1;
+    /* Number the roots by first appearance in input order. */
+    size_t* label = malloc(sizeof(size_t) * n);
+    if (!label) { free(parent); return false; }
+    for (size_t i = 0; i < n; i++) label[i] = SIZE_MAX;
+
+    size_t id = 0;
+    for (size_t i = 0; i < n; i++) {
+        size_t r = i;
+        while (parent[r] != r) { parent[r] = parent[parent[r]]; r = parent[r]; }
+        if (label[r] == SIZE_MAX) label[r] = id++;
+        assign[i] = label[r];
+    }
+    free(parent);
+    free(label);
+
+    *k = id;
     return true;
 }
 
@@ -1407,55 +1683,97 @@ Expr* builtin_find_clusters(Expr* res) {
 
     Expr** elem = list->data.function.args;
 
-    /* Numeric gate: every element must be a real number we can order exactly.
-     * One symbolic element declines the whole call rather than being dropped or
-     * treated as a nominal feature. */
-    for (size_t i = 0; i < n; i++)
-        if (!list_real_number_q(elem[i])) return NULL;
-
     FcData d;
     memset(&d, 0, sizeof d);
     d.elem = elem;
     d.n = n;
     d.n_gap = n - 1;
-    d.order = malloc(sizeof(size_t) * n);
-    d.val   = malloc(sizeof(double) * n);
-    if (!d.order || !d.val) { fc_data_free(&d); return NULL; }
-    for (size_t i = 0; i < n; i++) { d.order[i] = i; d.val[i] = fc_to_double(elem[i]); }
 
-    FcSortCtx sc = { elem, true };
-    fc_merge_sort(d.order, n, &sc);
-    if (!sc.ok) { fc_data_free(&d); return NULL; }
+    /* Shape gate. Every element must be a real scalar, or every element a vector
+     * of the same length over real components. One symbolic element declines the
+     * whole call rather than being dropped or treated as a nominal feature. */
+    if (!fc_probe_shape(elem, n, &d.dim, &d.kind)) return NULL;
 
-    /* Exact adjacent gaps over the sorted order. No Abs: sorted neighbours give
-     * a non-negative difference by construction. */
+    /* Only the gap methods are dimension-general so far; the rest still read the
+     * sorted projection and are declined above one dimension rather than being
+     * silently run on meaningless data. */
+    if (d.kind != FC_KIND_SCALAR && fn != fc_method_gap) return NULL;
+
+    /* Vector work is quadratic (Prim, and the neighbourhood queries that a sort
+     * makes linear in 1D), so it is capped the way the other quadratic methods
+     * already are. */
+    if (d.kind != FC_KIND_SCALAR && n > FC_NDIM_MAX_N) return NULL;
+
     if (d.n_gap) {
         d.gap = calloc(d.n_gap, sizeof(Expr*));
-        if (!d.gap) { fc_data_free(&d); return NULL; }
+        d.eu  = malloc(sizeof(size_t) * d.n_gap);
+        d.ev  = malloc(sizeof(size_t) * d.n_gap);
+        d.bnd = calloc(d.n_gap, sizeof(bool));
+        if (!d.gap || !d.eu || !d.ev || !d.bnd) { fc_data_free(&d); return NULL; }
+    }
+
+    if (d.kind == FC_KIND_SCALAR) {
+        /* The MST of points on a line is the sorted adjacency chain, so sorting
+         * builds it in O(n log n) and the weights are plain exact differences --
+         * no Abs needed, sorted neighbours differ non-negatively by
+         * construction. This is the original code path, unchanged, and the reason
+         * one-dimensional results are identical to before. */
+        d.thresh_factor = FC_GAP_FACTOR;
+        d.order = malloc(sizeof(size_t) * n);
+        d.val   = malloc(sizeof(double) * n);
+        if (!d.order || !d.val) { fc_data_free(&d); return NULL; }
+        for (size_t i = 0; i < n; i++) { d.order[i] = i; d.val[i] = fc_to_double(elem[i]); }
+
+        FcSortCtx sc = { elem, true };
+        fc_merge_sort(d.order, n, &sc);
+        if (!sc.ok) { fc_data_free(&d); return NULL; }
+
         for (size_t j = 0; j < d.n_gap; j++) {
-            Expr* a[2] = { expr_copy(elem[d.order[j + 1]]), expr_copy(elem[d.order[j]]) };
+            d.eu[j] = d.order[j];
+            d.ev[j] = d.order[j + 1];
+            Expr* a[2] = { expr_copy(elem[d.ev[j]]), expr_copy(elem[d.eu[j]]) };
             d.gap[j] = eval_and_free(internal_subtract(a, 2));
             if (!list_real_number_q(d.gap[j])) { fc_data_free(&d); return NULL; }
         }
+    } else {
+        /* POINT weights are SQUARED distances, so the threshold factor is
+         * squared too -- see the FcData comment. SEQUENCE weights are edit
+         * distances, already linear, so they keep the plain factor. */
+        d.thresh_factor = (d.kind == FC_KIND_POINT)
+                        ? FC_GAP_FACTOR * FC_GAP_FACTOR
+                        : FC_GAP_FACTOR;
+
+        /* Coordinates exist only where there are coordinates. Strings have none,
+         * and the gap methods never ask for any -- they work purely off the exact
+         * pairwise distances in the tree. */
+        if (d.kind == FC_KIND_POINT) {
+            d.coord = malloc(sizeof(double) * n * d.dim);
+            if (!d.coord) { fc_data_free(&d); return NULL; }
+            for (size_t i = 0; i < n; i++)
+                for (size_t c = 0; c < d.dim; c++)
+                    d.coord[i * d.dim + c] = fc_to_double(fc_comp(&d, i, c));
+        }
+
+        if (d.n_gap && !fc_build_mst(&d)) { fc_data_free(&d); return NULL; }
     }
 
-    /* Exact boundary flags and the distinct count, from one pass over the gap
-     * signs. Both are exact by construction; nothing downstream needs to
-     * rediscover "are these two values different" from the double projection. */
+    /* Exact boundary flags and the distinct count, one pass over the tree edges.
+     *
+     * Distinctness comes from comparing the ELEMENTS with the exact comparator,
+     * never from the sign or magnitude of an edge weight. The 1D weights are
+     * built with internal_subtract, which widens a mixed exact/inexact pair to a
+     * double: (2^60 + 1) - 2.0^60 is 0.0, so a weight test would call two
+     * different values equal, collapse n_distinct, and make the whole result
+     * depend on input order.
+     *
+     * Counting distinct points this way is exact in any dimension. Zero-weight
+     * edges are precisely those joining identical points, and a spanning tree
+     * restricted to a class of m identical points uses m-1 of them, so
+     * 1 + (number of nonzero edges) is the number of distinct points. */
     d.n_distinct = 1;
-    if (d.n_gap) {
-        d.bnd = calloc(d.n_gap, sizeof(bool));
-        if (!d.bnd) { fc_data_free(&d); return NULL; }
-    }
     for (size_t j = 0; j < d.n_gap; j++) {
-        /* Distinctness comes from comparing the ELEMENTS with the exact
-         * comparator, never from the sign of their difference. The gap Exprs
-         * are built with internal_subtract, which widens a mixed exact/inexact
-         * pair to a double: (2^60 + 1) - 2.0^60 is 0.0, so a gap-sign test
-         * would call two different values equal, collapse n_distinct, and make
-         * the whole result depend on input order. */
         bool ok = true;
-        if (list_numeric_cmp(elem[d.order[j + 1]], elem[d.order[j]], &ok) != 0) {
+        if (!fc_elem_equal(&d, d.eu[j], d.ev[j], &ok)) {
             d.bnd[j] = true;
             d.n_distinct++;
         }
@@ -1486,8 +1804,12 @@ Expr* builtin_find_clusters(Expr* res) {
      * count, which is the documented cap. fc_scatter then renumbers, so the
      * ids stay contiguous. */
     if (ok && d.n_gap) {
+        /* Ascending edge order with eu = parent means a point's representative is
+         * already folded when its own edge is processed, so one pass is
+         * transitive across a whole run of identical points. In 1D these are the
+         * sorted-chain edges, so this is the same walk as before. */
         for (size_t j = 0; j < d.n_gap; j++)
-            if (!d.bnd[j]) assign[d.order[j + 1]] = assign[d.order[j]];
+            if (!d.bnd[j]) assign[d.ev[j]] = assign[d.eu[j]];
         size_t* renum = malloc(sizeof(size_t) * n);
         if (!renum) { ok = false; }
         else {
