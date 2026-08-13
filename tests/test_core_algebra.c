@@ -171,6 +171,45 @@ static void test_map(void) {
     ck("Map[f, Hold[1 + 1]]", "Hold[f[Plus[1, 1]]]");
 }
 
+/* ------------------------------------------------------------------ Scan */
+static void test_scan(void) {
+    /* Scan applies f for side effects, leaves-before-roots, and returns Null.
+     * These accumulate the visit order into a Module local so the result is
+     * checkable. Default level 1: elements visited, compound elements NOT
+     * descended into (the past-max refcount short-circuit). */
+    ck("Module[{r = {}}, Scan[(r = Append[r, #]) &, {a, b, c}]; r]", "List[a, b, c]");
+    ck("Module[{r = {}}, Scan[(r = Append[r, #]) &, {g[a, b], g[c, d]}]; r]",
+       "List[g[a, b], g[c, d]]");
+    ck("Module[{r = {}}, Scan[(r = Append[r, #]) &, {{a, b}, {c, d}}, {2}]; r]",
+       "List[a, b, c, d]");
+    ck("Module[{r = {}}, Scan[(r = Append[r, #]) &, g[a, b], {0}]; r]", "List[g[a, b]]");
+    /* Infinity: every level, leaves before roots -- pins the traversal order. */
+    ck("Module[{r = {}}, Scan[(r = Append[r, #]) &, {g[a], h[b]}, Infinity]; r]",
+       "List[a, g[a], b, h[b]]");
+    /* Control flow through Scan is unaffected by the short-circuit. */
+    ck("Catch[Scan[If[# > 3, Throw[#]] &, {1, 2, 3, 4, 5}]]", "4");
+}
+
+/* ------------------------------------------------------------ MapIndexed */
+static void test_mapindexed(void) {
+    /* MapIndexed wraps each part as f[part, {position}]. Default level 1 pairs
+     * each element with {i}; compound elements are NOT descended into (the
+     * past-max share short-circuit), so their position stays a 1-vector. */
+    ck("MapIndexed[ff, {x, y, z}]", "List[ff[x, List[1]], ff[y, List[2]], ff[z, List[3]]]");
+    ck("MapIndexed[ff, {g[a, b], g[c, d]}]",
+       "List[ff[g[a, b], List[1]], ff[g[c, d], List[2]]]");
+    /* Level 2 threads a 2-component position. */
+    ck("MapIndexed[ff, {{a, b}, {c, d}}, {2}]",
+       "List[List[ff[a, List[1, 1]], ff[b, List[1, 2]]], "
+       "List[ff[c, List[2, 1]], ff[d, List[2, 2]]]]");
+    ck("MapIndexed[ff, g[a, b], {0}]", "ff[g[a, b], List[]]");   /* level 0: position {} */
+    ck("MapIndexed[ff, {g[a], b}, Infinity]",
+       "List[ff[g[ff[a, List[1, 1]]], List[1]], ff[b, List[2]]]");
+    /* Association: values positioned by Key[k]. */
+    ck("MapIndexed[ff, <|p -> 1, q -> 2|>]",
+       "Association[Rule[p, ff[1, List[Key[p]]]], Rule[q, ff[2, List[Key[q]]]]]");
+}
+
 /* ------------------------------------------------------ Length / Dimensions */
 static void test_length_dimensions(void) {
     ck("Length[a + b + c]", "3");
@@ -199,6 +238,8 @@ int main(void) {
     TEST(test_power_divide_subtract);
     TEST(test_apply);
     TEST(test_map);
+    TEST(test_scan);
+    TEST(test_mapindexed);
     TEST(test_length_dimensions);
     TEST(test_table);
 

@@ -126,6 +126,13 @@ def discover(only=None):
 def group_of(num):
     """Experiment number -> area. 01-10 / 11-20 / 21-30 by construction.
 
+    E (53-62) is advanced numerical analysis against scipy/numpy (one mpmath
+    baseline) — decompositions, eigenproblems, multidim/oscillatory quadrature,
+    stiff ODE/PDE, nonlinear systems, high-degree roots, DCT/DST, regularized
+    least squares, arbitrary precision. It sits one level below group B on the
+    same subsystems and is run under Python 3.11 (see benchmarks/requirements.txt).
+
+
     C is exactly the eight open roadmap items from docs/experiments/README.md —
     the array substrate: packing, dispatch, per-call overhead. D is the two
     subsystems (src/graph/, src/strings/) that nothing in the corpus had ever
@@ -146,6 +153,8 @@ def group_of(num):
         return "B numeric libraries (scipy)"
     if 21 <= num <= 28:
         return "C array substrate (numpy)"
+    if 53 <= num <= 62:
+        return "E numerical analysis (scipy)"
     return "D uncovered subsystems"
 
 

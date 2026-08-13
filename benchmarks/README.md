@@ -361,6 +361,37 @@ Python, because the graph accessors are O(n²) and rescan the edge list on every
 call while the string operations are fine. A single median over the group would
 hide both facts.
 
+**Group E — advanced numerical analysis, baseline `scipy`/`numpy` (one `mpmath`).**
+Where group B measures the *basic* numeric surface (1-D smooth quadrature, scalar
+root-finding, dense solve/inv/eig, 1-D FFT), group E goes one level deeper into the
+same subsystems: matrix decompositions and eigenproblems beyond `Eigenvalues`,
+multidimensional and oscillatory quadrature, stiff ODEs and PDEs, nonlinear
+systems, high-degree polynomial roots, the discrete cosine/sine transforms, and
+regularized least squares — plus arbitrary-precision numerics against `mpmath`,
+the one non-`scipy` baseline in the group.
+
+| # | experiment | subsystem | baseline |
+|---|---|---|---|
+| 53 | `matrix-decompositions` | `src/linalg/{ludecomp,qrdecomp,svdecomp,inv,matrank,nullspace}.c` | `scipy.linalg`/`numpy.linalg` |
+| 54 | `eigenproblems` | `src/linalg/eigen_*.c` | `scipy.linalg`/`scipy.sparse.linalg` |
+| 55 | `vectorized-special-functions` | `src/ndkernels.c`, `src/special_functions/` | `scipy.special` |
+| 56 | `multidim-quadrature` | `src/numerical_calculus/{cubature,oscint,dequad,denint,levincoll}.c` | `scipy.integrate` |
+| 57 | `stiff-ode-pde` | `src/numerical_calculus/ndsolve_{implicit,adams,mol,stencil}.c` | `scipy.integrate` |
+| 58 | `nonlinear-systems` | `src/numerical_roots/{findroot,nsolve_system}.c` | `scipy.optimize` |
+| 59 | `polynomial-roots` | `src/numerical_roots/{nroots,nroots_aberth,nroots_jt}.c` | `numpy` |
+| 60 | `dct-dst-transforms` | `src/fourier.c` | `scipy.fft` |
+| 61 | `regularized-least-squares` | `src/{fit,linalg/lstsq}.c` | `scipy`/`numpy` |
+| 62 | `arbitrary-precision` | `src/precision.c`, `src/*/*_mpfr.c` | `mpmath` |
+
+Group E is authored and verified against **Python 3.11** (numpy/scipy/mpmath, see
+`requirements.txt`). Pin the interpreter at run time — the runner does not hardcode
+a Python and the group needs no code change to select 3.11:
+
+```bash
+/usr/local/bin/python3.11 -m pip install -r benchmarks/requirements.txt
+HPC_PYTHON=/usr/local/bin/python3.11 python3 benchmarks/run_all.py --only 53,54,55,56,57,58,59,60,61,62 --check-labels
+```
+
 ### Why there is no WolframMark group
 
 There was one, and it was removed. WolframMark is a **hardware** benchmark: it

@@ -42,6 +42,10 @@
 #include "ludecomp_internal.h"
 #include "linalg.h"
 #include "lapack.h"
+#include "ndarray.h"
+#include "numarray.h"   /* na_load_matrix / na_build_matrix -- packed I/O */
+#include "ndlinalg.h"   /* linalg_delist_and_reeval -- packed fast-path net */
+#include "pack.h"       /* ndbuild_open -- packed buffer LU result */
 #include "expr.h"
 #include "print.h"
 #include "sym_names.h"
@@ -183,13 +187,37 @@ static Expr* lu_mach_make_scalar(double re, double im, bool is_complex)
 }
 
 /* Build the row-major LU output (rows x cols) from the column-major
- * LAPACK buffer.  Entries strictly above and below the unit diagonal
- * of L (resp. zero diagonal of U) are read verbatim -- LAPACK already
- * superimposed L and U into the same dense block, with L's unit
- * diagonal implicit. */
+ * LAPACK buffer.
+ *
+ * Real data goes straight into a packed float64 buffer via ndbuild_open
+ * -- one contiguous copy instead of rows*cols fresh Real Exprs, which for
+ * a 400x400 factor is the difference between ~5 ms and ~30 ms.  This is a
+ * PACKED LIST (Head List, fully transparent under Part/Tr/Apply), NOT a
+ * visible NDArray: a visible NDArray here is not transparent under Apply
+ * (`Times @@ Diagonal[lu]` would thread instead of reduce) and would be
+ * inconsistent with Inverse / LinearSolve, which return packed Lists.
+ *
+ * Under the packing threshold (small matrices) ndbuild_open returns NULL
+ * and we build the nested List as before.  Complex data has no packed
+ * form, so it always takes the nested-List path. */
 static Expr* lu_mach_build_lu(const double* A_cm, int rows, int cols,
                                bool is_complex)
 {
+    if (!is_complex) {
+        int64_t dims[2] = { rows, cols };
+        void* raw = NULL;
+        Expr* packed = ndbuild_open(2, dims, NDT_FLOAT64, &raw);
+        if (packed) {
+            double* out = (double*)raw;
+            for (int i = 0; i < rows; i++)
+                for (int j = 0; j < cols; j++)
+                    out[(size_t)i * (size_t)cols + (size_t)j] =
+                        A_cm[(size_t)i + (size_t)j * (size_t)rows];
+            return packed;   /* col-major LAPACK -> row-major packed buffer */
+        }
+        /* else: under threshold / packing off -- fall through to List. */
+    }
+
     size_t stride = is_complex ? 2 : 1;
     Expr** row_exprs = (Expr**)malloc(sizeof(Expr*) * (size_t)rows);
     for (int i = 0; i < rows; i++) {
@@ -357,6 +385,87 @@ Expr* lu_machine_dispatch(Expr* m, int rows, int cols)
 
     free(A_cm);
     free(ipiv);
+
+    Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
+    items[0] = lu; items[1] = p; items[2] = c;
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
+    free(items);
+    return result;
+#endif /* USE_LAPACK */
+}
+
+/* Packed fast path: LUDecomposition of an already-buffered matrix.
+ *
+ * The ndla_* pattern (see ndlinalg.h): read the buffer in place instead
+ * of materialising the packed input to a nested List and re-evaluating.
+ * The delist alone cost a 400x400 factorisation ~30 ms in rows*cols fresh
+ * Real Exprs -- more than everything else in the call combined -- so this
+ * is where LUDecomposition's gap against scipy.linalg.lu_factor lived.
+ *
+ * Handles the square real float64 case; rectangular, complex, non-float,
+ * or no-LAPACK falls back to linalg_delist_and_reeval (the universal
+ * safety net), which lands on the List machine path above. The result's
+ * lu factor inherits the input's presentation (packed List in -> packed
+ * List out; visible NDArray in -> NDArray out), matching the rest of the
+ * numeric linear-algebra surface. */
+Expr* ndla_ludecomposition(Expr* res)
+{
+#ifndef USE_LAPACK
+    return linalg_delist_and_reeval(res);
+#else
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1)
+        return linalg_delist_and_reeval(res);
+    Expr* arg = res->data.function.args[0];
+    if (!is_ndarray(arg) || arg->data.ndarray.rank != 2
+        || arg->data.ndarray.dims[0] != arg->data.ndarray.dims[1]
+        || arg->data.ndarray.dims[0] == 0
+        || arg->data.ndarray.dtype != NDT_FLOAT64
+        || !mathilda_lapack_probe())
+        return linalg_delist_and_reeval(res);
+
+    int n, cc; double* A = NULL;
+    if (!na_load_matrix(arg, false, /*colmajor=*/true, &n, &cc, &A))
+        return linalg_delist_and_reeval(res);
+
+    /* L-infinity norm of the ORIGINAL matrix, before dgetrf overwrites A. */
+    double anorm = mat_lapack_dlange('I', n, n, A, n);
+    int* ipiv = (int*)malloc(sizeof(int) * (size_t)n);
+    if (anorm < 0.0 || !ipiv) { free(A); free(ipiv); return linalg_delist_and_reeval(res); }
+
+    int info = mat_lapack_dgetrf(n, n, A, n, ipiv);
+    if (info < 0) { free(A); free(ipiv); return linalg_delist_and_reeval(res); }
+
+    static uint64_t sing_warn = 0, luc_warn = 0;
+    if (info > 0 && !sing_warn) {
+        sing_warn = 1;
+        char* s = expr_to_string(arg);
+        fprintf(stderr, "LUDecomposition::sing: Matrix %s is singular.\n", s);
+        free(s);
+    }
+
+    double rcond = 0.0, cond_est;
+    if (info == 0) {
+        int cinfo = mat_lapack_dgecon('I', n, A, n, anorm, &rcond);
+        cond_est = (cinfo != 0 || rcond <= 0.0) ? HUGE_VAL : 1.0 / rcond;
+        if (cond_est > 1.0 / DBL_EPSILON && !luc_warn) {
+            luc_warn = 1;
+            char* s = expr_to_string(arg);
+            fprintf(stderr,
+                "LUDecomposition::luc: Result for LUDecomposition of badly "
+                "conditioned matrix %s may contain significant numerical "
+                "errors.\n", s);
+            free(s);
+        }
+    } else {
+        cond_est = HUGE_VAL;
+    }
+
+    Expr* lu = na_build_matrix(A, n, n, false, /*colmajor=*/true);
+    if (lu && is_ndarray(lu))                        /* inherit presentation */
+        lu->data.ndarray.present_as = arg->data.ndarray.present_as;
+    Expr* p = lu_mach_build_perm(ipiv, n, n);
+    Expr* c = expr_new_real(cond_est);
+    free(A); free(ipiv);
 
     Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
     items[0] = lu; items[1] = p; items[2] = c;

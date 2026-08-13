@@ -972,8 +972,17 @@ static int ns_expr_size(const Expr* e, int limit) {
  * user pinned NSumTerms. */
 static int ns_em_head(const NsOpts* o, long settle) {
     int m = o->nsum_terms < 0 ? 0 : o->nsum_terms;
-    if (!o->nsum_terms_user && settle > 0) {
-        long want = settle + 4;
+    if (!o->nsum_terms_user) {
+        long want = (settle > 0) ? settle + 4 : 0;
+        /* Euler–Maclaurin's achievable accuracy is bounded by the asymptotic-
+         * series minimum (~10^-2.4N in practice) at base N, so the base must
+         * grow with the target precision: reaching `digits` places needs
+         * N ~ 0.45*digits. The old base (settle+4) was precision-independent and
+         * floored NSum at ~44 digits regardless of WorkingPrecision -- the tail
+         * integral, correction count and guard bits already scale, only the base
+         * did not. */
+        long prec_base = (long)(0.45 * ns_wp_digits(o)) + 8;
+        if (prec_base > want) want = prec_base;
         if (want > NS_EM_MAX_HEAD) want = NS_EM_MAX_HEAD;
         if ((int)want > m) m = (int)want;
     }

@@ -101,6 +101,13 @@ bool lu_symbolic_core(Expr** A_flat, int rows, int cols,
  * ------------------------------------------------------------------ */
 Expr* lu_machine_dispatch(Expr* m, int rows, int cols);
 
+/* Packed fast path for a buffered matrix input (the ndla_* pattern, see
+ * ndlinalg.h): reads the NDArray buffer in place instead of delisting it
+ * to a nested List and re-evaluating -- the delist dominated the cost.
+ * Square real float64 only; anything else (rectangular, complex, no
+ * LAPACK) falls back to linalg_delist_and_reeval. */
+Expr* ndla_ludecomposition(Expr* res);
+
 /* ---------------------------------------------------------------------
  * Arbitrary-precision MPFR kernel dispatcher.
  *

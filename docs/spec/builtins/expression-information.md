@@ -847,6 +847,50 @@ function are **not** automatically flattened out.
 ## InputForm
 - `InputForm[expr]` causes `expr` to be printed in a form suitable for input (standard form in Mathilda).
 
+## NumberForm
+- `NumberForm[expr, n]` prints the approximate real numbers in `expr` to `n`-digit precision.
+- `NumberForm[expr, {n, f}]` uses `n` significant digits with `f` digits to the right of the decimal point (the value is rounded to `n` significant figures, then shown with exactly `f` decimals).
+- `NumberForm[expr]` uses the default options; machine reals show 6 significant digits.
+- Works over integers, scalars, lists, matrices, and mixed symbolic expressions — every inexact real (and integer) inside `expr` is reformatted.
+- It is an inert **print wrapper**: the head remains in the expression tree (`FullForm[NumberForm[1.23, 2]]` is `NumberForm[1.23, 2]`) and only changes how the wrapped expression is displayed. Because the head survives, an intervening `NumberForm` blocks evaluation of the surrounding expression (`10 NumberForm[1.23, 2]` stays `10 1.2`); assign a variable first if the result must remain computable.
+
+**Options** (all except `ExponentFunction`/`ExponentStep` apply to integers too):
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `DefaultPrintPrecision` | `Automatic` (6) | significant digits for machine numbers when no `n` is given |
+| `DigitBlock` | `Infinity` | number of digits between separators; a pair `{l, r}` sets the integer/fractional side independently |
+| `ExponentFunction` | `Automatic` | function applied to the exponent; `Null` forces decimal form, an integer overrides the displayed exponent |
+| `ExponentStep` | `1` | constrains exponents to multiples of this |
+| `NumberFormat` | `Automatic` | function assembling `(mantissa, "10", exponent)` into the printed form |
+| `NumberMultiplier` | `"*"` | string between mantissa and base in scientific form |
+| `NumberPadding` | `{"", ""}` | left/right padding strings (alignment across the wrapped expression) |
+| `NumberPoint` | `"."` | decimal-point string |
+| `NumberSeparator` | `{",", " "}` | string inserted at `DigitBlock` breaks (`{integer, fractional}`) |
+| `NumberSigns` | `{"-", ""}` | sign strings for negative/positive numbers |
+| `ScientificNotationThreshold` | `{-5, 6}` | scientific form is used when the exponent is `< lo` or `>= hi` |
+| `SignPadding` | `False` | whether padding is inserted after the sign rather than before it |
+
+**Features**:
+- `NHoldRest`, `Protected`. The first argument evaluates; the precision spec and options are held under numeric evaluation.
+- A requested precision lower than the integer-digit count issues `NumberForm::reqsigz` and pads with zeros (`NumberForm[12345.6, 3]` is `12300.`).
+
+```mathematica
+In[1]:= NumberForm[N[Pi], 10]
+Out[1]= 3.141592654
+
+In[2]:= NumberForm[10^9, DigitBlock -> 3]
+Out[2]= 1,000,000,000
+
+In[3]:= NumberForm[{8.^5, 11.^7, 13.^9}, NumberFormat -> (Row[{#1, "e", #3}] &)]
+Out[3]= {32768.e, 1.94872e7, 1.06045e10}
+```
+
+## Row
+- `Row[{e1, e2, ...}]` displays the `ei` concatenated in a row; strings are shown without quotes.
+- `Row[{e1, e2, ...}, s]` inserts the string `s` between successive elements.
+- `Protected`. Used by `NumberForm`'s `NumberFormat` option to assemble a custom display.
+
 ## ToString
 - `ToString[expr]`: returns a `String` containing the printed form of `expr` in `InputForm`.
 - `ToString[expr, form]`: returns the printed form for the specified form. Supported forms are `InputForm` (default), `FullForm`, and `TeXForm`. `StandardForm` and `OutputForm` are accepted as aliases for `InputForm`.

@@ -758,6 +758,13 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
                     db_catf(b, "%s = %s[%s, %s]", rd, hn ? hn : "reduce", ra, rb);
                     return;
                 }
+                case OP_V_NORM: {
+                    double pc = c->imm.r;
+                    if (pc != pc)        db_catf(b, "%s = Norm[%s, \"Frobenius\"]", rd, ra);
+                    else if (pc != 0.0)  db_catf(b, "%s = Norm[%s, %g]", rd, ra, pc);
+                    else                 db_catf(b, "%s = Norm[%s]", rd, ra);
+                    return;
+                }
                 case OP_A_NDFN2: case OP_V_NDFN2: {
                     const char* hn = nd_fn2_head_name(c->imm.p);
                     db_catf(b, "%s = %s[%s, %s]", rd, hn ? hn : "ndfn2", ra, rb);

@@ -914,6 +914,24 @@ extern const char* SYM_FindSpanningTree;
 extern const char* SYM_VertexConnectivity;
 extern const char* SYM_GraphPlot;
 
+/* NumberForm + Row (numeric-display formatting) and NumberForm's option
+ * names. NumberForm is a print wrapper handled in print.c; the option-name
+ * pointers are compared by identity in numberform.c's option parser. */
+extern const char* SYM_NumberForm;
+extern const char* SYM_Row;
+extern const char* SYM_DigitBlock;
+extern const char* SYM_ExponentFunction;
+extern const char* SYM_ExponentStep;
+extern const char* SYM_NumberFormat;
+extern const char* SYM_NumberMultiplier;
+extern const char* SYM_NumberPadding;
+extern const char* SYM_NumberPoint;
+extern const char* SYM_NumberSeparator;
+extern const char* SYM_NumberSigns;
+extern const char* SYM_ScientificNotationThreshold;
+extern const char* SYM_SignPadding;
+extern const char* SYM_DefaultPrintPrecision;
+
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*
  * pointer; in practice it is called from core_init(). */

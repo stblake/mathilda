@@ -950,6 +950,7 @@ Expr* ndstruct_clip(Expr* res) {
     double lo = -1.0, hi = 1.0;
     /* The 1-arg default bounds are the exact Integers -1 and 1. */
     bool bounds_real = false;
+    bool lo_int = true, hi_int = true;   /* both default bounds are finite Integers */
     if (argc == 2) {
         Expr* iv = res->data.function.args[1];
         bool lo_inf = false, hi_inf = false;
@@ -963,27 +964,48 @@ Expr* ndstruct_clip(Expr* res) {
         /* Per side: a Real bound is safe because the clipped positions get a
          * Real; an INFINITE bound is safe because no position is ever clipped to
          * it. Anything else (an exact Integer or Rational bound) can put its own
-         * exact head into a Real answer, and falls to the in-range scan below. */
+         * exact head into a Real answer, and falls to the scan below. */
         bounds_real = (iv->data.function.args[0]->type == EXPR_REAL || lo_inf) &&
                       (iv->data.function.args[1]->type == EXPR_REAL || hi_inf);
+        /* Finite exact-Integer bounds admit the all-clip int64 buffer below. */
+        lo_int = iv->data.function.args[0]->type == EXPR_INTEGER;
+        hi_int = iv->data.function.args[1]->type == EXPR_INTEGER;
     }
 
     size_t sz = ndarray_size(a);
 
     if (!bounds_real) {
-        /* An exact bound would put an Integer into the result at every clipped
-         * position. Safe only if there is no such position — in which case the
-         * result is the input, unchanged and still uniformly Real. */
+        /* An exact bound puts an Integer at every clipped position. Three
+         * outcomes: NOTHING clips (the input, uniformly Real); a MIX of clipped
+         * (Integer) and unclipped (Real), which no uniform buffer holds and which
+         * goes to the exact List path; or EVERYTHING clips to a finite exact
+         * Integer bound, which is a uniform NDT_INT64 buffer -- the common
+         * Clip[reals, {-1, 1}] over out-of-range data (was ~30x an aware head). */
+        bool any_in = false, any_out = false;
         for (size_t k = 0; k < sz; k++) {
             double r, im;
             ndt_get(a->data.ndarray.data, k, dt, &r, &im);
-            if (r < lo || r > hi) return ndarray_delist_and_reeval(res);
+            if (r < lo || r > hi) any_out = true; else any_in = true;
+            if (any_in && any_out) return ndarray_delist_and_reeval(res);   /* mixed */
         }
-        void* same = malloc(ndt_elem_size(dt) * (sz ? sz : 1));
-        if (!same) return ndarray_delist_and_reeval(res);
-        memcpy(same, a->data.ndarray.data, ndt_elem_size(dt) * sz);
+        if (!any_out) {                                  /* nothing clips: Real copy */
+            void* same = malloc(ndt_elem_size(dt) * (sz ? sz : 1));
+            if (!same) return ndarray_delist_and_reeval(res);
+            memcpy(same, a->data.ndarray.data, ndt_elem_size(dt) * sz);
+            return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims,
+                                         same, dt);
+        }
+        if (!(lo_int && hi_int)) return ndarray_delist_and_reeval(res);  /* Rational/Inf bound */
+        int64_t* zi = malloc(sizeof(int64_t) * (sz ? sz : 1));           /* all clip -> int64 */
+        if (!zi) return ndarray_delist_and_reeval(res);
+        int64_t loi = (int64_t)lo, hii = (int64_t)hi;
+        for (size_t k = 0; k < sz; k++) {
+            double r, im;
+            ndt_get(a->data.ndarray.data, k, dt, &r, &im);
+            zi[k] = (r < lo) ? loi : hii;
+        }
         return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims,
-                                     same, dt);
+                                     zi, NDT_INT64);
     }
 
     void* out = malloc(ndt_elem_size(dt) * sz);

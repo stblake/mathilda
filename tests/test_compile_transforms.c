@@ -258,6 +258,101 @@ static void test_repeated_evaluation_does_not_corrupt(void) {
     }
 }
 
+/* ------------------------------------------------------------------ *
+ *  Norm[v, p] / Norm[m, method]  (two-arg forms + inline-vector expansion)
+ * ------------------------------------------------------------------ *
+ * Two mechanisms, by operand kind:
+ *   - A DECLARED-ARRAY operand delegates to ndla_norm through the V_NORM opcode
+ *     with the literal p baked into imm.r; the compiled answer is bit-identical
+ *     to Norm[NDArray[...], p] by construction (same delegate).
+ *   - A LIST-LITERAL operand is expanded to scalar arithmetic (norm_try_expand),
+ *     which is what lets a Norm[{f(x), ...}] body auto-compile inside Table/Plot.
+ *     Its value equals the interpreter's within machine tolerance (a different
+ *     summation order, exactly as the other autocompiled bodies). */
+static void test_cf_norm_array_vector(void) {
+    /* every reported two-arg vector form now lowers */
+    assert_lowers("CompileDiagnostics[{{v, _Real, 1}}, Norm[v, 1]]");
+    assert_lowers("CompileDiagnostics[{{v, _Real, 1}}, Norm[v, Infinity]]");
+    assert_lowers("CompileDiagnostics[{{v, _Real, 1}}, Norm[v, 3]]");
+    assert_lowers("CompileDiagnostics[{{v, _Real, 1}}, Norm[v, 2.5]]");
+    /* bit-identical to the NDArray delegate */
+    assert_true("Compile[{{v, _Real, 1}}, Norm[v, 1]][{3., -4., 5.}]"
+                " === Norm[NDArray[{3., -4., 5.}], 1]");
+    assert_true("Compile[{{v, _Real, 1}}, Norm[v, Infinity]][{3., -4., 5.}]"
+                " === Norm[NDArray[{3., -4., 5.}], Infinity]");
+    assert_true("Compile[{{v, _Real, 1}}, Norm[v, 3]][{3., -4., 5.}]"
+                " === Norm[NDArray[{3., -4., 5.}], 3]");
+    /* na==1 (the pre-existing reduction) is untouched */
+    assert_true("Compile[{{v, _Real, 1}}, Norm[v]][{3., 4.}]"
+                " === Norm[NDArray[{3., 4.}]]");
+    /* a rank-1 operand does not accept the string method (ndla declines) */
+    assert_true("Lookup[CompileDiagnostics[{{v, _Real, 1}}, Norm[v, \"Frobenius\"]],"
+                " \"Compiled\"] === False");
+}
+
+static void test_cf_norm_array_matrix(void) {
+    assert_lowers("CompileDiagnostics[{{m, _Real, 2}}, Norm[m, \"Frobenius\"]]");
+    assert_lowers("CompileDiagnostics[{{m, _Real, 2}}, Norm[m, 1]]");
+    assert_lowers("CompileDiagnostics[{{m, _Real, 2}}, Norm[m, Infinity]]");
+    assert_true("Compile[{{m, _Real, 2}}, Norm[m, \"Frobenius\"]][{{3., 4.}, {0., 0.}}]"
+                " === Norm[NDArray[{{3., 4.}, {0., 0.}}], \"Frobenius\"]");
+    assert_true("Compile[{{m, _Real, 2}}, Norm[m, 1]][{{1., -2.}, {3., 4.}}]"
+                " === Norm[NDArray[{{1., -2.}, {3., 4.}}], 1]");
+    assert_true("Compile[{{m, _Real, 2}}, Norm[m, Infinity]][{{1., -2.}, {3., 4.}}]"
+                " === Norm[NDArray[{{1., -2.}, {3., 4.}}], Infinity]");
+    /* the induced matrix p-norm (p != 1, 2, Inf) has no LAPACK path -> declines */
+    assert_true("Lookup[CompileDiagnostics[{{m, _Real, 2}}, Norm[m, 3]],"
+                " \"Compiled\"] === False");
+}
+
+static void test_cf_norm_list_literal(void) {
+    /* the inline-vector case that blocked auto-compilation now lowers */
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Norm[{Sin[x], Cos[x], x}]]");
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Norm[{Sin[x], x}, 1]]");
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Norm[{Sin[x], x}, Infinity]]");
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Norm[{Sin[x], x}, 3]]");
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Norm[{{x, 1.}, {2., x}}, \"Frobenius\"]]");
+    /* value equals the interpreter within machine tolerance */
+    assert_true("Abs[Compile[{{x, _Real}}, Norm[{Sin[x], Cos[x], x}]][0.7]"
+                " - Norm[{Sin[0.7], Cos[0.7], 0.7}]] < 10^-10");
+    assert_true("Abs[Compile[{{x, _Real}}, Norm[{Sin[x], x}, Infinity]][0.7]"
+                " - Norm[{Sin[0.7], 0.7}, Infinity]] < 10^-10");
+    assert_true("Abs[Compile[{{x, _Real}}, Norm[{Sin[x], x}, 3]][0.7]"
+                " - Norm[{Sin[0.7], 0.7}, 3]] < 10^-10");
+    /* a rank-2 list under an induced (non-Frobenius) norm is not expandable */
+    assert_true("Lookup[CompileDiagnostics[{{x, _Real}}, Norm[{{x, 1.}, {2., x}}]],"
+                " \"Compiled\"] === False");
+}
+
+/* ------------------------------------------------------------------ *
+ *  Chop / Clip scalar lowerings (branchless mask-multiply; default bounds)
+ * ------------------------------------------------------------------ *
+ * Chop[x] = x * (Abs[x] >= delta); the chopped value is a machine 0. (a
+ * CompiledFunction returns machine types, the compiled counterpart of the
+ * interpreter's exact Integer 0). Clip[x] fills the default-bounds na==1 gap
+ * as Min[Max[x, -1.], 1.]. */
+static void test_cf_chop(void) {
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Chop[x]]");
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Chop[x, 0.01]]");
+    assert_lowers("CompileDiagnostics[{{n, _Integer}}, Chop[n]]");   /* int never chops */
+    assert_true("Compile[{{x, _Real}}, Chop[x]][1.0*10^-15] === 0.");
+    assert_true("Compile[{{x, _Real}}, Chop[x]][3.5] === 3.5");
+    assert_true("Compile[{{x, _Real}}, Chop[x, 0.01]][0.005] === 0.");
+    assert_true("Compile[{{x, _Real}}, Chop[x, 0.01]][0.5] === 0.5");
+    assert_true("Compile[{{n, _Integer}}, Chop[n]][5] === 5");
+    /* a complex operand has no scalar lowering (chop can drop to real) */
+    assert_true("Lookup[CompileDiagnostics[{{z, _Complex}}, Chop[z]], \"Compiled\"] === False");
+}
+
+static void test_cf_clip_default(void) {
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Clip[x]]");
+    assert_true("Compile[{{x, _Real}}, Clip[x]][1.5] === 1.");
+    assert_true("Compile[{{x, _Real}}, Clip[x]][-2.] === -1.");
+    assert_true("Compile[{{x, _Real}}, Clip[x]][0.5] === 0.5");
+    /* the explicit-bounds scalar form still lowers */
+    assert_true("Compile[{{x, _Real}}, Clip[x, {0., 2.}]][3.0] === 2.");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -275,6 +370,13 @@ int main(void) {
     TEST(test_cf_vandermondematrix);
 
     TEST(test_buffer_producers);
+
+    TEST(test_cf_norm_array_vector);
+    TEST(test_cf_norm_array_matrix);
+    TEST(test_cf_norm_list_literal);
+
+    TEST(test_cf_chop);
+    TEST(test_cf_clip_default);
 
     TEST(test_repeated_evaluation_does_not_corrupt);
 

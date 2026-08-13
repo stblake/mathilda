@@ -19,6 +19,7 @@
 #include "../print.h"      /* expr_to_string — printing the node a bail choked on */
 #include "../sym_names.h" /* SYM_All / SYM_Span / SYM_List — Part subscript specs */
 #include "../sym_intern.h" /* intern_symbol — the FN_HEAD placeholder parameters */
+#include "../linalg/linalg.h" /* get_tensor_dims / flatten_tensor — Norm list expansion */
 #ifdef USE_MPFR
 #include "../numeric_complex.h"  /* ncpx — arbitrary-precision complex containers */
 #endif
@@ -1771,6 +1772,97 @@ void emit_nonzero_guard(Ctx* c, int reg) {
     c->temp_top -= 2;
 }
 
+/* ---- Norm[ {e1,...,en}, p ] : inline vector construction -------------------
+ *
+ * A List-literal operand to Norm need not become an array register (whose buffer
+ * would have to be materialised per call): the interpreter's builtin_norm already
+ * rewrites Norm[{...}, p] into scalar arithmetic, and every piece of that rewrite
+ * (Abs, Power, Plus, Max, Sqrt) already lowers.  So we build the SAME scalar tree
+ * here, unevaluated, and let emit_node/infer_type recurse into it — which is what
+ * unblocks a Norm[{f(x), g(x), ...}] body inside an auto-compiled Plot / Table /
+ * NIntegrate / FindRoot loop, and does it with no per-iteration allocation.
+ * Compiler-optimal spellings (Sqrt for the 2-norm, a bare Plus for the 1-norm)
+ * avoid a redundant Power[.,1] / Power[.,1/2].
+ *
+ * Expandable exactly where builtin_norm's symbolic branch is (src/linalg/norm.c):
+ * a rank-1 list under any positive p (or Infinity), or an any-rank list under
+ * "Frobenius".  A rank>=2 list under an induced norm (the spectral 2-norm needs
+ * an SVD) is NOT expandable and returns NULL, so the node falls through to the
+ * ordinary path and bails exactly as before — no regression.  Returns a freshly
+ * owned Expr, or NULL.  Shared with infer_type (compile_infer.c). */
+static Expr* norm_abs_own(Expr* e) {   /* consumes e -> Abs[e] */
+    return expr_new_function(expr_new_symbol(SYM_Abs), &e, 1);
+}
+Expr* norm_try_expand(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
+        || e->data.function.head->data.symbol.name != SYM_Norm) return NULL;
+    size_t na = e->data.function.arg_count;
+    if (na != 1 && na != 2) return NULL;
+
+    Expr* vec = e->data.function.args[0];
+    /* Operand must be a List literal.  A declared-array operand is a Symbol /
+     * array expression (get_tensor_dims -> 0) and is left to the V_NORM delegate. */
+    if (vec->type != EXPR_FUNCTION || vec->data.function.head->type != EXPR_SYMBOL
+        || vec->data.function.head->data.symbol.name != SYM_List) return NULL;
+
+    Expr* p = (na == 2) ? e->data.function.args[1] : NULL;
+    bool frob = p && p->type == EXPR_STRING && p->data.string
+                && strcmp(p->data.string, "Frobenius") == 0;
+
+    int64_t dims[64];
+    int rank = get_tensor_dims(vec, dims);
+    if (rank < 1) return NULL;                        /* jagged (-1) or scalar (0) */
+    if (rank >= 2 && !frob) return NULL;              /* induced matrix norm: not expandable */
+
+    /* Classify p before allocating anything, so a bad p bails cheaply.  p_inf,
+     * else a positive Integer (p_int) or Real (pv); default / Frobenius -> 2. */
+    bool p_inf = p && p->type == EXPR_SYMBOL && p->data.symbol.name == SYM_Infinity;
+    bool p_is_int = true; int64_t p_int = 2; double pv = 2.0;
+    if (p && !frob && !p_inf) {
+        if (p->type == EXPR_INTEGER && p->data.integer > 0) { p_int = p->data.integer; pv = (double)p_int; p_is_int = true; }
+        else if (p->type == EXPR_REAL && p->data.real > 0.0) { pv = p->data.real; p_is_int = false; }
+        else return NULL;                             /* p<=0, symbolic, other: not our case */
+    }
+
+    int64_t N = 1;
+    for (int i = 0; i < rank; i++) N *= dims[i];
+    if (N <= 0) return NULL;                           /* empty vector: leave to the interpreter */
+
+    Expr** flat = malloc(sizeof(Expr*) * (size_t)N);
+    if (!flat) return NULL;
+    size_t idx = 0;
+    flatten_tensor(vec, flat, &idx);                  /* flat[i] are OWNED copies; consumed below */
+
+    /* p == Infinity  ->  Max[Abs[e_i]...] */
+    if (p_inf) {
+        for (int64_t i = 0; i < N; i++) flat[i] = norm_abs_own(flat[i]);
+        Expr* out = expr_new_function(expr_new_symbol(SYM_Max), flat, (size_t)N);
+        free(flat);
+        return out;
+    }
+    /* p == 1  ->  Plus[Abs[e_i]...]  (no outer root; N==1 -> the bare Abs) */
+    if (p_is_int && p_int == 1) {
+        for (int64_t i = 0; i < N; i++) flat[i] = norm_abs_own(flat[i]);
+        Expr* out = (N == 1) ? flat[0]
+                             : expr_new_function(expr_new_symbol(SYM_Plus), flat, (size_t)N);
+        free(flat);
+        return out;
+    }
+    /* general p (incl. 2 / Frobenius):  (Sum Abs[e_i]^p)^(1/p), spelled Sqrt[...]
+     * for p==2 so the outer root is a sqrt rather than a pow(x, 0.5). */
+    for (int64_t i = 0; i < N; i++) {
+        Expr* pe = p_is_int ? expr_new_integer(p_int) : expr_new_real(pv);
+        flat[i] = expr_new_function(expr_new_symbol(SYM_Power),
+                                    (Expr*[]){ norm_abs_own(flat[i]), pe }, 2);
+    }
+    Expr* sum = (N == 1) ? flat[0]
+                         : expr_new_function(expr_new_symbol(SYM_Plus), flat, (size_t)N);
+    free(flat);
+    if (pv == 2.0) return expr_new_function(expr_new_symbol(SYM_Sqrt), &sum, 1);
+    return expr_new_function(expr_new_symbol(SYM_Power),
+                             (Expr*[]){ sum, expr_new_real(1.0 / pv) }, 2);
+}
+
 /* The lowering proper.  Every bail is a plain `return false` from somewhere in
  * here; the `emit` wrapper below is what turns that into a diagnostic, so no
  * bail site needs to know diagnostics exist. */
@@ -1821,6 +1913,13 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         int k = fn_slot_index(c, A, na);
         if (k >= 0) { out->reg = c->slot[k].reg; out->tmp = false; out->type = c->slot[k].type; return true; }
         c->ok = false; return false;
+    }
+
+    /* Norm[{e1,...}, p] over a List literal -> scalar arithmetic (norm_try_expand).
+     * A declared-array operand yields NULL here and takes the V_NORM delegate below. */
+    if (h == SYM_Norm) {
+        Expr* ex = norm_try_expand(e);
+        if (ex) { bool ok = emit_node(c, ex, out); expr_free(ex); return ok; }
     }
 
     /* Association read ops (B1), before fusion and the array lowerings: an

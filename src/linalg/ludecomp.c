@@ -484,7 +484,7 @@ Expr* lu_dispatch(Expr* m, int rows, int cols)
  * ------------------------------------------------------------------ */
 Expr* builtin_ludecomposition(Expr* res)
 {
-    if (linalg_call_has_ndarray(res)) return linalg_delist_and_reeval(res);
+    if (linalg_call_has_ndarray(res)) return ndla_ludecomposition(res);
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 1) return NULL;

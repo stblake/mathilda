@@ -76,6 +76,21 @@ static int is_blank_or_comment_only(const char* s) {
     return *skip_blanks_and_comments(s) == '\0';
 }
 
+/* Mathematica strips a top-level NumberForm from the value stored in Out[n]/%,
+ * so `%` (and arithmetic on it) sees the underlying number rather than the
+ * inert format wrapper -- while the displayed Out[n]= line still uses the
+ * wrapper's formatting. The stripping is TOP-LEVEL only: a nested NumberForm,
+ * or one bound to a variable via Set, is preserved. Returns a BORROWED pointer
+ * into `e` (or `e` itself when there is nothing to strip). */
+static Expr* out_value_unwrapped(Expr* e) {
+    if (e && e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_NumberForm
+        && e->data.function.arg_count >= 1)
+        return e->data.function.args[0];
+    return e;
+}
+
 void process_input(const char* input, int line_number) {
     if (strlen(input) == 0) return;
     if (is_blank_or_comment_only(input)) return;
@@ -136,7 +151,9 @@ void process_input(const char* input, int line_number) {
     Expr* out_arg = expr_new_integer(line_number);
     Expr* out_args[] = {out_arg};
     Expr* out_pattern = expr_new_function(out_sym, out_args, 1);
-    symtab_add_down_value("Out", out_pattern, evaluated);
+    /* Store the unwrapped value (add_down_value copies its argument); the full
+     * `evaluated` is kept for the formatted display below. */
+    symtab_add_down_value("Out", out_pattern, out_value_unwrapped(evaluated));
     expr_free(out_pattern);
 
     /* $PrePrint: applied only for display. Out[n] keeps the

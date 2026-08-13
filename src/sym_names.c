@@ -857,6 +857,22 @@ const char* SYM_FindSpanningTree = NULL;
 const char* SYM_VertexConnectivity = NULL;
 const char* SYM_GraphPlot = NULL;
 
+/* NumberForm + Row (numeric-display formatting) and NumberForm's options. */
+const char* SYM_NumberForm = NULL;
+const char* SYM_Row = NULL;
+const char* SYM_DigitBlock = NULL;
+const char* SYM_ExponentFunction = NULL;
+const char* SYM_ExponentStep = NULL;
+const char* SYM_NumberFormat = NULL;
+const char* SYM_NumberMultiplier = NULL;
+const char* SYM_NumberPadding = NULL;
+const char* SYM_NumberPoint = NULL;
+const char* SYM_NumberSeparator = NULL;
+const char* SYM_NumberSigns = NULL;
+const char* SYM_ScientificNotationThreshold = NULL;
+const char* SYM_SignPadding = NULL;
+const char* SYM_DefaultPrintPrecision = NULL;
+
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
      * times without re-allocating. */
@@ -1719,4 +1735,23 @@ void sym_names_init(void) {
     SYM_FLINT_HurwitzZeta      = intern_symbol("FLINT`HurwitzZeta");
     SYM_FLINT_PolyGamma        = intern_symbol("FLINT`PolyGamma");
     SYM_FLINT_StieltjesGamma   = intern_symbol("FLINT`StieltjesGamma");
+
+    /* NumberForm + Row and NumberForm's option names. Interned here so the
+     * pointers are stable for identity comparison in numberform.c's option
+     * parser and print.c's wrapper dispatch, and so they are flagged System`
+     * by intern_mark_all_system(). */
+    SYM_NumberForm                 = intern_symbol("NumberForm");
+    SYM_Row                        = intern_symbol("Row");
+    SYM_DigitBlock                 = intern_symbol("DigitBlock");
+    SYM_ExponentFunction           = intern_symbol("ExponentFunction");
+    SYM_ExponentStep               = intern_symbol("ExponentStep");
+    SYM_NumberFormat               = intern_symbol("NumberFormat");
+    SYM_NumberMultiplier           = intern_symbol("NumberMultiplier");
+    SYM_NumberPadding              = intern_symbol("NumberPadding");
+    SYM_NumberPoint                = intern_symbol("NumberPoint");
+    SYM_NumberSeparator            = intern_symbol("NumberSeparator");
+    SYM_NumberSigns                = intern_symbol("NumberSigns");
+    SYM_ScientificNotationThreshold = intern_symbol("ScientificNotationThreshold");
+    SYM_SignPadding                = intern_symbol("SignPadding");
+    SYM_DefaultPrintPrecision      = intern_symbol("DefaultPrintPrecision");
 }
