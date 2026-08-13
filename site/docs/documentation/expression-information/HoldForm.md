@@ -24,11 +24,9 @@ Out[1]= 1 + 1
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

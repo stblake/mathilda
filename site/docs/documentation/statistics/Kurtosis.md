@@ -39,11 +39,9 @@ Kurtosis[data] -- the coefficient of kurtosis, a measure of peak/tail vs flank c
 
 **Attributes:** `Protected`.
 
-## See also
-
-[NDArray](../../linear-algebra/NDArray/), [List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [NDArray](../../linear-algebra/NDArray/), [List](../../other-advanced/List/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)

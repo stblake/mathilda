@@ -47,41 +47,23 @@ Out[4]= {{{1/Sqrt[5], 2/Sqrt[5]}, {-2/Sqrt[5], 1/Sqrt[5]}}, {{2 Sqrt[5], 7/Sqrt[
 ### Applications (6)
 
 ```mathematica
-In[1]:= QRDecomposition[{{3, 0}, {0, 4}}]
-Out[1]= {{{1, 0}, {0, 1}}, {{3, 0}, {0, 4}}}
-```
+In[5]:= QRDecomposition[{{3, 0}, {0, 4}}]
+Out[5]= {{{1, 0}, {0, 1}}, {{3, 0}, {0, 4}}}
 
-```mathematica
-In[1]:= QRDecomposition[{{1, 1}, {0, 1}}]
-Out[1]= {{{1, 0}, {0, 1}}, {{1, 1}, {0, 1}}}
-```
+In[6]:= QRDecomposition[{{1, 1}, {0, 1}}]
+Out[6]= {{{1, 0}, {0, 1}}, {{1, 1}, {0, 1}}}
 
-Reconstructing the original matrix from `{q, r}` uses `ConjugateTranspose[q] . r`:
+In[7]:= q = QRDecomposition[{{1, 1}, {0, 1}}][[1]]; r = QRDecomposition[{{1, 1}, {0, 1}}][[2]]; ConjugateTranspose[q] . r
+Out[7]= {{1, 1}, {0, 1}}
 
-```mathematica
-In[1]:= q = QRDecomposition[{{1, 1}, {0, 1}}][[1]]; r = QRDecomposition[{{1, 1}, {0, 1}}][[2]]; ConjugateTranspose[q] . r
-Out[1]= {{1, 1}, {0, 1}}
-```
+In[8]:= QRDecomposition[{{12, -51}, {6, 167}}]
+Out[8]= {{{2/Sqrt[5], 1/Sqrt[5]}, {-1/Sqrt[5], 2/Sqrt[5]}}, {{6 Sqrt[5], 13 Sqrt[5]}, {0, 77 Sqrt[5]}}}
 
-For a non-orthogonal integer matrix the factors stay exact, with `Sqrt[...]` column norms carried symbolically (the classic Householder textbook matrix):
+In[9]:= q = QRDecomposition[{{2, -1}, {1, 2}}][[1]]; q . ConjugateTranspose[q]
+Out[9]= {{1, 0}, {0, 1}}
 
-```mathematica
-In[1]:= QRDecomposition[{{12, -51}, {6, 167}}]
-Out[1]= {{{2/Sqrt[5], 1/Sqrt[5]}, {-1/Sqrt[5], 2/Sqrt[5]}}, {{6 Sqrt[5], 13 Sqrt[5]}, {0, 77 Sqrt[5]}}}
-```
-
-The rows of `q` are genuinely orthonormal, so `q . ConjugateTranspose[q]` is the identity even though every entry is an irrational radical:
-
-```mathematica
-In[1]:= q = QRDecomposition[{{2, -1}, {1, 2}}][[1]]; q . ConjugateTranspose[q]
-Out[1]= {{1, 0}, {0, 1}}
-```
-
-With `Pivoting -> True` the columns are reordered by decreasing norm and a permutation matrix `p` is returned alongside `{q, r}`:
-
-```mathematica
-In[1]:= QRDecomposition[{{1, 2}, {3, 4}}, Pivoting -> True]
-Out[1]= {{{1/Sqrt[5], 2/Sqrt[5]}, {-2/Sqrt[5], 1/Sqrt[5]}}, {{2 Sqrt[5], 7/Sqrt[5]}, {0, 1/Sqrt[5]}}, {{0, 1}, {1, 0}}}
+In[10]:= QRDecomposition[{{1, 2}, {3, 4}}, Pivoting -> True]
+Out[10]= {{{1/Sqrt[5], 2/Sqrt[5]}, {-2/Sqrt[5], 1/Sqrt[5]}}, {{2 Sqrt[5], 7/Sqrt[5]}, {0, 1/Sqrt[5]}}, {{0, 1}, {1, 0}}}
 ```
 
 ## Options & behaviour
@@ -272,11 +254,9 @@ The symbolic core `qr_symbolic_core` is **Modified Gram-Schmidt** on the columns
 
 **Attributes:** `Protected`.
 
-## See also
-
-[I](../../mathematical-constants/I/)
-
 ## References
+
+**See also:** [I](../../mathematical-constants/I/)
 
 - L. N. Trefethen and D. Bau III, *Numerical Linear Algebra*, SIAM, 1997 — Gram-Schmidt orthogonalisation and the QR factorisation.
 - G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — QR factorisation algorithms.

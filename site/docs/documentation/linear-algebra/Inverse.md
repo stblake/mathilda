@@ -52,38 +52,26 @@ Out[7]= True
 ### Applications (7)
 
 ```mathematica
-In[1]:= Inverse[{{2, 0}, {0, 4}}]
-Out[1]= {{1/2, 0}, {0, 1/4}}
-```
+In[8]:= Inverse[{{2, 0}, {0, 4}}]
+Out[8]= {{1/2, 0}, {0, 1/4}}
 
-```mathematica
-In[1]:= Inverse[{{1, 2}, {3, 4}}]
-Out[1]= {{-2, 1}, {3/2, -1/2}}
-```
+In[9]:= Inverse[{{1, 2}, {3, 4}}]
+Out[9]= {{-2, 1}, {3/2, -1/2}}
 
-```mathematica
-In[1]:= Inverse[{{1, 1, 1}, {0, 1, 1}, {0, 0, 1}}]
-Out[1]= {{1, -1, 0}, {0, 1, -1}, {0, 0, 1}}
-```
+In[10]:= Inverse[{{1, 1, 1}, {0, 1, 1}, {0, 0, 1}}]
+Out[10]= {{1, -1, 0}, {0, 1, -1}, {0, 0, 1}}
 
-```mathematica
-In[1]:= Inverse[{{a, b}, {c, d}}]
-Out[1]= {{d/(-b c + a d), -b/(-b c + a d)}, {-c/(-b c + a d), a/(-b c + a d)}}
-```
+In[11]:= Inverse[{{a, b}, {c, d}}]
+Out[11]= {{d/(-b c + a d), -b/(-b c + a d)}, {-c/(-b c + a d), a/(-b c + a d)}}
 
-```mathematica
-In[1]:= Inverse[{{1, x}, {x, 1}}]
-Out[1]= {{1/(1 - x^2), -x/(1 - x^2)}, {-x/(1 - x^2), 1/(1 - x^2)}}
-```
+In[12]:= Inverse[{{1, x}, {x, 1}}]
+Out[12]= {{1/(1 - x^2), -x/(1 - x^2)}, {-x/(1 - x^2), 1/(1 - x^2)}}
 
-```mathematica
-In[1]:= Inverse[{{2.0, 1.0}, {1.0, 3.0}}]
-Out[1]= {{0.6, -0.2}, {-0.2, 0.4}}
-```
+In[13]:= Inverse[{{2.0, 1.0}, {1.0, 3.0}}]
+Out[13]= {{0.6, -0.2}, {-0.2, 0.4}}
 
-```mathematica
-In[1]:= Inverse[{{1, 2}, {2, 4}}]
-Out[1]= Inverse[{{1, 2}, {2, 4}}]
+In[14]:= Inverse[{{1, 2}, {2, 4}}]
+Out[14]= Inverse[{{1, 2}, {2, 4}}]
 ```
 
 ## Options & behaviour
@@ -184,11 +172,9 @@ Inexact (`Real`/MPFR) matrices are routed through the standard `common_scan_inex
 
 **Attributes:** `Protected`.
 
-## See also
-
-[RowReduce](../../linear-algebra/RowReduce/), [LinearSolve](../../linear-algebra/LinearSolve/), [Together](../../algebra/Together/), [Det](../../linear-algebra/Det/)
-
 ## References
+
+**See also:** [RowReduce](../../linear-algebra/RowReduce/), [LinearSolve](../../linear-algebra/LinearSolve/), [Together](../../algebra/Together/), [Det](../../linear-algebra/Det/)
 
 - G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — Gauss-Jordan elimination and matrix inversion.
 - Erwin H. Bareiss, "Sylvester's Identity and Multistep Integer-Preserving Gaussian Elimination", Mathematics of Computation 22 (1968).

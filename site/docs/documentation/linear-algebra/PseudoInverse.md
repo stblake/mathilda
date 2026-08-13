@@ -48,39 +48,21 @@ Out[6]= {{-0.0385185, 0.0966633, 0.0}, {0.210183, -0.0659894, 0.0}, {0.117363, 0
 
 ### Applications (5)
 
-For a non-singular square matrix the pseudoinverse coincides with the ordinary inverse:
-
 ```mathematica
-In[1]:= PseudoInverse[{{1, 2}, {3, 4}}] == Inverse[{{1, 2}, {3, 4}}]
-Out[1]= True
-```
+In[7]:= PseudoInverse[{{1, 2}, {3, 4}}] == Inverse[{{1, 2}, {3, 4}}]
+Out[7]= True
 
-On a wide (full-row-rank) integer matrix the right inverse is computed exactly in rational arithmetic:
+In[8]:= PseudoInverse[{{1, 2, 3}, {4, 5, 6}}]
+Out[8]= {{-17/18, 4/9}, {-1/9, 1/9}, {13/18, -2/9}}
 
-```mathematica
-In[1]:= PseudoInverse[{{1, 2, 3}, {4, 5, 6}}]
-Out[1]= {{-17/18, 4/9}, {-1/9, 1/9}, {13/18, -2/9}}
-```
+In[9]:= A = {{1, 2, 3}, {4, 5, 6}}; A . PseudoInverse[A] . A
+Out[9]= {{1, 2, 3}, {4, 5, 6}}
 
-The Moore-Penrose defining identity `A . A^+ . A == A` holds exactly:
+In[10]:= PseudoInverse[{{1, 1}, {1, 1}}]
+Out[10]= {{1/4, 1/4}, {1/4, 1/4}}
 
-```mathematica
-In[1]:= A = {{1, 2, 3}, {4, 5, 6}}; A . PseudoInverse[A] . A
-Out[1]= {{1, 2, 3}, {4, 5, 6}}
-```
-
-It handles rank-deficient inputs gracefully; the all-ones matrix has rank 1 and a rank-1 pseudoinverse:
-
-```mathematica
-In[1]:= PseudoInverse[{{1, 1}, {1, 1}}]
-Out[1]= {{1/4, 1/4}, {1/4, 1/4}}
-```
-
-Inexact input is rationalised, solved exactly, and returned at the input precision:
-
-```mathematica
-In[1]:= PseudoInverse[{{1., 2.}, {3., 4.}, {5., 6.}}]
-Out[1]= {{-1.33333, -0.333333, 0.666667}, {1.08333, 0.333333, -0.416667}}
+In[11]:= PseudoInverse[{{1., 2.}, {3., 4.}, {5., 6.}}]
+Out[11]= {{-1.33333, -0.333333, 0.666667}, {1.08333, 0.333333, -0.416667}}
 ```
 
 ## Algorithm
@@ -175,11 +157,9 @@ using `hermitian_transpose`, `mat_mult`, and `mat_invert` on the small `r × r` 
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Rational](../../arithmetic/Rational/)
-
 ## References
+
+**See also:** [Rational](../../arithmetic/Rational/)
 
 - A. Ben-Israel and T. N. E. Greville, *Generalized Inverses: Theory and Applications*, 2nd ed. (Springer, 2003).
 - Source: [`src/linalg/inv.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/inv.c)

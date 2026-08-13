@@ -18,7 +18,7 @@ Options: Method (Automatic | "Telescoping" | "Rational" | "Geometric" | "QProduc
 
 </details>
 
-## Examples (8)
+## Examples (18)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -52,6 +52,40 @@ Out[7]= Pi Csch[Pi]
 
 In[8]:= Product[(k^3 - 1)/(k^3 + 1), {k, 2, Infinity}]
 Out[8]= 2/3
+```
+
+### Worked examples (10)
+
+```mathematica
+In[9]:= Product[1 - 1/k^2, {k, 2, n}]
+Out[9]= (1/2 (1 + n))/n
+
+In[10]:= Product[k, {k, 1, n}]
+Out[10]= Factorial[n]
+
+In[11]:= Product[2^(k/2^k), {k, 1, Infinity}]
+Out[11]= 4
+
+In[12]:= Product[i^i, {i, 1, n}]
+Out[12]= Hyperfactorial[n]
+
+In[13]:= Product[Gamma[i], {i, 1, n-1}]
+Out[13]= BarnesG[n]
+
+In[14]:= Product[1 + c/k^2, {k, 1, Infinity}]
+Out[14]= Sinh[Pi Sqrt[c]]/(Pi Sqrt[c])
+
+In[15]:= Product[1 + (1/3)^(2^k), {k, 0, Infinity}]
+Out[15]= 3/2
+
+In[16]:= Product[Cos[Pi/2^(k+1)], {k, 1, Infinity}]
+Out[16]= 2/Pi
+
+In[17]:= Product[Cos[x/2^k], {k, 1, Infinity}]
+Out[17]= Sin[x]/x
+
+In[18]:= Product[1/(1 - Prime[i]^-s)]
+Out[18]= Product[1/(1 - Prime[i]^(-s))]
 ```
 
 ## Algorithm
@@ -94,11 +128,9 @@ Memory contract: builtin_product takes ownership of res but must not free it
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[Sum](../../calculus/Sum/), [HoldAll](../../expression-information/HoldAll/), [NProduct](../../numerical-calculus/NProduct/), [Pochhammer](../../special-functions/Pochhammer/), [Factorial](../../arithmetic/Factorial/), [Together](../../algebra/Together/), [Factor](../../algebra/Factor/), [QPochhammer](../../special-functions/QPochhammer/)
-
 ## References
+
+**See also:** [Sum](../../calculus/Sum/), [HoldAll](../../expression-information/HoldAll/), [NProduct](../../numerical-calculus/NProduct/), [Pochhammer](../../special-functions/Pochhammer/), [Factorial](../../arithmetic/Factorial/), [Together](../../algebra/Together/), [Factor](../../algebra/Factor/), [QPochhammer](../../special-functions/QPochhammer/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)

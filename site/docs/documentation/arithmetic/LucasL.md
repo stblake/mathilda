@@ -43,28 +43,20 @@ Out[4]= 5.92396265296195541013569786219401262875198554223617
 ### Applications (5)
 
 ```mathematica
-In[1]:= LucasL[10]
-Out[1]= 123
-```
+In[5]:= LucasL[10]
+Out[5]= 123
 
-```mathematica
-In[1]:= LucasL[5, x]
-Out[1]= 5 x + 5 x^3 + x^5
-```
+In[6]:= LucasL[5, x]
+Out[6]= 5 x + 5 x^3 + x^5
 
-```mathematica
-In[1]:= LucasL[100]
-Out[1]= 792070839848372253127
-```
+In[7]:= LucasL[100]
+Out[7]= 792070839848372253127
 
-```mathematica
-In[1]:= LucasL[-7]
-Out[1]= -29
-```
+In[8]:= LucasL[-7]
+Out[8]= -29
 
-```mathematica
-In[1]:= N[LucasL[20]/LucasL[19], 20]
-Out[1]= 1.6180339887498948482
+In[9]:= N[LucasL[20]/LucasL[19], 20]
+Out[9]= 1.6180339887498948482
 ```
 
 ## Algorithm
@@ -119,11 +111,9 @@ Memory: the builtin honours the ownership contract -- it never frees `res`, retu
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Complex](../../arithmetic/Complex/), [N](../../arithmetic/N/)
-
 ## References
+
+**See also:** [Complex](../../arithmetic/Complex/), [N](../../arithmetic/N/)
 
 - Source: [`src/lucas.c`](https://github.com/stblake/mathilda/blob/main/src/lucas.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

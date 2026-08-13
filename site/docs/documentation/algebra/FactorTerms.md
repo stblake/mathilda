@@ -61,18 +61,14 @@ Out[8]= 2 (2 + y) (1 + z) (-3 + x^2 + 2 y z)
 ### Applications (3)
 
 ```mathematica
-In[1]:= FactorTerms[6 x^2 + 4 x]
-Out[1]= 2 (2 x + 3 x^2)
-```
+In[9]:= FactorTerms[6 x^2 + 4 x]
+Out[9]= 2 (2 x + 3 x^2)
 
-```mathematica
-In[1]:= FactorTerms[2 x^2 + 4 x + 2]
-Out[1]= 2 (1 + 2 x + x^2)
-```
+In[10]:= FactorTerms[2 x^2 + 4 x + 2]
+Out[10]= 2 (1 + 2 x + x^2)
 
-```mathematica
-In[1]:= FactorTerms[3 x^2 y + 6 x y^2, x]
-Out[1]= 3 y (x^2 + 2 x y)
+In[11]:= FactorTerms[3 x^2 y + 6 x y^2, x]
+Out[11]= 3 y (x^2 + 2 x y)
 ```
 
 ## Implementation notes
@@ -97,11 +93,9 @@ Out[1]= 3 y (x^2 + 2 x y)
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [Equal](../../comparisons/Equal/), [Unequal](../../comparisons/Unequal/), [Less](../../comparisons/Less/), [LessEqual](../../comparisons/LessEqual/), [Greater](../../comparisons/Greater/), [GreaterEqual](../../comparisons/GreaterEqual/), [I](../../mathematical-constants/I/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [Equal](../../comparisons/Equal/), [Unequal](../../comparisons/Unequal/), [Less](../../comparisons/Less/), [LessEqual](../../comparisons/LessEqual/), [Greater](../../comparisons/Greater/), [GreaterEqual](../../comparisons/GreaterEqual/), [I](../../mathematical-constants/I/)
 
 - Source: [`src/poly/facpoly_factorterms.inc`](https://github.com/stblake/mathilda/blob/main/src/poly/facpoly_factorterms.inc)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

@@ -31,19 +31,37 @@ Out[2]= 0
 
 In[3]:= Residue[1/Sin[z]^5, {z, 0}]
 Out[3]= 3/8
+```
 
-In[4]:= Residue[(z + 1)/(z^2 (z - 2)), {z, 0}]      (* order-2 pole *)
+Order-2 pole
+
+```mathematica
+In[4]:= Residue[(z + 1)/(z^2 (z - 2)), {z, 0}]
 Out[4]= -3/4
+```
 
-In[5]:= Residue[1/(z^2 + 1), {z, I}]                (* complex pole *)
+Complex pole
+
+```mathematica
+In[5]:= Residue[1/(z^2 + 1), {z, I}]
 Out[5]= -1/2*I
+```
 
-In[6]:= Residue[x^3/(x^4 - 2), {x, 2^(1/4)}]        (* algebraic pole *)
+Algebraic pole
+
+```mathematica
+In[6]:= Residue[x^3/(x^4 - 2), {x, 2^(1/4)}]
 Out[6]= 1/4
+```
 
-In[7]:= Residue[f[z]/z^5, {z, 0}]                   (* unknown numerator *)
+Unknown numerator
+
+```mathematica
+In[7]:= Residue[f[z]/z^5, {z, 0}]
 Out[7]= 1/24 Derivative[4][f][0]
+```
 
+```mathematica
 In[8]:= Residue[Zeta[z]/(z - 1)^10, {z, 1}]
 Out[8]= -1/362880 StieltjesGamma[9]
 ```
@@ -78,11 +96,9 @@ coefficient is then a plain Series-at-0 of the expanded form.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[NResidue](../../numerical-calculus/NResidue/), [Together](../../algebra/Together/), [Zeta](../../special-functions/Zeta/)
-
 ## References
+
+**See also:** [NResidue](../../numerical-calculus/NResidue/), [Together](../../algebra/Together/), [Zeta](../../special-functions/Zeta/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)

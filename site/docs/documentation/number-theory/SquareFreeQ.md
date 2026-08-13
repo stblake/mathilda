@@ -59,44 +59,26 @@ Out[8]= False
 ### Applications (7)
 
 ```mathematica
-In[1]:= SquareFreeQ[12]
-Out[1]= False
-```
+In[9]:= SquareFreeQ[12]
+Out[9]= False
 
-A square-free integer has no repeated prime factor:
+In[10]:= SquareFreeQ[30]
+Out[10]= True
 
-```mathematica
-In[1]:= SquareFreeQ[30]
-Out[1]= True
-```
+In[11]:= SquareFreeQ[x^2 - 1]
+Out[11]= True
 
-For polynomials it detects repeated factors:
+In[12]:= SquareFreeQ[(x - 1)^2 (x + 1)]
+Out[12]= False
 
-```mathematica
-In[1]:= SquareFreeQ[x^2 - 1]
-Out[1]= True
+In[13]:= SquareFreeQ[2]
+Out[13]= True
 
-In[2]:= SquareFreeQ[(x - 1)^2 (x + 1)]
-Out[2]= False
-```
+In[14]:= SquareFreeQ[2, GaussianIntegers -> True]
+Out[14]= False
 
-Square-freeness depends on the coefficient ring: `2 = -i (1 + i)^2` is *not*
-square-free over the Gaussian integers, even though it is over the rationals:
-
-```mathematica
-In[1]:= SquareFreeQ[2]
-Out[1]= True
-
-In[2]:= SquareFreeQ[2, GaussianIntegers -> True]
-Out[2]= False
-```
-
-The cyclotomic-style polynomial `x^4 + x^2 + 1` has distinct irreducible
-factors and is square-free:
-
-```mathematica
-In[1]:= SquareFreeQ[x^4 + x^2 + 1]
-Out[1]= True
+In[15]:= SquareFreeQ[x^4 + x^2 + 1]
+Out[15]= True
 ```
 
 ## Options & behaviour
@@ -170,11 +152,9 @@ The Modulus option is parsed but only Modulus -> 0 is honoured; non-zero values 
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Symbol](../../expression-information/Symbol/), [List](../../other-advanced/List/), [Complex](../../arithmetic/Complex/), [Pi](../../mathematical-constants/Pi/), [D](../../calculus/D/), [PolynomialGCD](../../algebra/PolynomialGCD/), [Rule](../../assignment-and-rules/Rule/)
-
 ## References
+
+**See also:** [Symbol](../../expression-information/Symbol/), [List](../../other-advanced/List/), [Complex](../../arithmetic/Complex/), [Pi](../../mathematical-constants/Pi/), [D](../../calculus/D/), [PolynomialGCD](../../algebra/PolynomialGCD/), [Rule](../../assignment-and-rules/Rule/)
 
 - Source: [`src/poly/squarefreeq.c`](https://github.com/stblake/mathilda/blob/main/src/poly/squarefreeq.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)

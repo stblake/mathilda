@@ -30,43 +30,49 @@ Out[4]= 27 + 4 x^2 + 8 x^4 + 4 x^5 + 4 x^6 == 18 x + 28 x^3 && 12 + 2 x + 5 x^2 
 
 In[5]:= Eliminate[{x^2 + y^2 + z^2 == 1, x - y + z == 2, x^3 - y^2 == z + 1}, {y, z}]
 Out[5]= 27 + 4 x^2 + 8 x^4 + 4 x^5 + 4 x^6 == 18 x + 28 x^3
+```
 
-In[6]:= Eliminate[{x - a == 0, x - b == 0}, x]  (* common-root condition *)
+Common-root condition
+
+```mathematica
+In[6]:= Eliminate[{x - a == 0, x - b == 0}, x]
 Out[6]= b == a
+```
 
-In[7]:= Eliminate[1 == 2, x]                    (* inconsistent -> False *)
+Inconsistent -> False
+
+```mathematica
+In[7]:= Eliminate[1 == 2, x]
 Out[7]= False
+```
 
-In[8]:= Eliminate[x + y == 0, y]                (* solvable -> True *)
+Solvable -> True
+
+```mathematica
+In[8]:= Eliminate[x + y == 0, y]
 Out[8]= True
 ```
 
 ### Applications (6)
 
 ```mathematica
-In[1]:= Eliminate[{x + y == 2, x - y == 0}, y]
-Out[1]= x == 1
+In[9]:= Eliminate[{x + y == 2, x - y == 0}, y]
+Out[9]= x == 1
 
-In[2]:= Eliminate[{a == b + c, d == a - c}, c]
-Out[2]= d == b
-```
+In[10]:= Eliminate[{a == b + c, d == a - c}, c]
+Out[10]= d == b
 
-```mathematica
-In[1]:= Eliminate[{a == x + y, b == x y}, {x, y}]
-Out[1]= True
+In[11]:= Eliminate[{a == x + y, b == x y}, {x, y}]
+Out[11]= True
 
-In[2]:= Eliminate[{p == x + 1/x, q == x^2 + 1/x^2}, x]
-Out[2]= 2 + q == p^2
-```
+In[12]:= Eliminate[{p == x + 1/x, q == x^2 + 1/x^2}, x]
+Out[12]= 2 + q == p^2
 
-```mathematica
-In[1]:= Eliminate[{x == a Cos[t], y == a Sin[t]}, t]
-Out[1]= x^2 + y^2 == a^2
-```
+In[13]:= Eliminate[{x == a Cos[t], y == a Sin[t]}, t]
+Out[13]= x^2 + y^2 == a^2
 
-```mathematica
-In[1]:= Eliminate[{u == Exp[x], v == Exp[2 x]}, x]
-Out[1]= v == u^2
+In[14]:= Eliminate[{u == Exp[x], v == Exp[2 x]}, x]
+Out[14]= v == u^2
 ```
 
 ## Options & behaviour
@@ -229,11 +235,9 @@ The algebraic path moves each equation to `lhs − rhs` form, collects all varia
 
 **Attributes:** `Protected`.
 
-## See also
-
-[GroebnerBasis](../../algebra/GroebnerBasis/), [TrigExpand](../../elementary-functions/TrigExpand/), [Sinh](../../elementary-functions/Sinh/), [Cosh](../../elementary-functions/Cosh/), [Log](../../elementary-functions/Log/), [Exp](../../elementary-functions/Exp/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/)
-
 ## References
+
+**See also:** [GroebnerBasis](../../algebra/GroebnerBasis/), [TrigExpand](../../elementary-functions/TrigExpand/), [Sinh](../../elementary-functions/Sinh/), [Cosh](../../elementary-functions/Cosh/), [Log](../../elementary-functions/Log/), [Exp](../../elementary-functions/Exp/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/)
 
 - T. Becker, V. Weispfenning, *Gröbner Bases* (Springer, 1993).
 - D. Cox, J. Little, D. O'Shea, *Ideals, Varieties, and Algorithms* (Springer).

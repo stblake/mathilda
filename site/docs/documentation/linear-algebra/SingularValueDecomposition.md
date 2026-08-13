@@ -37,40 +37,42 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= sv = SingularValueDecomposition[{{1.2, 3.4}, {5.6, 7.8}, {9.0, 1.2}}]; sv[[2]]
 Out[1]= {{12.4778, 0.0}, {0.0, 5.65202}, {0.0, 0.0}}
+```
 
-In[2]:= SingularValueDecomposition[{{1.1, 2, 5}, {3, -11, 4.2}}, 1] (* "thin" SVD with only the top singular value *)
+"thin" SVD with only the top singular value
+
+```mathematica
+In[2]:= SingularValueDecomposition[{{1.1, 2, 5}, {3, -11, 4.2}}, 1]
 Out[2]= {{{0.0195749}, {0.999808}}, {{12.1526}}, {{0.248586}, {-0.901763}, {0.353593}}}
+```
 
-In[3]:= SingularValueDecomposition[N[{{1, 2}, {3, 4}}, 30]] (* MPFR Jacobi -- output at the input precision *)
+MPFR Jacobi -- output at the input precision
+
+```mathematica
+In[3]:= SingularValueDecomposition[N[{{1, 2}, {3, 4}}, 30]]
 Out[3]= {{{0.4045535848337569316424487226274, -0.9145142956773044526791769738123}, {0.9145142956773044526791769738107, 0.4045535848337569316424487226246}}, {{5.464985704219042650451188493292, 0.0}, {0.0, 0.3659661906262578204229643842617}}, {{0.5760484367663207913310985819436, 0.8174155604703632730886523884647}, {0.8174155604703632730886523884647, -0.5760484367663207913310985819436}}}
 ```
 
 ### Options (1)
 
+Explicit Tolerance preserves the tiny singular value
+
 ```mathematica
-In[4]:= SingularValueDecomposition[{{1.0, 0}, {1.0, 10^-14}}, Tolerance -> 10^-15] (* explicit Tolerance preserves the tiny singular value *)
+In[4]:= SingularValueDecomposition[{{1.0, 0}, {1.0, 10^-14}}, Tolerance -> 10^-15]
 Out[4]= {{{-0.707107, -0.707107}, {-0.707107, 0.707107}}, {{1.41421, 0.0}, {0.0, 7.07107e-15}}, {{-1.0, -5e-15}, {-5e-15, 1.0}}}
 ```
 
 ### Applications (3)
 
 ```mathematica
-In[1]:= SingularValueDecomposition[{{2, 0}, {0, 3}}]
-Out[1]= {{{0, 1}, {1, 0}}, {{3, 0}, {0, 2}}, {{0, 1}, {1, 0}}}
-```
+In[5]:= SingularValueDecomposition[{{2, 0}, {0, 3}}]
+Out[5]= {{{0, 1}, {1, 0}}, {{3, 0}, {0, 2}}, {{0, 1}, {1, 0}}}
 
-The middle factor is the diagonal matrix of singular values (here `3` and `2`, in descending order); the outer factors permute the axes so the larger value comes first.
+In[6]:= With[{r = SingularValueDecomposition[N[{{1, 2}, {3, 4}}]]}, Chop[r[[1]] . r[[2]] . Transpose[r[[3]]]]]
+Out[6]= {{1.0, 2.0}, {3.0, 4.0}}
 
-```mathematica
-In[1]:= With[{r = SingularValueDecomposition[N[{{1, 2}, {3, 4}}]]}, Chop[r[[1]] . r[[2]] . Transpose[r[[3]]]]]
-Out[1]= {{1.0, 2.0}, {3.0, 4.0}}
-```
-
-The defining identity `m == u . sigma . ConjugateTranspose[v]` reconstructs the original matrix exactly (up to floating-point noise removed by `Chop`).
-
-```mathematica
-In[1]:= SingularValueDecomposition[N[{{1, 2}, {3, 4}}]]
-Out[1]= {{{-0.404554, -0.914514}, {-0.914514, 0.404554}}, {{5.46499, 0.0}, {0.0, 0.365966}}, {{-0.576048, 0.817416}, {-0.817416, -0.576048}}}
+In[7]:= SingularValueDecomposition[N[{{1, 2}, {3, 4}}]]
+Out[7]= {{{-0.404554, -0.914514}, {-0.914514, 0.404554}}, {{5.46499, 0.0}, {0.0, 0.365966}}, {{-0.576048, 0.817416}, {-0.817416, -0.576048}}}
 ```
 
 ## Options & behaviour
@@ -231,11 +233,9 @@ expr_free(res) - the evaluator owns `res` and frees it on a non-NULL return (MEM
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Eigenvectors](../../linear-algebra/Eigenvectors/)
-
 ## References
+
+**See also:** [Eigenvectors](../../linear-algebra/Eigenvectors/)
 
 - G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed. (Johns Hopkins, 2013).
 - J. Demmel and K. Veselić, "Jacobi's Method is More Accurate than QR", SIAM J. Matrix Anal. Appl. 13 (1992).

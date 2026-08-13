@@ -36,18 +36,14 @@ Out[3]= x == (a^2 + 2 a b + b^2)/c && y >= (a^2 - 2 a b + b^2)/c
 ### Applications (3)
 
 ```mathematica
-In[1]:= ExpandNumerator[(a + b)^2 / (c + d)^2]
-Out[1]= (a^2 + 2 a b + b^2)/(c + d)^2
-```
+In[4]:= ExpandNumerator[(a + b)^2 / (c + d)^2]
+Out[4]= (a^2 + 2 a b + b^2)/(c + d)^2
 
-```mathematica
-In[1]:= ExpandNumerator[((x + 1)(x + 2)) / (y (y + 1))]
-Out[1]= (2 + 3 x + x^2)/(y (1 + y))
-```
+In[5]:= ExpandNumerator[((x + 1)(x + 2)) / (y (y + 1))]
+Out[5]= (2 + 3 x + x^2)/(y (1 + y))
 
-```mathematica
-In[1]:= ExpandNumerator[(1 + x)^3 / x^2 == (1 + y)^2 / y]
-Out[1]= (1 + 3 x + 3 x^2 + x^3)/x^2 == (1 + 2 y + y^2)/y
+In[6]:= ExpandNumerator[(1 + x)^3 / x^2 == (1 + y)^2 / y]
+Out[6]= (1 + 3 x + 3 x^2 + x^3)/x^2 == (1 + 2 y + y^2)/y
 ```
 
 ## Implementation notes
@@ -65,11 +61,9 @@ Out[1]= (1 + 3 x + 3 x^2 + x^3)/x^2 == (1 + 2 y + y^2)/y
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Expand](../../algebra/Expand/), [List](../../other-advanced/List/), [Equal](../../comparisons/Equal/), [Unequal](../../comparisons/Unequal/), [Less](../../comparisons/Less/), [LessEqual](../../comparisons/LessEqual/), [Greater](../../comparisons/Greater/), [GreaterEqual](../../comparisons/GreaterEqual/)
-
 ## References
+
+**See also:** [Expand](../../algebra/Expand/), [List](../../other-advanced/List/), [Equal](../../comparisons/Equal/), [Unequal](../../comparisons/Unequal/), [Less](../../comparisons/Less/), [LessEqual](../../comparisons/LessEqual/), [Greater](../../comparisons/Greater/), [GreaterEqual](../../comparisons/GreaterEqual/)
 
 - Source: [`src/expand.c`](https://github.com/stblake/mathilda/blob/main/src/expand.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

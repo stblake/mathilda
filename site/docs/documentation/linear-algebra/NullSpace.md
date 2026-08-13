@@ -51,41 +51,21 @@ Out[7]= {0, 0, 0}
 
 ### Applications (5)
 
-The classic rank-deficient magic-like matrix has a one-dimensional kernel:
-
 ```mathematica
-In[1]:= NullSpace[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
-Out[1]= {{1, -2, 1}}
-```
+In[8]:= NullSpace[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+Out[8]= {{1, -2, 1}}
 
-A full-column-rank matrix has only the trivial null space, returned as the empty
-list:
+In[9]:= NullSpace[{{1, 0}, {0, 1}}]
+Out[9]= {}
 
-```mathematica
-In[1]:= NullSpace[{{1, 0}, {0, 1}}]
-Out[1]= {}
-```
+In[10]:= NullSpace[{{1, 2, 3, 4}, {2, 4, 6, 8}}]
+Out[10]= {{-4, 0, 0, 1}, {-3, 0, 1, 0}, {-2, 1, 0, 0}}
 
-A wide matrix with a two-dimensional kernel — the basis vectors are scaled to
-clear denominators and ordered with the rightmost free column first:
+In[11]:= NullSpace[{{1, a}, {1, a}}]
+Out[11]= {{-a, 1}}
 
-```mathematica
-In[1]:= NullSpace[{{1, 2, 3, 4}, {2, 4, 6, 8}}]
-Out[1]= {{-4, 0, 0, 1}, {-3, 0, 1, 0}, {-2, 1, 0, 0}}
-```
-
-NullSpace works symbolically — here the kernel is parametrized by `a`:
-
-```mathematica
-In[1]:= NullSpace[{{1, a}, {1, a}}]
-Out[1]= {{-a, 1}}
-```
-
-The defining property `m . v == 0` can be checked directly:
-
-```mathematica
-In[1]:= m = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}; m . First[NullSpace[m]]
-Out[1]= {0, 0, 0}
+In[12]:= m = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}; m . First[NullSpace[m]]
+Out[12]= {0, 0, 0}
 ```
 
 ## Options & behaviour
@@ -180,11 +160,9 @@ owns `res` and frees it; on NULL return the caller retains ownership of `res`.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[RowReduce](../../linear-algebra/RowReduce/), [LinearSolve](../../linear-algebra/LinearSolve/), [Inverse](../../linear-algebra/Inverse/), [Together](../../algebra/Together/)
-
 ## References
+
+**See also:** [RowReduce](../../linear-algebra/RowReduce/), [LinearSolve](../../linear-algebra/LinearSolve/), [Inverse](../../linear-algebra/Inverse/), [Together](../../algebra/Together/)
 
 - Source: [`src/linalg/nullspace.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/nullspace.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

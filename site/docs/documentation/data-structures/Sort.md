@@ -32,27 +32,23 @@ Out[4]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
 ### Applications (6)
 
 ```mathematica
-In[1]:= Sort[{3, 1, 2}]
-Out[1]= {1, 2, 3}
+In[5]:= Sort[{3, 1, 2}]
+Out[5]= {1, 2, 3}
 
-In[2]:= Sort[{5, 3, 8, 1}, Greater]
-Out[2]= {8, 5, 3, 1}
-```
+In[6]:= Sort[{5, 3, 8, 1}, Greater]
+Out[6]= {8, 5, 3, 1}
 
-```mathematica
-In[1]:= Sort[{x^2, x, 1, x^3}]
-Out[1]= {1, x, x^2, x^3}
+In[7]:= Sort[{x^2, x, 1, x^3}]
+Out[7]= {1, x, x^2, x^3}
 
-In[2]:= Sort[{"banana", "apple", "cherry"}]
-Out[2]= {"apple", "banana", "cherry"}
-```
+In[8]:= Sort[{"banana", "apple", "cherry"}]
+Out[8]= {"apple", "banana", "cherry"}
 
-```mathematica
-In[1]:= Sort[{{2, 1}, {1, 3}, {1, 2}}]
-Out[1]= {{1, 2}, {1, 3}, {2, 1}}
+In[9]:= Sort[{{2, 1}, {1, 3}, {1, 2}}]
+Out[9]= {{1, 2}, {1, 3}, {2, 1}}
 
-In[2]:= Sort[Range[10], (Mod[#1, 3] < Mod[#2, 3]) &]
-Out[2]= {3, 9, 6, 10, 1, 7, 4, 2, 8, 5}
+In[10]:= Sort[Range[10], (Mod[#1, 3] < Mod[#2, 3]) &]
+Out[10]= {3, 9, 6, 10, 1, 7, 4, 2, 8, 5}
 ```
 
 ## Performance
@@ -92,11 +88,9 @@ heads with many unknowns.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[SortBy](../../data-structures/SortBy/), [Total](../../arithmetic/Total/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/), [Join](../../data-structures/Join/)
-
 ## References
+
+**See also:** [SortBy](../../data-structures/SortBy/), [Total](../../arithmetic/Total/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/), [Join](../../data-structures/Join/)
 
 - Source: [`src/sort.c`](https://github.com/stblake/mathilda/blob/main/src/sort.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

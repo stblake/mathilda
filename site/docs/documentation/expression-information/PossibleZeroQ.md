@@ -16,7 +16,7 @@ The general problem of deciding whether an expression is zero is undecidable; Po
 
 </details>
 
-## Examples (13)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -52,31 +52,30 @@ In[8]:= PossibleZeroQ[Sqrt[x^2] - x, Assumptions -> x >= 0]
 Out[8]= True
 ```
 
+### Worked examples (1)
+
+```mathematica
+In[9]:= Gamma[x] - Gamma[x]
+Out[9]= 0
+```
+
 ### Applications (5)
 
 ```mathematica
-In[1]:= PossibleZeroQ[(x - 1) (x + 1) - (x^2 - 1)]
-Out[1]= True
-```
+In[10]:= PossibleZeroQ[(x - 1) (x + 1) - (x^2 - 1)]
+Out[10]= True
 
-```mathematica
-In[1]:= PossibleZeroQ[x^2 + 1]
-Out[1]= False
-```
+In[11]:= PossibleZeroQ[x^2 + 1]
+Out[11]= False
 
-```mathematica
-In[1]:= PossibleZeroQ[Sin[x]^2 + Cos[x]^2 - 1]
-Out[1]= True
-```
+In[12]:= PossibleZeroQ[Sin[x]^2 + Cos[x]^2 - 1]
+Out[12]= True
 
-```mathematica
-In[1]:= PossibleZeroQ[Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]]
-Out[1]= True
-```
+In[13]:= PossibleZeroQ[Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]]
+Out[13]= True
 
-```mathematica
-In[1]:= PossibleZeroQ[Log[2] + Log[3] - Log[6]]
-Out[1]= True
+In[14]:= PossibleZeroQ[Log[2] + Log[3] - Log[6]]
+Out[14]= True
 ```
 
 ## Algorithm
@@ -128,11 +127,9 @@ See ZERO_RECOGNISE_PLAN.md for design notes and references.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Pi](../../mathematical-constants/Pi/), [Together](../../algebra/Together/), [Cancel](../../algebra/Cancel/), [Expand](../../algebra/Expand/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/), [CoefficientList](../../algebra/CoefficientList/)
-
 ## References
+
+**See also:** [Pi](../../mathematical-constants/Pi/), [Together](../../algebra/Together/), [Cancel](../../algebra/Cancel/), [Expand](../../algebra/Expand/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/), [CoefficientList](../../algebra/CoefficientList/)
 
 - J. T. Schwartz, "Fast probabilistic algorithms for verification of polynomial identities", JACM 27 (1980).
 - R. Zippel, "Probabilistic algorithms for sparse polynomials", EUROSAM 1979.

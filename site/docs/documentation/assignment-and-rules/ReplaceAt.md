@@ -59,28 +59,20 @@ Out[8]= {{a, xx}, {a, xx}}
 ### Applications (5)
 
 ```mathematica
-In[1]:= ReplaceAt[{a, b, c, d}, x_ -> X, 2]
-Out[1]= {a, X, c, d}
-```
+In[9]:= ReplaceAt[{a, b, c, d}, x_ -> X, 2]
+Out[9]= {a, X, c, d}
 
-```mathematica
-In[1]:= ReplaceAt[{a, b, c, d}, x_ -> X, -1]
-Out[1]= {a, b, c, X}
-```
+In[10]:= ReplaceAt[{a, b, c, d}, x_ -> X, -1]
+Out[10]= {a, b, c, X}
 
-```mathematica
-In[1]:= ReplaceAt[{{a, b}, {c, d}}, x_ -> X, {2, 1}]
-Out[1]= {{a, b}, {X, d}}
-```
+In[11]:= ReplaceAt[{{a, b}, {c, d}}, x_ -> X, {2, 1}]
+Out[11]= {{a, b}, {X, d}}
 
-```mathematica
-In[1]:= ReplaceAt[1 + x + x^2 + x^3, e_ :> D[e, x], {2}]
-Out[1]= 2 + x^2 + x^3
-```
+In[12]:= ReplaceAt[1 + x + x^2 + x^3, e_ :> D[e, x], {2}]
+Out[12]= 2 + x^2 + x^3
 
-```mathematica
-In[1]:= ReplaceAt[{1, 2, 3, 4, 5}, n_ :> n^2, {2 ;; 4}]
-Out[1]= {1, 4, 9, 16, 5}
+In[13]:= ReplaceAt[{1, 2, 3, 4, 5}, n_ :> n^2, {2 ;; 4}]
+Out[13]= {1, 4, 9, 16, 5}
 ```
 
 ## Implementation notes
@@ -102,11 +94,9 @@ Out[1]= {1, 4, 9, 16, 5}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[ReplaceAll](../../assignment-and-rules/ReplaceAll/), [Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/), [Span](../../structural-manipulation/Span/), [List](../../other-advanced/List/), [Orderless](../../expression-information/Orderless/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/)
-
 ## References
+
+**See also:** [ReplaceAll](../../assignment-and-rules/ReplaceAll/), [Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/), [Span](../../structural-manipulation/Span/), [List](../../other-advanced/List/), [Orderless](../../expression-information/Orderless/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/)
 
 - Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)

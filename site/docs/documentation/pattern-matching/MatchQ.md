@@ -29,36 +29,24 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= MatchQ[3, _Integer]
 Out[1]= True
-```
 
-```mathematica
-In[1]:= MatchQ[f[a, b], f[_, _]]
-Out[1]= True
-```
+In[2]:= MatchQ[f[a, b], f[_, _]]
+Out[2]= True
 
-```mathematica
-In[1]:= MatchQ[x^2, _^_]
-Out[1]= True
-```
+In[3]:= MatchQ[x^2, _^_]
+Out[3]= True
 
-```mathematica
-In[1]:= MatchQ[{1, 2, 3}, {__Integer}]
-Out[1]= True
-```
+In[4]:= MatchQ[{1, 2, 3}, {__Integer}]
+Out[4]= True
 
-```mathematica
-In[1]:= MatchQ[7, _Integer?PrimeQ]
-Out[1]= True
-```
+In[5]:= MatchQ[7, _Integer?PrimeQ]
+Out[5]= True
 
-```mathematica
-In[1]:= MatchQ[{2, 4, 6, 8}, {p__Integer} /; And @@ (EvenQ /@ {p})]
-Out[1]= True
-```
+In[6]:= MatchQ[{2, 4, 6, 8}, {p__Integer} /; And @@ (EvenQ /@ {p})]
+Out[6]= True
 
-```mathematica
-In[1]:= MatchQ[a + b + c, x_ + y_ /; x =!= y]
-Out[1]= True
+In[7]:= MatchQ[a + b + c, x_ + y_ /; x =!= y]
+Out[7]= True
 ```
 
 ## Implementation notes

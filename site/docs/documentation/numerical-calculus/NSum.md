@@ -57,28 +57,20 @@ Out[8]= 0.2751938594139530395689715615907
 ### Applications (5)
 
 ```mathematica
-In[1]:= NSum[1/n^2, {n, 1, Infinity}]
-Out[1]= 1.64493
-```
+In[9]:= NSum[1/n^2, {n, 1, Infinity}]
+Out[9]= 1.64493
 
-```mathematica
-In[1]:= NSum[(-1)^(n+1)/n, {n, 1, Infinity}]
-Out[1]= 0.693147
-```
+In[10]:= NSum[(-1)^(n+1)/n, {n, 1, Infinity}]
+Out[10]= 0.693147
 
-```mathematica
-In[1]:= NSum[1/n^2, {n, 1, Infinity}, WorkingPrecision -> 30]
-Out[1]= 1.644934066848226436472415166649
-```
+In[11]:= NSum[1/n^2, {n, 1, Infinity}, WorkingPrecision -> 30]
+Out[11]= 1.644934066848226436472415166649
 
-```mathematica
-In[1]:= NSum[1/n^4, {n, 1, Infinity}, WorkingPrecision -> 30]
-Out[1]= 1.082323233711138191516003696543
-```
+In[12]:= NSum[1/n^4, {n, 1, Infinity}, WorkingPrecision -> 30]
+Out[12]= 1.082323233711138191516003696543
 
-```mathematica
-In[1]:= NSum[1/n^2, {n, 1, Infinity}, Method -> "Levin"]
-Out[1]= 1.64493
+In[13]:= NSum[1/n^2, {n, 1, Infinity}, Method -> "Levin"]
+Out[13]= 1.64493
 ```
 
 ## Algorithm
@@ -115,11 +107,9 @@ binding is removed on all return paths.
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[Block](../../scoping-constructs/Block/), [Chop](../../elementary-functions/Chop/), [Integrate](../../calculus/Integrate/), [D](../../calculus/D/), [BernoulliB](../../special-functions/BernoulliB/), [NLimit](../../numerical-calculus/NLimit/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
-
 ## References
+
+**See also:** [Block](../../scoping-constructs/Block/), [Chop](../../elementary-functions/Chop/), [Integrate](../../calculus/Integrate/), [D](../../calculus/D/), [BernoulliB](../../special-functions/BernoulliB/), [NLimit](../../numerical-calculus/NLimit/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)

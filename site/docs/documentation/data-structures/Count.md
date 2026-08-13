@@ -31,28 +31,20 @@ Out[3]= <|"a" -> 1|>
 ### Applications (5)
 
 ```mathematica
-In[1]:= Count[{1,2,1,3,1},1]
-Out[1]= 3
-```
+In[4]:= Count[{1,2,1,3,1},1]
+Out[4]= 3
 
-```mathematica
-In[1]:= Count[{1,2,3,4,5,6},_?EvenQ]
-Out[1]= 3
-```
+In[5]:= Count[{1,2,3,4,5,6},_?EvenQ]
+Out[5]= 3
 
-```mathematica
-In[1]:= Count[Range[100], _?PrimeQ]
-Out[1]= 25
-```
+In[6]:= Count[Range[100], _?PrimeQ]
+Out[6]= 25
 
-```mathematica
-In[1]:= Count[{a, b, {c, a}, a, {a, {a}}}, a, Infinity]
-Out[1]= 5
-```
+In[7]:= Count[{a, b, {c, a}, a, {a, {a}}}, a, Infinity]
+Out[7]= 5
 
-```mathematica
-In[1]:= Count[IntegerDigits[2^100], _?(# > 5 &)]
-Out[1]= 11
+In[8]:= Count[IntegerDigits[2^100], _?(# > 5 &)]
+Out[8]= 11
 ```
 
 ## Implementation notes
@@ -63,11 +55,9 @@ Out[1]= 11
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Cases](../../data-structures/Cases/), [DeleteCases](../../data-structures/DeleteCases/)
-
 ## References
+
+**See also:** [Cases](../../data-structures/Cases/), [DeleteCases](../../data-structures/DeleteCases/)
 
 - Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

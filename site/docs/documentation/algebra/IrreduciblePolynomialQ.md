@@ -55,39 +55,23 @@ Out[8]= {False, True}
 ### Applications (6)
 
 ```mathematica
-In[1]:= IrreduciblePolynomialQ[x^2 + 1]
-Out[1]= True
-```
+In[9]:= IrreduciblePolynomialQ[x^2 + 1]
+Out[9]= True
 
-`x^4 + 1` is irreducible over the rationals (the cyclotomic polynomial of the eighth roots of unity):
+In[10]:= IrreduciblePolynomialQ[x^4 + 1]
+Out[10]= True
 
-```mathematica
-In[1]:= IrreduciblePolynomialQ[x^4 + 1]
-Out[1]= True
-```
+In[11]:= IrreduciblePolynomialQ[x^4 + 1, Extension -> All]
+Out[11]= False
 
-But it splits over the complex numbers — `Extension -> All` tests absolute irreducibility:
+In[12]:= IrreduciblePolynomialQ[x^2 + 1, GaussianIntegers -> True]
+Out[12]= False
 
-```mathematica
-In[1]:= IrreduciblePolynomialQ[x^4 + 1, Extension -> All]
-Out[1]= False
-```
+In[13]:= IrreduciblePolynomialQ[x^4 - 10 x^2 + 1]
+Out[13]= True
 
-Irreducibility is field-dependent. `x^2 + 1` is irreducible over `Q` but factors over the Gaussian rationals:
-
-```mathematica
-In[1]:= IrreduciblePolynomialQ[x^2 + 1, GaussianIntegers -> True]
-Out[1]= False
-```
-
-The minimal polynomial of `Sqrt[2] + Sqrt[3]` is irreducible over `Q`, yet becomes reducible once `Sqrt[2]` is adjoined:
-
-```mathematica
-In[1]:= IrreduciblePolynomialQ[x^4 - 10 x^2 + 1]
-Out[1]= True
-
-In[2]:= IrreduciblePolynomialQ[x^4 - 10 x^2 + 1, Extension -> Sqrt[2]]
-Out[2]= False
+In[14]:= IrreduciblePolynomialQ[x^4 - 10 x^2 + 1, Extension -> Sqrt[2]]
+Out[14]= False
 ```
 
 ## Options & behaviour
@@ -208,11 +192,9 @@ Algorithm:
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Complex](../../arithmetic/Complex/), [List](../../other-advanced/List/), [Pi](../../mathematical-constants/Pi/), [Rational](../../arithmetic/Rational/), [Rule](../../assignment-and-rules/Rule/)
-
 ## References
+
+**See also:** [Complex](../../arithmetic/Complex/), [List](../../other-advanced/List/), [Pi](../../mathematical-constants/Pi/), [Rational](../../arithmetic/Rational/), [Rule](../../assignment-and-rules/Rule/)
 
 - Source: [`src/poly/irrpolyq.c`](https://github.com/stblake/mathilda/blob/main/src/poly/irrpolyq.c)
 - Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)

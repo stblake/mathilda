@@ -19,10 +19,16 @@ Out[1]= CompiledFunction[{x}, x^2 + 1]
 
 In[2]:= f[3.0]
 Out[2]= 10.0
+```
 
-In[3]:= f[a]                 (* symbolic argument -> interpreter fallback *)
+Symbolic argument -> interpreter fallback
+
+```mathematica
+In[3]:= f[a]
 Out[3]= 1 + a^2
+```
 
+```mathematica
 In[4]:= g = Compile[{{n, _Integer}}, Module[{s = 0.}, Do[s = s + 1/i^2, {i, 1, n}]; s]]; g[100]
 Out[4]= 1.63498
 
@@ -35,11 +41,17 @@ Out[6]= {1.0, 3.0}
 
 ### Options (2)
 
-```mathematica
-In[7]:= (* RuntimeAttributes -> Listable: the object threads over lists *) h = Compile[{{x, _Real}}, If[x > 0, 1., -1.], RuntimeAttributes -> Listable]; h[{1., -2., 3.}]
-Out[7]= {1.0, -1.0, 1.0}
+RuntimeAttributes -> Listable: the object threads over lists
 
-In[8]:= (* a rank-1 parameter consumes one level, so this maps over the rows *) Compile[{{v, _Real, 1}}, Total[v], RuntimeAttributes -> Listable][ {{1., 2.}, {3., 4.}}]
+```mathematica
+In[7]:= h = Compile[{{x, _Real}}, If[x > 0, 1., -1.], RuntimeAttributes -> Listable]; h[{1., -2., 3.}]
+Out[7]= {1.0, -1.0, 1.0}
+```
+
+A rank-1 parameter consumes one level, so this maps over the rows
+
+```mathematica
+In[8]:= Compile[{{v, _Real, 1}}, Total[v], RuntimeAttributes -> Listable][ {{1., 2.}, {3., 4.}}]
 Out[8]= {3.0, 7.0}
 ```
 
@@ -59,11 +71,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/), [Power](../../arithmetic/Power/), [Gamma](../../special-functions/Gamma/), [Erf](../../special-functions/Erf/), [BesselJ](../../special-functions/BesselJ/), [Zeta](../../special-functions/Zeta/), [If](../../control-flow/If/), [Sum](../../calculus/Sum/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/), [Power](../../arithmetic/Power/), [Gamma](../../special-functions/Gamma/), [Erf](../../special-functions/Erf/), [BesselJ](../../special-functions/BesselJ/), [Zeta](../../special-functions/Zeta/), [If](../../control-flow/If/), [Sum](../../calculus/Sum/)
 
 - Source: [`src/compile/compiled_function.c`](https://github.com/stblake/mathilda/blob/main/src/compile/compiled_function.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

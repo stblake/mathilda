@@ -48,28 +48,20 @@ Out[7]= {-3/20, 1}
 ### Applications (5)
 
 ```mathematica
-In[1]:= MantissaExponent[123.45]
-Out[1]= {0.12345, 3}
-```
+In[8]:= MantissaExponent[123.45]
+Out[8]= {0.12345, 3}
 
-```mathematica
-In[1]:= MantissaExponent[7/3]
-Out[1]= {7/30, 1}
-```
+In[9]:= MantissaExponent[7/3]
+Out[9]= {7/30, 1}
 
-```mathematica
-In[1]:= MantissaExponent[1024, 2]
-Out[1]= {1/2, 11}
-```
+In[10]:= MantissaExponent[1024, 2]
+Out[10]= {1/2, 11}
 
-```mathematica
-In[1]:= MantissaExponent[N[Pi, 30]]
-Out[1]= {0.3141592653589793238462643383278, 1}
-```
+In[11]:= MantissaExponent[N[Pi, 30]]
+Out[11]= {0.3141592653589793238462643383278, 1}
 
-```mathematica
-In[1]:= MantissaExponent[255, 16]
-Out[1]= {255/256, 2}
+In[12]:= MantissaExponent[255, 16]
+Out[12]= {255/256, 2}
 ```
 
 ## Algorithm
@@ -135,11 +127,9 @@ Implementation only supports integer bases b >= 2.  Non-integer bases
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Rational](../../arithmetic/Rational/)
-
 ## References
+
+**See also:** [Rational](../../arithmetic/Rational/)
 
 - Source: [`src/real.c`](https://github.com/stblake/mathilda/blob/main/src/real.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

@@ -55,43 +55,27 @@ Out[8]= 1/(Log[b] x)
 ### Applications (7)
 
 ```mathematica
-In[1]:= D[x^n, x]
-Out[1]= n x^(-1 + n)
+In[9]:= D[x^n, x]
+Out[9]= n x^(-1 + n)
+
+In[10]:= D[Exp[a x], x]
+Out[10]= a E^(a x)
+
+In[11]:= D[x^2 y, {x, 2}]
+Out[11]= 2 y
+
+In[12]:= D[x^x, x]
+Out[12]= x^(-1 + x) (x + x Log[x])
+
+In[13]:= D[Sin[x]^Cos[x], x]
+Out[13]= Sin[x]^(-1 + Cos[x]) (Cos[x]^2 - Sin[x]^2 Log[Sin[x]])
+
+In[14]:= D[Log[Gamma[x]], x]
+Out[14]= PolyGamma[0, x]
+
+In[15]:= D[f[g[x]], x]
+Out[15]= Derivative[1][g][x] Derivative[1][f][g[x]]
 ```
-
-```mathematica
-In[1]:= D[Exp[a x], x]
-Out[1]= a E^(a x)
-```
-
-```mathematica
-In[1]:= D[x^2 y, {x, 2}]
-Out[1]= 2 y
-```
-
-```mathematica
-In[1]:= D[x^x, x]
-Out[1]= x^(-1 + x) (x + x Log[x])
-```
-
-```mathematica
-In[1]:= D[Sin[x]^Cos[x], x]
-Out[1]= Sin[x]^(-1 + Cos[x]) (Cos[x]^2 - Sin[x]^2 Log[Sin[x]])
-```
-
-```mathematica
-In[1]:= D[Log[Gamma[x]], x]
-Out[1]= PolyGamma[0, x]
-```
-
-```mathematica
-In[1]:= D[f[g[x]], x]
-Out[1]= Derivative[1][g][x] Derivative[1][f][g[x]]
-```
-
-## Options & behaviour
-
-### Examples
 
 ## Algorithm
 
@@ -195,11 +179,9 @@ the closed-form symbolic-order path.
 
 **Attributes:** `Protected`, `ReadProtected`.
 
-## See also
-
-[Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/), [Sqrt](../../arithmetic/Sqrt/), [Exp](../../elementary-functions/Exp/), [Log](../../elementary-functions/Log/), [List](../../other-advanced/List/), [Equal](../../comparisons/Equal/)
-
 ## References
+
+**See also:** [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/), [Sqrt](../../arithmetic/Sqrt/), [Exp](../../elementary-functions/Exp/), [Log](../../elementary-functions/Log/), [List](../../other-advanced/List/), [Equal](../../comparisons/Equal/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (Kluwer, 1992), ch. 2.
 - Source: [`src/calculus/deriv.c`](https://github.com/stblake/mathilda/blob/main/src/calculus/deriv.c)

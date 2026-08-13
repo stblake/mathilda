@@ -21,16 +21,12 @@ Out[1]= RootSum[Function[t, t^2 + t + 1], Function[t, t^3]]
 
 In[2]:= RootSum[#^2 + 1 &, # &]
 Out[2]= RootSum[#1^2 + 1 &, #1 &]
-```
 
-```mathematica
-In[1]:= Integrate[1/(x^3 - x + 1), x]
-Out[1]= RootSum[1 + #1^3 - #1 &, Log[-#1 + x]/(-1 + 3 #1^2) &]
-```
+In[3]:= Integrate[1/(x^3 - x + 1), x]
+Out[3]= RootSum[1 + #1^3 - #1 &, Log[-#1 + x]/(-1 + 3 #1^2) &]
 
-```mathematica
-In[1]:= D[RootSum[Function[t, t^3 + t + 1], Function[t, Log[x - t]/t]], x]
-Out[1]= RootSum[Function[t, t^3 + t + 1], Function[t, 1/(t (-t + x))]]
+In[4]:= D[RootSum[Function[t, t^3 + t + 1], Function[t, Log[x - t]/t]], x]
+Out[4]= RootSum[Function[t, t^3 + t + 1], Function[t, 1/(t (-t + x))]]
 ```
 
 ## Algorithm

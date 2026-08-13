@@ -20,11 +20,11 @@ PutAppend works the same as Put, except that it preserves any existing contents 
 
 </details>
 
-## Examples (3)
+## Examples (2)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Applications (3)
+### Applications (2)
 
 ```mathematica
 In[1]:= Put[x^2 + 1, "/tmp/mathilda_demo.m"]
@@ -32,16 +32,7 @@ Out[1]= Null
 
 In[2]:= PutAppend[y, "/tmp/mathilda_demo.m"]
 Out[2]= Null
-
-In[3]:= FilePrint["/tmp/mathilda_demo.m"]
-1 + x^2
-y
-Out[3]= Null
 ```
-
-## Options & behaviour
-
-### Example
 
 ## Algorithm
 
@@ -67,11 +58,9 @@ infix shorthand `expr >> "file"` and lowers it to `Put[expr, "file"]`.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Put](../../file-io/Put/)
-
 ## References
+
+**See also:** [Put](../../file-io/Put/)
 
 - Source: [`src/readwrite.c`](https://github.com/stblake/mathilda/blob/main/src/readwrite.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)

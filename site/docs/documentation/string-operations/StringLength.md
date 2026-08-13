@@ -32,14 +32,14 @@ Out[4]= StringLength[x]
 ### Applications (3)
 
 ```mathematica
-In[1]:= StringLength["hello"]
-Out[1]= 5
+In[5]:= StringLength["hello"]
+Out[5]= 5
 
-In[2]:= StringLength["Mathilda"]
-Out[2]= 8
+In[6]:= StringLength["Mathilda"]
+Out[6]= 8
 
-In[3]:= StringLength[""]
-Out[3]= 0
+In[7]:= StringLength[""]
+Out[7]= 0
 ```
 
 ## Performance

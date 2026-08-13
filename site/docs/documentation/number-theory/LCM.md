@@ -25,35 +25,21 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= LCM[3, 4, 5]
 Out[1]= 60
-```
 
-```mathematica
-In[1]:= LCM[12, 18, 30]
-Out[1]= 180
-```
+In[2]:= LCM[12, 18, 30]
+Out[2]= 180
 
-The absorbing convention `LCM[0, n] = 0`:
+In[3]:= LCM[0, 5]
+Out[3]= 0
 
-```mathematica
-In[1]:= LCM[0, 5]
-Out[1]= 0
-```
+In[4]:= LCM[1/2, 2/3, 3/4]
+Out[4]= 6
 
-`LCM` extends to rationals via numerator/denominator (`lcm(numerators)/gcd(denominators)`):
+In[5]:= LCM @@ Range[1, 20]
+Out[5]= 232792560
 
-```mathematica
-In[1]:= LCM[1/2, 2/3, 3/4]
-Out[1]= 6
-```
-
-Folded across a range it gives the smallest number divisible by every integer `1..20`, and large inputs promote to a GMP bigint:
-
-```mathematica
-In[1]:= LCM @@ Range[1, 20]
-Out[1]= 232792560
-
-In[2]:= LCM[123456789, 987654321]
-Out[2]= 13548070123626141
+In[6]:= LCM[123456789, 987654321]
+Out[6]= 13548070123626141
 ```
 
 ## Implementation notes
@@ -64,11 +50,9 @@ Out[2]= 13548070123626141
 
 **Attributes:** `Flat`, `Listable`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
 
-## See also
-
-[GCD](../../number-theory/GCD/)
-
 ## References
+
+**See also:** [GCD](../../number-theory/GCD/)
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on the Euclidean algorithm and least common multiples.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on GCD/LCM relations.

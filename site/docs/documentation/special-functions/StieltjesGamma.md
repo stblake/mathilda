@@ -29,33 +29,18 @@ Out[1]= EulerGamma
 
 ### Applications (4)
 
-The zeroth Stieltjes constant is the Euler–Mascheroni constant:
-
 ```mathematica
-In[1]:= StieltjesGamma[0]
-Out[1]= EulerGamma
-```
+In[2]:= StieltjesGamma[0]
+Out[2]= EulerGamma
 
-Higher constants are inert and stay symbolic:
+In[3]:= StieltjesGamma[3]
+Out[3]= StieltjesGamma[3]
 
-```mathematica
-In[1]:= StieltjesGamma[3]
-Out[1]= StieltjesGamma[3]
-```
+In[4]:= N[StieltjesGamma[0], 40]
+Out[4]= 0.57721566490153286060651209008240243104214
 
-Numericalizing the zeroth constant recovers γ to 40 digits:
-
-```mathematica
-In[1]:= N[StieltjesGamma[0], 40]
-Out[1]= 0.57721566490153286060651209008240243104214
-```
-
-The constants are exactly the Laurent coefficients of `Zeta` about `s = 1` —
-expanding the series exhibits them in their defining role:
-
-```mathematica
-In[1]:= Series[Zeta[s], {s, 1, 2}]
-Out[1]= 1/(s - 1) + EulerGamma + -StieltjesGamma[1] (s - 1) + 1/2 StieltjesGamma[2] (s - 1)^2 + O[s - 1]^3
+In[5]:= Series[Zeta[s], {s, 1, 2}]
+Out[5]= 1/(s - 1) + EulerGamma + -StieltjesGamma[1] (s - 1) + 1/2 StieltjesGamma[2] (s - 1)^2 + O[s - 1]^3
 ```
 
 ## Algorithm
@@ -79,11 +64,9 @@ Attributes: Listable, Protected.
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Zeta](../../special-functions/Zeta/), [EulerGamma](../../mathematical-constants/EulerGamma/), [Series](../../power-series/Series/)
-
 ## References
+
+**See also:** [Zeta](../../special-functions/Zeta/), [EulerGamma](../../mathematical-constants/EulerGamma/), [Series](../../power-series/Series/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

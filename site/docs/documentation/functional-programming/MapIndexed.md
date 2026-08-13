@@ -53,11 +53,9 @@ Out[8]= f[f[p, {0, 0}][f[x, {0, 1}]], {0}][f[a, {1}], f[b, {2}], f[c, {3}]]
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Part](../../structural-manipulation/Part/), [Extract](../../structural-manipulation/Extract/), [Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/), [Association](../../data-structures/Association/), [List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [Part](../../structural-manipulation/Part/), [Extract](../../structural-manipulation/Extract/), [Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/), [Association](../../data-structures/Association/), [List](../../other-advanced/List/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

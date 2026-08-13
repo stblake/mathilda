@@ -34,11 +34,9 @@ Out[3]= {<|"a" -> 1|>, <|"a" -> 3|>}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[KeyTake](../../data-structures/KeyTake/)
-
 ## References
+
+**See also:** [KeyTake](../../data-structures/KeyTake/)
 
 - Source: [`src/assoc.c`](https://github.com/stblake/mathilda/blob/main/src/assoc.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

@@ -27,36 +27,20 @@ Out[3]= 7
 ### Applications (5)
 
 ```mathematica
-In[1]:= LeafCount[x + y]
-Out[1]= 3
-```
+In[4]:= LeafCount[x + y]
+Out[4]= 3
 
-It counts every atomic subexpression, including operator heads:
+In[5]:= LeafCount[a + b^2 + Sin[c d]]
+Out[5]= 9
 
-```mathematica
-In[1]:= LeafCount[a + b^2 + Sin[c d]]
-Out[1]= 9
-```
+In[6]:= LeafCount[Expand[(1 + x)^10]]
+Out[6]= 48
 
-A handy proxy for symbolic "size" — here the blow-up of an expanded binomial:
+In[7]:= LeafCount[Integrate[1/(1 + x^4), x]]
+Out[7]= 89
 
-```mathematica
-In[1]:= LeafCount[Expand[(1 + x)^10]]
-Out[1]= 48
-```
-
-Measuring the complexity of a computed result, e.g. an antiderivative:
-
-```mathematica
-In[1]:= LeafCount[Integrate[1/(1 + x^4), x]]
-Out[1]= 89
-```
-
-Mapped over a list, it ranks expressions by structural weight:
-
-```mathematica
-In[1]:= Map[LeafCount, {1, 1/2, x, f[x], {a, b, c}}]
-Out[1]= {1, 3, 1, 2, 4}
+In[8]:= Map[LeafCount, {1, 1/2, x, f[x], {a, b, c}}]
+Out[8]= {1, 3, 1, 2, 4}
 ```
 
 ## Implementation notes
@@ -70,11 +54,9 @@ Out[1]= {1, 3, 1, 2, 4}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
-
 ## References
+
+**See also:** [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

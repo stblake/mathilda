@@ -31,17 +31,15 @@ Out[3]= {5, 1}
 
 In[4]:= h[5, 9]
 Out[4]= {5, 9}
-```
 
-```mathematica
-In[1]:= Default[q] = 0
-Out[1]= 0
+In[5]:= Default[q] = 0
+Out[5]= 0
 
-In[2]:= q[a_, b_.] := {a, b}
-Out[2]= Null
+In[6]:= q[a_, b_.] := {a, b}
+Out[6]= Null
 
-In[3]:= q[7]
-Out[3]= {7, 0}
+In[7]:= q[7]
+Out[7]= {7, 0}
 ```
 
 ## Implementation notes

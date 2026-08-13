@@ -27,11 +27,9 @@ Out[2]= {{x -> -1/3 ((1/2 (27 + 3 Sqrt[93]))^(1/3) - 3/(1/2 (27 + 3 Sqrt[93]))^(
 
 **Attributes:** none registered.
 
-## See also
-
-[Solve](../../solutions-of-equations/Solve/)
-
 ## References
+
+**See also:** [Solve](../../solutions-of-equations/Solve/)
 
 - Source: [`src/solve.c`](https://github.com/stblake/mathilda/blob/main/src/solve.c)
 - Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)

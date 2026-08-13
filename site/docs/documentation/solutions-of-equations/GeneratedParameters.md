@@ -19,11 +19,9 @@ Out[1]= {{x -> ConditionalExpression[Log[2] + (2*I) C[1] Pi, Element[C[1], Integ
 
 In[2]:= Solve[Exp[x] == 2, x, GeneratedParameters -> K]
 Out[2]= {{x -> ConditionalExpression[Log[2] + (2*I) K[1] Pi, Element[K[1], Integers]]}}
-```
 
-```mathematica
-In[1]:= Solve[Sin[x] == 0, x, GeneratedParameters -> n]
-Out[1]= {{x -> ConditionalExpression[Pi + 2 Pi n[1], Element[n[1], Integers]]}, {x -> ConditionalExpression[2 Pi n[1], Element[n[1], Integers]]}}
+In[3]:= Solve[Sin[x] == 0, x, GeneratedParameters -> n]
+Out[3]= {{x -> ConditionalExpression[Pi + 2 Pi n[1], Element[n[1], Integers]]}, {x -> ConditionalExpression[2 Pi n[1], Element[n[1], Integers]]}}
 ```
 
 ## Implementation notes

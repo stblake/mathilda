@@ -33,14 +33,14 @@ Out[2]= {1.0, 2.0, 0.75}
 ### Applications (3)
 
 ```mathematica
-In[1]:= y = 10
-Out[1]= 10
+In[3]:= y = 10
+Out[3]= 10
 
-In[2]:= y -= 4
-Out[2]= 6
+In[4]:= y -= 4
+Out[4]= 6
 
-In[3]:= y
-Out[3]= 6
+In[5]:= y
+Out[5]= 6
 ```
 
 ## Implementation notes
@@ -49,11 +49,9 @@ Out[3]= 6
 
 **Attributes:** `HoldFirst`, `Protected`.
 
-## See also
-
-[AddTo](../../assignment-and-rules/AddTo/), [TimesBy](../../assignment-and-rules/TimesBy/), [DivideBy](../../assignment-and-rules/DivideBy/), [HoldFirst](../../other-advanced/HoldFirst/), [Part](../../structural-manipulation/Part/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Increment](../../assignment-and-rules/Increment/)
-
 ## References
+
+**See also:** [AddTo](../../assignment-and-rules/AddTo/), [TimesBy](../../assignment-and-rules/TimesBy/), [DivideBy](../../assignment-and-rules/DivideBy/), [HoldFirst](../../other-advanced/HoldFirst/), [Part](../../structural-manipulation/Part/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Increment](../../assignment-and-rules/Increment/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)

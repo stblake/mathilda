@@ -21,23 +21,17 @@ Out[1]= 4
 ### Applications (4)
 
 ```mathematica
-In[1]:= Mean[{1, 2, 3, 4}]
-Out[1]= 5/2
-```
+In[2]:= Mean[{1, 2, 3, 4}]
+Out[2]= 5/2
 
-```mathematica
-In[1]:= Mean[{a, b, c}]
-Out[1]= 1/3 (a + b + c)
-```
+In[3]:= Mean[{a, b, c}]
+Out[3]= 1/3 (a + b + c)
 
-```mathematica
-In[1]:= Mean[{1/2, 1/3, 1/6}]
-Out[1]= 1/3
-```
+In[4]:= Mean[{1/2, 1/3, 1/6}]
+Out[4]= 1/3
 
-```mathematica
-In[1]:= Mean[Table[k^2, {k, 1, 10}]]
-Out[1]= 77/2
+In[5]:= Mean[Table[k^2, {k, 1, 10}]]
+Out[5]= 77/2
 ```
 
 ## Performance
@@ -69,11 +63,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Total](../../arithmetic/Total/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/)
-
 ## References
+
+**See also:** [Total](../../arithmetic/Total/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/)
 
 - Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

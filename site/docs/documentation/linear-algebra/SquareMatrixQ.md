@@ -42,39 +42,23 @@ Out[5]= True
 ### Applications (6)
 
 ```mathematica
-In[1]:= SquareMatrixQ[{{1, 2}, {3, 4}}]
-Out[1]= True
-```
+In[6]:= SquareMatrixQ[{{1, 2}, {3, 4}}]
+Out[6]= True
 
-A rectangular matrix is rejected:
+In[7]:= SquareMatrixQ[{{1, 2, 3}, {4, 5, 6}}]
+Out[7]= False
 
-```mathematica
-In[1]:= SquareMatrixQ[{{1, 2, 3}, {4, 5, 6}}]
-Out[1]= False
-```
+In[8]:= SquareMatrixQ[{{a, b}, {c, d}}]
+Out[8]= True
 
-The test is purely structural, so symbolic entries are fine:
+In[9]:= SquareMatrixQ[IdentityMatrix[5]]
+Out[9]= True
 
-```mathematica
-In[1]:= SquareMatrixQ[{{a, b}, {c, d}}]
-Out[1]= True
-```
+In[10]:= SquareMatrixQ[{1, 2, 3}]
+Out[10]= False
 
-It composes with matrix constructors, e.g. an order-5 identity:
-
-```mathematica
-In[1]:= SquareMatrixQ[IdentityMatrix[5]]
-Out[1]= True
-```
-
-Vectors, ragged lists, and other non-square shapes return `False`:
-
-```mathematica
-In[1]:= SquareMatrixQ[{1, 2, 3}]
-Out[1]= False
-
-In[2]:= SquareMatrixQ[{{1, 2}, {3}}]
-Out[2]= False
+In[11]:= SquareMatrixQ[{{1, 2}, {3}}]
+Out[11]= False
 ```
 
 ## Implementation notes

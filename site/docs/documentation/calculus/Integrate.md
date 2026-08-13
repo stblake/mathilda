@@ -20,7 +20,7 @@ fundamental theorem of calculus (Method -\> "NewtonLeibniz"). multiple integral 
 
 </details>
 
-## Examples (16)
+## Examples (26)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -38,67 +38,103 @@ Out[3]= 1/(a - x)
 
 In[4]:= Integrate[(2x+3)/(x^2+3x+5)^2, x]
 Out[4]= -1/(5 + 3 x + x^2)
+```
 
-In[5]:= Integrate[1/((x-1)(x-2)(x-3)), x]          (* Phase 2 LRT closes this *)
+Phase 2 LRT closes this
+
+```mathematica
+In[5]:= Integrate[1/((x-1)(x-2)(x-3)), x]
 Out[5]= -Log[-2 + x] + 1/2 Log[3 - 4 x + x^2]
+```
 
-In[6]:= Integrate[1/(x^2 + 1), x]                  (* Phase 4 LogToReal *)
+Phase 4 LogToReal
+
+```mathematica
+In[6]:= Integrate[1/(x^2 + 1), x]
 Out[6]= ArcTan[x]
+```
 
-In[7]:= Integrate[1/(x^4 + x^2 + 1), x]            (* two quadratic factors *) 1/6 Sqrt[3] ArcTan[(1 + 2 x)/Sqrt[3]] + 1/4 Log[1 + x + x^2] - 1/4 Log[1 - x + x^2]
+Two quadratic factors
+
+```mathematica
+In[7]:= Integrate[1/(x^4 + x^2 + 1), x] 1/6 Sqrt[3] ArcTan[(1 + 2 x)/Sqrt[3]] + 1/4 Log[1 + x + x^2] - 1/4 Log[1 - x + x^2]
 Out[7]= 1/4 Log[1 + x + x^2] - 1/4 Log[1 - x + x^2] + 1/2 (ArcTan[(1 + 2 x)/Sqrt[3]] (1/4 Log[1 + x + x^2] + 1/2 ArcTan[(-1 + 2 x)/Sqrt[3]]/Sqrt[3] + 1/2 ArcTan[(1 + 2 x)/Sqrt[3]]/Sqrt[3] - 1/4 Log[1 - x + x^2]))/Sqrt[3]
 ```
 
 ### Options (1)
 
+Strict, no fallback
+
 ```mathematica
-In[8]:= Integrate[Sin[x], x, Method -> "RischNorman"]  (* strict, no fallback *)
+In[8]:= Integrate[Sin[x], x, Method -> "RischNorman"]
 Out[8]= -Cos[x]
+```
+
+### Worked examples (10)
+
+```mathematica
+In[9]:= Integrate[(x^a-1)/Log[x], {x,0,1}]
+Out[9]= Log[1 + a]
+
+In[10]:= Integrate[Exp[-a x] Sin[b x]/x, {x,0,Infinity}, Assumptions->a>0]
+Out[10]= 1/2 (Pi b)/Sqrt[b^2] - ArcTan[a/b]
+
+In[11]:= Integrate[Sin[a x]^2/x^2, {x,0,Infinity}, Assumptions->a>0]
+Out[11]= 1/2 Pi a
+
+In[12]:= Integrate[Log[1+a^2 x^2]/(1+x^2), {x,0,Infinity}, Assumptions->a>0]
+Out[12]= Pi Log[1 + a]
+
+In[13]:= Integrate[Exp[-c x](1-Cos[a x])/x^2, {x,0,Infinity}, Assumptions->{a>0,c>0}]
+Out[13]= a ArcTan[a/c] - 1/2 c Log[1 + a^2/c^2]
+
+In[14]:= Integrate[Exp[-x^2] Sin[a x]/x, {x,0,Infinity}]
+Out[14]= 1/2 Pi Erf[1/2 a]
+
+In[15]:= Integrate[Exp[-x^2], {x,0,Infinity}]
+Out[15]= 1/2 Sqrt[Pi]
+
+In[16]:= Integrate[x^(s-1) Exp[-x], {x,0,Infinity}]
+Out[16]= ConditionalExpression[Gamma[s], s > 0]
+
+In[17]:= Integrate[x^(s-1) BesselJ[ν,2√x]/x^(ν/2), {x,0,Infinity}]
+Out[17]= Integrate[BesselJ[u03bd, 2 u221ax] x^(-1 + s - 1/2 u03bd), {x, 0, Infinity}]
+
+In[18]:= Integrate[x^(s-1) (Γ[a]-Γ[a,x])/x^a, {x,0,Infinity}]
+Out[18]= Integrate[x^(-1 - a + s) (u0393[a] - u0393[a, x]), {x, 0, Infinity}]
 ```
 
 ### Applications (8)
 
 ```mathematica
-In[1]:= Integrate[1/(1 + x^2), x]
-Out[1]= ArcTan[x]
-```
+In[19]:= Integrate[1/(1 + x^2), x]
+Out[19]= ArcTan[x]
 
-```mathematica
-In[1]:= Integrate[1/x, x]
-Out[1]= Log[x]
-```
+In[20]:= Integrate[1/x, x]
+Out[20]= Log[x]
 
-```mathematica
-In[1]:= Integrate[Cos[x], x]
-Out[1]= Sin[x]
-```
+In[21]:= Integrate[Cos[x], x]
+Out[21]= Sin[x]
 
-```mathematica
-In[1]:= Integrate[x^3 + x, x]
-Out[1]= 1/2 x^2 + 1/4 x^4
-```
+In[22]:= Integrate[x^3 + x, x]
+Out[22]= 1/2 x^2 + 1/4 x^4
 
-```mathematica
-In[1]:= Integrate[1/(x^3 + 1), x]
-Out[1]= 1/3 Log[1 + x] + ArcTan[(-1 + 2 x)/Sqrt[3]]/Sqrt[3] - 1/6 Log[1 - x + x^2]
-```
+In[23]:= Integrate[1/(x^3 + 1), x]
+Out[23]= 1/3 Log[1 + x] + ArcTan[(-1 + 2 x)/Sqrt[3]]/Sqrt[3] - 1/6 Log[1 - x + x^2]
 
-```mathematica
-In[1]:= Integrate[(x^2 + 1)/(x^4 + 1), x]
-Out[1]= ArcTan[x/Sqrt[2]]/Sqrt[2] + ArcTan[(x + x^3)/Sqrt[2]]/Sqrt[2]
-```
+In[24]:= Integrate[(x^2 + 1)/(x^4 + 1), x]
+Out[24]= ArcTan[x/Sqrt[2]]/Sqrt[2] + ArcTan[(x + x^3)/Sqrt[2]]/Sqrt[2]
 
-```mathematica
-In[1]:= Integrate[x*Exp[x], x]
-Out[1]= -E^x + x E^x
+In[25]:= Integrate[x*Exp[x], x]
+Out[25]= -E^x + x E^x
 
-In[2]:= Integrate[1/(x*Log[x]), x]
-Out[2]= Log[Log[x]]
+In[26]:= Integrate[1/(x*Log[x]), x]
+Out[26]= Log[Log[x]]
 ```
 
 ## Options & behaviour
 
-#### Differentiation under the integral sign (`Integrate\`DiffUnderInt`)
+### Differentiation under the integral sign (`Integrate\`DiffUnderInt`)
 
 For a parameter-dependent definite integral `I(p) = Integrate[f(x,p), {x,a,b}]`,
 this method (Leibniz rule / "Feynman's trick") differentiates the integrand with
@@ -131,15 +167,9 @@ function of `x`**: a differentiated exp-geometric/Mellin form (still carrying
 non-terminating rewrite — so such forms are declined up front and left for the
 Ramanujan/Mellin method.
 
-Worked examples that close:
-`Integrate[(x^a-1)/Log[x], {x,0,1}]` → `Log[1+a]`;
-`Integrate[Exp[-a x] Sin[b x]/x, {x,0,Infinity}, Assumptions->a>0]` → `ArcTan[b/a]`;
-`Integrate[Sin[a x]^2/x^2, {x,0,Infinity}, Assumptions->a>0]` → `π a/2`;
-`Integrate[Log[1+a^2 x^2]/(1+x^2), {x,0,Infinity}, Assumptions->a>0]` → `π Log[1+a]`;
-`Integrate[Exp[-c x](1-Cos[a x])/x^2, {x,0,Infinity}, Assumptions->{a>0,c>0}]` → `a ArcTan[a/c] − (c/2) Log[1+a²/c²]`;
-`Integrate[Exp[-x^2] Sin[a x]/x, {x,0,Infinity}]` → `(π/2) Erf[a/2]`.
+.
 
-#### Mellin / Ramanujan Master Theorem (`Integrate\`RamanujanMasterTheorem`)
+### Mellin / Ramanujan Master Theorem (`Integrate\`RamanujanMasterTheorem`)
 
 The series/transform-based mechanism for half-line integrals
 `∫₀^∞ x^{s-1} f(x) dx` of a *transcendental* `f` (the class residue and FTC do
@@ -218,21 +248,13 @@ sum is integrated term by term (each term must converge on its own). Out of
 scope — products of three or more transcendental kernels, finite intervals, and
 two-sided reductions — return unevaluated, never a wrong value.
 
-Worked examples that close:
-`Integrate[Exp[-x^2], {x,0,Infinity}]` → `√π/2`;
-`Integrate[x^(s-1) Exp[-x], {x,0,Infinity}]` → `ConditionalExpression[Γ[s], s>0]`;
-`Integrate[x^(s-1) BesselJ[ν,2√x]/x^(ν/2), {x,0,Infinity}]` → `Γ[s]/Γ[1+ν-s]` (Ramanujan's canonical example);
-`Integrate[x^(s-1) (Γ[a]-Γ[a,x])/x^a, {x,0,Infinity}]` → `Γ[s]/(a-s)`;
-`Integrate[x^(s-1) Hypergeometric2F1[a,b,c,-x], {x,0,Infinity}]` → `Γ[c]Γ[s]Γ[a-s]Γ[b-s]/(Γ[a]Γ[b]Γ[c-s])`;
-`Integrate[Sin[x]/x, {x,0,Infinity}]` → `π/2`;
-`Integrate[BesselJ[0, x], {x,0,Infinity}]` → `1`;
-`Integrate[x^3/(Exp[x]-1), {x,0,Infinity}]` → `π⁴/15` (Debye);
-`Integrate[x^3/(Exp[x]+1), {x,0,Infinity}]` → `7π⁴/120` (Fermi–Dirac);
-`Integrate[x^(s-1)/(Exp[x]-1), {x,0,Infinity}, Assumptions→s>1]` → `Γ[s] ζ[s]`;
-`Integrate[(Exp[-2x]-Exp[-5x])/x, {x,0,Infinity}]` → `Log[5/2]` (Frullani);
-`Integrate[Log[x]/(1+x^2), {x,0,Infinity}]` → `0`.
+ (Ramanujan's canonical example)
 
-### Examples
+ (Debye)
+ (Fermi–Dirac)
+
+ (Frullani)
+.
 
 ### Definite integration (Newton-Leibniz)
 
@@ -284,8 +306,6 @@ a pole-bearing trig head is accepted only when a numeric `NIntegrate`
 cross-check agrees; otherwise the integral is left unevaluated rather than
 risking a wrong value.
 
-### Examples
-
 ### Complex line / contour integration
 
 When a `{x, a, b}` spec has a **non-real endpoint**, or when a spec lists more
@@ -315,8 +335,6 @@ real machinery already in place:
 4. Every segment value is numerically cross-checked against a complex quadrature
    of `f(γ(t)) γ'(t)`; an uncorrectable branch crossing leaves the integral
    unevaluated rather than returning a wrong branch.
-
-### Examples
 
 ### Contour / residue-theorem definite integration
 
@@ -408,7 +426,7 @@ a mis-fire and returned unevaluated.  Negative controls such as
 `Integrate[1/Sqrt[1 + x^4], {x, -Infinity, Infinity}]` (branch point, not
 rational), and `Integrate[1/(2 + Cos[x]), {x, 0, Pi}]` (not a full period) all
 stay unevaluated.  The keyhole/Mellin, sector and rectangular families
-described above extend the reach to branch-cut and symbolic-exponent contours;
+described above extend the reach to branch-cut and symbolic-exponent contours
 a log-keyhole (`∫₀^∞ Log[x] R(x)`) with symbolic on-circle poles remains out of
 scope (it needs assumption-aware `Arg`/`Log` branch reasoning that Mathilda does
 not yet have).
@@ -464,7 +482,7 @@ fire; this is a separate issue tracked under the matcher work.
 **undefined functions** `u[x]` and their derivatives, following Kelly
 Roach, "Indefinite and Definite Integration" (1992), §1.7 ("Undefined
 Functions").  Each undefined function value `u[g]` and its derivative
-tower `u'[g], u''[g], …` is treated as a differential-field generator;
+tower `u'[g], u''[g], …` is treated as a differential-field generator
 the integrand is reduced by recognising integration-by-parts /
 total-derivative structure in the top generator.  A single inner call to
 the rational integrator over a substituted generator symbol subsumes
@@ -655,7 +673,7 @@ Algorithm: substitute `u = Tan[x/2]` (`u = Tanh[x/2]` for hyperbolic), turning
 case — add the secular correction `K Floor[(x - b)/p]` (`b = Pi`, `p = 2 Pi`)
 that removes the spurious jump discontinuities the classical substitution
 introduces at the poles of `Tan[x/2]` (odd multiples of `Pi`).  The jump `K` is
-the difference of the one-sided limits of the `u`-antiderivative at `±Infinity`;
+the difference of the one-sided limits of the `u`-antiderivative at `±Infinity`
 if that limit diverges (a *genuine* singularity of the integrand) no correction
 is applied.  A `TrigExpand` pre-pass reduces multiple/sum-angle arguments
 (`Cos[2 x]`, `Cosh[x] Cosh[2 x]`, ...) to kernels of the bare variable.
@@ -1298,11 +1316,9 @@ no multivariate integration, no constant of integration.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[PolynomialQuotientRemainder](../../calculus/PolynomialQuotientRemainder/), [Apart](../../algebra/Apart/), [Log](../../elementary-functions/Log/), [ToRadicals](../../solutions-of-equations/ToRadicals/), [Root](../../solutions-of-equations/Root/), [RootSum](../../solutions-of-equations/RootSum/), [Plus](../../arithmetic/Plus/), [Sqrt](../../arithmetic/Sqrt/)
-
 ## References
+
+**See also:** [PolynomialQuotientRemainder](../../calculus/PolynomialQuotientRemainder/), [Apart](../../algebra/Apart/), [Log](../../elementary-functions/Log/), [ToRadicals](../../solutions-of-equations/ToRadicals/), [Root](../../solutions-of-equations/Root/), [RootSum](../../solutions-of-equations/RootSum/), [Plus](../../arithmetic/Plus/), [Sqrt](../../arithmetic/Sqrt/)
 
 - Bronstein, "Symbolic Integration I: Transcendental Functions", 2nd ed. (Springer, 2005).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (Kluwer, 1992), ch. 11–12.

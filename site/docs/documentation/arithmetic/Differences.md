@@ -50,28 +50,20 @@ Out[5]= {a, b, c, d, e}
 ### Applications (5)
 
 ```mathematica
-In[1]:= Differences[{1, 4, 9, 16, 25}]
-Out[1]= {3, 5, 7, 9}
-```
+In[6]:= Differences[{1, 4, 9, 16, 25}]
+Out[6]= {3, 5, 7, 9}
 
-```mathematica
-In[1]:= Differences[{1, 8, 27, 64, 125, 216}, 3]
-Out[1]= {6, 6, 6}
-```
+In[7]:= Differences[{1, 8, 27, 64, 125, 216}, 3]
+Out[7]= {6, 6, 6}
 
-```mathematica
-In[1]:= Differences[{a, b, c, d}, 1, 2]
-Out[1]= {-a + c, -b + d}
-```
+In[8]:= Differences[{a, b, c, d}, 1, 2]
+Out[8]= {-a + c, -b + d}
 
-```mathematica
-In[1]:= Differences[{{1, 2, 3}, {4, 6, 8}, {9, 12, 15}}]
-Out[1]= {{3, 4, 5}, {5, 6, 7}}
-```
+In[9]:= Differences[{{1, 2, 3}, {4, 6, 8}, {9, 12, 15}}]
+Out[9]= {{3, 4, 5}, {5, 6, 7}}
 
-```mathematica
-In[1]:= FoldList[Plus, 1, Differences[{1, 4, 9, 16, 25}]]
-Out[1]= {1, 4, 9, 16, 25}
+In[10]:= FoldList[Plus, 1, Differences[{1, 4, 9, 16, 25}]]
+Out[10]= {1, 4, 9, 16, 25}
 ```
 
 ## Implementation notes
@@ -89,11 +81,9 @@ Out[1]= {1, 4, 9, 16, 25}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Accumulate](../../arithmetic/Accumulate/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/)
-
 ## References
+
+**See also:** [Accumulate](../../arithmetic/Accumulate/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

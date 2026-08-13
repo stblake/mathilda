@@ -77,29 +77,15 @@ Out[8]= 907
 ### Applications (3)
 
 ```mathematica
-In[1]:= NestWhile[#/2 &, 256, EvenQ]
-Out[1]= 1
+In[9]:= NestWhile[#/2 &, 256, EvenQ]
+Out[9]= 1
+
+In[10]:= NestWhile[# + 1 &, 1, # < 100 &]
+Out[10]= 100
+
+In[11]:= NestWhile[(# + 2/#)/2 &, 1.0, UnsameQ, 2]
+Out[11]= 1.41421
 ```
-
-Count how many `+1` steps are taken before a predicate fails — here it lands
-exactly on the boundary value:
-
-```mathematica
-In[1]:= NestWhile[# + 1 &, 1, # < 100 &]
-Out[1]= 100
-```
-
-With test `UnsameQ` and history length `2`, `NestWhile` becomes `FixedPoint`.
-Newton's iteration for `Sqrt[2]` converges to the machine fixed point:
-
-```mathematica
-In[1]:= NestWhile[(# + 2/#)/2 &, 1.0, UnsameQ, 2]
-Out[1]= 1.41421
-```
-
-## Options & behaviour
-
-### Examples
 
 ## Implementation notes
 

@@ -27,11 +27,9 @@ Out[2]= <|"a" -> <|"y" -> 6|>|>
 
 **Attributes:** none registered.
 
-## See also
-
-[KeyDrop](../../data-structures/KeyDrop/)
-
 ## References
+
+**See also:** [KeyDrop](../../data-structures/KeyDrop/)
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

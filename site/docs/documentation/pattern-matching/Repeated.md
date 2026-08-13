@@ -33,18 +33,12 @@ Out[2]= False
 
 In[3]:= MatchQ[{1, 2, 3}, {_Integer ..}]
 Out[3]= True
-```
 
-The bound can be a range `{min, max}` or an exact count `{n}`. Combined with
-`Cases`, this filters a list of lists by length — keeping only those with two or
-three matching elements:
+In[4]:= Cases[{{1}, {1, 1}, {1, 1, 1}, {1, 1, 1, 1}}, {Repeated[1, {2, 3}]}]
+Out[4]= {{1, 1}, {1, 1, 1}}
 
-```mathematica
-In[1]:= Cases[{{1}, {1, 1}, {1, 1, 1}, {1, 1, 1, 1}}, {Repeated[1, {2, 3}]}]
-Out[1]= {{1, 1}, {1, 1, 1}}
-
-In[2]:= MatchQ[{1, 2, 3, 4}, {Repeated[_Integer, {4}]}]
-Out[2]= True
+In[5]:= MatchQ[{1, 2, 3, 4}, {Repeated[_Integer, {4}]}]
+Out[5]= True
 ```
 
 ## Implementation notes

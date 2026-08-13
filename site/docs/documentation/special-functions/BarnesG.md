@@ -16,7 +16,7 @@ G(z+1) = Gamma\[z\] G(z) with G(1)=G(2)=1; for a positive integer n, G(n+1) = pr
 
 </details>
 
-## Examples (4)
+## Examples (5)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -34,6 +34,13 @@ Out[3]= 2548.745769568498989735906104648
 
 In[4]:= N[BarnesG[2.5 + 1.0 I]]
 Out[4]= 0.743798 - 0.0953168*I
+```
+
+### Worked examples (1)
+
+```mathematica
+In[5]:= Product[Gamma[i], {i, 1, n-1}]
+Out[5]= BarnesG[n]
 ```
 
 ## Algorithm
@@ -61,11 +68,9 @@ Memory: honours the builtin ownership contract.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Product](../../calculus/Product/), [N](../../arithmetic/N/), [Gamma](../../special-functions/Gamma/), [Log](../../elementary-functions/Log/), [Exp](../../elementary-functions/Exp/)
-
 ## References
+
+**See also:** [Product](../../calculus/Product/), [N](../../arithmetic/N/), [Gamma](../../special-functions/Gamma/), [Log](../../elementary-functions/Log/), [Exp](../../elementary-functions/Exp/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

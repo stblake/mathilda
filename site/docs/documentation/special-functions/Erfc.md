@@ -29,24 +29,18 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= Erfc[0]
 Out[1]= 1
-```
 
-```mathematica
-In[1]:= N[Erfc[2], 40]
-Out[1]= 0.0046777349810472658379307436327470713891081
-```
+In[2]:= N[Erfc[2], 40]
+Out[2]= 0.0046777349810472658379307436327470713891081
 
-```mathematica
-In[1]:= N[Erfc[1 + I], 25]
-Out[1]= -0.31615128169794764488027107 - 0.19045346923783468628410886*I
-```
+In[3]:= N[Erfc[1 + I], 25]
+Out[3]= -0.31615128169794764488027107 - 0.19045346923783468628410886*I
 
-```mathematica
-In[1]:= Series[Erfc[x], {x, 0, 5}]
-Out[1]= 1 + -2/Sqrt[Pi] x + 2/3/Sqrt[Pi] x^3 + -1/5/Sqrt[Pi] x^5 + O[x]^6
+In[4]:= Series[Erfc[x], {x, 0, 5}]
+Out[4]= 1 + -2/Sqrt[Pi] x + 2/3/Sqrt[Pi] x^3 + -1/5/Sqrt[Pi] x^5 + O[x]^6
 
-In[2]:= D[Erfc[Sqrt[x]], x]
-Out[2]= -E^(-x)/(Sqrt[Pi] Sqrt[x])
+In[5]:= D[Erfc[Sqrt[x]], x]
+Out[5]= -E^(-x)/(Sqrt[Pi] Sqrt[x])
 ```
 
 ## Algorithm
@@ -109,11 +103,9 @@ Attributes: Listable, NumericFunction, Protected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Erf](../../special-functions/Erf/), [D](../../calculus/D/)
-
 ## References
+
+**See also:** [Erf](../../special-functions/Erf/), [D](../../calculus/D/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

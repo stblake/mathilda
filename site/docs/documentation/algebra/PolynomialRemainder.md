@@ -41,23 +41,17 @@ Out[4]= -1
 ### Applications (4)
 
 ```mathematica
-In[1]:= PolynomialRemainder[x^2 - 1, x - 1, x]
-Out[1]= 0
-```
+In[5]:= PolynomialRemainder[x^2 - 1, x - 1, x]
+Out[5]= 0
 
-```mathematica
-In[1]:= PolynomialRemainder[x^3 + 2 x^2 + x + 1, x + 1, x]
-Out[1]= 1
-```
+In[6]:= PolynomialRemainder[x^3 + 2 x^2 + x + 1, x + 1, x]
+Out[6]= 1
 
-```mathematica
-In[1]:= PolynomialRemainder[x^2 + 1, x, x]
-Out[1]= 1
-```
+In[7]:= PolynomialRemainder[x^2 + 1, x, x]
+Out[7]= 1
 
-```mathematica
-In[1]:= PolynomialRemainder[x^5 + x + 1, x^2 + 1, x]
-Out[1]= 1 + 2 x
+In[8]:= PolynomialRemainder[x^5 + x + 1, x^2 + 1, x]
+Out[8]= 1 + 2 x
 ```
 
 ## Implementation notes
@@ -81,11 +75,9 @@ fast exact-integer-division path for pure integer/bigint leading coefficients. T
 
 **Attributes:** `Protected`.
 
-## See also
-
-[PolynomialQuotient](../../algebra/PolynomialQuotient/)
-
 ## References
+
+**See also:** [PolynomialQuotient](../../algebra/PolynomialQuotient/)
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra" (3rd ed.), Ch. 2 (division with remainder over a field).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 2.

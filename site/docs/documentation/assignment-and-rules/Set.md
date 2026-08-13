@@ -29,11 +29,9 @@ Out[2]= 6
 
 **Attributes:** `HoldFirst`, `Protected`, `SequenceHold`.
 
-## See also
-
-[SetDelayed](../../assignment-and-rules/SetDelayed/)
-
 ## References
+
+**See also:** [SetDelayed](../../assignment-and-rules/SetDelayed/)
 
 - Source: [`src/eval.c`](https://github.com/stblake/mathilda/blob/main/src/eval.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)

@@ -20,7 +20,7 @@ factoring algorithm via norm + sqfr\_norm + alg\_factor. compositum Q(alpha\_1, 
 
 </details>
 
-## Examples (12)
+## Examples (13)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -43,41 +43,36 @@ In[5]:= Factor[(x^3 + 2x^2)/(x^2 - 4y^2) - (x + 2)/(x^2 - 4y^2)]
 Out[5]= ((-1 + x) (1 + x) (2 + x))/((x - 2 y) (x + 2 y))
 ```
 
+### Worked examples (1)
+
+```mathematica
+In[6]:= Factor[y^2 - x^2]
+Out[6]= -(x + y) (x - y)
+```
+
 ### Applications (7)
 
 ```mathematica
-In[1]:= Factor[x^4 - 1]
-Out[1]= (-1 + x) (1 + x) (1 + x^2)
-```
+In[7]:= Factor[x^4 - 1]
+Out[7]= (-1 + x) (1 + x) (1 + x^2)
 
-```mathematica
-In[1]:= Factor[6 x^2 + 7 x + 2]
-Out[1]= (1 + 2 x) (2 + 3 x)
-```
+In[8]:= Factor[6 x^2 + 7 x + 2]
+Out[8]= (1 + 2 x) (2 + 3 x)
 
-```mathematica
-In[1]:= Factor[x^2 + 1, Extension -> I]
-Out[1]= (-I + x) (I + x)
-```
+In[9]:= Factor[x^2 + 1, Extension -> I]
+Out[9]= (-I + x) (I + x)
 
-```mathematica
-In[1]:= Factor[x^2 - 2, Extension -> Sqrt[2]]
-Out[1]= (Sqrt[2] + x) (-Sqrt[2] + x)
-```
+In[10]:= Factor[x^2 - 2, Extension -> Sqrt[2]]
+Out[10]= (Sqrt[2] + x) (-Sqrt[2] + x)
 
-```mathematica
-In[1]:= Factor[x^10 - 1]
-Out[1]= (-1 + x) (1 + x) (1 + x + x^2 + x^3 + x^4) (1 - x + x^2 - x^3 + x^4)
-```
+In[11]:= Factor[x^10 - 1]
+Out[11]= (-1 + x) (1 + x) (1 + x + x^2 + x^3 + x^4) (1 - x + x^2 - x^3 + x^4)
 
-```mathematica
-In[1]:= Factor[x^4 + 1, Extension -> Sqrt[2]]
-Out[1]= (1 - Sqrt[2] x + x^2) (1 + Sqrt[2] x + x^2)
-```
+In[12]:= Factor[x^4 + 1, Extension -> Sqrt[2]]
+Out[12]= (1 - Sqrt[2] x + x^2) (1 + Sqrt[2] x + x^2)
 
-```mathematica
-In[1]:= Factor[x^4 - 5 x^2 + 6, Extension -> {Sqrt[2], Sqrt[3]}]
-Out[1]= (Sqrt[2] + x) (Sqrt[3] + x) (-Sqrt[2] + x) (-Sqrt[3] + x)
+In[13]:= Factor[x^4 - 5 x^2 + 6, Extension -> {Sqrt[2], Sqrt[3]}]
+Out[13]= (Sqrt[2] + x) (Sqrt[3] + x) (-Sqrt[2] + x) (-Sqrt[3] + x)
 ```
 
 ## Performance
@@ -122,11 +117,9 @@ The univariate **Berlekamp–Zassenhaus** core (`factor_zassenhaus`): take the p
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Sqrt](../../arithmetic/Sqrt/), [Sin](../../elementary-functions/Sin/), [Together](../../algebra/Together/), [Expand](../../algebra/Expand/)
-
 ## References
+
+**See also:** [Sqrt](../../arithmetic/Sqrt/), [Sin](../../elementary-functions/Sin/), [Together](../../algebra/Together/), [Expand](../../algebra/Expand/)
 
 - B. M. Trager, "Algebraic factoring and rational function integration", SYMSAC 1976 — the norm / sqfr_norm / alg_factor approach used for the Extension path.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 8 (polynomial factorization).

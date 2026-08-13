@@ -28,11 +28,9 @@ Out[1]= {$1, x2, {a3, b3}}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Module](../../scoping-constructs/Module/)
-
 ## References
+
+**See also:** [Module](../../scoping-constructs/Module/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/scoping-constructs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/scoping-constructs.md)

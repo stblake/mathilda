@@ -47,23 +47,17 @@ Out[6]= I + x
 ### Applications (4)
 
 ```mathematica
-In[1]:= PolynomialQuotient[x^2 - 1, x - 1, x]
-Out[1]= 1 + x
-```
+In[7]:= PolynomialQuotient[x^2 - 1, x - 1, x]
+Out[7]= 1 + x
 
-```mathematica
-In[1]:= PolynomialQuotient[x^3 + 2 x^2 + x + 1, x + 1, x]
-Out[1]= x + x^2
-```
+In[8]:= PolynomialQuotient[x^3 + 2 x^2 + x + 1, x + 1, x]
+Out[8]= x + x^2
 
-```mathematica
-In[1]:= PolynomialQuotient[x^2 + 1, x, x]
-Out[1]= x
-```
+In[9]:= PolynomialQuotient[x^2 + 1, x, x]
+Out[9]= x
 
-```mathematica
-In[1]:= PolynomialQuotient[x^4 - 2, x^2 - Sqrt[2], x, Extension -> Sqrt[2]]
-Out[1]= Sqrt[2] + x^2
+In[10]:= PolynomialQuotient[x^4 - 2, x^2 - Sqrt[2], x, Extension -> Sqrt[2]]
+Out[10]= Sqrt[2] + x^2
 ```
 
 ## Implementation notes
@@ -88,11 +82,9 @@ returned through `out_Q`/`out_R` pointers.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[I](../../mathematical-constants/I/)
-
 ## References
+
+**See also:** [I](../../mathematical-constants/I/)
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra" (3rd ed.), Ch. 2 (division with remainder over a field).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 2.

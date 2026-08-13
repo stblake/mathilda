@@ -16,54 +16,43 @@ Sqrt is Listable. Sqrt\[z\] is canonicalised to Power\[z, 1/2\]; perfect integer
 
 </details>
 
-## Examples (8)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
+
+### Worked examples (1)
+
+```mathematica
+In[1]:= Sqrt[72]
+Out[1]= 6 Sqrt[2]
+```
 
 ### Applications (8)
 
 ```mathematica
-In[1]:= Sqrt[50]
-Out[1]= 5 Sqrt[2]
-```
+In[2]:= Sqrt[50]
+Out[2]= 5 Sqrt[2]
 
-```mathematica
-In[1]:= Sqrt[-9]
-Out[1]= 3*I
-```
+In[3]:= Sqrt[-9]
+Out[3]= 3*I
 
-Like terms combine and products of surds simplify back to integers:
+In[4]:= Sqrt[2] + Sqrt[8]
+Out[4]= 3 Sqrt[2]
 
-```mathematica
-In[1]:= Sqrt[2] + Sqrt[8]
-Out[1]= 3 Sqrt[2]
+In[5]:= Sqrt[12]*Sqrt[27]
+Out[5]= 18
 
-In[2]:= Sqrt[12]*Sqrt[27]
-Out[2]= 18
-```
+In[6]:= Sqrt[3 + 2 Sqrt[2]] // FullSimplify
+Out[6]= 1 + Sqrt[2]
 
-Nested radicals denest under `FullSimplify`:
+In[7]:= Sqrt[I]
+Out[7]= (1 + I)/Sqrt[2]
 
-```mathematica
-In[1]:= Sqrt[3 + 2 Sqrt[2]] // FullSimplify
-Out[1]= 1 + Sqrt[2]
-```
+In[8]:= N[Sqrt[I], 40]
+Out[8]= 0.70710678118654752440084436210484903928487 + 0.70710678118654752440084436210484903928487*I
 
-Principal value of a complex root, both symbolically and to 40 digits:
-
-```mathematica
-In[1]:= Sqrt[I]
-Out[1]= (1 + I)/Sqrt[2]
-
-In[2]:= N[Sqrt[I], 40]
-Out[2]= 0.70710678118654752440084436210484903928487 + 0.70710678118654752440084436210484903928487*I
-```
-
-The Puiseux series of `Sqrt[1 + x]` is delivered exactly:
-
-```mathematica
-In[1]:= Series[Sqrt[1 + x], {x, 0, 5}]
-Out[1]= 1 + 1/2 x - 1/8 x^2 + 1/16 x^3 - 5/128 x^4 + 7/256 x^5 + O[x]^6
+In[9]:= Series[Sqrt[1 + x], {x, 0, 5}]
+Out[9]= 1 + 1/2 x - 1/8 x^2 + 1/16 x^3 - 5/128 x^4 + 7/256 x^5 + O[x]^6
 ```
 
 ## Performance
@@ -85,11 +74,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[FactorInteger](../../number-theory/FactorInteger/)
-
 ## References
+
+**See also:** [FactorInteger](../../number-theory/FactorInteger/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on square-free factorization and radical simplification.
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on integer square roots.

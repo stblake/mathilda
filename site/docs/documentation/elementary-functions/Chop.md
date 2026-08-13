@@ -46,28 +46,20 @@ Out[5]= 2.0
 ### Applications (5)
 
 ```mathematica
-In[1]:= Chop[N[Sin[Pi]]]
-Out[1]= 0
-```
+In[6]:= Chop[N[Sin[Pi]]]
+Out[6]= 0
 
-```mathematica
-In[1]:= Chop[{1.5, 1.0*^-12, 3.2}]
-Out[1]= {1.5, 0, 3.2}
-```
+In[7]:= Chop[{1.5, 1.0*^-12, 3.2}]
+Out[7]= {1.5, 0, 3.2}
 
-```mathematica
-In[1]:= Chop[N[Exp[I Pi] + 1]]
-Out[1]= 0
-```
+In[8]:= Chop[N[Exp[I Pi] + 1]]
+Out[8]= 0
 
-```mathematica
-In[1]:= Chop[3.0 + 1.0*^-15 I]
-Out[1]= 3.0
-```
+In[9]:= Chop[3.0 + 1.0*^-15 I]
+Out[9]= 3.0
 
-```mathematica
-In[1]:= Chop[1.0*^-15 + 2.5 I]
-Out[1]= 0.0 + 2.5*I
+In[10]:= Chop[1.0*^-15 + 2.5 I]
+Out[10]= 0.0 + 2.5*I
 ```
 
 ## Options & behaviour
@@ -126,11 +118,9 @@ are ever affected; exact integers and rationals are never chopped.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Rational](../../arithmetic/Rational/)
-
 ## References
+
+**See also:** [Rational](../../arithmetic/Rational/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)

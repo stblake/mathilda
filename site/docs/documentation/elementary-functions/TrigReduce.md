@@ -51,37 +51,20 @@ Out[8]= Sin[2 x] + Sin[2 y]
 ### Applications (5)
 
 ```mathematica
-In[1]:= TrigReduce[Sin[x] Cos[x]]
-Out[1]= 1/2 Sin[2 x]
-```
+In[9]:= TrigReduce[Sin[x] Cos[x]]
+Out[9]= 1/2 Sin[2 x]
 
-A square is linearised through the power-reduction formula:
+In[10]:= TrigReduce[Sin[x]^2]
+Out[10]= 1/2 (1 - Cos[2 x])
 
-```mathematica
-In[1]:= TrigReduce[Sin[x]^2]
-Out[1]= 1/2 (1 - Cos[2 x])
-```
+In[11]:= TrigReduce[Cos[x]^3]
+Out[11]= 1/4 (3 Cos[x] + Cos[3 x])
 
-Higher powers spread across several harmonics:
+In[12]:= TrigReduce[Sin[x]^2 Cos[x]^2]
+Out[12]= 1/8 (1 - Cos[4 x])
 
-```mathematica
-In[1]:= TrigReduce[Cos[x]^3]
-Out[1]= 1/4 (3 Cos[x] + Cos[3 x])
-```
-
-A product of squares reduces to a single fourth harmonic — exactly the
-integrand identity behind `Integrate[Sin[x]^2 Cos[x]^2, x]`:
-
-```mathematica
-In[1]:= TrigReduce[Sin[x]^2 Cos[x]^2]
-Out[1]= 1/8 (1 - Cos[4 x])
-```
-
-The product-to-sum identity for two sines appears directly:
-
-```mathematica
-In[1]:= TrigReduce[2 Sin[x] Sin[y]]
-Out[1]= -Cos[x + y] + Cos[x - y]
+In[13]:= TrigReduce[2 Sin[x] Sin[y]]
+Out[13]= -Cos[x + y] + Cos[x - y]
 ```
 
 ## Options & behaviour
@@ -167,11 +150,9 @@ through the active `FactorMemo` via the `builtin_trigreduce` wrapper.
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[TrigExpand](../../elementary-functions/TrigExpand/), [Tan](../../elementary-functions/Tan/), [Cot](../../elementary-functions/Cot/), [Sec](../../elementary-functions/Sec/), [Csc](../../elementary-functions/Csc/), [Sin](../../elementary-functions/Sin/), [Cos](../../elementary-functions/Cos/), [Together](../../algebra/Together/)
-
 ## References
+
+**See also:** [TrigExpand](../../elementary-functions/TrigExpand/), [Tan](../../elementary-functions/Tan/), [Cot](../../elementary-functions/Cot/), [Sec](../../elementary-functions/Sec/), [Csc](../../elementary-functions/Csc/), [Sin](../../elementary-functions/Sin/), [Cos](../../elementary-functions/Cos/), [Together](../../algebra/Together/)
 
 - Source: [`src/simp/trigsimp.c`](https://github.com/stblake/mathilda/blob/main/src/simp/trigsimp.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)

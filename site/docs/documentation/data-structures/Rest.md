@@ -24,8 +24,8 @@ Out[2]= <|"a" -> 1, "b" -> 2|>
 ### Applications (1)
 
 ```mathematica
-In[1]:= Rest[{a,b,c,d}]
-Out[1]= {b, c, d}
+In[3]:= Rest[{a,b,c,d}]
+Out[3]= {b, c, d}
 ```
 
 ## Implementation notes
@@ -36,11 +36,9 @@ copies args `1 .. n−1` into a new function node with the same head. Returns `N
 
 **Attributes:** none registered.
 
-## See also
-
-[First](../../data-structures/First/), [Last](../../data-structures/Last/), [Most](../../data-structures/Most/), [Take](../../data-structures/Take/), [Drop](../../data-structures/Drop/)
-
 ## References
+
+**See also:** [First](../../data-structures/First/), [Last](../../data-structures/Last/), [Most](../../data-structures/Most/), [Take](../../data-structures/Take/), [Drop](../../data-structures/Drop/)
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

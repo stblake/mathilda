@@ -38,11 +38,9 @@ Out[3]= {1, 3}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Keys](../../data-structures/Keys/), [Values](../../data-structures/Values/)
-
 ## References
+
+**See also:** [Keys](../../data-structures/Keys/), [Values](../../data-structures/Values/)
 
 - Source: [`src/assoc.c`](https://github.com/stblake/mathilda/blob/main/src/assoc.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

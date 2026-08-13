@@ -36,28 +36,20 @@ Out[4]= {-2 - 6*I, 6.5 - 4.9*I, -6.8 + 2.0*I}
 ### Applications (5)
 
 ```mathematica
-In[1]:= Cross[{1,0,0},{0,1,0}]
-Out[1]= {0, 0, 1}
-```
+In[5]:= Cross[{1,0,0},{0,1,0}]
+Out[5]= {0, 0, 1}
 
-```mathematica
-In[1]:= Cross[{a1,a2,a3},{b1,b2,b3}]
-Out[1]= {-a3 b2 + a2 b3, -(-a3 b1 + a1 b3), -a2 b1 + a1 b2}
-```
+In[6]:= Cross[{a1,a2,a3},{b1,b2,b3}]
+Out[6]= {-a3 b2 + a2 b3, -(-a3 b1 + a1 b3), -a2 b1 + a1 b2}
 
-```mathematica
-In[1]:= Cross[{2,1,-1},{1,-1,2}]
-Out[1]= {1, -5, -3}
-```
+In[7]:= Cross[{2,1,-1},{1,-1,2}]
+Out[7]= {1, -5, -3}
 
-```mathematica
-In[1]:= Cross[{1,2}]
-Out[1]= {-2, 1}
-```
+In[8]:= Cross[{1,2}]
+Out[8]= {-2, 1}
 
-```mathematica
-In[1]:= Cross[{1,2,3,4},{5,6,7,8},{9,10,11,13}]
-Out[1]= {4, -8, 4, 0}
+In[9]:= Cross[{1,2,3,4},{5,6,7,8},{9,10,11,13}]
+Out[9]= {4, -8, 4, 0}
 ```
 
 ## Algorithm

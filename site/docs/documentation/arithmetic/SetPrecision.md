@@ -21,22 +21,12 @@ Out[1]= 1.5
 
 In[2]:= Precision[SetPrecision[1.5, 30]]
 Out[2]= 30.103
-```
 
-Applied to an exact constant, `SetPrecision` produces a high-precision numeric
-value — here 50 correct digits of `Pi`:
+In[3]:= SetPrecision[Pi, 50]
+Out[3]= 3.1415926535897932384626433832795028841971693993751
 
-```mathematica
-In[1]:= SetPrecision[Pi, 50]
-Out[1]= 3.1415926535897932384626433832795028841971693993751
-```
-
-It also re-rounds an exact rational to a chosen precision; note the trailing
-digit shows where the finite expansion is cut off:
-
-```mathematica
-In[1]:= SetPrecision[1/3, 40]
-Out[1]= 0.33333333333333333333333333333333333333332
+In[4]:= SetPrecision[1/3, 40]
+Out[4]= 0.33333333333333333333333333333333333333332
 ```
 
 ## Implementation notes

@@ -26,38 +26,26 @@ Out[2]= 0
 ### Applications (7)
 
 ```mathematica
-In[1]:= Resultant[x^2 - 1, x^2 - 4, x]
-Out[1]= 9
-```
+In[3]:= Resultant[x^2 - 1, x^2 - 4, x]
+Out[3]= 9
 
-```mathematica
-In[1]:= Resultant[x^2 - 2, x^2 - 3, x]
-Out[1]= 1
-```
+In[4]:= Resultant[x^2 - 2, x^2 - 3, x]
+Out[4]= 1
 
-```mathematica
-In[1]:= Resultant[x^2 + a, x + b, x]
-Out[1]= a + b^2
-```
+In[5]:= Resultant[x^2 + a, x + b, x]
+Out[5]= a + b^2
 
-```mathematica
-In[1]:= Resultant[x^2 - y, x^2 + y, x]
-Out[1]= 4 y^2
-```
+In[6]:= Resultant[x^2 - y, x^2 + y, x]
+Out[6]= 4 y^2
 
-```mathematica
-In[1]:= Resultant[x^2 + a x + b, 2 x + a, x]
-Out[1]= -a^2 + 4 b
-```
+In[7]:= Resultant[x^2 + a x + b, 2 x + a, x]
+Out[7]= -a^2 + 4 b
 
-```mathematica
-In[1]:= Resultant[x^3 + p x + q, 3 x^2 + p, x]
-Out[1]= 4 p^3 + 27 q^2
-```
+In[8]:= Resultant[x^3 + p x + q, 3 x^2 + p, x]
+Out[8]= 4 p^3 + 27 q^2
 
-```mathematica
-In[1]:= Factor[Resultant[x^2 + y^2 - 1, x + y - 1, x]]
-Out[1]= 2 y (-1 + y)
+In[9]:= Factor[Resultant[x^2 + y^2 - 1, x + y - 1, x]]
+Out[9]= 2 y (-1 + y)
 ```
 
 ## Implementation notes
@@ -104,11 +92,9 @@ expressions and handed to the linalg `Det` builtin.
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Plus](../../arithmetic/Plus/)
-
 ## References
+
+**See also:** [Plus](../../arithmetic/Plus/)
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra" (3rd ed.), Ch. 6 (resultants and the Sylvester matrix).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 7 (subresultant PRS).

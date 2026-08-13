@@ -34,33 +34,23 @@ Out[4]= {1, "prime", "prime", x, 6, Pi}
 ### Applications (6)
 
 ```mathematica
-In[1]:= x + y /. x -> 2
-Out[1]= 2 + y
-```
+In[5]:= x + y /. x -> 2
+Out[5]= 2 + y
 
-```mathematica
-In[1]:= {x, y, z} /. {x -> 1, z -> 3}
-Out[1]= {1, y, 3}
-```
+In[6]:= {x, y, z} /. {x -> 1, z -> 3}
+Out[6]= {1, y, 3}
 
-```mathematica
-In[1]:= x^2 + x /. x -> a + 1
-Out[1]= 1 + a + (1 + a)^2
-```
+In[7]:= x^2 + x /. x -> a + 1
+Out[7]= 1 + a + (1 + a)^2
 
-```mathematica
-In[1]:= D[x^x, x] /. Log[x] -> L
-Out[1]= x^(-1 + x) (x + L x)
-```
+In[8]:= D[x^x, x] /. Log[x] -> L
+Out[8]= x^(-1 + x) (x + L x)
 
-```mathematica
-In[1]:= {{1, 2}, {3, 4}} /. {a_, b_} :> a + b
-Out[1]= {4, 6}
-```
+In[9]:= {{1, 2}, {3, 4}} /. {a_, b_} :> a + b
+Out[9]= {4, 6}
 
-```mathematica
-In[1]:= x^4 + 1 /. x -> Sqrt[2]
-Out[1]= 5
+In[10]:= x^4 + 1 /. x -> Sqrt[2]
+Out[10]= 5
 ```
 
 ## Implementation notes

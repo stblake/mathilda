@@ -43,23 +43,17 @@ Out[4]= True
 ### Applications (4)
 
 ```mathematica
-In[1]:= PolynomialQ[x^3 + 2 x + 1, x]
-Out[1]= True
-```
+In[5]:= PolynomialQ[x^3 + 2 x + 1, x]
+Out[5]= True
 
-```mathematica
-In[1]:= PolynomialQ[Sin[x] + x, x]
-Out[1]= False
-```
+In[6]:= PolynomialQ[Sin[x] + x, x]
+Out[6]= False
 
-```mathematica
-In[1]:= PolynomialQ[x^2 y + x y^2 + 1, {x, y}]
-Out[1]= True
-```
+In[7]:= PolynomialQ[x^2 y + x y^2 + 1, {x, y}]
+Out[7]= True
 
-```mathematica
-In[1]:= PolynomialQ[x^2 + y/x, x]
-Out[1]= False
+In[8]:= PolynomialQ[x^2 + y/x, x]
+Out[8]= False
 ```
 
 ## Implementation notes

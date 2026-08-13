@@ -37,23 +37,17 @@ Out[3]= {3 f[x, x], a f[x, x], f[x (1 + x), x]}
 ### Applications (4)
 
 ```mathematica
-In[1]:= FreeQ[x^2 + y^2, z]
-Out[1]= True
-```
+In[4]:= FreeQ[x^2 + y^2, z]
+Out[4]= True
 
-```mathematica
-In[1]:= FreeQ[x^2 + y^2, y]
-Out[1]= False
-```
+In[5]:= FreeQ[x^2 + y^2, y]
+Out[5]= False
 
-```mathematica
-In[1]:= FreeQ[D[Sin[x] Exp[x], x], Cos]
-Out[1]= False
-```
+In[6]:= FreeQ[D[Sin[x] Exp[x], x], Cos]
+Out[6]= False
 
-```mathematica
-In[1]:= Select[Range[20], FreeQ[FactorInteger[#], {2, _}] &]
-Out[1]= {1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
+In[7]:= Select[Range[20], FreeQ[FactorInteger[#], {2, _}] &]
+Out[7]= {1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
 ```
 
 ## Implementation notes

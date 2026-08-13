@@ -44,28 +44,20 @@ Out[5]= 3.14159
 ### Applications (5)
 
 ```mathematica
-In[1]:= NIntegrate[Sin[x], {x, 0, Pi}]
-Out[1]= 2.0
-```
+In[6]:= NIntegrate[Sin[x], {x, 0, Pi}]
+Out[6]= 2.0
 
-```mathematica
-In[1]:= NIntegrate[Exp[-x^2], {x, -Infinity, Infinity}]
-Out[1]= 1.77245
-```
+In[7]:= NIntegrate[Exp[-x^2], {x, -Infinity, Infinity}]
+Out[7]= 1.77245
 
-```mathematica
-In[1]:= NIntegrate[Exp[-x^2], {x, -Infinity, Infinity}, WorkingPrecision -> 30]
-Out[1]= 1.772453850905516027298167483341
-```
+In[8]:= NIntegrate[Exp[-x^2], {x, -Infinity, Infinity}, WorkingPrecision -> 30]
+Out[8]= 1.772453850905516027298167483341
 
-```mathematica
-In[1]:= NIntegrate[Sin[x]/x, {x, 0, Infinity}]
-Out[1]= 1.5708
-```
+In[9]:= NIntegrate[Sin[x]/x, {x, 0, Infinity}]
+Out[9]= 1.5708
 
-```mathematica
-In[1]:= NIntegrate[Log[x] Log[1 - x], {x, 0, 1}]
-Out[1]= 0.355066
+In[10]:= NIntegrate[Log[x] Log[1 - x], {x, 0, 1}]
+Out[10]= 0.355066
 ```
 
 ## Algorithm
@@ -107,11 +99,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[Block](../../scoping-constructs/Block/), [Boole](../../control-flow/Boole/), [UnitStep](../../elementary-functions/UnitStep/), [Cos](../../elementary-functions/Cos/), [Sin](../../elementary-functions/Sin/), [D](../../calculus/D/), [PrecisionGoal](../../other-advanced/PrecisionGoal/), [AccuracyGoal](../../other-advanced/AccuracyGoal/)
-
 ## References
+
+**See also:** [Block](../../scoping-constructs/Block/), [Boole](../../control-flow/Boole/), [UnitStep](../../elementary-functions/UnitStep/), [Cos](../../elementary-functions/Cos/), [Sin](../../elementary-functions/Sin/), [D](../../calculus/D/), [PrecisionGoal](../../other-advanced/PrecisionGoal/), [AccuracyGoal](../../other-advanced/AccuracyGoal/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)

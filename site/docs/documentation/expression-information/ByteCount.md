@@ -22,16 +22,12 @@ Out[2]= 269
 
 In[3]:= ByteCount[x^2 + 1]
 Out[3]= 381
-```
 
-```mathematica
-In[1]:= ByteCount[Range[100]]
-Out[1]= 5701
-```
+In[4]:= ByteCount[Range[100]]
+Out[4]= 5701
 
-```mathematica
-In[1]:= ByteCount[Factorial[50]]
-Out[1]= 48
+In[5]:= ByteCount[Factorial[50]]
+Out[5]= 48
 ```
 
 ## Implementation notes
@@ -44,11 +40,9 @@ Out[1]= 48
 
 **Attributes:** `Protected`.
 
-## See also
-
-[NDArray](../../linear-algebra/NDArray/)
-
 ## References
+
+**See also:** [NDArray](../../linear-algebra/NDArray/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

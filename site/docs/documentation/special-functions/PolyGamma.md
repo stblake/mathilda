@@ -22,51 +22,49 @@ Positive-integer arguments reduce to exact values: psi(m) to a rational minus Eu
 
 </details>
 
-## Examples (7)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
+### Worked examples (4)
+
+```mathematica
+In[1]:= PolyGamma[n, -k]
+Out[1]= PolyGamma[n, -k]
+
+In[2]:= PolyGamma[0, Infinity]
+Out[2]= Infinity
+
+In[3]:= PolyGamma[n, Infinity]
+Out[3]= PolyGamma[n, Infinity]
+
+In[4]:= PolyGamma[n, Indeterminate]
+Out[4]= PolyGamma[n, Indeterminate]
+```
+
 ### Applications (7)
 
-The digamma function at positive integers reduces to an exact rational minus
-Euler's constant:
-
 ```mathematica
-In[1]:= PolyGamma[1]
-Out[1]= -EulerGamma
+In[5]:= PolyGamma[1]
+Out[5]= -EulerGamma
 
-In[2]:= PolyGamma[5]
-Out[2]= 25/12 - EulerGamma
-```
+In[6]:= PolyGamma[5]
+Out[6]= 25/12 - EulerGamma
 
-Higher derivatives `psi^(n)` at integer points give exact closed forms. The
-trigamma at `1` is the Basel constant, and the odd-order values are rational
-multiples of even powers of `Pi`:
+In[7]:= PolyGamma[1, 1]
+Out[7]= 1/6 Pi^2
 
-```mathematica
-In[1]:= PolyGamma[1, 1]
-Out[1]= 1/6 Pi^2
+In[8]:= PolyGamma[3, 1]
+Out[8]= 1/15 Pi^4
 
-In[2]:= PolyGamma[3, 1]
-Out[2]= 1/15 Pi^4
-```
+In[9]:= N[PolyGamma[0, 3/2], 40]
+Out[9]= 0.036489973978576520559023667001244432806843
 
-The numeric paths cover arbitrary precision and complex arguments — here the
-tetragamma value `psi^(2)(1+i)` to 30 digits:
+In[10]:= N[PolyGamma[2, 1 + I], 30]
+Out[10]= 0.3685529315879351717366345429807 + 0.7666528503450662124026953776316*I
 
-```mathematica
-In[1]:= N[PolyGamma[0, 3/2], 40]
-Out[1]= 0.036489973978576520559023667001244432806843
-
-In[2]:= N[PolyGamma[2, 1 + I], 30]
-Out[2]= 0.3685529315879351717366345429807 + 0.7666528503450662124026953776316*I
-```
-
-The order `-1` is the special "integral of psi" case, the log-gamma function:
-
-```mathematica
-In[1]:= PolyGamma[-1, z]
-Out[1]= LogGamma[z]
+In[11]:= PolyGamma[-1, z]
+Out[11]= LogGamma[z]
 ```
 
 ## Algorithm
@@ -125,11 +123,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[EulerGamma](../../mathematical-constants/EulerGamma/), [Series](../../power-series/Series/), [D](../../calculus/D/)
-
 ## References
+
+**See also:** [EulerGamma](../../mathematical-constants/EulerGamma/), [Series](../../power-series/Series/), [D](../../calculus/D/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

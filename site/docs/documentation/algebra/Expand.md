@@ -37,34 +37,46 @@ Out[6]= Overflow[]
 
 ### Applications (6)
 
-```mathematica
-In[1]:= Expand[(x + 1)^3]
-Out[1]= 1 + 3 x + 3 x^2 + x^3
-```
+A binomial power: the coefficients are the binomial coefficients
 
 ```mathematica
-In[1]:= Expand[(x + 1)^4]
-Out[1]= 1 + 4 x + 6 x^2 + 4 x^3 + x^4
+In[7]:= Expand[(x + 1)^3]
+Out[7]= 1 + 3 x + 3 x^2 + x^3
 ```
 
-```mathematica
-In[1]:= Expand[(a + b)(c + d)]
-Out[1]= a c + b c + a d + b d
-```
+A product of sums distributes into every pairwise term
 
 ```mathematica
-In[1]:= Expand[(x + 2)^2 (x - 1)]
-Out[1]= -4 + 3 x^2 + x^3
+In[8]:= Expand[(a + b)(c + d)]
+Out[8]= a c + b c + a d + b d
 ```
 
-```mathematica
-In[1]:= Expand[(1 + x + y)^3]
-Out[1]= 1 + 3 x + 3 x^2 + x^3 + 3 y + 6 x y + 3 x^2 y + 3 y^2 + 3 x y^2 + y^3
-```
+Several variables: the multinomial, not just the binomial, case
 
 ```mathematica
-In[1]:= Expand[(1 + x)^10]
-Out[1]= 1 + 10 x + 45 x^2 + 120 x^3 + 210 x^4 + 252 x^5 + 210 x^6 + 120 x^7 + 45 x^8 + 10 x^9 + x^10
+In[9]:= Expand[(1 + x + y)^3]
+Out[9]= 1 + 3 x + 3 x^2 + x^3 + 3 y + 6 x y + 3 x^2 y + 3 y^2 + 3 x y^2 + y^3
+```
+
+Numeric coefficients are folded, so terms collect and cancel
+
+```mathematica
+In[10]:= Expand[(x + 2)^2 (x - 1)]
+Out[10]= -4 + 3 x^2 + x^3
+```
+
+The work is polynomial in the exponent, not exponential
+
+```mathematica
+In[11]:= Expand[(1 + x)^10]
+Out[11]= 1 + 10 x + 45 x^2 + 120 x^3 + 210 x^4 + 252 x^5 + 210 x^6 + 120 x^7 + 45 x^8 + 10 x^9 + x^10
+```
+
+Only the numerator expands: Expand leaves denominators alone
+
+```mathematica
+In[12]:= Expand[(x + 1)^2/(y + 1)]
+Out[12]= (1 + 2 x + x^2)/(1 + y)
 ```
 
 ## Performance
@@ -124,11 +136,9 @@ A two-argument `Expand[expr, patt]` only expands subexpressions that *contain* `
 
 **Attributes:** `Protected`.
 
-## See also
-
-[ExpandNumerator](../../algebra/ExpandNumerator/), [ExpandDenominator](../../algebra/ExpandDenominator/)
-
 ## References
+
+**See also:** [ExpandNumerator](../../algebra/ExpandNumerator/), [ExpandDenominator](../../algebra/ExpandDenominator/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 3 (normal forms and the distributive expansion of polynomials).
 - Source: [`src/expand.c`](https://github.com/stblake/mathilda/blob/main/src/expand.c)

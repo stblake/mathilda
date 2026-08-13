@@ -35,11 +35,9 @@ Out[3]= True
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Equal](../../comparisons/Equal/)
-
 ## References
+
+**See also:** [Equal](../../comparisons/Equal/)
 
 - Source: [`src/comparisons.c`](https://github.com/stblake/mathilda/blob/main/src/comparisons.c)
 - Specification: [`docs/spec/builtins/comparisons.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/comparisons.md)

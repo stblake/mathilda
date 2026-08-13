@@ -27,23 +27,17 @@ Out[1]= <|"a" -> 1, "c" -> 2, "e" -> 3|>
 ### Applications (4)
 
 ```mathematica
-In[1]:= DeleteDuplicates[{1,2,1,3,2,4}]
-Out[1]= {1, 2, 3, 4}
-```
+In[2]:= DeleteDuplicates[{1,2,1,3,2,4}]
+Out[2]= {1, 2, 3, 4}
 
-```mathematica
-In[1]:= DeleteDuplicates[{a,b,a,c,b,d,a}]
-Out[1]= {a, b, c, d}
-```
+In[3]:= DeleteDuplicates[{a,b,a,c,b,d,a}]
+Out[3]= {a, b, c, d}
 
-```mathematica
-In[1]:= DeleteDuplicates[{1,2,3,4,5,6}, Mod[#1,3]==Mod[#2,3]&]
-Out[1]= {1, 2, 3}
-```
+In[4]:= DeleteDuplicates[{1,2,3,4,5,6}, Mod[#1,3]==Mod[#2,3]&]
+Out[4]= {1, 2, 3}
 
-```mathematica
-In[1]:= DeleteDuplicates[{1,-1,2,-2,3,-3}, Abs[#1]==Abs[#2]&]
-Out[1]= {1, 2, 3}
+In[5]:= DeleteDuplicates[{1,-1,2,-2,3,-3}, Abs[#1]==Abs[#2]&]
+Out[5]= {1, 2, 3}
 ```
 
 ## Implementation notes

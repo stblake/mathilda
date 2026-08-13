@@ -33,43 +33,29 @@ Out[2]= 1/2 (BesselY[-1 + n, x] - BesselY[1 + n, x])
 ### Applications (5)
 
 ```mathematica
-In[1]:= N[BesselY[1, 3.0]]
-Out[1]= 0.324674
-```
+In[3]:= N[BesselY[1, 3.0]]
+Out[3]= 0.324674
 
-Half-integer orders close in elementary functions (the second-kind partner of `BesselJ[1/2, z]`):
+In[4]:= BesselY[1/2, z]
+Out[4]= -Cos[z] Sqrt[2/(Pi z)]
 
-```mathematica
-In[1]:= BesselY[1/2, z]
-Out[1]= -Cos[z] Sqrt[2/(Pi z)]
-```
+In[5]:= N[BesselY[0, 1], 40]
+Out[5]= 0.088256964215676957982926766023515162827815
 
-High-precision evaluation at the origin-neighbourhood and beyond:
+In[6]:= N[BesselJ[1, 5] BesselY[0, 5] - BesselJ[0, 5] BesselY[1, 5], 30]
+Out[6]= 0.127323954473516268615107010698
 
-```mathematica
-In[1]:= N[BesselY[0, 1], 40]
-Out[1]= 0.088256964215676957982926766023515162827815
-```
-
-The Wronskian of the two first-order solutions confirms `J_1(z) Y_0(z) - J_0(z) Y_1(z) = 2/(Pi z)`, here matching `2/(5 Pi)` at `z = 5`:
-
-```mathematica
-In[1]:= N[BesselJ[1, 5] BesselY[0, 5] - BesselJ[0, 5] BesselY[1, 5], 30]
-Out[1]= 0.127323954473516268615107010698
-
-In[2]:= N[2/(5 Pi), 30]
-Out[2]= 0.127323954473516268615107010698
+In[7]:= N[2/(5 Pi), 30]
+Out[7]= 0.127323954473516268615107010698
 ```
 
 ## Implementation notes
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
 
-## See also
-
-[BesselJ](../../special-functions/BesselJ/), [BesselK](../../special-functions/BesselK/), [BesselI](../../special-functions/BesselI/)
-
 ## References
+
+**See also:** [BesselJ](../../special-functions/BesselJ/), [BesselK](../../special-functions/BesselK/), [BesselI](../../special-functions/BesselI/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

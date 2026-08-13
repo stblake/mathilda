@@ -72,11 +72,9 @@ Attributes: Listable, NumericFunction, Protected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[SinIntegral](../../special-functions/SinIntegral/)
-
 ## References
+
+**See also:** [SinIntegral](../../special-functions/SinIntegral/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

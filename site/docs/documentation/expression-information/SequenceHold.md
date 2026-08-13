@@ -17,11 +17,9 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Sequence](../../expression-information/Sequence/), [HoldAll](../../expression-information/HoldAll/), [HoldAllComplete](../../expression-information/HoldAllComplete/), [Set](../../assignment-and-rules/Set/), [SetDelayed](../../assignment-and-rules/SetDelayed/), [Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/)
-
 ## References
+
+**See also:** [Sequence](../../expression-information/Sequence/), [HoldAll](../../expression-information/HoldAll/), [HoldAllComplete](../../expression-information/HoldAllComplete/), [Set](../../assignment-and-rules/Set/), [SetDelayed](../../assignment-and-rules/SetDelayed/), [Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

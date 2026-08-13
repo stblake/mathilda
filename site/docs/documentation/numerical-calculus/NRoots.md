@@ -16,7 +16,7 @@ Options: Method (Automatic | "Aberth" | "CompanionMatrix" | "JenkinsTraub"), Pre
 
 </details>
 
-## Examples (6)
+## Examples (8)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -44,6 +44,16 @@ Out[5]= x == -2.0 - 1.0*I || x == 2.0 + 1.0*I
 ```mathematica
 In[6]:= NRoots[x^2 - 2 == 0, x, PrecisionGoal -> 30]
 Out[6]= x == -1.414213562373095048801688724209 || x == 1.414213562373095048801688724209
+```
+
+### Worked examples (2)
+
+```mathematica
+In[7]:= NRoots[1==0, x]
+Out[7]= False
+
+In[8]:= NRoots[1==1, x]
+Out[8]= True
 ```
 
 ## Algorithm
@@ -81,11 +91,9 @@ Memory contract: never frees `res`; returns a fresh Expr* or NULL.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Expand](../../algebra/Expand/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
-
 ## References
+
+**See also:** [Expand](../../algebra/Expand/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)

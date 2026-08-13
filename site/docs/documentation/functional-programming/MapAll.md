@@ -25,16 +25,12 @@ Out[3]= g[g[1] + g[x]]
 
 In[4]:= Map[f, {a, {b, c}}]
 Out[4]= {f[a], f[{b, c}]}
-```
 
-```mathematica
-In[1]:= f //@ (x^2 + y)
-Out[1]= f[f[f[x]^f[2]] + f[y]]
-```
+In[5]:= f //@ (x^2 + y)
+Out[5]= f[f[f[x]^f[2]] + f[y]]
 
-```mathematica
-In[1]:= MapAll[g, 1 + x^2]
-Out[1]= g[g[1] + g[g[x]^g[2]]]
+In[6]:= MapAll[g, 1 + x^2]
+Out[6]= g[g[1] + g[g[x]^g[2]]]
 ```
 
 ## Implementation notes

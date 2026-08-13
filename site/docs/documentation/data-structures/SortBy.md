@@ -41,11 +41,9 @@ Out[4]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Sort](../../data-structures/Sort/), [Total](../../arithmetic/Total/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/), [Join](../../data-structures/Join/)
-
 ## References
+
+**See also:** [Sort](../../data-structures/Sort/), [Total](../../arithmetic/Total/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/), [Join](../../data-structures/Join/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

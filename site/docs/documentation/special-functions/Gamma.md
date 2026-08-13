@@ -24,35 +24,43 @@ Integer and half-integer arguments reduce to exact values ((z-1)!, and rational 
 
 </details>
 
-## Examples (5)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
+
+### Worked examples (4)
+
+```mathematica
+In[1]:= Gamma[-n]
+Out[1]= Gamma[-n]
+
+In[2]:= Gamma[Infinity]
+Out[2]= Infinity
+
+In[3]:= Gamma[-Infinity]
+Out[3]= Indeterminate
+
+In[4]:= Gamma[ComplexInfinity]
+Out[4]= ComplexInfinity
+```
 
 ### Applications (5)
 
 ```mathematica
-In[1]:= Gamma[5]
-Out[1]= 24
-```
+In[5]:= Gamma[5]
+Out[5]= 24
 
-```mathematica
-In[1]:= Gamma[7/2]
-Out[1]= 15/8 Sqrt[Pi]
-```
+In[6]:= Gamma[7/2]
+Out[6]= 15/8 Sqrt[Pi]
 
-```mathematica
-In[1]:= Gamma[-1/2]
-Out[1]= -2 Sqrt[Pi]
-```
+In[7]:= Gamma[-1/2]
+Out[7]= -2 Sqrt[Pi]
 
-```mathematica
-In[1]:= N[Gamma[1/3], 40]
-Out[1]= 2.6789385347077476336556929409746776441289
-```
+In[8]:= N[Gamma[1/3], 40]
+Out[8]= 2.6789385347077476336556929409746776441289
 
-```mathematica
-In[1]:= N[Gamma[3 + 4 I], 20]
-Out[1]= 0.00522553847136921419473 - 0.172547079294300187719*I
+In[9]:= N[Gamma[3 + 4 I], 20]
+Out[9]= 0.00522553847136921419473 - 0.172547079294300187719*I
 ```
 
 ## Algorithm
@@ -122,11 +130,9 @@ Attributes: Listable, NumericFunction, Protected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[PolyGamma](../../special-functions/PolyGamma/)
-
 ## References
+
+**See also:** [PolyGamma](../../special-functions/PolyGamma/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

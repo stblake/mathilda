@@ -26,7 +26,7 @@ Series handles Taylor, Laurent (negative powers), and Puiseux (fractional powers
 
 </details>
 
-## Examples (16)
+## Examples (20)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -58,58 +58,48 @@ In[8]:= Series[Sin[x + y], {x, 0, 3}, {y, 0, 3}]
 Out[8]= y - 1/6 y^3 + O[y]^4 + (1 - 1/2 y^2 + O[y]^4) x + (-1/2 y + 1/12 y^3 + O[y]^4) x^2 + (-1/6 + 1/12 y^2 + O[y]^4) x^3 + O[x]^4
 ```
 
+### Worked examples (4)
+
+```mathematica
+In[9]:= Series[Erf[x], {x, Infinity, 2}]
+Out[9]= 1 + E^(-x^2) ((-1/Sqrt[Pi])/x + O[1/x]^3)
+
+In[10]:= Series[LogGamma[x], {x, Infinity, 2}]
+Out[10]= 1/2 Log[2 Pi] - x + Log[x] (-1/2 + x) + 1/12/x + O[1/x]^3
+
+In[11]:= Series[PolyGamma[0, x], {x, Infinity, 4}]
+Out[11]= Log[x] + -1/2/x - 1/12 (1/x)^2 + 1/120 (1/x)^4 + O[1/x]^5
+
+In[12]:= Series[PolyGamma[1, x], {x, Infinity, 5}]
+Out[12]= 1/x + 1/2 (1/x)^2 + 1/6 (1/x)^3 - 1/30 (1/x)^5 + O[1/x]^6
+```
+
 ### Applications (8)
 
 ```mathematica
-In[1]:= Series[Sin[x], {x, 0, 5}]
-Out[1]= x - 1/6 x^3 + 1/120 x^5 + O[x]^6
-```
+In[13]:= Series[Sin[x], {x, 0, 5}]
+Out[13]= x - 1/6 x^3 + 1/120 x^5 + O[x]^6
 
-```mathematica
-In[1]:= Series[1/(1 - x), {x, 0, 4}]
-Out[1]= 1 + x + x^2 + x^3 + x^4 + O[x]^5
-```
+In[14]:= Series[1/(1 - x), {x, 0, 4}]
+Out[14]= 1 + x + x^2 + x^3 + x^4 + O[x]^5
 
-```mathematica
-In[1]:= Series[Log[1 + x], {x, 0, 4}]
-Out[1]= x - 1/2 x^2 + 1/3 x^3 - 1/4 x^4 + O[x]^5
-```
+In[15]:= Series[Log[1 + x], {x, 0, 4}]
+Out[15]= x - 1/2 x^2 + 1/3 x^3 - 1/4 x^4 + O[x]^5
 
-```mathematica
-In[1]:= Normal[Series[Exp[x], {x, 0, 3}]]
-Out[1]= 1 + x + 1/2 x^2 + 1/6 x^3
-```
+In[16]:= Normal[Series[Exp[x], {x, 0, 3}]]
+Out[16]= 1 + x + 1/2 x^2 + 1/6 x^3
 
-The expansion of `Tan` recovers the tangent numbers as coefficients:
+In[17]:= Series[Tan[x], {x, 0, 7}]
+Out[17]= x + 1/3 x^3 + 2/15 x^5 + 17/315 x^7 + O[x]^8
 
-```mathematica
-In[1]:= Series[Tan[x], {x, 0, 7}]
-Out[1]= x + 1/3 x^3 + 2/15 x^5 + 17/315 x^7 + O[x]^8
-```
+In[18]:= Series[1/(Exp[x] - 1), {x, 0, 4}]
+Out[18]= 1/x - 1/2 + 1/12 x - 1/720 x^3 + O[x]^5
 
-A Laurent expansion appears automatically when `f` has a pole at the base point;
-`1/(E^x - 1)` starts at `x^(-1)` and its coefficients are the Bernoulli numbers
-over factorials:
+In[19]:= Series[x^x, {x, 0, 3}]
+Out[19]= 1 + Log[x] x + 1/2 Log[x]^2 x^2 + 1/6 Log[x]^3 x^3 + O[x]^4
 
-```mathematica
-In[1]:= Series[1/(Exp[x] - 1), {x, 0, 4}]
-Out[1]= 1/x - 1/2 + 1/12 x - 1/720 x^3 + O[x]^5
-```
-
-`Series` also handles symbolic-exponent expansions such as `x^x`, where the
-coefficients involve `Log[x]`:
-
-```mathematica
-In[1]:= Series[x^x, {x, 0, 3}]
-Out[1]= 1 + Log[x] x + 1/2 Log[x]^2 x^2 + 1/6 Log[x]^3 x^3 + O[x]^4
-```
-
-Expansion at infinity recovers the classic limit `(1 + 1/x)^x -> E`, with the
-correction terms made explicit:
-
-```mathematica
-In[1]:= Series[(1 + 1/x)^x, {x, Infinity, 2}]
-Out[1]= E + (-1/2 E)/x + 11/24 E (1/x)^2 + O[1/x]^3
+In[20]:= Series[(1 + 1/x)^x, {x, Infinity, 2}]
+Out[20]= E + (-1/2 E)/x + 11/24 E (1/x)^2 + O[1/x]^3
 ```
 
 ## Options & behaviour
@@ -128,9 +118,9 @@ Expansions where the inner series diverges at the expansion point (e.g. `Series[
 
 **Asymptotic expansions at Infinity for special functions with essential singularities**: Some functions have no Laurent series at `Infinity` because their leading behaviour is an essential singularity (a factor like `E^x`). For these the generic `x -> 1/u` substitution would hand a pole to naive Taylor, so they are emitted from dedicated asymptotic identities with the essential factor kept symbolic:
 - `Series[ExpIntegralEi[x], {x, Infinity, n}]` returns `E^x (1/x + 1/x^2 + 2/x^3 + ... + O[1/x]^(n+1))`, i.e. `Times[Power[E, x], SeriesData[Power[x, -1], 0, {0!, 1!, ..., (n-1)!}, 1, n+1, 1]]` (DLMF 6.12.2: `Ei(x) ~ E^x Σ_{k≥0} k!/x^(k+1)`). The `E^x` factor rides the expression-level `Times` exactly as a symbolic `x^alpha` prefactor does.
-- `Series[Erf[x], {x, Infinity, n}]`, `Series[Erfc[x], ...]`, `Series[Erfi[x], ...]` return the error-function asymptotic expansions (DLMF 7.12.1), each an `Exp[±x^2]` essential-singularity prefactor times a Laurent series in `1/x` with only odd powers populated. `Series[Erf[x], {x, Infinity, 2}]` → `1 + E^(-x^2) (-1/(Sqrt[Pi] x) + O[1/x]^3)` (the leading `1` is the limit); `Erfc = 1 - Erf` uses the negated multiplier without the constant; `Erfi` has all-positive coefficients and a growing `Exp[+x^2]` prefactor. The general coefficient is `a_k = (2k-1)!!/(2^k Sqrt[Pi])` at `x^-(2k+1)`, with alternating signs for `Erf`/`Erfc`.
-- `Series[LogGamma[x], {x, Infinity, n}]` returns the Stirling expansion (DLMF 5.11.1): an *additive* growth head `(x - 1/2) Log[x] - x + Log[2 Pi]/2` (kept symbolic, as the `E^x` prefactor is for `ExpIntegralEi`) plus a Bernoulli Laurent tail `Σ_{k≥1} B_{2k}/(2k(2k-1)) x^-(2k-1)` in `1/x`, i.e. `1/(12x) - 1/(360 x^3) + 1/(1260 x^5) - ...`. `Series[LogGamma[x], {x, Infinity, 2}]` → `1/2 Log[2 Pi] - x + Log[x] (-1/2 + x) + 1/(12 x) + O[1/x]^3`. (`Gamma[x] = Exp[LogGamma[x]]` still has no series at infinity — it diverges — so `Series[Gamma[x], {x, Infinity, n}]` stays unevaluated.)
-- `Series[PolyGamma[m, x], {x, Infinity, n}]` returns the polygamma Stirling expansion (DLMF 5.11.2). The digamma `m = 0` mirrors `LogGamma`: an additive `Log[x]` growth head plus a Laurent tail `-1/(2x) - Σ_{k≥1} B_{2k}/(2k) x^-(2k)`, so `Series[PolyGamma[0, x], {x, Infinity, 4}]` → `Log[x] - 1/(2x) - 1/(12 x^2) + 1/(120 x^4) + O[1/x]^5`. For `m ≥ 1` it is a pure Laurent series in `1/x` with leading power `x^-m` (decays to 0): `PolyGamma[m, x] ~ (-1)^(m-1) [ (m-1)!/x^m + m!/(2 x^(m+1)) + Σ_{k≥1} B_{2k}(2k+m-1)!/(2k)! x^-(2k+m) ]`. E.g. `Series[PolyGamma[1, x], {x, Infinity, 5}]` → `1/x + 1/(2 x^2) + 1/(6 x^3) - 1/(30 x^5) + O[1/x]^6`. `PolyGamma[x]` (unindexed) normalises to `PolyGamma[0, x]`. A requested order below the leading power `m` yields a pure `O[1/x]^(n+1)`.
+- `Series[Erf[x], {x, Infinity, n}]`, `Series[Erfc[x], ...]`, `Series[Erfi[x], ...]` return the error-function asymptotic expansions (DLMF 7.12.1), each an `Exp[±x^2]` essential-singularity prefactor times a Laurent series in `1/x` with only odd powers populated.  (the leading `1` is the limit); `Erfc = 1 - Erf` uses the negated multiplier without the constant; `Erfi` has all-positive coefficients and a growing `Exp[+x^2]` prefactor. The general coefficient is `a_k = (2k-1)!!/(2^k Sqrt[Pi])` at `x^-(2k+1)`, with alternating signs for `Erf`/`Erfc`.
+- `Series[LogGamma[x], {x, Infinity, n}]` returns the Stirling expansion (DLMF 5.11.1): an *additive* growth head `(x - 1/2) Log[x] - x + Log[2 Pi]/2` (kept symbolic, as the `E^x` prefactor is for `ExpIntegralEi`) plus a Bernoulli Laurent tail `Σ_{k≥1} B_{2k}/(2k(2k-1)) x^-(2k-1)` in `1/x`, i.e. `1/(12x) - 1/(360 x^3) + 1/(1260 x^5) - ...`. . (`Gamma[x] = Exp[LogGamma[x]]` still has no series at infinity — it diverges — so `Series[Gamma[x], {x, Infinity, n}]` stays unevaluated.)
+- `Series[PolyGamma[m, x], {x, Infinity, n}]` returns the polygamma Stirling expansion (DLMF 5.11.2). The digamma `m = 0` mirrors `LogGamma`: an additive `Log[x]` growth head plus a Laurent tail `-1/(2x) - Σ_{k≥1} B_{2k}/(2k) x^-(2k)`, so . For `m ≥ 1` it is a pure Laurent series in `1/x` with leading power `x^-m` (decays to 0): `PolyGamma[m, x] ~ (-1)^(m-1) [ (m-1)!/x^m + m!/(2 x^(m+1)) + Σ_{k≥1} B_{2k}(2k+m-1)!/(2k)! x^-(2k+m) ]`. E.g. . `PolyGamma[x]` (unindexed) normalises to `PolyGamma[0, x]`. A requested order below the leading power `m` yields a pure `O[1/x]^(n+1)`.
 - `Series[Zeta[x], {x, Infinity, n}]` returns the truncated Dirichlet head `1 + 2^-x + 3^-x + ... + (n+1)^-x`. Because `Zeta[x] = Σ_{k≥1} k^-x` and each `k^-x = Exp[-x Log[k]]` is exponentially smaller than the previous as `x → +∞`, the natural asymptotic scale here is *exponential* (`2^-x`), not a power of `1/x` — so this is a plain `Plus` of powers, not a `SeriesData` with an `O`-term. `n` counts the correction terms kept (bases `2..n+1`); the leading `1` is always present. This is exactly the exp-log form the Gruntz mrv engine consumes to resolve limits like `(Zeta[x] - 1) 2^x → 1` and `Log[Zeta[x] - 1]/x → -Log[2]`.
 
 **Logarithmic series at `x = 0` for special functions**: Some functions have a finite-radius series at the origin built around a single `Log[x]` branch term, with the log baked into the `x^0` coefficient. Naive Taylor-via-`D` cannot reach these (`f(0)` is infinite or the derivatives have poles), so they are emitted from dedicated identities:
@@ -267,11 +257,9 @@ avoid `O(N^2)` symbolic coefficient blow-up.
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[SeriesData](../../power-series/SeriesData/), [HoldAll](../../expression-information/HoldAll/), [D](../../calculus/D/), [Limit](../../calculus/Limit/), [PossibleZeroQ](../../expression-information/PossibleZeroQ/), [$Assumptions](../../simplification/$Assumptions/), [ExpIntegralEi](../../special-functions/ExpIntegralEi/), [LogIntegral](../../special-functions/LogIntegral/)
-
 ## References
+
+**See also:** [SeriesData](../../power-series/SeriesData/), [HoldAll](../../expression-information/HoldAll/), [D](../../calculus/D/), [Limit](../../calculus/Limit/), [PossibleZeroQ](../../expression-information/PossibleZeroQ/), [$Assumptions](../../simplification/$Assumptions/), [ExpIntegralEi](../../special-functions/ExpIntegralEi/), [LogIntegral](../../special-functions/LogIntegral/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (Kluwer, 1992), ch. 3.
 - Joel S. Cohen, *Computer Algebra and Symbolic Computation: Mathematical Methods* (A K Peters, 2003).

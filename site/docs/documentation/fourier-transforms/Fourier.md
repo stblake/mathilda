@@ -63,11 +63,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Protected`.
 
-## See also
-
-[N](../../arithmetic/N/), [NDArray](../../linear-algebra/NDArray/), [List](../../other-advanced/List/), [InverseFourier](../../fourier-transforms/InverseFourier/), [FourierDCT](../../fourier-transforms/FourierDCT/), [FourierDST](../../fourier-transforms/FourierDST/)
-
 ## References
+
+**See also:** [N](../../arithmetic/N/), [NDArray](../../linear-algebra/NDArray/), [List](../../other-advanced/List/), [InverseFourier](../../fourier-transforms/InverseFourier/), [FourierDCT](../../fourier-transforms/FourierDCT/), [FourierDST](../../fourier-transforms/FourierDST/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/fourier-transforms.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/fourier-transforms.md)

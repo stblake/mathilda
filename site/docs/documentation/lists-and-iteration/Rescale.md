@@ -51,11 +51,9 @@ Out[5]= 3/2 + 1/2*I
 
 **Attributes:** `NumericFunction`, `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

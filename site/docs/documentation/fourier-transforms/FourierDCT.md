@@ -41,11 +41,9 @@ Out[3]= {2.0 + 3.0*I, -0.112085 - 1.46508*I, -0.707107 + 0.707107*I, 1.57716 - 1
 
 **Attributes:** `Protected`.
 
-## See also
-
-[N](../../arithmetic/N/), [NDArray](../../linear-algebra/NDArray/)
-
 ## References
+
+**See also:** [N](../../arithmetic/N/), [NDArray](../../linear-algebra/NDArray/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/fourier-transforms.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/fourier-transforms.md)

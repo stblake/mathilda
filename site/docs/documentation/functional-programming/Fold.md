@@ -61,23 +61,17 @@ Out[8]= 11
 ### Applications (4)
 
 ```mathematica
-In[1]:= Fold[f, x, {a, b, c}]
-Out[1]= f[f[f[x, a], b], c]
-```
+In[9]:= Fold[f, x, {a, b, c}]
+Out[9]= f[f[f[x, a], b], c]
 
-```mathematica
-In[1]:= Fold[Plus, 0, {1, 2, 3, 4}]
-Out[1]= 10
-```
+In[10]:= Fold[Plus, 0, {1, 2, 3, 4}]
+Out[10]= 10
 
-```mathematica
-In[1]:= Fold[#1*10 + #2 &, 0, {1, 2, 3}]
-Out[1]= 123
-```
+In[11]:= Fold[#1*10 + #2 &, 0, {1, 2, 3}]
+Out[11]= 123
 
-```mathematica
-In[1]:= Fold[1/(#2 + #1) &, 0, {1, 1, 1, 1, 1, 1, 1, 1}]
-Out[1]= 21/34
+In[12]:= Fold[1/(#2 + #1) &, 0, {1, 1, 1, 1, 1, 1, 1, 1}]
+Out[12]= 21/34
 ```
 
 ## Implementation notes
@@ -110,11 +104,9 @@ buffer. The output preserves the input list's head only in the `FoldList` form.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [FoldList](../../data-structures/FoldList/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [FoldList](../../data-structures/FoldList/)
 
 - Richard Bird, *Introduction to Functional Programming using Haskell*, 2nd ed. (the foldl/reduce accumulator pattern).
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)

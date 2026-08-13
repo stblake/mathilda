@@ -26,10 +26,6 @@ The namei can be individual names or file paths containing pathname separators. 
 
 _No verified examples yet for this function._
 
-## Options & behaviour
-
-### Example
-
 ## Implementation notes
 
 - `Protected`.

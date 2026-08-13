@@ -41,11 +41,9 @@ Out[4]= List Null a b
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Map](../../data-structures/Map/), [Throw](../../control-flow/Throw/), [Catch](../../control-flow/Catch/), [NDArray](../../linear-algebra/NDArray/)
-
 ## References
+
+**See also:** [Map](../../data-structures/Map/), [Throw](../../control-flow/Throw/), [Catch](../../control-flow/Catch/), [NDArray](../../linear-algebra/NDArray/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

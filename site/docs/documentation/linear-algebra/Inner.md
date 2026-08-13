@@ -37,23 +37,17 @@ Out[3]= a1 b1 + a2 b2 + a3 b3
 ### Applications (4)
 
 ```mathematica
-In[1]:= Inner[Times, {a, b}, {c, d}, Plus]
-Out[1]= a c + b d
-```
+In[4]:= Inner[Times, {a, b}, {c, d}, Plus]
+Out[4]= a c + b d
 
-```mathematica
-In[1]:= Inner[Times, {2, 3, 5}, {7, 11, 13}, Plus]
-Out[1]= 112
-```
+In[5]:= Inner[Times, {2, 3, 5}, {7, 11, 13}, Plus]
+Out[5]= 112
 
-```mathematica
-In[1]:= Inner[f, {a, b}, {c, d}, g]
-Out[1]= g[f[a, c], f[b, d]]
-```
+In[6]:= Inner[f, {a, b}, {c, d}, g]
+Out[6]= g[f[a, c], f[b, d]]
 
-```mathematica
-In[1]:= Inner[Times, {{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}, Plus]
-Out[1]= {{19, 22}, {43, 50}}
+In[7]:= Inner[Times, {{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}, Plus]
+Out[7]= {{19, 22}, {43, 50}}
 ```
 
 ## Options & behaviour
@@ -75,11 +69,9 @@ Out[1]= {{19, 22}, {43, 50}}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Dot](../../linear-algebra/Dot/), [Plus](../../arithmetic/Plus/)
-
 ## References
+
+**See also:** [Dot](../../linear-algebra/Dot/), [Plus](../../arithmetic/Plus/)
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

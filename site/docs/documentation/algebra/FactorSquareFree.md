@@ -39,18 +39,14 @@ Out[4]= {(1 + x) (-1 + x)^2, (1 + x^2) (-1 + x^2)^2}
 ### Applications (3)
 
 ```mathematica
-In[1]:= FactorSquareFree[x^5 - x^4 - x + 1]
-Out[1]= (-1 + x)^2 (1 + x + x^2 + x^3)
-```
+In[5]:= FactorSquareFree[x^5 - x^4 - x + 1]
+Out[5]= (-1 + x)^2 (1 + x + x^2 + x^3)
 
-```mathematica
-In[1]:= FactorSquareFree[(x^2+1)^3 (x-1)^2]
-Out[1]= (-1 + x)^2 (1 + x^2)^3
-```
+In[6]:= FactorSquareFree[(x^2+1)^3 (x-1)^2]
+Out[6]= (-1 + x)^2 (1 + x^2)^3
 
-```mathematica
-In[1]:= FactorSquareFree[x^8 + 4 x^6 + 6 x^4 + 4 x^2 + 1]
-Out[1]= (1 + x^2)^4
+In[7]:= FactorSquareFree[x^8 + 4 x^6 + 6 x^4 + 4 x^2 + 1]
+Out[7]= (1 + x^2)^4
 ```
 
 ## Implementation notes

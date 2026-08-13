@@ -43,16 +43,12 @@ Out[2]= c
 
 In[3]:= Extract[{{1,2},{3,4}},{{1,1},{2,2}}]
 Out[3]= {1, 4}
-```
 
-```mathematica
-In[1]:= Extract[a+b+c, 0]
-Out[1]= Plus
-```
+In[4]:= Extract[a+b+c, 0]
+Out[4]= Plus
 
-```mathematica
-In[1]:= Extract[x^4 + 2 x^2 + 1, Position[x^4 + 2 x^2 + 1, x]]
-Out[1]= {x, x}
+In[5]:= Extract[x^4 + 2 x^2 + 1, Position[x^4 + 2 x^2 + 1, x]]
+Out[5]= {x, x}
 ```
 
 ## Implementation notes
@@ -71,11 +67,9 @@ Out[1]= {x, x}
 
 **Attributes:** `NHoldRest`, `Protected`.
 
-## See also
-
-[Position](../../data-structures/Position/), [Part](../../structural-manipulation/Part/), [Span](../../structural-manipulation/Span/)
-
 ## References
+
+**See also:** [Position](../../data-structures/Position/), [Part](../../structural-manipulation/Part/), [Span](../../structural-manipulation/Span/)
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

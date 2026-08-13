@@ -23,18 +23,12 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= Timing[Sum[i, {i, 1000}]]
 Out[1]= {0.000244, 500500}
-```
 
-The timing is non-deterministic, so extract the reproducible result with `Part`:
+In[2]:= Timing[Sum[i, {i, 1, 1000000}]][[2]]
+Out[2]= 500000500000
 
-```mathematica
-In[1]:= Timing[Sum[i, {i, 1, 1000000}]][[2]]
-Out[1]= 500000500000
-```
-
-```mathematica
-In[1]:= Timing[D[Tan[x]^10, x]][[2]]
-Out[1]= 10 Sec[x]^2 Tan[x]^9
+In[3]:= Timing[D[Tan[x]^10, x]][[2]]
+Out[3]= 10 Sec[x]^2 Tan[x]^9
 ```
 
 ## Implementation notes
@@ -49,11 +43,9 @@ Out[1]= 10 Sec[x]^2 Tan[x]^9
 
 **Attributes:** `HoldAll`, `Protected`, `SequenceHold`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/), [SequenceHold](../../expression-information/SequenceHold/), [AbsoluteTiming](../../time-and-date/AbsoluteTiming/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/), [SequenceHold](../../expression-information/SequenceHold/), [AbsoluteTiming](../../time-and-date/AbsoluteTiming/)
 
 - Source: [`src/datetime.c`](https://github.com/stblake/mathilda/blob/main/src/datetime.c)
 - Specification: [`docs/spec/builtins/time-and-date.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/time-and-date.md)

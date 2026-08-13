@@ -42,8 +42,12 @@ Out[3]= 11.592 + 2.15751e-13*I
 
 In[4]:= ND[{Exp[x], Sin[x]}, x, 1]
 Out[4]= {2.71828, 0.540302}
+```
 
-In[5]:= ND[Re[Cos[I y]], y, 1]          (* non-analytic: use EulerSum *)
+Non-analytic: use EulerSum
+
+```mathematica
+In[5]:= ND[Re[Cos[I y]], y, 1]
 Out[5]= 1.1752
 ```
 
@@ -63,23 +67,17 @@ Out[8]= 12.0 - 9.99201e-16*I
 ### Applications (4)
 
 ```mathematica
-In[1]:= ND[Sin[x], x, 1]
-Out[1]= 0.540302
-```
+In[9]:= ND[Sin[x], x, 1]
+Out[9]= 0.540302
 
-```mathematica
-In[1]:= ND[Gamma[x], x, 1]
-Out[1]= -0.577216
-```
+In[10]:= ND[Gamma[x], x, 1]
+Out[10]= -0.577216
 
-```mathematica
-In[1]:= ND[BesselJ[0, x], x, 2]
-Out[1]= -0.576725
-```
+In[11]:= ND[BesselJ[0, x], x, 2]
+Out[11]= -0.576725
 
-```mathematica
-In[1]:= ND[Tan[x], {x, 2}, 1]
-Out[1]= 11.4484
+In[12]:= ND[Tan[x], {x, 2}, 1]
+Out[12]= 11.4484
 ```
 
 ## Algorithm
@@ -130,11 +128,9 @@ Memory: receives `res` owned by the evaluator; returns a fresh Expr* on success 
 
 **Attributes:** `Protected`.
 
-## See also
-
-[NResidue](../../numerical-calculus/NResidue/), [Chop](../../elementary-functions/Chop/), [Abs](../../arithmetic/Abs/), [NIntegrate](../../numerical-calculus/NIntegrate/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
-
 ## References
+
+**See also:** [NResidue](../../numerical-calculus/NResidue/), [Chop](../../elementary-functions/Chop/), [Abs](../../arithmetic/Abs/), [NIntegrate](../../numerical-calculus/NIntegrate/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)

@@ -19,25 +19,15 @@ Out[1]= 3
 
 In[2]:= Re[7]
 Out[2]= 7
-```
 
-Being `Listable`, `Re` maps over a list of complex numbers, and it sees through
-exact arithmetic — `(1 + I)^10 = 32 I` is purely imaginary, so its real part is
-exactly `0`:
+In[3]:= Re[{1 + I, 2 - 3 I, 5}]
+Out[3]= {1, 2, 5}
 
-```mathematica
-In[1]:= Re[{1 + I, 2 - 3 I, 5}]
-Out[1]= {1, 2, 5}
+In[4]:= Re[(1 + I)^10]
+Out[4]= 0
 
-In[2]:= Re[(1 + I)^10]
-Out[2]= 0
-```
-
-It also rationalises quotients to extract an exact real part:
-
-```mathematica
-In[1]:= Re[1/(2 + 3 I)]
-Out[1]= 2/13
+In[5]:= Re[1/(2 + 3 I)]
+Out[5]= 2/13
 ```
 
 ## Implementation notes
@@ -46,11 +36,9 @@ Out[1]= 2/13
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Im](../../arithmetic/Im/), [ReIm](../../arithmetic/ReIm/), [Abs](../../arithmetic/Abs/), [Sign](../../arithmetic/Sign/), [Conjugate](../../arithmetic/Conjugate/), [Arg](../../arithmetic/Arg/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
-
 ## References
+
+**See also:** [Im](../../arithmetic/Im/), [ReIm](../../arithmetic/ReIm/), [Abs](../../arithmetic/Abs/), [Sign](../../arithmetic/Sign/), [Conjugate](../../arithmetic/Conjugate/), [Arg](../../arithmetic/Arg/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
 
 - Source: [`src/complex.c`](https://github.com/stblake/mathilda/blob/main/src/complex.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

@@ -28,55 +28,45 @@ Out[4]= 2^(1/3) 3^(2/3)
 
 In[5]:= 12^(1/3)
 Out[5]= 2^(2/3) 3^(1/3)
+```
 
-In[6]:= 60^(1/3)            (* 3 and 5 share eff 1/3 -> grouped *)
+3 and 5 share eff 1/3 -> grouped
+
+```mathematica
+In[6]:= 60^(1/3)
 Out[6]= 2^(2/3) 15^(1/3)
+```
 
-In[7]:= 6^(1/3)             (* uniform exps -> stays *)
+Uniform exps -> stays
+
+```mathematica
+In[7]:= 6^(1/3)
 Out[7]= 6^(1/3)
 ```
 
 ### Applications (7)
 
 ```mathematica
-In[1]:= 2^200
-Out[1]= 1606938044258990275541962092341162602522202993782792835301376
-```
+In[8]:= 2^200
+Out[8]= 1606938044258990275541962092341162602522202993782792835301376
 
-```mathematica
-In[1]:= (1/2)^-5
-Out[1]= 32
-```
+In[9]:= (1/2)^-5
+Out[9]= 32
 
-```mathematica
-In[1]:= 27^(2/3)
-Out[1]= 9
-```
+In[10]:= 27^(2/3)
+Out[10]= 9
 
-```mathematica
-In[1]:= 0^0
-Out[1]= Indeterminate
-```
+In[11]:= 0^0
+Out[11]= Indeterminate
 
-A Gaussian-integer base is raised exactly, keeping the real and imaginary parts as integers:
+In[12]:= (3 + 4 I)^10
+Out[12]= -9653287 + 1476984*I
 
-```mathematica
-In[1]:= (3 + 4 I)^10
-Out[1]= -9653287 + 1476984*I
-```
+In[13]:= Sqrt[-12]
+Out[13]= (2*I) Sqrt[3]
 
-A negative radicand is split into its real radical and the principal complex unit:
-
-```mathematica
-In[1]:= Sqrt[-12]
-Out[1]= (2*I) Sqrt[3]
-```
-
-Irrational powers numericalise to arbitrary precision on request:
-
-```mathematica
-In[1]:= N[2^(1/2), 40]
-Out[1]= 1.4142135623730950488016887242096980785697
+In[14]:= N[2^(1/2), 40]
+Out[14]= 1.4142135623730950488016887242096980785697
 ```
 
 ## Performance
@@ -141,11 +131,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Listable`, `NumericFunction`, `OneIdentity`, `Protected`.
 
-## See also
-
-[I](../../mathematical-constants/I/), [Times](../../arithmetic/Times/)
-
 ## References
+
+**See also:** [I](../../mathematical-constants/I/), [Times](../../arithmetic/Times/)
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on binary exponentiation.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on simplification of radical powers.

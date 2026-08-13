@@ -18,16 +18,12 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= RepeatedTiming[Sum[i, {i, 100}]]
 Out[1]= {4.53806e-05, 5050}
-```
 
-```mathematica
-In[1]:= Last[RepeatedTiming[Factorial[100]]]
-Out[1]= 93326215443944152681699238856266700490715968264381621468592963895217599993229915608941463976156518286253697920827223758251185210916864000000000000000000000000
-```
+In[2]:= Last[RepeatedTiming[Factorial[100]]]
+Out[2]= 93326215443944152681699238856266700490715968264381621468592963895217599993229915608941463976156518286253697920827223758251185210916864000000000000000000000000
 
-```mathematica
-In[1]:= Last[RepeatedTiming[Total[Range[10000]]]]
-Out[1]= 50005000
+In[3]:= Last[RepeatedTiming[Total[Range[10000]]]]
+Out[3]= 50005000
 ```
 
 ## Implementation notes
@@ -42,11 +38,9 @@ Out[1]= 50005000
 
 **Attributes:** `HoldFirst`, `Protected`, `SequenceHold`.
 
-## See also
-
-[HoldFirst](../../other-advanced/HoldFirst/), [SequenceHold](../../expression-information/SequenceHold/)
-
 ## References
+
+**See also:** [HoldFirst](../../other-advanced/HoldFirst/), [SequenceHold](../../expression-information/SequenceHold/)
 
 - Source: [`src/datetime.c`](https://github.com/stblake/mathilda/blob/main/src/datetime.c)
 - Specification: [`docs/spec/builtins/time-and-date.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/time-and-date.md)

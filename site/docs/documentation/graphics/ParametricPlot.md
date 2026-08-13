@@ -79,11 +79,9 @@ In both forms the body can be any expression that evaluates to a 2-element numer
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/)
 
 - Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)

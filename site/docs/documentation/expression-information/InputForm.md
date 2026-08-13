@@ -31,16 +31,12 @@ Out[2]= a + b
 
 In[3]:= InputForm[{1, 2, 3}]
 Out[3]= {1, 2, 3}
-```
 
-```mathematica
-In[1]:= InputForm[1/2 + 3/4 I]
-Out[1]= 1/2 + 3/4*I
-```
+In[4]:= InputForm[1/2 + 3/4 I]
+Out[4]= 1/2 + 3/4*I
 
-```mathematica
-In[1]:= InputForm[{1, 1/2, "a", x}]
-Out[1]= {1, 1/2, "a", x}
+In[5]:= InputForm[{1, 1/2, "a", x}]
+Out[5]= {1, 1/2, "a", x}
 ```
 
 ## Implementation notes

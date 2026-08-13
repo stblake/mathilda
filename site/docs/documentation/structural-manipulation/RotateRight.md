@@ -27,11 +27,9 @@ behaviour are identical with the opposite sign.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[RotateLeft](../../structural-manipulation/RotateLeft/)
-
 ## References
+
+**See also:** [RotateLeft](../../structural-manipulation/RotateLeft/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

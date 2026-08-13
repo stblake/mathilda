@@ -76,11 +76,9 @@ with PrimeOmega/LiouvilleLambda; it simply returns the count of factors rather t
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[PrimeOmega](../../number-theory/PrimeOmega/)
-
 ## References
+
+**See also:** [PrimeOmega](../../number-theory/PrimeOmega/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)

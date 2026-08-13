@@ -54,11 +54,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Map](../../data-structures/Map/), [Thread](../../functional-programming/Thread/), [NDArray](../../linear-algebra/NDArray/)
-
 ## References
+
+**See also:** [Map](../../data-structures/Map/), [Thread](../../functional-programming/Thread/), [NDArray](../../linear-algebra/NDArray/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

@@ -46,38 +46,20 @@ Out[5]= {{1.0, 0.5, 0.333333}, {0.5, 0.333333, 0.25}, {0.333333, 0.25, 0.2}}
 ### Applications (5)
 
 ```mathematica
-In[1]:= HilbertMatrix[3]
-Out[1]= {{1, 1/2, 1/3}, {1/2, 1/3, 1/4}, {1/3, 1/4, 1/5}}
-```
+In[6]:= HilbertMatrix[3]
+Out[6]= {{1, 1/2, 1/3}, {1/2, 1/3, 1/4}, {1/3, 1/4, 1/5}}
 
-Rectangular Hilbert matrices are available too:
+In[7]:= HilbertMatrix[{2, 4}]
+Out[7]= {{1, 1/2, 1/3, 1/4}, {1/2, 1/3, 1/4, 1/5}}
 
-```mathematica
-In[1]:= HilbertMatrix[{2, 4}]
-Out[1]= {{1, 1/2, 1/3, 1/4}, {1/2, 1/3, 1/4, 1/5}}
-```
+In[8]:= Inverse[HilbertMatrix[3]]
+Out[8]= {{9, -36, 30}, {-36, 192, -180}, {30, -180, 180}}
 
-The Hilbert matrix is the textbook ill-conditioned matrix, yet its exact
-rational inverse is integer-valued:
+In[9]:= Det[HilbertMatrix[5]]
+Out[9]= 1/266716800000
 
-```mathematica
-In[1]:= Inverse[HilbertMatrix[3]]
-Out[1]= {{9, -36, 30}, {-36, 192, -180}, {30, -180, 180}}
-```
-
-Its determinant is a tiny but exact rational (these are reciprocals of the
-Hilbert determinants), illustrating the near-singularity:
-
-```mathematica
-In[1]:= Det[HilbertMatrix[5]]
-Out[1]= 1/266716800000
-```
-
-Because entries are kept exact, eigenvalues come out in closed form:
-
-```mathematica
-In[1]:= Eigenvalues[HilbertMatrix[2]]
-Out[1]= {1/24 (16 + 4 Sqrt[13]), 1/24 (16 - 4 Sqrt[13])}
+In[10]:= Eigenvalues[HilbertMatrix[2]]
+Out[10]= {1/24 (16 + 4 Sqrt[13]), 1/24 (16 - 4 Sqrt[13])}
 ```
 
 ## Options & behaviour
@@ -136,11 +118,9 @@ Diagnostics mirror Wolfram's surface text:
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Rational](../../arithmetic/Rational/)
-
 ## References
+
+**See also:** [Rational](../../arithmetic/Rational/)
 
 - Source: [`src/linalg/hilbertmat.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/hilbertmat.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

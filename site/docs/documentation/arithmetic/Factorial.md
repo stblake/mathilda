@@ -34,23 +34,17 @@ Out[3]= 1
 ### Applications (4)
 
 ```mathematica
-In[1]:= 20!
-Out[1]= 2432902008176640000
-```
+In[4]:= 20!
+Out[4]= 2432902008176640000
 
-```mathematica
-In[1]:= Factorial[30]
-Out[1]= 265252859812191058636308480000000
-```
+In[5]:= Factorial[30]
+Out[5]= 265252859812191058636308480000000
 
-```mathematica
-In[1]:= 0!
-Out[1]= 1
-```
+In[6]:= 0!
+Out[6]= 1
 
-```mathematica
-In[1]:= (1/2)!
-Out[1]= 1/2 Sqrt[Pi]
+In[7]:= (1/2)!
+Out[7]= 1/2 Sqrt[Pi]
 ```
 
 ## Implementation notes

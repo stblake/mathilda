@@ -33,26 +33,20 @@ Out[3]= 20
 ### Applications (5)
 
 ```mathematica
-In[1]:= Position[{a,b,a},a]
-Out[1]= {{1}, {3}}
+In[4]:= Position[{a,b,a},a]
+Out[4]= {{1}, {3}}
 
-In[2]:= Position[{1,2,3,4},_?EvenQ]
-Out[2]= {{2}, {4}}
-```
+In[5]:= Position[{1,2,3,4},_?EvenQ]
+Out[5]= {{2}, {4}}
 
-```mathematica
-In[1]:= Position[{1, 2, 3, 4, 5, 6}, _?PrimeQ]
-Out[1]= {{2}, {3}, {5}}
-```
+In[6]:= Position[{1, 2, 3, 4, 5, 6}, _?PrimeQ]
+Out[6]= {{2}, {3}, {5}}
 
-```mathematica
-In[1]:= Position[x^2 + y^2 + z^2, _Symbol]
-Out[1]= {{0}, {1, 0}, {1, 1}, {2, 0}, {2, 1}, {3, 0}, {3, 1}}
-```
+In[7]:= Position[x^2 + y^2 + z^2, _Symbol]
+Out[7]= {{0}, {1, 0}, {1, 1}, {2, 0}, {2, 1}, {3, 0}, {3, 1}}
 
-```mathematica
-In[1]:= Position[Sin[Cos[x] + Tan[x]], x, Infinity]
-Out[1]= {{1, 1, 1}, {1, 2, 1}}
+In[8]:= Position[Sin[Cos[x] + Tan[x]], x, Infinity]
+Out[8]= {{1, 1, 1}, {1, 2, 1}}
 ```
 
 ## Implementation notes
@@ -63,11 +57,9 @@ Out[1]= {{1, 1, 1}, {1, 2, 1}}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Part](../../structural-manipulation/Part/), [Extract](../../structural-manipulation/Extract/)
-
 ## References
+
+**See also:** [Part](../../structural-manipulation/Part/), [Extract](../../structural-manipulation/Extract/)
 
 - Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

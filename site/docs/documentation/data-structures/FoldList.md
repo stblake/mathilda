@@ -45,23 +45,17 @@ Out[4]= <|"a" -> 2, "b" -> 6, "c" -> 24|>
 ### Applications (4)
 
 ```mathematica
-In[1]:= FoldList[Plus, 0, {1, 2, 3, 4}]
-Out[1]= {0, 1, 3, 6, 10}
-```
+In[5]:= FoldList[Plus, 0, {1, 2, 3, 4}]
+Out[5]= {0, 1, 3, 6, 10}
 
-```mathematica
-In[1]:= FoldList[Times, {1, 2, 3, 4, 5}]
-Out[1]= {1, 2, 6, 24, 120}
-```
+In[6]:= FoldList[Times, {1, 2, 3, 4, 5}]
+Out[6]= {1, 2, 6, 24, 120}
 
-```mathematica
-In[1]:= FoldList[Max, {3, 1, 4, 1, 5, 9, 2, 6}]
-Out[1]= {3, 3, 4, 4, 5, 9, 9, 9}
-```
+In[7]:= FoldList[Max, {3, 1, 4, 1, 5, 9, 2, 6}]
+Out[7]= {3, 3, 4, 4, 5, 9, 9, 9}
 
-```mathematica
-In[1]:= FoldList[(#1 + #2)/2 &, 0, {1, 1, 1, 1}]
-Out[1]= {0, 1/2, 3/4, 7/8, 15/16}
+In[8]:= FoldList[(#1 + #2)/2 &, 0, {1, 1, 1, 1}]
+Out[8]= {0, 1/2, 3/4, 7/8, 15/16}
 ```
 
 ## Implementation notes
@@ -77,11 +71,9 @@ head** (preserved via `expr_copy(list_head)`). Shares all machinery with `Fold`.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Accumulate](../../arithmetic/Accumulate/), [Differences](../../arithmetic/Differences/), [Ratios](../../arithmetic/Ratios/), [Total](../../arithmetic/Total/), [Fold](../../functional-programming/Fold/)
-
 ## References
+
+**See also:** [Accumulate](../../arithmetic/Accumulate/), [Differences](../../arithmetic/Differences/), [Ratios](../../arithmetic/Ratios/), [Total](../../arithmetic/Total/), [Fold](../../functional-programming/Fold/)
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

@@ -30,18 +30,14 @@ Out[2]= f[x, y] + g[x, y]
 ### Applications (3)
 
 ```mathematica
-In[1]:= Through[(f + g)[x]]
-Out[1]= f[x] + g[x]
-```
+In[3]:= Through[(f + g)[x]]
+Out[3]= f[x] + g[x]
 
-```mathematica
-In[1]:= Through[{Sin, Cos, Tan}[Pi/4]]
-Out[1]= {1/Sqrt[2], 1/Sqrt[2], 1}
-```
+In[4]:= Through[{Sin, Cos, Tan}[Pi/4]]
+Out[4]= {1/Sqrt[2], 1/Sqrt[2], 1}
 
-```mathematica
-In[1]:= f[x_] := x^2; g[x_] := x + 1; Through[(f + g)[3]]
-Out[1]= 13
+In[5]:= f[x_] := x^2; g[x_] := x + 1; Through[(f + g)[3]]
+Out[5]= 13
 ```
 
 ## Implementation notes

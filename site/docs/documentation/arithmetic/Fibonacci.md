@@ -49,28 +49,20 @@ Out[6]= 0.494833
 ### Applications (5)
 
 ```mathematica
-In[1]:= Fibonacci[10]
-Out[1]= 55
-```
+In[7]:= Fibonacci[10]
+Out[7]= 55
 
-```mathematica
-In[1]:= Fibonacci[100]
-Out[1]= 354224848179261915075
-```
+In[8]:= Fibonacci[100]
+Out[8]= 354224848179261915075
 
-```mathematica
-In[1]:= Fibonacci[10, x]
-Out[1]= 5 x + 20 x^3 + 21 x^5 + 8 x^7 + x^9
-```
+In[9]:= Fibonacci[10, x]
+Out[9]= 5 x + 20 x^3 + 21 x^5 + 8 x^7 + x^9
 
-```mathematica
-In[1]:= Fibonacci[200]/Fibonacci[199] // N
-Out[1]= 1.61803
-```
+In[10]:= Fibonacci[200]/Fibonacci[199] // N
+Out[10]= 1.61803
 
-```mathematica
-In[1]:= Sum[Fibonacci[k], {k, 1, 10}] == Fibonacci[12] - 1
-Out[1]= True
+In[11]:= Sum[Fibonacci[k], {k, 1, 10}] == Fibonacci[12] - 1
+Out[11]= True
 ```
 
 ## Algorithm
@@ -130,11 +122,9 @@ Memory: the builtin honours the ownership contract -- it never frees `res`, retu
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Complex](../../arithmetic/Complex/), [N](../../arithmetic/N/)
-
 ## References
+
+**See also:** [Complex](../../arithmetic/Complex/), [N](../../arithmetic/N/)
 
 - Source: [`src/fibonacci.c`](https://github.com/stblake/mathilda/blob/main/src/fibonacci.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

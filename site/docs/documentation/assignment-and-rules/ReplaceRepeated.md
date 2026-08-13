@@ -22,16 +22,12 @@ Out[2]= 1 + a
 
 In[3]:= Sin[x]^2 + Cos[x]^2 //. Sin[a_]^2 + Cos[a_]^2 -> 1
 Out[3]= 1
-```
 
-```mathematica
-In[1]:= f[f[f[x]]] //. f[a_] :> a + 1
-Out[1]= 3 + x
-```
+In[4]:= f[f[f[x]]] //. f[a_] :> a + 1
+Out[4]= 3 + x
 
-```mathematica
-In[1]:= {10, 5, 3} //. {a___, x_, y_, b___} /; x > y :> {a, y, x, b}
-Out[1]= {3, 5, 10}
+In[5]:= {10, 5, 3} //. {a___, x_, y_, b___} /; x > y :> {a, y, x, b}
+Out[5]= {3, 5, 10}
 ```
 
 ## Implementation notes

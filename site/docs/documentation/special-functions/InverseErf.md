@@ -31,34 +31,18 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= InverseErf[0]
 Out[1]= 0
-```
 
-High-precision evaluation for real arguments in `[-1, 1]`:
+In[2]:= N[InverseErf[1/2], 40]
+Out[2]= 0.47693627620446987338141835364313055980899
 
-```mathematica
-In[1]:= N[InverseErf[1/2], 40]
-Out[1]= 0.47693627620446987338141835364313055980899
-```
+In[3]:= Series[InverseErf[x], {x, 0, 7}]
+Out[3]= 1/2 Sqrt[Pi] x + 1/24 Pi^(3/2) x^3 + 7/960 Pi^(5/2) x^5 + 127/80640 Pi^(7/2) x^7 + O[x]^8
 
-The Maclaurin series in powers of `Sqrt[Pi]`:
+In[4]:= D[InverseErf[z], z]
+Out[4]= 1/2 Sqrt[Pi] E^InverseErf[z]^2
 
-```mathematica
-In[1]:= Series[InverseErf[x], {x, 0, 7}]
-Out[1]= 1/2 Sqrt[Pi] x + 1/24 Pi^(3/2) x^3 + 7/960 Pi^(5/2) x^5 + 127/80640 Pi^(7/2) x^7 + O[x]^8
-```
-
-The derivative is closed-form, `D[InverseErf[z], z] == (Sqrt[Pi]/2) E^(InverseErf[z]^2)`:
-
-```mathematica
-In[1]:= D[InverseErf[z], z]
-Out[1]= 1/2 Sqrt[Pi] E^InverseErf[z]^2
-```
-
-A statistical application: the two-sided 95% normal quantile is `Sqrt[2] InverseErf[2 p - 1]` with `p = 0.95`:
-
-```mathematica
-In[1]:= N[Sqrt[2] InverseErf[2 (95/100) - 1], 30]
-Out[1]= 1.644853626951472714863848907989
+In[5]:= N[Sqrt[2] InverseErf[2 (95/100) - 1], 30]
+Out[5]= 1.644853626951472714863848907989
 ```
 
 ## Algorithm
@@ -121,11 +105,9 @@ Attributes: Listable, NumericFunction, Protected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[D](../../calculus/D/)
-
 ## References
+
+**See also:** [D](../../calculus/D/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

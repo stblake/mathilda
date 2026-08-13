@@ -16,7 +16,7 @@ n is divisible by m when n is an integer multiple of m; this is effectively Mod\
 
 </details>
 
-## Examples (6)
+## Examples (15)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -40,6 +40,37 @@ Out[5]= False
 
 In[6]:= Divisible[{1, 2, 3, 4, 5, 6}, 2]
 Out[6]= {False, True, False, True, False, True}
+```
+
+### Worked examples (9)
+
+```mathematica
+In[7]:= Divisible[10^3000 + 1, 16001]
+Out[7]= True
+
+In[8]:= Divisible[0, 0]
+Out[8]= True
+
+In[9]:= Divisible[6, 0]
+Out[9]= False
+
+In[10]:= Divisible[10, -2]
+Out[10]= True
+
+In[11]:= Divisible[3 + I, 1 - I]
+Out[11]= True
+
+In[12]:= Divisible[3/2, 1/2]
+Out[12]= True
+
+In[13]:= Divisible[2 Pi, Pi/2]
+Out[13]= True
+
+In[14]:= Divisible[Sqrt[6], Sqrt[2]]
+Out[14]= False
+
+In[15]:= Divisible[{1, 2, 3, 4, 5, 6}, 2]
+Out[15]= {False, True, False, True, False, True}
 ```
 
 ## Implementation notes

@@ -27,22 +27,14 @@ Out[3]= 252097800623
 ### Applications (3)
 
 ```mathematica
-In[1]:= Prime[100]
-Out[1]= 541
-```
+In[4]:= Prime[100]
+Out[4]= 541
 
-`Prime` is `Listable`, so it threads over a list of indices:
+In[5]:= Prime[{1, 3, 4, 10}]
+Out[5]= {2, 5, 7, 29}
 
-```mathematica
-In[1]:= Prime[{1, 3, 4, 10}]
-Out[1]= {2, 5, 7, 29}
-```
-
-It reaches well beyond the small-prime table by inverting `PrimePi`:
-
-```mathematica
-In[1]:= Prime[10^10]
-Out[1]= 252097800623
+In[6]:= Prime[10^10]
+Out[6]= 252097800623
 ```
 
 ## Options & behaviour
@@ -109,11 +101,9 @@ exceed that bound, the call is left unevaluated.
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[PrimePi](../../number-theory/PrimePi/), [NextPrime](../../number-theory/NextPrime/)
-
 ## References
+
+**See also:** [PrimePi](../../number-theory/PrimePi/), [NextPrime](../../number-theory/NextPrime/)
 
 - M. Cipolla, "La determinazione assintotica dell'n-esimo numero primo", Rend. Accad. Sci. Fis. Mat. Napoli 8 (1902), 132–166.
 - Source: [`src/numbertheory/prime.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory/prime.c)

@@ -58,11 +58,9 @@ Out[5]= Ramp[1.0 + 2.0*I]
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Clip](../../elementary-functions/Clip/), [UnitStep](../../elementary-functions/UnitStep/), [Complex](../../arithmetic/Complex/)
-
 ## References
+
+**See also:** [Clip](../../elementary-functions/Clip/), [UnitStep](../../elementary-functions/UnitStep/), [Complex](../../arithmetic/Complex/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)

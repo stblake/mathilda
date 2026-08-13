@@ -41,30 +41,17 @@ Out[7]= 2 Cosh[t] Sinh[t] Sech[2 t]
 ### Applications (4)
 
 ```mathematica
-In[1]:= TrigExpand[Sin[a + b]]
-Out[1]= Cos[a] Sin[b] + Sin[a] Cos[b]
-```
+In[8]:= TrigExpand[Sin[a + b]]
+Out[8]= Cos[a] Sin[b] + Sin[a] Cos[b]
 
-Integer multiples in the argument are expanded via the multiple-angle formulas:
+In[9]:= TrigExpand[Sin[3 x]]
+Out[9]= -Sin[x]^3 + 3 Cos[x]^2 Sin[x]
 
-```mathematica
-In[1]:= TrigExpand[Sin[3 x]]
-Out[1]= -Sin[x]^3 + 3 Cos[x]^2 Sin[x]
-```
+In[10]:= TrigExpand[Cos[2 x]]
+Out[10]= Cos[x]^2 - Sin[x]^2
 
-The double-angle identity for the cosine drops out automatically:
-
-```mathematica
-In[1]:= TrigExpand[Cos[2 x]]
-Out[1]= Cos[x]^2 - Sin[x]^2
-```
-
-`TrigExpand` works on hyperbolic functions as well, giving the addition formula
-for `sinh`:
-
-```mathematica
-In[1]:= TrigExpand[Sinh[x + y]]
-Out[1]= Cosh[x] Sinh[y] + Sinh[x] Cosh[y]
+In[11]:= TrigExpand[Sinh[x + y]]
+Out[11]= Cosh[x] Sinh[y] + Sinh[x] Cosh[y]
 ```
 
 ## Implementation notes
@@ -143,11 +130,9 @@ calls. The pipeline (with the trig canonicalizer suppressed throughout):
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Sin](../../elementary-functions/Sin/), [Cos](../../elementary-functions/Cos/), [Tan](../../elementary-functions/Tan/), [Cot](../../elementary-functions/Cot/), [Sec](../../elementary-functions/Sec/), [Csc](../../elementary-functions/Csc/), [Sinh](../../elementary-functions/Sinh/), [Cosh](../../elementary-functions/Cosh/)
-
 ## References
+
+**See also:** [Sin](../../elementary-functions/Sin/), [Cos](../../elementary-functions/Cos/), [Tan](../../elementary-functions/Tan/), [Cot](../../elementary-functions/Cot/), [Sec](../../elementary-functions/Sec/), [Csc](../../elementary-functions/Csc/), [Sinh](../../elementary-functions/Sinh/), [Cosh](../../elementary-functions/Cosh/)
 
 - Source: [`src/simp/trigsimp.c`](https://github.com/stblake/mathilda/blob/main/src/simp/trigsimp.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)

@@ -51,11 +51,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Rule](../../assignment-and-rules/Rule/), [InputForm](../../expression-information/InputForm/), [FullForm](../../expression-information/FullForm/)
-
 ## References
+
+**See also:** [Rule](../../assignment-and-rules/Rule/), [InputForm](../../expression-information/InputForm/), [FullForm](../../expression-information/FullForm/)
 
 - Source: [`src/graph/graph.c`](https://github.com/stblake/mathilda/blob/main/src/graph/graph.c)
 - Specification: [`docs/spec/builtins/graphs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphs.md)

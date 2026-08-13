@@ -27,11 +27,9 @@ Out[2]= <|"a" -> 1|>
 
 **Attributes:** `Protected`.
 
-## See also
-
-[MinimalBy](../../functional-programming/MinimalBy/)
-
 ## References
+
+**See also:** [MinimalBy](../../functional-programming/MinimalBy/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

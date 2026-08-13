@@ -72,11 +72,9 @@ Out[6]= {30.103, 30.103}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Plus](../../arithmetic/Plus/), [Complex](../../arithmetic/Complex/), [Pi](../../mathematical-constants/Pi/)
-
 ## References
+
+**See also:** [Plus](../../arithmetic/Plus/), [Complex](../../arithmetic/Complex/), [Pi](../../mathematical-constants/Pi/)
 
 - Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)

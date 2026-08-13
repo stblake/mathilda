@@ -54,28 +54,20 @@ Out[5]= <|"a" -> 9, "b" -> 2|>
 ### Applications (5)
 
 ```mathematica
-In[1]:= MapAt[f, {a, b, c, d}, 2]
-Out[1]= {a, f[b], c, d}
-```
+In[6]:= MapAt[f, {a, b, c, d}, 2]
+Out[6]= {a, f[b], c, d}
 
-```mathematica
-In[1]:= MapAt[f, {a, b, c, d}, -1]
-Out[1]= {a, b, c, f[d]}
-```
+In[7]:= MapAt[f, {a, b, c, d}, -1]
+Out[7]= {a, b, c, f[d]}
 
-```mathematica
-In[1]:= MapAt[f, {{a, b}, {c, d}}, {2, 1}]
-Out[1]= {{a, b}, {f[c], d}}
-```
+In[8]:= MapAt[f, {{a, b}, {c, d}}, {2, 1}]
+Out[8]= {{a, b}, {f[c], d}}
 
-```mathematica
-In[1]:= MapAt[f, {a, b, c, d}, {{1}, {3}}]
-Out[1]= {f[a], b, f[c], d}
-```
+In[9]:= MapAt[f, {a, b, c, d}, {{1}, {3}}]
+Out[9]= {f[a], b, f[c], d}
 
-```mathematica
-In[1]:= MapAt[Framed, {1, 2, 3, 4, 5}, {{1}, {-1}}]
-Out[1]= {Framed[1], 2, 3, 4, Framed[5]}
+In[10]:= MapAt[Framed, {1, 2, 3, 4, 5}, {{1}, {-1}}]
+Out[10]= {Framed[1], 2, 3, 4, Framed[5]}
 ```
 
 ## Implementation notes
@@ -102,11 +94,9 @@ array and overwrites only the targeted slot, then rebuilds with
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Position](../../data-structures/Position/), [Span](../../structural-manipulation/Span/), [List](../../other-advanced/List/), [ReplaceAt](../../assignment-and-rules/ReplaceAt/)
-
 ## References
+
+**See also:** [Position](../../data-structures/Position/), [Span](../../structural-manipulation/Span/), [List](../../other-advanced/List/), [ReplaceAt](../../assignment-and-rules/ReplaceAt/)
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

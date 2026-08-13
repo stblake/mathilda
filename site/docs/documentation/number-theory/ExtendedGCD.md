@@ -16,31 +16,34 @@ Computed by folding GMP's mpz\_gcdext pairwise; accepts machine and BigInt integ
 
 </details>
 
-## Examples (5)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
+
+### Worked examples (1)
+
+```mathematica
+In[1]:= ExtendedGCD[3, {5, 15}]
+Out[1]= {{1, {2, -1}}, {3, {1, 0}}}
+```
 
 ### Applications (5)
 
 ```mathematica
-In[1]:= ExtendedGCD[12, 18]
-Out[1]= {6, {-1, 1}}
+In[2]:= ExtendedGCD[12, 18]
+Out[2]= {6, {-1, 1}}
 
-In[2]:= ExtendedGCD[15, 25, 35]
-Out[2]= {5, {2, -1, 0}}
-```
+In[3]:= ExtendedGCD[15, 25, 35]
+Out[3]= {5, {2, -1, 0}}
 
-```mathematica
-In[1]:= ExtendedGCD[17, 100]
-Out[1]= {1, {-47, 8}}
+In[4]:= ExtendedGCD[17, 100]
+Out[4]= {1, {-47, 8}}
 
-In[2]:= PowerMod[17, -1, 100]
-Out[2]= 53
-```
+In[5]:= PowerMod[17, -1, 100]
+Out[5]= 53
 
-```mathematica
-In[1]:= ExtendedGCD[2^64, 3^40]
-Out[1]= {1, {3997565229372176830, -6065478849745282079}}
+In[6]:= ExtendedGCD[2^64, 3^40]
+Out[6]= {1, {3997565229372176830, -6065478849745282079}}
 ```
 
 ## Implementation notes
@@ -59,11 +62,9 @@ Out[1]= {1, {3997565229372176830, -6065478849745282079}}
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [OneIdentity](../../expression-information/OneIdentity/), [GCD](../../number-theory/GCD/)
-
 ## References
+
+**See also:** [Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [OneIdentity](../../expression-information/OneIdentity/), [GCD](../../number-theory/GCD/)
 
 - D. E. Knuth, *The Art of Computer Programming, Vol. 2: Seminumerical Algorithms*, 3rd ed. (Addison-Wesley, 1997), §4.5.2.
 - Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)

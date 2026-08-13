@@ -25,31 +25,21 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= GCD[12, 18, 30]
 Out[1]= 6
-```
 
-```mathematica
-In[1]:= GCD[2^20, 2^15]
-Out[1]= 32768
-```
+In[2]:= GCD[2^20, 2^15]
+Out[2]= 32768
 
-```mathematica
-In[1]:= GCD[1/2, 1/3]
-Out[1]= 1/6
-```
+In[3]:= GCD[1/2, 1/3]
+Out[3]= 1/6
 
-```mathematica
-In[1]:= GCD[0, 5]
-Out[1]= 5
-```
+In[4]:= GCD[0, 5]
+Out[4]= 5
 
-```mathematica
-In[1]:= GCD[2^60 - 1, 2^36 - 1]
-Out[1]= 4095
-```
+In[5]:= GCD[2^60 - 1, 2^36 - 1]
+Out[5]= 4095
 
-```mathematica
-In[1]:= GCD[Fibonacci[30], Fibonacci[18]]
-Out[1]= 8
+In[6]:= GCD[Fibonacci[30], Fibonacci[18]]
+Out[6]= 8
 ```
 
 ## Performance
@@ -73,11 +63,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Flat`, `Listable`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
 
-## See also
-
-[LCM](../../number-theory/LCM/)
-
 ## References
+
+**See also:** [LCM](../../number-theory/LCM/)
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on the Euclidean algorithm.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on GCD computation over the integers and rationals.

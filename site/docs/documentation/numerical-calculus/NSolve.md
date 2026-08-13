@@ -16,7 +16,7 @@ Options: MaxRoots, Method (Automatic | "EndomorphismMatrix" | "Homotopy" | "Symb
 
 </details>
 
-## Examples (6)
+## Examples (7)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -44,6 +44,13 @@ Out[5]= {{x -> -6.99909}, {x -> 2.22154}}
 ```mathematica
 In[6]:= NSolve[{x^2 + y^2 == 1, x^3 - y^3 == 2}, {x, y}, WorkingPrecision -> 25]
 Out[6]= {{x -> -1.0979116727228235764163996 + 0.83988692161565920362280281*I, y -> 1.0979116727228235764163996 + 0.83988692161565920362280281*I}, {x -> -1.0979116727228235764163996 - 0.83988692161565920362280281*I, y -> 1.0979116727228235764163996 - 0.83988692161565920362280281*I}, {x -> 1.2233348984131033766895813 - 0.072998738390442569855466144*I, y -> 0.12542322569027980027318178 + 0.71200452485314764855498901*I}, {x -> 1.2233348984131033766895813 + 0.072998738390442569855466144*I, y -> 0.12542322569027980027318178 - 0.71200452485314764855498901*I}, {x -> -0.12542322569027980027318178 + 0.71200452485314764855498901*I, y -> -1.2233348984131033766895813 - 0.072998738390442569855466144*I}, {x -> -0.12542322569027980027318178 - 0.71200452485314764855498901*I, y -> -1.2233348984131033766895813 + 0.072998738390442569855466144*I}}
+```
+
+### Worked examples (1)
+
+```mathematica
+In[7]:= NSolve[Sqrt[x] + 3 x^(1/3) == 5, x]
+Out[7]= {{x -> 1.80863}}
 ```
 
 ## Algorithm
@@ -97,11 +104,9 @@ Memory contract (builtin): takes ownership of `res`; returns a fresh Expr* on su
 
 **Attributes:** `Protected`.
 
-## See also
-
-[NRoots](../../numerical-calculus/NRoots/), [Solve](../../solutions-of-equations/Solve/), [VerifySolutions](../../solutions-of-equations/VerifySolutions/), [ConditionalExpression](../../control-flow/ConditionalExpression/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/), [FindRoot](../../calculus/FindRoot/)
-
 ## References
+
+**See also:** [NRoots](../../numerical-calculus/NRoots/), [Solve](../../solutions-of-equations/Solve/), [VerifySolutions](../../solutions-of-equations/VerifySolutions/), [ConditionalExpression](../../control-flow/ConditionalExpression/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/), [FindRoot](../../calculus/FindRoot/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)

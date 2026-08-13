@@ -35,11 +35,9 @@ Out[1]= {1.0, 0.0, 1.0, 0.0, 1.0, 0.0}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Fourier](../../fourier-transforms/Fourier/)
-
 ## References
+
+**See also:** [Fourier](../../fourier-transforms/Fourier/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/fourier-transforms.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/fourier-transforms.md)

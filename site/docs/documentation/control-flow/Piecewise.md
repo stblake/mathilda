@@ -47,40 +47,21 @@ Out[5]= 3/4
 
 ### Applications (5)
 
-A piecewise definition stays symbolic until its conditions can be decided —
-here the absolute-value function, which holds in unevaluated form for symbolic
-`x`:
-
 ```mathematica
-In[1]:= Piecewise[{{-x, x < 0}, {x, x >= 0}}]
-Out[1]= Piecewise[{{-x, x < 0}, {x, x >= 0}}, 0]
-```
+In[6]:= Piecewise[{{-x, x < 0}, {x, x >= 0}}]
+Out[6]= Piecewise[{{-x, x < 0}, {x, x >= 0}}, 0]
 
-Supplying a concrete value selects the matching branch (and falls through to the
-default when no clause applies):
+In[7]:= Piecewise[{{1, x > 0}, {-1, x < 0}}, 0] /. x -> 5
+Out[7]= 1
 
-```mathematica
-In[1]:= Piecewise[{{1, x > 0}, {-1, x < 0}}, 0] /. x -> 5
-Out[1]= 1
+In[8]:= Piecewise[{{1, x > 0}}] /. x -> -2
+Out[8]= 0
 
-In[2]:= Piecewise[{{1, x > 0}}] /. x -> -2
-Out[2]= 0
-```
+In[9]:= Piecewise[{{a, x == 1}, {a, x == 2}, {b, x == 3}}]
+Out[9]= Piecewise[{{a, x == 1 || x == 2}, {b, x == 3}}, 0]
 
-Clauses with structurally identical values are automatically merged, their
-conditions combined with `Or` — a genuine canonicalisation, not just storage:
-
-```mathematica
-In[1]:= Piecewise[{{a, x == 1}, {a, x == 2}, {b, x == 3}}]
-Out[1]= Piecewise[{{a, x == 1 || x == 2}, {b, x == 3}}, 0]
-```
-
-`Piecewise` integrates with calculus: differentiation threads through every
-branch, returning a new piecewise function of the derivatives:
-
-```mathematica
-In[1]:= D[Piecewise[{{x^2, x < 0}, {x^3, x >= 0}}], x]
-Out[1]= Piecewise[{{2 x, x < 0}, {3 x^2, x >= 0}}, 0]
+In[10]:= D[Piecewise[{{x^2, x < 0}, {x^3, x >= 0}}], x]
+Out[10]= Piecewise[{{2 x, x < 0}, {3 x^2, x >= 0}}, 0]
 ```
 
 ## Implementation notes
@@ -95,11 +76,9 @@ Surviving clauses are then compacted: a run of consecutive clauses with structur
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/)
 
 - Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

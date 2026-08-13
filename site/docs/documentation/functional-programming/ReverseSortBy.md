@@ -27,11 +27,9 @@ Out[2]= <|"a" -> 3, "c" -> 2, "b" -> 1|>
 
 **Attributes:** `Protected`.
 
-## See also
-
-[ReverseSort](../../functional-programming/ReverseSort/), [Sort](../../data-structures/Sort/)
-
 ## References
+
+**See also:** [ReverseSort](../../functional-programming/ReverseSort/), [Sort](../../data-structures/Sort/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

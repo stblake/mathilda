@@ -42,37 +42,23 @@ Out[6]= Sqrt[Abs[a11]^2 + Abs[a12]^2 + Abs[a21]^2 + Abs[a22]^2]
 ### Applications (6)
 
 ```mathematica
-In[1]:= Norm[{3, 4}]
-Out[1]= 5
-```
+In[7]:= Norm[{3, 4}]
+Out[7]= 5
 
-A symbolic 2-norm is kept exact, written with `Abs` so it is valid for complex
-components too:
+In[8]:= Norm[{a, b, c}]
+Out[8]= Sqrt[Abs[a]^2 + Abs[b]^2 + Abs[c]^2]
 
-```mathematica
-In[1]:= Norm[{a, b, c}]
-Out[1]= Sqrt[Abs[a]^2 + Abs[b]^2 + Abs[c]^2]
-```
+In[9]:= Norm[{1, 2, 3, 4}, 1]
+Out[9]= 10
 
-The same vector under different p-norms — the 1-norm, the max (Infinity) norm,
-and the exact 3-norm:
+In[10]:= Norm[{1, 2, 3, 4}, Infinity]
+Out[10]= 4
 
-```mathematica
-In[1]:= Norm[{1, 2, 3, 4}, 1]
-Out[1]= 10
+In[11]:= Norm[{1, 2, 3, 4}, 3]
+Out[11]= 10^(2/3)
 
-In[2]:= Norm[{1, 2, 3, 4}, Infinity]
-Out[2]= 4
-
-In[3]:= Norm[{1, 2, 3, 4}, 3]
-Out[3]= 10^(2/3)
-```
-
-The norm of a complex vector, taken to 40 significant digits:
-
-```mathematica
-In[1]:= N[Norm[{1, 2, 3}], 40]
-Out[1]= 3.7416573867739413855837487323165493017559
+In[12]:= N[Norm[{1, 2, 3}], 40]
+Out[12]= 3.7416573867739413855837487323165493017559
 ```
 
 ## Algorithm
@@ -116,11 +102,9 @@ Other matrix norms (SVD-based 2-norm, etc.) are not yet implemented and fall thr
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [Plot](../../graphics/Plot/), [Table](../../lists-and-iteration/Table/), [NIntegrate](../../numerical-calculus/NIntegrate/), [FindRoot](../../calculus/FindRoot/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [Plot](../../graphics/Plot/), [Table](../../lists-and-iteration/Table/), [NIntegrate](../../numerical-calculus/NIntegrate/), [FindRoot](../../calculus/FindRoot/)
 
 - Source: [`src/linalg/norm.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/norm.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

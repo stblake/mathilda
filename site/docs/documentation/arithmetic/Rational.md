@@ -30,31 +30,20 @@ Out[1]= 3
 ### Applications (5)
 
 ```mathematica
-In[1]:= Rational[6, 4]
-Out[1]= 3/2
-```
+In[2]:= Rational[6, 4]
+Out[2]= 3/2
 
-`Rational` auto-reduces by the gcd, normalises the sign onto the numerator, and
-collapses to an `Integer` whenever the denominator divides the numerator:
+In[3]:= Rational[10, 2]
+Out[3]= 5
 
-```mathematica
-In[1]:= Rational[10, 2]
-Out[1]= 5
+In[4]:= Rational[-3, -9]
+Out[4]= 1/3
 
-In[2]:= Rational[-3, -9]
-Out[2]= 1/3
-```
+In[5]:= 1/2 + 1/3 + 1/6
+Out[5]= 1
 
-Because rationals propagate exactly through `Plus` and `Times` via GMP, exact
-sums never drift into floating point — a partial sum of the Basel series stays a
-single reduced fraction:
-
-```mathematica
-In[1]:= 1/2 + 1/3 + 1/6
-Out[1]= 1
-
-In[2]:= Sum[1/k^2, {k, 1, 10}]
-Out[2]= 1968329/1270080
+In[6]:= Sum[1/k^2, {k, 1, 10}]
+Out[6]= 1968329/1270080
 ```
 
 ## Implementation notes

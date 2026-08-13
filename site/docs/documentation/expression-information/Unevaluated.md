@@ -57,11 +57,9 @@ Out[6]= {HoldAllComplete, Protected}
 
 **Attributes:** `HoldAllComplete`, `Protected`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/), [HoldFirst](../../other-advanced/HoldFirst/), [HoldRest](../../other-advanced/HoldRest/), [HoldAllComplete](../../expression-information/HoldAllComplete/), [HoldComplete](../../expression-information/HoldComplete/), [Sequence](../../expression-information/Sequence/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/), [HoldFirst](../../other-advanced/HoldFirst/), [HoldRest](../../other-advanced/HoldRest/), [HoldAllComplete](../../expression-information/HoldAllComplete/), [HoldComplete](../../expression-information/HoldComplete/), [Sequence](../../expression-information/Sequence/)
 
 - Source: [`src/eval.c`](https://github.com/stblake/mathilda/blob/main/src/eval.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

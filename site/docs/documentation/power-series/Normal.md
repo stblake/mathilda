@@ -29,30 +29,17 @@ Out[3]= Sqrt[2/Pi] Sqrt[1/x] Cos[1/4 Pi - x] - 1/8 Sqrt[2/Pi] (1/x)^(3/2) Sin[1/
 ### Applications (4)
 
 ```mathematica
-In[1]:= Normal[Series[Exp[x], {x, 0, 5}]]
-Out[1]= 1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + 1/120 x^5
-```
+In[4]:= Normal[Series[Exp[x], {x, 0, 5}]]
+Out[4]= 1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + 1/120 x^5
 
-Drop the O-term from the Maclaurin series of `Sin[x]/x` to recover the truncated
-polynomial:
+In[5]:= Normal[Series[Sin[x]/x, {x, 0, 6}]]
+Out[5]= 1 - 1/6 x^2 + 1/120 x^4 - 1/5040 x^6
 
-```mathematica
-In[1]:= Normal[Series[Sin[x]/x, {x, 0, 6}]]
-Out[1]= 1 - 1/6 x^2 + 1/120 x^4 - 1/5040 x^6
-```
+In[6]:= Normal[Series[Tan[x], {x, 0, 7}]]
+Out[6]= x + 1/3 x^3 + 2/15 x^5 + 17/315 x^7
 
-The tangent series, with its Bernoulli-number coefficients laid bare:
-
-```mathematica
-In[1]:= Normal[Series[Tan[x], {x, 0, 7}]]
-Out[1]= x + 1/3 x^3 + 2/15 x^5 + 17/315 x^7
-```
-
-The alternating-harmonic expansion of `Log[1 + x]`:
-
-```mathematica
-In[1]:= Normal[Series[Log[1 + x], {x, 0, 5}]]
-Out[1]= x - 1/2 x^2 + 1/3 x^3 - 1/4 x^4 + 1/5 x^5
+In[7]:= Normal[Series[Log[1 + x], {x, 0, 5}]]
+Out[7]= x - 1/2 x^2 + 1/3 x^3 - 1/4 x^4 + 1/5 x^5
 ```
 
 ## Algorithm
@@ -91,11 +78,9 @@ for degenerate cases), evaluating the result. Any argument that is not a 6-eleme
 
 **Attributes:** `Protected`.
 
-## See also
-
-[SeriesData](../../power-series/SeriesData/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [BesselJ](../../special-functions/BesselJ/), [BesselY](../../special-functions/BesselY/), [BesselK](../../special-functions/BesselK/), [BesselI](../../special-functions/BesselI/), [AiryAi](../../special-functions/AiryAi/)
-
 ## References
+
+**See also:** [SeriesData](../../power-series/SeriesData/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [BesselJ](../../special-functions/BesselJ/), [BesselY](../../special-functions/BesselY/), [BesselK](../../special-functions/BesselK/), [BesselI](../../special-functions/BesselI/), [AiryAi](../../special-functions/AiryAi/)
 
 - Source: [`src/calculus/series.c`](https://github.com/stblake/mathilda/blob/main/src/calculus/series.c)
 - Specification: [`docs/spec/builtins/power-series.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/power-series.md)

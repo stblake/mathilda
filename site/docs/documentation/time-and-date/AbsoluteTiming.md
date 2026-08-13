@@ -23,11 +23,9 @@ _No verified examples yet for this function._
 
 **Attributes:** `HoldAll`, `Protected`, `SequenceHold`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/), [SequenceHold](../../expression-information/SequenceHold/), [Timing](../../time-and-date/Timing/), [Dot](../../linear-algebra/Dot/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/), [SequenceHold](../../expression-information/SequenceHold/), [Timing](../../time-and-date/Timing/), [Dot](../../linear-algebra/Dot/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/time-and-date.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/time-and-date.md)

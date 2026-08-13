@@ -36,18 +36,14 @@ Out[3]= ((a + b) (a - b))/(c^2 - d^2)
 ### Applications (3)
 
 ```mathematica
-In[1]:= ExpandDenominator[(a + b)^2 / (c + d)^2]
-Out[1]= (a + b)^2/(c^2 + 2 c d + d^2)
-```
+In[4]:= ExpandDenominator[(a + b)^2 / (c + d)^2]
+Out[4]= (a + b)^2/(c^2 + 2 c d + d^2)
 
-```mathematica
-In[1]:= ExpandDenominator[1 / ((x + 1)(x + 2)(x + 3))]
-Out[1]= 1/(6 + 11 x + 6 x^2 + x^3)
-```
+In[5]:= ExpandDenominator[1 / ((x + 1)(x + 2)(x + 3))]
+Out[5]= 1/(6 + 11 x + 6 x^2 + x^3)
 
-```mathematica
-In[1]:= ExpandDenominator[((x + 1)(x + 2)) / (y (y + 1))]
-Out[1]= ((1 + x) (2 + x))/(y + y^2)
+In[6]:= ExpandDenominator[((x + 1)(x + 2)) / (y (y + 1))]
+Out[6]= ((1 + x) (2 + x))/(y + y^2)
 ```
 
 ## Implementation notes
@@ -65,11 +61,9 @@ Out[1]= ((1 + x) (2 + x))/(y + y^2)
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Times](../../arithmetic/Times/), [List](../../other-advanced/List/), [Equal](../../comparisons/Equal/), [Unequal](../../comparisons/Unequal/), [Less](../../comparisons/Less/), [LessEqual](../../comparisons/LessEqual/), [Greater](../../comparisons/Greater/), [GreaterEqual](../../comparisons/GreaterEqual/)
-
 ## References
+
+**See also:** [Times](../../arithmetic/Times/), [List](../../other-advanced/List/), [Equal](../../comparisons/Equal/), [Unequal](../../comparisons/Unequal/), [Less](../../comparisons/Less/), [LessEqual](../../comparisons/LessEqual/), [Greater](../../comparisons/Greater/), [GreaterEqual](../../comparisons/GreaterEqual/)
 
 - Source: [`src/expand.c`](https://github.com/stblake/mathilda/blob/main/src/expand.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

@@ -44,33 +44,23 @@ Out[5]= -2^(1/3) + x
 ### Applications (6)
 
 ```mathematica
-In[1]:= PolynomialGCD[x^2 - 1, x^2 + 2 x + 1]
-Out[1]= 1 + x
-```
+In[6]:= PolynomialGCD[x^2 - 1, x^2 + 2 x + 1]
+Out[6]= 1 + x
 
-```mathematica
-In[1]:= PolynomialGCD[x^4 - 1, x^2 - 1]
-Out[1]= -1 + x^2
-```
+In[7]:= PolynomialGCD[x^4 - 1, x^2 - 1]
+Out[7]= -1 + x^2
 
-```mathematica
-In[1]:= PolynomialGCD[x^2 - 1, x - 1]
-Out[1]= -1 + x
-```
+In[8]:= PolynomialGCD[x^2 - 1, x - 1]
+Out[8]= -1 + x
 
-```mathematica
-In[1]:= PolynomialGCD[x^3 - x, x^2 - x]
-Out[1]= -x + x^2
-```
+In[9]:= PolynomialGCD[x^3 - x, x^2 - x]
+Out[9]= -x + x^2
 
-```mathematica
-In[1]:= PolynomialGCD[x^6 - 1, x^4 - 1, x^9 - 1]
-Out[1]= -1 + x
-```
+In[10]:= PolynomialGCD[x^6 - 1, x^4 - 1, x^9 - 1]
+Out[10]= -1 + x
 
-```mathematica
-In[1]:= PolynomialGCD[x^4 - 2, x^2 - Sqrt[2], Extension -> Sqrt[2]]
-Out[1]= -Sqrt[2] + x^2
+In[11]:= PolynomialGCD[x^4 - 2, x^2 - Sqrt[2], Extension -> Sqrt[2]]
+Out[11]= -Sqrt[2] + x^2
 ```
 
 ## Performance
@@ -121,11 +111,9 @@ ordinary `Expr` subtrees, so coefficient GCDs recurse through the same machinery
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[I](../../mathematical-constants/I/)
-
 ## References
+
+**See also:** [I](../../mathematical-constants/I/)
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra" (3rd ed.), Ch. 6 & 11 (Euclidean and modular GCD).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 7 (polynomial GCD computation).

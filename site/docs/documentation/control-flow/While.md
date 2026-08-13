@@ -53,11 +53,9 @@ Out[3]= 11
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/), [Throw](../../control-flow/Throw/), [Return](../../control-flow/Return/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/), [Throw](../../control-flow/Throw/), [Return](../../control-flow/Return/)
 
 - Source: [`src/iter.c`](https://github.com/stblake/mathilda/blob/main/src/iter.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

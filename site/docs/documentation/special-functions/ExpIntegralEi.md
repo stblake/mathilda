@@ -31,21 +31,15 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= ExpIntegralEi[0]
 Out[1]= -Infinity
-```
 
-```mathematica
-In[1]:= D[ExpIntegralEi[z], z]
-Out[1]= E^z/z
-```
+In[2]:= D[ExpIntegralEi[z], z]
+Out[2]= E^z/z
 
-```mathematica
-In[1]:= N[ExpIntegralEi[1], 40]
-Out[1]= 1.8951178163559367554665209343316342690171
-```
+In[3]:= N[ExpIntegralEi[1], 40]
+Out[3]= 1.8951178163559367554665209343316342690171
 
-```mathematica
-In[1]:= N[ExpIntegralEi[I], 30]
-Out[1]= 0.3374039229009681346626462038893 + 2.516879397162079634172675005462*I
+In[4]:= N[ExpIntegralEi[I], 30]
+Out[4]= 0.3374039229009681346626462038893 + 2.516879397162079634172675005462*I
 ```
 
 ## Algorithm
@@ -130,11 +124,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[N](../../arithmetic/N/), [D](../../calculus/D/)
-
 ## References
+
+**See also:** [N](../../arithmetic/N/), [D](../../calculus/D/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

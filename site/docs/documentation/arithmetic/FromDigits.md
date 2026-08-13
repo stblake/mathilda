@@ -46,28 +46,20 @@ Out[5]= e + d x + c x^2 + b x^3 + a x^4
 ### Applications (5)
 
 ```mathematica
-In[1]:= FromDigits[{1, 2, 3, 4}]
-Out[1]= 1234
-```
+In[6]:= FromDigits[{1, 2, 3, 4}]
+Out[6]= 1234
 
-```mathematica
-In[1]:= FromDigits[{1, 0, 1, 1}, 2]
-Out[1]= 11
-```
+In[7]:= FromDigits[{1, 0, 1, 1}, 2]
+Out[7]= 11
 
-```mathematica
-In[1]:= FromDigits["deadbeef", 16]
-Out[1]= 3735928559
-```
+In[8]:= FromDigits["deadbeef", 16]
+Out[8]= 3735928559
 
-```mathematica
-In[1]:= FromDigits[IntegerDigits[2^100], 10]
-Out[1]= 1267650600228229401496703205376
-```
+In[9]:= FromDigits[IntegerDigits[2^100], 10]
+Out[9]= 1267650600228229401496703205376
 
-```mathematica
-In[1]:= FromDigits[{d2, d1, d0}, b]
-Out[1]= d0 + b d1 + b^2 d2
+In[10]:= FromDigits[{d2, d1, d0}, b]
+Out[10]= d0 + b d1 + b^2 d2
 ```
 
 ## Implementation notes
@@ -95,11 +87,9 @@ Out[1]= d0 + b d1 + b^2 d2
 
 **Attributes:** `Protected`.
 
-## See also
-
-[IntegerDigits](../../arithmetic/IntegerDigits/), [IntegerString](../../arithmetic/IntegerString/)
-
 ## References
+
+**See also:** [IntegerDigits](../../arithmetic/IntegerDigits/), [IntegerString](../../arithmetic/IntegerString/)
 
 - Source: [`src/int.c`](https://github.com/stblake/mathilda/blob/main/src/int.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

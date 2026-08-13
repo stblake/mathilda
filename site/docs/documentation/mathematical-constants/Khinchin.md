@@ -27,23 +27,15 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= N[Khinchin]
 Out[1]= 2.68545
-```
 
-Khinchin's constant evaluates to arbitrary precision via its convergent product over partial quotients:
+In[2]:= N[Khinchin, 60]
+Out[2]= 2.685452001065306445309714835481795693820382293994462953051151
 
-```mathematica
-In[1]:= N[Khinchin, 60]
-Out[1]= 2.685452001065306445309714835481795693820382293994462953051151
-```
+In[3]:= NumericQ[Khinchin]
+Out[3]= True
 
-It is a true symbolic constant — `NumericQ` is `True` and its derivative vanishes:
-
-```mathematica
-In[1]:= NumericQ[Khinchin]
-Out[1]= True
-
-In[2]:= D[Khinchin, x]
-Out[2]= 0
+In[4]:= D[Khinchin, x]
+Out[4]= 0
 ```
 
 ## Options & behaviour
@@ -69,11 +61,9 @@ above. Their `Constant`/`Protected` attributes are stamped in `numeric_init`.
 
 **Attributes:** `Constant`, `Protected`.
 
-## See also
-
-[GoldenAngle](../../mathematical-constants/GoldenAngle/), [Glaisher](../../mathematical-constants/Glaisher/)
-
 ## References
+
+**See also:** [GoldenAngle](../../mathematical-constants/GoldenAngle/), [Glaisher](../../mathematical-constants/Glaisher/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/mathematical-constants.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/mathematical-constants.md)

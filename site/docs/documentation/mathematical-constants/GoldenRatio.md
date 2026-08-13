@@ -25,26 +25,18 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= N[GoldenRatio]
 Out[1]= 1.61803
-```
 
-```mathematica
-In[1]:= N[GoldenRatio, 40]
-Out[1]= 1.6180339887498948482045868343656381177203
-```
+In[2]:= N[GoldenRatio, 40]
+Out[2]= 1.6180339887498948482045868343656381177203
 
-```mathematica
-In[1]:= N[GoldenRatio^2 - GoldenRatio - 1, 40]
-Out[1]= 0.0
-```
+In[3]:= N[GoldenRatio^2 - GoldenRatio - 1, 40]
+Out[3]= 0.0
 
-```mathematica
-In[1]:= FromContinuedFraction[{1, {1}}]
-Out[1]= 1/2 (1 + Sqrt[5])
-```
+In[4]:= FromContinuedFraction[{1, {1}}]
+Out[4]= 1/2 (1 + Sqrt[5])
 
-```mathematica
-In[1]:= Round[N[(GoldenRatio^15 - (1 - GoldenRatio)^15)/Sqrt[5]]]
-Out[1]= 610
+In[5]:= Round[N[(GoldenRatio^15 - (1 - GoldenRatio)^15)/Sqrt[5]]]
+Out[5]= 610
 ```
 
 ## Implementation notes

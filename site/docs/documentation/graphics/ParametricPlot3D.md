@@ -84,11 +84,9 @@ In both forms the body can be any expression that evaluates to a 3-element numer
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/), [Plot3D](../../graphics/Plot3D/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/), [Plot3D](../../graphics/Plot3D/)
 
 - Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)

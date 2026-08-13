@@ -87,11 +87,9 @@ Attributes: Listable, NumericFunction, Protected, ReadProtected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
 
-## See also
-
-[N](../../arithmetic/N/)
-
 ## References
+
+**See also:** [N](../../arithmetic/N/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

@@ -39,32 +39,20 @@ Out[4]= {1, 2, 4, 5, 7, 8}
 ### Applications (5)
 
 ```mathematica
-In[1]:= PrimitiveRootList[7]
-Out[1]= {3, 5}
-```
+In[5]:= PrimitiveRootList[7]
+Out[5]= {3, 5}
 
-It works for twice-an-odd-prime-power moduli too:
+In[6]:= PrimitiveRootList[18]
+Out[6]= {5, 11}
 
-```mathematica
-In[1]:= PrimitiveRootList[18]
-Out[1]= {5, 11}
-```
+In[7]:= PrimitiveRootList[15]
+Out[7]= {}
 
-When the group is non-cyclic (15 is neither `4`, an odd prime power, nor twice one), the list is empty:
+In[8]:= Length[PrimitiveRootList[101]]
+Out[8]= 40
 
-```mathematica
-In[1]:= PrimitiveRootList[15]
-Out[1]= {}
-```
-
-The number of primitive roots of a prime `p` is `EulerPhi[EulerPhi[p]] = EulerPhi[p - 1]`; for `p = 101` this gives 40, matching the list length:
-
-```mathematica
-In[1]:= Length[PrimitiveRootList[101]]
-Out[1]= 40
-
-In[2]:= EulerPhi[EulerPhi[101]]
-Out[2]= 40
+In[9]:= EulerPhi[EulerPhi[101]]
+Out[9]= 40
 ```
 
 ## Implementation notes

@@ -41,31 +41,23 @@ Out[4]= Element[x, Reals]
 ### Applications (6)
 
 ```mathematica
-In[1]:= Element[5, Integers]
-Out[1]= True
-```
+In[5]:= Element[5, Integers]
+Out[5]= True
 
-```mathematica
-In[1]:= Element[5/2, Integers]
-Out[1]= False
-```
+In[6]:= Element[5/2, Integers]
+Out[6]= False
 
-```mathematica
-In[1]:= Element[7, Primes]
-Out[1]= True
+In[7]:= Element[7, Primes]
+Out[7]= True
 
-In[2]:= Element[1 + I, Algebraics]
-Out[2]= True
-```
+In[8]:= Element[1 + I, Algebraics]
+Out[8]= True
 
-```mathematica
-In[1]:= Element[{2, 3, 5, 7}, Primes]
-Out[1]= True
-```
+In[9]:= Element[{2, 3, 5, 7}, Primes]
+Out[9]= True
 
-```mathematica
-In[1]:= Assuming[Element[x, Integers], Element[x, Reals]]
-Out[1]= True
+In[10]:= Assuming[Element[x, Integers], Element[x, Reals]]
+Out[10]= True
 ```
 
 ## Implementation notes
@@ -105,11 +97,9 @@ persistent state.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[$Assumptions](../../simplification/$Assumptions/), [Simplify](../../simplification/Simplify/)
-
 ## References
+
+**See also:** [$Assumptions](../../simplification/$Assumptions/), [Simplify](../../simplification/Simplify/)
 
 - Source: [`src/simp/simp_builtins.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp_builtins.c)
 - Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)

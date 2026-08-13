@@ -59,32 +59,20 @@ Out[8]= True
 ### Applications (5)
 
 ```mathematica
-In[1]:= UpperTriangularMatrixQ[{{1, 2}, {0, 3}}]
-Out[1]= True
+In[9]:= UpperTriangularMatrixQ[{{1, 2}, {0, 3}}]
+Out[9]= True
 
-In[2]:= UpperTriangularMatrixQ[{{1, 0}, {2, 3}}]
-Out[2]= False
-```
+In[10]:= UpperTriangularMatrixQ[{{1, 0}, {2, 3}}]
+Out[10]= False
 
-The test is purely structural, so it works on a symbolically generated triangular matrix just as well as on numeric data:
+In[11]:= UpperTriangularMatrixQ[Table[If[j >= i, a[i, j], 0], {i, 4}, {j, 4}]]
+Out[11]= True
 
-```mathematica
-In[1]:= UpperTriangularMatrixQ[Table[If[j >= i, a[i, j], 0], {i, 4}, {j, 4}]]
-Out[1]= True
-```
+In[12]:= UpperTriangularMatrixQ[{{0, 1, 2}, {0, 0, 3}, {0, 0, 0}}, 1]
+Out[12]= True
 
-The two-argument form shifts the reference diagonal. A strictly upper-triangular matrix (zero main diagonal) passes the `k = 1` test:
-
-```mathematica
-In[1]:= UpperTriangularMatrixQ[{{0, 1, 2}, {0, 0, 3}, {0, 0, 0}}, 1]
-Out[1]= True
-```
-
-For approximate matrices, a `Tolerance` lets tiny round-off entries below the diagonal count as zero:
-
-```mathematica
-In[1]:= UpperTriangularMatrixQ[{{1.0, 2}, {1*10^-15, 3}}, Tolerance -> 10^-10]
-Out[1]= True
+In[13]:= UpperTriangularMatrixQ[{{1.0, 2}, {1*10^-15, 3}}, Tolerance -> 10^-10]
+Out[13]= True
 ```
 
 ## Implementation notes
@@ -120,11 +108,9 @@ Out[1]= True
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Rule](../../assignment-and-rules/Rule/)
-
 ## References
+
+**See also:** [Rule](../../assignment-and-rules/Rule/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

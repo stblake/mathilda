@@ -16,7 +16,7 @@ n must be an integer; p(n) = 0 for n \< 0. Threads over lists. For the partition
 
 </details>
 
-## Examples (4)
+## Examples (5)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -34,6 +34,13 @@ Out[3]= 6927233917602120527467409170319882882996950147283323368445315320451
 
 In[4]:= Table[Times @@ PartitionsP[Last /@ FactorInteger[n]], {n, 12}]
 Out[4]= {1, 1, 1, 2, 1, 1, 1, 3, 2, 1, 1, 2}
+```
+
+### Worked examples (1)
+
+```mathematica
+In[5]:= PartitionsP[{2, 4, 6}]
+Out[5]= {2, 5, 11}
 ```
 
 ## Algorithm
@@ -85,11 +92,9 @@ Ownership: this builtin only *reads* `res`. On every NULL return (bad arguments,
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[N](../../arithmetic/N/)
-
 ## References
+
+**See also:** [N](../../arithmetic/N/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)

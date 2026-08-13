@@ -24,18 +24,14 @@ Out[2]= {b + x, {-1/(a^2 - a b), 1/(a - b)}}
 ### Applications (3)
 
 ```mathematica
-In[1]:= PolynomialExtendedGCD[x^2 - 1, x^3 - 1, x]
-Out[1]= {-1 + x, {-x, 1}}
-```
+In[3]:= PolynomialExtendedGCD[x^2 - 1, x^3 - 1, x]
+Out[3]= {-1 + x, {-x, 1}}
 
-```mathematica
-In[1]:= PolynomialExtendedGCD[x^4 + x^3 + x^2 + x + 1, x^2 + 1, x]
-Out[1]= {1, {1, -x - x^2}}
-```
+In[4]:= PolynomialExtendedGCD[x^4 + x^3 + x^2 + x + 1, x^2 + 1, x]
+Out[4]= {1, {1, -x - x^2}}
 
-```mathematica
-In[1]:= PolynomialExtendedGCD[x^7 - 1, x^5 - 1, x]
-Out[1]= {-1 + x, {-x - x^3, 1 + x^3 + x^5}}
+In[5]:= PolynomialExtendedGCD[x^7 - 1, x^5 - 1, x]
+Out[5]= {-1 + x, {-x - x^3, 1 + x^3 + x^5}}
 ```
 
 ## Implementation notes

@@ -22,11 +22,9 @@ Out[1]= 1/2 Bailed Null Program Reason Signature argument at call compiled every
 
 **Attributes:** `Protected`.
 
-## See also
-
-[CompileDiagnostics](../../control-flow/CompileDiagnostics/), [HoldAll](../../expression-information/HoldAll/), [Compile](../../control-flow/Compile/), [Attributes](../../expression-information/Attributes/)
-
 ## References
+
+**See also:** [CompileDiagnostics](../../control-flow/CompileDiagnostics/), [HoldAll](../../expression-information/HoldAll/), [Compile](../../control-flow/Compile/), [Attributes](../../expression-information/Attributes/)
 
 - Source: [`src/compile/compiled_function.c`](https://github.com/stblake/mathilda/blob/main/src/compile/compiled_function.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

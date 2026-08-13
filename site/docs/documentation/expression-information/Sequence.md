@@ -42,11 +42,9 @@ Out[3]= {a, b, x, y, h[w], z, y}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [BlankSequence](../../pattern-matching/BlankSequence/), [BlankNullSequence](../../pattern-matching/BlankNullSequence/), [SlotSequence](../../functional-programming/SlotSequence/), [SequenceHold](../../expression-information/SequenceHold/), [HoldAllComplete](../../expression-information/HoldAllComplete/)
-
 ## References
+
+**See also:** [Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [BlankSequence](../../pattern-matching/BlankSequence/), [BlankNullSequence](../../pattern-matching/BlankNullSequence/), [SlotSequence](../../functional-programming/SlotSequence/), [SequenceHold](../../expression-information/SequenceHold/), [HoldAllComplete](../../expression-information/HoldAllComplete/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

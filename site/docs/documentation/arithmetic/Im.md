@@ -19,38 +19,24 @@ Out[1]= 4
 
 In[2]:= Im[7]
 Out[2]= 0
-```
 
-`Im` resolves exact algebraic and transcendental values, including radicals of
-negative numbers and branch-cut logarithms:
+In[3]:= Im[Sqrt[-4]]
+Out[3]= 2
 
-```mathematica
-In[1]:= Im[Sqrt[-4]]
-Out[1]= 2
+In[4]:= Im[(1 + I)^10]
+Out[4]= 32
 
-In[2]:= Im[(1 + I)^10]
-Out[2]= 32
+In[5]:= Im[Log[-1]]
+Out[5]= Pi
 
-In[3]:= Im[Log[-1]]
-Out[3]= Pi
-```
+In[6]:= Im[{1 + 2 I, 3 - 4 I, 5}]
+Out[6]= {2, -4, 0}
 
-Being Listable, it threads over a list of numbers:
+In[7]:= Im[Gamma[1 + I]]
+Out[7]= Im[Gamma[1 + I]]
 
-```mathematica
-In[1]:= Im[{1 + 2 I, 3 - 4 I, 5}]
-Out[1]= {2, -4, 0}
-```
-
-For values it cannot reduce in closed form, `Im` stays symbolic but still
-yields to high-precision numerics — here the imaginary part of Γ(1 + i):
-
-```mathematica
-In[1]:= Im[Gamma[1 + I]]
-Out[1]= Im[Gamma[1 + I]]
-
-In[2]:= N[Im[Gamma[1 + I]], 40]
-Out[2]= -0.15494982830181068512495513048388660519589
+In[8]:= N[Im[Gamma[1 + I]], 40]
+Out[8]= -0.15494982830181068512495513048388660519589
 ```
 
 ## Implementation notes
@@ -59,11 +45,9 @@ Out[2]= -0.15494982830181068512495513048388660519589
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Re](../../arithmetic/Re/), [ReIm](../../arithmetic/ReIm/), [Abs](../../arithmetic/Abs/), [Sign](../../arithmetic/Sign/), [Conjugate](../../arithmetic/Conjugate/), [Arg](../../arithmetic/Arg/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
-
 ## References
+
+**See also:** [Re](../../arithmetic/Re/), [ReIm](../../arithmetic/ReIm/), [Abs](../../arithmetic/Abs/), [Sign](../../arithmetic/Sign/), [Conjugate](../../arithmetic/Conjugate/), [Arg](../../arithmetic/Arg/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
 
 - Source: [`src/complex.c`](https://github.com/stblake/mathilda/blob/main/src/complex.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

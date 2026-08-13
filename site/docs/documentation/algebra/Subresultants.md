@@ -34,34 +34,18 @@ Out[5]= 21
 
 ### Applications (4)
 
-The principal subresultant coefficients of two coprime quadratics; the leading
-entry is the resultant:
-
 ```mathematica
-In[1]:= Subresultants[x^2 - 1, x^2 - 4, x]
-Out[1]= {9, 0, 1}
-```
+In[6]:= Subresultants[x^2 - 1, x^2 - 4, x]
+Out[6]= {9, 0, 1}
 
-That first entry matches `Resultant` exactly:
+In[7]:= Resultant[x^2 - 1, x^2 - 4, x]
+Out[7]= 9
 
-```mathematica
-In[1]:= Resultant[x^2 - 1, x^2 - 4, x]
-Out[1]= 9
-```
+In[8]:= Subresultants[x^3 + x + 1, x^2 + 1, x]
+Out[8]= {1, 0, 1}
 
-A coprime cubic/quadratic pair:
-
-```mathematica
-In[1]:= Subresultants[x^3 + x + 1, x^2 + 1, x]
-Out[1]= {1, 0, 1}
-```
-
-When the polynomials share a root the resultant vanishes — the leading entries
-are exactly zero, signalling the common factor `(x - 1)`:
-
-```mathematica
-In[1]:= Subresultants[x^2 - 1, (x - 1)^2, x]
-Out[1]= {0, -2, 1}
+In[9]:= Subresultants[x^2 - 1, (x - 1)^2, x]
+Out[9]= {0, -2, 1}
 ```
 
 ## Algorithm
@@ -113,11 +97,9 @@ For algebraic-number coefficients (Sqrt, cube roots — `subres_has_algebraic`),
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Resultant](../../algebra/Resultant/)
-
 ## References
+
+**See also:** [Resultant](../../algebra/Resultant/)
 
 - W. S. Brown and J. F. Traub, "On Euclid's Algorithm and the Theory of Subresultants", J. ACM 18(4), 1971.
 - M. Bronstein, *Symbolic Integration I: Transcendental Functions*, 2nd ed. (Springer, 2005).

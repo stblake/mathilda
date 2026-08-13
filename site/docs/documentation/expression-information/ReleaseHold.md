@@ -60,11 +60,9 @@ Out[8]= {f[3], g[7]}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Hold](../../expression-information/Hold/), [HoldForm](../../expression-information/HoldForm/), [HoldPattern](../../pattern-matching/HoldPattern/), [HoldComplete](../../expression-information/HoldComplete/)
-
 ## References
+
+**See also:** [Hold](../../expression-information/Hold/), [HoldForm](../../expression-information/HoldForm/), [HoldPattern](../../pattern-matching/HoldPattern/), [HoldComplete](../../expression-information/HoldComplete/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

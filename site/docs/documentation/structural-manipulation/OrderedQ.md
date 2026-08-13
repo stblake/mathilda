@@ -34,40 +34,21 @@ Out[5]= False
 
 ### Applications (5)
 
-Test whether a list is in canonical order:
-
 ```mathematica
-In[1]:= OrderedQ[{1, 2, 3}]
-Out[1]= True
+In[6]:= OrderedQ[{1, 2, 3}]
+Out[6]= True
 
-In[2]:= OrderedQ[{3, 1, 2}]
-Out[2]= False
-```
+In[7]:= OrderedQ[{3, 1, 2}]
+Out[7]= False
 
-A custom ordering function as the second argument — here descending order via
-`Greater`:
+In[8]:= OrderedQ[{5, 4, 3, 2, 1}, Greater]
+Out[8]= True
 
-```mathematica
-In[1]:= OrderedQ[{5, 4, 3, 2, 1}, Greater]
-Out[1]= True
-```
+In[9]:= Select[Permutations[{1, 2, 3}], OrderedQ]
+Out[9]= {{1, 2, 3}}
 
-Because `OrderedQ` works on any head and accepts an arbitrary comparator, it
-composes with `Select` to filter combinatorial output. Selecting the
-canonically-ordered permutations of `{1, 2, 3}` recovers exactly the single
-sorted tuple — the identity permutation:
-
-```mathematica
-In[1]:= Select[Permutations[{1, 2, 3}], OrderedQ]
-Out[1]= {{1, 2, 3}}
-```
-
-A pure-function comparator orders by a derived key — these symbolic powers are
-in strictly decreasing degree:
-
-```mathematica
-In[1]:= OrderedQ[{x^2, x, 1}, (#1 > #2 &)]
-Out[1]= True
+In[10]:= OrderedQ[{x^2, x, 1}, (#1 > #2 &)]
+Out[10]= True
 ```
 
 ## Implementation notes
@@ -87,11 +68,9 @@ to the same comparator that `Sort` uses.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Sort](../../data-structures/Sort/), [List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [Sort](../../data-structures/Sort/), [List](../../other-advanced/List/)
 
 - Source: [`src/sort.c`](https://github.com/stblake/mathilda/blob/main/src/sort.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

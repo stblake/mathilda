@@ -37,35 +37,23 @@ Out[2]= 1/2 z - 3/2 z^2 + z^3
 ### Applications (6)
 
 ```mathematica
-In[1]:= BernoulliB[10]
-Out[1]= 5/66
+In[3]:= BernoulliB[10]
+Out[3]= 5/66
 
-In[2]:= BernoulliB[20]
-Out[2]= -174611/330
-```
+In[4]:= BernoulliB[20]
+Out[4]= -174611/330
 
-The even-index Bernoulli numbers (odd ones beyond `B_1` vanish):
+In[5]:= Table[BernoulliB[2 k], {k, 0, 6}]
+Out[5]= {1, 1/6, -1/30, 1/42, -1/30, 5/66, -691/2730}
 
-```mathematica
-In[1]:= Table[BernoulliB[2 k], {k, 0, 6}]
-Out[1]= {1, 1/6, -1/30, 1/42, -1/30, 5/66, -691/2730}
-```
+In[6]:= BernoulliB[50]
+Out[6]= 495057205241079648212477525/66
 
-`BernoulliB[50]` is an exact rational with a large numerator:
+In[7]:= BernoulliB[4, x]
+Out[7]= -1/30 + x^2 - 2 x^3 + x^4
 
-```mathematica
-In[1]:= BernoulliB[50]
-Out[1]= 495057205241079648212477525/66
-```
-
-The two-argument form returns the Bernoulli polynomial, and these polynomials are the building blocks of the Faulhaber power-sum formulas:
-
-```mathematica
-In[1]:= BernoulliB[4, x]
-Out[1]= -1/30 + x^2 - 2 x^3 + x^4
-
-In[2]:= Sum[k^2, {k, 1, n}]
-Out[2]= 1/6 n (1 + n) (1 + 2 n)
+In[8]:= Sum[k^2, {k, 1, n}]
+Out[8]= 1/6 n (1 + n) (1 + 2 n)
 ```
 
 ## Algorithm
@@ -111,11 +99,9 @@ Attributes: Listable, Protected.
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[N](../../arithmetic/N/)
-
 ## References
+
+**See also:** [N](../../arithmetic/N/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

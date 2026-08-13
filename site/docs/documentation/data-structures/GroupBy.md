@@ -44,11 +44,9 @@ Out[5]= <|"x" -> 4, "y" -> 2|>
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Total](../../arithmetic/Total/)
-
 ## References
+
+**See also:** [Total](../../arithmetic/Total/)
 
 - Source: [`src/assoc.c`](https://github.com/stblake/mathilda/blob/main/src/assoc.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

@@ -27,21 +27,15 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= N[Glaisher]
 Out[1]= 1.28243
-```
 
-```mathematica
-In[1]:= N[Glaisher, 40]
-Out[1]= 1.2824271291006226368753425688697917277676
-```
+In[2]:= N[Glaisher, 40]
+Out[2]= 1.2824271291006226368753425688697917277676
 
-```mathematica
-In[1]:= NumericQ[Glaisher]
-Out[1]= True
-```
+In[3]:= NumericQ[Glaisher]
+Out[3]= True
 
-```mathematica
-In[1]:= D[Glaisher, x]
-Out[1]= 0
+In[4]:= D[Glaisher, x]
+Out[4]= 0
 ```
 
 ## Implementation notes
@@ -60,11 +54,9 @@ Out[1]= 0
 
 **Attributes:** `Constant`, `Protected`.
 
-## See also
-
-[Zeta](../../special-functions/Zeta/)
-
 ## References
+
+**See also:** [Zeta](../../special-functions/Zeta/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/mathematical-constants.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/mathematical-constants.md)

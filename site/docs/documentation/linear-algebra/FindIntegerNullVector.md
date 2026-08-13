@@ -43,23 +43,17 @@ Out[4]= {-7, -4*I, 1}
 ### Applications (4)
 
 ```mathematica
-In[1]:= FindIntegerNullVector[{N[Zeta[2], 40], N[Pi^2, 40]}]
-Out[1]= {-6, 1}
-```
+In[5]:= FindIntegerNullVector[{N[Zeta[2], 40], N[Pi^2, 40]}]
+Out[5]= {-6, 1}
 
-```mathematica
-In[1]:= FindIntegerNullVector[{N[GoldenRatio, 40]^2, N[GoldenRatio, 40], 1}]
-Out[1]= {-1, 1, 1}
-```
+In[6]:= FindIntegerNullVector[{N[GoldenRatio, 40]^2, N[GoldenRatio, 40], 1}]
+Out[6]= {-1, 1, 1}
 
-```mathematica
-In[1]:= FindIntegerNullVector[{N[Log[2], 40], N[Log[3], 40], N[Log[6], 40]}]
-Out[1]= {-1, -1, 1}
-```
+In[7]:= FindIntegerNullVector[{N[Log[2], 40], N[Log[3], 40], N[Log[6], 40]}]
+Out[7]= {-1, -1, 1}
 
-```mathematica
-In[1]:= FindIntegerNullVector[{N[Cos[Pi/7], 40]^3, N[Cos[Pi/7], 40]^2, N[Cos[Pi/7], 40], 1}]
-Out[1]= {8, -4, -4, 1}
+In[8]:= FindIntegerNullVector[{N[Cos[Pi/7], 40]^3, N[Cos[Pi/7], 40]^2, N[Cos[Pi/7], 40], 1}]
+Out[8]= {8, -4, -4, 1}
 ```
 
 ## Options & behaviour
@@ -170,11 +164,9 @@ SPEC.md S4.1).
 
 **Attributes:** `Protected`.
 
-## See also
-
-[LatticeReduce](../../linear-algebra/LatticeReduce/), [PossibleZeroQ](../../expression-information/PossibleZeroQ/), [$MachinePrecision](../../expression-information/$MachinePrecision/)
-
 ## References
+
+**See also:** [LatticeReduce](../../linear-algebra/LatticeReduce/), [PossibleZeroQ](../../expression-information/PossibleZeroQ/), [$MachinePrecision](../../expression-information/$MachinePrecision/)
 
 - A. K. Lenstra, H. W. Lenstra, L. Lovász, "Factoring Polynomials with Rational Coefficients", Mathematische Annalen 261 (1982).
 - Henri Cohen, *A Course in Computational Algebraic Number Theory* (Springer, 1993).

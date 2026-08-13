@@ -27,11 +27,9 @@ Out[2]= 2
 
 **Attributes:** `Protected`.
 
-## See also
-
-[TakeWhile](../../data-structures/TakeWhile/)
-
 ## References
+
+**See also:** [TakeWhile](../../data-structures/TakeWhile/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

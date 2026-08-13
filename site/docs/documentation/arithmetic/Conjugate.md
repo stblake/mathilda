@@ -19,21 +19,15 @@ Out[1]= 3 - 4*I
 
 In[2]:= Conjugate[5]
 Out[2]= 5
-```
 
-```mathematica
-In[1]:= Conjugate[{1 + I, 2 - 3 I}]
-Out[1]= {1 - I, 2 + 3*I}
-```
+In[3]:= Conjugate[{1 + I, 2 - 3 I}]
+Out[3]= {1 - I, 2 + 3*I}
 
-```mathematica
-In[1]:= Conjugate[(2 + I)/(1 - 3 I)]
-Out[1]= -1/10 - 7/10*I
-```
+In[4]:= Conjugate[(2 + I)/(1 - 3 I)]
+Out[4]= -1/10 - 7/10*I
 
-```mathematica
-In[1]:= z Conjugate[z] /. z -> 3 + 4 I
-Out[1]= 25
+In[5]:= z Conjugate[z] /. z -> 3 + 4 I
+Out[5]= 25
 ```
 
 ## Implementation notes
@@ -42,11 +36,9 @@ Out[1]= 25
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [ReIm](../../arithmetic/ReIm/), [Abs](../../arithmetic/Abs/), [Sign](../../arithmetic/Sign/), [Arg](../../arithmetic/Arg/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
-
 ## References
+
+**See also:** [Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [ReIm](../../arithmetic/ReIm/), [Abs](../../arithmetic/Abs/), [Sign](../../arithmetic/Sign/), [Arg](../../arithmetic/Arg/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
 
 - Source: [`src/complex.c`](https://github.com/stblake/mathilda/blob/main/src/complex.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

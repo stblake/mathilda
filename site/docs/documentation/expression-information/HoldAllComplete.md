@@ -39,11 +39,9 @@ Out[3]= {HoldAllComplete}
 
 **Attributes:** none registered.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/), [HoldComplete](../../expression-information/HoldComplete/), [Unevaluated](../../expression-information/Unevaluated/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/), [HoldComplete](../../expression-information/HoldComplete/), [Unevaluated](../../expression-information/Unevaluated/)
 
 - Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

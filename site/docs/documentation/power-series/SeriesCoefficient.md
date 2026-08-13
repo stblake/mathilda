@@ -33,28 +33,17 @@ Out[2]= 1/120
 ### Applications (4)
 
 ```mathematica
-In[1]:= SeriesCoefficient[Exp[x], {x, 0, 10}]
-Out[1]= 1/3628800
-```
+In[3]:= SeriesCoefficient[Exp[x], {x, 0, 10}]
+Out[3]= 1/3628800
 
-The coefficient of `x^7` in `Tan[x]` matches the corresponding tangent number:
+In[4]:= SeriesCoefficient[Tan[x], {x, 0, 7}]
+Out[4]= 17/315
 
-```mathematica
-In[1]:= SeriesCoefficient[Tan[x], {x, 0, 7}]
-Out[1]= 17/315
-```
+In[5]:= SeriesCoefficient[1/(1 - x - x^2), {x, 0, 10}]
+Out[5]= 89
 
-The coefficient of `x^n` in `1/(1 - x - x^2)` is the n-th Fibonacci number; here
-`F(10) = 89`:
-
-```mathematica
-In[1]:= SeriesCoefficient[1/(1 - x - x^2), {x, 0, 10}]
-Out[1]= 89
-```
-
-```mathematica
-In[1]:= SeriesCoefficient[Cos[x], {x, 0, 8}]
-Out[1]= 1/40320
+In[6]:= SeriesCoefficient[Cos[x], {x, 0, 8}]
+Out[6]= 1/40320
 ```
 
 ## Algorithm
@@ -98,11 +87,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/), [Series](../../power-series/Series/), [SeriesData](../../power-series/SeriesData/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/), [Series](../../power-series/Series/), [SeriesData](../../power-series/SeriesData/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/power-series.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/power-series.md)

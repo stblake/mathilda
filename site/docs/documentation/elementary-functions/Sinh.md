@@ -34,17 +34,15 @@ Out[3]= -Sinh[x]
 
 In[4]:= Sinh[ArcSinh[x]]
 Out[4]= x
-```
 
-```mathematica
-In[1]:= Sinh[I x]
-Out[1]= I Sin[x]
+In[5]:= Sinh[I x]
+Out[5]= I Sin[x]
 
-In[2]:= TrigExpand[Sinh[x + y]]
-Out[2]= Cosh[x] Sinh[y] + Sinh[x] Cosh[y]
+In[6]:= TrigExpand[Sinh[x + y]]
+Out[6]= Cosh[x] Sinh[y] + Sinh[x] Cosh[y]
 
-In[3]:= N[Sinh[1], 40]
-Out[3]= 1.1752011936438014568823818505956008151557
+In[7]:= N[Sinh[1], 40]
+Out[7]= 1.1752011936438014568823818505956008151557
 ```
 
 ## Implementation notes

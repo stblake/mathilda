@@ -46,13 +46,11 @@ Out[5]= 0.9999999999999999999999999999992 + 0.9999999999999999999999999999984 x 
 ### Applications (2)
 
 ```mathematica
-In[1]:= Chop[NSeries[Cos[x], {x, 0, 6}]]
-Out[1]= 1.0 - 0.5 x^2 + 0.0416667 x^4 - 0.00138889 x^6 + O[x]^7
-```
+In[6]:= Chop[NSeries[Cos[x], {x, 0, 6}]]
+Out[6]= 1.0 - 0.5 x^2 + 0.0416667 x^4 - 0.00138889 x^6 + O[x]^7
 
-```mathematica
-In[1]:= Chop[NSeries[Sin[x + 1/x], {x, 0, 3}]]
-Out[1]= -0.128943/x^3 + 0.576725/x + 0.576725 x - 0.128943 x^3 + O[x]^4
+In[7]:= Chop[NSeries[Sin[x + 1/x], {x, 0, 3}]]
+Out[7]= -0.128943/x^3 + 0.576725/x + 0.576725 x - 0.128943 x^3 + O[x]^4
 ```
 
 ## Algorithm
@@ -103,11 +101,9 @@ Memory: receives `res` owned by the evaluator. Returns a fresh Expr* (a SeriesDa
 
 **Attributes:** `Protected`.
 
-## See also
-
-[SeriesData](../../power-series/SeriesData/), [Series](../../power-series/Series/), [Chop](../../elementary-functions/Chop/), [N](../../arithmetic/N/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
-
 ## References
+
+**See also:** [SeriesData](../../power-series/SeriesData/), [Series](../../power-series/Series/), [Chop](../../elementary-functions/Chop/), [N](../../arithmetic/N/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)

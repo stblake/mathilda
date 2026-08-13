@@ -48,44 +48,21 @@ Out[7]= {f[a, b, c], f[a, c, b], f[b, a, c], f[b, c, a], f[c, a, b], f[c, b, a]}
 
 ### Applications (5)
 
-All orderings of a list:
-
 ```mathematica
-In[1]:= Permutations[{a, b, c}]
-Out[1]= {{a, b, c}, {a, c, b}, {b, a, c}, {b, c, a}, {c, a, b}, {c, b, a}}
-```
+In[8]:= Permutations[{a, b, c}]
+Out[8]= {{a, b, c}, {a, c, b}, {b, a, c}, {b, c, a}, {c, a, b}, {c, b, a}}
 
-The number of permutations of `n` distinct elements is `n!`:
+In[9]:= Length[Permutations[Range[6]]]
+Out[9]= 720
 
-```mathematica
-In[1]:= Length[Permutations[Range[6]]]
-Out[1]= 720
-```
+In[10]:= Permutations[{1, 1, 2}]
+Out[10]= {{1, 1, 2}, {1, 2, 1}, {2, 1, 1}}
 
-Repeated elements yield only the *distinct* arrangements (no duplicates), so a
-multiset gives multinomial-many results rather than `n!`:
+In[11]:= Permutations[{1, 2, 3, 4}, {2}]
+Out[11]= {{1, 2}, {1, 3}, {1, 4}, {2, 1}, {2, 3}, {2, 4}, {3, 1}, {3, 2}, {3, 4}, {4, 1}, {4, 2}, {4, 3}}
 
-```mathematica
-In[1]:= Permutations[{1, 1, 2}]
-Out[1]= {{1, 1, 2}, {1, 2, 1}, {2, 1, 1}}
-```
-
-The `{n}` form gives the ordered length-`n` arrangements (k-permutations) — here
-all ordered pairs drawn from four symbols:
-
-```mathematica
-In[1]:= Permutations[{1, 2, 3, 4}, {2}]
-Out[1]= {{1, 2}, {1, 3}, {1, 4}, {2, 1}, {2, 3}, {2, 4}, {3, 1}, {3, 2}, {3, 4}, {4, 1}, {4, 2}, {4, 3}}
-```
-
-`Permutations` is a building block for combinatorial search: filtering the full
-list by a predicate enumerates structured arrangements. Keeping only those
-permutations of `{1, 2, 3, 4}` whose first element is below the second selects
-exactly half of them:
-
-```mathematica
-In[1]:= Select[Permutations[{1, 2, 3, 4}], (#[[1]] < #[[2]] &)]
-Out[1]= {{1, 2, 3, 4}, {1, 2, 4, 3}, {1, 3, 2, 4}, {1, 3, 4, 2}, {1, 4, 2, 3}, {1, 4, 3, 2}, {2, 3, 1, 4}, {2, 3, 4, 1}, {2, 4, 1, 3}, {2, 4, 3, 1}, {3, 4, 1, 2}, {3, 4, 2, 1}}
+In[12]:= Select[Permutations[{1, 2, 3, 4}], (#[[1]] < #[[2]] &)]
+Out[12]= {{1, 2, 3, 4}, {1, 2, 4, 3}, {1, 3, 2, 4}, {1, 3, 4, 2}, {1, 4, 2, 3}, {1, 4, 3, 2}, {2, 3, 1, 4}, {2, 3, 4, 1}, {2, 4, 1, 3}, {2, 4, 3, 1}, {3, 4, 1, 2}, {3, 4, 2, 1}}
 ```
 
 ## Implementation notes
@@ -105,11 +82,9 @@ The optional second argument selects subsequence lengths: an integer `n` (length
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/)
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

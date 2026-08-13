@@ -27,21 +27,15 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= Log[E^3]
 Out[1]= 3
-```
 
-```mathematica
-In[1]:= N[E, 40]
-Out[1]= 2.7182818284590452353602874713526624977572
-```
+In[2]:= N[E, 40]
+Out[2]= 2.7182818284590452353602874713526624977572
 
-```mathematica
-In[1]:= Sum[1/n!, {n, 0, Infinity}]
-Out[1]= E
-```
+In[3]:= Sum[1/n!, {n, 0, Infinity}]
+Out[3]= E
 
-```mathematica
-In[1]:= Limit[(1 + 1/n)^n, n -> Infinity]
-Out[1]= E
+In[4]:= Limit[(1 + 1/n)^n, n -> Infinity]
+Out[4]= E
 ```
 
 ## Implementation notes

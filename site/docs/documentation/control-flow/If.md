@@ -41,23 +41,17 @@ Out[2]= Indeterminate
 ### Applications (4)
 
 ```mathematica
-In[1]:= If[3 > 2, yes, no]
-Out[1]= yes
-```
+In[3]:= If[3 > 2, yes, no]
+Out[3]= yes
 
-```mathematica
-In[1]:= If[x > 0, pos, neg]
-Out[1]= If[x > 0, pos, neg]
-```
+In[4]:= If[x > 0, pos, neg]
+Out[4]= If[x > 0, pos, neg]
 
-```mathematica
-In[1]:= If[1 == 2, a, b, c]
-Out[1]= b
-```
+In[5]:= If[1 == 2, a, b, c]
+Out[5]= b
 
-```mathematica
-In[1]:= If[PrimeQ[7], prime, composite]
-Out[1]= prime
+In[6]:= If[PrimeQ[7], prime, composite]
+Out[6]= prime
 ```
 
 ## Implementation notes
@@ -70,11 +64,9 @@ Out[1]= prime
 
 **Attributes:** `HoldRest`, `Protected`.
 
-## See also
-
-[HoldRest](../../other-advanced/HoldRest/)
-
 ## References
+
+**See also:** [HoldRest](../../other-advanced/HoldRest/)
 
 - Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

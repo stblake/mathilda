@@ -35,21 +35,15 @@ Out[2]= -2
 
 In[3]:= Ceiling[17, 5]
 Out[3]= 20
-```
 
-```mathematica
-In[1]:= Ceiling[Pi]
-Out[1]= 4
-```
+In[4]:= Ceiling[Pi]
+Out[4]= 4
 
-```mathematica
-In[1]:= Ceiling[E^2]
-Out[1]= 8
-```
+In[5]:= Ceiling[E^2]
+Out[5]= 8
 
-```mathematica
-In[1]:= Ceiling[100/7, 5]
-Out[1]= 15
+In[6]:= Ceiling[100/7, 5]
+Out[6]= 15
 ```
 
 ## Implementation notes

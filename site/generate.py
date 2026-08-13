@@ -508,6 +508,44 @@ def compact_figure(payload):
     return small if len(json.dumps(small)) <= FIGURE_MAX_BYTES else None
 
 
+# A worked example written as prose: `Expr[...]` -> `result`, usually in a
+# semicolon-separated run under a "Worked examples" lead-in. 108 of these exist
+# across 19 spec files.
+PROSE_EX_RE = re.compile(
+    r"`([A-Z][A-Za-z0-9]*\[[^`]{3,200}?)`\s*(?:\u2192|->)\s*`[^`\n]{1,120}`")
+
+
+def mine_prose_examples(body, limit=10):
+    """Input expressions from prose worked examples.
+
+    Only the INPUT is taken. The written result is prose -- `\u221a\u03c0/2`,
+    `\u0393[s]`, `\u03c0 a/2` -- not Mathilda syntax, so it cannot be trusted as
+    an expected value and is not shown. Running the inputs turns a claim in prose
+    into an example the reader can execute, with whatever this build actually
+    produces."""
+    seen, out = set(), []
+    for expr in PROSE_EX_RE.findall(body or ""):
+        e = " ".join(expr.split())
+        if e not in seen:
+            seen.add(e)
+            out.append(e)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def strip_prose_examples(text):
+    """Remove the prose runs whose inputs were promoted to real examples, so the
+    page does not state them twice."""
+    if not text:
+        return text
+    out = PROSE_EX_RE.sub("", text)
+    out = re.sub(r"(?im)^\s*Worked examples[^\n]*:\s*$", "", out)
+    out = re.sub(r"[ \t]*;[ \t]*(?=\n)", "", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip() or None
+
+
 def verify_block(inputs):
     """Run a block's inputs; return ([(in, out), ...], {input_expr: figure}).
 
@@ -689,21 +727,57 @@ def render_docstring(doc):
 OPTION_RE = re.compile(r"\b[A-Z][A-Za-z0-9]*\s*->")
 
 
+# A one-line explanation attached to an example, written as a Mathilda comment
+# in the spec or overlay: `Expand[(x+1)^3]  (* binomial coefficients *)`.
+EX_NOTE_RE = re.compile(r"\s*\(\*(.+?)\*\)\s*")
+
+
 def _example_fence(pairs, start=1):
-    lines = ["```mathematica"]
-    n = start
+    """Render examples, each preceded by its explanation when it has one.
+
+    An example carrying a `(* ... *)` comment gets that line as prose above its
+    own fenced block, so the notebook shows a sentence and then the input it
+    describes. Examples without one are grouped into a single fence as before --
+    the alternative would be inventing an explanation, and a documentation page
+    is the last place to put made-up prose.
+
+    The comment is stripped from the input it annotates: it has already been
+    said above the cell, and repeating it inside the expression the reader is
+    about to run is noise."""
+    out, n = [], start
+    run = []
+
+    def flush_run():
+        if not run:
+            return
+        block = ["```mathematica"]
+        for expr, res, _ in run:
+            block.append(expr)
+            block.append(res)
+            block.append("")
+        if block[-1] == "":
+            block.pop()
+        block.append("```")
+        out.append("\n".join(block))
+        run.clear()
+
     for expr, res in pairs:
-        lines.append(f"In[{n}]:= {expr}")
-        lines.append(f"Out[{n}]= {res}")
-        lines.append("")
+        note = EX_NOTE_RE.search(expr)
+        clean = EX_NOTE_RE.sub(" ", expr).strip() if note else expr
+        inp, outp = f"In[{n}]:= {clean}", f"Out[{n}]= {res}"
         n += 1
-    if lines[-1] == "":
-        lines.pop()
-    lines.append("```")
-    return "\n".join(lines), n
+        if note:
+            flush_run()
+            text = note.group(1).strip()
+            out.append(text[0].upper() + text[1:] if text else text)
+            out.append(f"```mathematica\n{inp}\n{outp}\n```")
+        else:
+            run.append((inp, outp, None))
+    flush_run()
+    return "\n\n".join(out), n
 
 
-def render_examples(blocks, applications=None):
+def render_examples(blocks, applications=None, worked=None):
     """Group the verified examples into subsections, each with its count.
 
     The groupings are derived from structure that already exists rather than
@@ -726,9 +800,12 @@ def render_examples(blocks, applications=None):
                 scope.append(pair)
 
     groups = [("Basic examples", basic), ("Scope", scope), ("Options", options)]
+    if worked:
+        groups.append(("Worked examples", worked))
     total = sum(len(g) for _, g in groups)
+    app_pairs = applications[1] if applications and applications[0] == "pairs" else None
     if applications:
-        total += applications[1]
+        total += len(app_pairs) if app_pairs is not None else applications[1]
 
     if not total:
         return None, 0
@@ -743,10 +820,16 @@ def render_examples(blocks, applications=None):
         out.append(fence)
         out.append("")
     if applications:
-        body, count = applications
-        out.append(f"### Applications ({count})")
-        out.append("")
-        out.append(body)
+        if app_pairs is not None:
+            fence, n = _example_fence(app_pairs, n)
+            out.append(f"### Applications ({len(app_pairs)})")
+            out.append("")
+            out.append(fence)
+        else:
+            body, count = applications
+            out.append(f"### Applications ({count})")
+            out.append("")
+            out.append(body)
         out.append("")
     return "\n".join(out).strip(), total
 
@@ -838,8 +921,40 @@ def mine_spec_detail(section_body):
     rest = section_body[idx + len(feat):]
     rest = _FENCE_RE.sub("", rest)
     rest = _promote_labels(rest)
+    # A spec section nests four deep; the reference page has only two levels
+    # below the page title, so H4 becomes H3 rather than rendering as literal
+    # '#### text' inside a paragraph.
+    rest = re.sub(r"^#{4,}\s+", "### ", rest, flags=re.M)
+    rest = _drop_empty_headings(rest)
     rest = re.sub(r"\n{3,}", "\n\n", rest).strip()
     return rest or None
+
+
+def _drop_empty_headings(text):
+    """Remove headings left with nothing under them.
+
+    The spec marks its example blocks with an '### Examples' heading, and those
+    blocks are stripped here because the examples are mined, re-verified and
+    shown in the Examples section instead. That left the heading behind: a page
+    could carry three or four 'Examples' subsections in a row, each empty and
+    each expanding to nothing."""
+    lines = text.split("\n")
+    keep = [True] * len(lines)
+    for i, line in enumerate(lines):
+        m = re.match(r"^(#{2,6})\s", line)
+        if not m:
+            continue
+        level = len(m.group(1))
+        has_content = False
+        for j in range(i + 1, len(lines)):
+            nxt = re.match(r"^(#{2,6})\s", lines[j])
+            if nxt and len(nxt.group(1)) <= level:
+                break
+            if lines[j].strip():
+                has_content = True
+                break
+        keep[i] = has_content
+    return "\n".join(l for l, k in zip(lines, keep) if k)
 
 
 def _promote_labels(text):
@@ -1113,7 +1228,8 @@ def render_page(info):
                  else "_No description available._")
     lines.append("")
 
-    ex, total = render_examples(info["examples"], info.get("applications"))
+    ex, total = render_examples(info["examples"], info.get("applications"),
+                                info.get("worked"))
     lines.append(f"## Examples ({total})" if total else "## Examples")
     lines.append("")
     if ex:
@@ -1177,21 +1293,20 @@ def render_page(info):
     lines.append(info["notes"])
     lines.append("")
 
+    lines.append("## References")
+    lines.append("")
     if info.get("related"):
-        # Related functions, from the spec's own groupings rather than from an
-        # alphabetical neighbourhood: a heading naming several functions is a
-        # curated set, and a function named in this one's spec prose is one the
-        # author thought worth mentioning here.
-        lines.append("## See also")
-        lines.append("")
+        # Related functions live here rather than in a section of their own:
+        # both answer "where do I go from this page", and one heading for that
+        # is enough. From the spec's own groupings, not an alphabetical
+        # neighbourhood -- a heading naming several functions is a curated set,
+        # and a function named in this one's prose is one the author thought
+        # worth mentioning.
         urls = info.get("related_urls", {})
-        lines.append(", ".join(
+        lines.append("**See also:** " + ", ".join(
             f"[{r}](../../{urls[r]}/)" if r in urls else f"`{r}`"
             for r in info["related"]))
         lines.append("")
-
-    lines.append("## References")
-    lines.append("")
     for r in info["references"]:
         lines.append(f"- {r}")
     for t in info.get("tests", []):
@@ -1388,6 +1503,15 @@ def main():
                 figures.update(figs)
                 verified_examples += len(pairs)
 
+        # Worked examples written as prose. Their inputs are real expressions;
+        # their stated results are prose, so the binary supplies the output.
+        worked_pairs = []
+        prose_inputs = mine_prose_examples(body)
+        if prose_inputs:
+            worked_pairs, wfigs = verify_block(prose_inputs)
+            figures.update(wfigs)
+            verified_examples += len(worked_pairs)
+
         status = derive_status(name, builtins[name]["doc"], bool(blocks),
                                tests_text, lim_text)
 
@@ -1412,6 +1536,8 @@ def main():
                                   cat_slugs, anchor_to_cat)
         detail = mine_spec_detail(body)
         if detail:
+            detail = strip_prose_examples(detail)
+        if detail:
             detail = rewrite_spec_links(detail, cat_slugs, anchor_to_cat)
 
         overlay = load_overlay(name)
@@ -1432,8 +1558,24 @@ def main():
                               overlay_body, re.S | re.M)
                 if m and m.group(1).strip():
                     app_body = m.group(1).strip()
-                    count = len(re.findall(r"^In\[", app_body, re.M)) or 1
-                    applications = (app_body, count)
+                    # Parse into (input, output) pairs so these render through the
+                    # same path as every other example group -- which is what
+                    # lifts a `(* ... *)` note out as a sentence above the cell.
+                    app_pairs = []
+                    for blk in re.findall(r"```mathematica\n(.*?)```", app_body, re.S):
+                        lines = blk.rstrip().split("\n")
+                        for i, ln in enumerate(lines):
+                            mi = re.match(r"^In\[\d+\]:=\s?(.*)$", ln)
+                            if not mi:
+                                continue
+                            mo = (re.match(r"^Out\[\d+\]=\s?(.*)$", lines[i + 1])
+                                  if i + 1 < len(lines) else None)
+                            if mo:
+                                app_pairs.append((mi.group(1).strip(), mo.group(1).strip()))
+                    if app_pairs:
+                        applications = ("pairs", app_pairs)
+                    else:
+                        applications = (app_body, len(re.findall(r"^In\[", app_body, re.M)) or 1)
                     overlay_body = (overlay_body[:m.start()] +
                                     overlay_body[m.end():]).strip() or None
 
@@ -1450,7 +1592,7 @@ def main():
             "attrs": attrs.get(name, []), "examples": blocks, "status": status,
             "references": refs, "notes": notes, "module": builtins[name]["module"],
             "overlay_body": overlay_body, "spec_detail": detail,
-            "applications": applications,
+            "applications": applications, "worked": worked_pairs,
             "algorithm": source_algorithm(name, impl_files.get(name), mod_counts),
             "figures": figures,
             "related": related.get(name, []),

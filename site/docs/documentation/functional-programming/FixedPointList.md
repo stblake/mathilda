@@ -59,18 +59,14 @@ Out[7]= {1.0, 1.5, 1.41667, 1.41422}
 ### Applications (3)
 
 ```mathematica
-In[1]:= FixedPointList[Floor[#/2] &, 100]
-Out[1]= {100, 50, 25, 12, 6, 3, 1, 0, 0}
-```
+In[8]:= FixedPointList[Floor[#/2] &, 100]
+Out[8]= {100, 50, 25, 12, 6, 3, 1, 0, 0}
 
-```mathematica
-In[1]:= FixedPointList[(# + 2/#)/2 &, 1.0]
-Out[1]= {1.0, 1.5, 1.41667, 1.41422, 1.41421, 1.41421, 1.41421}
-```
+In[9]:= FixedPointList[(# + 2/#)/2 &, 1.0]
+Out[9]= {1.0, 1.5, 1.41667, 1.41422, 1.41421, 1.41421, 1.41421}
 
-```mathematica
-In[1]:= Length[FixedPointList[If[EvenQ[#], #/2, 3 # + 1] &, 27, SameTest -> (#2 == 1 &)]]
-Out[1]= 112
+In[10]:= Length[FixedPointList[If[EvenQ[#], #/2, 3 # + 1] &, 27, SameTest -> (#2 == 1 &)]]
+Out[10]= 112
 ```
 
 ## Implementation notes
@@ -99,11 +95,9 @@ the kept history under a `List` head.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[SameQ](../../comparisons/SameQ/)
-
 ## References
+
+**See also:** [SameQ](../../comparisons/SameQ/)
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

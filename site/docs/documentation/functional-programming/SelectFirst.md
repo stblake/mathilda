@@ -30,11 +30,9 @@ Out[3]= None
 
 **Attributes:** `Protected`.
 
-## See also
-
-[FirstCase](../../functional-programming/FirstCase/)
-
 ## References
+
+**See also:** [FirstCase](../../functional-programming/FirstCase/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

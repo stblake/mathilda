@@ -53,39 +53,29 @@ Out[2]= <|"a" -> 1, "b" -> 2|>
 ### Applications (5)
 
 ```mathematica
-In[1]:= Drop[{a, b, c, d, e}, 2]
-Out[1]= {c, d, e}
-```
+In[3]:= Drop[{a, b, c, d, e}, 2]
+Out[3]= {c, d, e}
 
-```mathematica
-In[1]:= Drop[{a, b, c, d, e}, -2]
-Out[1]= {a, b, c}
-```
+In[4]:= Drop[{a, b, c, d, e}, -2]
+Out[4]= {a, b, c}
 
-```mathematica
-In[1]:= Drop[{a, b, c, d, e}, {2, 4}]
-Out[1]= {a, e}
-```
+In[5]:= Drop[{a, b, c, d, e}, {2, 4}]
+Out[5]= {a, e}
 
-```mathematica
-In[1]:= Drop[{a, b, c, d, e, f, g}, {2, 7, 2}]
-Out[1]= {a, c, e, g}
-```
+In[6]:= Drop[{a, b, c, d, e, f, g}, {2, 7, 2}]
+Out[6]= {a, c, e, g}
 
-```mathematica
-In[1]:= Drop[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {2}, {2}]
-Out[1]= {{1, 3}, {7, 9}}
+In[7]:= Drop[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {2}, {2}]
+Out[7]= {{1, 3}, {7, 9}}
 ```
 
 ## Implementation notes
 
 **Attributes:** `NHoldRest`, `Protected`.
 
-## See also
-
-[First](../../data-structures/First/), [Last](../../data-structures/Last/), [Rest](../../data-structures/Rest/), [Most](../../data-structures/Most/), [Take](../../data-structures/Take/)
-
 ## References
+
+**See also:** [First](../../data-structures/First/), [Last](../../data-structures/Last/), [Rest](../../data-structures/Rest/), [Most](../../data-structures/Most/), [Take](../../data-structures/Take/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

@@ -37,11 +37,9 @@ Out[3]= True
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[NumericQ](../../expression-information/NumericQ/)
-
 ## References
+
+**See also:** [NumericQ](../../expression-information/NumericQ/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

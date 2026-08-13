@@ -31,21 +31,15 @@ Out[2]= 0.761594
 
 In[3]:= Tanh[ArcTanh[z]]
 Out[3]= z
-```
 
-```mathematica
-In[1]:= N[Tanh[1], 40]
-Out[1]= 0.76159415595576488811945828260479359041279
-```
+In[4]:= N[Tanh[1], 40]
+Out[4]= 0.76159415595576488811945828260479359041279
 
-```mathematica
-In[1]:= D[Tanh[x], x]
-Out[1]= Sech[x]^2
-```
+In[5]:= D[Tanh[x], x]
+Out[5]= Sech[x]^2
 
-```mathematica
-In[1]:= Series[Tanh[x], {x, 0, 7}]
-Out[1]= x - 1/3 x^3 + 2/15 x^5 - 17/315 x^7 + O[x]^8
+In[6]:= Series[Tanh[x], {x, 0, 7}]
+Out[6]= x - 1/3 x^3 + 2/15 x^5 - 17/315 x^7 + O[x]^8
 ```
 
 ## Implementation notes

@@ -55,11 +55,9 @@ Out[5]= {2, 3, 1}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Sort](../../data-structures/Sort/), [List](../../other-advanced/List/), [Association](../../data-structures/Association/)
-
 ## References
+
+**See also:** [Sort](../../data-structures/Sort/), [List](../../other-advanced/List/), [Association](../../data-structures/Association/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

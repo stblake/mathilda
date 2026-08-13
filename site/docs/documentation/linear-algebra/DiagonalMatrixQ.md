@@ -59,26 +59,20 @@ Out[8]= True
 ### Applications (5)
 
 ```mathematica
-In[1]:= DiagonalMatrixQ[{{1, 0}, {0, 2}}]
-Out[1]= True
+In[9]:= DiagonalMatrixQ[{{1, 0}, {0, 2}}]
+Out[9]= True
 
-In[2]:= DiagonalMatrixQ[{{1, 2}, {0, 3}}]
-Out[2]= False
-```
+In[10]:= DiagonalMatrixQ[{{1, 2}, {0, 3}}]
+Out[10]= False
 
-```mathematica
-In[1]:= DiagonalMatrixQ[DiagonalMatrix[{a, b, c}]]
-Out[1]= True
-```
+In[11]:= DiagonalMatrixQ[DiagonalMatrix[{a, b, c}]]
+Out[11]= True
 
-```mathematica
-In[1]:= DiagonalMatrixQ[{{0, 5, 0}, {0, 0, 7}, {0, 0, 0}}, 1]
-Out[1]= True
-```
+In[12]:= DiagonalMatrixQ[{{0, 5, 0}, {0, 0, 7}, {0, 0, 0}}, 1]
+Out[12]= True
 
-```mathematica
-In[1]:= DiagonalMatrixQ[{{0.0, 1.0*10^-15}, {0, 0.0}}, Tolerance -> 10^-10]
-Out[1]= True
+In[13]:= DiagonalMatrixQ[{{0.0, 1.0*10^-15}, {0, 0.0}}, Tolerance -> 10^-10]
+Out[13]= True
 ```
 
 ## Implementation notes
@@ -114,11 +108,9 @@ Out[1]= True
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Rule](../../assignment-and-rules/Rule/)
-
 ## References
+
+**See also:** [Rule](../../assignment-and-rules/Rule/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

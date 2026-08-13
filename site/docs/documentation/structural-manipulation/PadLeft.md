@@ -54,11 +54,9 @@ Out[2]= {{a, b, 0, 0, 0}, {c, 0, 0, 0, 0}, {0, 0, 0, 0, 0}}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[PadRight](../../structural-manipulation/PadRight/), [List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [PadRight](../../structural-manipulation/PadRight/), [List](../../other-advanced/List/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

@@ -38,23 +38,17 @@ Out[3]= {15, 19, 10, 10, 14, 19, 7, 14, 20, 30}
 ### Applications (4)
 
 ```mathematica
-In[1]:= DigitCount[1234567890]
-Out[1]= {1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
-```
+In[4]:= DigitCount[1234567890]
+Out[4]= {1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
 
-```mathematica
-In[1]:= DigitCount[100!]
-Out[1]= {15, 19, 10, 10, 14, 19, 7, 14, 20, 30}
-```
+In[5]:= DigitCount[100!]
+Out[5]= {15, 19, 10, 10, 14, 19, 7, 14, 20, 30}
 
-```mathematica
-In[1]:= DigitCount[255, 2]
-Out[1]= {8, 0}
-```
+In[6]:= DigitCount[255, 2]
+Out[6]= {8, 0}
 
-```mathematica
-In[1]:= DigitCount[2^1000, 10, 0]
-Out[1]= 28
+In[7]:= DigitCount[2^1000, 10, 0]
+Out[7]= 28
 ```
 
 ## Implementation notes

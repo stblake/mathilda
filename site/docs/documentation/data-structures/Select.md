@@ -34,41 +34,23 @@ Out[2]= <|"b" -> 2, "c" -> 3|>
 ### Applications (6)
 
 ```mathematica
-In[1]:= Select[{1, 2, 3, 4, 5, 6}, EvenQ]
-Out[1]= {2, 4, 6}
-```
+In[3]:= Select[{1, 2, 3, 4, 5, 6}, EvenQ]
+Out[3]= {2, 4, 6}
 
-```mathematica
-In[1]:= Select[Range[10], # > 5 &]
-Out[1]= {6, 7, 8, 9, 10}
-```
+In[4]:= Select[Range[10], # > 5 &]
+Out[4]= {6, 7, 8, 9, 10}
 
-```mathematica
-In[1]:= Select[{1, 2, 3, 4, 5}, PrimeQ, 2]
-Out[1]= {2, 3}
-```
+In[5]:= Select[{1, 2, 3, 4, 5}, PrimeQ, 2]
+Out[5]= {2, 3}
 
-Combining predicates with logical operators filters by richer conditions — the
-twin primes below 100, where both `p` and `p + 2` are prime:
+In[6]:= Select[Range[100], PrimeQ[#] && PrimeQ[# + 2] &]
+Out[6]= {3, 5, 11, 17, 29, 41, 59, 71}
 
-```mathematica
-In[1]:= Select[Range[100], PrimeQ[#] && PrimeQ[# + 2] &]
-Out[1]= {3, 5, 11, 17, 29, 41, 59, 71}
-```
+In[7]:= Select[Range[2, 50], PrimeQ[2^# - 1] &]
+Out[7]= {2, 3, 5, 7, 13, 17, 19, 31}
 
-The criterion can itself perform a computation. Selecting the exponents `p` for
-which `2^p - 1` is prime yields the Mersenne-prime exponents:
-
-```mathematica
-In[1]:= Select[Range[2, 50], PrimeQ[2^# - 1] &]
-Out[1]= {2, 3, 5, 7, 13, 17, 19, 31}
-```
-
-The integers below 20 that are coprime to 20 (a `GCD`-based filter):
-
-```mathematica
-In[1]:= Select[Range[1, 20], GCD[#, 20] == 1 &]
-Out[1]= {1, 3, 7, 9, 11, 13, 17, 19}
+In[8]:= Select[Range[1, 20], GCD[#, 20] == 1 &]
+Out[8]= {1, 3, 7, 9, 11, 13, 17, 19}
 ```
 
 ## Implementation notes
@@ -85,11 +67,9 @@ plus its evaluated result, so memory is bounded per element.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Map](../../data-structures/Map/)
-
 ## References
+
+**See also:** [Map](../../data-structures/Map/)
 
 - Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §2.2.3 (sequences as conventional interfaces; filtering).
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)

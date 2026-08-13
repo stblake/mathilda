@@ -67,11 +67,9 @@ Strings are treated as raw byte arrays (consistent with StringRepeat / StringTak
 
 **Attributes:** `Protected`.
 
-## See also
-
-[StringPadRight](../../string-operations/StringPadRight/)
-
 ## References
+
+**See also:** [StringPadRight](../../string-operations/StringPadRight/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)

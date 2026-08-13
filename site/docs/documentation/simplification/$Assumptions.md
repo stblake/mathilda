@@ -49,11 +49,9 @@ simplification.
 
 **Attributes:** none registered.
 
-## See also
-
-[Simplify](../../simplification/Simplify/), [Assuming](../../simplification/Assuming/)
-
 ## References
+
+**See also:** [Simplify](../../simplification/Simplify/), [Assuming](../../simplification/Assuming/)
 
 - Source: [`src/simp/simp.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp.c)
 - Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)

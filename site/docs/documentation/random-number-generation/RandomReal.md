@@ -86,11 +86,9 @@ When a precision argument requests extended precision, the MPFR path (`randomrea
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/)
 
 - Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)

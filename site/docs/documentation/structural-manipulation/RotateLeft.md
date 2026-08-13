@@ -44,11 +44,9 @@ is implemented by negating `n` and calling the same routine.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[RotateRight](../../structural-manipulation/RotateRight/)
-
 ## References
+
+**See also:** [RotateRight](../../structural-manipulation/RotateRight/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

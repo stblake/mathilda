@@ -31,21 +31,15 @@ Out[2]= \frac{1}{2}
 
 In[3]:= TeXForm[Sqrt[x]/y]
 Out[3]= \frac{\sqrt{x}}{y}
-```
 
-```mathematica
-In[1]:= TeXForm[Integrate[1/(1 + x^2), x]]
-Out[1]= \tan ^{-1}(x)
-```
+In[4]:= TeXForm[Integrate[1/(1 + x^2), x]]
+Out[4]= \tan ^{-1}(x)
 
-```mathematica
-In[1]:= TeXForm[Gamma[1/2]]
-Out[1]= \sqrt{\pi }
-```
+In[5]:= TeXForm[Gamma[1/2]]
+Out[5]= \sqrt{\pi }
 
-```mathematica
-In[1]:= TeXForm[D[Tan[x], x]]
-Out[1]= \sec(x)^{2}
+In[6]:= TeXForm[D[Tan[x], x]]
+Out[6]= \sec(x)^{2}
 ```
 
 ## Implementation notes

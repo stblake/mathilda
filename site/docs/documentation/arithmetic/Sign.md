@@ -22,19 +22,15 @@ Out[2]= 0
 
 In[3]:= Sign[{-2, 0, 5}]
 Out[3]= {-1, 0, 1}
-```
 
-```mathematica
-In[1]:= Sign[3 + 4 I]
-Out[1]= 3/5 + 4/5*I
-```
+In[4]:= Sign[3 + 4 I]
+Out[4]= 3/5 + 4/5*I
 
-```mathematica
-In[1]:= Sign[(1 + I)^2]
-Out[1]= I
+In[5]:= Sign[(1 + I)^2]
+Out[5]= I
 
-In[2]:= Sign[2 - 2 I]
-Out[2]= (1/2 - 1/2*I) Sqrt[2]
+In[6]:= Sign[2 - 2 I]
+Out[6]= (1/2 - 1/2*I) Sqrt[2]
 ```
 
 ## Implementation notes
@@ -43,11 +39,9 @@ Out[2]= (1/2 - 1/2*I) Sqrt[2]
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [ReIm](../../arithmetic/ReIm/), [Abs](../../arithmetic/Abs/), [Conjugate](../../arithmetic/Conjugate/), [Arg](../../arithmetic/Arg/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
-
 ## References
+
+**See also:** [Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [ReIm](../../arithmetic/ReIm/), [Abs](../../arithmetic/Abs/), [Conjugate](../../arithmetic/Conjugate/), [Arg](../../arithmetic/Arg/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
 
 - Source: [`src/complex.c`](https://github.com/stblake/mathilda/blob/main/src/complex.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

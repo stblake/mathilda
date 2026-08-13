@@ -63,28 +63,20 @@ Out[8]= 3
 ### Applications (5)
 
 ```mathematica
-In[1]:= MatrixRank[{{1, 2}, {2, 4}}]
-Out[1]= 1
-```
+In[9]:= MatrixRank[{{1, 2}, {2, 4}}]
+Out[9]= 1
 
-```mathematica
-In[1]:= MatrixRank[{{1, 2}, {3, 4}}]
-Out[1]= 2
-```
+In[10]:= MatrixRank[{{1, 2}, {3, 4}}]
+Out[10]= 2
 
-```mathematica
-In[1]:= MatrixRank[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
-Out[1]= 2
-```
+In[11]:= MatrixRank[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+Out[11]= 2
 
-```mathematica
-In[1]:= MatrixRank[{{a, b}, {2 a, 2 b}}]
-Out[1]= 1
-```
+In[12]:= MatrixRank[{{a, b}, {2 a, 2 b}}]
+Out[12]= 1
 
-```mathematica
-In[1]:= MatrixRank[Table[1/(i + j - 1), {i, 4}, {j, 4}]]
-Out[1]= 4
+In[13]:= MatrixRank[Table[1/(i + j - 1), {i, 4}, {j, 4}]]
+Out[13]= 4
 ```
 
 ## Options & behaviour

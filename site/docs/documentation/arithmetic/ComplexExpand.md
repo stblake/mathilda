@@ -77,11 +77,9 @@ evaluated Expr*.  The builtin never frees `res` (the evaluator owns it).
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/), [Abs](../../arithmetic/Abs/), [Arg](../../arithmetic/Arg/), [Exp](../../elementary-functions/Exp/), [Log](../../elementary-functions/Log/), [Re](../../arithmetic/Re/)
-
 ## References
+
+**See also:** [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/), [Abs](../../arithmetic/Abs/), [Arg](../../arithmetic/Arg/), [Exp](../../elementary-functions/Exp/), [Log](../../elementary-functions/Log/), [Re](../../arithmetic/Re/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

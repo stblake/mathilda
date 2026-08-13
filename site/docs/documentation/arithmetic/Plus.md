@@ -21,18 +21,14 @@ Out[1]= 3 + 3 x
 ### Applications (3)
 
 ```mathematica
-In[1]:= 2^100 + 3^50
-Out[1]= 1267651318126217093349291975625
-```
+In[2]:= 2^100 + 3^50
+Out[2]= 1267651318126217093349291975625
 
-```mathematica
-In[1]:= 1/2 + 1/3 + 1/6
-Out[1]= 1
-```
+In[3]:= 1/2 + 1/3 + 1/6
+Out[3]= 1
 
-```mathematica
-In[1]:= a + a + b + 2 a
-Out[1]= 4 a + b
+In[4]:= a + a + b + 2 a
+Out[4]= 4 a + b
 ```
 
 ## Implementation notes
@@ -56,11 +52,9 @@ It first distributes `Times[-1, Plus[...]]` over the outer sum (`is_neg_of_plus`
 
 **Attributes:** `Flat`, `Listable`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
 
-## See also
-
-[Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [Total](../../arithmetic/Total/), [Times](../../arithmetic/Times/)
-
 ## References
+
+**See also:** [Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [Total](../../arithmetic/Total/), [Times](../../arithmetic/Times/)
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on arbitrary-precision integer addition.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on normal forms for sums.

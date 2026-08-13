@@ -98,11 +98,9 @@ NOT HANDLED: packed arrays (EXPR_NDARRAY) are a distinct representation from Lis
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/)
 
 - Source: [`src/list/list_init.c`](https://github.com/stblake/mathilda/blob/main/src/list/list_init.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

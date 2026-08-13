@@ -34,22 +34,18 @@ Out[3]= 0.523599
 
 In[4]:= ArcSin[Sin[x]]
 Out[4]= ArcSin[Sin[x]]
-```
 
-```mathematica
-In[1]:= ArcSin[Sqrt[3]/2]
-Out[1]= 1/3 Pi
+In[5]:= ArcSin[Sqrt[3]/2]
+Out[5]= 1/3 Pi
 
-In[2]:= ArcSin[I]
-Out[2]= I ArcSinh[1]
-```
+In[6]:= ArcSin[I]
+Out[6]= I ArcSinh[1]
 
-```mathematica
-In[1]:= D[ArcSin[x], x]
-Out[1]= 1/Sqrt[1 - x^2]
+In[7]:= D[ArcSin[x], x]
+Out[7]= 1/Sqrt[1 - x^2]
 
-In[2]:= Series[ArcSin[x], {x, 0, 7}]
-Out[2]= x + 1/6 x^3 + 3/40 x^5 + 5/112 x^7 + O[x]^8
+In[8]:= Series[ArcSin[x], {x, 0, 7}]
+Out[8]= x + 1/6 x^3 + 3/40 x^5 + 5/112 x^7 + O[x]^8
 ```
 
 ## Implementation notes

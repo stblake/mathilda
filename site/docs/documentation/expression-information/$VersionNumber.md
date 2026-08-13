@@ -27,11 +27,9 @@ Out[2]= "Mathilda 0.044 (Apple LLVM 21.0.0 (clang-2100.1.1.101), GMP 6.3.0, MPFR
 
 **Attributes:** `Protected`.
 
-## See also
-
-[$Version](../../expression-information/$Version/)
-
 ## References
+
+**See also:** [$Version](../../expression-information/$Version/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

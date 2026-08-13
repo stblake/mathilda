@@ -24,8 +24,8 @@ Out[2]= <|"a" -> 1, "b" -> 2|>
 ### Applications (1)
 
 ```mathematica
-In[1]:= Most[{a,b,c,d}]
-Out[1]= {a, b, c}
+In[3]:= Most[{a,b,c,d}]
+Out[3]= {a, b, c}
 ```
 
 ## Implementation notes
@@ -36,11 +36,9 @@ for atoms or empty expressions.
 
 **Attributes:** none registered.
 
-## See also
-
-[First](../../data-structures/First/), [Last](../../data-structures/Last/), [Rest](../../data-structures/Rest/), [Take](../../data-structures/Take/), [Drop](../../data-structures/Drop/)
-
 ## References
+
+**See also:** [First](../../data-structures/First/), [Last](../../data-structures/Last/), [Rest](../../data-structures/Rest/), [Take](../../data-structures/Take/), [Drop](../../data-structures/Drop/)
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

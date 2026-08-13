@@ -67,18 +67,14 @@ Out[8]= {19/3, 1/2}
 ### Applications (3)
 
 ```mathematica
-In[1]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {1, 2, 2}]
-Out[1]= {2/3, 1/2}
+In[9]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {1, 2, 2}]
+Out[9]= {2/3, 1/2}
 
-In[2]:= LeastSquares[{{1, 0}, {0, 1}, {1, 1}}, {1, 1, 3}]
-Out[2]= {4/3, 4/3}
-```
+In[10]:= LeastSquares[{{1, 0}, {0, 1}, {1, 1}}, {1, 1, 3}]
+Out[10]= {4/3, 4/3}
 
-A least-squares quadratic fit `{c0, c1, c2}` of `y = {6, 5, 7, 10}` at `x = 1, 2, 3, 4` (Vandermonde design matrix), returned as exact rationals:
-
-```mathematica
-In[1]:= LeastSquares[{{1, 1, 1}, {1, 2, 4}, {1, 3, 9}, {1, 4, 16}}, {6, 5, 7, 10}]
-Out[1]= {17/2, -18/5, 1}
+In[11]:= LeastSquares[{{1, 1, 1}, {1, 2, 4}, {1, 3, 9}, {1, 4, 16}}, {6, 5, 7, 10}]
+Out[11]= {17/2, -18/5, 1}
 ```
 
 ## Algorithm
@@ -227,11 +223,9 @@ call goes through eval_and_free so its argument tree is consumed and its return 
 
 **Attributes:** `Protected`.
 
-## See also
-
-[PseudoInverse](../../linear-algebra/PseudoInverse/), [Transpose](../../structural-manipulation/Transpose/), [Rational](../../arithmetic/Rational/)
-
 ## References
+
+**See also:** [PseudoInverse](../../linear-algebra/PseudoInverse/), [Transpose](../../structural-manipulation/Transpose/), [Rational](../../arithmetic/Rational/)
 
 - C. C. Paige, M. A. Saunders, "LSQR: An Algorithm for Sparse Linear Equations and Sparse Least Squares", ACM TOMS 8 (1982).
 - Gene H. Golub, Charles F. Van Loan, *Matrix Computations*, 4th ed. (Johns Hopkins University Press, 2013).

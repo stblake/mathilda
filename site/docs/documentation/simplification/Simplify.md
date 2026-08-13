@@ -59,37 +59,29 @@ Out[8]= Sqrt[6]
 ### Applications (8)
 
 ```mathematica
-In[1]:= Simplify[(x^2 - 1)/(x - 1)]
-Out[1]= 1 + x
-```
+In[9]:= Simplify[(x^2 - 1)/(x - 1)]
+Out[9]= 1 + x
 
-```mathematica
-In[1]:= Simplify[Sin[x]^2 + Cos[x]^2]
-Out[1]= 1
-```
+In[10]:= Simplify[Sin[x]^2 + Cos[x]^2]
+Out[10]= 1
 
-```mathematica
-In[1]:= Simplify[x + x + x]
-Out[1]= 3 x
-```
+In[11]:= Simplify[x + x + x]
+Out[11]= 3 x
 
-```mathematica
-In[1]:= Simplify[Sqrt[x^2], x > 0]
-Out[1]= x
+In[12]:= Simplify[Sqrt[x^2], x > 0]
+Out[12]= x
 
-In[2]:= Simplify[Sqrt[x^2], Element[x, Reals]]
-Out[2]= Abs[x]
-```
+In[13]:= Simplify[Sqrt[x^2], Element[x, Reals]]
+Out[13]= Abs[x]
 
-```mathematica
-In[1]:= Simplify[Cosh[x]^2 - Sinh[x]^2]
-Out[1]= 1
+In[14]:= Simplify[Cosh[x]^2 - Sinh[x]^2]
+Out[14]= 1
 
-In[2]:= Simplify[Log[a b] - Log[a] - Log[b], {a > 0, b > 0}]
-Out[2]= 0
+In[15]:= Simplify[Log[a b] - Log[a] - Log[b], {a > 0, b > 0}]
+Out[15]= 0
 
-In[3]:= Simplify[Cos[3 x]/Cos[x] - (2 Cos[2 x] - 1)]
-Out[3]= 0
+In[16]:= Simplify[Cos[3 x]/Cos[x] - (2 Cos[2 x] - 1)]
+Out[16]= 0
 ```
 
 ## Options & behaviour
@@ -268,11 +260,9 @@ wins depend on the structural provers in `simp_assume.c`.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [Together](../../algebra/Together/), [Cancel](../../algebra/Cancel/), [Expand](../../algebra/Expand/), [Factor](../../algebra/Factor/), [FactorSquareFree](../../algebra/FactorSquareFree/), [Apart](../../algebra/Apart/), [TrigExpand](../../elementary-functions/TrigExpand/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [Together](../../algebra/Together/), [Cancel](../../algebra/Cancel/), [Expand](../../algebra/Expand/), [Factor](../../algebra/Factor/), [FactorSquareFree](../../algebra/FactorSquareFree/), [Apart](../../algebra/Apart/), [TrigExpand](../../elementary-functions/TrigExpand/)
 
 - Joel S. Cohen, *Computer Algebra and Symbolic Computation: Mathematical Methods* (A K Peters, 2003).
 - Source: [`src/simp/simp.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp.c)

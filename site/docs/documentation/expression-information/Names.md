@@ -81,11 +81,9 @@ builtins instead of returning {} (nothing is stored with a literal "System`" pre
 
 **Attributes:** `Protected`.
 
-## See also
-
-[RegularExpression](../../string-operations/RegularExpression/)
-
 ## References
+
+**See also:** [RegularExpression](../../string-operations/RegularExpression/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

@@ -48,11 +48,19 @@ Out[1]= InterpolatingFunction[{{1, 6}}, <>]
 
 In[2]:= f[2.5]
 Out[2]= 2.4375
+```
 
-In[3]:= (* f = x^3 with f and f' supplied: cubic reproduced exactly *) c = Interpolation[{{{0}, 0, 0}, {{1}, 1, 3}, {{2}, 8, 12}, {{3}, 27, 27}}]; {c[1.5], c'[1.5]}
+F = x^3 with f and f' supplied: cubic reproduced exactly
+
+```mathematica
+In[3]:= c = Interpolation[{{{0}, 0, 0}, {{1}, 1, 3}, {{2}, 8, 12}, {{3}, 27, 27}}]; {c[1.5], c'[1.5]}
 Out[3]= {3.375, 6.75}
+```
 
-In[4]:= (* vector-valued: each component interpolated independently *) fv = Interpolation[{{{0.}, {1., 2.}}, {{1.2}, {3., 4.}}, {{2.1}, {5., 4.}}, {{3.}, {0., 4.}}}]; fv[1.5]
+Vector-valued: each component interpolated independently
+
+```mathematica
+In[4]:= fv = Interpolation[{{{0.}, {1., 2.}}, {{1.2}, {3., 4.}}, {{2.1}, {5., 4.}}, {{3.}, {0., 4.}}}]; fv[1.5]
 Out[4]= {4.03175, 4.07143}
 ```
 
@@ -61,44 +69,52 @@ Out[4]= {4.03175, 4.07143}
 ```mathematica
 In[5]:= Interpolation[{1, 5, 7, 2, 3, 1}, InterpolationOrder -> 1][2.5]
 Out[5]= 6.0
+```
 
-In[6]:= Interpolation[{1, 4, 9, 16, 25}, Method -> "Hermite"][2.5]  (* x^2 *)
+X^2
+
+```mathematica
+In[6]:= Interpolation[{1, 4, 9, 16, 25}, Method -> "Hermite"][2.5]
 Out[6]= 6.25
+```
 
-In[7]:= (* high-precision data -> high-precision result *) Interpolation[N[{1, 2, 3, 5, 8, 5}, 30], Method -> "Spline"][N[5/2, 30]]
+High-precision data -> high-precision result
+
+```mathematica
+In[7]:= Interpolation[N[{1, 2, 3, 5, 8, 5}, 30], Method -> "Spline"][N[5/2, 30]]
 Out[7]= 2.473086124401913875598086124405
+```
 
-In[8]:= (* periodic: f[x] wraps with period = data span (5) *) fp = Interpolation[Table[{x, N[Sin[2 Pi x/5]]}, {x, 0, 5}], PeriodicInterpolation -> True]; {fp[0.5], fp[5.5], fp[-4.5]}
+Periodic: f[x] wraps with period = data span (5)
+
+```mathematica
+In[8]:= fp = Interpolation[Table[{x, N[Sin[2 Pi x/5]]}, {x, 0, 5}], PeriodicInterpolation -> True]; {fp[0.5], fp[5.5], fp[-4.5]}
 Out[8]= {0.557674, 0.557674, 0.557674}
 ```
 
 ### Applications (7)
 
 ```mathematica
-In[1]:= f = Interpolation[{1, 4, 9, 16}]
-Out[1]= InterpolatingFunction[{{1, 4}}, <>]
+In[9]:= f = Interpolation[{1, 4, 9, 16}]
+Out[9]= InterpolatingFunction[{{1, 4}}, <>]
 
-In[2]:= f[2]
-Out[2]= 4
+In[10]:= f[2]
+Out[10]= 4
 
-In[3]:= f[2.5]
-Out[3]= 6.25
-```
+In[11]:= f[2.5]
+Out[11]= 6.25
 
-```mathematica
-In[1]:= g = Interpolation[Table[{x, Sin[x]}, {x, 0., 6., 0.5}]]
-Out[1]= InterpolatingFunction[{{0.0, 6.0}}, <>]
+In[12]:= g = Interpolation[Table[{x, Sin[x]}, {x, 0., 6., 0.5}]]
+Out[12]= InterpolatingFunction[{{0.0, 6.0}}, <>]
 
-In[2]:= g[1.5]
-Out[2]= 0.997495
-```
+In[13]:= g[1.5]
+Out[13]= 0.997495
 
-```mathematica
-In[1]:= p = Interpolation[{{0, 0}, {1, 1}, {2, 4}, {3, 9}}, InterpolationOrder -> 2]
-Out[1]= InterpolatingFunction[{{0, 3}}, <>]
+In[14]:= p = Interpolation[{{0, 0}, {1, 1}, {2, 4}, {3, 9}}, InterpolationOrder -> 2]
+Out[14]= InterpolatingFunction[{{0, 3}}, <>]
 
-In[2]:= p[1.5]
-Out[2]= 2.25
+In[15]:= p[1.5]
+Out[15]= 2.25
 ```
 
 ## Algorithm
@@ -193,11 +209,9 @@ tensor-product piecewise cubic Hermite.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[InterpolatingFunction](../../functional-programming/InterpolatingFunction/), [List](../../other-advanced/List/), [NDArray](../../linear-algebra/NDArray/)
-
 ## References
+
+**See also:** [InterpolatingFunction](../../functional-programming/InterpolatingFunction/), [List](../../other-advanced/List/), [NDArray](../../linear-algebra/NDArray/)
 
 - C. de Boor, *A Practical Guide to Splines*, rev. ed. (Springer, 2001).
 - Source: [`src/interp.c`](https://github.com/stblake/mathilda/blob/main/src/interp.c)

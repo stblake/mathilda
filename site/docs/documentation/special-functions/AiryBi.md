@@ -39,23 +39,17 @@ Out[2]= 2.59587
 ### Applications (4)
 
 ```mathematica
-In[1]:= AiryBi[0]
-Out[1]= 1/(3^(1/6) Gamma[2/3])
-```
+In[3]:= AiryBi[0]
+Out[3]= 1/(3^(1/6) Gamma[2/3])
 
-```mathematica
-In[1]:= N[AiryBi[0], 40]
-Out[1]= 0.6149266274460007351509223690936135535947
-```
+In[4]:= N[AiryBi[0], 40]
+Out[4]= 0.6149266274460007351509223690936135535947
 
-```mathematica
-In[1]:= D[AiryBi[z], z]
-Out[1]= AiryBiPrime[z]
-```
+In[5]:= D[AiryBi[z], z]
+Out[5]= AiryBiPrime[z]
 
-```mathematica
-In[1]:= N[AiryBi[2.0 + 1.0 I], 20]
-Out[1]= 0.778230383757041677129 + 2.50509630006410244363*I
+In[6]:= N[AiryBi[2.0 + 1.0 I], 20]
+Out[6]= 0.778230383757041677129 + 2.50509630006410244363*I
 ```
 
 ## Algorithm
@@ -128,11 +122,9 @@ Attributes (both heads): Listable, NumericFunction, Protected, ReadProtected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
 
-## See also
-
-[AiryAi](../../special-functions/AiryAi/), [N](../../arithmetic/N/), [AiryBiPrime](../../other-advanced/AiryBiPrime/)
-
 ## References
+
+**See also:** [AiryAi](../../special-functions/AiryAi/), [N](../../arithmetic/N/), [AiryBiPrime](../../other-advanced/AiryBiPrime/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

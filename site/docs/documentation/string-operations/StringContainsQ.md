@@ -21,7 +21,7 @@ Gives the list of results for each of the si.
 
 Represents an operator form that can be applied to a string. Equivalent to !StringFreeQ\["string", patt\], and to StringMatchQ\["string", \_\_\_ ~~ patt ~~ \_\_\_\]. Options: IgnoreCase -\> True treats upper/lowercase as equivalent.
 
-## Examples (5)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -48,15 +48,20 @@ In[5]:= StringContainsQ["abcd", "BC", IgnoreCase -> True]
 Out[5]= True
 ```
 
+### Worked examples (1)
+
+```mathematica
+In[6]:= Options[StringContainsQ]
+Out[6]= {IgnoreCase -> False}
+```
+
 ## Implementation notes
 
 **Attributes:** `Protected`.
 
-## See also
-
-[StringMatchQ](../../string-operations/StringMatchQ/), [SetOptions](../../assignment-and-rules/SetOptions/)
-
 ## References
+
+**See also:** [StringMatchQ](../../string-operations/StringMatchQ/), [SetOptions](../../assignment-and-rules/SetOptions/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)

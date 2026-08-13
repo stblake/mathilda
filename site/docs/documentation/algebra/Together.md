@@ -50,38 +50,23 @@ Out[7]= (2 x)/(-2 + x^2)
 ### Applications (6)
 
 ```mathematica
-In[1]:= Together[1/x + 1/y]
-Out[1]= (x + y)/(x y)
-```
+In[8]:= Together[1/x + 1/y]
+Out[8]= (x + y)/(x y)
 
-```mathematica
-In[1]:= Together[1/(x-1) + 1/(x+1)]
-Out[1]= (2 x)/(-1 + x^2)
-```
+In[9]:= Together[1/(x-1) + 1/(x+1)]
+Out[9]= (2 x)/(-1 + x^2)
 
-```mathematica
-In[1]:= Together[a/b + c/d]
-Out[1]= (b c + a d)/(b d)
-```
+In[10]:= Together[a/b + c/d]
+Out[10]= (b c + a d)/(b d)
 
-```mathematica
-In[1]:= Together[1/x + 1/(x+1) + 1/(x+2)]
-Out[1]= (2 + 6 x + 3 x^2)/(2 x + 3 x^2 + x^3)
-```
+In[11]:= Together[1/x + 1/(x+1) + 1/(x+2)]
+Out[11]= (2 + 6 x + 3 x^2)/(2 x + 3 x^2 + x^3)
 
-A telescoping sum collapses completely, with the GCD machinery cancelling the
-common factor so the result is an exact `1`:
+In[12]:= Together[a/(a-b) + b/(b-a)]
+Out[12]= 1
 
-```mathematica
-In[1]:= Together[a/(a-b) + b/(b-a)]
-Out[1]= 1
-```
-
-Common factors hidden across a factorable denominator are detected and removed:
-
-```mathematica
-In[1]:= Together[1/(x-1) - 2/(x^2-1)]
-Out[1]= 1/(1 + x)
+In[13]:= Together[1/(x-1) - 2/(x^2-1)]
+Out[13]= 1/(1 + x)
 ```
 
 ## Options & behaviour
@@ -91,7 +76,7 @@ Out[1]= 1/(1 + x)
   symbol (e.g. `k^(1/3)`) is combined over a common denominator via FLINT
   (`flint_algebraic_field_together`), with the radicals treated as free kernels —
   WL-faithful: radicals stay in the denominator, no rationalisation. This
-  generalises the sqrt-only combiner to any index. The same path serves `Cancel`;
+  generalises the sqrt-only combiner to any index. The same path serves `Cancel`
   single-fraction relation-dependent cancellations (`(x^3-k)/(x-k^(1/3))`) still
   go through the relation-aware GCD path.
 
@@ -116,11 +101,9 @@ Crucially, `together_recursive` never expands `Power[Plus[...], n]` — `extract
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[PolynomialLCM](../../algebra/PolynomialLCM/), [PolynomialQuotient](../../algebra/PolynomialQuotient/), [PolynomialRemainder](../../algebra/PolynomialRemainder/), [PolynomialExtendedGCD](../../algebra/PolynomialExtendedGCD/), [Plus](../../arithmetic/Plus/), [Cancel](../../algebra/Cancel/)
-
 ## References
+
+**See also:** [PolynomialLCM](../../algebra/PolynomialLCM/), [PolynomialQuotient](../../algebra/PolynomialQuotient/), [PolynomialRemainder](../../algebra/PolynomialRemainder/), [PolynomialExtendedGCD](../../algebra/PolynomialExtendedGCD/), [Plus](../../arithmetic/Plus/), [Cancel](../../algebra/Cancel/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational function arithmetic and common denominators.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on polynomial GCDs used in cancellation.

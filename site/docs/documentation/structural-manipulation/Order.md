@@ -41,11 +41,9 @@ Out[3]= {0, 1, 1, -1, 0, 1, -1, -1, 0}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Sort](../../data-structures/Sort/), [OrderedQ](../../structural-manipulation/OrderedQ/), [Pi](../../mathematical-constants/Pi/), [Plot](../../graphics/Plot/), [Table](../../lists-and-iteration/Table/), [NIntegrate](../../numerical-calculus/NIntegrate/)
-
 ## References
+
+**See also:** [Sort](../../data-structures/Sort/), [OrderedQ](../../structural-manipulation/OrderedQ/), [Pi](../../mathematical-constants/Pi/), [Plot](../../graphics/Plot/), [Table](../../lists-and-iteration/Table/), [NIntegrate](../../numerical-calculus/NIntegrate/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

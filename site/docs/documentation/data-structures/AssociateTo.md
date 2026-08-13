@@ -24,11 +24,9 @@ Out[1]= <|"a" -> 1, "b" -> 2|>
 
 **Attributes:** `HoldFirst`, `Protected`.
 
-## See also
-
-[HoldFirst](../../other-advanced/HoldFirst/)
-
 ## References
+
+**See also:** [HoldFirst](../../other-advanced/HoldFirst/)
 
 - Source: [`src/assoc.c`](https://github.com/stblake/mathilda/blob/main/src/assoc.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

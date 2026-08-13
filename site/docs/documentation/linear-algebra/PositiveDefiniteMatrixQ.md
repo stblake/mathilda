@@ -45,23 +45,17 @@ Out[6]= True
 ### Applications (4)
 
 ```mathematica
-In[1]:= PositiveDefiniteMatrixQ[{{2, 1}, {1, 2}}]
-Out[1]= True
-```
+In[7]:= PositiveDefiniteMatrixQ[{{2, 1}, {1, 2}}]
+Out[7]= True
 
-```mathematica
-In[1]:= PositiveDefiniteMatrixQ[{{1, 2}, {2, 1}}]
-Out[1]= False
-```
+In[8]:= PositiveDefiniteMatrixQ[{{1, 2}, {2, 1}}]
+Out[8]= False
 
-```mathematica
-In[1]:= PositiveDefiniteMatrixQ[{{2, -1, 0}, {-1, 2, -1}, {0, -1, 2}}]
-Out[1]= True
-```
+In[9]:= PositiveDefiniteMatrixQ[{{2, -1, 0}, {-1, 2, -1}, {0, -1, 2}}]
+Out[9]= True
 
-```mathematica
-In[1]:= PositiveDefiniteMatrixQ[{{2, I}, {-I, 2}}]
-Out[1]= True
+In[10]:= PositiveDefiniteMatrixQ[{{2, I}, {-I, 2}}]
+Out[10]= True
 ```
 
 ## Algorithm

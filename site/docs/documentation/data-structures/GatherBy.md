@@ -27,11 +27,9 @@ Out[2]= {<|"a" -> 1, "c" -> 3|>, <|"b" -> 2, "d" -> 4|>}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[GroupBy](../../data-structures/GroupBy/)
-
 ## References
+
+**See also:** [GroupBy](../../data-structures/GroupBy/)
 
 - Source: [`src/assoc.c`](https://github.com/stblake/mathilda/blob/main/src/assoc.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

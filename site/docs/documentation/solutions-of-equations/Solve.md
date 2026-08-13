@@ -22,7 +22,7 @@ Options: Cubics              -\> False     (radical form for cubics) Quartics   
 
 </details>
 
-## Examples (17)
+## Examples (18)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -54,47 +54,42 @@ In[8]:= Solve[Sin[x] == 0, x]
 Out[8]= {{x -> ConditionalExpression[Pi + 2 C[1] Pi, Element[C[1], Integers]]}, {x -> ConditionalExpression[2 C[1] Pi, Element[C[1], Integers]]}}
 ```
 
+### Worked examples (1)
+
+```mathematica
+In[9]:= Solve[x^3 - 6 x^2 + 11 x - 6 == 0, x, Integers]
+Out[9]= {{x -> 1}, {x -> 2}, {x -> 3}}
+```
+
 ### Applications (9)
 
 ```mathematica
-In[1]:= Solve[x^2 - 5 x + 6 == 0, x]
-Out[1]= {{x -> 2}, {x -> 3}}
-```
+In[10]:= Solve[x^2 - 5 x + 6 == 0, x]
+Out[10]= {{x -> 2}, {x -> 3}}
 
-```mathematica
-In[1]:= Solve[x^2 + 1 == 0, x]
-Out[1]= {{x -> -I}, {x -> I}}
-```
+In[11]:= Solve[x^2 + 1 == 0, x]
+Out[11]= {{x -> -I}, {x -> I}}
 
-```mathematica
-In[1]:= Solve[x^2 - 2 == 0, x]
-Out[1]= {{x -> -Sqrt[2]}, {x -> Sqrt[2]}}
-```
+In[12]:= Solve[x^2 - 2 == 0, x]
+Out[12]= {{x -> -Sqrt[2]}, {x -> Sqrt[2]}}
 
-```mathematica
-In[1]:= Solve[{x + y == 3, x - y == 1}, {x, y}]
-Out[1]= {{x -> 2, y -> 1}}
-```
+In[13]:= Solve[{x + y == 3, x - y == 1}, {x, y}]
+Out[13]= {{x -> 2, y -> 1}}
 
-```mathematica
-In[1]:= Solve[x y == 1 && x + y == 3, {x, y}]
-Out[1]= {{x -> 1/2 (3 - Sqrt[5]), y -> 1/2 (3 + Sqrt[5])}, {x -> 1/2 (3 + Sqrt[5]), y -> 1/2 (3 - Sqrt[5])}}
+In[14]:= Solve[x y == 1 && x + y == 3, {x, y}]
+Out[14]= {{x -> 1/2 (3 - Sqrt[5]), y -> 1/2 (3 + Sqrt[5])}, {x -> 1/2 (3 + Sqrt[5]), y -> 1/2 (3 - Sqrt[5])}}
 
-In[2]:= Solve[x y == 6 && x + y == 5, {x, y}, Integers]
-Out[2]= {{x -> 3, y -> 2}, {x -> 2, y -> 3}}
-```
+In[15]:= Solve[x y == 6 && x + y == 5, {x, y}, Integers]
+Out[15]= {{x -> 3, y -> 2}, {x -> 2, y -> 3}}
 
-```mathematica
-In[1]:= Solve[a x^2 + b x + c == 0, x]
-Out[1]= {{x -> (1/2 (-b + Sqrt[b^2 - 4 a c]))/a}, {x -> (1/2 (-b - Sqrt[b^2 - 4 a c]))/a}}
-```
+In[16]:= Solve[a x^2 + b x + c == 0, x]
+Out[16]= {{x -> (1/2 (-b + Sqrt[b^2 - 4 a c]))/a}, {x -> (1/2 (-b - Sqrt[b^2 - 4 a c]))/a}}
 
-```mathematica
-In[1]:= Solve[x^4 - 1 == 0, x]
-Out[1]= {{x -> -1}, {x -> 1}, {x -> -I}, {x -> I}}
+In[17]:= Solve[x^4 - 1 == 0, x]
+Out[17]= {{x -> -1}, {x -> 1}, {x -> -I}, {x -> I}}
 
-In[2]:= Solve[Sin[x] == 0, x]
-Out[2]= {{x -> ConditionalExpression[Pi + 2 C[1] Pi, Element[C[1], Integers]]}, {x -> ConditionalExpression[2 C[1] Pi, Element[C[1], Integers]]}}
+In[18]:= Solve[Sin[x] == 0, x]
+Out[18]= {{x -> ConditionalExpression[Pi + 2 C[1] Pi, Element[C[1], Integers]]}, {x -> ConditionalExpression[2 C[1] Pi, Element[C[1], Integers]]}}
 ```
 
 ## Options & behaviour
@@ -292,11 +287,9 @@ The `dom` third argument selects the solution domain: default `Complexes`; `Real
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Log](../../elementary-functions/Log/), [Exp](../../elementary-functions/Exp/), [Sin](../../elementary-functions/Sin/), [Cos](../../elementary-functions/Cos/), [Tan](../../elementary-functions/Tan/), [Cot](../../elementary-functions/Cot/), [Sec](../../elementary-functions/Sec/), [Csc](../../elementary-functions/Csc/)
-
 ## References
+
+**See also:** [Log](../../elementary-functions/Log/), [Exp](../../elementary-functions/Exp/), [Sin](../../elementary-functions/Sin/), [Cos](../../elementary-functions/Cos/), [Tan](../../elementary-functions/Tan/), [Cot](../../elementary-functions/Cot/), [Sec](../../elementary-functions/Sec/), [Csc](../../elementary-functions/Csc/)
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra" (3rd ed.), Ch. 14 (polynomial roots and resolution).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 9 (solving systems).

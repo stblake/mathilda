@@ -39,21 +39,17 @@ Out[5]= 7 (9 + 2 x + 3 y + 5 x y)
 ### Applications (4)
 
 ```mathematica
-In[1]:= FactorTermsList[6 x^2 + 4 x]
-Out[1]= {2, 2 x + 3 x^2}
+In[6]:= FactorTermsList[6 x^2 + 4 x]
+Out[6]= {2, 2 x + 3 x^2}
 
-In[2]:= FactorTermsList[2 x^2 + 4 x + 2]
-Out[2]= {2, 1 + 2 x + x^2}
-```
+In[7]:= FactorTermsList[2 x^2 + 4 x + 2]
+Out[7]= {2, 1 + 2 x + x^2}
 
-```mathematica
-In[1]:= FactorTermsList[a b x^2 + a b c x, {x}]
-Out[1]= {1, a b, c x + x^2}
-```
+In[8]:= FactorTermsList[a b x^2 + a b c x, {x}]
+Out[8]= {1, a b, c x + x^2}
 
-```mathematica
-In[1]:= FactorTermsList[12 x^3 y + 18 x^2 y, {x, y}]
-Out[1]= {6, 1, y, 3 x^2 + 2 x^3}
+In[9]:= FactorTermsList[12 x^3 y + 18 x^2 y, {x, y}]
+Out[9]= {6, 1, y, 3 x^2 + 2 x^3}
 ```
 
 ## Implementation notes
@@ -71,11 +67,9 @@ Out[1]= {6, 1, y, 3 x^2 + 2 x^3}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[FactorTerms](../../algebra/FactorTerms/)
-
 ## References
+
+**See also:** [FactorTerms](../../algebra/FactorTerms/)
 
 - Source: [`src/poly/facpoly_factorterms.inc`](https://github.com/stblake/mathilda/blob/main/src/poly/facpoly_factorterms.inc)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

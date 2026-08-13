@@ -16,7 +16,7 @@ Integers are relatively prime when their GCD is 1.  Works for machine and BigInt
 
 </details>
 
-## Examples (5)
+## Examples (15)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -39,6 +39,40 @@ In[5]:= CoprimeQ[{1, 2, 3, 4, 5}, 6]
 Out[5]= {True, False, False, False, True}
 ```
 
+### Worked examples (10)
+
+```mathematica
+In[6]:= CoprimeQ[2^100 - 1, 3^100 - 1]
+Out[6]= False
+
+In[7]:= CoprimeQ[2^127 - 1, 2^61 - 1]
+Out[7]= True
+
+In[8]:= CoprimeQ[0, 1]
+Out[8]= True
+
+In[9]:= CoprimeQ[0, 5]
+Out[9]= False
+
+In[10]:= CoprimeQ[6, 35, 143]
+Out[10]= True
+
+In[11]:= CoprimeQ[2, 3, 4]
+Out[11]= False
+
+In[12]:= CoprimeQ[5 + I, 1 - I]
+Out[12]= False
+
+In[13]:= CoprimeQ[2, 5, GaussianIntegers -> True]
+Out[13]= True
+
+In[14]:= CoprimeQ[2, 10, GaussianIntegers -> True]
+Out[14]= False
+
+In[15]:= CoprimeQ[{1, 2, 3, 4, 5}, 6]
+Out[15]= {True, False, False, False, True}
+```
+
 ## Implementation notes
 
 - Machine integers and GMP bigints, handled uniformly through `mpz_gcd`, so large cases are exact: `CoprimeQ[2^100 - 1, 3^100 - 1]` → `False` (both even), `CoprimeQ[2^127 - 1, 2^61 - 1]` → `True`. Sign is ignored; `GCD(0, n) = |n|`, so `CoprimeQ[0, 1]` → `True` but `CoprimeQ[0, 5]` → `False`.
@@ -50,11 +84,9 @@ Out[5]= {True, False, False, False, True}
 
 **Attributes:** `Listable`, `Orderless`, `Protected`.
 
-## See also
-
-[Orderless](../../expression-information/Orderless/)
-
 ## References
+
+**See also:** [Orderless](../../expression-information/Orderless/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)

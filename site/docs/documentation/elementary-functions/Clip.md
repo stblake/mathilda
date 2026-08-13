@@ -24,7 +24,7 @@ Clip threads over lists in its first argument and works at machine or arbitrary 
 
 </details>
 
-## Examples (12)
+## Examples (13)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -53,31 +53,30 @@ In[7]:= N[Clip[1/11, {1/7, 5}], 50]
 Out[7]= 0.142857142857142857142857142857142857142857142857142
 ```
 
+### Worked examples (1)
+
+```mathematica
+In[8]:= Min[Max[x, lo], hi]
+Out[8]= Min[hi, Max[lo, x]]
+```
+
 ### Applications (5)
 
 ```mathematica
-In[1]:= Clip[3.7]
-Out[1]= 1
-```
+In[9]:= Clip[3.7]
+Out[9]= 1
 
-```mathematica
-In[1]:= Clip[Pi]
-Out[1]= 1
-```
+In[10]:= Clip[Pi]
+Out[10]= 1
 
-```mathematica
-In[1]:= Clip[{-3, 0.5, 4}, {-1, 1}]
-Out[1]= {-1, 0.5, 1}
-```
+In[11]:= Clip[{-3, 0.5, 4}, {-1, 1}]
+Out[11]= {-1, 0.5, 1}
 
-```mathematica
-In[1]:= Clip[15, {0, 10}, {-1, 1}]
-Out[1]= 1
-```
+In[12]:= Clip[15, {0, 10}, {-1, 1}]
+Out[12]= 1
 
-```mathematica
-In[1]:= Clip[Infinity, {-2, 2}]
-Out[1]= 2
+In[13]:= Clip[Infinity, {-2, 2}]
+Out[13]= 2
 ```
 
 ## Performance
@@ -153,11 +152,9 @@ value preserves the original exact/symbolic `x`.
 
 **Attributes:** `NumericFunction`, `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [N](../../arithmetic/N/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [N](../../arithmetic/N/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)

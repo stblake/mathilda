@@ -39,23 +39,17 @@ Out[5]= 333/106
 ### Applications (4)
 
 ```mathematica
-In[1]:= FromContinuedFraction[{3, 7, 15, 1, 292}]
-Out[1]= 103993/33102
-```
+In[6]:= FromContinuedFraction[{3, 7, 15, 1, 292}]
+Out[6]= 103993/33102
 
-```mathematica
-In[1]:= FromContinuedFraction[{1, {1}}]
-Out[1]= 1/2 (1 + Sqrt[5])
-```
+In[7]:= FromContinuedFraction[{1, {1}}]
+Out[7]= 1/2 (1 + Sqrt[5])
 
-```mathematica
-In[1]:= FromContinuedFraction[{1, 2, {2}}]
-Out[1]= Sqrt[2]
-```
+In[8]:= FromContinuedFraction[{1, 2, {2}}]
+Out[8]= Sqrt[2]
 
-```mathematica
-In[1]:= FromContinuedFraction[{a, b, c}]
-Out[1]= (a + (1 + a b) c)/(1 + b c)
+In[9]:= FromContinuedFraction[{a, b, c}]
+Out[9]= (a + (1 + a b) c)/(1 + b c)
 ```
 
 ## Algorithm
@@ -139,11 +133,9 @@ Attributes: Listable, Protected.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[ContinuedFraction](../../number-theory/ContinuedFraction/), [Together](../../algebra/Together/)
-
 ## References
+
+**See also:** [ContinuedFraction](../../number-theory/ContinuedFraction/), [Together](../../algebra/Together/)
 
 - Source: [`src/contfrac.c`](https://github.com/stblake/mathilda/blob/main/src/contfrac.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)

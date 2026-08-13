@@ -51,11 +51,9 @@ Out[5]= {}
 
 **Attributes:** none registered.
 
-## See also
-
-[List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

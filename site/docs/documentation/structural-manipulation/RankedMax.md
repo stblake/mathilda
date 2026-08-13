@@ -50,11 +50,9 @@ Out[4]= Infinity
 
 **Attributes:** `Protected`.
 
-## See also
-
-[RankedMin](../../structural-manipulation/RankedMin/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/)
-
 ## References
+
+**See also:** [RankedMin](../../structural-manipulation/RankedMin/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

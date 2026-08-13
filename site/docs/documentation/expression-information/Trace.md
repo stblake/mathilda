@@ -79,11 +79,9 @@ All the nesting/clock/ownership subtlety lives in eval_collect_trace; this file 
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [MatchQ](../../pattern-matching/MatchQ/), [HoldAll](../../expression-information/HoldAll/), [Range](../../lists-and-iteration/Range/), [HoldForm](../../expression-information/HoldForm/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [MatchQ](../../pattern-matching/MatchQ/), [HoldAll](../../expression-information/HoldAll/), [Range](../../lists-and-iteration/Range/), [HoldForm](../../expression-information/HoldForm/)
 
 - Source: [`src/trace.c`](https://github.com/stblake/mathilda/blob/main/src/trace.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

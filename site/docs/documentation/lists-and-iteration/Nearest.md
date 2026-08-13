@@ -78,11 +78,9 @@ Measured on arm64 Darwin at commit `2dea9cc05`.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[MinimalBy](../../functional-programming/MinimalBy/), [Abs](../../arithmetic/Abs/)
-
 ## References
+
+**See also:** [MinimalBy](../../functional-programming/MinimalBy/), [Abs](../../arithmetic/Abs/)
 
 - Source: [`src/list/list_init.c`](https://github.com/stblake/mathilda/blob/main/src/list/list_init.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

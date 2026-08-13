@@ -76,11 +76,9 @@ A fully general direct engine handles every case (symbolic / exact / numeric, ev
 
 **Attributes:** `Protected`.
 
-## See also
-
-[ListConvolve](../../fourier-transforms/ListConvolve/), [Times](../../arithmetic/Times/), [Plus](../../arithmetic/Plus/)
-
 ## References
+
+**See also:** [ListConvolve](../../fourier-transforms/ListConvolve/), [Times](../../arithmetic/Times/), [Plus](../../arithmetic/Plus/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/fourier-transforms.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/fourier-transforms.md)

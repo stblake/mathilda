@@ -36,18 +36,14 @@ Out[4]= 1 + 7 x + x^3 + 4 y^2
 ### Applications (3)
 
 ```mathematica
-In[1]:= PolynomialMod[7 x^2 + 5 x + 3, 3]
-Out[1]= 2 x + x^2
-```
+In[5]:= PolynomialMod[7 x^2 + 5 x + 3, 3]
+Out[5]= 2 x + x^2
 
-```mathematica
-In[1]:= PolynomialMod[x^4, x^2 + 1]
-Out[1]= 1
-```
+In[6]:= PolynomialMod[x^4, x^2 + 1]
+Out[6]= 1
 
-```mathematica
-In[1]:= PolynomialMod[x^5 + x^3 + x, x^2 - 2]
-Out[1]= 7 x
+In[7]:= PolynomialMod[x^5 + x^3 + x, x^2 - 2]
+Out[7]= 7 x
 ```
 
 ## Implementation notes

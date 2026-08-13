@@ -43,11 +43,9 @@ The grouping itself is not reimplemented here. assoc_gather_core (assoc.c) is th
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Split](../../structural-manipulation/Split/)
-
 ## References
+
+**See also:** [Split](../../structural-manipulation/Split/)
 
 - Source: [`src/list/list_init.c`](https://github.com/stblake/mathilda/blob/main/src/list/list_init.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

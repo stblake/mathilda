@@ -27,21 +27,15 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= N[GoldenAngle]
 Out[1]= 2.39996
-```
 
-```mathematica
-In[1]:= N[GoldenAngle, 40]
-Out[1]= 2.399963229728653322231555506633613853125
-```
+In[2]:= N[GoldenAngle, 40]
+Out[2]= 2.399963229728653322231555506633613853125
 
-```mathematica
-In[1]:= N[GoldenAngle/Degree, 30]
-Out[1]= 137.5077640500378546463487396284
-```
+In[3]:= N[GoldenAngle/Degree, 30]
+Out[3]= 137.5077640500378546463487396284
 
-```mathematica
-In[1]:= N[GoldenAngle - (3 - Sqrt[5]) Pi, 40]
-Out[1]= 0.0
+In[4]:= N[GoldenAngle - (3 - Sqrt[5]) Pi, 40]
+Out[4]= 0.0
 ```
 
 ## Implementation notes

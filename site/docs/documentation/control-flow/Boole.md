@@ -43,28 +43,20 @@ Out[4]= 3
 ### Applications (5)
 
 ```mathematica
-In[1]:= Boole[3 > 2]
-Out[1]= 1
-```
+In[5]:= Boole[3 > 2]
+Out[5]= 1
 
-```mathematica
-In[1]:= Boole[{True, False, True}]
-Out[1]= {1, 0, 1}
-```
+In[6]:= Boole[{True, False, True}]
+Out[6]= {1, 0, 1}
 
-```mathematica
-In[1]:= Table[Boole[PrimeQ[n]], {n, 1, 12}]
-Out[1]= {0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0}
-```
+In[7]:= Table[Boole[PrimeQ[n]], {n, 1, 12}]
+Out[7]= {0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0}
 
-```mathematica
-In[1]:= Sum[Boole[GCD[k, 10] == 1], {k, 1, 10}]
-Out[1]= 4
-```
+In[8]:= Sum[Boole[GCD[k, 10] == 1], {k, 1, 10}]
+Out[8]= 4
 
-```mathematica
-In[1]:= Sum[Boole[Mod[k, 3] == 0] k^2, {k, 1, 10}]
-Out[1]= 126
+In[9]:= Sum[Boole[Mod[k, 3] == 0] k^2, {k, 1, 10}]
+Out[9]= 126
 ```
 
 ## Implementation notes
@@ -73,11 +65,9 @@ Out[1]= 126
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/)
 
 - Source: [`src/boolean.c`](https://github.com/stblake/mathilda/blob/main/src/boolean.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

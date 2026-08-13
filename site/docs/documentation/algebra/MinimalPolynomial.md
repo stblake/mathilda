@@ -44,28 +44,20 @@ Out[4]= 4 - 4 x^2 + x^4
 ### Applications (5)
 
 ```mathematica
-In[1]:= MinimalPolynomial[Sqrt[2], x]
-Out[1]= -2 + x^2
-```
+In[5]:= MinimalPolynomial[Sqrt[2], x]
+Out[5]= -2 + x^2
 
-```mathematica
-In[1]:= MinimalPolynomial[(1 + Sqrt[5])/2, x]
-Out[1]= -1 - x + x^2
-```
+In[6]:= MinimalPolynomial[(1 + Sqrt[5])/2, x]
+Out[6]= -1 - x + x^2
 
-```mathematica
-In[1]:= MinimalPolynomial[Sqrt[2] + Sqrt[3], x]
-Out[1]= 1 - 10 x^2 + x^4
-```
+In[7]:= MinimalPolynomial[Sqrt[2] + Sqrt[3], x]
+Out[7]= 1 - 10 x^2 + x^4
 
-```mathematica
-In[1]:= MinimalPolynomial[Cos[2 Pi/5], x]
-Out[1]= -1 + 2 x + 4 x^2
-```
+In[8]:= MinimalPolynomial[Cos[2 Pi/5], x]
+Out[8]= -1 + 2 x + 4 x^2
 
-```mathematica
-In[1]:= MinimalPolynomial[Sqrt[2 + Sqrt[2]], x]
-Out[1]= 2 - 4 x^2 + x^4
+In[9]:= MinimalPolynomial[Sqrt[2 + Sqrt[2]], x]
+Out[9]= 2 - 4 x^2 + x^4
 ```
 
 ## Options & behaviour
@@ -144,11 +136,9 @@ return an owned result; numericalize does not consume its input.
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [Sqrt](../../arithmetic/Sqrt/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/), [Pi](../../mathematical-constants/Pi/), [Resultant](../../algebra/Resultant/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [Sqrt](../../arithmetic/Sqrt/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/), [Pi](../../mathematical-constants/Pi/), [Resultant](../../algebra/Resultant/)
 
 - Source: [`src/poly/minpoly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/minpoly.c)
 - Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)

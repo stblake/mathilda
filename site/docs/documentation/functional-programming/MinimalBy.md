@@ -27,11 +27,9 @@ Out[2]= <|"a" -> 1|>
 
 **Attributes:** `Protected`.
 
-## See also
-
-[MaximalBy](../../functional-programming/MaximalBy/)
-
 ## References
+
+**See also:** [MaximalBy](../../functional-programming/MaximalBy/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

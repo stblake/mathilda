@@ -17,11 +17,9 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## See also
-
-[PolarPlot](../../graphics/PolarPlot/)
-
 ## References
+
+**See also:** [PolarPlot](../../graphics/PolarPlot/)
 
 - Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)

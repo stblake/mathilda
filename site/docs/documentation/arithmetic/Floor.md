@@ -29,26 +29,18 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= Floor[7/2]
 Out[1]= 3
-```
 
-```mathematica
-In[1]:= Floor[-2.3]
-Out[1]= -3
-```
+In[2]:= Floor[-2.3]
+Out[2]= -3
 
-```mathematica
-In[1]:= Floor[17, 5]
-Out[1]= 15
-```
+In[3]:= Floor[17, 5]
+Out[3]= 15
 
-```mathematica
-In[1]:= Floor[{2.7, -2.7, 5/2, 11/3}]
-Out[1]= {2, -3, 2, 3}
-```
+In[4]:= Floor[{2.7, -2.7, 5/2, 11/3}]
+Out[4]= {2, -3, 2, 3}
 
-```mathematica
-In[1]:= Floor[N[Pi, 40] 10^20]
-Out[1]= 314159265358979323846
+In[5]:= Floor[N[Pi, 40] 10^20]
+Out[5]= 314159265358979323846
 ```
 
 ## Implementation notes

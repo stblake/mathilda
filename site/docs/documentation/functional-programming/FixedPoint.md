@@ -37,16 +37,12 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= FixedPoint[Floor[#/2] &, 100]
 Out[1]= 0
-```
 
-```mathematica
-In[1]:= FixedPoint[Function[x, (x + 2/x)/2], 1.0]
-Out[1]= 1.41421
-```
+In[2]:= FixedPoint[Function[x, (x + 2/x)/2], 1.0]
+Out[2]= 1.41421
 
-```mathematica
-In[1]:= FixedPoint[1 + 1/# &, 1.0]
-Out[1]= 1.61803
+In[3]:= FixedPoint[1 + 1/# &, 1.0]
+Out[3]= 1.61803
 ```
 
 ## Implementation notes

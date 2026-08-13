@@ -49,40 +49,23 @@ Out[6]= {{1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1}, 1}
 ### Applications (6)
 
 ```mathematica
-In[1]:= RealDigits[123.456]
-Out[1]= {{1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 3}
-```
+In[7]:= RealDigits[123.456]
+Out[7]= {{1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 3}
 
-For an exact rational with a non-terminating decimal expansion, the digit list
-ends in a *nested* list giving the recurring block — here the period-6 cycle of
-`1/7`, and the mixed `22/7 = 3.142857142857…`:
+In[8]:= RealDigits[1/7]
+Out[8]= {{{1, 4, 2, 8, 5, 7}}, 0}
 
-```mathematica
-In[1]:= RealDigits[1/7]
-Out[1]= {{{1, 4, 2, 8, 5, 7}}, 0}
+In[9]:= RealDigits[22/7]
+Out[9]= {{3, {1, 4, 2, 8, 5, 7}}, 1}
 
-In[2]:= RealDigits[22/7]
-Out[2]= {{3, {1, 4, 2, 8, 5, 7}}, 1}
-```
+In[10]:= RealDigits[N[Pi, 30]]
+Out[10]= {{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8, 4, 6, 2, 6, 4, 3, 3, 8, 3, 2, 8}, 1}
 
-High-precision constants expose their digits directly. Thirty digits of `π`
-from a 30-digit MPFR value, and the first ten significant base-10 digits of a
-40-digit `π`:
+In[11]:= RealDigits[N[Pi, 40], 10, 10]
+Out[11]= {{3, 1, 4, 1, 5, 9, 2, 6, 5, 3}, 1}
 
-```mathematica
-In[1]:= RealDigits[N[Pi, 30]]
-Out[1]= {{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8, 4, 6, 2, 6, 4, 3, 3, 8, 3, 2, 8}, 1}
-
-In[2]:= RealDigits[N[Pi, 40], 10, 10]
-Out[2]= {{3, 1, 4, 1, 5, 9, 2, 6, 5, 3}, 1}
-```
-
-`RealDigits` also works in other bases — the binary expansion of `255` is eight
-ones:
-
-```mathematica
-In[1]:= RealDigits[255, 2]
-Out[1]= {{1, 1, 1, 1, 1, 1, 1, 1}, 8}
+In[12]:= RealDigits[255, 2]
+Out[12]= {{1, 1, 1, 1, 1, 1, 1, 1}, 8}
 ```
 
 ## Algorithm
@@ -164,11 +147,9 @@ Implementation only supports integer bases b >= 2.  Non-integer bases
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Rational](../../arithmetic/Rational/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [GoldenRatio](../../mathematical-constants/GoldenRatio/), [FromDigits](../../arithmetic/FromDigits/)
-
 ## References
+
+**See also:** [Rational](../../arithmetic/Rational/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [GoldenRatio](../../mathematical-constants/GoldenRatio/), [FromDigits](../../arithmetic/FromDigits/)
 
 - Source: [`src/real.c`](https://github.com/stblake/mathilda/blob/main/src/real.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

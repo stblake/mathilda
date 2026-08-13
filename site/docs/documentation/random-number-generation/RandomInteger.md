@@ -73,11 +73,9 @@ The `RandomInteger[range, n]` and `RandomInteger[range, {n1, n2, ...}]` forms pr
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/)
 
 - Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)

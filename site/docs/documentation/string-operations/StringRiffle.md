@@ -68,11 +68,9 @@ Strings are treated as raw byte arrays (consistent with the rest of the string s
 
 **Attributes:** `Protected`.
 
-## See also
-
-[StringSplit](../../string-operations/StringSplit/), [ToString](../../expression-information/ToString/)
-
 ## References
+
+**See also:** [StringSplit](../../string-operations/StringSplit/), [ToString](../../expression-information/ToString/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)

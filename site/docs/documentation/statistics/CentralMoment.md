@@ -68,11 +68,9 @@ a machine-buffer fast path via ndred_central_moment); every other case — exact
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Variance](../../data-structures/Variance/), [NDArray](../../linear-algebra/NDArray/), [Rational](../../arithmetic/Rational/), [List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [Variance](../../data-structures/Variance/), [NDArray](../../linear-algebra/NDArray/), [Rational](../../arithmetic/Rational/), [List](../../other-advanced/List/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)

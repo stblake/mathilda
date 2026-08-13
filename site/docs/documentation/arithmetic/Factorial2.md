@@ -29,14 +29,12 @@ Out[2]= 384
 
 In[3]:= 0!!
 Out[3]= 1
-```
 
-```mathematica
-In[1]:= Factorial2[19] Factorial2[20]
-Out[1]= 2432902008176640000
+In[4]:= Factorial2[19] Factorial2[20]
+Out[4]= 2432902008176640000
 
-In[2]:= Factorial2[19] Factorial2[20] == 20!
-Out[2]= True
+In[5]:= Factorial2[19] Factorial2[20] == 20!
+Out[5]= True
 ```
 
 ## Implementation notes

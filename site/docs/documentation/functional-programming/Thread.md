@@ -59,23 +59,17 @@ Out[8]= {f[a, r, {u, v}, {x, y}], f[b, s, {u, v}, {x, y}]}
 ### Applications (4)
 
 ```mathematica
-In[1]:= Thread[f[{a, b, c}]]
-Out[1]= {f[a], f[b], f[c]}
-```
+In[9]:= Thread[f[{a, b, c}]]
+Out[9]= {f[a], f[b], f[c]}
 
-```mathematica
-In[1]:= Thread[{x, y, z} -> {1, 2, 3}]
-Out[1]= {x -> 1, y -> 2, z -> 3}
-```
+In[10]:= Thread[{x, y, z} -> {1, 2, 3}]
+Out[10]= {x -> 1, y -> 2, z -> 3}
 
-```mathematica
-In[1]:= Thread[f[{a, b}, {c, d}, x]]
-Out[1]= {f[a, c, x], f[b, d, x]}
-```
+In[11]:= Thread[f[{a, b}, {c, d}, x]]
+Out[11]= {f[a, c, x], f[b, d, x]}
 
-```mathematica
-In[1]:= Thread[Equal[{a, b, c}, {1, 2, 3}]]
-Out[1]= {a == 1, b == 2, c == 3}
+In[12]:= Thread[Equal[{a, b, c}, {1, 2, 3}]]
+Out[12]= {a == 1, b == 2, c == 3}
 ```
 
 ## Implementation notes

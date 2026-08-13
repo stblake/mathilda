@@ -84,11 +84,9 @@ The weighted form `RandomSample[{w1,...}->{e1,...}, n]` uses `weighted_sample_wi
 
 **Attributes:** `Protected`.
 
-## See also
-
-[RandomChoice](../../random-number-generation/RandomChoice/), [NDArray](../../linear-algebra/NDArray/)
-
 ## References
+
+**See also:** [RandomChoice](../../random-number-generation/RandomChoice/), [NDArray](../../linear-algebra/NDArray/)
 
 - Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)

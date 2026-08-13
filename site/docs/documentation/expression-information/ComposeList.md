@@ -36,18 +36,14 @@ Out[3]= {x, 1/x, x, 1 - x, 1/(1 - x), 1 - x, x}
 ### Applications (3)
 
 ```mathematica
-In[1]:= ComposeList[{f, g, h}, x]
-Out[1]= {x, f[x], g[f[x]], h[g[f[x]]]}
-```
+In[4]:= ComposeList[{f, g, h}, x]
+Out[4]= {x, f[x], g[f[x]], h[g[f[x]]]}
 
-```mathematica
-In[1]:= ComposeList[{Sin, Cos, Tan}, x]
-Out[1]= {x, Sin[x], Cos[Sin[x]], Tan[Cos[Sin[x]]]}
-```
+In[5]:= ComposeList[{Sin, Cos, Tan}, x]
+Out[5]= {x, Sin[x], Cos[Sin[x]], Tan[Cos[Sin[x]]]}
 
-```mathematica
-In[1]:= ComposeList[{1 + #1 &, #1^2 &, 2 #1 &}, a]
-Out[1]= {a, 1 + a, (1 + a)^2, 2 (1 + a)^2}
+In[6]:= ComposeList[{1 + #1 &, #1^2 &, 2 #1 &}, a]
+Out[6]= {a, 1 + a, (1 + a)^2, 2 (1 + a)^2}
 ```
 
 ## Implementation notes

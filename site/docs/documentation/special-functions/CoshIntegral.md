@@ -100,11 +100,9 @@ Attributes: Listable, NumericFunction, Protected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[CosIntegral](../../special-functions/CosIntegral/), [Log](../../elementary-functions/Log/)
-
 ## References
+
+**See also:** [CosIntegral](../../special-functions/CosIntegral/), [Log](../../elementary-functions/Log/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

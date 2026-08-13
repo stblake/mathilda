@@ -59,11 +59,9 @@ Memory: honours the builtin ownership contract (never frees res; returns a fresh
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[N](../../arithmetic/N/), [Product](../../calculus/Product/)
-
 ## References
+
+**See also:** [N](../../arithmetic/N/), [Product](../../calculus/Product/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

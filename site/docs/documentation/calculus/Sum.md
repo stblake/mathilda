@@ -46,44 +46,26 @@ Out[8]= 6
 ### Applications (7)
 
 ```mathematica
-In[1]:= Sum[k, {k, 1, 10}]
-Out[1]= 55
-```
+In[9]:= Sum[k, {k, 1, 10}]
+Out[9]= 55
 
-```mathematica
-In[1]:= Sum[k^2, {k, 1, n}]
-Out[1]= 1/6 n (1 + n) (1 + 2 n)
-```
+In[10]:= Sum[k^2, {k, 1, n}]
+Out[10]= 1/6 n (1 + n) (1 + 2 n)
 
-Faulhaber's formula extends to high powers, here the fifth power:
+In[11]:= Sum[k^5, {k, 1, n}]
+Out[11]= 1/12 n^2 (1 + n)^2 (-1 + 2 n + 2 n^2)
 
-```mathematica
-In[1]:= Sum[k^5, {k, 1, n}]
-Out[1]= 1/12 n^2 (1 + n)^2 (-1 + 2 n + 2 n^2)
-```
+In[12]:= Sum[r^k, {k, 0, n}]
+Out[12]= -1/(-1 + r) + r^(1 + n)/(-1 + r)
 
-A finite geometric sum is returned in closed form in the parameter `r`:
+In[13]:= Sum[k x^k, {k, 1, n}]
+Out[13]= x/(1 - 2 x + x^2) + (x^(1 + n) (-1 - n - x + (1 + n) x))/(1 - 2 x + x^2)
 
-```mathematica
-In[1]:= Sum[r^k, {k, 0, n}]
-Out[1]= -1/(-1 + r) + r^(1 + n)/(-1 + r)
-```
+In[14]:= Sum[1/2^k, {k, 0, Infinity}]
+Out[14]= 2
 
-Gosper's algorithm handles the arithmetic–geometric summand `k x^k`:
-
-```mathematica
-In[1]:= Sum[k x^k, {k, 1, n}]
-Out[1]= x/(1 - 2 x + x^2) + (x^(1 + n) (-1 - n - x + (1 + n) x))/(1 - 2 x + x^2)
-```
-
-Convergent infinite geometric and exponential series close in symbolic form:
-
-```mathematica
-In[1]:= Sum[1/2^k, {k, 0, Infinity}]
-Out[1]= 2
-
-In[2]:= Sum[x^k/k!, {k, 0, Infinity}]
-Out[2]= E^x
+In[15]:= Sum[x^k/k!, {k, 0, Infinity}]
+Out[15]= E^x
 ```
 
 ## Algorithm
@@ -172,11 +154,9 @@ non-summable inputs fall through to the held form. No creative-telescoping
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[Integrate](../../calculus/Integrate/), [HoldAll](../../expression-information/HoldAll/), [Binomial](../../arithmetic/Binomial/), [HypergeometricPFQ](../../special-functions/HypergeometricPFQ/), [Pi](../../mathematical-constants/Pi/), [PolyGamma](../../special-functions/PolyGamma/), [Catalan](../../mathematical-constants/Catalan/), [Sin](../../elementary-functions/Sin/)
-
 ## References
+
+**See also:** [Integrate](../../calculus/Integrate/), [HoldAll](../../expression-information/HoldAll/), [Binomial](../../arithmetic/Binomial/), [HypergeometricPFQ](../../special-functions/HypergeometricPFQ/), [Pi](../../mathematical-constants/Pi/), [PolyGamma](../../special-functions/PolyGamma/), [Catalan](../../mathematical-constants/Catalan/), [Sin](../../elementary-functions/Sin/)
 
 - Petkovšek, Wilf & Zeilberger, "A=B" (A K Peters, 1996).
 - Graham, Knuth & Patashnik, "Concrete Mathematics", 2nd ed. (Addison-Wesley, 1994), ch. 2 & 6.

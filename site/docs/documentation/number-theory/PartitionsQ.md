@@ -18,7 +18,7 @@ parts (equivalently, into odd parts). n must be an integer; q(n) = 0 for n \< 0.
 
 </details>
 
-## Examples (3)
+## Examples (4)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -33,6 +33,13 @@ Out[2]= 444793
 
 In[3]:= PartitionsQ[{2, 4, 6}]
 Out[3]= {1, 2, 4}
+```
+
+### Worked examples (1)
+
+```mathematica
+In[4]:= PartitionsQ[{2, 4, 6}]
+Out[4]= {1, 2, 4}
 ```
 
 ## Algorithm
@@ -91,11 +98,9 @@ Ownership: this builtin only *reads* `res`. On every NULL return (bad arguments,
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[IntegerPartitions](../../number-theory/IntegerPartitions/), [PartitionsP](../../number-theory/PartitionsP/)
-
 ## References
+
+**See also:** [IntegerPartitions](../../number-theory/IntegerPartitions/), [PartitionsP](../../number-theory/PartitionsP/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)

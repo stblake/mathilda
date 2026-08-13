@@ -67,11 +67,9 @@ the quantity LiouvilleLambda computes internally before taking (-1)^Omega, so th
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[LiouvilleLambda](../../number-theory/LiouvilleLambda/)
-
 ## References
+
+**See also:** [LiouvilleLambda](../../number-theory/LiouvilleLambda/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)

@@ -34,42 +34,36 @@ Out[3]= (-1)^(4/5) 2^(1/5)
 
 In[4]:= With[{r = ToRadicals[Root[Function[#^4 + 3 #^3 - 5 #^2 - 7 # + 9], 1]]}, Chop[N[r^4 + 3 r^3 - 5 r^2 - 7 r + 9, 30]]]
 Out[4]= 0
+```
 
-In[5]:= ToRadicals[Root[Function[#^5 - # - 1], 1]]      (* non-binomial deg 5 *)
+Non-binomial deg 5
+
+```mathematica
+In[5]:= ToRadicals[Root[Function[#^5 - # - 1], 1]]
 Out[5]= Root[#1^5 - #1 - 1 &, 1]
+```
 
-In[6]:= ToRadicals[Root[Function[#^2 - 2], 2] < 3]      (* threading *)
+Threading
+
+```mathematica
+In[6]:= ToRadicals[Root[Function[#^2 - 2], 2] < 3]
 Out[6]= True
 ```
 
 ### Applications (4)
 
 ```mathematica
-In[1]:= ToRadicals[Root[#^2 - 2 &, 1]]
-Out[1]= -Sqrt[2]
-```
+In[7]:= ToRadicals[Root[#^2 - 2 &, 1]]
+Out[7]= -Sqrt[2]
 
-The smaller root of `x^2 + x - 1` is the negative reciprocal of the golden ratio,
-recovered exactly in radicals:
+In[8]:= ToRadicals[Root[#^2 + # - 1 &, 1]]
+Out[8]= 1/2 (-1 - Sqrt[5])
 
-```mathematica
-In[1]:= ToRadicals[Root[#^2 + # - 1 &, 1]]
-Out[1]= 1/2 (-1 - Sqrt[5])
-```
+In[9]:= ToRadicals[Root[1 + #1 + #1^3 &, 1]]
+Out[9]= -1/3 ((1/2 (27 + 3 Sqrt[93]))^(1/3) - 3/(1/2 (27 + 3 Sqrt[93]))^(1/3))
 
-Cardano's formula appears automatically for the real root of a depressed cubic:
-
-```mathematica
-In[1]:= ToRadicals[Root[1 + #1 + #1^3 &, 1]]
-Out[1]= -1/3 ((1/2 (27 + 3 Sqrt[93]))^(1/3) - 3/(1/2 (27 + 3 Sqrt[93]))^(1/3))
-```
-
-It threads through the implicit `Root` objects produced by `Solve`, here giving
-the three cube roots of two:
-
-```mathematica
-In[1]:= ToRadicals[Solve[x^3 - 2 == 0, x]]
-Out[1]= {{x -> 2^(1/3)}, {x -> -(-1)^(1/3) 2^(1/3)}, {x -> (-1)^(2/3) 2^(1/3)}}
+In[10]:= ToRadicals[Solve[x^3 - 2 == 0, x]]
+Out[10]= {{x -> 2^(1/3)}, {x -> -(-1)^(1/3) 2^(1/3)}, {x -> (-1)^(2/3) 2^(1/3)}}
 ```
 
 ## Algorithm
@@ -155,11 +149,9 @@ Per `Root` node: (1) extract the polynomial body, accepting both the `Slot[1]` f
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Sqrt](../../arithmetic/Sqrt/), [Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [List](../../other-advanced/List/), [Equal](../../comparisons/Equal/), [Less](../../comparisons/Less/), [Greater](../../comparisons/Greater/), [Root](../../solutions-of-equations/Root/)
-
 ## References
+
+**See also:** [Sqrt](../../arithmetic/Sqrt/), [Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [List](../../other-advanced/List/), [Equal](../../comparisons/Equal/), [Less](../../comparisons/Less/), [Greater](../../comparisons/Greater/), [Root](../../solutions-of-equations/Root/)
 
 - G. Cardano, *Ars Magna*, 1545 (cubic); L. Ferrari (quartic resolvent, via Cardano).
 - Source: [`src/radicals.c`](https://github.com/stblake/mathilda/blob/main/src/radicals.c)

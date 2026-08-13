@@ -38,18 +38,14 @@ Out[3]= -2 + x^2
 ### Applications (3)
 
 ```mathematica
-In[1]:= PolynomialLCM[x^2 - 1, x^2 + 2 x + 1]
-Out[1]= (-1 + x) (1 + 2 x + x^2)
-```
+In[4]:= PolynomialLCM[x^2 - 1, x^2 + 2 x + 1]
+Out[4]= (-1 + x) (1 + 2 x + x^2)
 
-```mathematica
-In[1]:= PolynomialLCM[x^6 - 1, x^4 - 1]
-Out[1]= (-1 + x^6) (1 + x^2)
-```
+In[5]:= PolynomialLCM[x^6 - 1, x^4 - 1]
+Out[5]= (-1 + x^6) (1 + x^2)
 
-```mathematica
-In[1]:= PolynomialLCM[x^2 - 2, x^2 - Sqrt[2], Extension -> Sqrt[2]]
-Out[1]= 2 Sqrt[2] - 2 x^2 - Sqrt[2] x^2 + x^4
+In[6]:= PolynomialLCM[x^2 - 2, x^2 - Sqrt[2], Extension -> Sqrt[2]]
+Out[6]= 2 Sqrt[2] - 2 x^2 - Sqrt[2] x^2 + x^4
 ```
 
 ## Implementation notes
@@ -76,11 +72,9 @@ product `a·b`.
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[I](../../mathematical-constants/I/), [PolynomialGCD](../../algebra/PolynomialGCD/)
-
 ## References
+
+**See also:** [I](../../mathematical-constants/I/), [PolynomialGCD](../../algebra/PolynomialGCD/)
 
 - G. E. Collins, "Subresultants and Reduced Polynomial Remainder Sequences", JACM 14(1), 1967.
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)

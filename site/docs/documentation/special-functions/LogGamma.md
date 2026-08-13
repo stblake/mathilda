@@ -25,26 +25,18 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= LogGamma[5]
 Out[1]= Log[24]
-```
 
-```mathematica
-In[1]:= LogGamma[1/2]
-Out[1]= Log[Sqrt[Pi]]
-```
+In[2]:= LogGamma[1/2]
+Out[2]= Log[Sqrt[Pi]]
 
-```mathematica
-In[1]:= D[LogGamma[z], z]
-Out[1]= PolyGamma[0, z]
-```
+In[3]:= D[LogGamma[z], z]
+Out[3]= PolyGamma[0, z]
 
-```mathematica
-In[1]:= N[LogGamma[100], 40]
-Out[1]= 359.13420536957539877604401046028690961264
-```
+In[4]:= N[LogGamma[100], 40]
+Out[4]= 359.13420536957539877604401046028690961264
 
-```mathematica
-In[1]:= N[LogGamma[1 + I], 30]
-Out[1]= -0.6509231993018563388852168315042 - 0.3016403204675331978875316577968*I
+In[5]:= N[LogGamma[1 + I], 30]
+Out[5]= -0.6509231993018563388852168315042 - 0.3016403204675331978875316577968*I
 ```
 
 ## Algorithm
@@ -105,11 +97,9 @@ Attributes: Listable, NumericFunction, Protected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Gamma](../../special-functions/Gamma/), [Log](../../elementary-functions/Log/), [PolyGamma](../../special-functions/PolyGamma/)
-
 ## References
+
+**See also:** [Gamma](../../special-functions/Gamma/), [Log](../../elementary-functions/Log/), [PolyGamma](../../special-functions/PolyGamma/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

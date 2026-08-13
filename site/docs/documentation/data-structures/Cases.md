@@ -37,38 +37,26 @@ Out[3]= <|"a" -> 1|>
 ### Applications (7)
 
 ```mathematica
-In[1]:= Cases[{1, a, 2, b, 3}, _Integer]
-Out[1]= {1, 2, 3}
-```
+In[4]:= Cases[{1, a, 2, b, 3}, _Integer]
+Out[4]= {1, 2, 3}
 
-```mathematica
-In[1]:= Cases[{1, 2, 3, 4}, x_ /; x > 2]
-Out[1]= {3, 4}
-```
+In[5]:= Cases[{1, 2, 3, 4}, x_ /; x > 2]
+Out[5]= {3, 4}
 
-```mathematica
-In[1]:= Cases[{f[1], g[2], f[3]}, f[x_] -> x]
-Out[1]= {1, 3}
-```
+In[6]:= Cases[{f[1], g[2], f[3]}, f[x_] -> x]
+Out[6]= {1, 3}
 
-```mathematica
-In[1]:= Cases[{{1, 2}, {3, 4}}, _Integer, 2]
-Out[1]= {1, 2, 3, 4}
-```
+In[7]:= Cases[{{1, 2}, {3, 4}}, _Integer, 2]
+Out[7]= {1, 2, 3, 4}
 
-```mathematica
-In[1]:= Cases[{1, 2, 3, 4, 5}, _?PrimeQ]
-Out[1]= {2, 3, 5}
-```
+In[8]:= Cases[{1, 2, 3, 4, 5}, _?PrimeQ]
+Out[8]= {2, 3, 5}
 
-```mathematica
-In[1]:= Cases[{f[1, 2], f[3], g[4], f[5, 6]}, f[a_, b_] -> a + b]
-Out[1]= {3, 11}
-```
+In[9]:= Cases[{f[1, 2], f[3], g[4], f[5, 6]}, f[a_, b_] -> a + b]
+Out[9]= {3, 11}
 
-```mathematica
-In[1]:= Cases[{x^2, y^3, z, w^4}, p_^n_ -> {p, n}]
-Out[1]= {{x, 2}, {y, 3}, {w, 4}}
+In[10]:= Cases[{x^2, y^3, z, w^4}, p_^n_ -> {p, n}]
+Out[10]= {{x, 2}, {y, 3}, {w, 4}}
 ```
 
 ## Implementation notes
@@ -79,11 +67,9 @@ Out[1]= {{x, 2}, {y, 3}, {w, 4}}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Count](../../data-structures/Count/), [DeleteCases](../../data-structures/DeleteCases/)
-
 ## References
+
+**See also:** [Count](../../data-structures/Count/), [DeleteCases](../../data-structures/DeleteCases/)
 
 - Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

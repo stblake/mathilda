@@ -30,11 +30,9 @@ Out[3]= {-9, 5}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[TakeLargest](../../functional-programming/TakeLargest/), [TakeSmallest](../../functional-programming/TakeSmallest/), [TakeLargestBy](../../functional-programming/TakeLargestBy/)
-
 ## References
+
+**See also:** [TakeLargest](../../functional-programming/TakeLargest/), [TakeSmallest](../../functional-programming/TakeSmallest/), [TakeLargestBy](../../functional-programming/TakeLargestBy/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

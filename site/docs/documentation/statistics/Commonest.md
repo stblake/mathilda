@@ -26,18 +26,14 @@ Out[2]= {1}
 ### Applications (3)
 
 ```mathematica
-In[1]:= Commonest[{1, 2, 2, 3, 3, 3, 4}]
-Out[1]= {3}
-```
+In[3]:= Commonest[{1, 2, 2, 3, 3, 3, 4}]
+Out[3]= {3}
 
-```mathematica
-In[1]:= Commonest[{a, b, a, c, b, a, d, b}, 2]
-Out[1]= {a, b}
-```
+In[4]:= Commonest[{a, b, a, c, b, a, d, b}, 2]
+Out[4]= {a, b}
 
-```mathematica
-In[1]:= Commonest[Table[Mod[k^2, 7], {k, 0, 20}]]
-Out[1]= {1, 4, 2}
+In[5]:= Commonest[Table[Mod[k^2, 7], {k, 0, 20}]]
+Out[5]= {1, 4, 2}
 ```
 
 ## Implementation notes
@@ -48,11 +44,9 @@ Out[1]= {1, 4, 2}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Tally](../../data-structures/Tally/), [Counts](../../data-structures/Counts/), [CountsBy](../../data-structures/CountsBy/)
-
 ## References
+
+**See also:** [Tally](../../data-structures/Tally/), [Counts](../../data-structures/Counts/), [CountsBy](../../data-structures/CountsBy/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

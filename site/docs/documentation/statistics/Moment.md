@@ -64,11 +64,9 @@ The raw moment is CentralMoment without the mean subtraction. Because there is n
 
 **Attributes:** `NHoldAll`, `Protected`.
 
-## See also
-
-[CentralMoment](../../statistics/CentralMoment/), [NDArray](../../linear-algebra/NDArray/), [Rational](../../arithmetic/Rational/), [List](../../other-advanced/List/), [Variance](../../data-structures/Variance/)
-
 ## References
+
+**See also:** [CentralMoment](../../statistics/CentralMoment/), [NDArray](../../linear-algebra/NDArray/), [Rational](../../arithmetic/Rational/), [List](../../other-advanced/List/), [Variance](../../data-structures/Variance/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)

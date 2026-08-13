@@ -40,23 +40,17 @@ Out[3]= <|"a" -> 1|>
 ### Applications (4)
 
 ```mathematica
-In[1]:= DeleteCases[{1,2,3,2},2]
-Out[1]= {1, 3}
-```
+In[4]:= DeleteCases[{1,2,3,2},2]
+Out[4]= {1, 3}
 
-```mathematica
-In[1]:= DeleteCases[{1,a,2,b,3},_Integer]
-Out[1]= {a, b}
-```
+In[5]:= DeleteCases[{1,a,2,b,3},_Integer]
+Out[5]= {a, b}
 
-```mathematica
-In[1]:= DeleteCases[{{1,2},{a,b},{3,c}}, {_Integer, _Integer}]
-Out[1]= {{a, b}, {3, c}}
-```
+In[6]:= DeleteCases[{{1,2},{a,b},{3,c}}, {_Integer, _Integer}]
+Out[6]= {{a, b}, {3, c}}
 
-```mathematica
-In[1]:= DeleteCases[{a + b, c d, e^2, f}, _Power, Infinity]
-Out[1]= {a + b, c d, f}
+In[7]:= DeleteCases[{a + b, c d, e^2, f}, _Power, Infinity]
+Out[7]= {a + b, c d, f}
 ```
 
 ## Implementation notes
@@ -67,11 +61,9 @@ Out[1]= {a + b, c d, f}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Cases](../../data-structures/Cases/), [Count](../../data-structures/Count/)
-
 ## References
+
+**See also:** [Cases](../../data-structures/Cases/), [Count](../../data-structures/Count/)
 
 - Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

@@ -51,35 +51,23 @@ Out[6]= UnitStep[x, y] Piecewise[{{Indeterminate, z == 0}}, 0]
 ### Applications (6)
 
 ```mathematica
-In[1]:= UnitStep[-2]
-Out[1]= 0
+In[7]:= UnitStep[-2]
+Out[7]= 0
 
-In[2]:= UnitStep[3]
-Out[2]= 1
-```
+In[8]:= UnitStep[3]
+Out[8]= 1
 
-UnitStep is `Listable`, so it vectorizes over a table to produce a discrete step profile (here switching on at `k = 3`):
+In[9]:= Table[UnitStep[k - 3], {k, 0, 6}]
+Out[9]= {0, 0, 0, 1, 1, 1, 1}
 
-```mathematica
-In[1]:= Table[UnitStep[k - 3], {k, 0, 6}]
-Out[1]= {0, 0, 0, 1, 1, 1, 1}
-```
+In[10]:= UnitStep[Pi - 3]
+Out[10]= 1
 
-Exact symbolic-real arguments are resolved by numerical certification — even transcendental comparisons collapse to an exact `0` or `1`:
+In[11]:= UnitStep[Log[2] - Log[3]]
+Out[11]= 0
 
-```mathematica
-In[1]:= UnitStep[Pi - 3]
-Out[1]= 1
-
-In[2]:= UnitStep[Log[2] - Log[3]]
-Out[2]= 0
-```
-
-The multivariate form is the indicator of the nonnegative orthant, returning `1` only when no argument is negative:
-
-```mathematica
-In[1]:= UnitStep[1, -1, 2]
-Out[1]= 0
+In[12]:= UnitStep[1, -1, 2]
+Out[12]= 0
 ```
 
 ## Options & behaviour
@@ -106,11 +94,9 @@ Out[1]= 0
 
 **Attributes:** `Listable`, `NumericFunction`, `Orderless`, `Protected`.
 
-## See also
-
-[Orderless](../../expression-information/Orderless/), [Pi](../../mathematical-constants/Pi/), [Complex](../../arithmetic/Complex/)
-
 ## References
+
+**See also:** [Orderless](../../expression-information/Orderless/), [Pi](../../mathematical-constants/Pi/), [Complex](../../arithmetic/Complex/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)

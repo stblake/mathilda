@@ -50,23 +50,17 @@ Out[5]= {1.0, 3.0, 6.0}
 ### Applications (4)
 
 ```mathematica
-In[1]:= Accumulate[{1, 2, 3, 4, 5}]
-Out[1]= {1, 3, 6, 10, 15}
-```
+In[6]:= Accumulate[{1, 2, 3, 4, 5}]
+Out[6]= {1, 3, 6, 10, 15}
 
-```mathematica
-In[1]:= Accumulate[{a, b, c, d}]
-Out[1]= {a, a + b, a + b + c, a + b + c + d}
-```
+In[7]:= Accumulate[{a, b, c, d}]
+Out[7]= {a, a + b, a + b + c, a + b + c + d}
 
-```mathematica
-In[1]:= Accumulate[Table[1/k, {k, 1, 5}]]
-Out[1]= {1, 3/2, 11/6, 25/12, 137/60}
-```
+In[8]:= Accumulate[Table[1/k, {k, 1, 5}]]
+Out[8]= {1, 3/2, 11/6, 25/12, 137/60}
 
-```mathematica
-In[1]:= Accumulate[{{1, 2}, {3, 4}, {5, 6}}]
-Out[1]= {{1, 2}, {4, 6}, {9, 12}}
+In[9]:= Accumulate[{{1, 2}, {3, 4}, {5, 6}}]
+Out[9]= {{1, 2}, {4, 6}, {9, 12}}
 ```
 
 ## Implementation notes
@@ -82,11 +76,9 @@ Out[1]= {{1, 2}, {4, 6}, {9, 12}}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Plus](../../arithmetic/Plus/)
-
 ## References
+
+**See also:** [Plus](../../arithmetic/Plus/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

@@ -26,11 +26,9 @@ Out[1]= {Flat, Listable, NumericFunction, OneIdentity, Orderless, Protected}
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [HoldFirst](../../other-advanced/HoldFirst/), [HoldRest](../../other-advanced/HoldRest/), [HoldAll](../../expression-information/HoldAll/)
-
 ## References
+
+**See also:** [Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [HoldFirst](../../other-advanced/HoldFirst/), [HoldRest](../../other-advanced/HoldRest/), [HoldAll](../../expression-information/HoldAll/)
 
 - Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

@@ -27,11 +27,9 @@ Out[2]= False
 
 **Attributes:** `Protected`.
 
-## See also
-
-[OddQ](../../expression-information/OddQ/)
-
 ## References
+
+**See also:** [OddQ](../../expression-information/OddQ/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

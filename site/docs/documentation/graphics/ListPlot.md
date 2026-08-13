@@ -48,11 +48,9 @@ The work is purely constructive: classify the data into one or more datasets, tu
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Plot](../../graphics/Plot/), [Show](../../graphics/Show/), [HoldAll](../../expression-information/HoldAll/)
-
 ## References
+
+**See also:** [Plot](../../graphics/Plot/), [Show](../../graphics/Show/), [HoldAll](../../expression-information/HoldAll/)
 
 - Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)

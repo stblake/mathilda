@@ -36,27 +36,17 @@ Out[3]= 20.8391
 ### Applications (4)
 
 ```mathematica
-In[1]:= LUDecomposition[{{4, 3}, {6, 3}}]
-Out[1]= {{{4, 3}, {3/2, -3/2}}, {1, 2}, 0}
-```
+In[4]:= LUDecomposition[{{4, 3}, {6, 3}}]
+Out[4]= {{{4, 3}, {3/2, -3/2}}, {1, 2}, 0}
 
-```mathematica
-In[1]:= LUDecomposition[{{2, 1}, {4, 1}}]
-Out[1]= {{{2, 1}, {2, -1}}, {1, 2}, 0}
-```
+In[5]:= LUDecomposition[{{2, 1}, {4, 1}}]
+Out[5]= {{{2, 1}, {2, -1}}, {1, 2}, 0}
 
-The combined factor reconstructs `m` via `L . U` (here `L = {{1, 0}, {3/2, 1}}`, `U = {{4, 3}, {0, -3/2}}`):
+In[6]:= {{1, 0}, {3/2, 1}} . {{4, 3}, {0, -3/2}}
+Out[6]= {{4, 3}, {6, 3}}
 
-```mathematica
-In[1]:= {{1, 0}, {3/2, 1}} . {{4, 3}, {0, -3/2}}
-Out[1]= {{4, 3}, {6, 3}}
-```
-
-A non-trivial `3x3` integer matrix factors exactly with no row swap (`p = {1, 2, 3}`), the multipliers `3, 2, 1` packed into the lower triangle:
-
-```mathematica
-In[1]:= LUDecomposition[{{1, 2, 4}, {3, 8, 14}, {2, 6, 13}}]
-Out[1]= {{{1, 2, 4}, {3, 2, 2}, {2, 1, 3}}, {1, 2, 3}, 0}
+In[7]:= LUDecomposition[{{1, 2, 4}, {3, 8, 14}, {2, 6, 13}}]
+Out[7]= {{{1, 2, 4}, {3, 2, 2}, {2, 1, 3}}, {1, 2, 3}, 0}
 ```
 
 ## Options & behaviour
@@ -186,11 +176,9 @@ The symbolic core `lu_symbolic_core` is Doolittle's algorithm (Gaussian eliminat
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/), [Sqrt](../../arithmetic/Sqrt/)
-
 ## References
+
+**See also:** [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/), [Sqrt](../../arithmetic/Sqrt/)
 
 - G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — LU factorisation with partial pivoting.
 - L. N. Trefethen and D. Bau III, *Numerical Linear Algebra*, SIAM, 1997 — Gaussian elimination and LU factorisation.

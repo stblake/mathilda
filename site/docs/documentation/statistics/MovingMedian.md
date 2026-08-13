@@ -42,18 +42,14 @@ Out[5]= {1901475900342344102245054808064, 3802951800684688204490109616128, 76059
 ### Applications (3)
 
 ```mathematica
-In[1]:= MovingMedian[{1, 3, 2, 8, 5, 4, 9}, 3]
-Out[1]= {2, 3, 5, 5, 5}
-```
+In[6]:= MovingMedian[{1, 3, 2, 8, 5, 4, 9}, 3]
+Out[6]= {2, 3, 5, 5, 5}
 
-```mathematica
-In[1]:= MovingMedian[{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 5]
-Out[1]= {3, 4, 5, 6, 7, 8}
-```
+In[7]:= MovingMedian[{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 5]
+Out[7]= {3, 4, 5, 6, 7, 8}
 
-```mathematica
-In[1]:= MovingMedian[Table[Mod[n^2, 11], {n, 1, 12}], 4]
-Out[1]= {9/2, 9/2, 4, 4, 4, 9/2, 9/2, 5/2, 1}
+In[8]:= MovingMedian[Table[Mod[n^2, 11], {n, 1, 12}], 4]
+Out[8]= {9/2, 9/2, 4, 4, 4, 9/2, 9/2, 5/2, 1}
 ```
 
 ## Implementation notes
@@ -69,11 +65,9 @@ Out[1]= {9/2, 9/2, 4, 4, 4, 9/2, 9/2, 5/2, 1}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Median](../../data-structures/Median/), [NumericQ](../../expression-information/NumericQ/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [Median](../../data-structures/Median/), [NumericQ](../../expression-information/NumericQ/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [List](../../other-advanced/List/)
 
 - Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
 - Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)

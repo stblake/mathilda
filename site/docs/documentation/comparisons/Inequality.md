@@ -22,16 +22,12 @@ Out[2]= False
 
 In[3]:= 2 <= 2 < 5
 Out[3]= True
-```
 
-```mathematica
-In[1]:= 1 < x < 3 < 5
-Out[1]= 1 < x < 3
-```
+In[4]:= 1 < x < 3 < 5
+Out[4]= 1 < x < 3
 
-```mathematica
-In[1]:= 2 < 3 < x < 1
-Out[1]= 3 < x < 1
+In[5]:= 2 < 3 < x < 1
+Out[5]= 3 < x < 1
 ```
 
 ## Implementation notes

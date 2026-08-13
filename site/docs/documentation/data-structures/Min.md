@@ -27,23 +27,17 @@ Out[1]= {1, 9}
 ### Applications (4)
 
 ```mathematica
-In[1]:= Min[3, 7, 2]
-Out[1]= 2
-```
+In[2]:= Min[3, 7, 2]
+Out[2]= 2
 
-```mathematica
-In[1]:= Min[1/3, 2/7, 5/11]
-Out[1]= 2/7
-```
+In[3]:= Min[1/3, 2/7, 5/11]
+Out[3]= 2/7
 
-```mathematica
-In[1]:= Min[x, 0, Infinity]
-Out[1]= Min[0, x]
-```
+In[4]:= Min[x, 0, Infinity]
+Out[4]= Min[0, x]
 
-```mathematica
-In[1]:= Min[{}]
-Out[1]= Infinity
+In[5]:= Min[{}]
+Out[5]= Infinity
 ```
 
 ## Performance
@@ -69,11 +63,9 @@ remaining symbolic terms, or `NULL` if nothing simplified. Empty `Min[]` is `Inf
 
 **Attributes:** `Flat`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
 
-## See also
-
-[Max](../../data-structures/Max/), [MinMax](../../data-structures/MinMax/)
-
 ## References
+
+**See also:** [Max](../../data-structures/Max/), [MinMax](../../data-structures/MinMax/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

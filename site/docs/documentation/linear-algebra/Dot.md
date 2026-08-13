@@ -27,23 +27,17 @@ Out[3]= {{a + 3 b, 2 a + 4 b}, {c + 3 d, 2 c + 4 d}}
 ### Applications (4)
 
 ```mathematica
-In[1]:= Dot[{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}]
-Out[1]= {{19, 22}, {43, 50}}
-```
+In[4]:= Dot[{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}]
+Out[4]= {{19, 22}, {43, 50}}
 
-```mathematica
-In[1]:= {1, 2, 3} . {4, 5, 6}
-Out[1]= 32
-```
+In[5]:= {1, 2, 3} . {4, 5, 6}
+Out[5]= 32
 
-```mathematica
-In[1]:= {{1, 2}, {3, 4}} . {5, 6}
-Out[1]= {17, 39}
-```
+In[6]:= {{1, 2}, {3, 4}} . {5, 6}
+Out[6]= {17, 39}
 
-```mathematica
-In[1]:= {{1, 2}, {3, 4}} . {{0, 1}, {1, 0}} . {{1, 2}, {3, 4}}
-Out[1]= {{5, 8}, {13, 20}}
+In[7]:= {{1, 2}, {3, 4}} . {{0, 1}, {1, 0}} . {{1, 2}, {3, 4}}
+Out[7]= {{5, 8}, {13, 20}}
 ```
 
 ## Implementation notes
@@ -69,11 +63,9 @@ Out[1]= {{5, 8}, {13, 20}}
 
 **Attributes:** `Flat`, `OneIdentity`, `Protected`.
 
-## See also
-
-[Flat](../../expression-information/Flat/), [OneIdentity](../../expression-information/OneIdentity/), [Inverse](../../linear-algebra/Inverse/), [LinearSolve](../../linear-algebra/LinearSolve/), [Cross](../../linear-algebra/Cross/), [LeastSquares](../../linear-algebra/LeastSquares/), [Normalize](../../linear-algebra/Normalize/), [MatrixPower](../../linear-algebra/MatrixPower/)
-
 ## References
+
+**See also:** [Flat](../../expression-information/Flat/), [OneIdentity](../../expression-information/OneIdentity/), [Inverse](../../linear-algebra/Inverse/), [LinearSolve](../../linear-algebra/LinearSolve/), [Cross](../../linear-algebra/Cross/), [LeastSquares](../../linear-algebra/LeastSquares/), [Normalize](../../linear-algebra/Normalize/), [MatrixPower](../../linear-algebra/MatrixPower/)
 
 - G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — matrix and vector products.
 - Source: [`src/linalg/dot.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/dot.c)

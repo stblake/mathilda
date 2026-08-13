@@ -50,36 +50,20 @@ Out[5]= Log[x] + Log[y] + (2*I) Pi Floor[1/2 - 1/2 (Arg[x] + Arg[y])/Pi]
 ### Applications (5)
 
 ```mathematica
-In[1]:= PowerExpand[Sqrt[a^2 b^2]]
-Out[1]= a b
-```
+In[6]:= PowerExpand[Sqrt[a^2 b^2]]
+Out[6]= a b
 
-`PowerExpand` turns the logarithm of a product into a sum of logarithms:
+In[7]:= PowerExpand[Log[a b c]]
+Out[7]= Log[a] + Log[b] + Log[c]
 
-```mathematica
-In[1]:= PowerExpand[Log[a b c]]
-Out[1]= Log[a] + Log[b] + Log[c]
-```
+In[8]:= PowerExpand[Log[x^n]]
+Out[8]= n Log[x]
 
-It pulls exponents out of `Log` of a power:
+In[9]:= PowerExpand[Sqrt[x^2], {x}]
+Out[9]= x
 
-```mathematica
-In[1]:= PowerExpand[Log[x^n]]
-Out[1]= n Log[x]
-```
-
-Restricting to a variable list expands only with respect to those variables (here `Sqrt[x^2] -> x`):
-
-```mathematica
-In[1]:= PowerExpand[Sqrt[x^2], {x}]
-Out[1]= x
-```
-
-With `Assumptions -> True` the result is universally correct: the omitted branch-cut term reappears as an explicit `Floor[...]` correction:
-
-```mathematica
-In[1]:= PowerExpand[(a b)^n, Assumptions -> True]
-Out[1]= a^n b^n E^((2*I) Pi Floor[1/2 - 1/2 (Arg[a] + Arg[b])/Pi] n)
+In[10]:= PowerExpand[(a b)^n, Assumptions -> True]
+Out[10]= a^n b^n E^((2*I) Pi Floor[1/2 - 1/2 (Arg[a] + Arg[b])/Pi] n)
 ```
 
 ## Options & behaviour
@@ -174,11 +158,9 @@ variable-restricted form `PowerExpand[expr, {x1, …}]`.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Plus](../../arithmetic/Plus/), [Floor](../../arithmetic/Floor/), [Arg](../../arithmetic/Arg/), [Im](../../arithmetic/Im/), [E](../../mathematical-constants/E/), [I](../../mathematical-constants/I/), [Pi](../../mathematical-constants/Pi/), [List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [Plus](../../arithmetic/Plus/), [Floor](../../arithmetic/Floor/), [Arg](../../arithmetic/Arg/), [Im](../../arithmetic/Im/), [E](../../mathematical-constants/E/), [I](../../mathematical-constants/I/), [Pi](../../mathematical-constants/Pi/), [List](../../other-advanced/List/)
 
 - Source: [`src/expand_power.c`](https://github.com/stblake/mathilda/blob/main/src/expand_power.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

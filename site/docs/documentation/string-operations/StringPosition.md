@@ -80,11 +80,9 @@ Byte semantics: like the rest of src/strings, positions are byte offsets (no UTF
 
 **Attributes:** `Protected`.
 
-## See also
-
-[StringTake](../../string-operations/StringTake/), [StringDrop](../../string-operations/StringDrop/), [StringReplacePart](../../string-operations/StringReplacePart/), [StringCases](../../string-operations/StringCases/), [SetOptions](../../assignment-and-rules/SetOptions/)
-
 ## References
+
+**See also:** [StringTake](../../string-operations/StringTake/), [StringDrop](../../string-operations/StringDrop/), [StringReplacePart](../../string-operations/StringReplacePart/), [StringCases](../../string-operations/StringCases/), [SetOptions](../../assignment-and-rules/SetOptions/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)

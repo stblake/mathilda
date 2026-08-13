@@ -67,11 +67,9 @@ See stats.h and stats_common.h for the subsystem layout.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)

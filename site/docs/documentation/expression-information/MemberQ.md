@@ -34,28 +34,20 @@ Out[4]= False
 ### Applications (5)
 
 ```mathematica
-In[1]:= MemberQ[{1, 2, 3}, 2]
-Out[1]= True
-```
+In[5]:= MemberQ[{1, 2, 3}, 2]
+Out[5]= True
 
-```mathematica
-In[1]:= MemberQ[{1, 2, 3}, _Integer]
-Out[1]= True
-```
+In[6]:= MemberQ[{1, 2, 3}, _Integer]
+Out[6]= True
 
-```mathematica
-In[1]:= MemberQ[{x^2, y^3, z}, _^_]
-Out[1]= True
-```
+In[7]:= MemberQ[{x^2, y^3, z}, _^_]
+Out[7]= True
 
-```mathematica
-In[1]:= MemberQ[{{1, 2}, {3, 4}}, 3, {2}]
-Out[1]= True
-```
+In[8]:= MemberQ[{{1, 2}, {3, 4}}, 3, {2}]
+Out[8]= True
 
-```mathematica
-In[1]:= MemberQ[#, 0] & /@ {{1, 2}, {0, 3}}
-Out[1]= {False, True}
+In[9]:= MemberQ[#, 0] & /@ {{1, 2}, {0, 3}}
+Out[9]= {False, True}
 ```
 
 ## Implementation notes
@@ -71,11 +63,9 @@ Out[1]= {False, True}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/)
 
 - Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

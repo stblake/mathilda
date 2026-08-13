@@ -44,11 +44,9 @@ Path resolution (mathilda_resolve_internal) is deliberately CWD-independent: a r
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Get](../../file-io/Get/)
-
 ## References
+
+**See also:** [Get](../../file-io/Get/)
 
 - Source: [`src/loadmodule.c`](https://github.com/stblake/mathilda/blob/main/src/loadmodule.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)

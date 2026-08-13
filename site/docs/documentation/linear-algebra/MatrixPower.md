@@ -44,36 +44,26 @@ Out[8]= {5, 8}
 ### Applications (7)
 
 ```mathematica
-In[1]:= MatrixPower[{{1, 1}, {0, 1}}, 3]
-Out[1]= {{1, 3}, {0, 1}}
-```
+In[9]:= MatrixPower[{{1, 1}, {0, 1}}, 3]
+Out[9]= {{1, 3}, {0, 1}}
 
-```mathematica
-In[1]:= MatrixPower[{{2, 0}, {0, 3}}, 2]
-Out[1]= {{4, 0}, {0, 9}}
-```
+In[10]:= MatrixPower[{{2, 0}, {0, 3}}, 2]
+Out[10]= {{4, 0}, {0, 9}}
 
-```mathematica
-In[1]:= MatrixPower[{{2, 0}, {0, 4}}, -1]
-Out[1]= {{1/2, 0}, {0, 1/4}}
-```
+In[11]:= MatrixPower[{{2, 0}, {0, 4}}, -1]
+Out[11]= {{1/2, 0}, {0, 1/4}}
 
-```mathematica
-In[1]:= MatrixPower[{{2, 0}, {0, 3}}, 2, {1, 1}]
-Out[1]= {4, 9}
-```
+In[12]:= MatrixPower[{{2, 0}, {0, 3}}, 2, {1, 1}]
+Out[12]= {4, 9}
 
-```mathematica
-In[1]:= MatrixPower[{{2, 1}, {0, 2}}, -2]
-Out[1]= {{1/4, -1/4}, {0, 1/4}}
-```
+In[13]:= MatrixPower[{{2, 1}, {0, 2}}, -2]
+Out[13]= {{1/4, -1/4}, {0, 1/4}}
 
-```mathematica
-In[1]:= MatrixPower[{{0, 1}, {1, 1}}, 10]
-Out[1]= {{34, 55}, {55, 89}}
+In[14]:= MatrixPower[{{0, 1}, {1, 1}}, 10]
+Out[14]= {{34, 55}, {55, 89}}
 
-In[2]:= MatrixPower[{{0, 1}, {1, 1}}, 10][[1, 2]] == Fibonacci[10]
-Out[2]= True
+In[15]:= MatrixPower[{{0, 1}, {1, 1}}, 10][[1, 2]] == Fibonacci[10]
+Out[15]= True
 ```
 
 ## Implementation notes
@@ -98,11 +88,9 @@ Out[2]= True
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Dot](../../linear-algebra/Dot/)
-
 ## References
+
+**See also:** [Dot](../../linear-algebra/Dot/)
 
 - R. A. Horn and C. R. Johnson, *Matrix Analysis*, 2nd ed., Cambridge University Press, 2013 — powers of matrices.
 - G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — repeated multiplication and inversion.

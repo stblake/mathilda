@@ -37,11 +37,9 @@ used to diagnose slow Simplify calls and runaway candidate explosion.
 
 **Attributes:** none registered.
 
-## See also
-
-[Simplify](../../simplification/Simplify/)
-
 ## References
+
+**See also:** [Simplify](../../simplification/Simplify/)
 
 - Source: [`src/simp/simp_util.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp_util.c)
 - Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)

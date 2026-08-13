@@ -38,11 +38,9 @@ Out[2]= {0.447214, 0.447214, -0.447214, -0.447214, 0.447214}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[FourierDCT](../../fourier-transforms/FourierDCT/), [NDArray](../../linear-algebra/NDArray/)
-
 ## References
+
+**See also:** [FourierDCT](../../fourier-transforms/FourierDCT/), [NDArray](../../linear-algebra/NDArray/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/fourier-transforms.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/fourier-transforms.md)

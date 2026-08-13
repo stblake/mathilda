@@ -19,20 +19,12 @@ Out[1]= 101
 
 In[2]:= NextPrime[10, 3]
 Out[2]= 17
-```
 
-The prime just above `10^20` — arbitrary-precision, so no overflow:
+In[3]:= NextPrime[10^20]
+Out[3]= 100000000000000000039
 
-```mathematica
-In[1]:= NextPrime[10^20]
-Out[1]= 100000000000000000039
-```
-
-Stepping five primes past `2^31`:
-
-```mathematica
-In[1]:= NextPrime[2^31, 5]
-Out[1]= 2147483777
+In[4]:= NextPrime[2^31, 5]
+Out[4]= 2147483777
 ```
 
 ## Implementation notes

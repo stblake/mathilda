@@ -22,10 +22,6 @@ FileNameSplit by default uses pathname separators and other conventions suitable
 
 _No verified examples yet for this function._
 
-## Options & behaviour
-
-### Example
-
 ## Implementation notes
 
 - `Protected`.
@@ -38,11 +34,9 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [FileNameJoin](../../file-io/FileNameJoin/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [FileNameJoin](../../file-io/FileNameJoin/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)

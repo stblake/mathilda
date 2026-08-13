@@ -26,33 +26,23 @@ Out[2]= 77
 ### Applications (6)
 
 ```mathematica
-In[1]:= Denominator[6/8]
-Out[1]= 4
-```
+In[3]:= Denominator[6/8]
+Out[3]= 4
 
-```mathematica
-In[1]:= Denominator[(x+1)/(x-1)]
-Out[1]= -1 + x
-```
+In[4]:= Denominator[(x+1)/(x-1)]
+Out[4]= -1 + x
 
-```mathematica
-In[1]:= Denominator[a/b + c/d]
-Out[1]= 1
-```
+In[5]:= Denominator[a/b + c/d]
+Out[5]= 1
 
-```mathematica
-In[1]:= Denominator[Together[a/b + c/d]]
-Out[1]= b d
-```
+In[6]:= Denominator[Together[a/b + c/d]]
+Out[6]= b d
 
-```mathematica
-In[1]:= Denominator[(x^2-1)/((x-2)^3 (x+5))]
-Out[1]= (5 + x) (-2 + x)^3
-```
+In[7]:= Denominator[(x^2-1)/((x-2)^3 (x+5))]
+Out[7]= (5 + x) (-2 + x)^3
 
-```mathematica
-In[1]:= Denominator[x^(-2) y^3 z^(-1)]
-Out[1]= x^2 z
+In[8]:= Denominator[x^(-2) y^3 z^(-1)]
+Out[8]= x^2 z
 ```
 
 ## Implementation notes

@@ -59,23 +59,17 @@ Out[8]= -3628799.999456765884220291526686 + 2.823257449139100034435257009205e-22
 ### Applications (4)
 
 ```mathematica
-In[1]:= Chop[NResidue[Cot[z], {z, 0}]]
-Out[1]= 1.0
-```
+In[9]:= Chop[NResidue[Cot[z], {z, 0}]]
+Out[9]= 1.0
 
-```mathematica
-In[1]:= NResidue[1/(z^2 + 1), {z, I}]
-Out[1]= 5.10703e-17 - 0.5*I
-```
+In[10]:= NResidue[1/(z^2 + 1), {z, I}]
+Out[10]= 5.10703e-17 - 0.5*I
 
-```mathematica
-In[1]:= NResidue[Gamma[z], {z, -3}]
-Out[1]= -0.166667 + 1.41553e-17*I
-```
+In[11]:= NResidue[Gamma[z], {z, -3}]
+Out[11]= -0.166667 + 1.41553e-17*I
 
-```mathematica
-In[1]:= NResidue[Exp[1/z], {z, 0}, Radius -> 1]
-Out[1]= 1.0 - 1.38778e-17*I
+In[12]:= NResidue[Exp[1/z], {z, 0}, Radius -> 1]
+Out[12]= 1.0 - 1.38778e-17*I
 ```
 
 ## Algorithm
@@ -107,11 +101,9 @@ Memory: receives `res` owned by the evaluator. Returns a fresh Expr* on success 
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Residue](../../calculus/Residue/), [Chop](../../elementary-functions/Chop/), [N](../../arithmetic/N/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
-
 ## References
+
+**See also:** [Residue](../../calculus/Residue/), [Chop](../../elementary-functions/Chop/), [N](../../arithmetic/N/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)

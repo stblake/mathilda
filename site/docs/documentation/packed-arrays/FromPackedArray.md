@@ -15,11 +15,9 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## See also
-
-[FromNDArray](../../packed-arrays/FromNDArray/), [ToPackedArray](../../packed-arrays/ToPackedArray/), [List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [FromNDArray](../../packed-arrays/FromNDArray/), [ToPackedArray](../../packed-arrays/ToPackedArray/), [List](../../other-advanced/List/)
 
 - Source: [`src/pack.c`](https://github.com/stblake/mathilda/blob/main/src/pack.c)
 - Specification: [`docs/spec/builtins/packed-arrays.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/packed-arrays.md)

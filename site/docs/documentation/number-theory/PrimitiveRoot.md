@@ -49,36 +49,20 @@ Out[6]= PrimitiveRoot[12]
 ### Applications (5)
 
 ```mathematica
-In[1]:= PrimitiveRoot[7]
-Out[1]= 3
-```
+In[7]:= PrimitiveRoot[7]
+Out[7]= 3
 
-It finds generators even for large primes; 5 generates the multiplicative group modulo the prime `10^9 + 7`:
+In[8]:= PrimitiveRoot[10^9 + 7]
+Out[8]= 5
 
-```mathematica
-In[1]:= PrimitiveRoot[10^9 + 7]
-Out[1]= 5
-```
+In[9]:= PrimitiveRoot[3^5]
+Out[9]= 2
 
-Prime powers are supported directly:
+In[10]:= PrimitiveRoot[7, 5]
+Out[10]= 5
 
-```mathematica
-In[1]:= PrimitiveRoot[3^5]
-Out[1]= 2
-```
-
-The two-argument form returns the smallest primitive root not below `k`:
-
-```mathematica
-In[1]:= PrimitiveRoot[7, 5]
-Out[1]= 5
-```
-
-When the multiplicative group is non-cyclic (e.g. `n = 8`), no primitive root exists and the call stays unevaluated:
-
-```mathematica
-In[1]:= PrimitiveRoot[8]
-Out[1]= PrimitiveRoot[8]
+In[11]:= PrimitiveRoot[8]
+Out[11]= PrimitiveRoot[8]
 ```
 
 ## Implementation notes

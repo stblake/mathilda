@@ -31,8 +31,12 @@ Out[2]= True
 
 In[3]:= SymmetricMatrixQ[{{1 + I, 2 - 3 I}, {2 - 3 I, 2 - 3 I}}]
 Out[3]= True
+```
 
-In[4]:= SymmetricMatrixQ[{{1, 3 + 4 I}, {3 - 4 I, 2}}]   (* Hermitian, not symmetric *)
+Hermitian, not symmetric
+
+```mathematica
+In[4]:= SymmetricMatrixQ[{{1, 3 + 4 I}, {3 - 4 I, 2}}]
 Out[4]= False
 ```
 
@@ -46,35 +50,23 @@ Out[5]= True
 ### Applications (6)
 
 ```mathematica
-In[1]:= SymmetricMatrixQ[{{1, 2}, {2, 1}}]
-Out[1]= True
+In[6]:= SymmetricMatrixQ[{{1, 2}, {2, 1}}]
+Out[6]= True
 
-In[2]:= SymmetricMatrixQ[{{1, 2}, {3, 4}}]
-Out[2]= False
-```
+In[7]:= SymmetricMatrixQ[{{1, 2}, {3, 4}}]
+Out[7]= False
 
-A complex symmetric matrix is symmetric without being Hermitian:
+In[8]:= SymmetricMatrixQ[{{1, I}, {I, 1}}]
+Out[8]= True
 
-```mathematica
-In[1]:= SymmetricMatrixQ[{{1, I}, {I, 1}}]
-Out[1]= True
+In[9]:= HermitianMatrixQ[{{1, I}, {I, 1}}]
+Out[9]= False
 
-In[2]:= HermitianMatrixQ[{{1, I}, {I, 1}}]
-Out[2]= False
-```
+In[10]:= SymmetricMatrixQ[{{1.0, 2.0001}, {2.0, 1.0}}, Tolerance -> 0.001]
+Out[10]= True
 
-`Tolerance` accepts numerically near-symmetric matrices:
-
-```mathematica
-In[1]:= SymmetricMatrixQ[{{1.0, 2.0001}, {2.0, 1.0}}, Tolerance -> 0.001]
-Out[1]= True
-```
-
-A custom `SameTest` relaxes equality of off-diagonal entries:
-
-```mathematica
-In[1]:= SymmetricMatrixQ[{{1, 2}, {3, 4}}, SameTest -> (Abs[#1 - #2] <= 1 &)]
-Out[1]= True
+In[11]:= SymmetricMatrixQ[{{1, 2}, {3, 4}}, SameTest -> (Abs[#1 - #2] <= 1 &)]
+Out[11]= True
 ```
 
 ## Implementation notes
@@ -93,11 +85,9 @@ Out[1]= True
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Rule](../../assignment-and-rules/Rule/)
-
 ## References
+
+**See also:** [Rule](../../assignment-and-rules/Rule/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

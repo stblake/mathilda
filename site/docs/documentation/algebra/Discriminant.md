@@ -32,23 +32,17 @@ Out[4]= 0
 ### Applications (4)
 
 ```mathematica
-In[1]:= Discriminant[x^2 - 5 x + 6, x]
-Out[1]= 1
-```
+In[5]:= Discriminant[x^2 - 5 x + 6, x]
+Out[5]= 1
 
-```mathematica
-In[1]:= Discriminant[a x^2 + b x + c, x]
-Out[1]= b^2 - 4 a c
-```
+In[6]:= Discriminant[a x^2 + b x + c, x]
+Out[6]= b^2 - 4 a c
 
-```mathematica
-In[1]:= Discriminant[x^3 + p x + q, x]
-Out[1]= -4 p^3 - 27 q^2
-```
+In[7]:= Discriminant[x^3 + p x + q, x]
+Out[7]= -4 p^3 - 27 q^2
 
-```mathematica
-In[1]:= Discriminant[x^4 + 1, x]
-Out[1]= 256
+In[8]:= Discriminant[x^4 + 1, x]
+Out[8]= 256
 ```
 
 ## Implementation notes

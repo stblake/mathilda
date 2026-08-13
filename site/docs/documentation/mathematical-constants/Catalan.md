@@ -27,26 +27,18 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= N[Catalan]
 Out[1]= 0.915966
-```
 
-```mathematica
-In[1]:= N[Catalan, 40]
-Out[1]= 0.91596559417721901505460351493238411077416
-```
+In[2]:= N[Catalan, 40]
+Out[2]= 0.91596559417721901505460351493238411077416
 
-```mathematica
-In[1]:= D[Catalan, x]
-Out[1]= 0
-```
+In[3]:= D[Catalan, x]
+Out[3]= 0
 
-```mathematica
-In[1]:= NumericQ[Catalan]
-Out[1]= True
-```
+In[4]:= NumericQ[Catalan]
+Out[4]= True
 
-```mathematica
-In[1]:= N[8 Catalan, 30]
-Out[1]= 7.32772475341775212043682811946
+In[5]:= N[8 Catalan, 30]
+Out[5]= 7.32772475341775212043682811946
 ```
 
 ## Implementation notes

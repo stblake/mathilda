@@ -55,11 +55,9 @@ Out[6]= "ae"
 
 **Attributes:** `Protected`.
 
-## See also
-
-[StringPosition](../../string-operations/StringPosition/)
-
 ## References
+
+**See also:** [StringPosition](../../string-operations/StringPosition/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)

@@ -37,43 +37,27 @@ Out[5]= 2
 ### Applications (7)
 
 ```mathematica
-In[1]:= Dt[x y]
-Out[1]= Dt[x] y + x Dt[y]
+In[6]:= Dt[x y]
+Out[6]= Dt[x] y + x Dt[y]
+
+In[7]:= Dt[Sin[x]]
+Out[7]= Cos[x] Dt[x]
+
+In[8]:= Dt[Log[x]]
+Out[8]= Dt[x]/x
+
+In[9]:= Dt[a x, x]
+Out[9]= a
+
+In[10]:= Dt[x^n]
+Out[10]= x^(-1 + n) (n Dt[x] + Dt[n] x Log[x])
+
+In[11]:= Dt[f[g[x]]]
+Out[11]= Dt[x] Derivative[1][g][x] Derivative[1][f][g[x]]
+
+In[12]:= Dt[x^2 y^3]
+Out[12]= 2 x Dt[x] y^3 + 3 x^2 y^2 Dt[y]
 ```
-
-```mathematica
-In[1]:= Dt[Sin[x]]
-Out[1]= Cos[x] Dt[x]
-```
-
-```mathematica
-In[1]:= Dt[Log[x]]
-Out[1]= Dt[x]/x
-```
-
-```mathematica
-In[1]:= Dt[a x, x]
-Out[1]= a
-```
-
-```mathematica
-In[1]:= Dt[x^n]
-Out[1]= x^(-1 + n) (n Dt[x] + Dt[n] x Log[x])
-```
-
-```mathematica
-In[1]:= Dt[f[g[x]]]
-Out[1]= Dt[x] Derivative[1][g][x] Derivative[1][f][g[x]]
-```
-
-```mathematica
-In[1]:= Dt[x^2 y^3]
-Out[1]= 2 x Dt[x] y^3 + 3 x^2 y^2 Dt[y]
-```
-
-## Options & behaviour
-
-### Examples
 
 ## Algorithm
 
@@ -129,11 +113,9 @@ is shared with `D`.
 
 **Attributes:** `Protected`, `ReadProtected`.
 
-## See also
-
-[Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [I](../../mathematical-constants/I/), [EulerGamma](../../mathematical-constants/EulerGamma/), [Catalan](../../mathematical-constants/Catalan/), [GoldenRatio](../../mathematical-constants/GoldenRatio/), [Degree](../../mathematical-constants/Degree/), [D](../../calculus/D/)
-
 ## References
+
+**See also:** [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [I](../../mathematical-constants/I/), [EulerGamma](../../mathematical-constants/EulerGamma/), [Catalan](../../mathematical-constants/Catalan/), [GoldenRatio](../../mathematical-constants/GoldenRatio/), [Degree](../../mathematical-constants/Degree/), [D](../../calculus/D/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (Kluwer, 1992), ch. 2.
 - Source: [`src/calculus/deriv.c`](https://github.com/stblake/mathilda/blob/main/src/calculus/deriv.c)

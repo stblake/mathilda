@@ -53,37 +53,20 @@ Out[6]= {0, 0, 0}
 ### Applications (5)
 
 ```mathematica
-In[1]:= Normalize[{3, 4}]
-Out[1]= {3/5, 4/5}
-```
+In[7]:= Normalize[{3, 4}]
+Out[7]= {3/5, 4/5}
 
-Normalizing an integer vector whose norm is rational stays exact:
+In[8]:= Normalize[{1, 2, 2}]
+Out[8]= {1/3, 2/3, 2/3}
 
-```mathematica
-In[1]:= Normalize[{1, 2, 2}]
-Out[1]= {1/3, 2/3, 2/3}
-```
+In[9]:= Normalize[{a, b}]
+Out[9]= {a/Sqrt[Abs[a]^2 + Abs[b]^2], b/Sqrt[Abs[a]^2 + Abs[b]^2]}
 
-A symbolic vector normalizes to its general unit-vector formula:
+In[10]:= Normalize[3 + 4 I]
+Out[10]= 3/5 + 4/5*I
 
-```mathematica
-In[1]:= Normalize[{a, b}]
-Out[1]= {a/Sqrt[Abs[a]^2 + Abs[b]^2], b/Sqrt[Abs[a]^2 + Abs[b]^2]}
-```
-
-A complex scalar is divided by its modulus, giving a unit-modulus phase:
-
-```mathematica
-In[1]:= Normalize[3 + 4 I]
-Out[1]= 3/5 + 4/5*I
-```
-
-`Normalize[expr, f]` normalizes with respect to any norm function — here `Total`
-turns counts into a probability distribution:
-
-```mathematica
-In[1]:= Normalize[{1, 1}, Total]
-Out[1]= {1/2, 1/2}
+In[11]:= Normalize[{1, 1}, Total]
+Out[11]= {1/2, 1/2}
 ```
 
 ## Algorithm

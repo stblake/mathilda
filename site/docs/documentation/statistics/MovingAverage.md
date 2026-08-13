@@ -49,23 +49,17 @@ Out[6]= MovingAverage[{1, 2, 3, 4, 5}, 6]
 ### Applications (4)
 
 ```mathematica
-In[1]:= MovingAverage[{1, 2, 3, 4, 5}, 2]
-Out[1]= {3/2, 5/2, 7/2, 9/2}
-```
+In[7]:= MovingAverage[{1, 2, 3, 4, 5}, 2]
+Out[7]= {3/2, 5/2, 7/2, 9/2}
 
-```mathematica
-In[1]:= MovingAverage[{1, 2, 3, 4, 5, 6}, 3]
-Out[1]= {2, 3, 4, 5}
-```
+In[8]:= MovingAverage[{1, 2, 3, 4, 5, 6}, 3]
+Out[8]= {2, 3, 4, 5}
 
-```mathematica
-In[1]:= MovingAverage[Table[k^2, {k, 1, 6}], 3]
-Out[1]= {14/3, 29/3, 50/3, 77/3}
-```
+In[9]:= MovingAverage[Table[k^2, {k, 1, 6}], 3]
+Out[9]= {14/3, 29/3, 50/3, 77/3}
 
-```mathematica
-In[1]:= MovingAverage[{a, b, c, d}, {1, 2, 1}]
-Out[1]= {1/4 a + 1/2 b + 1/4 c, 1/4 b + 1/2 c + 1/4 d}
+In[10]:= MovingAverage[{a, b, c, d}, {1, 2, 1}]
+Out[10]= {1/4 a + 1/2 b + 1/4 c, 1/4 b + 1/2 c + 1/4 d}
 ```
 
 ## Implementation notes
@@ -80,11 +74,9 @@ Out[1]= {1/4 a + 1/2 b + 1/4 c, 1/4 b + 1/2 c + 1/4 d}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [Mean](../../data-structures/Mean/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [Mean](../../data-structures/Mean/)
 
 - Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
 - Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)

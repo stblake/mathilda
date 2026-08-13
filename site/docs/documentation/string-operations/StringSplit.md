@@ -72,11 +72,9 @@ Zero-length substrings between two adjacent interior delimiters are kept; empty 
 
 **Attributes:** `Protected`.
 
-## See also
-
-[StringReplace](../../string-operations/StringReplace/)
-
 ## References
+
+**See also:** [StringReplace](../../string-operations/StringReplace/)
 
 - Source: [`src/strings/regex/regex_init.c`](https://github.com/stblake/mathilda/blob/main/src/strings/regex/regex_init.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)

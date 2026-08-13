@@ -44,28 +44,20 @@ Out[3]= $Failed
 ### Applications (5)
 
 ```mathematica
-In[1]:= ToExpression["1 + 2*3"]
-Out[1]= 7
-```
+In[4]:= ToExpression["1 + 2*3"]
+Out[4]= 7
 
-```mathematica
-In[1]:= ToExpression["D[ArcTan[x], x]"]
-Out[1]= 1/(1 + x^2)
-```
+In[5]:= ToExpression["D[ArcTan[x], x]"]
+Out[5]= 1/(1 + x^2)
 
-```mathematica
-In[1]:= ToExpression["Series[Exp[x], {x, 0, 4}]"]
-Out[1]= 1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + O[x]^5
-```
+In[6]:= ToExpression["Series[Exp[x], {x, 0, 4}]"]
+Out[6]= 1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + O[x]^5
 
-```mathematica
-In[1]:= ToExpression["x^2 + 1", InputForm, Hold]
-Out[1]= Hold[x^2 + 1]
-```
+In[7]:= ToExpression["x^2 + 1", InputForm, Hold]
+Out[7]= Hold[x^2 + 1]
 
-```mathematica
-In[1]:= ToExpression["bad syntax ]["]
-Out[1]= $Failed
+In[8]:= ToExpression["bad syntax ]["]
+Out[8]= $Failed
 ```
 
 ## Implementation notes
@@ -78,11 +70,9 @@ Out[1]= $Failed
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[InputForm](../../expression-information/InputForm/), [FullForm](../../expression-information/FullForm/)
-
 ## References
+
+**See also:** [InputForm](../../expression-information/InputForm/), [FullForm](../../expression-information/FullForm/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

@@ -31,11 +31,9 @@ Out[2]= {{0, 0, 0}, {0, 0, 0}}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

@@ -27,11 +27,9 @@ Out[2]= False
 
 **Attributes:** `Protected`.
 
-## See also
-
-[VectorQ](../../expression-information/VectorQ/), [MatrixQ](../../expression-information/MatrixQ/), [List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [VectorQ](../../expression-information/VectorQ/), [MatrixQ](../../expression-information/MatrixQ/), [List](../../other-advanced/List/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

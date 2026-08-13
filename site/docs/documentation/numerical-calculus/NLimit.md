@@ -55,28 +55,20 @@ Out[8]= 0.6931471805599453094172321284473
 ### Applications (5)
 
 ```mathematica
-In[1]:= NLimit[Sin[x]/x, x -> 0]
-Out[1]= 1.0
-```
+In[9]:= NLimit[Sin[x]/x, x -> 0]
+Out[9]= 1.0
 
-```mathematica
-In[1]:= NLimit[(1 + 1/n)^n, n -> Infinity]
-Out[1]= 2.71828
-```
+In[10]:= NLimit[(1 + 1/n)^n, n -> Infinity]
+Out[10]= 2.71828
 
-```mathematica
-In[1]:= NLimit[n (2^(1/n) - 1), n -> Infinity]
-Out[1]= 0.693147
-```
+In[11]:= NLimit[n (2^(1/n) - 1), n -> Infinity]
+Out[11]= 0.693147
 
-```mathematica
-In[1]:= NLimit[Zeta[x] - 1/(x - 1), x -> 1]
-Out[1]= 0.577216
-```
+In[12]:= NLimit[Zeta[x] - 1/(x - 1), x -> 1]
+Out[12]= 0.577216
 
-```mathematica
-In[1]:= NLimit[Sin[x]/x, x -> 0, Method -> "Levin"]
-Out[1]= 1.0
+In[13]:= NLimit[Sin[x]/x, x -> 0, Method -> "Levin"]
+Out[13]= 1.0
 ```
 
 ## Algorithm
@@ -172,11 +164,9 @@ created for the sampler is removed on all return paths.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Chop](../../elementary-functions/Chop/), [Pi](../../mathematical-constants/Pi/), [ND](../../numerical-calculus/ND/), [Information](../../expression-information/Information/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
-
 ## References
+
+**See also:** [Chop](../../elementary-functions/Chop/), [Pi](../../mathematical-constants/Pi/), [ND](../../numerical-calculus/ND/), [Information](../../expression-information/Information/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)

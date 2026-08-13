@@ -16,11 +16,19 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= DataType[ToNDArray[{True, False, True}]]
 Out[1]= "bool"
+```
 
-In[2]:= Positive[ToNDArray[{-1, 0, 2}]]      (* a numeric buffer -> a bool one *)
+A numeric buffer -> a bool one
+
+```mathematica
+In[2]:= Positive[ToNDArray[{-1, 0, 2}]]
 Out[2]= {False, False, True}
+```
 
-In[3]:= Sin[ToNDArray[{True, False}]]        (* not numeric: delists to symbolic *)
+Not numeric: delists to symbolic
+
+```mathematica
+In[3]:= Sin[ToNDArray[{True, False}]]
 Out[3]= {Sin[True], Sin[False]}
 ```
 
@@ -38,11 +46,9 @@ Out[5]= False
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/), [DataType](../../other-advanced/DataType/), [List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/), [DataType](../../other-advanced/DataType/), [List](../../other-advanced/List/)
 
 - Source: [`src/pack.c`](https://github.com/stblake/mathilda/blob/main/src/pack.c)
 - Specification: [`docs/spec/builtins/packed-arrays.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/packed-arrays.md)

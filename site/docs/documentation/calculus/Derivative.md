@@ -43,43 +43,27 @@ Out[6]= 6 a b^2
 ### Applications (7)
 
 ```mathematica
-In[1]:= f'[x]
-Out[1]= Derivative[1][f][x]
+In[7]:= f'[x]
+Out[7]= Derivative[1][f][x]
+
+In[8]:= D[f[x], x]
+Out[8]= Derivative[1][f][x]
+
+In[9]:= Derivative[2][Cos]
+Out[9]= Derivative[2][Cos]
+
+In[10]:= D[f[g[x]], x]
+Out[10]= Derivative[1][g][x] Derivative[1][f][g[x]]
+
+In[11]:= D[f[g[x], h[x]], x]
+Out[11]= Derivative[1][g][x] Derivative[1, 0][f][g[x], h[x]] + Derivative[1][h][x] Derivative[0, 1][f][g[x], h[x]]
+
+In[12]:= D[(f[x])^2, x]
+Out[12]= 2 f[x] Derivative[1][f][x]
+
+In[13]:= Derivative[1][#^2 + 1 &]
+Out[13]= 2 #1 &
 ```
-
-```mathematica
-In[1]:= D[f[x], x]
-Out[1]= Derivative[1][f][x]
-```
-
-```mathematica
-In[1]:= Derivative[2][Cos]
-Out[1]= Derivative[2][Cos]
-```
-
-```mathematica
-In[1]:= D[f[g[x]], x]
-Out[1]= Derivative[1][g][x] Derivative[1][f][g[x]]
-```
-
-```mathematica
-In[1]:= D[f[g[x], h[x]], x]
-Out[1]= Derivative[1][g][x] Derivative[1, 0][f][g[x], h[x]] + Derivative[1][h][x] Derivative[0, 1][f][g[x], h[x]]
-```
-
-```mathematica
-In[1]:= D[(f[x])^2, x]
-Out[1]= 2 f[x] Derivative[1][f][x]
-```
-
-```mathematica
-In[1]:= Derivative[1][#^2 + 1 &]
-Out[1]= 2 #1 &
-```
-
-## Options & behaviour
-
-### Examples
 
 ## Algorithm
 
@@ -150,11 +134,9 @@ reduced; symbolic or negative orders stay unevaluated.
 
 **Attributes:** `Protected`, `ReadProtected`.
 
-## See also
-
-[D](../../calculus/D/), [Dt](../../calculus/Dt/)
-
 ## References
+
+**See also:** [D](../../calculus/D/), [Dt](../../calculus/Dt/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (Kluwer, 1992), ch. 2.
 - Source: [`src/calculus/deriv.c`](https://github.com/stblake/mathilda/blob/main/src/calculus/deriv.c)

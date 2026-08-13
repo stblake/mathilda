@@ -32,11 +32,9 @@ Out[3]= (a + b)^2
 
 **Attributes:** `HoldAll`, `Protected`, `SequenceHold`.
 
-## See also
-
-[Set](../../assignment-and-rules/Set/)
-
 ## References
+
+**See also:** [Set](../../assignment-and-rules/Set/)
 
 - Source: [`src/eval.c`](https://github.com/stblake/mathilda/blob/main/src/eval.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)

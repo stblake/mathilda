@@ -26,29 +26,15 @@ Out[1]= True
 
 In[2]:= NumericQ[x]
 Out[2]= False
-```
 
-A deep tree of constants and transcendental functions is recognised as numeric
-without any value being computed:
+In[3]:= NumericQ[Gamma[1/2] + Zeta[3]]
+Out[3]= True
 
-```mathematica
-In[1]:= NumericQ[Gamma[1/2] + Zeta[3]]
-Out[1]= True
-```
+In[4]:= NumericQ[x + 1]
+Out[4]= False
 
-One non-numeric leaf is enough to spoil the whole expression:
-
-```mathematica
-In[1]:= NumericQ[x + 1]
-Out[1]= False
-```
-
-The classification looks through `NumericFunction` heads recursively, so mixed
-elementary and special functions of numeric arguments still qualify:
-
-```mathematica
-In[1]:= NumericQ[Sin[2] + Log[3]]
-Out[1]= True
+In[5]:= NumericQ[Sin[2] + Log[3]]
+Out[5]= True
 ```
 
 ## Implementation notes

@@ -24,23 +24,17 @@ Out[2]= -Factorial[k] + Factorial[1 + k]
 ### Applications (4)
 
 ```mathematica
-In[1]:= DifferenceDelta[n^2, n]
-Out[1]= 1 + 2 n
-```
+In[3]:= DifferenceDelta[n^2, n]
+Out[3]= 1 + 2 n
 
-```mathematica
-In[1]:= DifferenceDelta[f[n], n]
-Out[1]= -f[n] + f[1 + n]
-```
+In[4]:= DifferenceDelta[f[n], n]
+Out[4]= -f[n] + f[1 + n]
 
-```mathematica
-In[1]:= DifferenceDelta[n^3, n]
-Out[1]= 1 + 3 n + 3 n^2
-```
+In[5]:= DifferenceDelta[n^3, n]
+Out[5]= 1 + 3 n + 3 n^2
 
-```mathematica
-In[1]:= DifferenceDelta[Binomial[n, k], n]
-Out[1]= -Binomial[n, k] + Binomial[1 + n, k]
+In[6]:= DifferenceDelta[Binomial[n, k], n]
+Out[6]= -Binomial[n, k] + Binomial[1 + n, k]
 ```
 
 ## Algorithm
@@ -85,11 +79,9 @@ lives alongside Gosper's summation because the two are inverse operations.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[D](../../calculus/D/), [Sum](../../calculus/Sum/)
-
 ## References
+
+**See also:** [D](../../calculus/D/), [Sum](../../calculus/Sum/)
 
 - Source: [`src/sum/sum_gosper.c`](https://github.com/stblake/mathilda/blob/main/src/sum/sum_gosper.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)

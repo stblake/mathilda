@@ -41,11 +41,9 @@ Out[6]= "hello"
 
 **Attributes:** `Flat`, `OneIdentity`, `Protected`.
 
-## See also
-
-[Flat](../../expression-information/Flat/), [OneIdentity](../../expression-information/OneIdentity/)
-
 ## References
+
+**See also:** [Flat](../../expression-information/Flat/), [OneIdentity](../../expression-information/OneIdentity/)
 
 - Source: [`src/picostrings.c`](https://github.com/stblake/mathilda/blob/main/src/picostrings.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)

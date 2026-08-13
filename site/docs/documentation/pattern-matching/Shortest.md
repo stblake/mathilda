@@ -13,26 +13,18 @@ Every input below was run against the current Mathilda build and its output reco
 
 ### Applications (4)
 
-With `/.` only the single first match is taken; `Shortest` makes that the
-fewest-element partition, while `Longest` makes it the most:
-
 ```mathematica
 In[1]:= {a, b, c} /. {Shortest[x__], y__} :> {{x}, {y}}
 Out[1]= {{a}, {b, c}}
 
 In[2]:= {a, b, c} /. {Longest[x__], y__} :> {{x}, {y}}
 Out[2]= {{a, b}, {c}}
-```
 
-`ReplaceList` enumerates every match, revealing the order in which partitions are
-attempted — `Shortest` tries the smallest first, `Longest` the largest:
+In[3]:= ReplaceList[{a, b, c}, {Shortest[x__], y__} :> {{x}, {y}}]
+Out[3]= {{{a}, {b, c}}, {{a, b}, {c}}}
 
-```mathematica
-In[1]:= ReplaceList[{a, b, c}, {Shortest[x__], y__} :> {{x}, {y}}]
-Out[1]= {{{a}, {b, c}}, {{a, b}, {c}}}
-
-In[2]:= ReplaceList[{a, b, c}, {Longest[x__], y__} :> {{x}, {y}}]
-Out[2]= {{{a, b}, {c}}, {{a}, {b, c}}}
+In[4]:= ReplaceList[{a, b, c}, {Longest[x__], y__} :> {{x}, {y}}]
+Out[4]= {{{a, b}, {c}}, {{a}, {b, c}}}
 ```
 
 ## Implementation notes

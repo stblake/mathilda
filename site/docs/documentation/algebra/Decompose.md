@@ -18,21 +18,15 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= Decompose[x^4 + 6 x^2 + 10, x]
 Out[1]= {10 + 6 x + x^2, x^2}
-```
 
-```mathematica
-In[1]:= Decompose[x^6 + 6 x^4 + 12 x^2 + 8, x]
-Out[1]= {8 + 12 x + 6 x^2 + x^3, x^2}
-```
+In[2]:= Decompose[x^6 + 6 x^4 + 12 x^2 + 8, x]
+Out[2]= {8 + 12 x + 6 x^2 + x^3, x^2}
 
-```mathematica
-In[1]:= Decompose[x^4 + 2 x^3 + 3 x^2 + 2 x + 5, x]
-Out[1]= {5 + 2 x + x^2, x + x^2}
-```
+In[3]:= Decompose[x^4 + 2 x^3 + 3 x^2 + 2 x + 5, x]
+Out[3]= {5 + 2 x + x^2, x + x^2}
 
-```mathematica
-In[1]:= Decompose[x^6, x]
-Out[1]= {x^6}
+In[4]:= Decompose[x^6, x]
+Out[4]= {x^6}
 ```
 
 ## Implementation notes

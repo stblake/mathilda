@@ -43,31 +43,23 @@ Out[4]= 1 + a + b
 ### Applications (6)
 
 ```mathematica
-In[1]:= Replace[x^2, x^2 -> done]
-Out[1]= done
-```
+In[5]:= Replace[x^2, x^2 -> done]
+Out[5]= done
 
-```mathematica
-In[1]:= Replace[x, {x -> 1, _ -> 0}]
-Out[1]= 1
+In[6]:= Replace[x, {x -> 1, _ -> 0}]
+Out[6]= 1
 
-In[2]:= Replace[w, {x -> 1, _ -> 0}]
-Out[2]= 0
-```
+In[7]:= Replace[w, {x -> 1, _ -> 0}]
+Out[7]= 0
 
-```mathematica
-In[1]:= Replace[a + b + c + d, x_ + y_ -> {x, y}]
-Out[1]= {a, b + c + d}
-```
+In[8]:= Replace[a + b + c + d, x_ + y_ -> {x, y}]
+Out[8]= {a, b + c + d}
 
-```mathematica
-In[1]:= Replace[{{1, 2}, {3, 4}}, x_Integer :> x^2, {2}]
-Out[1]= {{1, 4}, {9, 16}}
-```
+In[9]:= Replace[{{1, 2}, {3, 4}}, x_Integer :> x^2, {2}]
+Out[9]= {{1, 4}, {9, 16}}
 
-```mathematica
-In[1]:= Replace[{1, {2, {3, {4}}}}, x_Integer :> x^2, {-1}]
-Out[1]= {1, {4, {9, {16}}}}
+In[10]:= Replace[{1, {2, {3, {4}}}}, x_Integer :> x^2, {-1}]
+Out[10]= {1, {4, {9, {16}}}}
 ```
 
 ## Implementation notes
@@ -86,11 +78,9 @@ Out[1]= {1, {4, {9, {16}}}}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/), [Hold](../../expression-information/Hold/)
-
 ## References
+
+**See also:** [Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/), [Hold](../../expression-information/Hold/)
 
 - Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)

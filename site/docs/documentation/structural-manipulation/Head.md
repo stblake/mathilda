@@ -46,11 +46,9 @@ Out[3]= f[Plus]
 
 **Attributes:** none registered.
 
-## See also
-
-[Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/), [Symbol](../../expression-information/Symbol/)
-
 ## References
+
+**See also:** [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/), [Symbol](../../expression-information/Symbol/)
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

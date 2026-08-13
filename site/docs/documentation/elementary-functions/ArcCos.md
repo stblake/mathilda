@@ -34,19 +34,15 @@ Out[3]= 0
 
 In[4]:= N[ArcCos[0.5]]
 Out[4]= 1.0472
-```
 
-```mathematica
-In[1]:= ArcCos[-1/2]
-Out[1]= 2/3 Pi
+In[5]:= ArcCos[-1/2]
+Out[5]= 2/3 Pi
 
-In[2]:= ArcCos[Sqrt[2]/2]
-Out[2]= 1/4 Pi
-```
+In[6]:= ArcCos[Sqrt[2]/2]
+Out[6]= 1/4 Pi
 
-```mathematica
-In[1]:= N[ArcCos[2], 20]
-Out[1]= 0.0 + 1.31695789692481670862*I
+In[7]:= N[ArcCos[2], 20]
+Out[7]= 0.0 + 1.31695789692481670862*I
 ```
 
 ## Implementation notes

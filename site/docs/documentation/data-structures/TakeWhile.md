@@ -27,11 +27,9 @@ Out[2]= 2
 
 **Attributes:** `Protected`.
 
-## See also
-
-[LengthWhile](../../data-structures/LengthWhile/)
-
 ## References
+
+**See also:** [LengthWhile](../../data-structures/LengthWhile/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

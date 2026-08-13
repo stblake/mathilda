@@ -53,30 +53,20 @@ Out[8]= Binomial[7/3, 1/5]
 ### Applications (5)
 
 ```mathematica
-In[1]:= Binomial[50, 25]
-Out[1]= 126410606437752
-```
+In[9]:= Binomial[50, 25]
+Out[9]= 126410606437752
 
-```mathematica
-In[1]:= Binomial[-1, 3]
-Out[1]= -1
-```
+In[10]:= Binomial[-1, 3]
+Out[10]= -1
 
-```mathematica
-In[1]:= Binomial[1/2, 3]
-Out[1]= 1/16
-```
+In[11]:= Binomial[1/2, 3]
+Out[11]= 1/16
 
-```mathematica
-In[1]:= Binomial[n, 2]
-Out[1]= 1/2 n (-1 + n)
-```
+In[12]:= Binomial[n, 2]
+Out[12]= 1/2 n (-1 + n)
 
-The polynomial coefficients reproduce the binomial theorem:
-
-```mathematica
-In[1]:= Sum[Binomial[4, k] x^k, {k, 0, 4}]
-Out[1]= 1 + 4 x + 6 x^2 + 4 x^3 + x^4
+In[13]:= Sum[Binomial[4, k] x^k, {k, 0, 4}]
+Out[13]= 1 + 4 x + 6 x^2 + 4 x^3 + x^4
 ```
 
 ## Performance
@@ -140,11 +130,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Times](../../arithmetic/Times/), [Plus](../../arithmetic/Plus/), [Gamma](../../special-functions/Gamma/)
-
 ## References
+
+**See also:** [Times](../../arithmetic/Times/), [Plus](../../arithmetic/Plus/), [Gamma](../../special-functions/Gamma/)
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on binomial coefficients.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on the generalized binomial and its polynomial form.

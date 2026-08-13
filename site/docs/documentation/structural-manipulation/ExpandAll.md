@@ -58,11 +58,9 @@ Out[5]= f[x^2 + 2 x y + y^2]^2 + g[(y + z)^2]^2 + 2 f[x^2 + 2 x y + y^2] g[(y + 
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Expand](../../algebra/Expand/), [ExpandDenominator](../../algebra/ExpandDenominator/), [List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [Expand](../../algebra/Expand/), [ExpandDenominator](../../algebra/ExpandDenominator/), [List](../../other-advanced/List/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

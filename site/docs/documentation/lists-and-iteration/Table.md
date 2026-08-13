@@ -27,38 +27,26 @@ Out[1]= {1, 4, 9, 16}
 ### Applications (7)
 
 ```mathematica
-In[1]:= Table[i^2, {i, 1, 5}]
-Out[1]= {1, 4, 9, 16, 25}
-```
+In[2]:= Table[i^2, {i, 1, 5}]
+Out[2]= {1, 4, 9, 16, 25}
 
-```mathematica
-In[1]:= Table[i + j, {i, 1, 2}, {j, 1, 3}]
-Out[1]= {{2, 3, 4}, {3, 4, 5}}
-```
+In[3]:= Table[i + j, {i, 1, 2}, {j, 1, 3}]
+Out[3]= {{2, 3, 4}, {3, 4, 5}}
 
-```mathematica
-In[1]:= Table[x, 4]
-Out[1]= {x, x, x, x}
-```
+In[4]:= Table[x, 4]
+Out[4]= {x, x, x, x}
 
-```mathematica
-In[1]:= Table[i, {i, 0, 1, 1/2}]
-Out[1]= {0, 1/2, 1}
-```
+In[5]:= Table[i, {i, 0, 1, 1/2}]
+Out[5]= {0, 1/2, 1}
 
-```mathematica
-In[1]:= Table[Fibonacci[n], {n, 1, 12}]
-Out[1]= {1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144}
-```
+In[6]:= Table[Fibonacci[n], {n, 1, 12}]
+Out[6]= {1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144}
 
-```mathematica
-In[1]:= Table[Sum[1/k, {k, 1, n}], {n, 1, 5}]
-Out[1]= {1, 3/2, 11/6, 25/12, 137/60}
-```
+In[7]:= Table[Sum[1/k, {k, 1, n}], {n, 1, 5}]
+Out[7]= {1, 3/2, 11/6, 25/12, 137/60}
 
-```mathematica
-In[1]:= Table[If[i == j, 1, 0], {i, 1, 3}, {j, 1, 3}]
-Out[1]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
+In[8]:= Table[If[i == j, 1, 0], {i, 1, 3}, {j, 1, 3}]
+Out[8]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
 ```
 
 ## Performance
@@ -114,11 +102,9 @@ For a single iterator the spec is parsed by the shared `iter_spec_parse` (`src/i
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/), [List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/), [Sum](../../calculus/Sum/), [Product](../../calculus/Product/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/), [List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/), [Sum](../../calculus/Sum/), [Product](../../calculus/Product/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

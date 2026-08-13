@@ -24,11 +24,9 @@ Out[1]= {1, 9}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Min](../../data-structures/Min/), [Max](../../data-structures/Max/)
-
 ## References
+
+**See also:** [Min](../../data-structures/Min/), [Max](../../data-structures/Max/)
 
 - Source: [`src/list/list_init.c`](https://github.com/stblake/mathilda/blob/main/src/list/list_init.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

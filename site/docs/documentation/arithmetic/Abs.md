@@ -25,17 +25,15 @@ Out[3]= 3/4
 
 In[4]:= Abs[{-1, 2, -3}]
 Out[4]= {1, 2, 3}
-```
 
-```mathematica
-In[1]:= Abs[(1 + I)^10]
-Out[1]= 32
+In[5]:= Abs[(1 + I)^10]
+Out[5]= 32
 
-In[2]:= Abs[Sqrt[2] + Sqrt[3] I]
-Out[2]= Sqrt[5]
+In[6]:= Abs[Sqrt[2] + Sqrt[3] I]
+Out[6]= Sqrt[5]
 
-In[3]:= N[Abs[Gamma[1/3 + 2 I]], 30]
-Out[3]= 0.09665959425732664141022797859867
+In[7]:= N[Abs[Gamma[1/3 + 2 I]], 30]
+Out[7]= 0.09665959425732664141022797859867
 ```
 
 ## Performance
@@ -57,11 +55,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [ReIm](../../arithmetic/ReIm/), [Sign](../../arithmetic/Sign/), [Conjugate](../../arithmetic/Conjugate/), [Arg](../../arithmetic/Arg/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
-
 ## References
+
+**See also:** [Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [ReIm](../../arithmetic/ReIm/), [Sign](../../arithmetic/Sign/), [Conjugate](../../arithmetic/Conjugate/), [Arg](../../arithmetic/Arg/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
 
 - Source: [`src/complex.c`](https://github.com/stblake/mathilda/blob/main/src/complex.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

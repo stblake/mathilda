@@ -27,21 +27,15 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= N[LogIntegral[2], 40]
 Out[1]= 1.0451637801174927848445888891946131365227
-```
 
-```mathematica
-In[1]:= D[LogIntegral[z], z]
-Out[1]= 1/Log[z]
-```
+In[2]:= D[LogIntegral[z], z]
+Out[2]= 1/Log[z]
 
-```mathematica
-In[1]:= N[LogIntegral[10^6], 30]
-Out[1]= 78627.54915946218191986291074769
-```
+In[3]:= N[LogIntegral[10^6], 30]
+Out[3]= 78627.54915946218191986291074769
 
-```mathematica
-In[1]:= N[LogIntegral[1000], 20]
-Out[1]= 177.609657990152226688
+In[4]:= N[LogIntegral[1000], 20]
+Out[4]= 177.609657990152226688
 ```
 
 ## Algorithm
@@ -99,11 +93,9 @@ Attributes: Listable, NumericFunction, Protected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[ExpIntegralEi](../../special-functions/ExpIntegralEi/), [Log](../../elementary-functions/Log/), [N](../../arithmetic/N/), [D](../../calculus/D/)
-
 ## References
+
+**See also:** [ExpIntegralEi](../../special-functions/ExpIntegralEi/), [Log](../../elementary-functions/Log/), [N](../../arithmetic/N/), [D](../../calculus/D/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

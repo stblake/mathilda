@@ -47,23 +47,17 @@ Out[5]= Distribute[{{}, {a}}, {{}, {b}}, {{}, {c}}, List, List, List, Join]
 ### Applications (4)
 
 ```mathematica
-In[1]:= Distribute[(a + b)(c + d)]
-Out[1]= a c + b c + a d + b d
-```
+In[6]:= Distribute[(a + b)(c + d)]
+Out[6]= a c + b c + a d + b d
 
-```mathematica
-In[1]:= Distribute[f[a + b, c + d]]
-Out[1]= f[a, c] + f[b, c] + f[a, d] + f[b, d]
-```
+In[7]:= Distribute[f[a + b, c + d]]
+Out[7]= f[a, c] + f[b, c] + f[a, d] + f[b, d]
 
-```mathematica
-In[1]:= Distribute[And[a, Or[b, c]], Or, And]
-Out[1]= a && b || a && c
-```
+In[8]:= Distribute[And[a, Or[b, c]], Or, And]
+Out[8]= a && b || a && c
 
-```mathematica
-In[1]:= Distribute[f[a + b + c], Plus, f, Plus, g]
-Out[1]= g[a] + g[b] + g[c]
+In[9]:= Distribute[f[a + b + c], Plus, f, Plus, g]
+Out[9]= g[a] + g[b] + g[c]
 ```
 
 ## Implementation notes
@@ -98,11 +92,9 @@ expansion is genuinely combinatorial.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Plus](../../arithmetic/Plus/), [Expand](../../algebra/Expand/)
-
 ## References
+
+**See also:** [Plus](../../arithmetic/Plus/), [Expand](../../algebra/Expand/)
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

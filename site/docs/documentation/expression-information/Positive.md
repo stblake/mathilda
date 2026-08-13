@@ -37,11 +37,9 @@ Out[3]= False
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[NumericQ](../../expression-information/NumericQ/), [Negative](../../expression-information/Negative/), [NonNegative](../../expression-information/NonNegative/), [NonPositive](../../expression-information/NonPositive/), [NDArray](../../linear-algebra/NDArray/)
-
 ## References
+
+**See also:** [NumericQ](../../expression-information/NumericQ/), [Negative](../../expression-information/Negative/), [NonNegative](../../expression-information/NonNegative/), [NonPositive](../../expression-information/NonPositive/), [NDArray](../../linear-algebra/NDArray/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

@@ -33,18 +33,14 @@ Out[3]= {1, -2*I, 3 - 4*I}
 ### Applications (3)
 
 ```mathematica
-In[1]:= ConjugateTranspose[{{1 + I, 2}, {3, 4 - I}}]
-Out[1]= {{1 - I, 3}, {2, 4 + I}}
-```
+In[4]:= ConjugateTranspose[{{1 + I, 2}, {3, 4 - I}}]
+Out[4]= {{1 - I, 3}, {2, 4 + I}}
 
-```mathematica
-In[1]:= ConjugateTranspose[{{a, b}, {c, d}}]
-Out[1]= {{Conjugate[a], Conjugate[c]}, {Conjugate[b], Conjugate[d]}}
-```
+In[5]:= ConjugateTranspose[{{a, b}, {c, d}}]
+Out[5]= {{Conjugate[a], Conjugate[c]}, {Conjugate[b], Conjugate[d]}}
 
-```mathematica
-In[1]:= m = {{1, I}, {-I, 2}}; ConjugateTranspose[m] == m
-Out[1]= True
+In[6]:= m = {{1, I}, {-I, 2}}; ConjugateTranspose[m] == m
+Out[6]= True
 ```
 
 ## Implementation notes
@@ -63,11 +59,9 @@ Out[1]= True
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Transpose](../../structural-manipulation/Transpose/)
-
 ## References
+
+**See also:** [Transpose](../../structural-manipulation/Transpose/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

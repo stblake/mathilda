@@ -13,7 +13,7 @@ Gives a machine-precision numerical approximation of expr.
 
 Gives a numerical approximation to n decimal digits. Requires a USE\_MPFR build; without it, a warning is emitted and machine precision is used.
 
-## Examples (10)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -37,36 +37,36 @@ In[4]:= Precision[%]
 Out[4]= Infinity
 ```
 
+### Worked examples (2)
+
+```mathematica
+In[5]:= N[1/10^30]
+Out[5]= 1e-30
+
+In[6]:= N[10^400/3]
+Out[6]= 3.333333333333333e+399
+```
+
 ### Applications (6)
 
 ```mathematica
-In[1]:= N[Sqrt[2]]
-Out[1]= 1.41421
-```
+In[7]:= N[Sqrt[2]]
+Out[7]= 1.41421
 
-```mathematica
-In[1]:= N[2/7, 15]
-Out[1]= 0.2857142857142856
-```
+In[8]:= N[2/7, 15]
+Out[8]= 0.2857142857142856
 
-```mathematica
-In[1]:= N[Pi, 40]
-Out[1]= 3.1415926535897932384626433832795028841971
-```
+In[9]:= N[Pi, 40]
+Out[9]= 3.1415926535897932384626433832795028841971
 
-```mathematica
-In[1]:= N[Zeta[3], 40]
-Out[1]= 1.2020569031595942853997381615114499907651
-```
+In[10]:= N[Zeta[3], 40]
+Out[10]= 1.2020569031595942853997381615114499907651
 
-```mathematica
-In[1]:= N[Gamma[1/3], 35]
-Out[1]= 2.67893853470774763365569294097467766
-```
+In[11]:= N[Gamma[1/3], 35]
+Out[11]= 2.67893853470774763365569294097467766
 
-```mathematica
-In[1]:= N[EulerGamma, 30]
-Out[1]= 0.5772156649015328606065120900823
+In[12]:= N[EulerGamma, 30]
+Out[12]= 0.5772156649015328606065120900823
 ```
 
 ## Algorithm
@@ -87,11 +87,9 @@ This file implements `N[expr]` / `N[expr, prec]`. Phase 1 targets machine-precis
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [GoldenRatio](../../mathematical-constants/GoldenRatio/)
-
 ## References
+
+**See also:** [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [GoldenRatio](../../mathematical-constants/GoldenRatio/)
 
 - Source: [`src/numeric.c`](https://github.com/stblake/mathilda/blob/main/src/numeric.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

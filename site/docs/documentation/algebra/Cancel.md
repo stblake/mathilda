@@ -53,28 +53,20 @@ Out[8]= 2^(2/3) + 2^(1/3) x + x^2
 ### Applications (5)
 
 ```mathematica
-In[1]:= Cancel[(x^2 - 1)/(x - 1)]
-Out[1]= 1 + x
-```
+In[9]:= Cancel[(x^2 - 1)/(x - 1)]
+Out[9]= 1 + x
 
-```mathematica
-In[1]:= Cancel[(x^2 + 2 x + 1)/(x + 1)]
-Out[1]= 1 + x
-```
+In[10]:= Cancel[(x^2 + 2 x + 1)/(x + 1)]
+Out[10]= 1 + x
 
-```mathematica
-In[1]:= Cancel[(x^2 - 1)/(x^2 - 2 x + 1)]
-Out[1]= (1 + x)/(-1 + x)
-```
+In[11]:= Cancel[(x^2 - 1)/(x^2 - 2 x + 1)]
+Out[11]= (1 + x)/(-1 + x)
 
-```mathematica
-In[1]:= Cancel[(x^4 - 1)/(x^2 - 1)]
-Out[1]= 1 + x^2
-```
+In[12]:= Cancel[(x^4 - 1)/(x^2 - 1)]
+Out[12]= 1 + x^2
 
-```mathematica
-In[1]:= Cancel[(x^2 - 2)/(x - Sqrt[2]), Extension -> Sqrt[2]]
-Out[1]= Sqrt[2] + x
+In[13]:= Cancel[(x^2 - 2)/(x - Sqrt[2]), Extension -> Sqrt[2]]
+Out[13]= Sqrt[2] + x
 ```
 
 ## Implementation notes
@@ -95,11 +87,9 @@ Out[1]= Sqrt[2] + x
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Together](../../algebra/Together/), [Plus](../../arithmetic/Plus/), [PolynomialQuotient](../../algebra/PolynomialQuotient/)
-
 ## References
+
+**See also:** [Together](../../algebra/Together/), [Plus](../../arithmetic/Plus/), [PolynomialQuotient](../../algebra/PolynomialQuotient/)
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on polynomial GCD computation.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational function simplification.

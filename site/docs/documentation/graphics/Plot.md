@@ -55,11 +55,9 @@ HoldAll, like Table/Do: f and the iterator spec must not be pre-evaluated (x has
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[Show](../../graphics/Show/), [HoldAll](../../expression-information/HoldAll/)
-
 ## References
+
+**See also:** [Show](../../graphics/Show/), [HoldAll](../../expression-information/HoldAll/)
 
 - Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)

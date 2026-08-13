@@ -22,9 +22,16 @@ Non-negative integer n expands to the exact finite sum (a rational for integer r
 
 </details>
 
-## Examples
+## Examples (1)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Worked examples (1)
+
+```mathematica
+In[1]:= HarmonicNumber[Infinity]
+Out[1]= ComplexInfinity
+```
 
 ## Algorithm
 
@@ -66,11 +73,9 @@ Attributes: Listable, NumericFunction, Protected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[BernoulliB](../../special-functions/BernoulliB/)
-
 ## References
+
+**See also:** [BernoulliB](../../special-functions/BernoulliB/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

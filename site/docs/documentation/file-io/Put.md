@@ -24,19 +24,15 @@ expr \>\> "filename" is equivalent to Put\[expr, "filename"\]; the bare-word for
 
 </details>
 
-## Examples (2)
+## Examples (1)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Applications (2)
+### Applications (1)
 
 ```mathematica
 In[1]:= Put[x^2 + 1, "/tmp/mathilda_demo.m"]
 Out[1]= Null
-
-In[2]:= FilePrint["/tmp/mathilda_demo.m"]
-1 + x^2
-Out[2]= Null
 ```
 
 ## Options & behaviour
@@ -72,11 +68,9 @@ infix shorthand `expr >> "file"` and lowers it to `Put[expr, "file"]`.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[PutAppend](../../file-io/PutAppend/), [Set](../../assignment-and-rules/Set/), [SetDelayed](../../assignment-and-rules/SetDelayed/), [CompoundExpression](../../assignment-and-rules/CompoundExpression/)
-
 ## References
+
+**See also:** [PutAppend](../../file-io/PutAppend/), [Set](../../assignment-and-rules/Set/), [SetDelayed](../../assignment-and-rules/SetDelayed/), [CompoundExpression](../../assignment-and-rules/CompoundExpression/)
 
 - Source: [`src/readwrite.c`](https://github.com/stblake/mathilda/blob/main/src/readwrite.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)

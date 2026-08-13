@@ -88,11 +88,9 @@ Out[2]= 8
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/), [Table](../../lists-and-iteration/Table/), [Return](../../control-flow/Return/), [Break](../../control-flow/Break/), [Continue](../../control-flow/Continue/), [Throw](../../control-flow/Throw/), [Pi](../../mathematical-constants/Pi/), [For](../../control-flow/For/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/), [Table](../../lists-and-iteration/Table/), [Return](../../control-flow/Return/), [Break](../../control-flow/Break/), [Continue](../../control-flow/Continue/), [Throw](../../control-flow/Throw/), [Pi](../../mathematical-constants/Pi/), [For](../../control-flow/For/)
 
 - Source: [`src/iter.c`](https://github.com/stblake/mathilda/blob/main/src/iter.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

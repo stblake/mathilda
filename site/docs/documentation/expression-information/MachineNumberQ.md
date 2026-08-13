@@ -29,14 +29,24 @@ Out[3]= False
 ```mathematica
 In[4]:= MachineNumberQ[Sin[1000.]]
 Out[4]= True
+```
 
-In[5]:= MachineNumberQ[Exp[1000.]]      (* overflows to +inf *)
+Overflows to +inf
+
+```mathematica
+In[5]:= MachineNumberQ[Exp[1000.]]
 Out[5]= False
+```
 
+```mathematica
 In[6]:= MachineNumberQ[-29037945.290347]
 Out[6]= True
+```
 
-In[7]:= MachineNumberQ[N[Pi, 30]]       (* MPFR, not machine *)
+MPFR, not machine
+
+```mathematica
+In[7]:= MachineNumberQ[N[Pi, 30]]
 Out[7]= False
 ```
 
@@ -54,11 +64,9 @@ This file implements `N[expr]` / `N[expr, prec]`. Phase 1 targets machine-precis
 
 **Attributes:** `Protected`.
 
-## See also
-
-[AtomQ](../../expression-information/AtomQ/), [NumberQ](../../expression-information/NumberQ/), [IntegerQ](../../expression-information/IntegerQ/), [StringQ](../../expression-information/StringQ/), [Complex](../../arithmetic/Complex/)
-
 ## References
+
+**See also:** [AtomQ](../../expression-information/AtomQ/), [NumberQ](../../expression-information/NumberQ/), [IntegerQ](../../expression-information/IntegerQ/), [StringQ](../../expression-information/StringQ/), [Complex](../../arithmetic/Complex/)
 
 - Source: [`src/numeric.c`](https://github.com/stblake/mathilda/blob/main/src/numeric.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

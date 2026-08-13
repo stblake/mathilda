@@ -51,11 +51,9 @@ Out[5]= Sequence[1, 2]
 
 **Attributes:** `HoldAllComplete`, `Protected`.
 
-## See also
-
-[Sequence](../../expression-information/Sequence/), [Unevaluated](../../expression-information/Unevaluated/), [Evaluate](../../expression-information/Evaluate/), [HoldAllComplete](../../expression-information/HoldAllComplete/), [ReplaceAll](../../assignment-and-rules/ReplaceAll/), [Replace](../../assignment-and-rules/Replace/), [ReleaseHold](../../expression-information/ReleaseHold/)
-
 ## References
+
+**See also:** [Sequence](../../expression-information/Sequence/), [Unevaluated](../../expression-information/Unevaluated/), [Evaluate](../../expression-information/Evaluate/), [HoldAllComplete](../../expression-information/HoldAllComplete/), [ReplaceAll](../../assignment-and-rules/ReplaceAll/), [Replace](../../assignment-and-rules/Replace/), [ReleaseHold](../../expression-information/ReleaseHold/)
 
 - Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

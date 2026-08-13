@@ -224,11 +224,9 @@ Measured on arm64 Darwin at commit `2dea9cc05`.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[CMYKColor](../../graphics/CMYKColor/), [SquaredEuclideanDistance](../../lists-and-iteration/SquaredEuclideanDistance/), [EditDistance](../../lists-and-iteration/EditDistance/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/), [List](../../other-advanced/List/), [NDArray](../../linear-algebra/NDArray/), [EuclideanDistance](../../lists-and-iteration/EuclideanDistance/)
-
 ## References
+
+**See also:** [CMYKColor](../../graphics/CMYKColor/), [SquaredEuclideanDistance](../../lists-and-iteration/SquaredEuclideanDistance/), [EditDistance](../../lists-and-iteration/EditDistance/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/), [List](../../other-advanced/List/), [NDArray](../../linear-algebra/NDArray/), [EuclideanDistance](../../lists-and-iteration/EuclideanDistance/)
 
 - Source: [`src/list/list_init.c`](https://github.com/stblake/mathilda/blob/main/src/list/list_init.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

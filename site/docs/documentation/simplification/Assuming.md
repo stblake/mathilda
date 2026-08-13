@@ -31,27 +31,21 @@ Out[1]= -x y
 
 ### Applications (5)
 
-Without assumptions `Sqrt[x^2]` cannot be reduced; supplying `x > 0` resolves it:
-
 ```mathematica
-In[1]:= Simplify[Sqrt[x^2]]
-Out[1]= Sqrt[x^2]
+In[2]:= Simplify[Sqrt[x^2]]
+Out[2]= Sqrt[x^2]
 
-In[2]:= Assuming[x > 0, Simplify[Sqrt[x^2]]]
-Out[2]= x
+In[3]:= Assuming[x > 0, Simplify[Sqrt[x^2]]]
+Out[3]= x
 
-In[3]:= Assuming[x > 0, Simplify[Sqrt[x^2] + Abs[x]]]
-Out[3]= 2 x
-```
+In[4]:= Assuming[x > 0, Simplify[Sqrt[x^2] + Abs[x]]]
+Out[4]= 2 x
 
-Domain assumptions feed Simplify's decision procedures; integer `k` kills the sine, positive `a, b` collapse the logarithm:
+In[5]:= Assuming[Element[k, Integers], Simplify[Sin[k Pi]]]
+Out[5]= 0
 
-```mathematica
-In[1]:= Assuming[Element[k, Integers], Simplify[Sin[k Pi]]]
-Out[1]= 0
-
-In[2]:= Assuming[a > 0 && b > 0, Simplify[Log[a b] - Log[a] - Log[b]]]
-Out[2]= 0
+In[6]:= Assuming[a > 0 && b > 0, Simplify[Log[a b] - Log[a] - Log[b]]]
+Out[6]= 0
 ```
 
 ## Implementation notes
@@ -78,11 +72,9 @@ OwnValue.
 
 **Attributes:** `HoldRest`, `Protected`.
 
-## See also
-
-[$Assumptions](../../simplification/$Assumptions/), [Simplify](../../simplification/Simplify/), [HoldRest](../../other-advanced/HoldRest/)
-
 ## References
+
+**See also:** [$Assumptions](../../simplification/$Assumptions/), [Simplify](../../simplification/Simplify/), [HoldRest](../../other-advanced/HoldRest/)
 
 - Source: [`src/simp/simp_builtins.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp_builtins.c)
 - Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)

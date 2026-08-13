@@ -33,26 +33,20 @@ Out[5]= 2.73861
 ### Applications (5)
 
 ```mathematica
-In[1]:= RootMeanSquare[{3, 4}]
-Out[1]= 5/Sqrt[2]
-```
+In[6]:= RootMeanSquare[{3, 4}]
+Out[6]= 5/Sqrt[2]
 
-```mathematica
-In[1]:= RootMeanSquare[{a, b}]
-Out[1]= Sqrt[1/2 (a^2 + b^2)]
-```
+In[7]:= RootMeanSquare[{a, b}]
+Out[7]= Sqrt[1/2 (a^2 + b^2)]
 
-```mathematica
-In[1]:= RootMeanSquare[Range[10]]
-Out[1]= Sqrt[77/2]
+In[8]:= RootMeanSquare[Range[10]]
+Out[8]= Sqrt[77/2]
 
-In[2]:= N[RootMeanSquare[{1, 2, 3, 4, 5}], 30]
-Out[2]= 3.316624790355399849114932736672
-```
+In[9]:= N[RootMeanSquare[{1, 2, 3, 4, 5}], 30]
+Out[9]= 3.316624790355399849114932736672
 
-```mathematica
-In[1]:= N[RootMeanSquare[Table[Sin[n], {n, 1, 1000}]], 20]
-Out[1]= 0.707242937053949660224
+In[10]:= N[RootMeanSquare[Table[Sin[n], {n, 1, 1000}]], 20]
+Out[10]= 0.707242937053949660224
 ```
 
 ## Implementation notes

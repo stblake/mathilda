@@ -30,11 +30,9 @@ Out[3]= True
 
 **Attributes:** `Protected`.
 
-## See also
-
-[AllTrue](../../functional-programming/AllTrue/), [NoneTrue](../../functional-programming/NoneTrue/)
-
 ## References
+
+**See also:** [AllTrue](../../functional-programming/AllTrue/), [NoneTrue](../../functional-programming/NoneTrue/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

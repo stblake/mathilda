@@ -41,11 +41,9 @@ The same nf_format_parts drives the measure pass, so alignment widths and the pr
 
 **Attributes:** `Protected`.
 
-## See also
-
-[NumberForm](../../expression-information/NumberForm/)
-
 ## References
+
+**See also:** [NumberForm](../../expression-information/NumberForm/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

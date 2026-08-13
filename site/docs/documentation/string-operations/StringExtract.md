@@ -72,11 +72,9 @@ Registered by regex_init() (regex_init.c) alongside its StringSplit dependency. 
 
 **Attributes:** `Protected`.
 
-## See also
-
-[StringSplit](../../string-operations/StringSplit/)
-
 ## References
+
+**See also:** [StringSplit](../../string-operations/StringSplit/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)

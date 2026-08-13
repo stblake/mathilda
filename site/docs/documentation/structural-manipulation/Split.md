@@ -30,23 +30,15 @@ Out[2]= {{1, 2, 3, 4}, {3}, {2}, {1}}
 ### Applications (3)
 
 ```mathematica
-In[1]:= Split[{1, 1, 2, 3, 3, 3, 1}]
-Out[1]= {{1, 1}, {2}, {3, 3, 3}, {1}}
+In[3]:= Split[{1, 1, 2, 3, 3, 3, 1}]
+Out[3]= {{1, 1}, {2}, {3, 3, 3}, {1}}
+
+In[4]:= Split[Sort[{3, 1, 1, 2, 3, 2, 1}]]
+Out[4]= {{1, 1, 1}, {2, 2}, {3, 3}}
+
+In[5]:= Split[{1, 2, 4, 7, 8, 10, 11}, (#2 - #1 == 1) &]
+Out[5]= {{1, 2}, {4}, {7, 8}, {10, 11}}
 ```
-
-```mathematica
-In[1]:= Split[Sort[{3, 1, 1, 2, 3, 2, 1}]]
-Out[1]= {{1, 1, 1}, {2, 2}, {3, 3}}
-```
-
-Sorting first turns `Split` into a run-length / tally tool, grouping all equal elements together.
-
-```mathematica
-In[1]:= Split[{1, 2, 4, 7, 8, 10, 11}, (#2 - #1 == 1) &]
-Out[1]= {{1, 2}, {4}, {7, 8}, {10, 11}}
-```
-
-With a custom test, `Split` extracts maximal runs of *consecutive* integers.
 
 ## Implementation notes
 
@@ -65,11 +57,9 @@ accumulated run is emitted. Output is a list of run sublists.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[SameQ](../../comparisons/SameQ/), [Gather](../../data-structures/Gather/)
-
 ## References
+
+**See also:** [SameQ](../../comparisons/SameQ/), [Gather](../../data-structures/Gather/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

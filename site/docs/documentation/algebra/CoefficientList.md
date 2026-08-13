@@ -29,33 +29,23 @@ Out[3]= {{1, 0, c}, {0, b, 0}, {a, 0, 0}}
 ### Applications (6)
 
 ```mathematica
-In[1]:= CoefficientList[x^2 + 3 x + 2, x]
-Out[1]= {2, 3, 1}
-```
+In[4]:= CoefficientList[x^2 + 3 x + 2, x]
+Out[4]= {2, 3, 1}
 
-```mathematica
-In[1]:= CoefficientList[1 + x^3, x]
-Out[1]= {1, 0, 0, 1}
-```
+In[5]:= CoefficientList[1 + x^3, x]
+Out[5]= {1, 0, 0, 1}
 
-```mathematica
-In[1]:= CoefficientList[a + b x + c x^2, x]
-Out[1]= {a, b, c}
-```
+In[6]:= CoefficientList[a + b x + c x^2, x]
+Out[6]= {a, b, c}
 
-```mathematica
-In[1]:= CoefficientList[x^2 + x y + y^2, {x, y}]
-Out[1]= {{0, 0, 1}, {0, 1, 0}, {1, 0, 0}}
-```
+In[7]:= CoefficientList[x^2 + x y + y^2, {x, y}]
+Out[7]= {{0, 0, 1}, {0, 1, 0}, {1, 0, 0}}
 
-```mathematica
-In[1]:= CoefficientList[(1 + x)^6, x]
-Out[1]= {1, 6, 15, 20, 15, 6, 1}
-```
+In[8]:= CoefficientList[(1 + x)^6, x]
+Out[8]= {1, 6, 15, 20, 15, 6, 1}
 
-```mathematica
-In[1]:= CoefficientList[Expand[(1 + x + x^2)^4], x]
-Out[1]= {1, 4, 10, 16, 19, 16, 10, 4, 1}
+In[9]:= CoefficientList[Expand[(1 + x + x^2)^4], x]
+Out[9]= {1, 4, 10, 16, 19, 16, 10, 4, 1}
 ```
 
 ## Implementation notes

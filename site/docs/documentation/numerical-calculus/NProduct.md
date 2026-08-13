@@ -38,13 +38,11 @@ Out[3]= 3.67608
 ### Applications (2)
 
 ```mathematica
-In[1]:= NProduct[1 - 1/n^2, {n, 2, Infinity}]
-Out[1]= 0.5
-```
+In[4]:= NProduct[1 - 1/n^2, {n, 2, Infinity}]
+Out[4]= 0.5
 
-```mathematica
-In[1]:= NProduct[Cos[1/n], {n, 1, Infinity}]
-Out[1]= 0.388536
+In[5]:= NProduct[Cos[1/n], {n, 1, Infinity}]
+Out[5]= 0.388536
 ```
 
 ## Algorithm
@@ -85,11 +83,9 @@ success or NULL (unevaluated).  Never frees `res`.
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/), [Exp](../../elementary-functions/Exp/)
-
 ## References
+
+**See also:** [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/), [Exp](../../elementary-functions/Exp/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)

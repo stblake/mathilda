@@ -43,39 +43,21 @@ Out[8]= -Cosh[x]^2 Sinh[x]^2
 
 ### Applications (5)
 
-`TrigFactor` collapses an expanded angle-addition expression back to a single
-trigonometric function:
-
 ```mathematica
-In[1]:= TrigFactor[Sin[a] Cos[b] + Cos[a] Sin[b]]
-Out[1]= Sin[a + b]
-```
+In[9]:= TrigFactor[Sin[a] Cos[b] + Cos[a] Sin[b]]
+Out[9]= Sin[a + b]
 
-```mathematica
-In[1]:= TrigFactor[Cos[a] Cos[b] - Sin[a] Sin[b]]
-Out[1]= Cos[a + b]
-```
+In[10]:= TrigFactor[Cos[a] Cos[b] - Sin[a] Sin[b]]
+Out[10]= Cos[a + b]
 
-A difference of squares of sine and cosine folds into a double angle:
+In[11]:= TrigFactor[Sin[x]^2 - Cos[x]^2]
+Out[11]= -Cos[2 x]
 
-```mathematica
-In[1]:= TrigFactor[Sin[x]^2 - Cos[x]^2]
-Out[1]= -Cos[2 x]
-```
+In[12]:= TrigFactor[Sin[x]^2 + 2 Sin[x] Cos[x] + Cos[x]^2]
+Out[12]= 2 Sin[1/4 Pi + x]^2
 
-A full trigonometric perfect square is factored and phase-shifted into a single
-squared sine:
-
-```mathematica
-In[1]:= TrigFactor[Sin[x]^2 + 2 Sin[x] Cos[x] + Cos[x]^2]
-Out[1]= 2 Sin[1/4 Pi + x]^2
-```
-
-It handles hyperbolic functions too, recognising the `cosh` double-angle identity:
-
-```mathematica
-In[1]:= TrigFactor[Sinh[x]^2 + Cosh[x]^2]
-Out[1]= Cosh[2 x]
+In[13]:= TrigFactor[Sinh[x]^2 + Cosh[x]^2]
+Out[13]= Cosh[2 x]
 ```
 
 ## Implementation notes
@@ -161,11 +143,9 @@ Memoized through the active `FactorMemo` via the `builtin_trigfactor` wrapper.
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[TrigExpand](../../elementary-functions/TrigExpand/), [Sin](../../elementary-functions/Sin/), [Cos](../../elementary-functions/Cos/), [Tan](../../elementary-functions/Tan/), [Cot](../../elementary-functions/Cot/), [Sec](../../elementary-functions/Sec/), [Csc](../../elementary-functions/Csc/), [Sinh](../../elementary-functions/Sinh/)
-
 ## References
+
+**See also:** [TrigExpand](../../elementary-functions/TrigExpand/), [Sin](../../elementary-functions/Sin/), [Cos](../../elementary-functions/Cos/), [Tan](../../elementary-functions/Tan/), [Cot](../../elementary-functions/Cot/), [Sec](../../elementary-functions/Sec/), [Csc](../../elementary-functions/Csc/), [Sinh](../../elementary-functions/Sinh/)
 
 - Source: [`src/simp/trigsimp.c`](https://github.com/stblake/mathilda/blob/main/src/simp/trigsimp.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)

@@ -43,33 +43,23 @@ Out[4]= True
 ### Applications (6)
 
 ```mathematica
-In[1]:= HermitianMatrixQ[{{1, I}, {-I, 1}}]
-Out[1]= True
+In[5]:= HermitianMatrixQ[{{1, I}, {-I, 1}}]
+Out[5]= True
 
-In[2]:= HermitianMatrixQ[{{1, 2}, {3, 4}}]
-Out[2]= False
-```
+In[6]:= HermitianMatrixQ[{{1, 2}, {3, 4}}]
+Out[6]= False
 
-A diagonal entry that is not real, or an off-diagonal pair that is not a
-conjugate pair, breaks Hermiticity:
+In[7]:= HermitianMatrixQ[{{1, 2 + I}, {2 + I, 1}}]
+Out[7]= False
 
-```mathematica
-In[1]:= HermitianMatrixQ[{{1, 2 + I}, {2 + I, 1}}]
-Out[1]= False
+In[8]:= HermitianMatrixQ[{{2, 3 + I}, {3 - I, 5}}]
+Out[8]= True
 
-In[2]:= HermitianMatrixQ[{{2, 3 + I}, {3 - I, 5}}]
-Out[2]= True
-```
+In[9]:= HermitianMatrixQ[N[{{1, I}, {-I, 1}}]]
+Out[9]= True
 
-The predicate also handles inexact matrices, and a `Tolerance` option absorbs
-floating-point noise on the diagonal:
-
-```mathematica
-In[1]:= HermitianMatrixQ[N[{{1, I}, {-I, 1}}]]
-Out[1]= True
-
-In[2]:= HermitianMatrixQ[{{1, I}, {-I, 2.0000001}}, Tolerance -> 0.001]
-Out[2]= True
+In[10]:= HermitianMatrixQ[{{1, I}, {-I, 2.0000001}}, Tolerance -> 0.001]
+Out[10]= True
 ```
 
 ## Implementation notes
@@ -86,11 +76,9 @@ Out[2]= True
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Conjugate](../../arithmetic/Conjugate/)
-
 ## References
+
+**See also:** [Conjugate](../../arithmetic/Conjugate/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

@@ -27,11 +27,9 @@ Out[2]= <|1 -> 2, 2 -> 1|>
 
 **Attributes:** `Protected`.
 
-## See also
-
-[NDArray](../../linear-algebra/NDArray/), [Tally](../../data-structures/Tally/), [Association](../../data-structures/Association/)
-
 ## References
+
+**See also:** [NDArray](../../linear-algebra/NDArray/), [Tally](../../data-structures/Tally/), [Association](../../data-structures/Association/)
 
 - Source: [`src/assoc.c`](https://github.com/stblake/mathilda/blob/main/src/assoc.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

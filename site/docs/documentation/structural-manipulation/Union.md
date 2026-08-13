@@ -37,22 +37,14 @@ Out[2]= {a, b, c, d, e}
 ### Applications (3)
 
 ```mathematica
-In[1]:= Union[{3, 1, 2, 1, 3}]
-Out[1]= {1, 2, 3}
-```
+In[3]:= Union[{3, 1, 2, 1, 3}]
+Out[3]= {1, 2, 3}
 
-With several arguments `Union` performs a true set union, merging and deduplicating across all lists:
+In[4]:= Union[{1, 2, 3}, {2, 3, 4}, {5}]
+Out[4]= {1, 2, 3, 4, 5}
 
-```mathematica
-In[1]:= Union[{1, 2, 3}, {2, 3, 4}, {5}]
-Out[1]= {1, 2, 3, 4, 5}
-```
-
-Deduplication uses canonical structural equality, so symbolic and compound elements are handled too, and the result is returned in canonical sorted order:
-
-```mathematica
-In[1]:= Union[{x, Sin[y], x, 1, Sin[y]}]
-Out[1]= {1, x, Sin[y]}
+In[5]:= Union[{x, Sin[y], x, 1, Sin[y]}]
+Out[5]= {1, x, Sin[y]}
 ```
 
 ## Options & behaviour
@@ -85,11 +77,9 @@ keyed on `expr_hash`/`expr_eq`.)
 
 **Attributes:** `Flat`, `OneIdentity`, `Protected`, `ReadProtected`.
 
-## See also
-
-[Flat](../../expression-information/Flat/), [OneIdentity](../../expression-information/OneIdentity/), [Intersection](../../structural-manipulation/Intersection/), [Complement](../../structural-manipulation/Complement/), [DeleteDuplicates](../../data-structures/DeleteDuplicates/), [List](../../other-advanced/List/), [NDArray](../../linear-algebra/NDArray/)
-
 ## References
+
+**See also:** [Flat](../../expression-information/Flat/), [OneIdentity](../../expression-information/OneIdentity/), [Intersection](../../structural-manipulation/Intersection/), [Complement](../../structural-manipulation/Complement/), [DeleteDuplicates](../../data-structures/DeleteDuplicates/), [List](../../other-advanced/List/), [NDArray](../../linear-algebra/NDArray/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

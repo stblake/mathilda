@@ -49,23 +49,17 @@ Out[6]= -1.0 + 1.0 x
 ### Applications (4)
 
 ```mathematica
-In[1]:= Fit[{1, 2, 1.3, 3.75, 2.25}, {1, x}, x]
-Out[1]= 0.785 + 0.425 x
-```
+In[7]:= Fit[{1, 2, 1.3, 3.75, 2.25}, {1, x}, x]
+Out[7]= 0.785 + 0.425 x
 
-```mathematica
-In[1]:= Fit[{1, 4, 9, 16}, {1, x, x^2}, x]
-Out[1]= 0.0 + 0.0 x + 1.0 x^2
-```
+In[8]:= Fit[{1, 4, 9, 16}, {1, x, x^2}, x]
+Out[8]= 0.0 + 0.0 x + 1.0 x^2
 
-```mathematica
-In[1]:= Fit[{{0, 1}, {1, 2.7}, {2, 7.4}, {3, 20.1}}, {1, x, x^2}, x]
-Out[1]= 1.25 - 2.05 x + 2.75 x^2
-```
+In[9]:= Fit[{{0, 1}, {1, 2.7}, {2, 7.4}, {3, 20.1}}, {1, x, x^2}, x]
+Out[9]= 1.25 - 2.05 x + 2.75 x^2
 
-```mathematica
-In[1]:= Fit[{{0, 0, 1}, {1, 0, 2}, {0, 1, 3}, {1, 1, 5}}, {1, x, y}, {x, y}]
-Out[1]= 0.75 + 1.5 x + 2.5 y
+In[10]:= Fit[{{0, 0, 1}, {1, 0, 2}, {0, 1, 3}, {1, 1, 5}}, {1, x, y}, {x, y}]
+Out[10]= 0.75 + 1.5 x + 2.5 y
 ```
 
 ## Algorithm
@@ -164,11 +158,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Protected`.
 
-## See also
-
-[FindMinimum](../../calculus/FindMinimum/), [LeastSquares](../../linear-algebra/LeastSquares/), [NDArray](../../linear-algebra/NDArray/)
-
 ## References
+
+**See also:** [FindMinimum](../../calculus/FindMinimum/), [LeastSquares](../../linear-algebra/LeastSquares/), [NDArray](../../linear-algebra/NDArray/)
 
 - Source: [`src/fit.c`](https://github.com/stblake/mathilda/blob/main/src/fit.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

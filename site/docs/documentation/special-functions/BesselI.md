@@ -35,43 +35,29 @@ Out[2]= 1/2 (BesselI[-1 + n, x] + BesselI[1 + n, x])
 ### Applications (5)
 
 ```mathematica
-In[1]:= BesselI[0, 0]
-Out[1]= 1
-```
+In[3]:= BesselI[0, 0]
+Out[3]= 1
 
-Half-integer orders close in hyperbolic functions:
+In[4]:= BesselI[1/2, z]
+Out[4]= Sinh[z] Sqrt[2/(Pi z)]
 
-```mathematica
-In[1]:= BesselI[1/2, z]
-Out[1]= Sinh[z] Sqrt[2/(Pi z)]
-```
+In[5]:= Series[BesselI[0, x], {x, 0, 6}]
+Out[5]= 1 + 1/4 x^2 + 1/64 x^4 + 1/2304 x^6 + O[x]^7
 
-The all-positive Frobenius series at the origin (contrast with the alternating series of `BesselJ`):
+In[6]:= N[BesselI[0, 1], 40]
+Out[6]= 1.2660658777520083355982446252147175376077
 
-```mathematica
-In[1]:= Series[BesselI[0, x], {x, 0, 6}]
-Out[1]= 1 + 1/4 x^2 + 1/64 x^4 + 1/2304 x^6 + O[x]^7
-```
-
-High-precision evaluation, and a Wronskian identity with `BesselK`: `I_0(z) K_1(z) + I_1(z) K_0(z) = 1/z`, which at `z = 2` gives exactly `1/2`:
-
-```mathematica
-In[1]:= N[BesselI[0, 1], 40]
-Out[1]= 1.2660658777520083355982446252147175376077
-
-In[2]:= N[BesselI[0, 2] BesselK[1, 2] + BesselI[1, 2] BesselK[0, 2], 30]
-Out[2]= 0.5
+In[7]:= N[BesselI[0, 2] BesselK[1, 2] + BesselI[1, 2] BesselK[0, 2], 30]
+Out[7]= 0.5
 ```
 
 ## Implementation notes
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
 
-## See also
-
-[BesselJ](../../special-functions/BesselJ/), [BesselK](../../special-functions/BesselK/), [N](../../arithmetic/N/), [Normal](../../power-series/Normal/), [Plus](../../arithmetic/Plus/), [Series](../../power-series/Series/)
-
 ## References
+
+**See also:** [BesselJ](../../special-functions/BesselJ/), [BesselK](../../special-functions/BesselK/), [N](../../arithmetic/N/), [Normal](../../power-series/Normal/), [Plus](../../arithmetic/Plus/), [Series](../../power-series/Series/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

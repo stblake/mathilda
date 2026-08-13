@@ -65,23 +65,17 @@ Out[6]= {1.0, {x -> -2.3206e-09}}
 ### Applications (4)
 
 ```mathematica
-In[1]:= FindMinimum[x^2 - 4 x + 7, {x, 0}]
-Out[1]= {3.0, {x -> 2.0}}
-```
+In[7]:= FindMinimum[x^2 - 4 x + 7, {x, 0}]
+Out[7]= {3.0, {x -> 2.0}}
 
-```mathematica
-In[1]:= FindMinimum[Cos[x] + x/5, {x, 0, 10}]
-Out[1]= {-0.391749, {x -> 2.94023}}
-```
+In[8]:= FindMinimum[Cos[x] + x/5, {x, 0, 10}]
+Out[8]= {-0.391749, {x -> 2.94023}}
 
-```mathematica
-In[1]:= FindMinimum[(1 - x)^2 + 100 (y - x^2)^2, {{x, -1}, {y, 1}}]
-Out[1]= {3.46541e-23, {x -> 1.0, y -> 1.0}}
-```
+In[9]:= FindMinimum[(1 - x)^2 + 100 (y - x^2)^2, {{x, -1}, {y, 1}}]
+Out[9]= {3.46541e-23, {x -> 1.0, y -> 1.0}}
 
-```mathematica
-In[1]:= FindMinimum[Gamma[x], {x, 1.5}]
-Out[1]= {0.885603, {x -> 1.46163}}
+In[10]:= FindMinimum[Gamma[x], {x, 1.5}]
+Out[10]= {0.885603, {x -> 1.46163}}
 ```
 
 ## Algorithm
@@ -185,11 +179,9 @@ evaluation or non-convergence, always restoring variable bindings.
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[FindMaximum](../../calculus/FindMaximum/), [Block](../../scoping-constructs/Block/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
-
 ## References
+
+**See also:** [FindMaximum](../../calculus/FindMaximum/), [Block](../../scoping-constructs/Block/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
 
 - J. Nocedal, S. J. Wright, *Numerical Optimization*, 2nd ed. (Springer, 2006) — BFGS, line search, conjugate gradient.
 - W. H. Press et al., *Numerical Recipes*, 3rd ed. (Cambridge, 2007) — Brent's method.

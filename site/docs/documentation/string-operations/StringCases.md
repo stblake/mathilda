@@ -83,11 +83,9 @@ The match enumeration itself is regex_scan() in regex_common.c, shared with Stri
 
 **Attributes:** `Protected`.
 
-## See also
-
-[SetOptions](../../assignment-and-rules/SetOptions/)
-
 ## References
+
+**See also:** [SetOptions](../../assignment-and-rules/SetOptions/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)

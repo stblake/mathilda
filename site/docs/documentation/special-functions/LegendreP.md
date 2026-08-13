@@ -82,11 +82,9 @@ Deferred (left symbolic): symbolic Series / SeriesCoefficient, D[] rules, the no
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[N](../../arithmetic/N/), [Series](../../power-series/Series/), [SeriesCoefficient](../../power-series/SeriesCoefficient/)
-
 ## References
+
+**See also:** [N](../../arithmetic/N/), [Series](../../power-series/Series/), [SeriesCoefficient](../../power-series/SeriesCoefficient/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

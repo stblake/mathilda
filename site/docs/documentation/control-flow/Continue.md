@@ -43,11 +43,9 @@ Out[2]= 25
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Do](../../control-flow/Do/), [For](../../control-flow/For/), [While](../../control-flow/While/)
-
 ## References
+
+**See also:** [Do](../../control-flow/Do/), [For](../../control-flow/For/), [While](../../control-flow/While/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

@@ -27,21 +27,15 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= AiryBiPrime[0]
 Out[1]= 3^(1/6)/Gamma[1/3]
-```
 
-```mathematica
-In[1]:= N[AiryBiPrime[0], 40]
-Out[1]= 0.44828835735382635791482371039882839086616
-```
+In[2]:= N[AiryBiPrime[0], 40]
+Out[2]= 0.44828835735382635791482371039882839086616
 
-```mathematica
-In[1]:= D[AiryBiPrime[z], z]
-Out[1]= z AiryBi[z]
-```
+In[3]:= D[AiryBiPrime[z], z]
+Out[3]= z AiryBi[z]
 
-```mathematica
-In[1]:= AiryBiPrime[1.0 + 1.0 I]
-Out[1]= 0.0756628 + 0.783701*I
+In[4]:= AiryBiPrime[1.0 + 1.0 I]
+Out[4]= 0.0756628 + 0.783701*I
 ```
 
 ## Algorithm

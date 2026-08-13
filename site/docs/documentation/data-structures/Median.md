@@ -33,18 +33,14 @@ Out[3]= 2
 ### Applications (3)
 
 ```mathematica
-In[1]:= Median[{5, 1, 3, 2, 4}]
-Out[1]= 3
-```
+In[4]:= Median[{5, 1, 3, 2, 4}]
+Out[4]= 3
 
-```mathematica
-In[1]:= Median[{1, 2, 3, 4}]
-Out[1]= 5/2
-```
+In[5]:= Median[{1, 2, 3, 4}]
+Out[5]= 5/2
 
-```mathematica
-In[1]:= Median[Table[k^2, {k, 1, 10}]]
-Out[1]= 61/2
+In[6]:= Median[Table[k^2, {k, 1, 10}]]
+Out[6]= 61/2
 ```
 
 ## Performance
@@ -66,11 +62,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Variance](../../data-structures/Variance/), [StandardDeviation](../../data-structures/StandardDeviation/), [Mean](../../data-structures/Mean/)
-
 ## References
+
+**See also:** [Variance](../../data-structures/Variance/), [StandardDeviation](../../data-structures/StandardDeviation/), [Mean](../../data-structures/Mean/)
 
 - Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

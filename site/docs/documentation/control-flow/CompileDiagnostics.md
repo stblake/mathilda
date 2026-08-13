@@ -15,11 +15,9 @@ _No verified examples yet for this function._
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[Compile](../../control-flow/Compile/), [HoldAll](../../expression-information/HoldAll/), [Plot](../../graphics/Plot/), [NIntegrate](../../numerical-calculus/NIntegrate/), [NSum](../../numerical-calculus/NSum/), [ContourPlot](../../graphics/ContourPlot/)
-
 ## References
+
+**See also:** [Compile](../../control-flow/Compile/), [HoldAll](../../expression-information/HoldAll/), [Plot](../../graphics/Plot/), [NIntegrate](../../numerical-calculus/NIntegrate/), [NSum](../../numerical-calculus/NSum/), [ContourPlot](../../graphics/ContourPlot/)
 
 - Source: [`src/compile/compiled_function.c`](https://github.com/stblake/mathilda/blob/main/src/compile/compiled_function.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

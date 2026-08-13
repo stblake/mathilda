@@ -22,47 +22,24 @@ Every input below was run against the current Mathilda build and its output reco
 
 ### Applications (6)
 
-Exact integer order — a product that collapses to an exact value for numeric
-arguments and to a polynomial product for symbolic ones:
-
 ```mathematica
 In[1]:= Pochhammer[10, 6]
 Out[1]= 3603600
-```
 
-```mathematica
-In[1]:= Pochhammer[n, 5]
-Out[1]= n (1 + n) (2 + n) (3 + n) (4 + n)
-```
+In[2]:= Pochhammer[n, 5]
+Out[2]= n (1 + n) (2 + n) (3 + n) (4 + n)
 
-Negative order gives the reciprocal product:
+In[3]:= Pochhammer[n, -5]
+Out[3]= 1/((-5 + n) (-4 + n) (-3 + n) (-2 + n) (-1 + n))
 
-```mathematica
-In[1]:= Pochhammer[n, -5]
-Out[1]= 1/((-5 + n) (-4 + n) (-3 + n) (-2 + n) (-1 + n))
-```
+In[4]:= Pochhammer[3/2, 1/2]
+Out[4]= 2/Sqrt[Pi]
 
-Exact half-integer arguments reduce through the Gamma ratio to rational
-multiples of `Sqrt[Pi]`:
+In[5]:= N[Pochhammer[1/3, 7], 50]
+Out[5]= 505.971650663008687700045724737082761774119798811158
 
-```mathematica
-In[1]:= Pochhammer[3/2, 1/2]
-Out[1]= 2/Sqrt[Pi]
-```
-
-Arbitrary precision tracks the input precision (here an exact rational product
-numericalised to 50 digits):
-
-```mathematica
-In[1]:= N[Pochhammer[1/3, 7], 50]
-Out[1]= 505.971650663008687700045724737082761774119798811158
-```
-
-Threads element-wise over lists:
-
-```mathematica
-In[1]:= Pochhammer[{2, 3, 5, 7, 11}, 3]
-Out[1]= {24, 60, 210, 504, 1716}
+In[6]:= Pochhammer[{2, 3, 5, 7, 11}, 3]
+Out[6]= {24, 60, 210, 504, 1716}
 ```
 
 ## Algorithm
@@ -128,11 +105,9 @@ Attributes: Listable, NumericFunction, Protected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Gamma](../../special-functions/Gamma/), [PolyGamma](../../special-functions/PolyGamma/)
-
 ## References
+
+**See also:** [Gamma](../../special-functions/Gamma/), [PolyGamma](../../special-functions/PolyGamma/)
 
 - Abramowitz & Stegun, "Handbook of Mathematical Functions" (1964), §6.1.22 — the Pochhammer symbol (rising factorial).
 - NIST Digital Library of Mathematical Functions, §5.2(iii), https://dlmf.nist.gov/5.2 — (a)_n = Gamma(a+n)/Gamma(a).

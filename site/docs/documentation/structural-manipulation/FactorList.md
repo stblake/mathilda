@@ -94,11 +94,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Factor](../../algebra/Factor/)
-
 ## References
+
+**See also:** [Factor](../../algebra/Factor/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

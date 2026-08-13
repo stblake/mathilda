@@ -20,7 +20,7 @@ gives the partitions of n in reverse-lexicographic order.
 
 </details>
 
-## Examples (3)
+## Examples (5)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -35,6 +35,16 @@ Out[2]= {{20, 9, 9, 6, 6}, {20, 6, 6, 6, 6, 6}}
 
 In[3]:= IntegerPartitions[5, 10, {1, -1}]
 Out[3]= {{-1, -1, 1, 1, 1, 1, 1, 1, 1}, {-1, 1, 1, 1, 1, 1, 1}, {1, 1, 1, 1, 1}}
+```
+
+### Worked examples (2)
+
+```mathematica
+In[4]:= IntegerPartitions[1/2]
+Out[4]= {}
+
+In[5]:= IntegerPartitions[1/2, All, {1/6, 1/3}]
+Out[5]= {{1/3, 1/6}, {1/6, 1/6, 1/6}}
 ```
 
 ## Algorithm

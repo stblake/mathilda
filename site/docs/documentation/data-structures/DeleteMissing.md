@@ -24,11 +24,9 @@ Out[1]= {1, 2}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Lookup](../../data-structures/Lookup/)
-
 ## References
+
+**See also:** [Lookup](../../data-structures/Lookup/)
 
 - Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

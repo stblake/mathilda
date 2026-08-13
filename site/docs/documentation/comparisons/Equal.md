@@ -40,11 +40,9 @@ Out[3]= a == b
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Orderless](../../expression-information/Orderless/)
-
 ## References
+
+**See also:** [Orderless](../../expression-information/Orderless/)
 
 - Source: [`src/comparisons.c`](https://github.com/stblake/mathilda/blob/main/src/comparisons.c)
 - Specification: [`docs/spec/builtins/comparisons.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/comparisons.md)

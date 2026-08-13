@@ -78,11 +78,9 @@ Options (both):
 
 **Attributes:** `Protected`.
 
-## See also
-
-[ChartStyle](../../other-advanced/ChartStyle/), [ChartLabels](../../other-advanced/ChartLabels/), [BarSpacing](../../other-advanced/BarSpacing/)
-
 ## References
+
+**See also:** [ChartStyle](../../other-advanced/ChartStyle/), [ChartLabels](../../other-advanced/ChartLabels/), [BarSpacing](../../other-advanced/BarSpacing/)
 
 - Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)

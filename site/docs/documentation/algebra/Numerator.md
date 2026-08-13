@@ -26,39 +26,23 @@ Out[2]= 33 + 7*I
 ### Applications (6)
 
 ```mathematica
-In[1]:= Numerator[6/8]
-Out[1]= 3
-```
+In[3]:= Numerator[6/8]
+Out[3]= 3
 
-```mathematica
-In[1]:= Numerator[(x+1)/(x-1)]
-Out[1]= 1 + x
-```
+In[4]:= Numerator[(x+1)/(x-1)]
+Out[4]= 1 + x
 
-```mathematica
-In[1]:= Numerator[x^(-2)]
-Out[1]= 1
-```
+In[5]:= Numerator[x^(-2)]
+Out[5]= 1
 
-```mathematica
-In[1]:= Numerator[a/b + c/d]
-Out[1]= a/b + c/d
-```
+In[6]:= Numerator[a/b + c/d]
+Out[6]= a/b + c/d
 
-Combine the sum into a single fraction first, then `Numerator` returns the
-genuine combined top:
+In[7]:= Numerator[Together[a/b + c/d]]
+Out[7]= b c + a d
 
-```mathematica
-In[1]:= Numerator[Together[a/b + c/d]]
-Out[1]= b c + a d
-```
-
-Several factors are sorted into numerator and denominator by the sign of their
-exponents — only `z^(-1)` is pushed below the bar:
-
-```mathematica
-In[1]:= Numerator[2 x/(3 y) * z^(-1)]
-Out[1]= 2 x
+In[8]:= Numerator[2 x/(3 y) * z^(-1)]
+Out[8]= 2 x
 ```
 
 ## Implementation notes

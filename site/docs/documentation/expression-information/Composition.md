@@ -16,7 +16,7 @@ Composition allows you to build up compositions of functions which can later be 
 
 </details>
 
-## Examples (8)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -39,21 +39,30 @@ In[5]:= Composition[f, g] @* Composition[a, b]
 Out[5]= Composition[f, g, a, b]
 ```
 
+### Worked examples (3)
+
+```mathematica
+In[6]:= Composition[f, g, h][x, y]
+Out[6]= f[g[h[x, y]]]
+
+In[7]:= Composition[f, Identity, g]
+Out[7]= Composition[f, g]
+
+In[8]:= Composition[f, InverseFunction[f]]
+Out[8]= Identity
+```
+
 ### Applications (3)
 
 ```mathematica
-In[1]:= Composition[f, g, h][x]
-Out[1]= f[g[h[x]]]
-```
+In[9]:= Composition[f, g, h][x]
+Out[9]= f[g[h[x]]]
 
-```mathematica
-In[1]:= Composition[Sqrt, Abs][-16]
-Out[1]= 4
-```
+In[10]:= Composition[Sqrt, Abs][-16]
+Out[10]= 4
 
-```mathematica
-In[1]:= Composition[f, InverseFunction[f]]
-Out[1]= Identity
+In[11]:= Composition[f, InverseFunction[f]]
+Out[11]= Identity
 ```
 
 ## Implementation notes
@@ -62,11 +71,9 @@ Out[1]= Identity
 
 **Attributes:** `Flat`, `OneIdentity`, `Protected`.
 
-## See also
-
-[Flat](../../expression-information/Flat/), [OneIdentity](../../expression-information/OneIdentity/), [Identity](../../expression-information/Identity/)
-
 ## References
+
+**See also:** [Flat](../../expression-information/Flat/), [OneIdentity](../../expression-information/OneIdentity/), [Identity](../../expression-information/Identity/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

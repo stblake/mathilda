@@ -48,11 +48,9 @@ Out[4]= a`x
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Head](../../structural-manipulation/Head/), [$Context](../../scoping-constructs/$Context/), [$ContextPath](../../scoping-constructs/$ContextPath/)
-
 ## References
+
+**See also:** [Head](../../structural-manipulation/Head/), [$Context](../../scoping-constructs/$Context/), [$ContextPath](../../scoping-constructs/$ContextPath/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

@@ -31,23 +31,17 @@ Out[2]= {{1, 0, 0}, {1, 1, 0}, {1, 0, 1}}
 ### Applications (4)
 
 ```mathematica
-In[1]:= DesignMatrix[{{0, 1}, {1, 0}, {3, 2}, {5, 4}}, {1, x}, x]
-Out[1]= {{1, 0}, {1, 1}, {1, 3}, {1, 5}}
-```
+In[3]:= DesignMatrix[{{0, 1}, {1, 0}, {3, 2}, {5, 4}}, {1, x}, x]
+Out[3]= {{1, 0}, {1, 1}, {1, 3}, {1, 5}}
 
-```mathematica
-In[1]:= DesignMatrix[{{1, 1}, {2, 8}, {3, 27}}, {1, x, x^2, x^3}, x]
-Out[1]= {{1, 1, 1, 1}, {1, 2, 4, 8}, {1, 3, 9, 27}}
-```
+In[4]:= DesignMatrix[{{1, 1}, {2, 8}, {3, 27}}, {1, x, x^2, x^3}, x]
+Out[4]= {{1, 1, 1, 1}, {1, 2, 4, 8}, {1, 3, 9, 27}}
 
-```mathematica
-In[1]:= DesignMatrix[{{1, 1, 5}, {2, 4, 6}, {3, 9, 2}}, {1, x, y, x*y}, {x, y}]
-Out[1]= {{1, 1, 1, 1}, {1, 2, 4, 8}, {1, 3, 9, 27}}
-```
+In[5]:= DesignMatrix[{{1, 1, 5}, {2, 4, 6}, {3, 9, 2}}, {1, x, y, x*y}, {x, y}]
+Out[5]= {{1, 1, 1, 1}, {1, 2, 4, 8}, {1, 3, 9, 27}}
 
-```mathematica
-In[1]:= DesignMatrix[{{1, 2}, {2, 5}}, {1, Sin[x]}, x, WorkingPrecision -> 40]
-Out[1]= {{1.0, 0.84147098480789650665250232163029899962254}, {1.0, 0.90929742682568169539601986591174484270222}}
+In[6]:= DesignMatrix[{{1, 2}, {2, 5}}, {1, Sin[x]}, x, WorkingPrecision -> 40]
+Out[6]= {{1.0, 0.84147098480789650665250232163029899962254}, {1.0, 0.90929742682568169539601986591174484270222}}
 ```
 
 ## Algorithm
@@ -126,11 +120,9 @@ subtrees.  Every intermediate built here is freed on every return path.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Fit](../../linear-algebra/Fit/), [List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [Fit](../../linear-algebra/Fit/), [List](../../other-advanced/List/)
 
 - Source: [`src/fit.c`](https://github.com/stblake/mathilda/blob/main/src/fit.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

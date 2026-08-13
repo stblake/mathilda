@@ -16,7 +16,7 @@ TransformationFunctions -\> Automatic uses the built-in collection of transforma
 
 </details>
 
-## Examples (7)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -30,40 +30,20 @@ In[2]:= Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> {}]
 Out[2]= Cos[x]^2 + Sin[x]^2
 ```
 
-### Applications (5)
-
-By default `Simplify` applies its built-in transformations, collapsing the
-Pythagorean identity:
+### Applications (4)
 
 ```mathematica
-In[1]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {Automatic}]
-Out[1]= 1
-```
+In[3]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {Automatic}]
+Out[3]= 1
 
-Passing an empty list disables every transformation, so the same expression is
-left untouched — a direct way to see which step the built-in collection was
-responsible for:
+In[4]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {}]
+Out[4]= Cos[x]^2 + Sin[x]^2
 
-```mathematica
-In[1]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {}]
-Out[1]= Cos[x]^2 + Sin[x]^2
-```
+In[5]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {f}]
+Out[5]= 1
 
-A user-supplied transformation can stand in for the built-ins entirely: here a
-single rewrite rule recovers the simplification without `Automatic`:
-
-```mathematica
-In[1]:= f = Function[e, e /. Sin[a_]^2 + Cos[a_]^2 -> 1];
-In[2]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {f}]
-Out[2]= 1
-```
-
-Built-in transformers may also be named explicitly and combined with `Automatic`,
-letting `TrigToExp` participate in the search:
-
-```mathematica
-In[1]:= Simplify[1 + Tan[x]^2, TransformationFunctions -> {Automatic, TrigToExp}]
-Out[1]= Sec[x]^2
+In[6]:= Simplify[1 + Tan[x]^2, TransformationFunctions -> {Automatic, TrigToExp}]
+Out[6]= Sec[x]^2
 ```
 
 ## Implementation notes
@@ -94,11 +74,9 @@ heap array of borrowed `Expr*` head expressions, freed after the search.
 
 **Attributes:** none registered.
 
-## See also
-
-[Simplify](../../simplification/Simplify/), [Together](../../algebra/Together/), [Cancel](../../algebra/Cancel/)
-
 ## References
+
+**See also:** [Simplify](../../simplification/Simplify/), [Together](../../algebra/Together/), [Cancel](../../algebra/Cancel/)
 
 - Source: [`src/simp/simp_builtins.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp_builtins.c)
 - Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)

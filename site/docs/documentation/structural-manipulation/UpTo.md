@@ -21,13 +21,9 @@ Out[1]= {a, b}
 
 In[2]:= Take[{a, b}, UpTo[5]]
 Out[2]= {a, b}
-```
 
-The defining behavior is graceful saturation: asking for far more elements than exist returns everything available instead of raising an error, which makes it safe inside generic pipelines where the length is unknown:
-
-```mathematica
-In[1]:= Take[Range[10], UpTo[100]]
-Out[1]= {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+In[3]:= Take[Range[10], UpTo[100]]
+Out[3]= {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 ```
 
 ## Implementation notes

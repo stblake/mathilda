@@ -36,11 +36,9 @@ Domain spec:
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[DensityPlot](../../graphics/DensityPlot/), [HoldAll](../../expression-information/HoldAll/), [Arg](../../arithmetic/Arg/), [AspectRatio](../../other-advanced/AspectRatio/), [Frame](../../other-advanced/Frame/), [ImageSize](../../other-advanced/ImageSize/)
-
 ## References
+
+**See also:** [DensityPlot](../../graphics/DensityPlot/), [HoldAll](../../expression-information/HoldAll/), [Arg](../../arithmetic/Arg/), [AspectRatio](../../other-advanced/AspectRatio/), [Frame](../../other-advanced/Frame/), [ImageSize](../../other-advanced/ImageSize/)
 
 - Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)

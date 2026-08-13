@@ -27,11 +27,9 @@ Out[2]= True
 
 **Attributes:** `Protected`.
 
-## See also
-
-[KeyExistsQ](../../data-structures/KeyExistsQ/), [KeyMemberQ](../../data-structures/KeyMemberQ/)
-
 ## References
+
+**See also:** [KeyExistsQ](../../data-structures/KeyExistsQ/), [KeyMemberQ](../../data-structures/KeyMemberQ/)
 
 - Source: [`src/assoc.c`](https://github.com/stblake/mathilda/blob/main/src/assoc.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

@@ -40,35 +40,20 @@ Out[4]= {{1, 0}, {0, 1}}
 ### Applications (5)
 
 ```mathematica
-In[1]:= RowReduce[{{1, 2}, {3, 4}}]
-Out[1]= {{1, 0}, {0, 1}}
-```
+In[5]:= RowReduce[{{1, 2}, {3, 4}}]
+Out[5]= {{1, 0}, {0, 1}}
 
-```mathematica
-In[1]:= RowReduce[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
-Out[1]= {{1, 0, -1}, {0, 1, 2}, {0, 0, 0}}
-```
+In[6]:= RowReduce[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+Out[6]= {{1, 0, -1}, {0, 1, 2}, {0, 0, 0}}
 
-A 4x4 Vandermonde matrix is nonsingular, so it reduces to the identity:
+In[7]:= RowReduce[{{1, 1, 1, 1}, {1, 2, 4, 8}, {1, 3, 9, 27}, {1, 4, 16, 64}}]
+Out[7]= {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}
 
-```mathematica
-In[1]:= RowReduce[{{1, 1, 1, 1}, {1, 2, 4, 8}, {1, 3, 9, 27}, {1, 4, 16, 64}}]
-Out[1]= {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}
-```
+In[8]:= RowReduce[{{2, 1, -1, 8}, {-3, -1, 2, -11}, {-2, 1, 2, -3}}]
+Out[8]= {{1, 0, 0, 2}, {0, 1, 0, 3}, {0, 0, 1, -1}}
 
-Reducing an augmented matrix `[A | b]` reads off the unique solution of `A x = b`
-in the last column:
-
-```mathematica
-In[1]:= RowReduce[{{2, 1, -1, 8}, {-3, -1, 2, -11}, {-2, 1, 2, -3}}]
-Out[1]= {{1, 0, 0, 2}, {0, 1, 0, 3}, {0, 0, 1, -1}}
-```
-
-A symbolic 2x2 matrix reduces to the identity, certifying generic invertibility:
-
-```mathematica
-In[1]:= RowReduce[{{a, b}, {c, d}}]
-Out[1]= {{1, 0}, {0, 1}}
+In[9]:= RowReduce[{{a, b}, {c, d}}]
+Out[9]= {{1, 0}, {0, 1}}
 ```
 
 ## Algorithm
@@ -128,11 +113,9 @@ Algorithm choice for the four supported matrix families:
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Together](../../algebra/Together/)
-
 ## References
+
+**See also:** [Together](../../algebra/Together/)
 
 - E. H. Bareiss, "Sylvester's Identity and Multistep Integer-Preserving Gaussian Elimination", Math. Comp. 22 (1968).
 - Source: [`src/linalg/linsolve.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/linsolve.c)

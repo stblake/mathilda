@@ -51,38 +51,23 @@ Out[8]= -Infinity
 ### Applications (6)
 
 ```mathematica
-In[1]:= RealExponent[1234.5]
-Out[1]= 3.09149
-```
+In[9]:= RealExponent[1234.5]
+Out[9]= 3.09149
 
-In an explicit base the result is the exact logarithm — the base-2 exponent of a
-pure power of two is an integer, which makes `RealExponent` a quick way to count
-the decimal digits of a huge integer (`Floor[log10] + 1`):
+In[10]:= RealExponent[2^100, 2]
+Out[10]= 100.0
 
-```mathematica
-In[1]:= RealExponent[2^100, 2]
-Out[1]= 100.0
+In[11]:= Floor[RealExponent[2^1000]] + 1
+Out[11]= 302
 
-In[2]:= Floor[RealExponent[2^1000]] + 1
-Out[2]= 302
-```
+In[12]:= RealExponent[N[Pi^Pi]]
+Out[12]= 1.56184
 
-It accepts symbolic numeric values and lifts to MPFR precision when given an MPFR
-argument — for example `Log10[E]` to 40 digits:
+In[13]:= RealExponent[N[E, 40]]
+Out[13]= 0.4342944819032518276511289189166050822944
 
-```mathematica
-In[1]:= RealExponent[N[Pi^Pi]]
-Out[1]= 1.56184
-
-In[2]:= RealExponent[N[E, 40]]
-Out[2]= 0.4342944819032518276511289189166050822944
-```
-
-`RealExponent` threads over lists:
-
-```mathematica
-In[1]:= RealExponent[{10, 100, 1000}]
-Out[1]= {1.0, 2.0, 3.0}
+In[14]:= RealExponent[{10, 100, 1000}]
+Out[14]= {1.0, 2.0, 3.0}
 ```
 
 ## Algorithm
@@ -156,11 +141,9 @@ Implementation only supports integer bases b >= 2.  Non-integer bases
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Rational](../../arithmetic/Rational/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [EulerGamma](../../mathematical-constants/EulerGamma/), [Catalan](../../mathematical-constants/Catalan/), [GoldenRatio](../../mathematical-constants/GoldenRatio/), [Degree](../../mathematical-constants/Degree/)
-
 ## References
+
+**See also:** [Rational](../../arithmetic/Rational/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [EulerGamma](../../mathematical-constants/EulerGamma/), [Catalan](../../mathematical-constants/Catalan/), [GoldenRatio](../../mathematical-constants/GoldenRatio/), [Degree](../../mathematical-constants/Degree/)
 
 - Source: [`src/real.c`](https://github.com/stblake/mathilda/blob/main/src/real.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

@@ -51,33 +51,18 @@ Out[8]= {1000, 1050.0, 1102.5, 1157.62, 1215.51, 1276.28, 1340.1, 1407.1, 1477.4
 ### Applications (4)
 
 ```mathematica
-In[1]:= NestList[f, x, 3]
-Out[1]= {x, f[x], f[f[x]], f[f[f[x]]]}
+In[9]:= NestList[f, x, 3]
+Out[9]= {x, f[x], f[f[x]], f[f[f[x]]]}
+
+In[10]:= NestList[2 # &, 1, 5]
+Out[10]= {1, 2, 4, 8, 16, 32}
+
+In[11]:= NestList[(# + 2/#)/2 &, 1, 4]
+Out[11]= {1, 3/2, 17/12, 577/408, 665857/470832}
+
+In[12]:= NestList[1/(1 + #) &, x, 3]
+Out[12]= {x, 1/(1 + x), 1/(1 + 1/(1 + x)), 1/(1 + 1/(1 + 1/(1 + x)))}
 ```
-
-```mathematica
-In[1]:= NestList[2 # &, 1, 5]
-Out[1]= {1, 2, 4, 8, 16, 32}
-```
-
-The successive convergents of Newton's iteration for `Sqrt[2]`, kept exact —
-each entry roughly doubles the number of correct digits:
-
-```mathematica
-In[1]:= NestList[(# + 2/#)/2 &, 1, 4]
-Out[1]= {1, 3/2, 17/12, 577/408, 665857/470832}
-```
-
-Building the first few convergents of a continued fraction symbolically:
-
-```mathematica
-In[1]:= NestList[1/(1 + #) &, x, 3]
-Out[1]= {x, 1/(1 + x), 1/(1 + 1/(1 + x)), 1/(1 + 1/(1 + 1/(1 + x)))}
-```
-
-## Options & behaviour
-
-### Examples
 
 ## Implementation notes
 

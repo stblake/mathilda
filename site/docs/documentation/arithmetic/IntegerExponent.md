@@ -42,23 +42,17 @@ Out[5]= Infinity
 ### Applications (4)
 
 ```mathematica
-In[1]:= IntegerExponent[1000]
-Out[1]= 3
-```
+In[6]:= IntegerExponent[1000]
+Out[6]= 3
 
-```mathematica
-In[1]:= IntegerExponent[1000, 2]
-Out[1]= 3
-```
+In[7]:= IntegerExponent[1000, 2]
+Out[7]= 3
 
-```mathematica
-In[1]:= IntegerExponent[100!, 5]
-Out[1]= 24
-```
+In[8]:= IntegerExponent[100!, 5]
+Out[8]= 24
 
-```mathematica
-In[1]:= IntegerExponent[20!, 2]
-Out[1]= 18
+In[9]:= IntegerExponent[20!, 2]
+Out[9]= 18
 ```
 
 ## Options & behaviour

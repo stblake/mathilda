@@ -50,23 +50,17 @@ Out[5]= {-9 + y^2 + 2 y^4, 3 x - y - 2 y^3}
 ### Applications (4)
 
 ```mathematica
-In[1]:= GroebnerBasis[{x^2 + y^2 - 1, x - y}, {x, y}]
-Out[1]= {-1 + 2 y^2, x - y}
-```
+In[6]:= GroebnerBasis[{x^2 + y^2 - 1, x - y}, {x, y}]
+Out[6]= {-1 + 2 y^2, x - y}
 
-```mathematica
-In[1]:= GroebnerBasis[{x y - 1, x - y}, {x, y}]
-Out[1]= {-1 + y^2, x - y}
-```
+In[7]:= GroebnerBasis[{x y - 1, x - y}, {x, y}]
+Out[7]= {-1 + y^2, x - y}
 
-```mathematica
-In[1]:= GroebnerBasis[{x^2 - y, x^3 - z}, {x, y, z}]
-Out[1]= {y^3 - z^2, -y^2 + x z, x y - z, x^2 - y}
-```
+In[8]:= GroebnerBasis[{x^2 - y, x^3 - z}, {x, y, z}]
+Out[8]= {y^3 - z^2, -y^2 + x z, x y - z, x^2 - y}
 
-```mathematica
-In[1]:= GroebnerBasis[{x + y + z, x y + y z + z x, x y z - 1}, {x, y, z}]
-Out[1]= {-1 + z^3, y^2 + y z + z^2, x + y + z}
+In[9]:= GroebnerBasis[{x + y + z, x y + y z + z x, x y z - 1}, {x, y, z}]
+Out[9]= {-1 + z^3, y^2 + y z + z^2, x + y + z}
 ```
 
 ## Options & behaviour
@@ -212,11 +206,9 @@ For expensive target orders the front end can route through the **Gröbner walk*
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Expand](../../algebra/Expand/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [EulerGamma](../../mathematical-constants/EulerGamma/), [Catalan](../../mathematical-constants/Catalan/), [Degree](../../mathematical-constants/Degree/), [Sort](../../data-structures/Sort/)
-
 ## References
+
+**See also:** [Expand](../../algebra/Expand/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [EulerGamma](../../mathematical-constants/EulerGamma/), [Catalan](../../mathematical-constants/Catalan/), [Degree](../../mathematical-constants/Degree/), [Sort](../../data-structures/Sort/)
 
 - Cox, Little & O'Shea, "Ideals, Varieties, and Algorithms" (Springer) — Buchberger's algorithm, monomial orders, and elimination.
 - von zur Gathen & Gerhard, "Modern Computer Algebra" (3rd ed.), Ch. 21 (Gröbner bases).

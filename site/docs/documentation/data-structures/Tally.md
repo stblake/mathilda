@@ -24,18 +24,14 @@ Out[2]= {1}
 ### Applications (3)
 
 ```mathematica
-In[1]:= Tally[{a, b, a, c, b, a}]
-Out[1]= {{a, 3}, {b, 2}, {c, 1}}
-```
+In[3]:= Tally[{a, b, a, c, b, a}]
+Out[3]= {{a, 3}, {b, 2}, {c, 1}}
 
-```mathematica
-In[1]:= Tally[Table[Mod[n^2, 5], {n, 0, 20}]]
-Out[1]= {{0, 5}, {1, 8}, {4, 8}}
-```
+In[4]:= Tally[Table[Mod[n^2, 5], {n, 0, 20}]]
+Out[4]= {{0, 5}, {1, 8}, {4, 8}}
 
-```mathematica
-In[1]:= Tally[Table[GCD[n, 12], {n, 1, 12}]]
-Out[1]= {{1, 4}, {2, 2}, {3, 2}, {4, 2}, {6, 1}, {12, 1}}
+In[5]:= Tally[Table[GCD[n, 12], {n, 1, 12}]]
+Out[5]= {{1, 4}, {2, 2}, {3, 2}, {4, 2}, {6, 1}, {12, 1}}
 ```
 
 ## Implementation notes
@@ -48,11 +44,9 @@ comparison. Multiplicities are tracked in a parallel `int64_t` array.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Commonest](../../statistics/Commonest/), [Counts](../../data-structures/Counts/), [CountsBy](../../data-structures/CountsBy/)
-
 ## References
+
+**See also:** [Commonest](../../statistics/Commonest/), [Counts](../../data-structures/Counts/), [CountsBy](../../data-structures/CountsBy/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

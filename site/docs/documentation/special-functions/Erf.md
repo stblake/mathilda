@@ -31,32 +31,24 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= Erf[0]
 Out[1]= 0
-```
 
-```mathematica
-In[1]:= Erf[Infinity]
-Out[1]= 1
+In[2]:= Erf[Infinity]
+Out[2]= 1
 
-In[2]:= Erf[-z]
-Out[2]= -Erf[z]
-```
+In[3]:= Erf[-z]
+Out[3]= -Erf[z]
 
-```mathematica
-In[1]:= N[Erf[1], 40]
-Out[1]= 0.84270079294971486934122063508260925929605
-```
+In[4]:= N[Erf[1], 40]
+Out[4]= 0.84270079294971486934122063508260925929605
 
-```mathematica
-In[1]:= N[Erf[1 + I], 20]
-Out[1]= 1.31615128169794764488 + 0.190453469237834686284*I
-```
+In[5]:= N[Erf[1 + I], 20]
+Out[5]= 1.31615128169794764488 + 0.190453469237834686284*I
 
-```mathematica
-In[1]:= Series[Erf[x], {x, 0, 7}]
-Out[1]= 2/Sqrt[Pi] x + -2/3/Sqrt[Pi] x^3 + 1/5/Sqrt[Pi] x^5 + -1/21/Sqrt[Pi] x^7 + O[x]^8
+In[6]:= Series[Erf[x], {x, 0, 7}]
+Out[6]= 2/Sqrt[Pi] x + -2/3/Sqrt[Pi] x^3 + 1/5/Sqrt[Pi] x^5 + -1/21/Sqrt[Pi] x^7 + O[x]^8
 
-In[2]:= D[Erf[x^2], x]
-Out[2]= (4 x E^(-x^4))/Sqrt[Pi]
+In[7]:= D[Erf[x^2], x]
+Out[7]= (4 x E^(-x^4))/Sqrt[Pi]
 ```
 
 ## Algorithm
@@ -123,11 +115,9 @@ Attributes: Listable, NumericFunction, Protected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[D](../../calculus/D/)
-
 ## References
+
+**See also:** [D](../../calculus/D/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

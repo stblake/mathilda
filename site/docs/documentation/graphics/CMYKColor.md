@@ -24,8 +24,10 @@ Every input below was run against the current Mathilda build and its output reco
 
 ### Basic examples (1)
 
+A cyan disk
+
 ```mathematica
-In[1]:= Graphics[{CMYKColor[1, 0, 0, 0], Disk[]}]   (* a cyan disk *)
+In[1]:= Graphics[{CMYKColor[1, 0, 0, 0], Disk[]}]
 Out[1]= -Graphics-
 ```
 

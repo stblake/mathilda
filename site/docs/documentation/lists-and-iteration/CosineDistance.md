@@ -59,11 +59,9 @@ Out[6]= 2
 
 **Attributes:** `Protected`.
 
-## See also
-
-[EuclideanDistance](../../lists-and-iteration/EuclideanDistance/), [SquaredEuclideanDistance](../../lists-and-iteration/SquaredEuclideanDistance/), [ManhattanDistance](../../lists-and-iteration/ManhattanDistance/), [List](../../other-advanced/List/), [FindClusters](../../lists-and-iteration/FindClusters/), [Abs](../../arithmetic/Abs/)
-
 ## References
+
+**See also:** [EuclideanDistance](../../lists-and-iteration/EuclideanDistance/), [SquaredEuclideanDistance](../../lists-and-iteration/SquaredEuclideanDistance/), [ManhattanDistance](../../lists-and-iteration/ManhattanDistance/), [List](../../other-advanced/List/), [FindClusters](../../lists-and-iteration/FindClusters/), [Abs](../../arithmetic/Abs/)
 
 - Source: [`src/list/list_init.c`](https://github.com/stblake/mathilda/blob/main/src/list/list_init.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

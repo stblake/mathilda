@@ -32,18 +32,14 @@ Out[4]= FactorialPower[n, k] x^(-k + n)
 ### Applications (3)
 
 ```mathematica
-In[1]:= FactorialPower[10, 3]
-Out[1]= 720
-```
+In[5]:= FactorialPower[10, 3]
+Out[5]= 720
 
-```mathematica
-In[1]:= FactorialPower[x, 4]
-Out[1]= x (-3 + x) (-2 + x) (-1 + x)
-```
+In[6]:= FactorialPower[x, 4]
+Out[6]= x (-3 + x) (-2 + x) (-1 + x)
 
-```mathematica
-In[1]:= FactorialPower[10, 4] == 10!/6!
-Out[1]= True
+In[7]:= FactorialPower[10, 4] == 10!/6!
+Out[7]= True
 ```
 
 ## Implementation notes
@@ -62,11 +58,9 @@ Out[1]= True
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Expand](../../algebra/Expand/), [D](../../calculus/D/), [N](../../arithmetic/N/)
-
 ## References
+
+**See also:** [Expand](../../algebra/Expand/), [D](../../calculus/D/), [N](../../arithmetic/N/)
 
 - Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

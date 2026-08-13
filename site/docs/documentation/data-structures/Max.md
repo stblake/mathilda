@@ -27,28 +27,20 @@ Out[1]= {1, 9}
 ### Applications (5)
 
 ```mathematica
-In[1]:= Max[3, 7, 2]
-Out[1]= 7
-```
+In[2]:= Max[3, 7, 2]
+Out[2]= 7
 
-```mathematica
-In[1]:= Max[{1, 5}, {9, 2}]
-Out[1]= 9
-```
+In[3]:= Max[{1, 5}, {9, 2}]
+Out[3]= 9
 
-```mathematica
-In[1]:= Max[2^100, 3^60, 5^40]
-Out[1]= 1267650600228229401496703205376
-```
+In[4]:= Max[2^100, 3^60, 5^40]
+Out[4]= 1267650600228229401496703205376
 
-```mathematica
-In[1]:= Max[Abs[Eigenvalues[{{2, 1}, {1, 2}}]]]
-Out[1]= 3
-```
+In[5]:= Max[Abs[Eigenvalues[{{2, 1}, {1, 2}}]]]
+Out[5]= 3
 
-```mathematica
-In[1]:= Max[x, 3, x]
-Out[1]= Max[3, x]
+In[6]:= Max[x, 3, x]
+Out[6]= Max[3, x]
 ```
 
 ## Performance
@@ -76,11 +68,9 @@ terms (returning `NULL` to stay unevaluated when nothing simplified). Empty `Max
 
 **Attributes:** `Flat`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
 
-## See also
-
-[Min](../../data-structures/Min/), [MinMax](../../data-structures/MinMax/)
-
 ## References
+
+**See also:** [Min](../../data-structures/Min/), [MinMax](../../data-structures/MinMax/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

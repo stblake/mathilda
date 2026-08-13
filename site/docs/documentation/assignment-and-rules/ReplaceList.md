@@ -24,16 +24,12 @@ Out[2]= {{a, b + c}, {b, a + c}, {c, a + b}, {a + b, c}, {a + c, b}, {b + c, a}}
 
 In[3]:= ReplaceList[{a, b, c, d}, {x___, y___} :> {{x}, {y}}, 2]
 Out[3]= {{{}, {a, b, c, d}}, {{a}, {b, c, d}}}
-```
 
-```mathematica
-In[1]:= ReplaceList[{1, 2, 3, 4}, {x___, y_, z_, w___} /; y + z == 5 :> {y, z}]
-Out[1]= {{2, 3}}
-```
+In[4]:= ReplaceList[{1, 2, 3, 4}, {x___, y_, z_, w___} /; y + z == 5 :> {y, z}]
+Out[4]= {{2, 3}}
 
-```mathematica
-In[1]:= ReplaceList[{1, 2, 3, 4, 5}, {a___, b_, c___} /; b == 3 :> {{a}, {c}}]
-Out[1]= {{{1, 2}, {4, 5}}}
+In[5]:= ReplaceList[{1, 2, 3, 4, 5}, {a___, b_, c___} /; b == 3 :> {{a}, {c}}]
+Out[5]= {{{1, 2}, {4, 5}}}
 ```
 
 ## Implementation notes

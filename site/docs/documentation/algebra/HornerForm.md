@@ -29,29 +29,15 @@ Out[1]= 1 + x (1 + x (1 + x))
 
 In[2]:= HornerForm[a x^3 + b x^2 + c x + d, x]
 Out[2]= d + x (c + x (b + a x))
-```
 
-Sparse and mixed-sign polynomials nest just as cleanly, skipping absent
-degrees:
+In[3]:= HornerForm[3 x^4 - 2 x^3 + x - 7]
+Out[3]= -7 + x (1 + x^2 (-2 + 3 x))
 
-```mathematica
-In[1]:= HornerForm[3 x^4 - 2 x^3 + x - 7]
-Out[1]= -7 + x (1 + x^2 (-2 + 3 x))
-```
+In[4]:= HornerForm[1 + 2 x + 3 x^2 y + 4 x y^2, x]
+Out[4]= 1 + x (2 + 3 x y + 4 y^2)
 
-For multivariate input, choose the recursion variable; the other variables
-ride along inside the coefficients:
-
-```mathematica
-In[1]:= HornerForm[1 + 2 x + 3 x^2 y + 4 x y^2, x]
-Out[1]= 1 + x (2 + 3 x y + 4 y^2)
-```
-
-A rational function can be nested numerator and denominator independently:
-
-```mathematica
-In[1]:= HornerForm[(x^2 + 1)/(x^3 - x + 2), x, x]
-Out[1]= (1 + x^2)/(2 + x (-1 + x^2))
+In[5]:= HornerForm[(x^2 + 1)/(x^3 - x + 2), x, x]
+Out[5]= (1 + x^2)/(2 + x (-1 + x^2))
 ```
 
 ## Implementation notes

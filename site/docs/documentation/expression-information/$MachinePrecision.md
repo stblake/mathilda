@@ -31,8 +31,12 @@ Out[2]= 2.22045e-16
 
 In[3]:= {$MinMachineNumber, $MaxMachineNumber}
 Out[3]= {2.22507e-308, 1.79769e+308}
+```
 
-In[4]:= MachineNumberQ[$MaxNumber]   (* MPFR, not machine *)
+MPFR, not machine
+
+```mathematica
+In[4]:= MachineNumberQ[$MaxNumber]
 Out[4]= False
 ```
 
@@ -42,11 +46,9 @@ A Protected OwnValue registered in `system_constants_init` (`src/core.c`) as `ex
 
 **Attributes:** `Protected`.
 
-## See also
-
-[$MachineEpsilon](../../expression-information/$MachineEpsilon/), [$MinMachineNumber](../../expression-information/$MinMachineNumber/), [$MaxMachineNumber](../../expression-information/$MaxMachineNumber/), [$MaxNumber](../../expression-information/$MaxNumber/), [$MinNumber](../../expression-information/$MinNumber/)
-
 ## References
+
+**See also:** [$MachineEpsilon](../../expression-information/$MachineEpsilon/), [$MinMachineNumber](../../expression-information/$MinMachineNumber/), [$MaxMachineNumber](../../expression-information/$MaxMachineNumber/), [$MaxNumber](../../expression-information/$MaxNumber/), [$MinNumber](../../expression-information/$MinNumber/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

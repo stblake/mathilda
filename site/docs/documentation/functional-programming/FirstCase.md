@@ -30,11 +30,9 @@ Out[3]= None
 
 **Attributes:** `Protected`.
 
-## See also
-
-[SelectFirst](../../functional-programming/SelectFirst/)
-
 ## References
+
+**See also:** [SelectFirst](../../functional-programming/SelectFirst/)
 
 - Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

@@ -35,38 +35,21 @@ Out[3]= {one, two, other}
 
 ### Applications (5)
 
-`Switch` returns the value for the first matching pattern; `_` is the default:
-
 ```mathematica
-In[1]:= Switch[5, _Integer, "int", _Real, "real", _, "other"]
-Out[1]= "int"
-```
+In[4]:= Switch[5, _Integer, "int", _Real, "real", _, "other"]
+Out[4]= "int"
 
-```mathematica
-In[1]:= Switch[2.5, _Integer, "int", _Real, "real", _, "other"]
-Out[1]= "real"
-```
+In[5]:= Switch[2.5, _Integer, "int", _Real, "real", _, "other"]
+Out[5]= "real"
 
-Forms can be arbitrary patterns, including `PatternTest` predicates:
+In[6]:= Switch[7, _?PrimeQ, "prime", _, "composite"]
+Out[6]= "prime"
 
-```mathematica
-In[1]:= Switch[7, _?PrimeQ, "prime", _, "composite"]
-Out[1]= "prime"
-```
+In[7]:= Table[Switch[Mod[n, 15], 0, "FizzBuzz", 3 | 6 | 9 | 12, "Fizz", 5 | 10, "Buzz", _, n], {n, 1, 15}]
+Out[7]= {1, 2, "Fizz", 4, "Buzz", "Fizz", 7, 8, "Fizz", "Buzz", 11, "Fizz", 13, 14, "FizzBuzz"}
 
-Combined with `Table` and alternative (`|`) patterns it expresses FizzBuzz in a
-single dispatch:
-
-```mathematica
-In[1]:= Table[Switch[Mod[n, 15], 0, "FizzBuzz", 3 | 6 | 9 | 12, "Fizz", 5 | 10, "Buzz", _, n], {n, 1, 15}]
-Out[1]= {1, 2, "Fizz", 4, "Buzz", "Fizz", 7, 8, "Fizz", "Buzz", 11, "Fizz", 13, 14, "FizzBuzz"}
-```
-
-If no form matches and there is no default, the call is returned unevaluated:
-
-```mathematica
-In[1]:= Switch[x, 1, "a", 2, "b"]
-Out[1]= Switch[x, 1, "a", 2, "b"]
+In[8]:= Switch[x, 1, "a", 2, "b"]
+Out[8]= Switch[x, 1, "a", 2, "b"]
 ```
 
 ## Implementation notes
@@ -83,11 +66,9 @@ Out[1]= Switch[x, 1, "a", 2, "b"]
 
 **Attributes:** `HoldRest`, `Protected`.
 
-## See also
-
-[HoldRest](../../other-advanced/HoldRest/), [Break](../../control-flow/Break/), [Return](../../control-flow/Return/), [Throw](../../control-flow/Throw/)
-
 ## References
+
+**See also:** [HoldRest](../../other-advanced/HoldRest/), [Break](../../control-flow/Break/), [Return](../../control-flow/Return/), [Throw](../../control-flow/Throw/)
 
 - Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

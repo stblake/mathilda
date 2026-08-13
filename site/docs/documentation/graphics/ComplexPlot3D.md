@@ -36,11 +36,9 @@ Domain spec:
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[Plot3D](../../graphics/Plot3D/), [HoldAll](../../expression-information/HoldAll/), [ComplexPlot](../../graphics/ComplexPlot/), [Lighting](../../other-advanced/Lighting/)
-
 ## References
+
+**See also:** [Plot3D](../../graphics/Plot3D/), [HoldAll](../../expression-information/HoldAll/), [ComplexPlot](../../graphics/ComplexPlot/), [Lighting](../../other-advanced/Lighting/)
 
 - Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)

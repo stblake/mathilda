@@ -39,11 +39,9 @@ Out[2]= {"f"}
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[Protect](../../assignment-and-rules/Protect/)
-
 ## References
+
+**See also:** [Protect](../../assignment-and-rules/Protect/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)

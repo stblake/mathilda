@@ -50,27 +50,23 @@ Out[5]= Derivative[0, 1][f][1.5, 2.5]
 ### Applications (6)
 
 ```mathematica
-In[1]:= f = Interpolation[{1, 4, 9, 16}]
-Out[1]= InterpolatingFunction[{{1, 4}}, <>]
+In[6]:= f = Interpolation[{1, 4, 9, 16}]
+Out[6]= InterpolatingFunction[{{1, 4}}, <>]
 
-In[2]:= f[2.5]
-Out[2]= 6.25
-```
+In[7]:= f[2.5]
+Out[7]= 6.25
 
-```mathematica
-In[1]:= g = Interpolation[Table[{x, Sin[x]}, {x, 0., 6., 0.5}]]
-Out[1]= InterpolatingFunction[{{0.0, 6.0}}, <>]
+In[8]:= g = Interpolation[Table[{x, Sin[x]}, {x, 0., 6., 0.5}]]
+Out[8]= InterpolatingFunction[{{0.0, 6.0}}, <>]
 
-In[2]:= g[1.5]
-Out[2]= 0.997495
+In[9]:= g[1.5]
+Out[9]= 0.997495
 
-In[3]:= Sin[1.5]
-Out[3]= 0.997495
-```
+In[10]:= Sin[1.5]
+Out[10]= 0.997495
 
-```mathematica
-In[1]:= d = Interpolation[{1, 4, 9, 16, 25}]; dd = d'; dd[2.5]
-Out[1]= 5.0
+In[11]:= d = Interpolation[{1, 4, 9, 16, 25}]; dd = d'; dd[2.5]
+Out[11]= 5.0
 ```
 
 ## Performance
@@ -132,11 +128,9 @@ borrowed, owned by the cache).
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[Function](../../functional-programming/Function/), [FullForm](../../expression-information/FullForm/)
-
 ## References
+
+**See also:** [Function](../../functional-programming/Function/), [FullForm](../../expression-information/FullForm/)
 
 - C. de Boor, *A Practical Guide to Splines*, rev. ed. (Springer, 2001).
 - E. H. Neville, "Iterative Interpolation", J. Indian Math. Soc. 1934.

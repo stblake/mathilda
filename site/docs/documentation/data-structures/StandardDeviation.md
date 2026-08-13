@@ -27,36 +27,20 @@ Out[3]= 2
 ### Applications (5)
 
 ```mathematica
-In[1]:= StandardDeviation[{1, 2, 3, 4, 5}]
-Out[1]= Sqrt[5/2]
-```
+In[4]:= StandardDeviation[{1, 2, 3, 4, 5}]
+Out[4]= Sqrt[5/2]
 
-Results are kept exact; here the (unbiased, n − 1) estimate of a small sample:
+In[5]:= StandardDeviation[{2, 4, 4, 4, 5, 5, 7, 9}]
+Out[5]= 4 Sqrt[2/7]
 
-```mathematica
-In[1]:= StandardDeviation[{2, 4, 4, 4, 5, 5, 7, 9}]
-Out[1]= 4 Sqrt[2/7]
-```
+In[6]:= N[StandardDeviation[{2, 4, 4, 4, 5, 5, 7, 9}], 40]
+Out[6]= 2.1380899352993950774764278470380281724321
 
-Numericalize the same estimate to 40 digits:
+In[7]:= Variance[{1, 2, 3, 4, 5}]
+Out[7]= 5/2
 
-```mathematica
-In[1]:= N[StandardDeviation[{2, 4, 4, 4, 5, 5, 7, 9}], 40]
-Out[1]= 2.1380899352993950774764278470380281724321
-```
-
-It relates to `Variance` as its square root:
-
-```mathematica
-In[1]:= Variance[{1, 2, 3, 4, 5}]
-Out[1]= 5/2
-```
-
-A constant sample has zero spread:
-
-```mathematica
-In[1]:= StandardDeviation[{1, 1, 1, 1}]
-Out[1]= 0
+In[8]:= StandardDeviation[{1, 1, 1, 1}]
+Out[8]= 0
 ```
 
 ## Implementation notes
@@ -65,11 +49,9 @@ Out[1]= 0
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Median](../../data-structures/Median/), [Variance](../../data-structures/Variance/), [Mean](../../data-structures/Mean/)
-
 ## References
+
+**See also:** [Median](../../data-structures/Median/), [Variance](../../data-structures/Variance/), [Mean](../../data-structures/Mean/)
 
 - Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

@@ -33,16 +33,14 @@ Out[5]= {3, 4, 5, 6, 7, 8, 9, 10}
 ### Applications (3)
 
 ```mathematica
-In[1]:= Range[10][[2 ;; 8]]
-Out[1]= {2, 3, 4, 5, 6, 7, 8}
-```
+In[6]:= Range[10][[2 ;; 8]]
+Out[6]= {2, 3, 4, 5, 6, 7, 8}
 
-```mathematica
-In[1]:= Range[10][[2 ;; 8 ;; 2]]
-Out[1]= {2, 4, 6, 8}
+In[7]:= Range[10][[2 ;; 8 ;; 2]]
+Out[7]= {2, 4, 6, 8}
 
-In[2]:= Range[10][[;; ;; 3]]
-Out[2]= {1, 4, 7, 10}
+In[8]:= Range[10][[;; ;; 3]]
+Out[8]= {1, 4, 7, 10}
 ```
 
 ## Implementation notes
@@ -62,11 +60,9 @@ elements. On its own a bare `Span` stays unevaluated.
 
 **Attributes:** none registered.
 
-## See also
-
-[Part](../../structural-manipulation/Part/)
-
 ## References
+
+**See also:** [Part](../../structural-manipulation/Part/)
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

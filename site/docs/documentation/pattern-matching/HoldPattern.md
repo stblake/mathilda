@@ -39,34 +39,17 @@ Out[4]= True
 ### Applications (4)
 
 ```mathematica
-In[1]:= HoldPattern[1 + 1]
-Out[1]= HoldPattern[1 + 1]
-```
+In[5]:= HoldPattern[1 + 1]
+Out[5]= HoldPattern[1 + 1]
 
-The usual reason to reach for `HoldPattern` is on the left-hand side of a
-rule: it keeps a structural pattern from being evaluated away before matching.
-Here `HoldPattern[p_ + q_]` matches each unevaluated symbolic sum and rewrites
-it as a product:
+In[6]:= {a + b, c + d} /. HoldPattern[p_ + q_] -> p*q
+Out[6]= {a b, c d}
 
-```mathematica
-In[1]:= {a + b, c + d} /. HoldPattern[p_ + q_] -> p*q
-Out[1]= {a b, c d}
-```
+In[7]:= Integrate[f[x], x] /. HoldPattern[Integrate[a_, b_]] -> done
+Out[7]= done
 
-It lets a rule target a still-unevaluated head, even one the evaluator would
-normally leave inert, such as a symbolic `Integrate`:
-
-```mathematica
-In[1]:= Integrate[f[x], x] /. HoldPattern[Integrate[a_, b_]] -> done
-Out[1]= done
-```
-
-`ReleaseHold` strips one wrapping layer, so the held expression finally
-evaluates:
-
-```mathematica
-In[1]:= ReleaseHold[HoldPattern[2 + 3]]
-Out[1]= 5
+In[8]:= ReleaseHold[HoldPattern[2 + 3]]
+Out[8]= 5
 ```
 
 ## Implementation notes
@@ -80,11 +63,9 @@ Out[1]= 5
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[ReleaseHold](../../expression-information/ReleaseHold/)
-
 ## References
+
+**See also:** [ReleaseHold](../../expression-information/ReleaseHold/)
 
 - Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

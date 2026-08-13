@@ -25,11 +25,9 @@ Out[2]= {1.0, 2.0}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Normal](../../power-series/Normal/)
-
 ## References
+
+**See also:** [Normal](../../power-series/Normal/)
 
 - Source: [`src/pack.c`](https://github.com/stblake/mathilda/blob/main/src/pack.c)
 - Specification: [`docs/spec/builtins/packed-arrays.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/packed-arrays.md)

@@ -25,26 +25,18 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= FullForm[a + b]
 Out[1]= Plus[a, b]
-```
 
-```mathematica
-In[1]:= FullForm[1/2]
-Out[1]= Rational[1, 2]
-```
+In[2]:= FullForm[1/2]
+Out[2]= Rational[1, 2]
 
-```mathematica
-In[1]:= FullForm[x^2 + 1]
-Out[1]= Plus[1, Power[x, 2]]
-```
+In[3]:= FullForm[x^2 + 1]
+Out[3]= Plus[1, Power[x, 2]]
 
-```mathematica
-In[1]:= FullForm[a/b]
-Out[1]= Times[a, Power[b, -1]]
-```
+In[4]:= FullForm[a/b]
+Out[4]= Times[a, Power[b, -1]]
 
-```mathematica
-In[1]:= FullForm[x_Integer /; x > 0]
-Out[1]= Condition[Pattern[x, Blank[Integer]], Greater[x, 0]]
+In[5]:= FullForm[x_Integer /; x > 0]
+Out[5]= Condition[Pattern[x, Blank[Integer]], Greater[x, 0]]
 ```
 
 ## Implementation notes

@@ -19,14 +19,12 @@ Out[1]= {{{a, b}, {c}}, {{a}, {b, c}}}
 
 In[2]:= MatchQ[{1, 1}, {Longest[1 ..]}]
 Out[2]= True
-```
 
-```mathematica
-In[1]:= ReplaceList[{1, 2, 3, 4}, {x__, y__} :> {{x}, {y}}]
-Out[1]= {{{1}, {2, 3, 4}}, {{1, 2}, {3, 4}}, {{1, 2, 3}, {4}}}
+In[3]:= ReplaceList[{1, 2, 3, 4}, {x__, y__} :> {{x}, {y}}]
+Out[3]= {{{1}, {2, 3, 4}}, {{1, 2}, {3, 4}}, {{1, 2, 3}, {4}}}
 
-In[2]:= Replace[{a, a, a, b}, {Longest[a ..], rest___} :> {x, rest}]
-Out[2]= {x, b}
+In[4]:= Replace[{a, a, a, b}, {Longest[a ..], rest___} :> {x, rest}]
+Out[4]= {x, b}
 ```
 
 ## Implementation notes

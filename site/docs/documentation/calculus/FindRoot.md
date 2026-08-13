@@ -32,7 +32,7 @@ Options: Method ('Newton' | 'Secant' | 'Brent' | Automatic), WorkingPrecision, M
 
 </details>
 
-## Examples (13)
+## Examples (15)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -68,31 +68,33 @@ In[8]:= FindRoot[(x - 1)^3, {x, 0.5}, DampingFactor -> 3]
 Out[8]= {x -> 1.0}
 ```
 
+### Worked examples (2)
+
+```mathematica
+In[9]:= FindRoot[Zeta[s] == 1.05, {s, 5}]
+Out[9]= {s -> 4.61297}
+
+In[10]:= FindRoot[2^(-s)(Zeta[s] - Zeta[s, 3/2]) == 0, {s, 20 I}]
+Out[10]= {s -> 0.948962 + 20.3778*I}
+```
+
 ### Applications (5)
 
 ```mathematica
-In[1]:= FindRoot[x^2 - 2, {x, 1}]
-Out[1]= {x -> 1.41421}
-```
+In[11]:= FindRoot[x^2 - 2, {x, 1}]
+Out[11]= {x -> 1.41421}
 
-```mathematica
-In[1]:= FindRoot[Cos[x] == x, {x, 1}, WorkingPrecision -> 40]
-Out[1]= {x -> 0.73908513321516064165531208767387340401341}
-```
+In[12]:= FindRoot[Cos[x] == x, {x, 1}, WorkingPrecision -> 40]
+Out[12]= {x -> 0.73908513321516064165531208767387340401341}
 
-```mathematica
-In[1]:= FindRoot[BesselJ[0, x], {x, 2, 3}]
-Out[1]= {x -> 2.40483}
-```
+In[13]:= FindRoot[BesselJ[0, x], {x, 2, 3}]
+Out[13]= {x -> 2.40483}
 
-```mathematica
-In[1]:= FindRoot[Sin[x] == 0, {x, 3}, WorkingPrecision -> 40]
-Out[1]= {x -> 3.1415926535897932384626433832875751974431}
-```
+In[14]:= FindRoot[Sin[x] == 0, {x, 3}, WorkingPrecision -> 40]
+Out[14]= {x -> 3.1415926535897932384626433832875751974431}
 
-```mathematica
-In[1]:= FindRoot[{x^2 + y^2 == 1, x == y}, {{x, 1}, {y, 1}}]
-Out[1]= {x -> 0.707107, y -> 0.707107}
+In[15]:= FindRoot[{x^2 + y^2 == 1, x == y}, {{x, 1}, {y, 1}}]
+Out[15]= {x -> 0.707107, y -> 0.707107}
 ```
 
 ## Algorithm
@@ -190,11 +192,9 @@ fails to converge.
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[Block](../../scoping-constructs/Block/), [Rule](../../assignment-and-rules/Rule/), [Solve](../../solutions-of-equations/Solve/), [D](../../calculus/D/), [HurwitzZeta](../../special-functions/HurwitzZeta/), [PolyGamma](../../special-functions/PolyGamma/), [Complex](../../arithmetic/Complex/), [Sin](../../elementary-functions/Sin/)
-
 ## References
+
+**See also:** [Block](../../scoping-constructs/Block/), [Rule](../../assignment-and-rules/Rule/), [Solve](../../solutions-of-equations/Solve/), [D](../../calculus/D/), [HurwitzZeta](../../special-functions/HurwitzZeta/), [PolyGamma](../../special-functions/PolyGamma/), [Complex](../../arithmetic/Complex/), [Sin](../../elementary-functions/Sin/)
 
 - W. H. Press et al., *Numerical Recipes*, 3rd ed. (Cambridge, 2007) — Newton, secant, Brent's method.
 - Source: [`src/numerical_roots/findroot.c`](https://github.com/stblake/mathilda/blob/main/src/numerical_roots/findroot.c)

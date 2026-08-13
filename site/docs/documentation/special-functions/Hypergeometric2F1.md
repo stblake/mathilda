@@ -23,27 +23,17 @@ Out[1]= -Log[1 - z]/z
 ### Applications (4)
 
 ```mathematica
-In[1]:= Hypergeometric2F1[1, 1, 2, z]
-Out[1]= -Log[1 - z]/z
-```
+In[2]:= Hypergeometric2F1[1, 1, 2, z]
+Out[2]= -Log[1 - z]/z
 
-A non-positive integer upper parameter terminates the Gauss series to a
-polynomial — here `(1 - z)^3`:
+In[3]:= Hypergeometric2F1[-3, 1, 1, z]
+Out[3]= 1 - 3 z + 3 z^2 - z^3
 
-```mathematica
-In[1]:= Hypergeometric2F1[-3, 1, 1, z]
-Out[1]= 1 - 3 z + 3 z^2 - z^3
-```
+In[4]:= N[Hypergeometric2F1[1/2, 1/2, 3/2, 1/4]/2, 40]
+Out[4]= 0.52359877559829887307710723054658381403285
 
-The function reproduces the elementary inverse trig functions: `z *
-2F1[1/2, 1/2, 3/2, z^2] = ArcSin[z]`. Checked at `z = 1/2` to 40 digits:
-
-```mathematica
-In[1]:= N[Hypergeometric2F1[1/2, 1/2, 3/2, 1/4]/2, 40]
-Out[1]= 0.52359877559829887307710723054658381403285
-
-In[2]:= N[ArcSin[1/2], 40]
-Out[2]= 0.52359877559829887307710723054658381403285
+In[5]:= N[ArcSin[1/2], 40]
+Out[5]= 0.52359877559829887307710723054658381403285
 ```
 
 ## Implementation notes

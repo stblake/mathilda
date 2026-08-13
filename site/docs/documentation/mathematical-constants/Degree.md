@@ -25,21 +25,15 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= N[Degree]
 Out[1]= 0.0174533
-```
 
-```mathematica
-In[1]:= Sin[30 Degree] // N
-Out[1]= 0.5
-```
+In[2]:= Sin[30 Degree] // N
+Out[2]= 0.5
 
-```mathematica
-In[1]:= N[Tan[60 Degree], 40]
-Out[1]= 1.7320508075688772935274463415058723669427
-```
+In[3]:= N[Tan[60 Degree], 40]
+Out[3]= 1.7320508075688772935274463415058723669427
 
-```mathematica
-In[1]:= N[Degree, 40]
-Out[1]= 0.017453292519943295769236907684886127134428
+In[4]:= N[Degree, 40]
+Out[4]= 0.017453292519943295769236907684886127134428
 ```
 
 ## Options & behaviour
@@ -64,11 +58,9 @@ live in the central numeric constant table (`src/numeric.c`); their identities
 
 **Attributes:** `Constant`, `Protected`.
 
-## See also
-
-[N](../../arithmetic/N/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [Catalan](../../mathematical-constants/Catalan/), [GoldenRatio](../../mathematical-constants/GoldenRatio/)
-
 ## References
+
+**See also:** [N](../../arithmetic/N/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [Catalan](../../mathematical-constants/Catalan/), [GoldenRatio](../../mathematical-constants/GoldenRatio/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/mathematical-constants.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/mathematical-constants.md)

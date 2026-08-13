@@ -24,8 +24,8 @@ Out[2]= <|"a" -> 1, "b" -> 2|>
 ### Applications (1)
 
 ```mathematica
-In[1]:= Last[{a,b,c}]
-Out[1]= c
+In[3]:= Last[{a,b,c}]
+Out[3]= c
 ```
 
 ## Implementation notes
@@ -34,11 +34,9 @@ Out[1]= c
 
 **Attributes:** none registered.
 
-## See also
-
-[First](../../data-structures/First/), [Rest](../../data-structures/Rest/), [Most](../../data-structures/Most/), [Take](../../data-structures/Take/), [Drop](../../data-structures/Drop/)
-
 ## References
+
+**See also:** [First](../../data-structures/First/), [Rest](../../data-structures/Rest/), [Most](../../data-structures/Most/), [Take](../../data-structures/Take/), [Drop](../../data-structures/Drop/)
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

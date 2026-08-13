@@ -32,27 +32,23 @@ Out[4]= 2
 ### Applications (6)
 
 ```mathematica
-In[1]:= SimplifyCount[1]
-Out[1]= 1
+In[5]:= SimplifyCount[1]
+Out[5]= 1
 
-In[2]:= SimplifyCount[x + 1]
-Out[2]= 3
-```
+In[6]:= SimplifyCount[x + 1]
+Out[6]= 3
 
-```mathematica
-In[1]:= SimplifyCount[3 x]
-Out[1]= 3
+In[7]:= SimplifyCount[3 x]
+Out[7]= 3
 
-In[2]:= SimplifyCount[12345]
-Out[2]= 5
-```
+In[8]:= SimplifyCount[12345]
+Out[8]= 5
 
-```mathematica
-In[1]:= SimplifyCount[a b c + d]
-Out[1]= 6
+In[9]:= SimplifyCount[a b c + d]
+Out[9]= 6
 
-In[2]:= SimplifyCount[Sin[x]^2 + Cos[x]^2]
-Out[1]= 9
+In[10]:= SimplifyCount[Sin[x]^2 + Cos[x]^2]
+Out[10]= 9
 ```
 
 ## Implementation notes
@@ -86,11 +82,9 @@ The same `size_t simp_default_complexity` function is consumed internally by
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Simplify](../../simplification/Simplify/)
-
 ## References
+
+**See also:** [Simplify](../../simplification/Simplify/)
 
 - Source: [`src/simp/simp_complexity.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp_complexity.c)
 - Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)

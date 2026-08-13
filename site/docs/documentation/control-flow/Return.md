@@ -60,11 +60,9 @@ Out[5]= 5
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Function](../../functional-programming/Function/), [Module](../../scoping-constructs/Module/), [Block](../../scoping-constructs/Block/), [With](../../scoping-constructs/With/), [Do](../../control-flow/Do/), [For](../../control-flow/For/), [While](../../control-flow/While/), [CompoundExpression](../../assignment-and-rules/CompoundExpression/)
-
 ## References
+
+**See also:** [Function](../../functional-programming/Function/), [Module](../../scoping-constructs/Module/), [Block](../../scoping-constructs/Block/), [With](../../scoping-constructs/With/), [Do](../../control-flow/Do/), [For](../../control-flow/For/), [While](../../control-flow/While/), [CompoundExpression](../../assignment-and-rules/CompoundExpression/)
 
 - Source: [`src/eval.c`](https://github.com/stblake/mathilda/blob/main/src/eval.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

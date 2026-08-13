@@ -27,22 +27,14 @@ Out[3]= 2
 ### Applications (3)
 
 ```mathematica
-In[1]:= Variance[{1, 2, 3, 4, 5}]
-Out[1]= 5/2
-```
+In[4]:= Variance[{1, 2, 3, 4, 5}]
+Out[4]= 5/2
 
-`Variance` is the *unbiased* (sample) estimator, dividing the sum of squared deviations by `n - 1`. On exact rational data the answer stays exact:
+In[5]:= Variance[{2, 4, 4, 4, 5, 5, 7, 9}]
+Out[5]= 32/7
 
-```mathematica
-In[1]:= Variance[{2, 4, 4, 4, 5, 5, 7, 9}]
-Out[1]= 32/7
-```
-
-Feeding the same integers as 40-digit reals propagates the precision all the way through the deviation sum:
-
-```mathematica
-In[1]:= Variance[N[{1, 1, 2, 3, 5, 8, 13}, 40]]
-Out[1]= 19.571428571428571428571428571428571428568
+In[6]:= Variance[N[{1, 1, 2, 3, 5, 8, 13}, 40]]
+Out[6]= 19.571428571428571428571428571428571428568
 ```
 
 ## Implementation notes
@@ -53,11 +45,9 @@ Out[1]= 19.571428571428571428571428571428571428568
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Median](../../data-structures/Median/), [StandardDeviation](../../data-structures/StandardDeviation/), [Mean](../../data-structures/Mean/)
-
 ## References
+
+**See also:** [Median](../../data-structures/Median/), [StandardDeviation](../../data-structures/StandardDeviation/), [Mean](../../data-structures/Mean/)
 
 - Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

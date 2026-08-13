@@ -24,8 +24,8 @@ Out[2]= <|"a" -> 1, "b" -> 2|>
 ### Applications (1)
 
 ```mathematica
-In[1]:= First[{a,b,c}]
-Out[1]= a
+In[3]:= First[{a,b,c}]
+Out[3]= a
 ```
 
 ## Performance
@@ -47,11 +47,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** none registered.
 
-## See also
-
-[Last](../../data-structures/Last/), [Rest](../../data-structures/Rest/), [Most](../../data-structures/Most/), [Take](../../data-structures/Take/), [Drop](../../data-structures/Drop/)
-
 ## References
+
+**See also:** [Last](../../data-structures/Last/), [Rest](../../data-structures/Rest/), [Most](../../data-structures/Most/), [Take](../../data-structures/Take/), [Drop](../../data-structures/Drop/)
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

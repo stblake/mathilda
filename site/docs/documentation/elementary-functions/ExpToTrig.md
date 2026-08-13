@@ -29,23 +29,17 @@ Out[3]= Cos[x] + I Sin[x] == -1
 ### Applications (4)
 
 ```mathematica
-In[1]:= ExpToTrig[Exp[x]]
-Out[1]= Cosh[x] + Sinh[x]
-```
+In[4]:= ExpToTrig[Exp[x]]
+Out[4]= Cosh[x] + Sinh[x]
 
-```mathematica
-In[1]:= ExpToTrig[Exp[I x]]
-Out[1]= Cos[x] + I Sin[x]
-```
+In[5]:= ExpToTrig[Exp[I x]]
+Out[5]= Cos[x] + I Sin[x]
 
-```mathematica
-In[1]:= ExpToTrig[(E^x - E^(-x))/2]
-Out[1]= Sinh[x]
-```
+In[6]:= ExpToTrig[(E^x - E^(-x))/2]
+Out[6]= Sinh[x]
 
-```mathematica
-In[1]:= ExpToTrig[E^(I x) + E^(-I x)]
-Out[1]= 2 Cos[x]
+In[7]:= ExpToTrig[E^(I x) + E^(-I x)]
+Out[7]= 2 Cos[x]
 ```
 
 ## Implementation notes
@@ -74,11 +68,9 @@ other trig builtins.
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[TrigToExp](../../elementary-functions/TrigToExp/)
-
 ## References
+
+**See also:** [TrigToExp](../../elementary-functions/TrigToExp/)
 
 - Source: [`src/simp/trigsimp.c`](https://github.com/stblake/mathilda/blob/main/src/simp/trigsimp.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)

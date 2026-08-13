@@ -39,23 +39,15 @@ Out[4]= {{b -> a}}
 ### Applications (3)
 
 ```mathematica
-In[1]:= SolveAlways[a x^2 + b x + c == 0, x]
-Out[1]= {{c -> 0, b -> 0, a -> 0}}
+In[5]:= SolveAlways[a x^2 + b x + c == 0, x]
+Out[5]= {{c -> 0, b -> 0, a -> 0}}
+
+In[6]:= SolveAlways[(a + b) x + (a - b - 2) == 0, x]
+Out[6]= {{a -> 1, b -> -1}}
+
+In[7]:= SolveAlways[p x^2 + q x + r == (x - 1)(x - 2), x]
+Out[7]= {{r -> 2, q -> -3, p -> 1}}
 ```
-
-For the quadratic to vanish for *every* `x`, all three coefficients must be zero.
-
-```mathematica
-In[1]:= SolveAlways[(a + b) x + (a - b - 2) == 0, x]
-Out[1]= {{a -> 1, b -> -1}}
-```
-
-```mathematica
-In[1]:= SolveAlways[p x^2 + q x + r == (x - 1)(x - 2), x]
-Out[1]= {{r -> 2, q -> -3, p -> 1}}
-```
-
-Matching `p x^2 + q x + r` to `(x-1)(x-2) = x^2 - 3x + 2` recovers the coefficients by equating powers of `x`.
 
 ## Algorithm
 
@@ -91,11 +83,9 @@ Scope (v1):
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Solve](../../solutions-of-equations/Solve/), [List](../../other-advanced/List/), [Unequal](../../comparisons/Unequal/), [Series](../../power-series/Series/), [CoefficientList](../../algebra/CoefficientList/), [Equal](../../comparisons/Equal/)
-
 ## References
+
+**See also:** [Solve](../../solutions-of-equations/Solve/), [List](../../other-advanced/List/), [Unequal](../../comparisons/Unequal/), [Series](../../power-series/Series/), [CoefficientList](../../algebra/CoefficientList/), [Equal](../../comparisons/Equal/)
 
 - Source: [`src/solvealways.c`](https://github.com/stblake/mathilda/blob/main/src/solvealways.c)
 - Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)

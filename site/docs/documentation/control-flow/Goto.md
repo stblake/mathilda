@@ -41,11 +41,9 @@ Out[2]= 1.41421
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Label](../../control-flow/Label/), [CompoundExpression](../../assignment-and-rules/CompoundExpression/), [Catch](../../control-flow/Catch/), [Throw](../../control-flow/Throw/), [If](../../control-flow/If/), [While](../../control-flow/While/)
-
 ## References
+
+**See also:** [Label](../../control-flow/Label/), [CompoundExpression](../../assignment-and-rules/CompoundExpression/), [Catch](../../control-flow/Catch/), [Throw](../../control-flow/Throw/), [If](../../control-flow/If/), [While](../../control-flow/While/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

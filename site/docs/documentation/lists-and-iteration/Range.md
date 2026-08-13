@@ -26,31 +26,21 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= Range[5]
 Out[1]= {1, 2, 3, 4, 5}
-```
 
-```mathematica
-In[1]:= Range[2, 10, 2]
-Out[1]= {2, 4, 6, 8, 10}
-```
+In[2]:= Range[2, 10, 2]
+Out[2]= {2, 4, 6, 8, 10}
 
-```mathematica
-In[1]:= Range[0, 1, 1/4]
-Out[1]= {0, 1/4, 1/2, 3/4, 1}
-```
+In[3]:= Range[0, 1, 1/4]
+Out[3]= {0, 1/4, 1/2, 3/4, 1}
 
-A negative step counts down, and `Range` chains naturally with the functional
-operators it is built to feed — here the exact triangular numbers and the sum of
-the first hundred integers:
+In[4]:= Range[10, 1, -1]
+Out[4]= {10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
 
-```mathematica
-In[1]:= Range[10, 1, -1]
-Out[1]= {10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
+In[5]:= Map[#^2 &, Range[5]]
+Out[5]= {1, 4, 9, 16, 25}
 
-In[2]:= Map[#^2 &, Range[5]]
-Out[2]= {1, 4, 9, 16, 25}
-
-In[3]:= Total[Range[100]]
-Out[3]= 5050
+In[6]:= Total[Range[100]]
+Out[6]= 5050
 ```
 
 ## Performance
@@ -72,11 +62,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

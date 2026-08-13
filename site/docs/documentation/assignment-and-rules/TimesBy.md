@@ -34,11 +34,9 @@ Out[2]= {1.0, 2.0, 0.75}
 
 **Attributes:** `HoldFirst`, `Protected`.
 
-## See also
-
-[AddTo](../../assignment-and-rules/AddTo/), [SubtractFrom](../../assignment-and-rules/SubtractFrom/), [DivideBy](../../assignment-and-rules/DivideBy/), [HoldFirst](../../other-advanced/HoldFirst/), [Part](../../structural-manipulation/Part/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Increment](../../assignment-and-rules/Increment/)
-
 ## References
+
+**See also:** [AddTo](../../assignment-and-rules/AddTo/), [SubtractFrom](../../assignment-and-rules/SubtractFrom/), [DivideBy](../../assignment-and-rules/DivideBy/), [HoldFirst](../../other-advanced/HoldFirst/), [Part](../../structural-manipulation/Part/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Increment](../../assignment-and-rules/Increment/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)

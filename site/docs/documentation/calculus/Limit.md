@@ -75,51 +75,33 @@ Out[8]= 2
 ### Applications (9)
 
 ```mathematica
-In[1]:= Limit[Sin[x]/x, x -> 0]
-Out[1]= 1
+In[9]:= Limit[Sin[x]/x, x -> 0]
+Out[9]= 1
+
+In[10]:= Limit[(x^2 - 1)/(x - 1), x -> 1]
+Out[10]= 2
+
+In[11]:= Limit[(1 + a/x)^x, x -> Infinity]
+Out[11]= E^a
+
+In[12]:= Limit[(Sin[x] - x + x^3/6)/x^5, x -> 0]
+Out[12]= 1/120
+
+In[13]:= Limit[(x^x - x)/(1 - x + Log[x]), x -> 1]
+Out[13]= -2
+
+In[14]:= Limit[x - Sqrt[x^2 + x], x -> Infinity]
+Out[14]= -1/2
+
+In[15]:= Limit[x^2 + y^2, {x, y} -> {1, 2}]
+Out[15]= 5
+
+In[16]:= Limit[1/x, x -> 0, Direction -> "FromAbove"]
+Out[16]= Infinity
+
+In[17]:= Limit[1/x, x -> 0, Direction -> "FromBelow"]
+Out[17]= -Infinity
 ```
-
-```mathematica
-In[1]:= Limit[(x^2 - 1)/(x - 1), x -> 1]
-Out[1]= 2
-```
-
-```mathematica
-In[1]:= Limit[(1 + a/x)^x, x -> Infinity]
-Out[1]= E^a
-```
-
-```mathematica
-In[1]:= Limit[(Sin[x] - x + x^3/6)/x^5, x -> 0]
-Out[1]= 1/120
-```
-
-```mathematica
-In[1]:= Limit[(x^x - x)/(1 - x + Log[x]), x -> 1]
-Out[1]= -2
-```
-
-```mathematica
-In[1]:= Limit[x - Sqrt[x^2 + x], x -> Infinity]
-Out[1]= -1/2
-```
-
-```mathematica
-In[1]:= Limit[x^2 + y^2, {x, y} -> {1, 2}]
-Out[1]= 5
-```
-
-```mathematica
-In[1]:= Limit[1/x, x -> 0, Direction -> "FromAbove"]
-Out[1]= Infinity
-
-In[2]:= Limit[1/x, x -> 0, Direction -> "FromBelow"]
-Out[2]= -Infinity
-```
-
-## Options & behaviour
-
-### Examples
 
 ## Algorithm
 
@@ -367,11 +349,9 @@ The core `compute_limit` runs (in order): reciprocal-trig rewrite; at ±∞ a hy
 
 **Attributes:** `Protected`, `ReadProtected`.
 
-## See also
-
-[Abs](../../arithmetic/Abs/), [Log](../../elementary-functions/Log/), [Sin](../../elementary-functions/Sin/), [Cos](../../elementary-functions/Cos/), [Plus](../../arithmetic/Plus/), [Interval](../../other-advanced/Interval/), [TrigToExp](../../elementary-functions/TrigToExp/), [Expand](../../algebra/Expand/)
-
 ## References
+
+**See also:** [Abs](../../arithmetic/Abs/), [Log](../../elementary-functions/Log/), [Sin](../../elementary-functions/Sin/), [Cos](../../elementary-functions/Cos/), [Plus](../../arithmetic/Plus/), [Interval](../../other-advanced/Interval/), [TrigToExp](../../elementary-functions/TrigToExp/), [Expand](../../algebra/Expand/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (Kluwer, 1992), ch. 3.
 - G. Gruntz, *On Computing Limits in a Symbolic Manipulation System*, PhD thesis, ETH Zürich, 1996.

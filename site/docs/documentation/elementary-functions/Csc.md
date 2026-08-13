@@ -25,26 +25,18 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= Csc[Pi/6]
 Out[1]= 2
-```
 
-```mathematica
-In[1]:= Csc[Pi/12]
-Out[1]= Sqrt[2] (1 + Sqrt[3])
-```
+In[2]:= Csc[Pi/12]
+Out[2]= Sqrt[2] (1 + Sqrt[3])
 
-```mathematica
-In[1]:= N[Csc[1], 40]
-Out[1]= 1.1883951057781212162615994523745510035279
-```
+In[3]:= N[Csc[1], 40]
+Out[3]= 1.1883951057781212162615994523745510035279
 
-```mathematica
-In[1]:= Series[Csc[x], {x, 0, 5}]
-Out[1]= 1/x + 1/6 x + 7/360 x^3 + 31/15120 x^5 + O[x]^6
-```
+In[4]:= Series[Csc[x], {x, 0, 5}]
+Out[4]= 1/x + 1/6 x + 7/360 x^3 + 31/15120 x^5 + O[x]^6
 
-```mathematica
-In[1]:= Csc[I]
-Out[1]= -I Csch[1]
+In[5]:= Csc[I]
+Out[5]= -I Csch[1]
 ```
 
 ## Implementation notes

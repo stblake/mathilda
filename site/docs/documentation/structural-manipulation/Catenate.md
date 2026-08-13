@@ -34,11 +34,9 @@ Out[3]= {1, 3, 5, 2, 4, 6}
 
 **Attributes:** `Protected`.
 
-## See also
-
-[GroupBy](../../data-structures/GroupBy/), [Merge](../../data-structures/Merge/)
-
 ## References
+
+**See also:** [GroupBy](../../data-structures/GroupBy/), [Merge](../../data-structures/Merge/)
 
 - Source: [`src/list/list_init.c`](https://github.com/stblake/mathilda/blob/main/src/list/list_init.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

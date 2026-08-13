@@ -30,33 +30,20 @@ Out[2]= {a, d}
 ### Applications (5)
 
 ```mathematica
-In[1]:= Transpose[{{1, 2, 3}, {4, 5, 6}}]
-Out[1]= {{1, 4}, {2, 5}, {3, 6}}
-```
+In[3]:= Transpose[{{1, 2, 3}, {4, 5, 6}}]
+Out[3]= {{1, 4}, {2, 5}, {3, 6}}
 
-```mathematica
-In[1]:= Transpose[{{1, 2}, {3, 4}}]
-Out[1]= {{1, 3}, {2, 4}}
-```
+In[4]:= Transpose[{{1, 2}, {3, 4}}]
+Out[4]= {{1, 3}, {2, 4}}
 
-```mathematica
-In[1]:= Transpose[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {1, 1}]
-Out[1]= {1, 5, 9}
-```
+In[5]:= Transpose[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {1, 1}]
+Out[5]= {1, 5, 9}
 
-The Gram matrix `A^T . A` of a symbolic `2x3` design matrix is symmetric by
-construction:
+In[6]:= Transpose[{{a, b, c}, {d, e, f}}] . {{a, b, c}, {d, e, f}}
+Out[6]= {{a^2 + d^2, a b + d e, a c + d f}, {a b + d e, b^2 + e^2, b c + e f}, {a c + d f, b c + e f, c^2 + f^2}}
 
-```mathematica
-In[1]:= Transpose[{{a, b, c}, {d, e, f}}] . {{a, b, c}, {d, e, f}}
-Out[1]= {{a^2 + d^2, a b + d e, a c + d f}, {a b + d e, b^2 + e^2, b c + e f}, {a c + d f, b c + e f, c^2 + f^2}}
-```
-
-For an antisymmetric matrix `M = -M^T`, the sum `M + Transpose[M]` vanishes:
-
-```mathematica
-In[1]:= m = {{0, 1, 2}, {-1, 0, 3}, {-2, -3, 0}}; m + Transpose[m]
-Out[1]= {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}}
+In[7]:= m = {{0, 1, 2}, {-1, 0, 3}, {-2, -3, 0}}; m + Transpose[m]
+Out[7]= {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}}
 ```
 
 ## Performance

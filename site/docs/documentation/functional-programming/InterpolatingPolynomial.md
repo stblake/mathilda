@@ -37,10 +37,16 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= InterpolatingPolynomial[{1, 4, 9, 16}, x]
 Out[1]= 1 + (-1 + x) (1 + x)
+```
 
-In[2]:= InterpolatingPolynomial[{4, 7, 2, {8, 0}, 9}, x]   (* value 8, slope 0 at x=4 *)
+Value 8, slope 0 at x=4
+
+```mathematica
+In[2]:= InterpolatingPolynomial[{4, 7, 2, {8, 0}, 9}, x]
 Out[2]= 4 + (-1 + x) (3 + (-2 + x) (-4 + (-3 + x) (19/6 + (-4 + x) (-107/36 + 109/72 (-4 + x)))))
+```
 
+```mathematica
 In[3]:= Expand[InterpolatingPolynomial[ {{{0, 0}, 1}, {{1, 0}, 7}, {{0, 1}, 10}, {{2, 1}, 40}, {{3, 3}, 151}, {{1, 2}, 47}}, {x, y}]]
 Out[3]= 1 + 2 x + 4 x^2 + 3 y + 5 x y + 6 y^2
 
@@ -102,11 +108,9 @@ Builtin ownership: interp_apply / the Interpolation builtin return a fresh Expr*
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Interpolation](../../functional-programming/Interpolation/), [InterpolatingFunction](../../functional-programming/InterpolatingFunction/), [N](../../arithmetic/N/), [NDArray](../../linear-algebra/NDArray/)
-
 ## References
+
+**See also:** [Interpolation](../../functional-programming/Interpolation/), [InterpolatingFunction](../../functional-programming/InterpolatingFunction/), [N](../../arithmetic/N/), [NDArray](../../linear-algebra/NDArray/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

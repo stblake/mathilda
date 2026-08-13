@@ -37,28 +37,20 @@ Out[2]= 1/4 - 3/2 z^2 + z^3
 ### Applications (5)
 
 ```mathematica
-In[1]:= EulerE[4]
-Out[1]= 5
-```
+In[3]:= EulerE[4]
+Out[3]= 5
 
-```mathematica
-In[1]:= Table[EulerE[2 n], {n, 0, 6}]
-Out[1]= {1, -1, 5, -61, 1385, -50521, 2702765}
-```
+In[4]:= Table[EulerE[2 n], {n, 0, 6}]
+Out[4]= {1, -1, 5, -61, 1385, -50521, 2702765}
 
-```mathematica
-In[1]:= EulerE[6, x]
-Out[1]= -3 x + 5 x^3 - 3 x^5 + x^6
-```
+In[5]:= EulerE[6, x]
+Out[5]= -3 x + 5 x^3 - 3 x^5 + x^6
 
-```mathematica
-In[1]:= Sum[EulerE[2 k] / (2 k)! Pi^(2 k), {k, 0, 5}]
-Out[1]= 1 - 1/2 Pi^2 + 5/24 Pi^4 - 61/720 Pi^6 + 277/8064 Pi^8 - 50521/3628800 Pi^10
-```
+In[6]:= Sum[EulerE[2 k] / (2 k)! Pi^(2 k), {k, 0, 5}]
+Out[6]= 1 - 1/2 Pi^2 + 5/24 Pi^4 - 61/720 Pi^6 + 277/8064 Pi^8 - 50521/3628800 Pi^10
 
-```mathematica
-In[1]:= N[EulerE[5, 1/3], 40]
-Out[1]= -0.24897119341563786008230452674897119341565
+In[7]:= N[EulerE[5, 1/3], 40]
+Out[7]= -0.24897119341563786008230452674897119341565
 ```
 
 ## Algorithm
@@ -117,11 +109,9 @@ Attributes: Listable, Protected.
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[N](../../arithmetic/N/)
-
 ## References
+
+**See also:** [N](../../arithmetic/N/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

@@ -88,11 +88,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Protected`.
 
-## See also
-
-[DataType](../../other-advanced/DataType/), [SameQ](../../comparisons/SameQ/), [List](../../other-advanced/List/), [MatrixQ](../../expression-information/MatrixQ/), [VectorQ](../../expression-information/VectorQ/), [ListQ](../../expression-information/ListQ/), [Head](../../structural-manipulation/Head/), [ToNDArray](../../packed-arrays/ToNDArray/)
-
 ## References
+
+**See also:** [DataType](../../other-advanced/DataType/), [SameQ](../../comparisons/SameQ/), [List](../../other-advanced/List/), [MatrixQ](../../expression-information/MatrixQ/), [VectorQ](../../expression-information/VectorQ/), [ListQ](../../expression-information/ListQ/), [Head](../../structural-manipulation/Head/), [ToNDArray](../../packed-arrays/ToNDArray/)
 
 - Source: [`src/ndarray.c`](https://github.com/stblake/mathilda/blob/main/src/ndarray.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

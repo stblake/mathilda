@@ -46,33 +46,23 @@ Out[5]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
 ### Applications (6)
 
 ```mathematica
-In[1]:= Apart[1/(x (x+1))]
-Out[1]= 1/x - 1/(1 + x)
-```
+In[6]:= Apart[1/(x (x+1))]
+Out[6]= 1/x - 1/(1 + x)
 
-```mathematica
-In[1]:= Apart[(x+2)/(x^2 - 1)]
-Out[1]= -1/2/(1 + x) + 3/2/(-1 + x)
-```
+In[7]:= Apart[(x+2)/(x^2 - 1)]
+Out[7]= -1/2/(1 + x) + 3/2/(-1 + x)
 
-```mathematica
-In[1]:= Apart[1/(x^2 (x+1))]
-Out[1]= 1/x^2 - 1/x + 1/(1 + x)
-```
+In[8]:= Apart[1/(x^2 (x+1))]
+Out[8]= 1/x^2 - 1/x + 1/(1 + x)
 
-```mathematica
-In[1]:= Apart[(x^3 + 1)/(x^2 - 1)]
-Out[1]= x + 1/(-1 + x)
-```
+In[9]:= Apart[(x^3 + 1)/(x^2 - 1)]
+Out[9]= x + 1/(-1 + x)
 
-```mathematica
-In[1]:= Apart[(2 x + 3)/((x+1)^2 (x^2+1))]
-Out[1]= 1/2/(1 + x)^2 + 3/2/(1 + x) + (1 - 3/2 x)/(1 + x^2)
-```
+In[10]:= Apart[(2 x + 3)/((x+1)^2 (x^2+1))]
+Out[10]= 1/2/(1 + x)^2 + 3/2/(1 + x) + (1 - 3/2 x)/(1 + x^2)
 
-```mathematica
-In[1]:= Apart[1/(x^2 - 2), Extension -> Sqrt[2]]
-Out[1]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
+In[11]:= Apart[1/(x^2 - 2), Extension -> Sqrt[2]]
+Out[11]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
 ```
 
 ## Implementation notes
@@ -100,11 +90,9 @@ Out[1]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[RowReduce](../../linear-algebra/RowReduce/), [Together](../../algebra/Together/)
-
 ## References
+
+**See also:** [RowReduce](../../linear-algebra/RowReduce/), [Together](../../algebra/Together/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on partial fraction decomposition.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on partial fractions and the extended Euclidean algorithm.

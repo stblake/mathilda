@@ -43,23 +43,17 @@ Out[4]= ConditionalExpression[e, c1 && c2]
 ### Applications (4)
 
 ```mathematica
-In[1]:= ConditionalExpression[x, True]
-Out[1]= x
-```
+In[5]:= ConditionalExpression[x, True]
+Out[5]= x
 
-```mathematica
-In[1]:= ConditionalExpression[1/x, x != 0] /. x -> 0
-Out[1]= Undefined
-```
+In[6]:= ConditionalExpression[1/x, x != 0] /. x -> 0
+Out[6]= Undefined
 
-```mathematica
-In[1]:= ConditionalExpression[Sqrt[x^2], x > 0]
-Out[1]= ConditionalExpression[Sqrt[x^2], x > 0]
-```
+In[7]:= ConditionalExpression[Sqrt[x^2], x > 0]
+Out[7]= ConditionalExpression[Sqrt[x^2], x > 0]
 
-```mathematica
-In[1]:= ConditionalExpression[ConditionalExpression[e, a > 0], b > 0]
-Out[1]= ConditionalExpression[e, a > 0 && b > 0]
+In[8]:= ConditionalExpression[ConditionalExpression[e, a > 0], b > 0]
+Out[8]= ConditionalExpression[e, a > 0 && b > 0]
 ```
 
 ## Implementation notes

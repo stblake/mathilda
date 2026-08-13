@@ -27,11 +27,9 @@ Out[2]= <|"a" -> 99|>
 
 **Attributes:** none registered.
 
-## See also
-
-[Prepend](../../data-structures/Prepend/), [AssociateTo](../../data-structures/AssociateTo/)
-
 ## References
+
+**See also:** [Prepend](../../data-structures/Prepend/), [AssociateTo](../../data-structures/AssociateTo/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

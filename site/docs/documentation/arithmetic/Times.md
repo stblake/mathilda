@@ -27,18 +27,14 @@ Out[3]= 7 Sqrt[2/5]
 ### Applications (3)
 
 ```mathematica
-In[1]:= 2^64 * 3
-Out[1]= 55340232221128654848
-```
+In[4]:= 2^64 * 3
+Out[4]= 55340232221128654848
 
-```mathematica
-In[1]:= (1/3)*(3/7)*7
-Out[1]= 1
-```
+In[5]:= (1/3)*(3/7)*7
+Out[5]= 1
 
-```mathematica
-In[1]:= x y x z
-Out[1]= x^2 y z
+In[6]:= x y x z
+Out[6]= x^2 y z
 ```
 
 ## Implementation notes
@@ -67,11 +63,9 @@ It accumulates the rational/numeric coefficient into a running `num_prod` (with 
 
 **Attributes:** `Flat`, `Listable`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
 
-## See also
-
-[Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [Power](../../arithmetic/Power/), [I](../../mathematical-constants/I/), [Plus](../../arithmetic/Plus/)
-
 ## References
+
+**See also:** [Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [Power](../../arithmetic/Power/), [I](../../mathematical-constants/I/), [Plus](../../arithmetic/Plus/)
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on arbitrary-precision integer multiplication.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on canonical forms for products.

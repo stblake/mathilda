@@ -27,11 +27,9 @@ Out[2]= False
 
 **Attributes:** `Protected`.
 
-## See also
-
-[SameQ](../../comparisons/SameQ/)
-
 ## References
+
+**See also:** [SameQ](../../comparisons/SameQ/)
 
 - Source: [`src/comparisons.c`](https://github.com/stblake/mathilda/blob/main/src/comparisons.c)
 - Specification: [`docs/spec/builtins/comparisons.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/comparisons.md)

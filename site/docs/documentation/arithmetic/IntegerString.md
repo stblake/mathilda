@@ -51,26 +51,20 @@ Out[6]= 72.0 an and base be between integer must the
 ### Applications (5)
 
 ```mathematica
-In[1]:= IntegerString[255, 16]
-Out[1]= "ff"
-```
+In[7]:= IntegerString[255, 16]
+Out[7]= "ff"
 
-```mathematica
-In[1]:= IntegerString[255, 2]
-Out[1]= "11111111"
+In[8]:= IntegerString[255, 2]
+Out[8]= "11111111"
 
-In[2]:= IntegerString[42, 2, 16]
-Out[2]= "0000000000101010"
-```
+In[9]:= IntegerString[42, 2, 16]
+Out[9]= "0000000000101010"
 
-```mathematica
-In[1]:= IntegerString[123456789, 36]
-Out[1]= "21i3v9"
-```
+In[10]:= IntegerString[123456789, 36]
+Out[10]= "21i3v9"
 
-```mathematica
-In[1]:= IntegerString[3^50, 16]
-Out[1]= "980553f0db2fd09de3c9"
+In[11]:= IntegerString[3^50, 16]
+Out[11]= "980553f0db2fd09de3c9"
 ```
 
 ## Options & behaviour
@@ -105,11 +99,9 @@ is left unevaluated:
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[FromDigits](../../arithmetic/FromDigits/)
-
 ## References
+
+**See also:** [FromDigits](../../arithmetic/FromDigits/)
 
 - Source: [`src/int.c`](https://github.com/stblake/mathilda/blob/main/src/int.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

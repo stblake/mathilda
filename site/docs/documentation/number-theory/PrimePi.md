@@ -31,22 +31,14 @@ Out[3]= 50847534
 ### Applications (3)
 
 ```mathematica
-In[1]:= PrimePi[100]
-Out[1]= 25
-```
+In[4]:= PrimePi[100]
+Out[4]= 25
 
-The count scales to large bounds; there are 78498 primes below one million:
+In[5]:= PrimePi[10^6]
+Out[5]= 78498
 
-```mathematica
-In[1]:= PrimePi[10^6]
-Out[1]= 78498
-```
-
-`PrimePi` threads over lists (it is `Listable`):
-
-```mathematica
-In[1]:= PrimePi[{10, 100}]
-Out[1]= {4, 25}
+In[6]:= PrimePi[{10, 100}]
+Out[6]= {4, 25}
 ```
 
 ## Algorithm

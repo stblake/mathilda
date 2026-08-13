@@ -45,11 +45,9 @@ Out[3]= Null
 
 **Attributes:** `Protected`.
 
-## See also
-
-[FullForm](../../expression-information/FullForm/), [InputForm](../../expression-information/InputForm/)
-
 ## References
+
+**See also:** [FullForm](../../expression-information/FullForm/), [InputForm](../../expression-information/InputForm/)
 
 - Source: [`src/print.c`](https://github.com/stblake/mathilda/blob/main/src/print.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

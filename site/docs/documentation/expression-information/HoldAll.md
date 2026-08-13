@@ -40,11 +40,9 @@ Out[4]= Hold[3, 3 + 4]
 
 **Attributes:** none registered.
 
-## See also
-
-[SequenceHold](../../expression-information/SequenceHold/), [HoldFirst](../../other-advanced/HoldFirst/), [HoldRest](../../other-advanced/HoldRest/), [Hold](../../expression-information/Hold/), [HoldForm](../../expression-information/HoldForm/), [HoldPattern](../../pattern-matching/HoldPattern/), [Function](../../functional-programming/Function/)
-
 ## References
+
+**See also:** [SequenceHold](../../expression-information/SequenceHold/), [HoldFirst](../../other-advanced/HoldFirst/), [HoldRest](../../other-advanced/HoldRest/), [Hold](../../expression-information/Hold/), [HoldForm](../../expression-information/HoldForm/), [HoldPattern](../../pattern-matching/HoldPattern/), [Function](../../functional-programming/Function/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

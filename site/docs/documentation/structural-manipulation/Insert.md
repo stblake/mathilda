@@ -30,11 +30,9 @@ Out[2]= {a, c}
 
 **Attributes:** none registered.
 
-## See also
-
-[Delete](../../data-structures/Delete/), [Sequence](../../expression-information/Sequence/)
-
 ## References
+
+**See also:** [Delete](../../data-structures/Delete/), [Sequence](../../expression-information/Sequence/)
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

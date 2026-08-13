@@ -43,11 +43,9 @@ Out[4]= 2
 
 **Attributes:** `Protected`.
 
-## See also
-
-[EditDistance](../../lists-and-iteration/EditDistance/)
-
 ## References
+
+**See also:** [EditDistance](../../lists-and-iteration/EditDistance/)
 
 - Source: [`src/list/list_init.c`](https://github.com/stblake/mathilda/blob/main/src/list/list_init.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

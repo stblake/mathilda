@@ -14,7 +14,7 @@ such that p == Quotient\*q + Remainder, with deg(Remainder) \< deg(q) in x. Sing
 
 </details>
 
-## Examples (7)
+## Examples (6)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -32,27 +32,20 @@ In[2]:= PolynomialQuotientRemainder[x^2 - 2, x - Sqrt[2], x, Extension -> Sqrt[2
 Out[2]= {Sqrt[2] + x, 0}
 ```
 
-### Applications (5)
+### Applications (4)
 
 ```mathematica
-In[1]:= PolynomialQuotientRemainder[x^2 - 1, x - 1, x]
-Out[1]= {1 + x, 0}
-```
+In[3]:= PolynomialQuotientRemainder[x^2 - 1, x - 1, x]
+Out[3]= {1 + x, 0}
 
-```mathematica
-In[1]:= PolynomialQuotientRemainder[x^5 + x + 1, x^2 + 1, x]
-Out[1]= {-x + x^3, 1 + 2 x}
-```
+In[4]:= PolynomialQuotientRemainder[x^5 + x + 1, x^2 + 1, x]
+Out[4]= {-x + x^3, 1 + 2 x}
 
-```mathematica
-In[1]:= {q, r} = PolynomialQuotientRemainder[x^5 + x + 1, x^2 + 1, x];
-In[2]:= Expand[q (x^2 + 1) + r]
-Out[2]= 1 + x + x^5
-```
+In[5]:= Expand[q (x^2 + 1) + r]
+Out[5]= 1 + x + x^5
 
-```mathematica
-In[1]:= PolynomialQuotientRemainder[x^4 - 2, x^2 - Sqrt[2], x, Extension -> Sqrt[2]]
-Out[1]= {Sqrt[2] + x^2, 0}
+In[6]:= PolynomialQuotientRemainder[x^4 - 2, x^2 - Sqrt[2], x, Extension -> Sqrt[2]]
+Out[6]= {Sqrt[2] + x^2, 0}
 ```
 
 ## Implementation notes
@@ -85,11 +78,9 @@ variable a symbol. Multivariate inputs are handled coefficient-wise in `x`.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[PolynomialQuotient](../../algebra/PolynomialQuotient/), [PolynomialRemainder](../../algebra/PolynomialRemainder/)
-
 ## References
+
+**See also:** [PolynomialQuotient](../../algebra/PolynomialQuotient/), [PolynomialRemainder](../../algebra/PolynomialRemainder/)
 
 - K. O. Geddes, S. R. Czapor, G. Labahn, *Algorithms for Computer Algebra* (Kluwer, 1992) — Ch. 2, polynomial division.
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)

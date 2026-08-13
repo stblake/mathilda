@@ -45,23 +45,17 @@ Out[6]= True
 ### Applications (4)
 
 ```mathematica
-In[1]:= NegativeDefiniteMatrixQ[{{-2, 0}, {0, 3}}]
-Out[1]= False
-```
+In[7]:= NegativeDefiniteMatrixQ[{{-2, 0}, {0, 3}}]
+Out[7]= False
 
-```mathematica
-In[1]:= NegativeDefiniteMatrixQ[{{-3, 1, 0}, {1, -3, 1}, {0, 1, -3}}]
-Out[1]= True
-```
+In[8]:= NegativeDefiniteMatrixQ[{{-3, 1, 0}, {1, -3, 1}, {0, 1, -3}}]
+Out[8]= True
 
-```mathematica
-In[1]:= NegativeDefiniteMatrixQ[{{-2, I}, {-I, -2}}]
-Out[1]= True
-```
+In[9]:= NegativeDefiniteMatrixQ[{{-2, I}, {-I, -2}}]
+Out[9]= True
 
-```mathematica
-In[1]:= NegativeDefiniteMatrixQ[-Table[1/(i + j - 1), {i, 3}, {j, 3}]]
-Out[1]= True
+In[10]:= NegativeDefiniteMatrixQ[-Table[1/(i + j - 1), {i, 3}, {j, 3}]]
+Out[10]= True
 ```
 
 ## Algorithm

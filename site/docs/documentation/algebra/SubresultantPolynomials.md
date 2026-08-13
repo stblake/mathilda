@@ -25,26 +25,15 @@ Out[2]= 183782157188
 
 ### Applications (3)
 
-The subresultant polynomials `{S_0, ..., S_m}` of two quadratics; `S_0` is the
-resultant and the top entry is the leading polynomial:
-
 ```mathematica
-In[1]:= SubresultantPolynomials[x^2 - 1, x^2 - 4, x]
-Out[1]= {9, -3, 1}
-```
+In[3]:= SubresultantPolynomials[x^2 - 1, x^2 - 4, x]
+Out[3]= {9, -3, 1}
 
-A cubic/quadratic pair, where `S_2` is itself a genuine polynomial in `x`:
+In[4]:= SubresultantPolynomials[x^3 + x + 1, x^2 + 1, x]
+Out[4]= {1, 1, 1 + x^2}
 
-```mathematica
-In[1]:= SubresultantPolynomials[x^3 + x + 1, x^2 + 1, x]
-Out[1]= {1, 1, 1 + x^2}
-```
-
-`S_0` agrees with `Resultant` as expected:
-
-```mathematica
-In[1]:= Resultant[x^2 - 1, x^2 - 4, x]
-Out[1]= 9
+In[5]:= Resultant[x^2 - 1, x^2 - 4, x]
+Out[5]= 9
 ```
 
 ## Algorithm
@@ -98,11 +87,9 @@ By the fundamental theorem of subresultants each `S_j` is either zero or a scala
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Subresultants](../../algebra/Subresultants/)
-
 ## References
+
+**See also:** [Subresultants](../../algebra/Subresultants/)
 
 - W. S. Brown and J. F. Traub, "On Euclid's Algorithm and the Theory of Subresultants", J. ACM 18(4), 1971.
 - M. Bronstein, *Symbolic Integration I: Transcendental Functions*, 2nd ed. (Springer, 2005).

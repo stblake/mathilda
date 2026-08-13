@@ -61,11 +61,9 @@ A machine-precision matrix (a packed List or a visible NDArray) takes the buffer
 
 **Attributes:** `Protected`.
 
-## See also
-
-[List](../../other-advanced/List/), [NDArray](../../linear-algebra/NDArray/)
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [NDArray](../../linear-algebra/NDArray/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

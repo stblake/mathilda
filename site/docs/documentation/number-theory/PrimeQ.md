@@ -63,42 +63,26 @@ Out[8]= True
 ### Applications (7)
 
 ```mathematica
-In[1]:= PrimeQ[97]
-Out[1]= True
-```
+In[9]:= PrimeQ[97]
+Out[9]= True
 
-Mersenne numbers `2^p - 1` are handled instantly; `2^31 - 1` is the prime 2147483647, while `2^67 - 1` is composite (a famous factorisation by Frank Nelson Cole):
+In[10]:= PrimeQ[2^31 - 1]
+Out[10]= True
 
-```mathematica
-In[1]:= PrimeQ[2^31 - 1]
-Out[1]= True
+In[11]:= PrimeQ[2^67 - 1]
+Out[11]= False
 
-In[2]:= PrimeQ[2^67 - 1]
-Out[2]= False
-```
+In[12]:= PrimeQ[561]
+Out[12]= False
 
-Carmichael numbers fool the naive Fermat test but not `PrimeQ`; 561 is correctly reported composite:
+In[13]:= PrimeQ[5, GaussianIntegers -> True]
+Out[13]= False
 
-```mathematica
-In[1]:= PrimeQ[561]
-Out[1]= False
-```
+In[14]:= PrimeQ[3, GaussianIntegers -> True]
+Out[14]= True
 
-`GaussianIntegers -> True` tests primality in `Z[i]`. A rational prime `p ≡ 1 (mod 4)` splits and is *not* a Gaussian prime, whereas `p ≡ 3 (mod 4)` remains prime:
-
-```mathematica
-In[1]:= PrimeQ[5, GaussianIntegers -> True]
-Out[1]= False
-
-In[2]:= PrimeQ[3, GaussianIntegers -> True]
-Out[2]= True
-```
-
-A Gaussian-integer argument is tested directly; `2 + 3 I` has norm 13 and is a Gaussian prime:
-
-```mathematica
-In[1]:= PrimeQ[2 + 3 I]
-Out[1]= True
+In[15]:= PrimeQ[2 + 3 I]
+Out[15]= True
 ```
 
 ## Implementation notes

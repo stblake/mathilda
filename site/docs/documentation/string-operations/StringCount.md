@@ -90,11 +90,9 @@ Byte semantics: like the rest of src/strings, offsets are byte offsets (no UTF-8
 
 **Attributes:** `Protected`.
 
-## See also
-
-[StringCases](../../string-operations/StringCases/), [Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/), [SetOptions](../../assignment-and-rules/SetOptions/), [StringPosition](../../string-operations/StringPosition/)
-
 ## References
+
+**See also:** [StringCases](../../string-operations/StringCases/), [Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/), [SetOptions](../../assignment-and-rules/SetOptions/), [StringPosition](../../string-operations/StringPosition/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)

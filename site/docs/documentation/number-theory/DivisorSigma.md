@@ -65,11 +65,9 @@ Out[8]= 2 + 6*I
 
 **Attributes:** `Listable`, `NHoldAll`, `Protected`.
 
-## See also
-
-[Rational](../../arithmetic/Rational/)
-
 ## References
+
+**See also:** [Rational](../../arithmetic/Rational/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)

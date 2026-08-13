@@ -53,28 +53,20 @@ Out[2]= <|"a" -> 1, "b" -> 2|>
 ### Applications (5)
 
 ```mathematica
-In[1]:= Take[{a, b, c, d, e}, 3]
-Out[1]= {a, b, c}
-```
+In[3]:= Take[{a, b, c, d, e}, 3]
+Out[3]= {a, b, c}
 
-```mathematica
-In[1]:= Take[{a, b, c, d, e}, -2]
-Out[1]= {d, e}
-```
+In[4]:= Take[{a, b, c, d, e}, -2]
+Out[4]= {d, e}
 
-```mathematica
-In[1]:= Take[Range[10], {2, 8, 2}]
-Out[1]= {2, 4, 6, 8}
-```
+In[5]:= Take[Range[10], {2, 8, 2}]
+Out[5]= {2, 4, 6, 8}
 
-```mathematica
-In[1]:= Take[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, 2, 2]
-Out[1]= {{1, 2}, {4, 5}}
-```
+In[6]:= Take[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, 2, 2]
+Out[6]= {{1, 2}, {4, 5}}
 
-```mathematica
-In[1]:= Take[Table[Fibonacci[n], {n, 1, 15}], {3, 15, 3}]
-Out[1]= {2, 8, 34, 144, 610}
+In[7]:= Take[Table[Fibonacci[n], {n, 1, 15}], {3, 15, 3}]
+Out[7]= {2, 8, 34, 144, 610}
 ```
 
 ## Performance
@@ -94,11 +86,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `NHoldRest`, `Protected`.
 
-## See also
-
-[First](../../data-structures/First/), [Last](../../data-structures/Last/), [Rest](../../data-structures/Rest/), [Most](../../data-structures/Most/), [Drop](../../data-structures/Drop/)
-
 ## References
+
+**See also:** [First](../../data-structures/First/), [Last](../../data-structures/Last/), [Rest](../../data-structures/Rest/), [Most](../../data-structures/Most/), [Drop](../../data-structures/Drop/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

@@ -36,21 +36,17 @@ Out[3]= {525, 332, 263, 227, 204, 187, 175, 166, 158, 152, 147, 142, 138, 135, 1
 ### Applications (4)
 
 ```mathematica
-In[1]:= IntegerLength[12345]
-Out[1]= 5
-```
+In[4]:= IntegerLength[12345]
+Out[4]= 5
 
-```mathematica
-In[1]:= IntegerLength[2^1000]
-Out[1]= 302
-```
+In[5]:= IntegerLength[2^1000]
+Out[5]= 302
 
-```mathematica
-In[1]:= IntegerLength[2^1000, 2]
-Out[1]= 1001
+In[6]:= IntegerLength[2^1000, 2]
+Out[6]= 1001
 
-In[2]:= IntegerLength[100!]
-Out[2]= 158
+In[7]:= IntegerLength[100!]
+Out[7]= 158
 ```
 
 ## Options & behaviour

@@ -34,29 +34,23 @@ Out[4]= {5, 3, 5, 4}
 ### Applications (6)
 
 ```mathematica
-In[1]:= IntegerDigits[12345]
-Out[1]= {1, 2, 3, 4, 5}
-```
+In[5]:= IntegerDigits[12345]
+Out[5]= {1, 2, 3, 4, 5}
 
-```mathematica
-In[1]:= IntegerDigits[255, 16]
-Out[1]= {15, 15}
+In[6]:= IntegerDigits[255, 16]
+Out[6]= {15, 15}
 
-In[2]:= IntegerDigits[255, 2]
-Out[2]= {1, 1, 1, 1, 1, 1, 1, 1}
+In[7]:= IntegerDigits[255, 2]
+Out[7]= {1, 1, 1, 1, 1, 1, 1, 1}
 
-In[3]:= IntegerDigits[5, 2, 8]
-Out[3]= {0, 0, 0, 0, 0, 1, 0, 1}
-```
+In[8]:= IntegerDigits[5, 2, 8]
+Out[8]= {0, 0, 0, 0, 0, 1, 0, 1}
 
-```mathematica
-In[1]:= Total[IntegerDigits[2^100]]
-Out[1]= 115
-```
+In[9]:= Total[IntegerDigits[2^100]]
+Out[9]= 115
 
-```mathematica
-In[1]:= IntegerDigits[100!, 10][[1 ;; 5]]
-Out[1]= {9, 3, 3, 2, 6}
+In[10]:= IntegerDigits[100!, 10][[1 ;; 5]]
+Out[10]= {9, 3, 3, 2, 6}
 ```
 
 ## Options & behaviour

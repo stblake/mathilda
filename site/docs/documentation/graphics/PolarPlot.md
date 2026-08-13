@@ -50,11 +50,9 @@ HoldAll: r and the iterator are unevaluated on entry, exactly like ParametricPlo
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/), [ParametricPlot](../../graphics/ParametricPlot/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/), [ParametricPlot](../../graphics/ParametricPlot/)
 
 - Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)

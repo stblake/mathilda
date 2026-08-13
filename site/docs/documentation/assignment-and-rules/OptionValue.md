@@ -73,11 +73,9 @@ Memory: every result is freshly built. Sub-expressions taken from `res` or from 
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Options](../../assignment-and-rules/Options/), [SetOptions](../../assignment-and-rules/SetOptions/), [Set](../../assignment-and-rules/Set/), [Hold](../../expression-information/Hold/), [Integrate](../../calculus/Integrate/), [Limit](../../calculus/Limit/), [Series](../../power-series/Series/), [PowerExpand](../../algebra/PowerExpand/)
-
 ## References
+
+**See also:** [Options](../../assignment-and-rules/Options/), [SetOptions](../../assignment-and-rules/SetOptions/), [Set](../../assignment-and-rules/Set/), [Hold](../../expression-information/Hold/), [Integrate](../../calculus/Integrate/), [Limit](../../calculus/Limit/), [Series](../../power-series/Series/), [PowerExpand](../../algebra/PowerExpand/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)

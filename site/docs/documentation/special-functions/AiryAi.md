@@ -35,28 +35,20 @@ Out[2]= 0.0470362
 ### Applications (5)
 
 ```mathematica
-In[1]:= AiryAi[0]
-Out[1]= 1/(3^(2/3) Gamma[2/3])
-```
+In[3]:= AiryAi[0]
+Out[3]= 1/(3^(2/3) Gamma[2/3])
 
-```mathematica
-In[1]:= N[AiryAi[1], 40]
-Out[1]= 0.13529241631288141552414742351546630617494
-```
+In[4]:= N[AiryAi[1], 40]
+Out[4]= 0.13529241631288141552414742351546630617494
 
-```mathematica
-In[1]:= D[AiryAi[z], {z, 2}]
-Out[1]= z AiryAi[z]
-```
+In[5]:= D[AiryAi[z], {z, 2}]
+Out[5]= z AiryAi[z]
 
-```mathematica
-In[1]:= Series[AiryAi[z], {z, 0, 4}]
-Out[1]= 1/(3^(2/3) Gamma[2/3]) + -1/(3^(1/3) Gamma[1/3]) z + 1/6/(3^(2/3) Gamma[2/3]) z^3 + -1/12/(3^(1/3) Gamma[1/3]) z^4 + O[z]^5
-```
+In[6]:= Series[AiryAi[z], {z, 0, 4}]
+Out[6]= 1/(3^(2/3) Gamma[2/3]) + -1/(3^(1/3) Gamma[1/3]) z + 1/6/(3^(2/3) Gamma[2/3]) z^3 + -1/12/(3^(1/3) Gamma[1/3]) z^4 + O[z]^5
 
-```mathematica
-In[1]:= N[AiryAi[2] AiryBiPrime[2] - AiryAiPrime[2] AiryBi[2], 30]
-Out[1]= 0.3183098861837906715377675267449
+In[7]:= N[AiryAi[2] AiryBiPrime[2] - AiryAiPrime[2] AiryBi[2], 30]
+Out[7]= 0.3183098861837906715377675267449
 ```
 
 ## Algorithm
@@ -118,11 +110,9 @@ Attributes (both heads): Listable, NumericFunction, Protected, ReadProtected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
 
-## See also
-
-[Erf](../../special-functions/Erf/), [N](../../arithmetic/N/), [AiryAiPrime](../../other-advanced/AiryAiPrime/)
-
 ## References
+
+**See also:** [Erf](../../special-functions/Erf/), [N](../../arithmetic/N/), [AiryAiPrime](../../other-advanced/AiryAiPrime/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

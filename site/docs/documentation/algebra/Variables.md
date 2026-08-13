@@ -36,30 +36,20 @@ Out[3]= {}
 ### Applications (5)
 
 ```mathematica
-In[1]:= Variables[x^2 + y z]
-Out[1]= {x, y, z}
-```
+In[4]:= Variables[x^2 + y z]
+Out[4]= {x, y, z}
 
-```mathematica
-In[1]:= Variables[a x^2 + b x + c]
-Out[1]= {a, b, c, x}
-```
+In[5]:= Variables[a x^2 + b x + c]
+Out[5]= {a, b, c, x}
 
-```mathematica
-In[1]:= Variables[Sin[x] + y]
-Out[1]= {Sin[x], y}
-```
+In[6]:= Variables[Sin[x] + y]
+Out[6]= {Sin[x], y}
 
-```mathematica
-In[1]:= Variables[x^2 + 3 x + 2]
-Out[1]= {x}
-```
+In[7]:= Variables[x^2 + 3 x + 2]
+Out[7]= {x}
 
-Fractional powers are treated as polynomial generators in their own right, so each radical base contributes its variable:
-
-```mathematica
-In[1]:= Variables[x^(1/2) + y^(2/3)]
-Out[1]= {x, y}
+In[8]:= Variables[x^(1/2) + y^(2/3)]
+Out[8]= {x, y}
 ```
 
 ## Implementation notes
@@ -78,11 +68,9 @@ input is treated as a polynomial/rational expression.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/), [List](../../other-advanced/List/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [I](../../mathematical-constants/I/)
-
 ## References
+
+**See also:** [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/), [List](../../other-advanced/List/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [I](../../mathematical-constants/I/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 3 (multivariate polynomial representation and variable sets).
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)

@@ -52,28 +52,20 @@ Out[7]= MultiplicativeOrder[10, 22]
 ### Applications (5)
 
 ```mathematica
-In[1]:= MultiplicativeOrder[2, 7]
-Out[1]= 3
-```
+In[8]:= MultiplicativeOrder[2, 7]
+Out[8]= 3
 
-```mathematica
-In[1]:= MultiplicativeOrder[10, 7]
-Out[1]= 6
-```
+In[9]:= MultiplicativeOrder[10, 7]
+Out[9]= 6
 
-```mathematica
-In[1]:= MultiplicativeOrder[7, 1000000007]
-Out[1]= 500000003
-```
+In[10]:= MultiplicativeOrder[7, 1000000007]
+Out[10]= 500000003
 
-```mathematica
-In[1]:= MultiplicativeOrder[3, 998244353]
-Out[1]= 998244352
-```
+In[11]:= MultiplicativeOrder[3, 998244353]
+Out[11]= 998244352
 
-```mathematica
-In[1]:= MultiplicativeOrder[2, 11, {1, 10}]
-Out[1]= 5
+In[12]:= MultiplicativeOrder[2, 11, {1, 10}]
+Out[12]= 5
 ```
 
 ## Implementation notes
@@ -105,11 +97,9 @@ Out[1]= 5
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Complex](../../arithmetic/Complex/), [Rational](../../arithmetic/Rational/)
-
 ## References
+
+**See also:** [Complex](../../arithmetic/Complex/), [Rational](../../arithmetic/Rational/)
 
 - Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)

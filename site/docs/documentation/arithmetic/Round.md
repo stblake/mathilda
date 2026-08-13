@@ -38,21 +38,15 @@ Out[3]= 15
 
 In[4]:= Round[{1.4, 2.5, 3.6}]
 Out[4]= {1, 2, 4}
-```
 
-```mathematica
-In[1]:= Round[2.5] + Round[3.5] + Round[4.5]
-Out[1]= 10
-```
+In[5]:= Round[2.5] + Round[3.5] + Round[4.5]
+Out[5]= 10
 
-```mathematica
-In[1]:= Round[GoldenRatio, 1/100]
-Out[1]= 81/50
-```
+In[6]:= Round[GoldenRatio, 1/100]
+Out[6]= 81/50
 
-```mathematica
-In[1]:= Round[N[Pi, 40], 1/10^20]
-Out[1]= 157079632679489661923/50000000000000000000
+In[7]:= Round[N[Pi, 40], 1/10^20]
+Out[7]= 157079632679489661923/50000000000000000000
 ```
 
 ## Performance

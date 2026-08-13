@@ -27,29 +27,23 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= N[EulerGamma]
 Out[1]= 0.577216
-```
 
-```mathematica
-In[1]:= N[EulerGamma, 50]
-Out[1]= 0.577215664901532860606512090082402431042159335939923
-```
+In[2]:= N[EulerGamma, 50]
+Out[2]= 0.577215664901532860606512090082402431042159335939923
 
-```mathematica
-In[1]:= D[EulerGamma, x]
-Out[1]= 0
+In[3]:= D[EulerGamma, x]
+Out[3]= 0
 
-In[2]:= NumericQ[EulerGamma]
-Out[2]= True
-```
+In[4]:= NumericQ[EulerGamma]
+Out[4]= True
 
-```mathematica
-In[1]:= N[Gamma[1/2] + EulerGamma, 30]
-Out[1]= 2.349669515807048887904679573425
+In[5]:= N[Gamma[1/2] + EulerGamma, 30]
+Out[5]= 2.349669515807048887904679573425
 ```
 
 ## Options & behaviour
 
-The constant value lives in the central numeric constant table (`src/numeric.c`);
+The constant value lives in the central numeric constant table (`src/numeric.c`)
 the symbol's identity (attributes) is registered in `src/special_functions/eulergamma.c`.
 
 ## Implementation notes

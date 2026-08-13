@@ -46,39 +46,23 @@ Out[3]= {Plus, Power, x, 2, x^2, Power, y, 3, y^3}
 ### Applications (6)
 
 ```mathematica
-In[1]:= Level[a + b c, {1}]
-Out[1]= {a, b c}
-```
+In[4]:= Level[a + b c, {1}]
+Out[4]= {a, b c}
 
-Level `{2}` reaches one step deeper, into the factors of `b c`:
+In[5]:= Level[a + b c, {2}]
+Out[5]= {b, c}
 
-```mathematica
-In[1]:= Level[a + b c, {2}]
-Out[1]= {b, c}
-```
+In[6]:= Level[f[g[h[x]]], {-1}]
+Out[6]= {x}
 
-`{-1}` extracts the atomic leaves; `{-2}` the parts of depth two:
+In[7]:= Level[(1 + x)^2 + y, {-2}]
+Out[7]= {1 + x}
 
-```mathematica
-In[1]:= Level[f[g[h[x]]], {-1}]
-Out[1]= {x}
+In[8]:= Level[{{a, b}, {c, {d, e}}}, Infinity]
+Out[8]= {a, b, {a, b}, c, d, e, {d, e}, {c, {d, e}}}
 
-In[2]:= Level[(1 + x)^2 + y, {-2}]
-Out[2]= {1 + x}
-```
-
-A full depth-first walk traverses subexpressions in lexicographic index order:
-
-```mathematica
-In[1]:= Level[{{a, b}, {c, {d, e}}}, Infinity]
-Out[1]= {a, b, {a, b}, c, d, e, {d, e}, {c, {d, e}}}
-```
-
-With `Heads -> True`, the head of each expression and its parts are included:
-
-```mathematica
-In[1]:= Level[f[g[x], y], 2, Heads -> True]
-Out[1]= {f, g, x, g[x], y}
+In[9]:= Level[f[g[x], y], 2, Heads -> True]
+Out[9]= {f, g, x, g[x], y}
 ```
 
 ## Implementation notes

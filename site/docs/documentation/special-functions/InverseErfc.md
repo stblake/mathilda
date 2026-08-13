@@ -27,34 +27,18 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= InverseErfc[1]
 Out[1]= 0
-```
 
-The endpoints of the domain `[0, 2]` are the infinities, with `InverseErfc[2] = -Infinity`:
+In[2]:= InverseErfc[2]
+Out[2]= -Infinity
 
-```mathematica
-In[1]:= InverseErfc[2]
-Out[1]= -Infinity
-```
+In[3]:= N[InverseErfc[1/1000000], 40]
+Out[3]= 3.4589107372795000221509276359575695199155
 
-High-precision evaluation, useful for tail quantiles where `Erf` underflows:
+In[4]:= D[InverseErfc[z], z]
+Out[4]= -1/2 Sqrt[Pi] E^InverseErfc[z]^2
 
-```mathematica
-In[1]:= N[InverseErfc[1/1000000], 40]
-Out[1]= 3.4589107372795000221509276359575695199155
-```
-
-The derivative is closed-form, `D[InverseErfc[z], z] == -(Sqrt[Pi]/2) E^(InverseErfc[z]^2)`:
-
-```mathematica
-In[1]:= D[InverseErfc[z], z]
-Out[1]= -1/2 Sqrt[Pi] E^InverseErfc[z]^2
-```
-
-The reflection identity `InverseErf[1 - s] == InverseErfc[s]` is recognised symbolically:
-
-```mathematica
-In[1]:= InverseErf[1 - 3/10] == InverseErfc[3/10]
-Out[1]= True
+In[5]:= InverseErf[1 - 3/10] == InverseErfc[3/10]
+Out[5]= True
 ```
 
 ## Algorithm
@@ -116,11 +100,9 @@ Attributes: Listable, NumericFunction, Protected.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[InverseErf](../../special-functions/InverseErf/), [D](../../calculus/D/)
-
 ## References
+
+**See also:** [InverseErf](../../special-functions/InverseErf/), [D](../../calculus/D/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

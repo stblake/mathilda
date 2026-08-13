@@ -22,11 +22,9 @@ Out[2]= 9
 
 In[3]:= x
 Out[3]= 10
-```
 
-```mathematica
-In[1]:= Block[{n = 5}, Sum[k, {k, 1, n}]]
-Out[1]= 15
+In[4]:= Block[{n = 5}, Sum[k, {k, 1, n}]]
+Out[4]= 15
 ```
 
 ## Implementation notes
@@ -43,11 +41,9 @@ The body is then `evaluate`d directly — any reference to `x` anywhere in the c
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/)
 
 - Source: [`src/modular.c`](https://github.com/stblake/mathilda/blob/main/src/modular.c)
 - Specification: [`docs/spec/builtins/scoping-constructs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/scoping-constructs.md)

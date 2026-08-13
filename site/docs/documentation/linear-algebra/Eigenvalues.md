@@ -49,33 +49,23 @@ Out[2]= {3.73205}
 ### Applications (6)
 
 ```mathematica
-In[1]:= Eigenvalues[{{2, 1}, {0, 3}}]
-Out[1]= {3, 2}
-```
+In[3]:= Eigenvalues[{{2, 1}, {0, 3}}]
+Out[3]= {3, 2}
 
-```mathematica
-In[1]:= Eigenvalues[{{2, 0}, {0, 5}}]
-Out[1]= {5, 2}
-```
+In[4]:= Eigenvalues[{{2, 0}, {0, 5}}]
+Out[4]= {5, 2}
 
-```mathematica
-In[1]:= Eigenvalues[{{0, 1}, {-1, 0}}]
-Out[1]= {-I, I}
-```
+In[5]:= Eigenvalues[{{0, 1}, {-1, 0}}]
+Out[5]= {-I, I}
 
-```mathematica
-In[1]:= Eigenvalues[{{a, b}, {c, d}}]
-Out[1]= {1/2 (a + d + Sqrt[(-a - d)^2 - 4 (-b c + a d)]), 1/2 (a + d - Sqrt[(-a - d)^2 - 4 (-b c + a d)])}
-```
+In[6]:= Eigenvalues[{{a, b}, {c, d}}]
+Out[6]= {1/2 (a + d + Sqrt[(-a - d)^2 - 4 (-b c + a d)]), 1/2 (a + d - Sqrt[(-a - d)^2 - 4 (-b c + a d)])}
 
-```mathematica
-In[1]:= Eigenvalues[{{0, 1, 0}, {0, 0, 1}, {1, 0, 0}}]
-Out[1]= {1, -(-1)^(1/3), (-1)^(2/3)}
-```
+In[7]:= Eigenvalues[{{0, 1, 0}, {0, 0, 1}, {1, 0, 0}}]
+Out[7]= {1, -(-1)^(1/3), (-1)^(2/3)}
 
-```mathematica
-In[1]:= Eigenvalues[{{5, 4, 2}, {4, 5, 2}, {2, 2, 2}}]
-Out[1]= {10, 1, 1}
+In[8]:= Eigenvalues[{{5, 4, 2}, {4, 5, 2}, {2, 2, 2}}]
+Out[8]= {10, 1, 1}
 ```
 
 ## Options & behaviour
@@ -161,11 +151,9 @@ returns *some* sensible answer — at worst the full Direct spectrum.
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Solve](../../solutions-of-equations/Solve/)
-
 ## References
+
+**See also:** [Solve](../../solutions-of-equations/Solve/)
 
 - G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — the symmetric and unsymmetric eigenvalue problems.
 - L. N. Trefethen and D. Bau III, *Numerical Linear Algebra*, SIAM, 1997 — eigenvalue algorithms and the QR iteration.

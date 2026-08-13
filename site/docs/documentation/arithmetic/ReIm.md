@@ -16,25 +16,15 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= ReIm[3 + 4 I]
 Out[1]= {3, 4}
-```
 
-It splits exact powers and quotients into their real/imaginary components —
-`(2 + I)^3 = 2 + 11 I`, and a complex division reduces to integers:
+In[2]:= ReIm[(2 + I)^3]
+Out[2]= {2, 11}
 
-```mathematica
-In[1]:= ReIm[(2 + I)^3]
-Out[1]= {2, 11}
+In[3]:= ReIm[(3 + 4 I)/(1 - 2 I)]
+Out[3]= {-1, 2}
 
-In[2]:= ReIm[(3 + 4 I)/(1 - 2 I)]
-Out[2]= {-1, 2}
-```
-
-On a transcendental argument it returns the numeric pair — here Euler's formula
-`e^(iπ/4)` to 20 digits, the real and imaginary parts each `1/√2`:
-
-```mathematica
-In[1]:= ReIm[N[E^(I Pi/4), 20]]
-Out[1]= {0.707106781186547524409, 0.707106781186547524395}
+In[4]:= ReIm[N[E^(I Pi/4), 20]]
+Out[4]= {0.707106781186547524409, 0.707106781186547524395}
 ```
 
 ## Implementation notes
@@ -43,11 +33,9 @@ Out[1]= {0.707106781186547524409, 0.707106781186547524395}
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## See also
-
-[Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [Abs](../../arithmetic/Abs/), [Sign](../../arithmetic/Sign/), [Conjugate](../../arithmetic/Conjugate/), [Arg](../../arithmetic/Arg/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
-
 ## References
+
+**See also:** [Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [Abs](../../arithmetic/Abs/), [Sign](../../arithmetic/Sign/), [Conjugate](../../arithmetic/Conjugate/), [Arg](../../arithmetic/Arg/), [Rational](../../arithmetic/Rational/), [Complex](../../arithmetic/Complex/)
 
 - Source: [`src/complex.c`](https://github.com/stblake/mathilda/blob/main/src/complex.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

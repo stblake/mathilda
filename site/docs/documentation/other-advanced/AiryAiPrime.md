@@ -27,21 +27,15 @@ Every input below was run against the current Mathilda build and its output reco
 ```mathematica
 In[1]:= AiryAiPrime[0]
 Out[1]= -1/(3^(1/3) Gamma[1/3])
-```
 
-```mathematica
-In[1]:= N[AiryAiPrime[0], 40]
-Out[1]= -0.25881940379280679840518356018920396347907
-```
+In[2]:= N[AiryAiPrime[0], 40]
+Out[2]= -0.25881940379280679840518356018920396347907
 
-```mathematica
-In[1]:= D[AiryAiPrime[z], z]
-Out[1]= z AiryAi[z]
-```
+In[3]:= D[AiryAiPrime[z], z]
+Out[3]= z AiryAi[z]
 
-```mathematica
-In[1]:= AiryAiPrime[1.0 + 1.0 I]
-Out[1]= -0.130628 + 0.163068*I
+In[4]:= AiryAiPrime[1.0 + 1.0 I]
+Out[4]= -0.130628 + 0.163068*I
 ```
 
 ## Algorithm

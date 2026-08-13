@@ -40,37 +40,23 @@ Out[6]= 742174169206529574
 ### Applications (6)
 
 ```mathematica
-In[1]:= PowerMod[3, 1000000, 7]
-Out[1]= 4
-```
+In[7]:= PowerMod[3, 1000000, 7]
+Out[7]= 4
 
-```mathematica
-In[1]:= PowerMod[2, 100, 101]
-Out[1]= 1
-```
+In[8]:= PowerMod[2, 100, 101]
+Out[8]= 1
 
-```mathematica
-In[1]:= PowerMod[7, -1, 11]
-Out[1]= 8
-```
+In[9]:= PowerMod[7, -1, 11]
+Out[9]= 8
 
-```mathematica
-In[1]:= PowerMod[2, -1, 4]
-Out[1]= PowerMod[2, -1, 4]
-```
+In[10]:= PowerMod[2, -1, 4]
+Out[10]= PowerMod[2, -1, 4]
 
-A fractional exponent requests a modular root; `PowerMod[2, 1/2, 7] = 3` because `3^2 = 9 ≡ 2 (mod 7)`:
+In[11]:= PowerMod[2, 1/2, 7]
+Out[11]= 3
 
-```mathematica
-In[1]:= PowerMod[2, 1/2, 7]
-Out[1]= 3
-```
-
-The extended Euclidean inverse scales to large prime moduli, here inverting 17 modulo the prime `10^9 + 7`:
-
-```mathematica
-In[1]:= PowerMod[17, -1, 10^9 + 7]
-Out[1]= 352941179
+In[12]:= PowerMod[17, -1, 10^9 + 7]
+Out[12]= 352941179
 ```
 
 ## Options & behaviour

@@ -30,11 +30,9 @@ variant that writes the result back to a symbol's OwnValue.)
 
 **Attributes:** none registered.
 
-## See also
-
-[Append](../../data-structures/Append/), [AssociateTo](../../data-structures/AssociateTo/)
-
 ## References
+
+**See also:** [Append](../../data-structures/Append/), [AssociateTo](../../data-structures/AssociateTo/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)

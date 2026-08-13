@@ -51,11 +51,9 @@ Out[4]= {1.9, 3.4, 7.6}
 
 **Attributes:** `Flat`, `OneIdentity`, `Protected`.
 
-## See also
-
-[Flat](../../expression-information/Flat/), [OneIdentity](../../expression-information/OneIdentity/), [List](../../other-advanced/List/)
-
 ## References
+
+**See also:** [Flat](../../expression-information/Flat/), [OneIdentity](../../expression-information/OneIdentity/), [List](../../other-advanced/List/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

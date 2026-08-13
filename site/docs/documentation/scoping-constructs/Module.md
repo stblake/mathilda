@@ -24,28 +24,20 @@ Out[2]= 1
 ### Applications (5)
 
 ```mathematica
-In[1]:= Module[{x = 5}, x^2 + 1]
-Out[1]= 26
-```
+In[3]:= Module[{x = 5}, x^2 + 1]
+Out[3]= 26
 
-```mathematica
-In[1]:= Module[{a = 2, b = 3}, a*b + a + b]
-Out[1]= 11
-```
+In[4]:= Module[{a = 2, b = 3}, a*b + a + b]
+Out[4]= 11
 
-```mathematica
-In[1]:= f[n_] := Module[{s = 0}, s = n^2 + n; s]; f[4]
-Out[1]= 20
-```
+In[5]:= f[n_] := Module[{s = 0}, s = n^2 + n; s]; f[4]
+Out[5]= 20
 
-```mathematica
-In[1]:= g[n_] := Module[{f}, f[0] = 1; f[k_] := k*f[k - 1]; f[n]]; g[6]
-Out[1]= 720
-```
+In[6]:= g[n_] := Module[{f}, f[0] = 1; f[k_] := k*f[k - 1]; f[n]]; g[6]
+Out[6]= 720
 
-```mathematica
-In[1]:= Module[{x = 1}, Do[x = x + 1/x, {5}]; x]
-Out[1]= 969581/272890
+In[7]:= Module[{x = 1}, Do[x = x + 1/x, {5}]; x]
+Out[7]= 969581/272890
 ```
 
 ## Performance
@@ -74,11 +66,9 @@ The rename is applied to the body by `substitute_scoping`, a recursive tree walk
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[HoldAll](../../expression-information/HoldAll/)
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/)
 
 - Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §3.1 (local state and lexical scoping).
 - Source: [`src/modular.c`](https://github.com/stblake/mathilda/blob/main/src/modular.c)

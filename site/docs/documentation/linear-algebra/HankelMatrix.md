@@ -44,32 +44,17 @@ Out[5]= {{1.0, 2.0, 3.0}, {2.0, 3.0, 0.0}, {3.0, 0.0, 0.0}}
 ### Applications (4)
 
 ```mathematica
-In[1]:= HankelMatrix[3]
-Out[1]= {{1, 2, 3}, {2, 3, 0}, {3, 0, 0}}
-```
+In[6]:= HankelMatrix[3]
+Out[6]= {{1, 2, 3}, {2, 3, 0}, {3, 0, 0}}
 
-Give an explicit first column; the matrix is constant along every
-antidiagonal and zero-padded below the secondary diagonal:
+In[7]:= HankelMatrix[{a, b, c}]
+Out[7]= {{a, b, c}, {b, c, 0}, {c, 0, 0}}
 
-```mathematica
-In[1]:= HankelMatrix[{a, b, c}]
-Out[1]= {{a, b, c}, {b, c, 0}, {c, 0, 0}}
-```
+In[8]:= HankelMatrix[{1, 2, 3, 4}, {4, 5, 6}]
+Out[8]= {{1, 2, 3}, {2, 3, 4}, {3, 4, 5}, {4, 5, 6}}
 
-A first column plus a last row builds a rectangular catalecticant — here the
-shared corner is taken from the column:
-
-```mathematica
-In[1]:= HankelMatrix[{1, 2, 3, 4}, {4, 5, 6}]
-Out[1]= {{1, 2, 3}, {2, 3, 4}, {3, 4, 5}, {4, 5, 6}}
-```
-
-Hankel determinants encode sequence properties. The catalecticant of the
-Fibonacci numbers is a perfect power of 2:
-
-```mathematica
-In[1]:= Det[HankelMatrix[{1, 1, 2, 3, 5, 8}]]
-Out[1]= -262144
+In[9]:= Det[HankelMatrix[{1, 1, 2, 3, 5, 8}]]
+Out[9]= -262144
 ```
 
 ## Options & behaviour
@@ -141,11 +126,9 @@ Diagnostics mirror Wolfram's surface text:
 
 **Attributes:** `Protected`.
 
-## See also
-
-[N](../../arithmetic/N/)
-
 ## References
+
+**See also:** [N](../../arithmetic/N/)
 
 - Source: [`src/linalg/hankelmat.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/hankelmat.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

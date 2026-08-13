@@ -31,29 +31,21 @@ Out[2]= {1, 1/2, -1}
 
 In[3]:= Cos[ArcCos[x]]
 Out[3]= x
-```
 
-```mathematica
-In[1]:= Cos[Pi/12]
-Out[1]= 1/4 (Sqrt[2] + Sqrt[6])
+In[4]:= Cos[Pi/12]
+Out[4]= 1/4 (Sqrt[2] + Sqrt[6])
 
-In[2]:= Cos[Pi/5]
-Out[2]= 1/4 (1 + Sqrt[5])
-```
+In[5]:= Cos[Pi/5]
+Out[5]= 1/4 (1 + Sqrt[5])
 
-```mathematica
-In[1]:= TrigExpand[Cos[a + b]]
-Out[1]= Cos[a] Cos[b] - Sin[a] Sin[b]
-```
+In[6]:= TrigExpand[Cos[a + b]]
+Out[6]= Cos[a] Cos[b] - Sin[a] Sin[b]
 
-```mathematica
-In[1]:= Series[Cos[x], {x, 0, 8}]
-Out[1]= 1 - 1/2 x^2 + 1/24 x^4 - 1/720 x^6 + 1/40320 x^8 + O[x]^9
-```
+In[7]:= Series[Cos[x], {x, 0, 8}]
+Out[7]= 1 - 1/2 x^2 + 1/24 x^4 - 1/720 x^6 + 1/40320 x^8 + O[x]^9
 
-```mathematica
-In[1]:= N[Cos[1], 40]
-Out[1]= 0.54030230586813971740093660744297660373228
+In[8]:= N[Cos[1], 40]
+Out[8]= 0.54030230586813971740093660744297660373228
 ```
 
 ## Performance

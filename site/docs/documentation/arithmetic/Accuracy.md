@@ -24,19 +24,15 @@ Out[2]= Infinity
 
 In[3]:= Accuracy[N[Pi, 30]]
 Out[3]= 29.6058
-```
 
-```mathematica
-In[1]:= Accuracy[N[10^20, 30]]
-Out[1]= 10.103
+In[4]:= Accuracy[N[10^20, 30]]
+Out[4]= 10.103
 
-In[2]:= Accuracy[N[1/10^20, 30]]
-Out[2]= 50.103
-```
+In[5]:= Accuracy[N[1/10^20, 30]]
+Out[5]= 50.103
 
-```mathematica
-In[1]:= Accuracy[0.]
-Out[1]= 323.607
+In[6]:= Accuracy[0.]
+Out[6]= 323.607
 ```
 
 ## Implementation notes

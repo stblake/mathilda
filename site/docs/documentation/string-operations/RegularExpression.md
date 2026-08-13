@@ -52,11 +52,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Protected`.
 
-## See also
-
-[StringMatchQ](../../string-operations/StringMatchQ/), [StringCases](../../string-operations/StringCases/), [StringReplace](../../string-operations/StringReplace/), [StringSplit](../../string-operations/StringSplit/)
-
 ## References
+
+**See also:** [StringMatchQ](../../string-operations/StringMatchQ/), [StringCases](../../string-operations/StringCases/), [StringReplace](../../string-operations/StringReplace/), [StringSplit](../../string-operations/StringSplit/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)

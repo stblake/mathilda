@@ -53,33 +53,23 @@ Out[6]= {-4, 9/2}
 ### Applications (6)
 
 ```mathematica
-In[1]:= LinearSolve[{{1, 2}, {3, 4}}, {5, 6}]
-Out[1]= {-4, 9/2}
-```
+In[7]:= LinearSolve[{{1, 2}, {3, 4}}, {5, 6}]
+Out[7]= {-4, 9/2}
 
-```mathematica
-In[1]:= LinearSolve[{{2, 0}, {0, 4}}, {6, 8}]
-Out[1]= {3, 2}
-```
+In[8]:= LinearSolve[{{2, 0}, {0, 4}}, {6, 8}]
+Out[8]= {3, 2}
 
-```mathematica
-In[1]:= LinearSolve[{{1, 1, 1}, {1, 2, 4}, {1, 3, 9}}, {a, b, c}]
-Out[1]= {3 a - 3 b + c, -5/2 a + 4 b - 3/2 c, 1/2 a - b + 1/2 c}
-```
+In[9]:= LinearSolve[{{1, 1, 1}, {1, 2, 4}, {1, 3, 9}}, {a, b, c}]
+Out[9]= {3 a - 3 b + c, -5/2 a + 4 b - 3/2 c, 1/2 a - b + 1/2 c}
 
-```mathematica
-In[1]:= LinearSolve[{{1, c}, {c, 1}}, {1, 0}]
-Out[1]= {1/(1 - c^2), -c/(1 - c^2)}
-```
+In[10]:= LinearSolve[{{1, c}, {c, 1}}, {1, 0}]
+Out[10]= {1/(1 - c^2), -c/(1 - c^2)}
 
-```mathematica
-In[1]:= LinearSolve[{{1, 2}, {3, 4}}, {{1, 0}, {0, 1}}]
-Out[1]= {{-2, 1}, {3/2, -1/2}}
-```
+In[11]:= LinearSolve[{{1, 2}, {3, 4}}, {{1, 0}, {0, 1}}]
+Out[11]= {{-2, 1}, {3/2, -1/2}}
 
-```mathematica
-In[1]:= LinearSolve[{{1, 2}, {2, 4}}, {1, 3}]
-Out[1]= LinearSolve[{{1, 2}, {2, 4}}, {1, 3}]
+In[12]:= LinearSolve[{{1, 2}, {2, 4}}, {1, 3}]
+Out[12]= LinearSolve[{{1, 2}, {2, 4}}, {1, 3}]
 ```
 
 ## Algorithm
@@ -170,11 +160,9 @@ The RHS shape is normalised: a rank-1 `b` against a rank-2 `m` returns a flat so
 
 **Attributes:** `Protected`.
 
-## See also
-
-[Solve](../../solutions-of-equations/Solve/), [RowReduce](../../linear-algebra/RowReduce/), [Inverse](../../linear-algebra/Inverse/), [Together](../../algebra/Together/)
-
 ## References
+
+**See also:** [Solve](../../solutions-of-equations/Solve/), [RowReduce](../../linear-algebra/RowReduce/), [Inverse](../../linear-algebra/Inverse/), [Together](../../algebra/Together/)
 
 - G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — solving linear systems by Gaussian elimination.
 - L. N. Trefethen and D. Bau III, *Numerical Linear Algebra*, SIAM, 1997 — LU factorisation and triangular solves.

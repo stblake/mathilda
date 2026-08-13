@@ -35,35 +35,23 @@ Out[2]= 1/2 (BesselJ[-1 + n, x] - BesselJ[1 + n, x])
 ### Applications (6)
 
 ```mathematica
-In[1]:= BesselJ[0, 0]
-Out[1]= 1
+In[3]:= BesselJ[0, 0]
+Out[3]= 1
 
-In[2]:= BesselJ[1, 0]
-Out[2]= 0
-```
+In[4]:= BesselJ[1, 0]
+Out[4]= 0
 
-Half-integer orders close in elementary functions:
+In[5]:= BesselJ[1/2, z]
+Out[5]= Sin[z] Sqrt[2/(Pi z)]
 
-```mathematica
-In[1]:= BesselJ[1/2, z]
-Out[1]= Sin[z] Sqrt[2/(Pi z)]
-```
+In[6]:= Series[BesselJ[0, x], {x, 0, 6}]
+Out[6]= 1 - 1/4 x^2 + 1/64 x^4 - 1/2304 x^6 + O[x]^7
 
-The Frobenius series at the origin:
+In[7]:= N[BesselJ[0, 1], 40]
+Out[7]= 0.7651976865579665514497175261026632209093
 
-```mathematica
-In[1]:= Series[BesselJ[0, x], {x, 0, 6}]
-Out[1]= 1 - 1/4 x^2 + 1/64 x^4 - 1/2304 x^6 + O[x]^7
-```
-
-High-precision and complex evaluation; the first input is `J_0` at its first zero, which numerically returns essentially zero:
-
-```mathematica
-In[1]:= N[BesselJ[0, 1], 40]
-Out[1]= 0.7651976865579665514497175261026632209093
-
-In[2]:= N[BesselJ[0, 10 + 5 I], 30]
-Out[2]= -17.78959112945037151834426180967 + 0.2007116167212048509818027697064*I
+In[8]:= N[BesselJ[0, 10 + 5 I], 30]
+Out[8]= -17.78959112945037151834426180967 + 0.2007116167212048509818027697064*I
 ```
 
 ## Performance
@@ -83,11 +71,9 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
 
-## See also
-
-[BesselY](../../special-functions/BesselY/), [BesselI](../../special-functions/BesselI/), [BesselK](../../special-functions/BesselK/), [N](../../arithmetic/N/), [Gamma](../../special-functions/Gamma/), [SeriesCoefficient](../../power-series/SeriesCoefficient/)
-
 ## References
+
+**See also:** [BesselY](../../special-functions/BesselY/), [BesselI](../../special-functions/BesselI/), [BesselK](../../special-functions/BesselK/), [N](../../arithmetic/N/), [Gamma](../../special-functions/Gamma/), [SeriesCoefficient](../../power-series/SeriesCoefficient/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)

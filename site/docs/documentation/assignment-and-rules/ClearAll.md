@@ -45,11 +45,9 @@ Out[3]= x
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## See also
-
-[Remove](../../assignment-and-rules/Remove/), [Clear](../../assignment-and-rules/Clear/)
-
 ## References
+
+**See also:** [Remove](../../assignment-and-rules/Remove/), [Clear](../../assignment-and-rules/Clear/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)

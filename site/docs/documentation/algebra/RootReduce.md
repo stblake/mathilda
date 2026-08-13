@@ -28,14 +28,24 @@ Out[4]= Root[-1 + 3 #1 + 3 #1^2 + #1^3 &, 1]
 
 In[5]:= RootReduce[Sqrt[2] + Sqrt[3] + Sqrt[5] == Sqrt[10 + 2 Sqrt[15] + 4 Sqrt[4 + Sqrt[15]]]]
 Out[5]= True
+```
 
-In[6]:= RootReduce[1/(1 + k^(1/3))]        (* parametric tower *)
+Parametric tower
+
+```mathematica
+In[6]:= RootReduce[1/(1 + k^(1/3))]
 Out[6]= (1 - k^(1/3) + k^(2/3))/(1 + k)
+```
 
+```mathematica
 In[7]:= RootReduce[(Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]) x^2 + x + 1]
 Out[7]= 1 + x
+```
 
-In[8]:= RootReduce[a x^2 + Sqrt[8] x]      (* thread over coefficients *)
+Thread over coefficients
+
+```mathematica
+In[8]:= RootReduce[a x^2 + Sqrt[8] x]
 Out[8]= 2 Sqrt[2] x + a x^2
 ```
 
@@ -89,11 +99,9 @@ When `expr` carries no algebraic content (or the case is out of scope) it is ret
 
 **Attributes:** `Listable`, `Protected`.
 
-## See also
-
-[Power](../../arithmetic/Power/), [Root](../../solutions-of-equations/Root/), [Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [Cancel](../../algebra/Cancel/), [Equal](../../comparisons/Equal/), [Unequal](../../comparisons/Unequal/), [Less](../../comparisons/Less/)
-
 ## References
+
+**See also:** [Power](../../arithmetic/Power/), [Root](../../solutions-of-equations/Root/), [Re](../../arithmetic/Re/), [Im](../../arithmetic/Im/), [Cancel](../../algebra/Cancel/), [Equal](../../comparisons/Equal/), [Unequal](../../comparisons/Unequal/), [Less](../../comparisons/Less/)
 
 - Source: [`src/rootreduce.c`](https://github.com/stblake/mathilda/blob/main/src/rootreduce.c)
 - Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
