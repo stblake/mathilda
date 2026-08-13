@@ -23,6 +23,9 @@
   export let cell: Cell;
   export let rowId: string;
   export let cellIdx: number;
+  /* Reference pages render their headings as structure: not editable, and a
+     click folds the section rather than placing a caret. */
+  export let headingReadonly = false;
   /** Per-notebook store instance — use store.xxx() for all mutations. */
   export let store: any;
   /** Side-by-side input/output layout (toggled from the focused toolbar) */
@@ -57,6 +60,7 @@
     focusPrev: { id: string };
     focusNext: { id: string };
     register:  { id: string; fn: () => void };
+    headingClick: { rowId: string };
   }>();
 
   $: selected = $selectedCells.has(cell.id);
@@ -243,8 +247,10 @@
       {#if cell.execIdx != null}
         <span class="exec-label">In[{cell.execIdx}]</span>
       {/if}
-    {:else}
-      <!-- Type badge for non-code cells: click to open type picker -->
+    {:else if !headingReadonly}
+      <!-- Type badge for non-code cells: click to open type picker. Hidden in a
+           reference page, where the cell types are the page's structure and not
+           the reader's to change. -->
       <div class="type-badge-wrap">
         <button class="type-badge" on:click|stopPropagation={() => showTypePicker = !showTypePicker} title="Change cell type">
           {TYPES.find(t => t.id === cell.type)?.icon ?? 'T'}
@@ -315,11 +321,12 @@
       <h1
         id={headingId}
         class="heading-cell"
-        contenteditable="true"
+        class:heading-static={headingReadonly}
+        contenteditable={!headingReadonly}
         bind:this={proseEl}
         on:input={onTextInput}
         on:keydown={onProseKeydown}
-        on:click|stopPropagation
+        on:click|stopPropagation={() => headingReadonly && dispatch('headingClick', { rowId })}
       ></h1>
 
     {:else if cell.type === 'ref'}
@@ -331,11 +338,12 @@
       <h2
         id={headingId}
         class="heading-cell"
-        contenteditable="true"
+        class:heading-static={headingReadonly}
+        contenteditable={!headingReadonly}
         bind:this={proseEl}
         on:input={onTextInput}
         on:keydown={onProseKeydown}
-        on:click|stopPropagation
+        on:click|stopPropagation={() => headingReadonly && dispatch('headingClick', { rowId })}
       ></h2>
     {/if}
   </div>
@@ -512,6 +520,14 @@
     text-align: left;
     white-space: pre-wrap;
   }
+  /* A documentation heading: not a text field, and its whole width is the
+     fold control, so the pointer says so. */
+  .heading-static {
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
   .heading-cell {
     padding: 6px 8px;
     margin: 0;
@@ -523,8 +539,24 @@
     background: transparent;
     width: 100%;
   }
-  h1.heading-cell { font-size: 1.15rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.3rem; }
-  h2.heading-cell { font-size: 1.0rem; }
+  /* Section and subsection have to read as different levels, not as two sizes
+     of the same thing: a section is a full-strength heading with a rule under
+     it, a subsection is smaller, lighter and dimmer so it clearly sits inside
+     one. They previously differed by 0.15rem and nothing else. */
+  h1.heading-cell {
+    font-size: 1.12rem;
+    font-weight: 700;
+    color: var(--text-h, #cdd6f4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 0.3rem;
+  }
+  h2.heading-cell {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text-dim, #9aa0b4);
+    letter-spacing: 0.02em;
+    padding-top: 2px;
+  }
 
   .out-label {
     font-size: 0.58rem;

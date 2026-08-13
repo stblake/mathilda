@@ -21,11 +21,17 @@
     addNotebookAt,
     setFocused,
     loadStartupContent,
+    setStageOrigin,
   } from './canvas';
 
   // ---------------------------------------------------------------------------
-  // Active notebook — the most recently clicked card renders on top (z-index)
-  let activeNbId: string | null = null;
+  // Active notebook — the most recently clicked card renders on top (z-index).
+  // Held in canvasState so code outside this component can raise a card;
+  // openRefpage does, so a documentation page opens in front of the notebook it
+  // was asked from rather than behind it.
+  function setActive(id: string) {
+    canvasState.update(s => (s.activeId === id ? s : { ...s, activeId: id }));
+  }
 
   // ---------------------------------------------------------------------------
   // Rubber-band selection — drag on empty canvas to select multiple notebooks
@@ -151,9 +157,19 @@
   let canvasEl: HTMLElement;
   let worldEl: HTMLElement;
 
+  /* Publish where the stage sits, so a viewport point (a clicked symbol) can be
+     turned into a canvas coordinate. Re-read on resize because the app bar and
+     window chrome move it. */
+  function publishStageOrigin() {
+    const r = canvasEl?.getBoundingClientRect();
+    if (r) setStageOrigin(r.left, r.top);
+  }
+
   onMount(() => {
     // Seed display values immediately to avoid lerp-from-zero flash
     panX = targetPanX; panY = targetPanY; zoom = targetZoom;
+    publishStageOrigin();
+    window.addEventListener('resize', publishStageOrigin);
     rafId = requestAnimationFrame(animate);
     // Load startup content after a tick to ensure all stores are ready
     setTimeout(() => {
@@ -163,6 +179,7 @@
 
   onDestroy(() => {
     cancelAnimationFrame(rafId);
+    window.removeEventListener('resize', publishStageOrigin);
     unsub();
   });
 
@@ -200,6 +217,21 @@
     return false;
   }
 
+  /* Scroll chaining, gesture-aware.
+   *
+   * A trackpad flick keeps delivering wheel events long after the fingers lift.
+   * Without this, reaching the bottom of a notebook mid-flick handed the rest of
+   * the momentum to the canvas and the view shot away. Native scrolling avoids
+   * that because a scroll gesture is bound to the element it started in.
+   *
+   * Same rule here: events closer together than GESTURE_GAP_MS are one gesture,
+   * and a gesture that has scrolled a card can never pan the canvas -- it stops
+   * dead at the boundary. Pausing ends the gesture, so scrolling again from a
+   * stop does pan, which is how you get out of a card deliberately. */
+  const GESTURE_GAP_MS = 160;
+  let lastWheelAt = 0;
+  let gestureScrolledCard = false;
+
   function onWheel(e: WheelEvent) {
     if (e.ctrlKey) {
       // Pinch: always zoom the canvas (even over cards). Must preventDefault
@@ -225,9 +257,19 @@
       // entirely -- on a card with nothing to scroll the gesture did nothing at
       // all. Focus is the wrong question; scrollability is the right one, and it
       // is what the browser itself uses to chain a scroll to an ancestor.
+      const now = e.timeStamp || performance.now();
+      if (now - lastWheelAt > GESTURE_GAP_MS) gestureScrolledCard = false;  // new gesture
+      lastWheelAt = now;
+
       const overCard = (e.target as HTMLElement).closest('.nb-card');
       if (overCard && canScroll(e.target as HTMLElement, overCard, e.deltaX, e.deltaY)) {
+        gestureScrolledCard = true;
         return;                       // the browser scrolls the card natively
+      }
+      if (gestureScrolledCard) {
+        // Boundary reached mid-flick: absorb the momentum rather than pan.
+        e.preventDefault();
+        return;
       }
       e.preventDefault();
       canvasState.update(s => ({ ...s, panX: s.panX - e.deltaX, panY: s.panY - e.deltaY }));
@@ -378,7 +420,7 @@
       if (wrapper) {
         const nbId = wrapper.getAttribute('data-nb-id');
         if (nbId) {
-          activeNbId = nbId;
+          setActive(nbId);
           if ($canvasState.selectedIds.includes(nbId)) {
             startGroupDrag(e, nbId);
             return;
@@ -553,8 +595,8 @@
         <div
           class="nb-card-wrapper"
           data-nb-id={nb.id}
-          style="left:{nb.x}px;top:{nb.y}px;width:{nb.width}px;z-index:{activeNbId===nb.id?10:1};"
-          on:pointerdown|capture={() => activeNbId = nb.id}
+          style="left:{nb.x}px;top:{nb.y}px;width:{nb.width}px;z-index:{$canvasState.activeId===nb.id?10:1};"
+          on:pointerdown|capture={() => setActive(nb.id)}
         >
           <NotebookCard
             {nb}

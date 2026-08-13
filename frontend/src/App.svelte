@@ -167,6 +167,12 @@
             title={$focusedActions?.horizontal ? 'Vertical layout' : 'Horizontal layout'}
             on:click={() => $focusedActions?.toggleLayout()}
     >{$focusedActions?.horizontal ? '↕' : '⇄'}</button>
+    {#if $focusedActions?.hasSections}
+      <button class="tb-btn"
+              title={$focusedActions?.allSectionsCollapsed ? 'Expand all sections' : 'Collapse all sections'}
+              on:click={() => $focusedActions?.toggleAllSections()}
+      >{$focusedActions?.allSectionsCollapsed ? '⌄' : '⌃'}</button>
+    {/if}
     <button class="tb-btn" title="Rename"
             on:click={() => $focusedActions?.rename()}>✎</button>
     <button class="tb-btn tb-focus" title="Back to canvas (pinch out)"

@@ -56,6 +56,12 @@
   let nbStore = nb.store;
   $: nbStore = nb.store;
 
+  /* Is this a reference page? Derived from the content as well as the flag:
+     a card opened before the flag existed, or restored from a saved library
+     (which does not persist it), still has 'ref' cells and should behave as
+     documentation -- non-editable headings, no cell-type control. */
+  $: isRefpage = !!nb.refpage || $nbStore.some(r => r.cells[0]?.type === 'ref');
+
   // ---------------------------------------------------------------------------
   // Mount animation
 
@@ -293,6 +299,19 @@
 
   let collapsedSections = new Set<string>();
 
+  /* Every heading row, and whether any is currently open. One button rather
+     than two: it collapses everything while anything is open, and expands
+     everything once all are closed. */
+  $: sectionRowIds = $nbStore
+    .filter(r => r.cells[0]?.type === 'section' || r.cells[0]?.type === 'subsection')
+    .map(r => r.id);
+  $: allSectionsCollapsed =
+    sectionRowIds.length > 0 && sectionRowIds.every(id => collapsedSections.has(id));
+
+  function toggleAllSections() {
+    collapsedSections = allSectionsCollapsed ? new Set() : new Set(sectionRowIds);
+  }
+
   function toggleSection(rowId: string) {
     collapsedSections = collapsedSections.has(rowId)
       ? new Set([...collapsedSections].filter(id => id !== rowId))
@@ -302,12 +321,35 @@
   // Reactive set of hidden row IDs — depends on BOTH $nbStore AND collapsedSections.
   // Plain function (not isHidden()) so the $: makes Svelte track collapsedSections,
   // ensuring {#if !hiddenRows.has(row.id)} re-evaluates immediately on toggle.
+  /* How deeply each row sits under a heading, so content reads as belonging to
+     its section rather than sitting flush with it. 0 for a section heading,
+     1 under a section (and for a subsection heading), 2 under a subsection. */
+  $: rowDepth = (() => {
+    const depth = new Map<string, number>();
+    const rows = $nbStore;
+    let cur = 0;
+    for (const row of rows) {
+      const t = row.cells[0]?.type;
+      if (t === 'section') { depth.set(row.id, 0); cur = 1; }
+      else if (t === 'subsection') { depth.set(row.id, 1); cur = 2; }
+      else depth.set(row.id, cur);
+    }
+    return depth;
+  })();
+
   $: hiddenRows = (() => {
     const hidden = new Set<string>();
     const rows = $nbStore;
     for (let ri = 0; ri < rows.length; ri++) {
       const currentType = rows[ri]?.cells[0]?.type ?? 'code';
       let hide = false;
+      /* Only the NEAREST subsection above a row is its parent. Any subsection
+       * before that one is a SIBLING, and its fold state says nothing about
+       * this row -- but the scan used to test every subsection it walked past,
+       * so collapsing "Basic examples" also emptied "Options" and
+       * "Applications" below it. Once the parent has been seen and is open, keep
+       * walking only to find the enclosing section. */
+      let parentSubsectionSeen = false;
       for (let i = ri - 1; i >= 0; i--) {
         const cell = rows[i]?.cells[0];
         if (!cell) continue;
@@ -316,9 +358,18 @@
           break; // stop at first section boundary
         }
         if (cell.type === 'subsection') {
-          if (currentType === 'section' || currentType === 'subsection') break;
-          if (collapsedSections.has(rows[i].id)) { hide = true; break; }
-          // Not collapsed — keep scanning for parent section.
+          // A section is never nested inside a subsection.
+          if (currentType === 'section') break;
+          // A subsection's parent is the SECTION, not the subsection before it.
+          // Breaking here meant a subsection heading that follows a sibling
+          // never asked whether its section was collapsed, so it stayed visible
+          // with all its content hidden -- a heading that could not be opened.
+          if (currentType === 'subsection') continue;
+          if (!parentSubsectionSeen) {
+            parentSubsectionSeen = true;
+            if (collapsedSections.has(rows[i].id)) { hide = true; break; }
+          }
+          // A sibling, or an open parent: keep scanning for the section.
         }
       }
       if (hide) hidden.add(rows[ri].id);
@@ -359,12 +410,13 @@
      at the very bottom, which in a long notebook is off-screen and reads as the
      click having done nothing. */
   async function onNameQuery(e: Event) {
-    const name = (e as CustomEvent<{ name: string }>).detail?.name;
+    const detail = (e as CustomEvent<{ name: string; at?: { x: number; y: number } | null }>).detail;
+    const name = detail?.name;
     if (!name) return;
     /* The full generated reference page, not `?name`: the terse docstring is
        what the ? query already gives, and a click asking for documentation
        should land on the examples and notes. */
-    openRefpage(nb.id, name);
+    openRefpage(nb.id, name, detail?.at);
   }
 
   async function addCellLeft(e: CustomEvent<{ rowId: string; cellIdx: number }>) {
@@ -551,6 +603,9 @@
           toggleLayout: () => { horizontal = !horizontal; },
           horizontal,
           rename: startRename,
+          toggleAllSections,
+          allSectionsCollapsed,
+          hasSections: sectionRowIds.length > 0,
           toggleCollapse: onToggleCollapse,
           close: () => removeNotebook(nb.id),
           collapsed: !!nb.collapsed,
@@ -618,6 +673,13 @@
         title={horizontal ? 'Vertical layout' : 'Horizontal layout'}
         on:click|stopPropagation={() => { horizontal = !horizontal; }}
       >{horizontal ? '↕' : '⇄'}</button>
+      {#if sectionRowIds.length > 0}
+        <button
+          class="tb-btn"
+          title={allSectionsCollapsed ? 'Expand all sections' : 'Collapse all sections'}
+          on:click|stopPropagation={toggleAllSections}
+        >{allSectionsCollapsed ? '⌄' : '⌃'}</button>
+      {/if}
       {#if !focused}
         <button class="tb-btn" title="Rename" on:click|stopPropagation={startRename}>✎</button>
         <button class="tb-btn tb-focus" title="Full screen" on:click|stopPropagation={() => setFocused(nb.id)}>⤢</button>
@@ -679,7 +741,8 @@
             {#if isSection}
               <!-- Section/Subsection row with collapse toggle -->
               <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-              <div class="section-row" class:subsection={firstCell.type === 'subsection'}>
+              <div class="section-row" class:subsection={firstCell.type === 'subsection'}
+                   style="--row-depth:{rowDepth.get(row.id) ?? 0}">
                 <button
                   class="section-collapse-btn"
                   on:click|stopPropagation={() => toggleSection(row.id)}
@@ -691,6 +754,8 @@
                     store={nb.store}
                     rowId={row.id}
                     cellIdx={0}
+                    headingReadonly={isRefpage}
+                    on:headingClick={(e) => toggleSection(e.detail.rowId)}
                     on:run={handleRun}
                     on:change={handleChange}
                     on:addAbove={addRowAbove}
@@ -705,7 +770,9 @@
                 </div>
               </div>
             {:else}
-              <div class="nb-row">
+              <!-- Indent by section depth so a subsection's content reads as
+                   belonging to it rather than sitting flush with the heading. -->
+              <div class="nb-row" style="--row-depth:{rowDepth.get(row.id) ?? 0}">
                 {#each row.cells as cell, ci (cell.id)}
                   <div class="cell-col" style="flex: 1 1 0; min-width: 0;">
                     <CellShell
@@ -713,6 +780,7 @@
                       store={nb.store}
                       rowId={row.id}
                       cellIdx={ci}
+                      headingReadonly={isRefpage}
                       on:run={handleRun}
                       on:change={handleChange}
                       on:addAbove={addRowAbove}
@@ -731,13 +799,17 @@
                 {/each}
               </div>
             {/if}
-          {/if}
 
-          <!-- Insertion point after this row -->
-          {#if insertionIdx === ri + 1}
-            <div class="insertion-cursor active"></div>
-          {:else if ri < $nbStore.length - 1}
-            <div class="insertion-cursor"></div>
+            <!-- Insertion point after this row. INSIDE the visibility guard:
+                 rendered per row regardless, a collapsed section still emitted
+                 one 3px strip for every row it was hiding, so folding
+                 "Examples (26)" left ~90px of dead space behind it while a
+                 section with no content left none. -->
+            {#if insertionIdx === ri + 1}
+              <div class="insertion-cursor active"></div>
+            {:else if ri < $nbStore.length - 1}
+              <div class="insertion-cursor"></div>
+            {/if}
           {/if}
         {/each}
 
@@ -1028,7 +1100,12 @@
     align-items: flex-start;
     border-bottom: 1px solid rgba(255,255,255,0.05);
   }
-  .section-row.subsection { padding-left: 1rem; }
+  /* The subsection's own fold arrow is smaller and dimmer, matching its
+     heading rather than the section above it. */
+  .section-row.subsection .section-collapse-btn {
+    font-size: 0.62rem;
+    opacity: 0.65;
+  }
 
   .section-collapse-btn {
     flex-shrink: 0;
@@ -1045,6 +1122,10 @@
   .section-collapse-btn:hover { color: var(--accent); }
 
   /* ---- Notebook rows ---- */
+  /* One step of indentation per level of section nesting. Applied as padding so
+     the row's own background and dividers still span the full card width. */
+  .nb-row, .section-row { padding-left: calc(var(--row-depth, 0) * 1.15rem); }
+
   .nb-row {
     display: flex;
     flex-direction: row;

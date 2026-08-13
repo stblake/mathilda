@@ -2,6 +2,8 @@
   --appbar-h: 34px;
   --text: #6b6375;
   --text-h: #08060d;
+  /* Subordinate text: subsection headings, captions, recorded output. */
+  --text-dim: #8d8797;
   --bg: #fff;
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
@@ -41,6 +43,7 @@
   :root:not(.light) {
     --text: #9ca3af;
     --text-h: #f3f4f6;
+    --text-dim: #767c8a;
     --bg: #16171d;
     --border: #2e303a;
     --code-bg: #1f2028;
@@ -61,6 +64,7 @@
 :root.dark {
     --text: #9ca3af;
     --text-h: #f3f4f6;
+    --text-dim: #767c8a;
     --bg: #16171d;
     --border: #2e303a;
     --code-bg: #1f2028;

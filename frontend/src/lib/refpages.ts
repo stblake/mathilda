@@ -83,7 +83,12 @@ export function splitRefpage(md: string): RefSegment[] {
 
   const flushProse = () => {
     const text = prose.join('\n').trim();
-    if (text) out.push({ kind: 'md', text });
+    /* Must contain something a reader can see. Trimming alone is not enough:
+       stripping fenced examples and empty headings out of a section can leave
+       stray punctuation -- a lone ';' or '.' -- and each such segment became a
+       cell that rendered as nothing but still occupied a row, which is what
+       produced the long blank gaps under a collapsed section. */
+    if (/[A-Za-z0-9]/.test(text)) out.push({ kind: 'md', text });
     prose.length = 0;
   };
 
@@ -165,7 +170,9 @@ export function buildToc(md: string): string | null {
   }
   if (items.filter(i => i.level === 2).length < 3) return null;
 
-  const out = ['<div class="ref-toc">', '', '**Contents**', ''];
+  /* A disclosure rather than a plain list: the contents of a long page are
+     worth having, but not worth pushing the first example below the fold. */
+  const out = ['<details class="ref-toc" open>', '<summary>Contents</summary>', ''];
   let open = false;
   for (const it of items) {
     const link = `[${it.text}](#${tocSlug(it.text)})`;
@@ -176,7 +183,7 @@ export function buildToc(md: string): string | null {
       out.push(`    - ${link}`);
     }
   }
-  out.push('', '</div>');
+  out.push('', '</details>');
   return out.join('\n');
 }
 
@@ -276,8 +283,8 @@ if (typeof document !== 'undefined') {
     if (!name || !hasRefpage(name)) return;
     e.preventDefault();
     e.stopPropagation();
-    (e.target as HTMLElement).dispatchEvent(
-      new CustomEvent('mathilda-refpage', { detail: { name }, bubbles: true }));
+    (e.target as HTMLElement).dispatchEvent(new CustomEvent('mathilda-refpage',
+      { detail: { name, at: { x: e.clientX, y: e.clientY } }, bubbles: true }));
   };
   window.__mathildaDocsClick = handler;
   document.addEventListener('mousedown', handler, true);
@@ -291,24 +298,50 @@ if (typeof document !== 'undefined') {
     document.removeEventListener('keydown', window.__mathildaDocsKey, true);
   }
   const keyHandler = (e: KeyboardEvent) => {
-    const wanted = e.key === 'F1' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'i');
-    if (!wanted) return;
+    const isI = (e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'i' || e.code === 'KeyI');
+    if (!(e.key === 'F1' || isI)) return;
+
     const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+
     let name: string | null = null;
-    if (sel && sel.rangeCount) {
-      const picked = sel.toString().trim();
-      if (/^[A-Za-z$][A-Za-z0-9$]*$/.test(picked)) {
-        name = picked;                              /* an explicit selection wins */
-      } else if (sel.anchorNode && sel.anchorNode.nodeType === Node.TEXT_NODE) {
-        name = identifierAt(sel.anchorNode.textContent ?? '', sel.anchorOffset);
+    let at: { x: number; y: number } | null = null;
+
+    const picked = sel.toString().trim();
+    if (/^[A-Za-z$][A-Za-z0-9$]*$/.test(picked)) {
+      name = picked;                                /* an explicit selection wins */
+    }
+
+    /* Locate the caret on screen and read the identifier there, reusing the
+       lookup the click gesture uses. Reading sel.anchorNode directly is not
+       enough: in CodeMirror the caret's anchor is often the line ELEMENT rather
+       than a text node, with anchorOffset a child index, and the text-node test
+       then failed silently -- which is why this key appeared dead while
+       Cmd+click worked. The caret sits BETWEEN characters, so probe a couple of
+       pixels either side before giving up. */
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    if (rect.width || rect.height || rect.x || rect.y) {
+      const y = rect.y + rect.height / 2;
+      at = { x: rect.x, y };
+      if (!name) {
+        for (const dx of [-2, 2, -6, 6]) {
+          name = identifierAtPoint(rect.x + dx, y);
+          if (name && hasRefpage(name)) break;
+        }
       }
     }
+
+    /* Last resort: the anchor really is a text node. */
+    if (!name && sel.anchorNode?.nodeType === Node.TEXT_NODE) {
+      name = identifierAt(sel.anchorNode.textContent ?? '', sel.anchorOffset);
+    }
+
     if (!name || !hasRefpage(name)) return;
     e.preventDefault();
     e.stopPropagation();
-    const target = (sel?.anchorNode?.parentElement ?? document.body) as HTMLElement;
+    const target = (sel.anchorNode?.parentElement ?? document.body) as HTMLElement;
     target.dispatchEvent(new CustomEvent('mathilda-refpage',
-      { detail: { name }, bubbles: true }));
+      { detail: { name, at }, bubbles: true }));
   };
   window.__mathildaDocsKey = keyHandler;
   document.addEventListener('keydown', keyHandler, true);

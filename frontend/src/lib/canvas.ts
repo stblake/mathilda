@@ -22,6 +22,10 @@ export type CanvasNotebook = {
    *  `?pat*` result). NotebookCard runs its first cell once on mount and clears
    *  the flag, so the answer is already there when the card appears. */
   autoRun?:  boolean;
+  /** A generated reference page rather than a user notebook. Its headings are
+   *  documentation structure, not editable prose, so clicking one folds the
+   *  section instead of placing a caret. */
+  refpage?:  boolean;
 };
 
 let _nextId = 1;
@@ -68,6 +72,9 @@ export interface FocusedActions {
   toggleLayout: () => void;
   horizontal: boolean;
   rename: () => void;
+  toggleAllSections: () => void;
+  allSectionsCollapsed: boolean;
+  hasSections: boolean;
   toggleCollapse: () => void;
   close: () => void;
   collapsed: boolean;
@@ -80,6 +87,10 @@ export const canvasState = writable({
   panY:         0,
   zoom:         1.0,
   focusedId:    null as string | null,
+  /* The card drawn on top. Lives in the store rather than in Canvas.svelte
+     because openRefpage has to raise the card it creates -- a documentation
+     page that opens behind the notebook you asked from is invisible. */
+  activeId:     null as string | null,
   selectedIds:  [] as string[],   // IDs of notebooks selected by rubber-band
 });
 
@@ -304,7 +315,15 @@ export function addNotebookAt(worldX: number, worldY: number, title?: string) {
  *
  * The card appears immediately with a placeholder and is filled in when the
  * fetch lands, rather than the click doing nothing until the network settles. */
-export function openRefpage(fromId: string, name: string) {
+/* Where the canvas stage sits on screen, published by Canvas.svelte. Needed to
+   turn a viewport point (where a symbol was clicked) into a canvas coordinate. */
+let stageOrigin = { left: 0, top: 0 };
+export function setStageOrigin(left: number, top: number) {
+  stageOrigin = { left, top };
+}
+
+export function openRefpage(fromId: string, name: string,
+                            at?: { x: number; y: number } | null) {
   type NotebookStore = ReturnType<typeof createNotebook>;
   let newId = '';
   /* Assigned inside the synchronous canvasState.update below; TypeScript cannot
@@ -313,13 +332,24 @@ export function openRefpage(fromId: string, name: string) {
 
   canvasState.update(s => {
     const from = s.notebooks.find(nb => nb.id === fromId);
-    const x = from ? from.x + from.width + 40 : 0;
-    const y = from ? from.y : 0;
+    /* Open beside the SYMBOL when we know where it was, not beside the whole
+       card: on a wide notebook the far edge can be most of a screen away from
+       what the reader just pointed at. Falls back to the card's right edge. */
+    let x = from ? from.x + from.width + 40 : 0;
+    let y = from ? from.y : 0;
+    if (at) {
+      const wx = (at.x - stageOrigin.left - s.panX) / s.zoom;
+      const wy = (at.y - stageOrigin.top - s.panY) / s.zoom;
+      x = wx + 90;                 /* clear of the pointer, not under it */
+      y = wy - 60;                 /* the symbol sits near the card's top */
+    }
     const nb = makeCard(name, x, y);
+    nb.refpage = true;
     nb.store.setCellSourceAndType(`Loading the reference page for \`${name}\`...`, 'ref');
     store = nb.store;
     newId = nb.id;
-    return { ...s, notebooks: [...s.notebooks, nb] };
+    /* On top: it is what the reader just asked for. */
+    return { ...s, notebooks: [...s.notebooks, nb], activeId: nb.id };
   });
 
   void (async () => {
@@ -330,8 +360,24 @@ export function openRefpage(fromId: string, name: string) {
     try {
       const md = await fetchRefpageMarkdown(name);
       segments = splitRefpage(md);
+      /* Place the contents after the definition, not above it: the first thing
+         a reader wants is what the function does, and an index of a page they
+         have not started reading yet is noise at the top. Inserted before the
+         heading that follows Description, or at the front if there is no
+         Description section. */
       const toc = buildToc(md);
-      if (toc) segments = [{ kind: 'md' as const, text: toc }, ...segments];
+      if (toc) {
+        const tocSeg = { kind: 'md' as const, text: toc };
+        const descAt = segments.findIndex(
+          seg => seg.kind === 'heading' && /^description$/i.test(seg.text));
+        let at = 0;
+        if (descAt >= 0) {
+          const next = segments.findIndex(
+            (seg, i) => i > descAt && seg.kind === 'heading');
+          at = next >= 0 ? next : segments.length;
+        }
+        segments = [...segments.slice(0, at), tocSeg, ...segments.slice(at)];
+      }
       figures = await fetchRefpageFigures(name);
     } catch (e) {
       const why = e instanceof Error ? e.message : String(e);
@@ -539,6 +585,7 @@ export function loadLibraryData(json: string): string {
     panY:        0,
     zoom:        1.0,
     focusedId:   null,
+    activeId:    null,
     selectedIds: [],
   });
   return data.title ?? 'Untitled Library';
