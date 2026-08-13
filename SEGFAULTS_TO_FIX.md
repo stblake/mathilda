@@ -8,7 +8,14 @@ on the committed `main` at the noted commit) unless stated otherwise.
 
 ## 1. `Eigenvalues` of an exact (integer/symbolic) matrix ≥ 3×3 — packed-array deref in Faddeev char-poly
 
-- **Status:** open. Pre-existing on `main` @ `92453b9` (confirmed by reproducing
+- **Status:** ✅ FIXED 2026-08-13. `eigen_mat_mul` (via `dot2`) returned a packed
+  NDArray for the machine matrix product; `eigen_char_poly_faddeev`'s trace/shift
+  helpers index it as a nested List. Fix: `eigen_mat_mul` now `pack_unpack`s its
+  result, and `eigen_char_poly_faddeev` `pack_unpack`s the initial `M = A` (a
+  large integer matrix packs to int64). `eigen_tests`, `mateigen_direct_tests`,
+  `lapack_builtin_tests`, and `singularvaluedecomposition_tests` now pass.
+  Original report retained below.
+- ~~**Status:** open. Pre-existing on `main` @ `92453b9`~~ (confirmed by reproducing
   with all local changes stashed).
 - **Severity:** high — segfault (SIGSEGV, `EXC_BAD_ACCESS`) on a common operation.
 - **Repro:**
