@@ -468,10 +468,21 @@ int mat_lapack_dgeev(int n, double* A, int lda,
 int mat_lapack_zgeev(int n, double* A, int lda,
                      double* w, double* VR, int ldvr);
 
+/* Eigenvalues only (jobvl='N', jobvr='N'): (wr, wi) split for the real form,
+ * w (2n interleaved) for the complex form. A is destroyed; no eigenvectors,
+ * roughly half the work of the vector-bearing form. */
+int mat_lapack_dgeev_values(int n, double* A, int lda, double* wr, double* wi);
+int mat_lapack_zgeev_values(int n, double* A, int lda, double* w);
+
 /* Symmetric / Hermitian eigenproblem (jobz='V', uplo='U'): eigenvalues
  * ascending in w (length n, real), eigenvectors overwrite A (columns). */
 int mat_lapack_dsyev(int n, double* A, int lda, double* w);
 int mat_lapack_zheev(int n, double* A, int lda, double* w);
+
+/* Eigenvalues only (jobz='N', uplo='U'): eigenvalues ascending in w; A is
+ * used as scratch and does NOT receive eigenvectors. About half the work of
+ * the jobz='V' form for a values-only request. */
+int mat_lapack_dsyev_values(int n, double* A, int lda, double* w);
 
 /* Generalized eigenproblem A x = lambda B x (jobvl='N', jobvr='V'). Real:
  * eigenvalues are (alphar[j] + i*alphai[j]) / beta[j] with VR packed per

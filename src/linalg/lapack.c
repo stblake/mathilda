@@ -561,11 +561,67 @@ int mat_lapack_zgeev(int n, double* A, int lda, double* w, double* VR, int ldvr)
     return info;
 }
 
+int mat_lapack_dgeev_values(int n, double* A, int lda, double* wr, double* wi)
+{
+    int info = 0, lwork = -1;
+    double query = 0.0, vl = 0.0, vr = 0.0;
+    int ldvl = 1, ldvr = 1;
+    char jvl[2] = { 'N', 0 }, jvr[2] = { 'N', 0 };
+    dgeev_(jvl, jvr, &n, A, &lda, wr, wi, &vl, &ldvl, &vr, &ldvr,
+           &query, &lwork, &info);
+    if (info != 0) return info;
+    lwork = lapack_lwork(query, 3 * n > 1 ? 3 * n : 1);
+    double* work = (double*)malloc((size_t)lwork * sizeof(double));
+    if (!work) return -999;
+    dgeev_(jvl, jvr, &n, A, &lda, wr, wi, &vl, &ldvl, &vr, &ldvr,
+           work, &lwork, &info);
+    free(work);
+    return info;
+}
+
+int mat_lapack_zgeev_values(int n, double* A, int lda, double* w)
+{
+    int info = 0, lwork = -1;
+    double query[2] = { 0.0, 0.0 }, vl[2] = { 0.0, 0.0 }, vr[2] = { 0.0, 0.0 };
+    int ldvl = 1, ldvr = 1;
+    char jvl[2] = { 'N', 0 }, jvr[2] = { 'N', 0 };
+    double* rwork = (double*)malloc((size_t)(2 * n > 1 ? 2 * n : 1) * sizeof(double));
+    if (!rwork) return -999;
+    zgeev_(jvl, jvr, &n, lapack_zptr(A), &lda, lapack_zptr(w),
+           lapack_zptr(vl), &ldvl, lapack_zptr(vr), &ldvr,
+           lapack_zptr(query), &lwork, rwork, &info);
+    if (info != 0) { free(rwork); return info; }
+    lwork = lapack_lwork(query[0], 2 * n > 1 ? 2 * n : 1);
+    double* work = (double*)malloc((size_t)lwork * 2 * sizeof(double));
+    if (!work) { free(rwork); return -999; }
+    zgeev_(jvl, jvr, &n, lapack_zptr(A), &lda, lapack_zptr(w),
+           lapack_zptr(vl), &ldvl, lapack_zptr(vr), &ldvr,
+           lapack_zptr(work), &lwork, rwork, &info);
+    free(work);
+    free(rwork);
+    return info;
+}
+
 int mat_lapack_dsyev(int n, double* A, int lda, double* w)
 {
     int info = 0, lwork = -1;
     double query = 0.0;
     char jz[2] = { 'V', 0 }, up[2] = { 'U', 0 };
+    dsyev_(jz, up, &n, A, &lda, w, &query, &lwork, &info);
+    if (info != 0) return info;
+    lwork = lapack_lwork(query, 3 * n - 1 > 1 ? 3 * n - 1 : 1);
+    double* work = (double*)malloc((size_t)lwork * sizeof(double));
+    if (!work) return -999;
+    dsyev_(jz, up, &n, A, &lda, w, work, &lwork, &info);
+    free(work);
+    return info;
+}
+
+int mat_lapack_dsyev_values(int n, double* A, int lda, double* w)
+{
+    int info = 0, lwork = -1;
+    double query = 0.0;
+    char jz[2] = { 'N', 0 }, up[2] = { 'U', 0 };
     dsyev_(jz, up, &n, A, &lda, w, &query, &lwork, &info);
     if (info != 0) return info;
     lwork = lapack_lwork(query, 3 * n - 1 > 1 ? 3 * n - 1 : 1);
@@ -881,7 +937,13 @@ int mat_lapack_dgeev(int n, double* A, int lda,
 { (void)n; (void)A; (void)lda; (void)wr; (void)wi; (void)VR; (void)ldvr; return -1; }
 int mat_lapack_zgeev(int n, double* A, int lda, double* w, double* VR, int ldvr)
 { (void)n; (void)A; (void)lda; (void)w; (void)VR; (void)ldvr; return -1; }
+int mat_lapack_dgeev_values(int n, double* A, int lda, double* wr, double* wi)
+{ (void)n; (void)A; (void)lda; (void)wr; (void)wi; return -1; }
+int mat_lapack_zgeev_values(int n, double* A, int lda, double* w)
+{ (void)n; (void)A; (void)lda; (void)w; return -1; }
 int mat_lapack_dsyev(int n, double* A, int lda, double* w)
+{ (void)n; (void)A; (void)lda; (void)w; return -1; }
+int mat_lapack_dsyev_values(int n, double* A, int lda, double* w)
 { (void)n; (void)A; (void)lda; (void)w; return -1; }
 int mat_lapack_zheev(int n, double* A, int lda, double* w)
 { (void)n; (void)A; (void)lda; (void)w; return -1; }

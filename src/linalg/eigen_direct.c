@@ -1000,6 +1000,60 @@ static Expr* direct_real_general_machine(const MatD* A, MateigenWant want,
 
     bool want_Q = (want & MATEIGEN_WANT_VECTORS) != 0;
 
+#ifdef USE_LAPACK
+    /* LAPACK dgeev for the general real machine eigenproblem: blocked
+     * Hessenberg + Francis QR, faster than the in-file version. Eigenvalues
+     * (and, for want_Q, VR's conjugate-pair-packed eigenvectors) feed the SAME
+     * sort/build helpers, so order and unit-2-norm normalisation match the
+     * fallback. dgeev works column-major, so the row-major A is loaded
+     * transposed -- eigenvalues are transpose-invariant and VR then holds the
+     * RIGHT eigenvectors of A. On any failure the hand-rolled kernel runs. */
+    if (mathilda_lapack_probe()) {
+        double* Ac = (double*)malloc(sizeof(double) * n * n);
+        double* wr = (double*)malloc(sizeof(double) * n);
+        double* wi = (double*)malloc(sizeof(double) * n);
+        double* VR = want_Q ? (double*)malloc(sizeof(double) * n * n) : NULL;
+        if (Ac && wr && wi && (!want_Q || VR)) {
+            for (size_t i = 0; i < n; i++)
+                for (size_t j = 0; j < n; j++)
+                    Ac[i + j * n] = A->re[i * n + j];  /* row-major -> col-major */
+            int info = want_Q
+                ? mat_lapack_dgeev((int)n, Ac, (int)n, wr, wi, VR, (int)n)
+                : mat_lapack_dgeev_values((int)n, Ac, (int)n, wr, wi);
+            if (info == 0) {
+                size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
+                direct_sort_perm_desc_abs_complex(wr, wi, n, perm);
+                Expr* out;
+                if (want_Q) {
+                    double* Vr = (double*)malloc(sizeof(double) * n * n);
+                    double* Vi = (double*)malloc(sizeof(double) * n * n);
+                    for (size_t s = 0; s < n; s++) {
+                        size_t jj = perm[s];
+                        double norm2 = 0.0;
+                        for (size_t i = 0; i < n; i++) {
+                            double re, im;  /* dgeev packs pairs, wi>0 first */
+                            if (wi[jj] == 0.0)      { re = VR[i + jj * n];       im = 0.0; }
+                            else if (wi[jj] > 0.0)  { re = VR[i + jj * n];       im = VR[i + (jj + 1) * n]; }
+                            else                    { re = VR[i + (jj - 1) * n]; im = -VR[i + jj * n]; }
+                            Vr[s * n + i] = re; Vi[s * n + i] = im;
+                            norm2 += re * re + im * im;
+                        }
+                        double inv = (norm2 > 0.0) ? 1.0 / sqrt(norm2) : 1.0;
+                        for (size_t i = 0; i < n; i++) { Vr[s * n + i] *= inv; Vi[s * n + i] *= inv; }
+                    }
+                    out = direct_build_complex_eigenvector_list(Vr, Vi, n);
+                    free(Vr); free(Vi);
+                } else {
+                    out = direct_build_complex_eigenvalue_list(wr, wi, n, perm);
+                }
+                free(perm); free(Ac); free(wr); free(wi); if (VR) free(VR);
+                return direct_apply_k_spec_list(out, k_spec);
+            }
+        }
+        free(Ac); free(wr); free(wi); if (VR) free(VR);
+    }
+#endif
+
     double* H = (double*)malloc(sizeof(double) * n * n);
     memcpy(H, A->re, sizeof(double) * n * n);
     double* Q = NULL;
@@ -1053,6 +1107,51 @@ static Expr* direct_real_sym_machine(const MatD* A, MateigenWant want,
     size_t n = A->n;
     if (n == 0) return NULL;
 
+    bool want_Q = (want & MATEIGEN_WANT_VECTORS) != 0;
+
+#ifdef USE_LAPACK
+    /* LAPACK dsyev: blocked, vectorised symmetric tridiagonalisation + QR,
+     * several times faster than the in-file Householder/QR below. Eigenvalues
+     * and eigenvectors are then sorted by descending |lambda| and emitted
+     * through the SAME builders as the fallback, so the output convention
+     * (order, unit-2-norm columns) is identical. On any LAPACK failure the
+     * hand-rolled kernel below still runs. */
+    if (mathilda_lapack_probe()) {
+        double* Ac = (double*)malloc(sizeof(double) * n * n);
+        double* w  = (double*)malloc(sizeof(double) * n);
+        if (Ac && w) {
+            memcpy(Ac, A->re, sizeof(double) * n * n);  /* symmetric: layout-agnostic */
+            int info = want_Q
+                ? mat_lapack_dsyev((int)n, Ac, (int)n, w)          /* jobz='V' */
+                : mat_lapack_dsyev_values((int)n, Ac, (int)n, w);  /* jobz='N' */
+            if (info == 0) {
+                /* dsyev returns eigenvalues ASCENDING. Present them DESCENDING
+                 * (algebraically) before the |lambda| sort so a +/-v tie breaks
+                 * positive-first -- matching Mathematica and the hand-rolled
+                 * kernel, whose sort breaks ties by earliest index. */
+                double* wd = (double*)malloc(sizeof(double) * n);
+                for (size_t k = 0; k < n; k++) wd[k] = w[n - 1 - k];
+                size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
+                direct_sort_perm_desc_abs(wd, n, perm);
+                Expr* out;
+                if (want_Q) {
+                    double* Q = (double*)malloc(sizeof(double) * n * n);
+                    for (size_t i = 0; i < n; i++)
+                        for (size_t j = 0; j < n; j++)   /* desc col j = dsyev col n-1-j */
+                            Q[i * n + j] = Ac[i + (n - 1 - j) * n];
+                    out = direct_build_real_eigenvector_list(Q, n, perm);
+                    free(Q);
+                } else {
+                    out = direct_build_real_eigenvalue_list(wd, n, perm);
+                }
+                free(perm); free(wd); free(Ac); free(w);
+                return direct_apply_k_spec_list(out, k_spec);
+            }
+        }
+        free(Ac); free(w);
+    }
+#endif
+
     /* Working copy of A (tridiag step modifies in place). */
     double* W = (double*)malloc(sizeof(double) * n * n);
     memcpy(W, A->re, sizeof(double) * n * n);
@@ -1062,7 +1161,6 @@ static Expr* direct_real_sym_machine(const MatD* A, MateigenWant want,
     double* u       = (double*)malloc(sizeof(double) * n);
     double* p_buf   = (double*)malloc(sizeof(double) * n);
     double* q_buf   = (double*)malloc(sizeof(double) * n);
-    bool want_Q     = (want & MATEIGEN_WANT_VECTORS) != 0;
     double* Q       = want_Q ? (double*)malloc(sizeof(double) * n * n) : NULL;
 
     direct_tridiag_real_sym(W, n, diag, sub, Q, want_Q, u, p_buf, q_buf);
