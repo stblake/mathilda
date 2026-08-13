@@ -1588,12 +1588,26 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * head claiming packed_broadcast_ok -- a lower-rank operand whose
                  * dims prefix the higher one's. Any other combination is left
                  * exactly as it was, to thread. */
+                /* A head with a matching-arity NDArray kernel is aware of a
+                 * packed buffer even when it ALSO carries DownValues: the kernel
+                 * runs at step 4b, AFTER DownValues (step 4), so a guarded
+                 * symbolic rule still gets first crack and a numeric array falls
+                 * through to the kernel. Without this, any rule-bearing head --
+                 * the whole Bessel family -- materialised its buffer and threaded
+                 * scalar by scalar (BesselI/BesselK over 10^6 elements cost tens
+                 * of seconds). The .m rules are guarded with !NDArrayQ[z] so they
+                 * decline on a buffer rather than fire element-wise. */
+                size_t nd_argc = res->data.function.arg_count;
+                bool has_nd_kernel = hdef &&
+                    ((nd_argc == 1 && hdef->ndarray_unary_kernel) ||
+                     (nd_argc == 2 && hdef->ndarray_binary_kernel));
                 if ((attrs & ATTR_LISTABLE) && hdef && hdef->packed_aware &&
-                    !hdef->down_values && pack_any_created())
+                    (!hdef->down_values || has_nd_kernel) && pack_any_created())
                     pack_lift_listable_args(res, hdef->packed_broadcast_ok != 0,
                                             hdef->packed_int64_ok != 0, changed);
                 bool listable_mixed = (attrs & ATTR_LISTABLE) && has_list_arg(res);
-                bool aware = ((hdef && hdef->packed_aware && !hdef->down_values)
+                bool aware = ((hdef && hdef->packed_aware
+                                    && (!hdef->down_values || has_nd_kernel))
                               || pure_fn || compiled_head || interp_head
                               || dv_binds_opaquely(hdef)) && !listable_mixed;
                 /* A head that binds opaquely is exact on an int64 buffer for

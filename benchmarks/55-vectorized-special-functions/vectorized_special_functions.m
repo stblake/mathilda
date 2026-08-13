@@ -12,11 +12,14 @@
    THE FINDING.  The Fresnel integrals, the complementary/imaginary error
    functions, the exponential/trigonometric integrals and the two-argument Beta
    are vectorized -- tens of ms over 10^6, a fair overhead comparison against
-   scipy's compiled ufuncs.  The modified Bessel functions BesselI/BesselK have
-   NO vector kernel: they thread one element at a time, ~20-40 s over 10^6, so
-   they use benchOnce and the large ratio against scipy.special.iv/kv is the
-   point -- a missing kernel, the same class of gap the array audits exist to
-   catch.
+   scipy's compiled ufuncs.  The modified Bessel functions BesselI/BesselK now
+   also run their registered NDArray kernel (tens of ms over 10^6, faster than
+   scipy.special.iv/kv): the transparency gate used to force any rule-bearing
+   head -- and every Bessel head carries half-integer DownValues -- off the
+   buffer path, so they threaded one element at a time (~20-40 s).  The gate now
+   also admits a head with a matching-arity NDArray kernel (eval.c), with the
+   .m rules guarded by !NDArrayQ so they decline on a buffer.  benchOnce is kept
+   so the row stays comparable across the history.
 
    Checks are a rounded scalar at a fixed rational input, never a sum over the
    random timing data.
