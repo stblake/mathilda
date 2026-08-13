@@ -43,7 +43,15 @@ on the committed `main` at the noted commit) unless stated otherwise.
   `eigen_mat_trace` / `eigen_mat_minus_scalar_id` to read an `EXPR_NDARRAY` via the
   NDArray element accessor. Prefer the former (one spot, matches the assumption the
   rest of the file already encodes).
-- **Blast radius note:** this blocks `eigen_tests` and `mateigen_direct_tests`
-  from completing (both abort at `test_direct_symbolic_ignores_dispatch`, which
-  evaluates exactly this integer matrix). The machine/LAPACK eigen paths and the
-  generalized-pencil path are unaffected and separately verified.
+- **Blast radius note:** this aborts every unit suite whose fixtures evaluate
+  `Eigenvalues` of an exact matrix — confirmed `eigen_tests`,
+  `mateigen_direct_tests` (both at `test_direct_symbolic_ignores_dispatch`),
+  `lapack_builtin_tests` (`test_eigen`), and `singularvaluedecomposition_tests`
+  (its eigen cross-check). All four crash at `eigen_mat_trace + 72`,
+  `address=0x22/0x23`. The machine/LAPACK eigen paths and the generalized-pencil
+  path are unaffected and separately verified. A full unit-suite sweep on
+  2026-08-13 was otherwise clean: 407 suites pass; the only other non-passes are
+  pre-existing slow-corpus timeouts (`crc_corpus`, `intrat_corpus`,
+  `numeric_stress`) and one stale test expectation
+  (`zero_test`: `Attributes[PossibleZeroQ]` asserts `{Listable, Protected}` but
+  the value is correctly `{Protected}` — PossibleZeroQ is not Listable).
