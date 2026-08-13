@@ -251,6 +251,35 @@ void zheev_(const char* jobz, const char* uplo, const int* n,
             double* a, const int* lda, double* w,
             double* work, const int* lwork, double* rwork, int* info);
 
+/* dggev / zggev -- generalized eigenproblem A x = lambda B x for a general
+ * pencil.  Real: eigenvalues are (alphar + i*alphai)/beta with conjugate
+ * pairs sharing a packed VR column (as dgeev); beta = 0 encodes an infinite
+ * eigenvalue.  Complex: eigenvalues are alpha/beta, VR complex.  A and B are
+ * both destroyed. */
+void dggev_(const char* jobvl, const char* jobvr, const int* n,
+            double* a, const int* lda, double* b, const int* ldb,
+            double* alphar, double* alphai, double* beta,
+            double* vl, const int* ldvl, double* vr, const int* ldvr,
+            double* work, const int* lwork, int* info);
+void zggev_(const char* jobvl, const char* jobvr, const int* n,
+            double* a, const int* lda, double* b, const int* ldb,
+            double* alpha, double* beta,
+            double* vl, const int* ldvl, double* vr, const int* ldvr,
+            double* work, const int* lwork, double* rwork, int* info);
+
+/* dsygv / zhegv -- generalized symmetric-/Hermitian-definite eigenproblem
+ * (itype=1: A x = lambda B x, B positive definite).  Eigenvalues ascending
+ * in w (length n, real); eigenvectors overwrite A.  B is overwritten with
+ * its Cholesky factor.  info > n means B was not positive definite. */
+void dsygv_(const int* itype, const char* jobz, const char* uplo,
+            const int* n, double* a, const int* lda,
+            double* b, const int* ldb, double* w,
+            double* work, const int* lwork, int* info);
+void zhegv_(const int* itype, const char* jobz, const char* uplo,
+            const int* n, double* a, const int* lda,
+            double* b, const int* ldb, double* w,
+            double* work, const int* lwork, double* rwork, int* info);
+
 /* dgels / zgels -- least-squares / minimum-norm solve of A X = B (full rank).
  * B is max(m,n)*nrhs, col-major; the solution occupies its first n rows. */
 void dgels_(const char* trans, const int* m, const int* n, const int* nrhs,
@@ -443,6 +472,25 @@ int mat_lapack_zgeev(int n, double* A, int lda,
  * ascending in w (length n, real), eigenvectors overwrite A (columns). */
 int mat_lapack_dsyev(int n, double* A, int lda, double* w);
 int mat_lapack_zheev(int n, double* A, int lda, double* w);
+
+/* Generalized eigenproblem A x = lambda B x (jobvl='N', jobvr='V'). Real:
+ * eigenvalues are (alphar[j] + i*alphai[j]) / beta[j] with VR packed per
+ * LAPACK's real convention; beta[j] = 0 encodes an infinite eigenvalue.
+ * Complex: eigenvalues alpha[j]/beta[j] (alpha, beta each 2n interleaved),
+ * VR complex n*n. A and B are both destroyed. */
+int mat_lapack_dggev(int n, double* A, int lda, double* B, int ldb,
+                     double* alphar, double* alphai, double* beta,
+                     double* VR, int ldvr);
+int mat_lapack_zggev(int n, double* A, int lda, double* B, int ldb,
+                     double* alpha, double* beta, double* VR, int ldvr);
+
+/* Generalized symmetric-/Hermitian-definite eigenproblem, itype=1
+ * (A x = lambda B x, B positive definite; jobz='V', uplo='U'): eigenvalues
+ * ascending in w (length n, real), eigenvectors overwrite A. B is destroyed
+ * (overwritten with its Cholesky factor). info > n signals B not positive
+ * definite. */
+int mat_lapack_dsygv(int n, double* A, int lda, double* B, int ldb, double* w);
+int mat_lapack_zhegv(int n, double* A, int lda, double* B, int ldb, double* w);
 
 /* Least squares min ||A X - B|| (trans='N', full rank). A is m*n; B is
  * ldb*nrhs with ldb = max(m,n); the solution occupies its first n rows. */

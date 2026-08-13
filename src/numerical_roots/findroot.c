@@ -1505,9 +1505,14 @@ Expr* builtin_findroot(Expr* res) {
     opts.wp_bits = 0;
     opts.max_iter = 100;
     /* Uniform numerical-function contract: AccuracyGoal defaults to
-     * MachinePrecision, PrecisionGoal to Automatic (== WorkingPrecision/2,
-     * filled in below). */
-    opts.acc_goal_digits = NUMERIC_MACHINE_PRECISION_DIGITS;
+     * MachinePrecision, PrecisionGoal to Automatic (both == WorkingPrecision/2,
+     * filled in below). Both must be negative sentinels so the resolution at
+     * the bottom of this block scales them with WorkingPrecision -- a positive
+     * literal here pinned the accuracy goal at ~16 digits regardless of
+     * WorkingPrecision, so FindRoot[..., WorkingPrecision -> 100] stopped its
+     * MPFR Newton at |f| < 10^-16 and returned ~19 correct digits while
+     * labelling the result Precision 100. */
+    opts.acc_goal_digits = NC_GOAL_MACHINE;
     opts.prec_goal_digits = NC_GOAL_AUTO;
     opts.damping = 1.0;
     opts.jacobian = NULL;

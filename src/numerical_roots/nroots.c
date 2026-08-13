@@ -44,6 +44,7 @@
 #include "poly/poly.h"      /* is_polynomial, get_degree_poly, get_all_coeffs_expanded */
 #include "poly/zupoly.h"    /* exact integer polynomials for squarefree decomposition */
 #include "linalg/eigen.h"   /* eigen_all_eigenvalues_real_mpfr */
+#include "linalg/lapack.h"  /* mat_lapack_zgeev — machine companion fast path */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -276,11 +277,90 @@ static void nr_poly_free(NrPoly* p) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Machine-precision companion path: build the Frobenius companion in
+ *  double-complex and get its eigenvalues from LAPACK zgeev in one call
+ *  — exactly numpy.roots.  Used as the Automatic default for a machine
+ *  request (WorkingPrecision at/below machine), where it is orders of
+ *  magnitude faster than the MPFR Aberth-Ehrlich sweeps (which run in
+ *  ~101-bit complex arithmetic even for a double answer) and matches the
+ *  companion-eigenvalue algorithm every other CAS uses at this precision.
+ *
+ *  Returns 0 on success (roots written at wp), -1 to fall back to the
+ *  MPFR engine (no LAPACK, degenerate leading coefficient, or a
+ *  coefficient too large for a double).
+ *
+ *  The double companion eigenvalues are then refined by a few Newton
+ *  steps against the working-precision polynomial (nr_newton_polish, as
+ *  the MPFR nr_companion does).  The LAPACK seed is already near a root,
+ *  so a handful of iterations reach the WorkingPrecision goal — this
+ *  costs a small fraction of the coefficient-extraction overhead and
+ *  avoids a spurious `accgl` warning on spread-root polynomials
+ *  (e.g. (x-1)...(x-5)), where the raw double eigenvalues sit at ~1e-13
+ *  instead of the machine tolerance.  It does not move a well-conditioned
+ *  root at the rounding scale of the order-invariant benchmark checks. */
+static int nr_companion_machine(const NrPoly* p, ncpx* roots, mpfr_prec_t wp) {
+    int n = p->deg;
+    if (n < 1) return -1;
+
+    /* Leading coefficient c_n as a double complex; bail if ~0 or non-finite. */
+    double cn_re = mpfr_get_d(p->c[n].re, MPFR_RNDN);
+    double cn_im = mpfr_get_d(p->c[n].im, MPFR_RNDN);
+    double cn2 = cn_re * cn_re + cn_im * cn_im;
+    if (!(cn2 > 0.0) || !isfinite(cn2)) return -1;
+
+    if (n == 1) {
+        /* root = -c0 / c1. */
+        double c0_re = mpfr_get_d(p->c[0].re, MPFR_RNDN);
+        double c0_im = mpfr_get_d(p->c[0].im, MPFR_RNDN);
+        double r_re = -(c0_re * cn_re + c0_im * cn_im) / cn2;
+        double r_im = -(c0_im * cn_re - c0_re * cn_im) / cn2;
+        mpfr_set_d(roots[0].re, r_re, MPFR_RNDN);
+        mpfr_set_d(roots[0].im, r_im, MPFR_RNDN);
+        return 0;
+    }
+
+    /* Column-major interleaved-complex companion.  Same "last column"
+     * Frobenius form as nr_companion: entry (i, i-1) = 1 (subdiagonal),
+     * entry (i, n-1) = -c_i / c_n (last column). */
+    double* A  = (double*)calloc((size_t)2 * n * n, sizeof(double));
+    double* w  = (double*)malloc((size_t)2 * n * sizeof(double));
+    double* VR = (double*)malloc((size_t)2 * n * n * sizeof(double)); /* jobvr='V' needs it */
+    if (!A || !w || !VR) { free(A); free(w); free(VR); return -1; }
+
+    for (int i = 1; i < n; i++) {                 /* subdiagonal ones */
+        size_t o = 2 * ((size_t)i + (size_t)(i - 1) * n);
+        A[o] = 1.0;
+    }
+    for (int i = 0; i < n; i++) {                 /* last column: -c_i / c_n */
+        double ci_re = mpfr_get_d(p->c[i].re, MPFR_RNDN);
+        double ci_im = mpfr_get_d(p->c[i].im, MPFR_RNDN);
+        if (!isfinite(ci_re) || !isfinite(ci_im)) { free(A); free(w); free(VR); return -1; }
+        size_t o = 2 * ((size_t)i + (size_t)(n - 1) * n);
+        A[o]     = -(ci_re * cn_re + ci_im * cn_im) / cn2;
+        A[o + 1] = -(ci_im * cn_re - ci_re * cn_im) / cn2;
+    }
+
+    int info = mat_lapack_zgeev(n, A, n, w, VR, n);
+    free(A); free(VR);
+    if (info != 0) { free(w); return -1; }
+
+    for (int i = 0; i < n; i++) {
+        mpfr_set_d(roots[i].re, w[2 * i],     MPFR_RNDN);
+        mpfr_set_d(roots[i].im, w[2 * i + 1], MPFR_RNDN);
+        nr_newton_polish(p, &roots[i], wp, 8);   /* refine LAPACK seed */
+    }
+    free(w);
+    return 0;
+}
+
+/* ------------------------------------------------------------------ *
  *  Engine dispatch with trailing-zero (x^m) deflation.
  *  `roots` is caller-owned, length p->deg, every cell ncpx_init'd at wp.
+ *  `want_machine` selects the LAPACK companion fast path for an
+ *  Automatic machine-precision request.
  * ------------------------------------------------------------------ */
 static int nr_solve(const NrPoly* p, NrMethod method, int max_iter,
-                    mpfr_prec_t wp, ncpx* roots) {
+                    mpfr_prec_t wp, ncpx* roots, bool want_machine) {
     int d = p->deg;
 
     /* m = number of leading zero coefficients = multiplicity of the root 0. */
@@ -301,17 +381,25 @@ static int nr_solve(const NrPoly* p, NrMethod method, int max_iter,
 
     int rc = 0;
     if (r.deg >= 1) {
-        switch (method) {
-            case NR_AUTO:
-            case NR_ABERTH:
-                rc = nr_aberth(&r, roots, max_iter, wp);
-                break;
-            case NR_COMPANION:
-                rc = nr_companion(&r, roots, wp);
-                break;
-            case NR_JT:
-                rc = nr_jenkinstraub(&r, roots, max_iter, wp);
-                break;
+        /* Automatic machine-precision request: LAPACK companion first
+         * (numpy.roots), falling back to the MPFR engine on any refusal. */
+        int done = 0;
+        if (want_machine && (method == NR_AUTO || method == NR_COMPANION)) {
+            if (nr_companion_machine(&r, roots, wp) == 0) done = 1;
+        }
+        if (!done) {
+            switch (method) {
+                case NR_AUTO:
+                case NR_ABERTH:
+                    rc = nr_aberth(&r, roots, max_iter, wp);
+                    break;
+                case NR_COMPANION:
+                    rc = nr_companion(&r, roots, wp);
+                    break;
+                case NR_JT:
+                    rc = nr_jenkinstraub(&r, roots, max_iter, wp);
+                    break;
+            }
         }
     }
     if (rc != 0) return rc;
@@ -395,7 +483,7 @@ static NrPoly* nr_zupoly_to_nrpoly(const ZUPoly* z, mpfr_prec_t wp) {
  * (d = zp->deg) with each squarefree factor's roots repeated by multiplicity.
  * Returns 0 on success, -1 to request the numeric fallback. */
 static int nr_solve_exact(const ZUPoly* zp, NrMethod method, int max_iter,
-                          mpfr_prec_t wp, ncpx* roots) {
+                          mpfr_prec_t wp, ncpx* roots, bool want_machine) {
     int d = zp->deg;
     ZUPoly** facs = NULL; int* mults = NULL; int nf = 0;
     if (nr_yun(zp, &facs, &mults, &nf) != 0) return -1;
@@ -407,7 +495,7 @@ static int nr_solve_exact(const ZUPoly* zp, NrMethod method, int max_iter,
         if (di <= 0) { nr_poly_free(fp); continue; }
         ncpx* fr = (ncpx*)malloc(sizeof(ncpx) * (size_t)di);
         for (int j = 0; j < di; j++) ncpx_init(&fr[j], wp);
-        if (nr_solve(fp, method, max_iter, wp, fr) == 0) {
+        if (nr_solve(fp, method, max_iter, wp, fr, want_machine) == 0) {
             for (int j = 0; j < di; j++)
                 for (int m = 0; m < mults[k]; m++)
                     if (fill < d) ncpx_set(&roots[fill++], &fr[j]);
@@ -873,10 +961,10 @@ Expr* builtin_nroots(Expr* res) {
     int rc;
     int poly_is_real;
     if (zp && zp->deg == d && d >= 2
-        && nr_solve_exact(zp, opts.method, max_iter, wp, roots) == 0) {
+        && nr_solve_exact(zp, opts.method, max_iter, wp, roots, want_machine) == 0) {
         rc = 0; poly_is_real = 1;
     } else {
-        rc = nr_solve(p, opts.method, max_iter, wp, roots);
+        rc = nr_solve(p, opts.method, max_iter, wp, roots, want_machine);
         poly_is_real = p->is_real;
     }
 

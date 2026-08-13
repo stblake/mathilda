@@ -1,6 +1,7 @@
 #include "eigen.h"
 #include "eigen_internal.h"
 #include "linalg.h"
+#include "lapack.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -3899,13 +3900,227 @@ static Expr* direct_dispatch_mpfr(Expr* m, Expr* a, int64_t n,
 #endif /* USE_MPFR */
 
 
+/* Fill a column-major real buffer cm[i + j*n] from a row-major real MatD. */
+static void gen_cm_real(const MatD* M, double* cm) {
+    size_t n = M->n;
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = 0; j < n; j++)
+            cm[i + j * n] = M->re[i * n + j];
+}
+
+/* Fill a column-major interleaved-complex buffer cm[2*(i + j*n)] from a
+ * MatD (imag part 0 when the source is real). */
+static void gen_cm_complex(const MatD* M, double* cm) {
+    size_t n = M->n;
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = 0; j < n; j++) {
+            size_t o = 2 * (i + j * n);
+            cm[o]     = M->re[i * n + j];
+            cm[o + 1] = M->is_complex ? M->im[i * n + j] : 0.0;
+        }
+}
+
+/* Generalized machine eigenproblem  A x = lambda B x  via LAPACK.
+ *
+ * Real symmetric-definite pencils go through dsygv (guaranteed-real
+ * spectrum, matching scipy.linalg.eigh); Hermitian-definite through
+ * zhegv; every other real / complex pencil through dggev / zggev.
+ * Eigenvalues are sorted by descending |lambda| and eigenvectors are
+ * normalized to unit 2-norm, exactly like the standard machine kernels
+ * above, so Eigenvalues / Eigenvectors / Eigensystem of a numeric pencil
+ * share one output convention.
+ *
+ * Returns NULL -- fall back to the exact symbolic path -- when there is
+ * no LAPACK (the mat_lapack_* stubs report failure), when B is singular
+ * (an infinite generalized eigenvalue, beta ~ 0, which the symbolic path
+ * renders as Infinity), or when a LAPACK routine reports a numerical
+ * failure.  This replaces the O(n!) Laplace determinant + symbolic
+ * root-find that previously ran for EVERY numeric pencil and hung for
+ * n >= 8. */
+static Expr* direct_generalized_machine(const MatD* A, const MatD* B,
+                                        MateigenWant want, Expr* k_spec) {
+    size_t n = A->n;
+    if (n == 0 || B->n != n) return NULL;
+    bool want_vec = (want & MATEIGEN_WANT_VECTORS) != 0;
+    int in = (int)n;
+    bool is_complex = A->is_complex || B->is_complex;
+
+    double* eval_re = (double*)calloc(n, sizeof(double));
+    double* eval_im = (double*)calloc(n, sizeof(double));
+    /* Raw eigenvectors in LAPACK order, row-major Vraw[j*n + i]. */
+    double* Vr = want_vec ? (double*)calloc(n * n, sizeof(double)) : NULL;
+    double* Vi = want_vec ? (double*)calloc(n * n, sizeof(double)) : NULL;
+    if (!eval_re || !eval_im || (want_vec && (!Vr || !Vi))) {
+        free(eval_re); free(eval_im); free(Vr); free(Vi); return NULL;
+    }
+
+    bool ok = false;
+    bool infinite_ev = false;
+
+    if (!is_complex) {
+        double na = matD_norm_inf_real(A->re, n);
+        double nb = matD_norm_inf_real(B->re, n);
+        double tolA = 1e-12 * (na == 0.0 ? 1.0 : na) * (double)n;
+        double tolB = 1e-12 * (nb == 0.0 ? 1.0 : nb) * (double)n;
+        bool symdef = matD_is_real_symmetric(A, tolA) &&
+                      matD_is_real_symmetric(B, tolB);
+
+        if (symdef) {
+            double* Ac = (double*)malloc(n * n * sizeof(double));
+            double* Bc = (double*)malloc(n * n * sizeof(double));
+            double* w  = (double*)malloc(n * sizeof(double));
+            if (Ac && Bc && w) {
+                gen_cm_real(A, Ac); gen_cm_real(B, Bc);
+                int info = mat_lapack_dsygv(in, Ac, in, Bc, in, w);
+                if (info == 0) {
+                    for (size_t j = 0; j < n; j++) { eval_re[j] = w[j]; eval_im[j] = 0.0; }
+                    if (want_vec)
+                        for (size_t j = 0; j < n; j++)
+                            for (size_t i = 0; i < n; i++)
+                                Vr[j * n + i] = Ac[i + j * n];  /* col j -> eigvec j */
+                    ok = true;
+                }
+                /* info != 0 (incl. B not positive definite) -> try dggev. */
+            }
+            free(Ac); free(Bc); free(w);
+        }
+
+        if (!ok) {
+            double* Ac = (double*)malloc(n * n * sizeof(double));
+            double* Bc = (double*)malloc(n * n * sizeof(double));
+            double* ar = (double*)malloc(n * sizeof(double));
+            double* ai = (double*)malloc(n * sizeof(double));
+            double* be = (double*)malloc(n * sizeof(double));
+            /* dggev is called with jobvr='V', so VR must be a valid buffer
+             * even when the caller only wants eigenvalues. */
+            double* VR = (double*)malloc(n * n * sizeof(double));
+            if (Ac && Bc && ar && ai && be && VR) {
+                gen_cm_real(A, Ac); gen_cm_real(B, Bc);
+                int info = mat_lapack_dggev(in, Ac, in, Bc, in, ar, ai, be, VR, in);
+                if (info == 0) {
+                    for (size_t j = 0; j < n; j++) {
+                        if (be[j] == 0.0) { infinite_ev = true; break; }
+                        eval_re[j] = ar[j] / be[j];
+                        eval_im[j] = ai[j] / be[j];
+                    }
+                    if (!infinite_ev) {
+                        if (want_vec) {
+                            /* Conjugate-pair VR unpacking, dgeev convention:
+                             * dggev guarantees beta >= 0, so sign(imag) = sign(ai). */
+                            for (size_t j = 0; j < n; j++)
+                                for (size_t i = 0; i < n; i++) {
+                                    double re, im;
+                                    if (ai[j] == 0.0)      { re = VR[i + j * n];       im = 0.0; }
+                                    else if (ai[j] > 0.0)  { re = VR[i + j * n];       im = VR[i + (j + 1) * n]; }
+                                    else                   { re = VR[i + (j - 1) * n]; im = -VR[i + j * n]; }
+                                    Vr[j * n + i] = re; Vi[j * n + i] = im;
+                                }
+                        }
+                        ok = true;
+                    }
+                }
+            }
+            free(Ac); free(Bc); free(ar); free(ai); free(be); free(VR);
+        }
+    } else {
+        double na = matD_norm_inf_complex(A);
+        double nb = matD_norm_inf_complex(B);
+        double tolA = 1e-12 * (na == 0.0 ? 1.0 : na) * (double)n;
+        double tolB = 1e-12 * (nb == 0.0 ? 1.0 : nb) * (double)n;
+        bool hermdef = matD_is_hermitian(A, tolA) && matD_is_hermitian(B, tolB);
+
+        if (hermdef) {
+            double* Ac = (double*)malloc(2 * n * n * sizeof(double));
+            double* Bc = (double*)malloc(2 * n * n * sizeof(double));
+            double* w  = (double*)malloc(n * sizeof(double));
+            if (Ac && Bc && w) {
+                gen_cm_complex(A, Ac); gen_cm_complex(B, Bc);
+                int info = mat_lapack_zhegv(in, Ac, in, Bc, in, w);
+                if (info == 0) {
+                    for (size_t j = 0; j < n; j++) { eval_re[j] = w[j]; eval_im[j] = 0.0; }
+                    if (want_vec)
+                        for (size_t j = 0; j < n; j++)
+                            for (size_t i = 0; i < n; i++) {
+                                size_t o = 2 * (i + j * n);
+                                Vr[j * n + i] = Ac[o]; Vi[j * n + i] = Ac[o + 1];
+                            }
+                    ok = true;
+                }
+            }
+            free(Ac); free(Bc); free(w);
+        }
+
+        if (!ok) {
+            double* Ac = (double*)malloc(2 * n * n * sizeof(double));
+            double* Bc = (double*)malloc(2 * n * n * sizeof(double));
+            double* al = (double*)malloc(2 * n * sizeof(double));
+            double* be = (double*)malloc(2 * n * sizeof(double));
+            /* zggev is called with jobvr='V', so VR must be a valid buffer
+             * even when the caller only wants eigenvalues. */
+            double* VR = (double*)malloc(2 * n * n * sizeof(double));
+            if (Ac && Bc && al && be && VR) {
+                gen_cm_complex(A, Ac); gen_cm_complex(B, Bc);
+                int info = mat_lapack_zggev(in, Ac, in, Bc, in, al, be, VR, in);
+                if (info == 0) {
+                    for (size_t j = 0; j < n; j++) {
+                        double br = be[2 * j], bi = be[2 * j + 1];
+                        double b2 = br * br + bi * bi;
+                        if (b2 == 0.0) { infinite_ev = true; break; }
+                        double are = al[2 * j], aim = al[2 * j + 1];
+                        eval_re[j] = (are * br + aim * bi) / b2;   /* alpha / beta */
+                        eval_im[j] = (aim * br - are * bi) / b2;
+                    }
+                    if (!infinite_ev) {
+                        if (want_vec)
+                            for (size_t j = 0; j < n; j++)
+                                for (size_t i = 0; i < n; i++) {
+                                    size_t o = 2 * (i + j * n);
+                                    Vr[j * n + i] = VR[o]; Vi[j * n + i] = VR[o + 1];
+                                }
+                        ok = true;
+                    }
+                }
+            }
+            free(Ac); free(Bc); free(al); free(be); free(VR);
+        }
+    }
+
+    if (!ok) { free(eval_re); free(eval_im); free(Vr); free(Vi); return NULL; }
+
+    size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
+    direct_sort_perm_desc_abs_complex(eval_re, eval_im, n, perm);
+
+    Expr* out;
+    if (want_vec) {
+        double* Vs_re = (double*)malloc(sizeof(double) * n * n);
+        double* Vs_im = (double*)malloc(sizeof(double) * n * n);
+        for (size_t s = 0; s < n; s++) {
+            size_t j = perm[s];
+            double norm2 = 0.0;
+            for (size_t i = 0; i < n; i++)
+                norm2 += Vr[j * n + i] * Vr[j * n + i] + Vi[j * n + i] * Vi[j * n + i];
+            double inv = (norm2 > 0.0) ? 1.0 / sqrt(norm2) : 1.0;
+            for (size_t i = 0; i < n; i++) {
+                Vs_re[s * n + i] = Vr[j * n + i] * inv;
+                Vs_im[s * n + i] = Vi[j * n + i] * inv;
+            }
+        }
+        out = direct_build_complex_eigenvector_list(Vs_re, Vs_im, n);
+        free(Vs_re); free(Vs_im);
+    } else {
+        out = direct_build_complex_eigenvalue_list(eval_re, eval_im, n, perm);
+    }
+
+    free(eval_re); free(eval_im); free(Vr); free(Vi); free(perm);
+    return direct_apply_k_spec_list(out, k_spec);
+}
+
 /* Dispatcher entry point: route a numeric matrix through the
  * appropriate "Direct" kernel.  Returns NULL when the matrix shape
  * isn't yet supported by a numerical kernel so the caller can fall
- * back to the symbolic path.  This NULL return is also used for
- * Eigenvalues / Eigenvectors combined with a generalised pencil
- * ({m, a}) -- generalised numeric eigenvalues are not part of the
- * current numerical scope.
+ * back to the symbolic path.  A generalised pencil ({m, a}) first tries
+ * the LAPACK dsygv/dggev machine path and only falls back to symbolic
+ * for a singular B or non-numeric content.
  *
  * Implemented kernels:
  *   - Real symmetric (machine precision):           values + vectors.
@@ -3921,11 +4136,18 @@ static Expr* direct_dispatch_mpfr(Expr* m, Expr* a, int64_t n,
  */
 static Expr* direct_dispatch_machine(Expr* m, Expr* a, int64_t n,
                                        MateigenWant want, Expr* k_spec) {
-    if (a != NULL) return NULL;          /* generalised: symbolic only */
     if (n <= 0)    return NULL;
 
     MatD A;
     if (!matD_load(m, (size_t)n, &A)) return NULL;
+
+    if (a != NULL) {                     /* generalised pencil A x = lambda B x */
+        MatD B;
+        if (!matD_load(a, (size_t)n, &B)) { matD_free(&A); return NULL; }
+        Expr* gout = direct_generalized_machine(&A, &B, want, k_spec);
+        matD_free(&A); matD_free(&B);
+        return gout;                     /* NULL -> symbolic fallback */
+    }
 
     Expr* out = NULL;
     if (A.is_complex) {
