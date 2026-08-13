@@ -319,14 +319,37 @@ static int nr_companion_machine(const NrPoly* p, ncpx* roots, mpfr_prec_t wp) {
         return 0;
     }
 
-    /* Column-major interleaved-complex companion.  Same "last column"
-     * Frobenius form as nr_companion: entry (i, i-1) = 1 (subdiagonal),
-     * entry (i, n-1) = -c_i / c_n (last column). */
-    double* A  = (double*)calloc((size_t)2 * n * n, sizeof(double));
-    double* w  = (double*)malloc((size_t)2 * n * sizeof(double));
-    double* VR = (double*)malloc((size_t)2 * n * n * sizeof(double)); /* jobvr='V' needs it */
-    if (!A || !w || !VR) { free(A); free(w); free(VR); return -1; }
+    /* Frobenius "last column" companion: entry (i, i-1) = 1 (subdiagonal),
+     * entry (i, n-1) = -c_i / c_n (last column). Eigenvalues are the roots.
+     * A REAL polynomial uses a real companion + dgeev (numpy.roots exactly) --
+     * ~4x cheaper than complex arithmetic; both forms request eigenvalues ONLY
+     * (no discarded eigenvectors). */
+    if (p->is_real) {
+        double* A  = (double*)calloc((size_t)n * (size_t)n, sizeof(double));
+        double* wr = (double*)malloc((size_t)n * sizeof(double));
+        double* wi = (double*)malloc((size_t)n * sizeof(double));
+        if (!A || !wr || !wi) { free(A); free(wr); free(wi); return -1; }
+        for (int i = 1; i < n; i++) A[(size_t)i + (size_t)(i - 1) * n] = 1.0;
+        for (int i = 0; i < n; i++) {
+            double ci = mpfr_get_d(p->c[i].re, MPFR_RNDN);
+            if (!isfinite(ci)) { free(A); free(wr); free(wi); return -1; }
+            A[(size_t)i + (size_t)(n - 1) * n] = -ci / cn_re;  /* c_n real, != 0 */
+        }
+        int info = mat_lapack_dgeev_values(n, A, n, wr, wi);
+        free(A);
+        if (info != 0) { free(wr); free(wi); return -1; }
+        for (int i = 0; i < n; i++) {
+            mpfr_set_d(roots[i].re, wr[i], MPFR_RNDN);
+            mpfr_set_d(roots[i].im, wi[i], MPFR_RNDN);
+            nr_newton_polish(p, &roots[i], wp, 8);
+        }
+        free(wr); free(wi);
+        return 0;
+    }
 
+    double* A = (double*)calloc((size_t)2 * n * n, sizeof(double));
+    double* w = (double*)malloc((size_t)2 * n * sizeof(double));
+    if (!A || !w) { free(A); free(w); return -1; }
     for (int i = 1; i < n; i++) {                 /* subdiagonal ones */
         size_t o = 2 * ((size_t)i + (size_t)(i - 1) * n);
         A[o] = 1.0;
@@ -334,14 +357,14 @@ static int nr_companion_machine(const NrPoly* p, ncpx* roots, mpfr_prec_t wp) {
     for (int i = 0; i < n; i++) {                 /* last column: -c_i / c_n */
         double ci_re = mpfr_get_d(p->c[i].re, MPFR_RNDN);
         double ci_im = mpfr_get_d(p->c[i].im, MPFR_RNDN);
-        if (!isfinite(ci_re) || !isfinite(ci_im)) { free(A); free(w); free(VR); return -1; }
+        if (!isfinite(ci_re) || !isfinite(ci_im)) { free(A); free(w); return -1; }
         size_t o = 2 * ((size_t)i + (size_t)(n - 1) * n);
         A[o]     = -(ci_re * cn_re + ci_im * cn_im) / cn2;
         A[o + 1] = -(ci_im * cn_re - ci_re * cn_im) / cn2;
     }
 
-    int info = mat_lapack_zgeev(n, A, n, w, VR, n);
-    free(A); free(VR);
+    int info = mat_lapack_zgeev_values(n, A, n, w);
+    free(A);
     if (info != 0) { free(w); return -1; }
 
     for (int i = 0; i < n; i++) {
