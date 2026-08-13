@@ -1295,8 +1295,13 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
 
-    /* Pre-compute Jacobian symbolically: matrix[i][j] = D[f_i, var_j]. */
+    /* Pre-compute Jacobian symbolically: matrix[i][j] = D[f_i, var_j].
+     * jz[i*n+j] flags the STRUCTURALLY-ZERO entries: for a sparse system (a
+     * tridiagonal Broyden field has 3 non-zeros per row, not n) that is the
+     * overwhelming majority, and skipping their compile + per-iteration eval is
+     * the difference between O(n^2) and O(nnz) work. */
     Expr*** jac = malloc(sizeof(Expr**) * n);
+    bool* jz = malloc(sizeof(bool) * n * n);
     for (size_t i = 0; i < n; i++) {
         jac[i] = malloc(sizeof(Expr*) * n);
         Expr* fi = flist_normalized->data.function.args[i];
@@ -1308,12 +1313,17 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
             } else {
                 jac[i][j] = fr_compute_derivative(fi, vars[j]);
             }
+            Expr* je = jac[i][j];
+            jz[i * n + j] = je &&
+                ((je->type == EXPR_INTEGER && je->data.integer == 0) ||
+                 (je->type == EXPR_REAL && je->data.real == 0.0));
         }
     }
 
     /* Compile each component f_i and Jacobian entry J_ij as a function of all n
      * variables (machine fast path); a NULL entry falls back to the interpreter.
-     * Systems are machine-precision, so the spec is fixed here. */
+     * Structurally-zero entries are never compiled. Systems are
+     * machine-precision, so the spec is fixed here. */
     AutoCompiled**  ac_f   = malloc(sizeof(*ac_f) * n);
     AutoCompiled*** ac_jac = malloc(sizeof(*ac_jac) * n);
     for (size_t i = 0; i < n; i++) {
@@ -1321,7 +1331,9 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
                                   (const Expr* const*)vars, n);
         ac_jac[i] = malloc(sizeof(**ac_jac) * n);
         for (size_t j = 0; j < n; j++)
-            ac_jac[i][j] = autocompile_new(jac[i][j], (const Expr* const*)vars, n);
+            ac_jac[i][j] = jz[i * n + j]
+                ? NULL
+                : autocompile_new(jac[i][j], (const Expr* const*)vars, n);
     }
 
     Expr* result = NULL;
@@ -1366,6 +1378,7 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
         double* J = malloc(sizeof(double) * n * n);
         for (size_t i = 0; i < n; i++) {
             for (size_t j = 0; j < n; j++) {
+                if (jz[i*n + j]) { J[i*n + j] = 0.0; continue; }
                 if (!fr_eval_compiled_double(ac_jac[i][j], x_vec, n, &J[i*n + j])) {
                     Expr* dv_e = fr_eval_with_bindings(jac[i][j], binds, xv, n, opts);
                     if (!dv_e || !fr_expr_to_double_real(dv_e, &J[i*n + j])) {
@@ -1497,6 +1510,7 @@ cleanup:
     free(jac);
     free(ac_jac);
     free(ac_f);
+    free(jz);
     return result;
 }
 
