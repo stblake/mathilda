@@ -14,6 +14,8 @@
   import { get } from 'svelte/store';
   import NotebookCard from './NotebookCard.svelte';
   import Minimap from './Minimap.svelte';
+  import StatusBar from './StatusBar.svelte';
+  import { showStatusBar } from './status';
   import { isTouchDevice } from './platform';
   import {
     canvasState,
@@ -568,11 +570,18 @@
   {#if fnb}
     <div
       class="focused-view"
+      class:with-status={$showStatusBar}
     >
       <div class="focused-view-inner">
         <NotebookCard nb={fnb} currentZoom={1} focused={true} />
       </div>
     </div>
+    <!-- A sibling of the scroller, not a child: a status bar that scrolls away
+         with the notebook is not a status bar. Fixed to the bottom, with
+         .focused-view inset above it by the same height. -->
+    {#if $showStatusBar}
+      <div class="status-dock"><StatusBar /></div>
+    {/if}
   {/if}
 {:else}
   <!-- ── Canvas mode ── -->
@@ -744,6 +753,7 @@
        taller grouped toolbar, and these two numbers must agree or the view
        either overlaps the bar or leaves a gap under it. */
     inset: var(--toolbar-h, 46px) 0 0 0;   /* clear the toolbar */
+
     /* Use card-bg so light mode doesn't show dark canvas edges */
     background: var(--card-bg, #050810);
     overflow-y: auto;
@@ -759,6 +769,18 @@
     display: flex;
     flex-direction: column;
   }
+  /* Leave room for the status bar when it is shown, so the notebook's last cell
+     is never hidden behind it. */
+  .focused-view.with-status { bottom: var(--statusbar-h, 22px); }
+
+  .status-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;   /* above .focused-view (50), below the app bar (200) */
+  }
+
   .focused-view-inner {
     width: 100%;
     /* Grow to fill, but never shrink below content. */

@@ -25,17 +25,23 @@
   import ToolbarGroup from './ToolbarGroup.svelte';
   import Menu from './Menu.svelte';
   import type { MenuItem } from './Menu.svelte';
-  import { canvasState, setFocused, activeActions, activeFlags, openRefpage } from './canvas';
+  import { canvasState, setFocused, activeActions, activeFlags, openRefpage, addQueryNotebook } from './canvas';
   import { activeCell, retypeActiveCell } from './active';
   import { darkMode } from './theme';
   import { symbolAtSelection } from './refpages';
+  import { kernelStatus } from './notebook';
+  import { restart, abortEvaluation } from './kernelActions';
+  import { showStatusBar, resetSessionStats } from './status';
   import type { Cell, CellType, NotebookRow } from './notebook';
 
-  type MenuId = 'style' | 'overflow' | null;
+  type MenuId = 'eval' | 'kernel' | 'docs' | 'style' | 'overflow' | null;
   let openMenu: MenuId = null;
 
   /* One anchor per trigger, so the menu can measure against the button that
      opened it. */
+  let evalAnchor: HTMLElement;
+  let kernelAnchor: HTMLElement;
+  let docsAnchor: HTMLElement;
   let styleAnchor: HTMLElement;
   let overflowAnchor: HTMLElement;
 
@@ -67,9 +73,66 @@
   }
   onDestroy(() => unsubRows?.());
 
+  $: cells = rows.flatMap(r => r.cells) as Cell[];
+
   $: activeCellObj = ($activeCell && $activeActions && $activeCell.notebookId === $activeActions.notebookId)
-    ? (rows.flatMap(r => r.cells).find((c: Cell) => c.id === $activeCell!.cellId) ?? null)
+    ? (cells.find((c: Cell) => c.id === $activeCell!.cellId) ?? null)
     : null;
+
+  /* Position in the flattened cell order, which is what runRange indexes. */
+  $: activeIdx = activeCellObj ? cells.findIndex(c => c.id === activeCellObj!.id) : -1;
+
+  // ---------------------------------------------------------------------------
+  // Evaluation
+
+  $: canRunCell = activeCellObj?.type === 'code' && activeCellObj.source.trim().length > 0;
+
+  /* The bare Run button does the obvious thing for where the caret is: run the
+     cell you are in, or the whole notebook if you are not in one. */
+  function runPrimary() {
+    const pane = $activeActions;
+    if (!pane) return;
+    if (canRunCell && activeCellObj) pane.runCell(activeCellObj.id);
+    else pane.runAll();
+  }
+
+  $: evalItems = [
+    { kind: 'item', id: 'cell', label: 'Evaluate cell', icon: 'run', hint: '⇧↵', disabled: !canRunCell },
+    { kind: 'item', id: 'notebook', label: 'Evaluate notebook', icon: 'runAll' },
+    { kind: 'sep' },
+    { kind: 'item', id: 'from', label: 'Evaluate from here down', disabled: activeIdx < 0 },
+    { kind: 'item', id: 'above', label: 'Evaluate above', disabled: activeIdx <= 0 },
+  ] as MenuItem[];
+
+  function onEvalSelect(id: string) {
+    const pane = $activeActions;
+    if (!pane) return;
+    switch (id) {
+      case 'cell':     if (activeCellObj) pane.runCell(activeCellObj.id); break;
+      case 'notebook': pane.runAll(); break;
+      case 'from':     pane.runRange(activeIdx, cells.length - 1); break;
+      case 'above':    pane.runRange(0, activeIdx - 1); break;
+    }
+  }
+
+  const KERNEL_SHORT: Record<string, string> = {
+    starting: 'Starting', ready: 'Ready', busy: 'Running',
+    restarting: 'Restarting', dead: 'Not running',
+  };
+
+  /* "Abort" is spelled out because it is not free: interrupt_kernel kills the
+     process without respawning it, so regaining control costs the session's
+     definitions. A control whose consequence surprises you is worse than one
+     that reads long. */
+  $: kernelItems = [
+    { kind: 'item', id: 'abort', label: 'Abort evaluation (restarts kernel)', icon: 'abort', hint: '⌘.', disabled: $kernelStatus !== 'busy' },
+    { kind: 'item', id: 'restart', label: 'Restart kernel', icon: 'restart' },
+  ] as MenuItem[];
+
+  function onKernelSelect(id: string) {
+    if (id === 'abort') { abortEvaluation(); resetSessionStats(); }
+    else if (id === 'restart') { restart(); resetSessionStats(); }
+  }
 
   // ---------------------------------------------------------------------------
   // Cell Style
@@ -131,11 +194,38 @@
   }
   $: { void $activeCell; refreshDocsTarget(); }
 
-  function openDocs() {
-    const hit = symbolAtSelection();
+  /* A menu rather than a bare button.
+   *
+   * As a button this was disabled whenever no documented symbol sat under the
+   * caret -- which is most of the time -- and a control that is usually greyed
+   * out and never says why reads as broken rather than as conditional. As a menu
+   * it always has at least one thing it can actually do. */
+  $: docsItems = [
+    {
+      kind: 'item',
+      id: 'symbol',
+      label: docsTarget ? `Documentation for ${docsTarget}` : 'Documentation for the symbol at the caret',
+      icon: 'docs',
+      hint: 'F1',
+      disabled: !docsTarget,
+    },
+    { kind: 'sep' },
+    { kind: 'item', id: 'browse', label: 'Browse all symbols…', icon: 'search' },
+  ] as MenuItem[];
+
+  function onDocsSelect(id: string) {
     const pane = $activeActions;
-    if (!hit || !pane) return;
-    openRefpage(pane.notebookId, hit.name, hit.at);
+    if (!pane) return;
+    if (id === 'symbol') {
+      const hit = symbolAtSelection();
+      if (hit) openRefpage(pane.notebookId, hit.name, hit.at);
+    } else if (id === 'browse') {
+      /* `?*` is the kernel's own wildcard symbol lookup, and its result already
+         renders as a grid of names where clicking one opens that symbol's
+         reference page. So this reuses a working path rather than inventing a
+         browser. */
+      addQueryNotebook(pane.notebookId, '?*', 'All Symbols');
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -147,6 +237,8 @@
       ? [{ kind: 'item' as const, id: 'sections', label: $activeFlags?.allSectionsCollapsed ? 'Expand all sections' : 'Collapse all sections', icon: $activeFlags?.allSectionsCollapsed ? 'caret' : 'caretUp' }]
       : []),
     { kind: 'sep' },
+    { kind: 'item', id: 'statusbar', label: 'Status bar', checked: $showStatusBar },
+    { kind: 'sep' },
     { kind: 'item', id: 'rename', label: 'Rename notebook…', icon: 'rename' },
     { kind: 'item', id: 'collapse', label: $activeFlags?.collapsed ? 'Expand notebook' : 'Collapse notebook', icon: 'collapse' },
     { kind: 'sep' },
@@ -154,6 +246,9 @@
   ] as MenuItem[];
 
   function onOverflowSelect(id: string) {
+    /* The status bar is a view preference, not a notebook command, so it does
+       not need a pane and must be handled before the guard below. */
+    if (id === 'statusbar') { showStatusBar.update(v => !v); return; }
     const pane = $activeActions;
     if (!pane) return;
     switch (id) {
@@ -171,12 +266,31 @@
     ? ($canvasState.notebooks.find(n => n.id === $canvasState.focusedActiveId)?.title ?? '')
     : '';
 
-  $: menuItems = openMenu === 'style' ? styleItems : openMenu === 'overflow' ? overflowItems : [];
-  $: menuAnchor = openMenu === 'style' ? styleAnchor : openMenu === 'overflow' ? overflowAnchor : null;
+  /* One <Menu> instance, driven by these three tables. Adding a dropdown means
+     adding a row to each, not another component with its own backdrop and
+     keyboard handling. */
+  $: menuItems =
+    openMenu === 'eval'     ? evalItems :
+    openMenu === 'kernel'   ? kernelItems :
+    openMenu === 'docs'     ? docsItems :
+    openMenu === 'style'    ? styleItems :
+    openMenu === 'overflow' ? overflowItems : [];
+
+  $: menuAnchor =
+    openMenu === 'eval'     ? evalAnchor :
+    openMenu === 'kernel'   ? kernelAnchor :
+    openMenu === 'docs'     ? docsAnchor :
+    openMenu === 'style'    ? styleAnchor :
+    openMenu === 'overflow' ? overflowAnchor : null;
 
   function onMenuSelect(e: CustomEvent<{ id: string }>) {
-    if (openMenu === 'style') onStyleSelect(e.detail.id);
-    else if (openMenu === 'overflow') onOverflowSelect(e.detail.id);
+    switch (openMenu) {
+      case 'eval':     onEvalSelect(e.detail.id); break;
+      case 'kernel':   onKernelSelect(e.detail.id); break;
+      case 'docs':     onDocsSelect(e.detail.id); break;
+      case 'style':    onStyleSelect(e.detail.id); break;
+      case 'overflow': onOverflowSelect(e.detail.id); break;
+    }
   }
 </script>
 
@@ -193,6 +307,47 @@
   on:pointerdown|preventDefault
   on:click={() => setFocused(null)}
 ><Icon name="back" size={17} /></button>
+
+<ToolbarGroup label="Evaluation">
+  <button
+    class="tb-btn tb-run"
+    title={canRunCell ? 'Evaluate the active cell (Shift+Enter)' : 'Evaluate the whole notebook'}
+    tabindex="-1"
+    on:pointerdown|preventDefault
+    on:click={runPrimary}
+  ><Icon name={canRunCell ? 'run' : 'runAll'} /></button>
+
+  <button
+    class="tb-caret"
+    title="Evaluation options"
+    aria-haspopup="menu"
+    aria-expanded={openMenu === 'eval'}
+    tabindex="-1"
+    bind:this={evalAnchor}
+    on:pointerdown|preventDefault
+    on:click={() => toggleMenu('eval')}
+  ><Icon name="caret" size={12} /></button>
+
+  <span class="tb-mini-rule"></span>
+
+  <!-- Kernel state, and the two things you can do about it. The dot carries the
+       status so the text can stay short enough for a toolbar. -->
+  <button
+    class="tb-kernel"
+    data-status={$kernelStatus}
+    title={`Local kernel — ${KERNEL_SHORT[$kernelStatus] ?? $kernelStatus}`}
+    aria-haspopup="menu"
+    aria-expanded={openMenu === 'kernel'}
+    tabindex="-1"
+    bind:this={kernelAnchor}
+    on:pointerdown|preventDefault
+    on:click={() => toggleMenu('kernel')}
+  >
+    <span class="dot"></span>
+    <span class="tb-kernel-label">{KERNEL_SHORT[$kernelStatus] ?? $kernelStatus}</span>
+    <Icon name="caret" size={12} />
+  </button>
+</ToolbarGroup>
 
 <ToolbarGroup label="Cell Style">
   <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -223,11 +378,13 @@
 
   <button
     class="tb-btn"
-    title={docsTarget ? `Documentation for ${docsTarget}` : 'Documentation — put the caret on a symbol first'}
-    disabled={!docsTarget}
+    title={docsTarget ? `Documentation for ${docsTarget}` : 'Documentation'}
+    aria-haspopup="menu"
+    aria-expanded={openMenu === 'docs'}
     tabindex="-1"
+    bind:this={docsAnchor}
     on:pointerdown|preventDefault
-    on:click={openDocs}
+    on:click={() => toggleMenu('docs')}
   ><Icon name="docs" /></button>
 </ToolbarGroup>
 
@@ -298,6 +455,70 @@
     letter-spacing: 0.06em;
     margin-left: 2px;
   }
+
+  /* ---- Evaluation ---- */
+  .tb-run { color: var(--ok); }
+  .tb-run:hover:not(:disabled) { background: color-mix(in srgb, var(--ok) 14%, transparent); }
+
+  /* A caret paired with a button: narrower, and visually attached to its left
+     neighbour so the two read as one control with a dropdown. */
+  .tb-caret {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: var(--tb-btn-sz, 24px);
+    padding: 0;
+    margin-left: -3px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--tb-caption);
+    cursor: pointer;
+  }
+  .tb-caret:hover { background: var(--surface-2); color: var(--text-h); }
+
+  /* Separates the run controls from the kernel chip inside one group. */
+  .tb-mini-rule {
+    width: 1px;
+    height: 14px;
+    margin: 0 4px;
+    background: var(--tb-rule);
+    flex-shrink: 0;
+  }
+
+  .tb-kernel {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: var(--tb-btn-sz, 24px);
+    padding: 0 4px 0 7px;
+    background: var(--surface-2);
+    border: 1px solid var(--tb-rule);
+    border-radius: 11px;
+    color: var(--text);
+    font: 500 0.72rem/1 var(--sans);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .tb-kernel:hover { border-color: var(--accent); color: var(--text-h); }
+  .tb-kernel-label { font-variant-numeric: tabular-nums; }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-muted);
+  }
+  [data-status='ready']      .dot { background: var(--ok); }
+  [data-status='busy']       .dot { background: var(--warn); animation: blink 1s ease-in-out infinite; }
+  [data-status='starting']   .dot { background: var(--accent); animation: blink 1s ease-in-out infinite; }
+  [data-status='restarting'] .dot { background: var(--warn); animation: blink 1s ease-in-out infinite; }
+  [data-status='dead']       .dot { background: var(--err); }
+  [data-status='dead'] .tb-kernel-label { color: var(--err); }
+
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
   /* ---- Cell-style combo ---- */
   .tb-combo {

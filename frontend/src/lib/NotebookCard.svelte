@@ -36,6 +36,7 @@
     selectedCells,
     clearSelection,
   } from './notebook';
+  import { recordOp } from './status';
   import type { OutputItem, CellType } from './notebook';
   import {
     evaluateCell,
@@ -480,10 +481,14 @@
 
   async function runCell(cellId: string, source: string) {
     if (!source.trim()) return;
-    nb.store.stampExec(cellId);
+    const execIdx = nb.store.stampExec(cellId);
     nb.store.clearOutput(cellId);
     nb.store.setStatus(cellId, 'running');
     kernelStatus.set('busy');
+    /* performance.now(), not Date.now(): a monotonic clock, so a system clock
+       adjustment mid-evaluation cannot produce a negative duration. */
+    const t0 = performance.now();
+    let ok = true;
     try {
       await evaluateCell(source, (msg: OutputMessage) => {
         const item = msgToOutputItem(msg);
@@ -493,10 +498,15 @@
       });
       nb.store.setStatus(cellId, 'done');
     } catch (err) {
+      ok = false;
       nb.store.appendOutput(cellId, { kind: 'error', text: String(err) });
       nb.store.setStatus(cellId, 'error');
       kernelStatus.set('dead');
     } finally {
+      /* Measured around the whole request, which is what a user means by "how
+         long did that take" -- it includes the wait for the single kernel mutex
+         when another pane is already running something. */
+      recordOp({ label: `In[${execIdx}]`, ms: performance.now() - t0, ok, source });
       if (get(kernelStatus) !== 'dead') kernelStatus.set('ready');
     }
   }

@@ -14,6 +14,9 @@
      reason Canvas.svelte's hints are in px. */
   --tb-caption-sz: 9px;
   --tb-btn-sz: 24px;
+  /* The optional status bar along the bottom of the focused view. .focused-view
+     insets its bottom by this when the bar is shown. */
+  --statusbar-h: 22px;
   --text: #6b6375;
   --text-h: #08060d;
   /* Subordinate text: subsection headings, captions, recorded output. */
