@@ -2,6 +2,7 @@
 #define ARITHMETIC_H
 
 #include "expr.h"
+#include <gmp.h>
 
 // GCD helper
 int64_t gcd(int64_t a, int64_t b);
@@ -11,6 +12,11 @@ int64_t lcm(int64_t a, int64_t b);
 
 // Create a simplified Rational or Integer
 Expr* make_rational(int64_t n, int64_t d);
+
+// Bignum analogue of make_rational: canonical Rational (or Integer/BigInt when
+// it reduces) from GMP numerator/denominator. Reduces by gcd, forces d > 0.
+// Returns NULL only for a zero denominator.
+Expr* make_rational_mpz(const mpz_t n, const mpz_t d);
 
 // Check if expression is a Rational[...]
 bool is_rational(const Expr* e, int64_t* n, int64_t* d);

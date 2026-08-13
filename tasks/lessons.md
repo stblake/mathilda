@@ -414,6 +414,49 @@ fall-through GMP path that recognises `Rational[BigInt, ...]` (and
 the matching defensive NULL handling at every call site that does
 `x = helper(...); is_overflow(x)`).
 
+### Recurrence: the same int64 blindspot in the leaf numeric heads (2026-08-13)
+
+The identical pattern resurfaced across a whole family of user-facing
+heads: `Abs`/`Sign` (the reported case:
+`Abs[-29043852094387/23409578234095283745029348750]` came back
+unevaluated), `Re`/`Im`/`ReIm`/`Arg`, `Numerator`/`Denominator`, and —
+via the shared comparator — `Min`/`Max`/`Sort`/`Median`/`Ordering`. Two
+distinct failure modes from the one root: heads gated on `is_rational`
+**declined** (returned `NULL`), while `expr_compare`'s double fallback
+read a bignum rational as `0.0` and **misordered silently** — worse than
+declining, because the wrong answer looks evaluated.
+
+Reusable rules this reinforced:
+
+- **Predicate:** use `is_rational_like` (bignum-aware), never
+  `is_rational(e, NULL, NULL)`, whenever you only need "is this a
+  rational?". They diverge exactly on the bignum case.
+- **Sign:** `expr_numeric_sign` returns a bare `0` both for "zero" and
+  "unrecognised", and until this fix it did not recurse into `Rational`
+  components. Fixing it there fixed every caller. For an *exact* sign
+  (e.g. `Arg`), read the sign — never `(double)n/d`, which underflows a
+  tiny rational like `-1/10^400` to `0` and flips the answer.
+- **Order:** for canonical comparison, cross-multiply the mpz
+  components (denominators are canonically positive) rather than compare
+  `get_numeric_value` doubles. A `list_numeric_cmp`/`lc_to_mpq` module
+  already existed in list_common.c *precisely because* `expr_compare`
+  was known-broken here — a local workaround is a signpost that the
+  shared helper still needs the fix.
+- **Fix at the shared root, not per-call.** `expr_numeric_sign`,
+  `expr_compare`, `is_real_numeric`, `extract_num_den` are the choke
+  points; touching them cleared ~10 heads at once.
+- **Grep for the bug's shape, then PROBE.** 357 `is_rational(` sites is
+  too many to triage by hand — build the binary and run the head over a
+  genuine `Rational[Integer, BigInt]` (and make sure the test value does
+  not accidentally reduce to an integer: `big/7` where `7 | big` becomes
+  a BigInt, not a bignum rational, and hides the bug).
+- **Fix leaks you touch in passing.** `leaks --atExit` on the probe
+  found a 16-byte leak in `ReIm` — the `results` array was never freed
+  after `expr_new_function` copied its pointers out (the sibling
+  `is_complex` branch had the same latent leak). When you edit a
+  function, run the leak checker over its path even if the leak predates
+  you.
+
 ## Subresultant PRS over Q(α): Power[α, k/m] vs Times[α^q, Sqrt[α]] don't combine via Plus (2026-05-09)
 
 When implementing Bronstein's subresultant PRS for Resultant, naive

@@ -35,6 +35,22 @@ static bool is_numeric_real(Expr* e) {
     return ok;
 }
 
+/* True for a concrete real-number leaf: Integer, BigInt, Real, MPFR, or a
+ * Rational whose components are integer-like (int64 OR bignum).  This is the
+ * bignum-safe replacement for the recurring
+ *   arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || is_rational(arg,..)
+ * idiom below, which silently declined on a BigInt like 10^30 and on any
+ * Rational past int64 (e.g. Rational[1, 10^25]) — leaving Re/Im/Sign/Abs/Arg
+ * unevaluated on perfectly ordinary exact numbers. */
+static bool is_real_number_leaf(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    return is_rational_like(e); /* Integer, BigInt, Rational[int-like, int-like] */
+}
+
 /* Structurally decompose an expression into real and imaginary parts.
  *
  * Returns true when at least one Complex[a, b] literal is found nested
@@ -218,15 +234,9 @@ Expr* builtin_re(Expr* res) {
     if (is_complex(arg, &re, &im)) {
         return expr_copy(re);
     }
-    int64_t n, d;
-    if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || is_rational(arg, &n, &d)) {
+    if (is_real_number_leaf(arg)) {
         return expr_copy(arg);
     }
-#ifdef USE_MPFR
-    if (arg->type == EXPR_MPFR) {
-        return expr_copy(arg);
-    }
-#endif
     if (complex_decompose(arg, &re, &im)) {
         if (is_numeric_real(re) && is_numeric_real(im)) {
             expr_free(im);
@@ -249,15 +259,9 @@ Expr* builtin_im(Expr* res) {
     if (is_complex(arg, &re, &im)) {
         return expr_copy(im);
     }
-    int64_t n, d;
-    if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || is_rational(arg, &n, &d)) {
+    if (is_real_number_leaf(arg)) {
         return expr_new_integer(0);
     }
-#ifdef USE_MPFR
-    if (arg->type == EXPR_MPFR) {
-        return expr_new_integer(0);
-    }
-#endif
     if (complex_decompose(arg, &re, &im)) {
         if (is_numeric_real(re) && is_numeric_real(im)) {
             expr_free(re);
@@ -287,14 +291,17 @@ Expr* builtin_reim(Expr* res) {
         Expr** results = malloc(sizeof(Expr*) * 2);
         results[0] = expr_copy(re);
         results[1] = expr_copy(im);
-        return expr_new_function(expr_new_symbol(SYM_List), results, 2);
+        Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, 2);
+        free(results); /* expr_new_function copies the pointers; we own the array */
+        return list;
     }
-    int64_t n, d;
-    if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || is_rational(arg, &n, &d)) {
+    if (is_real_number_leaf(arg)) {
         Expr** results = malloc(sizeof(Expr*) * 2);
         results[0] = expr_copy(arg);
         results[1] = expr_new_integer(0);
-        return expr_new_function(expr_new_symbol(SYM_List), results, 2);
+        Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, 2);
+        free(results);
+        return list;
     }
     if (complex_decompose(arg, &re, &im)) {
         if (is_numeric_real(re) && is_numeric_real(im)) {
@@ -418,6 +425,18 @@ Expr* builtin_abs(Expr* res) {
     if (is_rational(arg, &n, &d)) {
         return make_rational(n < 0 ? -n : n, d);
     }
+    /* Bignum-component Rational (numerator or denominator past int64):
+     * |Rational[num, den]| = Rational[|num|, |den|], re-normalised. */
+    if (is_rational_like(arg) && arg->type == EXPR_FUNCTION) {
+        mpz_t num, den;
+        expr_to_mpz(arg->data.function.args[0], num);
+        expr_to_mpz(arg->data.function.args[1], den);
+        mpz_abs(num, num);
+        mpz_abs(den, den);
+        Expr* r = make_rational_mpz(num, den);
+        mpz_clear(num); mpz_clear(den);
+        return r;
+    }
     return NULL;
 }
 
@@ -451,12 +470,14 @@ Expr* builtin_sign(Expr* res) {
         return expr_new_integer(mpfr_sgn(arg->data.mpfr));
     }
 #endif
-    int64_t n, d;
-    if (is_rational(arg, &n, &d)) {
-        /* Canonical Rational has d > 0, but be defensive against an
-         * un-canonicalised structural Rational[n, d] reaching here. */
-        int s = (n < 0) ^ (d < 0) ? -1 : (n == 0 ? 0 : 1);
-        return expr_new_integer(s);
+    /* Rational[num, den], bignum components included.  expr_numeric_sign
+     * recurses through the components, so a Rational whose numerator or
+     * denominator overflows int64 (e.g. Rational[1, 10^25]) gets a correct
+     * sign — the old is_rational() int64 path declined and left Sign
+     * unevaluated.  Plain Integer/BigInt/Real/MPFR were handled above, so
+     * this newly fires only on the Rational head. */
+    if (is_rational_like(arg) && arg->type == EXPR_FUNCTION) {
+        return expr_new_integer(expr_numeric_sign(arg));
     }
 
     /* Numeric Complex with real & imag parts: return z / Abs[z]. The
@@ -602,6 +623,17 @@ Expr* builtin_arg(Expr* res) {
     }
 #endif
 
+    /* Exact real leaf (Integer, BigInt, or Rational incl. bignum components):
+     * Arg is exactly 0 for a nonnegative value and Pi for a negative one.
+     * Read from the exact sign so a rational far below double resolution
+     * (e.g. -1/10^400) still returns Pi rather than underflowing to 0.  The
+     * old int64 is_rational path declined on bigints and bignum rationals and
+     * fell through to `return NULL` below. */
+    if (is_rational_like(arg)) {
+        return expr_numeric_sign(arg) < 0 ? expr_new_symbol(SYM_Pi)
+                                          : expr_new_integer(0);
+    }
+
     if (is_complex(arg, &re, &im)) {
 #ifdef USE_MPFR
         /* MPFR-aware Arg: when either component carries MPFR, evaluate
@@ -626,7 +658,9 @@ Expr* builtin_arg(Expr* res) {
         }
 #endif
         // re and im are assigned
-    } else if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || is_rational(arg, &n, &d)) {
+    } else if (arg->type == EXPR_REAL) {
+        /* Inexact real; exact reals were handled by the rational-like block
+         * above. */
         re = arg;
     } else {
         return NULL;

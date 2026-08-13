@@ -53,8 +53,26 @@ static bool is_atomic_numeric(const Expr* e) {
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR) return true;
 #endif
-    if (is_rational((Expr*)e, NULL, NULL)) return true;
+    /* is_rational_like, not is_rational: a Rational with a bignum numerator or
+     * denominator (e.g. Rational[1, 10^25]) must still sort as the number it
+     * is.  With the int64-only predicate it fell out of the numeric tier and
+     * was misordered by the polynomial-degree machinery below. */
+    if (is_rational_like(e)) return true;
     return false;
+}
+
+/* Extract the numerator and denominator of a rational-like atom (Integer,
+ * BigInt, or Rational[int-like, int-like]) as GMP integers, initialising both
+ * (caller mpz_clears).  Integer/BigInt yield den = 1.  The denominator keeps
+ * its stored sign; canonical rationals are positive. */
+static void rat_to_mpz_parts(const Expr* e, mpz_t num, mpz_t den) {
+    if (expr_is_integer_like(e)) {
+        expr_to_mpz(e, num);
+        mpz_init_set_ui(den, 1);
+    } else { /* Rational[num, den] */
+        expr_to_mpz(e->data.function.args[0], num);
+        expr_to_mpz(e->data.function.args[1], den);
+    }
 }
 
 /* True for a literal complex number Complex[re, im] whose real and imaginary
@@ -82,6 +100,15 @@ static double get_numeric_value(const Expr* e) {
 #endif
     int64_t n, d;
     if (is_rational((Expr*)e, &n, &d)) return (double)n / d;
+    /* Bignum-component Rational: is_rational rejected it and this used to
+     * return 0, collapsing every such value to a false tie. */
+    if (is_rational_like(e) && e->type == EXPR_FUNCTION) {
+        mpz_t num, den;
+        rat_to_mpz_parts(e, num, den);
+        double v = mpz_get_d(num) / mpz_get_d(den);
+        mpz_clear(num); mpz_clear(den);
+        return v;
+    }
     return 0;
 }
 
@@ -368,6 +395,26 @@ int expr_compare(const Expr* a, const Expr* b) {
             mpz_clear(ma2);
             mpz_clear(mb2);
             return cmp;
+        }
+        /* Exact rationals (bignum components included).  The double fallback
+         * below reads a bignum-component Rational as 0 (get_numeric_value
+         * could not decode it), collapsing distinct values to a tie and
+         * misordering Sort/Min/Max/Median.  Cross-multiply exactly; both
+         * denominators are positive (canonical form), so the inequality
+         * direction is preserved. */
+        if (is_rational_like(a) && is_rational_like(b)) {
+            mpz_t an, ad, bn, bd, lhs, rhs;
+            rat_to_mpz_parts(a, an, ad);
+            rat_to_mpz_parts(b, bn, bd);
+            mpz_init(lhs); mpz_init(rhs);
+            mpz_mul(lhs, an, bd);
+            mpz_mul(rhs, bn, ad);
+            int c = mpz_cmp(lhs, rhs);
+            mpz_clear(an); mpz_clear(ad); mpz_clear(bn); mpz_clear(bd);
+            mpz_clear(lhs); mpz_clear(rhs);
+            if (c != 0) return c < 0 ? -1 : 1;
+            if (a->type != b->type) return (int)a->type - (int)b->type;
+            return 0;
         }
         double va = get_numeric_value(a);
         double vb = get_numeric_value(b);

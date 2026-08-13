@@ -1302,6 +1302,10 @@ target_include_directories(ratios_tests PRIVATE ../src)
 add_executable(sort_tests test_sort.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(sort_tests PRIVATE ../src)
 
+add_executable(bignum_rational_numeric_tests test_bignum_rational_numeric.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(bignum_rational_numeric_tests PRIVATE ../src)
+add_test(NAME bignum_rational_numeric_tests COMMAND bignum_rational_numeric_tests)
+
 add_executable(ranked_tests test_ranked.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(ranked_tests PRIVATE ../src)
 
