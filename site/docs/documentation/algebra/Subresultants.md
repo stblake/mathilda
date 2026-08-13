@@ -5,21 +5,15 @@
 
 ## Description
 
-```text
-Subresultants[poly1, poly2, var]
-    gives the list of principal subresultant coefficients of poly1 and
-    poly2 with respect to var.  The list has length
-    Min[Exponent[poly1, var], Exponent[poly2, var]] + 1, its first
-    element is Resultant[poly1, poly2, var], and the first k entries
-    vanish exactly when the polynomials share k roots (with
-    multiplicity).  Computed by a subresultant polynomial-remainder
-    sequence, or a Sylvester-minor determinant for algebraic
-    coefficients.
-```
+**`Subresultants[poly1, poly2, var]`**
 
-## Examples
+gives the list of principal subresultant coefficients of poly1 and poly2 with respect to var.  The list has length Min\[Exponent\[poly1, var\], Exponent\[poly2, var\]\] + 1, its first element is Resultant\[poly1, poly2, var\], and the first k entries vanish exactly when the polynomials share k roots (with multiplicity).  Computed by a subresultant polynomial-remainder sequence, or a Sylvester-minor determinant for algebraic coefficients.
 
-All examples below are verified against the current Mathilda build.
+## Examples (9)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Subresultants[2x^7 + 3x^3 - 7x + 1, 3x^5 - 17x + 21, x]
@@ -38,6 +32,57 @@ In[5]:= Length[Subresultants[x^50 + a, x^20 + b, x]]
 Out[5]= 21
 ```
 
+### Applications (4)
+
+```mathematica
+In[6]:= Subresultants[x^2 - 1, x^2 - 4, x]
+Out[6]= {9, 0, 1}
+
+In[7]:= Resultant[x^2 - 1, x^2 - 4, x]
+Out[7]= 9
+
+In[8]:= Subresultants[x^3 + x + 1, x^2 + 1, x]
+Out[8]= {1, 0, 1}
+
+In[9]:= Subresultants[x^2 - 1, (x - 1)^2, x]
+Out[9]= {0, -2, 1}
+```
+
+## Algorithm
+
+==================================================================== subresultants.c -- Principal subresultant coefficients.
+
+```text
+  Subresultants[poly1, poly2, var]
+    generates the list of principal subresultant coefficients (PSCs)
+    of poly1 and poly2 with respect to var.  The list has length
+    Min[Exponent[poly1, var], Exponent[poly2, var]] + 1, its first
+    element equals Resultant[poly1, poly2, var], and the first k PSCs
+    vanish exactly when the polynomials share k roots (multiplicity
+    counted).
+```
+
+Two algorithms are provided:
+
+```text
+  1. subresultants_prs -- the efficient path.  Runs the subresultant
+     polynomial remainder sequence (the same Bronstein gamma/beta/delta
+     recurrence used by Resultant in poly.c), retaining each scaled
+     remainder as a polynomial and placing it at its subresultant index
+     via the fundamental theorem of subresultants.  PSC_j is the
+     coefficient of var^j in the j-th subresultant polynomial S_j;
+     defective (degree-gap) indices fall out as zero automatically.
+
+  2. subresultants_determinant -- the canonical definition and the
+     fallback (used for algebraic-number coefficients, mirroring
+     Resultant).  PSC_j = Det(M_j), where M_j is the Sylvester matrix
+     restricted to its first (m-j) poly1-shift rows, first (n-j)
+     poly2-shift rows, and first (n+m-2j) columns.  This generalises
+     the Sylvester construction in resultant_internal.
+```
+
+Memory convention matches the rest of Mathilda: every helper returning Expr* hands fresh ownership to the caller; builtin_subresultants leaves its input `res` alive for the evaluator to free. ====================================================================
+
 ## Implementation notes
 
 **Algorithm.** `builtin_subresultants` returns the list of principal subresultant coefficients (PSCs) of `poly1`, `poly2` w.r.t. `var`. The list has length `min(deg p1, deg p2) + 1`; element 0 equals `Resultant[p1, p2, var]`, and the first k PSCs vanish exactly when the polynomials share k roots (with multiplicity). Both arguments are checked polynomial in `var` (`internal_polynomialq`), then expanded.
@@ -52,50 +97,18 @@ For algebraic-number coefficients (Sqrt, cube roots — `subres_has_algebraic`),
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Resultant](../../algebra/Resultant/)
 
 - W. S. Brown and J. F. Traub, "On Euclid's Algorithm and the Theory of Subresultants", J. ACM 18(4), 1971.
 - M. Bronstein, *Symbolic Integration I: Transcendental Functions*, 2nd ed. (Springer, 2005).
 - Source: [`src/poly/subresultants.c`](https://github.com/stblake/mathilda/blob/main/src/poly/subresultants.c)
 - Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
+- Tests: [`tests/test_subresultantpolynomials.c`](https://github.com/stblake/mathilda/blob/main/tests/test_subresultantpolynomials.c)
+- Tests: [`tests/test_subresultants.c`](https://github.com/stblake/mathilda/blob/main/tests/test_subresultants.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-The principal subresultant coefficients of two coprime quadratics; the leading
-entry is the resultant:
-
-```mathematica
-In[1]:= Subresultants[x^2 - 1, x^2 - 4, x]
-Out[1]= {9, 0, 1}
-```
-
-That first entry matches `Resultant` exactly:
-
-```mathematica
-In[1]:= Resultant[x^2 - 1, x^2 - 4, x]
-Out[1]= 9
-```
-
-A coprime cubic/quadratic pair:
-
-```mathematica
-In[1]:= Subresultants[x^3 + x + 1, x^2 + 1, x]
-Out[1]= {1, 0, 1}
-```
-
-When the polynomials share a root the resultant vanishes — the leading entries
-are exactly zero, signalling the common factor `(x - 1)`:
-
-```mathematica
-In[1]:= Subresultants[x^2 - 1, (x - 1)^2, x]
-Out[1]= {0, -2, 1}
-```
 
 ### Notes
 

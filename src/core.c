@@ -2562,7 +2562,30 @@ Expr* builtin_information(Expr* res) {
     else if (arg->type == EXPR_STRING) sym_name = arg->data.string;
     
     if (!sym_name) return NULL;
-    
+
+    /* `?Pat*` is a search, not a lookup: list the symbols whose names match,
+     * one per line, the way Mathematica's ?Find* does. The matching itself is
+     * Names[], so the pattern vocabulary is exactly Names' -- no second
+     * implementation to drift. A pattern that matches nothing says so rather
+     * than returning an empty result the caller cannot interpret. */
+    bool wild = false;
+    for (const char* w = sym_name; *w; w++)
+        if (*w == '*' || *w == '@') { wild = true; break; }
+
+    if (wild) {
+        /* Return the LIST of matching names, not a rendered string, so the
+         * result composes: Length[?Find*], Select[?Find*, ...] and Map all
+         * work on it. Rendering is the front end's job -- the notebook lays
+         * it out as a grid, the terminal prints the list. The matching is
+         * Names[] itself, so the pattern vocabulary is exactly Names' and
+         * there is no second implementation to drift. */
+        Expr* na[1] = { expr_new_string(sym_name) };
+        Expr* names = eval_and_free(
+            expr_new_function(expr_new_symbol(SYM_Names), na, 1));
+        if (!names || !head_is(names, SYM_List)) { expr_free(names); return NULL; }
+        return names;
+    }
+
     const char* doc = symtab_get_docstring(sym_name);
     if (!doc) {
         char buf[256];

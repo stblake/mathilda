@@ -5,17 +5,33 @@
 
 ## Description
 
-```text
-patt:def or Optional[patt, def]
-    is a pattern object that matches patt if it is present; if patt is
-    omitted from the argument sequence, def is used in its place.
-patt_. (sugar for Optional[patt_, Default[f]]) draws the default value
-from Default[f] at the call site.
+patt:def or Optional\[patt, def\] is a pattern object that matches patt if it is present; if patt is omitted from the argument sequence, def is used in its place. patt\_. (sugar for Optional\[patt\_, Default\[f\]\]) draws the default value from Default\[f\] at the call site.
+
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (6)
+
+```mathematica
+In[1]:= f[3]
+Out[1]= 4
+
+In[2]:= f[3, 10]
+Out[2]= 13
+
+In[3]:= g[1, 2]
+Out[3]= {1, 2, 0}
+
+In[4]:= lin[2]
+Out[4]= 1 + 2 x^2
+
+In[5]:= lin[2, 3, 4]
+Out[5]= 4 + 3 x + 2 x^2
+
+In[6]:= p[a]
+Out[6]= {a, 0}
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -23,62 +39,13 @@ _No verified examples yet for this function._
 
 **Attributes:** none registered.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/match.c`](https://github.com/stblake/mathilda/blob/main/src/match.c)
 - Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
+- Tests: [`tests/test_condition_downvalue.c`](https://github.com/stblake/mathilda/blob/main/tests/test_condition_downvalue.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-A default-valued parameter: the second argument may be omitted, in which case
-the default is supplied.
-
-```mathematica
-In[1]:= f[x_, y_ : 1] := x + y
-
-In[2]:= f[3]
-Out[2]= 4
-
-In[3]:= f[3, 10]
-Out[3]= 13
-
-In[4]:= g[x_, y_ : 0, z_ : 0] := {x, y, z}
-
-In[5]:= g[1, 2]
-Out[5]= {1, 2, 0}
-```
-
-Several defaulted parameters give "optional trailing arguments" with sensible
-fallbacks — here a quadratic whose linear and constant coefficients default to
-`0` and `1`:
-
-```mathematica
-In[1]:= lin[a_, b_ : 0, c_ : 1] := a x^2 + b x + c
-
-In[2]:= lin[2]
-Out[2]= 1 + 2 x^2
-
-In[3]:= lin[2, 3, 4]
-Out[3]= 4 + 3 x + 2 x^2
-```
-
-The `_.` sugar draws the default from `Default[f]` at the call site, so a
-pattern like `x_ + y_.` matches a bare term by treating the missing summand as
-its additive identity `0` — the mechanism used to make rules robust
-against absent structure:
-
-```mathematica
-In[1]:= p[x_ + y_.] := {x, y}
-
-In[2]:= p[a]
-Out[2]= {a, 0}
-```
 
 ### Notes
 

@@ -5,29 +5,52 @@
 
 ## Description
 
-```text
-expr /. rules or ReplaceAll[expr, rules]
-    traverses expr top-down and applies the first matching rule at each
-    subexpression. A matched subexpression is replaced and NOT recursed
-    into further -- ReplaceAll is a single pass, not a fixed point.
-```
+expr /. rules or ReplaceAll\[expr, rules\] traverses expr top-down and applies the first matching rule at each subexpression. A matched subexpression is replaced and NOT recursed into further -- ReplaceAll is a single pass, not a fixed point.
 
-## Examples
+## Examples (10)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= {x, x^2, y, z} /. x -> 1
 Out[1]= {1, 1, y, z}
 
-In[2]:= Sin[x] /. Sin -> Cos
-Out[2]= Cos[x]
+In[2]:= {f[2], f[x, y], h[], f[]} /. f[x__] -> "OK"
+Out[2]= {"OK", "OK", h[], f[]}
+```
 
-In[3]:= {1, 3, 2, x, 6, Pi} /. _?PrimeQ -> "prime"
-Out[3]= {1, "prime", "prime", x, 6, Pi}
+### Options (2)
 
-In[4]:= {f[2], f[x, y], h[], f[]} /. f[x__] -> "OK"
-Out[4]= {"OK", "OK", h[], f[]}
+```mathematica
+In[3]:= Sin[x] /. Sin -> Cos
+Out[3]= Cos[x]
+
+In[4]:= {1, 3, 2, x, 6, Pi} /. _?PrimeQ -> "prime"
+Out[4]= {1, "prime", "prime", x, 6, Pi}
+```
+
+### Applications (6)
+
+```mathematica
+In[5]:= x + y /. x -> 2
+Out[5]= 2 + y
+
+In[6]:= {x, y, z} /. {x -> 1, z -> 3}
+Out[6]= {1, y, 3}
+
+In[7]:= x^2 + x /. x -> a + 1
+Out[7]= 1 + a + (1 + a)^2
+
+In[8]:= D[x^x, x] /. Log[x] -> L
+Out[8]= x^(-1 + x) (x + L x)
+
+In[9]:= {{1, 2}, {3, 4}} /. {a_, b_} :> a + b
+Out[9]= {4, 6}
+
+In[10]:= x^4 + 1 /. x -> Sqrt[2]
+Out[10]= 5
 ```
 
 ## Implementation notes
@@ -44,48 +67,15 @@ Out[4]= {"OK", "OK", h[], f[]}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
+- Tests: [`tests/test_condition_downvalue.c`](https://github.com/stblake/mathilda/blob/main/tests/test_condition_downvalue.c)
+- Tests: [`tests/test_match_extensive.c`](https://github.com/stblake/mathilda/blob/main/tests/test_match_extensive.c)
+- Tests: [`tests/test_parse.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parse.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= x + y /. x -> 2
-Out[1]= 2 + y
-```
-
-```mathematica
-In[1]:= {x, y, z} /. {x -> 1, z -> 3}
-Out[1]= {1, y, 3}
-```
-
-```mathematica
-In[1]:= x^2 + x /. x -> a + 1
-Out[1]= 1 + a + (1 + a)^2
-```
-
-```mathematica
-In[1]:= D[x^x, x] /. Log[x] -> L
-Out[1]= x^(-1 + x) (x + L x)
-```
-
-```mathematica
-In[1]:= {{1, 2}, {3, 4}} /. {a_, b_} :> a + b
-Out[1]= {4, 6}
-```
-
-```mathematica
-In[1]:= x^4 + 1 /. x -> Sqrt[2]
-Out[1]= 5
-```
 
 ### Notes
 

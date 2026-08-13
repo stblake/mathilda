@@ -5,16 +5,15 @@
 
 ## Description
 
-```text
-TakeLargestBy[list, f, n]
-    Gives the n elements of list for which f is
-    largest, in descending order of f. Over an association, ranks by f of
-    each value.
-```
+**`TakeLargestBy[list, f, n]`**
 
-## Examples
+Gives the n elements of list for which f is largest, in descending order of f. Over an association, ranks by f of each value.
 
-All examples below are verified against the current Mathilda build.
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= TakeLargest[{3, 1, 4, 1, 5, 9, 2, 6}, 3]
@@ -31,11 +30,10 @@ Out[3]= {-9, 5}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [TakeLargest](../../functional-programming/TakeLargest/), [TakeSmallest](../../functional-programming/TakeSmallest/), [TakeSmallestBy](../../functional-programming/TakeSmallestBy/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)

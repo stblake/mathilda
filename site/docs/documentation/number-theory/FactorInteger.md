@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.
-```
+**`FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.`**
 
-## Examples
+## Examples (8)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= FactorInteger[12]
@@ -27,6 +27,22 @@ In[4]:= FactorInteger[100, 1]
 Out[4]= {{2, 2}}
 ```
 
+### Applications (4)
+
+```mathematica
+In[5]:= FactorInteger[60]
+Out[5]= {{2, 2}, {3, 1}, {5, 1}}
+
+In[6]:= FactorInteger[2^67 - 1]
+Out[6]= {{193707721, 1}, {761838257287, 1}}
+
+In[7]:= FactorInteger[20!]
+Out[7]= {{2, 18}, {3, 8}, {5, 4}, {7, 2}, {11, 1}, {13, 1}, {17, 1}, {19, 1}}
+
+In[8]:= FactorInteger[1000000000000066600000000000001]
+Out[8]= {{1000000000000066600000000000001, 1}}
+```
+
 ## Implementation notes
 
 **Algorithm.** `builtin_factorinteger` drives the recursive `factorize_mpz`, which factors a working `mpz_t` (mutated in place) and accumulates `{prime, exponent}` pairs. The `Automatic` cascade is: GMP Miller–Rabin primality (`mpz_probab_prime_p`, 25 rounds) returns the number itself if prime; **trial division** by the first 25 cached primes strips small factors; then **Pollard rho** (Brent's improved variant with batched GCDs, `pollard_rho_brent_mpz`) splits a composite cofactor; finally, if rho fails, the vendored **GMP-ECM** library (`ecm_factor`, `src/external/ecm/`) is run with a ladder of increasing `B1` bounds `{2000, 11000, ..., 1.1e7}`, also serving as **Pollard p−1** (`ECM_PM1`) and **Williams p+1** (`ECM_PP1`) when those methods are requested. Each split recurses on both cofactors. The `Method` option can force a specific algorithm: trial, rho, ECM, p−1, p+1, Fermat (`fermat_factor_mpz`), CFRAC (`cfrac_factor_mpz`), Dixon (`dixon_factor_mpz`), SQUFOF (`squfof_factor_mpz`), or a random-by-difference probe (`rbd_factor_mpz`). When all bounded attempts fail, the residual is recorded as a single (assumed-prime) factor.
@@ -39,14 +55,22 @@ Out[4]= {{2, 2}}
 - Supports negative integers (includes `{-1, 1}`).
 - Supports rational numbers (denominator factors have negative exponents).
 - Perfect powers are reduced before the general search: `n = base^m` is peeled
+  to a primitive base, factored once, and the exponents scaled by `m`. This is
+  what makes prime powers of a large prime (e.g. `(2^61-1)^2`) factor correctly
+  rather than being mislabelled as prime — Pollard rho and ECM alone cannot
+  split such powers.
+- `FactorInteger::nofac`: under the default `Automatic` method, a hard composite
+  (e.g. a semiprime of two large distinct primes) that survives trial division,
+  Pollard rho and ECM within the search bounds is returned unfactored with
+  exponent 1 — which looks like a prime factor. A warning is emitted to make
+  that compromise explicit rather than silent. It is suppressed inside routines
+  that mute arithmetic warnings (numeric integration, `Limit`, `Series`, …).
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Limit](../../calculus/Limit/), [Series](../../power-series/Series/)
 
 - J. M. Pollard, "A Monte Carlo method for factorization", BIT 15 (1975).
 - R. P. Brent, "An improved Monte Carlo factorization algorithm", BIT 20 (1980).
@@ -56,30 +80,12 @@ Out[4]= {{2, 2}}
 - M. A. Morrison and J. Brillhart, "A method of factoring and the factorization of F_7", Math. Comp. 29 (1975) (CFRAC).
 - Source: [`src/facint.c`](https://github.com/stblake/mathilda/blob/main/src/facint.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_bigint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bigint.c)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_partitionsp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_partitionsp.c)
+- Tests: [`tests/test_power_integer_radical.c`](https://github.com/stblake/mathilda/blob/main/tests/test_power_integer_radical.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= FactorInteger[60]
-Out[1]= {{2, 2}, {3, 1}, {5, 1}}
-```
-
-```mathematica
-In[1]:= FactorInteger[2^67 - 1]
-Out[1]= {{193707721, 1}, {761838257287, 1}}
-```
-
-```mathematica
-In[1]:= FactorInteger[20!]
-Out[1]= {{2, 18}, {3, 8}, {5, 4}, {7, 2}, {11, 1}, {13, 1}, {17, 1}, {19, 1}}
-```
-
-```mathematica
-In[1]:= FactorInteger[1000000000000066600000000000001]
-Out[1]= {{1000000000000066600000000000001, 1}}
-```
 
 ### Notes
 

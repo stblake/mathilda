@@ -5,18 +5,26 @@
 
 ## Description
 
-```text
-ConditionalExpression[expr, cond]
-    is a symbolic construct that represents expr when cond is True.
-ConditionalExpression[expr, True] evaluates to expr.
-ConditionalExpression[expr, False] evaluates to Undefined.
-Nested forms collapse: ConditionalExpression[ConditionalExpression[e, c1], c2] evaluates to ConditionalExpression[e, c1 && c2].
-ConditionalExpression has attribute Protected.
-```
+**`ConditionalExpression[expr, cond]`**
 
-## Examples
+is a symbolic construct that represents expr when cond is True.
 
-All examples below are verified against the current Mathilda build.
+**`ConditionalExpression[expr, True] evaluates to expr.`**
+
+**`ConditionalExpression[expr, False] evaluates to Undefined.`**
+
+<details>
+<summary>Notes</summary>
+
+Nested forms collapse: ConditionalExpression\[ConditionalExpression\[e, c1\], c2\] evaluates to ConditionalExpression\[e, c1 && c2\]. ConditionalExpression has attribute Protected.
+
+</details>
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= ConditionalExpression[a, True]
@@ -32,44 +40,38 @@ In[4]:= ConditionalExpression[ConditionalExpression[e, c1], c2]
 Out[4]= ConditionalExpression[e, c1 && c2]
 ```
 
+### Applications (4)
+
+```mathematica
+In[5]:= ConditionalExpression[x, True]
+Out[5]= x
+
+In[6]:= ConditionalExpression[1/x, x != 0] /. x -> 0
+Out[6]= Undefined
+
+In[7]:= ConditionalExpression[Sqrt[x^2], x > 0]
+Out[7]= ConditionalExpression[Sqrt[x^2], x > 0]
+
+In[8]:= ConditionalExpression[ConditionalExpression[e, a > 0], b > 0]
+Out[8]= ConditionalExpression[e, a > 0 && b > 0]
+```
+
 ## Implementation notes
 
 **Algorithm.** `builtin_conditional_expression` takes `ConditionalExpression[expr, cond]` (two args; `ATTR_PROTECTED`, no Hold, so both are pre-evaluated). When `cond` is the interned `True` it yields `expr` (stealing the slot via `args[0] = NULL` so the evaluator's free of `res` doesn't double-free); when `cond` is `False` it yields the symbol `Undefined`. Nested forms `ConditionalExpression[ConditionalExpression[e, c1], c2]` are flattened to `ConditionalExpression[e, And[c1, c2]]`, with the combined `And` run through `evaluate` so contradictory or redundant conditions collapse. Any other condition leaves the call unevaluated (`NULL`).
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/boolean.c`](https://github.com/stblake/mathilda/blob/main/src/boolean.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+- Tests: [`tests/test_boolean.c`](https://github.com/stblake/mathilda/blob/main/tests/test_boolean.c)
+- Tests: [`tests/test_integrate_beta.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_beta.c)
+- Tests: [`tests/test_integrate_diffunderint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_diffunderint.c)
+- Tests: [`tests/test_integrate_ramanujan.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_ramanujan.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= ConditionalExpression[x, True]
-Out[1]= x
-```
-
-```mathematica
-In[1]:= ConditionalExpression[1/x, x != 0] /. x -> 0
-Out[1]= Undefined
-```
-
-```mathematica
-In[1]:= ConditionalExpression[Sqrt[x^2], x > 0]
-Out[1]= ConditionalExpression[Sqrt[x^2], x > 0]
-```
-
-```mathematica
-In[1]:= ConditionalExpression[ConditionalExpression[e, a > 0], b > 0]
-Out[1]= ConditionalExpression[e, a > 0 && b > 0]
-```
 
 ### Notes
 

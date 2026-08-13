@@ -5,20 +5,30 @@
 
 ## Description
 
-```text
-If[cond, t]
-    gives t if cond evaluates to True; gives Null otherwise.
-If[cond, t, f]
-    gives t if cond is True, f if False, and is left unevaluated
-    if cond is neither.
-If[cond, t, f, u]
-    also supplies u as the result when cond is neither True nor False.
+**`If[cond, t]`**
+
+gives t if cond evaluates to True; gives Null otherwise.
+
+**`If[cond, t, f]`**
+
+gives t if cond is True, f if False, and is left unevaluated if cond is neither.
+
+**`If[cond, t, f, u]`**
+
+also supplies u as the result when cond is neither True nor False.
+
+<details>
+<summary>Notes</summary>
+
 If has attribute HoldRest: only the branch chosen by cond is evaluated.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= If[True, x, y]
@@ -26,6 +36,22 @@ Out[1]= x
 
 In[2]:= If[a < b, 1, 0, Indeterminate]
 Out[2]= Indeterminate
+```
+
+### Applications (4)
+
+```mathematica
+In[3]:= If[3 > 2, yes, no]
+Out[3]= yes
+
+In[4]:= If[x > 0, pos, neg]
+Out[4]= If[x > 0, pos, neg]
+
+In[5]:= If[1 == 2, a, b, c]
+Out[5]= b
+
+In[6]:= If[PrimeQ[7], prime, composite]
+Out[6]= prime
 ```
 
 ## Implementation notes
@@ -38,38 +64,18 @@ Out[2]= Indeterminate
 
 **Attributes:** `HoldRest`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [HoldRest](../../other-advanced/HoldRest/)
 
 - Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+- Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_boolean.c`](https://github.com/stblake/mathilda/blob/main/tests/test_boolean.c)
+- Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_cherry_ei.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_ei.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= If[3 > 2, yes, no]
-Out[1]= yes
-```
-
-```mathematica
-In[1]:= If[x > 0, pos, neg]
-Out[1]= If[x > 0, pos, neg]
-```
-
-```mathematica
-In[1]:= If[1 == 2, a, b, c]
-Out[1]= b
-```
-
-```mathematica
-In[1]:= If[PrimeQ[7], prime, composite]
-Out[1]= prime
-```
 
 ### Notes
 

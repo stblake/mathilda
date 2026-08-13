@@ -5,14 +5,15 @@
 
 ## Description
 
-```text
-CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.
-CoefficientList[poly, {var1, var2, ...}] gives an array of coefficients of the variables.
-```
+**`CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.`**
 
-## Examples
+**`CoefficientList[poly, {var1, var2, ...}] gives an array of coefficients of the variables.`**
 
-All examples below are verified against the current Mathilda build.
+## Examples (9)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= CoefficientList[1 + 6 x - x^4, x]
@@ -23,6 +24,28 @@ Out[2]= {1, 10, 45, 120, 210, 252, 210, 120, 45, 10, 1}
 
 In[3]:= CoefficientList[1 + a x^2 + b x y + c y^2, {x, y}]
 Out[3]= {{1, 0, c}, {0, b, 0}, {a, 0, 0}}
+```
+
+### Applications (6)
+
+```mathematica
+In[4]:= CoefficientList[x^2 + 3 x + 2, x]
+Out[4]= {2, 3, 1}
+
+In[5]:= CoefficientList[1 + x^3, x]
+Out[5]= {1, 0, 0, 1}
+
+In[6]:= CoefficientList[a + b x + c x^2, x]
+Out[6]= {a, b, c}
+
+In[7]:= CoefficientList[x^2 + x y + y^2, {x, y}]
+Out[7]= {{0, 0, 1}, {0, 1, 0}, {1, 0, 0}}
+
+In[8]:= CoefficientList[(1 + x)^6, x]
+Out[8]= {1, 6, 15, 20, 15, 6, 1}
+
+In[9]:= CoefficientList[Expand[(1 + x + x^2)^4], x]
+Out[9]= {1, 4, 10, 16, 19, 16, 10, 4, 1}
 ```
 
 ## Implementation notes
@@ -38,49 +61,14 @@ Out[3]= {{1, 0, c}, {0, b, 0}, {a, 0, 0}}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 3 (dense polynomial coefficient vectors).
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= CoefficientList[x^2 + 3 x + 2, x]
-Out[1]= {2, 3, 1}
-```
-
-```mathematica
-In[1]:= CoefficientList[1 + x^3, x]
-Out[1]= {1, 0, 0, 1}
-```
-
-```mathematica
-In[1]:= CoefficientList[a + b x + c x^2, x]
-Out[1]= {a, b, c}
-```
-
-```mathematica
-In[1]:= CoefficientList[x^2 + x y + y^2, {x, y}]
-Out[1]= {{0, 0, 1}, {0, 1, 0}, {1, 0, 0}}
-```
-
-```mathematica
-In[1]:= CoefficientList[(1 + x)^6, x]
-Out[1]= {1, 6, 15, 20, 15, 6, 1}
-```
-
-```mathematica
-In[1]:= CoefficientList[Expand[(1 + x + x^2)^4], x]
-Out[1]= {1, 4, 10, 16, 19, 16, 10, 4, 1}
-```
 
 ### Notes
 

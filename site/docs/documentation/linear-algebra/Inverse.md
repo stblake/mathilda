@@ -5,32 +5,26 @@
 
 ## Description
 
-```text
-Inverse[m]
-    gives the inverse of a square matrix m.
-Inverse[m, Method -> "<name>"]
-    runs a specific inversion algorithm.
+**`Inverse[m]`**
 
-Inverse works on both symbolic and numerical matrices.
-For matrices with approximate real or complex numbers, the
-inverse is generated to the maximum possible precision given the
-input.  Inverse::sing is issued for singular matrices and
-Inverse::matsq for non-square / empty input; in either case the
-call is returned unevaluated.
+gives the inverse of a square matrix m.
 
-Accepted method names:
-  "Automatic"                 — alias for "DivisionFreeRowReduction" (default)
-  "DivisionFreeRowReduction"  — Bareiss-like fraction-free Gauss-Jordan on [m | I]
-  "OneStepRowReduction"       — classical Gauss-Jordan with division per pivot
-  "CofactorExpansion"         — adjugate / determinant formula via Laplace expansion
+**`Inverse[m, Method -> "<name>"]`**
 
-An unknown method name emits Inverse::method and leaves the call
-unevaluated.  Method -> Automatic (the symbol) is also accepted.
-```
+runs a specific inversion algorithm.
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+Inverse works on both symbolic and numerical matrices. For matrices with approximate real or complex numbers, the inverse is generated to the maximum possible precision given the input.  Inverse::sing is issued for singular matrices and Inverse::matsq for non-square / empty input; in either case the call is returned unevaluated. Accepted method names: "Automatic"                 — alias for "DivisionFreeRowReduction" (default) "DivisionFreeRowReduction"  — Bareiss-like fraction-free Gauss-Jordan on \[m | I\] "OneStepRowReduction"       — classical Gauss-Jordan with division per pivot "CofactorExpansion"         — adjugate / determinant formula via Laplace expansion An unknown method name emits Inverse::method and leaves the call unevaluated.  Method -\> Automatic (the symbol) is also accepted.
+
+</details>
+
+## Examples (14)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (7)
 
 ```mathematica
 In[1]:= Inverse[{{1.4,2},{3,-6.7}}]
@@ -51,12 +45,101 @@ Out[5]= {{-8/13, 2/13, 3/13}, {1/26, 3/26, -1/13}, {55/52, -17/52, -3/26}}
 In[6]:= Inverse[{{a,b},{c,d}}]
 Out[6]= {{d/(-b c + a d), -b/(-b c + a d)}, {-c/(-b c + a d), a/(-b c + a d)}}
 
-In[7]:= Inverse[{{1,2},{1,2}}]
-Out[7]= Inverse[{{1, 2}, {1, 2}}]
-
-In[8]:= a = {{1,2},{3,4}}; a . Inverse[a] == IdentityMatrix[2]
-Out[8]= True
+In[7]:= a = {{1,2},{3,4}}; a . Inverse[a] == IdentityMatrix[2]
+Out[7]= True
 ```
+
+### Applications (7)
+
+```mathematica
+In[8]:= Inverse[{{2, 0}, {0, 4}}]
+Out[8]= {{1/2, 0}, {0, 1/4}}
+
+In[9]:= Inverse[{{1, 2}, {3, 4}}]
+Out[9]= {{-2, 1}, {3/2, -1/2}}
+
+In[10]:= Inverse[{{1, 1, 1}, {0, 1, 1}, {0, 0, 1}}]
+Out[10]= {{1, -1, 0}, {0, 1, -1}, {0, 0, 1}}
+
+In[11]:= Inverse[{{a, b}, {c, d}}]
+Out[11]= {{d/(-b c + a d), -b/(-b c + a d)}, {-c/(-b c + a d), a/(-b c + a d)}}
+
+In[12]:= Inverse[{{1, x}, {x, 1}}]
+Out[12]= {{1/(1 - x^2), -x/(1 - x^2)}, {-x/(1 - x^2), 1/(1 - x^2)}}
+
+In[13]:= Inverse[{{2.0, 1.0}, {1.0, 3.0}}]
+Out[13]= {{0.6, -0.2}, {-0.2, 0.4}}
+
+In[14]:= Inverse[{{1, 2}, {2, 4}}]
+Out[14]= Inverse[{{1, 2}, {2, 4}}]
+```
+
+## Options & behaviour
+
+> Implementation lives in `src/linalg/inv.c` (registered by
+> `matinv_init`).  The algorithm — fraction-free Gauss-Jordan
+> elimination on the augmented matrix `[A | I]` — is unchanged.
+
+## Algorithm
+
+matinv.c
+
+Inverse and PseudoInverse.
+
+```text
+  Inverse[m]           -- exact / fraction-free Gauss-Jordan inversion
+                          of a non-empty square matrix.  Lifted verbatim
+                          from the previous src/linalg.c implementation.
+
+  PseudoInverse[m]
+  PseudoInverse[m,
+      Tolerance -> t]  -- Moore-Penrose pseudoinverse of a rectangular
+                          (or rank-deficient square) matrix.
+```
+
+Algorithm (PseudoInverse):
+
+```text
+  For an m x n matrix A with rank r > 0, compute the reduced row-echelon
+  form R of A.  The first r non-zero rows of R, taken together as a
+  r x n matrix C, span the row space of A; the columns of A at the pivot
+  positions, taken together as a m x r matrix B, span the column space.
+  This gives a full-rank decomposition A = B . C with rank(B) = rank(C) = r.
+  The Moore-Penrose pseudoinverse is then
+
+      A^+ = C^H . (C . C^H)^-1 . (B^H . B)^-1 . B^H
+
+  where ^H is the conjugate transpose.  When A is invertible (m == n, r == n)
+  the formula collapses to the standard inverse.  For the zero matrix
+  (r == 0) the pseudoinverse is the n x m zero matrix.
+
+  For inexact (Real / MPFR) matrices we rationalise the input at the
+  minimum precision present (the common_rationalize_input pipeline used
+  throughout the system), do every step in exact rational arithmetic so
+  the rank is well-defined, then numericalise the final result back to
+  that precision.  Tolerance -> Automatic uses the input precision.
+```
+
+Memory ownership follows the standard builtin contract: this file owns the `res` argument on success and frees it; on failure (returning NULL)
+
+```text
+the caller (evaluator) retains ownership.  Every intermediate matrix
+```
+
+allocated by Dot/Inverse/Transpose/Conjugate via eval_and_free is explicitly released.
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| Dot 6x6 x 6x6 x 10000 | 338 s | 6.36 s | 4.01 s |
+| Inverse 3x3 x 5000 | 2.7 s | 4.75 s | 7.67 s |
+| Det 6x6 x 5000 | 2.41 s | 5.83 s | 5.12 s |
+| LinearSolve 6x6 x 2000 | 2.31 s | 3.56 s | 3.97 s |
+| Inverse 6x6 x 2000 | 2.21 s | 2.71 s | 3.85 s |
+| Eigenvalues 6x6 x 500 | 0.679 s | 1.01 s | 2.9 s |
 
 ## Implementation notes
 
@@ -89,55 +172,20 @@ Inexact (`Real`/MPFR) matrices are routed through the standard `common_scan_inex
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [RowReduce](../../linear-algebra/RowReduce/), [LinearSolve](../../linear-algebra/LinearSolve/), [Together](../../algebra/Together/), [Det](../../linear-algebra/Det/)
 
 - G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — Gauss-Jordan elimination and matrix inversion.
 - Erwin H. Bareiss, "Sylvester's Identity and Multistep Integer-Preserving Gaussian Elimination", Mathematics of Computation 22 (1968).
 - Source: [`src/linalg/inv.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/inv.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_compile_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_linalg.c)
+- Tests: [`tests/test_diagonal_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_diagonal_matrix_q.c)
+- Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
+- Tests: [`tests/test_hilbertmatrix.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hilbertmatrix.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Inverse[{{2, 0}, {0, 4}}]
-Out[1]= {{1/2, 0}, {0, 1/4}}
-```
-
-```mathematica
-In[1]:= Inverse[{{1, 2}, {3, 4}}]
-Out[1]= {{-2, 1}, {3/2, -1/2}}
-```
-
-```mathematica
-In[1]:= Inverse[{{1, 1, 1}, {0, 1, 1}, {0, 0, 1}}]
-Out[1]= {{1, -1, 0}, {0, 1, -1}, {0, 0, 1}}
-```
-
-```mathematica
-In[1]:= Inverse[{{a, b}, {c, d}}]
-Out[1]= {{d/(-b c + a d), -b/(-b c + a d)}, {-c/(-b c + a d), a/(-b c + a d)}}
-```
-
-```mathematica
-In[1]:= Inverse[{{1, x}, {x, 1}}]
-Out[1]= {{1/(1 - x^2), -x/(1 - x^2)}, {-x/(1 - x^2), 1/(1 - x^2)}}
-```
-
-```mathematica
-In[1]:= Inverse[{{2.0, 1.0}, {1.0, 3.0}}]
-Out[1]= {{0.6, -0.2}, {-0.2, 0.4}}
-```
-
-```mathematica
-In[1]:= Inverse[{{1, 2}, {2, 4}}]
-Out[1]= Inverse[{{1, 2}, {2, 4}}]
-```
 
 ### Notes
 

@@ -5,21 +5,40 @@
 
 ## Description
 
-```text
-HornerForm[poly]
-    rewrites the univariate polynomial poly in nested (Horner) form,
-    which evaluates in n multiplications and n additions instead of
-    the naive 2n.
-HornerForm[poly, var]
-    uses var as the recursion variable for multivariate poly.
-HornerForm[poly1 / poly2, vars1, vars2]
-    puts a rational function in Horner form, nested with respect to
-    vars1 in the numerator and vars2 in the denominator.
+**`HornerForm[poly]`**
+
+rewrites the univariate polynomial poly in nested (Horner) form, which evaluates in n multiplications and n additions instead of the naive 2n.
+
+**`HornerForm[poly, var]`**
+
+uses var as the recursion variable for multivariate poly.
+
+**`HornerForm[poly1 / poly2, vars1, vars2]`**
+
+puts a rational function in Horner form, nested with respect to vars1 in the numerator and vars2 in the denominator.
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (5)
+
+```mathematica
+In[1]:= HornerForm[1 + x + x^2 + x^3]
+Out[1]= 1 + x (1 + x (1 + x))
+
+In[2]:= HornerForm[a x^3 + b x^2 + c x + d, x]
+Out[2]= d + x (c + x (b + a x))
+
+In[3]:= HornerForm[3 x^4 - 2 x^3 + x - 7]
+Out[3]= -7 + x (1 + x^2 (-2 + 3 x))
+
+In[4]:= HornerForm[1 + 2 x + 3 x^2 y + 4 x y^2, x]
+Out[4]= 1 + x (2 + 3 x y + 4 y^2)
+
+In[5]:= HornerForm[(x^2 + 1)/(x^3 - x + 2), x, x]
+Out[5]= (1 + x^2)/(2 + x (-1 + x^2))
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -29,50 +48,14 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - W. G. Horner, "A new method of solving numerical equations of all orders, by continuous approximation", Phil. Trans. R. Soc. 1819.
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= HornerForm[1 + x + x^2 + x^3]
-Out[1]= 1 + x (1 + x (1 + x))
-
-In[2]:= HornerForm[a x^3 + b x^2 + c x + d, x]
-Out[2]= d + x (c + x (b + a x))
-```
-
-Sparse and mixed-sign polynomials nest just as cleanly, skipping absent
-degrees:
-
-```mathematica
-In[1]:= HornerForm[3 x^4 - 2 x^3 + x - 7]
-Out[1]= -7 + x (1 + x^2 (-2 + 3 x))
-```
-
-For multivariate input, choose the recursion variable; the other variables
-ride along inside the coefficients:
-
-```mathematica
-In[1]:= HornerForm[1 + 2 x + 3 x^2 y + 4 x y^2, x]
-Out[1]= 1 + x (2 + 3 x y + 4 y^2)
-```
-
-A rational function can be nested numerator and denominator independently:
-
-```mathematica
-In[1]:= HornerForm[(x^2 + 1)/(x^3 - x + 2), x, x]
-Out[1]= (1 + x^2)/(2 + x (-1 + x^2))
-```
 
 ### Notes
 

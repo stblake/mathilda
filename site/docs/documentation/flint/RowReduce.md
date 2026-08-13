@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-FLINT`RowReduce[m] gives the reduced row echelon form of the matrix m when every entry is an integer or rational, computed exactly via FLINT (fmpq_mat_rref). Returns unevaluated for a matrix with any non-rational entry.
-```
+FLINT\`RowReduce\[m\] gives the reduced row echelon form of the matrix m when every entry is an integer or rational, computed exactly via FLINT (fmpq\_mat\_rref). Returns unevaluated for a matrix with any non-rational entry.
 
-## Examples
+## Examples (1)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= FLINT`RowReduce[{{1, 2, 3}, {4, 5, 6}}]
@@ -21,10 +21,6 @@ Out[1]= {{1, 0, -1}, {0, 1, 2}}
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 

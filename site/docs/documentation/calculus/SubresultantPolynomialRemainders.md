@@ -5,21 +5,34 @@
 
 ## Description
 
-```text
-SubresultantPolynomialRemainders[a, b, x] gives the polynomial-remainder
-chain {a, b, R_2, R_3, ...} obtained by iterating pseudo-remainder over
-K(coeffs)[x] until a constant or zero remainder is reached. Used by the
-Lazard-Rioboo-Trager rational integration pipeline; the chain is correct
-modulo content scaling, which downstream consumers strip with primitive[].
-```
+**`SubresultantPolynomialRemainders[a, b, x] gives the polynomial-remainder`**
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+chain {a, b, R\_2, R\_3, ...} obtained by iterating pseudo-remainder over K(coeffs)\[x\] until a constant or zero remainder is reached. Used by the Lazard-Rioboo-Trager rational integration pipeline; the chain is correct modulo content scaling, which downstream consumers strip with primitive\[\].
+
+</details>
+
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= SubresultantPolynomialRemainders[x^4 + 1, 2 x^3, x]
 Out[1]= {1 + x^4, 2 x^3, 2}
+```
+
+### Applications (2)
+
+```mathematica
+In[2]:= SubresultantPolynomialRemainders[x^4 - 1, x^2 - 1, x]
+Out[2]= {-1 + x^4, -1 + x^2}
+
+In[3]:= SubresultantPolynomialRemainders[x^3 - 2 x + 5, x^2 - 3, x]
+Out[3]= {5 - 2 x + x^3, -3 + x^2, 5 + x, 22}
 ```
 
 ## Implementation notes
@@ -51,35 +64,17 @@ needs) are exact. Requires the variable to be a symbol.
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Integrate](../../calculus/Integrate/)
 
 - K. O. Geddes, S. R. Czapor, G. Labahn, *Algorithms for Computer Algebra* (Kluwer, 1992) — polynomial remainder sequences / subresultants.
 - W. S. Brown, J. F. Traub, "On Euclid's Algorithm and the Theory of Subresultants", JACM 18 (1971).
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
+- Tests: [`tests/test_intrat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_intrat.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-The pseudo-remainder chain starting from the two input polynomials; here it
-terminates as soon as a divisor is reached:
-
-```mathematica
-In[1]:= SubresultantPolynomialRemainders[x^4 - 1, x^2 - 1, x]
-Out[1]= {-1 + x^4, -1 + x^2}
-```
-
-For coprime inputs the chain runs all the way down to a nonzero constant:
-
-```mathematica
-In[1]:= SubresultantPolynomialRemainders[x^3 - 2 x + 5, x^2 - 3, x]
-Out[1]= {5 - 2 x + x^3, -3 + x^2, 5 + x, 22}
-```
 
 ### Notes
 

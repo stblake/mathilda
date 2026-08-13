@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-Module[{x, y, ...}, expr] specifies that x, y, ... are local variables.
-```
+**`Module[{x, y, ...}, expr] specifies that x, y, ... are local variables.`**
 
-## Examples
+## Examples (7)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= x = 1; Module[{x = 2}, x + 1]
@@ -20,6 +20,37 @@ Out[1]= 3
 In[2]:= x
 Out[2]= 1
 ```
+
+### Applications (5)
+
+```mathematica
+In[3]:= Module[{x = 5}, x^2 + 1]
+Out[3]= 26
+
+In[4]:= Module[{a = 2, b = 3}, a*b + a + b]
+Out[4]= 11
+
+In[5]:= f[n_] := Module[{s = 0}, s = n^2 + n; s]; f[4]
+Out[5]= 20
+
+In[6]:= g[n_] := Module[{f}, f[0] = 1; f[k_] := k*f[k - 1]; f[n]]; g[6]
+Out[6]= 720
+
+In[7]:= Module[{x = 1}, Do[x = x + 1/x, {5}]; x]
+Out[7]= 969581/272890
+```
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| return {real, int, mask}, then Total | 61.2 s | 0.344 s | 0.983 s |
+| return {real, int}, then Total | 42 s | 0.219 s | 0.41 s |
+| return {real, int, mask}, discarded | 41.5 s | 0.244 s | 0.972 s |
+| return ragged {n, 1000, 100}, then Total | 20.2 s | 0.033 s | 0.051 s |
+| return {real, real}, then Total | 0.89 s | 0.161 s | 0.242 s |
 
 ## Implementation notes
 
@@ -35,44 +66,19 @@ The rename is applied to the body by `substitute_scoping`, a recursive tree walk
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/)
 
 - Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §3.1 (local state and lexical scoping).
 - Source: [`src/modular.c`](https://github.com/stblake/mathilda/blob/main/src/modular.c)
 - Specification: [`docs/spec/builtins/scoping-constructs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/scoping-constructs.md)
+- Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Module[{x = 5}, x^2 + 1]
-Out[1]= 26
-```
-
-```mathematica
-In[1]:= Module[{a = 2, b = 3}, a*b + a + b]
-Out[1]= 11
-```
-
-```mathematica
-In[1]:= f[n_] := Module[{s = 0}, s = n^2 + n; s]; f[4]
-Out[1]= 20
-```
-
-```mathematica
-In[1]:= g[n_] := Module[{f}, f[0] = 1; f[k_] := k*f[k - 1]; f[n]]; g[6]
-Out[1]= 720
-```
-
-```mathematica
-In[1]:= Module[{x = 1}, Do[x = x + 1/x, {5}]; x]
-Out[1]= 969581/272890
-```
 
 ### Notes
 

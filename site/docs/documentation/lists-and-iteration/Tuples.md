@@ -5,18 +5,23 @@
 
 ## Description
 
-```text
-Tuples[list,n]
-    generates a list of all possible n-tuples of elements from list.
-Tuples[{list1,list2,...}]
-    generates a list of all possible tuples whose ith element is from listi.
-Tuples[list,{n1,n2,...}]
-    generates a list of all possible n1 x n2 x ... arrays of elements in list.
-```
+**`Tuples[list,n]`**
 
-## Examples
+generates a list of all possible n-tuples of elements from list.
 
-All examples below are verified against the current Mathilda build.
+**`Tuples[{list1,list2,...}]`**
+
+generates a list of all possible tuples whose ith element is from listi.
+
+**`Tuples[list,{n1,n2,...}]`**
+
+generates a list of all possible n1 x n2 x ... arrays of elements in list.
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= Tuples[{0, 1}, 3]
@@ -32,6 +37,22 @@ In[4]:= Tuples[f[x, y, z], 2]
 Out[4]= {f[x, x], f[x, y], f[x, z], f[y, x], f[y, y], f[y, z], f[z, x], f[z, y], f[z, z]}
 ```
 
+### Applications (4)
+
+```mathematica
+In[5]:= Tuples[{a, b}, 2]
+Out[5]= {{a, a}, {a, b}, {b, a}, {b, b}}
+
+In[6]:= Tuples[{{1, 2}, {a, b, c}}]
+Out[6]= {{1, a}, {1, b}, {1, c}, {2, a}, {2, b}, {2, c}}
+
+In[7]:= Select[Tuples[Range[6], 2], #[[1]] + #[[2]] == 7 &]
+Out[7]= {{1, 6}, {2, 5}, {3, 4}, {4, 3}, {5, 2}, {6, 1}}
+
+In[8]:= Length[Tuples[{a, b, c}, 4]]
+Out[8]= 81
+```
+
 ## Implementation notes
 
 **Algorithm.** `builtin_tuples` (in `src/funcprog.c`) enumerates the Cartesian product. `Tuples[{l1, ..., lk}]` takes one tuple from each list; `Tuples[list, n]` is the n-ary product of one list with itself; `Tuples[list, {n1, ..., nd}]` produces n1·…·nd-element tuples reshaped into a d-dimensional array. All three normalize to an array of source-list pointers and call the recursive `tuples_rec`.
@@ -44,44 +65,16 @@ Out[4]= {f[x, x], f[x, y], f[x, z], f[y, x], f[y, y], f[y, z], f[z, x], f[z, y],
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [List](../../other-advanced/List/)
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)
+- Tests: [`tests/test_distribute.c`](https://github.com/stblake/mathilda/blob/main/tests/test_distribute.c)
+- Tests: [`tests/test_sort.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sort.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Tuples[{a, b}, 2]
-Out[1]= {{a, a}, {a, b}, {b, a}, {b, b}}
-```
-
-The flat-product form `Tuples[{list1, list2, ...}]` takes one element from each list — here every pairing of a coin with a die face:
-
-```mathematica
-In[1]:= Tuples[{{1, 2}, {a, b, c}}]
-Out[1]= {{1, a}, {1, b}, {1, c}, {2, a}, {2, b}, {2, c}}
-```
-
-Tuples enumerates the full sample space, so it composes with `Select` for combinatorial searches. The ways two dice sum to 7:
-
-```mathematica
-In[1]:= Select[Tuples[Range[6], 2], #[[1]] + #[[2]] == 7 &]
-Out[1]= {{1, 6}, {2, 5}, {3, 4}, {4, 3}, {5, 2}, {6, 1}}
-```
-
-The count of `n`-tuples from a `k`-element set is exactly `k^n`:
-
-```mathematica
-In[1]:= Length[Tuples[{a, b, c}, 4]]
-Out[1]= 81
-```
 
 ### Notes
 

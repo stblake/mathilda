@@ -5,19 +5,19 @@
 
 ## Description
 
-```text
-Norm[expr]
-    gives the 2-norm of a number, vector, or matrix (Frobenius norm for
-    matrices).
-Norm[expr, p]
-    gives the p-norm: Abs[expr] for scalars; (Sum |xi|^p)^(1/p) for
-    vectors with 1 <= p < Infinity; Max[Abs[expr]] for p == Infinity;
-    induced operator norm for matrices when p is 1, 2, or Infinity.
-```
+**`Norm[expr]`**
 
-## Examples
+gives the 2-norm of a number, vector, or matrix (Frobenius norm for matrices).
 
-All examples below are verified against the current Mathilda build.
+**`Norm[expr, p]`**
+
+gives the p-norm: Abs\[expr\] for scalars; (Sum |xi|^p)^(1/p) for vectors with 1 \<= p \< Infinity; Max\[Abs\[expr\]\] for p == Infinity; induced operator norm for matrices when p is 1, 2, or Infinity.
+
+## Examples (12)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (6)
 
 ```mathematica
 In[1]:= Norm[{x, y, z}]
@@ -39,6 +39,41 @@ In[6]:= Norm[{{a11, a12}, {a21, a22}}, "Frobenius"]
 Out[6]= Sqrt[Abs[a11]^2 + Abs[a12]^2 + Abs[a21]^2 + Abs[a22]^2]
 ```
 
+### Applications (6)
+
+```mathematica
+In[7]:= Norm[{3, 4}]
+Out[7]= 5
+
+In[8]:= Norm[{a, b, c}]
+Out[8]= Sqrt[Abs[a]^2 + Abs[b]^2 + Abs[c]^2]
+
+In[9]:= Norm[{1, 2, 3, 4}, 1]
+Out[9]= 10
+
+In[10]:= Norm[{1, 2, 3, 4}, Infinity]
+Out[10]= 4
+
+In[11]:= Norm[{1, 2, 3, 4}, 3]
+Out[11]= 10^(2/3)
+
+In[12]:= N[Norm[{1, 2, 3}], 40]
+Out[12]= 3.7416573867739413855837487323165493017559
+```
+
+## Algorithm
+
+Vector and matrix norms.
+
+```text
+  Norm[x]       scalar  -> Abs[x]
+  Norm[v]       vector  -> 2-norm
+  Norm[v, p]    vector  -> p-norm, also Infinity
+  Norm[m, "Frobenius"]  -> Frobenius norm (works on any tensor rank)
+```
+
+Other matrix norms (SVD-based 2-norm, etc.) are not yet implemented and fall through to NULL so the call stays symbolic.
+
 ## Implementation notes
 
 **Algorithm.** `builtin_norm` uses `get_tensor_dims` to classify the argument and then builds a symbolic norm expression that it evaluates. A rank-0 scalar reduces to `Abs[x]` (the `p` argument is rejected for scalars). For a rank-1 vector (or any tensor when `p` is the string `"Frobenius"`) it flattens to `Expr**` and assembles: `Norm[v, Infinity]` → `Max[Abs[v_i]]`; otherwise (default `p = 2`, or `"Frobenius"` → 2, or a user `p`) → `Power[Sum[Abs[v_i]^p], 1/p]`. Every `Abs`, `Power`, `Plus`, `Max` is created and run through the evaluator (`eval_and_free`), so exact/symbolic/complex entries produce exact symbolic norms.
@@ -51,55 +86,34 @@ Out[6]= Sqrt[Abs[a11]^2 + Abs[a12]^2 + Abs[a21]^2 + Abs[a22]^2]
 - For vectors, `Norm[v, p]` is `Total[Abs[v]^p]^(1/p)`.
 - For vectors, `Norm[v, Infinity]` is the $\infty$-norm given by `Max[Abs[v]]`.
 - `Norm[m, "Frobenius"]` gives the Frobenius norm of a matrix `m`.
+- **Packed/NDArray fast path**: an inexact vector or matrix routes through the
+  LAPACK-backed `ndla_norm` (`dlange`/`zlange`, and an SVD for the induced
+  matrix 2-norm); `Norm` is on the packed-array `AWARE` list.
+- **`Compile[]`**: both `Norm[v]`/`Norm[m]` and the two-argument forms lower to a
+  machine `Real`. Over a declared array argument the compiled body delegates to
+  `ndla_norm` (the `V_NORM` opcode carries the literal `p`), covering
+  `Norm[v, 1]`, `Norm[v, Infinity]`, `Norm[v, k]`, `Norm[v, 2.5]`, and the matrix
+  `Norm[m, 1]` / `Norm[m, Infinity]` / `Norm[m, "Frobenius"]`. An induced matrix
+  `p`-norm with `p ∉ {1, 2, Infinity}` has no LAPACK path and stays interpreted.
+- **Inline vector**: a `Norm[{e1, …, en}, p]` over a `List` literal (rather than a
+  declared array) compiles by expanding to the scalar arithmetic above
+  (`Sqrt[Σ Abs[ei]^2]`, `Σ Abs[ei]`, `Max[Abs[ei]]`, `(Σ Abs[ei]^p)^(1/p)`), so a
+  `Norm[{f[x], …}]` body auto-compiles inside `Plot`/`Table`/`NIntegrate`/`FindRoot`.
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [Plot](../../graphics/Plot/), [Table](../../lists-and-iteration/Table/), [NIntegrate](../../numerical-calculus/NIntegrate/), [FindRoot](../../calculus/FindRoot/)
 
 - Source: [`src/linalg/norm.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/norm.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_compile_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_transforms.c)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_diagonal.c`](https://github.com/stblake/mathilda/blob/main/tests/test_diagonal.c)
+- Tests: [`tests/test_fit.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fit.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Norm[{3, 4}]
-Out[1]= 5
-```
-
-A symbolic 2-norm is kept exact, written with `Abs` so it is valid for complex
-components too:
-
-```mathematica
-In[1]:= Norm[{a, b, c}]
-Out[1]= Sqrt[Abs[a]^2 + Abs[b]^2 + Abs[c]^2]
-```
-
-The same vector under different p-norms — the 1-norm, the max (Infinity) norm,
-and the exact 3-norm:
-
-```mathematica
-In[1]:= Norm[{1, 2, 3, 4}, 1]
-Out[1]= 10
-
-In[2]:= Norm[{1, 2, 3, 4}, Infinity]
-Out[2]= 4
-
-In[3]:= Norm[{1, 2, 3, 4}, 3]
-Out[3]= 10^(2/3)
-```
-
-The norm of a complex vector, taken to 40 significant digits:
-
-```mathematica
-In[1]:= N[Norm[{1, 2, 3}], 40]
-Out[1]= 3.7416573867739413855837487323165493017559
-```
 
 ### Notes
 

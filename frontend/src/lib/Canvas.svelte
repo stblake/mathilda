@@ -21,11 +21,17 @@
     addNotebookAt,
     setFocused,
     loadStartupContent,
+    setStageOrigin,
   } from './canvas';
 
   // ---------------------------------------------------------------------------
-  // Active notebook — the most recently clicked card renders on top (z-index)
-  let activeNbId: string | null = null;
+  // Active notebook — the most recently clicked card renders on top (z-index).
+  // Held in canvasState so code outside this component can raise a card;
+  // openRefpage does, so a documentation page opens in front of the notebook it
+  // was asked from rather than behind it.
+  function setActive(id: string) {
+    canvasState.update(s => (s.activeId === id ? s : { ...s, activeId: id }));
+  }
 
   // ---------------------------------------------------------------------------
   // Rubber-band selection — drag on empty canvas to select multiple notebooks
@@ -151,9 +157,19 @@
   let canvasEl: HTMLElement;
   let worldEl: HTMLElement;
 
+  /* Publish where the stage sits, so a viewport point (a clicked symbol) can be
+     turned into a canvas coordinate. Re-read on resize because the app bar and
+     window chrome move it. */
+  function publishStageOrigin() {
+    const r = canvasEl?.getBoundingClientRect();
+    if (r) setStageOrigin(r.left, r.top);
+  }
+
   onMount(() => {
     // Seed display values immediately to avoid lerp-from-zero flash
     panX = targetPanX; panY = targetPanY; zoom = targetZoom;
+    publishStageOrigin();
+    window.addEventListener('resize', publishStageOrigin);
     rafId = requestAnimationFrame(animate);
     // Load startup content after a tick to ensure all stores are ready
     setTimeout(() => {
@@ -163,11 +179,58 @@
 
   onDestroy(() => {
     cancelAnimationFrame(rafId);
+    window.removeEventListener('resize', publishStageOrigin);
     unsub();
   });
 
   // ---------------------------------------------------------------------------
   // Wheel handler
+
+  /* Is there an element between `from` and `stop` (inclusive) that can still
+     scroll in the direction of this gesture?
+     
+     "Can still scroll" matters as much as "is scrollable": a card scrolled to
+     its bottom should hand the rest of the gesture to the canvas rather than
+     swallowing it, which is how nested scrolling behaves everywhere else. The
+     1px tolerance absorbs fractional scroll positions at fractional zoom. */
+  function canScroll(from: HTMLElement, stop: Element, dx: number, dy: number): boolean {
+    let el: HTMLElement | null = from;
+    while (el) {
+      const style = getComputedStyle(el);
+      const scrollableY = /(auto|scroll)/.test(style.overflowY);
+      const scrollableX = /(auto|scroll)/.test(style.overflowX);
+      if (scrollableY && el.scrollHeight > el.clientHeight + 1) {
+        const room = dy > 0
+          ? el.scrollHeight - el.clientHeight - el.scrollTop > 1
+          : el.scrollTop > 1;
+        if (dy !== 0 && room) return true;
+      }
+      if (scrollableX && el.scrollWidth > el.clientWidth + 1) {
+        const room = dx > 0
+          ? el.scrollWidth - el.clientWidth - el.scrollLeft > 1
+          : el.scrollLeft > 1;
+        if (dx !== 0 && room) return true;
+      }
+      if (el === stop) break;
+      el = el.parentElement;
+    }
+    return false;
+  }
+
+  /* Scroll chaining, gesture-aware.
+   *
+   * A trackpad flick keeps delivering wheel events long after the fingers lift.
+   * Without this, reaching the bottom of a notebook mid-flick handed the rest of
+   * the momentum to the canvas and the view shot away. Native scrolling avoids
+   * that because a scroll gesture is bound to the element it started in.
+   *
+   * Same rule here: events closer together than GESTURE_GAP_MS are one gesture,
+   * and a gesture that has scrolled a card can never pan the canvas -- it stops
+   * dead at the boundary. Pausing ends the gesture, so scrolling again from a
+   * stop does pan, which is how you get out of a card deliberately. */
+  const GESTURE_GAP_MS = 160;
+  let lastWheelAt = 0;
+  let gestureScrolledCard = false;
 
   function onWheel(e: WheelEvent) {
     if (e.ctrlKey) {
@@ -186,12 +249,28 @@
         return { ...s, zoom: newZoom, panX: cx - zf * (cx - s.panX), panY: cy - zf * (cy - s.panY) };
       });
     } else {
-      // Two-finger scroll: scroll the notebook if a cell inside has focus;
-      // pan the canvas otherwise (including after pressing Escape).
+      // Two-finger scroll: let a card consume it only if the card can actually
+      // scroll the way the gesture is going; otherwise pan the canvas.
+      //
+      // This used to defer to the card whenever a cell inside it held focus,
+      // which meant that clicking into a notebook killed panning over that card
+      // entirely -- on a card with nothing to scroll the gesture did nothing at
+      // all. Focus is the wrong question; scrollability is the right one, and it
+      // is what the browser itself uses to chain a scroll to an ancestor.
+      const now = e.timeStamp || performance.now();
+      if (now - lastWheelAt > GESTURE_GAP_MS) gestureScrolledCard = false;  // new gesture
+      lastWheelAt = now;
+
       const overCard = (e.target as HTMLElement).closest('.nb-card');
-      const cellFocused = overCard && document.activeElement && overCard.contains(document.activeElement);
-      if (cellFocused) return; // browser scrolls the card natively
-      // No focused cell → pan canvas
+      if (overCard && canScroll(e.target as HTMLElement, overCard, e.deltaX, e.deltaY)) {
+        gestureScrolledCard = true;
+        return;                       // the browser scrolls the card natively
+      }
+      if (gestureScrolledCard) {
+        // Boundary reached mid-flick: absorb the momentum rather than pan.
+        e.preventDefault();
+        return;
+      }
       e.preventDefault();
       canvasState.update(s => ({ ...s, panX: s.panX - e.deltaX, panY: s.panY - e.deltaY }));
     }
@@ -341,7 +420,7 @@
       if (wrapper) {
         const nbId = wrapper.getAttribute('data-nb-id');
         if (nbId) {
-          activeNbId = nbId;
+          setActive(nbId);
           if ($canvasState.selectedIds.includes(nbId)) {
             startGroupDrag(e, nbId);
             return;
@@ -516,8 +595,8 @@
         <div
           class="nb-card-wrapper"
           data-nb-id={nb.id}
-          style="left:{nb.x}px;top:{nb.y}px;width:{nb.width}px;z-index:{activeNbId===nb.id?10:1};"
-          on:pointerdown|capture={() => activeNbId = nb.id}
+          style="left:{nb.x}px;top:{nb.y}px;width:{nb.width}px;z-index:{$canvasState.activeId===nb.id?10:1};"
+          on:pointerdown|capture={() => setActive(nb.id)}
         >
           <NotebookCard
             {nb}
@@ -582,9 +661,9 @@
 <style>
   .canvas-stage {
     position: fixed;
-    inset: 0;
+    inset: var(--appbar-h, 34px) 0 0 0;   /* clear the app bar */
     width: 100vw;
-    height: 100vh;
+    height: calc(100vh - var(--appbar-h, 34px));
     background-color: var(--bg, #050810);
     overflow: hidden;
     cursor: default;
@@ -657,7 +736,7 @@
   /* ---- Focused (full-screen) view — truly edge to edge ---- */
   .focused-view {
     position: fixed;
-    inset: 0;
+    inset: var(--appbar-h, 34px) 0 0 0;   /* clear the app bar */
     /* Use card-bg so light mode doesn't show dark canvas edges */
     background: var(--card-bg, #050810);
     overflow-y: auto;

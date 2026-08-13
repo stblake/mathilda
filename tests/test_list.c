@@ -1338,10 +1338,73 @@ void test_find_clusters() {
         {"FindClusters[{}]", "FindClusters[{}]"},
         {"FindClusters[5]", "FindClusters[5]"},
         {"FindClusters[f[1, 2, 3]]", "FindClusters[f[1, 2, 3]]"},
-        {"FindClusters[{{1, 2}, {3, 4}}]", "FindClusters[{{1, 2}, {3, 4}}]"},
         {"FindClusters[NDArray[{1., 2., 10.}]]", "FindClusters[NDArray[{1.0, 2.0, 10.0}]]"},
         {"FindClusters[Range[10]]", "{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}"},
         {"FindClusters[]", "FindClusters[]"},
+
+        /* --- n-dimensional numeric vectors ---------------------------
+         * A list of equal-length numeric vectors clusters in any
+         * dimension. The structure is a real minimum spanning tree over
+         * exact SQUARED distances; in one dimension that tree is the
+         * sorted adjacency chain, which is why every scalar row above
+         * is unchanged. Ragged rows, a scalar mixed among vectors,
+         * depth over 2 and a symbolic component all decline. The
+         * methods that still read the sorted 1-D projection (KMeans,
+         * DBSCAN, ...) decline on vectors rather than running on
+         * meaningless data. Cluster ORDER follows first occurrence in
+         * input order, so it differs from Mathematica while the
+         * partition agrees. */
+        {"FindClusters[{{1, 2}, {3, 4}}]", "{{{1, 2}, {3, 4}}}"},
+        {"FindClusters[{{1, 1}, {1, 2}, {9, 9}, {9, 8}}]", "{{{1, 1}, {1, 2}}, {{9, 9}, {9, 8}}}"},
+        {"FindClusters[{{1, 1}, {1, 2}, {9, 9}, {9, 8}}, 2]", "{{{1, 1}, {1, 2}}, {{9, 9}, {9, 8}}}"},
+        {"FindClusters[{{1, 1}, {1, 2}, {9, 9}, {9, 8}}, 3]", "{{{1, 1}}, {{1, 2}}, {{9, 9}, {9, 8}}}"},
+        {"FindClusters[{{1, 1}, {1, 2}, {9, 9}, {9, 8}}, 4]", "{{{1, 1}}, {{1, 2}}, {{9, 9}}, {{9, 8}}}"},
+        {"FindClusters[{{1, 1}, {1, 2}, {9, 9}, {9, 8}}, UpTo[3]]", "{{{1, 1}, {1, 2}}, {{9, 9}, {9, 8}}}"},
+        {"FindClusters[{{2.5, 3.1}, {5.9, 3.4}, {2.6, 3.0}, {6.1, 3.5}}]", "{{{2.5, 3.1}, {2.6, 3.0}}, {{5.9, 3.4}, {6.1, 3.5}}}"},
+        {"FindClusters[{{1, 1, 1}, {1, 1, 2}, {9, 9, 9}}]", "{{{1, 1, 1}, {1, 1, 2}}, {{9, 9, 9}}}"},
+        {"FindClusters[{{1}, {2}, {100}}]", "{{{1}, {2}}, {{100}}}"},
+        {"FindClusters[{{1}, {2}, {100}}, 3]", "{{{1}}, {{2}}, {{100}}}"},
+        {"FindClusters[{{1, 1}, {1, 1}, {9, 9}}, 3]", "{{{1, 1}, {1, 1}}, {{9, 9}}}"},
+        {"FindClusters[{{1, 1}, {1, 1}, {1, 1}}]", "{{{1, 1}, {1, 1}, {1, 1}}}"},
+        {"FindClusters[{{1, 2}, {1, 2}, {9, 9}, {9, 9}}, 4]", "{{{1, 2}, {1, 2}}, {{9, 9}, {9, 9}}}"},
+        {"FindClusters[{{1/3, 1/7}, {1/3, 1/7 + 1/10^20}, {5, 5}}]", "{{{1/3, 1/7}, {1/3, 100000000000000000007/700000000000000000000}}, {{5, 5}}}"},
+        {"FindClusters[{{0, 0}, {0, 1}, {1, 0}, {1, 1}, {50, 50}}]", "{{{0, 0}, {0, 1}, {1, 0}, {1, 1}}, {{50, 50}}}"},
+        {"FindClusters[{{1, 1}, {2, 2}, {3, 3}}, Method -> \"SpanningTree\"]", "{{{1, 1}, {2, 2}, {3, 3}}}"},
+        {"FindClusters[{{1, 1}, {2, 2}, {30, 30}}, Method -> \"Agglomerate\"]", "{{{1, 1}, {2, 2}}, {{30, 30}}}"},
+        {"FindClusters[{{1, 2}, {3}}]", "FindClusters[{{1, 2}, {3}}]"},
+        {"FindClusters[{{1, 2}, 3}]", "FindClusters[{{1, 2}, 3}]"},
+        {"FindClusters[{3, {1, 2}}]", "FindClusters[{3, {1, 2}}]"},
+        {"FindClusters[{{{1}}, {{2}}}]", "FindClusters[{{{1}}, {{2}}}]"},
+        {"FindClusters[{{1, a}, {2, 3}}]", "FindClusters[{{1, a}, {2, 3}}]"},
+        {"FindClusters[{{}, {}}]", "FindClusters[{{}, {}}]"},
+        {"FindClusters[{{1, 1}, {9, 9}}, 2, Method -> \"KMeans\"]", "FindClusters[{{1, 1}, {9, 9}}, 2, Method -> \"KMeans\"]"},
+        {"FindClusters[{{1, 1}, {9, 9}}, Method -> \"DBSCAN\"]", "FindClusters[{{1, 1}, {9, 9}}, Method -> \"DBSCAN\"]"},
+
+
+        /* --- strings and colours -------------------------------------
+         * A colour is a compound expression carrying numeric arguments,
+         * i.e. the same shape as a vector, so RGBColor and GrayLevel are
+         * points in their own space with no colour-specific code.
+         * Strings have no coordinates at all and cluster on exact
+         * integer edit distances -- the gap methods only ever ask for
+         * pairwise distances, never positions.
+         *
+         * The {1/2, 1/3, 10} row is a guard, not a feature: Rational is
+         * itself a compound expression, so reading any compound head as
+         * a point would cluster 1/2 by numerator and denominator. Heads
+         * are an explicit list and scalars are tested first. Complex is
+         * declined for the same reason, unchanged from before. */
+        {"FindClusters[{\"GGTTT\", \"GGGGT\", \"AACCC\", \"AAACC\"}, 2]", "{{\"GGTTT\", \"GGGGT\"}, {\"AACCC\", \"AAACC\"}}"},
+        {"FindClusters[{\"cat\", \"cot\", \"dog\", \"dig\"}, 2]", "{{\"cat\", \"cot\"}, {\"dog\", \"dig\"}}"},
+        {"FindClusters[{\"abc\", \"abc\", \"xyz\"}, 3]", "{{\"abc\", \"abc\"}, {\"xyz\"}}"},
+        {"FindClusters[{RGBColor[1, 0, 0], RGBColor[9/10, 1/10, 0], RGBColor[0, 0, 1]}, 2]", "{{RGBColor[1, 0, 0], RGBColor[9/10, 1/10, 0]}, {RGBColor[0, 0, 1]}}"},
+        {"FindClusters[{GrayLevel[0], GrayLevel[1/10], GrayLevel[1]}, 2]", "{{GrayLevel[0], GrayLevel[1/10]}, {GrayLevel[1]}}"},
+        {"FindClusters[{1/2, 1/3, 10}]", "{{1/2, 1/3}, {10}}"},
+        {"FindClusters[{\"a\", 5}]", "FindClusters[{\"a\", 5}]"},
+        {"FindClusters[{RGBColor[1, 0, 0], GrayLevel[0]}]", "FindClusters[{RGBColor[1, 0, 0], GrayLevel[0]}]"},
+        {"FindClusters[{RGBColor[1, 0, 0], RGBColor[0, 1, 0]}, Method -> \"KMeans\"]", "FindClusters[{RGBColor[1, 0, 0], RGBColor[0, 1, 0]}, Method -> \"KMeans\"]"},
+        {"FindClusters[{2 + 3 I, 1 + I}]", "FindClusters[{2 + 3*I, 1 + I}]"},
+
         {"Attributes[FindClusters]", "{Protected}"},
     };
 
@@ -1415,6 +1478,104 @@ void test_find_clusters() {
     }
 }
 
+/* The distance functions FindClusters ranks with, and which had no
+ * implementation at all before -- Names["*Distance*"] returned only
+ * GraphDistance, while FindClusters' DistanceFunction option accepted the names
+ * as inert symbols. Every expected value below was cross-checked against
+ * Mathematica via wolframscript, including the two conventions that are not
+ * derivable: CosineDistance of a zero vector is 0 rather than Indeterminate,
+ * and the Abs-then-square definition (not square-then-sum) is what makes a
+ * complex component contribute its modulus. */
+void test_distance_functions() {
+    struct { const char* in; const char* out; } cases[] = {
+        {"EuclideanDistance[{1, 2}, {4, 6}]", "5"},
+        {"SquaredEuclideanDistance[{1, 2}, {4, 6}]", "25"},
+        {"SquaredEuclideanDistance[{1/3, 0}, {0, 1/7}]", "58/441"},
+        {"ManhattanDistance[{1, 2}, {4, 6}]", "7"},
+        {"EuclideanDistance[{0, 0}, {1, 1}]", "Sqrt[2]"},
+        {"EuclideanDistance[3, 7]", "4"},
+        {"ManhattanDistance[{a}, {b}]", "Abs[a - b]"},
+        {"SquaredEuclideanDistance[{3 + 4 I}, {0}]", "25"},
+        {"EuclideanDistance[{1, 2}, {1, 2, 3}]", "EuclideanDistance[{1, 2}, {1, 2, 3}]"},
+        {"EuclideanDistance[{{1, 2}}, {{3, 4}}]", "EuclideanDistance[{{1, 2}}, {{3, 4}}]"},
+        {"CosineDistance[{1, 0}, {0, 1}]", "1"},
+        {"CosineDistance[{1, 1}, {1, 0}]", "1 - 1/Sqrt[2]"},
+        {"CosineDistance[{1, 2}, {2, 4}]", "0"},
+        {"CosineDistance[{1, 0}, {-1, 0}]", "2"},
+        {"CosineDistance[{0, 0}, {1, 2}]", "0"},
+        {"CosineDistance[3, 4]", "0"},
+        {"Attributes[EuclideanDistance]", "{Protected}"},
+        {"Attributes[CosineDistance]", "{Protected}"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
+        assert_eval_eq(cases[i].in, cases[i].out, 0);
+
+    /* Exact at a scale where Abs itself declines: Abs[-1/10^20] does not
+     * evaluate (nor does Sign of it), so composing internal_abs blindly left
+     * these unevaluated and FindClusters refused exact high-precision vectors.
+     * The distances take the sign through the exact comparator instead. */
+    assert_eval_eq("SquaredEuclideanDistance[{1/3, 1/7}, {1/3, 1/7 + 1/10^20}]",
+                   "1/10000000000000000000000000000000000000000", 0);
+    assert_eval_eq("ManhattanDistance[{0}, {1/10^20}]", "1/100000000000000000000", 0);
+    assert_eval_eq("ManhattanDistance[{1/10^20}, {0}]", "1/100000000000000000000", 0);
+
+    /* Sequence distances: strings and lists, cross-checked against
+     * Mathematica. HammingDistance requires equal lengths there
+     * (::idim) so declining is the faithful behaviour. */
+    struct { const char* in; const char* out; } seqs[] = {
+        {"EditDistance[\"GGTTT\", \"GGGGT\"]", "2"},
+        {"EditDistance[\"kitten\", \"sitting\"]", "3"},
+        {"EditDistance[\"\", \"abc\"]", "3"},
+        {"EditDistance[\"abc\", \"abc\"]", "0"},
+        {"EditDistance[{1, 2, 3}, {1, 3}]", "1"},
+        {"HammingDistance[\"GGTTT\", \"GGGGT\"]", "2"},
+        {"HammingDistance[{1, 2, 3}, {1, 5, 3}]", "1"},
+        {"HammingDistance[\"abc\", \"abcd\"]", "HammingDistance[\"abc\", \"abcd\"]"},
+        {"EditDistance[\"abc\", 5]", "EditDistance[\"abc\", 5]"},
+        {"Attributes[EditDistance]", "{Protected}"},
+    };
+    for (size_t i = 0; i < sizeof(seqs) / sizeof(seqs[0]); i++)
+        assert_eval_eq(seqs[i].in, seqs[i].out, 0);
+
+    /* Squared Euclidean is monotone in Euclidean -- the property the n-D
+     * clustering relies on to rank exactly without taking a root. */
+    assert_eval_eq("SquaredEuclideanDistance[{0, 0}, {1, 1}] < "
+                   "SquaredEuclideanDistance[{0, 0}, {2, 2}]", "True", 0);
+    assert_eval_eq("EuclideanDistance[{0, 0}, {1, 1}] < "
+                   "EuclideanDistance[{0, 0}, {2, 2}]", "True", 0);
+}
+
+/* The two spanning-tree builders must agree.
+ *
+ * Machine-precision points take a double Prim (over two orders of magnitude
+ * faster: 2000 2-D points went from 1.49 s to 6.8 ms) while exact points keep the
+ * Expr-arithmetic builder, which is the only one that can order a Rational or a
+ * bigint correctly. Two code paths for one definition is a standing risk, so the
+ * same points are clustered both ways -- as integers, which are machine, and
+ * divided by a constant, which makes them exact -- and the partitions must
+ * match. */
+void test_find_clusters_builder_agreement() {
+    assert_eval_eq(
+        "FindClusters[{{1, 1}, {1, 2}, {9, 9}, {9, 8}, {50, 50}, {2, 1}}, 3] === "
+        "3 * FindClusters[{{1, 1}, {1, 2}, {9, 9}, {9, 8}, {50, 50}, {2, 1}}/3, 3]",
+        "True", 0);
+    assert_eval_eq(
+        "Module[{p = Table[{RandomInteger[1000], RandomInteger[1000]}, {400}]},"
+        " FindClusters[p, 5] === 2 * FindClusters[p/2, 5]]", "True", 0);
+
+    /* Exactness is not lost on either path: two vectors differing by 1/10^20
+     * stay together, which a double projection of the ELEMENTS would collapse.
+     * (The distances may be computed in double; distinctness never is.) */
+    assert_eval_eq("FindClusters[{{1/3, 1/7}, {1/3, 1/7 + 1/10^20}, {5, 5}}]",
+                   "{{{1/3, 1/7}, {1/3, 100000000000000000007/700000000000000000000}}, {{5, 5}}}", 0);
+
+    /* Each builder has its own ceiling, because their constants differ. */
+    assert_eval_eq("Head[FindClusters[Partition[RandomReal[{0, 1}, 2 * 20001], 2]]]",
+                   "FindClusters", 0);
+    assert_eval_eq("Head[FindClusters[Table[{RandomInteger[10^6]/7, RandomInteger[10^6]/11}, {2001}]]]",
+                   "FindClusters", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1471,6 +1632,8 @@ int main() {
     TEST(test_subdivide);
     TEST(test_nearest);
     TEST(test_find_clusters);
+    TEST(test_distance_functions);
+    TEST(test_find_clusters_builder_agreement);
 
     printf("All list tests passed!\n");
     return 0;

@@ -5,24 +5,47 @@
 
 ## Description
 
-```text
-PolynomialQuotientRemainder[p, q, x] returns {Quotient, Remainder}
-such that p == Quotient*q + Remainder, with deg(Remainder) < deg(q)
-in x. Single-pass companion to PolynomialQuotient/PolynomialRemainder.
-Accepts an optional Extension -> alpha rule (default None) to perform
-the division over Q(alpha)[x] rather than the rational coefficient field.
-```
+**`PolynomialQuotientRemainder[p, q, x] returns {Quotient, Remainder}`**
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+such that p == Quotient\*q + Remainder, with deg(Remainder) \< deg(q) in x. Single-pass companion to PolynomialQuotient/PolynomialRemainder. Accepts an optional Extension -\> alpha rule (default None) to perform the division over Q(alpha)\[x\] rather than the rational coefficient field.
+
+</details>
+
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= PolynomialQuotientRemainder[x^3 + x + 1, x^2 + 1, x]
 Out[1]= {x, 1}
+```
 
+### Options (1)
+
+```mathematica
 In[2]:= PolynomialQuotientRemainder[x^2 - 2, x - Sqrt[2], x, Extension -> Sqrt[2]]
 Out[2]= {Sqrt[2] + x, 0}
+```
+
+### Applications (4)
+
+```mathematica
+In[3]:= PolynomialQuotientRemainder[x^2 - 1, x - 1, x]
+Out[3]= {1 + x, 0}
+
+In[4]:= PolynomialQuotientRemainder[x^5 + x + 1, x^2 + 1, x]
+Out[4]= {-x + x^3, 1 + 2 x}
+
+In[5]:= Expand[q (x^2 + 1) + r]
+Out[5]= 1 + x + x^5
+
+In[6]:= PolynomialQuotientRemainder[x^4 - 2, x^2 - Sqrt[2], x, Extension -> Sqrt[2]]
+Out[6]= {Sqrt[2] + x^2, 0}
 ```
 
 ## Implementation notes
@@ -55,40 +78,17 @@ variable a symbol. Multivariate inputs are handled coefficient-wise in `x`.
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [PolynomialQuotient](../../algebra/PolynomialQuotient/), [PolynomialRemainder](../../algebra/PolynomialRemainder/)
 
 - K. O. Geddes, S. R. Czapor, G. Labahn, *Algorithms for Computer Algebra* (Kluwer, 1992) — Ch. 2, polynomial division.
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
+- Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
+- Tests: [`tests/test_intrat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_intrat.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= PolynomialQuotientRemainder[x^2 - 1, x - 1, x]
-Out[1]= {1 + x, 0}
-```
-
-```mathematica
-In[1]:= PolynomialQuotientRemainder[x^5 + x + 1, x^2 + 1, x]
-Out[1]= {-x + x^3, 1 + 2 x}
-```
-
-```mathematica
-In[1]:= {q, r} = PolynomialQuotientRemainder[x^5 + x + 1, x^2 + 1, x];
-In[2]:= Expand[q (x^2 + 1) + r]
-Out[2]= 1 + x + x^5
-```
-
-```mathematica
-In[1]:= PolynomialQuotientRemainder[x^4 - 2, x^2 - Sqrt[2], x, Extension -> Sqrt[2]]
-Out[1]= {Sqrt[2] + x^2, 0}
-```
 
 ### Notes
 

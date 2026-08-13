@@ -5,16 +5,20 @@
 
 ## Description
 
-```text
-PolynomialLCM[poly1, poly2, ...] gives the least common multiple of the polynomials.
-Option Extension -> alpha computes the LCM over Q(alpha) via
-lcm(a, b) = a*b / PolynomialGCD[a, b, Extension -> alpha].
-Default Extension -> None computes over the rationals.
-```
+**`PolynomialLCM[poly1, poly2, ...] gives the least common multiple of the polynomials.`**
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+Option Extension -\> alpha computes the LCM over Q(alpha) via lcm(a, b) = a\*b / PolynomialGCD\[a, b, Extension -\> alpha\]. Default Extension -\> None computes over the rationals.
+
+</details>
+
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= PolynomialLCM[(1+x)^2(2+x)(4+x), (1+x)(2+x)(3+x)]
@@ -22,9 +26,26 @@ Out[1]= (2 + x) (3 + x) (4 + x) (1 + x)^2
 
 In[2]:= PolynomialLCM[x^4-4, x^4+4 x^2+4]
 Out[2]= (-2 + x^2) (4 + 4 x^2 + x^4)
+```
 
+### Options (1)
+
+```mathematica
 In[3]:= PolynomialLCM[x - Sqrt[2], x + Sqrt[2], Extension -> Sqrt[2]]
 Out[3]= -2 + x^2
+```
+
+### Applications (3)
+
+```mathematica
+In[4]:= PolynomialLCM[x^2 - 1, x^2 + 2 x + 1]
+Out[4]= (-1 + x) (1 + 2 x + x^2)
+
+In[5]:= PolynomialLCM[x^6 - 1, x^4 - 1]
+Out[5]= (-1 + x^6) (1 + x^2)
+
+In[6]:= PolynomialLCM[x^2 - 2, x^2 - Sqrt[2], Extension -> Sqrt[2]]
+Out[6]= 2 Sqrt[2] - 2 x^2 - Sqrt[2] x^2 + x^4
 ```
 
 ## Implementation notes
@@ -51,34 +72,19 @@ product `a·b`.
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [I](../../mathematical-constants/I/), [PolynomialGCD](../../algebra/PolynomialGCD/)
 
 - G. E. Collins, "Subresultants and Reduced Polynomial Remainder Sequences", JACM 14(1), 1967.
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_div.c`](https://github.com/stblake/mathilda/blob/main/tests/test_div.c)
+- Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
+- Tests: [`tests/test_extension_options.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_options.c)
+- Tests: [`tests/test_inexact_dispatch.c`](https://github.com/stblake/mathilda/blob/main/tests/test_inexact_dispatch.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= PolynomialLCM[x^2 - 1, x^2 + 2 x + 1]
-Out[1]= (-1 + x) (1 + 2 x + x^2)
-```
-
-```mathematica
-In[1]:= PolynomialLCM[x^6 - 1, x^4 - 1]
-Out[1]= (-1 + x^6) (1 + x^2)
-```
-
-```mathematica
-In[1]:= PolynomialLCM[x^2 - 2, x^2 - Sqrt[2], Extension -> Sqrt[2]]
-Out[1]= 2 Sqrt[2] - 2 x^2 - Sqrt[2] x^2 + x^4
-```
 
 ### Notes
 

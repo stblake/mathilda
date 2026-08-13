@@ -5,40 +5,13 @@
 
 ## Description
 
-```text
-f //@ expr or MapAll[f, expr]
-    applies f to every subexpression in expr (equivalent to
-    Map[f, expr, {0, Infinity}]).  Atomic leaves are wrapped too.
-```
+f //@ expr or MapAll\[f, expr\] applies f to every subexpression in expr (equivalent to Map\[f, expr, {0, Infinity}\]).  Atomic leaves are wrapped too.
 
-## Examples
+## Examples (6)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
 
-## Implementation notes
-
-`builtin_map_all` is a thin wrapper around the same `map_at_level` traversal used
-by `Map`, but with the fixed level-spec `{0, Infinity}` (`min=0`,
-`max=1000000`, `heads=false`), i.e. `MapAll[f, expr]` ≡ `Map[f, expr, {0,
-Infinity}]`. The bottom-up recursion rebuilds every `EXPR_FUNCTION` from its
-mapped children and then wraps each node (including the whole expression at level
-0) in `f[...]`, calling `evaluate()` so `f`'s attributes apply. A trailing
-`Heads -> True` option is honoured via `parse_options`.
-
-**Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
-- Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (6)
 
 ```mathematica
 In[1]:= MapAll[f, {a, {b, c}}]
@@ -52,17 +25,34 @@ Out[3]= g[g[1] + g[x]]
 
 In[4]:= Map[f, {a, {b, c}}]
 Out[4]= {f[a], f[{b, c}]}
+
+In[5]:= f //@ (x^2 + y)
+Out[5]= f[f[f[x]^f[2]] + f[y]]
+
+In[6]:= MapAll[g, 1 + x^2]
+Out[6]= g[g[1] + g[g[x]^g[2]]]
 ```
 
-```mathematica
-In[1]:= f //@ (x^2 + y)
-Out[1]= f[f[f[x]^f[2]] + f[y]]
-```
+## Implementation notes
 
-```mathematica
-In[1]:= MapAll[g, 1 + x^2]
-Out[1]= g[g[1] + g[g[x]^g[2]]]
-```
+`builtin_map_all` is a thin wrapper around the same `map_at_level` traversal used
+by `Map`, but with the fixed level-spec `{0, Infinity}` (`min=0`,
+`max=1000000`, `heads=false`), i.e. `MapAll[f, expr]` ≡ `Map[f, expr, {0,
+Infinity}]`. The bottom-up recursion rebuilds every `EXPR_FUNCTION` from its
+mapped children and then wraps each node (including the whole expression at level
+0) in `f[...]`, calling `evaluate()` so `f`'s attributes apply. A trailing
+`Heads -> True` option is honoured via `parse_options`.
+
+**Attributes:** `Protected`.
+
+## References
+
+- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
+- Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_map_ndarray.c`](https://github.com/stblake/mathilda/blob/main/tests/test_map_ndarray.c)
+- Tests: [`tests/test_sow_reap.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sow_reap.c)
+
+## Notes & additional examples
 
 ### Notes
 

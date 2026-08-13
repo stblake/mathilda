@@ -5,19 +5,43 @@
 
 ## Description
 
-```text
-Floor[x]
-    gives the greatest integer less than or equal to x.
-Floor[x, a]
-    gives the greatest multiple of a less than or equal to x.
-Floor is Listable. Exact (Integer / BigInt / Rational) inputs return
-exact integers; Real / MPFR inputs are rounded toward -Infinity at
-the input precision; symbolic inputs stay unevaluated.
+**`Floor[x]`**
+
+gives the greatest integer less than or equal to x.
+
+**`Floor[x, a]`**
+
+gives the greatest multiple of a less than or equal to x.
+
+<details>
+<summary>Notes</summary>
+
+Floor is Listable. Exact (Integer / BigInt / Rational) inputs return exact integers; Real / MPFR inputs are rounded toward -Infinity at the input precision; symbolic inputs stay unevaluated.
+
+</details>
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (5)
+
+```mathematica
+In[1]:= Floor[7/2]
+Out[1]= 3
+
+In[2]:= Floor[-2.3]
+Out[2]= -3
+
+In[3]:= Floor[17, 5]
+Out[3]= 15
+
+In[4]:= Floor[{2.7, -2.7, 5/2, 11/3}]
+Out[4]= {2, -3, 2, 3}
+
+In[5]:= Floor[N[Pi, 40] 10^20]
+Out[5]= 314159265358979323846
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -25,43 +49,16 @@ _No verified examples yet for this function._
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/piecewise.c`](https://github.com/stblake/mathilda/blob/main/src/piecewise.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_coverage.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_coverage.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_complement.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complement.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Floor[7/2]
-Out[1]= 3
-```
-
-```mathematica
-In[1]:= Floor[-2.3]
-Out[1]= -3
-```
-
-```mathematica
-In[1]:= Floor[17, 5]
-Out[1]= 15
-```
-
-```mathematica
-In[1]:= Floor[{2.7, -2.7, 5/2, 11/3}]
-Out[1]= {2, -3, 2, 3}
-```
-
-```mathematica
-In[1]:= Floor[N[Pi, 40] 10^20]
-Out[1]= 314159265358979323846
-```
 
 ### Notes
 

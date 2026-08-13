@@ -5,15 +5,17 @@
 
 ## Description
 
-```text
-PowerMod[a, b, m] gives a^b mod m.
-PowerMod[a, -1, m] finds the modular inverse of a modulo m.
-PowerMod[a, 1/r, m] finds a modular r-th root of a.
-```
+**`PowerMod[a, b, m] gives a^b mod m.`**
 
-## Examples
+**`PowerMod[a, -1, m] finds the modular inverse of a modulo m.`**
 
-All examples below are verified against the current Mathilda build.
+**`PowerMod[a, 1/r, m] finds a modular r-th root of a.`**
+
+## Examples (12)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (6)
 
 ```mathematica
 In[1]:= PowerMod[2, 10, 3]
@@ -35,6 +37,36 @@ In[6]:= PowerMod[2, 1/2, 10^18 + 9]
 Out[6]= 742174169206529574
 ```
 
+### Applications (6)
+
+```mathematica
+In[7]:= PowerMod[3, 1000000, 7]
+Out[7]= 4
+
+In[8]:= PowerMod[2, 100, 101]
+Out[8]= 1
+
+In[9]:= PowerMod[7, -1, 11]
+Out[9]= 8
+
+In[10]:= PowerMod[2, -1, 4]
+Out[10]= PowerMod[2, -1, 4]
+
+In[11]:= PowerMod[2, 1/2, 7]
+Out[11]= 3
+
+In[12]:= PowerMod[17, -1, 10^9 + 7]
+Out[12]= 352941179
+```
+
+## Options & behaviour
+
+> **Packed arrays.** `PowerMod[list, e, m]` over an `int64` buffer is
+> square-and-multiply on the machine words, with no GMP allocation per
+> element. Taken for a non-negative `e` and a modulus small enough that the
+> squaring step cannot overflow; a negative exponent is a modular inverse,
+> which exists only for some elements, and takes the ordinary path.
+
 ## Implementation notes
 
 **Algorithm.** `builtin_powermod` computes `PowerMod[a, b, m]` on integer-like `a`, `m` (any sign on `m`; reduced to `|m|`). Two cases.
@@ -50,12 +82,17 @@ Out[6]= 742174169206529574
 - `Protected`, `Listable`.
 - Evaluates much more efficiently than `Mod[a^b, m]`.
 - Integer-exponent path uses GMP `mpz_powm` / `mpz_invert`; `a`, `b`, `m`
+  may all be arbitrary-precision bignums.
+- Rational-exponent path `PowerMod[a, p/q, m]` solves the modular `q`-th
+  root of `a^p` via Tonelli–Shanks, the coprime closed form, Hensel
+  lifting, and CRT over the factorisation of `m`. The
+  Adleman–Manders–Miller branch (`gcd(q, p-1) > 1` for `q > 2` over a
+  large prime) is not yet supported.
+- Returns unevaluated if the corresponding inverse or root does not exist
+  (or cannot be computed by the implemented algorithms).
+- Allows threading over lists natively.
 
 **Attributes:** `Listable`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 
@@ -64,44 +101,12 @@ Out[6]= 742174169206529574
 - A. Tonelli, "Bemerkung über die Auflösung quadratischer Congruenzen", Göttinger Nachrichten, 1891; D. Shanks, "Five number-theoretic algorithms", 1973.
 - Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_bigint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bigint.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_modular.c`](https://github.com/stblake/mathilda/blob/main/tests/test_modular.c)
+- Tests: [`tests/test_multiplicative_order.c`](https://github.com/stblake/mathilda/blob/main/tests/test_multiplicative_order.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= PowerMod[3, 1000000, 7]
-Out[1]= 4
-```
-
-```mathematica
-In[1]:= PowerMod[2, 100, 101]
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= PowerMod[7, -1, 11]
-Out[1]= 8
-```
-
-```mathematica
-In[1]:= PowerMod[2, -1, 4]
-Out[1]= PowerMod[2, -1, 4]
-```
-
-A fractional exponent requests a modular root; `PowerMod[2, 1/2, 7] = 3` because `3^2 = 9 ≡ 2 (mod 7)`:
-
-```mathematica
-In[1]:= PowerMod[2, 1/2, 7]
-Out[1]= 3
-```
-
-The extended Euclidean inverse scales to large prime moduli, here inverting 17 modulo the prime `10^9 + 7`:
-
-```mathematica
-In[1]:= PowerMod[17, -1, 10^9 + 7]
-Out[1]= 352941179
-```
 
 ### Notes
 

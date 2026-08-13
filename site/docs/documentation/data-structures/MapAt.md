@@ -5,28 +5,34 @@
 
 ## Description
 
-```text
-MapAt[f, expr, n]
-    applies f to the element at position n in expr. Negative n counts from the end.
-MapAt[f, expr, {i, j, ...}]
-    applies f to the part of expr at position {i, j, ...}.
-MapAt[f, expr, {{i1, j1, ...}, {i2, j2, ...}, ...}]
-    applies f to the parts of expr at each of the listed positions.
-MapAt[f, pos]
-    is the operator form: MapAt[f, pos][expr] == MapAt[f, expr, pos].
+**`MapAt[f, expr, n]`**
 
-Positions take the form Position returns, and may contain All or Span
-specifications; 0 targets the head. On an association a position is a
-key, Key[k], or a positional index over the entries, and f is applied
-to the value. Repeated positions apply f repeatedly. MapAt[f, expr, {}]
-is an empty list of positions and maps nothing, while {{}} is the
-position of expr itself. A position that does not exist leaves MapAt
-unevaluated.
-```
+applies f to the element at position n in expr. Negative n counts from the end.
 
-## Examples
+**`MapAt[f, expr, {i, j, ...}]`**
 
-All examples below are verified against the current Mathilda build.
+applies f to the part of expr at position {i, j, ...}.
+
+**`MapAt[f, expr, {{i1, j1, ...}, {i2, j2, ...}, ...}]`**
+
+applies f to the parts of expr at each of the listed positions.
+
+**`MapAt[f, pos]`**
+
+is the operator form: MapAt\[f, pos\]\[expr\] == MapAt\[f, expr, pos\].
+
+<details>
+<summary>Notes</summary>
+
+Positions take the form Position returns, and may contain All or Span specifications; 0 targets the head. On an association a position is a key, Key\[k\], or a positional index over the entries, and f is applied to the value. Repeated positions apply f repeatedly. MapAt\[f, expr, {}\] is an empty list of positions and maps nothing, while {{}} is the position of expr itself. A position that does not exist leaves MapAt unevaluated.
+
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= MapAt[#^2 &, <|"a" -> 3, "b" -> 4|>, "b"]
@@ -43,6 +49,25 @@ Out[4]= <|"a" -> f[1], "b" -> f[2], "c" -> 3|>
 
 In[5]:= ReplaceAt[<|"a" -> 1, "b" -> 2|>, 1 -> 9, Key["a"]]
 Out[5]= <|"a" -> 9, "b" -> 2|>
+```
+
+### Applications (5)
+
+```mathematica
+In[6]:= MapAt[f, {a, b, c, d}, 2]
+Out[6]= {a, f[b], c, d}
+
+In[7]:= MapAt[f, {a, b, c, d}, -1]
+Out[7]= {a, b, c, f[d]}
+
+In[8]:= MapAt[f, {{a, b}, {c, d}}, {2, 1}]
+Out[8]= {{a, b}, {f[c], d}}
+
+In[9]:= MapAt[f, {a, b, c, d}, {{1}, {3}}]
+Out[9]= {f[a], b, f[c], d}
+
+In[10]:= MapAt[Framed, {1, 2, 3, 4, 5}, {{1}, {-1}}]
+Out[10]= {Framed[1], 2, 3, 4, Framed[5]}
 ```
 
 ## Implementation notes
@@ -69,43 +94,16 @@ array and overwrites only the targeted slot, then rebuilds with
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Position](../../data-structures/Position/), [Span](../../structural-manipulation/Span/), [List](../../other-advanced/List/), [ReplaceAt](../../assignment-and-rules/ReplaceAt/)
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_mapat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mapat.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= MapAt[f, {a, b, c, d}, 2]
-Out[1]= {a, f[b], c, d}
-```
-
-```mathematica
-In[1]:= MapAt[f, {a, b, c, d}, -1]
-Out[1]= {a, b, c, f[d]}
-```
-
-```mathematica
-In[1]:= MapAt[f, {{a, b}, {c, d}}, {2, 1}]
-Out[1]= {{a, b}, {f[c], d}}
-```
-
-```mathematica
-In[1]:= MapAt[f, {a, b, c, d}, {{1}, {3}}]
-Out[1]= {f[a], b, f[c], d}
-```
-
-```mathematica
-In[1]:= MapAt[Framed, {1, 2, 3, 4, 5}, {{1}, {-1}}]
-Out[1]= {Framed[1], 2, 3, 4, Framed[5]}
-```
 
 ### Notes
 

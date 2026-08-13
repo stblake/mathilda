@@ -5,25 +5,43 @@
 
 ## Description
 
-```text
-FilePrint["file"]
-    prints out the raw textual contents of file.
-FilePrint["file", n]
-    prints out the first n raw textual lines of file.
-FilePrint["file", -n]
-    prints out the last n raw textual lines of file.
-FilePrint["file", m;;n]
-    prints out lines m through n of file.
-FilePrint["file", m;;n;;s]
-    prints out lines m through n of file in steps of s; s may be negative
-    to walk the range backwards.
-FilePrint returns Null on success and $Failed if the file cannot be opened.
-Negative indices inside the Span count from the end of the file (-1 is the last line).
+**`FilePrint["file"]`**
+
+prints out the raw textual contents of file.
+
+**`FilePrint["file", n]`**
+
+prints out the first n raw textual lines of file.
+
+**`FilePrint["file", -n]`**
+
+prints out the last n raw textual lines of file.
+
+**`FilePrint["file", m;;n]`**
+
+prints out lines m through n of file.
+
+**`FilePrint["file", m;;n;;s]`**
+
+prints out lines m through n of file in steps of s; s may be negative to walk the range backwards.
+
+<details>
+<summary>Notes</summary>
+
+FilePrint returns Null on success and $Failed if the file cannot be opened. Negative indices inside the Span count from the end of the file (-1 is the last line).
+
+</details>
+
+## Examples (1)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (1)
+
+```mathematica
+In[1]:= Put[x^2 + 1, "/tmp/mathilda_demo.m"]
+Out[1]= Null
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -40,27 +58,15 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Span](../../structural-manipulation/Span/)
 
 - Source: [`src/files.c`](https://github.com/stblake/mathilda/blob/main/src/files.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
+- Tests: [`tests/test_files.c`](https://github.com/stblake/mathilda/blob/main/tests/test_files.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Put[x^2 + 1, "/tmp/mathilda_demo.m"]
-Out[1]= Null
-
-In[2]:= FilePrint["/tmp/mathilda_demo.m"]
-1 + x^2
-Out[2]= Null
-```
 
 ### Notes
 

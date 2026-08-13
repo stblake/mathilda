@@ -5,17 +5,21 @@
 
 ## Description
 
-```text
-lhs = rhs or Set[lhs, rhs]
-    evaluates rhs once and assigns the result to lhs.  When lhs is a
-    symbol, the assignment is stored as an OwnValue; when lhs has the
-    form f[args...] it is stored as a DownValue on f.  Set has attribute
-    HoldFirst so lhs is not evaluated before the assignment.
+lhs = rhs or Set\[lhs, rhs\] evaluates rhs once and assigns the result to lhs.  When lhs is a symbol, the assignment is stored as an OwnValue; when lhs has the form f\[args...\] it is stored as a DownValue on f.  Set has attribute HoldFirst so lhs is not evaluated before the assignment.
+
+## Examples (2)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (2)
+
+```mathematica
+In[1]:= x = 5
+Out[1]= 5
+
+In[2]:= x + 1
+Out[2]= 6
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -25,26 +29,18 @@ _No verified examples yet for this function._
 
 **Attributes:** `HoldFirst`, `Protected`, `SequenceHold`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [SetDelayed](../../assignment-and-rules/SetDelayed/)
 
 - Source: [`src/eval.c`](https://github.com/stblake/mathilda/blob/main/src/eval.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
+- Tests: [`tests/test_eval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval.c)
+- Tests: [`tests/test_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linalg.c)
+- Tests: [`tests/test_linearsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linearsolve.c)
+- Tests: [`tests/test_matinv_methods.c`](https://github.com/stblake/mathilda/blob/main/tests/test_matinv_methods.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= x = 5
-Out[1]= 5
-
-In[2]:= x + 1
-Out[2]= 6
-```
 
 ### Notes
 

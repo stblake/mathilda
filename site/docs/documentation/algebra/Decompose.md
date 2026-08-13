@@ -5,17 +5,29 @@
 
 ## Description
 
-```text
-Decompose[poly, x]
-    decomposes the univariate polynomial poly into the deepest possible
-    composition {p1, p2, ..., pk} such that poly == p1[p2[...[pk[x]]...]],
-    with each pi a polynomial of degree >= 2 in x.
-    Returns {poly} if no nontrivial decomposition exists.
+**`Decompose[poly, x]`**
+
+decomposes the univariate polynomial poly into the deepest possible composition {p1, p2, ..., pk} such that poly == p1\[p2\[...\[pk\[x\]\]...\]\], with each pi a polynomial of degree \>= 2 in x. Returns {poly} if no nontrivial decomposition exists.
+
+## Examples (4)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (4)
+
+```mathematica
+In[1]:= Decompose[x^4 + 6 x^2 + 10, x]
+Out[1]= {10 + 6 x + x^2, x^2}
+
+In[2]:= Decompose[x^6 + 6 x^4 + 12 x^2 + 8, x]
+Out[2]= {8 + 12 x + 6 x^2 + x^3, x^2}
+
+In[3]:= Decompose[x^4 + 2 x^3 + 3 x^2 + 2 x + 5, x]
+Out[3]= {5 + 2 x + x^2, x + x^2}
+
+In[4]:= Decompose[x^6, x]
+Out[4]= {x^6}
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -27,39 +39,14 @@ _No verified examples yet for this function._
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - D. Kozen and S. Landau, "Polynomial Decomposition Algorithms", J. Symbolic Computation 7 (1989).
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
+- Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Decompose[x^4 + 6 x^2 + 10, x]
-Out[1]= {10 + 6 x + x^2, x^2}
-```
-
-```mathematica
-In[1]:= Decompose[x^6 + 6 x^4 + 12 x^2 + 8, x]
-Out[1]= {8 + 12 x + 6 x^2 + x^3, x^2}
-```
-
-```mathematica
-In[1]:= Decompose[x^4 + 2 x^3 + 3 x^2 + 2 x + 5, x]
-Out[1]= {5 + 2 x + x^2, x + x^2}
-```
-
-```mathematica
-In[1]:= Decompose[x^6, x]
-Out[1]= {x^6}
-```
 
 ### Notes
 

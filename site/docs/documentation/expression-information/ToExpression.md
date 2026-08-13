@@ -5,22 +5,30 @@
 
 ## Description
 
-```text
-ToExpression[input]
-    parses input (a String) as Mathilda input and returns the resulting
-    expression after evaluation.
-ToExpression[input, form]
-    uses interpretation rules for the specified form. form may be
-    InputForm or FullForm (both currently use the same parser).
-ToExpression[input, form, h]
-    wraps the head h around the parsed expression before evaluation;
-    use h = Hold to obtain the unevaluated parsed form.
+**`ToExpression[input]`**
+
+parses input (a String) as Mathilda input and returns the resulting expression after evaluation.
+
+**`ToExpression[input, form]`**
+
+uses interpretation rules for the specified form. form may be InputForm or FullForm (both currently use the same parser).
+
+**`ToExpression[input, form, h]`**
+
+wraps the head h around the parsed expression before evaluation; use h = Hold to obtain the unevaluated parsed form.
+
+<details>
+<summary>Notes</summary>
+
 Returns $Failed if a syntax error is encountered.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= ToExpression["1+1"]
@@ -33,6 +41,25 @@ In[3]:= ToExpression["x+"]
 Out[3]= $Failed
 ```
 
+### Applications (5)
+
+```mathematica
+In[4]:= ToExpression["1 + 2*3"]
+Out[4]= 7
+
+In[5]:= ToExpression["D[ArcTan[x], x]"]
+Out[5]= 1/(1 + x^2)
+
+In[6]:= ToExpression["Series[Exp[x], {x, 0, 4}]"]
+Out[6]= 1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + O[x]^5
+
+In[7]:= ToExpression["x^2 + 1", InputForm, Hold]
+Out[7]= Hold[x^2 + 1]
+
+In[8]:= ToExpression["bad syntax ]["]
+Out[8]= $Failed
+```
+
 ## Implementation notes
 
 `builtin_toexpression` (`src/core.c`) feeds a string argument to `parse_expression` (the Pratt parser, `src/parse.c`) and returns the parsed tree for the evaluator to reduce. An optional second argument (`InputForm`/`FullForm`/`StandardForm`) is accepted but ignored, since the parser is form-agnostic; an optional third argument is a head `h` wrapped around the result (commonly `Hold`). A parse failure returns `$Failed`; non-string input returns `NULL`. The symbol is `Listable`.
@@ -43,43 +70,15 @@ Out[3]= $Failed
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [InputForm](../../expression-information/InputForm/), [FullForm](../../expression-information/FullForm/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_tostring_toexpression.c`](https://github.com/stblake/mathilda/blob/main/tests/test_tostring_toexpression.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= ToExpression["1 + 2*3"]
-Out[1]= 7
-```
-
-```mathematica
-In[1]:= ToExpression["D[ArcTan[x], x]"]
-Out[1]= 1/(1 + x^2)
-```
-
-```mathematica
-In[1]:= ToExpression["Series[Exp[x], {x, 0, 4}]"]
-Out[1]= 1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + O[x]^5
-```
-
-```mathematica
-In[1]:= ToExpression["x^2 + 1", InputForm, Hold]
-Out[1]= Hold[x^2 + 1]
-```
-
-```mathematica
-In[1]:= ToExpression["bad syntax ]["]
-Out[1]= $Failed
-```
 
 ### Notes
 

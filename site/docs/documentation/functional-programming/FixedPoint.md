@@ -5,24 +5,45 @@
 
 ## Description
 
-```text
-FixedPoint[f, expr]
-    starts with expr and applies f repeatedly until the result no longer
-    changes, returning the final value.
-FixedPoint[f, expr, n]
-    stops after at most n applications of f, returning the last value
-    obtained even if a fixed point has not been reached.
-FixedPoint[f, expr, SameTest -> s]
-FixedPoint[f, expr, n, SameTest -> s]
-    uses the binary predicate s instead of SameQ to test successive pairs.
+**`FixedPoint[f, expr]`**
 
-FixedPoint[f, expr] gives the last element of FixedPointList[f, expr].
+starts with expr and applies f repeatedly until the result no longer changes, returning the final value.
+
+**`FixedPoint[f, expr, n]`**
+
+stops after at most n applications of f, returning the last value obtained even if a fixed point has not been reached.
+
+**`FixedPoint[f, expr, SameTest -> s]`**
+
+**`FixedPoint[f, expr, n, SameTest -> s]`**
+
+uses the binary predicate s instead of SameQ to test successive pairs.
+
+**`FixedPoint[f, expr] gives the last element of FixedPointList[f, expr].`**
+
+<details>
+<summary>Notes</summary>
+
 Throw can be used inside f to exit early.
+
+</details>
+
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (3)
+
+```mathematica
+In[1]:= FixedPoint[Floor[#/2] &, 100]
+Out[1]= 0
+
+In[2]:= FixedPoint[Function[x, (x + 2/x)/2], 1.0]
+Out[2]= 1.41421
+
+In[3]:= FixedPoint[1 + 1/# &, 1.0]
+Out[3]= 1.61803
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -32,33 +53,16 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_fixedpoint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fixedpoint.c)
+- Tests: [`tests/test_numloop.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numloop.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= FixedPoint[Floor[#/2] &, 100]
-Out[1]= 0
-```
-
-```mathematica
-In[1]:= FixedPoint[Function[x, (x + 2/x)/2], 1.0]
-Out[1]= 1.41421
-```
-
-```mathematica
-In[1]:= FixedPoint[1 + 1/# &, 1.0]
-Out[1]= 1.61803
-```
 
 ### Notes
 

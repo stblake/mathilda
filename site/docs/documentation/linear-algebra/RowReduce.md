@@ -5,22 +5,19 @@
 
 ## Description
 
-```text
-RowReduce[m]
-    gives the row-reduced form of the matrix m.
-RowReduce[m, Method -> "<name>"]
-    runs a specific elimination algorithm.  Accepted method names:
-      "Automatic"                 — alias for "DivisionFreeRowReduction" (default)
-      "DivisionFreeRowReduction"  — Bareiss-like fraction-free Gauss-Jordan
-      "OneStepRowReduction"       — classical Gauss-Jordan with division per pivot
-      "CofactorExpansion"         — identity-if-invertible via Laplace cofactor
-                                     Det[m] (singular / rectangular m falls back
-                                     to "DivisionFreeRowReduction")
-```
+**`RowReduce[m]`**
 
-## Examples
+gives the row-reduced form of the matrix m.
 
-All examples below are verified against the current Mathilda build.
+**`RowReduce[m, Method -> "<name>"]`**
+
+runs a specific elimination algorithm.  Accepted method names: "Automatic"                 — alias for "DivisionFreeRowReduction" (default) "DivisionFreeRowReduction"  — Bareiss-like fraction-free Gauss-Jordan "OneStepRowReduction"       — classical Gauss-Jordan with division per pivot "CofactorExpansion"         — identity-if-invertible via Laplace cofactor Det\[m\] (singular / rectangular m falls back to "DivisionFreeRowReduction")
+
+## Examples (9)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= RowReduce[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
@@ -28,12 +25,69 @@ Out[1]= {{1, 0, -1}, {0, 1, 2}, {0, 0, 0}}
 
 In[2]:= RowReduce[{{a, b, c}, {d, e, f}, {a+d, b+e, c+f}}]
 Out[2]= {{1, 0, (c e)/(-b d + a e) - (b f)/(-b d + a e)}, {0, 1, -(c d)/(-b d + a e) + (a f)/(-b d + a e)}, {0, 0, 0}}
+```
 
+### Options (2)
+
+```mathematica
 In[3]:= RowReduce[{{2, 1, 0}, {0, 3, 1}, {1, 0, 2}}, Method -> "CofactorExpansion"]
 Out[3]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
 
 In[4]:= RowReduce[{{a, b}, {c, d}}, Method -> "OneStepRowReduction"]
 Out[4]= {{1, 0}, {0, 1}}
+```
+
+### Applications (5)
+
+```mathematica
+In[5]:= RowReduce[{{1, 2}, {3, 4}}]
+Out[5]= {{1, 0}, {0, 1}}
+
+In[6]:= RowReduce[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+Out[6]= {{1, 0, -1}, {0, 1, 2}, {0, 0, 0}}
+
+In[7]:= RowReduce[{{1, 1, 1, 1}, {1, 2, 4, 8}, {1, 3, 9, 27}, {1, 4, 16, 64}}]
+Out[7]= {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}
+
+In[8]:= RowReduce[{{2, 1, -1, 8}, {-3, -1, 2, -11}, {-2, 1, 2, -3}}]
+Out[8]= {{1, 0, 0, 2}, {0, 1, 0, 3}, {0, 0, 1, -1}}
+
+In[9]:= RowReduce[{{a, b}, {c, d}}]
+Out[9]= {{1, 0}, {0, 1}}
+```
+
+## Algorithm
+
+matsol.c
+
+Method-aware dispatcher for `RowReduce[m]` and `LinearSolve[m, b]`.
+
+Both builtins accept an optional `Method -> "<name>"` argument (RowReduce as arg 2, LinearSolve as arg 3) and route to one of three explicit algorithms:
+
+```text
+  "Automatic"                  -- alias for "DivisionFreeRowReduction"
+  "DivisionFreeRowReduction"   -- Bareiss-like fraction-free Gauss-Jordan
+  "OneStepRowReduction"        -- classical Gauss-Jordan, one division per
+                                  pivot per element of the pivot row
+  "CofactorExpansion"          -- LinearSolve: Cramer's rule via Laplace
+                                  cofactor expansion;
+                                  RowReduce: identity-if-invertible (for a
+                                  non-singular square matrix) with fallback
+                                  to DivisionFreeRowReduction on
+                                  singular / rectangular / empty input.
+```
+
+The DivisionFreeRowReduction workers are direct lifts of the previous bodies of `builtin_rowreduce` and `builtin_linearsolve` in src/linalg.c, so existing behaviour is preserved bit-for-bit when the user does not supply a Method option.
+
+Algorithm choice for the four supported matrix families:
+
+```text
+  - Machine precision (Real)            -> OneStep is fastest; DivFree fine.
+  - Bignum integer                      -> DivFree avoids GCD blow-up.
+  - MPFR / arbitrary precision          -> Same as machine precision.
+  - Symbolic                            -> DivFree avoids algebraic growth;
+                                           CofactorExpansion gives the
+                                           textbook Cramer form for small n.
 ```
 
 ## Implementation notes
@@ -59,51 +113,19 @@ Out[4]= {{1, 0}, {0, 1}}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Together](../../algebra/Together/)
 
 - E. H. Bareiss, "Sylvester's Identity and Multistep Integer-Preserving Gaussian Elimination", Math. Comp. 22 (1968).
 - Source: [`src/linalg/linsolve.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/linsolve.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_eigen.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eigen.c)
+- Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
+- Tests: [`tests/test_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linalg.c)
+- Tests: [`tests/test_matsol_methods.c`](https://github.com/stblake/mathilda/blob/main/tests/test_matsol_methods.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= RowReduce[{{1, 2}, {3, 4}}]
-Out[1]= {{1, 0}, {0, 1}}
-```
-
-```mathematica
-In[1]:= RowReduce[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
-Out[1]= {{1, 0, -1}, {0, 1, 2}, {0, 0, 0}}
-```
-
-A 4x4 Vandermonde matrix is nonsingular, so it reduces to the identity:
-
-```mathematica
-In[1]:= RowReduce[{{1, 1, 1, 1}, {1, 2, 4, 8}, {1, 3, 9, 27}, {1, 4, 16, 64}}]
-Out[1]= {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}
-```
-
-Reducing an augmented matrix `[A | b]` reads off the unique solution of `A x = b`
-in the last column:
-
-```mathematica
-In[1]:= RowReduce[{{2, 1, -1, 8}, {-3, -1, 2, -11}, {-2, 1, 2, -3}}]
-Out[1]= {{1, 0, 0, 2}, {0, 1, 0, 3}, {0, 0, 1, -1}}
-```
-
-A symbolic 2x2 matrix reduces to the identity, certifying generic invertibility:
-
-```mathematica
-In[1]:= RowReduce[{{a, b}, {c, d}}]
-Out[1]= {{1, 0}, {0, 1}}
-```
 
 ### Notes
 

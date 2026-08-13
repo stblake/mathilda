@@ -386,8 +386,89 @@ In[3]:= Nearest[{1, a, 3}, 2]
 Out[3]= Nearest[{1, a, 3}, 2]
 ```
 
+## EuclideanDistance, SquaredEuclideanDistance, ManhattanDistance, CosineDistance
+Distances between two numeric vectors, or between two scalars.
+- `EuclideanDistance[u, v]`: `Sqrt[Sum Abs[u_i - v_i]^2]`.
+- `SquaredEuclideanDistance[u, v]`: `Sum Abs[u_i - v_i]^2`.
+- `ManhattanDistance[u, v]`: `Sum Abs[u_i - v_i]`.
+- `CosineDistance[u, v]`: `1 - (u . Conjugate[v]) / (Norm[u] Norm[v])`.
+
+**Features**:
+- `Protected`. Not `Listable`: threading over a `List` argument is exactly what
+  these must not do, because the list *is* the point.
+- **Exact input gives an exact result** where the value is rational.
+  `SquaredEuclideanDistance[{1, 2}, {4, 6}]` is `25`, not `25.`, and
+  `SquaredEuclideanDistance[{1/3, 0}, {0, 1/7}]` is `58/441`. Squared Euclidean
+  is monotone in Euclidean, so ranking on it orders points identically without
+  introducing a root -- which is how `FindClusters` stays exact in n dimensions.
+- **Complex components contribute their modulus**, because the definition takes
+  `Abs` before squaring rather than squaring the difference. This matters only
+  for complex input, where the two orders differ, and follows Mathematica.
+- Symbolic input survives rather than being rejected: `ManhattanDistance[{a},
+  {b}]` is `Abs[a - b]`, as in Mathematica.
+- `CosineDistance` ranges over `[0, 2]` -- `0` parallel, `1` orthogonal, `2`
+  antiparallel -- and ignores magnitude. It is **not** a metric (it violates the
+  triangle inequality) and has no squared form that ranks identically, so it is
+  used directly. A zero vector on either side gives `0`, following Mathematica;
+  that is a convention, not a derivation, since the quotient is `0/0`.
+- Mismatched lengths, or an argument that is a matrix, leave the call
+  unevaluated.
+
+```mathematica
+In[1]:= EuclideanDistance[{1, 2}, {4, 6}]
+Out[1]= 5
+
+In[2]:= SquaredEuclideanDistance[{1/3, 0}, {0, 1/7}]
+Out[2]= 58/441
+
+In[3]:= ManhattanDistance[{1, 2}, {4, 6}]
+Out[3]= 7
+
+In[4]:= EuclideanDistance[{0, 0}, {1, 1}]
+Out[4]= Sqrt[2]
+
+In[5]:= CosineDistance[{1, 0}, {0, 1}]
+Out[5]= 1
+
+In[6]:= CosineDistance[{1, 0}, {-1, 0}]
+Out[6]= 2
+```
+
+## EditDistance, HammingDistance
+Distances between two sequences -- two strings, or two lists.
+- `EditDistance[u, v]`: the Levenshtein distance, i.e. the fewest single-element
+  insertions, deletions and substitutions that turn one into the other.
+- `HammingDistance[u, v]`: the number of positions at which they differ.
+
+**Features**:
+- `Protected`.
+- Elements are compared with structural equality, so the same routine serves
+  strings (character by character) and lists of arbitrary expressions:
+  `EditDistance[{1, 2, 3}, {1, 3}]` is `1`.
+- Strings are compared **byte by byte**, so a multi-byte UTF-8 character counts
+  as several elements.
+- `HammingDistance` requires equal lengths and leaves the call unevaluated
+  otherwise, matching Mathematica's `::idim`.
+- `EditDistance` costs `O(m n)` time and `O(min(m, n))` memory (two DP rows).
+
+```mathematica
+In[1]:= EditDistance["GGTTT", "GGGGT"]
+Out[1]= 2
+
+In[2]:= EditDistance["kitten", "sitting"]
+Out[2]= 3
+
+In[3]:= EditDistance[{1, 2, 3}, {1, 3}]
+Out[3]= 1
+
+In[4]:= HammingDistance["GGTTT", "GGGGT"]
+Out[4]= 2
+```
+
 ## FindClusters
-Partitions a 1D numeric list into clusters of nearby elements.
+Partitions a list into clusters of nearby elements. Elements may be real
+numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
+`CMYKColor`) or strings.
 - `FindClusters[list]`: partitions `list`, choosing the number of clusters automatically.
 - `FindClusters[list, n]`: gives **exactly** `n` clusters.
 - `FindClusters[list, UpTo[n]]`: gives **at most** `n` clusters, and fewer when the data suggests fewer.
@@ -396,6 +477,41 @@ Partitions a 1D numeric list into clusters of nearby elements.
 - `Protected`.
 - The result is a list of lists. Clusters appear in order of the first
   occurrence of any member; elements keep their input order within a cluster.
+- **Element kinds and the metric each uses.** All elements must be of one kind;
+  a mixture leaves the call unevaluated.
+  - Real numbers -- absolute difference on the line. This is the original path
+    and is unchanged.
+  - Equal-length numeric vectors (`{{2.5, 3.1}, {5.9, 3.4}, ...}`) -- squared
+    Euclidean distance. Ranking on the square rather than the root is what keeps
+    the partition exact for exact input, since squaring is monotone on
+    non-negatives and `SquaredEuclideanDistance` is rational for rational input.
+  - Colours, whose arguments are coordinates: `RGBColor[r, g, b]` is a point in
+    its own space and clusters like a 3-vector. Every element must share one
+    colour head; `RGBColor` and `GrayLevel` together are declined.
+  - Strings -- `EditDistance`, the Levenshtein distance.
+  - `Rational` and `Complex` are *numbers*, not points: `{1/2, 1/3, 10}` clusters
+    as three reals rather than as pairs of coordinates, and complex input is
+    declined as before.
+- **In one dimension the spanning tree IS the sorted adjacency chain**, so the
+  general implementation reduces exactly to the original algorithm there and
+  one-dimensional results are unchanged. Above one dimension the tree is a real
+  minimum spanning tree built by Prim's algorithm over exact distances.
+- **Only `Automatic`, `"Agglomerate"` and `"SpanningTree"` accept non-numeric
+  elements or vectors.** The other seven methods read a sorted one-dimensional
+  projection and decline rather than run on data for which it is meaningless.
+- **Two spanning-tree builders, and therefore two ceilings.** Points whose
+  every coordinate is already a machine number take a double-precision Prim,
+  since such input carries no precision that exact arithmetic would preserve;
+  points with a `Rational`, bigint or MPFR coordinate keep the exact builder,
+  which is the only one that can order them correctly. Distinctness is decided by
+  comparing the *elements* exactly on both paths, so `{{1/3, 1/7}, {1/3, 1/7 +
+  1/10^20}}` stays together either way.
+  - machine points: **capped at 20000**. Measured 6.8 ms at 2000, 0.17 s at
+    10000, 0.81 s at 20000.
+  - exact points and strings: **capped at 2000**, at roughly 1.5 s there.
+  - Both are quadratic -- a sort makes neighbourhood work linear only on a line
+    -- so a larger input is declined rather than silently taking minutes. One
+    dimension has no cap and does 10^6 elements in about 2.3 s.
 - `n` is capped at the number of distinct values — no method can separate two
   equal elements, so `FindClusters[{1, 2, 3}, 5]` gives three clusters and
   `FindClusters[{7, 7, 7, 7}, 3]` gives one.

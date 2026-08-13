@@ -5,17 +5,22 @@
 
 ## Description
 
-```text
-f /@ expr or Map[f, expr]
-    applies f to each element at level 1 of expr, preserving expr's head.
-Map[f, expr, levelspec]
-    applies f at the parts of expr selected by levelspec (e.g. {2} for
-    level 2 only, Infinity for every level).
-```
+**`Map[f, expr, levelspec]`**
 
-## Examples
+applies f at the parts of expr selected by levelspec (e.g. {2} for level 2 only, Infinity for every level).
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+f /@ expr or Map\[f, expr\] applies f to each element at level 1 of expr, preserving expr's head.
+
+</details>
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Map[#^2 &, <|"x" -> 3, "y" -> 4|>]
@@ -23,6 +28,28 @@ Out[1]= <|"x" -> 9, "y" -> 16|>
 
 In[2]:= Select[<|"a" -> 1, "b" -> 2, "c" -> 3|>, # > 1 &]
 Out[2]= <|"b" -> 2, "c" -> 3|>
+```
+
+### Applications (6)
+
+```mathematica
+In[3]:= Map[f, {a, b, c}]
+Out[3]= {f[a], f[b], f[c]}
+
+In[4]:= #^2 & /@ {1, 2, 3, 4}
+Out[4]= {1, 4, 9, 16}
+
+In[5]:= Map[Reverse, {{1, 2}, {3, 4}}]
+Out[5]= {{2, 1}, {4, 3}}
+
+In[6]:= Map[f, {{a}, {b}}, {2}]
+Out[6]= {{f[a]}, {f[b]}}
+
+In[7]:= Map[Total, {{1, 2, 3}, {4, 5, 6}}]
+Out[7]= {6, 15}
+
+In[8]:= Map[#^2 &, x + y + z]
+Out[8]= x^2 + y^2 + z^2
 ```
 
 ## Implementation notes
@@ -46,49 +73,19 @@ of the level range only by their depth.
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Select](../../data-structures/Select/)
 
 - Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §2.2.1 (sequence mapping).
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Map[f, {a, b, c}]
-Out[1]= {f[a], f[b], f[c]}
-```
-
-```mathematica
-In[1]:= #^2 & /@ {1, 2, 3, 4}
-Out[1]= {1, 4, 9, 16}
-```
-
-```mathematica
-In[1]:= Map[Reverse, {{1, 2}, {3, 4}}]
-Out[1]= {{2, 1}, {4, 3}}
-```
-
-```mathematica
-In[1]:= Map[f, {{a}, {b}}, {2}]
-Out[1]= {{f[a]}, {f[b]}}
-```
-
-```mathematica
-In[1]:= Map[Total, {{1, 2, 3}, {4, 5, 6}}]
-Out[1]= {6, 15}
-```
-
-```mathematica
-In[1]:= Map[#^2 &, x + y + z]
-Out[1]= x^2 + y^2 + z^2
-```
 
 ### Notes
 

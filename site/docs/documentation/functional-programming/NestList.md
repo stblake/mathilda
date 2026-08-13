@@ -5,19 +5,22 @@
 
 ## Description
 
-```text
-NestList[f, expr, n]
-    gives a list of the results of applying f to expr 0 through n times.
+**`NestList[f, expr, n]`**
 
-The result is a list of length n+1 whose first element is expr and
-whose (k+1)-th element is f applied k times to expr. n must be a
-non-negative integer. f may be a symbol or a pure function; each
-intermediate application is evaluated before the next one.
-```
+gives a list of the results of applying f to expr 0 through n times.
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+The result is a list of length n+1 whose first element is expr and whose (k+1)-th element is f applied k times to expr. n must be a non-negative integer. f may be a symbol or a pure function; each intermediate application is evaluated before the next one.
+
+</details>
+
+## Examples (12)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (8)
 
 ```mathematica
 In[1]:= NestList[f, x, 4]
@@ -45,6 +48,22 @@ In[8]:= NestList[#(1 + 0.05) &, 1000, 10]
 Out[8]= {1000, 1050.0, 1102.5, 1157.62, 1215.51, 1276.28, 1340.1, 1407.1, 1477.46, 1551.33, 1628.89}
 ```
 
+### Applications (4)
+
+```mathematica
+In[9]:= NestList[f, x, 3]
+Out[9]= {x, f[x], f[f[x]], f[f[f[x]]]}
+
+In[10]:= NestList[2 # &, 1, 5]
+Out[10]= {1, 2, 4, 8, 16, 32}
+
+In[11]:= NestList[(# + 2/#)/2 &, 1, 4]
+Out[11]= {1, 3/2, 17/12, 577/408, 665857/470832}
+
+In[12]:= NestList[1/(1 + #) &, x, 3]
+Out[12]= {x, 1/(1 + x), 1/(1 + 1/(1 + x)), 1/(1 + 1/(1 + 1/(1 + x)))}
+```
+
 ## Implementation notes
 
 `builtin_nestlist` is `nest_impl(res, true)`: it returns the full iteration
@@ -61,46 +80,22 @@ Shares all machinery with `Nest`; `n` must be a non-negative integer.
 - Each iteration evaluates `f[current]` before proceeding, so numeric computations collapse immediately.
 - Returns unevaluated if `n` is not a non-negative integer or the argument count is wrong.
 - **Compilable** inside `Compile[]` for a scalar accumulator, with any of the
+  function spellings listed in [`control-flow.md`](../control-flow/index.md) § Compile.
+  A negative `n` declines there too, since it is unevaluated here.
+- `Last[NestList[f, expr, n]]` is equivalent to `Nest[f, expr, n]`.
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_nestlist.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nestlist.c)
+- Tests: [`tests/test_numloop.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numloop.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= NestList[f, x, 3]
-Out[1]= {x, f[x], f[f[x]], f[f[f[x]]]}
-```
-
-```mathematica
-In[1]:= NestList[2 # &, 1, 5]
-Out[1]= {1, 2, 4, 8, 16, 32}
-```
-
-The successive convergents of Newton's iteration for `Sqrt[2]`, kept exact —
-each entry roughly doubles the number of correct digits:
-
-```mathematica
-In[1]:= NestList[(# + 2/#)/2 &, 1, 4]
-Out[1]= {1, 3/2, 17/12, 577/408, 665857/470832}
-```
-
-Building the first few convergents of a continued fraction symbolically:
-
-```mathematica
-In[1]:= NestList[1/(1 + #) &, x, 3]
-Out[1]= {x, 1/(1 + x), 1/(1 + 1/(1 + x)), 1/(1 + 1/(1 + 1/(1 + x)))}
-```
 
 ### Notes
 

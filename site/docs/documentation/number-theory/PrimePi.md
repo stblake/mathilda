@@ -5,24 +5,55 @@
 
 ## Description
 
-```text
-PrimePi[x] gives the number of primes less than or equal to x, exact for x up to 5*10^13 (larger x is left unevaluated). The option Method -> m selects the algorithm: Automatic (default), "Sieve", "Legendre", "Meissel", "Lehmer", "LMO" (Lagarias-Miller-Odlyzko), "DelegliseRivat", or "LucyHedgehog".
-```
+**`PrimePi[x] gives the number of primes less than or equal to x, exact for x up to 5*10^13 (larger x is left unevaluated). The option Method -> m selects the algorithm: Automatic (default), "Sieve", "Legendre", "Meissel", "Lehmer", "LMO" (Lagarias-Miller-Odlyzko), "DelegliseRivat", or "LucyHedgehog".`**
 
-## Examples
+## Examples (6)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= PrimePi[10^9]
 Out[1]= 50847534
 
-In[2]:= PrimePi[10^9, Method -> "LMO"]
-Out[2]= 50847534
-
-In[3]:= PrimePi[{10, 100}]
-Out[3]= {4, 25}
+In[2]:= PrimePi[{10, 100}]
+Out[2]= {4, 25}
 ```
+
+### Options (1)
+
+```mathematica
+In[3]:= PrimePi[10^9, Method -> "LMO"]
+Out[3]= 50847534
+```
+
+### Applications (3)
+
+```mathematica
+In[4]:= PrimePi[100]
+Out[4]= 25
+
+In[5]:= PrimePi[10^6]
+Out[5]= 78498
+
+In[6]:= PrimePi[{10, 100}]
+Out[6]= {4, 25}
+```
+
+## Algorithm
+
+prime.c -- Prime[n] (the nth prime) and PrimePi[x] (the prime-counting function).
+
+The prime-counting algorithms live in primecount.c; this file holds the two
+
+```text
+builtins.  PrimePi[x] accepts a Method option selecting the algorithm:
+  Automatic (default), "Sieve", "Legendre", "Meissel", "Lehmer", "LMO",
+  "DelegliseRivat", "LucyHedgehog".
+```
+
+Prime[n] is the functional inverse of PrimePi: small n are read straight from the sieve table; large n are found by seeding Cipolla's asymptotic estimate, refining it with a Newton step driven by the exact counter, then walking with GMP's nextprime/prevprime to land exactly on p_n.
 
 ## Implementation notes
 
@@ -91,12 +122,21 @@ hundredths of a second, where Lucy's lighter setup edges ahead — hence the
 
 - `Listable`, `Protected`.  Default `Method -> Automatic`.
 - Several recognised prime-counting algorithms are available via `Method`:
+  `"Sieve"` (segmented sieve of Eratosthenes), `"Legendre"`, `"Meissel"`,
+  `"Lehmer"`, `"LMO"` (Lagarias-Miller-Odlyzko, segmented special leaves),
+  `"DelegliseRivat"`, and `"LucyHedgehog"`.  `"DelegliseRivat"` refines `"LMO"`
+  by classifying special leaves as trivial / easy / hard and answering the
+  trivial and easy ones with $O(1)$ prime-count lookups, sending only the hard
+  leaves through the segmented sieve; it is the fastest combinatorial method here
+  (≈ 1.6 s at $10^{12}$, 9.9 s at $10^{13}$).  `Automatic` selects an efficient
+  method for the magnitude of `x` (a direct sieve table below $10^6$,
+  `"LucyHedgehog"` up to $10^9$, then `"DelegliseRivat"`).  The combinatorial
+  methods exact-count up to $5 \times 10^{13}$; `"Sieve"`/`"Legendre"` are
+  intended for smaller `x`.
+- An unrecognised `Method` setting emits `PrimePi::method` and leaves the call
+  unevaluated.
 
 **Attributes:** `Listable`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 
@@ -105,29 +145,10 @@ hundredths of a second, where Lucy's lighter setup edges ahead — hence the
 - D. H. Lehmer, "On the exact number of primes less than a given limit", Illinois J. Math. 3 (1959), 381–388.
 - Source: [`src/numbertheory/primecount.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory/primecount.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_prime.c`](https://github.com/stblake/mathilda/blob/main/tests/test_prime.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= PrimePi[100]
-Out[1]= 25
-```
-
-The count scales to large bounds; there are 78498 primes below one million:
-
-```mathematica
-In[1]:= PrimePi[10^6]
-Out[1]= 78498
-```
-
-`PrimePi` threads over lists (it is `Listable`):
-
-```mathematica
-In[1]:= PrimePi[{10, 100}]
-Out[1]= {4, 25}
-```
 
 ### Choosing a method
 

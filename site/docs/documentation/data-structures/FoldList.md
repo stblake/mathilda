@@ -5,23 +5,28 @@
 
 ## Description
 
-```text
-FoldList[f, x, list]
-    gives {x, f[x, list[[1]]], f[f[x, list[[1]]], list[[2]]], ...}.
-FoldList[f, list]
-    gives {list[[1]], f[list[[1]], list[[2]]], ...}.
+**`FoldList[f, x, list]`**
 
-For a length-n list, FoldList generates a list of length n+1. The
-head of list is preserved in the output:
-    FoldList[f, x, p[a, b]] -> p[x, f[x, a], f[f[x, a], b]].
-FoldList[f, {}] returns an empty list {}. f may be a symbol or a
-pure function; each intermediate application is evaluated before the
-next one.
-```
+gives {x, f\[x, list\[\[1\]\]\], f\[f\[x, list\[\[1\]\]\], list\[\[2\]\]\], ...}.
 
-## Examples
+**`FoldList[f, list]`**
 
-All examples below are verified against the current Mathilda build.
+gives {list\[\[1\]\], f\[list\[\[1\]\], list\[\[2\]\]\], ...}.
+
+**`FoldList[f, {}] returns an empty list {}. f may be a symbol or a`**
+
+<details>
+<summary>Notes</summary>
+
+For a length-n list, FoldList generates a list of length n+1. The head of list is preserved in the output: FoldList\[f, x, p\[a, b\]\] -\> p\[x, f\[x, a\], f\[f\[x, a\], b\]\]. pure function; each intermediate application is evaluated before the next one.
+
+</details>
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= Accumulate[<|"a" -> 1, "b" -> 2, "c" -> 3|>]
@@ -37,6 +42,22 @@ In[4]:= FoldList[Times, <|"a" -> 2, "b" -> 3, "c" -> 4|>]
 Out[4]= <|"a" -> 2, "b" -> 6, "c" -> 24|>
 ```
 
+### Applications (4)
+
+```mathematica
+In[5]:= FoldList[Plus, 0, {1, 2, 3, 4}]
+Out[5]= {0, 1, 3, 6, 10}
+
+In[6]:= FoldList[Times, {1, 2, 3, 4, 5}]
+Out[6]= {1, 2, 6, 24, 120}
+
+In[7]:= FoldList[Max, {3, 1, 4, 1, 5, 9, 2, 6}]
+Out[7]= {3, 3, 4, 4, 5, 9, 9, 9}
+
+In[8]:= FoldList[(#1 + #2)/2 &, 0, {1, 1, 1, 1}]
+Out[8]= {0, 1/2, 3/4, 7/8, 15/16}
+```
+
 ## Implementation notes
 
 `builtin_foldlist` is `fold_impl(res, true)`: it returns every intermediate
@@ -50,38 +71,18 @@ head** (preserved via `expr_copy(list_head)`). Shares all machinery with `Fold`.
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Accumulate](../../arithmetic/Accumulate/), [Differences](../../arithmetic/Differences/), [Ratios](../../arithmetic/Ratios/), [Total](../../arithmetic/Total/), [Fold](../../functional-programming/Fold/)
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_differences.c`](https://github.com/stblake/mathilda/blob/main/tests/test_differences.c)
+- Tests: [`tests/test_fold.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fold.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= FoldList[Plus, 0, {1, 2, 3, 4}]
-Out[1]= {0, 1, 3, 6, 10}
-```
-
-```mathematica
-In[1]:= FoldList[Times, {1, 2, 3, 4, 5}]
-Out[1]= {1, 2, 6, 24, 120}
-```
-
-```mathematica
-In[1]:= FoldList[Max, {3, 1, 4, 1, 5, 9, 2, 6}]
-Out[1]= {3, 3, 4, 4, 5, 9, 9, 9}
-```
-
-```mathematica
-In[1]:= FoldList[(#1 + #2)/2 &, 0, {1, 1, 1, 1}]
-Out[1]= {0, 1/2, 3/4, 7/8, 15/16}
-```
 
 ### Notes
 

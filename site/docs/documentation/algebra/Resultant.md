@@ -5,17 +5,15 @@
 
 ## Description
 
-```text
-Resultant[p, q, var]
-    gives the resultant of p and q as polynomials in var: the unique
-    integer / polynomial scalar that vanishes iff p and q share a
-    root in var.  Computed via a Sylvester-matrix determinant or, in
-    the exact path, a subresultant pseudo-remainder sequence.
-```
+**`Resultant[p, q, var]`**
 
-## Examples
+gives the resultant of p and q as polynomials in var: the unique integer / polynomial scalar that vanishes iff p and q share a root in var.  Computed via a Sylvester-matrix determinant or, in the exact path, a subresultant pseudo-remainder sequence.
 
-All examples below are verified against the current Mathilda build.
+## Examples (9)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Resultant[x^2 - 2x + 7, x^3 - x + 5, x]
@@ -23,6 +21,31 @@ Out[1]= 265
 
 In[2]:= Resultant[x^3 - 5x^2 - 7x + 14, x^3 - 8x^2 + 9x + 58, x]
 Out[2]= 0
+```
+
+### Applications (7)
+
+```mathematica
+In[3]:= Resultant[x^2 - 1, x^2 - 4, x]
+Out[3]= 9
+
+In[4]:= Resultant[x^2 - 2, x^2 - 3, x]
+Out[4]= 1
+
+In[5]:= Resultant[x^2 + a, x + b, x]
+Out[5]= a + b^2
+
+In[6]:= Resultant[x^2 - y, x^2 + y, x]
+Out[6]= 4 y^2
+
+In[7]:= Resultant[x^2 + a x + b, 2 x + a, x]
+Out[7]= -a^2 + 4 b
+
+In[8]:= Resultant[x^3 + p x + q, 3 x^2 + p, x]
+Out[8]= 4 p^3 + 27 q^2
+
+In[9]:= Factor[Resultant[x^2 + y^2 - 1, x + y - 1, x]]
+Out[9]= 2 y (-1 + y)
 ```
 
 ## Implementation notes
@@ -69,11 +92,9 @@ expressions and handed to the linalg `Det` builtin.
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Plus](../../arithmetic/Plus/)
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra" (3rd ed.), Ch. 6 (resultants and the Sylvester matrix).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 7 (subresultant PRS).
@@ -82,45 +103,12 @@ expressions and handed to the linalg `Det` builtin.
 - J. J. Sylvester, dialytic elimination / the Sylvester matrix.
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
+- Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
+- Tests: [`tests/test_rt_resultant.c`](https://github.com/stblake/mathilda/blob/main/tests/test_rt_resultant.c)
+- Tests: [`tests/test_subresultantpolynomials.c`](https://github.com/stblake/mathilda/blob/main/tests/test_subresultantpolynomials.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Resultant[x^2 - 1, x^2 - 4, x]
-Out[1]= 9
-```
-
-```mathematica
-In[1]:= Resultant[x^2 - 2, x^2 - 3, x]
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= Resultant[x^2 + a, x + b, x]
-Out[1]= a + b^2
-```
-
-```mathematica
-In[1]:= Resultant[x^2 - y, x^2 + y, x]
-Out[1]= 4 y^2
-```
-
-```mathematica
-In[1]:= Resultant[x^2 + a x + b, 2 x + a, x]
-Out[1]= -a^2 + 4 b
-```
-
-```mathematica
-In[1]:= Resultant[x^3 + p x + q, 3 x^2 + p, x]
-Out[1]= 4 p^3 + 27 q^2
-```
-
-```mathematica
-In[1]:= Factor[Resultant[x^2 + y^2 - 1, x + y - 1, x]]
-Out[1]= 2 y (-1 + y)
-```
 
 ### Notes
 

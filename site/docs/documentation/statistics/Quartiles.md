@@ -5,37 +5,23 @@
 
 ## Description
 
-```text
-Quartiles[data]
-    gives the {q_1/4, q_2/4, q_3/4} quantile estimates of the elements in data.
-Quartiles[data,{{a,b},{c,d}}]
-    uses the quantile definition specified by parameters a, b, c, d.
-Quartiles[dist]
-    gives the {q_1/4, q_2/4, q_3/4} quantiles of the distribution dist.
-```
+**`Quartiles[data]`**
 
-## Examples
+gives the {q\_1/4, q\_2/4, q\_3/4} quantile estimates of the elements in data.
 
-_No verified examples yet for this function._
+**`Quartiles[data,{{a,b},{c,d}}]`**
 
-## Implementation notes
+uses the quantile definition specified by parameters a, b, c, d.
 
-**Algorithm.** `builtin_quartiles` returns `{Q1, Q2, Q3}` using a parameterised quantile estimator. For a matrix (list of equal-length lists) it `Transpose`s and recurses column-wise. For a flat list it requires all entries to be real (`is_real_numeric`, else emits `Quartiles::rectn`), sorts via the evaluator's `Sort`, and for each `q` in `{1/4, 1/2, 3/4}` computes the interpolated order statistic with the four quantile parameters `{{a, b}, {c, d}}` — defaulting to `{{1/2, 0}, {0, 1}}` (the standard default). The index is `h = a + (n + b)·q`; it clamps to the endpoints when `h ≤ 1` or `h ≥ n`, takes `j = Floor[h]` and the fractional `g = h − j`, and linearly interpolates `sorted[j] + g·(c + d·g type adjustment)` between adjacent sorted elements. All arithmetic is done by building and `eval_and_free`-ing `Plus`/`Times`/`Floor` expression nodes, so exact (rational/symbolic-numeric) inputs stay exact. Non-list input returns the call unevaluated. Attribute: `ATTR_PROTECTED`.
+**`Quartiles[dist]`**
 
-**Attributes:** `Protected`.
+gives the {q\_1/4, q\_2/4, q\_3/4} quantiles of the distribution dist.
 
-## Implementation status
+## Examples (5)
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+Every input below was run against the current Mathilda build and its output recorded.
 
-## References
-
-- Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
-- Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= Quartiles[{1, 2, 3, 4, 5, 6, 7, 8}]
@@ -43,25 +29,32 @@ Out[1]= {5/2, 9/2, 13/2}
 
 In[2]:= Quartiles[{6, 7, 15, 36, 39, 40, 41, 42, 43, 47, 49}]
 Out[2]= {81/4, 40, 171/4}
+
+In[3]:= q = Quartiles[Range[1, 1000]]
+Out[3]= {501/2, 1001/2, 1501/2}
+
+In[4]:= q[[3]] - q[[1]]
+Out[4]= 500
+
+In[5]:= Quartiles[{1, 2, 3, 4, 5, 6, 7, 8}, {{1/2, 0}, {0, 1}}]
+Out[5]= {5/2, 9/2, 13/2}
 ```
 
-The estimates stay perfectly exact on rational data, so the interquartile range
-(`q3 - q1`) of an arithmetic progression comes out in closed form:
+## Implementation notes
 
-```mathematica
-In[1]:= q = Quartiles[Range[1, 1000]]
-Out[1]= {501/2, 1001/2, 1501/2}
+**Algorithm.** `builtin_quartiles` returns `{Q1, Q2, Q3}` using a parameterised quantile estimator. For a matrix (list of equal-length lists) it `Transpose`s and recurses column-wise. For a flat list it requires all entries to be real (`is_real_numeric`, else emits `Quartiles::rectn`), sorts via the evaluator's `Sort`, and for each `q` in `{1/4, 1/2, 3/4}` computes the interpolated order statistic with the four quantile parameters `{{a, b}, {c, d}}` — defaulting to `{{1/2, 0}, {0, 1}}` (the standard default). The index is `h = a + (n + b)·q`; it clamps to the endpoints when `h ≤ 1` or `h ≥ n`, takes `j = Floor[h]` and the fractional `g = h − j`, and linearly interpolates `sorted[j] + g·(c + d·g type adjustment)` between adjacent sorted elements. All arithmetic is done by building and `eval_and_free`-ing `Plus`/`Times`/`Floor` expression nodes, so exact (rational/symbolic-numeric) inputs stay exact. Non-list input returns the call unevaluated. Attribute: `ATTR_PROTECTED`.
 
-In[2]:= q[[3]] - q[[1]]
-Out[2]= 500
-```
+**Attributes:** `Protected`.
 
-An alternative quantile convention can be selected with a parameter list:
+## References
 
-```mathematica
-In[1]:= Quartiles[{1, 2, 3, 4, 5, 6, 7, 8}, {{1/2, 0}, {0, 1}}]
-Out[1]= {5/2, 9/2, 13/2}
-```
+- Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
+- Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)
+- Tests: [`tests/test_ndarray_reduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_reduce.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+- Tests: [`tests/test_stats.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stats.c)
+
+## Notes & additional examples
 
 ### Notes
 

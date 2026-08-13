@@ -5,18 +5,22 @@
 
 ## Description
 
-```text
-TransformationFunctions
-    is an option for Simplify giving the list of functions to apply to try to transform parts of an expression.
-TransformationFunctions -> Automatic uses the built-in collection of transformation functions.
-TransformationFunctions -> {f1, f2, ...} uses only the functions fi.
-TransformationFunctions -> {Automatic, f1, ...} uses the built-in transformation functions together with the fi.
-Each function is applied to the whole expression and to its subexpressions; the lowest-complexity result (per ComplexityFunction) is kept.
-```
+**`TransformationFunctions`**
 
-## Examples
+is an option for Simplify giving the list of functions to apply to try to transform parts of an expression.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+TransformationFunctions -\> Automatic uses the built-in collection of transformation functions. TransformationFunctions -\> {f1, f2, ...} uses only the functions fi. TransformationFunctions -\> {Automatic, f1, ...} uses the built-in transformation functions together with the fi. Each function is applied to the whole expression and to its subexpressions; the lowest-complexity result (per ComplexityFunction) is kept.
+
+</details>
+
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Options (2)
 
 ```mathematica
 In[1]:= Simplify[(x^2 - 1)/(x - 1), TransformationFunctions -> {Cancel}]
@@ -24,6 +28,22 @@ Out[1]= 1 + x
 
 In[2]:= Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> {}]
 Out[2]= Cos[x]^2 + Sin[x]^2
+```
+
+### Applications (4)
+
+```mathematica
+In[3]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {Automatic}]
+Out[3]= 1
+
+In[4]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {}]
+Out[4]= Cos[x]^2 + Sin[x]^2
+
+In[5]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {f}]
+Out[5]= 1
+
+In[6]:= Simplify[1 + Tan[x]^2, TransformationFunctions -> {Automatic, TrigToExp}]
+Out[6]= Sec[x]^2
 ```
 
 ## Implementation notes
@@ -44,52 +64,19 @@ the current best and keeps the lowest-complexity result by `score_with_func`.
 heap array of borrowed `Expr*` head expressions, freed after the search.
 
 - Each `fi` may be any function — a builtin head such as `Together` or `Cancel`,
+  or a pure function such as `(# /. a -> 0 &)`.
+- Every function is applied to the whole expression and to each of its
+  subexpressions; the candidate of lowest complexity (per `ComplexityFunction`)
+  is kept, in the same minimum-complexity search used for the built-in
+  transforms.
+- The option propagates through `Simplify`'s list / relation threading and
+  through the inexact-input rationalise/numericalise path.
 
 **Attributes:** none registered.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Simplify](../../simplification/Simplify/), [Together](../../algebra/Together/), [Cancel](../../algebra/Cancel/)
 
 - Source: [`src/simp/simp_builtins.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp_builtins.c)
 - Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)
-
-## Notes & additional examples
-
-### Worked examples
-
-By default `Simplify` applies its built-in transformations, collapsing the
-Pythagorean identity:
-
-```mathematica
-In[1]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {Automatic}]
-Out[1]= 1
-```
-
-Passing an empty list disables every transformation, so the same expression is
-left untouched — a direct way to see which step the built-in collection was
-responsible for:
-
-```mathematica
-In[1]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {}]
-Out[1]= Cos[x]^2 + Sin[x]^2
-```
-
-A user-supplied transformation can stand in for the built-ins entirely: here a
-single rewrite rule recovers the simplification without `Automatic`:
-
-```mathematica
-In[1]:= f = Function[e, e /. Sin[a_]^2 + Cos[a_]^2 -> 1];
-In[2]:= Simplify[Cos[x]^2 + Sin[x]^2, TransformationFunctions -> {f}]
-Out[2]= 1
-```
-
-Built-in transformers may also be named explicitly and combined with `Automatic`,
-letting `TrigToExp` participate in the search:
-
-```mathematica
-In[1]:= Simplify[1 + Tan[x]^2, TransformationFunctions -> {Automatic, TrigToExp}]
-Out[1]= Sec[x]^2
-```

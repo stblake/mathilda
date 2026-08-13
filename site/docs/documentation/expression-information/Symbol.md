@@ -5,23 +5,22 @@
 
 ## Description
 
-```text
-Symbol["name"]
-    refers to the symbol with the specified name, creating it in
-    $Context if none yet exists.
+**`Symbol["name"]`**
 
-All symbols, whether explicitly entered using Symbol or not, have head
-Symbol; x_Symbol matches any symbol. The name string may contain
-letters, letter-like forms, or digits but must not start with a digit.
-A backtick (`) separates context prefixes; a leading backtick makes the
-name relative to the current context $Context.
+refers to the symbol with the specified name, creating it in $Context if none yet exists.
 
-Attributes: Protected.
-```
+<details>
+<summary>Notes</summary>
 
-## Examples
+All symbols, whether explicitly entered using Symbol or not, have head Symbol; x\_Symbol matches any symbol. The name string may contain letters, letter-like forms, or digits but must not start with a digit. A backtick (\`) separates context prefixes; a leading backtick makes the name relative to the current context $Context. Attributes: Protected.
 
-All examples below are verified against the current Mathilda build.
+</details>
+
+## Examples (4)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= Symbol["x"]
@@ -35,9 +34,6 @@ Out[3]= {g[x], f["x"], f[2]}
 
 In[4]:= Symbol["a`x"]
 Out[4]= a`x
-
-In[5]:= Symbol["1x"]
-Out[5]= Symbol["1x"]
 ```
 
 ## Implementation notes
@@ -52,11 +48,10 @@ Out[5]= Symbol["1x"]
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Head](../../structural-manipulation/Head/), [$Context](../../scoping-constructs/$Context/), [$ContextPath](../../scoping-constructs/$ContextPath/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_symbol.c`](https://github.com/stblake/mathilda/blob/main/tests/test_symbol.c)

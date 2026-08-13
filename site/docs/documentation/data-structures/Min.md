@@ -5,21 +5,53 @@
 
 ## Description
 
-```text
-Min[x1, x2, ...]
-    yields the numerically smallest of the xi.
-Min[{x1, x2, ...}, {y1, ...}, ...]
-    yields the smallest element of any of the lists.
-```
+**`Min[x1, x2, ...]`**
 
-## Examples
+yields the numerically smallest of the xi.
 
-All examples below are verified against the current Mathilda build.
+**`Min[{x1, x2, ...}, {y1, ...}, ...]`**
+
+yields the smallest element of any of the lists.
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= MinMax[<|"a" -> 3, "b" -> 1, "c" -> 9|>]
 Out[1]= {1, 9}
 ```
+
+### Applications (4)
+
+```mathematica
+In[2]:= Min[3, 7, 2]
+Out[2]= 2
+
+In[3]:= Min[1/3, 2/7, 5/11]
+Out[3]= 2/7
+
+In[4]:= Min[x, 0, Infinity]
+Out[4]= Min[0, x]
+
+In[5]:= Min[{}]
+Out[5]= Infinity
+```
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| Clip to [0.25, 0.75] over 4x10^6 | 575 s | 1.95 s | 0.953 s |
+| MapThread[Max] over 4x10^6 | 14.8 s | 692 s | 0.772 s |
+| MapThread[Min] over 4x10^6 | 14.7 s | 687 s | 0.769 s |
+| integer Mod over 4x10^6 | 3.88 s | 0.504 s | 3.28 s |
+| a b + a over 4x10^6 | 0.754 s | 1.07 s | 1.41 s |
+| a + b over 4x10^6 | 0.383 s | 0.516 s | 0.74 s |
 
 ## Implementation notes
 
@@ -31,38 +63,18 @@ remaining symbolic terms, or `NULL` if nothing simplified. Empty `Min[]` is `Inf
 
 **Attributes:** `Flat`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Max](../../data-structures/Max/), [MinMax](../../data-structures/MinMax/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_transforms.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Min[3, 7, 2]
-Out[1]= 2
-```
-
-```mathematica
-In[1]:= Min[1/3, 2/7, 5/11]
-Out[1]= 2/7
-```
-
-```mathematica
-In[1]:= Min[x, 0, Infinity]
-Out[1]= Min[0, x]
-```
-
-```mathematica
-In[1]:= Min[{}]
-Out[1]= Infinity
-```
 
 ### Notes
 

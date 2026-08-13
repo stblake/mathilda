@@ -5,15 +5,20 @@
 
 ## Description
 
-```text
-PolynomialQuotient[p, q, x] gives the quotient of p and q, treated as polynomials in x, with any remainder dropped.
-Option: Extension -> alpha (default None) divides over Q(alpha) using the Q(alpha)[x] long-division substrate; Sqrt[c], c^(1/n), and I are recognised forms for alpha.
-Extension -> None and Extension -> Automatic are accepted and currently behave as the default (no extension).
-```
+**`PolynomialQuotient[p, q, x] gives the quotient of p and q, treated as polynomials in x, with any remainder dropped.`**
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+Option: Extension -\> alpha (default None) divides over Q(alpha) using the Q(alpha)\[x\] long-division substrate; Sqrt\[c\], c^(1/n), and I are recognised forms for alpha. Extension -\> None and Extension -\> Automatic are accepted and currently behave as the default (no extension).
+
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= PolynomialQuotient[x^4+2x+1, x^2+1, x]
@@ -24,7 +29,11 @@ Out[2]= 0
 
 In[3]:= PolynomialQuotient[x^2+x+1, 2x+1, x]
 Out[3]= 1/4 + 1/2 x
+```
 
+### Options (3)
+
+```mathematica
 In[4]:= PolynomialQuotient[x^2 - 2, x - Sqrt[2], x, Extension -> Sqrt[2]]
 Out[4]= Sqrt[2] + x
 
@@ -33,6 +42,22 @@ Out[5]= 2^(2/3) + 2^(1/3) x + x^2
 
 In[6]:= PolynomialQuotient[x^2 + 1, x - I, x, Extension -> I]
 Out[6]= I + x
+```
+
+### Applications (4)
+
+```mathematica
+In[7]:= PolynomialQuotient[x^2 - 1, x - 1, x]
+Out[7]= 1 + x
+
+In[8]:= PolynomialQuotient[x^3 + 2 x^2 + x + 1, x + 1, x]
+Out[8]= x + x^2
+
+In[9]:= PolynomialQuotient[x^2 + 1, x, x]
+Out[9]= x
+
+In[10]:= PolynomialQuotient[x^4 - 2, x^2 - Sqrt[2], x, Extension -> Sqrt[2]]
+Out[10]= Sqrt[2] + x^2
 ```
 
 ## Implementation notes
@@ -57,40 +82,20 @@ returned through `out_Q`/`out_R` pointers.
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [I](../../mathematical-constants/I/)
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra" (3rd ed.), Ch. 2 (division with remainder over a field).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 2.
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
+- Tests: [`tests/test_extension_options.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_options.c)
+- Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
+- Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= PolynomialQuotient[x^2 - 1, x - 1, x]
-Out[1]= 1 + x
-```
-
-```mathematica
-In[1]:= PolynomialQuotient[x^3 + 2 x^2 + x + 1, x + 1, x]
-Out[1]= x + x^2
-```
-
-```mathematica
-In[1]:= PolynomialQuotient[x^2 + 1, x, x]
-Out[1]= x
-```
-
-```mathematica
-In[1]:= PolynomialQuotient[x^4 - 2, x^2 - Sqrt[2], x, Extension -> Sqrt[2]]
-Out[1]= Sqrt[2] + x^2
-```
 
 ### Notes
 

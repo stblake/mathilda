@@ -5,28 +5,33 @@
 
 ## Description
 
-```text
-AbsoluteTime[]
-    gives the total number of seconds since the beginning of January 1, 1900, in your time zone.
-AbsoluteTime[date]
-    gives the absolute time specification corresponding to the given date specification.
+**`AbsoluteTime[]`**
 
-The supported date specifications are:
-    {y, m, d, h, m, s}    DateList specification
-    time            AbsoluteTime specification (a number, returned unchanged)
+gives the total number of seconds since the beginning of January 1, 1900, in your time zone.
 
-DateList entries may be elided from the right: {y}, {y, m}, {y, m, d}, etc. fill the
-missing fields with {_, 1, 1, 0, 0, 0}. Day, hour, minute, and second values may be
-noninteger; the year and month must be integers. Date lists are converted to standard
-normalized form, so e.g. AbsoluteTime[{2022, 2, 31}] = AbsoluteTime[{2022, 3, 3}].
+**`AbsoluteTime[date]`**
 
-AbsoluteTime[] uses whatever date and time have been set on your computer system. It
-performs no corrections for time zones, daylight saving time, or leap seconds.
+gives the absolute time specification corresponding to the given date specification.
+
+**`AbsoluteTime[] uses whatever date and time have been set on your computer system. It`**
+
+<details>
+<summary>Notes</summary>
+
+The supported date specifications are: {y, m, d, h, m, s}    DateList specification time            AbsoluteTime specification (a number, returned unchanged) DateList entries may be elided from the right: {y}, {y, m}, {y, m, d}, etc. fill the missing fields with {\_, 1, 1, 0, 0, 0}. Day, hour, minute, and second values may be noninteger; the year and month must be integers. Date lists are converted to standard normalized form, so e.g. AbsoluteTime\[{2022, 2, 31}\] = AbsoluteTime\[{2022, 3, 3}\]. performs no corrections for time zones, daylight saving time, or leap seconds.
+
+</details>
+
+## Examples (1)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (1)
+
+```mathematica
+In[1]:= AbsoluteTime[]
+Out[1]= 3.98985e+09
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -42,23 +47,13 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/datetime.c`](https://github.com/stblake/mathilda/blob/main/src/datetime.c)
 - Specification: [`docs/spec/builtins/time-and-date.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/time-and-date.md)
+- Tests: [`tests/test_datetime.c`](https://github.com/stblake/mathilda/blob/main/tests/test_datetime.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= AbsoluteTime[]
-Out[1]= 3.98985e+09
-```
 
 ### Notes
 

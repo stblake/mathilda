@@ -5,13 +5,27 @@
 
 ## Description
 
-```text
-NextPrime[x] gives the next prime after x.
+**`NextPrime[x] gives the next prime after x.`**
+
+## Examples (4)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (4)
+
+```mathematica
+In[1]:= NextPrime[100]
+Out[1]= 101
+
+In[2]:= NextPrime[10, 3]
+Out[2]= 17
+
+In[3]:= NextPrime[10^20]
+Out[3]= 100000000000000000039
+
+In[4]:= NextPrime[2^31, 5]
+Out[4]= 2147483777
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -23,40 +37,13 @@ _No verified examples yet for this function._
 
 **Attributes:** `Listable`, `Protected`, `ReadProtected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/facint.c`](https://github.com/stblake/mathilda/blob/main/src/facint.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= NextPrime[100]
-Out[1]= 101
-
-In[2]:= NextPrime[10, 3]
-Out[2]= 17
-```
-
-The prime just above `10^20` — arbitrary-precision, so no overflow:
-
-```mathematica
-In[1]:= NextPrime[10^20]
-Out[1]= 100000000000000000039
-```
-
-Stepping five primes past `2^31`:
-
-```mathematica
-In[1]:= NextPrime[2^31, 5]
-Out[1]= 2147483777
-```
 
 ### Notes
 

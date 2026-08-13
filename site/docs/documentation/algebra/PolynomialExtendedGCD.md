@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-PolynomialExtendedGCD[poly1, poly2, x] gives the extended GCD of poly1 and poly2 treated as univariate polynomials in x.
-```
+**`PolynomialExtendedGCD[poly1, poly2, x] gives the extended GCD of poly1 and poly2 treated as univariate polynomials in x.`**
 
-## Examples
+## Examples (5)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= PolynomialExtendedGCD[2x^5-2x, (x^2-1)^2, x]
@@ -19,6 +19,19 @@ Out[1]= {-1 + x^2, {1/4 x, 1/2 (-2 - x^2)}}
 
 In[2]:= PolynomialExtendedGCD[a (x+b)^2, (x+a)(x+b), x]
 Out[2]= {b + x, {-1/(a^2 - a b), 1/(a - b)}}
+```
+
+### Applications (3)
+
+```mathematica
+In[3]:= PolynomialExtendedGCD[x^2 - 1, x^3 - 1, x]
+Out[3]= {-1 + x, {-x, 1}}
+
+In[4]:= PolynomialExtendedGCD[x^4 + x^3 + x^2 + x + 1, x^2 + 1, x]
+Out[4]= {1, {1, -x - x^2}}
+
+In[5]:= PolynomialExtendedGCD[x^7 - 1, x^5 - 1, x]
+Out[5]= {-1 + x, {-x - x^3, 1 + x^3 + x^5}}
 ```
 
 ## Implementation notes
@@ -44,34 +57,15 @@ division/remainder reuse the field-based `poly_div_rem` long-division routine.
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Extended Euclidean algorithm over a polynomial ring; Bézout's identity.
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
+- Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= PolynomialExtendedGCD[x^2 - 1, x^3 - 1, x]
-Out[1]= {-1 + x, {-x, 1}}
-```
-
-```mathematica
-In[1]:= PolynomialExtendedGCD[x^4 + x^3 + x^2 + x + 1, x^2 + 1, x]
-Out[1]= {1, {1, -x - x^2}}
-```
-
-```mathematica
-In[1]:= PolynomialExtendedGCD[x^7 - 1, x^5 - 1, x]
-Out[1]= {-1 + x, {-x - x^3, 1 + x^3 + x^5}}
-```
 
 ### Notes
 

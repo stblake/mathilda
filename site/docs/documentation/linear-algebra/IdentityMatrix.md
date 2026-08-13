@@ -5,14 +5,15 @@
 
 ## Description
 
-```text
-IdentityMatrix[n] gives the n x n identity matrix.
-IdentityMatrix[{m, n}] gives the m x n identity matrix.
-```
+**`IdentityMatrix[n] gives the n x n identity matrix.`**
 
-## Examples
+**`IdentityMatrix[{m, n}] gives the m x n identity matrix.`**
 
-All examples below are verified against the current Mathilda build.
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= IdentityMatrix[3]
@@ -20,6 +21,19 @@ Out[1]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
 
 In[2]:= IdentityMatrix[{2, 3}]
 Out[2]= {{1, 0, 0}, {0, 1, 0}}
+```
+
+### Applications (3)
+
+```mathematica
+In[3]:= IdentityMatrix[3]
+Out[3]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
+
+In[4]:= IdentityMatrix[{2, 3}]
+Out[4]= {{1, 0, 0}, {0, 1, 0}}
+
+In[5]:= IdentityMatrix[4] . HilbertMatrix[4] == HilbertMatrix[4]
+Out[5]= True
 ```
 
 ## Implementation notes
@@ -32,39 +46,16 @@ Out[2]= {{1, 0, 0}, {0, 1, 0}}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/linalg/construct.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/construct.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_blas.c`](https://github.com/stblake/mathilda/blob/main/tests/test_blas.c)
+- Tests: [`tests/test_diagonal_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_diagonal_matrix_q.c)
+- Tests: [`tests/test_eigen.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eigen.c)
+- Tests: [`tests/test_fourier.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fourier.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= IdentityMatrix[3]
-Out[1]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
-```
-
-A two-element argument gives a rectangular identity (1s on the main diagonal,
-0s elsewhere):
-
-```mathematica
-In[1]:= IdentityMatrix[{2, 3}]
-Out[1]= {{1, 0, 0}, {0, 1, 0}}
-```
-
-It is the multiplicative identity for matrix products — multiplying any matrix
-by a conformant identity leaves it unchanged:
-
-```mathematica
-In[1]:= IdentityMatrix[4] . HilbertMatrix[4] == HilbertMatrix[4]
-Out[1]= True
-```
 
 ### Notes
 

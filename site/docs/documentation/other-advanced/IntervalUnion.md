@@ -5,9 +5,7 @@
 
 ## Description
 
-```text
-IntervalUnion[i1, i2, ...] gives the interval representing the union of the intervals ij.
-```
+**`IntervalUnion[i1, i2, ...] gives the interval representing the union of the intervals ij.`**
 
 ## Examples
 
@@ -17,11 +15,8 @@ _No verified examples yet for this function._
 
 **Attributes:** `Flat`, `Orderless`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/interval.c`](https://github.com/stblake/mathilda/blob/main/src/interval.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+- Tests: [`tests/test_interval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_interval.c)

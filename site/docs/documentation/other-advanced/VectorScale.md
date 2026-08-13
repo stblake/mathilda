@@ -5,13 +5,9 @@
 
 ## Description
 
-```text
-VectorScale
-    VectorPlot option: controls arrow length.
-      Automatic (default): all arrows drawn at equal length (direction only)
-      None: length proportional to field magnitude
-      real f: arrow length = f × grid spacing
-```
+**`VectorScale`**
+
+VectorPlot option: controls arrow length. Automatic (default): all arrows drawn at equal length (direction only) None: length proportional to field magnitude real f: arrow length = f × grid spacing
 
 ## Examples
 
@@ -20,10 +16,6 @@ _No verified examples yet for this function._
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
 
 ## References
 

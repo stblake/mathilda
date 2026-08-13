@@ -5,21 +5,39 @@
 
 ## Description
 
-```text
-DeleteDuplicates[list]
-    returns list with duplicate elements removed, keeping the first
-    occurrence of each element and preserving the original order.
-DeleteDuplicates[list, test]
-    treats two elements as duplicates when test[a, b] yields True.
-```
+**`DeleteDuplicates[list]`**
 
-## Examples
+returns list with duplicate elements removed, keeping the first occurrence of each element and preserving the original order.
 
-All examples below are verified against the current Mathilda build.
+**`DeleteDuplicates[list, test]`**
+
+treats two elements as duplicates when test\[a, b\] yields True.
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= DeleteDuplicates[<|"a" -> 1, "b" -> 1, "c" -> 2, "d" -> 2, "e" -> 3|>]
 Out[1]= <|"a" -> 1, "c" -> 2, "e" -> 3|>
+```
+
+### Applications (4)
+
+```mathematica
+In[2]:= DeleteDuplicates[{1,2,1,3,2,4}]
+Out[2]= {1, 2, 3, 4}
+
+In[3]:= DeleteDuplicates[{a,b,a,c,b,d,a}]
+Out[3]= {a, b, c, d}
+
+In[4]:= DeleteDuplicates[{1,2,3,4,5,6}, Mod[#1,3]==Mod[#2,3]&]
+Out[4]= {1, 2, 3}
+
+In[5]:= DeleteDuplicates[{1,-1,2,-2,3,-3}, Abs[#1]==Abs[#2]&]
+Out[5]= {1, 2, 3}
 ```
 
 ## Implementation notes
@@ -30,38 +48,16 @@ Out[1]= <|"a" -> 1, "c" -> 2, "e" -> 3|>
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+- Tests: [`tests/test_random.c`](https://github.com/stblake/mathilda/blob/main/tests/test_random.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= DeleteDuplicates[{1,2,1,3,2,4}]
-Out[1]= {1, 2, 3, 4}
-```
-
-```mathematica
-In[1]:= DeleteDuplicates[{a,b,a,c,b,d,a}]
-Out[1]= {a, b, c, d}
-```
-
-```mathematica
-In[1]:= DeleteDuplicates[{1,2,3,4,5,6}, Mod[#1,3]==Mod[#2,3]&]
-Out[1]= {1, 2, 3}
-```
-
-```mathematica
-In[1]:= DeleteDuplicates[{1,-1,2,-2,3,-3}, Abs[#1]==Abs[#2]&]
-Out[1]= {1, 2, 3}
-```
 
 ### Notes
 

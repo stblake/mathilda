@@ -5,27 +5,32 @@
 
 ## Description
 
-```text
-Return[expr]
-    returns the value expr from a function.
-Return[]
-    returns the value Null.
-Return[expr, h]
-    returns expr from the nearest enclosing construct whose head is h.
+**`Return[expr]`**
 
-Return[expr] exits control structures within the definition of a function,
-and gives the value expr for the whole function.
-Return takes effect as soon as it is evaluated, even if it appears inside
-other functions.
+returns the value expr from a function.
 
-The recognised boundary heads are Function, Module, Block, With, Do, For,
-and While. CompoundExpression and other Hold-free heads pass Return through
-unchanged so that it can reach the boundary.
-```
+**`Return[]`**
 
-## Examples
+returns the value Null.
 
-All examples below are verified against the current Mathilda build.
+**`Return[expr, h]`**
+
+returns expr from the nearest enclosing construct whose head is h.
+
+**`Return[expr] exits control structures within the definition of a function,`**
+
+<details>
+<summary>Notes</summary>
+
+and gives the value expr for the whole function. Return takes effect as soon as it is evaluated, even if it appears inside other functions. The recognised boundary heads are Function, Module, Block, With, Do, For, and While. CompoundExpression and other Hold-free heads pass Return through unchanged so that it can reach the boundary.
+
+</details>
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Function[x, If[x > 0, Return[positive], Return[negative]]][3]
@@ -55,11 +60,12 @@ Out[5]= 5
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Function](../../functional-programming/Function/), [Module](../../scoping-constructs/Module/), [Block](../../scoping-constructs/Block/), [With](../../scoping-constructs/With/), [Do](../../control-flow/Do/), [For](../../control-flow/For/), [While](../../control-flow/While/), [CompoundExpression](../../assignment-and-rules/CompoundExpression/)
 
 - Source: [`src/eval.c`](https://github.com/stblake/mathilda/blob/main/src/eval.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+- Tests: [`tests/test_iter.c`](https://github.com/stblake/mathilda/blob/main/tests/test_iter.c)
+- Tests: [`tests/test_return.c`](https://github.com/stblake/mathilda/blob/main/tests/test_return.c)
+- Tests: [`tests/test_scan.c`](https://github.com/stblake/mathilda/blob/main/tests/test_scan.c)

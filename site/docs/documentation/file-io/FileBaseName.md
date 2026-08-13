@@ -5,18 +5,34 @@
 
 ## Description
 
-```text
-FileBaseName["file"]
-    gives the base name for a file without its extension.
-FileBaseName["name.ext"] gives "name".
-FileBaseName drops all directory specifications.
-FileBaseName["file.tar.gz"] gives "file.tar" — only the final extension is split off.
-FileBaseName by default assumes pathname separators and other conventions suitable for your operating system.
+**`FileBaseName["file"]`**
+
+gives the base name for a file without its extension.
+
+**`FileBaseName["name.ext"] gives "name".`**
+
+**`FileBaseName["file.tar.gz"] gives "file.tar" — only the final extension is split off.`**
+
+<details>
+<summary>Notes</summary>
+
+FileBaseName drops all directory specifications. FileBaseName by default assumes pathname separators and other conventions suitable for your operating system.
+
+</details>
+
+## Examples (2)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (2)
+
+```mathematica
+In[1]:= FileBaseName["/tmp/data/report.txt"]
+Out[1]= "report"
+
+In[2]:= FileBaseName["archive.tar.gz"]
+Out[2]= "archive.tar"
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -30,26 +46,15 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [FileExtension](../../file-io/FileExtension/)
 
 - Source: [`src/files.c`](https://github.com/stblake/mathilda/blob/main/src/files.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
+- Tests: [`tests/test_files.c`](https://github.com/stblake/mathilda/blob/main/tests/test_files.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= FileBaseName["/tmp/data/report.txt"]
-Out[1]= "report"
-
-In[2]:= FileBaseName["archive.tar.gz"]
-Out[2]= "archive.tar"
-```
 
 ### Notes
 

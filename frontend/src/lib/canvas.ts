@@ -5,6 +5,7 @@ import { writable, get } from 'svelte/store';
 // Re-export the notebook factory so each card gets its own store instance.
 export { createNotebook } from './notebook';
 import { createNotebook } from './notebook';
+import { fetchRefpageMarkdown, splitRefpage, buildToc, fetchRefpageFigures } from './refpages';
 
 export type NotebookStore = ReturnType<typeof createNotebook>;
 
@@ -17,6 +18,14 @@ export type CanvasNotebook = {
   height:    number | null; // card height override; null = auto
   collapsed: boolean;
   store:     NotebookStore;
+  /** Set when the card was opened to answer a query (e.g. clicking a name in a
+   *  `?pat*` result). NotebookCard runs its first cell once on mount and clears
+   *  the flag, so the answer is already there when the card appears. */
+  autoRun?:  boolean;
+  /** A generated reference page rather than a user notebook. Its headings are
+   *  documentation structure, not editable prose, so clicking one folds the
+   *  section instead of placing a caret. */
+  refpage?:  boolean;
 };
 
 let _nextId = 1;
@@ -53,12 +62,35 @@ const _nb7 = makeCard('Special Functions',  750,1650);
 const _nb8 = makeCard('Applied Math',      1430,1650);
 const _nb9 = makeCard('Associations',      2110,1650);
 
+/* Controls of the notebook currently in full-screen mode, published so the
+   app bar can render them. The card owns this state (its run loop, its layout
+   flag), but in focused mode the buttons belong in the top bar rather than in
+   a second bar directly underneath it. The focused card writes here; anyone
+   else must leave it alone. */
+export interface FocusedActions {
+  runAll: () => void;
+  toggleLayout: () => void;
+  horizontal: boolean;
+  rename: () => void;
+  toggleAllSections: () => void;
+  allSectionsCollapsed: boolean;
+  hasSections: boolean;
+  toggleCollapse: () => void;
+  close: () => void;
+  collapsed: boolean;
+}
+export const focusedActions = writable<FocusedActions | null>(null);
+
 export const canvasState = writable({
   notebooks:    [_nb1,_nb2,_nb3,_nb4,_nb5,_nb6,_nb7,_nb8,_nb9] as CanvasNotebook[],
   panX:         0,
   panY:         0,
   zoom:         1.0,
   focusedId:    null as string | null,
+  /* The card drawn on top. Lives in the store rather than in Canvas.svelte
+     because openRefpage has to raise the card it creates -- a documentation
+     page that opens behind the notebook you asked from is invisible. */
+  activeId:     null as string | null,
   selectedIds:  [] as string[],   // IDs of notebooks selected by rubber-band
 });
 
@@ -268,10 +300,164 @@ export function addNotebookAt(worldX: number, worldY: number, title?: string) {
   return nb.id;
 }
 
+/* Open a card immediately to the right of `fromId` holding `query`, and mark it
+ * to evaluate on mount. Used by the name grid in a `?pat*` result: clicking a
+ * symbol should surface its documentation as its own card, not append a cell to
+ * the bottom of whatever notebook happened to run the search -- in a long
+ * notebook that lands off-screen and reads as nothing having happened. */
+/* Open a symbol's reference page as its own card to the right of `fromId`.
+ *
+ * The page becomes a real notebook rather than one block of rendered text: prose
+ * sections are Markdown cells, and every In[n]:= / Out[n]= example in the page
+ * becomes an actual code cell, pre-filled with the input and seeded with the
+ * output the generator verified against the built binary. So the page reads as
+ * complete on arrival, and any example can be edited and re-run in place.
+ *
+ * The card appears immediately with a placeholder and is filled in when the
+ * fetch lands, rather than the click doing nothing until the network settles. */
+/* Where the canvas stage sits on screen, published by Canvas.svelte. Needed to
+   turn a viewport point (where a symbol was clicked) into a canvas coordinate. */
+let stageOrigin = { left: 0, top: 0 };
+export function setStageOrigin(left: number, top: number) {
+  stageOrigin = { left, top };
+}
+
+export function openRefpage(fromId: string, name: string,
+                            at?: { x: number; y: number } | null) {
+  type NotebookStore = ReturnType<typeof createNotebook>;
+  let newId = '';
+  /* Assigned inside the synchronous canvasState.update below; TypeScript cannot
+     see that a store callback runs immediately, so the type is widened here. */
+  let store: NotebookStore | undefined;
+
+  canvasState.update(s => {
+    const from = s.notebooks.find(nb => nb.id === fromId);
+    /* Open beside the SYMBOL when we know where it was, not beside the whole
+       card: on a wide notebook the far edge can be most of a screen away from
+       what the reader just pointed at. Falls back to the card's right edge. */
+    let x = from ? from.x + from.width + 40 : 0;
+    let y = from ? from.y : 0;
+    if (at) {
+      const wx = (at.x - stageOrigin.left - s.panX) / s.zoom;
+      const wy = (at.y - stageOrigin.top - s.panY) / s.zoom;
+      x = wx + 90;                 /* clear of the pointer, not under it */
+      y = wy - 60;                 /* the symbol sits near the card's top */
+    }
+    const nb = makeCard(name, x, y);
+    nb.refpage = true;
+    nb.store.setCellSourceAndType(`Loading the reference page for \`${name}\`...`, 'ref');
+    store = nb.store;
+    newId = nb.id;
+    /* On top: it is what the reader just asked for. */
+    return { ...s, notebooks: [...s.notebooks, nb], activeId: nb.id };
+  });
+
+  void (async () => {
+    const target: NotebookStore | undefined = store;
+    if (!target) return;
+    let segments;
+    let figures: Record<string, object> = {};
+    try {
+      const md = await fetchRefpageMarkdown(name);
+      segments = splitRefpage(md);
+      /* Place the contents after the definition, not above it: the first thing
+         a reader wants is what the function does, and an index of a page they
+         have not started reading yet is noise at the top. Inserted before the
+         heading that follows Description, or at the front if there is no
+         Description section. */
+      const toc = buildToc(md);
+      if (toc) {
+        const tocSeg = { kind: 'md' as const, text: toc };
+        const descAt = segments.findIndex(
+          seg => seg.kind === 'heading' && /^description$/i.test(seg.text));
+        let at = 0;
+        if (descAt >= 0) {
+          const next = segments.findIndex(
+            (seg, i) => i > descAt && seg.kind === 'heading');
+          at = next >= 0 ? next : segments.length;
+        }
+        segments = [...segments.slice(0, at), tocSeg, ...segments.slice(at)];
+      }
+      figures = await fetchRefpageFigures(name);
+    } catch (e) {
+      const why = e instanceof Error ? e.message : String(e);
+      target.setCellSourceAndType(
+        `No reference page for \`${name}\`.\n\n` +
+        'Pages are generated by `python3 site/generate.py` and mirrored by ' +
+        '`npm run sync:refpages`; a symbol added since the last run will not ' +
+        `have one yet.\n\n*(${why})*`, 'ref');
+      return;
+    }
+    if (!segments.length) return;
+
+    /* The card already holds one cell, so the first segment rewrites it and the
+       rest are appended -- otherwise the page would open under a stray empty
+       cell. */
+    let first = true;
+    for (const seg of segments) {
+      if (seg.kind === 'heading') {
+        /* 'section' for H2, 'subsection' for H3 -- the notebook folds the rows
+           under each, so every part of the page collapses independently. */
+        const type = seg.level === 2 ? 'section' : 'subsection';
+        if (first) target.setCellSourceAndType(seg.text, type);
+        else target.addRow(type, seg.text);
+      } else if (seg.kind === 'md') {
+        if (first) target.setCellSourceAndType(seg.text, 'ref');
+        else target.addRow('ref', seg.text);
+      } else {
+        let id: string;
+        if (first) {
+          target.setCellSourceAndType(seg.input, 'code');
+          id = get(target)[0].cells[0].id;
+        } else {
+          id = target.addRow('code', seg.input);
+        }
+        /* 'expected', not 'expr': this is the recorded result, and an expr with
+           no kernel LaTeX gets typeset by KaTeX into something that looks like
+           mathematics but is really Mathilda syntax. Running the cell replaces
+           it with the live output. */
+        const fig = figures[seg.input];
+        if (fig) {
+          /* The saved plot, so a graphics example arrives drawn rather than as
+             the word -Graphics-. Running the cell redraws it live. */
+          target.appendOutput(id, { kind: 'plot', data: fig });
+        } else if (seg.output) {
+          target.appendOutput(id, { kind: 'expected', text: seg.output });
+        }
+      }
+      first = false;
+    }
+  })();
+
+  return newId;
+}
+
+export function addQueryNotebook(fromId: string, query: string, title?: string) {
+  let newId = '';
+  canvasState.update(s => {
+    const from = s.notebooks.find(nb => nb.id === fromId);
+    const x = from ? from.x + from.width + 40 : 0;
+    const y = from ? from.y : 0;
+    const nb = makeCard(title ?? query, x, y);
+    nb.autoRun = true;
+    nb.store.addRow('code', query);
+    newId = nb.id;
+    return { ...s, notebooks: [...s.notebooks, nb] };
+  });
+  return newId;
+}
+
 export function removeNotebook(id: string) {
   canvasState.update(s => {
     const remaining = s.notebooks.filter(nb => nb.id !== id);
-    return { ...s, notebooks: remaining.length > 0 ? remaining : s.notebooks };
+    /* Closing the last notebook is a no-op -- an empty canvas has nothing to
+       act on and no way back. */
+    if (remaining.length === 0) return s;
+    /* Closing the notebook that is currently full-screen has to return to the
+       canvas. Leaving focusedId pointing at a card that no longer exists
+       rendered an empty window with a toolbar whose buttons acted on nothing. */
+    const focusedId = s.focusedId === id ? null : s.focusedId;
+    return { ...s, notebooks: remaining, focusedId };
   });
 }
 
@@ -399,6 +585,7 @@ export function loadLibraryData(json: string): string {
     panY:        0,
     zoom:        1.0,
     focusedId:   null,
+    activeId:    null,
     selectedIds: [],
   });
   return data.title ?? 'Untitled Library';

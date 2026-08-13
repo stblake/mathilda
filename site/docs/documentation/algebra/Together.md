@@ -5,17 +5,20 @@
 
 ## Description
 
-```text
-Together[expr] combines fractions over a common denominator, then cancels.
-Option Extension -> alpha runs the final cancellation over Q(alpha) so
-algebraic-coefficient simplifications fire (e.g. 1/(x-Sqrt[2]) + 1/(x+Sqrt[2])
-collapses to (2 x)/(x^2 - 2) under Extension -> Sqrt[2]).
-Default Extension -> None combines and cancels over the rationals only.
-```
+**`Together[expr] combines fractions over a common denominator, then cancels.`**
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+Option Extension -\> alpha runs the final cancellation over Q(alpha) so algebraic-coefficient simplifications fire (e.g. 1/(x-Sqrt\[2\]) + 1/(x+Sqrt\[2\]) collapses to (2 x)/(x^2 - 2) under Extension -\> Sqrt\[2\]). Default Extension -\> None combines and cancels over the rationals only.
+
+</details>
+
+## Examples (13)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (6)
 
 ```mathematica
 In[1]:= Together[a/b + c/d]
@@ -33,12 +36,49 @@ Out[4]= x
 In[5]:= Together[y^(5/8)*(y^(19/8) - y^(73/24)/(y^(2/3) - 1/y^(1/3)))]
 Out[5]= -y^3/(-1 + y)
 
-In[6]:= Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2]), Extension -> Sqrt[2]]
-Out[6]= (2 x)/(-2 + x^2)
-
-In[7]:= Together[1/(x - k^(1/3)) + 1/(x + k^(1/3))]
-Out[7]= -(2 x)/(k^(2/3) - x^2)
+In[6]:= Together[1/(x - k^(1/3)) + 1/(x + k^(1/3))]
+Out[6]= -(2 x)/(k^(2/3) - x^2)
 ```
+
+### Options (1)
+
+```mathematica
+In[7]:= Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2]), Extension -> Sqrt[2]]
+Out[7]= (2 x)/(-2 + x^2)
+```
+
+### Applications (6)
+
+```mathematica
+In[8]:= Together[1/x + 1/y]
+Out[8]= (x + y)/(x y)
+
+In[9]:= Together[1/(x-1) + 1/(x+1)]
+Out[9]= (2 x)/(-1 + x^2)
+
+In[10]:= Together[a/b + c/d]
+Out[10]= (b c + a d)/(b d)
+
+In[11]:= Together[1/x + 1/(x+1) + 1/(x+2)]
+Out[11]= (2 + 6 x + 3 x^2)/(2 x + 3 x^2 + x^3)
+
+In[12]:= Together[a/(a-b) + b/(b-a)]
+Out[12]= 1
+
+In[13]:= Together[1/(x-1) - 2/(x^2-1)]
+Out[13]= 1/(1 + x)
+```
+
+## Options & behaviour
+
+- **Cube-and-higher-root towers** (2026-07-04): a `Plus` of fractions over
+  radicals `Power[base, p/q]` of any index `q ≥ 2` whose radicand carries a free
+  symbol (e.g. `k^(1/3)`) is combined over a common denominator via FLINT
+  (`flint_algebraic_field_together`), with the radicals treated as free kernels —
+  WL-faithful: radicals stay in the denominator, no rationalisation. This
+  generalises the sqrt-only combiner to any index. The same path serves `Cancel`
+  single-fraction relation-dependent cancellations (`(x^3-k)/(x-k^(1/3))`) still
+  go through the relation-aware GCD path.
 
 ## Implementation notes
 
@@ -61,55 +101,20 @@ Crucially, `together_recursive` never expands `Power[Plus[...], n]` — `extract
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [PolynomialLCM](../../algebra/PolynomialLCM/), [PolynomialQuotient](../../algebra/PolynomialQuotient/), [PolynomialRemainder](../../algebra/PolynomialRemainder/), [PolynomialExtendedGCD](../../algebra/PolynomialExtendedGCD/), [Plus](../../arithmetic/Plus/), [Cancel](../../algebra/Cancel/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational function arithmetic and common denominators.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on polynomial GCDs used in cancellation.
 - Source: [`src/rat.c`](https://github.com/stblake/mathilda/blob/main/src/rat.c)
 - Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
+- Tests: [`tests/test_cherry_ei.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_ei.c)
+- Tests: [`tests/test_contfrac.c`](https://github.com/stblake/mathilda/blob/main/tests/test_contfrac.c)
+- Tests: [`tests/test_crc_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_crc_corpus.c)
+- Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Together[1/x + 1/y]
-Out[1]= (x + y)/(x y)
-```
-
-```mathematica
-In[1]:= Together[1/(x-1) + 1/(x+1)]
-Out[1]= (2 x)/(-1 + x^2)
-```
-
-```mathematica
-In[1]:= Together[a/b + c/d]
-Out[1]= (b c + a d)/(b d)
-```
-
-```mathematica
-In[1]:= Together[1/x + 1/(x+1) + 1/(x+2)]
-Out[1]= (2 + 6 x + 3 x^2)/(2 x + 3 x^2 + x^3)
-```
-
-A telescoping sum collapses completely, with the GCD machinery cancelling the
-common factor so the result is an exact `1`:
-
-```mathematica
-In[1]:= Together[a/(a-b) + b/(b-a)]
-Out[1]= 1
-```
-
-Common factors hidden across a factorable denominator are detected and removed:
-
-```mathematica
-In[1]:= Together[1/(x-1) - 2/(x^2-1)]
-Out[1]= 1/(1 + x)
-```
 
 ### Notes
 

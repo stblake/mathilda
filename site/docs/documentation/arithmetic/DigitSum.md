@@ -5,15 +5,22 @@
 
 ## Description
 
-```text
-DigitSum[n] gives the sum of the decimal digits of the integer n.
-DigitSum[n, b] gives the sum of the base-b digits of n.
-The sign of n is discarded; DigitSum[0] is 0.
-```
+**`DigitSum[n] gives the sum of the decimal digits of the integer n.`**
 
-## Examples
+**`DigitSum[n, b] gives the sum of the base-b digits of n.`**
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+The sign of n is discarded; DigitSum\[0\] is 0.
+
+</details>
+
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= DigitSum[1234]
@@ -30,11 +37,8 @@ Out[3]= {10, 0, 18}
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_digit_sum.c`](https://github.com/stblake/mathilda/blob/main/tests/test_digit_sum.c)

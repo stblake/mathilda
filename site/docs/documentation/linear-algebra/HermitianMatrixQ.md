@@ -5,32 +5,61 @@
 
 ## Description
 
-```text
-HermitianMatrixQ[m]
-    gives True if m is explicitly Hermitian (m == ConjugateTranspose[m]),
-    and False otherwise.
+**`HermitianMatrixQ[m]`**
 
-Options:
-    SameTest  -> Automatic   function used to test equality of entries.
-    Tolerance -> Automatic   numeric tolerance for approximate matrices.
+gives True if m is explicitly Hermitian (m == ConjugateTranspose\[m\]), and False otherwise.
 
-With SameTest -> f, entries m[i,j] and Conjugate[m[j,i]] are taken to be
-equal when f[m[i,j], Conjugate[m[j,i]]] gives True.  With Tolerance -> t,
-entries are accepted when Abs[m[i,j] - Conjugate[m[j,i]]] <= t.
-Diagonal entries must satisfy the same test (i.e. be purely real for
-numeric matrices).
-```
+<details>
+<summary>Notes</summary>
 
-## Examples
+Options: SameTest  -\> Automatic   function used to test equality of entries. Tolerance -\> Automatic   numeric tolerance for approximate matrices. With SameTest -\> f, entries m\[i,j\] and Conjugate\[m\[j,i\]\] are taken to be equal when f\[m\[i,j\], Conjugate\[m\[j,i\]\]\] gives True.  With Tolerance -\> t, entries are accepted when Abs\[m\[i,j\] - Conjugate\[m\[j,i\]\]\] \<= t. Diagonal entries must satisfy the same test (i.e. be purely real for numeric matrices).
 
-All examples below are verified against the current Mathilda build.
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= HermitianMatrixQ[{{1, 3 + 4 I}, {3 - 4 I, 2}}]
 Out[1]= True
 
-In[2]:= HermitianMatrixQ[{{1, 2 I}, {2 I, 3}}]
-Out[2]= False
+In[2]:= HermitianMatrixQ[{{0, a, b}, {Conjugate[a], 1, c}, {Conjugate[b], Conjugate[c], -1}}]
+Out[2]= True
+
+In[3]:= HermitianMatrixQ[{{1, 2 I}, {2 I, 3}}]
+Out[3]= False
+```
+
+### Options (1)
+
+```mathematica
+In[4]:= HermitianMatrixQ[{{1.0, 2.0 + 0.01 I}, {2.0 - 0.02 I, 1.5}}, Tolerance -> 0.1]
+Out[4]= True
+```
+
+### Applications (6)
+
+```mathematica
+In[5]:= HermitianMatrixQ[{{1, I}, {-I, 1}}]
+Out[5]= True
+
+In[6]:= HermitianMatrixQ[{{1, 2}, {3, 4}}]
+Out[6]= False
+
+In[7]:= HermitianMatrixQ[{{1, 2 + I}, {2 + I, 1}}]
+Out[7]= False
+
+In[8]:= HermitianMatrixQ[{{2, 3 + I}, {3 - I, 5}}]
+Out[8]= True
+
+In[9]:= HermitianMatrixQ[N[{{1, I}, {-I, 1}}]]
+Out[9]= True
+
+In[10]:= HermitianMatrixQ[{{1, I}, {-I, 2.0000001}}, Tolerance -> 0.001]
+Out[10]= True
 ```
 
 ## Implementation notes
@@ -39,51 +68,24 @@ Out[2]= False
 
 - `Protected`.
 - Default test is structural: it accepts (Conjugate[a], a) / (a, Conjugate[a])
+  symbolic pairs without requiring our `Conjugate` builtin to fold
+  `Conjugate[Conjugate[x]] -> x`.
+- Returns `False` (rather than leaving unevaluated) on non-matrix, non-square,
+  ragged, empty, or higher-rank tensor inputs.
+- Unknown options and non-Rule trailing arguments leave the call unevaluated.
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Conjugate](../../arithmetic/Conjugate/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_hermitian_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hermitian_matrix_q.c)
+- Tests: [`tests/test_symmetric_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_symmetric_matrix_q.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= HermitianMatrixQ[{{1, I}, {-I, 1}}]
-Out[1]= True
-
-In[2]:= HermitianMatrixQ[{{1, 2}, {3, 4}}]
-Out[2]= False
-```
-
-A diagonal entry that is not real, or an off-diagonal pair that is not a
-conjugate pair, breaks Hermiticity:
-
-```mathematica
-In[1]:= HermitianMatrixQ[{{1, 2 + I}, {2 + I, 1}}]
-Out[1]= False
-
-In[2]:= HermitianMatrixQ[{{2, 3 + I}, {3 - I, 5}}]
-Out[2]= True
-```
-
-The predicate also handles inexact matrices, and a `Tolerance` option absorbs
-floating-point noise on the diagonal:
-
-```mathematica
-In[1]:= HermitianMatrixQ[N[{{1, I}, {-I, 1}}]]
-Out[1]= True
-
-In[2]:= HermitianMatrixQ[{{1, I}, {-I, 2.0000001}}, Tolerance -> 0.001]
-Out[2]= True
-```
 
 ### Notes
 

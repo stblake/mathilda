@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-FLINT`Zeta[s] gives the numeric value of the Riemann zeta function at the numeric argument s (real or complex), computed to the precision of s (machine precision for exact s) via FLINT's rigorous acb arithmetic (acb_dirichlet_zeta). Unevaluated for symbolic s or at the pole s = 1.
-```
+FLINT\`Zeta\[s\] gives the numeric value of the Riemann zeta function at the numeric argument s (real or complex), computed to the precision of s (machine precision for exact s) via FLINT's rigorous acb arithmetic (acb\_dirichlet\_zeta). Unevaluated for symbolic s or at the pole s = 1.
 
-## Examples
+## Examples (2)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= FLINT`Zeta[2]
@@ -24,10 +24,6 @@ Out[2]= 1.082323233711138
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 

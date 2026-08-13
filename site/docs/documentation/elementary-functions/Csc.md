@@ -5,15 +5,39 @@
 
 ## Description
 
-```text
-Csc[z]
-    gives the cosecant of z (= 1 / Sin[z]).
+**`Csc[z]`**
+
+gives the cosecant of z (= 1 / Sin\[z\]).
+
+<details>
+<summary>Notes</summary>
+
 Csc is Listable. Singularities at z = k Pi yield ComplexInfinity.
+
+</details>
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (5)
+
+```mathematica
+In[1]:= Csc[Pi/6]
+Out[1]= 2
+
+In[2]:= Csc[Pi/12]
+Out[2]= Sqrt[2] (1 + Sqrt[3])
+
+In[3]:= N[Csc[1], 40]
+Out[3]= 1.1883951057781212162615994523745510035279
+
+In[4]:= Series[Csc[x], {x, 0, 5}]
+Out[4]= 1/x + 1/6 x + 7/360 x^3 + 31/15120 x^5 + O[x]^6
+
+In[5]:= Csc[I]
+Out[5]= -I Csch[1]
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -23,43 +47,16 @@ _No verified examples yet for this function._
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/trig.c`](https://github.com/stblake/mathilda/blob/main/src/trig.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
+- Tests: [`tests/test_complexexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complexexpand.c)
+- Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
+- Tests: [`tests/test_gamma_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_gamma_transforms.c)
+- Tests: [`tests/test_integrate_dispatch.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_dispatch.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Csc[Pi/6]
-Out[1]= 2
-```
-
-```mathematica
-In[1]:= Csc[Pi/12]
-Out[1]= Sqrt[2] (1 + Sqrt[3])
-```
-
-```mathematica
-In[1]:= N[Csc[1], 40]
-Out[1]= 1.1883951057781212162615994523745510035279
-```
-
-```mathematica
-In[1]:= Series[Csc[x], {x, 0, 5}]
-Out[1]= 1/x + 1/6 x + 7/360 x^3 + 31/15120 x^5 + O[x]^6
-```
-
-```mathematica
-In[1]:= Csc[I]
-Out[1]= -I Csch[1]
-```
 
 ### Notes
 

@@ -5,16 +5,42 @@
 
 ## Description
 
-```text
-LCM[n1, n2, ...]
-    gives the least common multiple of the integers ni.
-Computed via GMP's mpz_lcm folded across the arguments; sign is
-normalised non-negative. Accepts BigInt and Rational inputs.
+**`LCM[n1, n2, ...]`**
+
+gives the least common multiple of the integers ni.
+
+<details>
+<summary>Notes</summary>
+
+Computed via GMP's mpz\_lcm folded across the arguments; sign is normalised non-negative. Accepts BigInt and Rational inputs.
+
+</details>
+
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (6)
+
+```mathematica
+In[1]:= LCM[3, 4, 5]
+Out[1]= 60
+
+In[2]:= LCM[12, 18, 30]
+Out[2]= 180
+
+In[3]:= LCM[0, 5]
+Out[3]= 0
+
+In[4]:= LCM[1/2, 2/3, 3/4]
+Out[4]= 6
+
+In[5]:= LCM @@ Range[1, 20]
+Out[5]= 232792560
+
+In[6]:= LCM[123456789, 987654321]
+Out[6]= 13548070123626141
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -24,54 +50,20 @@ _No verified examples yet for this function._
 
 **Attributes:** `Flat`, `Listable`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [GCD](../../number-theory/GCD/)
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on the Euclidean algorithm and least common multiples.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on GCD/LCM relations.
 - Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_integrate_linrad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_linrad.c)
+- Tests: [`tests/test_integrate_linratiorad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_linratiorad.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= LCM[3, 4, 5]
-Out[1]= 60
-```
-
-```mathematica
-In[1]:= LCM[12, 18, 30]
-Out[1]= 180
-```
-
-The absorbing convention `LCM[0, n] = 0`:
-
-```mathematica
-In[1]:= LCM[0, 5]
-Out[1]= 0
-```
-
-`LCM` extends to rationals via numerator/denominator (`lcm(numerators)/gcd(denominators)`):
-
-```mathematica
-In[1]:= LCM[1/2, 2/3, 3/4]
-Out[1]= 6
-```
-
-Folded across a range it gives the smallest number divisible by every integer `1..20`, and large inputs promote to a GMP bigint:
-
-```mathematica
-In[1]:= LCM @@ Range[1, 20]
-Out[1]= 232792560
-
-In[2]:= LCM[123456789, 987654321]
-Out[2]= 13548070123626141
-```
 
 ### Notes
 

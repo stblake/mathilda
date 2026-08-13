@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-EulerPhi[n] gives the Euler totient function phi(n).
-```
+**`EulerPhi[n] gives the Euler totient function phi(n).`**
 
-## Examples
+## Examples (6)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= EulerPhi[10]
@@ -21,6 +21,28 @@ In[2]:= EulerPhi[2^89 - 1]
 Out[2]= 618970019642690137449562110
 ```
 
+### Applications (4)
+
+```mathematica
+In[3]:= EulerPhi[36]
+Out[3]= 12
+
+In[4]:= Table[EulerPhi[n], {n, 1, 12}]
+Out[4]= {1, 1, 2, 2, 4, 2, 6, 4, 6, 4, 10, 4}
+
+In[5]:= EulerPhi[2^61 - 1]
+Out[5]= 2305843009213693950
+
+In[6]:= Total[Map[EulerPhi, {1, 2, 3, 5, 6, 10, 15, 30}]]
+Out[6]= 30
+```
+
+## Options & behaviour
+
+> **Packed arrays.** Runs on an `int64` buffer, factoring by trial division
+> in `int64`. `EulerPhi[3.]` is not `EulerPhi[3]`, so a real buffer takes the
+> ordinary path.
+
 ## Implementation notes
 
 `builtin_eulerphi` computes Euler's totient. It takes `|n|` (since `phi(-n)=phi(n)`), factors a working copy via the shared `factorize_mpz` cascade (trial division → Pollard rho → ECM), then applies `phi(n) = n * prod (1 - 1/p_i)` per distinct prime as `phi <- (phi / p) * (p - 1)` with GMP `mpz_divexact`/`mpz_mul`, keeping intermediates exact. `phi(0) = 0`, `phi(1) = 1`. Non-integer arguments return `NULL`. Its cost is dominated by the factorisation of `n`.
@@ -29,41 +51,26 @@ Out[2]= 618970019642690137449562110
 - Counts the number of positive integers less than or equal to $n$ that are relatively prime to $n$.
 - Returns 0 for $n = 0$, and handles negative integers via $\phi(-n) = \phi(n)$.
 - Accepts arbitrary-precision integers (`BigInt`). Factorization runs in GMP
+  through the same trial-division / Pollard-rho / ECM cascade used by
+  `FactorInteger`, so inputs of cryptographic size are tractable.
+- For a prime decomposition $n = \prod p_i^{k_i}$, computes
+  $\phi(n) = n \prod (1 - 1/p_i)$ as $(n / \prod p_i) \prod (p_i - 1)$
+  with exact integer arithmetic.
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [FactorInteger](../../number-theory/FactorInteger/)
 
 - Source: [`src/facint.c`](https://github.com/stblake/mathilda/blob/main/src/facint.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_divisors.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisors.c)
+- Tests: [`tests/test_multiplicative_order.c`](https://github.com/stblake/mathilda/blob/main/tests/test_multiplicative_order.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= EulerPhi[36]
-Out[1]= 12
-```
-
-```mathematica
-In[1]:= Table[EulerPhi[n], {n, 1, 12}]
-Out[1]= {1, 1, 2, 2, 4, 2, 6, 4, 6, 4, 10, 4}
-```
-
-```mathematica
-In[1]:= EulerPhi[2^61 - 1]
-Out[1]= 2305843009213693950
-```
-
-```mathematica
-In[1]:= Total[Map[EulerPhi, {1, 2, 3, 5, 6, 10, 15, 30}]]
-Out[1]= 30
-```
 
 ### Notes
 

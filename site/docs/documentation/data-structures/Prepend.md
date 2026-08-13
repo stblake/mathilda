@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-Prepend[expr, elem] adds elem to the beginning of expr.
-```
+**`Prepend[expr, elem] adds elem to the beginning of expr.`**
 
-## Examples
+## Examples (2)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Append[<|"a" -> 1, "b" -> 2|>, "c" -> 3]
@@ -30,11 +30,13 @@ variant that writes the result back to a symbol's OwnValue.)
 
 **Attributes:** none registered.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Append](../../data-structures/Append/), [AssociateTo](../../data-structures/AssociateTo/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_eval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval.c)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)

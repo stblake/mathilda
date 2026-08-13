@@ -5,28 +5,22 @@
 
 ## Description
 
-```text
-Switch[expr, form_1, value_1, form_2, value_2, ...]
-    evaluates expr, then compares it with each of the form_i in turn,
-    evaluating and returning the value_i corresponding to the first
-    match found.
-Only the value_i corresponding to the first form_i that matches
-expr is evaluated. Each form_i is itself evaluated only when the
-match is tried.
-If the last form_i is the pattern _, then the corresponding
-value_i is always returned if this case is reached -- it acts as
-a default branch.
-If none of the form_i match expr, the Switch is returned
-unevaluated.
-Switch has attribute HoldRest, so the form/value pairs are not
-evaluated until Switch examines them.
-Break, Return, and Throw inside the chosen value behave as they
-do in any other held context.
-```
+**`Switch[expr, form_1, value_1, form_2, value_2, ...]`**
 
-## Examples
+evaluates expr, then compares it with each of the form\_i in turn, evaluating and returning the value\_i corresponding to the first match found.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+Only the value\_i corresponding to the first form\_i that matches expr is evaluated. Each form\_i is itself evaluated only when the match is tried. If the last form\_i is the pattern \_, then the corresponding value\_i is always returned if this case is reached -- it acts as a default branch. If none of the form\_i match expr, the Switch is returned unevaluated. Switch has attribute HoldRest, so the form/value pairs are not evaluated until Switch examines them. Break, Return, and Throw inside the chosen value behave as they do in any other held context.
+
+</details>
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Switch[42, _Integer, "int", _Real, "real", _, "other"]
@@ -37,6 +31,25 @@ Out[2]= Together
 
 In[3]:= Switch[#, 1, one, 2, two, _, other] & /@ {1, 2, 3}
 Out[3]= {one, two, other}
+```
+
+### Applications (5)
+
+```mathematica
+In[4]:= Switch[5, _Integer, "int", _Real, "real", _, "other"]
+Out[4]= "int"
+
+In[5]:= Switch[2.5, _Integer, "int", _Real, "real", _, "other"]
+Out[5]= "real"
+
+In[6]:= Switch[7, _?PrimeQ, "prime", _, "composite"]
+Out[6]= "prime"
+
+In[7]:= Table[Switch[Mod[n, 15], 0, "FizzBuzz", 3 | 6 | 9 | 12, "Fizz", 5 | 10, "Buzz", _, n], {n, 1, 15}]
+Out[7]= {1, 2, "Fizz", 4, "Buzz", "Fizz", 7, 8, "Fizz", "Buzz", 11, "Fizz", 13, 14, "FizzBuzz"}
+
+In[8]:= Switch[x, 1, "a", 2, "b"]
+Out[8]= Switch[x, 1, "a", 2, "b"]
 ```
 
 ## Implementation notes
@@ -53,52 +66,15 @@ Out[3]= {one, two, other}
 
 **Attributes:** `HoldRest`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [HoldRest](../../other-advanced/HoldRest/), [Break](../../control-flow/Break/), [Return](../../control-flow/Return/), [Throw](../../control-flow/Throw/)
 
 - Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+- Tests: [`tests/test_cond.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cond.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-`Switch` returns the value for the first matching pattern; `_` is the default:
-
-```mathematica
-In[1]:= Switch[5, _Integer, "int", _Real, "real", _, "other"]
-Out[1]= "int"
-```
-
-```mathematica
-In[1]:= Switch[2.5, _Integer, "int", _Real, "real", _, "other"]
-Out[1]= "real"
-```
-
-Forms can be arbitrary patterns, including `PatternTest` predicates:
-
-```mathematica
-In[1]:= Switch[7, _?PrimeQ, "prime", _, "composite"]
-Out[1]= "prime"
-```
-
-Combined with `Table` and alternative (`|`) patterns it expresses FizzBuzz in a
-single dispatch:
-
-```mathematica
-In[1]:= Table[Switch[Mod[n, 15], 0, "FizzBuzz", 3 | 6 | 9 | 12, "Fizz", 5 | 10, "Buzz", _, n], {n, 1, 15}]
-Out[1]= {1, 2, "Fizz", 4, "Buzz", "Fizz", 7, 8, "Fizz", "Buzz", 11, "Fizz", 13, 14, "FizzBuzz"}
-```
-
-If no form matches and there is no default, the call is returned unevaluated:
-
-```mathematica
-In[1]:= Switch[x, 1, "a", 2, "b"]
-Out[1]= Switch[x, 1, "a", 2, "b"]
-```
 
 ### Notes
 

@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "node scripts/sync-refpages.mjs && vite",
+    "build": "node scripts/sync-refpages.mjs && vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
     "tauri": "tauri",
@@ -16,7 +16,8 @@
     "android:libs": "./build-android-lib.sh arm64",
     "android:init": "tauri android init",
     "android:dev": "tauri android dev",
-    "android:build": "tauri android build"
+    "android:build": "tauri android build",
+    "sync:refpages": "node scripts/sync-refpages.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
@@ -41,6 +42,7 @@
     "@tauri-apps/plugin-shell": "^2.3.5",
     "codemirror": "^6.0.2",
     "katex": "^0.17.0",
+    "marked": "^18.0.9",
     "plotly.js-dist-min": "^3.6.0"
   }
 }

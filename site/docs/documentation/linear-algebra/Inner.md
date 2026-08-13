@@ -5,18 +5,23 @@
 
 ## Description
 
-```text
-Inner[f,list1,list2,g]
-    is a generalization of Dot in which f plays the role of multiplication and g of addition.
-Inner[f,list1,list2]
-    uses Plus for g.
-Inner[f,list1,list2,g,n]
-    contracts index n of the first tensor with the first index of the second tensor.
-```
+**`Inner[f,list1,list2,g]`**
 
-## Examples
+is a generalization of Dot in which f plays the role of multiplication and g of addition.
 
-All examples below are verified against the current Mathilda build.
+**`Inner[f,list1,list2]`**
+
+uses Plus for g.
+
+**`Inner[f,list1,list2,g,n]`**
+
+contracts index n of the first tensor with the first index of the second tensor.
+
+## Examples (7)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Inner[f, {a, b}, {x, y}, g]
@@ -28,6 +33,29 @@ Out[2]= {a x + b y, c x + d y}
 In[3]:= Inner[Times, {a1, a2, a3}, {b1, b2, b3}, Plus]
 Out[3]= a1 b1 + a2 b2 + a3 b3
 ```
+
+### Applications (4)
+
+```mathematica
+In[4]:= Inner[Times, {a, b}, {c, d}, Plus]
+Out[4]= a c + b d
+
+In[5]:= Inner[Times, {2, 3, 5}, {7, 11, 13}, Plus]
+Out[5]= 112
+
+In[6]:= Inner[f, {a, b}, {c, d}, g]
+Out[6]= g[f[a, c], f[b, d]]
+
+In[7]:= Inner[Times, {{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}, Plus]
+Out[7]= {{19, 22}, {43, 50}}
+```
+
+## Options & behaviour
+
+> **Packed arrays.** `Inner[Times, a, b, Plus]` **is** a `Dot`, so with two
+> buffers it runs as one — the same BLAS path `a . b` takes. Any other
+> operator pair has no kernel and takes the ordinary path with the same
+> answer.
 
 ## Implementation notes
 
@@ -41,38 +69,16 @@ Out[3]= a1 b1 + a2 b2 + a3 b3
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Dot](../../linear-algebra/Dot/), [Plus](../../arithmetic/Plus/)
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_distribute.c`](https://github.com/stblake/mathilda/blob/main/tests/test_distribute.c)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Inner[Times, {a, b}, {c, d}, Plus]
-Out[1]= a c + b d
-```
-
-```mathematica
-In[1]:= Inner[Times, {2, 3, 5}, {7, 11, 13}, Plus]
-Out[1]= 112
-```
-
-```mathematica
-In[1]:= Inner[f, {a, b}, {c, d}, g]
-Out[1]= g[f[a, c], f[b, d]]
-```
-
-```mathematica
-In[1]:= Inner[Times, {{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}, Plus]
-Out[1]= {{19, 22}, {43, 50}}
-```
 
 ### Notes
 

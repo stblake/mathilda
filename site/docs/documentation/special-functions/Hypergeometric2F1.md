@@ -5,60 +5,51 @@
 
 ## Description
 
-```text
-Hypergeometric2F1[a, b, c, z]
-    is the Gauss hypergeometric 2F1, equal to HypergeometricPFQ[{a, b}, {c}, z].
-```
+**`Hypergeometric2F1[a, b, c, z]`**
 
-## Examples
+is the Gauss hypergeometric 2F1, equal to HypergeometricPFQ\[{a, b}, {c}, z\].
 
-All examples below are verified against the current Mathilda build.
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= Hypergeometric2F1[1, 1, 2, z]
 Out[1]= -Log[1 - z]/z
+```
+
+### Applications (4)
+
+```mathematica
+In[2]:= Hypergeometric2F1[1, 1, 2, z]
+Out[2]= -Log[1 - z]/z
+
+In[3]:= Hypergeometric2F1[-3, 1, 1, z]
+Out[3]= 1 - 3 z + 3 z^2 - z^3
+
+In[4]:= N[Hypergeometric2F1[1/2, 1/2, 3/2, 1/4]/2, 40]
+Out[4]= 0.52359877559829887307710723054658381403285
+
+In[5]:= N[ArcSin[1/2], 40]
+Out[5]= 0.52359877559829887307710723054658381403285
 ```
 
 ## Implementation notes
 
 **Attributes:** `NumericFunction`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_coverage.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_coverage.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_hypergeopfq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hypergeopfq.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Hypergeometric2F1[1, 1, 2, z]
-Out[1]= -Log[1 - z]/z
-```
-
-A non-positive integer upper parameter terminates the Gauss series to a
-polynomial — here `(1 - z)^3`:
-
-```mathematica
-In[1]:= Hypergeometric2F1[-3, 1, 1, z]
-Out[1]= 1 - 3 z + 3 z^2 - z^3
-```
-
-The function reproduces the elementary inverse trig functions: `z *
-2F1[1/2, 1/2, 3/2, z^2] = ArcSin[z]`. Checked at `z = 1/2` to 40 digits:
-
-```mathematica
-In[1]:= N[Hypergeometric2F1[1/2, 1/2, 3/2, 1/4]/2, 40]
-Out[1]= 0.52359877559829887307710723054658381403285
-
-In[2]:= N[ArcSin[1/2], 40]
-Out[2]= 0.52359877559829887307710723054658381403285
-```
 
 ### Notes
 

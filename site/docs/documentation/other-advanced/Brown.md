@@ -5,10 +5,9 @@
 
 ## Description
 
-```text
-Brown
-    The named colour RGBColor[0.6, 0.4, 0.2].
-```
+**`Brown`**
+
+The named colour RGBColor\[0.6, 0.4, 0.2\].
 
 ## Examples
 
@@ -17,10 +16,6 @@ _No verified examples yet for this function._
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
 
 ## References
 

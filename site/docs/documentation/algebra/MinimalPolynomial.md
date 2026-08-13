@@ -5,23 +5,23 @@
 
 ## Description
 
-```text
-MinimalPolynomial[s, x]
-    gives the lowest-degree polynomial in x with integer coefficients,
-    positive leading coefficient and content 1, having the algebraic
-    number s as a root.  s may be built from rationals, radicals, the
-    imaginary unit, roots of unity, and Root[] objects.
-MinimalPolynomial[s]
-    gives the minimal polynomial as a pure function.
-MinimalPolynomial[s, x, Extension -> a]
-    gives the characteristic polynomial of s in Q(a) over Q(a).
-    Computed by resultant elimination of the radicals; threads over
-    lists.
-```
+**`MinimalPolynomial[s, x]`**
 
-## Examples
+gives the lowest-degree polynomial in x with integer coefficients, positive leading coefficient and content 1, having the algebraic number s as a root.  s may be built from rationals, radicals, the imaginary unit, roots of unity, and Root\[\] objects.
 
-All examples below are verified against the current Mathilda build.
+**`MinimalPolynomial[s]`**
+
+gives the minimal polynomial as a pure function.
+
+**`MinimalPolynomial[s, x, Extension -> a]`**
+
+gives the characteristic polynomial of s in Q(a) over Q(a). Computed by resultant elimination of the radicals; threads over lists.
+
+## Examples (9)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= MinimalPolynomial[Sqrt[2] + Sqrt[3], x]
@@ -32,10 +32,86 @@ Out[2]= 1 + x^4
 
 In[3]:= MinimalPolynomial[Root[2 #1^3 - 2 #1 + 7 &, 1] + 17, x]
 Out[3]= -9785 + 1732 x - 102 x^2 + 2 x^3
+```
 
+### Options (1)
+
+```mathematica
 In[4]:= MinimalPolynomial[Sqrt[2], x, Extension -> E^(I Pi/4)]
 Out[4]= 4 - 4 x^2 + x^4
 ```
+
+### Applications (5)
+
+```mathematica
+In[5]:= MinimalPolynomial[Sqrt[2], x]
+Out[5]= -2 + x^2
+
+In[6]:= MinimalPolynomial[(1 + Sqrt[5])/2, x]
+Out[6]= -1 - x + x^2
+
+In[7]:= MinimalPolynomial[Sqrt[2] + Sqrt[3], x]
+Out[7]= 1 - 10 x^2 + x^4
+
+In[8]:= MinimalPolynomial[Cos[2 Pi/5], x]
+Out[8]= -1 + 2 x + 4 x^2
+
+In[9]:= MinimalPolynomial[Sqrt[2 + Sqrt[2]], x]
+Out[9]= 2 - 4 x^2 + x^4
+```
+
+## Options & behaviour
+
+### Algorithm
+
+each algebraic atom of `s` is replaced by a fresh auxiliary
+variable carrying a polynomial defining relation (negative powers become
+reciprocal variables `D w - 1`, so every relation stays polynomial). The
+auxiliaries are eliminated from `x - s` by repeated `Resultant`, the result is
+made primitive over `Z` and factored, and the unique irreducible factor that
+vanishes at `s` (chosen by a high-precision numeric test) is returned. The
+`Extension` form uses the tower law on the degrees produced by the same core,
+with membership `s ∈ Q(a)` verified through the primitive-element degree
+`[Q(a, s) : Q] = [Q(a) : Q]`.
+
+## Algorithm
+
+minpoly.c --------- Implementation of MinimalPolynomial (see minpoly.h for the user-facing description).
+
+Pipeline for MinimalPolynomial[s, x]:
+
+```text
+  1. Atom walk (mp_walk): recursively rewrite the algebraic number s into a
+     "value expression" V written in fresh auxiliary symbols, recording for
+     each auxiliary symbol t_i a polynomial defining relation p_i (in t_i and
+     earlier auxiliaries).  Every relation is kept polynomial — negative
+     powers become reciprocal variables (D*w - 1) so no fractions appear.
+  2. Build g = (x - V) and eliminate each t_i (highest index first) by
+     g <- Resultant[g, p_i, t_i].  The introduction order guarantees t_i is
+     present in g (in V or in a later relation already substituted in) when
+     it is eliminated, and that each relation references only earlier
+     auxiliaries — so the chain terminates in a univariate polynomial G(x).
+  3. Clear denominators (Numerator[Together[G]]), make primitive over Z and
+     factor.  Numerically evaluate s to high precision and pick the unique
+     irreducible factor that vanishes at s.
+  4. Return that factor, primitive with positive leading coefficient.
+```
+
+Extension -> a uses the tower law: if s in Q(a) then the characteristic
+
+```text
+polynomial of s over Q(a) is m_s(x)^([Q(a):Q] / [Q(s):Q]).  Membership is
+```
+
+checked via the primitive-element degree [Q(a,s):Q] == [Q(a):Q].
+
+Memory: the builtin takes ownership of res and returns a fresh Expr* or NULL
+
+```text
+(never frees res).  The internal_* helpers consume their argument Exprs and
+```
+
+return an owned result; numericalize does not consume its input.
 
 ## Implementation notes
 
@@ -54,46 +130,22 @@ Out[4]= 4 - 4 x^2 + x^4
 
 - `Listable`, `Protected`. A `List` first argument threads element-wise.
 - `s` may be built from integers and rationals, radicals (`Sqrt`,
+  `Power[_, p/q]`), the imaginary unit, roots of unity (`Power[E, I Pi r]`),
+  `Root[f &, k]` objects, and the field operations `Plus`/`Times`/`Power`.
+- Non-algebraic input (e.g. `Pi`, `Log[2]`) is left unevaluated.
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [Sqrt](../../arithmetic/Sqrt/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Power](../../arithmetic/Power/), [Pi](../../mathematical-constants/Pi/), [Resultant](../../algebra/Resultant/)
 
 - Source: [`src/poly/minpoly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/minpoly.c)
 - Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
+- Tests: [`tests/test_minimalpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_minimalpolynomial.c)
+- Tests: [`tests/test_rootreduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_rootreduce.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= MinimalPolynomial[Sqrt[2], x]
-Out[1]= -2 + x^2
-```
-
-```mathematica
-In[1]:= MinimalPolynomial[(1 + Sqrt[5])/2, x]
-Out[1]= -1 - x + x^2
-```
-
-```mathematica
-In[1]:= MinimalPolynomial[Sqrt[2] + Sqrt[3], x]
-Out[1]= 1 - 10 x^2 + x^4
-```
-
-```mathematica
-In[1]:= MinimalPolynomial[Cos[2 Pi/5], x]
-Out[1]= -1 + 2 x + 4 x^2
-```
-
-```mathematica
-In[1]:= MinimalPolynomial[Sqrt[2 + Sqrt[2]], x]
-Out[1]= 2 - 4 x^2 + x^4
-```
 
 ### Notes
 

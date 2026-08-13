@@ -1,6 +1,6 @@
 # Scoping Constructs
 
-10 built-in function(s) in this category.
+11 built-in function(s) in this category.
 
 - [`$Context`]($Context.md) — $Context is a string giving the current context. New symbols are created  _(Stable)_
 - [`$ContextPath`]($ContextPath.md) — $ContextPath is a list of contexts used (in order) to resolve bare  _(Stable)_
@@ -11,4 +11,5 @@
 - [`End`](End.md) — End[] restores the context that was active before the matching Begin[]  _(Stable)_
 - [`EndPackage`](EndPackage.md) — EndPackage[] restores the state saved by BeginPackage and prepends the  _(Stable)_
 - [`Module`](Module.md) — Module[{x, y, ...}, expr] specifies that x, y, ... are local variables.  _(Stable)_
+- [`Unique`](Unique.md) — Unique[] generates a new symbol; Unique["x"] or Unique[x] uses a name prefix; Unique[{x, ...}] gives a list of fresh symbols. Each is Temporary and never previously used.  _(Stable)_
 - [`With`](With.md) — With[{x = x0, ...}, expr] specifies that x should be replaced by x0 throughout expr.  _(Stable)_

@@ -5,30 +5,26 @@
 
 ## Description
 
-```text
-Accumulate[list]
-    gives a list of the successive accumulated totals of elements in
-    list. The result has the same length as list.
+**`Accumulate[list]`**
 
-Accumulate[list] is effectively equivalent to FoldList[Plus, list].
-Accumulate works with integers, arbitrary-precision bignums, machine
-doubles, and symbolic expressions, and threads naturally over rows
-(so for a matrix it accumulates within columns). The head of the
-input is preserved:
-    Accumulate[{a, b, c, d}]    ->  {a, a + b, a + b + c, a + b + c + d}
-    Accumulate[f[a, b, c, d]]   ->  f[a, a + b, a + b + c, a + b + c + d]
+gives a list of the successive accumulated totals of elements in list. The result has the same length as list.
 
-Accumulate[list, Method -> "CompensatedSummation"] uses Kahan
-compensated summation to reduce numerical error when every element
-of list is a machine number. For symbolic or mixed input the option
-is ignored and the standard symbolic accumulation is returned.
+**`Accumulate[list] is effectively equivalent to FoldList[Plus, list].`**
 
-Accumulate has the attribute Protected.
-```
+**`Accumulate[list, Method -> "CompensatedSummation"] uses Kahan`**
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+Accumulate works with integers, arbitrary-precision bignums, machine doubles, and symbolic expressions, and threads naturally over rows (so for a matrix it accumulates within columns). The head of the input is preserved: Accumulate\[{a, b, c, d}\]    -\>  {a, a + b, a + b + c, a + b + c + d} Accumulate\[f\[a, b, c, d\]\]   -\>  f\[a, a + b, a + b + c, a + b + c + d\] compensated summation to reduce numerical error when every element of list is a machine number. For symbolic or mixed input the option is ignored and the standard symbolic accumulation is returned. Accumulate has the attribute Protected.
+
+</details>
+
+## Examples (9)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= Accumulate[{a, b, c, d}]
@@ -42,9 +38,29 @@ Out[3]= f[a, a + b, a + b + c, a + b + c + d]
 
 In[4]:= Accumulate[{1, 2, 3, 4, 5}]
 Out[4]= {1, 3, 6, 10, 15}
+```
 
+### Options (1)
+
+```mathematica
 In[5]:= Accumulate[{1.0, 2.0, 3.0}, Method -> "CompensatedSummation"]
 Out[5]= {1.0, 3.0, 6.0}
+```
+
+### Applications (4)
+
+```mathematica
+In[6]:= Accumulate[{1, 2, 3, 4, 5}]
+Out[6]= {1, 3, 6, 10, 15}
+
+In[7]:= Accumulate[{a, b, c, d}]
+Out[7]= {a, a + b, a + b + c, a + b + c + d}
+
+In[8]:= Accumulate[Table[1/k, {k, 1, 5}]]
+Out[8]= {1, 3/2, 11/6, 25/12, 137/60}
+
+In[9]:= Accumulate[{{1, 2}, {3, 4}, {5, 6}}]
+Out[9]= {{1, 2}, {4, 6}, {9, 12}}
 ```
 
 ## Implementation notes
@@ -60,38 +76,18 @@ Out[5]= {1.0, 3.0, 6.0}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Plus](../../arithmetic/Plus/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_ndarray_reduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_reduce.c)
+- Tests: [`tests/test_numloop.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numloop.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Accumulate[{1, 2, 3, 4, 5}]
-Out[1]= {1, 3, 6, 10, 15}
-```
-
-```mathematica
-In[1]:= Accumulate[{a, b, c, d}]
-Out[1]= {a, a + b, a + b + c, a + b + c + d}
-```
-
-```mathematica
-In[1]:= Accumulate[Table[1/k, {k, 1, 5}]]
-Out[1]= {1, 3/2, 11/6, 25/12, 137/60}
-```
-
-```mathematica
-In[1]:= Accumulate[{{1, 2}, {3, 4}, {5, 6}}]
-Out[1]= {{1, 2}, {4, 6}, {9, 12}}
-```
 
 ### Notes
 

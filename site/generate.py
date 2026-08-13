@@ -27,6 +27,7 @@ The generated Markdown is committed so CI only needs MkDocs, not the C toolchain
 
 import json
 import re
+import collections
 import subprocess
 import sys
 from pathlib import Path
@@ -40,6 +41,7 @@ SRC = ROOT / "src"
 SPEC_DIR = ROOT / "docs" / "spec" / "builtins"
 LIMITATIONS = ROOT / "docs" / "spec" / "limitations.md"
 TESTS_DIR = ROOT / "tests"
+PLOTS_OUT = SITE / "docs" / "assets" / "plots"
 DOC_OUT = SITE / "docs" / "documentation"
 ASSETS = SITE / "docs" / "assets"
 OVERLAYS = SITE / "overlays"
@@ -319,7 +321,7 @@ def run_session(lines, timeout=60):
                               text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return None
-    payloads = {}
+    payloads, plots = {}, {}
     for raw in proc.stdout.splitlines():
         raw = raw.strip()
         if not raw or raw[0] != "{":
@@ -328,14 +330,28 @@ def run_session(lines, timeout=60):
             msg = json.loads(raw)
         except ValueError:
             continue
-        if isinstance(msg, dict) and msg.get("type") == "expr" and "payload" in msg:
+        if not isinstance(msg, dict):
+            continue
+        if msg.get("type") == "expr" and "payload" in msg:
             payloads[msg.get("id")] = msg["payload"]
-    return [payloads.get(i, "") for i in range(1, len(lines) + 1)]
+        elif msg.get("type") == "plot":
+            # A graphics result arrives as a plot payload, not an expr, so
+            # collecting only "expr" recorded nothing for it and every graphics
+            # example was then discarded as unevaluated. Plot's page was left
+            # with its one symbolic form, Plot[Sin[x], {x, a, b}], which is a
+            # signature rather than a worked example. "-Graphics-" is what the
+            # REPL prints for the same result.
+            payloads.setdefault(msg.get("id"), "-Graphics-")
+            # Keep the figure itself, not just the fact that there was one, so a
+            # page can show the plot without the reader running anything.
+            plots.setdefault(msg.get("id"), msg.get("payload"))
+    return ([payloads.get(i, "") for i in range(1, len(lines) + 1)],
+            {i: plots[i] for i in plots})
 
 
 def get_attributes(names):
     """Return {name: [attr, ...]} by querying Attributes[name] for each name."""
-    outs = run_session([f"Attributes[{n}]" for n in names], timeout=120)
+    outs, _ = run_session([f"Attributes[{n}]" for n in names], timeout=120)
     attrs = {}
     for name, out in zip(names, outs or []):
         out = (out or "").strip()
@@ -410,10 +426,14 @@ def parse_spec_files():
         # parts = [preamble, heading1, body1, heading2, body2, ...]
         for h, body in zip(parts[1::2], parts[2::2]):
             head = re.sub(r"\(.*?\)", "", h).strip()        # drop "(+)", "(parser-level)"
-            for token in re.split(r"[,/]", head):
-                token = token.strip().strip("`")
-                if NAME_RE.match(token) and token not in sections:
-                    sections[token] = {"category": slug, "body": body}
+            # A heading naming several functions is a curated grouping; record
+            # the whole set so each member can point at the others.
+            group = [t.strip().strip("`") for t in re.split(r"[,/]", head)]
+            group = [t for t in group if NAME_RE.match(t)]
+            for token in group:
+                if token not in sections:
+                    sections[token] = {"category": slug, "body": body,
+                                       "siblings": group}
     return categories, sections
 
 
@@ -443,6 +463,13 @@ def mine_example_inputs(body, limit=8):
             m = IN_RE.match(line)
             if m and m.group(1).strip():
                 cur.append(m.group(1).strip())
+            elif (cur and line.strip() and not OUTLINE_RE.match(line)
+                  and not line.startswith("(*")):
+                # A continuation of the previous input. Without this an example
+                # wrapped across two lines was truncated at the break and then
+                # fed to the binary as a syntax error, so it silently vanished
+                # from the page.
+                cur[-1] = cur[-1] + " " + line.strip()
     total = sum(len(b) for b in blocks)
     # Trim to `limit` inputs total, keeping whole blocks where possible.
     trimmed, count = [], 0
@@ -455,19 +482,93 @@ def mine_example_inputs(body, limit=8):
     return trimmed
 
 
+# A saved figure is a convenience, not the record -- the example is runnable
+# either way -- so it is not worth shipping megabytes for one page. Surface and
+# field plots (Plot3D, StreamPlot) carry tens of thousands of samples and blow
+# past this; line plots land around 10 KB each.
+FIGURE_MAX_BYTES = 150_000
+
+
+def compact_figure(payload):
+    """Round coordinates and drop the figure if it is still too large.
+
+    Six significant digits is far beyond what a few hundred pixels can show,
+    and trimming the tail of every float is most of the saving available
+    without resampling the curve, which would misrepresent it."""
+    def shrink(v):
+        if isinstance(v, float):
+            return round(v, 6)
+        if isinstance(v, list):
+            return [shrink(x) for x in v]
+        if isinstance(v, dict):
+            return {k: shrink(x) for k, x in v.items()}
+        return v
+
+    small = shrink(payload)
+    return small if len(json.dumps(small)) <= FIGURE_MAX_BYTES else None
+
+
+# A worked example written as prose: `Expr[...]` -> `result`, usually in a
+# semicolon-separated run under a "Worked examples" lead-in. 108 of these exist
+# across 19 spec files.
+PROSE_EX_RE = re.compile(
+    r"`([A-Z][A-Za-z0-9]*\[[^`]{3,200}?)`\s*(?:\u2192|->)\s*`[^`\n]{1,120}`")
+
+
+def mine_prose_examples(body, limit=10):
+    """Input expressions from prose worked examples.
+
+    Only the INPUT is taken. The written result is prose -- `\u221a\u03c0/2`,
+    `\u0393[s]`, `\u03c0 a/2` -- not Mathilda syntax, so it cannot be trusted as
+    an expected value and is not shown. Running the inputs turns a claim in prose
+    into an example the reader can execute, with whatever this build actually
+    produces."""
+    seen, out = set(), []
+    for expr in PROSE_EX_RE.findall(body or ""):
+        e = " ".join(expr.split())
+        if e not in seen:
+            seen.add(e)
+            out.append(e)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def strip_prose_examples(text):
+    """Remove the prose runs whose inputs were promoted to real examples, so the
+    page does not state them twice."""
+    if not text:
+        return text
+    out = PROSE_EX_RE.sub("", text)
+    out = re.sub(r"(?im)^\s*Worked examples[^\n]*:\s*$", "", out)
+    out = re.sub(r"[ \t]*;[ \t]*(?=\n)", "", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip() or None
+
+
 def verify_block(inputs):
-    """Run a block's inputs through the binary; return [(in, out), ...] for the
-    ones that produced a non-trivial, evaluated result."""
-    outs = run_session(inputs)
-    if outs is None or len(outs) != len(inputs):
-        return []
-    pairs = []
-    for expr, out in zip(inputs, outs):
+    """Run a block's inputs; return ([(in, out), ...], {input_expr: figure}).
+
+    The figure map carries the Plotly payload for any input that produced
+    graphics, keyed by the input text so it survives the later trimming and
+    renumbering of examples."""
+    result = run_session(inputs)
+    if result is None:
+        return [], {}
+    outs, plots = result
+    if len(outs) != len(inputs):
+        return [], {}
+    pairs, figures = [], {}
+    for idx, (expr, out) in enumerate(zip(inputs, outs), 1):
         out = out.strip()
         if not out or out == "Null":
             continue
         pairs.append((expr, out))
-    return pairs
+        if idx in plots and plots[idx] is not None:
+            fig = compact_figure(plots[idx])
+            if fig is not None:
+                figures[expr] = fig
+    return pairs, figures
 
 
 # ===========================================================================
@@ -560,33 +661,177 @@ def load_impl(name):
 # ===========================================================================
 # 8. Page rendering
 # ===========================================================================
+SIG_RE = re.compile(r"^[A-Z$][A-Za-z0-9$]*(\[|\s*$)")
+
+
 def render_docstring(doc):
-    """Render the raw docstring verbatim in a fenced block — exactly the text a
-    user sees from `?Name` in the REPL. A fenced block is faithful and immune to
-    Markdown injection from arbitrary `[`, `]`, `*`, `_` characters in docstrings."""
+    """Render the docstring as a signature list, with trailing notes collapsed.
+
+    A fenced block was faithful to `?Name` but wrong for a page: a fence never
+    wraps, so a docstring written as one long sentence ran off the right edge.
+
+    Docstrings here follow "signature, indented explanation", but many then add
+    general prose -- "Sin is Listable. Numeric inputs are evaluated via libm..."
+    Treating that as another signature would set a paragraph in code style, so
+    a line only counts as a signature if it actually looks like a call. The rest
+    becomes notes, in a collapsed block under the signatures, where it is
+    available without pushing the examples off the screen.
+
+    Signatures stay in code style so `[`, `*` and `_` inside them cannot be read
+    as Markdown; prose is escaped for the same reason."""
     body = doc.replace("\t", "    ").rstrip()
-    # Guard against the (vanishingly unlikely) docstring containing a fence.
-    fence = "```"
-    while fence in body:
-        fence += "`"
-    return f"{fence}text\n{body}\n{fence}"
+    if not body:
+        return "_No description available._"
 
+    def esc(text):
+        return re.sub(r"([*_`\[\]<>])", r"\\\1", text)
 
-def render_examples(blocks):
+    forms, notes = [], []
+    sig, expl = None, []
+
+    def flush():
+        if sig is not None:
+            forms.append((sig, " ".join(expl)))
+
+    for raw in body.split("\n"):
+        line = raw.rstrip()
+        if not line.strip():
+            continue
+        if line.startswith("    "):
+            (expl if sig is not None else notes).append(line.strip())
+        elif SIG_RE.match(line.strip()):
+            flush()
+            sig, expl = line.strip(), []
+        else:
+            # Prose, not a call: everything from here is a note.
+            flush()
+            sig, expl = None, []
+            notes.append(line.strip())
+    flush()
+
     out = []
-    for pairs in blocks:
+    for form, text in forms:
+        out.append(f"**`{form}`**")
+        out.append("")
+        if text:
+            out.extend([esc(text), ""])
+    if not forms:
+        out.append(esc(" ".join(notes)))
+        notes = []
+    if notes:
+        out.extend(["<details>", "<summary>Notes</summary>", "",
+                    esc(" ".join(notes)), "", "</details>", ""])
+    return "\n".join(out).strip()
+
+
+OPTION_RE = re.compile(r"\b[A-Z][A-Za-z0-9]*\s*->")
+
+
+# A one-line explanation attached to an example, written as a Mathilda comment
+# in the spec or overlay: `Expand[(x+1)^3]  (* binomial coefficients *)`.
+EX_NOTE_RE = re.compile(r"\s*\(\*(.+?)\*\)\s*")
+
+
+def _example_fence(pairs, start=1):
+    """Render examples, each preceded by its explanation when it has one.
+
+    An example carrying a `(* ... *)` comment gets that line as prose above its
+    own fenced block, so the notebook shows a sentence and then the input it
+    describes. Examples without one are grouped into a single fence as before --
+    the alternative would be inventing an explanation, and a documentation page
+    is the last place to put made-up prose.
+
+    The comment is stripped from the input it annotates: it has already been
+    said above the cell, and repeating it inside the expression the reader is
+    about to run is noise."""
+    out, n = [], start
+    run = []
+
+    def flush_run():
+        if not run:
+            return
+        block = ["```mathematica"]
+        for expr, res, _ in run:
+            block.append(expr)
+            block.append(res)
+            block.append("")
+        if block[-1] == "":
+            block.pop()
+        block.append("```")
+        out.append("\n".join(block))
+        run.clear()
+
+    for expr, res in pairs:
+        note = EX_NOTE_RE.search(expr)
+        clean = EX_NOTE_RE.sub(" ", expr).strip() if note else expr
+        inp, outp = f"In[{n}]:= {clean}", f"Out[{n}]= {res}"
+        n += 1
+        if note:
+            flush_run()
+            text = note.group(1).strip()
+            out.append(text[0].upper() + text[1:] if text else text)
+            out.append(f"```mathematica\n{inp}\n{outp}\n```")
+        else:
+            run.append((inp, outp, None))
+    flush_run()
+    return "\n\n".join(out), n
+
+
+def render_examples(blocks, applications=None, worked=None):
+    """Group the verified examples into subsections, each with its count.
+
+    The groupings are derived from structure that already exists rather than
+    invented: an example that passes an option (`Name -> value`) is an options
+    example, the first fenced block of a spec section is its basic set, and any
+    further blocks are additional scope. `Applications` is the overlay's own
+    "Worked examples" section, which every one of the 400 overlays carries.
+
+    A flat list of eight examples tells the reader nothing about which are the
+    simple cases and which are demonstrating an option; the counts make the
+    shape of the page visible before scrolling it."""
+    basic, scope, options = [], [], []
+    for idx, pairs in enumerate(blocks):
+        for pair in pairs:
+            if OPTION_RE.search(pair[0]):
+                options.append(pair)
+            elif idx == 0:
+                basic.append(pair)
+            else:
+                scope.append(pair)
+
+    groups = [("Basic examples", basic), ("Scope", scope), ("Options", options)]
+    if worked:
+        groups.append(("Worked examples", worked))
+    total = sum(len(g) for _, g in groups)
+    app_pairs = applications[1] if applications and applications[0] == "pairs" else None
+    if applications:
+        total += len(app_pairs) if app_pairs is not None else applications[1]
+
+    if not total:
+        return None, 0
+
+    out, n = [], 1
+    for title, pairs in groups:
         if not pairs:
             continue
-        lines = ["```mathematica"]
-        for i, (expr, res) in enumerate(pairs, 1):
-            lines.append(f"In[{i}]:= {expr}")
-            lines.append(f"Out[{i}]= {res}")
-            lines.append("")
-        if lines[-1] == "":
-            lines.pop()
-        lines.append("```")
-        out.append("\n".join(lines))
-    return "\n\n".join(out)
+        fence, n = _example_fence(pairs, n)
+        out.append(f"### {title} ({len(pairs)})")
+        out.append("")
+        out.append(fence)
+        out.append("")
+    if applications:
+        if app_pairs is not None:
+            fence, n = _example_fence(app_pairs, n)
+            out.append(f"### Applications ({len(app_pairs)})")
+            out.append("")
+            out.append(fence)
+        else:
+            body, count = applications
+            out.append(f"### Applications ({count})")
+            out.append("")
+            out.append(body)
+        out.append("")
+    return "\n".join(out).strip(), total
 
 
 def render_impl_notes(name, attrs, section_body, impl_body=None,
@@ -607,9 +852,8 @@ def render_impl_notes(name, attrs, section_body, impl_body=None,
     notes = []
     if impl_body:
         notes.append(impl_body.strip())
-    feat = re.search(r"\*\*Features\*\*:?\s*\n((?:[ \t]*-.*\n?)+)", section_body or "")
-    if feat:
-        bullets = feat.group(1).rstrip()
+    bullets = mine_features(section_body)
+    if bullets:
         if cat_slugs is not None:
             bullets = rewrite_spec_links(bullets, cat_slugs, anchor_to_cat or {})
         notes.append(bullets)
@@ -618,6 +862,357 @@ def render_impl_notes(name, attrs, section_body, impl_body=None,
     else:
         notes.append("**Attributes:** none registered.")
     return "\n\n".join(notes) if notes else "_No additional implementation notes._"
+
+
+def mine_features(section_body):
+    """The ``**Features**`` bullet block, INCLUDING wrapped continuation lines.
+
+    The spec files are hard-wrapped near 80 columns, so a bullet routinely spills
+    onto an indented continuation line that does not itself start with ``-``. A
+    regex of the form ``(?:[ \t]*-.*\n?)+`` stops dead at the first such line,
+    which silently truncated 168 of the 305 sections that have a Features block
+    -- 3351 bullet lines in total, and often mid-sentence. ``TrigFactor`` kept 2
+    lines of 42.
+
+    Scanning line by line instead: a bullet, an indented continuation, or a blank
+    line continues the block; anything flush-left that is not a bullet (the next
+    ``**Bold**`` block, prose, a table) ends it."""
+    if not section_body:
+        return None
+    fi = section_body.find("**Features**")
+    if fi < 0:
+        return None
+    nl = section_body.find("\n", fi)
+    if nl < 0:
+        return None
+    out = []
+    for line in section_body[nl + 1:].split("\n"):
+        if re.match(r"^[ \t]*-", line) or re.match(r"^[ \t]+\S", line) or line.strip() == "":
+            out.append(line)
+        else:
+            break
+    block = "\n".join(out).strip("\n").rstrip()
+    return block if block.lstrip().startswith("-") else None
+
+
+_FENCE_RE = re.compile(r"^```.*?^```[ \t]*$", re.M | re.S)
+
+
+def mine_spec_detail(section_body):
+    """Spec prose that follows the Features block -- option tables, algorithm
+    notes, diagnostics -- which never reached a page at all.
+
+    For FindClusters this is the entire Method compatibility matrix, the
+    suboptions, and the DistanceFunction / CriterionFunction / PerformanceGoal
+    documentation: 53 of the 622 sections carry such a block.
+
+    Fenced blocks are dropped because they are the *source* the example miner
+    reads, and those examples are already rendered under "Examples" after being
+    re-verified against the binary. Keeping them here would print each twice, and
+    the un-verified copy is the worse of the two.
+
+    Only content after an existing Features block is taken. Without that anchor
+    the remainder would start at the top of the section and duplicate the
+    signature bullets that "Description" already shows."""
+    feat = mine_features(section_body)
+    if not feat:
+        return None
+    idx = section_body.find(feat)
+    rest = section_body[idx + len(feat):]
+    rest = _FENCE_RE.sub("", rest)
+    rest = _promote_labels(rest)
+    # A spec section nests four deep; the reference page has only two levels
+    # below the page title, so H4 becomes H3 rather than rendering as literal
+    # '#### text' inside a paragraph.
+    rest = re.sub(r"^#{4,}\s+", "### ", rest, flags=re.M)
+    rest = _drop_empty_headings(rest)
+    rest = re.sub(r"\n{3,}", "\n\n", rest).strip()
+    return rest or None
+
+
+def _drop_empty_headings(text):
+    """Remove headings left with nothing under them.
+
+    The spec marks its example blocks with an '### Examples' heading, and those
+    blocks are stripped here because the examples are mined, re-verified and
+    shown in the Examples section instead. That left the heading behind: a page
+    could carry three or four 'Examples' subsections in a row, each empty and
+    each expanding to nothing."""
+    lines = text.split("\n")
+    keep = [True] * len(lines)
+    for i, line in enumerate(lines):
+        m = re.match(r"^(#{2,6})\s", line)
+        if not m:
+            continue
+        level = len(m.group(1))
+        has_content = False
+        for j in range(i + 1, len(lines)):
+            nxt = re.match(r"^(#{2,6})\s", lines[j])
+            if nxt and len(nxt.group(1)) <= level:
+                break
+            if lines[j].strip():
+                has_content = True
+                break
+        keep[i] = has_content
+    return "\n".join(l for l, k in zip(lines, keep) if k)
+
+
+def _promote_labels(text):
+    """Turn the spec's ``**Method** — ...`` labelled blocks into ``### Method``.
+
+    The spec marks a labelled block with a bold lead-in followed by an em dash or
+    a colon. Rendered as-is these are bold paragraphs, so a long page reads as one
+    undifferentiated run and the option documentation is invisible in the page
+    structure.
+
+    The em-dash/colon requirement is what makes this safe: bold used for emphasis
+    mid-prose (``**infinite**``, ``**cliff**``) can also start a line, and
+    promoting that would invent a heading out of a sentence fragment."""
+    def repl(m):
+        label, sep, tail = m.group(1), m.group(2), m.group(3)
+        return f"### {label}\n\n{tail.lstrip()}" if tail.strip() else f"### {label}\n"
+    return re.sub(r"^\*\*([A-Z][\w /`\"'-]{0,48}?)\*\*\s*(—|:)[ \t]*(.*)$",
+                  repl, text, flags=re.M)
+
+
+# ---------------------------------------------------------------------------
+# Enrichment: algorithm, related symbols, tests, measured performance
+# ---------------------------------------------------------------------------
+
+PERF_CACHE = SITE / "perf.json"
+BENCH_DIR  = ROOT / "benchmarks"
+EXP_DIRS   = [BENCH_DIR, ROOT / "docs" / "experiments"]
+TESTS_DIR  = ROOT / "tests"
+
+
+def comment_to_markdown(body):
+    """Turn a C block comment into Markdown, preserving what is load-bearing.
+
+    These comments are hand-formatted and their layout carries meaning: aligned
+    two-column tables, worked examples with `->`, ASCII diagrams. Reflowing
+    everything into paragraphs destroys exactly the parts worth reading -- an
+    early version merged two separate FindClusters examples onto one line and
+    flattened a table of semantics into a sentence.
+
+    So a line is treated as preformatted when it is indented, when it contains
+    run-together spacing used for column alignment, or when it shows a result
+    with `->`. Short ALL-CAPS lines are the section headings these comments use
+    and become real headings. Everything else is ordinary prose and is
+    reflowed."""
+    lines = [re.sub(r"^\s*\* ?", "", ln) for ln in body.split("\n")]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if not lines:
+        return None
+
+    def preformatted(ln):
+        if re.match(r"^(\s{2,}|\t)", ln):
+            return True
+        stripped = ln.strip()
+        if "  " in stripped:            # column alignment
+            return True
+        if "->" in stripped and stripped.startswith(("FindClusters", "In[", "{")):
+            return True
+        return bool(re.match(r"^[|+`]", stripped))
+
+    def is_heading(ln):
+        t = ln.strip()
+        return (2 <= len(t) <= 48 and t == t.upper()
+                and re.match(r"^[A-Z][A-Z0-9 ,&/()'-]*$", t) is not None
+                and any(c.isalpha() for c in t))
+
+    out, para, code = [], [], []
+
+    def flush_para():
+        if para:
+            out.extend([" ".join(x.strip() for x in para), ""])
+            para.clear()
+
+    def flush_code():
+        if code:
+            while code and not code[-1].strip():
+                code.pop()
+            if code:
+                out.extend(["```text", *code, "```", ""])
+            code.clear()
+
+    for ln in lines:
+        if not ln.strip():
+            if code:
+                code.append("")
+            else:
+                flush_para()
+        elif is_heading(ln):
+            flush_code()
+            flush_para()
+            out.extend([f"### {ln.strip().title()}", ""])
+        elif preformatted(ln):
+            flush_para()
+            code.append(ln)
+        else:
+            flush_code()
+            para.append(ln)
+    flush_code()
+    flush_para()
+    return "\n".join(out).strip() or None
+
+
+def module_builtin_counts(impl_files):
+    """How many public builtins each source file implements."""
+    c = {}
+    for path in impl_files.values():
+        c[path] = c.get(path, 0) + 1
+    return c
+
+
+def source_algorithm(name, module, counts):
+    """The implementation's own account of how it works.
+
+    The file header comment, used only when the file is effectively dedicated
+    to this function (at most three builtins) and the comment is substantial.
+    Those two conditions are what keep this honest: a shared file's header
+    describes the module, not the function, and a one-line header is a title
+    rather than an explanation. The modern one-symbol-per-file modules --
+    list/, numbertheory/, stats/ -- are where the real algorithm prose lives."""
+    if not module or counts.get(module, 0) > 3:
+        return None
+    path = ROOT / module
+    if not path.exists():
+        return None
+    m = re.match(r"\s*/\*(.*?)\*/", path.read_text(errors="replace"), re.S)
+    if not m:
+        return None
+    md = comment_to_markdown(m.group(1))
+    if not md or len(md.split()) < 40:
+        return None
+    return md
+
+
+def implementation_files():
+    """symbol -> the file where its C function is DEFINED.
+
+    `module` in the builtins map is where the function is *registered*, which
+    for most of the tree is a shared init hub -- src/list/list_init.c alone
+    registers dozens. That is the right answer for "where do I look this up"
+    and the wrong one for "what does this file implement": the algorithm prose
+    lives next to the code, in find_clusters.c, not in the registration line.
+
+    Resolved in two hops: the registration names the C function, and a scan of
+    the tree says where that function is defined. Exact, and free of guesswork
+    about how a symbol name maps to an identifier."""
+    reg = re.compile(r'symtab_add_builtin\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*(\w+)')
+    define = re.compile(r"^\s*(?:static\s+)?Expr\s*\*\s*(\w+)\s*\(", re.M)
+    fn_to_file, sym_to_fn = {}, {}
+    for cfile in sorted(SRC.rglob("*.c")):
+        if "external" in cfile.parts:
+            continue
+        text = cfile.read_text(errors="replace")
+        rel = cfile.relative_to(ROOT).as_posix()
+        for m in define.finditer(text):
+            fn_to_file.setdefault(m.group(1), rel)
+        for m in reg.finditer(text):
+            sym = m.group(1).encode().decode("unicode_escape")
+            sym_to_fn.setdefault(sym, m.group(2))
+    return {sym: fn_to_file[fn] for sym, fn in sym_to_fn.items() if fn in fn_to_file}
+
+
+def build_related(sections, valid):
+    """symbol -> related symbols, strongest signal first.
+
+    Two sources, both semantic rather than alphabetical. A spec heading that
+    names several functions ("## AtomQ, NumberQ, IntegerQ") is a curated
+    grouping, so its members are each other's closest relatives; after that,
+    any function this one's own spec section names in backticks."""
+    related = {}
+    for name, info in sections.items():
+        sibs = [s for s in info.get("siblings", []) if s != name and s in valid]
+        body = info.get("body", "") or ""
+        mentioned = []
+        for m in re.findall(r"`([A-Z$][A-Za-z0-9$]*)`", body):
+            if m != name and m in valid and m not in sibs and m not in mentioned:
+                mentioned.append(m)
+        picked = sibs + mentioned
+        if picked:
+            related[name] = picked[:8]
+    return related
+
+
+def tests_for(name):
+    """Test files that exercise this function, as evidence rather than a claim.
+
+    "Exercised by the test suite" appears in every Stable badge; naming the
+    file lets a reader check."""
+    if not TESTS_DIR.is_dir():
+        return []
+    hits = []
+    pat = re.compile(r"\b%s\s*\[" % re.escape(name))
+    for f in sorted(TESTS_DIR.glob("test_*.c")):
+        try:
+            if pat.search(f.read_text(errors="replace")):
+                hits.append(f.relative_to(ROOT).as_posix())
+        except OSError:
+            continue
+    return hits[:4]
+
+
+def load_perf():
+    """Measured timings from tools/docs_perf.py, if it has been run.
+
+    Kept in a cache rather than measured inline: timing hundreds of functions
+    would dominate generation, and a stale-but-labelled number beats making
+    every doc build slow."""
+    if not PERF_CACHE.exists():
+        return {}
+    try:
+        return json.loads(PERF_CACHE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def load_bench_rows():
+    """The most recent complete benchmark run: real Mathilda / Wolfram / Python
+    times for each case, already cross-checked for agreement."""
+    res = sorted((BENCH_DIR / "results").glob("*.json")) if (BENCH_DIR / "results").is_dir() else []
+    res = [p for p in res if "partial" not in p.name]
+    if not res:
+        return []
+    try:
+        return json.loads(res[-1].read_text()).get("rows", [])
+    except (OSError, ValueError):
+        return []
+
+
+def experiment_attribution(valid):
+    """symbol -> {experiment names}.
+
+    An experiment counts for a function when its header names the function or
+    the source file implementing it, or when the body calls it repeatedly. The
+    header is the strong signal (it states what the experiment measures); the
+    repeat-call rule catches experiments whose header is written in prose."""
+    attr = {}
+    for base in EXP_DIRS:
+        if not base.is_dir():
+            continue
+        for d in sorted(base.iterdir()):
+            if not d.is_dir() or not re.match(r"^\d\d-", d.name):
+                continue
+            for mfile in d.glob("*.m"):
+                try:
+                    txt = mfile.read_text(errors="replace")
+                except OSError:
+                    continue
+                head = re.match(r"\s*\(\*(.*?)\*\)", txt, re.S)
+                hdr = head.group(1) if head else ""
+                names = set(re.findall(r"\b([A-Z][A-Za-z0-9]{2,})\b", hdr)) & valid
+                for sym, cnt in collections.Counter(
+                        re.findall(r"\b([A-Z][A-Za-z0-9]{2,})\[", txt)).items():
+                    if sym in valid and cnt >= 3:
+                        names.add(sym)
+                for sym in names:
+                    attr.setdefault(sym, set()).add(d.name)
+    return attr
 
 
 def render_page(info):
@@ -633,32 +1228,90 @@ def render_page(info):
                  else "_No description available._")
     lines.append("")
 
-    lines.append("## Examples")
+    ex, total = render_examples(info["examples"], info.get("applications"),
+                                info.get("worked"))
+    lines.append(f"## Examples ({total})" if total else "## Examples")
     lines.append("")
-    ex = render_examples(info["examples"])
     if ex:
-        lines.append("All examples below are verified against the current "
-                     "Mathilda build.")
+        lines.append("Every input below was run against the current Mathilda "
+                     "build and its output recorded.")
         lines.append("")
         lines.append(ex)
     else:
         lines.append("_No verified examples yet for this function._")
     lines.append("")
 
+    if info.get("spec_detail"):
+        # Options, algorithm behaviour and diagnostics, promoted out of the spec.
+        # Placed before "Implementation notes" because it documents what the
+        # function DOES; the notes below are about how it is built.
+        lines.append("## Options & behaviour")
+        lines.append("")
+        lines.append(info["spec_detail"])
+        lines.append("")
+
+    if info.get("algorithm"):
+        # How it actually works, taken from the implementation's own header
+        # comment. This is the section a reference page usually cannot have:
+        # it is written by whoever wrote the code, next to the code, so it goes
+        # stale only when the file does.
+        lines.append("## Algorithm")
+        lines.append("")
+        lines.append(info["algorithm"])
+        lines.append("")
+
+    perf = info.get("perf")
+    bench = info.get("bench") or []
+    if perf or bench:
+        lines.append("## Performance")
+        lines.append("")
+        if perf:
+            lines.append(f"Measured on {perf.get('host', 'the build machine')}"
+                         f" at commit `{perf.get('commit', 'unknown')[:9]}`.")
+            lines.append("")
+            lines.append("| case | n | time |")
+            lines.append("|---|---:|---:|")
+            for row in perf.get("rows", []):
+                lines.append(f"| {row['case']} | {row['n']:,} | {row['time']} |")
+            lines.append("")
+        if bench:
+            lines.append("Against other systems, from the benchmark suite "
+                         "(same input, results cross-checked for agreement):")
+            lines.append("")
+            lines.append("| case | Mathilda | Wolfram | Python |")
+            lines.append("|---|---:|---:|---:|")
+            for r in bench:
+                t = r.get("times", {})
+                def fmt(v):
+                    return "--" if v is None else (f"{v:.3g} s" if isinstance(v, (int, float)) else str(v))
+                lines.append(f"| {r.get('label', '')} | {fmt(t.get('mathilda'))} "
+                             f"| {fmt(t.get('wolfram'))} | {fmt(t.get('python'))} |")
+            lines.append("")
+
     lines.append("## Implementation notes")
     lines.append("")
     lines.append(info["notes"])
     lines.append("")
 
-    lines.append("## Implementation status")
-    lines.append("")
-    lines.append(f"**{label}** — {rationale}")
-    lines.append("")
-
     lines.append("## References")
     lines.append("")
+    if info.get("related"):
+        # Related functions live here rather than in a section of their own:
+        # both answer "where do I go from this page", and one heading for that
+        # is enough. From the spec's own groupings, not an alphabetical
+        # neighbourhood -- a heading naming several functions is a curated set,
+        # and a function named in this one's prose is one the author thought
+        # worth mentioning.
+        urls = info.get("related_urls", {})
+        lines.append("**See also:** " + ", ".join(
+            f"[{r}](../../{urls[r]}/)" if r in urls else f"`{r}`"
+            for r in info["related"]))
+        lines.append("")
     for r in info["references"]:
         lines.append(f"- {r}")
+    for t in info.get("tests", []):
+        # Evidence for the "exercised by the test suite" claim in the badge.
+        lines.append(f"- Tests: [`{t}`](https://github.com/stblake/mathilda/blob/main/{t})")
     lines.append("")
 
     if info.get("overlay_body"):
@@ -704,7 +1357,7 @@ def emit_flint_section(tests_text, lim_text):
         body = bodies.get(name, "")
         blocks = []
         for inputs in mine_example_inputs(body):
-            pairs = verify_block(inputs)
+            pairs, _ = verify_block(inputs)   # FLINT routines emit no graphics
             if pairs:
                 blocks.append(pairs)
                 verified += len(pairs)
@@ -712,10 +1365,11 @@ def emit_flint_section(tests_text, lim_text):
                                tests_text, lim_text)
         refs = build_references(name, flint[name]["module"], FLINT_SLUG, spec_rel)
         notes = render_impl_notes(name, attrs.get(name, []), body)
+        detail = mine_spec_detail(body)
         info = {
             "name": name, "doc": flint[name]["doc"], "attrs": attrs.get(name, []),
             "examples": blocks, "status": status, "references": refs,
-            "notes": notes, "overlay_body": None,
+            "notes": notes, "overlay_body": None, "spec_detail": detail,
         }
         (cdir / f"{slug}.md").write_text(render_page(info))
         summary = flint[name]["doc"].split("\n", 1)[0] if flint[name]["doc"] else ""
@@ -806,6 +1460,29 @@ def main():
 
     anchor_to_cat = {nm.lower(): (_cat_of(nm), nm) for nm in names}
 
+    # ---- enrichment indices, computed once for the whole run ----
+    valid = set(names)
+    impl_files = implementation_files()
+    mod_counts = module_builtin_counts(impl_files)
+    related = build_related(sections, valid)
+    related_urls = {nm: f"{_cat_of(nm)}/{nm}" for nm in names}
+    perf_data = load_perf()
+
+    attribution = experiment_attribution(valid)
+    bench_rows = load_bench_rows()
+    bench_by_symbol = {}
+    for sym, exps in attribution.items():
+        rows = [r for r in bench_rows if r.get("experiment") in exps]
+        # Keep the page readable: the slowest few cases say the most about
+        # where a function actually costs something.
+        rows.sort(key=lambda r: (r.get("times") or {}).get("mathilda") or 0, reverse=True)
+        if rows:
+            bench_by_symbol[sym] = rows[:6]
+    print(f"  enrichment: {len(related)} with related symbols, "
+          f"{len(bench_by_symbol)} with benchmark rows, "
+          f"{len(perf_data)} with measured timings")
+
+    plots_written = 0
     print("Building + verifying pages ...")
     for name in names:
         sec = sections.get(name)
@@ -818,11 +1495,22 @@ def main():
         spec_rel = cat_spec.get(doc_slug or cat, "")
 
         blocks = []
+        figures = {}
         for inputs in mine_example_inputs(body):
-            pairs = verify_block(inputs)
+            pairs, figs = verify_block(inputs)
             if pairs:
                 blocks.append(pairs)
+                figures.update(figs)
                 verified_examples += len(pairs)
+
+        # Worked examples written as prose. Their inputs are real expressions;
+        # their stated results are prose, so the binary supplies the output.
+        worked_pairs = []
+        prose_inputs = mine_prose_examples(body)
+        if prose_inputs:
+            worked_pairs, wfigs = verify_block(prose_inputs)
+            figures.update(wfigs)
+            verified_examples += len(worked_pairs)
 
         status = derive_status(name, builtins[name]["doc"], bool(blocks),
                                tests_text, lim_text)
@@ -846,9 +1534,15 @@ def main():
             refs = impl_refs + refs
         notes = render_impl_notes(name, attrs.get(name, []), body, impl_body,
                                   cat_slugs, anchor_to_cat)
+        detail = mine_spec_detail(body)
+        if detail:
+            detail = strip_prose_examples(detail)
+        if detail:
+            detail = rewrite_spec_links(detail, cat_slugs, anchor_to_cat)
 
         overlay = load_overlay(name)
         overlay_body = None
+        applications = None
         if overlay:
             m = overlay["meta"]
             if m.get("status") in STATUS_BADGE:
@@ -856,6 +1550,34 @@ def main():
             if isinstance(m.get("references"), list) and m["references"]:
                 refs = m["references"] + refs
             overlay_body = overlay["body"] or None
+            # The overlay's own "Worked examples" belong with the examples, not
+            # in a footnote section below the references. Lift them out; the
+            # remaining notes stay where they are.
+            if overlay_body:
+                m = re.search(r"^###\s*Worked examples\s*$(.*?)(?=^###\s|\Z)",
+                              overlay_body, re.S | re.M)
+                if m and m.group(1).strip():
+                    app_body = m.group(1).strip()
+                    # Parse into (input, output) pairs so these render through the
+                    # same path as every other example group -- which is what
+                    # lifts a `(* ... *)` note out as a sentence above the cell.
+                    app_pairs = []
+                    for blk in re.findall(r"```mathematica\n(.*?)```", app_body, re.S):
+                        lines = blk.rstrip().split("\n")
+                        for i, ln in enumerate(lines):
+                            mi = re.match(r"^In\[\d+\]:=\s?(.*)$", ln)
+                            if not mi:
+                                continue
+                            mo = (re.match(r"^Out\[\d+\]=\s?(.*)$", lines[i + 1])
+                                  if i + 1 < len(lines) else None)
+                            if mo:
+                                app_pairs.append((mi.group(1).strip(), mo.group(1).strip()))
+                    if app_pairs:
+                        applications = ("pairs", app_pairs)
+                    else:
+                        applications = (app_body, len(re.findall(r"^In\[", app_body, re.M)) or 1)
+                    overlay_body = (overlay_body[:m.start()] +
+                                    overlay_body[m.end():]).strip() or None
 
         # Dedupe references, preserving first-seen order (impl, then overlay, then base).
         seen_refs, deduped = set(), []
@@ -869,7 +1591,15 @@ def main():
             "name": name, "category": cat, "doc": builtins[name]["doc"],
             "attrs": attrs.get(name, []), "examples": blocks, "status": status,
             "references": refs, "notes": notes, "module": builtins[name]["module"],
-            "overlay_body": overlay_body,
+            "overlay_body": overlay_body, "spec_detail": detail,
+            "applications": applications, "worked": worked_pairs,
+            "algorithm": source_algorithm(name, impl_files.get(name), mod_counts),
+            "figures": figures,
+            "related": related.get(name, []),
+            "related_urls": related_urls,
+            "tests": tests_for(name),
+            "perf": perf_data.get(name),
+            "bench": bench_by_symbol.get(name, []),
         }
 
     # ---- emit per-builtin pages, grouped by category ----------------------
@@ -916,6 +1646,15 @@ def main():
         for name in members:
             (cdir / f"{name}.md").write_text(render_page(pages[name]))
             npages += 1
+            # Saved figures, so a graphics example shows its plot before the
+            # reader runs anything. Keyed by the input text rather than by
+            # position, which survives example trimming and renumbering.
+            figs = pages[name].get("figures") or {}
+            if figs:
+                pdir = PLOTS_OUT / slug
+                pdir.mkdir(parents=True, exist_ok=True)
+                (pdir / f"{name}.json").write_text(json.dumps(figs))
+                plots_written += 1
 
     # ---- FLINT` context section (its own generation path) -----------------
     flint_entries = emit_flint_section(tests_text, lim_text)
@@ -979,6 +1718,7 @@ def main():
     for p in pages.values():
         statuses[p["status"]] = statuses.get(p["status"], 0) + 1
     print(f"\nDone. {npages} pages written.")
+    print(f"  Saved figures:     {plots_written} function(s)")
     print(f"  Verified examples: {verified_examples}")
     print(f"  Status breakdown:  {statuses}")
     overlays = list(OVERLAYS.glob("*.md")) if OVERLAYS.exists() else []

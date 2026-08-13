@@ -5,15 +5,39 @@
 
 ## Description
 
-```text
-Cot[z]
-    gives the cotangent of z. Equivalent to Cos[z] / Sin[z].
+**`Cot[z]`**
+
+gives the cotangent of z. Equivalent to Cos\[z\] / Sin\[z\].
+
+<details>
+<summary>Notes</summary>
+
 Cot is Listable. Singularities at z = k Pi yield ComplexInfinity.
+
+</details>
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (5)
+
+```mathematica
+In[1]:= Cot[Pi/4]
+Out[1]= 1
+
+In[2]:= Cot[Pi/12]
+Out[2]= 2 + Sqrt[3]
+
+In[3]:= N[Cot[1], 40]
+Out[3]= 0.64209261593433070300641998659426562023026
+
+In[4]:= Series[Cot[x], {x, 0, 5}]
+Out[4]= 1/x - 1/3 x - 1/45 x^3 - 2/945 x^5 + O[x]^6
+
+In[5]:= Cot[I]
+Out[5]= -I Coth[1]
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -23,43 +47,16 @@ _No verified examples yet for this function._
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/trig.c`](https://github.com/stblake/mathilda/blob/main/src/trig.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
+- Tests: [`tests/test_complexexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complexexpand.c)
+- Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
+- Tests: [`tests/test_integrate_derivdivides.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_derivdivides.c)
+- Tests: [`tests/test_integrate_dispatch.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_dispatch.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Cot[Pi/4]
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= Cot[Pi/12]
-Out[1]= 2 + Sqrt[3]
-```
-
-```mathematica
-In[1]:= N[Cot[1], 40]
-Out[1]= 0.64209261593433070300641998659426562023026
-```
-
-```mathematica
-In[1]:= Series[Cot[x], {x, 0, 5}]
-Out[1]= 1/x - 1/3 x - 1/45 x^3 - 2/945 x^5 + O[x]^6
-```
-
-```mathematica
-In[1]:= Cot[I]
-Out[1]= -I Coth[1]
-```
 
 ### Notes
 

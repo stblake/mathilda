@@ -5,13 +5,27 @@
 
 ## Description
 
-```text
-Block[{x, y, ...}, expr] evaluates expr with local values for x, y, ....
+**`Block[{x, y, ...}, expr] evaluates expr with local values for x, y, ....`**
+
+## Examples (4)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (4)
+
+```mathematica
+In[1]:= x = 10
+Out[1]= 10
+
+In[2]:= Block[{x = 3}, x^2]
+Out[2]= 9
+
+In[3]:= x
+Out[3]= 10
+
+In[4]:= Block[{n = 5}, Sum[k, {k, 1, n}]]
+Out[4]= 15
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -27,34 +41,18 @@ The body is then `evaluate`d directly — any reference to `x` anywhere in the c
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/)
 
 - Source: [`src/modular.c`](https://github.com/stblake/mathilda/blob/main/src/modular.c)
 - Specification: [`docs/spec/builtins/scoping-constructs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/scoping-constructs.md)
+- Tests: [`tests/test_limit_assumptions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_limit_assumptions.c)
+- Tests: [`tests/test_ludecomposition.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ludecomposition.c)
+- Tests: [`tests/test_ludecomposition_machine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ludecomposition_machine.c)
+- Tests: [`tests/test_ludecomposition_mpfr.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ludecomposition_mpfr.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= x = 10
-Out[1]= 10
-
-In[2]:= Block[{x = 3}, x^2]
-Out[2]= 9
-
-In[3]:= x
-Out[3]= 10
-```
-
-```mathematica
-In[1]:= Block[{n = 5}, Sum[k, {k, 1, n}]]
-Out[1]= 15
-```
 
 ### Notes
 

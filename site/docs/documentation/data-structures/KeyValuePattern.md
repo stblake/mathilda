@@ -5,17 +5,15 @@
 
 ## Description
 
-```text
-KeyValuePattern[{k1 -> p1, ...}]
-    A pattern matching an association (or
-    list of rules) that contains keys matching k1, ... with values matching
-    p1, .... Value patterns may bind (e.g. KeyValuePattern[{"a" -> v_}]).
-    KeyValuePattern[k -> p] is the single-key form.
-```
+**`KeyValuePattern[{k1 -> p1, ...}]`**
 
-## Examples
+A pattern matching an association (or list of rules) that contains keys matching k1, ... with values matching p1, .... Value patterns may bind (e.g. KeyValuePattern\[{"a" -\> v\_}\]). KeyValuePattern\[k -\> p\] is the single-key form.
 
-All examples below are verified against the current Mathilda build.
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= MatchQ[<|"a" -> 1, "b" -> 2|>, KeyValuePattern[{"a" -> _}]]
@@ -28,25 +26,22 @@ In[3]:= Cases[{<|"t" -> 1|>, <|"t" -> 2|>, <|"x" -> 3|>}, KeyValuePattern[{"t" -
 Out[3]= {<|"t" -> 1|>, <|"t" -> 2|>}
 ```
 
-```mathematica
-In[1]:= Cases[{<|"p" -> 3|>, <|"p" -> 9|>}, KeyValuePattern[{"p" -> v_}] /; v > 5 :> v]
-Out[1]= {9}
-```
+### Scope (2)
 
 ```mathematica
-In[1]:= area[KeyValuePattern[{"w" -> w_, "h" -> h_}]] := w h; area[<|"w" -> 3, "h" -> 4|>]
-Out[1]= 12
+In[4]:= Cases[{<|"p" -> 3|>, <|"p" -> 9|>}, KeyValuePattern[{"p" -> v_}] /; v > 5 :> v]
+Out[4]= {9}
+
+In[5]:= area[KeyValuePattern[{"w" -> w_, "h" -> h_}]] := w h; area[<|"w" -> 3, "h" -> 4|>]
+Out[5]= 12
 ```
 
 ## Implementation notes
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)

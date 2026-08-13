@@ -5,18 +5,44 @@
 
 ## Description
 
-```text
-Get["filename"]
-    reads expressions from a file, evaluates them in order, and returns the last result.
-Expressions are separated by a newline or a semicolon; a trailing ; is not required.
-A line break inside (), [], {} or <||> is insignificant, so one expression may span lines.
-Returns $Failed if the file cannot be opened.
-It is conventional to use names ending in .m for files containing Mathilda input.
+**`Get["filename"]`**
+
+reads expressions from a file, evaluates them in order, and returns the last result.
+
+<details>
+<summary>Notes</summary>
+
+Expressions are separated by a newline or a semicolon; a trailing ; is not required. A line break inside (), \[\], {} or \<||\> is insignificant, so one expression may span lines. Returns $Failed if the file cannot be opened. It is conventional to use names ending in .m for files containing Mathilda input.
+
+</details>
+
+## Examples (2)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (2)
+
+```mathematica
+In[1]:= Put[x^2 + 1, "/tmp/mathilda_demo.m"]
+Out[1]= Null
+
+In[2]:= Get["/tmp/mathilda_demo.m"]
+Out[2]= 1 + x^2
 ```
 
-## Examples
+## Algorithm
 
-_No verified examples yet for this function._
+readwrite.c - File I/O builtins (Get, Put).
+
+Get reads Mathilda source from a file and evaluates each expression, returning the last value (used by the REPL bootstrap to load the internal .m initialization files).
+
+Put writes one or more expressions to a file in InputForm so the
+
+```text
+output can be read back with Get.  The parser also recognises the
+```
+
+infix shorthand `expr >> "file"` and lowers it to `Put[expr, "file"]`.
 
 ## Implementation notes
 
@@ -29,26 +55,16 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/readwrite.c`](https://github.com/stblake/mathilda/blob/main/src/readwrite.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
+- Tests: [`tests/test_crc_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_crc_corpus.c)
+- Tests: [`tests/test_fullsimplify_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fullsimplify_corpus.c)
+- Tests: [`tests/test_integrals.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrals.c)
+- Tests: [`tests/test_intrat_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_intrat_corpus.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Put[x^2 + 1, "/tmp/mathilda_demo.m"]
-Out[1]= Null
-
-In[2]:= Get["/tmp/mathilda_demo.m"]
-Out[2]= 1 + x^2
-```
 
 ### Notes
 

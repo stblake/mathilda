@@ -5,18 +5,24 @@
 
 ## Description
 
-```text
-Element[x, dom]
-    returns True if x is provably an element of the domain dom under the current $Assumptions, False if it is provably not, and stays unevaluated otherwise.
-Supported domains: Integers, Rationals, Reals, Algebraics, Complexes, Booleans, Primes, Composites.
-Numeric and structural literals decide directly: Element[5, Integers] -> True, Element[5/2, Integers] -> False, Element[1+I, Reals] -> False, Element[2.5, Integers] -> False.
-Element consults $Assumptions for symbolic queries, so under Assuming[Element[x, Integers], ...] a query Element[x, Reals] returns True via the Integer => Real lattice.
-Element[{x1, ..., xN}, dom] and Element[x1 | ... | xN, dom] are shorthand for the conjunction Element[x1, dom] && ... && Element[xN, dom]: True/False if every component decides, otherwise unevaluated and treated as a joint per-variable fact by Simplify.
-```
+**`Element[x, dom]`**
 
-## Examples
+returns True if x is provably an element of the domain dom under the current $Assumptions, False if it is provably not, and stays unevaluated otherwise.
 
-All examples below are verified against the current Mathilda build.
+**`Element[{x1, ..., xN}, dom] and Element[x1 | ... | xN, dom] are shorthand for the conjunction Element[x1, dom] && ... && Element[xN, dom]: True/False if every component decides, otherwise unevaluated and treated as a joint per-variable fact by Simplify.`**
+
+<details>
+<summary>Notes</summary>
+
+Supported domains: Integers, Rationals, Reals, Algebraics, Complexes, Booleans, Primes, Composites. Numeric and structural literals decide directly: Element\[5, Integers\] -\> True, Element\[5/2, Integers\] -\> False, Element\[1+I, Reals\] -\> False, Element\[2.5, Integers\] -\> False. Element consults $Assumptions for symbolic queries, so under Assuming\[Element\[x, Integers\], ...\] a query Element\[x, Reals\] returns True via the Integer =\> Real lattice.
+
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= Element[7, Primes]
@@ -30,6 +36,28 @@ Out[3]= False
 
 In[4]:= Element[x, Reals]
 Out[4]= Element[x, Reals]
+```
+
+### Applications (6)
+
+```mathematica
+In[5]:= Element[5, Integers]
+Out[5]= True
+
+In[6]:= Element[5/2, Integers]
+Out[6]= False
+
+In[7]:= Element[7, Primes]
+Out[7]= True
+
+In[8]:= Element[1 + I, Algebraics]
+Out[8]= True
+
+In[9]:= Element[{2, 3, 5, 7}, Primes]
+Out[9]= True
+
+In[10]:= Assuming[Element[x, Integers], Element[x, Reals]]
+Out[10]= True
 ```
 
 ## Implementation notes
@@ -58,49 +86,29 @@ persistent state.
 
 - `Protected`.
 - Supported domains: `Integers`, `Rationals`, `Reals`, `Algebraics`, `Complexes`,
+  `Booleans`, `Primes`, `Composites`.
+- Numeric and structural literals decide directly. Symbolic queries consult
+  `$Assumptions`, honouring the `Integer ⊆ Rational ⊆ Algebraic ⊆ Real ⊆ Complex`
+  lattice.
+- `Element[{x1, ..., xN}, dom]` and `Element[x1 | ... | xN, dom]` are shorthand
+  for the conjunction `Element[x1, dom] && ... && Element[xN, dom]`: `True` /
+  `False` if every component decides, otherwise unevaluated (and treated as a
+  joint per-variable fact by `Simplify`).
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [$Assumptions](../../simplification/$Assumptions/), [Simplify](../../simplification/Simplify/)
 
 - Source: [`src/simp/simp_builtins.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp_builtins.c)
 - Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)
+- Tests: [`tests/test_element.c`](https://github.com/stblake/mathilda/blob/main/tests/test_element.c)
+- Tests: [`tests/test_fullsimplify.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fullsimplify.c)
+- Tests: [`tests/test_integrate_diffunderint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_diffunderint.c)
+- Tests: [`tests/test_limit_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_limit_stress.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Element[5, Integers]
-Out[1]= True
-```
-
-```mathematica
-In[1]:= Element[5/2, Integers]
-Out[1]= False
-```
-
-```mathematica
-In[1]:= Element[7, Primes]
-Out[1]= True
-
-In[2]:= Element[1 + I, Algebraics]
-Out[2]= True
-```
-
-```mathematica
-In[1]:= Element[{2, 3, 5, 7}, Primes]
-Out[1]= True
-```
-
-```mathematica
-In[1]:= Assuming[Element[x, Integers], Element[x, Reals]]
-Out[1]= True
-```
 
 ### Notes
 

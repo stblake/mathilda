@@ -5,32 +5,13 @@
 
 ## Description
 
-```text
-__ or BlankSequence[] represents a sequence of one or more expressions.
-```
+\_\_ or BlankSequence\[\] represents a sequence of one or more expressions.
 
-## Examples
+## Examples (3)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
 
-## Implementation notes
-
-`BlankSequence` is a pattern object head, not an evaluator builtin: `__` parses to `BlankSequence[]` and `__h` to `BlankSequence[h]` (and `x__` to `Pattern[x, BlankSequence[...]]`). It matches a sequence of **one or more** consecutive arguments. The matcher recognises it in `src/match.c` via `is_sequence_blank`, which sets `min_len = 1` and reports the optional head constraint. Sequence matching against an argument list is handled by `match_args_internal`, which backtracks over the possible partitions of the argument run; an optional head `h` requires every element of the matched run to have head `h` (same atomic-type-to-head mapping as `Blank`). Contrast `BlankNullSequence` (`min_len = 0`).
-
-**Attributes:** none registered.
-
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
-
-## References
-
-- Source: [`src/match.c`](https://github.com/stblake/mathilda/blob/main/src/match.c)
-- Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (3)
 
 ```mathematica
 In[1]:= MatchQ[f[1, 2], f[__]]
@@ -42,6 +23,19 @@ Out[2]= False
 In[3]:= FullForm[__]
 Out[3]= BlankSequence[]
 ```
+
+## Implementation notes
+
+`BlankSequence` is a pattern object head, not an evaluator builtin: `__` parses to `BlankSequence[]` and `__h` to `BlankSequence[h]` (and `x__` to `Pattern[x, BlankSequence[...]]`). It matches a sequence of **one or more** consecutive arguments. The matcher recognises it in `src/match.c` via `is_sequence_blank`, which sets `min_len = 1` and reports the optional head constraint. Sequence matching against an argument list is handled by `match_args_internal`, which backtracks over the possible partitions of the argument run; an optional head `h` requires every element of the matched run to have head `h` (same atomic-type-to-head mapping as `Blank`). Contrast `BlankNullSequence` (`min_len = 0`).
+
+**Attributes:** none registered.
+
+## References
+
+- Source: [`src/match.c`](https://github.com/stblake/mathilda/blob/main/src/match.c)
+- Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
+
+## Notes & additional examples
 
 ### Notes
 

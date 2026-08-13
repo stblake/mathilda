@@ -5,20 +5,26 @@
 
 ## Description
 
-```text
-Factor[poly] factors a polynomial over the integers.
-Factor[poly, Extension -> alpha] factors over Q(alpha), where alpha is
-Sqrt[c], c^(1/n) (rational c), or I.  Implements Trager's algebraic-
-factoring algorithm via norm + sqfr_norm + alg_factor.
-Factor[poly, Extension -> {alpha_1, ..., alpha_n}] factors over the
-compositum Q(alpha_1, ..., alpha_n).  The tower is reduced to a single
-primitive element gamma = alpha_1 + s_2 alpha_2 + ... via Trager's
-primitive-element algorithm (Phase G6).
-```
+**`Factor[poly] factors a polynomial over the integers.`**
 
-## Examples
+**`Factor[poly, Extension -> alpha] factors over Q(alpha), where alpha is`**
 
-All examples below are verified against the current Mathilda build.
+**`Sqrt[c], c^(1/n) (rational c), or I.  Implements Trager's algebraic-`**
+
+**`Factor[poly, Extension -> {alpha_1, ..., alpha_n}] factors over the`**
+
+<details>
+<summary>Notes</summary>
+
+factoring algorithm via norm + sqfr\_norm + alg\_factor. compositum Q(alpha\_1, ..., alpha\_n).  The tower is reduced to a single primitive element gamma = alpha\_1 + s\_2 alpha\_2 + ... via Trager's primitive-element algorithm (Phase G6).
+
+</details>
+
+## Examples (13)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Factor[1 + 2x + x^2]
@@ -36,6 +42,51 @@ Out[4]= (a + x) (a - x) (3 a^2 - 2 x y)
 In[5]:= Factor[(x^3 + 2x^2)/(x^2 - 4y^2) - (x + 2)/(x^2 - 4y^2)]
 Out[5]= ((-1 + x) (1 + x) (2 + x))/((x - 2 y) (x + 2 y))
 ```
+
+### Worked examples (1)
+
+```mathematica
+In[6]:= Factor[y^2 - x^2]
+Out[6]= -(x + y) (x - y)
+```
+
+### Applications (7)
+
+```mathematica
+In[7]:= Factor[x^4 - 1]
+Out[7]= (-1 + x) (1 + x) (1 + x^2)
+
+In[8]:= Factor[6 x^2 + 7 x + 2]
+Out[8]= (1 + 2 x) (2 + 3 x)
+
+In[9]:= Factor[x^2 + 1, Extension -> I]
+Out[9]= (-I + x) (I + x)
+
+In[10]:= Factor[x^2 - 2, Extension -> Sqrt[2]]
+Out[10]= (Sqrt[2] + x) (-Sqrt[2] + x)
+
+In[11]:= Factor[x^10 - 1]
+Out[11]= (-1 + x) (1 + x) (1 + x + x^2 + x^3 + x^4) (1 - x + x^2 - x^3 + x^4)
+
+In[12]:= Factor[x^4 + 1, Extension -> Sqrt[2]]
+Out[12]= (1 - Sqrt[2] x + x^2) (1 + Sqrt[2] x + x^2)
+
+In[13]:= Factor[x^4 - 5 x^2 + 6, Extension -> {Sqrt[2], Sqrt[3]}]
+Out[13]= (Sqrt[2] + x) (Sqrt[3] + x) (-Sqrt[2] + x) (-Sqrt[3] + x)
+```
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| GroebnerBasis cyclic-5 | 43.5 s | 18 s | 8.78e+03 s |
+| Factor x^120 - 1 | 7.01 s | 0.044 s | 3.85 s |
+| Discriminant of deg 20 | 2.51 s | 0.068 s | 0.182 s |
+| Factor dense degree 60 | 2.2 s | 0.599 s | 26.5 s |
+| Factor product of 16 quadratics | 1.29 s | 0.722 s | 27.6 s |
+| Factor sparse degree 60 | 0.532 s | 0.516 s | 9.48 s |
 
 ## Implementation notes
 
@@ -66,11 +117,9 @@ The univariate **Berlekamp–Zassenhaus** core (`factor_zassenhaus`): take the p
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Sqrt](../../arithmetic/Sqrt/), [Sin](../../elementary-functions/Sin/), [Together](../../algebra/Together/), [Expand](../../algebra/Expand/)
 
 - B. M. Trager, "Algebraic factoring and rational function integration", SYMSAC 1976 — the norm / sqfr_norm / alg_factor approach used for the Extension path.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 8 (polynomial factorization).
@@ -81,45 +130,12 @@ The univariate **Berlekamp–Zassenhaus** core (`factor_zassenhaus`): take the p
 - B. M. Trager, "Algebraic factoring and rational function integration", SYMSAC 1976.
 - Source: [`src/poly/facpoly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/facpoly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_cherry_dilog.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog.c)
+- Tests: [`tests/test_cherry_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_stress.c)
+- Tests: [`tests/test_eval_eager_exit.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval_eager_exit.c)
+- Tests: [`tests/test_eval_timestamps.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval_timestamps.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Factor[x^4 - 1]
-Out[1]= (-1 + x) (1 + x) (1 + x^2)
-```
-
-```mathematica
-In[1]:= Factor[6 x^2 + 7 x + 2]
-Out[1]= (1 + 2 x) (2 + 3 x)
-```
-
-```mathematica
-In[1]:= Factor[x^2 + 1, Extension -> I]
-Out[1]= (-I + x) (I + x)
-```
-
-```mathematica
-In[1]:= Factor[x^2 - 2, Extension -> Sqrt[2]]
-Out[1]= (Sqrt[2] + x) (-Sqrt[2] + x)
-```
-
-```mathematica
-In[1]:= Factor[x^10 - 1]
-Out[1]= (-1 + x) (1 + x) (1 + x + x^2 + x^3 + x^4) (1 - x + x^2 - x^3 + x^4)
-```
-
-```mathematica
-In[1]:= Factor[x^4 + 1, Extension -> Sqrt[2]]
-Out[1]= (1 - Sqrt[2] x + x^2) (1 + Sqrt[2] x + x^2)
-```
-
-```mathematica
-In[1]:= Factor[x^4 - 5 x^2 + 6, Extension -> {Sqrt[2], Sqrt[3]}]
-Out[1]= (Sqrt[2] + x) (Sqrt[3] + x) (-Sqrt[2] + x) (-Sqrt[3] + x)
-```
 
 ### Notes
 

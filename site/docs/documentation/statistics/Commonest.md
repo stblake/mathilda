@@ -5,14 +5,15 @@
 
 ## Description
 
-```text
-Commonest[list] gives a list of the elements that are the most common in list.
-Commonest[list, n] gives a list of the n most common elements in list.
-```
+**`Commonest[list] gives a list of the elements that are the most common in list.`**
 
-## Examples
+**`Commonest[list, n] gives a list of the n most common elements in list.`**
 
-All examples below are verified against the current Mathilda build.
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Tally[<|"a" -> 1, "b" -> 1, "c" -> 2|>]
@@ -20,6 +21,19 @@ Out[1]= {{1, 2}, {2, 1}}
 
 In[2]:= Commonest[<|"a" -> 1, "b" -> 1, "c" -> 2|>]
 Out[2]= {1}
+```
+
+### Applications (3)
+
+```mathematica
+In[3]:= Commonest[{1, 2, 2, 3, 3, 3, 4}]
+Out[3]= {3}
+
+In[4]:= Commonest[{a, b, a, c, b, a, d, b}, 2]
+Out[4]= {a, b}
+
+In[5]:= Commonest[Table[Mod[k^2, 7], {k, 0, 20}]]
+Out[5]= {1, 4, 2}
 ```
 
 ## Implementation notes
@@ -30,33 +44,17 @@ Out[2]= {1}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Tally](../../data-structures/Tally/), [Counts](../../data-structures/Counts/), [CountsBy](../../data-structures/CountsBy/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Commonest[{1, 2, 2, 3, 3, 3, 4}]
-Out[1]= {3}
-```
-
-```mathematica
-In[1]:= Commonest[{a, b, a, c, b, a, d, b}, 2]
-Out[1]= {a, b}
-```
-
-```mathematica
-In[1]:= Commonest[Table[Mod[k^2, 7], {k, 0, 20}]]
-Out[1]= {1, 4, 2}
-```
 
 ### Notes
 

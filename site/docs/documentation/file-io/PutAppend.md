@@ -5,20 +5,48 @@
 
 ## Description
 
-```text
-PutAppend[expr, "filename"] or expr >>> "filename"
-    appends expr to the end of the file, creating the file if it does not exist.
-PutAppend[expr1, expr2, ..., "filename"]
-    appends a sequence of expressions, one per line.
-PutAppend works the same as Put, except that it preserves any existing
-contents of the file rather than truncating them.
-expr >>> filename is equivalent to expr >>> "filename".
-Returns Null on success and $Failed if the file cannot be opened.
+**`PutAppend[expr, "filename"] or expr >>> "filename"`**
+
+appends expr to the end of the file, creating the file if it does not exist.
+
+**`PutAppend[expr1, expr2, ..., "filename"]`**
+
+appends a sequence of expressions, one per line.
+
+<details>
+<summary>Notes</summary>
+
+PutAppend works the same as Put, except that it preserves any existing contents of the file rather than truncating them. expr \>\>\> filename is equivalent to expr \>\>\> "filename". Returns Null on success and $Failed if the file cannot be opened.
+
+</details>
+
+## Examples (2)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (2)
+
+```mathematica
+In[1]:= Put[x^2 + 1, "/tmp/mathilda_demo.m"]
+Out[1]= Null
+
+In[2]:= PutAppend[y, "/tmp/mathilda_demo.m"]
+Out[2]= Null
 ```
 
-## Examples
+## Algorithm
 
-_No verified examples yet for this function._
+readwrite.c - File I/O builtins (Get, Put).
+
+Get reads Mathilda source from a file and evaluates each expression, returning the last value (used by the REPL bootstrap to load the internal .m initialization files).
+
+Put writes one or more expressions to a file in InputForm so the
+
+```text
+output can be read back with Get.  The parser also recognises the
+```
+
+infix shorthand `expr >> "file"` and lowers it to `Put[expr, "file"]`.
 
 ## Implementation notes
 
@@ -30,31 +58,15 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Put](../../file-io/Put/)
 
 - Source: [`src/readwrite.c`](https://github.com/stblake/mathilda/blob/main/src/readwrite.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
+- Tests: [`tests/test_readwrite.c`](https://github.com/stblake/mathilda/blob/main/tests/test_readwrite.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Put[x^2 + 1, "/tmp/mathilda_demo.m"]
-Out[1]= Null
-
-In[2]:= PutAppend[y, "/tmp/mathilda_demo.m"]
-Out[2]= Null
-
-In[3]:= FilePrint["/tmp/mathilda_demo.m"]
-1 + x^2
-y
-Out[3]= Null
-```
 
 ### Notes
 

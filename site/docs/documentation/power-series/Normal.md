@@ -5,16 +5,15 @@
 
 ## Description
 
-```text
-Normal[expr]
-    converts expr to a normal expression. If expr is a SeriesData object, the
-    O-term is dropped and the truncated polynomial (or Laurent/Puiseux sum) is
-    returned. Other expressions pass through unchanged.
-```
+**`Normal[expr]`**
 
-## Examples
+converts expr to a normal expression. If expr is a SeriesData object, the O-term is dropped and the truncated polynomial (or Laurent/Puiseux sum) is returned. Other expressions pass through unchanged.
 
-All examples below are verified against the current Mathilda build.
+## Examples (7)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Normal[Series[Exp[x], {x, 0, 5}]]
@@ -26,6 +25,38 @@ Out[2]= a + b
 In[3]:= Normal[Series[BesselJ[0, x], {x, Infinity, 2}]]
 Out[3]= Sqrt[2/Pi] Sqrt[1/x] Cos[1/4 Pi - x] - 1/8 Sqrt[2/Pi] (1/x)^(3/2) Sin[1/4 Pi - x]
 ```
+
+### Applications (4)
+
+```mathematica
+In[4]:= Normal[Series[Exp[x], {x, 0, 5}]]
+Out[4]= 1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + 1/120 x^5
+
+In[5]:= Normal[Series[Sin[x]/x, {x, 0, 6}]]
+Out[5]= 1 - 1/6 x^2 + 1/120 x^4 - 1/5040 x^6
+
+In[6]:= Normal[Series[Tan[x], {x, 0, 7}]]
+Out[6]= x + 1/3 x^3 + 2/15 x^5 + 17/315 x^7
+
+In[7]:= Normal[Series[Log[1 + x], {x, 0, 5}]]
+Out[7]= x - 1/2 x^2 + 1/3 x^3 - 1/4 x^4 + 1/5 x^5
+```
+
+## Algorithm
+
+============================================================================ series.c - Series and SeriesData ============================================================================
+
+This module implements the power-series machinery for Mathilda.
+
+SeriesData[x, x0, {a0, ..., a_{k-1}}, nmin, nmax, den] is the data head that represents a truncated power series. The i-th coefficient multiplies (x - x0)^((nmin + i)/den) and an O[x - x0]^(nmax/den) term captures the dropped higher-order terms.
+
+```text
+Series[f, {x, x0, n}]  expands f as a power series in (x - x0) up to
+```
+
+order n. Series also accepts the leading-term form Series[f, x -> x0] and the iterated multivariate form Series[f, {x, x0, nx}, {y, y0, ny}, ...]. The algorithm is a recursive "series algebra": primitive subexpressions become SeriesObj's, algebraic heads (Plus, Times, Power) combine them, and elementary heads (Exp, Log, Sin, Cos, Sinh, Cosh, Tan, Tanh) apply their known series kernels. Unknown heads fall back to naive Taylor via D[...]. Expansion about Infinity is handled by substituting x -> 1/u internally and presenting the result with Power[x, -1] as the series variable.
+
+Normal[s] drops the O-term from a SeriesData and returns an ordinary sum.
 
 ## Implementation notes
 
@@ -47,45 +78,18 @@ for degenerate cases), evaluating the result. Any argument that is not a 6-eleme
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [SeriesData](../../power-series/SeriesData/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [BesselJ](../../special-functions/BesselJ/), [BesselY](../../special-functions/BesselY/), [BesselK](../../special-functions/BesselK/), [BesselI](../../special-functions/BesselI/), [AiryAi](../../special-functions/AiryAi/)
 
 - Source: [`src/calculus/series.c`](https://github.com/stblake/mathilda/blob/main/src/calculus/series.c)
 - Specification: [`docs/spec/builtins/power-series.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/power-series.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_bessely.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bessely.c)
+- Tests: [`tests/test_blas.c`](https://github.com/stblake/mathilda/blob/main/tests/test_blas.c)
+- Tests: [`tests/test_chop.c`](https://github.com/stblake/mathilda/blob/main/tests/test_chop.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Normal[Series[Exp[x], {x, 0, 5}]]
-Out[1]= 1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + 1/120 x^5
-```
-
-Drop the O-term from the Maclaurin series of `Sin[x]/x` to recover the truncated
-polynomial:
-
-```mathematica
-In[1]:= Normal[Series[Sin[x]/x, {x, 0, 6}]]
-Out[1]= 1 - 1/6 x^2 + 1/120 x^4 - 1/5040 x^6
-```
-
-The tangent series, with its Bernoulli-number coefficients laid bare:
-
-```mathematica
-In[1]:= Normal[Series[Tan[x], {x, 0, 7}]]
-Out[1]= x + 1/3 x^3 + 2/15 x^5 + 17/315 x^7
-```
-
-The alternating-harmonic expansion of `Log[1 + x]`:
-
-```mathematica
-In[1]:= Normal[Series[Log[1 + x], {x, 0, 5}]]
-Out[1]= x - 1/2 x^2 + 1/3 x^3 - 1/4 x^4 + 1/5 x^5
-```
 
 ### Notes
 

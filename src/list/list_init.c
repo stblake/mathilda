@@ -96,6 +96,56 @@ void list_init(void) {
         "\tReturns unevaluated unless every distance is a real number, so a\n"
         "\tsymbolic element or target leaves the expression unchanged rather\n"
         "\tthan dropping it from the result.");
+    /* Distance functions. Vector functions, so NOT Listable: threading over a
+     * List argument is exactly what they must not do -- the List *is* the
+     * point. */
+    symtab_add_builtin("EuclideanDistance", builtin_euclidean_distance);
+    symtab_get_def("EuclideanDistance")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("EuclideanDistance",
+        "EuclideanDistance[u, v]\n\tGives the Euclidean distance "
+        "Sqrt[Sum Abs[u_i - v_i]^2] between\n"
+        "\ttwo equal-length numeric vectors, or between two scalars. Abs makes\n"
+        "\tcomplex components use their modulus. Exact input gives an exact\n"
+        "\tresult, which for a root is usually a Sqrt; use\n"
+        "\tSquaredEuclideanDistance to stay rational. Returns unevaluated for\n"
+        "\tmismatched lengths or matrix arguments.");
+    symtab_add_builtin("SquaredEuclideanDistance", builtin_squared_euclidean_distance);
+    symtab_get_def("SquaredEuclideanDistance")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("SquaredEuclideanDistance",
+        "SquaredEuclideanDistance[u, v]\n\tGives Sum Abs[u_i - v_i]^2, the "
+        "squared Euclidean distance.\n"
+        "\tRational for rational input, and monotone in EuclideanDistance, so\n"
+        "\tranking on it orders points identically without taking a root.");
+    symtab_add_builtin("ManhattanDistance", builtin_manhattan_distance);
+    symtab_get_def("ManhattanDistance")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ManhattanDistance",
+        "ManhattanDistance[u, v]\n\tGives Sum Abs[u_i - v_i], the sum of "
+        "component-wise distances.\n"
+        "\tDiffers from EuclideanDistance in two or more dimensions; in one\n"
+        "\tdimension the two agree.");
+    symtab_add_builtin("CosineDistance", builtin_cosine_distance);
+    symtab_get_def("CosineDistance")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("CosineDistance",
+        "CosineDistance[u, v]\n\tGives 1 - (u . Conjugate[v]) / (Norm[u] Norm[v]), "
+        "the angular\n"
+        "\tdistance between two vectors: 0 when parallel, 1 when orthogonal and\n"
+        "\t2 when antiparallel, ignoring magnitude. A zero vector gives 0. Not a\n"
+        "\tmetric -- it violates the triangle inequality -- so unlike the\n"
+        "\tEuclidean family it has no squared form that ranks identically.");
+    symtab_add_builtin("EditDistance", builtin_edit_distance);
+    symtab_get_def("EditDistance")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("EditDistance",
+        "EditDistance[u, v]\n\tGives the Levenshtein distance between two "
+        "strings or two lists: the\n"
+        "\tfewest single-element insertions, deletions and substitutions that\n"
+        "\tturn one into the other. Strings are compared byte by byte, so a\n"
+        "\tmulti-byte UTF-8 character counts as several elements.");
+    symtab_add_builtin("HammingDistance", builtin_hamming_distance);
+    symtab_get_def("HammingDistance")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("HammingDistance",
+        "HammingDistance[u, v]\n\tGives the number of positions at which two "
+        "equal-length strings or\n"
+        "\tlists differ. Returns unevaluated when the lengths differ.");
     symtab_add_builtin("FindClusters", builtin_find_clusters);
     symtab_get_def("FindClusters")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("FindClusters",

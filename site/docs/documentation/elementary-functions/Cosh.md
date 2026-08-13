@@ -5,15 +5,45 @@
 
 ## Description
 
-```text
-Cosh[z]
-    gives the hyperbolic cosine of z, (Exp[z] + Exp[-z]) / 2.
+**`Cosh[z]`**
+
+gives the hyperbolic cosine of z, (Exp\[z\] + Exp\[-z\]) / 2.
+
+<details>
+<summary>Notes</summary>
+
 Cosh is Listable.
+
+</details>
+
+## Examples (7)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (7)
+
+```mathematica
+In[1]:= Cosh[0]
+Out[1]= 1
+
+In[2]:= Cosh[-x]
+Out[2]= Cosh[x]
+
+In[3]:= Cosh[Pi I]
+Out[3]= -1
+
+In[4]:= Cosh[ArcSinh[x]]
+Out[4]= Sqrt[1 + x^2]
+
+In[5]:= TrigExpand[Cosh[a + b]]
+Out[5]= Cosh[a] Cosh[b] + Sinh[a] Sinh[b]
+
+In[6]:= Series[Cosh[x], {x, 0, 6}]
+Out[6]= 1 + 1/2 x^2 + 1/24 x^4 + 1/720 x^6 + O[x]^7
+
+In[7]:= N[Cosh[1], 40]
+Out[7]= 1.5430806348152437784779056207570616826015
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -23,49 +53,16 @@ _No verified examples yet for this function._
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/hyperbolic.c`](https://github.com/stblake/mathilda/blob/main/src/hyperbolic.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
+- Tests: [`tests/test_besseli.c`](https://github.com/stblake/mathilda/blob/main/tests/test_besseli.c)
+- Tests: [`tests/test_complexexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complexexpand.c)
+- Tests: [`tests/test_coshintegral.c`](https://github.com/stblake/mathilda/blob/main/tests/test_coshintegral.c)
+- Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Cosh[0]
-Out[1]= 1
-
-In[2]:= Cosh[-x]
-Out[2]= Cosh[x]
-```
-
-```mathematica
-In[1]:= Cosh[Pi I]
-Out[1]= -1
-```
-
-```mathematica
-In[1]:= Cosh[ArcSinh[x]]
-Out[1]= Sqrt[1 + x^2]
-```
-
-```mathematica
-In[1]:= TrigExpand[Cosh[a + b]]
-Out[1]= Cosh[a] Cosh[b] + Sinh[a] Sinh[b]
-```
-
-```mathematica
-In[1]:= Series[Cosh[x], {x, 0, 6}]
-Out[1]= 1 + 1/2 x^2 + 1/24 x^4 + 1/720 x^6 + O[x]^7
-
-In[2]:= N[Cosh[1], 40]
-Out[2]= 1.5430806348152437784779056207570616826015
-```
 
 ### Notes
 

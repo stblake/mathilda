@@ -5,21 +5,23 @@
 
 ## Description
 
-```text
-Tr[m]
-    gives the trace of the matrix m, i.e. the sum of its diagonal
-    entries (for a rectangular m, sums entries m[[i, i]] up to
-    Min[Dimensions[m]]).
-Tr[m, f]
-    combines the diagonal entries with f instead of Plus.
-Tr[m, f, n]
-    walks down to level n, summing the multi-index diagonal of a
-    rank-n tensor.
-```
+**`Tr[m]`**
 
-## Examples
+gives the trace of the matrix m, i.e. the sum of its diagonal entries (for a rectangular m, sums entries m\[\[i, i\]\] up to Min\[Dimensions\[m\]\]).
 
-All examples below are verified against the current Mathilda build.
+**`Tr[m, f]`**
+
+combines the diagonal entries with f instead of Plus.
+
+**`Tr[m, f, n]`**
+
+walks down to level n, summing the multi-index diagonal of a rank-n tensor.
+
+## Examples (9)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= Tr[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
@@ -33,6 +35,25 @@ Out[3]= {1, 5, 9}
 
 In[4]:= Tr[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, Plus, 1]
 Out[4]= {12, 15, 18}
+```
+
+### Applications (5)
+
+```mathematica
+In[5]:= Tr[{{1, 2}, {3, 4}}]
+Out[5]= 5
+
+In[6]:= Tr[{{a, b, c}, {d, e, f}, {g, h, i}}]
+Out[6]= a + e + i
+
+In[7]:= Tr[{{1, 2}, {3, 4}}, Times]
+Out[7]= 4
+
+In[8]:= Tr[MatrixPower[{{1, 1}, {1, 0}}, 10]]
+Out[8]= 123
+
+In[9]:= Tr[{{a, b}, {c, d}} . {{a, b}, {c, d}}]
+Out[9]= a^2 + 2 b c + d^2
 ```
 
 ## Implementation notes
@@ -50,51 +71,13 @@ Out[4]= {12, 15, 18}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Plus](../../arithmetic/Plus/)
 
 - Source: [`src/linalg/tr.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/tr.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
-
-## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Tr[{{1, 2}, {3, 4}}]
-Out[1]= 5
-```
-
-The trace of a symbolic matrix is the sum of its diagonal:
-
-```mathematica
-In[1]:= Tr[{{a, b, c}, {d, e, f}, {g, h, i}}]
-Out[1]= a + e + i
-```
-
-A second argument replaces `Plus` with another combiner — here multiplying the
-diagonal entries:
-
-```mathematica
-In[1]:= Tr[{{1, 2}, {3, 4}}, Times]
-Out[1]= 4
-```
-
-The trace of the `n`-th power of the Fibonacci `Q`-matrix is the Lucas number
-`L[n]`; for `n = 10` this gives `L[10] = 123`:
-
-```mathematica
-In[1]:= Tr[MatrixPower[{{1, 1}, {1, 0}}, 10]]
-Out[1]= 123
-```
-
-Because the trace is basis-independent, `Tr[A . A]` of a symbolic `2x2` matrix
-yields the invariant combination of its entries:
-
-```mathematica
-In[1]:= Tr[{{a, b}, {c, d}} . {{a, b}, {c, d}}]
-Out[1]= a^2 + 2 b c + d^2
-```
+- Tests: [`tests/test_compile_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_linalg.c)
+- Tests: [`tests/test_compile_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_transforms.c)
+- Tests: [`tests/test_diagonal.c`](https://github.com/stblake/mathilda/blob/main/tests/test_diagonal.c)
+- Tests: [`tests/test_eigen.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eigen.c)

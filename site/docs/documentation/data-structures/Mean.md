@@ -5,18 +5,55 @@
 
 ## Description
 
-```text
-Mean[data] gives the mean estimate of the elements in data.
-```
+**`Mean[data] gives the mean estimate of the elements in data.`**
 
-## Examples
+## Examples (5)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= Mean[<|"a" -> 2, "b" -> 4, "c" -> 6|>]
 Out[1]= 4
 ```
+
+### Applications (4)
+
+```mathematica
+In[2]:= Mean[{1, 2, 3, 4}]
+Out[2]= 5/2
+
+In[3]:= Mean[{a, b, c}]
+Out[3]= 1/3 (a + b + c)
+
+In[4]:= Mean[{1/2, 1/3, 1/6}]
+Out[4]= 1/3
+
+In[5]:= Mean[Table[k^2, {k, 1, 10}]]
+Out[5]= 77/2
+```
+
+## Performance
+
+Measured on arm64 Darwin at commit `2dea9cc05`.
+
+| case | n | time |
+|---|---:|---:|
+| list of machine reals | 1,000 | 5 us |
+| list of machine reals | 10,000 | 7 us |
+| list of machine reals | 100,000 | 21 us |
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| Quartiles over 2x10^6 | 17.3 s | 17.2 s | 17.4 s |
+| MovingAverage window 100 | 17.2 s | 2.02 s | 4.33 s |
+| Median over 2x10^6 | 10.2 s | 7.79 s | 13.3 s |
+| Skewness over 2x10^6 | 0.618 s | 0.582 s | 3.52 s |
+| Kurtosis over 2x10^6 | 0.572 s | 0.505 s | 3.21 s |
+| StandardDeviation over 2x10^6 | 0.325 s | 0.284 s | 0.927 s |
 
 ## Implementation notes
 
@@ -26,38 +63,18 @@ Out[1]= 4
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Total](../../arithmetic/Total/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/)
 
 - Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
+- Tests: [`tests/test_ndarray_reduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_reduce.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Mean[{1, 2, 3, 4}]
-Out[1]= 5/2
-```
-
-```mathematica
-In[1]:= Mean[{a, b, c}]
-Out[1]= 1/3 (a + b + c)
-```
-
-```mathematica
-In[1]:= Mean[{1/2, 1/3, 1/6}]
-Out[1]= 1/3
-```
-
-```mathematica
-In[1]:= Mean[Table[k^2, {k, 1, 10}]]
-Out[1]= 77/2
-```
 
 ### Notes
 

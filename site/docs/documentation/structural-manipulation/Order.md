@@ -5,14 +5,20 @@
 
 ## Description
 
-```text
-Order[e1, e2] gives 1 if e1 is before e2 in canonical order, -1 if e1 is after e2, and 0 if e1 is identical to e2.
+**`Order[e1, e2] gives 1 if e1 is before e2 in canonical order, -1 if e1 is after e2, and 0 if e1 is identical to e2.`**
+
+<details>
+<summary>Notes</summary>
+
 Order compares structurally (the same canonical order as Sort), not by numerical value, and is compilable.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= {Order[a, a], Order[a, b], Order[b, a]}
@@ -35,11 +41,11 @@ Out[3]= {0, 1, 1, -1, 0, 1, -1, -1, 0}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Sort](../../data-structures/Sort/), [OrderedQ](../../structural-manipulation/OrderedQ/), [Pi](../../mathematical-constants/Pi/), [Plot](../../graphics/Plot/), [Table](../../lists-and-iteration/Table/), [NIntegrate](../../numerical-calculus/NIntegrate/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_sort.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sort.c)

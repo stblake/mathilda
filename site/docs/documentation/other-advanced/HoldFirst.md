@@ -5,11 +5,16 @@
 
 ## Description
 
-```text
-HoldFirst
-    is an attribute that specifies that the first argument to a function is to be maintained in an unevaluated form.
+**`HoldFirst`**
+
+is an attribute that specifies that the first argument to a function is to be maintained in an unevaluated form.
+
+<details>
+<summary>Notes</summary>
+
 Use Evaluate to evaluate a held first argument in a controlled way.
-```
+
+</details>
 
 ## Examples
 
@@ -18,10 +23,6 @@ _No verified examples yet for this function._
 ## Implementation notes
 
 **Attributes:** `HoldFirst`, `Protected`.
-
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
 
 ## References
 

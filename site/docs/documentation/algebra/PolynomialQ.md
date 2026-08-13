@@ -5,18 +5,26 @@
 
 ## Description
 
-```text
-PolynomialQ[expr, var]
-    gives True if expr is a polynomial in var, False otherwise.
-PolynomialQ[expr, {v1, v2, ...}]
-    gives True if expr is a polynomial in all of the vi simultaneously.
-Checks that expr expands to a sum of products of non-negative integer
-powers of the vars with var-free coefficients.
-```
+**`PolynomialQ[expr, var]`**
 
-## Examples
+gives True if expr is a polynomial in var, False otherwise.
 
-All examples below are verified against the current Mathilda build.
+**`PolynomialQ[expr, {v1, v2, ...}]`**
+
+gives True if expr is a polynomial in all of the vi simultaneously.
+
+<details>
+<summary>Notes</summary>
+
+Checks that expr expands to a sum of products of non-negative integer powers of the vars with var-free coefficients.
+
+</details>
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= PolynomialQ[x^3 - 2x/y + 3x z, x]
@@ -30,6 +38,22 @@ Out[3]= True
 
 In[4]:= PolynomialQ[f[a] + f[a]^2, f[a]]
 Out[4]= True
+```
+
+### Applications (4)
+
+```mathematica
+In[5]:= PolynomialQ[x^3 + 2 x + 1, x]
+Out[5]= True
+
+In[6]:= PolynomialQ[Sin[x] + x, x]
+Out[6]= False
+
+In[7]:= PolynomialQ[x^2 y + x y^2 + 1, {x, y}]
+Out[7]= True
+
+In[8]:= PolynomialQ[x^2 + y/x, x]
+Out[8]= False
 ```
 
 ## Implementation notes
@@ -50,38 +74,15 @@ containing a variable in a non-polynomial position (e.g. `Sin[x]`, `1/x`, `x^(1/
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
+- Tests: [`tests/test_risch_canonical.c`](https://github.com/stblake/mathilda/blob/main/tests/test_risch_canonical.c)
+- Tests: [`tests/test_rootreduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_rootreduce.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= PolynomialQ[x^3 + 2 x + 1, x]
-Out[1]= True
-```
-
-```mathematica
-In[1]:= PolynomialQ[Sin[x] + x, x]
-Out[1]= False
-```
-
-```mathematica
-In[1]:= PolynomialQ[x^2 y + x y^2 + 1, {x, y}]
-Out[1]= True
-```
-
-```mathematica
-In[1]:= PolynomialQ[x^2 + y/x, x]
-Out[1]= False
-```
 
 ### Notes
 

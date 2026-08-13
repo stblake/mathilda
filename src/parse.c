@@ -1187,6 +1187,31 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
     
     if (*s->pos == '?') {
         s->pos++;
+        /* `?Name` looks up one docstring; `?Pat*` searches the symbol table.
+         * A wildcard cannot occur inside a symbol, so scan the whole run and
+         * decide before handing anything to parse_symbol -- that stops at the
+         * `*`, leaving it for the caller to report as "Extra characters after
+         * expression", which is how `?Find*` failed. The pattern is passed on
+         * as a String, which Information already accepts. */
+        const char* start = s->pos;
+        const char* p = start;
+        bool wild = false;
+        while (*p && (isalnum((unsigned char)*p) || *p == '_' || *p == '$'
+                      || *p == '`' || *p == '*' || *p == '@')) {
+            if (*p == '*' || *p == '@') wild = true;
+            p++;
+        }
+        if (wild && p > start) {
+            size_t n = (size_t)(p - start);
+            char* pat = malloc(n + 1);
+            if (!pat) return NULL;
+            memcpy(pat, start, n);
+            pat[n] = '\0';
+            s->pos = p;
+            Expr* args[1] = { expr_new_string(pat) };
+            free(pat);
+            return expr_new_function(expr_new_symbol(SYM_Information), args, 1);
+        }
         Expr* sym = parse_symbol(s);
         if (!sym) return NULL;
         Expr* args[1] = { sym };

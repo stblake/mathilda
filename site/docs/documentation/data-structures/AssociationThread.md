@@ -5,14 +5,15 @@
 
 ## Description
 
-```text
-AssociationThread[{k...}, {v...}]  |  AssociationThread[keys -> values]
-    Builds <|k1 -> v1, ...|> from parallel key and value lists.
-```
+**`AssociationThread[{k...}, {v...}]  |  AssociationThread[keys -> values]`**
 
-## Examples
+Builds \<|k1 -\> v1, ...|\> from parallel key and value lists.
 
-All examples below are verified against the current Mathilda build.
+## Examples (2)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= AssociationThread[{"a", "b"}, {1, 2}]
@@ -26,11 +27,8 @@ Out[2]= <|"a" -> 1, "b" -> 2|>
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/assoc.c`](https://github.com/stblake/mathilda/blob/main/src/assoc.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)

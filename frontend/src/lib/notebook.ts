@@ -2,11 +2,18 @@
 
 import { writable, get } from 'svelte/store';
 
-export type CellType = 'code' | 'text' | 'section' | 'subsection';
+/* 'ref' renders a symbol's generated reference page read-only; its `source` is
+   the symbol name, not code, and it never goes to the kernel. */
+export type CellType = 'code' | 'text' | 'section' | 'subsection' | 'ref';
 export type CellStatus = 'idle' | 'running' | 'done' | 'error';
 
 export type OutputItem =
   | { kind: 'expr';   text: string; latex?: string }  // latex = StandardForm LaTeX from kernel
+  | { kind: 'usage';  text: string }                  // ?sym help text: preformatted, never math
+  | { kind: 'expected'; text: string }                // reference-page example: the
+                                                      // recorded, verified result,
+                                                      // shown until the cell is run
+  | { kind: 'names';  names: string[] }               // ?pat* symbol search: laid out as a grid
   | { kind: 'error';  text: string }
   | { kind: 'stream'; text: string }
   | { kind: 'plot';   data: object }
@@ -155,6 +162,22 @@ export function createNotebook() {
         ...row,
         cells: row.cells.map(c => c.id === id ? { ...c, source } : c),
       })));
+    },
+
+    /** Retype the notebook's FIRST cell in place and give it a source.
+     *
+     * createNotebook() seeds one empty code row, so a card built for a single
+     * purpose (a reference page) would otherwise carry a stray empty cell above
+     * its content. Rewrites that row instead of appending after it. */
+    setCellSourceAndType(source: string, type: CellType) {
+      update(rows => {
+        if (rows.length === 0 || rows[0].cells.length === 0) return rows;
+        const first = rows[0];
+        return [
+          { ...first, cells: [{ ...first.cells[0], source, type }, ...first.cells.slice(1)] },
+          ...rows.slice(1),
+        ];
+      });
     },
 
     setCellType(id: string, type: CellType) {

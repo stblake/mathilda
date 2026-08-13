@@ -5,11 +5,9 @@
 
 ## Description
 
-```text
-VectorPoints
-    VectorPlot option: integer n specifies an n×n seed grid
-    (default 15). Automatic also uses 15.
-```
+**`VectorPoints`**
+
+VectorPlot option: integer n specifies an n×n seed grid (default 15). Automatic also uses 15.
 
 ## Examples
 
@@ -18,10 +16,6 @@ _No verified examples yet for this function._
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
 
 ## References
 

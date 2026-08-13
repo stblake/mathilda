@@ -5,19 +5,19 @@
 
 ## Description
 
-```text
-ArrayFlatten[a]
-    creates a single flattened matrix from a matrix of matrices, forming a
-    block matrix. Blocks sharing a row must agree on their first dimension
-    and blocks sharing a column on their second; elements shallower than a
-    block (e.g. 0) are treated as scalars and replicated to fill.
-ArrayFlatten[a, r]
-    flattens out r pairs of levels of a rank-2r array, giving a rank-r array.
-```
+**`ArrayFlatten[a]`**
 
-## Examples
+creates a single flattened matrix from a matrix of matrices, forming a block matrix. Blocks sharing a row must agree on their first dimension and blocks sharing a column on their second; elements shallower than a block (e.g. 0) are treated as scalars and replicated to fill.
 
-All examples below are verified against the current Mathilda build.
+**`ArrayFlatten[a, r]`**
+
+flattens out r pairs of levels of a rank-2r array, giving a rank-r array.
+
+## Examples (1)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= m = {{1, 2}, {3, 4}}; ArrayFlatten[{{0, 0, m}, {m, m, 0}}]
@@ -32,11 +32,8 @@ Out[1]= {{0, 0, 0, 0, 1, 2}, {0, 0, 0, 0, 3, 4}, {1, 2, 1, 2, 0, 0}, {3, 4, 3, 4
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_array_flatten.c`](https://github.com/stblake/mathilda/blob/main/tests/test_array_flatten.c)
