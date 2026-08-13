@@ -12,8 +12,9 @@
   import Canvas from './lib/Canvas.svelte';
   import KernelStatus from './lib/KernelStatus.svelte';
   import { kernelStatus } from './lib/notebook';
-  import { pingKernel, restartKernel, saveLibrary, loadLibrary, setWindowTitle as setTitleCmd } from './lib/ipc';
-  import { serializeLibrary, loadLibraryData, canvasState, focusedActions, setFocused } from './lib/canvas';
+  import { pingKernel, saveLibrary, loadLibrary, setWindowTitle as setTitleCmd } from './lib/ipc';
+  import { restart, abortEvaluation } from './lib/kernelActions';
+  import { serializeLibrary, loadLibraryData, canvasState, activeActions, activeFlags, setFocused } from './lib/canvas';
   /* Imported for its side effect: installs the document-level Cmd+click
      handler that opens a symbol's reference page. Importing it here rather
      than relying on a cell to pull it in means the gesture works from the
@@ -33,9 +34,12 @@
     document.documentElement.classList.toggle('dark', $darkMode);
   }
 
-  /* Title of the notebook currently filling the window, for the app bar. */
-  $: focusedTitle = $canvasState.focusedId
-    ? ($canvasState.notebooks.find(n => n.id === $canvasState.focusedId)?.title ?? '')
+  /* Title of the ACTIVE pane, for the app bar. With one pane that is the
+     notebook filling the window, as before; with several it names the one the
+     bar's own buttons will act on, which is the cheapest and strongest signal
+     available that the toolbar has a target. */
+  $: focusedTitle = $canvasState.focusedActiveId
+    ? ($canvasState.notebooks.find(n => n.id === $canvasState.focusedActiveId)?.title ?? '')
     : '';
 
   // ---------------------------------------------------------------------------
@@ -61,7 +65,7 @@
       unlisten.push(await listen('menu:save',        () => saveFile()));
       unlisten.push(await listen('menu:save-as',     () => saveFileAs()));
       unlisten.push(await listen('menu:restart',     () => restart()));
-      unlisten.push(await listen('menu:interrupt',   () => {}));
+      unlisten.push(await listen('menu:interrupt',   () => abortEvaluation()));
       unlisten.push(await listen('menu:toggle-dark', () => darkMode.update(v => !v)));
     } catch (e) { console.warn('Menu listen error:', e); }
   });
@@ -122,11 +126,9 @@
   // ---------------------------------------------------------------------------
   // Kernel restart
 
-  async function restart() {
-    kernelStatus.set('restarting');
-    try { await restartKernel(); kernelStatus.set('ready'); }
-    catch { kernelStatus.set('dead'); }
-  }
+  /* restart() and abortEvaluation() live in lib/kernelActions.ts so the
+     toolbar's kernel menu drives exactly the same paths as the native Kernel
+     menu. Two implementations of "abort" is how one of them ends up wrong. */
 
   // ---------------------------------------------------------------------------
   // Global UI scale (Cmd+= zoom in, Cmd+- zoom out, Cmd+0 reset)
@@ -156,32 +158,36 @@
      toggle. The toggle used to float over the canvas at top-right, which put
      it on top of a full-screen card's own toolbar. -->
 <div class="app-bar">
-  {#if $canvasState.focusedId}
-    <!-- The full-screen card's controls. Same icons in the same order as a
-         card's own toolbar on the canvas, so the row does not reshuffle when a
-         notebook is zoomed in; only the full-screen icon flips to its inverse,
-         because that is the one action whose meaning reverses. -->
+  {#if $canvasState.focusedIds.length}
+    <!-- The active pane's controls. Same icons in the same order as a card's own
+         toolbar on the canvas, so the row does not reshuffle when a notebook is
+         zoomed in; only the full-screen icon flips to its inverse, because that
+         is the one action whose meaning reverses.
+
+         Methods come from $activeActions, flags from $activeFlags — two stores
+         so a keystroke, which changes only the flags, does not invalidate the
+         methods every button is bound to. -->
     <button class="tb-btn tb-run-all" title="Run all cells"
-            on:click={() => $focusedActions?.runAll()}>▶▶</button>
+            on:click={() => $activeActions?.runAll()}>▶▶</button>
     <button class="tb-btn"
-            title={$focusedActions?.horizontal ? 'Vertical layout' : 'Horizontal layout'}
-            on:click={() => $focusedActions?.toggleLayout()}
-    >{$focusedActions?.horizontal ? '↕' : '⇄'}</button>
-    {#if $focusedActions?.hasSections}
+            title={$activeFlags?.horizontal ? 'Vertical layout' : 'Horizontal layout'}
+            on:click={() => $activeActions?.toggleLayout()}
+    >{$activeFlags?.horizontal ? '↕' : '⇄'}</button>
+    {#if $activeFlags?.hasSections}
       <button class="tb-btn"
-              title={$focusedActions?.allSectionsCollapsed ? 'Expand all sections' : 'Collapse all sections'}
-              on:click={() => $focusedActions?.toggleAllSections()}
-      >{$focusedActions?.allSectionsCollapsed ? '⌄' : '⌃'}</button>
+              title={$activeFlags?.allSectionsCollapsed ? 'Expand all sections' : 'Collapse all sections'}
+              on:click={() => $activeActions?.toggleAllSections()}
+      >{$activeFlags?.allSectionsCollapsed ? '⌄' : '⌃'}</button>
     {/if}
     <button class="tb-btn" title="Rename"
-            on:click={() => $focusedActions?.rename()}>✎</button>
+            on:click={() => $activeActions?.rename()}>✎</button>
     <button class="tb-btn tb-focus" title="Back to canvas (pinch out)"
             on:click={() => setFocused(null)}>⤡</button>
     <button class="tb-btn" title="Collapse / expand"
-            on:click={() => $focusedActions?.toggleCollapse()}
-    >{$focusedActions?.collapsed ? '⊟' : '⊞'}</button>
+            on:click={() => $activeActions?.toggleCollapse()}
+    >{$activeFlags?.collapsed ? '⊟' : '⊞'}</button>
     <button class="tb-btn tb-close" title="Close"
-            on:click={() => $focusedActions?.close()}>✕</button>
+            on:click={() => $activeActions?.close()}>✕</button>
   {:else}
     <span class="app-bar-name">Mathilda</span>
   {/if}
@@ -220,6 +226,24 @@
     --gutter-hover:rgba(255,255,255,0.03);
     --card-bg:     rgba(12,15,28,0.85);
     --card-border: rgba(255,255,255,0.08);
+
+    /* Toolbar / menu surfaces.
+       --surface-2 was referenced at .app-bar .tb-btn:hover with NO fallback and
+       defined nowhere in the tree, so the app bar's hover state was a literal
+       no-op. RefPage.svelte referenced it in five more places. Defining it here
+       rather than in app.css because App.svelte's :global(:root) owns the
+       surface palette and wins by load order anyway. */
+    --surface-2:   rgba(255,255,255,0.055);   /* hover / raised fill */
+    --surface-3:   rgba(255,255,255,0.10);    /* pressed / active toggle */
+    --tb-rule:     rgba(255,255,255,0.09);    /* group divider, subtler than --border */
+    --tb-caption:  #6c7086;                   /* group caption, dimmer than --text-dim */
+    --menu-bg:     rgba(18,21,34,0.98);
+    --menu-border: rgba(255,255,255,0.10);
+    --menu-shadow: 0 10px 32px rgba(0,0,0,0.55);
+    /* --ok was only ever used as a var() fallback; --err was hardcoded. */
+    --ok:          #4ade80;
+    --warn:        #fab387;
+    --err:         #f38ba8;
   }
   :global(body) { background: #050810; }
 
@@ -238,6 +262,17 @@
     --gutter-hover:#e4e5f0;
     --card-bg:     #f8f8fc;
     --card-border: rgba(0,0,0,0.08);
+
+    --surface-2:   rgba(0,0,0,0.045);
+    --surface-3:   rgba(0,0,0,0.085);
+    --tb-rule:     rgba(0,0,0,0.10);
+    --tb-caption:  #8a8a9e;
+    --menu-bg:     #ffffff;
+    --menu-border: rgba(0,0,0,0.12);
+    --menu-shadow: 0 10px 32px rgba(0,0,0,0.18);
+    --ok:          #16a34a;
+    --warn:        #d97706;
+    --err:         #dc2626;
   }
   :global(html.light body) { background: #1a1b2e; }
 

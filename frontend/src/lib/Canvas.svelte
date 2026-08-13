@@ -238,7 +238,9 @@
       // to stop browser from zooming the page.
       e.preventDefault();
       const factor = 1 - e.deltaY * 0.008;
-      if (factor < 1 && $canvasState.focusedId) { setFocused(null); return; }
+      /* Pinch out leaves focused mode entirely, however many panes are open —
+         it is the one gesture that means "zoom out of this whole thing". */
+      if (factor < 1 && $canvasState.focusedIds.length) { setFocused(null); return; }
       const rect = canvasEl?.getBoundingClientRect();
       if (!rect) return;
       const cx = e.clientX - rect.left;
@@ -467,7 +469,7 @@
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key === '0') { e.preventDefault(); fitAll(); return; }
     // 'N' key (no modifier) when not in an editor → add notebook at centre
-    if (!mod && !e.shiftKey && e.key === 'n' && !$canvasState.focusedId) {
+    if (!mod && !e.shiftKey && e.key === 'n' && !$canvasState.focusedIds.length) {
       const target = e.target as HTMLElement;
       if (!target.closest('.cm-editor') && !target.isContentEditable) {
         e.preventDefault();
@@ -558,9 +560,11 @@
 
 <svelte:window on:keydown={onKeydown} />
 
-{#if $canvasState.focusedId}
-  <!-- ── Focused (full-screen) mode — pinch out to return ── -->
-  {@const fnb = $canvasState.notebooks.find(n => n.id === $canvasState.focusedId)}
+{#if $canvasState.focusedIds.length}
+  <!-- ── Focused (full-screen) mode — pinch out to return ──
+       Still renders only the active pane. The tiled multi-pane view lands in the
+       next phase; this keeps the focus-state refactor free of visual change. -->
+  {@const fnb = $canvasState.notebooks.find(n => n.id === $canvasState.focusedActiveId)}
   {#if fnb}
     <div
       class="focused-view"

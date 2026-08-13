@@ -19,7 +19,8 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy, tick, createEventDispatcher } from 'svelte';
-  import { setFocused, setNotebookWidth, setNotebookHeight, addQueryNotebook, openRefpage, focusedActions } from './canvas';
+  import { setFocused, setNotebookWidth, setNotebookHeight, addQueryNotebook, openRefpage,
+           registerPane, publishPaneFlags, retractPane } from './canvas';
   const dispatch = createEventDispatcher();
   import { get } from 'svelte/store';
   import CellShell from './CellShell.svelte';
@@ -396,9 +397,10 @@
   }
 
   /* `mathilda-refpage` is a custom DOM event bubbled up from the name grid in
-     Output.svelte, so the grid needs no prop threaded down through CellShell
-     and CodeCell. Attached as an action rather than `on:mathilda-refpage`
-     because Svelte's element typings only know standard DOM events. */
+     Output.svelte (and from refpages.ts's document-level Cmd+click and F1
+     handlers), so the grid needs no prop threaded down through CellShell.
+     Attached as an action rather than `on:mathilda-refpage` because Svelte's
+     element typings only know standard DOM events. */
   function nameQueryListener(node: HTMLElement) {
     const handler = (e: Event) => onNameQuery(e);
     node.addEventListener('mathilda-refpage', handler);
@@ -451,6 +453,29 @@
         await runCell(cell.id, cell.source);
       }
     }
+  }
+
+  /** Run an inclusive index range over allCells(). Backs the toolbar's
+   *  "evaluate from here" and "evaluate above".
+   *
+   *  Deliberately does NOT reset the exec counter the way runAll does: a partial
+   *  run should not renumber the cells it did not touch. */
+  async function runRange(fromIdx: number, toIdx: number) {
+    const cells = nb.store.allCells();
+    const lo = Math.max(0, fromIdx);
+    const hi = Math.min(cells.length - 1, toIdx);
+    for (let i = lo; i <= hi; i++) {
+      const cell = cells[i];
+      if (cell?.type === 'code' && cell.source.trim()) {
+        await runCell(cell.id, cell.source);
+      }
+    }
+  }
+
+  /** Run one cell by id — the toolbar has an id, not a source string. */
+  async function runCellById(cellId: string) {
+    const cell = nb.store.allCells().find((c: any) => c.id === cellId);
+    if (cell) await runCell(cell.id, cell.source);
   }
 
   async function runCell(cellId: string, source: string) {
@@ -593,26 +618,54 @@
     }
   }
 
-  /* Hand this card's controls to the app bar while it is full-screen, and take
-     them back when it is not. onDestroy covers the card being closed while
-     focused, which no reactive statement would otherwise see. */
-  $: focusedActions.set(
-    focused
-      ? {
-          runAll,
-          toggleLayout: () => { horizontal = !horizontal; },
-          horizontal,
-          rename: startRename,
-          toggleAllSections,
-          allSectionsCollapsed,
-          hasSections: sectionRowIds.length > 0,
-          toggleCollapse: onToggleCollapse,
-          close: () => removeNotebook(nb.id),
-          collapsed: !!nb.collapsed,
-        }
-      : null
-  );
-  onDestroy(() => { if (focused) focusedActions.set(null); });
+  /* ---------------------------------------------------------------------------
+     Hand this card's controls to the toolbar.
+
+     Registered for every card, not only the focused one: the registry is keyed
+     by notebook id and the toolbar reads only the ACTIVE pane's entry, so a
+     canvas card's presence costs nothing and means commands that target a
+     notebook by id have somewhere to go.
+
+     The stable methods go up ONCE, in onMount. The volatile flags go up in a
+     reactive block. Publishing both together meant every keystroke replaced the
+     whole record -- `allSectionsCollapsed` derives from the notebook's rows --
+     and re-ran every toolbar subscriber.
+
+     `paneToken` identifies this card instance. Switching between canvas and
+     focused mode destroys one card and creates another for the SAME notebook id,
+     and Svelte does not promise the teardown runs first; without the token, a
+     late destroy would delete the entry the replacement card had just
+     registered. */
+  const paneToken = {};
+
+  onMount(() => {
+    registerPane(nb.id, paneToken, {
+      notebookId: nb.id,
+      store: nb.store,
+      runAll,
+      runCell: runCellById,
+      runRange,
+      focusCell: (cellId: string) => { cellFocusFns[cellId]?.(); },
+      toggleLayout: () => { horizontal = !horizontal; },
+      rename: startRename,
+      toggleAllSections,
+      toggleCollapse: onToggleCollapse,
+      close: () => removeNotebook(nb.id),
+    });
+  });
+
+  /* Every identifier this block reads must stay written out here. Svelte 4
+     derives a reactive block's dependencies from the identifiers it
+     syntactically mentions, so hoisting this object into a helper function would
+     stop the block re-running and freeze the toolbar's icon states. */
+  $: publishPaneFlags(nb.id, paneToken, {
+    horizontal,
+    allSectionsCollapsed,
+    hasSections: sectionRowIds.length > 0,
+    collapsed: !!nb.collapsed,
+  });
+
+  onDestroy(() => retractPane(nb.id, paneToken));
 
 </script>
 
@@ -754,6 +807,7 @@
                     store={nb.store}
                     rowId={row.id}
                     cellIdx={0}
+                    notebookId={nb.id}
                     headingReadonly={isRefpage}
                     on:headingClick={(e) => toggleSection(e.detail.rowId)}
                     on:run={handleRun}
@@ -780,6 +834,7 @@
                       store={nb.store}
                       rowId={row.id}
                       cellIdx={ci}
+                      notebookId={nb.id}
                       headingReadonly={isRefpage}
                       on:run={handleRun}
                       on:change={handleChange}

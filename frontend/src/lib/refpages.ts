@@ -220,7 +220,7 @@ void loadRefpageIndex().catch(() => {});
  * Registered on the document, at module scope, deliberately. The first attempt
  * put this inside CodeMirror's extension array, which fails in a way that looks
  * exactly like "the binding does not work": an EditorView is built once in
- * CodeCell's onMount, so every cell that already existed kept an editor
+ * CellShell's onMount, so every cell that already existed kept an editor
  * constructed from the previous extensions and never saw the handler. A
  * document-level listener has no such lifecycle -- it is installed when this
  * module loads and covers every cell, old or new, plus output text.
@@ -252,14 +252,70 @@ function identifierAtPoint(x: number, y: number): string | null {
 }
 
 /** The identifier spanning `offset` in `text`, if any. Offset may sit just past
- *  the end of a name, which is where a caret lands after typing one. */
-function identifierAt(text: string, offset: number): string | null {
+ *  the end of a name, which is where a caret lands after typing one.
+ *
+ *  Exported because it is the one genuinely pure piece of this file and worth a
+ *  unit test once the frontend has a test runner. */
+export function identifierAt(text: string, offset: number): string | null {
   for (const m of text.matchAll(/[A-Za-z$][A-Za-z0-9$]*/g)) {
     const start = m.index ?? 0;
     const end = start + m[0].length;
     if (offset >= start && offset <= end) return m[0];
   }
   return null;
+}
+
+/** The documented symbol at the current caret or selection, or null.
+ *
+ *  Returns null unless the name actually HAS a reference page, so a caller can
+ *  use a null return directly as its disabled state.
+ *
+ *  This was the body of the F1/Cmd-I handler below, extracted because the
+ *  toolbar's docs button needs exactly the same answer. Before this there were
+ *  three near-duplicate implementations of "symbol under cursor": this one,
+ *  identifierAtPoint above, and a CodeMirror-API version in CodeCell.svelte
+ *  (which was dead code -- nothing imported it -- and has been deleted). The DOM
+ *  version is the one to keep: it works over code cells and rendered output
+ *  alike, and it already handles the CodeMirror quirk noted below that the
+ *  editor-API version did not. */
+export function symbolAtSelection(): { name: string; at: { x: number; y: number } | null } | null {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+
+  let name: string | null = null;
+  let at: { x: number; y: number } | null = null;
+
+  const picked = sel.toString().trim();
+  if (/^[A-Za-z$][A-Za-z0-9$]*$/.test(picked)) {
+    name = picked;                                /* an explicit selection wins */
+  }
+
+  /* Locate the caret on screen and read the identifier there, reusing the
+     lookup the click gesture uses. Reading sel.anchorNode directly is not
+     enough: in CodeMirror the caret's anchor is often the line ELEMENT rather
+     than a text node, with anchorOffset a child index, and the text-node test
+     then failed silently -- which is why this key appeared dead while
+     Cmd+click worked. The caret sits BETWEEN characters, so probe a couple of
+     pixels either side before giving up. */
+  const rect = sel.getRangeAt(0).getBoundingClientRect();
+  if (rect.width || rect.height || rect.x || rect.y) {
+    const y = rect.y + rect.height / 2;
+    at = { x: rect.x, y };
+    if (!name) {
+      for (const dx of [-2, 2, -6, 6]) {
+        name = identifierAtPoint(rect.x + dx, y);
+        if (name && hasRefpage(name)) break;
+      }
+    }
+  }
+
+  /* Last resort: the anchor really is a text node. */
+  if (!name && sel.anchorNode?.nodeType === Node.TEXT_NODE) {
+    name = identifierAt(sel.anchorNode.textContent ?? '', sel.anchorOffset);
+  }
+
+  if (!name || !hasRefpage(name)) return null;
+  return { name, at };
 }
 
 /* A module-level guard, because a hot reload re-runs this file and would
@@ -301,47 +357,14 @@ if (typeof document !== 'undefined') {
     const isI = (e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'i' || e.code === 'KeyI');
     if (!(e.key === 'F1' || isI)) return;
 
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-
-    let name: string | null = null;
-    let at: { x: number; y: number } | null = null;
-
-    const picked = sel.toString().trim();
-    if (/^[A-Za-z$][A-Za-z0-9$]*$/.test(picked)) {
-      name = picked;                                /* an explicit selection wins */
-    }
-
-    /* Locate the caret on screen and read the identifier there, reusing the
-       lookup the click gesture uses. Reading sel.anchorNode directly is not
-       enough: in CodeMirror the caret's anchor is often the line ELEMENT rather
-       than a text node, with anchorOffset a child index, and the text-node test
-       then failed silently -- which is why this key appeared dead while
-       Cmd+click worked. The caret sits BETWEEN characters, so probe a couple of
-       pixels either side before giving up. */
-    const rect = sel.getRangeAt(0).getBoundingClientRect();
-    if (rect.width || rect.height || rect.x || rect.y) {
-      const y = rect.y + rect.height / 2;
-      at = { x: rect.x, y };
-      if (!name) {
-        for (const dx of [-2, 2, -6, 6]) {
-          name = identifierAtPoint(rect.x + dx, y);
-          if (name && hasRefpage(name)) break;
-        }
-      }
-    }
-
-    /* Last resort: the anchor really is a text node. */
-    if (!name && sel.anchorNode?.nodeType === Node.TEXT_NODE) {
-      name = identifierAt(sel.anchorNode.textContent ?? '', sel.anchorOffset);
-    }
-
-    if (!name || !hasRefpage(name)) return;
+    const hit = symbolAtSelection();
+    if (!hit) return;
     e.preventDefault();
     e.stopPropagation();
-    const target = (sel.anchorNode?.parentElement ?? document.body) as HTMLElement;
+    const anchorNode = window.getSelection()?.anchorNode ?? null;
+    const target = (anchorNode?.parentElement ?? document.body) as HTMLElement;
     target.dispatchEvent(new CustomEvent('mathilda-refpage',
-      { detail: { name, at }, bubbles: true }));
+      { detail: { name: hit.name, at: hit.at }, bubbles: true }));
   };
   window.__mathildaDocsKey = keyHandler;
   document.addEventListener('keydown', keyHandler, true);

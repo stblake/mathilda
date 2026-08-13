@@ -19,10 +19,15 @@
   import RefPage from './RefPage.svelte';
   import type { Cell, CellType, OutputItem } from './notebook';
   import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection } from './notebook';
+  import { registerHandle, unregisterHandle, setActiveCell, markBlurred } from './active';
 
   export let cell: Cell;
   export let rowId: string;
   export let cellIdx: number;
+  /** Which notebook this cell belongs to. Needed because the toolbar tracks a
+   *  single active cell globally, and in split mode two notebooks are on screen
+   *  at once -- so the record has to say which one owns the caret. */
+  export let notebookId: string;
   /* Reference pages render their headings as structure: not editable, and a
      click folds the section rather than placing a caret. */
   export let headingReadonly = false;
@@ -88,6 +93,16 @@
         extensions: [
           history(),
           syntaxHighlighting(defaultHighlightStyle),
+          /* Mathilda's only comment form is the nested block comment (* ... *).
+             This is not cosmetic metadata: every comment command in
+             @codemirror/commands (toggleComment, toggleLineComment, ...) reads
+             `commentTokens` out of language data and does NOTHING AT ALL when it
+             is absent. No language extension is installed here, so without this
+             facet the toolbar's comment button would look implemented, pass
+             review, and silently no-op. */
+          EditorState.languageData.of(() => [
+            { commentTokens: { block: { open: '(*', close: '*)' } } },
+          ]),
           keymap.of([
             { key: 'Shift-Enter', run() { dispatch('run', { id: cell.id }); return true; } },
             { key: 'Mod-Enter',   run() { dispatch('run', { id: cell.id }); dispatch('addBelow', { rowId }); return true; } },
@@ -112,6 +127,15 @@
           EditorView.updateListener.of(update => {
             if (update.docChanged)
               dispatch('change', { id: cell.id, source: view.state.doc.toString() });
+            /* Tell the toolbar which cell the caret is in. Extending the
+               listener that already exists rather than adding a second
+               extension: focusChanged is the documented signal for this, and
+               EditorView.focusChangeEffect is for producing StateEffects, which
+               is the wrong shape for a side effect outside the editor. */
+            if (update.focusChanged) {
+              if (update.view.hasFocus) setActiveCell(notebookId, cell.id, cell.type);
+              else                      markBlurred(cell.id);
+            }
           }),
           EditorView.theme({
             '&': { fontSize: '1rem', fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace", background: 'transparent' },
@@ -135,9 +159,16 @@
         view.dispatch({ selection: EditorSelection.cursor(end) });
       },
     });
+
+    /* A second, separate registry from the `register` event above. That one
+       feeds NotebookCard's cellFocusFns, which exists to MOVE the caret during
+       arrow-key navigation. This one hands the toolbar a live EditorView so
+       commands can read the selection and dispatch changes -- something the
+       toolbar cannot get by any prop path, since it lives in App.svelte. */
+    registerHandle(cell.id, { view, el: null, focus: () => view.focus() });
   }
 
-  onDestroy(() => view?.destroy());
+  onDestroy(() => { view?.destroy(); unregisterHandle(cell.id); });
 
   $: if (view && view.state.doc.toString() !== cell.source) {
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: cell.source } });
@@ -220,7 +251,14 @@
       id: cell.id,
       fn: () => { proseEl?.focus(); },
     });
+    registerHandle(cell.id, { view: null, el: proseEl, focus: () => proseEl?.focus() });
   }
+
+  /* focus/blur do NOT bubble, so these have to sit on the contenteditable
+     itself -- a focusin handler on .cell-shell could not tell which of a row's
+     side-by-side cells the caret landed in. */
+  function onProseFocus() { setActiveCell(notebookId, cell.id, cell.type); }
+  function onProseBlur()  { markBlurred(cell.id); }
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
@@ -310,6 +348,8 @@
         bind:this={proseEl}
         on:input={onTextInput}
         on:keydown={onProseKeydown}
+        on:focus={onProseFocus}
+        on:blur={onProseBlur}
         on:click|stopPropagation
       ></div>
 
@@ -326,6 +366,8 @@
         bind:this={proseEl}
         on:input={onTextInput}
         on:keydown={onProseKeydown}
+        on:focus={onProseFocus}
+        on:blur={onProseBlur}
         on:click|stopPropagation={() => headingReadonly && dispatch('headingClick', { rowId })}
       ></h1>
 
@@ -343,6 +385,8 @@
         bind:this={proseEl}
         on:input={onTextInput}
         on:keydown={onProseKeydown}
+        on:focus={onProseFocus}
+        on:blur={onProseBlur}
         on:click|stopPropagation={() => headingReadonly && dispatch('headingClick', { rowId })}
       ></h2>
     {/if}
@@ -436,12 +480,15 @@
     left: 0;
     display: flex;
     gap: 3px;
-    background: rgba(12, 15, 28, 0.96);
-    border: 1px solid rgba(255,255,255,0.1);
+    /* Was a hardcoded dark rgba(12,15,28,0.96), which made this picker
+       dark-on-light and unreadable in light mode. Pointing it at the menu
+       tokens fixes that and keeps it visually consistent with Menu.svelte. */
+    background: var(--menu-bg);
+    border: 1px solid var(--menu-border);
     border-radius: 7px;
     padding: 4px;
     z-index: 200;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    box-shadow: var(--menu-shadow);
     white-space: nowrap;
   }
 
