@@ -740,14 +740,31 @@
   /* ---- Focused (full-screen) view — truly edge to edge ---- */
   .focused-view {
     position: fixed;
-    inset: var(--appbar-h, 34px) 0 0 0;   /* clear the app bar */
+    /* The toolbar, not the canvas bar: focused mode swaps the app bar for the
+       taller grouped toolbar, and these two numbers must agree or the view
+       either overlaps the bar or leaves a gap under it. */
+    inset: var(--toolbar-h, 46px) 0 0 0;   /* clear the toolbar */
     /* Use card-bg so light mode doesn't show dark canvas edges */
     background: var(--card-bg, #050810);
     overflow-y: auto;
     z-index: 50;
+    /* Flex, not a percentage-height chain. The card has to fill the window when
+       the notebook is shorter than it, and `min-height: 100%` cannot do that:
+       a percentage min-height resolves against the parent's HEIGHT, which stays
+       auto no matter how many min-heights are stacked above it. The old
+       `min-height: 100vh` did fill, but .focused-view is inset from the top by
+       the bar height, so a 100vh child overflowed by exactly that much and put a
+       scrollbar in focused mode even on a one-line notebook. Flex gives the
+       child a real box to grow into. */
+    display: flex;
+    flex-direction: column;
   }
   .focused-view-inner {
     width: 100%;
+    /* Grow to fill, but never shrink below content. */
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
     /* No max-width, no side padding — notebook card fills the window */
   }
   /* Override card styles when in focused view so it has no border-radius or side margins */
@@ -755,7 +772,7 @@
     border-radius: 0;
     border-left: none;
     border-right: none;
-    min-height: 100vh;
+    flex: 1 0 auto;
   }
 
 </style>

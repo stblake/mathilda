@@ -923,7 +923,10 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     background: var(--bg, #050810);
-    min-height: 100vh;
+    /* No min-height here: Canvas.svelte's .focused-view is a flex column and
+       grows this card to fill it. A 100vh here overflowed the inset view by the
+       bar height; a percentage min-height could not resolve at all. See the note
+       on .focused-view in Canvas.svelte. */
     width: 100%;
     display: flex;
     flex-direction: column;
