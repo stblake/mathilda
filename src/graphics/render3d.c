@@ -20,6 +20,7 @@
 
 #include "render3d.h"
 #include "render_common.h"
+#include "label_font.h"
 #include "sym_names.h"
 #include "print.h"
 #include <raylib.h>
@@ -316,8 +317,8 @@ static void draw_box3(const Box3D* bb, Color col) {
 
 static void draw_tick_label3(Vector3 world_pos, Camera cam, const char* text, int win_w, int win_h, Color color) {
     Vector2 s = GetWorldToScreenEx(world_pos, cam, win_w, win_h);
-    int tw = MeasureText(text, 14);
-    DrawText(text, (int)s.x - tw / 2, (int)s.y, 14, color);
+    int tw = label_font_measure_px(text, 14);
+    label_font_draw_px(text, (int)s.x - tw / 2, (int)s.y, 14, color);
 }
 
 /* One tick label every nice_step() interval along each of the three box
@@ -333,11 +334,20 @@ static void draw_box_ticks(const Box3D* bb, Camera cam, int win_w, int win_h, Co
         snprintf(buf, sizeof(buf), "%g", x);
         draw_tick_label3(to_v3(x, bb->ymin, bb->zmin), cam, buf, win_w, win_h, col);
     }
+    /* y = ymin is the point (xmax, ymin, zmin) -- the same 3D point (and
+     * therefore the same projected screen position) as the x-loop's
+     * x = xmax tick above. Drawing both would overwrite one label with
+     * the other; skip the y-axis's copy and let the x-axis's tick stand
+     * for that corner. */
     for (double y = ceil(bb->ymin / ystep) * ystep; y <= bb->ymax + 1e-9; y += ystep) {
+        if (fabs(y - bb->ymin) < 1e-9) continue;
         snprintf(buf, sizeof(buf), "%g", y);
         draw_tick_label3(to_v3(bb->xmax, y, bb->zmin), cam, buf, win_w, win_h, col);
     }
+    /* z = zmin is the point (xmin, ymin, zmin) -- the same corner as the
+     * x-loop's x = xmin tick; skip it for the same reason as above. */
     for (double z = ceil(bb->zmin / zstep) * zstep; z <= bb->zmax + 1e-9; z += zstep) {
+        if (fabs(z - bb->zmin) < 1e-9) continue;
         snprintf(buf, sizeof(buf), "%g", z);
         draw_tick_label3(to_v3(bb->xmin, bb->ymin, z), cam, buf, win_w, win_h, col);
     }
@@ -353,9 +363,9 @@ static void draw_box_ticks(const Box3D* bb, Camera cam, int win_w, int win_h, Co
 #define TB3_GAP     4.0f
 #define TB3_MARGIN 10.0f
 #define TB3_LW      2.2f
-#define TB3_COUNT   3
+#define TB3_COUNT   4
 
-typedef enum { TB3_SAVE = 0, TB3_RESET, TB3_CLOSE } Tb3Btn;
+typedef enum { TB3_SAVE = 0, TB3_SLICE, TB3_RESET, TB3_CLOSE } Tb3Btn;
 
 static Rectangle tb3_rect(int i, int win_w) {
     float total = TB3_COUNT * TB3_BTN + (TB3_COUNT - 1) * TB3_GAP;
@@ -372,6 +382,7 @@ static int tb3_hit(Vector2 m, int win_w) {
 static const char* tb3_tip(int k) {
     switch (k) {
         case TB3_SAVE:  return "Save as PNG";
+        case TB3_SLICE: return "Toggle cross-section slicing";
         case TB3_RESET: return "Reset view";
         case TB3_CLOSE: return "Close window";
         default:        return "";
@@ -410,6 +421,14 @@ static void tb3_icon_home(Rectangle b, Color c) {
     tb3_stroke((Vector2){ dlx, dY }, (Vector2){ drx, dY }, c);
 }
 
+static void tb3_icon_slice(Rectangle b, Color c) {       /* box cut by a plane */
+    Rectangle box = { b.x + b.width * 0.16f, b.y + b.height * 0.16f,
+                       b.width * 0.68f, b.height * 0.68f };
+    DrawRectangleLinesEx(box, TB3_LW, c);
+    tb3_stroke((Vector2){ b.x, b.y + b.height * 0.5f },
+               (Vector2){ b.x + b.width, b.y + b.height * 0.5f }, c);
+}
+
 static void tb3_icon_close(Rectangle b, Color c) {
     float m = b.width * 0.18f;
     tb3_stroke((Vector2){ b.x + m, b.y + m },
@@ -418,7 +437,7 @@ static void tb3_icon_close(Rectangle b, Color c) {
                (Vector2){ b.x + m, b.y + b.height - m }, c);
 }
 
-static void draw_toolbar3(int win_w, int hover) {
+static void draw_toolbar3(int win_w, int hover, bool slicing) {
     float total = TB3_COUNT * TB3_BTN + (TB3_COUNT - 1) * TB3_GAP;
     Rectangle panel = { (float)win_w - TB3_MARGIN - total - 5.0f, TB3_MARGIN - 5.0f,
                         total + 10.0f, TB3_BTN + 10.0f };
@@ -427,13 +446,16 @@ static void draw_toolbar3(int win_w, int hover) {
     const Color icol = { 90, 90, 90, 255 };
     for (int i = 0; i < TB3_COUNT; i++) {
         Rectangle r = tb3_rect(i, win_w);
+        bool active = (i == TB3_SLICE && slicing);
         if (i == hover) {
             Color hb = (i == TB3_CLOSE) ? (Color){ 240, 205, 205, 255 } : (Color){ 220, 227, 236, 255 };
             DrawRectangleRounded(r, 0.3f, 6, hb);
         }
+        else if (active) DrawRectangleRounded(r, 0.3f, 6, (Color){ 205, 222, 245, 255 });
         Rectangle ic = { r.x + 6, r.y + 6, r.width - 12, r.height - 12 };
         switch (i) {
             case TB3_SAVE:  tb3_icon_save(ic, icol); break;
+            case TB3_SLICE: tb3_icon_slice(ic, icol); break;
             case TB3_RESET: tb3_icon_home(ic, icol); break;
             case TB3_CLOSE: tb3_icon_close(ic, (i == hover) ? (Color){ 190, 60, 60, 255 } : icol); break;
             default: break;
@@ -442,15 +464,270 @@ static void draw_toolbar3(int win_w, int hover) {
 
     if (hover >= 0) {
         const char* t = tb3_tip(hover);
-        int tw = MeasureText(t, 12);
+        int tw = label_font_measure_px(t, 12);
         Rectangle r = tb3_rect(hover, win_w);
         float tx = r.x + r.width * 0.5f - (float)tw * 0.5f;
         if (tx + (float)tw + 6 > (float)win_w) tx = (float)win_w - (float)tw - 6;
         if (tx < 4) tx = 4;
         float ty = r.y + r.height + 7;
         DrawRectangle((int)tx - 5, (int)ty - 3, tw + 10, 19, (Color){ 40, 40, 40, 235 });
-        DrawText(t, (int)tx, (int)ty, 12, RAYWHITE);
+        label_font_draw_px(t, (int)tx, (int)ty, 12, RAYWHITE);
     }
+}
+
+/* ---------------- hover trace (3D) ---------------- *
+ *
+ * Brute-force closest ray/triangle intersection over the baked mesh --
+ * there is no spatial index (render_baked() itself is a flat linear scan,
+ * see above), but a default-resolution Plot3D surface bakes to roughly a
+ * thousand triangles, cheap enough for a per-frame scan at interactive
+ * rates. GetRayCollisionTriangle is raylib's own routine, so no hand-rolled
+ * Moller-Trumbore is needed here. */
+static bool pick_baked_mesh(const BakedMesh* bm, Ray ray, Vector3* hit_point) {
+    bool found = false;
+    float best_dist = 0.0f;
+    for (size_t i = 0; i < bm->n_tris; i++) {
+        RayCollision rc = GetRayCollisionTriangle(ray, bm->tris[i].v0, bm->tris[i].v1, bm->tris[i].v2);
+        if (rc.hit && (!found || rc.distance < best_dist)) {
+            found = true;
+            best_dist = rc.distance;
+            *hit_point = rc.point;
+        }
+    }
+    return found;
+}
+
+/* ---------------- cross-section slicing (3D, standalone show only) ---------------- *
+ *
+ * An axis-aligned plane (X, Y, or Z in data space) cuts the baked mesh.
+ * There is no shortcut via Plot3D's original sample grid: build_surface_primitives
+ * only has that (i,j) structure while it's building the Graphics3D[...] result --
+ * by the time it reaches a flat BakedTri array here, all that's left is an
+ * unstructured triangle soup, so the intersection is genuine "marching
+ * triangles": per triangle, test each vertex's signed distance to the plane,
+ * and where exactly two of the three edges cross zero, linearly interpolate
+ * one segment. Segments are drawn independently, with no graph-stitching
+ * into a single ordered curve -- adjacent triangles share edges, so they
+ * still read as one continuous outline. */
+
+typedef struct { Vector3 a, b; } SliceSeg;
+
+/* Data axis -> the Raylib component to_v3 puts it in (to_v3 maps data
+ * (x,y,z) to Raylib (x,z,y): data x stays x, data y becomes Raylib z, data
+ * z becomes Raylib y). */
+static float axis_component(Vector3 v, int axis) {
+    switch (axis) {
+        case 0: return v.x;
+        case 1: return v.z;
+        default: return v.y;
+    }
+}
+
+static Vector3 lerp3(Vector3 a, Vector3 b, float t) {
+    return (Vector3){ a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t };
+}
+
+static void axis_range(const Box3D* bb, int axis, double* lo, double* hi) {
+    switch (axis) {
+        case 0: *lo = bb->xmin; *hi = bb->xmax; break;
+        case 1: *lo = bb->ymin; *hi = bb->ymax; break;
+        default: *lo = bb->zmin; *hi = bb->zmax; break;
+    }
+}
+
+static void slice_seg_push(SliceSeg** segs, size_t* len, size_t* cap, Vector3 a, Vector3 b) {
+    if (*len == *cap) {
+        *cap = *cap ? *cap * 2 : 256;
+        *segs = (SliceSeg*)realloc(*segs, sizeof(SliceSeg) * (*cap));
+    }
+    (*segs)[(*len)++] = (SliceSeg){ a, b };
+}
+
+static void slice_mesh(const BakedMesh* bm, int axis, float pos,
+                        SliceSeg** segs, size_t* len, size_t* cap) {
+    for (size_t i = 0; i < bm->n_tris; i++) {
+        Vector3 v0 = bm->tris[i].v0, v1 = bm->tris[i].v1, v2 = bm->tris[i].v2;
+        float d0 = axis_component(v0, axis) - pos;
+        float d1 = axis_component(v1, axis) - pos;
+        float d2 = axis_component(v2, axis) - pos;
+        Vector3 pts[2];
+        int n = 0;
+        if ((d0 < 0.0f) != (d1 < 0.0f) && d0 != d1) pts[n++] = lerp3(v0, v1, d0 / (d0 - d1));
+        if (n < 2 && (d1 < 0.0f) != (d2 < 0.0f) && d1 != d2) pts[n++] = lerp3(v1, v2, d1 / (d1 - d2));
+        if (n < 2 && (d2 < 0.0f) != (d0 < 0.0f) && d2 != d0) pts[n++] = lerp3(v2, v0, d2 / (d2 - d0));
+        if (n == 2) slice_seg_push(segs, len, cap, pts[0], pts[1]);
+    }
+}
+
+/* Translucent quad spanning the bbox's other two axes at the current plane
+ * position -- backface culling is already off for this whole render pass
+ * (mathematical surfaces are drawn double-sided), so one winding suffices. */
+static void draw_slice_plane(const Box3D* bb, int axis, float pos, Color col) {
+    Vector3 c[4];
+    switch (axis) {
+        case 0:
+            c[0] = to_v3(pos, bb->ymin, bb->zmin); c[1] = to_v3(pos, bb->ymax, bb->zmin);
+            c[2] = to_v3(pos, bb->ymax, bb->zmax); c[3] = to_v3(pos, bb->ymin, bb->zmax);
+            break;
+        case 1:
+            c[0] = to_v3(bb->xmin, pos, bb->zmin); c[1] = to_v3(bb->xmax, pos, bb->zmin);
+            c[2] = to_v3(bb->xmax, pos, bb->zmax); c[3] = to_v3(bb->xmin, pos, bb->zmax);
+            break;
+        default:
+            c[0] = to_v3(bb->xmin, bb->ymin, pos); c[1] = to_v3(bb->xmax, bb->ymin, pos);
+            c[2] = to_v3(bb->xmax, bb->ymax, pos); c[3] = to_v3(bb->xmin, bb->ymax, pos);
+            break;
+    }
+    DrawTriangle3D(c[0], c[1], c[2], col);
+    DrawTriangle3D(c[0], c[2], c[3], col);
+}
+
+/* Project a Raylib-space point onto the cutting plane's own 2D basis (the
+ * two data axes *not* being sliced), for the flattened inset panel. */
+static void free_axes_2d(Vector3 v, int slice_axis, float* fx, float* fy) {
+    switch (slice_axis) {
+        case 0: *fx = v.z; *fy = v.y; break; /* data (y, z) */
+        case 1: *fx = v.x; *fy = v.y; break; /* data (x, z) */
+        default: *fx = v.x; *fy = v.z; break; /* data (x, y) */
+    }
+}
+
+#define SLICE_INSET_W 170.0f
+#define SLICE_INSET_H 170.0f
+#define SLICE_INSET_MARGIN 14.0f
+
+/* The literal "CT-scan" view: the cross-section flattened into 2D, drawn as
+ * a small fixed-size inset panel, autoscaled to fit. Segments are drawn as
+ * disconnected lines (same reasoning as the 3D pass -- no stitching needed
+ * for them to read as one continuous curve). */
+static void draw_slice_inset(const SliceSeg* segs, size_t n_segs, int slice_axis,
+                              int win_w, float floor_y) {
+    if (n_segs == 0) return;
+    float minx = 1e30f, maxx = -1e30f, miny = 1e30f, maxy = -1e30f;
+    for (size_t i = 0; i < n_segs; i++) {
+        float ax, ay, bx, by;
+        free_axes_2d(segs[i].a, slice_axis, &ax, &ay);
+        free_axes_2d(segs[i].b, slice_axis, &bx, &by);
+        if (ax < minx) minx = ax;
+        if (ax > maxx) maxx = ax;
+        if (bx < minx) minx = bx;
+        if (bx > maxx) maxx = bx;
+        if (ay < miny) miny = ay;
+        if (ay > maxy) maxy = ay;
+        if (by < miny) miny = by;
+        if (by > maxy) maxy = by;
+    }
+    float dw = maxx - minx, dh = maxy - miny;
+    if (dw < 1e-6f) dw = 1.0f;
+    if (dh < 1e-6f) dh = 1.0f;
+
+    float box_x = (float)win_w - SLICE_INSET_MARGIN - SLICE_INSET_W;
+    float box_y = floor_y - SLICE_INSET_MARGIN - SLICE_INSET_H;
+    if (box_y < 40.0f) box_y = 40.0f;
+    DrawRectangle((int)box_x - 4, (int)box_y - 4, (int)SLICE_INSET_W + 8, (int)SLICE_INSET_H + 8,
+                  (Color){ 248, 248, 248, 235 });
+    DrawRectangleLines((int)box_x - 4, (int)box_y - 4, (int)SLICE_INSET_W + 8, (int)SLICE_INSET_H + 8,
+                        (Color){ 140, 140, 150, 255 });
+
+    float pad = 12.0f;
+    float sx = (SLICE_INSET_W - 2.0f * pad) / dw, sy = (SLICE_INSET_H - 2.0f * pad) / dh;
+    float s = sx < sy ? sx : sy;
+    float ox = box_x + SLICE_INSET_W * 0.5f - (minx + maxx) * 0.5f * s;
+    float oy = box_y + SLICE_INSET_H * 0.5f + (miny + maxy) * 0.5f * s;
+
+    for (size_t i = 0; i < n_segs; i++) {
+        float ax, ay, bx, by;
+        free_axes_2d(segs[i].a, slice_axis, &ax, &ay);
+        free_axes_2d(segs[i].b, slice_axis, &bx, &by);
+        Vector2 pa = { ox + ax * s, oy - ay * s };
+        Vector2 pb = { ox + bx * s, oy - by * s };
+        DrawLineEx(pa, pb, 2.0f, (Color){ 220, 60, 40, 255 });
+    }
+    const char* lbl = slice_axis == 0 ? "y-z cross-section"
+                     : slice_axis == 1 ? "x-z cross-section"
+                                       : "x-y cross-section";
+    label_font_draw_px(lbl, (int)box_x, (int)(box_y - 16), 11, (Color){ 80, 80, 90, 255 });
+}
+
+/* ---------------- slice control row (axis select + position slider) ---------------- */
+
+#define SLICE_ROW_H     30.0f
+#define SLICE_PAD       10.0f
+#define SLICE_AX0       54.0f
+#define SLICE_AXBTN_W   22.0f
+#define SLICE_AXBTN_GAP  4.0f
+#define SLICE_VALUE_W   70.0f
+
+static float slice_track_x0(void) { return SLICE_AX0 + 3.0f * (SLICE_AXBTN_W + SLICE_AXBTN_GAP) + 12.0f; }
+static float slice_track_x1(int win_w) { return (float)win_w - SLICE_VALUE_W - SLICE_PAD; }
+
+static int slice_axis_hit(Vector2 m, float row_y) {
+    for (int k = 0; k < 3; k++) {
+        Rectangle r = { SLICE_AX0 + k * (SLICE_AXBTN_W + SLICE_AXBTN_GAP),
+                        row_y + (SLICE_ROW_H - SLICE_AXBTN_W) * 0.5f, SLICE_AXBTN_W, SLICE_AXBTN_W };
+        if (CheckCollisionPointRec(m, r)) return k;
+    }
+    return -1;
+}
+
+static bool slice_track_hit(Vector2 m, float row_y, int win_w) {
+    float x0 = slice_track_x0(), x1 = slice_track_x1(win_w);
+    float mid_y = row_y + SLICE_ROW_H * 0.5f;
+    return m.x >= x0 - 14.0f && m.x <= x1 + 14.0f && m.y >= mid_y - 12.0f && m.y <= mid_y + 12.0f;
+}
+
+static double slice_frac_from_mouse(float mx, int win_w) {
+    float x0 = slice_track_x0(), x1 = slice_track_x1(win_w);
+    float frac = (mx - x0) / (x1 - x0);
+    if (frac < 0.0f) frac = 0.0f;
+    if (frac > 1.0f) frac = 1.0f;
+    return (double)frac;
+}
+
+static void draw_slice_row(int win_w, float row_y, int slice_axis, double slice_pos,
+                            double lo, double hi, Vector2 mouse, bool dragging) {
+    DrawRectangle(0, (int)row_y, win_w, (int)SLICE_ROW_H, (Color){ 235, 235, 240, 255 });
+    DrawRectangle(0, (int)(row_y + SLICE_ROW_H - 1), win_w, 1, (Color){ 200, 200, 210, 255 });
+
+    float mid_y = row_y + SLICE_ROW_H * 0.5f;
+    label_font_draw_px("Slice", 6, (int)(mid_y - 7), 13, (Color){ 60, 60, 100, 255 });
+
+    const char* names[3] = { "X", "Y", "Z" };
+    for (int k = 0; k < 3; k++) {
+        Rectangle r = { SLICE_AX0 + k * (SLICE_AXBTN_W + SLICE_AXBTN_GAP),
+                        row_y + (SLICE_ROW_H - SLICE_AXBTN_W) * 0.5f, SLICE_AXBTN_W, SLICE_AXBTN_W };
+        bool active = (k == slice_axis);
+        bool hov = CheckCollisionPointRec(mouse, r);
+        Color bg = active ? (Color){ 50, 100, 220, 255 }
+                           : (hov ? (Color){ 205, 205, 215, 255 } : (Color){ 222, 222, 228, 255 });
+        DrawRectangleRec(r, bg);
+        DrawRectangleLinesEx(r, 1.0f, (Color){ 150, 150, 165, 255 });
+        int tw = label_font_measure_px(names[k], 12);
+        label_font_draw_px(names[k], (int)(r.x + r.width * 0.5f - (float)tw * 0.5f), (int)(r.y + r.height * 0.5f - 6),
+                 12, active ? WHITE : (Color){ 40, 40, 60, 255 });
+    }
+
+    float track_x0 = slice_track_x0(), track_x1 = slice_track_x1(win_w);
+    float track_len = track_x1 - track_x0;
+    DrawRectangle((int)track_x0, (int)(mid_y - 2), (int)track_len + 1, 4, (Color){ 185, 185, 195, 255 });
+    double span = hi - lo;
+    double frac = (span > 0) ? (slice_pos - lo) / span : 0.0;
+    if (frac < 0.0) frac = 0.0;
+    if (frac > 1.0) frac = 1.0;
+    float fill = (float)(frac * track_len);
+    if (fill > 0.0f)
+        DrawRectangle((int)track_x0, (int)(mid_y - 2), (int)fill + 1, 4, (Color){ 220, 80, 60, 255 });
+    float hx = track_x0 + fill;
+    bool hover_handle = fabsf(mouse.x - hx) < 12.0f && mouse.y >= row_y && mouse.y < row_y + SLICE_ROW_H;
+    Color hc = (hover_handle || dragging) ? (Color){ 190, 50, 30, 255 } : (Color){ 220, 80, 60, 255 };
+    DrawCircle((int)hx, (int)mid_y, 7.0f, hc);
+    DrawCircleLines((int)hx, (int)mid_y, 7.0f, (Color){ 140, 30, 15, 255 });
+
+    char val[32];
+    snprintf(val, sizeof(val), "%.4g", slice_pos);
+    int vw = label_font_measure_px(val, 12);
+    label_font_draw_px(val, (int)((float)win_w - SLICE_VALUE_W / 2.0f - (float)vw / 2.0f), (int)(mid_y - 6), 12,
+             (Color){ 40, 40, 80, 255 });
 }
 
 /* ---------------- main loop ---------------- */
@@ -484,6 +761,7 @@ void graphics3d_show(const Expr* graphics3d_expr) {
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow((int)opts.width, (int)opts.height, "Mathilda");
     SetTargetFPS(60);
+    label_font_load();
 
     /* Pre-bake the expression tree into flat C arrays before the render loop.
      * This converts every Polygon into (n-2) BakedTri entries and every Line
@@ -510,6 +788,12 @@ void graphics3d_show(const Expr* graphics3d_expr) {
 
     int tb3_hover = -1;
 
+    /* Cross-section slicing state (toggled via the toolbar). */
+    bool slicing = false;
+    int slice_axis = 0;                          /* 0=X, 1=Y, 2=Z (data space) */
+    double slice_pos = (bb.xmin + bb.xmax) / 2.0; /* current plane position */
+    bool slice_dragging = false;
+
     while (!WindowShouldClose()) {
         /* Use the actual current window size every frame so toolbar hit
          * detection and 2D overlays stay correct if the OS resizes the window
@@ -526,6 +810,7 @@ void graphics3d_show(const Expr* graphics3d_expr) {
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && tb3_hover >= 0) {
             switch (tb3_hover) {
                 case TB3_SAVE:  TakeScreenshot("mathilda_plot.png"); break;
+                case TB3_SLICE: slicing = !slicing; break;
                 case TB3_RESET:
                     azimuth = home_az; elevation = home_el;
                     distance = home_dist; camera.target = home_target;
@@ -534,8 +819,30 @@ void graphics3d_show(const Expr* graphics3d_expr) {
             }
         }
 
-        /* Only orbit/pan when the mouse is NOT over the toolbar. */
-        if (tb3_hover < 0) {
+        /* Slice control row: only present/interactive while slicing is on.
+         * Positioned above the hint-text line at the very bottom. */
+        float slice_row_y = (float)win_h - 22.0f - SLICE_ROW_H - 4.0f;
+        bool slice_row_hover = slicing && mouse.y >= slice_row_y && mouse.y < slice_row_y + SLICE_ROW_H;
+        if (slicing && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && slice_row_hover) {
+            int ax_hit = slice_axis_hit(mouse, slice_row_y);
+            if (ax_hit >= 0) {
+                slice_axis = ax_hit;
+                double lo, hi; axis_range(&bb, slice_axis, &lo, &hi);
+                slice_pos = (lo + hi) * 0.5;
+            } else if (slice_track_hit(mouse, slice_row_y, win_w)) {
+                slice_dragging = true;
+                double lo, hi; axis_range(&bb, slice_axis, &lo, &hi);
+                slice_pos = lo + slice_frac_from_mouse(mouse.x, win_w) * (hi - lo);
+            }
+        }
+        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) slice_dragging = false;
+        if (slice_dragging) {
+            double lo, hi; axis_range(&bb, slice_axis, &lo, &hi);
+            slice_pos = lo + slice_frac_from_mouse(mouse.x, win_w) * (hi - lo);
+        }
+
+        /* Only orbit/pan when the mouse is NOT over the toolbar or the slice row. */
+        if (tb3_hover < 0 && !slice_row_hover && !slice_dragging) {
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
                 azimuth   -= mdelta.x * 0.005;
                 elevation += mdelta.y * 0.005;
@@ -556,7 +863,7 @@ void graphics3d_show(const Expr* graphics3d_expr) {
         }
 
         float wheel = GetMouseWheelMove();
-        if (wheel != 0.0f && tb3_hover < 0) {
+        if (wheel != 0.0f && tb3_hover < 0 && !slice_row_hover) {
             distance *= (wheel > 0) ? (1.0 / 1.1) : 1.1;
             if (distance < diag * 0.05) distance = diag * 0.05;
             if (distance > diag * 20.0) distance = diag * 20.0;
@@ -571,6 +878,25 @@ void graphics3d_show(const Expr* graphics3d_expr) {
             (float)(camera.target.y + distance * sin(elevation)),
             (float)(camera.target.z + distance * cos(elevation) * sin(azimuth)),
         };
+
+        /* Hover trace: pick the closest triangle under the cursor, gated to
+         * "not over the toolbar" and "not currently orbiting/panning" so it
+         * doesn't fight the drag gestures. */
+        bool hv_found = false;
+        Vector3 hv_pt = { 0, 0, 0 };
+        if (tb3_hover < 0 && !IsMouseButtonDown(MOUSE_BUTTON_LEFT)
+            && !IsMouseButtonDown(MOUSE_BUTTON_RIGHT) && !IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+            Ray ray = GetScreenToWorldRay(mouse, camera);
+            hv_found = pick_baked_mesh(&mesh, ray, &hv_pt);
+        }
+
+        /* Cross-section slicing: re-intersect the mesh fresh every frame --
+         * the mesh itself is static here (baked once before the loop), but
+         * this keeps the same "recompute, don't cache" shape as the rest of
+         * the interactive overlays and is cheap at these triangle counts. */
+        SliceSeg* slice_segs = NULL;
+        size_t n_slice_segs = 0, slice_cap = 0;
+        if (slicing) slice_mesh(&mesh, slice_axis, (float)slice_pos, &slice_segs, &n_slice_segs, &slice_cap);
 
         BeginDrawing();
         ClearBackground(to_raylib(opts.background));
@@ -591,16 +917,33 @@ void graphics3d_show(const Expr* graphics3d_expr) {
         rlDisableBackfaceCulling(); /* surfaces are visible from both sides */
         render_baked(&mesh, opts.lighting, light_dir);
         if (opts.axes) draw_box3(&bb, axes_color);
+        if (hv_found) DrawSphere(hv_pt, (float)(diag * 0.012), (Color){ 230, 60, 60, 255 });
+        if (slicing) {
+            draw_slice_plane(&bb, slice_axis, (float)slice_pos, (Color){ 80, 140, 220, 70 });
+            for (size_t i = 0; i < n_slice_segs; i++)
+                DrawLine3D(slice_segs[i].a, slice_segs[i].b, (Color){ 220, 60, 40, 255 });
+        }
         EndMode3D(); /* EndMode3D flushes the render batch; rlDisableBackfaceCulling
                       * must stay in effect until here so the flush renders both faces */
         rlEnableBackfaceCulling();
+
+        if (hv_found) {
+            /* Undo to_v3's axis swap: raylib (x,y,z) -> data (x,z,y). */
+            Vector2 spos = GetWorldToScreenEx(hv_pt, camera, win_w, win_h);
+            char lbl[80];
+            snprintf(lbl, sizeof(lbl), "(%.4g, %.4g, %.4g)", (double)hv_pt.x, (double)hv_pt.z, (double)hv_pt.y);
+            int tw = label_font_measure_px(lbl, 13);
+            float lx = spos.x + 10.0f, ly = spos.y - 18.0f;
+            DrawRectangle((int)lx - 4, (int)ly - 3, tw + 8, 19, (Color){ 40, 40, 40, 215 });
+            label_font_draw_px(lbl, (int)lx, (int)ly, 13, RAYWHITE);
+        }
 
         if (opts.axes) draw_box_ticks(&bb, camera, win_w, win_h, axes_color);
         if (opts.plot_label) {
             char* s = expr_to_string((Expr*)opts.plot_label);
             if (s) {
-                int tw = MeasureText(s, 18);
-                DrawText(s, (win_w - tw) / 2, 10, 18, BLACK);
+                int tw = label_font_measure_px(s, 18);
+                label_font_draw_px(s, (win_w - tw) / 2, 10, 18, BLACK);
                 free(s);
             }
         }
@@ -623,15 +966,241 @@ void graphics3d_show(const Expr* graphics3d_expr) {
             draw_color_bar(cb_x, cb_y, cb_w, cb_h, cb_min, cb_max, cb_cfn);
         }
 
-        draw_toolbar3(win_w, tb3_hover);
+        if (slicing) {
+            draw_slice_inset(slice_segs, n_slice_segs, slice_axis, win_w, slice_row_y);
+            double lo, hi; axis_range(&bb, slice_axis, &lo, &hi);
+            draw_slice_row(win_w, slice_row_y, slice_axis, slice_pos, lo, hi, mouse, slice_dragging);
+        }
 
-        DrawText("drag: rotate   scroll: zoom   right-drag: pan",
+        draw_toolbar3(win_w, tb3_hover, slicing);
+
+        label_font_draw_px(slicing
+                 ? "drag: rotate   scroll: zoom   right-drag: pan   drag slider: move slice"
+                 : "drag: rotate   scroll: zoom   right-drag: pan",
                  10, win_h - 22, 14, GRAY);
 
         EndDrawing();
+        free(slice_segs);
     }
     done3d:;
 
     bm_free(&mesh);
+    label_font_unload();
     CloseWindow();
+}
+
+/* ---------------- embedded region rendering (Animate/Manipulate) ---------------- *
+ *
+ * Unlike graphics3d_show(), the caller owns the window and re-evaluates its
+ * body -- and therefore hands us a freshly-baked Expr* -- every frame. The
+ * only thing that must survive across calls is the orbit camera; everything
+ * else (bbox, baked mesh) is cheap to recompute and has no stable identity
+ * to cache against (mirrors graphics_render_in_region's 2D behaviour). */
+
+struct Graphics3DEmbedState {
+    bool     initialized;
+    double   azimuth, elevation, distance;
+    Vector3  target;
+    double   home_az, home_el, home_dist;
+    Vector3  home_target;
+    bool     dragging_orbit, dragging_pan;
+    RenderTexture2D rt;
+    bool     rt_loaded;
+    int      rt_w, rt_h;
+};
+
+Graphics3DEmbedState* graphics3d_embed_state_new(void) {
+    return (Graphics3DEmbedState*)calloc(1, sizeof(Graphics3DEmbedState));
+}
+
+void graphics3d_embed_state_free(Graphics3DEmbedState* state) {
+    if (!state) return;
+    if (state->rt_loaded) UnloadRenderTexture(state->rt);
+    free(state);
+}
+
+void graphics3d_embed_state_reset_view(Graphics3DEmbedState* state) {
+    if (!state || !state->initialized) return;
+    state->azimuth   = state->home_az;
+    state->elevation = state->home_el;
+    state->distance  = state->home_dist;
+    state->target    = state->home_target;
+}
+
+void graphics3d_render_in_region(const Expr* graphics3d_expr,
+                                  float rx, float ry, float rw, float rh,
+                                  Graphics3DEmbedState* state) {
+    if (!state || !graphics3d_expr || graphics3d_expr->type != EXPR_FUNCTION
+        || graphics3d_expr->data.function.arg_count < 1) return;
+    if (rw <= 0.0f || rh <= 0.0f) return;
+
+    Gfx3DOptions opts;
+    gfx3d_options_parse(graphics3d_expr, &opts);
+    const Expr* prims = graphics3d_expr->data.function.args[0];
+    const Expr* color_bar_data = find_color_bar(graphics3d_expr);
+
+    Box3D bb = { DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX };
+    compute_bbox3(prims, &bb);
+    if (bb.xmin > bb.xmax) { bb.xmin = -1; bb.xmax = 1; }
+    if (bb.ymin > bb.ymax) { bb.ymin = -1; bb.ymax = 1; }
+    if (bb.zmin > bb.zmax) { bb.zmin = -1; bb.zmax = 1; }
+
+    Vector3 center = to_v3((bb.xmin + bb.xmax) / 2.0, (bb.ymin + bb.ymax) / 2.0, (bb.zmin + bb.zmax) / 2.0);
+    double diag = sqrt(pow(bb.xmax - bb.xmin, 2) + pow(bb.ymax - bb.ymin, 2) + pow(bb.zmax - bb.zmin, 2));
+    if (!(diag > 0.0)) diag = 2.0;
+
+    /* Establish the home view once; later calls keep whatever the user
+     * orbited to even as re-evaluation reshapes the bounding box. */
+    if (!state->initialized) {
+        state->azimuth  = state->home_az   = -60.0 * M_PI / 180.0;
+        state->elevation = state->home_el  = 25.0 * M_PI / 180.0;
+        state->distance  = state->home_dist = diag * 1.6;
+        state->target    = state->home_target = center;
+        state->initialized = true;
+    }
+
+    BakedMesh mesh = bake_mesh(prims, opts.style_color);
+
+    int want_w = (int)rw, want_h = (int)rh;
+    if (!state->rt_loaded || state->rt_w != want_w || state->rt_h != want_h) {
+        if (state->rt_loaded) UnloadRenderTexture(state->rt);
+        state->rt = LoadRenderTexture(want_w, want_h);
+        state->rt_loaded = true;
+        state->rt_w = want_w;
+        state->rt_h = want_h;
+    }
+
+    /* ---- input: orbit / pan / zoom, gated to this region ---- */
+    Vector2 mouse  = GetMousePosition();
+    Vector2 mdelta = GetMouseDelta();
+    bool inside = mouse.x >= rx && mouse.x <= rx + rw && mouse.y >= ry && mouse.y <= ry + rh;
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && inside)              state->dragging_orbit = true;
+    if ((IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)
+         || IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) && inside)       state->dragging_pan = true;
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))                       state->dragging_orbit = false;
+    if (IsMouseButtonReleased(MOUSE_BUTTON_RIGHT)
+        || IsMouseButtonReleased(MOUSE_BUTTON_MIDDLE))                  state->dragging_pan = false;
+
+    Camera3D camera = { 0 };
+    camera.up = (Vector3){ 0, 1, 0 };
+    camera.fovy = 45.0f;
+    camera.projection = CAMERA_PERSPECTIVE;
+    camera.target = state->target;
+
+    if (state->dragging_orbit) {
+        state->azimuth   -= mdelta.x * 0.005;
+        state->elevation += mdelta.y * 0.005;
+        const double lim = 89.0 * M_PI / 180.0;
+        if (state->elevation > lim) state->elevation = lim;
+        if (state->elevation < -lim) state->elevation = -lim;
+    } else if (state->dragging_pan) {
+        Vector3 cur_pos = (Vector3){
+            (float)(camera.target.x + state->distance * cos(state->elevation) * cos(state->azimuth)),
+            (float)(camera.target.y + state->distance * sin(state->elevation)),
+            (float)(camera.target.z + state->distance * cos(state->elevation) * sin(state->azimuth)),
+        };
+        Vector3 fwd    = Vector3Normalize(Vector3Subtract(camera.target, cur_pos));
+        Vector3 right  = Vector3Normalize(Vector3CrossProduct(fwd, camera.up));
+        Vector3 trueUp = Vector3CrossProduct(right, fwd);
+        float k = (float)(state->distance * 0.0015);
+        state->target = Vector3Add(state->target,
+            Vector3Add(Vector3Scale(right, -mdelta.x * k), Vector3Scale(trueUp, mdelta.y * k)));
+        camera.target = state->target;
+    }
+
+    float wheel = GetMouseWheelMove();
+    if (wheel != 0.0f && inside) {
+        state->distance *= (wheel > 0) ? (1.0 / 1.1) : 1.1;
+        if (state->distance < diag * 0.05) state->distance = diag * 0.05;
+        if (state->distance > diag * 20.0) state->distance = diag * 20.0;
+    }
+
+    camera.position = (Vector3){
+        (float)(camera.target.x + state->distance * cos(state->elevation) * cos(state->azimuth)),
+        (float)(camera.target.y + state->distance * sin(state->elevation)),
+        (float)(camera.target.z + state->distance * cos(state->elevation) * sin(state->azimuth)),
+    };
+
+    Vector3 fwd    = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+    Vector3 right  = Vector3Normalize(Vector3CrossProduct(fwd, camera.up));
+    Vector3 cam_up = Vector3CrossProduct(right, fwd);
+    Vector3 light_dir = Vector3Normalize(
+        Vector3Add(Vector3Add(Vector3Scale(right,  0.3f),
+                              Vector3Scale(cam_up,  1.0f)),
+                              Vector3Scale(fwd,     0.5f)));
+
+    /* Hover trace: gated to the region and to "no drag in progress" (own or
+     * the caller's, per the Left/Right/Middle state also gating
+     * dragging_orbit/dragging_pan above). The ray is cast in the render
+     * texture's own local coordinate space (mouse - region origin), since
+     * that's the viewport BeginMode3D actually renders into here. */
+    bool hv_found = false;
+    Vector3 hv_pt = { 0, 0, 0 };
+    if (inside && !state->dragging_orbit && !state->dragging_pan
+        && !IsMouseButtonDown(MOUSE_BUTTON_LEFT) && !IsMouseButtonDown(MOUSE_BUTTON_RIGHT)
+        && !IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+        Vector2 local_mouse = { mouse.x - rx, mouse.y - ry };
+        Ray ray = GetScreenToWorldRayEx(local_mouse, camera, want_w, want_h);
+        hv_found = pick_baked_mesh(&mesh, ray, &hv_pt);
+    }
+
+    /* ---- draw into an offscreen target sized exactly rw x rh, so
+     * BeginMode3D's projection gets the region's own aspect ratio rather
+     * than the full window's ---- */
+    BeginTextureMode(state->rt);
+    ClearBackground(to_raylib(opts.background));
+
+    BeginMode3D(camera);
+    rlDisableBackfaceCulling();
+    render_baked(&mesh, opts.lighting, light_dir);
+    if (opts.axes) draw_box3(&bb, (Color){ 90, 90, 90, 255 });
+    if (hv_found) DrawSphere(hv_pt, (float)(diag * 0.012), (Color){ 230, 60, 60, 255 });
+    EndMode3D();
+    rlEnableBackfaceCulling();
+
+    if (hv_found) {
+        Vector2 spos = GetWorldToScreenEx(hv_pt, camera, want_w, want_h);
+        char lbl[80];
+        snprintf(lbl, sizeof(lbl), "(%.4g, %.4g, %.4g)", (double)hv_pt.x, (double)hv_pt.z, (double)hv_pt.y);
+        int tw = label_font_measure_px(lbl, 13);
+        float lx = spos.x + 10.0f, ly = spos.y - 18.0f;
+        DrawRectangle((int)lx - 4, (int)ly - 3, tw + 8, 19, (Color){ 40, 40, 40, 215 });
+        label_font_draw_px(lbl, (int)lx, (int)ly, 13, RAYWHITE);
+    }
+
+    if (opts.axes) draw_box_ticks(&bb, camera, want_w, want_h, (Color){ 90, 90, 90, 255 });
+    if (opts.plot_label) {
+        char* s = expr_to_string((Expr*)opts.plot_label);
+        if (s) {
+            int tw = label_font_measure_px(s, 18);
+            label_font_draw_px(s, (want_w - tw) / 2, 10, 18, BLACK);
+            free(s);
+        }
+    }
+    if (color_bar_data && color_bar_data->data.function.arg_count >= 2) {
+        double cb_min = 0.0, cb_max = 1.0;
+        const Expr* a0 = color_bar_data->data.function.args[0];
+        const Expr* a1 = color_bar_data->data.function.args[1];
+        if (a0->type == EXPR_REAL) cb_min = a0->data.real;
+        if (a1->type == EXPR_REAL) cb_max = a1->data.real;
+        const Expr* cb_cfn = (color_bar_data->data.function.arg_count >= 3)
+                             ? color_bar_data->data.function.args[2] : NULL;
+        const float cb_margin = 50.0f;
+        const float cb_w = 18.0f;
+        float cb_h = (float)want_h - 2.0f * cb_margin;
+        if (cb_h < 20.0f) cb_h = 20.0f;
+        float cb_x = (float)want_w - 70.0f;
+        float cb_y = cb_margin;
+        draw_color_bar(cb_x, cb_y, cb_w, cb_h, cb_min, cb_max, cb_cfn);
+    }
+
+    EndTextureMode();
+    bm_free(&mesh);
+
+    /* Blit the render texture into the caller's window rect. Render
+     * textures are stored bottom-up, hence the negative source height. */
+    Rectangle src = { 0, 0, (float)state->rt.texture.width, -(float)state->rt.texture.height };
+    Rectangle dst = { rx, ry, rw, rh };
+    DrawTexturePro(state->rt.texture, src, dst, (Vector2){ 0, 0 }, 0.0f, WHITE);
 }

@@ -31,6 +31,7 @@
 #include "animate.h"
 #include "show.h"
 #include "render.h"
+#include "render3d.h"
 #include "sym_names.h"
 #include "symtab.h"
 #include "eval.h"
@@ -227,6 +228,7 @@ static bool parse_iter_spec(const Expr* e, const char** var_sym,
 
 #ifdef USE_GRAPHICS
 #include <raylib.h>
+#include "label_font.h"
 
 #define SLIDER_ROW_H   28.0f   /* height of each labeled-variable slider row */
 #define BTNS_ROW_H     34.0f   /* height of the playback button row          */
@@ -287,8 +289,8 @@ static void draw_direction_label(float x, float y, float sz, AnimDirection dir) 
         case ANIM_DIR_BACKWARD_FORWARD: lbl = "<>F"; col = (Color){120,40,160,255}; break;
         default:                         lbl = "?";   col = DARKGRAY;                break;
     }
-    int tw = MeasureText(lbl, 10);
-    DrawText(lbl, (int)(x + sz * 0.5f - (float)tw * 0.5f),
+    int tw = label_font_measure_px(lbl, 10);
+    label_font_draw_px(lbl, (int)(x + sz * 0.5f - (float)tw * 0.5f),
                   (int)(y + sz * 0.5f - 5), 10, col);
 }
 
@@ -323,15 +325,15 @@ static void draw_iter_slider(const AnimIter* it, int win_w,
     DrawRectangle(0, (int)(row_y + SLIDER_ROW_H - 1), win_w, 1, (Color){200,200,210,255});
 
     /* Variable name label */
-    DrawText(it->var_sym, 6, (int)(mid_y - 7), 14, (Color){60,60,100,255});
+    label_font_draw_px(it->var_sym, 6, (int)(mid_y - 7), 14, (Color){60,60,100,255});
 
     /* Min / max hints */
     char lo[24], hi[24];
     snprintf(lo, sizeof(lo), "%.4g", it->tmin);
     snprintf(hi, sizeof(hi), "%.4g", it->tmax);
-    int lo_w = MeasureText(lo, 10);
-    DrawText(lo, (int)(track_x0 - lo_w - 3), (int)(mid_y - 5), 10, DARKGRAY);
-    DrawText(hi, (int)(track_x1 + 3),         (int)(mid_y - 5), 10, DARKGRAY);
+    int lo_w = label_font_measure_px(lo, 10);
+    label_font_draw_px(lo, (int)(track_x0 - lo_w - 3), (int)(mid_y - 5), 10, DARKGRAY);
+    label_font_draw_px(hi, (int)(track_x1 + 3),         (int)(mid_y - 5), 10, DARKGRAY);
 
     /* Track */
     DrawRectangle((int)track_x0, (int)(mid_y - 2), (int)track_len + 1, 4,
@@ -361,8 +363,8 @@ static void draw_iter_slider(const AnimIter* it, int win_w,
     /* Current value */
     char val[32];
     snprintf(val, sizeof(val), "%.5g", it->t);
-    int val_w = MeasureText(val, 12);
-    DrawText(val, (int)((float)win_w - VALUE_W / 2.0f - (float)val_w / 2.0f),
+    int val_w = label_font_measure_px(val, 12);
+    label_font_draw_px(val, (int)((float)win_w - VALUE_W / 2.0f - (float)val_w / 2.0f),
              (int)(mid_y - 6), 12, (Color){40,40,80,255});
 }
 
@@ -390,11 +392,17 @@ static double slider_frac_from_mouse(float mx, int win_w) {
 /* Main animation loop                                                  */
 /* ------------------------------------------------------------------ */
 
-static bool is_graphics_expr(const Expr* e) {
+static bool is_graphics2d_expr(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && (e->data.function.head->data.symbol.name == SYM_Graphics
-            || e->data.function.head->data.symbol.name == SYM_Graphics3D)
+        && e->data.function.head->data.symbol.name == SYM_Graphics
+        && e->data.function.arg_count >= 1;
+}
+
+static bool is_graphics3d_expr(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Graphics3D
         && e->data.function.arg_count >= 1;
 }
 
@@ -430,6 +438,7 @@ static void graphics_animate(const Expr* body,
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(win_w, win_h, "Mathilda - Animate");
     SetTargetFPS((int)opts.refresh_rate);
+    label_font_load();
 
     /* Animation phase in [0,1]; drives all iterators simultaneously. */
     double phi      = 0.0;      /* 0 = tmin end, 1 = tmax end */
@@ -443,6 +452,7 @@ static void graphics_animate(const Expr* body,
     int  drag_slider = -1;   /* which slider is being dragged (-1 = none) */
 
     Expr* frame_expr = NULL;
+    Graphics3DEmbedState* cam3d = graphics3d_embed_state_new();
 
     /* Button positions (recomputed each frame but constant during a frame). */
     float btn_y    = 0.0f;
@@ -562,6 +572,7 @@ static void graphics_animate(const Expr* body,
                 double span = iters[k].tmax - iters[k].tmin;
                 iters[k].t  = iters[k].tmin + phi * span;
             }
+            graphics3d_embed_state_reset_view(cam3d);
         }
         if (IsKeyPressed(KEY_LEFT)) {
             running = false;
@@ -610,6 +621,7 @@ static void graphics_animate(const Expr* body,
                         double span = iters[k].tmax - iters[k].tmin;
                         iters[k].t  = iters[k].tmin + phi * span;
                     }
+                    graphics3d_embed_state_reset_view(cam3d);
                 }
                 if (opts.show_step_buttons && btn_hit(mouse, step_l_x, btn_y, BTN_SIZE)) {
                     running = false;
@@ -667,12 +679,16 @@ static void graphics_animate(const Expr* body,
         ClearBackground((Color){240,240,245,255});
 
         /* Content area */
-        if (frame_expr && is_graphics_expr(frame_expr)) {
+        bool is_3d = frame_expr && is_graphics3d_expr(frame_expr);
+        if (frame_expr && is_graphics2d_expr(frame_expr)) {
             graphics_render_in_region(frame_expr, 0.0f, content_y,
                                        (float)win_w, content_h);
+        } else if (is_3d) {
+            graphics3d_render_in_region(frame_expr, 0.0f, content_y,
+                                         (float)win_w, content_h, cam3d);
         } else if (frame_expr) {
             char* s = expr_to_string(frame_expr);
-            if (s) { DrawText(s, 20, (int)(content_y + 20), 16, DARKGRAY); free(s); }
+            if (s) { label_font_draw_px(s, 20, (int)(content_y + 20), 16, DARKGRAY); free(s); }
         }
 
         /* Separator line between content and control bar. */
@@ -695,7 +711,7 @@ static void graphics_animate(const Expr* body,
         /* Buttons */
         if (opts.show_reset_button) {
             draw_btn_bg(reset_x, btn_y, BTN_SIZE, btn_hit(mouse, reset_x, btn_y, BTN_SIZE));
-            DrawText("R", (int)(reset_x + BTN_SIZE * 0.5f - 4),
+            label_font_draw_px("R", (int)(reset_x + BTN_SIZE * 0.5f - 4),
                      (int)(btn_y + BTN_SIZE * 0.5f - 7), 14, BLACK);
         }
         if (opts.show_step_buttons) {
@@ -715,25 +731,30 @@ static void graphics_animate(const Expr* body,
         if (opts.show_speed_controls) {
             char spd[16];
             snprintf(spd, sizeof(spd), "%.3gx", speed_mult);
-            DrawText(spd, (int)(slower_x - 40.0f), (int)(btn_y + BTN_SIZE * 0.5f - 6),
+            label_font_draw_px(spd, (int)(slower_x - 40.0f), (int)(btn_y + BTN_SIZE * 0.5f - 6),
                      11, DARKGRAY);
             draw_btn_bg(slower_x, btn_y, BTN_SIZE, btn_hit(mouse, slower_x, btn_y, BTN_SIZE));
-            DrawText("-", (int)(slower_x + BTN_SIZE * 0.5f - 3),
+            label_font_draw_px("-", (int)(slower_x + BTN_SIZE * 0.5f - 3),
                      (int)(btn_y + BTN_SIZE * 0.5f - 8), 16, BLACK);
             draw_btn_bg(faster_x, btn_y, BTN_SIZE, btn_hit(mouse, faster_x, btn_y, BTN_SIZE));
-            DrawText("+", (int)(faster_x + BTN_SIZE * 0.5f - 4),
+            label_font_draw_px("+", (int)(faster_x + BTN_SIZE * 0.5f - 4),
                      (int)(btn_y + BTN_SIZE * 0.5f - 8), 16, BLACK);
         }
 
         /* Help text */
         float help_y = btns_y + BTNS_ROW_H + 1.0f;
-        DrawText("Space: play/pause   \xE2\x86\x90/\xE2\x86\x92: step 2%   R: reset   Esc: close",
-                 4, (int)help_y, 10, (Color){130,130,140,255});
+        const char* help = is_3d
+            ? "Space: play/pause   \xE2\x86\x90/\xE2\x86\x92: step 2%   R: reset   Esc: close   "
+              "drag: rotate  scroll: zoom  right-drag: pan"
+            : "Space: play/pause   \xE2\x86\x90/\xE2\x86\x92: step 2%   R: reset   Esc: close";
+        label_font_draw_px(help, 4, (int)help_y, 10, (Color){130,130,140,255});
 
         EndDrawing();
     }
 
     if (frame_expr) { expr_free(frame_expr); frame_expr = NULL; }
+    graphics3d_embed_state_free(cam3d);
+    label_font_unload();
     CloseWindow();
 }
 

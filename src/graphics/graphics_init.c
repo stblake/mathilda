@@ -411,6 +411,54 @@ void graphics_init(void) {
         "\t  AxesLabel, GridLines, ImageSize, Background, PlotLabel, …) pass\n"
         "\t  through to the Graphics[...] result.");
 
+    symtab_add_builtin("ArrayPlot", builtin_arrayplot);
+    symtab_get_def("ArrayPlot")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ArrayPlot",
+        "ArrayPlot[array, opts...]\n"
+        "\tRenders a 2D array (nested List or NDArray) as a grid of coloured\n"
+        "\tcells, one per array entry -- a discrete heatmap with no\n"
+        "\tinterpolation between cells. Row 1 of array is drawn at the top,\n"
+        "\tcolumn 1 at the left. Not HoldAll: array is an ordinary evaluated\n"
+        "\texpression. Returns a Graphics[...] object (auto-displayed).\n"
+        "\n"
+        "\tArrayPlot[colorArray, opts...]\n"
+        "\tIf a cell is already a colour literal (RGBColor/GrayLevel/Hue/\n"
+        "\tCMYKColor), it paints that colour directly instead of one derived\n"
+        "\tfrom ColorFunction -- ArrayPlot doubles as a raw pixel-grid\n"
+        "\trenderer, e.g. ArrayPlot[{{Red, Blue}, {Blue, Red}}]. Numeric and\n"
+        "\tcolour cells freely mix within the same array: ArrayPlot[{{1, 0,\n"
+        "\tPink}, {0, 1, Red}}] calls out two cells explicitly while the rest\n"
+        "\tstill follow the normal heatmap.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  ColorFunction        named ramp string or f[t]->color (t in [0,1]).\n"
+        "\t                      Ramps: \"Greyscale\" (default: white low, black\n"
+        "\t                      high -- matches Mathematica's ArrayPlot),\n"
+        "\t                      \"Rainbow\", \"Temperature\", \"CoolTones\",\n"
+        "\t                      \"WarmTones\", all keyed to the normalised entry\n"
+        "\t                      value. Only applies to numeric cells.\n"
+        "\t  ColorFunctionScaling True (default): normalise entries to [0,1]\n"
+        "\t                       before calling ColorFunction; False: raw value\n"
+        "\t  ColorRules           {v1 -> c1, v2 -> c2, ...} (or a single v -> c):\n"
+        "\t                      an explicit colour for numeric cells whose value\n"
+        "\t                      exactly equals v, checked before ColorFunction.\n"
+        "\t                      Cells matching no rule still get the normal\n"
+        "\t                      scaled ColorFunction colour.\n"
+        "\t  Mesh                 All/True: draw grey grid lines between cells;\n"
+        "\t                      None (default): no lines\n"
+        "\t  PlotLegends          Automatic: attach a vertical colour scale bar\n"
+        "\t                      (only when at least one cell is numeric)\n"
+        "\t  Standard Graphics options (Axes, AspectRatio -> rows/cols by\n"
+        "\t  default, Frame, PlotRange, ImageSize, Background, PlotLabel, ...)\n"
+        "\t  pass through to the Graphics[...] result.\n"
+        "\n"
+        "\tExamples:\n"
+        "\t  ArrayPlot[{{1, 0, 1}, {0, 1, 0}, {1, 0, 1}}]\n"
+        "\t  ArrayPlot[RandomReal[1, {20, 20}], ColorFunction -> \"Rainbow\"]\n"
+        "\t  ArrayPlot[Table[Mod[i + j, 2], {i, 10}, {j, 10}], Mesh -> All]\n"
+        "\t  ArrayPlot[{{1, 0}, {0, 1}}, ColorRules -> {1 -> Pink, 0 -> Yellow}]\n"
+        "\t  ArrayPlot[{{1, 0, 0, Pink}, {1, 1, 0, Pink}, {1, 0, 1, Red}}]");
+
     symtab_add_builtin("ComplexPlot", builtin_complexplot);
     symtab_get_def("ComplexPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("ComplexPlot",
@@ -603,6 +651,11 @@ void graphics_init(void) {
         "\t                   (all keyed to scaled speed).\n"
         "\t  RegionFunction – f[x,y] mask; seeds outside the region are skipped.\n"
         "\t  PlotLegends   – Automatic / \"Expressions\" / explicit label list.\n"
+        "\t  StreamAnimate  – True | False (default). When True, each streamline is\n"
+        "\t                   emitted as AnimatedStreamline[...] instead of Line[...]:\n"
+        "\t                   the shape is drawn identically, but an interactive\n"
+        "\t                   window (Show, or embedded in Animate/Manipulate) also\n"
+        "\t                   draws particles flowing along it in real time.\n"
         "\t  Standard Graphics options (PlotRange, Axes, AspectRatio, Frame, …)\n"
         "\t                   pass through to the Graphics[...] result.");
 
@@ -610,6 +663,12 @@ void graphics_init(void) {
         "Arrow[{{x1,y1}, {x2,y2}, ...}]\n"
         "\tA graphics primitive: a directed polyline with an arrowhead at its\n"
         "\tlast point. Used by StreamPlot to draw streamlines.");
+
+    register_inert("AnimatedStreamline",
+        "AnimatedStreamline[{{x1,y1}, {x2,y2}, ...}]\n"
+        "\tA graphics primitive: drawn identically to Line[...], but an\n"
+        "\tinteractive window additionally animates particle dots flowing along\n"
+        "\tit over time. Emitted by StreamPlot when StreamAnimate -> True.");
 
     symtab_add_builtin("Animate", builtin_animate);
     symtab_get_def("Animate")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
@@ -678,6 +737,30 @@ void graphics_init(void) {
     register_inert("BackwardForward",
         "BackwardForward\n\tAnimate AnimationDirection value: parameter pingpongs "
         "tmax→tmin→tmax→...");
+
+    symtab_add_builtin("Manipulate", builtin_manipulate);
+    symtab_get_def("Manipulate")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("Manipulate",
+        "Manipulate[expr, {u, umin, umax}, ...]\n"
+        "\tOpens an interactive window with one control per variable and\n"
+        "\tre-evaluates expr with each variable bound to its current value\n"
+        "\twhenever a control changes. Returns Null once the window is\n"
+        "\tclosed. expr is typically a Graphics[...] or Plot[...] call that\n"
+        "\tdepends on the control variables. Unlike Animate, every control\n"
+        "\tis independently user-driven from the first frame -- there is no\n"
+        "\tanimation phase or playback transport.\n"
+        "\n"
+        "\tControl specs (any number, one row each):\n"
+        "\t  {u, umin, umax}              continuous slider, default = umin\n"
+        "\t  {u, umin, umax, du}          continuous slider with step du\n"
+        "\t  {{u, u0}, umin, umax}        continuous slider, explicit default u0\n"
+        "\t  {{u, u0}, umin, umax, du}    continuous slider, default + step\n"
+        "\t  {u, {v1, v2, ...}}           discrete button set, default = v1\n"
+        "\t  {{u, u0}, {v1, v2, ...}}     discrete button set, explicit default u0\n"
+        "\n"
+        "\tClick-drag a slider handle or click a discrete button to change\n"
+        "\tits value; click Reset to restore every control to its default.\n"
+        "\tEsc closes the window.");
 
     symtab_add_builtin("Plot3D", builtin_plot3d);
     symtab_get_def("Plot3D")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;

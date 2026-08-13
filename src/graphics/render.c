@@ -10,7 +10,7 @@
 #include "render.h"
 #include "render_common.h"
 #include "sampling.h"
-#include "hershey_font.h"
+#include "label_font.h"
 #include "primitives.h"
 #include "sym_names.h"
 #include "print.h"
@@ -30,8 +30,6 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-
-#define HERSHEY_CAP_HEIGHT 7.0
 
 /* ---------------- Expr coercion ---------------- */
 
@@ -681,6 +679,200 @@ static void gather_ys(const Expr* node, double** buf, size_t* len, size_t* cap) 
     }
 }
 
+/* Hover trace cursor: given a single Line[] point-list run (world-space
+ * coordinates, i.e. post-ScalingFunctions, pre-yscale -- exactly what
+ * expr_point reads straight off the primitive), find the segment whose x
+ * range brackets `want_x` and linearly interpolate y there. This traces
+ * *along* the curve rather than snapping to the nearest sample point. */
+static bool trace_point_list(const Expr* pts_list, double want_x, double* out_y) {
+    size_t n = pts_list->data.function.arg_count;
+    double px = 0.0, py = 0.0;
+    bool have_prev = false;
+    for (size_t i = 0; i < n; i++) {
+        double x, y;
+        if (!expr_point(pts_list->data.function.args[i], &x, &y)) { have_prev = false; continue; }
+        if (have_prev) {
+            double lo = px < x ? px : x, hi = px < x ? x : px;
+            if (hi > lo && want_x >= lo && want_x <= hi) {
+                double f = (want_x - px) / (x - px);
+                *out_y = py + (y - py) * f;
+                return true;
+            }
+        }
+        px = x; py = y; have_prev = true;
+    }
+    return false;
+}
+
+/* Walk `node` (mirrors draw_primitive's/collect_slopes's List/Line
+ * traversal) and, among every Line[] run whose x-range brackets `want_x`,
+ * return the one whose interpolated y is closest to `want_y` -- i.e. the
+ * curve visually nearest the mouse when several overlap in x (a
+ * multi-function Plot[{f,g,...}]). */
+static bool trace_nearest_curve_point(const Expr* node, double want_x, double want_y,
+                                       double* out_y, bool* have_best, double* best_dy) {
+    if (!node || node->type != EXPR_FUNCTION) return false;
+    const Expr* h = node->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return false;
+    const char* name = h->data.symbol.name;
+    size_t n = node->data.function.arg_count;
+
+    if (name == SYM_List) {
+        for (size_t i = 0; i < n; i++)
+            trace_nearest_curve_point(node->data.function.args[i], want_x, want_y, out_y, have_best, best_dy);
+        return *have_best;
+    }
+    if (name == SYM_Line && n >= 1 && node->data.function.args[0]->type == EXPR_FUNCTION) {
+        const Expr* arg = node->data.function.args[0];
+        size_t m = arg->data.function.arg_count;
+        if (m > 0 && looks_like_point(arg->data.function.args[0])) {
+            double y;
+            if (trace_point_list(arg, want_x, &y)) {
+                double dy = fabs(y - want_y);
+                if (!*have_best || dy < *best_dy) { *have_best = true; *best_dy = dy; *out_y = y; }
+            }
+        } else {
+            for (size_t i = 0; i < m; i++) {
+                const Expr* sub = arg->data.function.args[i];
+                if (sub->type != EXPR_FUNCTION) continue;
+                double y;
+                if (trace_point_list(sub, want_x, &y)) {
+                    double dy = fabs(y - want_y);
+                    if (!*have_best || dy < *best_dy) { *have_best = true; *best_dy = dy; *out_y = y; }
+                }
+            }
+        }
+        return *have_best;
+    }
+    return *have_best;
+}
+
+/* Screen-position hover trace: converts `mouse` to world space via the
+ * active camera, finds the nearest on-curve point, and reports it back in
+ * world space (post-ScalingFunctions, pre-yscale -- ready to feed straight
+ * into DrawCircleV/DrawLineV inside BeginMode2D, or through
+ * GetWorldToScreen2D for a screen-space label). Returns false (leaving
+ * world_x/world_y untouched) when no curve brackets the cursor. */
+static bool hover_trace_find(const Expr* prims, Camera2D camera, double ysc,
+                              Vector2 mouse, double* world_x, double* world_y) {
+    Vector2 w = GetScreenToWorld2D(mouse, camera);
+    double want_x = w.x;
+    double want_y = (ysc > 0.0) ? (-w.y / ysc) : -w.y;
+    double traced_y = 0.0;
+    bool have_best = false;
+    double best_dy = 0.0;
+    if (!trace_nearest_curve_point(prims, want_x, want_y, &traced_y, &have_best, &best_dy))
+        return false;
+    *world_x = want_x;
+    *world_y = traced_y;
+    return true;
+}
+
+/* Auto-annotate: roots, local extrema, and inflection points, detected
+ * purely numerically from a Line[] run's already-rendered samples (there is
+ * no symbolic function available at render time -- see module doc). Each
+ * detection is recorded in render space (x, -y*ysc), the same space
+ * BeginMode2D draws in and GetWorldToScreen2D expects, so the caller can
+ * both plot a dot directly (inside BeginMode2D) and, from the same array,
+ * project a screen-space text label afterward (outside BeginMode2D) --
+ * mirroring how the hover-trace marker/label split works. */
+
+typedef struct { float x, y; const char* tag; Color col; } Annot;
+
+static void annot_push(Annot** buf, size_t* len, size_t* cap,
+                        float x, float y, const char* tag, Color col) {
+    if (*len == *cap) {
+        *cap = *cap ? *cap * 2 : 32;
+        *buf = (Annot*)realloc(*buf, sizeof(Annot) * (*cap));
+    }
+    Annot* a = &(*buf)[(*len)++];
+    a->x = x; a->y = y; a->tag = tag; a->col = col;
+}
+
+static void annotate_polyline(const Expr* pts_list, double ysc,
+                               Annot** buf, size_t* len, size_t* cap) {
+    size_t n = pts_list->data.function.arg_count;
+    if (n < 2) return;
+    double* xs = (double*)malloc(sizeof(double) * n);
+    double* ys = (double*)malloc(sizeof(double) * n);
+    size_t m = 0;
+    for (size_t i = 0; i < n; i++) {
+        double x, y;
+        if (expr_point(pts_list->data.function.args[i], &x, &y)) { xs[m] = x; ys[m] = y; m++; }
+    }
+    const Color root_col = { 20, 140, 20, 255 };
+    const Color max_col  = { 200, 40, 40, 255 };
+    const Color min_col  = { 40, 90, 200, 255 };
+    const Color infl_col = { 160, 100, 20, 255 };
+
+    /* Roots: consecutive samples with a y sign change, x interpolated at y=0. */
+    for (size_t i = 0; i + 1 < m; i++) {
+        bool cross = (ys[i] <= 0.0 && ys[i + 1] > 0.0) || (ys[i] >= 0.0 && ys[i + 1] < 0.0);
+        if (cross && ys[i] != ys[i + 1]) {
+            double f = -ys[i] / (ys[i + 1] - ys[i]);
+            double rx = xs[i] + (xs[i + 1] - xs[i]) * f;
+            annot_push(buf, len, cap, (float)rx, 0.0f, "root", root_col);
+        }
+    }
+    /* Local extrema: consecutive slope-sign changes. */
+    for (size_t i = 1; i + 1 < m; i++) {
+        double s1 = ys[i] - ys[i - 1], s2 = ys[i + 1] - ys[i];
+        if (s1 == 0.0 || s2 == 0.0) continue;
+        bool sign1 = s1 > 0.0, sign2 = s2 > 0.0;
+        if (sign1 != sign2) {
+            bool is_max = sign1 && !sign2;
+            annot_push(buf, len, cap, (float)xs[i], (float)(-ys[i] * ysc),
+                       is_max ? "max" : "min", is_max ? max_col : min_col);
+        }
+    }
+    /* Inflection points: sign changes in the discrete second difference.
+     * d2a is the curvature estimate centered at sample i-1 (from
+     * i-2,i-1,i); d2b at sample i (from i-1,i,i+1). A sign change means
+     * the true zero-curvature point lies between x[i-1] and x[i] -- so
+     * interpolate there the same way roots are interpolated, rather than
+     * reporting the sample index i outright. Without this, an inflection
+     * that's mathematically coincident with a root (e.g. Sin[x] at
+     * x = 0, Pi, 2 Pi, where Sin'' = -Sin) lands one sample over from the
+     * root marker instead of on top of it. */
+    for (size_t i = 2; i + 1 < m; i++) {
+        double d2a = (ys[i] - ys[i - 1]) - (ys[i - 1] - ys[i - 2]);
+        double d2b = (ys[i + 1] - ys[i]) - (ys[i] - ys[i - 1]);
+        if ((d2a > 0.0) != (d2b > 0.0) && d2a != d2b) {
+            double f = d2a / (d2a - d2b);
+            double ix = xs[i - 1] + (xs[i] - xs[i - 1]) * f;
+            double iy = ys[i - 1] + (ys[i] - ys[i - 1]) * f;
+            annot_push(buf, len, cap, (float)ix, (float)(-iy * ysc), "infl", infl_col);
+        }
+    }
+    free(xs); free(ys);
+}
+
+static void collect_annotations(const Expr* node, double ysc,
+                                 Annot** buf, size_t* len, size_t* cap) {
+    if (!node || node->type != EXPR_FUNCTION) return;
+    const Expr* h = node->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return;
+    const char* name = h->data.symbol.name;
+    size_t n = node->data.function.arg_count;
+
+    if (name == SYM_List) {
+        for (size_t i = 0; i < n; i++) collect_annotations(node->data.function.args[i], ysc, buf, len, cap);
+        return;
+    }
+    if (name == SYM_Line && n >= 1 && node->data.function.args[0]->type == EXPR_FUNCTION) {
+        const Expr* arg = node->data.function.args[0];
+        size_t m = arg->data.function.arg_count;
+        if (m > 0 && looks_like_point(arg->data.function.args[0])) {
+            annotate_polyline(arg, ysc, buf, len, cap);
+        } else {
+            for (size_t i = 0; i < m; i++) {
+                const Expr* sub = arg->data.function.args[i];
+                if (sub->type == EXPR_FUNCTION) annotate_polyline(sub, ysc, buf, len, cap);
+            }
+        }
+    }
+}
+
 /* Total number of dots a scatter renders: every coordinate inside a Point[...]
  * primitive (the single-point Point[{x,y}] and the cloud Point[{{x,y},...}]
  * shapes draw_primitive handles), recursing through List wrappers. Mirrors the
@@ -719,7 +911,7 @@ typedef struct {
     Color color;
     float thickness;  /* world units; <= 0 means hairline */
     float point_size; /* world units (radius) */
-    float text_scale; /* world units per Hershey grid unit, for Text[] */
+    float text_scale; /* world units per label cap-height unit, for Text[] */
     float yscale;     /* data-y -> render-y factor (non-uniform PlotRange/AspectRatio) */
 } DrawState;
 
@@ -738,6 +930,58 @@ static void draw_polyline(const Expr* pts_list, const DrawState* state) {
         prev = cur;
         have_prev = true;
     }
+}
+
+/* Draw a handful of dots walking `pts_list` (a List of {x,y} points, same
+ * shape draw_polyline takes) by arc length, phase-driven by GetTime() --
+ * see the SYM_AnimatedStreamline case in draw_primitive. Recomputes arc
+ * length fresh every call; cheap (O(points-per-streamline)) and consistent
+ * with the rest of this render pass never caching across frames. */
+static void draw_stream_particles(const Expr* pts_list, const DrawState* state) {
+    size_t m = pts_list->data.function.arg_count;
+    if (m < 2) return;
+
+    Vector2* rp = (Vector2*)malloc(sizeof(Vector2) * m);
+    size_t rn = 0;
+    for (size_t i = 0; i < m; i++) {
+        double x, y;
+        if (expr_point(pts_list->data.function.args[i], &x, &y))
+            rp[rn++] = (Vector2){ (float)x, (float)(-y * state->yscale) };
+    }
+    if (rn < 2) { free(rp); return; }
+
+    float* cum = (float*)malloc(sizeof(float) * rn);
+    cum[0] = 0.0f;
+    for (size_t i = 1; i < rn; i++) {
+        float dx = rp[i].x - rp[i - 1].x, dy = rp[i].y - rp[i - 1].y;
+        cum[i] = cum[i - 1] + sqrtf(dx * dx + dy * dy);
+    }
+    float total = cum[rn - 1];
+    if (total > 1e-9f) {
+        const int K = 4;              /* particles per streamline */
+        const double speed = 0.15;    /* full traversals per second */
+        double t = GetTime();
+        float radius = (state->point_size > 0.001f) ? state->point_size * 1.4f
+                                                      : total * 0.01f;
+        for (int k = 0; k < K; k++) {
+            double phase = fmod(t * speed + (double)k / (double)K, 1.0);
+            float target = (float)phase * total;
+            size_t seg = 0;
+            while (seg + 1 < rn && cum[seg + 1] < target) seg++;
+            Vector2 p;
+            if (seg + 1 < rn) {
+                float span = cum[seg + 1] - cum[seg];
+                float f = (span > 1e-9f) ? (target - cum[seg]) / span : 0.0f;
+                p.x = rp[seg].x + (rp[seg + 1].x - rp[seg].x) * f;
+                p.y = rp[seg].y + (rp[seg + 1].y - rp[seg].y) * f;
+            } else {
+                p = rp[rn - 1];
+            }
+            DrawCircleV(p, radius, state->color);
+        }
+    }
+    free(cum);
+    free(rp);
 }
 
 static void draw_primitive(const Expr* node, DrawState* state) {
@@ -795,6 +1039,18 @@ static void draw_primitive(const Expr* node, DrawState* state) {
                 if (sub->type == EXPR_FUNCTION) draw_polyline(sub, state);
             }
         }
+        return;
+    }
+    if (name == SYM_AnimatedStreamline && n >= 1 && node->data.function.args[0]->type == EXPR_FUNCTION) {
+        /* AnimatedStreamline[{{x1,y1},...,{xn,yn}}]: draw the shaft exactly
+         * like Line[...], then walk it with a few particle dots advancing
+         * by arc length over time. GetTime() (wall clock since InitWindow)
+         * drives the phase directly -- no per-primitive persistent state,
+         * consistent with this whole draw pass being recomputed every
+         * frame from scratch. */
+        const Expr* arg = node->data.function.args[0];
+        draw_polyline(arg, state);
+        draw_stream_particles(arg, state);
         return;
     }
     if (name == SYM_Rectangle && n >= 2) {
@@ -912,14 +1168,9 @@ static void draw_primitive(const Expr* node, DrawState* state) {
             owned = expr_to_string((Expr*)content);
             label = owned ? owned : "";
         }
-        float w = hershey_text_width(label, state->text_scale);
-        /* Stroke thickness in world units: scale proportionally to the glyph
-         * size so caps never balloon to data-range scale.  The 0.5 factor
-         * matches hershey_draw_text_ex's cap_r = thickness*0.5 formula and
-         * keeps caps at ~1/14 of cap height, which is visually tight. */
-        float ws_thick = state->text_scale * 0.5f;
-        hershey_draw_text_ex(label, (float)x - w / 2.0f, (float)(-y * state->yscale),
-                             state->text_scale, 0.0f, state->color, ws_thick);
+        float w = label_font_width(label, state->text_scale);
+        label_font_draw(label, (float)x - w / 2.0f, (float)(-y * state->yscale),
+                        state->text_scale, 0.0f, state->color);
         if (owned) free(owned);
         return;
     }
@@ -1136,8 +1387,8 @@ static void draw_gridlines(const PlotRange2D* range, double ysc, float zoom, con
  *
  * Each label is anchored to the *outer* end of its tick mark (not the axis
  * line) plus a small screen-pixel gap, so the digits sit clear of the ticks
- * instead of overprinting them. The Hershey baseline grows upward by
- * `cap = HERSHEY_CAP_HEIGHT * scale` px, which the offsets account for:
+ * instead of overprinting them. The label baseline grows upward by
+ * `cap = LABEL_FONT_CAP_HEIGHT * scale` px, which the offsets account for:
  * x-labels drop the baseline a full cap-height below the tick so the whole
  * glyph clears it; y-labels recentre vertically on the tick by half a cap. */
 static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange,
@@ -1149,7 +1400,7 @@ static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange
     double xtick = (range->ymax - range->ymin) * 0.015;
     double ytick = (range->xmax - range->xmin) * 0.015;
     const float scale = 1.5f;
-    const float cap = HERSHEY_CAP_HEIGHT * scale;
+    const float cap = LABEL_FONT_CAP_HEIGHT * scale;
     const float gap = 5.0f;
     char buf[64];
 
@@ -1160,8 +1411,8 @@ static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange
         for (int i = 0; i < nt; i++) {
             snprintf(buf, sizeof(buf), "%g", tv[i]);
             Vector2 tip = GetWorldToScreen2D((Vector2){ (float)tw[i], (float)-(oy - xtick) }, camera);
-            float lw = hershey_text_width(buf, scale);
-            hershey_draw_text_ex(buf, tip.x - lw / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
+            float lw = label_font_width(buf, scale);
+            label_font_draw_ex(buf, tip.x - lw / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
         }
     } else {
         double xstep = nice_step(range->xmax - range->xmin, 8);
@@ -1169,8 +1420,8 @@ static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange
             if (fabs(tx) < 1e-9) tx = 0.0;
             snprintf(buf, sizeof(buf), "%g", tx);
             Vector2 tip = GetWorldToScreen2D((Vector2){ (float)tx, (float)-(oy - xtick) }, camera);
-            float lw = hershey_text_width(buf, scale);
-            hershey_draw_text_ex(buf, tip.x - lw / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
+            float lw = label_font_width(buf, scale);
+            label_font_draw_ex(buf, tip.x - lw / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
         }
     }
 
@@ -1181,8 +1432,8 @@ static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange
         for (int i = 0; i < nt; i++) {
             snprintf(buf, sizeof(buf), "%g", tv[i]);
             Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)(-tw[i] * ysc) }, camera);
-            float lw = hershey_text_width(buf, scale);
-            hershey_draw_text_ex(buf, tip.x - lw - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
+            float lw = label_font_width(buf, scale);
+            label_font_draw_ex(buf, tip.x - lw - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
         }
     } else {
         double ystep = nice_step(dymax - dymin, 6);
@@ -1190,8 +1441,8 @@ static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange
             if (fabs(ty) < 1e-9) ty = 0.0;
             snprintf(buf, sizeof(buf), "%g", ty);
             Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)(-ty * ysc) }, camera);
-            float lw = hershey_text_width(buf, scale);
-            hershey_draw_text_ex(buf, tip.x - lw - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
+            float lw = label_font_width(buf, scale);
+            label_font_draw_ex(buf, tip.x - lw - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
         }
     }
 }
@@ -1251,7 +1502,7 @@ static void draw_frame(float rx, float ry, float rw, float rh,
     if (!(xR > xL) || !(dymax > dymin) || !isfinite(xL) || !isfinite(dymax)) return;
 
     const float scale = 1.5f;
-    const float cap = HERSHEY_CAP_HEIGHT * scale;
+    const float cap = LABEL_FONT_CAP_HEIGHT * scale;
     const float gap = 5.0f;
     const float maj = 6.0f, minr = 3.0f; /* inward tick pixel lengths */
     char buf[64];
@@ -1275,9 +1526,9 @@ static void draw_frame(float rx, float ry, float rw, float rh,
                 DrawLineEx((Vector2){ sx, T }, (Vector2){ sx, T + maj }, lw, col);
             if (xlab >= 0) {
                 snprintf(buf, sizeof(buf), "%g", tv[i]);
-                float fw = hershey_text_width(buf, scale);
+                float fw = label_font_width(buf, scale);
                 float baseline = (xlab == FR_BOTTOM) ? (B + gap + cap) : (T - gap);
-                hershey_draw_text_ex(buf, sx - fw / 2.0f, baseline, scale, 0.0f, col, lw);
+                label_font_draw_ex(buf, sx - fw / 2.0f, baseline, scale, 0.0f, col, lw);
             }
         }
     } else {
@@ -1298,9 +1549,9 @@ static void draw_frame(float rx, float ry, float rw, float rh,
                     DrawLineEx((Vector2){ sx, T }, (Vector2){ sx, T + len }, lw, col);
                 if (major && xlab >= 0) {
                     snprintf(buf, sizeof(buf), "%g", fabs(tx) < 1e-9 ? 0.0 : tx);
-                    float fw = hershey_text_width(buf, scale);
+                    float fw = label_font_width(buf, scale);
                     float baseline = (xlab == FR_BOTTOM) ? (B + gap + cap) : (T - gap);
-                    hershey_draw_text_ex(buf, sx - fw / 2.0f, baseline, scale, 0.0f, col, lw);
+                    label_font_draw_ex(buf, sx - fw / 2.0f, baseline, scale, 0.0f, col, lw);
                 }
             }
         }
@@ -1319,9 +1570,9 @@ static void draw_frame(float rx, float ry, float rw, float rh,
                 DrawLineEx((Vector2){ R, sy }, (Vector2){ R - maj, sy }, lw, col);
             if (ylab >= 0) {
                 snprintf(buf, sizeof(buf), "%g", tv[i]);
-                float fw = hershey_text_width(buf, scale);
+                float fw = label_font_width(buf, scale);
                 float ftx = (ylab == FR_LEFT) ? (L - gap - fw) : (R + gap);
-                hershey_draw_text_ex(buf, ftx, sy + cap / 2.0f, scale, 0.0f, col, lw);
+                label_font_draw_ex(buf, ftx, sy + cap / 2.0f, scale, 0.0f, col, lw);
             }
         }
     } else {
@@ -1342,9 +1593,9 @@ static void draw_frame(float rx, float ry, float rw, float rh,
                     DrawLineEx((Vector2){ R, sy }, (Vector2){ R - len, sy }, lw, col);
                 if (major && ylab >= 0) {
                     snprintf(buf, sizeof(buf), "%g", fabs(ty) < 1e-9 ? 0.0 : ty);
-                    float fw = hershey_text_width(buf, scale);
+                    float fw = label_font_width(buf, scale);
                     float ftx = (ylab == FR_LEFT) ? (L - gap - fw) : (R + gap);
-                    hershey_draw_text_ex(buf, ftx, sy + cap / 2.0f, scale, 0.0f, col, lw);
+                    label_font_draw_ex(buf, ftx, sy + cap / 2.0f, scale, 0.0f, col, lw);
                 }
             }
         }
@@ -1362,8 +1613,8 @@ static void draw_frame_label(float rx, float ry, float rw, float rh, const GfxOp
     char* ox = NULL;
     const char* xlabel = (xl->type == EXPR_STRING) ? xl->data.string : (ox = expr_to_string((Expr*)xl));
     if (xlabel) {
-        float w = hershey_text_width(xlabel, 1.8f);
-        hershey_draw_text(xlabel, rx + rw / 2.0f - w / 2.0f, ry + rh + 40.0f, 1.8f, 0.0f, BLACK);
+        float w = label_font_width(xlabel, 1.8f);
+        label_font_draw(xlabel, rx + rw / 2.0f - w / 2.0f, ry + rh + 40.0f, 1.8f, 0.0f, BLACK);
     }
     free(ox);
 
@@ -1371,10 +1622,10 @@ static void draw_frame_label(float rx, float ry, float rw, float rh, const GfxOp
     const char* ylabel = (yl->type == EXPR_STRING) ? yl->data.string : (oy = expr_to_string((Expr*)yl));
     if (ylabel) {
         if (o->rotate_label) {
-            hershey_draw_text(ylabel, rx - 32.0f, ry + rh / 2.0f, 1.8f, 90.0f, BLACK);
+            label_font_draw(ylabel, rx - 32.0f, ry + rh / 2.0f, 1.8f, 90.0f, BLACK);
         } else {
-            float w = hershey_text_width(ylabel, 1.8f);
-            hershey_draw_text(ylabel, rx - 16.0f - w, ry + rh / 2.0f, 1.8f, 0.0f, BLACK);
+            float w = label_font_width(ylabel, 1.8f);
+            label_font_draw(ylabel, rx - 16.0f - w, ry + rh / 2.0f, 1.8f, 0.0f, BLACK);
         }
     }
     free(oy);
@@ -1387,8 +1638,8 @@ static void draw_extra_labels(const GfxOptions* opts, int win_w, int win_h) {
         if (opts->plot_label->type == EXPR_STRING) label = opts->plot_label->data.string;
         else { owned = expr_to_string((Expr*)opts->plot_label); label = owned; }
         if (label) {
-            float w = hershey_text_width(label, 2.0f);
-            hershey_draw_text(label, win_w / 2.0f - w / 2.0f, 28.0f, 2.0f, 0.0f, BLACK);
+            float w = label_font_width(label, 2.0f);
+            label_font_draw(label, win_w / 2.0f - w / 2.0f, 28.0f, 2.0f, 0.0f, BLACK);
         }
         free(owned);
     }
@@ -1399,14 +1650,14 @@ static void draw_extra_labels(const GfxOptions* opts, int win_w, int win_h) {
         char* ox = NULL;
         const char* xlabel = (xl->type == EXPR_STRING) ? xl->data.string : (ox = expr_to_string((Expr*)xl));
         if (xlabel) {
-            float w = hershey_text_width(xlabel, 1.8f);
-            hershey_draw_text(xlabel, win_w / 2.0f - w / 2.0f, win_h - 36.0f, 1.8f, 0.0f, BLACK);
+            float w = label_font_width(xlabel, 1.8f);
+            label_font_draw(xlabel, win_w / 2.0f - w / 2.0f, win_h - 36.0f, 1.8f, 0.0f, BLACK);
         }
         free(ox);
 
         char* oy = NULL;
         const char* ylabel = (yl->type == EXPR_STRING) ? yl->data.string : (oy = expr_to_string((Expr*)yl));
-        if (ylabel) hershey_draw_text(ylabel, 18.0f, (float)win_h / 2.0f, 1.8f, 90.0f, BLACK);
+        if (ylabel) label_font_draw(ylabel, 18.0f, (float)win_h / 2.0f, 1.8f, 90.0f, BLACK);
         free(oy);
     }
 }
@@ -1416,7 +1667,8 @@ static void draw_extra_labels(const GfxOptions* opts, int win_w, int win_h) {
  * A row of icon buttons in the top-right corner whose actions mirror
  * Plotly's 2D modebar. Everything here is screen-space UI chrome drawn
  * after EndMode2D; the icons are hand-drawn vector glyphs (no image
- * assets), in keeping with the Hershey vector font used elsewhere.
+ * assets) drawn directly with line/triangle primitives, independent of
+ * whatever text font is in use elsewhere.
  *
  * Plotly's Box-Select / Lasso-Select are intentionally omitted: Mathilda
  * renders continuous primitives, not a discrete dataset, so there is
@@ -1426,7 +1678,7 @@ typedef enum { TOOL_PAN = 0, TOOL_ZOOM = 1 } ToolMode;
 
 typedef enum {
     TB_SAVE = 0, TB_ZOOMBOX, TB_PAN, TB_ZOOMIN, TB_ZOOMOUT,
-    TB_AUTOSCALE, TB_RESET, TB_CLOSE, TB_COUNT
+    TB_AUTOSCALE, TB_ANNOTATE, TB_RESET, TB_CLOSE, TB_COUNT
 } ToolButton;
 
 #define TB_BTN    30.0f   /* button edge (px)            */
@@ -1455,6 +1707,7 @@ static const char* tb_tip(int k) {
         case TB_ZOOMIN:    return "Zoom in";
         case TB_ZOOMOUT:   return "Zoom out";
         case TB_AUTOSCALE: return "Autoscale to fit";
+        case TB_ANNOTATE:  return "Toggle roots/extrema/inflection markers";
         case TB_RESET:     return "Reset axes";
         case TB_CLOSE:     return "Close window";
         default:           return "";
@@ -1576,6 +1829,18 @@ static void icon_home(Rectangle b, Color c) {            /* house */
     stroke((Vector2){ dlx, dY }, (Vector2){ drx, dY }, c);
 }
 
+static void icon_target(Rectangle b, Color c) {          /* ring + dot: "mark points" */
+    Vector2 ctr = { b.x + b.width * 0.5f, b.y + b.height * 0.5f };
+    float r = b.width * 0.36f;
+    DrawRing(ctr, r - TB_LW * 0.5f, r + TB_LW * 0.5f, 0.0f, 360.0f, 32, c);
+    DrawCircleV(ctr, b.width * 0.10f, c);
+    float t = r * 1.35f;
+    stroke((Vector2){ ctr.x - t, ctr.y }, (Vector2){ ctr.x - r * 1.05f, ctr.y }, c);
+    stroke((Vector2){ ctr.x + r * 1.05f, ctr.y }, (Vector2){ ctr.x + t, ctr.y }, c);
+    stroke((Vector2){ ctr.x, ctr.y - t }, (Vector2){ ctr.x, ctr.y - r * 1.05f }, c);
+    stroke((Vector2){ ctr.x, ctr.y + r * 1.05f }, (Vector2){ ctr.x, ctr.y + t }, c);
+}
+
 static void icon_close(Rectangle b, Color c) {           /* an X */
     float m = b.width * 0.18f;
     stroke((Vector2){ b.x + m, b.y + m },
@@ -1585,8 +1850,9 @@ static void icon_close(Rectangle b, Color c) {           /* an X */
 }
 
 /* Draw the whole toolbar. `tool` highlights the active mode button;
- * `hover` (a button index or -1) gets a hover background + tooltip. */
-static void draw_toolbar(int win_w, int tool, int hover) {
+ * `hover` (a button index or -1) gets a hover background + tooltip;
+ * `annotate` highlights the roots/extrema/inflection toggle when on. */
+static void draw_toolbar(int win_w, int tool, int hover, bool annotate) {
     float total = TB_COUNT * TB_BTN + (TB_COUNT - 1) * TB_GAP;
     Rectangle panel = { (float)win_w - TB_MARGIN - total - 5.0f, TB_MARGIN - 5.0f,
                         total + 10.0f, TB_BTN + 10.0f };
@@ -1597,7 +1863,8 @@ static void draw_toolbar(int win_w, int tool, int hover) {
     const Color icol = { 90, 90, 90, 255 };
     for (int i = 0; i < TB_COUNT; i++) {
         Rectangle r = tb_rect(i, win_w);
-        bool active = (i == TB_PAN && tool == TOOL_PAN) || (i == TB_ZOOMBOX && tool == TOOL_ZOOM);
+        bool active = (i == TB_PAN && tool == TOOL_PAN) || (i == TB_ZOOMBOX && tool == TOOL_ZOOM)
+                    || (i == TB_ANNOTATE && annotate);
         /* Close gets a red hover tint to flag its destructive action; every
          * other button shares the neutral blue-gray highlight. */
         if (i == hover) {
@@ -1613,6 +1880,7 @@ static void draw_toolbar(int win_w, int tool, int hover) {
             case TB_ZOOMIN:    icon_magnifier(ic, icol, +1); break;
             case TB_ZOOMOUT:   icon_magnifier(ic, icol, -1); break;
             case TB_AUTOSCALE: icon_expand(ic, icol);        break;
+            case TB_ANNOTATE:  icon_target(ic, icol);        break;
             case TB_RESET:     icon_home(ic, icol);          break;
             case TB_CLOSE:     icon_close(ic, (i == hover) ? (Color){ 190, 60, 60, 255 } : icol); break;
             default: break;
@@ -1621,14 +1889,14 @@ static void draw_toolbar(int win_w, int tool, int hover) {
 
     if (hover >= 0) {
         const char* t = tb_tip(hover);
-        int tw = MeasureText(t, 12);
+        int tw = label_font_measure_px(t, 12);
         Rectangle r = tb_rect(hover, win_w);
         float tx = r.x + r.width * 0.5f - tw * 0.5f;
         if (tx + tw + 6 > win_w) tx = (float)win_w - tw - 6;
         if (tx < 4) tx = 4;
         float ty = r.y + r.height + 7;
         DrawRectangle((int)tx - 5, (int)ty - 3, tw + 10, 19, (Color){ 40, 40, 40, 235 });
-        DrawText(t, (int)tx, (int)ty, 12, RAYWHITE);
+        label_font_draw_px(t, (int)tx, (int)ty, 12, RAYWHITE);
     }
 }
 
@@ -1688,12 +1956,12 @@ static void draw_bar_chart_labels(const Expr* bar_labels, Camera2D camera) {
 
     /* tick row: scale=1.5, cap=10.5 px, gap=5 px → tick row bottom ≈ +15 px */
     const float tick_scale = 1.5f;
-    const float tick_cap   = HERSHEY_CAP_HEIGHT * tick_scale; /* ~10.5 px */
+    const float tick_cap   = LABEL_FONT_CAP_HEIGHT * tick_scale; /* ~10.5 px */
     const float tick_gap   = 5.0f;
 
     /* category label row: scale=2.0, cap=14 px */
     const float scale  = 2.0f;
-    const float cap    = HERSHEY_CAP_HEIGHT * scale; /* 14 px */
+    const float cap    = LABEL_FONT_CAP_HEIGHT * scale; /* 14 px */
     const float label_gap = 6.0f;
 
     /* Screen y of the x-axis (world y=0, render y=0). */
@@ -1718,8 +1986,8 @@ static void draw_bar_chart_labels(const Expr* bar_labels, Camera2D camera) {
             text = owned ? owned : "?";
         }
         Vector2 sp = GetWorldToScreen2D((Vector2){ (float)wx, 0.0f }, camera);
-        float w = hershey_text_width(text, scale);
-        hershey_draw_text_ex(text, sp.x - w / 2.0f, label_y, scale, 0.0f, col, 1.5f);
+        float w = label_font_width(text, scale);
+        label_font_draw_ex(text, sp.x - w / 2.0f, label_y, scale, 0.0f, col, 1.5f);
         if (owned) free(owned);
     }
 }
@@ -1797,7 +2065,7 @@ void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
         else
             snprintf(buf, sizeof(buf), "%.1f", spd);
 
-        hershey_draw_text(buf, text_x, ty + 3.0f, scale, 0.0f,
+        label_font_draw(buf, text_x, ty + 3.0f, scale, 0.0f,
                           (Color){ 60, 60, 60, 255 });
     }
 }
@@ -1818,7 +2086,7 @@ static void draw_legend(const Expr* legend_data, int win_w) {
         if (entry->type != EXPR_FUNCTION || entry->data.function.arg_count != 2) continue;
         const Expr* label = entry->data.function.args[1];
         if (label->type != EXPR_STRING) continue;
-        float w = hershey_text_width(label->data.string, scale);
+        float w = label_font_width(label->data.string, scale);
         if (w > max_label_w) max_label_w = w;
     }
     float box_w = swatch_w + pad * 3 + max_label_w;
@@ -1840,10 +2108,87 @@ static void draw_legend(const Expr* legend_data, int win_w) {
 
         const Expr* label = entry->data.function.args[1];
         if (label->type == EXPR_STRING) {
-            hershey_draw_text(label->data.string, box_x + pad * 2 + swatch_w, ry + row_h - 6.0f,
+            label_font_draw(label->data.string, box_x + pad * 2 + swatch_w, ry + row_h - 6.0f,
                                scale, 0.0f, BLACK);
         }
     }
+}
+
+/* ---------------- Frame/Axes margin policy ---------------- *
+ *
+ * mL/mR depend only on window width, mT/mB only on window height, so the
+ * two axes are computed independently -- shared by the up-front window
+ * sizing below (which needs mT/mB to size the window so the DATA REGION,
+ * not just the outer window, hits the target AspectRatio) and the actual
+ * region layout right after InitWindow. One definition keeps the two from
+ * drifting apart. */
+void gfx_horizontal_margins(float width, bool frame, bool axes,
+                            bool frame_label, float* mL, float* mR) {
+    if (frame) {
+        float labelL = frame_label ? 26.0f : 0.0f;
+        *mL = width * 0.05f; if (*mL < 50.0f + labelL) *mL = 50.0f + labelL;
+        *mR = width * 0.05f; if (*mR < 20.0f) *mR = 20.0f;
+    } else if (axes) {
+        *mL = width * 0.06f; if (*mL < 52.0f) *mL = 52.0f;
+        *mR = width * 0.03f; if (*mR < 22.0f) *mR = 22.0f;
+    } else {
+        *mL = 0.0f; *mR = 0.0f;
+    }
+}
+
+void gfx_vertical_margins(float height, bool frame, bool axes,
+                          bool frame_label, float* mT, float* mB) {
+    if (frame) {
+        float labelB = frame_label ? 26.0f : 0.0f;
+        float mT_floor = TB_MARGIN + TB_BTN + 8.0f;
+        *mT = height * 0.05f; if (*mT < mT_floor) *mT = mT_floor;
+        *mB = height * 0.05f; if (*mB < 48.0f + labelB) *mB = 48.0f + labelB;
+    } else if (axes) {
+        *mT = height * 0.05f; if (*mT < 34.0f) *mT = 34.0f;
+        *mB = height * 0.07f; if (*mB < 52.0f) *mB = 52.0f;
+    } else {
+        *mT = 0.0f; *mB = 0.0f;
+    }
+}
+
+/* gfx_window_height() sizes the OUTER window to the target AspectRatio, but
+ * the frame/axes margins above are fixed pixel amounts (partly floored),
+ * not proportional to the window -- so the margin-reduced DATA REGION ends
+ * up at a different aspect ratio than the window, and AspectRatio-driven
+ * plots (ArrayPlot's rows/cols default, DensityPlot's 1, ...) letterbox
+ * inside their own frame instead of filling it edge-to-edge. This solves
+ * for the height whose REGION (not window) hits the target ratio: reg_w
+ * depends only on width (known already), so reg_h = a * reg_w is the fixed
+ * point of `h = a*reg_w + mT(h) + mB(h)`, a contraction (mT/mB are each
+ * either a height-independent floor or <= 7% of h) that a handful of
+ * iterations converges to float precision. Skipped in the same cases
+ * gfx_window_height itself skips (ImageSize pinned, AspectRatio -> Full),
+ * and whenever there isn't room for both margins to fit. */
+long gfx_window_height_fit_region(long width, long height, double aspect_ratio,
+                                  bool aspect_full, bool height_pinned,
+                                  double data_w, double data_h,
+                                  bool frame, bool axes, bool frame_label) {
+    if (height_pinned || aspect_full) return height;
+    double a = aspect_ratio > 0 ? aspect_ratio : (data_h / data_w);
+    if (!isfinite(a) || a <= 0) return height;
+    if (!frame && !axes) return height;   /* nothing to correct for */
+
+    float mL, mR;
+    gfx_horizontal_margins((float)width, frame, axes, frame_label, &mL, &mR);
+    float reg_w = (float)width - mL - mR;
+    if (reg_w < 40.0f) return height;
+
+    double h = (double)height;
+    for (int iter = 0; iter < 8; iter++) {
+        float mT, mB;
+        gfx_vertical_margins((float)h, frame, axes, frame_label, &mT, &mB);
+        if (mT + mB >= h - 40.0) return height;   /* margins would swallow the window */
+        double h_next = a * (double)reg_w + mT + mB;
+        if (h_next < 100.0) h_next = 100.0;
+        if (h_next > 2000.0) h_next = 2000.0;
+        h = h_next;
+    }
+    return (long)(h + 0.5);
 }
 
 /* ---------------- Main entry point ---------------- */
@@ -1930,6 +2275,14 @@ void graphics_show(const Expr* graphics_expr) {
     opts.height = gfx_window_height(opts.width, opts.height, opts.aspect_ratio,
                                     opts.aspect_full, opts.height_pinned,
                                     data_w, data_h);
+    /* Refine against the margin-reduced DATA REGION rather than the outer
+     * window, so a Frame/Axes plot with an explicit AspectRatio (ArrayPlot's
+     * rows/cols default, DensityPlot's 1, ...) fills its frame edge-to-edge
+     * instead of letterboxing inside it. See gfx_window_height_fit_region. */
+    opts.height = gfx_window_height_fit_region(opts.width, opts.height, opts.aspect_ratio,
+                                               opts.aspect_full, opts.height_pinned,
+                                               data_w, data_h,
+                                               opts.frame, opts.axes, opts.frame_label != NULL);
 
     /* 4x MSAA smooths every vector stroke -- the plot curves, the axes, and
      * the hand-drawn toolbar glyphs all read as crisp anti-aliased lines
@@ -1937,6 +2290,7 @@ void graphics_show(const Expr* graphics_expr) {
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow((int)opts.width, (int)opts.height, "Mathilda");
     SetTargetFPS(60);
+    label_font_load();
 
     /* Plot region: the rectangle the data is fitted to and clipped against.
      * A frame reserves a margin (~5% of each window dimension) around the
@@ -1952,37 +2306,12 @@ void graphics_show(const Expr* graphics_expr) {
      * fits *inside* the region. */
     float reg_x = 0.0f, reg_y = 0.0f;
     float reg_w = (float)opts.width, reg_h = (float)opts.height;
-    if (opts.frame) {
-        /* FrameLabel adds one more text line outside the tick labels, so it
-         * needs extra room past the tick-label minimums above. */
-        float labelL = opts.frame_label ? 26.0f : 0.0f;
-        float labelB = opts.frame_label ? 26.0f : 0.0f;
-        float mL = (float)opts.width  * 0.05f; if (mL < 50.0f + labelL) mL = 50.0f + labelL;
-        float mR = (float)opts.width  * 0.05f; if (mR < 20.0f) mR = 20.0f;
-        /* The top-right toolbar buttons occupy y in [TB_MARGIN, TB_MARGIN +
-         * TB_BTN]; floor the top margin below them (plus a small gap) so the
-         * frame's top edge and its tick labels are never drawn under the
-         * buttons. */
-        float mT_floor = TB_MARGIN + TB_BTN + 8.0f;
-        float mT = (float)opts.height * 0.05f; if (mT < mT_floor) mT = mT_floor;
-        float mB = (float)opts.height * 0.05f; if (mB < 48.0f + labelB) mB = 48.0f + labelB;
+    if (opts.frame || opts.axes) {
+        bool has_label = opts.frame_label != NULL;
+        float mL, mR, mT, mB;
+        gfx_horizontal_margins((float)opts.width, opts.frame, opts.axes, has_label, &mL, &mR);
+        gfx_vertical_margins((float)opts.height, opts.frame, opts.axes, has_label, &mT, &mB);
         /* Never let the margins swallow the whole window. */
-        if (mL + mR < (float)opts.width  - 40.0f && mT + mB < (float)opts.height - 40.0f) {
-            reg_x = mL; reg_y = mT;
-            reg_w = (float)opts.width - mL - mR;
-            reg_h = (float)opts.height - mT - mB;
-        }
-    } else if (opts.axes) {
-        /* Floors sized to the screen-space tick labels (draw_axes_labels):
-         * left clears a multi-digit y label, bottom a one-line x label plus
-         * its gap+cap drop *and* the bottom-of-window help-text line, top a
-         * PlotLabel line, right the overflow of the last x label's half-width.
-         * The bottom is the largest because a 0-off-screen x-axis is pinned to
-         * the region's bottom edge and its labels hang into this margin. */
-        float mL = (float)opts.width  * 0.06f; if (mL < 52.0f) mL = 52.0f;
-        float mR = (float)opts.width  * 0.03f; if (mR < 22.0f) mR = 22.0f;
-        float mT = (float)opts.height * 0.05f; if (mT < 34.0f) mT = 34.0f;
-        float mB = (float)opts.height * 0.07f; if (mB < 52.0f) mB = 52.0f;
         if (mL + mR < (float)opts.width  - 40.0f && mT + mB < (float)opts.height - 40.0f) {
             reg_x = mL; reg_y = mT;
             reg_w = (float)opts.width - mL - mR;
@@ -2050,10 +2379,11 @@ void graphics_show(const Expr* graphics_expr) {
     }
     if (r_px < 0.6) r_px = 0.6;                         /* never sub-pixel-invisible */
     init_state.point_size = (base_zoom > 0) ? (float)(r_px / base_zoom) : (float)r_px;
-    init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / HERSHEY_CAP_HEIGHT);
+    init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / LABEL_FONT_CAP_HEIGHT);
     init_state.yscale = (float)ysc;
 
     int tool = TOOL_PAN;          /* active left-drag tool (toolbar-selected) */
+    bool annotate = false;        /* roots/extrema/inflection toggle (toolbar) */
     bool selecting = false;       /* mid box-zoom drag */
     bool left_drag_canvas = false;/* current left drag began on the canvas, not the toolbar */
     Vector2 sel_start = { 0, 0 };
@@ -2102,6 +2432,7 @@ void graphics_show(const Expr* graphics_expr) {
                     case TB_ZOOMIN:    camera.zoom *= 1.3f;          clamp_zoom(&camera, base_zoom); break;
                     case TB_ZOOMOUT:   camera.zoom *= (1.0f / 1.3f); clamp_zoom(&camera, base_zoom); break;
                     case TB_AUTOSCALE: camera = home; break;
+                    case TB_ANNOTATE:  annotate = !annotate; break;
                     case TB_RESET:     camera = home; break;
                     case TB_CLOSE:     goto close_window;
                     default: break;
@@ -2202,6 +2533,22 @@ void graphics_show(const Expr* graphics_expr) {
             }
         }
 
+        /* Hover trace: find the on-curve point under the cursor once per
+         * frame, before drawing, so both the world-space marker (inside
+         * BeginMode2D) and the screen-space label (after EndMode2D) use the
+         * same traced point. Suppressed over the toolbar and mid-gesture so
+         * it doesn't fight box-zoom/pan feedback. */
+        bool hv_found = false;
+        double hv_wx = 0.0, hv_wy = 0.0;
+        if (hover < 0 && !selecting && !panning)
+            hv_found = hover_trace_find(draw_prims, camera, ysc, mouse, &hv_wx, &hv_wy);
+
+        /* Auto-annotate: recomputed fresh each frame draw_prims might change
+         * (live resample on zoom/pan) -- cheap relative to the resample
+         * itself, and only paid when the toolbar toggle is on. */
+        Annot* annots = NULL; size_t n_annots = 0, annot_cap = 0;
+        if (annotate) collect_annotations(draw_prims, ysc, &annots, &n_annots, &annot_cap);
+
         BeginDrawing();
         ClearBackground(to_raylib(opts.background));
 
@@ -2215,6 +2562,16 @@ void graphics_show(const Expr* graphics_expr) {
         DrawState state = init_state;
         draw_primitive(draw_prims, &state);
         if (opts.epilog) { DrawState es = init_state; draw_primitive(opts.epilog, &es); }
+        if (hv_found) {
+            Vector2 mk = { (float)hv_wx, (float)(-hv_wy * ysc) };
+            float r = 4.0f / camera.zoom;
+            DrawCircleV(mk, r, (Color){ 230, 60, 60, 255 });
+            DrawCircleLinesV(mk, r, (Color){ 120, 20, 20, 255 });
+        }
+        for (size_t i = 0; i < n_annots; i++) {
+            float r = 3.5f / camera.zoom;
+            DrawCircleV((Vector2){ annots[i].x, annots[i].y }, r, annots[i].col);
+        }
         EndMode2D();
         if (opts.frame) EndScissorMode();
 
@@ -2253,19 +2610,37 @@ void graphics_show(const Expr* graphics_expr) {
                 DrawRectangleRec(sel, (Color){ 30, 80, 180, 40 });
                 DrawRectangleLinesEx(sel, 1.0f, (Color){ 30, 80, 180, 180 });
             }
-            draw_toolbar((int)opts.width, tool, hover);
-            DrawText("drag: pan/zoom per tool   scroll: zoom   right-drag: pan   Q/E: rotate   R: reset   Esc: close",
+            draw_toolbar((int)opts.width, tool, hover, annotate);
+            for (size_t i = 0; i < n_annots; i++) {
+                Vector2 spos = GetWorldToScreen2D((Vector2){ annots[i].x, annots[i].y }, camera);
+                int tw = label_font_measure_px(annots[i].tag, 10);
+                label_font_draw_px(annots[i].tag, (int)spos.x - tw / 2, (int)spos.y - 16, 10, annots[i].col);
+            }
+            if (hv_found) {
+                Vector2 spos = GetWorldToScreen2D(
+                    (Vector2){ (float)hv_wx, (float)(-hv_wy * ysc) }, camera);
+                double dx = scale_invert(opts.sf_x, hv_wx);
+                double dy = scale_invert(opts.sf_y, hv_wy);
+                char lbl[64];
+                snprintf(lbl, sizeof(lbl), "(%.4g, %.4g)", dx, dy);
+                int tw = label_font_measure_px(lbl, 13);
+                float lx = spos.x + 10.0f, ly = spos.y - 18.0f;
+                DrawRectangle((int)lx - 4, (int)ly - 3, tw + 8, 19, (Color){ 40, 40, 40, 215 });
+                label_font_draw_px(lbl, (int)lx, (int)ly, 13, RAYWHITE);
+            }
+            label_font_draw_px("drag: pan/zoom per tool   scroll: zoom   right-drag: pan   Q/E: rotate   R: reset   Esc: close",
                      10, (int)opts.height - 22, 14, GRAY);
             if (toast > 0) {
                 const char* msg = "Saved mathilda_plot.png";
-                int tw = MeasureText(msg, 16);
+                int tw = label_font_measure_px(msg, 16);
                 DrawRectangle(10, 10, tw + 16, 26, (Color){ 40, 40, 40, 220 });
-                DrawText(msg, 18, 15, 16, RAYWHITE);
+                label_font_draw_px(msg, 18, 15, 16, RAYWHITE);
                 toast--;
             }
         }
 
         EndDrawing();
+        free(annots);
 
         /* EndDrawing has swapped buffers, so the chrome-free frame is now
          * presented -- capture it here (raylib's own F12 capture uses this
@@ -2279,6 +2654,7 @@ void graphics_show(const Expr* graphics_expr) {
 
 close_window:
     if (dyn_prims) expr_free(dyn_prims);
+    label_font_unload();
     CloseWindow();
 }
 
@@ -2389,10 +2765,20 @@ void graphics_render_in_region(const Expr* graphics_expr,
     }
     if (r_px < 0.6) r_px = 0.6;
     init_state.point_size = (base_zoom > 0) ? (float)(r_px / base_zoom) : (float)r_px;
-    init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / HERSHEY_CAP_HEIGHT);
+    init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / LABEL_FONT_CAP_HEIGHT);
     init_state.yscale     = (float)ysc;
 
     PlotRange2D visible = { range.xmin, range.xmax, range.ymin * ysc, range.ymax * ysc };
+
+    /* Hover trace: same as graphics_show, gated to the mouse being inside
+     * this content region (there's no toolbar/drag state here to fight --
+     * Animate/Manipulate's own controls live in a spatially disjoint area). */
+    Vector2 mouse = GetMousePosition();
+    bool hv_found = false;
+    double hv_wx = 0.0, hv_wy = 0.0;
+    bool mouse_in_region = mouse.x >= rx && mouse.x <= rx + rw && mouse.y >= ry && mouse.y <= ry + rh;
+    if (mouse_in_region && !IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+        hv_found = hover_trace_find(prims, camera, ysc, mouse, &hv_wx, &hv_wy);
 
     if (opts.frame) BeginScissorMode((int)preg_x, (int)preg_y, (int)preg_w, (int)preg_h);
     BeginMode2D(camera);
@@ -2402,8 +2788,26 @@ void graphics_render_in_region(const Expr* graphics_expr,
     DrawState state = init_state;
     draw_primitive(prims, &state);
     if (opts.epilog) { DrawState es = init_state; draw_primitive(opts.epilog, &es); }
+    if (hv_found) {
+        Vector2 mk = { (float)hv_wx, (float)(-hv_wy * ysc) };
+        float r = 4.0f / camera.zoom;
+        DrawCircleV(mk, r, (Color){ 230, 60, 60, 255 });
+        DrawCircleLinesV(mk, r, (Color){ 120, 20, 20, 255 });
+    }
     EndMode2D();
     if (opts.frame) EndScissorMode();
+
+    if (hv_found) {
+        Vector2 spos = GetWorldToScreen2D((Vector2){ (float)hv_wx, (float)(-hv_wy * ysc) }, camera);
+        double dx = scale_invert(opts.sf_x, hv_wx);
+        double dy = scale_invert(opts.sf_y, hv_wy);
+        char lbl[64];
+        snprintf(lbl, sizeof(lbl), "(%.4g, %.4g)", dx, dy);
+        int tw = label_font_measure_px(lbl, 13);
+        float lx = spos.x + 10.0f, ly = spos.y - 18.0f;
+        DrawRectangle((int)lx - 4, (int)ly - 3, tw + 8, 19, (Color){ 40, 40, 40, 215 });
+        label_font_draw_px(lbl, (int)lx, (int)ly, 13, RAYWHITE);
+    }
 
     if (opts.axes) draw_axes_labels(&visible, &range, camera, ysc, &opts);
     if (bar_labels_data) draw_bar_chart_labels(bar_labels_data, camera);

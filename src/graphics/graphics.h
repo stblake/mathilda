@@ -17,10 +17,12 @@
 #include "streamplot.h"
 #include "contourplot.h"
 #include "densityplot.h"
+#include "arrayplot.h"
 #include "barchart.h"
 #include "vectorplot.h"
 #include "show.h"
 #include "animate.h"
+#include "manipulate.h"
 #include "complexplot.h"
 
 void graphics_init(void);

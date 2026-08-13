@@ -312,7 +312,7 @@ endif
 SRC_DIR = src
 SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/numbertheory/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/stats/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/compile/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c) $(wildcard $(SRC_DIR)/graphics/*.c) $(wildcard $(SRC_DIR)/graph/*.c) $(wildcard $(SRC_DIR)/strings/*.c) $(wildcard $(SRC_DIR)/strings/regex/*.c)
 ifneq ($(USE_GRAPHICS), 1)
-SRC := $(filter-out $(SRC_DIR)/graphics/render.c $(SRC_DIR)/graphics/render3d.c $(SRC_DIR)/graphics/hershey_font.c, $(SRC))
+SRC := $(filter-out $(SRC_DIR)/graphics/render.c $(SRC_DIR)/graphics/render3d.c $(SRC_DIR)/graphics/label_font.c, $(SRC))
 endif
 OBJ = $(SRC:.c=.o)
 
@@ -368,7 +368,7 @@ AR ?= ar
 LIB_OBJ = $(filter-out $(SRC_DIR)/repl.o,$(OBJ)) $(FFI_OBJ)
 # Remove any existing archive first: `ar rcs` MERGES into an existing .a rather
 # than replacing it, so without this a cross-arch rebuild (iOS/Android) would
-# leave stale host-arch members (render.o, hershey_font.o, …) behind, producing
+# leave stale host-arch members (render.o, label_font.o, …) behind, producing
 # "neither ET_REL nor LLVM bitcode" linker warnings and a polluted archive.
 libmathilda.a: $(LIB_OBJ)
 	rm -f $@
@@ -380,13 +380,6 @@ libmathilda.a: $(LIB_OBJ)
 # consumed by the `-include $(DEP)` line below.
 $(SRC_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
-
-# hershey_font.c includes the generated glyph table. Header-dependency tracking
-# (-MMD, above) picks this up automatically once a .d exists, but the .d is only
-# written after the first successful compile — name the .inc explicitly so the
-# very first build (and a `make clean` build) also rebuilds when the font data
-# is regenerated (tools/gen_hershey.py).
-$(SRC_DIR)/graphics/hershey_font.o: $(SRC_DIR)/graphics/hershey_glyphs.inc
 
 clean:
 	rm -f $(OBJ) $(DEP) $(TARGET)

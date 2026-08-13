@@ -65,7 +65,7 @@ endif()
 # Raylib autodetection for the graphics engine.  Mirrors the makefile's
 # pkg-config probe; degrades to USE_GRAPHICS=OFF (sampling.c and the
 # symbolic Graphics[]/Plot[] construction path are still fully testable —
-# only render.c/hershey_font.c, which need a live display, are excluded).
+# only render.c/label_font.c, which need a live display, are excluded).
 if(USE_GRAPHICS)
     # On macOS, Homebrew installs its .pc files outside the search path used by
     # a MacPorts/system pkg-config, so the probe below fails on a stock shell
@@ -713,12 +713,14 @@ set(COMMON_SRC
     ../src/graphics/parametricplot3d.c
     ../src/graphics/contourplot.c
     ../src/graphics/densityplot.c
+    ../src/graphics/arrayplot.c
     ../src/graphics/complexplot.c
     ../src/graphics/streamplot.c
     ../src/graphics/vectorplot.c
     ../src/graphics/polarplot.c
     ../src/graphics/barchart.c
     ../src/graphics/animate.c
+    ../src/graphics/manipulate.c
     ../src/graphics/listplot.c
     ../src/graphics/show.c
     ../src/graph/graph.c
@@ -742,13 +744,13 @@ set(COMMON_SRC
     ../src/graph/graphplot.c
 )
 
-# render.c / render3d.c / hershey_font.c need a live Raylib + display; only
+# render.c / render3d.c / label_font.c need a live Raylib + display; only
 # compiled into COMMON_SRC when USE_GRAPHICS actually resolved to ON above.
 if(USE_GRAPHICS)
     list(APPEND COMMON_SRC
         ../src/graphics/render.c
         ../src/graphics/render3d.c
-        ../src/graphics/hershey_font.c
+        ../src/graphics/label_font.c
     )
 endif()
 
@@ -2489,6 +2491,14 @@ add_test(NAME graphics_tests COMMAND graphics_tests)
 add_executable(plot3d_tests test_plot3d.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(plot3d_tests PRIVATE ../src ../src/graphics)
 add_test(NAME plot3d_tests COMMAND plot3d_tests)
+
+add_executable(manipulate_tests test_manipulate.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(manipulate_tests PRIVATE ../src ../src/graphics)
+add_test(NAME manipulate_tests COMMAND manipulate_tests)
+
+add_executable(streamplot_tests test_streamplot.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(streamplot_tests PRIVATE ../src ../src/graphics)
+add_test(NAME streamplot_tests COMMAND streamplot_tests)
 
 add_executable(parametricplot_tests test_parametricplot.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(parametricplot_tests m)

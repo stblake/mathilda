@@ -24,6 +24,34 @@ long gfx_window_height(long width, long height, double aspect_ratio,
                        bool aspect_full, bool height_pinned,
                        double data_w, double data_h);
 
+/* Frame/Axes margin policy: mL/mR depend only on window width, mT/mB only on
+ * window height (partly floored in px), matching the layout render.c uses
+ * for the actual plot region. Factored out so gfx_window_height_fit_region
+ * below and the renderer's own region layout can never drift apart, and so
+ * both are unit-testable headless. */
+void gfx_horizontal_margins(float width, bool frame, bool axes,
+                            bool frame_label, float* mL, float* mR);
+void gfx_vertical_margins(float height, bool frame, bool axes,
+                          bool frame_label, float* mT, float* mB);
+
+/* Refines gfx_window_height's result against the margin-reduced DATA REGION
+ * rather than the outer window. gfx_window_height alone sizes the window so
+ * *it* matches aspect_ratio, but the Frame/Axes margins above are fixed
+ * pixel amounts (partly floored) rather than proportional, so the region
+ * left after subtracting them lands at a different ratio than the window --
+ * an AspectRatio-driven Frame plot (ArrayPlot's rows/cols default,
+ * DensityPlot's 1, ...) then letterboxes inside its own frame instead of
+ * filling it edge-to-edge. Solves for the height whose region hits the
+ * target ratio via fixed-point iteration (a contraction, since each margin
+ * is either height-independent or a small fraction of height); a no-op
+ * (returns height unchanged) in every case gfx_window_height itself is a
+ * no-op, when neither frame nor axes is drawn, or when there isn't room for
+ * both margins to fit. */
+long gfx_window_height_fit_region(long width, long height, double aspect_ratio,
+                                  bool aspect_full, bool height_pinned,
+                                  double data_w, double data_h,
+                                  bool frame, bool axes, bool frame_label);
+
 /* Convert a CMYK color to RGB using the standard (profile-free) subtractive
  * model: r = (1-c)(1-k), g = (1-m)(1-k), b = (1-y)(1-k). Each input is first
  * clipped to [0,1]; outputs land in [0,1]. Factored out of the renderer so the

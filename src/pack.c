@@ -757,6 +757,14 @@ static void pack_mark_aware_heads(void) {
          * in its own right by the List path. */
         "HypergeometricPFQ", "Hypergeometric0F1",
         "Hypergeometric1F1", "Hypergeometric2F1",
+        /* ArrayPlot reads its data table straight off the buffer via
+         * na_load_matrix (src/graphics/arrayplot.c, the same loader Fit and
+         * DesignMatrix use above) when given an EXPR_NDARRAY, so the gate
+         * must not pre-materialise a packed matrix into rows*cols boxed
+         * Exprs first just to render a heatmap. A nested-List argument takes
+         * a separate per-cell path (arrayplot_load) that is unaffected
+         * either way. */
+        "ArrayPlot",
     };
     for (size_t i = 0; i < sizeof(AWARE) / sizeof(AWARE[0]); i++)
         symtab_set_packed_aware(AWARE[i]);
@@ -876,6 +884,15 @@ static void pack_mark_aware_heads(void) {
          * returns an exact polynomial -- so an int64 buffer needs no
          * materialisation and the result is identical. */
         "InterpolatingPolynomial",
+        /* ArrayPlot reads an int64 data buffer through na_load_matrix exactly
+         * as it would the materialised integers (arrayplot_load's numeric arm
+         * is expr_to_real_double either way), and cell colouring is a machine-
+         * real computation regardless of the input's exactness -- ArrayPlot
+         * never produces an exact result, so nothing is lost that the
+         * materialised path would have kept. The flag only spares an int64
+         * array from materialising for the common RandomInteger[...]/
+         * Table[Mod[...], ...] usage shown in its own docstring. */
+        "ArrayPlot",
         /* Move the value without inspecting it. (List destructuring is the one
          * exception -- apply_assignment reads an int64 slice back as an exact
          * Integer via ndarray_part, so {a, b, c, d} = Range[4] binds exact

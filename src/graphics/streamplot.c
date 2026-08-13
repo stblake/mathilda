@@ -224,6 +224,7 @@ typedef struct {
     Expr*  region_function;   /* borrowed; NULL = none */
     Expr*  legends;           /* borrowed; NULL = none */
     ScaleFnType sf_x, sf_y;   /* ScalingFunctions per-axis */
+    bool   animate;           /* True = emit AnimatedStreamline instead of Line */
 } StreamOpts;
 
 static bool split_stream_options(Expr* res, StreamOpts* so,
@@ -236,6 +237,7 @@ static bool split_stream_options(Expr* res, StreamOpts* so,
     so->legends = NULL;
     so->sf_x = SF_NONE;
     so->sf_y = SF_NONE;
+    so->animate = false;
 
     size_t argc = res->data.function.arg_count;
     size_t cap = (argc > 3 ? argc - 3 : 0) + 4;
@@ -285,6 +287,10 @@ static bool split_stream_options(Expr* res, StreamOpts* so,
         } else if (name == SYM_ScalingFunctions) {
             Expr* v = evaluate(expr_copy(rhs));
             parse_scaling_functions(v, &so->sf_x, &so->sf_y);
+            expr_free(v);
+        } else if (name == SYM_StreamAnimate) {
+            Expr* v = evaluate(expr_copy(rhs));
+            so->animate = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True);
             expr_free(v);
         } else {
             /* Pass through to Graphics[...] */
@@ -353,6 +359,22 @@ static Expr* make_line(const Point2* pts, size_t n) {
     free(coord_exprs);
     Expr* args[1] = { pt_list };
     return expr_new_function(expr_new_symbol(SYM_Line), args, 1);
+}
+
+/* Build AnimatedStreamline[{{x1,y1},...,{xn,yn}}] — same point list as
+ * make_line(), but tagged with a distinct head so the renderer knows to
+ * additionally walk it with moving particle dots (StreamAnimate -> True). */
+static Expr* make_animated_streamline(const Point2* pts, size_t n) {
+    if (n < 2) return NULL;
+    Expr** coord_exprs = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        Expr* xy[2] = { expr_new_real(pts[i].x), expr_new_real(pts[i].y) };
+        coord_exprs[i] = expr_new_function(expr_new_symbol(SYM_List), xy, 2);
+    }
+    Expr* pt_list = expr_new_function(expr_new_symbol(SYM_List), coord_exprs, n);
+    free(coord_exprs);
+    Expr* args[1] = { pt_list };
+    return expr_new_function(expr_new_symbol(SYM_AnimatedStreamline), args, 1);
 }
 
 /* Build a fixed-length Arrow[{p1, p2}] centered at the stream midpoint,
@@ -627,8 +649,10 @@ Expr* builtin_streamplot(Expr* res) {
             prims[nprim++] = col;
         }
 
-        /* Full streamline as a smooth Line[...]. */
-        Expr* shaft = make_line(pts, n_pts);
+        /* Full streamline as a smooth Line[...], or an AnimatedStreamline[...]
+         * carrying the same points when StreamAnimate -> True. */
+        Expr* shaft = so.animate ? make_animated_streamline(pts, n_pts)
+                                  : make_line(pts, n_pts);
         if (shaft) {
             if (nprim + 2 >= prim_cap) { prim_cap *= 2; prims = realloc(prims, sizeof(Expr*) * prim_cap); }
             prims[nprim++] = shaft;
