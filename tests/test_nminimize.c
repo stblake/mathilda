@@ -189,6 +189,23 @@ static void test_method_randomsearch(void) {
 static void test_method_simulatedannealing(void) {
     check_true("Abs[First[NMinimize[x^4 - 3 x^2 - x, x, Method -> \"SimulatedAnnealing\"]] - (-3.5139097)] < 1.*^-2");
 }
+static void test_neldermead_suboptions(void) {
+    /* ExpandRatio / ContractRatio are consumed by the simplex and still
+     * converge to the optimum. */
+    check_true("Abs[First[NMinimize[(x-3)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"NelderMead\", \"ExpandRatio\" -> 2.5, \"ContractRatio\" -> 0.6}]]] < 1.*^-4");
+    /* PostProcess -> True runs the exact local polish, reaching the optimum. */
+    check_true("Abs[First[NMinimize[(x-3)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"PostProcess\" -> True}]]] < 1.*^-6");
+    /* PostProcess -> False skips the polish; the raw global-search point is
+     * still returned and is a valid nearby result. */
+    check_true("Abs[First[NMinimize[(x-3)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"PostProcess\" -> False}]]] < 1.*^-2");
+    /* All three together, as in the documented Rosenbrock example, are accepted. */
+    check_eq("Head[NMinimize[(x-1)^2 + (y-1)^2, {x, y}, "
+             "Method -> {\"NelderMead\", \"ExpandRatio\" -> 2.5, \"ContractRatio\" -> 0.6, \"PostProcess\" -> False}]]", "List");
+}
+
 static void test_method_suboptions(void) {
     /* Method with sub-options is accepted and returns the right shape/value. */
     check_true("Abs[First[NMinimize[x^4 - 3 x^2 - x, x, Method -> {\"DifferentialEvolution\", \"SearchPoints\" -> 20, \"RandomSeed\" -> 7}]] - (-3.5139097)] < 1.*^-3");
@@ -354,6 +371,7 @@ int main(void) {
     TEST(test_method_randomsearch);
     TEST(test_method_simulatedannealing);
     TEST(test_method_suboptions);
+    TEST(test_neldermead_suboptions);
 
     /* 8. NMaximize */
     TEST(test_nmaximize_simple);

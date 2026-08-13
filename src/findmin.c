@@ -2843,6 +2843,9 @@ typedef struct {
     int      search_points;  /* 0 ⇒ auto                                     */
     double   F;              /* DE scaling factor;   <0 ⇒ auto               */
     double   CR;             /* DE crossover prob.;  <0 ⇒ auto               */
+    double   expand_ratio;   /* NelderMead expansion coeff;  <0 ⇒ default 2  */
+    double   contract_ratio; /* NelderMead contraction coeff; <0 ⇒ default .5 */
+    int      post_process;   /* -1 auto (on) / 1 on / 0 off (skip polish)    */
     uint64_t seed;
 } NmConfig;
 
@@ -3195,6 +3198,10 @@ static void nm_neldermead(NmDriver* D, const NmConfig* nc, NmRng* rng,
     int restarts = nc->search_points > 0 ? nc->search_points : (n > 1 ? 4 : 2);
     if (restarts < 1) restarts = 1;
     if (restarts > 20) restarts = 20;
+    /* Simplex coefficients: reflection 1, expansion (ExpandRatio, default 2),
+     * contraction toward the centroid (ContractRatio, default 0.5). */
+    double er = nc->expand_ratio   > 0.0 ? nc->expand_ratio   : 2.0;
+    double cr = nc->contract_ratio > 0.0 ? nc->contract_ratio : 0.5;
     int64_t maxit = D->opts->max_iter > 0 ? D->opts->max_iter * (int64_t)(5 * n)
                                           : 200 * (int64_t)n;
     if (maxit < 100) maxit = 100;
@@ -3241,7 +3248,7 @@ static void nm_neldermead(NmDriver* D, const NmConfig* nc, NmRng* rng,
             double frr = nm_phi(D, xr);
             if (frr < fv[lo]) {
                 for (size_t j = 0; j < n; j++)
-                    xe[j] = xc[j] + 2.0 * (xc[j] - V[hi * n + j]);
+                    xe[j] = xc[j] + er * (xc[j] - V[hi * n + j]);
                 nm_project(D, xe);
                 double fe = nm_phi(D, xe);
                 if (fe < frr) { for (size_t j = 0; j < n; j++) V[hi * n + j] = xe[j]; fv[hi] = fe; }
@@ -3251,7 +3258,7 @@ static void nm_neldermead(NmDriver* D, const NmConfig* nc, NmRng* rng,
                 fv[hi] = frr;
             } else {
                 for (size_t j = 0; j < n; j++)
-                    xe[j] = xc[j] + 0.5 * (V[hi * n + j] - xc[j]);
+                    xe[j] = xc[j] + cr * (V[hi * n + j] - xc[j]);
                 nm_project(D, xe);
                 double fc = nm_phi(D, xe);
                 if (fc < fv[hi]) { for (size_t j = 0; j < n; j++) V[hi * n + j] = xe[j]; fv[hi] = fc; }
@@ -3401,6 +3408,18 @@ static bool nm_parse_method(Expr* rhs, NmConfig* nc, const char* fn) {
             } else if (strcmp(on, "RandomSeed") == 0) {
                 if (ov->type == EXPR_INTEGER && ov->data.integer >= 0)
                     nc->seed = (uint64_t)ov->data.integer;
+            } else if (strcmp(on, "ExpandRatio") == 0) {
+                double dv; if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0)
+                    nc->expand_ratio = dv;
+            } else if (strcmp(on, "ContractRatio") == 0) {
+                double dv; if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0)
+                    nc->contract_ratio = dv;
+            } else if (strcmp(on, "PostProcess") == 0) {
+                if (ov->type == EXPR_SYMBOL) {
+                    if (ov->data.symbol.name == SYM_True)  nc->post_process = 1;
+                    else if (ov->data.symbol.name == SYM_False) nc->post_process = 0;
+                    /* Automatic ⇒ leave the auto default (on) */
+                }
             }
         }
         return true;
@@ -3673,6 +3692,9 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     nc.search_points = 0;
     nc.F = -1.0;
     nc.CR = -1.0;
+    nc.expand_ratio = -1.0;
+    nc.contract_ratio = -1.0;
+    nc.post_process = -1;
     nc.seed = NM_DEFAULT_SEED;
 
     for (size_t i = pos_end; i < argc; i++) {
@@ -3893,10 +3915,12 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
         default:              nm_de(&D, &nc, &rng, xbest, &fbest, &penbest); break;
     }
 
-    /* Polish the global best with the exact local solver. Guard against a
-     * penalty/BFGS step that overshoots: if the polished point is worse by
-     * Deb's rules than the pre-polish global best, keep the latter. */
-    {
+    /* Polish the global best with the exact local solver, unless the caller
+     * disabled it with the Method sub-option "PostProcess" -> False. Guard
+     * against a penalty/BFGS step that overshoots: if the polished point is
+     * worse by Deb's rules than the pre-polish global best, keep the latter. */
+    bool do_post = (nc.post_process != 0);
+    if (do_post) {
         double* xsave = (double*)malloc(sizeof(double) * n);
         for (size_t i = 0; i < n; i++) xsave[i] = xbest[i];
         double fsave = fbest, psave = penbest;
@@ -3914,10 +3938,10 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
 #ifdef USE_MPFR
     bool mpfr_built = false;
     bool want_mpfr = (opts.prec_mode == FM_PREC_MPFR);
-    bool mpfr_eligible = want_mpfr && !vs.any_int && ngens == 0;
+    bool mpfr_eligible = want_mpfr && do_post && !vs.any_int && ngens == 0;
     mpfr_t* xm = NULL;
     mpfr_t fmv;
-    if (want_mpfr && !mpfr_eligible)
+    if (want_mpfr && !mpfr_eligible && do_post)
         fm_warn(fn_name, "nimpl",
                 "WorkingPrecision > MachinePrecision with general constraints or "
                 "integer domains is not supported; using machine precision");

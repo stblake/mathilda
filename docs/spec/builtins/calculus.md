@@ -3077,6 +3077,23 @@ A method may carry sub-options as a list, e.g.
 The search uses a deterministic PRNG with a fixed default seed, so results are
 reproducible; `"RandomSeed"` overrides it.
 
+Recognised sub-options:
+
+| Sub-option | Applies to | Meaning |
+|------------|-----------|---------|
+| `"SearchPoints" -> n` | DE, NelderMead (restarts) | population / restart count |
+| `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6) |
+| `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9) |
+| `"ExpandRatio" -> e` | NelderMead | simplex expansion coefficient (default 2) |
+| `"ContractRatio" -> c` | NelderMead | simplex contraction coefficient (default 0.5) |
+| `"PostProcess" -> False` | all | skip the final exact local polish; return the raw global-search point |
+| `"RandomSeed" -> s` | all | override the default PRNG seed |
+
+Unrecognised sub-options are ignored (matching Mathematica). `"PostProcess"`
+defaults to on: the global best is refined by the exact local optimizer (and,
+for continuous box/unconstrained problems at `WorkingPrecision > MachinePrecision`,
+by an MPFR BFGS step); `"PostProcess" -> False` disables both.
+
 ### Options
 
 | Option | Default | Meaning |
