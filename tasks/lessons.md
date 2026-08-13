@@ -2549,3 +2549,33 @@ the unit path under-ran). Fixing only the interpreter would have left
   and re-formats — emit **bare numbers in a fixed order** (both engines print those
   cleanly) and map them to labels by position; `Round[1.*^6 t]` gives integer µs
   with no float noise.
+
+## Authoring Mathilda benchmark experiments (group E, 2026-08-12)
+
+- **Verify a probe actually COMPUTES.** An early "fast" special-function probe used a
+  `f /. {sym -> (...&)}` dispatch that silently failed to substitute, leaving
+  `BesselI[0, <10^6 array>]` **unevaluated** — symbolic over a big array is instant, so
+  it read as 0.15 s when the real cost is 22 s. Rule: when a probe looks suspiciously
+  fast/uniform, check the RESULT head, not just the timing. Every experiment was then
+  gated through a `.m`-vs-`.py` check-agreement + timing harness before trusting it.
+- **`RandomReal[{0,1}, {n}]` (list dims) is UNPACKED; `RandomReal[{0,1}, n]` (scalar
+  count) is packed.** A head with a vector kernel (Gamma) auto-packs either way; a head
+  without one (BesselI/K) threads scalar-by-scalar on the unpacked list. Doesn't matter
+  which spelling you use for AWARE heads; matters enormously for the ones you're trying
+  to catch.
+- **`FindRoot` holds its args** — a computed variable spec (`Transpose[{vars, starts}]`)
+  must be wrapped in `Evaluate[]`, and the variables must be **plain symbols**
+  (`Symbol["v"<>ToString[i]]`), never indexed `x[i]` ("system variable spec malformed").
+  A `Module` around the `Symbol[]` generation recurses to `$RecursionLimit`; build the
+  symbols/equations **inline** at top level instead.
+- **DCT/DST normalization differs by type.** Mathematica FourierDCT/DST reconcile to
+  scipy only per-type: DCT-1 = `dct(norm='ortho', orthogonalize=False)`; DCT-4/DST-1/DST-4
+  = `norm='ortho'`; DCT-2 = ortho with `y[1:]/=√2` (index-0 special); DST-2 = ortho with
+  `y[:-1]/=√2` (last/Nyquist special). DCT-3/DST-3 have no single scipy setting — leave
+  them out rather than reconcile fragilely. Fourier = `fft2/√n`.
+- **Use `benchOnce` for `N[expr,p]` cases** — the warm-up would let Mathilda's N[] result
+  cache serve every timed rep for free (measure the cache, not the arithmetic).
+- **Mathilda numerical gaps this surfaced** (targets, not lessons): generalized eig has no
+  LAPACK path (symbolic char-poly); BesselI/K have no vector kernel; NullSpace on floats
+  takes a non-machine path; NSolve/NRoots 60–110× slower than numpy companion-matrix;
+  FindRoot/NSum under-deliver requested WorkingPrecision.
