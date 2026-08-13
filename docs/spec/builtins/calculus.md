@@ -2997,3 +2997,117 @@ In[10]:= FindMinimum[x Cos[x], {x, 2}, WorkingPrecision -> 80]
 Out[10]= {-3.2883713955908964865125964571235283975158511553846230554230811211040811736596049,
          {x -> 3.42561845948172814647771386218545617769640923939753965919739613085112431446169}}
 ```
+
+## NMinimize / NMaximize
+
+Numerical **global** optimisation.  Implemented natively in C in
+`src/findmin.c`, layered on the `FindMinimum` machinery (it reuses the same
+`Block`-style variable binding, `{f, cons}` constraint parsing, penalty/BFGS
+local solvers, MPFR path, and result construction).  Both have
+`HoldAll, Protected` attributes.  `NMaximize[f, ...]` is a thin wrapper around
+`NMinimize[-f, ...]` that negates the objective value before returning.
+
+Where `FindMinimum` descends from a single start point to the nearest local
+minimum, `NMinimize` runs a stochastic global search over a bounded region and
+then polishes the best point with the exact local solver.
+
+### Forms
+
+- `NMinimize[f, x]` -- global minimum with respect to one variable.
+- `NMinimize[f, {x, y, ...}]` -- global minimum over several variables.
+- `NMinimize[{f, cons}, vars]` -- constrained global minimum.  `cons` may be
+  a single constraint, an `And[...]` of constraints, or — as Mathematica
+  allows — additional list elements `{f, c1, c2, ...}` that are implicitly
+  `And`-ed.
+- `NMaximize[...]` -- same forms; maximises `f`.
+
+Variables may be given bare (`x`), as a starting interval (`{x, xmin, xmax}`,
+used to seed the search region), with an integer domain
+(`Element[x, Integers]`, in the variable list or the constraints), or as
+**indexed variables** `x[i]`.  Because both arguments are held (`HoldAll`), a
+generator that produces the variable list — `Table[x[i], {i, 1, n}]`,
+`Array[x, n]` — is evaluated once (with the variable head localized) so it
+expands to the concrete list `{x[1], ..., x[n]}`; a held `Table[...]`
+constraint list is expanded the same way and treated as an implicit `And`.
+Indexed variables are internally rewritten to fresh scalar symbols for the
+search and mapped back in the result, so `Rule`s come back keyed by the
+original `x[i]`.  This makes the standard `n`-dimensional benchmarks (e.g. the
+Rosenbrock valley `Sum[100 (x[i+1]-x[i]^2)^2 + (1-x[i])^2, {i, 1, n-1}]` over
+`Table[x[i], {i, 1, n}]`) express directly.
+
+### Output
+
+`{f_min, {var1 -> v1, ...}}`.  Integer-domain variables come back as exact
+integers.  If the feasible set is empty, the result is
+`{Infinity, {var1 -> Indeterminate, ...}}`.
+
+### Constraints and domains
+
+Constraints are the same relational/boolean forms `FindMinimum` accepts:
+`==`, `<`, `<=`, `>`, `>=`, chained inequalities, and their `And`
+combinations.  Bare-variable inequalities against a constant become **box
+constraints** (used both to bound the search region and to project during the
+local polish); other inequalities and equalities are handled with **Deb's
+feasibility rules** during the global search (a feasible point always beats an
+infeasible one; among feasible points the smaller objective wins; among
+infeasible points the smaller total violation wins) and with the
+quadratic-penalty local solver during the polish.  Scalar integer variables
+(`Element[x, Integers]`) are searched on the integer lattice and refined by
+integer coordinate descent.
+
+Not yet supported (emit `NMinimize::nimpl` and abstain / fall back): vector and
+matrix variables (`Vectors[n, dom]`, `Matrices`), geometric-region domains,
+`VectorGreaterEqual`, `Or[...]` (disjunctive) constraints, domains other than
+`Integers`/`Reals`, and general (non-box) constraints at
+`WorkingPrecision > MachinePrecision`.
+
+### Methods
+
+| `Method ->` | Engine |
+|-------------|--------|
+| `Automatic` | `"DifferentialEvolution"` |
+| `"DifferentialEvolution"` | DE/rand/1/bin with Deb feasibility selection (default) |
+| `"NelderMead"` | downhill-simplex with random restarts |
+| `"RandomSearch"` | multiple random starts refined by the local solver |
+| `"SimulatedAnnealing"` | Metropolis search with geometric cooling |
+
+A method may carry sub-options as a list, e.g.
+`Method -> {"DifferentialEvolution", "SearchPoints" -> 30,
+"ScalingFactor" -> 0.6, "CrossProbability" -> 0.9, "RandomSeed" -> 7}`.
+The search uses a deterministic PRNG with a fixed default seed, so results are
+reproducible; `"RandomSeed"` overrides it.
+
+### Options
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `Method` | `Automatic` | global-search selector (see above) |
+| `WorkingPrecision` | `MachinePrecision` | MPFR refinement of continuous, general-constraint-free problems |
+| `MaxIterations` | `Automatic` (100) | generation cap |
+| `AccuracyGoal` / `PrecisionGoal` | `Automatic` | convergence tolerances |
+| `EvaluationMonitor` | `None` | `:> body` run on every objective evaluation |
+| `StepMonitor` | `None` | `:> body` |
+
+### Examples
+
+```
+In[1]:= NMinimize[x^4 - 3 x^2 - x, x]
+Out[1]= {-3.51391, {x -> 1.30084}}
+
+In[2]:= NMinimize[{x + y, x^2 + y^2 <= 9}, {x, y}]
+Out[2]= {-4.24264, {x -> -2.12132, y -> -2.12132}}
+
+In[3]:= NMinimize[{x + 2 y, x^2 + 2 y^2 <= 3, x + y == 2, x >= 1}, {x, y}]
+Out[3]= {2.33333, {x -> 1.66667, y -> 0.33333}}
+
+In[4]:= NMinimize[{x + y, x + 2 y >= 3, x >= -2},
+          {Element[x, Integers], Element[y, Integers]}]
+Out[4]= {1, {x -> -1, y -> 2}}
+
+In[5]:= NMinimize[{x, x > 2 && x < 1}, x]
+Out[5]= {Infinity, {x -> Indeterminate}}
+
+In[6]:= NMaximize[{x + y, x^2 + y^2 <= 1}, {x, y}]
+Out[6]= {1.41421, {x -> 0.70710, y -> 0.70711}}
+```
+

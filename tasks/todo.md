@@ -39,3 +39,43 @@
 
 ## Not done (deferred per scope)
 - Implementing the kernel/feature fixes above — the user chose "author + run + gap report, then review".
+
+---
+
+# NMinimize / NMaximize — numerical global optimization (2026-08-14)
+
+Plan: `~/.claude/plans/let-s-plan-the-implementation-sequential-cosmos.md`.
+Global-optimization driver layered on the existing `FindMinimum` machinery
+(`src/findmin.c`), reusing its variable binding, `{f,cons}` constraint parsing,
+penalty/BFGS local solvers, MPFR path, and result builders.
+
+## Done
+- `builtin_nminimize` + `nm_minimize_driver` + 4 engines (DifferentialEvolution
+  default, NelderMead, RandomSearch, SimulatedAnnealing) with Deb feasibility
+  rules; `builtin_nmaximize` negate-and-wrap. All in `src/findmin.c`.
+- Mixed-integer via `Element[x, Integers]` (lattice search + integer coordinate
+  descent; integer results). Empty feasible set → `{Infinity, {x->Indeterminate}}`.
+- `SYM_NMinimize`/`SYM_NMaximize` (sym_names), `HoldAll|Protected` registration,
+  docstrings (info.c), `Options[]` defaults (options_builtin.c), docs
+  (calculus.md) + changelog (2026-08-10.md).
+- Deterministic SplitMix64 PRNG (fixed seed; `"RandomSeed"` override) → reproducible.
+- Internal solver diagnostics muted during search (`g_fm_quiet`) so successful
+  solves are silent.
+
+## Verification
+- `tests/test_nminimize.c` (29 cases) — all pass. `findmin_tests`,
+  `options_tests`, `core_tests` — no regression. `make check-c99` clean.
+  Valgrind identical to `Sin[1.0]` baseline (no NMinimize frames). Spec examples
+  reproduced (quartic, disk, linear-program, equality, integer, infeasible, dual).
+
+## Two bugs found + fixed during bring-up
+1. `{f, c1, c2, ...}` (>2-element list) silently dropped all constraints — only a
+   2-element `{f, cons}` was recognized. Now collects every trailing element into
+   an implicit `And`.
+2. Contradictory strict bounds (`x>2 && x<1`) were "repaired" by averaging,
+   hiding infeasibility. Now detects an empty box → `{Infinity, ...}`.
+
+## Deferred (per agreed scope)
+- Vector/matrix/region variables (`Vectors`/`Matrices`), `VectorGreaterEqual`,
+  `Or` constraints, non-Integers/Reals domains, general constraints at high
+  `WorkingPrecision`. Each abstains with an `NMinimize::nimpl` message.

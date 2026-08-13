@@ -1231,6 +1231,9 @@ target_include_directories(eliminate_tests PRIVATE ../src)
 add_executable(findmin_tests test_findmin.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(findmin_tests PRIVATE ../src)
 
+add_executable(nminimize_tests test_nminimize.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(nminimize_tests PRIVATE ../src)
+
 add_executable(fit_tests test_fit.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(fit_tests PRIVATE ../src)
 add_test(NAME fit_tests COMMAND fit_tests)

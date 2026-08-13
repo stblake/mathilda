@@ -135,7 +135,14 @@ typedef struct {
  *  Diagnostic helper                                                  *
  * ------------------------------------------------------------------ */
 
+/* When true, fm_warn is a no-op. NMinimize sets it around its internal
+ * local-solver calls so the penalty/line-search chatter that is expected
+ * during global search does not reach the user (NMinimize reports feasibility
+ * itself via its {Infinity, ...} result). */
+static bool g_fm_quiet = false;
+
 static void fm_warn(const char* fn, const char* tag, const char* fmt, ...) {
+    if (g_fm_quiet) return;
     va_list ap;
     fprintf(stderr, "%s::%s: ", fn, tag);
     va_start(ap, fmt);
@@ -2801,6 +2808,1241 @@ Expr* builtin_findmaximum(Expr* res) {
     return min_result;
 }
 
+/* ================================================================== *
+ *  NMinimize / NMaximize — numerical GLOBAL optimization             *
+ * ================================================================== *
+ *
+ *  Layered directly on the FindMinimum machinery above. NMinimize reuses
+ *  the same Block-style variable binding (fm_bind_*), objective and
+ *  constraint evaluation (fm_eval_scalar / fm_eval_penalty), constraint
+ *  parsing (fm_collect_constraints → boxes + general FmGenCon[]), local
+ *  polishers (fm_run_bfgs / fm_run_penalty, plus fm_run_bfgs_mpfr for
+ *  WorkingPrecision), and the result builders. What is new here is the
+ *  stochastic *global* search — DifferentialEvolution (Automatic default),
+ *  NelderMead, RandomSearch, SimulatedAnnealing — mixed-integer handling
+ *  via Element[x, Integers], and the infeasible {Infinity, ...} return.
+ *
+ *  Constraints are handled with Deb's feasibility rules during the global
+ *  search (no penalty-weight tuning): a feasible point always beats an
+ *  infeasible one; among feasible points the smaller objective wins; among
+ *  infeasible points the smaller total violation wins. The global best is
+ *  then polished with the exact local solver and re-checked for feasibility.
+ */
+
+#define NM_DEFAULT_SPAN   10.0     /* half-width of the default search box   */
+#define NM_BOUND_SPAN     20.0     /* span added when only one bound is known*/
+#define NM_FEAS_EPS       1.0e-8   /* penalty ≤ this ⇒ feasible (selection)  */
+#define NM_FEAS_FINAL     1.0e-6   /* final feasible-vs-Infinity threshold   */
+#define NM_PENALTY_MU     1.0e6    /* fixed penalty weight for NelderMead/SA */
+#define NM_DEFAULT_SEED   20260814ULL
+
+enum { NM_AUTO = 0, NM_DE, NM_NELDERMEAD, NM_RANDOMSEARCH, NM_SA };
+
+typedef struct {
+    int      method;         /* NM_AUTO / NM_DE / ...                        */
+    int      search_points;  /* 0 ⇒ auto                                     */
+    double   F;              /* DE scaling factor;   <0 ⇒ auto               */
+    double   CR;             /* DE crossover prob.;  <0 ⇒ auto               */
+    uint64_t seed;
+} NmConfig;
+
+/* SplitMix64 — a small, fast, fully deterministic PRNG (mirrors mcint). A
+ * fixed default seed makes the stochastic search reproducible so the unit
+ * tests are stable; "RandomSeed" overrides it. */
+typedef struct { uint64_t s; } NmRng;
+
+static void nm_rng_seed(NmRng* r, uint64_t seed) { r->s = seed; }
+
+static uint64_t nm_rng_next(NmRng* r) {
+    uint64_t z = (r->s += 0x9E3779B97F4A7C15ULL);
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    return z ^ (z >> 31);
+}
+static double nm_rng_unif(NmRng* r) {            /* [0, 1)                    */
+    return (double)(nm_rng_next(r) >> 11) * (1.0 / 9007199254740992.0);
+}
+static double nm_rng_range(NmRng* r, double lo, double hi) {
+    return lo + (hi - lo) * nm_rng_unif(r);
+}
+static double nm_rng_normal(NmRng* r) {          /* standard normal (Box-Muller) */
+    double u1 = nm_rng_unif(r), u2 = nm_rng_unif(r);
+    if (u1 < 1e-300) u1 = 1e-300;
+    return sqrt(-2.0 * log(u1)) * cos(6.28318530717958647692 * u2);
+}
+
+static bool nm_is_head(const Expr* e, const char* sym) {
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == sym;
+}
+
+/* A variable "atom" is a bare symbol (x) or an indexed form (x[i], x[i,j], ...):
+ * anything a Table[x[i], {i, ...}] spec can produce. A {x, lo, hi} spec (head
+ * List) is NOT an atom — it is a bounded-variable spec handled separately. */
+static bool nm_is_var_atom(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return true;
+    return e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name != SYM_List
+        && e->data.function.head->data.symbol.name != SYM_Element;
+}
+
+/* Is `cons` already a boolean/relational constraint tree, or a wrapper (Table,
+ * List, ...) that must be evaluated first to expand into one? */
+static bool nm_is_constraint_tree(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION
+        || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    return h == SYM_And || h == SYM_Or || h == SYM_Not || h == SYM_Xor
+        || h == SYM_Implies || h == SYM_Equal || h == SYM_Unequal
+        || h == SYM_Less || h == SYM_LessEqual || h == SYM_Greater
+        || h == SYM_GreaterEqual || h == SYM_Inequality || h == SYM_Element;
+}
+
+/* Structural substitution: a fresh copy of `e` with every subtree structurally
+ * equal to from[i] replaced by a copy of to[i]. Used to rewrite indexed
+ * optimisation variables (x[1], x[2], ...) to fresh scalar symbols so the whole
+ * symbol-keyed solver machinery applies unchanged. */
+static Expr* nm_subst(Expr* e, Expr* const* from, Expr* const* to, size_t n) {
+    if (!e) return NULL;
+    for (size_t i = 0; i < n; i++)
+        if (from[i] && expr_eq(e, from[i])) return expr_copy(to[i]);
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    size_t ac = e->data.function.arg_count;
+    Expr* head = nm_subst(e->data.function.head, from, to, n);
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (ac ? ac : 1));
+    for (size_t j = 0; j < ac; j++)
+        args[j] = nm_subst(e->data.function.args[j], from, to, n);
+    Expr* r = expr_new_function(head, args, ac);
+    free(args);
+    return r;
+}
+
+/* Generate a fresh, unused scalar symbol to stand in for an indexed variable.
+ * The name is interned and stable; the caller removes it (symtab_remove_symbol)
+ * once the optimisation and result construction are done. */
+static Expr* nm_fresh_symbol(void) {
+    static uint64_t ctr = 0;
+    char buf[64];
+    for (;;) {
+        snprintf(buf, sizeof(buf), "NMinimize$%llu", (unsigned long long)ctr++);
+        if (!symtab_lookup(buf)) break;
+    }
+    return expr_new_symbol(buf);
+}
+
+/* Block-localise a set of head symbols: snapshot and clear their Own/DownValues
+ * so an objective/constraint/variable expression that mentions x[i] evaluates
+ * with x free — expanding Table/Sum symbolically without capturing any stray
+ * user definition. Restored by nm_heads_restore. */
+typedef struct { const char* name; Rule* own; Rule* down; bool valid; } NmHeadSave;
+
+static void nm_free_rule_chain(Rule* r) {
+    while (r) {
+        Rule* nx = r->next;
+        expr_free(r->pattern);
+        expr_free(r->replacement);
+        free(r);
+        r = nx;
+    }
+}
+
+static void nm_heads_localize(NmHeadSave* sv, const char** names, size_t m) {
+    for (size_t i = 0; i < m; i++) {
+        SymbolDef* def = symtab_get_def(names[i]);
+        sv[i].name  = names[i];
+        sv[i].own   = def->own_values;
+        sv[i].down  = def->down_values;
+        sv[i].valid = true;
+        def->own_values  = NULL;
+        def->down_values = NULL;
+    }
+    if (m) eval_clock_bump();
+}
+
+static void nm_heads_restore(NmHeadSave* sv, size_t m) {
+    for (size_t i = 0; i < m; i++) {
+        if (!sv[i].valid) continue;
+        SymbolDef* def = symtab_get_def(sv[i].name);
+        nm_free_rule_chain(def->own_values);
+        nm_free_rule_chain(def->down_values);
+        def->own_values  = sv[i].own;
+        def->down_values = sv[i].down;
+        sv[i].valid = false;
+    }
+    if (m) eval_clock_bump();
+}
+
+/* ------------------------------------------------------------------ *
+ *  Driver context bundle + point evaluation / comparison             *
+ * ------------------------------------------------------------------ */
+
+typedef struct {
+    Expr*        f_raw;          /* objective (borrowed)                     */
+    Expr**       vars;           /* variable symbols (borrowed)             */
+    size_t       n;
+    FmVarBind*   binds;
+    Expr**       g_exprs;        /* symbolic ∇f, or NULL → finite diff       */
+    FmGenCon*    gens;
+    size_t       ngens;
+    FmBox*       boxes;
+    const FmOpts* opts;
+    const bool*  is_int;
+    bool         any_int;
+    const double* reg_lo;
+    const double* reg_hi;
+} NmDriver;
+
+/* Objective value and total constraint violation at x. Integer coordinates
+ * are rounded before evaluation. A non-evaluable objective or constraint is
+ * treated as maximally bad so the search steers away from it. */
+static void nm_eval(NmDriver* D, const double* x, double* f_out, double* pen_out) {
+    size_t n = D->n;
+    double* xr = (double*)malloc(sizeof(double) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) xr[i] = D->is_int[i] ? round(x[i]) : x[i];
+    double fx;
+    if (!fm_eval_scalar(D->f_raw, D->binds, xr, n, D->opts, &fx) || !isfinite(fx))
+        fx = 1e300;
+    double pen = 0.0;
+    if (D->ngens > 0 &&
+        !fm_eval_penalty(D->gens, D->ngens, D->binds, xr, n, D->opts, &pen))
+        pen = 1e300;
+    free(xr);
+    *f_out = fx;
+    *pen_out = pen;
+}
+
+/* Deb's feasibility rules: is (fa, pa) a better candidate than (fb, pb)? */
+static bool nm_better(double fa, double pa, double fb, double pb) {
+    bool fa_feas = (pa <= NM_FEAS_EPS);
+    bool fb_feas = (pb <= NM_FEAS_EPS);
+    if (fa_feas && fb_feas) return fa < fb;
+    if (fa_feas != fb_feas) return fa_feas;
+    return pa < pb;
+}
+
+/* Clamp x into the search region and snap integer coordinates. */
+static void nm_project(NmDriver* D, double* x) {
+    for (size_t j = 0; j < D->n; j++) {
+        if (x[j] < D->reg_lo[j]) x[j] = D->reg_lo[j];
+        if (x[j] > D->reg_hi[j]) x[j] = D->reg_hi[j];
+        if (D->is_int[j]) x[j] = round(x[j]);
+    }
+}
+
+/* Penalized scalar objective used by NelderMead / SimulatedAnnealing. */
+static double nm_phi(NmDriver* D, const double* x) {
+    double f, p;
+    nm_eval(D, x, &f, &p);
+    return f + NM_PENALTY_MU * p;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Local polish of a candidate (shared by RandomSearch + the driver) *
+ * ------------------------------------------------------------------ */
+
+/* Mixed/integer coordinate descent: step each coordinate (±1, ±2 on integer
+ * dims; scaled steps on continuous dims), accept any Deb-improvement. */
+static void nm_int_descent(NmDriver* D, double* x, double* f_io, double* pen_io) {
+    size_t n = D->n;
+    double* t = (double*)malloc(sizeof(double) * n);
+    bool improved = true;
+    int iter = 0;
+    while (improved && iter++ < 300) {
+        improved = false;
+        for (size_t j = 0; j < n; j++) {
+            double steps[4];
+            if (D->is_int[j]) {
+                steps[0] = 1; steps[1] = -1; steps[2] = 2; steps[3] = -2;
+            } else {
+                double h = (D->reg_hi[j] - D->reg_lo[j]) * 0.05 + 1e-3;
+                steps[0] = h; steps[1] = -h; steps[2] = 4 * h; steps[3] = -4 * h;
+            }
+            for (int s = 0; s < 4; s++) {
+                for (size_t k = 0; k < n; k++) t[k] = x[k];
+                t[j] = x[j] + steps[s];
+                nm_project(D, t);
+                double f, p;
+                nm_eval(D, t, &f, &p);
+                if (nm_better(f, p, *f_io, *pen_io)) {
+                    for (size_t k = 0; k < n; k++) x[k] = t[k];
+                    *f_io = f; *pen_io = p;
+                    improved = true;
+                }
+            }
+        }
+    }
+    free(t);
+}
+
+static void nm_local_polish(NmDriver* D, double* x, double* f_out, double* pen_out) {
+    if (D->any_int) {
+        nm_project(D, x);
+        nm_eval(D, x, f_out, pen_out);
+        nm_int_descent(D, x, f_out, pen_out);
+    } else {
+        double fx = 0.0;
+        bool saved_quiet = g_fm_quiet;
+        g_fm_quiet = true;                 /* silence internal solver chatter */
+        if (D->ngens > 0)
+            (void)fm_run_penalty(D->f_raw, D->vars, D->n, D->binds,
+                                 FM_METHOD_QUASINEWTON, D->g_exprs, NULL, x,
+                                 D->gens, D->ngens, D->boxes, D->opts, &fx);
+        else
+            (void)fm_run_bfgs(D->f_raw, D->vars, D->n, D->binds, D->g_exprs, x,
+                              NULL, 0, 0.0, D->boxes, D->opts, &fx);
+        g_fm_quiet = saved_quiet;
+        nm_eval(D, x, f_out, pen_out);
+    }
+}
+
+/* ------------------------------------------------------------------ *
+ *  Global engines                                                     *
+ * ------------------------------------------------------------------ */
+
+/* DifferentialEvolution, DE/rand/1/bin, with Deb-rule selection. */
+static void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
+                  double* xbest, double* fbest, double* penbest) {
+    size_t n = D->n;
+    const double* rlo = D->reg_lo;
+    const double* rhi = D->reg_hi;
+    size_t NP = nc->search_points > 0 ? (size_t)nc->search_points : 10 * n;
+    if (NP < 15) NP = 15;
+    if (NP > 40) NP = 40;
+    double F  = nc->F  > 0.0 ? nc->F  : 0.6;
+    double CR = nc->CR >= 0.0 ? nc->CR : 0.9;
+    int64_t maxgen = D->opts->max_iter > 0 ? D->opts->max_iter : 100;
+
+    double* pop   = (double*)malloc(sizeof(double) * NP * n);
+    double* fpop  = (double*)malloc(sizeof(double) * NP);
+    double* ppop  = (double*)malloc(sizeof(double) * NP);
+    double* trial = (double*)malloc(sizeof(double) * n);
+
+    for (size_t p = 0; p < NP; p++) {
+        for (size_t j = 0; j < n; j++) {
+            double v = nm_rng_range(rng, rlo[j], rhi[j]);
+            if (D->is_int[j]) v = round(v);
+            pop[p * n + j] = v;
+        }
+        nm_eval(D, &pop[p * n], &fpop[p], &ppop[p]);
+    }
+    size_t bi = 0;
+    for (size_t p = 1; p < NP; p++)
+        if (nm_better(fpop[p], ppop[p], fpop[bi], ppop[bi])) bi = p;
+    for (size_t j = 0; j < n; j++) xbest[j] = pop[bi * n + j];
+    *fbest = fpop[bi];
+    *penbest = ppop[bi];
+
+    for (int64_t g = 0; g < maxgen; g++) {
+        for (size_t p = 0; p < NP; p++) {
+            size_t r1, r2, r3;
+            if (NP < 4) break;
+            do { r1 = nm_rng_next(rng) % NP; } while (r1 == p);
+            do { r2 = nm_rng_next(rng) % NP; } while (r2 == p || r2 == r1);
+            do { r3 = nm_rng_next(rng) % NP; } while (r3 == p || r3 == r1 || r3 == r2);
+            size_t jr = nm_rng_next(rng) % n;
+            for (size_t j = 0; j < n; j++) {
+                if (nm_rng_unif(rng) < CR || j == jr) {
+                    double v = pop[r1 * n + j]
+                             + F * (pop[r2 * n + j] - pop[r3 * n + j]);
+                    if (v < rlo[j]) v = rlo[j];
+                    if (v > rhi[j]) v = rhi[j];
+                    if (D->is_int[j]) v = round(v);
+                    trial[j] = v;
+                } else {
+                    trial[j] = pop[p * n + j];
+                }
+            }
+            double ft, pt;
+            nm_eval(D, trial, &ft, &pt);
+            if (nm_better(ft, pt, fpop[p], ppop[p])) {
+                for (size_t j = 0; j < n; j++) pop[p * n + j] = trial[j];
+                fpop[p] = ft; ppop[p] = pt;
+                if (nm_better(ft, pt, *fbest, *penbest)) {
+                    for (size_t j = 0; j < n; j++) xbest[j] = trial[j];
+                    *fbest = ft; *penbest = pt;
+                }
+            }
+        }
+        /* Converged if the best is feasible and the feasible sub-population's
+         * objective spread has collapsed to the requested tolerance. */
+        if (*penbest <= NM_FEAS_EPS) {
+            double fmin = 1e300, fmax = -1e300;
+            size_t cnt = 0;
+            for (size_t p = 0; p < NP; p++) {
+                if (ppop[p] <= NM_FEAS_EPS) {
+                    if (fpop[p] < fmin) fmin = fpop[p];
+                    if (fpop[p] > fmax) fmax = fpop[p];
+                    cnt++;
+                }
+            }
+            double tol = pow(10.0, -D->opts->acc_goal_digits)
+                       + (1.0 + fabs(*fbest)) * pow(10.0, -D->opts->prec_goal_digits);
+            if (cnt >= NP / 2 && (fmax - fmin) <= tol) break;
+        }
+    }
+    free(pop); free(fpop); free(ppop); free(trial);
+}
+
+/* NelderMead downhill simplex on the penalized objective, with restarts. */
+static void nm_neldermead(NmDriver* D, const NmConfig* nc, NmRng* rng,
+                          double* xbest, double* fbest, double* penbest) {
+    size_t n = D->n;
+    const double* rlo = D->reg_lo;
+    const double* rhi = D->reg_hi;
+    int restarts = nc->search_points > 0 ? nc->search_points : (n > 1 ? 4 : 2);
+    if (restarts < 1) restarts = 1;
+    if (restarts > 20) restarts = 20;
+    int64_t maxit = D->opts->max_iter > 0 ? D->opts->max_iter * (int64_t)(5 * n)
+                                          : 200 * (int64_t)n;
+    if (maxit < 100) maxit = 100;
+
+    double* V  = (double*)malloc(sizeof(double) * (n + 1) * n);
+    double* fv = (double*)malloc(sizeof(double) * (n + 1));
+    double* xc = (double*)malloc(sizeof(double) * n);
+    double* xr = (double*)malloc(sizeof(double) * n);
+    double* xe = (double*)malloc(sizeof(double) * n);
+    bool have = false;
+
+    for (int rs = 0; rs < restarts; rs++) {
+        for (size_t j = 0; j < n; j++) V[j] = nm_rng_range(rng, rlo[j], rhi[j]);
+        nm_project(D, &V[0]);
+        for (size_t i = 1; i <= n; i++) {
+            for (size_t j = 0; j < n; j++) V[i * n + j] = V[j];
+            size_t d = i - 1;
+            double step = (rhi[d] - rlo[d]) * 0.1;
+            if (step == 0.0) step = 1.0;
+            V[i * n + d] += step;
+            nm_project(D, &V[i * n]);
+        }
+        for (size_t i = 0; i <= n; i++) fv[i] = nm_phi(D, &V[i * n]);
+
+        for (int64_t it = 0; it < maxit; it++) {
+            size_t lo = 0, hi = 0, nh = 0;
+            for (size_t i = 1; i <= n; i++) {
+                if (fv[i] < fv[lo]) lo = i;
+                if (fv[i] > fv[hi]) hi = i;
+            }
+            nh = (hi == 0) ? 1 : 0;
+            for (size_t i = 0; i <= n; i++)
+                if (i != hi && fv[i] > fv[nh]) nh = i;
+            if (fabs(fv[hi] - fv[lo]) <= 1e-12 * (1.0 + fabs(fv[lo]))) break;
+
+            for (size_t j = 0; j < n; j++) xc[j] = 0.0;
+            for (size_t i = 0; i <= n; i++)
+                if (i != hi)
+                    for (size_t j = 0; j < n; j++) xc[j] += V[i * n + j];
+            for (size_t j = 0; j < n; j++) xc[j] /= (double)n;
+
+            for (size_t j = 0; j < n; j++) xr[j] = xc[j] + (xc[j] - V[hi * n + j]);
+            nm_project(D, xr);
+            double frr = nm_phi(D, xr);
+            if (frr < fv[lo]) {
+                for (size_t j = 0; j < n; j++)
+                    xe[j] = xc[j] + 2.0 * (xc[j] - V[hi * n + j]);
+                nm_project(D, xe);
+                double fe = nm_phi(D, xe);
+                if (fe < frr) { for (size_t j = 0; j < n; j++) V[hi * n + j] = xe[j]; fv[hi] = fe; }
+                else          { for (size_t j = 0; j < n; j++) V[hi * n + j] = xr[j]; fv[hi] = frr; }
+            } else if (frr < fv[nh]) {
+                for (size_t j = 0; j < n; j++) V[hi * n + j] = xr[j];
+                fv[hi] = frr;
+            } else {
+                for (size_t j = 0; j < n; j++)
+                    xe[j] = xc[j] + 0.5 * (V[hi * n + j] - xc[j]);
+                nm_project(D, xe);
+                double fc = nm_phi(D, xe);
+                if (fc < fv[hi]) { for (size_t j = 0; j < n; j++) V[hi * n + j] = xe[j]; fv[hi] = fc; }
+                else {
+                    for (size_t i = 0; i <= n; i++) {
+                        if (i == lo) continue;
+                        for (size_t j = 0; j < n; j++)
+                            V[i * n + j] = V[lo * n + j] + 0.5 * (V[i * n + j] - V[lo * n + j]);
+                        nm_project(D, &V[i * n]);
+                        fv[i] = nm_phi(D, &V[i * n]);
+                    }
+                }
+            }
+        }
+        size_t lo = 0;
+        for (size_t i = 1; i <= n; i++) if (fv[i] < fv[lo]) lo = i;
+        double f, p;
+        nm_eval(D, &V[lo * n], &f, &p);
+        if (!have || nm_better(f, p, *fbest, *penbest)) {
+            for (size_t j = 0; j < n; j++) xbest[j] = V[lo * n + j];
+            *fbest = f; *penbest = p; have = true;
+        }
+    }
+    free(V); free(fv); free(xc); free(xr); free(xe);
+}
+
+/* RandomSearch: multiple random starts, each refined by the local solver. */
+static void nm_randomsearch(NmDriver* D, const NmConfig* nc, NmRng* rng,
+                            double* xbest, double* fbest, double* penbest) {
+    size_t n = D->n;
+    const double* rlo = D->reg_lo;
+    const double* rhi = D->reg_hi;
+    int K = nc->search_points > 0 ? nc->search_points : (n > 1 ? (int)(8 * n) : 12);
+    if (K < 4) K = 4;
+    if (K > 40) K = 40;
+    double* x = (double*)malloc(sizeof(double) * n);
+    bool have = false;
+    for (int k = 0; k < K; k++) {
+        for (size_t j = 0; j < n; j++) x[j] = nm_rng_range(rng, rlo[j], rhi[j]);
+        nm_project(D, x);
+        double f, p;
+        nm_local_polish(D, x, &f, &p);
+        if (!have || nm_better(f, p, *fbest, *penbest)) {
+            for (size_t j = 0; j < n; j++) xbest[j] = x[j];
+            *fbest = f; *penbest = p; have = true;
+        }
+    }
+    free(x);
+}
+
+/* SimulatedAnnealing with geometric cooling; tracks the best point seen. */
+static void nm_sa(NmDriver* D, const NmConfig* nc, NmRng* rng,
+                  double* xbest, double* fbest, double* penbest) {
+    size_t n = D->n;
+    const double* rlo = D->reg_lo;
+    const double* rhi = D->reg_hi;
+    (void)nc;
+    double* x  = (double*)malloc(sizeof(double) * n);
+    double* xn = (double*)malloc(sizeof(double) * n);
+    for (size_t j = 0; j < n; j++) x[j] = nm_rng_range(rng, rlo[j], rhi[j]);
+    nm_project(D, x);
+    double fx, px;
+    nm_eval(D, x, &fx, &px);
+    double phi = fx + NM_PENALTY_MU * px;
+    for (size_t j = 0; j < n; j++) xbest[j] = x[j];
+    *fbest = fx; *penbest = px;
+
+    int64_t iters = D->opts->max_iter > 0 ? D->opts->max_iter * 50 : 5000;
+    if (iters > 20000) iters = 20000;
+    double T = 1.0;
+    for (int64_t it = 0; it < iters; it++) {
+        for (size_t j = 0; j < n; j++) {
+            double span = rhi[j] - rlo[j];
+            xn[j] = x[j] + span * 0.1 * (0.1 + T) * nm_rng_normal(rng);
+        }
+        nm_project(D, xn);
+        double fn2, pn2;
+        nm_eval(D, xn, &fn2, &pn2);
+        double phin = fn2 + NM_PENALTY_MU * pn2;
+        double d = phin - phi;
+        if (d < 0.0 || nm_rng_unif(rng) < exp(-d / (T + 1e-12))) {
+            for (size_t j = 0; j < n; j++) x[j] = xn[j];
+            phi = phin; fx = fn2; px = pn2;
+            if (nm_better(fx, px, *fbest, *penbest)) {
+                for (size_t j = 0; j < n; j++) xbest[j] = x[j];
+                *fbest = fx; *penbest = px;
+            }
+        }
+        T *= 0.995;
+        if (T < 1e-4) T = 1e-4;
+    }
+    free(x); free(xn);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Option / method / variable / constraint parsing                    *
+ * ------------------------------------------------------------------ */
+
+static bool nm_method_from_string(const char* s, int* out) {
+    if (strcmp(s, "DifferentialEvolution") == 0) { *out = NM_DE;           return true; }
+    if (strcmp(s, "NelderMead") == 0)            { *out = NM_NELDERMEAD;   return true; }
+    if (strcmp(s, "RandomSearch") == 0)          { *out = NM_RANDOMSEARCH; return true; }
+    if (strcmp(s, "SimulatedAnnealing") == 0)    { *out = NM_SA;           return true; }
+    return false;
+}
+
+/* The Method sub-option LHS may be a string ("SearchPoints") or a symbol. */
+static const char* nm_option_name(Expr* e) {
+    if (e->type == EXPR_STRING) return e->data.string;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name;
+    return NULL;
+}
+
+static bool nm_parse_method(Expr* rhs, NmConfig* nc, const char* fn) {
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
+        nc->method = NM_AUTO;
+        return true;
+    }
+    if (rhs->type == EXPR_STRING) {
+        int m;
+        if (nm_method_from_string(rhs->data.string, &m)) { nc->method = m; return true; }
+        fm_warn(fn, "nimpl", "Method \"%s\" is not supported", rhs->data.string);
+        return false;
+    }
+    if (nm_is_head(rhs, SYM_List) && rhs->data.function.arg_count >= 1) {
+        Expr* h = rhs->data.function.args[0];
+        int m;
+        if (h->type != EXPR_STRING || !nm_method_from_string(h->data.string, &m)) {
+            fm_warn(fn, "badmeth", "Method list must begin with a method-name string");
+            return false;
+        }
+        nc->method = m;
+        for (size_t i = 1; i < rhs->data.function.arg_count; i++) {
+            Expr* r = rhs->data.function.args[i];
+            if (!nm_is_head(r, SYM_Rule) && !nm_is_head(r, SYM_RuleDelayed)) continue;
+            if (r->data.function.arg_count != 2) continue;
+            const char* on = nm_option_name(r->data.function.args[0]);
+            Expr* ov = r->data.function.args[1];
+            if (!on) continue;
+            if (strcmp(on, "SearchPoints") == 0) {
+                if (ov->type == EXPR_INTEGER && ov->data.integer > 0)
+                    nc->search_points = (int)ov->data.integer;
+            } else if (strcmp(on, "ScalingFactor") == 0) {
+                double dv; if (fm_expr_to_double_real(ov, &dv)) nc->F = dv;
+            } else if (strcmp(on, "CrossProbability") == 0) {
+                double dv; if (fm_expr_to_double_real(ov, &dv)) nc->CR = dv;
+            } else if (strcmp(on, "RandomSeed") == 0) {
+                if (ov->type == EXPR_INTEGER && ov->data.integer >= 0)
+                    nc->seed = (uint64_t)ov->data.integer;
+            }
+        }
+        return true;
+    }
+    fm_warn(fn, "badmeth", "invalid Method value");
+    return false;
+}
+
+static bool nm_apply_option(Expr* rule, FmOpts* opts, NmConfig* nc, const char* fn) {
+    Expr* lhs = rule->data.function.args[0];
+    Expr* rhs = rule->data.function.args[1];
+    const char* name = lhs->data.symbol.name;
+    if (name == SYM_Method) return nm_parse_method(rhs, nc, fn);
+    if (name == SYM_WorkingPrecision) {
+        if (!fm_parse_working_precision(rhs, &opts->prec_mode, &opts->wp_bits)) {
+            fm_warn(fn, "badopt", "invalid WorkingPrecision value");
+            return false;
+        }
+        return true;
+    }
+    if (name == SYM_MaxIterations) {
+        if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic)
+            return true;                       /* keep the NMinimize default */
+        if (rhs->type == EXPR_INTEGER && rhs->data.integer > 0) {
+            opts->max_iter = rhs->data.integer;
+            return true;
+        }
+        fm_warn(fn, "badopt", "MaxIterations must be a positive integer or Automatic");
+        return false;
+    }
+    if (name == SYM_AccuracyGoal)  return fm_parse_goal(rhs, &opts->acc_goal_digits);
+    if (name == SYM_PrecisionGoal) return fm_parse_goal(rhs, &opts->prec_goal_digits);
+    if (name == SYM_EvaluationMonitor) { opts->eval_monitor = rhs; return true; }
+    if (name == SYM_StepMonitor)       { opts->step_monitor = rhs; return true; }
+    if (name == SYM_Gradient)          return true;   /* accepted, unused */
+    fm_warn(fn, "badopt", "unrecognised option");
+    return false;
+}
+
+/* Variable set: symbols (borrowed), integer-domain mask, and per-variable
+ * search-interval hints parsed from {x, lo, hi} / {x, x0, lo, hi} specs. */
+typedef struct {
+    size_t  n;
+    Expr**  vars;
+    bool*   is_int;
+    double* rlo;
+    double* rhi;
+    bool*   has_rlo;
+    bool*   has_rhi;
+    bool    any_int;
+} NmVarSet;
+
+static void nm_varset_free(NmVarSet* vs) {
+    free(vs->vars); free(vs->is_int);
+    free(vs->rlo); free(vs->rhi); free(vs->has_rlo); free(vs->has_rhi);
+    vs->vars = NULL;
+}
+
+/* Parse one variable spec element (bare symbol, {x,...} list, or
+ * Element[x, Integers|Reals]). var_out is borrowed from the input tree. */
+static bool nm_one_var(Expr* sub, Expr** var_out, bool* is_int_out,
+                       bool* has_lo, double* lo, bool* has_hi, double* hi,
+                       const char* fn) {
+    *is_int_out = false; *has_lo = false; *has_hi = false;
+    if (nm_is_head(sub, SYM_Element) && sub->data.function.arg_count == 2) {
+        Expr* v = sub->data.function.args[0];
+        Expr* dom = sub->data.function.args[1];
+        if (v->type != EXPR_SYMBOL) {
+            fm_warn(fn, "ivar", "Element variable must be a symbol");
+            return false;
+        }
+        if (dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Integers) {
+            *var_out = v; *is_int_out = true; return true;
+        }
+        if (dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Reals) {
+            *var_out = v; return true;
+        }
+        fm_warn(fn, "nimpl", "only the Integers and Reals domains are supported");
+        return false;
+    }
+    /* Indexed variable atom (x[i], x[i,j], ...) from an expanded Table/Array
+     * spec: an unbounded variable, no starting interval. Rewritten to a fresh
+     * scalar symbol by the driver before the solver machinery runs. */
+    if (sub->type == EXPR_FUNCTION
+        && sub->data.function.head->type == EXPR_SYMBOL
+        && sub->data.function.head->data.symbol.name != SYM_List) {
+        *var_out = sub;
+        return true;
+    }
+    Expr *u, *x0 = NULL, *x1 = NULL, *xmn = NULL, *xmx = NULL;
+    FmSpecKind k = fm_parse_var_spec(sub, &u, &x0, &x1, &xmn, &xmx);
+    bool ok = (k != FM_SPEC_BAD);
+    if (ok) {
+        *var_out = u;
+        double a, b;
+        if (k == FM_SPEC_TWO_START && x0 && x1
+            && fm_expr_to_double_real(x0, &a) && fm_expr_to_double_real(x1, &b)) {
+            if (a > b) { double t = a; a = b; b = t; }
+            *has_lo = true; *lo = a; *has_hi = true; *hi = b;
+        } else if (k == FM_SPEC_BRACKET && xmn && xmx
+            && fm_expr_to_double_real(xmn, &a) && fm_expr_to_double_real(xmx, &b)) {
+            if (a > b) { double t = a; a = b; b = t; }
+            *has_lo = true; *lo = a; *has_hi = true; *hi = b;
+        }
+    } else {
+        fm_warn(fn, "ivar", "variable specification malformed");
+    }
+    expr_free(x0); expr_free(x1); expr_free(xmn); expr_free(xmx);
+    return ok;
+}
+
+static bool nm_parse_vars(Expr* var_arg, NmVarSet* vs, const char* fn) {
+    bool system = false;
+    size_t na = 0;
+    if (nm_is_head(var_arg, SYM_List) && var_arg->data.function.arg_count > 0) {
+        na = var_arg->data.function.arg_count;
+        bool any_sub = false, all_subsym = true, all_atom = true;
+        for (size_t i = 0; i < na; i++) {
+            Expr* e = var_arg->data.function.args[i];
+            bool inner = nm_is_head(e, SYM_List);
+            bool elem  = nm_is_head(e, SYM_Element);
+            bool atom  = nm_is_var_atom(e);         /* symbol or x[i] */
+            if (inner || elem) any_sub = true;
+            if (!(inner || elem || atom)) all_subsym = false;
+            if (!atom) all_atom = false;
+        }
+        if (any_sub && all_subsym) system = true;
+        else if (all_atom)         system = true;   /* {x, y, ...} / {x[1], x[2], ...} */
+    }
+
+    size_t n = system ? na : 1;
+    vs->n = n;
+    vs->vars    = (Expr**)calloc(n, sizeof(Expr*));
+    vs->is_int  = (bool*)calloc(n, sizeof(bool));
+    vs->rlo     = (double*)calloc(n, sizeof(double));
+    vs->rhi     = (double*)calloc(n, sizeof(double));
+    vs->has_rlo = (bool*)calloc(n, sizeof(bool));
+    vs->has_rhi = (bool*)calloc(n, sizeof(bool));
+    vs->any_int = false;
+
+    bool ok = true;
+    if (system) {
+        for (size_t i = 0; i < n && ok; i++) {
+            ok = nm_one_var(var_arg->data.function.args[i], &vs->vars[i],
+                            &vs->is_int[i], &vs->has_rlo[i], &vs->rlo[i],
+                            &vs->has_rhi[i], &vs->rhi[i], fn);
+        }
+    } else {
+        ok = nm_one_var(var_arg, &vs->vars[0], &vs->is_int[0],
+                        &vs->has_rlo[0], &vs->rlo[0],
+                        &vs->has_rhi[0], &vs->rhi[0], fn);
+    }
+    if (ok) {
+        for (size_t i = 0; i < n; i++)
+            if (!nm_is_var_atom(vs->vars[i])) { ok = false; break; }
+    }
+    if (ok) for (size_t i = 0; i < n; i++) if (vs->is_int[i]) vs->any_int = true;
+    if (!ok) nm_varset_free(vs);
+    return ok;
+}
+
+/* Pull Element[x, Integers|Reals] domain declarations out of the constraint
+ * tree (marking is_int for Integers), returning the remaining constraint
+ * expression (owned) or NULL if none remain. Unsupported Element domains are
+ * left in place so fm_collect_constraints rejects them with its own message. */
+static Expr* nm_filter_int(Expr* cons, Expr** vars, size_t n, bool* is_int) {
+    if (!cons) return NULL;
+    if (nm_is_head(cons, SYM_And)) {
+        size_t cnt = cons->data.function.arg_count;
+        Expr** kids = (Expr**)malloc(sizeof(Expr*) * (cnt ? cnt : 1));
+        size_t m = 0;
+        for (size_t i = 0; i < cnt; i++) {
+            Expr* c = nm_filter_int(cons->data.function.args[i], vars, n, is_int);
+            if (c) kids[m++] = c;
+        }
+        Expr* r;
+        if (m == 0)      { r = NULL; }
+        else if (m == 1) { r = kids[0]; }
+        else             { r = expr_new_function(expr_new_symbol(SYM_And), kids, m); }
+        free(kids);
+        return r;
+    }
+    if (nm_is_head(cons, SYM_Element) && cons->data.function.arg_count == 2) {
+        Expr* v = cons->data.function.args[0];
+        Expr* dom = cons->data.function.args[1];
+        if (v->type == EXPR_SYMBOL && dom->type == EXPR_SYMBOL) {
+            for (size_t i = 0; i < n; i++) {
+                if (vars[i]->data.symbol.name == v->data.symbol.name) {
+                    if (dom->data.symbol.name == SYM_Integers) { is_int[i] = true; return NULL; }
+                    if (dom->data.symbol.name == SYM_Reals)    { return NULL; }
+                    break;
+                }
+            }
+        }
+        return expr_copy(cons);
+    }
+    return expr_copy(cons);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Result construction                                                *
+ * ------------------------------------------------------------------ */
+
+static Expr* nm_build_result(double fmin, Expr** vars, const double* vals,
+                             const bool* is_int, size_t n) {
+    Expr** rules = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* val = is_int[i] ? expr_new_integer((int64_t)llround(vals[i]))
+                              : expr_new_real(vals[i]);
+        Expr* r_args[2] = { expr_copy(vars[i]), val };
+        rules[i] = expr_new_function(expr_new_symbol(SYM_Rule), r_args, 2);
+    }
+    Expr* rule_list = expr_new_function(expr_new_symbol(SYM_List), rules, n);
+    free(rules);
+    Expr* top_args[2] = { expr_new_real(fmin), rule_list };
+    return expr_new_function(expr_new_symbol(SYM_List), top_args, 2);
+}
+
+static Expr* nm_build_infeasible(Expr** vars, size_t n) {
+    Expr** rules = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* r_args[2] = { expr_copy(vars[i]), expr_new_symbol(SYM_Indeterminate) };
+        rules[i] = expr_new_function(expr_new_symbol(SYM_Rule), r_args, 2);
+    }
+    Expr* rule_list = expr_new_function(expr_new_symbol(SYM_List), rules, n);
+    free(rules);
+    Expr* top_args[2] = { expr_new_symbol(SYM_Infinity), rule_list };
+    return expr_new_function(expr_new_symbol(SYM_List), top_args, 2);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Driver                                                             *
+ * ------------------------------------------------------------------ */
+
+static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
+    g_fm_name = fn_name;
+    if (!res || res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2) {
+        fm_warn(fn_name, "argt", "needs at least 2 arguments; got %zu", argc);
+        return NULL;
+    }
+    /* Peel trailing options (same recogniser FindMinimum uses). */
+    size_t pos_end = argc;
+    while (pos_end > 0 && fm_is_option_arg(res->data.function.args[pos_end - 1])) pos_end--;
+    for (size_t i = pos_end; i < argc; i++) {
+        if (!fm_is_option_arg(res->data.function.args[i])) {
+            fm_warn(fn_name, "badopt", "unrecognised option in trailing position");
+            return NULL;
+        }
+    }
+    if (pos_end != 2) {
+        fm_warn(fn_name, "argt", "needs exactly 2 positional arguments (got %zu)", pos_end);
+        return NULL;
+    }
+
+    FmOpts opts;
+    opts.method = FM_METHOD_AUTOMATIC;
+    opts.prec_mode = FM_PREC_MACHINE;
+    opts.wp_bits = 0;
+    opts.max_iter = 100;                       /* NMinimize default */
+    opts.acc_goal_digits = -1.0;
+    opts.prec_goal_digits = -1.0;
+    opts.gradient = NULL;
+    opts.step_monitor = NULL;
+    opts.eval_monitor = NULL;
+
+    NmConfig nc;
+    nc.method = NM_AUTO;
+    nc.search_points = 0;
+    nc.F = -1.0;
+    nc.CR = -1.0;
+    nc.seed = NM_DEFAULT_SEED;
+
+    for (size_t i = pos_end; i < argc; i++) {
+        if (!nm_apply_option(res->data.function.args[i], &opts, &nc, fn_name))
+            return NULL;
+    }
+    double wp_digits = (opts.prec_mode == FM_PREC_MACHINE)
+        ? NUMERIC_MACHINE_PRECISION_DIGITS
+#ifdef USE_MPFR
+        : numeric_bits_to_digits(opts.wp_bits);
+#else
+        : NUMERIC_MACHINE_PRECISION_DIGITS;
+#endif
+    if (opts.acc_goal_digits  < 0.0) opts.acc_goal_digits  = wp_digits / 2.0;
+    if (opts.prec_goal_digits < 0.0) opts.prec_goal_digits = wp_digits / 2.0;
+
+    /* Split {f, cons}. */
+    Expr* f_arg = res->data.function.args[0];
+    Expr* var_arg = res->data.function.args[1];
+    Expr* f_raw = f_arg;
+    Expr* cons = NULL;         /* borrowed, or points at cons_built           */
+    Expr* cons_built = NULL;   /* owned And[...] for a multi-constraint list  */
+    if (nm_is_head(f_arg, SYM_List) && f_arg->data.function.arg_count >= 2) {
+        /* {f, cons} or {f, c1, c2, ...}: the objective is the first element
+         * and every remaining element is a constraint, implicitly And-ed. */
+        f_raw = f_arg->data.function.args[0];
+        size_t ncons = f_arg->data.function.arg_count - 1;
+        if (ncons == 1) {
+            cons = f_arg->data.function.args[1];
+        } else {
+            Expr** cc = (Expr**)malloc(sizeof(Expr*) * ncons);
+            for (size_t i = 0; i < ncons; i++)
+                cc[i] = expr_copy(f_arg->data.function.args[1 + i]);
+            cons_built = expr_new_function(expr_new_symbol(SYM_And), cc, ncons);
+            free(cc);
+            cons = cons_built;
+        }
+    }
+
+    /* Parse the variable specification. It is held (HoldAll), so a generator
+     * such as Table[x[i], {i, 1, 10}] or Array[x, 10] arrives unevaluated;
+     * evaluate it once (leaving the objective held) so it expands to the list
+     * of variables. A bare symbol, a {...} list, or Element[...] is already in
+     * final form and is parsed as-is. */
+    NmVarSet vs;
+    Expr* var_list_eval = NULL;
+    {
+        bool needs_eval = !(var_arg->type == EXPR_SYMBOL
+            || nm_is_head(var_arg, SYM_List) || nm_is_head(var_arg, SYM_Element));
+        Expr* var_spec = var_arg;
+        if (needs_eval) {
+            var_list_eval = eval_and_free(expr_copy(var_arg));
+            var_spec = var_list_eval;
+        }
+        if (!var_spec || !nm_parse_vars(var_spec, &vs, fn_name)) {
+            expr_free(var_list_eval);
+            expr_free(cons_built);
+            return NULL;
+        }
+    }
+    size_t n = vs.n;
+
+    /* Effective (scalar-symbol) variables for the solver machinery, and the
+     * original variable expressions for the result rules. Indexed variables
+     * (x[1], x[2], ...) are rewritten to fresh scalar symbols so the entire
+     * symbol-keyed solver applies unchanged; plain symbols pass through. */
+    bool indexed = false;
+    for (size_t i = 0; i < n; i++)
+        if (vs.vars[i]->type != EXPR_SYMBOL) indexed = true;
+
+    Expr**       eff_vars  = (Expr**)calloc(n, sizeof(Expr*));
+    Expr**       orig_vars = (Expr**)calloc(n, sizeof(Expr*));
+    const char** synth     = (const char**)calloc(n, sizeof(char*));
+    const char** heads      = (const char**)malloc(sizeof(char*) * (n ? n : 1));
+    size_t       nheads     = 0;
+    for (size_t i = 0; i < n; i++) {
+        orig_vars[i] = expr_copy(vs.vars[i]);
+        if (vs.vars[i]->type == EXPR_SYMBOL) {
+            eff_vars[i] = expr_copy(vs.vars[i]);
+        } else {
+            eff_vars[i] = nm_fresh_symbol();
+            synth[i]    = eff_vars[i]->data.symbol.name;
+        }
+        const char* hn = (vs.vars[i]->type == EXPR_SYMBOL)
+            ? vs.vars[i]->data.symbol.name
+            : vs.vars[i]->data.function.head->data.symbol.name;
+        bool seen = false;
+        for (size_t j = 0; j < nheads; j++) if (heads[j] == hn) { seen = true; break; }
+        if (!seen) heads[nheads++] = hn;
+    }
+
+    /* Expand a held Table/Sum constraint and/or rewrite indexed variables. The
+     * objective stays held for the plain path (evaluated per point); it is
+     * pre-expanded only when we must rewrite indexed vars inside it. */
+    Expr* f_eff = f_raw;   bool f_owned = false;
+    Expr* cons_eff = cons; bool cons_owned = false;
+    bool infeasible_pre = false;
+    bool expand_cons = (cons != NULL) && !nm_is_constraint_tree(cons);
+    if (indexed || expand_cons) {
+        NmHeadSave* hs = (NmHeadSave*)calloc(nheads ? nheads : 1, sizeof(NmHeadSave));
+        nm_heads_localize(hs, heads, nheads);
+
+        if (cons) {
+            Expr* ce = eval_and_free(expr_copy(cons));   /* expand, vars free */
+            if (ce && ce->type == EXPR_SYMBOL && ce->data.symbol.name == SYM_True) {
+                expr_free(ce); ce = NULL;
+            } else if (ce && ce->type == EXPR_SYMBOL && ce->data.symbol.name == SYM_False) {
+                expr_free(ce); ce = NULL; infeasible_pre = true;
+            } else if (nm_is_head(ce, SYM_List)) {
+                /* A list of constraints is an implicit And; drop trivially-true
+                 * entries, and a False entry makes the whole system infeasible. */
+                size_t m = ce->data.function.arg_count;
+                Expr** cc = (Expr**)malloc(sizeof(Expr*) * (m ? m : 1));
+                size_t kept = 0;
+                for (size_t i = 0; i < m; i++) {
+                    Expr* el = ce->data.function.args[i];
+                    if (el->type == EXPR_SYMBOL && el->data.symbol.name == SYM_True) continue;
+                    if (el->type == EXPR_SYMBOL && el->data.symbol.name == SYM_False) {
+                        infeasible_pre = true; continue;
+                    }
+                    cc[kept++] = expr_copy(el);
+                }
+                expr_free(ce);
+                if (kept == 0)      { ce = NULL; }
+                else if (kept == 1) { ce = cc[0]; }
+                else                { ce = expr_new_function(expr_new_symbol(SYM_And), cc, kept); }
+                free(cc);
+            }
+            if (ce && indexed) {
+                Expr* cs = nm_subst(ce, vs.vars, eff_vars, n);
+                expr_free(ce); ce = cs;
+            }
+            cons_eff = ce; cons_owned = true;
+        }
+
+        if (indexed) {
+            Expr* fe = eval_and_free(expr_copy(f_raw));
+            f_eff = nm_subst(fe, vs.vars, eff_vars, n);
+            expr_free(fe);
+            f_owned = true;
+        }
+
+        nm_heads_restore(hs, nheads);
+        free(hs);
+    }
+
+    /* Bind variables (Block semantics). */
+    FmVarBind* binds = (FmVarBind*)calloc(n, sizeof(FmVarBind));
+    for (size_t i = 0; i < n; i++)
+        fm_bind_snapshot(&binds[i], eff_vars[i]->data.symbol.name);
+
+    FmBox* boxes = (FmBox*)calloc(n, sizeof(FmBox));
+    FmGenCon* gens = NULL;
+    size_t ngens = 0, gcap = 0;
+    Expr** g_exprs = NULL;
+    Expr* cons2 = NULL;
+    double* reg_lo = NULL;
+    double* reg_hi = NULL;
+    double* xbest = NULL;
+    Expr* result_out = NULL;
+
+    /* Extract integer/real domain declarations, then collect the remaining
+     * constraints into boxes + general FmGenCon[]. */
+    if (cons_eff) {
+        cons2 = nm_filter_int(cons_eff, eff_vars, n, vs.is_int);
+        for (size_t i = 0; i < n; i++) if (vs.is_int[i]) vs.any_int = true;
+        if (cons2 && !fm_collect_constraints(cons2, eff_vars, n, boxes,
+                                             &gens, &ngens, &gcap))
+            goto cleanup;
+        for (size_t k = 0; k < ngens; k++)
+            gens[k].grad_exprs = fm_compute_gradient(gens[k].expr, eff_vars, n);
+    }
+
+    /* Resolve the per-dimension search box: box constraints tighten it,
+     * else a starting-interval hint, else a default span. Contradictory box
+     * bounds (lo > hi, e.g. x > 2 && x < 1) mean an empty feasible set. */
+    bool infeasible_box = false;
+    reg_lo = (double*)malloc(sizeof(double) * n);
+    reg_hi = (double*)malloc(sizeof(double) * n);
+    for (size_t i = 0; i < n; i++) {
+        bool klo = boxes[i].has_lo || vs.has_rlo[i];
+        bool khi = boxes[i].has_hi || vs.has_rhi[i];
+        double lo = boxes[i].has_lo ? boxes[i].lo : vs.rlo[i];
+        double hi = boxes[i].has_hi ? boxes[i].hi : vs.rhi[i];
+        if (boxes[i].has_lo && boxes[i].has_hi && boxes[i].lo > boxes[i].hi)
+            infeasible_box = true;
+        if (klo && khi)      { reg_lo[i] = lo; reg_hi[i] = hi; }
+        else if (klo)        { reg_lo[i] = lo; reg_hi[i] = lo + NM_BOUND_SPAN; }
+        else if (khi)        { reg_hi[i] = hi; reg_lo[i] = hi - NM_BOUND_SPAN; }
+        else                 { reg_lo[i] = -NM_DEFAULT_SPAN; reg_hi[i] = NM_DEFAULT_SPAN; }
+        if (reg_hi[i] <= reg_lo[i]) {
+            double m = 0.5 * (reg_lo[i] + reg_hi[i]);
+            reg_lo[i] = m - 0.5; reg_hi[i] = m + 0.5;
+        }
+        if (vs.is_int[i]) { reg_lo[i] = floor(reg_lo[i]); reg_hi[i] = ceil(reg_hi[i]); }
+    }
+
+    /* Objective gradient (for the continuous local polish; NULL → FD). */
+    if (!vs.any_int) g_exprs = fm_compute_gradient(f_eff, eff_vars, n);
+
+    NmDriver D;
+    D.f_raw = f_eff; D.vars = eff_vars; D.n = n; D.binds = binds;
+    D.g_exprs = g_exprs; D.gens = gens; D.ngens = ngens; D.boxes = boxes;
+    D.opts = &opts; D.is_int = vs.is_int; D.any_int = vs.any_int;
+    D.reg_lo = reg_lo; D.reg_hi = reg_hi;
+
+    xbest = (double*)malloc(sizeof(double) * n);
+    double fbest = 1e300, penbest = 1e300;
+
+    NmRng rng;
+    nm_rng_seed(&rng, nc.seed);
+    int method = (nc.method == NM_AUTO) ? NM_DE : nc.method;
+    switch (method) {
+        case NM_NELDERMEAD:   nm_neldermead(&D, &nc, &rng, xbest, &fbest, &penbest); break;
+        case NM_RANDOMSEARCH: nm_randomsearch(&D, &nc, &rng, xbest, &fbest, &penbest); break;
+        case NM_SA:           nm_sa(&D, &nc, &rng, xbest, &fbest, &penbest); break;
+        case NM_DE:
+        default:              nm_de(&D, &nc, &rng, xbest, &fbest, &penbest); break;
+    }
+
+    /* Polish the global best with the exact local solver. Guard against a
+     * penalty/BFGS step that overshoots: if the polished point is worse by
+     * Deb's rules than the pre-polish global best, keep the latter. */
+    {
+        double* xsave = (double*)malloc(sizeof(double) * n);
+        for (size_t i = 0; i < n; i++) xsave[i] = xbest[i];
+        double fsave = fbest, psave = penbest;
+        nm_local_polish(&D, xbest, &fbest, &penbest);
+        if (nm_better(fsave, psave, fbest, penbest)) {
+            for (size_t i = 0; i < n; i++) xbest[i] = xsave[i];
+            fbest = fsave; penbest = psave;
+        }
+        free(xsave);
+    }
+    bool feasible = !infeasible_box && !infeasible_pre && (penbest <= NM_FEAS_FINAL);
+
+    /* Optional MPFR refinement for WorkingPrecision > MachinePrecision on
+     * continuous, general-constraint-free problems (reuses fm_run_bfgs_mpfr). */
+#ifdef USE_MPFR
+    bool mpfr_built = false;
+    bool want_mpfr = (opts.prec_mode == FM_PREC_MPFR);
+    bool mpfr_eligible = want_mpfr && !vs.any_int && ngens == 0;
+    mpfr_t* xm = NULL;
+    mpfr_t fmv;
+    if (want_mpfr && !mpfr_eligible)
+        fm_warn(fn_name, "nimpl",
+                "WorkingPrecision > MachinePrecision with general constraints or "
+                "integer domains is not supported; using machine precision");
+    if (feasible && mpfr_eligible) {
+        Expr** gm = fm_compute_gradient(f_eff, eff_vars, n);
+        xm = fm_mpfr_array(n, opts.wp_bits);
+        for (size_t i = 0; i < n; i++) mpfr_set_d(xm[i], xbest[i], MPFR_RNDN);
+        mpfr_init2(fmv, opts.wp_bits);
+        bool saved_quiet = g_fm_quiet;
+        g_fm_quiet = true;
+        bool mok = fm_run_bfgs_mpfr(f_eff, eff_vars, n, binds, gm, xm, boxes, &opts, fmv);
+        g_fm_quiet = saved_quiet;
+        if (mok)
+            mpfr_built = true;
+        else { fm_mpfr_array_free(xm, n); xm = NULL; mpfr_clear(fmv); }
+        if (gm) { for (size_t i = 0; i < n; i++) expr_free(gm[i]); free(gm); }
+    }
+#endif
+
+    /* Free the temporary bindings so the variable symbols are unbound while
+     * we build the result rules (Rule[x, v] must not re-evaluate x). */
+    for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+
+#ifdef USE_MPFR
+    if (mpfr_built) {
+        result_out = fm_build_result_mpfr(fmv, orig_vars, (const mpfr_t*)xm, n);
+        fm_mpfr_array_free(xm, n);
+        mpfr_clear(fmv);
+    } else
+#endif
+    if (feasible) result_out = nm_build_result(fbest, orig_vars, xbest, vs.is_int, n);
+    else          result_out = nm_build_infeasible(orig_vars, n);
+
+cleanup:
+    for (size_t i = 0; i < n; i++) fm_bind_restore(&binds[i]);
+    free(binds);
+    if (g_exprs) { for (size_t i = 0; i < n; i++) expr_free(g_exprs[i]); free(g_exprs); }
+    if (gens) {
+        for (size_t k = 0; k < ngens; k++) {
+            expr_free(gens[k].expr);
+            if (gens[k].grad_exprs) {
+                for (size_t i = 0; i < n; i++) expr_free(gens[k].grad_exprs[i]);
+                free(gens[k].grad_exprs);
+            }
+        }
+        free(gens);
+    }
+    expr_free(cons2);
+    if (cons_owned) expr_free(cons_eff);
+    if (f_owned)    expr_free(f_eff);
+    expr_free(cons_built);
+    free(boxes);
+    free(reg_lo);
+    free(reg_hi);
+    free(xbest);
+    if (eff_vars)  { for (size_t i = 0; i < n; i++) expr_free(eff_vars[i]);  free(eff_vars); }
+    if (orig_vars) { for (size_t i = 0; i < n; i++) expr_free(orig_vars[i]); free(orig_vars); }
+    if (synth) {
+        for (size_t i = 0; i < n; i++) if (synth[i]) symtab_remove_symbol(synth[i]);
+        free(synth);
+    }
+    free(heads);
+    expr_free(var_list_eval);
+    nm_varset_free(&vs);
+    return result_out;
+}
+
+Expr* builtin_nminimize(Expr* res) {
+    return nm_minimize_driver(res, "NMinimize");
+}
+
+/* NMaximize: minimise −f and negate the reported optimum. Mirrors the
+ * FindMaximum → FindMinimum wrapper above. */
+Expr* builtin_nmaximize(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2) {
+        fm_warn("NMaximize", "argt", "needs at least 2 arguments; got %zu", argc);
+        return NULL;
+    }
+    Expr* f_orig = res->data.function.args[0];
+    Expr* new_first;
+    if (nm_is_head(f_orig, SYM_List) && f_orig->data.function.arg_count == 2) {
+        Expr* inner_f = f_orig->data.function.args[0];
+        Expr* cons = f_orig->data.function.args[1];
+        Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(inner_f) };
+        Expr* neg_f = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
+        Expr* list_args[2] = { neg_f, expr_copy(cons) };
+        new_first = expr_new_function(expr_new_symbol(SYM_List), list_args, 2);
+    } else {
+        Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(f_orig) };
+        new_first = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
+    }
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * argc);
+    new_args[0] = new_first;
+    for (size_t i = 1; i < argc; i++) new_args[i] = expr_copy(res->data.function.args[i]);
+    Expr* synthetic = expr_new_function(expr_new_symbol(SYM_NMinimize), new_args, argc);
+    free(new_args);
+    Expr* min_result = nm_minimize_driver(synthetic, "NMaximize");
+    expr_free(synthetic);
+    if (!min_result) return NULL;
+    /* Negate the reported optimum value while preserving its numeric type. */
+    if (min_result->type == EXPR_FUNCTION && min_result->data.function.arg_count == 2) {
+        Expr* fmin_e = min_result->data.function.args[0];
+#ifdef USE_MPFR
+        if (fmin_e && fmin_e->type == EXPR_MPFR) {
+            long bits = mpfr_get_prec(fmin_e->data.mpfr);
+            mpfr_t neg; mpfr_init2(neg, bits);
+            mpfr_neg(neg, fmin_e->data.mpfr, MPFR_RNDN);
+            expr_free(fmin_e);
+            min_result->data.function.args[0] = expr_new_mpfr_copy(neg);
+            mpfr_clear(neg);
+        } else
+#endif
+        {
+            double fmin;
+            if (fm_expr_to_double_real(fmin_e, &fmin)) {
+                expr_free(fmin_e);
+                min_result->data.function.args[0] = expr_new_real(-fmin);
+            }
+        }
+    }
+    return min_result;
+}
+
 /* ------------------------------------------------------------------ *
  *  Registration                                                       *
  * ------------------------------------------------------------------ */
@@ -2810,4 +4052,8 @@ void findmin_init(void) {
     symtab_get_def("FindMinimum")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_add_builtin("FindMaximum", builtin_findmaximum);
     symtab_get_def("FindMaximum")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_add_builtin("NMinimize", builtin_nminimize);
+    symtab_get_def("NMinimize")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_add_builtin("NMaximize", builtin_nmaximize);
+    symtab_get_def("NMaximize")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
 }

@@ -526,6 +526,27 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("StepMonitor", "None"));
     ob_commit(&b, "FindMaximum");
 
+    /* ---- Numerical global optimization ---- */
+    ob_init(&b);
+    ob_add(&b, r_sym("Method", "Automatic"));
+    ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
+    ob_add(&b, r_sym("MaxIterations", "Automatic"));
+    ob_add(&b, r_sym("AccuracyGoal", "Automatic"));
+    ob_add(&b, r_sym("PrecisionGoal", "Automatic"));
+    ob_add(&b, r_sym("EvaluationMonitor", "None"));
+    ob_add(&b, r_sym("StepMonitor", "None"));
+    ob_commit(&b, "NMinimize");
+
+    ob_init(&b);
+    ob_add(&b, r_sym("Method", "Automatic"));
+    ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));
+    ob_add(&b, r_sym("MaxIterations", "Automatic"));
+    ob_add(&b, r_sym("AccuracyGoal", "Automatic"));
+    ob_add(&b, r_sym("PrecisionGoal", "Automatic"));
+    ob_add(&b, r_sym("EvaluationMonitor", "None"));
+    ob_add(&b, r_sym("StepMonitor", "None"));
+    ob_commit(&b, "NMaximize");
+
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));
     ob_add(&b, r_sym("MaxIterations", "Automatic"));

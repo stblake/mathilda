@@ -365,6 +365,8 @@ extern const char* SYM_NHoldFirst;
 extern const char* SYM_NHoldRest;
 extern const char* SYM_NIntegrate;
 extern const char* SYM_NLimit;
+extern const char* SYM_NMaximize;
+extern const char* SYM_NMinimize;
 extern const char* SYM_NResidue;
 extern const char* SYM_Residue;
 extern const char* SYM_NRoots;

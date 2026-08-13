@@ -362,6 +362,8 @@ const char* SYM_NHoldFirst = NULL;
 const char* SYM_NHoldRest = NULL;
 const char* SYM_NIntegrate = NULL;
 const char* SYM_NLimit = NULL;
+const char* SYM_NMaximize = NULL;
+const char* SYM_NMinimize = NULL;
 const char* SYM_NResidue = NULL;
 const char* SYM_Residue = NULL;
 const char* SYM_NRoots = NULL;
@@ -1219,6 +1221,8 @@ void sym_names_init(void) {
     SYM_NHoldRest                  = intern_symbol("NHoldRest");
     SYM_NIntegrate                 = intern_symbol("NIntegrate");
     SYM_NLimit                     = intern_symbol("NLimit");
+    SYM_NMaximize                  = intern_symbol("NMaximize");
+    SYM_NMinimize                  = intern_symbol("NMinimize");
     SYM_NResidue                   = intern_symbol("NResidue");
     SYM_Residue                    = intern_symbol("Residue");
     SYM_NRoots                     = intern_symbol("NRoots");

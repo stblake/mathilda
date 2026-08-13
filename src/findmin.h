@@ -11,6 +11,8 @@
 
 Expr* builtin_findminimum(Expr* res);
 Expr* builtin_findmaximum(Expr* res);
+Expr* builtin_nminimize(Expr* res);
+Expr* builtin_nmaximize(Expr* res);
 void  findmin_init(void);
 
 #endif /* FINDMIN_H */
