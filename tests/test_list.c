@@ -1332,13 +1332,24 @@ void test_find_clusters() {
         {"Head[FindClusters[Range[3000], Method -> \"Spectral\"]]", "FindClusters"},
         {"Length[FindClusters[Range[1000], Method -> \"MeanShift\"]]", "1"},
 
-        /* Shape guards. A visible NDArray is not a List and is never
-         * materialised by the transparency gate, so it declines rather than
-         * being silently truncated; a packed list is materialised on the way in. */
+        /* Shape guards. A packed list is materialised on the way in by the
+         * transparency gate; a VISIBLE NDArray is not (the gate tests only
+         * is_packed_list), so FindClusters materialises that one itself and
+         * clusters it -- see the materialise guard in builtin_find_clusters.
+         * It used to decline, which is what the row below used to pin. */
         {"FindClusters[{}]", "FindClusters[{}]"},
         {"FindClusters[5]", "FindClusters[5]"},
         {"FindClusters[f[1, 2, 3]]", "FindClusters[f[1, 2, 3]]"},
-        {"FindClusters[NDArray[{1., 2., 10.}]]", "FindClusters[NDArray[{1.0, 2.0, 10.0}]]"},
+        /* Rank 1 -- scalars. Same answer as the equivalent List. */
+        {"FindClusters[NDArray[{1., 2., 10.}]]", "{{1.0, 2.0}, {10.0}}"},
+        {"FindClusters[{1., 2., 10.}]", "{{1.0, 2.0}, {10.0}}"},
+        /* Rank 2 -- points. */
+        {"FindClusters[NDArray[{{1., 1.}, {1.2, 0.9}, {9., 9.}}]]",
+         "{{{1.0, 1.0}, {1.2, 0.9}}, {{9.0, 9.0}}}"},
+        /* Rank 3 still declines: a component is list-valued, which fc_probe_shape
+         * rejects, so there is no coordinate reading to be silently wrong about. */
+        {"FindClusters[NDArray[{{{1., 2.}, {3., 4.}}, {{5., 6.}, {7., 8.}}}]]",
+         "FindClusters[NDArray[{{{1.0, 2.0}, {3.0, 4.0}}, {{5.0, 6.0}, {7.0, 8.0}}}]]"},
         {"FindClusters[Range[10]]", "{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}"},
         {"FindClusters[]", "FindClusters[]"},
 

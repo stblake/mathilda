@@ -66,6 +66,7 @@
 #include "internal.h"
 #include "find_clusters.h"
 #include "distance.h"
+#include "../ndarray.h"   /* is_ndarray, ndarray_to_nested_list */
 
 #include <math.h>       /* isnan, fabs, exp, sqrt, log -- all C99 */
 
@@ -1735,7 +1736,16 @@ static FcMethodFn fc_method_fn(FcMethod m) {
     }
 }
 
-Expr* builtin_find_clusters(Expr* res) {
+/* The whole of FindClusters, with the data list passed in rather than read off
+ * `res`.
+ *
+ * Split out purely for ownership. There are eighteen `return NULL` paths below,
+ * and the visible-NDArray surface has to materialise its argument into a nested
+ * List which must outlive fc_emit_clusters (that reads the elements to build the
+ * result) and be freed on every one of those paths. Threading a free through
+ * eighteen exits is how a leak or a double free gets in; one caller that owns the
+ * temporary and one callee that only borrows it cannot go wrong. */
+static Expr* fc_find_clusters(Expr* res, Expr* list) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;
@@ -1757,7 +1767,6 @@ Expr* builtin_find_clusters(Expr* res) {
     }
     if (n_pos < 1 || n_pos > 2) return NULL;
 
-    Expr* list = res->data.function.args[0];
     if (!is_listq(list)) return NULL;
 
     size_t n = list->data.function.arg_count;
@@ -1939,4 +1948,38 @@ Expr* builtin_find_clusters(Expr* res) {
     Expr* result = fc_emit_clusters(elem, n, assign, k);
     free(assign);
     return result;
+}
+
+Expr* builtin_find_clusters(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count < 1) return NULL;
+    Expr* a0 = res->data.function.args[0];
+
+    /* A VISIBLE NDArray. Not a fast path -- a materialise guard, the same shape
+     * Cases and FlattenAt use (see tools/check_packed_aware.py's EXEMPT list).
+     *
+     * Why materialise rather than read the buffer. Everything downstream is
+     * Expr-centric for reasons that are not incidental: the exact MST orders
+     * Rationals and bigints through internal_subtract, the boundary set compares
+     * ELEMENTS because 2^60 and 2^60+1 are distinct yet project to the same
+     * double, and the result is built from the input elements themselves. A
+     * buffer path would have to give all of that up, and the exactness is the
+     * reason one-dimensional answers are exact. Machine speed is already had:
+     * every value in an NDArray is machine by construction, so fc_all_machine is
+     * true and fc_build_mst_machine runs -- the same fast builder a machine List
+     * takes.
+     *
+     * The packed-List surface needs nothing here. The transparency gate
+     * (eval.c step 2.7) materialises it for any head not on pack.c's AWARE list,
+     * and FindClusters is deliberately not on it. The gate tests only
+     * is_packed_list, though, which is why the visible surface arrived here
+     * untouched and returned unevaluated before this. */
+    if (is_ndarray(a0)) {
+        Expr* nested = ndarray_to_nested_list(a0);
+        if (!nested) return NULL;
+        Expr* out = fc_find_clusters(res, nested);
+        expr_free(nested);
+        return out;
+    }
+    return fc_find_clusters(res, a0);
 }
