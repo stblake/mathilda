@@ -94,7 +94,7 @@ static Expr* builtin_classify(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
     size_t kopt = 0;
-    bool bayes = false;
+    bool bayes = false, logit = false;
     if (argc == 2) {
         Expr* o = res->data.function.args[1];
         if (!o || o->type != EXPR_FUNCTION || o->data.function.arg_count != 2) return NULL;
@@ -126,18 +126,127 @@ static Expr* builtin_classify(Expr* res) {
         }
         if (!mstr || mstr->type != EXPR_STRING) return NULL;
         const char* mm = mstr->data.string;
-        if (strcmp(mm, "NearestNeighbors") == 0)   bayes = false;
-        else if (strcmp(mm, "NaiveBayes") == 0)    bayes = true;
+        if (strcmp(mm, "NearestNeighbors") == 0)         { bayes = false; logit = false; }
+        else if (strcmp(mm, "NaiveBayes") == 0)           { bayes = true;  logit = false; }
+        else if (strcmp(mm, "LogisticRegression") == 0)   { bayes = false; logit = true; }
         else return NULL;
         /* A neighbour count means nothing to a Bayes classifier, so it is refused rather
          * than accepted and ignored -- silently swallowing it would hide a real mistake. */
-        if (kopt && bayes) return NULL;
+        if (kopt && (bayes || logit)) return NULL;
     }
 
     size_t n, dim; double* x = NULL; size_t* y = NULL;
     MlLabels labels = {0, NULL};
     if (!ml_read_labelled(res->data.function.args[0], &n, &dim, &x, &y, &labels))
         return NULL;
+
+    if (logit) {
+        /* Two-class logistic regression by iteratively reweighted least squares, which is
+         * Newton's method on the log-likelihood: each step solves a WEIGHTED least squares
+         * with weights p(1-p) and working response eta + (y - p)/(p(1-p)).
+         *
+         * TWO CLASSES ONLY. Multi-class would be one-vs-rest or a softmax, and rather than
+         * guess which, this declines -- the caller can see that it declined, where a
+         * silently-binarised three-class problem would just be wrong.
+         *
+         * A SMALL RIDGE, AND WHY IT IS NOT COSMETIC. On linearly separable data the
+         * likelihood is UNBOUNDED: pushing the coefficients to infinity drives every fitted
+         * probability to 0 or 1 and the likelihood to its supremum, so plain Newton diverges
+         * and never converges. This is the same shape of problem as a mixture's unbounded
+         * likelihood, and it gets the same honest treatment rather than a silent hang: a
+         * ridge on the non-intercept coefficients makes the penalised objective strictly
+         * concave, so the fit is finite and unique even when the data is separable, and the
+         * iteration count is capped as a backstop. The intercept is left unpenalised, which
+         * is standard -- shrinking it would bias the predicted base rate. */
+        if (labels.count != 2) {
+            ml_labels_free(&labels); free(x); free(y); return NULL;
+        }
+        size_t p1 = dim + 1;
+        double* beta = calloc(p1, sizeof(double));
+        double* eta  = malloc(sizeof(double) * n);
+        double* aug  = malloc(sizeof(double) * p1 * (p1 + 1));
+        Expr* outl = NULL;
+        if (beta && eta && aug) {
+            const double ridge = 1e-6;
+            bool converged = false;
+            for (int it = 0; it < 100 && !converged; it++) {
+                for (size_t a = 0; a < p1 * (p1 + 1); a++) aug[a] = 0.0;
+                for (size_t i = 0; i < n; i++) {
+                    double e = beta[0];
+                    for (size_t j = 0; j < dim; j++) e += beta[j + 1] * x[i * dim + j];
+                    eta[i] = e;
+                    double pi = 1.0 / (1.0 + exp(-e));
+                    /* Clamp the weight away from zero: a saturated point contributes
+                     * p(1-p) ~ 0, and dividing by it in the working response is exactly
+                     * where a separable fit blows up. */
+                    double w = pi * (1.0 - pi);
+                    if (w < 1e-10) w = 1e-10;
+                    double z = e + ((double)(y[i] == 1 ? 1 : 0) - pi) / w;
+                    for (size_t r = 0; r < p1; r++) {
+                        double ar = (r == 0) ? 1.0 : x[i * dim + (r - 1)];
+                        for (size_t c = 0; c < p1; c++) {
+                            double ac = (c == 0) ? 1.0 : x[i * dim + (c - 1)];
+                            aug[r * (p1 + 1) + c] += w * ar * ac;
+                        }
+                        aug[r * (p1 + 1) + p1] += w * ar * z;
+                    }
+                }
+                for (size_t r = 1; r < p1; r++) aug[r * (p1 + 1) + r] += ridge;
+
+                bool ok2 = true;
+                for (size_t c = 0; c < p1 && ok2; c++) {
+                    size_t piv = c; double best = fabs(aug[c * (p1 + 1) + c]);
+                    for (size_t r = c + 1; r < p1; r++) {
+                        double v = fabs(aug[r * (p1 + 1) + c]);
+                        if (v > best) { best = v; piv = r; }
+                    }
+                    if (!(best > 1e-14)) { ok2 = false; break; }
+                    if (piv != c)
+                        for (size_t kk = 0; kk <= p1; kk++) {
+                            double t = aug[c * (p1 + 1) + kk];
+                            aug[c * (p1 + 1) + kk] = aug[piv * (p1 + 1) + kk];
+                            aug[piv * (p1 + 1) + kk] = t;
+                        }
+                    for (size_t r = 0; r < p1; r++) {
+                        if (r == c) continue;
+                        double f = aug[r * (p1 + 1) + c] / aug[c * (p1 + 1) + c];
+                        if (f == 0.0) continue;
+                        for (size_t kk = c; kk <= p1; kk++)
+                            aug[r * (p1 + 1) + kk] -= f * aug[c * (p1 + 1) + kk];
+                    }
+                }
+                if (!ok2) break;
+                double delta = 0.0;
+                for (size_t r = 0; r < p1; r++) {
+                    double nb = aug[r * (p1 + 1) + p1] / aug[r * (p1 + 1) + r];
+                    double d = fabs(nb - beta[r]);
+                    if (d > delta) delta = d;
+                    beta[r] = nb;
+                }
+                if (delta < 1e-10) converged = true;
+            }
+            Expr** rows = malloc(sizeof(Expr*) * 2);
+            if (rows) {
+                rows[0] = ml_labels_to_list(&labels);
+                rows[1] = ml_list_of_reals(beta, p1);
+                Expr* pay = expr_new_function(expr_new_symbol(SYM_List), rows, 2);
+                free(rows);
+                if (pay) {
+                    Expr* a4[4];
+                    a4[0] = expr_new_string("LogisticRegression");
+                    a4[1] = pay;
+                    a4[2] = expr_new_integer((int64_t)dim);
+                    a4[3] = expr_new_integer(0);
+                    if (a4[0] && a4[1] && a4[2] && a4[3])
+                        outl = expr_new_function(expr_new_symbol("ClassifierFunction"), a4, 4);
+                    else { expr_free(a4[0]); expr_free(a4[1]); expr_free(a4[2]); expr_free(a4[3]); }
+                }
+            }
+        }
+        free(beta); free(eta); free(aug);
+        ml_labels_free(&labels); free(x); free(y);
+        return outl;
+    }
 
     if (bayes) {
         /* Gaussian naive Bayes: per class, a mean and a per-feature variance, plus the
@@ -317,6 +426,49 @@ Expr* ml_classifier_apply(Expr* head, Expr** args, size_t argc) {
     }
     if (!ok) { free(xin); ml_labels_free(&labels); return NULL; }
 
+    if (strcmp(mname->data.string, "LogisticRegression") == 0) {
+        /* p = logistic(intercept + coef . x) is the probability of the SECOND class in the
+         * vocabulary; the first is the complement. Two classes, so the probabilities sum to
+         * 1 by construction -- which is why the tests assert the stronger properties
+         * instead: exactly 0.5 on the fitted boundary, and monotone along the coefficient
+         * direction. */
+        if (labels.count != 2 || pay->data.function.arg_count != 2) {
+            free(xin); ml_labels_free(&labels); return NULL;
+        }
+        Expr* br = pay->data.function.args[1];
+        if (!br || br->type != EXPR_FUNCTION || br->data.function.arg_count != dim + 1) {
+            free(xin); ml_labels_free(&labels); return NULL;
+        }
+        double e = 0.0, cf = 0.0;
+        ok = na_read_scalar(br->data.function.args[0], &cf, &im) && im == 0.0;
+        e = cf;
+        for (size_t j = 0; j < dim && ok; j++) {
+            ok = na_read_scalar(br->data.function.args[j + 1], &cf, &im) && im == 0.0;
+            if (ok) e += cf * xin[j];
+        }
+        free(xin);
+        if (!ok) { ml_labels_free(&labels); return NULL; }
+        double pr = 1.0 / (1.0 + exp(-e));
+        Expr* outl = NULL;
+        if (want_probs) {
+            Expr** rules = malloc(sizeof(Expr*) * 2);
+            if (rules) {
+                Expr* r0[2]; r0[0] = expr_copy(labels.label[0]); r0[1] = expr_new_real(1.0 - pr);
+                Expr* r1[2]; r1[0] = expr_copy(labels.label[1]); r1[1] = expr_new_real(pr);
+                rules[0] = expr_new_function(expr_new_symbol(SYM_Rule), r0, 2);
+                rules[1] = expr_new_function(expr_new_symbol(SYM_Rule), r1, 2);
+                outl = expr_new_function(expr_new_symbol(SYM_List), rules, 2);
+                free(rules);
+            }
+        } else {
+            /* A probability of exactly 0.5 lies on the boundary; it goes to the FIRST class,
+             * matching the lowest-index tie-break used by the other two methods. */
+            outl = expr_copy(labels.label[pr > 0.5 ? 1 : 0]);
+        }
+        ml_labels_free(&labels);
+        return outl;
+    }
+
     if (strcmp(mname->data.string, "NaiveBayes") == 0) {
         /* log posterior = log prior + sum over features of the Gaussian log density.
          *
@@ -469,7 +621,13 @@ void ml_classify_init(void) {
         "than averages, so at k = 1 it reproduces its training labels exactly. Apply the "
         "result to a feature vector for a class, or with \"Probabilities\" for the vote "
         "shares. It also answers \"Classes\", \"Method\", \"FeatureCount\" and "
-        "\"NeighborCount\".");
+        "\"NeighborCount\". Method -> \"NaiveBayes\" fits a Gaussian per class with a "
+        "diagonal covariance; Method -> \"LogisticRegression\" fits a two-class logistic "
+        "model by iteratively reweighted least squares with a small ridge on the "
+        "non-intercept coefficients -- the ridge is load-bearing, because on linearly "
+        "separable data the unpenalised likelihood is unbounded and the coefficients would "
+        "diverge. LogisticRegression declines more than two classes rather than silently "
+        "binarising them.");
 
     symtab_get_def("ClassifierFunction")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ClassifierFunction",

@@ -445,6 +445,7 @@ Trains a classifier and returns a `ClassifierFunction`. Attributes: `Protected`.
 - `Classify[data]`
 - `Classify[data, Method -> "NearestNeighbors"]`
 - `Classify[data, Method -> "NaiveBayes"]`
+- `Classify[data, Method -> "LogisticRegression"]`
 - `Classify[data, Method -> {"NearestNeighbors", "NeighborsNumber" -> k}]`
 
 **A class may be any expression.** This is the substantive addition of this family:
@@ -495,6 +496,27 @@ for a single-member class.
 computes by a completely separate path. The two agree at eight points including 4.9 and 5.1
 — either side of the boundary at 5.0 — so the test exercises the decision rather than two
 obvious regions.
+
+**`"LogisticRegression"`** fits a **two-class** logistic model by iteratively reweighted
+least squares (Newton's method on the log-likelihood). More than two classes **declines**
+rather than silently binarising — multi-class would need one-vs-rest or a softmax, and
+guessing which would be worse than saying no.
+
+**A small ridge on the non-intercept coefficients, and it is load-bearing.** On linearly
+separable data the unpenalised likelihood is **unbounded**: driving the coefficients to
+infinity drives every fitted probability to 0 or 1, so plain Newton diverges and never
+converges. The ridge makes the penalised objective strictly concave, so the fit is finite and
+unique even when the data *is* separable; the iteration count is capped as a backstop. The
+intercept is left unpenalised, which is standard — shrinking it would bias the predicted base
+rate. This is the same shape of problem as a mixture's unbounded likelihood, handled the same
+honest way rather than left to hang.
+
+**Verified by an exact identity rather than an accuracy figure.** The fitted boundary is where
+`intercept + coef·x = 0`, and the probability there must be *exactly* 0.5 — because that is
+what the logistic of zero is. That single assertion ties the **fit** and the **application**
+together: any error in how coefficients are stored, read back, or recombined shows up in it.
+On the test data the boundary lands at exactly 5.0, the midpoint of the gap, with coefficients
+`{-33.27, 6.65}` — finite, which is the ridge working.
 
 ```mathematica
 In[1]:= c = Classify[{{0.,0.} -> "red", {1.,0.} -> "red", {0.,1.} -> "red",

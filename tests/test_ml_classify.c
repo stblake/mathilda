@@ -188,6 +188,78 @@ static void test_naivebayes_option_errors_and_coexistence(void) {
                    "ClassifierFunction[\"NaiveBayes\", <>]", 0);
 }
 
+#define LR1 "{1. -> \"a\", 2. -> \"a\", 3. -> \"a\", " \
+            "7. -> \"b\", 8. -> \"b\", 9. -> \"b\"}"
+
+static void test_logistic_separates_separable_data(void) {
+    assert_eval_eq("Module[{tr = " LR1 ", L},"
+                   " L = Classify[tr, Method -> \"LogisticRegression\"];"
+                   " And @@ Table[L[First[tr[[i]]]] === Last[tr[[i]]], {i, Length[tr]}]]",
+                   "True", 0);
+    assert_eval_eq("Module[{t2 = {{0.,0.} -> \"n\", {1.,0.} -> \"n\", {0.,1.} -> \"n\","
+                   " {9.,9.} -> \"p\", {10.,9.} -> \"p\", {9.,10.} -> \"p\"}, L},"
+                   " L = Classify[t2, Method -> \"LogisticRegression\"];"
+                   " And @@ Table[L[First[t2[[i]]]] === Last[t2[[i]]], {i, Length[t2]}]]",
+                   "True", 0);
+}
+
+static void test_logistic_probability_is_exactly_half_on_the_boundary(void) {
+    /* The EXACT identity, and much stronger than an accuracy figure. The fitted boundary is
+     * where intercept + coef x = 0, i.e. x = -intercept/coef; the probability there must be
+     * exactly 0.5 because that is what the logistic of zero is. Any error in how the
+     * coefficients are stored, read back, or combined at application time shows up here,
+     * because the identity ties the FIT and the APPLICATION together. */
+    assert_eval_eq("Module[{L, b, x0},"
+                   " L = Classify[" LR1 ", Method -> \"LogisticRegression\"];"
+                   " b = Part[L, 2, 2];"                   /* the coefficient row */
+                   " x0 = -First[b]/Last[b];"
+                   " Abs[Last[Last[L[x0, \"Probabilities\"]]] - 0.5] < 1.*^-12]",
+                   "True", 0);
+    /* And that boundary sits in the gap between the classes, not outside the data. */
+    assert_eval_eq("Module[{L, b, x0},"
+                   " L = Classify[" LR1 ", Method -> \"LogisticRegression\"];"
+                   " b = Part[L, 2, 2]; x0 = -First[b]/Last[b];"
+                   " 3. < x0 < 7.]", "True", 0);
+}
+
+static void test_logistic_probability_is_monotone_and_normalised(void) {
+    /* Monotonicity along the coefficient direction is what makes it a logistic model rather
+     * than an arbitrary function fitted to the labels. */
+    assert_eval_eq("Module[{L, ps},"
+                   " L = Classify[" LR1 ", Method -> \"LogisticRegression\"];"
+                   " ps = Table[Last[Last[L[x, \"Probabilities\"]]],"
+                   " {x, {0., 2., 4., 5., 6., 8., 10.}}];"
+                   " And @@ Table[ps[[i]] <= ps[[i + 1]], {i, Length[ps] - 1}]]", "True", 0);
+    assert_eval_eq("Chop[Total[Map[Last, Classify[" LR1 ", "
+                   "Method -> \"LogisticRegression\"][5., \"Probabilities\"]]] - 1.]",
+                   "0", 0);
+}
+
+static void test_logistic_coefficients_stay_finite_on_separable_data(void) {
+    /* THE reason the ridge exists. On linearly separable data the unpenalised likelihood is
+     * UNBOUNDED -- driving the coefficients to infinity drives every fitted probability to 0
+     * or 1 -- so plain Newton never converges. The ridge makes the penalised objective
+     * strictly concave, so the fit is finite and unique. This row is what fails if the ridge
+     * is ever removed as "unnecessary". */
+    assert_eval_eq("Module[{b = Part[Classify[" LR1 ", "
+                   "Method -> \"LogisticRegression\"], 2, 2]},"
+                   " And @@ Map[(NumberQ[#] && Abs[#] < 1000.) &, b]]", "True", 0);
+}
+
+static void test_logistic_declines_and_coexists(void) {
+    /* More than two classes would need one-vs-rest or a softmax; rather than guess, it
+     * declines -- a silently binarised three-class problem would just be wrong. */
+    assert_eval_eq("Head[Classify[{1. -> \"a\", 5. -> \"b\", 9. -> \"c\"}, "
+                   "Method -> \"LogisticRegression\"]]", "Classify", 0);
+    assert_eval_eq("Head[Classify[" LR1 ", Method -> {\"LogisticRegression\", "
+                   "\"NeighborsNumber\" -> 3}]]", "Classify", 0);
+    /* All three methods coexist on the one head. */
+    assert_eval_eq("Classify[" LR1 "][2.5]", "\"a\"", 0);
+    assert_eval_eq("Classify[" LR1 ", Method -> \"NaiveBayes\"][2.5]", "\"a\"", 0);
+    assert_eval_eq("Classify[" LR1 ", Method -> \"LogisticRegression\"]",
+                   "ClassifierFunction[\"LogisticRegression\", <>]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -203,6 +275,11 @@ int main(void) {
     TEST(test_naivebayes_matches_the_closed_form_gaussian_comparison);
     TEST(test_naivebayes_variance_floor_keeps_a_constant_feature_finite);
     TEST(test_naivebayes_option_errors_and_coexistence);
+    TEST(test_logistic_separates_separable_data);
+    TEST(test_logistic_probability_is_exactly_half_on_the_boundary);
+    TEST(test_logistic_probability_is_monotone_and_normalised);
+    TEST(test_logistic_coefficients_stay_finite_on_separable_data);
+    TEST(test_logistic_declines_and_coexists);
 
     printf("All ml Classify tests passed.\n");
     return 0;
