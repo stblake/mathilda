@@ -536,8 +536,8 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   the visible surface needed a guard. Rank 3 and above still decline: a
   list-valued component is not a coordinate.
 - **Which methods accept vectors.** `Agglomerate`, `SpanningTree`, `MeanShift`,
-  `NeighborhoodContraction` and `KMeans` cluster n-dimensional points; the
-  remaining five (`KMedoids`, `DBSCAN`, `JarvisPatrick`, `Spectral`,
+  `NeighborhoodContraction`, `KMeans` and `DBSCAN` cluster n-dimensional points; the
+  remaining four (`KMedoids`, `JarvisPatrick`, `Spectral`,
   `GaussianMixture`) accept scalars only and return unevaluated for vector input.
   That is not a conservative guard — those five reach their data through the sorted
   projection, which does not exist off a line — and the list grows as each is
@@ -595,7 +595,7 @@ projection and declines vector input.
 | `"KMeans"` | no | yes | yes | vectors |
 | `"KMedoids"` | no | yes | yes | scalars |
 | `"Spectral"` | yes | yes | no | scalars |
-| `"DBSCAN"` | yes | no | no | scalars |
+| `"DBSCAN"` | yes | no | no | vectors |
 | `"GaussianMixture"` | yes | no | no | scalars |
 | `"JarvisPatrick"` | yes | no | no | scalars |
 | `"MeanShift"` | yes | no | no | vectors |

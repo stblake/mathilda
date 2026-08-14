@@ -1393,7 +1393,10 @@ void test_find_clusters() {
         /* Was pinned as declining until KMeans was ported; the change is
          * deliberate, and the n-D suite carries the substantive cases. */
         {"FindClusters[{{1, 1}, {9, 9}}, 2, Method -> \"KMeans\"]", "{{{1, 1}}, {{9, 9}}}"},
-        {"FindClusters[{{1, 1}, {9, 9}}, Method -> \"DBSCAN\"]", "FindClusters[{{1, 1}, {9, 9}}, Method -> \"DBSCAN\"]"},
+        /* Also deliberate: DBSCAN's 1-D kernel was REPLACED by the general one,
+         * not supplemented, once the pin suite showed the general rule preserves
+         * every scalar answer. */
+        {"FindClusters[{{1, 1}, {9, 9}}, Method -> \"DBSCAN\"]", "{{{1, 1}, {9, 9}}}"},
 
 
         /* --- strings and colours -------------------------------------

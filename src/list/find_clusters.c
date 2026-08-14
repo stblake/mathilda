@@ -952,15 +952,9 @@ static bool fc_method_gap(const FcData* d, FcCount spec, const FcOpts* o,
  * dimension are the expensive part of DBSCAN, mean shift and Jarvis-Patrick.
  * `sv` is always the values in sorted order, i.e. sv[j] = val[order[j]]. */
 
-/* Half-open [*lo, *hi) : the indices within `eps` of sv[i]. */
-static void fc_eps_window(const double* sv, size_t n, size_t i, double eps,
-                          size_t* lo, size_t* hi) {
-    size_t a = i;
-    while (a > 0 && sv[i] - sv[a - 1] <= eps) a--;
-    size_t b = i + 1;
-    while (b < n && sv[b] - sv[i] <= eps) b++;
-    *lo = a; *hi = b;
-}
+/* The eps-window that used to live here went when DBSCAN was unified onto the
+ * general kernel: it was that method's only caller, and the sorted window is
+ * precisely the part with no meaning off a line. */
 
 /* Half-open [*lo, *hi) covering sv[i] and its k nearest neighbours. In 1D they
  * are contiguous around i, so expanding whichever side is closer is exact. */
@@ -1509,40 +1503,77 @@ static bool fc_method_kmedoids(const FcData* d, FcCount spec, const FcOpts* o,
  * overlap join. A point in no dense region is NOISE, and rather than dropping
  * it -- which would lose an input element -- it becomes its own singleton
  * cluster, so the result is always a partition. */
+/* DBSCAN in any dimension, and the ONLY implementation: the textbook
+ * formulation, with real eps-neighbourhoods instead of a sorted window and
+ * union-find instead of a left-to-right sweep.
+ *
+ * Unlike KMeans, which needs a second implementation because two initialisations
+ * settle in different local optima, this one replaced the 1-D kernel outright.
+ * The old kernel linked only ADJACENT sorted pairs -- "consecutive points, one of
+ * them core" -- where DBSCAN specifies any pair within eps joined through a core
+ * point. The two are not obviously the same rule, and at the default MinPoints of
+ * 2 they provably collapse together, since a point with any neighbour inside eps
+ * is then automatically core and both reduce to single linkage at eps. Above that
+ * default the argument runs out, so the question was put to the pin suite instead
+ * of settled by reasoning: all 22 one-dimensional pins pass unchanged through this
+ * kernel, so the general rule is answer-preserving on a line and there is no case
+ * for keeping a second copy.
+ *
+ * fc_eps_window went with it -- DBSCAN was its only caller, and
+ * -Werror=unused-function turns leaving a dead 1-D helper behind into a build
+ * failure, which is the right pressure.
+ */
+static bool fc_dbscan_ndim(const FcData* d, const FcOpts* o,
+                           size_t* assign, size_t* k) {
+    size_t n = d->n, dim = d->dim;
+    const double* pts = fc_points(d);
+    if (!pts) return false;
+
+    /* Quadratic in n and linear in dim, like every neighbourhood method here: a
+     * sort is what made this linear on a line, and vectors have no sort. The
+     * point builder's own ceiling already bounds n for this input. */
+    if (dim != 0 && n > FC_LLOYD_MAX_WORK / dim) return false;
+
+    double eps = o->radius_given ? o->radius
+                                 : (double)FC_GAP_FACTOR * fc_scale_ndim(d);
+    size_t minpts = o->min_points_given ? (size_t)o->min_points : 2;
+
+    bool*   core = calloc(n ? n : 1, sizeof(bool));
+    size_t* uf   = malloc(sizeof(size_t) * (n ? n : 1));
+    if (!core || !uf) { free(core); free(uf); return false; }
+    for (size_t i = 0; i < n; i++) uf[i] = i;
+
+    /* Core test counts the point itself, matching the 1-D window which spans
+     * [lo, hi) around j inclusive. */
+    for (size_t i = 0; i < n; i++) {
+        size_t cnt = 0;
+        for (size_t j = 0; j < n; j++)
+            if (fc_dist_to_point(d, pts, pts + j * dim, i) <= eps) cnt++;
+        core[i] = (cnt >= minpts);
+    }
+
+    /* Link every eps-close pair in which at least one side is core -- the same
+     * predicate the 1-D sweep applies to adjacent pairs, lifted off the line.
+     * A point in no dense region is joined to nothing and so falls out as its own
+     * singleton, which is how noise stays in the partition instead of being
+     * dropped and losing an input element. */
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = i + 1; j < n; j++)
+            if ((core[i] || core[j]) &&
+                fc_dist_pos(d, pts + i * dim, pts + j * dim) <= eps)
+                fc_uf_union(uf, i, j);
+
+    fc_assign_from_uf(uf, n, assign, k);
+    free(core); free(uf);
+    return *k > 0;
+}
+
 static bool fc_method_dbscan(const FcData* d, FcCount spec, const FcOpts* o,
                              size_t* assign, size_t* k) {
     (void)spec;
-    size_t n = d->n;
-    double* sv = fc_sorted_values(d);
-    if (!sv) return false;
-
-    double eps = o->radius_given ? o->radius : (double)FC_GAP_FACTOR * fc_median_gap(sv, n);
-    size_t minpts = o->min_points_given ? (size_t)o->min_points : 2;
-
-    bool*   core = calloc(n, sizeof(bool));
-    size_t* id   = malloc(sizeof(size_t) * n);
-    size_t* lo   = malloc(sizeof(size_t) * n);
-    size_t* hi   = malloc(sizeof(size_t) * n);
-    if (!core || !id || !lo || !hi) { free(sv); free(core); free(id); free(lo); free(hi); return false; }
-
-    for (size_t j = 0; j < n; j++) {
-        fc_eps_window(sv, n, j, eps, &lo[j], &hi[j]);
-        core[j] = (hi[j] - lo[j]) >= minpts;
-    }
-
-    /* One left-to-right sweep: stay in the current cluster while consecutive
-     * points are eps-reachable through a core point. */
-    size_t cur = 0;
-    id[0] = 0;
-    for (size_t j = 1; j < n; j++) {
-        bool linked = (sv[j] - sv[j - 1] <= eps) && (core[j] || core[j - 1]);
-        if (!linked) cur++;
-        id[j] = cur;
-    }
-
-    fc_scatter(d, id, assign, k);
-    free(sv); free(core); free(id); free(lo); free(hi);
-    return *k > 0;
+    /* One path for both dimensionalities. SEQUENCE has no coordinates and so still
+     * declines; everything else goes through the general kernel. */
+    return fc_points(d) ? fc_dbscan_ndim(d, o, assign, k) : false;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -2195,7 +2226,8 @@ static Expr* fc_find_clusters(Expr* res, Expr* list) {
     bool fn_is_ndim = (fn == fc_method_gap)
                    || (fn == fc_method_meanshift)
                    || (fn == fc_method_neighborhood)
-                   || (fn == fc_method_kmeans);
+                   || (fn == fc_method_kmeans)
+                   || (fn == fc_method_dbscan);
     /* The shift methods need coordinates; strings have none, so they stay
      * declined for those even though POINT input is now fine. */
     if (d.kind == FC_KIND_SEQUENCE && fn != fc_method_gap) return NULL;

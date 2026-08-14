@@ -6,7 +6,7 @@
  * guard in the builtin names the ported set explicitly so a new method cannot
  * default into being considered done.
  *
- * Ported so far: MeanShift, NeighborhoodContraction, KMeans.
+ * Ported so far: MeanShift, NeighborhoodContraction, KMeans, DBSCAN.
  *
  * The property that matters most here is not "n-D works" but "n-D and 1-D are the
  * same code". A dim-1 POINT is not a SCALAR -- its elements are Lists -- yet the
@@ -81,6 +81,31 @@ static void test_kmeans_recovers_blobs(void) {
      * behaviour on the same data. Twelve distinct points, nine asked for. */
     assert_eval_eq("Length[FindClusters[" BLOBS_2D ", 9, Method -> \"KMeans\"]]",
                    "9", 0);
+}
+
+static void test_dbscan_recovers_blobs(void) {
+    check("DBSCAN", BLOBS_2D, BLOBS_2D_OUT);
+    check("DBSCAN", BLOBS_5D, BLOBS_5D_OUT);
+    /* An explicit radius must reach the n-D kernel too, not just the default
+     * derived from the length scale. */
+    assert_eval_eq("FindClusters[" BLOBS_2D ", "
+                   "Method -> {\"DBSCAN\", \"NeighborhoodRadius\" -> 2}]",
+                   BLOBS_2D_OUT, 0);
+}
+
+static void test_dbscan_keeps_noise_as_singletons(void) {
+    /* DBSCAN's one structural difference from the other methods: a point in no
+     * dense region is noise. Dropping it would lose an input element and stop the
+     * result being a partition, so it becomes its own cluster. */
+    assert_eval_eq("FindClusters[{{0, 0}, {1, 0}, {0, 1}, {1, 1}, {99, 99}}, "
+                   "Method -> \"DBSCAN\"]",
+                   "{{{0, 0}, {1, 0}, {0, 1}, {1, 1}}, {{99, 99}}}", 0);
+    /* Raising MinPoints makes more points noise, which is the option doing its
+     * job: at 3 neither of the first two is core, so neither joins anything and
+     * both fall out separately, while the triple survives. */
+    assert_eval_eq("FindClusters[{{0, 0}, {1, 0}, {50, 50}, {51, 50}, {52, 50}}, "
+                   "Method -> {\"DBSCAN\", \"MinPoints\" -> 3}]",
+                   "{{{0, 0}}, {{1, 0}}, {{50, 50}, {51, 50}, {52, 50}}}", 0);
 }
 
 static void test_kmeans_is_independent_of_input_order(void) {
@@ -168,6 +193,16 @@ static void test_scalar_and_dim1_point_agree(void) {
     assert_eval_eq("FindClusters[{{1}, {2}, {3}, {10}, {11}, {12}, {25}}, 3, "
                    "Method -> \"KMeans\"]",
                    "{{{1}, {2}, {3}}, {{10}, {11}, {12}}, {{25}}}", 0);
+
+    /* DBSCAN went the other way from KMeans: one kernel now serves both
+     * dimensionalities, because all 22 one-dimensional pins pass through the
+     * general rule unchanged. So this pair is not two implementations agreeing but
+     * one implementation reached by two representations -- still worth asserting,
+     * since FC_KIND_SCALAR and a dim-1 FC_KIND_POINT read different fields. */
+    assert_eval_eq("FindClusters[{1, 2, 3, 100}, Method -> \"DBSCAN\"]",
+                   "{{1, 2, 3}, {100}}", 0);
+    assert_eval_eq("FindClusters[{{1}, {2}, {3}, {100}}, Method -> \"DBSCAN\"]",
+                   "{{{1}, {2}, {3}}, {{100}}}", 0);
 }
 
 static void test_equal_points_are_never_split(void) {
@@ -199,6 +234,10 @@ static void test_equal_points_are_never_split(void) {
     assert_eval_eq("FindClusters[{{5, 5}, {5, 5}, {5, 5}, {40, 40}, {41, 41}}, 4, "
                    "Method -> \"KMeans\"]",
                    "{{{5, 5}, {5, 5}, {5, 5}}, {{40, 40}}, {{41, 41}}}", 0);
+    check("DBSCAN", dup2, dup2_out);
+    assert_eval_eq("FindClusters[{{5, 5}, {5, 5}, {5, 5}, {40, 40}, {41, 41}}, "
+                   "Method -> \"DBSCAN\"]",
+                   "{{{5, 5}, {5, 5}, {5, 5}}, {{40, 40}, {41, 41}}}", 0);
 
     /* And the 1-D form of the same shape, to show the fold behaves the same way on
      * both surfaces. */
@@ -220,6 +259,10 @@ static void test_strings_still_decline(void) {
                    "Method -> \"NeighborhoodContraction\"]",
                    "FindClusters[{\"aa\", \"ab\", \"zz\"}, "
                    "Method -> \"NeighborhoodContraction\"]", 0);
+    /* DBSCAN too, and for the same reason: an eps-neighbourhood needs coordinates.
+     * This is now the ONLY thing its single kernel refuses. */
+    assert_eval_eq("FindClusters[{\"aa\", \"ab\", \"zz\"}, Method -> \"DBSCAN\"]",
+                   "FindClusters[{\"aa\", \"ab\", \"zz\"}, Method -> \"DBSCAN\"]", 0);
     /* Still works for the gap methods, which read only the tree. */
     assert_eval_eq("FindClusters[{\"aa\", \"ab\", \"zz\"}, 2]",
                    "{{\"aa\", \"ab\"}, {\"zz\"}}", 0);
@@ -230,8 +273,7 @@ static void test_unported_methods_still_decline_in_ndim(void) {
      * above one dimension -- reading d->val there would dereference NULL, so a
      * premature relaxation is a crash rather than a wrong answer. These rows come
      * off the list as each method is ported, which makes the progress visible. */
-    const char* unported[] = { "KMedoids", "DBSCAN",
-                               "GaussianMixture", "JarvisPatrick" };
+    const char* unported[] = { "KMedoids", "GaussianMixture", "JarvisPatrick" };
     for (size_t i = 0; i < sizeof(unported) / sizeof(unported[0]); i++) {
         char in[256], out[256];
         snprintf(in,  sizeof in,  "FindClusters[{{1, 1}, {9, 9}}, Method -> \"%s\"]",
@@ -275,6 +317,8 @@ int main(void) {
     TEST(test_shift_methods_recover_blobs_2d);
     TEST(test_shift_methods_recover_blobs_5d);
     TEST(test_kmeans_recovers_blobs);
+    TEST(test_dbscan_recovers_blobs);
+    TEST(test_dbscan_keeps_noise_as_singletons);
     TEST(test_kmeans_is_independent_of_input_order);
     TEST(test_kmeans_automatic_is_refused_on_both_surfaces);
     TEST(test_kmeans_declines_only_on_the_work_product);
