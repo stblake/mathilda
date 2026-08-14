@@ -14,6 +14,7 @@
 #include "numarray.h"      /* na_load_matrix / na_build_matrix -- the machine bridge */
 #include "lapack.h"        /* mat_lapack_dsyev; a stub returning nonzero without LAPACK */
 #include "pca.h"
+#include "predict.h"
 
 void ml_column_mean(const double* x, size_t n, size_t dim, double* mean) {
     for (size_t j = 0; j < dim; j++) mean[j] = 0.0;
@@ -465,6 +466,7 @@ static Expr* builtin_dimension_reduce(Expr* res) {
 }
 
 void ml_init(void) {
+    ml_predict_init();   /* src/ml/predict.c -- Predict, LinearModelFit */
     symtab_add_builtin("DimensionReduce", builtin_dimension_reduce);
     symtab_get_def("DimensionReduce")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DimensionReduce",

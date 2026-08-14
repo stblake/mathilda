@@ -21,6 +21,7 @@
 #include "assoc.h"                  /* assoc_lookup_value — O(1) <|...|>[key] */
 #include "interp.h"
 #include "compile/compiled_function.h"
+#include "predict.h"   /* src/ml -- fitted models as callables */
 #include "compile/autocompile.h"   /* $AutoCompilation */
 #include "numloop.h"                 /* $AutoCompilation also gates numloop */
 #include <string.h>
@@ -1880,6 +1881,25 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 if (applied) {
                     expr_free(res);
                     *changed = true; /* Pure Function applied */
+                    return applied;
+                }
+            } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
+                       res->data.function.arg_count >= 1 &&
+                       ml_model_apply_probe(head)) {
+                /* 7a-pre. A fitted machine-learning model as a callable:
+                 * PredictorFunction[...][features] predicts, and
+                 * PredictorFunction[...]["Coefficients"] reads a property. This sits in
+                 * the same composite-head chain as Function[...][args] just above and
+                 * Association[...][key] just below, which is the point -- a trained
+                 * model is a callable object, and this codebase already has an idiom
+                 * for that, so no new evaluation concept is introduced. See
+                 * src/ml/predict.h for why the model is a plain EXPR_FUNCTION rather
+                 * than a new node type. */
+                Expr* applied = ml_model_apply(head, res->data.function.args,
+                                               res->data.function.arg_count);
+                if (applied) {
+                    expr_free(res);
+                    *changed = true;
                     return applied;
                 }
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&

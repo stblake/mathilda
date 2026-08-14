@@ -136,6 +136,75 @@ Out[2]= {{3.53625, 1.0399}, {7.03311, -0.290957}, {9.24375, 3.24698},
          {9.903, -4.78819}, {13.8764, 1.13662}}
 ```
 
+## Trained models
+
+`Predict` returns a **`PredictorFunction`** — a fitted object that can be stored in a
+variable and applied to new inputs. The representation is deliberately plain: an
+ordinary expression whose head is the symbol `PredictorFunction` and whose arguments
+are ordinary lists and strings.
+
+Two richer designs were considered and rejected, which is worth knowing because the
+obvious one is the rejected one:
+
+- **A new opaque node type**, following `CompiledFunction`. That is the codebase's
+  precedent for a callable carrying binary state — but a compiled function is a VM
+  program (bytecode, a register file, a reference count), whereas a fitted linear model
+  is a short vector of numbers. A new node type would mean new cases in `expr_copy`,
+  `expr_free`, `expr_eq`, `expr_hash`, `expr_compare` and the printer, to store what
+  existing expression types already hold. Machine precision is not an argument for it
+  either: a packed list already holds a dense buffer and is still a list.
+- **An `Association` payload**, the most Wolfram-ish shape. It buys nothing positional
+  arguments do not, while adding a dependency to every read. Named properties are
+  reached through the application instead, which is where you would ask for them:
+  `p["Coefficients"]`, `p["Method"]`, `p["FeatureCount"]`.
+
+Applying a model uses the evaluator's existing composite-head dispatch — the same
+mechanism behind `Function[…][args]` and `<|…|>[key]` — so a trained model introduces
+no new evaluation concept.
+
+## Predict
+
+Fits a predictor to data and returns a `PredictorFunction`. Attributes: `Protected`.
+
+- `Predict[data]`
+- `Predict[data, Method -> "LinearRegression"]`
+
+**Features**:
+- Data is either a list of rules `{features -> value, …}` or a **matrix whose last
+  column is the response** — the shape data usually arrives in. Both give the same
+  model; which was used is not remembered.
+- A one-feature model accepts a bare scalar as well as a one-element list, so
+  `p[3.]` works for a single-variable regression.
+- **A singular system returns unevaluated.** Perfectly collinear features, or fewer
+  observations than parameters, have no unique fit — a pseudo-inverse would return one
+  of infinitely many answers and *look* like a successful fit.
+- `"LinearRegression"` is the only method implemented and the default. Any other
+  declines rather than silently linear-regressing.
+- A wrongly-shaped input leaves the application unevaluated rather than guessing.
+
+```mathematica
+In[1]:= p = Predict[{1. -> 3., 2. -> 5., 3. -> 7., 4. -> 9.}]
+Out[1]= PredictorFunction["LinearRegression", {1.0, 2.0}, 1]
+
+In[2]:= {p[10.], p["Coefficients"], p["Method"]}
+Out[2]= {21.0, {1.0, 2.0}, "LinearRegression"}
+
+In[3]:= Predict[{{1., 1., 6.}, {2., 1., 8.}, {1., 2., 9.},
+                 {3., 2., 13.}, {2., 3., 14.}}]["Coefficients"]
+Out[3]= {1.0, 2.0, 3.0}
+```
+
+## LinearModelFit
+
+- `LinearModelFit[data]`
+
+Fits a linear model with an intercept and returns a `PredictorFunction` carrying its
+coefficients — the same ones `Predict` finds. Attributes: `Protected`.
+
+**Not implemented**: Wolfram's `LinearModelFit` returns a `FittedModel` whose
+properties are regression diagnostics (`RSquared`, standard errors, ANOVA). Those are
+a separate piece of work and are **not** approximated here.
+
 ## Clustering
 
 `FindClusters` and its ten methods are documented under
