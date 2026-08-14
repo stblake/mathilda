@@ -158,6 +158,22 @@ obvious one is the rejected one:
   reached through the application instead, which is where you would ask for them:
   `p["Coefficients"]`, `p["Method"]`, `p["FeatureCount"]`.
 
+**Fitted models print abbreviated**, showing their method and eliding their parameters:
+
+```mathematica
+In[1]:= Predict[{1. -> 3., 2. -> 5., 3. -> 7.}]
+Out[1]= PredictorFunction["LinearRegression", <>]
+
+In[2]:= FullForm[%]
+Out[2]= PredictorFunction["LinearRegression", List[1.0, 2.0], 1, 0]
+```
+
+This is not cosmetic. A `"NearestNeighbors"` predictor carries its *entire training set*
+as its parameter block, so the unabridged form is unreadable at any real size and scrolls
+the useful answer off the screen. `InterpolatingFunction` already elides its data the same
+way, and for the same reason. Eliding is safe precisely because `FullForm` still reveals
+everything — the information is one keystroke away rather than gone.
+
 Applying a model uses the evaluator's existing composite-head dispatch — the same
 mechanism behind `Function[…][args]` and `<|…|>[key]` — so a trained model introduces
 no new evaluation concept.

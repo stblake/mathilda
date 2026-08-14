@@ -83,7 +83,7 @@ goal_lock:
 - [x] `Predict + LinearRegression + LinearModelFit + application via the evaluator chain` | `depends on: representation` | `done (iteration 12)`
 - [x] `Predict with Method -> NearestNeighbors` | `depends on: representation` | `done (iteration 13), with a NeighborsNumber sub-option`
 - [x] `Retrofit DimensionReducerFunction onto the representation (family 2 open row)` | `depends on: representation` | `done (iteration 14) -- needed NO new evaluation machinery, which was the payoff for designing the representation once`
-- [ ] `Abbreviated printing for fitted models` | `independent` | `pending`
+- [x] `Abbreviated printing for fitted models` | `independent` | `done (iteration 15) -- followed InterpolatingFunction's existing elision in print.c; FAMILY 3 NOW CLOSED`
 
 ## Checkpoints
 
@@ -128,7 +128,7 @@ goal_lock:
 ## Tech Debt Review
 
 - Potential tech debt introduced:
-  - `A fitted model prints its full parameter list rather than abbreviating.`
+  - `RESOLVED (iteration 15): models print method + <>, following InterpolatingFunction. FullForm still reveals everything.`
   - `RESOLVED (iteration 13): promoted to src/ml/mlutil.{c,h} -- ml_list_of_reals, ml_list_matrix, ml_read_data, plus ml_sqdist.`
 - Existing tech debt noticed:
   - `na_build_matrix returning a visible NDArray remains a trap for new user-facing builtins.`
@@ -140,6 +140,7 @@ goal_lock:
 
 ## Activity Log
 
+- `2026-08-14 02:30` Iteration 15: abbreviated printing, and family 3 is CLOSED. print.c already had the pattern -- InterpolatingFunction prints its domain then `, <>` and says in its own comment that FullForm reveals the rest -- so this was following an in-tree precedent rather than inventing a scheme, and it needed no new mechanism. Added SYM_PredictorFunction / SYM_DimensionReducerFunction to sym_names.c per CLAUDE.md rather than strcmp-ing in the printer. Asserted BOTH halves: the abbreviated form, and that FullForm plus application plus property access are all untouched -- a change that reached into the object rather than its rendering would show up in the second half. One test-expectation error of mine: this harness renders strings WITH quotes where the REPL's Print does not.
 - `2026-08-14 02:20` Iteration 14: DimensionReducerFunction, via a new DimensionReduction[data, k] builtin (Wolfram's split: DimensionReduce returns reduced data, DimensionReduction returns a reducer). This closes family 2's last open row. The retrofit needed NO new node type, NO new evaluation concept and no change to eval.c beyond the probe recognising one more head -- which is the payoff for having designed the representation once in iteration 12 rather than per-family. The one real hazard was centring: new rows must be centred on the TRAINING means, and the plausible bug (centring each incoming batch on its own mean) gives all zeros for a single point, which is indistinguishable from correct on data near the origin. Training data with means {104, 210} makes it detectable, and the test asserts both halves -- a point at the training mean projects to 0, a point away from it projects far from 0. Also note the loop was PAUSED for a while here: the permission classifier was unavailable, which blocked ScheduleWakeup and then Bash; no partial writes occurred because the rejected call never executed.
 - `2026-08-14 01:55` Iteration 13: Predict with NearestNeighbors, plus a NeighborsNumber sub-option, plus the promotion of the duplicated helpers to src/ml/mlutil.{c,h} (the third copy had arrived, which was the stated trigger). DECLINED to extract find_clusters.c's machine metric layer: it takes that file's FcData and honours a DistanceFunction, so extracting it means introducing a metric enum in src/ml and rewriting a 2600-line file with 22 pinned answers -- real risk to a finished family, bought for a four-line squared-Euclidean. Recorded the actual trigger instead: the moment Predict or Classify gains a DistanceFunction option, that layer has its second REAL consumer. Cross-checked k=1 against the existing Nearest on both sides of a midpoint. One of my tests was wrong for the exact reason I had written down: the k-NN-differs-from-linear test used data that was exactly y=10x, so both methods agreed and it proved nothing -- fixed with y=x^2.
 - `2026-08-14 01:45` Created, and iteration 12 landed: the trained-model representation plus Predict, LinearModelFit and application through eval.c\'s composite-head chain. Rejected a new EXPR node type (the expected answer) with reasons recorded. Cross-checked against the existing Fit, which is an independent least-squares implementation. One test of mine was wrong rather than the code: Head of an unevaluated composite application is the whole head PredictorFunction[...], not the symbol, so the assertion became NumberQ.

@@ -890,6 +890,24 @@ static void print_standard(Expr* e, int parent_prec) {
             print_standard(e->data.function.args[0], 0);
             printf(", <>]");
         }
+        else if ((head == SYM_PredictorFunction ||
+                  head == SYM_DimensionReducerFunction) &&
+                 e->data.function.arg_count >= 2 &&
+                 e->data.function.args[0]->type == EXPR_STRING) {
+            /* A fitted machine-learning model prints its METHOD and elides its
+             * parameters, exactly as InterpolatingFunction above elides its data and
+             * for the same reason. This is not cosmetic: a NearestNeighbors predictor
+             * carries its entire training set as its parameter block, so the unabridged
+             * form is unreadable at any real size and scrolls a useful answer off the
+             * screen. The method name is the part a reader actually wants back.
+             *
+             * FullForm still reveals everything, which is what makes eliding safe --
+             * the information is one keystroke away rather than gone. */
+            print_standard(e->data.function.head, 0);
+            printf("[");
+            print_standard(e->data.function.args[0], 0);
+            printf(", <>]");
+        }
         else if (head == SYM_Pattern && e->data.function.arg_count == 2 &&
                  e->data.function.args[0]->type == EXPR_SYMBOL &&
                  e->data.function.args[1]->type == EXPR_FUNCTION &&

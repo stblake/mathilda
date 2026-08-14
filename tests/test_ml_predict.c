@@ -173,6 +173,35 @@ static void test_knn_option_errors_decline(void) {
                    "\"NeighborsNumber\" -> 0}]]", "Predict", 0);
 }
 
+static void test_fitted_models_print_abbreviated(void) {
+    /* Note the quoting: this harness renders the method string WITH quotes, where the
+     * REPL's Print does not -- the abbreviation itself is identical either way.
+     *
+     * A NearestNeighbors predictor carries its ENTIRE training set as its parameter
+     * block, so the unabridged form is unreadable at any real size and scrolls the
+     * useful answer off screen. Models print their method and elide the rest, following
+     * InterpolatingFunction, which already does exactly this in print.c. */
+    assert_eval_eq("Predict[" LINE "]", "PredictorFunction[\"LinearRegression\", <>]", 0);
+    assert_eval_eq("Predict[" PLANE ", Method -> \"NearestNeighbors\"]",
+                   "PredictorFunction[\"NearestNeighbors\", <>]", 0);
+    assert_eval_eq("DimensionReduction[{{100., 200.}, {102., 205.}, {104., 210.}}, 1]",
+                   "DimensionReducerFunction[\"PrincipalComponentsAnalysis\", <>]", 0);
+}
+
+static void test_abbreviation_hides_nothing_and_breaks_nothing(void) {
+    /* Eliding is only safe because the information is one keystroke away rather than
+     * gone -- FullForm must still reveal the parameters. */
+    assert_eval_eq("FullForm[Predict[" LINE "]]",
+                   "PredictorFunction[\"LinearRegression\", List[1.0, 2.0], 1, 0]", 0);
+    /* And the abbreviation is a PRINTING change only: application and property access
+     * must be untouched. A change that reached into the object rather than its rendering
+     * would show up here. */
+    assert_eval_eq("Predict[" LINE "][10.]", "21.0", 0);
+    assert_eval_eq("Predict[" LINE "][\"Coefficients\"]", "{1.0, 2.0}", 0);
+    assert_eval_eq("Length[Predict[" PLANE ", Method -> \"NearestNeighbors\"]"
+                   "[\"TrainingData\"]]", "5", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -191,6 +220,8 @@ int main(void) {
     TEST(test_knn_is_not_linear);
     TEST(test_knn_properties_and_multifeature);
     TEST(test_knn_option_errors_decline);
+    TEST(test_fitted_models_print_abbreviated);
+    TEST(test_abbreviation_hides_nothing_and_breaks_nothing);
 
     printf("All ml Predict tests passed.\n");
     return 0;
