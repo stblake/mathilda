@@ -536,9 +536,10 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   the visible surface needed a guard. Rank 3 and above still decline: a
   list-valued component is not a coordinate.
 - **Which methods accept vectors.** `Agglomerate`, `SpanningTree`, `MeanShift`,
-  `NeighborhoodContraction`, `KMeans`, `DBSCAN`, `JarvisPatrick`, `KMedoids` and
-  `Spectral` cluster n-dimensional points; only `GaussianMixture` accepts scalars
-  only and return unevaluated for vector input.
+  `NeighborhoodContraction`, `KMeans`, `DBSCAN`, `JarvisPatrick`, `KMedoids`,
+  `Spectral` and `GaussianMixture` cluster n-dimensional points — **all ten**. The
+  only input still declined above one dimension is a list of strings, which has no
+  coordinates; the gap methods handle those through edit distances in the tree and return unevaluated for vector input.
   That is not a conservative guard — those five reach their data through the sorted
   projection, which does not exist off a line — and the list grows as each is
   ported. The ported methods additionally decline string input, having no
@@ -608,6 +609,26 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   raw data gaps it is the mean that misleads. Routing scalars through the n-D kernel
   under-counts (`{{1,2,3},{10,11,12},{25}}` becomes `{{1,2,3,10,11,12},{25}}`), so
   the two paths stay separate.
+- **`"GaussianMixture"` fits a full covariance, so it needs more points per
+  component than dimensions.** A component costs `dim` means plus `dim(dim+1)/2`
+  covariance entries, and `k_max` is capped at `n/(dim + 1)` — the minimum for a
+  non-degenerate scatter matrix. So nine points in five dimensions correctly return
+  *one* cluster (`k_max` falls to 1), while twenty-four points per blob recover all
+  three. This is BIC and the parameter count doing their job, not a defect.
+- **A singular component is modelled, not refused.** Identical points give a zero
+  scatter matrix and collinear points a covariance with a zero eigenvalue. The
+  variance floor is added as a **ridge** on the covariance diagonal — the matrix
+  reading of the scalar "clamp the variance up to a minimum", chosen because clamping
+  every direction properly means an eigendecomposition per component per iteration
+  while a ridge is one add and can only overshoot the bound. A component whose full
+  covariance still will not factorise falls back to diagonal rather than failing the
+  fit.
+- **`"GaussianMixture"`'s kernel is the one clustering algorithm that does not live
+  in `find_clusters.c`.** The EM fit is in `src/ml/gmm.c` behind a buffer-level API
+  (a row-major `n × dim` array, not a `FindClusters` internal), because it is the
+  first kernel with two real consumers — this `Method` and the `LearnDistribution`
+  learner of the same name. `find_clusters.c` exports exactly one symbol, so a second
+  builtin could not otherwise reach it.
 - **`KMeans` and `KMedoids` require a count.** Neither accepts the `Automatic`
   form, in any dimension, so `FindClusters[data, Method -> "KMeans"]` returns
   unevaluated; `UpTo[k]` is the data-driven form they do take, and a bare `k` is
@@ -644,7 +665,7 @@ projection and declines vector input.
 | `"KMedoids"` | no | yes | yes | vectors |
 | `"Spectral"` | yes | yes | no | vectors |
 | `"DBSCAN"` | yes | no | no | vectors |
-| `"GaussianMixture"` | yes | no | no | scalars |
+| `"GaussianMixture"` | yes | no | no | vectors |
 | `"JarvisPatrick"` | yes | no | no | vectors |
 | `"MeanShift"` | yes | no | no | vectors |
 | `"NeighborhoodContraction"` | yes | no | no | vectors |

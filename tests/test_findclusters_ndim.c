@@ -2,11 +2,11 @@
  *
  * Eight of the ten were one-dimensional by algorithm, reaching their data only
  * through the sorted projection (d->val indexed by d->order, both NULL for vector
- * input). They are being ported one at a time; this file grows with each, and the
- * guard in the builtin names the ported set explicitly so a new method cannot
- * default into being considered done.
+ * input), so each was an algorithm to write rather than a check to relax.
  *
- * Ported so far: MeanShift, NeighborhoodContraction, KMeans, DBSCAN.
+ * ALL TEN are ported. DBSCAN and GaussianMixture replaced their 1-D kernels
+ * outright; KMeans, KMedoids, JarvisPatrick and Spectral kept two paths because
+ * the general rule moved a covered 1-D answer in each case.
  *
  * The property that matters most here is not "n-D works" but "n-D and 1-D are the
  * same code". A dim-1 POINT is not a SCALAR -- its elements are Lists -- yet the
@@ -211,6 +211,47 @@ static void test_spectral_respects_upto_by_merging_nearest_components(void) {
                    "3", 0);
 }
 
+/* GaussianMixture with a FULL covariance needs more points per component than
+ * dimensions -- dim*(dim+1)/2 covariance entries plus dim means -- so the nine-point
+ * five-dimensional probe the other methods use is under-determined for it: k_max
+ * falls to n/(dim+1) == 1 and it correctly returns one cluster. That is BIC and the
+ * parameter count doing their job, the same shape of finding as JarvisPatrick's
+ * NeighborCount not fitting inside a 4-point blob. Its blob test therefore uses
+ * samples a full covariance can afford. */
+#define GMM_BLOBS_2D "Join[Table[{Mod[t, 4], Quotient[t, 4]}, {t, 0, 11}], " \
+                     "Table[{40 + Mod[t, 4], Quotient[t, 4]}, {t, 0, 11}], " \
+                     "Table[{Mod[t, 4], 40 + Quotient[t, 4]}, {t, 0, 11}]]"
+#define GMM_BLOBS_5D "Join[" \
+    "Table[{Mod[t, 4], Quotient[t, 4], 0, 0, 0}, {t, 0, 23}], " \
+    "Table[{40 + Mod[t, 4], Quotient[t, 4], 0, 0, 0}, {t, 0, 23}], " \
+    "Table[{Mod[t, 4], Quotient[t, 4], 0, 0, 60}, {t, 0, 23}]]"
+
+static void test_gaussianmixture_recovers_blobs(void) {
+    assert_eval_eq("Length[FindClusters[" GMM_BLOBS_2D ", "
+                   "Method -> \"GaussianMixture\"]]", "3", 0);
+    assert_eval_eq("Length[FindClusters[" GMM_BLOBS_5D ", "
+                   "Method -> \"GaussianMixture\"]]", "3", 0);
+    /* And the under-determined case is asserted as what it is, so that a later
+     * change loosening k_max shows up here rather than silently. */
+    assert_eval_eq("Length[FindClusters[" BLOBS_5D ", "
+                   "Method -> \"GaussianMixture\"]]", "1", 0);
+    /* Two dimensions with twelve points IS affordable, and is recovered exactly. */
+    check("GaussianMixture", BLOBS_2D, BLOBS_2D_OUT);
+}
+
+static void test_gaussianmixture_survives_a_singular_component(void) {
+    /* Identical points give a zero scatter matrix, which is singular: without the
+     * variance ridge the Cholesky fails and without the fallback the whole fit dies.
+     * One cluster is the right answer and it must arrive without a crash. */
+    assert_eval_eq("FindClusters[{{7, 7}, {7, 7}, {7, 7}, {7, 7}}, "
+                   "Method -> \"GaussianMixture\"]",
+                   "{{{7, 7}, {7, 7}, {7, 7}, {7, 7}}}", 0);
+    /* Collinear points in the plane are rank-deficient too -- a real covariance with
+     * a zero eigenvalue -- and must be modelled, not refused. */
+    assert_eval_eq("Head[FindClusters[{{0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}}, "
+                   "Method -> \"GaussianMixture\"]]", "List", 0);
+}
+
 static void test_kmeans_is_independent_of_input_order(void) {
     /* A k-means whose answer depends on the order its points were typed in is
      * seeding from index 0. This is why the n-D initialisation starts from the
@@ -412,20 +453,29 @@ static void test_strings_still_decline(void) {
                    "{{\"aa\", \"ab\"}, {\"zz\"}}", 0);
 }
 
-static void test_unported_methods_still_decline_in_ndim(void) {
+static void test_every_method_now_answers_in_ndim(void) {
     /* The guard names the ported set explicitly, so the rest must still decline
      * above one dimension -- reading d->val there would dereference NULL, so a
      * premature relaxation is a crash rather than a wrong answer. These rows come
      * off the list as each method is ported, which makes the progress visible. */
-    const char* unported[] = { "GaussianMixture" };
-    for (size_t i = 0; i < sizeof(unported) / sizeof(unported[0]); i++) {
-        char in[256], out[256];
-        snprintf(in,  sizeof in,  "FindClusters[{{1, 1}, {9, 9}}, Method -> \"%s\"]",
-                 unported[i]);
-        snprintf(out, sizeof out, "FindClusters[{{1, 1}, {9, 9}}, Method -> \"%s\"]",
-                 unported[i]);
-        assert_eval_eq(in, out, 0);
+    /* EMPTY at last: all ten methods cluster vectors. What replaces this list is the
+     * opposite assertion -- that every method now answers, and that the only thing
+     * still declined above one dimension is SEQUENCE input, which has no
+     * coordinates. A method silently regressing to a decline would show up here. */
+    const char* all[] = { "Agglomerate", "SpanningTree", "MeanShift",
+                          "NeighborhoodContraction", "DBSCAN", "JarvisPatrick",
+                          "Spectral", "GaussianMixture" };
+    for (size_t i = 0; i < sizeof(all) / sizeof(all[0]); i++) {
+        char in[256];
+        snprintf(in, sizeof in,
+                 "Head[FindClusters[{{1, 1}, {9, 9}}, Method -> \"%s\"]]", all[i]);
+        assert_eval_eq(in, "List", 0);
     }
+    /* KMeans and KMedoids need a count, so they are asked in the form they take. */
+    assert_eval_eq("Head[FindClusters[{{1, 1}, {9, 9}}, 2, Method -> \"KMeans\"]]",
+                   "List", 0);
+    assert_eval_eq("Head[FindClusters[{{1, 1}, {9, 9}}, 2, Method -> \"KMedoids\"]]",
+                   "List", 0);
     /* Spectral is ported; two points are below the n < 3 floor and come back as one
      * cluster. That floor must be handled on the point path itself -- falling
      * through to the 1-D branch reaches fc_scatter, which indexes d->order, NULL
@@ -467,6 +517,8 @@ int main(void) {
     TEST(test_jarvispatrick_recovers_blobs);
     TEST(test_kmedoids_recovers_blobs);
     TEST(test_spectral_recovers_blobs);
+    TEST(test_gaussianmixture_recovers_blobs);
+    TEST(test_gaussianmixture_survives_a_singular_component);
     TEST(test_spectral_respects_upto_by_merging_nearest_components);
     TEST(test_kmedoids_carries_a_tighter_ceiling_than_kmeans);
     TEST(test_kmedoids_ndim_finds_a_better_optimum_than_the_1d_kernel);
@@ -477,7 +529,7 @@ int main(void) {
     TEST(test_scalar_and_dim1_point_agree);
     TEST(test_equal_points_are_never_split);
     TEST(test_strings_still_decline);
-    TEST(test_unported_methods_still_decline_in_ndim);
+    TEST(test_every_method_now_answers_in_ndim);
     TEST(test_metric_applies_to_ported_methods);
 
     printf("All FindClusters n-dimensional tests passed.\n");

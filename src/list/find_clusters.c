@@ -65,6 +65,7 @@
 #include "list_common.h"
 #include "internal.h"
 #include "find_clusters.h"
+#include "gmm.h"       /* src/ml -- the EM fit, shared with LearnDistribution */
 #include "distance.h"
 #include "../ndarray.h"   /* is_ndarray, ndarray_to_nested_list */
 
@@ -1900,122 +1901,101 @@ static bool fc_method_jarvispatrick(const FcData* d, FcCount spec, const FcOpts*
 /* Method: GaussianMixture                                                    */
 /* ------------------------------------------------------------------------- */
 
-/* 1D EM over k Gaussians, with BIC choosing k from 1..k_max. Deterministic
- * quantile initialisation, as in fc_lloyd. Each point is assigned to its
- * highest-responsibility component.
+/* The scalar EM that used to live here (fc_gmm_fit) went when GaussianMixture was
+ * unified onto the general fit in src/ml/gmm.c. Its variance-floor reasoning did NOT
+ * go with it -- see fc_gmm_ndim, which keeps the floor at the squared data scale for
+ * exactly the reason recorded there: a mixture's likelihood is unbounded above, so a
+ * floor set merely "small" lets the BIC search buy near-singular spikes and report
+ * one cluster per point. Measured, before that floor existed: six components for
+ * eight points. */
+
+/* The only method here whose kernel is NOT in this file. The EM fit lives in
+ * src/ml/gmm.c behind a buffer-level API, because it is the first clustering kernel
+ * with two real consumers -- this Method and the LearnDistribution learner of the
+ * same name -- and this file exports exactly one symbol, so a second builtin cannot
+ * reach anything inside it. A 56th static function would have made the distribution
+ * learner re-implement EM.
  *
- * The variance floor is not defensive decoration: identical points give zero
- * variance and a singular Gaussian, so {7,7,7,7} would divide by zero without
- * it. It also prunes collapsed components, which is what makes a mixture
- * collapse to a single cluster on data that does not separate. */
-static double fc_gmm_fit(const double* sv, size_t n, size_t k, double vfloor,
-                         double* mu, double* var, double* w, size_t* id) {
-    for (size_t j = 0; j < k; j++) {
-        mu[j]  = sv[(size_t)(((double)j + 0.5) * (double)n / (double)k)];
-        var[j] = vfloor;
-        w[j]   = 1.0 / (double)k;
+ * What stays here is FindClusters' business: turning a fit into a partition, and
+ * choosing k. What moved out is nobody's business in particular: covariances,
+ * Cholesky factors, Mahalanobis distances, a log-density. */
+static bool fc_gmm_ndim(const FcData* d, FcCount spec, size_t* assign, size_t* k) {
+    size_t n = d->n, dim = d->dim;
+    const double* pts = fc_points(d);
+    if (!pts) return false;
+
+    /* Zero spread means every point is identical: one component, and the floor below
+     * would be zero. Handled HERE rather than by falling through to any 1-D path --
+     * that reaches fc_scatter, which indexes d->order, NULL for points. */
+    double scale = fc_scale_ndim(d);
+    if (!(scale > 0.0)) {
+        for (size_t i = 0; i < n; i++) assign[i] = 0;
+        *k = (n > 0) ? 1 : 0;
+        return *k > 0;
     }
 
-    double* r = malloc(sizeof(double) * n * k);
-    if (!r) return -INFINITY;
+    /* The variance floor, in squared data units. The deleted 1-D kernel used the
+     * squared median GAP; fc_scale_ndim is the median spanning-tree EDGE WEIGHT,
+     * which is that same quantity generalised -- on a line the tree IS the sorted
+     * chain. So this is the existing floor rather than a new choice. */
+    double vfloor = scale * scale;
 
-    double loglik = -INFINITY;
-    for (int it = 0; it < FC_MAX_ITER; it++) {
-        loglik = 0.0;
-        for (size_t i = 0; i < n; i++) {
-            double tot = 0.0;
-            for (size_t j = 0; j < k; j++) {
-                double z = sv[i] - mu[j];
-                double p = w[j] * exp(-0.5 * z * z / var[j]) / sqrt(2.0 * M_PI * var[j]);
-                r[i * k + j] = p;
-                tot += p;
-            }
-            if (tot <= 0.0) { for (size_t j = 0; j < k; j++) r[i * k + j] = 1.0 / (double)k; tot = 1.0; }
-            for (size_t j = 0; j < k; j++) r[i * k + j] /= tot;
-            loglik += log(tot);
-        }
-        for (size_t j = 0; j < k; j++) {
-            double sw = 0.0, sm = 0.0, sv2 = 0.0;
-            for (size_t i = 0; i < n; i++) sw += r[i * k + j];
-            if (sw <= 1e-12) { w[j] = 0.0; var[j] = vfloor; continue; }
-            for (size_t i = 0; i < n; i++) sm += r[i * k + j] * sv[i];
-            double m = sm / sw;
-            for (size_t i = 0; i < n; i++) { double z = sv[i] - m; sv2 += r[i * k + j] * z * z; }
-            mu[j]  = m;
-            var[j] = sv2 / sw;
-            if (var[j] < vfloor) var[j] = vfloor;
-            w[j]   = sw / (double)n;
+    /* k_max is bounded by the data as well as by 10, and in n dimensions the binding
+     * constraint is the PARAMETER COUNT, not the point count: a full covariance costs
+     * dim*(dim+1)/2 numbers per component, so a component needs more points than
+     * dimensions before it means anything. Requiring dim + 1 points per component is
+     * the minimum for a non-degenerate scatter matrix. */
+    size_t kmax = d->n_distinct < 10 ? d->n_distinct : 10;
+    if (kmax > n / (dim + 1)) kmax = n / (dim + 1);
+    if (kmax < 1) kmax = 1;
+
+    size_t* id = malloc(sizeof(size_t) * n);
+    size_t* best_id = malloc(sizeof(size_t) * n);
+    if (!id || !best_id) { free(id); free(best_id); return false; }
+    for (size_t i = 0; i < n; i++) best_id[i] = 0;
+
+    double best_bic = INFINITY;
+    for (size_t kk = 1; kk <= kmax; kk++) {
+        MlGmm* g = ml_gmm_fit(pts, n, dim, kk, vfloor, id);
+        if (!g) continue;
+        double bic = ml_gmm_param_count(kk, dim) * log((double)n) - 2.0 * g->loglik;
+        ml_gmm_free(g);
+        if (bic < best_bic) {
+            best_bic = bic;
+            memcpy(best_id, id, sizeof(size_t) * n);
         }
     }
 
+    /* A retired component leaves a hole in the numbering, so renumber by first
+     * appearance in input order, as every other n-D method here does. */
+    size_t maxid = 0;
+    for (size_t i = 0; i < n; i++) if (best_id[i] > maxid) maxid = best_id[i];
+    size_t* label = malloc(sizeof(size_t) * (maxid + 1));
+    if (!label) { free(id); free(best_id); return false; }
+    for (size_t j = 0; j <= maxid; j++) label[j] = SIZE_MAX;
+    size_t next = 0;
     for (size_t i = 0; i < n; i++) {
-        size_t best = 0; double bp = -1.0;
-        for (size_t j = 0; j < k; j++)
-            if (r[i * k + j] > bp) { bp = r[i * k + j]; best = j; }
-        id[i] = best;
+        if (label[best_id[i]] == SIZE_MAX) label[best_id[i]] = next++;
+        assign[i] = label[best_id[i]];
     }
-    free(r);
-    return loglik;
+    *k = next;
+
+    (void)spec;   /* FC_ALLOWED gives this method Automatic only */
+    free(label); free(id); free(best_id);
+    return *k > 0;
 }
 
 static bool fc_method_gaussianmixture(const FcData* d, FcCount spec, const FcOpts* o,
                                       size_t* assign, size_t* k) {
     (void)spec; (void)o;
-    size_t n = d->n;
-    double* sv = fc_sorted_values(d);
-    if (!sv) return false;
-
-    /* Zero spread means every point is identical and one component is the only
-     * sensible answer -- and the variance floor below would be zero. An empty
-     * input (n == 0) has no sv[n-1] to read, so it folds into the same branch. */
-    double spread = (n > 0) ? sv[n - 1] - sv[0] : 0.0;
-    if (spread <= 0.0) {
-        size_t* id0 = calloc(n, sizeof(size_t));
-        if (!id0) { free(sv); return false; }
-        fc_scatter(d, id0, assign, k);
-        free(sv); free(id0);
-        return *k > 0;
-    }
-
-    /* The variance floor is the squared median gap: a component may not be
-     * narrower than the typical spacing between samples.
+    /* ONE kernel for both dimensionalities. Routing scalars through the n-D fit
+     * leaves every covered 1-D answer unchanged -- all 22 pins and the list_tests
+     * capability rows -- so the 1-D body and its scalar EM (fc_gmm_fit) were
+     * deleted rather than kept beside it. That makes this the second unification
+     * after DBSCAN, and the only one that also moved a kernel out of this file.
      *
-     * This is load-bearing, not a guard against division by zero (though it is
-     * that too, for identical points). A Gaussian mixture is unbounded above --
-     * a component collapsing onto a single point drives its density, and hence
-     * the likelihood, to infinity -- so with a floor set merely "small" the BIC
-     * search buys arbitrarily many near-singular spikes and reports one cluster
-     * per point. Measured: a floor of (spread/n)^2 * 1e-4 selected SIX
-     * components for eight points. Flooring at the sampling scale says the
-     * honest thing instead: structure finer than the point spacing is not
-     * resolvable from this data. */
-    double mg = fc_median_gap(sv, n);
-    double vfloor = (mg > 0.0) ? mg * mg : (spread / (double)n) * (spread / (double)n);
-    if (vfloor <= 0.0) vfloor = 1e-300;
-
-    size_t kmax = d->n_distinct < 10 ? d->n_distinct : 10;
-    double best_bic = INFINITY;
-    size_t* best_id = malloc(sizeof(size_t) * n);
-    size_t* id      = malloc(sizeof(size_t) * n);
-    double* mu      = malloc(sizeof(double) * kmax);
-    double* var     = malloc(sizeof(double) * kmax);
-    double* w       = malloc(sizeof(double) * kmax);
-    if (!best_id || !id || !mu || !var || !w) {
-        free(sv); free(best_id); free(id); free(mu); free(var); free(w); return false;
-    }
-    for (size_t i = 0; i < n; i++) best_id[i] = 0;
-
-    for (size_t kk = 1; kk <= kmax; kk++) {
-        double ll = fc_gmm_fit(sv, n, kk, vfloor, mu, var, w, id);
-        if (ll == -INFINITY) continue;
-        double params = 3.0 * (double)kk - 1.0;          /* mu, var, weight */
-        double bic = params * log((double)n) - 2.0 * ll;
-        if (bic < best_bic) { best_bic = bic; memcpy(best_id, id, sizeof(size_t) * n); }
-    }
-
-    fc_scatter(d, best_id, assign, k);
-    free(sv); free(best_id); free(id); free(mu); free(var); free(w);
-    return *k > 0;
+     * SEQUENCE has no coordinates and so still declines. */
+    return fc_points(d) ? fc_gmm_ndim(d, spec, assign, k) : false;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -2632,7 +2612,8 @@ static Expr* fc_find_clusters(Expr* res, Expr* list) {
                    || (fn == fc_method_dbscan)
                    || (fn == fc_method_jarvispatrick)
                    || (fn == fc_method_kmedoids)
-                   || (fn == fc_method_spectral);
+                   || (fn == fc_method_spectral)
+                   || (fn == fc_method_gaussianmixture);
     /* The shift methods need coordinates; strings have none, so they stay
      * declined for those even though POINT input is now fine. */
     if (d.kind == FC_KIND_SEQUENCE && fn != fc_method_gap) return NULL;

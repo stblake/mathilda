@@ -192,6 +192,7 @@ include_directories(/usr/local/include)
 include_directories(../src)
 include_directories(../src/compile)
 include_directories(../src/list)
+include_directories(../src/ml)
 include_directories(../src/linalg)
 include_directories(../src/numbertheory)
 include_directories(../src/poly)
@@ -373,6 +374,7 @@ set(COMMON_SRC
     ../src/list/subdivide.c
     ../src/list/nearest.c
     ../src/list/find_clusters.c
+    ../src/ml/gmm.c
     ../src/list/distance.c
     ../src/patterns.c
     ../src/patterns.c
