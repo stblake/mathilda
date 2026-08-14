@@ -3090,13 +3090,20 @@ Recognised sub-options:
 | `"ShrinkRatio" -> s` | NelderMead | simplex shrink coefficient (default 0.5) |
 | `"Tolerance" -> t` | NelderMead | simplex objective-spread convergence threshold |
 | `"InitialPoints" -> {{x1,…},…}` | NelderMead | seed the initial simplex (extra points ignored, fewer are filled by perturbation; malformed → random start) |
-| `"PostProcess" -> False` | all | skip the final exact local polish; return the raw global-search point |
+| `"PostProcess" -> v` | all | final exact local polish. `True`/`Automatic`/a named method (`"InteriorPoint"`, `"FindMinimum"`, `"KKT"`, `{"…", opts}`) → on; `False`/`None` → off |
 | `"RandomSeed" -> s` | all | override the default PRNG seed |
 
 Unrecognised sub-options are ignored (matching Mathematica). `"PostProcess"`
 defaults to on: the global best is refined by the exact local optimizer (and,
 for continuous box/unconstrained problems at `WorkingPrecision > MachinePrecision`,
-by an MPFR BFGS step); `"PostProcess" -> False` disables both.
+by an MPFR BFGS step). It accepts the full Mathematica value set — `True`,
+`Automatic`, or a named local method as a string (`"InteriorPoint"`,
+`"FindMinimum"`, `"KKT"`, …) or `{"method", opts…}` turn the polish on; `False`
+or `None` turn it off. Mathilda has a single `FindMinimum`-style local polish
+(BFGS for continuous/box problems, a quadratic-penalty solver for general
+constraints) that already picks the right inner solver, so a named method
+enables post-processing rather than selecting a distinct algorithm; an
+unrecognised value warns (`NMinimize::pmeth`) and falls back to `Automatic`.
 
 `"InitialPoints"` seeds the NelderMead simplex, which matters for functions with
 a narrow basin in a broad flat region — the Easom function

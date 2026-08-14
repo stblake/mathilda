@@ -3529,10 +3529,28 @@ static bool nm_parse_method(Expr* rhs, NmConfig* nc, const char* fn) {
                 double dv; if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0)
                     nc->tolerance = dv;
             } else if (strcmp(on, "PostProcess") == 0) {
-                if (ov->type == EXPR_SYMBOL) {
-                    if (ov->data.symbol.name == SYM_True)  nc->post_process = 1;
-                    else if (ov->data.symbol.name == SYM_False) nc->post_process = 0;
-                    /* Automatic ⇒ leave the auto default (on) */
+                /* Every Mathematica setting is accepted. True / Automatic, a
+                 * named local method as a string ("InteriorPoint",
+                 * "FindMinimum", "KKT", ...), or {"Method", subopts...} enable
+                 * the final exact polish; False / None disable it. Mathilda has a
+                 * single FindMinimum-style local polish (BFGS for continuous/box,
+                 * quadratic penalty for general constraints) that already selects
+                 * the right inner solver for the problem, so a named method turns
+                 * post-processing on rather than picking a distinct algorithm. */
+                if (ov->type == EXPR_STRING) {
+                    nc->post_process = 1;
+                } else if (ov->type == EXPR_SYMBOL) {
+                    const char* s = ov->data.symbol.name;
+                    if (s == SYM_True || s == SYM_Automatic)      nc->post_process = 1;
+                    else if (s == SYM_False || s == SYM_None)     nc->post_process = 0;
+                    else fm_warn(fn, "pmeth",
+                                 "PostProcess -> %s not recognised; using Automatic", s);
+                } else if (nm_is_head(ov, SYM_List)
+                           && ov->data.function.arg_count >= 1
+                           && ov->data.function.args[0]->type == EXPR_STRING) {
+                    nc->post_process = 1;           /* {"InteriorPoint", opts...} */
+                } else {
+                    fm_warn(fn, "pmeth", "invalid PostProcess value; using Automatic");
                 }
             } else if (strcmp(on, "InitialPoints") == 0) {
                 /* A list of starting points {{x1,...}, {x2,...}, ...}; borrowed

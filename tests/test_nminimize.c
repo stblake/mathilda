@@ -207,6 +207,29 @@ static void test_neldermead_suboptions(void) {
              "\"ReflectRatio\" -> 1.0, \"ShrinkRatio\" -> 0.5, \"PostProcess\" -> False}]]", "List");
 }
 
+static void test_postprocess_values(void) {
+    /* Full PostProcess value set. On a smooth problem the polish reaches the
+     * optimum exactly, so "polish on" values all give ~0 and "polish off"
+     * values return the raw (nonzero) SimulatedAnnealing point.
+     * Polish ON: True, Automatic, and any named local method (string). */
+    check_true("Abs[First[NMinimize[(x-3)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"PostProcess\" -> Automatic}]]] < 1.*^-6");
+    check_true("Abs[First[NMinimize[(x-3)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"PostProcess\" -> \"InteriorPoint\"}]]] < 1.*^-6");
+    check_true("Abs[First[NMinimize[(x-3)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"PostProcess\" -> \"FindMinimum\"}]]] < 1.*^-6");
+    check_true("Abs[First[NMinimize[(x-3)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"PostProcess\" -> {\"InteriorPoint\", \"Tolerance\" -> 1.*^-8}}]]] < 1.*^-6");
+    /* Polish OFF: None behaves like False (raw point, > 0 on this seed). */
+    check_true("First[NMinimize[(x-3)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"PostProcess\" -> None}]] > 1.*^-9");
+    check_true("First[NMinimize[(x-3)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"PostProcess\" -> False}]] > 1.*^-9");
+    /* The reported ReflectRatio + string-PostProcess example is accepted. */
+    check_eq("Head[NMinimize[{x^2 + y^2 + 0.1 Sin[1000 x] + 0.1 Sin[1000 y], -5 <= x <= 5 && -5 <= y <= 5}, "
+             "{x, y}, Method -> {\"NelderMead\", \"ReflectRatio\" -> 1.5, \"PostProcess\" -> \"InteriorPoint\"}]]", "List");
+}
+
 static void test_neldermead_shrink_tolerance(void) {
     /* Tolerance controls the simplex convergence threshold: a tight tolerance
      * refines much further than a loose one under a capped budget. */
@@ -427,6 +450,7 @@ int main(void) {
     TEST(test_method_simulatedannealing);
     TEST(test_method_suboptions);
     TEST(test_neldermead_suboptions);
+    TEST(test_postprocess_values);
     TEST(test_neldermead_shrink_tolerance);
     TEST(test_bukin6_no_warning);
     TEST(test_initial_points);
