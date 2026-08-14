@@ -2,11 +2,11 @@
 schema_version: 2
 title: Wolfram-style notebook view — grouped toolbar, properties sidebar, split panes
 slug: notebook-toolbar
-status: ready-to-implement
+status: in-review
 source: direct-user-request
 owner: Michael Sollami
 issue: pending
-pull_request: pending
+pull_request: https://github.com/stblake/mathilda/pull/57
 started: 2026-08-13
 last_updated: 2026-08-13
 blocked_by: none
@@ -40,11 +40,11 @@ goal_lock:
 
 - Title: `Wolfram-style notebook view — grouped toolbar, properties sidebar, split panes`
 - Slug: `notebook-toolbar`
-- Status: `ready-to-implement`
+- Status: `in-review`
 - Source: `direct-user-request`
 - Owner: `Michael Sollami`
 - Issue / ticket: `pending`
-- Pull request: `pending`
+- Pull request: `stblake/mathilda#57 — FindClusters in n dimensions, runnable reference pages, and a Wolfram-style notebook toolbar`
 - Started: `2026-08-13`
 - Last updated: `2026-08-13`
 - Blocked by: `none`
@@ -305,12 +305,12 @@ Graduated to `NFR-N` under Success Criteria below.
 - [x] critic pass | completed: `2026-08-13 21:32`
 - [x] risk-register reviewed | completed: `2026-08-13 21:32`
 - [ ] feature validated | completed: `pending`
-- [ ] PR created | completed: `pending`
+- [x] PR created | completed: `2026-08-13 21:34`
 - [ ] closeout complete | completed: `pending`
 
 ## PR Updates
 
-- `pending`
+- `2026-08-13 21:34` Opened stblake/mathilda#57 from msollami:feat/findclusters-ndim against main. 15 commits: 7 pre-existing (FindClusters n-dim, reference pages), 8 from this feature. Scoped as one PR at the user's decision — the toolbar commits build on the reference-page ones and touch the same eight frontend files, so splitting would have meant conflict resolution across all of them.
 
 ## Decisions
 
