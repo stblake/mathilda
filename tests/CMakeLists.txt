@@ -642,7 +642,7 @@ set(COMMON_SRC
     ../src/solve.c
     ../src/solvealways.c
     ../src/numerical_roots/findroot.c
-    ../src/findmin.c
+    ../src/numerical_calculus/findmin.c
     ../src/poly/solvepoly.c
     ../src/solvelinsys.c
     ../src/solvenlsys.c
