@@ -301,12 +301,28 @@ static void test_sa_suboptions(void) {
                "Method -> {\"SimulatedAnnealing\", \"BoltzmannExponent\" -> (-#2/(#1 + 1) &), "
                "\"PostProcess\" -> True}]]] < 1.*^-6");
 
+    /* "LevelIterations" -> L sets the trial moves per temperature level, so the
+     * per-chain budget is MaxIterations * L. A longer single chain (no polish,
+     * fixed seed) reaches a strictly deeper raw point than a very short one on a
+     * rugged surface, proving the budget is honored — and honored verbatim, past
+     * the automatic cap. */
+    check_true("First[NMinimize[{-(y + 47) Sin[Sqrt[Abs[y + x/2 + 47]]] "
+               "- x Sin[Sqrt[Abs[x - (y + 47)]]], -512 <= x <= 512 && -512 <= y <= 512}, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"SearchPoints\" -> 1, "
+               "\"LevelIterations\" -> 200, \"PostProcess\" -> False}]] < "
+               "First[NMinimize[{-(y + 47) Sin[Sqrt[Abs[y + x/2 + 47]]] "
+               "- x Sin[Sqrt[Abs[x - (y + 47)]]], -512 <= x <= 512 && -512 <= y <= 512}, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"SearchPoints\" -> 1, "
+               "\"LevelIterations\" -> 2, \"PostProcess\" -> False}]]");
+
     /* Invalid sub-option values warn (NMinimize::sopt / ::bexp) and fall back
      * to the defaults rather than failing: the solve still returns a List. */
     check_eq("Head[NMinimize[{(x-3)^2 + (y+2)^2, -50 <= x <= 50 && -50 <= y <= 50}, {x, y}, "
              "Method -> {\"SimulatedAnnealing\", \"PerturbationScale\" -> -3}]]", "List");
     check_eq("Head[NMinimize[{(x-3)^2 + (y+2)^2, -50 <= x <= 50 && -50 <= y <= 50}, {x, y}, "
              "Method -> {\"SimulatedAnnealing\", \"BoltzmannExponent\" -> \"nope\"}]]", "List");
+    check_eq("Head[NMinimize[{(x-3)^2 + (y+2)^2, -50 <= x <= 50 && -50 <= y <= 50}, {x, y}, "
+             "Method -> {\"SimulatedAnnealing\", \"LevelIterations\" -> -5}]]", "List");
 }
 
 static void test_griewank_simulatedannealing(void) {
@@ -335,6 +351,30 @@ static void test_griewank_simulatedannealing(void) {
                "Method -> {\"SimulatedAnnealing\", \"PerturbationScale\" -> 2.0, "
                "\"BoltzmannExponent\" -> (1/# &), \"SearchPoints\" -> 50}]}, "
                "Head[r] === List && 0 <= First[r] < 200]");
+}
+
+static void test_sa_deceptive_landscapes(void) {
+    /* Deceptive landscapes whose global basin is off-center and unreachable by
+     * greedy descent (Eggholder, Schwefel). Before the adaptive-temperature fix
+     * the acceptance exponent -df/T sat far below the objective's magnitude
+     * (T <= 1, objective spanning hundreds), so every uphill move was rejected
+     * and each "chain" was greedy descent from its random start; the default
+     * 2 n = 4 chains at n = 2 then reported only -716.67 on the Eggholder. With
+     * the per-chain objective-scale temperature -df/(T s) and the
+     * Min[Max[2 n, 12], 50] = 12-chain floor, the default reaches the global
+     * -959.64, below Mathematica's default -935.34. Deterministic under the
+     * fixed default seed. */
+    check_true("First[NMinimize[{-(y + 47) Sin[Sqrt[Abs[y + x/2 + 47]]] "
+               "- x Sin[Sqrt[Abs[x - (y + 47)]]], "
+               "-512 <= x <= 512 && -512 <= y <= 512}, {x, y}, "
+               "Method -> \"SimulatedAnnealing\"]] < -935.0");
+
+    /* Schwefel-2D: global ~0 at (420.97, 420.97). The fixed-temperature greedy
+     * walk stuck one coordinate in a wrong well (~118); the real anneal clears
+     * both coordinates. */
+    check_true("First[NMinimize[{837.9658 - x Sin[Sqrt[Abs[x]]] - y Sin[Sqrt[Abs[y]]], "
+               "-500 <= x <= 500 && -500 <= y <= 500}, {x, y}, "
+               "Method -> \"SimulatedAnnealing\"]] < 0.01");
 }
 
 static void test_griewank_differentialevolution(void) {
@@ -737,6 +777,7 @@ int main(void) {
     TEST(test_postprocess_values);
     TEST(test_sa_suboptions);
     TEST(test_griewank_simulatedannealing);
+    TEST(test_sa_deceptive_landscapes);
     TEST(test_griewank_differentialevolution);
     TEST(test_griewank_neldermead);
     TEST(test_randomsearch_searchpoints_verbatim);

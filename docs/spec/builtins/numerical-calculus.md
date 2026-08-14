@@ -1669,11 +1669,12 @@ Recognised sub-options:
 
 | Sub-option | Applies to | Meaning |
 |------------|-----------|---------|
-| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts) | population / restart / start count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 40}]` under explicit `"DifferentialEvolution"` and `Clip[10·d, {15, 200}]` under `Method -> Automatic`; SimulatedAnnealing `Min[2·d, 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts |
+| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts) | population / restart / start count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 40}]` under explicit `"DifferentialEvolution"` and `Clip[10·d, {15, 200}]` under `Method -> Automatic`; SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts |
 | `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6) |
 | `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9) |
 | `"PerturbationScale" -> s` | SimulatedAnnealing | multiplies the trial-step size (default 1.0); a positive real, an invalid value warns (`NMinimize::sopt`) and falls back to 1.0 |
-| `"BoltzmannExponent" -> f` | SimulatedAnnealing | acceptance-probability exponent for an uphill move: `f[i, df, f0]` (1-based iteration `i`, objective increase `df`, current value `f0`) sets the probability `Exp[f[i, df, f0]]`. `Automatic`/`None` keep the built-in geometric-cooling exponent `-df/T`; an invalid value warns (`NMinimize::bexp`) and falls back to Automatic |
+| `"LevelIterations" -> L` | SimulatedAnnealing | trial moves at each temperature level, so the per-chain budget is `MaxIterations · L` (default 50, the previous fixed multiplier). An explicit value is honored verbatim — past the automatic aggregate cap, like `"SearchPoints"`. A positive integer, or `Automatic`/`None` for the default; an invalid value warns (`NMinimize::sopt`) and falls back to Automatic |
+| `"BoltzmannExponent" -> f` | SimulatedAnnealing | acceptance-probability exponent for an uphill move: `f[i, df, f0]` (1-based iteration `i`, objective increase `df`, current value `f0`) sets the probability `Exp[f[i, df, f0]]`. `Automatic`/`None` keep the built-in cooling exponent `-df/(T·s)`, where `s` is a per-chain estimate of the objective scale (mean `|Δφ|` of a short start-point probe) so the acceptance temperature tracks the objective's magnitude; an invalid value warns (`NMinimize::bexp`) and falls back to Automatic |
 | `"ReflectRatio" -> r` | NelderMead | simplex reflection coefficient (default 1) |
 | `"ExpandRatio" -> e` | NelderMead | simplex expansion coefficient (default 2) |
 | `"ContractRatio" -> c` | NelderMead | simplex contraction coefficient (default 0.5) |
@@ -1721,27 +1722,44 @@ value (a number, a string) warns (`NMinimize::penf`) and falls back to
 `Automatic`. On a box-only problem the option is inert (there are no general
 constraints to penalize).
 
-`"SimulatedAnnealing"` honors three of its own sub-options.
+`"SimulatedAnnealing"` honors four of its own sub-options.
 `"SearchPoints" -> K` runs `K` independent annealing chains from random starts
-and keeps the best local minimum (default `Automatic = Min[2·d, 50]`, matching
-Mathematica); a bounded aggregate iteration budget is shared across the chains so
-a large `K` stays fast. Each chain's best raw point is polished into its basin
-minimum before the chains are ranked — as `"RandomSearch"` does per restart — so
-the reported optimum *improves* monotonically with `"SearchPoints"` (ranking by
-random-walk lows, which need not sit in the deepest basin, does not).
-`"PerturbationScale" -> s` multiplies the size of the random trial step
-(default 1.0) — a small scale keeps the walk local, a large one explores more
-widely. `"BoltzmannExponent" -> f` replaces the Metropolis acceptance exponent
+and keeps the best local minimum (default `Automatic = Min[Max[2·d, 12], 50]`).
+The `2·d` scaling follows Mathematica, but a rugged, many-basin landscape in low
+dimension (Eggholder, Schwefel, Griewank, ...) has far more basins than `2·d = 4`
+starts can cover, so a floor of 12 independent starts is what makes the reported
+optimum reliably the global one there rather than luck-of-the-trajectory; a
+bounded aggregate iteration budget is shared across the chains so a large `K`
+stays fast. Each chain's best raw point is polished into its basin minimum before
+the chains are ranked — as `"RandomSearch"` does per restart — so the reported
+optimum *improves* monotonically with `"SearchPoints"` (ranking by random-walk
+lows, which need not sit in the deepest basin, does not).
+`"LevelIterations" -> L` sets the number of trial moves at each temperature
+level, so a chain's total iteration budget is `MaxIterations · L` (default 50 —
+the value the fixed multiplier used to hard-code, so an unset option reproduces
+the previous schedule exactly). A larger `L` anneals each chain longer; it is
+honored verbatim, past the automatic aggregate cap, since the caller has asked
+for that budget. `"PerturbationScale" -> s` multiplies the size of the random
+trial step (default 1.0) — a small scale keeps the walk local, a large one
+explores more widely. `"BoltzmannExponent" -> f` replaces the Metropolis
+acceptance exponent
 for an uphill move: the point is accepted with probability `Exp[f[i, df, f0]]`,
 where `i` is the (1-based) iteration, `df ≥ 0` the objective increase, and `f0`
-the current objective; `Automatic`/`None` keep the built-in geometric-cooling
-exponent `-df/T`. A downhill move is always accepted, as usual. `"SearchPoints"
--> 1` anneals over the identical PRNG sequence as a single-chain run and polishes
-that one point, so a seeded single-chain result is unchanged; `"PostProcess" ->
-False` skips the per-chain polish and returns the global raw best. On the
+the current objective; `Automatic`/`None` keep the built-in cooling exponent
+`-df/(T·s)`. The temperature scale `s` is measured once per chain from a short
+probe of trial steps at the start point (its mean `|Δφ|`): without it the fixed
+`T ∈ [1e-4, 1]` sits far below an objective ranging over hundreds, every uphill
+move is rejected, and the "anneal" degenerates into greedy descent from the start
+point — so only many restarts, never the walk itself, ever crossed a ridge. The
+probe draws from its own PRNG, so the annealing walk's stream is untouched and a
+seeded `"SearchPoints" -> 1` chain follows exactly the trajectory it would
+without the probe. A downhill move is always accepted, as usual. `"PostProcess"
+-> False` skips the per-chain polish and returns the global raw best. On the
 strongly-multimodal Griewank function `Sum[x[i]²/4000] - Product[Cos[x[i]/√i]] +
 1` over `[-600, 600]^d`, the default multi-chain SimulatedAnnealing reaches
-`~0.015` for `d = 10`, below Mathematica's `~0.175` on the same problem.
+`~0.015` for `d = 10`, below Mathematica's `~0.175` on the same problem; on the
+2-D Eggholder over `[-512, 512]²` it reaches the global `-959.64`, below
+Mathematica's default `-935.34`.
 
 ### Options
 

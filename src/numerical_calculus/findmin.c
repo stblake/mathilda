@@ -2845,6 +2845,8 @@ Expr* builtin_findmaximum(Expr* res) {
 #define NM_PENALTY_MU     1.0e6    /* fixed penalty weight for NelderMead/SA */
 #define NM_SA_TOTAL_CAP   120000   /* SA aggregate iteration cap across chains
                                     * when "SearchPoints" -> K > 1 restarts     */
+#define NM_SA_BURN_IN     30       /* trial steps probed per chain to measure
+                                    * the objective scale for the temperature   */
 #define NM_DEFAULT_SEED   20260814ULL
 #define NM_MAX_REGION_EXPAND 4     /* infeasible-region rescue: grow +-SPAN by
                                     * 10^k for k = 1..this (up to +-1e5)       */
@@ -2866,6 +2868,7 @@ typedef struct {
     Expr*    penalty_fn;     /* "PenaltyFunction" -> f, borrowed / NULL ⇒ auto */
     double   perturb_scale;  /* SA "PerturbationScale"; <0 ⇒ default 1.0       */
     Expr*    boltzmann_fn;   /* SA "BoltzmannExponent" -> f, borrowed / NULL ⇒ auto */
+    int      level_iterations;/* SA "LevelIterations"; <=0 ⇒ auto (50)         */
     uint64_t seed;
 } NmConfig;
 
@@ -3724,20 +3727,42 @@ static void nm_sa(NmDriver* D, const NmConfig* nc, NmRng* rng,
     double pscale = nc->perturb_scale > 0.0 ? nc->perturb_scale : 1.0;
     Expr*  bf     = nc->boltzmann_fn;
 
-    /* "SearchPoints" -> K chains. Default Automatic = Min[2 n, 50]. */
-    int64_t K = nc->search_points > 0
-              ? (int64_t)nc->search_points
-              : (2 * (int64_t)n < 50 ? 2 * (int64_t)n : 50);
+    /* "SearchPoints" -> K independent annealing chains. Default Automatic =
+     * Min[Max[2 n, 12], 50]. The 2 n scaling follows Mathematica, but a rugged,
+     * many-basin landscape in low dimension (Eggholder, Schwefel, Griewank, ...)
+     * has far more basins than 2 n = 4 starts can cover, so which basin the run
+     * reports is left to luck. A floor of 12 independent starts is what turns
+     * these from "sometimes finds the global" into "reliably finds it" at a cost
+     * of a few hundredths of a second — SA is opt-in (the automatic method is
+     * DifferentialEvolution), so only a caller who asked for it pays. */
+    int64_t K;
+    if (nc->search_points > 0) {
+        K = (int64_t)nc->search_points;
+    } else {
+        K = 2 * (int64_t)n;
+        if (K < 12) K = 12;
+        if (K > 50) K = 50;
+    }
     if (K < 1) K = 1;
 
-    /* Per-chain iteration budget. A single chain keeps the original schedule;
-     * many search points share a bounded aggregate so runtime stays in hand,
-     * with a floor so each chain still anneals meaningfully. */
-    int64_t per_chain = D->opts->max_iter > 0 ? D->opts->max_iter * 50 : 5000;
-    if (per_chain > 20000) per_chain = 20000;
-    if (K > 1 && K * per_chain > NM_SA_TOTAL_CAP) {
-        per_chain = NM_SA_TOTAL_CAP / K;
-        if (per_chain < 300) per_chain = 300;
+    /* Per-chain iteration budget = "LevelIterations" trial moves at each of the
+     * MaxIterations temperature levels, so per_chain = MaxIterations *
+     * LevelIterations — Mathematica's semantics, where LevelIterations is the
+     * dwell at each level. The old hard-coded 50 was exactly that implicit
+     * default. An explicit "LevelIterations" is honored verbatim (like
+     * "SearchPoints"): the caller asked for that budget, so the automatic
+     * runtime caps below are skipped. The automatic budget keeps runtime bounded
+     * — a single chain keeps the original schedule, and many search points share
+     * a bounded aggregate, with a floor so each chain still anneals. */
+    int64_t level_it  = nc->level_iterations > 0 ? (int64_t)nc->level_iterations : 50;
+    int64_t base_iter = D->opts->max_iter > 0 ? D->opts->max_iter : 100;
+    int64_t per_chain = base_iter * level_it;
+    if (nc->level_iterations <= 0) {
+        if (per_chain > 20000) per_chain = 20000;
+        if (K > 1 && K * per_chain > NM_SA_TOTAL_CAP) {
+            per_chain = NM_SA_TOTAL_CAP / K;
+            if (per_chain < 300) per_chain = 300;
+        }
     }
 
     double* x  = (double*)malloc(sizeof(double) * n);
@@ -3755,6 +3780,40 @@ static void nm_sa(NmDriver* D, const NmConfig* nc, NmRng* rng,
          * its own and compared against the other chains' basin minima. */
         for (size_t j = 0; j < n; j++) xc[j] = x[j];
         double fc = fx, pc = px;
+
+        /* Adaptive temperature scale. The acceptance exponent -d/T only anneals
+         * when T sits on the scale of the objective differences d. With a fixed
+         * T in [1e-4, 1] and an objective ranging over hundreds (Eggholder,
+         * Schwefel, ...), every uphill move is rejected and the "anneal"
+         * degenerates into greedy descent from the start point — so only many
+         * random restarts, never the walk itself, ever crossed a ridge into a
+         * deeper basin. Probe a handful of full-temperature trial steps to
+         * measure the typical |Δφ| and use it as the scale, so a move that
+         * worsens φ by one characteristic step is accepted with probability
+         * e^{-1/T}. The probe draws from its own RNG so the annealing walk's
+         * stream is untouched — a seeded chain takes exactly the trajectory it
+         * did before the scale was introduced. xn is scratch, overwritten by the
+         * main loop's first proposal. */
+        double scale = 0.0;
+        {
+            NmRng prng;
+            nm_rng_seed(&prng, nc->seed ^ (0x9E3779B97F4A7C15ULL * (uint64_t)(chain + 1)));
+            int nb = 0;
+            for (int b = 0; b < NM_SA_BURN_IN; b++) {
+                for (size_t j = 0; j < n; j++) {
+                    double span = rhi[j] - rlo[j];
+                    xn[j] = x[j] + pscale * (span * 0.1 * 1.1 * nm_rng_normal(&prng));
+                }
+                nm_project(D, xn);
+                double fb, pb;
+                nm_eval(D, xn, &fb, &pb);
+                double db = fabs((fb + NM_PENALTY_MU * pb) - phi);
+                if (isfinite(db)) { scale += db; nb++; }
+            }
+            scale = nb > 0 ? scale / nb : 0.0;
+            if (!(scale > 0.0) || !isfinite(scale))
+                scale = fabs(phi) > 1.0 ? fabs(phi) : 1.0;
+        }
 
         double T = 1.0;
         for (int64_t it = 0; it < per_chain; it++) {
@@ -3774,7 +3833,7 @@ static void nm_sa(NmDriver* D, const NmConfig* nc, NmRng* rng,
             } else {
                 double expo;
                 if (!bf || !nm_boltzmann_exponent(bf, it + 1, d, phi, &expo))
-                    expo = -d / (T + 1e-12);
+                    expo = -d / (T * scale + 1e-12);
                 accept = nm_rng_unif(rng) < exp(expo);   /* NaN prob ⇒ reject */
             }
             if (accept) {
@@ -3925,6 +3984,23 @@ static bool nm_parse_method(Expr* rhs, NmConfig* nc, const char* fn) {
                 else
                     fm_warn(fn, "sopt",
                             "PerturbationScale must be a positive real; using 1.0");
+            } else if (strcmp(on, "LevelIterations") == 0) {
+                /* SimulatedAnnealing: the number of trial moves spent at each
+                 * temperature level. The per-chain iteration budget is
+                 * MaxIterations * LevelIterations (default 50, the value the
+                 * previous fixed multiplier hard-coded), so this scales how long
+                 * each chain anneals. An explicit value is honored verbatim, like
+                 * "SearchPoints"; Automatic / None restore the default. */
+                if (ov->type == EXPR_INTEGER && ov->data.integer > 0
+                    && ov->data.integer <= 2000000000LL)
+                    nc->level_iterations = (int)ov->data.integer;
+                else if (ov->type == EXPR_SYMBOL
+                         && (ov->data.symbol.name == SYM_Automatic
+                             || ov->data.symbol.name == SYM_None))
+                    nc->level_iterations = 0;
+                else
+                    fm_warn(fn, "sopt",
+                            "LevelIterations must be a positive integer; using Automatic");
             } else if (strcmp(on, "BoltzmannExponent") == 0) {
                 /* SimulatedAnnealing: the exponent of the Metropolis acceptance
                  * probability for an uphill move. A function f is called as
@@ -4275,6 +4351,7 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     nc.penalty_fn = NULL;
     nc.perturb_scale = -1.0;
     nc.boltzmann_fn = NULL;
+    nc.level_iterations = 0;
     nc.seed = NM_DEFAULT_SEED;
 
     for (size_t i = pos_end; i < argc; i++) {
