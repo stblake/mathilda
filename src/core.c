@@ -90,6 +90,7 @@
 #include "findroot.h"
 #include "datetime.h"
 #include "linalg.h"
+#include "pca.h"        /* src/ml */
 #include "readwrite.h"
 #include "loadmodule.h"
 #include "files.h"
@@ -842,6 +843,7 @@ void core_init(void) {
     info_init();
     datetime_init();
     linalg_init();
+    ml_init();      /* src/ml -- PrincipalComponents, Standardize */
     void matsol_init(void);
     matsol_init();
     void matinv_init(void);

@@ -375,6 +375,7 @@ set(COMMON_SRC
     ../src/list/nearest.c
     ../src/list/find_clusters.c
     ../src/ml/gmm.c
+    ../src/ml/pca.c
     ../src/list/distance.c
     ../src/patterns.c
     ../src/patterns.c
@@ -845,6 +846,10 @@ add_test(NAME findclusters_distance_tests COMMAND findclusters_distance_tests)
 add_executable(findclusters_ndim_tests test_findclusters_ndim.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(findclusters_ndim_tests PRIVATE ../src)
 add_test(NAME findclusters_ndim_tests COMMAND findclusters_ndim_tests)
+
+add_executable(ml_pca_tests test_ml_pca.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ml_pca_tests PRIVATE ../src)
+add_test(NAME ml_pca_tests COMMAND ml_pca_tests)
 
 add_executable(intersection_tests test_intersection.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(intersection_tests PRIVATE ../src)
