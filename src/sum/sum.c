@@ -308,73 +308,66 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
  * the attempt is certainly not. */
 #define SUM_ARRAY_EXPAND_MAX 256
 
-/*
- * Is the body array-valued at the first index? One extra evaluation of `f`,
- * which the expansion is about to do anyway.
+/* WHY BODY SIZE DECIDES THE PATH. The closed-form stages (polynomial /
+ * geometric / hypergeometric antidifference, and Rational -> Cancel /
+ * PolynomialGCD / Expand / FLINT) cost time proportional to the SIZE OF THE
+ * BODY, not to the number of terms, because they take the body apart
+ * symbolically. On a scalar summand that is nothing. On a large one it is
+ * ruinous, and it FAILS on a body that has no closed form, then falls through to
+ * the enumeration that should have run first:
+ *   - A 256x256 packed grid measured **214 ms per Sum**, versus 0.256 ms to
+ *     expand: that fixed cost was the whole of the vectorised Game of Life
+ *     benchmark, Sum[RotateLeft[m,{i,j}], {i,-1,1}, {j,-1,1}], 463 ms vs 0.81 ms
+ *     for the same nine terms as an explicit Plus (and unpacked as well).
+ *   - A 20-D rotated Rastrigin objective, Sum[z[[i]]^2 - 10 Cos[2 Pi z[[i]]],
+ *     {i, 1, 20}] with z = q.vars, took MINUTES to build: each z[[i]] carries
+ *     the whole dotted vector, so every stage churned over it and failed.
+ *     Enumerating the 20 terms is instant.
+ * Only SHORT ranges skip the closed form, where the enumeration is bounded and
+ * cheap no matter how big the body is. A long range keeps trying the closed
+ * form -- Sum[m, {i, 1, 10^5}] for a constant matrix m answers in 0.53 ms that
+ * way and would cost 10^5 buffer adds by expansion.
  *
- * WHY THIS IS ASKED AT ALL. The closed-form stages (polynomial / geometric /
- * hypergeometric antidifference) cost time proportional to the SIZE OF THE BODY,
- * not to the number of terms, because they take the body apart symbolically. On
- * a scalar body that is nothing. On a 256x256 packed grid it measured **214 ms
- * per Sum**, and then failed and fell through to the expansion anyway -- which
- * took 0.256 ms. That single fixed cost was the whole of the vectorised Game of
- * Life benchmark: Sum[RotateLeft[m,{i,j}], {i,-1,1}, {j,-1,1}] took 463 ms where
- * the same nine terms written as an explicit Plus took 0.81 ms, 572x, and the
- * result came back UNPACKED as well.
- *
- * The attempt is not skipped in general, because it genuinely works on array
- * bodies and is worth a great deal there: Sum[m, {i, 1, 10^5}] for a constant
- * matrix m answers in 0.53 ms via the closed form and would cost 10^5 buffer
- * adds by expansion. Only the SHORT range skips it, where the expansion is
- * bounded and cheap no matter what the body is.
- */
-/* Could this held body plausibly evaluate to an array? True when it mentions a
- * symbol whose OwnValue is one.
- *
- * A pre-filter for the probe below, and it earns its place: the probe is one
- * extra evaluation of the body, which is nothing beside a 214 ms closed-form
- * attempt but is NOT nothing beside an ordinary scalar Sum -- paying it
- * unconditionally took Sum[i j, {i,-1,1}, {j,-1,1}] from 31 to 60 us. A purely
- * arithmetic body mentions no array-bound symbol, so it never probes and never
- * pays.
- *
- * Conservative in the useful direction: a body that produces an array WITHOUT
- * naming one (Sum[Range[1., 300.] i, {i,1,3}]) simply misses the optimisation
- * and behaves exactly as before. It cannot produce a wrong answer either way --
- * this only chooses which of two correct paths runs. */
-static bool sum_body_names_array(const Expr* e) {
-    if (!e) return false;
-    /* An array LITERAL sitting in the body. This is not a corner case, it is the
-     * common one: a helper like nb[q_] := Sum[RotateLeft[q,{i,j}], ...] binds q
-     * by SUBSTITUTION, so by the time Sum sees the body there is no symbol left
-     * to look up -- the packed grid is spliced in directly. Checking only for
-     * array-valued symbols found nothing here and left the whole Game of Life
-     * benchmark on the slow path. */
-    if (is_ndarray(e)) return true;
+ * SUM_BODY_CLOSED_FORM_MAX is the node budget below which a body is cheap to
+ * decompose. Ordinary scalar summands (i^2, r^i, i x[i], small polynomials --
+ * tens of nodes) stay under it and on the closed-form-first path unchanged. */
+#define SUM_BODY_CLOSED_FORM_MAX 48
+
+/* Node count of the body AS THE CLOSED-FORM STAGES WILL SEE IT, capped at
+ * `limit`. Two twists over a plain node walk, both essential because Sum is
+ * HoldAll and the body arrives unevaluated:
+ *   - a SYMBOL is charged the size of its OwnValue (the tree the cascade gets
+ *     once it evaluates the body). A summand like Part[z, i] is three held
+ *     nodes, but z is a length-n list, so the cascade sees Part[<the whole
+ *     list>, i]; charging z's value is what exposes that. (+1 per symbol before
+ *     recursing keeps a cyclic OwnValue like a := a + 1 from looping -- acc rises
+ *     every hop and the cap stops it.)
+ *   - an NDArray counts as the whole budget: cheap as a single node, but
+ *     expensive to take apart, and spliced in directly by helpers that bind
+ *     their grid argument by substitution (the Game of Life case).
+ * Capped, so this is O(min(size, limit)): a handful of nodes for an ordinary
+ * summand -- and, unlike the old array probe, it never EVALUATES the body, so a
+ * purely arithmetic Sum pays only a short pointer walk, not a spare evaluation. */
+static int64_t sum_body_expanded_size(const Expr* e, int64_t limit, int64_t acc) {
+    if (!e || acc > limit) return acc;
+    if (is_ndarray(e)) return limit + 1;
     if (e->type == EXPR_SYMBOL) {
         SymbolDef* d = symtab_lookup(e->data.symbol.name);
         if (d && d->own_values && d->own_values->replacement)
-            return is_ndarray(d->own_values->replacement);
-        return false;
+            return sum_body_expanded_size(d->own_values->replacement, limit, acc + 1);
+        return acc + 1;
     }
-    if (e->type != EXPR_FUNCTION) return false;
-    if (sum_body_names_array(e->data.function.head)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (sum_body_names_array(e->data.function.args[i])) return true;
-    return false;
+    if (e->type != EXPR_FUNCTION) return acc + 1;
+    acc += 1;
+    acc = sum_body_expanded_size(e->data.function.head, limit, acc);
+    for (size_t i = 0; i < e->data.function.arg_count && acc <= limit; i++)
+        acc = sum_body_expanded_size(e->data.function.args[i], limit, acc);
+    return acc;
 }
 
-static bool sum_body_is_array(Expr* f, Expr* var, Expr* imin) {
-    if (var->type != EXPR_SYMBOL) return false;
-    Rule* saved = iter_spec_shadow(var);
-    Expr* i_val = expr_copy(imin);
-    symtab_add_own_value(var->data.symbol.name, var, i_val);
-    Expr* probe = evaluate(f);
-    expr_free(i_val);
-    iter_spec_restore(var, saved);
-    bool arr = probe && is_ndarray(probe);
-    if (probe) expr_free(probe);
-    return arr;
+static bool sum_body_is_expensive(const Expr* f) {
+    return sum_body_expanded_size(f, SUM_BODY_CLOSED_FORM_MAX, 0)
+               > SUM_BODY_CLOSED_FORM_MAX;
 }
 
 static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
@@ -416,12 +409,16 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
          * The iterator is shadowed because Sum is HoldAll: an outer binding of
          * var would otherwise leak into the held body and the stage args. */
         double nterms = (max_val - min_val) / di_val + 1.0;
-        bool short_array_body =
-            nterms <= (double)SUM_ARRAY_EXPAND_MAX &&
-            sum_body_names_array(f) &&
-            sum_body_is_array(f, s.var, s.imin);
+        /* Skip the closed-form cascade for a SHORT range whose body is
+         * expensive to take apart symbolically -- a large symbolic tree or an
+         * array (see sum_body_is_expensive and SUM_ARRAY_EXPAND_MAX). The
+         * cascade's cost scales with body size while the enumeration below is
+         * bounded and cheap, so on such a body the cascade only churns and
+         * fails before falling through to it. */
+        bool short_expensive_body =
+            nterms <= (double)SUM_ARRAY_EXPAND_MAX && sum_body_is_expensive(f);
 
-        if (!is_real && di_val == 1.0 && min_val <= max_val && !short_array_body) {
+        if (!is_real && di_val == 1.0 && min_val <= max_val && !short_expensive_body) {
             Rule* saved = iter_spec_shadow(s.var);
             Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
             iter_spec_restore(s.var, saved);
