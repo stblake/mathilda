@@ -310,16 +310,17 @@ static void test_sa_suboptions(void) {
 }
 
 static void test_griewank_simulatedannealing(void) {
-    /* Griewank-10 on [-600, 600]^10 is strongly multimodal: SimulatedAnnealing
-     * settles into a nonzero local minimum rather than the global 0, exactly as
-     * Mathematica does (its SA reports a value in the ~0.2-0.8 range here). The
-     * default single-chain geometric-cooling Metropolis schedule lands in a good
-     * basin at ~0.234 — the same value Mathematica returns on this problem.
-     * Deterministic under the fixed default seed. */
+    /* Griewank-10 on [-600, 600]^10 is strongly multimodal. The default
+     * SimulatedAnnealing runs Min[2 n, 50] = 20 independent chains and polishes
+     * each chain's best into its basin minimum before ranking (as RandomSearch
+     * does per restart), so it reaches a far deeper basin than a single walk can
+     * — ~0.015 here, well below Mathematica's ~0.175 on the same problem, and a
+     * large improvement on the old single-chain ~0.31. Deterministic under the
+     * fixed default seed. */
     check_true("Module[{r = NMinimize[{Sum[x[i]^2/4000, {i, 1, 10}] "
                "- Product[Cos[x[i]/Sqrt[i]], {i, 1, 10}] + 1, "
                "Table[-600 <= x[i] <= 600, {i, 1, 10}]}, Table[x[i], {i, 1, 10}], "
-               "Method -> \"SimulatedAnnealing\"]}, 0.1 < First[r] < 1.0]");
+               "Method -> \"SimulatedAnnealing\"]}, 0 <= First[r] < 0.1]");
 
     /* The exact reported invocation — all three sub-options together — is
      * accepted and returns a valid, finite feasible minimum. The degenerate

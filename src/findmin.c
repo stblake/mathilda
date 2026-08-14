@@ -3583,13 +3583,24 @@ static bool nm_boltzmann_exponent(Expr* bf, int64_t i, double df, double f0,
  *
  * Honors three "SimulatedAnnealing" sub-options:
  *   "SearchPoints" -> K       run K independent annealing chains from random
- *                             starts and keep the global best (default 1);
+ *                             starts and keep the best local minimum (default
+ *                             Automatic = Min[2 n, 50], following Mathematica);
  *   "PerturbationScale" -> s  multiply the trial-step size by s (default 1.0);
  *   "BoltzmannExponent" -> f  use Exp[f[i, df, f0]] as the acceptance
  *                             probability for an uphill move (default -df/T).
- * The single-chain, default-option path is bit-for-bit identical to before
- * (scale 1.0 is an exact multiply, and the RNG is drawn in the same order), so
- * a seeded run without these options is unchanged. */
+ *
+ * A rugged, many-basin landscape (Griewank, Rastrigin, ...) is not solved by a
+ * single annealing walk: which basin one walk lands in is close to luck. So the
+ * default runs Min[2 n, 50] independent chains and — crucially — polishes the
+ * best raw point of *each* chain into its basin minimum before ranking them,
+ * exactly as RandomSearch does per restart. Ranking chains by their local
+ * minima rather than by their random-walk lows is what makes the reported
+ * optimum improve, not degrade, as SearchPoints grows: the lowest point a walk
+ * happens to visit is often in a shallower basin than a slightly higher point
+ * that sits above a deeper one. The RNG is still drawn in the original order
+ * within each chain, so a seeded single-chain run (SearchPoints -> 1) anneals
+ * identically to before and reaches the same polished point the driver's
+ * post-process already produced. */
 static void nm_sa(NmDriver* D, const NmConfig* nc, NmRng* rng,
                   double* xbest, double* fbest, double* penbest) {
     size_t n = D->n;
@@ -3598,8 +3609,11 @@ static void nm_sa(NmDriver* D, const NmConfig* nc, NmRng* rng,
     double pscale = nc->perturb_scale > 0.0 ? nc->perturb_scale : 1.0;
     Expr*  bf     = nc->boltzmann_fn;
 
-    /* "SearchPoints" -> K restarts (default: a single chain). */
-    int64_t K = nc->search_points > 0 ? (int64_t)nc->search_points : 1;
+    /* "SearchPoints" -> K chains. Default Automatic = Min[2 n, 50]. */
+    int64_t K = nc->search_points > 0
+              ? (int64_t)nc->search_points
+              : (2 * (int64_t)n < 50 ? 2 * (int64_t)n : 50);
+    if (K < 1) K = 1;
 
     /* Per-chain iteration budget. A single chain keeps the original schedule;
      * many search points share a bounded aggregate so runtime stays in hand,
@@ -3613,6 +3627,7 @@ static void nm_sa(NmDriver* D, const NmConfig* nc, NmRng* rng,
 
     double* x  = (double*)malloc(sizeof(double) * n);
     double* xn = (double*)malloc(sizeof(double) * n);
+    double* xc = (double*)malloc(sizeof(double) * n);  /* best raw point in chain */
     bool have = false;
 
     for (int64_t chain = 0; chain < K; chain++) {
@@ -3621,10 +3636,10 @@ static void nm_sa(NmDriver* D, const NmConfig* nc, NmRng* rng,
         double fx, px;
         nm_eval(D, x, &fx, &px);
         double phi = fx + NM_PENALTY_MU * px;
-        if (!have || nm_better(fx, px, *fbest, *penbest)) {
-            for (size_t j = 0; j < n; j++) xbest[j] = x[j];
-            *fbest = fx; *penbest = px; have = true;
-        }
+        /* Track this chain's best raw point separately, so it can be polished on
+         * its own and compared against the other chains' basin minima. */
+        for (size_t j = 0; j < n; j++) xc[j] = x[j];
+        double fc = fx, pc = px;
 
         double T = 1.0;
         for (int64_t it = 0; it < per_chain; it++) {
@@ -3650,16 +3665,39 @@ static void nm_sa(NmDriver* D, const NmConfig* nc, NmRng* rng,
             if (accept) {
                 for (size_t j = 0; j < n; j++) x[j] = xn[j];
                 phi = phin; fx = fn2; px = pn2;
-                if (nm_better(fx, px, *fbest, *penbest)) {
-                    for (size_t j = 0; j < n; j++) xbest[j] = x[j];
-                    *fbest = fx; *penbest = px;
+                if (nm_better(fx, px, fc, pc)) {
+                    for (size_t j = 0; j < n; j++) xc[j] = x[j];
+                    fc = fx; pc = px;
                 }
             }
             T *= 0.995;
             if (T < 1e-4) T = 1e-4;
         }
+
+        /* Polish this chain's best raw point into its basin minimum, then keep
+         * the global best of the polished candidates. A BFGS step can overshoot
+         * a bound-projected point, so fall back to the pre-polish value if the
+         * polish came out worse by Deb's rules (never worsens the chain).
+         *
+         * Skipped when the caller disabled polishing with "PostProcess" -> False:
+         * then the per-chain raw best is carried straight through and the global
+         * best over chains is the global raw best — bit-for-bit what a single
+         * global-raw-best pass over the same RNG sequence produced before. */
+        double fp = fc, pp = pc;
+        for (size_t j = 0; j < n; j++) x[j] = xc[j];   /* x reused as polish buffer */
+        if (nc->post_process != 0) {
+            nm_local_polish(D, x, &fp, &pp);
+            if (nm_better(fc, pc, fp, pp)) {
+                for (size_t j = 0; j < n; j++) x[j] = xc[j];
+                fp = fc; pp = pc;
+            }
+        }
+        if (!have || nm_better(fp, pp, *fbest, *penbest)) {
+            for (size_t j = 0; j < n; j++) xbest[j] = x[j];
+            *fbest = fp; *penbest = pp; have = true;
+        }
     }
-    free(x); free(xn);
+    free(x); free(xn); free(xc);
 }
 
 /* ------------------------------------------------------------------ *
