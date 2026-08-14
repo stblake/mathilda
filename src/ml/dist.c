@@ -10,6 +10,7 @@
 #include "numarray.h"
 #include "random.h"
 #include "mlutil.h"
+#include "pca.h"       /* ml_column_mean */
 #include "dist.h"
 
 #ifndef M_PI
@@ -55,6 +56,51 @@ typedef struct {
     const double* chol;   /* borrowed, lower factor */
 } MlDist;
 
+/* Read a LearnedDistribution["Multinormal", {mean, covRows...}, dim, 0] into d.
+ *
+ * `owned` receives one allocation holding the mean followed by the Cholesky factor, so
+ * the caller frees exactly one thing. Returns false if the covariance will not
+ * factorise -- which is information rather than an error, since it means the fitted
+ * covariance is singular (fewer points than dimensions, or collinear ones) and no
+ * density exists. */
+static bool ml_read_learned(Expr* e, MlDist* d, double** owned) {
+    size_t argc = e->data.function.arg_count;
+    if (argc != 4) return false;
+    Expr* mname = e->data.function.args[0];
+    Expr* pay   = e->data.function.args[1];
+    Expr* dimx  = e->data.function.args[2];
+    if (!mname || mname->type != EXPR_STRING) return false;
+    if (strcmp(mname->data.string, "Multinormal") != 0) return false;
+    if (!pay || pay->type != EXPR_FUNCTION) return false;
+    if (!dimx || dimx->type != EXPR_INTEGER || dimx->data.integer <= 0) return false;
+    size_t dim = (size_t)dimx->data.integer;
+    if (pay->data.function.arg_count != dim + 1) return false;
+
+    double* buf = malloc(sizeof(double) * (dim + dim * dim + dim * dim));
+    if (!buf) return false;
+    double* mu = buf, *cov = buf + dim, *chol = buf + dim + dim * dim;
+    double im = 0.0; bool ok = true;
+    Expr* mrow = pay->data.function.args[0];
+    if (!mrow || mrow->type != EXPR_FUNCTION || mrow->data.function.arg_count != dim)
+        ok = false;
+    for (size_t j = 0; ok && j < dim; j++)
+        ok = na_read_scalar(mrow->data.function.args[j], &mu[j], &im) && im == 0.0;
+    for (size_t a = 0; ok && a < dim; a++) {
+        Expr* cr = pay->data.function.args[a + 1];
+        if (!cr || cr->type != EXPR_FUNCTION || cr->data.function.arg_count != dim) {
+            ok = false; break;
+        }
+        for (size_t b = 0; ok && b < dim; b++)
+            ok = na_read_scalar(cr->data.function.args[b], &cov[a * dim + b], &im)
+              && im == 0.0;
+    }
+    if (ok) ok = ml_chol(cov, chol, dim);
+    if (!ok) { free(buf); return false; }
+    d->kind = ML_D_MULTINORMAL; d->dim = dim; d->mu = mu; d->chol = chol;
+    *owned = buf;
+    return true;
+}
+
 static bool ml_read_dist(Expr* e, MlDist* d, double** owned) {
     *owned = NULL;
     if (!e || e->type != EXPR_FUNCTION) return false;
@@ -63,6 +109,8 @@ static bool ml_read_dist(Expr* e, MlDist* d, double** owned) {
     const char* hn = h->data.symbol.name;
     size_t argc = e->data.function.arg_count;
     double im = 0.0;
+
+    if (strcmp(hn, "LearnedDistribution") == 0) return ml_read_learned(e, d, owned);
 
     if (strcmp(hn, "NormalDistribution") == 0) {
         d->kind = ML_D_NORMAL; d->dim = 1;
@@ -105,12 +153,53 @@ static bool ml_pdf_at(const MlDist* d, double x, double* out) {
     }
 }
 
+/* Multinormal log-density at a dim-vector. Kept in log space and exponentiated once,
+ * for the reason gmm.c's E-step is: a product of dim Gaussian factors underflows for a
+ * point a few standard deviations out, and the log form does not. */
+static bool ml_multinormal_pdf(const MlDist* d, const double* x, double* out) {
+    double* y = malloc(sizeof(double) * d->dim);
+    if (!y) return false;
+    double q = ml_mahalanobis(d->chol, d->mu, x, d->dim, y);
+    free(y);
+    double logdet = 0.0;
+    for (size_t a = 0; a < d->dim; a++) logdet += log(d->chol[a * d->dim + a]);
+    logdet *= 2.0;
+    *out = exp(-0.5 * ((double)d->dim * log(2.0 * M_PI) + logdet + q));
+    return true;
+}
+
 static Expr* builtin_pdf(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     MlDist d; double* owned = NULL;
     if (!ml_read_dist(res->data.function.args[0], &d, &owned)) return NULL;
     Expr* xe = res->data.function.args[1];
     double x = 0.0, im = 0.0;
+
+    if (d.kind == ML_D_MULTINORMAL) {
+        /* The argument is a POINT, so a list here is one observation rather than many.
+         * That is the opposite reading from the scalar case below, where a list is many
+         * points -- and it has to be, because a multinormal's argument is itself a
+         * list. Getting this backwards would silently treat each coordinate as a
+         * separate observation. */
+        size_t n, dm; double* px = NULL; bool vec = false;
+        Expr* out = NULL;
+        if (ml_read_data(xe, &n, &dm, &px, &vec)) {
+            double p = 0.0;
+            if (vec && n == d.dim && ml_multinormal_pdf(&d, px, &p))
+                out = expr_new_real(p);
+            else if (!vec && dm == d.dim) {         /* a matrix: many points */
+                double* o = malloc(sizeof(double) * n);
+                bool ok = o != NULL;
+                for (size_t i = 0; ok && i < n; i++)
+                    ok = ml_multinormal_pdf(&d, px + i * dm, &o[i]);
+                if (ok) out = ml_list_of_reals(o, n);
+                free(o);
+            }
+            free(px);
+        }
+        free(owned);
+        return out;
+    }
 
     /* A list of points threads, giving a list of densities -- the shape a caller
      * plotting a density actually wants. */
@@ -166,7 +255,107 @@ static Expr* builtin_randomvariate(Expr* res) {
     return out;
 }
 
+/* ---- LearnDistribution ---------------------------------------------------- */
+
+/* LearnDistribution[data] fits a distribution and returns a LearnedDistribution.
+ *
+ * A learned distribution IS a fitted model, so it uses the trained-model
+ * representation from src/ml/predict.h and prints elided. That is the deliberate
+ * opposite of a SPECIFIED distribution like NormalDistribution[mu, sigma], which prints
+ * in full because its parameters are what the user wrote rather than what was derived.
+ * The two must not be unified, and a test pins each convention.
+ *
+ * Only "Multinormal" here; GaussianMixture is the next piece and will reuse
+ * ml_gmm_fit / ml_gmm_logpdf, which were extracted for exactly that.
+ */
+static Expr* builtin_learn_distribution(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return NULL;
+    if (argc == 2) {
+        Expr* o = res->data.function.args[1];
+        if (!o || o->type != EXPR_FUNCTION || o->data.function.arg_count != 2) return NULL;
+        Expr* h = o->data.function.head;
+        if (!h || h->type != EXPR_SYMBOL) return NULL;
+        const char* hn = h->data.symbol.name;
+        if (hn != SYM_Rule && hn != SYM_RuleDelayed) return NULL;
+        Expr* lhs = o->data.function.args[0];
+        Expr* rhs = o->data.function.args[1];
+        if (!lhs || lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Method)
+            return NULL;
+        if (!rhs || rhs->type != EXPR_STRING) return NULL;
+        if (strcmp(rhs->data.string, "Multinormal") != 0) return NULL;
+    }
+
+    size_t n, dim; double* x = NULL; bool vec = false;
+    if (!ml_read_data(res->data.function.args[0], &n, &dim, &x, &vec)) return NULL;
+    /* A flat list is n observations of ONE variable, which is a perfectly good
+     * univariate normal -- so unlike PrincipalComponents this does not decline it. */
+    if (n < 2) { free(x); return NULL; }        /* one point has no dispersion to fit */
+
+    double* mean = malloc(sizeof(double) * dim);
+    double* cov  = malloc(sizeof(double) * dim * dim);
+    double* chk  = malloc(sizeof(double) * dim * dim);
+    if (!mean || !cov || !chk) { free(mean); free(cov); free(chk); free(x); return NULL; }
+    ml_column_mean(x, n, dim, mean);
+    /* Sample covariance with the n-1 divisor, matching ml_column_sd and Variance, so a
+     * one-variable fit agrees with StandardDeviation squared. */
+    double den = (double)(n - 1);
+    for (size_t a = 0; a < dim; a++)
+        for (size_t b = 0; b <= a; b++) {
+            double sacc = 0.0;
+            for (size_t i = 0; i < n; i++)
+                sacc += (x[i * dim + a] - mean[a]) * (x[i * dim + b] - mean[b]);
+            cov[a * dim + b] = cov[b * dim + a] = sacc / den;
+        }
+
+    /* Refuse a singular covariance rather than returning an object with no density.
+     * Collinear features or fewer observations than dimensions land here, and a
+     * pseudo-density would be a fiction. */
+    Expr* out = NULL;
+    if (ml_chol(cov, chk, dim)) {
+        Expr** rows = malloc(sizeof(Expr*) * (dim + 1));
+        if (rows) {
+            rows[0] = ml_list_of_reals(mean, dim);
+            for (size_t a = 0; a < dim; a++)
+                rows[a + 1] = ml_list_of_reals(cov + a * dim, dim);
+            Expr* pay = expr_new_function(expr_new_symbol(SYM_List), rows, dim + 1);
+            free(rows);
+            if (pay) {
+                Expr* a4[4];
+                a4[0] = expr_new_string("Multinormal");
+                a4[1] = pay;
+                a4[2] = expr_new_integer((int64_t)dim);
+                a4[3] = expr_new_integer(0);
+                if (a4[0] && a4[1] && a4[2] && a4[3])
+                    out = expr_new_function(expr_new_symbol("LearnedDistribution"), a4, 4);
+                else { expr_free(a4[0]); expr_free(a4[1]); expr_free(a4[2]); expr_free(a4[3]); }
+            }
+        }
+    }
+    free(mean); free(cov); free(chk); free(x);
+    return out;
+}
+
 void ml_dist_init(void) {
+    symtab_add_builtin("LearnDistribution", builtin_learn_distribution);
+    symtab_get_def("LearnDistribution")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("LearnDistribution",
+        "LearnDistribution[data] fits a distribution to data and returns a "
+        "LearnedDistribution, usable with PDF. Method -> \"Multinormal\" is the only "
+        "method implemented and is the default: it fits a mean vector and a sample "
+        "covariance (n-1 divisor, matching Variance). Rows are observations and columns "
+        "are variables; a flat list is n observations of one variable. A singular "
+        "covariance -- collinear columns, or fewer observations than dimensions -- "
+        "returns unevaluated, because no density exists rather than because of an "
+        "error.");
+
+    symtab_get_def("LearnedDistribution")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("LearnedDistribution",
+        "LearnedDistribution[method, parameters, dimension, extra] is the fitted "
+        "distribution LearnDistribution returns. Use it with PDF. Unlike a SPECIFIED "
+        "distribution such as NormalDistribution[mu, sigma], it prints elided, because "
+        "its parameters are derived rather than user-supplied.");
+
     symtab_add_builtin("RandomVariate", builtin_randomvariate);
     symtab_get_def("RandomVariate")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("RandomVariate",

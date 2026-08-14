@@ -219,6 +219,7 @@ extern const char* SYM_Beta;
 extern const char* SYM_Gamma;
 extern const char* SYM_InterpolatingFunction;
 extern const char* SYM_PredictorFunction;
+extern const char* SYM_LearnedDistribution;
 extern const char* SYM_DimensionReducerFunction;
 extern const char* SYM_Interpolation;
 extern const char* SYM_InterpolationOrder;

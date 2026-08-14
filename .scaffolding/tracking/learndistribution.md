@@ -83,7 +83,7 @@ goal_lock:
 ## Task List
 
 - [x] `Expose random_uniform_01; Box-Muller Gaussian deviate; RandomVariate; PDF; Normal and Uniform distribution objects` | `independent` | `done (iteration 16)`
-- [ ] `LearnDistribution with Method -> "Multinormal"` | `depends on: distributions` | `pending`
+- [x] `LearnDistribution with Method -> "Multinormal"` | `depends on: distributions` | `done (iteration 17)`
 - [ ] `LearnDistribution with Method -> "GaussianMixture" (wire up ml_gmm_fit/ml_gmm_logpdf)` | `depends on: distributions` | `pending`
 - [ ] `SmoothKernelDistribution / KernelDensityEstimation` | `depends on: distributions` | `pending`
 - [ ] `ContingencyTable` | `independent` | `pending`
@@ -133,7 +133,7 @@ goal_lock:
 
 - Potential tech debt introduced:
   - `The Box-Muller cache is per-process static state. Correct here, but it would need care if the evaluator ever became multi-threaded.`
-  - `MlDist carries unused mu/chol/dim fields for a Multinormal that is not implemented yet -- they land with the next piece.`
+  - `RESOLVED (iteration 17): the mu/chol/dim fields are now used by the Multinormal path.`
 - Existing tech debt noticed:
   - `PDF supports only the two distributions implemented here; Wolfram PDF is generic over its whole distribution zoo.`
 - Mitigations taken:
@@ -143,6 +143,7 @@ goal_lock:
 
 ## Activity Log
 
+- `2026-08-14 02:50` Iteration 17: LearnDistribution with Multinormal. Promoted ml_chol and ml_mahalanobis out of gmm.c into src/ml/mlutil -- second real consumer, the same rule that promoted the list builders and that declined to extract find_clusters.c's metric layer. Verified the GMM still passes after the move before going further. The independent cross-check is strong here: a 1-D fit reaches its density via Cholesky + Mahalanobis while PDF[NormalDistribution] uses the scalar closed form, sharing no code, and they agree exactly including 3.5 sigma into the tail where a wrong log-determinant would show only as a small relative error. Added a normalisation test too -- the density integrates to 1.0 over +/-6 sigma -- because an agreement test alone would pass two densities sharing a normalisation error. One asymmetry worth noting in the code: for a multinormal a flat list is ONE point (its argument is a list), the opposite of the scalar case where a list is many points.
 - `2026-08-14 02:35` Created, and iteration 16 landed: random_uniform_01 exposed, a Box-Muller Gaussian deviate (the tree had none), RandomVariate, PDF, and the Normal/Uniform distribution objects. The non-obvious bug found and fixed by design rather than by accident: SeedRandom must clear the cached spare deviate, or reproducibility half-works -- honoured by RandomReal, silently broken for RandomVariate -- and it only shows after an ODD number of prior draws, so both parities are asserted. Cross-checked PDF against the closed form computed by the existing symbolic machinery, which shares no code with the C density.
 
 ## Reflection

@@ -114,6 +114,80 @@ static void test_invalid_parameters_decline(void) {
     assert_eval_eq("RandomVariate[NormalDistribution[], 0]", "{}", 0);
 }
 
+#define D1 "{1., 2., 3., 4., 5., 6.}"
+#define D2 "{{1., 2.}, {2., 3.}, {3., 5.}, {4., 4.}, {5., 7.}, {6., 8.}}"
+
+static void test_one_dimensional_multinormal_equals_the_normal_pdf(void) {
+    /* THE cross-check for LearnDistribution, and a strong one: the fitted multinormal
+     * reaches its density through a Cholesky factor and a Mahalanobis distance, while
+     * PDF[NormalDistribution[...]] evaluates the scalar closed form. The two share no
+     * code, so agreement is evidence about both.
+     *
+     * Checked in the far tail (x = 10, about 3.5 sigma out) as well as at the mean,
+     * because the tail is where a wrong log-determinant or a missing 2 pi would show up
+     * as a small relative error rather than an obvious one. */
+    const char* xs[] = { "1.", "3.5", "6.", "10." };
+    for (size_t i = 0; i < sizeof(xs) / sizeof(xs[0]); i++) {
+        char in[512];
+        snprintf(in, sizeof in,
+                 "Chop[PDF[LearnDistribution[" D1 "], {%s}] - "
+                 "PDF[NormalDistribution[Mean[" D1 "], StandardDeviation[" D1 "]], %s]]",
+                 xs[i], xs[i]);
+        assert_eval_eq(in, "0", 0);
+    }
+}
+
+static void test_the_fitted_density_integrates_to_one(void) {
+    /* A density that is merely proportional to the right shape would pass every
+     * agreement test against another density with the same normalisation error. This
+     * one pins the normalisation absolutely: a trapezoid sum over +/- 6 sigma must be
+     * 1 to three decimals. */
+    assert_eval_eq("Module[{m = LearnDistribution[" D1 "], mu, sd, h, g},"
+                   " mu = Mean[" D1 "]; sd = StandardDeviation[" D1 "]; h = 0.01;"
+                   " g = Table[mu - 6. sd + h i, {i, 0, Round[12. sd/h]}];"
+                   " Abs[h Total[Map[PDF[m, {#}] &, g]] - 1.] < 0.001]", "True", 0);
+}
+
+static void test_multinormal_in_two_dimensions(void) {
+    /* The density must be maximal at the fitted mean and negligible far away -- the
+     * minimum any correct multivariate density satisfies. */
+    assert_eval_eq("Module[{m = LearnDistribution[" D2 "]},"
+                   " PDF[m, {3.5, 4.8333333}] > PDF[m, {6., 2.}] > PDF[m, {50., 50.}]]",
+                   "True", 0);
+    /* A MATRIX of points threads, giving one density each. Note the asymmetry with the
+     * scalar case: for a multinormal a flat list is ONE point, because its argument is
+     * itself a list -- reading it as many points would silently treat each coordinate
+     * as a separate observation. */
+    assert_eval_eq("Length[PDF[LearnDistribution[" D2 "], {{3.5, 4.8}, {50., 50.}}]]",
+                   "2", 0);
+    assert_eval_eq("NumberQ[PDF[LearnDistribution[" D2 "], {3.5, 4.8}]]", "True", 0);
+}
+
+static void test_learned_distributions_elide_but_specified_ones_do_not(void) {
+    /* Both directions of the deliberate contrast. A fitted distribution's parameters are
+     * derived, so it elides; a specified distribution's are what the user wrote, so it
+     * prints them. These two rows together are what stops a later change from unifying
+     * the conventions. */
+    assert_eval_eq("LearnDistribution[" D1 "]",
+                   "LearnedDistribution[\"Multinormal\", <>]", 0);
+    assert_eval_eq("NormalDistribution[3.5, 2.]", "NormalDistribution[3.5, 2.0]", 0);
+    /* And FullForm still reveals the fitted parameters. */
+    assert_eval_eq("FullForm[LearnDistribution[" D1 "]]",
+                   "LearnedDistribution[\"Multinormal\", "
+                   "List[List[3.5], List[3.5]], 1, 0]", 0);
+}
+
+static void test_singular_fits_decline(void) {
+    /* Perfectly collinear columns give a singular covariance, so no density exists --
+     * declining is the honest answer, where a pseudo-inverse would invent one. */
+    assert_eval_eq("Head[LearnDistribution[{{1., 2.}, {2., 4.}, {3., 6.}}]]",
+                   "LearnDistribution", 0);
+    /* One observation has no dispersion to fit. */
+    assert_eval_eq("Head[LearnDistribution[{{1., 2.}}]]", "LearnDistribution", 0);
+    assert_eval_eq("Head[LearnDistribution[" D1 ", Method -> \"Poisson\"]]",
+                   "LearnDistribution", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -125,6 +199,11 @@ int main(void) {
     TEST(test_sample_moments_match_the_distribution);
     TEST(test_distribution_objects_print_in_full);
     TEST(test_invalid_parameters_decline);
+    TEST(test_one_dimensional_multinormal_equals_the_normal_pdf);
+    TEST(test_the_fitted_density_integrates_to_one);
+    TEST(test_multinormal_in_two_dimensions);
+    TEST(test_learned_distributions_elide_but_specified_ones_do_not);
+    TEST(test_singular_fits_decline);
 
     printf("All ml distribution tests passed.\n");
     return 0;

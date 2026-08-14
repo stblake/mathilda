@@ -47,4 +47,19 @@ bool ml_read_data(Expr* e, size_t* n, size_t* dim, double** buf, bool* was_vecto
  * refactor pays for itself. Until then this is the honest size of the need. */
 double ml_sqdist(const double* a, const double* b, size_t dim);
 
+/* Lower Cholesky factor of a dim x dim row-major symmetric matrix into `l`. Returns
+ * false if the matrix is not positive definite -- which is information, not merely an
+ * error: it says the covariance is singular, i.e. fewer points than dimensions or
+ * collinear ones.
+ *
+ * Written in-house rather than routed through mat_lapack_dpotrf because `dim` is a
+ * feature count -- single digits in practice -- and the callers run this once per
+ * component per iteration, where the cost is elsewhere entirely. */
+bool ml_chol(const double* a, double* l, size_t dim);
+
+/* Squared Mahalanobis distance (x - mu)' S^-1 (x - mu), via forward substitution
+ * against the Cholesky factor `l`. `y` is scratch of length dim. */
+double ml_mahalanobis(const double* l, const double* mu, const double* x,
+                      size_t dim, double* y);
+
 #endif /* ML_UTIL_H */

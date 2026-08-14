@@ -272,6 +272,7 @@ const char* SYM_Intersection = NULL;
 const char* SYM_Interval = NULL;
 const char* SYM_InterpolatingFunction = NULL;
 const char* SYM_PredictorFunction = NULL;
+const char* SYM_LearnedDistribution = NULL;
 const char* SYM_DimensionReducerFunction = NULL;
 const char* SYM_Interpolation = NULL;
 const char* SYM_InterpolationOrder = NULL;
@@ -1131,6 +1132,7 @@ void sym_names_init(void) {
     SYM_Interval                   = intern_symbol("Interval");
     SYM_InterpolatingFunction      = intern_symbol("InterpolatingFunction");
     SYM_PredictorFunction          = intern_symbol("PredictorFunction");
+    SYM_LearnedDistribution        = intern_symbol("LearnedDistribution");
     SYM_DimensionReducerFunction   = intern_symbol("DimensionReducerFunction");
     SYM_Interpolation              = intern_symbol("Interpolation");
     SYM_InterpolationOrder         = intern_symbol("InterpolationOrder");

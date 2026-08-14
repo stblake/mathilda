@@ -327,6 +327,52 @@ In[3]:= PDF[NormalDistribution[], {-1., 0., 1.}]
 Out[3]= {0.241971, 0.398942, 0.241971}
 ```
 
+## LearnDistribution
+
+Fits a distribution to data and returns a `LearnedDistribution`, usable with `PDF`.
+Attributes: `Protected`.
+
+- `LearnDistribution[data]`
+- `LearnDistribution[data, Method -> "Multinormal"]`
+
+**Features**:
+- Rows are observations, columns are variables; a flat list is `n` observations of one
+  variable, which is a perfectly good univariate normal (unlike `PrincipalComponents`,
+  which declines a single variable).
+- The covariance uses the **`n - 1` divisor**, matching `Variance` and
+  `StandardDeviation` — so a one-variable fit agrees with `StandardDeviation` squared.
+- **A singular covariance returns unevaluated**: collinear columns, or fewer
+  observations than dimensions, mean *no density exists*. A pseudo-inverse would invent
+  one.
+- **A fitted distribution prints elided**, the deliberate opposite of a *specified*
+  distribution like `NormalDistribution[mu, sigma]`. A specified distribution's
+  parameters are what the user wrote, so they are the information; a fitted one's are
+  derived. `FullForm` reveals them either way.
+- For a multinormal, `PDF[dist, {x1, …, xd}]` is **one** point — because the argument is
+  itself a list — while a *matrix* threads to one density per row. That is the opposite
+  reading from the scalar case, and it has to be.
+
+**Verified against an independent implementation.** A one-dimensional fit reaches its
+density through a Cholesky factor and a Mahalanobis distance, while
+`PDF[NormalDdistribution[mu, sigma], x]` evaluates the scalar closed form; the two share
+no code and agree exactly, including 3.5σ into the tail where a wrong log-determinant
+would show as a small relative error rather than an obvious one. The density also
+integrates to `1.0` over ±6σ, which pins the *normalisation* absolutely — an agreement
+test alone would pass two densities that shared a normalisation error.
+
+```mathematica
+In[1]:= m = LearnDistribution[{1., 2., 3., 4., 5., 6.}]
+Out[1]= LearnedDistribution["Multinormal", <>]
+
+In[2]:= {PDF[m, {3.5}], PDF[NormalDistribution[Mean[{1.,2.,3.,4.,5.,6.}],
+                            StandardDeviation[{1.,2.,3.,4.,5.,6.}]], 3.5]}
+Out[2]= {0.213244, 0.213244}
+
+In[3]:= PDF[LearnDistribution[{{1.,2.},{2.,3.},{3.,5.},{4.,4.},{5.,7.},{6.,8.}}],
+            {{3.5, 4.8}, {50., 50.}}]
+Out[3]= {0.113186, 3.6193e-169}
+```
+
 ## Clustering
 
 `FindClusters` and its ten methods are documented under
