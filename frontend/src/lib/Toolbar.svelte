@@ -51,6 +51,9 @@
   let overflowAnchor: HTMLElement;
 
   function toggleMenu(which: Exclude<MenuId, null>) {
+    /* Read the caret's symbol at open time. Must happen BEFORE the menu takes
+       focus, while the editor's selection is still the document selection. */
+    if (which === 'docs' && openMenu !== 'docs') refreshDocsTarget();
     openMenu = openMenu === which ? null : which;
   }
 
@@ -299,11 +302,17 @@
 
   let docsTarget: string | null = null;
 
+  /* Computed when the docs menu opens, NOT on every selection change.
+     It used to run on document selectionchange, which fires on every caret move
+     and every character typed -- and symbolAtSelection does a
+     getBoundingClientRect plus up to four caretRangeFromPoint hit-tests, each
+     forcing synchronous layout. Five forced layouts per keystroke to keep a
+     tooltip and one menu label up to date is not a trade worth making, and the
+     answer is only ever read at the moment the menu is opened. */
   function refreshDocsTarget() {
     try { docsTarget = symbolAtSelection()?.name ?? null; }
     catch { docsTarget = null; }
   }
-  $: { void $activeCell; refreshDocsTarget(); }
 
   /* A menu rather than a bare button.
    *
@@ -407,8 +416,6 @@
     }
   }
 </script>
-
-<svelte:document on:selectionchange={refreshDocsTarget} />
 
 <!-- Leaving focused mode. NOT in a group and never in the overflow: this is the
      only way back to the canvas that works with a plain mouse -- the alternative
@@ -585,9 +592,11 @@
     on:click={() => darkMode.update(v => !v)}
   >{$darkMode ? '◑' : '☀'}</button>
 
+  <!-- A static title: what the caret is on is only resolved when the menu opens,
+       and the menu's own first item names it. -->
   <button
     class="tb-btn"
-    title={docsTarget ? `Documentation for ${docsTarget}` : 'Documentation'}
+    title="Documentation"
     aria-haspopup="menu"
     aria-expanded={openMenu === 'docs'}
     tabindex="-1"

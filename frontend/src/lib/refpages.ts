@@ -302,9 +302,14 @@ export function symbolAtSelection(): { name: string; at: { x: number; y: number 
     const y = rect.y + rect.height / 2;
     at = { x: rect.x, y };
     if (!name) {
+      /* Only commit a probe that actually found a documented symbol. Assigning
+         every probe's result meant a last probe landing on an undocumented
+         identifier left `name` truthy, which skipped the text-node fallback
+         below and returned nothing -- for a caret that the fallback would have
+         resolved. */
       for (const dx of [-2, 2, -6, 6]) {
-        name = identifierAtPoint(rect.x + dx, y);
-        if (name && hasRefpage(name)) break;
+        const candidate = identifierAtPoint(rect.x + dx, y);
+        if (candidate && hasRefpage(candidate)) { name = candidate; break; }
       }
     }
   }

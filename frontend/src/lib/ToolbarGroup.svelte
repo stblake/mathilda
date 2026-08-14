@@ -30,11 +30,18 @@
     /* px, not rem: the bar is a fixed height and Cmd+= scales the root font
        size, so rem padding here would overflow the bar at 2x. */
     padding: 0 9px;
-    border-inline-end: 1px solid var(--tb-rule);
     flex-shrink: 0;
+    /* A rule at the START of every group but the first, rather than at the end of
+       every group but the last.
+       Visually identical -- exactly one rule between any two groups -- but immune
+       to what follows the groups in the DOM. The end-of-all-but-last form used
+       :last-of-type, and Menu.svelte renders its backdrop and panel as sibling
+       divs of the groups: with a menu open the last div was the menu, no group
+       matched, and the trailing group grew a rule on every dropdown open. The
+       first div child is always the first group, whatever is appended later. */
+    border-inline-start: 1px solid var(--tb-rule);
   }
-  /* The last group before the flexible spacer should not draw a trailing rule. */
-  .tb-group:last-of-type { border-inline-end: none; }
+  .tb-group:first-of-type { border-inline-start: none; }
 
   .tb-caption {
     font-size: var(--tb-caption-sz, 9px);

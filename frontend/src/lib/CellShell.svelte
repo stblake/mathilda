@@ -10,7 +10,7 @@
   All mutation calls go through store.xxx() instead of the global notebook singleton.
 -->
 <script lang="ts">
-  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import { onDestroy, tick, createEventDispatcher } from 'svelte';
   import { EditorView, keymap } from '@codemirror/view';
   import { EditorState, EditorSelection } from '@codemirror/state';
   import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
@@ -80,10 +80,36 @@
   let editorContainer: HTMLElement;
   let view: EditorView;
 
-  onMount(() => {
-    if (cell.type !== 'code') return;
-    initEditor();
-  });
+  /* Which (cell, type) pair the current `view` was built for. */
+  let editorBuiltFor = '';
+
+  /* The cell owns its editor's lifecycle, rather than every caller that can
+     change a cell's type remembering to rebuild it.
+     Previously only the gutter type-badge did (via a setTimeout), so retyping
+     from the toolbar's cell-style control produced a cell that rendered an empty
+     editor container with no EditorView in it: no caret, impossible to type in,
+     and its retained source invisible but still evaluated by Run. Round-tripping
+     code -> text -> code additionally left `view` pointing at detached DOM.
+
+     tick() because the {#if cell.type === 'code'} branch has to render before
+     `editorContainer` is bound -- on the flush where the type changes it is
+     still null. */
+  $: syncEditor(cell.id, cell.type);
+
+  function syncEditor(id: string, type: CellType) {
+    if (type !== 'code') {
+      if (view) { view.destroy(); view = undefined as any; }
+      editorBuiltFor = '';
+      return;
+    }
+    const key = `${id}:code`;
+    if (editorBuiltFor === key && view) return;
+    editorBuiltFor = key;
+    tick().then(() => {
+      /* Re-check: the type may have changed again while we waited. */
+      if (cell.type === 'code' && editorContainer) initEditor();
+    });
+  }
 
   function initEditor() {
     if (view) { view.destroy(); view = undefined as any; }
@@ -187,9 +213,10 @@
     showTypePicker = false;
     // Use the store prop instead of the global notebook singleton
     store.setCellType(cell.id, t);
-    if (t === 'code') {
-      setTimeout(initEditor, 10);
-    }
+    /* No editor rebuild here any more: syncEditor above reacts to cell.type, so
+       every route that retypes a cell -- this badge, the toolbar's cell-style
+       control, anything future -- gets a working editor without having to know
+       to ask for one. */
   }
 
   // ---- Selection ----

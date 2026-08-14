@@ -648,20 +648,39 @@
      registered. */
   const paneToken = {};
 
-  onMount(() => {
-    registerPane(nb.id, paneToken, {
+  /* Registered in the component body, NOT in onMount.
+     Reactive blocks run after the body but before onMount, so registering there
+     meant the first publishPaneFlags below was rejected for having no owning
+     token yet -- and since the block only re-runs when one of the flags changes,
+     a notebook whose rows never change after mount (one restored from a saved
+     library, say) never got an entry at all. Its toolbar then had no flags:
+     "Collapse all sections" absent on a notebook that has sections, and the
+     layout and collapse labels showing the wrong state.
+     Nothing here touches the DOM, so the body is a valid place to do it. */
+  registerPane(nb.id, paneToken, {
       notebookId: nb.id,
       store: nb.store,
       runAll,
       runCell: runCellById,
       runRange,
-      focusCell: (cellId: string) => { cellFocusFns[cellId]?.(); },
+      /* A newly inserted cell has no focus callback yet: the store mutation is
+         flushed on the next tick, and the callback is registered when the new
+         CellShell mounts. Callers used to fire this immediately after inserting
+         and the optional call silently did nothing, so Split, Duplicate and
+         Insert never moved the caret. Wait for the cell to exist, and give
+         CodeMirror the extra frame it needs on top of that. */
+      focusCell: (cellId: string) => {
+        if (cellFocusFns[cellId]) { cellFocusFns[cellId](); return; }
+        tick().then(() => {
+          if (cellFocusFns[cellId]) cellFocusFns[cellId]();
+          else setTimeout(() => cellFocusFns[cellId]?.(), 60);
+        });
+      },
       toggleLayout: () => { horizontal = !horizontal; },
       rename: startRename,
       toggleAllSections,
       toggleCollapse: onToggleCollapse,
       close: () => removeNotebook(nb.id),
-    });
   });
 
   /* Every identifier this block reads must stay written out here. Svelte 4
