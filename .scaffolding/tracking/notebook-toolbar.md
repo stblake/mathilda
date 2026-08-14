@@ -300,8 +300,8 @@ Graduated to `NFR-N` under Success Criteria below.
 - [x] start | completed: `2026-08-13 17:33`
 - [x] spec / plan created | completed: `2026-08-13 17:33`
 - [ ] threat-model stamped | completed: `pending`
-- [ ] implementation started | completed: `pending`
-- [ ] implementation complete | completed: `pending`
+- [x] implementation started | completed: `2026-08-13 17:40`
+- [x] implementation complete | completed: `2026-08-13 21:14`
 - [ ] critic pass | completed: `pending`
 - [ ] risk-register reviewed | completed: `pending`
 - [ ] feature validated | completed: `pending`
@@ -393,6 +393,12 @@ Graduated to `NFR-N` under Success Criteria below.
 - `2026-08-13 17:33` Research complete: three parallel Explore agents mapped the kernel IPC surface, the canvas/focus architecture, and cell/output rendering. Three forks surfaced and were resolved with the user — Markdown for rich text, frontend-only evaluation, toolbar-driven split with a shared kernel.
 - `2026-08-13 17:33` Two parallel Plan agents designed the split-pane focus restructuring and the toolbar plus active-cell tracking. Both returned corrections: a flat pane-size array cannot express a 2×2; `toggleComment` exists but is a silent no-op without `commentTokens` language data; pane queueing needs no work because Rust already serializes on a mutex; and `[← Canvas]` is a hard requirement because the current exit disappears when the app bar is replaced.
 - `2026-08-13 17:33` Plan approved by the user. Stamped `start` and `spec / plan created`; `goal_lock` set active over `frontend/src/**` and `frontend/package.json`. 11 phases created as tasks.
+- `2026-08-13 17:40` Implementation started. P0 foundations and P1 focus-state refactor landed together in `7f6fdfa7`, verified by 34 assertions over the focus logic (bundled for node with vite; harness kept out of the repo since a frontend test runner is out of scope).
+- `2026-08-13 18:02` P2 toolbar shell landed in `cda8e262`. Found and fixed a pre-existing sizing bug: the focused card asked for `min-height: 100vh` inside a view inset by the bar height, guaranteeing a scrollbar. A percentage min-height cannot replace it — percentages resolve against the parent's *height*, which stays `auto` however many min-heights are stacked — so the view became a flex column. Confirmed by sampling rendered pixels.
+- `2026-08-13 20:15` **Scope added at the user's request** after seeing the toolbar in use: an optional status bar (kernel state, last-op timing, session totals, active cell, notebook shape) and a fix for the info button, which was disabled whenever no documented symbol sat under the caret and so read as broken. Required new evaluation-timing instrumentation — nothing measured duration before. Landed with the Evaluation group in `d7fcdc78`.
+- `2026-08-13 21:05` **Scope added at the user's request**: make splitting easy from the canvas as well as the toolbar, and open documentation as a side-by-side pane on the right. Landed with the tiled pane view in `d261ea8d`. `openRefpage` was never broken — it positioned its card on the canvas, which is off-screen in focused mode, so Cmd+click appeared to do nothing.
+- `2026-08-13 21:14` P5 Cells and P8 Code groups landed in `0c876515`, together with a fix for `setCellType` silently discarding a cell's output on retype — tolerable behind a 12px gutter badge, not with the cell-style control one click away.
+- `2026-08-13 21:19` Implementation complete for this PR's scope. P7 properties panel, P9 Markdown text cells with the Text sub-group, and P10 Insert plus notebook search are deliberately deferred to a follow-up; see Follow-Up.
 
 ## Reflection
 
@@ -403,7 +409,31 @@ Graduated to `NFR-N` under Success Criteria below.
 
 ## Follow-Up
 
-- `pending`
+- Deferred from this PR, in the order they should land: `P7` Notebook Properties
+  panel and its Sidebar group; `P9` Markdown text cells plus the Text half of the
+  context-sensitive group (one phase — until cells render Markdown, a bold button
+  inserts literal `**` and leaves the asterisks on screen); `P10` Insert group
+  (math template palette via `@codemirror/autocomplete`'s `snippet()`, inline TeX,
+  hyperlink) and notebook-wide search.
+- Interactive verification of the toolbar was not possible in the authoring
+  environment: synthetic mouse events do not reach the WKWebView without
+  input-synthesis permission, and `view.focus()` on a background window produces no
+  focus event. Rendering, disabled states and group visibility were verified from
+  screenshots; the enabled paths need a human click-through. Worth confirming
+  explicitly: that clicking a toolbar button leaves the caret in the cell, and that
+  `[← Canvas]` returns to the canvas with a mouse alone.
+- `--surface-2` and `--ok` were referenced but undefined and are now defined, but the
+  two conflicting root palettes (`app.css:1-34` vs `App.svelte`'s `:global(:root)`,
+  disagreeing on `--text`/`--bg`/`--border`/`--accent`, App.svelte winning by load
+  order) remain. It shows as a tonal step between a cell row and the empty card
+  space below it. Worth its own cleanup.
+- `selectedCells` in `notebook.ts` is a module-global singleton shared by every
+  notebook store. Currently masked because a notebook may occupy only one pane —
+  that constraint is doing load-bearing work, and should be removed properly if
+  duplicate panes are ever wanted.
+- `KernelStatus.svelte` is still unused and hardcodes light-mode colours. Either
+  make it theme-aware and use it or delete it; `StatusBar.svelte` renders its own
+  kernel indicator.
 
 ## Team Addendum
 
