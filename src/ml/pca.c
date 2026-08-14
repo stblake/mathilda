@@ -17,6 +17,7 @@
 #include "pca.h"
 #include "predict.h"
 #include "dist.h"
+#include "classify.h"
 
 void ml_column_mean(const double* x, size_t n, size_t dim, double* mean) {
     for (size_t j = 0; j < dim; j++) mean[j] = 0.0;
@@ -425,6 +426,7 @@ static Expr* builtin_dimension_reduce(Expr* res) {
 void ml_init(void) {
     ml_predict_init();   /* src/ml/predict.c -- Predict, LinearModelFit */
     ml_dist_init();      /* src/ml/dist.c -- RandomVariate, PDF, distributions */
+    ml_classify_init();  /* src/ml/classify.c -- Classify */
     symtab_add_builtin("DimensionReduce", builtin_dimension_reduce);
     symtab_get_def("DimensionReduce")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DimensionReduce",

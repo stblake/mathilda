@@ -14,6 +14,7 @@
 #include "numarray.h"
 #include "mlutil.h"
 #include "pca.h"        /* ml_pca, ml_column_mean -- shared with the reducer */
+#include "classify.h"
 #include "predict.h"
 
 /* Solve the normal equations (A'A) c = A'y where A is [1 | x], by Gaussian
@@ -441,7 +442,8 @@ bool ml_model_apply_probe(Expr* head) {
     if (!hh || hh->type != EXPR_SYMBOL) return false;
     const char* n = hh->data.symbol.name;
     return strcmp(n, "PredictorFunction") == 0
-        || strcmp(n, "DimensionReducerFunction") == 0;
+        || strcmp(n, "DimensionReducerFunction") == 0
+        || strcmp(n, "ClassifierFunction") == 0;
 }
 
 Expr* ml_model_apply(Expr* head, Expr** args, size_t argc) {
@@ -450,6 +452,8 @@ Expr* ml_model_apply(Expr* head, Expr** args, size_t argc) {
     if (!hh || hh->type != EXPR_SYMBOL) return NULL;
     if (strcmp(hh->data.symbol.name, "DimensionReducerFunction") == 0)
         return ml_reducer_apply(head, args, argc);
+    if (strcmp(hh->data.symbol.name, "ClassifierFunction") == 0)
+        return ml_classifier_apply(head, args, argc);
     if (strcmp(hh->data.symbol.name, "PredictorFunction") != 0) return NULL;
     if (head->data.function.arg_count != 4 || argc != 1) return NULL;
 

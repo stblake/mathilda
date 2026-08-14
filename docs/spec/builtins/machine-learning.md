@@ -438,6 +438,51 @@ In[2]:= PDF[k, {2.0}]
 Out[2]= 0.243738
 ```
 
+## Classify
+
+Trains a classifier and returns a `ClassifierFunction`. Attributes: `Protected`.
+
+- `Classify[data]`
+- `Classify[data, Method -> "NearestNeighbors"]`
+- `Classify[data, Method -> {"NearestNeighbors", "NeighborsNumber" -> k}]`
+
+**A class may be any expression.** This is the substantive addition of this family:
+every earlier one took numeric responses, and a class is a string, a symbol, a number, or
+whatever the user names it. The distinct classes form a **label vocabulary** stored in the
+model, and the numeric part of the model carries class *indices* — so the vocabulary is the
+single place a class is named. Comparison is structural, so `"a"` and `a` are two classes
+rather than one, the same distinction the pattern matcher makes everywhere else.
+
+**Class order is first appearance in the training data**, not sorted. What matters is that
+it is deterministic; first appearance is also stable under adding classes later, matches how
+`FindClusters` numbers clusters, and reads naturally beside the data that produced it. The
+*prediction* does not depend on it.
+
+**Features**:
+- Data must be a list of rules `{features -> class, …}`. A matrix with the class in its last
+  column is *not* accepted, and that is not an omission — a class need not be a number, so
+  the numeric matrix reader would refuse the whole thing. `Predict` accepts a matrix
+  precisely because its response is numeric.
+- `k` defaults to **1**, unlike the k-NN *predictor* where it defaults to 3. A regression
+  averages, so a little smoothing helps; a classifier votes, and at `k = 1` it reproduces
+  its training labels exactly.
+- `classifier[x, "Probabilities"]` gives one rule per class with the vote shares, which sum
+  to 1 by construction.
+- Also answers `"Classes"`, `"Method"`, `"FeatureCount"` and `"NeighborCount"`.
+- Ties in the vote go to the lowest class index, i.e. first appearance — deterministic.
+
+```mathematica
+In[1]:= c = Classify[{{0.,0.} -> "red", {1.,0.} -> "red", {0.,1.} -> "red",
+                      {10.,10.} -> "blue", {11.,10.} -> "blue", {10.,11.} -> "blue"}]
+Out[1]= ClassifierFunction["NearestNeighbors", <>]
+
+In[2]:= {c[{0.5, 0.5}], c[{10.5, 10.5}], c["Classes"]}
+Out[2]= {"red", "blue", {"red", "blue"}}
+
+In[3]:= c[{0.5, 0.5}, "Probabilities"]
+Out[3]= {"red" -> 1.0, "blue" -> 0.0}
+```
+
 ## Clustering
 
 `FindClusters` and its ten methods are documented under

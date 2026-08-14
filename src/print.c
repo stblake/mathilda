@@ -892,7 +892,8 @@ static void print_standard(Expr* e, int parent_prec) {
         }
         else if ((head == SYM_PredictorFunction ||
                   head == SYM_DimensionReducerFunction ||
-                  head == SYM_LearnedDistribution) &&
+                  head == SYM_LearnedDistribution ||
+                  head == SYM_ClassifierFunction) &&
                  e->data.function.arg_count >= 2 &&
                  e->data.function.args[0]->type == EXPR_STRING) {
             /* A fitted machine-learning model prints its METHOD and elides its
