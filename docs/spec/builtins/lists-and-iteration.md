@@ -536,8 +536,8 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   the visible surface needed a guard. Rank 3 and above still decline: a
   list-valued component is not a coordinate.
 - **Which methods accept vectors.** `Agglomerate`, `SpanningTree`, `MeanShift`,
-  `NeighborhoodContraction`, `KMeans`, `DBSCAN` and `JarvisPatrick` cluster
-  n-dimensional points; the remaining three (`KMedoids`, `Spectral`,
+  `NeighborhoodContraction`, `KMeans`, `DBSCAN`, `JarvisPatrick` and `KMedoids`
+  cluster n-dimensional points; the remaining two (`Spectral`,
   `GaussianMixture`) accept scalars only and return unevaluated for vector input.
   That is not a conservative guard — those five reach their data through the sorted
   projection, which does not exist off a line — and the list grows as each is
@@ -575,6 +575,19 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   (`{1, 2, 10, 12, 3, 1, 13, 25}` at `"NeighborCount" -> 2`), so adopting the
   general rule on a line would move an existing answer and is left as its own
   deliberate change.
+- **`"KMedoids"` carries a tighter ceiling than `"KMeans"`,** because the two differ
+  by a complexity class rather than a constant. A mean is `O(n·dim)`; a medoid
+  search compares every member against every other member of its cluster and is
+  `O(n²·dim)` however small `k` is. So the same 2000×10 input that `"KMeans"`
+  clusters is *declined* by `"KMedoids"`.
+- **`"KMedoids"` above one dimension is a second implementation** (quantile seeding
+  on a line, farthest-first off it), and the two **disagree** on
+  `{1, 2, 3, 10, 11, 12, 25}` at `k = 3`: the 1-D kernel gives
+  `{{1,2,3}, {10}, {11,12,25}}` and the n-D kernel `{{1,2,3}, {10,11,12}, {25}}`.
+  The n-D answer is strictly better by the method's own objective — total distance
+  from each member to its cluster's medoid — **4 against 16**. Both are documented
+  as they behave; adopting farthest-first on a line would improve the 1-D answer and
+  move an existing one, so it is left as its own deliberate change.
 - **`KMeans` and `KMedoids` require a count.** Neither accepts the `Automatic`
   form, in any dimension, so `FindClusters[data, Method -> "KMeans"]` returns
   unevaluated; `UpTo[k]` is the data-driven form they do take, and a bare `k` is
@@ -608,7 +621,7 @@ projection and declines vector input.
 | `"Agglomerate"` (single linkage) | yes | yes | yes | vectors |
 | `"SpanningTree"` (minimum spanning tree) | yes | yes | yes | vectors |
 | `"KMeans"` | no | yes | yes | vectors |
-| `"KMedoids"` | no | yes | yes | scalars |
+| `"KMedoids"` | no | yes | yes | vectors |
 | `"Spectral"` | yes | yes | no | scalars |
 | `"DBSCAN"` | yes | no | no | vectors |
 | `"GaussianMixture"` | yes | no | no | scalars |

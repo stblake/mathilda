@@ -142,6 +142,47 @@ static void test_jarvispatrick_recovers_blobs(void) {
                    BLOBS_2D_OUT, 0);
 }
 
+static void test_kmedoids_recovers_blobs(void) {
+    check_k("KMedoids", BLOBS_2D, "3", BLOBS_2D_OUT);
+    check_k("KMedoids", BLOBS_5D, "3", BLOBS_5D_OUT);
+    check_k("KMedoids", BLOBS_2D, "UpTo[3]", BLOBS_2D_OUT);
+}
+
+static void test_kmedoids_carries_a_tighter_ceiling_than_kmeans(void) {
+    /* The two methods share fc_lloyd_ndim and differ in their update step, and that
+     * difference is a complexity class: a mean is O(n * dim), a medoid search
+     * compares every member against every other member of its cluster and is
+     * O(n^2 * dim) however small k is. So KMedoids carries a second, tighter
+     * ceiling -- and the cleanest proof that it is real is that the SAME input
+     * separates the two methods. */
+    const char* sample = "Table[Table[1.0 Mod[7 i + 13 j, 997], {j, 10}], {i, 2000}]";
+    char in[512];
+    snprintf(in, sizeof in, "Length[FindClusters[%s, 4, Method -> \"KMeans\"]]", sample);
+    assert_eval_eq(in, "4", 0);
+    snprintf(in, sizeof in, "Head[FindClusters[%s, 4, Method -> \"KMedoids\"]]", sample);
+    assert_eval_eq(in, "FindClusters", 0);
+}
+
+static void test_kmedoids_ndim_finds_a_better_optimum_than_the_1d_kernel(void) {
+    /* KMedoids is split like KMeans -- quantile seeding on a line, farthest-first
+     * off it -- and here the two DISAGREE on the same seven numbers. That is not a
+     * defect to hide behind an agreement assertion: the n-D answer is strictly
+     * better by the method's own objective (total distance from each member to its
+     * cluster's medoid), 4 against 16.
+     *
+     *   1-D kernel:  {{1, 2, 3}, {10}, {11, 12, 25}}   cost 16
+     *   n-D kernel:  {{1, 2, 3}, {10, 11, 12}, {25}}   cost 4
+     *
+     * Both are pinned as they actually behave. Adopting farthest-first on a line
+     * would improve the 1-D answer and move a pinned one, so it is a deliberate
+     * change of its own -- recorded rather than smuggled in with a port. */
+    assert_eval_eq("FindClusters[{1, 2, 3, 10, 11, 12, 25}, 3, Method -> \"KMedoids\"]",
+                   "{{1, 2, 3}, {10}, {11, 12, 25}}", 0);
+    assert_eval_eq("FindClusters[{{1}, {2}, {3}, {10}, {11}, {12}, {25}}, 3, "
+                   "Method -> \"KMedoids\"]",
+                   "{{{1}, {2}, {3}}, {{10}, {11}, {12}}, {{25}}}", 0);
+}
+
 static void test_kmeans_is_independent_of_input_order(void) {
     /* A k-means whose answer depends on the order its points were typed in is
      * seeding from index 0. This is why the n-D initialisation starts from the
@@ -278,6 +319,11 @@ static void test_equal_points_are_never_split(void) {
     assert_eval_eq("FindClusters[{{5, 5}, {5, 5}, {5, 5}, {40, 40}, {41, 41}}, 4, "
                    "Method -> \"KMeans\"]",
                    "{{{5, 5}, {5, 5}, {5, 5}}, {{40, 40}}, {{41, 41}}}", 0);
+    /* KMedoids has the same exposure as KMeans: asked for more clusters than there
+     * are distinct points it would have to split a duplicate pair to comply. */
+    assert_eval_eq("FindClusters[{{5, 5}, {5, 5}, {5, 5}, {40, 40}, {41, 41}}, 4, "
+                   "Method -> \"KMedoids\"]",
+                   "{{{5, 5}, {5, 5}, {5, 5}}, {{40, 40}}, {{41, 41}}}", 0);
     check("DBSCAN", dup2, dup2_out);
     /* JarvisPatrick needs blobs its default k fits inside (see JP_BLOBS_2D), so the
      * duplicate goes there: a repeated {0, 0} prepended to the first blob must come
@@ -330,7 +376,7 @@ static void test_unported_methods_still_decline_in_ndim(void) {
      * above one dimension -- reading d->val there would dereference NULL, so a
      * premature relaxation is a crash rather than a wrong answer. These rows come
      * off the list as each method is ported, which makes the progress visible. */
-    const char* unported[] = { "KMedoids", "GaussianMixture" };
+    const char* unported[] = { "GaussianMixture" };
     for (size_t i = 0; i < sizeof(unported) / sizeof(unported[0]); i++) {
         char in[256], out[256];
         snprintf(in,  sizeof in,  "FindClusters[{{1, 1}, {9, 9}}, Method -> \"%s\"]",
@@ -376,6 +422,9 @@ int main(void) {
     TEST(test_kmeans_recovers_blobs);
     TEST(test_dbscan_recovers_blobs);
     TEST(test_jarvispatrick_recovers_blobs);
+    TEST(test_kmedoids_recovers_blobs);
+    TEST(test_kmedoids_carries_a_tighter_ceiling_than_kmeans);
+    TEST(test_kmedoids_ndim_finds_a_better_optimum_than_the_1d_kernel);
     TEST(test_dbscan_keeps_noise_as_singletons);
     TEST(test_kmeans_is_independent_of_input_order);
     TEST(test_kmeans_automatic_is_refused_on_both_surfaces);

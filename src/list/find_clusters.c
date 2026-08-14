@@ -1339,7 +1339,8 @@ static bool fc_lloyd(const FcData* d, FcCount spec, size_t* assign, size_t* k,
  *     than target centres are chosen some point is still at nonzero distance from
  *     all of them.
  */
-static bool fc_lloyd_ndim(const FcData* d, FcCount spec, size_t* assign, size_t* k) {
+static bool fc_lloyd_ndim(const FcData* d, FcCount spec, size_t* assign, size_t* k,
+                          bool medoid) {
     size_t n = d->n, dim = d->dim;
     const double* pts = fc_points(d);
     if (!pts) return false;
@@ -1369,6 +1370,13 @@ static bool fc_lloyd_ndim(const FcData* d, FcCount spec, size_t* assign, size_t*
      * work, the same order as the tree build that preceded it. */
     if (target != 0 && dim != 0 &&
         n > FC_LLOYD_MAX_WORK / target / dim) return false;
+    /* KMedoids carries a SECOND, tighter ceiling, because its update step is a
+     * different complexity class: the medoid search compares every member against
+     * every other member of its own cluster, which sums to O(n^2 * dim) per
+     * iteration however small k is. KMeans' mean is O(n * dim). So the bilinear
+     * budget above, which admits 20000 points at a small k, is the wrong bound
+     * here and would admit a run of minutes. */
+    if (medoid && dim != 0 && n != 0 && n > FC_LLOYD_MAX_WORK / n / dim) return false;
 
     double* c     = malloc(sizeof(double) * target * dim);
     size_t* owner = malloc(sizeof(size_t) * n);
@@ -1445,19 +1453,49 @@ static bool fc_lloyd_ndim(const FcData* d, FcCount spec, size_t* assign, size_t*
             nd[pick] = 0.0;
         }
 
-        /* Move each centre to the component-wise mean of its members. That the
-         * mean generalises component-wise is the whole reason this step is
-         * mechanical rather than a new derivation. */
         bool moved = false;
-        for (size_t j = 0; j < target * dim; j++) acc[j] = 0.0;
-        for (size_t i = 0; i < n; i++)
-            for (size_t comp = 0; comp < dim; comp++)
-                acc[owner[i] * dim + comp] += pts[i * dim + comp];
-        for (size_t j = 0; j < target; j++) {
-            if (count[j] == 0) continue;
-            for (size_t comp = 0; comp < dim; comp++) {
-                double v = acc[j * dim + comp] / (double)count[j];
-                if (v != c[j * dim + comp]) { c[j * dim + comp] = v; moved = true; }
+        if (medoid) {
+            /* KMedoids: the new centre must BE one of the members, the one whose
+             * total distance to the rest of its cluster is least. The 1-D kernel
+             * could take the middle element of a contiguous sorted run in O(1);
+             * off a line there is no such shortcut, so this is the real search,
+             * and it is what makes the method quadratic rather than linear in n.
+             *
+             * Restricting centres to data points is the whole point of the method:
+             * it is what lets a medoid resist an outlier that would drag a mean,
+             * and what lets the method run on a metric with no notion of average. */
+            for (size_t j = 0; j < target; j++) {
+                if (count[j] == 0) continue;
+                size_t best = SIZE_MAX; double bestsum = 0.0;
+                for (size_t a = 0; a < n; a++) {
+                    if (owner[a] != j) continue;
+                    double s = 0.0;
+                    for (size_t b = 0; b < n; b++) {
+                        if (owner[b] != j) continue;
+                        s += fc_dist_pos(d, pts + a * dim, pts + b * dim);
+                    }
+                    if (best == SIZE_MAX || s < bestsum) { bestsum = s; best = a; }
+                }
+                if (best == SIZE_MAX) continue;
+                for (size_t comp = 0; comp < dim; comp++) {
+                    double v = pts[best * dim + comp];
+                    if (v != c[j * dim + comp]) { c[j * dim + comp] = v; moved = true; }
+                }
+            }
+        } else {
+            /* KMeans: the component-wise mean of the members. That the mean
+             * generalises component-wise is the whole reason this step is
+             * mechanical rather than a new derivation. */
+            for (size_t j = 0; j < target * dim; j++) acc[j] = 0.0;
+            for (size_t i = 0; i < n; i++)
+                for (size_t comp = 0; comp < dim; comp++)
+                    acc[owner[i] * dim + comp] += pts[i * dim + comp];
+            for (size_t j = 0; j < target; j++) {
+                if (count[j] == 0) continue;
+                for (size_t comp = 0; comp < dim; comp++) {
+                    double v = acc[j * dim + comp] / (double)count[j];
+                    if (v != c[j * dim + comp]) { c[j * dim + comp] = v; moved = true; }
+                }
             }
         }
         if (!moved) break;
@@ -1485,13 +1523,15 @@ static bool fc_lloyd_ndim(const FcData* d, FcCount spec, size_t* assign, size_t*
 static bool fc_method_kmeans(const FcData* d, FcCount spec, const FcOpts* o,
                              size_t* assign, size_t* k) {
     (void)o;
-    if (d->kind == FC_KIND_POINT) return fc_lloyd_ndim(d, spec, assign, k);
+    if (d->kind == FC_KIND_POINT) return fc_lloyd_ndim(d, spec, assign, k, false);
     return fc_lloyd(d, spec, assign, k, false);
 }
 
 static bool fc_method_kmedoids(const FcData* d, FcCount spec, const FcOpts* o,
                                size_t* assign, size_t* k) {
-    (void)o; return fc_lloyd(d, spec, assign, k, true);
+    (void)o;
+    if (d->kind == FC_KIND_POINT) return fc_lloyd_ndim(d, spec, assign, k, true);
+    return fc_lloyd(d, spec, assign, k, true);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -2340,7 +2380,8 @@ static Expr* fc_find_clusters(Expr* res, Expr* list) {
                    || (fn == fc_method_neighborhood)
                    || (fn == fc_method_kmeans)
                    || (fn == fc_method_dbscan)
-                   || (fn == fc_method_jarvispatrick);
+                   || (fn == fc_method_jarvispatrick)
+                   || (fn == fc_method_kmedoids);
     /* The shift methods need coordinates; strings have none, so they stay
      * declined for those even though POINT input is now fine. */
     if (d.kind == FC_KIND_SEQUENCE && fn != fc_method_gap) return NULL;
