@@ -81,7 +81,7 @@ goal_lock:
 
 - [x] `Trained-model representation, designed once` | `independent` | `done (iteration 12)`
 - [x] `Predict + LinearRegression + LinearModelFit + application via the evaluator chain` | `depends on: representation` | `done (iteration 12)`
-- [ ] `Predict with Method -> NearestNeighbors` | `depends on: representation` | `pending`
+- [x] `Predict with Method -> NearestNeighbors` | `depends on: representation` | `done (iteration 13), with a NeighborsNumber sub-option`
 - [ ] `Retrofit DimensionReducerFunction onto the representation (family 2 open row)` | `depends on: representation` | `pending`
 - [ ] `Abbreviated printing for fitted models` | `independent` | `pending`
 
@@ -129,7 +129,7 @@ goal_lock:
 
 - Potential tech debt introduced:
   - `A fitted model prints its full parameter list rather than abbreviating.`
-  - `ml_reals_list in predict.c duplicates ml_list_of_reals in pca.c. THIRD consumer now; promote to a shared src/ml header.`
+  - `RESOLVED (iteration 13): promoted to src/ml/mlutil.{c,h} -- ml_list_of_reals, ml_list_matrix, ml_read_data, plus ml_sqdist.`
 - Existing tech debt noticed:
   - `na_build_matrix returning a visible NDArray remains a trap for new user-facing builtins.`
   - `find_clusters.c still exports one symbol; its machine distance layer will be wanted by NearestNeighbors.`
@@ -140,6 +140,7 @@ goal_lock:
 
 ## Activity Log
 
+- `2026-08-14 01:55` Iteration 13: Predict with NearestNeighbors, plus a NeighborsNumber sub-option, plus the promotion of the duplicated helpers to src/ml/mlutil.{c,h} (the third copy had arrived, which was the stated trigger). DECLINED to extract find_clusters.c's machine metric layer: it takes that file's FcData and honours a DistanceFunction, so extracting it means introducing a metric enum in src/ml and rewriting a 2600-line file with 22 pinned answers -- real risk to a finished family, bought for a four-line squared-Euclidean. Recorded the actual trigger instead: the moment Predict or Classify gains a DistanceFunction option, that layer has its second REAL consumer. Cross-checked k=1 against the existing Nearest on both sides of a midpoint. One of my tests was wrong for the exact reason I had written down: the k-NN-differs-from-linear test used data that was exactly y=10x, so both methods agreed and it proved nothing -- fixed with y=x^2.
 - `2026-08-14 01:45` Created, and iteration 12 landed: the trained-model representation plus Predict, LinearModelFit and application through eval.c\'s composite-head chain. Rejected a new EXPR node type (the expected answer) with reasons recorded. Cross-checked against the existing Fit, which is an independent least-squares implementation. One test of mine was wrong rather than the code: Head of an unevaluated composite application is the whole head PredictorFunction[...], not the symbol, so the assertion became NumberQ.
 
 ## Reflection

@@ -375,6 +375,7 @@ set(COMMON_SRC
     ../src/list/nearest.c
     ../src/list/find_clusters.c
     ../src/ml/gmm.c
+    ../src/ml/mlutil.c
     ../src/ml/pca.c
     ../src/ml/predict.c
     ../src/list/distance.c

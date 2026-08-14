@@ -12,6 +12,7 @@
 #include "attr.h"
 #include "sym_names.h"
 #include "numarray.h"
+#include "mlutil.h"
 #include "predict.h"
 
 /* Solve the normal equations (A'A) c = A'y where A is [1 | x], by Gaussian
@@ -77,15 +78,6 @@ bool ml_ols(const double* x, const double* y, size_t n, size_t dim, double* coef
 }
 
 /* ------------------------------------------------------------------------- */
-
-static Expr* ml_reals_list(const double* v, size_t n) {
-    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
-    if (!a) return NULL;
-    for (size_t i = 0; i < n; i++) a[i] = expr_new_real(v[i]);
-    Expr* out = expr_new_function(expr_new_symbol(SYM_List), a, n);
-    free(a);
-    return out;
-}
 
 /* Split `data` into an n x dim feature matrix and an n response vector.
  *
@@ -168,24 +160,42 @@ static bool ml_read_training(Expr* data, size_t* n_out, size_t* dim_out,
     return true;
 }
 
-static Expr* ml_make_predictor(const char* method, const double* coef, size_t dim) {
-    Expr* args[3];
+/* Assemble a fitted model. `params` is already-built and OWNED by this call.
+ *
+ * The parameter slot holds whatever the method needs and nothing more: a coefficient
+ * List for LinearRegression, the training matrix for NearestNeighbors. That the two
+ * shapes differ is not a wart -- it is why the representation is positional with a
+ * method tag rather than a fixed schema, and ml_model_apply dispatches on the tag. */
+static Expr* ml_make_model(const char* method, Expr* params, size_t dim, size_t extra) {
+    Expr* args[4];
     args[0] = expr_new_string(method);
-    args[1] = ml_reals_list(coef, dim + 1);
+    args[1] = params;
     args[2] = expr_new_integer((int64_t)dim);
-    if (!args[0] || !args[1] || !args[2]) {
-        expr_free(args[0]); expr_free(args[1]); expr_free(args[2]); return NULL;
+    args[3] = expr_new_integer((int64_t)extra);
+    if (!args[0] || !args[1] || !args[2] || !args[3]) {
+        expr_free(args[0]); expr_free(args[1]); expr_free(args[2]); expr_free(args[3]);
+        return NULL;
     }
-    return expr_new_function(expr_new_symbol("PredictorFunction"), args, 3);
+    return expr_new_function(expr_new_symbol("PredictorFunction"), args, 4);
+}
+
+static Expr* ml_make_predictor(const char* method, const double* coef, size_t dim) {
+    Expr* c = ml_list_of_reals(coef, dim + 1);
+    if (!c) return NULL;
+    return ml_make_model(method, c, dim, 0);
 }
 
 static Expr* builtin_predict(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
+    bool knn = false;
 
+    size_t kopt = 0;                  /* 0 = use the default */
     if (argc == 2) {
-        /* Only LinearRegression is implemented; anything else declines rather than
-         * silently linear-regressing, so an unsupported method is visible. */
+        /* Method -> m, or Method -> {m, subopt -> value} for NearestNeighbors'
+         * NeighborsNumber. Anything unrecognised declines rather than silently
+         * linear-regressing, so an unsupported method or a mistyped sub-option is
+         * visible instead of quietly ignored. */
         Expr* o = res->data.function.args[1];
         if (!o || o->type != EXPR_FUNCTION || o->data.function.arg_count != 2) return NULL;
         Expr* h = o->data.function.head;
@@ -196,18 +206,70 @@ static Expr* builtin_predict(Expr* res) {
         Expr* rhs = o->data.function.args[1];
         if (!lhs || lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Method)
             return NULL;
-        if (!rhs || rhs->type != EXPR_STRING) return NULL;
-        if (strcmp(rhs->data.string, "LinearRegression") != 0) return NULL;
+        /* The value is either a method string or {method, subopt -> value, ...}. */
+        Expr* mstr = rhs;
+        if (rhs && rhs->type == EXPR_FUNCTION
+            && rhs->data.function.head->type == EXPR_SYMBOL
+            && rhs->data.function.head->data.symbol.name == SYM_List
+            && rhs->data.function.arg_count >= 1) {
+            mstr = rhs->data.function.args[0];
+            for (size_t i = 1; i < rhs->data.function.arg_count; i++) {
+                Expr* so = rhs->data.function.args[i];
+                if (!so || so->type != EXPR_FUNCTION || so->data.function.arg_count != 2
+                    || so->data.function.head->type != EXPR_SYMBOL
+                    || (so->data.function.head->data.symbol.name != SYM_Rule
+                        && so->data.function.head->data.symbol.name != SYM_RuleDelayed))
+                    return NULL;
+                Expr* sk = so->data.function.args[0];
+                Expr* sv = so->data.function.args[1];
+                if (!sk || sk->type != EXPR_STRING) return NULL;
+                if (strcmp(sk->data.string, "NeighborsNumber") != 0) return NULL;
+                if (!sv || sv->type != EXPR_INTEGER || sv->data.integer <= 0) return NULL;
+                kopt = (size_t)sv->data.integer;
+            }
+        }
+        if (!mstr || mstr->type != EXPR_STRING) return NULL;
+        const char* mm = mstr->data.string;
+        if (strcmp(mm, "LinearRegression") == 0)      knn = false;
+        else if (strcmp(mm, "NearestNeighbors") == 0) knn = true;
+        else return NULL;
+        /* A neighbour count is meaningless for a regression, so it is refused rather
+         * than accepted and ignored. */
+        if (kopt && !knn) return NULL;
     }
 
     size_t n, dim; double* x = NULL; double* y = NULL;
     if (!ml_read_training(res->data.function.args[0], &n, &dim, &x, &y)) return NULL;
 
-    double* coef = malloc(sizeof(double) * (dim + 1));
-    if (!coef) { free(x); free(y); return NULL; }
     Expr* out = NULL;
-    if (ml_ols(x, y, n, dim, coef)) out = ml_make_predictor("LinearRegression", coef, dim);
-    free(coef); free(x); free(y);
+    if (knn) {
+        /* A nearest-neighbour predictor has no fitted parameters -- the training set IS
+         * the model, which is why this method costs nothing to fit and everything to
+         * apply. Stored as one matrix with the response appended to each row, so the
+         * features and their answers cannot drift apart.
+         *
+         * k defaults to 3: enough to average away a single noisy response, few enough
+         * to stay local. Clamped to n, since asking for more neighbours than there are
+         * points is a request the data cannot fill. */
+        size_t k = kopt ? kopt : 3;
+        if (k > n) k = n;
+        double* joint = malloc(sizeof(double) * n * (dim + 1));
+        if (joint) {
+            for (size_t i = 0; i < n; i++) {
+                for (size_t j = 0; j < dim; j++) joint[i * (dim + 1) + j] = x[i * dim + j];
+                joint[i * (dim + 1) + dim] = y[i];
+            }
+            Expr* tm = ml_list_matrix(joint, n, dim + 1);
+            free(joint);
+            if (tm) out = ml_make_model("NearestNeighbors", tm, dim, k);
+        }
+    } else {
+        double* coef = malloc(sizeof(double) * (dim + 1));
+        if (coef && ml_ols(x, y, n, dim, coef))
+            out = ml_make_predictor("LinearRegression", coef, dim);
+        free(coef);
+    }
+    free(x); free(y);
     return out;
 }
 
@@ -242,16 +304,19 @@ Expr* ml_model_apply(Expr* head, Expr** args, size_t argc) {
     Expr* hh = head->data.function.head;
     if (!hh || hh->type != EXPR_SYMBOL) return NULL;
     if (strcmp(hh->data.symbol.name, "PredictorFunction") != 0) return NULL;
-    if (head->data.function.arg_count != 3 || argc != 1) return NULL;
+    if (head->data.function.arg_count != 4 || argc != 1) return NULL;
 
     Expr* mname = head->data.function.args[0];
     Expr* cl    = head->data.function.args[1];
     Expr* dimx  = head->data.function.args[2];
+    Expr* extrax = head->data.function.args[3];
     if (!mname || mname->type != EXPR_STRING) return NULL;
     if (!cl || cl->type != EXPR_FUNCTION) return NULL;
     if (!dimx || dimx->type != EXPR_INTEGER) return NULL;
+    if (!extrax || extrax->type != EXPR_INTEGER) return NULL;
     size_t dim = (size_t)dimx->data.integer;
-    if (cl->data.function.arg_count != dim + 1) return NULL;
+    bool knn = strcmp(mname->data.string, "NearestNeighbors") == 0;
+    if (!knn && cl->data.function.arg_count != dim + 1) return NULL;
 
     /* Named property access. This is why an Association payload was unnecessary: the
      * place a user asks for a property is the application, and that is here. */
@@ -260,6 +325,8 @@ Expr* ml_model_apply(Expr* head, Expr** args, size_t argc) {
         if (strcmp(q, "Method") == 0) return expr_copy(mname);
         if (strcmp(q, "Coefficients") == 0) return expr_copy(cl);
         if (strcmp(q, "FeatureCount") == 0) return expr_copy(dimx);
+        if (knn && strcmp(q, "NeighborCount") == 0) return expr_copy(extrax);
+        if (knn && strcmp(q, "TrainingData") == 0)  return expr_copy(cl);
         return NULL;                       /* unknown property: leave unevaluated */
     }
 
@@ -280,6 +347,51 @@ Expr* ml_model_apply(Expr* head, Expr** args, size_t argc) {
         ok = (dim == 1) && na_read_scalar(a0, &xin[0], &im) && im == 0.0;
     }
     if (!ok) { free(xin); return NULL; }    /* wrong shape: unevaluated, not guessed */
+
+    if (knn) {
+        /* Mean response of the k nearest training rows.
+         *
+         * A partial selection rather than a sort: only the k smallest are needed, and k
+         * is small, so an insertion into a k-sized list beats ordering all n. Ties keep
+         * the incumbent, which is the earlier training row, so the answer does not
+         * depend on scan order. */
+        size_t n = cl->data.function.arg_count;
+        size_t k = (size_t)extrax->data.integer;
+        if (k == 0 || k > n) k = n;
+        double* bd = malloc(sizeof(double) * k);
+        double* bv = malloc(sizeof(double) * k);
+        if (!bd || !bv) { free(bd); free(bv); free(xin); return NULL; }
+        size_t cnt = 0;
+        double* row = malloc(sizeof(double) * (dim + 1));
+        if (!row) { free(bd); free(bv); free(xin); return NULL; }
+        for (size_t i = 0; i < n; i++) {
+            Expr* r = cl->data.function.args[i];
+            if (!r || r->type != EXPR_FUNCTION
+                || r->data.function.arg_count != dim + 1) {
+                free(row); free(bd); free(bv); free(xin); return NULL;
+            }
+            bool rok = true;
+            for (size_t j = 0; j <= dim && rok; j++)
+                rok = na_read_scalar(r->data.function.args[j], &row[j], &im) && im == 0.0;
+            if (!rok) { free(row); free(bd); free(bv); free(xin); return NULL; }
+            double d2 = ml_sqdist(xin, row, dim);
+            if (cnt < k) {
+                size_t q2 = cnt++;
+                while (q2 > 0 && bd[q2 - 1] > d2) { bd[q2] = bd[q2 - 1]; bv[q2] = bv[q2 - 1]; q2--; }
+                bd[q2] = d2; bv[q2] = row[dim];
+            } else if (d2 < bd[k - 1]) {
+                size_t q2 = k - 1;
+                while (q2 > 0 && bd[q2 - 1] > d2) { bd[q2] = bd[q2 - 1]; bv[q2] = bv[q2 - 1]; q2--; }
+                bd[q2] = d2; bv[q2] = row[dim];
+            }
+        }
+        free(row);
+        double s2 = 0.0;
+        for (size_t i = 0; i < cnt; i++) s2 += bv[i];
+        double mean = (cnt > 0) ? s2 / (double)cnt : 0.0;
+        free(bd); free(bv); free(xin);
+        return (cnt > 0) ? expr_new_real(mean) : NULL;
+    }
 
     double acc = 0.0, c = 0.0;
     if (!na_read_scalar(cl->data.function.args[0], &c, &im)) { free(xin); return NULL; }

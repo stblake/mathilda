@@ -95,6 +95,84 @@ static void test_wrong_shaped_application_stays_unevaluated(void) {
     assert_eval_eq("NumberQ[Predict[" LINE "][\"NoSuchProperty\"]]", "False", 0);
 }
 
+#define KNN_DATA "{1. -> 10., 2. -> 20., 3. -> 30., 10. -> 100., 11. -> 110.}"
+#define KNN1 "Method -> {\"NearestNeighbors\", \"NeighborsNumber\" -> 1}"
+
+static void test_knn_with_k_one_agrees_with_the_existing_nearest(void) {
+    /* The independent cross-check for this method. `Nearest` is a separate
+     * implementation already in the tree, so a 1-nearest predictor must return the
+     * label of whatever Nearest picks. Queried on both sides of a midpoint (2.4 and
+     * 2.6) so the comparison actually exercises the tie-breaking region rather than
+     * points that are obviously nearest to one row.
+     *
+     * The limit of the check is worth stating: Nearest here supports only the
+     * one-neighbour scalar form -- its k form and its point form decline -- so this
+     * validates neighbour SELECTION at k = 1 and nothing about the averaging. */
+    const char* qs[] = { "0.5", "2.4", "2.6", "7.", "9.9", "12." };
+    for (size_t i = 0; i < sizeof(qs) / sizeof(qs[0]); i++) {
+        char in[512];
+        snprintf(in, sizeof in,
+                 "Chop[Predict[" KNN_DATA ", " KNN1 "][%s] - "
+                 "10. First[Nearest[{1., 2., 3., 10., 11.}, %s]]]", qs[i], qs[i]);
+        assert_eval_eq(in, "0", 0);
+    }
+}
+
+static void test_knn_averages_its_neighbours(void) {
+    /* k = 3 around 2. takes 10, 20, 30 -- mean 20. k = 2 takes 10 and 20 -- mean 15.
+     * Different k must give different answers, or the option is decoration. */
+    assert_eval_eq("Predict[" KNN_DATA ", " KNN1 "][2.]", "20.0", 0);
+    assert_eval_eq("Predict[" KNN_DATA ", Method -> {\"NearestNeighbors\", "
+                   "\"NeighborsNumber\" -> 2}][2.]", "15.0", 0);
+    assert_eval_eq("Predict[" KNN_DATA ", Method -> \"NearestNeighbors\"][2.]", "20.0", 0);
+    /* Asking for every point makes the prediction the global mean, everywhere. */
+    assert_eval_eq("Predict[" KNN_DATA ", Method -> {\"NearestNeighbors\", "
+                   "\"NeighborsNumber\" -> 5}][2.] == Mean[{10., 20., 30., 100., 110.}]",
+                   "True", 0);
+}
+
+static void test_knn_is_not_linear(void) {
+    /* The two methods must genuinely differ -- and this test needs CURVED data to show
+     * it. KNN_DATA above is exactly y = 10x, so a neighbour average at an interior
+     * point equals the linear prediction there and the first version of this test
+     * passed for the wrong reason, proving nothing. y = x^2 has curvature a line cannot
+     * follow, so the two methods must disagree. */
+    const char* quad = "{1. -> 1., 2. -> 4., 3. -> 9., 4. -> 16., 5. -> 25.}";
+    char in[512];
+    snprintf(in, sizeof in,
+             "Predict[%s, Method -> \"NearestNeighbors\"][3.] == Predict[%s][3.]",
+             quad, quad);
+    assert_eval_eq(in, "False", 0);
+    /* And the k-NN answer is the neighbour mean, which on x = 3 with k = 3 is the mean
+     * of the labels at 2, 3 and 4: (4 + 9 + 16)/3. */
+    snprintf(in, sizeof in,
+             "Chop[Predict[%s, Method -> \"NearestNeighbors\"][3.] - (4. + 9. + 16.)/3.]",
+             quad);
+    assert_eval_eq(in, "0", 0);
+}
+
+static void test_knn_properties_and_multifeature(void) {
+    assert_eval_eq("Predict[" KNN_DATA ", Method -> \"NearestNeighbors\"]"
+                   "[\"NeighborCount\"]", "3", 0);
+    assert_eval_eq("Predict[" KNN_DATA ", Method -> \"NearestNeighbors\"][\"Method\"]",
+                   "\"NearestNeighbors\"", 0);
+    /* Two features, matrix form with the response last: the single nearest row to
+     * {10., 10.} is its own, so k = 1 returns that row's label exactly. */
+    assert_eval_eq("Predict[{{0., 0., 1.}, {1., 0., 2.}, {0., 1., 3.}, {10., 10., 99.}}, "
+                   KNN1 "][{10., 10.}]", "99.0", 0);
+}
+
+static void test_knn_option_errors_decline(void) {
+    /* A neighbour count is meaningless for a regression, so it is refused rather than
+     * accepted and ignored -- silently ignoring it would hide a real mistake. */
+    assert_eval_eq("Head[Predict[" KNN_DATA ", Method -> {\"LinearRegression\", "
+                   "\"NeighborsNumber\" -> 2}]]", "Predict", 0);
+    assert_eval_eq("Head[Predict[" KNN_DATA ", Method -> {\"NearestNeighbors\", "
+                   "\"Nope\" -> 2}]]", "Predict", 0);
+    assert_eval_eq("Head[Predict[" KNN_DATA ", Method -> {\"NearestNeighbors\", "
+                   "\"NeighborsNumber\" -> 0}]]", "Predict", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -108,6 +186,11 @@ int main(void) {
     TEST(test_rules_and_matrix_forms_agree);
     TEST(test_singular_and_malformed_input_declines);
     TEST(test_wrong_shaped_application_stays_unevaluated);
+    TEST(test_knn_with_k_one_agrees_with_the_existing_nearest);
+    TEST(test_knn_averages_its_neighbours);
+    TEST(test_knn_is_not_linear);
+    TEST(test_knn_properties_and_multifeature);
+    TEST(test_knn_option_errors_decline);
 
     printf("All ml Predict tests passed.\n");
     return 0;

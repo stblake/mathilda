@@ -168,6 +168,8 @@ Fits a predictor to data and returns a `PredictorFunction`. Attributes: `Protect
 
 - `Predict[data]`
 - `Predict[data, Method -> "LinearRegression"]`
+- `Predict[data, Method -> "NearestNeighbors"]`
+- `Predict[data, Method -> {"NearestNeighbors", "NeighborsNumber" -> k}]`
 
 **Features**:
 - Data is either a list of rules `{features -> value, …}` or a **matrix whose last
@@ -181,6 +183,21 @@ Fits a predictor to data and returns a `PredictorFunction`. Attributes: `Protect
 - `"LinearRegression"` is the only method implemented and the default. Any other
   declines rather than silently linear-regressing.
 - A wrongly-shaped input leaves the application unevaluated rather than guessing.
+- **`"NearestNeighbors"` has no fitted parameters — the training set *is* the model.**
+  That is why it costs nothing to fit and everything to apply. The prediction is the
+  mean response of the `k` nearest training rows; `k` defaults to 3, enough to average
+  away one noisy response and few enough to stay local, and is clamped to the number of
+  training rows. It answers `"NeighborCount"` and `"TrainingData"` as well as the shared
+  properties.
+- `"NeighborsNumber"` on a `"LinearRegression"` is **refused, not ignored** — silently
+  accepting a meaningless option would hide a real mistake. So is an unrecognised
+  sub-option, and a non-positive `k`.
+
+**On verification**: the 1-neighbour predictor is cross-checked against the existing
+independent `Nearest` builtin, on both sides of a midpoint, so neighbour *selection* is
+validated against separate code. `Nearest` supports only the one-neighbour scalar form
+here (its `k` form and point form decline), so that check covers selection at `k = 1`
+and says nothing about the averaging, which is asserted directly instead.
 
 ```mathematica
 In[1]:= p = Predict[{1. -> 3., 2. -> 5., 3. -> 7., 4. -> 9.}]

@@ -13,6 +13,7 @@
 #include "sym_names.h"
 #include "numarray.h"      /* na_load_matrix / na_build_matrix -- the machine bridge */
 #include "lapack.h"        /* mat_lapack_dsyev; a stub returning nonzero without LAPACK */
+#include "mlutil.h"   /* shared: list builders, data reader */
 #include "pca.h"
 #include "predict.h"
 
@@ -306,51 +307,6 @@ bool ml_reduce(const double* x, size_t n, size_t dim, size_t target,
 /* ------------------------------------------------------------------------- */
 /* Builtins                                                                   */
 /* ------------------------------------------------------------------------- */
-
-/* Build a plain List (of Lists) of machine reals.
- *
- * NOT na_build_matrix, deliberately, and this is a correctness point rather than a
- * style one. na_build_matrix hands back a VISIBLE NDArray, whose head is NDArray, so
- * `Standardize[data] === {{...}}` compares False against the literal a user would
- * write -- while Inverse, Dot and LinearSolve all return head List and compare True.
- * Building a List keeps this surface consistent with the rest of the system and lets
- * the evaluator's own packing gate decide whether the result is held as a buffer,
- * which is exactly what those three rely on. */
-static Expr* ml_list_of_reals(const double* v, size_t n) {
-    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
-    if (!a) return NULL;
-    for (size_t i = 0; i < n; i++) a[i] = expr_new_real(v[i]);
-    Expr* out = expr_new_function(expr_new_symbol(SYM_List), a, n);
-    free(a);
-    return out;
-}
-
-static Expr* ml_list_matrix(const double* x, size_t n, size_t dim) {
-    Expr** rows = malloc(sizeof(Expr*) * (n ? n : 1));
-    if (!rows) return NULL;
-    for (size_t i = 0; i < n; i++) rows[i] = ml_list_of_reals(x + i * dim, dim);
-    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, n);
-    free(rows);
-    return out;
-}
-
-/* Read arg 0 as an n x dim machine matrix, or as a single vector treated as one
- * column of n observations -- Standardize[{1, 2, 3}] is a list of scalars, which is
- * n observations of ONE variable, not one observation of three. */
-static bool ml_read_data(Expr* e, size_t* n, size_t* dim, double** buf,
-                         bool* was_vector) {
-    int r = 0, c = 0; double* b = NULL;
-    if (na_load_matrix(e, 0, 0, &r, &c, &b) && r > 0 && c > 0) {
-        *n = (size_t)r; *dim = (size_t)c; *buf = b; *was_vector = false;
-        return true;
-    }
-    int len = 0; double* v = NULL;
-    if (na_load_vector(e, 0, &len, &v) && len > 0) {
-        *n = (size_t)len; *dim = 1; *buf = v; *was_vector = true;
-        return true;
-    }
-    return false;
-}
 
 static Expr* builtin_standardize(Expr* res) {
     size_t argc = res->data.function.arg_count;
