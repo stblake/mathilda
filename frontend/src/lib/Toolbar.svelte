@@ -28,7 +28,9 @@
   import { canvasState, setFocused, activeActions, activeFlags, openRefpage, addQueryNotebook,
            addPaneToFocus, removePane, setFocusLayout, splitWithNext, MAX_PANES } from './canvas';
   import type { FocusLayout } from './canvas';
-  import { activeCell, retypeActiveCell } from './active';
+  import { activeCell, retypeActiveCell, activeHandle } from './active';
+  import { splitCell, mergeCellDown, duplicateCell, deleteCell,
+           indentCode, outdentCode, commentCode, duplicateLine } from './cellCommands';
   import { darkMode } from './theme';
   import { symbolAtSelection } from './refpages';
   import { kernelStatus } from './notebook';
@@ -218,6 +220,73 @@
   function closeActivePane() {
     const id = $canvasState.focusedActiveId;
     if (id) removePane(id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cells — structural edits on the active cell.
+
+  /* Merge needs a row below to merge with; the others only need a cell. */
+  $: canMerge = activeIdx >= 0 && rows.length > 1
+                && rows.findIndex(r => r.cells.some(c => c.id === activeCellObj?.id)) < rows.length - 1;
+
+  function doSplit() {
+    const pane = $activeActions;
+    if (!pane || !activeCellObj) return;
+    /* The caret offset only exists while the editor holds focus. Toolbar buttons
+       suppress pointerdown's default precisely so it still does -- but if
+       something took focus anyway, splitting at the end beats refusing. */
+    const h = activeHandle();
+    const at = $activeCell?.focused
+      ? (h?.view ? h.view.state.selection.main.head
+                 : (h?.el ? readContentEditableCaret(h.el) : null))
+      : null;
+    const newId = splitCell(pane.store, activeCellObj.id, at);
+    if (newId) pane.focusCell(newId);
+  }
+
+  /** Caret offset inside a contenteditable, as a plain character index. */
+  function readContentEditableCaret(el: HTMLElement): number | null {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !el.contains(sel.anchorNode)) return null;
+    const r = sel.getRangeAt(0).cloneRange();
+    r.selectNodeContents(el);
+    r.setEnd(sel.getRangeAt(0).endContainer, sel.getRangeAt(0).endOffset);
+    return r.toString().length;
+  }
+
+  function doMerge() {
+    const pane = $activeActions;
+    if (pane && activeCellObj) mergeCellDown(pane.store, activeCellObj.id);
+  }
+
+  function doDuplicate() {
+    const pane = $activeActions;
+    if (!pane || !activeCellObj) return;
+    const newId = duplicateCell(pane.store, activeCellObj.id);
+    if (newId) pane.focusCell(newId);
+  }
+
+  function doDelete() {
+    const pane = $activeActions;
+    if (pane && activeCellObj) deleteCell(pane.store, activeCellObj.id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Code — the context-sensitive group, when the active cell is code.
+  //
+  // The Text half of this group needs text cells to render Markdown before B/I/U
+  // mean anything: until then a bold button would insert literal ** and leave the
+  // asterisks on screen. So it is not rendered yet rather than shipped inert, and
+  // the group is hidden -- not disabled -- when no code cell is active, because a
+  // row of greyed-out controls under a caption reads as broken rather than as
+  // inapplicable.
+
+  $: codeView = activeCellObj?.type === 'code' ? (activeHandle()?.view ?? null) : null;
+  $: showCodeGroup = activeCellObj?.type === 'code';
+
+  function withView(fn: (v: import('@codemirror/view').EditorView) => void) {
+    const v = activeHandle()?.view;
+    if (v) fn(v);
   }
 
   // ---------------------------------------------------------------------------
@@ -469,6 +538,44 @@
   </button>
 </ToolbarGroup>
 
+<ToolbarGroup label="Cells">
+  <button class="tb-btn" title="Split the cell at the caret" disabled={!activeCellObj}
+          tabindex="-1" on:pointerdown|preventDefault on:click={doSplit}
+  ><Icon name="split" /></button>
+
+  <button class="tb-btn" title="Merge this cell with the one below" disabled={!canMerge}
+          tabindex="-1" on:pointerdown|preventDefault on:click={doMerge}
+  ><Icon name="merge" /></button>
+
+  <button class="tb-btn" title="Duplicate the cell" disabled={!activeCellObj}
+          tabindex="-1" on:pointerdown|preventDefault on:click={doDuplicate}
+  ><Icon name="duplicate" /></button>
+
+  <button class="tb-btn tb-danger" title="Delete the cell" disabled={!activeCellObj}
+          tabindex="-1" on:pointerdown|preventDefault on:click={doDelete}
+  ><Icon name="trash" /></button>
+</ToolbarGroup>
+
+<!-- Context-sensitive: only for code cells, and hidden rather than disabled
+     otherwise. The Text half arrives with Markdown text cells. -->
+<ToolbarGroup label="Code" visible={showCodeGroup}>
+  <button class="tb-btn" title="Indent" disabled={!codeView}
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => withView(indentCode)}
+  ><Icon name="indent" /></button>
+
+  <button class="tb-btn" title="Outdent" disabled={!codeView}
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => withView(outdentCode)}
+  ><Icon name="outdent" /></button>
+
+  <button class="tb-btn" title="Duplicate this line" disabled={!codeView}
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => withView(duplicateLine)}
+  ><Icon name="duplicate" size={14} /></button>
+
+  <button class="tb-btn tb-mono" title="Comment or uncomment the selection" disabled={!codeView}
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => withView(commentCode)}
+  >(*=*)</button>
+</ToolbarGroup>
+
 <ToolbarGroup label="Notebook">
   <button
     class="tb-btn"
@@ -538,6 +645,10 @@
   .tb-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text-h); }
   .tb-btn:active:not(:disabled) { background: var(--surface-3); }
   .tb-btn:disabled { opacity: 0.32; cursor: default; }
+  .tb-btn.tb-danger:hover:not(:disabled) { color: var(--err); background: var(--surface-2); }
+  /* Typographic marks stay text, so they should look like the code they insert. */
+  .tb-btn.tb-mono { font-family: var(--mono); font-size: 0.66rem; letter-spacing: -0.02em; }
+
   /* A toggle that is currently the case — the arrangement buttons. */
   .tb-btn.on {
     background: var(--surface-3);
