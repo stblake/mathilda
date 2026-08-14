@@ -337,6 +337,28 @@ static void test_griewank_simulatedannealing(void) {
                "Head[r] === List && 0 <= First[r] < 200]");
 }
 
+static void test_griewank_differentialevolution(void) {
+    /* Griewank-10 under explicit "DifferentialEvolution". The final population is
+     * spread across basins; polishing the best Min[2 n, 50] distinct members and
+     * keeping the deepest local minimum (not the raw global best's basin) reaches
+     * the global 0 here — far below Mathematica's ~0.175. Deterministic under the
+     * fixed default seed. */
+    check_true("Module[{r = NMinimize[{Sum[x[i]^2/4000, {i, 1, 10}] "
+               "- Product[Cos[x[i]/Sqrt[i]], {i, 1, 10}] + 1, "
+               "Table[-600 <= x[i] <= 600, {i, 1, 10}]}, Table[x[i], {i, 1, 10}], "
+               "Method -> \"DifferentialEvolution\"]}, 0 <= First[r] < 0.1]");
+
+    /* Monotonicity: enlarging "SearchPoints" leaves the population less converged
+     * per generation, which used to STRAND the single polished best in a shallow
+     * basin and report a worse optimum (SP 100 -> 0.197). With per-member basin
+     * polishing a larger population is no worse — it stays well under 0.1. */
+    check_true("Module[{r = NMinimize[{Sum[x[i]^2/4000, {i, 1, 10}] "
+               "- Product[Cos[x[i]/Sqrt[i]], {i, 1, 10}] + 1, "
+               "Table[-600 <= x[i] <= 600, {i, 1, 10}]}, Table[x[i], {i, 1, 10}], "
+               "Method -> {\"DifferentialEvolution\", \"SearchPoints\" -> 100}]}, "
+               "0 <= First[r] < 0.1]");
+}
+
 static void test_neldermead_shrink_tolerance(void) {
     /* Tolerance controls the simplex convergence threshold: a tight tolerance
      * refines much further than a loose one under a capped budget. */
@@ -684,6 +706,7 @@ int main(void) {
     TEST(test_postprocess_values);
     TEST(test_sa_suboptions);
     TEST(test_griewank_simulatedannealing);
+    TEST(test_griewank_differentialevolution);
     TEST(test_neldermead_shrink_tolerance);
     TEST(test_bukin6_no_warning);
     TEST(test_initial_points);

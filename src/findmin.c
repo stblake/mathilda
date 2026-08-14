@@ -3374,6 +3374,80 @@ static void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
             if (cnt >= NP / 2 && (fmax - fmin) <= tol) break;
         }
     }
+
+    /* Multi-start local polish over the final population. Polishing only the
+     * single global best strands DE in whichever basin that one member happened
+     * to occupy, so a larger population or a shorter run — both of which leave
+     * the population less converged — can report a WORSE optimum (Griewank-10:
+     * SearchPoints -> 100 gave 0.197 where the default 40 gave 0.044). This is
+     * the same non-monotonicity the SimulatedAnnealing per-chain polish removed.
+     * Polish the best Min[2 n, 50] *distinct* members — skipping any that sits in
+     * an already-polished basin — and keep the deepest local minimum, ranking
+     * basins by their minima rather than by the raw fitness of the member that
+     * found them. Gated by "PostProcess" -> False (then the raw global best is
+     * carried through as before) and confined to continuous problems, where the
+     * BFGS polish is cheap; a mixed-integer run keeps its single driver polish so
+     * its integer-descent cost is unchanged. */
+    if (nc->post_process != 0 && !D->any_int && NP >= 1) {
+        int64_t polish_cap = 2 * (int64_t)n < 50 ? 2 * (int64_t)n : 50;
+        if (polish_cap > (int64_t)NP) polish_cap = (int64_t)NP;
+        if (polish_cap < 1) polish_cap = 1;
+
+        /* Two members belong to the same basin for dedup purposes when they agree
+         * to within 1e-3 of the search span on every coordinate (floored, so a
+         * degenerate zero-width span still separates distinct points). */
+        double* btol = (double*)malloc(sizeof(double) * n);
+        for (size_t j = 0; j < n; j++) {
+            double t = 1e-3 * (rhi[j] - rlo[j]);
+            btol[j] = t > 1e-6 ? t : 1e-6;
+        }
+        unsigned char* used = (unsigned char*)calloc(NP, 1);
+        double* seeds = (double*)malloc(sizeof(double) * (size_t)polish_cap * n);
+        double* xp = (double*)malloc(sizeof(double) * n);
+        size_t nseeds = 0;
+        int64_t done = 0;
+
+        while (used && seeds && xp && btol && done < polish_cap) {
+            /* best not-yet-considered member by Deb's rules */
+            size_t best = NP;
+            for (size_t p = 0; p < NP; p++) {
+                if (used[p]) continue;
+                if (best == NP || nm_better(fpop[p], ppop[p], fpop[best], ppop[best]))
+                    best = p;
+            }
+            if (best == NP) break;
+            used[best] = 1;
+
+            /* Skip a member already represented by a polished basin seed. */
+            bool dup = false;
+            for (size_t s = 0; s < nseeds && !dup; s++) {
+                bool same = true;
+                for (size_t j = 0; j < n; j++)
+                    if (fabs(pop[best * n + j] - seeds[s * n + j]) > btol[j]) {
+                        same = false; break;
+                    }
+                if (same) dup = true;
+            }
+            if (dup) continue;   /* does not count against polish_cap */
+            for (size_t j = 0; j < n; j++) seeds[nseeds * n + j] = pop[best * n + j];
+            nseeds++;
+
+            for (size_t j = 0; j < n; j++) xp[j] = pop[best * n + j];
+            double fp = fpop[best], pp = ppop[best];
+            nm_local_polish(D, xp, &fp, &pp);
+            if (nm_better(fpop[best], ppop[best], fp, pp)) {  /* overshoot guard */
+                for (size_t j = 0; j < n; j++) xp[j] = pop[best * n + j];
+                fp = fpop[best]; pp = ppop[best];
+            }
+            if (nm_better(fp, pp, *fbest, *penbest)) {
+                for (size_t j = 0; j < n; j++) xbest[j] = xp[j];
+                *fbest = fp; *penbest = pp;
+            }
+            done++;
+        }
+        free(btol); free(used); free(seeds); free(xp);
+    }
+
     free(pop); free(fpop); free(ppop); free(trial);
 }
 

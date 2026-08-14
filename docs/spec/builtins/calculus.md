@@ -3127,6 +3127,19 @@ differentials to zero, and strand the search there whenever a box-constrained
 optimum lies in the interior (e.g. the Schwefel function, optimum at
 `x_i = 420.97` inside `[-500, 500]`).
 
+On a continuous problem the local polish is a **multi-start** over the final
+population, not a single refinement of the global best: the best `Min[2·d, 50]`
+*distinct* members (deduplicated by basin) are each polished into their basin
+minimum and the deepest is kept. Polishing only the single best strands DE in
+whichever basin that one member occupied, so a larger population or a shorter run
+— both of which leave the population less converged — could report a *worse*
+optimum; ranking basins by their minima instead makes the result improve, not
+degrade, with `"SearchPoints"`. On Griewank-10 over `[-600, 600]` the plain
+`Method -> "DifferentialEvolution"` reaches the global `0` (Mathematica reports
+`~0.175`). `"PostProcess" -> False` disables it and returns the raw global best;
+mixed-integer problems keep the single driver polish so their integer-descent cost
+is unchanged.
+
 **Automatic vs. explicit `"DifferentialEvolution"` — the default budget.**
 `Method -> Automatic` (i.e. no `Method`) runs DE with a *dimension-scaled* budget:
 population `Clip[10·d, {15, 200}]` and `150·d` generations, rather than the flat
