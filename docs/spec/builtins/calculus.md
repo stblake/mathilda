@@ -3058,9 +3058,48 @@ local polish); other inequalities and equalities are handled with **Deb's
 feasibility rules** during the global search (a feasible point always beats an
 infeasible one; among feasible points the smaller objective wins; among
 infeasible points the smaller total violation wins) and with the
-quadratic-penalty local solver during the polish.  Scalar integer variables
+quadratic-penalty local solver during the polish.  Integer variables
 (`Element[x, Integers]`) are searched on the integer lattice and refined by
-integer coordinate descent.
+integer coordinate descent.  A domain declaration may name **several variables
+at once**, written either as `Element[x | y, Integers]` (Alternatives) or
+`Element[{x, y}, Integers]` (List); each named variable gets the domain, exactly
+as Mathematica does.  The declaration is accepted in the variable list or the
+constraints, and every member must be one of the optimization variables (a
+declaration on any other symbol is left in place and rejected as unenforceable).
+
+For a **mixed-integer** problem whose feasible region lies outside the default
+`±10` search span, the polish adds a continuous-relaxation recovery step: it
+solves the continuous relaxation (the integer variables relaxed to reals, every
+coordinate free of the sampling region) to locate the basin, rounds the integer
+coordinates, then refines the continuous coordinates with the integers pinned.
+The relaxed point is adopted only when it is a Deb-improvement, so it can never
+worsen the region-confined result.  This lets e.g.
+`NMinimize[{(x-15)^2 + (y-3)^2, Element[y, Integers]}, {x, y}]` recover the
+optimum at `(15, 3)` even though `x = 15` is far outside the sampling box.
+
+**Adaptive region expansion.**  When the default `±10` sampling region contains
+no feasible point at all — common when the feasible set's location is implied by
+nonlinear constraints rather than stated as variable bounds — the fully-unbounded
+coordinates are grown by successive powers of ten (up to `±10^5`) and the search
+is retried, so the feasible region is found instead of reporting
+`{Infinity, ...}`.  Only fully-unbounded coordinates grow; a coordinate carrying
+a box bound or a starting-interval hint keeps its resolved region.  The first
+attempt is the base region with the base seed, so a problem already feasible
+there is solved identically to before; expansion triggers only to rescue
+infeasibility and stops at the smallest region that yields feasibility (so it
+does not drift into far basins).  Thus
+`NMinimize[{(x-50)^2 + (y-40)^2, x + y >= 80}, {x, y}]`, whose feasible set lies
+wholly outside `±10`, returns the optimum `(50, 40)`, while a genuinely
+infeasible problem (e.g. `x^2 + 1 <= 0`) still returns `{Infinity, ...}`.
+
+A problem that is genuinely **unbounded below** returns whatever feasible point
+the (bounded) search settles on; supplying explicit variable bounds (as the
+standard engineering MINLP benchmarks do) both bounds the objective and pins the
+intended optimum.  For instance the pressure-vessel MINLP written without its
+non-negativity bounds is unbounded below (its true global minimum is a large-
+negative non-physical point), so it returns a feasible point rather than the
+textbook physical optimum until the standard bounds
+`1 <= x1, x2 <= 99 && 10 <= x3, x4 <= 240` are added.
 
 Not yet supported (emit `NMinimize::nimpl` and abstain / fall back): vector and
 matrix variables (`Vectors[n, dom]`, `Matrices`), geometric-region domains,

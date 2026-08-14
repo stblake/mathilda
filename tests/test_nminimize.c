@@ -163,6 +163,45 @@ static void test_mixed_integer(void) {
     check_eq("Head[x /. Last[NMinimize[{x + 2 y, x^2 + 2 y^2 <= 3, x + y == 2, Element[x, Integers]}, {x, y}]]]", "Integer");
 }
 
+static void test_integer_domain_alternatives(void) {
+    /* Element[x|y, Integers] (Alternatives) declares BOTH x and y integer,
+     * exactly like a pair of single declarations. Same LP as
+     * test_integer_domain_value -> optimum 1, both variables integer. */
+    check_true("Abs[First[NMinimize[{x + y, x + 2 y >= 3, x >= -2, Element[x | y, Integers]}, {x, y}]] - 1.0] < 1.*^-6");
+    check_eq("Head[x /. Last[NMinimize[{x + y, x + 2 y >= 3, x >= -2, Element[x | y, Integers]}, {x, y}]]]", "Integer");
+    check_eq("Head[y /. Last[NMinimize[{x + y, x + 2 y >= 3, x >= -2, Element[x | y, Integers]}, {x, y}]]]", "Integer");
+}
+
+static void test_integer_domain_list(void) {
+    /* Element[{x, y}, Integers] (List) is the same multi-variable declaration. */
+    check_true("Abs[First[NMinimize[{x + y, x + 2 y >= 3, x >= -2, Element[{x, y}, Integers]}, {x, y}]] - 1.0] < 1.*^-6");
+    check_eq("Head[y /. Last[NMinimize[{x + y, x + 2 y >= 3, x >= -2, Element[{x, y}, Integers]}, {x, y}]]]", "Integer");
+}
+
+static void test_region_expansion_rescue(void) {
+    /* Feasible region x + y >= 80 lies entirely OUTSIDE the default +-10 DE
+     * sampling span (there x + y <= 20). Adaptive region expansion must grow
+     * the fully-unbounded coordinates until the feasible basin is reached and
+     * return the true optimum (50, 40) with value 0, not {Infinity, ...}. */
+    check_true("First[NMinimize[{(x-50)^2 + (y-40)^2, x + y >= 80}, {x, y}]] < 1.*^-2");
+    check_true("Abs[(x /. Last[NMinimize[{(x-50)^2 + (y-40)^2, x + y >= 80}, {x, y}]]) - 50.0] < 1.*^-1");
+    /* The same rescue with an integer coordinate. */
+    check_true("First[NMinimize[{(x-50)^2 + (y-40)^2, x + y >= 80, Element[y, Integers]}, {x, y}]] < 1.*^-2");
+    /* A genuinely infeasible unbounded problem still returns Infinity (the
+     * expansion exhausts without ever finding a feasible point). */
+    check_eq("First[NMinimize[{x, x^2 + 1 <= 0}, x]]", "Infinity");
+}
+
+static void test_mixed_integer_outside_region(void) {
+    /* The continuous optimum (x = 15) lies well outside the +-10 default DE
+     * sampling span; y is integer with optimum 3. The mixed-integer polish's
+     * continuous-relaxation step must recover it: value 0 at (15, 3). Without
+     * it the search would be stranded at the region wall (x ~ 10, value ~ 25). */
+    check_true("Abs[First[NMinimize[{(x - 15)^2 + (y - 3)^2, Element[y, Integers]}, {x, y}]]] < 1.*^-2");
+    check_true("Abs[(x /. Last[NMinimize[{(x - 15)^2 + (y - 3)^2, Element[y, Integers]}, {x, y}]]) - 15.0] < 1.*^-2");
+    check_eq("Head[y /. Last[NMinimize[{(x - 15)^2 + (y - 3)^2, Element[y, Integers]}, {x, y}]]]", "Integer");
+}
+
 /* ------------------------------------------------------------------ */
 /* 6. Infeasible problems                                              */
 /* ------------------------------------------------------------------ */
@@ -544,6 +583,10 @@ int main(void) {
     TEST(test_integer_domain_value);
     TEST(test_integer_domain_heads);
     TEST(test_mixed_integer);
+    TEST(test_integer_domain_alternatives);
+    TEST(test_integer_domain_list);
+    TEST(test_region_expansion_rescue);
+    TEST(test_mixed_integer_outside_region);
 
     /* 6. Infeasible */
     TEST(test_infeasible);

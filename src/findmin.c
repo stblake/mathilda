@@ -2842,6 +2842,8 @@ Expr* builtin_findmaximum(Expr* res) {
 #define NM_FEAS_FINAL     1.0e-6   /* final feasible-vs-Infinity threshold   */
 #define NM_PENALTY_MU     1.0e6    /* fixed penalty weight for NelderMead/SA */
 #define NM_DEFAULT_SEED   20260814ULL
+#define NM_MAX_REGION_EXPAND 4     /* infeasible-region rescue: grow +-SPAN by
+                                    * 10^k for k = 1..this (up to +-1e5)       */
 
 enum { NM_AUTO = 0, NM_DE, NM_NELDERMEAD, NM_RANDOMSEARCH, NM_SA };
 
@@ -3155,11 +3157,80 @@ static void nm_int_descent(NmDriver* D, double* x, double* f_io, double* pen_io)
     free(t);
 }
 
+/* Run the exact continuous local solver over all variables from x, confined
+ * only by the real box constraints (D->boxes) — never the DE sampling region,
+ * so a coordinate with no explicit bound is free to leave the default span
+ * (the freedom the pure-continuous polish already has). When pin_int is true
+ * each integer coordinate is pinned to its rounded value with a degenerate
+ * [v, v] box (fm_line_search projects every trial into the box, so it stays
+ * fixed); when false the integer coordinates are relaxed and solved as
+ * continuous. x is overwritten with the refined point and (f, penalty) at the
+ * integer-rounded point is returned; the caller decides whether to keep it. */
+static void nm_continuous_solve(NmDriver* D, double* x, bool pin_int,
+                                double* f_out, double* pen_out) {
+    size_t n = D->n;
+    FmBox* tb = (FmBox*)malloc(sizeof(FmBox) * n);
+    if (!tb) { nm_eval(D, x, f_out, pen_out); return; }
+    for (size_t j = 0; j < n; j++) {
+        if (pin_int && D->is_int[j]) {
+            double v = round(x[j]);
+            x[j] = v;
+            tb[j].has_lo = tb[j].has_hi = true;
+            tb[j].lo = tb[j].hi = v;
+        } else {
+            tb[j] = D->boxes[j];             /* real constraint bounds, else free    */
+        }
+    }
+    double fx = 0.0;
+    bool saved_quiet = g_fm_quiet;
+    g_fm_quiet = true;                        /* silence internal solver chatter      */
+    if (D->ngens > 0)
+        (void)fm_run_penalty(D->f_raw, D->vars, n, D->binds,
+                             FM_METHOD_QUASINEWTON, D->g_exprs, NULL, x,
+                             D->gens, D->ngens, tb, D->opts, &fx);
+    else
+        (void)fm_run_bfgs(D->f_raw, D->vars, n, D->binds, D->g_exprs, x,
+                          NULL, 0, 0.0, tb, D->opts, &fx);
+    g_fm_quiet = saved_quiet;
+    free(tb);
+    nm_eval(D, x, f_out, pen_out);
+}
+
 static void nm_local_polish(NmDriver* D, double* x, double* f_out, double* pen_out) {
     if (D->any_int) {
         nm_project(D, x);
         nm_eval(D, x, f_out, pen_out);
         nm_int_descent(D, x, f_out, pen_out);
+        /* A mixed-integer problem whose feasible region lies outside the DE
+         * sampling region (e.g. the pressure-vessel MINLP, feasible near
+         * x3 ~ 52 with the default +-10 span) is invisible to the region-bound
+         * integer descent above. Recover it with the continuous-relaxation +
+         * rounding heuristic: solve the continuous relaxation (integers relaxed,
+         * every coordinate free of the sampling region) to locate the basin,
+         * round the integer coordinates, then refine the continuous coordinates
+         * with the integers pinned. Adopt the result only when it is a
+         * Deb-improvement, so this can never worsen the region-descent answer.
+         * Skipped when every variable is integer (no continuous coordinate to
+         * free), where the region descent is already the whole story. */
+        bool has_cont = false;
+        for (size_t j = 0; j < D->n; j++) if (!D->is_int[j]) { has_cont = true; break; }
+        if (has_cont) {
+            double* xr = (double*)malloc(sizeof(double) * D->n);
+            if (xr) {
+                for (size_t j = 0; j < D->n; j++) xr[j] = x[j];
+                double fr, pr;
+                nm_continuous_solve(D, xr, false, &fr, &pr);     /* relaxation      */
+                for (size_t j = 0; j < D->n; j++)
+                    if (D->is_int[j]) xr[j] = round(xr[j]);
+                nm_continuous_solve(D, xr, true, &fr, &pr);      /* pin + refine    */
+                if (nm_better(fr, pr, *f_out, *pen_out)) {
+                    for (size_t j = 0; j < D->n; j++) x[j] = xr[j];
+                    *f_out = fr; *pen_out = pr;
+                }
+                free(xr);
+            }
+            nm_int_descent(D, x, f_out, pen_out);   /* re-settle integers in-region */
+        }
     } else {
         double fx = 0.0;
         bool saved_quiet = g_fm_quiet;
@@ -3793,8 +3864,12 @@ static bool nm_parse_vars(Expr* var_arg, NmVarSet* vs, const char* fn) {
 
 /* Pull Element[x, Integers|Reals] domain declarations out of the constraint
  * tree (marking is_int for Integers), returning the remaining constraint
- * expression (owned) or NULL if none remain. Unsupported Element domains are
- * left in place so fm_collect_constraints rejects them with its own message. */
+ * expression (owned) or NULL if none remain. The declared operand may be a
+ * single variable (Element[x, Integers]) or a set of them written as x|y|...
+ * (Alternatives) or {x, y, ...} (List): the domain applies to every member,
+ * matching Mathematica. Unsupported Element domains — and declarations naming
+ * a non-optimization symbol — are left in place so fm_collect_constraints
+ * rejects them with its own message. */
 static Expr* nm_filter_int(Expr* cons, Expr** vars, size_t n, bool* is_int) {
     if (!cons) return NULL;
     if (nm_is_head(cons, SYM_And)) {
@@ -3813,15 +3888,41 @@ static Expr* nm_filter_int(Expr* cons, Expr** vars, size_t n, bool* is_int) {
         return r;
     }
     if (nm_is_head(cons, SYM_Element) && cons->data.function.arg_count == 2) {
-        Expr* v = cons->data.function.args[0];
+        Expr* v   = cons->data.function.args[0];
         Expr* dom = cons->data.function.args[1];
-        if (v->type == EXPR_SYMBOL && dom->type == EXPR_SYMBOL) {
-            for (size_t i = 0; i < n; i++) {
-                if (vars[i]->data.symbol.name == v->data.symbol.name) {
-                    if (dom->data.symbol.name == SYM_Integers) { is_int[i] = true; return NULL; }
-                    if (dom->data.symbol.name == SYM_Reals)    { return NULL; }
-                    break;
-                }
+        /* Only the Integers and Reals domains are absorbed here; any other
+         * domain (or a non-symbol domain) falls through to be left in place. */
+        if (dom->type == EXPR_SYMBOL
+            && (dom->data.symbol.name == SYM_Integers
+                || dom->data.symbol.name == SYM_Reals)) {
+            bool integers = (dom->data.symbol.name == SYM_Integers);
+            /* Operand list: the bare symbol, or the members of an
+             * Alternatives / List container. */
+            Expr** ops; size_t nops;
+            if (v->type == EXPR_SYMBOL) { ops = &v; nops = 1; }
+            else if (nm_is_head(v, SYM_Alternatives) || nm_is_head(v, SYM_List)) {
+                ops = v->data.function.args; nops = v->data.function.arg_count;
+            } else { ops = NULL; nops = 0; }
+            /* Absorb the declaration only when every operand is one of the
+             * optimization variables; otherwise leave the whole node in place
+             * (a domain assertion on some other symbol is not enforceable). */
+            bool all_vars = (nops > 0);
+            for (size_t k = 0; k < nops && all_vars; k++) {
+                if (ops[k]->type != EXPR_SYMBOL) { all_vars = false; break; }
+                bool found = false;
+                for (size_t i = 0; i < n; i++)
+                    if (vars[i]->data.symbol.name == ops[k]->data.symbol.name) {
+                        found = true; break;
+                    }
+                all_vars = found;
+            }
+            if (all_vars) {
+                if (integers)
+                    for (size_t k = 0; k < nops; k++)
+                        for (size_t i = 0; i < n; i++)
+                            if (vars[i]->data.symbol.name == ops[k]->data.symbol.name)
+                                is_int[i] = true;
+                return NULL;   /* domain declaration absorbed */
             }
         }
         return expr_copy(cons);
@@ -4096,6 +4197,7 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     Expr* cons2 = NULL;
     double* reg_lo = NULL;
     double* reg_hi = NULL;
+    bool*   used_default = NULL;   /* dim used the default +-SPAN (fully unbounded) */
     double* xbest = NULL;
     Expr* result_out = NULL;
     CompiledProgram*  f_prog = NULL;   /* compiled objective (machine prec)     */
@@ -4119,6 +4221,8 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     bool infeasible_box = false;
     reg_lo = (double*)malloc(sizeof(double) * n);
     reg_hi = (double*)malloc(sizeof(double) * n);
+    used_default = (bool*)calloc(n ? n : 1, sizeof(bool));
+    bool any_default = false;
     for (size_t i = 0; i < n; i++) {
         bool klo = boxes[i].has_lo || vs.has_rlo[i];
         bool khi = boxes[i].has_hi || vs.has_rhi[i];
@@ -4129,7 +4233,8 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
         if (klo && khi)      { reg_lo[i] = lo; reg_hi[i] = hi; }
         else if (klo)        { reg_lo[i] = lo; reg_hi[i] = lo + NM_BOUND_SPAN; }
         else if (khi)        { reg_hi[i] = hi; reg_lo[i] = hi - NM_BOUND_SPAN; }
-        else                 { reg_lo[i] = -NM_DEFAULT_SPAN; reg_hi[i] = NM_DEFAULT_SPAN; }
+        else                 { reg_lo[i] = -NM_DEFAULT_SPAN; reg_hi[i] = NM_DEFAULT_SPAN;
+                               used_default[i] = true; any_default = true; }
         if (reg_hi[i] <= reg_lo[i]) {
             double m = 0.5 * (reg_lo[i] + reg_hi[i]);
             reg_lo[i] = m - 0.5; reg_hi[i] = m + 0.5;
@@ -4185,34 +4290,64 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
 
     xbest = (double*)malloc(sizeof(double) * n);
     double fbest = 1e300, penbest = 1e300;
-
-    NmRng rng;
-    nm_rng_seed(&rng, nc.seed);
     int method = (nc.method == NM_AUTO) ? NM_DE : nc.method;
-    switch (method) {
-        case NM_NELDERMEAD:   nm_neldermead(&D, &nc, &rng, xbest, &fbest, &penbest); break;
-        case NM_RANDOMSEARCH: nm_randomsearch(&D, &nc, &rng, xbest, &fbest, &penbest); break;
-        case NM_SA:           nm_sa(&D, &nc, &rng, xbest, &fbest, &penbest); break;
-        case NM_DE:
-        default:              nm_de(&D, &nc, &rng, xbest, &fbest, &penbest); break;
-    }
-
-    /* Polish the global best with the exact local solver, unless the caller
-     * disabled it with the Method sub-option "PostProcess" -> False. Guard
-     * against a penalty/BFGS step that overshoots: if the polished point is
-     * worse by Deb's rules than the pre-polish global best, keep the latter. */
     bool do_post = (nc.post_process != 0);
-    if (do_post) {
-        double* xsave = (double*)malloc(sizeof(double) * n);
-        for (size_t i = 0; i < n; i++) xsave[i] = xbest[i];
-        double fsave = fbest, psave = penbest;
-        nm_local_polish(&D, xbest, &fbest, &penbest);
-        if (nm_better(fsave, psave, fbest, penbest)) {
-            for (size_t i = 0; i < n; i++) xbest[i] = xsave[i];
-            fbest = fsave; penbest = psave;
+
+    /* Adaptive search-region expansion. If the default +-SPAN sampling region
+     * contains no feasible point, the fully-unbounded coordinates are grown by
+     * successive powers of ten and the search is retried — so a feasible region
+     * whose location is implied by nonlinear constraints rather than stated as
+     * variable bounds (e.g. the pressure-vessel MINLP, feasible near x3 ~ 52) is
+     * still found instead of reporting {Infinity, ...}. Only fully-unbounded
+     * coordinates grow; a coordinate carrying a box bound or a starting-interval
+     * hint keeps its resolved region. Attempt 0 is the base region with the base
+     * seed, so a problem already feasible there is solved identically to before;
+     * expansion triggers only to rescue infeasibility, and stops as soon as a
+     * feasible point is found (the smallest region that yields feasibility,
+     * which keeps the search from drifting into far, non-physical basins). */
+    int max_attempt = (any_default && !infeasible_box && !infeasible_pre)
+                    ? NM_MAX_REGION_EXPAND : 0;
+    double* xattempt = (double*)malloc(sizeof(double) * n);
+    for (int attempt = 0; attempt <= max_attempt; attempt++) {
+        if (attempt > 0) {
+            double span = NM_DEFAULT_SPAN * pow(10.0, (double)attempt);
+            for (size_t i = 0; i < n; i++) if (used_default[i]) {
+                reg_lo[i] = vs.is_int[i] ? floor(-span) : -span;
+                reg_hi[i] = vs.is_int[i] ? ceil(span)   :  span;
+            }
         }
-        free(xsave);
+        double fa = 1e300, pa = 1e300;
+        NmRng rng;
+        nm_rng_seed(&rng, nc.seed + (uint64_t)attempt * 0x100000001B3ULL);
+        switch (method) {
+            case NM_NELDERMEAD:   nm_neldermead(&D, &nc, &rng, xattempt, &fa, &pa); break;
+            case NM_RANDOMSEARCH: nm_randomsearch(&D, &nc, &rng, xattempt, &fa, &pa); break;
+            case NM_SA:           nm_sa(&D, &nc, &rng, xattempt, &fa, &pa); break;
+            case NM_DE:
+            default:              nm_de(&D, &nc, &rng, xattempt, &fa, &pa); break;
+        }
+        /* Polish this attempt's best with the exact local solver, unless the
+         * caller disabled it with "PostProcess" -> False. Guard against a
+         * penalty/BFGS step that overshoots: if the polished point is worse by
+         * Deb's rules than the pre-polish best, keep the latter. */
+        if (do_post) {
+            double* xsave = (double*)malloc(sizeof(double) * n);
+            for (size_t i = 0; i < n; i++) xsave[i] = xattempt[i];
+            double fsave = fa, psave = pa;
+            nm_local_polish(&D, xattempt, &fa, &pa);
+            if (nm_better(fsave, psave, fa, pa)) {
+                for (size_t i = 0; i < n; i++) xattempt[i] = xsave[i];
+                fa = fsave; pa = psave;
+            }
+            free(xsave);
+        }
+        if (attempt == 0 || nm_better(fa, pa, fbest, penbest)) {
+            for (size_t i = 0; i < n; i++) xbest[i] = xattempt[i];
+            fbest = fa; penbest = pa;
+        }
+        if (penbest <= NM_FEAS_FINAL) break;   /* feasible: stop expanding */
     }
+    free(xattempt);
     bool feasible = !infeasible_box && !infeasible_pre && (penbest <= NM_FEAS_FINAL);
 
     /* Optional MPFR refinement for WorkingPrecision > MachinePrecision on
@@ -4284,6 +4419,7 @@ cleanup:
     free(boxes);
     free(reg_lo);
     free(reg_hi);
+    free(used_default);
     free(xbest);
     if (eff_vars)  { for (size_t i = 0; i < n; i++) expr_free(eff_vars[i]);  free(eff_vars); }
     if (orig_vars) { for (size_t i = 0; i < n; i++) expr_free(orig_vars[i]); free(orig_vars); }
