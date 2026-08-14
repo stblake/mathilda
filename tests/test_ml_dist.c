@@ -188,6 +188,71 @@ static void test_singular_fits_decline(void) {
                    "LearnDistribution", 0);
 }
 
+/* Spacing 0.1 between consecutive points, so the squared median nearest-neighbour
+ * distance -- the variance floor -- is exactly 0.01. That makes the floor's effect
+ * PREDICTABLE rather than a fudge factor, which is what lets the estimator relationship
+ * below be asserted exactly. */
+#define UNI "Table[1. i/10., {i, 0, 40}]"
+#define BIMODAL "Join[Table[1. i/10., {i, 0, 20}], Table[10. + 1. i/10., {i, 0, 20}]]"
+
+static void test_bic_picks_the_component_count_from_the_data(void) {
+    /* One component for unimodal data, two for bimodal -- and the fitted means are the
+     * two modes with equal weight, which is the answer rather than merely a plausible
+     * one. Asserted through FullForm because the fitted object prints elided. */
+    assert_eval_eq("FullForm[LearnDistribution[" UNI ", Method -> \"GaussianMixture\"]]",
+                   "LearnedDistribution[\"GaussianMixture\", "
+                   "List[List[1.0], List[2.0], List[1.41]], 1, 1]", 0);
+    assert_eval_eq("FullForm[LearnDistribution[" BIMODAL ", "
+                   "Method -> \"GaussianMixture\"]]",
+                   "LearnedDistribution[\"GaussianMixture\", "
+                   "List[List[0.5, 0.5], List[1.0], List[0.376667], "
+                   "List[11.0], List[0.376667]], 1, 2]", 0);
+}
+
+static void test_one_component_mixture_relates_exactly_to_the_multinormal(void) {
+    /* The cross-check, and it is EXACT rather than approximate once the two estimators
+     * are stated precisely. EM maximises the likelihood, so its covariance uses the ML
+     * (n) divisor; LearnDistribution's Multinormal uses the unbiased (n-1) divisor to
+     * agree with Variance. The mixture then adds the variance-floor ridge. So:
+     *
+     *   cov_mixture = ((n-1)/n) * cov_multinormal + floor
+     *   1.41        = (40/41) * 1.435            + 0.01
+     *
+     * A fuzzy "the ratio is about 1.009" assertion would have hidden a wrong divisor OR
+     * a wrong floor; this one cannot, because it pins both terms. */
+    assert_eval_eq("Chop[(40./41.) 1.435 + 0.01 - 1.41]", "0", 0);
+    assert_eval_eq("Chop[Variance[" UNI "] - 1.435]", "0", 0);
+    /* And the densities differ by exactly the amount that implies, not by more. */
+    assert_eval_eq("Module[{g, m}, g = LearnDistribution[" UNI ", "
+                   "Method -> \"GaussianMixture\"]; m = LearnDistribution[" UNI "];"
+                   " Abs[PDF[g, {2.}] Sqrt[1.41] - PDF[m, {2.}] Sqrt[1.435]] < 1.*^-12]",
+                   "True", 0);
+}
+
+static void test_the_mixture_density_is_bimodal_and_normalised(void) {
+    /* Both modes must dominate the valley between them -- a single wide Gaussian would
+     * put the maximum in the middle, so this distinguishes a real mixture from a
+     * mixture-shaped object. */
+    assert_eval_eq("Module[{g = LearnDistribution[" BIMODAL ", "
+                   "Method -> \"GaussianMixture\"]},"
+                   " PDF[g, {1.}] > 1000. PDF[g, {5.5}] && "
+                   "PDF[g, {11.}] > 1000. PDF[g, {5.5}]]", "True", 0);
+    /* And it is a density: the trapezoid sum over the whole support is 1. A mixture whose
+     * weights did not sum to 1, or whose components were individually mis-normalised,
+     * fails here while still looking bimodal. */
+    assert_eval_eq("Module[{g = LearnDistribution[" BIMODAL ", "
+                   "Method -> \"GaussianMixture\"], h = 0.02, gr},"
+                   " gr = Table[-5. + h i, {i, 0, Round[25./h]}];"
+                   " Abs[h Total[Map[PDF[g, {#}] &, gr]] - 1.] < 0.001]", "True", 0);
+}
+
+static void test_mixture_declines_like_the_multinormal(void) {
+    assert_eval_eq("Head[LearnDistribution[" UNI ", Method -> \"Poisson\"]]",
+                   "LearnDistribution", 0);
+    assert_eval_eq("Head[LearnDistribution[{{1., 2.}}, "
+                   "Method -> \"GaussianMixture\"]]", "LearnDistribution", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -204,6 +269,10 @@ int main(void) {
     TEST(test_multinormal_in_two_dimensions);
     TEST(test_learned_distributions_elide_but_specified_ones_do_not);
     TEST(test_singular_fits_decline);
+    TEST(test_bic_picks_the_component_count_from_the_data);
+    TEST(test_one_component_mixture_relates_exactly_to_the_multinormal);
+    TEST(test_the_mixture_density_is_bimodal_and_normalised);
+    TEST(test_mixture_declines_like_the_multinormal);
 
     printf("All ml distribution tests passed.\n");
     return 0;

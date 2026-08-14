@@ -11,6 +11,7 @@
 #include "random.h"
 #include "mlutil.h"
 #include "pca.h"       /* ml_column_mean */
+#include "gmm.h"       /* ml_gmm_fit / ml_gmm_param_count -- extracted in iteration 9 for this */
 #include "dist.h"
 
 #ifndef M_PI
@@ -46,15 +47,83 @@ double ml_normal_deviate(void) {
 /* Recognised distributions. A distribution object is an ordinary expression whose
  * head names the family and whose arguments are its parameters -- specified, not
  * fitted, so it prints in full. */
-typedef enum { ML_D_NONE, ML_D_NORMAL, ML_D_UNIFORM, ML_D_MULTINORMAL } MlDistKind;
+typedef enum { ML_D_NONE, ML_D_NORMAL, ML_D_UNIFORM, ML_D_MULTINORMAL,
+               ML_D_MIXTURE } MlDistKind;
 
 typedef struct {
     MlDistKind kind;
     double a, b;          /* Normal: mu, sigma. Uniform: lo, hi. */
-    size_t dim;           /* Multinormal */
-    const double* mu;     /* borrowed */
-    const double* chol;   /* borrowed, lower factor */
+    size_t dim;           /* Multinormal / Mixture */
+    const double* mu;     /* borrowed. Mixture: k means, row-major */
+    const double* chol;   /* borrowed, lower factor(s) */
+    size_t k;             /* Mixture: component count */
+    const double* w;      /* borrowed. Mixture: k weights */
+    const double* logdet; /* borrowed. Mixture: k log-determinants */
 } MlDist;
+
+/* Read a LearnedDistribution["GaussianMixture", {weights, (mean, covRows...) x k}, dim, k].
+ *
+ * The Cholesky factors and log-determinants are DERIVED, so they are recomputed here
+ * rather than stored: keeping them in the payload would double its size and create two
+ * places for the same fact to live. That is the same choice the Multinormal path makes.
+ *
+ * A component whose covariance will not factorise makes the whole density undefined, so
+ * this declines. ml_gmm_fit cannot produce one -- its ridge guarantees positive
+ * definiteness -- but a hand-written LearnedDistribution could. */
+static bool ml_read_mixture(Expr* e, MlDist* d, double** owned) {
+    Expr* pay  = e->data.function.args[1];
+    Expr* dimx = e->data.function.args[2];
+    Expr* kx   = e->data.function.args[3];
+    if (!pay || pay->type != EXPR_FUNCTION) return false;
+    if (!dimx || dimx->type != EXPR_INTEGER || dimx->data.integer <= 0) return false;
+    if (!kx || kx->type != EXPR_INTEGER || kx->data.integer <= 0) return false;
+    size_t dim = (size_t)dimx->data.integer, k = (size_t)kx->data.integer;
+    if (pay->data.function.arg_count != 1 + k * (1 + dim)) return false;
+
+    /* One allocation: weights | means | chol | logdet. */
+    double* buf = malloc(sizeof(double) * (k + k * dim + k * dim * dim + k));
+    double* cov = malloc(sizeof(double) * dim * dim);
+    if (!buf || !cov) { free(buf); free(cov); return false; }
+    double* w = buf, *mu = buf + k, *ch = mu + k * dim, *ld = ch + k * dim * dim;
+
+    double im = 0.0; bool ok = true;
+    Expr* wr = pay->data.function.args[0];
+    if (!wr || wr->type != EXPR_FUNCTION || wr->data.function.arg_count != k) ok = false;
+    for (size_t j = 0; ok && j < k; j++)
+        ok = na_read_scalar(wr->data.function.args[j], &w[j], &im) && im == 0.0;
+
+    for (size_t j = 0; ok && j < k; j++) {
+        size_t base = 1 + j * (1 + dim);
+        Expr* mr = pay->data.function.args[base];
+        if (!mr || mr->type != EXPR_FUNCTION || mr->data.function.arg_count != dim) {
+            ok = false; break;
+        }
+        for (size_t a = 0; ok && a < dim; a++)
+            ok = na_read_scalar(mr->data.function.args[a], &mu[j * dim + a], &im)
+              && im == 0.0;
+        for (size_t a = 0; ok && a < dim; a++) {
+            Expr* cr = pay->data.function.args[base + 1 + a];
+            if (!cr || cr->type != EXPR_FUNCTION || cr->data.function.arg_count != dim) {
+                ok = false; break;
+            }
+            for (size_t b = 0; ok && b < dim; b++)
+                ok = na_read_scalar(cr->data.function.args[b], &cov[a * dim + b], &im)
+                  && im == 0.0;
+        }
+        if (ok) ok = ml_chol(cov, ch + j * dim * dim, dim);
+        if (ok) {
+            double t = 0.0;
+            for (size_t a = 0; a < dim; a++) t += log(ch[j * dim * dim + a * dim + a]);
+            ld[j] = 2.0 * t;
+        }
+    }
+    free(cov);
+    if (!ok) { free(buf); return false; }
+    d->kind = ML_D_MIXTURE; d->dim = dim; d->k = k;
+    d->w = w; d->mu = mu; d->chol = ch; d->logdet = ld;
+    *owned = buf;
+    return true;
+}
 
 /* Read a LearnedDistribution["Multinormal", {mean, covRows...}, dim, 0] into d.
  *
@@ -70,6 +139,8 @@ static bool ml_read_learned(Expr* e, MlDist* d, double** owned) {
     Expr* pay   = e->data.function.args[1];
     Expr* dimx  = e->data.function.args[2];
     if (!mname || mname->type != EXPR_STRING) return false;
+    if (strcmp(mname->data.string, "GaussianMixture") == 0)
+        return ml_read_mixture(e, d, owned);
     if (strcmp(mname->data.string, "Multinormal") != 0) return false;
     if (!pay || pay->type != EXPR_FUNCTION) return false;
     if (!dimx || dimx->type != EXPR_INTEGER || dimx->data.integer <= 0) return false;
@@ -168,6 +239,32 @@ static bool ml_multinormal_pdf(const MlDist* d, const double* x, double* out) {
     return true;
 }
 
+/* Mixture density: log-sum-exp over the components, exponentiated once. The log form is
+ * not optional here -- each component's density is a product of dim factors, so a point
+ * a few standard deviations from every mean underflows in linear space, and the answer
+ * would be a flat zero exactly where the tail behaviour matters. */
+static bool ml_mixture_pdf(const MlDist* d, const double* x, double* out) {
+    double* y = malloc(sizeof(double) * d->dim);
+    double* lp = malloc(sizeof(double) * d->k);
+    if (!y || !lp) { free(y); free(lp); return false; }
+    double best = -INFINITY;
+    for (size_t j = 0; j < d->k; j++) {
+        if (!(d->w[j] > 0.0)) { lp[j] = -INFINITY; continue; }
+        double q = ml_mahalanobis(d->chol + j * d->dim * d->dim,
+                                 d->mu + j * d->dim, x, d->dim, y);
+        lp[j] = log(d->w[j])
+              - 0.5 * ((double)d->dim * log(2.0 * M_PI) + d->logdet[j] + q);
+        if (lp[j] > best) best = lp[j];
+    }
+    double sacc = 0.0;
+    if (best > -INFINITY)
+        for (size_t j = 0; j < d->k; j++)
+            if (lp[j] > -INFINITY) sacc += exp(lp[j] - best);
+    free(y); free(lp);
+    *out = (sacc > 0.0) ? exp(best + log(sacc)) : 0.0;
+    return true;
+}
+
 static Expr* builtin_pdf(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     MlDist d; double* owned = NULL;
@@ -175,7 +272,7 @@ static Expr* builtin_pdf(Expr* res) {
     Expr* xe = res->data.function.args[1];
     double x = 0.0, im = 0.0;
 
-    if (d.kind == ML_D_MULTINORMAL) {
+    if (d.kind == ML_D_MULTINORMAL || d.kind == ML_D_MIXTURE) {
         /* The argument is a POINT, so a list here is one observation rather than many.
          * That is the opposite reading from the scalar case below, where a list is many
          * points -- and it has to be, because a multinormal's argument is itself a
@@ -185,13 +282,15 @@ static Expr* builtin_pdf(Expr* res) {
         Expr* out = NULL;
         if (ml_read_data(xe, &n, &dm, &px, &vec)) {
             double p = 0.0;
-            if (vec && n == d.dim && ml_multinormal_pdf(&d, px, &p))
+            bool (*pdf)(const MlDist*, const double*, double*) =
+                (d.kind == ML_D_MIXTURE) ? ml_mixture_pdf : ml_multinormal_pdf;
+            if (vec && n == d.dim && pdf(&d, px, &p))
                 out = expr_new_real(p);
             else if (!vec && dm == d.dim) {         /* a matrix: many points */
                 double* o = malloc(sizeof(double) * n);
                 bool ok = o != NULL;
                 for (size_t i = 0; ok && i < n; i++)
-                    ok = ml_multinormal_pdf(&d, px + i * dm, &o[i]);
+                    ok = pdf(&d, px + i * dm, &o[i]);
                 if (ok) out = ml_list_of_reals(o, n);
                 free(o);
             }
@@ -268,9 +367,47 @@ static Expr* builtin_randomvariate(Expr* res) {
  * Only "Multinormal" here; GaussianMixture is the next piece and will reuse
  * ml_gmm_fit / ml_gmm_logpdf, which were extracted for exactly that.
  */
+/* The variance floor for a standalone mixture fit: the SQUARED MEDIAN NEAREST-NEIGHBOUR
+ * DISTANCE.
+ *
+ * This is load-bearing, not defensive. A Gaussian mixture's likelihood is unbounded
+ * above -- a component collapsing onto a single point drives its density, and hence the
+ * likelihood, to infinity -- so with a floor set merely "small" the BIC search buys
+ * arbitrarily many near-singular spikes. That was measured in the clustering path before
+ * its floor existed: six components for eight points.
+ *
+ * The median nearest-neighbour distance is the standalone analogue of the median
+ * spanning-tree edge weight that fc_gmm_ndim uses, and it says the same honest thing:
+ * structure finer than the spacing between samples is not resolvable from this data. The
+ * MEDIAN rather than the mean, so one tight pair cannot drag the floor to nearly zero
+ * and reopen the same hole. */
+static double ml_nn_floor(const double* x, size_t n, size_t dim) {
+    if (n < 2) return 0.0;
+    double* nn = malloc(sizeof(double) * n);
+    if (!nn) return 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double best = -1.0;
+        for (size_t j = 0; j < n; j++) {
+            if (j == i) continue;
+            double d2 = ml_sqdist(x + i * dim, x + j * dim, dim);
+            if (best < 0.0 || d2 < best) best = d2;
+        }
+        nn[i] = (best > 0.0) ? best : 0.0;
+    }
+    for (size_t a = 1; a < n; a++) {                    /* insertion sort, n is bounded */
+        double v = nn[a]; size_t b = a;
+        while (b > 0 && nn[b - 1] > v) { nn[b] = nn[b - 1]; b--; }
+        nn[b] = v;
+    }
+    double med = (n % 2) ? nn[n / 2] : 0.5 * (nn[n / 2 - 1] + nn[n / 2]);
+    free(nn);
+    return med;                                          /* already a SQUARED distance */
+}
+
 static Expr* builtin_learn_distribution(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
+    bool mixture = false;
     if (argc == 2) {
         Expr* o = res->data.function.args[1];
         if (!o || o->type != EXPR_FUNCTION || o->data.function.arg_count != 2) return NULL;
@@ -283,7 +420,10 @@ static Expr* builtin_learn_distribution(Expr* res) {
         if (!lhs || lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Method)
             return NULL;
         if (!rhs || rhs->type != EXPR_STRING) return NULL;
-        if (strcmp(rhs->data.string, "Multinormal") != 0) return NULL;
+        const char* mm = rhs->data.string;
+        if (strcmp(mm, "Multinormal") == 0)          mixture = false;
+        else if (strcmp(mm, "GaussianMixture") == 0) mixture = true;
+        else return NULL;
     }
 
     size_t n, dim; double* x = NULL; bool vec = false;
@@ -291,6 +431,63 @@ static Expr* builtin_learn_distribution(Expr* res) {
     /* A flat list is n observations of ONE variable, which is a perfectly good
      * univariate normal -- so unlike PrincipalComponents this does not decline it. */
     if (n < 2) { free(x); return NULL; }        /* one point has no dispersion to fit */
+
+    if (mixture) {
+        /* BIC over k = 1..k_max, exactly as the clustering path does. k_max is bounded by
+         * the PARAMETER COUNT rather than the point count: a full covariance costs
+         * dim*(dim+1)/2 numbers per component, so a component needs more points than
+         * dimensions before it means anything. */
+        double vfloor = ml_nn_floor(x, n, dim);
+        if (!(vfloor > 0.0)) vfloor = 1e-300;
+        size_t kmax = n / (dim + 1);
+        if (kmax > 10) kmax = 10;
+        if (kmax < 1) kmax = 1;
+
+        MlGmm* best = NULL; double best_bic = INFINITY;
+        for (size_t kk = 1; kk <= kmax; kk++) {
+            MlGmm* g = ml_gmm_fit(x, n, dim, kk, vfloor, NULL);
+            if (!g) continue;
+            double bic = ml_gmm_param_count(kk, dim) * log((double)n) - 2.0 * g->loglik;
+            if (bic < best_bic) {
+                best_bic = bic;
+                if (best) ml_gmm_free(best);
+                best = g;
+            } else {
+                ml_gmm_free(g);
+            }
+        }
+        free(x);
+        if (!best) return NULL;
+
+        size_t k = best->k;
+        Expr** rows = malloc(sizeof(Expr*) * (1 + k * (1 + dim)));
+        Expr* outm = NULL;
+        if (rows) {
+            rows[0] = ml_list_of_reals(best->w, k);
+            for (size_t j = 0; j < k; j++) {
+                size_t base = 1 + j * (1 + dim);
+                rows[base] = ml_list_of_reals(best->mu + j * dim, dim);
+                for (size_t a = 0; a < dim; a++)
+                    rows[base + 1 + a] =
+                        ml_list_of_reals(best->cov + j * dim * dim + a * dim, dim);
+            }
+            Expr* pay = expr_new_function(expr_new_symbol(SYM_List), rows,
+                                          1 + k * (1 + dim));
+            free(rows);
+            if (pay) {
+                Expr* a4[4];
+                a4[0] = expr_new_string("GaussianMixture");
+                a4[1] = pay;
+                a4[2] = expr_new_integer((int64_t)dim);
+                a4[3] = expr_new_integer((int64_t)k);
+                if (a4[0] && a4[1] && a4[2] && a4[3])
+                    outm = expr_new_function(expr_new_symbol("LearnedDistribution"), a4, 4);
+                else { expr_free(a4[0]); expr_free(a4[1]); expr_free(a4[2]); expr_free(a4[3]); }
+            }
+        }
+        ml_gmm_free(best);
+        return outm;
+    }
 
     double* mean = malloc(sizeof(double) * dim);
     double* cov  = malloc(sizeof(double) * dim * dim);
@@ -341,8 +538,9 @@ void ml_dist_init(void) {
     symtab_get_def("LearnDistribution")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("LearnDistribution",
         "LearnDistribution[data] fits a distribution to data and returns a "
-        "LearnedDistribution, usable with PDF. Method -> \"Multinormal\" is the only "
-        "method implemented and is the default: it fits a mean vector and a sample "
+        "LearnedDistribution, usable with PDF. Method -> \"Multinormal\" is the default; "
+        "Method -> \"GaussianMixture\" fits a mixture, choosing the component count by "
+        "BIC. Multinormal fits a mean vector and a sample "
         "covariance (n-1 divisor, matching Variance). Rows are observations and columns "
         "are variables; a flat list is n observations of one variable. A singular "
         "covariance -- collinear columns, or fewer observations than dimensions -- "

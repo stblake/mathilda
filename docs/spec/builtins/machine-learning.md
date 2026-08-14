@@ -334,6 +334,7 @@ Attributes: `Protected`.
 
 - `LearnDistribution[data]`
 - `LearnDistribution[data, Method -> "Multinormal"]`
+- `LearnDistribution[data, Method -> "GaussianMixture"]`
 
 **Features**:
 - Rows are observations, columns are variables; a flat list is `n` observations of one
@@ -351,6 +352,30 @@ Attributes: `Protected`.
 - For a multinormal, `PDF[dist, {x1, …, xd}]` is **one** point — because the argument is
   itself a list — while a *matrix* threads to one density per row. That is the opposite
   reading from the scalar case, and it has to be.
+
+**`"GaussianMixture"`** fits a mixture and chooses the component count by BIC — one
+component for unimodal data, two for bimodal, with the fitted means landing on the modes.
+
+**Its variance floor is the squared median nearest-neighbour distance, and it is
+load-bearing.** A mixture's likelihood is *unbounded above*: a component collapsing onto
+a single point drives its density, and hence the likelihood, to infinity. With a floor set
+merely "small", the BIC search buys arbitrarily many near-singular spikes — measured in the
+clustering path before its floor existed, six components for eight points. The median
+nearest-neighbour distance says the honest thing instead: structure finer than the spacing
+between samples is not resolvable. The *median* rather than the mean, so one tight pair
+cannot drag the floor toward zero and reopen the same hole.
+
+**A one-component mixture relates to the Multinormal fit exactly**, not approximately, and
+the relationship is worth stating because it looks like a discrepancy:
+
+```
+cov_mixture = ((n-1)/n) · cov_multinormal + floor
+1.41        = (40/41)   · 1.435           + 0.01
+```
+
+EM maximises the likelihood, so its covariance uses the ML (`n`) divisor, while
+`"Multinormal"` uses the unbiased (`n-1`) divisor to agree with `Variance`; the mixture
+then adds the ridge. Both estimators are standard and both are correct for what they are.
 
 **Verified against an independent implementation.** A one-dimensional fit reaches its
 density through a Cholesky factor and a Mahalanobis distance, while
