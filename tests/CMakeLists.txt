@@ -376,6 +376,7 @@ set(COMMON_SRC
     ../src/list/find_clusters.c
     ../src/ml/gmm.c
     ../src/ml/mlutil.c
+    ../src/ml/dist.c
     ../src/ml/pca.c
     ../src/ml/predict.c
     ../src/list/distance.c
@@ -856,6 +857,10 @@ add_test(NAME ml_pca_tests COMMAND ml_pca_tests)
 add_executable(ml_predict_tests test_ml_predict.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(ml_predict_tests PRIVATE ../src)
 add_test(NAME ml_predict_tests COMMAND ml_predict_tests)
+
+add_executable(ml_dist_tests test_ml_dist.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ml_dist_tests PRIVATE ../src)
+add_test(NAME ml_dist_tests COMMAND ml_dist_tests)
 
 add_executable(intersection_tests test_intersection.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(intersection_tests PRIVATE ../src)

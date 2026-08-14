@@ -277,6 +277,56 @@ In[3]:= r[{104., 210.}]           (* exactly at the training mean *)
 Out[3]= {0.0}
 ```
 
+## Distributions
+
+`NormalDistribution[mu, sigma]` and `UniformDistribution[{lo, hi}]` are distribution
+objects — ordinary expressions whose head names the family and whose arguments are its
+parameters. `NormalDistribution[]` and `UniformDistribution[]` give the standard cases.
+Attributes: `Protected`.
+
+**Distribution objects print in full, unlike fitted models**, and that contrast is
+deliberate. A distribution is *specified* by its parameters — the user wrote them — so
+they are the information. A fitted model's parameters are derived and are an
+implementation detail, so it elides them. Same mechanism, opposite convention on
+visibility.
+
+## RandomVariate
+
+- `RandomVariate[dist]` — one draw
+- `RandomVariate[dist, n]` — a list of `n`
+
+**Features**:
+- **Draws come from the same stream as `RandomReal`**, so `SeedRandom` makes them
+  reproducible. A sampler with its own generator would silently ignore `SeedRandom`
+  while `RandomReal` honoured it — reproducibility half-working is worse than not
+  working.
+- Normal deviates use Box–Muller in its polar form, which needs no `sin`/`cos`. There
+  was no Gaussian deviate anywhere in the tree before this.
+- **A non-positive standard deviation, or an inverted range, returns unevaluated** —
+  not `NaN`, which would propagate silently through a whole sample and surface much
+  later as a strange plot. `RandomVariate[dist, 0]` is a valid empty request.
+
+## PDF
+
+- `PDF[dist, x]`, threading over a list of `x`.
+
+Verified against the closed form computed symbolically: `PDF[NormalDistribution[], 0]`
+equals `1/Sqrt[2 Pi]`, and the general case matches the longhand
+`Exp[-((x-mu)/sigma)^2/2]/(sigma Sqrt[2 Pi])`. A uniform density is flat inside its
+support and exactly zero outside.
+
+```mathematica
+In[1]:= SeedRandom[42]; RandomVariate[NormalDistribution[], 5]
+Out[1]= {0.981398, -0.56572, 1.34033, 0.402313, -0.964221}
+
+In[2]:= SeedRandom[1]; s = RandomVariate[NormalDistribution[5., 2.], 20000];
+        {Mean[s], StandardDeviation[s]}
+Out[2]= {5.00479, 1.99627}
+
+In[3]:= PDF[NormalDistribution[], {-1., 0., 1.}]
+Out[3]= {0.241971, 0.398942, 0.241971}
+```
+
 ## Clustering
 
 `FindClusters` and its ten methods are documented under

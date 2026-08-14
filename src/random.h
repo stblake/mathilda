@@ -17,6 +17,11 @@
  * verdict is a pure function of its input), not a user-visible sequence.
  * Speeding up the user-facing generator must not move them -- doing so changed
  * an Integrate result. See the definition in random.c. */
+/* A uniform double in [0, 1) from the USER-VISIBLE stream, so anything built on it
+ * is reproducible under SeedRandom. Distribution samplers in src/ml use this.
+ * Contrast random_internal_int_range below, which must NOT disturb that stream. */
+double random_uniform_01(void);
+
 int64_t random_internal_int_range(int64_t lo, int64_t hi);
 
 void random_push_seed(uint64_t seed);
