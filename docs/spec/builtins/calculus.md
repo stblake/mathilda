@@ -3151,9 +3151,11 @@ Recognised sub-options:
 
 | Sub-option | Applies to | Meaning |
 |------------|-----------|---------|
-| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts) | population / restart / start count, honored verbatim; the automatic DE population is `Clip[10·d, {15, 40}]` under explicit `"DifferentialEvolution"` and `Clip[10·d, {15, 200}]` under `Method -> Automatic` (see below) |
+| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts) | population / restart / start count, honored verbatim; the automatic DE population is `Clip[10·d, {15, 40}]` under explicit `"DifferentialEvolution"` and `Clip[10·d, {15, 200}]` under `Method -> Automatic` (see below); for SimulatedAnnealing it is the number of independent annealing chains (default 1) |
 | `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6) |
 | `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9) |
+| `"PerturbationScale" -> s` | SimulatedAnnealing | multiplies the trial-step size (default 1.0); a positive real, an invalid value warns (`NMinimize::sopt`) and falls back to 1.0 |
+| `"BoltzmannExponent" -> f` | SimulatedAnnealing | acceptance-probability exponent for an uphill move: `f[i, df, f0]` (1-based iteration `i`, objective increase `df`, current value `f0`) sets the probability `Exp[f[i, df, f0]]`. `Automatic`/`None` keep the built-in geometric-cooling exponent `-df/T`; an invalid value warns (`NMinimize::bexp`) and falls back to Automatic |
 | `"ReflectRatio" -> r` | NelderMead | simplex reflection coefficient (default 1) |
 | `"ExpandRatio" -> e` | NelderMead | simplex expansion coefficient (default 2) |
 | `"ContractRatio" -> c` | NelderMead | simplex contraction coefficient (default 0.5) |
@@ -3200,6 +3202,24 @@ inequality always contributes 0, so the feasibility test is unchanged; an invali
 value (a number, a string) warns (`NMinimize::penf`) and falls back to
 `Automatic`. On a box-only problem the option is inert (there are no general
 constraints to penalize).
+
+`"SimulatedAnnealing"` honors three of its own sub-options.
+`"SearchPoints" -> K` runs `K` independent annealing chains from random starts
+and keeps the global best (default 1, a single chain); a bounded aggregate
+iteration budget is shared across the chains so a large `K` stays fast.
+`"PerturbationScale" -> s` multiplies the size of the random trial step
+(default 1.0) — a small scale keeps the walk local, a large one explores more
+widely. `"BoltzmannExponent" -> f` replaces the Metropolis acceptance exponent
+for an uphill move: the point is accepted with probability `Exp[f[i, df, f0]]`,
+where `i` is the (1-based) iteration, `df ≥ 0` the objective increase, and `f0`
+the current objective; `Automatic`/`None` keep the built-in geometric-cooling
+exponent `-df/T`. A downhill move is always accepted, as usual. The default
+single-chain run without these options is bit-for-bit identical to before —
+scale 1.0 is an exact multiply and the PRNG is drawn in the same order — so a
+seeded result is unchanged. On the strongly-multimodal Griewank function
+`Sum[x[i]²/4000] - Product[Cos[x[i]/√i]] + 1` over `[-600, 600]^d`,
+SimulatedAnnealing (like Mathematica's) settles into a nonzero local minimum
+(~0.2-0.8 for `d = 10`) rather than the global 0.
 
 ### Options
 

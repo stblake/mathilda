@@ -1,81 +1,55 @@
-# Group E benchmarks — 10 advanced-numerical-analysis experiments (Mathilda vs Python 3.11 + numpy/scipy)
+# Task: NMinimize SimulatedAnnealing Method options
+
+## Goal
+Make the SimulatedAnnealing method honor its three Method sub-options
+("PerturbationScale", "BoltzmannExponent", "SearchPoints") — currently `nm_sa`
+does `(void)nc;` and ignores all of them, and the parser silently drops
+PerturbationScale/BoltzmannExponent. Add regression tests, including the
+Griewank-10 case Mathematica returns a nonzero local minimum on.
 
 ## Plan
-- [x] Wire a new report group E (53–62) into `benchmarks/run_all.py` `group_of()`
-- [x] Add `benchmarks/requirements.txt` (numpy/scipy/mpmath) + group-E table & Python-3.11 note in README
-- [x] 53 matrix-decompositions (LU/QR/SVD/PseudoInverse/rank/NullSpace; Cholesky ABSENT)
-- [x] 54 eigenproblems (sym/general/generalized/Arnoldi; Eigensystem ABSENT)
-- [x] 55 vectorized special functions (Fresnel/Erf/integrals/Beta vectorized; BesselI/K no kernel)
-- [x] 56 multidim quadrature (2D/3D/oscillatory/singular/semi-infinite/dependent-bounds)
-- [x] 57 stiff ODE + PDE (stiff scalar/Robertson/harmonic/VdP + heat/wave MethodOfLines)
-- [x] 58 nonlinear systems (2×2, Burden–Faires 3×3, Broyden tridiagonal N=10/40)
-- [x] 59 polynomial roots (NSolve/NRoots dense 20/50/100, roots-of-unity, Wilkinson)
-- [x] 60 DCT/DST (types 1/2/4, DST 1/2) + 2D Fourier, normalization reconciled in checks
-- [x] 61 regularized least squares (LeastSquares + Fit Tikhonov/ridge; FindFit ABSENT)
-- [x] 62 arbitrary precision (N[…,p]/NSum/NIntegrate/FindRoot vs mpmath), deep-digit checks
-- [x] Run subset under Python 3.11 via `HPC_PYTHON`, `--check-labels`; produce gap report
+- [ ] Add `perturbation_scale` (double, <0 ⇒ default 1.0) and `boltzmann_fn`
+      (Expr*, borrowed / NULL ⇒ default) to `NmConfig`; init in the setup block.
+- [ ] Parse `"PerturbationScale"` and `"BoltzmannExponent"` in `nm_parse_method`.
+- [ ] Add `nm_boltzmann_exponent()` helper (mirrors `nm_apply_penalty_fn`),
+      calling `fn[i, df, f0]` → double, fallback to default exponent on failure.
+- [ ] Rewrite `nm_sa` to:
+      - run `K = search_points>0 ? search_points : 1` annealing chains from
+        random starts, keeping the global best (SearchPoints = restarts);
+      - scale the perturbation step by `perturbation_scale`;
+      - use `Exp[boltzmann_fn[i, df, f0]]` as the Metropolis acceptance
+        probability when a function is supplied, else the current `exp(-d/T)`.
+      - **Preserve the K=1, default-options path bit-for-bit** (multiply by 1.0,
+        identical RNG draw order) so existing SA tests stay deterministic.
+- [ ] Bound total work when many chains are requested (per-chain iteration cap).
+- [ ] Update docs: `docs/spec/builtins/calculus.md` sub-option table + paragraph;
+      `src/info.c` docstring; changelog `docs/spec/changelog/2026-08-10.md`.
+- [ ] Add regression tests in `tests/test_nminimize.c`:
+      - Griewank-10 with the exact Method from the report (SA + PerturbationScale
+        + BoltzmannExponent + SearchPoints) returns a finite nonzero local min;
+      - each of the three options individually takes effect / is honored.
+- [ ] Build, run test_nminimize, verify no regressions.
 
 ## Review
-- **Result:** 65 cases, **0 INCOMPLETE, 0 CHECK-FAIL** (every case runs, every check agrees within 1e-6),
-  32 SLOWER, 30 AHEAD, 3 ABSENT. Coverage 85.7% (30/35 declared heads). Wall clock 1.8 min.
-- Only shared-code edit: one clause in `run_all.py` `group_of()`. No Mathilda source touched.
-- Run it: `HPC_PYTHON=/usr/local/bin/python3.11 python3 benchmarks/run_all.py --only 53,54,55,56,57,58,59,60,61,62 --system mathilda,python`
-- Outputs: `benchmarks/REPORT.partial.md`, `ABSENT.partial.md`, `results/2026-08-12-partial.json`.
+Done. `src/findmin.c`: added `perturb_scale` + `boltzmann_fn` to `NmConfig`
+(init'd -1.0 / NULL), parsed `"PerturbationScale"` / `"BoltzmannExponent"` in
+`nm_parse_method` (with `NMinimize::sopt` / `::bexp` fallbacks), added
+`nm_boltzmann_exponent()` (mirrors `nm_apply_penalty_fn`), and rewrote `nm_sa`
+to run K=`search_points` chains sharing a bounded budget (`NM_SA_TOTAL_CAP`),
+scale the step by `perturb_scale`, and use `Exp[f[i,df,f0]]` acceptance. The
+K=1/default-option path is bit-for-bit unchanged (verified: 1D SA still
+−3.51391; default Griewank-10 still 0.233824, matching Mathematica).
 
-### Top gaps surfaced (the "drive improvements" queue)
-1. `NullSpace` on a float matrix takes a non-machine path — **2428×** (9.6 s vs 4 ms).
-2. `NSolve`/`NRoots` high-degree — **60–110×**; Wilkinson-15 **1616×** (symbolic preprocessing of the product form).
-3. Generalized `Eigenvalues[{A,B}]` has **no LAPACK path** — symbolic char-poly root-finding; **1136×**, returns Root[] at n≥6, hangs at n≥8.
-4. `BesselI`/`BesselK` over arrays have **no SIMD kernel** (scalar threading) — **105×/209×**; the other special functions are vectorized and mostly AHEAD.
-5. `LUDecomposition` **31.5×**, `FindRoot` systems scale poorly (Broyden N=40 **19×**), symmetric eig **6.7×**, Fit ridge **8.1×**, DCT-2/4 **~3.6×**.
-- Also `FindRoot`/`NSum` under-deliver requested WorkingPrecision (FindRoot ~19 correct digits at WP→100).
+Docs: `docs/spec/builtins/calculus.md` (sub-option table + SA paragraph),
+`src/info.c` docstring, changelog `docs/spec/changelog/2026-08-10.md`.
 
-### Where Mathilda already wins (regression guards)
-- NDSolve (compiled RHS) beats scipy solve_ivp 5–40×; arbitrary precision beats (pure-Python) mpmath up to ~200×
-  (N[Gamma[1/3],1000]: 19 ms vs 3.9 s); most vectorized special functions and several NIntegrate cases AHEAD.
+Tests (`tests/test_nminimize.c`): `test_sa_suboptions` (each option honored +
+invalid-value fallback) and `test_griewank_simulatedannealing` (default lands
+in [0.1,1.0]; the exact reported all-options invocation stays finite/feasible).
+Full nminimize_tests (52) + findmin_tests pass; `make check-c99` clean; suite
+1.84s.
 
-### Absences (feature work)
-- `CholeskyDecomposition`, `Eigensystem`, `FindFit` (declared, benched on the Python side only).
-
-## Not done (deferred per scope)
-- Implementing the kernel/feature fixes above — the user chose "author + run + gap report, then review".
-
----
-
-# NMinimize / NMaximize — numerical global optimization (2026-08-14)
-
-Plan: `~/.claude/plans/let-s-plan-the-implementation-sequential-cosmos.md`.
-Global-optimization driver layered on the existing `FindMinimum` machinery
-(`src/findmin.c`), reusing its variable binding, `{f,cons}` constraint parsing,
-penalty/BFGS local solvers, MPFR path, and result builders.
-
-## Done
-- `builtin_nminimize` + `nm_minimize_driver` + 4 engines (DifferentialEvolution
-  default, NelderMead, RandomSearch, SimulatedAnnealing) with Deb feasibility
-  rules; `builtin_nmaximize` negate-and-wrap. All in `src/findmin.c`.
-- Mixed-integer via `Element[x, Integers]` (lattice search + integer coordinate
-  descent; integer results). Empty feasible set → `{Infinity, {x->Indeterminate}}`.
-- `SYM_NMinimize`/`SYM_NMaximize` (sym_names), `HoldAll|Protected` registration,
-  docstrings (info.c), `Options[]` defaults (options_builtin.c), docs
-  (calculus.md) + changelog (2026-08-10.md).
-- Deterministic SplitMix64 PRNG (fixed seed; `"RandomSeed"` override) → reproducible.
-- Internal solver diagnostics muted during search (`g_fm_quiet`) so successful
-  solves are silent.
-
-## Verification
-- `tests/test_nminimize.c` (29 cases) — all pass. `findmin_tests`,
-  `options_tests`, `core_tests` — no regression. `make check-c99` clean.
-  Valgrind identical to `Sin[1.0]` baseline (no NMinimize frames). Spec examples
-  reproduced (quartic, disk, linear-program, equality, integer, infeasible, dual).
-
-## Two bugs found + fixed during bring-up
-1. `{f, c1, c2, ...}` (>2-element list) silently dropped all constraints — only a
-   2-element `{f, cons}` was recognized. Now collects every trailing element into
-   an implicit `And`.
-2. Contradictory strict bounds (`x>2 && x<1`) were "repaired" by averaging,
-   hiding infeasibility. Now detects an empty box → `{Infinity, ...}`.
-
-## Deferred (per agreed scope)
-- Vector/matrix/region variables (`Vectors`/`Matrices`), `VectorGreaterEqual`,
-  `Or` constraints, non-Integers/Reals domains, general constraints at high
-  `WorkingPrecision`. Each abstains with an `NMinimize::nimpl` message.
+Caveat surfaced to user: the reported `"BoltzmannExponent" -> (1/#&)` is
+always-accept (Exp[1/i] > 1), so under our schedule it random-walks to a higher
+local min (46.4) than Mathematica's 0.234 — but the *default* SA matches MMA at
+0.234. Options are demonstrably honored regardless.

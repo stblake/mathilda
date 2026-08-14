@@ -270,6 +270,72 @@ static void test_postprocess_values(void) {
              "{x, y}, Method -> {\"NelderMead\", \"ReflectRatio\" -> 1.5, \"PostProcess\" -> \"InteriorPoint\"}]]", "List");
 }
 
+static void test_sa_suboptions(void) {
+    /* The three "SimulatedAnnealing" sub-options are honored — nm_sa used to
+     * do (void)nc and ignore all of them, and the parser silently dropped
+     * "PerturbationScale" / "BoltzmannExponent". Deterministic under the fixed
+     * default seed. */
+
+    /* "SearchPoints" -> K runs K independent annealing restarts and keeps the
+     * global best. On a rugged multimodal surface, 30 restarts reach a far
+     * better raw (PostProcess -> False) point than a single chain. */
+    check_true("First[NMinimize[{x^2 + y^2 + 10 Sin[3 x]^2 + 10 Sin[3 y]^2, "
+               "-5 <= x <= 5 && -5 <= y <= 5}, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"SearchPoints\" -> 30, \"PostProcess\" -> False}]] < "
+               "First[NMinimize[{x^2 + y^2 + 10 Sin[3 x]^2 + 10 Sin[3 y]^2, "
+               "-5 <= x <= 5 && -5 <= y <= 5}, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"SearchPoints\" -> 1, \"PostProcess\" -> False}]]");
+
+    /* "PerturbationScale" scales the trial-step size. A tiny scale keeps the
+     * raw walk near its random start, far from the (3, -2) optimum of this wide
+     * box; the default scale explores and reaches it. */
+    check_true("First[NMinimize[{(x-3)^2 + (y+2)^2, -50 <= x <= 50 && -50 <= y <= 50}, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"PerturbationScale\" -> 0.002, \"PostProcess\" -> False}]] > 10");
+    check_true("First[NMinimize[{(x-3)^2 + (y+2)^2, -50 <= x <= 50 && -50 <= y <= 50}, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"PerturbationScale\" -> 1.0, \"PostProcess\" -> False}]] < 1");
+
+    /* "BoltzmannExponent" -> f supplies the acceptance-probability exponent
+     * f[i, df, f0]; a proper (negative-for-uphill) exponent still anneals and
+     * the polish reaches the optimum. */
+    check_true("Abs[First[NMinimize[{(x-3)^2 + (y+2)^2, -50 <= x <= 50 && -50 <= y <= 50}, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"BoltzmannExponent\" -> (-#2/(#1 + 1) &), "
+               "\"PostProcess\" -> True}]]] < 1.*^-6");
+
+    /* Invalid sub-option values warn (NMinimize::sopt / ::bexp) and fall back
+     * to the defaults rather than failing: the solve still returns a List. */
+    check_eq("Head[NMinimize[{(x-3)^2 + (y+2)^2, -50 <= x <= 50 && -50 <= y <= 50}, {x, y}, "
+             "Method -> {\"SimulatedAnnealing\", \"PerturbationScale\" -> -3}]]", "List");
+    check_eq("Head[NMinimize[{(x-3)^2 + (y+2)^2, -50 <= x <= 50 && -50 <= y <= 50}, {x, y}, "
+             "Method -> {\"SimulatedAnnealing\", \"BoltzmannExponent\" -> \"nope\"}]]", "List");
+}
+
+static void test_griewank_simulatedannealing(void) {
+    /* Griewank-10 on [-600, 600]^10 is strongly multimodal: SimulatedAnnealing
+     * settles into a nonzero local minimum rather than the global 0, exactly as
+     * Mathematica does (its SA reports a value in the ~0.2-0.8 range here). The
+     * default single-chain geometric-cooling Metropolis schedule lands in a good
+     * basin at ~0.234 — the same value Mathematica returns on this problem.
+     * Deterministic under the fixed default seed. */
+    check_true("Module[{r = NMinimize[{Sum[x[i]^2/4000, {i, 1, 10}] "
+               "- Product[Cos[x[i]/Sqrt[i]], {i, 1, 10}] + 1, "
+               "Table[-600 <= x[i] <= 600, {i, 1, 10}]}, Table[x[i], {i, 1, 10}], "
+               "Method -> \"SimulatedAnnealing\"]}, 0.1 < First[r] < 1.0]");
+
+    /* The exact reported invocation — all three sub-options together — is
+     * accepted and returns a valid, finite feasible minimum. The degenerate
+     * "BoltzmannExponent" -> (1/# &) makes acceptance certain (Exp[1/i] > 1),
+     * turning each chain into a wide random walk that, with 2x perturbation,
+     * settles at a higher local minimum than the default Metropolis schedule;
+     * the point of the test is that every sub-option is parsed and applied
+     * without error and the result stays finite/feasible. */
+    check_true("Module[{r = NMinimize[{Sum[x[i]^2/4000, {i, 1, 10}] "
+               "- Product[Cos[x[i]/Sqrt[i]], {i, 1, 10}] + 1, "
+               "Table[-600 <= x[i] <= 600, {i, 1, 10}]}, Table[x[i], {i, 1, 10}], "
+               "Method -> {\"SimulatedAnnealing\", \"PerturbationScale\" -> 2.0, "
+               "\"BoltzmannExponent\" -> (1/# &), \"SearchPoints\" -> 50}]}, "
+               "Head[r] === List && 0 <= First[r] < 200]");
+}
+
 static void test_neldermead_shrink_tolerance(void) {
     /* Tolerance controls the simplex convergence threshold: a tight tolerance
      * refines much further than a loose one under a capped budget. */
@@ -615,6 +681,8 @@ int main(void) {
     TEST(test_symbol_indirection);
     TEST(test_neldermead_suboptions);
     TEST(test_postprocess_values);
+    TEST(test_sa_suboptions);
+    TEST(test_griewank_simulatedannealing);
     TEST(test_neldermead_shrink_tolerance);
     TEST(test_bukin6_no_warning);
     TEST(test_initial_points);

@@ -2843,6 +2843,8 @@ Expr* builtin_findmaximum(Expr* res) {
 #define NM_FEAS_EPS       1.0e-8   /* penalty ≤ this ⇒ feasible (selection)  */
 #define NM_FEAS_FINAL     1.0e-6   /* final feasible-vs-Infinity threshold   */
 #define NM_PENALTY_MU     1.0e6    /* fixed penalty weight for NelderMead/SA */
+#define NM_SA_TOTAL_CAP   120000   /* SA aggregate iteration cap across chains
+                                    * when "SearchPoints" -> K > 1 restarts     */
 #define NM_DEFAULT_SEED   20260814ULL
 #define NM_MAX_REGION_EXPAND 4     /* infeasible-region rescue: grow +-SPAN by
                                     * 10^k for k = 1..this (up to +-1e5)       */
@@ -2862,6 +2864,8 @@ typedef struct {
     int      post_process;   /* -1 auto (on) / 1 on / 0 off (skip polish)    */
     Expr*    init_points;    /* "InitialPoints" -> {{...},...}, borrowed / NULL */
     Expr*    penalty_fn;     /* "PenaltyFunction" -> f, borrowed / NULL ⇒ auto */
+    double   perturb_scale;  /* SA "PerturbationScale"; <0 ⇒ default 1.0       */
+    Expr*    boltzmann_fn;   /* SA "BoltzmannExponent" -> f, borrowed / NULL ⇒ auto */
     uint64_t seed;
 } NmConfig;
 
@@ -3554,46 +3558,106 @@ static void nm_randomsearch(NmDriver* D, const NmConfig* nc, NmRng* rng,
     free(x);
 }
 
-/* SimulatedAnnealing with geometric cooling; tracks the best point seen. */
+/* SimulatedAnnealing "BoltzmannExponent" -> f. Evaluate f[i, df, f0] to the
+ * real exponent whose Exp is the Metropolis acceptance probability for an
+ * uphill move: i is the (1-based) iteration, df ≥ 0 the objective increase, f0
+ * the current objective. Evaluator numeric diagnostics are muted, as everywhere
+ * in the trial-point loop. Returns false — so the caller falls back to the
+ * built-in geometric-cooling exponent — if f does not yield a finite real. */
+static bool nm_boltzmann_exponent(Expr* bf, int64_t i, double df, double f0,
+                                  double* out) {
+    Expr* a[3];
+    a[0] = expr_new_integer(i);
+    a[1] = expr_new_real(df);
+    a[2] = expr_new_real(f0);
+    Expr* call = expr_new_function(expr_copy(bf), a, 3);
+    arith_warnings_mute_push();
+    Expr* v = eval_and_free(call);
+    arith_warnings_mute_pop();
+    bool ok = v && fm_expr_to_double_real(v, out) && isfinite(*out);
+    expr_free(v);
+    return ok;
+}
+
+/* SimulatedAnnealing with geometric cooling; tracks the best point seen.
+ *
+ * Honors three "SimulatedAnnealing" sub-options:
+ *   "SearchPoints" -> K       run K independent annealing chains from random
+ *                             starts and keep the global best (default 1);
+ *   "PerturbationScale" -> s  multiply the trial-step size by s (default 1.0);
+ *   "BoltzmannExponent" -> f  use Exp[f[i, df, f0]] as the acceptance
+ *                             probability for an uphill move (default -df/T).
+ * The single-chain, default-option path is bit-for-bit identical to before
+ * (scale 1.0 is an exact multiply, and the RNG is drawn in the same order), so
+ * a seeded run without these options is unchanged. */
 static void nm_sa(NmDriver* D, const NmConfig* nc, NmRng* rng,
                   double* xbest, double* fbest, double* penbest) {
     size_t n = D->n;
     const double* rlo = D->reg_lo;
     const double* rhi = D->reg_hi;
-    (void)nc;
+    double pscale = nc->perturb_scale > 0.0 ? nc->perturb_scale : 1.0;
+    Expr*  bf     = nc->boltzmann_fn;
+
+    /* "SearchPoints" -> K restarts (default: a single chain). */
+    int64_t K = nc->search_points > 0 ? (int64_t)nc->search_points : 1;
+
+    /* Per-chain iteration budget. A single chain keeps the original schedule;
+     * many search points share a bounded aggregate so runtime stays in hand,
+     * with a floor so each chain still anneals meaningfully. */
+    int64_t per_chain = D->opts->max_iter > 0 ? D->opts->max_iter * 50 : 5000;
+    if (per_chain > 20000) per_chain = 20000;
+    if (K > 1 && K * per_chain > NM_SA_TOTAL_CAP) {
+        per_chain = NM_SA_TOTAL_CAP / K;
+        if (per_chain < 300) per_chain = 300;
+    }
+
     double* x  = (double*)malloc(sizeof(double) * n);
     double* xn = (double*)malloc(sizeof(double) * n);
-    for (size_t j = 0; j < n; j++) x[j] = nm_rng_range(rng, rlo[j], rhi[j]);
-    nm_project(D, x);
-    double fx, px;
-    nm_eval(D, x, &fx, &px);
-    double phi = fx + NM_PENALTY_MU * px;
-    for (size_t j = 0; j < n; j++) xbest[j] = x[j];
-    *fbest = fx; *penbest = px;
+    bool have = false;
 
-    int64_t iters = D->opts->max_iter > 0 ? D->opts->max_iter * 50 : 5000;
-    if (iters > 20000) iters = 20000;
-    double T = 1.0;
-    for (int64_t it = 0; it < iters; it++) {
-        for (size_t j = 0; j < n; j++) {
-            double span = rhi[j] - rlo[j];
-            xn[j] = x[j] + span * 0.1 * (0.1 + T) * nm_rng_normal(rng);
+    for (int64_t chain = 0; chain < K; chain++) {
+        for (size_t j = 0; j < n; j++) x[j] = nm_rng_range(rng, rlo[j], rhi[j]);
+        nm_project(D, x);
+        double fx, px;
+        nm_eval(D, x, &fx, &px);
+        double phi = fx + NM_PENALTY_MU * px;
+        if (!have || nm_better(fx, px, *fbest, *penbest)) {
+            for (size_t j = 0; j < n; j++) xbest[j] = x[j];
+            *fbest = fx; *penbest = px; have = true;
         }
-        nm_project(D, xn);
-        double fn2, pn2;
-        nm_eval(D, xn, &fn2, &pn2);
-        double phin = fn2 + NM_PENALTY_MU * pn2;
-        double d = phin - phi;
-        if (d < 0.0 || nm_rng_unif(rng) < exp(-d / (T + 1e-12))) {
-            for (size_t j = 0; j < n; j++) x[j] = xn[j];
-            phi = phin; fx = fn2; px = pn2;
-            if (nm_better(fx, px, *fbest, *penbest)) {
-                for (size_t j = 0; j < n; j++) xbest[j] = x[j];
-                *fbest = fx; *penbest = px;
+
+        double T = 1.0;
+        for (int64_t it = 0; it < per_chain; it++) {
+            for (size_t j = 0; j < n; j++) {
+                double span = rhi[j] - rlo[j];
+                xn[j] = x[j]
+                      + pscale * (span * 0.1 * (0.1 + T) * nm_rng_normal(rng));
             }
+            nm_project(D, xn);
+            double fn2, pn2;
+            nm_eval(D, xn, &fn2, &pn2);
+            double phin = fn2 + NM_PENALTY_MU * pn2;
+            double d = phin - phi;
+            bool accept;
+            if (d < 0.0) {
+                accept = true;
+            } else {
+                double expo;
+                if (!bf || !nm_boltzmann_exponent(bf, it + 1, d, phi, &expo))
+                    expo = -d / (T + 1e-12);
+                accept = nm_rng_unif(rng) < exp(expo);   /* NaN prob ⇒ reject */
+            }
+            if (accept) {
+                for (size_t j = 0; j < n; j++) x[j] = xn[j];
+                phi = phin; fx = fn2; px = pn2;
+                if (nm_better(fx, px, *fbest, *penbest)) {
+                    for (size_t j = 0; j < n; j++) xbest[j] = x[j];
+                    *fbest = fx; *penbest = px;
+                }
+            }
+            T *= 0.995;
+            if (T < 1e-4) T = 1e-4;
         }
-        T *= 0.995;
-        if (T < 1e-4) T = 1e-4;
     }
     free(x); free(xn);
 }
@@ -3698,6 +3762,33 @@ static bool nm_parse_method(Expr* rhs, NmConfig* nc, const char* fn) {
                  * known. Anything else is ignored (falls back to random starts). */
                 if (nm_is_head(ov, SYM_List) && ov->data.function.arg_count > 0)
                     nc->init_points = ov;
+            } else if (strcmp(on, "PerturbationScale") == 0) {
+                /* SimulatedAnnealing: multiplies the size of the random step
+                 * used to generate a new trial point (default 1.0). A larger
+                 * scale explores more widely; must be a positive finite real. */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0)
+                    nc->perturb_scale = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "PerturbationScale must be a positive real; using 1.0");
+            } else if (strcmp(on, "BoltzmannExponent") == 0) {
+                /* SimulatedAnnealing: the exponent of the Metropolis acceptance
+                 * probability for an uphill move. A function f is called as
+                 * f[i, df, f0] (iteration i≥1, objective difference df≥0, current
+                 * value f0) and the point is accepted with probability Exp[f[...]];
+                 * Automatic / None keep the built-in geometric-cooling exponent
+                 * -df/T. Borrowed from the held method list. */
+                if (ov->type == EXPR_SYMBOL
+                    && (ov->data.symbol.name == SYM_Automatic
+                        || ov->data.symbol.name == SYM_None)) {
+                    nc->boltzmann_fn = NULL;
+                } else if (ov->type == EXPR_FUNCTION || ov->type == EXPR_SYMBOL) {
+                    nc->boltzmann_fn = ov;
+                } else {
+                    fm_warn(fn, "bexp",
+                            "invalid BoltzmannExponent value; using Automatic");
+                }
             } else if (strcmp(on, "PenaltyFunction") == 0) {
                 /* A function applied to each constraint's violation to score
                  * infeasible points during the global search; Automatic ≡ #^2 &.
@@ -4029,6 +4120,8 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     nc.post_process = -1;
     nc.init_points = NULL;
     nc.penalty_fn = NULL;
+    nc.perturb_scale = -1.0;
+    nc.boltzmann_fn = NULL;
     nc.seed = NM_DEFAULT_SEED;
 
     for (size_t i = pos_end; i < argc; i++) {
