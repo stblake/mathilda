@@ -76,11 +76,44 @@ static Expr* shift_var(Expr* e, Expr* var, int k) {
 }
 
 /*
+ * True if e contains a subexpression Power[base, exp] whose exponent is not an
+ * integer literal and whose base depends on var -- e.g. Sqrt[p(var)], which is
+ * Power[p(var), 1/2].  For any such factor the term ratio t(var+1)/t(var) is a
+ * radical, not a rational function, so t is not a hypergeometric term and
+ * Gosper cannot sum it.  Rejecting it here is not merely an optimisation: the
+ * Simplify in step 1 below, asked to rationalise such a term ratio, can diverge
+ * (e.g. the multi-symbol quadratic radical of the Thomson-problem summand), so
+ * the structural check must run *before* that Simplify is ever built.
+ */
+static bool has_var_radical(Expr* e, Expr* var) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    Expr* head = e->data.function.head;
+    size_t argc = e->data.function.arg_count;
+    if (head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Power
+        && argc == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp  = e->data.function.args[1];
+        if (exp->type != EXPR_INTEGER && exp->type != EXPR_BIGINT
+            && !sum_free_of(base, var))
+            return true;
+    }
+    if (has_var_radical(head, var)) return true;
+    for (size_t k = 0; k < argc; k++)
+        if (has_var_radical(e->data.function.args[k], var)) return true;
+    return false;
+}
+
+/*
  * Gosper's algorithm.  Returns the indefinite antidifference F(var) such that
  * F(var+1) - F(var) = t(var), or NULL if t is not a hypergeometric term or not
  * Gosper-summable.
  */
 static Expr* gosper_antidiff(Expr* t, Expr* var) {
+    /* A var-dependent radical gives an irrational term ratio, so t cannot be a
+     * hypergeometric term.  Bail before the step-1 Simplify, which can diverge
+     * on such radicals. */
+    if (has_var_radical(t, var)) return NULL;
+
     /* 1. term ratio r = t(var+1)/t(var), reduced to a rational function. */
     Expr* tshift = shift_var(t, var, 1);
     Expr* ratio_raw = expr_new_function(expr_new_symbol(SYM_Times),

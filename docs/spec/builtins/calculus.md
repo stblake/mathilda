@@ -2401,7 +2401,12 @@ Gosper's algorithm for indefinite summation of a hypergeometric term
 Gosper–Petkovšek normal form (dispersion + gcd peeling) → degree-bounded
 key equation `a(i) x(i+1) - b(i-1) x(i) = c(i)` → antidifference
 `F = (b(i-1)/c(i)) x(i) t(i)`.  Returns unevaluated when `t` is not a
-hypergeometric term or is not Gosper-summable.
+hypergeometric term or is not Gosper-summable.  A summand carrying a
+fractional power of an `i`-dependent base (e.g. `Sqrt[p(i)]`) has an
+irrational term ratio, so it is rejected structurally up front — this is both
+correct and avoids the term-ratio `Simplify` diverging on such a radical,
+which previously hung nested finite sums like the Thomson-problem repulsion
+`Sum[1/Sqrt[(x[i]-x[j])^2+...], {i,1,n-1}, {j,i+1,n}]`.
 
 ```mathematica
 In[1]:= Sum[k k!, k]
