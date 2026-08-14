@@ -824,6 +824,15 @@ add_test(NAME flint_bridge_tests COMMAND flint_bridge_tests)
 add_executable(list_tests test_list.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(list_tests PRIVATE ../src)
 
+# Regression pins for FindClusters' one-dimensional answers, held separately from
+# test_list.c because they exist to guard a specific refactor: eight of the ten
+# methods are 1-D by algorithm, and giving them n dimensions means changing the
+# distance, the length scale and the assignment contract that the working 1-D
+# paths share.
+add_executable(findclusters_scalar_pin_tests test_findclusters_scalar_pin.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(findclusters_scalar_pin_tests PRIVATE ../src)
+add_test(NAME findclusters_scalar_pin_tests COMMAND findclusters_scalar_pin_tests)
+
 add_executable(intersection_tests test_intersection.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(intersection_tests PRIVATE ../src)
 add_test(NAME intersection_tests COMMAND intersection_tests)
