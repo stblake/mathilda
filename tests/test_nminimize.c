@@ -359,6 +359,37 @@ static void test_griewank_differentialevolution(void) {
                "0 <= First[r] < 0.1]");
 }
 
+static void test_griewank_neldermead(void) {
+    /* NelderMead now polishes each restart's converged vertex into its basin
+     * minimum before ranking the restarts, rather than ranking raw simplex
+     * vertices and polishing only the winner. The default runs Min[2 n, 20]
+     * restarts; on Griewank-10 it stays well below Mathematica's ~0.175, and 40
+     * restarts reach the global 0. Deterministic under the fixed default seed. */
+    check_true("Module[{r = NMinimize[{Sum[x[i]^2/4000, {i, 1, 10}] "
+               "- Product[Cos[x[i]/Sqrt[i]], {i, 1, 10}] + 1, "
+               "Table[-600 <= x[i] <= 600, {i, 1, 10}]}, Table[x[i], {i, 1, 10}], "
+               "Method -> \"NelderMead\"]}, 0 <= First[r] < 0.1]");
+    check_true("Module[{r = NMinimize[{Sum[x[i]^2/4000, {i, 1, 10}] "
+               "- Product[Cos[x[i]/Sqrt[i]], {i, 1, 10}] + 1, "
+               "Table[-600 <= x[i] <= 600, {i, 1, 10}]}, Table[x[i], {i, 1, 10}], "
+               "Method -> {\"NelderMead\", \"SearchPoints\" -> 40}]}, 0 <= First[r] < 0.01]");
+}
+
+static void test_randomsearch_searchpoints_verbatim(void) {
+    /* RandomSearch "SearchPoints" was silently capped at 40, making any larger
+     * value a no-op. It is now honored verbatim: on a Griewank box narrow enough
+     * that random starts can reach the good basins, 200 starts beat 10 — which is
+     * only possible if the 200 are actually run. Deterministic (fixed seed). */
+    check_true("First[NMinimize[{Sum[x[i]^2/4000, {i, 1, 5}] "
+               "- Product[Cos[x[i]/Sqrt[i]], {i, 1, 5}] + 1, "
+               "Table[-15 <= x[i] <= 15, {i, 1, 5}]}, Table[x[i], {i, 1, 5}], "
+               "Method -> {\"RandomSearch\", \"SearchPoints\" -> 200}]] < "
+               "First[NMinimize[{Sum[x[i]^2/4000, {i, 1, 5}] "
+               "- Product[Cos[x[i]/Sqrt[i]], {i, 1, 5}] + 1, "
+               "Table[-15 <= x[i] <= 15, {i, 1, 5}]}, Table[x[i], {i, 1, 5}], "
+               "Method -> {\"RandomSearch\", \"SearchPoints\" -> 10}]]");
+}
+
 static void test_neldermead_shrink_tolerance(void) {
     /* Tolerance controls the simplex convergence threshold: a tight tolerance
      * refines much further than a loose one under a capped budget. */
@@ -707,6 +738,8 @@ int main(void) {
     TEST(test_sa_suboptions);
     TEST(test_griewank_simulatedannealing);
     TEST(test_griewank_differentialevolution);
+    TEST(test_griewank_neldermead);
+    TEST(test_randomsearch_searchpoints_verbatim);
     TEST(test_neldermead_shrink_tolerance);
     TEST(test_bukin6_no_warning);
     TEST(test_initial_points);

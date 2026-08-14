@@ -3115,8 +3115,8 @@ matrix variables (`Vectors[n, dom]`, `Matrices`), geometric-region domains,
 |-------------|--------|
 | `Automatic` | `"DifferentialEvolution"` with a dimension-scaled budget (see below) |
 | `"DifferentialEvolution"` | DE/rand/1/bin with Deb feasibility selection (default) |
-| `"NelderMead"` | downhill-simplex with random restarts |
-| `"RandomSearch"` | multiple random starts refined by the local solver |
+| `"NelderMead"` | downhill-simplex; each restart's vertex polished into its basin minimum, deepest kept |
+| `"RandomSearch"` | multiple random starts, each refined by the local solver, best local minimum kept |
 | `"SimulatedAnnealing"` | Metropolis search with geometric cooling |
 
 `"DifferentialEvolution"` keeps every trial point inside the box by *bounce-back*
@@ -3139,6 +3139,18 @@ degrade, with `"SearchPoints"`. On Griewank-10 over `[-600, 600]` the plain
 `~0.175`). `"PostProcess" -> False` disables it and returns the raw global best;
 mixed-integer problems keep the single driver polish so their integer-descent cost
 is unchanged.
+
+All four multi-start engines share this principle: **polish each independent
+start into its basin minimum and keep the deepest, ranking by local minima rather
+than by the raw search point that found the basin.** `"RandomSearch"` always did
+(one local solve per start). `"SimulatedAnnealing"` polishes each of its
+`Min[2·d, 50]` chains, `"NelderMead"` each of its `Min[2·d, 20]` restarts, and
+`"DifferentialEvolution"` the distinct members of its final population. The one
+engine this cannot rescue is `"RandomSearch"` itself: with no global move, pure
+multi-start local search only finds basins a random start lands near, so on a box
+far wider than the optimum's basin (Griewank over `[-600, 600]`, where the central
+bowl is `~10⁻¹¹` of the 10-D volume) no attainable start count reaches it —
+`"DifferentialEvolution"` / `"SimulatedAnnealing"` are the engines for that shape.
 
 **Automatic vs. explicit `"DifferentialEvolution"` — the default budget.**
 `Method -> Automatic` (i.e. no `Method`) runs DE with a *dimension-scaled* budget:
@@ -3164,7 +3176,7 @@ Recognised sub-options:
 
 | Sub-option | Applies to | Meaning |
 |------------|-----------|---------|
-| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts) | population / restart / start count, honored verbatim; the automatic DE population is `Clip[10·d, {15, 40}]` under explicit `"DifferentialEvolution"` and `Clip[10·d, {15, 200}]` under `Method -> Automatic` (see below); for SimulatedAnnealing it is the number of independent annealing chains (default `Automatic = Min[2·d, 50]`) |
+| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts) | population / restart / start count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 40}]` under explicit `"DifferentialEvolution"` and `Clip[10·d, {15, 200}]` under `Method -> Automatic`; SimulatedAnnealing `Min[2·d, 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts |
 | `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6) |
 | `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9) |
 | `"PerturbationScale" -> s` | SimulatedAnnealing | multiplies the trial-step size (default 1.0); a positive real, an invalid value warns (`NMinimize::sopt`) and falls back to 1.0 |

@@ -3486,15 +3486,25 @@ static bool nm_simplex_from_points(NmDriver* D, const Expr* pts, size_t n, doubl
     return true;
 }
 
-/* NelderMead downhill simplex on the penalized objective, with restarts. */
+/* NelderMead downhill simplex on the penalized objective, with restarts. Each
+ * restart's converged best vertex is polished into its basin minimum and the
+ * restarts are ranked by those minima (default Min[2 n, 20] restarts), so a
+ * multimodal surface improves with more restarts instead of being decided by the
+ * raw simplex vertices. Gated by "PostProcess" -> False. */
 static void nm_neldermead(NmDriver* D, const NmConfig* nc, NmRng* rng,
                           double* xbest, double* fbest, double* penbest) {
     size_t n = D->n;
     const double* rlo = D->reg_lo;
     const double* rhi = D->reg_hi;
-    int restarts = nc->search_points > 0 ? nc->search_points : (n > 1 ? 4 : 2);
+    /* Explicit "SearchPoints" is honored verbatim (it was silently clamped at 20
+     * before, contradicting the documented "honored verbatim"). The automatic
+     * default runs Min[2 n, 20] random-simplex restarts rather than a flat 4, so
+     * a multimodal surface is probed from several basins — the same "sample many
+     * independent starts, keep the deepest" principle the other engines use. */
+    int restarts;
+    if (nc->search_points > 0) restarts = nc->search_points;
+    else restarts = n > 1 ? (2 * (int)n < 20 ? 2 * (int)n : 20) : 2;
     if (restarts < 1) restarts = 1;
-    if (restarts > 20) restarts = 20;
     /* Simplex coefficients: reflection (ReflectRatio, default 1), expansion
      * (ExpandRatio, default 2), contraction toward the centroid (ContractRatio,
      * default 0.5), shrink toward the best vertex (ShrinkRatio, default 0.5).
@@ -3599,24 +3609,55 @@ static void nm_neldermead(NmDriver* D, const NmConfig* nc, NmRng* rng,
         size_t lo = 0;
         for (size_t i = 1; i <= n; i++) if (fv[i] < fv[lo]) lo = i;
         double f, p;
-        nm_eval(D, &V[lo * n], &f, &p);
+        for (size_t j = 0; j < n; j++) xr[j] = V[lo * n + j];  /* xr: polish buffer */
+        nm_eval(D, xr, &f, &p);
+        /* Polish this restart's best vertex into its basin minimum before ranking
+         * restarts, rather than ranking them by their raw simplex vertices and
+         * polishing only the single winner afterward. The lowest converged vertex
+         * across restarts need not sit in the deepest basin, so ranking by local
+         * minima is what lets more restarts help rather than hurt. Skipped under
+         * "PostProcess" -> False (then the raw vertex is ranked, as before); a
+         * BFGS overshoot falls back to the raw vertex. */
+        if (nc->post_process != 0) {
+            double fr = f, pr = p;
+            nm_local_polish(D, xr, &fr, &pr);
+            if (nm_better(f, p, fr, pr)) {
+                for (size_t j = 0; j < n; j++) xr[j] = V[lo * n + j];
+            } else { f = fr; p = pr; }
+        }
         if (!have || nm_better(f, p, *fbest, *penbest)) {
-            for (size_t j = 0; j < n; j++) xbest[j] = V[lo * n + j];
+            for (size_t j = 0; j < n; j++) xbest[j] = xr[j];
             *fbest = f; *penbest = p; have = true;
         }
     }
     free(V); free(fv); free(xc); free(xr); free(xe);
 }
 
-/* RandomSearch: multiple random starts, each refined by the local solver. */
+/* RandomSearch: multiple random starts, each refined by the local solver, best
+ * local minimum kept. This is already the "polish each start, rank by basin
+ * depth" pattern; the two other multi-start engines were brought in line with it.
+ * Pure multi-start local search has no global move, so on a search box far wider
+ * than the optimum's basin (e.g. Griewank over [-600, 600], where the central
+ * bowl is ~1e-11 of the volume in 10-D) no attainable number of random starts
+ * reaches it — DifferentialEvolution / SimulatedAnnealing are the engines for
+ * that shape. */
 static void nm_randomsearch(NmDriver* D, const NmConfig* nc, NmRng* rng,
                             double* xbest, double* fbest, double* penbest) {
     size_t n = D->n;
     const double* rlo = D->reg_lo;
     const double* rhi = D->reg_hi;
-    int K = nc->search_points > 0 ? nc->search_points : (n > 1 ? (int)(8 * n) : 12);
-    if (K < 4) K = 4;
-    if (K > 40) K = 40;
+    /* Explicit "SearchPoints" is honored verbatim — it was silently capped at 40,
+     * so SearchPoints -> 1000 was a no-op that returned the 40-start result. The
+     * automatic default keeps a bound (runtime is one local solve per start). */
+    int K;
+    if (nc->search_points > 0) {
+        K = nc->search_points;          /* honored verbatim (was capped at 40) */
+        if (K < 1) K = 1;
+    } else {
+        K = n > 1 ? (int)(8 * n) : 12;  /* automatic default, bounded for runtime */
+        if (K < 4)  K = 4;
+        if (K > 40) K = 40;
+    }
     double* x = (double*)malloc(sizeof(double) * n);
     bool have = false;
     for (int k = 0; k < K; k++) {
