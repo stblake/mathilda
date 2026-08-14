@@ -83,6 +83,59 @@ In[2]:= p = PrincipalComponents[{{1., 2.}, {3., 5.}, {4., 4.}, {6., 9.}, {7., 8.
 Out[2]= {13.4817, 0.518295}
 ```
 
+## DimensionReduce
+
+Reduces each row of a matrix to a lower-dimensional representation.
+Attributes: `Protected`.
+
+- `DimensionReduce[data, k]`
+- `DimensionReduce[data, k, Method -> m]`
+
+**Features**:
+- The three methods are **one algorithm with three ways of forming the symmetric
+  matrix to decompose**, which is why they share the eigendecomposition rather than
+  each carrying its own linear algebra:
+
+| Method | What it decomposes |
+|---|---|
+| `"PrincipalComponentsAnalysis"` (default) | the covariance of the **centred** columns |
+| `"LatentSemanticAnalysis"` | the Gram matrix `X'X`, **without** centring — a truncated SVD |
+| `"MultidimensionalScaling"` | the double-centred squared-distance matrix (classical Torgerson scaling) |
+
+- **Skipping the centring is the entire difference between PCA and LSA.** A
+  term-document matrix is sparse and non-negative, and centring destroys both
+  properties along with the meaning of a zero entry — which is why LSA does not.
+- **Reducing to `k` gives exactly the first `k` principal components**, not a
+  separately-fitted `k`-component model: `DimensionReduce[data, 2]` equals
+  `Map[Take[#, 2] &, PrincipalComponents[data]]`.
+- **Classical MDS on Euclidean distances is the same embedding as PCA**, reached by a
+  different route (an `n × n` double-centred distance matrix rather than a
+  `dim × dim` covariance). That agreement is used as a cross-check on both in the test
+  suite; it also means MDS earns its keep only when the distances come from somewhere
+  other than the coordinates.
+- `"MultidimensionalScaling"` is **capped at 2000 rows**, its matrix being `n × n` —
+  the same order of ceiling, for the same reason, as `FindClusters`' `"Spectral"`.
+- **Asking for more dimensions than the data supports returns unevaluated** rather
+  than padding with zeros, since padding would look like a successful reduction to a
+  caller checking only the shape. An unknown `Method`, a non-positive `k`, an omitted
+  `k`, and a flat list all decline too.
+
+**Not implemented**: Wolfram's `DimensionReduce` can also choose `k` itself and can
+return a `DimensionReducerFunction` applicable to *new* data. The second is the
+substantive gap — a reusable reducer is a trained model, and that representation is
+being designed with the `Predict` family rather than invented twice.
+
+```mathematica
+In[1]:= d = {{1., 2., 3.}, {3., 5., 4.}, {4., 4., 8.}, {6., 9., 2.}, {7., 8., 9.}};
+        DimensionReduce[d, 2]
+Out[1]= {{-5.28583, 0.302136}, {-1.6734, -0.58098}, {0.141634, 3.22424},
+         {1.80921, -4.66364}, {5.00839, 1.71825}}
+
+In[2]:= DimensionReduce[d, 2, Method -> "LatentSemanticAnalysis"]
+Out[2]= {{3.53625, 1.0399}, {7.03311, -0.290957}, {9.24375, 3.24698},
+         {9.903, -4.78819}, {13.8764, 1.13662}}
+```
+
 ## Clustering
 
 `FindClusters` and its ten methods are documented under

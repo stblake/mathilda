@@ -207,6 +207,102 @@ bool ml_pca(const double* x, size_t n, size_t dim, bool correlation,
 }
 
 /* ------------------------------------------------------------------------- */
+/* Dimensionality reduction                                                   */
+/* ------------------------------------------------------------------------- */
+
+/* Classical MDS builds an n x n matrix, so it needs a ceiling the other two do not.
+ * Same order as the Spectral method's, and for the same reason: the memory is
+ * quadratic in the sample size, and refusing is better than appearing to hang. */
+#define ML_MDS_MAX_N 2000
+
+bool ml_reduce(const double* x, size_t n, size_t dim, size_t target,
+               MlReduceMethod method, double* out) {
+    if (!x || !out || n == 0 || dim == 0 || target == 0) return false;
+
+    if (method == ML_REDUCE_MDS) {
+        if (n > ML_MDS_MAX_N) return false;
+        /* Classical (Torgerson) scaling. B = -0.5 * J D^2 J with J = I - 11'/n,
+         * which is the double-centring that turns squared distances back into inner
+         * products; its eigenvectors scaled by sqrt(eigenvalue) are the coordinates.
+         *
+         * Worth knowing, and asserted in the tests: on EUCLIDEAN distances this is
+         * mathematically the same embedding as PCA. That is not a redundancy -- it is
+         * the check that both are right -- and it is also why MDS earns its keep only
+         * when the distances come from somewhere else. */
+        double* b = malloc(sizeof(double) * n * n);
+        double* ev = malloc(sizeof(double) * n);
+        double* vc = malloc(sizeof(double) * n * n);
+        double* rm = malloc(sizeof(double) * n);
+        if (!b || !ev || !vc || !rm) { free(b); free(ev); free(vc); free(rm); return false; }
+
+        for (size_t i = 0; i < n; i++)
+            for (size_t j = 0; j <= i; j++) {
+                double sq = 0.0;
+                for (size_t a = 0; a < dim; a++) {
+                    double d = x[i * dim + a] - x[j * dim + a];
+                    sq += d * d;
+                }
+                b[i * n + j] = b[j * n + i] = sq;
+            }
+        double gm = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            double s = 0.0;
+            for (size_t j = 0; j < n; j++) s += b[i * n + j];
+            rm[i] = s / (double)n;
+            gm += s;
+        }
+        gm /= (double)(n * n);
+        for (size_t i = 0; i < n; i++)
+            for (size_t j = 0; j < n; j++)
+                b[i * n + j] = -0.5 * (b[i * n + j] - rm[i] - rm[j] + gm);
+
+        bool ok = ml_sym_eigen_desc(b, n, ev, vc);
+        if (ok)
+            for (size_t i = 0; i < n; i++)
+                for (size_t t = 0; t < target; t++) {
+                    /* A non-positive eigenvalue means that axis carries no real
+                     * structure, so it is zero rather than the square root of a
+                     * negative number. */
+                    double lam = (t < n && ev[t] > 0.0) ? sqrt(ev[t]) : 0.0;
+                    out[i * target + t] = (t < n) ? vc[t * n + i] * lam : 0.0;
+                }
+        free(b); free(ev); free(vc); free(rm);
+        return ok;
+    }
+
+    /* PCA and LSA differ only in whether the columns are centred first, so one path
+     * serves both -- and that single `if` is the entire mathematical difference
+     * between "principal components" and "truncated SVD". */
+    size_t keep = (target < dim) ? target : dim;
+    double* xc = malloc(sizeof(double) * n * dim);
+    double* cv = malloc(sizeof(double) * dim * dim);
+    double* ev = malloc(sizeof(double) * dim);
+    double* vc = malloc(sizeof(double) * dim * dim);
+    if (!xc || !cv || !ev || !vc) { free(xc); free(cv); free(ev); free(vc); return false; }
+    memcpy(xc, x, sizeof(double) * n * dim);
+    if (method == ML_REDUCE_PCA) ml_standardize(xc, n, dim, false);
+
+    for (size_t a = 0; a < dim; a++)
+        for (size_t b2 = 0; b2 <= a; b2++) {
+            double s = 0.0;
+            for (size_t i = 0; i < n; i++) s += xc[i * dim + a] * xc[i * dim + b2];
+            cv[a * dim + b2] = cv[b2 * dim + a] = s;
+        }
+
+    bool ok = ml_sym_eigen_desc(cv, dim, ev, vc);
+    if (ok)
+        for (size_t i = 0; i < n; i++)
+            for (size_t t = 0; t < target; t++) {
+                if (t >= keep) { out[i * target + t] = 0.0; continue; }
+                double s = 0.0;
+                for (size_t r = 0; r < dim; r++) s += xc[i * dim + r] * vc[t * dim + r];
+                out[i * target + t] = s;
+            }
+    free(xc); free(cv); free(ev); free(vc);
+    return ok;
+}
+
+/* ------------------------------------------------------------------------- */
 /* Builtins                                                                   */
 /* ------------------------------------------------------------------------- */
 
@@ -305,7 +401,83 @@ static Expr* builtin_principal_components(Expr* res) {
     return r;
 }
 
+/* DimensionReduce[data, k] and DimensionReduce[data, k, Method -> m].
+ *
+ * Wolfram's DimensionReduce can also be called without a target dimension (choosing
+ * one itself) and can return a DimensionReducerFunction applicable to LATER data.
+ * Neither is implemented here, and the second is the substantive gap: a reusable
+ * reducer is a trained model, and the model representation is being designed with the
+ * Predict family rather than invented twice. The data-in/data-out form is what this
+ * provides, and an omitted dimension declines rather than guessing. */
+static Expr* builtin_dimension_reduce(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2 || argc > 3) return NULL;
+
+    MlReduceMethod method = ML_REDUCE_PCA;
+    if (argc == 3) {
+        Expr* o = res->data.function.args[2];
+        if (!o || o->type != EXPR_FUNCTION || o->data.function.arg_count != 2)
+            return NULL;
+        Expr* h = o->data.function.head;
+        if (!h || h->type != EXPR_SYMBOL) return NULL;
+        const char* hn = h->data.symbol.name;
+        if (hn != SYM_Rule && hn != SYM_RuleDelayed) return NULL;
+        Expr* lhs = o->data.function.args[0];
+        Expr* rhs = o->data.function.args[1];
+        if (!lhs || lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_Method)
+            return NULL;
+        if (!rhs || rhs->type != EXPR_STRING) return NULL;
+        const char* m = rhs->data.string;
+        if      (strcmp(m, "PrincipalComponentsAnalysis") == 0) method = ML_REDUCE_PCA;
+        else if (strcmp(m, "LatentSemanticAnalysis") == 0)      method = ML_REDUCE_LSA;
+        else if (strcmp(m, "MultidimensionalScaling") == 0)     method = ML_REDUCE_MDS;
+        else return NULL;   /* an unknown method declines rather than defaulting */
+    }
+
+    Expr* kexpr = res->data.function.args[1];
+    if (!kexpr || kexpr->type != EXPR_INTEGER) return NULL;
+    if (kexpr->data.integer <= 0) return NULL;
+    size_t target = (size_t)kexpr->data.integer;
+
+    size_t n, dim; double* x = NULL; bool vec = false;
+    if (!ml_read_data(res->data.function.args[0], &n, &dim, &x, &vec)) return NULL;
+    if (vec) { free(x); return NULL; }
+
+    /* Asking for more dimensions than the data has is a question with no answer, so
+     * it declines instead of padding with zeros -- padding would look like a
+     * successful reduction to a caller checking only the shape. */
+    size_t cap = (method == ML_REDUCE_MDS) ? (n > 0 ? n - 1 : 0) : dim;
+    if (target > cap) { free(x); return NULL; }
+
+    double* out = malloc(sizeof(double) * n * target);
+    if (!out) { free(x); return NULL; }
+    Expr* r = NULL;
+    if (ml_reduce(x, n, dim, target, method, out)) {
+        Expr** rows = malloc(sizeof(Expr*) * (n ? n : 1));
+        if (rows) {
+            for (size_t i = 0; i < n; i++) rows[i] = ml_list_of_reals(out + i * target, target);
+            r = expr_new_function(expr_new_symbol(SYM_List), rows, n);
+            free(rows);
+        }
+    }
+    free(out); free(x);
+    return r;
+}
+
 void ml_init(void) {
+    symtab_add_builtin("DimensionReduce", builtin_dimension_reduce);
+    symtab_get_def("DimensionReduce")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DimensionReduce",
+        "DimensionReduce[data, k] reduces each row of data to k dimensions. "
+        "Method -> \"PrincipalComponentsAnalysis\" (default) centres the columns and "
+        "projects onto the leading eigenvectors of the covariance; "
+        "\"LatentSemanticAnalysis\" skips the centring, giving a truncated SVD, which "
+        "is what a sparse non-negative term-document matrix wants; "
+        "\"MultidimensionalScaling\" double-centres the squared distance matrix "
+        "(classical Torgerson scaling) and is capped at 2000 rows, its matrix being "
+        "n x n. Asking for more dimensions than the data supports returns unevaluated "
+        "rather than padding with zeros.");
+
     symtab_add_builtin("Standardize", builtin_standardize);
     symtab_get_def("Standardize")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Standardize",

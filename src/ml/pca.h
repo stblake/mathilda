@@ -68,6 +68,44 @@ bool ml_sym_eigen_desc(const double* a, size_t dim, double* eval, double* evec);
 bool ml_pca(const double* x, size_t n, size_t dim, bool correlation,
             double* out, double* eval, double* evec);
 
+/* ------------------------------------------------------------------------- */
+/* Dimensionality reduction                                                   */
+/* ------------------------------------------------------------------------- */
+
+/* The three reducers implemented here are one algorithm with three ways of forming
+ * the symmetric matrix to decompose, which is why they share ml_sym_eigen_desc
+ * rather than each carrying its own linear algebra:
+ *
+ *   PCA  -- centre the columns, decompose the covariance, project onto the leading
+ *           eigenvectors.
+ *   LSA  -- do NOT centre; decompose the Gram matrix X'X instead. That is a
+ *           truncated SVD, and skipping the centring is the whole difference: a
+ *           term-document matrix is sparse and non-negative, and centring it
+ *           destroys both properties along with the meaning of a zero entry.
+ *   MDS  -- classical (Torgerson) scaling: double-centre the squared distance
+ *           matrix, decompose that, and scale each axis by the square root of its
+ *           eigenvalue. Its eigenproblem is n x n rather than dim x dim, because it
+ *           works from distances between OBSERVATIONS.
+ */
+typedef enum {
+    ML_REDUCE_PCA = 0,
+    ML_REDUCE_LSA,
+    ML_REDUCE_MDS
+} MlReduceMethod;
+
+/* Reduce `x` (row-major n x dim) to `target` dimensions into `out` (n x target).
+ *
+ * `target` is clamped to dim for PCA and LSA, whose output axes are directions in
+ * feature space and so cannot outnumber the features. MDS can in principle produce
+ * up to n - 1 axes, but a non-positive eigenvalue means the requested dimension
+ * carries no real structure, and those columns come back as zero rather than as the
+ * square root of a negative number.
+ *
+ * Returns false on allocation failure, a degenerate decomposition, or an n above the
+ * MDS ceiling (its matrix is n x n). */
+bool ml_reduce(const double* x, size_t n, size_t dim, size_t target,
+               MlReduceMethod method, double* out);
+
 void ml_init(void);
 
 #endif /* ML_PCA_H */

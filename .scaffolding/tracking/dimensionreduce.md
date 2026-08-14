@@ -91,9 +91,10 @@ goal_lock:
 
 - [x] `src/ml/pca.{c,h} kernels: column mean/sd, standardise, symmetric eigen desc, PCA` | `independent` | `done (iteration 10)`
 - [x] `Standardize + PrincipalComponents builtins, registered with attributes and docstrings` | `depends on: kernels` | `done (iteration 10)`
-- [ ] `DimensionReduce with a method dispatch (PCA first)` | `depends on: kernels` | `pending`
-- [ ] `MultidimensionalScaling` | `depends on: symmetric eigen` | `pending`
-- [ ] `LatentSemanticAnalysis` | `depends on: SVD` | `pending`
+- [x] `DimensionReduce with a method dispatch (PCA first)` | `depends on: kernels` | `done (iteration 11)`
+- [x] `MultidimensionalScaling` | `depends on: symmetric eigen` | `done (iteration 11, as a DimensionReduce method)`
+- [x] `LatentSemanticAnalysis` | `depends on: SVD` | `done (iteration 11, as a DimensionReduce method -- the Gram-matrix eigendecomposition IS a truncated SVD, so no separate SVD path was needed)`
+- [ ] `A DimensionReducerFunction applicable to new data` | `depends on: the family-3 model representation` | `pending`
 
 ## Checkpoints
 
@@ -149,6 +150,7 @@ goal_lock:
 
 ## Activity Log
 
+- `2026-08-14 01:40` Iteration 11: DimensionReduce with all three methods, closing the family's data-in/data-out surface. The three turned out to be ONE algorithm with three ways of forming the matrix to decompose (centred covariance / uncentred Gram / double-centred squared distances), so LSA needed no separate SVD path and MDS reused ml_sym_eigen_desc. Strongest evidence in the family so far: classical MDS on Euclidean distances reproduces PCA exactly to 1e-8, by a completely different route (n x n vs dim x dim), so the agreement is evidence about BOTH rather than self-consistency. Deferred deliberately: a DimensionReducerFunction applicable to new data is a trained model, and that representation belongs with Predict rather than being invented twice.
 - `2026-08-14 01:30` Created, and iteration 10 landed: src/ml/pca.{c,h} plus Standardize and PrincipalComponents. Found and fixed a surface bug before it shipped — na_build_matrix returns a visible NDArray, so the first version's `Standardize[d] === {{...}}` was False while Inverse's is True; results now build plain Lists. Canonicalised eigenvector signs so output does not depend on whether LAPACK was linked.
 
 ## Reflection

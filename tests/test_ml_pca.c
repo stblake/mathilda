@@ -119,6 +119,59 @@ static void test_bad_arguments_decline(void) {
                    "PrincipalComponents", 0);
 }
 
+#define DR_DATA "{{1., 2., 3.}, {3., 5., 4.}, {4., 4., 8.}, {6., 9., 2.}, {7., 8., 9.}}"
+
+static void test_dimension_reduce_is_a_prefix_of_the_full_rotation(void) {
+    /* Reducing to k dimensions must give exactly the first k principal components, not
+     * a separately-fitted k-component model. This is the assertion that would catch a
+     * reducer that re-derived its axes from a truncated matrix. */
+    assert_eval_eq("Chop[Map[Take[#, 2] &, PrincipalComponents[" DR_DATA "]] - "
+                   "DimensionReduce[" DR_DATA ", 2], 10.^-10]",
+                   "{{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}}", 0);
+    assert_eval_eq("Length[First[DimensionReduce[" DR_DATA ", 1]]]", "1", 0);
+    assert_eval_eq("Head[DimensionReduce[" DR_DATA ", 2]]", "List", 0);
+}
+
+static void test_classical_mds_on_euclidean_distances_reproduces_pca(void) {
+    /* The strongest check available here, and the reason MDS was worth implementing in
+     * the same iteration: classical (Torgerson) scaling of EUCLIDEAN distances is
+     * mathematically the same embedding as PCA, reached by a completely different
+     * route -- an n x n double-centred distance matrix rather than a dim x dim
+     * covariance. Agreement is therefore evidence about BOTH, in a way that no
+     * self-consistency check could be.
+     *
+     * Compared on absolute values because an eigenvector's sign is arbitrary and the
+     * two matrices have different shapes, so the canonicalisation in
+     * ml_sym_eigen_desc does not force the same choice for both. */
+    assert_eval_eq("Chop[Map[Abs, DimensionReduce[" DR_DATA ", 2, "
+                   "Method -> \"MultidimensionalScaling\"]] - "
+                   "Map[Abs, Map[Take[#, 2] &, PrincipalComponents[" DR_DATA "]]], "
+                   "10.^-8]",
+                   "{{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}}", 0);
+}
+
+static void test_lsa_differs_from_pca_because_it_does_not_centre(void) {
+    /* The single `if` that separates them is the whole mathematical difference between
+     * principal components and a truncated SVD, so the two must not agree on data with
+     * a non-zero mean -- if they did, the centring step would be dead code. */
+    assert_eval_eq("DimensionReduce[" DR_DATA ", 2, "
+                   "Method -> \"LatentSemanticAnalysis\"] === "
+                   "DimensionReduce[" DR_DATA ", 2]", "False", 0);
+}
+
+static void test_dimension_reduce_declines_rather_than_padding(void) {
+    /* Asking for more dimensions than the data supports has no answer, and padding
+     * with zeros would look like a successful reduction to a caller checking only the
+     * shape. */
+    assert_eval_eq("Head[DimensionReduce[" DR_DATA ", 5]]", "DimensionReduce", 0);
+    assert_eval_eq("Head[DimensionReduce[" DR_DATA ", 0]]", "DimensionReduce", 0);
+    assert_eval_eq("Head[DimensionReduce[" DR_DATA ", 2, Method -> \"tSNE\"]]",
+                   "DimensionReduce", 0);
+    /* No target dimension: Wolfram picks one, this declines rather than guessing. */
+    assert_eval_eq("Head[DimensionReduce[" DR_DATA "]]", "DimensionReduce", 0);
+    assert_eval_eq("Head[DimensionReduce[{1., 2., 3.}, 1]]", "DimensionReduce", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -132,6 +185,10 @@ int main(void) {
     TEST(test_pca_puts_rank_one_data_entirely_in_one_component);
     TEST(test_pca_method_correlation_differs_from_covariance);
     TEST(test_bad_arguments_decline);
+    TEST(test_dimension_reduce_is_a_prefix_of_the_full_rotation);
+    TEST(test_classical_mds_on_euclidean_distances_reproduces_pca);
+    TEST(test_lsa_differs_from_pca_because_it_does_not_centre);
+    TEST(test_dimension_reduce_declines_rather_than_padding);
 
     printf("All ml PCA tests passed.\n");
     return 0;
