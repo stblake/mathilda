@@ -13,6 +13,7 @@
 #include "sym_names.h"
 #include "numarray.h"
 #include "mlutil.h"
+#include "pca.h"        /* ml_pca, ml_column_mean -- shared with the reducer */
 #include "predict.h"
 
 /* Solve the normal equations (A'A) c = A'y where A is [1 | x], by Gaussian
@@ -292,17 +293,163 @@ static Expr* builtin_linear_model_fit(Expr* res) {
 
 /* ------------------------------------------------------------------------- */
 
+static Expr* ml_reducer_apply(Expr* head, Expr** args, size_t argc);
+
+/* ------------------------------------------------------------------------- */
+/* DimensionReducerFunction -- the second model kind on the shared representation */
+/* ------------------------------------------------------------------------- */
+
+/* A reducer is the same positional, method-tagged object a predictor is, and that is
+ * the payoff for having designed the representation once: this needed no new node type,
+ * no new evaluation concept, and no change to eval.c beyond the probe above recognising
+ * one more head.
+ *
+ * Payload: a List whose FIRST row is the training column means and whose remaining
+ * `target` rows are the loadings, one component per row. Those two things together are
+ * exactly what it takes to project a point that was not in the training set -- which is
+ * the whole difference between a reducer and the reduced data.
+ */
+static Expr* ml_make_reducer(const char* method, const double* mean,
+                             const double* evec, size_t dim, size_t target) {
+    Expr** rows = malloc(sizeof(Expr*) * (target + 1));
+    if (!rows) return NULL;
+    rows[0] = ml_list_of_reals(mean, dim);
+    for (size_t t = 0; t < target; t++)
+        rows[t + 1] = ml_list_of_reals(evec + t * dim, dim);
+    Expr* payload = expr_new_function(expr_new_symbol(SYM_List), rows, target + 1);
+    free(rows);
+    if (!payload) return NULL;
+    Expr* a[4];
+    a[0] = expr_new_string(method);
+    a[1] = payload;
+    a[2] = expr_new_integer((int64_t)dim);
+    a[3] = expr_new_integer((int64_t)target);
+    if (!a[0] || !a[1] || !a[2] || !a[3]) {
+        expr_free(a[0]); expr_free(a[1]); expr_free(a[2]); expr_free(a[3]); return NULL;
+    }
+    return expr_new_function(expr_new_symbol("DimensionReducerFunction"), a, 4);
+}
+
+/* DimensionReduction[data, k]. Wolfram's split is kept: DimensionReduce returns the
+ * REDUCED DATA, DimensionReduction returns a REUSABLE REDUCER. */
+static Expr* builtin_dimension_reduction(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* kexpr = res->data.function.args[1];
+    if (!kexpr || kexpr->type != EXPR_INTEGER || kexpr->data.integer <= 0) return NULL;
+    size_t target = (size_t)kexpr->data.integer;
+
+    size_t n, dim; double* x = NULL; bool vec = false;
+    if (!ml_read_data(res->data.function.args[0], &n, &dim, &x, &vec)) return NULL;
+    if (vec || target > dim) { free(x); return NULL; }
+
+    double* mean = malloc(sizeof(double) * dim);
+    double* evec = malloc(sizeof(double) * dim * dim);
+    if (!mean || !evec) { free(mean); free(evec); free(x); return NULL; }
+    ml_column_mean(x, n, dim, mean);
+    Expr* out = NULL;
+    if (ml_pca(x, n, dim, false, NULL, NULL, evec))
+        out = ml_make_reducer("PrincipalComponentsAnalysis", mean, evec, dim, target);
+    free(mean); free(evec); free(x);
+    return out;
+}
+
+/* Project one row: subtract the TRAINING means, then contract with each loading.
+ *
+ * Using the training means rather than the incoming batch's is the entire point of a
+ * reusable reducer, and getting it wrong would still look plausible: centring a single
+ * new point against itself gives all zeros, and on data that happens to sit near the
+ * origin the two agree. The test for this therefore uses training data with a
+ * deliberately off-centre mean. */
+static void ml_project_row(const double* row, const double* mean, const double* load,
+                           size_t dim, size_t target, double* out) {
+    for (size_t t = 0; t < target; t++) {
+        double s = 0.0;
+        for (size_t j = 0; j < dim; j++) s += (row[j] - mean[j]) * load[t * dim + j];
+        out[t] = s;
+    }
+}
+
+static Expr* ml_reducer_apply(Expr* head, Expr** args, size_t argc) {
+    if (head->data.function.arg_count != 4 || argc != 1) return NULL;
+    Expr* mname = head->data.function.args[0];
+    Expr* pay   = head->data.function.args[1];
+    Expr* dimx  = head->data.function.args[2];
+    Expr* tgtx  = head->data.function.args[3];
+    if (!mname || mname->type != EXPR_STRING) return NULL;
+    if (!pay || pay->type != EXPR_FUNCTION) return NULL;
+    if (!dimx || dimx->type != EXPR_INTEGER || !tgtx || tgtx->type != EXPR_INTEGER)
+        return NULL;
+    size_t dim = (size_t)dimx->data.integer, target = (size_t)tgtx->data.integer;
+    if (pay->data.function.arg_count != target + 1) return NULL;
+
+    if (args[0] && args[0]->type == EXPR_STRING) {
+        const char* q = args[0]->data.string;
+        if (strcmp(q, "Method") == 0) return expr_copy(mname);
+        if (strcmp(q, "FeatureCount") == 0) return expr_copy(dimx);
+        if (strcmp(q, "ReducedDimension") == 0) return expr_copy(tgtx);
+        return NULL;
+    }
+
+    double* mean = malloc(sizeof(double) * dim);
+    double* load = malloc(sizeof(double) * target * dim);
+    if (!mean || !load) { free(mean); free(load); return NULL; }
+    double im = 0.0; bool ok = true;
+    Expr* mrow = pay->data.function.args[0];
+    if (!mrow || mrow->type != EXPR_FUNCTION || mrow->data.function.arg_count != dim)
+        ok = false;
+    for (size_t j = 0; ok && j < dim; j++)
+        ok = na_read_scalar(mrow->data.function.args[j], &mean[j], &im) && im == 0.0;
+    for (size_t t = 0; ok && t < target; t++) {
+        Expr* lr = pay->data.function.args[t + 1];
+        if (!lr || lr->type != EXPR_FUNCTION || lr->data.function.arg_count != dim) {
+            ok = false; break;
+        }
+        for (size_t j = 0; ok && j < dim; j++)
+            ok = na_read_scalar(lr->data.function.args[j], &load[t * dim + j], &im)
+              && im == 0.0;
+    }
+    if (!ok) { free(mean); free(load); return NULL; }
+
+    /* One point or a whole matrix of them. A reducer applied to a batch is the common
+     * case, so threading it here is better than making every caller Map. */
+    size_t rn, rdim; double* rx = NULL; bool rvec = false;
+    Expr* out = NULL;
+    if (ml_read_data(args[0], &rn, &rdim, &rx, &rvec)) {
+        if (rvec && rn == dim) {
+            double* o = malloc(sizeof(double) * target);
+            if (o) { ml_project_row(rx, mean, load, dim, target, o);
+                     out = ml_list_of_reals(o, target); }
+            free(o);
+        } else if (!rvec && rdim == dim) {
+            double* o = malloc(sizeof(double) * rn * target);
+            if (o) {
+                for (size_t i = 0; i < rn; i++)
+                    ml_project_row(rx + i * dim, mean, load, dim, target, o + i * target);
+                out = ml_list_matrix(o, rn, target);
+            }
+            free(o);
+        }
+        free(rx);
+    }
+    free(mean); free(load);
+    return out;
+}
+
 bool ml_model_apply_probe(Expr* head) {
     if (!head || head->type != EXPR_FUNCTION) return false;
     Expr* hh = head->data.function.head;
     if (!hh || hh->type != EXPR_SYMBOL) return false;
-    return strcmp(hh->data.symbol.name, "PredictorFunction") == 0;
+    const char* n = hh->data.symbol.name;
+    return strcmp(n, "PredictorFunction") == 0
+        || strcmp(n, "DimensionReducerFunction") == 0;
 }
 
 Expr* ml_model_apply(Expr* head, Expr** args, size_t argc) {
     if (!head || head->type != EXPR_FUNCTION) return NULL;
     Expr* hh = head->data.function.head;
     if (!hh || hh->type != EXPR_SYMBOL) return NULL;
+    if (strcmp(hh->data.symbol.name, "DimensionReducerFunction") == 0)
+        return ml_reducer_apply(head, args, argc);
     if (strcmp(hh->data.symbol.name, "PredictorFunction") != 0) return NULL;
     if (head->data.function.arg_count != 4 || argc != 1) return NULL;
 
@@ -407,6 +554,23 @@ Expr* ml_model_apply(Expr* head, Expr** args, size_t argc) {
 }
 
 void ml_predict_init(void) {
+    symtab_add_builtin("DimensionReduction", builtin_dimension_reduction);
+    symtab_get_def("DimensionReduction")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DimensionReduction",
+        "DimensionReduction[data, k] returns a DimensionReducerFunction projecting into "
+        "k dimensions, applicable to data it was NOT trained on -- the difference from "
+        "DimensionReduce[data, k], which returns the reduced training data. New rows are "
+        "centred on the TRAINING column means, which is what makes projections "
+        "comparable across batches. Accepts one point or a matrix of points, and answers "
+        "\"Method\", \"FeatureCount\" and \"ReducedDimension\".");
+
+    symtab_get_def("DimensionReducerFunction")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DimensionReducerFunction",
+        "DimensionReducerFunction[method, {means, loadings...}, featureCount, "
+        "reducedDimension] is the reusable reducer DimensionReduction returns. Apply it "
+        "to a feature vector, or to a matrix of them, to project into the reduced "
+        "space.");
+
     symtab_add_builtin("Predict", builtin_predict);
     symtab_get_def("Predict")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Predict",

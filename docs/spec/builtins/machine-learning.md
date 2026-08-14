@@ -222,6 +222,45 @@ coefficients — the same ones `Predict` finds. Attributes: `Protected`.
 properties are regression diagnostics (`RSquared`, standard errors, ANOVA). Those are
 a separate piece of work and are **not** approximated here.
 
+## DimensionReduction
+
+Returns a reusable **`DimensionReducerFunction`**. Attributes: `Protected`.
+
+- `DimensionReduction[data, k]`
+
+This is the counterpart to `DimensionReduce[data, k]`, and Wolfram's split of the two is
+kept: `DimensionReduce` gives you the *reduced training data*, `DimensionReduction` gives
+you a *reducer you can apply to data it was never trained on*.
+
+**Features**:
+- **New rows are centred on the training column means**, not on the incoming batch's.
+  That is the entire point of a reusable reducer — it is what makes projections
+  comparable across batches — and it is worth stating because the alternative bug is
+  hard to see: centring a single new point against itself gives all zeros, which looks
+  correct on data that happens to sit near the origin.
+- Applies to a single feature vector or to a matrix of them, so a batch needs no `Map`.
+- On its own training data it reproduces `DimensionReduce` exactly.
+- Answers `"Method"`, `"FeatureCount"` and `"ReducedDimension"`.
+- Only `"PrincipalComponentsAnalysis"` is available as a reducer so far; MDS has no
+  out-of-sample extension without an explicit one (Nyström), and LSA's would need the
+  term-document vocabulary carried along.
+
+A reducer is the *same* representation as a `PredictorFunction` — positional and
+method-tagged — which is why adding it needed no new evaluation machinery.
+
+```mathematica
+In[1]:= tr = {{100., 200.}, {102., 205.}, {104., 210.}, {106., 215.}, {108., 220.}};
+        r = DimensionReduction[tr, 1]
+Out[1]= DimensionReducerFunction["PrincipalComponentsAnalysis",
+          {{104.0, 210.0}, {0.371391, 0.928477}}, 2, 1]
+
+In[2]:= r[{110., 225.}]           (* a point NOT in the training set *)
+Out[2]= {16.1555}
+
+In[3]:= r[{104., 210.}]           (* exactly at the training mean *)
+Out[3]= {0.0}
+```
+
 ## Clustering
 
 `FindClusters` and its ten methods are documented under

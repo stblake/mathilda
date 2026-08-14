@@ -172,6 +172,62 @@ static void test_dimension_reduce_declines_rather_than_padding(void) {
     assert_eval_eq("Head[DimensionReduce[{1., 2., 3.}, 1]]", "DimensionReduce", 0);
 }
 
+/* Training data with a deliberately OFF-CENTRE mean. This matters: the reducer must
+ * centre new rows on the TRAINING means, and centring on the incoming batch's own mean
+ * instead gives all zeros for a single point -- which is indistinguishable from correct
+ * on data that happens to sit near the origin. Column means here are {104, 210}. */
+#define RED_TRAIN "{{100., 200.}, {102., 205.}, {104., 210.}, {106., 215.}, {108., 220.}}"
+
+static void test_reducer_reproduces_dimension_reduce_on_its_training_data(void) {
+    /* The two builtins must agree where their domains overlap: DimensionReduce returns
+     * the reduced training data, and the reducer applied to that same training data must
+     * give the same thing. Disagreement would mean one of them centres or projects
+     * differently. */
+    assert_eval_eq("Chop[DimensionReduce[" RED_TRAIN ", 1] - "
+                   "DimensionReduction[" RED_TRAIN ", 1][" RED_TRAIN "], 10.^-9]",
+                   "{{0}, {0}, {0}, {0}, {0}}", 0);
+}
+
+static void test_reducer_centres_new_data_on_the_training_mean(void) {
+    /* The discriminating pair, and the reason the training data is off-centre.
+     *
+     * A point AT the training mean must project to zero -- that identifies WHICH mean is
+     * being subtracted. And a point away from it must project far from zero: if the
+     * implementation centred each incoming batch on its own mean, a single point would
+     * always land at zero, so this second row is what fails on the plausible bug. */
+    assert_eval_eq("Chop[DimensionReduction[" RED_TRAIN ", 1][{104., 210.}], 10.^-9]",
+                   "{0}", 0);
+    assert_eval_eq("Chop[Abs[First[DimensionReduction[" RED_TRAIN ", 1][{110., 225.}]]] "
+                   "> 10.]", "True", 0);
+    /* Symmetry as a further constraint: points equally far either side of the training
+     * mean must project to values of equal magnitude and opposite sign. */
+    assert_eval_eq("Chop[First[DimensionReduction[" RED_TRAIN ", 1][{110., 225.}]] + "
+                   "First[DimensionReduction[" RED_TRAIN ", 1][{98., 195.}]]]", "0", 0);
+}
+
+static void test_reducer_accepts_a_point_or_a_batch(void) {
+    assert_eval_eq("DimensionReduction[" RED_TRAIN ", 1][{110., 225.}] === "
+                   "First[DimensionReduction[" RED_TRAIN ", 1][{{110., 225.}}]]",
+                   "True", 0);
+    assert_eval_eq("Head[DimensionReduction[" RED_TRAIN ", 1][{{110., 225.}}]]",
+                   "List", 0);
+    assert_eval_eq("Length[DimensionReduction[" RED_TRAIN ", 2][{110., 225.}]]", "2", 0);
+}
+
+static void test_reducer_properties_and_declines(void) {
+    assert_eval_eq("DimensionReduction[" RED_TRAIN ", 1][\"ReducedDimension\"]", "1", 0);
+    assert_eval_eq("DimensionReduction[" RED_TRAIN ", 1][\"FeatureCount\"]", "2", 0);
+    assert_eval_eq("Head[DimensionReduction[" RED_TRAIN ", 3]]", "DimensionReduction", 0);
+    assert_eval_eq("Head[DimensionReduction[" RED_TRAIN ", 0]]", "DimensionReduction", 0);
+    assert_eval_eq("Head[DimensionReduction[{1., 2., 3.}, 1]]", "DimensionReduction", 0);
+    /* A wrongly-shaped input must not be projected. Asserted as "no list of the reduced
+     * width came back" rather than by Head, since Head of an unevaluated composite
+     * application is the whole reducer, not a symbol. */
+    assert_eval_eq("MatrixQ[DimensionReduction[" RED_TRAIN ", 1][{1., 2., 3.}]] || "
+                   "VectorQ[DimensionReduction[" RED_TRAIN ", 1][{1., 2., 3.}], NumberQ]",
+                   "False", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -189,6 +245,10 @@ int main(void) {
     TEST(test_classical_mds_on_euclidean_distances_reproduces_pca);
     TEST(test_lsa_differs_from_pca_because_it_does_not_centre);
     TEST(test_dimension_reduce_declines_rather_than_padding);
+    TEST(test_reducer_reproduces_dimension_reduce_on_its_training_data);
+    TEST(test_reducer_centres_new_data_on_the_training_mean);
+    TEST(test_reducer_accepts_a_point_or_a_batch);
+    TEST(test_reducer_properties_and_declines);
 
     printf("All ml PCA tests passed.\n");
     return 0;

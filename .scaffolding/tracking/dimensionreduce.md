@@ -94,7 +94,7 @@ goal_lock:
 - [x] `DimensionReduce with a method dispatch (PCA first)` | `depends on: kernels` | `done (iteration 11)`
 - [x] `MultidimensionalScaling` | `depends on: symmetric eigen` | `done (iteration 11, as a DimensionReduce method)`
 - [x] `LatentSemanticAnalysis` | `depends on: SVD` | `done (iteration 11, as a DimensionReduce method -- the Gram-matrix eigendecomposition IS a truncated SVD, so no separate SVD path was needed)`
-- [ ] `A DimensionReducerFunction applicable to new data` | `depends on: the family-3 model representation` | `pending`
+- [x] `A DimensionReducerFunction applicable to new data` | `depends on: the family-3 model representation` | `done (iteration 14) -- DimensionReduction[data, k]; family 2 is now CLOSED`
 
 ## Checkpoints
 
