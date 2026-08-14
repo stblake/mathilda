@@ -536,9 +536,9 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   the visible surface needed a guard. Rank 3 and above still decline: a
   list-valued component is not a coordinate.
 - **Which methods accept vectors.** `Agglomerate`, `SpanningTree`, `MeanShift`,
-  `NeighborhoodContraction`, `KMeans`, `DBSCAN`, `JarvisPatrick` and `KMedoids`
-  cluster n-dimensional points; the remaining two (`Spectral`,
-  `GaussianMixture`) accept scalars only and return unevaluated for vector input.
+  `NeighborhoodContraction`, `KMeans`, `DBSCAN`, `JarvisPatrick`, `KMedoids` and
+  `Spectral` cluster n-dimensional points; only `GaussianMixture` accepts scalars
+  only and return unevaluated for vector input.
   That is not a conservative guard — those five reach their data through the sorted
   projection, which does not exist off a line — and the list grows as each is
   ported. The ported methods additionally decline string input, having no
@@ -588,6 +588,26 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   from each member to its cluster's medoid — **4 against 16**. Both are documented
   as they behave; adopting farthest-first on a line would improve the 1-D answer and
   move an existing one, so it is left as its own deliberate change.
+- **`"Spectral"` above one dimension reads the graph's connected components before
+  its Fiedler vector, and that is not an optimisation.** The multiplicity of the
+  zero eigenvalue of the normalised Laplacian equals the number of connected
+  components, so on a well-separated sample the null space is multi-dimensional and
+  a single "leading non-trivial eigenvector" is defined only up to a rotation
+  inside it — power iteration then lands on whichever member the seed favours,
+  separating two groups at best. This is the *easy* case, not a corner case: better
+  separation means smaller cross-affinity, and `exp(-(60/1.5)²/2)` is zero in double
+  precision, not merely small. Components are therefore read off with union-find.
+  Asked (via `UpTo[k]`) for fewer clusters than there are components, the nearest
+  components merge first, ranked by the spanning tree — the spectrum itself cannot
+  choose, since every partition respecting components has zero cut.
+- **`"Spectral"` above one dimension is a second implementation, and the threshold
+  is why.** The n-D kernel counts embedding jumps wider than three times the **mean**
+  jump; the 1-D kernel counts data gaps wider than three times the **median**. Each
+  is right in its own domain — a good embedding collapses within-cluster distance,
+  driving the median to ~0 so a median threshold accepts nearly every jump, while on
+  raw data gaps it is the mean that misleads. Routing scalars through the n-D kernel
+  under-counts (`{{1,2,3},{10,11,12},{25}}` becomes `{{1,2,3,10,11,12},{25}}`), so
+  the two paths stay separate.
 - **`KMeans` and `KMedoids` require a count.** Neither accepts the `Automatic`
   form, in any dimension, so `FindClusters[data, Method -> "KMeans"]` returns
   unevaluated; `UpTo[k]` is the data-driven form they do take, and a bare `k` is
@@ -622,7 +642,7 @@ projection and declines vector input.
 | `"SpanningTree"` (minimum spanning tree) | yes | yes | yes | vectors |
 | `"KMeans"` | no | yes | yes | vectors |
 | `"KMedoids"` | no | yes | yes | vectors |
-| `"Spectral"` | yes | yes | no | scalars |
+| `"Spectral"` | yes | yes | no | vectors |
 | `"DBSCAN"` | yes | no | no | vectors |
 | `"GaussianMixture"` | yes | no | no | scalars |
 | `"JarvisPatrick"` | yes | no | no | vectors |

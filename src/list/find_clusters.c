@@ -2035,10 +2035,260 @@ static bool fc_method_gaussianmixture(const FcData* d, FcCount spec, const FcOpt
  * FC_SPECTRAL_MAX_N rather than allocating gigabytes. Inverse iteration against
  * the known-constant first eigenvector is enough for the Fiedler vector here
  * and avoids pulling a full eigensolver onto this path. */
+/* Spectral clustering in any dimension.
+ *
+ * The realisation that makes this a small port rather than a new algorithm: the
+ * only 1-D-specific step looked like the cut rule, and it is not. The 1-D kernel
+ * cuts the widest jumps in the EMBEDDING, and the embedding is a scalar per point
+ * however many dimensions the data has -- so "sort and cut the widest gaps" is a
+ * statement about the Fiedler vector, not about the input. Sorting by embedding
+ * value instead of by data value carries the rule across unchanged, and no k-means
+ * on the embedding is needed.
+ *
+ * Two real differences from the 1-D kernel:
+ *
+ *   - the affinity is exp(-(dist/h)^2 / 2) with dist from fc_dist_pos and h from
+ *     fc_scale_ndim, rather than a coordinate difference over the median gap; and
+ *   - the affinity matrix is PRECOMPUTED rather than rebuilt inside the power
+ *     iteration. The 1-D kernel recomputes exp() for every pair on every one of up
+ *     to FC_MAX_ITER iterations, which costs nothing extra on a line but would
+ *     multiply by dim here. Precomputing is arithmetically identical -- the same
+ *     exp() of the same argument -- so it is a speed change only, and at the
+ *     FC_SPECTRAL_MAX_N ceiling the matrix is 2000 x 2000 doubles, 32 MB.
+ */
+static bool fc_spectral_ndim(const FcData* d, FcCount spec, const FcOpts* o,
+                             size_t* assign, size_t* k) {
+    size_t n = d->n, dim = d->dim;
+    const double* pts = fc_points(d);
+    if (!pts) return false;
+
+    double h = o->radius_given ? o->radius : fc_scale_ndim(d);
+    if (h <= 0.0) h = 1.0;
+
+    double* wm  = malloc(sizeof(double) * n * n);
+    double* deg = calloc(n, sizeof(double));
+    double* v   = malloc(sizeof(double) * n);
+    double* t   = malloc(sizeof(double) * n);
+    size_t* ord = malloc(sizeof(size_t) * n);
+    size_t* id  = malloc(sizeof(size_t) * n);
+    if (!wm || !deg || !v || !t || !ord || !id) {
+        free(wm); free(deg); free(v); free(t); free(ord); free(id); return false;
+    }
+
+    for (size_t i = 0; i < n; i++) {
+        for (size_t j = 0; j < n; j++) {
+            double z = fc_dist_pos(d, pts + i * dim, pts + j * dim) / h;
+            double wij = exp(-0.5 * z * z);
+            wm[i * n + j] = wij;
+            deg[i] += wij;
+        }
+    }
+
+    /* CONNECTED COMPONENTS FIRST, because for a well-separated sample they are the
+     * answer and a single Fiedler vector cannot be.
+     *
+     * The multiplicity of the zero eigenvalue of the normalised Laplacian equals
+     * the number of connected components of the affinity graph. So when the graph
+     * has c components the null space is c-dimensional, the "leading non-trivial
+     * eigenvector" is only defined up to an arbitrary rotation inside it, and power
+     * iteration converges to whichever member of it the seed happens to favour --
+     * which separates two groups at best, however many components there are.
+     *
+     * This is not a corner case for clustering, it is the EASY case: the better
+     * separated the clusters, the smaller the cross-affinity, and
+     * exp(-(60/1.5)^2/2) is not merely small but zero in double precision. Three
+     * blobs in five dimensions came back with two merged and the third split for
+     * exactly this reason, while the same three blobs in two dimensions happened to
+     * survive on the luck of the seed vector.
+     *
+     * Reading the components off directly is what the spectrum says to do, and it
+     * needs union-find rather than an eigensolver. The Fiedler cut below still runs
+     * when the graph is connected, or when more clusters are wanted than there are
+     * components. The threshold is where the affinity stops being representable
+     * rather than a tuned constant: exp(-z^2/2) < 1e-12 is z > ~7.4 bandwidths. */
+    size_t* uf = malloc(sizeof(size_t) * n);
+    if (!uf) {
+        free(wm); free(deg); free(v); free(t); free(ord); free(id); return false;
+    }
+    for (size_t i = 0; i < n; i++) uf[i] = i;
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = i + 1; j < n; j++)
+            if (wm[i * n + j] > 1e-12) fc_uf_union(uf, i, j);
+    size_t ncomp = 0;
+    for (size_t i = 0; i < n; i++) if (fc_uf_find(uf, i) == i) ncomp++;
+
+    for (size_t i = 0; i < n; i++) v[i] = ((i % 2) ? 1.0 : -1.0) + 0.001 * (double)i;
+
+    /* Power iteration on (I - L_sym), deflated against the constant eigenvector --
+     * the same loop the 1-D kernel runs, reading wm instead of recomputing. */
+    for (int it = 0; it < FC_MAX_ITER; it++) {
+        for (size_t i = 0; i < n; i++) {
+            double acc = 0.0;
+            for (size_t j = 0; j < n; j++)
+                acc += wm[i * n + j] * v[j] / sqrt(deg[i] * deg[j]);
+            t[i] = acc;
+        }
+        double dot = 0.0, nrm = 0.0, cn = 0.0;
+        for (size_t i = 0; i < n; i++) cn += deg[i];
+        cn = sqrt(cn);
+        for (size_t i = 0; i < n; i++) dot += t[i] * sqrt(deg[i]) / cn;
+        for (size_t i = 0; i < n; i++) t[i] -= dot * sqrt(deg[i]) / cn;
+        for (size_t i = 0; i < n; i++) nrm += t[i] * t[i];
+        nrm = sqrt(nrm);
+        if (nrm < 1e-300) break;
+        for (size_t i = 0; i < n; i++) v[i] = t[i] / nrm;
+    }
+
+    /* Order the points by their embedding value. Ties break to the lower input
+     * index, so the ordering is deterministic. */
+    for (size_t i = 0; i < n; i++) ord[i] = i;
+    for (size_t a = 1; a < n; a++) {
+        size_t x = ord[a]; size_t b = a;
+        while (b > 0 && v[ord[b - 1]] > v[x]) { ord[b] = ord[b - 1]; b--; }
+        ord[b] = x;
+    }
+
+    size_t m = (n > 0) ? n - 1 : 0;
+    double* g = malloc(sizeof(double) * (m ? m : 1));
+    size_t* gi = malloc(sizeof(size_t) * (m ? m : 1));
+    bool* cut = calloc(m ? m : 1, sizeof(bool));
+    if (!g || !gi || !cut) {
+        free(g); free(gi); free(cut); free(uf);
+        free(wm); free(deg); free(v); free(t); free(ord); free(id); return false;
+    }
+    for (size_t j = 0; j < m; j++) g[j] = fabs(v[ord[j + 1]] - v[ord[j]]);
+
+    /* Natural count: embedding jumps wider than FC_GAP_FACTOR times the MEAN jump.
+     *
+     * The 1-D kernel thresholds against the MEDIAN, and that is right for gaps
+     * between DATA values and wrong for gaps in an EMBEDDING. A spectral embedding
+     * earns its keep precisely by collapsing within-cluster distances toward zero,
+     * so with tight clusters most jumps are ~0, the median is ~0, and a threshold of
+     * three times it admits nearly every jump -- which is exactly what happened:
+     * two well-separated 4-point blobs came back as FOUR clusters, and three as
+     * five, while UpTo[3] recovered all three perfectly. The embedding was right and
+     * only the count was wrong.
+     *
+     * The mean is the correct statistic because the jumps SUM to the embedding
+     * range, so mean = range/m and "wider than three times the mean" is a
+     * statement about a jump's share of the whole spread. It behaves at both ends:
+     * on uniform data every jump equals the mean, so nothing exceeds three times it
+     * and the count is 1; with c tight clusters the c-1 between-cluster jumps each
+     * take a ~1/(c-1) share and clear the threshold while the within-cluster jumps
+     * do not. It is also robust to a lone outlier, whose single wide jump inflates
+     * the mean only by 1/m.
+     *
+     * `s` is still sorted below for the widest-jump selection; only the threshold
+     * statistic changed. */
+    size_t natural = 1;
+    if (m > 0) {
+        double total = 0.0;
+        for (size_t j = 0; j < m; j++) total += g[j];
+        double mean = total / (double)m;
+        for (size_t j = 0; j < m; j++)
+            if (g[j] > (double)FC_GAP_FACTOR * mean) natural++;
+    }
+
+    /* A disconnected graph already carries a count, and it is a better one than the
+     * embedding jumps can give: each component is a zero eigenvalue. */
+    if (ncomp > natural) natural = ncomp;
+    size_t target = fc_target_count(natural, spec, d->n_distinct);
+
+    if (ncomp >= target && ncomp > 1) {
+        /* More components than clusters wanted -- UpTo[2] on a three-component
+         * graph -- so components must be MERGED, not returned as they are. Which
+         * pair to merge is not something the spectrum decides: on a disconnected
+         * graph every partition that respects components has zero cut, so they are
+         * all optimal and a tie-break has to come from somewhere. The nearest pair
+         * is the defensible one, and the spanning tree already ranks exactly that:
+         * adding its edges in ascending weight is single linkage, so walking them
+         * until the count falls to `target` merges the closest components first.
+         * Edges interior to a component are already unioned and no-op. */
+        if (ncomp > target) {
+            size_t ne = d->n_gap;
+            size_t* eo = malloc(sizeof(size_t) * (ne ? ne : 1));
+            if (eo) {
+                for (size_t j = 0; j < ne; j++) eo[j] = j;
+                /* Rank by machine distance: this only orders the merges, so the
+                 * exact weights in d->gap are not needed to pick them. */
+                for (size_t a = 1; a < ne; a++) {
+                    size_t x = eo[a]; size_t b = a;
+                    double wx = fc_dist_pos(d, pts + d->eu[x] * dim,
+                                               pts + d->ev[x] * dim);
+                    while (b > 0) {
+                        size_t y = eo[b - 1];
+                        double wy = fc_dist_pos(d, pts + d->eu[y] * dim,
+                                                   pts + d->ev[y] * dim);
+                        if (wy <= wx) break;
+                        eo[b] = y; b--;
+                    }
+                    eo[b] = x;
+                }
+                for (size_t a = 0; a < ne && ncomp > target; a++) {
+                    size_t e = eo[a];
+                    if (fc_uf_find(uf, d->eu[e]) != fc_uf_find(uf, d->ev[e])) {
+                        fc_uf_union(uf, d->eu[e], d->ev[e]);
+                        ncomp--;
+                    }
+                }
+                free(eo);
+            }
+        }
+        fc_assign_from_uf(uf, n, assign, k);
+        free(g); free(gi); free(cut); free(uf);
+        free(wm); free(deg); free(v); free(t); free(ord); free(id);
+        return *k > 0;
+    }
+
+    for (size_t j = 0; j < m; j++) gi[j] = j;
+    for (size_t i = 1; i < m; i++) {
+        size_t x = gi[i]; size_t j = i;
+        while (j > 0 && g[gi[j - 1]] > g[x]) { gi[j] = gi[j - 1]; j--; }
+        gi[j] = x;
+    }
+    size_t ncut = target > 0 ? target - 1 : 0;
+    if (ncut > m) ncut = m;
+    for (size_t c = 0; c < ncut; c++) cut[gi[m - 1 - c]] = true;
+
+    /* Walk the embedding order assigning a run id, then renumber by first
+     * appearance in INPUT order so the output matches every other method. */
+    size_t cur = 0;
+    id[ord[0]] = 0;
+    for (size_t j = 1; j < n; j++) { if (cut[j - 1]) cur++; id[ord[j]] = cur; }
+
+    size_t* label = malloc(sizeof(size_t) * (cur + 1));
+    if (!label) {
+        free(g); free(gi); free(cut); free(uf);
+        free(wm); free(deg); free(v); free(t); free(ord); free(id); return false;
+    }
+    for (size_t j = 0; j <= cur; j++) label[j] = SIZE_MAX;
+    size_t next = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (label[id[i]] == SIZE_MAX) label[id[i]] = next++;
+        assign[i] = label[id[i]];
+    }
+    *k = next;
+
+    free(label); free(g); free(gi); free(cut); free(uf);
+    free(wm); free(deg); free(v); free(t); free(ord); free(id);
+    return *k > 0;
+}
+
 static bool fc_method_spectral(const FcData* d, FcCount spec, const FcOpts* o,
                                size_t* assign, size_t* k) {
     size_t n = d->n;
     if (n > FC_SPECTRAL_MAX_N) return false;
+    if (d->kind == FC_KIND_POINT) {
+        /* n < 3 must be handled HERE and not fall through: the 1-D branch below
+         * reaches it through fc_scatter, which indexes d->order -- NULL for point
+         * input, so falling through is a segfault rather than a wrong answer. */
+        if (n < 3) {
+            for (size_t i = 0; i < n; i++) assign[i] = 0;
+            *k = (n > 0) ? 1 : 0;
+            return *k > 0;
+        }
+        return fc_spectral_ndim(d, spec, o, assign, k);
+    }
     if (n < 3) {                        /* nothing for a spectrum to say */
         size_t* id0 = calloc(n, sizeof(size_t));
         if (!id0) return false;
@@ -2381,7 +2631,8 @@ static Expr* fc_find_clusters(Expr* res, Expr* list) {
                    || (fn == fc_method_kmeans)
                    || (fn == fc_method_dbscan)
                    || (fn == fc_method_jarvispatrick)
-                   || (fn == fc_method_kmedoids);
+                   || (fn == fc_method_kmedoids)
+                   || (fn == fc_method_spectral);
     /* The shift methods need coordinates; strings have none, so they stay
      * declined for those even though POINT input is now fine. */
     if (d.kind == FC_KIND_SEQUENCE && fn != fc_method_gap) return NULL;

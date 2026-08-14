@@ -183,6 +183,34 @@ static void test_kmedoids_ndim_finds_a_better_optimum_than_the_1d_kernel(void) {
                    "{{{1}, {2}, {3}}, {{10}, {11}, {12}}, {{25}}}", 0);
 }
 
+static void test_spectral_recovers_blobs(void) {
+    check("Spectral", BLOBS_2D, BLOBS_2D_OUT);
+    check("Spectral", BLOBS_5D, BLOBS_5D_OUT);
+}
+
+static void test_spectral_respects_upto_by_merging_nearest_components(void) {
+    /* Spectral takes Automatic and UpTo only, never a fixed count. Asked for fewer
+     * clusters than the affinity graph has components, it must MERGE -- and which
+     * pair is not something the spectrum decides, since on a disconnected graph
+     * every partition respecting components has zero cut and all are optimal. The
+     * nearest pair is the tie-break, taken from the spanning tree.
+     *
+     * The three blobs sit at separations 20 and 40, so UpTo[2] must join the two
+     * twenty apart and leave the far one alone. A merge of an arbitrary pair would
+     * still give two clusters, so the count alone would not catch it -- the
+     * membership is the assertion that matters. */
+    assert_eval_eq("Length[FindClusters[" BLOBS_2D ", UpTo[1], Method -> \"Spectral\"]]",
+                   "1", 0);
+    assert_eval_eq("FindClusters[" BLOBS_2D ", UpTo[2], Method -> \"Spectral\"]",
+                   "{{{0, 0}, {1, 0}, {0, 1}, {1, 1}, "
+                   "{20, 20}, {21, 20}, {20, 21}, {21, 21}}, "
+                   "{{0, 40}, {1, 40}, {0, 41}, {1, 41}}}", 0);
+    /* And it saturates: asked for more than the data supports, the natural count
+     * wins rather than the request. */
+    assert_eval_eq("Length[FindClusters[" BLOBS_2D ", UpTo[5], Method -> \"Spectral\"]]",
+                   "3", 0);
+}
+
 static void test_kmeans_is_independent_of_input_order(void) {
     /* A k-means whose answer depends on the order its points were typed in is
      * seeding from index 0. This is why the n-D initialisation starts from the
@@ -288,6 +316,19 @@ static void test_scalar_and_dim1_point_agree(void) {
                    "{{1, 2, 3, 100}}", 0);
     assert_eval_eq("FindClusters[{{1}, {2}, {3}, {100}}, Method -> \"JarvisPatrick\"]",
                    "{{{1}, {2}, {3}, {100}}}", 0);
+
+    /* Spectral is split too, and the reason is the exact mirror of the KMedoids
+     * story. Its n-D kernel thresholds embedding jumps against the MEAN because a
+     * good embedding collapses within-cluster distance and drives the MEDIAN to
+     * zero; on a line the 1-D kernel thresholds DATA gaps against the median, where
+     * the mean is the one that misleads. Each statistic is right in its own domain,
+     * so routing scalars through the n-D kernel under-counts -- it turned
+     * {{1,2,3},{10,11,12},{25}} into {{1,2,3,10,11,12},{25}}. Here the two forms
+     * agree, which is what makes the row worth keeping. */
+    assert_eval_eq("FindClusters[{1, 2, 3, 100}, Method -> \"Spectral\"]",
+                   "{{1, 2, 3}, {100}}", 0);
+    assert_eval_eq("FindClusters[{{1}, {2}, {3}, {100}}, Method -> \"Spectral\"]",
+                   "{{{1}, {2}, {3}}, {{100}}}", 0);
 }
 
 static void test_equal_points_are_never_split(void) {
@@ -385,10 +426,12 @@ static void test_unported_methods_still_decline_in_ndim(void) {
                  unported[i]);
         assert_eval_eq(in, out, 0);
     }
-    /* Spectral takes no fixed count, so its n-D decline is checked in the form it
-     * does accept. */
+    /* Spectral is ported; two points are below the n < 3 floor and come back as one
+     * cluster. That floor must be handled on the point path itself -- falling
+     * through to the 1-D branch reaches fc_scatter, which indexes d->order, NULL
+     * here, and segfaulted before this row existed. */
     assert_eval_eq("FindClusters[{{1, 1}, {9, 9}}, Method -> \"Spectral\"]",
-                   "FindClusters[{{1, 1}, {9, 9}}, Method -> \"Spectral\"]", 0);
+                   "{{{1, 1}, {9, 9}}}", 0);
 }
 
 static void test_metric_applies_to_ported_methods(void) {
@@ -423,6 +466,8 @@ int main(void) {
     TEST(test_dbscan_recovers_blobs);
     TEST(test_jarvispatrick_recovers_blobs);
     TEST(test_kmedoids_recovers_blobs);
+    TEST(test_spectral_recovers_blobs);
+    TEST(test_spectral_respects_upto_by_merging_nearest_components);
     TEST(test_kmedoids_carries_a_tighter_ceiling_than_kmeans);
     TEST(test_kmedoids_ndim_finds_a_better_optimum_than_the_1d_kernel);
     TEST(test_dbscan_keeps_noise_as_singletons);
