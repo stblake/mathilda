@@ -173,11 +173,42 @@ static const struct { const char* name; FcMethod m; } FC_METHOD_NAMES[] = {
     { "NeighborhoodContraction", FC_NEIGHBORHOODCONTRACTION },
 };
 
+/* Which metric the tree edges are weighted by.
+ *
+ * Euclidean and SquaredEuclidean are deliberately ONE case, not two. Squaring is
+ * monotone on non-negatives, so it preserves the ranking of edges, and the
+ * Automatic threshold compares against a multiple of the median -- where
+ * d > 3 * median(d) if and only if d^2 > 9 * median(d^2). Both the ranking and
+ * the threshold test are therefore identical under the two, so they always
+ * produce the same partition, and collapsing them avoids taking a square root of
+ * an exact value: Sqrt[2] is not rational, and an exact ordering that has to
+ * compare irrationals is a different and much harder problem than this needs.
+ *
+ * Manhattan genuinely differs and is the one that had to be wired.
+ *
+ * FC_DIST_AUTOMATIC is kept distinct from FC_DIST_SQUAREDEUCLIDEAN even though
+ * they behave identically, so that a future Automatic that chooses a metric from
+ * the data does not have to be told apart from an explicit request. */
+typedef enum {
+    FC_DIST_AUTOMATIC,
+    FC_DIST_EUCLIDEAN,
+    FC_DIST_SQUAREDEUCLIDEAN,
+    FC_DIST_MANHATTAN
+} FcDistance;
+
+/* True when this metric's weights are squared distances, which the Automatic
+ * threshold factor has to match -- see FcData.thresh_factor. */
+static bool fc_dist_is_squared(FcDistance dist) {
+    return dist == FC_DIST_AUTOMATIC || dist == FC_DIST_EUCLIDEAN
+        || dist == FC_DIST_SQUAREDEUCLIDEAN;
+}
+
 typedef struct {
     FcMethod method;
     double   radius;          bool radius_given;
     long     min_points;      bool min_points_given;
     long     neighbor_count;  bool neighbor_count_given;
+    FcDistance dist;
 } FcOpts;
 
 /* ------------------------------------------------------------------------- */
@@ -250,6 +281,14 @@ typedef struct {
      * d^2 > 9 * median(d^2) if and only if d > 3 * median(d). Getting this wrong
      * would silently apply a factor of sqrt(3) in higher dimensions. */
     size_t  thresh_factor;
+
+    /* The metric the edge weights above were built with. Carried here rather than
+     * passed alongside FcData because every distance consumer already takes a
+     * FcData and nothing else needs the option struct. Meaningful for
+     * FC_KIND_POINT only: on a line all four accepted metrics agree up to the
+     * monotone transform the threshold factor cancels, and for strings the only
+     * meaningful metric is edit distance. */
+    FcDistance dist;
 
     size_t  n_distinct;
     /* owned: bnd[j] is true when edge j's endpoints hold EXACTLY different
@@ -339,6 +378,7 @@ static bool fc_elem_equal(const FcData* d, size_t i, size_t j, bool* ok) {
  * call rather than a guess. */
 static Expr* fc_pair_distance(const FcData* d, size_t i, size_t j) {
     if (d->kind == FC_KIND_SEQUENCE) return distance_edit(d->elem[i], d->elem[j]);
+    if (d->dist == FC_DIST_MANHATTAN) return distance_manhattan(d->elem[i], d->elem[j]);
     return distance_squared_euclidean(d->elem[i], d->elem[j]);
 }
 
@@ -475,11 +515,20 @@ static bool fc_all_machine(const FcData* d) {
     return true;
 }
 
-/* Squared Euclidean distance over the machine projection. */
+/* Distance over the machine projection, in whichever metric the edge weights are
+ * being built with.
+ *
+ * Must agree with fc_pair_distance on the SAME input, or the two spanning-tree
+ * builders would disagree and the partition would depend on whether the input
+ * happened to be machine-precision. */
 static double fc_sqdist(const FcData* d, size_t i, size_t j) {
     const double* a = d->coord + i * d->dim;
     const double* b = d->coord + j * d->dim;
     double s = 0.0;
+    if (d->dist == FC_DIST_MANHATTAN) {
+        for (size_t c = 0; c < d->dim; c++) s += fabs(a[c] - b[c]);
+        return s;
+    }
     for (size_t c = 0; c < d->dim; c++) {
         double t = a[c] - b[c];
         s += t * t;
@@ -1652,17 +1701,21 @@ static bool fc_parse_method(Expr* rhs, FcOpts* o) {
     return false;
 }
 
-/* In 1D every accepted distance is a monotone transform of |a - b|, so all of
- * them induce the same ordering of gaps and therefore the same partition for
- * every distance-ranking method. Accepting four names is not four
- * implementations, and the docs say so. */
-static bool fc_parse_distance_function(Expr* rhs) {
+/* On a LINE every accepted metric is a monotone transform of |a - b|, so all four
+ * induce the same ordering of gaps and the same partition -- which is why this
+ * used to validate the name and store nothing at all.
+ *
+ * That stops being true the moment the points have more than one component:
+ * Manhattan and Euclidean rank pairs differently in the plane, and the option
+ * silently doing nothing there would be a wrong answer rather than a missing
+ * feature. The choice is now recorded and applied for FC_KIND_POINT. */
+static bool fc_parse_distance_function(Expr* rhs, FcOpts* o) {
     if (rhs->type == EXPR_SYMBOL) {
         const char* s = rhs->data.symbol.name;
-        return s == SYM_Automatic
-            || strcmp(s, "EuclideanDistance") == 0
-            || strcmp(s, "ManhattanDistance") == 0
-            || strcmp(s, "SquaredEuclideanDistance") == 0;
+        if (s == SYM_Automatic)                              { o->dist = FC_DIST_AUTOMATIC;        return true; }
+        if (strcmp(s, "EuclideanDistance") == 0)             { o->dist = FC_DIST_EUCLIDEAN;        return true; }
+        if (strcmp(s, "SquaredEuclideanDistance") == 0)      { o->dist = FC_DIST_SQUAREDEUCLIDEAN; return true; }
+        if (strcmp(s, "ManhattanDistance") == 0)             { o->dist = FC_DIST_MANHATTAN;        return true; }
     }
     return false;
 }
@@ -1672,7 +1725,7 @@ static bool fc_apply_option(Expr* rule, FcOpts* o) {
     Expr* rhs = rule->data.function.args[1];
 
     if (name == SYM_Method) return fc_parse_method(rhs, o);
-    if (name == SYM_DistanceFunction) return fc_parse_distance_function(rhs);
+    if (name == SYM_DistanceFunction) return fc_parse_distance_function(rhs, o);
     /* CriterionFunction and PerformanceGoal are accepted and currently have no
      * effect; the docs state this rather than leaving it implicit. */
     if (name == SYM_CriterionFunction || name == SYM_PerformanceGoal) return true;
@@ -1751,7 +1804,7 @@ static Expr* fc_find_clusters(Expr* res, Expr* list) {
     if (argc < 1) return NULL;
 
     /* Split trailing options from the positional arguments. */
-    FcOpts opts = { FC_AGGLOMERATE, 0.0, false, 0, false, 0, false };
+    FcOpts opts = { FC_AGGLOMERATE, 0.0, false, 0, false, 0, false, FC_DIST_AUTOMATIC };
     bool method_given = false;
     size_t n_pos = argc;
     for (size_t i = 1; i < argc; i++) {
@@ -1814,6 +1867,12 @@ static Expr* fc_find_clusters(Expr* res, Expr* list) {
         if (n > cap) return NULL;
     }
 
+    /* The metric the tree will be weighted by. Set before either builder runs,
+     * since both read it, and only meaningful for POINT input -- the scalar path
+     * below builds plain exact differences and the sequence path edit distances,
+     * neither of which the option can change. */
+    d.dist = (d.kind == FC_KIND_POINT) ? opts.dist : FC_DIST_AUTOMATIC;
+
     if (d.n_gap) {
         d.gap = calloc(d.n_gap, sizeof(Expr*));
         d.eu  = malloc(sizeof(size_t) * d.n_gap);
@@ -1846,10 +1905,13 @@ static Expr* fc_find_clusters(Expr* res, Expr* list) {
             if (!list_real_number_q(d.gap[j])) { fc_data_free(&d); return NULL; }
         }
     } else {
-        /* POINT weights are SQUARED distances, so the threshold factor is
-         * squared too -- see the FcData comment. SEQUENCE weights are edit
-         * distances, already linear, so they keep the plain factor. */
-        d.thresh_factor = (d.kind == FC_KIND_POINT)
+        /* POINT weights are SQUARED distances under the Euclidean metrics, so the
+         * threshold factor is squared to match -- see the FcData comment. Under
+         * Manhattan the weights are plain sums of absolute differences, already
+         * linear, so the factor stays plain: squaring it there would silently
+         * apply a threshold nine times too large. SEQUENCE weights are edit
+         * distances, also linear. */
+        d.thresh_factor = (d.kind == FC_KIND_POINT && fc_dist_is_squared(d.dist))
                         ? FC_GAP_FACTOR * FC_GAP_FACTOR
                         : FC_GAP_FACTOR;
 

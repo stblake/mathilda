@@ -581,11 +581,41 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   much from `"Agglomerate"`.
 
 **DistanceFunction** — accepts `Automatic`, `EuclideanDistance`,
-`ManhattanDistance` and `SquaredEuclideanDistance`. On a line these are monotone
-transforms of one another, so **all four give the same partition** for every
-method that only ranks distances; the option is accepted for compatibility
-rather than offering four behaviours. Any other value leaves the call
-unevaluated.
+`ManhattanDistance` and `SquaredEuclideanDistance`, and **selects the metric the
+spanning tree is weighted by**. Takes a metric, not a string: `EuclideanDistance`,
+not `"EuclideanDistance"` — the reverse of `Method`, which takes strings. Any
+other value leaves the call unevaluated, so a typo cannot silently cluster by the
+wrong metric.
+
+Two things follow from the arithmetic rather than from choice:
+
+- **On a line all four agree.** Every accepted metric is a monotone transform of
+  `|a - b|` there, so they induce the same ordering of gaps and the same
+  partition. The option is therefore accepted and has no effect on scalar input,
+  whose weights are plain exact differences.
+- **`EuclideanDistance` and `SquaredEuclideanDistance` always agree**, in any
+  dimension. Squaring is monotone on non-negatives so it preserves edge ranking,
+  and the `Automatic` threshold compares against a multiple of the median, where
+  `d > 3 median(d)` exactly when `d² > 9 median(d²)`. They are one implementation
+  for that reason — which also avoids taking a square root of an exact value,
+  since `Sqrt[2]` is irrational and an exact ordering that must compare
+  irrationals is a far harder problem than clustering needs.
+
+`ManhattanDistance` is the one that genuinely differs above one dimension:
+
+```
+In[1]:= FindClusters[{{0, 0}, {0, 11}, {8, 6}}, 2]
+Out[1]= {{{0, 0}}, {{0, 11}, {8, 6}}}
+
+In[2]:= FindClusters[{{0, 0}, {0, 11}, {8, 6}}, 2,
+          DistanceFunction -> ManhattanDistance]
+Out[2]= {{{0, 0}, {0, 11}}, {{8, 6}}}
+```
+
+Squared Euclidean makes those edges 121, 100 and 89, so the tree is `{89, 100}`
+and cutting its heaviest edge isolates `{0, 0}`. Manhattan makes them 11, 14 and
+13, so the tree is `{11, 13}` and cutting its heaviest edge isolates `{8, 6}`
+instead.
 
 **CriterionFunction** and **PerformanceGoal** are accepted and currently have no
 effect.

@@ -89,7 +89,8 @@ goal_lock:
 
 ## Task List
 
-- [ ] `prerequisites: fc_dist, n-D length scale, assign[] contract, DistanceFunction` | `independent` | `in-progress`
+- [x] `DistanceFunction wired through FcOpts and both MST builders` | `independent` | `done (iteration 2)`
+- [ ] `remaining prerequisites: generic fc_dist over coord, n-D length scale from the MST median` | `independent` | `pending — deferred to the first port that needs them, since -Werror=unused-function forbids landing helpers with no consumer`
 - [ ] `MeanShift + NeighborhoodContraction` | `depends on: prerequisites` | `pending`
 - [ ] `KMeans` | `depends on: prerequisites` | `pending`
 - [ ] `DBSCAN` | `depends on: prerequisites` | `pending`
@@ -152,6 +153,7 @@ goal_lock:
 
 ## Activity Log
 
+- `2026-08-13 23:20` Iteration 2: DistanceFunction made real. It was validated and discarded, which is harmless on a line (all four metrics are monotone transforms of |a-b| there) and a wrong answer above one dimension. Euclidean and SquaredEuclidean collapsed to one case on purpose — monotone, same threshold test, and it avoids an exact square root. The threshold factor now tracks the metric rather than the kind, since Manhattan weights are linear and the squared factor would have been nine times too large.
 - `2026-08-13 23:05` Created. Follows the NDArray slice (stblake/mathilda#57); the user asked to work through the ML families, starting by completing FindClusters.
 
 ## Reflection

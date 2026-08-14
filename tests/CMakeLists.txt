@@ -833,6 +833,11 @@ add_executable(findclusters_scalar_pin_tests test_findclusters_scalar_pin.c $<TA
 target_include_directories(findclusters_scalar_pin_tests PRIVATE ../src)
 add_test(NAME findclusters_scalar_pin_tests COMMAND findclusters_scalar_pin_tests)
 
+# DistanceFunction selects a metric rather than being validated and discarded.
+add_executable(findclusters_distance_tests test_findclusters_distance.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(findclusters_distance_tests PRIVATE ../src)
+add_test(NAME findclusters_distance_tests COMMAND findclusters_distance_tests)
+
 add_executable(intersection_tests test_intersection.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(intersection_tests PRIVATE ../src)
 add_test(NAME intersection_tests COMMAND intersection_tests)
