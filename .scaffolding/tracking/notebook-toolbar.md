@@ -302,8 +302,8 @@ Graduated to `NFR-N` under Success Criteria below.
 - [ ] threat-model stamped | completed: `pending`
 - [x] implementation started | completed: `2026-08-13 17:40`
 - [x] implementation complete | completed: `2026-08-13 21:14`
-- [ ] critic pass | completed: `pending`
-- [ ] risk-register reviewed | completed: `pending`
+- [x] critic pass | completed: `2026-08-13 21:32`
+- [x] risk-register reviewed | completed: `2026-08-13 21:32`
 - [ ] feature validated | completed: `pending`
 - [ ] PR created | completed: `pending`
 - [ ] closeout complete | completed: `pending`
@@ -398,6 +398,7 @@ Graduated to `NFR-N` under Success Criteria below.
 - `2026-08-13 20:15` **Scope added at the user's request** after seeing the toolbar in use: an optional status bar (kernel state, last-op timing, session totals, active cell, notebook shape) and a fix for the info button, which was disabled whenever no documented symbol sat under the caret and so read as broken. Required new evaluation-timing instrumentation — nothing measured duration before. Landed with the Evaluation group in `d7fcdc78`.
 - `2026-08-13 21:05` **Scope added at the user's request**: make splitting easy from the canvas as well as the toolbar, and open documentation as a side-by-side pane on the right. Landed with the tiled pane view in `d261ea8d`. `openRefpage` was never broken — it positioned its card on the canvas, which is off-screen in focused mode, so Cmd+click appeared to do nothing.
 - `2026-08-13 21:14` P5 Cells and P8 Code groups landed in `0c876515`, together with a fix for `setCellType` silently discarding a cell's output on retype — tolerable behind a 12px gutter badge, not with the cell-style control one click away.
+- `2026-08-13 21:32` Critic pass: a high-effort code review over the whole diff returned six findings, all real and all fixed in `8714c825` — one HIGH (retyping a cell to Code through the toolbar produced a dead, uneditable cell, because only the gutter badge rebuilt the editor), three MEDIUM (`focusCell` fired before the cell existed so Split/Duplicate/Insert never moved the caret; the pane's first flags publish was discarded so a restored notebook's toolbar had no flags; documentation lookup forced up to five synchronous layouts per keystroke), and two LOW (group rules broke while a menu was open; the caret probe could strand an undocumented name and suppress its fallback). The HIGH fix was verified at runtime.
 - `2026-08-13 21:19` Implementation complete for this PR's scope. P7 properties panel, P9 Markdown text cells with the Text sub-group, and P10 Insert plus notebook search are deliberately deferred to a follow-up; see Follow-Up.
 
 ## Reflection
