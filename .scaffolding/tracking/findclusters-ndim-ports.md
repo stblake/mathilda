@@ -90,8 +90,8 @@ goal_lock:
 ## Task List
 
 - [x] `DistanceFunction wired through FcOpts and both MST builders` | `independent` | `done (iteration 2)`
-- [ ] `remaining prerequisites: generic fc_dist over coord, n-D length scale from the MST median` | `independent` | `pending — deferred to the first port that needs them, since -Werror=unused-function forbids landing helpers with no consumer`
-- [ ] `MeanShift + NeighborhoodContraction` | `depends on: prerequisites` | `pending`
+- [x] `prerequisites: fc_points, fc_dist_to_point, fc_dist_pos, fc_scale_ndim, union-find merge` | `independent` | `done (iteration 3, landed with their first consumer)`
+- [x] `MeanShift + NeighborhoodContraction` | `depends on: prerequisites` | `done (iteration 3)`
 - [ ] `KMeans` | `depends on: prerequisites` | `pending`
 - [ ] `DBSCAN` | `depends on: prerequisites` | `pending`
 - [ ] `JarvisPatrick` | `depends on: prerequisites` | `pending`
@@ -145,6 +145,7 @@ goal_lock:
   - `pending`
 - Existing tech debt noticed:
   - `CriterionFunction accepted and ignored (find_clusters.c:1677)`
+  - `NeighborhoodContraction cannot separate an outlier from a tie-heavy 4-point set: a zero median edge weight makes the scale fall back to range/(n-1), and the flat kernel default radius of 3*scale is then EXACTLY the range, putting the outlier precisely on the inclusion boundary. Pre-existing 1-D behaviour, identical in both dimensionalities. Fixing it moves a pinned answer, so it needs its own deliberate change.`
   - `CosineDistance and HammingDistance implemented in distance.c but not in FindClusters' accepted names`
 - Mitigations taken:
   - `pending`
@@ -153,6 +154,7 @@ goal_lock:
 
 ## Activity Log
 
+- `2026-08-13 23:35` Iteration 3: MeanShift and NeighborhoodContraction ported. Unified rather than duplicated, on three observations: d->val is already the dim-1 layout of d->coord; the median MST edge weight generalises the median adjacent gap exactly, and the mean generalises the zero-median fallback, because on a line the MST is the sorted chain whose gaps sum to the range; and union-find merging reproduces the adjacent-difference pass on a line. fc_merge_modes deleted as irreducibly 1-D. Found and recorded a pre-existing NeighborhoodContraction quirk on tie-heavy 4-point input.
 - `2026-08-13 23:20` Iteration 2: DistanceFunction made real. It was validated and discarded, which is harmless on a line (all four metrics are monotone transforms of |a-b| there) and a wrong answer above one dimension. Euclidean and SquaredEuclidean collapsed to one case on purpose — monotone, same threshold test, and it avoids an exact square root. The threshold factor now tracks the metric rather than the kind, since Manhattan weights are linear and the squared factor would have been nine times too large.
 - `2026-08-13 23:05` Created. Follows the NDArray slice (stblake/mathilda#57); the user asked to work through the ML families, starting by completing FindClusters.
 

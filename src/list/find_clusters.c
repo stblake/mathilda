@@ -1026,18 +1026,144 @@ static void fc_scatter(const FcData* d, const size_t* sorted_id, size_t* assign,
     *k = next;
 }
 
-/* Merge contiguous runs of a sorted, monotone "converged position" array into
- * cluster ids: two points join when their converged positions differ by less
- * than `tol`. Shared by MeanShift and NeighborhoodContraction, whose update
- * rules differ but whose merge step is identical. */
-static void fc_merge_modes(const double* pos, size_t n, double tol, size_t* id) {
-    size_t cur = 0;
-    id[0] = 0;
-    for (size_t j = 1; j < n; j++) {
-        if (fabs(pos[j] - pos[j - 1]) > tol) cur++;
-        id[j] = cur;
-    }
+/* ------------------------------------------------------------------------- */
+/* Dimension-general helpers                                                  */
+/*                                                                            */
+/* Everything here works for FC_KIND_SCALAR and FC_KIND_POINT alike, so the    */
+/* methods built on them need one implementation rather than two. The scalar   */
+/* case is not a special case: d->val is a row-major n x 1 buffer indexed by   */
+/* INPUT position, which is exactly the layout d->coord has for dim == 1.      */
+/* ------------------------------------------------------------------------- */
+
+/* The coordinate buffer, whichever field holds it. Both are n x dim row-major
+ * and input-indexed; only their names differ. NULL for FC_KIND_SEQUENCE, which
+ * has no coordinates at all. */
+static const double* fc_points(const FcData* d) {
+    if (d->kind == FC_KIND_POINT)  return d->coord;
+    if (d->kind == FC_KIND_SCALAR) return d->val;
+    return NULL;
 }
+
+/* LINEAR distance from an arbitrary position to data point t.
+ *
+ * Linear, never squared, unlike fc_sqdist -- a kernel bandwidth and a merge
+ * tolerance are lengths, and mixing a squared distance into either silently
+ * changes the scale by an exponent rather than a factor. */
+static double fc_dist_to_point(const FcData* d, const double* pts,
+                               const double* p, size_t t) {
+    const double* b = pts + t * d->dim;
+    double s = 0.0;
+    if (d->dist == FC_DIST_MANHATTAN) {
+        for (size_t c = 0; c < d->dim; c++) s += fabs(p[c] - b[c]);
+        return s;
+    }
+    for (size_t c = 0; c < d->dim; c++) { double t2 = p[c] - b[c]; s += t2 * t2; }
+    return sqrt(s);
+}
+
+/* LINEAR distance between two arbitrary positions. */
+static double fc_dist_pos(const FcData* d, const double* a, const double* b) {
+    double s = 0.0;
+    if (d->dist == FC_DIST_MANHATTAN) {
+        for (size_t c = 0; c < d->dim; c++) s += fabs(a[c] - b[c]);
+        return s;
+    }
+    for (size_t c = 0; c < d->dim; c++) { double t = a[c] - b[c]; s += t * t; }
+    return sqrt(s);
+}
+
+/* The length scale of the data, in any dimension: the median spanning-tree edge
+ * weight, as a LINEAR distance.
+ *
+ * This is not merely analogous to fc_median_gap, it GENERALISES it exactly. On a
+ * line the minimum spanning tree IS the sorted adjacency chain, so the tree's
+ * edge weights are precisely the adjacent gaps that fc_median_gap takes the
+ * median of. Two consequences, both relied on below:
+ *
+ *   - the median edge weight reproduces fc_median_gap on scalar input, so one
+ *     scale serves both dimensionalities and the 1-D answers do not move;
+ *   - the MEAN edge weight reproduces (max - min) / (n - 1) there, because the
+ *     adjacent gaps of a sorted line sum to its range. That is exactly the
+ *     fallback the 1-D code used when the median gap came out zero, so the
+ *     fallback generalises for free too.
+ *
+ * Weights are converted to lengths BEFORE the median is taken. Taking the median
+ * of squared weights and rooting afterwards happens to give the same answer,
+ * since a root is monotone, but the mean does not commute that way and the
+ * fallback would be wrong. */
+static double fc_scale_ndim(const FcData* d) {
+    size_t m = d->n_gap;
+    if (m == 0) return 0.0;
+    double* w = malloc(sizeof(double) * m);
+    if (!w) return 0.0;
+
+    bool squared = fc_dist_is_squared(d->dist) && d->kind == FC_KIND_POINT;
+    double sum = 0.0;
+    for (size_t j = 0; j < m; j++) {
+        double v = fc_to_double(d->gap[j]);
+        if (v < 0.0) v = 0.0;                 /* a weight is a distance */
+        w[j] = squared ? sqrt(v) : v;
+        sum += w[j];
+    }
+
+    for (size_t i = 1; i < m; i++) {          /* insertion sort, as fc_median_gap */
+        double v = w[i]; size_t j = i;
+        while (j > 0 && w[j - 1] > v) { w[j] = w[j - 1]; j--; }
+        w[j] = v;
+    }
+    double med = (m % 2) ? w[m / 2] : 0.5 * (w[m / 2 - 1] + w[m / 2]);
+    free(w);
+
+    /* A zero median does NOT mean the points coincide -- it means at least half
+     * the tree edges have zero length, which any tie-heavy input has. Collapsing
+     * to one cluster there would discard real structure, so fall back to the mean
+     * edge length, which on a line is the range over n-1. */
+    if (med <= 0.0) med = sum / (double)m;
+    return med;
+}
+
+/* Union-find over converged positions, with path halving. Replaces the 1-D
+ * adjacent-difference merge, which cannot generalise: it relies on a sorted order
+ * that vectors do not have.
+ *
+ * It also reproduces that merge exactly on a line. Merging every pair within tol
+ * is transitive chaining, and in one dimension a point lying between two others
+ * is closer to each than they are to one another -- so pairs within tol of each
+ * other are always reachable through adjacent steps, and the two agree. */
+static size_t fc_uf_find(size_t* parent, size_t x) {
+    while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+    return x;
+}
+
+static void fc_uf_union(size_t* parent, size_t a, size_t b) {
+    a = fc_uf_find(parent, a);
+    b = fc_uf_find(parent, b);
+    if (a != b) parent[b] = a;
+}
+
+/* Turn union-find roots into the input-indexed assignment every method returns,
+ * numbering clusters by first appearance in INPUT order -- the same order
+ * fc_emit_clusters and the equal-elements fold use, so the three agree. */
+static void fc_assign_from_uf(size_t* parent, size_t n, size_t* assign, size_t* k) {
+    size_t* label = malloc(sizeof(size_t) * n);
+    if (!label) { *k = 0; return; }
+    for (size_t i = 0; i < n; i++) label[i] = SIZE_MAX;
+    size_t next = 0;
+    for (size_t i = 0; i < n; i++) {
+        size_t r = fc_uf_find(parent, i);
+        if (label[r] == SIZE_MAX) label[r] = next++;
+        assign[i] = label[r];
+    }
+    free(label);
+    *k = next;
+}
+
+/* fc_merge_modes lived here: an adjacent-difference pass over sorted, monotone
+ * converged positions. It was correct and it was one-dimensional to its core --
+ * it needed a total order on positions, which vectors do not have. The union-find
+ * merge above replaces it and agrees with it on a line, so it was deleted rather
+ * than kept alongside; -Werror=unused-function makes leaving it a build failure,
+ * which is the right pressure. */
 
 /* ------------------------------------------------------------------------- */
 /* Method: KMeans and KMedoids                                                */
@@ -1247,10 +1373,19 @@ static bool fc_method_dbscan(const FcData* d, FcCount spec, const FcOpts* o,
  * -- so the merge can be a single adjacent-difference pass. */
 static bool fc_shift_cluster(const FcData* d, const FcOpts* o, size_t* assign,
                              size_t* k, bool flat_kernel) {
-    size_t n = d->n;
-    if (n > FC_SHIFT_MAX_N) return false;      /* quadratic; see FC_SHIFT_MAX_N */
-    double* sv = fc_sorted_values(d);
-    if (!sv) return false;
+    size_t n = d->n, dim = d->dim;
+
+    /* Strings have no coordinates to shift toward anything, so there is no
+     * meaningful update rule -- declined rather than approximated. */
+    const double* pts = fc_points(d);
+    if (!pts) return false;
+
+    /* Quadratic in n and linear in dim. The 1-D cap was chosen for
+     * Theta(FC_MAX_ITER * n^2); dim multiplies that, so the cap is divided by the
+     * dimension rather than left to grow with it. */
+    size_t cap = (dim > 1) ? (FC_SHIFT_MAX_N / dim) : FC_SHIFT_MAX_N;
+    if (cap < 2) cap = 2;
+    if (n > cap) return false;
 
     /* Two scales, deliberately separate -- conflating them is what produced
      * both of the bugs found here.
@@ -1269,57 +1404,73 @@ static bool fc_shift_cluster(const FcData* d, const FcOpts* o, size_t* assign,
      * cannot span the one scale between neighbours. Widening the Gaussian to
      * FC_GAP_FACTOR * scale fixed that and immediately over-merged the other
      * direction: {1,1,1,1,100} came back whole. */
-    double scale = fc_median_gap(sv, n);
-
-    /* A zero median gap does NOT mean the points are identical -- it means at
-     * least half the adjacent gaps are zero, which any tie-heavy input has.
-     * Collapsing to one cluster there discarded real structure. */
-    if (scale <= 0.0 && n > 1 && sv[n - 1] > sv[0])
-        scale = (sv[n - 1] - sv[0]) / (double)(n - 1);
+    double scale = fc_scale_ndim(d);
 
     double h = o->radius_given ? o->radius
                                : (flat_kernel ? (double)FC_GAP_FACTOR : 1.0) * scale;
     if (o->radius_given) scale = o->radius;
 
     if (h <= 0.0) {                     /* genuinely no spread: one cluster */
-        size_t* id0 = calloc(n, sizeof(size_t));
-        if (!id0) { free(sv); return false; }
-        fc_scatter(d, id0, assign, k);
-        free(sv); free(id0);
-        return *k > 0;
+        for (size_t i = 0; i < n; i++) assign[i] = 0;
+        *k = 1;
+        return true;
     }
 
-    double* pos = malloc(sizeof(double) * n);
-    double* nxt = malloc(sizeof(double) * n);
-    size_t* id  = malloc(sizeof(size_t) * n);
-    if (!pos || !nxt || !id) { free(sv); free(pos); free(nxt); free(id); return false; }
-    memcpy(pos, sv, sizeof(double) * n);
+    /* Positions are dim-vectors now, so every buffer is n * dim and every
+     * "distance" goes through the metric rather than fabs of a difference. */
+    double* pos = malloc(sizeof(double) * n * dim);
+    double* nxt = malloc(sizeof(double) * n * dim);
+    size_t* parent = malloc(sizeof(size_t) * n);
+    if (!pos || !nxt || !parent) { free(pos); free(nxt); free(parent); return false; }
+    memcpy(pos, pts, sizeof(double) * n * dim);
 
     for (int it = 0; it < FC_MAX_ITER; it++) {
         double delta = 0.0;
         for (size_t j = 0; j < n; j++) {
-            double num = 0.0, den = 0.0;
-            if (flat_kernel) {
-                for (size_t t = 0; t < n; t++)
-                    if (fabs(sv[t] - pos[j]) <= h) { num += sv[t]; den += 1.0; }
-            } else {
-                for (size_t t = 0; t < n; t++) {
-                    double z = (pos[j] - sv[t]) / h;
-                    double w = exp(-0.5 * z * z);
-                    num += w * sv[t]; den += w;
+            double* pj = pos + j * dim;
+            double* nj = nxt + j * dim;
+            /* The update is a weighted MEAN of the sample, which generalises
+             * component-wise: one shared weight per point, applied to every
+             * coordinate. That is the whole of what makes this port mechanical. */
+            double den = 0.0;
+            for (size_t c = 0; c < dim; c++) nj[c] = 0.0;
+            for (size_t t = 0; t < n; t++) {
+                double dist = fc_dist_to_point(d, pts, pj, t);
+                double w;
+                if (flat_kernel) {
+                    if (dist > h) continue;              /* sees nothing outside */
+                    w = 1.0;
+                } else {
+                    double z = dist / h;
+                    w = exp(-0.5 * z * z);
                 }
+                const double* bt = pts + t * dim;
+                for (size_t c = 0; c < dim; c++) nj[c] += w * bt[c];
+                den += w;
             }
-            nxt[j] = (den > 0.0) ? num / den : pos[j];
-            double mv = fabs(nxt[j] - pos[j]);
+            if (den > 0.0) { for (size_t c = 0; c < dim; c++) nj[c] /= den; }
+            else           { for (size_t c = 0; c < dim; c++) nj[c] = pj[c]; }
+
+            double mv = fc_dist_pos(d, nj, pj);
             if (mv > delta) delta = mv;
         }
-        memcpy(pos, nxt, sizeof(double) * n);
+        memcpy(pos, nxt, sizeof(double) * n * dim);
         if (delta < h * 1e-6) break;
     }
 
-    fc_merge_modes(pos, n, scale * FC_MERGE_SLACK, id);
-    fc_scatter(d, id, assign, k);
-    free(sv); free(pos); free(nxt); free(id);
+    /* Merge every pair of converged positions within tolerance. The 1-D code
+     * walked adjacent sorted positions instead, which vectors have no analogue
+     * of; on a line the two agree, because a point between two others is closer
+     * to each of them than they are to one another. */
+    double tol = scale * FC_MERGE_SLACK;
+    for (size_t i = 0; i < n; i++) parent[i] = i;
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = i + 1; j < n; j++)
+            if (fc_dist_pos(d, pos + i * dim, pos + j * dim) <= tol)
+                fc_uf_union(parent, i, j);
+
+    fc_assign_from_uf(parent, n, assign, k);
+    free(pos); free(nxt); free(parent);
     return *k > 0;
 }
 
@@ -1849,10 +2000,21 @@ static Expr* fc_find_clusters(Expr* res, Expr* list) {
      * whole call rather than being dropped or treated as a nominal feature. */
     if (!fc_probe_shape(elem, n, &d.dim, &d.kind)) return NULL;
 
-    /* Only the gap methods are dimension-general so far; the rest still read the
-     * sorted projection and are declined above one dimension rather than being
-     * silently run on meaningless data. */
-    if (d.kind != FC_KIND_SCALAR && fn != fc_method_gap) return NULL;
+    /* Which methods are dimension-general, as opposed to still reading the sorted
+     * projection. The rest are declined above one dimension rather than being
+     * silently run on meaningless data -- d->val and d->order are both NULL there,
+     * so "silently" would in fact be a crash.
+     *
+     * This list grows one method at a time as each is ported. Kept as an explicit
+     * check on the function pointer rather than a flag on FcMethod so that a new
+     * method cannot default into being considered ported. */
+    bool fn_is_ndim = (fn == fc_method_gap)
+                   || (fn == fc_method_meanshift)
+                   || (fn == fc_method_neighborhood);
+    /* The shift methods need coordinates; strings have none, so they stay
+     * declined for those even though POINT input is now fine. */
+    if (d.kind == FC_KIND_SEQUENCE && fn != fc_method_gap) return NULL;
+    if (d.kind != FC_KIND_SCALAR && !fn_is_ndim) return NULL;
 
     /* Vector work is quadratic (Prim, and the neighbourhood queries that a sort
      * makes linear in 1D), so it is capped the way the other quadratic methods

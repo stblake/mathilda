@@ -838,6 +838,12 @@ add_executable(findclusters_distance_tests test_findclusters_distance.c $<TARGET
 target_include_directories(findclusters_distance_tests PRIVATE ../src)
 add_test(NAME findclusters_distance_tests COMMAND findclusters_distance_tests)
 
+# Methods ported to work on vectors. Grows one method at a time; also asserts that
+# the unported ones still decline, so progress is visible in the diff.
+add_executable(findclusters_ndim_tests test_findclusters_ndim.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(findclusters_ndim_tests PRIVATE ../src)
+add_test(NAME findclusters_ndim_tests COMMAND findclusters_ndim_tests)
+
 add_executable(intersection_tests test_intersection.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(intersection_tests PRIVATE ../src)
 add_test(NAME intersection_tests COMMAND intersection_tests)

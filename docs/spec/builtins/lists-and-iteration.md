@@ -534,6 +534,14 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   transparency gate materialises it before the builtin sees it, which is why only
   the visible surface needed a guard. Rank 3 and above still decline: a
   list-valued component is not a coordinate.
+- **Which methods accept vectors.** `Agglomerate`, `SpanningTree`, `MeanShift` and
+  `NeighborhoodContraction` cluster n-dimensional points; the remaining six still
+  accept scalars only and return unevaluated for vector input. That is not a
+  conservative guard — those six reach their data through the sorted projection,
+  which does not exist off a line — and the list grows as each is ported.
+  `MeanShift` and `NeighborhoodContraction` additionally decline string input,
+  having no coordinates to shift; the gap methods still handle strings through edit
+  distances in the tree.
 - Returns unevaluated for an empty list, a non-`List` argument, a nested list, an
   `NDArray` of rank 3 or more, a non-numeric element, a count that is not a
   positive integer or `UpTo[k]`, or a method incompatible with the count mode.
