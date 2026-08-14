@@ -214,6 +214,61 @@ static void test_infeasible(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 6b. Disjunctive (Or) constraints                                    */
+/* ------------------------------------------------------------------ */
+
+static void test_disjunctive_constraints(void) {
+    /* Disjunctive constraint A || B: a point is feasible iff it satisfies at
+     * least one branch. NMinimize scores such a constraint by its minimum-branch
+     * violation penalty (0 when any branch holds), so Deb's feasibility rules
+     * select it during the derivative-free global search, and the local polish
+     * folds in the currently-active branch so it descends within the feasible
+     * region. Deterministic under the fixed default seed. */
+
+    /* Himmelblau over the union of two small disks, one of which (centred (3,2))
+     * contains the global minimiser: the constrained optimum is Himmelblau's
+     * f = 0 at (3, 2). This is the reported In[5] example. */
+    check_true("First[NMinimize[{(x^2 + y - 11)^2 + (x + y^2 - 7)^2, "
+               "(x - 3)^2 + (y - 2)^2 <= 0.1 || (x + 2.8)^2 + (y + 3.1)^2 <= 0.1}, "
+               "{x, y}, Method -> {\"RandomSearch\", \"SearchPoints\" -> 500, "
+               "\"Method\" -> \"InteriorPoint\"}]] < 1.*^-4");
+    /* The reported minimiser lands in the disk around (3, 2). */
+    check_true("Norm[{x - 3, y - 2} /. Last[NMinimize[{(x^2 + y - 11)^2 + (x + y^2 - 7)^2, "
+               "(x - 3)^2 + (y - 2)^2 <= 0.1 || (x + 2.8)^2 + (y + 3.1)^2 <= 0.1}, "
+               "{x, y}, Method -> {\"RandomSearch\", \"SearchPoints\" -> 500, "
+               "\"Method\" -> \"InteriorPoint\"}]]] < 0.35");
+
+    /* A non-convex feasible set: x <= -2 OR x >= 2. The constrained minimum of
+     * x^2 is 4 at x = +-2 (the branch boundaries), not the unconstrained x = 0
+     * that sits in the infeasible gap between the branches. */
+    check_true("Abs[First[NMinimize[{x^2, x <= -2 || x >= 2}, x]] - 4.0] < 0.05");
+    check_true("Abs[x /. Last[NMinimize[{x^2, x <= -2 || x >= 2}, x]]] >= 1.99");
+    /* RandomSearch is pure multi-start local polish with no global move, so its
+     * per-start polish must itself respect the active branch — otherwise it
+     * drives every feasible start into the infeasible gap and reports Infinity.
+     * This asserts the disjunction-aware polish (regression guard). */
+    check_true("Abs[First[NMinimize[{x^2, x <= -2 || x >= 2}, x, "
+               "Method -> \"RandomSearch\"]] - 4.0] < 0.05");
+    /* Same, with an enclosing box: the polish must honour both the box and the
+     * active branch. */
+    check_true("Abs[First[NMinimize[{x^2, (x <= -2 || x >= 2) && -100 <= x <= 100}, x, "
+               "Method -> \"RandomSearch\"]] - 4.0] < 0.05");
+
+    /* Nearest point to the union of two disks: the optimum sits on the boundary
+     * of the disk around (3, 0), at ~(2.51, 0.098), f ~ 4.20. */
+    check_true("Abs[First[NMinimize[{(x - 0.5)^2 + (y - 0.5)^2, "
+               "-5 <= x <= 5 && -5 <= y <= 5 && "
+               "((x - 3)^2 + y^2 <= 0.25 || (x + 3)^2 + y^2 <= 0.25)}, {x, y}, "
+               "Method -> {\"DifferentialEvolution\", \"SearchPoints\" -> 60}]] - 4.2] < 0.05");
+
+    /* NMaximize over a disjunction (negated-objective path): maximise
+     * -(x^2 + y^2) over two disks; optimum on the (2,2)-disk boundary, ~-6.311. */
+    check_true("Abs[First[NMaximize[{-(x^2 + y^2), "
+               "(x - 2)^2 + (y - 2)^2 <= 0.1 || (x + 2)^2 + (y + 2)^2 <= 0.1}, {x, y}, "
+               "Method -> \"SimulatedAnnealing\"]] - (-6.311)] < 0.05");
+}
+
+/* ------------------------------------------------------------------ */
 /* 7. Methods                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -375,6 +430,23 @@ static void test_sa_deceptive_landscapes(void) {
     check_true("First[NMinimize[{837.9658 - x Sin[Sqrt[Abs[x]]] - y Sin[Sqrt[Abs[y]]], "
                "-500 <= x <= 500 && -500 <= y <= 500}, {x, y}, "
                "Method -> \"SimulatedAnnealing\"]] < 0.01");
+}
+
+static void test_schaffer2_simulatedannealing(void) {
+    /* Schaffer function N.2: 0.5 + (Sin[x^2-y^2]^2 - 0.5)/(1 + 0.001(x^2+y^2))^2.
+     * Global minimum 0 at the origin, ringed by concentric near-optimal circular
+     * ridges whose value approaches 0.5 far out and decays toward the centre —
+     * a deceptive basin that greedy descent settles onto the wrong ring of. On
+     * the [-100,100]^2 box with "SearchPoints" -> 150 restarts and a tight
+     * "Tolerance" -> 10^-6, the anneal-plus-polish reaches the true centre:
+     * f = 0 at (~1e-7, ~-1e-7). Deterministic under the fixed default seed. */
+    check_true("First[NMinimize[{0.5 + (Sin[x^2 - y^2]^2 - 0.5)/(1 + 0.001 (x^2 + y^2))^2, "
+               "-100 <= x <= 100 && -100 <= y <= 100}, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"SearchPoints\" -> 150, \"Tolerance\" -> 10^-6}]] < 1.*^-6");
+    /* The reported minimizer lands at the origin (both coordinates ~0). */
+    check_true("Norm[{x, y} /. Last[NMinimize[{0.5 + (Sin[x^2 - y^2]^2 - 0.5)/(1 + 0.001 (x^2 + y^2))^2, "
+               "-100 <= x <= 100 && -100 <= y <= 100}, {x, y}, "
+               "Method -> {\"SimulatedAnnealing\", \"SearchPoints\" -> 150, \"Tolerance\" -> 10^-6}]]] < 1.*^-3");
 }
 
 static void test_griewank_differentialevolution(void) {
@@ -764,6 +836,7 @@ int main(void) {
 
     /* 6. Infeasible */
     TEST(test_infeasible);
+    TEST(test_disjunctive_constraints);
 
     /* 7. Methods */
     TEST(test_method_de);
@@ -778,6 +851,7 @@ int main(void) {
     TEST(test_sa_suboptions);
     TEST(test_griewank_simulatedannealing);
     TEST(test_sa_deceptive_landscapes);
+    TEST(test_schaffer2_simulatedannealing);
     TEST(test_griewank_differentialevolution);
     TEST(test_griewank_neldermead);
     TEST(test_randomsearch_searchpoints_verbatim);

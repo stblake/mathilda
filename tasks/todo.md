@@ -1,55 +1,67 @@
-# Task: NMinimize SimulatedAnnealing Method options
+# Task: Disjunctive (Or) constraints in NMinimize / NMaximize
 
 ## Goal
-Make the SimulatedAnnealing method honor its three Method sub-options
-("PerturbationScale", "BoltzmannExponent", "SearchPoints") — currently `nm_sa`
-does `(void)nc;` and ignores all of them, and the parser silently drops
-PerturbationScale/BoltzmannExponent. Add regression tests, including the
-Griewank-10 case Mathematica returns a nonzero local minimum on.
+Support constraints like `(x-3)^2+(y-2)^2<=0.1 || (x+2.8)^2+(y+3.1)^2<=0.1`
+in NMinimize's global optimizers (RandomSearch/DE/SA/NelderMead), instead of
+emitting `NMinimize::nimpl: disjunctive (Or) constraints are not yet supported`.
 
-## Plan
-- [ ] Add `perturbation_scale` (double, <0 ⇒ default 1.0) and `boltzmann_fn`
-      (Expr*, borrowed / NULL ⇒ default) to `NmConfig`; init in the setup block.
-- [ ] Parse `"PerturbationScale"` and `"BoltzmannExponent"` in `nm_parse_method`.
-- [ ] Add `nm_boltzmann_exponent()` helper (mirrors `nm_apply_penalty_fn`),
-      calling `fn[i, df, f0]` → double, fallback to default exponent on failure.
-- [ ] Rewrite `nm_sa` to:
-      - run `K = search_points>0 ? search_points : 1` annealing chains from
-        random starts, keeping the global best (SearchPoints = restarts);
-      - scale the perturbation step by `perturbation_scale`;
-      - use `Exp[boltzmann_fn[i, df, f0]]` as the Metropolis acceptance
-        probability when a function is supplied, else the current `exp(-d/T)`.
-      - **Preserve the K=1, default-options path bit-for-bit** (multiply by 1.0,
-        identical RNG draw order) so existing SA tests stay deterministic.
-- [ ] Bound total work when many chains are requested (per-chain iteration cap).
-- [ ] Update docs: `docs/spec/builtins/calculus.md` sub-option table + paragraph;
-      `src/info.c` docstring; changelog `docs/spec/changelog/2026-08-10.md`.
-- [ ] Add regression tests in `tests/test_nminimize.c`:
-      - Griewank-10 with the exact Method from the report (SA + PerturbationScale
-        + BoltzmannExponent + SearchPoints) returns a finite nonzero local min;
-      - each of the three options individually takes effect / is honored.
-- [ ] Build, run test_nminimize, verify no regressions.
+## Design
+- A disjunction is feasible iff at least one branch is feasible ⇒ its penalty is
+  the MIN over branches of that branch's violation penalty (0 when any branch
+  holds). This composes with the existing Deb feasibility gate (`nm_better`)
+  with zero tuning.
+- Global (derivative-free) search consumes the min-penalty; the smooth local
+  polish (BFGS) ignores disjunctions, and the post-polish `nm_eval` +
+  `nm_better` gate rejects any polish that leaves the disjunctive-feasible set.
+- FindMinimum (gradient penalty method) still rejects `Or` — a non-smooth min
+  breaks its μ-schedule / gradient path. NMinimize-only feature.
 
-## Review
-Done. `src/findmin.c`: added `perturb_scale` + `boltzmann_fn` to `NmConfig`
-(init'd -1.0 / NULL), parsed `"PerturbationScale"` / `"BoltzmannExponent"` in
-`nm_parse_method` (with `NMinimize::sopt` / `::bexp` fallbacks), added
-`nm_boltzmann_exponent()` (mirrors `nm_apply_penalty_fn`), and rewrote `nm_sa`
-to run K=`search_points` chains sharing a bounded budget (`NM_SA_TOTAL_CAP`),
-scale the step by `perturb_scale`, and use `Exp[f[i,df,f0]]` acceptance. The
-K=1/default-option path is bit-for-bit unchanged (verified: 1D SA still
-−3.51391; default Griewank-10 still 0.233824, matching Mathematica).
+## Steps
+- [ ] Add `FmDisjunction { Expr* expr; }` struct near `FmGenCon`.
+- [ ] Add `fm_bool_supported(Expr*)` structural validator (And/Or/Inequality/cmp).
+- [ ] Add `fm_bool_penalty(...)` recursive penalty: And=Σ, Or=min, Inequality=Σ
+      pairs, comparison=squared violation (honours "PenaltyFunction").
+- [ ] Extend `fm_collect_constraints` with a disjunction sink (NULL ⇒ Or nimpl);
+      collect `Or[...]` subtrees when the sink is provided.
+- [ ] Thread NULL sink through the FindMinimum call site (Or stays nimpl there).
+- [ ] Add `disj`/`ndisj` to `NmDriver`; add disjunction sum to `nm_eval_pen`.
+- [ ] Wire collection + free of `disj` into the NMinimize setup/cleanup.
+- [ ] Docstring/spec/changelog updates (builtin modified).
+- [ ] Unit test: Himmelblau constrained to two disks -> min at (3,2), f≈0.
 
-Docs: `docs/spec/builtins/calculus.md` (sub-option table + SA paragraph),
-`src/info.c` docstring, changelog `docs/spec/changelog/2026-08-10.md`.
+## Verification
+- [ ] Build main + nminimize_tests clean (`-std=c99 -Wall -Wextra`).
+- [ ] Run the user's In[5] example: no nimpl warning, returns feasible ≈0 result.
+- [ ] `make check-c99` clean.
+- [ ] Full nminimize_tests suite passes; new test deterministic.
 
-Tests (`tests/test_nminimize.c`): `test_sa_suboptions` (each option honored +
-invalid-value fallback) and `test_griewank_simulatedannealing` (default lands
-in [0.1,1.0]; the exact reported all-options invocation stays finite/feasible).
-Full nminimize_tests (52) + findmin_tests pass; `make check-c99` clean; suite
-1.84s.
+## Review — DONE (2026-08-14)
 
-Caveat surfaced to user: the reported `"BoltzmannExponent" -> (1/#&)` is
-always-accept (Exp[1/i] > 1), so under our schedule it random-walks to a higher
-local min (46.4) than Mathematica's 0.234 — but the *default* SA matches MMA at
-0.234. Options are demonstrably honored regardless.
+Implemented in `src/numerical_calculus/findmin.c`:
+- `FmDisjunction` struct + `fm_bool_supported` (structural validator) +
+  `fm_bool_penalty` (recursive And=Σ / Or=min / Inequality=Σ / cmp=squared).
+- `fm_collect_constraints` gained a disjunction sink; FindMinimum passes NULL
+  (Or still `nimpl`), NMinimize passes the real sink.
+- `nm_eval_pen` adds `Σ_disj min-branch penalty`.
+- Disjunction-aware **local polish** (`nm_polish_gens` + `nm_collect_branch_gens`
+  + `fm_free_gens`): folds each disjunction's active (min-penalty) branch into
+  the smooth BFGS penalty solve so RandomSearch (pure multi-start polish) doesn't
+  strand feasible starts in the infeasible gap.
+
+**Non-obvious bug found & fixed:** symbolic `D[...]` taken *during* the search
+returns 0 because the optimisation variables are transiently value-bound
+(differentiating a constant). Fixed by using finite-difference gradients for the
+polish constraints (`grad_exprs = NULL`); the objective gradient is unaffected
+(differentiated once at setup where the variables are free).
+
+Verified:
+- User In[5] (Himmelblau two-disks) → `~0` at (3,2), feasible. No `nimpl`.
+- `x^2, x<=-2||x>=2` → 4 at x=±2 across DE/SA/NelderMead/**RandomSearch**, with
+  and without an enclosing box.
+- Boundary optima (nearest-point-to-disk, NMaximize disjunction) correct.
+- FindMinimum still rejects `Or` (`nimpl`).
+- `findmin_tests` + `nminimize_tests` (incl. new `test_disjunctive_constraints`)
+  all pass; `make check-c99` clean; valgrind shows no leak in the new code
+  (only the known macOS objc/dyld baseline).
+
+Docs: docstring (info.c), spec (numerical-calculus.md), changelog (2026-08-10.md).

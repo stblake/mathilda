@@ -133,6 +133,19 @@ typedef struct {
     bool   equality;   /* true → equality constraint                          */
 } FmGenCon;
 
+/* A disjunctive (Or) constraint: feasible ≡ at least ONE branch is feasible.
+ * Stored as its boolean-of-comparisons subtree over the effective variables.
+ * The penalty contribution is the MINIMUM branch penalty (fm_bool_penalty), so
+ * a point satisfying any one branch scores zero and the (total ≤ NM_FEAS_EPS)
+ * feasibility test still means "feasible". Because the min() is non-smooth it is
+ * consumed only by the derivative-free global search (NMinimize); the smooth
+ * local polish leaves disjunction feasibility to the Deb accept/reject gate, and
+ * FindMinimum's gradient penalty method rejects Or outright. Evaluated by the
+ * interpreter rather than a compiled program — disjunctive problems are rare. */
+typedef struct {
+    Expr*  expr;       /* owned: the Or[...] constraint subtree                */
+} FmDisjunction;
+
 /* ------------------------------------------------------------------ *
  *  Diagnostic helper                                                  *
  * ------------------------------------------------------------------ */
@@ -1225,13 +1238,46 @@ static bool fm_constraint_to_g(Expr* cmp, Expr** expr_out, bool* equality_out) {
     return false;
 }
 
+/* True if `c` is a boolean-of-comparisons tree the disjunction penalty
+ * evaluator (fm_bool_penalty) understands: And / Or of {binary comparison,
+ * Inequality chain}. Validated when a disjunction is collected so an
+ * unsupported shape is reported as nimpl at parse time rather than silently
+ * scoring every trial point infeasible during the search. */
+static bool fm_bool_supported(Expr* c) {
+    if (!c || c->type != EXPR_FUNCTION
+        || c->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = c->data.function.head->data.symbol.name;
+    size_t ac = c->data.function.arg_count;
+    if (h == SYM_And || h == SYM_Or) {
+        if (ac == 0) return false;
+        for (size_t i = 0; i < ac; i++)
+            if (!fm_bool_supported(c->data.function.args[i])) return false;
+        return true;
+    }
+    if (h == SYM_Inequality) {
+        if (ac < 3 || (ac & 1u) != 1) return false;
+        for (size_t k = 0; 2 * k + 2 < ac; k++)
+            if (c->data.function.args[2 * k + 1]->type != EXPR_SYMBOL) return false;
+        return true;
+    }
+    /* single binary comparison: reuse fm_constraint_to_g's acceptance test */
+    Expr* g = NULL; bool eq = false;
+    if (!fm_constraint_to_g(c, &g, &eq)) return false;
+    expr_free(g);
+    return true;
+}
+
 /* Walk an And[...] tree, an Inequality[...] node, or a single binary
- * comparison and accumulate boxes / general constraints. Returns false if
- * any branch is unsupported. */
+ * comparison and accumulate boxes / general constraints. A top-level (or
+ * And-nested) Or[...] is collected into the disjunction sink when one is
+ * provided; if `disj_inout` is NULL (FindMinimum), Or is rejected as nimpl.
+ * Returns false if any branch is unsupported. */
 static bool fm_collect_constraints(Expr* cons, Expr** vars, size_t nvars,
                                    FmBox* boxes,
                                    FmGenCon** gens_inout, size_t* ngens_inout,
-                                   size_t* gens_cap_inout) {
+                                   size_t* gens_cap_inout,
+                                   FmDisjunction** disj_inout,
+                                   size_t* ndisj_inout, size_t* disj_cap_inout) {
     if (!cons) return true;
     if (cons->type == EXPR_FUNCTION
         && cons->data.function.head->type == EXPR_SYMBOL
@@ -1239,7 +1285,8 @@ static bool fm_collect_constraints(Expr* cons, Expr** vars, size_t nvars,
         for (size_t i = 0; i < cons->data.function.arg_count; i++) {
             if (!fm_collect_constraints(cons->data.function.args[i], vars, nvars,
                                         boxes, gens_inout, ngens_inout,
-                                        gens_cap_inout)) return false;
+                                        gens_cap_inout, disj_inout,
+                                        ndisj_inout, disj_cap_inout)) return false;
         }
         return true;
     }
@@ -1266,7 +1313,8 @@ static bool fm_collect_constraints(Expr* cons, Expr** vars, size_t nvars,
                                            pair_args, 2);
             bool ok = fm_collect_constraints(pair, vars, nvars, boxes,
                                              gens_inout, ngens_inout,
-                                             gens_cap_inout);
+                                             gens_cap_inout, disj_inout,
+                                             ndisj_inout, disj_cap_inout);
             expr_free(pair);
             if (!ok) return false;
         }
@@ -1275,8 +1323,26 @@ static bool fm_collect_constraints(Expr* cons, Expr** vars, size_t nvars,
     if (cons->type == EXPR_FUNCTION
         && cons->data.function.head->type == EXPR_SYMBOL
         && cons->data.function.head->data.symbol.name == SYM_Or) {
-        fm_warn(g_fm_name, "nimpl", "disjunctive (Or) constraints are not yet supported");
-        return false;
+        /* FindMinimum's gradient penalty method cannot use a non-smooth min
+         * penalty, so it passes no sink and Or stays unsupported there. */
+        if (!disj_inout) {
+            fm_warn(g_fm_name, "nimpl",
+                    "disjunctive (Or) constraints are not yet supported");
+            return false;
+        }
+        if (!fm_bool_supported(cons)) {
+            fm_warn(g_fm_name, "nimpl", "unsupported disjunctive constraint shape");
+            return false;
+        }
+        if (*ndisj_inout == *disj_cap_inout) {
+            size_t nc = *disj_cap_inout ? (*disj_cap_inout) * 2 : 2;
+            *disj_inout = (FmDisjunction*)realloc(*disj_inout,
+                                                  sizeof(FmDisjunction) * nc);
+            *disj_cap_inout = nc;
+        }
+        (*disj_inout)[*ndisj_inout].expr = expr_copy(cons);
+        (*ndisj_inout)++;
+        return true;
     }
     /* Reject Element[...] (e.g. x ∈ Integers) outright. */
     if (cons->type == EXPR_FUNCTION
@@ -2524,9 +2590,11 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     binds = (FmVarBind*)calloc(n, sizeof(FmVarBind));
     for (size_t i = 0; i < n; i++) fm_bind_snapshot(&binds[i], vars[i]->data.symbol.name);
 
-    /* Constraints. */
+    /* Constraints. FindMinimum passes no disjunction sink: its smooth gradient
+     * penalty method cannot use the non-smooth min penalty an Or requires. */
     if (cons) {
-        if (!fm_collect_constraints(cons, vars, n, boxes, &gens, &ngens, &gcap))
+        if (!fm_collect_constraints(cons, vars, n, boxes, &gens, &ngens, &gcap,
+                                    NULL, NULL, NULL))
             goto cleanup;
         /* Best-effort symbolic gradient of each constraint expression. The
          * penalty solver needs ∇(f + μ·Σ penalty) — using a stale ∇f alone
@@ -2824,18 +2892,26 @@ Expr* builtin_findmaximum(Expr* res) {
  *  Layered directly on the FindMinimum machinery above. NMinimize reuses
  *  the same Block-style variable binding (fm_bind_*), objective and
  *  constraint evaluation (fm_eval_scalar / fm_eval_penalty), constraint
- *  parsing (fm_collect_constraints → boxes + general FmGenCon[]), local
- *  polishers (fm_run_bfgs / fm_run_penalty, plus fm_run_bfgs_mpfr for
- *  WorkingPrecision), and the result builders. What is new here is the
- *  stochastic *global* search — DifferentialEvolution (Automatic default),
- *  NelderMead, RandomSearch, SimulatedAnnealing — mixed-integer handling
- *  via Element[x, Integers], and the infeasible {Infinity, ...} return.
+ *  parsing (fm_collect_constraints → boxes + general FmGenCon[] +
+ *  disjunctions), local polishers (fm_run_bfgs / fm_run_penalty, plus
+ *  fm_run_bfgs_mpfr for WorkingPrecision), and the result builders. What is new
+ *  here is the stochastic *global* search — DifferentialEvolution (Automatic
+ *  default), NelderMead, RandomSearch, SimulatedAnnealing — mixed-integer
+ *  handling via Element[x, Integers], and the infeasible {Infinity, ...} return.
  *
  *  Constraints are handled with Deb's feasibility rules during the global
  *  search (no penalty-weight tuning): a feasible point always beats an
  *  infeasible one; among feasible points the smaller objective wins; among
  *  infeasible points the smaller total violation wins. The global best is
  *  then polished with the exact local solver and re-checked for feasibility.
+ *
+ *  Disjunctive (Or) constraints — feasible iff at least one branch holds — are
+ *  supported here (but not in FindMinimum's smooth gradient path): each adds its
+ *  minimum-branch penalty (fm_bool_penalty), 0 when any branch is satisfied, so
+ *  the same Deb gate selects it with no extra tuning. The derivative-free global
+ *  search consumes the non-smooth min directly; the local polish optimises only
+ *  the conjunctive part and the post-polish feasibility gate keeps the result
+ *  inside the disjunctive-feasible region.
  */
 
 #define NM_DEFAULT_SPAN   10.0     /* half-width of the default search box   */
@@ -3030,6 +3106,10 @@ typedef struct {
      * penalty). When set, the global-search violation of each active constraint
      * is scored as f[violation] rather than violation^2; see nm_eval_pen. */
     Expr*             penalty_fn;
+    /* Disjunctive (Or) constraints. Each contributes min-over-branch penalty via
+     * the interpreter (fm_bool_penalty); len ndisj, borrowed from the setup. */
+    FmDisjunction*    disj;
+    size_t            ndisj;
 } NmDriver;
 
 /* Objective at the (already integer-rounded) point xr: the compiled program if
@@ -3056,6 +3136,78 @@ static bool nm_apply_penalty_fn(Expr* pf, double m, double* out) {
     return ok;
 }
 
+/* Penalty of a boolean-of-comparisons constraint tree at x, used for
+ * disjunctive (Or) constraints:
+ *   And[c...]        → Σ penalty(c)            (all must hold)
+ *   Or[c...]         → min penalty(c)          (any one holding scores 0)
+ *   Inequality[...]  → Σ over adjacent pairs   (a chained conjunction)
+ *   binary compare   → squared violation: max(0,g)^2 for g<=0, h^2 for h==0,
+ *                      or penalty_fn[violation] when a custom "PenaltyFunction"
+ *                      is supplied (matching nm_eval_pen's per-term rule).
+ * A satisfied leaf contributes 0, so the whole expression is 0 iff feasible and
+ * the (total ≤ NM_FEAS_EPS) feasibility test carries over unchanged. The tree
+ * shape is pre-validated by fm_bool_supported at collection time; this returns
+ * false only if a leaf cannot be evaluated to a finite real at this point. */
+static bool fm_bool_penalty(Expr* c, FmVarBind* binds, const double* x, size_t n,
+                            const FmOpts* opts, Expr* penalty_fn, double* out) {
+    const char* h = c->data.function.head->data.symbol.name;
+    size_t ac = c->data.function.arg_count;
+    if (h == SYM_And) {
+        double total = 0.0;
+        for (size_t i = 0; i < ac; i++) {
+            double t;
+            if (!fm_bool_penalty(c->data.function.args[i], binds, x, n, opts,
+                                 penalty_fn, &t)) return false;
+            total += t;
+        }
+        *out = total;
+        return true;
+    }
+    if (h == SYM_Or) {
+        double best = -1.0;
+        for (size_t i = 0; i < ac; i++) {
+            double t;
+            if (!fm_bool_penalty(c->data.function.args[i], binds, x, n, opts,
+                                 penalty_fn, &t)) return false;
+            if (best < 0.0 || t < best) best = t;
+        }
+        *out = (best < 0.0) ? 0.0 : best;
+        return true;
+    }
+    if (h == SYM_Inequality) {
+        double total = 0.0;
+        size_t npairs = (ac - 1) / 2;
+        for (size_t k = 0; k < npairs; k++) {
+            Expr* a  = c->data.function.args[2 * k];
+            Expr* op = c->data.function.args[2 * k + 1];
+            Expr* b  = c->data.function.args[2 * k + 2];
+            Expr* pair_args[2] = { expr_copy(a), expr_copy(b) };
+            Expr* pair = expr_new_function(expr_new_symbol(op->data.symbol.name),
+                                           pair_args, 2);
+            double t;
+            bool ok = fm_bool_penalty(pair, binds, x, n, opts, penalty_fn, &t);
+            expr_free(pair);
+            if (!ok) return false;
+            total += t;
+        }
+        *out = total;
+        return true;
+    }
+    /* single binary comparison → squared / custom violation */
+    Expr* g = NULL; bool eq = false;
+    if (!fm_constraint_to_g(c, &g, &eq)) return false;
+    double d;
+    bool ok = fm_eval_scalar(g, binds, x, n, opts, &d);
+    expr_free(g);
+    if (!ok || !isfinite(d)) return false;
+    double m = eq ? fabs(d) : (d > 0.0 ? d : 0.0);
+    if (m == 0.0) { *out = 0.0; return true; }
+    double term;
+    if (!penalty_fn || !nm_apply_penalty_fn(penalty_fn, m, &term)) term = m * m;
+    *out = term;
+    return true;
+}
+
 /* Σ pen(g_i) over the general constraints at xr, each constraint via its
  * compiled program if present, else the interpreter. The per-constraint term is
  * the built-in squared violation — max(0, g)^2 for an inequality g <= 0, h^2 for
@@ -3065,23 +3217,40 @@ static bool nm_apply_penalty_fn(Expr* pf, double m, double* out) {
  * contributes 0, keeping the feasibility test (total ≤ NM_FEAS_EPS) intact.
  * Returns false if any constraint cannot be evaluated at all. */
 static bool nm_eval_pen(NmDriver* D, const double* xr, double* out) {
-    if (D->ngens == 0) { *out = 0.0; return true; }
-    if (!D->g_progs && !D->penalty_fn)
-        return fm_eval_penalty(D->gens, D->ngens, D->binds, xr, D->n, D->opts, out);
     double total = 0.0;
-    for (size_t k = 0; k < D->ngens; k++) {
-        double d;
-        bool got = D->g_progs && D->g_progs[k]
-                && compiled_eval_real(D->g_progs[k], xr, &d) && isfinite(d);
-        if (!got && (!fm_eval_scalar(D->gens[k].expr, D->binds, xr, D->n, D->opts, &d)
-                     || !isfinite(d)))
+    /* General (conjunctive) constraints: the compiled/penalty-fn path when either
+     * is present, else the shared squared-penalty evaluator. */
+    if (D->ngens > 0) {
+        if (!D->g_progs && !D->penalty_fn) {
+            double base;
+            if (!fm_eval_penalty(D->gens, D->ngens, D->binds, xr, D->n, D->opts, &base))
+                return false;
+            total += base;
+        } else {
+            for (size_t k = 0; k < D->ngens; k++) {
+                double d;
+                bool got = D->g_progs && D->g_progs[k]
+                        && compiled_eval_real(D->g_progs[k], xr, &d) && isfinite(d);
+                if (!got && (!fm_eval_scalar(D->gens[k].expr, D->binds, xr, D->n,
+                                             D->opts, &d) || !isfinite(d)))
+                    return false;
+                double m = D->gens[k].equality ? fabs(d) : (d > 0.0 ? d : 0.0);
+                if (m == 0.0) continue;
+                double term;
+                if (!D->penalty_fn || !nm_apply_penalty_fn(D->penalty_fn, m, &term))
+                    term = m * m;
+                total += term;
+            }
+        }
+    }
+    /* Disjunctive (Or) constraints: each adds its minimum-branch penalty, which
+     * is 0 exactly when at least one branch is satisfied. */
+    for (size_t d = 0; d < D->ndisj; d++) {
+        double dp;
+        if (!fm_bool_penalty(D->disj[d].expr, D->binds, xr, D->n, D->opts,
+                             D->penalty_fn, &dp))
             return false;
-        double m = D->gens[k].equality ? fabs(d) : (d > 0.0 ? d : 0.0);
-        if (m == 0.0) continue;
-        double term;
-        if (!D->penalty_fn || !nm_apply_penalty_fn(D->penalty_fn, m, &term))
-            term = m * m;
-        total += term;
+        total += dp;
     }
     *out = total;
     return true;
@@ -3166,6 +3335,118 @@ static void nm_int_descent(NmDriver* D, double* x, double* f_io, double* pen_io)
     free(t);
 }
 
+/* Deep-free a general-constraint array built by nm_polish_gens. */
+static void fm_free_gens(FmGenCon* g, size_t ng, size_t n) {
+    if (!g) return;
+    for (size_t k = 0; k < ng; k++) {
+        expr_free(g[k].expr);
+        if (g[k].grad_exprs) {
+            for (size_t i = 0; i < n; i++) expr_free(g[k].grad_exprs[i]);
+            free(g[k].grad_exprs);
+        }
+    }
+    free(g);
+}
+
+/* Flatten one disjunction branch (And / Inequality / single comparison — never
+ * Or, since a top-level Or's args are the individual disjuncts) into owned
+ * general constraints appended to *g, each with its symbolic gradient. Returns
+ * false if any leaf is not a convertible comparison. */
+static bool nm_collect_branch_gens(Expr* c, Expr** vars, size_t n,
+                                   FmGenCon** g, size_t* ng, size_t* cap) {
+    const char* h = c->data.function.head->data.symbol.name;
+    size_t ac = c->data.function.arg_count;
+    if (h == SYM_And) {
+        for (size_t i = 0; i < ac; i++)
+            if (!nm_collect_branch_gens(c->data.function.args[i], vars, n, g, ng, cap))
+                return false;
+        return true;
+    }
+    if (h == SYM_Inequality) {
+        size_t npairs = (ac - 1) / 2;
+        for (size_t k = 0; k < npairs; k++) {
+            Expr* a  = c->data.function.args[2 * k];
+            Expr* op = c->data.function.args[2 * k + 1];
+            Expr* b  = c->data.function.args[2 * k + 2];
+            Expr* pa[2] = { expr_copy(a), expr_copy(b) };
+            Expr* pair = expr_new_function(expr_new_symbol(op->data.symbol.name), pa, 2);
+            bool ok = nm_collect_branch_gens(pair, vars, n, g, ng, cap);
+            expr_free(pair);
+            if (!ok) return false;
+        }
+        return true;
+    }
+    Expr* ge = NULL; bool eq = false;
+    if (!fm_constraint_to_g(c, &ge, &eq)) return false;
+    if (*ng == *cap) {
+        size_t nc = *cap ? (*cap) * 2 : 4;
+        *g = (FmGenCon*)realloc(*g, sizeof(FmGenCon) * nc);
+        *cap = nc;
+    }
+    (*g)[*ng].expr = ge;
+    /* Finite-difference gradient (NULL ⇒ fm_run_penalty FDs on demand): the
+     * optimisation variables carry transient value-bindings during the search,
+     * so symbolic D[...] taken here differentiates a constant and yields 0. */
+    (*g)[*ng].grad_exprs = NULL;
+    (*g)[*ng].equality = eq;
+    (*ng)++;
+    return true;
+}
+
+/* Effective smooth-constraint set for a local polish at x when disjunctions are
+ * present: deep copies of the conjunctive base D->gens, plus — for each
+ * disjunction — the constraints of its currently-active (minimum-penalty) branch
+ * at x. Folding in the active branch turns the non-smooth Or into a smooth local
+ * problem the BFGS penalty solver can descend, so the polish refines *within* the
+ * feasible region x already occupies instead of ignoring the Or and drifting into
+ * the infeasible gap between branches (which left RandomSearch, whose only
+ * descent is this polish, stranded). Returns NULL (and does not touch *nout) when
+ * D->ndisj == 0, signalling the caller to use D->gens directly; otherwise returns
+ * a newly-allocated array of length *nout, freed with fm_free_gens. */
+static FmGenCon* nm_polish_gens(NmDriver* D, const double* x, size_t* nout) {
+    if (D->ndisj == 0) return NULL;
+    FmGenCon* g = NULL; size_t ng = 0, cap = 0;
+    for (size_t k = 0; k < D->ngens; k++) {
+        if (ng == cap) {
+            size_t nc = cap ? cap * 2 : 4;
+            g = (FmGenCon*)realloc(g, sizeof(FmGenCon) * nc);
+            cap = nc;
+        }
+        g[ng].expr = expr_copy(D->gens[k].expr);
+        g[ng].grad_exprs = NULL;   /* FD during search; see nm_collect_branch_gens */
+        g[ng].equality = D->gens[k].equality;
+        ng++;
+    }
+    for (size_t d = 0; d < D->ndisj; d++) {
+        Expr* orx = D->disj[d].expr;          /* Or[branch, ...] */
+        size_t ac = orx->data.function.arg_count;
+        size_t best = 0; double bestp = -1.0;
+        for (size_t i = 0; i < ac; i++) {
+            double p;
+            if (!fm_bool_penalty(orx->data.function.args[i], D->binds, x, D->n,
+                                 D->opts, D->penalty_fn, &p))
+                p = 1e300;
+            if (bestp < 0.0 || p < bestp) { bestp = p; best = i; }
+        }
+        /* On an unconvertible branch, drop its augmentation (the global search's
+         * exact penalty still gates feasibility); rewind any partial append. */
+        size_t ng_save = ng;
+        if (!nm_collect_branch_gens(orx->data.function.args[best], D->vars, D->n,
+                                    &g, &ng, &cap)) {
+            for (size_t k = ng_save; k < ng; k++) {
+                expr_free(g[k].expr);
+                if (g[k].grad_exprs) {
+                    for (size_t i = 0; i < D->n; i++) expr_free(g[k].grad_exprs[i]);
+                    free(g[k].grad_exprs);
+                }
+            }
+            ng = ng_save;
+        }
+    }
+    *nout = ng;
+    return g;
+}
+
 /* Run the exact continuous local solver over all variables from x, confined
  * only by the real box constraints (D->boxes) — never the DE sampling region,
  * so a coordinate with no explicit bound is free to leave the default span
@@ -3193,13 +3474,17 @@ static void nm_continuous_solve(NmDriver* D, double* x, bool pin_int,
     double fx = 0.0;
     bool saved_quiet = g_fm_quiet;
     g_fm_quiet = true;                        /* silence internal solver chatter      */
-    if (D->ngens > 0)
+    size_t png = D->ngens;
+    FmGenCon* pg = nm_polish_gens(D, x, &png);           /* NULL ⇒ use D->gens */
+    FmGenCon* use = pg ? pg : D->gens;
+    if (png > 0)
         (void)fm_run_penalty(D->f_raw, D->vars, n, D->binds,
                              FM_METHOD_QUASINEWTON, D->g_exprs, NULL, x,
-                             D->gens, D->ngens, tb, D->opts, &fx);
+                             use, png, tb, D->opts, &fx);
     else
         (void)fm_run_bfgs(D->f_raw, D->vars, n, D->binds, D->g_exprs, x,
                           NULL, 0, 0.0, tb, D->opts, &fx);
+    if (pg) fm_free_gens(pg, png, n);
     g_fm_quiet = saved_quiet;
     free(tb);
     nm_eval(D, x, f_out, pen_out);
@@ -3244,13 +3529,17 @@ static void nm_local_polish(NmDriver* D, double* x, double* f_out, double* pen_o
         double fx = 0.0;
         bool saved_quiet = g_fm_quiet;
         g_fm_quiet = true;                 /* silence internal solver chatter */
-        if (D->ngens > 0)
+        size_t png = D->ngens;
+        FmGenCon* pg = nm_polish_gens(D, x, &png);       /* NULL ⇒ use D->gens */
+        FmGenCon* use = pg ? pg : D->gens;
+        if (png > 0)
             (void)fm_run_penalty(D->f_raw, D->vars, D->n, D->binds,
                                  FM_METHOD_QUASINEWTON, D->g_exprs, NULL, x,
-                                 D->gens, D->ngens, D->boxes, D->opts, &fx);
+                                 use, png, D->boxes, D->opts, &fx);
         else
             (void)fm_run_bfgs(D->f_raw, D->vars, D->n, D->binds, D->g_exprs, x,
                               NULL, 0, 0.0, D->boxes, D->opts, &fx);
+        if (pg) fm_free_gens(pg, png, D->n);
         g_fm_quiet = saved_quiet;
         nm_eval(D, x, f_out, pen_out);
     }
@@ -4535,6 +4824,8 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     FmBox* boxes = (FmBox*)calloc(n, sizeof(FmBox));
     FmGenCon* gens = NULL;
     size_t ngens = 0, gcap = 0;
+    FmDisjunction* disj = NULL;
+    size_t ndisj = 0, dcap = 0;
     Expr** g_exprs = NULL;
     Expr* cons2 = NULL;
     double* reg_lo = NULL;
@@ -4546,12 +4837,13 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     CompiledProgram** g_progs = NULL;  /* compiled general constraints          */
 
     /* Extract integer/real domain declarations, then collect the remaining
-     * constraints into boxes + general FmGenCon[]. */
+     * constraints into boxes + general FmGenCon[] + disjunctions. */
     if (cons_eff) {
         cons2 = nm_filter_int(cons_eff, eff_vars, n, vs.is_int);
         for (size_t i = 0; i < n; i++) if (vs.is_int[i]) vs.any_int = true;
         if (cons2 && !fm_collect_constraints(cons2, eff_vars, n, boxes,
-                                             &gens, &ngens, &gcap))
+                                             &gens, &ngens, &gcap,
+                                             &disj, &ndisj, &dcap))
             goto cleanup;
         for (size_t k = 0; k < ngens; k++)
             gens[k].grad_exprs = fm_compute_gradient(gens[k].expr, eff_vars, n);
@@ -4629,6 +4921,7 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     D.reg_lo = reg_lo; D.reg_hi = reg_hi;
     D.f_prog = f_prog; D.g_progs = g_progs;
     D.penalty_fn = nc.penalty_fn;
+    D.disj = disj; D.ndisj = ndisj;
 
     xbest = (double*)malloc(sizeof(double) * n);
     double fbest = 1e300, penbest = 1e300;
@@ -4747,6 +5040,10 @@ cleanup:
             }
         }
         free(gens);
+    }
+    if (disj) {
+        for (size_t k = 0; k < ndisj; k++) expr_free(disj[k].expr);
+        free(disj);
     }
     expr_free(cons2);
     if (cons_owned) expr_free(cons_eff);

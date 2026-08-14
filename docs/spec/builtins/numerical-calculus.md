@@ -1547,7 +1547,8 @@ integers.  If the feasible set is empty, the result is
 
 Constraints are the same relational/boolean forms `FindMinimum` accepts:
 `==`, `<`, `<=`, `>`, `>=`, chained inequalities, and their `And`
-combinations.  Bare-variable inequalities against a constant become **box
+combinations — plus disjunctive `Or` combinations, which `FindMinimum` does not
+accept (see below).  Bare-variable inequalities against a constant become **box
 constraints** (used both to bound the search region and to project during the
 local polish); other inequalities and equalities are handled with **Deb's
 feasibility rules** during the global search (a feasible point always beats an
@@ -1561,6 +1562,25 @@ at once**, written either as `Element[x | y, Integers]` (Alternatives) or
 as Mathematica does.  The declaration is accepted in the variable list or the
 constraints, and every member must be one of the optimization variables (a
 declaration on any other symbol is left in place and rejected as unenforceable).
+
+**Disjunctive (`Or`) constraints.**  A constraint `c1 || c2 || ...`, at the top
+level or nested inside an `And`, is feasible when **at least one** branch holds.
+Each branch may itself be a single comparison, a chained inequality, or an `And`
+of those.  A disjunction is scored by its **minimum-branch penalty** — the
+smallest of the branches' squared-violation penalties, which is `0` exactly when
+some branch is satisfied — so Deb's feasibility rules select it during the global
+search with no extra weighting.  The derivative-free global engines
+(DifferentialEvolution / SimulatedAnnealing / NelderMead / RandomSearch) consume
+the non-smooth `min` directly; the smooth local polish folds in each
+disjunction's currently-active (minimum-penalty) branch so it refines *within*
+the feasible region the point already occupies, and the post-polish feasibility
+gate keeps the reported point feasible.  For example,
+`NMinimize[{(x^2+y-11)^2+(x+y^2-7)^2, (x-3)^2+(y-2)^2<=0.1 || (x+2.8)^2+(y+3.1)^2<=0.1}, {x, y}]`
+returns the Himmelblau minimum `0` at `(3, 2)`, the branch that contains it, and
+`NMinimize[{x^2, x<=-2 || x>=2}, x]` returns `4` at `x = ±2` — the branch
+boundary, not the infeasible `x = 0` in the gap between branches.  (`FindMinimum`,
+whose gradient penalty method requires a smooth penalty, still rejects `Or` with
+`FindMinimum::nimpl`.)
 
 For a **mixed-integer** problem whose feasible region lies outside the default
 `±10` search span, the polish adds a continuous-relaxation recovery step: it
