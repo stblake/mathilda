@@ -11,7 +11,12 @@ started: 2026-08-13
 last_updated: 2026-08-13
 blocked_by: none
 goal_lock:
-  status: active
+  # Released 2026-08-13 22:10: implementation is complete and in review as
+  # stblake/mathilda#57. The lock exists to keep an in-flight implementation
+  # inside its agreed plan boundary; leaving it active once the work has shipped
+  # would gate every unrelated feature in the repo. The follow-up work listed
+  # under Follow-Up will be locked by its own tracking file.
+  status: released
   stamped: 2026-08-13 17:33
   scope:
     - "frontend/src/**"
