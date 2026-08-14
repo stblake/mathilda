@@ -98,6 +98,7 @@ typedef struct {
     FmPrecMode prec_mode;
     long       wp_bits;          /* MPFR bits when prec_mode == MPFR    */
     int64_t    max_iter;         /* default 500                          */
+    bool       max_iter_set;     /* true if MaxIterations given explicitly */
     double     acc_goal_digits;  /* filled at WP/2 if Automatic          */
     double     prec_goal_digits;
     Expr*      gradient;         /* borrowed; user-supplied list or NULL */
@@ -2375,6 +2376,7 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     opts.prec_mode = FM_PREC_MACHINE;
     opts.wp_bits = 0;
     opts.max_iter = 500;
+    opts.max_iter_set = false;
     opts.acc_goal_digits = -1.0;
     opts.prec_goal_digits = -1.0;
     opts.gradient = NULL;
@@ -3258,21 +3260,35 @@ static void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
     const double* rlo = D->reg_lo;
     const double* rhi = D->reg_hi;
     /* An explicit "SearchPoints" is honored verbatim (only floored at the DE
-     * minimum of 4 members its DE/rand/1 mutation needs); the [15, 40] clamp
-     * tunes the *automatic* population 10n and must not cap a user's request —
-     * NelderMead restarts and RandomSearch starts already honor it verbatim. */
+     * minimum of 4 members its DE/rand/1 mutation needs). The automatic
+     * population is Storn & Price's 10n, but the ceiling is *method dependent*:
+     * an explicit "DifferentialEvolution" keeps the historical [15, 40] clamp so
+     * a seeded run reproduces bit-for-bit, while Method -> Automatic lifts the
+     * ceiling to 200 so that n >= 5 problems get the population DE actually needs
+     * (at n = 4 the two agree). NelderMead restarts and RandomSearch starts honor
+     * SearchPoints verbatim. */
     size_t NP;
     if (nc->search_points > 0) {
         NP = (size_t)nc->search_points;
         if (NP < 4) NP = 4;
     } else {
+        size_t cap = (nc->method == NM_AUTO) ? 200 : 40;
         NP = 10 * n;
-        if (NP < 15) NP = 15;
-        if (NP > 40) NP = 40;
+        if (NP < 15)  NP = 15;
+        if (NP > cap) NP = cap;
     }
     double F  = nc->F  > 0.0 ? nc->F  : 0.6;
     double CR = nc->CR >= 0.0 ? nc->CR : 0.9;
     int64_t maxgen = D->opts->max_iter > 0 ? D->opts->max_iter : 100;
+    /* Method -> Automatic with no explicit MaxIterations scales the generation
+     * budget with dimension (150n). A deceptive multimodal landscape such as
+     * Michalewicz-10 (Sin[...]^20 ridges, near-flat elsewhere, so the post-polish
+     * cannot rescue a weak basin) needs far more than the flat 100 generations to
+     * find a good basin. This is free on easy problems: the convergence
+     * early-break below stops as soon as the population collapses. An explicit
+     * "DifferentialEvolution" (or a user MaxIterations) keeps the flat budget. */
+    if (nc->method == NM_AUTO && !D->opts->max_iter_set)
+        maxgen = 150 * (int64_t)n;
 
     double* pop   = (double*)malloc(sizeof(double) * NP * n);
     double* fpop  = (double*)malloc(sizeof(double) * NP);
@@ -3726,6 +3742,7 @@ static bool nm_apply_option(Expr* rule, FmOpts* opts, NmConfig* nc, const char* 
             return true;                       /* keep the NMinimize default */
         if (rhs->type == EXPR_INTEGER && rhs->data.integer > 0) {
             opts->max_iter = rhs->data.integer;
+            opts->max_iter_set = true;
             return true;
         }
         fm_warn(fn, "badopt", "MaxIterations must be a positive integer or Automatic");
@@ -3992,6 +4009,7 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     opts.prec_mode = FM_PREC_MACHINE;
     opts.wp_bits = 0;
     opts.max_iter = 100;                       /* NMinimize default */
+    opts.max_iter_set = false;
     opts.acc_goal_digits = -1.0;
     opts.prec_goal_digits = -1.0;
     opts.gradient = NULL;
@@ -4027,21 +4045,21 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     if (opts.acc_goal_digits  < 0.0) opts.acc_goal_digits  = wp_digits / 2.0;
     if (opts.prec_goal_digits < 0.0) opts.prec_goal_digits = wp_digits / 2.0;
 
-    /* Both the problem argument and the variable spec are held (HoldAll). Parse
-     * the variables first — they do not depend on the objective — so that a
+    /* Parse the variables first — they do not depend on the objective — so a
      * problem passed as a bare symbol (prob = {f, cons}; NMinimize[prob, vars])
      * can be resolved below with those variables protected. */
     Expr* var_arg = res->data.function.args[1];
 
-    /* Parse the variable specification. It is held (HoldAll), so a generator
-     * such as Table[x[i], {i, 1, 10}] or Array[x, 10] arrives unevaluated;
-     * evaluate it once (leaving the objective held) so it expands to the list
-     * of variables. A {...} list or Element[...] is already in final form. A
-     * bare symbol is ambiguous: it may be a single optimization variable
-     * (NMinimize[f, x]) or a symbol bound to a variable list
-     * (vars = {x, y}; NMinimize[f, vars]). Resolve it — if it evaluates to a
-     * List/Element use that; if it is unbound (evaluates to itself) or resolves
-     * to a non-spec, keep the symbol itself as the single variable. */
+    /* Parse the variable specification. NMinimize is not HoldAll, so a generator
+     * such as Table[x[i], {i, 1, 10}] or Array[x, 10] has already expanded to the
+     * variable list before we run, and a symbol bound to a list has already
+     * resolved. The eval_and_free calls below are therefore idempotent
+     * normalizers (they no-op on an already-evaluated {...}/Element, and still
+     * cover a spec reaching the driver unevaluated). A {...} list or Element[...]
+     * is used directly. A bare symbol is ambiguous: it may be a single
+     * optimization variable (NMinimize[f, x], x unbound) or a symbol that still
+     * resolves to a variable list — evaluate it, and if it yields a List/Element
+     * use that, otherwise keep the symbol itself as the single variable. */
     NmVarSet vs;
     Expr* var_list_eval = NULL;
     {
@@ -4094,12 +4112,13 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
         if (!seen) heads[nheads++] = hn;
     }
 
-    /* Resolve and split {f, cons}. The held problem argument, when a bare symbol
-     * bound to the problem (prob = {f, cons}; NMinimize[prob, vars], or a symbol
-     * bound to a scalar objective), is evaluated once with the variable heads
-     * localized — so its structure is exposed without capturing any global
-     * variable values — and the {f, cons} list is then split. An inline list or
-     * expression already carries its structure and is used directly. */
+    /* Resolve and split {f, cons}. NMinimize is not HoldAll, so the problem
+     * argument normally arrives already in structural form (an inline {f, cons}
+     * list or a scalar objective) and is used directly. The bare-symbol branch
+     * below is a defensive resolver: if the argument still reaches the driver as
+     * a symbol, it is evaluated once with the variable heads localized — so its
+     * structure is exposed without capturing any global variable values — and the
+     * {f, cons} list is then split. */
     Expr* f_arg  = res->data.function.args[0];
     Expr* f_eval = NULL;               /* owned resolved objective, or NULL     */
     if (f_arg->type == EXPR_SYMBOL) {
@@ -4500,8 +4519,17 @@ void findmin_init(void) {
     symtab_get_def("FindMinimum")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_add_builtin("FindMaximum", builtin_findmaximum);
     symtab_get_def("FindMaximum")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    /* NMinimize/NMaximize are Protected but NOT HoldAll (matching Mathematica,
+     * whose Attributes[NMinimize] is {Protected}). Their variables are ordinary
+     * unbound symbols that evaluate to themselves, and the objective is
+     * re-evaluated per trial point under a Block-style binding of those symbols,
+     * so holding the arguments is unnecessary — and holding them is what made a
+     * Method sub-option value such as "RandomSeed" -> s (s a Do/Table iterator or
+     * any expression) arrive unevaluated and get silently dropped. FindMinimum
+     * stays HoldAll: its {x, x0} specs pair a variable with an initial value that
+     * must not evaluate. */
     symtab_add_builtin("NMinimize", builtin_nminimize);
-    symtab_get_def("NMinimize")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_get_def("NMinimize")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("NMaximize", builtin_nmaximize);
-    symtab_get_def("NMaximize")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_get_def("NMaximize")->attributes |= ATTR_PROTECTED;
 }

@@ -3003,8 +3003,10 @@ Out[10]= {-3.2883713955908964865125964571235283975158511553846230554230811211040
 Numerical **global** optimisation.  Implemented natively in C in
 `src/findmin.c`, layered on the `FindMinimum` machinery (it reuses the same
 `Block`-style variable binding, `{f, cons}` constraint parsing, penalty/BFGS
-local solvers, MPFR path, and result construction).  Both have
-`HoldAll, Protected` attributes.  `NMaximize[f, ...]` is a thin wrapper around
+local solvers, MPFR path, and result construction).  Both are `Protected` but
+**not** `HoldAll` (matching Mathematica's `Attributes[NMinimize] == {Protected}`);
+their variables must be unbound symbols, and an assigned optimization variable
+makes the call return unevaluated with `NMinimize::ivar`.  `NMaximize[f, ...]` is a thin wrapper around
 `NMinimize[-f, ...]` that negates the objective value before returning.
 
 Where `FindMinimum` descends from a single start point to the nearest local
@@ -3111,7 +3113,7 @@ matrix variables (`Vectors[n, dom]`, `Matrices`), geometric-region domains,
 
 | `Method ->` | Engine |
 |-------------|--------|
-| `Automatic` | `"DifferentialEvolution"` |
+| `Automatic` | `"DifferentialEvolution"` with a dimension-scaled budget (see below) |
 | `"DifferentialEvolution"` | DE/rand/1/bin with Deb feasibility selection (default) |
 | `"NelderMead"` | downhill-simplex with random restarts |
 | `"RandomSearch"` | multiple random starts refined by the local solver |
@@ -3125,6 +3127,20 @@ differentials to zero, and strand the search there whenever a box-constrained
 optimum lies in the interior (e.g. the Schwefel function, optimum at
 `x_i = 420.97` inside `[-500, 500]`).
 
+**Automatic vs. explicit `"DifferentialEvolution"` — the default budget.**
+`Method -> Automatic` (i.e. no `Method`) runs DE with a *dimension-scaled* budget:
+population `Clip[10·d, {15, 200}]` and `150·d` generations, rather than the flat
+`Clip[10·d, {15, 40}]` / `100` used when `"DifferentialEvolution"` is named
+explicitly. Deceptive multimodal landscapes (e.g. the 10-D Michalewicz function,
+whose `Sin[...]^20` ridges are near-flat elsewhere so the local post-polish cannot
+rescue a weak basin) need far more search than the flat budget provides; the larger
+default lets the plain call reach a good basin. This costs nothing on easy problems
+— the convergence early-break stops each run as soon as the feasible sub-population
+collapses to tolerance, so low-dimensional and convex problems finish in the same
+time as before. Naming `"DifferentialEvolution"` explicitly (or supplying your own
+`SearchPoints` / `MaxIterations`) selects the flat budget, so a seeded run stays
+bit-for-bit reproducible.
+
 A method may carry sub-options as a list, e.g.
 `Method -> {"DifferentialEvolution", "SearchPoints" -> 30,
 "ScalingFactor" -> 0.6, "CrossProbability" -> 0.9, "RandomSeed" -> 7}`.
@@ -3135,7 +3151,7 @@ Recognised sub-options:
 
 | Sub-option | Applies to | Meaning |
 |------------|-----------|---------|
-| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts) | population / restart / start count, honored verbatim; when `Automatic` the DE population is `Clip[10·d, {15, 40}]` |
+| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts) | population / restart / start count, honored verbatim; the automatic DE population is `Clip[10·d, {15, 40}]` under explicit `"DifferentialEvolution"` and `Clip[10·d, {15, 200}]` under `Method -> Automatic` (see below) |
 | `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6) |
 | `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9) |
 | `"ReflectRatio" -> r` | NelderMead | simplex reflection coefficient (default 1) |
@@ -3191,7 +3207,7 @@ constraints to penalize).
 |--------|---------|---------|
 | `Method` | `Automatic` | global-search selector (see above) |
 | `WorkingPrecision` | `MachinePrecision` | MPFR refinement of continuous, general-constraint-free problems |
-| `MaxIterations` | `Automatic` (100) | generation cap |
+| `MaxIterations` | `Automatic` | DE generation cap: `150·d` under `Method -> Automatic`, `100` under explicit `"DifferentialEvolution"`; an explicit value overrides both |
 | `AccuracyGoal` / `PrecisionGoal` | `Automatic` | convergence tolerances |
 | `EvaluationMonitor` | `None` | `:> body` run on every objective evaluation |
 | `StepMonitor` | `None` | `:> body` |

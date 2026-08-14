@@ -17,7 +17,8 @@
  *   - NMaximize wrapper + min/max duality.
  *   - Options[NMinimize]; WorkingPrecision (MPFR) refinement.
  *   - Constraint back-substitution feasibility.
- *   - HoldAll locality: the search variable does not leak.
+ *   - Variable locality (Protected, not HoldAll): the search variable does not
+ *     leak, and an assigned optimization variable makes the call unevaluated.
  *   - Memory-hygiene smoke loop.
  *
  * Run binary directly: ./nminimize_tests */
@@ -433,12 +434,19 @@ static void test_max_iterations_accepted(void) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 10. HoldAll locality                                                */
+/* 10. Variable locality (Protected, not HoldAll)                      */
 /* ------------------------------------------------------------------ */
 
-static void test_holdall_locality(void) {
-    /* A pre-existing value of the search variable must be preserved. */
-    check_eq("Module[{}, x = 5; NMinimize[x^2, x]; x]", "5");
+static void test_variable_locality(void) {
+    /* Attributes[NMinimize] == {Protected} (matching Mathematica), NOT HoldAll.
+     * The Block-style snapshot/restore of a search variable's OwnValue during the
+     * numeric search must not leak: an unbound variable stays unbound. */
+    check_eq("(ClearAll[x]; NMinimize[{x^2, -5 <= x <= 5}, x]; ValueQ[x])", "False");
+    /* Because arguments are evaluated (not held), an optimization variable that
+     * already carries a value resolves before the call, the variable spec is then
+     * malformed, and NMinimize returns unevaluated — exactly as in Mathematica —
+     * without mutating the pre-existing value. */
+    check_eq("(x = 5; Head[NMinimize[x^2, x]])", "NMinimize");
     check_true("(x = 5; NMinimize[(x-1)^2, x]; x) == 5");
     /* Clean up the global assignment so later tests see a free x. */
     check_eq("(x =.; ValueQ[x])", "False");
@@ -505,8 +513,14 @@ static void test_indexed_rosenbrock(void) {
                "Table[x[i], {i, 1, 10}], MaxIterations -> 5000]]) - 1.0] < 1.*^-1");
 }
 
-static void test_indexed_holdall_locality(void) {
-    /* A pre-existing indexed value must be restored after the call. */
+static void test_indexed_variable_locality(void) {
+    /* Indexed analogue. An unbound indexed variable stays unbound after the
+     * search (indexed vars are rewritten to fresh synthetic symbols, so x itself
+     * is never bound). And a pre-existing indexed value makes the now-evaluated
+     * variable spec malformed, so the call returns unevaluated and leaves the
+     * value intact — matching Mathematica's non-HoldAll NMinimize. */
+    check_eq("(ClearAll[x]; NMinimize[Sum[(x[i]-i)^2, {i,1,3}], Table[x[i], {i,1,3}]]; ValueQ[x[1]])", "False");
+    check_eq("(x[1] = 42; Head[NMinimize[Sum[(x[i] - i)^2, {i, 1, 3}], Table[x[i], {i, 1, 3}]]])", "NMinimize");
     check_eq("(x[1] = 42; NMinimize[Sum[(x[i] - i)^2, {i, 1, 3}], Table[x[i], {i, 1, 3}]]; x[1])", "42");
     check_eq("(x[1] =.; ValueQ[x[1]])", "False");
 }
@@ -618,7 +632,7 @@ int main(void) {
     TEST(test_max_iterations_accepted);
 
     /* 10. Locality */
-    TEST(test_holdall_locality);
+    TEST(test_variable_locality);
 
     /* 11. Diagnostics */
     TEST(test_arity_error_unevaluated);
@@ -632,7 +646,7 @@ int main(void) {
     TEST(test_indexed_array_vars);
     TEST(test_indexed_table_constraints);
     TEST(test_indexed_rosenbrock);
-    TEST(test_indexed_holdall_locality);
+    TEST(test_indexed_variable_locality);
     TEST(test_indexed_real_coefficient);
     TEST(test_de_boundary_no_stagnation);
 
