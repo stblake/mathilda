@@ -14,6 +14,10 @@
 #include <string.h>
 #include <math.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #include "expr.h"
 #include "symtab.h"
 #include "attr.h"
@@ -21,6 +25,7 @@
 #include "numarray.h"
 #include "mlutil.h"
 #include "encode.h"
+#include "pca.h"      /* ml_column_mean, ml_column_sd */
 #include "classify.h"
 
 /* Read {features -> class, ...} into a feature matrix and a label vocabulary.
@@ -89,6 +94,7 @@ static Expr* builtin_classify(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
     size_t kopt = 0;
+    bool bayes = false;
     if (argc == 2) {
         Expr* o = res->data.function.args[1];
         if (!o || o->type != EXPR_FUNCTION || o->data.function.arg_count != 2) return NULL;
@@ -119,13 +125,102 @@ static Expr* builtin_classify(Expr* res) {
             }
         }
         if (!mstr || mstr->type != EXPR_STRING) return NULL;
-        if (strcmp(mstr->data.string, "NearestNeighbors") != 0) return NULL;
+        const char* mm = mstr->data.string;
+        if (strcmp(mm, "NearestNeighbors") == 0)   bayes = false;
+        else if (strcmp(mm, "NaiveBayes") == 0)    bayes = true;
+        else return NULL;
+        /* A neighbour count means nothing to a Bayes classifier, so it is refused rather
+         * than accepted and ignored -- silently swallowing it would hide a real mistake. */
+        if (kopt && bayes) return NULL;
     }
 
     size_t n, dim; double* x = NULL; size_t* y = NULL;
     MlLabels labels = {0, NULL};
     if (!ml_read_labelled(res->data.function.args[0], &n, &dim, &x, &y, &labels))
         return NULL;
+
+    if (bayes) {
+        /* Gaussian naive Bayes: per class, a mean and a per-feature variance, plus the
+         * class prior. "Naive" is the independence assumption -- the joint density is the
+         * PRODUCT of per-feature densities, i.e. a diagonal covariance -- which is why
+         * this needs no Cholesky and why it works with far fewer points per class than the
+         * full-covariance Multinormal does.
+         *
+         * THE VARIANCE FLOOR. A class whose feature j takes one value everywhere has zero
+         * variance there and therefore infinite density at that value, which would make it
+         * win every comparison involving that feature. Same class of problem as the
+         * mixture's unbounded likelihood, so the same kind of fix -- but expressed as a
+         * fraction of the feature's OVERALL variance across all classes rather than as a
+         * fixed epsilon, so it is scale-invariant: a feature measured in millimetres and
+         * the same feature in kilometres get proportionate floors, where a fixed epsilon
+         * would be enormous for one and negligible for the other. */
+        size_t C = labels.count;
+        double* gmean = malloc(sizeof(double) * dim);
+        double* gsd   = malloc(sizeof(double) * dim);
+        double* prior = calloc(C, sizeof(double));
+        double* cmean = calloc(C * dim, sizeof(double));
+        double* cvar  = calloc(C * dim, sizeof(double));
+        size_t* cnt   = calloc(C, sizeof(size_t));
+        Expr* outb = NULL;
+        if (gmean && gsd && prior && cmean && cvar && cnt) {
+            ml_column_mean(x, n, dim, gmean);
+            ml_column_sd(x, n, dim, gmean, gsd);
+
+            for (size_t i = 0; i < n; i++) {
+                cnt[y[i]]++;
+                for (size_t j = 0; j < dim; j++) cmean[y[i] * dim + j] += x[i * dim + j];
+            }
+            for (size_t c = 0; c < C; c++) {
+                prior[c] = (double)cnt[c] / (double)n;
+                if (cnt[c] > 0)
+                    for (size_t j = 0; j < dim; j++) cmean[c * dim + j] /= (double)cnt[c];
+            }
+            for (size_t i = 0; i < n; i++)
+                for (size_t j = 0; j < dim; j++) {
+                    double d = x[i * dim + j] - cmean[y[i] * dim + j];
+                    cvar[y[i] * dim + j] += d * d;
+                }
+            for (size_t c = 0; c < C; c++)
+                for (size_t j = 0; j < dim; j++) {
+                    /* ML (n) divisor per class: with one point in a class the unbiased
+                     * form would divide by zero, and the floor below is what makes the
+                     * ML form safe. */
+                    cvar[c * dim + j] = (cnt[c] > 0) ? cvar[c * dim + j] / (double)cnt[c]
+                                                     : 0.0;
+                    double floor_j = 1e-6 * gsd[j] * gsd[j];
+                    if (!(floor_j > 0.0)) floor_j = 1e-12;   /* a constant feature */
+                    if (!(cvar[c * dim + j] > floor_j)) cvar[c * dim + j] = floor_j;
+                }
+
+            /* Payload: vocabulary, priors, then a mean row and a variance row per class. */
+            Expr** rows = malloc(sizeof(Expr*) * (2 + 2 * C));
+            if (rows) {
+                rows[0] = ml_labels_to_list(&labels);
+                rows[1] = ml_list_of_reals(prior, C);
+                for (size_t c = 0; c < C; c++) {
+                    rows[2 + 2 * c]     = ml_list_of_reals(cmean + c * dim, dim);
+                    rows[2 + 2 * c + 1] = ml_list_of_reals(cvar + c * dim, dim);
+                }
+                Expr* pay = expr_new_function(expr_new_symbol(SYM_List), rows, 2 + 2 * C);
+                free(rows);
+                if (pay) {
+                    Expr* a4[4];
+                    a4[0] = expr_new_string("NaiveBayes");
+                    a4[1] = pay;
+                    a4[2] = expr_new_integer((int64_t)dim);
+                    a4[3] = expr_new_integer(0);
+                    if (a4[0] && a4[1] && a4[2] && a4[3])
+                        outb = expr_new_function(expr_new_symbol("ClassifierFunction"),
+                                                 a4, 4);
+                    else { expr_free(a4[0]); expr_free(a4[1]); expr_free(a4[2]); expr_free(a4[3]); }
+                }
+            }
+        }
+        free(gmean); free(gsd); free(prior); free(cmean); free(cvar); free(cnt);
+        ml_labels_free(&labels);
+        free(x); free(y);
+        return outb;
+    }
 
     /* k defaults to 1 rather than 3, unlike the k-NN PREDICTOR. A regression averages, so
      * a little smoothing helps; a classifier votes, and at k = 1 it reproduces the
@@ -181,7 +276,7 @@ Expr* ml_classifier_apply(Expr* head, Expr** args, size_t argc) {
     if (!pay || pay->type != EXPR_FUNCTION || pay->data.function.arg_count < 2) return NULL;
     if (!dimx || dimx->type != EXPR_INTEGER || !kx || kx->type != EXPR_INTEGER) return NULL;
     size_t dim = (size_t)dimx->data.integer, k = (size_t)kx->data.integer;
-    size_t n = pay->data.function.arg_count - 1;
+    size_t n = pay->data.function.arg_count - 1;   /* k-NN: one row per example */
 
     MlLabels labels = {0, NULL};
     if (!ml_labels_from_list(pay->data.function.args[0], &labels)) return NULL;
@@ -191,7 +286,8 @@ Expr* ml_classifier_apply(Expr* head, Expr** args, size_t argc) {
         Expr* r = NULL;
         if (strcmp(q, "Method") == 0)            r = expr_copy(mname);
         else if (strcmp(q, "FeatureCount") == 0) r = expr_copy(dimx);
-        else if (strcmp(q, "NeighborCount") == 0) r = expr_copy(kx);
+        else if (strcmp(q, "NeighborCount") == 0
+                 && strcmp(mname->data.string, "NearestNeighbors") == 0) r = expr_copy(kx);
         else if (strcmp(q, "Classes") == 0)      r = ml_labels_to_list(&labels);
         ml_labels_free(&labels);
         return r;                                /* NULL for an unknown property */
@@ -220,6 +316,79 @@ Expr* ml_classifier_apply(Expr* head, Expr** args, size_t argc) {
         ok = (dim == 1) && na_read_scalar(a0, &xin[0], &im) && im == 0.0;
     }
     if (!ok) { free(xin); ml_labels_free(&labels); return NULL; }
+
+    if (strcmp(mname->data.string, "NaiveBayes") == 0) {
+        /* log posterior = log prior + sum over features of the Gaussian log density.
+         *
+         * Log space throughout, then one softmax. A product of dim densities underflows in
+         * linear space for a point several standard deviations out in every feature -- the
+         * same reason the mixture and the KDE work in logs -- and here it would silently
+         * make every class equally (in)probable exactly where the answer is most obvious. */
+        size_t C = labels.count;
+        if (pay->data.function.arg_count != 2 + 2 * C) {
+            free(xin); ml_labels_free(&labels); return NULL;
+        }
+        double* lp = malloc(sizeof(double) * C);
+        if (!lp) { free(xin); ml_labels_free(&labels); return NULL; }
+        Expr* prow = pay->data.function.args[1];
+        ok = prow && prow->type == EXPR_FUNCTION && prow->data.function.arg_count == C;
+        double best = -INFINITY;
+        for (size_t c = 0; ok && c < C; c++) {
+            double pr = 0.0;
+            ok = na_read_scalar(prow->data.function.args[c], &pr, &im) && im == 0.0;
+            if (!ok) break;
+            /* A class with zero prior cannot win; log(0) would be -inf and poison the
+             * softmax, so it is excluded rather than computed. */
+            if (!(pr > 0.0)) { lp[c] = -INFINITY; continue; }
+            double acc = log(pr);
+            Expr* mr = pay->data.function.args[2 + 2 * c];
+            Expr* vr = pay->data.function.args[2 + 2 * c + 1];
+            if (!mr || mr->type != EXPR_FUNCTION || mr->data.function.arg_count != dim
+                || !vr || vr->type != EXPR_FUNCTION || vr->data.function.arg_count != dim) {
+                ok = false; break;
+            }
+            for (size_t j = 0; j < dim && ok; j++) {
+                double mu = 0.0, va = 0.0;
+                ok = na_read_scalar(mr->data.function.args[j], &mu, &im) && im == 0.0
+                  && na_read_scalar(vr->data.function.args[j], &va, &im) && im == 0.0;
+                if (!ok || !(va > 0.0)) { ok = false; break; }
+                double z = xin[j] - mu;
+                acc += -0.5 * (log(2.0 * M_PI * va) + z * z / va);
+            }
+            if (!ok) break;
+            lp[c] = acc;
+            if (acc > best) best = acc;
+        }
+        free(xin);
+        if (!ok || !(best > -INFINITY)) {
+            free(lp); ml_labels_free(&labels); return NULL;
+        }
+        Expr* outb = NULL;
+        if (want_probs) {
+            double sacc = 0.0;
+            for (size_t c = 0; c < C; c++)
+                if (lp[c] > -INFINITY) sacc += exp(lp[c] - best);
+            Expr** rules = malloc(sizeof(Expr*) * C);
+            if (rules) {
+                for (size_t c = 0; c < C; c++) {
+                    Expr* pr2[2];
+                    pr2[0] = expr_copy(labels.label[c]);
+                    pr2[1] = expr_new_real((lp[c] > -INFINITY)
+                                           ? exp(lp[c] - best) / sacc : 0.0);
+                    rules[c] = expr_new_function(expr_new_symbol(SYM_Rule), pr2, 2);
+                }
+                outb = expr_new_function(expr_new_symbol(SYM_List), rules, C);
+                free(rules);
+            }
+        } else {
+            size_t bc2 = 0;
+            for (size_t c = 1; c < C; c++) if (lp[c] > lp[bc2]) bc2 = c;
+            outb = expr_copy(labels.label[bc2]);
+        }
+        free(lp);
+        ml_labels_free(&labels);
+        return outb;
+    }
 
     /* k nearest by squared Euclidean distance, kept as a partial selection. Ties keep the
      * earlier training row, so the vote does not depend on scan order. */

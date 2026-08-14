@@ -100,6 +100,94 @@ static void test_malformed_input_declines(void) {
     assert_eval_eq("StringQ[Classify[" TR "][\"NoSuchProperty\"]]", "False", 0);
 }
 
+#define NB "{{0.,0.} -> \"red\", {1.,0.} -> \"red\", {0.,1.} -> \"red\", " \
+           "{1.,1.} -> \"red\", {10.,10.} -> \"blue\", {11.,10.} -> \"blue\", " \
+           "{10.,11.} -> \"blue\", {11.,11.} -> \"blue\"}"
+#define NB1 "{1. -> \"a\", 2. -> \"a\", 3. -> \"a\", " \
+            "7. -> \"b\", 8. -> \"b\", 9. -> \"b\"}"
+
+static void test_naivebayes_separates_well_separated_blobs(void) {
+    /* Absolute, not a percentage: every training row, correct. */
+    assert_eval_eq("Module[{tr = " NB ", b},"
+                   " b = Classify[tr, Method -> \"NaiveBayes\"];"
+                   " And @@ Table[b[First[tr[[i]]]] === Last[tr[[i]]], {i, Length[tr]}]]",
+                   "True", 0);
+    assert_eval_eq("Classify[" NB ", Method -> \"NaiveBayes\"][{0.5, 0.5}]", "\"red\"", 0);
+    assert_eval_eq("Classify[" NB ", Method -> \"NaiveBayes\"][{10.5, 10.5}]",
+                   "\"blue\"", 0);
+}
+
+static void test_naivebayes_posteriors_sum_to_one(void) {
+    /* Asserted at the MIDPOINT as well, where the split is an exact 0.5/0.5 -- a
+     * degenerate 1.0/0.0 split would sum to 1 even with a broken softmax. */
+    assert_eval_eq("Chop[Total[Map[Last, Classify[" NB ", Method -> \"NaiveBayes\"]"
+                   "[{5.5, 5.5}, \"Probabilities\"]]] - 1.]", "0", 0);
+    assert_eval_eq("Module[{p = Classify[" NB ", Method -> \"NaiveBayes\"]"
+                   "[{5.5, 5.5}, \"Probabilities\"]}, 0.4 < Last[First[p]] < 0.6]",
+                   "True", 0);
+    assert_eval_eq("Chop[Total[Map[Last, Classify[" NB ", Method -> \"NaiveBayes\"]"
+                   "[{0.5, 0.5}, \"Probabilities\"]]] - 1.]", "0", 0);
+}
+
+static void test_naivebayes_matches_the_closed_form_gaussian_comparison(void) {
+    /* The independent-implementation check, and the strongest available for this method.
+     * With one feature and equal priors the decision is just "which prior-weighted
+     * Gaussian density is larger", which PDF[NormalDistribution[...]] computes by a
+     * completely separate path. Note the fit uses the ML (n) divisor per class, so the
+     * comparison variance is Variance[...] * (n-1)/n -- getting that wrong would move the
+     * boundary slightly and the straddling points below would catch it.
+     *
+     * Queried at 4.9 and 5.1, either side of the boundary at 5.0, so the test actually
+     * exercises the decision rather than two obvious regions. */
+    const char* xs[] = { "0.", "1.5", "3.5", "4.9", "5.1", "6.5", "8.5", "12." };
+    for (size_t i = 0; i < sizeof(xs) / sizeof(xs[0]); i++) {
+        char in[900];
+        snprintf(in, sizeof in,
+                 "Module[{nb, ma, mb, va, vb, la, lb},"
+                 " nb = Classify[" NB1 ", Method -> \"NaiveBayes\"];"
+                 " ma = Mean[{1.,2.,3.}]; mb = Mean[{7.,8.,9.}];"
+                 " va = Variance[{1.,2.,3.}] 2/3; vb = Variance[{7.,8.,9.}] 2/3;"
+                 " la = 0.5 PDF[NormalDistribution[ma, Sqrt[va]], %s];"
+                 " lb = 0.5 PDF[NormalDistribution[mb, Sqrt[vb]], %s];"
+                 " If[la > lb, \"a\", \"b\"] === nb[%s]]", xs[i], xs[i], xs[i]);
+        assert_eval_eq(in, "True", 0);
+    }
+}
+
+static void test_naivebayes_variance_floor_keeps_a_constant_feature_finite(void) {
+    /* A class whose feature is constant has zero variance there and therefore INFINITE
+     * density at that value -- it would win every comparison involving that feature. The
+     * floor is a fraction of the feature's overall variance, so it is scale-invariant. The
+     * observable consequence: probabilities stay finite and the informative feature still
+     * decides. */
+    const char* cz = "{{5., 1.} -> \"x\", {5., 2.} -> \"x\", {5., 3.} -> \"x\", "
+                     "{9., 1.} -> \"y\", {9., 2.} -> \"y\", {9., 3.} -> \"y\"}";
+    char in[700];
+    snprintf(in, sizeof in, "Classify[%s, Method -> \"NaiveBayes\"][{5., 2.}]", cz);
+    assert_eval_eq(in, "\"x\"", 0);
+    snprintf(in, sizeof in, "Classify[%s, Method -> \"NaiveBayes\"][{9., 2.}]", cz);
+    assert_eval_eq(in, "\"y\"", 0);
+    snprintf(in, sizeof in,
+             "Chop[Total[Map[Last, Classify[%s, Method -> \"NaiveBayes\"]"
+             "[{7., 2.}, \"Probabilities\"]]] - 1.]", cz);
+    assert_eval_eq(in, "0", 0);
+}
+
+static void test_naivebayes_option_errors_and_coexistence(void) {
+    /* A neighbour count means nothing to a Bayes classifier, so it is refused rather than
+     * ignored; and NeighborCount is not a property of one. */
+    assert_eval_eq("Head[Classify[" NB ", Method -> {\"NaiveBayes\", "
+                   "\"NeighborsNumber\" -> 3}]]", "Classify", 0);
+    assert_eval_eq("StringQ[Classify[" NB ", Method -> \"NaiveBayes\"][\"NeighborCount\"]]",
+                   "False", 0);
+    /* Both methods on one head must coexist -- adding a method must not disturb the other. */
+    assert_eval_eq("Classify[" NB "][{0.5, 0.5}]", "\"red\"", 0);
+    assert_eval_eq("Classify[" NB ", Method -> \"NaiveBayes\"][\"Method\"]",
+                   "\"NaiveBayes\"", 0);
+    assert_eval_eq("Classify[" NB ", Method -> \"NaiveBayes\"]",
+                   "ClassifierFunction[\"NaiveBayes\", <>]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -110,6 +198,11 @@ int main(void) {
     TEST(test_class_order_is_first_appearance_and_deterministic);
     TEST(test_three_classes_and_properties);
     TEST(test_malformed_input_declines);
+    TEST(test_naivebayes_separates_well_separated_blobs);
+    TEST(test_naivebayes_posteriors_sum_to_one);
+    TEST(test_naivebayes_matches_the_closed_form_gaussian_comparison);
+    TEST(test_naivebayes_variance_floor_keeps_a_constant_feature_finite);
+    TEST(test_naivebayes_option_errors_and_coexistence);
 
     printf("All ml Classify tests passed.\n");
     return 0;

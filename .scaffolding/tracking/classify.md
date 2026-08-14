@@ -80,7 +80,7 @@ goal_lock:
 
 - [x] `Label vocabulary in src/ml/encode.{c,h}` | `independent` | `done (iteration 20)`
 - [x] `ClassifierFunction on the existing model representation + Method -> NearestNeighbors` | `depends on: vocabulary` | `done (iteration 20)`
-- [ ] `Method -> "NaiveBayes"` | `depends on: vocabulary` | `pending`
+- [x] `Method -> "NaiveBayes"` | `depends on: vocabulary` | `done (iteration 21)`
 - [ ] `Method -> "LogisticRegression"` | `depends on: vocabulary` | `pending`
 - [ ] `DecisionTree / RandomForest, or a recorded decision not to` | `independent` | `pending`
 - [ ] `ContingencyTable (inherited from family 4)` | `depends on: vocabulary` | `pending`
@@ -141,6 +141,7 @@ goal_lock:
 
 ## Activity Log
 
+- `2026-08-14 03:40` Iteration 21: NaiveBayes. Adding a METHOD to an existing head was smaller than adding the head was -- dispatch on the method tag inside the existing fit and apply functions, no new registration, no printer change. Gaussian per class with a diagonal covariance, so no Cholesky. The variance floor is a fraction of the feature's OVERALL variance rather than a fixed epsilon, which makes it scale-invariant -- a fixed epsilon would be enormous for a millimetre feature and negligible for a kilometre one; a class with a constant feature otherwise has infinite density there and wins every comparison involving it. Verified against the closed form: with one feature and equal priors the decision is just which prior-weighted Gaussian is larger, computed independently by PDF[NormalDistribution[...]], and the two agree at eight points INCLUDING 4.9 and 5.1 either side of the boundary at 5.0 -- so the test exercises the decision, not two obvious regions. Getting the ML (n) vs unbiased (n-1) per-class divisor wrong would shift that boundary and those straddling points would catch it.
 - `2026-08-14 03:25` Created, and iteration 20 landed: the label vocabulary (src/ml/encode.{c,h}) plus Classify with a k-NN majority vote. ClassifierFunction is the FOURTH head on the model representation from iteration 12 and needed no change to it -- adding it was the documented three steps plus the printer entry. The two verifications are ABSOLUTE rather than comparative: k=1 reproduces all six training labels exactly (each point is its own nearest neighbour, so there is no "close enough"), and probabilities sum to 1 including at k=5 where the split is a genuine 0.6/0.4 rather than degenerate. Strings, symbols and integers all work as classes, and structural comparison keeps "a" and a distinct.
 
 ## Reflection

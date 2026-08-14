@@ -444,6 +444,7 @@ Trains a classifier and returns a `ClassifierFunction`. Attributes: `Protected`.
 
 - `Classify[data]`
 - `Classify[data, Method -> "NearestNeighbors"]`
+- `Classify[data, Method -> "NaiveBayes"]`
 - `Classify[data, Method -> {"NearestNeighbors", "NeighborsNumber" -> k}]`
 
 **A class may be any expression.** This is the substantive addition of this family:
@@ -470,6 +471,30 @@ it is deterministic; first appearance is also stable under adding classes later,
   to 1 by construction.
 - Also answers `"Classes"`, `"Method"`, `"FeatureCount"` and `"NeighborCount"`.
 - Ties in the vote go to the lowest class index, i.e. first appearance — deterministic.
+
+**`"NaiveBayes"`** fits, per class, a mean and a per-feature variance plus the class
+prior, and classifies by the largest log posterior. "Naive" is the independence
+assumption — the joint density is the *product* of per-feature densities, i.e. a diagonal
+covariance — which is why it needs no Cholesky and works with far fewer points per class
+than a full-covariance Multinormal.
+
+**Its variance floor is load-bearing.** A class whose feature takes one value everywhere
+has zero variance there and therefore *infinite* density at that value, which would win
+every comparison involving that feature. The floor is a fraction of the feature's
+**overall** variance across all classes rather than a fixed epsilon, so it is
+scale-invariant: the same feature measured in millimetres and in kilometres gets
+proportionate floors, where a fixed epsilon would be enormous for one and negligible for
+the other. Per-class variances use the ML (`n`) divisor, which the floor is what makes safe
+for a single-member class.
+
+`"NeighborsNumber"` is **refused** on a Bayes classifier rather than ignored, and
+`"NeighborCount"` is not one of its properties.
+
+**Verified against a closed form.** With one feature and equal priors the decision is just
+"which prior-weighted Gaussian density is larger", which `PDF[NormalDistribution[…]]`
+computes by a completely separate path. The two agree at eight points including 4.9 and 5.1
+— either side of the boundary at 5.0 — so the test exercises the decision rather than two
+obvious regions.
 
 ```mathematica
 In[1]:= c = Classify[{{0.,0.} -> "red", {1.,0.} -> "red", {0.,1.} -> "red",
