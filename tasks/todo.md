@@ -1,76 +1,44 @@
-# NMinimize RandomSearch: compiled local polish
+# NMinimize: DifferentialEvolution options + 20-D rotated Rastrigin stress test
 
-## Root cause (verified)
-`NMinimize[..., Method -> {"RandomSearch", "SearchPoints" -> 1000, "Method" -> "NelderMead"}]`
-took 24.8s (≈10–25× Mathematica). Isolated:
-- DifferentialEvolution 0.98s, NelderMead(global) 0.59s, RandomSearch(1000) 24.1s.
-- RandomSearch scales linearly with SearchPoints (~25 ms/start).
-- Profile dominated by the interpreter: `fm_eval_with_bindings`, `apply_own_values`,
-  `add_rule`, `symtab_add_own_value`, `builtin_plus`, `builtin_abs`, `expr_copy/free`.
+## Requests
+1. Add the 20-D rotated Rastrigin as an NMinimize unit test.
+2. Ensure all `"DifferentialEvolution"` sub-options work as expected.
+3. Use Storn & Price's 10n = 200 default population.
 
-The compiled objective (`NmDriver.f_prog`) is consumed **only** by global-search
-scoring (`nm_eval_obj`). The **local polish** (`nm_local_polish` → `fm_run_bfgs`,
-findmin.c:3540) passes `D->f_raw` and evaluates through `fm_eval_scalar` /
-`fm_eval_with_bindings` — 20 OwnValue installs + deep copy + full evaluate +
-numericalize per point. RandomSearch does one polish per SearchPoint ⇒ 1000
-interpreter BFGS runs. (The objective itself already compiles; `Compile[]` already
-lowers `Sum`. The gap is the polish, not the objective.)
+## Findings (verified before coding)
+- All DE options were *parsed*, but two were consumed only by NelderMead:
+  - `"Tolerance"` → used only in `nm_neldermead` (simplex spread); DE's early-break
+    used the AccuracyGoal/PrecisionGoal-derived threshold. **Silently ignored by DE.**
+  - `"InitialPoints"` → used only in `nm_simplex_from_points`; DE always
+    random-initialised. **Silently ignored by DE.**
+  - `"CrossProbability"`/`"ScalingFactor"` accepted any value with no validation.
+- Explicit `"DifferentialEvolution"` clamped the population to `[15, 40]`, so a
+  20-D solve ran 40 members instead of 10n = 200.
 
-## Fix — compiled objective + FD gradient in the local solvers (broad)
-Route every local-solver objective evaluation through the compiled program, and
-take the gradient by finite differences off it. Elegant, minimal surface, general
-(all NMinimize methods), interpreter fallback preserved, answers unchanged.
+## Changes (all in src/numerical_calculus/findmin.c)
+- [x] Population = `Clip[10·d, {15, 200}]` for explicit DE and Automatic alike.
+- [x] DE convergence break honors an explicit `"Tolerance"` (default path unchanged).
+- [x] New `nm_population_from_points` seeds the leading DE population members from
+      `"InitialPoints"`, rest random; RNG stream unchanged when absent.
+- [x] Validate `"CrossProbability"` ∈ [0,1] and `"ScalingFactor"` ∈ (0,2]; invalid
+      warns `NMinimize::sopt` and falls back (matches the SA sub-options).
 
-- [ ] Add file statics `g_fm_obj_expr` / `g_fm_obj_prog` / `g_fm_obj_nargs`.
-- [ ] Fast path at top of `fm_eval_scalar`: when `f == g_fm_obj_expr` and arity
-      matches and `compiled_eval_real` returns finite, use it; else interpreter.
-      Pointer identity keeps constraint/gradient sub-exprs on the interpreter.
-- [ ] `nm_minimize_driver`: set the statics (save/restore) around the solve,
-      pointing at `f_eff` / `f_prog`; restore before `compiled_free(f_prog)`.
-- [ ] Force FD gradient when compiled: pass `NULL` for `g_exprs` in the polish
-      calls (`nm_local_polish`, `nm_continuous_solve`) when `D->f_prog` set, so
-      `fm_grad_finite_diff` (→ `fm_eval_scalar` → compiled) is used instead of the
-      interpreter symbolic-gradient path.
+## Tests (tests/test_nminimize.c)
+- [x] `test_rotated_rastrigin_stress` — loose shape/feasibility/basin invariant.
+- [x] `test_de_options_effective` — Tolerance, InitialPoints, CR, F each steer the
+      search; invalid CR/F warn + fall back.
 
-## Verify
-- [ ] Rebuild; the reported example drops from ~25s toward ~1s, same optimum.
-- [ ] `tests/` full suite (esp. test_nminimize, test_findmin) — no regressions.
-- [ ] MPFR final refinement still exact (uses symbolic gradient, untouched).
-- [ ] Docs + changelog (week of 2026-08-10).
+## Docs
+- [x] docs/spec/builtins/numerical-calculus.md (population, Tolerance, InitialPoints,
+      CR/F validation).
+- [x] docs/spec/changelog/2026-08-10.md (this ISO week).
 
-## Notes / follow-ups
-- FindMinimum uses a separate driver (`findmin_driver`) with no `f_prog`; the
-  static is inert there → unchanged. Compiling there is a clean follow-up.
-- General (non-box) constraints in the local penalty polish still evaluate on the
-  interpreter (different Expr pointers); follow-up via `g_progs`.
-
-## Review (done 2026-08-14)
-Root cause was NOT the objective failing to compile — it already compiles, and
-`Compile[]` already lowers `Sum`. The compiled program (`f_prog`) served only the
-global-search *scoring*; the local polish (`fm_run_bfgs`) ran on the interpreter,
-and RandomSearch does one polish per SearchPoint. Fix routes the polish's
-objective evals through `f_prog` via a pointer-identity fast path in
-`fm_eval_scalar`, with an FD gradient taken off the compiled objective.
-
-Implemented (all in `src/numerical_calculus/findmin.c`):
-- statics `g_fm_obj_expr/_prog/_nargs` + fast path in `fm_eval_scalar`.
-- register/deregister in `nm_minimize_driver` (plain reset, not save/restore — a
-  compilable objective cannot contain a nested NMinimize, so no active
-  registration is ever clobbered; also dodges a GCC-16 `-Wmaybe-uninitialized`).
-- `nm_local_polish` / `nm_continuous_solve` pass `g_exprs = NULL` when `f_prog`
-  set → FD-on-compiled gradient.
-
-Results: RandomSearch(1000) 24.8 s → 0.54 s (identical `1.76e-5`); DE 0.98 → 0.023;
-NelderMead 0.59 → 0.13. Clean `-Wall -Wextra` build, `make check-c99` clean,
-`nminimize_tests` + `findmin_tests` all pass. Docs + changelog updated.
-
-## Follow-up: FindMinimum compiled objective + gradient (done 2026-08-14)
-FindMinimum uses a separate driver (`findmin_driver`). Value-only objective
-compilation gave ~0 speedup — the QuasiNewton/CG/Newton cost is dominated by the
-per-iteration gradient. Fix compiles the objective AND each exact symbolic
-gradient component (companion `g_fm_grad_*` registry consulted by
-`fm_eval_gradient`, keyed by g_exprs pointer identity). Gradient stays EXACT (not
-FD) to preserve FindMinimum's precision. Gains: 1-D ~3×, 2-D Rosenbrock ~4×, 6-D
-~1.9×; trivial 2-D quadratic regresses ~8µs (unamortised compile, accepted).
-Skipped when EvaluationMonitor set (fires from interpreter) and on MPFR.
-findmin_tests + nminimize_tests pass; clean build; valgrind noise only (libobjc).
+## Review / results
+- Full `nminimize_tests` (63 tests) pass; `findmin_tests` pass; `make check-c99` clean.
+- No regressions: `test_griewank_differentialevolution` (n=10, now NP=100) still
+  passes; existing seeded runs with no InitialPoints reproduce (RNG stream intact).
+- Stress test lands at 37.8084 (feasible, 20 coords) — a good basin, not the global
+  0. Plain DE does not crack 20-D rotated Rastrigin; the bound is a "found a good
+  region" check, robust to cross-platform QR + DE drift.
+- Empirically confirmed each option now takes effect: Tolerance 5.5e-16 (tight) vs
+  3.5e-3 (loose); InitialPoints-at-origin → raw 0.0 vs random 65.

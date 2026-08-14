@@ -3658,6 +3658,45 @@ static void nm_local_polish(NmDriver* D, double* x, double* f_out, double* pen_o
  *  Global engines                                                     *
  * ------------------------------------------------------------------ */
 
+/* Seed the leading members of a DE population from a user "InitialPoints" list
+ * and return how many were seeded (the rest are filled at random by the caller).
+ * Each seed must be a length-n list of reals (evaluated + numericalized, so Pi
+ * etc. are fine); it is projected into the search region and its integer
+ * coordinates are rounded. Unlike nm_simplex_from_points this is per-member
+ * rather than all-or-nothing: a malformed point ends the seeding and the rest of
+ * the population is random, so one bad point is not fatal. Extra points beyond
+ * the population size are ignored. Returns 0 (→ fully random) when the list is
+ * absent or empty. */
+static size_t nm_population_from_points(NmDriver* D, const Expr* pts,
+                                        size_t n, size_t NP, double* pop) {
+    if (!pts || !nm_is_head(pts, SYM_List) || pts->data.function.arg_count == 0)
+        return 0;
+    size_t npts = pts->data.function.arg_count;
+    size_t use  = npts < NP ? npts : NP;
+    size_t seeded = 0;
+    for (size_t i = 0; i < use; i++) {
+        Expr* p = pts->data.function.args[i];
+        if (!nm_is_head(p, SYM_List) || p->data.function.arg_count != n) break;
+        double* row = &pop[i * n];
+        bool ok = true;
+        for (size_t j = 0; j < n; j++) {
+            Expr* c  = eval_and_free(expr_copy(p->data.function.args[j]));
+            Expr* cn = c ? numericalize(c, numeric_machine_spec()) : NULL;
+            double v = 0.0;
+            ok = cn && fm_expr_to_double_real(cn, &v);
+            expr_free(c); expr_free(cn);
+            if (!ok) break;
+            row[j] = v;
+        }
+        if (!ok) break;
+        nm_project(D, row);
+        for (size_t j = 0; j < n; j++)
+            if (D->is_int[j]) row[j] = round(row[j]);
+        seeded++;
+    }
+    return seeded;
+}
+
 /* DifferentialEvolution, DE/rand/1/bin, with Deb-rule selection. */
 static void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
                   double* xbest, double* fbest, double* penbest) {
@@ -3666,21 +3705,21 @@ static void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
     const double* rhi = D->reg_hi;
     /* An explicit "SearchPoints" is honored verbatim (only floored at the DE
      * minimum of 4 members its DE/rand/1 mutation needs). The automatic
-     * population is Storn & Price's 10n, but the ceiling is *method dependent*:
-     * an explicit "DifferentialEvolution" keeps the historical [15, 40] clamp so
-     * a seeded run reproduces bit-for-bit, while Method -> Automatic lifts the
-     * ceiling to 200 so that n >= 5 problems get the population DE actually needs
-     * (at n = 4 the two agree). NelderMead restarts and RandomSearch starts honor
-     * SearchPoints verbatim. */
+     * population is Storn & Price's 10n — the textbook default — clamped to
+     * [15, 200]: the floor keeps a tiny problem's population workable, and the
+     * ceiling 200 = 10·20 bounds the per-generation cost on high-dimensional
+     * problems. This sizing is the same whether the method is an explicit
+     * "DifferentialEvolution" or Method -> Automatic (there is no longer a lower
+     * historical clamp for the explicit form). NelderMead restarts and
+     * RandomSearch starts honor SearchPoints verbatim. */
     size_t NP;
     if (nc->search_points > 0) {
         NP = (size_t)nc->search_points;
         if (NP < 4) NP = 4;
     } else {
-        size_t cap = (nc->method == NM_AUTO) ? 200 : 40;
         NP = 10 * n;
         if (NP < 15)  NP = 15;
-        if (NP > cap) NP = cap;
+        if (NP > 200) NP = 200;
     }
     double F  = nc->F  > 0.0 ? nc->F  : 0.6;
     double CR = nc->CR >= 0.0 ? nc->CR : 0.9;
@@ -3700,11 +3739,17 @@ static void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
     double* ppop  = (double*)malloc(sizeof(double) * NP);
     double* trial = (double*)malloc(sizeof(double) * n);
 
+    /* "InitialPoints" seeds the leading population members; the remainder are
+     * random. When no list is supplied seeded == 0 and every member is random —
+     * the RNG stream is then identical to before, so seeded runs reproduce. */
+    size_t seeded = nm_population_from_points(D, nc->init_points, n, NP, pop);
     for (size_t p = 0; p < NP; p++) {
-        for (size_t j = 0; j < n; j++) {
-            double v = nm_rng_range(rng, rlo[j], rhi[j]);
-            if (D->is_int[j]) v = round(v);
-            pop[p * n + j] = v;
+        if (p >= seeded) {
+            for (size_t j = 0; j < n; j++) {
+                double v = nm_rng_range(rng, rlo[j], rhi[j]);
+                if (D->is_int[j]) v = round(v);
+                pop[p * n + j] = v;
+            }
         }
         nm_eval(D, &pop[p * n], &fpop[p], &ppop[p]);
     }
@@ -3770,8 +3815,13 @@ static void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
                     cnt++;
                 }
             }
-            double tol = pow(10.0, -D->opts->acc_goal_digits)
-                       + (1.0 + fabs(*fbest)) * pow(10.0, -D->opts->prec_goal_digits);
+            /* Convergence tolerance on the feasible sub-population's objective
+             * spread. An explicit "Tolerance" sub-option sets it directly;
+             * otherwise it is derived from AccuracyGoal / PrecisionGoal. */
+            double tol = nc->tolerance > 0.0
+                       ? nc->tolerance
+                       : pow(10.0, -D->opts->acc_goal_digits)
+                         + (1.0 + fabs(*fbest)) * pow(10.0, -D->opts->prec_goal_digits);
             if (cnt >= NP / 2 && (fmax - fmin) <= tol) break;
         }
     }
@@ -4321,9 +4371,25 @@ static bool nm_parse_method(Expr* rhs, NmConfig* nc, const char* fn) {
                 if (ov->type == EXPR_INTEGER && ov->data.integer > 0)
                     nc->search_points = (int)ov->data.integer;
             } else if (strcmp(on, "ScalingFactor") == 0) {
-                double dv; if (fm_expr_to_double_real(ov, &dv)) nc->F = dv;
+                /* DE differential weight F, mutation scale in DE/rand/1. A real
+                 * in (0, 2]; an out-of-range or non-real value warns and keeps
+                 * the default 0.6. */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0 && dv <= 2.0)
+                    nc->F = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "ScalingFactor must be a real in (0, 2]; using the default");
             } else if (strcmp(on, "CrossProbability") == 0) {
-                double dv; if (fm_expr_to_double_real(ov, &dv)) nc->CR = dv;
+                /* DE crossover probability CR, the per-coordinate chance of
+                 * taking the mutant. A real in [0, 1]; an out-of-range or
+                 * non-real value warns and keeps the default 0.9. */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv >= 0.0 && dv <= 1.0)
+                    nc->CR = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "CrossProbability must be a real in [0, 1]; using the default");
             } else if (strcmp(on, "RandomSeed") == 0) {
                 if (ov->type == EXPR_INTEGER && ov->data.integer >= 0)
                     nc->seed = (uint64_t)ov->data.integer;

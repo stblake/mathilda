@@ -1685,18 +1685,22 @@ bowl is `~10⁻¹¹` of the 10-D volume) no attainable start count reaches it �
 `"DifferentialEvolution"` / `"SimulatedAnnealing"` are the engines for that shape.
 
 **Automatic vs. explicit `"DifferentialEvolution"` — the default budget.**
-`Method -> Automatic` (i.e. no `Method`) runs DE with a *dimension-scaled* budget:
-population `Clip[10·d, {15, 200}]` and `150·d` generations, rather than the flat
-`Clip[10·d, {15, 40}]` / `100` used when `"DifferentialEvolution"` is named
-explicitly. Deceptive multimodal landscapes (e.g. the 10-D Michalewicz function,
-whose `Sin[...]^20` ridges are near-flat elsewhere so the local post-polish cannot
-rescue a weak basin) need far more search than the flat budget provides; the larger
-default lets the plain call reach a good basin. This costs nothing on easy problems
-— the convergence early-break stops each run as soon as the feasible sub-population
+The DE *population* is Storn & Price's `10·d` clamped to `[15, 200]`, the same
+whether `"DifferentialEvolution"` is named explicitly or selected via
+`Method -> Automatic` — the textbook default, so high-dimensional problems get the
+population DE actually needs (a 20-D problem runs 200 members, not the 40 the
+explicit form was previously clamped to). The two differ only in the *generation*
+budget: `Method -> Automatic` (i.e. no `Method`) scales it with dimension, `150·d`
+generations, where the explicit form keeps a flat `100`. Deceptive multimodal
+landscapes (e.g. the 10-D Michalewicz function, whose `Sin[...]^20` ridges are
+near-flat elsewhere so the local post-polish cannot rescue a weak basin) need far
+more search than the flat budget provides; the larger automatic default lets the
+plain call reach a good basin. This costs nothing on easy problems — the
+convergence early-break stops each run as soon as the feasible sub-population
 collapses to tolerance, so low-dimensional and convex problems finish in the same
 time as before. Naming `"DifferentialEvolution"` explicitly (or supplying your own
-`SearchPoints` / `MaxIterations`) selects the flat budget, so a seeded run stays
-bit-for-bit reproducible.
+`SearchPoints` / `MaxIterations`) selects the flat generation budget; the search
+still uses a fixed default PRNG seed, so a seeded run stays reproducible.
 
 A method may carry sub-options as a list, e.g.
 `Method -> {"DifferentialEvolution", "SearchPoints" -> 30,
@@ -1708,9 +1712,9 @@ Recognised sub-options:
 
 | Sub-option | Applies to | Meaning |
 |------------|-----------|---------|
-| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts) | population / restart / start count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 40}]` under explicit `"DifferentialEvolution"` and `Clip[10·d, {15, 200}]` under `Method -> Automatic`; SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts |
-| `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6) |
-| `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9) |
+| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts) | population / restart / start count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 200}]` (Storn & Price's 10n, the same whether `"DifferentialEvolution"` is explicit or via `Method -> Automatic`); SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts |
+| `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6); a real in `(0, 2]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
+| `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9); a real in `[0, 1]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
 | `"PerturbationScale" -> s` | SimulatedAnnealing | multiplies the trial-step size (default 1.0); a positive real, an invalid value warns (`NMinimize::sopt`) and falls back to 1.0 |
 | `"LevelIterations" -> L` | SimulatedAnnealing | trial moves at each temperature level, so the per-chain budget is `MaxIterations · L` (default 50, the previous fixed multiplier). An explicit value is honored verbatim — past the automatic aggregate cap, like `"SearchPoints"`. A positive integer, or `Automatic`/`None` for the default; an invalid value warns (`NMinimize::sopt`) and falls back to Automatic |
 | `"BoltzmannExponent" -> f` | SimulatedAnnealing | acceptance-probability exponent for an uphill move: `f[i, df, f0]` (1-based iteration `i`, objective increase `df`, current value `f0`) sets the probability `Exp[f[i, df, f0]]`. `Automatic`/`None` keep the built-in cooling exponent `-df/(T·s)`, where `s` is a per-chain estimate of the objective scale (mean `|Δφ|` of a short start-point probe) so the acceptance temperature tracks the objective's magnitude; an invalid value warns (`NMinimize::bexp`) and falls back to Automatic |
@@ -1718,8 +1722,8 @@ Recognised sub-options:
 | `"ExpandRatio" -> e` | NelderMead | simplex expansion coefficient (default 2) |
 | `"ContractRatio" -> c` | NelderMead | simplex contraction coefficient (default 0.5) |
 | `"ShrinkRatio" -> s` | NelderMead | simplex shrink coefficient (default 0.5) |
-| `"Tolerance" -> t` | NelderMead | simplex objective-spread convergence threshold |
-| `"InitialPoints" -> {{x1,…},…}` | NelderMead | seed the initial simplex (extra points ignored, fewer are filled by perturbation; malformed → random start) |
+| `"Tolerance" -> t` | DifferentialEvolution, NelderMead | objective-spread convergence threshold — the DE population's feasible-member spread, or the NelderMead simplex; overrides the AccuracyGoal/PrecisionGoal-derived default |
+| `"InitialPoints" -> {{x1,…},…}` | DifferentialEvolution, NelderMead | seed the initial DE population / NelderMead simplex. For DE the leading population members are set from the list (each a length-`d` real point, projected into the box, integer coordinates rounded) and the rest are random; a malformed point ends the seeding. For NelderMead the initial simplex is seeded (extra points ignored, fewer are filled by perturbation; malformed → random start) |
 | `"PostProcess" -> v` | all | final exact local polish. `True`/`Automatic`/a named method (`"InteriorPoint"`, `"FindMinimum"`, `"KKT"`, `{"…", opts}`) → on; `False`/`None` → off |
 | `"PenaltyFunction" -> f` | all | function applied to each constraint's violation when scoring infeasible points. `Automatic`/`None` keep the built-in squared penalty; a pure function or function symbol (`#^2 &`, `(10 #) &`, `Sqrt`, …) replaces it |
 | `"RandomSeed" -> s` | all | override the default PRNG seed |

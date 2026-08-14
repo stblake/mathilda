@@ -886,6 +886,97 @@ static void test_katsuura_differentialevolution(void) {
         "&& Max[Abs[vars /. Last[r]]] <= 100.0001]");
 }
 
+static void test_rotated_rastrigin_stress(void) {
+    /* 20-D rotated Rastrigin: the canonical hard, non-separable global-optimization
+     * benchmark. A dense random orthogonal rotation Q (the Q factor of a seeded
+     * RandomReal matrix, via QRDecomposition) couples all 20 coordinates, so the
+     * ~10^20 local minima cannot be picked off one axis at a time; the global
+     * minimum is 0 at the origin (well inside the +-5.12 box, since Q.0 = 0). This
+     * drives the whole indexed-variable + DifferentialEvolution path at scale at
+     * once: {qMat, rMat} = QRDecomposition[...] destructuring, Table vars and
+     * constraints, a held Sum over a Dot, the "CrossProbability"/"ScalingFactor"
+     * DE sub-options, and the Storn & Price 10n = 200 default population.
+     * Deterministic under the fixed default search seed; the rotation is itself
+     * pinned by SeedRandom[12345].
+     *
+     * The assertion is a loose invariant, robust to the cross-platform
+     * floating-point drift of both the QR rotation and the 20-D DE trajectory
+     * (cf. test_de_boundary_no_stagnation): the search must return the right
+     * shape (all 20 coordinates), a feasible point inside the box, and a genuinely
+     * good feasible basin. Rastrigin is >= 0 everywhere and a random scatter over
+     * this box averages ~375, so First[r] < 100 confirms DE reached a deep basin
+     * rather than a sentinel (1e300) or a scattered point. Plain DE does not solve
+     * 20-D rotated Rastrigin to the global 0 -- it lands at ~37.8 here -- so the
+     * bound is a "found a good region" check, not a "found the optimum" one. */
+    check_true(
+        "Module[{qMat, rMat, vars, z, obj, cons, r, d = 20}, "
+        "SeedRandom[12345]; "
+        "{qMat, rMat} = QRDecomposition[RandomReal[{-1, 1}, {d, d}]]; "
+        "vars = Table[x[i], {i, 1, d}]; "
+        "z = qMat . vars; "
+        "obj = 10 d + Sum[z[[i]]^2 - 10 Cos[2 Pi z[[i]]], {i, 1, d}]; "
+        "cons = Table[-5.12 <= x[i] <= 5.12, {i, 1, d}]; "
+        "r = NMinimize[{obj, cons}, vars, "
+        "Method -> {\"DifferentialEvolution\", \"CrossProbability\" -> 0.95, "
+        "\"ScalingFactor\" -> 0.85}, MaxIterations -> 3000]; "
+        "Head[r] === List && Length[Last[r]] == 20 && 0 <= First[r] < 100 "
+        "&& Max[Abs[vars /. Last[r]]] <= 5.1201]");
+}
+
+static void test_de_options_effective(void) {
+    /* Every "DifferentialEvolution" sub-option must actually steer the search, not
+     * be silently dropped. "Tolerance" and "InitialPoints" used to be consumed
+     * only by NelderMead; "CrossProbability"/"ScalingFactor" took any value with
+     * no validation. Deterministic under the fixed default seed. */
+
+    /* Tolerance sets the population-convergence threshold. On a smooth bowl with
+     * the polish off, a tight tolerance refines the raw best far below a loose one
+     * (which breaks as soon as the feasible sub-population's objective spread
+     * collapses). If Tolerance were ignored the two would be identical. */
+    check_true("First[NMinimize[{Sum[(x[i] - 3)^2, {i, 1, 4}], Table[-10 <= x[i] <= 10, {i, 1, 4}]}, "
+               "Table[x[i], {i, 1, 4}], Method -> {\"DifferentialEvolution\", \"Tolerance\" -> 1.*^-14, "
+               "\"PostProcess\" -> False}, MaxIterations -> 400]] < "
+               "First[NMinimize[{Sum[(x[i] - 3)^2, {i, 1, 4}], Table[-10 <= x[i] <= 10, {i, 1, 4}]}, "
+               "Table[x[i], {i, 1, 4}], Method -> {\"DifferentialEvolution\", \"Tolerance\" -> 0.1, "
+               "\"PostProcess\" -> False}, MaxIterations -> 400]]");
+
+    /* InitialPoints seeds the initial DE population. Seeding every member at the
+     * origin -- the global minimum 0 of this 5-D Rastrigin -- makes the raw best
+     * (one generation, no polish) essentially 0; a random start over the same box
+     * is tens away. If InitialPoints were ignored the population would be random
+     * and the raw best far from 0. */
+    check_true("First[NMinimize[{50 + Sum[x[i]^2 - 10 Cos[2 Pi x[i]], {i, 1, 5}], "
+               "Table[-5.12 <= x[i] <= 5.12, {i, 1, 5}]}, Table[x[i], {i, 1, 5}], "
+               "Method -> {\"DifferentialEvolution\", \"SearchPoints\" -> 8, \"PostProcess\" -> False, "
+               "\"InitialPoints\" -> ConstantArray[ConstantArray[0, 5], 8]}, MaxIterations -> 1]] < 1.*^-6");
+
+    /* CrossProbability and ScalingFactor each steer DE/rand/1/bin: changing one
+     * (all else fixed, same seed) lands the raw global-search point somewhere
+     * different on a multimodal surface -- only possible if the value is threaded
+     * into the mutation/crossover. Raw (PostProcess -> False) points are compared,
+     * so the check does not depend on two polishes landing in different basins. */
+    check_true("First[NMinimize[{Sum[x[i]^2 - 10 Cos[2 Pi x[i]], {i, 1, 8}], "
+               "Table[-5.12 <= x[i] <= 5.12, {i, 1, 8}]}, Table[x[i], {i, 1, 8}], "
+               "Method -> {\"DifferentialEvolution\", \"CrossProbability\" -> 0.1, \"PostProcess\" -> False}]] != "
+               "First[NMinimize[{Sum[x[i]^2 - 10 Cos[2 Pi x[i]], {i, 1, 8}], "
+               "Table[-5.12 <= x[i] <= 5.12, {i, 1, 8}]}, Table[x[i], {i, 1, 8}], "
+               "Method -> {\"DifferentialEvolution\", \"CrossProbability\" -> 0.95, \"PostProcess\" -> False}]]");
+    check_true("First[NMinimize[{Sum[x[i]^2 - 10 Cos[2 Pi x[i]], {i, 1, 8}], "
+               "Table[-5.12 <= x[i] <= 5.12, {i, 1, 8}]}, Table[x[i], {i, 1, 8}], "
+               "Method -> {\"DifferentialEvolution\", \"ScalingFactor\" -> 0.3, \"PostProcess\" -> False}]] != "
+               "First[NMinimize[{Sum[x[i]^2 - 10 Cos[2 Pi x[i]], {i, 1, 8}], "
+               "Table[-5.12 <= x[i] <= 5.12, {i, 1, 8}]}, Table[x[i], {i, 1, 8}], "
+               "Method -> {\"DifferentialEvolution\", \"ScalingFactor\" -> 0.9, \"PostProcess\" -> False}]]");
+
+    /* An out-of-range CrossProbability (not in [0,1]) or ScalingFactor (not in
+     * (0,2]) warns (NMinimize::sopt) and falls back to the default rather than
+     * failing: the solve still returns a valid List. */
+    check_eq("Head[NMinimize[{x^2 + y^2, x + y >= 1}, {x, y}, "
+             "Method -> {\"DifferentialEvolution\", \"CrossProbability\" -> 5}]]", "List");
+    check_eq("Head[NMinimize[{x^2 + y^2, x + y >= 1}, {x, y}, "
+             "Method -> {\"DifferentialEvolution\", \"ScalingFactor\" -> -1}]]", "List");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -980,6 +1071,8 @@ int main(void) {
     TEST(test_de_boundary_no_stagnation);
     TEST(test_lennard_jones_cluster);
     TEST(test_katsuura_differentialevolution);
+    TEST(test_rotated_rastrigin_stress);
+    TEST(test_de_options_effective);
 
     printf("All NMinimize tests passed.\n");
     return 0;
