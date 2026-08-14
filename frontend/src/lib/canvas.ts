@@ -465,7 +465,9 @@ export function openRefpage(fromId: string, name: string,
     store = nb.store;
     newId = nb.id;
     /* On top: it is what the reader just asked for. */
-    return { ...s, notebooks: [...s.notebooks, nb], activeId: nb.id };
+    const next = { ...s, notebooks: [...s.notebooks, nb], activeId: nb.id };
+
+    return attachAsPane(next, nb.id, fromId, true);
   });
 
   void (async () => {
@@ -558,7 +560,10 @@ export function addQueryNotebook(fromId: string, query: string, title?: string) 
     nb.autoRun = true;
     nb.store.addRow('code', query);
     newId = nb.id;
-    return { ...s, notebooks: [...s.notebooks, nb] };
+    /* Same reasoning as openRefpage: on the canvas the position is enough, in
+       focused mode it would be invisible. Not treated as a docs pane -- a query
+       result is a working notebook the reader may well want to keep. */
+    return attachAsPane({ ...s, notebooks: [...s.notebooks, nb] }, nb.id, fromId, false);
   });
   return newId;
 }
@@ -663,6 +668,53 @@ function normalizeFocus<T extends FocusState & { notebooks: CanvasNotebook[] }>(
   return { ...s, focusedIds, focusedSizes, focusedActiveId, focusedLayout };
 }
 
+/** Put a just-created card on screen when the window is in focused mode.
+ *
+ *  On the canvas a new card's x/y is the whole story. In focused mode that
+ *  position is invisible, which is exactly why a Cmd+click on a symbol used to
+ *  appear to do nothing: the reference page opened perfectly, behind a
+ *  full-window notebook.
+ *
+ *  The new pane goes on the RIGHT and the caret stays where it was. You asked
+ *  what a symbol means while writing, so the next Shift+Enter has to still
+ *  belong to your own notebook and not to a read-only reference page.
+ *
+ *  `reuseDocsPane` makes repeated lookups replace the pane already showing
+ *  documentation instead of adding one per lookup -- a docs panel is something
+ *  you glance at repeatedly, not something you accumulate. */
+function attachAsPane<T extends FocusState & { notebooks: CanvasNotebook[] }>(
+  s: T, newId: string, fromId: string, reuseDocsPane: boolean,
+): T {
+  if (s.focusedIds.length === 0) return s;
+
+  const reusable = reuseDocsPane
+    ? s.focusedIds.find(id => s.notebooks.find(nb => nb.id === id)?.refpage)
+    : undefined;
+
+  let focusedIds: string[];
+  if (reusable) {
+    focusedIds = s.focusedIds.map(id => (id === reusable ? newId : id));
+  } else if (s.focusedIds.length < MAX_PANES) {
+    focusedIds = [...s.focusedIds, newId];
+  } else {
+    /* Full, with nothing to reuse: take the pane the request came from. Its
+       notebook stays on the canvas, and that pane is where the reader's
+       attention already is. */
+    focusedIds = s.focusedIds.map(id => (id === fromId ? newId : id));
+  }
+
+  return normalizeFocus({
+    ...s,
+    focusedIds,
+    /* Side by side: "beside what I am reading" is the whole point. Leave a 2x2
+       alone, since it is already showing everything at once. */
+    focusedLayout: focusedIds.length >= 3 ? s.focusedLayout : 'h',
+    focusedActiveId: focusedIds.includes(s.focusedActiveId ?? '')
+      ? s.focusedActiveId
+      : focusedIds[0],
+  });
+}
+
 /** Enter focused mode on one notebook, or return to the canvas with null.
  *
  *  Kept with its original signature deliberately. Three callers should not have
@@ -687,6 +739,50 @@ export function addPaneToFocus(id: string) {
     if (s.focusedIds.includes(id) || s.focusedIds.length >= MAX_PANES) return s;
     return normalizeFocus({ ...s, focusedIds: [...s.focusedIds, id], focusedActiveId: id });
   });
+}
+
+/** Open several notebooks tiled, in one step.
+ *
+ *  This is the route in from the canvas: rubber-band a few cards, then open them
+ *  together. Going through addPaneToFocus one at a time would work but would
+ *  re-equalise sizes and re-point the active pane on every call. */
+export function openPanes(ids: string[], layout: FocusLayout = 'h') {
+  canvasState.update(s => {
+    const live = ids.filter(id => s.notebooks.some(nb => nb.id === id));
+    const kept = [...new Set(live)].slice(0, MAX_PANES);
+    if (kept.length === 0) return s;
+    return normalizeFocus({
+      ...s,
+      focusedIds:      kept,
+      /* A 2x2 needs three panes; asking for one with two is a side-by-side. */
+      focusedLayout:   kept.length >= 3 ? layout : (layout === 'grid' ? 'h' : layout),
+      focusedActiveId: kept[0],
+      focusedSizes:    Array(kept.length).fill(100 / kept.length),
+      activeId:        kept[0],
+    });
+  });
+}
+
+/** Split the window with whichever notebook is next in canvas order and not
+ *  already on screen. The one-click path: no picker, and the pane header names
+ *  what arrived so a wrong guess is obvious and fixable with + / x. */
+export function splitWithNext(layout: FocusLayout = 'h'): string | null {
+  let picked: string | null = null;
+  canvasState.update(s => {
+    if (s.focusedIds.length >= MAX_PANES) return s;
+    const next = s.notebooks.find(nb => !s.focusedIds.includes(nb.id));
+    if (!next) return s;
+    picked = next.id;
+    return normalizeFocus({
+      ...s,
+      focusedIds:      [...s.focusedIds, next.id],
+      focusedLayout:   layout,
+      /* Keep the caret where it was: the user asked for a second view, not to
+         start typing in it. */
+      focusedActiveId: s.focusedActiveId,
+    });
+  });
+  return picked;
 }
 
 /** Remove a pane, keeping its notebook on the canvas. Emptying returns to canvas.

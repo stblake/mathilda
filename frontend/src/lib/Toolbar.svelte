@@ -25,7 +25,9 @@
   import ToolbarGroup from './ToolbarGroup.svelte';
   import Menu from './Menu.svelte';
   import type { MenuItem } from './Menu.svelte';
-  import { canvasState, setFocused, activeActions, activeFlags, openRefpage, addQueryNotebook } from './canvas';
+  import { canvasState, setFocused, activeActions, activeFlags, openRefpage, addQueryNotebook,
+           addPaneToFocus, removePane, setFocusLayout, splitWithNext, MAX_PANES } from './canvas';
+  import type { FocusLayout } from './canvas';
   import { activeCell, retypeActiveCell } from './active';
   import { darkMode } from './theme';
   import { symbolAtSelection } from './refpages';
@@ -34,7 +36,7 @@
   import { showStatusBar, resetSessionStats } from './status';
   import type { Cell, CellType, NotebookRow } from './notebook';
 
-  type MenuId = 'eval' | 'kernel' | 'docs' | 'style' | 'overflow' | null;
+  type MenuId = 'eval' | 'kernel' | 'docs' | 'style' | 'addpane' | 'overflow' | null;
   let openMenu: MenuId = null;
 
   /* One anchor per trigger, so the menu can measure against the button that
@@ -43,6 +45,7 @@
   let kernelAnchor: HTMLElement;
   let docsAnchor: HTMLElement;
   let styleAnchor: HTMLElement;
+  let addPaneAnchor: HTMLElement;
   let overflowAnchor: HTMLElement;
 
   function toggleMenu(which: Exclude<MenuId, null>) {
@@ -179,6 +182,45 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Layout — how many notebooks are on screen, and how they are arranged.
+
+  $: paneCount = $canvasState.focusedIds.length;
+  $: paneLayout = $canvasState.focusedLayout;
+  $: atPaneCap = paneCount >= MAX_PANES;
+
+  /* Notebooks not already on screen. A notebook may only appear in one pane:
+     two cards over one store would share cell selection and open two reference
+     pages from a single Cmd+click, since those stores are module-global. */
+  $: addablePanes = $canvasState.notebooks.filter(n => !$canvasState.focusedIds.includes(n.id));
+
+  $: addPaneItems = (addablePanes.length === 0
+    ? [{ kind: 'item' as const, id: '', label: 'Every notebook is already open', disabled: true }]
+    : addablePanes.map(n => ({ kind: 'item' as const, id: n.id, label: n.title }))) as MenuItem[];
+
+  /** Add a notebook beside the current one, arranged the given way. */
+  function addPane(id: string, layout?: FocusLayout) {
+    if (layout && paneCount >= 1) setFocusLayout(layout);
+    addPaneToFocus(id);
+  }
+
+  /* "Split" is the verb people reach for, so the two arrangement buttons double
+     as the way IN to a split: with one notebook open they bring the next one in
+     rather than doing nothing visible.
+     One click, no picker. Which notebook arrives is deterministic (canvas order)
+     rather than chosen, and the pane header names it -- so a wrong guess is
+     immediately visible and one click from fixed with + or x. Making the user
+     answer a menu before seeing any split at all was the friction. */
+  function chooseLayout(layout: FocusLayout) {
+    if (paneCount === 1 && addablePanes.length > 0) splitWithNext(layout);
+    else setFocusLayout(layout);
+  }
+
+  function closeActivePane() {
+    const id = $canvasState.focusedActiveId;
+    if (id) removePane(id);
+  }
+
+  // ---------------------------------------------------------------------------
   // Docs
   //
   // Whether a documented symbol is under the caret is not reactive state -- it
@@ -274,6 +316,7 @@
     openMenu === 'kernel'   ? kernelItems :
     openMenu === 'docs'     ? docsItems :
     openMenu === 'style'    ? styleItems :
+    openMenu === 'addpane'  ? addPaneItems :
     openMenu === 'overflow' ? overflowItems : [];
 
   $: menuAnchor =
@@ -281,6 +324,7 @@
     openMenu === 'kernel'   ? kernelAnchor :
     openMenu === 'docs'     ? docsAnchor :
     openMenu === 'style'    ? styleAnchor :
+    openMenu === 'addpane'  ? addPaneAnchor :
     openMenu === 'overflow' ? overflowAnchor : null;
 
   function onMenuSelect(e: CustomEvent<{ id: string }>) {
@@ -289,6 +333,7 @@
       case 'kernel':   onKernelSelect(e.detail.id); break;
       case 'docs':     onDocsSelect(e.detail.id); break;
       case 'style':    onStyleSelect(e.detail.id); break;
+      case 'addpane':  if (e.detail.id) addPane(e.detail.id); break;
       case 'overflow': onOverflowSelect(e.detail.id); break;
     }
   }
@@ -347,6 +392,63 @@
     <span class="tb-kernel-label">{KERNEL_SHORT[$kernelStatus] ?? $kernelStatus}</span>
     <Icon name="caret" size={12} />
   </button>
+</ToolbarGroup>
+
+<!-- How many notebooks share the window, and how they sit. With one notebook the
+     two arrangement buttons are also the way IN to a split: they set the
+     arrangement and then ask which notebook to bring in, rather than being inert
+     until a second pane exists. -->
+<ToolbarGroup label="Layout">
+  <button
+    class="tb-btn"
+    class:on={paneCount > 1 && paneLayout === 'h'}
+    title={paneCount > 1 ? 'Arrange panes side by side' : 'Open a second notebook side by side'}
+    tabindex="-1"
+    on:pointerdown|preventDefault
+    on:click={() => chooseLayout('h')}
+  ><Icon name="layoutH" /></button>
+
+  <button
+    class="tb-btn"
+    class:on={paneCount > 1 && paneLayout === 'v'}
+    title={paneCount > 1 ? 'Stack panes one above the other' : 'Open a second notebook below'}
+    tabindex="-1"
+    on:pointerdown|preventDefault
+    on:click={() => chooseLayout('v')}
+  ><Icon name="layoutV" /></button>
+
+  <button
+    class="tb-btn"
+    class:on={paneLayout === 'grid'}
+    title={paneCount >= 3 ? 'Arrange panes in a 2×2 grid' : 'A 2×2 grid needs at least three notebooks open'}
+    disabled={paneCount < 3}
+    tabindex="-1"
+    on:pointerdown|preventDefault
+    on:click={() => setFocusLayout('grid')}
+  ><Icon name="layoutGrid" /></button>
+
+  <span class="tb-mini-rule"></span>
+
+  <button
+    class="tb-btn"
+    title={atPaneCap ? `At most ${MAX_PANES} notebooks can share the window` : 'Add a notebook to the window'}
+    disabled={atPaneCap || addablePanes.length === 0}
+    aria-haspopup="menu"
+    aria-expanded={openMenu === 'addpane'}
+    tabindex="-1"
+    bind:this={addPaneAnchor}
+    on:pointerdown|preventDefault
+    on:click={() => toggleMenu('addpane')}
+  ><Icon name="plus" /></button>
+
+  <button
+    class="tb-btn"
+    title="Remove the active pane (its notebook stays on the canvas)"
+    disabled={paneCount < 2}
+    tabindex="-1"
+    on:pointerdown|preventDefault
+    on:click={closeActivePane}
+  ><Icon name="close" size={14} /></button>
 </ToolbarGroup>
 
 <ToolbarGroup label="Cell Style">
@@ -436,6 +538,12 @@
   .tb-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text-h); }
   .tb-btn:active:not(:disabled) { background: var(--surface-3); }
   .tb-btn:disabled { opacity: 0.32; cursor: default; }
+  /* A toggle that is currently the case — the arrangement buttons. */
+  .tb-btn.on {
+    background: var(--surface-3);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
 
   /* The exit control sits outside every group and gets its own vertical rule,
      so it reads as chrome rather than as one of the notebook's commands. */
