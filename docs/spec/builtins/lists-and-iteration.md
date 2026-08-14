@@ -536,8 +536,8 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   the visible surface needed a guard. Rank 3 and above still decline: a
   list-valued component is not a coordinate.
 - **Which methods accept vectors.** `Agglomerate`, `SpanningTree`, `MeanShift`,
-  `NeighborhoodContraction`, `KMeans` and `DBSCAN` cluster n-dimensional points; the
-  remaining four (`KMedoids`, `JarvisPatrick`, `Spectral`,
+  `NeighborhoodContraction`, `KMeans`, `DBSCAN` and `JarvisPatrick` cluster
+  n-dimensional points; the remaining three (`KMedoids`, `Spectral`,
   `GaussianMixture`) accept scalars only and return unevaluated for vector input.
   That is not a conservative guard — those five reach their data through the sorted
   projection, which does not exist off a line — and the list grows as each is
@@ -560,6 +560,21 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   (`FindClusters[{1, 2, 3, 10, 11, 12, 25}, 3, Method -> "KMeans"]` and the same
   numbers as `{{1}, {2}, …}`), and unifying them would move the one-dimensional
   answers, so it stays a deliberate change rather than a tidy-up.
+- **`"JarvisPatrick"` needs enough points per group for its `NeighborCount`.** The
+  default is 5, and a 5-nearest-neighbour list cannot fit inside a 4-point group —
+  it must reach into a neighbouring one, which then links them. So
+  `FindClusters[fourPointBlobs, Method -> "JarvisPatrick"]` returns *one* cluster
+  while `"NeighborCount" -> 3` returns three. That is the algorithm on data too
+  small for its default rather than a defect, and the one-dimensional kernel does
+  the same (a `k` clamped to `n - 1` puts every point in one window).
+- **`"JarvisPatrick"` above one dimension is a second implementation**, like
+  `KMeans` and unlike `DBSCAN`. The 1-D kernel counts shared neighbours as the
+  overlap of two *contiguous windows* and links only adjacent sorted pairs, where
+  the n-D one takes a true set intersection over all pairs — the textbook rule.
+  The two differ on at least one checked case
+  (`{1, 2, 10, 12, 3, 1, 13, 25}` at `"NeighborCount" -> 2`), so adopting the
+  general rule on a line would move an existing answer and is left as its own
+  deliberate change.
 - **`KMeans` and `KMedoids` require a count.** Neither accepts the `Automatic`
   form, in any dimension, so `FindClusters[data, Method -> "KMeans"]` returns
   unevaluated; `UpTo[k]` is the data-driven form they do take, and a bare `k` is
@@ -597,7 +612,7 @@ projection and declines vector input.
 | `"Spectral"` | yes | yes | no | scalars |
 | `"DBSCAN"` | yes | no | no | vectors |
 | `"GaussianMixture"` | yes | no | no | scalars |
-| `"JarvisPatrick"` | yes | no | no | scalars |
+| `"JarvisPatrick"` | yes | no | no | vectors |
 | `"MeanShift"` | yes | no | no | vectors |
 | `"NeighborhoodContraction"` | yes | no | no | vectors |
 

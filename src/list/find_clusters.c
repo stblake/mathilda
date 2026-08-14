@@ -1708,9 +1708,121 @@ static bool fc_method_neighborhood(const FcData* d, FcCount spec, const FcOpts* 
  * contiguous window fc_knn_window returns, so both tests are index arithmetic
  * and the whole pass is O(nk). Only adjacent sorted points can be mutual
  * neighbours here, which keeps clusters contiguous. */
+/* Jarvis-Patrick in any dimension: real k-NN lists and a real set intersection,
+ * where the 1-D kernel had index arithmetic on contiguous windows.
+ *
+ * One detail carried over deliberately rather than reinvented: the 1-D window
+ * spans sv[i] AND its k nearest, so a point is a member of its own neighbour
+ * list and counts toward the shared total. The lists built here include self for
+ * the same reason, which is also the classical formulation -- two points that are
+ * each other's neighbours already share those two members.
+ *
+ * Lists are kept sorted by INDEX rather than by distance, so the intersection is
+ * a linear merge instead of a nested scan. Selection breaks ties toward the lower
+ * index, so the result does not depend on scan order.
+ *
+ * This one does NOT replace the 1-D kernel, and finding that out corrected the
+ * procedure DBSCAN established. Routing scalars through here leaves all 22
+ * one-dimensional pins passing -- which is what licensed the DBSCAN unification --
+ * and yet moves an answer that `list_tests` covers and the pin file does not:
+ *
+ *   FindClusters[{1, 2, 10, 12, 3, 1, 13, 25},
+ *                Method -> {"JarvisPatrick", "NeighborCount" -> 2}]
+ *     1-D kernel: {{1, 2, 1}, {10, 12, 13}, {3}, {25}}
+ *     this kernel: {{1, 2, 3, 1}, {10, 12, 13}, {25}}
+ *
+ * So the unify test is "does any covered 1-D answer move", not "do the pins
+ * pass". The two rules differ because the 1-D kernel counts shared neighbours as
+ * the OVERLAP OF TWO CONTIGUOUS WINDOWS and restricts linkage to adjacent sorted
+ * pairs, where this one takes a true set intersection over all pairs -- the
+ * textbook formulation. The general rule is very likely the better one, but
+ * adopting it on a line moves a checked answer, so it is a deliberate behaviour
+ * change to argue separately rather than a side effect of a port.
+ */
+static bool fc_jarvis_ndim(const FcData* d, const FcOpts* o,
+                           size_t* assign, size_t* k) {
+    size_t n = d->n, dim = d->dim;
+    const double* pts = fc_points(d);
+    if (!pts) return false;
+    /* Quadratic in n, as the neighbourhood methods all are off a line; the point
+     * builder's ceiling is what actually bounds n for this input. */
+    if (dim != 0 && n > FC_LLOYD_MAX_WORK / dim) return false;
+
+    size_t kn = o->neighbor_count_given ? (size_t)o->neighbor_count : 5;
+    if (kn > n - 1) kn = (n > 1) ? n - 1 : 0;
+    size_t thresh = (kn + 1) / 2;
+    if (thresh < 1) thresh = 1;
+
+    size_t w = kn + 1;                    /* list width, self included */
+    size_t* nbr = malloc(sizeof(size_t) * n * w);
+    double* nds = malloc(sizeof(double) * w);
+    size_t* uf  = malloc(sizeof(size_t) * (n ? n : 1));
+    if (!nbr || !nds || !uf) { free(nbr); free(nds); free(uf); return false; }
+    for (size_t i = 0; i < n; i++) uf[i] = i;
+
+    for (size_t i = 0; i < n; i++) {
+        size_t* row = nbr + i * w;
+        size_t cnt = 0;
+        /* Insertion selection of the kn nearest, held sorted by distance. Ties
+         * keep the incumbent, which is the lower index because j ascends. */
+        for (size_t j = 0; j < n; j++) {
+            if (j == i) continue;
+            double dd = fc_dist_to_point(d, pts, pts + i * dim, j);
+            if (cnt < kn) {
+                size_t p = cnt++;
+                while (p > 0 && nds[p - 1] > dd) {
+                    nds[p] = nds[p - 1]; row[p] = row[p - 1]; p--;
+                }
+                nds[p] = dd; row[p] = j;
+            } else if (kn > 0 && dd < nds[kn - 1]) {
+                size_t p = kn - 1;
+                while (p > 0 && nds[p - 1] > dd) {
+                    nds[p] = nds[p - 1]; row[p] = row[p - 1]; p--;
+                }
+                nds[p] = dd; row[p] = j;
+            }
+        }
+        row[cnt++] = i;                   /* self */
+        /* Re-sort the row by index so intersections can merge. cnt <= kn + 1 and
+         * kn is small, so an insertion sort is the right tool. */
+        for (size_t a = 1; a < cnt; a++) {
+            size_t v = row[a], b = a;
+            while (b > 0 && row[b - 1] > v) { row[b] = row[b - 1]; b--; }
+            row[b] = v;
+        }
+        for (size_t a = cnt; a < w; a++) row[a] = (size_t)-1;   /* pad */
+    }
+
+    for (size_t i = 0; i < n; i++) {
+        const size_t* ri = nbr + i * w;
+        for (size_t j = i + 1; j < n; j++) {
+            const size_t* rj = nbr + j * w;
+            /* Mutual membership first: it is O(w) and rejects most pairs. */
+            bool in_i = false, in_j = false;
+            for (size_t a = 0; a < w; a++) {
+                if (ri[a] == j) in_i = true;
+                if (rj[a] == i) in_j = true;
+            }
+            if (!(in_i && in_j)) continue;
+            size_t a = 0, b = 0, shared = 0;
+            while (a < w && b < w && ri[a] != (size_t)-1 && rj[b] != (size_t)-1) {
+                if (ri[a] == rj[b]) { shared++; a++; b++; }
+                else if (ri[a] < rj[b]) a++;
+                else b++;
+            }
+            if (shared >= thresh) fc_uf_union(uf, i, j);
+        }
+    }
+
+    fc_assign_from_uf(uf, n, assign, k);
+    free(nbr); free(nds); free(uf);
+    return *k > 0;
+}
+
 static bool fc_method_jarvispatrick(const FcData* d, FcCount spec, const FcOpts* o,
                                     size_t* assign, size_t* k) {
     (void)spec;
+    if (d->kind == FC_KIND_POINT) return fc_jarvis_ndim(d, o, assign, k);
     size_t n = d->n;
     double* sv = fc_sorted_values(d);
     if (!sv) return false;
@@ -2227,7 +2339,8 @@ static Expr* fc_find_clusters(Expr* res, Expr* list) {
                    || (fn == fc_method_meanshift)
                    || (fn == fc_method_neighborhood)
                    || (fn == fc_method_kmeans)
-                   || (fn == fc_method_dbscan);
+                   || (fn == fc_method_dbscan)
+                   || (fn == fc_method_jarvispatrick);
     /* The shift methods need coordinates; strings have none, so they stay
      * declined for those even though POINT input is now fine. */
     if (d.kind == FC_KIND_SEQUENCE && fn != fc_method_gap) return NULL;

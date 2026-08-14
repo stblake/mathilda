@@ -108,6 +108,40 @@ static void test_dbscan_keeps_noise_as_singletons(void) {
                    "{{{0, 0}}, {{1, 0}}, {{50, 50}, {51, 50}, {52, 50}}}", 0);
 }
 
+/* Three blobs of EIGHT points, not four. Jarvis-Patrick's default NeighborCount is
+ * 5, and a 5-NN list cannot fit inside a 4-point blob -- it must reach into a
+ * neighbouring one, which then links them. That is the algorithm behaving as
+ * specified on data too small for its default, not a defect, and the 1-D kernel
+ * does the same thing (a k clamped to n-1 puts every point in one window). So the
+ * blob test for this method needs blobs the default k fits inside; asserting the
+ * merge instead would be pinning a data-sizing artefact. */
+#define JP_BLOBS_2D "Join[Table[{Mod[t, 4], Quotient[t, 4]}, {t, 0, 7}], " \
+                    "Table[{40 + Mod[t, 4], Quotient[t, 4]}, {t, 0, 7}], " \
+                    "Table[{Mod[t, 4], 40 + Quotient[t, 4]}, {t, 0, 7}]]"
+#define JP_BLOBS_5D "Join[" \
+    "Table[{Mod[t, 4], Quotient[t, 4], 0, 0, 0}, {t, 0, 7}], " \
+    "Table[{40 + Mod[t, 4], Quotient[t, 4], 0, 0, 0}, {t, 0, 7}], " \
+    "Table[{Mod[t, 4], Quotient[t, 4], 0, 0, 60}, {t, 0, 7}]]"
+
+static void test_jarvispatrick_recovers_blobs(void) {
+    assert_eval_eq("Length[FindClusters[" JP_BLOBS_2D ", "
+                   "Method -> \"JarvisPatrick\"]]", "3", 0);
+    assert_eval_eq("Length[FindClusters[" JP_BLOBS_5D ", "
+                   "Method -> \"JarvisPatrick\"]]", "3", 0);
+    /* Membership, not just the count: the first blob must come back whole. */
+    assert_eval_eq("First[FindClusters[" JP_BLOBS_2D ", Method -> \"JarvisPatrick\"]]",
+                   "{{0, 0}, {1, 0}, {2, 0}, {3, 0}, "
+                   "{0, 1}, {1, 1}, {2, 1}, {3, 1}}", 0);
+    /* NeighborCount reaches the n-D kernel: on the small 4-point blobs the
+     * default merges everything, and lowering k to fit recovers all three. This
+     * pair is the option doing visible work. */
+    assert_eval_eq("Length[FindClusters[" BLOBS_2D ", Method -> \"JarvisPatrick\"]]",
+                   "1", 0);
+    assert_eval_eq("FindClusters[" BLOBS_2D ", "
+                   "Method -> {\"JarvisPatrick\", \"NeighborCount\" -> 3}]",
+                   BLOBS_2D_OUT, 0);
+}
+
 static void test_kmeans_is_independent_of_input_order(void) {
     /* A k-means whose answer depends on the order its points were typed in is
      * seeding from index 0. This is why the n-D initialisation starts from the
@@ -203,6 +237,16 @@ static void test_scalar_and_dim1_point_agree(void) {
                    "{{1, 2, 3}, {100}}", 0);
     assert_eval_eq("FindClusters[{{1}, {2}, {3}, {100}}, Method -> \"DBSCAN\"]",
                    "{{{1}, {2}, {3}}, {{100}}}", 0);
+
+    /* JarvisPatrick is split like KMeans, for a reason found rather than assumed:
+     * its general rule leaves all 22 pins passing yet moves a list_tests answer at
+     * NeighborCount -> 2, because the 1-D kernel counts shared neighbours as the
+     * overlap of two contiguous windows and links only adjacent sorted pairs. Here
+     * the two forms are asked the same question on data where they agree. */
+    assert_eval_eq("FindClusters[{1, 2, 3, 100}, Method -> \"JarvisPatrick\"]",
+                   "{{1, 2, 3, 100}}", 0);
+    assert_eval_eq("FindClusters[{{1}, {2}, {3}, {100}}, Method -> \"JarvisPatrick\"]",
+                   "{{{1}, {2}, {3}, {100}}}", 0);
 }
 
 static void test_equal_points_are_never_split(void) {
@@ -235,6 +279,16 @@ static void test_equal_points_are_never_split(void) {
                    "Method -> \"KMeans\"]",
                    "{{{5, 5}, {5, 5}, {5, 5}}, {{40, 40}}, {{41, 41}}}", 0);
     check("DBSCAN", dup2, dup2_out);
+    /* JarvisPatrick needs blobs its default k fits inside (see JP_BLOBS_2D), so the
+     * duplicate goes there: a repeated {0, 0} prepended to the first blob must come
+     * back inside that blob's cluster, adjacent to its twin, and must not become a
+     * fourth cluster of its own. */
+    assert_eval_eq("Length[FindClusters[Join[{{0, 0}}, " JP_BLOBS_2D "], "
+                   "Method -> \"JarvisPatrick\"]]", "3", 0);
+    assert_eval_eq("First[FindClusters[Join[{{0, 0}}, " JP_BLOBS_2D "], "
+                   "Method -> \"JarvisPatrick\"]]",
+                   "{{0, 0}, {0, 0}, {1, 0}, {2, 0}, {3, 0}, "
+                   "{0, 1}, {1, 1}, {2, 1}, {3, 1}}", 0);
     assert_eval_eq("FindClusters[{{5, 5}, {5, 5}, {5, 5}, {40, 40}, {41, 41}}, "
                    "Method -> \"DBSCAN\"]",
                    "{{{5, 5}, {5, 5}, {5, 5}}, {{40, 40}, {41, 41}}}", 0);
@@ -263,6 +317,9 @@ static void test_strings_still_decline(void) {
      * This is now the ONLY thing its single kernel refuses. */
     assert_eval_eq("FindClusters[{\"aa\", \"ab\", \"zz\"}, Method -> \"DBSCAN\"]",
                    "FindClusters[{\"aa\", \"ab\", \"zz\"}, Method -> \"DBSCAN\"]", 0);
+    assert_eval_eq("FindClusters[{\"aa\", \"ab\", \"zz\"}, Method -> \"JarvisPatrick\"]",
+                   "FindClusters[{\"aa\", \"ab\", \"zz\"}, "
+                   "Method -> \"JarvisPatrick\"]", 0);
     /* Still works for the gap methods, which read only the tree. */
     assert_eval_eq("FindClusters[{\"aa\", \"ab\", \"zz\"}, 2]",
                    "{{\"aa\", \"ab\"}, {\"zz\"}}", 0);
@@ -273,7 +330,7 @@ static void test_unported_methods_still_decline_in_ndim(void) {
      * above one dimension -- reading d->val there would dereference NULL, so a
      * premature relaxation is a crash rather than a wrong answer. These rows come
      * off the list as each method is ported, which makes the progress visible. */
-    const char* unported[] = { "KMedoids", "GaussianMixture", "JarvisPatrick" };
+    const char* unported[] = { "KMedoids", "GaussianMixture" };
     for (size_t i = 0; i < sizeof(unported) / sizeof(unported[0]); i++) {
         char in[256], out[256];
         snprintf(in,  sizeof in,  "FindClusters[{{1, 1}, {9, 9}}, Method -> \"%s\"]",
@@ -318,6 +375,7 @@ int main(void) {
     TEST(test_shift_methods_recover_blobs_5d);
     TEST(test_kmeans_recovers_blobs);
     TEST(test_dbscan_recovers_blobs);
+    TEST(test_jarvispatrick_recovers_blobs);
     TEST(test_dbscan_keeps_noise_as_singletons);
     TEST(test_kmeans_is_independent_of_input_order);
     TEST(test_kmeans_automatic_is_refused_on_both_surfaces);
