@@ -398,6 +398,46 @@ In[3]:= PDF[LearnDistribution[{{1.,2.},{2.,3.},{3.,5.},{4.,4.},{5.,7.},{6.,8.}}]
 Out[3]= {0.113186, 3.6193e-169}
 ```
 
+## SmoothKernelDistribution
+
+A kernel density estimate, returned as a `LearnedDistribution` usable with `PDF`.
+Attributes: `Protected`.
+
+- `SmoothKernelDistribution[data]`
+- `SmoothKernelDistribution[data, h]` — bandwidth as one number, or one per dimension
+
+**Features**:
+- **The sample *is* the model.** Nothing is fitted except the bandwidth, which is why a
+  KDE costs nothing to build and everything to evaluate — the same trade as a
+  nearest-neighbour predictor.
+- The kernel is a **product Gaussian** with a per-dimension bandwidth. A
+  full-covariance kernel would need a bandwidth *matrix*, and estimating one from the
+  same sample it smooths is a substantially harder problem than the default rule solves.
+- Default bandwidth is the multivariate **normal-reference** rule,
+  `h_a = sigma_a (4/((dim+2) n))^(1/(dim+4))`, which in one dimension is exactly
+  Silverman's `1.06 sigma n^(-1/5)` — the constant being `(4/3)^(1/5) = 1.059224`.
+- Being a *normal-reference* rule, the default **oversmooths strongly multimodal data**.
+  That is a known property of the rule rather than a defect here, and it is why the
+  explicit-bandwidth form exists.
+- A **constant column** has no scale, so the rule gives a zero bandwidth and there is no
+  density: it returns unevaluated rather than dividing by zero.
+
+**An exact identity is used as the verification.** A KDE is the empirical distribution
+*convolved* with the kernel, so its mean is exactly the sample mean and its variance is
+exactly the ML sample variance plus `h²`. That one identity pins the bandwidth rule, the
+kernel's own variance, and the normalisation simultaneously — it holds to `4e-15`. On 4000
+draws from a standard normal the estimate also tracks the true density to within about
+0.017, asserted as a *bound* rather than an equality because a KDE genuinely is an
+approximation (error `O(n^(-2/5))` for this rule).
+
+```mathematica
+In[1]:= k = SmoothKernelDistribution[Table[1. i/10., {i, 0, 40}]]
+Out[1]= LearnedDistribution["SmoothKernel", <>]
+
+In[2]:= PDF[k, {2.0}]
+Out[2]= 0.243738
+```
+
 ## Clustering
 
 `FindClusters` and its ten methods are documented under

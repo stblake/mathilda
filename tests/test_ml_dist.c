@@ -253,6 +253,84 @@ static void test_mixture_declines_like_the_multinormal(void) {
                    "Method -> \"GaussianMixture\"]]", "LearnDistribution", 0);
 }
 
+static void test_kde_variance_identity_is_exact(void) {
+    /* The strongest single assertion in this file. A kernel density estimate is the
+     * empirical distribution CONVOLVED with the kernel, so its variance is exactly the
+     * ML sample variance plus the squared bandwidth -- and its mean is exactly the sample
+     * mean. One identity therefore pins the bandwidth rule, the kernel's own variance and
+     * the normalisation all at once, because getting any of the three wrong breaks it.
+     *
+     * Note the bandwidth must be written with the EXACT constant the rule uses,
+     * (4/((dim+2) n))^(1/(dim+4)), not the familiar rounded 1.0592. Using the rounded
+     * form left a residual of 1.6e-5 that did NOT shrink under grid refinement -- which
+     * is how it was identified as a wrong constant in the test rather than quadrature
+     * error in the integration. With the exact constant the identity holds to 4e-15. */
+    assert_eval_eq("Module[{u, n, k, bw, pred, g, m1, m2},"
+                   " u = Table[1. i/10., {i, 0, 40}]; n = Length[u];"
+                   " k = SmoothKernelDistribution[u];"
+                   " bw = StandardDeviation[u] (4./(3. n))^(1./5.);"
+                   " pred = Variance[u] (n - 1)/n + bw^2;"
+                   " g = Table[-6. + 0.01 i, {i, 0, Round[24./0.01]}];"
+                   " m1 = 0.01 Total[Map[# PDF[k, {#}] &, g]];"
+                   " m2 = 0.01 Total[Map[(#^2) PDF[k, {#}] &, g]];"
+                   " Abs[(m2 - m1^2) - pred] < 1.*^-9]", "True", 0);
+    /* The mean is exact, not merely close. */
+    assert_eval_eq("Module[{u = Table[1. i/10., {i, 0, 40}], k, g},"
+                   " k = SmoothKernelDistribution[u];"
+                   " g = Table[-6. + 0.005 i, {i, 0, Round[24./0.005]}];"
+                   " Abs[0.005 Total[Map[# PDF[k, {#}] &, g]] - Mean[u]] < 1.*^-9]",
+                   "True", 0);
+}
+
+static void test_kde_density_integrates_to_one(void) {
+    assert_eval_eq("Module[{k = SmoothKernelDistribution[Table[1. i/10., {i, 0, 40}]],"
+                   " h = 0.01, g},"
+                   " g = Table[-4. + h i, {i, 0, Round[16./h]}];"
+                   " Abs[h Total[Map[PDF[k, {#}] &, g]] - 1.] < 0.001]", "True", 0);
+}
+
+static void test_kde_approximates_a_known_density(void) {
+    /* On 4000 draws from a standard normal the estimate must track the true density --
+     * but this is an APPROXIMATION, so a bound is asserted rather than equality, and the
+     * bound is stated as what it is. A KDE's error is O(n^(-2/5)) for this bandwidth rule,
+     * which at n = 4000 is a few percent of the peak density; 0.05 is comfortably above
+     * the observed ~0.017 and far below anything a broken estimator would produce. */
+    const char* xs[] = { "-1.", "0.", "1.", "2." };
+    for (size_t i = 0; i < sizeof(xs) / sizeof(xs[0]); i++) {
+        char in[512];
+        snprintf(in, sizeof in,
+                 "Module[{k}, SeedRandom[7];"
+                 " k = SmoothKernelDistribution[RandomVariate[NormalDistribution[], 4000]];"
+                 " Abs[PDF[k, {%s}] - PDF[NormalDistribution[], %s]] < 0.05]",
+                 xs[i], xs[i]);
+        assert_eval_eq(in, "True", 0);
+    }
+}
+
+static void test_kde_bandwidth_can_be_given_and_matters(void) {
+    /* An explicit bandwidth must actually change the density, or the option is
+     * decoration. Compared at a point away from the sample centre, where the amount of
+     * smoothing shows most. */
+    assert_eval_eq("Module[{u = Table[1. i/10., {i, 0, 40}]},"
+                   " PDF[SmoothKernelDistribution[u, 1.0], {2.}] != "
+                   "PDF[SmoothKernelDistribution[u, 0.05], {2.}]]", "True", 0);
+    /* One bandwidth per dimension is also accepted. */
+    assert_eval_eq("NumberQ[PDF[SmoothKernelDistribution["
+                   "{{1., 2.}, {2., 3.}, {3., 5.}, {4., 4.}}, {0.5, 0.5}], {2., 3.}]]",
+                   "True", 0);
+}
+
+static void test_kde_declines_without_a_scale(void) {
+    /* A constant column has zero spread, so the normal-reference rule gives a zero
+     * bandwidth and there is no density -- dividing by it would return infinities. */
+    assert_eval_eq("Head[SmoothKernelDistribution[{5., 5., 5., 5.}]]",
+                   "SmoothKernelDistribution", 0);
+    assert_eval_eq("Head[SmoothKernelDistribution[{5.}]]",
+                   "SmoothKernelDistribution", 0);
+    assert_eval_eq("Head[SmoothKernelDistribution[Table[1. i, {i, 5}], -1.]]",
+                   "SmoothKernelDistribution", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -273,6 +351,11 @@ int main(void) {
     TEST(test_one_component_mixture_relates_exactly_to_the_multinormal);
     TEST(test_the_mixture_density_is_bimodal_and_normalised);
     TEST(test_mixture_declines_like_the_multinormal);
+    TEST(test_kde_variance_identity_is_exact);
+    TEST(test_kde_density_integrates_to_one);
+    TEST(test_kde_approximates_a_known_density);
+    TEST(test_kde_bandwidth_can_be_given_and_matters);
+    TEST(test_kde_declines_without_a_scale);
 
     printf("All ml distribution tests passed.\n");
     return 0;

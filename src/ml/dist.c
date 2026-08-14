@@ -48,7 +48,7 @@ double ml_normal_deviate(void) {
  * head names the family and whose arguments are its parameters -- specified, not
  * fitted, so it prints in full. */
 typedef enum { ML_D_NONE, ML_D_NORMAL, ML_D_UNIFORM, ML_D_MULTINORMAL,
-               ML_D_MIXTURE } MlDistKind;
+               ML_D_MIXTURE, ML_D_KDE } MlDistKind;
 
 typedef struct {
     MlDistKind kind;
@@ -56,10 +56,51 @@ typedef struct {
     size_t dim;           /* Multinormal / Mixture */
     const double* mu;     /* borrowed. Mixture: k means, row-major */
     const double* chol;   /* borrowed, lower factor(s) */
-    size_t k;             /* Mixture: component count */
+    size_t k;             /* Mixture: component count. KDE: sample size */
     const double* w;      /* borrowed. Mixture: k weights */
     const double* logdet; /* borrowed. Mixture: k log-determinants */
+    const double* band;   /* borrowed. KDE: per-dimension bandwidths */
 } MlDist;
+
+/* Read a LearnedDistribution["SmoothKernel", {bandwidths, sample rows...}, dim, n].
+ *
+ * The sample IS the model, as it is for a nearest-neighbour predictor: nothing is fitted
+ * except the bandwidth, which is why a KDE costs nothing to build and everything to
+ * evaluate. */
+static bool ml_read_kde(Expr* e, MlDist* d, double** owned) {
+    Expr* pay  = e->data.function.args[1];
+    Expr* dimx = e->data.function.args[2];
+    Expr* nx   = e->data.function.args[3];
+    if (!pay || pay->type != EXPR_FUNCTION) return false;
+    if (!dimx || dimx->type != EXPR_INTEGER || dimx->data.integer <= 0) return false;
+    if (!nx || nx->type != EXPR_INTEGER || nx->data.integer <= 0) return false;
+    size_t dim = (size_t)dimx->data.integer, n = (size_t)nx->data.integer;
+    if (pay->data.function.arg_count != n + 1) return false;
+
+    double* buf = malloc(sizeof(double) * (dim + n * dim));
+    if (!buf) return false;
+    double* band = buf, *smp = buf + dim;
+    double im = 0.0; bool ok = true;
+    Expr* br = pay->data.function.args[0];
+    if (!br || br->type != EXPR_FUNCTION || br->data.function.arg_count != dim) ok = false;
+    for (size_t a = 0; ok && a < dim; a++) {
+        ok = na_read_scalar(br->data.function.args[a], &band[a], &im) && im == 0.0;
+        if (ok && !(band[a] > 0.0)) ok = false;      /* a zero bandwidth has no density */
+    }
+    for (size_t i = 0; ok && i < n; i++) {
+        Expr* r = pay->data.function.args[i + 1];
+        if (!r || r->type != EXPR_FUNCTION || r->data.function.arg_count != dim) {
+            ok = false; break;
+        }
+        for (size_t a = 0; ok && a < dim; a++)
+            ok = na_read_scalar(r->data.function.args[a], &smp[i * dim + a], &im)
+              && im == 0.0;
+    }
+    if (!ok) { free(buf); return false; }
+    d->kind = ML_D_KDE; d->dim = dim; d->k = n; d->band = band; d->mu = smp;
+    *owned = buf;
+    return true;
+}
 
 /* Read a LearnedDistribution["GaussianMixture", {weights, (mean, covRows...) x k}, dim, k].
  *
@@ -141,6 +182,8 @@ static bool ml_read_learned(Expr* e, MlDist* d, double** owned) {
     if (!mname || mname->type != EXPR_STRING) return false;
     if (strcmp(mname->data.string, "GaussianMixture") == 0)
         return ml_read_mixture(e, d, owned);
+    if (strcmp(mname->data.string, "SmoothKernel") == 0)
+        return ml_read_kde(e, d, owned);
     if (strcmp(mname->data.string, "Multinormal") != 0) return false;
     if (!pay || pay->type != EXPR_FUNCTION) return false;
     if (!dimx || dimx->type != EXPR_INTEGER || dimx->data.integer <= 0) return false;
@@ -265,6 +308,41 @@ static bool ml_mixture_pdf(const MlDist* d, const double* x, double* out) {
     return true;
 }
 
+/* KDE density: the mean of product-Gaussian kernels centred on the sample points.
+ *
+ * A PRODUCT (diagonal) kernel with a per-dimension bandwidth rather than a full-covariance
+ * one. That is the standard choice, and the honest one here: a full-covariance kernel would
+ * need a bandwidth MATRIX, and estimating one from the same sample it smooths is a
+ * different and much harder problem than the normal-reference rule below solves.
+ *
+ * Summed in log space per kernel and combined by log-sum-exp, for the reason the mixture
+ * is: with dim factors per kernel, a point several bandwidths from every sample point
+ * underflows in linear space, and the tail would read as a flat zero. */
+static bool ml_kde_pdf(const MlDist* d, const double* x, double* out) {
+    size_t n = d->k, dim = d->dim;
+    double lognorm = -log((double)n);
+    for (size_t a = 0; a < dim; a++)
+        lognorm -= log(d->band[a] * sqrt(2.0 * M_PI));
+    double best = -INFINITY;
+    double* lp = malloc(sizeof(double) * n);
+    if (!lp) return false;
+    for (size_t i = 0; i < n; i++) {
+        double q = 0.0;
+        for (size_t a = 0; a < dim; a++) {
+            double z = (x[a] - d->mu[i * dim + a]) / d->band[a];
+            q += z * z;
+        }
+        lp[i] = -0.5 * q;
+        if (lp[i] > best) best = lp[i];
+    }
+    double sacc = 0.0;
+    if (best > -INFINITY)
+        for (size_t i = 0; i < n; i++) sacc += exp(lp[i] - best);
+    free(lp);
+    *out = (sacc > 0.0) ? exp(lognorm + best + log(sacc)) : 0.0;
+    return true;
+}
+
 static Expr* builtin_pdf(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     MlDist d; double* owned = NULL;
@@ -272,7 +350,8 @@ static Expr* builtin_pdf(Expr* res) {
     Expr* xe = res->data.function.args[1];
     double x = 0.0, im = 0.0;
 
-    if (d.kind == ML_D_MULTINORMAL || d.kind == ML_D_MIXTURE) {
+    if (d.kind == ML_D_MULTINORMAL || d.kind == ML_D_MIXTURE
+        || d.kind == ML_D_KDE) {
         /* The argument is a POINT, so a list here is one observation rather than many.
          * That is the opposite reading from the scalar case below, where a list is many
          * points -- and it has to be, because a multinormal's argument is itself a
@@ -283,7 +362,8 @@ static Expr* builtin_pdf(Expr* res) {
         if (ml_read_data(xe, &n, &dm, &px, &vec)) {
             double p = 0.0;
             bool (*pdf)(const MlDist*, const double*, double*) =
-                (d.kind == ML_D_MIXTURE) ? ml_mixture_pdf : ml_multinormal_pdf;
+                (d.kind == ML_D_MIXTURE) ? ml_mixture_pdf :
+                (d.kind == ML_D_KDE)     ? ml_kde_pdf : ml_multinormal_pdf;
             if (vec && n == d.dim && pdf(&d, px, &p))
                 out = expr_new_real(p);
             else if (!vec && dm == d.dim) {         /* a matrix: many points */
@@ -533,7 +613,99 @@ static Expr* builtin_learn_distribution(Expr* res) {
     return out;
 }
 
+/* SmoothKernelDistribution[data] -- a kernel density estimate.
+ *
+ * Bandwidth: the multivariate NORMAL-REFERENCE rule,
+ *   h_a = sigma_a * (4 / ((dim + 2) n))^(1/(dim + 4))
+ * which in one dimension is exactly Silverman's 1.06 sigma n^(-1/5) --
+ * (4/3)^(1/5) = 1.0592. Naming it as the multivariate rule rather than as Silverman's is
+ * the honest description, since it is applied per dimension for any dim.
+ *
+ * It is a NORMAL-reference rule, so it is the right default only insofar as the data is
+ * not wildly non-normal; on strongly multimodal data it oversmooths, which is a known
+ * property of the rule rather than a defect here. A user-supplied bandwidth is the
+ * remedy, and is accepted as a second argument.
+ */
+static Expr* builtin_smooth_kernel(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return NULL;
+
+    size_t n, dim; double* x = NULL; bool vec = false;
+    if (!ml_read_data(res->data.function.args[0], &n, &dim, &x, &vec)) return NULL;
+    if (n < 2) { free(x); return NULL; }    /* one point has no scale to estimate */
+
+    double* band = malloc(sizeof(double) * dim);
+    double* mean = malloc(sizeof(double) * dim);
+    if (!band || !mean) { free(band); free(mean); free(x); return NULL; }
+
+    bool ok = true;
+    if (argc == 2) {
+        /* An explicit bandwidth: one number for every dimension, or one per dimension. */
+        double h = 0.0, im = 0.0;
+        Expr* be = res->data.function.args[1];
+        if (na_read_scalar(be, &h, &im) && im == 0.0 && h > 0.0) {
+            for (size_t a = 0; a < dim; a++) band[a] = h;
+        } else {
+            size_t bn, bd; double* bb = NULL; bool bvec = false;
+            if (ml_read_data(be, &bn, &bd, &bb, &bvec) && bvec && bn == dim) {
+                for (size_t a = 0; a < dim; a++) {
+                    band[a] = bb[a];
+                    if (!(band[a] > 0.0)) ok = false;
+                }
+            } else ok = false;
+            free(bb);
+        }
+    } else {
+        ml_column_mean(x, n, dim, mean);
+        ml_column_sd(x, n, dim, mean, band);          /* n-1 divisor, matching Variance */
+        double expo = 1.0 / ((double)dim + 4.0);
+        double factor = pow(4.0 / (((double)dim + 2.0) * (double)n), expo);
+        for (size_t a = 0; a < dim; a++) {
+            band[a] *= factor;
+            /* A constant column has zero spread, so the normal-reference rule gives a
+             * zero bandwidth and there is no density. Declining beats dividing by zero
+             * and returning infinities. */
+            if (!(band[a] > 0.0)) ok = false;
+        }
+    }
+
+    Expr* out = NULL;
+    if (ok) {
+        Expr** rows = malloc(sizeof(Expr*) * (n + 1));
+        if (rows) {
+            rows[0] = ml_list_of_reals(band, dim);
+            for (size_t i = 0; i < n; i++) rows[i + 1] = ml_list_of_reals(x + i * dim, dim);
+            Expr* pay = expr_new_function(expr_new_symbol(SYM_List), rows, n + 1);
+            free(rows);
+            if (pay) {
+                Expr* a4[4];
+                a4[0] = expr_new_string("SmoothKernel");
+                a4[1] = pay;
+                a4[2] = expr_new_integer((int64_t)dim);
+                a4[3] = expr_new_integer((int64_t)n);
+                if (a4[0] && a4[1] && a4[2] && a4[3])
+                    out = expr_new_function(expr_new_symbol("LearnedDistribution"), a4, 4);
+                else { expr_free(a4[0]); expr_free(a4[1]); expr_free(a4[2]); expr_free(a4[3]); }
+            }
+        }
+    }
+    free(band); free(mean); free(x);
+    return out;
+}
+
 void ml_dist_init(void) {
+    symtab_add_builtin("SmoothKernelDistribution", builtin_smooth_kernel);
+    symtab_get_def("SmoothKernelDistribution")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("SmoothKernelDistribution",
+        "SmoothKernelDistribution[data] gives a kernel density estimate as a "
+        "LearnedDistribution, usable with PDF. The kernel is a product Gaussian with a "
+        "per-dimension bandwidth from the multivariate normal-reference rule, which in "
+        "one dimension is Silverman's 1.06 sigma n^(-1/5). "
+        "SmoothKernelDistribution[data, h] sets the bandwidth explicitly, as one number "
+        "or one per dimension. Being a normal-reference rule the default oversmooths "
+        "strongly multimodal data -- a known property of the rule, and the reason the "
+        "explicit form exists. A constant column has no scale and returns unevaluated.");
+
     symtab_add_builtin("LearnDistribution", builtin_learn_distribution);
     symtab_get_def("LearnDistribution")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("LearnDistribution",
