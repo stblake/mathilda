@@ -472,6 +472,23 @@ static void test_indexed_holdall_locality(void) {
     check_eq("(x[1] =.; ValueQ[x[1]])", "False");
 }
 
+static void test_indexed_real_coefficient(void) {
+    /* Regression: a Real coefficient multiplying an indexed term used to
+     * numericalize the index itself (x[i] -> x[i.]) when the held objective was
+     * expanded, leaving an unbound x[1.] in the compiled body. Every trial
+     * point then scored non-numeric and NMinimize returned the infeasible
+     * 1e+300 sentinel. The fix stops inexact contagion threading N into a
+     * non-numeric head's arguments (see test_inexact_contagion in
+     * test_numeric.c). 3-D Ackley (global min 0 at the origin, inside the box)
+     * must now solve to ~0; deterministic under the fixed seed (~9.5e-10). */
+    check_true("First[NMinimize[{-20 Exp[-0.2 Sqrt[1/3 Sum[x[i]^2, {i, 1, 3}]]] "
+               "- Exp[1/3 Sum[Cos[2 Pi x[i]], {i, 1, 3}]] + 20 + E, "
+               "Table[-32 <= x[i] <= 32, {i, 1, 3}]}, Table[x[i], {i, 1, 3}]]] < 0.01");
+    /* Minimal reproducer: real coefficient, indexed vars, no Sum at all. */
+    check_true("First[NMinimize[{Sqrt[0.333 (x[1]^2 + x[2]^2 + x[3]^2)], "
+               "Table[-5 <= x[i] <= 5, {i, 1, 3}]}, Table[x[i], {i, 1, 3}]]] < 0.001");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -549,6 +566,7 @@ int main(void) {
     TEST(test_indexed_table_constraints);
     TEST(test_indexed_rosenbrock);
     TEST(test_indexed_holdall_locality);
+    TEST(test_indexed_real_coefficient);
 
     printf("All NMinimize tests passed.\n");
     return 0;

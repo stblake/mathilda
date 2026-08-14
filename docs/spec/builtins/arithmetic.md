@@ -80,6 +80,13 @@ Numerical evaluation.
 - Inexact contagion is unaffected: mixing a machine real with a
   higher-precision value collapses to machine precision
   (`1. + N[Pi, 100]` → `4.14159`), since `MachinePrecision` is the floor.
+- Contagion is **narrower than explicit `N`**: an approximate operand in a
+  `Plus`/`Times` numericalizes the *exact numeric* parts of its siblings
+  (including coefficients reached through nested numeric heads — `1. + 2 x` →
+  `1. + 2. x`, `1. + Sin[2]` → `1.9093`) but does **not** thread into the
+  arguments of a non-numeric head. So `0.333 x[1]` stays `0.333 x[1]` (the `1`
+  is `x`'s argument, not an arithmetic operand) and `1. Abs[x[3]]` keeps
+  `x[3]`. Explicit `N[]` still threads everywhere, so `N[x[1]]` is `x[1.]`.
 - Rationals whose numerator or denominator overflow `int64`/`double` still
   numericalize to a **single** real, not a frozen `Rational[Real, Real]`
   (`N[1/10^30]` → `1.e-30`, `N[10^400/3]` → `3.33e+399`). Out-of-range machine

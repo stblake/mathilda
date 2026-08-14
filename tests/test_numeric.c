@@ -194,6 +194,24 @@ static void test_inexact_contagion(void) {
     /* Symbolic factors stay symbolic — Pi was the only exact numeric. */
     assert_eval_eq("1. x", "1.0 x", 0);
 
+    /* Contagion must NOT thread N into the arguments of a non-numeric head:
+     * the `1` in x[1] is an argument to x, not an arithmetic operand, so
+     * `0.333 x[1]` stays `0.333 x[1]`, never `0.333 x[1.]`. Left unfixed this
+     * leaves an unbound x[1.] and silently breaks NMinimize's indexed-variable
+     * substitution (objective scored non-numeric → infeasible 1e+300). */
+    assert_eval_eq("0.333 x[1]",   "Times[0.333, x[1]]",   1);
+    assert_eval_eq("x[1] + 0.5",   "Plus[0.5, x[1]]",      1);
+    assert_eval_eq("1. Log[x[2]]", "Times[1.0, Log[x[2]]]", 1);
+    assert_eval_eq("1. Abs[x[3]]", "Times[1.0, Abs[x[3]]]", 1);
+    assert_eval_eq("0.5 (x[1] + x[2]^2)",
+                   "Times[0.5, Plus[Power[x[2], 2], x[1]]]", 1);
+    /* But an exact numeric coefficient reached through a numeric head (Times)
+     * still numericalizes: `1. + 2 x` → `1. + 2. x` (Mathematica-matched). */
+    assert_eval_eq("1. + 2 x",     "Plus[1.0, Times[2.0, x]]", 1);
+    /* Explicit N[] is different from contagion — it threads everywhere, so
+     * N[x[1]] == x[1.] exactly as in Mathematica. */
+    assert_eval_eq("N[x[1]]",      "x[1.0]", 1);
+
 #ifdef USE_MPFR
     /* Precision contagion — the *lowest* precision among inexact args
      * wins. MachinePrecision is the floor; any Real collapses the
