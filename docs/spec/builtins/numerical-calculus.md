@@ -1806,6 +1806,17 @@ change in answer. Example: the 10-D Rosenbrock over `Table[x[i], {i, 1, 10}]`
 runs ~11× faster than the interpreter path. At `WorkingPrecision >
 MachinePrecision` the exact MPFR interpreter path is used.
 
+The same compiled objective also drives the **local polish** — the exact
+solver that refines each candidate — not just the global-search scoring. The
+polish's objective values, line searches, and gradient (taken by finite
+differences off the compiled objective) all run on the register machine, with
+the interpreter as fallback. This matters most for `"RandomSearch"`, which runs
+one local solve per `SearchPoints`: a 20-variable `Sum[Abs[x[i]], {i, 1, 20}]`
+with `"SearchPoints" -> 1000` went from ~25 s to ~0.5 s (same optimum). Every
+method benefits (`DifferentialEvolution` and `NelderMead` also polish), so the
+compiled program is now the single evaluation substrate across the whole
+machine-precision optimizer.
+
 Expected numeric-domain diagnostics raised while probing the function — e.g.
 `Power::infy` from a `1/0` in a gradient term on a non-differentiable ridge
 (Bukin N.6, `100 Sqrt[Abs[x2 - 0.01 x1^2]] + ...`) — are **quieted** during the

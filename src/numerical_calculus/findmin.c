@@ -531,10 +531,29 @@ static void fm_tol_from_digits(mpfr_t out, double digits) {
 }
 #endif /* USE_MPFR */
 
+/* Machine-precision fast path for the local solvers. When a solve registers its
+ * objective here (nm_minimize_driver), any fm_eval_scalar on that *exact*
+ * objective expression — pointer identity, matching arity — is served by the
+ * compiled program the global search already uses (NmDriver.f_prog) instead of
+ * the interpreter. This is what makes RandomSearch's per-start local polish run
+ * compiled rather than re-binding 20 OwnValues + deep-copying + evaluating +
+ * numericalizing per point. Constraint and gradient sub-expressions are distinct
+ * Expr* (and may have a different arity), so they correctly fall through to the
+ * interpreter; a non-finite compiled result also falls through, so the point is
+ * scored exactly as before. Registered/deregistered around each solve in
+ * nm_minimize_driver (a plain reset — see the note there on why save/restore is
+ * unnecessary). */
+static Expr*            g_fm_obj_expr  = NULL;
+static CompiledProgram* g_fm_obj_prog  = NULL;
+static size_t           g_fm_obj_nargs = 0;
+
 /* Evaluate the bound objective and return a double; NULL on failure. */
 static bool fm_eval_scalar(Expr* f, FmVarBind* binds,
                            const double* x, size_t n,
                            const FmOpts* opts, double* out) {
+    if (g_fm_obj_prog && f == g_fm_obj_expr && n == g_fm_obj_nargs
+        && compiled_eval_real(g_fm_obj_prog, x, out) && isfinite(*out))
+        return true;
     Expr** xv = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
     for (size_t i = 0; i < n; i++) xv[i] = expr_new_real(x[i]);
     Expr* res = fm_eval_with_bindings(f, binds, xv, n,
@@ -3477,12 +3496,17 @@ static void nm_continuous_solve(NmDriver* D, double* x, bool pin_int,
     size_t png = D->ngens;
     FmGenCon* pg = nm_polish_gens(D, x, &png);           /* NULL ⇒ use D->gens */
     FmGenCon* use = pg ? pg : D->gens;
+    /* With a compiled objective, take the gradient by finite differences off it
+     * (fm_grad_finite_diff → fm_eval_scalar → compiled) rather than evaluating
+     * the symbolic gradient through the interpreter — 2n compiled evals beats
+     * n symbolic evals each re-binding n OwnValues. */
+    Expr** ge = D->f_prog ? NULL : D->g_exprs;
     if (png > 0)
         (void)fm_run_penalty(D->f_raw, D->vars, n, D->binds,
-                             FM_METHOD_QUASINEWTON, D->g_exprs, NULL, x,
+                             FM_METHOD_QUASINEWTON, ge, NULL, x,
                              use, png, tb, D->opts, &fx);
     else
-        (void)fm_run_bfgs(D->f_raw, D->vars, n, D->binds, D->g_exprs, x,
+        (void)fm_run_bfgs(D->f_raw, D->vars, n, D->binds, ge, x,
                           NULL, 0, 0.0, tb, D->opts, &fx);
     if (pg) fm_free_gens(pg, png, n);
     g_fm_quiet = saved_quiet;
@@ -3532,12 +3556,15 @@ static void nm_local_polish(NmDriver* D, double* x, double* f_out, double* pen_o
         size_t png = D->ngens;
         FmGenCon* pg = nm_polish_gens(D, x, &png);       /* NULL ⇒ use D->gens */
         FmGenCon* use = pg ? pg : D->gens;
+        /* Compiled objective ⇒ finite-difference gradient off it (see the
+         * matching note in nm_continuous_solve). */
+        Expr** ge = D->f_prog ? NULL : D->g_exprs;
         if (png > 0)
             (void)fm_run_penalty(D->f_raw, D->vars, D->n, D->binds,
-                                 FM_METHOD_QUASINEWTON, D->g_exprs, NULL, x,
+                                 FM_METHOD_QUASINEWTON, ge, NULL, x,
                                  use, png, D->boxes, D->opts, &fx);
         else
-            (void)fm_run_bfgs(D->f_raw, D->vars, D->n, D->binds, D->g_exprs, x,
+            (void)fm_run_bfgs(D->f_raw, D->vars, D->n, D->binds, ge, x,
                               NULL, 0, 0.0, D->boxes, D->opts, &fx);
         if (pg) fm_free_gens(pg, png, D->n);
         g_fm_quiet = saved_quiet;
@@ -4923,6 +4950,19 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     D.penalty_fn = nc.penalty_fn;
     D.disj = disj; D.ndisj = ndisj;
 
+    /* Serve the local polish's objective evaluations from the compiled program
+     * instead of the interpreter. RandomSearch runs one local solve per
+     * SearchPoint, so this is the difference between 1000 compiled polishes and
+     * 1000 interpreter polishes (see g_fm_obj_* and fm_eval_scalar). Cleared to
+     * the inactive sentinel below, before f_prog is freed. A plain reset is
+     * enough rather than save/restore: the registration is live only while
+     * f_prog != NULL, and an objective compilable enough to have a program
+     * cannot contain a nested NMinimize call (NMinimize is not a compilable
+     * head), so no active registration can ever be clobbered by re-entry. */
+    g_fm_obj_expr  = f_eff;
+    g_fm_obj_prog  = f_prog;
+    g_fm_obj_nargs = n;
+
     xbest = (double*)malloc(sizeof(double) * n);
     double fbest = 1e300, penbest = 1e300;
     int method = (nc.method == NM_AUTO) ? NM_DE : nc.method;
@@ -5050,6 +5090,9 @@ cleanup:
     if (f_owned)    expr_free(f_eff);
     expr_free(cons_built);
     expr_free(f_eval);         /* resolved bare-symbol objective; frees f_raw/cons borrows */
+    g_fm_obj_expr  = NULL;     /* deregister the objective before f_prog is freed */
+    g_fm_obj_prog  = NULL;
+    g_fm_obj_nargs = 0;
     if (f_prog) compiled_free(f_prog);
     if (g_progs) {
         for (size_t k = 0; k < ngens; k++) if (g_progs[k]) compiled_free(g_progs[k]);
