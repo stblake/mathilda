@@ -10,6 +10,7 @@
 #include "numarray.h"
 #include "random.h"
 #include "mlutil.h"
+#include "encode.h"
 #include "pca.h"       /* ml_column_mean */
 #include "gmm.h"       /* ml_gmm_fit / ml_gmm_param_count -- extracted in iteration 9 for this */
 #include "dist.h"
@@ -343,8 +344,57 @@ static bool ml_kde_pdf(const MlDist* d, const double* x, double* out) {
     return true;
 }
 
+/* PDF of a ContingencyTable: look the outcome up in the stored table.
+ *
+ * Separate from the MlDist path on purpose. MlDist holds doubles, and the argument here is
+ * a nominal outcome -- a string, a symbol, a pair of them -- so there is nothing to read
+ * into a double buffer. Reusing the numeric reader would mean either declining the input
+ * this method exists for, or coercing it into numbers it is not.
+ *
+ * Returns true and sets *out when `dist` IS a ContingencyTable (including the miss case,
+ * where the probability is an exact 0); false means "not this method, try the others". */
+static bool ct_pdf(Expr* dist, Expr* xe, double* out) {
+    if (!dist || dist->type != EXPR_FUNCTION || dist->data.function.arg_count != 4)
+        return false;
+    Expr* h = dist->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL
+        || strcmp(h->data.symbol.name, "LearnedDistribution") != 0) return false;
+    Expr* m = dist->data.function.args[0];
+    if (!m || m->type != EXPR_STRING
+        || strcmp(m->data.string, "ContingencyTable") != 0) return false;
+
+    Expr* pay = dist->data.function.args[1];
+    if (!pay || pay->type != EXPR_FUNCTION || pay->data.function.arg_count != 2) return false;
+    Expr* outs = pay->data.function.args[0];
+    Expr* prs  = pay->data.function.args[1];
+    if (!outs || outs->type != EXPR_FUNCTION || !prs || prs->type != EXPR_FUNCTION)
+        return false;
+    if (outs->data.function.arg_count != prs->data.function.arg_count) return false;
+
+    for (size_t k = 0; k < outs->data.function.arg_count; k++) {
+        if (expr_eq(outs->data.function.args[k], xe)) {
+            double v = 0.0, im = 0.0;
+            if (!na_read_scalar(prs->data.function.args[k], &v, &im) || im != 0.0)
+                return false;
+            *out = v;
+            return true;
+        }
+    }
+    /* Never observed. Exactly 0, for the reason the fit records: smoothing would need to
+     * know how many outcomes were possible but unseen, which for arbitrary expressions is
+     * unknowable. */
+    *out = 0.0;
+    return true;
+}
+
 static Expr* builtin_pdf(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
+    /* Nominal first: a ContingencyTable's argument is an outcome, not a number. */
+    {
+        double cp = 0.0;
+        if (ct_pdf(res->data.function.args[0], res->data.function.args[1], &cp))
+            return expr_new_real(cp);
+    }
     MlDist d; double* owned = NULL;
     if (!ml_read_dist(res->data.function.args[0], &d, &owned)) return NULL;
     Expr* xe = res->data.function.args[1];
@@ -488,6 +538,7 @@ static Expr* builtin_learn_distribution(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
     bool mixture = false;
+    bool contingency = false;
     if (argc == 2) {
         Expr* o = res->data.function.args[1];
         if (!o || o->type != EXPR_FUNCTION || o->data.function.arg_count != 2) return NULL;
@@ -503,7 +554,91 @@ static Expr* builtin_learn_distribution(Expr* res) {
         const char* mm = rhs->data.string;
         if (strcmp(mm, "Multinormal") == 0)          mixture = false;
         else if (strcmp(mm, "GaussianMixture") == 0) mixture = true;
+        else if (strcmp(mm, "ContingencyTable") == 0) contingency = true;
         else return NULL;
+    }
+
+    if (contingency) {
+        /* NOMINAL data: a probability per distinct outcome, which is what Wolfram's
+         * "ContingencyTable" method is -- and in one dimension is a categorical
+         * distribution.
+         *
+         * This branch comes BEFORE ml_read_data because ml_read_data reads NUMBERS, and
+         * the whole point here is outcomes that are not numbers. "red", "blue", a symbol
+         * or a pair {"a", "x"} are the intended input, and forcing them through a numeric
+         * reader would decline exactly the data this method exists for.
+         *
+         * The label vocabulary does all the work: ml_labels_build already collects distinct
+         * expressions in first-appearance order using expr_eq, which is precisely a
+         * cross-tabulation over arbitrary outcomes. This is the third consumer of that
+         * module and it needed no change to serve it.
+         *
+         * Counts are divided by n, so the probabilities are EMPIRICAL frequencies with no
+         * smoothing. That is a deliberate choice, and the consequence is stated rather than
+         * hidden: an outcome absent from the training data gets probability exactly 0, not a
+         * small positive number. Add-one smoothing would need a claim about the size of the
+         * outcome space, which for arbitrary expressions is unknowable -- there is no way to
+         * know how many nominal values were possible but unseen. A hard 0 for "never
+         * observed" is the honest answer, and PDF returns it as an exact 0. */
+        Expr* data = res->data.function.args[0];
+        if (!data || data->type != EXPR_FUNCTION) return NULL;
+        Expr* dh = data->data.function.head;
+        if (!dh || dh->type != EXPR_SYMBOL || dh->data.symbol.name != SYM_List) return NULL;
+        size_t cn = data->data.function.arg_count;
+        if (cn == 0) return NULL;
+
+        /* The outcome arity: a list-valued outcome is that many nominal variables, anything
+         * else is one. Ragged outcomes are a different table per row, which is not a
+         * distribution, so they decline. */
+        Expr* f0 = data->data.function.args[0];
+        bool listy = f0 && f0->type == EXPR_FUNCTION && f0->data.function.head
+                     && f0->data.function.head->type == EXPR_SYMBOL
+                     && f0->data.function.head->data.symbol.name == SYM_List;
+        size_t arity = listy ? f0->data.function.arg_count : 1;
+        for (size_t i = 0; i < cn; i++) {
+            Expr* r = data->data.function.args[i];
+            if (!r) return NULL;
+            bool rl = r->type == EXPR_FUNCTION && r->data.function.head
+                      && r->data.function.head->type == EXPR_SYMBOL
+                      && r->data.function.head->data.symbol.name == SYM_List;
+            if (rl != listy) return NULL;
+            if (rl && r->data.function.arg_count != arity) return NULL;
+        }
+
+        MlLabels vocab = {0, NULL};
+        size_t* idx = malloc(sizeof(size_t) * cn);
+        if (!idx) return NULL;
+        if (!ml_labels_build(data->data.function.args, cn, &vocab, idx)) {
+            free(idx); return NULL;
+        }
+        double* prob = calloc(vocab.count, sizeof(double));
+        Expr* outc = NULL;
+        if (prob) {
+            for (size_t i = 0; i < cn; i++) prob[idx[i]] += 1.0;
+            for (size_t k = 0; k < vocab.count; k++) prob[k] /= (double)cn;
+            Expr** rows = malloc(sizeof(Expr*) * 2);
+            if (rows) {
+                rows[0] = ml_labels_to_list(&vocab);
+                rows[1] = ml_list_of_reals(prob, vocab.count);
+                Expr* pay = (rows[0] && rows[1])
+                    ? expr_new_function(expr_new_symbol(SYM_List), rows, 2) : NULL;
+                if (!pay) { expr_free(rows[0]); expr_free(rows[1]); }
+                free(rows);
+                if (pay) {
+                    Expr* a4[4];
+                    a4[0] = expr_new_string("ContingencyTable");
+                    a4[1] = pay;
+                    a4[2] = expr_new_integer((int64_t)arity);
+                    a4[3] = expr_new_integer((int64_t)cn);
+                    if (a4[0] && a4[1] && a4[2] && a4[3])
+                        outc = expr_new_function(expr_new_symbol("LearnedDistribution"), a4, 4);
+                    else { expr_free(a4[0]); expr_free(a4[1]);
+                           expr_free(a4[2]); expr_free(a4[3]); }
+                }
+            }
+        }
+        free(prob); free(idx); ml_labels_free(&vocab);
+        return outc;
     }
 
     size_t n, dim; double* x = NULL; bool vec = false;
@@ -717,7 +852,14 @@ void ml_dist_init(void) {
         "are variables; a flat list is n observations of one variable. A singular "
         "covariance -- collinear columns, or fewer observations than dimensions -- "
         "returns unevaluated, because no density exists rather than because of an "
-        "error.");
+        "error. Method -> \"ContingencyTable\" is for NOMINAL data instead of numeric: it "
+        "stores a probability per distinct outcome, which in one dimension is a "
+        "categorical distribution. Outcomes may be any expressions -- strings, symbols, or "
+        "equal-length lists of them -- compared structurally, and are kept in "
+        "first-appearance order. Probabilities are empirical frequencies with no "
+        "smoothing, so PDF of an outcome never observed is exactly 0; smoothing would "
+        "require knowing how many outcomes were possible but unseen, which for arbitrary "
+        "expressions is unknowable. Ragged outcomes decline.");
 
     symtab_get_def("LearnedDistribution")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("LearnedDistribution",

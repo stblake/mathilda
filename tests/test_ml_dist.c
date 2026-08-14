@@ -331,11 +331,90 @@ static void test_kde_declines_without_a_scale(void) {
                    "SmoothKernelDistribution", 0);
 }
 
+static void test_contingency_table_probabilities_are_exact(void) {
+    /* Counts chosen so every probability is an EXACT binary fraction: 3 and 1 out of 4 give
+     * 0.75 and 0.25, which are representable to the bit. So these are equalities, not
+     * tolerances -- there is no float slop to hide behind, and a wrong divisor or an
+     * off-by-one count cannot pass. */
+    assert_eval_eq("PDF[LearnDistribution[{\"r\", \"r\", \"r\", \"b\"}, "
+                   "Method -> \"ContingencyTable\"], \"r\"] == 0.75", "True", 0);
+    assert_eval_eq("PDF[LearnDistribution[{\"r\", \"r\", \"r\", \"b\"}, "
+                   "Method -> \"ContingencyTable\"], \"b\"] == 0.25", "True", 0);
+    /* Eight observations, one outcome seen five times: 5/8 = 0.625, also exact. */
+    assert_eval_eq("PDF[LearnDistribution[{1, 1, 1, 1, 1, 2, 2, 3}, "
+                   "Method -> \"ContingencyTable\"], 1] == 0.625", "True", 0);
+}
+
+static void test_contingency_table_unseen_outcome_is_exactly_zero(void) {
+    /* No smoothing, and the consequence is asserted rather than left implicit: an outcome
+     * never observed has probability exactly 0. Smoothing would need to know how many
+     * outcomes were possible but unseen, which for arbitrary expressions is unknowable. */
+    assert_eval_eq("PDF[LearnDistribution[{\"r\", \"b\"}, "
+                   "Method -> \"ContingencyTable\"], \"g\"] === 0.", "True", 0);
+    /* And a structurally different expression is a different outcome -- "a" and a are two
+     * classes, the same distinction the pattern matcher makes. */
+    assert_eval_eq("PDF[LearnDistribution[{\"a\", \"a\"}, "
+                   "Method -> \"ContingencyTable\"], a] === 0.", "True", 0);
+}
+
+static void test_contingency_table_sums_to_one_over_its_support(void) {
+    /* The defining property of a distribution. Asserted on a NON-uniform table, because a
+     * uniform one sums to 1 even if every probability were computed as 1/k regardless of
+     * the counts. */
+    assert_eval_eq("Module[{d = LearnDistribution["
+                   "{{\"a\",\"x\"}, {\"a\",\"y\"}, {\"b\",\"x\"}, {\"a\",\"x\"}}, "
+                   "Method -> \"ContingencyTable\"], o},"
+                   " o = Part[d, 2, 1];"
+                   " Chop[Total[Map[PDF[d, #] &, o]] - 1.]]", "0", 0);
+    /* The counts really are unequal, so the row above is not the degenerate case: {a,x}
+     * occurs twice out of four and the others once each. */
+    assert_eval_eq("Module[{d = LearnDistribution["
+                   "{{\"a\",\"x\"}, {\"a\",\"y\"}, {\"b\",\"x\"}, {\"a\",\"x\"}}, "
+                   "Method -> \"ContingencyTable\"]},"
+                   " {PDF[d, {\"a\",\"x\"}] == 0.5, PDF[d, {\"a\",\"y\"}] == 0.25,"
+                   "  PDF[d, {\"b\",\"x\"}] == 0.25}]", "{True, True, True}", 0);
+}
+
+static void test_contingency_table_declines_ragged_and_coexists(void) {
+    /* Ragged outcomes would be a different table per row, which is not a distribution. */
+    assert_eval_eq("Head[LearnDistribution[{{\"a\",\"x\"}, {\"b\"}}, "
+                   "Method -> \"ContingencyTable\"]]", "LearnDistribution", 0);
+    /* A mix of list and non-list outcomes is the same problem. */
+    assert_eval_eq("Head[LearnDistribution[{{\"a\",\"x\"}, \"b\"}, "
+                   "Method -> \"ContingencyTable\"]]", "LearnDistribution", 0);
+    assert_eval_eq("Head[LearnDistribution[{}, Method -> \"ContingencyTable\"]]",
+                   "LearnDistribution", 0);
+    /* It coexists with the numeric methods on the one head, and prints abbreviated the way
+     * every other fitted model does. */
+    assert_eval_eq("LearnDistribution[{\"r\", \"b\"}, Method -> \"ContingencyTable\"]",
+                   "LearnedDistribution[\"ContingencyTable\", <>]", 0);
+    assert_eval_eq("Part[LearnDistribution[{\"r\", \"b\"}, "
+                   "Method -> \"ContingencyTable\"], 1]", "\"ContingencyTable\"", 0);
+}
+
+static void test_contingency_table_order_is_first_appearance(void) {
+    /* Same contract as every other vocabulary in src/ml: deterministic, and first
+     * appearance rather than sorted. Reversing the data reverses the stored outcome list
+     * but must not change any probability. */
+    assert_eval_eq("Part[LearnDistribution[{\"b\", \"a\", \"a\"}, "
+                   "Method -> \"ContingencyTable\"], 2, 1]", "{\"b\", \"a\"}", 0);
+    assert_eval_eq("Module[{f = {\"b\", \"a\", \"a\"}, d1, d2},"
+                   " d1 = LearnDistribution[f, Method -> \"ContingencyTable\"];"
+                   " d2 = LearnDistribution[Reverse[f], Method -> \"ContingencyTable\"];"
+                   " {PDF[d1, \"a\"] == PDF[d2, \"a\"], PDF[d1, \"b\"] == PDF[d2, \"b\"]}]",
+                   "{True, True}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     TEST(test_pdf_matches_the_closed_form);
+    TEST(test_contingency_table_probabilities_are_exact);
+    TEST(test_contingency_table_unseen_outcome_is_exactly_zero);
+    TEST(test_contingency_table_sums_to_one_over_its_support);
+    TEST(test_contingency_table_declines_ragged_and_coexists);
+    TEST(test_contingency_table_order_is_first_appearance);
     TEST(test_pdf_threads_and_handles_uniform_support);
     TEST(test_draws_are_reproducible_under_seedrandom);
     TEST(test_reseeding_clears_the_gaussian_cache);

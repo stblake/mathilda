@@ -335,6 +335,41 @@ Attributes: `Protected`.
 - `LearnDistribution[data]`
 - `LearnDistribution[data, Method -> "Multinormal"]`
 - `LearnDistribution[data, Method -> "GaussianMixture"]`
+- `LearnDistribution[data, Method -> "ContingencyTable"]` — nominal, not numeric
+
+### `"ContingencyTable"` — nominal outcomes
+
+The one method here that does not take numbers. It stores a probability per distinct
+outcome, which in one dimension is a categorical distribution:
+
+```
+In[1]:= d = LearnDistribution[{"r", "r", "r", "b"}, Method -> "ContingencyTable"]
+Out[1]= LearnedDistribution["ContingencyTable", <>]
+
+In[2]:= {PDF[d, "r"], PDF[d, "b"], PDF[d, "g"]}
+Out[2]= {0.75, 0.25, 0.}
+```
+
+Outcomes may be **any expressions** — strings, symbols, numbers, or equal-length lists of
+them — compared structurally, so `"a"` and `a` are two outcomes rather than one. Order is
+first appearance, the same contract every other vocabulary in `src/ml` uses. Several nominal
+variables are a list per observation, which is the cross-tabulation case:
+`LearnDistribution[{{"a","x"}, {"a","y"}, {"b","x"}, {"a","x"}}, …]` gives `{a,x}` a
+probability of `0.5` and the other two `0.25` each.
+
+This branch runs **before** the numeric reader, because that reader reads numbers and the
+whole point of this method is outcomes that are not numbers — pushing them through it would
+decline exactly the data the method exists for. The label vocabulary in `src/ml/encode.h`
+does the work unchanged; this is its third consumer.
+
+**Probabilities are empirical frequencies with no smoothing, and the consequence is stated
+rather than hidden:** an outcome never observed has probability **exactly 0**. Add-one
+smoothing would need a claim about the size of the outcome space, and for arbitrary
+expressions there is no way to know how many nominal values were possible but unseen. A hard
+zero for "never observed" is the honest answer.
+
+**Ragged outcomes decline** — differing lengths, or a mix of list and non-list observations,
+would be a different table per row, which is not a distribution.
 
 **Features**:
 - Rows are observations, columns are variables; a flat list is `n` observations of one
