@@ -497,10 +497,33 @@ computes by a completely separate path. The two agree at eight points including 
 — either side of the boundary at 5.0 — so the test exercises the decision rather than two
 obvious regions.
 
-**`"LogisticRegression"`** fits a **two-class** logistic model by iteratively reweighted
-least squares (Newton's method on the log-likelihood). More than two classes **declines**
-rather than silently binarising — multi-class would need one-vs-rest or a softmax, and
-guessing which would be worse than saying no.
+**`"LogisticRegression"`** fits a logistic model by iteratively reweighted least squares
+(Newton's method on the log-likelihood).
+
+**Two classes** give a single fit and a single coefficient vector. **More than two** are
+fitted **one-vs-rest**: K binary models, class *k* against everything else, and the reported
+class is the arg-max of the K fitted probabilities.
+
+One-vs-rest was chosen over a softmax for two reasons, and the second is the deciding one.
+It reuses the identical IRLS iteration K times rather than needing a different one. And a
+softmax's parameters are identified only up to an additive constant per feature, so the
+stored coefficients would not be unique — meaning no test could pin them, which is exactly
+the kind of assertion that caught real bugs in the other four families.
+
+What one-vs-rest does **not** give is calibrated probabilities. The K sigmoids come from K
+separate fits with nothing tying them together, so they are normalised to sum to 1 on read.
+That normalisation is a presentation convention, not a likelihood — but because it is
+monotone it cannot move the arg-max, so **the class is the better-founded of the two
+answers**, and it is the one the tests pin hardest. If every sigmoid underflows to zero the
+normaliser would be zero, and that case declines rather than inventing a uniform answer.
+
+The two shapes are told apart by the payload itself — a flat list of `dim + 1` reals is the
+two-class fit, a list of K such lists is one-vs-rest — so no extra tag is stored. A **single**
+class declines: it is not a classification problem.
+
+`Classify[{1. -> "a", 5. -> "b", 9. -> "c"}, Method -> "LogisticRegression"]` used to
+decline, and a test pinned that refusal so it would be noticed when the gap closed. It now
+fits, and the test pins the answer instead.
 
 **A small ridge on the non-intercept coefficients, and it is load-bearing.** On linearly
 separable data the unpenalised likelihood is **unbounded**: driving the coefficients to

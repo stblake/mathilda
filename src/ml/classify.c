@@ -90,6 +90,101 @@ static bool ml_read_labelled(Expr* data, size_t* n_out, size_t* dim_out,
     return true;
 }
 
+/* One binary logistic fit by iteratively reweighted least squares -- Newton's method on the
+ * log-likelihood, each step a WEIGHTED least squares with weights p(1-p) and working response
+ * eta + (y - p)/(p(1-p)).
+ *
+ * `pos` is the class index treated as the positive outcome, and it is the whole reason this is
+ * a function rather than the loop it used to be: one-vs-rest runs the identical iteration K
+ * times, changing only which class counts as 1. Extracted at the second real consumer, not in
+ * anticipation of one.
+ *
+ * A SMALL RIDGE, AND WHY IT IS NOT COSMETIC. On linearly separable data the likelihood is
+ * UNBOUNDED: driving the coefficients to infinity sends every fitted probability to 0 or 1 and
+ * the likelihood to its supremum, so plain Newton diverges and never converges. Same shape of
+ * problem as a mixture's unbounded likelihood, and it gets the same honest treatment rather
+ * than a silent hang -- a ridge on the non-intercept coefficients makes the penalised objective
+ * strictly concave, so the fit is finite and unique even on separable data, with the iteration
+ * count capped as a backstop. The intercept is left unpenalised, which is standard: shrinking it
+ * would bias the predicted base rate.
+ *
+ * One-vs-rest makes separability the COMMON case rather than a corner one. With K well-spaced
+ * classes every binary sub-problem -- class k against all the others -- is separable by
+ * construction, so the ridge is what each of the K fits relies on to come back finite at all.
+ * It carries more weight here than it ever did in the two-class fit.
+ *
+ * Returns false only when a step's normal-equation matrix is singular. `beta` (dim + 1 entries,
+ * intercept first) is filled on success. */
+static bool logit_irls(const double* x, const size_t* y, size_t n, size_t dim,
+                       size_t pos, double* beta) {
+    size_t p1 = dim + 1;
+    double* eta = malloc(sizeof(double) * n);
+    double* aug = malloc(sizeof(double) * p1 * (p1 + 1));
+    if (!eta || !aug) { free(eta); free(aug); return false; }
+    for (size_t r = 0; r < p1; r++) beta[r] = 0.0;
+    bool singular = false;
+    const double ridge = 1e-6;
+    bool converged = false;
+    for (int it = 0; it < 100 && !converged; it++) {
+        for (size_t a = 0; a < p1 * (p1 + 1); a++) aug[a] = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            double e = beta[0];
+            for (size_t j = 0; j < dim; j++) e += beta[j + 1] * x[i * dim + j];
+            eta[i] = e;
+            double pi = 1.0 / (1.0 + exp(-e));
+            /* Clamp the weight away from zero: a saturated point contributes
+             * p(1-p) ~ 0, and dividing by it in the working response is exactly
+             * where a separable fit blows up. */
+            double w = pi * (1.0 - pi);
+            if (w < 1e-10) w = 1e-10;
+            double z = e + ((double)(y[i] == pos ? 1.0 : 0.0) - pi) / w;
+            for (size_t r = 0; r < p1; r++) {
+                double ar = (r == 0) ? 1.0 : x[i * dim + (r - 1)];
+                for (size_t c = 0; c < p1; c++) {
+                    double ac = (c == 0) ? 1.0 : x[i * dim + (c - 1)];
+                    aug[r * (p1 + 1) + c] += w * ar * ac;
+                }
+                aug[r * (p1 + 1) + p1] += w * ar * z;
+            }
+        }
+        for (size_t r = 1; r < p1; r++) aug[r * (p1 + 1) + r] += ridge;
+
+        bool ok2 = true;
+        for (size_t c = 0; c < p1 && ok2; c++) {
+            size_t piv = c; double best = fabs(aug[c * (p1 + 1) + c]);
+            for (size_t r = c + 1; r < p1; r++) {
+                double v = fabs(aug[r * (p1 + 1) + c]);
+                if (v > best) { best = v; piv = r; }
+            }
+            if (!(best > 1e-14)) { ok2 = false; break; }
+            if (piv != c)
+                for (size_t kk = 0; kk <= p1; kk++) {
+                    double t = aug[c * (p1 + 1) + kk];
+                    aug[c * (p1 + 1) + kk] = aug[piv * (p1 + 1) + kk];
+                    aug[piv * (p1 + 1) + kk] = t;
+                }
+            for (size_t r = 0; r < p1; r++) {
+                if (r == c) continue;
+                double f = aug[r * (p1 + 1) + c] / aug[c * (p1 + 1) + c];
+                if (f == 0.0) continue;
+                for (size_t kk = c; kk <= p1; kk++)
+                    aug[r * (p1 + 1) + kk] -= f * aug[c * (p1 + 1) + kk];
+            }
+        }
+        if (!ok2) { singular = true; break; }
+        double delta = 0.0;
+        for (size_t r = 0; r < p1; r++) {
+            double nb = aug[r * (p1 + 1) + p1] / aug[r * (p1 + 1) + r];
+            double d = fabs(nb - beta[r]);
+            if (d > delta) delta = d;
+            beta[r] = nb;
+        }
+        if (delta < 1e-10) converged = true;
+    }
+    free(eta); free(aug);
+    return !singular;
+}
+
 static Expr* builtin_classify(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
@@ -158,92 +253,80 @@ static Expr* builtin_classify(Expr* res) {
          * concave, so the fit is finite and unique even when the data is separable, and the
          * iteration count is capped as a backstop. The intercept is left unpenalised, which
          * is standard -- shrinking it would bias the predicted base rate. */
-        if (labels.count != 2) {
+        /* TWO CLASSES stay exactly as they were: one fit, one coefficient vector, the same
+         * payload shape and the same numbers. At K = 2 one-vs-rest would fit two models that
+         * are reflections of each other, so the single fit is not a shortcut but the right
+         * answer -- and its coefficients are pinned by tests.
+         *
+         * MORE THAN TWO is one-vs-rest: K binary fits, class k against everything else, and
+         * the predicted class is the arg-max of the K fitted probabilities. Chosen over a
+         * softmax for two reasons. It reuses this exact iteration K times instead of needing
+         * a different one. And a softmax's parameters are identified only up to an additive
+         * constant per feature, so the stored coefficients would not be unique -- meaning no
+         * test could pin them, which is precisely the property that caught real bugs in the
+         * other four families. */
+        if (labels.count < 2) {
             ml_labels_free(&labels); free(x); free(y); return NULL;
         }
         size_t p1 = dim + 1;
-        double* beta = calloc(p1, sizeof(double));
-        double* eta  = malloc(sizeof(double) * n);
-        double* aug  = malloc(sizeof(double) * p1 * (p1 + 1));
+        size_t nfit = (labels.count == 2) ? 1 : labels.count;
+        double* beta = calloc(nfit * p1, sizeof(double));
         Expr* outl = NULL;
-        if (beta && eta && aug) {
-            const double ridge = 1e-6;
-            bool converged = false;
-            for (int it = 0; it < 100 && !converged; it++) {
-                for (size_t a = 0; a < p1 * (p1 + 1); a++) aug[a] = 0.0;
-                for (size_t i = 0; i < n; i++) {
-                    double e = beta[0];
-                    for (size_t j = 0; j < dim; j++) e += beta[j + 1] * x[i * dim + j];
-                    eta[i] = e;
-                    double pi = 1.0 / (1.0 + exp(-e));
-                    /* Clamp the weight away from zero: a saturated point contributes
-                     * p(1-p) ~ 0, and dividing by it in the working response is exactly
-                     * where a separable fit blows up. */
-                    double w = pi * (1.0 - pi);
-                    if (w < 1e-10) w = 1e-10;
-                    double z = e + ((double)(y[i] == 1 ? 1 : 0) - pi) / w;
-                    for (size_t r = 0; r < p1; r++) {
-                        double ar = (r == 0) ? 1.0 : x[i * dim + (r - 1)];
-                        for (size_t c = 0; c < p1; c++) {
-                            double ac = (c == 0) ? 1.0 : x[i * dim + (c - 1)];
-                            aug[r * (p1 + 1) + c] += w * ar * ac;
-                        }
-                        aug[r * (p1 + 1) + p1] += w * ar * z;
-                    }
-                }
-                for (size_t r = 1; r < p1; r++) aug[r * (p1 + 1) + r] += ridge;
-
-                bool ok2 = true;
-                for (size_t c = 0; c < p1 && ok2; c++) {
-                    size_t piv = c; double best = fabs(aug[c * (p1 + 1) + c]);
-                    for (size_t r = c + 1; r < p1; r++) {
-                        double v = fabs(aug[r * (p1 + 1) + c]);
-                        if (v > best) { best = v; piv = r; }
-                    }
-                    if (!(best > 1e-14)) { ok2 = false; break; }
-                    if (piv != c)
-                        for (size_t kk = 0; kk <= p1; kk++) {
-                            double t = aug[c * (p1 + 1) + kk];
-                            aug[c * (p1 + 1) + kk] = aug[piv * (p1 + 1) + kk];
-                            aug[piv * (p1 + 1) + kk] = t;
-                        }
-                    for (size_t r = 0; r < p1; r++) {
-                        if (r == c) continue;
-                        double f = aug[r * (p1 + 1) + c] / aug[c * (p1 + 1) + c];
-                        if (f == 0.0) continue;
-                        for (size_t kk = c; kk <= p1; kk++)
-                            aug[r * (p1 + 1) + kk] -= f * aug[c * (p1 + 1) + kk];
-                    }
-                }
-                if (!ok2) break;
-                double delta = 0.0;
-                for (size_t r = 0; r < p1; r++) {
-                    double nb = aug[r * (p1 + 1) + p1] / aug[r * (p1 + 1) + r];
-                    double d = fabs(nb - beta[r]);
-                    if (d > delta) delta = d;
-                    beta[r] = nb;
-                }
-                if (delta < 1e-10) converged = true;
+        if (beta) {
+            bool okfit = true;
+            for (size_t k = 0; k < nfit && okfit; k++) {
+                /* Two classes keep the original sign convention, where the positive outcome
+                 * is class index 1; one-vs-rest makes it class k. */
+                size_t pos = (nfit == 1) ? 1 : k;
+                okfit = logit_irls(x, y, n, dim, pos, beta + k * p1);
             }
-            Expr** rows = malloc(sizeof(Expr*) * 2);
-            if (rows) {
-                rows[0] = ml_labels_to_list(&labels);
-                rows[1] = ml_list_of_reals(beta, p1);
-                Expr* pay = expr_new_function(expr_new_symbol(SYM_List), rows, 2);
-                free(rows);
-                if (pay) {
-                    Expr* a4[4];
-                    a4[0] = expr_new_string("LogisticRegression");
-                    a4[1] = pay;
-                    a4[2] = expr_new_integer((int64_t)dim);
-                    a4[3] = expr_new_integer(0);
-                    if (a4[0] && a4[1] && a4[2] && a4[3])
-                        outl = expr_new_function(expr_new_symbol("ClassifierFunction"), a4, 4);
-                    else { expr_free(a4[0]); expr_free(a4[1]); expr_free(a4[2]); expr_free(a4[3]); }
+            Expr* coef = NULL;
+            if (okfit) {
+                if (nfit == 1) {
+                    coef = ml_list_of_reals(beta, p1);
+                } else {
+                    Expr** vs = malloc(sizeof(Expr*) * nfit);
+                    if (vs) {
+                        bool allv = true;
+                        for (size_t k = 0; k < nfit; k++) {
+                            vs[k] = ml_list_of_reals(beta + k * p1, p1);
+                            if (!vs[k]) allv = false;
+                        }
+                        if (allv) {
+                            coef = expr_new_function(expr_new_symbol(SYM_List), vs, nfit);
+                        } else {
+                            for (size_t k = 0; k < nfit; k++) expr_free(vs[k]);
+                        }
+                        free(vs);
+                    }
+                }
+            }
+            if (coef) {
+                Expr** rows = malloc(sizeof(Expr*) * 2);
+                if (rows) {
+                    rows[0] = ml_labels_to_list(&labels);
+                    rows[1] = coef;
+                    Expr* pay = expr_new_function(expr_new_symbol(SYM_List), rows, 2);
+                    free(rows);
+                    if (pay) {
+                        Expr* a4[4];
+                        a4[0] = expr_new_string("LogisticRegression");
+                        a4[1] = pay;
+                        a4[2] = expr_new_integer((int64_t)dim);
+                        a4[3] = expr_new_integer(0);
+                        if (a4[0] && a4[1] && a4[2] && a4[3]) {
+                            outl = expr_new_function(expr_new_symbol("ClassifierFunction"), a4, 4);
+                        } else {
+                            expr_free(a4[0]); expr_free(a4[1]);
+                            expr_free(a4[2]); expr_free(a4[3]);
+                        }
+                    }
+                } else {
+                    expr_free(coef);
                 }
             }
         }
-        free(beta); free(eta); free(aug);
+        free(beta);
         ml_labels_free(&labels); free(x); free(y);
         return outl;
     }
@@ -427,44 +510,102 @@ Expr* ml_classifier_apply(Expr* head, Expr** args, size_t argc) {
     if (!ok) { free(xin); ml_labels_free(&labels); return NULL; }
 
     if (strcmp(mname->data.string, "LogisticRegression") == 0) {
-        /* p = logistic(intercept + coef . x) is the probability of the SECOND class in the
-         * vocabulary; the first is the complement. Two classes, so the probabilities sum to
-         * 1 by construction -- which is why the tests assert the stronger properties
-         * instead: exactly 0.5 on the fitted boundary, and monotone along the coefficient
-         * direction. */
-        if (labels.count != 2 || pay->data.function.arg_count != 2) {
+        /* TWO CLASSES: p = logistic(intercept + coef . x) is the probability of the SECOND
+         * class in the vocabulary, the first being its complement, so the pair sums to 1 by
+         * construction. That is why the tests assert the stronger properties instead --
+         * exactly 0.5 on the fitted boundary, and monotone along the coefficient direction.
+         *
+         * MORE THAN TWO: K one-vs-rest fits, hence K independent sigmoids with nothing tying
+         * them together. The class is the arg-max; the reported probabilities are those
+         * sigmoids normalised to sum to 1. That normalisation is a presentation convention
+         * and not a likelihood -- but being monotone it cannot move the arg-max, so the CLASS
+         * is the trustworthy part and the tests lean on it hardest.
+         *
+         * The two shapes are told apart by the payload itself: a flat list of dim + 1 reals is
+         * the two-class fit, a list of K such lists is one-vs-rest. No extra tag is stored,
+         * because the shape already answers the question without ambiguity. */
+        if (labels.count < 2 || pay->data.function.arg_count != 2) {
             free(xin); ml_labels_free(&labels); return NULL;
         }
         Expr* br = pay->data.function.args[1];
-        if (!br || br->type != EXPR_FUNCTION || br->data.function.arg_count != dim + 1) {
+        if (!br || br->type != EXPR_FUNCTION) {
             free(xin); ml_labels_free(&labels); return NULL;
         }
-        double e = 0.0, cf = 0.0;
-        ok = na_read_scalar(br->data.function.args[0], &cf, &im) && im == 0.0;
-        e = cf;
-        for (size_t j = 0; j < dim && ok; j++) {
-            ok = na_read_scalar(br->data.function.args[j + 1], &cf, &im) && im == 0.0;
-            if (ok) e += cf * xin[j];
+        bool multi = labels.count != 2
+                     && br->data.function.arg_count == labels.count
+                     && br->data.function.args[0]
+                     && br->data.function.args[0]->type == EXPR_FUNCTION;
+        size_t nfit = multi ? labels.count : 1;
+        if (!multi && br->data.function.arg_count != dim + 1) {
+            free(xin); ml_labels_free(&labels); return NULL;
+        }
+        double* pv = malloc(sizeof(double) * nfit);
+        if (!pv) { free(xin); ml_labels_free(&labels); return NULL; }
+        for (size_t k = 0; k < nfit && ok; k++) {
+            Expr* row = multi ? br->data.function.args[k] : br;
+            if (!row || row->type != EXPR_FUNCTION
+                || row->data.function.arg_count != dim + 1) { ok = false; break; }
+            double e = 0.0, cf = 0.0;
+            ok = na_read_scalar(row->data.function.args[0], &cf, &im) && im == 0.0;
+            e = cf;
+            for (size_t j2 = 0; j2 < dim && ok; j2++) {
+                ok = na_read_scalar(row->data.function.args[j2 + 1], &cf, &im) && im == 0.0;
+                if (ok) e += cf * xin[j2];
+            }
+            if (ok) pv[k] = 1.0 / (1.0 + exp(-e));
         }
         free(xin);
-        if (!ok) { ml_labels_free(&labels); return NULL; }
-        double pr = 1.0 / (1.0 + exp(-e));
+        if (!ok) { free(pv); ml_labels_free(&labels); return NULL; }
         Expr* outl = NULL;
-        if (want_probs) {
-            Expr** rules = malloc(sizeof(Expr*) * 2);
+        if (!multi) {
+            double pr = pv[0];
+            if (want_probs) {
+                Expr** rules = malloc(sizeof(Expr*) * 2);
+                if (rules) {
+                    Expr* r0[2]; r0[0] = expr_copy(labels.label[0]); r0[1] = expr_new_real(1.0 - pr);
+                    Expr* r1[2]; r1[0] = expr_copy(labels.label[1]); r1[1] = expr_new_real(pr);
+                    rules[0] = expr_new_function(expr_new_symbol(SYM_Rule), r0, 2);
+                    rules[1] = expr_new_function(expr_new_symbol(SYM_Rule), r1, 2);
+                    outl = expr_new_function(expr_new_symbol(SYM_List), rules, 2);
+                    free(rules);
+                }
+            } else {
+                /* A probability of exactly 0.5 lies on the boundary; it goes to the FIRST
+                 * class, matching the lowest-index tie-break the other methods use. */
+                outl = expr_copy(labels.label[pr > 0.5 ? 1 : 0]);
+            }
+        } else if (want_probs) {
+            /* Normalise the K sigmoids. Were every one of them to underflow to zero the
+             * normaliser would be zero too, so that case DECLINES rather than dividing: a
+             * uniform answer invented out of no information is worse than no answer. */
+            double tot = 0.0;
+            for (size_t k = 0; k < nfit; k++) tot += pv[k];
+            if (!(tot > 0.0)) { free(pv); ml_labels_free(&labels); return NULL; }
+            Expr** rules = malloc(sizeof(Expr*) * nfit);
             if (rules) {
-                Expr* r0[2]; r0[0] = expr_copy(labels.label[0]); r0[1] = expr_new_real(1.0 - pr);
-                Expr* r1[2]; r1[0] = expr_copy(labels.label[1]); r1[1] = expr_new_real(pr);
-                rules[0] = expr_new_function(expr_new_symbol(SYM_Rule), r0, 2);
-                rules[1] = expr_new_function(expr_new_symbol(SYM_Rule), r1, 2);
-                outl = expr_new_function(expr_new_symbol(SYM_List), rules, 2);
+                bool allr = true;
+                for (size_t k = 0; k < nfit; k++) {
+                    Expr* rr[2];
+                    rr[0] = expr_copy(labels.label[k]);
+                    rr[1] = expr_new_real(pv[k] / tot);
+                    rules[k] = expr_new_function(expr_new_symbol(SYM_Rule), rr, 2);
+                    if (!rules[k]) allr = false;
+                }
+                if (allr) {
+                    outl = expr_new_function(expr_new_symbol(SYM_List), rules, nfit);
+                } else {
+                    for (size_t k = 0; k < nfit; k++) expr_free(rules[k]);
+                }
                 free(rules);
             }
         } else {
-            /* A probability of exactly 0.5 lies on the boundary; it goes to the FIRST class,
-             * matching the lowest-index tie-break used by the other two methods. */
-            outl = expr_copy(labels.label[pr > 0.5 ? 1 : 0]);
+            /* Arg-max, ties to the lowest index -- the same tie-break as everywhere else
+             * here, which is why this is a strict > rather than >=. */
+            size_t best = 0;
+            for (size_t k = 1; k < nfit; k++) if (pv[k] > pv[best]) best = k;
+            outl = expr_copy(labels.label[best]);
         }
+        free(pv);
         ml_labels_free(&labels);
         return outl;
     }
@@ -622,12 +763,16 @@ void ml_classify_init(void) {
         "result to a feature vector for a class, or with \"Probabilities\" for the vote "
         "shares. It also answers \"Classes\", \"Method\", \"FeatureCount\" and "
         "\"NeighborCount\". Method -> \"NaiveBayes\" fits a Gaussian per class with a "
-        "diagonal covariance; Method -> \"LogisticRegression\" fits a two-class logistic "
-        "model by iteratively reweighted least squares with a small ridge on the "
-        "non-intercept coefficients -- the ridge is load-bearing, because on linearly "
-        "separable data the unpenalised likelihood is unbounded and the coefficients would "
-        "diverge. LogisticRegression declines more than two classes rather than silently "
-        "binarising them.");
+        "diagonal covariance; Method -> \"LogisticRegression\" fits a logistic model by "
+        "iteratively reweighted least squares with a small ridge on the non-intercept "
+        "coefficients -- the ridge is load-bearing, because on linearly separable data the "
+        "unpenalised likelihood is unbounded and the coefficients would diverge. Two "
+        "classes give a single fit; more than two are fitted one-vs-rest, one binary model "
+        "per class, and the class is the arg-max of the fitted probabilities. Those "
+        "probabilities are normalised to sum to 1, which is a convention rather than a "
+        "likelihood -- being monotone it cannot change the arg-max, so the class is the "
+        "better-founded of the two answers. A single class declines: it is not a "
+        "classification problem.");
 
     symtab_get_def("ClassifierFunction")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ClassifierFunction",
