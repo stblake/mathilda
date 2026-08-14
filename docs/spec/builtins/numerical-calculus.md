@@ -1429,7 +1429,26 @@ constraint tolerance (1e-12).
 | `PrecisionGoal`     | `Automatic`    | Digit count `n` ⇒ stop when `\|step\| < \|x\| * 10^{-n}`. |
 | `Gradient`          | `Automatic`    | Explicit `{dfdx1, ..., dfdxN}` overrides the symbolic gradient. |
 | `StepMonitor`       | `None`         | A held expression evaluated after each step. |
-| `EvaluationMonitor` | `None`         | A held expression evaluated each time `f` (or any partial) is evaluated. |
+| `EvaluationMonitor` | `None`         | A held expression evaluated each time `f` (or any partial) is evaluated. Setting it disables the compiled fast path below (the monitor fires from the interpreter), so it trades speed for the trace. |
+
+### Evaluation (auto-compilation)
+
+At `MachinePrecision` (the default) the objective **and its exact symbolic
+gradient** are lowered to bytecode once over the variables (`compile_expr`, the
+same compiler `Compile[]` uses) and evaluated on the register machine at every
+trial point, instead of the interpreter (`expr_copy` + one `OwnValue` install
+per variable + `evaluate` + `numericalize`). The gradient is the *same*
+`∂f/∂x_i` — compiled, not finite-differenced — so the result is unchanged; only
+the evaluation engine differs. This is what makes the QuasiNewton / Conjugate
+Gradient / Newton loop fast (its cost is dominated by the per-iteration
+gradient), and the 1-D Brent path benefits from the compiled value evals. A
+user-supplied `Gradient` is compiled the same way; a component `Compile` cannot
+lower falls back to the interpreter per component, and a non-finite compiled
+result falls back per point — a pure speedup. Typical gains: 1-D transcendental
+~3×, 2-D Rosenbrock ~4×, 6-D Rosenbrock ~1.9×. `WorkingPrecision >
+MachinePrecision` keeps the exact MPFR interpreter path, and setting
+`EvaluationMonitor` disables the fast path so the monitor still fires per
+evaluation.
 
 ### Diagnostics (stderr)
 

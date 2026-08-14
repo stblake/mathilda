@@ -547,6 +547,17 @@ static Expr*            g_fm_obj_expr  = NULL;
 static CompiledProgram* g_fm_obj_prog  = NULL;
 static size_t           g_fm_obj_nargs = 0;
 
+/* Companion registry for the exact symbolic gradient (FindMinimum). When a solve
+ * registers its gradient-component array here, `fm_eval_gradient` evaluates each
+ * component through its compiled program instead of the interpreter — the SAME
+ * symbolic ∂f/∂x_i, just lowered, so the gradient stays exact (no finite
+ * differences) while running on the register machine. Keyed by the g_exprs array
+ * pointer + arity, so constraint gradients (a different array) stay on the
+ * interpreter; a NULL or non-finite component falls back per-component. */
+static Expr**            g_fm_grad_exprs = NULL;
+static CompiledProgram** g_fm_grad_progs = NULL;   /* len g_fm_grad_n, entries may be NULL */
+static size_t            g_fm_grad_n     = 0;
+
 /* Evaluate the bound objective and return a double; NULL on failure. */
 static bool fm_eval_scalar(Expr* f, FmVarBind* binds,
                            const double* x, size_t n,
@@ -640,18 +651,30 @@ static bool fm_grad_finite_diff(Expr* f, FmVarBind* binds,
 static bool fm_eval_gradient(Expr** g_exprs, FmVarBind* binds,
                              const double* x, size_t n,
                              const FmOpts* opts, double* g_out) {
-    Expr** xv = (Expr**)malloc(sizeof(Expr*) * n);
-    for (size_t i = 0; i < n; i++) xv[i] = expr_new_real(x[i]);
+    /* Compiled fast path (see g_fm_grad_*): each component whose program is
+     * registered is evaluated on the register machine. The interpreter value
+     * bindings `xv` are built lazily — only if some component has no program or
+     * returns a non-finite result — so an all-compiled gradient allocates
+     * nothing. */
+    bool reg = (g_exprs == g_fm_grad_exprs && n == g_fm_grad_n && g_fm_grad_progs);
+    Expr** xv = NULL;
     bool ok = true;
     for (size_t i = 0; i < n; i++) {
+        if (reg && g_fm_grad_progs[i]
+            && compiled_eval_real(g_fm_grad_progs[i], x, &g_out[i])
+            && isfinite(g_out[i]))
+            continue;
+        if (!xv) {
+            xv = (Expr**)malloc(sizeof(Expr*) * n);
+            for (size_t j = 0; j < n; j++) xv[j] = expr_new_real(x[j]);
+        }
         Expr* gi = fm_eval_with_bindings(g_exprs[i], binds, xv, n,
                                          opts->eval_monitor,
                                          fm_numeric_spec(opts));
         if (!gi || !fm_expr_to_double_real(gi, &g_out[i])) { ok = false; expr_free(gi); break; }
         expr_free(gi);
     }
-    for (size_t i = 0; i < n; i++) expr_free(xv[i]);
-    free(xv);
+    if (xv) { for (size_t i = 0; i < n; i++) expr_free(xv[i]); free(xv); }
     return ok;
 }
 
@@ -2540,6 +2563,8 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     Expr** g_exprs = NULL;
     Expr*** H_exprs = NULL;
     Expr* result_out = NULL;
+    CompiledProgram*  f_prog = NULL;      /* machine-precision compiled objective */
+    CompiledProgram** grad_progs = NULL;  /* per-component compiled exact gradient */
     size_t n = 0;
 
     if (is_system) {
@@ -2655,6 +2680,52 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         H_exprs = fm_compute_hessian(f_raw, vars, n);
         /* OK if NULL — Newton will fall back to BFGS-style steepest. */
     }
+
+    /* Machine-precision auto-compilation of the objective. The local solvers
+     * evaluate f at every trial point (line search, bracketing, function
+     * values); lowering it to bytecode once over the variables and running the
+     * register machine per point is far cheaper than the interpreter
+     * (expr_copy + n OwnValue installs + evaluate + numericalize). Registered in
+     * the g_fm_obj_* slots that fm_eval_scalar consults; deregistered and freed
+     * at cleanup. Compiled *after* fm_bind_snapshot (which cleared the vars'
+     * OwnValues) so they lower as the argument symbols, not folded constants.
+     * The symbolic gradient is left exact — only the value path is compiled — so
+     * FindMinimum's precision is unchanged. MPFR keeps the exact interpreter
+     * path (its solvers never call fm_eval_scalar). A body Compile can't lower
+     * stays NULL and the interpreter is used, and every per-point call falls
+     * back on a non-finite compiled result, so this is a pure speedup.
+     *
+     * The exact symbolic gradient `g_exprs` is compiled the same way (each
+     * component is a function of all the variables). This is what actually
+     * accelerates the QuasiNewton/CG/Newton loop, whose cost is dominated by the
+     * per-iteration gradient — the same ∂f/∂x_i, lowered, so the gradient stays
+     * exact (no finite differences) and FindMinimum's precision is unchanged.
+     * A component Compile can't lower stays NULL and falls back per-component.
+     *
+     * Skipped when an "EvaluationMonitor" is set: the monitor fires inside
+     * fm_eval_with_bindings (per interpreter evaluation of f), which the compiled
+     * path bypasses, so compiling would silently stop the monitor from firing.
+     * Monitoring is a debugging aid, not a performance path, so falling back to
+     * the interpreter there is the right trade. */
+    if (opts.prec_mode == FM_PREC_MACHINE && n > 0 && !opts.eval_monitor) {
+        const char** cnames = (const char**)malloc(sizeof(char*) * n);
+        CompileType* ctypes = (CompileType*)malloc(sizeof(CompileType) * n);
+        for (size_t i = 0; i < n; i++) { cnames[i] = vars[i]->data.symbol.name; ctypes[i] = CT_REAL; }
+        f_prog = compile_expr_ex(f_raw, cnames, ctypes, n, COMPILE_FOLD_GLOBALS);
+        if (f_prog && compiled_result_type(f_prog) != CT_REAL) { compiled_free(f_prog); f_prog = NULL; }
+        if (g_exprs) {
+            grad_progs = (CompiledProgram**)calloc(n, sizeof(CompiledProgram*));
+            for (size_t i = 0; i < n; i++) {
+                CompiledProgram* p = compile_expr_ex(g_exprs[i], cnames, ctypes, n,
+                                                     COMPILE_FOLD_GLOBALS);
+                if (p && compiled_result_type(p) != CT_REAL) { compiled_free(p); p = NULL; }
+                grad_progs[i] = p;
+            }
+        }
+        free(cnames); free(ctypes);
+    }
+    g_fm_obj_expr = f_raw; g_fm_obj_prog = f_prog; g_fm_obj_nargs = n;
+    g_fm_grad_exprs = g_exprs; g_fm_grad_progs = grad_progs; g_fm_grad_n = n;
 
     /* Dispatch. */
     double fx_min = 0.0;
@@ -2807,6 +2878,17 @@ run_done:
 #endif
 
 cleanup:
+    g_fm_obj_expr = NULL;      /* deregister objective + gradient before freeing */
+    g_fm_obj_prog = NULL;
+    g_fm_obj_nargs = 0;
+    g_fm_grad_exprs = NULL;
+    g_fm_grad_progs = NULL;
+    g_fm_grad_n = 0;
+    if (f_prog) compiled_free(f_prog);
+    if (grad_progs) {
+        for (size_t i = 0; i < n; i++) if (grad_progs[i]) compiled_free(grad_progs[i]);
+        free(grad_progs);
+    }
     if (binds) {
         for (size_t i = 0; i < n; i++) fm_bind_restore(&binds[i]);
         free(binds);

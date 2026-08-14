@@ -63,3 +63,14 @@ Implemented (all in `src/numerical_calculus/findmin.c`):
 Results: RandomSearch(1000) 24.8 s → 0.54 s (identical `1.76e-5`); DE 0.98 → 0.023;
 NelderMead 0.59 → 0.13. Clean `-Wall -Wextra` build, `make check-c99` clean,
 `nminimize_tests` + `findmin_tests` all pass. Docs + changelog updated.
+
+## Follow-up: FindMinimum compiled objective + gradient (done 2026-08-14)
+FindMinimum uses a separate driver (`findmin_driver`). Value-only objective
+compilation gave ~0 speedup — the QuasiNewton/CG/Newton cost is dominated by the
+per-iteration gradient. Fix compiles the objective AND each exact symbolic
+gradient component (companion `g_fm_grad_*` registry consulted by
+`fm_eval_gradient`, keyed by g_exprs pointer identity). Gradient stays EXACT (not
+FD) to preserve FindMinimum's precision. Gains: 1-D ~3×, 2-D Rosenbrock ~4×, 6-D
+~1.9×; trivial 2-D quadratic regresses ~8µs (unamortised compile, accepted).
+Skipped when EvaluationMonitor set (fires from interpreter) and on MPFR.
+findmin_tests + nminimize_tests pass; clean build; valgrind noise only (libobjc).
