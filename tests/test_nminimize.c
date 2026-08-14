@@ -201,9 +201,64 @@ static void test_neldermead_suboptions(void) {
      * still returned and is a valid nearby result. */
     check_true("Abs[First[NMinimize[(x-3)^2 + (y+2)^2, {x, y}, "
                "Method -> {\"SimulatedAnnealing\", \"PostProcess\" -> False}]]] < 1.*^-2");
-    /* All three together, as in the documented Rosenbrock example, are accepted. */
+    /* All together, as in the documented examples, are accepted. */
     check_eq("Head[NMinimize[(x-1)^2 + (y-1)^2, {x, y}, "
-             "Method -> {\"NelderMead\", \"ExpandRatio\" -> 2.5, \"ContractRatio\" -> 0.6, \"PostProcess\" -> False}]]", "List");
+             "Method -> {\"NelderMead\", \"ExpandRatio\" -> 2.5, \"ContractRatio\" -> 0.6, "
+             "\"ReflectRatio\" -> 1.0, \"ShrinkRatio\" -> 0.5, \"PostProcess\" -> False}]]", "List");
+}
+
+static void test_neldermead_shrink_tolerance(void) {
+    /* Tolerance controls the simplex convergence threshold: a tight tolerance
+     * refines much further than a loose one under a capped budget. */
+    check_true("Abs[First[NMinimize[(x-3)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"NelderMead\", \"Tolerance\" -> 1.*^-10, \"PostProcess\" -> False}]]] < 1.*^-6");
+    check_true("First[NMinimize[(x-3)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"NelderMead\", \"Tolerance\" -> 0.1, \"PostProcess\" -> False}, MaxIterations -> 2]] "
+               "> First[NMinimize[(x-3)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"NelderMead\", \"Tolerance\" -> 1.*^-12, \"PostProcess\" -> False}, MaxIterations -> 2]]");
+    /* ShrinkRatio is accepted and still converges to the optimum. */
+    check_true("Abs[First[NMinimize[Abs[x-3] + Abs[y+2], {x, y}, "
+               "Method -> {\"NelderMead\", \"ShrinkRatio\" -> 0.6}]]] < 1.*^-3");
+}
+
+static void test_bukin6_no_warning(void) {
+    /* Bukin N.6: a Sqrt[Abs[...]] ridge whose gradient hits 1/0 on the valley.
+     * The optimizer must not surface Power::infy (muted during point eval) and
+     * must reproduce Mathematica's result. */
+    check_true("Abs[First[NMinimize[{100 Sqrt[Abs[x2 - 0.01 x1^2]] + 0.01 Abs[x1 + 10], "
+               "-15 <= x1 <= -5 && -3 <= x2 <= 3}, {x1, x2}, "
+               "Method -> {\"NelderMead\", \"ShrinkRatio\" -> 0.75, \"Tolerance\" -> 10^-6}]] - 0.0113668] < 1.*^-3");
+}
+
+static void test_initial_points(void) {
+    /* Easom function: a narrow spike of depth -1 at (Pi, Pi) in an otherwise
+     * flat region. The three seed points are collinear on y=x with centroid
+     * ~(Pi,Pi); using them as the simplex (and not declaring convergence on the
+     * flat plateau while the simplex is still large) lets it find the spike. */
+    check_true("Abs[First[NMinimize[{-Cos[x] Cos[y] Exp[-((x-Pi)^2 + (y-Pi)^2)], "
+               "-100 <= x <= 100 && -100 <= y <= 100}, {x, y}, "
+               "Method -> {\"NelderMead\", \"InitialPoints\" -> {{-50,-50},{50,50},{10,10}}}]] - (-1.0)] < 1.*^-3");
+    check_true("Abs[(x /. Last[NMinimize[{-Cos[x] Cos[y] Exp[-((x-Pi)^2 + (y-Pi)^2)], "
+               "-100 <= x <= 100 && -100 <= y <= 100}, {x, y}, "
+               "Method -> {\"NelderMead\", \"InitialPoints\" -> {{-50,-50},{50,50},{10,10}}}]]) - Pi] < 1.*^-3");
+    /* Symbolic seed entries (Pi) are evaluated/numericalized. */
+    check_true("Abs[First[NMinimize[(x-1)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"NelderMead\", \"InitialPoints\" -> {{Pi,Pi},{0,0},{6,6}}}]]] < 1.*^-4");
+    /* Malformed seeds (wrong dimension / non-numeric) fall back to random starts
+     * and still return a valid, correct result. */
+    check_true("Abs[First[NMinimize[(x-1)^2 + (y+2)^2, {x, y}, "
+               "Method -> {\"NelderMead\", \"InitialPoints\" -> {{1,2,3},{4,5}}}]]] < 1.*^-3");
+    check_true("Abs[First[NMinimize[(x-3)^2 + (y-3)^2, {x, y}, "
+               "Method -> {\"NelderMead\", \"InitialPoints\" -> {{a,b},{1,1},{2,2}}}]]] < 1.*^-3");
+}
+
+static void test_autocompile_parity_and_fallback(void) {
+    /* At machine precision the objective is auto-compiled; the answer must be
+     * identical to the (verified) interpreter result. */
+    check_true("Abs[First[NMinimize[x^4 - 3 x^2 - x, x]] - (-3.5139097)] < 1.*^-4");
+    /* A non-compilable objective (special function) falls back to the
+     * interpreter and still optimizes correctly: min Gamma on [1,2] ~ 0.88560. */
+    check_true("Abs[First[NMinimize[Gamma[x], {x, 1, 2}]] - 0.8856032] < 1.*^-3");
 }
 
 static void test_method_suboptions(void) {
@@ -372,6 +427,10 @@ int main(void) {
     TEST(test_method_simulatedannealing);
     TEST(test_method_suboptions);
     TEST(test_neldermead_suboptions);
+    TEST(test_neldermead_shrink_tolerance);
+    TEST(test_bukin6_no_warning);
+    TEST(test_initial_points);
+    TEST(test_autocompile_parity_and_fallback);
 
     /* 8. NMaximize */
     TEST(test_nmaximize_simple);

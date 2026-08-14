@@ -3084,8 +3084,12 @@ Recognised sub-options:
 | `"SearchPoints" -> n` | DE, NelderMead (restarts) | population / restart count |
 | `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6) |
 | `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9) |
+| `"ReflectRatio" -> r` | NelderMead | simplex reflection coefficient (default 1) |
 | `"ExpandRatio" -> e` | NelderMead | simplex expansion coefficient (default 2) |
 | `"ContractRatio" -> c` | NelderMead | simplex contraction coefficient (default 0.5) |
+| `"ShrinkRatio" -> s` | NelderMead | simplex shrink coefficient (default 0.5) |
+| `"Tolerance" -> t` | NelderMead | simplex objective-spread convergence threshold |
+| `"InitialPoints" -> {{x1,…},…}` | NelderMead | seed the initial simplex (extra points ignored, fewer are filled by perturbation; malformed → random start) |
 | `"PostProcess" -> False` | all | skip the final exact local polish; return the raw global-search point |
 | `"RandomSeed" -> s` | all | override the default PRNG seed |
 
@@ -3093,6 +3097,17 @@ Unrecognised sub-options are ignored (matching Mathematica). `"PostProcess"`
 defaults to on: the global best is refined by the exact local optimizer (and,
 for continuous box/unconstrained problems at `WorkingPrecision > MachinePrecision`,
 by an MPFR BFGS step); `"PostProcess" -> False` disables both.
+
+`"InitialPoints"` seeds the NelderMead simplex, which matters for functions with
+a narrow basin in a broad flat region — the Easom function
+`-Cos[x] Cos[y] Exp[-((x-π)² + (y-π)²)]` is ≈0 everywhere except a spike of depth
+−1 at `(π, π)`, so an undirected search over a large box rarely samples it.
+NelderMead's convergence test additionally requires the simplex to be
+geometrically small (not merely flat in objective value) before it stops, so a
+simplex sitting on the plateau keeps contracting toward its centroid instead of
+declaring victory immediately — enough to slide into the spike when the seed
+points bracket it. With `"InitialPoints" -> {{-50,-50},{50,50},{10,10}}` (centroid
+≈ `(π,π)`) NMinimize returns `{-1., {x -> π, y -> π}}`.
 
 ### Options
 
@@ -3104,6 +3119,28 @@ by an MPFR BFGS step); `"PostProcess" -> False` disables both.
 | `AccuracyGoal` / `PrecisionGoal` | `Automatic` | convergence tolerances |
 | `EvaluationMonitor` | `None` | `:> body` run on every objective evaluation |
 | `StepMonitor` | `None` | `:> body` |
+
+### Evaluation (auto-compilation and message quieting)
+
+At `MachinePrecision` (the default) the global search evaluates the objective —
+and each general constraint — at hundreds to thousands of trial points, so
+`NMinimize` **auto-compiles** them to bytecode over the search variables once
+(`compile_expr`, the same lowering `Compile[]` and NDSolve's RHS use) and runs
+the register machine per point instead of the interpreter (`expr_copy` +
+`evaluate` + `numericalize`). A body with a construct that cannot be compiled
+stays on the interpreter, and every per-point call falls back to the interpreter
+on a domain or non-finite result, so the compiled path is a pure speedup with no
+change in answer. Example: the 10-D Rosenbrock over `Table[x[i], {i, 1, 10}]`
+runs ~11× faster than the interpreter path. At `WorkingPrecision >
+MachinePrecision` the exact MPFR interpreter path is used.
+
+Expected numeric-domain diagnostics raised while probing the function — e.g.
+`Power::infy` from a `1/0` in a gradient term on a non-differentiable ridge
+(Bukin N.6, `100 Sqrt[Abs[x2 - 0.01 x1^2]] + ...`) — are **quieted** during the
+search: a non-finite value is treated as a bad point and steered away from, so
+the messages are noise. This matches Mathematica, which quiets `NMinimize`'s
+internal evaluation. (The same applies to `FindMinimum` / `FindMaximum`, which
+share the point-evaluation path.)
 
 ### Examples
 

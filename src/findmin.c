@@ -59,6 +59,7 @@
 
 #include "arithmetic.h"
 #include "attr.h"
+#include "compile/compile.h"
 #include "eval.h"
 #include "expr.h"
 #include "numeric.h"
@@ -408,9 +409,15 @@ static Expr* fm_eval_with_bindings(Expr* f, FmVarBind* binds,
     for (size_t i = 0; i < n; i++) fm_bind_set(&binds[i], values[i]);
     eval_clock_bump();
     fm_fire_monitor(eval_monitor);
+    /* Mute expected numeric-domain diagnostics (Power::infy from a 1/0 in a
+     * gradient term on a non-differentiable ridge, Infinity::indet, ...): the
+     * search evaluates the user function at many trial points and treats any
+     * non-finite result as a bad point, so these messages are pure noise.
+     * Matches Mathematica, which quiets NMinimize's internal evaluation. */
+    arith_warnings_mute_push();
     Expr* raw = eval_and_free(expr_copy(f));
-    if (!raw) return NULL;
-    Expr* num = numericalize(raw, spec);
+    Expr* num = raw ? numericalize(raw, spec) : NULL;
+    arith_warnings_mute_pop();
     expr_free(raw);
     return num;
 }
@@ -2843,9 +2850,13 @@ typedef struct {
     int      search_points;  /* 0 ⇒ auto                                     */
     double   F;              /* DE scaling factor;   <0 ⇒ auto               */
     double   CR;             /* DE crossover prob.;  <0 ⇒ auto               */
-    double   expand_ratio;   /* NelderMead expansion coeff;  <0 ⇒ default 2  */
+    double   reflect_ratio;  /* NelderMead reflection coeff;  <0 ⇒ default 1  */
+    double   expand_ratio;   /* NelderMead expansion coeff;   <0 ⇒ default 2  */
     double   contract_ratio; /* NelderMead contraction coeff; <0 ⇒ default .5 */
+    double   shrink_ratio;   /* NelderMead shrink coeff;      <0 ⇒ default .5 */
+    double   tolerance;      /* simplex convergence tolerance; <0 ⇒ default    */
     int      post_process;   /* -1 auto (on) / 1 on / 0 off (skip polish)    */
+    Expr*    init_points;    /* "InitialPoints" -> {{...},...}, borrowed / NULL */
     uint64_t seed;
 } NmConfig;
 
@@ -2996,7 +3007,43 @@ typedef struct {
     bool         any_int;
     const double* reg_lo;
     const double* reg_hi;
+    /* Machine-precision fast path: a bytecode-compiled objective and per-general-
+     * constraint programs over the effective variables, or NULL to use the
+     * interpreter. Each point evaluation prefers the compiled program and falls
+     * back to the interpreter when it is absent or reports a domain/non-finite
+     * result — so the compiled path is a pure speedup, never a correctness risk. */
+    CompiledProgram*  f_prog;    /* objective, or NULL                          */
+    CompiledProgram** g_progs;   /* per-constraint (len ngens), entries may NULL */
 } NmDriver;
+
+/* Objective at the (already integer-rounded) point xr: the compiled program if
+ * present and it returns a finite real, else the interpreter. */
+static bool nm_eval_obj(NmDriver* D, const double* xr, double* out) {
+    if (D->f_prog && compiled_eval_real(D->f_prog, xr, out) && isfinite(*out))
+        return true;
+    return fm_eval_scalar(D->f_raw, D->binds, xr, D->n, D->opts, out) && isfinite(*out);
+}
+
+/* Σ max(0, g_i)^2 + Σ h_j^2 over the general constraints at xr, each constraint
+ * via its compiled program if present, else the interpreter. Returns false if
+ * any constraint cannot be evaluated at all. */
+static bool nm_eval_pen(NmDriver* D, const double* xr, double* out) {
+    if (D->ngens == 0) { *out = 0.0; return true; }
+    if (!D->g_progs)
+        return fm_eval_penalty(D->gens, D->ngens, D->binds, xr, D->n, D->opts, out);
+    double total = 0.0;
+    for (size_t k = 0; k < D->ngens; k++) {
+        double d;
+        bool got = D->g_progs[k]
+                && compiled_eval_real(D->g_progs[k], xr, &d) && isfinite(d);
+        if (!got && (!fm_eval_scalar(D->gens[k].expr, D->binds, xr, D->n, D->opts, &d)
+                     || !isfinite(d)))
+            return false;
+        if (D->gens[k].equality || d > 0.0) total += d * d;
+    }
+    *out = total;
+    return true;
+}
 
 /* Objective value and total constraint violation at x. Integer coordinates
  * are rounded before evaluation. A non-evaluable objective or constraint is
@@ -3006,12 +3053,9 @@ static void nm_eval(NmDriver* D, const double* x, double* f_out, double* pen_out
     double* xr = (double*)malloc(sizeof(double) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) xr[i] = D->is_int[i] ? round(x[i]) : x[i];
     double fx;
-    if (!fm_eval_scalar(D->f_raw, D->binds, xr, n, D->opts, &fx) || !isfinite(fx))
-        fx = 1e300;
+    if (!nm_eval_obj(D, xr, &fx)) fx = 1e300;
     double pen = 0.0;
-    if (D->ngens > 0 &&
-        !fm_eval_penalty(D->gens, D->ngens, D->binds, xr, n, D->opts, &pen))
-        pen = 1e300;
+    if (!nm_eval_pen(D, xr, &pen)) pen = 1e300;
     free(xr);
     *f_out = fx;
     *pen_out = pen;
@@ -3189,6 +3233,41 @@ static void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
     free(pop); free(fpop); free(ppop); free(trial);
 }
 
+/* Build the (n+1)-vertex initial simplex from a user "InitialPoints" list. Each
+ * element must be a length-n list of reals (evaluated + numericalized, so Pi
+ * etc. are fine). If fewer than n+1 points are given, the remaining vertices are
+ * seeded by perturbing the first point along successive axes; extra points are
+ * ignored. Returns false (→ fall back to a random simplex) if the list is
+ * malformed or any used point has the wrong dimension or a non-numeric entry. */
+static bool nm_simplex_from_points(NmDriver* D, const Expr* pts, size_t n, double* V) {
+    if (!pts || !nm_is_head(pts, SYM_List) || pts->data.function.arg_count == 0)
+        return false;
+    size_t npts = pts->data.function.arg_count;
+    size_t use  = npts < (n + 1) ? npts : (n + 1);
+    for (size_t i = 0; i < use; i++) {
+        Expr* p = pts->data.function.args[i];
+        if (!nm_is_head(p, SYM_List) || p->data.function.arg_count != n) return false;
+        for (size_t j = 0; j < n; j++) {
+            Expr* c  = eval_and_free(expr_copy(p->data.function.args[j]));
+            Expr* cn = c ? numericalize(c, numeric_machine_spec()) : NULL;
+            double v;
+            bool ok = cn && fm_expr_to_double_real(cn, &v);
+            expr_free(c); expr_free(cn);
+            if (!ok) return false;
+            V[i * n + j] = v;
+        }
+    }
+    for (size_t i = use; i <= n; i++) {
+        for (size_t j = 0; j < n; j++) V[i * n + j] = V[j];
+        size_t d = i - 1;
+        double step = (D->reg_hi[d] - D->reg_lo[d]) * 0.1;
+        if (step == 0.0) step = 1.0;
+        V[i * n + d] += step;
+    }
+    for (size_t i = 0; i <= n; i++) nm_project(D, &V[i * n]);
+    return true;
+}
+
 /* NelderMead downhill simplex on the penalized objective, with restarts. */
 static void nm_neldermead(NmDriver* D, const NmConfig* nc, NmRng* rng,
                           double* xbest, double* fbest, double* penbest) {
@@ -3198,13 +3277,27 @@ static void nm_neldermead(NmDriver* D, const NmConfig* nc, NmRng* rng,
     int restarts = nc->search_points > 0 ? nc->search_points : (n > 1 ? 4 : 2);
     if (restarts < 1) restarts = 1;
     if (restarts > 20) restarts = 20;
-    /* Simplex coefficients: reflection 1, expansion (ExpandRatio, default 2),
-     * contraction toward the centroid (ContractRatio, default 0.5). */
-    double er = nc->expand_ratio   > 0.0 ? nc->expand_ratio   : 2.0;
-    double cr = nc->contract_ratio > 0.0 ? nc->contract_ratio : 0.5;
+    /* Simplex coefficients: reflection (ReflectRatio, default 1), expansion
+     * (ExpandRatio, default 2), contraction toward the centroid (ContractRatio,
+     * default 0.5), shrink toward the best vertex (ShrinkRatio, default 0.5).
+     * Tolerance is the objective-spread convergence threshold. */
+    double rr  = nc->reflect_ratio  > 0.0 ? nc->reflect_ratio  : 1.0;
+    double er  = nc->expand_ratio   > 0.0 ? nc->expand_ratio   : 2.0;
+    double cr  = nc->contract_ratio > 0.0 ? nc->contract_ratio : 0.5;
+    double sr  = nc->shrink_ratio   > 0.0 ? nc->shrink_ratio   : 0.5;
+    double tol = nc->tolerance      > 0.0 ? nc->tolerance      : 1e-12;
     int64_t maxit = D->opts->max_iter > 0 ? D->opts->max_iter * (int64_t)(5 * n)
                                           : 200 * (int64_t)n;
     if (maxit < 100) maxit = 100;
+
+    /* Domain-convergence scale: the simplex must shrink to a small fraction of
+     * the search region — not just reach a flat objective — before we declare
+     * convergence. Without this, a broad plateau (the flat outer region of the
+     * Easom function, where f ≈ 0 everywhere away from a narrow spike) trips the
+     * objective-spread test on the first iteration and the simplex never moves. */
+    double rscale = 1.0;
+    for (size_t j = 0; j < n; j++) { double e = rhi[j] - rlo[j]; if (e > rscale) rscale = e; }
+    double xdtol = 1e-6 * rscale;
 
     double* V  = (double*)malloc(sizeof(double) * (n + 1) * n);
     double* fv = (double*)malloc(sizeof(double) * (n + 1));
@@ -3214,15 +3307,20 @@ static void nm_neldermead(NmDriver* D, const NmConfig* nc, NmRng* rng,
     bool have = false;
 
     for (int rs = 0; rs < restarts; rs++) {
-        for (size_t j = 0; j < n; j++) V[j] = nm_rng_range(rng, rlo[j], rhi[j]);
-        nm_project(D, &V[0]);
-        for (size_t i = 1; i <= n; i++) {
-            for (size_t j = 0; j < n; j++) V[i * n + j] = V[j];
-            size_t d = i - 1;
-            double step = (rhi[d] - rlo[d]) * 0.1;
-            if (step == 0.0) step = 1.0;
-            V[i * n + d] += step;
-            nm_project(D, &V[i * n]);
+        /* Restart 0 uses the user's "InitialPoints" simplex when supplied and
+         * valid; every other restart (and the fallback) is a random simplex. */
+        bool seeded = (rs == 0) && nm_simplex_from_points(D, nc->init_points, n, V);
+        if (!seeded) {
+            for (size_t j = 0; j < n; j++) V[j] = nm_rng_range(rng, rlo[j], rhi[j]);
+            nm_project(D, &V[0]);
+            for (size_t i = 1; i <= n; i++) {
+                for (size_t j = 0; j < n; j++) V[i * n + j] = V[j];
+                size_t d = i - 1;
+                double step = (rhi[d] - rlo[d]) * 0.1;
+                if (step == 0.0) step = 1.0;
+                V[i * n + d] += step;
+                nm_project(D, &V[i * n]);
+            }
         }
         for (size_t i = 0; i <= n; i++) fv[i] = nm_phi(D, &V[i * n]);
 
@@ -3235,7 +3333,14 @@ static void nm_neldermead(NmDriver* D, const NmConfig* nc, NmRng* rng,
             nh = (hi == 0) ? 1 : 0;
             for (size_t i = 0; i <= n; i++)
                 if (i != hi && fv[i] > fv[nh]) nh = i;
-            if (fabs(fv[hi] - fv[lo]) <= 1e-12 * (1.0 + fabs(fv[lo]))) break;
+            double xspread = 0.0;
+            for (size_t i = 0; i <= n; i++)
+                for (size_t j = 0; j < n; j++) {
+                    double dd = fabs(V[i * n + j] - V[lo * n + j]);
+                    if (dd > xspread) xspread = dd;
+                }
+            if (fabs(fv[hi] - fv[lo]) <= tol * (1.0 + fabs(fv[lo])) && xspread <= xdtol)
+                break;
 
             for (size_t j = 0; j < n; j++) xc[j] = 0.0;
             for (size_t i = 0; i <= n; i++)
@@ -3243,7 +3348,7 @@ static void nm_neldermead(NmDriver* D, const NmConfig* nc, NmRng* rng,
                     for (size_t j = 0; j < n; j++) xc[j] += V[i * n + j];
             for (size_t j = 0; j < n; j++) xc[j] /= (double)n;
 
-            for (size_t j = 0; j < n; j++) xr[j] = xc[j] + (xc[j] - V[hi * n + j]);
+            for (size_t j = 0; j < n; j++) xr[j] = xc[j] + rr * (xc[j] - V[hi * n + j]);
             nm_project(D, xr);
             double frr = nm_phi(D, xr);
             if (frr < fv[lo]) {
@@ -3266,7 +3371,7 @@ static void nm_neldermead(NmDriver* D, const NmConfig* nc, NmRng* rng,
                     for (size_t i = 0; i <= n; i++) {
                         if (i == lo) continue;
                         for (size_t j = 0; j < n; j++)
-                            V[i * n + j] = V[lo * n + j] + 0.5 * (V[i * n + j] - V[lo * n + j]);
+                            V[i * n + j] = V[lo * n + j] + sr * (V[i * n + j] - V[lo * n + j]);
                         nm_project(D, &V[i * n]);
                         fv[i] = nm_phi(D, &V[i * n]);
                     }
@@ -3408,18 +3513,33 @@ static bool nm_parse_method(Expr* rhs, NmConfig* nc, const char* fn) {
             } else if (strcmp(on, "RandomSeed") == 0) {
                 if (ov->type == EXPR_INTEGER && ov->data.integer >= 0)
                     nc->seed = (uint64_t)ov->data.integer;
+            } else if (strcmp(on, "ReflectRatio") == 0) {
+                double dv; if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0)
+                    nc->reflect_ratio = dv;
             } else if (strcmp(on, "ExpandRatio") == 0) {
                 double dv; if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0)
                     nc->expand_ratio = dv;
             } else if (strcmp(on, "ContractRatio") == 0) {
                 double dv; if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0)
                     nc->contract_ratio = dv;
+            } else if (strcmp(on, "ShrinkRatio") == 0) {
+                double dv; if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0)
+                    nc->shrink_ratio = dv;
+            } else if (strcmp(on, "Tolerance") == 0) {
+                double dv; if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0)
+                    nc->tolerance = dv;
             } else if (strcmp(on, "PostProcess") == 0) {
                 if (ov->type == EXPR_SYMBOL) {
                     if (ov->data.symbol.name == SYM_True)  nc->post_process = 1;
                     else if (ov->data.symbol.name == SYM_False) nc->post_process = 0;
                     /* Automatic ⇒ leave the auto default (on) */
                 }
+            } else if (strcmp(on, "InitialPoints") == 0) {
+                /* A list of starting points {{x1,...}, {x2,...}, ...}; borrowed
+                 * and validated/consumed by the engine, where the dimension n is
+                 * known. Anything else is ignored (falls back to random starts). */
+                if (nm_is_head(ov, SYM_List) && ov->data.function.arg_count > 0)
+                    nc->init_points = ov;
             }
         }
         return true;
@@ -3692,9 +3812,13 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     nc.search_points = 0;
     nc.F = -1.0;
     nc.CR = -1.0;
+    nc.reflect_ratio = -1.0;
     nc.expand_ratio = -1.0;
     nc.contract_ratio = -1.0;
+    nc.shrink_ratio = -1.0;
+    nc.tolerance = -1.0;
     nc.post_process = -1;
+    nc.init_points = NULL;
     nc.seed = NM_DEFAULT_SEED;
 
     for (size_t i = pos_end; i < argc; i++) {
@@ -3855,6 +3979,8 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     double* reg_hi = NULL;
     double* xbest = NULL;
     Expr* result_out = NULL;
+    CompiledProgram*  f_prog = NULL;   /* compiled objective (machine prec)     */
+    CompiledProgram** g_progs = NULL;  /* compiled general constraints          */
 
     /* Extract integer/real domain declarations, then collect the remaining
      * constraints into boxes + general FmGenCon[]. */
@@ -3895,11 +4021,47 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     /* Objective gradient (for the continuous local polish; NULL → FD). */
     if (!vs.any_int) g_exprs = fm_compute_gradient(f_eff, eff_vars, n);
 
+    /* Machine-precision auto-compilation: the global search evaluates the
+     * objective (and each general constraint) at hundreds–thousands of trial
+     * points, so lowering them to bytecode over the effective variables once and
+     * running the register machine per point is far cheaper than the interpreter
+     * (expr_copy + evaluate + numericalize each call). The variables are already
+     * unbound (Block snapshot cleared their OwnValues), so they compile as the
+     * argument symbols; COMPILE_FOLD_GLOBALS folds any other machine-valued
+     * symbol — safe because these programs live only for this call. A body with
+     * a construct Compile can't lower stays NULL and uses the interpreter, and
+     * every per-point call falls back to the interpreter on a domain/non-finite
+     * result, so this is a pure speedup with no change in answer. MPFR
+     * (WorkingPrecision > MachinePrecision) keeps the exact interpreter path. */
+    if (opts.prec_mode == FM_PREC_MACHINE) {
+        const char** cnames = (const char**)malloc(sizeof(char*) * (n ? n : 1));
+        CompileType* ctypes = (CompileType*)malloc(sizeof(CompileType) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) {
+            cnames[i] = eff_vars[i]->data.symbol.name;
+            ctypes[i] = CT_REAL;
+        }
+        f_prog = compile_expr_ex(f_eff, cnames, ctypes, n, COMPILE_FOLD_GLOBALS);
+        if (f_prog && compiled_result_type(f_prog) != CT_REAL) {
+            compiled_free(f_prog); f_prog = NULL;
+        }
+        if (ngens > 0) {
+            g_progs = (CompiledProgram**)calloc(ngens, sizeof(CompiledProgram*));
+            for (size_t k = 0; k < ngens; k++) {
+                CompiledProgram* p = compile_expr_ex(gens[k].expr, cnames, ctypes,
+                                                     n, COMPILE_FOLD_GLOBALS);
+                if (p && compiled_result_type(p) != CT_REAL) { compiled_free(p); p = NULL; }
+                g_progs[k] = p;
+            }
+        }
+        free(cnames); free(ctypes);
+    }
+
     NmDriver D;
     D.f_raw = f_eff; D.vars = eff_vars; D.n = n; D.binds = binds;
     D.g_exprs = g_exprs; D.gens = gens; D.ngens = ngens; D.boxes = boxes;
     D.opts = &opts; D.is_int = vs.is_int; D.any_int = vs.any_int;
     D.reg_lo = reg_lo; D.reg_hi = reg_hi;
+    D.f_prog = f_prog; D.g_progs = g_progs;
 
     xbest = (double*)malloc(sizeof(double) * n);
     double fbest = 1e300, penbest = 1e300;
@@ -3993,6 +4155,11 @@ cleanup:
     if (cons_owned) expr_free(cons_eff);
     if (f_owned)    expr_free(f_eff);
     expr_free(cons_built);
+    if (f_prog) compiled_free(f_prog);
+    if (g_progs) {
+        for (size_t k = 0; k < ngens; k++) if (g_progs[k]) compiled_free(g_progs[k]);
+        free(g_progs);
+    }
     free(boxes);
     free(reg_lo);
     free(reg_hi);
