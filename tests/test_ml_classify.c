@@ -348,6 +348,93 @@ static void test_logistic_multiclass_coefficients_stay_finite(void) {
                    " And @@ Map[(NumberQ[#] && Abs[#] < 1000.) &, b]]", "True", 0);
 }
 
+static void test_tree_reproduces_every_training_label(void) {
+    /* The tree grows until every leaf is pure or unsplittable, so this is an EXACT property
+     * rather than an accuracy figure -- the same role k = 1 plays for nearest neighbours. */
+    assert_eval_eq("Module[{tr = " MC3 ", L},"
+                   " L = Classify[tr, Method -> \"DecisionTree\"];"
+                   " And @@ Table[L[First[tr[[i]]]] === Last[tr[[i]]], {i, Length[tr]}]]",
+                   "True", 0);
+    /* One dimension, and a blob count that is not the class count. */
+    assert_eval_eq("Module[{L = Classify[{1. -> \"lo\", 2. -> \"lo\", 8. -> \"hi\","
+                   " 9. -> \"hi\"}, Method -> \"DecisionTree\"]}, {L[1.5], L[8.5]}]",
+                   "{\"lo\", \"hi\"}", 0);
+}
+
+static void test_tree_threshold_is_the_midpoint(void) {
+    /* An EXACT value, and the reason midpoints are used at all. A threshold sitting on a
+     * training value would make the <= boundary depend on floating-point equality with that
+     * value, so an unseen point equal to it lands by luck. Between 1 and 9 the midpoint is 5,
+     * exactly representable, so this is an equality and not a tolerance. */
+    assert_eval_eq("Part[Classify[{1. -> \"lo\", 9. -> \"hi\"}, "
+                   "Method -> \"DecisionTree\"], 2, 2, 1, 2] == 5.", "True", 0);
+    /* The node table's shape: a root split plus two leaves, a leaf marked by feature -1. */
+    assert_eval_eq("Part[Classify[{1. -> \"lo\", 9. -> \"hi\"}, "
+                   "Method -> \"DecisionTree\"], 2, 2]",
+                   "{{0, 5.0, 1, 2}, {-1, 0.0, 0, 0}, {-1, 0.0, 0, 0}}", 0);
+}
+
+static void test_tree_probabilities_on_an_impure_leaf(void) {
+    /* THE non-degenerate probability case, and it needs contradictory data to exist at all:
+     * on separable data every leaf is pure, so the answer is 1/0 and would sum to 1 even with
+     * a broken normaliser. Three points at the SAME coordinates with classes a, b, b cannot be
+     * separated by any threshold, so they share one leaf whose histogram is genuinely mixed --
+     * and 1/3 and 2/3 is what a correct normaliser gives. */
+    assert_eval_eq("Module[{L = Classify[{{0.,0.} -> \"a\", {0.,0.} -> \"b\","
+                   " {0.,0.} -> \"b\", {9.,9.} -> \"c\"}, Method -> \"DecisionTree\"], p},"
+                   " p = L[{0.,0.}, \"Probabilities\"];"
+                   " {Chop[Total[Map[Last, p]] - 1.],"
+                   "  Chop[Last[p[[1]]] - 1./3.], Chop[Last[p[[2]]] - 2./3.]}]",
+                   "{0, 0, 0}", 0);
+    /* And the class is the majority of that leaf, not the first-seen label. */
+    assert_eval_eq("Classify[{{0.,0.} -> \"a\", {0.,0.} -> \"b\", {0.,0.} -> \"b\","
+                   " {9.,9.} -> \"c\"}, Method -> \"DecisionTree\"][{0.,0.}]", "\"b\"", 0);
+}
+
+static void test_tree_is_deterministic(void) {
+    /* Fitting the same data twice must give the IDENTICAL model. Ties on impurity decrease are
+     * broken by lower feature index then lower threshold, and the sort comparator falls back to
+     * the point index so qsort's instability cannot decide anything. Without all of that no
+     * test could pin a tree -- the same reasoning that ruled out a softmax for multi-class
+     * logistic regression, whose parameters are not unique either. */
+    assert_eval_eq("Classify[" MC3 ", Method -> \"DecisionTree\"] === "
+                   "Classify[" MC3 ", Method -> \"DecisionTree\"]", "True", 0);
+    /* Well-separated blobs are classified the same whichever order the rows arrive in. */
+    assert_eval_eq("Module[{a = " MC3 ", La, Lb, pts},"
+                   " La = Classify[a, Method -> \"DecisionTree\"];"
+                   " Lb = Classify[Reverse[a], Method -> \"DecisionTree\"];"
+                   " pts = {{0.1,0.1}, {5.,0.2}, {0.2,5.}};"
+                   " And @@ Table[La[p] === Lb[p], {p, pts}]]", "True", 0);
+}
+
+static void test_tree_handles_unsplittable_data(void) {
+    /* A feature that never varies offers no split, so the tree must find the one that does
+     * rather than giving up at the root. */
+    assert_eval_eq("Module[{L = Classify[{{1.,5.} -> \"x\", {1.,6.} -> \"x\","
+                   " {1.,7.} -> \"y\"}, Method -> \"DecisionTree\"]}, {L[{1.,5.}], L[{1.,7.}]}]",
+                   "{\"x\", \"y\"}", 0);
+    /* Every feature constant AND the classes disagreeing: nothing can be split, so the whole
+     * tree is one leaf holding the majority. This is the case that would recurse forever if
+     * "no split improves impurity" were not a stopping rule. */
+    assert_eval_eq("Module[{L = Classify[{{2.,2.} -> \"p\", {2.,2.} -> \"q\","
+                   " {2.,2.} -> \"q\"}, Method -> \"DecisionTree\"]},"
+                   " {L[{2.,2.}], Length[Part[L, 2, 2]]}]", "{\"q\", 1}", 0);
+    /* A single training point is a valid one-leaf tree, not an error. */
+    assert_eval_eq("Classify[{{1.,1.} -> \"only\"}, Method -> \"DecisionTree\"][{9.,9.}]",
+                   "\"only\"", 0);
+}
+
+static void test_tree_declines_and_coexists(void) {
+    /* A neighbour count means nothing to a tree, so it is refused rather than ignored. */
+    assert_eval_eq("Head[Classify[" LR1 ", Method -> {\"DecisionTree\", "
+                   "\"NeighborsNumber\" -> 3}]]", "Classify", 0);
+    /* Four methods on the one head, and the fitted model elides like the others. */
+    assert_eval_eq("Classify[" LR1 ", Method -> \"DecisionTree\"]",
+                   "ClassifierFunction[\"DecisionTree\", <>]", 0);
+    assert_eval_eq("Part[Classify[" LR1 ", Method -> \"DecisionTree\"], 1]",
+                   "\"DecisionTree\"", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -373,6 +460,12 @@ int main(void) {
     TEST(test_logistic_multiclass_is_independent_of_row_order);
     TEST(test_logistic_two_class_payload_shape_is_unchanged);
     TEST(test_logistic_multiclass_coefficients_stay_finite);
+    TEST(test_tree_reproduces_every_training_label);
+    TEST(test_tree_threshold_is_the_midpoint);
+    TEST(test_tree_probabilities_on_an_impure_leaf);
+    TEST(test_tree_is_deterministic);
+    TEST(test_tree_handles_unsplittable_data);
+    TEST(test_tree_declines_and_coexists);
 
     printf("All ml Classify tests passed.\n");
     return 0;

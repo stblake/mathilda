@@ -378,6 +378,7 @@ set(COMMON_SRC
     ../src/ml/mlutil.c
     ../src/ml/dist.c
     ../src/ml/encode.c
+    ../src/ml/tree.c
     ../src/ml/classify.c
     ../src/ml/pca.c
     ../src/ml/predict.c

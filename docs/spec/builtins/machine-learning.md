@@ -481,6 +481,7 @@ Trains a classifier and returns a `ClassifierFunction`. Attributes: `Protected`.
 - `Classify[data, Method -> "NearestNeighbors"]`
 - `Classify[data, Method -> "NaiveBayes"]`
 - `Classify[data, Method -> "LogisticRegression"]`
+- `Classify[data, Method -> "DecisionTree"]`
 - `Classify[data, Method -> {"NearestNeighbors", "NeighborsNumber" -> k}]`
 
 **A class may be any expression.** This is the substantive addition of this family:
@@ -594,3 +595,55 @@ Out[3]= {"red" -> 1.0, "blue" -> 0.0}
 [`lists-and-iteration.md`](lists-and-iteration.md), where the rest of the list
 operations live. All ten cluster n-dimensional points; only string input is declined
 above one dimension, having no coordinates.
+
+### `"DecisionTree"` — a CART classification tree
+
+The first method in `src/ml` that reuses **nothing** from the other families: no distance, no
+density, no linear algebra, no label-index arithmetic beyond counting. A tree needs an
+impurity criterion, a recursive splitter, a stopping rule and a node representation, none of
+which any earlier family had a use for — which is why it was recorded as deferred for as long
+as it was rather than being wedged into an iteration. The kernel lives in `src/ml/tree.c`,
+buffer-level, because `RandomForest` is this same fit run over bootstrap resamples.
+
+**Gini rather than entropy**, and not as a coin toss. Both rank splits almost identically in
+practice, but Gini is a sum of squares where entropy is a sum of `x log x` — no logarithm per
+candidate threshold and no special case at `p = 0`. The splitter evaluates the criterion
+O(`dim` × `n`) times per node, so the cheaper one with no domain edge is the better default.
+
+**Thresholds are midpoints between consecutive distinct values**, never the values themselves.
+A threshold sitting on a training value makes the `<=` boundary depend on floating-point
+equality with it, so an unseen point equal to that value lands by luck; the midpoint puts the
+boundary in the gap where nothing lies. Between `1.` and `9.` the split is at exactly `5.`,
+and a test pins that.
+
+**It grows until every leaf is pure or unsplittable** (depth 32, min-split 2). That is a
+deliberate default: it makes "reproduces every training label" an *exact* property to assert
+rather than an accuracy figure to hope for — the role `k = 1` plays for nearest neighbours. It
+also **overfits**, which is the honest trade. Pruning needs a validation split or a complexity
+parameter, and inventing either silently would be worse than growing the tree that was asked
+for.
+
+**Determinism is a requirement here, not a courtesy.** Ties on impurity decrease break by
+lower feature index then lower threshold, and the sort comparator falls back to the point
+index so `qsort`'s permitted instability cannot decide anything. Without all of that no test
+could pin a tree at all — the same reasoning that ruled out a softmax for multi-class logistic
+regression, whose parameters are likewise not unique. `Classify[d, …] === Classify[d, …]` is
+asserted.
+
+The payload is the vocabulary plus **two matrices with one row per node**: the split
+(`feature`, `threshold`, `left`, `right`, with `feature = -1` marking a leaf) and the class
+counts. Storing counts at *every* node rather than only at leaves is what lets the class and
+`"Probabilities"` come out of the same array, with no separate leaf table to keep in step; an
+internal node's histogram is its subtree's distribution, so nothing in the layout is dead
+weight.
+
+```
+In[1]:= Part[Classify[{1. -> "lo", 9. -> "hi"}, Method -> "DecisionTree"], 2, 2]
+Out[1]= {{0, 5.0, 1, 2}, {-1, 0.0, 0, 0}, {-1, 0.0, 0, 0}}
+```
+
+**Data the tree cannot separate is handled rather than fatal.** Identical feature rows with
+different classes share a leaf holding the majority, and its `"Probabilities"` are that leaf's
+real histogram — three points at one coordinate with classes `a`, `b`, `b` give `1/3` and
+`2/3`. "No split improves impurity" is a stopping rule, and it is what would otherwise recurse
+forever when every feature is constant. A single training point is a valid one-leaf tree.
