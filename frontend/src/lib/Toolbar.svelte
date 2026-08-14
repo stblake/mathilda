@@ -35,7 +35,7 @@
   import { symbolAtSelection } from './refpages';
   import { kernelStatus } from './notebook';
   import { restart, abortEvaluation } from './kernelActions';
-  import { showStatusBar, resetSessionStats } from './status';
+  import { showStatusBar, showMemory, resetSessionStats } from './status';
   import type { Cell, CellType, NotebookRow } from './notebook';
 
   type MenuId = 'eval' | 'kernel' | 'docs' | 'style' | 'addpane' | 'overflow' | null;
@@ -358,6 +358,7 @@
       : []),
     { kind: 'sep' },
     { kind: 'item', id: 'statusbar', label: 'Status bar', checked: $showStatusBar },
+    { kind: 'item', id: 'memory', label: 'Kernel memory', checked: $showMemory },
     { kind: 'sep' },
     { kind: 'item', id: 'rename', label: 'Rename notebook…', icon: 'rename' },
     { kind: 'item', id: 'collapse', label: $activeFlags?.collapsed ? 'Expand notebook' : 'Collapse notebook', icon: 'collapse' },
@@ -369,6 +370,17 @@
     /* The status bar is a view preference, not a notebook command, so it does
        not need a pane and must be handled before the guard below. */
     if (id === 'statusbar') { showStatusBar.update(v => !v); return; }
+    /* Memory is the same kind of thing -- a view preference, no pane needed.
+       Turning it on also turns the bar on, since a segment of a hidden bar is
+       a setting with no visible effect, which reads as a broken menu item. */
+    if (id === 'memory') {
+      showMemory.update(v => {
+        const next = !v;
+        if (next) showStatusBar.set(true);
+        return next;
+      });
+      return;
+    }
     const pane = $activeActions;
     if (!pane) return;
     switch (id) {

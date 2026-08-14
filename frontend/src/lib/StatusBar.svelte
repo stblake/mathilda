@@ -13,7 +13,10 @@
 -->
 <script lang="ts">
   import { kernelStatus } from './notebook';
-  import { lastOp, evalCount, evalTotalMs, formatMs } from './status';
+  import { lastOp, evalCount, evalTotalMs, formatMs,
+           memoryBytes, memoryStale, showMemory, formatBytes } from './status';
+  import { evaluateCell } from './ipc';
+  import { onMount } from 'svelte';
   import { activeCell } from './active';
   import { activeActions } from './canvas';
   import { restart } from './kernelActions';
@@ -50,6 +53,73 @@
   $: activeInfo = ($activeCell && $activeActions && $activeCell.notebookId === $activeActions.notebookId)
     ? cells.find(c => c.id === $activeCell!.cellId) ?? null
     : null;
+
+  /* ---- Memory sampling ----------------------------------------------------
+   *
+   * Lives here rather than in a store so it only runs while the bar is on
+   * screen: a hidden status bar should cost nothing at all.
+   *
+   * Deliberately NOT routed through recordOp(). A poll is not the user's work,
+   * so counting it would inflate the very session totals displayed two segments
+   * to the left -- a bar that changed its own numbers by being visible.
+   *
+   * The kernel does not record In[]/Out[] in pipe mode and exec indices are
+   * assigned by the frontend per cell, so these samples cannot disturb cell
+   * numbering either. That was checked rather than assumed; it is the reason a
+   * timed poll is acceptable at all.
+   *
+   * SEQUENCED, NEVER OVERLAPPED. A single in-flight flag means a slow sample
+   * cannot stack up behind itself -- without it, a kernel that went busy
+   * mid-poll would accumulate one queued evaluation per tick and hand the user
+   * a backlog to wait through.
+   */
+  const MEMORY_POLL_MS = 2000;
+  let sampling = false;
+
+  async function sampleMemory() {
+    /* Not ready means busy, starting, restarting or dead. In every one of those
+       the right move is to leave the last figure up and flag it, not to queue
+       an evaluation the user will end up waiting behind. */
+    if ($kernelStatus !== 'ready') { memoryStale.set(true); return; }
+    if (sampling) return;
+    sampling = true;
+    try {
+      let raw = '';
+      await evaluateCell('MemoryInUse[]', (msg) => {
+        if (msg.type === 'expr') raw += msg.payload;
+      });
+      /* MemoryInUse returns unevaluated on a platform that cannot answer, so a
+         non-numeric reply is a real possibility and means "no figure", not
+         zero. Blank the value rather than showing a fabricated 0 B. */
+      const n = Number(raw.trim());
+      if (Number.isFinite(n) && n > 0) {
+        memoryBytes.set(n);
+        memoryStale.set(false);
+      } else {
+        memoryBytes.set(null);
+        memoryStale.set(false);
+      }
+    } catch {
+      /* A failed sample keeps the previous figure and marks it stale. */
+      memoryStale.set(true);
+    } finally {
+      sampling = false;
+    }
+  }
+
+  onMount(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const unsubMem = showMemory.subscribe(on => {
+      if (on && timer === null) {
+        void sampleMemory();                  /* something to show immediately */
+        timer = setInterval(() => void sampleMemory(), MEMORY_POLL_MS);
+      } else if (!on && timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+    });
+    return () => { if (timer !== null) clearInterval(timer); unsubMem(); };
+  });
 
   /* One line, and short: this sits in a 22px strip. */
   $: opSource = $lastOp
@@ -91,6 +161,21 @@
   {/if}
 
   <span class="spacer"></span>
+
+  <!-- Kernel memory. Opt-in, so absent unless asked for. -->
+  {#if $showMemory}
+    <span
+      class="seg"
+      class:stale={$memoryStale}
+      title={$memoryBytes == null
+        ? 'Kernel memory — no figure yet'
+        : `Kernel resident memory${$memoryStale ? ' (last known — the kernel is busy, so it cannot be sampled right now)' : ''}. This is the process resident set size, the same figure Activity Monitor shows, so it includes the binary and shared libraries as well as session data.`}
+    >
+      <span class="seg-label">Mem</span>
+      <span class="seg-value">{$memoryBytes == null ? '—' : formatBytes($memoryBytes)}</span>
+    </span>
+    <span class="rule"></span>
+  {/if}
 
   <!-- Session totals -->
   {#if $evalCount > 0}
@@ -151,6 +236,10 @@
     color: inherit;
   }
   .seg.muted { opacity: 0.5; }
+  /* A stale figure is dimmed rather than hidden: the number is still the best
+     information available, and hiding it would read as "memory went to zero"
+     at exactly the moment it most likely spiked. */
+  .seg.stale .seg-value { opacity: 0.45; font-style: italic; }
   .seg.err .seg-value.strong { color: var(--err); }
 
   .seg-label {
