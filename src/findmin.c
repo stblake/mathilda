@@ -2857,6 +2857,7 @@ typedef struct {
     double   tolerance;      /* simplex convergence tolerance; <0 ⇒ default    */
     int      post_process;   /* -1 auto (on) / 1 on / 0 off (skip polish)    */
     Expr*    init_points;    /* "InitialPoints" -> {{...},...}, borrowed / NULL */
+    Expr*    penalty_fn;     /* "PenaltyFunction" -> f, borrowed / NULL ⇒ auto */
     uint64_t seed;
 } NmConfig;
 
@@ -3014,6 +3015,10 @@ typedef struct {
      * result — so the compiled path is a pure speedup, never a correctness risk. */
     CompiledProgram*  f_prog;    /* objective, or NULL                          */
     CompiledProgram** g_progs;   /* per-constraint (len ngens), entries may NULL */
+    /* "PenaltyFunction" -> f. Borrowed / NULL ⇒ Automatic (built-in squared
+     * penalty). When set, the global-search violation of each active constraint
+     * is scored as f[violation] rather than violation^2; see nm_eval_pen. */
+    Expr*             penalty_fn;
 } NmDriver;
 
 /* Objective at the (already integer-rounded) point xr: the compiled program if
@@ -3024,22 +3029,48 @@ static bool nm_eval_obj(NmDriver* D, const double* xr, double* out) {
     return fm_eval_scalar(D->f_raw, D->binds, xr, D->n, D->opts, out) && isfinite(*out);
 }
 
-/* Σ max(0, g_i)^2 + Σ h_j^2 over the general constraints at xr, each constraint
- * via its compiled program if present, else the interpreter. Returns false if
- * any constraint cannot be evaluated at all. */
+/* Apply a user "PenaltyFunction" f to one nonnegative constraint-violation
+ * magnitude m, returning f[m] as a double. Evaluator numeric diagnostics are
+ * muted, as everywhere else in the trial-point loop. A non-numeric, non-finite,
+ * or negative result is rejected so the caller can fall back to the built-in
+ * m^2 for that term (a custom penalty must be a usable nonnegative score). */
+static bool nm_apply_penalty_fn(Expr* pf, double m, double* out) {
+    Expr* arg  = expr_new_real(m);
+    Expr* call = expr_new_function(expr_copy(pf), &arg, 1);
+    arith_warnings_mute_push();
+    Expr* v = eval_and_free(call);
+    arith_warnings_mute_pop();
+    bool ok = v && fm_expr_to_double_real(v, out) && isfinite(*out) && *out >= 0.0;
+    expr_free(v);
+    return ok;
+}
+
+/* Σ pen(g_i) over the general constraints at xr, each constraint via its
+ * compiled program if present, else the interpreter. The per-constraint term is
+ * the built-in squared violation — max(0, g)^2 for an inequality g <= 0, h^2 for
+ * an equality h == 0 — unless a "PenaltyFunction" f was supplied, in which case a
+ * *violated* constraint contributes f[violation] instead (Automatic ≡ #^2 &, so
+ * this generalises the default exactly). A satisfied inequality always
+ * contributes 0, keeping the feasibility test (total ≤ NM_FEAS_EPS) intact.
+ * Returns false if any constraint cannot be evaluated at all. */
 static bool nm_eval_pen(NmDriver* D, const double* xr, double* out) {
     if (D->ngens == 0) { *out = 0.0; return true; }
-    if (!D->g_progs)
+    if (!D->g_progs && !D->penalty_fn)
         return fm_eval_penalty(D->gens, D->ngens, D->binds, xr, D->n, D->opts, out);
     double total = 0.0;
     for (size_t k = 0; k < D->ngens; k++) {
         double d;
-        bool got = D->g_progs[k]
+        bool got = D->g_progs && D->g_progs[k]
                 && compiled_eval_real(D->g_progs[k], xr, &d) && isfinite(d);
         if (!got && (!fm_eval_scalar(D->gens[k].expr, D->binds, xr, D->n, D->opts, &d)
                      || !isfinite(d)))
             return false;
-        if (D->gens[k].equality || d > 0.0) total += d * d;
+        double m = D->gens[k].equality ? fabs(d) : (d > 0.0 ? d : 0.0);
+        if (m == 0.0) continue;
+        double term;
+        if (!D->penalty_fn || !nm_apply_penalty_fn(D->penalty_fn, m, &term))
+            term = m * m;
+        total += term;
     }
     *out = total;
     return true;
@@ -3558,6 +3589,25 @@ static bool nm_parse_method(Expr* rhs, NmConfig* nc, const char* fn) {
                  * known. Anything else is ignored (falls back to random starts). */
                 if (nm_is_head(ov, SYM_List) && ov->data.function.arg_count > 0)
                     nc->init_points = ov;
+            } else if (strcmp(on, "PenaltyFunction") == 0) {
+                /* A function applied to each constraint's violation to score
+                 * infeasible points during the global search; Automatic ≡ #^2 &.
+                 * Automatic / None keep the built-in squared penalty; a pure
+                 * function or a function symbol (#^2 &, (10 #) &, Sqrt, ...) is
+                 * stored (borrowed from the held method list) and applied in
+                 * nm_eval_pen. It affects only the global-search feasibility
+                 * scoring — the final local polish keeps the differentiable
+                 * squared penalty its analytic gradient assumes. */
+                if (ov->type == EXPR_SYMBOL
+                    && (ov->data.symbol.name == SYM_Automatic
+                        || ov->data.symbol.name == SYM_None)) {
+                    nc->penalty_fn = NULL;
+                } else if (ov->type == EXPR_FUNCTION || ov->type == EXPR_SYMBOL) {
+                    nc->penalty_fn = ov;
+                } else {
+                    fm_warn(fn, "penf",
+                            "invalid PenaltyFunction value; using Automatic");
+                }
             }
         }
         return true;
@@ -3837,6 +3887,7 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     nc.tolerance = -1.0;
     nc.post_process = -1;
     nc.init_points = NULL;
+    nc.penalty_fn = NULL;
     nc.seed = NM_DEFAULT_SEED;
 
     for (size_t i = pos_end; i < argc; i++) {
@@ -4080,6 +4131,7 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     D.opts = &opts; D.is_int = vs.is_int; D.any_int = vs.any_int;
     D.reg_lo = reg_lo; D.reg_hi = reg_hi;
     D.f_prog = f_prog; D.g_progs = g_progs;
+    D.penalty_fn = nc.penalty_fn;
 
     xbest = (double*)malloc(sizeof(double) * n);
     double fbest = 1e300, penbest = 1e300;

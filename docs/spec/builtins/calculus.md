@@ -3091,6 +3091,7 @@ Recognised sub-options:
 | `"Tolerance" -> t` | NelderMead | simplex objective-spread convergence threshold |
 | `"InitialPoints" -> {{x1,…},…}` | NelderMead | seed the initial simplex (extra points ignored, fewer are filled by perturbation; malformed → random start) |
 | `"PostProcess" -> v` | all | final exact local polish. `True`/`Automatic`/a named method (`"InteriorPoint"`, `"FindMinimum"`, `"KKT"`, `{"…", opts}`) → on; `False`/`None` → off |
+| `"PenaltyFunction" -> f` | all | function applied to each constraint's violation when scoring infeasible points. `Automatic`/`None` keep the built-in squared penalty; a pure function or function symbol (`#^2 &`, `(10 #) &`, `Sqrt`, …) replaces it |
 | `"RandomSeed" -> s` | all | override the default PRNG seed |
 
 Unrecognised sub-options are ignored (matching Mathematica). `"PostProcess"`
@@ -3115,6 +3116,20 @@ simplex sitting on the plateau keeps contracting toward its centroid instead of
 declaring victory immediately — enough to slide into the spike when the seed
 points bracket it. With `"InitialPoints" -> {{-50,-50},{50,50},{10,10}}` (centroid
 ≈ `(π,π)`) NMinimize returns `{-1., {x -> π, y -> π}}`.
+
+`"PenaltyFunction"` sets how infeasible points are scored during the global
+search. By default (`Automatic`) a *general* (non-box) constraint contributes the
+square of its violation — `Max[0, g]²` for an inequality `g ≤ 0`, `h²` for an
+equality `h == 0` — and box bounds are handled by projection, not penalty. A
+supplied function `f` replaces the square: a violated constraint contributes
+`f[violation]`, so `Automatic` is exactly `#^2 &`. This affects only the
+feasibility scoring used by the global search (Deb's rules, and the NelderMead /
+SimulatedAnnealing penalized objective); the final local polish keeps the
+differentiable squared penalty its analytic gradient assumes. A satisfied
+inequality always contributes 0, so the feasibility test is unchanged; an invalid
+value (a number, a string) warns (`NMinimize::penf`) and falls back to
+`Automatic`. On a box-only problem the option is inert (there are no general
+constraints to penalize).
 
 ### Options
 

@@ -275,6 +275,32 @@ static void test_initial_points(void) {
                "Method -> {\"NelderMead\", \"InitialPoints\" -> {{a,b},{1,1},{2,2}}}]]] < 1.*^-3");
 }
 
+static void test_penalty_function(void) {
+    /* "PenaltyFunction" scores infeasible points during the global search;
+     * Automatic is the built-in squared penalty. On a genuinely constrained
+     * problem (min x+y on the unit disk -> -Sqrt[2]) every well-formed penalty
+     * choice must still converge to the same feasible optimum. */
+    check_true("Abs[First[NMinimize[{x + y, x^2 + y^2 <= 1}, {x, y}, "
+               "Method -> {\"DifferentialEvolution\", \"PenaltyFunction\" -> Automatic}]] + 1.4142136] < 1.*^-2");
+    /* #^2 & is exactly the Automatic penalty. */
+    check_true("Abs[First[NMinimize[{x + y, x^2 + y^2 <= 1}, {x, y}, "
+               "Method -> {\"DifferentialEvolution\", \"PenaltyFunction\" -> (#^2 &)}]] + 1.4142136] < 1.*^-2");
+    /* A different (still monotone nonnegative) penalty also converges. */
+    check_true("Abs[First[NMinimize[{x + y, x^2 + y^2 <= 1}, {x, y}, "
+               "Method -> {\"DifferentialEvolution\", \"PenaltyFunction\" -> (10 # &)}]] + 1.4142136] < 1.*^-2");
+    check_true("Abs[First[NMinimize[{x + y, x^2 + y^2 <= 1}, {x, y}, "
+               "Method -> {\"NelderMead\", \"PenaltyFunction\" -> Sqrt}]] + 1.4142136] < 1.*^-2");
+    /* An invalid value (a number) is rejected with NMinimize::penf and the run
+     * falls back to Automatic, still returning the correct shape and answer. */
+    check_true("Abs[First[NMinimize[{x + y, x^2 + y^2 <= 1}, {x, y}, "
+               "Method -> {\"DifferentialEvolution\", \"PenaltyFunction\" -> 5}]] + 1.4142136] < 1.*^-2");
+    /* On a box-only problem PenaltyFunction is inert (no general constraints);
+     * the user's scaled-quadratic example still reaches ~0. */
+    check_true("First[NMinimize[{Sum[10^(6 (i-1)/9) x[i]^2, {i, 1, 10}], "
+               "Table[-10 <= x[i] <= 10, {i, 1, 10}]}, Table[x[i], {i, 1, 10}], "
+               "Method -> {\"NelderMead\", \"Tolerance\" -> 10^-8, \"PenaltyFunction\" -> Automatic}]] < 1.*^-6");
+}
+
 static void test_autocompile_parity_and_fallback(void) {
     /* At machine precision the objective is auto-compiled; the answer must be
      * identical to the (verified) interpreter result. */
@@ -454,6 +480,7 @@ int main(void) {
     TEST(test_neldermead_shrink_tolerance);
     TEST(test_bukin6_no_warning);
     TEST(test_initial_points);
+    TEST(test_penalty_function);
     TEST(test_autocompile_parity_and_fallback);
 
     /* 8. NMaximize */
