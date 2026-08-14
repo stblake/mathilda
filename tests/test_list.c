@@ -1360,9 +1360,11 @@ void test_find_clusters() {
          * sorted adjacency chain, which is why every scalar row above
          * is unchanged. Ragged rows, a scalar mixed among vectors,
          * depth over 2 and a symbolic component all decline. The
-         * methods that still read the sorted 1-D projection (KMeans,
-         * DBSCAN, ...) decline on vectors rather than running on
-         * meaningless data. Cluster ORDER follows first occurrence in
+         * methods that still read the sorted 1-D projection (DBSCAN,
+         * JarvisPatrick, KMedoids, Spectral, GaussianMixture) decline on
+         * vectors rather than running on meaningless data; MeanShift,
+         * NeighborhoodContraction and KMeans have been ported and no
+         * longer do. Cluster ORDER follows first occurrence in
          * input order, so it differs from Mathematica while the
          * partition agrees. */
         {"FindClusters[{{1, 2}, {3, 4}}]", "{{{1, 2}, {3, 4}}}"},
@@ -1388,7 +1390,9 @@ void test_find_clusters() {
         {"FindClusters[{{{1}}, {{2}}}]", "FindClusters[{{{1}}, {{2}}}]"},
         {"FindClusters[{{1, a}, {2, 3}}]", "FindClusters[{{1, a}, {2, 3}}]"},
         {"FindClusters[{{}, {}}]", "FindClusters[{{}, {}}]"},
-        {"FindClusters[{{1, 1}, {9, 9}}, 2, Method -> \"KMeans\"]", "FindClusters[{{1, 1}, {9, 9}}, 2, Method -> \"KMeans\"]"},
+        /* Was pinned as declining until KMeans was ported; the change is
+         * deliberate, and the n-D suite carries the substantive cases. */
+        {"FindClusters[{{1, 1}, {9, 9}}, 2, Method -> \"KMeans\"]", "{{{1, 1}}, {{9, 9}}}"},
         {"FindClusters[{{1, 1}, {9, 9}}, Method -> \"DBSCAN\"]", "FindClusters[{{1, 1}, {9, 9}}, Method -> \"DBSCAN\"]"},
 
 

@@ -6,7 +6,7 @@
  * guard in the builtin names the ported set explicitly so a new method cannot
  * default into being considered done.
  *
- * Ported so far: MeanShift, NeighborhoodContraction.
+ * Ported so far: MeanShift, NeighborhoodContraction, KMeans.
  *
  * The property that matters most here is not "n-D works" but "n-D and 1-D are the
  * same code". A dim-1 POINT is not a SCALAR -- its elements are Lists -- yet the
@@ -44,6 +44,17 @@ static void check(const char* method, const char* data, const char* expect) {
     assert_eval_eq(in, expect, 0);
 }
 
+/* Separate from check() because the count-taking methods are a different shape,
+ * not a variation: FC_ALLOWED denies KMeans and KMedoids the Automatic count, so
+ * for them a count is mandatory rather than optional. */
+static void check_k(const char* method, const char* data, const char* count,
+                    const char* expect) {
+    char in[1024];
+    snprintf(in, sizeof in, "FindClusters[%s, %s, Method -> \"%s\"]",
+             data, count, method);
+    assert_eval_eq(in, expect, 0);
+}
+
 static void test_shift_methods_recover_blobs_2d(void) {
     check("MeanShift", BLOBS_2D, BLOBS_2D_OUT);
     check("NeighborhoodContraction", BLOBS_2D, BLOBS_2D_OUT);
@@ -56,6 +67,68 @@ static void test_shift_methods_recover_blobs_5d(void) {
      * two components. */
     check("MeanShift", BLOBS_5D, BLOBS_5D_OUT);
     check("NeighborhoodContraction", BLOBS_5D, BLOBS_5D_OUT);
+}
+
+static void test_kmeans_recovers_blobs(void) {
+    check_k("KMeans", BLOBS_2D, "3", BLOBS_2D_OUT);
+    check_k("KMeans", BLOBS_5D, "3", BLOBS_5D_OUT);
+    /* UpTo is the only data-driven count KMeans accepts, so it is worth its own
+     * row: asked for more clusters than the data has, it must return the data's
+     * count and not the asked-for one. */
+    check_k("KMeans", BLOBS_2D, "UpTo[3]", BLOBS_2D_OUT);
+    check_k("KMeans", BLOBS_2D, "UpTo[9]", BLOBS_2D_OUT);
+    /* ...and a FIXED count must be obeyed exactly, which is the opposite
+     * behaviour on the same data. Twelve distinct points, nine asked for. */
+    assert_eval_eq("Length[FindClusters[" BLOBS_2D ", 9, Method -> \"KMeans\"]]",
+                   "9", 0);
+}
+
+static void test_kmeans_is_independent_of_input_order(void) {
+    /* A k-means whose answer depends on the order its points were typed in is
+     * seeding from index 0. This is why the n-D initialisation starts from the
+     * point nearest the centroid rather than from the first point: the centroid is
+     * a property of the SET. Compared as sorted-sorted so that cluster numbering,
+     * which legitimately follows input order, is not what is being asserted. */
+    const char* srt = "Sort[Map[Sort, FindClusters[%s, 3, Method -> \"KMeans\"]]]";
+    char a[1024], b[1024], c[1024];
+    snprintf(a, sizeof a, srt, BLOBS_2D);
+    snprintf(b, sizeof b, srt,
+             "{{20,21},{0,1},{21,21},{1,1},{0,40},{20,20},{1,40},{0,0},"
+             "{1,41},{1,0},{21,20},{0,41}}");
+    snprintf(c, sizeof c, srt, "Reverse[" BLOBS_2D "]");
+    char eq[3072];
+    snprintf(eq, sizeof eq, "(%s === %s) && (%s === %s)", a, b, a, c);
+    assert_eval_eq(eq, "True", 0);
+}
+
+static void test_kmeans_automatic_is_refused_on_both_surfaces(void) {
+    /* Not a porting gap. FC_ALLOWED denies KMeans FC_COUNT_AUTOMATIC, so a bare
+     * call declines in one dimension too -- asserted here for both so that the
+     * n-D decline is never mistaken for an unported path and "fixed". */
+    assert_eval_eq("FindClusters[{1, 2, 3, 10, 11, 12, 25}, Method -> \"KMeans\"]",
+                   "FindClusters[{1, 2, 3, 10, 11, 12, 25}, Method -> \"KMeans\"]", 0);
+    assert_eval_eq("FindClusters[{{1, 1}, {2, 2}, {20, 20}}, Method -> \"KMeans\"]",
+                   "FindClusters[{{1, 1}, {2, 2}, {20, 20}}, Method -> \"KMeans\"]", 0);
+}
+
+static void test_kmeans_declines_only_on_the_work_product(void) {
+    /* The cap is on n * k * dim, not on n -- Lloyd is LINEAR in n and cheaper than
+     * the spanning tree already built for the same input, so capping n would refuse
+     * work just paid for. Both rows use the same 5000 x 10 machine sample and
+     * differ only in k, which isolates the claim: a small k is admitted at a size
+     * an n-cap would have refused, and a k in the thousands -- 100 near-quadratic
+     * passes over the whole sample -- declines.
+     *
+     * The bound is deliberately conservative in one direction: k == n converges in
+     * a single iteration, since farthest-first hands every point its own centre, so
+     * it is refused by a budget that assumes the iteration count. Refusing a
+     * degenerate request is cheaper than modelling it. */
+    const char* sample = "Table[Table[1.0 Mod[7 i + 13 j, 997], {j, 10}], {i, 5000}]";
+    char in[512];
+    snprintf(in, sizeof in, "Length[FindClusters[%s, 8, Method -> \"KMeans\"]]", sample);
+    assert_eval_eq(in, "8", 0);
+    snprintf(in, sizeof in, "Head[FindClusters[%s, 1000, Method -> \"KMeans\"]]", sample);
+    assert_eval_eq(in, "FindClusters", 0);
 }
 
 static void test_scalar_and_dim1_point_agree(void) {
@@ -83,6 +156,18 @@ static void test_scalar_and_dim1_point_agree(void) {
     assert_eval_eq("FindClusters[{{1}, {2}, {3}, {100}}, "
                    "Method -> \"NeighborhoodContraction\"]",
                    "{{{1}, {2}, {3}}, {{100}}}", 0);
+
+    /* KMeans keeps two implementations on purpose -- 1-D seeds at quantiles of the
+     * sorted distinct values, n-D seeds farthest-first -- so this is the one place
+     * the two are made to answer the same question, and the only guard that they
+     * have not diverged. Unifying them would move the pinned 1-D answers, so it is
+     * a deliberate behaviour change rather than a refactor; this row is what would
+     * catch it being done by accident. */
+    assert_eval_eq("FindClusters[{1, 2, 3, 10, 11, 12, 25}, 3, Method -> \"KMeans\"]",
+                   "{{1, 2, 3}, {10, 11, 12}, {25}}", 0);
+    assert_eval_eq("FindClusters[{{1}, {2}, {3}, {10}, {11}, {12}, {25}}, 3, "
+                   "Method -> \"KMeans\"]",
+                   "{{{1}, {2}, {3}}, {{10}, {11}, {12}}, {{25}}}", 0);
 }
 
 static void test_equal_points_are_never_split(void) {
@@ -107,6 +192,13 @@ static void test_equal_points_are_never_split(void) {
                            "{{20, 20}, {21, 20}, {20, 21}, {21, 21}}}";
     check("MeanShift", dup2, dup2_out);
     check("NeighborhoodContraction", dup2, dup2_out);
+    /* KMeans is the method most able to break this on its own: asked for more
+     * clusters than there are distinct points it would have to split a duplicate
+     * pair to comply, so the count must yield instead. */
+    check_k("KMeans", dup2, "2", dup2_out);
+    assert_eval_eq("FindClusters[{{5, 5}, {5, 5}, {5, 5}, {40, 40}, {41, 41}}, 4, "
+                   "Method -> \"KMeans\"]",
+                   "{{{5, 5}, {5, 5}, {5, 5}}, {{40, 40}}, {{41, 41}}}", 0);
 
     /* And the 1-D form of the same shape, to show the fold behaves the same way on
      * both surfaces. */
@@ -138,7 +230,7 @@ static void test_unported_methods_still_decline_in_ndim(void) {
      * above one dimension -- reading d->val there would dereference NULL, so a
      * premature relaxation is a crash rather than a wrong answer. These rows come
      * off the list as each method is ported, which makes the progress visible. */
-    const char* unported[] = { "KMeans", "KMedoids", "DBSCAN",
+    const char* unported[] = { "KMedoids", "DBSCAN",
                                "GaussianMixture", "JarvisPatrick" };
     for (size_t i = 0; i < sizeof(unported) / sizeof(unported[0]); i++) {
         char in[256], out[256];
@@ -163,6 +255,17 @@ static void test_metric_applies_to_ported_methods(void) {
                    "DistanceFunction -> ManhattanDistance]", BLOBS_2D_OUT, 0);
     assert_eval_eq("FindClusters[" BLOBS_2D ", Method -> \"MeanShift\", "
                    "DistanceFunction -> EuclideanDistance]", BLOBS_2D_OUT, 0);
+
+    /* For KMeans the metric is asserted where the two answers genuinely DIFFER,
+     * which is the only form of this test that proves anything. Three points: the
+     * apex is nearer the origin under Euclidean (10 vs 11) and nearer the far point
+     * under Manhattan (14 vs 11), so the pair that clusters flips. */
+    assert_eval_eq("FindClusters[{{0, 0}, {0, 11}, {8, 6}}, 2, Method -> \"KMeans\", "
+                   "DistanceFunction -> EuclideanDistance]",
+                   "{{{0, 0}}, {{0, 11}, {8, 6}}}", 0);
+    assert_eval_eq("FindClusters[{{0, 0}, {0, 11}, {8, 6}}, 2, Method -> \"KMeans\", "
+                   "DistanceFunction -> ManhattanDistance]",
+                   "{{{0, 0}, {0, 11}}, {{8, 6}}}", 0);
 }
 
 int main(void) {
@@ -171,6 +274,10 @@ int main(void) {
 
     TEST(test_shift_methods_recover_blobs_2d);
     TEST(test_shift_methods_recover_blobs_5d);
+    TEST(test_kmeans_recovers_blobs);
+    TEST(test_kmeans_is_independent_of_input_order);
+    TEST(test_kmeans_automatic_is_refused_on_both_surfaces);
+    TEST(test_kmeans_declines_only_on_the_work_product);
     TEST(test_scalar_and_dim1_point_agree);
     TEST(test_equal_points_are_never_split);
     TEST(test_strings_still_decline);

@@ -92,7 +92,7 @@ goal_lock:
 - [x] `DistanceFunction wired through FcOpts and both MST builders` | `independent` | `done (iteration 2)`
 - [x] `prerequisites: fc_points, fc_dist_to_point, fc_dist_pos, fc_scale_ndim, union-find merge` | `independent` | `done (iteration 3, landed with their first consumer)`
 - [x] `MeanShift + NeighborhoodContraction` | `depends on: prerequisites` | `done (iteration 3)`
-- [ ] `KMeans` | `depends on: prerequisites` | `pending`
+- [x] `KMeans` | `depends on: prerequisites` | `done (iteration 4)`
 - [ ] `DBSCAN` | `depends on: prerequisites` | `pending`
 - [ ] `JarvisPatrick` | `depends on: prerequisites` | `pending`
 - [ ] `KMedoids` | `depends on: prerequisites` | `pending`
@@ -147,6 +147,8 @@ goal_lock:
   - `CriterionFunction accepted and ignored (find_clusters.c:1677)`
   - `NeighborhoodContraction cannot separate an outlier from a tie-heavy 4-point set: a zero median edge weight makes the scale fall back to range/(n-1), and the flat kernel default radius of 3*scale is then EXACTLY the range, putting the outlier precisely on the inclusion boundary. Pre-existing 1-D behaviour, identical in both dimensionalities. Fixing it moves a pinned answer, so it needs its own deliberate change.`
   - `CosineDistance and HammingDistance implemented in distance.c but not in FindClusters' accepted names`
+  - `KMeans now has two Lloyd implementations, one per dimensionality. Unifying them onto farthest-first would move the pinned 1-D answers, so it is a deliberate behaviour change and not a refactor. The n-D suite asserts the two agree on the same data written both ways, which is what would catch an accidental merge.`
+  - `The KMeans work budget refuses k == n, which actually converges in a single iteration since farthest-first hands every point its own centre. Conservative on purpose -- modelling the iteration count per k is more machinery than the degenerate case is worth -- but it is a false refusal.`
 - Mitigations taken:
   - `pending`
 - Follow-up needed:
@@ -154,6 +156,7 @@ goal_lock:
 
 ## Activity Log
 
+- `2026-08-14 00:05` Iteration 4: KMeans ported. NOT unified with the 1-D kernel, and the contrast with iteration 3 is the point: MeanShift unified because the n-D form provably reproduced the 1-D answers, whereas quantile and farthest-first initialisation settle in different local optima, so routing one through the other would move pinned answers. Two paths, with a test that asserts they agree on the same data written both ways. Farthest-first chosen for three properties, not by default: deterministic (no RandomVariate needed yet), independent of input order (the first centre comes from the centroid, a property of the SET, not from index 0), and every centre a distinct data point so empty clusters are rare. Corrected my own first cap: I copied the shift methods' n-cap by analogy, which was the wrong SHAPE — Lloyd is linear in n and cheaper than the spanning tree already built, so an n-cap declines work just paid for. Rewrote it as a budget on n*k*dim; 20000x10 at k=3 now runs in 0.60 s where the first version refused it.
 - `2026-08-13 23:35` Iteration 3: MeanShift and NeighborhoodContraction ported. Unified rather than duplicated, on three observations: d->val is already the dim-1 layout of d->coord; the median MST edge weight generalises the median adjacent gap exactly, and the mean generalises the zero-median fallback, because on a line the MST is the sorted chain whose gaps sum to the range; and union-find merging reproduces the adjacent-difference pass on a line. fc_merge_modes deleted as irreducibly 1-D. Found and recorded a pre-existing NeighborhoodContraction quirk on tie-heavy 4-point input.
 - `2026-08-13 23:20` Iteration 2: DistanceFunction made real. It was validated and discarded, which is harmless on a line (all four metrics are monotone transforms of |a-b| there) and a wrong answer above one dimension. Euclidean and SquaredEuclidean collapsed to one case on purpose — monotone, same threshold test, and it avoids an exact square root. The threshold factor now tracks the metric rather than the kind, since Manhattan weights are linear and the squared factor would have been nine times too large.
 - `2026-08-13 23:05` Created. Follows the NDArray slice (stblake/mathilda#57); the user asked to work through the ML families, starting by completing FindClusters.

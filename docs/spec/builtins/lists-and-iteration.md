@@ -497,8 +497,9 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   one-dimensional results are unchanged. Above one dimension the tree is a real
   minimum spanning tree built by Prim's algorithm over exact distances.
 - **Only `Automatic`, `"Agglomerate"` and `"SpanningTree"` accept non-numeric
-  elements or vectors.** The other seven methods read a sorted one-dimensional
-  projection and decline rather than run on data for which it is meaningless.
+  elements.** For *vectors* the list is longer — see "Which methods accept vectors"
+  below. The methods that still read a sorted one-dimensional projection decline
+  rather than run on data for which it is meaningless.
 - **Two spanning-tree builders, and therefore two ceilings.** Points whose
   every coordinate is already a machine number take a double-precision Prim,
   since such input carries no precision that exact arithmetic would preserve;
@@ -534,14 +535,41 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   transparency gate materialises it before the builtin sees it, which is why only
   the visible surface needed a guard. Rank 3 and above still decline: a
   list-valued component is not a coordinate.
-- **Which methods accept vectors.** `Agglomerate`, `SpanningTree`, `MeanShift` and
-  `NeighborhoodContraction` cluster n-dimensional points; the remaining six still
-  accept scalars only and return unevaluated for vector input. That is not a
-  conservative guard — those six reach their data through the sorted projection,
-  which does not exist off a line — and the list grows as each is ported.
-  `MeanShift` and `NeighborhoodContraction` additionally decline string input,
-  having no coordinates to shift; the gap methods still handle strings through edit
-  distances in the tree.
+- **Which methods accept vectors.** `Agglomerate`, `SpanningTree`, `MeanShift`,
+  `NeighborhoodContraction` and `KMeans` cluster n-dimensional points; the
+  remaining five (`KMedoids`, `DBSCAN`, `JarvisPatrick`, `Spectral`,
+  `GaussianMixture`) accept scalars only and return unevaluated for vector input.
+  That is not a conservative guard — those five reach their data through the sorted
+  projection, which does not exist off a line — and the list grows as each is
+  ported. The ported methods additionally decline string input, having no
+  coordinates to move; the gap methods still handle strings through edit distances
+  in the tree.
+- **`KMeans` above one dimension is a second implementation, not the same one.**
+  The one-dimensional kernel seeds at quantiles of the sorted distinct values; the
+  n-dimensional one seeds *farthest-first* — the point nearest the centroid, then
+  repeatedly the point farthest from everything already chosen. Both are
+  deterministic and need no random seeding. Two consequences worth relying on:
+  - the result **does not depend on the order the points were given in**, because
+    the first centre is chosen from a property of the set rather than from the
+    first element; and
+  - every centre starts as a distinct data point, so empty clusters are rare. One
+    that does empty is reseeded at the point currently farthest from its own
+    centre, which is the order-free form of the one-dimensional repair.
+
+  The two paths agree on the same data written both ways
+  (`FindClusters[{1, 2, 3, 10, 11, 12, 25}, 3, Method -> "KMeans"]` and the same
+  numbers as `{{1}, {2}, …}`), and unifying them would move the one-dimensional
+  answers, so it stays a deliberate change rather than a tidy-up.
+- **`KMeans` and `KMedoids` require a count.** Neither accepts the `Automatic`
+  form, in any dimension, so `FindClusters[data, Method -> "KMeans"]` returns
+  unevaluated; `UpTo[k]` is the data-driven form they do take, and a bare `k` is
+  obeyed exactly.
+- **The n-dimensional `KMeans` ceiling is on `n × k × dim`, not on `n`.** Lloyd's
+  algorithm is linear in `n` — cheaper than the spanning tree already built for the
+  same input — so an `n` cap would refuse work just paid for: 20000 machine points
+  in ten dimensions at `k = 3` takes **0.60 s**, and at `UpTo[8]` the same. What is
+  declined is a `k` on the order of thousands at that size, where the assignment
+  scan becomes a hundred near-quadratic passes over the whole sample.
 - Returns unevaluated for an empty list, a non-`List` argument, a nested list, an
   `NDArray` of rank 3 or more, a non-numeric element, a count that is not a
   positive integer or `UpTo[k]`, or a method incompatible with the count mode.
@@ -556,18 +584,22 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
 
 **Method** — `Method -> m`, or `Method -> {m, subopt -> value}`:
 
-| Method | `Automatic` | `UpTo[n]` | `n` |
-|---|:---:|:---:|:---:|
-| `"Agglomerate"` (single linkage) | yes | yes | yes |
-| `"SpanningTree"` (minimum spanning tree) | yes | yes | yes |
-| `"KMeans"` | no | yes | yes |
-| `"KMedoids"` | no | yes | yes |
-| `"Spectral"` | yes | yes | no |
-| `"DBSCAN"` | yes | no | no |
-| `"GaussianMixture"` | yes | no | no |
-| `"JarvisPatrick"` | yes | no | no |
-| `"MeanShift"` | yes | no | no |
-| `"NeighborhoodContraction"` | yes | no | no |
+The last column is the dimensionality: `vectors` means the method clusters
+n-dimensional points, `scalars` means it still reads the sorted one-dimensional
+projection and declines vector input.
+
+| Method | `Automatic` | `UpTo[n]` | `n` | data |
+|---|:---:|:---:|:---:|:---:|
+| `"Agglomerate"` (single linkage) | yes | yes | yes | vectors |
+| `"SpanningTree"` (minimum spanning tree) | yes | yes | yes | vectors |
+| `"KMeans"` | no | yes | yes | vectors |
+| `"KMedoids"` | no | yes | yes | scalars |
+| `"Spectral"` | yes | yes | no | scalars |
+| `"DBSCAN"` | yes | no | no | scalars |
+| `"GaussianMixture"` | yes | no | no | scalars |
+| `"JarvisPatrick"` | yes | no | no | scalars |
+| `"MeanShift"` | yes | no | no | vectors |
+| `"NeighborhoodContraction"` | yes | no | no | vectors |
 
 - `Automatic` (the default) currently means `"Agglomerate"`. It is not a
   criterion-driven search across methods.

@@ -103,6 +103,11 @@
  * earns a correspondingly larger ceiling. Still quadratic: 20000 points is
  * roughly 0.7 s. */
 #define FC_NDIM_MACHINE_MAX_N 20000
+/* Lloyd in n dimensions is linear in n but bilinear in (n, k), so its ceiling is
+ * on n * k * dim rather than on n -- see fc_lloyd_ndim. Admits 20000 points in ten
+ * dimensions at any sensible k, and refuses k on the order of n at that size,
+ * which would be 100 quadratic passes over the whole sample. */
+#define FC_LLOYD_MAX_WORK    20000000u
 
 /* Merge tolerance for the shift methods, in units of the data scale (one
  * median gap). Strictly 1.0 is too tight: on evenly spaced data the interior
@@ -1306,9 +1311,188 @@ static bool fc_lloyd(const FcData* d, FcCount spec, size_t* assign, size_t* k,
     return *k > 0;
 }
 
+/* Lloyd's algorithm in any dimension.
+ *
+ * A SECOND implementation rather than a generalisation of fc_lloyd above, and
+ * deliberately so. Iteration 3 was able to unify MeanShift because its n-D form
+ * provably reproduced the 1-D answers -- the median spanning-tree edge weight IS
+ * the median adjacent gap on a line, and union-find merging IS the
+ * adjacent-difference pass there. Nothing like that holds here: the 1-D kernel
+ * seeds at quantiles of the sorted distinct values and this one seeds
+ * farthest-first, and two initialisations are two algorithms that settle in
+ * different local optima. Routing one dimension through the other would change
+ * answers that are pinned, so unifying is a deliberate behaviour change and not a
+ * refactor -- and it is not this iteration's.
+ *
+ * What survives the port is the shape: assign, move the centres, repeat. What does
+ * not is every mechanism the 1-D kernel uses to do it quickly -- a merge walk over
+ * midpoints of sorted centres, a scalar mean over a contiguous run, and an
+ * empty-cluster repair that picks value boundaries in sorted order. All three need
+ * a total order that vectors do not have.
+ *
+ * Initialisation is farthest-first (Gonzalez): the point nearest the centroid,
+ * then repeatedly the point farthest from everything chosen so far. Three reasons:
+ *
+ *   - It is DETERMINISTIC, which the quantile seeding it replaces also was. The
+ *     docs promise reproducibility without RandomSeeding and there is no
+ *     RandomVariate in the tree yet, so keeping that property costs nothing here.
+ *   - Starting from the centroid-nearest point rather than from index 0 makes the
+ *     result independent of input order, which a k-means has no business depending
+ *     on. Ties break to the lowest index so it stays deterministic.
+ *   - Every centre is a distinct data point, so each cluster starts owning at
+ *     least itself, which is what makes empty clusters rare rather than routine.
+ *     Distinctness is guaranteed: target is capped at n_distinct, so while fewer
+ *     than target centres are chosen some point is still at nonzero distance from
+ *     all of them.
+ */
+static bool fc_lloyd_ndim(const FcData* d, FcCount spec, size_t* assign, size_t* k) {
+    size_t n = d->n, dim = d->dim;
+    const double* pts = fc_points(d);
+    if (!pts) return false;
+
+    /* Same count rule as the 1-D kernel. Both helpers read only d->gap, d->bnd and
+     * d->n_distinct, all of which are kind-agnostic -- which is why the gap methods
+     * already worked in n-D and why these need no porting. */
+    size_t natural = d->n_distinct;
+    if (spec.mode == FC_COUNT_BOUNDED) {
+        bool nok = true;
+        natural = fc_automatic_gap_count(d, &nok);
+        if (!nok) return false;
+    }
+    size_t target = fc_target_count(natural, spec, d->n_distinct);
+    if (target < 1) target = 1;
+    if (target > n) target = n;
+
+    /* Θ(FC_MAX_ITER * n * target * dim), so the cap is on that PRODUCT and not on
+     * n, which is the mistake the shift methods' cap invites by analogy. Lloyd is
+     * LINEAR in n -- cheaper than the spanning tree already built for this input --
+     * so capping n would decline work the builder had just finished paying for:
+     * 20000 machine points in ten dimensions is admitted by FC_NDIM_MACHINE_MAX_N
+     * and there is no reason for k-means to be the step that refuses it.
+     *
+     * What can still run away is target approaching n, where the assignment scan
+     * becomes quadratic. At the ceiling this budget is a few seconds of assignment
+     * work, the same order as the tree build that preceded it. */
+    if (target != 0 && dim != 0 &&
+        n > FC_LLOYD_MAX_WORK / target / dim) return false;
+
+    double* c     = malloc(sizeof(double) * target * dim);
+    size_t* owner = malloc(sizeof(size_t) * n);
+    /* One buffer, two jobs across the two phases: the distance to the nearest
+     * chosen centre while seeding, then the distance to its own centre once the
+     * assignment exists. The second is what the empty-cluster repair reads. */
+    double* nd    = malloc(sizeof(double) * n);
+    size_t* count = malloc(sizeof(size_t) * target);
+    double* acc   = malloc(sizeof(double) * target * dim);
+    if (!c || !owner || !nd || !count || !acc) {
+        free(c); free(owner); free(nd); free(count); free(acc); return false;
+    }
+
+    /* ---- Seed 0: the point nearest the centroid ---- */
+    double* mean = calloc(dim, sizeof(double));
+    if (!mean) { free(c); free(owner); free(nd); free(count); return false; }
+    for (size_t i = 0; i < n; i++)
+        for (size_t comp = 0; comp < dim; comp++) mean[comp] += pts[i * dim + comp];
+    for (size_t comp = 0; comp < dim; comp++) mean[comp] /= (double)n;
+
+    size_t seed = 0; double bestd = -1.0;
+    for (size_t i = 0; i < n; i++) {
+        double dd = fc_dist_to_point(d, pts, mean, i);
+        if (bestd < 0.0 || dd < bestd) { bestd = dd; seed = i; }
+    }
+    free(mean);
+    memcpy(c, pts + seed * dim, sizeof(double) * dim);
+
+    /* ---- Seeds 1..target-1: farthest from everything chosen ---- */
+    for (size_t i = 0; i < n; i++) nd[i] = fc_dist_to_point(d, pts, c, i);
+    for (size_t j = 1; j < target; j++) {
+        size_t pick = 0; double far = -1.0;
+        for (size_t i = 0; i < n; i++)
+            if (nd[i] > far) { far = nd[i]; pick = i; }   /* > keeps lowest index */
+        memcpy(c + j * dim, pts + pick * dim, sizeof(double) * dim);
+        for (size_t i = 0; i < n; i++) {
+            double dd = fc_dist_to_point(d, pts, c + j * dim, i);
+            if (dd < nd[i]) nd[i] = dd;
+        }
+    }
+
+    /* ---- Lloyd ---- */
+    for (int it = 0; it < FC_MAX_ITER; it++) {
+        for (size_t i = 0; i < n; i++) {
+            size_t best = 0; double bd = -1.0;
+            for (size_t j = 0; j < target; j++) {
+                double dd = fc_dist_to_point(d, pts, c + j * dim, i);
+                if (bd < 0.0 || dd < bd) { bd = dd; best = j; }  /* lowest j on tie */
+            }
+            owner[i] = best;
+            nd[i] = bd;
+        }
+
+        for (size_t j = 0; j < target; j++) count[j] = 0;
+        for (size_t i = 0; i < n; i++) count[owner[i]]++;
+
+        /* An empty cluster is reseeded at the point currently worst served by its
+         * own centre. The 1-D kernel instead split at the widest unused value
+         * boundary, which needs an order over positions; "farthest from its
+         * centre" is the order-free statement of the same idea, and it cannot
+         * loop, since the reseeded centre then owns at least that point. */
+        for (size_t j = 0; j < target; j++) {
+            if (count[j] > 0) continue;
+            size_t pick = SIZE_MAX; double far = -1.0;
+            for (size_t i = 0; i < n; i++) {
+                if (count[owner[i]] < 2) continue;      /* do not empty another */
+                if (nd[i] > far) { far = nd[i]; pick = i; }
+            }
+            if (pick == SIZE_MAX) break;                /* nothing to give */
+            memcpy(c + j * dim, pts + pick * dim, sizeof(double) * dim);
+            count[owner[pick]]--;
+            owner[pick] = j;
+            count[j] = 1;
+            nd[pick] = 0.0;
+        }
+
+        /* Move each centre to the component-wise mean of its members. That the
+         * mean generalises component-wise is the whole reason this step is
+         * mechanical rather than a new derivation. */
+        bool moved = false;
+        for (size_t j = 0; j < target * dim; j++) acc[j] = 0.0;
+        for (size_t i = 0; i < n; i++)
+            for (size_t comp = 0; comp < dim; comp++)
+                acc[owner[i] * dim + comp] += pts[i * dim + comp];
+        for (size_t j = 0; j < target; j++) {
+            if (count[j] == 0) continue;
+            for (size_t comp = 0; comp < dim; comp++) {
+                double v = acc[j * dim + comp] / (double)count[j];
+                if (v != c[j * dim + comp]) { c[j * dim + comp] = v; moved = true; }
+            }
+        }
+        if (!moved) break;
+    }
+
+    /* Number clusters by first appearance in INPUT order, matching what
+     * fc_emit_clusters and the equal-elements fold do, and dropping any cluster
+     * that ended up empty so the count reported is the count returned. */
+    size_t* label = malloc(sizeof(size_t) * target);
+    if (!label) {
+        free(c); free(owner); free(nd); free(count); free(acc); return false;
+    }
+    for (size_t j = 0; j < target; j++) label[j] = SIZE_MAX;
+    size_t next = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (label[owner[i]] == SIZE_MAX) label[owner[i]] = next++;
+        assign[i] = label[owner[i]];
+    }
+    *k = next;
+
+    free(label); free(c); free(owner); free(nd); free(count); free(acc);
+    return *k > 0;
+}
+
 static bool fc_method_kmeans(const FcData* d, FcCount spec, const FcOpts* o,
                              size_t* assign, size_t* k) {
-    (void)o; return fc_lloyd(d, spec, assign, k, false);
+    (void)o;
+    if (d->kind == FC_KIND_POINT) return fc_lloyd_ndim(d, spec, assign, k);
+    return fc_lloyd(d, spec, assign, k, false);
 }
 
 static bool fc_method_kmedoids(const FcData* d, FcCount spec, const FcOpts* o,
@@ -2010,7 +2194,8 @@ static Expr* fc_find_clusters(Expr* res, Expr* list) {
      * method cannot default into being considered ported. */
     bool fn_is_ndim = (fn == fc_method_gap)
                    || (fn == fc_method_meanshift)
-                   || (fn == fc_method_neighborhood);
+                   || (fn == fc_method_neighborhood)
+                   || (fn == fc_method_kmeans);
     /* The shift methods need coordinates; strings have none, so they stay
      * declined for those even though POINT input is now fine. */
     if (d.kind == FC_KIND_SEQUENCE && fn != fc_method_gap) return NULL;
