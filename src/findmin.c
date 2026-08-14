@@ -3186,9 +3186,19 @@ static void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
     size_t n = D->n;
     const double* rlo = D->reg_lo;
     const double* rhi = D->reg_hi;
-    size_t NP = nc->search_points > 0 ? (size_t)nc->search_points : 10 * n;
-    if (NP < 15) NP = 15;
-    if (NP > 40) NP = 40;
+    /* An explicit "SearchPoints" is honored verbatim (only floored at the DE
+     * minimum of 4 members its DE/rand/1 mutation needs); the [15, 40] clamp
+     * tunes the *automatic* population 10n and must not cap a user's request —
+     * NelderMead restarts and RandomSearch starts already honor it verbatim. */
+    size_t NP;
+    if (nc->search_points > 0) {
+        NP = (size_t)nc->search_points;
+        if (NP < 4) NP = 4;
+    } else {
+        NP = 10 * n;
+        if (NP < 15) NP = 15;
+        if (NP > 40) NP = 40;
+    }
     double F  = nc->F  > 0.0 ? nc->F  : 0.6;
     double CR = nc->CR >= 0.0 ? nc->CR : 0.9;
     int64_t maxgen = D->opts->max_iter > 0 ? D->opts->max_iter : 100;
@@ -3904,47 +3914,39 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     if (opts.acc_goal_digits  < 0.0) opts.acc_goal_digits  = wp_digits / 2.0;
     if (opts.prec_goal_digits < 0.0) opts.prec_goal_digits = wp_digits / 2.0;
 
-    /* Split {f, cons}. */
-    Expr* f_arg = res->data.function.args[0];
+    /* Both the problem argument and the variable spec are held (HoldAll). Parse
+     * the variables first — they do not depend on the objective — so that a
+     * problem passed as a bare symbol (prob = {f, cons}; NMinimize[prob, vars])
+     * can be resolved below with those variables protected. */
     Expr* var_arg = res->data.function.args[1];
-    Expr* f_raw = f_arg;
-    Expr* cons = NULL;         /* borrowed, or points at cons_built           */
-    Expr* cons_built = NULL;   /* owned And[...] for a multi-constraint list  */
-    if (nm_is_head(f_arg, SYM_List) && f_arg->data.function.arg_count >= 2) {
-        /* {f, cons} or {f, c1, c2, ...}: the objective is the first element
-         * and every remaining element is a constraint, implicitly And-ed. */
-        f_raw = f_arg->data.function.args[0];
-        size_t ncons = f_arg->data.function.arg_count - 1;
-        if (ncons == 1) {
-            cons = f_arg->data.function.args[1];
-        } else {
-            Expr** cc = (Expr**)malloc(sizeof(Expr*) * ncons);
-            for (size_t i = 0; i < ncons; i++)
-                cc[i] = expr_copy(f_arg->data.function.args[1 + i]);
-            cons_built = expr_new_function(expr_new_symbol(SYM_And), cc, ncons);
-            free(cc);
-            cons = cons_built;
-        }
-    }
 
     /* Parse the variable specification. It is held (HoldAll), so a generator
      * such as Table[x[i], {i, 1, 10}] or Array[x, 10] arrives unevaluated;
      * evaluate it once (leaving the objective held) so it expands to the list
-     * of variables. A bare symbol, a {...} list, or Element[...] is already in
-     * final form and is parsed as-is. */
+     * of variables. A {...} list or Element[...] is already in final form. A
+     * bare symbol is ambiguous: it may be a single optimization variable
+     * (NMinimize[f, x]) or a symbol bound to a variable list
+     * (vars = {x, y}; NMinimize[f, vars]). Resolve it — if it evaluates to a
+     * List/Element use that; if it is unbound (evaluates to itself) or resolves
+     * to a non-spec, keep the symbol itself as the single variable. */
     NmVarSet vs;
     Expr* var_list_eval = NULL;
     {
-        bool needs_eval = !(var_arg->type == EXPR_SYMBOL
-            || nm_is_head(var_arg, SYM_List) || nm_is_head(var_arg, SYM_Element));
         Expr* var_spec = var_arg;
-        if (needs_eval) {
+        if (var_arg->type == EXPR_SYMBOL) {
+            Expr* ev = eval_and_free(expr_copy(var_arg));
+            if (ev && (nm_is_head(ev, SYM_List) || nm_is_head(ev, SYM_Element))) {
+                var_list_eval = ev;
+                var_spec = ev;
+            } else {
+                expr_free(ev);          /* unbound / scalar: use the symbol */
+            }
+        } else if (!nm_is_head(var_arg, SYM_List) && !nm_is_head(var_arg, SYM_Element)) {
             var_list_eval = eval_and_free(expr_copy(var_arg));
             var_spec = var_list_eval;
         }
         if (!var_spec || !nm_parse_vars(var_spec, &vs, fn_name)) {
             expr_free(var_list_eval);
-            expr_free(cons_built);
             return NULL;
         }
     }
@@ -3977,6 +3979,42 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
         bool seen = false;
         for (size_t j = 0; j < nheads; j++) if (heads[j] == hn) { seen = true; break; }
         if (!seen) heads[nheads++] = hn;
+    }
+
+    /* Resolve and split {f, cons}. The held problem argument, when a bare symbol
+     * bound to the problem (prob = {f, cons}; NMinimize[prob, vars], or a symbol
+     * bound to a scalar objective), is evaluated once with the variable heads
+     * localized — so its structure is exposed without capturing any global
+     * variable values — and the {f, cons} list is then split. An inline list or
+     * expression already carries its structure and is used directly. */
+    Expr* f_arg  = res->data.function.args[0];
+    Expr* f_eval = NULL;               /* owned resolved objective, or NULL     */
+    if (f_arg->type == EXPR_SYMBOL) {
+        NmHeadSave* hs = (NmHeadSave*)calloc(nheads ? nheads : 1, sizeof(NmHeadSave));
+        nm_heads_localize(hs, heads, nheads);
+        f_eval = eval_and_free(expr_copy(f_arg));
+        nm_heads_restore(hs, nheads);
+        free(hs);
+        if (f_eval) f_arg = f_eval;
+    }
+    Expr* f_raw = f_arg;
+    Expr* cons = NULL;         /* borrowed, or points at cons_built           */
+    Expr* cons_built = NULL;   /* owned And[...] for a multi-constraint list  */
+    if (nm_is_head(f_arg, SYM_List) && f_arg->data.function.arg_count >= 2) {
+        /* {f, cons} or {f, c1, c2, ...}: the objective is the first element
+         * and every remaining element is a constraint, implicitly And-ed. */
+        f_raw = f_arg->data.function.args[0];
+        size_t ncons = f_arg->data.function.arg_count - 1;
+        if (ncons == 1) {
+            cons = f_arg->data.function.args[1];
+        } else {
+            Expr** cc = (Expr**)malloc(sizeof(Expr*) * ncons);
+            for (size_t i = 0; i < ncons; i++)
+                cc[i] = expr_copy(f_arg->data.function.args[1 + i]);
+            cons_built = expr_new_function(expr_new_symbol(SYM_And), cc, ncons);
+            free(cc);
+            cons = cons_built;
+        }
     }
 
     /* Expand a held Table/Sum constraint and/or rewrite indexed variables. The
@@ -4225,6 +4263,7 @@ cleanup:
     if (cons_owned) expr_free(cons_eff);
     if (f_owned)    expr_free(f_eff);
     expr_free(cons_built);
+    expr_free(f_eval);         /* resolved bare-symbol objective; frees f_raw/cons borrows */
     if (f_prog) compiled_free(f_prog);
     if (g_progs) {
         for (size_t k = 0; k < ngens; k++) if (g_progs[k]) compiled_free(g_progs[k]);

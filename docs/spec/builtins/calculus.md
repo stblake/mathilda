@@ -3035,6 +3035,13 @@ original `x[i]`.  This makes the standard `n`-dimensional benchmarks (e.g. the
 Rosenbrock valley `Sum[100 (x[i+1]-x[i]^2)^2 + (1-x[i])^2, {i, 1, n-1}]` over
 `Table[x[i], {i, 1, n}]`) express directly.
 
+The problem and the variable spec may also be supplied through a bound symbol —
+`prob = {f, cons}; vars = Table[x[i], {i, 1, n}]; NMinimize[prob, vars]`. Since
+both arguments are held, such a symbol is resolved (with the variable heads
+localized) so its `{f, cons}` list or variable list is exposed and then handled
+exactly as if written inline; a genuinely unbound symbol stays a single
+optimization variable (`NMinimize[f, x]`).
+
 ### Output
 
 `{f_min, {var1 -> v1, ...}}`.  Integer-domain variables come back as exact
@@ -3081,7 +3088,7 @@ Recognised sub-options:
 
 | Sub-option | Applies to | Meaning |
 |------------|-----------|---------|
-| `"SearchPoints" -> n` | DE, NelderMead (restarts) | population / restart count |
+| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts) | population / restart / start count, honored verbatim; when `Automatic` the DE population is `Clip[10·d, {15, 40}]` |
 | `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6) |
 | `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9) |
 | `"ReflectRatio" -> r` | NelderMead | simplex reflection coefficient (default 1) |

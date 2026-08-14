@@ -315,6 +315,44 @@ static void test_method_suboptions(void) {
     check_true("Abs[First[NMinimize[x^4 - 3 x^2 - x, x, Method -> {\"DifferentialEvolution\", \"SearchPoints\" -> 20, \"RandomSeed\" -> 7}]] - (-3.5139097)] < 1.*^-3");
 }
 
+static void test_symbol_indirection(void) {
+    /* The problem and the variable spec are held (HoldAll). A problem or a
+     * variable list passed via a bound symbol — prob = {f, cons}; NMinimize[prob,
+     * vars] — must resolve to its value, not be treated as a single opaque
+     * variable. Regression: the {f, cons} list-via-symbol returned the infeasible
+     * sentinel, and a vars-list-via-symbol produced one rule keyed by the whole
+     * list. Module scopes the bound symbols so no global state leaks. */
+    check_true("Module[{p = {x^2 + y^2, x + y >= 1}}, "
+               "Abs[First[NMinimize[p, {x, y}]] - 0.5] < 1.*^-2]");           /* objective via symbol */
+    check_true("Module[{v = {x, y}}, "
+               "Abs[First[NMinimize[{x^2 + y^2, x + y >= 1}, v]] - 0.5] < 1.*^-2]"); /* vars via symbol */
+    check_true("Module[{p = {x^2 + y^2, x + y >= 1}, v = {x, y}}, "
+               "Length[Last[NMinimize[p, v]]] == 2]");                        /* both, correct arity */
+    check_true("Module[{p = {Sum[x[i]^2, {i, 1, 3}], Table[-5 <= x[i] <= 5, {i, 1, 3}]}, "
+               "v = Table[x[i], {i, 1, 3}]}, Abs[First[NMinimize[p, v]]] < 1.*^-2]"); /* indexed via symbol */
+    /* An unbound bare symbol is still a single optimization variable. */
+    check_true("Abs[First[NMinimize[x^4 - 3 x^2 - x, x]] - (-3.5139097)] < 1.*^-4");
+}
+
+static void test_search_points_honored(void) {
+    /* Regression: an explicit DifferentialEvolution "SearchPoints" must be
+     * honored, not silently capped at the automatic ceiling (was 40). Two runs
+     * that differ only in SearchPoints, both above the old cap, once returned
+     * byte-identical results because the cap swallowed the value — the RNG
+     * trajectory is population-size dependent, so on a multimodal surface a
+     * genuinely different NP lands on a different basin. Deterministic under the
+     * fixed default seed. */
+    check_true("First[NMinimize[{Sum[x[i]^2 - 10 Cos[2 Pi x[i]], {i, 1, 8}], "
+               "Table[-5.12 <= x[i] <= 5.12, {i, 1, 8}]}, Table[x[i], {i, 1, 8}], "
+               "Method -> {\"DifferentialEvolution\", \"SearchPoints\" -> 250}]] != "
+               "First[NMinimize[{Sum[x[i]^2 - 10 Cos[2 Pi x[i]], {i, 1, 8}], "
+               "Table[-5.12 <= x[i] <= 5.12, {i, 1, 8}]}, Table[x[i], {i, 1, 8}], "
+               "Method -> {\"DifferentialEvolution\", \"SearchPoints\" -> 60}]]");
+    /* A large explicit population still solves a convex bowl to the optimum. */
+    check_true("Abs[First[NMinimize[{Sum[x[i]^2, {i, 1, 3}], Table[-5 <= x[i] <= 5, {i, 1, 3}]}, "
+               "Table[x[i], {i, 1, 3}], Method -> {\"DifferentialEvolution\", \"SearchPoints\" -> 120}]]] < 1.*^-3");
+}
+
 /* ------------------------------------------------------------------ */
 /* 8. NMaximize                                                        */
 /* ------------------------------------------------------------------ */
@@ -475,6 +513,8 @@ int main(void) {
     TEST(test_method_randomsearch);
     TEST(test_method_simulatedannealing);
     TEST(test_method_suboptions);
+    TEST(test_search_points_honored);
+    TEST(test_symbol_indirection);
     TEST(test_neldermead_suboptions);
     TEST(test_postprocess_values);
     TEST(test_neldermead_shrink_tolerance);
