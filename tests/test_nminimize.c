@@ -489,6 +489,30 @@ static void test_indexed_real_coefficient(void) {
                "Table[-5 <= x[i] <= 5, {i, 1, 3}]}, Table[x[i], {i, 1, 3}]]] < 0.001");
 }
 
+static void test_de_boundary_no_stagnation(void) {
+    /* Regression: DifferentialEvolution used to CLAMP an out-of-range mutant to
+     * the box boundary. On the 10-D Schwefel function (global min ~0 at
+     * x_i = 420.9687, well inside [-500, 500]) that stranded the search: once
+     * several members shared the exact boundary value for a coordinate, their
+     * mutation differentials for it collapsed to zero and it froze on the wall.
+     * The reported run returned 1758.88 with five coordinates pinned to +/-500,
+     * worse than Mathematica's 1221.25. Bounce-back reinitialisation (nm_de)
+     * fixed it: the default-seed objective now solves to ~963, and -- the
+     * platform-independent invariant this test asserts -- NO coordinate sits on
+     * the boundary. The objective threshold is loose (buggy 1758 vs fixed ~963)
+     * to tolerate cross-platform floating-point drift in the search path. */
+    check_true("First[NMinimize[{418.9829*10 - Sum[x[i] Sin[Sqrt[Abs[x[i]]]], {i, 1, 10}], "
+               "Table[-500 <= x[i] <= 500, {i, 1, 10}]}, Table[x[i], {i, 1, 10}], "
+               "Method -> {\"DifferentialEvolution\", \"SearchPoints\" -> 100, "
+               "\"PostProcess\" -> False}]] < 1400");
+    /* No coordinate parked on the +/-500 boundary (the stagnation signature). */
+    check_true("Count[Table[x[i], {i, 1, 10}] /. Last[NMinimize[{418.9829*10 "
+               "- Sum[x[i] Sin[Sqrt[Abs[x[i]]]], {i, 1, 10}], "
+               "Table[-500 <= x[i] <= 500, {i, 1, 10}]}, Table[x[i], {i, 1, 10}], "
+               "Method -> {\"DifferentialEvolution\", \"SearchPoints\" -> 100, "
+               "\"PostProcess\" -> False}]], v_ /; Abs[Abs[v] - 500] < 0.001] == 0");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -567,6 +591,7 @@ int main(void) {
     TEST(test_indexed_rosenbrock);
     TEST(test_indexed_holdall_locality);
     TEST(test_indexed_real_coefficient);
+    TEST(test_de_boundary_no_stagnation);
 
     printf("All NMinimize tests passed.\n");
     return 0;

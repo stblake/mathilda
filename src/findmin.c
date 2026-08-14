@@ -3233,10 +3233,22 @@ static void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
             size_t jr = nm_rng_next(rng) % n;
             for (size_t j = 0; j < n; j++) {
                 if (nm_rng_unif(rng) < CR || j == jr) {
-                    double v = pop[r1 * n + j]
-                             + F * (pop[r2 * n + j] - pop[r3 * n + j]);
-                    if (v < rlo[j]) v = rlo[j];
-                    if (v > rhi[j]) v = rhi[j];
+                    double base = pop[r1 * n + j];
+                    double v = base + F * (pop[r2 * n + j] - pop[r3 * n + j]);
+                    /* Bounce-back on a bound violation instead of clamping to
+                     * the bound. Clamping strands the search: once several
+                     * members share the exact boundary value for coordinate j,
+                     * their pairwise mutation differentials for j collapse to
+                     * zero, no mutant can lift the coordinate off the wall, and
+                     * it freezes there for the rest of the run — the Schwefel
+                     * failure, where half the coordinates pinned to ±500 while
+                     * the rest found the true basin. Bounce-back (Price, Storn &
+                     * Lampinen 2005) reflects the overshoot to a random point
+                     * between the base vector and the violated bound: feasible,
+                     * but almost never exactly on the boundary, so the
+                     * population keeps its diversity. */
+                    if (v < rlo[j])      v = base + nm_rng_unif(rng) * (rlo[j] - base);
+                    else if (v > rhi[j]) v = base + nm_rng_unif(rng) * (rhi[j] - base);
                     if (D->is_int[j]) v = round(v);
                     trial[j] = v;
                 } else {

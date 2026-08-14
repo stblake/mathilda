@@ -3078,6 +3078,14 @@ matrix variables (`Vectors[n, dom]`, `Matrices`), geometric-region domains,
 | `"RandomSearch"` | multiple random starts refined by the local solver |
 | `"SimulatedAnnealing"` | Metropolis search with geometric cooling |
 
+`"DifferentialEvolution"` keeps every trial point inside the box by *bounce-back*
+reinitialisation — a mutant that overshoots a bound is redrawn at random between
+its base vector and the violated bound — rather than clamping to the bound.
+Clamping would pile members onto the wall, collapse that coordinate's mutation
+differentials to zero, and strand the search there whenever a box-constrained
+optimum lies in the interior (e.g. the Schwefel function, optimum at
+`x_i = 420.97` inside `[-500, 500]`).
+
 A method may carry sub-options as a list, e.g.
 `Method -> {"DifferentialEvolution", "SearchPoints" -> 30,
 "ScalingFactor" -> 0.6, "CrossProbability" -> 0.9, "RandomSeed" -> 7}`.
