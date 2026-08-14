@@ -1,0 +1,285 @@
+{
+ "host": {
+  "date": "2026-08-06",
+  "missing_optional_deps": [],
+  "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "processor": "arm",
+  "mathilda": "Mathilda 0.032 (Apple LLVM 21.0.0 (clang-2100.1.1.101), GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)",
+  "mathilda_bin": "/Users/67840/Documents/GitHub/mathilda/Mathilda",
+  "python_bin": "/opt/homebrew/opt/python@3.14/bin/python3.14",
+  "python_libs": "3.14.3 2.4.1 1.17.1 1.14.0",
+  "wolframscript": "/usr/local/bin/wolframscript",
+  "runner_python": "3.14.3",
+  "local_versions": {
+   "numpy": "2.4.1",
+   "scipy": "1.17.1",
+   "sympy": "1.14.0",
+   "mpmath": "1.3.0",
+   "numba": "0.65.0",
+   "networkx": "3.6.1"
+  }
+ },
+ "rows": [
+  {
+   "experiment": "27-elementwise-binary",
+   "group": "C array substrate (numpy)",
+   "label": "a + b over 4x10^6",
+   "times": {
+    "mathilda": 0.518,
+    "wolfram": 0.553,
+    "python": 0.781
+   },
+   "checks": {
+    "mathilda": "30",
+    "wolfram": "30",
+    "python": "30"
+   },
+   "ratio": 0.9367088607594937,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "27-elementwise-binary",
+   "group": "C array substrate (numpy)",
+   "label": "a * b over 4x10^6",
+   "times": {
+    "mathilda": 0.391,
+    "wolfram": 0.45,
+    "python": 0.834
+   },
+   "checks": {
+    "mathilda": "55",
+    "wolfram": "55",
+    "python": "55"
+   },
+   "ratio": 0.8688888888888889,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "27-elementwise-binary",
+   "group": "C array substrate (numpy)",
+   "label": "MapThread[Min] over 4x10^6",
+   "times": {
+    "mathilda": 16.346,
+    "wolfram": 737.182,
+    "python": 0.787
+   },
+   "checks": {
+    "mathilda": "6",
+    "wolfram": "6",
+    "python": "6"
+   },
+   "ratio": 20.770012706480305,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "27-elementwise-binary",
+   "group": "C array substrate (numpy)",
+   "label": "MapThread[Max] over 4x10^6",
+   "times": {
+    "mathilda": 15.428,
+    "wolfram": 747.565,
+    "python": 0.795
+   },
+   "checks": {
+    "mathilda": "15",
+    "wolfram": "15",
+    "python": "15"
+   },
+   "ratio": 19.4062893081761,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "27-elementwise-binary",
+   "group": "C array substrate (numpy)",
+   "label": "Clip to [0.25, 0.75] over 4x10^6",
+   "times": {
+    "mathilda": 0.257,
+    "wolfram": 2.057,
+    "python": 0.98
+   },
+   "checks": {
+    "mathilda": "1500000",
+    "wolfram": "1500000",
+    "python": "1500000"
+   },
+   "ratio": 0.2622448979591837,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "27-elementwise-binary",
+   "group": "C array substrate (numpy)",
+   "label": "a b + a over 4x10^6",
+   "times": {
+    "mathilda": 0.809,
+    "wolfram": 0.929,
+    "python": 1.444
+   },
+   "checks": {
+    "mathilda": "70",
+    "wolfram": "70",
+    "python": "70"
+   },
+   "ratio": 0.8708288482238967,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "27-elementwise-binary",
+   "group": "C array substrate (numpy)",
+   "label": "integer Mod over 4x10^6",
+   "times": {
+    "mathilda": 4.182,
+    "wolfram": 0.539,
+    "python": 3.418
+   },
+   "checks": {
+    "mathilda": "5",
+    "wolfram": "5",
+    "python": "5"
+   },
+   "ratio": 7.758812615955473,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  }
+ ],
+ "requires": {
+  "MapThread": "present",
+  "Min": "present",
+  "Max": "present",
+  "Plus": "present",
+  "Times": "present",
+  "Mod": "present",
+  "Quotient": "present",
+  "Clip": "present",
+  "UnitStep": "present",
+  "Threshold": "absent"
+ },
+ "raw": {
+  "27-elementwise-binary": {
+   "mathilda": {
+    "bench": {
+     "a + b over 4x10^6": 0.518,
+     "a * b over 4x10^6": 0.391,
+     "MapThread[Min] over 4x10^6": 16.346,
+     "MapThread[Max] over 4x10^6": 15.428,
+     "Clip to [0.25, 0.75] over 4x10^6": 0.257,
+     "a b + a over 4x10^6": 0.809,
+     "integer Mod over 4x10^6": 4.182
+    },
+    "check": {
+     "a + b over 4x10^6": "30",
+     "a * b over 4x10^6": "55",
+     "MapThread[Min] over 4x10^6": "6",
+     "MapThread[Max] over 4x10^6": "15",
+     "Clip to [0.25, 0.75] over 4x10^6": "1500000",
+     "a b + a over 4x10^6": "70",
+     "integer Mod over 4x10^6": "5"
+    },
+    "require": {
+     "MapThread": "present",
+     "Min": "present",
+     "Max": "present",
+     "Plus": "present",
+     "Times": "present",
+     "Mod": "present",
+     "Quotient": "present",
+     "Clip": "present",
+     "UnitStep": "present",
+     "Threshold": "absent"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "a + b over 4x10^6": 0.553,
+     "a * b over 4x10^6": 0.45,
+     "MapThread[Min] over 4x10^6": 737.182,
+     "MapThread[Max] over 4x10^6": 747.565,
+     "Clip to [0.25, 0.75] over 4x10^6": 2.057,
+     "a b + a over 4x10^6": 0.929,
+     "integer Mod over 4x10^6": 0.539
+    },
+    "check": {
+     "a + b over 4x10^6": "30",
+     "a * b over 4x10^6": "55",
+     "MapThread[Min] over 4x10^6": "6",
+     "MapThread[Max] over 4x10^6": "15",
+     "Clip to [0.25, 0.75] over 4x10^6": "1500000",
+     "a b + a over 4x10^6": "70",
+     "integer Mod over 4x10^6": "5"
+    },
+    "require": {
+     "MapThread": "present",
+     "Min": "present",
+     "Max": "present",
+     "Plus": "present",
+     "Times": "present",
+     "Mod": "present",
+     "Quotient": "present",
+     "Clip": "present",
+     "UnitStep": "present",
+     "Threshold": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "a + b over 4x10^6": 0.781,
+     "a * b over 4x10^6": 0.834,
+     "MapThread[Min] over 4x10^6": 0.787,
+     "MapThread[Max] over 4x10^6": 0.795,
+     "Clip to [0.25, 0.75] over 4x10^6": 0.98,
+     "a b + a over 4x10^6": 1.444,
+     "integer Mod over 4x10^6": 3.418
+    },
+    "check": {
+     "a + b over 4x10^6": "30",
+     "a * b over 4x10^6": "55",
+     "MapThread[Min] over 4x10^6": "6",
+     "MapThread[Max] over 4x10^6": "15",
+     "Clip to [0.25, 0.75] over 4x10^6": "1500000",
+     "a b + a over 4x10^6": "70",
+     "integer Mod over 4x10^6": "5"
+    },
+    "require": {
+     "numpy:minimum": "present",
+     "numpy:maximum": "present",
+     "numpy:clip": "present",
+     "numpy:mod": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  }
+ },
+ "elapsed_s": 10.35220718383789,
+ "durations": {
+  "27-elementwise-binary": 8.635801076889038
+ },
+ "partial": true,
+ "label_problems": []
+}
