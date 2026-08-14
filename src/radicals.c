@@ -45,6 +45,7 @@
 #include "attr.h"
 #include "common.h"
 #include "eval.h"
+#include "zero_test.h"
 #include "expr.h"
 #include "numeric.h"
 #include "poly/poly.h"
@@ -329,6 +330,11 @@ static Expr** radical_quartic(Expr* a, Expr* b, Expr* c, Expr* d, Expr* e,
     Expr* eight_a2d = eval_and_free(mk_fn3("Times", mk_int(8),
         eval_and_free(mk_pow(expr_copy(a), mk_int(2))), expr_copy(d)));
     Expr* num_q = eval_and_free(mk_fn3("Plus", b3, mk_neg(four_abc), eight_a2d));
+    /* Biquadratic iff the depressed linear coefficient q vanishes.  Test the
+     * numerator polynomial (the 8 a^3 denominator is nonzero) with a symbolic
+     * zero test, not a literal one — for a circulant-style characteristic
+     * polynomial q is identically zero yet not reduced to a literal 0. */
+    bool biquad = (zero_test_decide(num_q) == ZERO_TEST_TRUE);
     Expr* den_q = eval_and_free(mk_fn2("Times", mk_int(8),
         eval_and_free(mk_pow(expr_copy(a), mk_int(3)))));
     Expr* q = eval_and_free(mk_fn2("Times", num_q, mk_inv(den_q)));
@@ -360,7 +366,7 @@ static Expr** radical_quartic(Expr* a, Expr* b, Expr* c, Expr* d, Expr* e,
 
     Expr** out = (Expr**)malloc(sizeof(Expr*) * 4);
 
-    if (is_int_zero(q)) {
+    if (biquad) {
         /* Biquadratic branch: y² satisfies y² = (-p ± √(p² − 4r)) / 2 */
         Expr* p_sq    = eval_and_free(mk_pow(expr_copy(p), mk_int(2)));
         Expr* four_r  = eval_and_free(mk_fn2("Times", mk_int(4), expr_copy(r)));

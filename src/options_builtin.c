@@ -752,13 +752,13 @@ void options_register_defaults(void) {
 
     /* ---- Linear algebra ---- */
     ob_init(&b);
-    ob_add(&b, r_sym("Cubics", "True"));
-    ob_add(&b, r_sym("Quartics", "True"));
+    ob_add(&b, r_sym("Cubics", "False"));
+    ob_add(&b, r_sym("Quartics", "False"));
     ob_commit(&b, "Eigenvalues");
 
     ob_init(&b);
-    ob_add(&b, r_sym("Cubics", "True"));
-    ob_add(&b, r_sym("Quartics", "True"));
+    ob_add(&b, r_sym("Cubics", "False"));
+    ob_add(&b, r_sym("Quartics", "False"));
     ob_commit(&b, "Eigenvectors");
 
     ob_init(&b);

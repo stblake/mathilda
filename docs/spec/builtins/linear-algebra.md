@@ -2158,8 +2158,16 @@ Gives a list of the eigenvalues of a square matrix.
   symbolic eigenvalues retain Solve's natural order.
 - When `m, a` have a shared null space, `Eigenvalues[{m, a}]` returns
   `Infinity` for each degree drop in the characteristic polynomial.
-- Options: `Cubics -> True` (use radicals for cubics; default true so the
-  closed-form pipeline can numericalize), `Quartics -> True`, `Method`.
+- Options: `Cubics -> False`, `Quartics -> False` (defaults), `Method`.  With
+  the defaults a general irreducible cubic/quartic characteristic polynomial is
+  returned as held `Root[]` objects (matching Mathematica); `Cubics -> True` /
+  `Quartics -> True` force explicit radicals for the general case.  The special
+  always-solvable families — binomials (`a x^n + b`), quadratic-in-`x^m`, and
+  biquadratic-after-depression quartics — are always returned in radical form
+  regardless of these options, so a matrix whose eigenvalues are compact nested
+  radicals keeps its closed form.  `Root[]` objects numericalize (including
+  after numeric substitution), so `N` and the numeric optimizers work either
+  way.
 - For approximate-numeric (`Real` / MPFR) matrices `Method` selects the
   numerical kernel.  Accepted values: `Automatic` (default; routes
   among Direct / Arnoldi / Banded based on shape and `k`), `"Direct"`,

@@ -2622,3 +2622,35 @@ the unit path under-ran). Fixing only the interpreter would have left
   LAPACK path (symbolic char-poly); BesselI/K have no vector kernel; NullSpace on floats
   takes a non-machine path; NSolve/NRoots 60–110× slower than numpy companion-matrix;
   FindRoot/NSum under-deliver requested WorkingPrecision.
+
+## Eigenvalues/Solve quartic radical form (2026-08-15)
+- **Don't assume the output form — ask what the reference tool actually produces.**
+  Reported: `NMinimize[Max[Re[Eigenvalues[matrix[c1,c2]]]]]` hangs. I hypothesized
+  Mathematica returns `Root[]` objects and built a whole `Root[]`-default +
+  Root-numericalization path. The user then pasted Mathematica's actual `obj`: a
+  **compact nested radical**, not `Root[]`. The matrix's quartic is *biquadratic
+  after depression* (`x -> x - b/4a`), so it solves in nested square roots.
+- **Biquadratic-after-depression detection needs a symbolic zero test, not a literal
+  one.** `solve_quartic_radical` (solvepoly.c) gated its biquadratic branch on
+  `is_definite_zero(q)` — a literal Integer/Rational-zero check. A symbolically-zero
+  depressed linear coefficient `q` (circulant-style matrices) was missed → the general
+  resolvent-cubic branch ran: 9205 leaves AND numerically wrong (`q=0` ⇒ resolvent root
+  `t=0` ⇒ `0/0` in `q/Sqrt[2t]`). Fix: `zero_test_decide(q) == ZERO_TEST_TRUE`.
+- **Two quartic solvers exist with the identical bug**: `poly/solvepoly.c`
+  `solve_quartic_radical` (Solve/Eigenvalues path) AND `radicals.c` `radical_quartic`
+  (Root→radical path). Fix both.
+- **Policy (per user): Cubics/Quartics default False (Root[] for the general case), but
+  the always-solvable families always return radicals** regardless of the flag —
+  binomials `a x^n+b`, quadratic-in-`x^m`, and biquadratic-after-depression quartics.
+  Binomial/n-quadratic already fire *before* the Cubics/Quartics gate in the dispatch;
+  the biquadratic quartic had to be explicitly ungated.
+- **A compact radical evaluates ~20× faster than a `Root[]` per point** (arithmetic vs
+  companion-matrix root-finding), which is why Mathematica is 0.2 s: same expansion, but
+  compact radicals + compiled eval. Mathilda: infinite hang → 6.2 s.
+- **Internal consumers that manipulate eigenvalues symbolically must request radicals.**
+  `SingularValueDecomposition` builds a gram matrix and works its eigenvalues with
+  `Sqrt`/rational idioms; under the new `Root[]` default it must pass
+  `Cubics -> True, Quartics -> True` or it can't reduce.
+- **git checkout HEAD -- <file> discards uncommitted work irrecoverably.** Reverted a
+  large working change on a wrong hypothesis, then the user asked to keep it — had to
+  re-apply from the conversation. Prefer `git stash` when a revert might be temporary.

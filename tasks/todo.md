@@ -1,44 +1,67 @@
-# NMinimize: DifferentialEvolution options + 20-D rotated Rastrigin stress test
+# Fix: NMinimize hang on Max[Re[Eigenvalues[matrix[c1,c2]]]]
 
-## Requests
-1. Add the 20-D rotated Rastrigin as an NMinimize unit test.
-2. Ensure all `"DifferentialEvolution"` sub-options work as expected.
-3. Use Storn & Price's 10n = 200 default population.
+## Root cause (confirmed by user's Mathematica output)
+Mathematica returns a COMPACT radical for this matrix: the char poly is
+biquadratic AFTER depression (x -> x - 5/2), so it solves in nested square
+roots (~80 leaves), evaluates by arithmetic (fast), and is correct.
 
-## Findings (verified before coding)
-- All DE options were *parsed*, but two were consumed only by NelderMead:
-  - `"Tolerance"` → used only in `nm_neldermead` (simplex spread); DE's early-break
-    used the AccuracyGoal/PrecisionGoal-derived threshold. **Silently ignored by DE.**
-  - `"InitialPoints"` → used only in `nm_simplex_from_points`; DE always
-    random-initialised. **Silently ignored by DE.**
-  - `"CrossProbability"`/`"ScalingFactor"` accepted any value with no validation.
-- Explicit `"DifferentialEvolution"` clamped the population to `[15, 40]`, so a
-  20-D solve ran 40 members instead of 10n = 200.
+Mathilda's `solve_quartic_radical` (solvepoly.c) detected the biquadratic case
+only via `is_definite_zero(q)` — a LITERAL zero test — which missed the
+symbolic-zero `q`. It fell to the general resolvent-cubic path: 9205 leaves AND
+numerically WRONG (q=0 forces resolvent root t=0 -> 0/0 in q/Sqrt[2t]).
 
-## Changes (all in src/numerical_calculus/findmin.c)
-- [x] Population = `Clip[10·d, {15, 200}]` for explicit DE and Automatic alike.
-- [x] DE convergence break honors an explicit `"Tolerance"` (default path unchanged).
-- [x] New `nm_population_from_points` seeds the leading DE population members from
-      `"InitialPoints"`, rest random; RNG stream unchanged when absent.
-- [x] Validate `"CrossProbability"` ∈ [0,1] and `"ScalingFactor"` ∈ (0,2]; invalid
-      warns `NMinimize::sopt` and falls back (matches the SA sub-options).
+## Desired policy (user)
+- Cubics / Quartics default to **False** (Root[] for the general case).
+- Biquadratics (incl. biquadratic-after-depression), n-quadratics
+  (a x^{2m}+b x^m+c), and n-linear/binomials (a x^n + b) **always** radicals.
+- Keep the new Root-object numericalisation.
 
-## Tests (tests/test_nminimize.c)
-- [x] `test_rotated_rastrigin_stress` — loose shape/feasibility/basin invariant.
-- [x] `test_de_options_effective` — Tolerance, InitialPoints, CR, F each steer the
-      search; invalid CR/F warn + fall back.
+## Plan
+- [x] solvepoly.c `solve_quartic_radical`: biquadratic detection via
+      `zero_test_decide` (polynomial-identity), not literal `is_definite_zero`.
+- [ ] solvepoly.c dispatch: emit the depressed-biquadratic quartic in radicals
+      even when quartics_radical is False (ungate the special case). Binomial /
+      n-quadratic already fire before the gate — verified.
+- [ ] Restore Fix A: Cubics/Quartics default False (eigen_common.c,
+      options_builtin.c).
+- [ ] Restore Fix B: Root[] numericalisation of inexact-coefficient polynomials
+      (root_numeric.c) — user wants it kept; needed so general Root eigenvalues
+      still numericalise under the False default.
+- [ ] radicals.c `radical_quartic`: same biquadratic-detection fix (parallel
+      Root->radical path).
+- [ ] Tests: test_options.c (Cubics/Quartics -> False); test_eigen.c
+      irreducible-cubic residual threshold (Root-based now ~1e-13, relax
+      10^-20 -> 10^-10).
+- [ ] Verify: user NMinimize fast+correct; N[Root[inexact]] works; general
+      quartic -> Root; suites pass.
+- [ ] Docs + changelog.
 
-## Docs
-- [x] docs/spec/builtins/numerical-calculus.md (population, Tolerance, InitialPoints,
-      CR/F validation).
-- [x] docs/spec/changelog/2026-08-10.md (this ISO week).
+## Review
+Done. Infinite hang -> 6.2 s, correct global min (-2.0, matches coarse grid).
 
-## Review / results
-- Full `nminimize_tests` (63 tests) pass; `findmin_tests` pass; `make check-c99` clean.
-- No regressions: `test_griewank_differentialevolution` (n=10, now NP=100) still
-  passes; existing seeded runs with no InitialPoints reproduce (RNG stream intact).
-- Stress test lands at 37.8084 (feasible, 20 coords) — a good basin, not the global
-  0. Plain DE does not crack 20-D rotated Rastrigin; the bound is a "found a good
-  region" check, robust to cross-platform QR + DE drift.
-- Empirically confirmed each option now takes effect: Tolerance 5.5e-16 (tight) vs
-  3.5e-3 (loose); InitialPoints-at-origin → raw 0.0 vs random 65.
+Changes:
+- `poly/solvepoly.c`: biquadratic detection via `zero_test_decide` (was literal
+  `is_definite_zero`); dispatch ungates the depressed-biquadratic quartic so it
+  emits radicals even under Quartics -> False. New helper
+  `quartic_depressed_is_biquadratic`.
+- `radicals.c`: same `zero_test_decide` biquadratic fix in the parallel
+  `radical_quartic` (Root->radical path).
+- `linalg/eigen_common.c` + `options_builtin.c`: Cubics/Quartics default -> False.
+- `root_numeric.c`: numericalise Root[] with inexact (machine-real / rational)
+  coefficients — `solve_root_core` refactor shared by exact and inexact paths,
+  LAPACK dgeev machine fast path, graceful Newton-stall fallback.
+- `linalg/svdecomp.c`: SVD requests Cubics/Quartics -> True internally.
+- Docs: info.c docstrings, linear-algebra.md, changelog 2026-08-10.
+- Tests: test_options.c (defaults -> False), test_eigen.c (irreducible-cubic
+  residual 10^-20 -> 10^-10, now Root-based).
+
+Verified:
+- Radical obj matches direct numeric eigenvalues to 1.15e-14 over a 121-pt grid.
+- Suites pass: root_numeric, nroots, eigen, options, rootreduce, solve,
+  mateigen_{direct,arnoldi,banded}, SVD, nsolve, findroot. (Full sweep running.)
+- N[Root[inexact]] works; general quartic/cubic -> Root; biquadratic/binomial
+  -> radicals.
+
+Not done (out of scope): matching Mathematica's 0.2 s exactly — the residual gap
+is the SA evaluation count (tuned for the benchmark suite) and the radical not
+being maximally simplified (365 vs ~80 leaves); neither is a correctness issue.
