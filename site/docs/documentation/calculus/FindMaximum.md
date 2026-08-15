@@ -32,7 +32,7 @@ local maximum subject to box and Inequality constraints.
 <details>
 <summary>Notes</summary>
 
-Methods (Method -\> ...): Automatic           picks Brent for 1D, QuasiNewton (BFGS) for n-D. "Brent"             derivative-free golden-section + parabolic interpolation; 1D only; honours MPFR WorkingPrecision. "QuasiNewton"       BFGS with cubic line search; uses analytic Gradient if given, otherwise central differences; default for n\>=2; honours MPFR WorkingPrecision. "ConjugateGradient" Polak-Ribiere CG with line search; lower memory than BFGS for large n; gradient-based. "Newton"            full Hessian step via modified Cholesky factorization; falls back to a steepest-descent step when the Hessian is not negative definite or unavailable. Options: Method              algorithm selector (see above). WorkingPrecision    MachinePrecision (double) or a positive digit count (MPFR; honoured by Brent and BFGS). MaxIterations       positive integer cap on outer iterations; default 500. AccuracyGoal        Automatic | Infinity | digits; absolute tolerance on |f| (and |x| where applicable). PrecisionGoal       Automatic | Infinity | digits; relative tolerance on step size. Gradient            Automatic (finite differences) or an explicit list { dfdx1, dfdx2, ... } in the same order as vars.  The gradient is taken with respect to f, not -f. StepMonitor         :\> body run after each accepted step, with the variables locally bound to their current values. EvaluationMonitor   :\> body run on every function/gradient evaluation. FindMaximum has HoldAll and effectively uses Block to localize the variables.  Internally maximises by minimising -f, then negates the objective value in the result.  Returns {fmax, {x -\> xmax, ...}}.
+Methods (Method -\> ...): Automatic           picks Brent for 1D, QuasiNewton (BFGS) for n-D. "Brent"             derivative-free golden-section + parabolic interpolation; 1D only; honours MPFR WorkingPrecision. "QuasiNewton"       BFGS with cubic line search; uses analytic Gradient if given, otherwise central differences; default for n\>=2; honours MPFR WorkingPrecision. "ConjugateGradient" Polak-Ribiere CG with line search; lower memory than BFGS for large n; gradient-based. "Newton"            full Hessian step via modified Cholesky factorization; falls back to a steepest-descent step when the Hessian is not negative definite or unavailable. "LBFGSB"            limited-memory BFGS (history 10) with box constraints via active-set projection; O(m*n) per step, so it scales to large n where QuasiNewton's dense Hessian is O(n^2); aliases "LBFGS", "LimitedMemoryBFGS" (a Mathilda extension). Options: Method              algorithm selector (see above). WorkingPrecision    MachinePrecision (double) or a positive digit count (MPFR; honoured by Brent and BFGS). MaxIterations       positive integer cap on outer iterations; default 500. AccuracyGoal        Automatic | Infinity | digits; absolute tolerance on |f| (and |x| where applicable). PrecisionGoal       Automatic | Infinity | digits; relative tolerance on step size. Gradient            Automatic (finite differences) or an explicit list { dfdx1, dfdx2, ... } in the same order as vars.  The gradient is taken with respect to f, not -f. StepMonitor         :\> body run after each accepted step, with the variables locally bound to their current values. EvaluationMonitor   :\> body run on every function/gradient evaluation. FindMaximum has HoldAll and effectively uses Block to localize the variables.  Internally maximises by minimising -f, then negates the objective value in the result.  Returns {fmax, {x -\> xmax, ...}}.
 
 </details>
 
@@ -96,7 +96,7 @@ Options (Rule[...] in trailing position, any order):
 
 ```text
   Method            -> Automatic | "Brent" | "Newton" | "QuasiNewton"
-                                 | "ConjugateGradient"
+                                 | "ConjugateGradient" | "LBFGSB"
   WorkingPrecision  -> MachinePrecision | digits   (MPFR for Brent + BFGS)
   MaxIterations     -> positive integer (default 500)
   AccuracyGoal      -> Automatic | Infinity | digits
@@ -126,11 +126,11 @@ Returns NULL (unevaluated) on any failure — variable bindings are always resto
 `FindMinimum` (src/findmin.c, `builtin_findmaximum`): it negates the objective,
 runs the same local optimizer, and negates the first component of the resulting
 `{f_min, {x -> x_min, ...}}` pair to report `{f_max, {x -> x_max, ...}}`. All
-machinery — Brent in 1-D, BFGS quasi-Newton / conjugate-gradient / Newton in
-n-D, symbolic gradients/Hessian with a central-difference fallback, Armijo line
-search, box-projection and quadratic-penalty constraint handling, MPFR extended
-precision — is inherited unchanged from `FindMinimum`. See `FindMinimum` for the
-full description.
+machinery — Brent in 1-D, BFGS quasi-Newton / conjugate-gradient / Newton /
+limited-memory `"LBFGSB"` in n-D, symbolic gradients/Hessian with a
+central-difference fallback, Armijo line search, box-projection and
+quadratic-penalty constraint handling, MPFR extended precision — is inherited
+unchanged from `FindMinimum`. See `FindMinimum` for the full description.
 
 **Complexity / limits.** Same as `FindMinimum`: local search only. The negation
 is precision-aware (`mpfr_neg` for `EXPR_MPFR` results, plain real otherwise).
@@ -148,6 +148,13 @@ is precision-aware (`mpfr_neg` for `EXPR_MPFR` results, plain real otherwise).
 
 ## Notes & additional examples
 
+### Worked examples
+
+```mathematica
+In[1]:= FindMaximum[10 - (x - 3)^2 - (y + 1)^2, {{x, 0}, {y, 0}}, Method -> "LBFGSB"]
+Out[1]= {10.0, {x -> 3.0, y -> -1.0}}
+```
+
 ### Notes
 
 `FindMaximum[f, {x, x0}]` returns `{fmax, {x -> xmax, ...}}`. Internally it
@@ -155,3 +162,8 @@ maximises by minimising `-f`, so the same Brent (1D) and BFGS quasi-Newton
 (n-D) machinery as `FindMinimum` applies. The first example recovers the
 peak of `Sin` at `x = π/2`; the multivariate case locates a saddle-free
 maximum of the product `Sin[x] Sin[2 y]` at `(π/2, π/4)`.
+
+Every `FindMinimum` method is available, including `Method -> "LBFGSB"`
+(limited-memory BFGS with bound constraints; aliases `"LBFGS"`,
+`"LimitedMemoryBFGS"`), shown in the last example locating the peak of a
+concave paraboloid at `(3, -1)`.

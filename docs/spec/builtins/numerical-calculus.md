@@ -1382,13 +1382,27 @@ optimising variable assignments.
 | `{x, x0, x1}` (1D)    | Brent (bracket) |
 
 Methods overridable via `Method -> "Brent" | "Newton" | "QuasiNewton"
-| "ConjugateGradient"`.  Brent is golden-section search with parabolic
-interpolation (derivative-free), QuasiNewton is BFGS with Armijo
+| "ConjugateGradient" | "LBFGSB"`.  Brent is golden-section search with
+parabolic interpolation (derivative-free), QuasiNewton is BFGS with Armijo
 backtracking line search, ConjugateGradient is Polak-Ribière+ with
 restart, Newton uses the symbolic Hessian (via repeated `D[]`) with
 modified-Cholesky safeguarding.  Gradients default to a symbolic
 gradient (`D[f, x_i]` per variable) with a central-difference fallback;
 override via `Gradient -> {dfdx1, dfdx2, ...}`.
+
+`"LBFGSB"` (aliases `"LBFGS"`, `"LimitedMemoryBFGS"`; a Mathilda extension —
+Mathematica exposes no such method name) is **limited-memory BFGS with bound
+constraints**.  It keeps only the `m = 10` most recent correction pairs and
+forms the search direction by the Nocedal two-loop recursion at `O(m·n)` cost,
+so it scales to large `n` where the full-memory QuasiNewton's dense `n×n`
+inverse-Hessian is `O(n²)` in both memory and per-step work.  The line search
+tries the quasi-Newton unit step first (with expansion, to follow curved
+valleys); box constraints are honoured by an active-set projection (a
+coordinate resting on a face with the gradient pushing outward is fixed and the
+free variables optimise in the reduced subspace), reaching the same optima as a
+reference L-BFGS-B.  General (non-box) constraints route through the same
+augmented-Lagrangian wrapper as the other methods.  References: Byrd, Lu,
+Nocedal & Zhu 1995, with the Morales–Nocedal 2011 correction.
 
 ### Constraints
 

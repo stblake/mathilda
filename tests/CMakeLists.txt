@@ -1286,6 +1286,11 @@ target_include_directories(findmin_tests PRIVATE ../src)
 add_executable(nminimize_tests test_nminimize.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(nminimize_tests PRIVATE ../src)
 
+# L-BFGS-B method of FindMinimum (run the binary directly, matching the
+# findmin_tests / nminimize_tests convention — no add_test registration).
+add_executable(lbfgsb_tests test_lbfgsb.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(lbfgsb_tests PRIVATE ../src)
+
 add_executable(fit_tests test_fit.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(fit_tests PRIVATE ../src)
 add_test(NAME fit_tests COMMAND fit_tests)

@@ -1,67 +1,55 @@
-# Fix: NMinimize hang on Max[Re[Eigenvalues[matrix[c1,c2]]]]
+# L-BFGS-B for FindMinimum — implementation todo
 
-## Root cause (confirmed by user's Mathematica output)
-Mathematica returns a COMPACT radical for this matrix: the char poly is
-biquadratic AFTER depression (x -> x - 5/2), so it solves in nested square
-roots (~80 leaves), evaluates by arithmetic (fast), and is correct.
+Plan: `/Users/user/.claude/plans/let-s-compare-the-existing-harmonic-jellyfish.md`
+Branch: `feat/lbfgsb-findminimum`
 
-Mathilda's `solve_quartic_radical` (solvepoly.c) detected the biquadratic case
-only via `is_definite_zero(q)` — a LITERAL zero test — which missed the
-symbolic-zero `q`. It fell to the general resolvent-cubic path: 9205 leaves AND
-numerically WRONG (q=0 forces resolvent root t=0 -> 0/0 in q/Sqrt[2t]).
+## Design deviations from plan (all verified, documented here)
+- Bound handling: ACTIVE-SET projection (not the exact BLNZ generalized-Cauchy-
+  point/subspace-min). Reaches the same optima; the bound-active discriminating
+  case (Rosenbrock on x<=0.5 -> {0.25, x->0.5, y->0.25}) is EXACT. GCP left as a
+  future refinement.
+- Line search: robust strong-Wolfe with expansion + best-point fallback (tries
+  alpha=1 first; the shared fm_line_search's 1/||d|| cap throttled L-BFGS).
+- Convergence: projected-gradient inf-norm + machine-noise relative-f stall
+  (removed the single-step displacement test, which pre-empted convergence on
+  narrow valleys).
+- Indexed vars: NOT added to FindMinimum. Large-n cases use programmatic scalar
+  symbols Symbol["z"<>ToString[i]] (no driver surgery).
+- Extended Rosenbrock is multimodal for n>=4 -> large-n scaling uses the
+  UNIMODAL ill-conditioned quadratic instead (method-independent optimum).
 
-## Desired policy (user)
-- Cubics / Quartics default to **False** (Root[] for the general case).
-- Biquadratics (incl. biquadratic-after-depression), n-quadratics
-  (a x^{2m}+b x^m+c), and n-linear/binomials (a x^n + b) **always** radicals.
-- Keep the new Root-object numericalisation.
+## M1 core — DONE
+- [x] Enum, parse strings, needs_grad, driver dispatch, fm_run_penalty case, MPFR nimpl fallback
+- [x] fm_run_lbfgsb: two-loop + curvature-skip + active-set + robust Wolfe
+- [x] All scalar/large-n/bound/general cases converge (verified)
 
-## Plan
-- [x] solvepoly.c `solve_quartic_radical`: biquadratic detection via
-      `zero_test_decide` (polynomial-identity), not literal `is_definite_zero`.
-- [ ] solvepoly.c dispatch: emit the depressed-biquadratic quartic in radicals
-      even when quartics_radical is False (ungate the special case). Binomial /
-      n-quadratic already fire before the gate — verified.
-- [ ] Restore Fix A: Cubics/Quartics default False (eigen_common.c,
-      options_builtin.c).
-- [ ] Restore Fix B: Root[] numericalisation of inexact-coefficient polynomials
-      (root_numeric.c) — user wants it kept; needed so general Root eigenvalues
-      still numericalise under the False default.
-- [ ] radicals.c `radical_quartic`: same biquadratic-detection fix (parallel
-      Root->radical path).
-- [ ] Tests: test_options.c (Cubics/Quartics -> False); test_eigen.c
-      irreducible-cubic residual threshold (Root-based now ~1e-13, relax
-      10^-20 -> 10^-10).
-- [ ] Verify: user NMinimize fast+correct; N[Root[inexact]] works; general
-      quartic -> Root; suites pass.
-- [ ] Docs + changelog.
+## M2 (true GCP) — DEFERRED (active-set variant reaches same optima)
 
-## Review
-Done. Infinite hang -> 6.2 s, correct global min (-2.0, matches coarse grid).
+## Tests — DONE
+- [x] tests/test_lbfgsb.c (26 tests, 7 groups) — ALL GREEN
+- [x] Registered in tests/CMakeLists.txt
+- [x] findmin/nminimize no regression
 
-Changes:
-- `poly/solvepoly.c`: biquadratic detection via `zero_test_decide` (was literal
-  `is_definite_zero`); dispatch ungates the depressed-biquadratic quartic so it
-  emits radicals even under Quartics -> False. New helper
-  `quartic_depressed_is_biquadratic`.
-- `radicals.c`: same `zero_test_decide` biquadratic fix in the parallel
-  `radical_quartic` (Root->radical path).
-- `linalg/eigen_common.c` + `options_builtin.c`: Cubics/Quartics default -> False.
-- `root_numeric.c`: numericalise Root[] with inexact (machine-real / rational)
-  coefficients — `solve_root_core` refactor shared by exact and inexact paths,
-  LAPACK dgeev machine fast path, graceful Newton-stall fallback.
-- `linalg/svdecomp.c`: SVD requests Cubics/Quartics -> True internally.
-- Docs: info.c docstrings, linear-algebra.md, changelog 2026-08-10.
-- Tests: test_options.c (defaults -> False), test_eigen.c (irreducible-cubic
-  residual 10^-20 -> 10^-10, now Root-based).
+## Benchmark — DONE
+- [x] benchmarks/64-lbfgsb-scaling/lbfgsb_scaling.{m,py} (10 cases)
+- [x] Ran exp 64 vs scipy: CHECK-FAIL=0, INCOMPLETE=0; AHEAD 6 / SLOWER 4
+- GOTCHA fixed: build objectives with Total[Table[...]] NOT Sum[...] — Sum
+  attempts a closed form with a symbolic iterator (Symbol["z"<>ToString[i]]
+  collapses to one concrete symbol -> geometric series) and burns the whole
+  budget. Tests dodge it via v[[i]] (Part blocks the closed-form attempt).
+- FINDINGS (honest, informative):
+  * Within Mathilda: LBFGSB 402ms vs QuasiNewton 1650ms at n=1000 (4x — the
+    scalability win); QN n=50->1000 grows 609x vs LBFGSB 128x.
+  * Mathilda QuasiNewton BEATS scipy BFGS at n=1000 (1.65s vs 7.38s, 0.22x).
+  * Mathilda LBFGSB SLOWER than scipy L-BFGS-B at large n (402 vs 12ms, 33x):
+    the O(mn) solve is cheap, so per-solve COMPILE setup (objective+gradient to
+    bytecode) dominates — same as bench63 A6/A7. Gradient-> barely helps
+    (0.398->0.367s), confirming compile, not symbolic-diff, is the cost.
 
-Verified:
-- Radical obj matches direct numeric eigenvalues to 1.15e-14 over a 121-pt grid.
-- Suites pass: root_numeric, nroots, eigen, options, rootreduce, solve,
-  mateigen_{direct,arnoldi,banded}, SVD, nsolve, findroot. (Full sweep running.)
-- N[Root[inexact]] works; general quartic/cubic -> Root; biquadratic/binomial
-  -> radicals.
+## Docs & verify — DONE
+- [x] src/info.c docstring (LBFGSB method + aliases)
+- [x] docs/spec/builtins/numerical-calculus.md + docs/spec/changelog/2026-08-10.md
+- [x] make check-c99 PASS; valgrind clean (all lost = macOS runtime baseline noise)
 
-Not done (out of scope): matching Mathematica's 0.2 s exactly — the residual gap
-is the SA evaluation count (tuned for the benchmark suite) and the radical not
-being maximally simplified (365 vs ~80 leaves); neither is a correctness issue.
+## STATUS: COMPLETE. All suites green, no regression, C99-clean, valgrind-clean.
+Not committed (awaiting user). M2 (exact GCP) deferred as documented follow-up.
