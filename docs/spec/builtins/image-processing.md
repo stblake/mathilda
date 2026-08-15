@@ -1525,3 +1525,63 @@ positional was given.
 It was caught by asserting that the option form and the positional form agree — an equivalence
 worth writing down for any setting that has two spellings, since neither spelling looks wrong on
 its own.
+
+## LocalAdaptiveBinarize
+
+A global threshold cannot binarize unevenly lit content, and that is not a tuning problem: if one
+half of a page is darker than the other, **no single number** separates ink from paper in both
+halves at once. `LocalAdaptiveBinarize[image, r]` compares each pixel to the mean of its own
+`(2r+1)²` neighbourhood; `LocalAdaptiveBinarize[image, r, {c1, c2, c3}]` uses
+
+```
+threshold(y, x) = c1·mean + c2·stddev + c3
+```
+
+Mean alone (the default `{1, 0, 0}`) is Bradley's method; a negative `c2` is Sauvola's, tightening
+the threshold where the neighbourhood is busy. Summed-area tables make the statistics **O(1) per
+pixel regardless of r** — the same identity NCC uses — where a radius-16 window would otherwise be
+1089 taps per pixel. With `c2 = 0` the sum-of-squares table is not built at all, since it exists
+only for the deviation term. The result is typed `"Bit"`.
+
+### The test that shows it earning its place
+
+A checkerboard under a strong lighting ramp. No single number separates the two tones in both
+halves, so a global threshold **must** collapse one half to a single value, while the local form
+keeps the pattern in both. Asserted as set membership — "this half contains both values" — which is
+absolute, rather than as a percentage recovered. Measured: the global result's left third is
+`{0.}`; both thirds of the local result contain `{0., 1.}`.
+
+### Mean-only is a boundary case, stated precisely
+
+With `c2 = 0` and `c3 = 0` the threshold *is* the window mean, so a pixel can tie it — and on a
+periodic synthetic image many do exactly. The summed-area mean (four lookups, then `sum/area`) and
+a direct sum of the same window differ in the last bit, and a **binary** decision amplifies that
+into a visible flip: 15 pixels of 224 in the suite's case, every one of them a tie. So the test
+does not assert the outputs are equal; it asserts the stronger true statement that **every
+disagreement is a pixel within one ulp of its own threshold**. Where the definition is numerically
+determined, the implementation matches it — and with `c2` or `c1` moving the threshold off the mean,
+agreement is exact.
+
+### Measured
+
+512×512, flat in radius as the tables promise:
+
+| | Mathilda | scikit-image |
+|---|---:|---:|
+| r = 2 | 0.58 ms | 1.72 ms (`threshold_local`, mean) |
+| r = 8 | 0.60 ms | 1.67 ms |
+| r = 16 | 0.66 ms | 1.68 ms |
+| r = 32 | 0.73 ms | 1.72 ms |
+
+**2.6–2.9× faster** — but it was *4.2× slower* an hour before, and the reason is worth recording as
+the third instance of one pattern. `bit_image_from_mask` was building 262144 `Expr` integers in 512
+nested `List`s, and that dominated: global `Binarize` measured 6.56 ms where its Otsu pass and
+comparison together are well under 1 ms, and the local version measured 7.2 ms — only 0.7 ms more,
+despite building summed-area tables over the whole image. Emitting a packed `int64` buffer instead
+took the local form to **0.58 ms** and global `Binarize` from 6.47 to **0.278 ms**, a 23× speedup of
+a head this change was not even about.
+
+The other two instances were `image_load` walking a buffer element-by-element (found when `ImagePad`
+looked 10× slower than NumPy) and `image3d_load` still doing so after `image_load` was fixed (found
+when the volumetric pad looked 6.5× slower). In all three the answers were correct and only the
+marshalling was slow, so no test could have caught them — a benchmark did, each time.

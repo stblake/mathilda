@@ -35,6 +35,7 @@
 #include "sym_names.h"
 #include "linalg/numarray.h"
 #include "image.h"
+#include "pack.h"
 #include "options.h"
 #ifdef USE_FFTW
 #include <fftw3.h>
@@ -1070,6 +1071,166 @@ static Expr* builtin_findthreshold(Expr* res) {
  * differ on exactly the pixels a threshold was chosen to sit between.
  *
  * Colour is reduced to luminance first, which is also what Mathematica does. */
+/* Build an Image[..., "Bit"] from a 0/1 mask.
+ *
+ * Typed "Bit" rather than "Real" because the result IS binary by construction, and calling it real
+ * would lose that: a later ImageData would scale nothing, but the caller could no longer tell the
+ * image was binary. Shared by Binarize and LocalAdaptiveBinarize -- one construction, so the two
+ * cannot disagree about the type they produce. */
+static Expr* bit_image_from_mask(const unsigned char* mask, size_t w, size_t h) {
+    /* A PACKED int64 buffer, not h*w Expr nodes.
+     *
+     * The nested form was costing more than the thresholding it delivered: global Binarize measured
+     * 6.56 ms on 512x512 where the Otsu pass and the comparison together are well under 1 ms, and
+     * LocalAdaptiveBinarize measured 7.2 ms -- only 0.7 ms more, despite doing summed-area tables over
+     * the whole image. Both numbers were 262144 calls to expr_new_integer and 512 List allocations.
+     * That is the same marshalling cost that made ImagePad look four times slower than it was, in a
+     * different place.
+     *
+     * int64 rather than float64 because "Bit" values are integers and ImageData reports stored values:
+     * a real-typed 1 would print as `1.` where Mathematica prints `1`. */
+    int64_t dims[2];
+    dims[0] = (int64_t)h; dims[1] = (int64_t)w;
+    void* raw = NULL;
+    Expr* nd = ndbuild_open(2, dims, NDT_INT64, &raw);
+    if (nd && raw) {
+        int64_t* p = (int64_t*)raw;
+        for (size_t i = 0; i < w * h; i++) p[i] = mask[i] ? 1 : 0;
+        /* The VISIBLE NDArray surface, for the reason image_build_real documents: the evaluator's
+         * post-gate materialises a resting packed List unconditionally, and an image is a container
+         * whose whole purpose is to come to rest holding its pixels. */
+        nd->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+        Expr* two[2];
+        two[0] = nd;
+        two[1] = expr_new_string("Bit");
+        if (!two[1]) { expr_free(nd); return NULL; }
+        return expr_new_function(expr_new_symbol("Image"), two, 2);
+    }
+    if (nd) expr_free(nd);
+
+    /* Fallback: below whatever size ndbuild_open packs at, the nested form is correct and the cost
+     * does not matter. */
+    Expr** rows = malloc(sizeof(Expr*) * h);
+    if (!rows) return NULL;
+    for (size_t y = 0; y < h; y++) rows[y] = NULL;
+    bool ok = true;
+    for (size_t y = 0; y < h && ok; y++) {
+        Expr** cols = malloc(sizeof(Expr*) * w);
+        if (!cols) { ok = false; break; }
+        bool okc = true;
+        for (size_t x = 0; x < w; x++) {
+            cols[x] = expr_new_integer(mask[y * w + x] ? 1 : 0);
+            if (!cols[x]) okc = false;
+        }
+        if (okc) rows[y] = expr_new_function(expr_new_symbol(SYM_List), cols, w);
+        else for (size_t x = 0; x < w; x++) expr_free(cols[x]);
+        free(cols);
+        if (!rows[y]) ok = false;
+    }
+    Expr* out = NULL;
+    if (ok) {
+        Expr* data = expr_new_function(expr_new_symbol(SYM_List), rows, h);
+        if (data) {
+            Expr* two[2];
+            two[0] = data;
+            two[1] = expr_new_string("Bit");
+            if (two[1]) out = expr_new_function(expr_new_symbol("Image"), two, 2);
+            else expr_free(data);
+        }
+    } else {
+        for (size_t y = 0; y < h; y++) expr_free(rows[y]);
+    }
+    free(rows);
+    return out;
+}
+
+/* LocalAdaptiveBinarize[image, r] / [image, r, {c1, c2, c3}]
+ *
+ * A GLOBAL threshold cannot binarize unevenly lit content, and that is not a tuning problem: if one
+ * half of a page is darker than the other, no single number separates ink from paper in both halves at
+ * once. The local form compares each pixel to statistics of its own neighbourhood, so
+ *
+ *     threshold(y, x) = c1 * mean + c2 * stddev + c3
+ *
+ * over the (2r+1)^2 window around it, with a pixel set when it exceeds that. Mean alone (the default
+ * {1, 0, 0}) is Bradley's method; a negative c2 is Sauvola's, tightening the threshold where the
+ * neighbourhood is busy.
+ *
+ * SUMMED-AREA TABLES make the window statistics O(1) per pixel regardless of r -- the same identity
+ * NCC uses next door: sum I and sum I^2 from four lookups each give the mean and the variance. Without
+ * them a radius-16 window would be 1089 taps per pixel. The tables are built through clampi, so the
+ * border replicates the edge exactly as every other filter here does.
+ */
+static Expr* builtin_localadaptivebinarize(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2 && argc != 3) return NULL;
+    double rr = 0.0, im = 0.0;
+    if (!na_read_scalar(res->data.function.args[1], &rr, &im) || im != 0.0) return NULL;
+    if (!(rr >= 1.0) || rr != floor(rr) || rr > 256.0) return NULL;
+    size_t r = (size_t)rr;
+
+    double c1 = 1.0, c2 = 0.0, c3 = 0.0;
+    if (argc == 3) {
+        const Expr* cs = res->data.function.args[2];
+        if (!cs || cs->type != EXPR_FUNCTION || !cs->data.function.head
+            || cs->data.function.head->type != EXPR_SYMBOL
+            || cs->data.function.head->data.symbol.name != SYM_List
+            || cs->data.function.arg_count != 3) return NULL;
+        double v[3];
+        for (int i = 0; i < 3; i++)
+            if (!na_read_scalar(cs->data.function.args[i], &v[i], &im) || im != 0.0) return NULL;
+        c1 = v[0]; c2 = v[1]; c3 = v[2];
+    }
+
+    size_t w = 0, h = 0; double* g = NULL;
+    if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
+
+    size_t m = 2 * r + 1;
+    size_t PH = h + 2 * r, PW = w + 2 * r, sw = PW + 1;
+    bool need_sd = (c2 != 0.0);
+    double* s1 = calloc((PH + 1) * sw, sizeof(double));
+    /* The sum-of-squares table is only for the standard deviation, so with c2 == 0 -- the default,
+     * Bradley's mean thresholding -- building it is half the work for nothing. */
+    double* s2 = need_sd ? calloc((PH + 1) * sw, sizeof(double)) : NULL;
+    unsigned char* mask = malloc(w * h);
+    Expr* out = NULL;
+    if (s1 && (s2 || !need_sd) && mask) {
+        for (size_t y = 0; y < PH; y++) {
+            size_t sy = clampi((int64_t)y - (int64_t)r, h);
+            for (size_t x = 0; x < PW; x++) {
+                size_t sx = clampi((int64_t)x - (int64_t)r, w);
+                double v = g[sy * w + sx];
+                s1[(y + 1) * sw + (x + 1)] = s1[y * sw + (x + 1)] + s1[(y + 1) * sw + x]
+                                           - s1[y * sw + x] + v;
+                if (need_sd)
+                    s2[(y + 1) * sw + (x + 1)] = s2[y * sw + (x + 1)] + s2[(y + 1) * sw + x]
+                                               - s2[y * sw + x] + v * v;
+            }
+        }
+        double area = (double)(m * m);
+        for (size_t y = 0; y < h; y++)
+          for (size_t x = 0; x < w; x++) {
+            size_t a = y * sw + x, b = y * sw + (x + m);
+            size_t c = (y + m) * sw + x, d = (y + m) * sw + (x + m);
+            double sum = s1[d] - s1[b] - s1[c] + s1[a];
+            double mean = sum / area;
+            double sd = 0.0;
+            if (need_sd) {
+                double sq = s2[d] - s2[b] - s2[c] + s2[a];
+                /* Cancellation can push a uniform window's variance a hair below zero; it is zero,
+                 * and sqrt of it would be a NaN spreading into the comparison. */
+                double var = sq / area - mean * mean;
+                sd = var > 0.0 ? sqrt(var) : 0.0;
+            }
+            double thr = c1 * mean + c2 * sd + c3;
+            mask[y * w + x] = (g[y * w + x] > thr) ? 1u : 0u;
+          }
+        out = bit_image_from_mask(mask, w, h);
+    }
+    free(g); free(s1); free(s2); free(mask);
+    return out;
+}
+
 static Expr* builtin_binarize(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;
@@ -1086,41 +1247,13 @@ static Expr* builtin_binarize(Expr* res) {
         free(g); return NULL;
     }
 
-    /* Built as a Bit image directly rather than through image_build_real: the result is 0/1 by
-     * construction, and typing it "Real" would lose that -- a later ImageData would then scale
-     * nothing but the caller could no longer tell it was binary. */
-    Expr** rows = malloc(sizeof(Expr*) * h);
+    unsigned char* mask = malloc(w * h);
     Expr* out = NULL;
-    if (rows) {
-        bool ok = true;
-        for (size_t y = 0; y < h; y++) rows[y] = NULL;
-        for (size_t y = 0; y < h && ok; y++) {
-            Expr** cols = malloc(sizeof(Expr*) * w);
-            if (!cols) { ok = false; break; }
-            bool okc = true;
-            for (size_t x = 0; x < w; x++) {
-                cols[x] = expr_new_integer(g[y * w + x] > t ? 1 : 0);
-                if (!cols[x]) okc = false;
-            }
-            if (okc) rows[y] = expr_new_function(expr_new_symbol(SYM_List), cols, w);
-            else for (size_t x = 0; x < w; x++) expr_free(cols[x]);
-            free(cols);
-            if (!rows[y]) ok = false;
-        }
-        if (ok) {
-            Expr* data = expr_new_function(expr_new_symbol(SYM_List), rows, h);
-            if (data) {
-                Expr* two[2];
-                two[0] = data;
-                two[1] = expr_new_string("Bit");
-                if (two[1]) out = expr_new_function(expr_new_symbol("Image"), two, 2);
-                else expr_free(data);
-            }
-        } else {
-            for (size_t y = 0; y < h; y++) expr_free(rows[y]);
-        }
-        free(rows);
+    if (mask) {
+        for (size_t i = 0; i < w * h; i++) mask[i] = (g[i] > t) ? 1u : 0u;
+        out = bit_image_from_mask(mask, w, h);
     }
+    free(mask);
     free(g);
     return out;
 }
@@ -3131,6 +3264,18 @@ void imagefilter_init(void) {
         "A colour image is reduced to Rec. 601 luminance first. Returns unevaluated for an "
         "image whose pixels are all identical, since no threshold splits one cluster into two.");
 
+    symtab_add_builtin("LocalAdaptiveBinarize", builtin_localadaptivebinarize);
+    symtab_get_def("LocalAdaptiveBinarize")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("LocalAdaptiveBinarize",
+        "LocalAdaptiveBinarize[image, r] binarizes by comparing each pixel to the MEAN of its own "
+        "(2r+1)x(2r+1) neighbourhood, and LocalAdaptiveBinarize[image, r, {c1, c2, c3}] to "
+        "c1*mean + c2*stddev + c3. A global threshold cannot binarize unevenly lit content, and that "
+        "is not a tuning problem: if one half of a page is darker than the other, no single number "
+        "separates ink from paper in both halves at once. Mean alone (the default {1, 0, 0}) is "
+        "Bradley's method; a negative c2 is Sauvola's, tightening the threshold where the "
+        "neighbourhood is busy. Summed-area tables make the window statistics O(1) per pixel "
+        "regardless of r -- without them a radius-16 window would be 1089 taps per pixel. The result "
+        "is typed \"Bit\", since it is binary by construction. Colour is reduced to luminance first.");
     symtab_add_builtin("Binarize", builtin_binarize);
     symtab_get_def("Binarize")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Binarize",

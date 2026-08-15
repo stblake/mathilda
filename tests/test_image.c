@@ -1900,6 +1900,77 @@ static void test_corner_named_options(void) {
     assert_eval_eq("Length[ImageCorners[" VCK ", MaxFeatures -> 5]]", "5", 0);
 }
 
+
+/* LocalAdaptiveBinarize. A global threshold cannot binarize unevenly lit content -- not as a tuning
+ * problem but in principle -- and the discriminating test below is what shows the feature earning its
+ * place rather than merely running. */
+#define LIMG "Image[Table[N[Mod[i*13 + j*7, 97]]/97, {i, 1, 14}, {j, 1, 16}]]"
+/* The definition, longhand, with the same clamped border. */
+#define LREF \
+  "cl[v_, n_] := Max[1, Min[n, v]];" \
+  "winOf[y_, x_, r_] := Flatten[Table[d[[cl[y + a, 14], cl[x + b, 16]]], {a, -r, r}, {b, -r, r}]];" \
+  "muOf[y_, x_, r_] := Mean[winOf[y, x, r]];" \
+  "sdOf[y_, x_, r_] := Sqrt[Max[0., Mean[winOf[y, x, r]^2] - muOf[y, x, r]^2]];"
+
+static void test_local_adaptive_binarize_matches_the_definition(void) {
+    /* With c2 or c1 moving the threshold off the pixel's own mean, agreement is EXACT. */
+    assert_eval_eq("Module[{d = ImageData[" LIMG "]}," LREF
+                   " ImageData[LocalAdaptiveBinarize[" LIMG ", 2, {1, -0.3, 0.02}]]"
+                   " === N[Table[If[d[[y, x]] > muOf[y, x, 2] - 0.3 sdOf[y, x, 2] + 0.02, 1, 0],"
+                   "        {y, 1, 14}, {x, 1, 16}]]]", "True", 0);
+    assert_eval_eq("Module[{d = ImageData[" LIMG "]}," LREF
+                   " ImageData[LocalAdaptiveBinarize[" LIMG ", 2, {0.9, 0, 0.}]]"
+                   " === N[Table[If[d[[y, x]] > 0.9 muOf[y, x, 2], 1, 0],"
+                   "        {y, 1, 14}, {x, 1, 16}]]]", "True", 0);
+
+    /* MEAN-ONLY IS THE BOUNDARY CASE, and it is worth stating precisely rather than excluding. With
+     * the threshold equal to the window mean, a pixel can tie it -- and on this periodic image many
+     * do exactly. The summed-area mean (four table lookups, then sum/area) and a direct sum of the
+     * window differ in the last bit, and a BINARY decision amplifies that into a visible flip: 15 of
+     * 224 pixels here, every one of them a tie.
+     *
+     * So the assertion is not "the outputs are equal" but the stronger and true statement: every
+     * disagreement is a pixel within one ulp of its own threshold. Where the definition is
+     * numerically determined, the implementation matches it. */
+    assert_eval_eq("Module[{d = ImageData[" LIMG "], mine, ref, bad}," LREF
+                   " mine = ImageData[LocalAdaptiveBinarize[" LIMG ", 2]];"
+                   " ref = N[Table[If[d[[y, x]] > muOf[y, x, 2], 1, 0], {y, 1, 14}, {x, 1, 16}]];"
+                   " bad = Position[mine - ref, _?(# != 0 &)];"
+                   " And @@ Table[Abs[d[[p[[1]], p[[2]]]] - muOf[p[[1]], p[[2]], 2]] < 1.*^-15,"
+                   "              {p, bad}]]", "True", 0);
+}
+
+static void test_local_adaptive_binarize_properties(void) {
+    /* A uniform image: the window mean IS the value, so nothing exceeds it -- all zero, exactly. */
+    assert_eval_eq("Union[Flatten[ImageData[LocalAdaptiveBinarize[Image[Table[0.5, {16}, {16}]], 3]]]]",
+                   "{0.0}", 0);
+    /* Typed Bit, because the result is binary by construction. */
+    assert_eval_eq("Part[LocalAdaptiveBinarize[" LIMG ", 3], 2]", "\"Bit\"", 0);
+    assert_eval_eq("Union[Flatten[ImageData[LocalAdaptiveBinarize[" LIMG ", 3]]]]", "{0.0, 1.0}", 0);
+    /* Raising the offset can only turn pixels off. */
+    assert_eval_eq("Module[{img = " LIMG ", n},"
+                   " n = Table[Total[Flatten[ImageData[LocalAdaptiveBinarize[img, 3, {1, 0, c}]]]],"
+                   "      {c, {0., 0.05, 0.2}}];"
+                   " And @@ Table[n[[i]] >= n[[i + 1]], {i, 1, 2}]]", "True", 0);
+    assert_eval_eq("Head[LocalAdaptiveBinarize[" LIMG ", 0]]", "LocalAdaptiveBinarize", 0);
+    assert_eval_eq("Head[LocalAdaptiveBinarize[" LIMG ", 3, {1, 0}]]", "LocalAdaptiveBinarize", 0);
+}
+
+static void test_local_adaptive_beats_global_under_a_ramp(void) {
+    /* THE REASON THE FUNCTION EXISTS. A checkerboard under a strong lighting ramp: no single number
+     * separates the two tones in both halves, so a global threshold must collapse one half to a
+     * single value. The local form keeps the pattern in both. Asserted as set membership -- "this half
+     * contains both values" -- which is absolute, rather than as a percentage recovered. */
+    assert_eval_eq("Module[{ramp, gl, lo},"
+                   " ramp = Image[Table[N[(0.1 + 0.8 (j - 1)/63)"
+                   "   * If[Mod[Quotient[i - 1, 4] + Quotient[j - 1, 4], 2] == 0, 0.55, 1.]],"
+                   "   {i, 1, 64}, {j, 1, 64}]];"
+                   " gl = ImageData[Binarize[ramp]]; lo = ImageData[LocalAdaptiveBinarize[ramp, 5]];"
+                   " {Length[Union[Flatten[Take[gl, All, 20]]]],"
+                   "  Length[Union[Flatten[Take[lo, All, 20]]]],"
+                   "  Length[Union[Flatten[Take[lo, All, -20]]]]}]", "{1, 2, 2}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1996,6 +2067,9 @@ int main(void) {
     TEST(test_volume_corner_axis_covariance);
     TEST(test_volume_imagecorners);
     TEST(test_corner_named_options);
+    TEST(test_local_adaptive_binarize_matches_the_definition);
+    TEST(test_local_adaptive_binarize_properties);
+    TEST(test_local_adaptive_beats_global_under_a_ramp);
 
     printf("All image tests passed.\n");
     return 0;
