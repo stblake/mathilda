@@ -1846,7 +1846,163 @@ static Expr* builtin_imageadjust(Expr* res) {
     return out;
 }
 
+/* ---- correlation and template matching ------------------------------------
+ *
+ * CORRELATION IS CONVOLUTION WITH THE KERNEL REVERSED ON BOTH AXES, and implementing it that way rather
+ * than as a second loop is the point: the two differ by exactly a reflection, so one of them should be
+ * derived from the other or they will drift. A test asserts the identity
+ * `ImageCorrelate[img, k] == ImageConvolve[img, Reverse[Reverse[k], 2]]`, which is the cleanest
+ * statement of the relationship and would fail if either grew its own centring convention.
+ *
+ * The pair is also where the reflection becomes VISIBLE. On a symmetric kernel they agree exactly, so
+ * every smoothing example looks identical; on a delta image with {{1, 2, 3}} convolution gives
+ * {1, 2, 3} and correlation gives {3, 2, 1}. That is the same discriminator the convolution tests use,
+ * now asserted from the other side.
+ *
+ * NORMALISED CROSS-CORRELATION is the template-matching method, and it earns its cost. Plain
+ * correlation is maximised by BRIGHTNESS, not by similarity: a white patch beats a correct but darker
+ * match, which makes raw correlation almost useless for finding a template. NCC subtracts the local
+ * mean and divides by the local standard deviation, so it measures shape alone and is invariant to
+ * both brightness offset and contrast scale.
+ *
+ * That buys an exact test. Where the template IS a crop of the image, the two windows are identical up
+ * to nothing at all, so NCC there is exactly 1 -- and it is the global maximum. "The peak sits at the
+ * crop's location" is a ground truth, not an accuracy figure, which is the same kind of assertion as
+ * a k=1 classifier reproducing its training labels.
+ *
+ * A window of zero variance -- a flat patch -- has no shape to compare, so NCC is undefined there and
+ * reports 0 rather than dividing by zero. Reporting 1 would be worse than wrong: a flat region would
+ * then match every template perfectly.
+ */
+/* Correlation by REVERSING the kernel and convolving.
+ *
+ * The comment above says correlation and convolution differ by exactly a reflection, and this is what
+ * acting on that costs: four lines instead of a second nested loop. Two things follow, and the second is
+ * why the first version was wrong to duplicate the loop.
+ *
+ * It cannot drift from convolution, because it IS convolution -- the documented identity
+ * `ImageCorrelate[img, k] == ImageConvolve[img, Reverse[Reverse[k], 2]]` holds by construction rather
+ * than by two implementations happening to agree.
+ *
+ * And it inherits SEPARABILITY for free. A 5x5 box is rank 1, so the direct loop was paying 25
+ * multiply-adds per pixel where the dispatcher pays 10 -- measured at 3.67 ms against scipy's 2.8, which
+ * is what sent this back for a second look. Duplicating the loop did not merely repeat code; it silently
+ * opted out of every optimisation the convolution path had accumulated. */
+static void correlate_planes(const double* src, double* dst, size_t w, size_t h, size_t c,
+                             const double* k, size_t kw, size_t kh) {
+    double* rk = malloc(sizeof(double) * kw * kh);
+    if (!rk) return;
+    for (size_t i = 0; i < kh; i++)
+        for (size_t j = 0; j < kw; j++)
+            rk[i * kw + j] = k[(kh - 1 - i) * kw + (kw - 1 - j)];
+    convolve_dispatch(src, dst, w, h, c, rk, kw, kh);
+    free(rk);
+}
+
+/* Normalised cross-correlation of a greyscale plane against a template. */
+static void ncc_planes(const double* src, double* dst, size_t w, size_t h,
+                       const double* t, size_t kw, size_t kh) {
+    int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
+    size_t m = kw * kh;
+
+    /* The template's mean and its deviation norm are position-independent, so they are computed once
+     * rather than per pixel -- the difference between one pass over the template and w*h passes. */
+    double tbar = 0.0;
+    for (size_t i = 0; i < m; i++) tbar += t[i];
+    tbar /= (double)m;
+    double tnorm = 0.0;
+    for (size_t i = 0; i < m; i++) { double dt = t[i] - tbar; tnorm += dt * dt; }
+    tnorm = sqrt(tnorm);
+
+    for (size_t y = 0; y < h; y++)
+      for (size_t x = 0; x < w; x++) {
+        double sbar = 0.0;
+        for (size_t i = 0; i < kh; i++) {
+            size_t sy = clampi((int64_t)y + (int64_t)i - ci, h);
+            for (size_t j = 0; j < kw; j++) {
+                size_t sx = clampi((int64_t)x + (int64_t)j - cj, w);
+                sbar += src[sy * w + sx];
+            }
+        }
+        sbar /= (double)m;
+
+        double num = 0.0, snorm = 0.0;
+        for (size_t i = 0; i < kh; i++) {
+            size_t sy = clampi((int64_t)y + (int64_t)i - ci, h);
+            for (size_t j = 0; j < kw; j++) {
+                size_t sx = clampi((int64_t)x + (int64_t)j - cj, w);
+                double ds = src[sy * w + sx] - sbar;
+                double dt = t[i * kw + j] - tbar;
+                num += ds * dt;
+                snorm += ds * ds;
+            }
+        }
+        snorm = sqrt(snorm);
+        /* No variance on either side means no shape to compare: 0, not a division. */
+        dst[y * w + x] = (snorm > 0.0 && tnorm > 0.0) ? num / (snorm * tnorm) : 0.0;
+      }
+}
+
+/* ImageCorrelate[image, kernel] / [image, template, "NormalizedCrossCorrelation"] */
+static Expr* builtin_imagecorrelate(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2 && argc != 3) return NULL;
+
+    bool ncc = false;
+    if (argc == 3) {
+        Expr* m = res->data.function.args[2];
+        if (!m || m->type != EXPR_STRING) return NULL;
+        if (strcmp(m->data.string, "NormalizedCrossCorrelation") == 0) ncc = true;
+        else return NULL;
+    }
+
+    size_t kw = 0, kh = 0; double* k = NULL;
+    if (!ker_load(res->data.function.args[1], &kh, &kw, &k)) return NULL;
+
+    Expr* out = NULL;
+    if (ncc) {
+        /* NCC compares SHAPE, which is a property of brightness rather than of colour, so a colour
+         * image is reduced to luminance first -- the same choice GradientFilter makes, and for the
+         * same reason: combining per-channel scores needs an arbitrary rule. */
+        size_t w = 0, h = 0; double* g = NULL;
+        if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) { free(k); return NULL; }
+        double* dst = malloc(sizeof(double) * w * h);
+        if (dst) {
+            ncc_planes(g, dst, w, h, k, kw, kh);
+            out = image_build_real(dst, w, h, 1);
+        }
+        free(g); free(dst);
+    } else {
+        size_t w = 0, h = 0, c = 0; double* src = NULL;
+        if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) { free(k); return NULL; }
+        double* dst = malloc(sizeof(double) * w * h * c);
+        if (dst) {
+            correlate_planes(src, dst, w, h, c, k, kw, kh);
+            out = image_build_real(dst, w, h, c);
+        }
+        free(src); free(dst);
+    }
+    free(k);
+    return out;
+}
+
 void imagefilter_init(void) {
+    symtab_add_builtin("ImageCorrelate", builtin_imagecorrelate);
+    symtab_get_def("ImageCorrelate")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ImageCorrelate",
+        "ImageCorrelate[image, kernel] correlates image with kernel: the kernel is NOT reflected, which "
+        "is the only difference from ImageConvolve. The two are related exactly -- correlation equals "
+        "convolution with the kernel reversed on both axes -- and they agree on any symmetric kernel, "
+        "so the distinction only shows on an asymmetric one, where a delta with {{1,2,3}} gives "
+        "{3,2,1} here and {1,2,3} convolved. "
+        "ImageCorrelate[image, template, \"NormalizedCrossCorrelation\"] is template matching: it "
+        "subtracts the local mean and divides by the local standard deviation, so it measures SHAPE and "
+        "is invariant to brightness offset and contrast scale. Plain correlation is maximised by "
+        "brightness rather than similarity -- a white patch beats a correct but darker match -- which is "
+        "why raw correlation is a poor matcher. Where the template is a crop of the image the score is "
+        "exactly 1 and is the global maximum. A flat window has no shape to compare and scores 0 rather "
+        "than dividing by zero; scoring 1 would make every flat region match everything. Colour is "
+        "reduced to luminance first for the NCC form.");
     symtab_add_builtin("ImageLevels", builtin_imagelevels);
     symtab_get_def("ImageLevels")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageLevels",

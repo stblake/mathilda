@@ -984,3 +984,68 @@ brightness. `{0, 0, 1}` is the exact identity.
 The stretch is 10× faster than skimage's `rescale_intensity`, which does more work per call (dtype
 negotiation and range inference); the gamma path is at parity, as two `pow` loops over the same buffer
 should be.
+
+---
+
+# Correlation and template matching
+
+## ImageCorrelate
+
+`ImageCorrelate[image, kernel]` correlates — the kernel is **not** reflected, which is the only
+difference from `ImageConvolve`. `ImageCorrelate[image, template, "NormalizedCrossCorrelation"]` is
+template matching. Attributes: `Protected`.
+
+**Correlation is convolution with the kernel reversed on both axes**, and the identity is asserted rather
+than assumed:
+
+```
+ImageCorrelate[img, k] == ImageConvolve[img, Reverse[Reverse[k], 2]]
+```
+
+**bit-exactly**, because correlation is *implemented* that way — the kernel is reversed and handed to the
+convolution path — so the identity holds by construction rather than by two implementations agreeing. That
+also means correlation inherits **separability**: a 5×5 box is rank 1, so it costs 10 multiply-adds per
+pixel rather than 25.
+
+The first version had its own nested loop, and both consequences showed up: the identity held only to
+3.6e-15 (the same products summed in a different order), and a 5×5 correlation took 3.67 ms against
+scipy's 2.8 because it silently opted out of every optimisation the convolution path had accumulated.
+Deriving it removed the duplicate code, the discrepancy and the deficit together.
+
+The distinction between the two only shows on an *asymmetric* kernel, where a delta with `{{1,2,3}}` gives
+`{3,2,1}` here and `{1,2,3}` convolved. Both directions are pinned, so neither can drift toward the other.
+
+## Normalised cross-correlation
+
+Plain correlation is maximised by **brightness, not similarity** — a white patch beats a correct but
+darker match — which makes it a poor matcher. NCC subtracts the local mean and divides by the local
+standard deviation, so it measures shape alone and is invariant to brightness offset and contrast scale.
+A test confirms that: the same template scaled by 0.4 and offset by 0.1 still scores 1.
+
+By Cauchy–Schwarz `|NCC| ≤ 1`, with equality exactly when the window is an affine image of the template.
+So where the template is a crop, the score is **exactly 1**, and nothing anywhere exceeds 1 — both
+asserted.
+
+**What is deliberately not asserted is that the peak is unique.** The first version of that test expected
+a single maximum at the crop's location and failed, because the test image was periodic
+(`Mod[x·11 + y·7, 23]`) and had five exact matches. Uniqueness is a property of the *image*, not of NCC;
+asserting it would have been testing the wrong thing.
+
+A flat window has no shape to compare and scores **0**, not 1 — scoring 1 would make every flat region
+match every template perfectly. Colour is reduced to luminance first, as `GradientFilter` does, since
+combining per-channel scores needs an arbitrary rule.
+
+### Measured
+
+512×512:
+
+| operation | Mathilda | reference |
+|---|---|---|
+| `ImageCorrelate` 5×5 | **1.94 ms** | scipy `correlate` 2.8 ms |
+| NCC, 8×8 template | 21.9 ms | skimage `match_template` 8.8 ms |
+
+`ImageCorrelate` is faster than scipy's, having separability. **NCC is 2.5× slower**, and the reason is
+algorithmic rather than incidental: this computes the local mean and variance directly per position,
+O(w·h·kw·kh), where `match_template` uses **integral images** to get both in O(1) per position. That is the remedy if template matching becomes a hot path — a summed-area
+table over the image and its square, built once — and it is a known limit with a known fix rather than a
+number that happens to be good.

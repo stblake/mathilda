@@ -1196,6 +1196,64 @@ static void test_vanherk_agrees_with_an_independent_reference(void) {
                    "  Union[Flatten[ImageData[Erosion[img, 4]]]]}]", "{{1.0}, {0.25}}", 0);
 }
 
+static void test_correlation_is_convolution_reflected(void) {
+    /* The reflection asserted from the OTHER side: on a delta with {{1,2,3}}, correlation gives
+     * {3,2,1} where convolution gives {1,2,3}. Both are pinned, so neither can drift toward the
+     * other. */
+    assert_eval_eq("ImageData[ImageCorrelate[Image[{{0., 1., 0.}}], {{1, 2, 3}}]]",
+                   "{{3.0, 2.0, 1.0}}", 0);
+    /* THE identity: correlation equals convolution with the kernel reversed on both axes -- and it is
+     * BIT-EXACT, not merely close, because correlation is now implemented that way rather than as a
+     * second loop. The identity holds by construction instead of by two implementations agreeing.
+     *
+     * It was a tolerance first, when correlation had its own loop: the difference was 3.6e-15, the
+     * same products summed in a different order. Deriving it from convolution removed the difference
+     * along with the duplicate code, so the assertion tightened from Chop to ===. */
+    assert_eval_eq("Module[{img = Image[Table[N[Mod[x*3 + y*5, 7]/7.], {y, 6}, {x, 7}]],"
+                   " k = {{1., 2., 3.}, {4., 5., 6.}, {7., 8., 9.}}},"
+                   " ImageData[ImageCorrelate[img, k]]"
+                   " === ImageData[ImageConvolve[img, Reverse[Reverse[k], 2]]]]", "True", 0);
+    /* On a SYMMETRIC kernel the two must agree -- again to rounding, since the Gaussian is rank 1 and
+     * so takes the separable path on the convolution side. */
+    assert_eval_eq("Module[{img = Image[Table[N[Mod[x*3 + y*5, 7]/7.], {y, 6}, {x, 7}]]},"
+                   " Chop[Max[Abs[Flatten[ImageData[ImageCorrelate[img, GaussianMatrix[1]]]"
+                   " - ImageData[ImageConvolve[img, GaussianMatrix[1]]]]]]]]", "0", 0);
+}
+
+static void test_ncc_scores_exactly_one_at_an_exact_match(void) {
+    /* NCC's defining properties, and the bound is the strong one: |NCC| <= 1 by Cauchy-Schwarz, with
+     * equality exactly when the window is an affine image of the template. So where the template is a
+     * CROP of the image the score is exactly 1, and nothing anywhere exceeds 1.
+     *
+     * NOTE WHAT IS *NOT* ASSERTED: that the peak is unique. The first version of this test expected a
+     * single maximum at the crop's location and failed -- because the test image was periodic
+     * (Mod[x*11 + y*7, 23]) and had five exact matches. Uniqueness is a property of the IMAGE, not of
+     * NCC, so asserting it would have been testing the wrong thing. The claim is that an exact match
+     * scores exactly 1 and that 1 is the ceiling. */
+    assert_eval_eq("Module[{big = Image[Table[N[Mod[x*11 + y*7, 23]/23.], {y, 12}, {x, 12}]],"
+                   " bd, tmpl, nc},"
+                   " bd = ImageData[big];"
+                   " tmpl = bd[[5 ;; 7, 6 ;; 8]];"
+                   " nc = ImageData[ImageCorrelate[big, tmpl, \"NormalizedCrossCorrelation\"]];"
+                   " {Chop[Part[nc, 6, 7] - 1.], Chop[Max[Flatten[nc]] - 1.],"
+                   "  Min[Flatten[nc]] >= -1.000001}]", "{0, 0, True}", 0);
+    /* Brightness and contrast invariance is the whole reason for normalising: the same template scaled
+     * and offset still scores 1, where plain correlation would rank by brightness instead. */
+    assert_eval_eq("Module[{big = Image[Table[N[Mod[x*11 + y*7, 23]/23.], {y, 12}, {x, 12}]],"
+                   " bd, tmpl, nc},"
+                   " bd = ImageData[big];"
+                   " tmpl = Map[(0.4 # + 0.1) &, bd[[5 ;; 7, 6 ;; 8]], {2}];"
+                   " nc = ImageData[ImageCorrelate[big, tmpl, \"NormalizedCrossCorrelation\"]];"
+                   " Chop[Part[nc, 6, 7] - 1.]]", "0", 0);
+    /* A flat window has no shape to compare, so it scores 0 rather than dividing by zero. Scoring 1
+     * would be worse than wrong: every flat region would then match every template perfectly. */
+    assert_eval_eq("Union[Flatten[ImageData[ImageCorrelate[Image[Table[0.5, {5}, {5}]],"
+                   " {{1., 2.}, {3., 4.}}, \"NormalizedCrossCorrelation\"]]]]", "{0.0}", 0);
+    assert_eval_eq("Head[ImageCorrelate[" LIMG ", {{1., 2.}}, \"Bogus\"]]", "ImageCorrelate", 0);
+    assert_eval_eq("Head[ImageCorrelate[{{1, 2}}, {{1.}}]]", "ImageCorrelate", 0);
+    assert_eval_eq("MemberQ[Attributes[ImageCorrelate], Protected]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1250,6 +1308,8 @@ int main(void) {
     TEST(test_dilating_a_point_gives_the_element);
     TEST(test_element_forms_and_declines);
     TEST(test_vanherk_agrees_with_an_independent_reference);
+    TEST(test_correlation_is_convolution_reflected);
+    TEST(test_ncc_scores_exactly_one_at_an_exact_match);
     TEST(test_connectivity_is_the_discriminating_property);
     TEST(test_a_u_shape_needs_the_union_find);
     TEST(test_labels_are_contiguous_in_raster_order);
