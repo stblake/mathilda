@@ -214,3 +214,79 @@ arithmetic per megapixel-scale image the transfer cost to a GPU would exceed the
 
 The benchmark pair lives in `benchmarks/63-image-convolve/`, including a deliberate
 `r=0` row that measures the marshalling floor on its own.
+
+---
+
+# Thresholding and colour
+
+## FindThreshold
+
+`FindThreshold[image]` gives a threshold separating the image into two classes, by **Otsu's
+method**. Attributes: `Protected`.
+
+Otsu maximises the **between-class** variance
+
+```
+sigma_b^2(t) = w0(t) w1(t) (mu0(t) - mu1(t))^2
+```
+
+which is algebraically the same as minimising the weighted *within*-class variance — so one cheap
+pass optimises the thing you actually want (how well separated the two groups are) without ever
+computing a within-class variance. Both weights and both means update **incrementally** as `t`
+advances one bin, so the search is O(bins) after the histogram; recomputing the means per
+candidate is the obvious implementation and is quadratic.
+
+A colour image is reduced to luminance first. Values are binned over `[0, 1]`, and anything
+outside — which a `"Real"` image may legitimately hold, since `Image` stores faithfully rather than
+clamping — is clamped *into* the histogram rather than dropped, so an out-of-range pixel still
+votes for the extreme it belongs to instead of vanishing from the statistics.
+
+**Returns unevaluated for an image whose pixels are all identical.** That is one cluster; no
+threshold splits it into two, and inventing one would be a fiction.
+
+**On comparing against other libraries.** The returned value is the winning bin's **upper edge**,
+binned over `[0, 1]`. scikit-image returns the bin **centre**, binned over `[min, max]` of the
+data. Both are legitimate, and they differ by a bin or two while agreeing on *which split is
+best* — so the test verifies the defining property instead of matching a number: between-class
+variance is recomputed from the pixel values in Mathilda itself, sharing no code with the
+implementation, and the returned threshold must maximise it. On a 48×48 ramp it does, exactly.
+
+## Binarize
+
+`Binarize[image]` thresholds by Otsu; `Binarize[image, t]` thresholds at `t`. Gives a `"Bit"`
+image. Attributes: `Protected`.
+
+**A pixel strictly above the threshold becomes 1**, so a pixel exactly at it becomes 0. That
+matters and is pinned by a test: "above" and "at or above" differ on exactly the pixels a threshold
+was chosen to sit between.
+
+```
+In[1]:= ImageData[Binarize[Image[{{0.4, 0.5, 0.6}}], 0.5], "Bit"]
+Out[1]= {{0, 0, 1}}
+```
+
+On a bimodal image there is a ground truth, and Otsu recovers it exactly — every pixel on the right
+side, not merely most:
+
+```
+In[2]:= ImageData[Binarize[Image[{{0.2,0.2,0.8,0.8},{0.2,0.2,0.8,0.8}}]], "Bit"]
+Out[2]= {{0, 0, 1, 1}, {0, 0, 1, 1}}
+```
+
+The result is built as a `"Bit"` image directly rather than as `"Real"`: it is 0/1 by construction,
+and typing it `"Real"` would mean a caller could no longer tell it was binary.
+
+## ColorConvert
+
+`ColorConvert[image, "Grayscale"]` converts by **Rec. 601 luminance**,
+`0.299 R + 0.587 G + 0.114 B`. Attributes: `Protected`.
+
+Weighted rather than averaged because the eye is far more sensitive to green than to blue. An
+unweighted mean would give 1/3 for each of pure red, green and blue, putting a saturated blue and a
+saturated green at the same brightness — and for thresholding specifically it would put pure red
+and pure blue on the same side of any threshold, when perceptually they are far apart. The test
+asserts the three weights as exact values for exactly this reason.
+
+**Only `"Grayscale"` is accepted.** The other spaces Mathematica supports (LAB, HSB, XYZ, …) each
+carry their own white point and transfer-function decisions; accepting the name while doing
+something approximate would be worse than declining it.

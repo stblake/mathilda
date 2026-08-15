@@ -230,6 +230,87 @@ static void test_filters_handle_colour_and_decline_junk(void) {
                    " {ImageConvolve, GaussianMatrix, BoxMatrix, GaussianFilter}]", "True", 0);
 }
 
+#define BIMODAL "Image[{{0.2,0.2,0.8,0.8},{0.2,0.2,0.8,0.8}," \
+                "{0.2,0.2,0.8,0.8},{0.2,0.2,0.8,0.8}}]"
+
+static void test_otsu_splits_a_bimodal_image_perfectly(void) {
+    /* The absolute property, and the analogue of "reproduces every training label": on data with
+     * two clean clusters there is a ground truth, so Otsu must recover it EXACTLY -- every pixel
+     * on the right side, not merely most. */
+    assert_eval_eq("ImageData[Binarize[" BIMODAL "], \"Bit\"] === "
+                   "{{0,0,1,1},{0,0,1,1},{0,0,1,1},{0,0,1,1}}", "True", 0);
+    /* And the threshold lands strictly between the two clusters. */
+    assert_eval_eq("0.2 < FindThreshold[" BIMODAL "] < 0.8", "True", 0);
+    /* Result is a Bit image at the original dimensions. */
+    assert_eval_eq("{ImageType[Binarize[" BIMODAL "]], ImageDimensions[Binarize[" BIMODAL "]]}",
+                   "{\"Bit\", {4, 4}}", 0);
+}
+
+static void test_otsu_is_the_argmax_of_between_class_variance(void) {
+    /* Verified against an INDEPENDENT computation of the objective, written from the pixel values
+     * and sharing no code with the implementation: between-class variance is
+     * w0 w1 (mu0 - mu1)^2, and the returned threshold must maximise it. This is much stronger
+     * than comparing against another library's reported number, which would only pin a bin
+     * convention -- skimage returns the winning bin's CENTRE and bins over [min, max], where this
+     * returns the upper EDGE and bins over [0, 1], so the two legitimately differ by a bin or two
+     * while agreeing on which split is best. */
+    assert_eval_eq("Module[{r, px, sb, t0, best},"
+                   " r = Image[Table[N[Mod[x*7 + y*13, 251]/251], {y, 48}, {x, 48}]];"
+                   " px = Flatten[ImageData[r]];"
+                   " sb[t_] := Module[{lo, hi, w0, w1},"
+                   "   lo = Select[px, # <= t &]; hi = Select[px, # > t &];"
+                   "   w0 = Length[lo]/Length[px]; w1 = Length[hi]/Length[px];"
+                   "   If[w0 == 0 || w1 == 0, 0., w0 w1 (Mean[lo] - Mean[hi])^2]];"
+                   " t0 = FindThreshold[r];"
+                   " best = Max[Table[sb[t], {t, 0.02, 0.98, 0.02}]];"
+                   " sb[t0] >= 0.99 best]", "True", 0);
+}
+
+static void test_binarize_boundary_is_strictly_above(void) {
+    /* "Above" versus "at or above" differ on exactly the pixels a threshold was chosen to sit
+     * between, so the boundary is pinned rather than left to chance. At the threshold: 0. */
+    assert_eval_eq("ImageData[Binarize[Image[{{0.4, 0.5, 0.6}}], 0.5], \"Bit\"]",
+                   "{{0, 0, 1}}", 0);
+    /* A threshold below everything gives all 1s; above everything, all 0s. */
+    assert_eval_eq("ImageData[Binarize[Image[{{0.4, 0.6}}], -1.], \"Bit\"]", "{{1, 1}}", 0);
+    assert_eval_eq("ImageData[Binarize[Image[{{0.4, 0.6}}], 2.], \"Bit\"]", "{{0, 0}}", 0);
+}
+
+static void test_greyscale_uses_rec601_luminance(void) {
+    /* EXACT weights, asserted as the values themselves: pure red, green and blue must come back
+     * as 0.299, 0.587 and 0.114. An unweighted mean would give 1/3 for all three, which is the
+     * mistake this row exists to catch -- and it matters for thresholding, since an average puts
+     * saturated red and saturated blue on the same side of any threshold when perceptually they
+     * are far apart. */
+    assert_eval_eq("ImageData[ColorConvert[Image[{{{1.,0.,0.}, {0.,1.,0.}, {0.,0.,1.}}}],"
+                   " \"Grayscale\"]]", "{{0.299, 0.587, 0.114}}", 0);
+    /* One channel out, whatever went in. */
+    assert_eval_eq("ImageChannels[ColorConvert[Image[{{{1.,0.,0.}}}], \"Grayscale\"]]", "1", 0);
+    /* Already grey is a no-op on the values. */
+    assert_eval_eq("ImageData[ColorConvert[Image[{{0.25, 0.75}}], \"Grayscale\"]]",
+                   "{{0.25, 0.75}}", 0);
+    /* Binarize on colour goes through luminance, so red (0.299) and blue (0.114) separate. */
+    assert_eval_eq("ImageData[Binarize[Image[{{{1.,0.,0.}, {0.,0.,1.}}}], 0.2], \"Bit\"]",
+                   "{{1, 0}}", 0);
+    /* Other colour spaces are declined rather than approximated. */
+    assert_eval_eq("Head[ColorConvert[Image[{{{1.,0.,0.}}}], \"LAB\"]]", "ColorConvert", 0);
+}
+
+static void test_degenerate_and_malformed_decline(void) {
+    /* A constant image is ONE cluster: no threshold splits it in two, and inventing one would be
+     * a fiction. Declining is the honest answer. */
+    assert_eval_eq("Head[FindThreshold[Image[Table[0.5, {3}, {3}]]]]", "FindThreshold", 0);
+    assert_eval_eq("Head[Binarize[Image[Table[0.5, {3}, {3}]]]]", "Binarize", 0);
+    /* But an EXPLICIT threshold on a constant image is perfectly well defined. */
+    assert_eval_eq("ImageData[Binarize[Image[Table[0.5, {2}, {2}]], 0.4], \"Bit\"]",
+                   "{{1, 1}, {1, 1}}", 0);
+    assert_eval_eq("Head[FindThreshold[{{1, 2}}]]", "FindThreshold", 0);
+    assert_eval_eq("Head[Binarize[{{1, 2}}]]", "Binarize", 0);
+    assert_eval_eq("Head[Binarize[" BIMODAL ", x]]", "Binarize", 0);
+    assert_eval_eq("And @@ Map[MemberQ[Attributes[#], Protected] &,"
+                   " {Binarize, FindThreshold, ColorConvert}]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -248,6 +329,11 @@ int main(void) {
     TEST(test_kernel_constructors);
     TEST(test_gaussianfilter_equals_imageconvolve);
     TEST(test_filters_handle_colour_and_decline_junk);
+    TEST(test_otsu_splits_a_bimodal_image_perfectly);
+    TEST(test_otsu_is_the_argmax_of_between_class_variance);
+    TEST(test_binarize_boundary_is_strictly_above);
+    TEST(test_greyscale_uses_rec601_luminance);
+    TEST(test_degenerate_and_malformed_decline);
 
     printf("All image tests passed.\n");
     return 0;

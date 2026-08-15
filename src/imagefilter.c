@@ -267,7 +267,232 @@ static Expr* builtin_gaussianfilter(Expr* res) {
     return out;
 }
 
+/* ---- greyscale, thresholding, segmentation ---------------------------------
+ *
+ * REC. 601 LUMINANCE, 0.299 R + 0.587 G + 0.114 B, which is what Mathematica's conversion to
+ * greyscale uses. The weights are not a mean because the eye is not equally sensitive across the
+ * spectrum -- green carries most of the perceived brightness and blue almost none -- so a plain
+ * average would make a saturated blue and a saturated green look equally bright, which they are
+ * not. This matters for thresholding specifically: an unweighted average puts pure red and pure
+ * blue on the same side of any threshold, when perceptually they are far apart.
+ */
+static void img_to_grey(const double* src, double* dst, size_t w, size_t h, size_t c) {
+    static const double R = 0.299, G = 0.587, B = 0.114;
+    for (size_t i = 0; i < w * h; i++) {
+        if (c == 1) { dst[i] = src[i]; continue; }
+        if (c >= 3) {
+            dst[i] = R * src[i * c + 0] + G * src[i * c + 1] + B * src[i * c + 2];
+        } else {
+            /* Two channels is grey-plus-alpha; the alpha is not brightness. */
+            dst[i] = src[i * c + 0];
+        }
+    }
+}
+
+#define IMG_OTSU_BINS 256
+
+/* Otsu's threshold: the level maximising BETWEEN-CLASS variance.
+ *
+ * The classic 1979 result, and the reason it is the default everywhere: maximising the variance
+ * *between* the two classes is algebraically the same as minimising the weighted variance
+ * *within* them, so one cheap pass over a histogram optimises the thing you actually want -- how
+ * well separated the two groups are -- without ever computing a within-class variance.
+ *
+ *   sigma_b^2(t) = w0(t) w1(t) (mu0(t) - mu1(t))^2
+ *
+ * Both class weights and both means update INCREMENTALLY as t advances by one bin, so the whole
+ * search is O(bins) after the histogram, not O(bins^2). Written with running sums for exactly
+ * that reason: recomputing the means per candidate is the obvious implementation and is
+ * quadratic.
+ *
+ * Values are binned over [0, 1] because that is the range image_load guarantees. Anything
+ * outside -- a Real image may legitimately hold it, since Image stores faithfully rather than
+ * clamping -- is clamped INTO the histogram rather than dropped, so an out-of-range pixel still
+ * votes for the extreme it belongs to instead of vanishing from the statistics.
+ *
+ * Returns false for a degenerate image where every pixel is identical: there is no threshold
+ * that separates one cluster into two, and inventing one would be a fiction. */
+static bool img_otsu(const double* grey, size_t n, double* thresh) {
+    if (!grey || n == 0) return false;
+    double hist[IMG_OTSU_BINS];
+    for (size_t i = 0; i < IMG_OTSU_BINS; i++) hist[i] = 0.0;
+
+    for (size_t i = 0; i < n; i++) {
+        double v = grey[i];
+        if (!(v == v)) return false;                    /* a NaN pixel has no bin */
+        if (v < 0.0) v = 0.0;
+        if (v > 1.0) v = 1.0;
+        size_t b = (size_t)(v * (double)(IMG_OTSU_BINS - 1) + 0.5);
+        if (b >= IMG_OTSU_BINS) b = IMG_OTSU_BINS - 1;
+        hist[b] += 1.0;
+    }
+
+    /* One occupied bin means one cluster: no split exists. */
+    size_t occupied = 0;
+    for (size_t i = 0; i < IMG_OTSU_BINS; i++) if (hist[i] > 0.0) occupied++;
+    if (occupied < 2) return false;
+
+    double total = (double)n, sum_all = 0.0;
+    for (size_t i = 0; i < IMG_OTSU_BINS; i++) sum_all += (double)i * hist[i];
+
+    double w0 = 0.0, sum0 = 0.0, best = -1.0;
+    size_t best_bin = 0;
+    for (size_t t = 0; t + 1 < IMG_OTSU_BINS; t++) {
+        w0 += hist[t];
+        sum0 += (double)t * hist[t];
+        double w1 = total - w0;
+        if (!(w0 > 0.0) || !(w1 > 0.0)) continue;       /* an empty class has no mean */
+        double mu0 = sum0 / w0;
+        double mu1 = (sum_all - sum0) / w1;
+        double d = mu0 - mu1;
+        double sb = w0 * w1 * d * d;
+        /* Strictly greater, so a tie keeps the LOWEST bin -- deterministic, and the same
+         * lowest-index tie-break the rest of the tree uses. */
+        if (sb > best) { best = sb; best_bin = t; }
+    }
+    if (!(best > 0.0)) return false;
+
+    /* The threshold sits at the UPPER EDGE of the winning bin, so a pixel in that bin falls on
+     * the low side. Bin b covers values centred on b/255, so its upper edge is halfway to the
+     * next centre. */
+    *thresh = ((double)best_bin + 0.5) / (double)(IMG_OTSU_BINS - 1);
+    if (*thresh > 1.0) *thresh = 1.0;
+    return true;
+}
+
+/* Load an image and reduce it to a greyscale plane. */
+static bool img_grey_plane(Expr* img, size_t* w, size_t* h, double** grey) {
+    size_t ww = 0, hh = 0, cc = 0; double* src = NULL;
+    if (!image_load(img, &ww, &hh, &cc, &src)) return false;
+    double* g = malloc(sizeof(double) * ww * hh);
+    if (!g) { free(src); return false; }
+    img_to_grey(src, g, ww, hh, cc);
+    free(src);
+    *w = ww; *h = hh; *grey = g;
+    return true;
+}
+
+/* FindThreshold[image] -- Otsu's threshold as a real number. */
+static Expr* builtin_findthreshold(Expr* res) {
+    if (res->data.function.arg_count != 1) return NULL;
+    size_t w = 0, h = 0; double* g = NULL;
+    if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
+    double t = 0.0;
+    bool ok = img_otsu(g, w * h, &t);
+    free(g);
+    return ok ? expr_new_real(t) : NULL;
+}
+
+/* Binarize[image] -- threshold by Otsu.
+ * Binarize[image, t] -- threshold at t.
+ *
+ * A pixel STRICTLY ABOVE the threshold becomes 1, so a pixel exactly at it becomes 0. That
+ * matches Mathematica and it is the boundary a test pins, because "above" and "at or above"
+ * differ on exactly the pixels a threshold was chosen to sit between.
+ *
+ * Colour is reduced to luminance first, which is also what Mathematica does. */
+static Expr* builtin_binarize(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+    size_t w = 0, h = 0; double* g = NULL;
+    if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
+
+    double t = 0.0;
+    if (argc == 2) {
+        double im = 0.0;
+        if (!na_read_scalar(res->data.function.args[1], &t, &im) || im != 0.0) {
+            free(g); return NULL;
+        }
+    } else if (!img_otsu(g, w * h, &t)) {
+        free(g); return NULL;
+    }
+
+    /* Built as a Bit image directly rather than through image_build_real: the result is 0/1 by
+     * construction, and typing it "Real" would lose that -- a later ImageData would then scale
+     * nothing but the caller could no longer tell it was binary. */
+    Expr** rows = malloc(sizeof(Expr*) * h);
+    Expr* out = NULL;
+    if (rows) {
+        bool ok = true;
+        for (size_t y = 0; y < h; y++) rows[y] = NULL;
+        for (size_t y = 0; y < h && ok; y++) {
+            Expr** cols = malloc(sizeof(Expr*) * w);
+            if (!cols) { ok = false; break; }
+            bool okc = true;
+            for (size_t x = 0; x < w; x++) {
+                cols[x] = expr_new_integer(g[y * w + x] > t ? 1 : 0);
+                if (!cols[x]) okc = false;
+            }
+            if (okc) rows[y] = expr_new_function(expr_new_symbol(SYM_List), cols, w);
+            else for (size_t x = 0; x < w; x++) expr_free(cols[x]);
+            free(cols);
+            if (!rows[y]) ok = false;
+        }
+        if (ok) {
+            Expr* data = expr_new_function(expr_new_symbol(SYM_List), rows, h);
+            if (data) {
+                Expr* two[2];
+                two[0] = data;
+                two[1] = expr_new_string("Bit");
+                if (two[1]) out = expr_new_function(expr_new_symbol("Image"), two, 2);
+                else expr_free(data);
+            }
+        } else {
+            for (size_t y = 0; y < h; y++) expr_free(rows[y]);
+        }
+        free(rows);
+    }
+    free(g);
+    return out;
+}
+
+/* ColorConvert[image, "Grayscale"] -- Rec. 601 luminance.
+ *
+ * Only "Grayscale" is accepted. The other colour spaces Mathematica supports (LAB, HSB, XYZ, ...)
+ * each carry their own white point and transfer-function decisions, and accepting the name while
+ * doing something approximate would be worse than declining it. */
+static Expr* builtin_colorconvert(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* sp = res->data.function.args[1];
+    if (!sp || sp->type != EXPR_STRING) return NULL;
+    if (strcmp(sp->data.string, "Grayscale") != 0 && strcmp(sp->data.string, "Gray") != 0)
+        return NULL;
+    size_t w = 0, h = 0; double* g = NULL;
+    if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
+    Expr* out = image_build_real(g, w, h, 1);
+    free(g);
+    return out;
+}
+
 void imagefilter_init(void) {
+    symtab_add_builtin("FindThreshold", builtin_findthreshold);
+    symtab_get_def("FindThreshold")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("FindThreshold",
+        "FindThreshold[image] gives a threshold separating the image into two classes, by "
+        "Otsu's method: the level maximising the BETWEEN-class variance "
+        "w0 w1 (mu0 - mu1)^2, which is algebraically the same as minimising the weighted "
+        "within-class variance but needs only one incremental pass over a 256-bin histogram. "
+        "A colour image is reduced to Rec. 601 luminance first. Returns unevaluated for an "
+        "image whose pixels are all identical, since no threshold splits one cluster into two.");
+
+    symtab_add_builtin("Binarize", builtin_binarize);
+    symtab_get_def("Binarize")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Binarize",
+        "Binarize[image] thresholds image by Otsu's method (see FindThreshold), giving a "
+        "\"Bit\" image. Binarize[image, t] thresholds at t. A pixel STRICTLY ABOVE the "
+        "threshold becomes 1, so a pixel exactly at it becomes 0 -- which matters, because "
+        "\"above\" and \"at or above\" differ on exactly the pixels a threshold was chosen "
+        "to sit between. A colour image is reduced to luminance first.");
+
+    symtab_add_builtin("ColorConvert", builtin_colorconvert);
+    symtab_get_def("ColorConvert")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ColorConvert",
+        "ColorConvert[image, \"Grayscale\"] converts to greyscale by Rec. 601 luminance, "
+        "0.299 R + 0.587 G + 0.114 B -- weighted rather than averaged because the eye is far "
+        "more sensitive to green than to blue, so an unweighted mean would put a saturated blue "
+        "and a saturated green at the same brightness. Only \"Grayscale\" is accepted; other "
+        "colour spaces carry their own white-point and transfer-function decisions, and "
+        "accepting the name while doing something approximate would be worse than declining.");
     symtab_add_builtin("ImageConvolve", builtin_imageconvolve);
     symtab_get_def("ImageConvolve")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageConvolve",
