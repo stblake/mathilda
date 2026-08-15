@@ -1382,7 +1382,8 @@ optimising variable assignments.
 | `{x, x0, x1}` (1D)    | Brent (bracket) |
 
 Methods overridable via `Method -> "Brent" | "Newton" | "QuasiNewton"
-| "ConjugateGradient" | "LBFGSB" | "Powell" | "NelderMead" | "TNC" | "SLSQP"`.  Brent
+| "ConjugateGradient" | "LBFGSB" | "Powell" | "NelderMead" | "TNC" | "SLSQP"
+| "COBYLA"`.  Brent
 is golden-section search with parabolic interpolation (derivative-free),
 QuasiNewton is BFGS with Armijo backtracking line search, ConjugateGradient
 is Polak-Ribière+ with restart, Newton uses the symbolic Hessian (via
@@ -1503,6 +1504,37 @@ problems where the compiled gradient pays off (HS71 ~17×) and losing on large
 trivial-objective QPs where the dense active-set QP linear algebra dominates
 (an incremental/warm-started QP is the future refinement).  References: Kraft
 1988; Powell 1978; Goldfarb & Idnani 1983; Nocedal & Wright ch. 18.
+
+`"COBYLA"` (Powell's Constrained Optimization BY Linear Approximation; a
+Mathilda extension -- Mathematica has no such method name) is the
+**derivative-free** method for **constrained** problems, and the FIRST
+derivative-free method here to accept general (non-box) constraints -- `"Powell"`
+and `"NelderMead"` reject them, and every gradient method needs a derivative --
+so it is the method for **non-smooth / noisy / black-box objectives WITH
+constraints**.  Each iteration models `f` and every constraint by a linear
+approximation and solves a trust-region subproblem: (stage 1) minimise the worst
+constraint violation, then (stage 2) minimise the linear objective model while
+holding that minimum violation.  Here the linear models are recovered by
+**central differences** on a coordinate cross of the current trust radius --
+central (not forward) differences are what let it handle a **kink**, where the
+two-sided slope of `|t|` at `t=0` reads `0` (correct) rather than a spurious
+`±1` -- and the two-stage LP is solved by the same dual active-set QP as
+`"SLSQP"` (`fm_slsqp_activeset`) with an inf-norm trust box, reaching the same
+constrained optimum as reference COBYLA.  Step acceptance uses Powell's
+L-infinity exact-penalty merit `Phi = f + mu*max_i max(0, c_i)` with his PARMU
+update.  **Equalities** `h==0` are handled by splitting into `h<=0` and `-h<=0`
+(so this is strictly more capable than SciPy's inequality-only COBYLA); **box
+bounds** enter as ordinary linear inequalities.  It converges to `~rhoend =
+10^-PrecisionGoal` accuracy (a trust radius, not a gradient test), and its
+**linear** models cannot navigate a strongly curved valley to machine precision
+(Rosenbrock stalls near `f ~ 10^-3`) -- that limitation is exactly what
+`"COBYQA"` addresses with quadratic models.  The objective and constraints ride
+the compiled fast path; `WorkingPrecision > MachinePrecision` falls back to
+`QuasiNewton`; `n == 1` with no general constraints delegates to `"Brent"`.
+Matches SciPy's `minimize(method="COBYLA")` on the optimiser (experiment
+`69-cobyla-constrained`), 40-200x faster (compiled objective/constraint
+evaluations vs SciPy's Python-callback evaluations, the same win as `"Powell"`).
+Reference: Powell 1994.
 
 ### Constraints
 
