@@ -290,3 +290,77 @@ asserts the three weights as exact values for exactly this reason.
 **Only `"Grayscale"` is accepted.** The other spaces Mathematica supports (LAB, HSB, XYZ, …) each
 carry their own white point and transfer-function decisions; accepting the name while doing
 something approximate would be worse than declining it.
+
+---
+
+# Geometry
+
+## ImageResize
+
+`ImageResize[image, {w, h}]` resizes to `w × h`; `ImageResize[image, w]` gives width `w` with the
+height following to preserve the aspect ratio. `Resampling -> "Nearest" | "Bilinear" | "Average"`
+selects the method. Attributes: `Protected`.
+
+**Aliasing is the whole problem with downsampling, and it is invisible until it is catastrophic.**
+Picking every other pixel out of a photograph looks fine, so nearest-neighbour reduction passes
+every casual test. Hand it a fine checkerboard and it returns a flat field — the pattern is sampled
+at exactly the frequency that annihilates it:
+
+```
+In[1]:= chk = Image[{{0.,1.,0.,1.},{1.,0.,1.,0.},{0.,1.,0.,1.},{1.,0.,1.,0.}}];
+
+In[2]:= ImageData[ImageResize[chk, {2, 2}]]                      (* area averaging *)
+Out[2]= {{0.5, 0.5}, {0.5, 0.5}}
+
+In[3]:= ImageData[ImageResize[chk, {2, 2}, Resampling -> "Nearest"]]
+Out[3]= {{0.0, 0.0}, {0.0, 0.0}}                                  (* pattern gone *)
+```
+
+Nyquist requires every frequency above half the *new* sampling rate to be removed **before**
+resampling, and no interpolation afterwards can restore what point-sampling discarded. So
+`Automatic` uses **area averaging whenever either axis shrinks** — a box prefilter and a resample in
+one pass. It is not the best possible antialiasing filter (a windowed sinc has better stopband
+behaviour) but it is exactly right for integer reduction factors, cheap, and impossible to get
+subtly wrong. Enlarging has no frequencies to remove, so bilinear is used there; area averaging on
+an enlargement would degenerate to nearest, since each destination pixel would fall inside a single
+source pixel.
+
+**Fractional coverage, not integer blocks.** Each source pixel is weighted by how much of it the
+destination pixel actually overlaps, so a 3 → 2 reduction is as correct as 4 → 2. Restricting the
+area path to integer factors would have been simpler and would have quietly fallen back to
+something worse on the sizes people actually ask for.
+
+**Centre-aligned coordinates.** A destination pixel `i` covers source `[i·s, (i+1)·s)` with its
+centre at `(i+0.5)·s`, so the bilinear map is `sx = (i+0.5)·s − 0.5`. The naive `sx = i·s` is the
+classic half-pixel shift: correct at 1:1, drifting the image half a pixel at every other scale, and
+asymmetric — the left edge gains a border the right does not. A test *only* at 1:1 would miss it
+entirely, which is why the checkerboard and fractional rows exist alongside the identity ones.
+
+An unknown resampling name **declines** rather than falling back to a default, so a typo cannot look
+like it worked. Sizes must be positive integers: rounding `10.5` silently would make the call mean
+something the caller did not say.
+
+### Measured
+
+Verified against skimage (`downscale_local_mean` for the area path — exactly a block mean at an
+integer factor, which is what area averaging reduces to; `resize(order=1, anti_aliasing=False)` for
+bilinear). The checkerboard reduction agrees exactly, `[[0.5, 0.5], [0.5, 0.5]]` either side.
+
+| operation | Mathilda | skimage | ratio |
+|---|---|---|---|
+| 512→256, area | **1.71 ms** | 2.0 ms | **0.86× (faster)** |
+| 512→256, nearest | 1.67 ms | — | |
+| 512→1024, bilinear | 17.8 ms | 14.3 ms | 1.24× |
+
+**Area averaging preserves the mean exactly** — 0.497985 before and after, to every digit — because
+every source pixel contributes with equal total weight. That is a conservation law, so the benchmark
+carries it as a *check* rather than a timing, and it is what fails if the coverage weights are ever
+normalised wrongly.
+
+The two ratios together confirm the earlier diagnosis rather than adding a new one. Mathilda is
+*faster* on the reduction, where the output is a quarter of the input and there are few `Expr`s to
+build; it is slower on the enlargement, where 17.8 ms for 1M output pixels matches the ~4.6 ms per
+262k marshalling rate measured for convolution almost exactly. **The resampling arithmetic is not
+the cost — building the output expressions is**, and that cost scales with the *output* pixel count.
+
+Benchmark pair in `benchmarks/64-image-resize/`.

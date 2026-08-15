@@ -311,6 +311,88 @@ static void test_degenerate_and_malformed_decline(void) {
                    " {Binarize, FindThreshold, ColorConvert}]", "True", 0);
 }
 
+#define CHK4 "Image[{{0.,1.,0.,1.},{1.,0.,1.,0.},{0.,1.,0.,1.},{1.,0.,1.,0.}}]"
+
+static void test_downsampling_does_not_alias(void) {
+    /* THE row, and the analogue of the convolution-reflection test: it separates a correct
+     * resampler from one that merely looks correct on smooth data.
+     *
+     * A 4x4 checkerboard reduced to 2x2 is sampled at exactly the frequency that annihilates the
+     * pattern. Area averaging returns its mean, 0.5 everywhere. Nearest-neighbour returns a FLAT
+     * FIELD -- the pattern is simply gone -- which is what aliasing looks like and what no amount
+     * of interpolation afterwards could undo. Exact values either way, so nothing can land
+     * between them by accident. */
+    assert_eval_eq("ImageData[ImageResize[" CHK4 ", {2, 2}]]",
+                   "{{0.5, 0.5}, {0.5, 0.5}}", 0);
+    assert_eval_eq("ImageData[ImageResize[" CHK4 ", {2, 2}, Resampling -> \"Nearest\"]]",
+                   "{{0.0, 0.0}, {0.0, 0.0}}", 0);
+    /* Automatic must CHOOSE area averaging when shrinking; if the default ever flipped to
+     * bilinear or nearest this fails, which is the point. */
+    assert_eval_eq("ImageData[ImageResize[" CHK4 ", {2, 2}]] === "
+                   "ImageData[ImageResize[" CHK4 ", {2, 2}, Resampling -> \"Average\"]]",
+                   "True", 0);
+}
+
+static void test_area_averaging_is_an_exact_block_mean(void) {
+    /* At an integer reduction factor the fractional coverage terms vanish and the result is an
+     * exact mean of each source block -- so these are equalities. Block (1,1) covers
+     * {0, 0.25, 0, 0.25} with mean 0.125; block (1,2) covers {0.5, 0.75, 0.5, 0.75} with mean
+     * 0.625. Chosen so both are exactly representable. */
+    assert_eval_eq("ImageData[ImageResize[Image[{{0.,0.25,0.5,0.75},{0.,0.25,0.5,0.75},"
+                   "{1.,1.,1.,1.},{1.,1.,1.,1.}}], {2, 2}]]",
+                   "{{0.125, 0.625}, {1.0, 1.0}}", 0);
+    /* FRACTIONAL coverage, on a 3 -> 2 reduction where no block boundary lines up. Destination
+     * pixel 0 spans source [0, 1.5): all of pixel 0 (value 0) plus half of pixel 1 (value 0.5),
+     * so (0*1 + 0.5*0.5)/1.5 = 1/6. Restricting the area path to integer factors would have
+     * silently fallen back to something worse on exactly the sizes people ask for. */
+    assert_eval_eq("Module[{r = ImageData[ImageResize[Image[{{0., 0.5, 1.}}], {2, 1}]]},"
+                   " {Chop[Part[r,1,1] - 1./6.], Chop[Part[r,1,2] - 5./6.]}]", "{0, 0}", 0);
+}
+
+static void test_resizing_to_the_same_size_is_the_identity(void) {
+    /* Every method must be the identity at 1:1 -- exactly, not approximately. This is what
+     * catches a half-pixel shift: the naive sx = i * scale is right at 1:1 and wrong everywhere
+     * else, so a test only at 1:1 would MISS it, which is why the fractional and checkerboard
+     * rows above exist too. */
+    assert_eval_eq("ImageData[ImageResize[" I23 ", {3, 2}, Resampling -> \"Bilinear\"]] === "
+                   "ImageData[" I23 "]", "True", 0);
+    assert_eval_eq("ImageData[ImageResize[" I23 ", {3, 2}, Resampling -> \"Average\"]] === "
+                   "ImageData[" I23 "]", "True", 0);
+    assert_eval_eq("ImageData[ImageResize[" I23 ", {3, 2}, Resampling -> \"Nearest\"]] === "
+                   "ImageData[" I23 "]", "True", 0);
+    /* A constant image survives ENLARGEMENT unchanged, which bilinear must give exactly. */
+    assert_eval_eq("Union[Flatten[ImageData[ImageResize[Image[{{0.25,0.25},{0.25,0.25}}],"
+                   " {4, 4}]]]]", "{0.25}", 0);
+}
+
+static void test_size_specification(void) {
+    /* A single number is a WIDTH and the height follows the aspect ratio: 4x2 to width 2 is
+     * height 1. */
+    assert_eval_eq("ImageDimensions[ImageResize[Image[Table[0.5, {2}, {4}]], 2]]", "{2, 1}", 0);
+    assert_eval_eq("ImageDimensions[ImageResize[" I23 ", {7, 5}]]", "{7, 5}", 0);
+    /* Enlarging and shrinking both land on exactly the requested size. */
+    assert_eval_eq("ImageDimensions[ImageResize[" I23 ", {1, 1}]]", "{1, 1}", 0);
+    /* Colour channels and the Real result type survive a resize. */
+    assert_eval_eq("{ImageChannels[ImageResize[Image[{{{1.,0.,0.},{0.,1.,0.}}}], {1, 1}]],"
+                   " ImageType[ImageResize[" I23 ", {2, 2}]]}", "{3, \"Real\"}", 0);
+}
+
+static void test_resize_declines_bad_input(void) {
+    /* A fractional pixel count has no meaning, and rounding one silently would make
+     * ImageResize[img, 10.5] quietly mean something the caller did not say. */
+    assert_eval_eq("Head[ImageResize[" I23 ", 2.5]]", "ImageResize", 0);
+    assert_eval_eq("Head[ImageResize[" I23 ", 0]]", "ImageResize", 0);
+    assert_eval_eq("Head[ImageResize[" I23 ", -3]]", "ImageResize", 0);
+    assert_eval_eq("Head[ImageResize[" I23 ", {2, 0}]]", "ImageResize", 0);
+    assert_eval_eq("Head[ImageResize[" I23 ", {2, 3, 4}]]", "ImageResize", 0);
+    assert_eval_eq("Head[ImageResize[{{1, 2}}, 2]]", "ImageResize", 0);
+    /* An unknown resampling name declines rather than falling back to a default -- a silent
+     * fallback would make a typo look like it worked. */
+    assert_eval_eq("Head[ImageResize[" I23 ", 2, Resampling -> \"Bogus\"]]", "ImageResize", 0);
+    assert_eval_eq("Head[ImageResize[" I23 ", 2, Bogus -> \"Nearest\"]]", "ImageResize", 0);
+    assert_eval_eq("MemberQ[Attributes[ImageResize], Protected]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -334,6 +416,11 @@ int main(void) {
     TEST(test_binarize_boundary_is_strictly_above);
     TEST(test_greyscale_uses_rec601_luminance);
     TEST(test_degenerate_and_malformed_decline);
+    TEST(test_downsampling_does_not_alias);
+    TEST(test_area_averaging_is_an_exact_block_mean);
+    TEST(test_resizing_to_the_same_size_is_the_identity);
+    TEST(test_size_specification);
+    TEST(test_resize_declines_bad_input);
 
     printf("All image tests passed.\n");
     return 0;

@@ -13,6 +13,7 @@
 
 void image_init(void);
 void imagefilter_init(void);
+void imagegeom_init(void);
 
 /* Pixel types, in Wolfram's names. The type fixes the RANGE of a stored value, which is what
  * makes ImageData's scaling well defined: "Bit" is {0, 1}, "Byte" is 0..255, "Real" is already
