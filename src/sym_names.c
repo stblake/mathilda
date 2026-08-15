@@ -390,6 +390,7 @@ const char* SYM_None = NULL;
 const char* SYM_NormFunction = NULL;
 const char* SYM_Normalize = NULL;
 const char* SYM_Not = NULL;
+const char* SYM_Nothing = NULL;
 const char* SYM_Null = NULL;
 const char* SYM_NullSpace = NULL;
 const char* SYM_NumericFunction = NULL;
@@ -1249,6 +1250,7 @@ void sym_names_init(void) {
     SYM_NormFunction               = intern_symbol("NormFunction");
     SYM_Normalize                  = intern_symbol("Normalize");
     SYM_Not                        = intern_symbol("Not");
+    SYM_Nothing                    = intern_symbol("Nothing");
     SYM_Null                       = intern_symbol("Null");
     SYM_NullSpace                  = intern_symbol("NullSpace");
     SYM_NumericFunction            = intern_symbol("NumericFunction");

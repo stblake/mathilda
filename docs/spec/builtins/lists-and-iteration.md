@@ -131,6 +131,23 @@ In[1]:= Table[i^2, {i, 4}]
 Out[1]= {1, 4, 9, 16}
 ```
 
+## Nothing
+The identity element for list construction: `Nothing` is removed from any list in
+which it appears as an element, so `{a, Nothing, b}` evaluates to `{a, b}`. This
+is the idiom behind conditionally building a list with `Table[If[test, val,
+Nothing], ...]` — the entries for which `test` fails simply vanish. Any
+`Nothing[...]` form is removed likewise; under a non-list head `Nothing` is an
+ordinary symbol. Stripped during evaluation (a genuinely held list keeps its
+`Nothing` until released). Attributes: `Protected`.
+
+```mathematica
+In[1]:= {1, Nothing, 2}
+Out[1]= {1, 2}
+
+In[2]:= Table[If[EvenQ[i], i, Nothing], {i, 6}]
+Out[2]= {2, 4, 6}
+```
+
 ## Range
 Generates a list of values. Attributes: `Protected`.
 - `Range[imax]`

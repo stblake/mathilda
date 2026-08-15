@@ -393,6 +393,7 @@ extern const char* SYM_None;
 extern const char* SYM_Normalize;
 extern const char* SYM_NormFunction;
 extern const char* SYM_Not;
+extern const char* SYM_Nothing;
 extern const char* SYM_Null;
 extern const char* SYM_NullSpace;
 extern const char* SYM_NumericFunction;

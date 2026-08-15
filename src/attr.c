@@ -146,6 +146,7 @@ static SymbolAttr builtin_attrs[] = {
     {"Cross", ATTR_PROTECTED},
     {"Norm", ATTR_PROTECTED},
     {"Sequence", ATTR_PROTECTED},
+    {"Nothing", ATTR_PROTECTED},
     {"SequenceHold", ATTR_PROTECTED},
     {NULL, 0}
 };

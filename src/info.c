@@ -2132,6 +2132,14 @@ void info_init(void) {
         "\tthe argument list of any enclosing function. Sequence[] evaporates and\n"
         "\tSequence[e] acts like the identity. Splicing is suppressed for heads\n"
         "\twith the attribute SequenceHold or HoldAllComplete.");
+    symtab_set_docstring("Nothing",
+        "Nothing\n"
+        "\tis a symbol that is automatically removed from any list in which it\n"
+        "\tappears as an element: {a, Nothing, b} evaluates to {a, b}. It is the\n"
+        "\tidentity element for list construction, so Table[If[test, val, Nothing],\n"
+        "\t...] builds a list of just the values for which test held. Any\n"
+        "\tNothing[...] form is removed likewise. Non-list heads treat Nothing as\n"
+        "\tan ordinary symbol.");
     symtab_set_docstring("SequenceHold",
         "SequenceHold\n"
         "\tis an attribute which specifies that Sequence objects appearing in the\n"
