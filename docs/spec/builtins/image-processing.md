@@ -1780,3 +1780,41 @@ As at rank 2, the sum-of-squares work is skipped entirely when `c2 = 0`.
 Flat in the radius, as the prefix-sum construction requires. The Sauvola form costs about twice the
 mean-only one, which is the second box sum over the squared volume and is why it is skipped when
 `c2 = 0`.
+
+## The distance transform in a volume
+
+`DistanceTransform` accepts an `Image3D`: three lower-envelope passes instead of two.
+
+Felzenszwalb and Huttenlocher's decomposition is exact **because** it is separable in *squared*
+distance — the squared distance to the nearest seed along a line, summed across axes, is the squared
+distance in the volume. So the third axis is genuinely one more pass of the same `dt_1d`, which is
+rank-agnostic since it works on a line, and the cost stays linear in the voxel count regardless of how
+far away the nearest seed is. The square root is taken **once at the end**; per axis it would not be
+slower, it would be wrong.
+
+### The strongest tests in the subsystem
+
+Squared distances on an integer lattice are exact integers, so this is one of the few places where a
+geometric result can be compared with `===`:
+
+- With one background voxel, distances at Pythagorean offsets are **exact integers**: `(0,0,3) → 3`,
+  `(0,3,4) → 5`, `(1,2,2) → 3`, `(2,3,6) → 7`, and `(1,4,4) → √33` exactly. A transform that summed
+  distances per axis instead of squared distances would fail every one of these while still producing a
+  plausible-looking gradient.
+- Against the **definition** — the minimum Euclidean distance to any background voxel, computed by
+  brute force over every one of them — agreement is `===`, with a measured maximum difference of
+  exactly `0.0`.
+- An all-background volume is everywhere zero, exactly.
+
+### Measured
+
+32 × 48 × 64 (98,304 voxels):
+
+| | Mathilda | SciPy `distance_transform_edt` | Ratio |
+|---|---:|---:|---:|
+| ~4% background | 0.770 ms | 3.92 ms | **5.1× faster** |
+| single seed | 0.684 ms | 1.35 ms | **2.0× faster** |
+
+Near-flat in how sparse the seeds are, which is what a lower-envelope method gives you: the work is
+three linear passes whatever the geometry, where a propagation method does more when the nearest seed
+is further away.

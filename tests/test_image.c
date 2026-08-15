@@ -2162,6 +2162,43 @@ static void test_volume_local_adaptive_beats_global(void) {
                    "  Length[Union[Flatten[lo[[All, All, -10 ;; -1]]]]]}]", "{1, 2, 2}", 0);
 }
 
+
+/* The volumetric distance transform. This one admits the strongest tests in the file: squared
+ * distances on an integer lattice are exact integers, so Pythagorean offsets give exact distances and
+ * the comparison is `===` rather than a tolerance. */
+static void test_volume_distance_transform_is_exactly_euclidean(void) {
+    /* One background voxel at (6,6,6); the distance at an offset is sqrt of the sum of squares, and
+     * these offsets are chosen so that root is an integer. A separable transform that added distances
+     * per axis instead of SQUARED distances would fail every one of these while still producing a
+     * plausible-looking gradient. */
+    assert_eval_eq("Module[{v, r},"
+                   " v = Image3D[Table[If[z == 6 && y == 6 && x == 6, 0., 1.],"
+                   "   {z, 1, 12}, {y, 1, 12}, {x, 1, 12}]];"
+                   " r = ImageData[DistanceTransform[v]];"
+                   " {r[[6, 6, 6]], r[[6, 6, 9]] === 3., r[[6, 9, 10]] === 5.,"
+                   "  r[[7, 8, 8]] === 3., r[[8, 9, 12]] === 7., r[[7, 10, 10]] === Sqrt[33.]}]",
+                   "{0.0, True, True, True, True, True}", 0);
+    /* Against the DEFINITION -- the minimum Euclidean distance to any background voxel, computed by
+     * brute force over every one of them -- and the agreement is exact. */
+    assert_eval_eq("Module[{u, du, bg, ref},"
+                   " u = Image3D[Table[If[Mod[z*5 + y*3 + x*7, 11] == 0, 0., 1.],"
+                   "   {z, 1, 7}, {y, 1, 8}, {x, 1, 9}]];"
+                   " du = ImageData[u]; bg = Position[du, 0.];"
+                   " ref = Table[Min[Table[Sqrt[N[(z - b[[1]])^2 + (y - b[[2]])^2"
+                   "   + (x - b[[3]])^2]], {b, bg}]], {z, 1, 7}, {y, 1, 8}, {x, 1, 9}];"
+                   " ImageData[DistanceTransform[u]] === ref]", "True", 0);
+    /* An all-background volume is everywhere zero, exactly. */
+    assert_eval_eq("Union[Flatten[ImageData[DistanceTransform["
+                   "Image3D[Table[0., {6}, {6}, {6}]]]]]]", "{0.0}", 0);
+    /* The threshold argument selects what counts as background, and 0.5 on a 0/1 volume is the same
+     * partition as the default. */
+    assert_eval_eq("Module[{v},"
+                   " v = Image3D[Table[If[z == 6 && y == 6 && x == 6, 0., 1.],"
+                   "   {z, 1, 12}, {y, 1, 12}, {x, 1, 12}]];"
+                   " ImageData[DistanceTransform[v, 0.5]] === ImageData[DistanceTransform[v]]]",
+                   "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2268,6 +2305,7 @@ int main(void) {
     TEST(test_volume_binarize);
     TEST(test_volume_local_adaptive_binarize);
     TEST(test_volume_local_adaptive_beats_global);
+    TEST(test_volume_distance_transform_is_exactly_euclidean);
 
     printf("All image tests passed.\n");
     return 0;

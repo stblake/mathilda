@@ -2602,6 +2602,58 @@ static void dt_1d(const double* f, double* d, size_t n, size_t* v, double* z) {
 /* DistanceTransform[image] / [image, t] -- for each pixel, the Euclidean distance to the nearest
  * BACKGROUND pixel, matching Mathematica and scipy: background pixels are 0, and the value rises
  * toward the interior of a blob. */
+/* The volumetric distance transform: THREE lower-envelope passes instead of two.
+ *
+ * Felzenszwalb and Huttenlocher's decomposition is what makes an exact Euclidean transform cheap, and
+ * it is exact BECAUSE it is separable in squared distance: the squared distance to the nearest seed
+ * along a line, added across axes, is the squared distance in the volume. So the third axis is genuinely
+ * one more pass of the same dt_1d -- which is rank-agnostic, since it works on a line -- and the cost
+ * is linear in the number of voxels regardless of how far the nearest seed is.
+ *
+ * The square root is taken ONCE at the end. Per axis it would not be slower, it would be wrong.
+ */
+static Expr* dt3_run(Expr* vol, double thr) {
+    size_t w = 0, h = 0, d = 0; double* g = NULL;
+    if (!img3_grey_volume(vol, &w, &h, &d, &g)) return NULL;
+    size_t n = w * h * d;
+    size_t maxn = w > h ? (w > d ? w : d) : (h > d ? h : d);
+
+    double* f = malloc(sizeof(double) * n);
+    double* tmp = malloc(sizeof(double) * maxn);
+    double* line = malloc(sizeof(double) * maxn);
+    size_t* vv = malloc(sizeof(size_t) * maxn);
+    double* zz = malloc(sizeof(double) * (maxn + 1));
+    Expr* out = NULL;
+    if (f && tmp && line && vv && zz) {
+        /* Seed: 0 at background, infinity at foreground -- so the transform reports, for every voxel,
+         * the distance to the nearest background voxel. */
+        for (size_t i = 0; i < n; i++) f[i] = (g[i] > thr) ? DT_INF : 0.0;
+
+        for (size_t z = 0; z < d; z++)
+          for (size_t y = 0; y < h; y++) {
+            for (size_t x = 0; x < w; x++) line[x] = f[(z * h + y) * w + x];
+            dt_1d(line, tmp, w, vv, zz);
+            for (size_t x = 0; x < w; x++) f[(z * h + y) * w + x] = tmp[x];
+          }
+        for (size_t z = 0; z < d; z++)
+          for (size_t x = 0; x < w; x++) {
+            for (size_t y = 0; y < h; y++) line[y] = f[(z * h + y) * w + x];
+            dt_1d(line, tmp, h, vv, zz);
+            for (size_t y = 0; y < h; y++) f[(z * h + y) * w + x] = tmp[y];
+          }
+        for (size_t y = 0; y < h; y++)
+          for (size_t x = 0; x < w; x++) {
+            for (size_t z = 0; z < d; z++) line[z] = f[(z * h + y) * w + x];
+            dt_1d(line, tmp, d, vv, zz);
+            for (size_t z = 0; z < d; z++) f[(z * h + y) * w + x] = tmp[z];
+          }
+        for (size_t i = 0; i < n; i++) f[i] = (f[i] >= DT_INF) ? DT_INF : sqrt(f[i]);
+        out = image3d_build_real(f, w, h, d, 1);
+    }
+    free(g); free(f); free(tmp); free(line); free(vv); free(zz);
+    return out;
+}
+
 static Expr* builtin_distancetransform(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;
@@ -2609,6 +2661,8 @@ static Expr* builtin_distancetransform(Expr* res) {
     if (argc == 2) {
         if (!na_read_scalar(res->data.function.args[1], &thr, &im) || im != 0.0) return NULL;
     }
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL))
+        return dt3_run(res->data.function.args[0], thr);
     size_t w = 0, h = 0; double* g = NULL;
     if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
     size_t n = w * h;
