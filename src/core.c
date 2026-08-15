@@ -845,6 +845,7 @@ void core_init(void) {
     info_init();
     meminfo_init();
     image_init();
+    imagefilter_init();
     datetime_init();
     linalg_init();
     ml_init();      /* src/ml -- PrincipalComponents, Standardize */

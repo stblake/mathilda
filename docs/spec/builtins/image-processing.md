@@ -118,3 +118,99 @@ it as rectangular.
 `ImageData` on a 512×512 byte image is ~4.8 ms, dominated by building 262,144 `Expr` reals — the
 cost of materialising an array as expressions, and the reason filters will operate on the stored
 data rather than round-tripping through `ImageData`.
+
+---
+
+# Filtering
+
+## ImageConvolve
+
+`ImageConvolve[image, kernel]` convolves `image` with a rank-2 numeric kernel. Attributes:
+`Protected`.
+
+**This is true convolution: the kernel is reflected before summing.** That distinction is not
+pedantry, and it is unusually easy to get wrong, because on any *symmetric* kernel — a Gaussian, a
+box — convolution and correlation agree exactly. Every smoothing filter anyone tries first looks
+right either way. It shows up only on an asymmetric kernel, where the two answers are mirror
+images:
+
+```
+In[1]:= ImageData[ImageConvolve[Image[{{0., 1., 0.}}], {{1, 2, 3}}]]
+Out[1]= {{1.0, 2.0, 3.0}}          (* correlation would give {{3., 2., 1.}} *)
+```
+
+Mathematica draws the same line — `ImageConvolve` reflects, `ImageCorrelate` does not — and a test
+pins it with exactly that case.
+
+**Padding is `"Fixed"`**: out-of-range reads clamp to the nearest edge pixel, replicating the
+border. This is Mathematica's default, and it is the right one for smoothing — zero padding would
+darken every edge, which looks exactly like a real vignetting bug. Clamping also makes an exact
+property available: a constant image convolved with a kernel summing to 1 comes back as the *same*
+constant everywhere, border included. A test asserts that, and it is what would fail if the
+padding were ever changed.
+
+The result is always a `"Real"` image of the same dimensions; each colour channel is convolved
+independently. A Gaussian of bytes is not a byte, and rounding back into the input type would
+discard precision the caller never asked to lose.
+
+## GaussianMatrix
+
+`GaussianMatrix[r]` gives a `(2r+1) × (2r+1)` Gaussian normalised to sum 1.
+`GaussianMatrix[{r, sigma}]` states the standard deviation. Attributes: `Protected`.
+
+`sigma` defaults to `r/2`, Mathematica's convention: it puts the kernel's edge at two standard
+deviations, where the Gaussian has fallen to about 13% of its peak, so truncating there loses
+little.
+
+**Normalisation divides by the realised sum, not the analytic `2 pi sigma^2`.** The analytic
+constant is correct only for an infinite kernel; using it on a truncated one leaves the sum
+slightly under 1, which darkens an image a little on every pass — invisible once, obvious after
+fifty.
+
+## BoxMatrix
+
+`BoxMatrix[r]` gives a `(2r+1) × (2r+1)` matrix of 1s. Attributes: `Protected`.
+
+**Not normalised**, matching Mathematica — so `ImageConvolve[img, BoxMatrix[1]]` is nine times too
+bright, and the normalised version is a mean filter. Kept faithful rather than helpfully rescaled,
+since a caller using `BoxMatrix` in arithmetic needs the ones.
+
+## GaussianFilter
+
+`GaussianFilter[image, r]` blurs `image` with a Gaussian of radius `r`. Attributes: `Protected`.
+
+Exactly `ImageConvolve[image, GaussianMatrix[r]]` — Mathematica documents the two as equal, so it
+is implemented by building the same matrix and calling the same convolution, and a test asserts the
+identity. Two independent implementations of one identity is how the identity quietly stops
+holding.
+
+## Filtering performance, measured
+
+Verified against `scipy.ndimage.convolve` (the right baseline: it reflects the kernel like
+`ImageConvolve`, and `mode='nearest'` replicates the edge exactly like `"Fixed"`). The two agree to
+**six significant figures** on sampled pixels and on the image total — 2050.0623 either side.
+
+512×512 grey, normalised Gaussian:
+
+| radius | taps | Mathilda | scipy | ratio |
+|---|---|---|---|---|
+| r=0 | 1 | 4.6 ms | — | marshalling floor |
+| r=1 | 9 | 5.3 ms | — | |
+| r=2 | 25 | **6.3 ms** | 3.2 ms | **1.97×** |
+| r=4 | 81 | 14.4 ms | — | |
+
+**The `Expr` round-trip dominates at small radii, not the inner loop.** A single-tap convolution
+still costs 4.6 ms, which is purely loading 262,144 pixels into a buffer and rebuilding the result
+as expressions; the convolution arithmetic at r=2 is only ~1.7 ms of the 6.3. Arithmetic scales
+linearly in taps (1.7 ms at 25 taps, ~9.8 ms at 81), which is what the direct form should do.
+
+That measurement redirects the optimisation target. The inner loop is not the problem; the
+expression marshalling is. In priority order: keep images in packed buffers so a filter chain
+does not round-trip through `Expr` at every step; exploit **separability** for Gaussians
+(`kw + kh` taps instead of `kw × kh`, a 2.5× win at r=2 and 4.5× at r=4); and only then reach for
+Accelerate's `vImage`, which is already linked. Nothing here is GPU-accelerated, and at ~1.7 ms of
+arithmetic per megapixel-scale image the transfer cost to a GPU would exceed the saving —
+`vImage` is the honest next step, not Metal.
+
+The benchmark pair lives in `benchmarks/63-image-convolve/`, including a deliberate
+`r=0` row that measures the marshalling floor on its own.

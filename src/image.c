@@ -298,6 +298,80 @@ static Expr* builtin_imagedata(Expr* res) {
     return img_scale_tree(img->data.function.args[0], t, raw);
 }
 
+bool image_load(const Expr* img, size_t* width, size_t* height, size_t* channels,
+                double** buf) {
+    size_t w = 0, h = 0, c = 0; ImgType t;
+    if (!image_info(img, &w, &h, &c, &t)) return false;
+    double* out = malloc(sizeof(double) * w * h * c);
+    if (!out) return false;
+
+    const Expr* d = img->data.function.args[0];
+    for (size_t y = 0; y < h; y++) {
+        const Expr* row = d->data.function.args[y];
+        for (size_t x = 0; x < w; x++) {
+            const Expr* px = row->data.function.args[x];
+            for (size_t k = 0; k < c; k++) {
+                const Expr* v = (c == 1) ? px : px->data.function.args[k];
+                double re = 0.0, im = 0.0;
+                if (!na_read_scalar(v, &re, &im) || im != 0.0) { free(out); return false; }
+                out[(y * w + x) * c + k] = img_to_unit(re, t);
+            }
+        }
+    }
+    if (width) *width = w;
+    if (height) *height = h;
+    if (channels) *channels = c;
+    *buf = out;
+    return true;
+}
+
+Expr* image_build_real(const double* buf, size_t width, size_t height, size_t channels) {
+    if (!buf || width == 0 || height == 0 || channels == 0) return NULL;
+    Expr** rows = malloc(sizeof(Expr*) * height);
+    if (!rows) return NULL;
+    bool ok = true;
+    for (size_t y = 0; y < height; y++) rows[y] = NULL;
+    for (size_t y = 0; y < height && ok; y++) {
+        Expr** cols = malloc(sizeof(Expr*) * width);
+        if (!cols) { ok = false; break; }
+        for (size_t x = 0; x < width; x++) cols[x] = NULL;
+        for (size_t x = 0; x < width && ok; x++) {
+            if (channels == 1) {
+                cols[x] = expr_new_real(buf[(y * width + x)]);
+            } else {
+                Expr** ch = malloc(sizeof(Expr*) * channels);
+                if (!ch) { ok = false; break; }
+                bool okc = true;
+                for (size_t k = 0; k < channels; k++) {
+                    ch[k] = expr_new_real(buf[(y * width + x) * channels + k]);
+                    if (!ch[k]) okc = false;
+                }
+                if (okc) cols[x] = expr_new_function(expr_new_symbol(SYM_List), ch, channels);
+                else for (size_t k = 0; k < channels; k++) expr_free(ch[k]);
+                free(ch);
+            }
+            if (!cols[x]) ok = false;
+        }
+        if (ok) rows[y] = expr_new_function(expr_new_symbol(SYM_List), cols, width);
+        else for (size_t x = 0; x < width; x++) expr_free(cols[x]);
+        free(cols);
+        if (!rows[y]) ok = false;
+    }
+    if (!ok) {
+        for (size_t y = 0; y < height; y++) expr_free(rows[y]);
+        free(rows);
+        return NULL;
+    }
+    Expr* data = expr_new_function(expr_new_symbol(SYM_List), rows, height);
+    free(rows);
+    if (!data) return NULL;
+    Expr* two[2];
+    two[0] = data;
+    two[1] = expr_new_string("Real");
+    if (!two[1]) { expr_free(data); return NULL; }
+    return expr_new_function(expr_new_symbol("Image"), two, 2);
+}
+
 void image_init(void) {
     symtab_add_builtin("Image", builtin_image);
     symtab_get_def("Image")->attributes |= ATTR_PROTECTED;

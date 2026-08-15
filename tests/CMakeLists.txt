@@ -447,6 +447,7 @@ set(COMMON_SRC
     ../src/info.c
     ../src/meminfo.c
     ../src/image.c
+    ../src/imagefilter.c
     ../src/expand.c
     ../src/expand_power.c
     ../src/poly/poly.c

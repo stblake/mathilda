@@ -138,6 +138,98 @@ static void test_imageq_and_attributes(void) {
                    "True", 0);
 }
 
+static void test_convolution_reflects_the_kernel(void) {
+    /* THE discriminating row, and the only one that can tell convolution from correlation.
+     * They agree exactly on every symmetric kernel -- a Gaussian, a box -- so a smoothing test
+     * passes either way and the mistake goes unnoticed. With a delta at the centre of a 1x3
+     * image and the asymmetric kernel {{1,2,3}}, convolution gives {1,2,3} and correlation gives
+     * {3,2,1}: exact integers, no tolerance, and no way to pass by accident. */
+    assert_eval_eq("ImageData[ImageConvolve[Image[{{0., 1., 0.}}], {{1, 2, 3}}]]",
+                   "{{1.0, 2.0, 3.0}}", 0);
+    /* Vertically too, so a transposed index cannot hide in the row case. */
+    assert_eval_eq("ImageData[ImageConvolve[Image[{{0.}, {1.}, {0.}}], {{1}, {2}, {3}}]]",
+                   "{{1.0}, {2.0}, {3.0}}", 0);
+}
+
+static void test_identity_kernel_is_the_identity(void) {
+    /* A 1x1 kernel of 1 must return the pixels EXACTLY -- not close, identical. Any stray
+     * scaling, any off-by-one in the centre calculation, and this fails. */
+    assert_eval_eq("ImageData[ImageConvolve[" I23 ", {{1}}]] === ImageData[" I23 "]",
+                   "True", 0);
+    /* And dimensions survive, which is what fails if the output is built transposed. */
+    assert_eval_eq("ImageDimensions[ImageConvolve[" I23 ", GaussianMatrix[2]]]", "{3, 2}", 0);
+}
+
+static void test_constant_image_survives_a_normalised_kernel(void) {
+    /* An exact property that specifically tests the BORDER. A kernel summing to 1 over a
+     * constant image must give that same constant everywhere -- and at the edges that is only
+     * true because out-of-range reads clamp to the edge pixel. Zero padding would darken the
+     * border, which looks exactly like a real vignetting bug, so this row is what stands between
+     * that and going unnoticed. Chop, because the sum of 25 scaled doubles need not be bit-exact. */
+    assert_eval_eq("Chop[Max[Abs[Flatten[ImageData[ImageConvolve["
+                   "Image[Table[0.25, {6}, {6}]], GaussianMatrix[2]]] - 0.25]]]]", "0", 0);
+    /* A box kernel is NOT normalised, so the same image comes back nine times brighter. That is
+     * Mathematica's definition and this row pins that it was not "helpfully" rescaled. */
+    assert_eval_eq("Chop[Part[ImageData[ImageConvolve[Image[Table[0.1, {4}, {4}]],"
+                   " BoxMatrix[1]]], 2, 2] - 0.9]", "0", 0);
+}
+
+static void test_kernel_constructors(void) {
+    /* A Gaussian matrix must sum to exactly 1, because it is normalised by the REALISED sum
+     * rather than the analytic 2 pi sigma^2 -- the analytic constant is right only for an
+     * infinite kernel, and on a truncated one it leaves the sum under 1, darkening an image a
+     * little on every pass. */
+    assert_eval_eq("Chop[Total[Flatten[GaussianMatrix[2]]] - 1.]", "0", 0);
+    assert_eval_eq("Chop[Total[Flatten[GaussianMatrix[4]]] - 1.]", "0", 0);
+    assert_eval_eq("Dimensions[GaussianMatrix[3]]", "{7, 7}", 0);
+    /* Symmetric about the centre, and the centre is the largest entry. */
+    assert_eval_eq("GaussianMatrix[1] === Transpose[GaussianMatrix[1]]", "True", 0);
+    assert_eval_eq("Part[GaussianMatrix[2], 3, 3] == Max[Flatten[GaussianMatrix[2]]]",
+                   "True", 0);
+    /* r = 0 is a single tap of 1, which makes it the identity kernel. */
+    assert_eval_eq("GaussianMatrix[0]", "{{1.0}}", 0);
+    /* An explicit sigma is honoured: a larger sigma is flatter, so its centre is smaller. */
+    assert_eval_eq("Part[GaussianMatrix[{2, 5.}], 3, 3] < Part[GaussianMatrix[{2, 0.5}], 3, 3]",
+                   "True", 0);
+    assert_eval_eq("BoxMatrix[0]", "{{1}}", 0);
+    assert_eval_eq("BoxMatrix[2] === Table[1, {5}, {5}]", "True", 0);
+    /* A fractional or negative radius has no matrix size, so it declines. */
+    assert_eval_eq("Head[GaussianMatrix[1.5]]", "GaussianMatrix", 0);
+    assert_eval_eq("Head[GaussianMatrix[-1]]", "GaussianMatrix", 0);
+    assert_eval_eq("Head[BoxMatrix[1.5]]", "BoxMatrix", 0);
+    assert_eval_eq("Head[GaussianMatrix[{2, -1.}]]", "GaussianMatrix", 0);
+}
+
+static void test_gaussianfilter_equals_imageconvolve(void) {
+    /* Mathematica DOCUMENTS these as equal, so the identity is asserted rather than assumed.
+     * GaussianFilter is implemented by building the same matrix and calling the same convolution
+     * for exactly this reason -- two independent implementations of one identity is how the
+     * identity quietly stops holding. */
+    assert_eval_eq("ImageData[GaussianFilter[" I23 ", 1]] === "
+                   "ImageData[ImageConvolve[" I23 ", GaussianMatrix[1]]]", "True", 0);
+    assert_eval_eq("ImageData[GaussianFilter[" I23 ", 2]] === "
+                   "ImageData[ImageConvolve[" I23 ", GaussianMatrix[2]]]", "True", 0);
+}
+
+static void test_filters_handle_colour_and_decline_junk(void) {
+    /* Each channel is convolved independently, so the channel count survives. */
+    assert_eval_eq("Module[{c = Image[{{{1.,0.,0.}, {0.,1.,0.}}, {{0.,0.,1.}, {1.,1.,0.}}}]},"
+                   " {ImageChannels[GaussianFilter[c, 1]], ImageDimensions[GaussianFilter[c, 1]],"
+                   "  ImageType[GaussianFilter[c, 1]]}]", "{3, {2, 2}, \"Real\"}", 0);
+    /* The result is always Real, because a Gaussian of bytes is not a byte and rounding back
+     * would discard precision nobody asked to lose. */
+    assert_eval_eq("ImageType[ImageConvolve[Image[{{0, 255}, {255, 0}}], GaussianMatrix[1]]]",
+                   "\"Real\"", 0);
+    /* Declines: a non-image, a ragged kernel, a rank-1 kernel, a symbolic entry. */
+    assert_eval_eq("Head[ImageConvolve[{{1, 2}}, {{1}}]]", "ImageConvolve", 0);
+    assert_eval_eq("Head[ImageConvolve[" I23 ", {{1, 2}, {3}}]]", "ImageConvolve", 0);
+    assert_eval_eq("Head[ImageConvolve[" I23 ", {1, 2, 3}]]", "ImageConvolve", 0);
+    assert_eval_eq("Head[ImageConvolve[" I23 ", {{1, x}}]]", "ImageConvolve", 0);
+    assert_eval_eq("Head[GaussianFilter[{{1, 2}}, 1]]", "GaussianFilter", 0);
+    assert_eval_eq("And @@ Map[MemberQ[Attributes[#], Protected] &,"
+                   " {ImageConvolve, GaussianMatrix, BoxMatrix, GaussianFilter}]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -150,6 +242,12 @@ int main(void) {
     TEST(test_channels);
     TEST(test_malformed_input_declines);
     TEST(test_imageq_and_attributes);
+    TEST(test_convolution_reflects_the_kernel);
+    TEST(test_identity_kernel_is_the_identity);
+    TEST(test_constant_image_survives_a_normalised_kernel);
+    TEST(test_kernel_constructors);
+    TEST(test_gaussianfilter_equals_imageconvolve);
+    TEST(test_filters_handle_colour_and_decline_junk);
 
     printf("All image tests passed.\n");
     return 0;
