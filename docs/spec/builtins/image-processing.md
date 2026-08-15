@@ -364,3 +364,41 @@ build; it is slower on the enlargement, where 17.8 ms for 1M output pixels match
 the cost — building the output expressions is**, and that cost scales with the *output* pixel count.
 
 Benchmark pair in `benchmarks/64-image-resize/`.
+
+---
+
+# Storage: machine buffers
+
+Computed images store their pixels as a **machine buffer** (a rank-2 or rank-3 `NDArray`) rather
+than nested expressions. This is invisible through the API — `ImageData` always answers with a
+`List`, whatever the storage — and it is what three separate benchmarks had been pointing at.
+
+| operation, 512×512 | nested `Expr` | buffer | speedup | baseline |
+|---|---|---|---|---|
+| marshalling floor (r=0) | 4.62 ms | **0.98 ms** | 4.7× | — |
+| `ImageConvolve` r=2 | 7.18 ms | **2.95 ms** | 2.4× | scipy 3.2 ms |
+| `ImageConvolve` r=4 | 14.6 ms | **11.2 ms** | 1.3× | — |
+| `ImageResize` 512→1024 | 16.4 ms | **2.76 ms** | 5.9× | skimage 14.3 ms |
+| `ImageResize` 512→256 | 1.72 ms | **0.63 ms** | 2.7× | skimage 2.0 ms |
+| chain of three `GaussianFilter` | 17.3 ms | **4.43 ms** | 3.9× | — |
+
+Mathilda is now **faster than scipy** on convolution (2.95 ms against 3.2) and **5.2× faster than
+skimage** on bilinear enlargement. Pixel values are unchanged — still agreeing with
+`scipy.ndimage.convolve` to six significant figures.
+
+**The visible-`NDArray` surface is required, and this is the subtle part.** Mathilda has two array
+surfaces: a *packed List*, which looks like an ordinary `List`, and a *visible* `NDArray`. The
+obvious choice is the packed List, since an image's pixels are conceptually a list — and it does not
+work. `eval.c` has a **post-gate**: when a node comes to rest still holding a packed List, it
+materialises it into expressions **unconditionally**, with no `packed_aware` check. That is right for
+an ordinary head, where a resting buffer means some fast path declined it and an inert `Mod[buffer]`
+would behave differently from `Mod[{1., 2., 3.}]`. It is fatal for a *container*: `Image[…]` coming
+to rest holding its pixels is the entire point. A packed-List image was materialised on **every
+evaluation**, which is why adding the image heads to `AWARE` changed nothing measurable.
+
+The gate never touches a visible `NDArray`, so that is the surface image storage uses — both for
+filter output and for pixels handed in as a packed `List` (which `Table` produces).
+
+Storage is buffer-backed **uniformly, at every size**; there is no threshold at which the
+representation changes. That matters for testing: it means no class of image that only large-input
+tests would reach. The data a caller passes to `Image[data]` directly is kept as given.

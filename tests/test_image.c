@@ -393,6 +393,63 @@ static void test_resize_declines_bad_input(void) {
     assert_eval_eq("MemberQ[Attributes[ImageResize], Protected]", "True", 0);
 }
 
+static void test_buffer_backed_storage_agrees_with_the_nested_path(void) {
+    /* Above the packing threshold a filter's output is stored as a machine BUFFER rather than
+     * nested expressions. The two representations must be indistinguishable through the API, and
+     * the identity kernel makes that an EXACT equality rather than a tolerance: convolving with
+     * {{1}} goes in through the nested path and comes out through the buffer path, so if the two
+     * disagreed anywhere this would fail.
+     *
+     * The Head assertion is what stops this test passing vacuously. Every other row in this file
+     * uses a small image that stays nested, so none of them touch the buffer path at all -- which
+     * is exactly how the first version of this change shipped an ImageData that could not read its
+     * own storage. */
+    assert_eval_eq("Module[{d, img, out},"
+                   " d = Table[N[Mod[x*7 + y*13, 251]/251], {y, 64}, {x, 64}];"
+                   " img = Image[d];"
+                   " out = ImageConvolve[img, {{1}}];"
+                   " {Head[Part[out, 1]], ImageData[out] === ImageData[img]}]",
+                   "{NDArray, True}", 0);
+    /* Storage is buffer-backed UNIFORMLY, at every size -- ndbuild_open packs even six elements,
+     * so there is no size threshold at which the representation changes. That is the better
+     * outcome: one representation for every computed image, and no class of image that only the
+     * large-input tests would ever reach. What stays nested is the data a CALLER handed to
+     * Image[...], which is copied as given rather than converted. */
+    assert_eval_eq("Head[Part[ImageConvolve[" I23 ", {{1}}], 1]]", "NDArray", 0);
+    assert_eval_eq("Head[Part[" I23 ", 1]]", "List", 0);
+    /* And the two agree exactly, small as well as large: an identity convolution of the nested
+     * form gives back the same pixels through the buffer form. */
+    assert_eval_eq("ImageData[ImageConvolve[" I23 ", {{1}}]] === ImageData[" I23 "]", "True", 0);
+    /* ImageData always answers with a List whatever the storage -- a caller writing
+     * Part[ImageData[img], y, x] must not have to care which side of the threshold it landed. */
+    assert_eval_eq("Module[{out = ImageConvolve[Image[Table[0.5, {64}, {64}]], {{1}}]},"
+                   " {Head[Part[out, 1]], Head[ImageData[out]],"
+                   "  Dimensions[ImageData[out]], Union[Flatten[ImageData[out]]]}]",
+                   "{NDArray, List, {64, 64}, {0.5}}", 0);
+}
+
+static void test_every_accessor_reads_buffer_storage(void) {
+    /* Each accessor and each filter must work on buffer-backed storage, not just on nested. These
+     * all go through image_info's O(1) dims read or image_load's buffer read. */
+    assert_eval_eq("Module[{g = ImageConvolve[Image[Table[N[x/70.], {y, 64}, {x, 64}]],"
+                   " GaussianMatrix[1]]},"
+                   " {ImageQ[g], ImageDimensions[g], ImageChannels[g], ImageType[g],"
+                   "  Dimensions[ImageData[g]]}]",
+                   "{True, {64, 64}, 1, \"Real\", {64, 64}}", 0);
+    /* Colour keeps its rank-3 buffer and its per-channel values. */
+    assert_eval_eq("Module[{c = ImageConvolve[Image[Table[{0.5, 0.25, 0.75}, {40}, {40}]],"
+                   " GaussianMatrix[1]]},"
+                   " {Head[Part[c, 1]], ImageChannels[c], Dimensions[ImageData[c]],"
+                   "  Part[ImageData[c], 20, 20]}]",
+                   "{NDArray, 3, {40, 40, 3}, {0.5, 0.25, 0.75}}", 0);
+    /* Thresholding and resizing consume buffer storage too. */
+    assert_eval_eq("Module[{g = ImageConvolve[Image[Table[N[x/70.], {y, 64}, {x, 64}]],"
+                   " GaussianMatrix[1]]},"
+                   " {ImageType[Binarize[g]], ImageDimensions[ImageResize[g, {16, 16}]],"
+                   "  NumberQ[FindThreshold[g]]}]",
+                   "{\"Bit\", {16, 16}, True}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -421,6 +478,8 @@ int main(void) {
     TEST(test_resizing_to_the_same_size_is_the_identity);
     TEST(test_size_specification);
     TEST(test_resize_declines_bad_input);
+    TEST(test_buffer_backed_storage_agrees_with_the_nested_path);
+    TEST(test_every_accessor_reads_buffer_storage);
 
     printf("All image tests passed.\n");
     return 0;

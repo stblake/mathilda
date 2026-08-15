@@ -33,6 +33,8 @@
 #include "attr.h"
 #include "sym_names.h"
 #include "linalg/numarray.h"
+#include "ndarray.h"
+#include "pack.h"
 #include "image.h"
 
 /* ---- shape and type inspection of a nested List ---- */
@@ -43,6 +45,9 @@ static bool img_is_list(const Expr* e) {
         && e->data.function.head->data.symbol.name == SYM_List;
 }
 
+/* Defined below; img_shape needs it for the packed case. */
+static bool img_shape_fast(const Expr* d, size_t* h, size_t* w, size_t* c);
+
 /* Walk a rank-2 or rank-3 numeric array, checking it is RECTANGULAR and collecting its shape.
  *
  * Raggedness is rejected rather than padded or truncated. A ragged array is not an image, and
@@ -50,6 +55,26 @@ static bool img_is_list(const Expr* e) {
  * clear refusal here into an out-of-bounds read somewhere far away. */
 static bool img_shape(const Expr* d, size_t* h, size_t* w, size_t* c,
                       bool* all_int, double* lo, double* hi) {
+    /* A packed buffer is machine reals or machine integers by construction, so there is nothing
+     * per-element to validate: every element is already numeric and non-complex. Read the range
+     * straight from the buffer, which is what makes constructing an Image from a filter's output
+     * O(pixels) of arithmetic rather than O(pixels) of Expr inspection. */
+    if (is_ndarray(d)) {
+        const NDArrayData* a = &d->data.ndarray;
+        if (!img_shape_fast(d, h, w, c)) return false;
+        if (a->dtype == NDT_COMPLEX64 || a->dtype == NDT_COMPLEX32) return false;
+        size_t n = (*h) * (*w) * (*c);
+        *all_int = (a->dtype == NDT_INT64 || a->dtype == NDT_BOOL);
+        *lo = *hi = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            double re = 0.0, imv = 0.0;
+            ndt_get(a->data, i, a->dtype, &re, &imv);
+            if (imv != 0.0) return false;
+            if (i == 0) { *lo = *hi = re; }
+            else { if (re < *lo) *lo = re; if (re > *hi) *hi = re; }
+        }
+        return true;
+    }
     if (!img_is_list(d) || d->data.function.arg_count == 0) return false;
     size_t rows = d->data.function.arg_count;
     size_t cols = 0, chan = 0;
@@ -123,6 +148,17 @@ static bool img_type_from_name(const char* s, ImgType* out) {
  * will index it as rectangular. Per-pixel numeric checking is the part that stays in
  * construction, where it is paid once. */
 static bool img_shape_fast(const Expr* d, size_t* h, size_t* w, size_t* c) {
+    /* A PACKED image answers in O(1) from its dims, with no walking at all -- the point of
+     * storing one. rank 2 is grey, rank 3 is height x width x channels. */
+    if (is_ndarray(d)) {
+        const NDArrayData* a = &d->data.ndarray;
+        if (a->rank == 2) { *h = (size_t)a->dims[0]; *w = (size_t)a->dims[1]; *c = 1; return true; }
+        if (a->rank == 3) {
+            *h = (size_t)a->dims[0]; *w = (size_t)a->dims[1]; *c = (size_t)a->dims[2];
+            return *c > 0;
+        }
+        return false;
+    }
     if (!img_is_list(d) || d->data.function.arg_count == 0) return false;
     size_t rows = d->data.function.arg_count;
     const Expr* r0 = d->data.function.args[0];
@@ -198,6 +234,13 @@ static Expr* builtin_image(Expr* res) {
 
     Expr* two[2];
     two[0] = expr_copy(data);
+    /* If the caller handed us a PACKED LIST -- which Table and Range produce for any sizeable
+     * array -- keep the buffer by storing it on the visible NDArray surface. Left as a packed
+     * List it would be materialised into Expr nodes the moment this node came to rest, by the
+     * same post-gate described in image_build_real, so an image built from Table[...] would
+     * arrive already un-packed and every later filter would pay the walk. */
+    if (two[0] && is_packed_list(two[0]))
+        two[0]->data.ndarray.present_as = NDA_HEAD_NDARRAY;
     two[1] = expr_new_string(img_type_name(t));
     if (!two[0] || !two[1]) { expr_free(two[0]); expr_free(two[1]); return NULL; }
     return expr_new_function(expr_new_symbol("Image"), two, 2);
@@ -245,6 +288,64 @@ static double img_to_unit(double v, ImgType t) {
  * flattened because ImageData must give back the SAME shape it was handed -- height x width for
  * grey, height x width x channels for colour, interleaved. */
 static Expr* img_scale_tree(const Expr* e, ImgType t, bool raw) {
+    /* A buffer-backed image: rebuild the nested List from the buffer, scaling as we go.
+     *
+     * ImageData must always answer with a List whatever the storage is -- a caller writing
+     * Part[ImageData[img], y, x] cannot be asked to care whether the image happened to exceed the
+     * packing threshold. This branch is what makes the storage an implementation detail rather
+     * than a visible fork in the API, and its absence is what the first version got wrong: every
+     * test used a small image, stayed on the nested path, and so never touched it. */
+    if (is_ndarray(e)) {
+        const NDArrayData* a = &e->data.ndarray;
+        size_t h = (size_t)a->dims[0];
+        size_t w = (a->rank >= 2) ? (size_t)a->dims[1] : 1;
+        size_t c = (a->rank >= 3) ? (size_t)a->dims[2] : 1;
+        Expr** rows = malloc(sizeof(Expr*) * h);
+        if (!rows) return NULL;
+        bool ok = true;
+        for (size_t y = 0; y < h; y++) rows[y] = NULL;
+        for (size_t y = 0; y < h && ok; y++) {
+            Expr** cols = malloc(sizeof(Expr*) * w);
+            if (!cols) { ok = false; break; }
+            for (size_t x = 0; x < w; x++) cols[x] = NULL;
+            for (size_t x = 0; x < w && ok; x++) {
+                if (c == 1) {
+                    double re = 0.0, imv = 0.0;
+                    ndt_get(a->data, y * w + x, a->dtype, &re, &imv);
+                    cols[x] = raw ? ndarray_buffer_element_to_expr(a->data, y * w + x, a->dtype)
+                                  : expr_new_real(img_to_unit(re, t));
+                } else {
+                    Expr** ch = malloc(sizeof(Expr*) * c);
+                    if (!ch) { ok = false; break; }
+                    bool okc = true;
+                    for (size_t k = 0; k < c; k++) {
+                        size_t idx = (y * w + x) * c + k;
+                        double re = 0.0, imv = 0.0;
+                        ndt_get(a->data, idx, a->dtype, &re, &imv);
+                        ch[k] = raw ? ndarray_buffer_element_to_expr(a->data, idx, a->dtype)
+                                    : expr_new_real(img_to_unit(re, t));
+                        if (!ch[k]) okc = false;
+                    }
+                    if (okc) cols[x] = expr_new_function(expr_new_symbol(SYM_List), ch, c);
+                    else for (size_t k = 0; k < c; k++) expr_free(ch[k]);
+                    free(ch);
+                }
+                if (!cols[x]) ok = false;
+            }
+            if (ok) rows[y] = expr_new_function(expr_new_symbol(SYM_List), cols, w);
+            else for (size_t x = 0; x < w; x++) expr_free(cols[x]);
+            free(cols);
+            if (!rows[y]) ok = false;
+        }
+        if (!ok) {
+            for (size_t y = 0; y < h; y++) expr_free(rows[y]);
+            free(rows);
+            return NULL;
+        }
+        Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, h);
+        free(rows);
+        return out;
+    }
     if (img_is_list(e)) {
         size_t n = e->data.function.arg_count;
         Expr** kids = malloc(sizeof(Expr*) * n);
@@ -306,6 +407,27 @@ bool image_load(const Expr* img, size_t* width, size_t* height, size_t* channels
     if (!out) return false;
 
     const Expr* d = img->data.function.args[0];
+
+    /* THE fast path this whole change exists for: a packed image is already a flat row-major
+     * buffer in exactly the order needed, so loading it is a scale over contiguous memory rather
+     * than a walk over height*width*channels Expr nodes. Measurements put the walk at ~4.6 ms per
+     * 262144 pixels, which dominated every filter at small kernel radii. */
+    if (is_ndarray(d)) {
+        const NDArrayData* a = &d->data.ndarray;
+        size_t n = h * w * c;
+        for (size_t i = 0; i < n; i++) {
+            double re = 0.0, imv = 0.0;
+            ndt_get(a->data, i, a->dtype, &re, &imv);
+            if (imv != 0.0) { free(out); return false; }
+            out[i] = img_to_unit(re, t);
+        }
+        if (width) *width = w;
+        if (height) *height = h;
+        if (channels) *channels = c;
+        *buf = out;
+        return true;
+    }
+
     for (size_t y = 0; y < h; y++) {
         const Expr* row = d->data.function.args[y];
         for (size_t x = 0; x < w; x++) {
@@ -327,6 +449,44 @@ bool image_load(const Expr* img, size_t* width, size_t* height, size_t* channels
 
 Expr* image_build_real(const double* buf, size_t width, size_t height, size_t channels) {
     if (!buf || width == 0 || height == 0 || channels == 0) return NULL;
+
+    /* Build a PACKED array when packing is available: one memcpy-shaped loop into a machine
+     * buffer instead of height*width*channels expr_new_real calls. ndbuild_open returns NULL when
+     * packing is disabled or the array is under the size threshold, and the nested-Expr path below
+     * then runs exactly as before -- so small images keep their old representation and every
+     * existing test keeps its exact answer. */
+    {
+        int64_t dims[3];
+        int rank;
+        if (channels == 1) { rank = 2; dims[0] = (int64_t)height; dims[1] = (int64_t)width; }
+        else { rank = 3; dims[0] = (int64_t)height; dims[1] = (int64_t)width;
+               dims[2] = (int64_t)channels; }
+        void* raw = NULL;
+        Expr* nd = ndbuild_open(rank, dims, NDT_FLOAT64, &raw);
+        if (nd && raw) {
+            memcpy(raw, buf, sizeof(double) * width * height * channels);
+            /* Present as a VISIBLE NDArray, not a packed List, and this is the crux.
+             *
+             * eval.c's POST-GATE materialises any packed LIST still sitting inside a node that
+             * has come to rest -- unconditionally, with no aware check, because for an ordinary
+             * head a resting buffer means "a fast path declined it" and an inert Mod[buffer]
+             * would then behave differently from Mod[plain list]. That reasoning is right, and it
+             * is fatal here: Image[...] is a CONTAINER, so coming to rest holding its pixels is
+             * exactly what it is for. A packed-List image was materialised on every single
+             * evaluation, which is why marking the image heads AWARE changed nothing.
+             *
+             * The gate never touches a visible NDArray -- the asymmetry SPEC.md documents -- so
+             * that is the surface an image's storage has to use. */
+            nd->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+            Expr* two[2];
+            two[0] = nd;
+            two[1] = expr_new_string("Real");
+            if (!two[1]) { expr_free(nd); return NULL; }
+            return expr_new_function(expr_new_symbol("Image"), two, 2);
+        }
+        if (nd) expr_free(nd);
+    }
+
     Expr** rows = malloc(sizeof(Expr*) * height);
     if (!rows) return NULL;
     bool ok = true;
@@ -373,6 +533,16 @@ Expr* image_build_real(const double* buf, size_t width, size_t height, size_t ch
 }
 
 void image_init(void) {
+    /* The image heads are listed in src/pack.c's AWARE table, which is where
+     * tools/check_packed_aware.py looks. Setting the flag here as well because pack_init() runs
+     * before image_init() in core_init, and the table's effect must survive whatever order the
+     * modules happen to initialise in. */
+    symtab_set_packed_aware("Image");
+    symtab_set_packed_aware("ImageData");
+    symtab_set_packed_aware("ImageDimensions");
+    symtab_set_packed_aware("ImageChannels");
+    symtab_set_packed_aware("ImageType");
+    symtab_set_packed_aware("ImageQ");
     symtab_add_builtin("Image", builtin_image);
     symtab_get_def("Image")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Image",
