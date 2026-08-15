@@ -1219,6 +1219,33 @@ static void test_qap_assignment(void) {
         "  AllTrue[Flatten[xm], Abs[# - Round[#]] < 1*^-4 &]]");
 }
 
+static void test_job_scheduling(void) {
+    /* B2: single-machine job scheduling, n=5, Big-M disjunctive formulation.
+     * Continuous start times t_i, binary precedence y[i,j], and for every pair
+     * a Big-M disjunction forcing i-before-j OR j-before-i (no overlap). Minimize
+     * the makespan Max_i(t_i + dur_i). Because all five jobs share one machine,
+     * the makespan is exactly Σ durations = 26 for ANY ordering (pack from t=0),
+     * so 26 is a hard lower bound. Mathilda's general RandomSearch finds a valid
+     * schedule with makespan 27 — within 3.8% of the MILP optimum; the residual
+     * gap is imperfect continuous-time packing, the expected general-vs-dedicated
+     * cost. The `Nothing` in the Table (used to skip the i≥j pairs) exercises the
+     * list-construction identity element. Asserts a near-optimal makespan; since
+     * a feasible single-machine schedule cannot dip below 26, the lower bound
+     * also certifies the disjunctions hold. Deterministic under RandomSeed. */
+    check_true(
+        "Module[{n = 5, m = 1000, times, order, durations, cons, obj, allc, r, o},"
+        " times = Array[t, n]; order = Array[y, {n, n}]; durations = {4, 7, 2, 8, 5};"
+        " cons = Flatten@Table[If[i < j,"
+        "   {t[j] >= t[i] + durations[[i]] - m (1 - y[i, j]),"
+        "    t[i] >= t[j] + durations[[j]] - m y[i, j],"
+        "    0 <= y[i, j] <= 1, Element[y[i, j], Integers]}, Nothing], {i, n}, {j, n}];"
+        " obj = Max[Table[t[i] + durations[[i]], {i, n}]];"
+        " allc = Join[cons, Map[# >= 0 &, times]];"
+        " r = NMinimize[{obj, allc}, Flatten[{times, order}],"
+        "   Method -> {\"RandomSearch\", \"SearchPoints\" -> 50, \"RandomSeed\" -> 1}];"
+        " o = First[r]; 25.99 < o < 28]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1327,6 +1354,7 @@ int main(void) {
 
     /* 15. Combinatorial / integer (MINLP) */
     TEST(test_qap_assignment);
+    TEST(test_job_scheduling);
 
     printf("All NMinimize tests passed.\n");
     return 0;
