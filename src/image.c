@@ -771,6 +771,79 @@ bool image3d_load(const Expr* img, size_t* width, size_t* height, size_t* depth,
     return true;
 }
 
+/* Nested Lists from a flat double buffer of any rank -- the fallback when packing declines.
+ *
+ * Distinct from nd_nest, which reads an NDArray buffer through a dtype and applies unit scaling.
+ * This one takes plain doubles already in unit scale, which is what a filter produces. */
+static Expr* dbuf_nest(const double* buf, const int64_t* dims, int rank, size_t offset) {
+    size_t n = (size_t)dims[0];
+    Expr** kids = malloc(sizeof(Expr*) * n);
+    if (!kids) return NULL;
+    bool ok = true;
+    for (size_t i = 0; i < n; i++) kids[i] = NULL;
+    if (rank == 1) {
+        for (size_t i = 0; i < n && ok; i++) {
+            kids[i] = expr_new_real(buf[offset + i]);
+            if (!kids[i]) ok = false;
+        }
+    } else {
+        size_t stride = 1;
+        for (int r = 1; r < rank; r++) stride *= (size_t)dims[r];
+        for (size_t i = 0; i < n && ok; i++) {
+            kids[i] = dbuf_nest(buf, dims + 1, rank - 1, offset + i * stride);
+            if (!kids[i]) ok = false;
+        }
+    }
+    if (!ok) {
+        for (size_t i = 0; i < n; i++) expr_free(kids[i]);
+        free(kids);
+        return NULL;
+    }
+    Expr* o = expr_new_function(expr_new_symbol(SYM_List), kids, n);
+    free(kids);
+    return o;
+}
+
+Expr* image3d_build_real(const double* buf, size_t width, size_t height, size_t depth,
+                         size_t channels) {
+    if (!buf || width == 0 || height == 0 || depth == 0 || channels == 0) return NULL;
+    int64_t dims[4];
+    int rank;
+    if (channels == 1) { rank = 3; dims[0] = (int64_t)depth; dims[1] = (int64_t)height;
+                         dims[2] = (int64_t)width; }
+    else { rank = 4; dims[0] = (int64_t)depth; dims[1] = (int64_t)height;
+           dims[2] = (int64_t)width; dims[3] = (int64_t)channels; }
+    void* raw = NULL;
+    Expr* nd = ndbuild_open(rank, dims, NDT_FLOAT64, &raw);
+    if (nd && raw) {
+        memcpy(raw, buf, sizeof(double) * depth * height * width * channels);
+        /* Visible surface, for the reason image_build_real documents: a packed List inside a
+         * resting container is materialised by eval.c's post-gate on every evaluation. */
+        nd->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+        Expr* two[2];
+        two[0] = nd;
+        two[1] = expr_new_string("Real");
+        if (!two[1]) { expr_free(nd); return NULL; }
+        return expr_new_function(expr_new_symbol("Image3D"), two, 2);
+    }
+    if (nd) expr_free(nd);
+
+    /* NESTED FALLBACK, and its absence was a live bug.
+     *
+     * ndbuild_open declines an array under the packing threshold, so a small volume -- a 3-voxel
+     * z-line, an 8-voxel cube -- got NULL here and the whole convolution DECLINED rather than
+     * returning a nested result. The 2-D builder always had this fallback; the 3-D one was written
+     * without it and only large volumes were tried, so it looked correct. Building the nested form
+     * for the small case is what makes the two ranks behave alike. */
+    Expr* out = dbuf_nest(buf, dims, rank, 0);
+    if (!out) return NULL;
+    Expr* two[2];
+    two[0] = out;
+    two[1] = expr_new_string("Real");
+    if (!two[1]) { expr_free(out); return NULL; }
+    return expr_new_function(expr_new_symbol("Image3D"), two, 2);
+}
+
 /* Image3D[data] / Image3D[data, type] -- same normalisation and inference as Image. */
 static Expr* builtin_image3d(Expr* res) {
     size_t argc = res->data.function.arg_count;

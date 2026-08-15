@@ -53,4 +53,11 @@ bool image_load(const Expr* img, size_t* width, size_t* height, size_t* channels
  * back would throw away precision the caller did not ask to lose. */
 Expr* image_build_real(const double* buf, size_t width, size_t height, size_t channels);
 
+/* Build a canonical Image3D[data, "Real"] from a depth*height*width*channels buffer.
+ *
+ * Removed once for having no caller and restored with the 3-D convolution that uses it -- untested
+ * unused code is worse than absent code. */
+Expr* image3d_build_real(const double* buf, size_t width, size_t height, size_t depth,
+                         size_t channels);
+
 #endif /* MATHILDA_IMAGE_H */

@@ -206,9 +206,214 @@ static bool convolve_dispatch(const double* src, double* dst, size_t w, size_t h
     return true;
 }
 
+/* ---- volumetric convolution -----------------------------------------------
+ *
+ * SEPARABILITY MATTERS MORE IN THREE DIMENSIONS THAN IN TWO, and by a widening margin: a rank-1
+ * kernel costs kw + kh + kd taps instead of kw * kh * kd, so radius 1 goes from 27 to 9 and radius 4
+ * from 729 to 27. In two dimensions skipping it costs a factor of the radius; here it costs the
+ * SQUARE of it, which is the difference between a volume filter being usable and not.
+ *
+ * The rank-3 factorisation follows the rank-2 one: pivot on the largest-magnitude entry so a kernel
+ * with a zero at a corner still factors, take the three axis-lines through that pivot as the
+ * candidate factors, then VERIFY every entry against their product at a tight relative tolerance.
+ * Verifying is the whole point -- treating a non-separable kernel as separable computes a different
+ * filter, not a slightly wrong one.
+ */
+static bool ker3_load(const Expr* e, size_t* kd, size_t* kh, size_t* kw, double** buf) {
+    if (!ker_is_list(e) || e->data.function.arg_count == 0) return false;
+    size_t d = e->data.function.arg_count;
+    const Expr* s0 = e->data.function.args[0];
+    if (!ker_is_list(s0) || s0->data.function.arg_count == 0) return false;
+    size_t hh = s0->data.function.arg_count;
+    const Expr* r0 = s0->data.function.args[0];
+    if (!ker_is_list(r0) || r0->data.function.arg_count == 0) return false;
+    size_t ww = r0->data.function.arg_count;
+
+    double* k = malloc(sizeof(double) * d * hh * ww);
+    if (!k) return false;
+    for (size_t z = 0; z < d; z++) {
+        const Expr* sl = e->data.function.args[z];
+        if (!ker_is_list(sl) || sl->data.function.arg_count != hh) { free(k); return false; }
+        for (size_t y = 0; y < hh; y++) {
+            const Expr* row = sl->data.function.args[y];
+            if (!ker_is_list(row) || row->data.function.arg_count != ww) { free(k); return false; }
+            for (size_t x = 0; x < ww; x++) {
+                double re = 0.0, im = 0.0;
+                if (!na_read_scalar(row->data.function.args[x], &re, &im) || im != 0.0) {
+                    free(k); return false;
+                }
+                k[(z * hh + y) * ww + x] = re;
+            }
+        }
+    }
+    *kd = d; *kh = hh; *kw = ww; *buf = k;
+    return true;
+}
+
+static bool ker3_separable(const double* k, size_t kd, size_t kh, size_t kw,
+                           double* u, double* v, double* t) {
+    size_t pz = 0, py = 0, px = 0;
+    double best = 0.0;
+    for (size_t z = 0; z < kd; z++)
+        for (size_t y = 0; y < kh; y++)
+            for (size_t x = 0; x < kw; x++) {
+                double a = fabs(k[(z * kh + y) * kw + x]);
+                if (a > best) { best = a; pz = z; py = y; px = x; }
+            }
+    if (!(best > 0.0)) return false;
+    double piv = k[(pz * kh + py) * kw + px];
+
+    /* The three axis-lines through the pivot, each scaled so its pivot entry is 1. The pivot value
+     * is then folded into u alone, so the product u v t reproduces K rather than K/piv^2. */
+    for (size_t z = 0; z < kd; z++) u[z] = k[(z * kh + py) * kw + px] / piv;
+    for (size_t y = 0; y < kh; y++) v[y] = k[(pz * kh + y) * kw + px] / piv;
+    for (size_t x = 0; x < kw; x++) t[x] = k[(pz * kh + py) * kw + x] / piv;
+
+    double tol = 1e-12 * best;
+    for (size_t z = 0; z < kd; z++)
+        for (size_t y = 0; y < kh; y++)
+            for (size_t x = 0; x < kw; x++)
+                if (fabs(k[(z * kh + y) * kw + x] - piv * u[z] * v[y] * t[x]) > tol) return false;
+    for (size_t z = 0; z < kd; z++) u[z] *= piv;
+    return true;
+}
+
+/* Three passes: x, then y, then z. Clamping is per-axis and therefore separable, exactly as in the
+ * 2-D case, so this equals the direct form up to summation order. */
+static void convolve3_separable(const double* src, double* dst, double* a, double* b,
+                                size_t w, size_t h, size_t d, size_t c,
+                                const double* u, size_t kd, const double* v, size_t kh,
+                                const double* t, size_t kw) {
+    int64_t cz = (int64_t)(kd / 2), cy = (int64_t)(kh / 2), cx = (int64_t)(kw / 2);
+    size_t plane = w * h * c;
+
+    for (size_t z = 0; z < d; z++)
+      for (size_t y = 0; y < h; y++)
+        for (size_t x = 0; x < w; x++)
+          for (size_t ch = 0; ch < c; ch++) {
+            double acc = 0.0;
+            for (size_t j = 0; j < kw; j++) {
+                size_t sx = clampi((int64_t)x - (int64_t)j + cx, w);
+                acc += t[j] * src[z * plane + (y * w + sx) * c + ch];
+            }
+            a[z * plane + (y * w + x) * c + ch] = acc;
+          }
+
+    for (size_t z = 0; z < d; z++)
+      for (size_t y = 0; y < h; y++)
+        for (size_t x = 0; x < w; x++)
+          for (size_t ch = 0; ch < c; ch++) {
+            double acc = 0.0;
+            for (size_t i = 0; i < kh; i++) {
+                size_t sy = clampi((int64_t)y - (int64_t)i + cy, h);
+                acc += v[i] * a[z * plane + (sy * w + x) * c + ch];
+            }
+            b[z * plane + (y * w + x) * c + ch] = acc;
+          }
+
+    for (size_t z = 0; z < d; z++)
+      for (size_t y = 0; y < h; y++)
+        for (size_t x = 0; x < w; x++)
+          for (size_t ch = 0; ch < c; ch++) {
+            double acc = 0.0;
+            for (size_t m = 0; m < kd; m++) {
+                size_t sz = clampi((int64_t)z - (int64_t)m + cz, d);
+                acc += u[m] * b[sz * plane + (y * w + x) * c + ch];
+            }
+            dst[z * plane + (y * w + x) * c + ch] = acc;
+          }
+}
+
+static void convolve3_direct(const double* src, double* dst,
+                             size_t w, size_t h, size_t d, size_t c,
+                             const double* k, size_t kd, size_t kh, size_t kw) {
+    int64_t cz = (int64_t)(kd / 2), cy = (int64_t)(kh / 2), cx = (int64_t)(kw / 2);
+    size_t plane = w * h * c;
+    for (size_t z = 0; z < d; z++)
+      for (size_t y = 0; y < h; y++)
+        for (size_t x = 0; x < w; x++)
+          for (size_t ch = 0; ch < c; ch++) {
+            double acc = 0.0;
+            for (size_t m = 0; m < kd; m++) {
+                size_t sz = clampi((int64_t)z - (int64_t)m + cz, d);
+                for (size_t i = 0; i < kh; i++) {
+                    size_t sy = clampi((int64_t)y - (int64_t)i + cy, h);
+                    for (size_t j = 0; j < kw; j++) {
+                        size_t sx = clampi((int64_t)x - (int64_t)j + cx, w);
+                        acc += k[(m * kh + i) * kw + j] * src[sz * plane + (sy * w + sx) * c + ch];
+                    }
+                }
+            }
+            dst[z * plane + (y * w + x) * c + ch] = acc;
+          }
+}
+
+/* Convolve a volume, separably when the kernel allows. Returns the built Image3D or NULL. */
+static Expr* convolve3_run(Expr* vol, const double* k, size_t kd, size_t kh, size_t kw) {
+    size_t w = 0, h = 0, d = 0, c = 0; double* src = NULL;
+    if (!image3d_load(vol, &w, &h, &d, &c, &src)) return NULL;
+    size_t n = w * h * d * c;
+    double* dst = malloc(sizeof(double) * n);
+    double* u = malloc(sizeof(double) * kd);
+    double* v = malloc(sizeof(double) * kh);
+    double* t = malloc(sizeof(double) * kw);
+    Expr* out = NULL;
+    if (dst && u && v && t) {
+        if (ker3_separable(k, kd, kh, kw, u, v, t)) {
+            double* a = malloc(sizeof(double) * n);
+            double* b = malloc(sizeof(double) * n);
+            if (a && b) convolve3_separable(src, dst, a, b, w, h, d, c, u, kd, v, kh, t, kw);
+            else convolve3_direct(src, dst, w, h, d, c, k, kd, kh, kw);
+            free(a); free(b);
+        } else {
+            convolve3_direct(src, dst, w, h, d, c, k, kd, kh, kw);
+        }
+        out = image3d_build_real(dst, w, h, d, c);
+    }
+    free(src); free(dst); free(u); free(v); free(t);
+    return out;
+}
+
+/* A separable 3-D Gaussian of radius r, normalised to sum 1. Built as a full rank-3 kernel and
+ * handed to the same dispatcher, so its separability is re-derived and verified rather than
+ * assumed -- the same discipline the 2-D derivative kernels follow. */
+static double* gauss3_kernel(size_t r, size_t* kd, size_t* kh, size_t* kw) {
+    size_t n = 2 * r + 1;
+    double sigma = (r == 0) ? 1.0 : (double)r / 2.0;
+    double* k = malloc(sizeof(double) * n * n * n);
+    if (!k) return NULL;
+    double sum = 0.0;
+    for (size_t z = 0; z < n; z++) {
+        double dz = (double)z - (double)r;
+        for (size_t y = 0; y < n; y++) {
+            double dy = (double)y - (double)r;
+            for (size_t x = 0; x < n; x++) {
+                double dx = (double)x - (double)r;
+                double val = exp(-(dx * dx + dy * dy + dz * dz) / (2.0 * sigma * sigma));
+                k[(z * n + y) * n + x] = val;
+                sum += val;
+            }
+        }
+    }
+    if (!(sum > 0.0)) { free(k); return NULL; }
+    for (size_t i = 0; i < n * n * n; i++) k[i] /= sum;
+    *kd = *kh = *kw = n;
+    return k;
+}
+
 /* ImageConvolve[image, kernel] */
 static Expr* builtin_imageconvolve(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
+    /* A VOLUME takes the rank-3 path. Dispatching on the image rather than on the kernel is
+     * deliberate: a rank-3 kernel handed to a plane is a mistake worth declining, not something to
+     * reinterpret as a stack of 2-D kernels. */
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
+        size_t kd = 0, kh3 = 0, kw3 = 0; double* k3 = NULL;
+        if (!ker3_load(res->data.function.args[1], &kd, &kh3, &kw3, &k3)) return NULL;
+        Expr* o = convolve3_run(res->data.function.args[0], k3, kd, kh3, kw3);
+        free(k3);
+        return o;
+    }
     size_t w = 0, h = 0, c = 0; double* src = NULL;
     if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) return NULL;
     size_t kw = 0, kh = 0; double* k = NULL;
@@ -339,6 +544,17 @@ static Expr* builtin_boxmatrix(Expr* res) {
  * independent implementations of the same identity is how the identity quietly stops holding. */
 static Expr* builtin_gaussianfilter(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
+        double rr = 0.0, im = 0.0;
+        if (!na_read_scalar(res->data.function.args[1], &rr, &im) || im != 0.0) return NULL;
+        if (!(rr >= 0.0) || rr != floor(rr) || rr > 32.0) return NULL;
+        size_t kd = 0, kh3 = 0, kw3 = 0;
+        double* k3 = gauss3_kernel((size_t)rr, &kd, &kh3, &kw3);
+        if (!k3) return NULL;
+        Expr* o = convolve3_run(res->data.function.args[0], k3, kd, kh3, kw3);
+        free(k3);
+        return o;
+    }
     Expr* rad[1];
     rad[0] = expr_copy(res->data.function.args[1]);
     if (!rad[0]) return NULL;

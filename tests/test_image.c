@@ -714,6 +714,62 @@ static void test_image3d_colour_volumes(void) {
                    "True", 0);
 }
 
+static void test_volume_convolution_reflects_on_every_axis(void) {
+    /* The z-axis version of the 2-D reflection test. A delta in a 3-slice column with the kernel
+     * varying only in z gives {1, 2, 3} under convolution and {3, 2, 1} under correlation -- exact
+     * integers, and it covers the axis the 2-D tests cannot reach. */
+    assert_eval_eq("Flatten[ImageData[ImageConvolve[Image3D[{{{0.}}, {{1.}}, {{0.}}}],"
+                   " {{{1}}, {{2}}, {{3}}}]]]", "{1.0, 2.0, 3.0}", 0);
+    /* Identity kernel returns the voxels exactly, and the dimensions survive. */
+    assert_eval_eq("ImageData[ImageConvolve[" VOL234 ", {{{1}}}]] === ImageData[" VOL234 "]",
+                   "True", 0);
+    assert_eval_eq("ImageDimensions[ImageConvolve[" VOL234 ", {{{1}}}]]", "{4, 3, 2}", 0);
+    /* A constant volume through a normalised kernel is unchanged everywhere, borders included --
+     * which is only true because the per-axis clamping composes. */
+    assert_eval_eq("Chop[Max[Abs[Flatten[ImageData[GaussianFilter["
+                   "Image3D[Table[0.25, {4}, {4}, {4}]], 1]]] - 0.25]]]", "0", 0);
+}
+
+static void test_volume_separability_equals_three_1d_passes(void) {
+    /* The independent check on the rank-3 factorisation, and the analogue of the 2-D outer-product
+     * row: a separable 3x3x3 kernel must give exactly what three successive 1-D convolutions give.
+     * Reached by a different route through the code, so a mis-scaled factor or a wrong pivot shows
+     * up here rather than being invisible. */
+    assert_eval_eq("Module[{w = Image3D[Table[N[Mod[x*3 + y*5 + z*7, 11]/11.],"
+                   " {z, 4}, {y, 5}, {x, 6}]]},"
+                   " Chop[Max[Abs[Flatten["
+                   "   ImageData[ImageConvolve[w, Table[a*b*c, {a, {1,2,1}}, {b, {1,2,1}},"
+                   "                                          {c, {1,2,1}}]]]"
+                   " - ImageData[ImageConvolve[ImageConvolve[ImageConvolve[w,"
+                   "     {{{1,2,1}}}], {{{1},{2},{1}}}], {{{1}},{{2}},{{1}}}]]]]]]]",
+                   "0", 0);
+    /* A non-separable rank-3 kernel must still run, on the direct path, and return a volume. */
+    assert_eval_eq("Module[{r = ImageConvolve[Image3D[{{{0.}}, {{1.}}, {{0.}}}],"
+                   " {{{1, 0}, {0, 0}}, {{0, 0}, {0, 1}}}]},"
+                   " {Image3DQ[r], ImageDimensions[r]}]", "{True, {1, 1, 3}}", 0);
+}
+
+static void test_volume_gaussian_and_small_volumes(void) {
+    /* THE row for the nested fallback, which was a live bug: ndbuild_open declines an array under
+     * the packing threshold, so a small volume returned NULL and the whole convolution DECLINED
+     * instead of answering. The 2-D builder always had a nested fallback; the 3-D one was written
+     * without it, and only large volumes had been tried, so it looked correct. Three voxels and
+     * eight voxels are both below the threshold. */
+    assert_eval_eq("Image3DQ[ImageConvolve[Image3D[{{{0.}}, {{1.}}, {{0.}}}], {{{1}}}]]",
+                   "True", 0);
+    assert_eval_eq("Image3DQ[GaussianFilter[Image3D[Table[0.5, {2}, {2}, {2}]], 1]]", "True", 0);
+    /* Shape, type and channels through a 3-D Gaussian, including a colour volume. */
+    assert_eval_eq("Module[{w = Image3D[Table[N[x/8.], {z, 4}, {y, 5}, {x, 6}]]},"
+                   " {ImageDimensions[GaussianFilter[w, 1]], ImageType[GaussianFilter[w, 1]],"
+                   "  ImageChannels[GaussianFilter[w, 1]]}]", "{{6, 5, 4}, \"Real\", 1}", 0);
+    assert_eval_eq("ImageChannels[GaussianFilter["
+                   "Image3D[Table[{0.5, 0.25, 0.75}, {2}, {3}, {4}]], 1]]", "3", 0);
+    /* A rank-2 kernel on a volume declines rather than being reinterpreted as a stack of planes. */
+    assert_eval_eq("Head[ImageConvolve[" VOL234 ", {{1, 2}, {3, 4}}]]", "ImageConvolve", 0);
+    assert_eval_eq("Head[GaussianFilter[" VOL234 ", 1.5]]", "GaussianFilter", 0);
+    assert_eval_eq("Head[GaussianFilter[" VOL234 ", -1]]", "GaussianFilter", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -759,6 +815,9 @@ int main(void) {
     TEST(test_image3d_is_distinct_from_image);
     TEST(test_image3d_shares_the_type_rules);
     TEST(test_image3d_colour_volumes);
+    TEST(test_volume_convolution_reflects_on_every_axis);
+    TEST(test_volume_separability_equals_three_1d_passes);
+    TEST(test_volume_gaussian_and_small_volumes);
 
     printf("All image tests passed.\n");
     return 0;

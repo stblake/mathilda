@@ -618,3 +618,36 @@ start.
 Volumetric *operations* — 3-D convolution and filtering — are the next step and are not here yet.
 Separability pays even better in three dimensions: `kw + kh + kd` taps instead of `kw · kh · kd`, so
 27 becomes 9 at radius 1 and 729 becomes 27 at radius 4.
+
+## Volumetric convolution
+
+`ImageConvolve[volume, kernel]` takes a rank-3 kernel; `GaussianFilter[volume, r]` builds a 3-D
+Gaussian. Dispatch is on the **image**, not the kernel: a rank-3 kernel handed to a plane is a
+mistake worth declining, not something to reinterpret as a stack of 2-D kernels.
+
+**Separability matters more in three dimensions than in two, and by a widening margin.** A rank-1
+kernel costs `kw + kh + kd` taps instead of `kw · kh · kd`: radius 1 goes from 27 to 9, radius 4 from
+729 to 27. In 2-D, skipping separability costs a factor of the radius; here it costs its **square**.
+
+64³ volume (262,144 voxels):
+
+| radius | taps 3-D → 1-D | Mathilda | scipy `convolve` (3-D) | scipy `gaussian_filter` |
+|---|---|---|---|---|
+| r=1 | 27 → 9 | **2.28 ms** | 3.0 ms | 2.4 ms |
+| r=2 | 125 → 15 | **2.11 ms** | 18.0 ms | 2.5 ms |
+| r=4 | 729 → 27 | **2.92 ms** | 155.1 ms | 2.9 ms |
+
+At radius 4 that is **53× faster** than scipy's general 3-D convolve, and level with its dedicated
+separable routine. Again the gap is not scipy being slow — `ndimage.convolve` does not detect
+separability, so a caller must know to reach for `gaussian_filter`. Any rank-1 kernel gets it here
+automatically. The mean is preserved exactly (0.498134 either side of an r=1 filter).
+
+The rank-3 factorisation follows the rank-2 one: pivot on the largest-magnitude entry so a
+zero-cornered kernel still factors, take the three axis-lines through the pivot as candidate factors,
+then **verify every entry** against their product at a tight relative tolerance. A test checks it
+independently — a separable 3×3×3 kernel must give exactly what three successive 1-D convolutions
+give — and a non-separable rank-3 kernel is confirmed to run on the direct path.
+
+The z axis gets its own reflection test, since the 2-D rows cannot reach it: a delta in a 3-slice
+column with a kernel varying only in z gives `{1, 2, 3}` under convolution and would give `{3, 2, 1}`
+under correlation.
