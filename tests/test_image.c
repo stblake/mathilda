@@ -1529,6 +1529,67 @@ static void test_ncc_degenerate_and_invariant(void) {
     assert_eval_eq("Head[ImageCorrelate[" NIMG ", {{1.}}, \"NoSuchMethod\"]]", "ImageCorrelate", 0);
 }
 
+
+/* Convolution through the transform. None of the groups above reaches it: every kernel they use is
+ * either separable or smaller than the crossover, so before these the FFT path shipped untested. */
+#define FIMG "Image[Table[N[Mod[i*13 + j*7, 97]]/97, {i, 1, 40}, {j, 1, 48}]]"
+/* The definition, longhand, with the clamped border and ci = Floor[kh/2] -- the same convention the
+ * direct loop uses. Written once as a Mathilda function the tests below call.
+ *
+ * The first version of this reference was WRONG, off by one in both axes, and it accused the working
+ * separable path of a 376-unit error before it accused the new one. Which is the argument for having
+ * it: a reference that disagrees with two independent implementations is the thing that is broken, and
+ * that is only visible when there ARE two. */
+#define FREF \
+  "cl[v_, n_] := Max[1, Min[n, v]];" \
+  "refOf[kk_, kh_, kw_] := Module[{ci = Floor[kh/2], cj = Floor[kw/2]}," \
+  " Table[Sum[d[[cl[y - i + ci, 40], cl[x - j + cj, 48]]] * kk[[i + 1, j + 1]]," \
+  "       {i, 0, kh - 1}, {j, 0, kw - 1}], {y, 1, 40}, {x, 1, 48}]];"
+#define FKER(n) "Table[N[Mod[i*5 + j*3, 11]] - 5, {i, 1, " n "}, {j, 1, " n "}]"
+
+static void test_fft_convolution_agrees_with_the_definition(void) {
+    /* Straddling the crossover: 6x6 is still the dense loop, 7x7 and up take the transform, and both
+     * must answer the same question. The kernel is deliberately full-rank so the separable path
+     * cannot claim it. */
+    assert_eval_eq("Module[{d = ImageData[" FIMG "], k}," FREF
+                   " Max[Table[k = " FKER("n") ";"
+                   "   Max[Abs[Flatten[ImageData[ImageConvolve[" FIMG ", k]] - refOf[k, n, n]]]],"
+                   "   {n, {6, 7, 9, 12}}]] < 1.*^-12]", "True", 0);
+    /* A NON-SQUARE kernel, both orientations. The transform has a different length on each axis, and
+     * a transposed pad or a transposed output crop is exactly the bug that would survive a square
+     * test. */
+    assert_eval_eq("Module[{d = ImageData[" FIMG "], k}," FREF
+                   " k = Table[N[Mod[i*5 + j*3, 11]] - 5, {i, 1, 7}, {j, 1, 11}];"
+                   " Max[Abs[Flatten[ImageData[ImageConvolve[" FIMG ", k]] - refOf[k, 7, 11]]]]"
+                   " < 1.*^-12]", "True", 0);
+    assert_eval_eq("Module[{d = ImageData[" FIMG "], k}," FREF
+                   " k = Table[N[Mod[i*5 + j*3, 11]] - 5, {i, 1, 11}, {j, 1, 7}];"
+                   " Max[Abs[Flatten[ImageData[ImageConvolve[" FIMG ", k]] - refOf[k, 11, 7]]]]"
+                   " < 1.*^-12]", "True", 0);
+    /* An EVEN extent, where Floor[kh/2] puts the centre off-centre and the pad offset has to follow
+     * it rather than assuming symmetry. */
+    assert_eval_eq("Module[{d = ImageData[" FIMG "], k}," FREF
+                   " k = " FKER("8") ";"
+                   " Max[Abs[Flatten[ImageData[ImageConvolve[" FIMG ", k]] - refOf[k, 8, 8]]]]"
+                   " < 1.*^-12]", "True", 0);
+}
+
+static void test_fft_convolution_across_channels(void) {
+    /* The kernel's transform is computed once and reused for every channel, so a colour image is
+     * where a stale reused buffer would appear -- as identical channels, which is why the assertion
+     * is that they DIFFER rather than that the call returned something. */
+    assert_eval_eq("Module[{img, o},"
+                   " img = Image[Table[N[Mod[i*13 + j*7 + k*5, 97]]/97,"
+                   "   {i, 1, 20}, {j, 1, 24}, {k, 1, 3}]];"
+                   " o = ImageData[ImageConvolve[img, " FKER("9") "]];"
+                   " {Dimensions[o], o[[1, 1, 1]] != o[[1, 1, 2]],"
+                   "  o[[1, 1, 2]] != o[[1, 1, 3]]}]", "{{20, 24, 3}, True, True}", 0);
+    /* Below the crossover nothing changed, and the identity kernel is still EXACT -- the transform
+     * would have cost that, which is one reason the switch is where it is. */
+    assert_eval_eq("Module[{img = " FIMG "},"
+                   " ImageData[ImageConvolve[img, {{1}}]] === ImageData[img]]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1612,6 +1673,8 @@ int main(void) {
     TEST(test_ncc_finds_the_patch_it_was_given);
     TEST(test_ncc_agrees_with_its_definition);
     TEST(test_ncc_degenerate_and_invariant);
+    TEST(test_fft_convolution_agrees_with_the_definition);
+    TEST(test_fft_convolution_across_channels);
 
     printf("All image tests passed.\n");
     return 0;

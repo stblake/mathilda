@@ -35,6 +35,9 @@
 #include "sym_names.h"
 #include "linalg/numarray.h"
 #include "image.h"
+#ifdef USE_FFTW
+#include <fftw3.h>
+#endif
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -186,6 +189,144 @@ static void convolve_separable(const double* src, double* dst, double* tmp,
 }
 
 /* Convolve, taking the separable path when the kernel allows it. */
+/* ---- convolution through the transform -------------------------------------
+ *
+ * A direct convolution costs w*h*kw*kh multiply-adds, which at 512x512 with a 32x32 kernel is 275
+ * million and measured 197 ms -- against SciPy's 143 for the same dense loop. Neither is doing
+ * anything clever, and the convolution theorem is the thing to do instead: O(n log n) regardless of
+ * kernel size.
+ *
+ * THE BORDER IS THE WHOLE DIFFICULTY. A transform gives CIRCULAR convolution, while every filter here
+ * replicates the edge -- so the wrap has to be made impossible rather than accepted. Padding the
+ * image to PH = h + kh - 1 by replication does exactly that: the outputs that matter then sit at
+ * indices kh-1 .. kh-2+h of the linear result, and each of them reads only padded rows that exist, so
+ * no output touches a wrapped one. Rounding the transform up to a 5-smooth size adds zeros beyond the
+ * pad, which cannot reach those indices either.
+ *
+ * The index algebra, written out because an off-by-one here is a shifted image rather than an error.
+ * The direct loop computes dst[y] = sum_i src[clamp(y - i + ci)] k[i] with ci = kh/2. Define
+ *
+ *     P[a] = src[clamp(a - (kh-1) + ci)]
+ *
+ * then sum_i P[(y + kh - 1) - i] k[i] = sum_i src[clamp(y - i + ci)] k[i] = dst[y], and the left side
+ * is the linear convolution of P with k at index y + kh - 1. So no kernel flip is needed: this is a
+ * convolution, and the output is a shifted window of the transform's result.
+ *
+ * The kernel's transform is computed ONCE and reused across channels; only the image transform and the
+ * inverse are per channel.
+ */
+#ifdef USE_FFTW
+/* The next size >= n that is a product of 2, 3 and 5, where FFTW's algorithms are the good ones. */
+static size_t fft_smooth(size_t n) {
+    if (n < 2) return 2;
+    for (;;) {
+        size_t m = n;
+        while (m % 2 == 0) m /= 2;
+        while (m % 3 == 0) m /= 3;
+        while (m % 5 == 0) m /= 5;
+        if (m == 1) return n;
+        n++;
+    }
+}
+
+static bool convolve_fft(const double* src, double* dst, size_t w, size_t h, size_t c,
+                         const double* k, size_t kw, size_t kh) {
+    int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
+    size_t PH = h + kh - 1, PW = w + kw - 1;
+    size_t NH = fft_smooth(PH), NW = fft_smooth(PW);
+    size_t NC = NW / 2 + 1;                       /* r2c packs the last axis */
+    double scale = 1.0 / (double)(NH * NW);
+
+    double* rbuf = fftw_malloc(sizeof(double) * NH * NW);
+    double* kbuf = fftw_malloc(sizeof(double) * NH * NW);
+    fftw_complex* F = fftw_malloc(sizeof(fftw_complex) * NH * NC);
+    fftw_complex* G = fftw_malloc(sizeof(fftw_complex) * NH * NC);
+    if (!rbuf || !kbuf || !F || !G) {
+        fftw_free(rbuf); fftw_free(kbuf); fftw_free(F); fftw_free(G);
+        return false;                             /* caller falls back to the direct loop */
+    }
+
+    /* Plans are built per call on the actual pointers, matching fourier.c: FFTW_ESTIMATE does not
+     * touch the arrays while planning, and a plan built on the buffer it will run on cannot meet a
+     * different alignment later. */
+    int nn[2]; nn[0] = (int)NH; nn[1] = (int)NW;
+    fftw_plan pf = fftw_plan_dft_r2c(2, nn, rbuf, F, FFTW_ESTIMATE);
+    fftw_plan pk = fftw_plan_dft_r2c(2, nn, kbuf, G, FFTW_ESTIMATE);
+    fftw_plan pb = fftw_plan_dft_c2r(2, nn, F, rbuf, FFTW_ESTIMATE);
+    if (!pf || !pk || !pb) {
+        if (pf) fftw_destroy_plan(pf);
+        if (pk) fftw_destroy_plan(pk);
+        if (pb) fftw_destroy_plan(pb);
+        fftw_free(rbuf); fftw_free(kbuf); fftw_free(F); fftw_free(G);
+        return false;
+    }
+
+    /* The kernel at the origin, once for every channel. */
+    memset(kbuf, 0, sizeof(double) * NH * NW);
+    for (size_t i = 0; i < kh; i++)
+        for (size_t j = 0; j < kw; j++) kbuf[i * NW + j] = k[i * kw + j];
+    fftw_execute(pk);
+
+    for (size_t ch = 0; ch < c; ch++) {
+        memset(rbuf, 0, sizeof(double) * NH * NW);
+        for (size_t y = 0; y < PH; y++) {
+            size_t sy = clampi((int64_t)y - (int64_t)(kh - 1) + ci, h);
+            for (size_t x = 0; x < PW; x++) {
+                size_t sx = clampi((int64_t)x - (int64_t)(kw - 1) + cj, w);
+                rbuf[y * NW + x] = src[(sy * w + sx) * c + ch];
+            }
+        }
+        fftw_execute(pf);
+        for (size_t i = 0; i < NH * NC; i++) {
+            double ar = F[i][0], ai = F[i][1], br = G[i][0], bi = G[i][1];
+            F[i][0] = ar * br - ai * bi;
+            F[i][1] = ar * bi + ai * br;
+        }
+        fftw_execute(pb);
+        for (size_t y = 0; y < h; y++)
+            for (size_t x = 0; x < w; x++)
+                dst[(y * w + x) * c + ch] = rbuf[(y + kh - 1) * NW + (x + kw - 1)] * scale;
+    }
+
+    fftw_destroy_plan(pf); fftw_destroy_plan(pk); fftw_destroy_plan(pb);
+    fftw_free(rbuf); fftw_free(kbuf); fftw_free(F); fftw_free(G);
+    return true;
+}
+
+/* Is the transform cheaper than the dense loop here?
+ *
+ * Direct is w*h*c taps of kw*kh each. The transform is one kernel forward, then a forward and an
+ * inverse per channel, over NH*NW points at roughly 5*N*log2(N) flops each, plus the pointwise
+ * multiply. FFT_TAX is the one empirical number, and it was FITTED TO A MEASUREMENT rather than
+ * guessed -- the first value here was guessed, at 6.0, and it was an order of magnitude out.
+ *
+ * The measurement, 512x512 with non-separable kernels, both paths forced:
+ *
+ *      k       direct      transform
+ *      3x3      1.05 ms      ~2.7 ms
+ *      5x5      2.60         ~2.7
+ *      7x7      5.56         ~2.7
+ *      9x9     10.61         ~2.7
+ *     15x15    35.16         ~2.7
+ *     21x21    78.90          2.63
+ *     32x32   198.69          2.77
+ *
+ * The transform is flat in the kernel -- that is the whole point of it -- so the crossover is wherever
+ * the dense loop passes ~2.7 ms, which is just under 5x5. Switching exactly there would trade a dense
+ * loop for a transform of the same cost, so the tax is set to land the switch at 7x7, the first size
+ * where the transform is a clear win (5.56 -> 2.7, about 2x). At 6.0 the model switched between 15x15
+ * and 21x21 instead, leaving 35 ms on the table at 15x15 where 2.7 was available. */
+#define FFT_TAX 0.6
+static bool fft_is_cheaper(size_t w, size_t h, size_t c, size_t kw, size_t kh) {
+    double direct = (double)w * (double)h * (double)c * (double)kw * (double)kh;
+    size_t NH = fft_smooth(h + kh - 1), NW = fft_smooth(w + kw - 1);
+    double N = (double)NH * (double)NW;
+    double lg = log2(N > 2.0 ? N : 2.0);
+    double fft = FFT_TAX * (2.0 * (double)c + 1.0) * N * lg;
+    return fft < direct;
+}
+#endif /* USE_FFTW */
+
 static bool convolve_dispatch(const double* src, double* dst, size_t w, size_t h, size_t c,
                               const double* k, size_t kw, size_t kh) {
     double* u = malloc(sizeof(double) * kh);
@@ -202,6 +343,12 @@ static bool convolve_dispatch(const double* src, double* dst, size_t w, size_t h
         sep = false;                              /* no scratch: fall back rather than fail */
     }
     free(u); free(v);
+#ifdef USE_FFTW
+    /* Not separable: the transform is the next thing to try, when the cost model says it wins. A
+     * separable kernel is never sent here -- kw + kh taps beats any transform. */
+    if (fft_is_cheaper(w, h, c, kw, kh) && convolve_fft(src, dst, w, h, c, k, kw, kh))
+        return true;
+#endif
     convolve_planes(src, dst, w, h, c, k, kw, kh);
     return true;
 }

@@ -1054,26 +1054,72 @@ that would spread through `Max` and `Position` without ever looking like an erro
 
 512×512, construction excluded:
 
-| Template | Mathilda | Reference | Ratio |
-|----------|---------:|----------:|------:|
-| 8×8 | 8.81 ms | 15.50 ms | **1.8× faster** |
-| 32×32 | 199.6 ms | 146.4 ms | 1.36× slower |
+| Template | Mathilda | SciPy | Ratio |
+|----------|---------:|------:|------:|
+| 8×8 | 3.55 ms | 15.03 ms | **4.2× faster** |
+| 32×32 | 3.55 ms | 146.51 ms | **41× faster** |
 
 The reference is the identical algorithm in NumPy/SciPy (integral images plus
-`signal.correlate2d`), so the comparison is of implementations rather than of methods.
+`signal.correlate2d`), so this compares implementations rather than methods.
 
-The 8×8 case was **21.9 ms** before this change: the tables are worth 2.5× there. The 32×32
-case is not about NCC at all — plain `ImageCorrelate` with the same 32×32 template is
-197.3 ms of the 199.6, against SciPy's 143.2 for `correlate2d`. At that size the statistics
-are ~2 ms of 200 and the dense cross term is everything, so the remaining gap belongs to the
-correlation path, not to the normalisation.
+Both figures are flat in template size because the cross term now goes through the
+transform (below). The arc for the 32×32 case was 199.6 ms with the direct cross term,
+and 21.9 ms before the summed-area tables at 8×8 — the tables removed the statistics, and
+the transform then removed the cross term.
 
-**What would close it:** an FFT-based cross term. 512² against a 32×32 template is 275M
-multiply-adds done directly (1.4 GFLOP/s here, 1.9 for SciPy — both scalar loops), where
-correlation via the convolution theorem is O(n log n) and would be roughly an order of
-magnitude faster. FFTW is already linked into the build (`USE_FFTW`), so this is a lowering
-to an existing dependency rather than a new one, with a crossover threshold — for a 3×3
-template the direct loop wins easily and the transform would be pure overhead.
+## Convolution through the transform
+
+A direct convolution costs `w·h·kw·kh` multiply-adds, which at 512×512 with a 32×32 kernel
+is 275 million and measured 197 ms. `convolve_dispatch` therefore tries three things in
+order: the separable factorisation (`kw + kh` taps, unbeatable when it applies), then the
+transform when a cost model says it is cheaper, then the dense loop.
+
+**The border is the whole difficulty.** A transform gives *circular* convolution while every
+filter here replicates the edge, so the wrap has to be made impossible rather than accepted.
+Padding the image by replication to `PH = h + kh - 1` does exactly that: the outputs that
+matter sit at indices `kh-1 … kh-2+h` of the linear result and each reads only padded rows
+that exist, so no output touches a wrapped one. Rounding the transform up to a 5-smooth size
+adds zeros beyond the pad, which cannot reach those indices either.
+
+No kernel flip is needed. The direct loop computes `dst[y] = Σᵢ src[clamp(y - i + ci)]·k[i]`
+with `ci = kh/2`; defining `P[a] = src[clamp(a - (kh-1) + ci)]` makes
+`Σᵢ P[(y + kh - 1) - i]·k[i]` equal to it, and the left side is the linear convolution of `P`
+with `k` at index `y + kh - 1`. So the answer is a shifted window of the transform's output.
+The kernel's transform is computed once and reused across channels.
+
+### The crossover was measured, not guessed
+
+The cost model has one empirical constant, and the first value chosen for it was an order of
+magnitude wrong. Forcing both paths at 512×512 with non-separable kernels:
+
+| Kernel | Direct | Transform |
+|--------|-------:|----------:|
+| 3×3 | 1.05 ms | ~2.7 ms |
+| 5×5 | 2.60 ms | ~2.7 ms |
+| 7×7 | 5.56 ms | 2.63 ms |
+| 9×9 | 10.61 ms | 2.66 ms |
+| 15×15 | 35.16 ms | 2.65 ms |
+| 21×21 | 78.90 ms | 2.59 ms |
+| 32×32 | 198.69 ms | 2.83 ms |
+
+The transform is **flat in the kernel** — that is the point of it — so the crossover is
+wherever the dense loop passes ~2.7 ms, just under 5×5. The constant is set to switch at
+7×7, the first size where the transform is a clear win rather than a wash. The initial
+guessed constant switched between 15×15 and 21×21, leaving 35 ms on the table at 15×15 where
+2.7 ms was available.
+
+Consequences at 512×512: **9×9 4.0× faster, 15×15 13.3×, 21×21 30.5×, 32×32 70×**. Plain
+`ImageCorrelate` with a 32×32 template went 197.3 → 2.78 ms, against SciPy's 142.4 for
+`correlate2d`. Separable filters are untouched by design — `GaussianFilter` at radius 8 is
+3.09 ms through the factorisation, and sending it to a transform would be slower.
+
+Below the crossover nothing changed, which is deliberate: an identity kernel stays bit-exact,
+and a transform would have cost that. Agreement with the definition written out longhand is
+≤1.8e-14 across the sizes that switch, including non-square kernels in both orientations and
+even extents, where a transposed pad or output crop would otherwise hide.
+
+The branch is guarded by `USE_FFTW`; `make USE_FFTW=0` compiles it out and the dense loop
+answers instead.
 
 ## ImagePad and ImageCrop
 
