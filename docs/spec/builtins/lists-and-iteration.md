@@ -539,9 +539,21 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   compare the elements themselves, so rationals with bigint components work:
   `FindClusters[{1/10^25, 2/10^25, 1}, 2]` is
   `{{1/10000000000000000000000000, 1/5000000000000000000000000}, {1}}`.
-- Returns unevaluated for an empty list, a non-`List` argument, a nested list, a
-  visible `NDArray`, a non-numeric element, a count that is not a positive
-  integer or `UpTo[k]`, or a method incompatible with the count mode.
+- **A visible `NDArray` is accepted**, at rank 1 (scalars) or rank 2 (points), and
+  gives the same partition as the equivalent `List`:
+  `FindClusters[NDArray[{1., 2., 10.}]]` is `{{1., 2.}, {10.}}`. It is
+  materialised on the way in rather than read as a buffer, because the exact
+  spanning tree, the exact boundary set and the emitted clusters all work on the
+  input elements themselves — and that exactness is why one-dimensional answers
+  are exact. Nothing is given up in speed: every value in an `NDArray` is machine
+  by construction, so the machine spanning-tree builder runs, the same one a
+  machine `List` takes. A *packed* list needs no special handling — the
+  transparency gate materialises it before the builtin sees it, which is why only
+  the visible surface needed a guard. Rank 3 and above still decline: a
+  list-valued component is not a coordinate.
+- Returns unevaluated for an empty list, a non-`List` argument, a nested list, an
+  `NDArray` of rank 3 or more, a non-numeric element, a count that is not a
+  positive integer or `UpTo[k]`, or a method incompatible with the count mode.
 - **Symbolic elements are declined**, not clustered. Mathematica treats them as
   nominal features and answers `FindClusters[{1, a, 3}, 2]` with `{{a}, {1, 3}}`;
   this implementation is numeric-only.

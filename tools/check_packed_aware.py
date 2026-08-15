@@ -31,6 +31,7 @@ EXEMPT below WITH A REASON. An unexplained absence is an error.
 Usage:  python3 tools/check_packed_aware.py        (exit 1 on a finding)
         make check-packed-aware
 """
+
 import os
 import re
 import sys
@@ -45,25 +46,24 @@ SRC = os.path.join(ROOT, "src")
 # ---------------------------------------------------------------------------
 EXEMPT = {
     "List": "enforces the no-nesting invariant -- a buffer must never sit inside "
-            "a plain List, which is what keeps the gate an O(argc) top-level scan",
+    "a plain List, which is what keeps the gate an O(argc) top-level scan",
     # Floor / Ceiling / Round / IntegerPart / Sign were exempt here until
     # 2026-07-30 for want of a narrowing float64->int64 kernel category. They
     # have one now (NDUnaryKernel.to_int), are off NOT_AWARE, and answer with the
     # exact Integers the List path does -- so they are no longer exceptions.
     "Im": "projection kernel (to_real), so a real input yields a real 0.0 where "
-          "the List gives the exact Integer 0; it needs the narrowing treatment "
-          "Floor and friends got, which its to_real category cannot express",
+    "the List gives the exact Integer 0; it needs the narrowing treatment "
+    "Floor and friends got, which its to_real category cannot express",
     "Clip": "clamps to the EXACT bounds, so a clipped element comes back Integer",
     "Precision": "Listable here, so the list answers per element and a buffer "
-                 "path would answer with one scalar",
+    "path would answer with one scalar",
     "Accuracy": "as Precision",
-
     # Surfaced by this script on 2026-07-30 and then REJECTED by a differential
     # sweep: each answers differently for a buffer than for the same value as a
     # plain List. The observed difference is recorded so nobody re-litigates it.
     "Chop": "replaces a negligible element with the EXACT Integer 0, so "
-            "Chop[{1.*^-14, 1.}] is {0, 1.} and a float64 buffer makes it "
-            "{0., 1.} -- the Floor class again",
+    "Chop[{1.*^-14, 1.}] is {0, 1.} and a float64 buffer makes it "
+    "{0., 1.} -- the Floor class again",
     # Quotient was exempt here until 2026-08-01 for want of a BINARY narrowing
     # kernel: real in, exact Integer out, which NDBinaryKernel could not express,
     # so Quotient[{1.,2.,3.,4.}, 2] gave {0.,1.,1.,2.} on the buffer against
@@ -71,17 +71,17 @@ EXEMPT = {
     # NDUnaryKernel and Quotient supplies both arms, so it is no longer an
     # exception -- and neither is Mod, which supplies the int64 arm.
     "LeafCount": "counts a packed list as ONE node (1 against 5 for a "
-                 "4-element vector), which would perturb Simplify's complexity "
-                 "metric -- the reason it was excluded by design",
+    "4-element vector), which would perturb Simplify's complexity "
+    "metric -- the reason it was excluded by design",
     "Series": "has no NDArray handling; the call stays unevaluated either way, "
-              "but the packed form prints its argument differently",
+    "but the packed form prints its argument differently",
     "SortBy": "its NDArray path does not sort -- SortBy[buffer, Abs] returns the "
-              "input unchanged. A live gap on the VISIBLE NDArray surface too, "
-              "but fixing it is a sort change, not a packing one",
+    "input unchanged. A live gap on the VISIBLE NDArray surface too, "
+    "but fixing it is a sort change, not a packing one",
     "ReverseSortBy": "delegates to SortBy, so it inherits that gap",
     "MinimalBy": "flagged only by this script's intra-file call-graph "
-                 "propagation from src/sort.c; maximal_minimal_by walks "
-                 "data.function.args directly and has no NDArray handling at all",
+    "propagation from src/sort.c; maximal_minimal_by walks "
+    "data.function.args directly and has no NDArray handling at all",
     "MaximalBy": "as MinimalBy",
     # The pattern-matching family, added 2026-08-01. Each gained an is_ndarray
     # test in src/patterns.c -- but it is a MATERIALISE guard, not a fast path:
@@ -92,31 +92,43 @@ EXEMPT = {
     # been right. This is the marker heuristic's other blind spot -- it cannot
     # tell "reads the buffer" from "refuses the buffer".
     "Cases": "is_ndarray in patterns.c is a materialise guard for the VISIBLE "
-             "surface, not a fast path; the packed form must keep being "
-             "materialised by the gate",
+    "surface, not a fast path; the packed form must keep being "
+    "materialised by the gate",
     "MemberQ": "as Cases",
     "Count": "as Cases",
     "Position": "as Cases",
     "FirstCase": "as Cases",
     "DeleteCases": "as Cases",
     "FreeQ": "as Cases, in funcprog.c",
-
     "FlattenAt": "its is_ndarray in src/list/flatten_at.c is a materialise "
-                 "guard, not a fast path: a visible NDArray is atomic so the "
-                 "position walker cannot descend into it, and flattening one "
-                 "row of a rectangular array yields a RAGGED list that must "
-                 "never be repacked (unlike MapAt, whose result stays "
-                 "rectangular). Must NOT go on AWARE -- it has no buffer path "
-                 "to reach, and opting in would stop the gate materialising a "
-                 "packed-List argument, which is exactly the plain args[] the "
-                 "walker needs",
-
+    "guard, not a fast path: a visible NDArray is atomic so the "
+    "position walker cannot descend into it, and flattening one "
+    "row of a rectangular array yields a RAGGED list that must "
+    "never be repacked (unlike MapAt, whose result stays "
+    "rectangular). Must NOT go on AWARE -- it has no buffer path "
+    "to reach, and opting in would stop the gate materialising a "
+    "packed-List argument, which is exactly the plain args[] the "
+    "walker needs",
+    "FindClusters": "its is_ndarray in src/list/find_clusters.c is a materialise "
+    "guard for the VISIBLE surface, not a fast path. Everything "
+    "downstream is Expr-centric and not incidentally so: the exact "
+    "MST orders Rationals and bigints through internal_subtract, "
+    "the boundary set compares ELEMENTS because 2^60 and 2^60+1 "
+    "are distinct yet project to the same double, and the result "
+    "is built from the input elements themselves -- that exactness "
+    "is why one-dimensional answers are exact. Must NOT go on "
+    "AWARE: opting in would stop the gate materialising a packed "
+    "List, which is exactly the plain args[] all of that needs. "
+    "Machine speed is already had without it -- every value in an "
+    "NDArray is machine by construction, so fc_all_machine is true "
+    "and fc_build_mst_machine runs, the same builder a machine "
+    "List takes",
     "Sum": "HoldAll, so a packed value never arrives as a top-level ARGUMENT -- "
-           "the gate has nothing to materialise. Its is_ndarray call is a probe "
-           "on the already-evaluated body (sum_body_is_array, which decides "
-           "whether the closed-form stage is worth attempting), not a dispatch "
-           "on an argument. This is the marker heuristic's blind spot: it cannot "
-           "tell 'notices the tag' from 'dispatches on the tag'",
+    "the gate has nothing to materialise. Its is_ndarray call is a probe "
+    "on the already-evaluated body (sum_body_is_array, which decides "
+    "whether the closed-form stage is worth attempting), not a dispatch "
+    "on an argument. This is the marker heuristic's blind spot: it cannot "
+    "tell 'notices the tag' from 'dispatches on the tag'",
 }
 
 
@@ -137,10 +149,16 @@ def all_sources():
 def builtin_registry():
     """builtin C function name -> registered Mathilda head name."""
     reg = {}
-    pat = re.compile(r'symtab_add_builtin\(\s*"([A-Za-z$][A-Za-z0-9$]*)"\s*,\s*'
-                     r'([A-Za-z_][A-Za-z0-9_]*)\s*\)', re.S)
-    pat_sym = re.compile(r'symtab_add_builtin\(\s*SYM_([A-Za-z0-9_]+)\s*,\s*'
-                         r'([A-Za-z_][A-Za-z0-9_]*)\s*\)', re.S)
+    pat = re.compile(
+        r'symtab_add_builtin\(\s*"([A-Za-z$][A-Za-z0-9$]*)"\s*,\s*'
+        r"([A-Za-z_][A-Za-z0-9_]*)\s*\)",
+        re.S,
+    )
+    pat_sym = re.compile(
+        r"symtab_add_builtin\(\s*SYM_([A-Za-z0-9_]+)\s*,\s*"
+        r"([A-Za-z_][A-Za-z0-9_]*)\s*\)",
+        re.S,
+    )
     for path in all_sources():
         text = read(path)
         for name, fn in pat.findall(text):
@@ -150,7 +168,7 @@ def builtin_registry():
     return reg
 
 
-FN_DEF = re.compile(r'^(?:static\s+)?Expr\*\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(', re.M)
+FN_DEF = re.compile(r"^(?:static\s+)?Expr\*\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(", re.M)
 
 # Evidence, inside a builtin's body, that the head has an NDArray fast path.
 #
@@ -172,7 +190,7 @@ DISPATCH_MARKERS = (
 )
 
 
-CALL = re.compile(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+CALL = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 
 
 def heads_with_fast_paths(reg):
@@ -228,7 +246,7 @@ def kernel_heads():
     # NOT line-anchored: ndkernels_init packs several per line
     # (`REG_U(Floor); REG_U(Ceiling); REG_U(Round);`), and anchoring found only
     # the first of each, which reported the rest as stale NOT_AWARE entries.
-    macro = re.compile(r'REG_[UB]\(\s*([A-Za-z0-9_]+)')
+    macro = re.compile(r"REG_[UB]\(\s*([A-Za-z0-9_]+)")
     for path in all_sources():
         text = read(path)
         out.update(pat.findall(text))
@@ -247,7 +265,7 @@ def strip_comments(text):
 
 def string_list(text, varname):
     """Parse `static const char* const VARNAME[] = { "A", "B", ... };`."""
-    m = re.search(r'\b' + varname + r'\s*\[\s*\]\s*=\s*\{(.*?)\}\s*;', text, re.S)
+    m = re.search(r"\b" + varname + r"\s*\[\s*\]\s*=\s*\{(.*?)\}\s*;", text, re.S)
     if not m:
         return None
     return set(re.findall(r'"([^"]+)"', strip_comments(m.group(1))))
@@ -259,8 +277,11 @@ def main():
     not_aware = string_list(pack_c, "NOT_AWARE")
     int64_ok = string_list(pack_c, "INT64_OK")
     if aware is None or not_aware is None or int64_ok is None:
-        print("ERROR: could not parse the AWARE / NOT_AWARE / INT64_OK lists in "
-              "src/pack.c -- has their shape changed?", file=sys.stderr)
+        print(
+            "ERROR: could not parse the AWARE / NOT_AWARE / INT64_OK lists in "
+            "src/pack.c -- has their shape changed?",
+            file=sys.stderr,
+        )
         return 2
 
     reg = builtin_registry()
@@ -284,7 +305,8 @@ def main():
             f"{head}: has an NDArray fast path ({marker} in {path}) but is not in\n"
             f"    src/pack.c's AWARE list, so the gate materialises the buffer "
             f"before it can be used.\n"
-            f"    Add it to AWARE, or add it to EXEMPT in this script with a reason.")
+            f"    Add it to AWARE, or add it to EXEMPT in this script with a reason."
+        )
 
     # (2) INT64_OK implies packed_aware; an entry that is not aware does nothing.
     for head in sorted(int64_ok - effective_aware):
@@ -292,22 +314,29 @@ def main():
             continue
         problems.append(
             f"{head}: is in INT64_OK but not in AWARE. INT64_OK is the narrower "
-            f"claim and\n    has no effect without the broader one.")
+            f"claim and\n    has no effect without the broader one."
+        )
 
     # (3) A head cleared by NOT_AWARE with no registered kernel has nothing to
     #     clear. That is harmless (clearing an unset bit is a no-op) and is
     #     sometimes deliberate belt-and-braces, so it is reported as a NOTE
     #     rather than a failure -- but it is worth seeing, because it also
     #     describes an entry that has drifted away from the code it guards.
-    notes = [f"{h}: in NOT_AWARE but has no registered ND kernel -- the clear is "
-             f"a no-op (defensive, or stale)"
-             for h in sorted(not_aware - kernels)]
+    notes = [
+        f"{h}: in NOT_AWARE but has no registered ND kernel -- the clear is "
+        f"a no-op (defensive, or stale)"
+        for h in sorted(not_aware - kernels)
+    ]
 
-    print(f"scanned {len(reg)} registered builtins; "
-          f"{len(fast)} have an NDArray dispatch, "
-          f"{len(kernels)} have an ND kernel")
-    print(f"AWARE={len(aware)}  NOT_AWARE={len(not_aware)}  INT64_OK={len(int64_ok)}  "
-          f"EXEMPT={len(EXEMPT)}")
+    print(
+        f"scanned {len(reg)} registered builtins; "
+        f"{len(fast)} have an NDArray dispatch, "
+        f"{len(kernels)} have an ND kernel"
+    )
+    print(
+        f"AWARE={len(aware)}  NOT_AWARE={len(not_aware)}  INT64_OK={len(int64_ok)}  "
+        f"EXEMPT={len(EXEMPT)}"
+    )
 
     for n in notes:
         print("  note: " + n)
@@ -316,12 +345,15 @@ def main():
         print("\npacked-aware audit FAILED:\n", file=sys.stderr)
         for p in problems:
             print("  " + p + "\n", file=sys.stderr)
-        print(f"{len(problems)} problem(s). See docs/design/packed_arrays.md.",
-              file=sys.stderr)
+        print(
+            f"{len(problems)} problem(s). See docs/design/packed_arrays.md.",
+            file=sys.stderr,
+        )
         return 1
 
-    print("OK: every head with an NDArray fast path opts in (or is exempt with a "
-          "reason).")
+    print(
+        "OK: every head with an NDArray fast path opts in (or is exempt with a reason)."
+    )
     return 0
 
 

@@ -180,10 +180,23 @@ export function createNotebook() {
       });
     },
 
+    /** Change a cell's type, keeping its output.
+     *
+     *  This used to clear `output` and `execIdx`, which made retyping a
+     *  destructive act: a code cell with a result on screen lost it, silently,
+     *  and switching back gave you an empty cell. That was tolerable while the
+     *  only way to retype was a 12px badge in the gutter; it is not now that the
+     *  toolbar's cell-style control puts it one click away.
+     *
+     *  Keeping the output costs nothing. Only code cells render an output area,
+     *  so a retained result is invisible on a text or heading cell, and
+     *  serialize() persists only {type, source} so nothing extra reaches disk.
+     *  Switching code -> text -> code now restores the result instead of
+     *  discarding it. */
     setCellType(id: string, type: CellType) {
       update(rows => rows.map(row => ({
         ...row,
-        cells: row.cells.map(c => c.id === id ? { ...c, type, output: [], execIdx: undefined } : c),
+        cells: row.cells.map(c => c.id === id ? { ...c, type } : c),
       })));
     },
 

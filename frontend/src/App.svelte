@@ -10,10 +10,12 @@
   import { listen } from '@tauri-apps/api/event';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import Canvas from './lib/Canvas.svelte';
-  import KernelStatus from './lib/KernelStatus.svelte';
+  import Toolbar from './lib/Toolbar.svelte';
   import { kernelStatus } from './lib/notebook';
-  import { pingKernel, restartKernel, saveLibrary, loadLibrary, setWindowTitle as setTitleCmd } from './lib/ipc';
-  import { serializeLibrary, loadLibraryData, canvasState, focusedActions, setFocused } from './lib/canvas';
+  import { darkMode } from './lib/theme';
+  import { pingKernel, saveLibrary, loadLibrary, setWindowTitle as setTitleCmd } from './lib/ipc';
+  import { restart, abortEvaluation } from './lib/kernelActions';
+  import { serializeLibrary, loadLibraryData, canvasState, activeActions, activeFlags, setFocused } from './lib/canvas';
   /* Imported for its side effect: installs the document-level Cmd+click
      handler that opens a symbol's reference page. Importing it here rather
      than relying on a cell to pull it in means the gesture works from the
@@ -21,9 +23,9 @@
   import './lib/refpages';
 
   // ---------------------------------------------------------------------------
-  // Dark mode (default to dark — canvas is always dark)
+  // Dark mode. The store lives in lib/theme.ts so the toolbar and the
+  // properties panel can reach it; the DOM write stays here.
 
-  const darkMode = writable(true);
   /* Set BOTH classes, not just .light: app.css keys its palette off
      :root:not(.light) inside the dark media query and :root.dark outside it,
      so an explicit choice has to be stated in whichever direction it differs
@@ -33,9 +35,12 @@
     document.documentElement.classList.toggle('dark', $darkMode);
   }
 
-  /* Title of the notebook currently filling the window, for the app bar. */
-  $: focusedTitle = $canvasState.focusedId
-    ? ($canvasState.notebooks.find(n => n.id === $canvasState.focusedId)?.title ?? '')
+  /* Title of the ACTIVE pane, for the app bar. With one pane that is the
+     notebook filling the window, as before; with several it names the one the
+     bar's own buttons will act on, which is the cheapest and strongest signal
+     available that the toolbar has a target. */
+  $: focusedTitle = $canvasState.focusedActiveId
+    ? ($canvasState.notebooks.find(n => n.id === $canvasState.focusedActiveId)?.title ?? '')
     : '';
 
   // ---------------------------------------------------------------------------
@@ -61,7 +66,7 @@
       unlisten.push(await listen('menu:save',        () => saveFile()));
       unlisten.push(await listen('menu:save-as',     () => saveFileAs()));
       unlisten.push(await listen('menu:restart',     () => restart()));
-      unlisten.push(await listen('menu:interrupt',   () => {}));
+      unlisten.push(await listen('menu:interrupt',   () => abortEvaluation()));
       unlisten.push(await listen('menu:toggle-dark', () => darkMode.update(v => !v)));
     } catch (e) { console.warn('Menu listen error:', e); }
   });
@@ -122,11 +127,9 @@
   // ---------------------------------------------------------------------------
   // Kernel restart
 
-  async function restart() {
-    kernelStatus.set('restarting');
-    try { await restartKernel(); kernelStatus.set('ready'); }
-    catch { kernelStatus.set('dead'); }
-  }
+  /* restart() and abortEvaluation() live in lib/kernelActions.ts so the
+     toolbar's kernel menu drives exactly the same paths as the native Kernel
+     menu. Two implementations of "abort" is how one of them ends up wrong. */
 
   // ---------------------------------------------------------------------------
   // Global UI scale (Cmd+= zoom in, Cmd+- zoom out, Cmd+0 reset)
@@ -152,48 +155,29 @@
 <!-- Full-viewport canvas -->
 <Canvas />
 
-<!-- App bar: owns the app name, the focused notebook's name, and the theme
-     toggle. The toggle used to float over the canvas at top-right, which put
-     it on top of a full-screen card's own toolbar. -->
-<div class="app-bar">
-  {#if $canvasState.focusedId}
-    <!-- The full-screen card's controls. Same icons in the same order as a
-         card's own toolbar on the canvas, so the row does not reshuffle when a
-         notebook is zoomed in; only the full-screen icon flips to its inverse,
-         because that is the one action whose meaning reverses. -->
-    <button class="tb-btn tb-run-all" title="Run all cells"
-            on:click={() => $focusedActions?.runAll()}>▶▶</button>
-    <button class="tb-btn"
-            title={$focusedActions?.horizontal ? 'Vertical layout' : 'Horizontal layout'}
-            on:click={() => $focusedActions?.toggleLayout()}
-    >{$focusedActions?.horizontal ? '↕' : '⇄'}</button>
-    {#if $focusedActions?.hasSections}
-      <button class="tb-btn"
-              title={$focusedActions?.allSectionsCollapsed ? 'Expand all sections' : 'Collapse all sections'}
-              on:click={() => $focusedActions?.toggleAllSections()}
-      >{$focusedActions?.allSectionsCollapsed ? '⌄' : '⌃'}</button>
-    {/if}
-    <button class="tb-btn" title="Rename"
-            on:click={() => $focusedActions?.rename()}>✎</button>
-    <button class="tb-btn tb-focus" title="Back to canvas (pinch out)"
-            on:click={() => setFocused(null)}>⤡</button>
-    <button class="tb-btn" title="Collapse / expand"
-            on:click={() => $focusedActions?.toggleCollapse()}
-    >{$focusedActions?.collapsed ? '⊟' : '⊞'}</button>
-    <button class="tb-btn tb-close" title="Close"
-            on:click={() => $focusedActions?.close()}>✕</button>
+<!-- App bar. Two quite different things share this strip:
+
+     On the canvas it is a 34px name-and-theme strip.
+
+     In focused mode it becomes the notebook toolbar — labelled, ruled groups at
+     46px. Two heights rather than one reactive variable, because making
+     --appbar-h itself change would put a JS style write in the middle of the
+     {#if} branch swap between .canvas-stage and .focused-view, and would drag
+     .canvas-stage into a change it has no stake in. -->
+<div class="app-bar" class:toolbar-mode={$canvasState.focusedIds.length > 0}>
+  {#if $canvasState.focusedIds.length}
+    <Toolbar />
   {:else}
     <span class="app-bar-name">Mathilda</span>
+    <span class="dark-toggle-spacer"></span>
+    <button
+      class="dark-toggle"
+      title="Toggle dark mode"
+      on:click={() => darkMode.update(v => !v)}
+    >
+      {$darkMode ? '◑' : '☀'}
+    </button>
   {/if}
-  {#if focusedTitle}<span class="app-bar-focus">{focusedTitle}</span>{/if}
-  <span class="dark-toggle-spacer"></span>
-  <button
-    class="dark-toggle"
-    title="Toggle dark mode"
-    on:click={() => darkMode.update(v => !v)}
-  >
-    {$darkMode ? '◑' : '☀'}
-  </button>
 </div>
 
 <!-- Kernel dead banner -->
@@ -220,6 +204,24 @@
     --gutter-hover:rgba(255,255,255,0.03);
     --card-bg:     rgba(12,15,28,0.85);
     --card-border: rgba(255,255,255,0.08);
+
+    /* Toolbar / menu surfaces.
+       --surface-2 was referenced at .app-bar .tb-btn:hover with NO fallback and
+       defined nowhere in the tree, so the app bar's hover state was a literal
+       no-op. RefPage.svelte referenced it in five more places. Defining it here
+       rather than in app.css because App.svelte's :global(:root) owns the
+       surface palette and wins by load order anyway. */
+    --surface-2:   rgba(255,255,255,0.055);   /* hover / raised fill */
+    --surface-3:   rgba(255,255,255,0.10);    /* pressed / active toggle */
+    --tb-rule:     rgba(255,255,255,0.09);    /* group divider, subtler than --border */
+    --tb-caption:  #6c7086;                   /* group caption, dimmer than --text-dim */
+    --menu-bg:     rgba(18,21,34,0.98);
+    --menu-border: rgba(255,255,255,0.10);
+    --menu-shadow: 0 10px 32px rgba(0,0,0,0.55);
+    /* --ok was only ever used as a var() fallback; --err was hardcoded. */
+    --ok:          #4ade80;
+    --warn:        #fab387;
+    --err:         #f38ba8;
   }
   :global(body) { background: #050810; }
 
@@ -238,6 +240,17 @@
     --gutter-hover:#e4e5f0;
     --card-bg:     #f8f8fc;
     --card-border: rgba(0,0,0,0.08);
+
+    --surface-2:   rgba(0,0,0,0.045);
+    --surface-3:   rgba(0,0,0,0.085);
+    --tb-rule:     rgba(0,0,0,0.10);
+    --tb-caption:  #8a8a9e;
+    --menu-bg:     #ffffff;
+    --menu-border: rgba(0,0,0,0.12);
+    --menu-shadow: 0 10px 32px rgba(0,0,0,0.18);
+    --ok:          #16a34a;
+    --warn:        #d97706;
+    --err:         #dc2626;
   }
   :global(html.light body) { background: #1a1b2e; }
 
@@ -263,9 +276,21 @@
     background: var(--bg);
     border-bottom: 1px solid var(--border);
     z-index: 200;
+    /* The toolbar is a row of fixed-height groups; nothing here may wrap. */
+    overflow: hidden;
     /* Nothing here should swallow a drag meant for the window chrome. */
     user-select: none;
     -webkit-user-select: none;
+  }
+
+  /* Focused mode: taller, and its own padding in px rather than rem. The bar is
+     a fixed height full of fixed-px content, so rem padding would push the
+     groups out of it once Cmd+= scales the root font size. */
+  .app-bar.toolbar-mode {
+    height: var(--toolbar-h, 46px);
+    gap: 0;
+    padding: 0 8px;
+    align-items: stretch;
   }
 
   .app-bar-name {
@@ -274,36 +299,9 @@
     letter-spacing: 0.01em;
   }
 
-  /* Centred independently of the flanking items, so the notebook name sits in
-     the middle of the WINDOW rather than the middle of the leftover space. */
-  .app-bar-focus {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    font: 500 0.78rem/1 var(--sans);
-    color: var(--text);
-    max-width: 50vw;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  /* Same visual language as the card toolbar these came from. */
-  .app-bar .tb-btn {
-    background: none;
-    border: 1px solid transparent;
-    border-radius: 5px;
-    color: var(--text);
-    font-size: 0.8rem;
-    line-height: 1;
-    padding: 0.18rem 0.36rem;
-    cursor: pointer;
-  }
-  .app-bar .tb-btn:hover { background: var(--surface-2); color: var(--text-h); }
-  .app-bar .tb-run-all { color: var(--ok, #4ade80); }
-  /* Match the card toolbar's accents rather than position-based ones. */
-  .app-bar .tb-focus { color: var(--accent, #89b4fa); }
-  .app-bar .tb-close:hover { color: #f38ba8; }
+  /* The centred title and the seven glyph buttons that used to live here now
+     belong to Toolbar.svelte, which owns its own styles. A centred overlay title
+     cannot coexist with a full-width row of groups. */
 
   .dark-toggle-spacer { flex: 1; }
 

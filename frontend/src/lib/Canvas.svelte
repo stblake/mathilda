@@ -12,8 +12,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
+  import type { FocusLayout } from './canvas';
   import NotebookCard from './NotebookCard.svelte';
   import Minimap from './Minimap.svelte';
+  import StatusBar from './StatusBar.svelte';
+  import { showStatusBar } from './status';
   import { isTouchDevice } from './platform';
   import {
     canvasState,
@@ -22,6 +25,15 @@
     setFocused,
     loadStartupContent,
     setStageOrigin,
+    removePane,
+    addPaneToFocus,
+    setFocusLayout,
+    splitWithNext,
+    openPanes,
+    MAX_PANES,
+    setFocusedActive,
+    setFocusedSizes,
+    setFocusedGrid,
   } from './canvas';
 
   // ---------------------------------------------------------------------------
@@ -238,7 +250,9 @@
       // to stop browser from zooming the page.
       e.preventDefault();
       const factor = 1 - e.deltaY * 0.008;
-      if (factor < 1 && $canvasState.focusedId) { setFocused(null); return; }
+      /* Pinch out leaves focused mode entirely, however many panes are open —
+         it is the one gesture that means "zoom out of this whole thing". */
+      if (factor < 1 && $canvasState.focusedIds.length) { setFocused(null); return; }
       const rect = canvasEl?.getBoundingClientRect();
       if (!rect) return;
       const cx = e.clientX - rect.left;
@@ -466,8 +480,41 @@
   function onKeydown(e: KeyboardEvent) {
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key === '0') { e.preventDefault(); fitAll(); return; }
+
+    /* Splitting from the keyboard. Works from inside a cell -- these are the
+       shortcuts you reach for mid-edit, so requiring the caret to be outside an
+       editor first would defeat them. Backslash rather than a letter because
+       every plain Cmd+letter is either taken here or by the native menu. */
+    if (mod && (e.key === '\\' || e.code === 'Backslash')) {
+      e.preventDefault();
+      const layout: FocusLayout = e.shiftKey ? 'v' : 'h';
+      if ($canvasState.focusedIds.length === 0) {
+        /* From the canvas: open the selection if there is one, else the card on
+           top, and split it with the next notebook. */
+        const sel = $canvasState.selectedIds;
+        if (sel.length >= 2) { openPanes(sel, layout); return; }
+        const seed = sel[0] ?? $canvasState.activeId ?? $canvasState.notebooks[0]?.id;
+        if (!seed) return;
+        setFocused(seed);
+      }
+      splitWithNext(layout);
+      return;
+    }
+
+    /* Open the rubber-band selection side by side. Enter is safe here only
+       because this branch requires the caret to be outside any editor. */
+    if (!mod && e.key === 'Enter' && !$canvasState.focusedIds.length
+        && $canvasState.selectedIds.length >= 2) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.cm-editor') && !target.isContentEditable) {
+        e.preventDefault();
+        openPanes($canvasState.selectedIds, 'h');
+        return;
+      }
+    }
+
     // 'N' key (no modifier) when not in an editor → add notebook at centre
-    if (!mod && !e.shiftKey && e.key === 'n' && !$canvasState.focusedId) {
+    if (!mod && !e.shiftKey && e.key === 'n' && !$canvasState.focusedIds.length) {
       const target = e.target as HTMLElement;
       if (!target.closest('.cm-editor') && !target.isContentEditable) {
         e.preventDefault();
@@ -546,6 +593,119 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Tiled focused view
+
+  let focusRootEl: HTMLElement;
+
+  $: fIds    = $canvasState.focusedIds;
+  $: fLayout = $canvasState.focusedLayout;
+  /* filter(Boolean) guards the frame between a notebook being removed and
+     normalizeFocus dropping its id. */
+  $: fPanes  = fIds
+       .map(id => $canvasState.notebooks.find(n => n.id === id))
+       .filter(Boolean) as import('./canvas').CanvasNotebook[];
+
+  /** Divider thickness in px. Its own grid track, so it takes real space rather
+   *  than overlapping a pane. */
+  const DIV = 10;
+  /** A pane narrower than this is not usefully editable. */
+  const MIN_PANE_PX = 240;
+
+  /* Sizes come from drag-local state while a drag is in flight, so a 60Hz
+     pointermove does not write the canvas store 60 times a second and
+     invalidate every card, cell and the minimap along with it. */
+  let dragKind: number | 'gx' | 'gy' | null = null;
+  let dragSizes: number[] | null = null;
+  let dragGrid: { x: number; y: number } | null = null;
+
+  $: sizes   = dragSizes ?? $canvasState.focusedSizes;
+  $: gridPos = dragGrid  ?? $canvasState.focusedGrid;
+
+  /* Panes and dividers are both grid items: N sizes interleaved with N-1 fixed
+     tracks. Using fr means the fixed px are subtracted automatically instead of
+     pushing the total past 100%. */
+  $: flowTemplate = sizes.length
+    ? sizes.map(p => `minmax(0, ${Math.max(p, 0.001)}fr)`).join(` ${DIV}px `)
+    : 'minmax(0, 1fr)';
+
+  $: containerStyle =
+      fLayout === 'grid'
+        ? `grid-template-columns: minmax(0, ${gridPos.x}fr) ${DIV}px minmax(0, ${100 - gridPos.x}fr);` +
+          `grid-template-rows: minmax(0, ${gridPos.y}fr) ${DIV}px minmax(0, ${100 - gridPos.y}fr);`
+      : fLayout === 'h'
+        ? `grid-template-columns: ${flowTemplate}; grid-template-rows: minmax(0, 1fr);`
+        : `grid-template-rows: ${flowTemplate}; grid-template-columns: minmax(0, 1fr);`;
+
+  /** Which grid cell a pane occupies. With three panes the third spans the
+   *  bottom row, so the layout has no empty quadrant. */
+  function gridArea(i: number, n: number): string {
+    if (i === 0) return 'grid-column: 1; grid-row: 1;';
+    if (i === 1) return 'grid-column: 3; grid-row: 1;';
+    if (i === 2) return n === 3 ? 'grid-column: 1 / -1; grid-row: 3;' : 'grid-column: 1; grid-row: 3;';
+    return 'grid-column: 3; grid-row: 3;';
+  }
+
+  /* Activation is pointerdown in the CAPTURE phase, mirroring how canvas cards
+     are raised: capture runs before CodeMirror's own mouse handling and before
+     the several |stopPropagation handlers inside a card, so it cannot be
+     swallowed. `focusin` covers the keyboard and programmatic paths (Tab, or the
+     card moving the caret itself), since focus does not bubble but focusin does.
+     Deliberately not hover: with four panes, a mouse travelling to the toolbar
+     would re-target it en route, and Run would fire on the wrong notebook. */
+  function activatePane(id: string) {
+    if (get(canvasState).focusedActiveId === id) return;   // no store write per click
+    setFocusedActive(id);
+  }
+
+  function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
+
+  function onDividerDown(e: PointerEvent, kind: number | 'gx' | 'gy') {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragKind  = kind;
+    dragSizes = [...get(canvasState).focusedSizes];
+    dragGrid  = { ...get(canvasState).focusedGrid };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onDividerMove(e: PointerEvent) {
+    if (dragKind === null || !focusRootEl) return;
+    e.stopPropagation();
+    const r = focusRootEl.getBoundingClientRect();
+    const alongX = dragKind === 'gx' || (typeof dragKind === 'number' && fLayout === 'h');
+    const extent = alongX ? r.width : r.height;
+    if (extent <= 0) return;
+    const pos    = alongX ? e.clientX - r.left : e.clientY - r.top;
+    const pct    = (pos / extent) * 100;
+    const minPct = (MIN_PANE_PX / extent) * 100;
+
+    if (dragKind === 'gx')      dragGrid = { ...gridPos, x: clamp(pct, minPct, 100 - minPct) };
+    else if (dragKind === 'gy') dragGrid = { ...gridPos, y: clamp(pct, minPct, 100 - minPct) };
+    else {
+      /* Divider i moves only the boundary between pane i and i+1: the two trade
+         against each other, so the total stays 100 with no renormalise pass and
+         the panes you are not touching hold still. */
+      const i = dragKind;
+      const base = dragSizes ?? [];
+      const before = base.slice(0, i).reduce((a, b) => a + b, 0);
+      const pair   = (base[i] ?? 0) + (base[i + 1] ?? 0);
+      const want   = clamp(pct - before, Math.min(minPct, pair / 2), Math.max(pair - minPct, pair / 2));
+      const next = [...base];
+      next[i] = want;
+      next[i + 1] = pair - want;
+      dragSizes = next;
+    }
+  }
+
+  function onDividerUp() {
+    if (dragKind === null) return;
+    if (dragKind === 'gx' || dragKind === 'gy') setFocusedGrid(dragGrid!);
+    else if (dragSizes) setFocusedSizes(dragSizes);
+    dragKind = null; dragSizes = null; dragGrid = null;
+  }
+
+  // ---------------------------------------------------------------------------
   // Dot grid (reacts to animated pan/zoom)
 
   $: dotSpacing = 28 * zoom;
@@ -558,17 +718,89 @@
 
 <svelte:window on:keydown={onKeydown} />
 
-{#if $canvasState.focusedId}
-  <!-- ── Focused (full-screen) mode — pinch out to return ── -->
-  {@const fnb = $canvasState.notebooks.find(n => n.id === $canvasState.focusedId)}
-  {#if fnb}
-    <div
-      class="focused-view"
-    >
-      <div class="focused-view-inner">
-        <NotebookCard nb={fnb} currentZoom={1} focused={true} />
+{#if $canvasState.focusedIds.length}
+  <!-- ── Focused mode — 1 to 4 notebooks tiled. Pinch out to return ──
+       A CSS grid, not nested flex: flex handles side-by-side and stacked, but the
+       2x2 would need two levels of nesting, two kinds of divider, and a
+       special case for the 3-pane row that spans. One grid template does all
+       three. Tracks are minmax(0, Nfr) so a pane can shrink below its content's
+       intrinsic width and scroll, instead of pushing the grid past the window. -->
+  <div
+    class="focused-view"
+    class:with-status={$showStatusBar}
+    class:multi={fPanes.length > 1}
+    class:dragging={dragKind !== null}
+    style={containerStyle}
+    bind:this={focusRootEl}
+  >
+    {#each fPanes as fnb, i (fnb.id)}
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div
+        class="focused-pane"
+        class:active={fPanes.length > 1 && fnb.id === $canvasState.focusedActiveId}
+        style={fLayout === 'grid' ? gridArea(i, fPanes.length) : ''}
+        data-pane-id={fnb.id}
+        on:pointerdown|capture={() => activatePane(fnb.id)}
+        on:focusin={() => activatePane(fnb.id)}
+      >
+        {#if fPanes.length > 1}
+          <div class="pane-header">
+            <span class="pane-title">{fnb.title}</span>
+            <button
+              class="pane-close"
+              title="Remove this pane (the notebook stays on the canvas)"
+              tabindex="-1"
+              on:pointerdown|stopPropagation|preventDefault
+              on:click|stopPropagation={() => removePane(fnb.id)}
+            >✕</button>
+          </div>
+        {/if}
+        <div class="focused-view-inner">
+          <NotebookCard nb={fnb} currentZoom={1} focused={true} />
+        </div>
       </div>
-    </div>
+
+      <!-- One divider after every pane but the last, along the flow axis. -->
+      {#if fLayout !== 'grid' && i < fPanes.length - 1}
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div
+          class="pane-divider"
+          class:vertical={fLayout === 'v'}
+          on:pointerdown={(e) => onDividerDown(e, i)}
+          on:pointermove={onDividerMove}
+          on:pointerup={onDividerUp}
+          on:pointercancel={onDividerUp}
+        ></div>
+      {/if}
+    {/each}
+
+    {#if fLayout === 'grid'}
+      <!-- The two crossing dividers. The column one is drawn second and takes
+           the intersection, so a drag there moves one axis rather than both. -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div
+        class="pane-divider vertical grid-row"
+        on:pointerdown={(e) => onDividerDown(e, 'gy')}
+        on:pointermove={onDividerMove}
+        on:pointerup={onDividerUp}
+        on:pointercancel={onDividerUp}
+      ></div>
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div
+        class="pane-divider grid-col"
+        on:pointerdown={(e) => onDividerDown(e, 'gx')}
+        on:pointermove={onDividerMove}
+        on:pointerup={onDividerUp}
+        on:pointercancel={onDividerUp}
+      ></div>
+    {/if}
+  </div>
+
+  <!-- A sibling of the scroller, not a child: a status bar that scrolls away
+       with the notebook is not a status bar. Fixed to the bottom, with
+       .focused-view inset above it by the same height. -->
+  {#if $showStatusBar}
+    <div class="status-dock"><StatusBar /></div>
   {/if}
 {:else}
   <!-- ── Canvas mode ── -->
@@ -629,15 +861,40 @@
       {/each}
     </div>
 
-    <div class="canvas-hints">
-      <button class="hint-new-btn" on:click={addAtCentre}>＋ New Notebook</button>
-      <span class="hint-sep">·</span>
-      <span>dbl-click or right-click canvas</span>
-      <span class="hint-sep">·</span>
-      <span>⌘0 fit · N key</span>
-      <span class="hint-sep">·</span>
-      <span>scroll pan · pinch zoom</span>
-    </div>
+    <!-- With a selection, the hint strip becomes the route into the split view.
+         Rubber-band a few cards and open them together, which is the answer to
+         "how do I get these two side by side" from the canvas. -->
+    {#if $canvasState.selectedIds.length >= 2}
+      <div class="canvas-hints selection-actions">
+        <button class="hint-new-btn" on:click={() => openPanes($canvasState.selectedIds, 'h')}>
+          Open {Math.min($canvasState.selectedIds.length, MAX_PANES)} side by side
+        </button>
+        <button class="hint-new-btn" on:click={() => openPanes($canvasState.selectedIds, 'v')}>
+          Stacked
+        </button>
+        {#if $canvasState.selectedIds.length >= 3}
+          <button class="hint-new-btn" on:click={() => openPanes($canvasState.selectedIds, 'grid')}>
+            2×2
+          </button>
+        {/if}
+        <span class="hint-sep">·</span>
+        <span>⏎ or ⌘\</span>
+        {#if $canvasState.selectedIds.length > MAX_PANES}
+          <span class="hint-sep">·</span>
+          <span>first {MAX_PANES} of {$canvasState.selectedIds.length}</span>
+        {/if}
+      </div>
+    {:else}
+      <div class="canvas-hints">
+        <button class="hint-new-btn" on:click={addAtCentre}>＋ New Notebook</button>
+        <span class="hint-sep">·</span>
+        <span>drag-select 2+ to open side by side</span>
+        <span class="hint-sep">·</span>
+        <span>⌘\ split · ⌘0 fit · N key</span>
+        <span class="hint-sep">·</span>
+        <span>scroll pan · pinch zoom</span>
+      </div>
+    {/if}
 
     <!-- Rubber-band selection rectangle -->
     {#if selRect && selRect.w > 4 && selRect.h > 4}
@@ -715,6 +972,18 @@
     letter-spacing: 0.02em;
     white-space: nowrap;
   }
+  /* With a selection this strip is offering actions, not reciting hints, so it
+     gets a surface and full opacity instead of the near-invisible grey. */
+  .canvas-hints.selection-actions {
+    pointer-events: auto;
+    color: var(--text);
+    background: var(--menu-bg);
+    border: 1px solid var(--menu-border);
+    border-radius: 9px;
+    padding: 5px 9px;
+    box-shadow: var(--menu-shadow);
+  }
+
   .hint-new-btn {
     background: rgba(137,180,250,0.15);
     border: 1px solid rgba(137,180,250,0.35);
@@ -736,14 +1005,149 @@
   /* ---- Focused (full-screen) view — truly edge to edge ---- */
   .focused-view {
     position: fixed;
-    inset: var(--appbar-h, 34px) 0 0 0;   /* clear the app bar */
+    /* The toolbar, not the canvas bar: focused mode swaps the app bar for the
+       taller grouped toolbar, and these two numbers must agree or the view
+       either overlaps the bar or leaves a gap under it. */
+    inset: var(--toolbar-h, 46px) 0 0 0;   /* clear the toolbar */
+
     /* Use card-bg so light mode doesn't show dark canvas edges */
     background: var(--card-bg, #050810);
-    overflow-y: auto;
     z-index: 50;
+    /* A grid of panes. overflow:hidden is load-bearing, not tidiness: while the
+       WINDOW was the scroller, dragging a divider scrolled the page and no pane
+       could scroll on its own. Each .focused-pane is now its own scroller, which
+       is what "independent panes" actually requires. */
+    display: grid;
+    overflow: hidden;
   }
+
+  .focused-pane {
+    /* Both non-optional. A grid item's automatic minimum size is min-content,
+       and a notebook full of CodeMirror never reports a small one -- so without
+       these the tracks blow past the container and the fr maths silently stops
+       meaning anything. */
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    /* The canvas sets touch-action:none to own pan/zoom; re-enable finger scroll
+       inside a pane. */
+    touch-action: pan-y;
+  }
+  /* Seams only when tiled: with one pane there is no header, no border and no
+     accent, so the single-notebook view is unchanged. */
+  .focused-view.multi .focused-pane { border: 1px solid var(--border); }
+
+  /* The active pane gets 2px on one edge and nothing else. The rubber-band
+     selection language (outline + double box-shadow) belongs to a different
+     concept and would shout here. */
+  .focused-view.multi .focused-pane.active { border-color: var(--accent); }
+  .focused-view.multi .focused-pane.active::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    background: var(--accent);
+    z-index: 11;
+  }
+
+  .pane-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    flex-shrink: 0;
+    padding: 0 6px 0 9px;
+    background: var(--gutter-bg);
+    border-bottom: 1px solid var(--border);
+    /* Deliberately slimmer than the card's own 36px titlebar, so a pane header
+       never reads as a second app bar. */
+    font: 600 11px/1 var(--sans);
+    color: var(--text);
+    user-select: none;
+    -webkit-user-select: none;
+    /* iOS: a top-row pane's header would otherwise sit under the notch. */
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  /* Dim the CHROME of an inactive pane, never its content: a notebook you can
+     still read and scroll must not look disabled. */
+  .focused-pane:not(.active) .pane-header { opacity: 0.55; }
+
+  .pane-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .pane-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .pane-close:hover { background: var(--surface-2); color: var(--err); }
+
+  /* ---- Dividers ---- */
+  .pane-divider {
+    grid-column: auto;
+    cursor: col-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 12;
+    /* The pane's pan-y would otherwise steal the drag on a touchscreen. */
+    touch-action: none;
+  }
+  .pane-divider.vertical { cursor: row-resize; }
+
+  .pane-divider::before {
+    content: '';
+    display: block;
+    width: 2px;
+    height: 46px;
+    max-height: 70%;
+    border-radius: 2px;
+    background: var(--tb-rule);
+    transition: background 0.15s, height 0.15s;
+  }
+  .pane-divider.vertical::before { width: 46px; max-width: 70%; height: 2px; }
+  .pane-divider:hover::before, .pane-divider:active::before { background: var(--accent); height: 64px; }
+  .pane-divider.vertical:hover::before, .pane-divider.vertical:active::before { width: 64px; height: 2px; }
+
+  /* The two crossing dividers of the 2x2. The column one is painted above so it
+     owns the 10x10 intersection and a drag there moves one axis, not both. */
+  .pane-divider.grid-col { grid-column: 2; grid-row: 1 / -1; z-index: 14; }
+  .pane-divider.grid-row { grid-column: 1 / -1; grid-row: 2; z-index: 13; }
+
+  /* During a drag, panes stop taking pointer events so a fast movement across
+     one cannot start a CodeMirror text selection behind the divider. */
+  .focused-view.dragging .focused-pane { pointer-events: none; user-select: none; }
+
+  /* Leave room for the status bar when it is shown, so the notebook's last cell
+     is never hidden behind it. */
+  .focused-view.with-status { bottom: var(--statusbar-h, 22px); }
+
+  .status-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;   /* above .focused-view (50), below the app bar (200) */
+  }
+
   .focused-view-inner {
     width: 100%;
+    /* Grow to fill, but never shrink below content. */
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
     /* No max-width, no side padding — notebook card fills the window */
   }
   /* Override card styles when in focused view so it has no border-radius or side margins */
@@ -751,7 +1155,7 @@
     border-radius: 0;
     border-left: none;
     border-right: none;
-    min-height: 100vh;
+    flex: 1 0 auto;
   }
 
 </style>
