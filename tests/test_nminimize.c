@@ -1246,6 +1246,32 @@ static void test_job_scheduling(void) {
         " o = First[r]; 25.99 < o < 28]");
 }
 
+static void test_multiknapsack(void) {
+    /* B5: multiple-knapsack, 30 items, 5 capacity constraints. Binary x_i,
+     * maximize value·x (written as minimize -value·x) subject to five
+     * weight·x ≤ capacity budgets. Purely inequality-constrained (no tight
+     * assignment structure), so the integer search — now with 2-flip swap moves,
+     * which for a knapsack means "drop one item, add another" — reaches the
+     * region of the optimum easily. The MILP optimum (scipy.milp) is -995;
+     * DifferentialEvolution (100 search points) lands at -990 for this seed,
+     * within 0.5% of it, in ~0.04 s (faster than milp's ~0.17 s). Asserts a
+     * near-optimal value AND that every capacity budget is honoured and the
+     * solution is binary. Deterministic under RandomSeed. */
+    check_true(
+        "Module[{n = 30, m = 5, values, weights, capacities, vars, obj, cons, r, o, sol, xv},"
+        " SeedRandom[123];"
+        " values = RandomInteger[{10, 100}, n]; weights = RandomInteger[{5, 50}, {m, n}];"
+        " capacities = Total[weights, {2}]*0.4; vars = Array[x, n];"
+        " obj = -values . vars;"
+        " cons = Join[Table[weights[[j]] . vars <= capacities[[j]], {j, m}],"
+        "   Table[0 <= vars[[i]] <= 1, {i, n}], {Element[vars, Integers]}];"
+        " r = NMinimize[{obj, cons}, vars,"
+        "   Method -> {\"DifferentialEvolution\", \"SearchPoints\" -> 100, \"RandomSeed\" -> 1}];"
+        " o = First[r]; sol = Last[r]; xv = vars /. sol;"
+        " o <= -985 && AllTrue[Range[m], weights[[#]] . xv <= capacities[[#]] + 1*^-6 &] &&"
+        "  AllTrue[xv, Abs[# - Round[#]] < 1*^-6 &]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1355,6 +1381,7 @@ int main(void) {
     /* 15. Combinatorial / integer (MINLP) */
     TEST(test_qap_assignment);
     TEST(test_job_scheduling);
+    TEST(test_multiknapsack);
 
     printf("All NMinimize tests passed.\n");
     return 0;
