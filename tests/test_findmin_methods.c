@@ -32,7 +32,8 @@
 
 /* Every method that operates on n>=2 variables. */
 static const char* ND_METHODS[] = {
-    "QuasiNewton", "ConjugateGradient", "Newton", "LBFGSB", "Powell", "NelderMead", "TNC", "SLSQP", "COBYLA"
+    "QuasiNewton", "ConjugateGradient", "Newton", "LBFGSB", "Powell", "NelderMead", "TNC", "SLSQP",
+    "COBYLA", "COBYQA"
 };
 #define N_ND_METHODS ((int)(sizeof(ND_METHODS) / sizeof(ND_METHODS[0])))
 

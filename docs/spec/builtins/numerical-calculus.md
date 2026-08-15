@@ -1383,7 +1383,7 @@ optimising variable assignments.
 
 Methods overridable via `Method -> "Brent" | "Newton" | "QuasiNewton"
 | "ConjugateGradient" | "LBFGSB" | "Powell" | "NelderMead" | "TNC" | "SLSQP"
-| "COBYLA"`.  Brent
+| "COBYLA" | "COBYQA"`.  Brent
 is golden-section search with parabolic interpolation (derivative-free),
 QuasiNewton is BFGS with Armijo backtracking line search, ConjugateGradient
 is Polak-Ribière+ with restart, Newton uses the symbolic Hessian (via
@@ -1535,6 +1535,31 @@ Matches SciPy's `minimize(method="COBYLA")` on the optimiser (experiment
 `69-cobyla-constrained`), 40-200x faster (compiled objective/constraint
 evaluations vs SciPy's Python-callback evaluations, the same win as `"Powell"`).
 Reference: Powell 1994.
+
+`"COBYQA"` (Constrained Optimization BY Quadratic Approximations; a Mathilda
+extension) is the **derivative-free** analogue of `"SLSQP"`: a trust-region SQP
+that, unlike `"COBYLA"`'s *linear* models, builds a full **quadratic** model of
+`f` and of every constraint -- so it captures curvature, converging tighter on
+smooth problems and **navigating curved valleys that COBYLA cannot** (it drives
+Rosenbrock to machine precision where `"COBYLA"` stalls near `f ~ 10^-3`), and it
+handles equality + inequality + bounds **natively** (equalities are not split).
+Each iteration builds the quadratic models by finite differences on a structured
+stencil of side `Delta` -- the coordinate cross `x0 +/- Delta e_i` gives the
+gradient and the diagonal Hessian, the corners `x0 + Delta(e_i + e_j)` the
+off-diagonal Hessian, a fully-determined quadratic per function in closed form (a
+minimum-Frobenius-norm 2n+1-point model is the eval-efficiency refinement) -- then
+takes a Byrd-Omojokun trust-region SQP step realised as a single inf-norm box
+trust-region QP handed to the same dual active-set solver as `"SLSQP"`, with the
+Lagrangian-Hessian model `B = H_f + sum lambda_k H_{c_k}`.  Steps are accepted by
+an L1 exact-penalty merit with Powell's penalty update; the trust radius `Delta`
+doubles as the stencil scale (grown on a good step, halved on a poor one,
+terminating at `Delta = 10^-PrecisionGoal`).  The objective and constraints ride
+the compiled fast path; `WorkingPrecision > MachinePrecision` falls back to
+`QuasiNewton`; `n == 1` with no general constraints delegates to `"Brent"`.
+Matches SciPy's `minimize(method="COBYQA")` on the optimiser (experiment
+`70-cobyqa-constrained`), 30-390x faster (SciPy's COBYQA is a pure-Python
+implementation, so the compiled-evaluation advantage is even larger than for
+COBYLA).  References: Ragonneau & Zhang 2023; Conn, Gould & Toint 2000.
 
 ### Constraints
 

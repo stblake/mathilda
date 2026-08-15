@@ -1311,6 +1311,10 @@ target_include_directories(slsqp_tests PRIVATE ../src)
 add_executable(cobyla_tests test_findmin_cobyla.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(cobyla_tests PRIVATE ../src)
 
+# COBYQA (derivative-free quadratic-approximation, constrained) of FindMinimum.
+add_executable(cobyqa_tests test_findmin_cobyqa.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(cobyqa_tests PRIVATE ../src)
+
 # Cross-method battery: every FindMinimum method over a shared function set.
 add_executable(findmin_methods_tests test_findmin_methods.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(findmin_methods_tests PRIVATE ../src)
