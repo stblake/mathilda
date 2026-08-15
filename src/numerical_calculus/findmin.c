@@ -146,6 +146,18 @@ typedef struct {
     Expr*  expr;       /* owned: the Or[...] constraint subtree                */
 } FmDisjunction;
 
+/* A "one-hot" / assignment group: an equality constraint of the form
+ * x_{i1} + x_{i2} + ... + x_{im} == k over DISTINCT binary optimization
+ * variables (e.g. each row/column of an assignment matrix summing to 1). The
+ * integer local search repairs each group to exactly k ones so the 2-flip swap
+ * move can then navigate to full feasibility — the structure single-coordinate
+ * descent cannot reach from a random rounded start. `idx` is owned. */
+typedef struct {
+    size_t* idx;       /* owned: indices (into the effective variable list)     */
+    size_t  len;
+    int     k;         /* target sum                                            */
+} NmOneHot;
+
 /* ------------------------------------------------------------------ *
  *  Diagnostic helper                                                  *
  * ------------------------------------------------------------------ */
@@ -3334,6 +3346,10 @@ typedef struct {
      * the interpreter (fm_bool_penalty); len ndisj, borrowed from the setup. */
     FmDisjunction*    disj;
     size_t            ndisj;
+    /* One-hot / assignment groups detected from the equality constraints; owned,
+     * freed at driver cleanup. Empty for problems without assignment structure. */
+    NmOneHot*         onehots;
+    size_t            n_onehots;
 } NmDriver;
 
 /* Objective at the (already integer-rounded) point xr: the compiled program if
@@ -3527,6 +3543,123 @@ static double nm_phi(NmDriver* D, const double* x) {
 
 /* Mixed/integer coordinate descent: step each coordinate (±1, ±2 on integer
  * dims; scaled steps on continuous dims), accept any Deb-improvement. */
+/* Map an effective-variable symbol to its index; SIZE_MAX if not found. */
+static size_t nm_var_index(NmDriver* D, const char* sym) {
+    for (size_t i = 0; i < D->n; i++)
+        if (D->vars[i]->type == EXPR_SYMBOL && D->vars[i]->data.symbol.name == sym)
+            return i;
+    return (size_t)-1;
+}
+
+static bool nm_is_binary(NmDriver* D, size_t i) {
+    return D->is_int[i] &&
+           fabs(D->reg_lo[i]) < 1e-9 && fabs(D->reg_hi[i] - 1.0) < 1e-9;
+}
+
+/* If `plus` is Plus[v1, v2, ...] over DISTINCT binary optimization variables,
+ * fill idx[0..*nv) with their indices and return true; else false. */
+static bool nm_plus_of_binaries(NmDriver* D, const Expr* plus, size_t* idx, size_t* nv) {
+    if (!nm_is_head(plus, SYM_Plus)) return false;
+    *nv = 0;
+    for (size_t a = 0; a < plus->data.function.arg_count; a++) {
+        const Expr* arg = plus->data.function.args[a];
+        if (arg->type != EXPR_SYMBOL) return false;
+        size_t vi = nm_var_index(D, arg->data.symbol.name);
+        if (vi == (size_t)-1 || !nm_is_binary(D, vi)) return false;
+        for (size_t p = 0; p < *nv; p++) if (idx[p] == vi) return false; /* distinct */
+        idx[(*nv)++] = vi;
+    }
+    return *nv >= 2;
+}
+
+/* Detect one-hot / assignment groups (Σ binaries == k) from the equality
+ * constraints, in either the Subtract[Plus[...], k] form the constraint builder
+ * produces or a canonicalized Plus[..., -k]. Populates D->onehots. */
+static void nm_detect_onehots(NmDriver* D) {
+    D->onehots = NULL; D->n_onehots = 0;
+    if (D->ngens == 0) return;
+    NmOneHot* out = (NmOneHot*)malloc(sizeof(NmOneHot) * D->ngens);
+    if (!out) return;
+    size_t count = 0;
+    for (size_t g = 0; g < D->ngens; g++) {
+        if (!D->gens[g].equality) continue;
+        const Expr* e = D->gens[g].expr;
+        if (!e || e->type != EXPR_FUNCTION) continue;
+        size_t* idx = (size_t*)malloc(sizeof(size_t) * D->n);
+        if (!idx) continue;
+        size_t nv = 0; int k = 0; bool ok = false;
+        if (nm_is_head(e, SYM_Subtract) && e->data.function.arg_count == 2 &&
+            e->data.function.args[1]->type == EXPR_INTEGER) {
+            /* Subtract[Plus[vars...], k]  ⇒  Σ vars == k */
+            if (nm_plus_of_binaries(D, e->data.function.args[0], idx, &nv)) {
+                k = (int)e->data.function.args[1]->data.integer;
+                ok = true;
+            }
+        } else if (nm_is_head(e, SYM_Plus)) {
+            /* Plus[vars..., -k]  ⇒  Σ vars == k. Split off a single integer term. */
+            size_t m = e->data.function.arg_count;
+            long konst = 0; int nints = 0; nv = 0; ok = true;
+            for (size_t a = 0; a < m && ok; a++) {
+                const Expr* arg = e->data.function.args[a];
+                if (arg->type == EXPR_INTEGER) { konst += arg->data.integer; nints++; }
+                else if (arg->type == EXPR_SYMBOL) {
+                    size_t vi = nm_var_index(D, arg->data.symbol.name);
+                    if (vi == (size_t)-1 || !nm_is_binary(D, vi)) { ok = false; break; }
+                    for (size_t p = 0; p < nv; p++) if (idx[p] == vi) { ok = false; break; }
+                    if (ok) idx[nv++] = vi;
+                } else ok = false;
+            }
+            k = (int)(-konst);
+            ok = ok && nints == 1 && nv >= 2;
+        }
+        if (ok && k >= 1 && (size_t)k <= nv) {
+            out[count].idx = idx; out[count].len = nv; out[count].k = k;
+            count++;
+        } else {
+            free(idx);
+        }
+    }
+    if (count == 0) { free(out); return; }
+    D->onehots = out; D->n_onehots = count;
+}
+
+static void nm_free_onehots(NmDriver* D) {
+    for (size_t g = 0; g < D->n_onehots; g++) free(D->onehots[g].idx);
+    free(D->onehots);
+    D->onehots = NULL; D->n_onehots = 0;
+}
+
+/* Snap each one-hot group to exactly k ones, so the swap move can then reach
+ * full feasibility. Members currently 1 are kept first (up to k); the shortfall
+ * is filled from the not-yet-used members and any excess turned off. Uses the
+ * point's own rounded pattern to break ties, so different restarts repair to
+ * different assignments. Returns true iff it changed x. */
+static bool nm_repair_onehots(NmDriver* D, double* x) {
+    bool changed = false;
+    for (size_t g = 0; g < D->n_onehots; g++) {
+        NmOneHot* oh = &D->onehots[g];
+        int ones = 0;
+        for (size_t p = 0; p < oh->len; p++) if (round(x[oh->idx[p]]) >= 0.5) ones++;
+        if (ones == oh->k) continue;
+        int want = oh->k;
+        int kept = 0;
+        /* keep the first `want` members that are already 1, drop the rest */
+        for (size_t p = 0; p < oh->len; p++) {
+            size_t v = oh->idx[p];
+            if (round(x[v]) >= 0.5) {
+                if (kept < want) { x[v] = 1.0; kept++; }
+                else             { x[v] = 0.0; changed = true; }
+            }
+        }
+        /* fill the shortfall from members currently 0 */
+        for (size_t p = 0; p < oh->len && kept < want; p++) {
+            size_t v = oh->idx[p];
+            if (round(x[v]) < 0.5) { x[v] = 1.0; kept++; changed = true; }
+        }
+    }
+    return changed;
+}
+
 /* Does the symbol `sym` (interned name) occur anywhere in expression `e`? */
 static bool nm_expr_contains_symbol(const Expr* e, const char* sym) {
     if (!e) return false;
@@ -3551,9 +3684,20 @@ static void nm_int_descent(NmDriver* D, double* x, double* f_io, double* pen_io)
             bidx[nb++] = j;
     /* Cap the O(nb^2) swap sweep so a very large binary problem cannot blow up. */
     bool do_swaps = (nb >= 2 && nb <= 400);
-    bool improved = true;
-    int iter = 0;
-    while (improved && iter++ < 300) {
+    /* Two passes: a plain descent, then — only if it ends INFEASIBLE and there are
+     * one-hot / assignment groups — snap each group to k ones and descend again.
+     * Gating the repair on residual infeasibility keeps it a FALLBACK: problems
+     * the plain descent already solves (e.g. QAP, whose objective guides the
+     * search to good permutations) are unchanged, while those it cannot make
+     * feasible from a random rounded start (pure assignment, sudoku) are rescued. */
+    for (int attempt = 0; attempt < 2; attempt++) {
+        if (attempt == 1) {
+            if (D->n_onehots == 0 || *pen_io <= NM_FEAS_EPS) break;
+            if (nm_repair_onehots(D, x)) { nm_project(D, x); nm_eval(D, x, f_io, pen_io); }
+        }
+        bool improved = true;
+        int iter = 0;
+        while (improved && iter++ < 300) {
         improved = false;
         for (size_t j = 0; j < n; j++) {
             double steps[4];
@@ -3605,6 +3749,7 @@ static void nm_int_descent(NmDriver* D, double* x, double* f_io, double* pen_io)
                     }
                 }
             }
+        }
         }
     }
     free(bidx);
@@ -5288,6 +5433,7 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     D.f_prog = f_prog; D.g_progs = g_progs;
     D.penalty_fn = nc.penalty_fn;
     D.disj = disj; D.ndisj = ndisj;
+    nm_detect_onehots(&D);   /* assignment groups for the integer repair */
 
     /* Serve the local polish's objective evaluations from the compiled program
      * instead of the interpreter. RandomSearch runs one local solve per
@@ -5437,6 +5583,7 @@ cleanup:
         for (size_t k = 0; k < ngens; k++) if (g_progs[k]) compiled_free(g_progs[k]);
         free(g_progs);
     }
+    nm_free_onehots(&D);
     free(boxes);
     free(reg_lo);
     free(reg_hi);
