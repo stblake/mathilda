@@ -1382,7 +1382,7 @@ optimising variable assignments.
 | `{x, x0, x1}` (1D)    | Brent (bracket) |
 
 Methods overridable via `Method -> "Brent" | "Newton" | "QuasiNewton"
-| "ConjugateGradient" | "LBFGSB" | "Powell" | "NelderMead" | "TNC"`.  Brent
+| "ConjugateGradient" | "LBFGSB" | "Powell" | "NelderMead" | "TNC" | "SLSQP"`.  Brent
 is golden-section search with parabolic interpolation (derivative-free),
 QuasiNewton is BFGS with Armijo backtracking line search, ConjugateGradient
 is Polak-Ribière+ with restart, Newton uses the symbolic Hessian (via
@@ -1473,6 +1473,36 @@ would let the inner-iteration cap drop toward SciPy's `n/2`, is a future
 refinement); `WorkingPrecision > MachinePrecision` falls back to
 `QuasiNewton`.  Matches SciPy's `minimize(method="TNC")` on the box-only
 case.  References: Nash 1984; Dembo & Steihaug 1983; Nocedal & Wright ch. 7.
+
+`"SLSQP"` (alias `"SequentialQuadraticProgramming"`, a Mathilda extension --
+Mathematica has no such method name) is **Han-Powell sequential quadratic
+programming**, the method for smooth **constrained** problems (equality +
+inequality + bounds).  Each outer iteration replaces `f` by a quadratic model
+`½ dᵀB d + ∇fᵀd` -- where `B` is a BFGS approximation to the Hessian of the
+**Lagrangian** kept positive-definite by **Powell's (1978) damping** -- and
+each constraint by its linearisation, then solves the resulting **QP** for the
+step `d` with a **Goldfarb-Idnani dual active-set** solver built on the same
+Cholesky primitive as `"Newton"` (a dual method needs no feasible start, which
+matters because SQP iterates are routinely infeasible w.r.t. the
+linearisation).  The step is accepted by an **L1 exact-penalty merit** line
+search whose penalties are driven above the QP multipliers by Powell's rule, so
+`d` is always a descent direction; an inconsistent linearisation is repaired by
+Kraft's slack relaxation.  Unlike every other gradient method, SLSQP consumes
+**general (non-box) constraints DIRECTLY through the QP** rather than the
+augmented-Lagrangian penalty wrapper, so it reaches the true constrained
+optimum with **accurate constraint satisfaction and super-linear local
+convergence** -- e.g. the corner problem `FindMinimum[{x + y, 3 x + 2 y >= 7 &&
+x >= 0 && y >= 0}, ...]` lands exactly on `{7/3, 0}` where the penalty method
+stops once merely feasible, and HS71 reaches `17.014`.  With no constraints it
+degrades gracefully to a damped-BFGS line-search solve; equalities, box bounds
+and inequalities may be mixed freely.  The objective and its exact gradient
+ride the compiled fast path; `WorkingPrecision > MachinePrecision` falls back to
+`QuasiNewton`.  Matches SciPy's `minimize(method="SLSQP")` on the optimiser to
+rounding (experiment `68-slsqp-constrained`), winning on the harder constrained
+problems where the compiled gradient pays off (HS71 ~17×) and losing on large
+trivial-objective QPs where the dense active-set QP linear algebra dominates
+(an incremental/warm-started QP is the future refinement).  References: Kraft
+1988; Powell 1978; Goldfarb & Idnani 1983; Nocedal & Wright ch. 18.
 
 ### Constraints
 

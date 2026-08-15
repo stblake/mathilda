@@ -1303,6 +1303,10 @@ target_include_directories(neldermead_tests PRIVATE ../src)
 add_executable(tnc_tests test_findmin_tnc.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(tnc_tests PRIVATE ../src)
 
+# SLSQP (sequential least-squares QP, constrained SQP) of FindMinimum.
+add_executable(slsqp_tests test_findmin_slsqp.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(slsqp_tests PRIVATE ../src)
+
 # Cross-method battery: every FindMinimum method over a shared function set.
 add_executable(findmin_methods_tests test_findmin_methods.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(findmin_methods_tests PRIVATE ../src)

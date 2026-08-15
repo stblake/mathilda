@@ -6,8 +6,8 @@
  * the complementary sweep: it runs a SHARED battery of standard test functions
  * with known analytic optima across EVERY applicable method, so a regression in
  * any one method on any one function surfaces here. Each n-D case is solved by
- * all six n-D methods
- *     QuasiNewton, ConjugateGradient, Newton, LBFGSB, Powell, NelderMead
+ * all n-D methods
+ *     QuasiNewton, ConjugateGradient, Newton, LBFGSB, Powell, NelderMead, TNC, SLSQP
  * and every 1-D case by Brent plus the two derivative-free methods that delegate
  * n==1 to Brent. Failures are labelled with the offending method.
  *
@@ -32,7 +32,7 @@
 
 /* Every method that operates on n>=2 variables. */
 static const char* ND_METHODS[] = {
-    "QuasiNewton", "ConjugateGradient", "Newton", "LBFGSB", "Powell", "NelderMead", "TNC"
+    "QuasiNewton", "ConjugateGradient", "Newton", "LBFGSB", "Powell", "NelderMead", "TNC", "SLSQP"
 };
 #define N_ND_METHODS ((int)(sizeof(ND_METHODS) / sizeof(ND_METHODS[0])))
 
