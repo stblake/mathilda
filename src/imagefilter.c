@@ -2349,6 +2349,220 @@ static bool ncc_planes(const double* src, double* dst, size_t w, size_t h,
     return true;
 }
 
+/* ---- corner detection: the structure tensor --------------------------------
+ *
+ * A corner is where the image gradient points in TWO independent directions. That is a statement
+ * about the second-moment matrix of the gradient over a neighbourhood,
+ *
+ *     M = [ <Ix Ix>  <Ix Iy> ]      <.> = a Gaussian-weighted average over the window
+ *         [ <Ix Iy>  <Iy Iy> ]
+ *
+ * and the whole method is reading its two eigenvalues. Both small: flat. One large: an edge, where the
+ * gradient has a single direction. Both large: a corner. The three distinct entries are gradient
+ * products, each smoothed, so this composes entirely out of parts that already exist here and are
+ * already fast -- the derivative stencils, and a separable Gaussian that convolve_dispatch factors on
+ * its own.
+ *
+ * TWO RESPONSES, and they differ in what they do with the eigenvalues rather than in how M is built:
+ *
+ *   Harris             det(M) - k*trace(M)^2, with k = 0.04. Cheap: no square root, and no
+ *                      eigenvalues computed explicitly. Negative on edges, which is informative.
+ *   MinimumEigenvalue  lambda_min directly (Shi-Tomasi). Costs a square root and is the more honest
+ *                      quantity -- it IS "how much does the weaker direction vary" -- and it is
+ *                      comparable across images in a way the Harris combination is not.
+ *
+ * WHY AN EDGE MUST SCORE ZERO. Along a straight edge every gradient in the window is parallel, so M
+ * has rank 1, so det(M) = 0 and lambda_min = 0 exactly. That is the property the tests check, and it
+ * is the one that separates a corner detector from an edge detector: getting a large response on an
+ * edge means the smoothing or the products are wrong, and no visual inspection of a response map
+ * reliably shows it.
+ */
+static double* gauss2_buf(size_t r, size_t* kh, size_t* kw) {
+    size_t n = 2 * r + 1;
+    double sigma = (r > 0) ? ((double)r / 2.0) : 1.0;
+    double* line = malloc(sizeof(double) * n);
+    double* k = malloc(sizeof(double) * n * n);
+    if (!line || !k) { free(line); free(k); return NULL; }
+    double sum = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double d = (double)i - (double)r;
+        line[i] = exp(-(d * d) / (2.0 * sigma * sigma));
+        sum += line[i];
+    }
+    for (size_t i = 0; i < n; i++) line[i] /= sum;
+    /* Built as an outer product, which makes it exactly rank 1 -- so convolve_dispatch's
+     * factorisation finds it and the smoothing costs 2n taps rather than n*n. */
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = 0; j < n; j++) k[i * n + j] = line[i] * line[j];
+    free(line);
+    *kh = n; *kw = n;
+    return k;
+}
+
+static bool structure_tensor(const double* g, size_t w, size_t h, size_t r,
+                             double* sxx, double* syy, double* sxy) {
+    size_t khx = 0, kwx = 0, khy = 0, kwy = 0;
+    double* kx = deriv_kernel(0, 1, &khx, &kwx);
+    double* ky = deriv_kernel(1, 0, &khy, &kwy);
+    double* dx = malloc(sizeof(double) * w * h);
+    double* dy = malloc(sizeof(double) * w * h);
+    size_t gkh = 0, gkw = 0;
+    double* gk = gauss2_buf(r, &gkh, &gkw);
+    double* tmp = malloc(sizeof(double) * w * h);
+    bool ok = false;
+    if (kx && ky && dx && dy && gk && tmp) {
+        convolve_dispatch(g, dx, w, h, 1, kx, kwx, khx);
+        convolve_dispatch(g, dy, w, h, 1, ky, kwy, khy);
+        for (size_t i = 0; i < w * h; i++) {
+            tmp[i] = dx[i] * dx[i];
+            syy[i] = dy[i] * dy[i];
+            sxy[i] = dx[i] * dy[i];
+        }
+        convolve_dispatch(tmp, sxx, w, h, 1, gk, gkw, gkh);
+        memcpy(tmp, syy, sizeof(double) * w * h);
+        convolve_dispatch(tmp, syy, w, h, 1, gk, gkw, gkh);
+        memcpy(tmp, sxy, sizeof(double) * w * h);
+        convolve_dispatch(tmp, sxy, w, h, 1, gk, gkw, gkh);
+        ok = true;
+    }
+    free(kx); free(ky); free(dx); free(dy); free(gk); free(tmp);
+    return ok;
+}
+
+/* Fill `out` with the corner response. `harris` selects the combination. */
+static bool corner_response(Expr* img, size_t r, bool harris,
+                            size_t* wout, size_t* hout, double** out) {
+    size_t w = 0, h = 0; double* g = NULL;
+    if (!img_grey_plane(img, &w, &h, &g)) return false;
+    double* sxx = malloc(sizeof(double) * w * h);
+    double* syy = malloc(sizeof(double) * w * h);
+    double* sxy = malloc(sizeof(double) * w * h);
+    double* rsp = malloc(sizeof(double) * w * h);
+    bool ok = false;
+    if (sxx && syy && sxy && rsp && structure_tensor(g, w, h, r, sxx, syy, sxy)) {
+        for (size_t i = 0; i < w * h; i++) {
+            double tr = sxx[i] + syy[i];
+            double det = sxx[i] * syy[i] - sxy[i] * sxy[i];
+            if (harris) {
+                rsp[i] = det - 0.04 * tr * tr;
+            } else {
+                /* lambda_min of a symmetric 2x2. The discriminant is (Sxx-Syy)^2 + 4 Sxy^2, which is
+                 * a sum of squares and so never negative -- written that way rather than as
+                 * tr^2 - 4 det, where cancellation can produce a small negative and a NaN. */
+                double diff = sxx[i] - syy[i];
+                double disc = sqrt(diff * diff + 4.0 * sxy[i] * sxy[i]);
+                rsp[i] = 0.5 * (tr - disc);
+            }
+        }
+        ok = true;
+    }
+    free(g); free(sxx); free(syy); free(sxy);
+    if (!ok) { free(rsp); return false; }
+    *wout = w; *hout = h; *out = rsp;
+    return true;
+}
+
+static bool corner_opts(Expr* res, size_t argc, size_t* r, bool* harris) {
+    *r = 2; *harris = false;
+    if (argc >= 2) {
+        double rr = 0.0, im = 0.0;
+        if (!na_read_scalar(res->data.function.args[1], &rr, &im) || im != 0.0) return false;
+        if (!(rr >= 1.0) || rr != floor(rr) || rr > 32.0) return false;
+        *r = (size_t)rr;
+    }
+    if (argc >= 3) {
+        Expr* m = res->data.function.args[2];
+        if (!m || m->type != EXPR_STRING) return false;
+        if (strcmp(m->data.string, "Harris") == 0) *harris = true;
+        else if (strcmp(m->data.string, "MinimumEigenvalue") == 0) *harris = false;
+        else return false;
+    }
+    return true;
+}
+
+/* CornerFilter[image] / [image, r] / [image, r, method] */
+static Expr* builtin_cornerfilter(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3) return NULL;
+    size_t r = 2; bool harris = false;
+    if (!corner_opts(res, argc, &r, &harris)) return NULL;
+    size_t w = 0, h = 0; double* rsp = NULL;
+    if (!corner_response(res->data.function.args[0], r, harris, &w, &h, &rsp)) return NULL;
+    Expr* out = image_build_real(rsp, w, h, 1);
+    free(rsp);
+    return out;
+}
+
+/* ImageCorners[image] / [image, r] / [image, r, t] -- the local maxima of the response.
+ *
+ * Two steps, and both are needed. A THRESHOLD alone returns a blob of adjacent pixels around every
+ * corner, because the response is smooth; NON-MAXIMUM SUPPRESSION alone returns a local maximum in
+ * every flat region, because a plateau of zeros has maxima too. Together they give one position per
+ * corner. */
+static Expr* builtin_imagecorners(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3) return NULL;
+    size_t r = 2;
+    double frac = 0.05;
+    if (argc >= 2) {
+        double rr = 0.0, im = 0.0;
+        if (!na_read_scalar(res->data.function.args[1], &rr, &im) || im != 0.0) return NULL;
+        if (!(rr >= 1.0) || rr != floor(rr) || rr > 32.0) return NULL;
+        r = (size_t)rr;
+    }
+    if (argc >= 3) {
+        double t = 0.0, im = 0.0;
+        if (!na_read_scalar(res->data.function.args[2], &t, &im) || im != 0.0) return NULL;
+        if (!(t >= 0.0) || !(t <= 1.0)) return NULL;
+        frac = t;
+    }
+    size_t w = 0, h = 0; double* rsp = NULL;
+    if (!corner_response(res->data.function.args[0], r, false, &w, &h, &rsp)) return NULL;
+
+    double mx = 0.0;
+    for (size_t i = 0; i < w * h; i++) if (rsp[i] > mx) mx = rsp[i];
+    double cut = frac * mx;
+
+    /* Collected as {row, column}, 1-based, so a position indexes ImageData directly. That is NOT
+     * Mathematica's {x, y} with y from the bottom; the convention is stated rather than guessed at,
+     * because a silently transposed or flipped coordinate is the kind of thing that looks plausible
+     * on any test image. */
+    size_t cap = 64, n = 0;
+    Expr** items = malloc(sizeof(Expr*) * cap);
+    if (!items) { free(rsp); return NULL; }
+    for (size_t y = 1; y + 1 < h; y++)
+      for (size_t x = 1; x + 1 < w; x++) {
+        double v = rsp[y * w + x];
+        if (!(v > cut) || v <= 0.0) continue;
+        bool peak = true;
+        for (int dy = -1; dy <= 1 && peak; dy++)
+            for (int dx = -1; dx <= 1; dx++) {
+                if (dx == 0 && dy == 0) continue;
+                /* Strictly greater than earlier neighbours and >= later ones, so a plateau of equal
+                 * values yields exactly one position instead of none. */
+                double nv = rsp[(y + (size_t)dy) * w + (x + (size_t)dx)];
+                bool before = (dy < 0) || (dy == 0 && dx < 0);
+                if (before ? (nv >= v) : (nv > v)) { peak = false; break; }
+            }
+        if (!peak) continue;
+        if (n == cap) {
+            size_t nc = cap * 2;
+            Expr** t2 = realloc(items, sizeof(Expr*) * nc);
+            if (!t2) break;
+            items = t2; cap = nc;
+        }
+        Expr* pr[2];
+        pr[0] = expr_new_integer((int64_t)y + 1);
+        pr[1] = expr_new_integer((int64_t)x + 1);
+        if (!pr[0] || !pr[1]) { expr_free(pr[0]); expr_free(pr[1]); break; }
+        items[n++] = expr_new_function(expr_new_symbol("List"), pr, 2);
+      }
+    free(rsp);
+    Expr* out = expr_new_function(expr_new_symbol("List"), items, n);
+    free(items);
+    return out;
+}
+
 /* ImageCorrelate[image, kernel] / [image, template, "NormalizedCrossCorrelation"] */
 static Expr* builtin_imagecorrelate(Expr* res) {
     size_t argc = res->data.function.arg_count;
@@ -2391,6 +2605,31 @@ static Expr* builtin_imagecorrelate(Expr* res) {
 }
 
 void imagefilter_init(void) {
+    symtab_add_builtin("CornerFilter", builtin_cornerfilter);
+    symtab_get_def("CornerFilter")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("CornerFilter",
+        "CornerFilter[image] gives the corner strength at every pixel, from the eigenvalues of the "
+        "Gaussian-weighted second-moment matrix of the gradient (the structure tensor). Both "
+        "eigenvalues small is flat, one large is an edge, both large is a corner. "
+        "CornerFilter[image, r] sets the window radius (default 2); CornerFilter[image, r, method] "
+        "selects \"MinimumEigenvalue\" (the default -- Shi-Tomasi's lambda_min, which is directly "
+        "\"how much does the weaker direction vary\" and is comparable across images) or "
+        "\"Harris\" (det - 0.04 trace^2, cheaper since it needs no square root, and negative on "
+        "edges). A STRAIGHT EDGE SCORES ZERO under both: every gradient in the window is parallel, so "
+        "the matrix has rank 1 and its determinant and smaller eigenvalue vanish. Colour is reduced "
+        "to luminance first, since a corner is a property of brightness.");
+
+    symtab_add_builtin("ImageCorners", builtin_imagecorners);
+    symtab_get_def("ImageCorners")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ImageCorners",
+        "ImageCorners[image] gives the positions of corners: the local maxima of the "
+        "MinimumEigenvalue response that exceed a fraction of its largest value. "
+        "ImageCorners[image, r] sets the window radius (default 2), ImageCorners[image, r, t] the "
+        "fraction (default 0.05). Both steps are needed -- a threshold alone returns a blob of "
+        "adjacent pixels per corner because the response is smooth, and suppression alone returns a "
+        "maximum in every flat region because a plateau of zeros has maxima too. Positions are "
+        "{row, column}, 1-based, so each one indexes ImageData directly; this is NOT Mathematica's "
+        "{x, y} measured from the bottom left, and the difference is stated rather than guessed.");
     symtab_add_builtin("ImageCorrelate", builtin_imagecorrelate);
     symtab_get_def("ImageCorrelate")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageCorrelate",

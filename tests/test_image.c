@@ -1649,6 +1649,73 @@ static void test_volume_fft_convolution_across_channels(void) {
                    " Dimensions[o]]", "{10, 12, 14}", 0);
 }
 
+
+/* Corner detection. The properties here are absolute, not scores: an edge must be EXACTLY zero, a
+ * uniform region exactly zero, and the response must rotate with the image. */
+#define CK24 "Image[Table[If[Mod[Quotient[i - 1, 6] + Quotient[j - 1, 6], 2] == 0, 0., 1.]," \
+             " {i, 1, 24}, {j, 1, 24}]]"
+
+static void test_corner_response_is_zero_where_there_is_no_corner(void) {
+    /* No gradient at all: exactly zero, and not merely small. */
+    assert_eval_eq("Union[Flatten[ImageData[CornerFilter[Image[Table[0.5, {16}, {16}]]]]]]",
+                   "{0.0}", 0);
+    assert_eval_eq("ImageCorners[Image[Table[0.5, {16}, {16}]]]", "{}", 0);
+    /* THE DISCRIMINATING PROPERTY. Along a straight edge every gradient in the window is parallel, so
+     * the structure tensor has rank 1 and both det and lambda_min vanish. A corner detector that
+     * fires on an edge is an edge detector, and no visual check of a response map reveals it. */
+    assert_eval_eq("Module[{e = Image[Table[If[j <= 8, 0., 1.], {i, 1, 24}, {j, 1, 24}]]},"
+                   " {Max[Flatten[ImageData[CornerFilter[e]]]],"
+                   "  Max[Flatten[ImageData[CornerFilter[e, 2, \"Harris\"]]]],"
+                   "  Length[ImageCorners[e]]}]", "{0.0, 0.0, 0}", 0);
+    /* The tensor is positive semi-definite, so the smaller eigenvalue is never negative -- which is
+     * also why it is computed from (Sxx-Syy)^2 + 4 Sxy^2 rather than trace^2 - 4 det, where
+     * cancellation could produce a negative discriminant and a NaN. */
+    assert_eval_eq("Min[Flatten[ImageData[CornerFilter[" CK24 "]]]] >= -1.*^-15", "True", 0);
+}
+
+static void test_corner_response_finds_corners_and_rotates_with_them(void) {
+    /* One square corner, at a known place. */
+    assert_eval_eq("Module[{sq, rs},"
+                   " sq = Image[Table[If[i >= 8 && j >= 8, 1., 0.], {i, 1, 24}, {j, 1, 24}]];"
+                   " rs = ImageData[CornerFilter[sq]];"
+                   " {Position[rs, Max[Flatten[rs]]], ImageCorners[sq]}]",
+                   "{{{8, 8}}, {{8, 8}}}", 0);
+    /* A 24x24 checkerboard of 6-pixel blocks has interior corners at every multiple of 6, so 3x3 of
+     * them -- an exact count, not an approximate one. */
+    assert_eval_eq("Length[ImageCorners[" CK24 "]]", "9", 0);
+    /* ROTATIONAL COVARIANCE. A quarter turn is an exact index permutation, so the response of the
+     * rotated image must be the rotation of the response. This is what catches a swapped Ix/Iy, a
+     * transposed smoothing pass, or a sign error in one derivative -- all of which leave a response
+     * map that looks entirely plausible. */
+    assert_eval_eq("Module[{ck = " CK24 ", r0},"
+                   " r0 = CornerFilter[ck];"
+                   " Max[Abs[Flatten[ImageData[CornerFilter[ImageRotate[ck]]]"
+                   "                 - ImageData[ImageRotate[r0]]]]] < 1.*^-15]", "True", 0);
+    assert_eval_eq("Module[{ck = " CK24 "},"
+                   " CornerFilter[Nest[ImageRotate, ck, 4]] === CornerFilter[ck]]", "True", 0);
+}
+
+static void test_corner_options_are_wired(void) {
+    /* Both parameters have to change the answer, or they are decoration. The radius is the window the
+     * tensor averages over and the method is what is done with the eigenvalues. */
+    assert_eval_eq("Module[{ck = " CK24 "},"
+                   " {Max[Abs[Flatten[ImageData[CornerFilter[ck, 1]]"
+                   "                  - ImageData[CornerFilter[ck, 4]]]]] > 1.*^-6,"
+                   "  Max[Abs[Flatten[ImageData[CornerFilter[ck, 2, \"Harris\"]]"
+                   "                  - ImageData[CornerFilter[ck, 2, \"MinimumEigenvalue\"]]]]]"
+                   "  > 1.*^-6}]", "{True, True}", 0);
+    /* A position indexes ImageData directly -- {row, column}, which is the documented convention. */
+    assert_eval_eq("Module[{sq},"
+                   " sq = Image[Table[If[i >= 8 && j >= 8, 1., 0.], {i, 1, 24}, {j, 1, 24}]];"
+                   " Head[ImageData[sq][[Sequence @@ First[ImageCorners[sq]]]]]]", "Real", 0);
+    /* A raised threshold keeps no more corners than a lower one. */
+    assert_eval_eq("Module[{ck = " CK24 "},"
+                   " Length[ImageCorners[ck, 2, 0.9]] <= Length[ImageCorners[ck, 2, 0.01]]]",
+                   "True", 0);
+    assert_eval_eq("Head[CornerFilter[" CK24 ", 2, \"Nope\"]]", "CornerFilter", 0);
+    assert_eval_eq("Head[CornerFilter[" CK24 ", 0]]", "CornerFilter", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1736,6 +1803,9 @@ int main(void) {
     TEST(test_fft_convolution_across_channels);
     TEST(test_volume_fft_convolution_agrees_with_the_definition);
     TEST(test_volume_fft_convolution_across_channels);
+    TEST(test_corner_response_is_zero_where_there_is_no_corner);
+    TEST(test_corner_response_finds_corners_and_rotates_with_them);
+    TEST(test_corner_options_are_wired);
 
     printf("All image tests passed.\n");
     return 0;

@@ -1336,3 +1336,71 @@ with the written-out definition at 1e-14; single precision answers to about 1e-7
 dropping six digits of a numeric function's accuracy to make it faster is not a trade to make
 invisibly in a computer algebra system. If it is ever wanted it should be an explicit opt-in
 that says so in its name, not the default behind an existing head.
+
+## Corner detection
+
+A corner is where the gradient points in **two** independent directions, which is a statement
+about the second-moment matrix of the gradient over a neighbourhood — the structure tensor:
+
+```
+M = [ ⟨Ix·Ix⟩  ⟨Ix·Iy⟩ ]        ⟨·⟩ = Gaussian-weighted average over the window
+    [ ⟨Ix·Iy⟩  ⟨Iy·Iy⟩ ]
+```
+
+Reading its two eigenvalues is the whole method. Both small: flat. One large: an edge, where
+the gradient has a single direction. Both large: a corner. The three distinct entries are
+gradient products, each smoothed, so this composes entirely from parts already here — the
+derivative stencils, and a Gaussian built as an outer product so `convolve_dispatch` factors
+it and the smoothing costs `2n` taps rather than `n²`.
+
+`CornerFilter[image]` gives the response map, `CornerFilter[image, r]` sets the window radius
+(default 2), and `CornerFilter[image, r, method]` selects:
+
+| method | response | note |
+|--------|----------|------|
+| `"MinimumEigenvalue"` (default) | λ_min (Shi-Tomasi) | *is* "how much does the weaker direction vary"; comparable across images |
+| `"Harris"` | `det − 0.04·trace²` | cheaper (no square root); goes negative on edges, which is informative |
+
+λ_min is computed from `√((Sxx−Syy)² + 4Sxy²)` rather than `√(trace² − 4det)`. The first is a
+sum of squares and cannot go negative; the second can, through cancellation, and would give a
+NaN that spreads silently.
+
+`ImageCorners[image]`, `[image, r]`, `[image, r, t]` gives corner **positions**: the local
+maxima of the λ_min response exceeding a fraction `t` of its largest value (default 0.05).
+Both steps are needed — a threshold alone returns a blob of adjacent pixels per corner because
+the response is smooth, and suppression alone returns a maximum in every flat region because a
+plateau of zeros has maxima too. A plateau of equal values yields exactly one position, by
+comparing strictly against earlier neighbours and loosely against later ones.
+
+Positions are `{row, column}`, 1-based, so each indexes `ImageData` directly. This is **not**
+Mathematica's `{x, y}` measured from the bottom left; the convention is stated rather than
+guessed, because a silently transposed or flipped coordinate looks plausible on any test image.
+
+### The properties that are exact
+
+- A uniform region has no gradient, so the response is **exactly** `0.0`, not merely small.
+- **A straight edge scores exactly zero** under both methods. Every gradient in the window is
+  parallel, so `M` has rank 1 and both `det` and `λ_min` vanish. This is the property that
+  separates a corner detector from an edge detector, and it is the one no visual inspection of
+  a response map reliably shows.
+- **Rotational covariance.** A quarter turn is an exact index permutation, so the response of
+  the rotated image is the rotation of the response — measured agreement 1.4e-17, and four
+  turns reproduce the original map under `===`. This is what catches a swapped `Ix`/`Iy`, a
+  transposed smoothing pass, or a sign error in one derivative, none of which spoil the look
+  of the output.
+- A 24×24 checkerboard of 6-pixel blocks has interior corners at every multiple of 6, so
+  `ImageCorners` returns exactly **9**.
+
+### Measured
+
+512×512, against scikit-image:
+
+| | Mathilda | scikit-image | Ratio |
+|---|---:|---:|---:|
+| λ_min response | 5.28 ms | 10.79 ms (`corner_shi_tomasi`) | **2.0× faster** |
+| Harris response | 5.33 ms | 9.08 ms (`corner_harris`) | **1.7× faster** |
+| positions | 6.01 ms | 29.8 ms (`corner_shi_tomasi` + `corner_peaks`) | **5.0× faster** |
+
+Not quite like-for-like: scikit-image is parameterised by `sigma` where this takes an integer
+radius, and `corner_peaks` applies its own minimum-separation rule. The comparison is of the
+same work in the same shape, not of identical outputs.
