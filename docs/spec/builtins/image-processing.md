@@ -1863,5 +1863,7 @@ power of two, so it is representable and `===` means what it says.
 | `DerivativeFilter` one axis | 0.495 ms | 0.70 ms (`sobel`) | **1.4× faster** |
 | second derivative | 0.498 ms | — | — |
 
-`make check-image-packing` now reports 43 (head, rank) pairs, all packed, with six heads still having
-no volumetric path.
+`make check-image-packing` now reports 44 (head, rank) pairs, all packed, with five heads still having
+no volumetric path. The gate needed a rank-3 derivative-order shape added to see this change at all:
+without it `DerivativeFilter` read a three-element list as orders, correctly declined, and was reported
+as planar-only when it was not. A "no volumetric path" list is only as good as the shapes it tries.

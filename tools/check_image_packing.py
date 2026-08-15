@@ -76,6 +76,10 @@ SHAPES = [
     # that no shape fitted it: a 3-D kernel and a 3-element extent.
     "{H}[IMG, {{{1.}}}]",
     "{H}[IMG, {12, 12, 12}]",
+    # A rank-3 DERIVATIVE ORDER spec. Without this, DerivativeFilter reads {12, 12, 12} as orders,
+    # correctly declines, and the head is reported as planar-only when it is not -- the gate's
+    # "no volumetric path" list is only as good as the shapes it tries.
+    "{H}[IMG, {0, 0, 1}]",
 ]
 
 # BOTH RANKS. The gate would be half a gate covering only planes: two of the three bugs it exists
