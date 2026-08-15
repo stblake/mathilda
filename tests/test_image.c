@@ -1097,6 +1097,72 @@ static void test_volume_resize_respects_the_axis_order(void) {
                    "{3, {1, 2, 2, 3}}", 0);
 }
 
+#define LIMG "Image[Table[N[Mod[x*3 + y*5, 7]/7.], {y, 6}, {x, 8}]]"
+
+static void test_levels_counts_sum_to_the_pixel_count(void) {
+    /* THE property for a histogram, and it is exact: every pixel lands in exactly one bin, so a total
+     * that disagrees means a bin boundary is wrong or a pixel was dropped. 6 x 8 is 48. */
+    assert_eval_eq("Total[Map[Last, ImageLevels[" LIMG "]]]", "48", 0);
+    assert_eval_eq("Total[Map[Last, ImageLevels[" LIMG ", 8]]]", "48", 0);
+    assert_eval_eq("{Length[ImageLevels[" LIMG "]], Length[ImageLevels[" LIMG ", 8]]}",
+                   "{256, 8}", 0);
+    /* A Bit image has TWO natural levels, not 256 -- those are its distinct values, and binning it
+     * into anything else would invent structure. Both counts are pinned. */
+    assert_eval_eq("ImageLevels[Image[{{0, 1}, {1, 0}}]]", "{{0.0, 2}, {1.0, 2}}", 0);
+    /* Levels are on ImageData's unit scale, so the last level is exactly 1. */
+    assert_eval_eq("First[Last[ImageLevels[" LIMG "]]] == 1.", "True", 0);
+    /* Volumes count too -- 2 x 3 x 4 is 24 voxels. */
+    assert_eval_eq("Total[Map[Last, ImageLevels["
+                   "Image3D[Table[N[z/4.], {z, 2}, {y, 3}, {x, 4}]]]]]", "24", 0);
+    assert_eval_eq("Head[ImageLevels[" LIMG ", 1]]", "ImageLevels", 0);
+}
+
+static void test_imageadjust_stretches_exactly_and_is_idempotent(void) {
+    /* The stretch puts the darkest pixel on exactly 0 and the brightest on exactly 1 -- equalities,
+     * not tolerances. */
+    assert_eval_eq("Module[{a = ImageData[ImageAdjust[Image[{{0.25, 0.5}, {0.5, 0.75}}]]]},"
+                   " {Min[Flatten[a]] == 0., Max[Flatten[a]] == 1.}]", "{True, True}", 0);
+    /* IDEMPOTENT, and this is the row that would catch an off-by-one in the range: a slightly wrong
+     * divisor still produces a plausible-looking contrast curve, but a second stretch would then move
+     * the pixels again. After a correct stretch the second pass is the identity. */
+    assert_eval_eq("Module[{a = ImageData[ImageAdjust[Image[{{0.25, 0.5}, {0.5, 0.75}}]]]},"
+                   " ImageData[ImageAdjust[Image[a]]] === a]", "True", 0);
+    /* A constant image has no range: unchanged, rather than dividing by zero or mapping the single
+     * value to an arbitrary end. */
+    assert_eval_eq("Union[Flatten[ImageData[ImageAdjust[Image[Table[0.4, {3}, {3}]]]]]]",
+                   "{0.4}", 0);
+    /* Monotone -- a stretch may not reorder pixels. */
+    assert_eval_eq("OrderedQ[Flatten[ImageData[ImageAdjust[Image[{{0.1, 0.2, 0.3, 0.9}}]]]]]",
+                   "True", 0);
+}
+
+static void test_imageadjust_parametric_curve(void) {
+    /* c = 0, b = 0, g = 1 must be the EXACT identity: contrast pivots about mid-grey so zero contrast
+     * leaves the pivot arithmetic a no-op, and gamma 1 is skipped. If any step were misordered this
+     * would drift. */
+    assert_eval_eq("Chop[Max[Abs[Flatten[ImageData[ImageAdjust[" LIMG ", {0., 0., 1.}]]"
+                   " - ImageData[" LIMG "]]]]]", "0", 0);
+    /* Brightness is a plain offset: 0.5 + 0.25 is exactly 0.75. */
+    assert_eval_eq("Part[ImageData[ImageAdjust[Image[{{0.5}}], {0., 0.25}]], 1, 1] == 0.75",
+                   "True", 0);
+    /* Contrast pivots about mid-grey, so mid-grey itself is FIXED by any contrast change -- that is
+     * what "pivots" means, and it is the property that fails if the pivot is 0 instead of 1/2. */
+    assert_eval_eq("Part[ImageData[ImageAdjust[Image[{{0.5}}], {3., 0.}]], 1, 1] == 0.5",
+                   "True", 0);
+    /* Clipping happens before gamma, so a value driven past 1 by brightness stays 1 rather than
+     * becoming a power of something out of range. */
+    assert_eval_eq("Part[ImageData[ImageAdjust[Image[{{0.9}}], {0., 0.5, 2.}]], 1, 1] == 1.",
+                   "True", 0);
+    assert_eval_eq("Head[ImageAdjust[" LIMG ", {1.}]]", "ImageAdjust", 0);
+    assert_eval_eq("Head[ImageAdjust[" LIMG ", {0., 0., -1.}]]", "ImageAdjust", 0);
+    assert_eval_eq("Head[ImageAdjust[{{1, 2}}]]", "ImageAdjust", 0);
+    /* Volumes go through both forms. */
+    assert_eval_eq("ImageDimensions[ImageAdjust["
+                   "Image3D[Table[N[z/4.], {z, 2}, {y, 3}, {x, 4}]]]]", "{4, 3, 2}", 0);
+    assert_eval_eq("And @@ Map[MemberQ[Attributes[#], Protected] &, {ImageLevels, ImageAdjust}]",
+                   "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1162,6 +1228,9 @@ int main(void) {
     TEST(test_distance_transform_relates_to_morphology);
     TEST(test_volume_downsampling_does_not_alias);
     TEST(test_volume_resize_respects_the_axis_order);
+    TEST(test_levels_counts_sum_to_the_pixel_count);
+    TEST(test_imageadjust_stretches_exactly_and_is_idempotent);
+    TEST(test_imageadjust_parametric_curve);
 
     printf("All image tests passed.\n");
     return 0;

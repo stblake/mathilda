@@ -904,3 +904,70 @@ would pass with axes swapped.
 | 64³ → 128³, trilinear | **8.08 ms** | scipy `zoom(order=1)` 36.7 ms |
 
 Parity on the reduction and **4.5× faster** on the enlargement.
+
+---
+
+# Levels and tone adjustment
+
+## ImageLevels
+
+`ImageLevels[image]` gives `{{level, count}, …}` — the histogram as **data, not a plot**. Mathematica's
+`ImageHistogram` draws a graphic and `ImageLevels` gives the counts; in a computer algebra system the
+counts are the useful half, so that is what this provides and `Histogram` over the result draws the
+picture. `ImageLevels[image, n]` uses `n` bins. Accepts volumes. Attributes: `Protected`.
+
+**The counts sum to the pixel count, exactly.** That is the property worth asserting: every pixel lands
+in exactly one bin, so a total that disagrees means a bin boundary is wrong or a pixel was dropped.
+
+A `"Bit"` image uses its **2** natural levels and `"Byte"` its 256, because those *are* its distinct
+values — binning them into anything else would invent structure. Only `"Real"` has no natural set, and is
+binned into 256 over `[0, 1]`. Levels are reported on `ImageData`'s unit scale, so a level can be compared
+against a pixel value without rescaling.
+
+```
+In[1]:= ImageLevels[Image[{{0, 1}, {1, 0}}]]
+Out[1]= {{0.0, 2}, {1.0, 2}}
+```
+
+## ImageAdjust
+
+`ImageAdjust[image]` stretches to the full range. `ImageAdjust[image, {c, b}]` and `[image, {c, b, g}]`
+apply contrast, brightness and gamma. Accepts volumes. Attributes: `Protected`.
+
+The default stretch puts the darkest pixel on **exactly 0** and the brightest on **exactly 1**, and two
+exact properties follow:
+
+- **Idempotence** — a second stretch is the identity. This is the row that catches an off-by-one in the
+  range, because a slightly wrong divisor still produces a plausible-looking contrast curve; only a
+  second pass reveals it.
+- **Monotonicity** — a stretch may not reorder pixels.
+
+**A constant image has no range to stretch and comes back unchanged.** Dividing by zero is not the
+answer, and mapping the single value to either end would be arbitrary.
+
+**The parametric curve is Mathilda's documented choice, not a claim of bit-compatibility** with
+Mathematica, whose exact formula is not published in a form worth guessing at. It is stated so a caller
+can reproduce it:
+
+```
+v' = (v − 1/2)(1 + c) + 1/2 + b      clipped to [0, 1],  then  v'^(1/g)
+```
+
+Contrast **pivots about mid-grey**, so a contrast change does not also shift brightness — mid-grey is
+fixed by any contrast value, and a test pins that (`ImageAdjust[Image[{{0.5}}], {3., 0.}]` is `0.5`). The
+clip precedes gamma because a negative base has no real power, and a test covers a value driven past 1 by
+brightness. `{0, 0, 1}` is the exact identity.
+
+### Measured
+
+512×512:
+
+| operation | Mathilda | reference |
+|---|---|---|
+| `ImageLevels` (256 bins) | **0.66 ms** | numpy `histogram` 1.6 ms |
+| `ImageAdjust` stretch | **0.76 ms** | skimage `rescale_intensity` 7.7 ms |
+| `ImageAdjust {c,b,g}` | 1.49 ms | skimage `adjust_gamma` 1.3 ms |
+
+The stretch is 10× faster than skimage's `rescale_intensity`, which does more work per call (dtype
+negotiation and range inference); the gamma path is at parity, as two `pow` loops over the same buffer
+should be.

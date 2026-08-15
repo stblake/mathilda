@@ -1635,7 +1635,179 @@ static Expr* builtin_distancetransform(Expr* res) {
     return out;
 }
 
+/* ---- levels and tone adjustment -------------------------------------------
+ *
+ * ImageLevels returns DATA, not a plot. Mathematica's ImageHistogram draws a graphic and ImageLevels
+ * gives the counts; in a computer algebra system the counts are the useful half, so that is what is
+ * implemented and the plot is left to Histogram over the result.
+ *
+ * THE COUNTS SUM TO THE PIXEL COUNT. That is the property worth asserting, and it is exact: every
+ * pixel lands in exactly one bin, so a total that disagrees means a bin boundary is wrong or a pixel
+ * was dropped. Bit and Byte images use their natural levels -- 2 and 256 -- because those ARE the
+ * distinct values; a Real image has no natural set, so it is binned into 256 over [0, 1] and the bin
+ * count is stated rather than guessed at.
+ *
+ * IMAGEADJUST'S DEFAULT IS A FULL-RANGE STRETCH, which is unambiguous: subtract the minimum, divide by
+ * the range, so the darkest pixel becomes exactly 0 and the brightest exactly 1. Two exact properties
+ * follow and both are asserted -- the endpoints land on 0 and 1, and the operation is IDEMPOTENT,
+ * since a second stretch of an already-stretched image is the identity. Idempotence is the one that
+ * would catch an off-by-one in the range, because a slightly wrong divisor still looks like a
+ * plausible contrast curve.
+ *
+ * A CONSTANT IMAGE HAS NO RANGE TO STRETCH, and dividing by zero is not the answer. It comes back
+ * unchanged, which is the only defined choice: there is no contrast to expand, and mapping the single
+ * value to 0 or to 1 would both be arbitrary.
+ *
+ * THE THREE-PARAMETER FORM IS OUR OWN DOCUMENTED CURVE, not a claim of bit-compatibility with
+ * Mathematica, whose exact formula is not published in a form worth guessing at. Contrast pivots about
+ * mid-grey, brightness is an offset, gamma is applied last on the unit interval; each step is stated
+ * in the docstring so a caller can reproduce it rather than having to infer it.
+ */
+#define IMG_LEVEL_BINS 256
+
+static Expr* builtin_imagelevels(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+
+    size_t nbins = 0;
+    if (argc == 2) {
+        double b = 0.0, im = 0.0;
+        if (!na_read_scalar(res->data.function.args[1], &b, &im) || im != 0.0) return NULL;
+        if (!(b >= 2.0) || b != floor(b) || b > 65536.0) return NULL;
+        nbins = (size_t)b;
+    }
+
+    Expr* img = res->data.function.args[0];
+    ImgType t;
+    bool is3 = image3d_info(img, NULL, NULL, NULL, NULL, &t);
+    if (!is3 && !image_info(img, NULL, NULL, NULL, &t)) return NULL;
+
+    size_t w = 0, h = 0, d = 1, c = 0; double* buf = NULL;
+    if (is3) { if (!image3d_load(img, &w, &h, &d, &c, &buf)) return NULL; }
+    else     { if (!image_load(img, &w, &h, &c, &buf)) return NULL; }
+    size_t n = w * h * d * c;
+
+    /* Natural levels where the type HAS them. A Bit image genuinely has two values and a Byte 256, so
+     * binning them into anything else would invent structure. Only Real needs a choice. */
+    if (nbins == 0) nbins = (t == IMG_BIT) ? 2 : IMG_LEVEL_BINS;
+
+    double* count = calloc(nbins, sizeof(double));
+    Expr* out = NULL;
+    if (count) {
+        for (size_t i = 0; i < n; i++) {
+            double v = buf[i];
+            if (v < 0.0) v = 0.0;
+            if (v > 1.0) v = 1.0;
+            size_t b = (size_t)(v * (double)(nbins - 1) + 0.5);
+            if (b >= nbins) b = nbins - 1;
+            count[b] += 1.0;
+        }
+        Expr** rows = malloc(sizeof(Expr*) * nbins);
+        if (rows) {
+            bool ok = true;
+            for (size_t i = 0; i < nbins; i++) rows[i] = NULL;
+            for (size_t i = 0; i < nbins && ok; i++) {
+                Expr* pair[2];
+                /* The level, on the same unit scale ImageData uses, so a level can be compared
+                 * against a pixel value without rescaling. */
+                pair[0] = expr_new_real((double)i / (double)(nbins - 1));
+                pair[1] = expr_new_integer((int64_t)count[i]);
+                if (pair[0] && pair[1])
+                    rows[i] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
+                else { expr_free(pair[0]); expr_free(pair[1]); }
+                if (!rows[i]) ok = false;
+            }
+            if (ok) out = expr_new_function(expr_new_symbol(SYM_List), rows, nbins);
+            else for (size_t i = 0; i < nbins; i++) expr_free(rows[i]);
+            free(rows);
+        }
+        free(count);
+    }
+    free(buf);
+    return out;
+}
+
+/* ImageAdjust[image] -- full-range stretch.
+ * ImageAdjust[image, {c, b}] / [image, {c, b, g}] -- contrast, brightness, gamma. */
+static Expr* builtin_imageadjust(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+
+    double ct = 0.0, br = 0.0, gm = 1.0;
+    bool params = false;
+    if (argc == 2) {
+        Expr* sp = res->data.function.args[1];
+        if (!ker_is_list(sp)) return NULL;
+        size_t k = sp->data.function.arg_count;
+        if (k != 2 && k != 3) return NULL;
+        double im = 0.0;
+        if (!na_read_scalar(sp->data.function.args[0], &ct, &im) || im != 0.0) return NULL;
+        if (!na_read_scalar(sp->data.function.args[1], &br, &im) || im != 0.0) return NULL;
+        if (k == 3) {
+            if (!na_read_scalar(sp->data.function.args[2], &gm, &im) || im != 0.0) return NULL;
+            if (!(gm > 0.0)) return NULL;      /* a non-positive gamma is not a curve */
+        }
+        params = true;
+    }
+
+    Expr* img = res->data.function.args[0];
+    bool is3 = image3d_info(img, NULL, NULL, NULL, NULL, NULL);
+    size_t w = 0, h = 0, d = 1, c = 0; double* buf = NULL;
+    if (is3) { if (!image3d_load(img, &w, &h, &d, &c, &buf)) return NULL; }
+    else     { if (!image_load(img, &w, &h, &c, &buf)) return NULL; }
+    size_t n = w * h * d * c;
+
+    if (!params) {
+        double lo = buf[0], hi = buf[0];
+        for (size_t i = 1; i < n; i++) { if (buf[i] < lo) lo = buf[i]; if (buf[i] > hi) hi = buf[i]; }
+        double span = hi - lo;
+        /* No range: return unchanged rather than dividing by zero or picking an arbitrary end. */
+        if (span > 0.0)
+            for (size_t i = 0; i < n; i++) buf[i] = (buf[i] - lo) / span;
+    } else {
+        for (size_t i = 0; i < n; i++) {
+            /* Contrast pivots about mid-grey so a contrast change does not also shift brightness;
+             * brightness is then a plain offset; gamma applies last on the unit interval, which is
+             * where it is defined. Clipping happens before gamma because a negative base has no real
+             * power. */
+            double v = (buf[i] - 0.5) * (1.0 + ct) + 0.5 + br;
+            if (v < 0.0) v = 0.0;
+            if (v > 1.0) v = 1.0;
+            if (gm != 1.0) v = pow(v, 1.0 / gm);
+            buf[i] = v;
+        }
+    }
+    Expr* out = is3 ? image3d_build_real(buf, w, h, d, c)
+                    : image_build_real(buf, w, h, c);
+    free(buf);
+    return out;
+}
+
 void imagefilter_init(void) {
+    symtab_add_builtin("ImageLevels", builtin_imagelevels);
+    symtab_get_def("ImageLevels")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ImageLevels",
+        "ImageLevels[image] gives {{level, count}, ...}: the histogram as DATA, not a plot -- use "
+        "Histogram over the result for a picture. ImageLevels[image, n] uses n bins. Levels are on "
+        "the same unit scale as ImageData, so a level can be compared against a pixel value without "
+        "rescaling. A \"Bit\" image uses its 2 natural levels and \"Byte\" its 256, because those "
+        "ARE the distinct values; a \"Real\" image has no natural set and is binned into 256 over "
+        "[0, 1]. The counts sum to the pixel count exactly, every pixel landing in one bin. Accepts "
+        "volumes as well as planes.");
+
+    symtab_add_builtin("ImageAdjust", builtin_imageadjust);
+    symtab_get_def("ImageAdjust")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ImageAdjust",
+        "ImageAdjust[image] stretches to the full range: the darkest pixel becomes exactly 0 and the "
+        "brightest exactly 1. It is IDEMPOTENT, a second stretch being the identity. A constant image "
+        "has no range to stretch and comes back unchanged, since dividing by zero is not the answer "
+        "and mapping the single value to either end would be arbitrary. "
+        "ImageAdjust[image, {c, b}] and [image, {c, b, g}] apply contrast c, brightness b and gamma g "
+        "by a curve stated here rather than inferred: v' = (v - 1/2)(1 + c) + 1/2 + b, clipped to "
+        "[0, 1], then raised to the power 1/g. Contrast pivots about mid-grey so it does not also "
+        "shift brightness; clipping precedes gamma because a negative base has no real power. This "
+        "curve is Mathilda's documented choice, not a claim of bit-compatibility with Mathematica. "
+        "Accepts volumes as well as planes.");
     symtab_add_builtin("DistanceTransform", builtin_distancetransform);
     symtab_get_def("DistanceTransform")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DistanceTransform",
