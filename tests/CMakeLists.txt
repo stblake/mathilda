@@ -3213,9 +3213,9 @@ else()
     target_link_libraries(intrat_corpus_tests gmp m)
 endif()
 add_test(NAME intrat_corpus_tests
-         COMMAND intrat_corpus_tests ../../IntegrateRationalTests.m)
+         COMMAND intrat_corpus_tests ../IntegrateRationalTests.m)
 add_test(NAME intrat_inline_corpus_tests
-         COMMAND intrat_corpus_tests ../../IntegrateRationalInlineCases.m)
+         COMMAND intrat_corpus_tests ../IntegrateRationalInlineCases.m)
 
 # Comprehensive corpus runner for the CRC integral table.  Loads
 # CRCIntegralsCorpus.m (a flat List of {integrand, var} pairs, ~3 per
@@ -3230,7 +3230,7 @@ else()
     target_link_libraries(crc_corpus_tests gmp m)
 endif()
 add_test(NAME crc_corpus_tests
-         COMMAND crc_corpus_tests ../../CRCIntegralsCorpus.m)
+         COMMAND crc_corpus_tests ../CRCIntegralsCorpus.m)
 
 add_executable(readwrite_tests test_readwrite.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(readwrite_tests PRIVATE ../src)

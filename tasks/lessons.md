@@ -1117,9 +1117,10 @@ Lessons:
   FAIL count; then restore. (Did this for the 2 `Sqrt[x^2+6]`/`Sqrt[6]`
   `simplify_tests` soft-asserts — n=1 symbolic base, so the pass is inert.)
 - **Corpus `*_tests` binaries load their `.m` via `../`-relative paths.** Run
-  `fullsimplify_corpus_tests`/`crc_corpus_tests` from `tests/build/` (so `../` ->
-  `tests/`); `intrat_corpus_tests` wants `IntegrateRationalTests.m` in the repo
-  root. A "could not load … as a List" failure is a cwd issue, not a result DIFF.
+  `fullsimplify_corpus_tests`/`crc_corpus_tests`/`intrat_corpus_tests` from
+  `tests/build/` (so `../` -> `tests/`, where all the corpus `.m` files now
+  live). A "could not load … as a List" failure is a cwd issue, not a result
+  DIFF.
 
 ## PossibleZeroQ false-zeros masquerade as integrator/algorithm bugs (2026-06-30)
 - **Symptom**: `Integrate[(1-x^3)^(1/3)/x, x, Method->"GoursatAlgebraic"]` (and

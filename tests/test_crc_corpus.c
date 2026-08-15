@@ -2,7 +2,7 @@
  *
  * Corpus runner for the CRC integral table (src/internal/CRCMathTablesIntegrals.m).
  *
- * Loads ../../CRCIntegralsCorpus.m — a List of {integrand, var} pairs that
+ * Loads ../CRCIntegralsCorpus.m — a List of {integrand, var} pairs that
  * each exercise one rule from the CRC table.  For every pair the runner
  *
  *   1. computes  r = Integrate[integrand, var, Method -> "CRCTable"]
@@ -242,7 +242,7 @@ int main(int argc, char** argv) {
     setvbuf(stderr, NULL, _IONBF, 0);
 
     const char* corpus_file =
-        (argc > 1) ? argv[1] : "../../CRCIntegralsCorpus.m";
+        (argc > 1) ? argv[1] : "../CRCIntegralsCorpus.m";
 
     symtab_init();
     core_init();

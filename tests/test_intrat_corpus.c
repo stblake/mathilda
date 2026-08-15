@@ -157,7 +157,7 @@ int main(int argc, char** argv) {
      * test corpus (IntegrateRationalInlineCases.m, 2-arg {integrand,
      * var} pairs) can be selected via argv[1]. */
     const char* corpus_file =
-        (argc > 1) ? argv[1] : "../../IntegrateRationalTests.m";
+        (argc > 1) ? argv[1] : "../IntegrateRationalTests.m";
 
     symtab_init();
     core_init();
