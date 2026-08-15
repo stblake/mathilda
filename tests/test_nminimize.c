@@ -1331,6 +1331,30 @@ static void test_3sat_feasibility(void) {
         "  AllTrue[xv, Abs[# - Round[#]] < 1*^-4 &]]");
 }
 
+static void test_max_independent_set(void) {
+    /* B7: maximum independent set on a random 20-node graph (~62 edges at edge
+     * probability 0.3). Binary x_i, maximize Σx (as minimize -Σx) subject to
+     * x_u + x_v ≤ 1 for every edge — no two chosen vertices adjacent. Purely
+     * inequality-constrained, so the 2-flip integer search handles it directly:
+     * SimulatedAnnealing at 20 restarts finds an independent set of size 7 in
+     * ~0.25 s — the exact optimum (scipy.milp = 7). Asserts a large set (≥ 6,
+     * loose for cross-platform SA drift), that every edge constraint holds (a
+     * genuine independent set), and binary. Deterministic under the seeded graph
+     * + RandomSeed. */
+    check_true(
+        "Module[{n = 20, edges, vars, obj, cons, r, o, sol, xv, sz},"
+        " SeedRandom[7];"
+        " edges = Select[Subsets[Range[n], {2}], RandomReal[] < 0.3 &];"
+        " vars = Array[x, n]; obj = -Total[vars];"
+        " cons = Join[Map[vars[[#[[1]]]] + vars[[#[[2]]]] <= 1 &, edges],"
+        "   Table[0 <= vars[[i]] <= 1, {i, n}], {Element[vars, Integers]}];"
+        " r = NMinimize[{obj, cons}, vars,"
+        "   Method -> {\"SimulatedAnnealing\", \"RandomSeed\" -> 1, \"SearchPoints\" -> 20}];"
+        " o = First[r]; sol = Last[r]; xv = vars /. sol; sz = -o;"
+        " sz >= 6 && AllTrue[edges, (xv[[#[[1]]]] + xv[[#[[2]]]]) <= 1.0001 &] &&"
+        "  AllTrue[xv, Abs[# - Round[#]] < 1*^-4 &]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1443,6 +1467,7 @@ int main(void) {
     TEST(test_multiknapsack);
     TEST(test_sudoku_latin);
     TEST(test_3sat_feasibility);
+    TEST(test_max_independent_set);
 
     printf("All NMinimize tests passed.\n");
     return 0;
