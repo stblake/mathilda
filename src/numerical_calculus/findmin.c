@@ -5339,6 +5339,12 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     CompiledProgram*  f_prog = NULL;   /* compiled objective (machine prec)     */
     CompiledProgram** g_progs = NULL;  /* compiled general constraints          */
 
+    /* Declared here (before the first `goto cleanup`) so the cleanup path always
+     * sees an initialized one-hot list — the remaining fields are filled below on
+     * the non-error path. */
+    NmDriver D;
+    D.onehots = NULL; D.n_onehots = 0;
+
     /* Extract integer/real domain declarations, then collect the remaining
      * constraints into boxes + general FmGenCon[] + disjunctions. */
     if (cons_eff) {
@@ -5417,7 +5423,6 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
         free(cnames); free(ctypes);
     }
 
-    NmDriver D;
     D.f_raw = f_eff; D.vars = eff_vars; D.n = n; D.binds = binds;
     D.g_exprs = g_exprs; D.gens = gens; D.ngens = ngens; D.boxes = boxes;
     D.opts = &opts; D.is_int = vs.is_int; D.any_int = vs.any_int;
