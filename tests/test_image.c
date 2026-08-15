@@ -1038,6 +1038,65 @@ static void test_distance_transform_relates_to_morphology(void) {
                    "True", 0);
 }
 
+static void test_volume_downsampling_does_not_alias(void) {
+    /* The 3-D version of the checkerboard row. A 2x2x2-periodic pattern halved on every axis is
+     * sampled at exactly the frequency that annihilates it: area averaging returns its mean, 0.5
+     * everywhere, and nearest returns a FLAT FIELD. Exact values on both sides. */
+    assert_eval_eq("Union[Flatten[ImageData[ImageResize["
+                   "Image3D[Table[N[Mod[x + y + z, 2]], {z, 4}, {y, 4}, {x, 4}]], {2, 2, 2}]]]]",
+                   "{0.5}", 0);
+    assert_eval_eq("Union[Flatten[ImageData[ImageResize["
+                   "Image3D[Table[N[Mod[x + y + z, 2]], {z, 4}, {y, 4}, {x, 4}]], {2, 2, 2},"
+                   " Resampling -> \"Nearest\"]]]]", "{0.0}", 0);
+    /* An exact block mean over EIGHT voxels: a 2x2x2 volume of slice values 1 and 2 averages to
+     * exactly 1.5. */
+    assert_eval_eq("ImageData[ImageResize[Image3D[Table[N[z], {z, 2}, {y, 2}, {x, 2}]],"
+                   " {1, 1, 1}]]", "{{{1.5}}}", 0);
+    /* Area averaging preserves the mean at an integer factor, since every source voxel carries
+     * equal total weight -- a conservation law in three dimensions as in two. */
+    assert_eval_eq("Module[{big = Image3D[Table[N[Mod[x*7 + y*13 + z*3, 251]/251],"
+                   " {z, 8}, {y, 8}, {x, 8}]]},"
+                   " Chop[Mean[Flatten[ImageData[ImageResize[big, {4, 4, 4}]]]]"
+                   " - Mean[Flatten[ImageData[big]]]]]", "0", 0);
+}
+
+static void test_volume_resize_respects_the_axis_order(void) {
+    /* THE reversal, and it needs a non-cubic volume AND a non-cubic TARGET. The spec is
+     * {width, height, depth} while the storage is depth x height x width, so a resize has to reverse
+     * the spec before indexing. A cubic source or a cubic target validates none of that -- and with
+     * three axes there are six ways to get it wrong, each of which a cube would hide.
+     *
+     * Source is 4 wide, 3 high, 2 deep; asked for 2 wide, 6 high, 4 deep. Both the reported
+     * dimensions and the data shape are asserted, since either alone would pass with axes swapped. */
+    assert_eval_eq("ImageDimensions[ImageResize["
+                   "Image3D[Table[N[(x + 10 y + 100 z)/1000.], {z, 2}, {y, 3}, {x, 4}]],"
+                   " {2, 6, 4}]]", "{2, 6, 4}", 0);
+    assert_eval_eq("Dimensions[ImageData[ImageResize["
+                   "Image3D[Table[N[(x + 10 y + 100 z)/1000.], {z, 2}, {y, 3}, {x, 4}]],"
+                   " {2, 6, 4}]]]", "{4, 6, 2}", 0);
+    /* Every method is the identity at 1:1, which is what fails on a half-voxel shift in any axis --
+     * though only the aliasing and block-mean rows above can catch a shift at other scales. */
+    assert_eval_eq("Module[{v = " VOL234 "},"
+                   " {ImageData[ImageResize[v, {4, 3, 2}, Resampling -> \"Average\"]]"
+                   "    === ImageData[v],"
+                   "  ImageData[ImageResize[v, {4, 3, 2}, Resampling -> \"Bilinear\"]]"
+                   "    === ImageData[v],"
+                   "  ImageData[ImageResize[v, {4, 3, 2}, Resampling -> \"Nearest\"]]"
+                   "    === ImageData[v]}]", "{True, True, True}", 0);
+    /* A constant volume survives enlargement exactly. */
+    assert_eval_eq("Union[Flatten[ImageData[ImageResize["
+                   "Image3D[Table[0.25, {2}, {2}, {2}]], {4, 4, 4}]]]]", "{0.25}", 0);
+    /* A two-element spec on a volume declines rather than being guessed at as a plane. */
+    assert_eval_eq("Head[ImageResize[" VOL234 ", {2, 3}]]", "ImageResize", 0);
+    assert_eval_eq("Head[ImageResize[" VOL234 ", {2, 3, 0}]]", "ImageResize", 0);
+    assert_eval_eq("Head[ImageResize[" VOL234 ", {2, 3, 1.5}]]", "ImageResize", 0);
+    /* Colour volumes keep their channels through a resize. */
+    assert_eval_eq("Module[{cv = Image3D[Table[{0.5, 0.25, 0.75}, {2}, {3}, {4}]]},"
+                   " {ImageChannels[ImageResize[cv, {2, 2, 1}]],"
+                   "  Dimensions[ImageData[ImageResize[cv, {2, 2, 1}]]]}]",
+                   "{3, {1, 2, 2, 3}}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1101,6 +1160,8 @@ int main(void) {
     TEST(test_distance_transform_is_exactly_euclidean);
     TEST(test_distance_transform_degenerate_cases);
     TEST(test_distance_transform_relates_to_morphology);
+    TEST(test_volume_downsampling_does_not_alias);
+    TEST(test_volume_resize_respects_the_axis_order);
 
     printf("All image tests passed.\n");
     return 0;

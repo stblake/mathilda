@@ -862,3 +862,45 @@ A further test ties it to morphology: surviving `k` erosions is equivalent to di
 `+1` is the substance — a 3×3 erosion removes every pixel with a background neighbour, so one erosion
 already means distance 2. Both `k=1` and `k=2` are asserted so the relation is pinned rather than a
 coincidence at one value.
+
+## Volumetric resampling
+
+`ImageResize[volume, {w, h, d}]` and `ImageResize[volume, w]` (the other two extents following the
+aspect ratio), with `Resampling -> "Nearest" | "Bilinear" | "Average"`. Dispatch is on the **image**, so a
+two-element spec handed to a volume declines rather than being guessed at as a plane.
+
+The 2-D reasoning carries over unchanged, and so does the discriminator. A 2×2×2-periodic pattern halved
+on every axis is sampled at exactly the frequency that annihilates it:
+
+```
+In[1]:= chk = Image3D[Table[N[Mod[x + y + z, 2]], {z, 4}, {y, 4}, {x, 4}]];
+
+In[2]:= Union[Flatten[ImageData[ImageResize[chk, {2, 2, 2}]]]]
+Out[2]= {0.5}                                              (* area averaging: the mean *)
+
+In[3]:= Union[Flatten[ImageData[ImageResize[chk, {2, 2, 2}, Resampling -> "Nearest"]]]]
+Out[3]= {0.0}                                              (* pattern gone *)
+```
+
+Fractional coverage in three axes — a source voxel's weight is the product of its three per-axis
+overlaps — so an integer factor gives an exact block mean over eight voxels and a non-integer one is
+handled correctly rather than approximated. Area averaging **preserves the mean** exactly at an integer
+factor, a conservation law in 3-D as in 2-D.
+
+**The axis order is the harder part, and it is not the arithmetic.** The spec is `{width, height, depth}`
+while the storage is `depth × height × width` — fully reversed — so a resize must reverse the spec before
+indexing. Both a non-cubic **source** and a non-cubic **target** are needed to test it: with three axes
+there are six ways to get it wrong and a cube hides every one. The tests resize a 4×3×2 volume to
+`{2, 6, 4}` and assert *both* the reported dimensions and the data shape (`{4, 6, 2}`), since either alone
+would pass with axes swapped.
+
+### Measured
+
+64³ volume:
+
+| operation | Mathilda | reference |
+|---|---|---|
+| 64³ → 32³, area | **0.83 ms** | skimage `downscale_local_mean` 0.8 ms |
+| 64³ → 128³, trilinear | **8.08 ms** | scipy `zoom(order=1)` 36.7 ms |
+
+Parity on the reduction and **4.5× faster** on the enlargement.
