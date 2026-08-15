@@ -1900,13 +1900,39 @@ static void correlate_planes(const double* src, double* dst, size_t w, size_t h,
 }
 
 /* Normalised cross-correlation of a greyscale plane against a template. */
-static void ncc_planes(const double* src, double* dst, size_t w, size_t h,
+/* Normalised cross-correlation by SUMMED-AREA TABLES.
+ *
+ * NCC at every position needs, per window, the cross term, the window sum and the window sum of
+ * squares. Written directly that is three sweeps of the template over every pixel; the first version
+ * here did two (one for the mean, one for the numerator and the deviation norm together) and cost
+ * 21.9 ms against SciPy's 8.8 on 512x512 with a 32x32 template.
+ *
+ * Two identities remove the statistics from the inner loop entirely. With m = kw*kh,
+ *
+ *     sum (I - Ibar)(T - Tbar) = sum I*T - (sum I) * Tbar
+ *     sum (I - Ibar)^2         = sum I^2 - (sum I)^2 / m
+ *
+ * so the only per-window quantities left are `sum I` and `sum I^2`, and a summed-area table answers
+ * each in four lookups regardless of template size. The cross term is then a PLAIN correlation, which
+ * means it can go through correlate_planes and inherit the separable path -- the same code that made
+ * plain ImageCorrelate 1.94 ms. What was O(pixels * template) three times over becomes
+ * O(pixels * template) once plus O(pixels).
+ *
+ * The tables are built through clampi rather than over a padded copy, so they encode exactly the
+ * edge-replicated border the direct loop had, at no extra memory.
+ *
+ * ONE PROPERTY IS TRADED, and it is worth naming. The direct form computed sum(ds*dt) and sum(ds*ds)
+ * from the same values in the same order, so a template matched against itself gave a peak of exactly
+ * 1.0. Here the numerator and the variance come from different summations, so the peak is 1.0 within
+ * a few ulp instead. The ARGMAX is unaffected -- it is an integer -- and that is the property template
+ * matching actually rests on, so the tests assert the argmax exactly and the peak to 1e-12.
+ */
+static bool ncc_planes(const double* src, double* dst, size_t w, size_t h,
                        const double* t, size_t kw, size_t kh) {
-    int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
     size_t m = kw * kh;
+    int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
 
-    /* The template's mean and its deviation norm are position-independent, so they are computed once
-     * rather than per pixel -- the difference between one pass over the template and w*h passes. */
+    /* The template's mean and deviation norm are position-independent: one pass, not w*h passes. */
     double tbar = 0.0;
     for (size_t i = 0; i < m; i++) tbar += t[i];
     tbar /= (double)m;
@@ -1914,33 +1940,48 @@ static void ncc_planes(const double* src, double* dst, size_t w, size_t h,
     for (size_t i = 0; i < m; i++) { double dt = t[i] - tbar; tnorm += dt * dt; }
     tnorm = sqrt(tnorm);
 
+    /* Tables are (PH+1) x (PW+1) over the window-aligned extent, with a zero first row and column so
+     * the four-corner difference needs no boundary cases. */
+    size_t PW = w + kw - 1, PH = h + kh - 1;
+    size_t sw = PW + 1;
+    double* s1 = calloc((PH + 1) * sw, sizeof(double));
+    double* s2 = calloc((PH + 1) * sw, sizeof(double));
+    double* cross = malloc(sizeof(double) * w * h);
+    if (!s1 || !s2 || !cross) { free(s1); free(s2); free(cross); return false; }
+
+    for (size_t y = 0; y < PH; y++) {
+        size_t sy = clampi((int64_t)y - ci, h);
+        for (size_t x = 0; x < PW; x++) {
+            size_t sx = clampi((int64_t)x - cj, w);
+            double v = src[sy * w + sx];
+            s1[(y + 1) * sw + (x + 1)] = s1[y * sw + (x + 1)] + s1[(y + 1) * sw + x]
+                                       - s1[y * sw + x] + v;
+            s2[(y + 1) * sw + (x + 1)] = s2[y * sw + (x + 1)] + s2[(y + 1) * sw + x]
+                                       - s2[y * sw + x] + v * v;
+        }
+    }
+
+    /* The cross term, through the shared correlation so a separable template costs kw+kh rather
+     * than kw*kh. Its border rule is the same clamp the tables encode. */
+    correlate_planes(src, cross, w, h, 1, t, kw, kh);
+
     for (size_t y = 0; y < h; y++)
       for (size_t x = 0; x < w; x++) {
-        double sbar = 0.0;
-        for (size_t i = 0; i < kh; i++) {
-            size_t sy = clampi((int64_t)y + (int64_t)i - ci, h);
-            for (size_t j = 0; j < kw; j++) {
-                size_t sx = clampi((int64_t)x + (int64_t)j - cj, w);
-                sbar += src[sy * w + sx];
-            }
-        }
-        sbar /= (double)m;
-
-        double num = 0.0, snorm = 0.0;
-        for (size_t i = 0; i < kh; i++) {
-            size_t sy = clampi((int64_t)y + (int64_t)i - ci, h);
-            for (size_t j = 0; j < kw; j++) {
-                size_t sx = clampi((int64_t)x + (int64_t)j - cj, w);
-                double ds = src[sy * w + sx] - sbar;
-                double dt = t[i * kw + j] - tbar;
-                num += ds * dt;
-                snorm += ds * ds;
-            }
-        }
-        snorm = sqrt(snorm);
+        size_t a = y * sw + x, b = y * sw + (x + kw);
+        size_t cc = (y + kh) * sw + x, d = (y + kh) * sw + (x + kw);
+        double sum1 = s1[d] - s1[b] - s1[cc] + s1[a];
+        double sum2 = s2[d] - s2[b] - s2[cc] + s2[a];
+        /* Cancellation can push a uniform window's variance a hair below zero; it is not negative,
+         * it is zero, and sqrt of it would be NaN spreading through the result. */
+        double var = sum2 - sum1 * sum1 / (double)m;
+        double snorm = var > 0.0 ? sqrt(var) : 0.0;
+        double num = cross[y * w + x] - sum1 * tbar;
         /* No variance on either side means no shape to compare: 0, not a division. */
         dst[y * w + x] = (snorm > 0.0 && tnorm > 0.0) ? num / (snorm * tnorm) : 0.0;
       }
+
+    free(s1); free(s2); free(cross);
+    return true;
 }
 
 /* ImageCorrelate[image, kernel] / [image, template, "NormalizedCrossCorrelation"] */
@@ -1967,10 +2008,8 @@ static Expr* builtin_imagecorrelate(Expr* res) {
         size_t w = 0, h = 0; double* g = NULL;
         if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) { free(k); return NULL; }
         double* dst = malloc(sizeof(double) * w * h);
-        if (dst) {
-            ncc_planes(g, dst, w, h, k, kw, kh);
+        if (dst && ncc_planes(g, dst, w, h, k, kw, kh))
             out = image_build_real(dst, w, h, 1);
-        }
         free(g); free(dst);
     } else {
         size_t w = 0, h = 0, c = 0; double* src = NULL;

@@ -1468,6 +1468,67 @@ static void test_volume_pad_fill_modes(void) {
                    "  ImagePad[ImagePad[v, 2, \"Reflected\"], -2] === v}]", "{True, True}", 0);
 }
 
+
+/* NCC on summed-area tables. The properties that matter are the argmax (exact, an integer) and
+ * agreement with the definition; the peak is 1.0 only to a few ulp now, which is the documented
+ * trade for taking the window statistics out of the inner loop. */
+#define NIMG "Image[Table[N[Mod[i*13 + j*7, 97]]/97, {i, 1, 12}, {j, 1, 14}]]"
+
+static void test_ncc_finds_the_patch_it_was_given(void) {
+    /* A patch OF THE IMAGE, so the correct answer is known: the score peaks where the patch came
+     * from. The argmax is asserted exactly -- it is the property template matching rests on. */
+    assert_eval_eq("Module[{img = " NIMG ", t, r},"
+                   " t = ImageData[img][[4 ;; 6, 5 ;; 7]];"
+                   " r = ImageData[ImageCorrelate[img, t, \"NormalizedCrossCorrelation\"]];"
+                   " Position[r, Max[Flatten[r]]]]", "{{5, 6}}", 0);
+    /* And the peak is 1 to within 1e-12. Not exactly 1: the numerator comes from the correlation and
+     * the variance from the tables, so they no longer share a summation order. */
+    assert_eval_eq("Module[{img = " NIMG ", t, r},"
+                   " t = ImageData[img][[4 ;; 6, 5 ;; 7]];"
+                   " r = ImageData[ImageCorrelate[img, t, \"NormalizedCrossCorrelation\"]];"
+                   " Abs[1 - Max[Flatten[r]]] < 1.*^-12]", "True", 0);
+    /* Every score is a cosine of two deviation vectors, so it cannot leave [-1, 1]. */
+    assert_eval_eq("Module[{img = " NIMG ", t, r},"
+                   " t = ImageData[img][[4 ;; 6, 5 ;; 7]];"
+                   " r = Flatten[ImageData[ImageCorrelate[img, t, "
+                   "     \"NormalizedCrossCorrelation\"]]];"
+                   " Min[r] >= -1.000000001 && Max[r] <= 1.000000001]", "True", 0);
+}
+
+static void test_ncc_agrees_with_its_definition(void) {
+    /* The reference is the definition itself, written out in Mathilda with the same clamped border:
+     * the tables are an optimisation, and an optimisation is only correct if it agrees with the thing
+     * it replaced. A summed-area table that is off by a row still produces plausible scores. */
+    assert_eval_eq("Module[{img = " NIMG ", d, t, r, ref, cl},"
+                   " d = ImageData[img]; t = d[[4 ;; 6, 5 ;; 7]];"
+                   " r = ImageData[ImageCorrelate[img, t, \"NormalizedCrossCorrelation\"]];"
+                   " cl[v_, n_] := Max[1, Min[n, v]];"
+                   " ref = Table[Module[{win, wb, tb, nu, sn, tn},"
+                   "   win = Table[d[[cl[y + i - 2, 12], cl[x + j - 2, 14]]], {i, 3}, {j, 3}];"
+                   "   wb = Mean[Flatten[win]]; tb = Mean[Flatten[t]];"
+                   "   nu = Total[Flatten[(win - wb)*(t - tb)]];"
+                   "   sn = Sqrt[Total[Flatten[(win - wb)^2]]];"
+                   "   tn = Sqrt[Total[Flatten[(t - tb)^2]]];"
+                   "   If[sn > 0 && tn > 0, nu/(sn*tn), 0.]], {y, 12}, {x, 14}];"
+                   " Max[Abs[Flatten[r - ref]]] < 1.*^-11]", "True", 0);
+}
+
+static void test_ncc_degenerate_and_invariant(void) {
+    /* A uniform image has no variance at any position. Every score is 0 -- and specifically not NaN,
+     * which is what a sqrt of a slightly-negative variance would give and what would then spread
+     * through Max and Position without ever looking like an error. */
+    assert_eval_eq("Union[Flatten[ImageData[ImageCorrelate[Image[Table[0.5, {8}, {8}]],"
+                   " {{1., 2.}, {3., 4.}}, \"NormalizedCrossCorrelation\"]]]]", "{0.0}", 0);
+    /* NCC compares shape, so an affine change of the template must not move any score. */
+    assert_eval_eq("Module[{img = " NIMG ", t, r},"
+                   " t = ImageData[img][[4 ;; 6, 5 ;; 7]];"
+                   " r = ImageData[ImageCorrelate[img, t, \"NormalizedCrossCorrelation\"]];"
+                   " Max[Abs[Flatten[ImageData[ImageCorrelate[img, 2 t + 3,"
+                   "   \"NormalizedCrossCorrelation\"]] - r]]] < 1.*^-11]", "True", 0);
+    /* An unknown method name declines rather than silently correlating. */
+    assert_eval_eq("Head[ImageCorrelate[" NIMG ", {{1.}}, \"NoSuchMethod\"]]", "ImageCorrelate", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1548,6 +1609,9 @@ int main(void) {
     TEST(test_volume_pad_then_crop_is_the_identity);
     TEST(test_volume_pad_axis_conventions);
     TEST(test_volume_pad_fill_modes);
+    TEST(test_ncc_finds_the_patch_it_was_given);
+    TEST(test_ncc_agrees_with_its_definition);
+    TEST(test_ncc_degenerate_and_invariant);
 
     printf("All image tests passed.\n");
     return 0;

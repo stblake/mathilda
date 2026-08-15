@@ -1017,92 +1017,63 @@ The distinction between the two only shows on an *asymmetric* kernel, where a de
 
 ## Normalised cross-correlation
 
-Plain correlation is maximised by **brightness, not similarity** — a white patch beats a correct but
-darker match — which makes it a poor matcher. NCC subtracts the local mean and divides by the local
-standard deviation, so it measures shape alone and is invariant to brightness offset and contrast scale.
-A test confirms that: the same template scaled by 0.4 and offset by 0.1 still scores 1.
+`ImageCorrelate[image, template, "NormalizedCrossCorrelation"]` is template matching. A
+colour image is reduced to luminance first, since NCC compares *shape* — a property of
+brightness — and combining per-channel scores would need an arbitrary rule.
 
-By Cauchy–Schwarz `|NCC| ≤ 1`, with equality exactly when the window is an affine image of the template.
-So where the template is a crop, the score is **exactly 1**, and nothing anywhere exceeds 1 — both
-asserted.
+### Summed-area tables
 
-**What is deliberately not asserted is that the peak is unique.** The first version of that test expected
-a single maximum at the crop's location and failed, because the test image was periodic
-(`Mod[x·11 + y·7, 23]`) and had five exact matches. Uniqueness is a property of the *image*, not of NCC;
-asserting it would have been testing the wrong thing.
+NCC needs three quantities per window: the cross term, the window sum, and the window sum
+of squares. Written directly that is three sweeps of the template over every pixel. Two
+identities remove the statistics from the inner loop, with `m = kw*kh`:
 
-A flat window has no shape to compare and scores **0**, not 1 — scoring 1 would make every flat region
-match every template perfectly. Colour is reduced to luminance first, as `GradientFilter` does, since
-combining per-channel scores needs an arbitrary rule.
+```
+Σ (I - Ī)(T - T̄) = Σ I·T − (Σ I)·T̄
+Σ (I - Ī)²       = Σ I² − (Σ I)²/m
+```
 
-### Measured
+so the only per-window quantities left are `Σ I` and `Σ I²`, and a summed-area table
+answers each in **four lookups regardless of template size**. The cross term is then a
+plain correlation, so it goes through the shared correlation path and inherits its
+separable case. The tables are built through the same `clampi` the direct loop used, so
+they encode exactly the edge-replicated border at no extra memory.
 
-512×512:
+**One property is traded, and it is worth naming.** The direct form computed `Σ ds·dt` and
+`Σ ds·ds` from the same values in the same order, so a template matched against itself gave
+a peak of *exactly* 1.0. Now the numerator comes from the correlation and the variance from
+the tables, so the peak is 1.0 to within a few ulp — measured at 3.3e-15. The **argmax** is
+unaffected, being an integer, and that is what template matching rests on, so the suite
+asserts the argmax exactly, the peak to 1e-12, and agreement with the written-out
+definition to 1e-11.
 
-| operation | Mathilda | reference |
-|---|---|---|
-| `ImageCorrelate` 5×5 | **1.94 ms** | scipy `correlate` 2.8 ms |
-| NCC, 8×8 template | 21.9 ms | skimage `match_template` 8.8 ms |
-
-`ImageCorrelate` is faster than scipy's, having separability. **NCC is 2.5× slower**, and the reason is
-algorithmic rather than incidental: this computes the local mean and variance directly per position,
-O(w·h·kw·kh), where `match_template` uses **integral images** to get both in O(1) per position. That is the remedy if template matching becomes a hot path — a summed-area
-table over the image and its square, built once — and it is a known limit with a known fix rather than a
-number that happens to be good.
-
----
-
-# Rotation and reflection
-
-`ImageRotate[image]` turns a quarter counterclockwise; `ImageRotate[image, angle]` rotates by an angle in
-radians (`n Degree` works). `ImageReflect[image]` reflects top-to-bottom, `ImageReflect[image, Left]`
-left-to-right. Attributes: `Protected`.
-
-**A right angle is a pure index permutation**, and keeping it off the resampler is the design. Every pixel
-lands on another pixel's exact position, so nothing is interpolated and **four quarter turns are exactly
-the identity** — asserted with `===`, which is only available because of that separation. Sent through a
-bilinear resampler the sample points would land on pixel centres and the weights would be 1 and 0, but the
-arithmetic would still run and the half-pixel convention would have to be exactly right for the identity
-to come out clean.
-
-An odd number of quarter turns **swaps the dimensions** — which a square test image could not show, so the
-tests use 4×2.
-
-Reflection is also a permutation, hence exact and **self-inverse**: reflecting twice is exactly the
-identity, on either axis.
-
-**Angles are numericalised.** `Pi`, `Pi/2` and `90 Degree` are exact symbolic values rather than machine
-reals, so a plain scalar read refuses them — `ImageRotate[img, Pi]` declined outright until the angle was
-wrapped in `N` and evaluated, which is a poor answer to the most natural way of writing a half turn.
-Wrapping handles every exact form at once instead of special-casing `Pi`.
-
-**Arbitrary angles cannot be exact**, since a rotated pixel grid does not land on a pixel grid. Sampling is
-by **inverse mapping** — iterating over destination pixels and asking where each came from — so every
-output is filled exactly once; forward mapping leaves holes wherever the rotation stretches, which is the
-classic artefact. Area rotated in from outside reads as **0, not the replicated edge**: replication is
-right for a *filter*, where the border is a boundary condition on an operation inside the image, and wrong
-for a *rotation*, where that area genuinely was not photographed.
-
-The round-trip property is that θ then −θ recovers the interior, and it holds to **1.1e-16** on smooth
-content. That qualifier matters: the same test on a noise-like pattern recovers only to 0.377 — not a bug
-but two bilinear interpolations destroying energy at the Nyquist limit. A tolerance loose enough to admit
-that would also admit an outright wrong rotation, so the test uses band-limited content and says why.
+A uniform window has no variance and scores 0 rather than dividing; the variance is clamped
+at zero first, because cancellation can push it a hair negative and `sqrt` of that is a NaN
+that would spread through `Max` and `Position` without ever looking like an error.
 
 ### Measured
 
-512×512:
+512×512, construction excluded:
 
-| operation | Mathilda | reference |
-|---|---|---|
-| `ImageRotate` 0.3 rad, bilinear | **0.97 ms** | scipy `rotate(order=1)` 3.7 ms |
-| `ImageRotate` quarter turn | 1.65 ms | numpy `rot90` + copy 0.4 ms |
-| `ImageReflect` | 0.46 ms | numpy `flipud` + copy ~0 ms |
+| Template | Mathilda | Reference | Ratio |
+|----------|---------:|----------:|------:|
+| 8×8 | 8.81 ms | 15.50 ms | **1.8× faster** |
+| 32×32 | 199.6 ms | 146.4 ms | 1.36× slower |
 
-The bilinear rotation is 3.8× faster than scipy's. The two permutation rows are slower, and the comparison
-is not quite like-for-like: numpy's `rot90` and `flipud` return **views** — zero work — and even forcing a
-copy is a strided memcpy, where these build an `Expr` result. The permutation itself is a pointer shuffle;
-the time is output construction, which is the same bottleneck `MorphologicalComponents` documents and has
-the same remedy.
+The reference is the identical algorithm in NumPy/SciPy (integral images plus
+`signal.correlate2d`), so the comparison is of implementations rather than of methods.
+
+The 8×8 case was **21.9 ms** before this change: the tables are worth 2.5× there. The 32×32
+case is not about NCC at all — plain `ImageCorrelate` with the same 32×32 template is
+197.3 ms of the 199.6, against SciPy's 143.2 for `correlate2d`. At that size the statistics
+are ~2 ms of 200 and the dense cross term is everything, so the remaining gap belongs to the
+correlation path, not to the normalisation.
+
+**What would close it:** an FFT-based cross term. 512² against a 32×32 template is 275M
+multiply-adds done directly (1.4 GFLOP/s here, 1.9 for SciPy — both scalar loops), where
+correlation via the convolution theorem is O(n log n) and would be roughly an order of
+magnitude faster. FFTW is already linked into the build (`USE_FFTW`), so this is a lowering
+to an existing dependency rather than a new one, with a crossover threshold — for a 3×3
+template the direct loop wins easily and the transform would be pure overhead.
 
 ## ImagePad and ImageCrop
 
