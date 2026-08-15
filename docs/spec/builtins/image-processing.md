@@ -1291,3 +1291,48 @@ Agreement with the definition written out longhand is ≤1.8e-14 at every size, 
 non-cubic extents in both orderings and even extents on every axis, which is where a
 transposed pad or output window would hide — a class of mistake the volumetric paths in this
 subsystem have shipped twice.
+
+## The dense loop: interior and border
+
+Below the transform's crossover the dense loop still runs, and it used to call the clamping
+index helper on **every tap**. A pixel whose kernel reaches only rows and columns inside the
+image needs no clamping at all, and for a 3×3 kernel on 512×512 that is 99.2% of pixels. So
+the two cases are separated: the interior is a plain dot product over a contiguous window,
+the border keeps the clamped form, and the kernel is reversed on every axis once up front so
+the interior's index expressions ascend — a descending stride is not something a compiler
+will vectorise.
+
+### What it was worth, including where it was not
+
+512×512 planar and 64 × 96 × 128 volumetric, dense sizes only (above the crossover the
+transform runs instead):
+
+| | before | after |
+|---|---:|---:|
+| planar 3×3 | 1.05 ms | 1.05 ms |
+| planar 5×5 | 2.60 ms | 2.42 ms |
+| volumetric 3³ | 11.35 ms | 7.50 ms |
+
+**The planar split is a wash and is kept anyway.** At 3×3 the timing is unchanged across
+repeated runs; at 5×5 it is about 7% better. The clamping was evidently not the bottleneck in
+the plane — at nine taps per pixel the per-pixel overhead is, and the branches were
+predictable enough that removing them bought nothing.
+
+The volumetric split is worth **1.5×**, and the reason is that every tap there clamps *three*
+axes: a 3×3×3 kernel does 81 clamped index computations to produce 27 multiply-adds. That
+closes the last case where SciPy led — `ndimage.convolve` at 3³ measures 7.31 ms against 7.50
+here, which is parity.
+
+The planar version is kept for symmetry with the rank-3 one rather than for its timing. Two
+different shapes for the same algorithm at two ranks is exactly the divergence that produced
+the two volumetric bugs recorded above, and identical shapes are worth something even when
+one of them is not faster.
+
+### Why not vImage
+
+`vImageConvolve_PlanarF` is already linked through Accelerate and is genuinely fast. It is
+also **float32**. Every filter in this subsystem is float64, and the suite asserts agreement
+with the written-out definition at 1e-14; single precision answers to about 1e-7. Quietly
+dropping six digits of a numeric function's accuracy to make it faster is not a trade to make
+invisibly in a computer algebra system. If it is ever wanted it should be an explicit opt-in
+that says so in its name, not the default behind an existing head.

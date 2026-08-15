@@ -86,6 +86,31 @@ static size_t clampi(int64_t v, size_t n) {
 }
 
 /* The convolution itself. `dst` and `src` are h*w*c unit-scaled buffers. */
+/* The dense convolution, split into an interior that needs no clamping and a border that does.
+ *
+ * The first version called clampi on EVERY TAP -- two branches per multiply-add, in the innermost
+ * loop, which also stopped the loop vectorising. For a 3x3 kernel on 512x512 that is nine clamped
+ * index computations per pixel to produce nine multiply-adds, and 99.2% of those pixels have every
+ * tap comfortably inside the image.
+ *
+ * So the pixels are separated. A pixel is interior when every row and column the kernel reaches is in
+ * range, which is y in [kh-1-ci, h-1-ci] and x in [kw-1-cj, w-1-cj]; there the taps are a contiguous
+ * window and the loop is a plain dot product. Everything else keeps the clamped form, and there is
+ * little of it.
+ *
+ * The kernel is REVERSED ON BOTH AXES once, up front. Convolution reads the kernel backwards
+ * (`y - i + ci`), so the natural interior loop walks the image backwards too -- a descending stride
+ * the compiler will not vectorise. Substituting i' = kh-1-i turns both index expressions into
+ * increasing ones, and then the inner loop is a forward dot product over adjacent doubles, which is
+ * what the hardware wants. The arithmetic is identical; only the order of the sum changes, and it
+ * changes to the order the separable and transform paths already use.
+ *
+ * NO PRECISION IS TRADED. This is worth stating because the alternative considered here was vImage's
+ * vImageConvolve_PlanarF, which is already linked and genuinely fast -- and is float32. Every filter
+ * in this subsystem is float64, and the suite asserts agreement with the written-out definition at
+ * 1e-14; single precision would answer to about 1e-7. Quietly dropping six digits of a numeric
+ * function to make it faster is not a trade to make invisibly in a computer algebra system.
+ */
 static void convolve_planes(const double* src, double* dst,
                             size_t w, size_t h, size_t c,
                             const double* k, size_t kw, size_t kh) {
@@ -93,8 +118,49 @@ static void convolve_planes(const double* src, double* dst,
      * just past the middle for an even one, which is the usual convention. */
     int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
 
+    double* kr = malloc(sizeof(double) * kw * kh);
+    if (kr) {
+        for (size_t i = 0; i < kh; i++)
+            for (size_t j = 0; j < kw; j++)
+                kr[i * kw + j] = k[(kh - 1 - i) * kw + (kw - 1 - j)];
+    }
+
+    /* The interior, in the sense above. Signed, because a kernel larger than the image makes these
+     * cross over and the interior is then empty. */
+    int64_t y0 = (int64_t)kh - 1 - ci, y1 = (int64_t)h - 1 - ci;
+    int64_t x0 = (int64_t)kw - 1 - cj, x1 = (int64_t)w - 1 - cj;
+    if (!kr) { y0 = 1; y1 = 0; x0 = 1; x1 = 0; }   /* no reversed kernel: clamp everything */
+
     for (size_t y = 0; y < h; y++) {
+        bool yi = ((int64_t)y >= y0 && (int64_t)y <= y1);
         for (size_t x = 0; x < w; x++) {
+            if (yi && (int64_t)x >= x0 && (int64_t)x <= x1) {
+                /* Interior: no clamping, ascending indices, contiguous in the last axis when the
+                 * image has one channel. */
+                size_t sy0 = (size_t)((int64_t)y - (int64_t)kh + 1 + ci);
+                size_t sx0 = (size_t)((int64_t)x - (int64_t)kw + 1 + cj);
+                if (c == 1) {
+                    double acc = 0.0;
+                    for (size_t i = 0; i < kh; i++) {
+                        const double* srow = src + (sy0 + i) * w + sx0;
+                        const double* krow = kr + i * kw;
+                        for (size_t j = 0; j < kw; j++) acc += krow[j] * srow[j];
+                    }
+                    dst[y * w + x] = acc;
+                } else {
+                    for (size_t ch = 0; ch < c; ch++) {
+                        double acc = 0.0;
+                        for (size_t i = 0; i < kh; i++) {
+                            const double* srow = src + ((sy0 + i) * w + sx0) * c + ch;
+                            const double* krow = kr + i * kw;
+                            for (size_t j = 0; j < kw; j++) acc += krow[j] * srow[j * c];
+                        }
+                        dst[(y * w + x) * c + ch] = acc;
+                    }
+                }
+                continue;
+            }
+            /* Border: the clamped form, unchanged. */
             for (size_t ch = 0; ch < c; ch++) {
                 double acc = 0.0;
                 for (size_t i = 0; i < kh; i++) {
@@ -110,7 +176,9 @@ static void convolve_planes(const double* src, double* dst,
             }
         }
     }
+    free(kr);
 }
+
 
 /* Is the kernel SEPARABLE -- that is, rank 1, an outer product u (x) v?
  *
@@ -471,14 +539,64 @@ static void convolve3_separable(const double* src, double* dst, double* a, doubl
           }
 }
 
+/* The dense volumetric convolution, with the same interior/border split as the plane -- and here it
+ * has three times the reason to exist: every tap clamps THREE axes, so a 3x3x3 kernel does 81 clamped
+ * index computations per voxel to produce 27 multiply-adds.
+ *
+ * The kernel is reversed on all three axes once, turning the three descending index expressions into
+ * ascending ones so the innermost loop is a forward dot product over adjacent doubles. */
 static void convolve3_direct(const double* src, double* dst,
                              size_t w, size_t h, size_t d, size_t c,
                              const double* k, size_t kd, size_t kh, size_t kw) {
     int64_t cz = (int64_t)(kd / 2), cy = (int64_t)(kh / 2), cx = (int64_t)(kw / 2);
     size_t plane = w * h * c;
-    for (size_t z = 0; z < d; z++)
-      for (size_t y = 0; y < h; y++)
-        for (size_t x = 0; x < w; x++)
+
+    double* kr = malloc(sizeof(double) * kd * kh * kw);
+    if (kr) {
+        for (size_t m = 0; m < kd; m++)
+            for (size_t i = 0; i < kh; i++)
+                for (size_t j = 0; j < kw; j++)
+                    kr[(m * kh + i) * kw + j] =
+                        k[((kd - 1 - m) * kh + (kh - 1 - i)) * kw + (kw - 1 - j)];
+    }
+    int64_t z0 = (int64_t)kd - 1 - cz, z1 = (int64_t)d - 1 - cz;
+    int64_t y0 = (int64_t)kh - 1 - cy, y1 = (int64_t)h - 1 - cy;
+    int64_t x0 = (int64_t)kw - 1 - cx, x1 = (int64_t)w - 1 - cx;
+    if (!kr) { z0 = 1; z1 = 0; }                  /* no reversed kernel: clamp everything */
+
+    for (size_t z = 0; z < d; z++) {
+      bool zi = ((int64_t)z >= z0 && (int64_t)z <= z1);
+      for (size_t y = 0; y < h; y++) {
+        bool yi = zi && ((int64_t)y >= y0 && (int64_t)y <= y1);
+        for (size_t x = 0; x < w; x++) {
+          if (yi && (int64_t)x >= x0 && (int64_t)x <= x1) {
+            size_t sz0 = (size_t)((int64_t)z - (int64_t)kd + 1 + cz);
+            size_t sy0 = (size_t)((int64_t)y - (int64_t)kh + 1 + cy);
+            size_t sx0 = (size_t)((int64_t)x - (int64_t)kw + 1 + cx);
+            if (c == 1) {
+              double acc = 0.0;
+              for (size_t m = 0; m < kd; m++)
+                for (size_t i = 0; i < kh; i++) {
+                  const double* srow = src + (sz0 + m) * w * h + (sy0 + i) * w + sx0;
+                  const double* krow = kr + (m * kh + i) * kw;
+                  for (size_t j = 0; j < kw; j++) acc += krow[j] * srow[j];
+                }
+              dst[(z * h + y) * w + x] = acc;
+            } else {
+              for (size_t ch = 0; ch < c; ch++) {
+                double acc = 0.0;
+                for (size_t m = 0; m < kd; m++)
+                  for (size_t i = 0; i < kh; i++) {
+                    const double* srow = src + (sz0 + m) * plane + ((sy0 + i) * w + sx0) * c + ch;
+                    const double* krow = kr + (m * kh + i) * kw;
+                    for (size_t j = 0; j < kw; j++) acc += krow[j] * srow[j * c];
+                  }
+                dst[z * plane + (y * w + x) * c + ch] = acc;
+              }
+            }
+            continue;
+          }
+          /* Border: the clamped form, unchanged. */
           for (size_t ch = 0; ch < c; ch++) {
             double acc = 0.0;
             for (size_t m = 0; m < kd; m++) {
@@ -493,6 +611,10 @@ static void convolve3_direct(const double* src, double* dst,
             }
             dst[z * plane + (y * w + x) * c + ch] = acc;
           }
+        }
+      }
+    }
+    free(kr);
 }
 
 /* Convolve a volume, separably when the kernel allows. Returns the built Image3D or NULL. */
