@@ -33,6 +33,7 @@
  */
 
 #include "random.h"
+#include "dist.h"   /* ml_dist_reset_cache -- SeedRandom must clear the Gaussian cache */
 #include "checked_int.h"   /* ci_add_i64 */
 #include "arithmetic.h"
 #include "symtab.h"
@@ -604,9 +605,15 @@ static bool expr_to_real(Expr* e, double* out) {
 
 /*
  * Generate a single uniform random real in [0, 1).
- * Uses 53 bits of randomness from GMP for full double precision.
+ *
+ * EXPORTED (see random.h) because src/ml needs deviates that draw from THIS stream:
+ * a distribution sampler that used its own generator would ignore SeedRandom, so
+ * RandomVariate would not be reproducible while RandomReal was. Note that
+ * random_internal_int_range is deliberately NOT the path for that -- it is reserved
+ * for internal decision procedures that must not perturb the user-visible stream,
+ * which is the opposite requirement.
  */
-static double random_uniform_01(void) {
+double random_uniform_01(void) {
     ensure_rand_init();
     /* Top 53 bits scaled by 2^-53: uniform on [0, 1) with a full double mantissa,
      * the same 53 bits of randomness the GMP version delivered, at 2.4 ns instead
@@ -1057,6 +1064,13 @@ Expr* builtin_randomreal(Expr* res) {
  * builtin_seedrandom - implements SeedRandom[n] and SeedRandom[]
  */
 Expr* builtin_seedrandom(Expr* res) {
+    /* Reseeding must also drop any cached Gaussian deviate held by src/ml's
+     * Box-Muller sampler. Without this, SeedRandom leaves a spare deviate in hand from
+     * the PREVIOUS stream, so the first RandomVariate after reseeding differs between
+     * two otherwise identical runs -- reproducibility would hold for RandomReal and
+     * silently fail for RandomVariate, which is the worst kind of half-working. */
+    ml_dist_reset_cache();
+
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
 

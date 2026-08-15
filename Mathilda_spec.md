@@ -29,6 +29,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Time and date (`Timing`, `RepeatedTiming`, ...) | [`builtins/time-and-date.md`](docs/spec/builtins/time-and-date.md) |
 | Linear algebra (`Dot`, `Det`, `Inverse`, `Cross`, `Norm`, `Eigenvalues`, `Eigenvectors`, ...) | [`builtins/linear-algebra.md`](docs/spec/builtins/linear-algebra.md) |
 | Statistics (`Mean`, `Variance`, `Median`, ...) | [`builtins/statistics.md`](docs/spec/builtins/statistics.md) |
+| Machine learning (`Standardize`, `PrincipalComponents`, clustering kernels) | [`builtins/machine-learning.md`](docs/spec/builtins/machine-learning.md) |
 | Random number generation | [`builtins/random-number-generation.md`](docs/spec/builtins/random-number-generation.md) |
 | String operations | [`builtins/string-operations.md`](docs/spec/builtins/string-operations.md) |
 | Arithmetic (`Plus`, `Times`, `Power`, `Mod`, `Factorial`, `Binomial`, ...) | [`builtins/arithmetic.md`](docs/spec/builtins/arithmetic.md) |

@@ -192,6 +192,7 @@ include_directories(/usr/local/include)
 include_directories(../src)
 include_directories(../src/compile)
 include_directories(../src/list)
+include_directories(../src/ml)
 include_directories(../src/linalg)
 include_directories(../src/numbertheory)
 include_directories(../src/poly)
@@ -373,6 +374,14 @@ set(COMMON_SRC
     ../src/list/subdivide.c
     ../src/list/nearest.c
     ../src/list/find_clusters.c
+    ../src/ml/gmm.c
+    ../src/ml/mlutil.c
+    ../src/ml/dist.c
+    ../src/ml/encode.c
+    ../src/ml/tree.c
+    ../src/ml/classify.c
+    ../src/ml/pca.c
+    ../src/ml/predict.c
     ../src/list/distance.c
     ../src/patterns.c
     ../src/patterns.c
@@ -823,6 +832,42 @@ add_test(NAME flint_bridge_tests COMMAND flint_bridge_tests)
 
 add_executable(list_tests test_list.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(list_tests PRIVATE ../src)
+
+# Regression pins for FindClusters' one-dimensional answers, held separately from
+# test_list.c because they exist to guard a specific refactor: eight of the ten
+# methods are 1-D by algorithm, and giving them n dimensions means changing the
+# distance, the length scale and the assignment contract that the working 1-D
+# paths share.
+add_executable(findclusters_scalar_pin_tests test_findclusters_scalar_pin.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(findclusters_scalar_pin_tests PRIVATE ../src)
+add_test(NAME findclusters_scalar_pin_tests COMMAND findclusters_scalar_pin_tests)
+
+# DistanceFunction selects a metric rather than being validated and discarded.
+add_executable(findclusters_distance_tests test_findclusters_distance.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(findclusters_distance_tests PRIVATE ../src)
+add_test(NAME findclusters_distance_tests COMMAND findclusters_distance_tests)
+
+# Methods ported to work on vectors. Grows one method at a time; also asserts that
+# the unported ones still decline, so progress is visible in the diff.
+add_executable(findclusters_ndim_tests test_findclusters_ndim.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(findclusters_ndim_tests PRIVATE ../src)
+add_test(NAME findclusters_ndim_tests COMMAND findclusters_ndim_tests)
+
+add_executable(ml_pca_tests test_ml_pca.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ml_pca_tests PRIVATE ../src)
+add_test(NAME ml_pca_tests COMMAND ml_pca_tests)
+
+add_executable(ml_predict_tests test_ml_predict.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ml_predict_tests PRIVATE ../src)
+add_test(NAME ml_predict_tests COMMAND ml_predict_tests)
+
+add_executable(ml_dist_tests test_ml_dist.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ml_dist_tests PRIVATE ../src)
+add_test(NAME ml_dist_tests COMMAND ml_dist_tests)
+
+add_executable(ml_classify_tests test_ml_classify.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ml_classify_tests PRIVATE ../src)
+add_test(NAME ml_classify_tests COMMAND ml_classify_tests)
 
 add_executable(intersection_tests test_intersection.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(intersection_tests PRIVATE ../src)

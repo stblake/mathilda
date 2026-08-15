@@ -514,8 +514,9 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   one-dimensional results are unchanged. Above one dimension the tree is a real
   minimum spanning tree built by Prim's algorithm over exact distances.
 - **Only `Automatic`, `"Agglomerate"` and `"SpanningTree"` accept non-numeric
-  elements or vectors.** The other seven methods read a sorted one-dimensional
-  projection and decline rather than run on data for which it is meaningless.
+  elements.** For *vectors* the list is longer — see "Which methods accept vectors"
+  below. The methods that still read a sorted one-dimensional projection decline
+  rather than run on data for which it is meaningless.
 - **Two spanning-tree builders, and therefore two ceilings.** Points whose
   every coordinate is already a machine number take a double-precision Prim,
   since such input carries no precision that exact arithmetic would preserve;
@@ -551,6 +552,110 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   transparency gate materialises it before the builtin sees it, which is why only
   the visible surface needed a guard. Rank 3 and above still decline: a
   list-valued component is not a coordinate.
+- **Which methods accept vectors.** `Agglomerate`, `SpanningTree`, `MeanShift`,
+  `NeighborhoodContraction`, `KMeans`, `DBSCAN`, `JarvisPatrick`, `KMedoids`,
+  `Spectral` and `GaussianMixture` cluster n-dimensional points — **all ten**. The
+  only input still declined above one dimension is a list of strings, which has no
+  coordinates; the gap methods handle those through edit distances in the tree and return unevaluated for vector input.
+  That is not a conservative guard — those five reach their data through the sorted
+  projection, which does not exist off a line — and the list grows as each is
+  ported. The ported methods additionally decline string input, having no
+  coordinates to move; the gap methods still handle strings through edit distances
+  in the tree.
+- **`KMeans` above one dimension is a second implementation, not the same one.**
+  The one-dimensional kernel seeds at quantiles of the sorted distinct values; the
+  n-dimensional one seeds *farthest-first* — the point nearest the centroid, then
+  repeatedly the point farthest from everything already chosen. Both are
+  deterministic and need no random seeding. Two consequences worth relying on:
+  - the result **does not depend on the order the points were given in**, because
+    the first centre is chosen from a property of the set rather than from the
+    first element; and
+  - every centre starts as a distinct data point, so empty clusters are rare. One
+    that does empty is reseeded at the point currently farthest from its own
+    centre, which is the order-free form of the one-dimensional repair.
+
+  The two paths agree on the same data written both ways
+  (`FindClusters[{1, 2, 3, 10, 11, 12, 25}, 3, Method -> "KMeans"]` and the same
+  numbers as `{{1}, {2}, …}`), and unifying them would move the one-dimensional
+  answers, so it stays a deliberate change rather than a tidy-up.
+- **`"JarvisPatrick"` needs enough points per group for its `NeighborCount`.** The
+  default is 5, and a 5-nearest-neighbour list cannot fit inside a 4-point group —
+  it must reach into a neighbouring one, which then links them. So
+  `FindClusters[fourPointBlobs, Method -> "JarvisPatrick"]` returns *one* cluster
+  while `"NeighborCount" -> 3` returns three. That is the algorithm on data too
+  small for its default rather than a defect, and the one-dimensional kernel does
+  the same (a `k` clamped to `n - 1` puts every point in one window).
+- **`"JarvisPatrick"` above one dimension is a second implementation**, like
+  `KMeans` and unlike `DBSCAN`. The 1-D kernel counts shared neighbours as the
+  overlap of two *contiguous windows* and links only adjacent sorted pairs, where
+  the n-D one takes a true set intersection over all pairs — the textbook rule.
+  The two differ on at least one checked case
+  (`{1, 2, 10, 12, 3, 1, 13, 25}` at `"NeighborCount" -> 2`), so adopting the
+  general rule on a line would move an existing answer and is left as its own
+  deliberate change.
+- **`"KMedoids"` carries a tighter ceiling than `"KMeans"`,** because the two differ
+  by a complexity class rather than a constant. A mean is `O(n·dim)`; a medoid
+  search compares every member against every other member of its cluster and is
+  `O(n²·dim)` however small `k` is. So the same 2000×10 input that `"KMeans"`
+  clusters is *declined* by `"KMedoids"`.
+- **`"KMedoids"` above one dimension is a second implementation** (quantile seeding
+  on a line, farthest-first off it), and the two **disagree** on
+  `{1, 2, 3, 10, 11, 12, 25}` at `k = 3`: the 1-D kernel gives
+  `{{1,2,3}, {10}, {11,12,25}}` and the n-D kernel `{{1,2,3}, {10,11,12}, {25}}`.
+  The n-D answer is strictly better by the method's own objective — total distance
+  from each member to its cluster's medoid — **4 against 16**. Both are documented
+  as they behave; adopting farthest-first on a line would improve the 1-D answer and
+  move an existing one, so it is left as its own deliberate change.
+- **`"Spectral"` above one dimension reads the graph's connected components before
+  its Fiedler vector, and that is not an optimisation.** The multiplicity of the
+  zero eigenvalue of the normalised Laplacian equals the number of connected
+  components, so on a well-separated sample the null space is multi-dimensional and
+  a single "leading non-trivial eigenvector" is defined only up to a rotation
+  inside it — power iteration then lands on whichever member the seed favours,
+  separating two groups at best. This is the *easy* case, not a corner case: better
+  separation means smaller cross-affinity, and `exp(-(60/1.5)²/2)` is zero in double
+  precision, not merely small. Components are therefore read off with union-find.
+  Asked (via `UpTo[k]`) for fewer clusters than there are components, the nearest
+  components merge first, ranked by the spanning tree — the spectrum itself cannot
+  choose, since every partition respecting components has zero cut.
+- **`"Spectral"` above one dimension is a second implementation, and the threshold
+  is why.** The n-D kernel counts embedding jumps wider than three times the **mean**
+  jump; the 1-D kernel counts data gaps wider than three times the **median**. Each
+  is right in its own domain — a good embedding collapses within-cluster distance,
+  driving the median to ~0 so a median threshold accepts nearly every jump, while on
+  raw data gaps it is the mean that misleads. Routing scalars through the n-D kernel
+  under-counts (`{{1,2,3},{10,11,12},{25}}` becomes `{{1,2,3,10,11,12},{25}}`), so
+  the two paths stay separate.
+- **`"GaussianMixture"` fits a full covariance, so it needs more points per
+  component than dimensions.** A component costs `dim` means plus `dim(dim+1)/2`
+  covariance entries, and `k_max` is capped at `n/(dim + 1)` — the minimum for a
+  non-degenerate scatter matrix. So nine points in five dimensions correctly return
+  *one* cluster (`k_max` falls to 1), while twenty-four points per blob recover all
+  three. This is BIC and the parameter count doing their job, not a defect.
+- **A singular component is modelled, not refused.** Identical points give a zero
+  scatter matrix and collinear points a covariance with a zero eigenvalue. The
+  variance floor is added as a **ridge** on the covariance diagonal — the matrix
+  reading of the scalar "clamp the variance up to a minimum", chosen because clamping
+  every direction properly means an eigendecomposition per component per iteration
+  while a ridge is one add and can only overshoot the bound. A component whose full
+  covariance still will not factorise falls back to diagonal rather than failing the
+  fit.
+- **`"GaussianMixture"`'s kernel is the one clustering algorithm that does not live
+  in `find_clusters.c`.** The EM fit is in `src/ml/gmm.c` behind a buffer-level API
+  (a row-major `n × dim` array, not a `FindClusters` internal), because it is the
+  first kernel with two real consumers — this `Method` and the `LearnDistribution`
+  learner of the same name. `find_clusters.c` exports exactly one symbol, so a second
+  builtin could not otherwise reach it.
+- **`KMeans` and `KMedoids` require a count.** Neither accepts the `Automatic`
+  form, in any dimension, so `FindClusters[data, Method -> "KMeans"]` returns
+  unevaluated; `UpTo[k]` is the data-driven form they do take, and a bare `k` is
+  obeyed exactly.
+- **The n-dimensional `KMeans` ceiling is on `n × k × dim`, not on `n`.** Lloyd's
+  algorithm is linear in `n` — cheaper than the spanning tree already built for the
+  same input — so an `n` cap would refuse work just paid for: 20000 machine points
+  in ten dimensions at `k = 3` takes **0.60 s**, and at `UpTo[8]` the same. What is
+  declined is a `k` on the order of thousands at that size, where the assignment
+  scan becomes a hundred near-quadratic passes over the whole sample.
 - Returns unevaluated for an empty list, a non-`List` argument, a nested list, an
   `NDArray` of rank 3 or more, a non-numeric element, a count that is not a
   positive integer or `UpTo[k]`, or a method incompatible with the count mode.
@@ -565,18 +670,22 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
 
 **Method** — `Method -> m`, or `Method -> {m, subopt -> value}`:
 
-| Method | `Automatic` | `UpTo[n]` | `n` |
-|---|:---:|:---:|:---:|
-| `"Agglomerate"` (single linkage) | yes | yes | yes |
-| `"SpanningTree"` (minimum spanning tree) | yes | yes | yes |
-| `"KMeans"` | no | yes | yes |
-| `"KMedoids"` | no | yes | yes |
-| `"Spectral"` | yes | yes | no |
-| `"DBSCAN"` | yes | no | no |
-| `"GaussianMixture"` | yes | no | no |
-| `"JarvisPatrick"` | yes | no | no |
-| `"MeanShift"` | yes | no | no |
-| `"NeighborhoodContraction"` | yes | no | no |
+The last column is the dimensionality: `vectors` means the method clusters
+n-dimensional points, `scalars` means it still reads the sorted one-dimensional
+projection and declines vector input.
+
+| Method | `Automatic` | `UpTo[n]` | `n` | data |
+|---|:---:|:---:|:---:|:---:|
+| `"Agglomerate"` (single linkage) | yes | yes | yes | vectors |
+| `"SpanningTree"` (minimum spanning tree) | yes | yes | yes | vectors |
+| `"KMeans"` | no | yes | yes | vectors |
+| `"KMedoids"` | no | yes | yes | vectors |
+| `"Spectral"` | yes | yes | no | vectors |
+| `"DBSCAN"` | yes | no | no | vectors |
+| `"GaussianMixture"` | yes | no | no | vectors |
+| `"JarvisPatrick"` | yes | no | no | vectors |
+| `"MeanShift"` | yes | no | no | vectors |
+| `"NeighborhoodContraction"` | yes | no | no | vectors |
 
 - `Automatic` (the default) currently means `"Agglomerate"`. It is not a
   criterion-driven search across methods.
@@ -598,11 +707,41 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
   much from `"Agglomerate"`.
 
 **DistanceFunction** — accepts `Automatic`, `EuclideanDistance`,
-`ManhattanDistance` and `SquaredEuclideanDistance`. On a line these are monotone
-transforms of one another, so **all four give the same partition** for every
-method that only ranks distances; the option is accepted for compatibility
-rather than offering four behaviours. Any other value leaves the call
-unevaluated.
+`ManhattanDistance` and `SquaredEuclideanDistance`, and **selects the metric the
+spanning tree is weighted by**. Takes a metric, not a string: `EuclideanDistance`,
+not `"EuclideanDistance"` — the reverse of `Method`, which takes strings. Any
+other value leaves the call unevaluated, so a typo cannot silently cluster by the
+wrong metric.
+
+Two things follow from the arithmetic rather than from choice:
+
+- **On a line all four agree.** Every accepted metric is a monotone transform of
+  `|a - b|` there, so they induce the same ordering of gaps and the same
+  partition. The option is therefore accepted and has no effect on scalar input,
+  whose weights are plain exact differences.
+- **`EuclideanDistance` and `SquaredEuclideanDistance` always agree**, in any
+  dimension. Squaring is monotone on non-negatives so it preserves edge ranking,
+  and the `Automatic` threshold compares against a multiple of the median, where
+  `d > 3 median(d)` exactly when `d² > 9 median(d²)`. They are one implementation
+  for that reason — which also avoids taking a square root of an exact value,
+  since `Sqrt[2]` is irrational and an exact ordering that must compare
+  irrationals is a far harder problem than clustering needs.
+
+`ManhattanDistance` is the one that genuinely differs above one dimension:
+
+```
+In[1]:= FindClusters[{{0, 0}, {0, 11}, {8, 6}}, 2]
+Out[1]= {{{0, 0}}, {{0, 11}, {8, 6}}}
+
+In[2]:= FindClusters[{{0, 0}, {0, 11}, {8, 6}}, 2,
+          DistanceFunction -> ManhattanDistance]
+Out[2]= {{{0, 0}, {0, 11}}, {{8, 6}}}
+```
+
+Squared Euclidean makes those edges 121, 100 and 89, so the tree is `{89, 100}`
+and cutting its heaviest edge isolates `{0, 0}`. Manhattan makes them 11, 14 and
+13, so the tree is `{11, 13}` and cutting its heaviest edge isolates `{8, 6}`
+instead.
 
 **CriterionFunction** and **PerformanceGoal** are accepted and currently have no
 effect.
