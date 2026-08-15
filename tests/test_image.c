@@ -2029,6 +2029,63 @@ static void test_volume_morphology_matches_the_definition(void) {
     assert_eval_eq("Head[Dilation[" MVOL ", {{{1.}}}]]", "Dilation", 0);
 }
 
+
+/* Volumetric MeanFilter and MedianFilter. */
+#define FVOL "Image3D[Table[N[Mod[z*13 + y*7 + x*3, 97]]/97, {z, 1, 10}, {y, 1, 12}, {x, 1, 14}]]"
+#define FCUBE \
+  "cl[q_, n_] := Max[1, Min[n, q]];" \
+  "cube[y_, x_, z_, r_] := Flatten[Table[dv[[cl[z + a, 10], cl[y + b, 12], cl[x + c, 14]]]," \
+  "  {a, -r, r}, {b, -r, r}, {c, -r, r}]];"
+
+static void test_volume_mean_and_median_match_the_definition(void) {
+    assert_eval_eq("ImageDimensions[MeanFilter[" FVOL ", 2]]", "{14, 12, 10}", 0);
+    /* The mean, to 1e-12. Not exact, and the reason is stated in the source: the window total comes
+     * from differencing two prefix sums, whose error scales with the LINE length rather than the
+     * window's. That buys radius-independence -- 0.55 ms at r = 1 and at r = 4 alike -- for rounding
+     * no caller of an image mean can observe. */
+    assert_eval_eq("Module[{v = " FVOL ", dv}, dv = ImageData[v];" FCUBE
+                   " Max[Abs[Flatten[ImageData[MeanFilter[v, 1]]"
+                   "   - Table[Mean[cube[y, x, z, 1]], {z, 1, 10}, {y, 1, 12}, {x, 1, 14}]]]]"
+                   " < 1.*^-12]", "True", 0);
+    /* The median EXACTLY, at two radii. A median is an order statistic, so unlike a sum there is no
+     * rounding to hide behind and `===` is the right comparison -- which also pins the even-window
+     * convention, since the reference takes the same lower middle. */
+    assert_eval_eq("Module[{v = " FVOL ", dv}, dv = ImageData[v];" FCUBE
+                   " And @@ Table[ImageData[MedianFilter[v, r]] ==="
+                   "   Table[Module[{s = Sort[cube[y, x, z, r]]}, s[[(Length[s] + 1)/2]]],"
+                   "     {z, 1, 10}, {y, 1, 12}, {x, 1, 14}], {r, {1, 2}}]]", "True", 0);
+    /* r = 0 is EXACTLY the identity for both. For the mean this is short-circuited on purpose: the
+     * prefix-sum path returns the input only to within the prefix's rounding, and this identity was
+     * silently lost when that path replaced the separable convolution. */
+    assert_eval_eq("Module[{v = " FVOL ", dv}, dv = ImageData[v];"
+                   " {ImageData[MeanFilter[v, 0]] === dv, ImageData[MedianFilter[v, 0]] === dv}]",
+                   "{True, True}", 0);
+    assert_eval_eq("Module[{u = Image3D[Table[0.5, {8}, {8}, {8}]]},"
+                   " {Union[Flatten[ImageData[MeanFilter[u, 2]]]],"
+                   "  Union[Flatten[ImageData[MedianFilter[u, 2]]]]}]", "{{0.5}, {0.5}}", 0);
+    /* (2r+1)^3 grows fast enough that a large radius is refused rather than silently taking minutes. */
+    assert_eval_eq("Head[MedianFilter[" FVOL ", 20]]", "MedianFilter", 0);
+}
+
+static void test_volume_median_is_a_rank_filter(void) {
+    /* AN ORDER STATISTIC: every output value is one of the input values. A mean invents values; a
+     * median must not, and this is the property that says so about the whole output at once. */
+    assert_eval_eq("Module[{v = " FVOL "},"
+                   " Complement[Union[Flatten[ImageData[MedianFilter[v, 2]]]],"
+                   "            Union[Flatten[ImageData[v]]]] === {}]", "True", 0);
+    /* THE DISCRIMINATING PROPERTY, and the reason a median filter exists. A lone impulse in an
+     * otherwise constant volume is removed COMPLETELY -- the output is the constant and nothing else
+     * -- because the impulse is outvoted in every window it appears in. A mean cannot do this at any
+     * radius: it spreads the impulse over the whole neighbourhood instead. Asserted as the exact set
+     * of output values, which is absolute. */
+    assert_eval_eq("Module[{imp},"
+                   " imp = Image3D[Table[If[z == 5 && y == 6 && x == 7, 1., 0.25],"
+                   "   {z, 1, 10}, {y, 1, 12}, {x, 1, 14}]];"
+                   " {Union[Flatten[ImageData[MedianFilter[imp, 1]]]],"
+                   "  Length[Union[Flatten[ImageData[MeanFilter[imp, 1]]]]] > 1}]",
+                   "{{0.25}, True}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2130,6 +2187,8 @@ int main(void) {
     TEST(test_local_adaptive_beats_global_under_a_ramp);
     TEST(test_volume_morphology_algebra);
     TEST(test_volume_morphology_matches_the_definition);
+    TEST(test_volume_mean_and_median_match_the_definition);
+    TEST(test_volume_median_is_a_rank_filter);
 
     printf("All image tests passed.\n");
     return 0;

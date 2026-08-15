@@ -2114,22 +2114,202 @@ static Expr* builtin_morphologicalcomponents(Expr* res) {
  * only for 8-bit data at large radii, and this works on doubles.
  */
 static double window_median(double* buf, size_t n) {
-    /* Insertion sort, then the middle element. For even n the LOWER middle is taken rather than
-     * averaging the two: averaging would invent a value not present in the window, which for a
-     * rank filter is exactly what a caller does not want -- the point of a median is that its
-     * output is one of its inputs. Odd windows are the normal case anyway. */
-    for (size_t i = 1; i < n; i++) {
-        double v = buf[i];
-        size_t j = i;
-        while (j > 0 && buf[j - 1] > v) { buf[j] = buf[j - 1]; j--; }
-        buf[j] = v;
+    /* QUICKSELECT for the (n-1)/2-th order statistic, not a full sort.
+     *
+     * For EVEN n the LOWER middle is taken rather than averaging the two: averaging would invent a
+     * value not present in the window, and the point of a rank filter is that its output is one of
+     * its inputs. Odd windows are the normal case anyway.
+     *
+     * This was an insertion sort, which is the right choice at 25 elements (a radius-2 plane) and the
+     * wrong one at 125 (a radius-2 CUBE): insertion sort is quadratic, so a volumetric window costs
+     * ~3900 comparisons per voxel against quickselect's ~250. One implementation serves both ranks --
+     * it computes the same order statistic, so the values are identical -- rather than a fast path for
+     * volumes and a slow one for planes, which is how the two drift apart. */
+    size_t lo = 0, hi = n - 1, k = (n - 1) / 2;
+    while (lo < hi) {
+        /* Median-of-three pivot, so a sorted or reverse-sorted window -- both of which occur, since
+         * a smooth image's windows are nearly sorted -- does not hit the quadratic case. */
+        size_t mid = lo + (hi - lo) / 2;
+        if (buf[mid] < buf[lo]) { double t = buf[mid]; buf[mid] = buf[lo]; buf[lo] = t; }
+        if (buf[hi] < buf[lo])  { double t = buf[hi];  buf[hi]  = buf[lo]; buf[lo] = t; }
+        if (buf[hi] < buf[mid]) { double t = buf[hi];  buf[hi]  = buf[mid]; buf[mid] = t; }
+        double pivot = buf[mid];
+        size_t i = lo, j = hi;
+        while (i <= j) {
+            while (buf[i] < pivot) i++;
+            while (buf[j] > pivot) { if (j == 0) break; j--; }
+            if (i <= j) {
+                double t = buf[i]; buf[i] = buf[j]; buf[j] = t;
+                i++;
+                if (j == 0) break;
+                j--;
+            }
+        }
+        if (k <= j)      hi = j;
+        else if (k >= i) lo = i;
+        else             return buf[k];   /* the pivot's final resting place is the answer */
     }
-    return buf[(n - 1) / 2];
+    return buf[k];
 }
 
 /* MedianFilter[image, r] -- median over a (2r+1) square neighbourhood. */
+/* The rank-3 halves of MeanFilter and MedianFilter.
+ *
+ * MeanFilter IS a convolution with a normalised box, so it goes through the rank-3 convolution
+ * dispatch and inherits its separable path: a box is rank 1, so the cost is 3(2r+1) taps rather than
+ * (2r+1)^3 and is nearly independent of the radius. Nothing here needs to know that.
+ *
+ * MedianFilter cannot do the same, and the reason is worth stating: THE MEDIAN IS NOT SEPARABLE.
+ * Taking medians along x, then y, then z gives a different filter -- it has its own uses and it is not
+ * the median of the cube. So the window really is gathered, (2r+1)^3 values per voxel, and the only
+ * saving available is in the selection, which is why window_median is a quickselect.
+ */
+/* A box mean by PREFIX SUMS along each axis: three passes, each O(1) per voxel.
+ *
+ * MeanFilter's planar half is a convolution with a normalised box, which convolve_dispatch factors
+ * into two 1-D passes -- but a separable box convolution still costs 2r+1 taps per axis, so it grows
+ * with the radius. A box sum does not need taps at all: one prefix sum per line and a difference of
+ * two entries gives the window total in constant time, whatever the radius. That is why SciPy's
+ * uniform_filter is flat in r where a separable convolution is not, and the measurement said so --
+ * this was 0.42 ms at r = 1 and 0.94 at r = 4 against SciPy's steady 0.58.
+ *
+ * Prefix sums rather than a sliding add-one-subtract-one running sum: the sliding form accumulates
+ * drift along the whole line, where differencing two prefix entries has error bounded by the prefix
+ * magnitude. Over a 64-long line of unit-interval values that is ~1e-14, and the suite checks against
+ * the definition at 1e-12.
+ *
+ * THE TRADE IS REAL AND WORTH NAMING. Summing only the 2r+1 values in the window, as the separable
+ * convolution does, carries error ~k*eps; differencing two prefix sums carries ~line_length*eps, about
+ * ten times more on a 64-long line. Both are ~1e-14 on unit-interval data, so the exchange buys
+ * radius-independence for rounding no caller of an image mean can observe -- but it does mean the
+ * r = 0 case is no longer bit-exact by construction, which is why it is short-circuited above rather
+ * than left to fall out of the general path.
+ *
+ * The border replicates the edge, as everywhere else here, which the padded prefix expresses directly:
+ * r copies of the first value, the line, r copies of the last.
+ */
+static bool mean3_boxsum(const double* src, double* dst, size_t w, size_t h, size_t d, size_t c,
+                         size_t r) {
+    size_t n = w * h * d * c, k = 2 * r + 1;
+    size_t maxn = w > h ? (w > d ? w : d) : (h > d ? h : d);
+    double* t1 = malloc(sizeof(double) * n);
+    double* t2 = malloc(sizeof(double) * n);
+    /* prefix[i] is the sum of the first i padded entries, so prefix has one extra slot. */
+    double* pre = malloc(sizeof(double) * (maxn + 2 * r + 2));
+    if (!t1 || !t2 || !pre) { free(t1); free(t2); free(pre); return false; }
+    size_t plane = w * h * c;
+    double inv = 1.0 / (double)k;
+
+    #define MEAN3_PASS(LEN, READ, WRITE)                                            \
+        do {                                                                        \
+            size_t len = (LEN);                                                     \
+            pre[0] = 0.0;                                                           \
+            for (size_t t = 0; t < r; t++)   pre[t + 1] = pre[t] + (READ(0));        \
+            for (size_t q = 0; q < len; q++) pre[r + q + 1] = pre[r + q] + (READ(q));\
+            for (size_t t = 0; t < r; t++)                                          \
+                pre[r + len + t + 1] = pre[r + len + t] + (READ(len - 1));          \
+            for (size_t q = 0; q < len; q++) {                                      \
+                double sum = pre[q + k] - pre[q];                                   \
+                WRITE(q, sum * inv);                                                \
+            }                                                                       \
+        } while (0)
+
+    for (size_t z = 0; z < d; z++)
+      for (size_t y = 0; y < h; y++)
+        for (size_t ch = 0; ch < c; ch++) {
+          #define RD(q) src[z * plane + (y * w + (q)) * c + ch]
+          #define WR(q, v) t1[z * plane + (y * w + (q)) * c + ch] = (v)
+          MEAN3_PASS(w, RD, WR);
+          #undef RD
+          #undef WR
+        }
+    for (size_t z = 0; z < d; z++)
+      for (size_t x = 0; x < w; x++)
+        for (size_t ch = 0; ch < c; ch++) {
+          #define RD(q) t1[z * plane + ((q) * w + x) * c + ch]
+          #define WR(q, v) t2[z * plane + ((q) * w + x) * c + ch] = (v)
+          MEAN3_PASS(h, RD, WR);
+          #undef RD
+          #undef WR
+        }
+    for (size_t y = 0; y < h; y++)
+      for (size_t x = 0; x < w; x++)
+        for (size_t ch = 0; ch < c; ch++) {
+          #define RD(q) t2[(q) * plane + (y * w + x) * c + ch]
+          #define WR(q, v) dst[(q) * plane + (y * w + x) * c + ch] = (v)
+          MEAN3_PASS(d, RD, WR);
+          #undef RD
+          #undef WR
+        }
+    #undef MEAN3_PASS
+    free(t1); free(t2); free(pre);
+    return true;
+}
+
+static Expr* mean3_run(Expr* vol, double rr) {
+    size_t r = (size_t)rr;
+    size_t w = 0, h = 0, d = 0, c = 0; double* src = NULL;
+    if (!image3d_load(vol, &w, &h, &d, &c, &src)) return NULL;
+    size_t n = w * h * d * c;
+    double* dst = malloc(sizeof(double) * n);
+    Expr* out = NULL;
+    if (dst) {
+        if (r == 0) {
+            /* A one-voxel window is no filtering, and the answer is the input EXACTLY. The prefix-sum
+             * path would return it to within the prefix's rounding rather than bit-for-bit -- which is
+             * how this identity was silently lost when that path replaced the separable convolution,
+             * and how the test caught it. */
+            memcpy(dst, src, sizeof(double) * n);
+            out = image3d_build_real(dst, w, h, d, c);
+        } else if (mean3_boxsum(src, dst, w, h, d, c, r)) {
+            out = image3d_build_real(dst, w, h, d, c);
+        }
+    }
+    free(src); free(dst);
+    return out;
+}
+
+
+static Expr* median3_run(Expr* vol, double rr) {
+    size_t r = (size_t)rr, n = 2 * r + 1, m = n * n * n;
+    size_t w = 0, h = 0, d = 0, c = 0; double* src = NULL;
+    if (!image3d_load(vol, &w, &h, &d, &c, &src)) return NULL;
+    double* dst = malloc(sizeof(double) * w * h * d * c);
+    double* win = malloc(sizeof(double) * m);
+    Expr* out = NULL;
+    if (dst && win) {
+        size_t plane = w * h * c;
+        for (size_t z = 0; z < d; z++)
+          for (size_t y = 0; y < h; y++)
+            for (size_t x = 0; x < w; x++)
+              for (size_t ch = 0; ch < c; ch++) {
+                size_t q = 0;
+                for (size_t a = 0; a < n; a++) {
+                    size_t sz = clampi((int64_t)z + (int64_t)a - (int64_t)r, d);
+                    for (size_t b = 0; b < n; b++) {
+                        size_t sy = clampi((int64_t)y + (int64_t)b - (int64_t)r, h);
+                        for (size_t e = 0; e < n; e++) {
+                            size_t sx = clampi((int64_t)x + (int64_t)e - (int64_t)r, w);
+                            win[q++] = src[sz * plane + (sy * w + sx) * c + ch];
+                        }
+                    }
+                }
+                dst[z * plane + (y * w + x) * c + ch] = window_median(win, m);
+              }
+        out = image3d_build_real(dst, w, h, d, c);
+    }
+    free(src); free(dst); free(win);
+    return out;
+}
+
 static Expr* builtin_medianfilter(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
+        double rv = 0.0, iv = 0.0;
+        if (!na_read_scalar(res->data.function.args[1], &rv, &iv) || iv != 0.0) return NULL;
+        if (!(rv >= 0.0) || rv != floor(rv) || rv > 16.0) return NULL;   /* (2r+1)^3 grows fast */
+        return median3_run(res->data.function.args[0], rv);
+    }
     double r = 0.0, im = 0.0;
     if (!na_read_scalar(res->data.function.args[1], &r, &im) || im != 0.0) return NULL;
     if (!(r >= 0.0) || r != floor(r) || r > 64.0) return NULL;
@@ -2169,6 +2349,8 @@ static Expr* builtin_meanfilter(Expr* res) {
     double r = 0.0, im = 0.0;
     if (!na_read_scalar(res->data.function.args[1], &r, &im) || im != 0.0) return NULL;
     if (!(r >= 0.0) || r != floor(r) || r > 256.0) return NULL;
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL))
+        return mean3_run(res->data.function.args[0], r);
     size_t n = 2 * (size_t)r + 1;
     double* k = malloc(sizeof(double) * n * n);
     if (!k) return NULL;

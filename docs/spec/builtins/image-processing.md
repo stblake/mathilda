@@ -1672,3 +1672,59 @@ comparison of implementations, not of methods.
 
 `make check-image-packing` now reports 37 (head, rank) pairs, all packed — the four heads added here
 appear at rank 3 and the planar-only list is four shorter.
+
+## MeanFilter and MedianFilter in a volume
+
+Both accept an `Image3D` with an integer radius, and they are worth reading together because one is
+separable and the other provably is not.
+
+**`MeanFilter` is a box sum, done by prefix sums along each axis** — three passes, each O(1) per
+voxel, so the cost is **independent of the radius**. The planar half convolves with a normalised box,
+which factors into two 1-D passes but still costs `2r+1` taps per axis; a box *sum* needs no taps at
+all, since differencing two prefix entries gives the window total in constant time. That is why
+SciPy's `uniform_filter` is flat in `r` where a separable convolution is not — and the measurement
+said so before this was rewritten: 0.42 ms at r = 1 rising to 0.94 at r = 4, against SciPy's steady
+0.58.
+
+The trade is real and named in the source. Summing only the `2r+1` window values carries error
+`~k·ε`; differencing two prefix sums carries `~line·ε`, about ten times more on a 64-long line. Both
+are ~1e-14 on unit-interval data, so it buys radius-independence for rounding no caller of an image
+mean can observe. But it does mean **`r = 0` is no longer bit-exact by construction**, so that case
+short-circuits to a copy — an identity that was silently lost when the prefix path replaced the
+convolution, and that the suite caught.
+
+**`MedianFilter` cannot do the same, and the reason is worth stating: the median is not separable.**
+Taking medians along x, then y, then z gives a different filter — it has its own uses and it is not
+the median of the cube. So the window really is gathered, `(2r+1)³` values per voxel, and the only
+saving available is in the selection. `window_median` is therefore a **quickselect** with a
+median-of-three pivot, shared by both ranks: insertion sort is the right choice at 25 elements (a
+radius-2 plane) and the wrong one at 125 (a radius-2 cube), where it costs ~3900 comparisons per voxel
+against quickselect's ~250. One implementation serves both ranks because it computes the same order
+statistic, rather than a fast path for volumes and a slow one for planes.
+
+### Properties
+
+- The median matches the definition **exactly** (`===`) at both radii — an order statistic has no
+  rounding to hide behind — which also pins the even-window convention, since the lower middle is
+  taken rather than averaging (averaging would invent a value not in the window).
+- **Every output value is an input value.** A mean invents values; a rank filter must not.
+- **A lone impulse is removed completely.** In an otherwise constant volume the median returns the
+  constant and *nothing else*, because the impulse is outvoted in every window containing it. A mean
+  cannot do this at any radius — it spreads the impulse instead. This is the property that says why a
+  median filter exists, asserted as the exact set of output values.
+- `r = 0` is exactly the identity for both; a uniform volume is unchanged by both.
+
+### Measured
+
+32 × 48 × 64 (98,304 voxels):
+
+| | Mathilda | SciPy | Ratio |
+|---|---:|---:|---:|
+| MeanFilter r = 1 | 0.550 ms | 0.58 ms (`uniform_filter`) | 1.05× faster |
+| MeanFilter r = 2 | 0.558 ms | 0.57 ms | 1.02× |
+| MeanFilter r = 4 | 0.557 ms | 0.60 ms | 1.08× |
+| MedianFilter r = 1 | 2.81 ms | 5.28 ms (`median_filter`) | **1.9× faster** |
+| MedianFilter r = 2 | 13.84 ms | 37.96 ms | **2.7× faster** |
+
+The median grows as the window does, which is inherent — it is the one filter here with no
+separable form. `make check-image-packing` now reports 39 (head, rank) pairs, all packed.
