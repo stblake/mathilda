@@ -1971,6 +1971,64 @@ static void test_local_adaptive_beats_global_under_a_ramp(void) {
                    "  Length[Union[Flatten[Take[lo, All, -20]]]]}]", "{1, 2, 2}", 0);
 }
 
+
+/* Volumetric morphology. The properties are algebraic identities, which is the strongest thing a
+ * morphological operator offers: they hold exactly or the implementation is wrong. */
+#define MVOL "Image3D[Table[N[Mod[z*13 + y*7 + x*3, 97]]/97, {z, 1, 12}, {y, 1, 14}, {x, 1, 16}]]"
+
+static void test_volume_morphology_algebra(void) {
+    assert_eval_eq("ImageDimensions[Dilation[" MVOL ", 2]]", "{16, 14, 12}", 0);
+    /* DUALITY: eroding f is dilating -f and negating. Checked through 1 - f so the values stay in
+     * the unit interval, which costs one rounding and is why this is 1e-16 rather than exact. */
+    assert_eval_eq("Module[{v = " MVOL ", dv, neg},"
+                   " dv = ImageData[v]; neg = Image3D[1. - dv];"
+                   " Max[Abs[Flatten[ImageData[Erosion[v, 2]]"
+                   "   - (1. - ImageData[Dilation[neg, 2]])]]] < 1.*^-15]", "True", 0);
+    /* ORDERING: opening never brightens and closing never darkens, pointwise. */
+    assert_eval_eq("Module[{v = " MVOL ", dv},"
+                   " dv = ImageData[v];"
+                   " {Max[Flatten[ImageData[Opening[v, 2]] - dv]] <= 0.,"
+                   "  Min[Flatten[ImageData[Closing[v, 2]] - dv]] >= 0.}]", "{True, True}", 0);
+    /* IDEMPOTENCE, exactly. This is what makes an opening an opening rather than merely a smoother,
+     * and it holds only because both passes use the SAME element. */
+    assert_eval_eq("Module[{v = " MVOL "},"
+                   " {ImageData[Opening[Opening[v, 2], 2]] === ImageData[Opening[v, 2]],"
+                   "  ImageData[Closing[Closing[v, 2], 2]] === ImageData[Closing[v, 2]]}]",
+                   "{True, True}", 0);
+    /* Monotone in the radius, and r = 0 is exactly the identity. */
+    assert_eval_eq("Module[{v = " MVOL "},"
+                   " {Min[Flatten[ImageData[Dilation[v, 3]] - ImageData[Dilation[v, 2]]]] >= 0.,"
+                   "  Max[Flatten[ImageData[Erosion[v, 3]] - ImageData[Erosion[v, 2]]]] <= 0.}]",
+                   "{True, True}", 0);
+    assert_eval_eq("Module[{v = " MVOL ", dv}, dv = ImageData[v];"
+                   " {ImageData[Dilation[v, 0]] === dv, ImageData[Erosion[v, 0]] === dv}]",
+                   "{True, True}", 0);
+    /* A uniform volume has nothing to spread, so both leave it alone. */
+    assert_eval_eq("Module[{u = Image3D[Table[0.5, {8}, {8}, {8}]]},"
+                   " {Union[Flatten[ImageData[Dilation[u, 3]]]],"
+                   "  Union[Flatten[ImageData[Erosion[u, 3]]]]}]", "{{0.5}, {0.5}}", 0);
+}
+
+static void test_volume_morphology_matches_the_definition(void) {
+    /* Three van Herk passes must equal the max over the whole cube, EXACTLY -- max and min are
+     * order statistics, so unlike a sum there is no rounding to hide behind and `===` is the right
+     * comparison. */
+    assert_eval_eq("Module[{v = " MVOL ", dv, cl, ref}, dv = ImageData[v];"
+                   " cl[q_, n_] := Max[1, Min[n, q]];"
+                   " ref = Table[Max[Flatten[Table[dv[[cl[z + a, 12], cl[y + b, 14], cl[x + c, 16]]],"
+                   "   {a, -2, 2}, {b, -2, 2}, {c, -2, 2}]]], {z, 1, 12}, {y, 1, 14}, {x, 1, 16}];"
+                   " ImageData[Dilation[v, 2]] === ref]", "True", 0);
+    assert_eval_eq("Module[{v = " MVOL ", dv, cl, ref}, dv = ImageData[v];"
+                   " cl[q_, n_] := Max[1, Min[n, q]];"
+                   " ref = Table[Min[Flatten[Table[dv[[cl[z + a, 12], cl[y + b, 14], cl[x + c, 16]]],"
+                   "   {a, -2, 2}, {b, -2, 2}, {c, -2, 2}]]], {z, 1, 12}, {y, 1, 14}, {x, 1, 16}];"
+                   " ImageData[Erosion[v, 2]] === ref]", "True", 0);
+    /* An explicit structuring element DECLINES at rank 3. An arbitrary 3-D element is not separable,
+     * so honouring it would mean a cubic walk costing hundreds of times more behind the same
+     * spelling -- declining says so instead of hiding it. */
+    assert_eval_eq("Head[Dilation[" MVOL ", {{{1.}}}]]", "Dilation", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2070,6 +2128,8 @@ int main(void) {
     TEST(test_local_adaptive_binarize_matches_the_definition);
     TEST(test_local_adaptive_binarize_properties);
     TEST(test_local_adaptive_beats_global_under_a_ramp);
+    TEST(test_volume_morphology_algebra);
+    TEST(test_volume_morphology_matches_the_definition);
 
     printf("All image tests passed.\n");
     return 0;

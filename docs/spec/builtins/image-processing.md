@@ -1624,3 +1624,51 @@ worse than no gate: it is a green light with nothing behind it. So the exit stat
 empty result is a failure rather than an empty success, and four paths are exercised directly — a
 newly nested head exits 1, a head fixed since being listed exits 0 with a FIXED note, an empty probe
 exits 1, and a failed probe exits 1 and keeps the generated file for inspection.
+
+## Morphology in a volume
+
+`Dilation`, `Erosion`, `Opening` and `Closing` accept an `Image3D` with an integer radius.
+
+**Separability is what makes it usable.** A radius-4 box in three dimensions is 729 voxels per
+output, and a max over a box is the max over lines along each axis in turn — so three van Herk
+passes cost O(1) per voxel per axis and the whole operation becomes **independent of the radius**,
+exactly as the planar version is. Written out directly the same filter would be cubic in `r`.
+
+Only an integer radius is accepted at rank 3. An arbitrary 3-D structuring element is not separable
+in general, so honouring it would mean the direct cubic walk — hundreds of times more work behind
+the same spelling — and `Dilation[volume, element]` **declines** rather than quietly costing that.
+
+### The properties are algebraic identities
+
+Which is the strongest thing a morphological operator offers: they hold exactly, or the
+implementation is wrong.
+
+- **Agreement with the definition is `===`, not a tolerance.** Three van Herk passes equal the max
+  over the whole cube exactly — max and min are order statistics, so unlike a sum there is no
+  rounding to hide behind.
+- **Idempotence** holds exactly: `Opening[Opening[v, r], r] === Opening[v, r]`. That is what makes
+  an opening an opening rather than merely a smoother, and it holds only because both passes use the
+  same element.
+- **Duality**: eroding `f` is dilating `-f` and negating. Checked through `1 - f` so values stay in
+  the unit interval, which costs one rounding — hence 1e-16 rather than exact.
+- **Ordering**: `Opening[v] ≤ v ≤ Closing[v]` pointwise.
+- **Monotone** in the radius, and `r = 0` is exactly the identity.
+- A uniform volume is unchanged by both.
+
+### Measured
+
+32 × 48 × 64 (98,304 voxels):
+
+| radius | box | Mathilda | SciPy `grey_dilation` | Ratio |
+|-------:|----:|---------:|----------------------:|------:|
+| 1 | 27 | 0.535 ms | 1.11 ms | **2.1× faster** |
+| 2 | 125 | 0.536 ms | 1.14 ms | **2.1×** |
+| 4 | 729 | 0.561 ms | 1.17 ms | **2.1×** |
+| 8 | 4913 | 0.584 ms | 1.31 ms | **2.2×** |
+
+`Opening` at r = 4 is 1.12 ms against SciPy's `grey_opening` at 2.34 ms, also 2.1×. Both
+implementations are near-flat in the radius, since SciPy separates a full box too; the ratio is a
+comparison of implementations, not of methods.
+
+`make check-image-packing` now reports 37 (head, rank) pairs, all packed — the four heads added here
+appear at rank 3 and the planar-only list is four shorter.

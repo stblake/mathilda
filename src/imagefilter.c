@@ -1801,9 +1801,108 @@ static bool morph_element(Expr* spec, size_t* kh, size_t* kw, unsigned char** su
     return morph_support(spec, kh, kw, sup, full);
 }
 
+/* Volumetric morphology over a CUBIC box, by three van Herk passes.
+ *
+ * Separability is what makes this usable at all. A radius-4 box in three dimensions is 729 voxels per
+ * output, and a max over a box is the max over lines along each axis in turn -- so three passes of
+ * van Herk cost O(1) per voxel per axis and the whole operation becomes INDEPENDENT OF THE RADIUS,
+ * exactly as the planar version is. Written out directly the same filter would be cubic in r.
+ *
+ * Only an integer radius is accepted at rank 3. An arbitrary 3-D structuring element is not separable
+ * in general, so it would need the direct cubic walk, and inventing that quietly behind the same
+ * spelling would make Dilation[volume, element] look like Dilation[volume, r] while costing hundreds
+ * of times more. Declining says so instead.
+ *
+ * The border replicates the edge, matching every other filter here: each line is padded by r on both
+ * ends with its end value, so the replicate rule lives in one place and van Herk sees a plain array.
+ */
+static bool morph3_separable(const double* src, double* dst, size_t w, size_t h, size_t d, size_t c,
+                             size_t k, MorphOp op) {
+    size_t r = k / 2;
+    size_t n = w * h * d * c;
+    size_t maxn = w > h ? (w > d ? w : d) : (h > d ? h : d);
+    double* t1 = malloc(sizeof(double) * n);
+    double* t2 = malloc(sizeof(double) * n);
+    double* line = malloc(sizeof(double) * (maxn + k + 2));
+    double* resl = malloc(sizeof(double) * (maxn + k + 2));
+    double* pre  = malloc(sizeof(double) * (maxn + k + 2));
+    double* suf  = malloc(sizeof(double) * (maxn + k + 2));
+    if (!t1 || !t2 || !line || !resl || !pre || !suf) {
+        free(t1); free(t2); free(line); free(resl); free(pre); free(suf);
+        return false;
+    }
+    size_t plane = w * h * c;
+
+    /* x */
+    for (size_t z = 0; z < d; z++)
+      for (size_t y = 0; y < h; y++)
+        for (size_t ch = 0; ch < c; ch++) {
+            const double* row = src + z * plane + (y * w) * c + ch;
+            for (size_t t = 0; t < r; t++) line[t] = row[0];
+            for (size_t x = 0; x < w; x++) line[r + x] = row[x * c];
+            for (size_t t = 0; t < r; t++) line[r + w + t] = row[(w - 1) * c];
+            morph_1d_vanherk(line, resl, w, k, pre, suf, op);
+            for (size_t x = 0; x < w; x++) t1[z * plane + (y * w + x) * c + ch] = resl[x];
+        }
+    /* y */
+    for (size_t z = 0; z < d; z++)
+      for (size_t x = 0; x < w; x++)
+        for (size_t ch = 0; ch < c; ch++) {
+            for (size_t t = 0; t < r; t++) line[t] = t1[z * plane + (0 * w + x) * c + ch];
+            for (size_t y = 0; y < h; y++) line[r + y] = t1[z * plane + (y * w + x) * c + ch];
+            for (size_t t = 0; t < r; t++) line[r + h + t] = t1[z * plane + ((h - 1) * w + x) * c + ch];
+            morph_1d_vanherk(line, resl, h, k, pre, suf, op);
+            for (size_t y = 0; y < h; y++) t2[z * plane + (y * w + x) * c + ch] = resl[y];
+        }
+    /* z */
+    for (size_t y = 0; y < h; y++)
+      for (size_t x = 0; x < w; x++)
+        for (size_t ch = 0; ch < c; ch++) {
+            for (size_t t = 0; t < r; t++) line[t] = t2[0 * plane + (y * w + x) * c + ch];
+            for (size_t z = 0; z < d; z++) line[r + z] = t2[z * plane + (y * w + x) * c + ch];
+            for (size_t t = 0; t < r; t++) line[r + d + t] = t2[(d - 1) * plane + (y * w + x) * c + ch];
+            morph_1d_vanherk(line, resl, d, k, pre, suf, op);
+            for (size_t z = 0; z < d; z++) dst[z * plane + (y * w + x) * c + ch] = resl[z];
+        }
+    free(t1); free(t2); free(line); free(resl); free(pre); free(suf);
+    return true;
+}
+
+/* The rank-3 half of Dilation/Erosion/Opening/Closing. */
+static Expr* morph3_builtin(Expr* res, MorphOp first, bool two_pass) {
+    double r = 0.0, im = 0.0;
+    if (!na_read_scalar(res->data.function.args[1], &r, &im) || im != 0.0) return NULL;
+    if (!(r >= 0.0) || r != floor(r) || r > 64.0) return NULL;
+    size_t k = 2 * (size_t)r + 1;
+
+    size_t w = 0, h = 0, d = 0, c = 0; double* src = NULL;
+    if (!image3d_load(res->data.function.args[0], &w, &h, &d, &c, &src)) return NULL;
+    size_t n = w * h * d * c;
+    double* a = malloc(sizeof(double) * n);
+    Expr* out = NULL;
+    if (a && morph3_separable(src, a, w, h, d, c, k, first)) {
+        if (!two_pass) {
+            out = image3d_build_real(a, w, h, d, c);
+        } else {
+            /* The SAME element both times, which is what makes the pair idempotent: a different
+             * second element would still smooth but would no longer be an opening. */
+            double* b = malloc(sizeof(double) * n);
+            MorphOp second = (first == MORPH_ERODE) ? MORPH_DILATE : MORPH_ERODE;
+            if (b && morph3_separable(a, b, w, h, d, c, k, second))
+                out = image3d_build_real(b, w, h, d, c);
+            free(b);
+        }
+    }
+    free(src); free(a);
+    return out;
+}
+
 /* One-pass operators (Dilation, Erosion) and two-pass ones (Opening, Closing). */
 static Expr* morph_builtin(Expr* res, MorphOp first, bool two_pass) {
     if (res->data.function.arg_count != 2) return NULL;
+    /* A VOLUME takes the rank-3 path, dispatching on the image as every other filter here does. */
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL))
+        return morph3_builtin(res, first, two_pass);
     size_t kh = 0, kw = 0; unsigned char* sup = NULL; bool full = false;
     if (!morph_element(res->data.function.args[1], &kh, &kw, &sup, &full)) return NULL;
 
