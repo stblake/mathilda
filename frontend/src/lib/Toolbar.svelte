@@ -36,6 +36,7 @@
   import { kernelStatus } from './notebook';
   import { restart, abortEvaluation } from './kernelActions';
   import { showStatusBar, resetSessionStats } from './status';
+  import { propertiesOpen } from './properties';
   import type { Cell, CellType, NotebookRow } from './notebook';
 
   type MenuId = 'eval' | 'kernel' | 'docs' | 'style' | 'addpane' | 'overflow' | null;
@@ -581,6 +582,21 @@
   <button class="tb-btn tb-mono" title="Comment or uncomment the selection" disabled={!codeView}
           tabindex="-1" on:pointerdown|preventDefault on:click={() => withView(commentCode)}
   >(*=*)</button>
+</ToolbarGroup>
+
+<!-- One button, not two: Mathematica's sidebar group also carries a chat panel,
+     and Mathilda has no chat. A second button that opened nothing would be worse
+     than the asymmetry. -->
+<ToolbarGroup label="Sidebar">
+  <button
+    class="tb-btn"
+    class:active={$propertiesOpen}
+    title={$propertiesOpen ? 'Hide properties' : 'Show properties'}
+    aria-pressed={$propertiesOpen}
+    tabindex="-1"
+    on:pointerdown|preventDefault
+    on:click={() => propertiesOpen.update(v => !v)}
+  ><Icon name="sidebar" /></button>
 </ToolbarGroup>
 
 <ToolbarGroup label="Notebook">

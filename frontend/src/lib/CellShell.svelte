@@ -18,6 +18,7 @@
   import Output from './Output.svelte';
   import RefPage from './RefPage.svelte';
   import type { Cell, CellType, OutputItem } from './notebook';
+  import { showExecLabels } from './properties';
   import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection } from './notebook';
   import { registerHandle, unregisterHandle, setActiveCell, markBlurred } from './active';
 
@@ -309,7 +310,7 @@
         disabled={cell.status === 'running'}
         on:click|stopPropagation={() => dispatch('run', { id: cell.id })}
       >{#if cell.status === 'running'}<span class="spinner">●</span>{:else}▶{/if}</button>
-      {#if cell.execIdx != null}
+      {#if cell.execIdx != null && $showExecLabels}
         <span class="exec-label">In[{cell.execIdx}]</span>
       {/if}
     {:else if !headingReadonly}

@@ -11,6 +11,7 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import Canvas from './lib/Canvas.svelte';
   import Toolbar from './lib/Toolbar.svelte';
+  import PropertiesPanel from './lib/PropertiesPanel.svelte';
   import { kernelStatus } from './lib/notebook';
   import { darkMode } from './lib/theme';
   import { pingKernel, saveLibrary, loadLibrary, setWindowTitle as setTitleCmd } from './lib/ipc';
@@ -179,6 +180,12 @@
     </button>
   {/if}
 </div>
+
+<!-- Properties sidebar. Focused mode only: it reports on the notebook in the
+     active pane, and on the canvas there is no active pane to report on. -->
+{#if $canvasState.focusedIds.length}
+  <PropertiesPanel />
+{/if}
 
 <!-- Kernel dead banner -->
 {#if $kernelStatus === 'dead'}

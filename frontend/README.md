@@ -77,3 +77,32 @@ Mathilda C binary (../Mathilda)
 ```
 
 See docs/frontend-research.md for the full design rationale.
+
+### Focused-mode surfaces
+
+The window has two modes. On the canvas, the top strip is a 34px name-and-theme
+bar (`--appbar-h`). Focusing one or more notebooks swaps it for the 46px notebook
+toolbar (`--toolbar-h`), and three surfaces then belong to that mode only:
+
+| File | What it owns |
+|------|--------------|
+| `lib/Toolbar.svelte` | the labelled, ruled control groups; one `Menu.svelte` instance is shared and its `items` swapped |
+| `lib/StatusBar.svelte` | the optional 22px bottom strip: kernel state, last evaluation time, session totals |
+| `lib/PropertiesPanel.svelte` | the sidebar that slides in from the left: notebook name and size, cell counts, kernel status with Restart/Abort, display preferences, pane layout |
+
+The panel reports only what the model actually holds. A canvas notebook has a
+title and **no file** — `saveNotebook` takes a path from a dialog and nothing
+writes it back — so Location says the notebook is unsaved rather than inventing a
+path, and Size counts characters of source rather than quoting a file size for a
+file that does not exist.
+
+Two things follow from the toolbar being *verbs*: a preference that lasts the rest
+of the session belongs in the panel instead, which is where the `In[n]` label
+toggle lives (`lib/properties.ts`), and the Sidebar group is **one** button —
+Mathematica's equivalent group carries a chat panel as its second, and a button
+that opened nothing would be worse than the asymmetry.
+
+Both panel stores are plain writables with no persistence, matching `darkMode` in
+`theme.ts`. Nothing in the app persists UI state yet, and making one preference
+the only setting that survives a restart would be a surprise rather than a
+feature.
