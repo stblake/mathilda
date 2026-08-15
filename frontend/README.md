@@ -162,6 +162,31 @@ naive `from = at + 1`), and stepping wraps in **both** directions — in JavaScr
 `-1 % 3` is `-1`, so the naive form sends Shift+Enter at the first match to a
 negative index and the bar reads "0 of 3".
 
+### The Insert palette
+
+The **Insert** group offers CodeMirror snippet templates — Table, Matrix, Sum,
+Integrate, Solve, Plot, Module, a definition, and so on — inserted at the caret
+with `${field}` placeholders that Tab walks. Code cells only: every template is a
+Mathilda expression, and offering `Table[]` for a prose cell would insert text that
+never evaluates. The menu's hint is the *expansion*, so it shows what will land in
+the cell rather than only what it is called.
+
+`@codemirror/autocomplete` is now an explicit dependency. It was already in
+`node_modules` transitively through the `codemirror` meta-package and importing it
+on that basis works right up until the day the meta-package reorganises.
+
+The templates are the risk, not the machinery: one with an unbalanced bracket
+produces a broken cell every time the button is pressed, and reading
+`{{${a}, ${b}}, {${c}, ${d}}}` is a poor way to notice. So
+`npm run check:snippets` expands each template and feeds it to **the real Mathilda
+binary** inside `Hold[...]`, which parses without evaluating — `Plot[]` must not
+open a window and a definition must not define anything. A template whose expansion
+does not parse fails the check, which is a stronger guarantee than counting
+brackets: it is the language's own parser agreeing that what the button inserts is
+valid. Bracket counts are checked too, because they say *which* kind is unbalanced
+where the parser only says the line is wrong. If the C binary is not built the
+parser half reports SKIP rather than failing.
+
 ### Interface scale
 
 The scale rows in the properties panel drive the same store the `Cmd+=` / `Cmd+-`

@@ -40,9 +40,10 @@
   import { wrapSelection, PROSE_BOLD, PROSE_ITALIC, PROSE_CODE, PROSE_LINK,
            PROSE_MATH } from './prose';
   import { searchOpen } from './search';
+  import { SNIPPETS, expandedText, insertSnippet } from './snippets';
   import type { Cell, CellType, NotebookRow } from './notebook';
 
-  type MenuId = 'eval' | 'kernel' | 'docs' | 'style' | 'addpane' | 'overflow' | null;
+  type MenuId = 'eval' | 'kernel' | 'docs' | 'style' | 'addpane' | 'insert' | 'overflow' | null;
   let openMenu: MenuId = null;
 
   /* One anchor per trigger, so the menu can measure against the button that
@@ -52,6 +53,7 @@
   let docsAnchor: HTMLElement;
   let styleAnchor: HTMLElement;
   let addPaneAnchor: HTMLElement;
+  let insertAnchor: HTMLElement;
   let overflowAnchor: HTMLElement;
 
   function toggleMenu(which: Exclude<MenuId, null>) {
@@ -405,6 +407,24 @@
     ? ($canvasState.notebooks.find(n => n.id === $canvasState.focusedActiveId)?.title ?? '')
     : '';
 
+  /* The Insert palette. The hint is the EXPANSION, so the menu shows what will
+     land in the cell rather than only what it is called -- and it is the same
+     string npm run check:snippets feeds to Mathilda's parser. */
+  $: insertItems = SNIPPETS.map(sn => ({
+    kind: 'item' as const,
+    id: sn.label,
+    label: sn.label,
+    hint: expandedText(sn.template),
+  })) as MenuItem[];
+
+  function onInsertSelect(id: string) {
+    const sn = SNIPPETS.find(x => x.label === id);
+    if (!sn) return;
+    /* codeView is re-read here rather than captured when the menu opened: the cell
+       can be deleted between the two, and insertSnippet declines on a null view. */
+    insertSnippet(activeHandle()?.view ?? null, sn.template);
+  }
+
   /* One <Menu> instance, driven by these three tables. Adding a dropdown means
      adding a row to each, not another component with its own backdrop and
      keyboard handling. */
@@ -414,6 +434,7 @@
     openMenu === 'docs'     ? docsItems :
     openMenu === 'style'    ? styleItems :
     openMenu === 'addpane'  ? addPaneItems :
+    openMenu === 'insert'   ? insertItems :
     openMenu === 'overflow' ? overflowItems : [];
 
   $: menuAnchor =
@@ -422,6 +443,7 @@
     openMenu === 'docs'     ? docsAnchor :
     openMenu === 'style'    ? styleAnchor :
     openMenu === 'addpane'  ? addPaneAnchor :
+    openMenu === 'insert'   ? insertAnchor :
     openMenu === 'overflow' ? overflowAnchor : null;
 
   function onMenuSelect(e: CustomEvent<{ id: string }>) {
@@ -431,6 +453,7 @@
       case 'docs':     onDocsSelect(e.detail.id); break;
       case 'style':    onStyleSelect(e.detail.id); break;
       case 'addpane':  if (e.detail.id) addPane(e.detail.id); break;
+      case 'insert':   onInsertSelect(e.detail.id); break;
       case 'overflow': onOverflowSelect(e.detail.id); break;
     }
   }
@@ -584,6 +607,21 @@
 
 <!-- Context-sensitive: only for code cells, and hidden rather than disabled
      otherwise. The Text half above is the same idea for prose cells. -->
+<!-- Insert. Code cells only, because every template is a Mathilda expression;
+     offering Table[] for a prose cell would insert text that never evaluates. -->
+<ToolbarGroup label="Insert" visible={showCodeGroup}>
+  <button
+    class="tb-btn"
+    title="Insert a template at the caret"
+    aria-haspopup="menu"
+    aria-expanded={openMenu === 'insert'}
+    tabindex="-1"
+    bind:this={insertAnchor}
+    on:pointerdown|preventDefault
+    on:click={() => toggleMenu('insert')}
+  ><Icon name="plus" /></button>
+</ToolbarGroup>
+
 <ToolbarGroup label="Text" visible={showTextGroup}>
   <button class="tb-btn tb-bold" title="Bold (**)"
           tabindex="-1" on:pointerdown|preventDefault on:click={() => applyProse(PROSE_BOLD)}
