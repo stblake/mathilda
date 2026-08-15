@@ -1383,6 +1383,33 @@ static void test_adjacency_assignment(void) {
         "  AllTrue[bv, Abs[# - Round[#]] < 1*^-4 &] && Min[yv] >= -1*^-6]");
 }
 
+static void test_cardinality_portfolio(void) {
+    /* B4: cardinality-constrained min-variance portfolio (MIQP), 20 assets, pick
+     * at most 5. Continuous weights w (Σw=1, w≥0) and binary selectors z (Σz≤5)
+     * coupled by 0≤w_i≤z_i (an asset can carry weight only if selected). Minimize
+     * the quadratic w·cov·w. The true optimum, by enumerating all C(20,5)=15504
+     * subsets and solving each long-only min-variance QP (scipy), is 2.446.
+     * RandomSearch at 30 restarts (the swap move exchanges assets in and out of
+     * the selection, the continuous polish reallocates within it) reaches 2.80 —
+     * within ~15% of the MIQP optimum, a hard combinatorial-quadratic problem.
+     * Asserts a near-optimal variance, the budget Σw=1, cardinality Σz≤5, the
+     * w≤z coupling, non-negativity, and binary z. Deterministic under RandomSeed. */
+    check_true(
+        "Module[{n = 20, k = 5, cov, weights, selectors, obj, cons, r, o, sol, wv, zv},"
+        " SeedRandom[99];"
+        " cov = (# + Transpose[#]) &@RandomReal[{-0.1, 0.5}, {n, n}]; cov = cov . Transpose[cov];"
+        " weights = Array[w, n]; selectors = Array[z, n]; obj = weights . cov . weights;"
+        " cons = Join[{Total[weights] == 1, Total[selectors] <= k},"
+        "   Table[0 <= weights[[i]] <= selectors[[i]], {i, n}],"
+        "   Table[0 <= selectors[[i]] <= 1, {i, n}], {Element[selectors, Integers]}];"
+        " r = NMinimize[{obj, cons}, Flatten[{weights, selectors}],"
+        "   Method -> {\"RandomSearch\", \"SearchPoints\" -> 30, \"RandomSeed\" -> 1}];"
+        " o = First[r]; sol = Last[r]; wv = weights /. sol; zv = selectors /. sol;"
+        " o < 2.95 && Abs[Total[wv] - 1] < 1*^-3 && Total[zv] <= 5.001 &&"
+        "  AllTrue[Range[n], wv[[#]] <= zv[[#]] + 1*^-5 &] && Min[wv] >= -1*^-6 &&"
+        "  AllTrue[zv, Abs[# - Round[#]] < 1*^-4 &]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1497,6 +1524,7 @@ int main(void) {
     TEST(test_3sat_feasibility);
     TEST(test_max_independent_set);
     TEST(test_adjacency_assignment);
+    TEST(test_cardinality_portfolio);
 
     printf("All NMinimize tests passed.\n");
     return 0;
