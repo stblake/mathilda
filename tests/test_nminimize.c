@@ -1272,6 +1272,38 @@ static void test_multiknapsack(void) {
         "  AllTrue[xv, Abs[# - Round[#]] < 1*^-6 &]]");
 }
 
+static void test_sudoku_latin(void) {
+    /* B8: 4x4 Latin-square / mini-sudoku feasibility. Binary x[i,j,k] (cell (i,j)
+     * holds value k) with three families of one-hot constraints — each cell holds
+     * one value, each value appears once per row, once per column — and a constant
+     * objective (pure feasibility). The one-hot groups OVERLAP (every x[i,j,k] is
+     * in a cell-group, a row-group and a column-group), so a random rounded start
+     * is never a valid assignment; single-coordinate descent stalls infeasible and
+     * NMinimize used to return the {Infinity,...} sentinel. The integer search now
+     * detects the Σ-of-binaries == 1 groups and, when the plain descent ends
+     * infeasible, repairs each group to exactly one 1; the 2-flip swap move then
+     * reconciles the overlapping groups into a full solution. RandomSearch at 20
+     * restarts finds a feasible Latin square in ~0.3 s. Asserts the objective is
+     * finite (feasible) and every one-hot family is satisfied and binary.
+     * Deterministic under RandomSeed. */
+    check_true(
+        "Module[{n = 4, vars, vl, cons, r, o, sol, xm},"
+        " vars = Array[x, {n, n, n}]; vl = Flatten[vars];"
+        " cons = Join["
+        "   Flatten@Table[Sum[vars[[i, j, k]], {k, n}] == 1, {i, n}, {j, n}],"
+        "   Flatten@Table[Sum[vars[[i, j, k]], {j, n}] == 1, {i, n}, {k, n}],"
+        "   Flatten@Table[Sum[vars[[i, j, k]], {i, n}] == 1, {j, n}, {k, n}],"
+        "   Table[0 <= vl[[i]] <= 1, {i, Length[vl]}], {Element[vl, Integers]}];"
+        " r = NMinimize[{0, cons}, vl,"
+        "   Method -> {\"RandomSearch\", \"SearchPoints\" -> 20, \"RandomSeed\" -> 1}];"
+        " o = First[r]; sol = Last[r]; xm = vars /. sol;"
+        " o < 1 &&"
+        "  AllTrue[Flatten@Table[Sum[xm[[i, j, k]], {k, n}], {i, n}, {j, n}], Abs[# - 1] < 1*^-4 &] &&"
+        "  AllTrue[Flatten@Table[Sum[xm[[i, j, k]], {j, n}], {i, n}, {k, n}], Abs[# - 1] < 1*^-4 &] &&"
+        "  AllTrue[Flatten@Table[Sum[xm[[i, j, k]], {i, n}], {j, n}, {k, n}], Abs[# - 1] < 1*^-4 &] &&"
+        "  AllTrue[Flatten[xm], Abs[# - Round[#]] < 1*^-4 &]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1382,6 +1414,7 @@ int main(void) {
     TEST(test_qap_assignment);
     TEST(test_job_scheduling);
     TEST(test_multiknapsack);
+    TEST(test_sudoku_latin);
 
     printf("All NMinimize tests passed.\n");
     return 0;
