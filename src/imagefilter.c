@@ -561,7 +561,157 @@ static Expr* builtin_colorconvert(Expr* res) {
     return out;
 }
 
+/* ---- derivative and gradient filters --------------------------------------
+ *
+ * THE STENCILS, and why these normalisations. A derivative filter is a separable outer product of
+ * two 1-D stencils, one per axis:
+ *
+ *   order 0   {1, 2, 1}/4     smooth. Normalised to sum 1, so it preserves a constant -- and,
+ *                             being symmetric, it preserves a LINEAR ramp exactly too.
+ *   order 1   {-1, 0, 1}/2    central difference. On f(x) = c x this gives
+ *                             (c(x+1) - c(x-1))/2 = c EXACTLY, which is what makes "the gradient
+ *                             of a ramp is its slope" an equality rather than an approximation.
+ *   order 2   {1, -2, 1}      second difference. On f(x) = c x^2 it gives 2c exactly.
+ *
+ * So DerivativeFilter[img, {0, 1}] is the classic Sobel-x, {1, 0} Sobel-y. Dividing by 4 and 2
+ * rather than leaving the raw integer stencils matters: unnormalised Sobel reports a gradient
+ * eight times the true slope, which is harmless for edge DETECTION -- where only the ranking
+ * matters -- and wrong for anything that reads the number, including a physical gradient or a
+ * threshold carried over from another tool.
+ *
+ * Both stencils are separable and one of them has a zero in the middle, so this is exactly the
+ * case the separable path's largest-magnitude pivot exists for: pivoting on K[[1,1]] would divide
+ * by that zero. The kernels are built as full 2-D matrices and handed to the same
+ * convolve_dispatch every other filter uses, which re-derives the factorisation rather than
+ * assuming it -- the factorisation is then verified by the same tolerance as any other kernel,
+ * instead of being trusted because the author knew it was separable.
+ */
+static bool deriv_stencil(int order, double* st, size_t* n) {
+    switch (order) {
+        case 0: st[0] = 0.25; st[1] = 0.5;  st[2] = 0.25; *n = 3; return true;
+        /* NOTE THE ORDER: {+1/2, 0, -1/2}, not {-1/2, 0, +1/2}.
+         *
+         * ImageConvolve REFLECTS its kernel, so a stencil written in the natural reading order
+         * computes the NEGATED derivative: convolution with {-1/2, 0, 1/2} gives
+         * (s[x-1] - s[x+1])/2. A derivative filter is really a CORRELATION, which is why every CV
+         * library's Sobel is defined with correlate semantics -- so the stencil is pre-flipped here
+         * and convolution then yields the true derivative, positive where brightness increases to
+         * the right.
+         *
+         * Caught by asserting an exact value rather than an absolute one: the gradient MAGNITUDE
+         * squares the sign away and looked perfectly correct, and so would any edge-detection
+         * result, because only the ranking matters there. Only "the derivative of a ramp of slope
+         * 1/8 is exactly +1/8" could see it. The order-2 stencil is symmetric and so unaffected. */
+        case 1: st[0] = 0.5;  st[1] = 0.0;  st[2] = -0.5; *n = 3; return true;
+        case 2: st[0] = 1.0;  st[1] = -2.0; st[2] = 1.0;  *n = 3; return true;
+        default: return false;
+    }
+}
+
+/* Build the (ny x nx) kernel for a {y-order, x-order} derivative. Caller frees. */
+static double* deriv_kernel(int oy, int ox, size_t* kh, size_t* kw) {
+    double sy[3], sx[3]; size_t ny = 0, nx = 0;
+    if (!deriv_stencil(oy, sy, &ny) || !deriv_stencil(ox, sx, &nx)) return NULL;
+    double* k = malloc(sizeof(double) * ny * nx);
+    if (!k) return NULL;
+    for (size_t i = 0; i < ny; i++)
+        for (size_t j = 0; j < nx; j++)
+            k[i * nx + j] = sy[i] * sx[j];
+    *kh = ny; *kw = nx;
+    return k;
+}
+
+/* Read a {n, m} derivative-order specification. */
+static bool deriv_orders(Expr* spec, int* oy, int* ox) {
+    if (!ker_is_list(spec) || spec->data.function.arg_count != 2) return false;
+    double a = 0.0, b = 0.0, im = 0.0;
+    if (!na_read_scalar(spec->data.function.args[0], &a, &im) || im != 0.0) return false;
+    if (!na_read_scalar(spec->data.function.args[1], &b, &im) || im != 0.0) return false;
+    if (a != floor(a) || b != floor(b) || a < 0.0 || b < 0.0 || a > 2.0 || b > 2.0) return false;
+    *oy = (int)a; *ox = (int)b;
+    return true;
+}
+
+/* DerivativeFilter[image, {n, m}] -- n-th derivative down the rows, m-th across the columns. */
+static Expr* builtin_derivativefilter(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    int oy = 0, ox = 0;
+    if (!deriv_orders(res->data.function.args[1], &oy, &ox)) return NULL;
+    /* {0, 0} is a plain smoothing, which is a legitimate request but not a derivative; it is
+     * allowed because the stencil table defines it and refusing would be arbitrary. */
+    size_t kh = 0, kw = 0;
+    double* k = deriv_kernel(oy, ox, &kh, &kw);
+    if (!k) return NULL;
+
+    size_t w = 0, h = 0, c = 0; double* src = NULL;
+    if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) { free(k); return NULL; }
+    double* dst = malloc(sizeof(double) * w * h * c);
+    Expr* out = NULL;
+    if (dst) {
+        convolve_dispatch(src, dst, w, h, c, k, kw, kh);
+        out = image_build_real(dst, w, h, c);
+    }
+    free(src); free(dst); free(k);
+    return out;
+}
+
+/* GradientFilter[image] -- the gradient MAGNITUDE, Sqrt[dx^2 + dy^2].
+ *
+ * ROTATION INVARIANCE is the property that makes this the right combination rather than, say,
+ * |dx| + |dy|: the magnitude of a vector does not depend on which way the axes point, so an edge
+ * at 45 degrees reports the same strength as one at 0. The absolute-sum alternative is cheaper and
+ * reports an edge at 45 degrees as sqrt(2) times stronger, which biases every downstream threshold
+ * by orientation.
+ *
+ * Colour is reduced to luminance FIRST, then differentiated once -- not differentiated per channel
+ * and combined. Per-channel gradients would have to be combined by some rule (max? sum? norm?) and
+ * every choice is arbitrary; taking the gradient of brightness is the one interpretation that
+ * needs no such choice. */
+static Expr* builtin_gradientfilter(Expr* res) {
+    if (res->data.function.arg_count != 1) return NULL;
+    size_t w = 0, h = 0; double* g = NULL;
+    if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
+
+    size_t khx = 0, kwx = 0, khy = 0, kwy = 0;
+    double* kx = deriv_kernel(0, 1, &khx, &kwx);
+    double* ky = deriv_kernel(1, 0, &khy, &kwy);
+    double* dx = malloc(sizeof(double) * w * h);
+    double* dy = malloc(sizeof(double) * w * h);
+    Expr* out = NULL;
+    if (kx && ky && dx && dy) {
+        convolve_dispatch(g, dx, w, h, 1, kx, kwx, khx);
+        convolve_dispatch(g, dy, w, h, 1, ky, kwy, khy);
+        for (size_t i = 0; i < w * h; i++)
+            dx[i] = sqrt(dx[i] * dx[i] + dy[i] * dy[i]);
+        out = image_build_real(dx, w, h, 1);
+    }
+    free(g); free(kx); free(ky); free(dx); free(dy);
+    return out;
+}
+
 void imagefilter_init(void) {
+    symtab_add_builtin("DerivativeFilter", builtin_derivativefilter);
+    symtab_get_def("DerivativeFilter")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DerivativeFilter",
+        "DerivativeFilter[image, {n, m}] gives the n-th derivative down the rows and the m-th "
+        "across the columns, each order from 0 to 2. The kernel is a separable outer product of "
+        "1-D stencils: order 0 is the smoothing {1,2,1}/4, order 1 the central difference "
+        "{-1,0,1}/2, order 2 the second difference {1,-2,1}. So {0,1} is Sobel-x and {1,0} is "
+        "Sobel-y. The stencils are NORMALISED, unlike the raw integer Sobel kernels, which report "
+        "a gradient eight times the true slope -- harmless when only the ranking of edges matters, "
+        "and wrong for anything that reads the number. On f(x) = c x the first derivative gives "
+        "exactly c. The result is a \"Real\" image.");
+
+    symtab_add_builtin("GradientFilter", builtin_gradientfilter);
+    symtab_get_def("GradientFilter")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("GradientFilter",
+        "GradientFilter[image] gives the gradient magnitude Sqrt[dx^2 + dy^2], using the "
+        "normalised Sobel derivatives of DerivativeFilter. The magnitude rather than |dx| + |dy| "
+        "because it is ROTATION INVARIANT: an edge at 45 degrees reports the same strength as one "
+        "at 0, where the absolute sum would report it sqrt(2) times stronger and so bias every "
+        "downstream threshold by orientation. A colour image is reduced to luminance first and "
+        "differentiated once, rather than differentiated per channel and combined by some "
+        "arbitrary rule.");
     symtab_add_builtin("FindThreshold", builtin_findthreshold);
     symtab_get_def("FindThreshold")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("FindThreshold",

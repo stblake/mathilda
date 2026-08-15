@@ -446,3 +446,64 @@ covers `{{0,0,0},{1,2,1},{0,0,0}}` for that.
 Verification is independent rather than self-referential: an outer product `{{1,2},{2,4}}` must give
 the same result as convolving with `{{1,2}}` and then `{{1},{2}}` — two genuine 1-D convolutions
 reached by a different route through the code.
+
+---
+
+# Derivatives and gradients
+
+## DerivativeFilter
+
+`DerivativeFilter[image, {n, m}]` gives the `n`-th derivative down the rows and the `m`-th across
+the columns, each order 0–2. Attributes: `Protected`.
+
+The kernel is a separable outer product of 1-D stencils:
+
+| order | stencil | on what it is exact |
+|---|---|---|
+| 0 | `{1, 2, 1}/4` | smoothing; preserves a constant *and* a linear ramp exactly |
+| 1 | central difference | `f(x) = c x` → exactly `c` |
+| 2 | `{1, -2, 1}` | `f(x) = c x²` → exactly `2c` |
+
+So `{0, 1}` is Sobel-x and `{1, 0}` is Sobel-y. The stencils are **normalised**, unlike the raw
+integer Sobel kernels, which report a gradient eight times the true slope — harmless when only the
+*ranking* of edges matters, and wrong for anything that reads the number.
+
+**The sign convention, and the bug it hid.** `ImageConvolve` reflects its kernel, so a central
+difference written in natural reading order `{-½, 0, ½}` computes the **negated** derivative. A
+derivative filter is really a *correlation*, which is why every CV library defines Sobel with
+correlate semantics. The stencil is therefore pre-flipped to `{½, 0, -½}`, and convolution then
+yields the true derivative — positive where brightness increases to the right, matching
+`scipy.ndimage.correlate` to the digit.
+
+That was a live bug, and it is worth recording *why the obvious tests missed it*: the gradient
+**magnitude** squares the sign away, so it looked perfectly correct, and so would any edge-detection
+result, since only the ranking matters there. Only an exact *signed* value could see it — "the
+derivative of a ramp of slope ⅛ is exactly +⅛". An absolute-property test on the magnitude would have
+shipped it.
+
+Both stencils are separable, and the first has a **zero in the middle** — precisely the case the
+separable path's largest-magnitude pivot exists for. The kernels are built as full 2-D matrices and
+handed to the same dispatcher every other filter uses, so the factorisation is *re-derived and
+verified* rather than trusted because the author knew it was separable.
+
+## GradientFilter
+
+`GradientFilter[image]` gives the gradient magnitude `Sqrt[dx² + dy²]`. Attributes: `Protected`.
+
+**The magnitude rather than `|dx| + |dy|`, because it is rotation invariant.** An edge at 45° reports
+the same strength as one at 0°; the absolute sum would report it `Sqrt[2]` times stronger and so bias
+every downstream threshold by orientation. A test asserts exactly that: a diagonal ramp `x + y` of
+slope ⅛ has magnitude `0.125 Sqrt[2]`.
+
+Colour is reduced to luminance **first** and differentiated once, not differentiated per channel and
+combined — per-channel gradients would need a combining rule (max? sum? norm?) and every choice is
+arbitrary, where the gradient of brightness needs none.
+
+### Measured
+
+| operation, 512×512 | Mathilda | scipy |
+|---|---|---|
+| `DerivativeFilter[{0,1}]` | 1.58 ms | — |
+| `GradientFilter` | **2.25 ms** | 2.3 ms |
+
+Parity, and the values agree exactly — gradient total 26191.5 and maximum 0.522601 on both sides.

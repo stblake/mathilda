@@ -505,6 +505,84 @@ static void test_separability_preserves_the_documented_identity(void) {
                    "Image[Table[0.25, {6}, {6}]], GaussianMatrix[2]]] - 0.25]]]]", "0", 0);
 }
 
+#define RAMP8 "Image[Table[N[x/8.], {y, 6}, {x, 6}]]"
+
+static void test_derivative_of_a_ramp_is_exactly_its_slope(void) {
+    /* THE row, and it is the one that caught a real sign bug. A ramp rising 1/8 per pixel has
+     * derivative exactly +1/8, and 0.125 is exactly representable, so this is an EQUALITY.
+     *
+     * The sign is the whole point. ImageConvolve reflects its kernel, so a central-difference
+     * stencil written in natural reading order computes the NEGATED derivative. The gradient
+     * MAGNITUDE squares that away and looked perfectly correct; so would any edge-detection
+     * result, since only the ranking of edges matters there. Only an exact signed value could see
+     * it -- an absolute-property test on the magnitude would have shipped the bug. The convention
+     * now matches scipy's correlate to the digit. */
+    assert_eval_eq("Part[ImageData[DerivativeFilter[" RAMP8 ", {0, 1}]], 3, 3] == 0.125",
+                   "True", 0);
+    /* An x-ramp has NO y-derivative, exactly zero everywhere including the border. */
+    assert_eval_eq("Union[Flatten[ImageData[DerivativeFilter[" RAMP8 ", {1, 0}]]]]", "{0.0}", 0);
+    /* A y-ramp is the mirror case, so a transposed stencil index cannot hide. */
+    assert_eval_eq("Part[ImageData[DerivativeFilter["
+                   "Image[Table[N[y/8.], {y, 6}, {x, 6}]], {1, 0}]], 3, 3] == 0.125", "True", 0);
+    /* Every derivative of a constant is exactly zero -- including the second, and including the
+     * gradient magnitude. */
+    assert_eval_eq("Module[{c = Image[Table[0.4, {5}, {5}]]},"
+                   " {Union[Flatten[ImageData[DerivativeFilter[c, {0, 1}]]]],"
+                   "  Union[Flatten[ImageData[DerivativeFilter[c, {1, 0}]]]],"
+                   "  Union[Flatten[ImageData[DerivativeFilter[c, {0, 2}]]]],"
+                   "  Union[Flatten[ImageData[GradientFilter[c]]]]}]",
+                   "{{0.0}, {0.0}, {0.0}, {0.0}}", 0);
+}
+
+static void test_second_derivative_is_exact_on_a_quadratic(void) {
+    /* The second difference {1, -2, 1} on f(x) = x^2 gives exactly 2, for the same reason the
+     * first is exact on a ramp: the stencil is the exact finite difference, not an approximation
+     * of one. A wrong normalisation here would show as 1 or 4 rather than 2. */
+    assert_eval_eq("Part[ImageData[DerivativeFilter["
+                   "Image[Table[N[x*x], {y, 6}, {x, 6}]], {0, 2}]], 3, 3] == 2.", "True", 0);
+    /* Order 0 is a smoothing, and being symmetric and normalised it preserves a LINEAR ramp
+     * exactly -- which is also what makes the mixed orders exact. */
+    assert_eval_eq("Part[ImageData[DerivativeFilter[" RAMP8 ", {0, 0}]], 3, 3] == 0.375",
+                   "True", 0);
+}
+
+static void test_gradient_magnitude_is_rotation_invariant(void) {
+    /* Rotation invariance is why the magnitude is Sqrt[dx^2 + dy^2] and not |dx| + |dy|. A
+     * DIAGONAL ramp x + y has gradient of magnitude slope*Sqrt[2]; the absolute sum would report
+     * 2*slope, biasing every downstream threshold by orientation. With slope 1/8 the answer is
+     * 0.125 Sqrt[2], asserted to rounding. */
+    assert_eval_eq("Chop[Part[ImageData[GradientFilter["
+                   "Image[Table[N[(x + y)/8.], {y, 6}, {x, 6}]]]], 3, 3] - 0.125 Sqrt[2.]]",
+                   "0", 0);
+    /* On an axis-aligned ramp the magnitude is just the slope. */
+    assert_eval_eq("Part[ImageData[GradientFilter[" RAMP8 "]], 3, 3] == 0.125", "True", 0);
+    /* Magnitude is non-negative everywhere, whatever the sign of the derivatives. */
+    assert_eval_eq("Module[{g = Flatten[ImageData[GradientFilter["
+                   "Image[Table[N[Mod[x*3 + y*5, 7]/7.], {y, 8}, {x, 8}]]]]]},"
+                   " And @@ Map[# >= 0. &, g]]", "True", 0);
+}
+
+static void test_derivative_filter_matches_an_explicit_kernel(void) {
+    /* DerivativeFilter must be exactly ImageConvolve with the kernel it claims to use -- the
+     * pre-flipped outer product of {1,2,1}/4 and {1/2, 0, -1/2}. Writing the kernel out here is
+     * what pins the SIGN CONVENTION in a place a reader can check, rather than leaving it implicit
+     * in a stencil table. */
+    assert_eval_eq("ImageData[DerivativeFilter[" RAMP8 ", {0, 1}]] === "
+                   "ImageData[ImageConvolve[" RAMP8 ", "
+                   "{{0.125, 0., -0.125}, {0.25, 0., -0.25}, {0.125, 0., -0.125}}]]", "True", 0);
+    /* Orders outside 0..2 and a malformed spec decline rather than guessing a stencil. */
+    assert_eval_eq("Head[DerivativeFilter[" RAMP8 ", {0, 3}]]", "DerivativeFilter", 0);
+    assert_eval_eq("Head[DerivativeFilter[" RAMP8 ", {-1, 0}]]", "DerivativeFilter", 0);
+    assert_eval_eq("Head[DerivativeFilter[" RAMP8 ", 1]]", "DerivativeFilter", 0);
+    assert_eval_eq("Head[DerivativeFilter[" RAMP8 ", {0, 1.5}]]", "DerivativeFilter", 0);
+    assert_eval_eq("Head[DerivativeFilter[{{1, 2}}, {0, 1}]]", "DerivativeFilter", 0);
+    assert_eval_eq("Head[GradientFilter[{{1, 2}}]]", "GradientFilter", 0);
+    /* Colour goes through luminance, so the result is single-channel. */
+    assert_eval_eq("ImageChannels[GradientFilter[Image[{{{1.,0.,0.},{0.,1.,0.}}}]]]", "1", 0);
+    assert_eval_eq("And @@ Map[MemberQ[Attributes[#], Protected] &,"
+                   " {DerivativeFilter, GradientFilter}]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -538,6 +616,10 @@ int main(void) {
     TEST(test_separable_kernels_are_detected_and_decomposed);
     TEST(test_non_separable_kernels_take_the_direct_path);
     TEST(test_separability_preserves_the_documented_identity);
+    TEST(test_derivative_of_a_ramp_is_exactly_its_slope);
+    TEST(test_second_derivative_is_exact_on_a_quadratic);
+    TEST(test_gradient_magnitude_is_rotation_invariant);
+    TEST(test_derivative_filter_matches_an_explicit_kernel);
 
     printf("All image tests passed.\n");
     return 0;
