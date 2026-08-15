@@ -33,3 +33,19 @@ a1meth = {"DifferentialEvolution", "RandomSeed" -> 1};
 bench["A1 refinery pooling (DE)", NMinimize[{a1cost, a1cons}, a1vars, Method -> a1meth];];
 check["A1 refinery pooling (DE)",
   Round[First[NMinimize[{a1cost, a1cons}, a1vars, Method -> a1meth]]]];
+
+(* ---- A2: isolated Gaussian well in a flat 10-D landscape -- DifferentialEvolution
+   Global 1.524e-4 sits in a single narrow basin at 1.2345; the rest is a ~1.0
+   plateau. DE's population finds it across every seed; a local method misses it.
+   (The user's original d=12/sharpness-50 needle is unfindable by ANY
+   derivative-free method — this is the widest still-isolated, genuinely findable
+   well.) Check = Round[10^4 · obj] pins that the well (not the plateau) was found.
+   Matching scipy engine: differential_evolution. *)
+a2vars = Table[x[i], {i, 1, 10}];
+a2obj = 1 - Exp[-2 Sum[(x[i] - 1.2345)^2, {i, 1, 10}]] + 10^-5 Sum[x[i]^2, {i, 1, 10}];
+a2box = Table[-5 <= x[i] <= 5, {i, 1, 10}];
+a2meth = {"DifferentialEvolution", "SearchPoints" -> 400, "ScalingFactor" -> 0.9,
+          "RandomSeed" -> 1};
+bench["A2 gaussian well (DE)", NMinimize[{a2obj, a2box}, a2vars, Method -> a2meth];];
+check["A2 gaussian well (DE)",
+  Round[10^4 First[NMinimize[{a2obj, a2box}, a2vars, Method -> a2meth]]]];

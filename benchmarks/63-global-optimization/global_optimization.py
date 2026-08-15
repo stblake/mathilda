@@ -48,3 +48,26 @@ def _a1_solve():
 
 bench("A1 refinery pooling (DE)", _a1_solve)
 check("A1 refinery pooling (DE)", int(np.floor(_a1_solve().fun + 0.5)))
+
+
+# ---- A2: isolated Gaussian well in a flat 10-D landscape -- differential_evolution ----
+# Global 1.524e-4 at x_i=1.2345; elsewhere the ~1.0 plateau. popsize*d = 40*10 = 400
+# matches Mathilda's SearchPoints. Check = Round[10^4 * obj] (2 -> well found).
+_A2_D, _A2_S, _A2_C = 10, 2.0, 1.2345
+
+
+def _a2_obj(x):
+    r2 = np.sum((x - _A2_C) ** 2)
+    return 1 - np.exp(-_A2_S * r2) + 1e-5 * np.sum(x ** 2)
+
+
+_a2_bnds = [(-5.0, 5.0)] * _A2_D
+
+
+def _a2_solve():
+    return differential_evolution(_a2_obj, _a2_bnds, seed=1, tol=1e-9,
+                                  popsize=40, maxiter=300, polish=True)
+
+
+bench("A2 gaussian well (DE)", _a2_solve)
+check("A2 gaussian well (DE)", int(np.floor(1e4 * _a2_solve().fun + 0.5)))
