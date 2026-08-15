@@ -1867,3 +1867,43 @@ power of two, so it is representable and `===` means what it says.
 no volumetric path. The gate needed a rank-3 derivative-order shape added to see this change at all:
 without it `DerivativeFilter` read a three-element list as orders, correctly declined, and was reported
 as planar-only when it was not. A "no volumetric path" list is only as good as the shapes it tries.
+
+## ImageReflect in a volume
+
+`ImageReflect[volume]` reflects about the **height** axis, matching the planar default. The named
+sides extend Mathematica's own vocabulary rather than inventing one: `Top`/`Bottom` select the height
+axis as in the plane, `Left`/`Right` the width axis, and `Front`/`Back` the depth axis — the pair
+Mathematica uses for volumes. Either name of a pair selects the same axis, since reflecting *to* the
+top and *to* the bottom are one operation; that is already true of the planar version.
+
+`Front` and `Back` **decline** on a plane, which has no depth axis. Reinterpreting them as some other
+axis would turn a caller's mistake into a wrong picture.
+
+### Every property is an exact identity
+
+A reflection is a pure index permutation, so it interpolates nothing and nothing can drift:
+
+- Each named axis matches `Reverse` on the corresponding level of `ImageData` — which is what "reflect
+  about this axis" *means*, and leaves no room for a transposition to hide.
+- **Self-inverse** on every axis, bit for bit.
+- **Reflections about different axes commute**, exactly. This is the property that catches one axis
+  confused with another: a swapped pair still reflects something and still round-trips, but stops
+  commuting with the axis it was confused for.
+- All three composed is a point inversion, equal to reversing all three levels, and applying it twice
+  is the identity.
+- On a colour volume the channels ride along rather than being permuted with the axes.
+
+### Measured
+
+32 × 48 × 64 (98,304 voxels):
+
+| axis | Mathilda | NumPy `flip` + copy |
+|------|---------:|--------------------:|
+| height | 0.048 ms | 0.014 ms |
+| width | 0.045 ms | 0.025 ms |
+| depth | 0.047 ms | 0.010 ms |
+
+Slower, and the comparison is not like-for-like: NumPy's `flip` returns a **view** and the copy is a
+contiguous `memcpy` of a strided read that its own machinery optimises per axis, while this walks
+voxels and writes a fresh image. At ~0.05 ms for 98k voxels it is memory-bound either way and the
+absolute difference is 35 µs; the same gap the planar reflect documents, for the same reason.

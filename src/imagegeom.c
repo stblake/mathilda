@@ -540,18 +540,77 @@ static Expr* builtin_imagerotate(Expr* res) {
 }
 
 /* ImageReflect[image] / [image, side] -- a pure index permutation, hence exact and self-inverse. */
+/* ImageReflect for a volume.
+ *
+ * A pure index permutation, which makes the properties the strongest kind available: reflecting twice
+ * is the identity BIT FOR BIT, not to a tolerance, and reflections along different axes commute
+ * exactly. Nothing is interpolated, so nothing can drift.
+ *
+ * The named sides extend Mathematica's own vocabulary rather than inventing one: Top and Bottom name
+ * the height axis as in the plane, Left and Right the width axis, and Front and Back the depth axis --
+ * the pair Mathematica uses for Image3D. Either name of a pair selects the same axis, since reflecting
+ * "to the top" and "to the bottom" are the same operation; that is already true of the planar version
+ * and is not a simplification introduced here.
+ *
+ * Front and Back DECLINE on a plane, which has no depth axis to reflect. Silently treating them as
+ * some other axis would turn a caller's mistake into a wrong picture.
+ */
+static Expr* reflect3_run(Expr* vol, int axis) {
+    size_t w = 0, h = 0, d = 0, c = 0; double* src = NULL;
+    if (!image3d_load(vol, &w, &h, &d, &c, &src)) return NULL;
+    double* dst = malloc(sizeof(double) * w * h * d * c);
+    Expr* out = NULL;
+    if (dst) {
+        size_t plane = w * h * c;
+        for (size_t z = 0; z < d; z++)
+          for (size_t y = 0; y < h; y++)
+            for (size_t x = 0; x < w; x++) {
+                size_t sz = (axis == 0) ? d - 1 - z : z;
+                size_t sy = (axis == 1) ? h - 1 - y : y;
+                size_t sx = (axis == 2) ? w - 1 - x : x;
+                for (size_t k = 0; k < c; k++)
+                    dst[z * plane + (y * w + x) * c + k] = src[sz * plane + (sy * w + sx) * c + k];
+            }
+        out = image3d_build_real(dst, w, h, d, c);
+    }
+    free(src); free(dst);
+    return out;
+}
+
+/* Map a side name to a STORAGE axis: 0 = depth, 1 = height, 2 = width. Returns -1 for a name that is
+ * not a side, and -2 for a depth side, which the caller must reject for a plane. */
+static int reflect_side_axis(const Expr* sd) {
+    if (!sd || sd->type != EXPR_SYMBOL) return -1;
+    const char* n = sd->data.symbol.name;
+    if (!n) return -1;
+    if (strcmp(n, "Top") == 0 || strcmp(n, "Bottom") == 0) return 1;
+    if (strcmp(n, "Left") == 0 || strcmp(n, "Right") == 0) return 2;
+    if (strcmp(n, "Front") == 0 || strcmp(n, "Back") == 0) return 0;
+    return -1;
+}
+
 static Expr* builtin_imagereflect(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;
 
+    /* A VOLUME reflects about one of three axes, named by the same sides plus Front/Back. */
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
+        int axis = 1;                       /* the height axis, matching the planar default */
+        if (argc == 2) {
+            axis = reflect_side_axis(res->data.function.args[1]);
+            if (axis < 0) return NULL;
+        }
+        return reflect3_run(res->data.function.args[0], axis);
+    }
+
     /* Mathematica's default reflects top-to-bottom. The named sides are given as symbols. */
     int mode = 0;                          /* 0 = vertical flip, 1 = horizontal, 2 = both */
     if (argc == 2) {
-        Expr* sd = res->data.function.args[1];
-        if (!sd || sd->type != EXPR_SYMBOL) return NULL;
-        const char* n = sd->data.symbol.name;
-        if      (strcmp(n, "Top") == 0 || strcmp(n, "Bottom") == 0) mode = 0;
-        else if (strcmp(n, "Left") == 0 || strcmp(n, "Right") == 0) mode = 1;
+        int ax = reflect_side_axis(res->data.function.args[1]);
+        /* A plane has no depth axis, so Front and Back are refused rather than reinterpreted: a
+         * silent substitution would turn a caller's mistake into a wrong picture. */
+        if (ax == 1)      mode = 0;
+        else if (ax == 2) mode = 1;
         else return NULL;
     }
     size_t w = 0, h = 0, c = 0; double* src = NULL;
@@ -1005,8 +1064,13 @@ void imagegeom_init(void) {
     symtab_get_def("ImageReflect")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageReflect",
         "ImageReflect[image] reflects top to bottom; ImageReflect[image, Left] or Right reflects left "
-        "to right, and Top or Bottom reflects vertically. A pure index permutation, so it is exact and "
-        "self-inverse: reflecting twice is exactly the identity.");
+        "to right, and Top or Bottom is the vertical reflection again -- either name of a pair selects "
+        "the same axis, since reflecting to the top and reflecting to the bottom are one operation. "
+        "For an Image3D, Front or Back selects the DEPTH axis, the pair Mathematica uses for volumes; "
+        "those two DECLINE on a plane, which has no depth axis, rather than being reinterpreted as some "
+        "other axis and turning a mistake into a wrong picture. A reflection is a pure index "
+        "permutation, so it interpolates nothing: reflecting twice about the same axis is the identity "
+        "bit for bit, and reflections about different axes commute exactly.");
     symtab_add_builtin("ImageResize", builtin_imageresize);
     symtab_get_def("ImageResize")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageResize",

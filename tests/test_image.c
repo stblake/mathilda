@@ -2250,6 +2250,60 @@ static void test_volume_derivative_filter_signs_and_orders(void) {
                    "{DerivativeFilter, DerivativeFilter}", 0);
 }
 
+
+/* ImageReflect for a volume. A reflection is a pure index permutation, so every property here is an
+ * EXACT identity -- nothing is interpolated, so nothing can drift. */
+#define RVOL "Image3D[Table[N[Mod[z*13 + y*7 + x*3, 97]]/97, {z, 1, 6}, {y, 1, 8}, {x, 1, 10}]]"
+
+static void test_volume_reflect_names_the_right_axes(void) {
+    assert_eval_eq("ImageDimensions[ImageReflect[" RVOL "]]", "{10, 8, 6}", 0);
+    /* The default is the HEIGHT axis, matching the planar default, and each named pair selects one
+     * axis: Top/Bottom height, Left/Right width, Front/Back depth -- Mathematica's own vocabulary for
+     * volumes. Checked against Reverse on the corresponding level of the data, which is what
+     * "reflect about this axis" means and leaves no room for a transposition to hide. */
+    assert_eval_eq("Module[{v = " RVOL ", dv}, dv = ImageData[v];"
+                   " {ImageData[ImageReflect[v]] === Reverse[dv, 2],"
+                   "  ImageData[ImageReflect[v, Top]] === Reverse[dv, 2],"
+                   "  ImageData[ImageReflect[v, Left]] === Reverse[dv, 3],"
+                   "  ImageData[ImageReflect[v, Front]] === Reverse[dv, 1]}]",
+                   "{True, True, True, True}", 0);
+    /* Either name of a pair is the same operation: reflecting to the top and to the bottom are one
+     * thing, which is already true of the planar version. */
+    assert_eval_eq("ImageReflect[" RVOL ", Bottom] === ImageReflect[" RVOL ", Top]", "True", 0);
+    /* Front and Back DECLINE on a plane, which has no depth axis. Reinterpreting them as some other
+     * axis would turn a caller's mistake into a wrong picture. */
+    assert_eval_eq("Head[ImageReflect[Image[Table[N[i*j]/100, {i, 1, 6}, {j, 1, 8}]], Front]]",
+                   "ImageReflect", 0);
+    assert_eval_eq("Head[ImageReflect[" RVOL ", Sideways]]", "ImageReflect", 0);
+}
+
+static void test_volume_reflect_algebra(void) {
+    /* SELF-INVERSE on every axis, bit for bit. */
+    assert_eval_eq("Module[{v = " RVOL "},"
+                   " And @@ Table[ImageReflect[ImageReflect[v, sd], sd] === v,"
+                   "   {sd, {Top, Left, Front}}]]", "True", 0);
+    /* Reflections about DIFFERENT axes COMMUTE, exactly. This is the property that catches an axis
+     * confused with another: a swapped pair still reflects something, and still round-trips, but stops
+     * commuting with the axis it was confused for. */
+    assert_eval_eq("Module[{v = " RVOL "},"
+                   " {ImageReflect[ImageReflect[v, Left], Front]"
+                   "    === ImageReflect[ImageReflect[v, Front], Left],"
+                   "  ImageReflect[ImageReflect[v, Top], Front]"
+                   "    === ImageReflect[ImageReflect[v, Front], Top]}]", "{True, True}", 0);
+    /* All three composed is a point inversion, and applying that twice is the identity. */
+    assert_eval_eq("Module[{v = " RVOL ", dv, inv}, dv = ImageData[v];"
+                   " inv = ImageReflect[ImageReflect[ImageReflect[v, Left], Top], Front];"
+                   " {ImageData[inv] === Reverse[Reverse[Reverse[dv, 1], 2], 3],"
+                   "  ImageReflect[ImageReflect[ImageReflect[inv, Left], Top], Front] === v}]",
+                   "{True, True}", 0);
+    /* A colour volume: the channels must ride along rather than be permuted with the axes. */
+    assert_eval_eq("Module[{cv},"
+                   " cv = Image3D[Table[N[Mod[z*13 + y*7 + x*3 + ch*29, 97]]/97,"
+                   "   {z, 1, 4}, {y, 1, 5}, {x, 1, 6}, {ch, 1, 3}]];"
+                   " {ImageReflect[ImageReflect[cv, Front], Front] === cv,"
+                   "  Dimensions[ImageData[ImageReflect[cv, Left]]]}]", "{True, {4, 5, 6, 3}}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2359,6 +2413,8 @@ int main(void) {
     TEST(test_volume_distance_transform_is_exactly_euclidean);
     TEST(test_volume_gradient_of_a_ramp_is_exactly_the_slope);
     TEST(test_volume_derivative_filter_signs_and_orders);
+    TEST(test_volume_reflect_names_the_right_axes);
+    TEST(test_volume_reflect_algebra);
 
     printf("All image tests passed.\n");
     return 0;
