@@ -81,3 +81,17 @@ a4meth = {"NelderMead", "ContractRatio" -> 0.5, "Tolerance" -> 10^-8,
 bench["A4 minimax chebyshev (NM)", NMinimize[{a4obj, a4cons}, a4vars, Method -> a4meth];];
 check["A4 minimax chebyshev (NM)",
   Round[10^4 First[NMinimize[{a4obj, a4cons}, a4vars, Method -> a4meth]]]];
+
+(* ---- A5: Almgren-Chriss optimal liquidation (T=15) -- SimulatedAnnealing
+   Convex execution problem (|.|^1.5 impact + risk penalty, linear constraints),
+   optimum 0.035206. SA at SearchPoints 1 (one chain + AL polish) reaches it in
+   ~0.05 s, beating scipy single-start SLSQP ~0.11 s. Check = Round[10^6 obj]. *)
+a5x = Array[pos, 16];
+a5obj = Sum[0.1 Abs[a5x[[t]] - a5x[[t + 1]]]^1.5 + 0.05*0.04 a5x[[t]]^2, {t, 1, 15}];
+a5cons = Join[{pos[1] == 1, pos[16] == 0}, Table[a5x[[t + 1]] <= a5x[[t]], {t, 1, 15}],
+   Table[0 <= a5x[[t]] <= 1, {t, 1, 16}]];
+a5meth = {"SimulatedAnnealing", "PerturbationScale" -> 0.1, "SearchPoints" -> 1,
+          "RandomSeed" -> 1};
+bench["A5 liquidation (SA)", NMinimize[{a5obj, a5cons}, a5x, Method -> a5meth];];
+check["A5 liquidation (SA)",
+  Round[10^6 First[NMinimize[{a5obj, a5cons}, a5x, Method -> a5meth]]]];

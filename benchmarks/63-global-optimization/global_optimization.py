@@ -127,3 +127,33 @@ def _a4_solve():
 
 bench("A4 minimax chebyshev (NM)", _a4_solve)
 check("A4 minimax chebyshev (NM)", int(np.floor(1e4 * _a4_solve().x[-1] + 0.5)))
+
+
+# ---- A5: Almgren-Chriss optimal liquidation (T=15) -- SLSQP single-start ----
+# Convex; optimum 0.035206. Interior vars z = x[1..T-1]; x[0]=1, x[T]=0 pinned.
+_A5_T, _A5_ETA, _A5_LAM, _A5_S2 = 15, 0.1, 0.05, 0.04
+
+
+def _a5_expand(z):
+    x = np.empty(_A5_T + 1); x[0] = 1.0; x[-1] = 0.0; x[1:_A5_T] = z
+    return x
+
+
+def _a5_obj(z):
+    x = _a5_expand(z)
+    return np.sum(_A5_ETA * np.abs(x[:-1] - x[1:]) ** 1.5 + _A5_LAM * _A5_S2 * x[:-1] ** 2)
+
+
+_a5_cons = [{'type': 'ineq', 'fun': (lambda z, t=t: _a5_expand(z)[t] - _a5_expand(z)[t + 1])}
+            for t in range(_A5_T)]
+_a5_bnds = [(0, 1)] * (_A5_T - 1)
+_a5_z0 = np.linspace(1, 0, _A5_T + 1)[1:_A5_T]
+
+
+def _a5_solve():
+    return minimize(_a5_obj, _a5_z0, method='SLSQP', bounds=_a5_bnds,
+                    constraints=_a5_cons, options=dict(maxiter=500, ftol=1e-12))
+
+
+bench("A5 liquidation (SA)", _a5_solve)
+check("A5 liquidation (SA)", int(np.floor(1e6 * _a5_solve().fun + 0.5)))

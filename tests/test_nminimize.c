@@ -1101,6 +1101,32 @@ static void test_minimax_chebyshev(void) {
         "  Sum[(x[i] /. sol)^2, {i, 1, d}] <= 15.001]");
 }
 
+static void test_optimal_liquidation(void) {
+    /* A5: Almgren-Chriss optimal execution over T=15 periods — minimize
+     * Σ_t [0.1·|x_t-x_{t+1}|^1.5 + 0.05·0.04·x_t²] (transient market impact +
+     * a risk penalty) subject to x_1=1, x_16=0 (start invested, end liquidated),
+     * x_{t+1} ≤ x_t (sell-only), x_t ∈ [0,1]. |·|^1.5 and x² are convex and the
+     * constraints are linear, so this is a CONVEX program with optimum 0.035206
+     * (verified against scipy SLSQP). SimulatedAnnealing is far more than a
+     * convex problem needs: at SearchPoints -> 1 (one chain + AL polish) it
+     * reaches the optimum in ~0.05 s — faster than scipy's single-start SLSQP
+     * (~0.11 s) — where the user's SearchPoints -> 100 spent ~2.2 s for the same
+     * answer. Asserts the optimum, the pinned endpoints, and the monotone
+     * (sell-only) schedule; convex ⇒ reached precisely, tight band. */
+    check_true(
+        "Module[{T = 15, x, eta = 0.1, lam = 0.05, s2 = 0.04, obj, cons, r, o, sol, xv},"
+        " x = Array[pos, T + 1];"
+        " obj = Sum[eta Abs[x[[t]] - x[[t + 1]]]^1.5 + lam s2 x[[t]]^2, {t, 1, T}];"
+        " cons = Join[{pos[1] == 1, pos[T + 1] == 0}, Table[x[[t + 1]] <= x[[t]], {t, 1, T}],"
+        "   Table[0 <= x[[t]] <= 1, {t, 1, T + 1}]];"
+        " r = NMinimize[{obj, cons}, x,"
+        "   Method -> {\"SimulatedAnnealing\", \"PerturbationScale\" -> 0.1,"
+        "              \"SearchPoints\" -> 1, \"RandomSeed\" -> 1}];"
+        " o = First[r]; sol = Last[r]; xv = x /. sol;"
+        " Abs[o - 0.035206] < 1*^-4 && Abs[xv[[1]] - 1] < 1*^-4 &&"
+        "  Abs[xv[[T + 1]]] < 1*^-4 && Max[Differences[xv]] <= 1*^-4]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1203,6 +1229,7 @@ int main(void) {
     TEST(test_gaussian_well);
     TEST(test_modified_ackley);
     TEST(test_minimax_chebyshev);
+    TEST(test_optimal_liquidation);
 
     printf("All NMinimize tests passed.\n");
     return 0;
