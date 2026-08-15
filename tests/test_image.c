@@ -1399,6 +1399,75 @@ static void test_crop_trims_a_uniform_border(void) {
     assert_eval_eq("Module[{u = Image[Table[0.5, {3}, {4}]]}, ImageCrop[u] === u]", "True", 0);
 }
 
+
+/* Volumetric pad and crop. Every property the planar pair has is asserted again at rank 3, because
+ * "same as the other rank" is a claim to verify: the volumetric paths here have twice dropped
+ * something the planar ones had. */
+#define VOL3 "Image3D[Table[N[100 z + 10 y + x], {z, 1, 3}, {y, 1, 4}, {x, 1, 5}]]"
+
+static void test_volume_pad_then_crop_is_the_identity(void) {
+    /* NON-CUBIC extents on purpose -- 3 slices of 4 rows of 5 columns -- so any axis swap in the
+     * pad or the crop shows up as a wrong size or wrong voxels rather than passing by symmetry. */
+    assert_eval_eq("ImageDimensions[" VOL3 "]", "{5, 4, 3}", 0);
+    assert_eval_eq("ImageDimensions[ImagePad[" VOL3 ", 2]]", "{9, 8, 7}", 0);
+    assert_eval_eq("Module[{v = " VOL3 "},"
+                   " ImageCrop[ImagePad[v, 2], ImageDimensions[v]] === v]", "True", 0);
+    /* Negative padding crops, and agrees with the centred crop that removes the same shell. */
+    assert_eval_eq("Module[{v = " VOL3 "},"
+                   " {ImageDimensions[ImagePad[v, -1]], ImagePad[v, -1] === ImageCrop[v, {3, 2, 1}]}]",
+                   "{{3, 2, 1}, True}", 0);
+    /* An asymmetric pad is inverted by the negated pad, not by a centred crop. */
+    assert_eval_eq("Module[{v = " VOL3 "},"
+                   " ImagePad[ImagePad[v, {{1, 2}, {3, 0}, {0, 1}}],"
+                   "          {{-1, -2}, {-3, 0}, {0, -1}}] === v]", "True", 0);
+    /* Padding may not erase the volume; a crop may not enlarge it; and trimming a uniform border in
+     * three dimensions is a question this declines rather than answering silently. */
+    assert_eval_eq("Head[ImagePad[" VOL3 ", -9]]", "ImagePad", 0);
+    assert_eval_eq("Head[ImageCrop[" VOL3 ", {99, 99, 99}]]", "ImageCrop", 0);
+    assert_eval_eq("Head[ImageCrop[" VOL3 "]]", "ImageCrop", 0);
+}
+
+static void test_volume_pad_axis_conventions(void) {
+    /* THE THREE CONVENTIONS, pinned one axis at a time, since a symmetric pad cannot tell any of
+     * them apart. The spec is {{left, right}, {bottom, top}, {first slice, last slice}} in the order
+     * ImageDimensions reports, and the HEIGHT pair is the reversed one -- Mathematica names it
+     * {bottom, top} while row 1 is the top of the image. */
+    assert_eval_eq("Module[{v = " VOL3 ", q},"
+                   " q = ImagePad[v, {{0, 0}, {0, 0}, {0, 2}}];"
+                   " {ImageDimensions[q], First[ImageData[q]] === First[ImageData[v]],"
+                   "  ImageData[q][[5]] === Table[0., {4}, {5}]}]",
+                   "{{5, 4, 5}, True, True}", 0);
+    assert_eval_eq("Module[{v = " VOL3 ", r},"
+                   " r = ImagePad[v, {{0, 0}, {0, 2}, {0, 0}}];"
+                   " {ImageDimensions[r], ImageData[r][[1, 1]] === Table[0., {5}],"
+                   "  ImageData[r][[1, 3]] === ImageData[v][[1, 1]]}]",
+                   "{{5, 6, 3}, True, True}", 0);
+    assert_eval_eq("Module[{v = " VOL3 ", u},"
+                   " u = ImagePad[v, {{2, 0}, {0, 0}, {0, 0}}];"
+                   " {ImageDimensions[u], ImageData[u][[1, 1, 1 ;; 2]] === {0., 0.}}]",
+                   "{{7, 4, 3}, True}", 0);
+}
+
+static void test_volume_pad_fill_modes(void) {
+    /* Exact voxel values, which is the only way to tell the modes apart: the volume holds
+     * 100z + 10y + x, so slice 1 row 1 is {111, 112, 113, 114, 115}. */
+    assert_eval_eq("ImageData[ImagePad[" VOL3 ", {{1, 0}, {0, 0}, {0, 0}}, \"Fixed\"]][[1, 1, 1 ;; 3]]",
+                   "{111.0, 111.0, 112.0}", 0);
+    /* Reflection does NOT repeat the edge voxel: padding by 2 gives 113, 112 before 111. */
+    assert_eval_eq("ImageData[ImagePad[" VOL3 ", {{2, 0}, {0, 0}, {0, 0}}, "
+                   "\"Reflected\"]][[1, 1, 1 ;; 4]]", "{113.0, 112.0, 111.0, 112.0}", 0);
+    /* The modes apply per axis, not only across rows: Fixed in DEPTH repeats the first slice. */
+    assert_eval_eq("Module[{v = " VOL3 "},"
+                   " First[ImageData[ImagePad[v, {{0, 0}, {0, 0}, {1, 0}}, \"Fixed\"]]]"
+                   " === First[ImageData[v]]]", "True", 0);
+    assert_eval_eq("ImageData[ImagePad[" VOL3 ", {{1, 0}, {0, 0}, {0, 0}}, 0.5]][[1, 1, 1]]",
+                   "0.5", 0);
+    /* Every mode is invertible by a negative pad, since none touches the interior. */
+    assert_eval_eq("Module[{v = " VOL3 "},"
+                   " {ImagePad[ImagePad[v, 1, \"Fixed\"], -1] === v,"
+                   "  ImagePad[ImagePad[v, 2, \"Reflected\"], -2] === v}]", "{True, True}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1476,6 +1545,9 @@ int main(void) {
     TEST(test_pad_then_crop_is_the_identity);
     TEST(test_pad_side_convention_and_modes);
     TEST(test_crop_trims_a_uniform_border);
+    TEST(test_volume_pad_then_crop_is_the_identity);
+    TEST(test_volume_pad_axis_conventions);
+    TEST(test_volume_pad_fill_modes);
 
     printf("All image tests passed.\n");
     return 0;

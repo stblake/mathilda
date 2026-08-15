@@ -1182,3 +1182,53 @@ filter in the subsystem pays. Making that a `memcpy` for the `"Real"` float64 ca
 unit-scaling is the identity) took the pad to 0.110 ms and `ImageConvolve` from 1.48 to
 1.14 ms as a side effect. NumPy's remaining edge is that a crop there is a *view* plus one
 copy, while this returns a fresh image.
+
+## ImagePad and ImageCrop on a volume
+
+Both accept an `Image3D`, dispatching on the image exactly as `ImageConvolve` does.
+`ImagePad[volume, m]` pads all six faces; the per-axis form takes one `{lo, hi}` pair per
+axis **in the order `ImageDimensions` reports**, so
+
+```
+ImagePad[volume, {{left, right}, {bottom, top}, {first slice, last slice}}]
+```
+
+The third pair is named for what it does rather than as `{front, back}`: which end of a
+volume "front" means is not something to guess, and a wrong guess here is a silent
+transposition rather than an error. The **height** pair is the reversed one, matching the
+2-D case — Mathematica names it `{bottom, top}` while row 1 is the top of the image, so
+`top` adds rows at the start of the array. Width and depth are `{low, high}` as written.
+Each convention is pinned by a test that pads one axis on one side only, since a symmetric
+pad cannot tell any of them apart.
+
+The fill modes are the planar ones and apply per axis, so `"Fixed"` in depth repeats the
+first slice and `"Reflected"` in depth mirrors slices without repeating it.
+
+`ImageCrop[volume, {w, h, d}]` crops about the centre with floor division on every axis —
+the same convention as the planar crop, which is what makes the round trip exact rather
+than a one-voxel shift:
+
+```
+ImageCrop[ImagePad[volume, m], ImageDimensions[volume]] === volume
+```
+
+`ImageCrop[volume]` with no size **declines**. Trimming a uniform border in three
+dimensions is a genuinely different question — which faces, and a shell or a box — and
+declining beats picking one silently.
+
+### Measured
+
+64 × 96 × 128 float64 (786,432 voxels), construction excluded:
+
+| Operation | Mathilda | NumPy | Ratio |
+|-----------|---------:|------:|------:|
+| pad 8, constant | 0.378 ms | 0.217 ms (`np.pad`) | 1.7× slower |
+| pad 8, reflected | 0.894 ms | 0.363 ms (`np.pad`) | 2.5× slower |
+| centred crop | 0.327 ms | 0.094 ms (slice + copy) | 3.5× slower |
+
+The first volumetric pad measured 1.42 ms — 6.5× NumPy, against 2.2× for the planar pad
+whose arithmetic is the same code. The cause was `image3d_load`: the `memcpy` fast path for
+a `"Real"` float64 buffer had been added to `image_load` alone, so the volumetric loader was
+still walking every voxel through `ndt_go`'s dtype switch. That is this subsystem's most
+repeated bug in its purest form, and the measurement is what found it — the identity tests
+were all passing. Adding the same path took the pad to 0.378 ms and the crop to 0.327 ms.

@@ -615,6 +615,145 @@ static bool pad_src_index(int64_t v, size_t n, PadMode mode, size_t* out) {
     return true;
 }
 
+/* ---- volumetric padding and cropping --------------------------------------
+ *
+ * The 3-D half of the pair, and it carries the same exact identity: a symmetric pad
+ * followed by a centred crop back to the original extents returns the original voxels bit for bit.
+ * Worth stating twice because "same as the other rank" is a claim to verify, not a shortcut -- the
+ * volumetric paths in this subsystem have twice dropped something the planar path had (a nested
+ * fallback once, an axis order once), so both ranks are asserted for every property here.
+ *
+ * THE SPEC'S THIRD PAIR IS NAMED FOR WHAT IT DOES. The 2-D form is Mathematica's
+ * {{left, right}, {bottom, top}} in visual order, so `top` adds rows at the START of the array. For
+ * the third axis this code says {first slice, last slice} rather than {front, back}: which end of a
+ * volume "front" means is not something to guess at, and a wrong guess here is a silent
+ * transposition rather than an error. The pairs map to storage axes in reverse, since
+ * ImageDimensions reports {width, height, depth} while storage is depth x height x width.
+ */
+static Expr* pad3_run(const Expr* img, const int64_t* lo, const int64_t* hi,
+                      PadMode mode, double fill) {
+    size_t w = 0, h = 0, d = 0, c = 0; double* src = NULL;
+    if (!image3d_load(img, &w, &h, &d, &c, &src)) return NULL;
+
+    /* lo/hi are in STORAGE axis order: 0 = depth, 1 = height, 2 = width. */
+    int64_t nd = (int64_t)d + lo[0] + hi[0];
+    int64_t nh = (int64_t)h + lo[1] + hi[1];
+    int64_t nw = (int64_t)w + lo[2] + hi[2];
+    if (nd < 1 || nh < 1 || nw < 1) { free(src); return NULL; }
+
+    size_t total = (size_t)nd * (size_t)nh * (size_t)nw * c;
+    double* dst = malloc(sizeof(double) * total);
+    if (!dst) { free(src); return NULL; }
+
+    if (mode == PAD_VALUE) {
+        if (fill == 0.0) memset(dst, 0, sizeof(double) * total);
+        else for (size_t i = 0; i < total; i++) dst[i] = fill;
+    }
+
+    /* Same shape as the 2-D loop: the innermost run of voxels that maps inside the source is one
+     * memcpy, and only the frame is computed per voxel. A negative offset needs no second code
+     * path -- it makes the in-range span start later and end sooner. */
+    for (int64_t z = 0; z < nd; z++) {
+        int64_t sz = z - lo[0];
+        bool z_in = (sz >= 0 && sz < (int64_t)d);
+        size_t uz = 0;
+        if (!z_in) {
+            if (mode == PAD_VALUE) continue;              /* already filled */
+            pad_src_index(sz, d, mode, &uz);
+        } else uz = (size_t)sz;
+
+        for (int64_t y = 0; y < nh; y++) {
+            int64_t sy = y - lo[1];
+            bool y_in = (sy >= 0 && sy < (int64_t)h);
+            size_t uy = 0;
+            if (!y_in) {
+                if (mode == PAD_VALUE) continue;
+                pad_src_index(sy, h, mode, &uy);
+            } else uy = (size_t)sy;
+
+            double* drow = dst + (((size_t)z * (size_t)nh + (size_t)y) * (size_t)nw) * c;
+            const double* srow = src + ((uz * h + uy) * w) * c;
+
+            int64_t x0 = lo[2] > 0 ? lo[2] : 0;
+            int64_t x1 = lo[2] + (int64_t)w;
+            if (x1 > nw) x1 = nw;
+            /* The row copy only applies when this row really is interior in z AND y; a reflected
+             * row is still a contiguous source row, so it copies too. */
+            if (x1 > x0)
+                memcpy(drow + (size_t)x0 * c, srow + (size_t)(x0 - lo[2]) * c,
+                       sizeof(double) * (size_t)(x1 - x0) * c);
+            if (mode != PAD_VALUE) {
+                for (int64_t x = 0; x < nw; x++) {
+                    if (x >= x0 && x < x1) continue;
+                    size_t ux;
+                    pad_src_index(x - lo[2], w, mode, &ux);
+                    for (size_t k = 0; k < c; k++)
+                        drow[(size_t)x * c + k] = srow[ux * c + k];
+                }
+            }
+        }
+    }
+
+    Expr* out = image3d_build_real(dst, (size_t)nw, (size_t)nh, (size_t)nd, c);
+    free(src); free(dst);
+    return out;
+}
+
+static Expr* crop3_run(const Expr* img, size_t cw, size_t ch, size_t cd) {
+    size_t w = 0, h = 0, d = 0, c = 0; double* src = NULL;
+    if (!image3d_load(img, &w, &h, &d, &c, &src)) return NULL;
+    if (cw > w || ch > h || cd > d) { free(src); return NULL; }   /* a crop cannot enlarge */
+
+    /* Floor division on every axis, the same convention as the 2-D crop and as the kernel centres,
+     * which is what makes pad-then-crop the identity rather than a one-voxel shift. */
+    size_t x0 = (w - cw) / 2, y0 = (h - ch) / 2, z0 = (d - cd) / 2;
+    double* dst = malloc(sizeof(double) * cw * ch * cd * c);
+    Expr* out = NULL;
+    if (dst) {
+        for (size_t z = 0; z < cd; z++)
+            for (size_t y = 0; y < ch; y++)
+                memcpy(dst + ((z * ch + y) * cw) * c,
+                       src + (((z0 + z) * h + (y0 + y)) * w + x0) * c,
+                       sizeof(double) * cw * c);
+        out = image3d_build_real(dst, cw, ch, cd, c);
+    }
+    free(src); free(dst);
+    return out;
+}
+
+/* Read a padding spec: a single number for every face, or one {lo, hi} pair per axis in the
+ * DIMENSION order ImageDimensions reports. Fills lo/hi in storage-axis order. */
+static bool pad_spec(const Expr* sp, int rank, int64_t* lo, int64_t* hi) {
+    double a = 0.0, im = 0.0;
+    if (na_read_scalar(sp, &a, &im) && im == 0.0) {
+        if (a != floor(a)) return false;
+        for (int i = 0; i < rank; i++) { lo[i] = (int64_t)a; hi[i] = (int64_t)a; }
+        return true;
+    }
+    if (!sp || sp->type != EXPR_FUNCTION || !sp->data.function.head
+        || sp->data.function.head->type != EXPR_SYMBOL
+        || sp->data.function.head->data.symbol.name != SYM_List
+        || sp->data.function.arg_count != (size_t)rank) return false;
+
+    for (int i = 0; i < rank; i++) {
+        const Expr* pr = sp->data.function.args[i];
+        double p0 = 0.0, p1 = 0.0;
+        if (!pr || pr->type != EXPR_FUNCTION || pr->data.function.arg_count != 2) return false;
+        if (!na_read_scalar(pr->data.function.args[0], &p0, &im) || im != 0.0) return false;
+        if (!na_read_scalar(pr->data.function.args[1], &p1, &im) || im != 0.0) return false;
+        if (p0 != floor(p0) || p1 != floor(p1)) return false;
+
+        /* Spec entry i is dimension i (width, height, depth) and maps to storage axis
+         * rank-1-i. Within the pair, the HEIGHT axis is reversed because Mathematica names it
+         * {bottom, top} and row 0 is the top; width and depth are {low, high} as written. */
+        int axis = rank - 1 - i;
+        bool reversed = (i == 1);
+        lo[axis] = (int64_t)(reversed ? p1 : p0);
+        hi[axis] = (int64_t)(reversed ? p0 : p1);
+    }
+    return true;
+}
+
 /* ImagePad[image, m] / [image, {{l,r},{b,t}}] / with a value or "Fixed"/"Reflected" */
 static Expr* builtin_imagepad(Expr* res) {
     size_t argc = res->data.function.arg_count;
@@ -632,6 +771,13 @@ static Expr* builtin_imagepad(Expr* res) {
         } else if (na_read_scalar(pv, &fill, &im) && im == 0.0) {
             mode = PAD_VALUE;
         } else return NULL;
+    }
+
+    /* A VOLUME takes the rank-3 path, dispatching on the image exactly as ImageConvolve does. */
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
+        int64_t lo3[3], hi3[3];
+        if (!pad_spec(res->data.function.args[1], 3, lo3, hi3)) return NULL;
+        return pad3_run(res->data.function.args[0], lo3, hi3, mode, fill);
     }
 
     /* The amounts. A single number pads all four sides; {{l,r},{b,t}} is Mathematica's form. */
@@ -754,6 +900,24 @@ static void border_trim(const double* p, size_t w, size_t h, size_t c,
 static Expr* builtin_imagecrop(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;
+
+    /* A volume, again dispatching on the image. Only the sized form: trimming a uniform border in
+     * three dimensions is a different question (which faces? a shell or a box?) and declining is
+     * better than picking one silently. */
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
+        if (argc != 2) return NULL;
+        Expr* sp3 = res->data.function.args[1];
+        if (!sp3 || sp3->type != EXPR_FUNCTION || sp3->data.function.arg_count != 3
+            || sp3->data.function.head->type != EXPR_SYMBOL
+            || sp3->data.function.head->data.symbol.name != SYM_List) return NULL;
+        double e[3], im3 = 0.0;
+        for (int i = 0; i < 3; i++) {
+            if (!na_read_scalar(sp3->data.function.args[i], &e[i], &im3) || im3 != 0.0) return NULL;
+            if (!(e[i] >= 1.0) || e[i] != floor(e[i])) return NULL;
+        }
+        return crop3_run(res->data.function.args[0], (size_t)e[0], (size_t)e[1], (size_t)e[2]);
+    }
+
     size_t w = 0, h = 0, c = 0; double* src = NULL;
     if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) return NULL;
 

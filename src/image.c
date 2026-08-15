@@ -813,11 +813,22 @@ bool image3d_load(const Expr* img, size_t* width, size_t* height, size_t* depth,
     if (is_ndarray(d)) {
         const NDArrayData* a = &d->data.ndarray;
         size_t n = dp * h * w * c;
-        for (size_t i = 0; i < n; i++) {
-            double re = 0.0, imv = 0.0;
-            ndt_get(a->data, i, a->dtype, &re, &imv);
-            if (imv != 0.0) { free(out); return false; }
-            out[i] = img_to_unit(re, t);
+        /* The same memcpy the planar loader got, and it belongs here for the same reason: a "Real"
+         * float64 volume needs no conversion at all, since img_to_unit is the identity for it.
+         *
+         * It was added to image_load alone at first, and the volumetric path kept walking n elements
+         * through ndt_get's dtype switch -- which is this subsystem's most repeated bug in its
+         * purest form. The measurement is what found it: a volumetric pad sat at 6.5x NumPy where
+         * the planar one had just been brought to 2.2x, and the pad arithmetic is the same code. */
+        if (a->dtype == NDT_FLOAT64 && t == IMG_REAL) {
+            memcpy(out, a->data, sizeof(double) * n);
+        } else {
+            for (size_t i = 0; i < n; i++) {
+                double re = 0.0, imv = 0.0;
+                ndt_get(a->data, i, a->dtype, &re, &imv);
+                if (imv != 0.0) { free(out); return false; }
+                out[i] = img_to_unit(re, t);
+            }
         }
     } else {
         size_t i = 0;
