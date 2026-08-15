@@ -37,7 +37,12 @@
 #include "attr.h"
 #include "sym_names.h"
 #include "linalg/numarray.h"
+#include "eval.h"
 #include "image.h"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 typedef enum { RS_AUTO, RS_NEAREST, RS_BILINEAR, RS_AVERAGE } Resample;
 
@@ -399,7 +404,194 @@ static Expr* builtin_imageresize(Expr* res) {
     return out;
 }
 
+/* ---- rotation and reflection ----------------------------------------------
+ *
+ * RIGHT ANGLES ARE A PURE INDEX PERMUTATION, and keeping them on that path rather than sending them
+ * through the general resampler is the whole design. A quarter turn moves every pixel to another pixel's
+ * exact position -- no interpolation, no rounding, nothing lost -- so four of them are EXACTLY the
+ * identity, and a test asserts that with `===` rather than a tolerance. Route 90 degrees through a
+ * bilinear resampler and the identity becomes approximate for no reason at all: the sample points land
+ * on pixel centres, so the interpolation weights are 1 and 0, but the arithmetic still runs and the
+ * half-pixel convention still has to be exactly right for it to come out clean.
+ *
+ * A quarter turn also SWAPS THE DIMENSIONS, which is the other thing a test has to pin, and it needs a
+ * non-square image to say anything at all.
+ *
+ * ARBITRARY ANGLES cannot be exact -- a rotated pixel grid does not land on a pixel grid -- so they
+ * interpolate, and the honest test is different in kind: rotating by theta and then by -theta returns
+ * the image approximately, not exactly, and the interior is what recovers while the corners have rotated
+ * out of frame and back as background. Testing the interior and saying so is better than a loose
+ * whole-image tolerance that hides where the error actually is.
+ *
+ * Out-of-frame samples read as 0 (black) rather than replicating the edge. Replication is right for a
+ * FILTER, where the border is a boundary condition on an operation happening inside the image; it is
+ * wrong for a ROTATION, where the area outside genuinely was not photographed and smearing the edge
+ * across it invents content.
+ */
+static void rot90_run(const double* src, double* dst, size_t w, size_t h, size_t c, int quarters) {
+    /* quarters is 1, 2 or 3. Destination dimensions are swapped for the odd turns; the caller has
+     * already allocated accordingly. */
+    for (size_t y = 0; y < h; y++)
+        for (size_t x = 0; x < w; x++)
+            for (size_t k = 0; k < c; k++) {
+                size_t dx, dy, dw;
+                if (quarters == 1)      { dx = h - 1 - y; dy = x;         dw = h; }
+                else if (quarters == 2) { dx = w - 1 - x; dy = h - 1 - y; dw = w; }
+                else                    { dx = y;         dy = w - 1 - x; dw = h; }
+                dst[(dy * dw + dx) * c + k] = src[(y * w + x) * c + k];
+            }
+}
+
+/* Bilinear rotation about the image centre, sampling the SOURCE for each destination pixel.
+ *
+ * Inverse mapping, not forward: iterating over destination pixels and asking where each came from
+ * fills every output exactly once. Forward mapping -- iterating over the source and writing where each
+ * pixel lands -- leaves holes wherever the rotation stretches, which is the classic artefact and is why
+ * inverse mapping is universal. */
+static void rot_free_run(const double* src, double* dst, size_t w, size_t h, size_t c, double rad) {
+    double ca = cos(rad), sa = sin(rad);
+    double cx = 0.5 * (double)(w - 1), cy = 0.5 * (double)(h - 1);
+    for (size_t y = 0; y < h; y++)
+        for (size_t x = 0; x < w; x++) {
+            double dx = (double)x - cx, dy = (double)y - cy;
+            /* Rotate the destination offset BACKWARDS to find the source point. */
+            double sxf =  ca * dx + sa * dy + cx;
+            double syf = -sa * dx + ca * dy + cy;
+            int64_t x0 = (int64_t)floor(sxf), y0 = (int64_t)floor(syf);
+            double fx = sxf - (double)x0, fy = syf - (double)y0;
+            for (size_t k = 0; k < c; k++) {
+                /* Outside the frame is 0, not the clamped edge: that area was never photographed. */
+                double p00 = 0.0, p01 = 0.0, p10 = 0.0, p11 = 0.0;
+                if (x0 >= 0 && (size_t)x0 < w && y0 >= 0 && (size_t)y0 < h)
+                    p00 = src[((size_t)y0 * w + (size_t)x0) * c + k];
+                if (x0 + 1 >= 0 && (size_t)(x0 + 1) < w && y0 >= 0 && (size_t)y0 < h)
+                    p01 = src[((size_t)y0 * w + (size_t)(x0 + 1)) * c + k];
+                if (x0 >= 0 && (size_t)x0 < w && y0 + 1 >= 0 && (size_t)(y0 + 1) < h)
+                    p10 = src[((size_t)(y0 + 1) * w + (size_t)x0) * c + k];
+                if (x0 + 1 >= 0 && (size_t)(x0 + 1) < w && y0 + 1 >= 0 && (size_t)(y0 + 1) < h)
+                    p11 = src[((size_t)(y0 + 1) * w + (size_t)(x0 + 1)) * c + k];
+                double top = p00 + (p01 - p00) * fx;
+                double bot = p10 + (p11 - p10) * fx;
+                dst[(y * w + x) * c + k] = top + (bot - top) * fy;
+            }
+        }
+}
+
+/* ImageRotate[image] (a quarter turn) / [image, angle] / [image, n Degree] */
+static Expr* builtin_imagerotate(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+
+    double rad = M_PI / 2.0;               /* Mathematica's default is a quarter turn */
+    if (argc == 2) {
+        /* NUMERICALISE the angle before reading it. `Pi`, `Pi/2` and `90 Degree` are exact symbolic
+         * values, not machine reals, so na_read_scalar refuses them -- ImageRotate[img, Pi] declined
+         * outright until this was added, which is a poor answer to the most natural way of writing a
+         * half turn. Wrapping in N and evaluating handles every exact form at once rather than
+         * special-casing Pi. */
+        Expr* one[1];
+        one[0] = expr_copy(res->data.function.args[1]);
+        if (!one[0]) return NULL;
+        Expr* nexpr = expr_new_function(expr_new_symbol("N"), one, 1);
+        if (!nexpr) { expr_free(one[0]); return NULL; }
+        Expr* num = evaluate(nexpr);
+        double v = 0.0, im = 0.0;
+        bool ok = num && na_read_scalar(num, &v, &im) && im == 0.0;
+        expr_free(num);
+        if (!ok) return NULL;
+        rad = v;
+    }
+    size_t w = 0, h = 0, c = 0; double* src = NULL;
+    if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) return NULL;
+
+    /* Is the angle a multiple of a right angle, to within the rounding of Pi/2 arithmetic? If so take
+     * the exact permutation path. The tolerance is on the ANGLE, not on the pixels: a caller writing
+     * Pi/2 gets the exact path, and one writing 1.5707963 gets the resampler, which is the honest
+     * reading of what they asked for. */
+    double q = rad / (M_PI / 2.0);
+    double qr = floor(q + 0.5);
+    bool right = fabs(q - qr) < 1e-9;
+
+    Expr* out = NULL;
+    if (right) {
+        int quarters = (int)(((int64_t)qr % 4 + 4) % 4);
+        if (quarters == 0) {
+            out = image_build_real(src, w, h, c);      /* full turn: the image itself */
+        } else {
+            size_t dw = (quarters == 2) ? w : h;
+            size_t dh = (quarters == 2) ? h : w;
+            double* dst = malloc(sizeof(double) * dw * dh * c);
+            if (dst) {
+                rot90_run(src, dst, w, h, c, quarters);
+                out = image_build_real(dst, dw, dh, c);
+            }
+            free(dst);
+        }
+    } else {
+        double* dst = malloc(sizeof(double) * w * h * c);
+        if (dst) {
+            rot_free_run(src, dst, w, h, c, rad);
+            out = image_build_real(dst, w, h, c);
+        }
+        free(dst);
+    }
+    free(src);
+    return out;
+}
+
+/* ImageReflect[image] / [image, side] -- a pure index permutation, hence exact and self-inverse. */
+static Expr* builtin_imagereflect(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+
+    /* Mathematica's default reflects top-to-bottom. The named sides are given as symbols. */
+    int mode = 0;                          /* 0 = vertical flip, 1 = horizontal, 2 = both */
+    if (argc == 2) {
+        Expr* sd = res->data.function.args[1];
+        if (!sd || sd->type != EXPR_SYMBOL) return NULL;
+        const char* n = sd->data.symbol.name;
+        if      (strcmp(n, "Top") == 0 || strcmp(n, "Bottom") == 0) mode = 0;
+        else if (strcmp(n, "Left") == 0 || strcmp(n, "Right") == 0) mode = 1;
+        else return NULL;
+    }
+    size_t w = 0, h = 0, c = 0; double* src = NULL;
+    if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) return NULL;
+    double* dst = malloc(sizeof(double) * w * h * c);
+    Expr* out = NULL;
+    if (dst) {
+        for (size_t y = 0; y < h; y++)
+            for (size_t x = 0; x < w; x++) {
+                size_t sy = (mode == 1) ? y : h - 1 - y;
+                size_t sx = (mode == 0) ? x : w - 1 - x;
+                for (size_t k = 0; k < c; k++)
+                    dst[(y * w + x) * c + k] = src[(sy * w + sx) * c + k];
+            }
+        out = image_build_real(dst, w, h, c);
+    }
+    free(src); free(dst);
+    return out;
+}
+
 void imagegeom_init(void) {
+    symtab_add_builtin("ImageRotate", builtin_imagerotate);
+    symtab_get_def("ImageRotate")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ImageRotate",
+        "ImageRotate[image] rotates a quarter turn counterclockwise; ImageRotate[image, angle] rotates "
+        "by angle in radians (use n Degree for degrees). A multiple of a right angle takes an EXACT "
+        "index-permutation path -- every pixel lands on another pixel's position, nothing is "
+        "interpolated, and four quarter turns are exactly the identity. An odd number of quarter turns "
+        "swaps the dimensions. Any other angle interpolates bilinearly, sampling the source per "
+        "destination pixel (inverse mapping, so every output is filled exactly once; forward mapping "
+        "leaves holes wherever the rotation stretches). Area rotated in from outside reads as 0 rather "
+        "than the replicated edge, because that area was never photographed and smearing the border "
+        "across it would invent content.");
+
+    symtab_add_builtin("ImageReflect", builtin_imagereflect);
+    symtab_get_def("ImageReflect")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ImageReflect",
+        "ImageReflect[image] reflects top to bottom; ImageReflect[image, Left] or Right reflects left "
+        "to right, and Top or Bottom reflects vertically. A pure index permutation, so it is exact and "
+        "self-inverse: reflecting twice is exactly the identity.");
     symtab_add_builtin("ImageResize", builtin_imageresize);
     symtab_get_def("ImageResize")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageResize",

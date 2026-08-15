@@ -1254,6 +1254,76 @@ static void test_ncc_scores_exactly_one_at_an_exact_match(void) {
     assert_eval_eq("MemberQ[Attributes[ImageCorrelate], Protected]", "True", 0);
 }
 
+#define RIMG "Image[{{0.1, 0.2, 0.3, 0.4}, {0.5, 0.6, 0.7, 0.8}}]"
+
+static void test_right_angle_rotation_is_exact(void) {
+    /* A quarter turn is a pure index permutation -- every pixel lands on another pixel's position, so
+     * nothing is interpolated and FOUR of them are exactly the identity. Asserted with ===, which is
+     * only available because right angles are kept off the resampler; routed through bilinear the
+     * identity would become approximate for no reason. */
+    assert_eval_eq("ImageData[ImageRotate[ImageRotate[ImageRotate[ImageRotate[" RIMG "]]]]]"
+                   " === ImageData[" RIMG "]", "True", 0);
+    /* A quarter turn SWAPS the dimensions, which a square image could not show. 4 wide by 2 high
+     * becomes 2 wide by 4 high. */
+    assert_eval_eq("{ImageDimensions[" RIMG "], ImageDimensions[ImageRotate[" RIMG "]]}",
+                   "{{4, 2}, {2, 4}}", 0);
+    /* Two quarter turns are exactly a half turn, and a half turn of a single row reverses it. */
+    assert_eval_eq("ImageData[ImageRotate[ImageRotate[" RIMG "]]]"
+                   " === ImageData[ImageRotate[" RIMG ", Pi]]", "True", 0);
+    assert_eval_eq("ImageData[ImageRotate[Image[{{0.1, 0.2, 0.3}}], Pi]]",
+                   "{{0.3, 0.2, 0.1}}", 0);
+    /* A full turn is the image itself. Pi and 2 Pi are EXACT SYMBOLIC values, not machine reals, so
+     * these rows also pin that the angle is numericalised -- ImageRotate[img, Pi] declined outright
+     * before that was added, which is a poor answer to the most natural way of writing a half turn. */
+    assert_eval_eq("ImageData[ImageRotate[" RIMG ", 2 Pi]] === ImageData[" RIMG "]", "True", 0);
+    assert_eval_eq("ImageData[ImageRotate[" RIMG ", 90 Degree]] === ImageData[ImageRotate[" RIMG "]]",
+                   "True", 0);
+}
+
+static void test_reflection_is_exact_and_self_inverse(void) {
+    /* Also a pure permutation, so reflecting twice is exactly the identity -- on both axes. */
+    assert_eval_eq("ImageData[ImageReflect[ImageReflect[" RIMG "]]] === ImageData[" RIMG "]",
+                   "True", 0);
+    assert_eval_eq("ImageData[ImageReflect[ImageReflect[" RIMG ", Left], Left]]"
+                   " === ImageData[" RIMG "]", "True", 0);
+    /* And the two directions do different things, which a self-inverse test alone cannot show. */
+    assert_eval_eq("ImageData[ImageReflect[" RIMG "]]",
+                   "{{0.5, 0.6, 0.7, 0.8}, {0.1, 0.2, 0.3, 0.4}}", 0);
+    assert_eval_eq("ImageData[ImageReflect[" RIMG ", Left]]",
+                   "{{0.4, 0.3, 0.2, 0.1}, {0.8, 0.7, 0.6, 0.5}}", 0);
+    /* Dimensions are unchanged by a reflection, unlike a quarter turn. */
+    assert_eval_eq("ImageDimensions[ImageReflect[" RIMG "]]", "{4, 2}", 0);
+    assert_eval_eq("Head[ImageReflect[" RIMG ", Sideways]]", "ImageReflect", 0);
+    assert_eval_eq("Head[ImageRotate[{{1, 2}}]]", "ImageRotate", 0);
+    assert_eval_eq("And @@ Map[MemberQ[Attributes[#], Protected] &, {ImageRotate, ImageReflect}]",
+                   "True", 0);
+}
+
+static void test_arbitrary_angle_rotation_round_trips_smooth_content(void) {
+    /* An arbitrary angle CANNOT be exact -- a rotated pixel grid does not land on a pixel grid -- so
+     * the property is that theta then -theta recovers the interior, and it holds to 1.1e-16 on SMOOTH
+     * content. The interior specifically, because the corners rotate out of frame and back as
+     * background.
+     *
+     * SMOOTH content specifically, and that distinction is the point. The first version of this row
+     * used the noise-like Mod[x*7 + y*13, 251] pattern and recovered only to 0.377 -- not a bug but
+     * two bilinear interpolations destroying energy at the Nyquist limit, which is what interpolation
+     * does. A tolerance loose enough to admit that would have accepted an outright wrong rotation
+     * too; using band-limited content instead keeps the assertion tight enough to mean something. */
+    assert_eval_eq("Module[{sm = Image[Table[N[(x + 2 y)/128.], {y, 32}, {x, 32}]], rt, d0},"
+                   " rt = ImageData[ImageRotate[ImageRotate[sm, 0.3], -0.3]];"
+                   " d0 = ImageData[sm];"
+                   " Chop[Max[Abs[Flatten[rt[[9 ;; 24, 9 ;; 24]] - d0[[9 ;; 24, 9 ;; 24]]]]]]]",
+                   "0", 0);
+    /* Out-of-frame area reads as 0, not the replicated edge: a rotation exposes area that was never
+     * photographed, and smearing the border across it would invent content. A half turn of a
+     * one-pixel-tall image by a small angle pulls background into the corners. */
+    assert_eval_eq("Module[{r = ImageData[ImageRotate[Image[Table[1., {8}, {8}]], 0.4]]},"
+                   " Min[Flatten[r]] < 0.5]", "True", 0);
+    /* Dimensions are preserved by an arbitrary-angle rotation, unlike a quarter turn. */
+    assert_eval_eq("ImageDimensions[ImageRotate[" RIMG ", 0.3]]", "{4, 2}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1310,6 +1380,9 @@ int main(void) {
     TEST(test_vanherk_agrees_with_an_independent_reference);
     TEST(test_correlation_is_convolution_reflected);
     TEST(test_ncc_scores_exactly_one_at_an_exact_match);
+    TEST(test_right_angle_rotation_is_exact);
+    TEST(test_reflection_is_exact_and_self_inverse);
+    TEST(test_arbitrary_angle_rotation_round_trips_smooth_content);
     TEST(test_connectivity_is_the_discriminating_property);
     TEST(test_a_u_shape_needs_the_union_find);
     TEST(test_labels_are_contiguous_in_raster_order);

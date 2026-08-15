@@ -1049,3 +1049,57 @@ algorithmic rather than incidental: this computes the local mean and variance di
 O(w·h·kw·kh), where `match_template` uses **integral images** to get both in O(1) per position. That is the remedy if template matching becomes a hot path — a summed-area
 table over the image and its square, built once — and it is a known limit with a known fix rather than a
 number that happens to be good.
+
+---
+
+# Rotation and reflection
+
+`ImageRotate[image]` turns a quarter counterclockwise; `ImageRotate[image, angle]` rotates by an angle in
+radians (`n Degree` works). `ImageReflect[image]` reflects top-to-bottom, `ImageReflect[image, Left]`
+left-to-right. Attributes: `Protected`.
+
+**A right angle is a pure index permutation**, and keeping it off the resampler is the design. Every pixel
+lands on another pixel's exact position, so nothing is interpolated and **four quarter turns are exactly
+the identity** — asserted with `===`, which is only available because of that separation. Sent through a
+bilinear resampler the sample points would land on pixel centres and the weights would be 1 and 0, but the
+arithmetic would still run and the half-pixel convention would have to be exactly right for the identity
+to come out clean.
+
+An odd number of quarter turns **swaps the dimensions** — which a square test image could not show, so the
+tests use 4×2.
+
+Reflection is also a permutation, hence exact and **self-inverse**: reflecting twice is exactly the
+identity, on either axis.
+
+**Angles are numericalised.** `Pi`, `Pi/2` and `90 Degree` are exact symbolic values rather than machine
+reals, so a plain scalar read refuses them — `ImageRotate[img, Pi]` declined outright until the angle was
+wrapped in `N` and evaluated, which is a poor answer to the most natural way of writing a half turn.
+Wrapping handles every exact form at once instead of special-casing `Pi`.
+
+**Arbitrary angles cannot be exact**, since a rotated pixel grid does not land on a pixel grid. Sampling is
+by **inverse mapping** — iterating over destination pixels and asking where each came from — so every
+output is filled exactly once; forward mapping leaves holes wherever the rotation stretches, which is the
+classic artefact. Area rotated in from outside reads as **0, not the replicated edge**: replication is
+right for a *filter*, where the border is a boundary condition on an operation inside the image, and wrong
+for a *rotation*, where that area genuinely was not photographed.
+
+The round-trip property is that θ then −θ recovers the interior, and it holds to **1.1e-16** on smooth
+content. That qualifier matters: the same test on a noise-like pattern recovers only to 0.377 — not a bug
+but two bilinear interpolations destroying energy at the Nyquist limit. A tolerance loose enough to admit
+that would also admit an outright wrong rotation, so the test uses band-limited content and says why.
+
+### Measured
+
+512×512:
+
+| operation | Mathilda | reference |
+|---|---|---|
+| `ImageRotate` 0.3 rad, bilinear | **0.97 ms** | scipy `rotate(order=1)` 3.7 ms |
+| `ImageRotate` quarter turn | 1.65 ms | numpy `rot90` + copy 0.4 ms |
+| `ImageReflect` | 0.46 ms | numpy `flipud` + copy ~0 ms |
+
+The bilinear rotation is 3.8× faster than scipy's. The two permutation rows are slower, and the comparison
+is not quite like-for-like: numpy's `rot90` and `flipud` return **views** — zero work — and even forcing a
+copy is a strided memcpy, where these build an `Expr` result. The permutation itself is a pointer shuffle;
+the time is output construction, which is the same bottleneck `MorphologicalComponents` documents and has
+the same remedy.
