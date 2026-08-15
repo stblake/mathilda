@@ -482,6 +482,7 @@ Trains a classifier and returns a `ClassifierFunction`. Attributes: `Protected`.
 - `Classify[data, Method -> "NaiveBayes"]`
 - `Classify[data, Method -> "LogisticRegression"]`
 - `Classify[data, Method -> "DecisionTree"]`
+- `Classify[data, Method -> "RandomForest"]`
 - `Classify[data, Method -> {"NearestNeighbors", "NeighborsNumber" -> k}]`
 
 **A class may be any expression.** This is the substantive addition of this family:
@@ -647,3 +648,41 @@ different classes share a leaf holding the majority, and its `"Probabilities"` a
 real histogram — three points at one coordinate with classes `a`, `b`, `b` give `1/3` and
 `2/3`. "No split improves impurity" is a stopping rule, and it is what would otherwise recurse
 forever when every feature is constant. A single training point is a valid one-leaf tree.
+
+### `"RandomForest"` — fifty trees, bagged and feature-sampled
+
+Fifty CART trees, each grown on a bootstrap resample of the rows, each node choosing among
+only `sqrt(dim)` features. The class is the arg-max of the averaged predicted distribution.
+
+**Both sources of randomness are needed, and the second matters more.** Bootstrap resampling
+alone leaves the trees highly correlated: if every tree may pick the single most informative
+feature at its root, they all do, and averaging near-identical trees buys nothing. Restricting
+each node's candidate set is what decorrelates them. `sqrt(dim)` is the standard choice for
+classification.
+
+**A forest is reproducible under `SeedRandom`.** Both the bootstrap draw and the per-node
+feature sample come from `random_uniform_01` — the same stream `RandomReal` uses — so
+`SeedRandom[42]` before two fits gives two identical forests, and a different seed gives a
+different one. Both are asserted. This is load-bearing rather than a nicety: a fit that varied
+run to run could not be pinned by any test, which is the same concern that made multi-class
+logistic regression one-vs-rest instead of a softmax.
+
+**Per-tree distributions are normalised before averaging, not pooled as raw counts.** Pooling
+would let one tree with a large leaf outvote several trees with small ones, so each tree would
+carry a weight set by its own depth rather than one vote. Averaging distributions is the
+standard choice and the defensible one.
+
+A pleasant consequence: the forest's probabilities are **genuinely mixed** near a boundary,
+because the trees disagree there. A single tree on separable data always answers `1/0`, so its
+sum-to-one assertion needed contrived contradictory data to mean anything; the forest's does
+not.
+
+```
+In[1]:= SeedRandom[42]; f = Classify[data, Method -> "RandomForest"];
+In[2]:= f[{2.5, 2.5}, "Probabilities"]
+Out[2]= {"a" -> 0.641, "b" -> 0.174, "c" -> 0.185}
+```
+
+**Fifty trees, fixed.** Wolfram tunes the count against held-out data. Doing that here would
+mean carving a validation split out of the user's data without being asked, and guessing
+silently is worse than a documented constant.

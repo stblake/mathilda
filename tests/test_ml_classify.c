@@ -91,7 +91,11 @@ static void test_malformed_input_declines(void) {
     assert_eval_eq("Head[Classify[{{1., 2.}, {3., 4.}}]]", "Classify", 0);
     assert_eval_eq("Head[Classify[{}]]", "Classify", 0);
     assert_eval_eq("Head[Classify[x]]", "Classify", 0);
-    assert_eval_eq("Head[Classify[" TR ", Method -> \"RandomForest\"]]", "Classify", 0);
+    /* RandomForest used to decline and this row pinned the refusal; it is implemented
+     * now, so the row pins the answer instead. An unknown method still declines. */
+    assert_eval_eq("Head[Classify[" TR ", Method -> \"RandomForest\"]]",
+                   "ClassifierFunction", 0);
+    assert_eval_eq("Head[Classify[" TR ", Method -> \"NoSuchMethod\"]]", "Classify", 0);
     assert_eval_eq("Head[Classify[" TR ", Method -> {\"NearestNeighbors\", "
                    "\"NeighborsNumber\" -> 0}]]", "Classify", 0);
     /* A wrongly-shaped query, and an unknown property, leave the application
@@ -435,6 +439,70 @@ static void test_tree_declines_and_coexists(void) {
                    "\"DecisionTree\"", 0);
 }
 
+static void test_forest_reproduces_labels_and_is_seeded(void) {
+    /* Fifty trees, each grown to purity on its own bootstrap resample, so the majority vote
+     * still recovers every training label on separable data. */
+    assert_eval_eq("Module[{tr = " MC3 ", L},"
+                   " SeedRandom[42];"
+                   " L = Classify[tr, Method -> \"RandomForest\"];"
+                   " And @@ Table[L[First[tr[[i]]]] === Last[tr[[i]]], {i, Length[tr]}]]",
+                   "True", 0);
+    /* THE load-bearing property. Both the bootstrap draw and the per-node feature sample come
+     * from the same generator RandomReal uses, so a forest is reproducible under SeedRandom.
+     * Without this no assertion about a forest could be exact -- and a fit that quietly varied
+     * run to run would be the sort of bug that half-works, passing every accuracy check while
+     * making the model unpinnable. */
+    assert_eval_eq("Module[{tr = " MC3 ", a, b},"
+                   " SeedRandom[42]; a = Classify[tr, Method -> \"RandomForest\"];"
+                   " SeedRandom[42]; b = Classify[tr, Method -> \"RandomForest\"];"
+                   " a === b]", "True", 0);
+    /* And a different seed must give a different forest, or the row above would also pass for
+     * an implementation that ignored the generator entirely. */
+    assert_eval_eq("Module[{tr = " MC3 ", a, c},"
+                   " SeedRandom[42]; a = Classify[tr, Method -> \"RandomForest\"];"
+                   " SeedRandom[7];  c = Classify[tr, Method -> \"RandomForest\"];"
+                   " a =!= c]", "True", 0);
+    /* Fifty trees, and the payload really holds that many. */
+    assert_eval_eq("Module[{L}, SeedRandom[1];"
+                   " L = Classify[" MC3 ", Method -> \"RandomForest\"];"
+                   " {Part[L, 4], Length[Part[L, 2, 2]]}]", "{50, 50}", 0);
+}
+
+static void test_forest_probabilities_are_genuinely_mixed(void) {
+    /* The forest gets the non-degenerate probability case for free, where a single tree needed
+     * contrived contradictory data: near a boundary the trees disagree, so the averaged
+     * distribution is genuinely mixed rather than 1/0. That makes the sum-to-one assertion
+     * meaningful here without any special fixture. */
+    assert_eval_eq("Module[{L, p}, SeedRandom[42];"
+                   " L = Classify[" MC3 ", Method -> \"RandomForest\"];"
+                   " p = L[{2.5, 2.5}, \"Probabilities\"];"
+                   " {Chop[Total[Map[Last, p]] - 1.], Length[p],"
+                   "  And @@ Map[(0. <= Last[#] <= 1.) &, p],"
+                   "  Count[p, r_ /; 0.01 < Last[r] < 0.99] >= 2}]",
+                   "{0, 3, True, True}", 0);
+    /* The reported class is the arg-max of the reported probabilities -- the two come from one
+     * array, and this catches them ever diverging. */
+    assert_eval_eq("Module[{L, p, q}, SeedRandom[42];"
+                   " L = Classify[" MC3 ", Method -> \"RandomForest\"];"
+                   " Table[p = L[pt, \"Probabilities\"];"
+                   "  q = First[Part[p, First[Ordering[Map[-Last[#] &, p]]]]];"
+                   "  q === L[pt], {pt, {{0.1,0.1}, {5.,0.2}, {0.2,5.}, {2.5,2.5}}}]]",
+                   "{True, True, True, True}", 0);
+}
+
+static void test_forest_declines_and_coexists(void) {
+    /* A neighbour count means nothing to a forest either. */
+    assert_eval_eq("Head[Classify[" LR1 ", Method -> {\"RandomForest\", "
+                   "\"NeighborsNumber\" -> 3}]]", "Classify", 0);
+    /* Five methods on the one head now, and the fitted model elides like the rest. */
+    assert_eval_eq("Module[{}, SeedRandom[1]; Classify[" LR1 ", Method -> \"RandomForest\"]]",
+                   "ClassifierFunction[\"RandomForest\", <>]", 0);
+    /* A single training point is a valid forest: every resample is that point. */
+    assert_eval_eq("Module[{}, SeedRandom[1];"
+                   " Classify[{{1.,1.} -> \"only\"}, Method -> \"RandomForest\"][{9.,9.}]]",
+                   "\"only\"", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -466,6 +534,9 @@ int main(void) {
     TEST(test_tree_is_deterministic);
     TEST(test_tree_handles_unsplittable_data);
     TEST(test_tree_declines_and_coexists);
+    TEST(test_forest_reproduces_labels_and_is_seeded);
+    TEST(test_forest_probabilities_are_genuinely_mixed);
+    TEST(test_forest_declines_and_coexists);
 
     printf("All ml Classify tests passed.\n");
     return 0;

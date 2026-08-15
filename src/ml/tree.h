@@ -45,8 +45,19 @@ typedef struct {
  * assert rather than an accuracy figure to hope for.
  *
  * Returns NULL on allocation failure or degenerate input (n == 0, k == 0). */
+/* `mtry` is how many features each node may consider, sampled without replacement from the
+ * dim available; 0 means all of them, which is a plain CART tree. A value below dim is what
+ * makes a RANDOM forest random in the second of its two senses -- the first being the
+ * bootstrap resample of the rows -- and it is the more important of the two: trees grown on
+ * bootstrap samples of the same data still agree closely if every one of them may pick the
+ * single most informative feature at the root, and averaging near-identical trees buys
+ * nothing. Restricting the candidate set is what decorrelates them.
+ *
+ * Sampling draws from the same generator as RandomReal, so a forest is reproducible under
+ * SeedRandom. That is a testable property rather than a nicety: without it no assertion about
+ * a forest could be exact. */
 MlTree* ml_tree_fit(const double* x, const size_t* y, size_t n, size_t dim, size_t k,
-                    size_t max_depth, size_t min_split);
+                    size_t max_depth, size_t min_split, size_t mtry);
 
 /* Index of the leaf a point routes to. */
 size_t ml_tree_route(const MlTree* t, const double* x);

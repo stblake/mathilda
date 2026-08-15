@@ -32,6 +32,7 @@
 #include <math.h>
 
 #include "tree.h"
+#include "random.h"
 
 /* ---- the sort key: (value, index), so the order is total ---- */
 
@@ -72,6 +73,8 @@ typedef struct {
     double*  cl;        /* left histogram during the sweep  */
     double*  cr;        /* right histogram during the sweep */
     size_t*  idx;       /* the point indices this subtree owns, partitioned in place */
+    size_t*  fpool;     /* feature indices, shuffled per node when mtry < dim */
+    size_t   mtry;
 } TreeBuild;
 
 static bool tree_reserve(TreeBuild* b, size_t need) {
@@ -129,7 +132,22 @@ static size_t tree_build(TreeBuild* b, const double* x, const size_t* y,
     size_t best_nleft = 0;
     bool found = false;
 
-    for (size_t f = 0; f < dim; f++) {
+    /* Which features this node may consider. With mtry == 0 (or >= dim) that is all of them
+     * in order; otherwise a partial Fisher-Yates shuffle draws mtry of them without
+     * replacement -- partial because only the first mtry entries are ever read, so shuffling
+     * the whole pool would be wasted work at every node of every tree. */
+    size_t nf = dim;
+    if (b->mtry > 0 && b->mtry < dim) {
+        nf = b->mtry;
+        for (size_t i = 0; i < nf; i++) {
+            size_t j = i + (size_t)(random_uniform_01() * (double)(dim - i));
+            if (j >= dim) j = dim - 1;          /* guard the 1.0 endpoint */
+            size_t tmp = b->fpool[i]; b->fpool[i] = b->fpool[j]; b->fpool[j] = tmp;
+        }
+    }
+
+    for (size_t fi = 0; fi < nf; fi++) {
+        size_t f = b->fpool[fi];
         for (size_t p = lo; p < hi; p++) {
             b->key[p - lo].v = x[b->idx[p] * dim + f];
             b->key[p - lo].i = b->idx[p];
@@ -149,9 +167,12 @@ static size_t tree_build(TreeBuild* b, const double* x, const size_t* y,
             double nl = (double)(s + 1), nr = (double)(m - s - 1);
             double gain = parent - gini_weighted(b->cl, k, nl)
                                  - gini_weighted(b->cr, k, nr);
-            /* Strictly greater, so the tie-break is "first found wins" -- and because f
-             * ascends outermost and s ascends inside it, that is lower feature index then
-             * lower threshold, deterministically. */
+            /* Strictly greater, so the tie-break is "first considered wins": lower position
+             * in the candidate pool, then lower threshold. With mtry == 0 the pool is in
+             * ascending feature order, so that is lower feature index -- the plain-tree
+             * guarantee. With sampling the pool order is itself drawn from the generator, so
+             * the tie-break is reproducible under SeedRandom rather than index-ordered, which
+             * is the most that can be promised once features are sampled at all. */
             if (gain > best_gain + 1e-12) {
                 best_gain  = gain;
                 best_f     = f;
@@ -195,7 +216,7 @@ static size_t tree_build(TreeBuild* b, const double* x, const size_t* y,
 }
 
 MlTree* ml_tree_fit(const double* x, const size_t* y, size_t n, size_t dim, size_t k,
-                    size_t max_depth, size_t min_split) {
+                    size_t max_depth, size_t min_split, size_t mtry) {
     if (!x || !y || n == 0 || dim == 0 || k == 0) return NULL;
     if (min_split < 2) min_split = 2;
 
@@ -205,20 +226,22 @@ MlTree* ml_tree_fit(const double* x, const size_t* y, size_t n, size_t dim, size
     t->dim = dim;
 
     TreeBuild b;
-    b.t = t; b.cap = 0;
+    b.t = t; b.cap = 0; b.mtry = mtry;
+    b.fpool = malloc(sizeof(size_t) * dim);
     b.key = malloc(sizeof(TreeKey) * n);
     b.cl  = malloc(sizeof(double) * k);
     b.cr  = malloc(sizeof(double) * k);
     b.idx = malloc(sizeof(size_t) * n);
-    if (!b.key || !b.cl || !b.cr || !b.idx) {
-        free(b.key); free(b.cl); free(b.cr); free(b.idx);
+    if (!b.key || !b.cl || !b.cr || !b.idx || !b.fpool) {
+        free(b.key); free(b.cl); free(b.cr); free(b.idx); free(b.fpool);
         ml_tree_free(t);
         return NULL;
     }
     for (size_t i = 0; i < n; i++) b.idx[i] = i;
+    for (size_t f = 0; f < dim; f++) b.fpool[f] = f;
 
     size_t root = tree_build(&b, x, y, dim, 0, n, 0, max_depth, min_split);
-    free(b.key); free(b.cl); free(b.cr); free(b.idx);
+    free(b.key); free(b.cl); free(b.cr); free(b.idx); free(b.fpool);
     if (root == SIZE_MAX || t->count == 0) { ml_tree_free(t); return NULL; }
     return t;
 }

@@ -26,6 +26,8 @@
 #include "mlutil.h"
 #include "encode.h"
 #include "tree.h"
+#include "random.h"   /* random_uniform_01: the forest draws from the user-visible
+                       * stream, so a fit is reproducible under SeedRandom */
 #include "pca.h"      /* ml_column_mean, ml_column_sd */
 #include "classify.h"
 
@@ -186,11 +188,98 @@ static bool logit_irls(const double* x, const size_t* y, size_t n, size_t dim,
     return !singular;
 }
 
+/* An MlTree as two Exprs: the split table and the class-count table, one row per node.
+ *
+ * Extracted when the forest arrived and needed the identical conversion B times -- the second
+ * real consumer, not an anticipated one. Returns false and leaves both outputs NULL on
+ * failure, so a caller never has to reason about a half-built pair. */
+static bool tree_to_exprs(const MlTree* t, Expr** nodes_out, Expr** dists_out) {
+    *nodes_out = NULL; *dists_out = NULL;
+    if (!t || t->count == 0) return false;
+    Expr** nrows = malloc(sizeof(Expr*) * t->count);
+    Expr** drows = malloc(sizeof(Expr*) * t->count);
+    bool ok = nrows && drows;
+    if (ok) {
+        for (size_t i = 0; i < t->count; i++) { nrows[i] = NULL; drows[i] = NULL; }
+        for (size_t i = 0; i < t->count && ok; i++) {
+            Expr* four[4];
+            four[0] = expr_new_integer(t->feature[i]);
+            four[1] = expr_new_real(t->thresh[i]);
+            four[2] = expr_new_integer((int64_t)t->left[i]);
+            four[3] = expr_new_integer((int64_t)t->right[i]);
+            if (four[0] && four[1] && four[2] && four[3])
+                nrows[i] = expr_new_function(expr_new_symbol(SYM_List), four, 4);
+            else { expr_free(four[0]); expr_free(four[1]);
+                   expr_free(four[2]); expr_free(four[3]); }
+            drows[i] = ml_list_of_reals(t->dist + i * t->k, t->k);
+            if (!nrows[i] || !drows[i]) ok = false;
+        }
+    }
+    Expr* nodes = NULL; Expr* dists = NULL;
+    if (ok) {
+        nodes = expr_new_function(expr_new_symbol(SYM_List), nrows, t->count);
+        dists = expr_new_function(expr_new_symbol(SYM_List), drows, t->count);
+        if (!nodes || !dists) ok = false;
+    }
+    if (!ok) {
+        for (size_t i = 0; i < t->count; i++) {
+            if (nrows) expr_free(nrows[i]);
+            if (drows) expr_free(drows[i]);
+        }
+        expr_free(nodes); expr_free(dists);
+        free(nrows); free(drows);
+        return false;
+    }
+    free(nrows); free(drows);
+    *nodes_out = nodes; *dists_out = dists;
+    return true;
+}
+
+/* Route a point through one tree's Expr tables and read the leaf's class COUNTS into `out`.
+ *
+ * Walks the payload directly rather than rebuilding an MlTree: routing one point touches at
+ * most depth nodes, so reconstruction would cost more than the prediction, and the payload is
+ * already the structure the walk needs. The step count is bounded by the node count because a
+ * ClassifierFunction can be typed by hand, making left/right untrusted -- a cycle would
+ * otherwise spin forever on every prediction. */
+static bool tree_leaf_counts(Expr* nodes, Expr* dists, const double* xin,
+                            size_t dim, size_t k, double* out) {
+    if (!nodes || nodes->type != EXPR_FUNCTION || !dists || dists->type != EXPR_FUNCTION)
+        return false;
+    size_t nn = nodes->data.function.arg_count;
+    if (nn == 0 || nn != dists->data.function.arg_count) return false;
+
+    double im = 0.0;
+    size_t at = 0;
+    for (size_t step = 0; step <= nn; step++) {
+        Expr* nd = nodes->data.function.args[at];
+        if (!nd || nd->type != EXPR_FUNCTION || nd->data.function.arg_count != 4) return false;
+        double fv = 0.0, th = 0.0, lv = 0.0, rv = 0.0;
+        if (!(na_read_scalar(nd->data.function.args[0], &fv, &im) && im == 0.0
+           && na_read_scalar(nd->data.function.args[1], &th, &im) && im == 0.0
+           && na_read_scalar(nd->data.function.args[2], &lv, &im) && im == 0.0
+           && na_read_scalar(nd->data.function.args[3], &rv, &im) && im == 0.0))
+            return false;
+        if (fv < 0.0) break;                      /* a leaf: this is the answer */
+        size_t f = (size_t)fv;
+        if (f >= dim) return false;
+        size_t nxt = (xin[f] <= th) ? (size_t)lv : (size_t)rv;
+        if (nxt >= nn || nxt == at) break;         /* malformed: answer where we stand */
+        at = nxt;
+    }
+    Expr* row = dists->data.function.args[at];
+    if (!row || row->type != EXPR_FUNCTION || row->data.function.arg_count != k) return false;
+    for (size_t c = 0; c < k; c++)
+        if (!(na_read_scalar(row->data.function.args[c], &out[c], &im) && im == 0.0))
+            return false;
+    return true;
+}
+
 static Expr* builtin_classify(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 2) return NULL;
     size_t kopt = 0;
-    bool bayes = false, logit = false, tree = false;
+    bool bayes = false, logit = false, tree = false, forest = false;
     if (argc == 2) {
         Expr* o = res->data.function.args[1];
         if (!o || o->type != EXPR_FUNCTION || o->data.function.arg_count != 2) return NULL;
@@ -226,10 +315,11 @@ static Expr* builtin_classify(Expr* res) {
         else if (strcmp(mm, "NaiveBayes") == 0)           { bayes = true;  logit = false; }
         else if (strcmp(mm, "LogisticRegression") == 0)   { bayes = false; logit = true; }
         else if (strcmp(mm, "DecisionTree") == 0)          { bayes = false; logit = false; tree = true; }
+        else if (strcmp(mm, "RandomForest") == 0)          { bayes = false; logit = false; forest = true; }
         else return NULL;
         /* A neighbour count means nothing to a Bayes classifier, so it is refused rather
          * than accepted and ignored -- silently swallowing it would hide a real mistake. */
-        if (kopt && (bayes || logit || tree)) return NULL;
+        if (kopt && (bayes || logit || tree || forest)) return NULL;
     }
 
     size_t n, dim; double* x = NULL; size_t* y = NULL;
@@ -337,56 +427,23 @@ static Expr* builtin_classify(Expr* res) {
         /* A CART classification tree. The kernel is src/ml/tree.c; this is the Expr side.
          *
          * DEPTH 32 AND MIN-SPLIT 2 MEAN THE TREE GROWS UNTIL EVERY LEAF IS PURE OR
-         * UNSPLITTABLE, which is a deliberate default rather than an oversight. It makes
-         * "reproduces every training label" an exact property to assert instead of an accuracy
-         * figure to hope for -- the role k = 1 plays for the nearest-neighbour classifier. It
-         * also overfits, which is the honest trade and is stated in the docs: pruning needs a
+         * UNSPLITTABLE, a deliberate default rather than an oversight. It makes "reproduces
+         * every training label" an exact property to assert instead of an accuracy figure to
+         * hope for -- the role k = 1 plays for the nearest-neighbour classifier. It also
+         * overfits, which is the honest trade and is stated in the docs: pruning needs a
          * validation split or a complexity parameter, and inventing either silently would be
-         * worse than growing the tree that was asked for. Depth 32 bounds the work without
-         * being reachable on data that leaf purity would not stop first.
+         * worse than growing the tree that was asked for. mtry 0 means every node considers
+         * every feature, which is what makes this a plain tree rather than a forest member.
          *
          * The payload is the vocabulary plus TWO matrices with one row per node: the split
          * (feature, threshold, left, right) and the class counts. Counts at every node rather
          * than only at leaves is what makes "Probabilities" fall out of the same array as the
          * class, with no separate leaf table to keep in step. */
-        MlTree* tt = ml_tree_fit(x, y, n, dim, labels.count, 32, 2);
+        MlTree* tt = ml_tree_fit(x, y, n, dim, labels.count, 32, 2, 0);
         Expr* outt = NULL;
         if (tt) {
-            Expr** nrows = malloc(sizeof(Expr*) * tt->count);
-            Expr** drows = malloc(sizeof(Expr*) * tt->count);
-            bool ok2 = nrows && drows;
-            if (ok2) {
-                for (size_t i = 0; i < tt->count; i++) { nrows[i] = NULL; drows[i] = NULL; }
-                for (size_t i = 0; i < tt->count && ok2; i++) {
-                    Expr* four[4];
-                    four[0] = expr_new_integer(tt->feature[i]);
-                    four[1] = expr_new_real(tt->thresh[i]);
-                    four[2] = expr_new_integer((int64_t)tt->left[i]);
-                    four[3] = expr_new_integer((int64_t)tt->right[i]);
-                    if (four[0] && four[1] && four[2] && four[3])
-                        nrows[i] = expr_new_function(expr_new_symbol(SYM_List), four, 4);
-                    else { expr_free(four[0]); expr_free(four[1]);
-                           expr_free(four[2]); expr_free(four[3]); }
-                    drows[i] = ml_list_of_reals(tt->dist + i * tt->k, tt->k);
-                    if (!nrows[i] || !drows[i]) ok2 = false;
-                }
-            }
             Expr* nodes = NULL; Expr* dists = NULL;
-            if (ok2) {
-                nodes = expr_new_function(expr_new_symbol(SYM_List), nrows, tt->count);
-                dists = expr_new_function(expr_new_symbol(SYM_List), drows, tt->count);
-                if (!nodes || !dists) ok2 = false;
-            }
-            if (!ok2) {
-                for (size_t i = 0; i < tt->count; i++) {
-                    if (nrows) expr_free(nrows[i]);
-                    if (drows) expr_free(drows[i]);
-                }
-                expr_free(nodes); expr_free(dists);
-                nodes = NULL; dists = NULL;
-            }
-            free(nrows); free(drows);
-            if (nodes && dists) {
+            if (tree_to_exprs(tt, &nodes, &dists)) {
                 Expr** rows = malloc(sizeof(Expr*) * 3);
                 if (rows) {
                     rows[0] = ml_labels_to_list(&labels);
@@ -413,6 +470,86 @@ static Expr* builtin_classify(Expr* res) {
         }
         ml_labels_free(&labels); free(x); free(y);
         return outt;
+    }
+
+    if (forest) {
+        /* A random forest: fifty CART trees, each grown on a bootstrap resample of the rows,
+         * each node choosing among only sqrt(dim) features.
+         *
+         * BOTH SOURCES OF RANDOMNESS ARE NEEDED AND THE SECOND MATTERS MORE. Bootstrap
+         * resampling alone leaves the trees highly correlated: if every tree may pick the single
+         * most informative feature at its root then they all do, and averaging near-identical
+         * trees buys nothing. Restricting each node's candidate set is what decorrelates them.
+         * sqrt(dim) is the standard choice for classification.
+         *
+         * Both draw from random_uniform_01, the same stream RandomReal uses, so a forest is
+         * REPRODUCIBLE UNDER SeedRandom. That is load-bearing rather than a nicety -- a fit
+         * varying run to run could not be pinned by any test, which is the same concern that
+         * made multi-class logistic regression one-vs-rest instead of a softmax.
+         *
+         * Fifty trees, fixed. Wolfram tunes the count against held-out data; doing that here
+         * would mean carving a validation split out of the user's data without being asked, and
+         * guessing silently is worse than a documented constant. */
+        const size_t FOREST_TREES = 50;
+        size_t mtry = (size_t)(sqrt((double)dim) + 0.5);
+        if (mtry == 0) mtry = 1;
+        if (mtry > dim) mtry = dim;
+
+        double* xb = malloc(sizeof(double) * n * dim);
+        size_t* yb = malloc(sizeof(size_t) * n);
+        Expr** trees = malloc(sizeof(Expr*) * FOREST_TREES);
+        Expr* outf = NULL;
+        bool okf = xb && yb && trees;
+        if (trees) for (size_t b = 0; b < FOREST_TREES; b++) trees[b] = NULL;
+        for (size_t b = 0; b < FOREST_TREES && okf; b++) {
+            /* n rows drawn WITH replacement. About 63% of distinct rows appear in any given
+             * resample, which is the point: the trees see different data. */
+            for (size_t i2 = 0; i2 < n; i2++) {
+                size_t pick = (size_t)(random_uniform_01() * (double)n);
+                if (pick >= n) pick = n - 1;        /* guard the 1.0 endpoint */
+                memcpy(xb + i2 * dim, x + pick * dim, sizeof(double) * dim);
+                yb[i2] = y[pick];
+            }
+            MlTree* bt = ml_tree_fit(xb, yb, n, dim, labels.count, 32, 2, mtry);
+            if (!bt) { okf = false; break; }
+            Expr* nd = NULL; Expr* ds = NULL;
+            if (tree_to_exprs(bt, &nd, &ds)) {
+                Expr* pair[2]; pair[0] = nd; pair[1] = ds;
+                trees[b] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
+                if (!trees[b]) { expr_free(nd); expr_free(ds); okf = false; }
+            } else okf = false;
+            ml_tree_free(bt);
+        }
+        if (okf) {
+            Expr* tlist = expr_new_function(expr_new_symbol(SYM_List), trees, FOREST_TREES);
+            if (tlist) {
+                Expr** rows = malloc(sizeof(Expr*) * 2);
+                if (rows) {
+                    rows[0] = ml_labels_to_list(&labels);
+                    rows[1] = tlist;
+                    Expr* pay = rows[0]
+                        ? expr_new_function(expr_new_symbol(SYM_List), rows, 2) : NULL;
+                    if (!pay) { expr_free(rows[0]); expr_free(tlist); }
+                    free(rows);
+                    if (pay) {
+                        Expr* a4[4];
+                        a4[0] = expr_new_string("RandomForest");
+                        a4[1] = pay;
+                        a4[2] = expr_new_integer((int64_t)dim);
+                        a4[3] = expr_new_integer((int64_t)FOREST_TREES);
+                        if (a4[0] && a4[1] && a4[2] && a4[3])
+                            outf = expr_new_function(expr_new_symbol("ClassifierFunction"), a4, 4);
+                        else { expr_free(a4[0]); expr_free(a4[1]);
+                               expr_free(a4[2]); expr_free(a4[3]); }
+                    }
+                } else expr_free(tlist);
+            } else { for (size_t b = 0; b < FOREST_TREES; b++) expr_free(trees[b]); }
+        } else {
+            if (trees) for (size_t b = 0; b < FOREST_TREES; b++) expr_free(trees[b]);
+        }
+        free(xb); free(yb); free(trees);
+        ml_labels_free(&labels); free(x); free(y);
+        return outf;
     }
 
     if (bayes) {
@@ -694,72 +831,62 @@ Expr* ml_classifier_apply(Expr* head, Expr** args, size_t argc) {
         return outl;
     }
 
-    if (strcmp(mname->data.string, "DecisionTree") == 0) {
-        /* Walk from the root, then read the reached node's class histogram: arg-max for the
-         * class, normalised for "Probabilities". One array answers both, which is the point of
-         * storing counts at every node.
+    if (strcmp(mname->data.string, "DecisionTree") == 0
+        || strcmp(mname->data.string, "RandomForest") == 0) {
+        /* One code path for both, because the difference is only how many trees are consulted.
          *
-         * The walk is over the payload directly rather than by rebuilding an MlTree. Routing a
-         * single point touches at most depth nodes, so reconstructing the whole tree per
-         * prediction would cost more than the prediction -- and the payload is already exactly
-         * the structure the walk needs.
+         * A TREE reports its leaf's class histogram: arg-max for the class, normalised for
+         * "Probabilities". A FOREST normalises each tree's leaf histogram FIRST and then
+         * averages, which is not the same as pooling the raw counts -- pooling would let one
+         * tree with a large leaf outvote several trees with small ones, so each tree would carry
+         * a weight set by its own depth rather than one vote. Averaging distributions is the
+         * standard choice and the defensible one.
          *
-         * The step count is bounded by the node count. A ClassifierFunction can be typed out
-         * by hand, so left/right are untrusted input: a cycle would otherwise spin here
-         * forever, and this runs on every prediction. */
-        if (labels.count == 0 || pay->data.function.arg_count != 3) {
+         * The forest's averaged probabilities are also genuinely mixed where a single tree's are
+         * 1/0, since the trees disagree near a boundary. That makes the sum-to-one assertion
+         * meaningful for the forest without needing contrived contradictory data. */
+        bool isforest = strcmp(mname->data.string, "RandomForest") == 0;
+        size_t want_args = isforest ? 2 : 3;
+        if (labels.count == 0 || pay->data.function.arg_count != want_args) {
             free(xin); ml_labels_free(&labels); return NULL;
         }
-        Expr* nodes = pay->data.function.args[1];
-        Expr* dists = pay->data.function.args[2];
-        if (!nodes || nodes->type != EXPR_FUNCTION || !dists || dists->type != EXPR_FUNCTION
-            || nodes->data.function.arg_count == 0
-            || nodes->data.function.arg_count != dists->data.function.arg_count) {
-            free(xin); ml_labels_free(&labels); return NULL;
-        }
-        size_t nn = nodes->data.function.arg_count;
+        double* h = calloc(labels.count, sizeof(double));
+        double* one = malloc(sizeof(double) * labels.count);
+        if (!h || !one) { free(h); free(one); free(xin); ml_labels_free(&labels); return NULL; }
 
-        size_t at = 0;
-        for (size_t step = 0; step <= nn && ok; step++) {
-            Expr* nd = nodes->data.function.args[at];
-            if (!nd || nd->type != EXPR_FUNCTION || nd->data.function.arg_count != 4) {
-                ok = false; break;
+        if (!isforest) {
+            ok = tree_leaf_counts(pay->data.function.args[1], pay->data.function.args[2],
+                                  xin, dim, labels.count, h);
+        } else {
+            Expr* tl = pay->data.function.args[1];
+            if (!tl || tl->type != EXPR_FUNCTION || tl->data.function.arg_count == 0) ok = false;
+            size_t nt = ok ? tl->data.function.arg_count : 0;
+            for (size_t b = 0; b < nt && ok; b++) {
+                Expr* tr = tl->data.function.args[b];
+                if (!tr || tr->type != EXPR_FUNCTION || tr->data.function.arg_count != 2) {
+                    ok = false; break;
+                }
+                ok = tree_leaf_counts(tr->data.function.args[0], tr->data.function.args[1],
+                                      xin, dim, labels.count, one);
+                if (!ok) break;
+                double tot1 = 0.0;
+                for (size_t c = 0; c < labels.count; c++) tot1 += one[c];
+                if (!(tot1 > 0.0)) { ok = false; break; }
+                for (size_t c = 0; c < labels.count; c++) h[c] += one[c] / tot1;
             }
-            double fv = 0.0, th = 0.0, lv = 0.0, rv = 0.0;
-            ok = na_read_scalar(nd->data.function.args[0], &fv, &im) && im == 0.0
-              && na_read_scalar(nd->data.function.args[1], &th, &im) && im == 0.0
-              && na_read_scalar(nd->data.function.args[2], &lv, &im) && im == 0.0
-              && na_read_scalar(nd->data.function.args[3], &rv, &im) && im == 0.0;
-            if (!ok) break;
-            if (fv < 0.0) break;                        /* a leaf: this is the answer */
-            size_t f = (size_t)fv;
-            if (f >= dim) { ok = false; break; }
-            size_t nxt = (xin[f] <= th) ? (size_t)lv : (size_t)rv;
-            if (nxt >= nn || nxt == at) break;          /* malformed: stop where we are */
-            at = nxt;
+            if (ok) for (size_t c = 0; c < labels.count; c++) h[c] /= (double)nt;
         }
-        free(xin);
-        if (!ok) { ml_labels_free(&labels); return NULL; }
-
-        Expr* row = dists->data.function.args[at];
-        if (!row || row->type != EXPR_FUNCTION
-            || row->data.function.arg_count != labels.count) {
-            ml_labels_free(&labels); return NULL;
-        }
-        double* h = malloc(sizeof(double) * labels.count);
-        if (!h) { ml_labels_free(&labels); return NULL; }
-        double tot = 0.0;
-        for (size_t c = 0; c < labels.count && ok; c++) {
-            ok = na_read_scalar(row->data.function.args[c], &h[c], &im) && im == 0.0;
-            if (ok) tot += h[c];
-        }
+        free(xin); free(one);
         if (!ok) { free(h); ml_labels_free(&labels); return NULL; }
+
+        double tot = 0.0;
+        for (size_t c = 0; c < labels.count; c++) tot += h[c];
 
         Expr* outt = NULL;
         if (want_probs) {
-            /* An all-zero histogram would mean a node holding no training points, which
-             * ml_tree_fit never produces. Declining beats dividing by zero, and beats
-             * inventing a uniform answer from no evidence. */
+            /* An all-zero histogram means a node holding no training points, which the fit
+             * never produces. Declining beats dividing by zero, and beats inventing a uniform
+             * answer out of no evidence. */
             if (!(tot > 0.0)) { free(h); ml_labels_free(&labels); return NULL; }
             Expr** rules = malloc(sizeof(Expr*) * labels.count);
             if (rules) {
@@ -776,8 +903,8 @@ Expr* ml_classifier_apply(Expr* head, Expr** args, size_t argc) {
                 free(rules);
             }
         } else {
-            /* Arg-max, ties to the lowest class index -- the same tie-break the other three
-             * methods use, hence the strict >. */
+            /* Arg-max, ties to the lowest class index -- the tie-break all the methods here
+             * share, hence the strict >. */
             size_t best = 0;
             for (size_t c = 1; c < labels.count; c++) if (h[c] > h[best]) best = c;
             outt = expr_copy(labels.label[best]);
