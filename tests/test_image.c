@@ -1163,6 +1163,39 @@ static void test_imageadjust_parametric_curve(void) {
                    "True", 0);
 }
 
+static void test_vanherk_agrees_with_an_independent_reference(void) {
+    /* The 1-D max/min is now van Herk--Gil-Werman: three comparisons per pixel whatever the radius.
+     * It is EXACT rather than approximate, because max and min are associative and idempotent, so
+     * splitting a window at a block boundary and recombining loses nothing -- which means the fast
+     * path must agree BIT-EXACTLY with a direct computation.
+     *
+     * The reference is written in Mathilda and shares no code with the C implementation: replicate
+     * padding means an out-of-range read clamps to the edge, so the neighbourhood max equals the max
+     * over the CLAMPED index range, which Span with Max/Min expresses directly.
+     *
+     * Comparing against Dilation with an all-ones matrix would NOT have been a check: an all-ones
+     * element is a full rectangle, so both sides would take van Herk and agree with themselves. */
+    assert_eval_eq("Module[{img = Image[Table[N[Mod[x*11 + y*7, 23]/23.], {y, 9}, {x, 11}]], d, ref},"
+                   " d = ImageData[img];"
+                   " ref[dd_, r_] := Module[{h = Length[dd], w = Length[First[dd]]},"
+                   "   Table[Max[Flatten[dd[[Max[1, y - r] ;; Min[h, y + r],"
+                   "                        Max[1, x - r] ;; Min[w, x + r]]]]], {y, h}, {x, w}]];"
+                   " And @@ Table[ImageData[Dilation[img, r]] === ref[d, r], {r, {1, 2, 3, 4}}]]",
+                   "True", 0);
+    assert_eval_eq("Module[{img = Image[Table[N[Mod[x*11 + y*7, 23]/23.], {y, 9}, {x, 11}]], d, ref},"
+                   " d = ImageData[img];"
+                   " ref[dd_, r_] := Module[{h = Length[dd], w = Length[First[dd]]},"
+                   "   Table[Min[Flatten[dd[[Max[1, y - r] ;; Min[h, y + r],"
+                   "                        Max[1, x - r] ;; Min[w, x + r]]]]], {y, h}, {x, w}]];"
+                   " And @@ Table[ImageData[Erosion[img, r]] === ref[d, r], {r, {1, 2, 3, 4}}]]",
+                   "True", 0);
+    /* A radius LARGER than the image is the case the block decomposition can get wrong, since the
+     * last block is short and a window then spans the whole padded line. */
+    assert_eval_eq("Module[{img = Image[{{0.25, 0.75}, {0.5, 1.}}]},"
+                   " {Union[Flatten[ImageData[Dilation[img, 4]]]],"
+                   "  Union[Flatten[ImageData[Erosion[img, 4]]]]}]", "{{1.0}, {0.25}}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1216,6 +1249,7 @@ int main(void) {
     TEST(test_opening_and_closing_are_idempotent);
     TEST(test_dilating_a_point_gives_the_element);
     TEST(test_element_forms_and_declines);
+    TEST(test_vanherk_agrees_with_an_independent_reference);
     TEST(test_connectivity_is_the_discriminating_property);
     TEST(test_a_u_shape_needs_the_union_find);
     TEST(test_labels_are_contiguous_in_raster_order);

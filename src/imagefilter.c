@@ -1172,7 +1172,9 @@ static void morph_direct(const double* src, double* dst, size_t w, size_t h, siz
             for (size_t i = 0; i < kh; i++) {
                 size_t sy = clampi((int64_t)y + (int64_t)i - ci, h);
                 for (size_t j = 0; j < kw; j++) {
-                    if (!sup[i * kw + j]) continue;
+                    /* A NULL support means a full rectangle -- the shape the separable path takes,
+                     * used when its scratch allocation fails. */
+                    if (sup && !sup[i * kw + j]) continue;
                     size_t sx = clampi((int64_t)x + (int64_t)j - cj, w);
                     double v = src[(sy * w + sx) * c + ch];
                     if (op == MORPH_DILATE) { if (v > acc) acc = v; }
@@ -1183,35 +1185,96 @@ static void morph_direct(const double* src, double* dst, size_t w, size_t h, siz
         }
 }
 
+/* van Herk--Gil-Werman: a 1-D dilation or erosion in THREE comparisons per pixel, whatever the
+ * structuring element's width.
+ *
+ * The separable form already reduced a k x k rectangle to 2k comparisons per pixel. This reduces each
+ * axis to a constant, so the whole operation stops depending on the radius at all -- which is the
+ * difference between morphology being usable at r = 20 and not. A benchmark put the crossover against
+ * scipy at r ~ 4-6 and this is what closes it.
+ *
+ * THE IDEA. Cut the line into blocks of exactly k. Within each block compute a PREFIX maximum running
+ * forwards and a SUFFIX maximum running backwards. Any window of width k straddles exactly two adjacent
+ * blocks -- it cannot span three, because it is the same width as a block -- so its maximum is
+ * max(suffix at the window's start, prefix at the window's end). Two lookups and one comparison,
+ * regardless of k. The prefix and suffix arrays each cost one pass, so the total is three comparisons
+ * per pixel amortised.
+ *
+ * It is EXACT, not approximate: max and min are associative and idempotent, so splitting a window at a
+ * block boundary and recombining loses nothing. That matters here more than usual -- it means the fast
+ * path must agree BIT-EXACTLY with the naive one, and a test asserts exactly that on random data at
+ * several radii rather than merely checking the fast path against its own expectations.
+ *
+ * The caller passes a line already padded by r on each side, so boundary handling stays where it was
+ * and this routine never has to know about it. */
+static void morph_1d_vanherk(const double* in, double* out, size_t n, size_t k,
+                             double* pre, double* suf, MorphOp op) {
+    size_t m = n + k - 1;                 /* padded length; window i covers in[i .. i+k-1] */
+    for (size_t b = 0; b < m; b += k) {
+        size_t end = (b + k < m) ? b + k : m;   /* last block may be short */
+        /* Prefix maxima, forwards within the block. */
+        double acc = in[b];
+        pre[b] = acc;
+        for (size_t i = b + 1; i < end; i++) {
+            double v = in[i];
+            if (op == MORPH_DILATE) { if (v > acc) acc = v; }
+            else                    { if (v < acc) acc = v; }
+            pre[i] = acc;
+        }
+        /* Suffix maxima, backwards within the block. */
+        acc = in[end - 1];
+        suf[end - 1] = acc;
+        for (size_t i = end - 1; i > b; i--) {
+            double v = in[i - 1];
+            if (op == MORPH_DILATE) { if (v > acc) acc = v; }
+            else                    { if (v < acc) acc = v; }
+            suf[i - 1] = acc;
+        }
+    }
+    for (size_t i = 0; i < n; i++) {
+        double a = suf[i], bb = pre[i + k - 1];
+        out[i] = (op == MORPH_DILATE) ? (a > bb ? a : bb) : (a < bb ? a : bb);
+    }
+}
+
 /* Separable max/min over a full rectangle: rows then columns. */
 static void morph_separable(const double* src, double* dst, double* tmp,
                             size_t w, size_t h, size_t c,
                             size_t kh, size_t kw, MorphOp op) {
-    int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
+    size_t rh = kh / 2, rw = kw / 2;
+    size_t maxline = (w > h ? w : h) + (kw > kh ? kw : kh);
+    double* line = malloc(sizeof(double) * (maxline + 2));
+    double* res  = malloc(sizeof(double) * (maxline + 2));
+    double* pre  = malloc(sizeof(double) * (maxline + 2));
+    double* suf  = malloc(sizeof(double) * (maxline + 2));
+    if (!line || !res || !pre || !suf) {
+        /* Without scratch there is no fast path; the caller's direct routine still answers. */
+        free(line); free(res); free(pre); free(suf);
+        morph_direct(src, dst, w, h, c, NULL, kh, kw, op);
+        return;
+    }
+
+    /* Horizontal pass. The line is padded by rw on each side with the edge value, so the van Herk
+     * routine sees a plain array and the replicate rule stays in one place. */
     for (size_t y = 0; y < h; y++)
-      for (size_t x = 0; x < w; x++)
         for (size_t ch = 0; ch < c; ch++) {
-            double acc = (op == MORPH_DILATE) ? -INFINITY : INFINITY;
-            for (size_t j = 0; j < kw; j++) {
-                size_t sx = clampi((int64_t)x + (int64_t)j - cj, w);
-                double v = src[(y * w + sx) * c + ch];
-                if (op == MORPH_DILATE) { if (v > acc) acc = v; }
-                else                    { if (v < acc) acc = v; }
-            }
-            tmp[(y * w + x) * c + ch] = acc;
+            for (size_t t = 0; t < rw; t++)          line[t] = src[(y * w + 0) * c + ch];
+            for (size_t x = 0; x < w; x++)           line[rw + x] = src[(y * w + x) * c + ch];
+            for (size_t t = 0; t < rw; t++)          line[rw + w + t] = src[(y * w + (w - 1)) * c + ch];
+            morph_1d_vanherk(line, res, w, kw, pre, suf, op);
+            for (size_t x = 0; x < w; x++) tmp[(y * w + x) * c + ch] = res[x];
         }
-    for (size_t y = 0; y < h; y++)
-      for (size_t x = 0; x < w; x++)
+
+    /* Vertical pass over the horizontal result. */
+    for (size_t x = 0; x < w; x++)
         for (size_t ch = 0; ch < c; ch++) {
-            double acc = (op == MORPH_DILATE) ? -INFINITY : INFINITY;
-            for (size_t i = 0; i < kh; i++) {
-                size_t sy = clampi((int64_t)y + (int64_t)i - ci, h);
-                double v = tmp[(sy * w + x) * c + ch];
-                if (op == MORPH_DILATE) { if (v > acc) acc = v; }
-                else                    { if (v < acc) acc = v; }
-            }
-            dst[(y * w + x) * c + ch] = acc;
+            for (size_t t = 0; t < rh; t++)          line[t] = tmp[(0 * w + x) * c + ch];
+            for (size_t y = 0; y < h; y++)           line[rh + y] = tmp[(y * w + x) * c + ch];
+            for (size_t t = 0; t < rh; t++)          line[rh + h + t] = tmp[((h - 1) * w + x) * c + ch];
+            morph_1d_vanherk(line, res, h, kh, pre, suf, op);
+            for (size_t y = 0; y < h; y++) dst[(y * w + x) * c + ch] = res[y];
         }
+    free(line); free(res); free(pre); free(suf);
 }
 
 /* Run one morphological pass over a loaded buffer. */
