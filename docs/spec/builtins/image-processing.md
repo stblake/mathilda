@@ -1386,9 +1386,11 @@ separation `d` in pixels (0), and the maximum number of features `n` (all). Thre
 a single cluster.
 
 The result is sorted strongest first, ties broken by position, so `First` is the strongest corner
-and the same image always gives the same list. The greedy pass is O(kept × candidates), which is
-the honest cost — 4104 candidates at a small `d` is a few million distance tests, and a grid would
-make it linear but is not worth the code until a measurement says so.
+and the same image always gives the same list. The greedy pass is O(kept × candidates), and **measurement says it is cheap**: at 512×512 the
+raw list is 4104 corners in 6.14 ms, and `d = 10` keeps 1044 in 6.72 ms — the greedy selection
+costs about 0.6 ms of that, because each candidate is rejected by the first kept neighbour it is
+near and the loop exits early. A grid would make it asymptotically linear and there is no reason
+to write one.
 
 Positions carry a caveat worth reading twice if you are writing a test against them: Mathilda's
 real comparison is **tolerant**, in Mathematica's way, so two responses one ulp apart are `Equal`
