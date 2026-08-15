@@ -3311,6 +3311,12 @@ typedef struct {
     const FmOpts* opts;
     const bool*  is_int;
     bool         any_int;
+    /* True iff at least one CONTINUOUS optimization variable appears in the
+     * objective. When false, the continuous variables are constraint-only helpers
+     * (e.g. MTZ ordering variables in a TSP), so the expensive continuous-
+     * relaxation recovery in nm_local_polish — which exists to optimize/rescue
+     * continuous objective variables — is pure overhead and is skipped. */
+    bool         cont_in_obj;
     const double* reg_lo;
     const double* reg_hi;
     /* Machine-precision fast path: a bytecode-compiled objective and per-general-
@@ -3521,9 +3527,30 @@ static double nm_phi(NmDriver* D, const double* x) {
 
 /* Mixed/integer coordinate descent: step each coordinate (±1, ±2 on integer
  * dims; scaled steps on continuous dims), accept any Deb-improvement. */
+/* Does the symbol `sym` (interned name) occur anywhere in expression `e`? */
+static bool nm_expr_contains_symbol(const Expr* e, const char* sym) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == sym;
+    if (e->type == EXPR_FUNCTION) {
+        if (nm_expr_contains_symbol(e->data.function.head, sym)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (nm_expr_contains_symbol(e->data.function.args[i], sym)) return true;
+    }
+    return false;
+}
+
 static void nm_int_descent(NmDriver* D, double* x, double* f_io, double* pen_io) {
     size_t n = D->n;
     double* t = (double*)malloc(sizeof(double) * n);
+    /* Binary coordinates — integer variables with a [0,1] region. These are the
+     * candidates for the swap move below. */
+    size_t* bidx = (size_t*)malloc(sizeof(size_t) * (n ? n : 1));
+    size_t nb = 0;
+    for (size_t j = 0; j < n; j++)
+        if (D->is_int[j] && fabs(D->reg_lo[j]) < 1e-9 && fabs(D->reg_hi[j] - 1.0) < 1e-9)
+            bidx[nb++] = j;
+    /* Cap the O(nb^2) swap sweep so a very large binary problem cannot blow up. */
+    bool do_swaps = (nb >= 2 && nb <= 400);
     bool improved = true;
     int iter = 0;
     while (improved && iter++ < 300) {
@@ -3549,7 +3576,38 @@ static void nm_int_descent(NmDriver* D, double* x, double* f_io, double* pen_io)
                 }
             }
         }
+        /* 2-flip SWAP move over binary coordinates: flip a 1 and a 0 together.
+         * This preserves every Sum-of-binaries constraint that contains both
+         * coordinates, so it moves *along* the assignment / permutation manifold
+         * — which single-coordinate flips cannot, because any single flip off a
+         * near-feasible permutation breaks a row or column sum and is rejected by
+         * the Deb rule. It is the move that lets integer descent reach feasibility
+         * on assignment-structured problems (QAP, TSP, sudoku, transport). Run
+         * only when the single-coordinate sweep has stalled, so it is the escape
+         * move rather than the common case; first-improvement, restart on accept. */
+        if (do_swaps && !improved) {
+            for (size_t a = 0; a < nb && !improved; a++) {
+                size_t j = bidx[a];
+                for (size_t b = a + 1; b < nb; b++) {
+                    size_t k = bidx[b];
+                    if (round(x[j]) == round(x[k])) continue;  /* only true swaps */
+                    for (size_t m = 0; m < n; m++) t[m] = x[m];
+                    t[j] = 1.0 - x[j];
+                    t[k] = 1.0 - x[k];
+                    nm_project(D, t);
+                    double f, p;
+                    nm_eval(D, t, &f, &p);
+                    if (nm_better(f, p, *f_io, *pen_io)) {
+                        for (size_t m = 0; m < n; m++) x[m] = t[m];
+                        *f_io = f; *pen_io = p;
+                        improved = true;
+                        break;
+                    }
+                }
+            }
+        }
     }
+    free(bidx);
     free(t);
 }
 
@@ -3731,7 +3789,15 @@ static void nm_local_polish(NmDriver* D, double* x, double* f_out, double* pen_o
          * free), where the region descent is already the whole story. */
         bool has_cont = false;
         for (size_t j = 0; j < D->n; j++) if (!D->is_int[j]) { has_cont = true; break; }
-        if (has_cont) {
+        /* The continuous-relaxation recovery is a heavy 2× QuasiNewton penalty
+         * solve. Its purpose is to optimize / region-rescue continuous OBJECTIVE
+         * variables, so it is skipped when the continuous variables never touch
+         * the objective (constraint-only helpers such as MTZ ordering variables):
+         * running it there is pure overhead — often seconds per restart — and
+         * cannot improve the answer, which lets a combinatorial problem afford far
+         * more restarts. It is still run whenever a continuous variable is in the
+         * objective (the pressure-vessel MINLP, cardinality portfolios, ...). */
+        if (has_cont && D->cont_in_obj) {
             double* xr = (double*)malloc(sizeof(double) * D->n);
             if (xr) {
                 for (size_t j = 0; j < D->n; j++) xr[j] = x[j];
@@ -5210,6 +5276,14 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     D.f_raw = f_eff; D.vars = eff_vars; D.n = n; D.binds = binds;
     D.g_exprs = g_exprs; D.gens = gens; D.ngens = ngens; D.boxes = boxes;
     D.opts = &opts; D.is_int = vs.is_int; D.any_int = vs.any_int;
+    /* Does any continuous variable appear in the objective? (Gates the heavy
+     * continuous-relaxation recovery in nm_local_polish — see that flag's note.) */
+    D.cont_in_obj = false;
+    for (size_t i = 0; i < n; i++)
+        if (!vs.is_int[i] && nm_expr_contains_symbol(f_eff, eff_vars[i]->data.symbol.name)) {
+            D.cont_in_obj = true;
+            break;
+        }
     D.reg_lo = reg_lo; D.reg_hi = reg_hi;
     D.f_prog = f_prog; D.g_progs = g_progs;
     D.penalty_fn = nc.penalty_fn;
