@@ -1355,6 +1355,34 @@ static void test_max_independent_set(void) {
         "  AllTrue[xv, Abs[# - Round[#]] < 1*^-4 &]]");
 }
 
+static void test_adjacency_assignment(void) {
+    /* B9: a mixed continuous/binary adjacency-assignment, n=10. Continuous
+     * weights y_i (Σy=1, y≥0) and binary adjacency indicators b_j (Σb=1), coupled
+     * by y_i ≤ b_{i-1}+b_i — a chosen b_j lets only y_j and y_{j+1} be nonzero.
+     * Minimize Σ coef·y: concentrate y on the cheapest position a b allows, so the
+     * optimum is min(coef)=1.11838 (b_1=1, y_1=1). Two fixes to the drawn-up
+     * formulation: SeedRandom makes the objective's RandomReal coefficients
+     * reproducible, and 0≤b≤1 makes the "binary indicators" actually binary (the
+     * spec only said Integers, so the solver was free to use b=-1). RandomSearch
+     * at 200 restarts reaches 1.148 — within 3% of the optimum; the coupled
+     * continuous-y / binary-b feasibility keeps it off the exact vertex. Asserts
+     * near-optimal value, Σy=1, Σb=1, binary b, and y≥0. Deterministic. */
+    check_true(
+        "Module[{n = 10, coef, yVars, bVars, obj, cons, r, o, sol, yv, bv},"
+        " SeedRandom[13]; coef = RandomReal[{1, 10}, n];"
+        " yVars = Array[y, n]; bVars = Array[b, n - 1]; obj = coef . yVars;"
+        " cons = Join[{Total[yVars] == 1, Total[bVars] == 1},"
+        "   {yVars[[1]] <= bVars[[1]], yVars[[n]] <= bVars[[n - 1]]},"
+        "   Table[yVars[[i]] <= bVars[[i - 1]] + bVars[[i]], {i, 2, n - 1}],"
+        "   Table[yVars[[i]] >= 0, {i, n}], Table[0 <= bVars[[i]] <= 1, {i, n - 1}],"
+        "   {Element[bVars, Integers]}];"
+        " r = NMinimize[{obj, cons}, Flatten[{yVars, bVars}],"
+        "   Method -> {\"RandomSearch\", \"SearchPoints\" -> 200, \"RandomSeed\" -> 1}];"
+        " o = First[r]; sol = Last[r]; yv = yVars /. sol; bv = bVars /. sol;"
+        " o < 1.25 && Abs[Total[yv] - 1] < 1*^-3 && Abs[Total[bv] - 1] < 1*^-3 &&"
+        "  AllTrue[bv, Abs[# - Round[#]] < 1*^-4 &] && Min[yv] >= -1*^-6]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1468,6 +1496,7 @@ int main(void) {
     TEST(test_sudoku_latin);
     TEST(test_3sat_feasibility);
     TEST(test_max_independent_set);
+    TEST(test_adjacency_assignment);
 
     printf("All NMinimize tests passed.\n");
     return 0;
