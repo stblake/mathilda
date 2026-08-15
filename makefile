@@ -448,6 +448,17 @@ check-packed-aware:
 check-array-exactness:
 	python3 tools/check_array_exactness.py
 
+# `make check-image-packing` — does every image head hand back a PACKED buffer,
+# at BOTH ranks? Three times an image operation was 4x to 23x slower than its
+# equivalent elsewhere with entirely correct answers, because the marshalling and
+# not the algorithm was the cost: image_load walking an NDArray element by
+# element, image3d_load still walking after image_load was fixed, and
+# bit_image_from_mask building 262144 Expr integers in nested Lists. No test in
+# the suite could catch any of them; a benchmark caught each one by accident, one
+# at a time. This asks the question mechanically instead.
+check-image-packing:
+	python3 tools/check_image_packing.py
+
 # `make check-nd-surfaces` — does every head reach the SAME fast path from a
 # packed List and from a visible NDArray, and agree on the answer?
 #

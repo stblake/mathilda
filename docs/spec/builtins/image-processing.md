@@ -1585,3 +1585,42 @@ The other two instances were `image_load` walking a buffer element-by-element (f
 looked 10× slower than NumPy) and `image3d_load` still doing so after `image_load` was fixed (found
 when the volumetric pad looked 6.5× slower). In all three the answers were correct and only the
 marshalling was slow, so no test could have caught them — a benchmark did, each time.
+
+## make check-image-packing
+
+Three times in this subsystem an image operation ran 4× to 23× slower than its equivalent
+elsewhere, with **entirely correct answers**, because the marshalling and not the algorithm was the
+cost:
+
+| where | found because |
+|-------|---------------|
+| `image_load` walked an NDArray element-by-element | `ImagePad` measured 0.57 ms against NumPy's 0.050 |
+| `image3d_load` still walked after `image_load` was fixed | the volumetric pad measured 6.5× NumPy while the planar one had just reached 2.2× |
+| `bit_image_from_mask` built 262144 `Expr` integers in nested `List`s | `LocalAdaptiveBinarize` measured 4.2× scikit-image — and the fix made global `Binarize` 23× faster |
+
+No test in the suite could have caught any of them, because nothing was wrong with the output. A
+benchmark caught each one, by accident, one at a time. So the property is now checked mechanically:
+**an image-returning head hands back a packed buffer.**
+
+Heads are read out of the image sources rather than listed in the tool, so a new one is covered the
+day it is registered, and each is asked at **both ranks** — two of the three bugs were a volumetric
+path failing to gain what its planar twin already had, so a planar-only gate would be half a gate.
+Call shapes are discovered by trial, the same approach `nd_fastpath_sweep.py` takes and for the same
+reason: a curated list of shapes only covers the heads someone remembered. It ratchets on
+`KNOWN_UNPACKED`, currently empty.
+
+It also reports, as information rather than failure, which heads accept no rank-3 shape at all —
+`Binarize`, `Closing`, `Dilation`, `Erosion`, `EdgeDetect`, `MeanFilter`, `MedianFilter`, `Opening`,
+`DistanceTransform`, `GradientFilter`, `DerivativeFilter`, `ColorConvert`, `ImageCorrelate`,
+`ImageReflect`, `ImageRotate`, `LocalAdaptiveBinarize`. That is a genuine backlog of volumetric
+coverage, listed where it can be seen instead of rediscovered.
+
+### The gate proves it can fail
+
+The first version of this tool reported `0 image-returning heads` and `no newly nested image heads`
+and exited **0** — because a missing bracket made the generated probe a syntax error, and `run()`
+returned stdout while ignoring the exit status. A gate that passes because its probe never ran is
+worse than no gate: it is a green light with nothing behind it. So the exit status is checked, an
+empty result is a failure rather than an empty success, and four paths are exercised directly — a
+newly nested head exits 1, a head fixed since being listed exits 0 with a FIXED note, an empty probe
+exits 1, and a failed probe exits 1 and keeps the generated file for inspection.

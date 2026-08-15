@@ -358,6 +358,7 @@ make check-packed-aware      # does every head with a buffer path opt in?
 make check-array-exactness   # does any head return a two-headed array?
 make check-nd-surfaces       # do the packed and NDArray surfaces agree?
 make check-compile-coverage  # does every numeric fast path also COMPILE?
+make check-image-packing     # does every image head hand back a packed buffer?
 make check-fastpath-sweep    # measured: is each head really on the buffer?
 ```
 
