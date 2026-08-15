@@ -707,3 +707,55 @@ width, keeping running prefix and suffix maxima, and needs three comparisons per
 It is not here because radii of 1–4 are the common case and the code that is here is far simpler; the
 honest position is that this is a known limit with a known remedy, not that the numbers are good
 everywhere.
+
+## MorphologicalComponents
+
+`MorphologicalComponents[image]` labels the connected components of the foreground.
+`[image, t]` takes pixels above `t` as foreground (default 0). `CornerNeighbors -> False` selects
+4-connectivity instead of the default 8. Attributes: `Protected`.
+
+**Returns an integer matrix, not an `Image`** — a deliberate deviation from Mathematica. Here an
+`Image` would be actively wrong: type inference would call a label array of 1..12 a `"Byte"` image, and
+`ImageData` would then divide every label by 255. Labels are indices, not brightnesses, and the one
+thing that must not happen to them is being scaled.
+
+**Connectivity is the discriminating property**, and the only one that can tell the two rules apart:
+
+```
+In[1]:= MorphologicalComponents[Image[{{1., 0.}, {0., 1.}}]]
+Out[1]= {{1, 0}, {0, 1}}                                        (* 8-conn: one component *)
+
+In[2]:= MorphologicalComponents[Image[{{1., 0.}, {0., 1.}}], CornerNeighbors -> False]
+Out[2]= {{1, 0}, {0, 2}}                                        (* 4-conn: two *)
+```
+
+Every other property — background staying 0, labels contiguous, a single blob labelling 1 — holds under
+*either* rule, so a wrong default would pass all of them.
+
+**Two passes, doing genuinely different jobs.** The first walks in raster order and can only see
+already-visited neighbours (W, NW, N, NE), so a **U-shaped** region gets *different* labels on its two
+arms — nothing has connected them yet — and only the base reveals they are one component. Union-find
+records the equivalence; the second pass applies it. A one-pass implementation returns two components
+there and looks perfectly reasonable on every convex shape, so a U is tested explicitly under
+4-connectivity (where a diagonal cannot join the arms instead).
+
+The second pass also **relabels to 1..k in raster order of first appearance**. Without it the labels
+would be whatever the first pass allocated, with gaps where two provisional labels were later merged —
+so `Max` would not be the component count and no label pattern would be assertable.
+
+Dilation can only *merge* components, never split them, so the count cannot increase: four isolated
+corners become one blob at radius 1, which is an absolute relationship between two features rather than
+a property of either alone.
+
+### Measured, and the cost is not the algorithm
+
+512×512 binarised, against `scipy.ndimage.label`: both find **41 components**, exactly. Timing is
+5.20 ms against scipy's 1.2 ms — 4.3× slower.
+
+The arithmetic says where it goes. The `Expr` marshalling rate measured for convolution was ~4.6 ms per
+262,144 elements, and this builds exactly 262,144 integer `Expr`s for its output matrix. So the
+labelling itself is ~0.6 ms — **faster than scipy's 1.2** — and the output construction is the other
+4.6. That is the same finding as the buffer-storage change, now confirmed a fourth time, and the same
+remedy: return a packed integer array instead of nested expressions. It is not done here because the
+result is a `List` rather than an `Image`, so it has no container to rest inside and would face the
+post-gate directly — worth doing, and worth doing carefully rather than at the end of an iteration.

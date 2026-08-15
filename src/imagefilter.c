@@ -1276,7 +1276,170 @@ static Expr* builtin_erosion(Expr* res)  { return morph_builtin(res, MORPH_ERODE
 static Expr* builtin_opening(Expr* res)  { return morph_builtin(res, MORPH_ERODE,  true);  }
 static Expr* builtin_closing(Expr* res)  { return morph_builtin(res, MORPH_DILATE, true);  }
 
+/* ---- connected components -------------------------------------------------
+ *
+ * Two-pass union-find, the classic algorithm, and the two passes do genuinely different jobs.
+ *
+ * The FIRST pass walks in raster order and can only see neighbours it has already visited -- for
+ * 8-connectivity that is W, NW, N, NE. A U-shaped region is the case that makes one pass
+ * insufficient: the two arms get different labels because nothing has yet connected them, and the
+ * base at the bottom is where they turn out to be the same component. Union-find records that
+ * equivalence; the second pass applies it.
+ *
+ * The SECOND pass also RELABELS to 1..k in raster order of first appearance. Without that the labels
+ * would be whatever the first pass happened to allocate, with gaps where two provisional labels were
+ * later merged -- so `Max[labels]` would not be the component count, and no test could pin a label
+ * pattern. Contiguous labels in scan order are what make both possible.
+ *
+ * CONNECTIVITY IS THE DISCRIMINATING PROPERTY, and it is exactly testable: two pixels touching only
+ * at a corner are ONE component under 8-connectivity and TWO under 4. Every other property --
+ * background staying 0, labels being contiguous, a single blob labelling 1 -- holds under either
+ * rule, so a wrong default would pass all of them. CornerNeighbors -> True (8-connectivity) is the
+ * default, matching Mathematica.
+ *
+ * RETURNS A PLAIN INTEGER MATRIX, NOT AN IMAGE, and this is a deliberate deviation. Mathematica
+ * returns an Image; here that would be actively wrong, because Image type inference would call a
+ * label array of 1..12 a "Byte" image and ImageData would then divide every label by 255. Labels are
+ * indices, not brightnesses, and the one thing that must not happen to them is being scaled.
+ */
+static size_t cc_find(size_t* parent, size_t x) {
+    while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+    return x;
+}
+
+static void cc_union(size_t* parent, size_t a, size_t b) {
+    a = cc_find(parent, a); b = cc_find(parent, b);
+    if (a == b) return;
+    /* Union by lower index rather than by rank. Rank would be faster asymptotically; lower-index
+     * keeps the representative deterministic, and the second pass relabels anyway so the extra
+     * depth costs nothing measurable at image scale. */
+    if (a < b) parent[b] = a; else parent[a] = b;
+}
+
+/* MorphologicalComponents[image] / [image, t] / with CornerNeighbors -> False */
+static Expr* builtin_morphologicalcomponents(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3) return NULL;
+
+    double thr = 0.0, im = 0.0;
+    bool corners = true;
+    size_t next_arg = 1;
+    if (argc >= 2) {
+        Expr* a1 = res->data.function.args[1];
+        /* A threshold, or the option -- the option may appear in either position. */
+        if (a1 && a1->type == EXPR_FUNCTION && a1->data.function.arg_count == 2
+            && a1->data.function.head && a1->data.function.head->type == EXPR_SYMBOL
+            && (a1->data.function.head->data.symbol.name == SYM_Rule
+                || a1->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
+            /* handled below as an option */
+        } else {
+            if (!na_read_scalar(a1, &thr, &im) || im != 0.0) return NULL;
+            next_arg = 2;
+        }
+    }
+    for (size_t i = next_arg; i < argc; i++) {
+        Expr* o = res->data.function.args[i];
+        if (!o || o->type != EXPR_FUNCTION || o->data.function.arg_count != 2) return NULL;
+        Expr* hd = o->data.function.head;
+        if (!hd || hd->type != EXPR_SYMBOL) return NULL;
+        if (hd->data.symbol.name != SYM_Rule && hd->data.symbol.name != SYM_RuleDelayed)
+            return NULL;
+        Expr* lhs = o->data.function.args[0];
+        Expr* rhs = o->data.function.args[1];
+        if (!lhs || lhs->type != EXPR_SYMBOL
+            || strcmp(lhs->data.symbol.name, "CornerNeighbors") != 0) return NULL;
+        if (!rhs || rhs->type != EXPR_SYMBOL) return NULL;
+        if (strcmp(rhs->data.symbol.name, "True") == 0) corners = true;
+        else if (strcmp(rhs->data.symbol.name, "False") == 0) corners = false;
+        else return NULL;
+    }
+
+    size_t w = 0, h = 0; double* g = NULL;
+    if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
+    size_t n = w * h;
+
+    size_t* lab = calloc(n, sizeof(size_t));
+    size_t* parent = malloc(sizeof(size_t) * (n + 1));
+    Expr* out = NULL;
+    if (lab && parent) {
+        size_t next = 1;
+        parent[0] = 0;
+        /* First pass: provisional labels, unioning already-seen neighbours. */
+        for (size_t y = 0; y < h; y++) {
+            for (size_t x = 0; x < w; x++) {
+                size_t i = y * w + x;
+                if (!(g[i] > thr)) continue;                 /* background */
+                size_t best = 0;
+                /* W, then NW, N, NE -- the visited half of the neighbourhood. */
+                int64_t dxs[4] = { -1, -1, 0, 1 };
+                int64_t dys[4] = {  0, -1, -1, -1 };
+                for (int k = 0; k < 4; k++) {
+                    if (!corners && (dxs[k] != 0 && dys[k] != 0)) continue;  /* 4-connectivity */
+                    int64_t nx = (int64_t)x + dxs[k], ny = (int64_t)y + dys[k];
+                    if (nx < 0 || (size_t)nx >= w || ny < 0) continue;
+                    size_t j = (size_t)ny * w + (size_t)nx;
+                    if (lab[j] == 0) continue;
+                    if (best == 0) best = lab[j];
+                    else cc_union(parent, best, lab[j]);
+                }
+                if (best == 0) { parent[next] = next; lab[i] = next; next++; }
+                else lab[i] = cc_find(parent, best);
+            }
+        }
+        /* Second pass: resolve to roots and RELABEL to 1..k in raster order of first appearance. */
+        size_t* remap = calloc(next + 1, sizeof(size_t));
+        if (remap) {
+            size_t k = 0;
+            for (size_t i = 0; i < n; i++) {
+                if (lab[i] == 0) continue;
+                size_t r = cc_find(parent, lab[i]);
+                if (remap[r] == 0) remap[r] = ++k;
+                lab[i] = remap[r];
+            }
+            /* A plain integer matrix -- see the note above on why not an Image. */
+            Expr** rows = malloc(sizeof(Expr*) * h);
+            if (rows) {
+                bool ok = true;
+                for (size_t y = 0; y < h; y++) rows[y] = NULL;
+                for (size_t y = 0; y < h && ok; y++) {
+                    Expr** cols = malloc(sizeof(Expr*) * w);
+                    if (!cols) { ok = false; break; }
+                    bool okc = true;
+                    for (size_t x = 0; x < w; x++) {
+                        cols[x] = expr_new_integer((int64_t)lab[y * w + x]);
+                        if (!cols[x]) okc = false;
+                    }
+                    if (okc) rows[y] = expr_new_function(expr_new_symbol(SYM_List), cols, w);
+                    else for (size_t x = 0; x < w; x++) expr_free(cols[x]);
+                    free(cols);
+                    if (!rows[y]) ok = false;
+                }
+                if (ok) out = expr_new_function(expr_new_symbol(SYM_List), rows, h);
+                else for (size_t y = 0; y < h; y++) expr_free(rows[y]);
+                free(rows);
+            }
+            free(remap);
+        }
+    }
+    free(g); free(lab); free(parent);
+    return out;
+}
+
 void imagefilter_init(void) {
+    symtab_add_builtin("MorphologicalComponents", builtin_morphologicalcomponents);
+    symtab_get_def("MorphologicalComponents")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("MorphologicalComponents",
+        "MorphologicalComponents[image] labels the connected components of the foreground, giving "
+        "an INTEGER MATRIX with background 0 and components numbered 1..k in raster order of first "
+        "appearance. MorphologicalComponents[image, t] takes pixels above t as foreground "
+        "(default 0, so nonzero is foreground). CornerNeighbors -> False uses 4-connectivity "
+        "instead of the default 8. Two pixels touching only at a corner are ONE component under 8 "
+        "and TWO under 4, which is the property that distinguishes the two rules -- every other "
+        "property holds under either. "
+        "A matrix rather than an Image, deliberately: Image type inference would call a label array "
+        "of 1..12 a \"Byte\" image and ImageData would then divide every label by 255. Labels are "
+        "indices, not brightnesses. Contiguous labels in scan order mean Max of the result is the "
+        "component count.");
     symtab_add_builtin("Dilation", builtin_dilation);
     symtab_get_def("Dilation")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Dilation",

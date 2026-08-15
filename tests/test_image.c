@@ -842,6 +842,66 @@ static void test_element_forms_and_declines(void) {
                    " {Dilation, Erosion, Opening, Closing}]", "True", 0);
 }
 
+static void test_connectivity_is_the_discriminating_property(void) {
+    /* THE row. Two pixels touching only at a corner are ONE component under 8-connectivity and TWO
+     * under 4. Every other property here -- background staying 0, labels contiguous, a single blob
+     * labelling 1 -- holds under either rule, so a wrong default would pass all of them and only
+     * this can tell them apart. Exact label patterns, not counts. */
+    assert_eval_eq("MorphologicalComponents[Image[{{1., 0.}, {0., 1.}}]]",
+                   "{{1, 0}, {0, 1}}", 0);
+    assert_eval_eq("MorphologicalComponents[Image[{{1., 0.}, {0., 1.}}],"
+                   " CornerNeighbors -> False]", "{{1, 0}, {0, 2}}", 0);
+    /* And the counts follow, since labels are contiguous from 1. */
+    assert_eval_eq("{Max[Flatten[MorphologicalComponents[Image[{{1., 0.}, {0., 1.}}]]]],"
+                   " Max[Flatten[MorphologicalComponents[Image[{{1., 0.}, {0., 1.}}],"
+                   "   CornerNeighbors -> False]]]}", "{1, 2}", 0);
+}
+
+static void test_a_u_shape_needs_the_union_find(void) {
+    /* The case a single pass cannot handle, and the reason for union-find at all. Scanning in raster
+     * order, the two arms of a U get DIFFERENT provisional labels -- nothing has connected them yet
+     * -- and only the base at the bottom reveals they are one component. A one-pass implementation
+     * returns two components here and looks perfectly reasonable on every convex shape.
+     *
+     * Asserted under 4-connectivity, so the arms cannot be joined by a diagonal instead. */
+    assert_eval_eq("MorphologicalComponents[Image[{{1.,0.,1.},{1.,0.,1.},{1.,1.,1.}}],"
+                   " CornerNeighbors -> False]",
+                   "{{1, 0, 1}, {1, 0, 1}, {1, 1, 1}}", 0);
+}
+
+static void test_labels_are_contiguous_in_raster_order(void) {
+    /* Relabelling to 1..k in raster order of first appearance is what makes Max the component count
+     * and makes a label pattern assertable at all. Without it the labels would be whatever the first
+     * pass allocated, with GAPS where two provisional labels were later merged. */
+    assert_eval_eq("MorphologicalComponents[Image[{{1.,0.,1.},{0.,0.,0.},{1.,0.,0.}}],"
+                   " CornerNeighbors -> False]", "{{1, 0, 2}, {0, 0, 0}, {3, 0, 0}}", 0);
+    assert_eval_eq("Module[{lb = Flatten[MorphologicalComponents["
+                   "Image[{{1.,0.,1.},{0.,0.,0.},{1.,0.,0.}}], CornerNeighbors -> False]]},"
+                   " Union[Select[lb, # > 0 &]] === Range[Max[lb]]]", "True", 0);
+    /* An all-background image has no components and every label is 0. */
+    assert_eval_eq("MorphologicalComponents[Image[Table[0., {3}, {3}]]]",
+                   "{{0, 0, 0}, {0, 0, 0}, {0, 0, 0}}", 0);
+    /* A single blob is all label 1. */
+    assert_eval_eq("Union[Flatten[MorphologicalComponents[Image[Table[1., {3}, {3}]]]]]",
+                   "{1}", 0);
+}
+
+static void test_components_interact_with_morphology(void) {
+    /* Dilation can only MERGE components, never split them, so the count cannot increase -- an
+     * absolute relationship between the two features rather than a property of either alone. Four
+     * isolated corners become one blob at radius 1. */
+    assert_eval_eq("Module[{sep = Image[{{1.,0.,0.,1.},{0.,0.,0.,0.},{1.,0.,0.,1.}}]},"
+                   " {Max[Flatten[MorphologicalComponents[sep]]],"
+                   "  Max[Flatten[MorphologicalComponents[Dilation[sep, 1]]]]}]", "{4, 1}", 0);
+    /* The threshold argument selects the foreground: above t, not at or above. */
+    assert_eval_eq("MorphologicalComponents[Image[{{0.3, 0.7}, {0.7, 0.3}}], 0.5]",
+                   "{{0, 1}, {1, 0}}", 0);
+    assert_eval_eq("Head[MorphologicalComponents[{{1, 2}}]]", "MorphologicalComponents", 0);
+    assert_eval_eq("Head[MorphologicalComponents[Image[{{1., 0.}}],"
+                   " CornerNeighbors -> Maybe]]", "MorphologicalComponents", 0);
+    assert_eval_eq("MemberQ[Attributes[MorphologicalComponents], Protected]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -895,6 +955,10 @@ int main(void) {
     TEST(test_opening_and_closing_are_idempotent);
     TEST(test_dilating_a_point_gives_the_element);
     TEST(test_element_forms_and_declines);
+    TEST(test_connectivity_is_the_discriminating_property);
+    TEST(test_a_u_shape_needs_the_union_find);
+    TEST(test_labels_are_contiguous_in_raster_order);
+    TEST(test_components_interact_with_morphology);
 
     printf("All image tests passed.\n");
     return 0;
