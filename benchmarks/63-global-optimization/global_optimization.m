@@ -65,3 +65,19 @@ a3meth = {"SimulatedAnnealing", "LevelIterations" -> 200, "PerturbationScale" ->
 bench["A3 modified Ackley (SA)", NMinimize[{a3obj, a3box}, a3vars, Method -> a3meth];];
 check["A3 modified Ackley (SA)",
   Round[First[NMinimize[{a3obj, a3box}, a3vars, Method -> a3meth]]]];
+
+(* ---- A4: 15-D constrained minimax (Chebyshev) -- NelderMead
+   min Max_i|x_i-Sin[i]| s.t. sum x^2<=15, sum i*x_i==1, box [-2,2]. Convex
+   (max-of-affine + convex sphere + linear eq) -> unique optimum 0.125116. One
+   simplex (SearchPoints 1) + AL polish reaches it in ~0.06 s, matching scipy
+   single-start SLSQP epigraph (~0.065 s). Matching character: local/polish ->
+   scipy.optimize.minimize. Check = Round[10^4 obj] = 1251. *)
+a4vars = Table[x[i], {i, 1, 15}];
+a4obj = Max[Table[Abs[x[i] - Sin[i]], {i, 1, 15}]];
+a4cons = Join[{Sum[x[i]^2, {i, 1, 15}] <= 15, Sum[i x[i], {i, 1, 15}] == 1},
+   Table[-2 <= x[i] <= 2, {i, 1, 15}]];
+a4meth = {"NelderMead", "ContractRatio" -> 0.5, "Tolerance" -> 10^-8,
+          "SearchPoints" -> 1, "RandomSeed" -> 1};
+bench["A4 minimax chebyshev (NM)", NMinimize[{a4obj, a4cons}, a4vars, Method -> a4meth];];
+check["A4 minimax chebyshev (NM)",
+  Round[10^4 First[NMinimize[{a4obj, a4cons}, a4vars, Method -> a4meth]]]];

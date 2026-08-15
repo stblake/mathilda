@@ -1071,6 +1071,36 @@ static void test_modified_ackley(void) {
         " First[r] < -0.87]");
 }
 
+static void test_minimax_chebyshev(void) {
+    /* A4: a 15-D constrained minimax (Chebyshev) — minimize
+     * Max_i |x_i - Sin[i]| subject to Σx_i² ≤ 15 and the linear equality
+     * Σ i·x_i = 1, over [-2,2]^15. Max-of-affine + a convex sphere + a linear
+     * equality is a CONVEX program, so the optimum is unique: t* = 0.125116
+     * (verified independently by scipy SLSQP on the epigraph form). Because it
+     * is convex a single NelderMead simplex (SearchPoints -> 1) plus the
+     * augmented-Lagrangian polish reaches it exactly — no multi-restart needed —
+     * in ~0.06 s, matching scipy's single-start SLSQP (~0.065 s). The default 20
+     * restarts would be ~12× the work for the same answer. The user's original
+     * spec passed the box table as a THIRD top-level list element
+     * ({obj, cons, box}); NMinimize takes {obj, cons}, so the box is folded into
+     * the constraint list here. Asserts the optimum, the equality residual, and
+     * sphere feasibility; the convex optimum is reached precisely, so the band
+     * is tight. */
+    check_true(
+        "Module[{d = 15, vars, obj, allcons, r, o, sol},"
+        " vars = Table[x[i], {i, 1, d}];"
+        " obj = Max[Table[Abs[x[i] - Sin[i]], {i, 1, d}]];"
+        " allcons = Join[{Sum[x[i]^2, {i, 1, d}] <= d, Sum[i x[i], {i, 1, d}] == 1},"
+        "   Table[-2 <= x[i] <= 2, {i, 1, d}]];"
+        " r = NMinimize[{obj, allcons}, vars,"
+        "   Method -> {\"NelderMead\", \"ContractRatio\" -> 0.5, \"Tolerance\" -> 10^-8,"
+        "              \"SearchPoints\" -> 1, \"RandomSeed\" -> 1}];"
+        " o = First[r]; sol = Last[r];"
+        " Abs[o - 0.125116] < 1*^-3 &&"
+        "  Abs[Sum[i (x[i] /. sol), {i, 1, d}] - 1] < 1*^-4 &&"
+        "  Sum[(x[i] /. sol)^2, {i, 1, d}] <= 15.001]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1172,6 +1202,7 @@ int main(void) {
     TEST(test_refinery_pooling);
     TEST(test_gaussian_well);
     TEST(test_modified_ackley);
+    TEST(test_minimax_chebyshev);
 
     printf("All NMinimize tests passed.\n");
     return 0;

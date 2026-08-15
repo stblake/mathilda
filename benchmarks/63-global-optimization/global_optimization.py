@@ -95,3 +95,35 @@ def _a3_solve():
 
 bench("A3 modified Ackley (SA)", _a3_solve)
 check("A3 modified Ackley (SA)", int(np.floor(_a3_solve().fun + 0.5)))
+
+
+# ---- A4: 15-D constrained minimax (Chebyshev) -- SLSQP on the epigraph ----
+# Convex, unique optimum 0.125116. Matching character for NelderMead: a local
+# constrained solver = scipy.optimize.minimize (SLSQP). vars z = [x_0..x_14, t].
+from scipy.optimize import minimize  # noqa: E402
+
+_A4_D = 15
+_A4_S = np.sin(np.arange(1, _A4_D + 1))
+_A4_IDX = np.arange(1, _A4_D + 1)
+
+
+def _a4_cons():
+    cons = [{'type': 'ineq', 'fun': lambda z: _A4_D - np.sum(z[:_A4_D] ** 2)},
+            {'type': 'eq', 'fun': lambda z: np.sum(_A4_IDX * z[:_A4_D]) - 1}]
+    for i in range(_A4_D):
+        cons.append({'type': 'ineq', 'fun': (lambda z, i=i: z[-1] - (z[i] - _A4_S[i]))})
+        cons.append({'type': 'ineq', 'fun': (lambda z, i=i: z[-1] - (_A4_S[i] - z[i]))})
+    return cons
+
+
+_a4_bnds = [(-2, 2)] * _A4_D + [(0, None)]
+_a4_z0 = np.append(np.zeros(_A4_D), 1.0)
+
+
+def _a4_solve():
+    return minimize(lambda z: z[-1], _a4_z0, method='SLSQP', bounds=_a4_bnds,
+                    constraints=_a4_cons(), options=dict(maxiter=500, ftol=1e-12))
+
+
+bench("A4 minimax chebyshev (NM)", _a4_solve)
+check("A4 minimax chebyshev (NM)", int(np.floor(1e4 * _a4_solve().x[-1] + 0.5)))
