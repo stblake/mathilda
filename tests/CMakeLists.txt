@@ -446,6 +446,7 @@ set(COMMON_SRC
     ../src/fit.c
     ../src/info.c
     ../src/meminfo.c
+    ../src/image.c
     ../src/expand.c
     ../src/expand_power.c
     ../src/poly/poly.c
@@ -832,6 +833,12 @@ add_test(NAME rootreduce_tests COMMAND rootreduce_tests)
 add_executable(meminfo_tests test_meminfo.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(meminfo_tests PRIVATE ../src)
 add_test(NAME meminfo_tests COMMAND meminfo_tests)
+# The Image representation and its accessors. Every row that touches dimensions uses a
+# NON-SQUARE image, because ImageDimensions is {width, height} while ImageData is
+# height x width and a square image cannot tell the two apart.
+add_executable(image_tests test_image.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(image_tests PRIVATE ../src)
+add_test(NAME image_tests COMMAND image_tests)
 
 add_executable(flint_bridge_tests test_flint_bridge.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(flint_bridge_tests PRIVATE ../src)
