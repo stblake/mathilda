@@ -445,6 +445,7 @@ set(COMMON_SRC
     ../src/stats/exponentialmovingaverage.c
     ../src/fit.c
     ../src/info.c
+    ../src/meminfo.c
     ../src/expand.c
     ../src/expand_power.c
     ../src/poly/poly.c
@@ -825,6 +826,12 @@ add_test(NAME trigexp_zero_tests COMMAND trigexp_zero_tests)
 add_executable(rootreduce_tests test_rootreduce.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(rootreduce_tests PRIVATE ../src)
 add_test(NAME rootreduce_tests COMMAND rootreduce_tests)
+
+# MemoryInUse / MaxMemoryUsed. Values are machine-dependent, so the suite asserts
+# relations (positive, peak >= current, responds to allocation) rather than numbers.
+add_executable(meminfo_tests test_meminfo.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(meminfo_tests PRIVATE ../src)
+add_test(NAME meminfo_tests COMMAND meminfo_tests)
 
 add_executable(flint_bridge_tests test_flint_bridge.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(flint_bridge_tests PRIVATE ../src)

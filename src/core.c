@@ -77,6 +77,7 @@
 #include "partitions.h"
 #include "fit.h"
 #include "info.h"
+#include "meminfo.h"
 #include "expand.h"
 #include "expand_power.h"
 #include "poly.h"
@@ -841,6 +842,7 @@ void core_init(void) {
     void nsolve_init(void);
     nsolve_init();
     info_init();
+    meminfo_init();
     datetime_init();
     linalg_init();
     ml_init();      /* src/ml -- PrincipalComponents, Standardize */
