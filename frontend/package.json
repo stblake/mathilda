@@ -17,7 +17,8 @@
     "android:init": "tauri android init",
     "android:dev": "tauri android dev",
     "android:build": "tauri android build",
-    "sync:refpages": "node scripts/sync-refpages.mjs"
+    "sync:refpages": "node scripts/sync-refpages.mjs",
+    "check:prose": "node scripts/check-prose.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.1.2",

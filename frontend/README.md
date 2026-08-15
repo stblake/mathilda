@@ -102,6 +102,41 @@ toggle lives (`lib/properties.ts`), and the Sidebar group is **one** button —
 Mathematica's equivalent group carries a chat panel as its second, and a button
 that opened nothing would be worse than the asymmetry.
 
+### Markdown text cells
+
+A `text` cell shows **rendered Markdown** when it is not being edited and its raw
+source while it is — the two states Jupyter has, and what the cell-type picker has
+described as "Prose / markdown" since it was written, back when nothing rendered
+any. Rendering is `lib/prose.ts` over `marked`, with `breaks: true` so a single
+newline is a line break: a cell is typed like prose, and needing two trailing
+spaces to end a line would read as the cell ignoring Return.
+
+One element switches between the two states rather than two elements swapping, so
+the existing handlers, handle registration and arrow-key navigation are untouched
+— only what is painted into it and whether it is `contenteditable` change. An
+empty cell starts in edit mode, since a rendered empty cell is a zero-height
+click target.
+
+The toolbar's **Text** group wraps the selection in `**`, `*`, `` ` `` or a link,
+via `document.execCommand('insertText')` — deprecated, and still the only API that
+edits a contenteditable while keeping the browser's native undo stack, and it
+fires `input` so the cell's existing handler saves the new source with no extra
+plumbing. The group appears for `text` only: a section or subsection is an
+`<h1>`/`<h2>` that is not Markdown-rendered, so `**bold**` there would display its
+own asterisks.
+
+There is no bullet-list button and no caret-at-click-point, both for the same
+reason — each needs to map a position through a contenteditable whose line boxes
+may be text nodes, `<div>`s or `<br>`s, and a bullet landing mid-word or a caret
+landing at the wrong offset is worse than the button not being there. Rendered
+prose reaches the DOM through `{@html}`: a notebook is an executable document
+whose code cells already evaluate arbitrary Mathilda, so HTML in its prose is not
+a new capability, and a regex pass would look like sanitisation without being it.
+
+`npm run check:prose` covers the pure half — the renderer and the marker
+constants, read out of `prose.ts` so the checks cannot drift from it. The DOM half
+needs a real pointer, since synthetic events do not reach the WKWebView.
+
 Both panel stores are plain writables with no persistence, matching `darkMode` in
 `theme.ts`. Nothing in the app persists UI state yet, and making one preference
 the only setting that survives a restart would be a surprise rather than a

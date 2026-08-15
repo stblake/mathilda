@@ -37,6 +37,7 @@
   import { restart, abortEvaluation } from './kernelActions';
   import { showStatusBar, resetSessionStats } from './status';
   import { propertiesOpen } from './properties';
+  import { wrapSelection, PROSE_BOLD, PROSE_ITALIC, PROSE_CODE, PROSE_LINK } from './prose';
   import type { Cell, CellType, NotebookRow } from './notebook';
 
   type MenuId = 'eval' | 'kernel' | 'docs' | 'style' | 'addpane' | 'overflow' | null;
@@ -287,6 +288,21 @@
 
   $: codeView = activeCellObj?.type === 'code' ? (activeHandle()?.view ?? null) : null;
   $: showCodeGroup = activeCellObj?.type === 'code';
+  /* Only 'text'. A section or subsection is a single-line heading rendered as an
+     <h1>/<h2> and NOT through Markdown, so `**bold**` there would show its own
+     asterisks -- a button that inserts markup the cell will never interpret is
+     worse than no button. */
+  $: showTextGroup = activeCellObj?.type === 'text';
+
+  /* No disabled state, deliberately. Whether the caret is live in the cell is
+     exactly what ActiveCell.focused must not be used to gate (see active.ts), so
+     instead wrapSelection refuses when the selection is not inside the cell's
+     element: pressing one of these with the caret elsewhere does nothing rather
+     than editing whichever cell was last active. */
+  function applyProse(spec: { before: string; after: string;
+                              caret: { collapsed: number; selected: number } }) {
+    wrapSelection(activeHandle()?.el ?? null, spec.before, spec.after, spec.caret);
+  }
 
   function withView(fn: (v: import('@codemirror/view').EditorView) => void) {
     const v = activeHandle()?.view;
@@ -565,7 +581,25 @@
 </ToolbarGroup>
 
 <!-- Context-sensitive: only for code cells, and hidden rather than disabled
-     otherwise. The Text half arrives with Markdown text cells. -->
+     otherwise. The Text half above is the same idea for prose cells. -->
+<ToolbarGroup label="Text" visible={showTextGroup}>
+  <button class="tb-btn tb-bold" title="Bold (**)"
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => applyProse(PROSE_BOLD)}
+  >B</button>
+
+  <button class="tb-btn tb-italic" title="Italic (*)"
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => applyProse(PROSE_ITALIC)}
+  >I</button>
+
+  <button class="tb-btn tb-mono" title="Inline code (`)"
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => applyProse(PROSE_CODE)}
+  >`</button>
+
+  <button class="tb-btn" title="Link ([text](url))"
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => applyProse(PROSE_LINK)}
+  ><Icon name="link" /></button>
+</ToolbarGroup>
+
 <ToolbarGroup label="Code" visible={showCodeGroup}>
   <button class="tb-btn" title="Indent" disabled={!codeView}
           tabindex="-1" on:pointerdown|preventDefault on:click={() => withView(indentCode)}
@@ -801,4 +835,6 @@
     user-select: none;
     -webkit-user-select: none;
   }
+  .tb-bold   { font-weight: 700; }
+  .tb-italic { font-style: italic; font-family: Georgia, serif; }
 </style>
