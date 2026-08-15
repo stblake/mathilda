@@ -1438,6 +1438,42 @@ static void test_txncost_portfolio(void) {
         "  AllTrue[Range[n], Abs[wv[[#]] - w0[[#]]] <= zv[[#]] + 1*^-4 &] && Min[wv] >= -1*^-6]");
 }
 
+static void test_fixed_charge_flow(void) {
+    /* B6: fixed-charge network flow, 5 nodes. Continuous flows x[i,j] and binary
+     * open-arc indicators y[i,j] (with x[i,j] ≤ 100·y[i,j]), minimizing variable
+     * cost c·x plus fixed charge f·y, subject to FLOW-CONSERVATION EQUALITIES
+     * Σ_k x[k,i] − Σ_j x[i,j] = demand_i at every node (node 1 absorbs 20, the
+     * rest supply 5 each). Formulation fixes: SeedRandom for reproducible costs,
+     * and 0 ≤ y ≤ 1 for genuinely binary arc indicators (the spec only said
+     * Integers). The coupled flow-conservation equalities are the hard class:
+     * RandomSearch cannot even find a feasible flow, and the milp optimum (191.72,
+     * scipy) is out of reach for the general derivative-free solver. Automatic
+     * (DE with the dimension-scaled budget) DOES find a valid flow (~877, ~4.6× the
+     * optimum) in ~4 s — this test pins that honest outcome: a FEASIBLE flow
+     * (finite cost, every conservation equality satisfied, binary arcs,
+     * non-negative flows), documenting that flow-conservation MILP optimality
+     * remains a limitation. Deterministic under the default seed. */
+    check_true(
+        "Module[{nodes = 5, c, f, xVars, yVars, demand, obj, cons, r, o, sol, xm, ym},"
+        " SeedRandom[55];"
+        " c = RandomReal[{1, 5}, {nodes, nodes}]; f = RandomReal[{10, 50}, {nodes, nodes}];"
+        " xVars = Array[x, {nodes, nodes}]; yVars = Array[y, {nodes, nodes}];"
+        " demand = {20, -5, -5, -5, -5};"
+        " obj = Sum[c[[i, j]] xVars[[i, j]] + f[[i, j]] yVars[[i, j]], {i, nodes}, {j, nodes}];"
+        " cons = Join["
+        "   Table[Sum[xVars[[k, i]], {k, nodes}] - Sum[xVars[[i, j]], {j, nodes}] == demand[[i]], {i, nodes}],"
+        "   Flatten@Table[xVars[[i, j]] <= 100 yVars[[i, j]], {i, nodes}, {j, nodes}],"
+        "   Flatten@Table[xVars[[i, j]] >= 0, {i, nodes}, {j, nodes}],"
+        "   Flatten@Table[0 <= yVars[[i, j]] <= 1, {i, nodes}, {j, nodes}],"
+        "   {Element[Flatten[yVars], Integers]}];"
+        " r = NMinimize[{obj, cons}, Flatten[{xVars, yVars}]];"
+        " o = First[r]; sol = Last[r]; xm = xVars /. sol; ym = yVars /. sol;"
+        " o < 1000 &&"
+        "  AllTrue[Range[nodes], Abs[Sum[xm[[k, #]], {k, nodes}] - Sum[xm[[#, j]], {j, nodes}]"
+        "    - demand[[#]]] < 1*^-2 &] &&"
+        "  AllTrue[Flatten[ym], Abs[# - Round[#]] < 1*^-4 &] && Min[Flatten[xm]] >= -1*^-4]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1554,6 +1590,7 @@ int main(void) {
     TEST(test_adjacency_assignment);
     TEST(test_cardinality_portfolio);
     TEST(test_txncost_portfolio);
+    TEST(test_fixed_charge_flow);
 
     printf("All NMinimize tests passed.\n");
     return 0;
