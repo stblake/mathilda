@@ -1846,6 +1846,60 @@ static void test_volume_imagecorners(void) {
     assert_eval_eq("Length[ImageCorners[" CK24 "]]", "9", 0);
 }
 
+
+/* Named options, through the generic reader in options.c. */
+static void test_corner_named_options(void) {
+    /* The registered defaults are what Options[head] reports, and they are the single source the
+     * reader consults -- so this is not decoration, it is the mechanism. */
+    /* expr_to_string quotes strings, unlike Print -- so the expected form carries the quotes. */
+    assert_eval_eq("Options[CornerFilter]", "{Method -> \"MinimumEigenvalue\"}", 0);
+    assert_eval_eq("Options[ImageCorners]", "{MaxFeatures -> Infinity}", 0);
+
+    /* THE EQUIVALENCE THAT MATTERS, and the one that caught the bug: the option form and the
+     * positional form must agree. The first version of the reader could not distinguish an option the
+     * caller passed from a default it had filled in, so the default overrode the positional argument
+     * and CornerFilter[img, 2, "Harris"] silently computed the other response. Both spellings of both
+     * settings are asserted equal here. */
+    assert_eval_eq("Module[{img = " CIMG "},"
+                   " ImageCorners[img, MaxFeatures -> 5] === ImageCorners[img, 2, 0.05, 0, 5]]",
+                   "True", 0);
+    assert_eval_eq("Module[{ck = " CK24 "},"
+                   " ImageData[CornerFilter[ck, 2, Method -> \"Harris\"]]"
+                   " === ImageData[CornerFilter[ck, 2, \"Harris\"]]]", "True", 0);
+    /* And the default still applies when nothing positional was given. */
+    assert_eval_eq("Module[{ck = " CK24 "},"
+                   " ImageData[CornerFilter[ck]]"
+                   " === ImageData[CornerFilter[ck, 2, Method -> \"MinimumEigenvalue\"]]]",
+                   "True", 0);
+
+    /* Options are trailing, may accompany positional arguments, and the last duplicate wins. */
+    assert_eval_eq("Module[{img = " CIMG "},"
+                   " {Length[ImageCorners[img, 2, 0.05, 10., MaxFeatures -> 3]],"
+                   "  Length[ImageCorners[img, MaxFeatures -> 9, MaxFeatures -> 2]]}]",
+                   "{3, 2}", 0);
+    /* An unknown option DECLINES rather than being ignored. Mathematica warns and continues; refusing
+     * is the more conservative reading, and a typo'd option name that silently does nothing is the
+     * failure this avoids. */
+    assert_eval_eq("Module[{img = " CIMG "}, Head[ImageCorners[img, Nonsense -> 3]]]",
+                   "ImageCorners", 0);
+    assert_eval_eq("Module[{img = " CIMG "}, Head[ImageCorners[img, MaxFeatures -> -2]]]",
+                   "ImageCorners", 0);
+    assert_eval_eq("Head[CornerFilter[" CK24 ", Method -> \"Nope\"]]", "CornerFilter", 0);
+
+    /* SetOptions works with no code in the builtin beyond reading the registry -- which is the
+     * argument for the defaults living there rather than as constants in C. */
+    assert_eval_eq("Module[{img = " CIMG ", a, b, c},"
+                   " SetOptions[ImageCorners, MaxFeatures -> 4];"
+                   " a = Length[ImageCorners[img]];"
+                   " b = Length[ImageCorners[img, MaxFeatures -> 7]];"
+                   " SetOptions[ImageCorners, MaxFeatures -> Infinity];"
+                   " c = Length[ImageCorners[img]];"
+                   " {a, b, c > 100}]", "{4, 7, True}", 0);
+
+    /* Options reach the volumetric path too, since they are stripped before the rank dispatch. */
+    assert_eval_eq("Length[ImageCorners[" VCK ", MaxFeatures -> 5]]", "5", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1941,6 +1995,7 @@ int main(void) {
     TEST(test_volume_corner_eigenvalue_hierarchy);
     TEST(test_volume_corner_axis_covariance);
     TEST(test_volume_imagecorners);
+    TEST(test_corner_named_options);
 
     printf("All image tests passed.\n");
     return 0;

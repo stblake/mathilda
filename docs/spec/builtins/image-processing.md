@@ -1484,3 +1484,44 @@ a plane returns `{}`; an edge returns none.
 
 Harris needs no eigenvalues, which is why it is the cheaper of the two here. Not quite
 like-for-like: scikit-image is parameterised by `sigma` where this takes an integer radius.
+
+## Named options
+
+`CornerFilter` and `ImageCorners` take Wolfram-style trailing options as well as their positional
+forms:
+
+```
+CornerFilter[image, r, Method -> "Harris"]
+ImageCorners[image, MaxFeatures -> 5]
+ImageCorners[image, 2, 0.05, 10., MaxFeatures -> 3]
+```
+
+`Options[CornerFilter]` reports `{Method -> "MinimumEigenvalue"}` and `Options[ImageCorners]`
+reports `{MaxFeatures -> Infinity}`. Those registered defaults are the **single place** the reader
+looks, so `SetOptions[ImageCorners, MaxFeatures -> 4]` takes effect with no further code in the
+builtin — which is the argument for keeping defaults in the symbol registry rather than as
+constants in C.
+
+The mechanism is `options_extract` in `options.c`, and it is general: any builtin can accept a set
+of named options without growing a positional tail. `ImageCorners` had reached five positional
+arguments, four of them settings, which is what prompted it. Options must be **trailing**, as in
+Mathematica; the scan runs from the end of the argument list so a positional argument that happens
+to be a rule cannot be mistaken for an option. Duplicates resolve last-wins.
+
+An unknown option **declines** rather than being ignored. Mathematica warns and continues; refusing
+is the more conservative reading and matches this tree's rule of refusing rather than guessing — a
+mistyped option name that silently does nothing is the failure it avoids.
+
+### One thing the reader has to get right
+
+An option entry reports whether **the call** supplied it or the value came from the defaults. That
+distinction is load-bearing for any head that also accepts the setting positionally, and the first
+version of this reader omitted it. The consequence was immediate and silent:
+`CornerFilter[image, 2, "Harris"]` computed the *MinimumEigenvalue* response, because the default
+`Method` filled the slot and the builtin could not tell that apart from an explicit option, so the
+default overrode the positional argument. The default is therefore consulted only when no
+positional was given.
+
+It was caught by asserting that the option form and the positional form agree — an equivalence
+worth writing down for any setting that has two spellings, since neither spelling looks wrong on
+its own.

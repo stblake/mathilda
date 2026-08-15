@@ -35,6 +35,7 @@
 #include "sym_names.h"
 #include "linalg/numarray.h"
 #include "image.h"
+#include "options.h"
 #ifdef USE_FFTW
 #include <fftw3.h>
 #endif
@@ -2648,10 +2649,26 @@ static bool corner_opts(Expr* res, size_t argc, size_t* r, bool* harris) {
 
 /* CornerFilter[image] / [image, r] / [image, r, method] */
 static Expr* builtin_cornerfilter(Expr* res) {
+    /* Trailing options are stripped FIRST, so the positional parse below never meets a Rule. */
+    const Expr* mopt = NULL;
+    bool mgiven = false;
+    const OptEntry ents[1] = { { "Method", &mopt, &mgiven } };
     size_t argc = res->data.function.arg_count;
+    if (!options_extract(res, "CornerFilter", ents, 1, &argc)) return NULL;
     if (argc < 1 || argc > 3) return NULL;
     size_t r = 2; bool harris = false;
     if (!corner_opts(res, argc, &r, &harris)) return NULL;
+    /* An explicit option beats the positional form. The default must NOT: `mopt` is non-NULL even
+     * when the caller passed nothing, since it then holds the registered default, and applying that
+     * unconditionally made CornerFilter[img, 2, "Harris"] silently compute the other response. So the
+     * default is consulted only when no positional method was given -- which is still what makes
+     * SetOptions[CornerFilter, Method -> ...] take effect. */
+    if (mopt && (mgiven || argc < 3)) {
+        if (mopt->type != EXPR_STRING) return NULL;
+        if (strcmp(mopt->data.string, "Harris") == 0) harris = true;
+        else if (strcmp(mopt->data.string, "MinimumEigenvalue") == 0) harris = false;
+        else return NULL;
+    }
     /* A VOLUME takes the rank-3 path, dispatching on the image as every other filter here does. */
     if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
         size_t w3 = 0, h3 = 0, d3 = 0; double* r3 = NULL;
@@ -2796,7 +2813,11 @@ static Expr* corner_peaks_list(const double* rsp, size_t w, size_t h, size_t d,
 }
 
 static Expr* builtin_imagecorners(Expr* res) {
+    const Expr* nopt = NULL;
+    bool ngiven = false;
+    const OptEntry ents[1] = { { "MaxFeatures", &nopt, &ngiven } };
     size_t argc = res->data.function.arg_count;
+    if (!options_extract(res, "ImageCorners", ents, 1, &argc)) return NULL;
     if (argc < 1 || argc > 5) return NULL;
     size_t r = 2;
     double frac = 0.05, sep = 0.0;
@@ -2823,6 +2844,21 @@ static Expr* builtin_imagecorners(Expr* res) {
         if (!na_read_scalar(res->data.function.args[4], &n, &im) || im != 0.0) return NULL;
         if (!(n >= 1.0) || n != floor(n)) return NULL;
         maxn = (size_t)n;
+    }
+
+    /* MaxFeatures as an option, which is how Mathematica spells it. Infinity means no limit, and is
+     * the registered default -- so SetOptions[ImageCorners, MaxFeatures -> n] works without another
+     * line here. An explicit option beats the positional form. */
+    if (nopt && (ngiven || argc < 5)) {
+        if (nopt->type == EXPR_SYMBOL && nopt->data.symbol.name
+            && strcmp(nopt->data.symbol.name, "Infinity") == 0) {
+            maxn = 0;
+        } else {
+            double nv = 0.0, iv = 0.0;
+            if (!na_read_scalar(nopt, &nv, &iv) || iv != 0.0) return NULL;
+            if (!(nv >= 1.0) || nv != floor(nv)) return NULL;
+            maxn = (size_t)nv;
+        }
     }
 
     /* A VOLUME takes the rank-3 response and emits {slice, row, column}. */
@@ -2881,6 +2917,24 @@ static Expr* builtin_imagecorrelate(Expr* res) {
 }
 
 void imagefilter_init(void) {
+    /* Registered defaults, so Options[head] reports them, SetOptions changes them, and the reader
+     * has one place to look. */
+    {
+        Expr* r1[2];
+        r1[0] = expr_new_symbol("Method");
+        r1[1] = expr_new_string("MinimumEigenvalue");
+        Expr* one = expr_new_function(expr_new_symbol("Rule"), r1, 2);
+        Expr* lst[1]; lst[0] = one;
+        symtab_set_options("CornerFilter", expr_new_function(expr_new_symbol("List"), lst, 1));
+    }
+    {
+        Expr* r2[2];
+        r2[0] = expr_new_symbol("MaxFeatures");
+        r2[1] = expr_new_symbol("Infinity");
+        Expr* one = expr_new_function(expr_new_symbol("Rule"), r2, 2);
+        Expr* lst[1]; lst[0] = one;
+        symtab_set_options("ImageCorners", expr_new_function(expr_new_symbol("List"), lst, 1));
+    }
     symtab_add_builtin("CornerFilter", builtin_cornerfilter);
     symtab_get_def("CornerFilter")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("CornerFilter",

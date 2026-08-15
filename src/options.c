@@ -1,6 +1,7 @@
 /* options.c — see options.h. */
 
 #include "options.h"
+#include "symtab.h"
 #include "sym_names.h"
 #include <stdbool.h>
 #include <string.h>
@@ -72,4 +73,68 @@ const Expr* extract_extension_option_full(const Expr* res, size_t* new_argc,
 
 const Expr* extract_extension_option(const Expr* res, size_t* new_argc) {
     return extract_extension_option_full(res, new_argc, NULL);
+}
+
+/* ---- generic named options (see options.h) --------------------------------- */
+
+static bool opt_rule_parts(const Expr* e, const char** name, const Expr** value) {
+    if (!e || e->type != EXPR_FUNCTION || !e->data.function.head) return false;
+    const Expr* hd = e->data.function.head;
+    if (hd->type != EXPR_SYMBOL) return false;
+    const char* hn = hd->data.symbol.name;
+    if (!hn || (strcmp(hn, "Rule") != 0 && strcmp(hn, "RuleDelayed") != 0)) return false;
+    if (e->data.function.arg_count != 2) return false;
+    const Expr* lhs = e->data.function.args[0];
+    if (!lhs || lhs->type != EXPR_SYMBOL) return false;
+    *name = lhs->data.symbol.name;
+    *value = e->data.function.args[1];
+    return true;
+}
+
+bool options_extract(const Expr* res, const char* head_name,
+                     const OptEntry* entries, size_t n_entries, size_t* new_argc) {
+    if (!res || res->type != EXPR_FUNCTION) return false;
+    size_t argc = res->data.function.arg_count;
+
+    /* Find where the trailing options begin: the first argument that is a Rule with a symbol on the
+     * left. Scanning from the END rather than the front, so a positional argument that happens to be
+     * a rule -- ReplaceAll's second argument, say -- cannot be mistaken for an option. */
+    size_t first_opt = argc;
+    while (first_opt > 0) {
+        const char* nm = NULL; const Expr* vv = NULL;
+        if (!opt_rule_parts(res->data.function.args[first_opt - 1], &nm, &vv)) break;
+        first_opt--;
+    }
+    if (new_argc) *new_argc = first_opt;
+
+    /* Apply the call's own options left to right, so the LAST setting wins. */
+    for (size_t i = first_opt; i < argc; i++) {
+        const char* nm = NULL; const Expr* vv = NULL;
+        if (!opt_rule_parts(res->data.function.args[i], &nm, &vv)) return false;
+        bool known = false;
+        for (size_t j = 0; j < n_entries; j++) {
+            if (strcmp(nm, entries[j].name) == 0) {
+                if (entries[j].out) *entries[j].out = vv;
+                if (entries[j].given) *entries[j].given = true;
+                known = true;
+                break;
+            }
+        }
+        if (!known) return false;            /* refuse rather than silently ignore */
+    }
+
+    /* Anything the call did not set comes from Options[head], which keeps the registered defaults as
+     * the single source of truth and makes SetOptions work with no further code here. */
+    Expr* defs = head_name ? symtab_get_options(head_name) : NULL;
+    if (defs && defs->type == EXPR_FUNCTION) {
+        for (size_t j = 0; j < n_entries; j++) {
+            if (!entries[j].out || *entries[j].out) continue;
+            for (size_t i = 0; i < defs->data.function.arg_count; i++) {
+                const char* nm = NULL; const Expr* vv = NULL;
+                if (!opt_rule_parts(defs->data.function.args[i], &nm, &vv)) continue;
+                if (strcmp(nm, entries[j].name) == 0) { *entries[j].out = vv; break; }
+            }
+        }
+    }
+    return true;
 }
