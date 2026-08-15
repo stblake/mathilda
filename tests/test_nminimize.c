@@ -1410,6 +1410,34 @@ static void test_cardinality_portfolio(void) {
         "  AllTrue[zv, Abs[# - Round[#]] < 1*^-4 &]]");
 }
 
+static void test_txncost_portfolio(void) {
+    /* B11: portfolio rebalancing with transaction costs (MIQP), n=10. Continuous
+     * weights w (Σw=1) starting from the equal-weight w0, and binary trade
+     * indicators z, with objective 0.5·w·cov·w − 0.5·mu·w + Σ(0.01·|w_i−w0_i| +
+     * 0.02·z_i): risk minus expected return plus proportional and fixed trading
+     * costs. The Big-M coupling −z_i ≤ w_i−w0_i ≤ z_i forces z_i=1 whenever asset
+     * i is traded. The true optimum, by enumerating all 2^10 trade patterns and
+     * solving each convex QP (scipy), is −0.0334. DifferentialEvolution left it at
+     * +0.12, but RandomSearch's multi-start polish concentrates the weights onto
+     * the high-return assets and reaches −0.0334 — the MIQP optimum — at 40
+     * restarts in ~4 s. Asserts the near-optimal value, Σw=1, binary z, the
+     * |w−w0| ≤ z coupling, and non-negativity. Deterministic under RandomSeed. */
+    check_true(
+        "Module[{n = 10, mu, cov, w0, w, z, dw, obj, cons, r, o, sol, wv, zv},"
+        " SeedRandom[101];"
+        " mu = RandomReal[{0.01, 0.15}, n];"
+        " cov = (# + Transpose[#]) &@RandomReal[{-0.02, 0.08}, {n, n}]; cov = cov . Transpose[cov];"
+        " w0 = ConstantArray[1/n, n]; w = Array[weight, n]; z = Array[trade, n]; dw = w - w0;"
+        " obj = 0.5 w . cov . w - 0.5 mu . w + Sum[0.01 Abs[dw[[i]]] + 0.02 z[[i]], {i, n}];"
+        " cons = Join[{Total[w] == 1}, Table[-z[[i]] <= dw[[i]] <= z[[i]], {i, n}],"
+        "   Table[0 <= w[[i]] <= 1, {i, n}], Table[0 <= z[[i]] <= 1, {i, n}], {Element[z, Integers]}];"
+        " r = NMinimize[{obj, cons}, Flatten[{w, z}],"
+        "   Method -> {\"RandomSearch\", \"SearchPoints\" -> 40, \"RandomSeed\" -> 1}];"
+        " o = First[r]; sol = Last[r]; wv = w /. sol; zv = z /. sol;"
+        " o < -0.032 && Abs[Total[wv] - 1] < 1*^-3 && AllTrue[zv, Abs[# - Round[#]] < 1*^-4 &] &&"
+        "  AllTrue[Range[n], Abs[wv[[#]] - w0[[#]]] <= zv[[#]] + 1*^-4 &] && Min[wv] >= -1*^-6]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1525,6 +1553,7 @@ int main(void) {
     TEST(test_max_independent_set);
     TEST(test_adjacency_assignment);
     TEST(test_cardinality_portfolio);
+    TEST(test_txncost_portfolio);
 
     printf("All NMinimize tests passed.\n");
     return 0;
