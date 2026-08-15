@@ -759,3 +759,59 @@ labelling itself is ~0.6 ms — **faster than scipy's 1.2** — and the output c
 remedy: return a packed integer array instead of nested expressions. It is not done here because the
 result is a `List` rather than an `Image`, so it has no container to rest inside and would face the
 post-gate directly — worth doing, and worth doing carefully rather than at the end of an iteration.
+
+---
+
+# Rank filters
+
+`MedianFilter[image, r]` and `MeanFilter[image, r]` over a `(2r+1)²` neighbourhood. Attributes:
+`Protected`.
+
+## The median is the one operator here that is not separable
+
+Worth stating plainly after a week of leaning on separability. A **sum**, a **maximum** and a
+**minimum** all decompose — the sum over a rectangle is the sum over rows of the sums over columns, and
+likewise for max and min — because all three are associative, commutative reductions that **ignore how
+values are grouped**. A median does not: it depends on a value's **rank within the whole window**, and
+grouping destroys rank information.
+
+```
+{{1, 2, 9}, {3, 4, 5}, {6, 7, 8}}    true median of all nine  = 5
+                                      median of row medians {2,4,7} = 4
+```
+
+The separable version is fast, plausible, and simply wrong. A test pins `5` on exactly that window, so
+an implementation that took the shortcut fails rather than passing quietly.
+
+`MeanFilter`, by contrast, **is** a convolution with a normalised box, so it is implemented as one and a
+test asserts the identity against `ImageConvolve` — two implementations of one identity is how the
+identity quietly stops holding. Being a full rectangle it gets the separable path.
+
+## Why a median at all
+
+A median removes an isolated outlier **exactly**; a Gaussian or mean only attenuates and smears it. One
+bright pixel in a constant field leaves *nothing* behind under the median — the whole result is the
+background value — where the mean leaves a visible bump. Both halves are asserted, because "it smooths"
+is true of the mean too and proves nothing. On salt-and-pepper noise that is the difference between
+clean and merely blurred.
+
+For an even window the **lower middle** is taken rather than averaging the two, so the output is always
+one of the inputs — averaging would invent a value not present in the window, which for a rank filter is
+precisely what a caller does not want. A test checks every output value is drawn from the input.
+
+## Measured
+
+512×512, against `scipy.ndimage`:
+
+| | Mathilda | scipy |
+|---|---|---|
+| `MedianFilter` r=1 (9 values) | **3.13 ms** | 6.8 ms |
+| `MedianFilter` r=2 (25 values) | **10.27 ms** | 15.3 ms |
+| `MeanFilter` r=2 | **1.49 ms** | 1.6 ms |
+
+Faster than scipy at both median radii. Insertion sort on the window is the reason: for the radii people
+actually use — 1 to 3, so 9 to 49 values — a small contiguous array beats a histogram or a running
+median on constant factors, and it is exact and obviously correct on doubles. Both implementations grow
+with the window, so at large radii a histogram median (8-bit data) or a running median would win; that
+is the same shape of limit as van Herk for morphology, and the same honest position — a known ceiling
+with a known remedy, not numbers that are good everywhere.

@@ -902,6 +902,65 @@ static void test_components_interact_with_morphology(void) {
     assert_eval_eq("MemberQ[Attributes[MorphologicalComponents], Protected]", "True", 0);
 }
 
+static void test_median_removes_an_outlier_exactly(void) {
+    /* THE discriminating property, and why a median exists alongside a Gaussian: an isolated outlier
+     * is removed EXACTLY, not attenuated. One bright pixel in a constant field leaves NOTHING behind
+     * -- the whole result is the background value -- where the mean leaves a visible bump at the same
+     * place. Both halves are asserted, because "the median smooths" is true of the mean too and
+     * proves nothing. */
+    assert_eval_eq("Union[Flatten[ImageData[MedianFilter["
+                   "Image[Table[If[x == 3 && y == 3, 1., 0.25], {y, 5}, {x, 5}]], 1]]]]",
+                   "{0.25}", 0);
+    assert_eval_eq("Part[ImageData[MeanFilter["
+                   "Image[Table[If[x == 3 && y == 3, 1., 0.25], {y, 5}, {x, 5}]], 1]], 3, 3]"
+                   " > 0.25", "True", 0);
+    /* A median of a constant is that constant, exactly -- and 0.375 is exactly representable. */
+    assert_eval_eq("Union[Flatten[ImageData[MedianFilter["
+                   "Image[Table[0.375, {4}, {4}]], 1]]]]", "{0.375}", 0);
+    /* Radius 0 is a one-element window, hence the identity. */
+    assert_eval_eq("ImageData[MedianFilter[" MIMG ", 0]] === ImageData[" MIMG "]", "True", 0);
+}
+
+static void test_median_is_not_separable(void) {
+    /* The median is the ONE operator in this file that does not decompose, and this pins that the
+     * implementation does the real thing rather than the fast wrong thing.
+     *
+     * A sum, a maximum and a minimum all separate because they ignore grouping. A median depends on a
+     * value's RANK within the whole window, and grouping destroys rank. On {{1,2,9},{3,4,5},{6,7,8}}
+     * the true median of all nine values is 5, while the median of the row medians {2,4,7} is 4. A
+     * separable implementation would return 4 here -- fast, plausible, and wrong. */
+    assert_eval_eq("Part[ImageData[MedianFilter[Image[{{1.,2.,9.},{3.,4.,5.},{6.,7.,8.}}], 1]],"
+                   " 2, 2] == 5.", "True", 0);
+    /* The output of a rank filter is always one of its INPUTS -- an even window takes the lower
+     * middle rather than averaging the two, which would invent a value not present in the window. */
+    assert_eval_eq("Module[{v = Flatten[ImageData[MedianFilter["
+                   "Image[{{0.25, 0.5}, {0.75, 1.}}], 1]]], src = {0.25, 0.5, 0.75, 1.}},"
+                   " And @@ Map[MemberQ[src, #] &, v]]", "True", 0);
+}
+
+static void test_meanfilter_is_a_box_convolution(void) {
+    /* MeanFilter IS a convolution with a normalised box, and is implemented as one -- so this asserts
+     * the identity rather than a reimplementation agreeing with itself. Two implementations of one
+     * identity is how the identity quietly stops holding. */
+    assert_eval_eq("Module[{img = Image[Table[N[Mod[x*3 + y*5, 7]/7.], {y, 6}, {x, 7}]]},"
+                   " Chop[Max[Abs[Flatten[ImageData[MeanFilter[img, 1]]"
+                   " - ImageData[ImageConvolve[img, Table[1./9., {3}, {3}]]]]]]]]", "0", 0);
+    /* A constant survives a mean exactly, borders included, because the box sums to 1 and the padding
+     * replicates. */
+    assert_eval_eq("Chop[Max[Abs[Flatten[ImageData[MeanFilter["
+                   "Image[Table[0.25, {5}, {5}]], 2]]] - 0.25]]]", "0", 0);
+    /* Both rank filters bracket nothing in general, but a mean must lie between the min and the max
+     * of the image -- a weak property, and the one that fails if the kernel is not normalised. */
+    assert_eval_eq("Module[{f = Flatten[ImageData[" MIMG "]],"
+                   " m = Flatten[ImageData[MeanFilter[" MIMG ", 1]]]},"
+                   " And @@ Map[(Min[f] <= # <= Max[f]) &, m]]", "True", 0);
+    assert_eval_eq("Head[MedianFilter[" MIMG ", -1]]", "MedianFilter", 0);
+    assert_eval_eq("Head[MedianFilter[" MIMG ", 1.5]]", "MedianFilter", 0);
+    assert_eval_eq("Head[MeanFilter[{{1, 2}}, 1]]", "MeanFilter", 0);
+    assert_eval_eq("And @@ Map[MemberQ[Attributes[#], Protected] &,"
+                   " {MedianFilter, MeanFilter}]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -959,6 +1018,9 @@ int main(void) {
     TEST(test_a_u_shape_needs_the_union_find);
     TEST(test_labels_are_contiguous_in_raster_order);
     TEST(test_components_interact_with_morphology);
+    TEST(test_median_removes_an_outlier_exactly);
+    TEST(test_median_is_not_separable);
+    TEST(test_meanfilter_is_a_box_convolution);
 
     printf("All image tests passed.\n");
     return 0;

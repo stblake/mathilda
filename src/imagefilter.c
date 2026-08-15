@@ -1425,7 +1425,128 @@ static Expr* builtin_morphologicalcomponents(Expr* res) {
     return out;
 }
 
+/* ---- rank filters ---------------------------------------------------------
+ *
+ * THE MEDIAN IS THE ONE OPERATOR HERE THAT IS NOT SEPARABLE, and that is worth stating plainly after
+ * a week of leaning on separability. A sum, a maximum and a minimum all decompose: the sum over a
+ * rectangle is the sum over rows of the sums over columns, and likewise for max and min, because all
+ * three are ASSOCIATIVE and COMMUTATIVE reductions that ignore how the values are grouped. The median
+ * is not: it depends on the RANK of a value within the whole window, and grouping destroys rank
+ * information. The median of row-medians is a real filter, it is fast, and it is not the median --
+ *
+ *   {{1, 2, 9}, {3, 4, 5}, {6, 7, 8}}   true median of all nine = 5
+ *                                        row medians {2, 4, 7}, their median = 4
+ *
+ * -- so the separable version is simply wrong, and a test pins the true value on exactly that window.
+ * MeanFilter, by contrast, IS a convolution with a normalised box, and a test asserts the identity
+ * against ImageConvolve rather than reimplementing it.
+ *
+ * WHY A MEDIAN AT ALL, when a Gaussian is cheaper: a median removes an isolated outlier EXACTLY,
+ * where a Gaussian only attenuates it and smears it over the neighbourhood. On salt-and-pepper noise
+ * that is the difference between clean and merely blurred, and it is the discriminating test here --
+ * a single bright pixel in a constant field vanishes completely under the median and leaves a visible
+ * bump under the mean.
+ *
+ * Insertion sort on the window rather than a histogram or a running median. For the radii people
+ * actually use -- 1 to 3, so 9 to 49 values -- insertion sort on a small contiguous array beats both
+ * on constant factors, and it is exact and obviously correct. A histogram median is the right choice
+ * only for 8-bit data at large radii, and this works on doubles.
+ */
+static double window_median(double* buf, size_t n) {
+    /* Insertion sort, then the middle element. For even n the LOWER middle is taken rather than
+     * averaging the two: averaging would invent a value not present in the window, which for a
+     * rank filter is exactly what a caller does not want -- the point of a median is that its
+     * output is one of its inputs. Odd windows are the normal case anyway. */
+    for (size_t i = 1; i < n; i++) {
+        double v = buf[i];
+        size_t j = i;
+        while (j > 0 && buf[j - 1] > v) { buf[j] = buf[j - 1]; j--; }
+        buf[j] = v;
+    }
+    return buf[(n - 1) / 2];
+}
+
+/* MedianFilter[image, r] -- median over a (2r+1) square neighbourhood. */
+static Expr* builtin_medianfilter(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    double r = 0.0, im = 0.0;
+    if (!na_read_scalar(res->data.function.args[1], &r, &im) || im != 0.0) return NULL;
+    if (!(r >= 0.0) || r != floor(r) || r > 64.0) return NULL;
+    size_t rr = (size_t)r, k = 2 * rr + 1;
+
+    size_t w = 0, h = 0, c = 0; double* src = NULL;
+    if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) return NULL;
+    double* dst = malloc(sizeof(double) * w * h * c);
+    double* win = malloc(sizeof(double) * k * k);
+    Expr* out = NULL;
+    if (dst && win) {
+        for (size_t y = 0; y < h; y++)
+          for (size_t x = 0; x < w; x++)
+            for (size_t ch = 0; ch < c; ch++) {
+                size_t m = 0;
+                for (size_t i = 0; i < k; i++) {
+                    size_t sy = clampi((int64_t)y + (int64_t)i - (int64_t)rr, h);
+                    for (size_t j = 0; j < k; j++) {
+                        size_t sx = clampi((int64_t)x + (int64_t)j - (int64_t)rr, w);
+                        win[m++] = src[(sy * w + sx) * c + ch];
+                    }
+                }
+                dst[(y * w + x) * c + ch] = window_median(win, m);
+            }
+        out = image_build_real(dst, w, h, c);
+    }
+    free(src); free(dst); free(win);
+    return out;
+}
+
+/* MeanFilter[image, r] -- the mean over a (2r+1) square, which IS a convolution with a normalised
+ * box, so it is implemented as one rather than as a second averaging loop. Two implementations of
+ * one identity is how the identity quietly stops holding -- the same reason GaussianFilter routes
+ * through ImageConvolve. */
+static Expr* builtin_meanfilter(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    double r = 0.0, im = 0.0;
+    if (!na_read_scalar(res->data.function.args[1], &r, &im) || im != 0.0) return NULL;
+    if (!(r >= 0.0) || r != floor(r) || r > 256.0) return NULL;
+    size_t n = 2 * (size_t)r + 1;
+    double* k = malloc(sizeof(double) * n * n);
+    if (!k) return NULL;
+    double inv = 1.0 / (double)(n * n);
+    for (size_t i = 0; i < n * n; i++) k[i] = inv;
+
+    size_t w = 0, h = 0, c = 0; double* src = NULL;
+    if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) { free(k); return NULL; }
+    double* dst = malloc(sizeof(double) * w * h * c);
+    Expr* out = NULL;
+    if (dst) {
+        convolve_dispatch(src, dst, w, h, c, k, n, n);
+        out = image_build_real(dst, w, h, c);
+    }
+    free(src); free(dst); free(k);
+    return out;
+}
+
 void imagefilter_init(void) {
+    symtab_add_builtin("MedianFilter", builtin_medianfilter);
+    symtab_get_def("MedianFilter")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("MedianFilter",
+        "MedianFilter[image, r] replaces each pixel with the median over a (2r+1) x (2r+1) "
+        "neighbourhood. Unlike a Gaussian it removes an isolated outlier EXACTLY rather than "
+        "attenuating and smearing it, which is what makes it the filter for salt-and-pepper noise. "
+        "It is also the one filter here that is NOT separable: a sum, a maximum and a minimum all "
+        "decompose because they ignore grouping, but a median depends on a value's rank within the "
+        "whole window, and grouping destroys rank -- the median of row medians of "
+        "{{1,2,9},{3,4,5},{6,7,8}} is 4 where the true median is 5. For an even window the lower "
+        "middle is taken rather than the average of the two, so the output is always one of the "
+        "inputs.");
+
+    symtab_add_builtin("MeanFilter", builtin_meanfilter);
+    symtab_get_def("MeanFilter")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("MeanFilter",
+        "MeanFilter[image, r] averages over a (2r+1) x (2r+1) neighbourhood. This IS a convolution "
+        "with a normalised box, and it is implemented as one rather than as a separate averaging "
+        "loop -- two implementations of one identity is how the identity quietly stops holding. "
+        "Being a full rectangle the kernel is separable, so it costs kw + kh rather than kw * kh.");
     symtab_add_builtin("MorphologicalComponents", builtin_morphologicalcomponents);
     symtab_get_def("MorphologicalComponents")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("MorphologicalComponents",
