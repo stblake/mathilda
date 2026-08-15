@@ -1728,3 +1728,55 @@ statistic, rather than a fast path for volumes and a slow one for planes.
 
 The median grows as the window does, which is inherent — it is the one filter here with no
 separable form. `make check-image-packing` now reports 39 (head, rank) pairs, all packed.
+
+## Binarization in a volume
+
+`Binarize` and `LocalAdaptiveBinarize` accept an `Image3D`. Both return a packed `"Bit"` volume.
+
+`Binarize[volume]` uses Otsu over the whole volume, which needs no rank awareness at all — a
+volume's histogram is a histogram, so `img_otsu` runs on the flat buffer unchanged.
+`Binarize[volume, t]` is exactly a comparison against `t`.
+
+### The 3-D window statistics reuse the box sum rather than a summed-volume table
+
+The textbook route for `LocalAdaptiveBinarize` at rank 3 is to extend the summed-area idea one
+dimension: each box sum becomes **eight lookups with alternating signs**, an inclusion–exclusion whose
+sign pattern is genuinely easy to get wrong and which produces plausible-looking output when it is.
+
+That formula is not written here. `mean3_boxsum` — three separable prefix passes, O(1) per voxel,
+already checked against the definition for `MeanFilter` — gives the window mean directly, and the mean
+of squares is the same call on the squared volume, from which the variance is `E[x²] − E[x]²`. Reusing
+a tested routine beats hand-writing an error-prone one, and it is also cheaper in memory: two
+volume-sized buffers rather than a padded table of `(D+2r+1)(H+2r+1)(W+2r+1)` doubles, which at
+64×96×128 with r = 4 would be 8.4 MB per table with two tables needed.
+
+As at rank 2, the sum-of-squares work is skipped entirely when `c2 = 0`.
+
+### Properties
+
+- Agreement with the longhand definition is **exact** whenever the threshold is moved off the window
+  mean (`{1, -0.3, 0.02}` and `{0.9, 0, 0}` both `===`).
+- Mean-only is the same boundary case as at rank 2, and confirmed to behave identically: with the
+  threshold *equal* to the window mean a voxel can tie it, and the prefix-sum mean differs from a
+  direct sum in the last bit. Two voxels of 1680 in the suite's case, and the assertion is that **every
+  disagreement is a tie**, not that the outputs match.
+- A uniform volume gives all zero; raising the offset can only turn voxels off.
+- **The discriminating test at rank 3**: a checkerboard volume under a lighting ramp along x. No single
+  number separates the tones at both ends, so a global threshold collapses one end to a single value
+  while the local form keeps the pattern at both — asserted as set membership.
+
+### Measured
+
+32 × 48 × 64 (98,304 voxels):
+
+| | Mathilda | Reference | Ratio |
+|---|---:|---:|---:|
+| `Binarize` (Otsu) | 0.096 ms | 0.59 ms (`skimage.threshold_otsu`) | **6.2× faster** |
+| `LocalAdaptiveBinarize` r = 2 | 0.562 ms | 0.59 ms (`uniform_filter` + compare) | 1.05× |
+| r = 4 | 0.529 ms | 0.61 ms | 1.15× |
+| r = 8 | 0.557 ms | 0.62 ms | 1.11× |
+| Sauvola form, r = 4 | 1.062 ms | 1.38 ms (two `uniform_filter`s) | 1.30× |
+
+Flat in the radius, as the prefix-sum construction requires. The Sauvola form costs about twice the
+mean-only one, which is the second box sum over the squared volume and is why it is skipped when
+`c2 = 0`.

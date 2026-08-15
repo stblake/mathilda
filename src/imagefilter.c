@@ -1161,6 +1161,166 @@ static Expr* bit_image_from_mask(const unsigned char* mask, size_t w, size_t h) 
  * them a radius-16 window would be 1089 taps per pixel. The tables are built through clampi, so the
  * border replicates the edge exactly as every other filter here does.
  */
+/* A greyscale VOLUME, the rank-3 counterpart of img_grey_plane. */
+static bool img3_grey_volume(Expr* img, size_t* w, size_t* h, size_t* d, double** grey) {
+    size_t ww = 0, hh = 0, dd = 0, cc = 0; double* src = NULL;
+    if (!image3d_load(img, &ww, &hh, &dd, &cc, &src)) return false;
+    size_t n = ww * hh * dd;
+    double* g = malloc(sizeof(double) * n);
+    if (!g) { free(src); return false; }
+    if (cc == 1) {
+        memcpy(g, src, sizeof(double) * n);
+    } else {
+        /* Rec. 601 luminance, the same weights img_to_grey uses, so a colour volume and a colour
+         * plane are reduced identically. */
+        for (size_t i = 0; i < n; i++) {
+            const double* px = src + i * cc;
+            g[i] = (cc >= 3) ? (0.299 * px[0] + 0.587 * px[1] + 0.114 * px[2]) : px[0];
+        }
+    }
+    free(src);
+    *w = ww; *h = hh; *d = dd; *grey = g;
+    return true;
+}
+
+/* Build an Image3D[..., "Bit"] from a 0/1 mask, packed, mirroring bit_image_from_mask. */
+static Expr* bit_image3d_from_mask(const unsigned char* mask, size_t w, size_t h, size_t d) {
+    int64_t dims[3];
+    dims[0] = (int64_t)d; dims[1] = (int64_t)h; dims[2] = (int64_t)w;
+    void* raw = NULL;
+    Expr* nd = ndbuild_open(3, dims, NDT_INT64, &raw);
+    if (nd && raw) {
+        int64_t* p = (int64_t*)raw;
+        for (size_t i = 0; i < w * h * d; i++) p[i] = mask[i] ? 1 : 0;
+        nd->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+        Expr* two[2];
+        two[0] = nd;
+        two[1] = expr_new_string("Bit");
+        if (!two[1]) { expr_free(nd); return NULL; }
+        return expr_new_function(expr_new_symbol("Image3D"), two, 2);
+    }
+    if (nd) expr_free(nd);
+    /* Below the packing threshold, nest -- the cost does not matter there and the form is valid. */
+    Expr** slices = malloc(sizeof(Expr*) * d);
+    if (!slices) return NULL;
+    for (size_t z = 0; z < d; z++) slices[z] = NULL;
+    bool ok = true;
+    for (size_t z = 0; z < d && ok; z++) {
+        Expr** rows = malloc(sizeof(Expr*) * h);
+        if (!rows) { ok = false; break; }
+        bool okr = true;
+        for (size_t y = 0; y < h; y++) {
+            Expr** cols = malloc(sizeof(Expr*) * w);
+            if (!cols) { okr = false; rows[y] = NULL; continue; }
+            for (size_t x = 0; x < w; x++)
+                cols[x] = expr_new_integer(mask[(z * h + y) * w + x] ? 1 : 0);
+            rows[y] = expr_new_function(expr_new_symbol(SYM_List), cols, w);
+            free(cols);
+            if (!rows[y]) okr = false;
+        }
+        if (okr) slices[z] = expr_new_function(expr_new_symbol(SYM_List), rows, h);
+        else for (size_t y = 0; y < h; y++) expr_free(rows[y]);
+        free(rows);
+        if (!slices[z]) ok = false;
+    }
+    Expr* out = NULL;
+    if (ok) {
+        Expr* data = expr_new_function(expr_new_symbol(SYM_List), slices, d);
+        if (data) {
+            Expr* two[2];
+            two[0] = data;
+            two[1] = expr_new_string("Bit");
+            if (two[1]) out = expr_new_function(expr_new_symbol("Image3D"), two, 2);
+            else expr_free(data);
+        }
+    } else {
+        for (size_t z = 0; z < d; z++) expr_free(slices[z]);
+    }
+    free(slices);
+    return out;
+}
+
+/* Binarize[volume] / [volume, t] -- Otsu over the whole volume, or a stated threshold. */
+static Expr* binarize3_run(Expr* vol, const Expr* targ) {
+    size_t w = 0, h = 0, d = 0; double* g = NULL;
+    if (!img3_grey_volume(vol, &w, &h, &d, &g)) return NULL;
+    double t = 0.0;
+    if (targ) {
+        double im = 0.0;
+        if (!na_read_scalar(targ, &t, &im) || im != 0.0) { free(g); return NULL; }
+    } else if (!img_otsu(g, w * h * d, &t)) {
+        /* Otsu works on a flat buffer of unit-interval values, so it needs no rank awareness --
+         * a volume's histogram is a histogram. */
+        free(g); return NULL;
+    }
+    unsigned char* mask = malloc(w * h * d);
+    Expr* out = NULL;
+    if (mask) {
+        for (size_t i = 0; i < w * h * d; i++) mask[i] = (g[i] > t) ? 1u : 0u;
+        out = bit_image3d_from_mask(mask, w, h, d);
+    }
+    free(g); free(mask);
+    return out;
+}
+
+/* Forward declaration: mean3_boxsum lives with MeanFilter further down, and this is its first
+ * caller. Declared rather than moved, so the box-sum code stays next to the filter it was written for
+ * and the reader finds it where MeanFilter is. */
+static bool mean3_boxsum(const double* src, double* dst, size_t w, size_t h, size_t d, size_t c,
+                         size_t r);
+
+/* LocalAdaptiveBinarize[volume, r] / [volume, r, {c1, c2, c3}]
+ *
+ * THE WINDOW STATISTICS COME FROM mean3_boxsum, NOT FROM A 3-D SUMMED-VOLUME TABLE. The table is the
+ * textbook route: extend the summed-area idea one rank and each box sum is eight lookups with
+ * alternating signs, an inclusion-exclusion whose sign pattern is genuinely easy to get wrong and
+ * which produces plausible-looking output when it is. But mean3_boxsum already computes a box MEAN in
+ * O(1) per voxel by three separable prefix passes, it is already tested against the definition, and
+ * the mean of squares is the same call on the squared volume -- from which the variance is
+ * E[x^2] - E[x]^2. So the harder formula is not written at all.
+ *
+ * It is also cheaper in memory: two volume-sized scratch buffers rather than a padded table of
+ * (D+2r+1)(H+2r+1)(W+2r+1) doubles, which for a 64x96x128 volume at r = 4 would be 8.4 MB per table
+ * and two tables are needed.
+ */
+static Expr* localadapt3_run(Expr* vol, double rr, double c1, double c2, double c3) {
+    size_t r = (size_t)rr;
+    size_t w = 0, h = 0, d = 0; double* g = NULL;
+    if (!img3_grey_volume(vol, &w, &h, &d, &g)) return NULL;
+    size_t n = w * h * d;
+    bool need_sd = (c2 != 0.0);
+    double* mean = malloc(sizeof(double) * n);
+    double* sq = need_sd ? malloc(sizeof(double) * n) : NULL;
+    double* msq = need_sd ? malloc(sizeof(double) * n) : NULL;
+    unsigned char* mask = malloc(n);
+    Expr* out = NULL;
+    bool ok = mean && mask && (!need_sd || (sq && msq));
+    if (ok) {
+        if (r == 0) memcpy(mean, g, sizeof(double) * n);
+        else ok = mean3_boxsum(g, mean, w, h, d, 1, r);
+    }
+    if (ok && need_sd) {
+        for (size_t i = 0; i < n; i++) sq[i] = g[i] * g[i];
+        if (r == 0) memcpy(msq, sq, sizeof(double) * n);
+        else ok = mean3_boxsum(sq, msq, w, h, d, 1, r);
+    }
+    if (ok) {
+        for (size_t i = 0; i < n; i++) {
+            double sd = 0.0;
+            if (need_sd) {
+                /* Cancellation can put a uniform window's variance a hair below zero; it is zero, and
+                 * sqrt of it would be a NaN spreading into the comparison. */
+                double var = msq[i] - mean[i] * mean[i];
+                sd = var > 0.0 ? sqrt(var) : 0.0;
+            }
+            mask[i] = (g[i] > c1 * mean[i] + c2 * sd + c3) ? 1u : 0u;
+        }
+        out = bit_image3d_from_mask(mask, w, h, d);
+    }
+    free(g); free(mean); free(sq); free(msq); free(mask);
+    return out;
+}
+
 static Expr* builtin_localadaptivebinarize(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 2 && argc != 3) return NULL;
@@ -1181,6 +1341,9 @@ static Expr* builtin_localadaptivebinarize(Expr* res) {
             if (!na_read_scalar(cs->data.function.args[i], &v[i], &im) || im != 0.0) return NULL;
         c1 = v[0]; c2 = v[1]; c3 = v[2];
     }
+
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL))
+        return localadapt3_run(res->data.function.args[0], (double)r, c1, c2, c3);
 
     size_t w = 0, h = 0; double* g = NULL;
     if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
@@ -1234,6 +1397,9 @@ static Expr* builtin_localadaptivebinarize(Expr* res) {
 static Expr* builtin_binarize(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL))
+        return binarize3_run(res->data.function.args[0],
+                             argc == 2 ? res->data.function.args[1] : NULL);
     size_t w = 0, h = 0; double* g = NULL;
     if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
 

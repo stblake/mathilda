@@ -2086,6 +2086,82 @@ static void test_volume_median_is_a_rank_filter(void) {
                    "{{0.25}, True}", 0);
 }
 
+
+/* Volumetric binarization. */
+#define BVOL "Image3D[Table[N[Mod[z*13 + y*7 + x*3, 97]]/97, {z, 1, 10}, {y, 1, 12}, {x, 1, 14}]]"
+#define BCUBE \
+  "cl[q_, n_] := Max[1, Min[n, q]];" \
+  "cube[y_, x_, z_, r_] := Flatten[Table[dv[[cl[z + a, 10], cl[y + b, 12], cl[x + c, 14]]]," \
+  "  {a, -r, r}, {b, -r, r}, {c, -r, r}]];"
+
+static void test_volume_binarize(void) {
+    /* Typed Bit and PACKED, which check-image-packing also enforces -- asserted here too because the
+     * type and the storage are separate claims and a nested Bit volume would satisfy neither cheaply. */
+    assert_eval_eq("{ImageDimensions[Binarize[" BVOL "]], Part[Binarize[" BVOL "], 2],"
+                   " Head[Part[Binarize[" BVOL "], 1]],"
+                   " Union[Flatten[ImageData[Binarize[" BVOL "]]]]}",
+                   "{{14, 12, 10}, \"Bit\", NDArray, {0.0, 1.0}}", 0);
+    /* A stated threshold is exactly a comparison -- no Otsu, no scaling, nothing to approximate. */
+    assert_eval_eq("Module[{v = " BVOL ", dv}, dv = ImageData[v];"
+                   " ImageData[Binarize[v, 0.5]]"
+                   " === N[Table[If[dv[[z, y, x]] > 0.5, 1, 0], {z, 1, 10}, {y, 1, 12}, {x, 1, 14}]]]",
+                   "True", 0);
+}
+
+static void test_volume_local_adaptive_binarize(void) {
+    assert_eval_eq("{ImageDimensions[LocalAdaptiveBinarize[" BVOL ", 2]],"
+                   " Part[LocalAdaptiveBinarize[" BVOL ", 2], 2],"
+                   " Head[Part[LocalAdaptiveBinarize[" BVOL ", 2], 1]]}",
+                   "{{14, 12, 10}, \"Bit\", NDArray}", 0);
+    /* Against the longhand definition, EXACTLY, whenever the threshold is moved off the window mean.
+     * The window statistics come from three separable prefix passes rather than a 3-D summed-volume
+     * table: the table's box sum is an eight-term inclusion-exclusion whose sign pattern is easy to
+     * get wrong and produces plausible output when it is, and mean3_boxsum was already written and
+     * already checked. */
+    assert_eval_eq("Module[{v = " BVOL ", dv}, dv = ImageData[v];" BCUBE
+                   " ImageData[LocalAdaptiveBinarize[v, 2, {1, -0.3, 0.02}]]"
+                   " === N[Table[Module[{wi = cube[y, x, z, 2], mu, sd},"
+                   "   mu = Mean[wi]; sd = Sqrt[Max[0., Mean[wi^2] - mu^2]];"
+                   "   If[dv[[z, y, x]] > mu - 0.3 sd + 0.02, 1, 0]],"
+                   "   {z, 1, 10}, {y, 1, 12}, {x, 1, 14}]]]", "True", 0);
+    assert_eval_eq("Module[{v = " BVOL ", dv}, dv = ImageData[v];" BCUBE
+                   " ImageData[LocalAdaptiveBinarize[v, 2, {0.9, 0, 0.}]]"
+                   " === N[Table[If[dv[[z, y, x]] > 0.9 Mean[cube[y, x, z, 2]], 1, 0],"
+                   "   {z, 1, 10}, {y, 1, 12}, {x, 1, 14}]]]", "True", 0);
+    /* Mean-only is the boundary case at rank 3 exactly as at rank 2: with the threshold equal to the
+     * window mean a voxel can tie it, and the prefix-sum mean differs from a direct sum in the last
+     * bit. Two voxels of 1680 here, and the assertion is that EVERY disagreement is a tie. */
+    assert_eval_eq("Module[{v = " BVOL ", dv, mine, ref, bad}, dv = ImageData[v];" BCUBE
+                   " mine = ImageData[LocalAdaptiveBinarize[v, 2]];"
+                   " ref = N[Table[If[dv[[z, y, x]] > Mean[cube[y, x, z, 2]], 1, 0],"
+                   "   {z, 1, 10}, {y, 1, 12}, {x, 1, 14}]];"
+                   " bad = Position[mine - ref, _?(# != 0 &)];"
+                   " And @@ Table[Abs[dv[[p[[1]], p[[2]], p[[3]]]]"
+                   "   - Mean[cube[p[[2]], p[[3]], p[[1]], 2]]] < 1.*^-15, {p, bad}]]", "True", 0);
+    /* A uniform volume: the window mean IS the value, so nothing exceeds it. */
+    assert_eval_eq("Union[Flatten[ImageData[LocalAdaptiveBinarize["
+                   "Image3D[Table[0.5, {8}, {8}, {8}]], 2]]]]", "{0.0}", 0);
+    /* Raising the offset can only turn voxels off. */
+    assert_eval_eq("Module[{v = " BVOL ", n},"
+                   " n = Table[Total[Flatten[ImageData[LocalAdaptiveBinarize[v, 2, {1, 0, c}]]]],"
+                   "   {c, {0., 0.05, 0.2}}];"
+                   " And @@ Table[n[[i]] >= n[[i + 1]], {i, 1, 2}]]", "True", 0);
+}
+
+static void test_volume_local_adaptive_beats_global(void) {
+    /* THE REASON IT EXISTS, at rank 3. A checkerboard volume under a lighting ramp along x: no single
+     * number separates the two tones at both ends, so a global threshold must collapse one end to a
+     * single value while the local form keeps the pattern at both. Set membership, not a percentage. */
+    assert_eval_eq("Module[{ramp, gl, lo},"
+                   " ramp = Image3D[Table[N[(0.1 + 0.8 (x - 1)/31)"
+                   "   * If[Mod[Quotient[z - 1, 4] + Quotient[y - 1, 4] + Quotient[x - 1, 4], 2] == 0,"
+                   "        0.55, 1.]], {z, 1, 16}, {y, 1, 16}, {x, 1, 32}]];"
+                   " gl = ImageData[Binarize[ramp]]; lo = ImageData[LocalAdaptiveBinarize[ramp, 3]];"
+                   " {Length[Union[Flatten[gl[[All, All, 1 ;; 10]]]]],"
+                   "  Length[Union[Flatten[lo[[All, All, 1 ;; 10]]]]],"
+                   "  Length[Union[Flatten[lo[[All, All, -10 ;; -1]]]]]}]", "{1, 2, 2}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2189,6 +2265,9 @@ int main(void) {
     TEST(test_volume_morphology_matches_the_definition);
     TEST(test_volume_mean_and_median_match_the_definition);
     TEST(test_volume_median_is_a_rank_filter);
+    TEST(test_volume_binarize);
+    TEST(test_volume_local_adaptive_binarize);
+    TEST(test_volume_local_adaptive_beats_global);
 
     printf("All image tests passed.\n");
     return 0;
