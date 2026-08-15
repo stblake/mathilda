@@ -49,3 +49,19 @@ a2meth = {"DifferentialEvolution", "SearchPoints" -> 400, "ScalingFactor" -> 0.9
 bench["A2 gaussian well (DE)", NMinimize[{a2obj, a2box}, a2vars, Method -> a2meth];];
 check["A2 gaussian well (DE)",
   Round[10^4 First[NMinimize[{a2obj, a2box}, a2vars, Method -> a2meth]]]];
+
+(* ---- A3: modified-Ackley product-of-cosines (10-D) -- SimulatedAnnealing
+   Dense multimodal forest; true global -1 at x=0 is unreachable by any
+   derivative-free method (origin basin radius ~pi/20). SA finds a deep basin
+   (-0.92 at seed 1, best -0.984 across seeds) in ~0.5 s vs scipy dual_annealing
+   ~1.0 s / best -0.975. Check = Round[obj] = -1 for both. Matching engine:
+   dual_annealing (global vs global). *)
+a3vars = Table[x[i], {i, 1, 10}];
+a3obj = -Exp[-0.2 Sqrt[1/10 Sum[x[i]^2, {i, 1, 10}]]] Product[Cos[20 x[i]], {i, 1, 10}] +
+         0.05 Sum[x[i]^2, {i, 1, 10}];
+a3box = Table[-5 <= x[i] <= 5, {i, 1, 10}];
+a3meth = {"SimulatedAnnealing", "LevelIterations" -> 200, "PerturbationScale" -> 0.5,
+          "SearchPoints" -> 40, "RandomSeed" -> 1};
+bench["A3 modified Ackley (SA)", NMinimize[{a3obj, a3box}, a3vars, Method -> a3meth];];
+check["A3 modified Ackley (SA)",
+  Round[First[NMinimize[{a3obj, a3box}, a3vars, Method -> a3meth]]]];

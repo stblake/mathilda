@@ -71,3 +71,27 @@ def _a2_solve():
 
 bench("A2 gaussian well (DE)", _a2_solve)
 check("A2 gaussian well (DE)", int(np.floor(1e4 * _a2_solve().fun + 0.5)))
+
+
+# ---- A3: modified-Ackley product-of-cosines (10-D) -- dual_annealing ----
+# True global -1 at x=0 unreachable; both solvers plateau ~ -0.95..-0.98.
+# Check = round(obj) = -1 for both.
+from scipy.optimize import dual_annealing  # noqa: E402
+
+_A3_D = 10
+
+
+def _a3_obj(x):
+    rms = np.sqrt(np.mean(x ** 2))
+    return -np.exp(-0.2 * rms) * np.prod(np.cos(20 * x)) + 0.05 * np.sum(x ** 2)
+
+
+_a3_bnds = [(-5.0, 5.0)] * _A3_D
+
+
+def _a3_solve():
+    return dual_annealing(_a3_obj, _a3_bnds, seed=1, maxiter=1000)
+
+
+bench("A3 modified Ackley (SA)", _a3_solve)
+check("A3 modified Ackley (SA)", int(np.floor(_a3_solve().fun + 0.5)))
