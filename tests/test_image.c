@@ -770,6 +770,78 @@ static void test_volume_gaussian_and_small_volumes(void) {
     assert_eval_eq("Head[GaussianFilter[" VOL234 ", -1]]", "GaussianFilter", 0);
 }
 
+#define MIMG "Image[Table[N[Mod[x*3 + y*5, 7]/7.], {y, 7}, {x, 8}]]"
+
+static void test_morphology_ordering_chain(void) {
+    /* Erosion <= Opening <= f <= Closing <= Dilation, POINTWISE and everywhere including the
+     * border. One assertion covering four operators and their relationship to the original, which
+     * no per-operator check would catch: a wrong element centre shifts one of them off the chain
+     * while leaving each individually plausible. It holds at the border only because the padding
+     * replicates rather than zero-fills. */
+    assert_eval_eq("Module[{f = ImageData[" MIMG "], d, e, o, c},"
+                   " d = ImageData[Dilation[" MIMG ", 1]]; e = ImageData[Erosion[" MIMG ", 1]];"
+                   " o = ImageData[Opening[" MIMG ", 1]]; c = ImageData[Closing[" MIMG ", 1]];"
+                   " And @@ MapThread[#1 <= #2 <= #3 <= #4 <= #5 &,"
+                   "   Map[Flatten, {e, o, f, c, d}]]]", "True", 0);
+}
+
+static void test_morphology_duality_is_exact(void) {
+    /* Erosion[f, k] == 1 - Dilation[1 - f, k]. An EXACT identity, and it fails for a swapped
+     * min/max, a mis-centred element, or a padding rule that is not self-dual -- zero padding would
+     * break it at the border specifically, which is why replicate is used. */
+    assert_eval_eq("Module[{f = ImageData[" MIMG "], neg},"
+                   " neg = Image[Map[(1. - #) &, f, {2}]];"
+                   " Chop[Max[Abs[Flatten[ImageData[Erosion[" MIMG ", 1]]"
+                   "   - Map[(1. - #) &, ImageData[Dilation[neg, 1]], {2}]]]]]]", "0", 0);
+}
+
+static void test_opening_and_closing_are_idempotent(void) {
+    /* THE defining property of an opening, and the reason opening twice is not a sharpening loop.
+     * Exact, not approximate. A mis-composed pair -- dilate-then-erode where erode-then-dilate was
+     * meant, or a different element on the second pass -- still smooths and still looks reasonable,
+     * and fails here. */
+    assert_eval_eq("Module[{o = ImageData[Opening[" MIMG ", 1]]},"
+                   " Chop[Max[Abs[Flatten[o - ImageData[Opening[Image[o], 1]]]]]]]", "0", 0);
+    assert_eval_eq("Module[{c = ImageData[Closing[" MIMG ", 1]]},"
+                   " Chop[Max[Abs[Flatten[c - ImageData[Closing[Image[c], 1]]]]]]]", "0", 0);
+}
+
+static void test_dilating_a_point_gives_the_element(void) {
+    /* The cleanest statement of what dilation IS: a single bright voxel spreads to exactly the
+     * structuring element's footprint, so the output is the element itself. Exact pixel pattern. */
+    assert_eval_eq("ImageData[Dilation[Image[Table[If[x == 3 && y == 3, 1., 0.],"
+                   " {y, 5}, {x, 5}]], 1]]",
+                   "{{0.0, 0.0, 0.0, 0.0, 0.0}, {0.0, 1.0, 1.0, 1.0, 0.0},"
+                   " {0.0, 1.0, 1.0, 1.0, 0.0}, {0.0, 1.0, 1.0, 1.0, 0.0},"
+                   " {0.0, 0.0, 0.0, 0.0, 0.0}}", 0);
+    /* A radius of 0 is a single-pixel element, hence the identity for both operators. */
+    assert_eval_eq("ImageData[Dilation[" MIMG ", 0]] === ImageData[" MIMG "]", "True", 0);
+    assert_eval_eq("ImageData[Erosion[" MIMG ", 0]] === ImageData[" MIMG "]", "True", 0);
+}
+
+static void test_element_forms_and_declines(void) {
+    /* An integer radius and the equivalent BoxMatrix must be the SAME operation -- which is what
+     * flat morphology means: only the support enters, never the values. Both take the separable
+     * path, so this also pins that the two paths agree. */
+    assert_eval_eq("ImageData[Dilation[" MIMG ", BoxMatrix[1]]] === "
+                   "ImageData[Dilation[" MIMG ", 1]]", "True", 0);
+    /* Values are ignored, only the support: an element of 5s is the same as an element of 1s. */
+    assert_eval_eq("ImageData[Dilation[" MIMG ", {{5, 5, 5}, {5, 5, 5}, {5, 5, 5}}]] === "
+                   "ImageData[Dilation[" MIMG ", 1]]", "True", 0);
+    /* A non-rectangular element takes the direct path and must still bracket the image. */
+    assert_eval_eq("Module[{f = ImageData[" MIMG "],"
+                   " cr = ImageData[Dilation[" MIMG ", {{0,1,0},{1,1,1},{0,1,0}}]]},"
+                   " And @@ MapThread[#1 <= #2 &, {Flatten[f], Flatten[cr]}]]", "True", 0);
+    /* An all-zero element marks no neighbourhood at all, so it declines rather than returning the
+     * infinities an empty max would produce. */
+    assert_eval_eq("Head[Dilation[" MIMG ", {{0, 0}, {0, 0}}]]", "Dilation", 0);
+    assert_eval_eq("Head[Dilation[" MIMG ", -1]]", "Dilation", 0);
+    assert_eval_eq("Head[Dilation[" MIMG ", 1.5]]", "Dilation", 0);
+    assert_eval_eq("Head[Erosion[{{1, 2}}, 1]]", "Erosion", 0);
+    assert_eval_eq("And @@ Map[MemberQ[Attributes[#], Protected] &,"
+                   " {Dilation, Erosion, Opening, Closing}]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -818,6 +890,11 @@ int main(void) {
     TEST(test_volume_convolution_reflects_on_every_axis);
     TEST(test_volume_separability_equals_three_1d_passes);
     TEST(test_volume_gaussian_and_small_volumes);
+    TEST(test_morphology_ordering_chain);
+    TEST(test_morphology_duality_is_exact);
+    TEST(test_opening_and_closing_are_idempotent);
+    TEST(test_dilating_a_point_gives_the_element);
+    TEST(test_element_forms_and_declines);
 
     printf("All image tests passed.\n");
     return 0;

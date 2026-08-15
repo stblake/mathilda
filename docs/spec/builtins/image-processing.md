@@ -651,3 +651,59 @@ give — and a non-separable rank-3 kernel is confirmed to run on the direct pat
 The z axis gets its own reflection test, since the 2-D rows cannot reach it: a delta in a 3-slice
 column with a kernel varying only in z gives `{1, 2, 3}` under convolution and would give `{3, 2, 1}`
 under correlation.
+
+---
+
+# Morphology
+
+`Dilation[image, r]`, `Erosion[image, r]`, `Opening[image, r]`, `Closing[image, r]`, each also taking
+an explicit structuring element in place of the radius. Attributes: `Protected`.
+
+**Flat morphology**: only the element's **support** — its nonzero positions — enters the maximum or
+minimum, never its values. That is what keeps `Dilation[img, BoxMatrix[1]]`, `Dilation[img, 1]` and
+`Dilation[img, {{5,5,5},{5,5,5},{5,5,5}}]` the same operation, and all three are asserted equal.
+
+## The algebraic laws, and why they are the right tests
+
+Morphology has exact laws, and each fails for a *different* bug:
+
+| law | fails for |
+|---|---|
+| `Erosion[f,k] == 1 - Dilation[1-f,k]` | a swapped min/max, or a padding rule that is not self-dual |
+| `Erosion <= Opening <= f <= Closing <= Dilation` pointwise | a mis-centred element |
+| `Opening[Opening[f]] == Opening[f]` | a mis-composed pair |
+
+All three hold **exactly** (max error 0), and the ordering chain is one assertion covering four
+operators *and* their relationship to the original — something no per-operator check would catch, since
+a shifted element leaves each operator individually plausible.
+
+**Padding replicates the border**, the same rule the convolutions use, and that is what makes the laws
+hold *at the edges*. Zero padding would let a dilation at the border see black that is not there,
+breaking `Dilation >= f` on the boundary; and it is not self-dual, so duality would fail there too.
+
+The cleanest statement of what dilation *is*: a single bright pixel spreads to exactly the element's
+footprint, so the output **is** the element. A test pins that pixel pattern.
+
+## Measured, including where it loses
+
+A full rectangle is separable for max and min exactly as for a sum, giving `kw + kh` comparisons
+instead of `kw · kh`. 512×512:
+
+| radius | Mathilda | scipy `grey_dilation` |
+|---|---|---|
+| r=1 | **1.51 ms** | 2.4 ms |
+| r=4 | **2.04 ms** | 2.4 ms |
+| r=8 | 3.75 ms | **2.4 ms** |
+| r=16 | 6.52 ms | **2.3 ms** |
+| `Opening` r=2 | **2.74 ms** | 4.8 ms |
+
+**scipy's timing is flat in the radius and Mathilda's is not**, which is the whole story: scipy uses the
+van Herk–Gil-Werman algorithm, O(1) comparisons per pixel per axis *regardless of radius*, where the
+separable max here is O(kw + kh). So Mathilda is faster to about r=4–6 and scipy pulls ahead beyond it.
+The crossover was measured rather than guessed.
+
+Van Herk is the fix if large-radius morphology matters — it processes each row in chunks of the element
+width, keeping running prefix and suffix maxima, and needs three comparisons per pixel at any radius.
+It is not here because radii of 1–4 are the common case and the code that is here is far simpler; the
+honest position is that this is a known limit with a known remedy, not that the numbers are good
+everywhere.

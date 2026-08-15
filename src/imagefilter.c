@@ -1113,7 +1113,203 @@ static Expr* builtin_edgedetect(Expr* res) {
     return out;
 }
 
+/* ---- morphology ------------------------------------------------------------
+ *
+ * FLAT morphology: only the SUPPORT of the structuring element matters, not its values. Dilation is
+ * the maximum over the neighbourhood the element marks, erosion the minimum. A greyscale element
+ * (adding its values before taking the max) is a different operator and is not what Dilation[r]
+ * means anywhere; using the support keeps `Dilation[img, BoxMatrix[1]]` and `Dilation[img, 1]` the
+ * same operation, which is what a caller expects.
+ *
+ * WHY THESE FOUR ARE WORTH TESTING TOGETHER: morphology has algebraic laws, and they are exact.
+ *
+ *   duality      Erosion[f, k] == 1 - Dilation[1 - f, k]      for a symmetric k
+ *   ordering     Erosion <= Opening <= f <= Closing <= Dilation   pointwise, everywhere
+ *   idempotence  Opening[Opening[f]] == Opening[f]             and likewise Closing
+ *
+ * Idempotence is the DEFINING property of an opening: it is why "open then open again" is not a
+ * sharpening loop. Each of the three would fail for a different bug -- duality for a swapped
+ * min/max, ordering for a wrong element centre, idempotence for a mis-composed pair -- so the three
+ * together pin more than any accuracy figure could.
+ *
+ * PADDING IS REPLICATE, the same rule the convolutions use, and it is what makes the laws hold AT
+ * THE BORDER. Zero padding would let a dilation at the edge see a black neighbour that is not
+ * there, breaking `Dilation >= f` on the boundary; and it is not self-dual, so duality would fail
+ * there too. Replicate is self-dual, so both survive.
+ *
+ * A FULL RECTANGLE IS SEPARABLE FOR MAX AND MIN, exactly as it is for a sum: the maximum over a
+ * rectangle is the maximum over rows of the maxima over columns. That gives kw + kh comparisons
+ * instead of kw * kh, the same win the convolution gets, and it applies to the common case since
+ * BoxMatrix and an integer radius both give full rectangles.
+ */
+typedef enum { MORPH_DILATE, MORPH_ERODE } MorphOp;
+
+/* Support of a structuring element: 1 where nonzero. Returns false on a malformed element. */
+static bool morph_support(const Expr* e, size_t* kh, size_t* kw, unsigned char** sup,
+                          bool* full) {
+    size_t h = 0, w = 0; double* k = NULL;
+    if (!ker_load(e, &h, &w, &k)) return false;
+    unsigned char* m = malloc(h * w);
+    if (!m) { free(k); return false; }
+    bool all = true, any = false;
+    for (size_t i = 0; i < h * w; i++) {
+        m[i] = (k[i] != 0.0) ? 1 : 0;
+        if (!m[i]) all = false; else any = true;
+    }
+    free(k);
+    if (!any) { free(m); return false; }   /* an empty element has no neighbourhood */
+    *kh = h; *kw = w; *sup = m; *full = all;
+    return true;
+}
+
+static void morph_direct(const double* src, double* dst, size_t w, size_t h, size_t c,
+                         const unsigned char* sup, size_t kh, size_t kw, MorphOp op) {
+    int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
+    for (size_t y = 0; y < h; y++)
+      for (size_t x = 0; x < w; x++)
+        for (size_t ch = 0; ch < c; ch++) {
+            double acc = (op == MORPH_DILATE) ? -INFINITY : INFINITY;
+            for (size_t i = 0; i < kh; i++) {
+                size_t sy = clampi((int64_t)y + (int64_t)i - ci, h);
+                for (size_t j = 0; j < kw; j++) {
+                    if (!sup[i * kw + j]) continue;
+                    size_t sx = clampi((int64_t)x + (int64_t)j - cj, w);
+                    double v = src[(sy * w + sx) * c + ch];
+                    if (op == MORPH_DILATE) { if (v > acc) acc = v; }
+                    else                    { if (v < acc) acc = v; }
+                }
+            }
+            dst[(y * w + x) * c + ch] = acc;
+        }
+}
+
+/* Separable max/min over a full rectangle: rows then columns. */
+static void morph_separable(const double* src, double* dst, double* tmp,
+                            size_t w, size_t h, size_t c,
+                            size_t kh, size_t kw, MorphOp op) {
+    int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
+    for (size_t y = 0; y < h; y++)
+      for (size_t x = 0; x < w; x++)
+        for (size_t ch = 0; ch < c; ch++) {
+            double acc = (op == MORPH_DILATE) ? -INFINITY : INFINITY;
+            for (size_t j = 0; j < kw; j++) {
+                size_t sx = clampi((int64_t)x + (int64_t)j - cj, w);
+                double v = src[(y * w + sx) * c + ch];
+                if (op == MORPH_DILATE) { if (v > acc) acc = v; }
+                else                    { if (v < acc) acc = v; }
+            }
+            tmp[(y * w + x) * c + ch] = acc;
+        }
+    for (size_t y = 0; y < h; y++)
+      for (size_t x = 0; x < w; x++)
+        for (size_t ch = 0; ch < c; ch++) {
+            double acc = (op == MORPH_DILATE) ? -INFINITY : INFINITY;
+            for (size_t i = 0; i < kh; i++) {
+                size_t sy = clampi((int64_t)y + (int64_t)i - ci, h);
+                double v = tmp[(sy * w + x) * c + ch];
+                if (op == MORPH_DILATE) { if (v > acc) acc = v; }
+                else                    { if (v < acc) acc = v; }
+            }
+            dst[(y * w + x) * c + ch] = acc;
+        }
+}
+
+/* Run one morphological pass over a loaded buffer. */
+static void morph_run(const double* src, double* dst, size_t w, size_t h, size_t c,
+                      const unsigned char* sup, size_t kh, size_t kw, bool full, MorphOp op) {
+    if (full) {
+        double* tmp = malloc(sizeof(double) * w * h * c);
+        if (tmp) { morph_separable(src, dst, tmp, w, h, c, kh, kw, op); free(tmp); return; }
+    }
+    morph_direct(src, dst, w, h, c, sup, kh, kw, op);
+}
+
+/* Read the second argument: an integer radius (a full (2r+1) square) or an explicit element. */
+static bool morph_element(Expr* spec, size_t* kh, size_t* kw, unsigned char** sup, bool* full) {
+    double r = 0.0, im = 0.0;
+    if (na_read_scalar(spec, &r, &im) && im == 0.0) {
+        if (!(r >= 0.0) || r != floor(r) || r > 256.0) return false;
+        size_t n = 2 * (size_t)r + 1;
+        unsigned char* m = malloc(n * n);
+        if (!m) return false;
+        memset(m, 1, n * n);
+        *kh = *kw = n; *sup = m; *full = true;
+        return true;
+    }
+    return morph_support(spec, kh, kw, sup, full);
+}
+
+/* One-pass operators (Dilation, Erosion) and two-pass ones (Opening, Closing). */
+static Expr* morph_builtin(Expr* res, MorphOp first, bool two_pass) {
+    if (res->data.function.arg_count != 2) return NULL;
+    size_t kh = 0, kw = 0; unsigned char* sup = NULL; bool full = false;
+    if (!morph_element(res->data.function.args[1], &kh, &kw, &sup, &full)) return NULL;
+
+    size_t w = 0, h = 0, c = 0; double* src = NULL;
+    if (!image_load(res->data.function.args[0], &w, &h, &c, &src)) { free(sup); return NULL; }
+    size_t n = w * h * c;
+    double* a = malloc(sizeof(double) * n);
+    Expr* out = NULL;
+    if (a) {
+        morph_run(src, a, w, h, c, sup, kh, kw, full, first);
+        if (!two_pass) {
+            out = image_build_real(a, w, h, c);
+        } else {
+            /* Opening is erode-then-dilate, closing dilate-then-erode: the SAME element both
+             * times, which is what makes the pair idempotent. Using a different element for the
+             * second pass would still smooth, and would no longer be an opening. */
+            double* b = malloc(sizeof(double) * n);
+            if (b) {
+                MorphOp second = (first == MORPH_ERODE) ? MORPH_DILATE : MORPH_ERODE;
+                morph_run(a, b, w, h, c, sup, kh, kw, full, second);
+                out = image_build_real(b, w, h, c);
+                free(b);
+            }
+        }
+    }
+    free(src); free(a); free(sup);
+    return out;
+}
+
+static Expr* builtin_dilation(Expr* res) { return morph_builtin(res, MORPH_DILATE, false); }
+static Expr* builtin_erosion(Expr* res)  { return morph_builtin(res, MORPH_ERODE,  false); }
+static Expr* builtin_opening(Expr* res)  { return morph_builtin(res, MORPH_ERODE,  true);  }
+static Expr* builtin_closing(Expr* res)  { return morph_builtin(res, MORPH_DILATE, true);  }
+
 void imagefilter_init(void) {
+    symtab_add_builtin("Dilation", builtin_dilation);
+    symtab_get_def("Dilation")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Dilation",
+        "Dilation[image, r] gives the maximum over a (2r+1) x (2r+1) square neighbourhood; "
+        "Dilation[image, elem] uses the SUPPORT of the matrix elem -- its nonzero positions -- as "
+        "the neighbourhood. This is flat morphology: the element's values do not enter the "
+        "maximum, which is what keeps Dilation[img, BoxMatrix[1]] and Dilation[img, 1] the same "
+        "operation. Padding replicates the border, the same rule the convolutions use, which is "
+        "what makes Dilation >= image hold at the edges too. A full rectangle is separable for the "
+        "maximum exactly as for a sum, so it costs kw + kh comparisons rather than kw * kh.");
+
+    symtab_add_builtin("Erosion", builtin_erosion);
+    symtab_get_def("Erosion")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Erosion",
+        "Erosion[image, r] gives the minimum over a (2r+1) x (2r+1) square neighbourhood; "
+        "Erosion[image, elem] uses the support of elem. Dual to Dilation: for a symmetric element, "
+        "Erosion[f, k] equals 1 - Dilation[1 - f, k] exactly, which holds at the border only "
+        "because the replicate padding is itself self-dual.");
+
+    symtab_add_builtin("Opening", builtin_opening);
+    symtab_get_def("Opening")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Opening",
+        "Opening[image, r] erodes then dilates with the same element, removing bright features "
+        "smaller than it while leaving larger ones close to their original size. IDEMPOTENT: "
+        "Opening[Opening[f]] equals Opening[f], which is the defining property and the reason "
+        "opening twice is not a sharpening loop.");
+
+    symtab_add_builtin("Closing", builtin_closing);
+    symtab_get_def("Closing")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Closing",
+        "Closing[image, r] dilates then erodes with the same element, filling dark features "
+        "smaller than it. Idempotent, like Opening, and the two bracket the image: "
+        "Erosion <= Opening <= image <= Closing <= Dilation pointwise everywhere.");
     symtab_add_builtin("EdgeDetect", builtin_edgedetect);
     symtab_get_def("EdgeDetect")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("EdgeDetect",
