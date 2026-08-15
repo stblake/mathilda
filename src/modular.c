@@ -95,7 +95,7 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
                 if (it->type == EXPR_FUNCTION
                     && it->data.function.head->type == EXPR_SYMBOL
                     && it->data.function.head->data.symbol.name == SYM_List
-                    && it->data.function.arg_count >= 1
+                    && it->data.function.arg_count >= 2   /* {n} is a count, binds nothing */
                     && it->data.function.args[0]->type == EXPR_SYMBOL) {
                     shadow_buf[nshadow++] = it->data.function.args[0]->data.symbol.name;
                 }
@@ -150,10 +150,13 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
                 new_args[i] = substitute_scoping(e->data.function.args[i], filtered_env);
             } else {
                 Expr* it = e->data.function.args[i];
+                // A length-1 spec {n} is an iteration COUNT, not a binding: `n`
+                // must be substituted (With[{n=3}, Table[x, {n}]] -> {x,x,x}).
+                // Only {i, lim, ...} (length >= 2) binds `i` as an iterator var.
                 if (it->type == EXPR_FUNCTION
                     && it->data.function.head->type == EXPR_SYMBOL
                     && it->data.function.head->data.symbol.name == SYM_List
-                    && it->data.function.arg_count >= 1
+                    && it->data.function.arg_count >= 2
                     && it->data.function.args[0]->type == EXPR_SYMBOL) {
                     size_t na = it->data.function.arg_count;
                     Expr** nb = malloc(sizeof(Expr*) * na);
