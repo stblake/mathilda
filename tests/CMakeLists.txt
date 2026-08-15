@@ -1291,6 +1291,18 @@ target_include_directories(nminimize_tests PRIVATE ../src)
 add_executable(lbfgsb_tests test_lbfgsb.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(lbfgsb_tests PRIVATE ../src)
 
+# Powell / PrincipalAxis derivative-free method of FindMinimum (same convention).
+add_executable(powell_tests test_findmin_powell.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(powell_tests PRIVATE ../src)
+
+# Nelder-Mead derivative-free method of FindMinimum (same convention).
+add_executable(neldermead_tests test_findmin_neldermead.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(neldermead_tests PRIVATE ../src)
+
+# Cross-method battery: every FindMinimum method over a shared function set.
+add_executable(findmin_methods_tests test_findmin_methods.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(findmin_methods_tests PRIVATE ../src)
+
 add_executable(fit_tests test_fit.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(fit_tests PRIVATE ../src)
 add_test(NAME fit_tests COMMAND fit_tests)

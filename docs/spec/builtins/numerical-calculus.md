@@ -1382,13 +1382,16 @@ optimising variable assignments.
 | `{x, x0, x1}` (1D)    | Brent (bracket) |
 
 Methods overridable via `Method -> "Brent" | "Newton" | "QuasiNewton"
-| "ConjugateGradient" | "LBFGSB"`.  Brent is golden-section search with
-parabolic interpolation (derivative-free), QuasiNewton is BFGS with Armijo
-backtracking line search, ConjugateGradient is Polak-Ribière+ with
-restart, Newton uses the symbolic Hessian (via repeated `D[]`) with
-modified-Cholesky safeguarding.  Gradients default to a symbolic
-gradient (`D[f, x_i]` per variable) with a central-difference fallback;
-override via `Gradient -> {dfdx1, dfdx2, ...}`.
+| "ConjugateGradient" | "LBFGSB" | "Powell" | "NelderMead"`.  Brent is
+golden-section search with parabolic interpolation (derivative-free),
+QuasiNewton is BFGS with Armijo backtracking line search, ConjugateGradient
+is Polak-Ribière+ with restart, Newton uses the symbolic Hessian (via
+repeated `D[]`) with modified-Cholesky safeguarding, and Powell and
+NelderMead are the two derivative-free multivariate methods (see below).
+The four gradient methods default to a symbolic gradient (`D[f, x_i]` per
+variable) with a central-difference fallback; override via
+`Gradient -> {dfdx1, dfdx2, ...}`.  Powell and NelderMead use no gradient
+at all.
 
 `"LBFGSB"` (aliases `"LBFGS"`, `"LimitedMemoryBFGS"`; a Mathilda extension —
 Mathematica exposes no such method name) is **limited-memory BFGS with bound
@@ -1403,6 +1406,45 @@ free variables optimise in the reduced subspace), reaching the same optima as a
 reference L-BFGS-B.  General (non-box) constraints route through the same
 augmented-Lagrangian wrapper as the other methods.  References: Byrd, Lu,
 Nocedal & Zhu 1995, with the Morales–Nocedal 2011 correction.
+
+`"Powell"` (alias `"PrincipalAxis"`, Mathematica's name for the same
+derivative-free conjugate-direction family) minimises **using function
+values only** — no gradient, analytic or finite-difference — so it is the
+method for non-smooth, noisy, or black-box objectives the gradient methods
+cannot handle.  Each cycle does a 1-D minimisation (the same Brent
+parabolic-interpolation line search as `"Brent"`, restricted to
+`phi(t) = f(p + t d)`) along each of `n` directions, then replaces the
+direction of largest decrease with the averaged cycle step when Powell's
+parabolic test accepts it — building up conjugate directions so that
+successive cycles converge super-linearly on smooth quadratics.  The
+replace-direction test, direction cycling, and extrapolated point match
+SciPy's `minimize(method="Powell")`, so the two agree on the minimiser to
+rounding.  **Box bounds** are honoured by clamping each line search to the
+feasible `t`-interval (SciPy added bounded Powell in 1.5); general
+(non-box) constraints are **not** supported — they emit `FindMinimum::nimpl`
+(SciPy's Powell has no constrained form either).  The objective still rides
+the compiled fast path at `MachinePrecision` (Powell, value-only across
+thousands of evaluations, is its single biggest beneficiary);
+`WorkingPrecision > MachinePrecision` falls back to `QuasiNewton` with a
+diagnostic.  `n == 1` delegates to the exact `"Brent"` path.  Reference:
+Powell 1964; Press et al., *Numerical Recipes*, §10.5.
+
+`"NelderMead"` is the Nelder & Mead (1965) **downhill simplex**: `n+1`
+vertices reflected, expanded, contracted and shrunk toward the best, using
+function values only.  It is the LOCAL simplex from a single start (matching
+SciPy's `minimize(method="Nelder-Mead")`), distinct from the restarted,
+box-sampling simplex the global `NMinimize` driver uses.  Standard
+non-adaptive coefficients `rho/chi/psi/sigma = 1/2/0.5/0.5` (SciPy's
+default), initial simplex perturbing each coordinate by 5% (or `0.00025` for
+a zero coordinate), so the two agree on the minimiser.  Like Powell it is
+derivative-free, rides the compiled objective at `MachinePrecision`, honours
+box bounds by projecting every candidate vertex, rejects general
+constraints (`FindMinimum::nimpl`), falls back to `QuasiNewton` above
+machine precision, and delegates `n == 1` to `"Brent"`.  Nelder-Mead is
+strong on **smooth** black-box objectives but famously **weak on
+non-smooth** ones -- the simplex can converge to a non-stationary point
+(McKinnon 1998) -- so `"Powell"` is the better derivative-free choice for a
+non-smooth objective.  Reference: Nelder & Mead 1965.
 
 ### Constraints
 
@@ -1443,7 +1485,7 @@ constraint tolerance (1e-12).
 
 | Option              | Default        | Effect |
 |---------------------|----------------|--------|
-| `Method`            | `Automatic`    | `"Brent"`, `"QuasiNewton"`, `"ConjugateGradient"`, `"Newton"`, or `Automatic`. |
+| `Method`            | `Automatic`    | `"Brent"`, `"QuasiNewton"`, `"ConjugateGradient"`, `"Newton"`, `"LBFGSB"`, `"Powell"` (alias `"PrincipalAxis"`), `"NelderMead"`, or `Automatic`. |
 | `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a digit count (>= ~16 routes through MPFR).  Lifts the 1D `Brent` and n-D `QuasiNewton` iterations into MPFR at the requested precision so the result `{f_min, {x -> ...}}` carries MPFR leaves with that many digits.  Explicit `Method -> "Newton"` or `"ConjugateGradient"` at MPFR currently falls back to `QuasiNewton` with a `FindMinimum::nimpl` diagnostic; general (non-box) constraints at MPFR fall back to machine precision similarly. |
 | `MaxIterations`     | `500`          | Iteration limit on the inner loop. |
 | `AccuracyGoal`      | `Automatic`    | Digit count `n` ⇒ stop when `\|grad\| < 10^{-n}`. `Infinity` disables. `Automatic` resolves to `WorkingPrecision/2`. |
