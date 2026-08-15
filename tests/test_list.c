@@ -1028,14 +1028,19 @@ void test_nearest() {
          * Numericalizing it (as RankedMin's ranked_numeric_key would) is a
          * deliberate follow-up, not current behaviour. */
         {"Nearest[{Pi, 4}, 3]", "Nearest[{Pi, 4}, 3]"},
-        /* A rational with a BIGINT component declines, for a reason that is
-         * not Nearest's: builtin_abs does not evaluate one, so the distance
-         * comes back as an unevaluated Abs[...] and the numeric gate rejects
-         * it. Abs[1/1000] is 1/1000 but Abs[1/10^25] is Abs[1/10^25], and
-         * Sign has the same gap. Pinned here so this row flips the day
-         * builtin_abs is fixed, rather than the limitation going unnoticed. */
-        {"Nearest[{1/10^25, 1}, 0]",
-         "Nearest[{1/10000000000000000000000000, 1}, 0]"},
+        /* A rational with a BIGINT component used to decline, for a reason
+         * that was not Nearest's: builtin_abs did not evaluate one, so the
+         * distance came back as an unevaluated Abs[...] and the numeric gate
+         * rejected it. This row was pinned in the declining state precisely so
+         * that it would flip the day builtin_abs was fixed rather than the
+         * limitation going unnoticed -- and it has: Abs[1/10^25] now evaluates
+         * to 1/10^25, so the distance is a real and the gate admits it.
+         *
+         * The row is kept, now pinning the answer instead of the refusal,
+         * because that is what it was always guarding: 1/10^25 is nearer to 0
+         * than 1 is, and it is returned EXACTLY, with no degradation to a
+         * double along the way. */
+        {"Nearest[{1/10^25, 1}, 0]", "{1/10000000000000000000000000}"},
 
         /* MIXED EXACT / INEXACT DISTANCES are compared as exact rationals,
          * not by subtracting. Subtraction widens the pair to a double and
