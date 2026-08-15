@@ -115,3 +115,19 @@ a6meth = {"RandomSearch", "Method" -> "InteriorPoint", "SearchPoints" -> 1, "Ran
 bench["A6 risk parity (RS)", NMinimize[{a6obj, a6cons}, a6w, Method -> a6meth];];
 check["A6 risk parity (RS)",
   Round[10^4 Min[a6w /. Last[NMinimize[{a6obj, a6cons}, a6w, Method -> a6meth]]]]];
+
+(* ---- A7: VWAP execution tracking (T=20) -- NelderMead + QuasiNewton
+   min Σ(v_t-target_t)² s.t. Σv=1, v≥0, nonlinear impact budget Σ0.5 v²e^v ≤ B.
+   Convex. The user's B=0.01 is INFEASIBLE (min impact 0.02628); B=0.027 binds
+   (between the uniform min and target impact 0.02775), optimum 0.000224628.
+   Convex ⇒ SearchPoints 1 + MaxIterations 100 (not 5000 with 20 restarts):
+   ~0.08 s. Check = Round[10^6 obj] = 225. Matching character: local -> minimize. *)
+a7tp = Table[0.05 + 0.04 Cos[Pi (t - 10)/10]^4, {t, 1, 20}]; a7tp = a7tp/Total[a7tp];
+a7v = Array[trade, 20];
+a7te = Sum[(a7v[[t]] - a7tp[[t]])^2, {t, 1, 20}];
+a7ic = Sum[0.5 a7v[[t]]^2 Exp[a7v[[t]]], {t, 1, 20}];
+a7cons = Join[{Total[a7v] == 1}, {a7ic <= 0.027}, Table[a7v[[t]] >= 0, {t, 1, 20}]];
+a7meth = {"NelderMead", "PostProcess" -> "QuasiNewton", "SearchPoints" -> 1, "RandomSeed" -> 1};
+bench["A7 vwap tracking (NM)", NMinimize[{a7te, a7cons}, a7v, Method -> a7meth, MaxIterations -> 100];];
+check["A7 vwap tracking (NM)",
+  Round[10^6 First[NMinimize[{a7te, a7cons}, a7v, Method -> a7meth, MaxIterations -> 100]]]];

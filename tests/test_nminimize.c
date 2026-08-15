@@ -1155,6 +1155,36 @@ static void test_risk_parity(void) {
         "  (Max[rcv] - Min[rcv]) < 1*^-4]");
 }
 
+static void test_vwap_tracking(void) {
+    /* A7: VWAP execution tracking, T=20 — minimize the tracking error
+     * Σ(v_t-target_t)² against an intraday volume profile, subject to Σv=1
+     * (execute the whole order), v≥0, and a NONLINEAR impact-cost budget
+     * Σ0.5·v_t²·Exp[v_t] ≤ B. Quadratic objective + convex constraint + linear
+     * equality = a CONVEX program, unique optimum. The user's B=0.01 is
+     * INFEASIBLE — the minimum achievable impact (at the uniform schedule) is
+     * 0.02628, so no schedule with Σv=1 can meet 0.01. Set B=0.027, which lies
+     * between the uniform minimum and the target's own impact (0.02775): the
+     * budget genuinely BINDS, pulling the schedule off the target to
+     * trackingError 0.000224628 (verified against scipy SLSQP). Convex ⇒ one
+     * simplex (SearchPoints -> 1) + the QuasiNewton/AL polish reaches it, so
+     * MaxIterations 100 suffices where the user's 5000 with the default 20
+     * restarts spent ~3.9 s for the same answer (~0.08 s here). Asserts the
+     * optimum, Σv=1, the active impact budget, and non-negativity. */
+    check_true(
+        "Module[{T = 20, tp, v, te, ic, cons, r, o, sol, vv},"
+        " tp = Table[0.05 + 0.04 Cos[Pi (t - T/2)/(T/2)]^4, {t, 1, T}]; tp = tp/Total[tp];"
+        " v = Array[trade, T];"
+        " te = Sum[(v[[t]] - tp[[t]])^2, {t, 1, T}];"
+        " ic = Sum[0.5 v[[t]]^2 Exp[v[[t]]], {t, 1, T}];"
+        " cons = Join[{Total[v] == 1}, {ic <= 0.027}, Table[v[[t]] >= 0, {t, 1, T}]];"
+        " r = NMinimize[{te, cons}, v,"
+        "   Method -> {\"NelderMead\", \"PostProcess\" -> \"QuasiNewton\","
+        "              \"SearchPoints\" -> 1, \"RandomSeed\" -> 1}, MaxIterations -> 100];"
+        " o = First[r]; sol = Last[r]; vv = v /. sol;"
+        " Abs[o - 0.000224628] < 1*^-5 && Abs[Total[vv] - 1] < 1*^-5 &&"
+        "  (Sum[0.5 vv[[t]]^2 Exp[vv[[t]]], {t, 1, T}]) <= 0.027001 && Min[vv] >= -1*^-6]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1259,6 +1289,7 @@ int main(void) {
     TEST(test_minimax_chebyshev);
     TEST(test_optimal_liquidation);
     TEST(test_risk_parity);
+    TEST(test_vwap_tracking);
 
     printf("All NMinimize tests passed.\n");
     return 0;

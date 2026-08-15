@@ -190,3 +190,33 @@ def _a6_solve():
 
 bench("A6 risk parity (RS)", _a6_solve)
 check("A6 risk parity (RS)", int(np.floor(1e4 * _a6_solve().x.min() + 0.5)))
+
+
+# ---- A7: VWAP execution tracking (T=20) -- SLSQP (convex, local) ----
+# Impact budget B=0.027 binds; optimum 0.000224628. Check = Round[10^6 obj].
+_A7_T = 20
+_A7_TP = np.array([0.05 + 0.04 * np.cos(np.pi * (t - _A7_T / 2) / (_A7_T / 2)) ** 4
+                   for t in range(1, _A7_T + 1)])
+_A7_TP = _A7_TP / _A7_TP.sum()
+
+
+def _a7_te(v):
+    return np.sum((v - _A7_TP) ** 2)
+
+
+def _a7_ic(v):
+    return np.sum(0.5 * v ** 2 * np.exp(v))
+
+
+_a7_cons = [{'type': 'eq', 'fun': lambda v: v.sum() - 1},
+            {'type': 'ineq', 'fun': lambda v: 0.027 - _a7_ic(v)}]
+_a7_bnds = [(0, 1)] * _A7_T
+
+
+def _a7_solve():
+    return minimize(_a7_te, _A7_TP.copy(), method='SLSQP', bounds=_a7_bnds,
+                    constraints=_a7_cons, options=dict(maxiter=500, ftol=1e-14))
+
+
+bench("A7 vwap tracking (NM)", _a7_solve)
+check("A7 vwap tracking (NM)", int(np.floor(1e6 * _a7_solve().fun + 0.5)))
