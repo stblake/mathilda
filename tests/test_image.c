@@ -1590,6 +1590,65 @@ static void test_fft_convolution_across_channels(void) {
                    " ImageData[ImageConvolve[img, {{1}}]] === ImageData[img]]", "True", 0);
 }
 
+
+/* The rank-3 transform. It matters more than the planar one: a kd*kh*kw kernel is CUBIC in the
+ * radius, so 9x9x9 is 729 taps per voxel where 9x9 is 81 per pixel. */
+#define F3VOL "Image3D[Table[N[Mod[z*13 + y*7 + x*3, 97]]/97, {z, 1, 10}, {y, 1, 12}, {x, 1, 14}]]"
+#define F3REF \
+  "cl[a_, n_] := Max[1, Min[n, a]];" \
+  "refOf[kk_, kd_, kh_, kw_] := Module[{cz = Floor[kd/2], cy = Floor[kh/2], cx = Floor[kw/2]}," \
+  " Table[Sum[dd[[cl[z - m + cz, 10], cl[y - i + cy, 12], cl[x - j + cx, 14]]]" \
+  "           * kk[[m + 1, i + 1, j + 1]]," \
+  "       {m, 0, kd - 1}, {i, 0, kh - 1}, {j, 0, kw - 1}], {z, 1, 10}, {y, 1, 12}, {x, 1, 14}]];" \
+  "mk[a_, b_, cc_] := Table[N[Mod[m*5 + i*3 + j*2, 11]] - 5, {m, 1, a}, {i, 1, b}, {j, 1, cc}];"
+
+static void test_volume_fft_convolution_agrees_with_the_definition(void) {
+    /* Straddling the crossover, which at rank 3 sits at 3x3x3: that size stays dense (the two paths
+     * measured equal there, so staying dense avoids the transform's scratch memory) and 5x5x5 up take
+     * the transform. Both must answer the same question. */
+    assert_eval_eq("Module[{dd = ImageData[" F3VOL "], k}," F3REF
+                   " Max[Table[k = mk[n, n, n];"
+                   "   Max[Abs[Flatten[ImageData[ImageConvolve[" F3VOL ", k]]"
+                   "                   - refOf[k, n, n, n]]]], {n, {3, 5, 7}}]] < 1.*^-12]",
+                   "True", 0);
+    /* NON-CUBIC extents with all three axes distinct, in both orderings. The transform has a
+     * different length on each axis, so a transposed pad or a transposed output window is the bug
+     * that a cubic kernel could never reveal -- and the volumetric paths in this file have twice
+     * shipped exactly that class of mistake. */
+    assert_eval_eq("Module[{dd = ImageData[" F3VOL "], k}," F3REF
+                   " k = mk[3, 4, 5];"
+                   " Max[Abs[Flatten[ImageData[ImageConvolve[" F3VOL ", k]]"
+                   "                 - refOf[k, 3, 4, 5]]]] < 1.*^-12]", "True", 0);
+    assert_eval_eq("Module[{dd = ImageData[" F3VOL "], k}," F3REF
+                   " k = mk[5, 4, 3];"
+                   " Max[Abs[Flatten[ImageData[ImageConvolve[" F3VOL ", k]]"
+                   "                 - refOf[k, 5, 4, 3]]]] < 1.*^-12]", "True", 0);
+    /* EVEN extents on every axis, where Floor[k/2] is off-centre and the pad offset must follow. */
+    assert_eval_eq("Module[{dd = ImageData[" F3VOL "], k}," F3REF
+                   " k = mk[4, 4, 4];"
+                   " Max[Abs[Flatten[ImageData[ImageConvolve[" F3VOL ", k]]"
+                   "                 - refOf[k, 4, 4, 4]]]] < 1.*^-12]", "True", 0);
+}
+
+static void test_volume_fft_convolution_across_channels(void) {
+    /* A colour VOLUME. The kernel transform is hoisted out of the channel loop here too, so a stale
+     * reused buffer would show as identical channels. */
+    assert_eval_eq("Module[{cv, k, o},"
+                   " cv = Image3D[Table[N[Mod[z*13 + y*7 + x*3 + ch*29, 97]]/97,"
+                   "   {z, 1, 6}, {y, 1, 8}, {x, 1, 10}, {ch, 1, 3}]];"
+                   " k = Table[N[Mod[m*5 + i*3 + j*2, 11]] - 5, {m, 1, 5}, {i, 1, 5}, {j, 1, 5}];"
+                   " o = ImageData[ImageConvolve[cv, k]];"
+                   " {Dimensions[o], o[[1, 1, 1, 1]] != o[[1, 1, 1, 2]],"
+                   "  o[[1, 1, 1, 2]] != o[[1, 1, 1, 3]]}]", "{{6, 8, 10, 3}, True, True}", 0);
+    /* A separable volumetric kernel still takes the factorisation, which beats any transform:
+     * kd + kh + kw taps against a transform of the whole padded extent. */
+    assert_eval_eq("Module[{v = " F3VOL ", u, k, o},"
+                   " u = Table[N[i], {i, 1, 5}];"
+                   " k = Table[u[[m]] u[[i]] u[[j]], {m, 1, 5}, {i, 1, 5}, {j, 1, 5}];"
+                   " o = ImageData[ImageConvolve[v, k]];"
+                   " Dimensions[o]]", "{10, 12, 14}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1675,6 +1734,8 @@ int main(void) {
     TEST(test_ncc_degenerate_and_invariant);
     TEST(test_fft_convolution_agrees_with_the_definition);
     TEST(test_fft_convolution_across_channels);
+    TEST(test_volume_fft_convolution_agrees_with_the_definition);
+    TEST(test_volume_fft_convolution_across_channels);
 
     printf("All image tests passed.\n");
     return 0;

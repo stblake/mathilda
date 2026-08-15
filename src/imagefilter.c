@@ -496,6 +496,97 @@ static void convolve3_direct(const double* src, double* dst,
 }
 
 /* Convolve a volume, separably when the kernel allows. Returns the built Image3D or NULL. */
+#ifdef USE_FFTW
+/* The rank-3 transform. Same construction as the planar one -- replicated pad, no kernel flip, output
+ * read out of a shifted window -- and it matters more here, because a kd*kh*kw kernel is CUBIC in the
+ * radius where the planar one is quadratic. A 9x9x9 kernel is 729 taps per voxel.
+ *
+ * Memory is the thing to know about: the transform runs over the padded, smoothed extent, so a
+ * 64x96x128 volume with a 9^3 kernel transforms 72x108x144 and needs roughly 36 MB of scratch across
+ * the two real and two complex buffers. That is why the cost model has to be right rather than
+ * generous -- an unnecessary transform here costs memory as well as time. */
+static bool convolve3_fft(const double* src, double* dst, size_t w, size_t h, size_t d, size_t c,
+                          const double* k, size_t kd, size_t kh, size_t kw) {
+    int64_t cz = (int64_t)(kd / 2), cy = (int64_t)(kh / 2), cx = (int64_t)(kw / 2);
+    size_t PD = d + kd - 1, PH = h + kh - 1, PW = w + kw - 1;
+    size_t ND = fft_smooth(PD), NH = fft_smooth(PH), NW = fft_smooth(PW);
+    size_t NC = NW / 2 + 1;
+    size_t nreal = ND * NH * NW, ncplx = ND * NH * NC;
+    double scale = 1.0 / (double)nreal;
+
+    double* rbuf = fftw_malloc(sizeof(double) * nreal);
+    double* kbuf = fftw_malloc(sizeof(double) * nreal);
+    fftw_complex* F = fftw_malloc(sizeof(fftw_complex) * ncplx);
+    fftw_complex* G = fftw_malloc(sizeof(fftw_complex) * ncplx);
+    if (!rbuf || !kbuf || !F || !G) {
+        fftw_free(rbuf); fftw_free(kbuf); fftw_free(F); fftw_free(G);
+        return false;
+    }
+    int nn[3]; nn[0] = (int)ND; nn[1] = (int)NH; nn[2] = (int)NW;
+    fftw_plan pf = fftw_plan_dft_r2c(3, nn, rbuf, F, FFTW_ESTIMATE);
+    fftw_plan pk = fftw_plan_dft_r2c(3, nn, kbuf, G, FFTW_ESTIMATE);
+    fftw_plan pb = fftw_plan_dft_c2r(3, nn, F, rbuf, FFTW_ESTIMATE);
+    if (!pf || !pk || !pb) {
+        if (pf) fftw_destroy_plan(pf);
+        if (pk) fftw_destroy_plan(pk);
+        if (pb) fftw_destroy_plan(pb);
+        fftw_free(rbuf); fftw_free(kbuf); fftw_free(F); fftw_free(G);
+        return false;
+    }
+
+    memset(kbuf, 0, sizeof(double) * nreal);
+    for (size_t m = 0; m < kd; m++)
+        for (size_t i = 0; i < kh; i++)
+            for (size_t j = 0; j < kw; j++)
+                kbuf[(m * NH + i) * NW + j] = k[(m * kh + i) * kw + j];
+    fftw_execute(pk);
+
+    size_t plane = w * h * c;
+    for (size_t ch = 0; ch < c; ch++) {
+        memset(rbuf, 0, sizeof(double) * nreal);
+        for (size_t z = 0; z < PD; z++) {
+            size_t sz = clampi((int64_t)z - (int64_t)(kd - 1) + cz, d);
+            for (size_t y = 0; y < PH; y++) {
+                size_t sy = clampi((int64_t)y - (int64_t)(kh - 1) + cy, h);
+                for (size_t x = 0; x < PW; x++) {
+                    size_t sx = clampi((int64_t)x - (int64_t)(kw - 1) + cx, w);
+                    rbuf[(z * NH + y) * NW + x] = src[sz * plane + (sy * w + sx) * c + ch];
+                }
+            }
+        }
+        fftw_execute(pf);
+        for (size_t i = 0; i < ncplx; i++) {
+            double ar = F[i][0], ai = F[i][1], br = G[i][0], bi = G[i][1];
+            F[i][0] = ar * br - ai * bi;
+            F[i][1] = ar * bi + ai * br;
+        }
+        fftw_execute(pb);
+        for (size_t z = 0; z < d; z++)
+            for (size_t y = 0; y < h; y++)
+                for (size_t x = 0; x < w; x++)
+                    dst[z * plane + (y * w + x) * c + ch] =
+                        rbuf[((z + kd - 1) * NH + (y + kh - 1)) * NW + (x + kw - 1)] * scale;
+    }
+
+    fftw_destroy_plan(pf); fftw_destroy_plan(pk); fftw_destroy_plan(pb);
+    fftw_free(rbuf); fftw_free(kbuf); fftw_free(F); fftw_free(G);
+    return true;
+}
+
+static bool fft3_is_cheaper(size_t w, size_t h, size_t d, size_t c,
+                            size_t kd, size_t kh, size_t kw) {
+    double direct = (double)w * (double)h * (double)d * (double)c
+                  * (double)kd * (double)kh * (double)kw;
+    size_t ND = fft_smooth(d + kd - 1), NH = fft_smooth(h + kh - 1), NW = fft_smooth(w + kw - 1);
+    double N = (double)ND * (double)NH * (double)NW;
+    double lg = log2(N > 2.0 ? N : 2.0);
+    /* The same tax as rank 2: the per-point work of a transform does not depend on the rank, only on
+     * how many points there are, and the measured crossover confirmed the shared constant. */
+    double fft = FFT_TAX * (2.0 * (double)c + 1.0) * N * lg;
+    return fft < direct;
+}
+#endif /* USE_FFTW */
+
 static Expr* convolve3_run(Expr* vol, const double* k, size_t kd, size_t kh, size_t kw) {
     size_t w = 0, h = 0, d = 0, c = 0; double* src = NULL;
     if (!image3d_load(vol, &w, &h, &d, &c, &src)) return NULL;
@@ -513,6 +604,11 @@ static Expr* convolve3_run(Expr* vol, const double* k, size_t kd, size_t kh, siz
             else convolve3_direct(src, dst, w, h, d, c, k, kd, kh, kw);
             free(a); free(b);
         } else {
+#ifdef USE_FFTW
+            /* Not separable: try the transform, which is where the cubic tap count gets removed. */
+            if (!(fft3_is_cheaper(w, h, d, c, kd, kh, kw)
+                  && convolve3_fft(src, dst, w, h, d, c, k, kd, kh, kw)))
+#endif
             convolve3_direct(src, dst, w, h, d, c, k, kd, kh, kw);
         }
         out = image3d_build_real(dst, w, h, d, c);

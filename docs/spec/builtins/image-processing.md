@@ -1249,3 +1249,45 @@ a `"Real"` float64 buffer had been added to `image_load` alone, so the volumetri
 still walking every voxel through `ndt_go`'s dtype switch. That is this subsystem's most
 repeated bug in its purest form, and the measurement is what found it — the identity tests
 were all passing. Adding the same path took the pad to 0.378 ms and the crop to 0.327 ms.
+
+## Volumetric convolution through the transform
+
+The rank-3 path takes the same three-way dispatch: separable factorisation, then the
+transform when the cost model says it wins, then the dense loop. It matters more here than
+in the plane, because a `kd·kh·kw` kernel is **cubic** in the radius — 9×9×9 is 729 taps per
+voxel where 9×9 is 81 per pixel.
+
+The construction is identical to the planar one: replicate the border to
+`PD × PH × PW = (d+kd-1) × (h+kh-1) × (w+kw-1)`, round each axis up to a 5-smooth length, no
+kernel flip, and read the answer out of the window at `(z+kd-1, y+kh-1, x+kw-1)`. The
+kernel's transform is hoisted out of the channel loop.
+
+Memory is the thing to know: a 64 × 96 × 128 volume with a 9³ kernel transforms
+72 × 108 × 144 and needs roughly **36 MB** of scratch across the two real and two complex
+buffers. That is another reason the cost model has to be right rather than generous — an
+unnecessary transform costs memory as well as time.
+
+### Measured
+
+64 × 96 × 128 float64, non-separable kernels, both paths forced:
+
+| Kernel | Taps/voxel | Direct | Transform | SciPy `ndimage.convolve` |
+|--------|-----------:|-------:|----------:|-------------------------:|
+| 3³ | 27 | 11.35 ms | 11.29 ms | 7.31 ms |
+| 5³ | 125 | 58.31 ms | **10.89 ms** | 48.53 ms |
+| 7³ | 343 | 200.28 ms | **11.55 ms** | 180.27 ms |
+| 9³ | 729 | 454.83 ms | **9.53 ms** | 421.07 ms |
+
+The transform is flat at ~11 ms, so the crossover sits exactly at 3³ where the two paths
+measure equal — and the shared cost constant fitted for rank 2 puts the switch between 3³ and
+5³ with no retuning, which is what the model predicted and now what the measurement says.
+Staying dense at 3³ is the right call anyway: equal speed, and none of the scratch.
+
+Against SciPy: **4.5× faster at 5³, 15.6× at 7³, 44× at 9³**. The one remaining loss is 3³,
+at 11.3 ms against 7.31 — that is the 27-tap dense loop, where SciPy's `ndimage` has a
+specialised C kernel and this has a general one.
+
+Agreement with the definition written out longhand is ≤1.8e-14 at every size, including
+non-cubic extents in both orderings and even extents on every axis, which is where a
+transposed pad or output window would hide — a class of mistake the volumetric paths in this
+subsystem have shipped twice.
