@@ -1774,6 +1774,78 @@ static void test_corner_feature_limit_keeps_the_strongest(void) {
     assert_eval_eq("Head[ImageCorners[" CK24 ", 2, 0.05, 0, 0]]", "ImageCorners", 0);
 }
 
+
+/* Volumetric corner detection. The eigenvalue HIERARCHY is the test, and it is what distinguishes a
+ * real 3-D detector from a 2-D one applied slicewise: in three dimensions the rank of the structure
+ * tensor says what the neighbourhood holds -- 1 is a plane, 2 is an edge, 3 is a corner -- so
+ * lambda_min is exactly zero for BOTH a plane and an edge, and positive only at a corner. */
+#define V16(cond) "Image3D[Table[If[" cond ", 0., 1.], {z, 1, 16}, {y, 1, 16}, {x, 1, 16}]]"
+#define VPLANE  V16("x <= 6")
+#define VEDGE   V16("x <= 8 && y <= 8")
+#define VCORNER V16("x <= 8 && y <= 8 && z <= 8")
+#define VCK "Image3D[Table[If[Mod[Quotient[z - 1, 6] + Quotient[y - 1, 6] + Quotient[x - 1, 6], 2]" \
+            " == 0, 0., 1.], {z, 1, 24}, {y, 1, 24}, {x, 1, 24}]]"
+
+static void test_volume_corner_eigenvalue_hierarchy(void) {
+    /* Flat: exactly zero, not merely small. */
+    assert_eval_eq("Union[Flatten[ImageData[CornerFilter[Image3D[Table[0.5, {12}, {12}, {12}]]]]]]",
+                   "{0.0}", 0);
+    /* A PLANE is rank 1 and an EDGE is rank 2, so both have lambda_min = 0. A detector that fires on
+     * either has not been written for three dimensions, and a response map cannot show the
+     * difference. */
+    assert_eval_eq("Max[Flatten[ImageData[CornerFilter[" VPLANE "]]]] < 1.*^-15", "True", 0);
+    assert_eval_eq("Max[Flatten[ImageData[CornerFilter[" VEDGE "]]]] < 1.*^-15", "True", 0);
+    /* Only rank 3 responds, and it responds at the octant's corner. */
+    assert_eval_eq("Module[{rs = ImageData[CornerFilter[" VCORNER "]]},"
+                   " {Max[Flatten[rs]] > 1.*^-3, Position[rs, Max[Flatten[rs]]]}]",
+                   "{True, {{7, 7, 7}}}", 0);
+    /* The tensor is positive semi-definite, so lambda_min is never negative. */
+    assert_eval_eq("Min[Flatten[ImageData[CornerFilter[" VCK "]]]] >= 0.", "True", 0);
+    /* Harris in three dimensions subtracts k*trace^3, not trace^2: det scales as lambda^3 here, and
+     * the two terms must share a dimension or the constant means nothing. On a plane det is 0, so the
+     * response is negative. */
+    assert_eval_eq("Max[Flatten[ImageData[CornerFilter[" VPLANE ", 2, \"Harris\"]]]] <= 1.*^-18",
+                   "True", 0);
+    assert_eval_eq("ImageDimensions[CornerFilter[" VCORNER "]]", "{16, 16, 16}", 0);
+}
+
+static void test_volume_corner_axis_covariance(void) {
+    /* Swapping two axes must swap them in the response. There is no ImageRotate for volumes, so the
+     * permutation is done on the data -- the property is the same one the planar tests get from a
+     * quarter turn, and it is what catches a transposed gradient, a transposed smoothing pass, or a
+     * mis-indexed tensor entry, none of which spoil the look of the output. */
+    assert_eval_eq("Module[{v, a},"
+                   " v = Image3D[Table[N[Mod[z*13 + y*7 + x*3, 97]]/97,"
+                   "   {z, 1, 10}, {y, 1, 12}, {x, 1, 14}]];"
+                   " a = ImageData[CornerFilter[v]];"
+                   " Max[Abs[Flatten[ImageData[CornerFilter[Image3D[Transpose[ImageData[v],"
+                   "   {1, 3, 2}]]]] - Transpose[a, {1, 3, 2}]]]] < 1.*^-15]", "True", 0);
+}
+
+static void test_volume_imagecorners(void) {
+    /* One corner, found once, as a triple that indexes ImageData. */
+    assert_eval_eq("ImageCorners[" VCORNER "]", "{{7, 7, 7}}", 0);
+    /* Neither a plane nor an edge is a corner -- the same hierarchy, now in the position list. */
+    assert_eval_eq("{ImageCorners[" VPLANE "], Length[ImageCorners[" VEDGE "]]}", "{{}, 0}", 0);
+    /* A 24^3 checkerboard of 6-voxel blocks has interior corners at every multiple of 6: 3^3 of
+     * them, an exact count. */
+    assert_eval_eq("Length[ImageCorners[" VCK "]]", "27", 0);
+    assert_eval_eq("Length[First[ImageCorners[" VCK "]]]", "3", 0);
+    assert_eval_eq("Head[ImageData[" VCK "][[Sequence @@ First[ImageCorners[" VCK "]]]]]", "Real", 0);
+    /* Separation is Euclidean in three dimensions, and the same absolute property holds: no two
+     * returned positions within d. */
+    assert_eval_eq("Module[{ck = " VCK ", minD},"
+                   " minD[l_] := If[Length[l] < 2, Infinity, Min[Table["
+                   "   Sqrt[N[Total[(l[[a]] - l[[b]])^2]]], {a, 1, Length[l]}, {b, a + 1, Length[l]}]]];"
+                   " And @@ Table[minD[ImageCorners[ck, 2, 0.05, dd]] >= dd, {dd, {4., 8.}}]]",
+                   "True", 0);
+    assert_eval_eq("Length[ImageCorners[" VCK ", 2, 0.05, 0, 3]]", "3", 0);
+    assert_eval_eq("ImageCorners[" VCK ", 2, 0.05, 4.] === ImageCorners[" VCK ", 2, 0.05, 4.]",
+                   "True", 0);
+    /* The planar path is untouched by sharing the peak-finding code. */
+    assert_eval_eq("Length[ImageCorners[" CK24 "]]", "9", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1866,6 +1938,9 @@ int main(void) {
     TEST(test_corner_options_are_wired);
     TEST(test_corner_separation_is_respected);
     TEST(test_corner_feature_limit_keeps_the_strongest);
+    TEST(test_volume_corner_eigenvalue_hierarchy);
+    TEST(test_volume_corner_axis_covariance);
+    TEST(test_volume_imagecorners);
 
     printf("All image tests passed.\n");
     return 0;

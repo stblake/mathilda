@@ -1431,3 +1431,56 @@ guessed, because a silently transposed or flipped coordinate looks plausible on 
 Not quite like-for-like: scikit-image is parameterised by `sigma` where this takes an integer
 radius, and `corner_peaks` applies its own minimum-separation rule. The comparison is of the
 same work in the same shape, not of identical outputs.
+
+## Corner detection in a volume
+
+`CornerFilter` and `ImageCorners` both accept an `Image3D`. In three dimensions the structure
+tensor is symmetric 3×3, and **its rank says what the neighbourhood contains**:
+
+| rank | content | eigenvalues |
+|-----:|---------|-------------|
+| 0 | flat | all three zero |
+| 1 | a **plane** | two zero |
+| 2 | an **edge** — a line where two planes meet | one zero |
+| 3 | a **corner** | all three positive |
+
+So `λ_min` is exactly zero for a plane *and* for an edge, and positive only at a true corner.
+That hierarchy is the test: a detector that fires on a planar interface has not been written for
+three dimensions, and no inspection of a response map shows the difference. Measured: flat gives
+exactly `0.0`, a plane `< 1e-15`, an edge `9.8e-17`, and an octant corner `0.0527` at the corner
+voxel.
+
+`λ_min` comes from the closed trigonometric solution for a symmetric 3×3's eigenvalues, not an
+iteration — the characteristic polynomial is a cubic with three real roots, and a per-voxel
+iterative solver would need a convergence story. `r` is clamped into `[-1, 1]` before `acos`,
+where rounding could otherwise produce a NaN. `"Harris"` subtracts `k·trace³`, **not** `trace²`:
+`det` scales as `λ³` in three dimensions, and the two terms have to share a dimension or the
+constant `k` means nothing.
+
+Gradients are central differences taken directly on the buffer. The sign convention is
+irrelevant here — the tensor holds *products* of gradients, so flipping an axis changes nothing —
+which sidesteps the pre-flipped-stencil trap the planar derivative code documents. Smoothing is
+three 1-D passes rather than one cubic kernel: a radius-2 Gaussian is 125 taps per voxel as a
+cube and 15 as three lines, and there are six tensor entries to smooth.
+
+`ImageCorners` on a volume returns `{slice, row, column}` triples, suppresses over the 26
+neighbours, and separates in 3-D Euclidean distance. The peak-finding is **one implementation
+parameterised by depth**, shared with the planar path — a plane is depth 1, where the
+neighbourhood collapses to eight and the position to a pair. That is deliberate: the volumetric
+paths in this subsystem have twice diverged from their planar twin by exactly one dropped detail.
+
+A 24³ checkerboard of 6-voxel blocks returns exactly **27** corners (3³, at every multiple of 6);
+a plane returns `{}`; an edge returns none.
+
+### Measured
+
+32 × 48 × 64 (98,304 voxels), radius 2:
+
+| | Mathilda | scikit-image | Ratio |
+|---|---:|---:|---:|
+| λ_min response | 4.90 ms | 36.65 ms (`structure_tensor` + `structure_tensor_eigenvalues`) | **7.5× faster** |
+| Harris response | 3.69 ms | 7.67 ms (`structure_tensor` alone) | **2.1× faster than the tensor alone** |
+| positions | 4.98 ms | — | — |
+
+Harris needs no eigenvalues, which is why it is the cheaper of the two here. Not quite
+like-for-like: scikit-image is parameterised by `sigma` where this takes an integer radius.

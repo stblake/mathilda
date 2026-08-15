@@ -2462,6 +2462,172 @@ static bool corner_response(Expr* img, size_t r, bool harris,
     return true;
 }
 
+/* ---- the volumetric structure tensor --------------------------------------
+ *
+ * The same idea one rank up, and the eigenvalue hierarchy is what makes it worth having. In three
+ * dimensions M is symmetric 3x3, so its rank says what the neighbourhood contains:
+ *
+ *   rank 0   flat            all three eigenvalues zero
+ *   rank 1   a PLANE         gradient in one direction; two eigenvalues zero
+ *   rank 2   an EDGE         a line where two planes meet; one eigenvalue zero
+ *   rank 3   a CORNER        all three positive
+ *
+ * So lambda_min is exactly zero for a plane AND for an edge, and positive only at a true corner.
+ * That hierarchy is the test: a detector that fires on a planar interface has not been written for
+ * three dimensions, and a response map cannot show you the difference.
+ *
+ * Gradients are central differences taken directly on the buffer rather than through the convolution
+ * machinery. The sign convention does not matter here -- the tensor holds PRODUCTS of gradients, so
+ * flipping one axis changes nothing -- which removes the trap that the 2-D derivative stencil comment
+ * next door exists to warn about.
+ *
+ * Smoothing is applied as three 1-D passes rather than one 3-D kernel: a radius-2 Gaussian is 125
+ * taps per voxel as a cube and 15 as three lines, and there are six tensor entries to smooth.
+ */
+static void grad3_axis(const double* src, double* out, size_t w, size_t h, size_t d, int axis) {
+    for (size_t z = 0; z < d; z++)
+      for (size_t y = 0; y < h; y++)
+        for (size_t x = 0; x < w; x++) {
+            size_t zm = z, zp = z, ym = y, yp = y, xm = x, xp = x;
+            if (axis == 0) { zm = clampi((int64_t)z - 1, d); zp = clampi((int64_t)z + 1, d); }
+            if (axis == 1) { ym = clampi((int64_t)y - 1, h); yp = clampi((int64_t)y + 1, h); }
+            if (axis == 2) { xm = clampi((int64_t)x - 1, w); xp = clampi((int64_t)x + 1, w); }
+            out[(z * h + y) * w + x] = 0.5 * (src[(zp * h + yp) * w + xp]
+                                            - src[(zm * h + ym) * w + xm]);
+        }
+}
+
+/* One separable Gaussian pass along each axis, in place, using `tmp` as scratch. */
+static void smooth3_sep(double* buf, double* tmp, size_t w, size_t h, size_t d,
+                        const double* line, size_t n) {
+    int64_t c = (int64_t)(n / 2);
+    for (int axis = 0; axis < 3; axis++) {
+        for (size_t z = 0; z < d; z++)
+          for (size_t y = 0; y < h; y++)
+            for (size_t x = 0; x < w; x++) {
+                double acc = 0.0;
+                for (size_t t = 0; t < n; t++) {
+                    int64_t off = (int64_t)t - c;
+                    size_t zz = z, yy = y, xx = x;
+                    if (axis == 0) zz = clampi((int64_t)z + off, d);
+                    if (axis == 1) yy = clampi((int64_t)y + off, h);
+                    if (axis == 2) xx = clampi((int64_t)x + off, w);
+                    acc += line[t] * buf[(zz * h + yy) * w + xx];
+                }
+                tmp[(z * h + y) * w + x] = acc;
+            }
+        memcpy(buf, tmp, sizeof(double) * w * h * d);
+    }
+}
+
+/* Smallest eigenvalue of the symmetric 3x3 [[a,d,e],[d,b,f],[e,f,c]].
+ *
+ * The closed trigonometric form, not an iteration: for a 3x3 the characteristic polynomial is a cubic
+ * whose roots are all real (the matrix is symmetric), and the three-cosine solution gives them
+ * directly. An iterative solver here would run per voxel and would need a convergence story. */
+static double sym3_eig_min(double a, double b, double c, double dxy, double exz, double fyz) {
+    double p1 = dxy * dxy + exz * exz + fyz * fyz;
+    if (p1 <= 0.0) {
+        /* Already diagonal: the eigenvalues ARE the diagonal, and the cubic form would divide by a
+         * zero p below. */
+        double m = a < b ? a : b;
+        return m < c ? m : c;
+    }
+    double q = (a + b + c) / 3.0;
+    double p2 = (a - q) * (a - q) + (b - q) * (b - q) + (c - q) * (c - q) + 2.0 * p1;
+    double p = sqrt(p2 / 6.0);
+    if (!(p > 0.0)) return q;
+    /* det((M - qI)/p) / 2 */
+    double a2 = (a - q) / p, b2 = (b - q) / p, c2 = (c - q) / p;
+    double d2 = dxy / p, e2 = exz / p, f2 = fyz / p;
+    double det = a2 * (b2 * c2 - f2 * f2) - d2 * (d2 * c2 - f2 * e2) + e2 * (d2 * f2 - b2 * e2);
+    double r = det / 2.0;
+    /* Rounding can put r a hair outside [-1, 1], where acos is a NaN. */
+    if (r <= -1.0) r = -1.0; else if (r >= 1.0) r = 1.0;
+    double phi = acos(r) / 3.0;
+    /* The SMALLEST of the three roots is the one at phi + 2pi/3. */
+    return q + 2.0 * p * cos(phi + 2.0 * M_PI / 3.0);
+}
+
+static bool corner3_response(Expr* img, size_t r, bool harris,
+                             size_t* wout, size_t* hout, size_t* dout, double** out) {
+    size_t w = 0, h = 0, d = 0, c = 0; double* src = NULL;
+    if (!image3d_load(img, &w, &h, &d, &c, &src)) return false;
+    size_t n = w * h * d;
+
+    /* Luminance, as in the plane: a corner is a property of brightness, and combining per-channel
+     * scores would need an arbitrary rule. */
+    double* g = malloc(sizeof(double) * n);
+    if (!g) { free(src); return false; }
+    if (c == 1) {
+        memcpy(g, src, sizeof(double) * n);
+    } else {
+        for (size_t i = 0; i < n; i++) {
+            const double* px = src + i * c;
+            g[i] = (c >= 3) ? (0.299 * px[0] + 0.587 * px[1] + 0.114 * px[2]) : px[0];
+        }
+    }
+    free(src);
+
+    double* gz = malloc(sizeof(double) * n);
+    double* gy = malloc(sizeof(double) * n);
+    double* gx = malloc(sizeof(double) * n);
+    double* sxx = malloc(sizeof(double) * n);
+    double* syy = malloc(sizeof(double) * n);
+    double* szz = malloc(sizeof(double) * n);
+    double* sxy = malloc(sizeof(double) * n);
+    double* sxz = malloc(sizeof(double) * n);
+    double* syz = malloc(sizeof(double) * n);
+    double* tmp = malloc(sizeof(double) * n);
+    double* rsp = malloc(sizeof(double) * n);
+    size_t ln = 2 * r + 1;
+    double* line = malloc(sizeof(double) * ln);
+    bool ok = gz && gy && gx && sxx && syy && szz && sxy && sxz && syz && tmp && rsp && line;
+    if (ok) {
+        double sigma = (r > 0) ? ((double)r / 2.0) : 1.0, sum = 0.0;
+        for (size_t i = 0; i < ln; i++) {
+            double t = (double)i - (double)r;
+            line[i] = exp(-(t * t) / (2.0 * sigma * sigma));
+            sum += line[i];
+        }
+        for (size_t i = 0; i < ln; i++) line[i] /= sum;
+
+        grad3_axis(g, gz, w, h, d, 0);
+        grad3_axis(g, gy, w, h, d, 1);
+        grad3_axis(g, gx, w, h, d, 2);
+        for (size_t i = 0; i < n; i++) {
+            sxx[i] = gx[i] * gx[i]; syy[i] = gy[i] * gy[i]; szz[i] = gz[i] * gz[i];
+            sxy[i] = gx[i] * gy[i]; sxz[i] = gx[i] * gz[i]; syz[i] = gy[i] * gz[i];
+        }
+        smooth3_sep(sxx, tmp, w, h, d, line, ln);
+        smooth3_sep(syy, tmp, w, h, d, line, ln);
+        smooth3_sep(szz, tmp, w, h, d, line, ln);
+        smooth3_sep(sxy, tmp, w, h, d, line, ln);
+        smooth3_sep(sxz, tmp, w, h, d, line, ln);
+        smooth3_sep(syz, tmp, w, h, d, line, ln);
+
+        for (size_t i = 0; i < n; i++) {
+            if (harris) {
+                double tr = sxx[i] + syy[i] + szz[i];
+                double det = sxx[i] * (syy[i] * szz[i] - syz[i] * syz[i])
+                           - sxy[i] * (sxy[i] * szz[i] - syz[i] * sxz[i])
+                           + sxz[i] * (sxy[i] * syz[i] - syy[i] * sxz[i]);
+                /* trace CUBED, not squared: det scales as lambda^3 in three dimensions, and the two
+                 * terms have to have the same dimension or the constant is meaningless. */
+                rsp[i] = det - 0.04 * tr * tr * tr;
+            } else {
+                rsp[i] = sym3_eig_min(sxx[i], syy[i], szz[i], sxy[i], sxz[i], syz[i]);
+                if (rsp[i] < 0.0) rsp[i] = 0.0;    /* PSD: a negative value is rounding, not signal */
+            }
+        }
+    }
+    free(g); free(gz); free(gy); free(gx);
+    free(sxx); free(syy); free(szz); free(sxy); free(sxz); free(syz); free(tmp); free(line);
+    if (!ok) { free(rsp); return false; }
+    *wout = w; *hout = h; *dout = d; *out = rsp;
+    return true;
+}
+
 static bool corner_opts(Expr* res, size_t argc, size_t* r, bool* harris) {
     *r = 2; *harris = false;
     if (argc >= 2) {
@@ -2486,6 +2652,14 @@ static Expr* builtin_cornerfilter(Expr* res) {
     if (argc < 1 || argc > 3) return NULL;
     size_t r = 2; bool harris = false;
     if (!corner_opts(res, argc, &r, &harris)) return NULL;
+    /* A VOLUME takes the rank-3 path, dispatching on the image as every other filter here does. */
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
+        size_t w3 = 0, h3 = 0, d3 = 0; double* r3 = NULL;
+        if (!corner3_response(res->data.function.args[0], r, harris, &w3, &h3, &d3, &r3)) return NULL;
+        Expr* o = image3d_build_real(r3, w3, h3, d3, 1);
+        free(r3);
+        return o;
+    }
     size_t w = 0, h = 0; double* rsp = NULL;
     if (!corner_response(res->data.function.args[0], r, harris, &w, &h, &rsp)) return NULL;
     Expr* out = image_build_real(rsp, w, h, 1);
@@ -2521,7 +2695,7 @@ static Expr* builtin_cornerfilter(Expr* res) {
  * is a few million distance tests. A grid would make it linear and is not worth the code until a
  * measurement says so.
  */
-typedef struct { double v; size_t y, x; } CornerCand;
+typedef struct { double v; size_t z, y, x; } CornerCand;
 
 static int corner_cmp(const void* a, const void* b) {
     const CornerCand* p = (const CornerCand*)a;
@@ -2530,9 +2704,95 @@ static int corner_cmp(const void* a, const void* b) {
     if (p->v < q->v) return 1;
     /* Deterministic ties: the same image must give the same list every time, and "whichever the sort
      * happened to place first" is not a specification. */
+    if (p->z != q->z) return (p->z < q->z) ? -1 : 1;
     if (p->y != q->y) return (p->y < q->y) ? -1 : 1;
     if (p->x != q->x) return (p->x < q->x) ? -1 : 1;
     return 0;
+}
+
+/* Threshold, suppress, separate, truncate -- ONE implementation for both ranks.
+ *
+ * Parameterised by depth rather than copied, and that is deliberate: the volumetric paths in this file
+ * have twice diverged from their planar twin by exactly one dropped detail, so the peak-finding that
+ * both ranks need is written once. A plane is depth 1, where the neighbourhood collapses to the eight
+ * neighbours and the emitted position to a pair. */
+static Expr* corner_peaks_list(const double* rsp, size_t w, size_t h, size_t d,
+                               double frac, double sep, size_t maxn, bool rank3) {
+    size_t n_all = w * h * d;
+    double mx = 0.0;
+    for (size_t i = 0; i < n_all; i++) if (rsp[i] > mx) mx = rsp[i];
+    double cut = frac * mx;
+
+    size_t cap = 64, n = 0;
+    CornerCand* cand = malloc(sizeof(CornerCand) * cap);
+    if (!cand) return NULL;
+    size_t z_lo = rank3 ? 1 : 0, z_hi = rank3 ? (d >= 1 ? d - 1 : 0) : 1;
+    for (size_t z = z_lo; z < z_hi; z++)
+      for (size_t y = 1; y + 1 < h; y++)
+        for (size_t x = 1; x + 1 < w; x++) {
+          double v = rsp[(z * h + y) * w + x];
+          if (!(v > cut) || v <= 0.0) continue;
+          bool peak = true;
+          int dz_lo = rank3 ? -1 : 0, dz_hi = rank3 ? 1 : 0;
+          for (int dz = dz_lo; dz <= dz_hi && peak; dz++)
+            for (int dy = -1; dy <= 1 && peak; dy++)
+              for (int dx = -1; dx <= 1; dx++) {
+                  if (dx == 0 && dy == 0 && dz == 0) continue;
+                  /* Strictly greater than earlier neighbours and >= later ones, so a plateau of equal
+                   * values yields exactly one position instead of none. */
+                  double nv = rsp[((z + (size_t)dz) * h + (y + (size_t)dy)) * w + (x + (size_t)dx)];
+                  bool before = (dz < 0) || (dz == 0 && dy < 0) || (dz == 0 && dy == 0 && dx < 0);
+                  if (before ? (nv >= v) : (nv > v)) { peak = false; break; }
+              }
+          if (!peak) continue;
+          if (n == cap) {
+              size_t nc = cap * 2;
+              CornerCand* t2 = realloc(cand, sizeof(CornerCand) * nc);
+              if (!t2) break;
+              cand = t2; cap = nc;
+          }
+          cand[n].v = v; cand[n].z = z; cand[n].y = y; cand[n].x = x; n++;
+        }
+
+    qsort(cand, n, sizeof(CornerCand), corner_cmp);
+
+    /* Greedy separation in descending response order, on squared distance so no square root is
+     * needed and `sep` stays a plain distance to the caller. */
+    size_t keep_n = n;
+    if (sep > 0.0) {
+        double s2 = sep * sep;
+        keep_n = 0;
+        for (size_t i = 0; i < n; i++) {
+            bool ok = true;
+            for (size_t j = 0; j < keep_n; j++) {
+                double dz = (double)cand[i].z - (double)cand[j].z;
+                double dy = (double)cand[i].y - (double)cand[j].y;
+                double dx = (double)cand[i].x - (double)cand[j].x;
+                if (dz * dz + dy * dy + dx * dx < s2) { ok = false; break; }
+            }
+            if (ok) cand[keep_n++] = cand[i];
+        }
+    }
+    if (maxn > 0 && keep_n > maxn) keep_n = maxn;
+
+    Expr** items = malloc(sizeof(Expr*) * (keep_n > 0 ? keep_n : 1));
+    if (!items) { free(cand); return NULL; }
+    size_t out_n = 0;
+    for (size_t i = 0; i < keep_n; i++) {
+        Expr* pr[3];
+        size_t np = 0;
+        if (rank3) pr[np++] = expr_new_integer((int64_t)cand[i].z + 1);
+        pr[np++] = expr_new_integer((int64_t)cand[i].y + 1);
+        pr[np++] = expr_new_integer((int64_t)cand[i].x + 1);
+        bool bad = false;
+        for (size_t q = 0; q < np; q++) if (!pr[q]) bad = true;
+        if (bad) { for (size_t q = 0; q < np; q++) expr_free(pr[q]); break; }
+        items[out_n++] = expr_new_function(expr_new_symbol("List"), pr, np);
+    }
+    free(cand);
+    Expr* out = expr_new_function(expr_new_symbol("List"), items, out_n);
+    free(items);
+    return out;
 }
 
 static Expr* builtin_imagecorners(Expr* res) {
@@ -2565,77 +2825,20 @@ static Expr* builtin_imagecorners(Expr* res) {
         maxn = (size_t)n;
     }
 
+    /* A VOLUME takes the rank-3 response and emits {slice, row, column}. */
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
+        size_t w3 = 0, h3 = 0, d3 = 0; double* r3 = NULL;
+        if (!corner3_response(res->data.function.args[0], r, false, &w3, &h3, &d3, &r3)) return NULL;
+        Expr* o = corner_peaks_list(r3, w3, h3, d3, frac, sep, maxn, true);
+        free(r3);
+        return o;
+    }
     size_t w = 0, h = 0; double* rsp = NULL;
     if (!corner_response(res->data.function.args[0], r, false, &w, &h, &rsp)) return NULL;
-
-    double mx = 0.0;
-    for (size_t i = 0; i < w * h; i++) if (rsp[i] > mx) mx = rsp[i];
-    double cut = frac * mx;
-
-    size_t cap = 64, n = 0;
-    CornerCand* cand = malloc(sizeof(CornerCand) * cap);
-    if (!cand) { free(rsp); return NULL; }
-    for (size_t y = 1; y + 1 < h; y++)
-      for (size_t x = 1; x + 1 < w; x++) {
-        double v = rsp[y * w + x];
-        if (!(v > cut) || v <= 0.0) continue;
-        bool peak = true;
-        for (int dy = -1; dy <= 1 && peak; dy++)
-            for (int dx = -1; dx <= 1; dx++) {
-                if (dx == 0 && dy == 0) continue;
-                /* Strictly greater than earlier neighbours and >= later ones, so a plateau of equal
-                 * values yields exactly one position instead of none. */
-                double nv = rsp[(y + (size_t)dy) * w + (x + (size_t)dx)];
-                bool before = (dy < 0) || (dy == 0 && dx < 0);
-                if (before ? (nv >= v) : (nv > v)) { peak = false; break; }
-            }
-        if (!peak) continue;
-        if (n == cap) {
-            size_t nc = cap * 2;
-            CornerCand* t2 = realloc(cand, sizeof(CornerCand) * nc);
-            if (!t2) break;
-            cand = t2; cap = nc;
-        }
-        cand[n].v = v; cand[n].y = y; cand[n].x = x; n++;
-      }
+    Expr* out = corner_peaks_list(rsp, w, h, 1, frac, sep, maxn, false);
     free(rsp);
-
-    qsort(cand, n, sizeof(CornerCand), corner_cmp);
-
-    /* Greedy separation, in descending response order. Compared on SQUARED distance so the test needs
-     * no square root and `d` is still a plain pixel distance to the caller. */
-    size_t keep_n = n;
-    if (sep > 0.0) {
-        double s2 = sep * sep;
-        keep_n = 0;
-        for (size_t i = 0; i < n; i++) {
-            bool ok = true;
-            for (size_t j = 0; j < keep_n; j++) {
-                double dy = (double)cand[i].y - (double)cand[j].y;
-                double dx = (double)cand[i].x - (double)cand[j].x;
-                if (dy * dy + dx * dx < s2) { ok = false; break; }
-            }
-            if (ok) cand[keep_n++] = cand[i];      /* compacted in place, order preserved */
-        }
-    }
-    if (maxn > 0 && keep_n > maxn) keep_n = maxn;
-
-    Expr** items = malloc(sizeof(Expr*) * (keep_n > 0 ? keep_n : 1));
-    if (!items) { free(cand); return NULL; }
-    size_t out_n = 0;
-    for (size_t i = 0; i < keep_n; i++) {
-        Expr* pr[2];
-        pr[0] = expr_new_integer((int64_t)cand[i].y + 1);
-        pr[1] = expr_new_integer((int64_t)cand[i].x + 1);
-        if (!pr[0] || !pr[1]) { expr_free(pr[0]); expr_free(pr[1]); break; }
-        items[out_n++] = expr_new_function(expr_new_symbol("List"), pr, 2);
-    }
-    free(cand);
-    Expr* out = expr_new_function(expr_new_symbol("List"), items, out_n);
-    free(items);
     return out;
 }
-
 /* ImageCorrelate[image, kernel] / [image, template, "NormalizedCrossCorrelation"] */
 static Expr* builtin_imagecorrelate(Expr* res) {
     size_t argc = res->data.function.arg_count;
