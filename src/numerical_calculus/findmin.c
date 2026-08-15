@@ -156,6 +156,23 @@ typedef struct {
  * itself via its {Infinity, ...} result). */
 static bool g_fm_quiet = false;
 
+/* Augmented-Lagrangian multipliers for the constrained local solver. When
+ * g_fm_al_lambda is non-NULL and g_fm_al_gens matches the general-constraint
+ * array currently being minimized, fm_eval_augmented / fm_eval_aug_gradient use
+ * the PHR (Powell–Hestenes–Rockafellar) augmented-Lagrangian terms
+ *   equality  h_k:  λ_k·h_k + μ·h_k²          (always active)
+ *   ineq g_k≤0:      λ_k·g_k + μ·g_k²  if s>0, else −λ_k²/(4μ),  s = λ_k+2μ·g_k
+ * instead of the pure quadratic penalty μ·(Σmax(0,g)²+Σh²). This lets a moderate
+ * μ reach feasibility (multipliers absorb the active-constraint gradient) rather
+ * than needing μ→∞, which is ill-conditioned and strands nonlinear equalities
+ * (e.g. a bilinear pooling constraint). CRUCIAL invariant: with every λ_k == 0
+ * the AL terms are algebraically identical to the quadratic penalty, so a solve
+ * that never updates λ (g_fm_al_lambda == NULL, the historical path) is
+ * bit-for-bit unchanged. The gens-pointer identity guard keeps a nested solver
+ * call on a different constraint set from mis-indexing this array. */
+static const double* g_fm_al_lambda = NULL;
+static const FmGenCon* g_fm_al_gens = NULL;
+
 static void fm_warn(const char* fn, const char* tag, const char* fmt, ...) {
     if (g_fm_quiet) return;
     va_list ap;
@@ -1459,6 +1476,26 @@ static bool fm_eval_augmented(Expr* f, FmVarBind* binds,
                               double mu, const FmOpts* opts, double* out) {
     double fv;
     if (!fm_eval_scalar(f, binds, x, n, opts, &fv)) return false;
+    /* Augmented-Lagrangian branch: active only when multipliers are installed
+     * for exactly this constraint set (see g_fm_al_lambda). Otherwise fall
+     * through to the historical quadratic-penalty value, byte-for-byte. */
+    if (g_fm_al_lambda && gens == g_fm_al_gens && ngens > 0 && mu > 0.0) {
+        double aug = 0.0;
+        for (size_t k = 0; k < ngens; k++) {
+            double c;
+            if (!fm_eval_scalar(gens[k].expr, binds, x, n, opts, &c)) return false;
+            double lam = g_fm_al_lambda[k];
+            if (gens[k].equality) {
+                aug += lam * c + mu * c * c;
+            } else {
+                double s = lam + 2.0 * mu * c;
+                if (s > 0.0) aug += lam * c + mu * c * c;
+                else         aug += -lam * lam / (4.0 * mu);
+            }
+        }
+        *out = fv + aug;
+        return true;
+    }
     double pen;
     if (!fm_eval_penalty(gens, ngens, binds, x, n, opts, &pen)) return false;
     *out = fv + mu * pen;
@@ -1486,6 +1523,7 @@ static bool fm_eval_aug_gradient(Expr* f, Expr** g_exprs,
     }
     if (mu <= 0.0 || !gens || ngens == 0) return true;
 
+    bool use_al = (g_fm_al_lambda && gens == g_fm_al_gens);
     double* gk_grad = (double*)malloc(sizeof(double) * n);
     if (!gk_grad) return false;
     for (size_t k = 0; k < ngens; k++) {
@@ -1494,8 +1532,19 @@ static bool fm_eval_aug_gradient(Expr* f, Expr** g_exprs,
             free(gk_grad);
             return false;
         }
-        /* Active-set: inequalities contribute only when violated. */
-        if (!gens[k].equality && gk <= 0.0) continue;
+        /* Augmented-Lagrangian active value a_k, whose ∇ contribution is a_k·∇c_k.
+         * With λ_k == 0 this is exactly the quadratic-penalty coefficient
+         * 2μ·gk (equality) / 2μ·gk when gk>0 (inequality), so the non-AL path is
+         * unchanged. Inequalities contribute only when s_k = λ_k + 2μ·gk > 0. */
+        double lam = use_al ? g_fm_al_lambda[k] : 0.0;
+        double a_k;
+        if (gens[k].equality) {
+            a_k = lam + 2.0 * mu * gk;
+        } else {
+            double s = lam + 2.0 * mu * gk;
+            if (s <= 0.0) continue;
+            a_k = s;
+        }
         bool grad_ok = false;
         if (gens[k].grad_exprs) {
             grad_ok = fm_eval_gradient(gens[k].grad_exprs, binds, x, n, opts, gk_grad);
@@ -1507,8 +1556,7 @@ static bool fm_eval_aug_gradient(Expr* f, Expr** g_exprs,
             free(gk_grad);
             return false;
         }
-        double scale = 2.0 * mu * gk;
-        for (size_t i = 0; i < n; i++) g_out[i] += scale * gk_grad[i];
+        for (size_t i = 0; i < n; i++) g_out[i] += a_k * gk_grad[i];
     }
     free(gk_grad);
     return true;
@@ -2408,7 +2456,38 @@ static bool fm_run_penalty(Expr* f, Expr** vars, size_t n,
     bool feas = false;
     double* x_prev = (double*)malloc(sizeof(double) * n);
     if (!x_prev) return false;
+    /* Best FEASIBLE iterate seen across the whole μ schedule. The high-μ rounds
+     * are ill-conditioned — the augmented objective f + μ·Σpenalty is dominated
+     * by the penalty term — so for a hard constraint (e.g. a bilinear equality
+     * with large-magnitude terms) the final round can DRIFT to a point *more*
+     * infeasible than an earlier round already reached, making the polish report
+     * the infeasible sentinel on a problem that is in fact feasible (and making
+     * a larger MaxIterations, which converges each ill-conditioned round harder,
+     * return a worse answer). Remember the lowest-objective feasible point and
+     * fall back to it ONLY when the last round ends infeasible, so any run that
+     * already ends feasible is bit-for-bit unchanged. */
+    double* best_feas_x = (double*)malloc(sizeof(double) * n);
+    if (!best_feas_x) { free(x_prev); return false; }
+    double best_feas_f = 0.0;
+    bool have_feas = false;
+    const double feas_eps = 1.0e-8;   /* matches NMinimize's selection tolerance */
+    double pen = 0.0;
     const double rel_tol = pow(10.0, -opts->prec_goal_digits);
+    /* Augmented-Lagrangian multipliers, one per general constraint, all zero at
+     * the first round (so round 0 is exactly the classical quadratic penalty).
+     * Installed on the file statics that fm_eval_augmented / fm_eval_aug_gradient
+     * consult, and updated by the PHR rule after each inner solve. Saved and
+     * restored so a nested solver call is unaffected. */
+    double* al_lambda = NULL;
+    if (ngens > 0) {
+        al_lambda = (double*)calloc(ngens, sizeof(double));
+        if (!al_lambda) { free(x_prev); free(best_feas_x); return false; }
+    }
+    const double* al_saved_lambda = g_fm_al_lambda;
+    const FmGenCon* al_saved_gens = g_fm_al_gens;
+    g_fm_al_lambda = al_lambda;      /* NULL when ngens==0 → AL branch inert */
+    g_fm_al_gens   = gens;
+    const double LAM_MAX = 1.0e12;
     for (int round = 0; round < 9; round++) {
         for (size_t i = 0; i < n; i++) x_prev[i] = x[i];
         bool ok;
@@ -2425,10 +2504,38 @@ static bool fm_run_penalty(Expr* f, Expr** vars, size_t n,
             default:
                 ok = fm_run_bfgs(f, vars, n, binds, g_exprs, x, gens, ngens, mu, boxes, opts, &fx);
         }
-        if (!ok) { free(x_prev); return false; }
-        double pen;
+        if (!ok) {
+            g_fm_al_lambda = al_saved_lambda; g_fm_al_gens = al_saved_gens;
+            free(al_lambda); free(x_prev); free(best_feas_x); return false;
+        }
         if (!fm_eval_penalty(gens, ngens, binds, x, n, opts, &pen)) {
-            free(x_prev); return false;
+            g_fm_al_lambda = al_saved_lambda; g_fm_al_gens = al_saved_gens;
+            free(al_lambda); free(x_prev); free(best_feas_x); return false;
+        }
+        if (pen <= feas_eps) {
+            double f_here;
+            if (fm_eval_scalar(f, binds, x, n, opts, &f_here) &&
+                (!have_feas || f_here < best_feas_f)) {
+                for (size_t i = 0; i < n; i++) best_feas_x[i] = x[i];
+                best_feas_f = f_here; have_feas = true;
+            }
+        }
+        /* PHR multiplier update at the post-solve iterate, using this round's μ:
+         *   λ_k ← λ_k + 2μ·h_k          (equality)
+         *   λ_k ← max(0, λ_k + 2μ·g_k)  (inequality g_k ≤ 0)
+         * clamped so a pathological constraint cannot blow a multiplier up. This
+         * is what lets the next round reach feasibility at a moderate μ rather
+         * than depending on μ→∞. Skipped when there are no general constraints. */
+        if (al_lambda) {
+            for (size_t k = 0; k < ngens; k++) {
+                double c;
+                if (!fm_eval_scalar(gens[k].expr, binds, x, n, opts, &c)) continue;
+                double nl = al_lambda[k] + 2.0 * mu * c;
+                if (!gens[k].equality && nl < 0.0) nl = 0.0;
+                if (nl >  LAM_MAX) nl =  LAM_MAX;
+                if (nl < -LAM_MAX) nl = -LAM_MAX;
+                al_lambda[k] = nl;
+            }
         }
         if (pen < 1e-12) feas = true;
         if (feas) {
@@ -2444,7 +2551,17 @@ static bool fm_run_penalty(Expr* f, Expr** vars, size_t n,
         }
         mu *= 10.0;
     }
+    /* Drift rescue: the final iterate is infeasible but an earlier round found a
+     * feasible point — return that instead. Never triggers when the run already
+     * ends feasible (pen ≤ feas_eps), so existing feasible results are unchanged. */
+    if (pen > feas_eps && have_feas) {
+        for (size_t i = 0; i < n; i++) x[i] = best_feas_x[i];
+    }
+    g_fm_al_lambda = al_saved_lambda;
+    g_fm_al_gens   = al_saved_gens;
+    free(al_lambda);
     free(x_prev);
+    free(best_feas_x);
     if (!feas) {
         fm_warn(g_fm_name, "infeas", "could not satisfy constraints to tolerance");
     }

@@ -1398,14 +1398,21 @@ Inside the `{f, cons}` form, `cons` is a boolean tree of comparisons:
   variable and a numeric constant become **box constraints** (enforced
   by per-step projection).
 - Other inequalities (`g(x) <= 0`) and equalities (`h(x) == 0`) feed a
-  **quadratic-penalty** wrapper around the inner solver.  The outer μ
-  schedule starts at 1 and multiplies by 10 each round until feasible
-  (max 9 rounds, μ up to 10^8).  The inner BFGS/CG/Newton iterations
-  drive the *augmented* objective `f + μ·Σ_k max(0, g_k)^2 + μ·Σ_j h_j^2`
-  using a matching *augmented* gradient `∇f + 2μ·Σ_k (active) g_k ∇g_k +
-  2μ·Σ_j h_j ∇h_j` — the gradient of each constraint expression is
-  computed symbolically at setup and falls back to central differences
-  per-constraint when symbolic differentiation fails.
+  **PHR augmented-Lagrangian** wrapper around the inner solver.  Each
+  outer round minimises `f + Σ_k [λ_k·c_k + μ·c_k²]` (with the standard
+  Rockafellar shift for inactive inequalities) via BFGS/CG/Newton, then
+  updates the multipliers `λ_k ← λ_k + 2μ·c_k` (clamped to 0 below for
+  inequalities); μ starts at 1 and ramps ×10 (max 9 rounds).  The
+  matching gradient is `∇f + Σ_k a_k·∇c_k` with active value
+  `a_k = λ_k + 2μ·c_k`; each constraint gradient is symbolic at setup and
+  falls back to central differences.  The multipliers let a *moderate* μ
+  reach the constraint surface instead of relying on μ→∞, which is
+  ill-conditioned and previously could not restore feasibility on a
+  nonlinear/bilinear equality.  With every `λ_k = 0` the terms reduce
+  exactly to the classical quadratic penalty, so an unconstrained or
+  linear-only problem is unchanged.  A drift rescue returns the best
+  feasible iterate seen across the schedule if the final round drifts
+  infeasible.
 - `Or[...]`, `Element[...]`, `x ∈ Integers` and the rest of the
   Mathematica constraint surface are not yet implemented -- they emit
   `FindMinimum::nimpl`.
