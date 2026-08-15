@@ -689,7 +689,228 @@ static Expr* builtin_gradientfilter(Expr* res) {
     return out;
 }
 
+/* ---- EdgeDetect: Canny --------------------------------------------------------
+ *
+ * Four stages, and each exists to fix a specific failure of the previous one:
+ *
+ *   1. SMOOTH. A derivative amplifies noise -- differencing doubles the noise amplitude while a
+ *      real edge keeps its step -- so gradients are taken of a blurred image, never a raw one.
+ *   2. GRADIENT. Magnitude and direction from the normalised Sobel pair.
+ *   3. NON-MAXIMUM SUPPRESSION. A gradient magnitude ridge is several pixels wide; thresholding it
+ *      alone gives a thick band. NMS keeps only pixels that are maximal ALONG THE GRADIENT
+ *      DIRECTION, which is what makes a Canny edge one pixel wide.
+ *   4. HYSTERESIS. One threshold either breaks long edges wherever they weaken, or admits noise
+ *      everywhere. Two thresholds plus connectivity keeps a weak pixel only if it is reachable
+ *      from a strong one, so a genuine edge survives its own faint stretches while isolated weak
+ *      responses do not.
+ *
+ * THINNING TO EXACTLY ONE PIXEL DEPENDS ON AN ASYMMETRIC COMPARISON, and this is the subtle part.
+ * A clean step edge does not give a single-pixel gradient peak: with the central difference, a step
+ * at column k responds 0.5 at BOTH k-1 and k -- a two-wide plateau of exactly equal values. Testing
+ * `mag >= both neighbours` keeps both and yields a two-pixel edge. So the test is
+ * `mag > backward && mag >= forward`: on a tie the lower-index side wins, deterministically, and
+ * the ridge thins to one pixel. That is the difference between an edge detector and a thick mask,
+ * and a test pins the width at exactly 1.
+ *
+ * NMS IS INSENSITIVE TO THE GRADIENT SIGN, which is worth stating after the last change: it compares
+ * both neighbours along the direction, and direction and direction+180 degrees select the same pair.
+ * So the sign bug fixed in DerivativeFilter would not have been caught here either -- another reason
+ * that exact signed value had to be asserted where it was.
+ *
+ * The direction is quantised into four bins rather than interpolated along the exact angle.
+ * Interpolation is more accurate on curved edges; quantisation is exactly reproducible and is what
+ * the original algorithm specifies, and reproducibility is what lets a test pin a pixel pattern.
+ */
+static void canny_nms(const double* mag, const double* dx, const double* dy,
+                      double* out, size_t w, size_t h) {
+    for (size_t y = 0; y < h; y++) {
+        for (size_t x = 0; x < w; x++) {
+            size_t i = y * w + x;
+            double gx = dx[i], gy = dy[i];
+            double m = mag[i];
+            if (!(m > 0.0)) { out[i] = 0.0; continue; }
+
+            /* Quantise the direction to one of four neighbour pairs. atan2 is avoided: comparing
+             * |gy| against |gx| times tan(22.5) and tan(67.5) picks the same bin without a
+             * transcendental call per pixel. */
+            double agx = fabs(gx), agy = fabs(gy);
+            int64_t ox, oy;
+            if (agy <= 0.41421356237309503 * agx)      { ox = 1;  oy = 0;  }   /* tan 22.5 */
+            else if (agy >= 2.414213562373095 * agx)   { ox = 0;  oy = 1;  }   /* tan 67.5 */
+            else if ((gx > 0.0) == (gy > 0.0))         { ox = 1;  oy = 1;  }
+            else                                       { ox = 1;  oy = -1; }
+
+            /* Off the edge counts as zero: a border pixel has no neighbour to lose to, so it is
+             * kept if it beats the one neighbour it has. Clamping instead would compare a pixel
+             * against itself and keep every border pixel unconditionally. */
+            double fwd = 0.0, bwd = 0.0;
+            int64_t fx = (int64_t)x + ox, fy = (int64_t)y + oy;
+            int64_t bx = (int64_t)x - ox, by = (int64_t)y - oy;
+            if (fx >= 0 && (size_t)fx < w && fy >= 0 && (size_t)fy < h)
+                fwd = mag[(size_t)fy * w + (size_t)fx];
+            if (bx >= 0 && (size_t)bx < w && by >= 0 && (size_t)by < h)
+                bwd = mag[(size_t)by * w + (size_t)bx];
+
+            /* ASYMMETRIC on purpose -- see the note above. Strictly greater one way, at-least the
+             * other, so an even plateau resolves to one pixel rather than two. */
+            out[i] = (m > bwd && m >= fwd) ? m : 0.0;
+        }
+    }
+}
+
+/* Hysteresis: keep every pixel above `hi`, and every pixel above `lo` reachable from one.
+ *
+ * Iterative with an explicit stack rather than recursive. A long edge across a large image is a
+ * connected component thousands of pixels deep, and recursion there is a stack overflow on a real
+ * photograph -- not a hypothetical one. */
+static void canny_hysteresis(const double* nms, double* out, size_t w, size_t h,
+                             double lo, double hi, size_t* stack) {
+    size_t n = w * h, top = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (nms[i] >= hi) { out[i] = 1.0; stack[top++] = i; }
+        else out[i] = 0.0;
+    }
+    while (top > 0) {
+        size_t i = stack[--top];
+        size_t y = i / w, x = i % w;
+        for (int64_t dyy = -1; dyy <= 1; dyy++) {
+            for (int64_t dxx = -1; dxx <= 1; dxx++) {
+                if (dxx == 0 && dyy == 0) continue;
+                int64_t nx = (int64_t)x + dxx, ny = (int64_t)y + dyy;
+                if (nx < 0 || (size_t)nx >= w || ny < 0 || (size_t)ny >= h) continue;
+                size_t j = (size_t)ny * w + (size_t)nx;
+                /* 8-connectivity, because a diagonal edge is connected in any sensible reading and
+                 * 4-connectivity would break every 45-degree line into dots. */
+                if (out[j] == 0.0 && nms[j] >= lo) { out[j] = 1.0; stack[top++] = j; }
+            }
+        }
+    }
+}
+
+/* EdgeDetect[image] / EdgeDetect[image, r] / EdgeDetect[image, r, t] */
+static Expr* builtin_edgedetect(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3) return NULL;
+
+    double rad = 2.0, thi = -1.0, im = 0.0;
+    if (argc >= 2) {
+        if (!na_read_scalar(res->data.function.args[1], &rad, &im) || im != 0.0) return NULL;
+        if (!(rad >= 0.0) || rad != floor(rad) || rad > 64.0) return NULL;
+    }
+    if (argc == 3) {
+        if (!na_read_scalar(res->data.function.args[2], &thi, &im) || im != 0.0) return NULL;
+        if (!(thi >= 0.0)) return NULL;
+    }
+
+    size_t w = 0, h = 0; double* g = NULL;
+    if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
+    size_t n = w * h;
+
+    double* sm  = malloc(sizeof(double) * n);
+    double* dx  = malloc(sizeof(double) * n);
+    double* dy  = malloc(sizeof(double) * n);
+    double* mag = malloc(sizeof(double) * n);
+    double* nms = malloc(sizeof(double) * n);
+    size_t* stk = malloc(sizeof(size_t) * n);
+    size_t khx = 0, kwx = 0, khy = 0, kwy = 0;
+    double* kx = deriv_kernel(0, 1, &khx, &kwx);
+    double* ky = deriv_kernel(1, 0, &khy, &kwy);
+    Expr* out = NULL;
+
+    if (sm && dx && dy && mag && nms && stk && kx && ky) {
+        /* 1. Smooth. Radius 0 means no smoothing, which is a legitimate request on already-clean
+         * synthetic input and is what makes an exact single-step test possible. */
+        if (rad > 0.0) {
+            size_t gkh = 0, gkw = 0;
+            double* gk = NULL;
+            {
+                Expr* r1[1]; r1[0] = expr_new_integer((int64_t)rad);
+                Expr* call = r1[0] ? expr_new_function(expr_new_symbol("GaussianMatrix"), r1, 1)
+                                   : NULL;
+                Expr* kexpr = call ? builtin_gaussianmatrix(call) : NULL;
+                if (call) expr_free(call);
+                if (kexpr) { ker_load(kexpr, &gkh, &gkw, &gk); expr_free(kexpr); }
+            }
+            if (gk) { convolve_dispatch(g, sm, w, h, 1, gk, gkw, gkh); free(gk); }
+            else memcpy(sm, g, sizeof(double) * n);
+        } else {
+            memcpy(sm, g, sizeof(double) * n);
+        }
+
+        /* 2. Gradient. */
+        convolve_dispatch(sm, dx, w, h, 1, kx, kwx, khx);
+        convolve_dispatch(sm, dy, w, h, 1, ky, kwy, khy);
+        for (size_t i = 0; i < n; i++) mag[i] = sqrt(dx[i] * dx[i] + dy[i] * dy[i]);
+
+        /* 3. Thin. */
+        canny_nms(mag, dx, dy, nms, w, h);
+
+        /* 4. Threshold. The high threshold defaults to Otsu ON THE SUPPRESSED MAGNITUDE, not on the
+         * raw magnitude: after thinning, the histogram really is "edge pixels against the rest",
+         * which is the two-class problem Otsu solves. Run on the raw magnitude it would be
+         * dominated by the wide ridge flanks. Low is 0.4 * high, the conventional ratio, stated
+         * because it is a choice rather than a derivation. */
+        double hi = thi;
+        if (hi < 0.0 && !img_otsu(nms, n, &hi)) {
+            /* No two classes -- a blank or perfectly uniform gradient field. No edges is the honest
+             * answer, not an arbitrary threshold. */
+            hi = 2.0;
+        }
+        double lo = 0.4 * hi;
+        double* bits = malloc(sizeof(double) * n);
+        if (bits) {
+            canny_hysteresis(nms, bits, w, h, lo, hi, stk);
+            /* Built as a Bit image: the result is 0/1 by construction. */
+            Expr** rows = malloc(sizeof(Expr*) * h);
+            if (rows) {
+                bool ok = true;
+                for (size_t y = 0; y < h; y++) rows[y] = NULL;
+                for (size_t y = 0; y < h && ok; y++) {
+                    Expr** cols = malloc(sizeof(Expr*) * w);
+                    if (!cols) { ok = false; break; }
+                    bool okc = true;
+                    for (size_t x = 0; x < w; x++) {
+                        cols[x] = expr_new_integer(bits[y * w + x] > 0.5 ? 1 : 0);
+                        if (!cols[x]) okc = false;
+                    }
+                    if (okc) rows[y] = expr_new_function(expr_new_symbol(SYM_List), cols, w);
+                    else for (size_t x = 0; x < w; x++) expr_free(cols[x]);
+                    free(cols);
+                    if (!rows[y]) ok = false;
+                }
+                if (ok) {
+                    Expr* data = expr_new_function(expr_new_symbol(SYM_List), rows, h);
+                    if (data) {
+                        Expr* two[2];
+                        two[0] = data;
+                        two[1] = expr_new_string("Bit");
+                        if (two[1]) out = expr_new_function(expr_new_symbol("Image"), two, 2);
+                        else expr_free(data);
+                    }
+                } else for (size_t y = 0; y < h; y++) expr_free(rows[y]);
+                free(rows);
+            }
+            free(bits);
+        }
+    }
+    free(g); free(sm); free(dx); free(dy); free(mag); free(nms); free(stk); free(kx); free(ky);
+    return out;
+}
+
 void imagefilter_init(void) {
+    symtab_add_builtin("EdgeDetect", builtin_edgedetect);
+    symtab_get_def("EdgeDetect")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("EdgeDetect",
+        "EdgeDetect[image] finds edges by the Canny algorithm, giving a \"Bit\" image. "
+        "EdgeDetect[image, r] sets the Gaussian smoothing radius (default 2; 0 means no "
+        "smoothing). EdgeDetect[image, r, t] sets the high threshold explicitly. Four stages: "
+        "smooth, because a derivative amplifies noise; gradient by the normalised Sobel pair; "
+        "non-maximum suppression along the gradient direction, which is what makes an edge ONE "
+        "pixel wide rather than a thick band; and hysteresis, keeping any pixel above the high "
+        "threshold plus any above 0.4 of it that is 8-connected to one, so a real edge survives "
+        "its faint stretches while isolated weak responses do not. The high threshold defaults to "
+        "Otsu's method applied to the SUPPRESSED magnitude, where the two classes really are edge "
+        "against non-edge; on the raw magnitude it would be dominated by the ridge flanks.");
     symtab_add_builtin("DerivativeFilter", builtin_derivativefilter);
     symtab_get_def("DerivativeFilter")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DerivativeFilter",

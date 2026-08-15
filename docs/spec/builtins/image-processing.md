@@ -507,3 +507,68 @@ arbitrary, where the gradient of brightness needs none.
 | `GradientFilter` | **2.25 ms** | 2.3 ms |
 
 Parity, and the values agree exactly — gradient total 26191.5 and maximum 0.522601 on both sides.
+
+---
+
+# Edge detection
+
+## EdgeDetect
+
+`EdgeDetect[image]` finds edges by the **Canny** algorithm, giving a `"Bit"` image.
+`EdgeDetect[image, r]` sets the Gaussian smoothing radius (default 2; `0` means none).
+`EdgeDetect[image, r, t]` sets the high threshold. Attributes: `Protected`.
+
+Four stages, each fixing a specific failure of the one before:
+
+1. **Smooth** — a derivative amplifies noise (differencing doubles noise amplitude while a real edge
+   keeps its step), so gradients are taken of a blurred image.
+2. **Gradient** — magnitude and direction from the normalised Sobel pair.
+3. **Non-maximum suppression** — a magnitude ridge is several pixels wide, so thresholding alone
+   gives a thick band. NMS keeps only pixels maximal *along the gradient direction*.
+4. **Hysteresis** — one threshold either breaks long edges where they weaken or admits noise
+   everywhere. Two thresholds plus 8-connectivity keeps a weak pixel only if reachable from a strong
+   one.
+
+**Thinning to exactly one pixel depends on an asymmetric comparison**, and this is the subtle part. A
+clean step does *not* give a single-pixel gradient peak: with the central difference, a step at column
+`k` responds `0.5` at **both** `k−1` and `k` — an even plateau. Testing `mag >= both neighbours` keeps
+both and gives a two-pixel edge. So the test is `mag > backward && mag >= forward`: ties resolve to the
+lower-index side, deterministically, and the ridge thins to one.
+
+```
+In[1]:= Map[Total, ImageData[EdgeDetect[step, 0], "Bit"]]
+Out[1]= {1, 1, 1, 1, 1, 1, 1, 1}
+```
+
+The high threshold defaults to **Otsu on the *suppressed* magnitude**, not the raw one: after
+thinning, the histogram really is edge-against-non-edge, which is the two-class problem Otsu solves.
+On the raw magnitude it would be dominated by the wide ridge flanks. Low is `0.4 × high`, the
+conventional ratio — stated because it is a choice, not a derivation.
+
+**NMS is insensitive to the gradient sign**, worth noting after the `DerivativeFilter` sign bug: it
+compares both neighbours along the direction, and direction and direction+180° select the same pair.
+So that bug would not have been caught here either — more reason the exact signed value had to be
+asserted where it was.
+
+### Two deliberate differences from scikit-image
+
+Measured against `skimage.feature.canny` on the same 8×8 step, and they disagree in two ways that are
+worth stating rather than smoothing over:
+
+| | Mathilda | skimage |
+|---|---|---|
+| edge width on a perfect step | **1** | 2 |
+| border rows | kept | discarded |
+| 512×512, r≈1–2 | **9.1 ms** | 19.9 ms |
+
+The width difference is the plateau tie: skimage compares symmetrically, so on an *exactly* even
+ridge it keeps both pixels. On real photographs the plateau is rare — values differ slightly — so both
+give one-pixel edges in practice; the synthetic step is precisely the degenerate case that exposes the
+tie rule. Mathilda's is the stricter reading of "one pixel wide".
+
+For the border, off-the-edge counts as **zero magnitude**, so a border pixel is kept if it beats the
+one neighbour it has. Clamping instead would compare a pixel against itself and keep every border
+pixel unconditionally; discarding the border, as skimage does, loses real edges running along it.
+
+Mathilda is ~2.2× faster. Edge *fractions* are not comparable between the two, since the thresholds are
+chosen by different rules, and reporting them side by side would imply a comparison that is not there.

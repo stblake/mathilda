@@ -583,6 +583,77 @@ static void test_derivative_filter_matches_an_explicit_kernel(void) {
                    " {DerivativeFilter, GradientFilter}]", "True", 0);
 }
 
+#define STEPV "Image[Table[If[x >= 5, 1., 0.], {y, 8}, {x, 8}]]"
+#define STEPH "Image[Table[If[y >= 5, 1., 0.], {y, 8}, {x, 8}]]"
+
+static void test_canny_thins_an_edge_to_one_pixel(void) {
+    /* THE property that separates an edge detector from a thick mask, and it is exact.
+     *
+     * A clean step does NOT give a single-pixel gradient peak: the central difference responds 0.5
+     * at both k-1 and k, an even plateau. Testing `mag >= both neighbours` keeps both and yields a
+     * two-pixel edge -- which is what scikit-image's canny does on this input, giving width 2. The
+     * asymmetric test `mag > backward && mag >= forward` resolves the tie to the lower-index side
+     * and thins to one. Radius 0 keeps the geometry exact so this is a pixel pattern, not a
+     * tendency. */
+    assert_eval_eq("Map[Total, ImageData[EdgeDetect[" STEPV ", 0], \"Bit\"]]",
+                   "{1, 1, 1, 1, 1, 1, 1, 1}", 0);
+    /* Same for a horizontal step, transposed -- so a swapped index cannot hide in one axis. */
+    assert_eval_eq("Map[Total, Transpose[ImageData[EdgeDetect[" STEPH ", 0], \"Bit\"]]]",
+                   "{1, 1, 1, 1, 1, 1, 1, 1}", 0);
+    /* And it lands in the same column on every row: a straight edge stays straight. */
+    assert_eval_eq("Union[Map[First[Flatten[Position[#, 1]]] &, "
+                   "ImageData[EdgeDetect[" STEPV ", 0], \"Bit\"]]]", "{4}", 0);
+    /* Border rows are KEPT, not discarded: off-the-edge counts as zero magnitude, so a border
+     * pixel is kept if it beats the one neighbour it has. Clamping instead would compare a pixel
+     * against itself and keep every border pixel unconditionally; discarding the border, as
+     * scikit-image does, loses real edges that run along it. */
+    assert_eval_eq("{First[Map[Total, ImageData[EdgeDetect[" STEPV ", 0], \"Bit\"]]],"
+                   " Last[Map[Total, ImageData[EdgeDetect[" STEPV ", 0], \"Bit\"]]]}",
+                   "{1, 1}", 0);
+}
+
+static void test_canny_finds_no_edges_where_there_are_none(void) {
+    /* A constant image has no gradient anywhere, so Otsu finds no two classes and the honest answer
+     * is no edges -- not an arbitrary threshold applied to numerical noise. */
+    assert_eval_eq("Union[Flatten[ImageData[EdgeDetect[Image[Table[0.5, {6}, {6}]], 0],"
+                   " \"Bit\"]]]", "{0}", 0);
+    /* A threshold above any possible gradient suppresses everything, which is what shows the
+     * explicit-threshold argument is really used rather than ignored. */
+    assert_eval_eq("Union[Flatten[ImageData[EdgeDetect[" STEPV ", 0, 10.], \"Bit\"]]]",
+                   "{0}", 0);
+    /* A threshold below the step's gradient keeps the edge, still one pixel wide. */
+    assert_eval_eq("Map[Total, ImageData[EdgeDetect[" STEPV ", 0, 0.2], \"Bit\"]]",
+                   "{1, 1, 1, 1, 1, 1, 1, 1}", 0);
+}
+
+static void test_hysteresis_drops_isolated_weak_edges(void) {
+    /* Hysteresis is the reason for two thresholds. A step of height 0.3 has gradient 0.15, which
+     * sits between 0.4*t and t for t = 0.25 -- so it is a WEAK edge. Isolated, with no strong pixel
+     * anywhere to be 8-connected to, it must be dropped entirely. If the implementation collapsed
+     * to a single threshold at the low value, this would come back as a full edge. */
+    assert_eval_eq("Union[Flatten[ImageData[EdgeDetect["
+                   "Image[Table[If[x >= 5, 0.3, 0.], {y, 8}, {x, 8}]], 0, 0.25], \"Bit\"]]]",
+                   "{0}", 0);
+    /* The same weak step at a threshold it exceeds outright is kept -- so the row above is about
+     * hysteresis and not about the edge being invisible. */
+    assert_eval_eq("Map[Total, ImageData[EdgeDetect["
+                   "Image[Table[If[x >= 5, 0.3, 0.], {y, 8}, {x, 8}]], 0, 0.1], \"Bit\"]]",
+                   "{1, 1, 1, 1, 1, 1, 1, 1}", 0);
+}
+
+static void test_edgedetect_shape_and_declines(void) {
+    assert_eval_eq("{ImageType[EdgeDetect[" STEPV ", 0]], ImageDimensions[EdgeDetect[" STEPV ", 0]]}",
+                   "{\"Bit\", {8, 8}}", 0);
+    /* Colour goes through luminance, so the result is single channel. */
+    assert_eval_eq("ImageChannels[EdgeDetect[Image[Table[{0.2, 0.6, 0.9}, {8}, {8}]], 0]]",
+                   "1", 0);
+    assert_eval_eq("Head[EdgeDetect[{{1, 2}}]]", "EdgeDetect", 0);
+    assert_eval_eq("Head[EdgeDetect[" STEPV ", 1.5]]", "EdgeDetect", 0);
+    assert_eval_eq("Head[EdgeDetect[" STEPV ", -1]]", "EdgeDetect", 0);
+    assert_eval_eq("Head[EdgeDetect[" STEPV ", 0, -0.5]]", "EdgeDetect", 0);
+    assert_eval_eq("MemberQ[Attributes[EdgeDetect], Protected]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -620,6 +691,10 @@ int main(void) {
     TEST(test_second_derivative_is_exact_on_a_quadratic);
     TEST(test_gradient_magnitude_is_rotation_invariant);
     TEST(test_derivative_filter_matches_an_explicit_kernel);
+    TEST(test_canny_thins_an_edge_to_one_pixel);
+    TEST(test_canny_finds_no_edges_where_there_are_none);
+    TEST(test_hysteresis_drops_isolated_weak_edges);
+    TEST(test_edgedetect_shape_and_declines);
 
     printf("All image tests passed.\n");
     return 0;
