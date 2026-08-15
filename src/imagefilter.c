@@ -1526,7 +1526,128 @@ static Expr* builtin_meanfilter(Expr* res) {
     return out;
 }
 
+/* ---- distance transform ---------------------------------------------------
+ *
+ * EXACT Euclidean, by Felzenszwalb and Huttenlocher's algorithm, and the exactness is the reason for
+ * choosing it over the obvious alternative. The classic two-pass CHAMFER transform propagates local
+ * step costs and is approximate: it cannot represent sqrt(2) with integer steps, so a diagonal
+ * distance comes out a few percent wrong. That error is invisible on a picture and fatal to a test --
+ * it would force a tolerance where an equality is available.
+ *
+ * The exact version costs the same asymptotically. It computes, per axis,
+ *
+ *     D(x) = min over y of ( (x - y)^2 + f(y) )
+ *
+ * which is the LOWER ENVELOPE OF PARABOLAS: each y contributes a parabola of identical shape
+ * translated to y and raised by f(y), and the transform is their pointwise minimum. Because the
+ * parabolas all have the same curvature, any two intersect exactly once, so the envelope can be built
+ * in one left-to-right sweep maintaining a stack of the parabolas still visible -- O(n) per row, no
+ * sorting.
+ *
+ * SEPARABILITY IS EXACT HERE, unlike the median's, and for a reason worth naming: squared Euclidean
+ * distance is a SUM over the axes, (dx^2 + dy^2), so minimising it decomposes into minimising per axis.
+ * A median does not decompose because rank is not a sum. So the same word covers an exact
+ * factorisation in one case and a wrong shortcut in the other, and which it is depends on whether the
+ * quantity being reduced is additive.
+ *
+ * The test that separates exact from approximate is a 3-4-5 triangle: a single background pixel with a
+ * foreground pixel three across and four down must read EXACTLY 5. A chamfer transform gives about
+ * 5.03, and no picture would ever show the difference.
+ */
+#define DT_INF 1.0e30
+
+/* One-dimensional squared-distance transform of f into d, using scratch v (indices) and z
+ * (intersections). All four arrays are length n, z needs n + 1. */
+static void dt_1d(const double* f, double* d, size_t n, size_t* v, double* z) {
+    size_t k = 0;
+    v[0] = 0;
+    z[0] = -DT_INF;
+    z[1] = DT_INF;
+    for (size_t q = 1; q < n; q++) {
+        /* Intersection of the parabola from q with the one currently on top of the stack. */
+        double s = ((f[q] + (double)q * (double)q)
+                    - (f[v[k]] + (double)v[k] * (double)v[k]))
+                   / (2.0 * (double)q - 2.0 * (double)v[k]);
+        /* If it lies left of where the top parabola became visible, that one is entirely hidden by
+         * this one and is popped. The loop, not an if: one new parabola can hide several. */
+        while (s <= z[k]) {
+            if (k == 0) break;
+            k--;
+            s = ((f[q] + (double)q * (double)q)
+                 - (f[v[k]] + (double)v[k] * (double)v[k]))
+                / (2.0 * (double)q - 2.0 * (double)v[k]);
+        }
+        k++;
+        v[k] = q;
+        z[k] = s;
+        z[k + 1] = DT_INF;
+    }
+    k = 0;
+    for (size_t q = 0; q < n; q++) {
+        while (z[k + 1] < (double)q) k++;
+        double dx = (double)q - (double)v[k];
+        d[q] = dx * dx + f[v[k]];
+    }
+}
+
+/* DistanceTransform[image] / [image, t] -- for each pixel, the Euclidean distance to the nearest
+ * BACKGROUND pixel, matching Mathematica and scipy: background pixels are 0, and the value rises
+ * toward the interior of a blob. */
+static Expr* builtin_distancetransform(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+    double thr = 0.0, im = 0.0;
+    if (argc == 2) {
+        if (!na_read_scalar(res->data.function.args[1], &thr, &im) || im != 0.0) return NULL;
+    }
+    size_t w = 0, h = 0; double* g = NULL;
+    if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
+    size_t n = w * h;
+
+    double* f = malloc(sizeof(double) * n);
+    double* tmp = malloc(sizeof(double) * (w > h ? w : h));
+    double* line = malloc(sizeof(double) * (w > h ? w : h));
+    size_t* vv = malloc(sizeof(size_t) * (w > h ? w : h));
+    double* zz = malloc(sizeof(double) * ((w > h ? w : h) + 1));
+    Expr* out = NULL;
+    if (f && tmp && line && vv && zz) {
+        /* Seed: 0 at background, infinity at foreground. The transform then finds, for every pixel,
+         * the nearest seed -- which is exactly "distance to the nearest background pixel". */
+        for (size_t i = 0; i < n; i++) f[i] = (g[i] > thr) ? DT_INF : 0.0;
+
+        for (size_t y = 0; y < h; y++) {
+            for (size_t x = 0; x < w; x++) line[x] = f[y * w + x];
+            dt_1d(line, tmp, w, vv, zz);
+            for (size_t x = 0; x < w; x++) f[y * w + x] = tmp[x];
+        }
+        for (size_t x = 0; x < w; x++) {
+            for (size_t y = 0; y < h; y++) line[y] = f[y * w + x];
+            dt_1d(line, tmp, h, vv, zz);
+            for (size_t y = 0; y < h; y++) f[y * w + x] = tmp[y];
+        }
+        /* The passes accumulate SQUARED distance, which is what makes the decomposition exact; the
+         * square root is taken once at the end. Taking it per axis would be wrong, not merely
+         * slower. */
+        for (size_t i = 0; i < n; i++) f[i] = (f[i] >= DT_INF) ? DT_INF : sqrt(f[i]);
+        out = image_build_real(f, w, h, 1);
+    }
+    free(g); free(f); free(tmp); free(line); free(vv); free(zz);
+    return out;
+}
+
 void imagefilter_init(void) {
+    symtab_add_builtin("DistanceTransform", builtin_distancetransform);
+    symtab_get_def("DistanceTransform")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DistanceTransform",
+        "DistanceTransform[image] replaces each pixel by its EXACT Euclidean distance to the nearest "
+        "background pixel; background pixels are 0, so the value rises toward the interior of a blob. "
+        "DistanceTransform[image, t] takes pixels above t as foreground (default 0). "
+        "Exact rather than the classic two-pass chamfer approximation, which cannot represent "
+        "sqrt(2) with integer steps and so gets diagonal distances a few percent wrong -- invisible "
+        "on a picture and fatal to a test. Uses Felzenszwalb and Huttenlocher's lower-envelope-of-"
+        "parabolas method, O(n) per row with no sorting. Separability is EXACT here because squared "
+        "Euclidean distance is a sum over the axes, so minimising it decomposes per axis; the square "
+        "root is taken once at the end rather than per pass.");
     symtab_add_builtin("MedianFilter", builtin_medianfilter);
     symtab_get_def("MedianFilter")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("MedianFilter",

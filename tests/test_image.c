@@ -961,6 +961,83 @@ static void test_meanfilter_is_a_box_convolution(void) {
                    " {MedianFilter, MeanFilter}]", "True", 0);
 }
 
+#define DTONE "Image[Table[If[x == 1 && y == 1, 0., 1.], {y, 6}, {x, 6}]]"
+
+static void test_distance_transform_is_exactly_euclidean(void) {
+    /* THE row separating an exact transform from the classic chamfer approximation, and it is an
+     * EQUALITY because a 3-4-5 triangle has an integer hypotenuse. One background pixel at the
+     * corner; the pixel three across and four down must read exactly 5. A chamfer transform gives
+     * about 5.03 -- invisible on any picture, and the reason a tolerance here would have hidden the
+     * wrong algorithm entirely. */
+    assert_eval_eq("Part[ImageData[DistanceTransform[" DTONE "]], 5, 4] == 5.", "True", 0);
+    /* A background pixel is exactly 0, and its immediate neighbour exactly 1. */
+    assert_eval_eq("Part[ImageData[DistanceTransform[" DTONE "]], 1, 1] == 0.", "True", 0);
+    assert_eval_eq("Part[ImageData[DistanceTransform[" DTONE "]], 1, 2] == 1.", "True", 0);
+    /* The diagonal neighbour is Sqrt[2], which is what a chamfer transform cannot represent with
+     * integer steps -- the root of its inexactness. */
+    assert_eval_eq("Chop[Part[ImageData[DistanceTransform[" DTONE "]], 2, 2] - Sqrt[2.]]",
+                   "0", 0);
+    /* And a 5-12-13 triangle, so the 3-4-5 case cannot be passing by coincidence. */
+    assert_eval_eq("Module[{one = Image[Table[If[x == 1 && y == 1, 0., 1.], {y, 14}, {x, 14}]]},"
+                   " Part[ImageData[DistanceTransform[one]], 13, 6] == 13.]", "True", 0);
+}
+
+static void test_distance_transform_degenerate_cases(void) {
+    /* All background: every distance is 0, and nothing divides by an empty parabola stack. */
+    assert_eval_eq("Union[Flatten[ImageData[DistanceTransform["
+                   "Image[Table[0., {4}, {4}]]]]]]", "{0.0}", 0);
+    /* A checkerboard has every foreground pixel adjacent to a background one, so the only distances
+     * are 0 and 1 -- which also confirms the transform is over the FOUR-neighbour distance to the
+     * nearest zero rather than something looser. */
+    assert_eval_eq("Union[Flatten[ImageData[DistanceTransform["
+                   "Image[Table[If[Mod[x + y, 2] == 0, 1., 0.], {y, 4}, {x, 4}]]]]]]",
+                   "{0.0, 1.0}", 0);
+    /* The threshold argument chooses the foreground: at t = 0.5 a 0.3 pixel is background, so its
+     * own distance is 0. */
+    assert_eval_eq("Part[ImageData[DistanceTransform["
+                   "Image[{{0.3, 0.7}, {0.7, 0.7}}], 0.5]], 1, 1] == 0.", "True", 0);
+    assert_eval_eq("Head[DistanceTransform[{{1, 2}}]]", "DistanceTransform", 0);
+    assert_eval_eq("Head[DistanceTransform[" DTONE ", x]]", "DistanceTransform", 0);
+    assert_eval_eq("MemberQ[Attributes[DistanceTransform], Protected]", "True", 0);
+}
+
+static void test_distance_transform_relates_to_morphology(void) {
+    /* An absolute relationship between two features rather than a property of either alone, and the
+     * OFF-BY-ONE in it is the interesting part. A 3x3 erosion removes every pixel that has a
+     * background pixel in its 8-neighbourhood -- that is, every pixel at Chebyshev distance 1 -- so
+     * surviving ONE erosion means distance >= 2, and surviving k means distance >= k + 1, not >= k.
+     * The first version of this row asserted >= 2 against TWO erosions and failed, correctly.
+     *
+     * The Euclidean-to-Chebyshev step is exact rather than approximate: Chebyshev 1 bounds Euclidean
+     * by Sqrt[2] < 2, and Euclidean >= Chebyshev always, so "Euclidean >= 2" and "Chebyshev >= 2"
+     * pick out the same pixels. Checked as an equality over the whole image, not a spot check.
+     *
+     * SameQ rather than Equal, and for a reason worth recording because it is NOT about booleans.
+     * `False == False` reduces to True perfectly well. But `(2.0 >= 2.) == (1.0 > 0.)` evaluates to
+     * `2.0 == True` -- the parenthesised comparison is being swallowed into a chained comparison
+     * rather than evaluated first. That is a comparison bug independent of anything here, filed to
+     * look at separately; SameQ sidesteps it.
+     *
+     * The route to it is the lesson: the assertion failed while the underlying arrays matched
+     * exactly, and printing the two arrays is what settled it. Two attempts at re-deriving the claim
+     * had already gone wrong before that -- once genuinely (the off-by-one) and once not (the claim
+     * was right and the test was broken). Print the data before arguing with it a third time. */
+    assert_eval_eq("Module[{img = Image[Table[If[2 <= x <= 7 && 2 <= y <= 7, 1., 0.],"
+                   " {y, 9}, {x, 9}]], dt, er},"
+                   " dt = ImageData[DistanceTransform[img]];"
+                   " er = ImageData[Erosion[img, 1]];"
+                   " And @@ MapThread[((#1 >= 2.) === (#2 > 0.)) &, {Flatten[dt], Flatten[er]}]]",
+                   "True", 0);
+    /* And two erosions correspond to distance >= 3, confirming the k + 1 relation rather than a
+     * coincidence at k = 1. */
+    assert_eval_eq("Module[{img = Image[Table[If[2 <= x <= 7 && 2 <= y <= 7, 1., 0.],"
+                   " {y, 9}, {x, 9}]], dt, er},"
+                   " dt = ImageData[DistanceTransform[img]];"
+                   " er = ImageData[Erosion[Erosion[img, 1], 1]];"
+                   " And @@ MapThread[((#1 >= 3.) === (#2 > 0.)) &, {Flatten[dt], Flatten[er]}]]",
+                   "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1021,6 +1098,9 @@ int main(void) {
     TEST(test_median_removes_an_outlier_exactly);
     TEST(test_median_is_not_separable);
     TEST(test_meanfilter_is_a_box_convolution);
+    TEST(test_distance_transform_is_exactly_euclidean);
+    TEST(test_distance_transform_degenerate_cases);
+    TEST(test_distance_transform_relates_to_morphology);
 
     printf("All image tests passed.\n");
     return 0;

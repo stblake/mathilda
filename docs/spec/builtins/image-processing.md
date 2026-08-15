@@ -815,3 +815,50 @@ median on constant factors, and it is exact and obviously correct on doubles. Bo
 with the window, so at large radii a histogram median (8-bit data) or a running median would win; that
 is the same shape of limit as van Herk for morphology, and the same honest position — a known ceiling
 with a known remedy, not numbers that are good everywhere.
+
+---
+
+# DistanceTransform
+
+`DistanceTransform[image]` replaces each pixel by its **exact** Euclidean distance to the nearest
+background pixel; background pixels are 0, so the value rises toward a blob's interior.
+`[image, t]` takes pixels above `t` as foreground. Attributes: `Protected`.
+
+**Exact, not the classic chamfer approximation**, and that choice is what makes the tests equalities. A
+two-pass chamfer transform propagates integer step costs and cannot represent `Sqrt[2]`, so diagonal
+distances come out a few percent wrong — invisible on a picture, and it would have forced a tolerance
+where an equality is available.
+
+The discriminating test is a **3-4-5 triangle**: one background pixel, and the pixel three across and
+four down must read exactly `5`. Chamfer gives about 5.03. A 5-12-13 triangle is checked too, so 3-4-5
+cannot be passing by coincidence, along with `Sqrt[2]` at the diagonal neighbour — the value chamfer
+fundamentally cannot produce.
+
+Uses Felzenszwalb and Huttenlocher's method: per axis it computes
+`D(x) = min over y of ((x−y)² + f(y))`, the **lower envelope of parabolas**. Every parabola has the same
+curvature, so any two intersect exactly once and the envelope is built in a single sweep maintaining a
+stack of still-visible parabolas — O(n) per row, no sorting.
+
+**Separability is exact here, unlike the median's**, and the reason is worth naming: squared Euclidean
+distance is a **sum** over the axes, so minimising it decomposes per axis. A median does not decompose
+because rank is not a sum. The same word covers an exact factorisation in one case and a wrong shortcut
+in the other, and which it is depends on whether the reduced quantity is additive. The square root is
+taken once at the end — per pass it would be wrong, not merely slower.
+
+### Measured
+
+512×512 on an identical explicit mask, against `scipy.ndimage.distance_transform_edt` (also exact):
+
+| | Mathilda | scipy |
+|---|---|---|
+| time | **2.86 ms** | 7.3 ms |
+| max distance | 6 | 6 |
+| total | 323895 | 323895 |
+
+2.6× faster with values agreeing exactly, which is the check that matters — both compute the same exact
+transform, so any disagreement would be a bug rather than a convention difference.
+
+A further test ties it to morphology: surviving `k` erosions is equivalent to distance `>= k+1`. The
+`+1` is the substance — a 3×3 erosion removes every pixel with a background neighbour, so one erosion
+already means distance 2. Both `k=1` and `k=2` are asserted so the relation is pinned rather than a
+coincidence at one value.
