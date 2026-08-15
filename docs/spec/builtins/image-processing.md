@@ -683,30 +683,43 @@ breaking `Dilation >= f` on the boundary; and it is not self-dual, so duality wo
 
 The cleanest statement of what dilation *is*: a single bright pixel spreads to exactly the element's
 footprint, so the output **is** the element. A test pins that pixel pattern.
+## Measured: constant in the radius
 
-## Measured, including where it loses
+The 1-D max and min use **van Herk–Gil-Werman**: three comparisons per pixel *whatever the element's
+width*, so the operation no longer depends on the radius at all.
 
-A full rectangle is separable for max and min exactly as for a sum, giving `kw + kh` comparisons
-instead of `kw · kh`. 512×512:
+A window of width `k` cannot span three blocks of width `k`. So cut the line into blocks of exactly `k`,
+build a prefix maximum forwards and a suffix maximum backwards within each, and any window straddles
+exactly two adjacent blocks — its maximum is `max(suffix at its start, prefix at its end)`. Two lookups
+and one comparison, plus one pass each to build the arrays.
 
-| radius | Mathilda | scipy `grey_dilation` |
-|---|---|---|
-| r=1 | **1.51 ms** | 2.4 ms |
-| r=4 | **2.04 ms** | 2.4 ms |
-| r=8 | 3.75 ms | **2.4 ms** |
-| r=16 | 6.52 ms | **2.3 ms** |
-| `Opening` r=2 | **2.74 ms** | 4.8 ms |
+512×512:
 
-**scipy's timing is flat in the radius and Mathilda's is not**, which is the whole story: scipy uses the
-van Herk–Gil-Werman algorithm, O(1) comparisons per pixel per axis *regardless of radius*, where the
-separable max here is O(kw + kh). So Mathilda is faster to about r=4–6 and scipy pulls ahead beyond it.
-The crossover was measured rather than guessed.
+| radius | Mathilda | scipy `grey_dilation` | before van Herk |
+|---|---|---|---|
+| r=1 | 2.38 ms | 2.6 ms | 1.51 ms |
+| r=2 | **1.98 ms** | 2.4 ms | 2.04 ms |
+| r=4 | **2.01 ms** | 2.4 ms | 2.04 ms |
+| r=8 | **2.02 ms** | 2.4 ms | 3.75 ms |
+| r=16 | **2.03 ms** | 2.3 ms | 6.52 ms |
+| r=32 | **2.03 ms** | 2.3 ms | — |
+| `Opening` r=2 | **3.73 ms** | 4.8 ms | 2.74 ms |
 
-Van Herk is the fix if large-radius morphology matters — it processes each row in chunks of the element
-width, keeping running prefix and suffix maxima, and needs three comparisons per pixel at any radius.
-It is not here because radii of 1–4 are the common case and the code that is here is far simpler; the
-honest position is that this is a known limit with a known remedy, not that the numbers are good
-everywhere.
+Flat from r=2 to r=32, and at or ahead of scipy at every radius — the crossover that used to sit at
+r≈4–6 is gone, and r=16 improved 3.2×. `Opening` at r=2 regressed slightly (2.74 → 3.73 ms) from the
+extra scratch passes: that is the trade, a constant cost everywhere instead of a cheap small case and an
+expensive large one.
+
+**It is exact, not approximate**, because max and min are associative and idempotent — splitting a window
+at a block boundary and recombining loses nothing. That has a testing consequence: the fast path must
+agree **bit-exactly** with a direct computation, so the test compares it against a reference written in
+Mathilda sharing no code with the C.
+
+Comparing against `Dilation` with an all-ones matrix would **not** be a check — an all-ones element *is* a
+full rectangle, so both sides take van Herk and agree with themselves. The reference instead uses `Span`
+with `Max`/`Min` over the clamped index range, which is exactly what replicate padding means. A radius
+larger than the image is tested separately, that being where the last short block makes a window span the
+whole padded line.
 
 ## MorphologicalComponents
 
