@@ -654,6 +654,66 @@ static void test_edgedetect_shape_and_declines(void) {
     assert_eval_eq("MemberQ[Attributes[EdgeDetect], Protected]", "True", 0);
 }
 
+#define VOL234 "Image3D[Table[N[(x + 10 y + 100 z)/1000.], {z, 2}, {y, 3}, {x, 4}]]"
+
+static void test_image3d_dimensions_are_fully_reversed(void) {
+    /* THE row for volumes, and the 3-D version of the 2-D transposition trap -- only worse: with
+     * three axes there are SIX possible orderings, and a cubic test volume validates none of them.
+     * So this uses 2 slices of 3 rows of 4 columns, every extent distinct.
+     *
+     * Storage is depth x height x width, indexed data[[z, y, x]]; ImageDimensions reports
+     * {width, height, depth}, fully reversed. Both are asserted, because either one alone would
+     * pass with two axes swapped. */
+    assert_eval_eq("ImageDimensions[" VOL234 "]", "{4, 3, 2}", 0);
+    assert_eval_eq("Dimensions[ImageData[" VOL234 "]]", "{2, 3, 4}", 0);
+    /* And the voxel the indices imply really is the one stored: (x=4) + 10(y=3) + 100(z=2) over
+     * 1000 is 0.234, exactly representable. */
+    assert_eval_eq("Part[ImageData[" VOL234 "], 2, 3, 4] == 0.234", "True", 0);
+    assert_eval_eq("Part[ImageData[" VOL234 "], 1, 1, 1] == 0.111", "True", 0);
+}
+
+static void test_image3d_is_distinct_from_image(void) {
+    /* A volume is not a 2-D image and must not answer to ImageQ, or every filter written for a
+     * plane would silently accept one and index it wrongly. */
+    assert_eval_eq("{Image3DQ[" VOL234 "], ImageQ[" VOL234 "]}", "{True, False}", 0);
+    /* And conversely a plane is not a volume. */
+    assert_eval_eq("{Image3DQ[" I23 "], ImageQ[" I23 "]}", "{False, True}", 0);
+    /* Malformed input stays unevaluated, so Image3DQ is how validity is tested. */
+    assert_eval_eq("Image3DQ[Image3D[{{{1, 2}}, {{3}}}]]", "False", 0);
+    assert_eval_eq("Image3DQ[{{{1}}}]", "False", 0);
+    assert_eval_eq("Head[Image3D[{{1, 2}, {3, 4}}]]", "Image3D", 0);
+    assert_eval_eq("Head[Image3D[{}]]", "Image3D", 0);
+    assert_eval_eq("Head[Image3D[{{{1, x}}}]]", "Image3D", 0);
+}
+
+static void test_image3d_shares_the_type_rules(void) {
+    /* Type inference and ImageData's scaling are the same code for both ranks, and this pins that:
+     * a byte volume scales 255 to exactly 1.0 and 128 to 128/255, as a byte plane does. */
+    assert_eval_eq("ImageType[Image3D[{{{0, 255}}, {{128, 64}}}]]", "\"Byte\"", 0);
+    assert_eval_eq("Part[ImageData[Image3D[{{{0, 255}}, {{128, 64}}}]], 1, 1, 2] == 1.0",
+                   "True", 0);
+    assert_eval_eq("ImageType[Image3D[{{{0, 1}}, {{1, 0}}}]]", "\"Bit\"", 0);
+    assert_eval_eq("ImageType[Image3D[{{{0., 0.5}}}]]", "\"Real\"", 0);
+    /* A stated type inconsistent with the data declines, as in 2-D. */
+    assert_eval_eq("Head[Image3D[{{{0, 300}}}, \"Byte\"]]", "Image3D", 0);
+    /* Canonical form is a fixed point. */
+    assert_eval_eq("Length[Image3D[{{{0, 1}}}]]", "2", 0);
+}
+
+static void test_image3d_colour_volumes(void) {
+    /* A colour volume is RANK 4 -- depth x height x width x channels -- which is the case that
+     * forced ImageData's nested rebuild to become a general recursion over dims rather than the
+     * unrolled two-and-a-bit levels the plane case uses. */
+    assert_eval_eq("Module[{cv = Image3D[Table[{0.5, 0.25, 0.75}, {z, 2}, {y, 2}, {x, 3}]]},"
+                   " {ImageChannels[cv], ImageDimensions[cv], Dimensions[ImageData[cv]],"
+                   "  Part[ImageData[cv], 1, 1, 1]}]",
+                   "{3, {3, 2, 2}, {2, 2, 3, 3}, {0.5, 0.25, 0.75}}", 0);
+    /* Grey volumes report one channel. */
+    assert_eval_eq("ImageChannels[" VOL234 "]", "1", 0);
+    assert_eval_eq("And @@ Map[MemberQ[Attributes[#], Protected] &, {Image3D, Image3DQ}]",
+                   "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -695,6 +755,10 @@ int main(void) {
     TEST(test_canny_finds_no_edges_where_there_are_none);
     TEST(test_hysteresis_drops_isolated_weak_edges);
     TEST(test_edgedetect_shape_and_declines);
+    TEST(test_image3d_dimensions_are_fully_reversed);
+    TEST(test_image3d_is_distinct_from_image);
+    TEST(test_image3d_shares_the_type_rules);
+    TEST(test_image3d_colour_volumes);
 
     printf("All image tests passed.\n");
     return 0;

@@ -572,3 +572,49 @@ pixel unconditionally; discarding the border, as skimage does, loses real edges 
 
 Mathilda is ~2.2× faster. Edge *fractions* are not comparable between the two, since the thresholds are
 chosen by different rules, and reporting them side by side would imply a comparison that is not there.
+
+---
+
+# Volumes
+
+## Image3D
+
+`Image3D[data]` is a volumetric image, normalising to `Image3D[data, type]`. Attributes:
+`Protected`.
+
+Data is **depth × height × width** — slices outermost, indexed `data[[z, y, x]]` — or
+`depth × height × width × channels` for colour. `ImageDimensions` reports
+**{width, height, depth}**: *fully reversed*.
+
+That reversal is the 2-D transposition trap made worse. With three axes there are **six** possible
+orderings, and a cubic test volume validates none of them — so every test here uses distinct
+extents (2 slices of 3 rows of 4 columns), and asserts *both* directions, since either alone would
+pass with two axes swapped:
+
+```
+In[1]:= v = Image3D[Table[N[(x + 10 y + 100 z)/1000.], {z, 2}, {y, 3}, {x, 4}]];
+
+In[2]:= {ImageDimensions[v], Dimensions[ImageData[v]]}
+Out[2]= {{4, 3, 2}, {2, 3, 4}}
+
+In[3]:= Part[ImageData[v], 2, 3, 4]        (* x=4, y=3, z=2 *)
+Out[3]= 0.234
+```
+
+**A volume is not a plane.** `ImageQ` is `False` for an `Image3D` and `Image3DQ` is `False` for an
+`Image` — deliberately, because every filter written for a plane would otherwise accept a volume
+silently and index it wrongly.
+
+Everything else is shared with `Image`: type inference (`"Bit"`/`"Byte"`/`"Real"` from the values), the
+refusal of a stated type the data does not fit, ragged rejection, the canonical form as a fixed point,
+and `ImageData`'s scaling — a byte volume returns 255 as exactly `1.0`, the same code path as a byte
+plane. `ImageDimensions`, `ImageChannels`, `ImageType` and `ImageData` all accept either rank.
+
+A **colour volume is rank 4**, which is what forced `ImageData`'s nested rebuild to become a general
+recursion over dims rather than the unrolled two-and-a-bit levels the plane case used. Unrolling a
+fourth level would have been the point at which the pattern should have been a recursion from the
+start.
+
+Volumetric *operations* — 3-D convolution and filtering — are the next step and are not here yet.
+Separability pays even better in three dimensions: `kw + kh + kd` taps instead of `kw · kh · kd`, so
+27 becomes 9 at radius 1 and 729 becomes 27 at radius 4.

@@ -255,7 +255,20 @@ static Expr* builtin_imageq(Expr* res) {
 /* ImageDimensions -- {WIDTH, HEIGHT}, transposed relative to ImageData's height x width. */
 static Expr* builtin_imagedimensions(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
-    size_t w = 0, h = 0;
+    size_t w = 0, h = 0, dp = 0;
+    /* A 3-D image reports {width, height, depth} -- three elements, and REVERSED from the
+     * depth x height x width storage order. Six orderings are possible with three axes and a cubic
+     * volume validates none of them, so every test uses distinct extents. */
+    if (image3d_info(res->data.function.args[0], &w, &h, &dp, NULL, NULL)) {
+        Expr* three[3];
+        three[0] = expr_new_integer((int64_t)w);
+        three[1] = expr_new_integer((int64_t)h);
+        three[2] = expr_new_integer((int64_t)dp);
+        if (!three[0] || !three[1] || !three[2]) {
+            expr_free(three[0]); expr_free(three[1]); expr_free(three[2]); return NULL;
+        }
+        return expr_new_function(expr_new_symbol(SYM_List), three, 3);
+    }
     if (!image_info(res->data.function.args[0], &w, &h, NULL, NULL)) return NULL;
     Expr* two[2];
     two[0] = expr_new_integer((int64_t)w);
@@ -267,6 +280,8 @@ static Expr* builtin_imagedimensions(Expr* res) {
 static Expr* builtin_imagechannels(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
     size_t c = 0;
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, &c, NULL))
+        return expr_new_integer((int64_t)c);
     if (!image_info(res->data.function.args[0], NULL, NULL, &c, NULL)) return NULL;
     return expr_new_integer((int64_t)c);
 }
@@ -274,6 +289,8 @@ static Expr* builtin_imagechannels(Expr* res) {
 static Expr* builtin_imagetype(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
     ImgType t;
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, &t))
+        return expr_new_string(img_type_name(t));
     if (!image_info(res->data.function.args[0], NULL, NULL, NULL, &t)) return NULL;
     return expr_new_string(img_type_name(t));
 }
@@ -287,6 +304,48 @@ static double img_to_unit(double v, ImgType t) {
 /* Recursively rebuild the pixel array, scaling leaves. The structure is copied rather than
  * flattened because ImageData must give back the SAME shape it was handed -- height x width for
  * grey, height x width x channels for colour, interleaved. */
+/* Rebuild nested Lists from a flat row-major buffer of ANY rank, scaling leaves.
+ *
+ * The 2-D and 3-D cases are unrolled below for directness, but a colour VOLUME is rank 4 and
+ * unrolling a fourth level would be the point at which the pattern should have been a recursion
+ * from the start. One axis per call, with the stride being the product of the remaining dims. */
+static Expr* nd_nest(const void* data, NDType dt, const int64_t* dims, int rank,
+                     size_t offset, ImgType t, bool raw) {
+    size_t n = (size_t)dims[0];
+    Expr** kids = malloc(sizeof(Expr*) * n);
+    if (!kids) return NULL;
+    bool ok = true;
+    for (size_t i = 0; i < n; i++) kids[i] = NULL;
+
+    if (rank == 1) {
+        for (size_t i = 0; i < n && ok; i++) {
+            if (raw) {
+                kids[i] = ndarray_buffer_element_to_expr(data, offset + i, dt);
+            } else {
+                double re = 0.0, imv = 0.0;
+                ndt_get(data, offset + i, dt, &re, &imv);
+                kids[i] = expr_new_real(img_to_unit(re, t));
+            }
+            if (!kids[i]) ok = false;
+        }
+    } else {
+        size_t stride = 1;
+        for (int r = 1; r < rank; r++) stride *= (size_t)dims[r];
+        for (size_t i = 0; i < n && ok; i++) {
+            kids[i] = nd_nest(data, dt, dims + 1, rank - 1, offset + i * stride, t, raw);
+            if (!kids[i]) ok = false;
+        }
+    }
+    if (!ok) {
+        for (size_t i = 0; i < n; i++) expr_free(kids[i]);
+        free(kids);
+        return NULL;
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), kids, n);
+    free(kids);
+    return out;
+}
+
 static Expr* img_scale_tree(const Expr* e, ImgType t, bool raw) {
     /* A buffer-backed image: rebuild the nested List from the buffer, scaling as we go.
      *
@@ -296,7 +355,13 @@ static Expr* img_scale_tree(const Expr* e, ImgType t, bool raw) {
      * than a visible fork in the API, and its absence is what the first version got wrong: every
      * test used a small image, stayed on the nested path, and so never touched it. */
     if (is_ndarray(e)) {
+        /* Rank 4 is a colour VOLUME. Rebuilding it as nested Lists needs a general recursion over
+         * dims rather than the two-and-a-bit levels the 2-D case hard-codes, so ranks above 3
+         * recurse one axis at a time. */
         const NDArrayData* a = &e->data.ndarray;
+        if (a->rank > 3) {
+            return nd_nest(a->data, a->dtype, a->dims, a->rank, 0, t, raw);
+        }
         size_t h = (size_t)a->dims[0];
         size_t w = (a->rank >= 2) ? (size_t)a->dims[1] : 1;
         size_t c = (a->rank >= 3) ? (size_t)a->dims[2] : 1;
@@ -383,7 +448,9 @@ static Expr* builtin_imagedata(Expr* res) {
     if (argc != 1 && argc != 2) return NULL;
     Expr* img = res->data.function.args[0];
     ImgType t;
-    if (!image_info(img, NULL, NULL, NULL, &t)) return NULL;
+    /* Works for both ranks: the scaling walk is shape-agnostic, so a volume needs only the type. */
+    if (!image3d_info(img, NULL, NULL, NULL, NULL, &t)
+        && !image_info(img, NULL, NULL, NULL, &t)) return NULL;
 
     bool raw = false;
     if (argc == 2) {
@@ -532,7 +599,235 @@ Expr* image_build_real(const double* buf, size_t width, size_t height, size_t ch
     return expr_new_function(expr_new_symbol("Image"), two, 2);
 }
 
+/* ---- Image3D: volumetric images ------------------------------------------
+ *
+ * A volume is depth x height x width (slices outermost, indexed data[[z, y, x]]) for grey, or
+ * depth x height x width x channels for colour. ImageDimensions reports {width, height, depth} --
+ * FULLY REVERSED from the storage order. That is Mathematica's convention and it is the 3-D version
+ * of the trap the 2-D accessors already carry, only worse: with three axes there are six possible
+ * orderings and a cubic test volume validates none of them. Every test here therefore uses
+ * DISTINCT depth, height and width.
+ *
+ * The validation and storage follow the 2-D path exactly: a buffer answers its shape in O(1) from
+ * its dims, a nested List is walked once at construction, and computed volumes are stored on the
+ * visible NDArray surface so the post-gate cannot flatten them.
+ */
+
+/* Shape of a canonical 3-D image without walking the voxels. */
+static bool img3_shape_fast(const Expr* d, size_t* dp, size_t* h, size_t* w, size_t* c) {
+    if (is_ndarray(d)) {
+        const NDArrayData* a = &d->data.ndarray;
+        if (a->rank == 3) {
+            *dp = (size_t)a->dims[0]; *h = (size_t)a->dims[1]; *w = (size_t)a->dims[2]; *c = 1;
+            return true;
+        }
+        if (a->rank == 4) {
+            *dp = (size_t)a->dims[0]; *h = (size_t)a->dims[1]; *w = (size_t)a->dims[2];
+            *c = (size_t)a->dims[3];
+            return *c > 0;
+        }
+        return false;
+    }
+    /* Nested: check every slice is rectangular and of the same shape. O(depth * height), not
+     * O(voxels) -- the same trade the 2-D accessor makes, and for the same reason. */
+    if (!img_is_list(d) || d->data.function.arg_count == 0) return false;
+    size_t nd = d->data.function.arg_count;
+    size_t nh = 0, nw = 0, nc = 1;
+    for (size_t z = 0; z < nd; z++) {
+        const Expr* sl = d->data.function.args[z];
+        if (!img_is_list(sl) || sl->data.function.arg_count == 0) return false;
+        if (z == 0) nh = sl->data.function.arg_count;
+        else if (sl->data.function.arg_count != nh) return false;
+        for (size_t y = 0; y < nh; y++) {
+            const Expr* row = sl->data.function.args[y];
+            if (!img_is_list(row) || row->data.function.arg_count == 0) return false;
+            if (z == 0 && y == 0) {
+                nw = row->data.function.arg_count;
+                const Expr* p0 = row->data.function.args[0];
+                if (img_is_list(p0)) {
+                    nc = p0->data.function.arg_count;
+                    if (nc == 0) return false;
+                }
+            } else if (row->data.function.arg_count != nw) return false;
+        }
+    }
+    *dp = nd; *h = nh; *w = nw; *c = nc;
+    return true;
+}
+
+/* Full validation: every voxel numeric and real, plus the range and integer-ness for type
+ * inference. */
+static bool img3_shape(const Expr* d, size_t* dp, size_t* h, size_t* w, size_t* c,
+                       bool* all_int, double* lo, double* hi) {
+    if (!img3_shape_fast(d, dp, h, w, c)) return false;
+    *all_int = true; *lo = 0.0; *hi = 0.0;
+    bool first = true;
+
+    if (is_ndarray(d)) {
+        const NDArrayData* a = &d->data.ndarray;
+        if (a->dtype == NDT_COMPLEX64 || a->dtype == NDT_COMPLEX32) return false;
+        size_t n = (*dp) * (*h) * (*w) * (*c);
+        *all_int = (a->dtype == NDT_INT64 || a->dtype == NDT_BOOL);
+        for (size_t i = 0; i < n; i++) {
+            double re = 0.0, imv = 0.0;
+            ndt_get(a->data, i, a->dtype, &re, &imv);
+            if (imv != 0.0) return false;
+            if (first) { *lo = *hi = re; first = false; }
+            else { if (re < *lo) *lo = re; if (re > *hi) *hi = re; }
+        }
+        return true;
+    }
+
+    for (size_t z = 0; z < *dp; z++) {
+        const Expr* sl = d->data.function.args[z];
+        for (size_t y = 0; y < *h; y++) {
+            const Expr* row = sl->data.function.args[y];
+            for (size_t x = 0; x < *w; x++) {
+                const Expr* px = row->data.function.args[x];
+                if (*c > 1) {
+                    if (!img_is_list(px) || px->data.function.arg_count != *c) return false;
+                    for (size_t k = 0; k < *c; k++) {
+                        const Expr* v = px->data.function.args[k];
+                        double re = 0.0, imv = 0.0;
+                        if (!na_read_scalar(v, &re, &imv) || imv != 0.0) return false;
+                        if (v->type != EXPR_INTEGER) *all_int = false;
+                        if (first) { *lo = *hi = re; first = false; }
+                        else { if (re < *lo) *lo = re; if (re > *hi) *hi = re; }
+                    }
+                } else {
+                    if (img_is_list(px)) return false;   /* mixed rank */
+                    double re = 0.0, imv = 0.0;
+                    if (!na_read_scalar(px, &re, &imv) || imv != 0.0) return false;
+                    if (px->type != EXPR_INTEGER) *all_int = false;
+                    if (first) { *lo = *hi = re; first = false; }
+                    else { if (re < *lo) *lo = re; if (re > *hi) *hi = re; }
+                }
+            }
+        }
+    }
+    return true;
+}
+
+bool image3d_info(const Expr* e, size_t* width, size_t* height, size_t* depth,
+                  size_t* channels, ImgType* type) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2) return false;
+    const Expr* hd = e->data.function.head;
+    if (!hd || hd->type != EXPR_SYMBOL || strcmp(hd->data.symbol.name, "Image3D") != 0)
+        return false;
+    const Expr* ty = e->data.function.args[1];
+    if (!ty || ty->type != EXPR_STRING) return false;
+    ImgType t;
+    if (!img_type_from_name(ty->data.string, &t)) return false;
+    size_t dp = 0, h = 0, w = 0, c = 0;
+    if (!img3_shape_fast(e->data.function.args[0], &dp, &h, &w, &c)) return false;
+    if (width) *width = w;
+    if (height) *height = h;
+    if (depth) *depth = dp;
+    if (channels) *channels = c;
+    if (type) *type = t;
+    return true;
+}
+
+bool image3d_load(const Expr* img, size_t* width, size_t* height, size_t* depth,
+                  size_t* channels, double** buf) {
+    size_t w = 0, h = 0, dp = 0, c = 0; ImgType t;
+    if (!image3d_info(img, &w, &h, &dp, &c, &t)) return false;
+    double* out = malloc(sizeof(double) * dp * h * w * c);
+    if (!out) return false;
+    const Expr* d = img->data.function.args[0];
+
+    if (is_ndarray(d)) {
+        const NDArrayData* a = &d->data.ndarray;
+        size_t n = dp * h * w * c;
+        for (size_t i = 0; i < n; i++) {
+            double re = 0.0, imv = 0.0;
+            ndt_get(a->data, i, a->dtype, &re, &imv);
+            if (imv != 0.0) { free(out); return false; }
+            out[i] = img_to_unit(re, t);
+        }
+    } else {
+        size_t i = 0;
+        for (size_t z = 0; z < dp; z++) {
+            const Expr* sl = d->data.function.args[z];
+            for (size_t y = 0; y < h; y++) {
+                const Expr* row = sl->data.function.args[y];
+                for (size_t x = 0; x < w; x++) {
+                    const Expr* px = row->data.function.args[x];
+                    for (size_t k = 0; k < c; k++) {
+                        const Expr* v = (c == 1) ? px : px->data.function.args[k];
+                        double re = 0.0, imv = 0.0;
+                        if (!na_read_scalar(v, &re, &imv) || imv != 0.0) { free(out); return false; }
+                        out[i++] = img_to_unit(re, t);
+                    }
+                }
+            }
+        }
+    }
+    if (width) *width = w;
+    if (height) *height = h;
+    if (depth) *depth = dp;
+    if (channels) *channels = c;
+    *buf = out;
+    return true;
+}
+
+/* Image3D[data] / Image3D[data, type] -- same normalisation and inference as Image. */
+static Expr* builtin_image3d(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+    if (argc == 2 && image3d_info(res, NULL, NULL, NULL, NULL, NULL)) return NULL;
+
+    Expr* data = res->data.function.args[0];
+    size_t dp = 0, h = 0, w = 0, c = 0; bool all_int = false; double lo = 0.0, hi = 0.0;
+    if (!img3_shape(data, &dp, &h, &w, &c, &all_int, &lo, &hi)) return NULL;
+
+    ImgType t;
+    if (argc == 2) {
+        Expr* ty = res->data.function.args[1];
+        if (!ty || ty->type != EXPR_STRING || !img_type_from_name(ty->data.string, &t))
+            return NULL;
+        if (t == IMG_BIT && !(all_int && lo >= 0.0 && hi <= 1.0)) return NULL;
+        if (t == IMG_BYTE && !(all_int && lo >= 0.0 && hi <= 255.0)) return NULL;
+    } else {
+        if (all_int && lo >= 0.0 && hi <= 1.0)        t = IMG_BIT;
+        else if (all_int && lo >= 0.0 && hi <= 255.0) t = IMG_BYTE;
+        else                                          t = IMG_REAL;
+    }
+    Expr* two[2];
+    two[0] = expr_copy(data);
+    if (two[0] && is_packed_list(two[0]))
+        two[0]->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+    two[1] = expr_new_string(img_type_name(t));
+    if (!two[0] || !two[1]) { expr_free(two[0]); expr_free(two[1]); return NULL; }
+    return expr_new_function(expr_new_symbol("Image3D"), two, 2);
+}
+
+static Expr* builtin_image3dq(Expr* res) {
+    if (res->data.function.arg_count != 1) return NULL;
+    bool q = image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL);
+    return expr_new_symbol(q ? SYM_True : SYM_False);
+}
+
 void image_init(void) {
+    symtab_add_builtin("Image3D", builtin_image3d);
+    symtab_get_def("Image3D")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Image3D",
+        "Image3D[data] is a volumetric image, normalising to Image3D[data, type]. The data is a "
+        "depth x height x width array of voxels, or depth x height x width x channels for colour, "
+        "so it is indexed data[[z, y, x]] with slices outermost. ImageDimensions reports "
+        "{width, height, depth} -- FULLY REVERSED from that order, which is Mathematica's "
+        "convention. Type inference and the accessors match Image: ImageQ is False for a volume "
+        "(use Image3DQ), while ImageDimensions, ImageChannels, ImageType and ImageData all accept "
+        "either rank.");
+
+    symtab_add_builtin("Image3DQ", builtin_image3dq);
+    symtab_get_def("Image3DQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Image3DQ",
+        "Image3DQ[expr] gives True if expr is a valid volumetric image in canonical form. "
+        "Malformed input to Image3D stays unevaluated, so this is how validity is tested.");
+
+    symtab_set_packed_aware("Image3D");
+    symtab_set_packed_aware("Image3DQ");
     /* The image heads are listed in src/pack.c's AWARE table, which is where
      * tools/check_packed_aware.py looks. Setting the flag here as well because pack_init() runs
      * before image_init() in core_init, and the table's effect must survive whatever order the
