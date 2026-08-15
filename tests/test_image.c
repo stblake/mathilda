@@ -2199,6 +2199,57 @@ static void test_volume_distance_transform_is_exactly_euclidean(void) {
                    "True", 0);
 }
 
+
+/* Volumetric GradientFilter and DerivativeFilter. A LINEAR RAMP is the right test object: a central
+ * difference reproduces a linear function's slope exactly, and the smoothing along the other axes
+ * preserves linearity, so the answers are exact equalities rather than tolerances. The slope is 1/32 --
+ * a power of two, so it is representable and `===` means what it says. */
+#define RAMPX "Image3D[Table[N[(x - 1)/32], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}]]"
+
+static void test_volume_gradient_of_a_ramp_is_exactly_the_slope(void) {
+    assert_eval_eq("Module[{g = ImageData[GradientFilter[" RAMPX "]]},"
+                   " {g[[4, 5, 6]] === 1./32,"
+                   "  Union[Flatten[g[[2 ;; 7, 2 ;; 9, 2 ;; 11]]]] === {1./32}}]",
+                   "{True, True}", 0);
+    /* A constant volume has no gradient at all -- exactly zero, not merely small. */
+    assert_eval_eq("Union[Flatten[ImageData[GradientFilter["
+                   "Image3D[Table[0.5, {8}, {8}, {8}]]]]]]", "{0.0}", 0);
+    /* AXIS COVARIANCE: the magnitude does not care which axis the ramp runs along. This is what
+     * catches a transposed stencil or a mis-indexed component, neither of which spoils the look of
+     * the output. */
+    assert_eval_eq("Module[{rz, ry},"
+                   " rz = Image3D[Table[N[(z - 1)/32], {z, 1, 12}, {y, 1, 10}, {x, 1, 8}]];"
+                   " ry = Image3D[Table[N[(y - 1)/32], {z, 1, 8}, {y, 1, 12}, {x, 1, 10}]];"
+                   " {Union[Flatten[ImageData[GradientFilter[rz]][[2 ;; 11, 2 ;; 9, 2 ;; 7]]]]"
+                   "    === {1./32},"
+                   "  Union[Flatten[ImageData[GradientFilter[ry]][[2 ;; 7, 2 ;; 11, 2 ;; 9]]]]"
+                   "    === {1./32}}]", "{True, True}", 0);
+}
+
+static void test_volume_derivative_filter_signs_and_orders(void) {
+    /* THE SIGN, asserted as an exact signed value. The stencils are pre-flipped because ImageConvolve
+     * reflects its kernel, and the rank-2 code records that this was caught only this way -- a gradient
+     * magnitude squares the sign away, so a flipped derivative looks perfect in every other test. */
+    assert_eval_eq("ImageData[DerivativeFilter[" RAMPX ", {0, 0, 1}]][[4, 5, 6]] === 1./32",
+                   "True", 0);
+    /* The derivative along an axis the ramp does not vary in is zero. */
+    assert_eval_eq("Abs[ImageData[DerivativeFilter[" RAMPX ", {1, 0, 0}]][[4, 5, 6]]] < 1.*^-17",
+                   "True", 0);
+    /* Order 0 on every axis is a pure smoothing, which is a legitimate request and not a derivative:
+     * on a linear ramp a symmetric smoothing returns the centre value untouched. */
+    assert_eval_eq("ImageData[DerivativeFilter[" RAMPX ", {0, 0, 0}]][[4, 5, 6]] === N[5/32]",
+                   "True", 0);
+    /* The SECOND derivative of a linear function is zero -- an exact property of the function, not of
+     * the filter, which is what makes it a good check on the order-2 stencil. */
+    assert_eval_eq("Abs[ImageData[DerivativeFilter[" RAMPX ", {0, 0, 2}]][[4, 5, 6]]] < 1.*^-17",
+                   "True", 0);
+    assert_eval_eq("ImageDimensions[DerivativeFilter[" RAMPX ", {0, 0, 1}]]", "{12, 10, 8}", 0);
+    /* A rank-2 order spec on a volume, and an order the stencil table does not define, both decline. */
+    assert_eval_eq("{Head[DerivativeFilter[" RAMPX ", {0, 1}]],"
+                   " Head[DerivativeFilter[" RAMPX ", {0, 0, 5}]]}",
+                   "{DerivativeFilter, DerivativeFilter}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2306,6 +2357,8 @@ int main(void) {
     TEST(test_volume_local_adaptive_binarize);
     TEST(test_volume_local_adaptive_beats_global);
     TEST(test_volume_distance_transform_is_exactly_euclidean);
+    TEST(test_volume_gradient_of_a_ramp_is_exactly_the_slope);
+    TEST(test_volume_derivative_filter_signs_and_orders);
 
     printf("All image tests passed.\n");
     return 0;

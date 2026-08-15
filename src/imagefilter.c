@@ -1514,8 +1514,105 @@ static bool deriv_orders(Expr* spec, int* oy, int* ox) {
 }
 
 /* DerivativeFilter[image, {n, m}] -- n-th derivative down the rows, m-th across the columns. */
+/* A separable 3-D derivative kernel: the outer product of three stencils, one per axis.
+ *
+ * Exactly the rank-2 construction with a third factor, so the same head means the same thing at both
+ * ranks -- derivative along the requested axis, SMOOTHING along the others. That smoothing is not
+ * decoration: a bare central difference amplifies noise, which is why every library's Sobel is a
+ * derivative in one direction and a blur in the rest.
+ *
+ * The stencils come pre-flipped from deriv_stencil, because ImageConvolve reflects its kernel and a
+ * stencil written in reading order would therefore compute the NEGATED derivative. The comment there
+ * records that this was caught only by asserting an exact signed value -- the gradient magnitude
+ * squares the sign away -- and the same trap applies here, one rank up.
+ *
+ * The product of three rank-1 factors is rank 1, so convolve3_run's factorisation finds it and the
+ * cost is 9 taps rather than 27.
+ */
+static double* deriv3_kernel(int oz, int oy, int ox, size_t* kd, size_t* kh, size_t* kw) {
+    double sz[3], sy[3], sx[3]; size_t nz = 0, ny = 0, nx = 0;
+    if (!deriv_stencil(oz, sz, &nz) || !deriv_stencil(oy, sy, &ny)
+        || !deriv_stencil(ox, sx, &nx)) return NULL;
+    double* k = malloc(sizeof(double) * nz * ny * nx);
+    if (!k) return NULL;
+    for (size_t m = 0; m < nz; m++)
+        for (size_t i = 0; i < ny; i++)
+            for (size_t j = 0; j < nx; j++)
+                k[(m * ny + i) * nx + j] = sz[m] * sy[i] * sx[j];
+    *kd = nz; *kh = ny; *kw = nx;
+    return k;
+}
+
+/* Read {oz, oy, ox}. */
+static bool deriv3_orders(const Expr* e, int* oz, int* oy, int* ox) {
+    if (!e || e->type != EXPR_FUNCTION || !e->data.function.head
+        || e->data.function.head->type != EXPR_SYMBOL
+        || e->data.function.head->data.symbol.name != SYM_List
+        || e->data.function.arg_count != 3) return false;
+    double v[3], im = 0.0;
+    for (int i = 0; i < 3; i++) {
+        if (!na_read_scalar(e->data.function.args[i], &v[i], &im) || im != 0.0) return false;
+        if (v[i] != floor(v[i]) || v[i] < 0.0 || v[i] > 2.0) return false;
+    }
+    *oz = (int)v[0]; *oy = (int)v[1]; *ox = (int)v[2];
+    return true;
+}
+
+static Expr* deriv3_run(Expr* vol, int oz, int oy, int ox) {
+    size_t kd = 0, kh = 0, kw = 0;
+    double* k = deriv3_kernel(oz, oy, ox, &kd, &kh, &kw);
+    if (!k) return NULL;
+    Expr* o = convolve3_run(vol, k, kd, kh, kw);
+    free(k);
+    return o;
+}
+
+/* GradientFilter for a volume: the magnitude of the three first derivatives.
+ *
+ * Each component goes through the same separable derivative the rank-2 filter uses, so a volume and a
+ * plane agree about what a gradient is. The three are combined once at the end -- squaring per axis
+ * and summing, then one square root -- because sqrt is not additive and taking it per component would
+ * give the sum of absolute derivatives, a different (and larger) quantity.
+ */
+static Expr* gradient3_run(Expr* vol) {
+    size_t w = 0, h = 0, d = 0; double* g = NULL;
+    if (!img3_grey_volume(vol, &w, &h, &d, &g)) return NULL;
+    size_t n = w * h * d;
+    Expr* gv = image3d_build_real(g, w, h, d, 1);   /* a grey volume to convolve three times */
+    free(g);
+    if (!gv) return NULL;
+
+    Expr* comp[3];
+    comp[0] = deriv3_run(gv, 1, 0, 0);
+    comp[1] = deriv3_run(gv, 0, 1, 0);
+    comp[2] = deriv3_run(gv, 0, 0, 1);
+    expr_free(gv);
+    double* acc = malloc(sizeof(double) * n);
+    Expr* out = NULL;
+    bool ok = comp[0] && comp[1] && comp[2] && acc;
+    if (ok) for (size_t i = 0; i < n; i++) acc[i] = 0.0;
+    for (int q = 0; q < 3 && ok; q++) {
+        size_t cw = 0, ch = 0, cd = 0, cc = 0; double* buf = NULL;
+        if (!image3d_load(comp[q], &cw, &ch, &cd, &cc, &buf)) { ok = false; break; }
+        for (size_t i = 0; i < n; i++) acc[i] += buf[i] * buf[i];
+        free(buf);
+    }
+    if (ok) {
+        for (size_t i = 0; i < n; i++) acc[i] = sqrt(acc[i]);
+        out = image3d_build_real(acc, w, h, d, 1);
+    }
+    for (int q = 0; q < 3; q++) expr_free(comp[q]);
+    free(acc);
+    return out;
+}
+
 static Expr* builtin_derivativefilter(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
+        int oz3 = 0, oy3 = 0, ox3 = 0;
+        if (!deriv3_orders(res->data.function.args[1], &oz3, &oy3, &ox3)) return NULL;
+        return deriv3_run(res->data.function.args[0], oz3, oy3, ox3);
+    }
     int oy = 0, ox = 0;
     if (!deriv_orders(res->data.function.args[1], &oy, &ox)) return NULL;
     /* {0, 0} is a plain smoothing, which is a legitimate request but not a derivative; it is
@@ -1550,6 +1647,8 @@ static Expr* builtin_derivativefilter(Expr* res) {
  * needs no such choice. */
 static Expr* builtin_gradientfilter(Expr* res) {
     if (res->data.function.arg_count != 1) return NULL;
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL))
+        return gradient3_run(res->data.function.args[0]);
     size_t w = 0, h = 0; double* g = NULL;
     if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
 

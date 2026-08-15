@@ -1818,3 +1818,50 @@ geometric result can be compared with `===`:
 Near-flat in how sparse the seeds are, which is what a lower-envelope method gives you: the work is
 three linear passes whatever the geometry, where a propagation method does more when the nearest seed
 is further away.
+
+## Gradient and derivative filters in a volume
+
+`GradientFilter` and `DerivativeFilter[volume, {oz, oy, ox}]` accept an `Image3D`.
+
+The kernel is the outer product of three stencils, one per axis — exactly the rank-2 construction with
+a third factor, so **the same head means the same thing at both ranks**: a derivative along the
+requested axis and *smoothing* along the others. That smoothing is not decoration. A bare central
+difference amplifies noise, which is why every library's Sobel is a derivative in one direction and a
+blur in the rest. The product of three rank-1 factors is rank 1, so `convolve3_run`'s factorisation
+finds it and the cost is 9 taps rather than 27.
+
+`GradientFilter` combines the three components once at the end — square, sum, then one square root.
+Taking the root per component would give the sum of absolute derivatives, a different and larger
+quantity.
+
+### A linear ramp makes every test an exact equality
+
+A central difference reproduces a linear function's slope exactly, and symmetric smoothing preserves
+linearity, so a ramp gives exact answers rather than approximate ones. The slope used is **1/32** — a
+power of two, so it is representable and `===` means what it says.
+
+- The gradient of an x-ramp is **exactly** the slope, at a point and across the whole interior.
+- A constant volume gives **exactly** `0.0`.
+- **Axis covariance**: ramps along x, y and z all give exactly the same magnitude. This is what catches
+  a transposed stencil or a mis-indexed component, neither of which spoils the look of the output.
+- The **signed** `d/dx` is exactly `+1/32`, positive where brightness increases. The stencils are
+  pre-flipped because `ImageConvolve` reflects its kernel, and the rank-2 code records that this was
+  caught only by asserting an exact *signed* value — a gradient magnitude squares the sign away, so a
+  flipped derivative looks perfect in every other test.
+- The derivative along an axis the ramp does not vary in is zero; order `{0,0,0}` is a pure smoothing,
+  which on a ramp returns the centre value untouched; and the **second** derivative of a linear function
+  is zero — a property of the function, not the filter, which is what makes it a good check on the
+  order-2 stencil.
+
+### Measured
+
+32 × 48 × 64 (98,304 voxels):
+
+| | Mathilda | SciPy | Ratio |
+|---|---:|---:|---:|
+| `GradientFilter` | 1.542 ms | 2.17 ms (three `sobel`s + magnitude) | **1.4× faster** |
+| `DerivativeFilter` one axis | 0.495 ms | 0.70 ms (`sobel`) | **1.4× faster** |
+| second derivative | 0.498 ms | — | — |
+
+`make check-image-packing` now reports 43 (head, rank) pairs, all packed, with six heads still having
+no volumetric path.
