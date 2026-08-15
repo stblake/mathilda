@@ -133,6 +133,47 @@ prose reaches the DOM through `{@html}`: a notebook is an executable document
 whose code cells already evaluate arbitrary Mathilda, so HTML in its prose is not
 a new capability, and a regex pass would look like sanitisation without being it.
 
+### Notebook search
+
+`Cmd+F` in focused mode opens a find bar that searches **every cell** of the
+notebook in the active pane. It is deliberately not `@codemirror/search`: that
+package's `openSearchPanel` searches one editor — whichever cell holds focus — and
+a bar that silently ignores the other forty cells while calling itself notebook
+search is worse than no bar, because you would believe its "No matches". So
+`lib/search.ts` matches over the notebook's own model via `store.allCells()`, and
+navigation then drives whichever editor owns the match it landed on: a code cell
+gets a real CodeMirror selection and scroll, a prose cell is opened for editing
+(which un-renders it) and its range selected.
+
+`Cmd+F` is free because `@codemirror/search` is *not* installed, so no editor
+claims the binding. Enter and Shift+Enter walk the matches, wrapping both ways;
+typing only updates the count, since jumping per keystroke would scroll the
+notebook out from under someone still typing.
+
+What it does not do is highlight every match at once — that needs a CodeMirror
+decoration extension per cell, which is its own change. The count says how many
+there are and Enter walks them.
+
+`npm run check:search` compiles `lib/search.ts` with the project's own `tsc` and
+imports the result, so its 18 checks exercise the shipped functions rather than a
+paraphrase. Two properties carry it: matches are **non-overlapping** (`"aa"` in
+`"aaaa"` is two matches, not three, which is what separates the loop from the
+naive `from = at + 1`), and stepping wraps in **both** directions — in JavaScript
+`-1 % 3` is `-1`, so the naive form sends Shift+Enter at the first match to a
+negative index and the bar reads "0 of 3".
+
+### Interface scale
+
+The scale rows in the properties panel drive the same store the `Cmd+=` / `Cmd+-`
+/ `Cmd+0` bindings drive (root `font-size`, via `uiScale` in `lib/properties.ts`).
+It was a local in `App.svelte`; lifting it to a store is what lets the panel show
+the number the keyboard changes, rather than becoming a second scale that drifts
+from the first. The panel's steps are exactly representable in binary (0.75, 1,
+1.25, 1.5) so a button reads as selected on an exact equality, and only on one —
+the keyboard still moves in 0.1, and highlighting the nearest step while sitting
+between two would misreport the state. `Cmd+0` had been documented in that
+handler's own comment without being implemented; the store made it one line.
+
 `npm run check:prose` covers the pure half — the renderer and the marker
 constants, read out of `prose.ts` so the checks cannot drift from it. The DOM half
 needs a real pointer, since synthetic events do not reach the WKWebView.

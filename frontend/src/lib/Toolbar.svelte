@@ -38,6 +38,7 @@
   import { showStatusBar, resetSessionStats } from './status';
   import { propertiesOpen } from './properties';
   import { wrapSelection, PROSE_BOLD, PROSE_ITALIC, PROSE_CODE, PROSE_LINK } from './prose';
+  import { searchOpen } from './search';
   import type { Cell, CellType, NotebookRow } from './notebook';
 
   type MenuId = 'eval' | 'kernel' | 'docs' | 'style' | 'addpane' | 'overflow' | null;
@@ -641,6 +642,16 @@
     on:pointerdown|preventDefault
     on:click={() => darkMode.update(v => !v)}
   >{$darkMode ? '◑' : '☀'}</button>
+
+  <button
+    class="tb-btn"
+    class:active={$searchOpen}
+    title="Find in notebook (Cmd+F)"
+    aria-pressed={$searchOpen}
+    tabindex="-1"
+    on:pointerdown|preventDefault
+    on:click={() => searchOpen.update(v => !v)}
+  ><Icon name="search" /></button>
 
   <!-- A static title: what the caret is on is only resolved when the menu opens,
        and the menu's own first item names it. -->

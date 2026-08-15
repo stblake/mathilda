@@ -25,7 +25,7 @@
   import type { Cell, NotebookRow } from './notebook';
   import { restart, abortEvaluation } from './kernelActions';
   import { darkMode } from './theme';
-  import { propertiesOpen, showExecLabels } from './properties';
+  import { propertiesOpen, showExecLabels, uiScale, UI_SCALE_STEPS } from './properties';
 
   const KERNEL_LABEL: Record<string, string> = {
     starting:   'Starting…',
@@ -166,6 +166,26 @@
       />
       Show In[n] labels
     </label>
+
+    <!-- Scale drives the SAME store Cmd+= / Cmd+- / Cmd+0 have always driven; the
+         panel is a second way in, not a second setting. A step reads as selected
+         only on an exact match, because the keyboard moves in 0.1 and would
+         otherwise light up the nearest button while sitting between two. -->
+    <div class="row scale-row">
+      <span class="k">Scale</span>
+      <span class="scale-steps">
+        {#each UI_SCALE_STEPS as step}
+          <button
+            class="props-btn scale-btn"
+            class:on={$uiScale === step}
+            tabindex={$propertiesOpen ? 0 : -1}
+            title={`Set the interface scale to ${Math.round(step * 100)}%`}
+            on:pointerdown|preventDefault
+            on:click={() => uiScale.set(step)}
+          >{Math.round(step * 100)}%</button>
+        {/each}
+      </span>
+    </div>
   </section>
 
   <!-- Layout is only a question when there is more than one pane; with one pane
@@ -295,6 +315,10 @@
   .props-btn:hover:not(:disabled) { border-color: var(--accent); }
   .props-btn:disabled { opacity: 0.45; cursor: default; }
   .props-btn.on { border-color: var(--accent); color: var(--accent); }
+
+  .scale-row { align-items: center; }
+  .scale-steps { display: flex; gap: 4px; }
+  .scale-btn { flex: 0 0 auto; padding: 3px 5px; font-size: 10px; }
 
   .check {
     display: flex;
