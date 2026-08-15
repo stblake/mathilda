@@ -410,13 +410,14 @@ static void test_buffer_backed_storage_agrees_with_the_nested_path(void) {
                    " out = ImageConvolve[img, {{1}}];"
                    " {Head[Part[out, 1]], ImageData[out] === ImageData[img]}]",
                    "{NDArray, True}", 0);
-    /* Storage is buffer-backed UNIFORMLY, at every size -- ndbuild_open packs even six elements,
-     * so there is no size threshold at which the representation changes. That is the better
-     * outcome: one representation for every computed image, and no class of image that only the
-     * large-input tests would ever reach. What stays nested is the data a CALLER handed to
-     * Image[...], which is copied as given rather than converted. */
+    /* Storage is buffer-backed UNIFORMLY, and -- since the constructor was made to canonicalise --
+     * REGARDLESS OF PROVENANCE. It did not always: data a caller handed to Image[...] used to be
+     * copied as given, so a constructed image and a computed one with identical pixels were never
+     * SameQ, and `===` was quietly useless on images. Both agreeing on representation is what makes
+     * every exactness claim in this file assertable at all. */
     assert_eval_eq("Head[Part[ImageConvolve[" I23 ", {{1}}], 1]]", "NDArray", 0);
-    assert_eval_eq("Head[Part[" I23 ", 1]]", "List", 0);
+    assert_eval_eq("Head[Part[" I23 ", 1]]", "NDArray", 0);
+    assert_eval_eq("ImageConvolve[" I23 ", {{1}}] === " I23, "True", 0);
     /* And the two agree exactly, small as well as large: an identity convolution of the nested
      * form gives back the same pixels through the buffer form. */
     assert_eval_eq("ImageData[ImageConvolve[" I23 ", {{1}}]] === ImageData[" I23 "]", "True", 0);
@@ -1324,6 +1325,80 @@ static void test_arbitrary_angle_rotation_round_trips_smooth_content(void) {
     assert_eval_eq("ImageDimensions[ImageRotate[" RIMG ", 0.3]]", "{4, 2}", 0);
 }
 
+
+/* ImagePad and ImageCrop -- the geometry pair whose composition is exactly the identity. */
+static void test_pad_then_crop_is_the_identity(void) {
+    /* THE property. Both are index arithmetic with no interpolation, so cropping back to the
+     * original size after a symmetric pad returns the original pixels bit for bit. It is also the
+     * test that catches an off-by-one on either side INDEPENDENTLY: a pad that adds one row too many
+     * at the top and one too few at the bottom still has the right total size, and only a round trip
+     * notices. */
+    assert_eval_eq("Module[{img = Image[Table[N[Sin[i*0.7] + Cos[j*0.4]], {i, 5}, {j, 7}]]},"
+                   " ImageCrop[ImagePad[img, 3], ImageDimensions[img]] === img]", "True", 0);
+    /* Three channels too, since the pad indexes pixels and the channel stride is the easy thing to
+     * drop. */
+    assert_eval_eq("Module[{img = Image[Table[N[i + j + k]/20, {i, 3}, {j, 4}, {k, 3}]]},"
+                   " ImageCrop[ImagePad[img, 2], ImageDimensions[img]] === img]", "True", 0);
+    /* A CENTRED crop can only invert a SYMMETRIC pad -- with pt=4, pb=3 the content starts one row
+     * below where a centred crop begins looking. The exact inverse of an asymmetric pad is a
+     * negative pad, and that is the property worth asserting. */
+    assert_eval_eq("Module[{img = Image[Table[N[i*j]/30, {i, 5}, {j, 7}]]},"
+                   " ImagePad[ImagePad[img, {{1, 2}, {3, 4}}], {{-1, -2}, {-3, -4}}] === img]",
+                   "True", 0);
+    assert_eval_eq("ImageDimensions[ImagePad[Image[Table[N[i*j]/30, {i, 5}, {j, 7}]], 3]]",
+                   "{13, 11}", 0);
+    /* Negative padding IS cropping, and agrees with the centred crop that removes the same border. */
+    assert_eval_eq("Module[{img = Image[Table[N[i*j]/30, {i, 5}, {j, 7}]]},"
+                   " ImagePad[img, -1] === ImageCrop[img, {5, 3}]]", "True", 0);
+    /* Padding may not erase the image, and a crop may not enlarge it: both decline. */
+    assert_eval_eq("Head[ImagePad[Image[Table[N[i*j]/30, {i, 5}, {j, 7}]], -9]]", "ImagePad", 0);
+    assert_eval_eq("Head[ImageCrop[Image[Table[N[i*j]/30, {i, 5}, {j, 7}]], {99, 99}]]",
+                   "ImageCrop", 0);
+}
+
+static void test_pad_side_convention_and_modes(void) {
+    /* THE CONVENTION TRAP. {{left, right}, {bottom, top}} names the pair in VISUAL order, while the
+     * data's first row is the TOP -- so `top` padding adds rows at the START of the array, the
+     * reverse of how the spec reads. A symmetric pad cannot tell; this pads one side only. */
+    assert_eval_eq("Module[{img = Image[Table[N[i*j]/30, {i, 5}, {j, 7}]], q},"
+                   " q = ImagePad[img, {{0, 0}, {0, 2}}];"
+                   " {ImageDimensions[q], First[ImageData[q]] === Table[0., {7}],"
+                   "  Chop[ImageData[q][[3]] - First[ImageData[img]]] === Table[0, {7}]}]",
+                   "{{7, 7}, True, True}", 0);
+    /* The three fill modes, on a row where each gives a different answer. Reflection does NOT repeat
+     * the edge pixel: doubling the edge sample would bias any later average toward the border. */
+    assert_eval_eq("First[ImageData[ImagePad[Image[{{0.1, 0.2, 0.3}}], {{1, 1}, {0, 0}}, "
+                   "\"Reflected\"]]]", "{0.2, 0.1, 0.2, 0.3, 0.2}", 0);
+    assert_eval_eq("First[ImageData[ImagePad[Image[{{0.1, 0.2, 0.3}}], {{1, 1}, {0, 0}}, "
+                   "\"Fixed\"]]]", "{0.1, 0.1, 0.2, 0.3, 0.3}", 0);
+    assert_eval_eq("First[ImageData[ImagePad[Image[{{0.1, 0.2, 0.3}}], {{1, 1}, {0, 0}}, 0.9]]]",
+                   "{0.9, 0.1, 0.2, 0.3, 0.9}", 0);
+    /* Reflection deeper than the image works, because the period is 2n-2 rather than one width. */
+    assert_eval_eq("First[ImageData[ImagePad[Image[{{0.1, 0.2, 0.3}}], {{4, 0}, {0, 0}}, "
+                   "\"Reflected\"]]]", "{0.1, 0.2, 0.3, 0.2, 0.1, 0.2, 0.3}", 0);
+    /* Every mode is invertible by a negative pad, since none of them touches the interior. */
+    assert_eval_eq("Module[{img = Image[Table[N[i*j]/30, {i, 5}, {j, 7}]]},"
+                   " {ImagePad[ImagePad[img, 1, \"Fixed\"], -1] === img,"
+                   "  ImagePad[ImagePad[img, 2, \"Reflected\"], -2] === img}]",
+                   "{True, True}", 0);
+}
+
+static void test_crop_trims_a_uniform_border(void) {
+    /* ImageCrop with no size asks how much of the frame carries no information. */
+    assert_eval_eq("Module[{b = Image[{{0., 0., 0., 0., 0.}, {0., 0.4, 0.6, 0., 0.},"
+                   " {0., 0., 0., 0., 0.}}]},"
+                   " {ImageDimensions[ImageCrop[b]], ImageData[ImageCrop[b]]}]",
+                   "{{2, 1}, {{0.4, 0.6}}}", 0);
+    /* The border colour is read from a corner rather than assumed black -- a scanned page's margin
+     * is white, and assuming black would trim nothing at all. */
+    assert_eval_eq("Module[{w = Image[{{1., 1., 1.}, {1., 0.2, 1.}, {1., 1., 1.}}]},"
+                   " {ImageDimensions[ImageCrop[w]], ImageData[ImageCrop[w]]}]",
+                   "{{1, 1}, {{0.2}}}", 0);
+    /* An entirely uniform image has no content to keep, and a zero-sized image is not an image, so
+     * it comes back unchanged. */
+    assert_eval_eq("Module[{u = Image[Table[0.5, {3}, {4}]]}, ImageCrop[u] === u]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1398,6 +1473,9 @@ int main(void) {
     TEST(test_levels_counts_sum_to_the_pixel_count);
     TEST(test_imageadjust_stretches_exactly_and_is_idempotent);
     TEST(test_imageadjust_parametric_curve);
+    TEST(test_pad_then_crop_is_the_identity);
+    TEST(test_pad_side_convention_and_modes);
+    TEST(test_crop_trims_a_uniform_border);
 
     printf("All image tests passed.\n");
     return 0;

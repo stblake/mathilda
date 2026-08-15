@@ -206,12 +206,73 @@ bool image_info(const Expr* e, size_t* width, size_t* height,
  * the values and nothing else, so it is predictable from the data alone -- and it is why
  * Image[{{0, 1}, {1, 0}}] is a bit image while Image[{{0., 1.}, {1., 0.}}] is a real one, which
  * is a distinction a caller can rely on rather than having to guess. */
+/* Canonicalise pixel/voxel data onto the VISIBLE NDArray surface, preserving stored values exactly and
+ * without scaling. Rank-generic, so Image and Image3D share it.
+ *
+ * Exists because the two ways an image can come into being disagreed about representation, which made
+ * `===` useless on images. image_build_real -- what every filter returns -- always builds an NDArray,
+ * while the constructor only promoted data that arrived ALREADY packed. A rank-2 Table is nested, not
+ * packed, so `Image[Table[...], "Real"]` stayed a tree and was never SameQ to any computed image with
+ * identical pixels. Both had the right numbers, so nothing caught it: the round-trip tests that would
+ * have compared a constructed image against a computed one were the ones just being written.
+ *
+ * The dtype follows the pixel type rather than being FLOAT64 throughout: "Bit" and "Byte" hold integers
+ * and ImageData reports stored values, so storing them as reals would turn a byte 200 into `200.` where
+ * Mathematica prints `200`.
+ *
+ * The fill is a recursive row-major walk rather than indexed loops, which is what lets one function
+ * serve both ranks -- the alternative was a 2-D version and a 3-D copy of it, and a dropped detail
+ * between the two is this subsystem's most repeated bug. */
+static bool img_fill_nested(const Expr* e, void* raw, NDType dt, size_t total, size_t* at) {
+    if (!e) return false;
+    if (e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!img_fill_nested(e->data.function.args[i], raw, dt, total, at)) return false;
+        return true;
+    }
+    double re = 0.0, im = 0.0;
+    if (*at >= total) return false;
+    if (!na_read_scalar(e, &re, &im) || im != 0.0) return false;
+    if (dt == NDT_INT64) ((int64_t*)raw)[*at] = (int64_t)re;
+    else                 ((double*)raw)[*at]  = re;
+    (*at)++;
+    return true;
+}
+
+static Expr* img_canonical_data(const Expr* data, const int64_t* dims, int rank, ImgType t) {
+    if (!data) return NULL;
+    /* expr_copy takes a mutable pointer and does not mutate; the cast is the tree's convention. */
+    if (is_ndarray(data)) return expr_copy((Expr*)data);
+
+    size_t total = 1;
+    for (int i = 0; i < rank; i++) total *= (size_t)dims[i];
+
+    NDType dt = (t == IMG_REAL) ? NDT_FLOAT64 : NDT_INT64;
+    void* raw = NULL;
+    Expr* nd = ndbuild_open(rank, dims, dt, &raw);
+    if (!nd || !raw) { expr_free(nd); return NULL; }
+
+    size_t at = 0;
+    /* A short count means the data was ragged in a way the shape check accepted; refusing is the only
+     * safe answer, since the tail of the buffer would otherwise be uninitialised memory read as
+     * pixels. */
+    if (!img_fill_nested(data, raw, dt, total, &at) || at != total) { expr_free(nd); return NULL; }
+    nd->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+    return nd;
+}
+
 static Expr* builtin_image(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;
 
-    /* Already canonical: leave it alone, or the evaluator would never reach a fixed point. */
-    if (argc == 2 && image_info(res, NULL, NULL, NULL, NULL)) return NULL;
+    /* Already canonical AND already on the NDArray surface: leave it alone, or the evaluator would
+     * never reach a fixed point. Canonical-but-nested falls through to be converted below, which is
+     * what makes two images with equal pixels SameQ regardless of how each was made. The fixed point
+     * still holds: after conversion the data IS an NDArray, so the next pass stops here. */
+    if (argc == 2 && image_info(res, NULL, NULL, NULL, NULL)
+        && is_ndarray(res->data.function.args[0])) return NULL;
 
     Expr* data = res->data.function.args[0];
     size_t h = 0, w = 0, c = 0; bool all_int = false; double lo = 0.0, hi = 0.0;
@@ -233,14 +294,16 @@ static Expr* builtin_image(Expr* res) {
     }
 
     Expr* two[2];
-    two[0] = expr_copy(data);
-    /* If the caller handed us a PACKED LIST -- which Table and Range produce for any sizeable
-     * array -- keep the buffer by storing it on the visible NDArray surface. Left as a packed
-     * List it would be materialised into Expr nodes the moment this node came to rest, by the
-     * same post-gate described in image_build_real, so an image built from Table[...] would
-     * arrive already un-packed and every later filter would pay the walk. */
-    if (two[0] && is_packed_list(two[0]))
-        two[0]->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+    int64_t cdims[3]; int crank;
+    if (c == 1) { crank = 2; cdims[0] = (int64_t)h; cdims[1] = (int64_t)w; }
+    else        { crank = 3; cdims[0] = (int64_t)h; cdims[1] = (int64_t)w; cdims[2] = (int64_t)c; }
+    /* Canonical storage, so representation never depends on provenance. Falls back to the tree when
+     * the buffer cannot be built -- a nested image is still a valid one, merely slower. */
+    two[0] = img_canonical_data(data, cdims, crank, t);
+    if (!two[0]) {
+        if (argc == 2) return NULL;      /* already canonical; declining keeps the fixed point */
+        two[0] = expr_copy(data);
+    }
     two[1] = expr_new_string(img_type_name(t));
     if (!two[0] || !two[1]) { expr_free(two[0]); expr_free(two[1]); return NULL; }
     return expr_new_function(expr_new_symbol("Image"), two, 2);
@@ -482,11 +545,22 @@ bool image_load(const Expr* img, size_t* width, size_t* height, size_t* channels
     if (is_ndarray(d)) {
         const NDArrayData* a = &d->data.ndarray;
         size_t n = h * w * c;
+        /* A "Real" float64 image needs no conversion AT ALL -- img_to_unit is the identity for it --
+         * so the load is one memcpy rather than n calls through ndt_get's dtype switch. This is not a
+         * micro-optimisation: every filter in the subsystem begins with image_load and ends with
+         * image_build_real, and build_real already memcpy'd, so the per-element load was the entire
+         * remaining marshalling cost. It showed up as ImagePad taking 0.57 ms where the pad itself is
+         * ~0.05 -- the pad was never the expense. Byte and Bit still scale per element, since there
+         * the conversion is real work. */
+        if (a->dtype == NDT_FLOAT64 && t == IMG_REAL) {
+            memcpy(out, a->data, sizeof(double) * n);
+        } else {
         for (size_t i = 0; i < n; i++) {
             double re = 0.0, imv = 0.0;
             ndt_get(a->data, i, a->dtype, &re, &imv);
             if (imv != 0.0) { free(out); return false; }
             out[i] = img_to_unit(re, t);
+        }
         }
         if (width) *width = w;
         if (height) *height = h;
@@ -848,7 +922,12 @@ Expr* image3d_build_real(const double* buf, size_t width, size_t height, size_t 
 static Expr* builtin_image3d(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1 && argc != 2) return NULL;
-    if (argc == 2 && image3d_info(res, NULL, NULL, NULL, NULL, NULL)) return NULL;
+    /* Already canonical AND already on the NDArray surface: leave it alone, or the evaluator would
+     * never reach a fixed point. Canonical-but-nested falls through to be converted below, which is
+     * what makes two images with equal pixels SameQ regardless of how each was made. The fixed point
+     * still holds: after conversion the data IS an NDArray, so the next pass stops here. */
+    if (argc == 2 && image3d_info(res, NULL, NULL, NULL, NULL, NULL)
+        && is_ndarray(res->data.function.args[0])) return NULL;
 
     Expr* data = res->data.function.args[0];
     size_t dp = 0, h = 0, w = 0, c = 0; bool all_int = false; double lo = 0.0, hi = 0.0;
@@ -867,9 +946,17 @@ static Expr* builtin_image3d(Expr* res) {
         else                                          t = IMG_REAL;
     }
     Expr* two[2];
-    two[0] = expr_copy(data);
-    if (two[0] && is_packed_list(two[0]))
-        two[0]->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+    int64_t cdims[4]; int crank;
+    if (c == 1) { crank = 3; cdims[0] = (int64_t)dp; cdims[1] = (int64_t)h; cdims[2] = (int64_t)w; }
+    else        { crank = 4; cdims[0] = (int64_t)dp; cdims[1] = (int64_t)h; cdims[2] = (int64_t)w;
+                  cdims[3] = (int64_t)c; }
+    /* Canonical storage, so representation never depends on provenance. Falls back to the tree when
+     * the buffer cannot be built -- a nested image is still a valid one, merely slower. */
+    two[0] = img_canonical_data(data, cdims, crank, t);
+    if (!two[0]) {
+        if (argc == 2) return NULL;      /* already canonical; declining keeps the fixed point */
+        two[0] = expr_copy(data);
+    }
     two[1] = expr_new_string(img_type_name(t));
     if (!two[0] || !two[1]) { expr_free(two[0]); expr_free(two[1]); return NULL; }
     return expr_new_function(expr_new_symbol("Image3D"), two, 2);

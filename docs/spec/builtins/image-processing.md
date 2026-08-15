@@ -1103,3 +1103,82 @@ is not quite like-for-like: numpy's `rot90` and `flipud` return **views** — ze
 copy is a strided memcpy, where these build an `Expr` result. The permutation itself is a pointer shuffle;
 the time is output construction, which is the same bottleneck `MorphologicalComponents` documents and has
 the same remedy.
+
+## ImagePad and ImageCrop
+
+`ImagePad[image, m]` pads `m` pixels on every side; `ImagePad[image, {{left, right},
+{bottom, top}}]` pads each side separately. The pair is named in Mathematica's **visual**
+order — bottom before top — while the data's first row is the **top** of the image, so `top`
+padding adds rows at the *start* of the array. That is the reverse of how the specification
+reads, and a symmetric pad cannot detect it being wrong, so the test pads one side only and
+checks which end grew.
+
+Negative amounts crop, but may not erase the image: `ImagePad[img, -9]` on a 7×5 image
+declines rather than returning something zero-sized.
+
+`ImagePad[image, m, spec]` chooses the fill:
+
+| `spec` | Fill |
+|--------|------|
+| a number | that constant value (the default is 0) |
+| `"Fixed"` | replicates the edge pixel — the same boundary rule the filters use, so padding and then filtering composes with it |
+| `"Reflected"` | mirrors **without** repeating the edge pixel: `{1,2,3}` padded by 1 gives `{2,1,2,3,2}`, not `{1,1,2,3,3}` |
+
+The reflection distinction is not cosmetic. Repeating the edge doubles that sample, which
+biases any subsequent average toward the border. Reflection uses a period of `2n-2`, so
+padding deeper than the image itself still works — padding a 3-pixel row by 4 gives
+`{1,2,3,2,1,2,3}`.
+
+`ImageCrop[image, {w, h}]` crops to `w × h` about the centre, any odd remainder going to the
+right and bottom — the same floor-division convention the kernel centres use. A crop may not
+enlarge.
+
+`ImageCrop[image]` with no size instead **trims a uniform border**, which is a different
+question: how much of the frame carries no information. The border colour is read from a
+corner rather than assumed black, since a scanned page's margin is white and assuming black
+would trim nothing. Each edge is tested independently, so a border uniform on three sides and
+not the fourth trims the three. An entirely uniform image comes back unchanged — there is no
+content to keep, and a zero-sized image is not an image.
+
+### The exact identities
+
+Both operations are index arithmetic with no interpolation, so their composition is exact:
+
+```
+ImageCrop[ImagePad[img, m], ImageDimensions[img]] === img
+```
+
+That round trip is also the test that catches an off-by-one on either side *independently*: a
+pad that adds one row too many at the top and one too few at the bottom still has the right
+total size, and only the round trip notices.
+
+A **centred** crop can only invert a **symmetric** pad. With `{{1,2},{3,4}}` the content starts
+at row 4 while a centred crop begins at row 3, so the exact inverse of an asymmetric pad is a
+negative pad, and that is what the suite asserts:
+
+```
+ImagePad[ImagePad[img, {{1,2},{3,4}}], {{-1,-2},{-3,-4}}] === img
+```
+
+Every fill mode is invertible the same way, since none of them touches the interior.
+
+Both are 2-D only at present; `ImagePad` on an `Image3D` declines rather than guessing an
+axis order.
+
+### Measured
+
+512×512 float64, one channel, construction excluded from the timing:
+
+| Operation | Mathilda | NumPy | Ratio |
+|-----------|---------:|------:|------:|
+| pad 16, constant | 0.110 ms | 0.050 ms (`np.pad`) | 2.2× slower |
+| pad 16, reflected | 0.221 ms | 0.059 ms (`np.pad`) | 3.7× slower |
+| centred crop | 0.130 ms | 0.026 ms (slice + copy) | 5.0× slower |
+
+The first version of the pad was 0.57 ms, and the obvious suspect — a per-pixel coordinate
+map where NumPy does block copies — turned out to be worth only 0.57 → 0.45. The remaining
+0.35 ms was `image_load` walking the buffer element by element through `ndt_get`, which every
+filter in the subsystem pays. Making that a `memcpy` for the `"Real"` float64 case (where the
+unit-scaling is the identity) took the pad to 0.110 ms and `ImageConvolve` from 1.48 to
+1.14 ms as a side effect. NumPy's remaining edge is that a crop there is a *view* plus one
+copy, while this returns a fresh image.
