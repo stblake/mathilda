@@ -1716,6 +1716,64 @@ static void test_corner_options_are_wired(void) {
     assert_eval_eq("Head[CornerFilter[" CK24 ", 0]]", "CornerFilter", 0);
 }
 
+
+/* ImageCorners' separation and feature limit. The properties here are absolute: a minimum separation
+ * d means no two returned positions are within d, which is a statement about the output alone. */
+#define CIMG "Image[Table[N[Mod[i*7 + j*13, 251]]/251, {i, 1, 128}, {j, 1, 128}]]"
+/* Smallest pairwise distance in a list of {row, column} positions; Infinity for fewer than two. */
+#define MIND \
+  "minD[l_] := If[Length[l] < 2, Infinity," \
+  " Min[Table[Sqrt[N[(l[[a, 1]] - l[[b, 1]])^2 + (l[[a, 2]] - l[[b, 2]])^2]]," \
+  "           {a, 1, Length[l]}, {b, a + 1, Length[l]}]]];"
+
+static void test_corner_separation_is_respected(void) {
+    /* THE property, at three separations. Not "roughly spread out" -- no pair closer than d. */
+    assert_eval_eq("Module[{img = " CIMG "}," MIND
+                   " And @@ Table[minD[ImageCorners[img, 2, 0.05, d]] >= d, {d, {2., 5., 10.}}]]",
+                   "True", 0);
+    /* Asking for more separation cannot return more corners. */
+    assert_eval_eq("Module[{img = " CIMG "},"
+                   " Length[ImageCorners[img, 2, 0.05, 2.]]"
+                   " >= Length[ImageCorners[img, 2, 0.05, 10.]]]", "True", 0);
+    /* Separation removes a great deal on a busy image: the first two filters leave clusters a pixel
+     * or two apart, which is what makes the raw list unusable as a feature set. */
+    assert_eval_eq("Module[{img = " CIMG "},"
+                   " Length[ImageCorners[img, 2, 0.05, 10.]] < Length[ImageCorners[img]]]",
+                   "True", 0);
+    /* The same image must always give the same list -- ties are broken by position for exactly
+     * this reason. */
+    assert_eval_eq("Module[{img = " CIMG "},"
+                   " ImageCorners[img, 2, 0.05, 5.] === ImageCorners[img, 2, 0.05, 5.]]", "True", 0);
+}
+
+static void test_corner_feature_limit_keeps_the_strongest(void) {
+    /* Exactly n, and they are the strongest n. The second half is asserted as "the weakest kept is at
+     * least as strong as the strongest dropped", which is what "the top n" means -- and NOT by
+     * comparing against Sort[..., Greater], which cannot serve as an oracle here: Mathilda's real
+     * comparison is tolerant in Mathematica's way, so two responses a single ulp apart are Equal and
+     * neither is Greater, and Sort then permutes them freely. */
+    assert_eval_eq("Module[{img = " CIMG ", rs, all, top, kept, rest},"
+                   " rs = ImageData[CornerFilter[img]];"
+                   " all = ImageCorners[img]; top = ImageCorners[img, 2, 0.05, 0, 5];"
+                   " kept = Table[rs[[p[[1]], p[[2]]]], {p, top}];"
+                   " rest = Table[rs[[p[[1]], p[[2]]]], {p, Drop[all, 5]}];"
+                   " {Length[top], Min[kept] >= Max[rest]}]", "{5, True}", 0);
+    /* Strongest first, stated as the list being non-increasing. */
+    assert_eval_eq("Module[{img = " CIMG ", rs, v},"
+                   " rs = ImageData[CornerFilter[img]];"
+                   " v = Table[rs[[p[[1]], p[[2]]]], {p, Take[ImageCorners[img], 12]}];"
+                   " And @@ Table[v[[i]] >= v[[i + 1]], {i, 1, Length[v] - 1}]]", "True", 0);
+    /* The limit is applied AFTER separation, so a limited request still separates: applied first it
+     * would return n positions out of a single cluster. */
+    assert_eval_eq("Module[{img = " CIMG ", l}," MIND
+                   " l = ImageCorners[img, 2, 0.05, 10., 3];"
+                   " {Length[l] <= 3, minD[l] >= 10.}]", "{True, True}", 0);
+    /* The default path is unchanged by any of this. */
+    assert_eval_eq("Length[ImageCorners[" CK24 "]]", "9", 0);
+    assert_eval_eq("Head[ImageCorners[" CK24 ", 2, 0.05, -1.]]", "ImageCorners", 0);
+    assert_eval_eq("Head[ImageCorners[" CK24 ", 2, 0.05, 0, 0]]", "ImageCorners", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1806,6 +1864,8 @@ int main(void) {
     TEST(test_corner_response_is_zero_where_there_is_no_corner);
     TEST(test_corner_response_finds_corners_and_rotates_with_them);
     TEST(test_corner_options_are_wired);
+    TEST(test_corner_separation_is_respected);
+    TEST(test_corner_feature_limit_keeps_the_strongest);
 
     printf("All image tests passed.\n");
     return 0;

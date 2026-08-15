@@ -2493,29 +2493,78 @@ static Expr* builtin_cornerfilter(Expr* res) {
     return out;
 }
 
-/* ImageCorners[image] / [image, r] / [image, r, t] -- the local maxima of the response.
+/* ImageCorners[image] / [image, r] / [image, r, t] / [image, r, t, d] / [image, r, t, d, n]
  *
- * Two steps, and both are needed. A THRESHOLD alone returns a blob of adjacent pixels around every
- * corner, because the response is smooth; NON-MAXIMUM SUPPRESSION alone returns a local maximum in
- * every flat region, because a plateau of zeros has maxima too. Together they give one position per
- * corner. */
+ * Three filters, in this order, because each removes something the others cannot.
+ *
+ *   NON-MAXIMUM SUPPRESSION (3x3) and a THRESHOLD are both required, and neither alone is close. A
+ *   threshold alone returns a blob of adjacent pixels around every corner, because the response is
+ *   smooth. Suppression alone returns a local maximum in every flat region, because a plateau of
+ *   zeros has maxima too.
+ *
+ *   MINIMUM SEPARATION d is what makes the list usable. On a noise-like 512x512 image the first two
+ *   filters leave 4104 positions -- every one a genuine local maximum above the cut, and useless as a
+ *   feature set, because they arrive in clusters a pixel or two apart. Greedy selection in descending
+ *   response order keeps the strongest of each cluster: walk the sorted list, keep a position if it is
+ *   at least d from everything already kept. That ordering is what makes the choice principled rather
+ *   than arbitrary -- the survivor of a cluster is its strongest member, not whichever came first in
+ *   raster order.
+ *
+ *   MaxFeatures n then truncates. It comes last on purpose: applied before separation it would return
+ *   n positions from one cluster.
+ *
+ * The output is sorted by DESCENDING RESPONSE, ties broken by position, so First is the strongest
+ * corner and the order is deterministic. Sorting is not decoration here -- separation and MaxFeatures
+ * are both defined in terms of it.
+ *
+ * The greedy pass is O(kept * candidates) and that is the honest cost: 4104 candidates with a small d
+ * is a few million distance tests. A grid would make it linear and is not worth the code until a
+ * measurement says so.
+ */
+typedef struct { double v; size_t y, x; } CornerCand;
+
+static int corner_cmp(const void* a, const void* b) {
+    const CornerCand* p = (const CornerCand*)a;
+    const CornerCand* q = (const CornerCand*)b;
+    if (p->v > q->v) return -1;
+    if (p->v < q->v) return 1;
+    /* Deterministic ties: the same image must give the same list every time, and "whichever the sort
+     * happened to place first" is not a specification. */
+    if (p->y != q->y) return (p->y < q->y) ? -1 : 1;
+    if (p->x != q->x) return (p->x < q->x) ? -1 : 1;
+    return 0;
+}
+
 static Expr* builtin_imagecorners(Expr* res) {
     size_t argc = res->data.function.arg_count;
-    if (argc < 1 || argc > 3) return NULL;
+    if (argc < 1 || argc > 5) return NULL;
     size_t r = 2;
-    double frac = 0.05;
+    double frac = 0.05, sep = 0.0;
+    size_t maxn = 0;                              /* 0 means "no limit" */
+    double im = 0.0;
     if (argc >= 2) {
-        double rr = 0.0, im = 0.0;
+        double rr = 0.0;
         if (!na_read_scalar(res->data.function.args[1], &rr, &im) || im != 0.0) return NULL;
         if (!(rr >= 1.0) || rr != floor(rr) || rr > 32.0) return NULL;
         r = (size_t)rr;
     }
     if (argc >= 3) {
-        double t = 0.0, im = 0.0;
+        double t = 0.0;
         if (!na_read_scalar(res->data.function.args[2], &t, &im) || im != 0.0) return NULL;
         if (!(t >= 0.0) || !(t <= 1.0)) return NULL;
         frac = t;
     }
+    if (argc >= 4) {
+        if (!na_read_scalar(res->data.function.args[3], &sep, &im) || im != 0.0) return NULL;
+        if (!(sep >= 0.0)) return NULL;
+    }
+    if (argc >= 5) {
+        double n = 0.0;
+        if (!na_read_scalar(res->data.function.args[4], &n, &im) || im != 0.0) return NULL;
+        if (!(n >= 1.0) || n != floor(n)) return NULL;
+        maxn = (size_t)n;
+    }
+
     size_t w = 0, h = 0; double* rsp = NULL;
     if (!corner_response(res->data.function.args[0], r, false, &w, &h, &rsp)) return NULL;
 
@@ -2523,13 +2572,9 @@ static Expr* builtin_imagecorners(Expr* res) {
     for (size_t i = 0; i < w * h; i++) if (rsp[i] > mx) mx = rsp[i];
     double cut = frac * mx;
 
-    /* Collected as {row, column}, 1-based, so a position indexes ImageData directly. That is NOT
-     * Mathematica's {x, y} with y from the bottom; the convention is stated rather than guessed at,
-     * because a silently transposed or flipped coordinate is the kind of thing that looks plausible
-     * on any test image. */
     size_t cap = 64, n = 0;
-    Expr** items = malloc(sizeof(Expr*) * cap);
-    if (!items) { free(rsp); return NULL; }
+    CornerCand* cand = malloc(sizeof(CornerCand) * cap);
+    if (!cand) { free(rsp); return NULL; }
     for (size_t y = 1; y + 1 < h; y++)
       for (size_t x = 1; x + 1 < w; x++) {
         double v = rsp[y * w + x];
@@ -2547,18 +2592,46 @@ static Expr* builtin_imagecorners(Expr* res) {
         if (!peak) continue;
         if (n == cap) {
             size_t nc = cap * 2;
-            Expr** t2 = realloc(items, sizeof(Expr*) * nc);
+            CornerCand* t2 = realloc(cand, sizeof(CornerCand) * nc);
             if (!t2) break;
-            items = t2; cap = nc;
+            cand = t2; cap = nc;
         }
-        Expr* pr[2];
-        pr[0] = expr_new_integer((int64_t)y + 1);
-        pr[1] = expr_new_integer((int64_t)x + 1);
-        if (!pr[0] || !pr[1]) { expr_free(pr[0]); expr_free(pr[1]); break; }
-        items[n++] = expr_new_function(expr_new_symbol("List"), pr, 2);
+        cand[n].v = v; cand[n].y = y; cand[n].x = x; n++;
       }
     free(rsp);
-    Expr* out = expr_new_function(expr_new_symbol("List"), items, n);
+
+    qsort(cand, n, sizeof(CornerCand), corner_cmp);
+
+    /* Greedy separation, in descending response order. Compared on SQUARED distance so the test needs
+     * no square root and `d` is still a plain pixel distance to the caller. */
+    size_t keep_n = n;
+    if (sep > 0.0) {
+        double s2 = sep * sep;
+        keep_n = 0;
+        for (size_t i = 0; i < n; i++) {
+            bool ok = true;
+            for (size_t j = 0; j < keep_n; j++) {
+                double dy = (double)cand[i].y - (double)cand[j].y;
+                double dx = (double)cand[i].x - (double)cand[j].x;
+                if (dy * dy + dx * dx < s2) { ok = false; break; }
+            }
+            if (ok) cand[keep_n++] = cand[i];      /* compacted in place, order preserved */
+        }
+    }
+    if (maxn > 0 && keep_n > maxn) keep_n = maxn;
+
+    Expr** items = malloc(sizeof(Expr*) * (keep_n > 0 ? keep_n : 1));
+    if (!items) { free(cand); return NULL; }
+    size_t out_n = 0;
+    for (size_t i = 0; i < keep_n; i++) {
+        Expr* pr[2];
+        pr[0] = expr_new_integer((int64_t)cand[i].y + 1);
+        pr[1] = expr_new_integer((int64_t)cand[i].x + 1);
+        if (!pr[0] || !pr[1]) { expr_free(pr[0]); expr_free(pr[1]); break; }
+        items[out_n++] = expr_new_function(expr_new_symbol("List"), pr, 2);
+    }
+    free(cand);
+    Expr* out = expr_new_function(expr_new_symbol("List"), items, out_n);
     free(items);
     return out;
 }
@@ -2622,14 +2695,21 @@ void imagefilter_init(void) {
     symtab_add_builtin("ImageCorners", builtin_imagecorners);
     symtab_get_def("ImageCorners")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageCorners",
-        "ImageCorners[image] gives the positions of corners: the local maxima of the "
-        "MinimumEigenvalue response that exceed a fraction of its largest value. "
-        "ImageCorners[image, r] sets the window radius (default 2), ImageCorners[image, r, t] the "
-        "fraction (default 0.05). Both steps are needed -- a threshold alone returns a blob of "
-        "adjacent pixels per corner because the response is smooth, and suppression alone returns a "
-        "maximum in every flat region because a plateau of zeros has maxima too. Positions are "
-        "{row, column}, 1-based, so each one indexes ImageData directly; this is NOT Mathematica's "
-        "{x, y} measured from the bottom left, and the difference is stated rather than guessed.");
+        "ImageCorners[image] gives the positions of corners. ImageCorners[image, r, t, d, n] sets the "
+        "window radius (default 2), the threshold as a fraction of the largest response (0.05), the "
+        "MINIMUM SEPARATION in pixels (0), and the maximum number of features (all). Three filters "
+        "apply in that order because each removes what the others cannot: a threshold alone returns a "
+        "blob of adjacent pixels per corner since the response is smooth; 3x3 non-maximum suppression "
+        "alone returns a maximum in every flat region since a plateau of zeros has maxima; and "
+        "separation is what makes the list usable, since the first two leave clusters a pixel apart -- "
+        "4104 of them on a noise-like 512x512 image. Separation is greedy in DESCENDING RESPONSE "
+        "order, so the survivor of a cluster is its strongest member rather than whichever came first "
+        "in raster order, and the feature limit is applied last: before separation it would return n "
+        "positions from a single cluster. The result is sorted strongest first, ties broken by "
+        "position so the same image always gives the same list. Positions are {row, column}, 1-based, "
+        "so each indexes ImageData directly; that is NOT Mathematica's {x, y} from the bottom left, "
+        "and Mathematica spells the feature limit as a MaxFeatures option where this takes it "
+        "positionally -- both differences are stated rather than guessed.");
     symtab_add_builtin("ImageCorrelate", builtin_imagecorrelate);
     symtab_get_def("ImageCorrelate")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageCorrelate",

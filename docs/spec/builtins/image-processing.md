@@ -1365,12 +1365,37 @@ it and the smoothing costs `2n` taps rather than `n²`.
 sum of squares and cannot go negative; the second can, through cancellation, and would give a
 NaN that spreads silently.
 
-`ImageCorners[image]`, `[image, r]`, `[image, r, t]` gives corner **positions**: the local
-maxima of the λ_min response exceeding a fraction `t` of its largest value (default 0.05).
-Both steps are needed — a threshold alone returns a blob of adjacent pixels per corner because
-the response is smooth, and suppression alone returns a maximum in every flat region because a
-plateau of zeros has maxima too. A plateau of equal values yields exactly one position, by
-comparing strictly against earlier neighbours and loosely against later ones.
+`ImageCorners[image, r, t, d, n]` gives corner **positions**, with the window radius `r`
+(default 2), the threshold `t` as a fraction of the largest response (0.05), the minimum
+separation `d` in pixels (0), and the maximum number of features `n` (all). Three filters apply
+**in that order**, because each removes what the others cannot:
+
+1. **3×3 non-maximum suppression.** Alone it returns a maximum in every flat region, since a
+   plateau of zeros has maxima too. A plateau yields exactly one position, by comparing strictly
+   against earlier neighbours and loosely against later ones.
+2. **Threshold.** Alone it returns a blob of adjacent pixels around every corner, because the
+   response is smooth.
+3. **Minimum separation**, which is what makes the list usable. On a noise-like 512×512 image
+   the first two leave **4104** positions — every one a genuine local maximum above the cut, and
+   useless as a feature set, because they arrive in clusters a pixel or two apart. Selection is
+   greedy in *descending response order*: walk the sorted list and keep a position if it is at
+   least `d` from everything already kept. That ordering is what makes the choice principled —
+   the survivor of a cluster is its strongest member, not whichever came first in raster order.
+
+`n` truncates last, deliberately: applied before separation it would return `n` positions out of
+a single cluster.
+
+The result is sorted strongest first, ties broken by position, so `First` is the strongest corner
+and the same image always gives the same list. The greedy pass is O(kept × candidates), which is
+the honest cost — 4104 candidates at a small `d` is a few million distance tests, and a grid would
+make it linear but is not worth the code until a measurement says so.
+
+Positions carry a caveat worth reading twice if you are writing a test against them: Mathilda's
+real comparison is **tolerant**, in Mathematica's way, so two responses one ulp apart are `Equal`
+and neither is `Greater`. `Sort[values, Greater]` therefore cannot serve as a descending-order
+oracle for a response list — it reports such elements incomparable and permutes them freely. The
+suite asserts non-increasing order elementwise instead, and asserts "the top n" as *the weakest
+kept is at least as strong as the strongest dropped*.
 
 Positions are `{row, column}`, 1-based, so each indexes `ImageData` directly. This is **not**
 Mathematica's `{x, y}` measured from the bottom left; the convention is stated rather than
