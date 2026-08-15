@@ -450,6 +450,61 @@ static void test_every_accessor_reads_buffer_storage(void) {
                    "{\"Bit\", {16, 16}, True}", 0);
 }
 
+static void test_separable_kernels_are_detected_and_decomposed(void) {
+    /* An outer product is rank 1, so ImageConvolve factors it and runs two 1-D passes. The
+     * INDEPENDENT check that the factorisation is right: {{1,2},{2,4}} is u (x) v for u = {1,2} and
+     * v = {1,2}, so convolving with it must equal convolving with {{1,2}} and then {{1},{2}} --
+     * two genuine one-dimensional convolutions, arrived at by a different route through the code.
+     * If the decomposition picked the wrong pivot or scaled a factor wrongly, these would differ. */
+    assert_eval_eq("Module[{img = Image[Table[N[Mod[x*3 + y*5, 17]/17.], {y, 9}, {x, 7}]]},"
+                   " Chop[Max[Abs[Flatten["
+                   "   ImageData[ImageConvolve[img, {{1, 2}, {2, 4}}]]"
+                   " - ImageData[ImageConvolve[ImageConvolve[img, {{1, 2}}], {{1}, {2}}]]]]]]]",
+                   "0", 0);
+    /* A kernel with a ZERO in the corner is still separable, and pivoting on the LARGEST entry
+     * rather than on K[[1,1]] is what makes that work -- pivoting on a zero would divide by it.
+     * {{0,0,0},{1,2,1},{0,0,0}} is {0,1,0} (x) {1,2,1}, so it must equal the same two 1-D
+     * convolutions. This row is what fails if the pivot search is ever simplified away. */
+    assert_eval_eq("Module[{img = Image[Table[N[Mod[x*3 + y*5, 17]/17.], {y, 6}, {x, 6}]]},"
+                   " Chop[Max[Abs[Flatten["
+                   "   ImageData[ImageConvolve[img, {{0,0,0}, {1,2,1}, {0,0,0}}]]"
+                   " - ImageData[ImageConvolve[ImageConvolve[img, {{1,2,1}}],"
+                   "                           {{0}, {1}, {0}}]]]]]]]", "0", 0);
+}
+
+static void test_non_separable_kernels_take_the_direct_path(void) {
+    /* THE correctness row for separability. Treating a rank-2 kernel as rank 1 does not make the
+     * answer slightly wrong -- it computes a completely different filter -- so the detector must
+     * reject one, and the tolerance is relative and tight (1e-12) for exactly that reason.
+     *
+     * {{1,0},{0,1}} is rank 2. Its centre is (1,1) by floor division, so
+     * out[y][x] = s[y+1][x+1] + s[y][x]; a delta at the centre of a 3x3 therefore gives
+     * {{1,0,0},{0,1,0},{0,0,0}}. Computed by hand, and no rank-1 approximation of that kernel
+     * produces it. */
+    assert_eval_eq("ImageData[ImageConvolve[Image[{{0.,0.,0.},{0.,1.,0.},{0.,0.,0.}}],"
+                   " {{1, 0}, {0, 1}}]]",
+                   "{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 0.0}}", 0);
+    /* An all-zero kernel has no factorisation at all and must not divide by its pivot. */
+    assert_eval_eq("Union[Flatten[ImageData[ImageConvolve[" I23 ", {{0, 0}, {0, 0}}]]]]",
+                   "{0.0}", 0);
+}
+
+static void test_separability_preserves_the_documented_identity(void) {
+    /* GaussianFilter and ImageConvolve[.., GaussianMatrix[..]] must remain BIT-identical, not
+     * merely close. Both route through the same separable path when the kernel is rank 1, which is
+     * precisely why separability was put in ImageConvolve rather than only in GaussianFilter --
+     * doing it in one of them would have made the documented identity approximate. */
+    assert_eval_eq("ImageData[GaussianFilter[" I23 ", 2]] === "
+                   "ImageData[ImageConvolve[" I23 ", GaussianMatrix[2]]]", "True", 0);
+    /* And the earlier exact answers survive the new path: a 1xN kernel is trivially rank 1. */
+    assert_eval_eq("ImageData[ImageConvolve[Image[{{0., 1., 0.}}], {{1, 2, 3}}]]",
+                   "{{1.0, 2.0, 3.0}}", 0);
+    /* A constant image through a normalised separable kernel is still unchanged at the border,
+     * which is what fails if the two passes clamp differently from the direct form. */
+    assert_eval_eq("Chop[Max[Abs[Flatten[ImageData[ImageConvolve["
+                   "Image[Table[0.25, {6}, {6}]], GaussianMatrix[2]]] - 0.25]]]]", "0", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -480,6 +535,9 @@ int main(void) {
     TEST(test_resize_declines_bad_input);
     TEST(test_buffer_backed_storage_agrees_with_the_nested_path);
     TEST(test_every_accessor_reads_buffer_storage);
+    TEST(test_separable_kernels_are_detected_and_decomposed);
+    TEST(test_non_separable_kernels_take_the_direct_path);
+    TEST(test_separability_preserves_the_documented_identity);
 
     printf("All image tests passed.\n");
     return 0;

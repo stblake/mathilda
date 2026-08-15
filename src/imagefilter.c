@@ -109,6 +109,103 @@ static void convolve_planes(const double* src, double* dst,
     }
 }
 
+/* Is the kernel SEPARABLE -- that is, rank 1, an outer product u (x) v?
+ *
+ * A separable kernel turns kw * kh multiply-adds per pixel into kw + kh, which at radius 4 is 18
+ * instead of 81. Gaussians are separable by construction, since
+ * exp(-(dx^2 + dy^2)/2s^2) = exp(-dx^2/2s^2) exp(-dy^2/2s^2), and so is any box.
+ *
+ * THE TOLERANCE IS THE WHOLE RISK, and it is deliberately tight. Treating a non-separable kernel
+ * as separable does not make it slightly wrong -- it computes a completely different filter. So the
+ * check is a relative one against the kernel's own magnitude at 1e-12: a Gaussian factorises to
+ * within about 1e-16 relative, so real separable kernels pass with room to spare, while anything
+ * genuinely rank 2 or higher (an identity matrix, a rotation-sensitive edge kernel) fails long
+ * before it could be mistaken for rank 1. A test convolves with {{1,0},{0,1}} specifically to pin
+ * that the direct path still runs for it.
+ *
+ * The factorisation itself is the textbook one: pick the largest-magnitude entry as pivot, take its
+ * column as u and its row (scaled) as v, then verify every entry. Pivoting on the largest entry
+ * rather than on K[0][0] matters, because a kernel with a zero in the corner -- which a
+ * derivative kernel has -- would otherwise divide by it. */
+static bool ker_separable(const double* k, size_t kh, size_t kw, double* u, double* v) {
+    size_t pi = 0, pj = 0;
+    double best = 0.0;
+    for (size_t i = 0; i < kh; i++)
+        for (size_t j = 0; j < kw; j++) {
+            double a = fabs(k[i * kw + j]);
+            if (a > best) { best = a; pi = i; pj = j; }
+        }
+    if (!(best > 0.0)) return false;              /* an all-zero kernel: nothing to factor */
+
+    double piv = k[pi * kw + pj];
+    for (size_t i = 0; i < kh; i++) u[i] = k[i * kw + pj];
+    for (size_t j = 0; j < kw; j++) v[j] = k[pi * kw + j] / piv;
+
+    double tol = 1e-12 * best;
+    for (size_t i = 0; i < kh; i++)
+        for (size_t j = 0; j < kw; j++)
+            if (fabs(k[i * kw + j] - u[i] * v[j]) > tol) return false;
+    return true;
+}
+
+/* Two-pass separable convolution: horizontal with v, then vertical with u.
+ *
+ * EXACTLY equal to the direct form, and not merely close, because "Fixed" padding is itself
+ * separable -- the direct read src[clamp(y)][clamp(x)] clamps the two axes independently, which is
+ * precisely what doing one axis and then the other does. Only the summation ORDER differs, so the
+ * two agree to floating-point rounding; and because ImageConvolve routes BOTH itself and
+ * GaussianFilter through this same path when the kernel is separable, the documented
+ * GaussianFilter == ImageConvolve[.., GaussianMatrix[..]] identity stays bit-exact rather than
+ * becoming approximate. */
+static void convolve_separable(const double* src, double* dst, double* tmp,
+                               size_t w, size_t h, size_t c,
+                               const double* u, size_t kh, const double* v, size_t kw) {
+    int64_t ci = (int64_t)(kh / 2), cj = (int64_t)(kw / 2);
+
+    for (size_t y = 0; y < h; y++)
+        for (size_t x = 0; x < w; x++)
+            for (size_t ch = 0; ch < c; ch++) {
+                double acc = 0.0;
+                for (size_t j = 0; j < kw; j++) {
+                    size_t sx = clampi((int64_t)x - (int64_t)j + cj, w);
+                    acc += v[j] * src[(y * w + sx) * c + ch];
+                }
+                tmp[(y * w + x) * c + ch] = acc;
+            }
+
+    for (size_t y = 0; y < h; y++)
+        for (size_t x = 0; x < w; x++)
+            for (size_t ch = 0; ch < c; ch++) {
+                double acc = 0.0;
+                for (size_t i = 0; i < kh; i++) {
+                    size_t sy = clampi((int64_t)y - (int64_t)i + ci, h);
+                    acc += u[i] * tmp[(sy * w + x) * c + ch];
+                }
+                dst[(y * w + x) * c + ch] = acc;
+            }
+}
+
+/* Convolve, taking the separable path when the kernel allows it. */
+static bool convolve_dispatch(const double* src, double* dst, size_t w, size_t h, size_t c,
+                              const double* k, size_t kw, size_t kh) {
+    double* u = malloc(sizeof(double) * kh);
+    double* v = malloc(sizeof(double) * kw);
+    bool sep = false;
+    if (u && v) sep = ker_separable(k, kh, kw, u, v);
+    if (sep) {
+        double* tmp = malloc(sizeof(double) * w * h * c);
+        if (tmp) {
+            convolve_separable(src, dst, tmp, w, h, c, u, kh, v, kw);
+            free(tmp); free(u); free(v);
+            return true;
+        }
+        sep = false;                              /* no scratch: fall back rather than fail */
+    }
+    free(u); free(v);
+    convolve_planes(src, dst, w, h, c, k, kw, kh);
+    return true;
+}
+
 /* ImageConvolve[image, kernel] */
 static Expr* builtin_imageconvolve(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
@@ -120,7 +217,7 @@ static Expr* builtin_imageconvolve(Expr* res) {
     double* dst = malloc(sizeof(double) * w * h * c);
     Expr* out = NULL;
     if (dst) {
-        convolve_planes(src, dst, w, h, c, k, kw, kh);
+        convolve_dispatch(src, dst, w, h, c, k, kw, kh);
         out = image_build_real(dst, w, h, c);
     }
     free(src); free(k); free(dst);
@@ -260,7 +357,7 @@ static Expr* builtin_gaussianfilter(Expr* res) {
     double* dst = malloc(sizeof(double) * w * h * c);
     Expr* out = NULL;
     if (dst) {
-        convolve_planes(src, dst, w, h, c, k, kw, kh);
+        convolve_dispatch(src, dst, w, h, c, k, kw, kh);
         out = image_build_real(dst, w, h, c);
     }
     free(src); free(k); free(dst);

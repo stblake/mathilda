@@ -402,3 +402,47 @@ filter output and for pixels handed in as a packed `List` (which `Table` produce
 Storage is buffer-backed **uniformly, at every size**; there is no threshold at which the
 representation changes. That matters for testing: it means no class of image that only large-input
 tests would reach. The data a caller passes to `Image[data]` directly is kept as given.
+
+---
+
+# Separable kernels
+
+`ImageConvolve` detects a **separable** (rank-1) kernel and runs two one-dimensional passes instead
+of one two-dimensional one, turning `kw × kh` multiply-adds per pixel into `kw + kh` — at radius 8,
+34 instead of 289.
+
+| radius | taps 2-D → 1-D | Mathilda | scipy `convolve` (2-D) | scipy `gaussian_filter` (separable) |
+|---|---|---|---|---|
+| r=2 | 25 → 10 | **1.48 ms** | 2.5 ms | 1.6 ms |
+| r=4 | 81 → 18 | **1.97 ms** | 10.5 ms | 1.9 ms |
+| r=8 | 289 → 34 | **3.44 ms** | 53.2 ms | 3.3 ms |
+
+So Mathilda now **matches scipy's dedicated separable routine** while being 5–15× faster than its
+general 2-D convolve. The difference is not that scipy is slow: `scipy.ndimage.convolve` simply does
+not detect separability, so you have to know to reach for `gaussian_filter` instead. Here **any**
+rank-1 kernel gets it automatically — a Gaussian, a box, a smoothing-times-derivative outer product.
+
+**Separability lives in `ImageConvolve`, not only in `GaussianFilter`, and that is deliberate.** Put
+in one of the two, it would have made the documented
+`GaussianFilter[i, r] == ImageConvolve[i, GaussianMatrix[r]]` identity *approximate*, since two 1-D
+passes sum in a different order from one 2-D pass. Both routing through the same path keeps the
+identity **bit-exact**, and a test asserts it.
+
+The two-pass result equals the direct form for a real reason rather than by luck: `"Fixed"` padding is
+itself separable — the direct read `src[clamp(y)][clamp(x)]` clamps the axes independently, which is
+exactly what doing one axis then the other does. Only summation order differs.
+
+**The tolerance is the whole risk, and it is tight.** Treating a non-separable kernel as separable
+does not make the answer slightly wrong; it computes a completely different filter. Detection is a
+relative check at `1e-12` against the kernel's own magnitude: a Gaussian factorises to ~1e-16
+relative, so real separable kernels pass with room to spare, while anything genuinely rank 2 fails
+long before it could be mistaken. A test convolves with `{{1,0},{0,1}}` — rank 2 — and pins the
+hand-computed direct answer `{{1,0,0},{0,1,0},{0,0,0}}`, which no rank-1 approximation produces.
+
+The factorisation pivots on the **largest-magnitude** entry rather than on `K[[1,1]]`, so a kernel
+with a zero corner — which any derivative kernel has — factors instead of dividing by zero. A test
+covers `{{0,0,0},{1,2,1},{0,0,0}}` for that.
+
+Verification is independent rather than self-referential: an outer product `{{1,2},{2,4}}` must give
+the same result as convolving with `{{1,2}}` and then `{{1},{2}}` — two genuine 1-D convolutions
+reached by a different route through the code.
