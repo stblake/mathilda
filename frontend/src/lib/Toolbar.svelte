@@ -37,7 +37,8 @@
   import { restart, abortEvaluation } from './kernelActions';
   import { showStatusBar, resetSessionStats } from './status';
   import { propertiesOpen } from './properties';
-  import { wrapSelection, PROSE_BOLD, PROSE_ITALIC, PROSE_CODE, PROSE_LINK } from './prose';
+  import { wrapSelection, PROSE_BOLD, PROSE_ITALIC, PROSE_CODE, PROSE_LINK,
+           PROSE_MATH } from './prose';
   import { searchOpen } from './search';
   import type { Cell, CellType, NotebookRow } from './notebook';
 
@@ -599,6 +600,12 @@
   <button class="tb-btn" title="Link ([text](url))"
           tabindex="-1" on:pointerdown|preventDefault on:click={() => applyProse(PROSE_LINK)}
   ><Icon name="link" /></button>
+
+  <!-- Inline TeX. A text cell renders `$…$` through KaTeX, and this is how that
+       gets discovered: the alternative is knowing to type it. -->
+  <button class="tb-btn" title="Inline math ($…$, rendered with KaTeX)"
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => applyProse(PROSE_MATH)}
+  ><Icon name="sigma" /></button>
 </ToolbarGroup>
 
 <ToolbarGroup label="Code" visible={showCodeGroup}>

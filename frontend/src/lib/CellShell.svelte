@@ -20,6 +20,11 @@
   import type { Cell, CellType, OutputItem } from './notebook';
   import { showExecLabels } from './properties';
   import { renderProse } from './prose';
+  /* Rendered prose can contain KaTeX, so this component owns the stylesheet.
+     Output.svelte imports it too and Vite dedupes; relying on ANOTHER component's
+     import would leave prose unstyled the day that one changed. It cannot live in
+     prose.ts, where a CSS import would break the node-run checks. */
+  import 'katex/dist/katex.min.css';
   import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection } from './notebook';
   import { registerHandle, unregisterHandle, setActiveCell, markBlurred } from './active';
 

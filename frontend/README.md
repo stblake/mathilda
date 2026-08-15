@@ -174,9 +174,26 @@ the keyboard still moves in 0.1, and highlighting the nearest step while sitting
 between two would misreport the state. `Cmd+0` had been documented in that
 handler's own comment without being implemented; the store made it one line.
 
-`npm run check:prose` covers the pure half — the renderer and the marker
-constants, read out of `prose.ts` so the checks cannot drift from it. The DOM half
-needs a real pointer, since synthetic events do not reach the WKWebView.
+Inline TeX renders through KaTeX: `$…$` inline, `$$…$$` display. The math is
+pulled OUT before Markdown runs and put back after, and that order is the whole
+point — handed to Markdown first, `$a_1 * b_2$` loses `_1 * b_2` to emphasis and
+nothing downstream can recover it. Extraction is a hand-written scan rather than a
+regex because everything that must *not* be math is context: a `$` inside a code
+span or fence is a literal dollar, and `\$` is one anywhere. Two standard
+heuristics (pandoc and markdown-it use the same pair) keep prose about money from
+becoming equations — an opening `$` must be followed by a non-space and a closing
+`$` preceded by one, so "it cost $5 and $6" stays prose. Unclosed delimiters are
+left exactly as typed rather than swallowing the rest of the cell. The Text group's
+fifth button writes `$…$`, which is how the feature gets discovered at all; the
+alternative is knowing to type it.
+
+`npm run check:prose` compiles `lib/prose.ts` with the project's own `tsc` and
+imports the result, so its 39 checks exercise the shipped `renderProse`,
+`extractMath` and marker constants rather than a paraphrase — a paraphrase can
+agree with its test and disagree with the app. It keeps one direct `marked` import
+for a single negative control: that without `breaks: true` there is no `<br>` at
+all, so the option is load-bearing rather than decorative. The DOM half needs a
+real pointer, since synthetic events do not reach the WKWebView.
 
 Both panel stores are plain writables with no persistence, matching `darkMode` in
 `theme.ts`. Nothing in the app persists UI state yet, and making one preference
