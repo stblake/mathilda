@@ -1127,6 +1127,34 @@ static void test_optimal_liquidation(void) {
         "  Abs[xv[[T + 1]]] < 1*^-4 && Max[Differences[xv]] <= 1*^-4]");
 }
 
+static void test_risk_parity(void) {
+    /* A6: risk-parity portfolio, n=8. Minimize Σ_{i,j}(rc_i-rc_j)² where the
+     * risk contribution rc = w ⊙ (cov·w), subject to Σw=1 and w≥0 — i.e. find
+     * the weights whose per-asset risk contributions are all equal. For a PSD
+     * covariance this has a unique interior solution (all w_i > 0); here every
+     * rc_i converges to the same value, driving the objective to ~1e-16 with
+     * min weight 0.0747 (identical to scipy SLSQP on the same covariance). The
+     * problem is effectively unimodal, so RandomSearch needs only ONE start
+     * (SearchPoints -> 1) — the user's 250 was ~40× the work for the same point.
+     * Asserts the objective is ~0, the budget Σw=1, all weights strictly
+     * positive, and — the risk-parity property itself — that the spread of risk
+     * contributions is < 1e-4. Deterministic (seeded covariance + RandomSeed). */
+    check_true(
+        "Module[{n = 8, cov, w, rc, obj, cons, r, o, sol, wv, rcv},"
+        " SeedRandom[202];"
+        " cov = (# + Transpose[#]) &@RandomReal[{-0.05, 0.15}, {n, n}];"
+        " cov = cov . Transpose[cov];"
+        " w = Array[weight, n]; rc = w * (cov . w);"
+        " obj = Sum[(rc[[i]] - rc[[j]])^2, {i, n}, {j, n}];"
+        " cons = Join[{Total[w] == 1}, Table[w[[i]] >= 0, {i, n}]];"
+        " r = NMinimize[{obj, cons}, w,"
+        "   Method -> {\"RandomSearch\", \"Method\" -> \"InteriorPoint\","
+        "              \"SearchPoints\" -> 1, \"RandomSeed\" -> 1}];"
+        " o = First[r]; sol = Last[r]; wv = w /. sol; rcv = wv * (cov . wv);"
+        " o < 1*^-6 && Abs[Total[wv] - 1] < 1*^-6 && Min[wv] > 0 &&"
+        "  (Max[rcv] - Min[rcv]) < 1*^-4]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1230,6 +1258,7 @@ int main(void) {
     TEST(test_modified_ackley);
     TEST(test_minimax_chebyshev);
     TEST(test_optimal_liquidation);
+    TEST(test_risk_parity);
 
     printf("All NMinimize tests passed.\n");
     return 0;

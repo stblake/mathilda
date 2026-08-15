@@ -95,3 +95,23 @@ a5meth = {"SimulatedAnnealing", "PerturbationScale" -> 0.1, "SearchPoints" -> 1,
 bench["A5 liquidation (SA)", NMinimize[{a5obj, a5cons}, a5x, Method -> a5meth];];
 check["A5 liquidation (SA)",
   Round[10^6 First[NMinimize[{a5obj, a5cons}, a5x, Method -> a5meth]]]];
+
+(* ---- A6: risk-parity portfolio (n=8) -- RandomSearch (local)
+   Unimodal: unique interior solution, risk contributions all equal, obj ~0,
+   min weight 0.0747 (identical to scipy SLSQP on the same covariance). One
+   start (SearchPoints 1) suffices. NOTE this case is SLOWER than scipy here:
+   NMinimize's per-solve objective SETUP (indexed-var rewrite + internal compile
+   of a 4313-leaf tree with no common-subexpression sharing of the repeated cov.w
+   dot products) dominates the ~0.07 s, versus scipy's pre-vectorized numpy at
+   ~0.01 s; the overhead amortizes on larger problems. Check pins the solution
+   via Round[10^4 min weight] = 747. Matching character: local -> scipy.minimize. *)
+SeedRandom[202];
+a6cov = (# + Transpose[#]) &@RandomReal[{-0.05, 0.15}, {8, 8}];
+a6cov = a6cov . Transpose[a6cov];
+a6w = Array[weight, 8]; a6rc = a6w * (a6cov . a6w);
+a6obj = Sum[(a6rc[[i]] - a6rc[[j]])^2, {i, 8}, {j, 8}];
+a6cons = Join[{Total[a6w] == 1}, Table[a6w[[i]] >= 0, {i, 8}]];
+a6meth = {"RandomSearch", "Method" -> "InteriorPoint", "SearchPoints" -> 1, "RandomSeed" -> 1};
+bench["A6 risk parity (RS)", NMinimize[{a6obj, a6cons}, a6w, Method -> a6meth];];
+check["A6 risk parity (RS)",
+  Round[10^4 Min[a6w /. Last[NMinimize[{a6obj, a6cons}, a6w, Method -> a6meth]]]]];

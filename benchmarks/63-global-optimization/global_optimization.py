@@ -157,3 +157,36 @@ def _a5_solve():
 
 bench("A5 liquidation (SA)", _a5_solve)
 check("A5 liquidation (SA)", int(np.floor(1e6 * _a5_solve().fun + 0.5)))
+
+
+# ---- A6: risk-parity portfolio (n=8) -- SLSQP (local; the fair tool here) ----
+# Same covariance as the .m (SeedRandom[202] output baked in). Unimodal, unique
+# solution, min weight 0.0747. Check pins the solution: Round[10^4 min weight].
+_A6_COV = np.array([
+    [0.15758, 0.17402, 0.0159189, 0.0323425, 0.0648861, 0.0529201, 0.0528615, 0.0255465],
+    [0.17402, 0.286713, 0.0886202, 0.115798, 0.158623, 0.158004, 0.108319, 0.113397],
+    [0.0159189, 0.0886202, 0.0655135, 0.066327, 0.0627865, 0.0904437, 0.0328245, 0.0736588],
+    [0.0323425, 0.115798, 0.066327, 0.133109, 0.0874982, 0.118648, 0.0759667, 0.107299],
+    [0.0648861, 0.158623, 0.0627865, 0.0874982, 0.149331, 0.104485, 0.10696, 0.094532],
+    [0.0529201, 0.158004, 0.0904437, 0.118648, 0.104485, 0.152967, 0.0502845, 0.0964691],
+    [0.0528615, 0.108319, 0.0328245, 0.0759667, 0.10696, 0.0502845, 0.136991, 0.103453],
+    [0.0255465, 0.113397, 0.0736588, 0.107299, 0.094532, 0.0964691, 0.103453, 0.133861]])
+_A6_N = 8
+
+
+def _a6_obj(w):
+    rc = w * (_A6_COV @ w)
+    return np.sum((rc[:, None] - rc[None, :]) ** 2)
+
+
+_a6_cons = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1}]
+_a6_bnds = [(0, 1)] * _A6_N
+
+
+def _a6_solve():
+    return minimize(_a6_obj, np.full(_A6_N, 1 / _A6_N), method='SLSQP',
+                    bounds=_a6_bnds, constraints=_a6_cons, options=dict(maxiter=500, ftol=1e-14))
+
+
+bench("A6 risk parity (RS)", _a6_solve)
+check("A6 risk parity (RS)", int(np.floor(1e4 * _a6_solve().x.min() + 0.5)))
