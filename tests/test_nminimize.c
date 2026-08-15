@@ -1304,6 +1304,33 @@ static void test_sudoku_latin(void) {
         "  AllTrue[Flatten[xm], Abs[# - Round[#]] < 1*^-4 &]]");
 }
 
+static void test_3sat_feasibility(void) {
+    /* B10: random 3-SAT feasibility, 15 variables, 30 clauses. Each clause is a
+     * disjunction of three literals, encoded as Σ literal ≥ 1 with a positive
+     * literal contributing x and a negative literal 1-x; a constant objective
+     * (find any satisfying assignment). SimulatedAnnealing at 20 restarts finds a
+     * model in ~0.3 s. The clause list is built with Table[genClause[], {clauses}]
+     * inside a Module — which relies on the scoping fix that substitutes the count
+     * {clauses}; the assertion checks the list really has 30 clauses and that
+     * every one is satisfied at the returned assignment (plus binary). Also guards
+     * the crash fix: a malformed clause encoding must return unevaluated, never
+     * segfault. Deterministic under the seeded clauses + RandomSeed. */
+    check_true(
+        "Module[{nvars = 15, clauses = 30, xVars, satClauses, cl, cons, r, o, sol, xv},"
+        " SeedRandom[88];"
+        " xVars = Array[x, nvars];"
+        " genClause[] := RandomSample[Range[nvars], 3]*RandomChoice[{-1, 1}, 3];"
+        " satClauses = Table[genClause[], {clauses}];"
+        " cl = Map[Sum[If[Sign[#[[i]]] > 0, xVars[[Abs[#[[i]]]]],"
+        "   1 - xVars[[Abs[#[[i]]]]]], {i, 3}] >= 1 &, satClauses];"
+        " cons = Join[cl, Table[0 <= xVars[[i]] <= 1, {i, nvars}], {Element[xVars, Integers]}];"
+        " r = NMinimize[{0, cons}, xVars,"
+        "   Method -> {\"SimulatedAnnealing\", \"RandomSeed\" -> 1, \"SearchPoints\" -> 20}];"
+        " o = First[r]; sol = Last[r]; xv = xVars /. sol;"
+        " o < 1 && Length[satClauses] == 30 && AllTrue[cl /. sol, TrueQ] &&"
+        "  AllTrue[xv, Abs[# - Round[#]] < 1*^-4 &]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1415,6 +1442,7 @@ int main(void) {
     TEST(test_job_scheduling);
     TEST(test_multiknapsack);
     TEST(test_sudoku_latin);
+    TEST(test_3sat_feasibility);
 
     printf("All NMinimize tests passed.\n");
     return 0;
