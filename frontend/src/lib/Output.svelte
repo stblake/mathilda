@@ -143,21 +143,41 @@
     ev.preventDefault();
     ev.stopPropagation();
     const handle = ev.currentTarget as HTMLElement;
+    const frame = handle.parentElement as HTMLElement | null;
     const startX = ev.clientX;
     const startW = shownWidth(idx, it);
     handle.setPointerCapture(ev.pointerId);
 
+    /* THE DRAG DOES NOT TOUCH SVELTE STATE. Writing `imgWidth` per pointermove invalidated the
+       component, which re-rendered the whole output list and re-laid-out the page around it --
+       on a reference page of sixty examples that is a full document reflow per mouse move, and
+       the resize visibly lagged the cursor. During the drag the width is written straight onto
+       the one element that changes, and the state is committed once on release so the size
+       survives a later re-render.
+
+       Coalesced to one write per animation frame as well: a trackpad emits pointermove far faster
+       than the compositor paints, and every extra write was a layout nobody saw. */
+    let pending = 0;
+    let latest = startW;
+    const flush = () => {
+      pending = 0;
+      if (frame) frame.style.width = `${latest}px`;
+    };
+
     const move = (e: PointerEvent) => {
       /* Clamped at both ends: below ~24px the handle would be most of the image and the
          drag could not be undone by dragging back. */
-      imgWidth[idx] = Math.max(24, Math.min(4096, startW + (e.clientX - startX)));
-      imgWidth = imgWidth;                    /* Svelte 4: reassign to trigger */
+      latest = Math.max(24, Math.min(4096, startW + (e.clientX - startX)));
+      if (!pending) pending = requestAnimationFrame(flush);
     };
     const up = (e: PointerEvent) => {
       handle.releasePointerCapture(e.pointerId);
       handle.removeEventListener('pointermove', move);
       handle.removeEventListener('pointerup', up);
       handle.removeEventListener('pointercancel', up);
+      if (pending) { cancelAnimationFrame(pending); flush(); }
+      imgWidth[idx] = latest;
+      imgWidth = imgWidth;                    /* Svelte 4: reassign to trigger */
     };
     handle.addEventListener('pointermove', move);
     handle.addEventListener('pointerup', up);
@@ -165,7 +185,12 @@
   }
 
   /* Double-click the handle to go back to the default, so a drag is never a one-way door. */
-  function resetResize(idx: number) {
+  function resetResize(idx: number, ev?: Event) {
+    /* The drag writes an inline width directly onto the frame, so clearing the state is not
+       enough -- the inline style would win over the re-rendered one. */
+    const handle = ev?.currentTarget as HTMLElement | undefined;
+    const frame = handle?.parentElement as HTMLElement | undefined;
+    if (frame) frame.style.width = '';
     delete imgWidth[idx];
     imgWidth = imgWidth;
   }
@@ -349,7 +374,16 @@
     const yaw0 = yawOf(idx), pitch0 = pitchOf(idx);
     node.setPointerCapture(ev.pointerId);
 
-    const move = (e: PointerEvent) => {
+    /* One redraw per animation frame, for the reason the resize handle documents: pointermove
+       outruns the compositor, and three drawImage calls per event that never gets painted is
+       work thrown away. Rotation is local to this canvas, so no Svelte state is touched until
+       the pointer is released. */
+    let pending = 0;
+    let lastEv: PointerEvent | null = null;
+    const flush = () => {
+      pending = 0;
+      const e = lastEv;
+      if (!e) return;
       volYaw[idx] = yaw0 + (e.clientX - x0) * 0.011;
       /* Pitch is clamped just short of a pole: at exactly +-pi/2 the box degenerates to a line and
          there is no way to tell which way a further drag should go. */
@@ -357,11 +391,17 @@
       volPitch[idx] = Math.max(-lim, Math.min(lim, pitch0 + (e.clientY - y0) * 0.011));
       (node as any).__redraw?.();
     };
+
+    const move = (e: PointerEvent) => {
+      lastEv = e;
+      if (!pending) pending = requestAnimationFrame(flush);
+    };
     const up = (e: PointerEvent) => {
       node.releasePointerCapture(e.pointerId);
       node.removeEventListener('pointermove', move);
       node.removeEventListener('pointerup', up);
       node.removeEventListener('pointercancel', up);
+      if (pending) { cancelAnimationFrame(pending); flush(); }
     };
     node.addEventListener('pointermove', move);
     node.addEventListener('pointerup', up);
@@ -517,7 +557,7 @@
               class="img-handle"
               title="Drag to resize · double-click to reset"
               on:pointerdown={(e) => startResize(e, idx, item)}
-              on:dblclick={() => resetResize(idx)}
+              on:dblclick={(e) => resetResize(idx, e)}
             ></div>
           </div>
           <span class="out-image-note">
