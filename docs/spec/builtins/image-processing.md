@@ -637,6 +637,104 @@ The result is always a `"Real"` image of the same dimensions; each colour channe
 independently. A Gaussian of bytes is not a byte, and rounding back into the input type would
 discard precision the caller never asked to lose.
 
+## RandomImage
+Uniform noise as an image.
+- `RandomImage[]`: a 150x150 grey image of uniform noise on `[0, 1]`.
+- `RandomImage[max]`: the same size, with samples on `[0, max]`.
+- `RandomImage[max, {w, h}]`: sets the size; a single `n` means `{n, n}`.
+- `RandomImage[max, {w, h}, ColorSpace -> "RGB"]`: three independent channels.
+
+**Features**:
+- `Protected`.
+- Samples are drawn from the **same stream as `RandomReal`**, so `SeedRandom` makes a
+  random image reproducible. A private generator would have made this the one random
+  builtin that ignores the seed.
+- The range is scaled, not clamped: a `"Real"` image may hold values above 1, and
+  clamping belongs in `Export`, where 8 bits actually run out.
+- Noise is the input a filter is most often judged on — a smoothing radius means nothing
+  on a checkerboard and everything on a noise field.
+- An unsupported colour space declines rather than silently returning grey.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= SeedRandom[42];
+
+In[2]:= RandomImage[1, {32, 32}]
+Out[2]= -Image-
+
+In[3]:= ImageDimensions[RandomImage[]]
+Out[3]= {150, 150}
+
+In[4]:= ImageType[RandomImage[1, {8, 8}]]
+Out[4]= "Real"
+
+In[5]:= ImageChannels[RandomImage[1, {8, 8}]]
+Out[5]= 1
+```
+
+#### Scope
+
+```mathematica
+In[1]:= SeedRandom[7];
+
+In[2]:= ImageDimensions[RandomImage[1, {64, 16}]]
+Out[2]= {64, 16}
+
+In[3]:= ImageDimensions[RandomImage[1, 24]]
+Out[3]= {24, 24}
+
+In[4]:= RandomImage[1, {24, 24}, ColorSpace -> "RGB"]
+Out[4]= -Image-
+
+In[5]:= ImageChannels[RandomImage[1, {8, 8}, ColorSpace -> "RGB"]]
+Out[5]= 3
+
+In[6]:= Max[Flatten[ImageData[RandomImage[255, {16, 16}]]]] > 200
+Out[6]= True
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= (* the same seed gives the same image *)
+Module[{a, b}, SeedRandom[7]; a = ImageData[RandomImage[1, {4, 4}]]; SeedRandom[7]; b = ImageData[RandomImage[1, {4, 4}]]; a === b]
+Out[1]= True
+
+In[2]:= (* and a different seed does not *)
+Module[{a, b}, SeedRandom[7]; a = ImageData[RandomImage[1, {4, 4}]]; SeedRandom[8]; b = ImageData[RandomImage[1, {4, 4}]]; a =!= b]
+Out[2]= True
+
+In[3]:= (* the result is packed, like every other image-returning head *)
+Head[Part[RandomImage[1, {16, 16}], 1]]
+Out[3]= NDArray
+
+In[4]:= (* an unsupported colour space declines *)
+Head[RandomImage[1, {4, 4}, ColorSpace -> "CMYK"]]
+Out[4]= RandomImage
+```
+
+#### Applications
+
+```mathematica
+In[1]:= SeedRandom[3];
+
+In[2]:= (* noise is what shows a smoothing filter doing anything at all *)
+GaussianFilter[RandomImage[1, {48, 48}], 2]
+Out[2]= -Image-
+
+In[3]:= (* a median filter removes salt-and-pepper noise a mean filter would only spread *)
+MedianFilter[RandomImage[1, {48, 48}], 2]
+Out[3]= -Image-
+
+In[4]:= Binarize[RandomImage[1, {32, 32}]]
+Out[4]= -Image-
+
+In[5]:= (* and it is the honest input for a timing comparison, having no structure to exploit *)
+ImageDimensions[Dilation[RandomImage[1, {64, 64}], 3]]
+Out[5]= {64, 64}
+```
+
 ## GaussianMatrix
 
 `GaussianMatrix[r]` gives a `(2r+1) × (2r+1)` Gaussian normalised to sum 1.

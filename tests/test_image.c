@@ -2428,6 +2428,37 @@ static void test_lossy_and_lossless_formats_differ_as_expected(void) {
                    " \"Image\"]]", "{16, 12}", 0);
 }
 
+
+static void test_random_image_is_seeded_and_shaped(void) {
+    /* THE POINT OF DRAWING FROM RandomReal'S STREAM: SeedRandom has to make a random image
+     * reproducible. A private generator would have been simpler and would have quietly made this
+     * the one random builtin that ignores the seed -- and the test that catches that has to assert
+     * BOTH halves, since a constant image would pass the "same seed agrees" half alone. */
+    assert_eval_eq("Module[{a, b},"
+                   " SeedRandom[7]; a = ImageData[RandomImage[1, {4, 4}]];"
+                   " SeedRandom[7]; b = ImageData[RandomImage[1, {4, 4}]];"
+                   " a === b]", "True", 0);
+    assert_eval_eq("Module[{a, b},"
+                   " SeedRandom[7]; a = ImageData[RandomImage[1, {4, 4}]];"
+                   " SeedRandom[8]; b = ImageData[RandomImage[1, {4, 4}]];"
+                   " a =!= b]", "True", 0);
+    /* Shapes: the default, a pair, and a single n meaning {n, n}. */
+    assert_eval_eq("{ImageDimensions[RandomImage[]], ImageDimensions[RandomImage[1, {32, 16}]],"
+                   " ImageDimensions[RandomImage[1, 24]]}",
+                   "{{150, 150}, {32, 16}, {24, 24}}", 0);
+    assert_eval_eq("{ImageChannels[RandomImage[1, {8, 8}]],"
+                   " ImageChannels[RandomImage[1, {8, 8}, ColorSpace -> \"RGB\"]]}", "{1, 3}", 0);
+    /* Packed, like every other image-returning head. */
+    assert_eval_eq("Head[Part[RandomImage[1, {16, 16}], 1]]", "NDArray", 0);
+    /* The range is scaled and NOT clamped: the caller asked for [0, max], and clamping belongs in
+     * Export where 8 bits actually run out. */
+    assert_eval_eq("Module[{d = Flatten[ImageData[RandomImage[255, {24, 24}]]]},"
+                   " {Max[d] > 200, Min[d] >= 0, Max[d] <= 255}]", "{True, True, True}", 0);
+    /* An unsupported colour space declines rather than silently returning grey. */
+    assert_eval_eq("Head[RandomImage[1, {4, 4}, ColorSpace -> \"CMYK\"]]", "RandomImage", 0);
+    assert_eval_eq("Head[RandomImage[-1]]", "RandomImage", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2545,6 +2576,7 @@ int main(void) {
     TEST(test_export_clamps_rather_than_wraps);
     TEST(test_import_distinguishes_missing_from_unclaimed);
     TEST(test_lossy_and_lossless_formats_differ_as_expected);
+    TEST(test_random_image_is_seeded_and_shaped);
 
     printf("All image tests passed.\n");
     return 0;

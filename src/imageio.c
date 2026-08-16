@@ -27,6 +27,8 @@
 #include "attr.h"
 #include "image.h"
 #include "imageio.h"
+#include "random.h"
+#include "options.h"
 
 /* The vendored decoders. Their diagnostics are suppressed rather than fixed: the files are
  * upstream text, byte-identical to the release, so they can be re-fetched without a merge -- see
@@ -224,6 +226,91 @@ static Expr* builtin_export(Expr* res)
     return out ? out : failed();
 }
 
+
+/* -------------------------------------------------------------- RandomImage */
+
+/* The default size, matching Mathematica's. Large enough that a filter's effect is visible and
+ * small enough to print, resize and Export without thinking about it. */
+#define RANDIMG_DEFAULT 150
+
+/* A dimension pair {w, h}, or a single n meaning {n, n}. Returns false when the argument is
+ * neither -- a symbolic size has to stay unevaluated rather than become a guess. */
+static bool read_size(const Expr* e, size_t* w, size_t* h)
+{
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER && e->data.integer > 0) {
+        *w = *h = (size_t)e->data.integer;
+        return true;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+        e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
+        strcmp(e->data.function.head->data.symbol.name, "List") == 0) {
+        const Expr* a = e->data.function.args[0];
+        const Expr* b = e->data.function.args[1];
+        if (a && b && a->type == EXPR_INTEGER && b->type == EXPR_INTEGER &&
+            a->data.integer > 0 && b->data.integer > 0) {
+            *w = (size_t)a->data.integer;
+            *h = (size_t)b->data.integer;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* RandomImage[] / RandomImage[max] / RandomImage[max, {w, h}] / ColorSpace -> "RGB"
+ *
+ * Noise is the input a filter is most often judged on -- a smoothing radius means nothing on a
+ * checkerboard and everything on a noise field -- and until this existed the only way to get one
+ * was to write a deterministic Mod expression and call it random.
+ *
+ * Samples come from `random_uniform_01`, the SAME stream RandomReal draws on, so SeedRandom makes
+ * a random image reproducible. A private generator would have been simpler and would have quietly
+ * made this the one random builtin that ignores the seed.
+ */
+static Expr* builtin_random_image(Expr* res)
+{
+    const Expr* colorspace = NULL;
+    bool cs_given = false;
+    OptEntry opts[] = { { "ColorSpace", &colorspace, &cs_given } };
+    size_t argc = 0;
+    size_t w = RANDIMG_DEFAULT, h = RANDIMG_DEFAULT, ch = 1, n, i;
+    double max = 1.0;
+    double* buf;
+    Expr* out;
+
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (!options_extract(res, "RandomImage", opts, 1, &argc)) return NULL;
+    if (argc > 2) return NULL;
+
+    if (argc >= 1) {
+        const Expr* a = res->data.function.args[0];
+        if (!a) return NULL;
+        if (a->type == EXPR_INTEGER)   max = (double)a->data.integer;
+        else if (a->type == EXPR_REAL) max = a->data.real;
+        else return NULL;
+        if (!(max > 0.0)) return NULL;
+    }
+    if (argc == 2 && !read_size(res->data.function.args[1], &w, &h)) return NULL;
+
+    if (cs_given && colorspace && colorspace->type == EXPR_STRING) {
+        const char* cs = colorspace->data.string;
+        if (strcmp(cs, "RGB") == 0)            ch = 3;
+        else if (strcmp(cs, "Grayscale") == 0) ch = 1;
+        else return NULL;   /* an unsupported space is not silently grey */
+    }
+
+    n = w * h * ch;
+    buf = (double*)malloc(n * sizeof(double));
+    if (!buf) return NULL;
+    /* Scaled by `max` and NOT clamped: the caller asked for that range, and a "Real" image is
+     * free to hold values above 1 -- Export is where clamping belongs. */
+    for (i = 0; i < n; i++) buf[i] = random_uniform_01() * max;
+
+    out = image_build_real(buf, w, h, ch);
+    free(buf);
+    return out;
+}
+
 void imageio_init(void)
 {
     symtab_add_builtin("Import", builtin_import);
@@ -242,4 +329,11 @@ void imageio_init(void)
         "file extension (PNG, JPEG, BMP, TGA). Export[\"file\", image, \"PNG\"] states the format "
         "explicitly. Samples outside the unit interval are clamped, since 8-bit output has no room "
         "for them. Returns the file name, so Import[Export[f, img]] is a round trip.");
+    symtab_add_builtin("RandomImage", builtin_random_image);
+    symtab_get_def("RandomImage")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("RandomImage",
+        "RandomImage[] gives a 150x150 grey image of uniform noise on [0, 1]. RandomImage[max] "
+        "scales the range to [0, max]; RandomImage[max, {w, h}] sets the size, and a single n "
+        "means {n, n}. ColorSpace -> \"RGB\" gives three independent channels. Samples are drawn "
+        "from the same stream as RandomReal, so SeedRandom makes the result reproducible.");
 }
