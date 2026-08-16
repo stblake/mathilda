@@ -24,7 +24,7 @@ MatrixRank works on both numerical and symbolic matrices and on square or rectan
 
 </details>
 
-## Examples (13)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -53,30 +53,33 @@ In[7]:= MatrixRank[N[m]]
 Out[7]= 2
 ```
 
-### Options (1)
+### Options (2)
 
 ```mathematica
 In[8]:= MatrixRank[N[m], Tolerance -> 0]
 Out[8]= 3
+
+In[9]:= MatrixRank[N[m], Tolerance -> 10^-8]
+Out[9]= 1
 ```
 
 ### Applications (5)
 
 ```mathematica
-In[9]:= MatrixRank[{{1, 2}, {2, 4}}]
-Out[9]= 1
+In[10]:= MatrixRank[{{1, 2}, {2, 4}}]
+Out[10]= 1
 
-In[10]:= MatrixRank[{{1, 2}, {3, 4}}]
-Out[10]= 2
-
-In[11]:= MatrixRank[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+In[11]:= MatrixRank[{{1, 2}, {3, 4}}]
 Out[11]= 2
 
-In[12]:= MatrixRank[{{a, b}, {2 a, 2 b}}]
-Out[12]= 1
+In[12]:= MatrixRank[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+Out[12]= 2
 
-In[13]:= MatrixRank[Table[1/(i + j - 1), {i, 4}, {j, 4}]]
-Out[13]= 4
+In[13]:= MatrixRank[{{a, b}, {2 a, 2 b}}]
+Out[13]= 1
+
+In[14]:= MatrixRank[Table[1/(i + j - 1), {i, 4}, {j, 4}]]
+Out[14]= 4
 ```
 
 ## Options & behaviour

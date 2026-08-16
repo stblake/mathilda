@@ -16,7 +16,7 @@ Option Extension -\> alpha | {alpha\_i} tests irreducibility over the field exte
 
 </details>
 
-## Examples (14)
+## Examples (19)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -39,7 +39,7 @@ In[5]:= IrreduciblePolynomialQ[x^2 + 2 Sqrt[2] x + 2]
 Out[5]= True
 ```
 
-### Options (3)
+### Options (8)
 
 ```mathematica
 In[6]:= IrreduciblePolynomialQ[x^2 + 1, GaussianIntegers -> True]
@@ -50,28 +50,43 @@ Out[7]= False
 
 In[8]:= IrreduciblePolynomialQ[{x^3 - 2, x^3 - 3}, Extension -> 2^(1/3)]
 Out[8]= {False, True}
+
+In[9]:= IrreduciblePolynomialQ[x^2 + 2, Extension -> {I, Sqrt[2]}]
+Out[9]= False
+
+In[10]:= IrreduciblePolynomialQ[{x^3 - 3, x^2 + 2 x y - 7}, Extension -> All]
+Out[10]= {False, True}
+
+In[11]:= IrreduciblePolynomialQ[{x^2 - 2 y^4, x^4 - 3 y^2}, Extension -> Sqrt[3]]
+Out[11]= {True, False}
+
+In[12]:= IrreduciblePolynomialQ[x^2 + y^2, GaussianIntegers -> True]
+Out[12]= False
+
+In[13]:= IrreduciblePolynomialQ[x^7 + 12 x y - 11, Extension -> All]
+Out[13]= True
 ```
 
 ### Applications (6)
 
 ```mathematica
-In[9]:= IrreduciblePolynomialQ[x^2 + 1]
-Out[9]= True
+In[14]:= IrreduciblePolynomialQ[x^2 + 1]
+Out[14]= True
 
-In[10]:= IrreduciblePolynomialQ[x^4 + 1]
-Out[10]= True
+In[15]:= IrreduciblePolynomialQ[x^4 + 1]
+Out[15]= True
 
-In[11]:= IrreduciblePolynomialQ[x^4 + 1, Extension -> All]
-Out[11]= False
+In[16]:= IrreduciblePolynomialQ[x^4 + 1, Extension -> All]
+Out[16]= False
 
-In[12]:= IrreduciblePolynomialQ[x^2 + 1, GaussianIntegers -> True]
-Out[12]= False
+In[17]:= IrreduciblePolynomialQ[x^2 + 1, GaussianIntegers -> True]
+Out[17]= False
 
-In[13]:= IrreduciblePolynomialQ[x^4 - 10 x^2 + 1]
-Out[13]= True
+In[18]:= IrreduciblePolynomialQ[x^4 - 10 x^2 + 1]
+Out[18]= True
 
-In[14]:= IrreduciblePolynomialQ[x^4 - 10 x^2 + 1, Extension -> Sqrt[2]]
-Out[14]= False
+In[19]:= IrreduciblePolynomialQ[x^4 - 10 x^2 + 1, Extension -> Sqrt[2]]
+Out[19]= False
 ```
 
 ## Options & behaviour

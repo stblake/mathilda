@@ -9,11 +9,11 @@
 
 factors trigonometric functions in expr. TrigFactor operates on both circular and hyperbolic functions. TrigFactor factors polynomials in trigonometric functions and collapses Pythagorean, angle-addition, and double-angle identities where possible, broadly acting as the inverse of TrigExpand. TrigFactor automatically threads over lists, as well as equations, inequalities, and logic functions.
 
-## Examples (13)
+## Examples (18)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (13)
 
 ```mathematica
 In[1]:= TrigFactor[Sin[x]^2 + Cos[x]^2]
@@ -39,25 +39,40 @@ Out[7]= (1 + Cos[x]^2) Tan[x]^2
 
 In[8]:= TrigFactor[Cosh[x]^2 - Cosh[x]^4]
 Out[8]= -Cosh[x]^2 Sinh[x]^2
+
+In[9]:= TrigFactor[Sin[x+y]^2 + Tan[x+y]]
+Out[9]= Tan[x + y] (1 + Cos[x + y] Sin[x + y])
+
+In[10]:= TrigFactor[Cos[x + y] + Sin[x] Sin[y]]
+Out[10]= Cos[x] Cos[y]
+
+In[11]:= TrigFactor[Cos[x]^4 - Sin[x]^4]
+Out[11]= Cos[2 x]
+
+In[12]:= TrigFactor[{Sin[x]^2 + Cos[x]^2, 2 Sinh[x] Cosh[x]}]
+Out[12]= {1, Sinh[2 x]}
+
+In[13]:= TrigFactor[Sin[x]^2 + Cos[x]^2 == 1]
+Out[13]= True
 ```
 
 ### Applications (5)
 
 ```mathematica
-In[9]:= TrigFactor[Sin[a] Cos[b] + Cos[a] Sin[b]]
-Out[9]= Sin[a + b]
+In[14]:= TrigFactor[Sin[a] Cos[b] + Cos[a] Sin[b]]
+Out[14]= Sin[a + b]
 
-In[10]:= TrigFactor[Cos[a] Cos[b] - Sin[a] Sin[b]]
-Out[10]= Cos[a + b]
+In[15]:= TrigFactor[Cos[a] Cos[b] - Sin[a] Sin[b]]
+Out[15]= Cos[a + b]
 
-In[11]:= TrigFactor[Sin[x]^2 - Cos[x]^2]
-Out[11]= -Cos[2 x]
+In[16]:= TrigFactor[Sin[x]^2 - Cos[x]^2]
+Out[16]= -Cos[2 x]
 
-In[12]:= TrigFactor[Sin[x]^2 + 2 Sin[x] Cos[x] + Cos[x]^2]
-Out[12]= 2 Sin[1/4 Pi + x]^2
+In[17]:= TrigFactor[Sin[x]^2 + 2 Sin[x] Cos[x] + Cos[x]^2]
+Out[17]= 2 Sin[1/4 Pi + x]^2
 
-In[13]:= TrigFactor[Sinh[x]^2 + Cosh[x]^2]
-Out[13]= Cosh[2 x]
+In[18]:= TrigFactor[Sinh[x]^2 + Cosh[x]^2]
+Out[18]= Cosh[2 x]
 ```
 
 ## Implementation notes

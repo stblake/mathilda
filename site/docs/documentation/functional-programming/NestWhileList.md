@@ -39,11 +39,11 @@ drops the last n elements from the list.
 
 **`NestWhileList[f, expr, test, {1, Infinity}].`**
 
-## Examples (11)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (11)
 
 ```mathematica
 In[1]:= NestWhileList[#/2 &, 123456, EvenQ]
@@ -69,19 +69,28 @@ Out[7]= {899, 900, 901, 902, 903, 904, 905, 906, 907}
 
 In[8]:= NestWhileList[Mod[2 #, 19] &, 2, # != 1 &]
 Out[8]= {2, 4, 8, 16, 13, 7, 14, 9, 18, 17, 15, 11, 3, 6, 12, 5, 10, 1}
+
+In[9]:= NestWhileList[Mod[5 #, 7] &, 4, Unequal, All]
+Out[9]= {4, 6, 2, 3, 1, 5, 4}
+
+In[10]:= NestWhileList[If[EvenQ[#], #/2, (3 # + 1)/2] &, 400, Unequal, All]
+Out[10]= {400, 200, 100, 50, 25, 38, 19, 29, 44, 22, 11, 17, 26, 13, 20, 10, 5, 8, 4, 2, 1, 2}
+
+In[11]:= NestWhileList[If[EvenQ[#], #/2, (3 # + 1)/2] &, 400, Unequal, All, Infinity, -1]
+Out[11]= {400, 200, 100, 50, 25, 38, 19, 29, 44, 22, 11, 17, 26, 13, 20, 10, 5, 8, 4, 2, 1}
 ```
 
 ### Applications (3)
 
 ```mathematica
-In[9]:= NestWhileList[#/2 &, 256, EvenQ]
-Out[9]= {256, 128, 64, 32, 16, 8, 4, 2, 1}
+In[12]:= NestWhileList[#/2 &, 256, EvenQ]
+Out[12]= {256, 128, 64, 32, 16, 8, 4, 2, 1}
 
-In[10]:= Length[NestWhileList[If[EvenQ[#], #/2, 3 # + 1] &, 27, # > 1 &]]
-Out[10]= 112
+In[13]:= Length[NestWhileList[If[EvenQ[#], #/2, 3 # + 1] &, 27, # > 1 &]]
+Out[13]= 112
 
-In[11]:= NestWhileList[(# + 2/#)/2 &, 1.0, UnsameQ, 2]
-Out[11]= {1.0, 1.5, 1.41667, 1.41422, 1.41421, 1.41421, 1.41421}
+In[14]:= NestWhileList[(# + 2/#)/2 &, 1.0, UnsameQ, 2]
+Out[14]= {1.0, 1.5, 1.41667, 1.41422, 1.41421, 1.41421, 1.41421}
 ```
 
 ## Implementation notes

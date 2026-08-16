@@ -20,11 +20,11 @@ Inverse works on both symbolic and numerical matrices. For matrices with approxi
 
 </details>
 
-## Examples (14)
+## Examples (17)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (7)
+### Basic examples (8)
 
 ```mathematica
 In[1]:= Inverse[{{1.4,2},{3,-6.7}}]
@@ -47,31 +47,44 @@ Out[6]= {{d/(-b c + a d), -b/(-b c + a d)}, {-c/(-b c + a d), a/(-b c + a d)}}
 
 In[7]:= a = {{1,2},{3,4}}; a . Inverse[a] == IdentityMatrix[2]
 Out[7]= True
+
+In[8]:= a = {{1,1,1},{6,9,7},{8,1,9}}; b = {{0,3,9},{7,9,7},{4,4,1}}; Inverse[a . b] == Inverse[b] . Inverse[a]
+Out[8]= True
+```
+
+### Options (2)
+
+```mathematica
+In[9]:= Inverse[{{1, 2}, {3, 4}}, Method -> "CofactorExpansion"]
+Out[9]= {{-2, 1}, {3/2, -1/2}}
+
+In[10]:= Inverse[{{a, b}, {c, d}}, Method -> "OneStepRowReduction"] // Together
+Out[10]= Inverse[{{{{1, 1, 1}, {6, 9, 7}, {8, 1, 9}}, {{0, 3, 9}, {7, 9, 7}, {4, 4, 1}}}, {c, d}}, Method -> "OneStepRowReduction"]
 ```
 
 ### Applications (7)
 
 ```mathematica
-In[8]:= Inverse[{{2, 0}, {0, 4}}]
-Out[8]= {{1/2, 0}, {0, 1/4}}
+In[11]:= Inverse[{{2, 0}, {0, 4}}]
+Out[11]= {{1/2, 0}, {0, 1/4}}
 
-In[9]:= Inverse[{{1, 2}, {3, 4}}]
-Out[9]= {{-2, 1}, {3/2, -1/2}}
+In[12]:= Inverse[{{1, 2}, {3, 4}}]
+Out[12]= {{-2, 1}, {3/2, -1/2}}
 
-In[10]:= Inverse[{{1, 1, 1}, {0, 1, 1}, {0, 0, 1}}]
-Out[10]= {{1, -1, 0}, {0, 1, -1}, {0, 0, 1}}
+In[13]:= Inverse[{{1, 1, 1}, {0, 1, 1}, {0, 0, 1}}]
+Out[13]= {{1, -1, 0}, {0, 1, -1}, {0, 0, 1}}
 
-In[11]:= Inverse[{{a, b}, {c, d}}]
-Out[11]= {{d/(-b c + a d), -b/(-b c + a d)}, {-c/(-b c + a d), a/(-b c + a d)}}
+In[14]:= Inverse[{{a, b}, {c, d}}]
+Out[14]= {{d/(-b c + a d), -b/(-b c + a d)}, {-c/(-b c + a d), a/(-b c + a d)}}
 
-In[12]:= Inverse[{{1, x}, {x, 1}}]
-Out[12]= {{1/(1 - x^2), -x/(1 - x^2)}, {-x/(1 - x^2), 1/(1 - x^2)}}
+In[15]:= Inverse[{{1, x}, {x, 1}}]
+Out[15]= {{1/(1 - x^2), -x/(1 - x^2)}, {-x/(1 - x^2), 1/(1 - x^2)}}
 
-In[13]:= Inverse[{{2.0, 1.0}, {1.0, 3.0}}]
-Out[13]= {{0.6, -0.2}, {-0.2, 0.4}}
+In[16]:= Inverse[{{2.0, 1.0}, {1.0, 3.0}}]
+Out[16]= {{0.6, -0.2}, {-0.2, 0.4}}
 
-In[14]:= Inverse[{{1, 2}, {2, 4}}]
-Out[14]= Inverse[{{1, 2}, {2, 4}}]
+In[17]:= Inverse[{{1, 2}, {2, 4}}]
+Out[17]= Inverse[{{1, 2}, {2, 4}}]
 ```
 
 ## Options & behaviour

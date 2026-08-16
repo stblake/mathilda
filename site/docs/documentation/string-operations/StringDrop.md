@@ -33,11 +33,11 @@ Drops n characters, or as many as are available.
 
 Gives the list of results for each of the si. Negative indices count from the end.
 
-## Examples (8)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (9)
 
 ```mathematica
 In[1]:= StringDrop["abcdefghijklm", 4]
@@ -63,6 +63,8 @@ Out[7]= ""
 
 In[8]:= StringDrop["abcdefghijklm", {5, -4}]
 Out[8]= "abcdklm"
+
+In[9]:= StringDrop[] StringDrop::argrx: StringDrop called with 0 arguments; 2 arguments are expected.
 ```
 
 ## Implementation notes

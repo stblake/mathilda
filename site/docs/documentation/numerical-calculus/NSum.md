@@ -18,11 +18,11 @@ Options: Method (Automatic | EulerMaclaurin | AlternatingSigns | WynnEpsilon | "
 
 </details>
 
-## Examples (13)
+## Examples (15)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (5)
+### Basic examples (6)
 
 ```mathematica
 In[1]:= NSum[1/i^2, {i, 1, Infinity}] - Pi^2/6 // N
@@ -39,38 +39,44 @@ Out[4]= 0.0100492
 
 In[5]:= NSum[(-1)^n (2/n)^k/k^2, {n, 2, Infinity}, {k, 1, n}]
 Out[5]= 0.770188
+
+In[6]:= NSum[2^i, {i, 0, Infinity}] NSum::div: the sum does not appear to converge
+Out[6]= Optional[ComplexInfinity NSum::div, appear converge does not sum the to]
 ```
 
-### Options (3)
+### Options (4)
 
 ```mathematica
-In[6]:= NSum[(-5)^i/i!, {i, 0, Infinity}, NSumTerms -> 25] - Exp[-5]
-Out[6]= -2.4182e-15
+In[7]:= NSum[(-5)^i/i!, {i, 0, Infinity}, NSumTerms -> 25] - Exp[-5]
+Out[7]= -2.4182e-15
 
-In[7]:= NSum[1/n^(11/10), {n, 1, Infinity}, WorkingPrecision -> 40] - Zeta[11/10]
-Out[7]= 1.4693679385278593849609206715278070972733e-39
+In[8]:= NSum[1/n^(11/10), {n, 1, Infinity}, WorkingPrecision -> 40] - Zeta[11/10]
+Out[8]= 4.40810381558357815488276201458342129182e-39
 
-In[8]:= NSum[(-1)^x/(1 + (x - 12)^2), {x, 0, Infinity}, Method -> "AlternatingSigns", WorkingPrecision -> 30]
-Out[8]= 0.2751938594139530395689715615907
+In[9]:= NSum[(-1)^x/(1 + (x - 12)^2), {x, 0, Infinity}, Method -> "AlternatingSigns", WorkingPrecision -> 30]
+Out[9]= 0.2751938594139530395689715615907
+
+In[10]:= NSum[1/n^2, {n, 1, Infinity}, Method -> "Levin", WorkingPrecision -> 30]
+Out[10]= 1.644934066848226436472415166646
 ```
 
 ### Applications (5)
 
 ```mathematica
-In[9]:= NSum[1/n^2, {n, 1, Infinity}]
-Out[9]= 1.64493
+In[11]:= NSum[1/n^2, {n, 1, Infinity}]
+Out[11]= 1.64493
 
-In[10]:= NSum[(-1)^(n+1)/n, {n, 1, Infinity}]
-Out[10]= 0.693147
+In[12]:= NSum[(-1)^(n+1)/n, {n, 1, Infinity}]
+Out[12]= 0.693147
 
-In[11]:= NSum[1/n^2, {n, 1, Infinity}, WorkingPrecision -> 30]
-Out[11]= 1.644934066848226436472415166649
+In[13]:= NSum[1/n^2, {n, 1, Infinity}, WorkingPrecision -> 30]
+Out[13]= 1.644934066848226436472415166649
 
-In[12]:= NSum[1/n^4, {n, 1, Infinity}, WorkingPrecision -> 30]
-Out[12]= 1.082323233711138191516003696543
+In[14]:= NSum[1/n^4, {n, 1, Infinity}, WorkingPrecision -> 30]
+Out[14]= 1.082323233711138191516003696543
 
-In[13]:= NSum[1/n^2, {n, 1, Infinity}, Method -> "Levin"]
-Out[13]= 1.64493
+In[15]:= NSum[1/n^2, {n, 1, Infinity}, Method -> "Levin"]
+Out[15]= 1.64493
 ```
 
 ## Algorithm

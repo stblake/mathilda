@@ -11,21 +11,41 @@
 
 **`ClearAttributes[{s1, s2, ...}, attrs] removes attributes from several symbols at a time.`**
 
-## Examples (3)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (3)
+### Basic examples (12)
 
 ```mathematica
-In[1]:= f[{1, 2, 3}]
-Out[1]= {f[1], f[2], f[3]}
+In[1]:= SetAttributes[f, Listable]
 
 In[2]:= f[{1, 2, 3}]
-Out[2]= f[{1, 2, 3}]
+Out[2]= {f[1], f[2], f[3]}
 
-In[3]:= Attributes[f]
-Out[3]= {Flat, Orderless}
+In[3]:= ClearAttributes[f, Listable]
+
+In[4]:= f[{1, 2, 3}]
+Out[4]= f[{1, 2, 3}]
+
+In[5]:= SetAttributes[f, {Flat, Orderless, OneIdentity}]
+
+In[6]:= ClearAttributes[f, OneIdentity]
+
+In[7]:= Attributes[f]
+Out[7]= {Flat, Orderless}
+
+In[8]:= ClearAttributes[f, {Flat, Orderless}]
+
+In[9]:= Attributes[f]
+Out[9]= {}
+
+In[10]:= SetAttributes[{g, h}, Protected]
+
+In[11]:= ClearAttributes[{g, h}, Protected]
+
+In[12]:= Attributes[g]
+Out[12]= {}
 ```
 
 ## Implementation notes

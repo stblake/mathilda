@@ -32,18 +32,26 @@ Do has attribute HoldAll: expr and the iterator specifications are held unevalua
 
 </details>
 
-## Examples (2)
+## Examples (4)
 
 Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
+
+```mathematica
+In[1]:= Do[Print[i], {i, 3}]
+
+In[2]:= Do[If[i == 3, Break[]]; Print[i], {i, 5}]
+```
 
 ### Applications (2)
 
 ```mathematica
-In[1]:= (s = 0; Do[s = s + i, {i, 5}]; s)
-Out[1]= 15
+In[3]:= (s = 0; Do[s = s + i, {i, 5}]; s)
+Out[3]= 15
 
-In[2]:= (p = 1; Do[p = p*2, {3}]; p)
-Out[2]= 8
+In[4]:= (p = 1; Do[p = p*2, {3}]; p)
+Out[4]= 8
 ```
 
 ## Implementation notes

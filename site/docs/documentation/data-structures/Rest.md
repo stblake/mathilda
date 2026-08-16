@@ -7,25 +7,27 @@
 
 **`Rest[expr] gives all but the first element of expr.`**
 
-## Examples (3)
+## Examples (4)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (2)
+### Basic examples (3)
 
 ```mathematica
-In[1]:= Rest[<|"a" -> 10, "b" -> 20, "c" -> 30|>]
-Out[1]= <|"b" -> 20, "c" -> 30|>
+In[1]:= First[<|"a" -> 10, "b" -> 20|>] In[1b]:= First[<||>, 0] Out[1b]= 0
 
-In[2]:= Take[<|"a" -> 1, "b" -> 2, "c" -> 3|>, 2]
-Out[2]= <|"a" -> 1, "b" -> 2|>
+In[2]:= Rest[<|"a" -> 10, "b" -> 20, "c" -> 30|>]
+Out[2]= <|"b" -> 20, "c" -> 30|>
+
+In[3]:= Take[<|"a" -> 1, "b" -> 2, "c" -> 3|>, 2]
+Out[3]= <|"a" -> 1, "b" -> 2|>
 ```
 
 ### Applications (1)
 
 ```mathematica
-In[3]:= Rest[{a,b,c,d}]
-Out[3]= {b, c, d}
+In[4]:= Rest[{a,b,c,d}]
+Out[4]= {b, c, d}
 ```
 
 ## Implementation notes

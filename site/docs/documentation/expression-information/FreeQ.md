@@ -17,11 +17,11 @@ restricts the search to parts of expr at the levels specified by levelspec.
 
 is the operator form: FreeQ\[form\]\[expr\] == FreeQ\[expr, form\].
 
-## Examples (7)
+## Examples (8)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (3)
+### Basic examples (4)
 
 ```mathematica
 In[1]:= FreeQ[{1, 2, 4, 1, 0}, 0]
@@ -30,24 +30,26 @@ Out[1]= False
 In[2]:= FreeQ[{a, b, b, a, a, a}, _Integer]
 Out[2]= True
 
-In[3]:= {f[3 x, x], f[a x, x], f[(1 + x) x, x]}
-Out[3]= {3 f[x, x], a f[x, x], f[x (1 + x), x]}
+In[3]:= f[c_ x_, x_] := c f[x, x] /; FreeQ[c, x]
+
+In[4]:= {f[3 x, x], f[a x, x], f[(1 + x) x, x]}
+Out[4]= {3 f[x, x], a f[x, x], f[x (1 + x), x]}
 ```
 
 ### Applications (4)
 
 ```mathematica
-In[4]:= FreeQ[x^2 + y^2, z]
-Out[4]= True
+In[5]:= FreeQ[x^2 + y^2, z]
+Out[5]= True
 
-In[5]:= FreeQ[x^2 + y^2, y]
-Out[5]= False
-
-In[6]:= FreeQ[D[Sin[x] Exp[x], x], Cos]
+In[6]:= FreeQ[x^2 + y^2, y]
 Out[6]= False
 
-In[7]:= Select[Range[20], FreeQ[FactorInteger[#], {2, _}] &]
-Out[7]= {1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
+In[7]:= FreeQ[D[Sin[x] Exp[x], x], Cos]
+Out[7]= False
+
+In[8]:= Select[Range[20], FreeQ[FactorInteger[#], {2, _}] &]
+Out[8]= {1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
 ```
 
 ## Implementation notes

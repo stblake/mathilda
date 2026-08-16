@@ -9,11 +9,11 @@
 
 expands out trigonometric functions in expr. TrigExpand operates on both circular and hyperbolic functions. TrigExpand splits up sums and integer multiples that appear in arguments of trigonometric functions, and then expands out products of trigonometric functions into sums of powers, using trigonometric identities when possible. TrigExpand automatically threads over lists, as well as equations, inequalities, and logic functions.
 
-## Examples (11)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (7)
+### Basic examples (10)
 
 ```mathematica
 In[1]:= TrigExpand[Sin[2 x]]
@@ -28,30 +28,38 @@ Out[3]= -Sin[x]^3 + 3 Cos[x]^2 Sin[x]
 In[4]:= TrigExpand[Cos[x + y + z]]
 Out[4]= Cos[x] Cos[y] Cos[z] - Cos[x] Sin[y] Sin[z] - Sin[x] Cos[y] Sin[z] - Sin[x] Sin[y] Cos[z]
 
-In[5]:= TrigExpand[Sinh[4 x]]
-Out[5]= 4 Cosh[x] Sinh[x]^3 + 4 Cosh[x]^3 Sinh[x]
+In[5]:= TrigExpand[Sin[x]^2 + Cos[x]^2] In[5b]:= TrigExpand[Sin[4 x]^2 + Cos[4 x]^2] Out[5b]= 1
 
-In[6]:= TrigExpand[Cosh[x - y]]
-Out[6]= Cosh[x] Cosh[y] - Sinh[x] Sinh[y]
+In[6]:= TrigExpand[Sinh[4 x]]
+Out[6]= 4 Cosh[x] Sinh[x]^3 + 4 Cosh[x]^3 Sinh[x]
 
-In[7]:= TrigExpand[Tanh[2 t]]
-Out[7]= 2 Cosh[t] Sinh[t] Sech[2 t]
+In[7]:= TrigExpand[Cosh[x - y]]
+Out[7]= Cosh[x] Cosh[y] - Sinh[x] Sinh[y]
+
+In[8]:= TrigExpand[Tanh[2 t]]
+Out[8]= 2 Cosh[t] Sinh[t] Sech[2 t]
+
+In[9]:= TrigExpand[{Tan[2 x], Sinh[x + y]}]
+Out[9]= {2 Cos[x] Sin[x] Sec[2 x], Cosh[x] Sinh[y] + Sinh[x] Cosh[y]}
+
+In[10]:= TrigExpand[1 < Cos[x + y] < 2]
+Out[10]= 1 < Cos[x] Cos[y] - Sin[x] Sin[y] < 2
 ```
 
 ### Applications (4)
 
 ```mathematica
-In[8]:= TrigExpand[Sin[a + b]]
-Out[8]= Cos[a] Sin[b] + Sin[a] Cos[b]
+In[11]:= TrigExpand[Sin[a + b]]
+Out[11]= Cos[a] Sin[b] + Sin[a] Cos[b]
 
-In[9]:= TrigExpand[Sin[3 x]]
-Out[9]= -Sin[x]^3 + 3 Cos[x]^2 Sin[x]
+In[12]:= TrigExpand[Sin[3 x]]
+Out[12]= -Sin[x]^3 + 3 Cos[x]^2 Sin[x]
 
-In[10]:= TrigExpand[Cos[2 x]]
-Out[10]= Cos[x]^2 - Sin[x]^2
+In[13]:= TrigExpand[Cos[2 x]]
+Out[13]= Cos[x]^2 - Sin[x]^2
 
-In[11]:= TrigExpand[Sinh[x + y]]
-Out[11]= Cosh[x] Sinh[y] + Sinh[x] Cosh[y]
+In[14]:= TrigExpand[Sinh[x + y]]
+Out[14]= Cosh[x] Sinh[y] + Sinh[x] Cosh[y]
 ```
 
 ## Implementation notes

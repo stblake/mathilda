@@ -16,7 +16,7 @@ IntegerLength ignores the sign of n; IntegerLength\[0\] is 0.
 
 </details>
 
-## Examples (7)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -33,20 +33,28 @@ In[3]:= Table[IntegerLength[100!, n], {n, 2, 20}]
 Out[3]= {525, 332, 263, 227, 204, 187, 175, 166, 158, 152, 147, 142, 138, 135, 132, 129, 126, 124, 122}
 ```
 
+### Scope (2)
+
+```mathematica
+In[4]:= IntegerLength[] IntegerLength::argt: IntegerLength called with 0 arguments; 1 or 2 arguments are expected.
+
+In[5]:= IntegerLength[1, 2, 3, 4] IntegerLength::argt: IntegerLength called with 4 arguments; 1 or 2 arguments are expected.
+```
+
 ### Applications (4)
 
 ```mathematica
-In[4]:= IntegerLength[12345]
-Out[4]= 5
+In[6]:= IntegerLength[12345]
+Out[6]= 5
 
-In[5]:= IntegerLength[2^1000]
-Out[5]= 302
+In[7]:= IntegerLength[2^1000]
+Out[7]= 302
 
-In[6]:= IntegerLength[2^1000, 2]
-Out[6]= 1001
+In[8]:= IntegerLength[2^1000, 2]
+Out[8]= 1001
 
-In[7]:= IntegerLength[100!]
-Out[7]= 158
+In[9]:= IntegerLength[100!]
+Out[9]= 158
 ```
 
 ## Options & behaviour

@@ -22,18 +22,24 @@ For has attribute HoldAll: start, test, incr, and body are all held unevaluated 
 
 </details>
 
-## Examples (2)
+## Examples (3)
 
 Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
+
+```mathematica
+In[1]:= For[i=0, i<4, i++, Print[i]]
+```
 
 ### Applications (2)
 
 ```mathematica
-In[1]:= (s = 0; For[i = 1, i <= 5, i++, s = s + i]; s)
-Out[1]= 15
+In[2]:= (s = 0; For[i = 1, i <= 5, i++, s = s + i]; s)
+Out[2]= 15
 
-In[2]:= (f = 1; For[i = 1, i <= 4, i++, f = f*i]; f)
-Out[2]= 24
+In[3]:= (f = 1; For[i = 1, i <= 4, i++, f = f*i]; f)
+Out[3]= 24
 ```
 
 ## Implementation notes

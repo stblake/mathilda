@@ -42,11 +42,11 @@ If test\[expr\] does not yield True initially, NestWhile returns expr.
 
 </details>
 
-## Examples (11)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (11)
 
 ```mathematica
 In[1]:= NestWhile[#/2 &, 123456, EvenQ]
@@ -72,19 +72,28 @@ Out[7]= 2
 
 In[8]:= NestWhile[# + 1 &, 888, !PrimeQ[#] &]
 Out[8]= 907
+
+In[9]:= NestWhile[# + 1 &, 888, !PrimeQ[#1] || !PrimeQ[#3] &, 3]
+Out[9]= 1021
+
+In[10]:= NestWhile[Mod[# + 3, 7] &, 0, UnsameQ, All]
+Out[10]= 0
+
+In[11]:= NestWhile[If[EvenQ[#], #/2, 3 # + 1] &, 27, # != 1 &]
+Out[11]= 1
 ```
 
 ### Applications (3)
 
 ```mathematica
-In[9]:= NestWhile[#/2 &, 256, EvenQ]
-Out[9]= 1
+In[12]:= NestWhile[#/2 &, 256, EvenQ]
+Out[12]= 1
 
-In[10]:= NestWhile[# + 1 &, 1, # < 100 &]
-Out[10]= 100
+In[13]:= NestWhile[# + 1 &, 1, # < 100 &]
+Out[13]= 100
 
-In[11]:= NestWhile[(# + 2/#)/2 &, 1.0, UnsameQ, 2]
-Out[11]= 1.41421
+In[14]:= NestWhile[(# + 2/#)/2 &, 1.0, UnsameQ, 2]
+Out[14]= 1.41421
 ```
 
 ## Implementation notes

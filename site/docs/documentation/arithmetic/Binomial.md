@@ -18,11 +18,11 @@ For non-negative integer arguments, computed exactly via GMP's mpz\_bin\_uiui. G
 
 </details>
 
-## Examples (13)
+## Examples (21)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (16)
 
 ```mathematica
 In[1]:= Binomial[10, 3]
@@ -48,25 +48,49 @@ Out[7]= 0
 
 In[8]:= Binomial[7/3, 1/5]
 Out[8]= Binomial[7/3, 1/5]
+
+In[9]:= N[Binomial[7/3, 1/5]]
+Out[9]= 1.33313
+
+In[10]:= N[Binomial[7/3, 1/5], 25]
+Out[10]= 1.3331254244650286522359229
+
+In[11]:= Binomial[2.5, 1/5]
+Out[11]= 1.34885
+
+In[12]:= Binomial[1/2 + I/3, 1/4]
+Out[12]= Binomial[1/2 + 1/3*I, 1/4]
+
+In[13]:= N[Binomial[1/2 + I/3, 1/4]]
+Out[13]= 1.08987 + 0.0929283*I
+
+In[14]:= N[Binomial[1/2 + I/3, 1/4], 25]
+Out[14]= 1.0898678407199392604353272 + 0.092928304677202434313313055*I
+
+In[15]:= Binomial[1 + I, 5.]
+Out[15]= -0.0833333 - 0.0833333*I
+
+In[16]:= Binomial[2. + I, 7 - 3 I]
+Out[16]= -75.4683 + 106.815*I
 ```
 
 ### Applications (5)
 
 ```mathematica
-In[9]:= Binomial[50, 25]
-Out[9]= 126410606437752
+In[17]:= Binomial[50, 25]
+Out[17]= 126410606437752
 
-In[10]:= Binomial[-1, 3]
-Out[10]= -1
+In[18]:= Binomial[-1, 3]
+Out[18]= -1
 
-In[11]:= Binomial[1/2, 3]
-Out[11]= 1/16
+In[19]:= Binomial[1/2, 3]
+Out[19]= 1/16
 
-In[12]:= Binomial[n, 2]
-Out[12]= 1/2 n (-1 + n)
+In[20]:= Binomial[n, 2]
+Out[20]= 1/2 n (-1 + n)
 
-In[13]:= Sum[Binomial[4, k] x^k, {k, 0, 4}]
-Out[13]= 1 + 4 x + 6 x^2 + 4 x^3 + x^4
+In[21]:= Sum[Binomial[4, k] x^k, {k, 0, 4}]
+Out[21]= 1 + 4 x + 6 x^2 + 4 x^3 + x^4
 ```
 
 ## Performance

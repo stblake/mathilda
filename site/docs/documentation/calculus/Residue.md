@@ -16,11 +16,11 @@ Computed by power-series expansion, so a residue is found only where f admits a 
 
 </details>
 
-## Examples (8)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (9)
 
 ```mathematica
 In[1]:= Residue[1/z, {z, 0}]
@@ -64,6 +64,13 @@ Out[7]= 1/24 Derivative[4][f][0]
 ```mathematica
 In[8]:= Residue[Zeta[z]/(z - 1)^10, {z, 1}]
 Out[8]= -1/362880 StieltjesGamma[9]
+```
+
+Branch point
+
+```mathematica
+In[9]:= Residue[1/Sqrt[z], {z, 0}]
+Out[9]= Residue[1/Sqrt[z], {z, 0}]
 ```
 
 ## Algorithm

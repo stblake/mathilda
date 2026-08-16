@@ -89,7 +89,7 @@ This file implements `N[expr]` / `N[expr, prec]`. Phase 1 targets machine-precis
 
 ## References
 
-**See also:** [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [GoldenRatio](../../mathematical-constants/GoldenRatio/)
+**See also:** [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [GoldenRatio](../../mathematical-constants/GoldenRatio/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/)
 
 - Source: [`src/numeric.c`](https://github.com/stblake/mathilda/blob/main/src/numeric.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

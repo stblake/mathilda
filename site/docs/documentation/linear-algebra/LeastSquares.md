@@ -28,7 +28,7 @@ LeastSquares works on every input family supported by PseudoInverse: exact (Inte
 
 </details>
 
-## Examples (11)
+## Examples (13)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -54,7 +54,7 @@ In[6]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 7}] == LinearSolve[{{1, 1}
 Out[6]= True
 ```
 
-### Options (2)
+### Options (4)
 
 ```mathematica
 In[7]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 8}, Method -> "IterativeRefinement", Tolerance -> 1/100]
@@ -62,19 +62,25 @@ Out[7]= {19/3, 1/2}
 
 In[8]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 8}, Method -> "Krylov"]
 Out[8]= {19/3, 1/2}
+
+In[9]:= LeastSquares[{{3.2, 2.2, 1.2}, {2.1, 7.1, 8.5}, {9.5, 6.7, 3.7}}, {7., 8., 9.}, Method -> "LSQR"]
+Out[9]= {73.9499, -174.379, 128.329}
+
+In[10]:= LeastSquares[{{1., 2., 3.}, {4., 5., 6.}, {7., 8., 9.}}, {2., -4., 2.}, Method -> "LSQR"]
+Out[10]= {0.0, 0.0, 0.0}
 ```
 
 ### Applications (3)
 
 ```mathematica
-In[9]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {1, 2, 2}]
-Out[9]= {2/3, 1/2}
+In[11]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {1, 2, 2}]
+Out[11]= {2/3, 1/2}
 
-In[10]:= LeastSquares[{{1, 0}, {0, 1}, {1, 1}}, {1, 1, 3}]
-Out[10]= {4/3, 4/3}
+In[12]:= LeastSquares[{{1, 0}, {0, 1}, {1, 1}}, {1, 1, 3}]
+Out[12]= {4/3, 4/3}
 
-In[11]:= LeastSquares[{{1, 1, 1}, {1, 2, 4}, {1, 3, 9}, {1, 4, 16}}, {6, 5, 7, 10}]
-Out[11]= {17/2, -18/5, 1}
+In[13]:= LeastSquares[{{1, 1, 1}, {1, 2, 4}, {1, 3, 9}, {1, 4, 16}}, {6, 5, 7, 10}]
+Out[13]= {17/2, -18/5, 1}
 ```
 
 ## Algorithm

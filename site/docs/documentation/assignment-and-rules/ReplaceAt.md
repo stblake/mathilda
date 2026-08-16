@@ -24,11 +24,11 @@ Rules may be a single Rule/RuleDelayed or a list of them; rules are tried in ord
 
 </details>
 
-## Examples (13)
+## Examples (22)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (17)
 
 ```mathematica
 In[1]:= ReplaceAt[{a, a, a, a}, a -> xx, 2]
@@ -54,25 +54,52 @@ Out[7]= {xx, yy, c, yy}
 
 In[8]:= ReplaceAt[{{a, a}, {a, a}}, a -> xx, {All, 2}]
 Out[8]= {{a, xx}, {a, xx}}
+
+In[9]:= ReplaceAt[{{a, b}, {c, d}, e}, x_ :> f[x], 2]
+Out[9]= {{a, b}, f[{c, d}], e}
+
+In[10]:= ReplaceAt[{{a, b}, {c, d}, e}, x_ :> f[x], -1]
+Out[10]= {{a, b}, {c, d}, f[e]}
+
+In[11]:= ReplaceAt[{{a, b}, {c, d}, e}, x_ :> f[x], {2, 1}]
+Out[11]= {{a, b}, {f[c], d}, e}
+
+In[12]:= ReplaceAt[{{a, b}, {c, d}, e}, x_ :> f[x], {{1}, {3}}]
+Out[12]= {f[{a, b}], {c, d}, f[e]}
+
+In[13]:= ReplaceAt[{{a, b}, {c, d}, e}, x_ :> f[x], {{1, 2}, {2, 2}, {3}}]
+Out[13]= {{a, f[b]}, {c, f[d]}, f[e]}
+
+In[14]:= ReplaceAt[{a, a, a, a, a}, a -> xx, 2 ;; 4]
+Out[14]= {a, xx, xx, xx, a}
+
+In[15]:= ReplaceAt[a + b + c + d, _ -> x, 2]
+Out[15]= a + c + d + x
+
+In[16]:= ReplaceAt[x^2 + y^2, _ -> z, {{1, 1}, {2, 1}}]
+Out[16]= 2 z^2
+
+In[17]:= ReplaceAt[{a, b, c}, _ -> f, 0]
+Out[17]= f[a, b, c]
 ```
 
 ### Applications (5)
 
 ```mathematica
-In[9]:= ReplaceAt[{a, b, c, d}, x_ -> X, 2]
-Out[9]= {a, X, c, d}
+In[18]:= ReplaceAt[{a, b, c, d}, x_ -> X, 2]
+Out[18]= {a, X, c, d}
 
-In[10]:= ReplaceAt[{a, b, c, d}, x_ -> X, -1]
-Out[10]= {a, b, c, X}
+In[19]:= ReplaceAt[{a, b, c, d}, x_ -> X, -1]
+Out[19]= {a, b, c, X}
 
-In[11]:= ReplaceAt[{{a, b}, {c, d}}, x_ -> X, {2, 1}]
-Out[11]= {{a, b}, {X, d}}
+In[20]:= ReplaceAt[{{a, b}, {c, d}}, x_ -> X, {2, 1}]
+Out[20]= {{a, b}, {X, d}}
 
-In[12]:= ReplaceAt[1 + x + x^2 + x^3, e_ :> D[e, x], {2}]
-Out[12]= 2 + x^2 + x^3
+In[21]:= ReplaceAt[1 + x + x^2 + x^3, e_ :> D[e, x], {2}]
+Out[21]= 2 + x^2 + x^3
 
-In[13]:= ReplaceAt[{1, 2, 3, 4, 5}, n_ :> n^2, {2 ;; 4}]
-Out[13]= {1, 4, 9, 16, 5}
+In[22]:= ReplaceAt[{1, 2, 3, 4, 5}, n_ :> n^2, {2 ;; 4}]
+Out[22]= {1, 4, 9, 16, 5}
 ```
 
 ## Implementation notes

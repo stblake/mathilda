@@ -16,11 +16,11 @@ n must be a non-negative integer. Nest\[f, expr, 0\] returns expr. The function 
 
 </details>
 
-## Examples (13)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (9)
 
 ```mathematica
 In[1]:= Nest[f, x, 3]
@@ -46,25 +46,28 @@ Out[7]= 1628.89
 
 In[8]:= Nest[(# + 2/#)/2 &, 1.0, 5]
 Out[8]= 1.41421
+
+In[9]:= Nest[{{1, 1}, {1, 0}} . # &, {0, 1}, 10]
+Out[9]= {55, 34}
 ```
 
 ### Applications (5)
 
 ```mathematica
-In[9]:= Nest[f, x, 3]
-Out[9]= f[f[f[x]]]
+In[10]:= Nest[f, x, 3]
+Out[10]= f[f[f[x]]]
 
-In[10]:= Nest[#^2 &, 2, 3]
-Out[10]= 256
+In[11]:= Nest[#^2 &, 2, 3]
+Out[11]= 256
 
-In[11]:= Nest[1/(1 + #) &, x, 2]
-Out[11]= 1/(1 + 1/(1 + x))
+In[12]:= Nest[1/(1 + #) &, x, 2]
+Out[12]= 1/(1 + 1/(1 + x))
 
-In[12]:= Nest[(# + 2/#)/2 &, 1, 4]
-Out[12]= 665857/470832
+In[13]:= Nest[(# + 2/#)/2 &, 1, 4]
+Out[13]= 665857/470832
 
-In[13]:= Nest[Sqrt[1 + #] &, x, 2]
-Out[13]= Sqrt[1 + Sqrt[1 + x]]
+In[14]:= Nest[Sqrt[1 + #] &, x, 2]
+Out[14]= Sqrt[1 + Sqrt[1 + x]]
 ```
 
 ## Implementation notes

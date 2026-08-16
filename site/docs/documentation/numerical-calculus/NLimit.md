@@ -16,11 +16,11 @@ A geometric sequence of sample points approaching z0 is constructed (z0 may be f
 
 </details>
 
-## Examples (13)
+## Examples (16)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (4)
+### Basic examples (6)
 
 ```mathematica
 In[1]:= NLimit[Sin[x]/x, x -> 0]
@@ -34,41 +34,54 @@ Out[3]= 0.540302 + 0.841471*I
 
 In[4]:= NLimit[Tanh[Pi x]/(1 + x^2), x -> I] // Chop
 Out[4]= 0.0 - 1.5708*I
+
+In[5]:= NLimit[x Sin[x], x -> Infinity] NLimit::osc: The sampled values oscillate with a non-decaying envelope; ...
+Out[5]= RepeatedNull[Null]
 ```
 
-### Options (4)
+Same oscillation, decaying envelope
 
 ```mathematica
-In[5]:= NLimit[(10^x - 1)/x, x -> 0, Terms -> 10, Method -> SequenceLimit]
-Out[5]= 2.30259
+In[6]:= NLimit[Sin[x]/x, x -> Infinity]
+Out[6]= -0.000155258
+```
 
-In[6]:= NLimit[z + Conjugate[z]/z, z -> 0, Direction -> -I] // Chop
-Out[6]= -1.0
+### Options (5)
 
-In[7]:= NLimit[Tan[z], z -> Infinity I, Method -> SequenceLimit] // Chop
-Out[7]= 0.0 + 1.0*I
+```mathematica
+In[7]:= NLimit[(10^x - 1)/x, x -> 0, Terms -> 10, Method -> SequenceLimit]
+Out[7]= 2.30259
 
-In[8]:= NLimit[(2^x - 1)/x, x -> 0, WorkingPrecision -> 30, Terms -> 14]
-Out[8]= 0.6931471805599453094172321284473
+In[8]:= NLimit[z + Conjugate[z]/z, z -> 0, Direction -> -I] // Chop
+Out[8]= -1.0
+
+In[9]:= NLimit[Tan[z], z -> Infinity I, Method -> SequenceLimit] // Chop
+Out[9]= 0.0 + 1.0*I
+
+In[10]:= NLimit[(2^x - 1)/x, x -> 0, WorkingPrecision -> 30, Terms -> 14]
+Out[10]= 0.6931471805599453094172321284473
+
+In[11]:= NLimit[Sin[x]/x, x -> 0, Method -> "Levin"]
+Out[11]= 1.0
 ```
 
 ### Applications (5)
 
 ```mathematica
-In[9]:= NLimit[Sin[x]/x, x -> 0]
-Out[9]= 1.0
+In[12]:= NLimit[Sin[x]/x, x -> 0]
+Out[12]= 1.0
 
-In[10]:= NLimit[(1 + 1/n)^n, n -> Infinity]
-Out[10]= 2.71828
+In[13]:= NLimit[(1 + 1/n)^n, n -> Infinity]
+Out[13]= 2.71828
 
-In[11]:= NLimit[n (2^(1/n) - 1), n -> Infinity]
-Out[11]= 0.693147
+In[14]:= NLimit[n (2^(1/n) - 1), n -> Infinity]
+Out[14]= 0.693147
 
-In[12]:= NLimit[Zeta[x] - 1/(x - 1), x -> 1]
-Out[12]= 0.577216
+In[15]:= NLimit[Zeta[x] - 1/(x - 1), x -> 1]
+Out[15]= 0.577216
 
-In[13]:= NLimit[Sin[x]/x, x -> 0, Method -> "Levin"]
-Out[13]= 1.0
+In[16]:= NLimit[Sin[x]/x, x -> 0, Method -> "Levin"]
+Out[16]= 1.0
 ```
 
 ## Algorithm

@@ -22,11 +22,11 @@ Options: Cubics              -\> False     (radical form for cubics) Quartics   
 
 </details>
 
-## Examples (18)
+## Examples (31)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (21)
 
 ```mathematica
 In[1]:= Solve[2 x + 3 == 0, x]
@@ -52,44 +52,83 @@ Out[7]= {{x -> Root[1 + #1 + #1^3 &, 1]}, {x -> Root[1 + #1 + #1^3 &, 2]}, {x ->
 
 In[8]:= Solve[Sin[x] == 0, x]
 Out[8]= {{x -> ConditionalExpression[Pi + 2 C[1] Pi, Element[C[1], Integers]]}, {x -> ConditionalExpression[2 C[1] Pi, Element[C[1], Integers]]}}
+
+In[9]:= Solve[a/x + b == 0, x]
+Out[9]= {{x -> -a/b}}
+
+In[10]:= Solve[1/(x-1) == 2, x]
+Out[10]= {{x -> 3/2}}
+
+In[11]:= Solve[x/(x-1) == 2/(x-1), x]
+Out[11]= {{x -> 2}}
+
+In[12]:= Solve[x^2 - 5 x + 6 == 0, x, Integers]
+Out[12]= {{x -> 2}, {x -> 3}}
+
+In[13]:= Solve[x^2 - 2 == 0, x, Integers]
+Out[13]= {}
+
+In[14]:= Solve[1.5 x + 3 == 0, x]
+Out[14]= {{x -> -2.0}}
+
+In[15]:= Solve[{1.5 x + y == 4.5, x - y == 0.5}, {x, y}]
+Out[15]= {{x -> 2.0, y -> 1.5}}
+
+In[16]:= Solve[N[Pi, 50] x == 1, x]
+Out[16]= {{x -> 0.318309886183790679458993446443125399383289683168242}}
+
+In[17]:= Solve[x^3 + 1 == 0, x, Reals]
+Out[17]= {{x -> -1}}
+
+In[18]:= Solve[x^3 - 6 x^2 + 11 x - 6 == 0, x, Integers]
+Out[18]= {{x -> 1}, {x -> 2}, {x -> 3}}
+
+In[19]:= Solve[3 x + 2 y == 11 && x + y == 12, {x, y}]
+Out[19]= {{x -> -13, y -> 25}}
+
+In[20]:= Solve[a x + c == 1 && b x - d y == 2, {x, y}]
+Out[20]= {{x -> (1 - c)/a, y -> (-2 a + b - b c)/(a d)}}
+
+In[21]:= Solve[3 x + 2 y == 11 && x + y == 12 && 3 x + y == 32, {x, y}]
+Out[21]= {}
 ```
 
 ### Worked examples (1)
 
 ```mathematica
-In[9]:= Solve[x^3 - 6 x^2 + 11 x - 6 == 0, x, Integers]
-Out[9]= {{x -> 1}, {x -> 2}, {x -> 3}}
+In[22]:= Solve[x^3 - 6 x^2 + 11 x - 6 == 0, x, Integers]
+Out[22]= {{x -> 1}, {x -> 2}, {x -> 3}}
 ```
 
 ### Applications (9)
 
 ```mathematica
-In[10]:= Solve[x^2 - 5 x + 6 == 0, x]
-Out[10]= {{x -> 2}, {x -> 3}}
+In[23]:= Solve[x^2 - 5 x + 6 == 0, x]
+Out[23]= {{x -> 2}, {x -> 3}}
 
-In[11]:= Solve[x^2 + 1 == 0, x]
-Out[11]= {{x -> -I}, {x -> I}}
+In[24]:= Solve[x^2 + 1 == 0, x]
+Out[24]= {{x -> -I}, {x -> I}}
 
-In[12]:= Solve[x^2 - 2 == 0, x]
-Out[12]= {{x -> -Sqrt[2]}, {x -> Sqrt[2]}}
+In[25]:= Solve[x^2 - 2 == 0, x]
+Out[25]= {{x -> -Sqrt[2]}, {x -> Sqrt[2]}}
 
-In[13]:= Solve[{x + y == 3, x - y == 1}, {x, y}]
-Out[13]= {{x -> 2, y -> 1}}
+In[26]:= Solve[{x + y == 3, x - y == 1}, {x, y}]
+Out[26]= {{x -> 2, y -> 1}}
 
-In[14]:= Solve[x y == 1 && x + y == 3, {x, y}]
-Out[14]= {{x -> 1/2 (3 - Sqrt[5]), y -> 1/2 (3 + Sqrt[5])}, {x -> 1/2 (3 + Sqrt[5]), y -> 1/2 (3 - Sqrt[5])}}
+In[27]:= Solve[x y == 1 && x + y == 3, {x, y}]
+Out[27]= {{x -> 1/2 (3 - Sqrt[5]), y -> 1/2 (3 + Sqrt[5])}, {x -> 1/2 (3 + Sqrt[5]), y -> 1/2 (3 - Sqrt[5])}}
 
-In[15]:= Solve[x y == 6 && x + y == 5, {x, y}, Integers]
-Out[15]= {{x -> 3, y -> 2}, {x -> 2, y -> 3}}
+In[28]:= Solve[x y == 6 && x + y == 5, {x, y}, Integers]
+Out[28]= {{x -> 3, y -> 2}, {x -> 2, y -> 3}}
 
-In[16]:= Solve[a x^2 + b x + c == 0, x]
-Out[16]= {{x -> (1/2 (-b + Sqrt[b^2 - 4 a c]))/a}, {x -> (1/2 (-b - Sqrt[b^2 - 4 a c]))/a}}
+In[29]:= Solve[a x^2 + b x + c == 0, x]
+Out[29]= {{x -> (1/2 (-b + Sqrt[b^2 - 4 a c]))/a}, {x -> (1/2 (-b - Sqrt[b^2 - 4 a c]))/a}}
 
-In[17]:= Solve[x^4 - 1 == 0, x]
-Out[17]= {{x -> -1}, {x -> 1}, {x -> -I}, {x -> I}}
+In[30]:= Solve[x^4 - 1 == 0, x]
+Out[30]= {{x -> -1}, {x -> 1}, {x -> -I}, {x -> I}}
 
-In[18]:= Solve[Sin[x] == 0, x]
-Out[18]= {{x -> ConditionalExpression[Pi + 2 C[1] Pi, Element[C[1], Integers]]}, {x -> ConditionalExpression[2 C[1] Pi, Element[C[1], Integers]]}}
+In[31]:= Solve[Sin[x] == 0, x]
+Out[31]= {{x -> ConditionalExpression[Pi + 2 C[1] Pi, Element[C[1], Integers]]}, {x -> ConditionalExpression[2 C[1] Pi, Element[C[1], Integers]]}}
 ```
 
 ## Options & behaviour

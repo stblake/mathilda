@@ -22,7 +22,7 @@ The head of list need not be List. Fold\[f, x, {}\] returns x, and symbol or a p
 
 </details>
 
-## Examples (12)
+## Examples (19)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -33,7 +33,7 @@ In[1]:= Fold[Plus, 0., NDArray[{1., 2., 3.}]]
 Out[1]= 6.0
 ```
 
-### Scope (7)
+### Scope (14)
 
 ```mathematica
 In[2]:= Fold[f, x, {a, b, c, d}]
@@ -56,22 +56,43 @@ Out[7]= f[f[f[f[x, a], b], c], d]
 
 In[8]:= Fold[2 #1 + #2 &, 0, {1, 0, 1, 1}]
 Out[8]= 11
+
+In[9]:= Fold[10 #1 + #2 &, 0, {4, 5, 1, 6, 7, 8}]
+Out[9]= 451678
+
+In[10]:= Fold[1/(#2 + #1) &, x, Reverse[{a, b, c, d}]]
+Out[10]= 1/(a + 1/(b + 1/(c + 1/(d + x))))
+
+In[11]:= Fold[Times, 1, Range[5]]
+Out[11]= 120
+
+In[12]:= Fold[f[#1] &, x, Range[5]]
+Out[12]= f[f[f[f[f[x]]]]]
+
+In[13]:= Fold[f, x, {}]
+Out[13]= x
+
+In[14]:= Fold[f, {a}]
+Out[14]= a
+
+In[15]:= Fold[f, {}]
+Out[15]= Fold[f, {}]
 ```
 
 ### Applications (4)
 
 ```mathematica
-In[9]:= Fold[f, x, {a, b, c}]
-Out[9]= f[f[f[x, a], b], c]
+In[16]:= Fold[f, x, {a, b, c}]
+Out[16]= f[f[f[x, a], b], c]
 
-In[10]:= Fold[Plus, 0, {1, 2, 3, 4}]
-Out[10]= 10
+In[17]:= Fold[Plus, 0, {1, 2, 3, 4}]
+Out[17]= 10
 
-In[11]:= Fold[#1*10 + #2 &, 0, {1, 2, 3}]
-Out[11]= 123
+In[18]:= Fold[#1*10 + #2 &, 0, {1, 2, 3}]
+Out[18]= 123
 
-In[12]:= Fold[1/(#2 + #1) &, 0, {1, 1, 1, 1, 1, 1, 1, 1}]
-Out[12]= 21/34
+In[19]:= Fold[1/(#2 + #1) &, 0, {1, 1, 1, 1, 1, 1, 1, 1}]
+Out[19]= 21/34
 ```
 
 ## Implementation notes

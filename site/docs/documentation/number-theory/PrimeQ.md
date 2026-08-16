@@ -24,11 +24,11 @@ Primality is tested with GMP's mpz\_probab\_prime\_p using 25 Miller-Rabin round
 
 </details>
 
-## Examples (15)
+## Examples (16)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (6)
+### Basic examples (7)
 
 ```mathematica
 In[1]:= PrimeQ[7]
@@ -48,41 +48,44 @@ Out[5]= False
 
 In[6]:= PrimeQ[2 + 2 I]
 Out[6]= False
+
+In[7]:= PrimeQ[Exp[2 Pi I/3]]
+Out[7]= False
 ```
 
 ### Options (2)
 
 ```mathematica
-In[7]:= PrimeQ[5, GaussianIntegers -> True]
-Out[7]= False
+In[8]:= PrimeQ[5, GaussianIntegers -> True]
+Out[8]= False
 
-In[8]:= PrimeQ[3, GaussianIntegers -> True]
-Out[8]= True
+In[9]:= PrimeQ[3, GaussianIntegers -> True]
+Out[9]= True
 ```
 
 ### Applications (7)
 
 ```mathematica
-In[9]:= PrimeQ[97]
-Out[9]= True
-
-In[10]:= PrimeQ[2^31 - 1]
+In[10]:= PrimeQ[97]
 Out[10]= True
 
-In[11]:= PrimeQ[2^67 - 1]
-Out[11]= False
+In[11]:= PrimeQ[2^31 - 1]
+Out[11]= True
 
-In[12]:= PrimeQ[561]
+In[12]:= PrimeQ[2^67 - 1]
 Out[12]= False
 
-In[13]:= PrimeQ[5, GaussianIntegers -> True]
+In[13]:= PrimeQ[561]
 Out[13]= False
 
-In[14]:= PrimeQ[3, GaussianIntegers -> True]
-Out[14]= True
+In[14]:= PrimeQ[5, GaussianIntegers -> True]
+Out[14]= False
 
-In[15]:= PrimeQ[2 + 3 I]
+In[15]:= PrimeQ[3, GaussianIntegers -> True]
 Out[15]= True
+
+In[16]:= PrimeQ[2 + 3 I]
+Out[16]= True
 ```
 
 ## Implementation notes

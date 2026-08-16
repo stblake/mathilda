@@ -33,11 +33,11 @@ Gives n characters, or as many as are available.
 
 Gives the list of results for each si.
 
-## Examples (8)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (11)
 
 ```mathematica
 In[1]:= StringTake["abcdefghijklm", 6]
@@ -63,6 +63,15 @@ Out[7]= "abc"
 
 In[8]:= StringTake["abcdef", {-3, -1}]
 Out[8]= "def"
+
+In[9]:= StringTake["abcde", {5, 1, -1}]
+Out[9]= "edcba"
+
+In[10]:= StringTake["abc", 0]
+Out[10]= ""
+
+In[11]:= StringTake[x, 1]
+Out[11]= StringTake[x, 1]
 ```
 
 ## Implementation notes

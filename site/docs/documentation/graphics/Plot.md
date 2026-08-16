@@ -64,3 +64,4 @@ HoldAll, like Table/Do: f and the iterator spec must not be pre-evaluated (x has
 - Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
 - Tests: [`tests/test_graphics.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphics.c)
 - Tests: [`tests/test_graphics_sampling.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphics_sampling.c)
+- Tests: [`tests/test_manipulate.c`](https://github.com/stblake/mathilda/blob/main/tests/test_manipulate.c)

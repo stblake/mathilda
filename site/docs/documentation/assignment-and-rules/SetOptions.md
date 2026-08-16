@@ -9,18 +9,20 @@
 
 s and returns the new Options\[s\].  It can change Protected (but not Locked) symbols, and only changes existing options -- an unknown name raises SetOptions::optnf.  Use AppendTo\[Options\[s\], ...\] to add one.
 
-## Examples (2)
+## Examples (3)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (2)
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Options[LinearSolve]
 Out[1]= {Method -> Automatic, Modulus -> 0, ZeroTest -> Automatic}
 
-In[2]:= SetOptions[f, c -> 3] SetOptions::optnf: c is not a known option for f. AppendTo[Options[f], c -> 3]
-Out[2]= Optional[{SetOptions::optnf (a -> 1), SetOptions::optnf (b -> 2), SetOptions::optnf (c -> 3)}, a c Dot[f, {a -> 1, b -> 2, c -> 3}] for is known not option]
+In[2]:= Options[f] = {a -> 1, b -> 2}; f[OptionsPattern[]] := {OptionValue[a], OptionValue[b]} {f[], f[a -> 17], f[b -> 18], f[a -> 17, b -> 18]}
+
+In[3]:= SetOptions[f, c -> 3] SetOptions::optnf: c is not a known option for f. AppendTo[Options[f], c -> 3]
+Out[3]= Optional[{SetOptions::optnf (a -> 1), SetOptions::optnf (b -> 2), SetOptions::optnf (c -> 3)}, a c Dot[f, {a -> 1, b -> 2, c -> 3}] for is known not option]
 ```
 
 ## Algorithm
@@ -80,6 +82,6 @@ Memory: every result is freshly built. Sub-expressions taken from `res` or from 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
 - Tests: [`tests/test_numberform.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numberform.c)
 - Tests: [`tests/test_options.c`](https://github.com/stblake/mathilda/blob/main/tests/test_options.c)
-- Tests: [`tests/test_stringcontainsq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringcontainsq.c)

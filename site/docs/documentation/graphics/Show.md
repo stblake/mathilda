@@ -33,7 +33,7 @@ Out[1]= -Graphics-
 
 ## References
 
-**See also:** [Plot](../../graphics/Plot/), [Frame](../../other-advanced/Frame/), [FrameTicks](../../other-advanced/FrameTicks/), [FrameStyle](../../other-advanced/FrameStyle/), [AspectRatio](../../other-advanced/AspectRatio/), [ImageSize](../../other-advanced/ImageSize/), [Tan](../../elementary-functions/Tan/), [Sec](../../elementary-functions/Sec/)
+**See also:** [Plot](../../graphics/Plot/), [Plot3D](../../graphics/Plot3D/), [Animate](../../graphics/Animate/), [Manipulate](../../graphics/Manipulate/), [ListPlot](../../graphics/ListPlot/), [E](../../mathematical-constants/E/), [ParametricPlot3D](../../graphics/ParametricPlot3D/), [Frame](../../other-advanced/Frame/)
 
 - Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)

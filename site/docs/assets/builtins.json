@@ -155,7 +155,7 @@
     "name": "$SimplifyDebug",
     "category": "Simplification",
     "slug": "simplification",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "$SimplifyDebug",
     "url": "documentation/simplification/$SimplifyDebug/"
   },
@@ -304,10 +304,18 @@
     "url": "documentation/functional-programming/AllTrue/"
   },
   {
+    "name": "AlphaChannel",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "AlphaChannel[image] gives the image's opacity as a one-channel image. An image with no alpha channel answers with an all-opaque one rather than declining: \"how transparent is this?\" has an answer for every image, and it is \"not at all\". Two channels are read as grey+alpha and four as RGB+alpha.",
+    "url": "documentation/image-processing/AlphaChannel/"
+  },
+  {
     "name": "Animate",
     "category": "Graphics",
     "slug": "graphics",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "Animate[expr, {t, tmin, tmax}, opts...]",
     "url": "documentation/graphics/Animate/"
   },
@@ -390,6 +398,14 @@
     "status": "Stable",
     "summary": "ArrayFlatten[a]",
     "url": "documentation/structural-manipulation/ArrayFlatten/"
+  },
+  {
+    "name": "ArrayPlot",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Stable",
+    "summary": "ArrayPlot[array, opts...]",
+    "url": "documentation/graphics/ArrayPlot/"
   },
   {
     "name": "AspectRatio",
@@ -560,6 +576,14 @@
     "url": "documentation/special-functions/Beta/"
   },
   {
+    "name": "Binarize",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "Binarize[image] thresholds image by Otsu's method (see FindThreshold), giving a \"Bit\" image. Binarize[image, t] thresholds at t. A pixel STRICTLY ABOVE the threshold becomes 1, so a pixel exactly at it becomes 0 -- which matters, because \"above\" and \"at or above\" differ on exactly the pixels a threshold was chosen to sit between. A colour image is reduced to luminance first.",
+    "url": "documentation/image-processing/Binarize/"
+  },
+  {
     "name": "Binomial",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -622,6 +646,14 @@
     "status": "Stable",
     "summary": "Boole[expr]",
     "url": "documentation/control-flow/Boole/"
+  },
+  {
+    "name": "BoxMatrix",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "BoxMatrix[r] gives a (2r+1) x (2r+1) matrix of 1s. It is NOT normalised, matching Mathematica, so ImageConvolve[image, BoxMatrix[1]] is nine times too bright; the normalised version is a mean filter. Kept faithful rather than helpfully rescaled, since a caller using BoxMatrix in arithmetic needs the ones.",
+    "url": "documentation/image-processing/BoxMatrix/"
   },
   {
     "name": "Break",
@@ -744,6 +776,22 @@
     "url": "documentation/elementary-functions/Chop/"
   },
   {
+    "name": "ClassifierFunction",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "ClassifierFunction[method, parameters, featureCount, k] is the fitted classifier Classify returns. Apply it to a feature vector to get a class, or to a feature vector and \"Probabilities\" to get one rule per class.",
+    "url": "documentation/other-advanced/ClassifierFunction/"
+  },
+  {
+    "name": "Classify",
+    "category": "Machine Learning",
+    "slug": "machine-learning",
+    "status": "Stable",
+    "summary": "Classify[data] trains a classifier and returns a ClassifierFunction. Data is a list of rules {features -> class, ...}; a class may be any expression -- a string, a symbol, a number -- and the distinct classes are numbered by first appearance. Method -> \"NearestNeighbors\" is the only method implemented and is the default, with NeighborsNumber defaulting to 1: a classifier votes rather than averages, so at k = 1 it reproduces its training labels exactly. Apply the result to a feature vector for a class, or with \"Probabilities\" for the vote shares. It also answers \"Classes\", \"Method\", \"FeatureCount\" and \"NeighborCount\". Method -> \"NaiveBayes\" fits a Gaussian per class with a diagonal covariance; Method -> \"LogisticRegression\" fits a logistic model by iteratively reweighted least squares with a small ridge on the non-intercept coefficients -- the ridge is load-bearing, because on linearly separable data the unpenalised likelihood is unbounded and the coefficients would diverge. Two classes give a single fit; more than two are fitted one-vs-rest, one binary model per class, and the class is the arg-max of the fitted probabilities. Those probabilities are normalised to sum to 1, which is a convention rather than a likelihood -- being monotone it cannot change the arg-max, so the class is the better-founded of the two answers. A single class declines: it is not a classification problem.",
+    "url": "documentation/machine-learning/Classify/"
+  },
+  {
     "name": "Clear",
     "category": "Assignment and Rules",
     "slug": "assignment-and-rules",
@@ -776,6 +824,14 @@
     "url": "documentation/elementary-functions/Clip/"
   },
   {
+    "name": "Closing",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "Closing[image, r] dilates then erodes with the same element, filling dark features smaller than it. Idempotent, like Opening, and the two bracket the image: Erosion <= Opening <= image <= Closing <= Dilation pointwise everywhere.",
+    "url": "documentation/image-processing/Closing/"
+  },
+  {
     "name": "Coefficient",
     "category": "Algebra",
     "slug": "algebra",
@@ -798,6 +854,14 @@
     "status": "Stable",
     "summary": "Collect[expr, x]",
     "url": "documentation/algebra/Collect/"
+  },
+  {
+    "name": "ColorConvert",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ColorConvert[image, \"Grayscale\"] (or \"Gray\") reduces an image or an Image3D to a single channel using the Rec. 601 luminance weights 0.299 R + 0.587 G + 0.114 B, the same weights every filter here uses when it needs brightness. An image that is ALREADY GREY is returned unchanged, bit for bit, since no weighting happens. An image whose three channels are merely EQUAL is returned only to within an ulp, and whether it is exact depends on the value: those weights sum to 0.9999999999999999 when added in the order they are applied, though to exactly 1.0 in any order beginning with 0.114, so the final rounding lands on the input for some values and one ulp below it for others. The weights are the standard's and are not adjusted to compensate; a triple hand-tuned to sum to exactly 1.0 in double would no longer be Rec. 601.",
+    "url": "documentation/image-processing/ColorConvert/"
   },
   {
     "name": "Commonest",
@@ -1022,6 +1086,14 @@
     "status": "Stable",
     "summary": "CoprimeQ[n1, n2, ...]",
     "url": "documentation/number-theory/CoprimeQ/"
+  },
+  {
+    "name": "CornerFilter",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "CornerFilter[image] gives the corner strength at every pixel, from the eigenvalues of the Gaussian-weighted second-moment matrix of the gradient (the structure tensor). Both eigenvalues small is flat, one large is an edge, both large is a corner. CornerFilter[image, r] sets the window radius (default 2); CornerFilter[image, r, method] selects \"MinimumEigenvalue\" (the default -- Shi-Tomasi's lambda_min, which is directly \"how much does the weaker direction vary\" and is comparable across images) or \"Harris\" (det - 0.04 trace^2, cheaper since it needs no square root, and negative on edges). A STRAIGHT EDGE SCORES ZERO under both: every gradient in the window is parallel, so the matrix has rank 1 and its determinant and smaller eigenvalue vanish. Colour is reduced to luminance first, since a corner is a property of brightness.",
+    "url": "documentation/image-processing/CornerFilter/"
   },
   {
     "name": "Correlation",
@@ -1264,6 +1336,14 @@
     "url": "documentation/calculus/Derivative/"
   },
   {
+    "name": "DerivativeFilter",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "DerivativeFilter[image, {n, m}] gives the n-th derivative down the rows and the m-th across the columns, each order from 0 to 2. The kernel is a separable outer product of 1-D stencils: order 0 is the smoothing {1,2,1}/4, order 1 the central difference {-1,0,1}/2, order 2 the second difference {1,-2,1}. So {0,1} is Sobel-x and {1,0} is Sobel-y. The stencils are NORMALISED, unlike the raw integer Sobel kernels, which report a gradient eight times the true slope -- harmless when only the ranking of edges matters, and wrong for anything that reads the number. On f(x) = c x the first derivative gives exactly c. The result is a \"Real\" image.",
+    "url": "documentation/image-processing/DerivativeFilter/"
+  },
+  {
     "name": "DesignMatrix",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
@@ -1336,6 +1416,38 @@
     "url": "documentation/arithmetic/DigitSum/"
   },
   {
+    "name": "Dilation",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "Dilation[image, r] gives the maximum over a (2r+1) x (2r+1) square neighbourhood; Dilation[image, elem] uses the SUPPORT of the matrix elem -- its nonzero positions -- as the neighbourhood. This is flat morphology: the element's values do not enter the maximum, which is what keeps Dilation[img, BoxMatrix[1]] and Dilation[img, 1] the same operation. Padding replicates the border, the same rule the convolutions use, which is what makes Dilation >= image hold at the edges too. A full rectangle is separable for the maximum exactly as for a sum, so it costs kw + kh comparisons rather than kw * kh.",
+    "url": "documentation/image-processing/Dilation/"
+  },
+  {
+    "name": "DimensionReduce",
+    "category": "Machine Learning",
+    "slug": "machine-learning",
+    "status": "Stable",
+    "summary": "DimensionReduce[data, k] reduces each row of data to k dimensions. Method -> \"PrincipalComponentsAnalysis\" (default) centres the columns and projects onto the leading eigenvectors of the covariance; \"LatentSemanticAnalysis\" skips the centring, giving a truncated SVD, which is what a sparse non-negative term-document matrix wants; \"MultidimensionalScaling\" double-centres the squared distance matrix (classical Torgerson scaling) and is capped at 2000 rows, its matrix being n x n. Asking for more dimensions than the data supports returns unevaluated rather than padding with zeros.",
+    "url": "documentation/machine-learning/DimensionReduce/"
+  },
+  {
+    "name": "DimensionReducerFunction",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "DimensionReducerFunction[method, {means, loadings...}, featureCount, reducedDimension] is the reusable reducer DimensionReduction returns. Apply it to a feature vector, or to a matrix of them, to project into the reduced space.",
+    "url": "documentation/other-advanced/DimensionReducerFunction/"
+  },
+  {
+    "name": "DimensionReduction",
+    "category": "Machine Learning",
+    "slug": "machine-learning",
+    "status": "Stable",
+    "summary": "DimensionReduction[data, k] returns a DimensionReducerFunction projecting into k dimensions, applicable to data it was NOT trained on -- the difference from DimensionReduce[data, k], which returns the reduced training data. New rows are centred on the TRAINING column means, which is what makes projections comparable across batches. Accepts one point or a matrix of points, and answers \"Method\", \"FeatureCount\" and \"ReducedDimension\".",
+    "url": "documentation/machine-learning/DimensionReduction/"
+  },
+  {
     "name": "Dimensions",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -1358,6 +1470,14 @@
     "status": "Stable",
     "summary": "Discriminant[poly, var]",
     "url": "documentation/algebra/Discriminant/"
+  },
+  {
+    "name": "DistanceTransform",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "DistanceTransform[image] replaces each pixel by its EXACT Euclidean distance to the nearest background pixel; background pixels are 0, so the value rises toward the interior of a blob. DistanceTransform[image, t] takes pixels above t as foreground (default 0). Exact rather than the classic two-pass chamfer approximation, which cannot represent sqrt(2) with integer steps and so gets diagonal distances a few percent wrong -- invisible on a picture and fatal to a test. Uses Felzenszwalb and Huttenlocher's lower-envelope-of-parabolas method, O(n) per row with no sorting. Separability is EXACT here because squared Euclidean distance is a sum over the axes, so minimising it decomposes per axis; the square root is taken once at the end rather than per pass.",
+    "url": "documentation/image-processing/DistanceTransform/"
   },
   {
     "name": "Distribute",
@@ -1464,6 +1584,14 @@
     "url": "documentation/other-advanced/EdgeCount/"
   },
   {
+    "name": "EdgeDetect",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "EdgeDetect[image] finds edges by the Canny algorithm, giving a \"Bit\" image. EdgeDetect[image, r] sets the Gaussian smoothing radius (default 2; 0 means no smoothing). EdgeDetect[image, r, t] sets the high threshold explicitly. Four stages: smooth, because a derivative amplifies noise; gradient by the normalised Sobel pair; non-maximum suppression along the gradient direction, which is what makes an edge ONE pixel wide rather than a thick band; and hysteresis, keeping any pixel above the high threshold plus any above 0.4 of it that is 8-connected to one, so a real edge survives its faint stretches while isolated weak responses do not. The high threshold defaults to Otsu's method applied to the SUPPRESSED magnitude, where the two classes really are edge against non-edge; on the raw magnitude it would be dominated by the ridge flanks.",
+    "url": "documentation/image-processing/EdgeDetect/"
+  },
+  {
     "name": "EdgeList",
     "category": "Other & Advanced",
     "slug": "other-advanced",
@@ -1558,6 +1686,14 @@
     "status": "Stable",
     "summary": "Erfi[z]",
     "url": "documentation/special-functions/Erfi/"
+  },
+  {
+    "name": "Erosion",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "Erosion[image, r] gives the minimum over a (2r+1) x (2r+1) square neighbourhood; Erosion[image, elem] uses the support of elem. Dual to Dilation: for a symmetric element, Erosion[f, k] equals 1 - Dilation[1 - f, k] exactly, which holds at the border only because the replicate padding is itself self-dual.",
+    "url": "documentation/image-processing/Erosion/"
   },
   {
     "name": "EuclideanDistance",
@@ -1678,6 +1814,14 @@
     "status": "Stable",
     "summary": "ExponentialMovingAverage[list, alpha]",
     "url": "documentation/statistics/ExponentialMovingAverage/"
+  },
+  {
+    "name": "Export",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "Export[\"file\", image] writes an Image to a raster file, choosing the format from the file extension (PNG, JPEG, BMP, TGA). Export[\"file\", image, \"PNG\"] states the format explicitly. Samples outside the unit interval are clamped, since 8-bit output has no room for them. Returns the file name, so Import[Export[f, img]] is a round trip.",
+    "url": "documentation/file-io/Export/"
   },
   {
     "name": "ExtendedGCD",
@@ -1945,19 +2089,19 @@
   },
   {
     "name": "FindMaximum",
-    "category": "Calculus",
-    "slug": "calculus",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
     "status": "Stable",
     "summary": "FindMaximum[f, {x, x0}]",
-    "url": "documentation/calculus/FindMaximum/"
+    "url": "documentation/numerical-calculus/FindMaximum/"
   },
   {
     "name": "FindMinimum",
-    "category": "Calculus",
-    "slug": "calculus",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
     "status": "Stable",
     "summary": "FindMinimum[f, {x, x0}]",
-    "url": "documentation/calculus/FindMinimum/"
+    "url": "documentation/numerical-calculus/FindMinimum/"
   },
   {
     "name": "FindRoot",
@@ -1982,6 +2126,14 @@
     "status": "Stable",
     "summary": "FindSpanningTree[g] gives a spanning tree (forest) of g as a graph.",
     "url": "documentation/other-advanced/FindSpanningTree/"
+  },
+  {
+    "name": "FindThreshold",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "FindThreshold[image] gives a threshold separating the image into two classes, by Otsu's method: the level maximising the BETWEEN-class variance w0 w1 (mu0 - mu1)^2, which is algebraically the same as minimising the weighted within-class variance but needs only one incremental pass over a 256-bin histogram. A colour image is reduced to Rec. 601 luminance first. Returns unevaluated for an image whose pixels are all identical, since no threshold splits one cluster into two.",
+    "url": "documentation/image-processing/FindThreshold/"
   },
   {
     "name": "First",
@@ -2240,6 +2392,22 @@
     "url": "documentation/data-structures/GatherBy/"
   },
   {
+    "name": "GaussianFilter",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "GaussianFilter[image, r] blurs image with a Gaussian of radius r. It is exactly ImageConvolve[image, GaussianMatrix[r]] -- the same matrix through the same convolution, not a second implementation -- and a test asserts the identity.",
+    "url": "documentation/image-processing/GaussianFilter/"
+  },
+  {
+    "name": "GaussianMatrix",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "GaussianMatrix[r] gives a (2r+1) x (2r+1) Gaussian matrix normalised to sum 1. GaussianMatrix[{r, sigma}] states the standard deviation; it defaults to r/2, which puts the kernel's edge at two standard deviations. Normalisation divides by the realised sum rather than the analytic 2 pi sigma^2, because the analytic constant is correct only for an infinite kernel and using it on a truncated one leaves the sum under 1 -- which darkens an image slightly on every pass.",
+    "url": "documentation/image-processing/GaussianMatrix/"
+  },
+  {
     "name": "GeneratedParameters",
     "category": "Solutions of Equations",
     "slug": "solutions-of-equations",
@@ -2286,6 +2454,14 @@
     "status": "Stable",
     "summary": "Goto[tag]",
     "url": "documentation/control-flow/Goto/"
+  },
+  {
+    "name": "GradientFilter",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "GradientFilter[image] gives the gradient magnitude Sqrt[dx^2 + dy^2], using the normalised Sobel derivatives of DerivativeFilter. The magnitude rather than |dx| + |dy| because it is ROTATION INVARIANT: an edge at 45 degrees reports the same strength as one at 0, where the absolute sum would report it sqrt(2) times stronger and so bias every downstream threshold by orientation. A colour image is reduced to luminance first and differentiated once, rather than differentiated per channel and combined by some arbitrary rule.",
+    "url": "documentation/image-processing/GradientFilter/"
   },
   {
     "name": "Graph",
@@ -2584,12 +2760,180 @@
     "url": "documentation/arithmetic/Im/"
   },
   {
+    "name": "Image",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "Image[data] is a raster image, normalising to the canonical Image[data, type]. The data is a rectangular height x width array of pixel values, or height x width x channels for a colour image, so it is indexed data[[y, x]] with rows running down the image -- note that ImageDimensions reports {width, height}, transposed relative to this. The type is inferred from the values: all-integer data in {0, 1} is \"Bit\", all-integer in 0..255 is \"Byte\", anything else is \"Real\". Image[data, type] states the type instead, and declines if the data does not fit it. Ragged data declines rather than being padded.",
+    "url": "documentation/image-processing/Image/"
+  },
+  {
+    "name": "Image3D",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "Image3D[data] is a volumetric image, normalising to Image3D[data, type]. The data is a depth x height x width array of voxels, or depth x height x width x channels for colour, so it is indexed data[[z, y, x]] with slices outermost. ImageDimensions reports {width, height, depth} -- FULLY REVERSED from that order, which is Mathematica's convention. Type inference and the accessors match Image: ImageQ is False for a volume (use Image3DQ), while ImageDimensions, ImageChannels, ImageType and ImageData all accept either rank.",
+    "url": "documentation/image-processing/Image3D/"
+  },
+  {
+    "name": "Image3DQ",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "Image3DQ[expr] gives True if expr is a valid volumetric image in canonical form. Malformed input to Image3D stays unevaluated, so this is how validity is tested.",
+    "url": "documentation/image-processing/Image3DQ/"
+  },
+  {
+    "name": "ImageAdjust",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageAdjust[image] stretches to the full range: the darkest pixel becomes exactly 0 and the brightest exactly 1. It is IDEMPOTENT, a second stretch being the identity. A constant image has no range to stretch and comes back unchanged, since dividing by zero is not the answer and mapping the single value to either end would be arbitrary. ImageAdjust[image, {c, b}] and [image, {c, b, g}] apply contrast c, brightness b and gamma g by a curve stated here rather than inferred: v' = (v - 1/2)(1 + c) + 1/2 + b, clipped to [0, 1], then raised to the power 1/g. Contrast pivots about mid-grey so it does not also shift brightness; clipping precedes gamma because a negative base has no real power. This curve is Mathilda's documented choice, not a claim of bit-compatibility with Mathematica. Accepts volumes as well as planes.",
+    "url": "documentation/image-processing/ImageAdjust/"
+  },
+  {
+    "name": "ImageAssemble",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageAssemble[{{a, b}, {c, d}}] tiles a grid of images into one; ImageAssemble[{a, b}] makes a single row. Each tile keeps its natural size -- a row is as tall as its tallest tile and a column as wide as its widest, and any gap is left blank rather than stretched, since stretching would resample an image the caller did not ask to resize. Alpha survives if any tile had it.",
+    "url": "documentation/image-processing/ImageAssemble/"
+  },
+  {
+    "name": "ImageChannels",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageChannels[image] gives the number of colour channels: 1 for a grey image, otherwise the length of each pixel's value list (3 for RGB, 4 with an alpha channel).",
+    "url": "documentation/image-processing/ImageChannels/"
+  },
+  {
+    "name": "ImageCompose",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageCompose[base, over] alpha-composites over onto base, centred, keeping base's size and clipping whatever falls outside. ImageCompose[base, over, {x, y}] centres the overlay at {x, y} in image coordinates -- x from the left, y from the BOTTOM. ImageCompose[base, {over, a}] scales the overlay's opacity by a. A grey image composed with a colour one produces colour: grey means the same value in every channel, so it is replicated rather than zero-padded.",
+    "url": "documentation/image-processing/ImageCompose/"
+  },
+  {
+    "name": "ImageConvolve",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageConvolve[image, kernel] convolves image with the rank-2 numeric kernel. This is true convolution: the kernel is REFLECTED before summing, so it differs from correlation on an asymmetric kernel (the two agree exactly on a symmetric one such as a Gaussian or a box). Out-of-range reads clamp to the nearest edge pixel, replicating the border, so a constant image convolved with a kernel summing to 1 comes back unchanged everywhere including the edges -- zero padding would darken them. The result is always a \"Real\" image of the same dimensions, since a filtered byte is not generally a byte. Each colour channel is convolved independently.",
+    "url": "documentation/image-processing/ImageConvolve/"
+  },
+  {
+    "name": "ImageCorners",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageCorners[image] gives the positions of corners. ImageCorners[image, r, t, d, n] sets the window radius (default 2), the threshold as a fraction of the largest response (0.05), the MINIMUM SEPARATION in pixels (0), and the maximum number of features (all). Three filters apply in that order because each removes what the others cannot: a threshold alone returns a blob of adjacent pixels per corner since the response is smooth; 3x3 non-maximum suppression alone returns a maximum in every flat region since a plateau of zeros has maxima; and separation is what makes the list usable, since the first two leave clusters a pixel apart -- 4104 of them on a noise-like 512x512 image. Separation is greedy in DESCENDING RESPONSE order, so the survivor of a cluster is its strongest member rather than whichever came first in raster order, and the feature limit is applied last: before separation it would return n positions from a single cluster. The result is sorted strongest first, ties broken by position so the same image always gives the same list. Positions are {row, column}, 1-based, so each indexes ImageData directly; that is NOT Mathematica's {x, y} from the bottom left, and Mathematica spells the feature limit as a MaxFeatures option where this takes it positionally -- both differences are stated rather than guessed.",
+    "url": "documentation/image-processing/ImageCorners/"
+  },
+  {
+    "name": "ImageCorrelate",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageCorrelate[image, kernel] correlates image with kernel: the kernel is NOT reflected, which is the only difference from ImageConvolve. The two are related exactly -- correlation equals convolution with the kernel reversed on both axes -- and they agree on any symmetric kernel, so the distinction only shows on an asymmetric one, where a delta with {{1,2,3}} gives {3,2,1} here and {1,2,3} convolved. ImageCorrelate[image, template, \"NormalizedCrossCorrelation\"] is template matching: it subtracts the local mean and divides by the local standard deviation, so it measures SHAPE and is invariant to brightness offset and contrast scale. Plain correlation is maximised by brightness rather than similarity -- a white patch beats a correct but darker match -- which is why raw correlation is a poor matcher. Where the template is a crop of the image the score is exactly 1 and is the global maximum. A flat window has no shape to compare and scores 0 rather than dividing by zero; scoring 1 would make every flat region match everything. Colour is reduced to luminance first for the NCC form.",
+    "url": "documentation/image-processing/ImageCorrelate/"
+  },
+  {
+    "name": "ImageCrop",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageCrop[image, {w, h}] crops to w x h about the centre, any odd remainder going to the right and bottom -- the same floor-division convention the kernel centres use, which is what makes ImageCrop[ImagePad[image, m], ImageDimensions[image]] exactly the original image. A crop may not enlarge. ImageCrop[image] instead TRIMS A UNIFORM BORDER, asking how much of the frame carries no information; the border colour is read from a corner rather than assumed black, since a scanned page's margin is white. An entirely uniform image comes back unchanged, there being no content to keep and a zero-sized image not being one.",
+    "url": "documentation/image-processing/ImageCrop/"
+  },
+  {
+    "name": "ImageData",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageData[image] gives the pixel array as reals in [0, 1], scaling out the image's type -- a \"Byte\" 255 comes back as exactly 1.0. The array is height x width, or height x width x channels for a colour image, interleaved. ImageData[image, type] gives the stored values unscaled instead, where type must be the image's own type; converting between types is a separate operation with its own rounding, not something this does silently.",
+    "url": "documentation/image-processing/ImageData/"
+  },
+  {
+    "name": "ImageDimensions",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageDimensions[image] gives {width, height}. This is TRANSPOSED relative to ImageData, which returns a height x width array -- the same convention Mathematica uses.",
+    "url": "documentation/image-processing/ImageDimensions/"
+  },
+  {
+    "name": "ImageLevels",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageLevels[image] gives {{level, count}, ...}: the histogram as DATA, not a plot -- use Histogram over the result for a picture. ImageLevels[image, n] uses n bins. Levels are on the same unit scale as ImageData, so a level can be compared against a pixel value without rescaling. A \"Bit\" image uses its 2 natural levels and \"Byte\" its 256, because those ARE the distinct values; a \"Real\" image has no natural set and is binned into 256 over [0, 1]. The counts sum to the pixel count exactly, every pixel landing in one bin. Accepts volumes as well as planes.",
+    "url": "documentation/image-processing/ImageLevels/"
+  },
+  {
+    "name": "ImagePad",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImagePad[image, m] pads m pixels on every side; ImagePad[image, {{left, right}, {bottom, top}}] pads each side separately, in Mathematica's VISUAL order -- so `top` adds rows at the start of the data, since row 1 is the top of the image. Negative amounts crop, but may not erase the image. ImagePad[image, m, v] fills with the value v (default 0); ImagePad[image, m, \"Fixed\"] replicates the edge pixel, the same boundary rule the filters use, so padding then filtering composes with it; ImagePad[image, m, \"Reflected\"] mirrors WITHOUT repeating the edge -- {1,2,3} padded by 1 gives {2,1,2,3,2}, not {1,1,2,3,3}, because doubling the edge sample biases any later average toward the border. Reflection uses a period of 2n-2, so padding deeper than the image still works.",
+    "url": "documentation/image-processing/ImagePad/"
+  },
+  {
+    "name": "ImageQ",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageQ[expr] gives True if expr is a valid image in canonical form, and False otherwise. Malformed input to Image stays unevaluated, so ImageQ is how validity is tested.",
+    "url": "documentation/image-processing/ImageQ/"
+  },
+  {
+    "name": "ImageReflect",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageReflect[image] reflects top to bottom; ImageReflect[image, Left] or Right reflects left to right, and Top or Bottom is the vertical reflection again -- either name of a pair selects the same axis, since reflecting to the top and reflecting to the bottom are one operation. For an Image3D, Front or Back selects the DEPTH axis, the pair Mathematica uses for volumes; those two DECLINE on a plane, which has no depth axis, rather than being reinterpreted as some other axis and turning a mistake into a wrong picture. A reflection is a pure index permutation, so it interpolates nothing: reflecting twice about the same axis is the identity bit for bit, and reflections about different axes commute exactly.",
+    "url": "documentation/image-processing/ImageReflect/"
+  },
+  {
+    "name": "ImageResize",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageResize[image, {w, h}] resizes to w x h pixels; ImageResize[image, w] gives width w with the height following to preserve the aspect ratio. Resampling -> \"Nearest\" | \"Bilinear\" | \"Average\" selects the method; the default Automatic uses AREA AVERAGING when either axis shrinks and bilinear otherwise. That default is about aliasing: point-sampling a shrinking image destroys every frequency above half the new sampling rate -- a fine checkerboard reduced by nearest-neighbour comes back a flat field -- and no interpolation afterwards can restore what point-sampling discarded. Area averaging is a box prefilter and a resample in one pass, exact for integer reduction factors, using true fractional coverage so a 3 -> 2 reduction is as correct as 4 -> 2. Enlarging has no frequencies to remove, so bilinear is used there; area averaging on an enlargement would degenerate to nearest. Coordinates are centre-aligned, avoiding the half-pixel shift that sx = i * scale introduces at any scale other than 1:1. The result is a \"Real\" image; sizes must be positive integers.",
+    "url": "documentation/image-processing/ImageResize/"
+  },
+  {
+    "name": "ImageRotate",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageRotate[image] rotates a quarter turn counterclockwise; ImageRotate[image, angle] rotates by angle in radians (use n Degree for degrees). A multiple of a right angle takes an EXACT index-permutation path -- every pixel lands on another pixel's position, nothing is interpolated, and four quarter turns are exactly the identity. An odd number of quarter turns swaps the dimensions. Any other angle interpolates bilinearly, sampling the source per destination pixel (inverse mapping, so every output is filled exactly once; forward mapping leaves holes wherever the rotation stretches). Area rotated in from outside reads as 0 rather than the replicated edge, because that area was never photographed and smearing the border across it would invent content.",
+    "url": "documentation/image-processing/ImageRotate/"
+  },
+  {
     "name": "ImageSize",
     "category": "Other & Advanced",
     "slug": "other-advanced",
     "status": "Experimental",
     "summary": "ImageSize",
     "url": "documentation/other-advanced/ImageSize/"
+  },
+  {
+    "name": "ImageType",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ImageType[image] gives the pixel type as \"Bit\", \"Byte\" or \"Real\". The type fixes the range of a stored value, which is what makes ImageData's scaling to the unit interval well defined.",
+    "url": "documentation/image-processing/ImageType/"
+  },
+  {
+    "name": "Import",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Stable",
+    "summary": "Import[\"file\"] reads a raster image file (PNG, JPEG, BMP, GIF, TGA, PSD, HDR, PNM) and returns an Image. Import[\"file\", \"Image\"] is the same. Samples are scaled by 1/255 into the unit interval, so the result is a \"Real\" image whatever the file's bit depth, and the file's channel count is preserved -- grey stays 1 channel, RGBA keeps its alpha. Gives $Failed for a missing or malformed file.",
+    "url": "documentation/file-io/Import/"
   },
   {
     "name": "IncidenceMatrix",
@@ -3000,6 +3344,22 @@
     "url": "documentation/expression-information/LeafCount/"
   },
   {
+    "name": "LearnDistribution",
+    "category": "Machine Learning",
+    "slug": "machine-learning",
+    "status": "Stable",
+    "summary": "LearnDistribution[data] fits a distribution to data and returns a LearnedDistribution, usable with PDF. Method -> \"Multinormal\" is the default; Method -> \"GaussianMixture\" fits a mixture, choosing the component count by BIC. Multinormal fits a mean vector and a sample covariance (n-1 divisor, matching Variance). Rows are observations and columns are variables; a flat list is n observations of one variable. A singular covariance -- collinear columns, or fewer observations than dimensions -- returns unevaluated, because no density exists rather than because of an error. Method -> \"ContingencyTable\" is for NOMINAL data instead of numeric: it stores a probability per distinct outcome, which in one dimension is a categorical distribution. Outcomes may be any expressions -- strings, symbols, or equal-length lists of them -- compared structurally, and are kept in first-appearance order. Probabilities are empirical frequencies with no smoothing, so PDF of an outcome never observed is exactly 0; smoothing would require knowing how many outcomes were possible but unseen, which for arbitrary expressions is unknowable. Ragged outcomes decline.",
+    "url": "documentation/machine-learning/LearnDistribution/"
+  },
+  {
+    "name": "LearnedDistribution",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "LearnedDistribution[method, parameters, dimension, extra] is the fitted distribution LearnDistribution returns. Use it with PDF. Unlike a SPECIFIED distribution such as NormalDistribution[mu, sigma], it prints elided, because its parameters are derived rather than user-supplied.",
+    "url": "documentation/other-advanced/LearnedDistribution/"
+  },
+  {
     "name": "LeastSquares",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
@@ -3168,6 +3528,14 @@
     "url": "documentation/calculus/Limit/"
   },
   {
+    "name": "LinearModelFit",
+    "category": "Machine Learning",
+    "slug": "machine-learning",
+    "status": "Partial",
+    "summary": "LinearModelFit[data] fits a linear model with an intercept and returns a PredictorFunction carrying its coefficients. Wolfram's version returns a FittedModel with regression diagnostics (RSquared, standard errors, ANOVA); those are not implemented and are not approximated. The coefficients are the same ones Predict finds.",
+    "url": "documentation/machine-learning/LinearModelFit/"
+  },
+  {
     "name": "LinearSolve",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
@@ -3230,6 +3598,14 @@
     "status": "Experimental",
     "summary": "LoadModule[\"relpath\"]",
     "url": "documentation/file-io/LoadModule/"
+  },
+  {
+    "name": "LocalAdaptiveBinarize",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "LocalAdaptiveBinarize[image, r] binarizes by comparing each pixel to the MEAN of its own (2r+1)x(2r+1) neighbourhood, and LocalAdaptiveBinarize[image, r, {c1, c2, c3}] to c1*mean + c2*stddev + c3. A global threshold cannot binarize unevenly lit content, and that is not a tuning problem: if one half of a page is darker than the other, no single number separates ink from paper in both halves at once. Mean alone (the default {1, 0, 0}) is Bradley's method; a negative c2 is Sauvola's, tightening the threshold where the neighbourhood is busy. Summed-area tables make the window statistics O(1) per pixel regardless of r -- without them a radius-16 window would be 1089 taps per pixel. The result is typed \"Bit\", since it is binary by construction. Colour is reduced to luminance first.",
+    "url": "documentation/image-processing/LocalAdaptiveBinarize/"
   },
   {
     "name": "Log",
@@ -3302,6 +3678,14 @@
     "status": "Stable",
     "summary": "ManhattanDistance[u, v]",
     "url": "documentation/lists-and-iteration/ManhattanDistance/"
+  },
+  {
+    "name": "Manipulate",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Stable",
+    "summary": "Manipulate[expr, {u, umin, umax}, ...]",
+    "url": "documentation/graphics/Manipulate/"
   },
   {
     "name": "MantissaExponent",
@@ -3392,6 +3776,14 @@
     "url": "documentation/data-structures/Max/"
   },
   {
+    "name": "MaxMemoryUsed",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "MaxMemoryUsed[] gives the peak number of bytes resident for the Mathilda process over its lifetime. The high-water mark comes from the operating system, so it catches spikes that occurred between two calls to MemoryInUse rather than only the largest value previously observed.",
+    "url": "documentation/expression-information/MaxMemoryUsed/"
+  },
+  {
     "name": "MaximalBy",
     "category": "Functional Programming",
     "slug": "functional-programming",
@@ -3408,6 +3800,14 @@
     "url": "documentation/data-structures/Mean/"
   },
   {
+    "name": "MeanFilter",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "MeanFilter[image, r] averages over a (2r+1) x (2r+1) neighbourhood. This IS a convolution with a normalised box, and it is implemented as one rather than as a separate averaging loop -- two implementations of one identity is how the identity quietly stops holding. Being a full rectangle the kernel is separable, so it costs kw + kh rather than kw * kh.",
+    "url": "documentation/image-processing/MeanFilter/"
+  },
+  {
     "name": "Median",
     "category": "Data Structures",
     "slug": "data-structures",
@@ -3416,12 +3816,28 @@
     "url": "documentation/data-structures/Median/"
   },
   {
+    "name": "MedianFilter",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "MedianFilter[image, r] replaces each pixel with the median over a (2r+1) x (2r+1) neighbourhood. Unlike a Gaussian it removes an isolated outlier EXACTLY rather than attenuating and smearing it, which is what makes it the filter for salt-and-pepper noise. It is also the one filter here that is NOT separable: a sum, a maximum and a minimum all decompose because they ignore grouping, but a median depends on a value's rank within the whole window, and grouping destroys rank -- the median of row medians of {{1,2,9},{3,4,5},{6,7,8}} is 4 where the true median is 5. For an even window the lower middle is taken rather than the average of the two, so the output is always one of the inputs.",
+    "url": "documentation/image-processing/MedianFilter/"
+  },
+  {
     "name": "MemberQ",
     "category": "Expression Information",
     "slug": "expression-information",
     "status": "Stable",
     "summary": "MemberQ[list, form] returns True if an element of list matches form, and False otherwise.",
     "url": "documentation/expression-information/MemberQ/"
+  },
+  {
+    "name": "MemoryInUse",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "MemoryInUse[] gives the number of bytes of memory currently resident for the Mathilda process. This is the process resident set size, so unlike Mathematica's MemoryInUse it also counts the binary, the shared libraries and whatever the allocator holds without returning it to the system -- it is the figure Activity Monitor and top report, not a count of session data alone. Returns unevaluated on a platform that offers no way to ask, rather than reporting zero.",
+    "url": "documentation/expression-information/MemoryInUse/"
   },
   {
     "name": "Merge",
@@ -3486,6 +3902,14 @@
     "status": "Stable",
     "summary": "Moment[data, r]",
     "url": "documentation/statistics/Moment/"
+  },
+  {
+    "name": "MorphologicalComponents",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "MorphologicalComponents[image] labels the connected components of the foreground, giving an INTEGER MATRIX with background 0 and components numbered 1..k in raster order of first appearance. MorphologicalComponents[image, t] takes pixels above t as foreground (default 0, so nonzero is foreground). CornerNeighbors -> False uses 4-connectivity instead of the default 8. Two pixels touching only at a corner are ONE component under 8 and TWO under 4, which is the property that distinguishes the two rules -- every other property holds under either. A matrix rather than an Image, deliberately: Image type inference would call a label array of 1..12 a \"Byte\" image and ImageData would then divide every label by 255. Labels are indices, not brightnesses. Contiguous labels in scan order mean Max of the result is the component count.",
+    "url": "documentation/image-processing/MorphologicalComponents/"
   },
   {
     "name": "Most",
@@ -3574,6 +3998,22 @@
     "status": "Stable",
     "summary": "NLimit[expr, z -> z0]",
     "url": "documentation/numerical-calculus/NLimit/"
+  },
+  {
+    "name": "NMaximize",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
+    "status": "Stable",
+    "summary": "NMaximize[f, x]",
+    "url": "documentation/numerical-calculus/NMaximize/"
+  },
+  {
+    "name": "NMinimize",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
+    "status": "Stable",
+    "summary": "NMinimize[f, x]",
+    "url": "documentation/numerical-calculus/NMinimize/"
   },
   {
     "name": "NProduct",
@@ -3736,12 +4176,28 @@
     "url": "documentation/power-series/Normal/"
   },
   {
+    "name": "NormalDistribution",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "NormalDistribution[mu, sigma] represents a normal distribution; NormalDistribution[] is the standard normal. Unlike a fitted model it prints its parameters in full, because they are what the user specified rather than an implementation detail.",
+    "url": "documentation/other-advanced/NormalDistribution/"
+  },
+  {
     "name": "Normalize",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
     "status": "Stable",
     "summary": "Normalize[v]",
     "url": "documentation/linear-algebra/Normalize/"
+  },
+  {
+    "name": "Nothing",
+    "category": "Lists and Iteration",
+    "slug": "lists-and-iteration",
+    "status": "Stable",
+    "summary": "Nothing",
+    "url": "documentation/lists-and-iteration/Nothing/"
   },
   {
     "name": "NullSpace",
@@ -3798,6 +4254,14 @@
     "status": "Experimental",
     "summary": "OneIdentity is an attribute that can be assigned to a symbol f to indicate that f[x], f[f[x]], etc. are all equivalent to x for the purpose of pattern matching.",
     "url": "documentation/expression-information/OneIdentity/"
+  },
+  {
+    "name": "Opening",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "Opening[image, r] erodes then dilates with the same element, removing bright features smaller than it while leaving larger ones close to their original size. IDEMPOTENT: Opening[Opening[f]] equals Opening[f], which is the defining property and the reason opening twice is not a sharpening loop.",
+    "url": "documentation/image-processing/Opening/"
   },
   {
     "name": "OptionValue",
@@ -3886,6 +4350,14 @@
     "status": "Stable",
     "summary": "OwnValues[s] gives a list of own-value rules for s.",
     "url": "documentation/assignment-and-rules/OwnValues/"
+  },
+  {
+    "name": "PDF",
+    "category": "Machine Learning",
+    "slug": "machine-learning",
+    "status": "Stable",
+    "summary": "PDF[dist, x] gives the probability density of dist at x, and threads over a list of x. Supports NormalDistribution and UniformDistribution.",
+    "url": "documentation/machine-learning/PDF/"
   },
   {
     "name": "PadLeft",
@@ -4240,6 +4712,22 @@
     "url": "documentation/other-advanced/PrecisionGoal/"
   },
   {
+    "name": "Predict",
+    "category": "Machine Learning",
+    "slug": "machine-learning",
+    "status": "Stable",
+    "summary": "Predict[data] fits a predictor to data and returns a PredictorFunction, which can be stored and applied to new inputs. Data is either a list of rules {features -> value, ...} or a matrix whose last column is the response. Method -> \"LinearRegression\" is the only method implemented and is the default; any other declines rather than silently linear-regressing. The returned object also answers \"Method\", \"Coefficients\" and \"FeatureCount\". A collinear feature set has no unique fit and returns unevaluated.",
+    "url": "documentation/machine-learning/Predict/"
+  },
+  {
+    "name": "PredictorFunction",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "PredictorFunction[method, coefficients, featureCount] is the fitted object Predict returns. Apply it to a feature vector to get a prediction, or to \"Method\", \"Coefficients\" or \"FeatureCount\" to read it. A one-feature model also accepts a bare scalar.",
+    "url": "documentation/other-advanced/PredictorFunction/"
+  },
+  {
     "name": "Prepend",
     "category": "Data Structures",
     "slug": "data-structures",
@@ -4302,6 +4790,14 @@
     "status": "Stable",
     "summary": "PrimitiveRootList[n]",
     "url": "documentation/number-theory/PrimitiveRootList/"
+  },
+  {
+    "name": "PrincipalComponents",
+    "category": "Machine Learning",
+    "slug": "machine-learning",
+    "status": "Stable",
+    "summary": "PrincipalComponents[matrix] gives the rows of matrix in principal-component coordinates, components ordered by decreasing variance. Rows are observations and columns are variables. Method -> \"Correlation\" standardises each variable to unit variance first, which is what you want when the columns have different units; the default \"Covariance\" does not.",
+    "url": "documentation/machine-learning/PrincipalComponents/"
   },
   {
     "name": "Print",
@@ -4432,6 +4928,14 @@
     "url": "documentation/other-advanced/RandomGraph/"
   },
   {
+    "name": "RandomImage",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "RandomImage[] gives a 150x150 grey image of uniform noise on [0, 1]. RandomImage[max] scales the range to [0, max]; RandomImage[max, {w, h}] sets the size, and a single n means {n, n}. ColorSpace -> \"RGB\" gives three independent channels. Samples are drawn from the same stream as RandomReal, so SeedRandom makes the result reproducible.",
+    "url": "documentation/image-processing/RandomImage/"
+  },
+  {
     "name": "RandomInteger",
     "category": "Random Number Generation",
     "slug": "random-number-generation",
@@ -4454,6 +4958,14 @@
     "status": "Stable",
     "summary": "RandomSample[{e1, e2, ...}, n]",
     "url": "documentation/random-number-generation/RandomSample/"
+  },
+  {
+    "name": "RandomVariate",
+    "category": "Machine Learning",
+    "slug": "machine-learning",
+    "status": "Stable",
+    "summary": "RandomVariate[dist] draws one value from dist; RandomVariate[dist, n] draws a list of n. Supports NormalDistribution[mu, sigma] and UniformDistribution[{lo, hi}], each also usable with no arguments for the standard case. Draws come from the same stream as RandomReal, so SeedRandom makes them reproducible. A non-positive standard deviation, or an inverted range, returns unevaluated rather than producing NaNs.",
+    "url": "documentation/machine-learning/RandomVariate/"
   },
   {
     "name": "Range",
@@ -4582,6 +5094,14 @@
     "status": "Stable",
     "summary": "Remove[s1, s2, ...]",
     "url": "documentation/assignment-and-rules/Remove/"
+  },
+  {
+    "name": "RemoveAlphaChannel",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "RemoveAlphaChannel[image] drops the alpha channel. RemoveAlphaChannel[image, b] instead COMPOSITES over a background of brightness b, which is the difference between forgetting the transparency and resolving it: a half-transparent white pixel over black is grey, where dropping alpha would leave it white.",
+    "url": "documentation/image-processing/RemoveAlphaChannel/"
   },
   {
     "name": "Repeated",
@@ -4920,6 +5440,14 @@
     "url": "documentation/arithmetic/SetAccuracy/"
   },
   {
+    "name": "SetAlphaChannel",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "SetAlphaChannel[image] attaches a fully opaque alpha channel. SetAlphaChannel[image, a] sets one opacity everywhere when a is a number in [0, 1], or per pixel when a is an image of the same dimensions (read as grey, so a colour mask is not taken as its red channel alone). A mask of the wrong size is declined rather than resampled.",
+    "url": "documentation/image-processing/SetAlphaChannel/"
+  },
+  {
     "name": "SetAttributes",
     "category": "Expression Information",
     "slug": "expression-information",
@@ -5064,6 +5592,14 @@
     "url": "documentation/functional-programming/SlotSequence/"
   },
   {
+    "name": "SmoothKernelDistribution",
+    "category": "Machine Learning",
+    "slug": "machine-learning",
+    "status": "Stable",
+    "summary": "SmoothKernelDistribution[data] gives a kernel density estimate as a LearnedDistribution, usable with PDF. The kernel is a product Gaussian with a per-dimension bandwidth from the multivariate normal-reference rule, which in one dimension is Silverman's 1.06 sigma n^(-1/5). SmoothKernelDistribution[data, h] sets the bandwidth explicitly, as one number or one per dimension. Being a normal-reference rule the default oversmooths strongly multimodal data -- a known property of the rule, and the reason the explicit form exists. A constant column has no scale and returns unevaluated.",
+    "url": "documentation/machine-learning/SmoothKernelDistribution/"
+  },
+  {
     "name": "Solve",
     "category": "Solutions of Equations",
     "slug": "solutions-of-equations",
@@ -5166,6 +5702,14 @@
     "status": "Stable",
     "summary": "StandardDeviation[data] gives the standard deviation estimate of the elements in data.",
     "url": "documentation/data-structures/StandardDeviation/"
+  },
+  {
+    "name": "Standardize",
+    "category": "Machine Learning",
+    "slug": "machine-learning",
+    "status": "Stable",
+    "summary": "Standardize[data] shifts each column of data to zero mean and rescales it to unit sample standard deviation (divisor n-1, matching StandardDeviation). A flat list is treated as n observations of one variable. A constant column becomes exactly 0 rather than Indeterminate.",
+    "url": "documentation/machine-learning/Standardize/"
   },
   {
     "name": "StieltjesGamma",
@@ -5798,6 +6342,14 @@
     "status": "Stable",
     "summary": "Unevaluated[expr]",
     "url": "documentation/expression-information/Unevaluated/"
+  },
+  {
+    "name": "UniformDistribution",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "UniformDistribution[{lo, hi}] represents a continuous uniform distribution; UniformDistribution[] is uniform on {0, 1}.",
+    "url": "documentation/other-advanced/UniformDistribution/"
   },
   {
     "name": "Union",

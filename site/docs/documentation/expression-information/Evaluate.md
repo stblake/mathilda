@@ -16,11 +16,11 @@ Evaluate only overrides HoldFirst, HoldRest, and HoldAll attributes when it appe
 
 </details>
 
-## Examples (8)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (11)
 
 ```mathematica
 In[1]:= Evaluate[1+1]
@@ -46,6 +46,15 @@ Out[7]= 2
 
 In[8]:= Hold[Evaluate[Length[{a,b,c}]]]
 Out[8]= Hold[3]
+
+In[9]:= Evaluate[Head[{1,2,3}]]
+Out[9]= List
+
+In[10]:= Evaluate[]
+Out[10]= Sequence[]
+
+In[11]:= Hold[Evaluate[1+1, 2+2]]
+Out[11]= Hold[2, 4]
 ```
 
 ## Implementation notes

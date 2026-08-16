@@ -36,37 +36,39 @@ Negative indices count from the end; UpTo\[n\], All, and None are also accepted 
 
 </details>
 
-## Examples (7)
+## Examples (8)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (2)
+### Basic examples (3)
 
 ```mathematica
-In[1]:= Rest[<|"a" -> 10, "b" -> 20, "c" -> 30|>]
-Out[1]= <|"b" -> 20, "c" -> 30|>
+In[1]:= First[<|"a" -> 10, "b" -> 20|>] In[1b]:= First[<||>, 0] Out[1b]= 0
 
-In[2]:= Take[<|"a" -> 1, "b" -> 2, "c" -> 3|>, 2]
-Out[2]= <|"a" -> 1, "b" -> 2|>
+In[2]:= Rest[<|"a" -> 10, "b" -> 20, "c" -> 30|>]
+Out[2]= <|"b" -> 20, "c" -> 30|>
+
+In[3]:= Take[<|"a" -> 1, "b" -> 2, "c" -> 3|>, 2]
+Out[3]= <|"a" -> 1, "b" -> 2|>
 ```
 
 ### Applications (5)
 
 ```mathematica
-In[3]:= Take[{a, b, c, d, e}, 3]
-Out[3]= {a, b, c}
+In[4]:= Take[{a, b, c, d, e}, 3]
+Out[4]= {a, b, c}
 
-In[4]:= Take[{a, b, c, d, e}, -2]
-Out[4]= {d, e}
+In[5]:= Take[{a, b, c, d, e}, -2]
+Out[5]= {d, e}
 
-In[5]:= Take[Range[10], {2, 8, 2}]
-Out[5]= {2, 4, 6, 8}
+In[6]:= Take[Range[10], {2, 8, 2}]
+Out[6]= {2, 4, 6, 8}
 
-In[6]:= Take[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, 2, 2]
-Out[6]= {{1, 2}, {4, 5}}
+In[7]:= Take[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, 2, 2]
+Out[7]= {{1, 2}, {4, 5}}
 
-In[7]:= Take[Table[Fibonacci[n], {n, 1, 15}], {3, 15, 3}]
-Out[7]= {2, 8, 34, 144, 610}
+In[8]:= Take[Table[Fibonacci[n], {n, 1, 15}], {3, 15, 3}]
+Out[8]= {2, 8, 34, 144, 610}
 ```
 
 ## Performance
@@ -95,7 +97,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_clip.c`](https://github.com/stblake/mathilda/blob/main/tests/test_clip.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
-- Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
+- Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
 
 ## Notes & additional examples
 

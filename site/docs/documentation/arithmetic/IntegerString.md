@@ -18,7 +18,7 @@ The maximum allowed base is 36; the sign of n is discarded.
 
 </details>
 
-## Examples (11)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -41,30 +41,32 @@ In[5]:= IntegerString[12345, 10, 3]
 Out[5]= "345"
 ```
 
-### Scope (1)
+### Scope (2)
 
 ```mathematica
-In[6]:= IntegerString[10, 50] IntegerString::basf: 50 is not a valid base for IntegerString in IntegerString[10, 50]; the base must be an integer between 2 and 36.
-Out[6]= 72.0 an and base be between integer must the
+In[6]:= IntegerString[] IntegerString::argb: IntegerString called with 0 arguments; between 1 and 3 arguments are expected.
+
+In[7]:= IntegerString[10, 50] IntegerString::basf: 50 is not a valid base for IntegerString in IntegerString[10, 50]; the base must be an integer between 2 and 36.
+Out[7]= 72.0 an and base be between integer must the
 ```
 
 ### Applications (5)
 
 ```mathematica
-In[7]:= IntegerString[255, 16]
-Out[7]= "ff"
+In[8]:= IntegerString[255, 16]
+Out[8]= "ff"
 
-In[8]:= IntegerString[255, 2]
-Out[8]= "11111111"
+In[9]:= IntegerString[255, 2]
+Out[9]= "11111111"
 
-In[9]:= IntegerString[42, 2, 16]
-Out[9]= "0000000000101010"
+In[10]:= IntegerString[42, 2, 16]
+Out[10]= "0000000000101010"
 
-In[10]:= IntegerString[123456789, 36]
-Out[10]= "21i3v9"
+In[11]:= IntegerString[123456789, 36]
+Out[11]= "21i3v9"
 
-In[11]:= IntegerString[3^50, 16]
-Out[11]= "980553f0db2fd09de3c9"
+In[12]:= IntegerString[3^50, 16]
+Out[12]= "980553f0db2fd09de3c9"
 ```
 
 ## Options & behaviour

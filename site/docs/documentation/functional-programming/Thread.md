@@ -24,11 +24,11 @@ Functions with attribute Listable are automatically threaded over lists. All the
 
 </details>
 
-## Examples (12)
+## Examples (18)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (14)
 
 ```mathematica
 In[1]:= Thread[f[{a, b, c}]]
@@ -54,22 +54,40 @@ Out[7]= f[{a, b}, {r, s}, {u, v}, {x, y}]
 
 In[8]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List, 2]
 Out[8]= {f[a, r, {u, v}, {x, y}], f[b, s, {u, v}, {x, y}]}
+
+In[9]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List, -2]
+Out[9]= {f[{a, b}, {r, s}, u, x], f[{a, b}, {r, s}, v, y]}
+
+In[10]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List, {2, 4}]
+Out[10]= {f[{a, b}, r, u, x], f[{a, b}, s, v, y]}
+
+In[11]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List, {1, -1, 2}]
+Out[11]= {f[a, {r, s}, u, {x, y}], f[b, {r, s}, v, {x, y}]}
+
+In[12]:= Thread[f[a + b, c + d]]
+Out[12]= f[a + b, c + d]
+
+In[13]:= Thread[f[a + b, c + d], Plus]
+Out[13]= f[a, c] + f[b, d]
+
+In[14]:= Thread[f[{a, b, c}, h, {x, y, z}]]
+Out[14]= {f[a, h, x], f[b, h, y], f[c, h, z]}
 ```
 
 ### Applications (4)
 
 ```mathematica
-In[9]:= Thread[f[{a, b, c}]]
-Out[9]= {f[a], f[b], f[c]}
+In[15]:= Thread[f[{a, b, c}]]
+Out[15]= {f[a], f[b], f[c]}
 
-In[10]:= Thread[{x, y, z} -> {1, 2, 3}]
-Out[10]= {x -> 1, y -> 2, z -> 3}
+In[16]:= Thread[{x, y, z} -> {1, 2, 3}]
+Out[16]= {x -> 1, y -> 2, z -> 3}
 
-In[11]:= Thread[f[{a, b}, {c, d}, x]]
-Out[11]= {f[a, c, x], f[b, d, x]}
+In[17]:= Thread[f[{a, b}, {c, d}, x]]
+Out[17]= {f[a, c, x], f[b, d, x]}
 
-In[12]:= Thread[Equal[{a, b, c}, {1, 2, 3}]]
-Out[12]= {a == 1, b == 2, c == 3}
+In[18]:= Thread[Equal[{a, b, c}, {1, 2, 3}]]
+Out[18]= {a == 1, b == 2, c == 3}
 ```
 
 ## Implementation notes

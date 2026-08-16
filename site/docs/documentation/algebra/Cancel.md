@@ -14,11 +14,11 @@ Option Extension -\> alpha cancels factors over Q(alpha) (e.g. simplifies (x^2 -
 
 </details>
 
-## Examples (13)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (6)
+### Basic examples (7)
 
 ```mathematica
 In[1]:= Cancel[(x^2 - 1) / (x - 1)]
@@ -38,35 +38,38 @@ Out[5]= y^(1/3)/(-1 + y)
 
 In[6]:= Cancel[Sqrt[2]/(Sqrt[2] + Sqrt[2] x^4)]
 Out[6]= 1/(1 + x^4)
+
+In[7]:= Cancel[(Sqrt[2] x + Sqrt[2] y)/(Sqrt[2] + Sqrt[2] x)]
+Out[7]= (x + y)/(1 + x)
 ```
 
 ### Options (2)
 
 ```mathematica
-In[7]:= Cancel[(x^2 - 2)/(x - Sqrt[2]), Extension -> Sqrt[2]]
-Out[7]= Sqrt[2] + x
+In[8]:= Cancel[(x^2 - 2)/(x - Sqrt[2]), Extension -> Sqrt[2]]
+Out[8]= Sqrt[2] + x
 
-In[8]:= Cancel[(x^3 - 2)/(x - 2^(1/3)), Extension -> 2^(1/3)]
-Out[8]= 2^(2/3) + 2^(1/3) x + x^2
+In[9]:= Cancel[(x^3 - 2)/(x - 2^(1/3)), Extension -> 2^(1/3)]
+Out[9]= 2^(2/3) + 2^(1/3) x + x^2
 ```
 
 ### Applications (5)
 
 ```mathematica
-In[9]:= Cancel[(x^2 - 1)/(x - 1)]
-Out[9]= 1 + x
-
-In[10]:= Cancel[(x^2 + 2 x + 1)/(x + 1)]
+In[10]:= Cancel[(x^2 - 1)/(x - 1)]
 Out[10]= 1 + x
 
-In[11]:= Cancel[(x^2 - 1)/(x^2 - 2 x + 1)]
-Out[11]= (1 + x)/(-1 + x)
+In[11]:= Cancel[(x^2 + 2 x + 1)/(x + 1)]
+Out[11]= 1 + x
 
-In[12]:= Cancel[(x^4 - 1)/(x^2 - 1)]
-Out[12]= 1 + x^2
+In[12]:= Cancel[(x^2 - 1)/(x^2 - 2 x + 1)]
+Out[12]= (1 + x)/(-1 + x)
 
-In[13]:= Cancel[(x^2 - 2)/(x - Sqrt[2]), Extension -> Sqrt[2]]
-Out[13]= Sqrt[2] + x
+In[13]:= Cancel[(x^4 - 1)/(x^2 - 1)]
+Out[13]= 1 + x^2
+
+In[14]:= Cancel[(x^2 - 2)/(x - Sqrt[2]), Extension -> Sqrt[2]]
+Out[14]= Sqrt[2] + x
 ```
 
 ## Implementation notes

@@ -26,11 +26,11 @@ Series handles Taylor, Laurent (negative powers), and Puiseux (fractional powers
 
 </details>
 
-## Examples (20)
+## Examples (21)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (9)
 
 ```mathematica
 In[1]:= Series[Exp[x], {x, 0, 10}]
@@ -56,50 +56,53 @@ Out[7]= 1/x - 1/6 (1/x)^3 + 1/120 (1/x)^5 - 1/5040 (1/x)^7 + 1/362880 (1/x)^9 + 
 
 In[8]:= Series[Sin[x + y], {x, 0, 3}, {y, 0, 3}]
 Out[8]= y - 1/6 y^3 + O[y]^4 + (1 - 1/2 y^2 + O[y]^4) x + (-1/2 y + 1/12 y^3 + O[y]^4) x^2 + (-1/6 + 1/12 y^2 + O[y]^4) x^3 + O[x]^4
+
+In[9]:= Series[{Sin[x], Cos[x], Tan[x]}, {x, 0, 5}]
+Out[9]= {x - 1/6 x^3 + 1/120 x^5 + O[x]^6, 1 - 1/2 x^2 + 1/24 x^4 + O[x]^6, x + 1/3 x^3 + 2/15 x^5 + O[x]^6}
 ```
 
 ### Worked examples (4)
 
 ```mathematica
-In[9]:= Series[Erf[x], {x, Infinity, 2}]
-Out[9]= 1 + E^(-x^2) ((-1/Sqrt[Pi])/x + O[1/x]^3)
+In[10]:= Series[Erf[x], {x, Infinity, 2}]
+Out[10]= 1 + E^(-x^2) ((-1/Sqrt[Pi])/x + O[1/x]^3)
 
-In[10]:= Series[LogGamma[x], {x, Infinity, 2}]
-Out[10]= 1/2 Log[2 Pi] - x + Log[x] (-1/2 + x) + 1/12/x + O[1/x]^3
+In[11]:= Series[LogGamma[x], {x, Infinity, 2}]
+Out[11]= 1/2 Log[2 Pi] - x + Log[x] (-1/2 + x) + 1/12/x + O[1/x]^3
 
-In[11]:= Series[PolyGamma[0, x], {x, Infinity, 4}]
-Out[11]= Log[x] + -1/2/x - 1/12 (1/x)^2 + 1/120 (1/x)^4 + O[1/x]^5
+In[12]:= Series[PolyGamma[0, x], {x, Infinity, 4}]
+Out[12]= Log[x] + -1/2/x - 1/12 (1/x)^2 + 1/120 (1/x)^4 + O[1/x]^5
 
-In[12]:= Series[PolyGamma[1, x], {x, Infinity, 5}]
-Out[12]= 1/x + 1/2 (1/x)^2 + 1/6 (1/x)^3 - 1/30 (1/x)^5 + O[1/x]^6
+In[13]:= Series[PolyGamma[1, x], {x, Infinity, 5}]
+Out[13]= 1/x + 1/2 (1/x)^2 + 1/6 (1/x)^3 - 1/30 (1/x)^5 + O[1/x]^6
 ```
 
 ### Applications (8)
 
 ```mathematica
-In[13]:= Series[Sin[x], {x, 0, 5}]
-Out[13]= x - 1/6 x^3 + 1/120 x^5 + O[x]^6
+In[14]:= Series[Sin[x], {x, 0, 5}]
+Out[14]= x - 1/6 x^3 + 1/120 x^5 + O[x]^6
 
-In[14]:= Series[1/(1 - x), {x, 0, 4}]
-Out[14]= 1 + x + x^2 + x^3 + x^4 + O[x]^5
+In[15]:= Series[1/(1 - x), {x, 0, 4}]
+Out[15]= 1 + x + x^2 + x^3 + x^4 + O[x]^5
 
-In[15]:= Series[Log[1 + x], {x, 0, 4}]
-Out[15]= x - 1/2 x^2 + 1/3 x^3 - 1/4 x^4 + O[x]^5
+In[16]:= Series[Log[1 + x], {x, 0, 4}]
+Out[16]= x - 1/2 x^2 + 1/3 x^3 - 1/4 x^4 + O[x]^5
 
-In[16]:= Normal[Series[Exp[x], {x, 0, 3}]]
-Out[16]= 1 + x + 1/2 x^2 + 1/6 x^3
+In[17]:= Normal[Series[Exp[x], {x, 0, 3}]]
+Out[17]= 1 + x + 1/2 x^2 + 1/6 x^3
 
-In[17]:= Series[Tan[x], {x, 0, 7}]
-Out[17]= x + 1/3 x^3 + 2/15 x^5 + 17/315 x^7 + O[x]^8
+In[18]:= Series[Tan[x], {x, 0, 7}]
+Out[18]= x + 1/3 x^3 + 2/15 x^5 + 17/315 x^7 + O[x]^8
 
-In[18]:= Series[1/(Exp[x] - 1), {x, 0, 4}]
-Out[18]= 1/x - 1/2 + 1/12 x - 1/720 x^3 + O[x]^5
+In[19]:= Series[1/(Exp[x] - 1), {x, 0, 4}]
+Out[19]= 1/x - 1/2 + 1/12 x - 1/720 x^3 + O[x]^5
 
-In[19]:= Series[x^x, {x, 0, 3}]
-Out[19]= 1 + Log[x] x + 1/2 Log[x]^2 x^2 + 1/6 Log[x]^3 x^3 + O[x]^4
+In[20]:= Series[x^x, {x, 0, 3}]
+Out[20]= 1 + Log[x] x + 1/2 Log[x]^2 x^2 + 1/6 Log[x]^3 x^3 + O[x]^4
 
-In[20]:= Series[(1 + 1/x)^x, {x, Infinity, 2}]
-Out[20]= E + (-1/2 E)/x + 11/24 E (1/x)^2 + O[1/x]^3
+In[21]:= Series[(1 + 1/x)^x, {x, Infinity, 2}]
+Out[21]= E + (-1/2 E)/x + 11/24 E (1/x)^2 + O[1/x]^3
 ```
 
 ## Options & behaviour

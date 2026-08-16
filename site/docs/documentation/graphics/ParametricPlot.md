@@ -9,7 +9,7 @@
 
 Adaptively samples the parametric curve (fx(t), fy(t)) over \[tmin, tmax\] and returns a Graphics\[...\] object (auto-displayed). The body may be any expression that evaluates to a 2-element {x,y} list (not just a literal {fx,fy}). Multiple curves: ParametricPlot\[{{fx1,fy1}, ...}, {t,...}\]. Two-iterator (filled region) form: ParametricPlot\[body, {t,...}, {r,...}\] samples a PlotPoints x PlotPoints grid and emits Polygon\[\] quads. Default AspectRatio -\> 1 (both axes equally important). Options: PlotPoints (default 25), MaxRecursion (default 6), MaxPlotPoints, Mesh (All: dots for curves, grid lines for regions), PlotLegends (Automatic/"Expressions"/{labels...}: draws a legend), ColorFunction ("Rainbow" or f\[t\] / f\[t,r\]), ColorFunctionScaling (default True), RegionFunction (f\[x,y\] mask), PlotStyle, AspectRatio, Axes, PlotRange, PlotRangePadding, AxesLabel, AxesOrigin, Frame, FrameLabel, GridLines, Prolog, Epilog, PlotLabel, Background, ImageSize (all passed through to Graphics).
 
-## Examples (8)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -35,7 +35,7 @@ In[6]:= ParametricPlot[r^2 {Sqrt[t] Cos[t], Sin[t]}, {t, 0, 3 Pi/2}, {r, 1, 2}]
 Out[6]= -Graphics-
 ```
 
-### Options (2)
+### Options (3)
 
 ```mathematica
 In[7]:= ParametricPlot[{Cos[t], Sin[t]}, {t, 0, 2 Pi}, ColorFunction -> (Hue[#] &)]
@@ -43,6 +43,9 @@ Out[7]= -Graphics-
 
 In[8]:= ParametricPlot[{Cos[t], Sin[t]}, {t, 0, 2 Pi}, RegionFunction -> Function[{x, y}, x > 0]]
 Out[8]= -Graphics-
+
+In[9]:= ParametricPlot[{r Cos[t], r Sin[t]}, {t, 0, 2 Pi}, {r, 1, 2}, Mesh -> All]
+Out[9]= -Graphics-
 ```
 
 ## Algorithm

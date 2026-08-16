@@ -24,11 +24,11 @@ Free symbols in pi that are not in vars (and not a known constant like Pi, E, Eu
 
 </details>
 
-## Examples (9)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (5)
+### Basic examples (6)
 
 ```mathematica
 In[1]:= GroebnerBasis[{x^2 - 2 y^2, x y - 3}, {x, y}]
@@ -45,22 +45,41 @@ Out[4]= {y + 2 z, x - z}
 
 In[5]:= GroebnerBasis[{x^2 - 2 y^2 == 1, x y == 3}, {x, y}]
 Out[5]= {-9 + y^2 + 2 y^4, 3 x - y - 2 y^3}
+
+In[6]:= TimeConstrained[GroebnerBasis[hard_polys, {x, y, z}], 3]
+Out[6]= GroebnerBasis[hard_polys, {x, y, z}]
+```
+
+### Options (4)
+
+```mathematica
+In[7]:= GroebnerBasis[polys, ParameterVariables -> x]
+Out[7]= GroebnerBasis[polys, ParameterVariables -> x]
+
+In[8]:= GroebnerBasis[polys, {x, y, z}, Sort -> True] === GroebnerBasis[polys, {z, y, x}]
+Out[8]= False
+
+In[9]:= GroebnerBasis[{-5x^2 + y z - x - 1, 2x + 3 x y + y^2, x - 3y + x z - 2 z^2}, {x, y, z}, MonomialOrder -> {{1, 3, 1}, {-1, 2, 0}, {4, -3, 2}}]
+Out[9]= {-21 x - 13 x^2 - 15 x^3 + 6 z + 6 x z + 20 x^2 z + 20 x z^2, 60 + 39 x + 287 x^2 - 15 x^3 + 6 z - 14 x z + 20 x^2 z + 40 z^3, -x + 3 y - x z + 2 z^2, 10 - 38 x + 141 x^2 - 305 x^3 + 325 x^4 - 12 z - 82 x z - 50 x^2 z + 20 z^2, 30 + 913 x + 189 x^2 + 4545 x^3 + 42 z + 1132 x z + 630 x^2 z + 1950 x^3 z - 200 z^2}
+
+In[10]:= GroebnerBasis[polys, {x, y, z}, Method -> "GroebnerWalk"] === GroebnerBasis[polys, {x, y, z}]
+Out[10]= False
 ```
 
 ### Applications (4)
 
 ```mathematica
-In[6]:= GroebnerBasis[{x^2 + y^2 - 1, x - y}, {x, y}]
-Out[6]= {-1 + 2 y^2, x - y}
+In[11]:= GroebnerBasis[{x^2 + y^2 - 1, x - y}, {x, y}]
+Out[11]= {-1 + 2 y^2, x - y}
 
-In[7]:= GroebnerBasis[{x y - 1, x - y}, {x, y}]
-Out[7]= {-1 + y^2, x - y}
+In[12]:= GroebnerBasis[{x y - 1, x - y}, {x, y}]
+Out[12]= {-1 + y^2, x - y}
 
-In[8]:= GroebnerBasis[{x^2 - y, x^3 - z}, {x, y, z}]
-Out[8]= {y^3 - z^2, -y^2 + x z, x y - z, x^2 - y}
+In[13]:= GroebnerBasis[{x^2 - y, x^3 - z}, {x, y, z}]
+Out[13]= {y^3 - z^2, -y^2 + x z, x y - z, x^2 - y}
 
-In[9]:= GroebnerBasis[{x + y + z, x y + y z + z x, x y z - 1}, {x, y, z}]
-Out[9]= {-1 + z^3, y^2 + y z + z^2, x + y + z}
+In[14]:= GroebnerBasis[{x + y + z, x y + y z + z x, x y z - 1}, {x, y, z}]
+Out[14]= {-1 + z^3, y^2 + y z + z^2, x + y + z}
 ```
 
 ## Options & behaviour
