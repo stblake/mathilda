@@ -203,7 +203,7 @@ typedef bool (*FmSubSolver)(const FmQuad* q, const double* g, double gnorm,
                             double Delta, double* p, bool* hits);
 
 enum { NM_AUTO = 0, NM_DE, NM_NELDERMEAD, NM_RANDOMSEARCH, NM_SA, NM_SHGO,
-       NM_DUAL_ANNEALING };
+       NM_DUAL_ANNEALING, NM_DIRECT };
 
 typedef struct {
     int      method;         /* NM_AUTO / NM_DE / ...                        */
@@ -228,6 +228,16 @@ typedef struct {
     double   da_init_temp;   /* DualAnnealing "InitialTemperature"; <=0 ⇒ default 5230  */
     double   da_restart_ratio;/* DualAnnealing "RestartTemperatureRatio"; <=0 ⇒ default */
     int      da_local_search;/* DualAnnealing "LocalSearch": -1 auto(on) / 1 on / 0 off  */
+    /* DIRECT (DIviding RECTangles), mirroring scipy.optimize.direct. Sentinels:
+     * <0 / <=0 ⇒ take the scipy default (see NM_DIRECT_* macros / nm_direct). */
+    int      direct_locally_biased; /* "LocallyBiased": -1 auto(on, DIRECT-L) / 1 on / 0 off (original DIRECT) */
+    double   direct_eps;     /* "Epsilon": potentially-optimal slack; <0 ⇒ 1e-4    */
+    int      direct_max_fun; /* "MaxFunctionEvaluations"; <=0 ⇒ auto 1000*n (capped) */
+    int      direct_max_iter;/* "MaxIterations"; <=0 ⇒ default 1000                 */
+    double   direct_vol_tol; /* "VolumeTolerance"; <0 ⇒ 1e-16                        */
+    double   direct_len_tol; /* "LengthTolerance"; <0 ⇒ 1e-6                         */
+    double   direct_fmin;    /* "MinValue": known global minimum; -inf ⇒ inactive   */
+    double   direct_fmin_rtol;/* "MinValueTolerance": rel. tol vs MinValue; <0 ⇒ 1e-4 */
     uint64_t seed;
 } NmConfig;
 
@@ -446,6 +456,16 @@ typedef struct {
                                         * non-improving chains (scipy default)   */
 #define NM_DA_TAIL_LIMIT     1.0e8     /* clamp bound on a raw visiting jump      */
 #define NM_DA_MIN_VISIT      1.0e-10   /* nudge off the lower bound after wrap    */
+
+/* DIRECT (DIviding RECTangles) defaults, matching scipy.optimize.direct.
+ * See nm_direct. */
+#define NM_DIRECT_EPS        1.0e-4    /* eps: potentially-optimal slack          */
+#define NM_DIRECT_MAXITER    1000      /* maxiter: division-round budget          */
+#define NM_DIRECT_MAXFUN_PER_DIM 1000  /* auto maxfun = this * n (scipy rule)     */
+#define NM_DIRECT_MAXFUN_CAP 20000000  /* absolute maxfun ceiling (~1 GiB store)  */
+#define NM_DIRECT_VOLTOL     1.0e-16   /* stop when incumbent cell volume < this  */
+#define NM_DIRECT_LENTOL     1.0e-6    /* stop when incumbent cell half-side < this*/
+#define NM_DIRECT_FMINRTOL   1.0e-4    /* rel. tol for the MinValue early stop     */
 
 /* ===== file-static global registries (defined in findmin_common.c) ===== */
 extern bool g_fm_quiet;
@@ -711,6 +731,8 @@ void nm_dual_annealing(NmDriver* D, const NmConfig* nc, NmRng* rng,
                               double* xbest, double* fbest, double* penbest);
 void nm_shgo(NmDriver* D, const NmConfig* nc, NmRng* rng,
                     double* xbest, double* fbest, double* penbest);
+void nm_direct(NmDriver* D, const NmConfig* nc, NmRng* rng,
+                      double* xbest, double* fbest, double* penbest);
 bool nm_apply_option(Expr* rule, FmOpts* opts, NmConfig* nc, const char* fn);
 void nm_varset_free(NmVarSet* vs);
 bool nm_parse_vars(Expr* var_arg, NmVarSet* vs, const char* fn);

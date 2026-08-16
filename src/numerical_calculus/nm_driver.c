@@ -66,6 +66,14 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     nc.da_init_temp = NM_DA_INIT_TEMP;
     nc.da_restart_ratio = NM_DA_RESTART_RATIO;
     nc.da_local_search = -1;
+    nc.direct_locally_biased = -1;
+    nc.direct_eps = -1.0;
+    nc.direct_max_fun = 0;
+    nc.direct_max_iter = 0;
+    nc.direct_vol_tol = -1.0;
+    nc.direct_len_tol = -1.0;
+    nc.direct_fmin = -HUGE_VAL;
+    nc.direct_fmin_rtol = -1.0;
     nc.seed = NM_DEFAULT_SEED;
 
     for (size_t i = pos_end; i < argc; i++) {
@@ -412,6 +420,7 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
             case NM_SA:           nm_sa(&D, &nc, &rng, xattempt, &fa, &pa); break;
             case NM_SHGO:         nm_shgo(&D, &nc, &rng, xattempt, &fa, &pa); break;
             case NM_DUAL_ANNEALING: nm_dual_annealing(&D, &nc, &rng, xattempt, &fa, &pa); break;
+            case NM_DIRECT:       nm_direct(&D, &nc, &rng, xattempt, &fa, &pa); break;
             case NM_DE:
             default:              nm_de(&D, &nc, &rng, xattempt, &fa, &pa); break;
         }

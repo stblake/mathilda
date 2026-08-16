@@ -2,7 +2,14 @@
  * Split from the original findmin.c; shared declarations in
  * findmin_internal.h. Do not add cross-file helpers here without a
  * prototype in that header. */
-#include "findmin_internal.h"
+#include "findmin_internal.h"   /* pulls in <math.h> */
+
+/* M_PI is POSIX, not C99: glibc hides it under -std=c99 (macOS exposes it
+ * anyway). Provide the standard fallback so the Tsallis visiting factors below
+ * compile on Linux. See CLAUDE.md §10 / src/trig.c. */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 
 static void da_factors_init(DaFactors* F, double qv) {

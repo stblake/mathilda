@@ -764,6 +764,7 @@ static bool nm_method_from_string(const char* s, int* out) {
     if (strcmp(s, "SimulatedAnnealing") == 0)    { *out = NM_SA;           return true; }
     if (strcmp(s, "SHGO") == 0)                  { *out = NM_SHGO;         return true; }
     if (strcmp(s, "DualAnnealing") == 0)         { *out = NM_DUAL_ANNEALING; return true; }
+    if (strcmp(s, "DIRECT") == 0)                { *out = NM_DIRECT;       return true; }
     return false;
 }
 
@@ -783,6 +784,7 @@ static const char* nm_method_name(int m) {
         case NM_SA:             return "SimulatedAnnealing";
         case NM_SHGO:           return "SHGO";
         case NM_DUAL_ANNEALING: return "DualAnnealing";
+        case NM_DIRECT:         return "DIRECT";
         default:                return "Automatic";
     }
 }
@@ -821,6 +823,11 @@ static unsigned nm_option_owner(const char* on) {
         strcmp(on, "InitialTemperature") == 0 || strcmp(on, "RestartTemperatureRatio") == 0 ||
         strcmp(on, "LocalSearch") == 0)
         return 1u << NM_DUAL_ANNEALING;
+    if (strcmp(on, "LocallyBiased") == 0 || strcmp(on, "Epsilon") == 0 ||
+        strcmp(on, "MaxFunctionEvaluations") == 0 || strcmp(on, "MaxIterations") == 0 ||
+        strcmp(on, "VolumeTolerance") == 0 || strcmp(on, "LengthTolerance") == 0 ||
+        strcmp(on, "MinValue") == 0 || strcmp(on, "MinValueTolerance") == 0)
+        return 1u << NM_DIRECT;
     return 0u;   /* not a known NMinimize Method sub-option */
 }
 
@@ -1095,6 +1102,100 @@ static bool nm_parse_method(Expr* rhs, NmConfig* nc, const char* fn) {
                 else
                     fm_warn(fn, "sopt",
                             "LocalSearch must be True or False; using Automatic");
+            } else if (strcmp(on, "LocallyBiased") == 0) {
+                /* DIRECT: True (default) uses the locally-biased DIRECT-L
+                 * (Gablonsky & Kelley); False uses the original unbiased DIRECT
+                 * (Jones et al.), recommended for landscapes with many local
+                 * minima. Automatic / None keep the default (on). */
+                if (ov->type == EXPR_SYMBOL && ov->data.symbol.name == SYM_True)
+                    nc->direct_locally_biased = 1;
+                else if (ov->type == EXPR_SYMBOL && ov->data.symbol.name == SYM_False)
+                    nc->direct_locally_biased = 0;
+                else if (ov->type == EXPR_SYMBOL
+                         && (ov->data.symbol.name == SYM_Automatic
+                             || ov->data.symbol.name == SYM_None))
+                    nc->direct_locally_biased = -1;
+                else
+                    fm_warn(fn, "sopt",
+                            "LocallyBiased must be True or False; using Automatic");
+            } else if (strcmp(on, "Epsilon") == 0) {
+                /* DIRECT: the potentially-optimal slack eps (scipy's `eps`), the
+                 * minimum relative improvement a cell must promise over the
+                 * incumbent. A nonnegative finite real; else warn and keep 1e-4. */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv >= 0.0)
+                    nc->direct_eps = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "Epsilon must be a nonnegative real; using 1*^-4");
+            } else if (strcmp(on, "MaxFunctionEvaluations") == 0) {
+                /* DIRECT: objective-evaluation budget (scipy's `maxfun`). A
+                 * positive integer; Automatic / None -> 1000*n (capped). */
+                if (ov->type == EXPR_INTEGER && ov->data.integer > 0)
+                    nc->direct_max_fun =
+                        (ov->data.integer > (long long)NM_DIRECT_MAXFUN_CAP)
+                            ? NM_DIRECT_MAXFUN_CAP : (int)ov->data.integer;
+                else if (ov->type == EXPR_SYMBOL
+                         && (ov->data.symbol.name == SYM_Automatic
+                             || ov->data.symbol.name == SYM_None))
+                    nc->direct_max_fun = 0;
+                else
+                    fm_warn(fn, "sopt",
+                            "MaxFunctionEvaluations must be a positive integer; "
+                            "using Automatic");
+            } else if (strcmp(on, "MaxIterations") == 0) {
+                /* DIRECT: division-round budget (scipy's `maxiter`). A positive
+                 * integer; Automatic / None -> 1000. */
+                if (ov->type == EXPR_INTEGER && ov->data.integer > 0
+                    && ov->data.integer <= 2000000000LL)
+                    nc->direct_max_iter = (int)ov->data.integer;
+                else if (ov->type == EXPR_SYMBOL
+                         && (ov->data.symbol.name == SYM_Automatic
+                             || ov->data.symbol.name == SYM_None))
+                    nc->direct_max_iter = 0;
+                else
+                    fm_warn(fn, "sopt",
+                            "MaxIterations must be a positive integer; using Automatic");
+            } else if (strcmp(on, "VolumeTolerance") == 0) {
+                /* DIRECT: stop once the incumbent cell's volume (fraction of the
+                 * box) drops below this (scipy's `vol_tol`). A real in [0, 1). */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv >= 0.0 && dv < 1.0)
+                    nc->direct_vol_tol = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "VolumeTolerance must be a real in [0, 1); using 1*^-16");
+            } else if (strcmp(on, "LengthTolerance") == 0) {
+                /* DIRECT: stop once the incumbent cell's normalized size drops
+                 * below this (scipy's `len_tol`). A real in [0, 1). */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv >= 0.0 && dv < 1.0)
+                    nc->direct_len_tol = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "LengthTolerance must be a real in [0, 1); using 1*^-6");
+            } else if (strcmp(on, "MinValue") == 0) {
+                /* DIRECT: a known global-minimum value enabling the early stop
+                 * when the incumbent gets within MinValueTolerance of it (scipy's
+                 * `f_min`). A finite real; Automatic / None disable it (default). */
+                double dv;
+                if (ov->type == EXPR_SYMBOL
+                    && (ov->data.symbol.name == SYM_Automatic
+                        || ov->data.symbol.name == SYM_None))
+                    nc->direct_fmin = -HUGE_VAL;
+                else if (fm_expr_to_double_real(ov, &dv) && isfinite(dv))
+                    nc->direct_fmin = dv;
+                else
+                    fm_warn(fn, "sopt", "MinValue must be a real; ignored");
+            } else if (strcmp(on, "MinValueTolerance") == 0) {
+                /* DIRECT: relative tolerance for the MinValue early stop (scipy's
+                 * `f_min_rtol`). A real in [0, 1). */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv >= 0.0 && dv < 1.0)
+                    nc->direct_fmin_rtol = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "MinValueTolerance must be a real in [0, 1); using 1*^-4");
             }
         }
         return true;

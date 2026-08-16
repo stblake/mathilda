@@ -1879,6 +1879,7 @@ matrix variables (`Vectors[n, dom]`, `Matrices`), geometric-region domains,
 | `"SimulatedAnnealing"` | Metropolis search with geometric cooling |
 | `"SHGO"` | Simplicial Homology Global Optimization: sample the box, build a graph, start one local search per minimizer-pool vertex (see below) |
 | `"DualAnnealing"` | Generalized Simulated Annealing: a heavy-tailed visiting distribution and a generalized Metropolis rule with reannealing, plus a local search after each Markov chain (see below) |
+| `"DIRECT"` | DIviding RECTangles: a deterministic Lipschitzian search that normalizes the box to the unit hypercube and repeatedly subdivides the "potentially optimal" cells; no derivatives, no random seed (see below) |
 
 `"DifferentialEvolution"` keeps every trial point inside the box by *bounce-back*
 reinitialisation — a mutant that overshoots a bound is redrawn at random between
@@ -1949,6 +1950,14 @@ Recognised sub-options:
 | `"InitialTemperature" -> T0` | DualAnnealing | initial (and post-reanneal) visiting temperature (default 5230); a positive real, else warns (`NMinimize::sopt`) and keeps 5230 |
 | `"RestartTemperatureRatio" -> r` | DualAnnealing | reanneal (reset the temperature to `T0`) once the visiting temperature falls below `T0 · r` (default `2·10⁻⁵`); a real in `(0, 1)`, else warns (`NMinimize::sopt`) |
 | `"LocalSearch" -> b` | DualAnnealing | run the local search after each Markov chain (scipy's `no_local_search` inverted; default `True`). `True`/`False`, or `Automatic`/`None` for the default; else warns (`NMinimize::sopt`). `False` leaves pure Generalized Simulated Annealing (the final `"PostProcess"` polish still applies unless it too is off) |
+| `"LocallyBiased" -> b` | DIRECT | `True` (default) is DIRECT-L (Gablonsky & Kelley), biased toward the incumbent — fewer evaluations when there are few local minima; `False` is the original unbiased DIRECT (Jones et al.), better on landscapes with many minima (scipy's `locally_biased`). `True`/`False`, or `Automatic`/`None` for the default; else warns (`NMinimize::sopt`) |
+| `"Epsilon" -> e` | DIRECT | potentially-optimal slack (scipy's `eps`, default `10⁻⁴`): the minimum relative improvement a cell must promise over the incumbent to be subdivided. A nonnegative real; else warns (`NMinimize::sopt`) |
+| `"MaxFunctionEvaluations" -> m` | DIRECT | objective-evaluation budget (scipy's `maxfun`); a positive integer, or `Automatic`/`None` for the default `1000·n` (capped at `2·10⁷`); else warns (`NMinimize::sopt`) |
+| `"MaxIterations" -> k` | DIRECT | division-round budget (scipy's `maxiter`, default 1000); a positive integer, or `Automatic`/`None` for the default; else warns (`NMinimize::sopt`) |
+| `"VolumeTolerance" -> v` | DIRECT | stop once the incumbent cell's volume, as a fraction of the box, drops below this (scipy's `vol_tol`, default `10⁻¹⁶`); a real in `[0, 1)`, else warns (`NMinimize::sopt`) |
+| `"LengthTolerance" -> l` | DIRECT | stop once the incumbent cell's normalized size (half diagonal for unbiased DIRECT, half the longest side for DIRECT-L) drops below this (scipy's `len_tol`, default `10⁻⁶`); a real in `[0, 1)`, else warns (`NMinimize::sopt`) |
+| `"MinValue" -> f*` | DIRECT | a known global-minimum value enabling an early stop when the incumbent gets within `"MinValueTolerance"` of it (scipy's `f_min`); a finite real, or `Automatic`/`None` to disable (the default). An invalid value warns (`NMinimize::sopt`) |
+| `"MinValueTolerance" -> rt` | DIRECT | relative tolerance for the `"MinValue"` early stop (scipy's `f_min_rtol`, default `10⁻⁴`); a real in `[0, 1)`, else warns (`NMinimize::sopt`) |
 | `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6); a real in `(0, 2]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
 | `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9); a real in `[0, 1]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
 | `"PerturbationScale" -> s` | SimulatedAnnealing | multiplies the trial-step size (default 1.0); a positive real, an invalid value warns (`NMinimize::sopt`) and falls back to 1.0 |
@@ -2197,6 +2206,101 @@ auto-compiled to bytecode, where scipy calls back into Python for every one of
 the ~10⁴ evaluations a run needs.
 
 [dualannealing]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.dual_annealing.html
+
+#### DIRECT — DIviding RECTangles
+
+`Method -> "DIRECT"` is the deterministic Lipschitzian global optimizer of
+Jones, Perttunen & Stuckman (1993), with the locally-biased variant DIRECT-L of
+Gablonsky & Kelley (2001), reproducing the reference `DIRECTv2.04` Fortran
+(the algorithm behind [`scipy.optimize.direct`][direct]). It needs no
+derivatives and no random seed, and requires only a bounded box.
+
+The search normalizes the box to the unit hypercube `[0,1]ⁿ` and represents each
+cell by its center and a per-dimension trisection count (side length `3⁻ᵗ`):
+
+- **Cells are grouped by size.** For DIRECT-L the size class is the number of
+  trisections of the longest side; for original DIRECT it is a `k·n + q` key
+  (`k` the minimum trisection count, `q` the count of deeper dimensions) that
+  maps one-to-one to the cell's half-diagonal. Each class keeps its minimum-value
+  cell as the only "potentially optimal" candidate.
+- **Each iteration subdivides the potentially-optimal cells** — those on the
+  lower-right convex hull of the `(size, value)` class minima that also promise,
+  for some rate constant, at least `"Epsilon"` relative improvement over the
+  incumbent (`f_j − K̃·d_j ≤ f_min − ε·max(|f_min|, 1)`). The largest cell is
+  always potentially optimal, so the search never stalls.
+- **A cell is trisected along its longest sides**, sampling `c ± ⅓·(side)` in
+  each and dividing so the best children keep the largest sub-cells — biasing
+  the next round toward promising regions while still guaranteeing every region
+  is refined.
+- `"LocallyBiased" -> True` (DIRECT-L, the default) groups only by the longest
+  side, biasing toward the incumbent and converging with fewer evaluations when
+  there are few minima; `-> False` uses the full-diagonal grouping of the
+  original unbiased DIRECT, which spreads the search and is better when there are
+  many minima.
+
+Every center is scored with the shared point evaluator (compiled machine-code
+objective, integer rounding, constraint penalty), and the incumbent is chosen by
+Deb feasibility rules, so box, general-constraint, and mixed-integer problems all
+work with no DIRECT-specific code. The engine returns the raw DIRECT incumbent;
+the global best is then polished with the exact local optimizer (BFGS /
+augmented-Lagrangian / integer descent) unless `"PostProcess" -> False`. The
+search stops on `"MaxFunctionEvaluations"` (default `1000·n`), `"MaxIterations"`
+(default 1000), the `"VolumeTolerance"` / `"LengthTolerance"` cell-size limits,
+or `"MinValue"` proximity. Unbounded coordinates use the default `±10` region.
+
+> **Fidelity note.** The unit-cube normalization, the `thirds`/level size
+> tables, the convex-hull potentially-optimal selection, and the longest-side
+> trisection reproduce `DIRECTv2.04` / `scipy.optimize.direct`; on the shared
+> non-global basin of Rosenbrock-10D the two raw implementations agree to
+> `~8.7916` (`benchmarks/84-direct-testbed`, case 08). The one deliberate
+> difference is the local polish: scipy's `direct` has none, whereas Mathilda
+> applies its own BFGS / augmented-Lagrangian / integer-descent polish after the
+> search (disable it with `"PostProcess" -> False` for a raw comparison) — and,
+> unlike `scipy.optimize.direct` (which is box-only), this lets
+> `Method -> "DIRECT"` solve inequality-, equality-, and disjunctively-
+> constrained and mixed-integer problems. On deceptive high-dimensional
+> functions DIRECT is weak (both implementations miss Rosenbrock-10D's global
+> and diverge on Schwefel-10D); `"DifferentialEvolution"` / `"DualAnnealing"`
+> are the engines for that shape.
+
+```mathematica
+(* Rastrigin — DIRECT samples cell centers, so the origin global is found fast *)
+NMinimize[{20 + x^2 - 10 Cos[2 Pi x] + y^2 - 10 Cos[2 Pi y],
+           -5.12 <= x <= 5.12 && -5.12 <= y <= 5.12}, {x, y},
+          Method -> "DIRECT"]
+(* -> {0., {x -> 0., y -> 0.}} *)
+
+(* Branin — three global minima at 0.397887; the unbiased variant spreads wider *)
+NMinimize[{(y - 5.1/(4 Pi^2) x^2 + 5/Pi x - 6)^2 + 10 (1 - 1/(8 Pi)) Cos[x] + 10,
+           -5 <= x <= 10 && 0 <= y <= 15}, {x, y},
+          Method -> {"DIRECT", "LocallyBiased" -> False}]
+(* -> {0.397887, {x -> ..., y -> ...}} *)
+
+(* Constrained — general constraints via the penalty + augmented-Lagrangian polish
+   (scipy.optimize.direct cannot take constraints at all) *)
+NMinimize[{x + y, x^2 + y^2 <= 9}, {x, y}, Method -> "DIRECT"]
+(* -> {-4.242641, {x -> -2.12132, y -> -2.12132}} *)
+```
+
+Against `scipy.optimize.direct` on nine standard bounded multimodal benchmarks
+(`benchmarks/83-direct`, scipy's default parameters, raw-vs-raw with
+`"PostProcess" -> False` on both sides so it is the same algorithm), Mathilda
+reaches the identical basin on every case (0 CHECK-FAIL) and is **AHEAD on all
+nine — ~1.5×–20× faster per solve** (Ackley-2D 0.40 ms vs 3.4 ms, Styblinski-Tang
+0.96 ms vs 19.5 ms, Himmelblau 0.75 ms vs 1.1 ms): its machine-precision
+objective is auto-compiled to bytecode, where scipy's C DIRECT still calls back
+into Python for every evaluation. The `benchmarks/84-direct-testbed` sweep runs
+the whole `tests/test_nminimize.c` corpus through DIRECT: its 18-case box-bounded
+race is 0 CHECK-FAIL and 15 of 18 AHEAD (up to ~11× on the origin-centred high-D
+globals), the three losses being objective-evaluation cost rather than the
+algorithm (two cheap few-hundred-eval objectives, and the `Round`-heavy Katsuura
+whose objective does not take the compiled fast path). Its README additionally
+records the non-raceable corpus — 16 constrained / equality / disjunctive /
+small-integer problems `Method -> "DIRECT"` solves but `scipy.optimize.direct`
+(box-only) cannot express, and the high-D-equality and combinatorial problems
+that are beyond DIRECT in either system.
+
+[direct]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.direct.html
 
 ### Options
 
