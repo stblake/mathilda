@@ -11,7 +11,7 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import Canvas from './lib/Canvas.svelte';
   import Toolbar from './lib/Toolbar.svelte';
-  import MenuBar from './lib/MenuBar.svelte';
+  import { MENU_IDS, runMenuCommand } from './lib/menuCommands';
   import { kernelStatus } from './lib/notebook';
   import { darkMode } from './lib/theme';
   import { pingKernel, saveLibrary, loadLibrary, setWindowTitle as setTitleCmd } from './lib/ipc';
@@ -63,12 +63,14 @@
 
   onMount(async () => {
     try {
-      unlisten.push(await listen('menu:open',        () => openFile()));
-      unlisten.push(await listen('menu:save',        () => saveFile()));
-      unlisten.push(await listen('menu:save-as',     () => saveFileAs()));
-      unlisten.push(await listen('menu:restart',     () => restart()));
-      unlisten.push(await listen('menu:interrupt',   () => abortEvaluation()));
-      unlisten.push(await listen('menu:toggle-dark', () => darkMode.update(v => !v)));
+      /* Every id the native menu can emit, subscribed from one list. Previously each item needed
+         its own one-line listener here, so an item added in Rust silently did nothing until
+         someone remembered this file; now the two sides share MENU_IDS and the dispatcher warns
+         about an id it has no case for. */
+      const hooks = { openFile, saveFile, saveFileAs };
+      for (const id of MENU_IDS) {
+        unlisten.push(await listen(`menu:${id}`, () => runMenuCommand(id, hooks)));
+      }
     } catch (e) { console.warn('Menu listen error:', e); }
   });
 
@@ -167,16 +169,11 @@
      .canvas-stage into a change it has no stake in. -->
 <div class="app-bar" class:toolbar-mode={$canvasState.focusedIds.length > 0}>
   {#if $canvasState.focusedIds.length}
-    <!-- Two stacked rows in focused mode: the menu bar names every command the app has, the
-         toolbar keeps the handful worth a permanent button. The menu bar is the same component
-         in both modes so the commands cannot drift apart. -->
-    <div class="bar-rows">
-      <div class="bar-row-menu"><MenuBar /></div>
-      <div class="bar-row-tools"><Toolbar /></div>
-    </div>
+    <!-- One row again. The menus are NATIVE now -- on macOS they live in the system bar at the
+         top of the screen -- so this strip is free for controls that belong to the window. -->
+    <Toolbar />
   {:else}
     <span class="app-bar-name">Mathilda</span>
-    <MenuBar />
     <span class="dark-toggle-spacer"></span>
     <button
       class="dark-toggle"
@@ -294,27 +291,8 @@
   /* Focused mode: taller, and its own padding in px rather than rem. The bar is
      a fixed height full of fixed-px content, so rem padding would push the
      groups out of it once Cmd+= scales the root font size. */
-  /* In focused mode the strip carries both rows, so its height is their sum. The rows are a
-     flex column INSIDE the fixed bar rather than two fixed bars, so only one element owns the
-     top edge and the focused view's inset has one thing to clear. */
-  .bar-rows { display: flex; flex-direction: column; width: 100%; height: 100%; }
-  .bar-row-menu {
-    display: flex;
-    align-items: center;
-    height: var(--menubar-h, 28px);
-    flex: 0 0 auto;
-    border-bottom: 1px solid var(--tb-rule, var(--border));
-  }
-  .bar-row-tools {
-    display: flex;
-    align-items: stretch;
-    flex: 1 1 auto;
-    min-height: 0;
-    gap: 0;
-  }
-
   .app-bar.toolbar-mode {
-    height: calc(var(--menubar-h, 28px) + var(--toolbar-h, 46px));
+    height: var(--toolbar-h, 46px);
     gap: 0;
     padding: 0 8px;
     align-items: stretch;
