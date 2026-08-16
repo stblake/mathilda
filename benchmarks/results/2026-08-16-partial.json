@@ -1,0 +1,820 @@
+{
+ "host": {
+  "date": "2026-08-16",
+  "missing_optional_deps": [],
+  "platform": "macOS-15.7.4-x86_64-i386-64bit-Mach-O",
+  "machine": "x86_64",
+  "processor": "i386",
+  "mathilda": "Mathilda 0.054 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)",
+  "mathilda_bin": "/Users/user/Mathilda_dev/Mathilda/Mathilda",
+  "python_bin": "python3.11",
+  "python_libs": "3.11.15 2.4.4 1.17.1 1.14.0",
+  "wolframscript": "/Applications/Mathematica.app/Contents/MacOS/wolframscript",
+  "runner_python": "3.14.6",
+  "local_versions": {
+   "numpy": "absent",
+   "scipy": "absent",
+   "sympy": "absent",
+   "mpmath": "1.4.1",
+   "numba": "absent",
+   "networkx": "absent"
+  }
+ },
+ "rows": [
+  {
+   "experiment": "71-newton-cg",
+   "group": "D uncovered subsystems",
+   "label": "01 Rosenbrock 2D",
+   "times": {
+    "mathilda": 0.061,
+    "python": 8.977
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.006795143143589172,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "71-newton-cg",
+   "group": "D uncovered subsystems",
+   "label": "02 Rosenbrock 10D",
+   "times": {
+    "mathilda": 0.651,
+    "python": 15.613
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.041696022545314806,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "71-newton-cg",
+   "group": "D uncovered subsystems",
+   "label": "03 Rosenbrock 20D",
+   "times": {
+    "mathilda": 1.752,
+    "python": 21.215
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.08258307801084139,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "71-newton-cg",
+   "group": "D uncovered subsystems",
+   "label": "04 Illcond quad n20 c1e4",
+   "times": {
+    "mathilda": 0.993,
+    "python": 3.048
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.3257874015748031,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "71-newton-cg",
+   "group": "D uncovered subsystems",
+   "label": "05 Trid n10",
+   "times": {
+    "mathilda": 0.246,
+    "python": 0.621
+   },
+   "checks": {
+    "mathilda": "-210000000",
+    "python": "-210000000"
+   },
+   "ratio": 0.3961352657004831,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "71-newton-cg",
+   "group": "D uncovered subsystems",
+   "label": "06 Trid n20",
+   "times": {
+    "mathilda": 0.587,
+    "python": 1.296
+   },
+   "checks": {
+    "mathilda": "-1520000000",
+    "python": "-1520000000"
+   },
+   "ratio": 0.45293209876543206,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "72-dogleg",
+   "group": "D uncovered subsystems",
+   "label": "01 Sphere n10",
+   "times": {
+    "mathilda": 0.356,
+    "python": 0.727
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.48968363136176063,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "72-dogleg",
+   "group": "D uncovered subsystems",
+   "label": "02 Illcond quad n10 c1e2",
+   "times": {
+    "mathilda": 0.738,
+    "python": 0.575
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 1.2834782608695654,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "72-dogleg",
+   "group": "D uncovered subsystems",
+   "label": "03 Illcond quad n10 c1e4",
+   "times": {
+    "mathilda": 0.771,
+    "python": 0.56
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 1.3767857142857143,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "72-dogleg",
+   "group": "D uncovered subsystems",
+   "label": "04 Illcond quad n10 c1e6",
+   "times": {
+    "mathilda": 0.688,
+    "python": 0.472
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 1.4576271186440677,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "72-dogleg",
+   "group": "D uncovered subsystems",
+   "label": "05 Trid n10",
+   "times": {
+    "mathilda": 0.939,
+    "python": 1.021
+   },
+   "checks": {
+    "mathilda": "-210000000",
+    "python": "-210000000"
+   },
+   "ratio": 0.9196865817825661,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "72-dogleg",
+   "group": "D uncovered subsystems",
+   "label": "06 Trid n20",
+   "times": {
+    "mathilda": 6.065,
+    "python": 1.281
+   },
+   "checks": {
+    "mathilda": "-1520000000",
+    "python": "-1520000000"
+   },
+   "ratio": 4.734582357533178,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "73-trust-ncg",
+   "group": "D uncovered subsystems",
+   "label": "01 Rosenbrock 2D",
+   "times": {
+    "mathilda": 0.082,
+    "python": 6.123
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.013392128041809571,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "73-trust-ncg",
+   "group": "D uncovered subsystems",
+   "label": "02 Rosenbrock 10D",
+   "times": {
+    "mathilda": 0.758,
+    "python": 13.479
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.05623562578826323,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "73-trust-ncg",
+   "group": "D uncovered subsystems",
+   "label": "03 Rosenbrock 20D",
+   "times": {
+    "mathilda": 1.91,
+    "python": 24.018
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.07952369056540927,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "73-trust-ncg",
+   "group": "D uncovered subsystems",
+   "label": "04 Illcond quad n20 c1e4",
+   "times": {
+    "mathilda": 0.97,
+    "python": 3.121
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.31079782121115024,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "73-trust-ncg",
+   "group": "D uncovered subsystems",
+   "label": "05 Trid n10",
+   "times": {
+    "mathilda": 0.302,
+    "python": 1.169
+   },
+   "checks": {
+    "mathilda": "-210000000",
+    "python": "-210000000"
+   },
+   "ratio": 0.2583404619332763,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "73-trust-ncg",
+   "group": "D uncovered subsystems",
+   "label": "06 Trid n20",
+   "times": {
+    "mathilda": 0.857,
+    "python": 1.798
+   },
+   "checks": {
+    "mathilda": "-1520000000",
+    "python": "-1520000000"
+   },
+   "ratio": 0.47664071190211343,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "74-trust-exact",
+   "group": "D uncovered subsystems",
+   "label": "01 Rosenbrock 2D",
+   "times": {
+    "mathilda": 0.389,
+    "python": 7.727
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.050342953280704025,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "74-trust-exact",
+   "group": "D uncovered subsystems",
+   "label": "02 Rosenbrock 10D",
+   "times": {
+    "mathilda": 8.778,
+    "python": 10.234
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.8577291381668947,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "74-trust-exact",
+   "group": "D uncovered subsystems",
+   "label": "03 Rosenbrock 20D",
+   "times": {
+    "mathilda": 57.712,
+    "python": 16.407
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 3.517523008471994,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "74-trust-exact",
+   "group": "D uncovered subsystems",
+   "label": "04 Illcond quad n20 c1e4",
+   "times": {
+    "mathilda": 3.068,
+    "python": 1.196
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 2.565217391304348,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "74-trust-exact",
+   "group": "D uncovered subsystems",
+   "label": "05 Trid n10",
+   "times": {
+    "mathilda": 0.932,
+    "python": 1.697
+   },
+   "checks": {
+    "mathilda": "-210000000",
+    "python": "-210000000"
+   },
+   "ratio": 0.5492044784914555,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "74-trust-exact",
+   "group": "D uncovered subsystems",
+   "label": "06 Trid n20",
+   "times": {
+    "mathilda": 6.209,
+    "python": 2.333
+   },
+   "checks": {
+    "mathilda": "-1520000000",
+    "python": "-1520000000"
+   },
+   "ratio": 2.6613801971710243,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "75-trust-krylov",
+   "group": "D uncovered subsystems",
+   "label": "01 Rosenbrock 2D",
+   "times": {
+    "mathilda": 0.256,
+    "python": 5.755
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.044483058210251954,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "75-trust-krylov",
+   "group": "D uncovered subsystems",
+   "label": "02 Rosenbrock 10D",
+   "times": {
+    "mathilda": 5.213,
+    "python": 12.775
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.40806262230919765,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "75-trust-krylov",
+   "group": "D uncovered subsystems",
+   "label": "03 Rosenbrock 20D",
+   "times": {
+    "mathilda": 27.358,
+    "python": 480.525
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.056933562249622816,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "75-trust-krylov",
+   "group": "D uncovered subsystems",
+   "label": "04 Illcond quad n20 c1e4",
+   "times": {
+    "mathilda": 12.603,
+    "python": 251.586
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.050094202380100636,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "75-trust-krylov",
+   "group": "D uncovered subsystems",
+   "label": "05 Trid n10",
+   "times": {
+    "mathilda": 1.52,
+    "python": 1.152
+   },
+   "checks": {
+    "mathilda": "-210000000",
+    "python": "-210000000"
+   },
+   "ratio": 1.3194444444444446,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "75-trust-krylov",
+   "group": "D uncovered subsystems",
+   "label": "06 Trid n20",
+   "times": {
+    "mathilda": 9.324,
+    "python": 1.587
+   },
+   "checks": {
+    "mathilda": "-1520000000",
+    "python": "-1520000000"
+   },
+   "ratio": 5.87523629489603,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  }
+ ],
+ "requires": {
+  "FindMinimum": "present"
+ },
+ "raw": {
+  "71-newton-cg": {
+   "mathilda": {
+    "bench": {
+     "01 Rosenbrock 2D": 0.061,
+     "02 Rosenbrock 10D": 0.651,
+     "03 Rosenbrock 20D": 1.752,
+     "04 Illcond quad n20 c1e4": 0.993,
+     "05 Trid n10": 0.246,
+     "06 Trid n20": 0.587
+    },
+    "check": {
+     "01 Rosenbrock 2D": "0",
+     "02 Rosenbrock 10D": "0",
+     "03 Rosenbrock 20D": "0",
+     "04 Illcond quad n20 c1e4": "0",
+     "05 Trid n10": "-210000000",
+     "06 Trid n20": "-1520000000"
+    },
+    "require": {
+     "FindMinimum": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "01 Rosenbrock 2D": 8.977,
+     "02 Rosenbrock 10D": 15.613,
+     "03 Rosenbrock 20D": 21.215,
+     "04 Illcond quad n20 c1e4": 3.048,
+     "05 Trid n10": 0.621,
+     "06 Trid n20": 1.296
+    },
+    "check": {
+     "01 Rosenbrock 2D": "0",
+     "02 Rosenbrock 10D": "0",
+     "03 Rosenbrock 20D": "0",
+     "04 Illcond quad n20 c1e4": "0",
+     "05 Trid n10": "-210000000",
+     "06 Trid n20": "-1520000000"
+    },
+    "require": {
+     "scipy.optimize:minimize": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "72-dogleg": {
+   "mathilda": {
+    "bench": {
+     "01 Sphere n10": 0.356,
+     "02 Illcond quad n10 c1e2": 0.738,
+     "03 Illcond quad n10 c1e4": 0.771,
+     "04 Illcond quad n10 c1e6": 0.688,
+     "05 Trid n10": 0.939,
+     "06 Trid n20": 6.065
+    },
+    "check": {
+     "01 Sphere n10": "0",
+     "02 Illcond quad n10 c1e2": "0",
+     "03 Illcond quad n10 c1e4": "0",
+     "04 Illcond quad n10 c1e6": "0",
+     "05 Trid n10": "-210000000",
+     "06 Trid n20": "-1520000000"
+    },
+    "require": {
+     "FindMinimum": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "01 Sphere n10": 0.727,
+     "02 Illcond quad n10 c1e2": 0.575,
+     "03 Illcond quad n10 c1e4": 0.56,
+     "04 Illcond quad n10 c1e6": 0.472,
+     "05 Trid n10": 1.021,
+     "06 Trid n20": 1.281
+    },
+    "check": {
+     "01 Sphere n10": "0",
+     "02 Illcond quad n10 c1e2": "0",
+     "03 Illcond quad n10 c1e4": "0",
+     "04 Illcond quad n10 c1e6": "0",
+     "05 Trid n10": "-210000000",
+     "06 Trid n20": "-1520000000"
+    },
+    "require": {
+     "scipy.optimize:minimize": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "73-trust-ncg": {
+   "mathilda": {
+    "bench": {
+     "01 Rosenbrock 2D": 0.082,
+     "02 Rosenbrock 10D": 0.758,
+     "03 Rosenbrock 20D": 1.91,
+     "04 Illcond quad n20 c1e4": 0.97,
+     "05 Trid n10": 0.302,
+     "06 Trid n20": 0.857
+    },
+    "check": {
+     "01 Rosenbrock 2D": "0",
+     "02 Rosenbrock 10D": "0",
+     "03 Rosenbrock 20D": "0",
+     "04 Illcond quad n20 c1e4": "0",
+     "05 Trid n10": "-210000000",
+     "06 Trid n20": "-1520000000"
+    },
+    "require": {
+     "FindMinimum": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "01 Rosenbrock 2D": 6.123,
+     "02 Rosenbrock 10D": 13.479,
+     "03 Rosenbrock 20D": 24.018,
+     "04 Illcond quad n20 c1e4": 3.121,
+     "05 Trid n10": 1.169,
+     "06 Trid n20": 1.798
+    },
+    "check": {
+     "01 Rosenbrock 2D": "0",
+     "02 Rosenbrock 10D": "0",
+     "03 Rosenbrock 20D": "0",
+     "04 Illcond quad n20 c1e4": "0",
+     "05 Trid n10": "-210000000",
+     "06 Trid n20": "-1520000000"
+    },
+    "require": {
+     "scipy.optimize:minimize": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "74-trust-exact": {
+   "mathilda": {
+    "bench": {
+     "01 Rosenbrock 2D": 0.389,
+     "02 Rosenbrock 10D": 8.778,
+     "03 Rosenbrock 20D": 57.712,
+     "04 Illcond quad n20 c1e4": 3.068,
+     "05 Trid n10": 0.932,
+     "06 Trid n20": 6.209
+    },
+    "check": {
+     "01 Rosenbrock 2D": "0",
+     "02 Rosenbrock 10D": "0",
+     "03 Rosenbrock 20D": "0",
+     "04 Illcond quad n20 c1e4": "0",
+     "05 Trid n10": "-210000000",
+     "06 Trid n20": "-1520000000"
+    },
+    "require": {
+     "FindMinimum": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "01 Rosenbrock 2D": 7.727,
+     "02 Rosenbrock 10D": 10.234,
+     "03 Rosenbrock 20D": 16.407,
+     "04 Illcond quad n20 c1e4": 1.196,
+     "05 Trid n10": 1.697,
+     "06 Trid n20": 2.333
+    },
+    "check": {
+     "01 Rosenbrock 2D": "0",
+     "02 Rosenbrock 10D": "0",
+     "03 Rosenbrock 20D": "0",
+     "04 Illcond quad n20 c1e4": "0",
+     "05 Trid n10": "-210000000",
+     "06 Trid n20": "-1520000000"
+    },
+    "require": {
+     "scipy.optimize:minimize": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "75-trust-krylov": {
+   "mathilda": {
+    "bench": {
+     "01 Rosenbrock 2D": 0.256,
+     "02 Rosenbrock 10D": 5.213,
+     "03 Rosenbrock 20D": 27.358,
+     "04 Illcond quad n20 c1e4": 12.603,
+     "05 Trid n10": 1.52,
+     "06 Trid n20": 9.324
+    },
+    "check": {
+     "01 Rosenbrock 2D": "0",
+     "02 Rosenbrock 10D": "0",
+     "03 Rosenbrock 20D": "0",
+     "04 Illcond quad n20 c1e4": "0",
+     "05 Trid n10": "-210000000",
+     "06 Trid n20": "-1520000000"
+    },
+    "require": {
+     "FindMinimum": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "01 Rosenbrock 2D": 5.755,
+     "02 Rosenbrock 10D": 12.775,
+     "03 Rosenbrock 20D": 480.525,
+     "04 Illcond quad n20 c1e4": 251.586,
+     "05 Trid n10": 1.152,
+     "06 Trid n20": 1.587
+    },
+    "check": {
+     "01 Rosenbrock 2D": "0",
+     "02 Rosenbrock 10D": "0",
+     "03 Rosenbrock 20D": "0",
+     "04 Illcond quad n20 c1e4": "0",
+     "05 Trid n10": "-210000000",
+     "06 Trid n20": "-1520000000"
+    },
+    "require": {
+     "scipy.optimize:minimize": "present"
+    },
+    "skip": {},
+    "stderr": "/usr/local/lib/python3.11/site-packages/scipy/optimize/_trustregion.py:250: RuntimeWarning: invalid value encountered in multiply\n  p, hits_boundary = m.solve(trust_radius)",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  }
+ },
+ "elapsed_s": 12.241677045822144,
+ "durations": {
+  "71-newton-cg": 1.815385103225708,
+  "72-dogleg": 1.3035080432891846,
+  "73-trust-ncg": 1.2998051643371582,
+  "74-trust-exact": 1.5484437942504883,
+  "75-trust-krylov": 4.8680620193481445
+ },
+ "partial": true,
+ "label_problems": []
+}
