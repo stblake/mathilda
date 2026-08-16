@@ -60,4 +60,20 @@ Expr* image_build_real(const double* buf, size_t width, size_t height, size_t ch
 Expr* image3d_build_real(const double* buf, size_t width, size_t height, size_t depth,
                          size_t channels);
 
+/* Serialise an Image or Image3D for the notebook front end.
+ *
+ * Returns a malloc'd JSON object -- {"w":W,"h":H,"data":"<base64 RGBA>"} plus, for a volume, the depth
+ * and which slice was sent -- or NULL when `e` is not an image. The caller frees it.
+ *
+ * RGBA base64 rather than a JSON array of numbers: a 512x512 colour image is 786432 samples, which as
+ * decimal text is about 3 MB per evaluation, where base64 of the RGBA bytes is 1.4 MB and is exactly
+ * what a canvas ImageData wants -- no per-pixel work in JavaScript at all.
+ *
+ * A VOLUME SENDS ITS SIX BOUNDARY FACES plus the middle slice, under "faces" and "data". Three faces
+ * are visible from any viewpoint, so six is everything an opaque rotatable block can ever show, and
+ * for a 256^3 volume that is 6 * 65536 samples rather than 16.7 million. The middle slice stays as
+ * well, for a consumer that can only draw one plane. Internal structure is NOT sent: an opaque box
+ * cannot display it, and a cutting plane or a translucent rendering would need the volume itself. */
+char* image_to_json(const Expr* e);
+
 #endif /* MATHILDA_IMAGE_H */
