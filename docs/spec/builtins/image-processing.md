@@ -44,6 +44,68 @@ unevaluated rather than reinterpreting 300, which would corrupt every later scal
 and every filter downstream indexes it as rectangular — so a clear refusal here beats an
 out-of-bounds read somewhere far away.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= Image[{{0., 1.}, {1., 0.}}]
+In[2]:= Image[{{0., 0.25, 0.5, 0.75, 1.}}]
+In[3]:= ImageDimensions[Image[{{0., 1., 0.5}, {1., 0., 0.25}}]]
+In[4]:= ImageChannels[Image[{{0., 1.}, {1., 0.}}]]
+In[5]:= ImageType[Image[{{0., 1.}, {1., 0.}}]]
+In[6]:= ImageData[Image[{{0., 1.}, {1., 0.}}]]
+```
+
+#### Scope
+
+```mathematica
+In[1]:= (* the type is inferred from the values *) ImageType[Image[{{0, 1}, {1, 0}}]]
+In[2]:= ImageType[Image[{{0, 128}, {255, 7}}]]
+In[3]:= ImageType[Image[{{0., 0.5}}]]
+In[4]:= (* a stated type must fit the data, or the call declines *) Head[Image[{{0, 300}}, "Byte"]]
+In[5]:= Head[Image[{{0, 2}}, "Bit"]]
+In[6]:= ImageType[Image[{{0, 1}, {1, 0}}, "Byte"]]
+In[7]:= (* ragged data declines rather than being padded *) Head[Image[{{1., 2.}, {3.}}]]
+In[8]:= Head[Image[{}]]
+```
+
+#### Scope
+
+```mathematica
+In[1]:= (* data is indexed [[y, x]] while ImageDimensions reports {width, height} *) Dimensions[ImageData[Image[{{1., 2., 3.}, {4., 5., 6.}}]]]
+In[2]:= ImageDimensions[Image[{{1., 2., 3.}, {4., 5., 6.}}]]
+In[3]:= ImageData[Image[{{1., 2., 3.}, {4., 5., 6.}}]][[1, 3]]
+In[4]:= (* three channels make a colour image *) ImageChannels[Image[{{{1., 0., 0.}, {0., 1., 0.}}}]]
+In[5]:= Image[{{{1., 0., 0.}, {0., 1., 0.}, {0., 0., 1.}}}]
+In[6]:= ImageDimensions[Image[{{{1., 0., 0.}, {0., 1., 0.}}}]]
+In[7]:= (* two or four channels carry alpha *) ImageChannels[Image[{{{1., 0.5}, {0., 1.}}}]]
+In[8]:= ImageChannels[Image[{{{1., 0., 0., 0.5}}}]]
+```
+
+#### Scope
+
+```mathematica
+In[1]:= (* ImageData reports STORED values with an explicit type *) ImageData[Image[{{0, 255}}, "Byte"], "Byte"]
+In[2]:= ImageData[Image[{{0, 255}}, "Byte"]]
+In[3]:= ImageData[Image[{{1, 0}, {0, 1}}, "Bit"], "Bit"]
+In[4]:= (* an already-canonical image is left alone, so evaluation reaches a fixed point *) Image[Image[{{0., 1.}}]] === Image[{{0., 1.}}]
+In[5]:= (* pixels survive a round trip through ImageData exactly *) Module[{d = {{0.1, 0.2}, {0.3, 0.4}}}, ImageData[Image[d]] === d]
+In[6]:= Image[Table[N[i j]/9, {i, 3}, {j, 3}]]
+In[7]:= Image[Table[N[Mod[i + j, 2]], {i, 8}, {j, 8}]]
+In[8]:= Image[Table[N[(i - 1)/7], {i, 8}, {j, 8}]]
+```
+
+#### Scope
+
+```mathematica
+In[1]:= (* a colour ramp *) Image[Table[{N[(j - 1)/7], N[(i - 1)/7], 0.5}, {i, 8}, {j, 8}]]
+In[2]:= Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 8}, {j, 8}]]
+In[3]:= Image[Table[N[Boole[(i - 4.5)^2 + (j - 4.5)^2 <= 9]], {i, 8}, {j, 8}]]
+In[4]:= ImageQ[Image[{{0., 1.}}]]
+In[5]:= ImageQ[{{0., 1.}}]
+In[6]:= Image3DQ[Image[{{0., 1.}}]]
+In[7]:= (* the storage is a packed buffer, not a tree of Expr nodes *) Head[Part[Image[Table[N[i j]/64, {i, 8}, {j, 8}]], 1]]
+In[8]:= Part[Image[{{0., 1.}}], 2]
+```
 ## ImageQ
 
 `ImageQ[expr]` gives `True` for a valid canonical image, `False` otherwise. Attributes:
@@ -52,12 +114,23 @@ out-of-bounds read somewhere far away.
 This is *how validity is tested*, because `Head` cannot do it: malformed input to `Image` stays
 unevaluated, so both a valid image and a refused one have head `Image`.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageQ[Image[{{0., 1.}, {1., 0.}}]]
+In[2]:= ImageQ[{{0., 1.}, {1., 0.}}]
+```
 ## ImageDimensions
 
 `ImageDimensions[image]` gives `{width, height}`. Attributes: `Protected`.
 
 Transposed relative to `ImageData`, which is `height × width`.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageDimensions[Image[{{1., 2., 3.}, {4., 5., 6.}}]]
+```
 ## ImageChannels
 
 `ImageChannels[image]` gives the number of colour channels — `1` for grey, otherwise the length
@@ -66,6 +139,12 @@ of each pixel's value list (`3` for RGB, `4` with alpha). Attributes: `Protected
 A pixel list of a different length in one place is not a channel count, so that declines rather
 than reporting the first pixel's length as if it were the image's.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageChannels[Image[{{0.5, 0.5}}]]
+In[2]:= ImageChannels[Image[{{{1., 0., 0.}, {0., 1., 0.}}}]]
+```
 ## ImageType
 
 `ImageType[image]` gives `"Bit"`, `"Byte"` or `"Real"`. Attributes: `Protected`.
@@ -73,6 +152,12 @@ than reporting the first pixel's length as if it were the image's.
 The type is not decoration: it fixes the **range** of a stored value, which is what makes
 `ImageData`'s scaling well defined.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageType[Image[{{0.5, 0.25}}]]
+In[2]:= ImageType[Binarize[Image[{{0.1, 0.9}}]]]
+```
 ## ImageData
 
 `ImageData[image]` gives the pixels as reals in `[0, 1]`, scaling out the image's type.
@@ -167,6 +252,12 @@ constant is correct only for an infinite kernel; using it on a truncated one lea
 slightly under 1, which darkens an image a little on every pass — invisible once, obvious after
 fifty.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= GaussianMatrix[1]
+In[2]:= Total[Flatten[GaussianMatrix[2]]]
+```
 ## BoxMatrix
 
 `BoxMatrix[r]` gives a `(2r+1) × (2r+1)` matrix of 1s. Attributes: `Protected`.
@@ -175,6 +266,11 @@ fifty.
 bright, and the normalised version is a mean filter. Kept faithful rather than helpfully rescaled,
 since a caller using `BoxMatrix` in arithmetic needs the ones.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= BoxMatrix[1]
+```
 ## GaussianFilter
 
 `GaussianFilter[image, r]` blurs `image` with a Gaussian of radius `r`. Attributes: `Protected`.
@@ -184,6 +280,11 @@ is implemented by building the same matrix and calling the same convolution, and
 identity. Two independent implementations of one identity is how the identity quietly stops
 holding.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[GaussianFilter[Image[{{0., 0., 0.}, {0., 1., 0.}, {0., 0., 0.}}], 1]]
+```
 ## Filtering performance, measured
 
 Verified against `scipy.ndimage.convolve` (the right baseline: it reflects the kernel like
@@ -251,6 +352,11 @@ best* — so the test verifies the defining property instead of matching a numbe
 variance is recomputed from the pixel values in Mathilda itself, sharing no code with the
 implementation, and the returned threshold must maximise it. On a 48×48 ramp it does, exactly.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= FindThreshold[Image[{{0., 0., 1.}, {0., 1., 1.}}]]
+```
 ## Binarize
 
 `Binarize[image]` thresholds by Otsu; `Binarize[image, t]` thresholds at `t`. Gives a `"Bit"`
@@ -295,6 +401,11 @@ something approximate would be worse than declining it.
 
 # Geometry
 
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[ColorConvert[Image[{{{1., 0., 0.}, {0., 1., 0.}}}], "Grayscale"]]
+```
 ## ImageResize
 
 `ImageResize[image, {w, h}]` resizes to `w × h`; `ImageResize[image, w]` gives width `w` with the
@@ -486,6 +597,11 @@ separable path's largest-magnitude pivot exists for. The kernels are built as fu
 handed to the same dispatcher every other filter uses, so the factorisation is *re-derived and
 verified* rather than trusted because the author knew it was separable.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[DerivativeFilter[Image[{{0., 0., 1., 1.}, {0., 0., 1., 1.}}], {0, 1}]]
+```
 ## GradientFilter
 
 `GradientFilter[image]` gives the gradient magnitude `Sqrt[dx² + dy²]`. Attributes: `Protected`.
@@ -512,6 +628,11 @@ Parity, and the values agree exactly — gradient total 26191.5 and maximum 0.52
 
 # Edge detection
 
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[GradientFilter[Image[{{0., 0., 1., 1.}, {0., 0., 1., 1.}}]]]
+```
 ## EdgeDetect
 
 `EdgeDetect[image]` finds edges by the **Canny** algorithm, giving a `"Bit"` image.
@@ -989,6 +1110,11 @@ should be.
 
 # Correlation and template matching
 
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[ImageAdjust[Image[{{0.25, 0.5}, {0.5, 0.75}}]]]
+```
 ## ImageCorrelate
 
 `ImageCorrelate[image, kernel]` correlates — the kernel is **not** reflected, which is the only
@@ -1015,6 +1141,11 @@ Deriving it removed the duplicate code, the discrepancy and the deficit together
 The distinction between the two only shows on an *asymmetric* kernel, where a delta with `{{1,2,3}}` gives
 `{3,2,1}` here and `{1,2,3}` convolved. Both directions are pinned, so neither can drift toward the other.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[ImageCorrelate[Image[{{0., 1., 0.}, {1., 0., 1.}}], {{1.}}]]
+```
 ## Normalised cross-correlation
 
 `ImageCorrelate[image, template, "NormalizedCrossCorrelation"]` is template matching. A
@@ -1586,6 +1717,11 @@ looked 10× slower than NumPy) and `image3d_load` still doing so after `image_lo
 when the volumetric pad looked 6.5× slower). In all three the answers were correct and only the
 marshalling was slow, so no test could have caught them — a benchmark did, each time.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[LocalAdaptiveBinarize[Image[{{0.2, 0.3, 0.9}, {0.2, 0.8, 0.9}, {0.1, 0.2, 0.3}}], 1]]
+```
 ## make check-image-packing
 
 Three times in this subsystem an image operation ran 4× to 23× slower than its equivalent
@@ -1943,3 +2079,196 @@ Mathilda's printer shows that weight sum as `1.0` **even through `InputForm`**, 
 `1.0 - (0.299 + 0.587 + 0.114)`, which prints `1.11e-16`, reveals otherwise. A test written from the
 printed value would assert the wrong thing and pass for the wrong reason — which is why the suite
 asserts the subtraction is non-zero.
+
+## ImagePad
+Pads an image or volume, or crops it when given negative amounts.
+
+- `ImagePad[image, m]`: pads `m` pixels on every side.
+- `ImagePad[image, {{left, right}, {bottom, top}}]`: pads each side separately, in visual order.
+- `ImagePad[image, m, v | "Fixed" | "Reflected"]`: chooses the fill. `"Reflected"` mirrors *without* repeating the edge pixel.
+- Accepts an `Image3D`, where the spec takes one `{lo, hi}` pair per axis.
+- Pad then crop is the **exact** identity, which is the property the pair exists to satisfy.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageDimensions[ImagePad[Image[{{1., 2.}, {3., 4.}}], 1]]
+In[2]:= ImageData[ImagePad[Image[{{1., 2.}, {3., 4.}}], 1]]
+In[3]:= ImageData[ImagePad[Image[{{1., 2., 3.}}], {{1, 1}, {0, 0}}, "Reflected"]]
+In[4]:= Module[{img = Image[{{1., 2.}, {3., 4.}}]}, ImageCrop[ImagePad[img, 2], ImageDimensions[img]] === img]
+```
+
+## ImageCrop
+Crops an image about its centre, or trims a uniform border.
+
+- `ImageCrop[image, {w, h}]`: crops to `w` by `h` about the centre.
+- `ImageCrop[image]`: trims a uniform border, whose colour is read from a corner rather than assumed black.
+- `ImageCrop[volume, {w, h, d}]` for an `Image3D`.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[ImageCrop[Image[{{1., 2., 3.}, {4., 5., 6.}, {7., 8., 9.}}], {1, 1}]]
+In[2]:= ImageDimensions[ImageCrop[Image[{{0., 0., 0.}, {0., 0.5, 0.}, {0., 0., 0.}}]]]
+```
+
+## CornerFilter
+Corner strength from the eigenvalues of the structure tensor.
+
+- `CornerFilter[image]`: the smaller eigenvalue (Shi-Tomasi) at every pixel.
+- `CornerFilter[image, r]`: sets the window radius.
+- `Method -> "Harris"` selects `det - 0.04 trace^2` instead.
+- A straight edge scores **exactly zero**: its tensor has rank 1, so both the determinant and the smaller eigenvalue vanish. That is what separates a corner detector from an edge detector.
+- Accepts an `Image3D`, where rank 1 is a plane and rank 2 an edge, so both score zero.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= Max[Flatten[ImageData[CornerFilter[Image[Table[If[j <= 4, 0., 1.], {i, 8}, {j, 8}]]]]]]
+In[2]:= Options[CornerFilter]
+```
+
+## ImageCorners
+Positions of corners: thresholded, suppressed, and separated.
+
+- `ImageCorners[image]`: local maxima of the response above a fraction of its peak.
+- `ImageCorners[image, r, t, d, n]`: radius, threshold fraction, minimum separation, and a cap on the count.
+- `MaxFeatures -> n` is the same cap as an option.
+- Positions are `{row, column}`, 1-based, so each indexes `ImageData` directly; for a volume they are `{slice, row, column}`.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageCorners[Image[Table[If[i >= 5 && j >= 5, 1., 0.], {i, 12}, {j, 12}]]]
+In[2]:= Options[ImageCorners]
+```
+
+## Dilation
+Morphological dilation: the maximum over a structuring element.
+
+- `Dilation[image, r]`: a `(2r+1)` square, or a cube for an `Image3D`.
+- `Dilation[image, elem]`: an explicit element (planar only).
+- Cost is independent of the radius: a full box separates into one pass per axis.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[Dilation[Image[{{0., 0., 0.}, {0., 1., 0.}, {0., 0., 0.}}], 1]]
+```
+
+## Erosion
+Morphological erosion: the minimum over a structuring element.
+
+- `Erosion[image, r]`, the dual of `Dilation` under negation.
+- Accepts an `Image3D` with an integer radius.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[Erosion[Image[{{1., 1., 1.}, {1., 0., 1.}, {1., 1., 1.}}], 1]]
+```
+
+## Opening
+Erosion then dilation with the same element. Idempotent.
+
+- `Opening[image, r]`: removes bright detail smaller than the element.
+- `Opening[Opening[x, r], r]` equals `Opening[x, r]` **exactly**, which is what makes it an opening rather than merely a smoother, and holds only because both passes use the same element.
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= Module[{img = Image[{{0., 0., 0.}, {0., 1., 0.}, {0., 0., 0.}}]}, ImageData[Opening[Opening[img, 1], 1]] === ImageData[Opening[img, 1]]]
+```
+
+## Closing
+Dilation then erosion with the same element. Idempotent.
+
+- `Closing[image, r]`: fills dark detail smaller than the element.
+- `Opening[x] <= x <= Closing[x]` pointwise.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[Closing[Image[{{1., 1., 1.}, {1., 0., 1.}, {1., 1., 1.}}], 1]]
+```
+
+## MeanFilter
+The mean over a square or cubic window.
+
+- `MeanFilter[image, r]`.
+- For an `Image3D` the window total comes from prefix sums, so the cost does not grow with `r`.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[MeanFilter[Image[{{0., 0., 0.}, {0., 1., 0.}, {0., 0., 0.}}], 1]]
+```
+
+## MedianFilter
+The median over a window. Every output value is an input value.
+
+- `MedianFilter[image, r]`.
+- A lone impulse is removed **completely**, where a mean spreads it at any radius.
+- The median is *not* separable, so the window is gathered in full; the saving is in the selection, which is a quickselect rather than a sort.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[MedianFilter[Image[{{0.25, 0.25, 0.25}, {0.25, 1., 0.25}, {0.25, 0.25, 0.25}}], 1]]
+```
+
+## DistanceTransform
+Distance from each pixel to the nearest background pixel.
+
+- `DistanceTransform[image]`, or `DistanceTransform[image, t]` to set what counts as background.
+- Exact Euclidean, by lower envelopes of parabolas one axis at a time; accepts an `Image3D`.
+- Squared distances on an integer lattice are exact integers, so Pythagorean offsets give exact distances.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[DistanceTransform[Image[{{1., 1., 1., 1., 1.}, {1., 1., 1., 1., 1.}, {1., 1., 0., 1., 1.}, {1., 1., 1., 1., 1.}, {1., 1., 1., 1., 1.}}]]]
+```
+
+## ImageReflect
+Reflects an image or volume about one axis.
+
+- `ImageReflect[image]`: top to bottom.
+- `ImageReflect[image, Left]` or `Right`: left to right; `Top` or `Bottom` is the vertical reflection again, since either name of a pair selects the same axis.
+- `Front` or `Back` selects an `Image3D`'s depth axis; both decline on a plane, which has no depth axis to reflect.
+- A pure index permutation, so it is self-inverse bit for bit and reflections about different axes commute exactly.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[ImageReflect[Image[{{1., 2.}, {3., 4.}}]]]
+In[2]:= ImageData[ImageReflect[Image[{{1., 2.}, {3., 4.}}], Left]]
+In[3]:= Module[{img = Image[{{1., 2.}, {3., 4.}}]}, ImageReflect[ImageReflect[img]] === img]
+```
+
+## ImageRotate
+Rotates an image. Right angles are exact index permutations.
+
+- `ImageRotate[image]`: a quarter turn.
+- `ImageRotate[image, angle]`: bilinear inverse mapping for a free angle, reading out of frame as 0 rather than replicating the edge.
+- Four quarter turns are **exactly** the identity, and an odd number swaps the dimensions.
+- Volumes are not yet rotatable: a rotation in three dimensions needs an axis, which is a design decision rather than an extension.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= ImageData[ImageRotate[Image[{{1., 2.}, {3., 4.}}]]]
+In[2]:= Module[{img = Image[{{1., 2.}, {3., 4.}}]}, Nest[ImageRotate, img, 4] === img]
+```
+
+## Image3DQ
+Tests whether an expression is a well-formed volumetric image.
+
+- `Image3DQ[expr]`.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= Image3DQ[Image3D[{{{0., 1.}, {1., 0.}}}]]
+In[2]:= Image3DQ[Image[{{0., 1.}}]]
+```
