@@ -1310,6 +1310,11 @@ target_include_directories(nminimize_tests PRIVATE ../src)
 add_executable(shgo_tests test_shgo.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(shgo_tests PRIVATE ../src)
 
+# DualAnnealing (Generalized Simulated Annealing) method of NMinimize (same
+# convention — run the binary directly, no add_test registration).
+add_executable(dual_annealing_tests test_dual_annealing.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dual_annealing_tests PRIVATE ../src)
+
 # L-BFGS-B method of FindMinimum (run the binary directly, matching the
 # findmin_tests / nminimize_tests convention — no add_test registration).
 add_executable(lbfgsb_tests test_lbfgsb.c $<TARGET_OBJECTS:mathilda_common>)

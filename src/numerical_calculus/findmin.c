@@ -45,6 +45,13 @@
 #include "findmin.h"
 
 #include <math.h>
+/* M_PI is POSIX, not C99: glibc hides it under -std=c99 (macOS exposes it
+ * anyway, masking the omission). The Dual Annealing visiting distribution needs
+ * it; provide the standard C99 fallback right after <math.h>. See CLAUDE.md §10.
+ * (lgamma/tgamma, also used there, ARE C99 and need no guard.) */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -6277,7 +6284,21 @@ Expr* builtin_findmaximum(Expr* res) {
 #define NM_MAX_REGION_EXPAND 4     /* infeasible-region rescue: grow +-SPAN by
                                     * 10^k for k = 1..this (up to +-1e5)       */
 
-enum { NM_AUTO = 0, NM_DE, NM_NELDERMEAD, NM_RANDOMSEARCH, NM_SA, NM_SHGO };
+/* Dual Annealing (Generalized Simulated Annealing) defaults, matching
+ * scipy.optimize.dual_annealing. See nm_dual_annealing. */
+#define NM_DA_VISIT          2.62      /* qv: visiting-distribution shape, (1,3] */
+#define NM_DA_ACCEPT        (-5.0)     /* qa: acceptance-distribution shape      */
+#define NM_DA_INIT_TEMP      5230.0    /* T0: initial (and post-reanneal) temp   */
+#define NM_DA_RESTART_RATIO  2.0e-5    /* reanneal when T < T0 * this            */
+#define NM_DA_MAXITER        1000      /* temperature-step budget (scipy maxiter)*/
+#define NM_DA_MAXFUN         10000000LL/* objective-evaluation safety cap        */
+#define NM_DA_STALL_MAX      1000      /* forced local search after this many
+                                        * non-improving chains (scipy default)   */
+#define NM_DA_TAIL_LIMIT     1.0e8     /* clamp bound on a raw visiting jump      */
+#define NM_DA_MIN_VISIT      1.0e-10   /* nudge off the lower bound after wrap    */
+
+enum { NM_AUTO = 0, NM_DE, NM_NELDERMEAD, NM_RANDOMSEARCH, NM_SA, NM_SHGO,
+       NM_DUAL_ANNEALING };
 
 typedef struct {
     int      method;         /* NM_AUTO / NM_DE / ...                        */
@@ -6297,6 +6318,11 @@ typedef struct {
     int      level_iterations;/* SA "LevelIterations"; <=0 ⇒ auto (50)         */
     int      shgo_sampling;  /* SHGO "SamplingMethod": 0 Simplicial / 1 Sobol / 2 Halton */
     int      shgo_iters;     /* SHGO "Iterations" (scipy iters); <=0 ⇒ auto (1) */
+    double   da_visit;       /* DualAnnealing "VisitingParameter" qv; <=0 ⇒ default 2.62 */
+    double   da_accept;      /* DualAnnealing "AcceptanceParameter" qa; 0 ⇒ default -5.0 */
+    double   da_init_temp;   /* DualAnnealing "InitialTemperature"; <=0 ⇒ default 5230  */
+    double   da_restart_ratio;/* DualAnnealing "RestartTemperatureRatio"; <=0 ⇒ default */
+    int      da_local_search;/* DualAnnealing "LocalSearch": -1 auto(on) / 1 on / 0 off  */
     uint64_t seed;
 } NmConfig;
 
@@ -7773,6 +7799,257 @@ static void nm_sa(NmDriver* D, const NmConfig* nc, NmRng* rng,
 }
 
 /* ============================================================================
+ *  Dual Annealing — Generalized Simulated Annealing (Tsallis & Stariolo,
+ *  Physica A 233 (1996) 395-406; Xiang, Sun, Fan & Gong, Phys. Lett. A 233
+ *  (1997) 216-220) with a local search after each Markov chain, mirroring
+ *  scipy.optimize.dual_annealing.
+ *
+ *  Two Tsallis q-generalizations of the classical distributions:
+ *    - the VISITING distribution (shape qv) draws a heavy-tailed Cauchy-Lorentz
+ *      jump whose scale is set by the visiting temperature T(si). qv -> 1 is
+ *      Gaussian (classical SA), qv = 2 is Cauchy (fast SA), qv > 2 has the heavy
+ *      tails that let the walk escape deep basins. Jumps beyond a tail limit are
+ *      folded back into the box, so a hot chain samples the box near-uniformly.
+ *    - the ACCEPTANCE distribution (shape qa) is a generalized Metropolis rule
+ *      on the penalized energy, with acceptance temperature T/(step+1).
+ *  The temperature follows the GSA cooling schedule and REANNEALS (resets to T0)
+ *  once it drops below T0 * restart_ratio, so one chain keeps exploring across
+ *  the whole budget. After each chain a local search (Mathilda's shared
+ *  nm_local_polish: BFGS / augmented-Lagrangian / integer descent) refines the
+ *  incumbent — the second "annealing" that makes the method dual. Deb's
+ *  feasibility rules (nm_better) select the reported best, so box + general
+ *  constraints + integer domains work with no Dual-Annealing-specific code.
+ *
+ *  "SearchPoints" -> K runs K independent chains (default 1, matching scipy's
+ *  single chain) and keeps the Deb-best. Sub-options: "VisitingParameter" (qv),
+ *  "AcceptanceParameter" (qa), "InitialTemperature" (T0),
+ *  "RestartTemperatureRatio", "LocalSearch" (on/off), "MaxIterations" (the
+ *  per-chain temperature-step budget), "RandomSeed", "PostProcess".
+ * ========================================================================== */
+
+/* Visiting-distribution factors that depend only on qv (precomputed once). */
+typedef struct {
+    double qv;
+    double factor4p;   /* sqrt(pi) * factor2 / (factor3 * (3 - qv))           */
+    double factor6;    /* pi (1-f5) / sin(pi (1-f5)) / Gamma(2 - f5)          */
+} DaFactors;
+
+static void da_factors_init(DaFactors* F, double qv) {
+    double factor2 = exp((4.0 - qv) * log(qv - 1.0));
+    double factor3 = exp((2.0 - qv) * log(2.0) / (qv - 1.0));
+    double factor5 = 1.0 / (qv - 1.0) - 0.5;
+    double d1 = 2.0 - factor5;
+    F->qv = qv;
+    F->factor4p = sqrt(M_PI) * factor2 / (factor3 * (3.0 - qv));
+    F->factor6  = M_PI * (1.0 - factor5) / sin(M_PI * (1.0 - factor5))
+                / exp(lgamma(d1));
+}
+
+/* One raw visiting jump at temperature T (Tsallis "Visita" formula). */
+static double da_visit_fn(NmRng* rng, const DaFactors* F, double T) {
+    double qv = F->qv;
+    double x = nm_rng_normal(rng);
+    double y = nm_rng_normal(rng);
+    if (fabs(y) < 1e-300) y = (y < 0.0) ? -1e-300 : 1e-300;
+    double factor1 = exp(log(T) / (qv - 1.0));
+    double factor4 = F->factor4p * factor1;
+    x *= exp(-(qv - 1.0) * log(F->factor6 / factor4) / (3.0 - qv));
+    double den = exp((qv - 1.0) * log(fabs(y)) / (3.0 - qv));
+    return x / den;
+}
+
+/* Fold a jumped coordinate back into [lo, hi] periodically (scipy's fmod-based
+ * wrapping), nudged off the exact lower bound. */
+static double da_wrap(double v, double lo, double hi) {
+    double range = hi - lo;
+    if (!(range > 0.0)) return lo;         /* degenerate fixed coordinate */
+    double a = v - lo;
+    double b = fmod(a, range) + range;
+    double w = fmod(b, range) + lo;
+    if (fabs(w - lo) < NM_DA_MIN_VISIT) w += NM_DA_MIN_VISIT;
+    if (w > hi) w = hi;
+    if (w < lo) w = lo;
+    return w;
+}
+
+/* Build x_visit from x: jump all coordinates (step < n) or only coordinate
+ * step-n (step >= n), with tail clamping and box wrapping. */
+static void da_visiting(NmRng* rng, const DaFactors* F, double T,
+                        const double* lo, const double* hi, size_t n,
+                        const double* x, size_t step, double* xv) {
+    if (step < n) {
+        for (size_t j = 0; j < n; j++) {
+            double vis = da_visit_fn(rng, F, T);
+            if (!isfinite(vis) || vis > NM_DA_TAIL_LIMIT)
+                vis = NM_DA_TAIL_LIMIT * nm_rng_unif(rng);
+            else if (vis < -NM_DA_TAIL_LIMIT)
+                vis = -NM_DA_TAIL_LIMIT * nm_rng_unif(rng);
+            xv[j] = da_wrap(x[j] + vis, lo[j], hi[j]);
+        }
+    } else {
+        size_t idx = step - n;
+        for (size_t j = 0; j < n; j++) xv[j] = x[j];
+        double vis = da_visit_fn(rng, F, T);
+        if (!isfinite(vis) || vis > NM_DA_TAIL_LIMIT)
+            vis = NM_DA_TAIL_LIMIT * nm_rng_unif(rng);
+        else if (vis < -NM_DA_TAIL_LIMIT)
+            vis = -NM_DA_TAIL_LIMIT * nm_rng_unif(rng);
+        xv[idx] = da_wrap(x[idx] + vis, lo[idx], hi[idx]);
+    }
+}
+
+static void nm_dual_annealing(NmDriver* D, const NmConfig* nc, NmRng* rng,
+                              double* xbest, double* fbest, double* penbest) {
+    size_t n = D->n;
+    const double* rlo = D->reg_lo;
+    const double* rhi = D->reg_hi;
+    *fbest = 1e300; *penbest = 1e300;
+    bool have = false;
+
+    if (n == 0) {
+        double d0 = 0.0, f, p;
+        nm_eval(D, &d0, &f, &p);
+        *fbest = f; *penbest = p;
+        return;
+    }
+
+    /* Parameters (validated at parse time; clamp qv defensively for the log/pow
+     * domain in case an engine is reached with an unvalidated config). */
+    double qv = nc->da_visit;
+    if (!(qv > 1.0 && qv <= 3.0)) qv = NM_DA_VISIT;
+    double qa = nc->da_accept;
+    double T0 = nc->da_init_temp > 0.0 ? nc->da_init_temp : NM_DA_INIT_TEMP;
+    double restart_ratio = (nc->da_restart_ratio > 0.0 && nc->da_restart_ratio < 1.0)
+                         ? nc->da_restart_ratio : NM_DA_RESTART_RATIO;
+    /* Inner local search runs unless disabled OR PostProcess -> False (which
+     * asks for the raw, unpolished global-search result everywhere). */
+    bool local_on = (nc->da_local_search != 0) && (nc->post_process != 0);
+
+    /* Temperature-step budget. An explicit MaxIterations wins; otherwise use
+     * Dual Annealing's own default (scipy's maxiter=1000), NOT NMinimize's
+     * generic MaxIterations default of 100 — a 10x-too-small budget starves the
+     * anneal on the larger boxes and is the difference between missing and
+     * reaching the global (matches scipy). */
+    int64_t maxiter = D->opts->max_iter_set ? D->opts->max_iter : NM_DA_MAXITER;
+    int64_t K = nc->search_points > 0 ? (int64_t)nc->search_points : 1;
+
+    DaFactors F;
+    da_factors_init(&F, qv);
+    double t1 = exp((qv - 1.0) * log(2.0)) - 1.0;   /* schedule numerator     */
+    double T_restart = T0 * restart_ratio;
+
+    double* xcur = (double*)malloc(sizeof(double) * n);
+    double* xv   = (double*)malloc(sizeof(double) * n);
+    double* xp   = (double*)malloc(sizeof(double) * n);  /* local-search scratch */
+
+    for (int64_t chain = 0; chain < K; chain++) {
+        for (size_t j = 0; j < n; j++) xcur[j] = nm_rng_range(rng, rlo[j], rhi[j]);
+        double fcur, pcur;
+        nm_eval(D, xcur, &fcur, &pcur);
+        double Ecur = fcur + NM_PENALTY_MU * pcur;
+        if (!have || nm_better(fcur, pcur, *fbest, *penbest)) {
+            for (size_t j = 0; j < n; j++) xbest[j] = xcur[j];
+            *fbest = fcur; *penbest = pcur; have = true;
+        }
+
+        int64_t si = 0, iteration = 0, nfev = 0, stall = 0;
+        while (iteration < maxiter && nfev < NM_DA_MAXFUN) {
+            double s = (double)si + 2.0;
+            double t2 = exp((qv - 1.0) * log(s)) - 1.0;
+            double T = T0 * t1 / t2;
+
+            if (T < T_restart) {
+                /* Reanneal: fresh current point; the temperature climbs back to
+                 * T0 at si = 0. The best is preserved. Does not consume the
+                 * iteration budget (matches scipy's reset-then-restart loop). */
+                for (size_t j = 0; j < n; j++)
+                    xcur[j] = nm_rng_range(rng, rlo[j], rhi[j]);
+                nm_eval(D, xcur, &fcur, &pcur); nfev++;
+                Ecur = fcur + NM_PENALTY_MU * pcur;
+                if (nm_better(fcur, pcur, *fbest, *penbest)) {
+                    for (size_t j = 0; j < n; j++) xbest[j] = xcur[j];
+                    *fbest = fcur; *penbest = pcur;
+                }
+                si = 0;
+                continue;
+            }
+
+            double Tstep = T / (double)(si + 1);
+            /* scipy forces a local search after the hottest chain of each
+             * temperature ramp (step 0) regardless of improvement, seeding an
+             * early basin. */
+            bool improved = (si == 0);
+
+            for (size_t step = 0; step < 2 * n; step++) {
+                da_visiting(rng, &F, T, rlo, rhi, n, xcur, step, xv);
+                double fvv, pvv;
+                nm_eval(D, xv, &fvv, &pvv); nfev++;
+                double Ev = fvv + NM_PENALTY_MU * pvv;
+                double d = Ev - Ecur;
+                bool accept;
+                if (d <= 0.0) {
+                    accept = true;
+                } else {
+                    double base = 1.0 - (1.0 - qa) * d / Tstep;
+                    double pqv = (base <= 0.0) ? 0.0 : exp(log(base) / (1.0 - qa));
+                    accept = nm_rng_unif(rng) < pqv;
+                }
+                if (accept) {
+                    for (size_t j = 0; j < n; j++) xcur[j] = xv[j];
+                    Ecur = Ev; fcur = fvv; pcur = pvv;
+                }
+                if (nm_better(fvv, pvv, *fbest, *penbest)) {
+                    for (size_t j = 0; j < n; j++) xbest[j] = xv[j];
+                    *fbest = fvv; *penbest = pvv;
+                    have = true; improved = true;
+                }
+                if (nfev >= NM_DA_MAXFUN) break;
+            }
+
+            if (local_on) {
+                if (improved) {
+                    /* Global best moved this chain (or the forced step-0 search):
+                     * polish from the best, keep the refined basin as the new
+                     * current (scipy's improved branch). */
+                    for (size_t j = 0; j < n; j++) xp[j] = xbest[j];
+                    double fp = *fbest, pp = *penbest;
+                    nm_local_polish(D, xp, &fp, &pp); nfev++;
+                    if (nm_better(fp, pp, *fbest, *penbest)) {
+                        for (size_t j = 0; j < n; j++) { xbest[j] = xp[j]; xcur[j] = xp[j]; }
+                        *fbest = fp; *penbest = pp;
+                        fcur = fp; pcur = pp; Ecur = fp + NM_PENALTY_MU * pp;
+                    }
+                    stall = 0;
+                } else if (++stall >= NM_DA_STALL_MAX) {
+                    /* Long stagnation: force a polish from the current point and
+                     * continue from it (scipy's not_improved_max_idx branch). */
+                    for (size_t j = 0; j < n; j++) xp[j] = xcur[j];
+                    double fp = fcur, pp = pcur;
+                    nm_local_polish(D, xp, &fp, &pp); nfev++;
+                    if (nm_better(fp, pp, *fbest, *penbest)) {
+                        for (size_t j = 0; j < n; j++) xbest[j] = xp[j];
+                        *fbest = fp; *penbest = pp; have = true;
+                    }
+                    for (size_t j = 0; j < n; j++) xcur[j] = xp[j];
+                    fcur = fp; pcur = pp; Ecur = fp + NM_PENALTY_MU * pp;
+                    stall = 0;
+                }
+            }
+            si++; iteration++;
+        }
+    }
+
+    /* Snap integer coordinates and clamp to the box, then re-score so the
+     * reported point and value are consistent (nm_eval rounds integers during
+     * scoring, but the stored coordinates are otherwise continuous). */
+    if (have) {
+        nm_project(D, xbest);
+        nm_eval(D, xbest, fbest, penbest);
+    }
+    free(xcur); free(xv); free(xp);
+}
+
+/* ============================================================================
  *  SHGO — Simplicial Homology Global Optimization (Endres, Sandrock & Focke,
  *  J. Glob. Optim. 72 (2018) 181-217), mirroring scipy.optimize.shgo.
  *
@@ -8295,6 +8572,7 @@ static bool nm_method_from_string(const char* s, int* out) {
     if (strcmp(s, "RandomSearch") == 0)          { *out = NM_RANDOMSEARCH; return true; }
     if (strcmp(s, "SimulatedAnnealing") == 0)    { *out = NM_SA;           return true; }
     if (strcmp(s, "SHGO") == 0)                  { *out = NM_SHGO;         return true; }
+    if (strcmp(s, "DualAnnealing") == 0)         { *out = NM_DUAL_ANNEALING; return true; }
     return false;
 }
 
@@ -8498,6 +8776,68 @@ static bool nm_parse_method(Expr* rhs, NmConfig* nc, const char* fn) {
                 else
                     fm_warn(fn, "sopt",
                             "Iterations must be a positive integer; using Automatic");
+            } else if (strcmp(on, "VisitingParameter") == 0) {
+                /* DualAnnealing: qv, the visiting-distribution shape (scipy's
+                 * `visit`). qv -> 1 is Gaussian (classical SA), 2 is Cauchy
+                 * (fast SA), > 2 gives the heavy tails of GSA. Valid range (1, 3];
+                 * an out-of-range or non-real value warns and keeps 2.62. */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv)
+                    && dv > 1.0 && dv <= 3.0)
+                    nc->da_visit = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "VisitingParameter must be a real in (1, 3]; using 2.62");
+            } else if (strcmp(on, "AcceptanceParameter") == 0) {
+                /* DualAnnealing: qa, the acceptance-distribution shape (scipy's
+                 * `accept`). More negative => a smaller uphill-acceptance
+                 * probability. Valid range [-1e4, -5]; else warn and keep -5.0. */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv)
+                    && dv >= -1.0e4 && dv <= -5.0)
+                    nc->da_accept = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "AcceptanceParameter must be a real in [-1e4, -5]; "
+                            "using -5.0");
+            } else if (strcmp(on, "InitialTemperature") == 0) {
+                /* DualAnnealing: T0, the initial (and post-reanneal) visiting
+                 * temperature. A positive real; else warn and keep 5230. */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0)
+                    nc->da_init_temp = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "InitialTemperature must be a positive real; using 5230");
+            } else if (strcmp(on, "RestartTemperatureRatio") == 0) {
+                /* DualAnnealing: reanneal (reset the temperature) once the
+                 * visiting temperature falls below T0 * this. A real in (0, 1);
+                 * else warn and keep 2e-5. */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv)
+                    && dv > 0.0 && dv < 1.0)
+                    nc->da_restart_ratio = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "RestartTemperatureRatio must be a real in (0, 1); "
+                            "using 2*^-5");
+            } else if (strcmp(on, "LocalSearch") == 0) {
+                /* DualAnnealing: run the local search after each Markov chain
+                 * (scipy's `no_local_search` inverted). True / False; Automatic /
+                 * None keep the default (on). */
+                if (ov->type == EXPR_SYMBOL
+                    && ov->data.symbol.name == SYM_True)
+                    nc->da_local_search = 1;
+                else if (ov->type == EXPR_SYMBOL
+                         && ov->data.symbol.name == SYM_False)
+                    nc->da_local_search = 0;
+                else if (ov->type == EXPR_SYMBOL
+                         && (ov->data.symbol.name == SYM_Automatic
+                             || ov->data.symbol.name == SYM_None))
+                    nc->da_local_search = -1;
+                else
+                    fm_warn(fn, "sopt",
+                            "LocalSearch must be True or False; using Automatic");
             }
         }
         return true;
@@ -8815,6 +9155,11 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     nc.level_iterations = 0;
     nc.shgo_sampling = 0;
     nc.shgo_iters = 0;
+    nc.da_visit = NM_DA_VISIT;
+    nc.da_accept = NM_DA_ACCEPT;
+    nc.da_init_temp = NM_DA_INIT_TEMP;
+    nc.da_restart_ratio = NM_DA_RESTART_RATIO;
+    nc.da_local_search = -1;
     nc.seed = NM_DEFAULT_SEED;
 
     for (size_t i = pos_end; i < argc; i++) {
@@ -9160,6 +9505,7 @@ static Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
             case NM_RANDOMSEARCH: nm_randomsearch(&D, &nc, &rng, xattempt, &fa, &pa); break;
             case NM_SA:           nm_sa(&D, &nc, &rng, xattempt, &fa, &pa); break;
             case NM_SHGO:         nm_shgo(&D, &nc, &rng, xattempt, &fa, &pa); break;
+            case NM_DUAL_ANNEALING: nm_dual_annealing(&D, &nc, &rng, xattempt, &fa, &pa); break;
             case NM_DE:
             default:              nm_de(&D, &nc, &rng, xattempt, &fa, &pa); break;
         }

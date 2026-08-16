@@ -1878,6 +1878,7 @@ matrix variables (`Vectors[n, dom]`, `Matrices`), geometric-region domains,
 | `"RandomSearch"` | multiple random starts, each refined by the local solver, best local minimum kept |
 | `"SimulatedAnnealing"` | Metropolis search with geometric cooling |
 | `"SHGO"` | Simplicial Homology Global Optimization: sample the box, build a graph, start one local search per minimizer-pool vertex (see below) |
+| `"DualAnnealing"` | Generalized Simulated Annealing: a heavy-tailed visiting distribution and a generalized Metropolis rule with reannealing, plus a local search after each Markov chain (see below) |
 
 `"DifferentialEvolution"` keeps every trial point inside the box by *bounce-back*
 reinitialisation — a mutant that overshoots a bound is redrawn at random between
@@ -1940,9 +1941,14 @@ Recognised sub-options:
 
 | Sub-option | Applies to | Meaning |
 |------------|-----------|---------|
-| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts), SHGO (sampling points) | population / restart / start / sample count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 200}]` (Storn & Price's 10n, the same whether `"DifferentialEvolution"` is explicit or via `Method -> Automatic`); SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts; SHGO `100` sample points (scipy's `n`) |
+| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts), SHGO (sampling points), DualAnnealing (independent chains) | population / restart / start / sample / chain count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 200}]` (Storn & Price's 10n, the same whether `"DifferentialEvolution"` is explicit or via `Method -> Automatic`); SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts; SHGO `100` sample points (scipy's `n`); DualAnnealing `1` chain (scipy's single-chain default) |
 | `"SamplingMethod" -> m` | SHGO | `"Simplicial"` (default), `"Sobol"`, or `"Halton"` — how the box is sampled and its connectivity graph built (see below). An unknown value warns (`NMinimize::sopt`) and keeps `"Simplicial"` |
 | `"Iterations" -> k` | SHGO | sampling/refinement rounds (scipy's `iters`, default 1); each round grows the complex and re-pools, stopping early once no new local minimum appears. A positive integer, or `Automatic`/`None` for the default; an invalid value warns (`NMinimize::sopt`) |
+| `"VisitingParameter" -> qv` | DualAnnealing | Tsallis visiting-distribution shape `q_v` (scipy's `visit`, default 2.62); `q_v → 1` is Gaussian (classical SA), 2 is Cauchy (fast SA), `> 2` gives the heavy tails of GSA. A real in `(1, 3]`; an out-of-range or non-real value warns (`NMinimize::sopt`) and keeps 2.62 |
+| `"AcceptanceParameter" -> qa` | DualAnnealing | generalized-Metropolis acceptance shape `q_a` (scipy's `accept`, default -5); more negative means a smaller uphill-acceptance probability. A real in `[-1e4, -5]`; an invalid value warns (`NMinimize::sopt`) and keeps -5 |
+| `"InitialTemperature" -> T0` | DualAnnealing | initial (and post-reanneal) visiting temperature (default 5230); a positive real, else warns (`NMinimize::sopt`) and keeps 5230 |
+| `"RestartTemperatureRatio" -> r` | DualAnnealing | reanneal (reset the temperature to `T0`) once the visiting temperature falls below `T0 · r` (default `2·10⁻⁵`); a real in `(0, 1)`, else warns (`NMinimize::sopt`) |
+| `"LocalSearch" -> b` | DualAnnealing | run the local search after each Markov chain (scipy's `no_local_search` inverted; default `True`). `True`/`False`, or `Automatic`/`None` for the default; else warns (`NMinimize::sopt`). `False` leaves pure Generalized Simulated Annealing (the final `"PostProcess"` polish still applies unless it too is off) |
 | `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6); a real in `(0, 2]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
 | `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9); a real in `[0, 1]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
 | `"PerturbationScale" -> s` | SimulatedAnnealing | multiplies the trial-step size (default 1.0); a positive real, an invalid value warns (`NMinimize::sopt`) and falls back to 1.0 |
@@ -2106,6 +2112,84 @@ minimizer pool, so Mathilda runs proportionally more local searches — the hone
 cost of pool completeness on a densely-multimodal surface.
 
 [shgo]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.shgo.html
+
+#### DualAnnealing — Dual Annealing (generalized simulated annealing)
+
+`Method -> {"DualAnnealing", …}` mirrors [`scipy.optimize.dual_annealing`][dualannealing],
+which implements **Generalized Simulated Annealing** (Tsallis & Stariolo,
+*Generalized simulated annealing*, Physica A 233 (1996) 395–406; Xiang, Sun, Fan
+& Gong, Phys. Lett. A 233 (1997) 216–220). It is "dual" because it couples a
+global annealing walk with a local search:
+
+- The **visiting distribution** draws each trial jump from a Tsallis
+  *q*-generalized Cauchy–Lorentz distribution whose scale is set by the visiting
+  temperature. The shape `"VisitingParameter"` `q_v` controls the tails: `q_v → 1`
+  is Gaussian (classical SA), `q_v = 2` is Cauchy (fast SA), and the default
+  `q_v = 2.62` gives heavy tails, so an occasional long jump escapes a deep basin
+  even when the walk has cooled. Jumps larger than a tail limit are folded back
+  into the box, so a hot chain samples the box near-uniformly.
+- Uphill moves are accepted by a **generalized Metropolis rule** with shape
+  `"AcceptanceParameter"` `q_a` (default -5) on an acceptance temperature that
+  falls faster than the visiting temperature.
+- The visiting temperature follows the GSA cooling schedule and **reanneals** —
+  resets to `"InitialTemperature"` `T0` — once it drops below
+  `T0 · "RestartTemperatureRatio"`, so a single chain keeps exploring across the
+  whole `MaxIterations` budget.
+- After each Markov chain a **local search** refines the incumbent (disable it
+  with `"LocalSearch" -> False` for pure GSA).
+
+The local search reuses the same exact local optimizer as the other engines
+(BFGS for continuous/box problems, the augmented-Lagrangian penalty solver for
+general constraints, integer descent for `Element[·, Integers]`), so box, general
+constraints, and mixed-integer domains all work with no Dual-Annealing-specific
+code. `"SearchPoints" -> K` runs `K` independent chains and keeps the Deb-best
+(default `1`, matching scipy's single chain); `MaxIterations` is the per-chain
+temperature-step budget (default 1000). Requires a bounded box; unbounded
+coordinates use the default `±10` region. The walk is deterministic for a fixed
+`"RandomSeed"`.
+
+> **Fidelity note.** The visiting and acceptance distributions, cooling schedule,
+> and reannealing reproduce scipy's algorithm exactly (the precomputed
+> distribution constants agree to machine precision). The one deliberate
+> difference is the local search: where scipy calls L-BFGS-B (box) or SLSQP,
+> Mathilda reuses its own BFGS / augmented-Lagrangian / integer-descent polish, so
+> general-constraint and integer handling follow Mathilda's conventions rather
+> than scipy's — and, unlike `scipy.optimize.dual_annealing` (which is box-only),
+> this lets `Method -> {"DualAnnealing"}` solve inequality-, equality-, and
+> disjunctively-constrained problems. On sharp-needle functions (the Bukin ridge,
+> a narrow Gaussian well) both implementations are approximate; on the broader
+> deceptive functions Mathilda reaches a strictly deeper basin than scipy at a
+> matched seed (Eggholder, drop-wave, Griewank-5, modified-Ackley-10 — see
+> `benchmarks/82-dual-annealing-testbed`).
+
+```mathematica
+(* Deceptive Schwefel — the heavy-tailed visiting distribution escapes the
+   near-boundary global basin at (420.97, 420.97) *)
+NMinimize[{837.9658 - x Sin[Sqrt[Abs[x]]] - y Sin[Sqrt[Abs[y]]],
+           -500 <= x <= 500 && -500 <= y <= 500}, {x, y},
+          Method -> {"DualAnnealing"}]
+(* -> {2.54551*^-5, {x -> 420.969, y -> 420.969}} *)
+
+(* Smooth but ill-conditioned Rosenbrock valley *)
+NMinimize[{100 (y - x^2)^2 + (1 - x)^2, -5 <= x <= 5 && -5 <= y <= 5}, {x, y},
+          Method -> {"DualAnnealing", "VisitingParameter" -> 2.62}]
+(* -> {~0., {x -> 1., y -> 1.}} *)
+
+(* Constrained — the per-chain augmented-Lagrangian polish handles x + 2 y >= 4 *)
+NMinimize[{x^2 + y^2, x + 2 y >= 4 && -5 <= x <= 5 && -5 <= y <= 5}, {x, y},
+          Method -> {"DualAnnealing"}]
+(* -> {3.2, {x -> 0.8, y -> 1.6}} *)
+```
+
+Against `scipy.optimize.dual_annealing` on nine standard bounded multimodal
+benchmarks (`benchmarks/81-dual-annealing`, scipy's default parameters and a
+matched seed on both sides), Mathilda reaches the identical global on every case
+(0 CHECK-FAIL) and is **~100×–600× faster per solve** (e.g. Himmelblau 0.19 ms vs
+112 ms, Ackley-5D 2.3 ms vs 441 ms): its machine-precision objective is
+auto-compiled to bytecode, where scipy calls back into Python for every one of
+the ~10⁴ evaluations a run needs.
+
+[dualannealing]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.dual_annealing.html
 
 ### Options
 
