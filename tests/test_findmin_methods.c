@@ -37,6 +37,14 @@ static const char* ND_METHODS[] = {
 };
 #define N_ND_METHODS ((int)(sizeof(ND_METHODS) / sizeof(ND_METHODS[0])))
 
+/* The UNCONSTRAINED trust-region / truncated-Newton family. These mirror scipy's
+ * unconstrained-only methods, so they are swept over the smooth battery but NOT
+ * the box-bound case (they ignore bounds, like scipy). */
+static const char* TR_METHODS[] = {
+    "NewtonCG", "Dogleg", "TrustNCG", "TrustExact", "TrustKrylov"
+};
+#define N_TR_METHODS ((int)(sizeof(TR_METHODS) / sizeof(TR_METHODS[0])))
+
 /* Evaluate `input`, require the fullform to equal "True", label failures. */
 static void check_true_labeled(const char* input, const char* label) {
     Expr* e = parse_expression(input);
@@ -189,6 +197,63 @@ static void test_1d_methods(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* M5b. Unconstrained trust-region / truncated-Newton family           */
+/* ------------------------------------------------------------------ */
+
+/* Solve `obj` over `spec` with every TR-family method and assert `assertion`. */
+static void check_all_tr(const char* obj, const char* spec, const char* assertion) {
+    for (int i = 0; i < N_TR_METHODS; i++) {
+        char buf[1500];
+        snprintf(buf, sizeof buf,
+                 "With[{r=FindMinimum[%s, %s, Method->\"%s\", MaxIterations->5000]}, %s]",
+                 obj, spec, TR_METHODS[i], assertion);
+        check_true_labeled(buf, TR_METHODS[i]);
+    }
+}
+
+static void test_tr_family_battery(void) {
+    /* quadratic bowl, Booth, Himmelblau (from (1,1) → (3,2)), all f=0 optima. */
+    check_all_tr("(x-1)^2+(y-2)^2", "{{x,0},{y,0}}",
+                 "Abs[First[r]] < 1.*^-6 && Abs[(x/.Last[r])-1]+Abs[(y/.Last[r])-2] < 1.*^-3");
+    check_all_tr("(x+2 y-7)^2+(2 x+y-5)^2", "{{x,0},{y,0}}",
+                 "Abs[First[r]] < 1.*^-6 && Abs[(x/.Last[r])-1]+Abs[(y/.Last[r])-3] < 1.*^-3");
+    check_all_tr("(x^2+y-11)^2+(x+y^2-7)^2", "{{x,1},{y,1}}",
+                 "Abs[First[r]] < 1.*^-5 && Abs[(x/.Last[r])-3]+Abs[(y/.Last[r])-2] < 1.*^-3");
+    /* Rosenbrock, curved valley → (1,1). */
+    check_all_tr("(1-x)^2+100(y-x^2)^2", "{{x,-1.2},{y,1}}",
+                 "Abs[First[r]] < 1.*^-5 && Abs[(x/.Last[r])-1]+Abs[(y/.Last[r])-1] < 5.*^-3");
+    /* separable quadratic n=5 → origin. */
+    for (int i = 0; i < N_TR_METHODS; i++) {
+        char buf[1500];
+        snprintf(buf, sizeof buf,
+                 "Module[{v=Table[Symbol[\"z\"<>ToString[i]],{i,1,5}]}, "
+                 "Abs[First[FindMinimum[Evaluate[Total[Table[v[[i]]^2,{i,1,5}]]], "
+                 "Evaluate[Table[{v[[k]],1.0},{k,1,5}]], Method->\"%s\", "
+                 "MaxIterations->5000]]] < 1.*^-7]", TR_METHODS[i]);
+        check_true_labeled(buf, TR_METHODS[i]);
+    }
+    /* FindMaximum of a concave paraboloid → (1,2). */
+    for (int i = 0; i < N_TR_METHODS; i++) {
+        char buf[1500];
+        snprintf(buf, sizeof buf,
+                 "With[{r=FindMaximum[-(x-1)^2-(y-2)^2, {{x,0},{y,0}}, "
+                 "Method->\"%s\", MaxIterations->5000]}, "
+                 "Abs[First[r]] < 1.*^-6 && Abs[(x/.Last[r])-1]+Abs[(y/.Last[r])-2] < 1.*^-3]",
+                 TR_METHODS[i]);
+        check_true_labeled(buf, TR_METHODS[i]);
+    }
+    /* result shape. */
+    for (int i = 0; i < N_TR_METHODS; i++) {
+        char buf[900];
+        snprintf(buf, sizeof buf,
+                 "Length[FindMinimum[(x-1)^2+(y-2)^2, {{x,0},{y,0}}, Method->\"%s\"]] == 2 && "
+                 "Length[Last[FindMinimum[(x-1)^2+(y-2)^2, {{x,0},{y,0}}, Method->\"%s\"]]] == 2",
+                 TR_METHODS[i], TR_METHODS[i]);
+        check_true_labeled(buf, TR_METHODS[i]);
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* M6. Automatic method selection                                      */
 /* ------------------------------------------------------------------ */
 
@@ -216,6 +281,7 @@ int main(void) {
     TEST(test_findmaximum_all);
     TEST(test_shape_all);
     TEST(test_1d_methods);
+    TEST(test_tr_family_battery);
     TEST(test_automatic);
 
     printf("All FindMinimum cross-method tests passed!\n");

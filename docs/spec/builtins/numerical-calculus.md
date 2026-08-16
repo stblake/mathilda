@@ -1383,7 +1383,8 @@ optimising variable assignments.
 
 Methods overridable via `Method -> "Brent" | "Newton" | "QuasiNewton"
 | "ConjugateGradient" | "LBFGSB" | "Powell" | "NelderMead" | "TNC" | "SLSQP"
-| "COBYLA" | "COBYQA"`.  Brent
+| "COBYLA" | "COBYQA" | "NewtonCG" | "Dogleg" | "TrustNCG" | "TrustExact"
+| "TrustKrylov"`.  Brent
 is golden-section search with parabolic interpolation (derivative-free),
 QuasiNewton is BFGS with Armijo backtracking line search, ConjugateGradient
 is Polak-Ribière+ with restart, Newton uses the symbolic Hessian (via
@@ -1560,6 +1561,54 @@ Matches SciPy's `minimize(method="COBYQA")` on the optimiser (experiment
 `70-cobyqa-constrained`), 30-390x faster (SciPy's COBYQA is a pure-Python
 implementation, so the compiled-evaluation advantage is even larger than for
 COBYLA).  References: Ragonneau & Zhang 2023; Conn, Gould & Toint 2000.
+
+#### Trust-region / truncated-Newton family (unconstrained)
+
+The five methods `"NewtonCG"`, `"Dogleg"`, `"TrustNCG"`, `"TrustExact"`, and
+`"TrustKrylov"` mirror the corresponding `scipy.optimize.minimize` methods
+(`"Newton-CG"`, `"dogleg"`, `"trust-ncg"`, `"trust-exact"`, `"trust-krylov"` —
+each accepted as an alias). All five are **unconstrained** in SciPy, so — like
+`"Powell"`/`"NelderMead"` — they reject general (non-box) constraints
+(`FindMinimum::nimpl`) and ignore box bounds with a diagnostic; `n == 1` still
+runs the general machinery (no `"Brent"` delegation when requested explicitly);
+`WorkingPrecision > MachinePrecision` falls back to `QuasiNewton`. Four of them
+share one trust-region driver (initial radius Δ₀ = 1, Δmax = 1000, accept when
+the actual/predicted reduction ratio ρ > 0.15, shrink by ¼ when ρ < ¼, expand by
+2 on a boundary step) and differ only in how the subproblem
+`min_{‖p‖≤Δ} g·p + ½ pᵀBp` is solved.
+
+- `"NewtonCG"` (alias `"Newton-CG"`) is a **line-search** truncated Newton: an
+  inner CG loop solves `Bp = -g` with the Eisenstat–Walker forcing sequence and
+  negative-curvature truncation, then a unit-step-first Wolfe line search. Uses
+  Hessian-vector products only (finite differences of the exact compiled
+  gradient) — Hessian-free, scales to large `n`.
+- `"Dogleg"` (alias `"dogleg"`) is the **Powell dogleg** trust region: it builds
+  the dense Hessian and blends the Cauchy and Newton points along the dogleg
+  path. When the model Hessian is not positive definite it falls back to the
+  steepest-descent-to-boundary step (where SciPy's dogleg raises), so it stays
+  robust on convex/near-convex problems. Reference: Powell 1970.
+- `"TrustNCG"` (aliases `"trust-ncg"`, `"TrustRegionNewtonCG"`) is the
+  **Steihaug–Toint** truncated CG: it solves the subproblem with CG using
+  Hessian-vector products, stopping at the boundary on negative curvature or when
+  the step leaves the ball. Hessian-free. Reference: Steihaug 1983.
+- `"TrustExact"` (alias `"trust-exact"`) solves the subproblem **nearly exactly**
+  by the Moré–Sorensen algorithm on the dense Hessian: it iterates the Levenberg
+  shift λ so `(B+λI)` is positive semidefinite and `‖p(λ)‖ ≈ Δ`, with a dedicated
+  hard-case branch (`g ⟂` the least eigenvector). Handles indefinite Hessians
+  that dogleg cannot. Reference: Moré & Sorensen 1983.
+- `"TrustKrylov"` (alias `"trust-krylov"`) is **GLTR**: it Lanczos-tridiagonalizes
+  the Hessian in the Krylov space of the gradient (Hessian-vector products, full
+  re-orthogonalization) and solves the small tridiagonal subproblem exactly
+  (reusing the Moré–Sorensen solver), which recovers the least-eigenvector
+  component and so handles the indefinite/hard case. Hessian-free. Reference:
+  Gould, Lucidi, Roma & Toint 1999.
+
+`"NewtonCG"`, `"TrustNCG"`, and `"TrustKrylov"` never form the Hessian (only
+Hessian-vector products), so they scale to large `n`; `"Dogleg"` and
+`"TrustExact"` form the dense Hessian (symbolic via `D[]`, else finite-differenced
+from the gradient). All ride the compiled fast path at `MachinePrecision` and
+match SciPy's optimiser to benchmark tolerance (experiments `71-newton-cg`,
+`72-dogleg`, `73-trust-ncg`, `74-trust-exact`, `75-trust-krylov`).
 
 ### Constraints
 

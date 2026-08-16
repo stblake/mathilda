@@ -1315,6 +1315,26 @@ target_include_directories(cobyla_tests PRIVATE ../src)
 add_executable(cobyqa_tests test_findmin_cobyqa.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(cobyqa_tests PRIVATE ../src)
 
+# Newton-CG (line-search truncated Newton, Hessian-free) of FindMinimum.
+add_executable(newtoncg_tests test_findmin_newtoncg.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(newtoncg_tests PRIVATE ../src)
+
+# dogleg (trust-region Powell dogleg) of FindMinimum.
+add_executable(dogleg_tests test_findmin_dogleg.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dogleg_tests PRIVATE ../src)
+
+# trust-ncg (trust-region Steihaug-Toint CG, Hessian-free) of FindMinimum.
+add_executable(trustncg_tests test_findmin_trustncg.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trustncg_tests PRIVATE ../src)
+
+# trust-exact (trust-region Moré-Sorensen near-exact subproblem) of FindMinimum.
+add_executable(trustexact_tests test_findmin_trustexact.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trustexact_tests PRIVATE ../src)
+
+# trust-krylov (trust-region GLTR/Lanczos, Hessian-free) of FindMinimum.
+add_executable(trustkrylov_tests test_findmin_trustkrylov.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trustkrylov_tests PRIVATE ../src)
+
 # Cross-method battery: every FindMinimum method over a shared function set.
 add_executable(findmin_methods_tests test_findmin_methods.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(findmin_methods_tests PRIVATE ../src)
