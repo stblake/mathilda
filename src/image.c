@@ -1117,25 +1117,36 @@ static unsigned char to_byte(double v) {
 /* One face, as base64 RGBA plus its own dimensions. */
 typedef struct { size_t w, h; char* b64; } FaceOut;
 
-/* Sample the volume at (x, y, z) and write one RGBA pixel. */
-static void voxel_rgba(const double* buf, size_t w, size_t h, size_t c,
-                       size_t x, size_t y, size_t z, unsigned char* out) {
-    const double* px = buf + ((z * h + y) * w + x) * c;
-    if (c >= 3) { out[0] = to_byte(px[0]); out[1] = to_byte(px[1]); out[2] = to_byte(px[2]); }
-    else        { out[0] = out[1] = out[2] = to_byte(px[0]); }
-    out[3] = (c == 2 || c == 4) ? to_byte(px[c - 1]) : 255;
-}
-
-/* Build one boundary face. `axis` is the constant one (0 = x, 1 = y, 2 = z) and `far` selects the
- * high-index side. The face's own u axis is the next axis round, v the one after, which keeps the
- * six faces consistently oriented -- getting this wrong mirrors a face and the block looks right
- * until the reader turns it. */
+/* Build one face: an ALPHA-COMPOSITED PROJECTION THROUGH the volume along that face's axis,
+ * from the near side inward -- not the boundary layer.
+ *
+ * WHY NOT THE BOUNDARY. The first version sent the outermost slice, on the reasoning that an opaque
+ * box shows only its surface. It is a true statement about opaque boxes and it made the renderer
+ * useless: a ball with clearance on every side has nothing but zeros on its boundary, so
+ * `GaussianFilter[ball, 2]`, `Dilation[ball, 2]` and `MeanFilter[ball, 1]` all rendered as identical
+ * BLACK hexagons. Three different results, three blank pictures, each of them "correct".
+ *
+ * So each face now carries what a viewer actually wants from a volume: what you see looking into it
+ * from that side. Rays are composited front to back in the usual emission-absorption form,
+ *
+ *     C += v * a * T ;  A += a * T ;  T *= (1 - a)      with  a = v * K
+ *
+ * which makes a solid interior visible without saturating a noisy one -- the colour is a
+ * transmittance-weighted average along the ray, so structure survives instead of collapsing to the
+ * maximum. A maximum-intensity projection was the cheaper option and turns any noise field into a
+ * flat white square.
+ *
+ * K is per-sample opacity, scaled by the ray length so the same shape reads the same in a 32-deep
+ * volume and a 256-deep one: 4/len means a unit-valued path of a quarter of the volume's depth
+ * reaches ~63% opacity. Accumulated alpha is the OUTPUT alpha, so empty space stays transparent and
+ * a ball looks like a ball rather than filling its bounding box.
+ */
 static bool face_build(const double* buf, size_t w, size_t h, size_t d, size_t c,
                        int axis, bool far, FaceOut* out) {
-    size_t su, sv;                     /* full face size before capping */
-    if (axis == 2)      { su = w; sv = h; }
-    else if (axis == 0) { su = d; sv = h; }
-    else                { su = w; sv = d; }
+    size_t su, sv, len;                /* face extent, and the ray length through the volume */
+    if (axis == 2)      { su = w; sv = h; len = d; }
+    else if (axis == 0) { su = d; sv = h; len = w; }
+    else                { su = w; sv = d; len = h; }
 
     size_t step_u = (su + FACE_MAX - 1) / FACE_MAX;
     size_t step_v = (sv + FACE_MAX - 1) / FACE_MAX;
@@ -1143,18 +1154,56 @@ static bool face_build(const double* buf, size_t w, size_t h, size_t d, size_t c
     if (step_v < 1) step_v = 1;
     size_t fu = (su + step_u - 1) / step_u;
     size_t fv = (sv + step_v - 1) / step_v;
-    if (!fu || !fv) return false;
+    if (!fu || !fv || !len) return false;
+
+    double kk = 4.0 / (double)len;
+    if (kk > 1.0) kk = 1.0;
 
     unsigned char* rgba = (unsigned char*)malloc(fu * fv * 4);
     if (!rgba) return false;
     for (size_t j = 0; j < fv; j++) {
         for (size_t i = 0; i < fu; i++) {
             size_t u = i * step_u, v = j * step_v;
-            size_t x, y, z;
-            if (axis == 2)      { x = u; y = v; z = far ? d - 1 : 0; }
-            else if (axis == 0) { z = u; y = v; x = far ? w - 1 : 0; }
-            else                { x = u; z = v; y = far ? h - 1 : 0; }
-            voxel_rgba(buf, w, h, c, x, y, z, rgba + (j * fu + i) * 4);
+            double acc[3] = {0.0, 0.0, 0.0};
+            double alpha = 0.0, trans = 1.0;
+            for (size_t t = 0; t < len; t++) {
+                /* Near side first: a face on the high-index side walks inward from the far end. */
+                size_t tt = far ? len - 1 - t : t;
+                size_t x, y, z;
+                if (axis == 2)      { x = u; y = v; z = tt; }
+                else if (axis == 0) { z = u; y = v; x = tt; }
+                else                { x = u; z = v; y = tt; }
+
+                const double* px = buf + ((z * h + y) * w + x) * c;
+                double r, g, b, lum;
+                if (c >= 3) { r = px[0]; g = px[1]; b = px[2]; }
+                else        { r = g = b = px[0]; }
+                lum = (r + g + b) / 3.0;
+                /* An alpha channel in the data scales its own voxel's contribution. */
+                if (c == 2)      lum *= px[1];
+                else if (c == 4) lum *= px[3];
+
+                {
+                    double a = lum * kk;
+                    if (a <= 0.0) continue;          /* empty space contributes nothing */
+                    if (a > 1.0) a = 1.0;
+                    acc[0] += r * a * trans;
+                    acc[1] += g * a * trans;
+                    acc[2] += b * a * trans;
+                    alpha  += a * trans;
+                    trans  *= (1.0 - a);
+                    if (trans < 0.003) break;        /* saturated: the rest is invisible */
+                }
+            }
+            {
+                unsigned char* o = rgba + (j * fu + i) * 4;
+                /* Un-premultiply: the canvas wants straight colour with alpha beside it. */
+                double inv = alpha > 1e-9 ? 1.0 / alpha : 0.0;
+                o[0] = to_byte(acc[0] * inv);
+                o[1] = to_byte(acc[1] * inv);
+                o[2] = to_byte(acc[2] * inv);
+                o[3] = to_byte(alpha);
+            }
         }
     }
     size_t n = fu * fv * 4;

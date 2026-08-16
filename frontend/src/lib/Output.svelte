@@ -342,6 +342,13 @@
         .filter(f => f.visible && faces[f.k])
         .sort((a, b) => b.z - a.z);
 
+      /* One scratch canvas, reused: shading is applied to a COPY of the texture rather than as a
+         fill over the projected quad. A face now carries the volume's own alpha (empty space is
+         transparent, so a ball looks like a ball instead of filling its bounding box) and a quad
+         fill painted a dark hexagon across that emptiness. */
+      const scratch = document.createElement('canvas');
+      const sctx = scratch.getContext('2d');
+
       for (const f of order) {
         const cvs = faceCanvas(`${idx}:${f.k}`, faces[f.k]);
         if (!cvs) continue;
@@ -351,34 +358,29 @@
         /* The affine map taking the texture's (0,0)-(w,0)-(0,h) to those three points. */
         const a = (ux - ox) / cvs.width,  b = (uy - oy) / cvs.width;
         const c = (vx - ox) / cvs.height, d = (vy - oy) / cvs.height;
+
+        /* Shade first, into the scratch, so the darkening follows the texture's own alpha. */
+        let src: HTMLCanvasElement = cvs;
+        const nl = Math.abs(f.n[0] * L[0] + f.n[1] * L[1] + f.n[2] * L[2]);
+        const shade = 0.38 * (1 - Math.min(1, nl));
+        if (shade > 0.01 && sctx) {
+          scratch.width = cvs.width; scratch.height = cvs.height;
+          sctx.setTransform(1, 0, 0, 1, 0, 0);
+          sctx.clearRect(0, 0, cvs.width, cvs.height);
+          sctx.globalCompositeOperation = 'source-over';
+          sctx.drawImage(cvs, 0, 0);
+          sctx.globalCompositeOperation = 'source-atop';   /* only where the texture is opaque */
+          sctx.fillStyle = `rgba(0,0,0,${shade})`;
+          sctx.fillRect(0, 0, cvs.width, cvs.height);
+          sctx.globalCompositeOperation = 'source-over';
+          src = scratch;
+        }
+
         ctx.save();
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.transform(a, b, c, d, ox, oy);
-        ctx.drawImage(cvs, 0, 0);
+        ctx.drawImage(src, 0, 0);
         ctx.restore();
-
-        /* Per-face shading, so three faces of similar voxels still read as three faces. */
-        const nl = Math.abs(f.n[0] * L[0] + f.n[1] * L[1] + f.n[2] * L[2]);
-        const shade = 0.38 * (1 - Math.min(1, nl));
-        if (shade > 0.01) {
-          ctx.save();
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-          ctx.beginPath();
-          const p4 = [pts[f.g.o], pts[f.g.u],
-                      /* the fourth corner: o + (u - o) + (v - o) */
-                      [pts[f.g.u][0] + pts[f.g.v][0] - pts[f.g.o][0],
-                       pts[f.g.u][1] + pts[f.g.v][1] - pts[f.g.o][1],
-                       pts[f.g.u][2] + pts[f.g.v][2] - pts[f.g.o][2]] as [number, number, number],
-                      pts[f.g.v]];
-          p4.forEach((q, i2) => {
-            const [X, Y] = proj(q as [number, number, number]);
-            if (i2 === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
-          });
-          ctx.closePath();
-          ctx.fillStyle = `rgba(0,0,0,${shade})`;
-          ctx.fill();
-          ctx.restore();
-        }
       }
     };
 

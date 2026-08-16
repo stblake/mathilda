@@ -2310,13 +2310,19 @@ Volumetric *operations* — 3-D convolution and filtering — are the next step 
 Separability pays even better in three dimensions: `kw + kh + kd` taps instead of `kw · kh · kd`, so
 27 becomes 9 at radius 1 and 729 becomes 27 at radius 4.
 
-**What the rendered block shows.** A volume is drawn as an opaque box carrying the voxels on its
-**boundary faces**, so a shape lying entirely inside the volume — a ball with clearance on every
-side — renders as a dark cube however bright its interior is. That is not a defect in the render
-and Mathematica's view has the same property: three faces of an opaque solid are all a projection
-can show. Reach for `Image[Part[ImageData[vol], k]]` to see inside, which is what the Applications
-group below does; the examples here lead with volumes whose boundary carries structure, because
-those are the ones the block view says something about.
+**What the rendered block shows.** A volume is drawn as a block whose three visible faces each
+carry an **alpha-composited projection through the volume** along that face's axis — what you see
+looking into it from that side, not the boundary layer. Rays are accumulated front to back in the
+usual emission-absorption form, so a solid interior becomes visible without a noisy one saturating,
+and empty space stays transparent: a ball with clearance on every side looks like a ball rather than
+filling its bounding box.
+
+The first version of this renderer did send only the boundary faces, on the reasoning that an
+opaque box shows nothing else. It is a true statement about opaque boxes and it made the view
+useless — `GaussianFilter[ball, 2]`, `Dilation[ball, 2]` and `MeanFilter[ball, 1]` all rendered as
+identical black hexagons, three different results shown as three blank pictures. Drag the block to
+turn it; `Image[Part[ImageData[vol], k]]` still gives an exact slice when a projection is not what
+you want.
 
 #### Basic Examples
 
