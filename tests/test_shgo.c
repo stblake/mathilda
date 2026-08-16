@@ -272,6 +272,26 @@ static void test_postprocess_false(void) {
                "Method->{\"SHGO\",\"PostProcess\"->False}], {_?NumberQ, {(_->_)..}}]");
 }
 
+static void test_option_scoping(void) {
+    /* A sub-option belonging to another method (DualAnnealing's
+     * "VisitingParameter"), an unknown key, and MaxIterations (a top-level-only
+     * option) inside the Method list are each warned to stderr (muted) and
+     * dropped — never stored — so the deterministic SHGO result is identical to
+     * omitting them. Guards against the old flat, method-agnostic parser that
+     * silently accepted a wrong-method key into its shared config slot. */
+    check_eq("NMinimize[{(x^2+y-11)^2+(x+y^2-7)^2, -5<=x<=5 && -5<=y<=5}, {x,y}, "
+             "Method->{\"SHGO\",\"SamplingMethod\"->\"Sobol\",\"RandomSeed\"->7,"
+             "\"VisitingParameter\"->2.5,\"Frobnicate\"->1,MaxIterations->9}] "
+             "=== "
+             "NMinimize[{(x^2+y-11)^2+(x+y^2-7)^2, -5<=x<=5 && -5<=y<=5}, {x,y}, "
+             "Method->{\"SHGO\",\"SamplingMethod\"->\"Sobol\",\"RandomSeed\"->7}]",
+             "True");
+    /* A valid-for-SHGO key is still honored (not swept up by the scoping guard). */
+    check_true("Abs[First[NMinimize[{(x^2+y-11)^2+(x+y^2-7)^2, "
+               "-5<=x<=5 && -5<=y<=5}, {x,y}, "
+               "Method->{\"SHGO\",\"Iterations\"->2}]]] < 1.*^-5");
+}
+
 /* ------------------------------------------------------------------ */
 /* 7. High-dimension fall-back                                         */
 /* ------------------------------------------------------------------ */
@@ -348,6 +368,7 @@ int main(void) {
     TEST(test_search_points_honored);
     TEST(test_iterations);
     TEST(test_postprocess_false);
+    TEST(test_option_scoping);
 
     /* 7. High-dimension fall-back */
     TEST(test_simplicial_fallback);

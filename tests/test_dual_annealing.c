@@ -297,6 +297,27 @@ static void test_option_validation(void) {
                "\"AcceptanceParameter\"->-2.0}]] - (-3.5139097)] < 1.*^-3");
 }
 
+static void test_option_scoping(void) {
+    /* A sub-option belonging to another method (SHGO's "SamplingMethod"), an
+     * unknown key, and MaxIterations (a top-level-only option) inside the Method
+     * list are each warned to stderr (muted) and dropped — never stored — so the
+     * seed-deterministic result is identical to omitting them entirely. Guards
+     * against the old flat, method-agnostic parser that silently accepted a
+     * wrong-method key into its shared config slot. */
+    check_eq("NMinimize[{x^4-3x^2-x, -5<=x<=5}, {x}, "
+             "Method->{\"DualAnnealing\",\"RandomSeed\"->5,"
+             "\"SamplingMethod\"->\"Sobol\",\"Frobnicate\"->1,MaxIterations->9}] "
+             "=== "
+             "NMinimize[{x^4-3x^2-x, -5<=x<=5}, {x}, "
+             "Method->{\"DualAnnealing\",\"RandomSeed\"->5}]",
+             "True");
+    /* A valid-for-DualAnnealing key is still honored (it must not be swept up by
+     * the scoping guard). */
+    check_true("Abs[First[NMinimize[{x^4-3x^2-x, -5<=x<=5}, {x}, "
+               "Method->{\"DualAnnealing\",\"RandomSeed\"->5,"
+               "\"VisitingParameter\"->2.5}]] - (-3.5139097)] < 1.*^-3");
+}
+
 /* ------------------------------------------------------------------ */
 /* 7. NMaximize + duality                                              */
 /* ------------------------------------------------------------------ */
@@ -384,6 +405,7 @@ int main(void) {
     TEST(test_determinism);
     TEST(test_postprocess_false);
     TEST(test_option_validation);
+    TEST(test_option_scoping);
 
     /* 7. NMaximize + duality */
     TEST(test_nmaximize);

@@ -1964,7 +1964,14 @@ Recognised sub-options:
 | `"PenaltyFunction" -> f` | all | function applied to each constraint's violation when scoring infeasible points. `Automatic`/`None` keep the built-in squared penalty; a pure function or function symbol (`#^2 &`, `(10 #) &`, `Sqrt`, …) replaces it |
 | `"RandomSeed" -> s` | all | override the default PRNG seed |
 
-Unrecognised sub-options are ignored (matching Mathematica). `"PostProcess"`
+Sub-options are scoped to the selected method (the second column above lists each
+option's owning method(s)). A key that is unrecognised, or that belongs to a
+different method than the one chosen, is dropped with a warning
+(`NMinimize::optx`) rather than silently accepted-and-ignored — e.g. passing
+DualAnnealing's `"VisitingParameter"` to `"SHGO"`, a misspelled/scipy-style name,
+or `MaxIterations` (a top-level option, not a Method sub-option) each warn and are
+ignored. This mirrors how top-level options already report an unrecognised name.
+`"PostProcess"`
 defaults to on: the global best is refined by the exact local optimizer (and,
 for continuous box/unconstrained problems at `WorkingPrecision > MachinePrecision`,
 by an MPFR BFGS step). It accepts the full Mathematica value set — `True`,

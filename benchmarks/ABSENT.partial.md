@@ -12,5 +12,5 @@ _None._
 
 ## Present heads (1)
 
-`FindMinimum`
+`NMinimize`
 

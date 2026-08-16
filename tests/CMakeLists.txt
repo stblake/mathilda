@@ -660,6 +660,28 @@ set(COMMON_SRC
     ../src/solvealways.c
     ../src/numerical_roots/findroot.c
     ../src/numerical_calculus/findmin.c
+    ../src/numerical_calculus/findmin_common.c
+    ../src/numerical_calculus/findmin_nm_common.c
+    ../src/numerical_calculus/findmin_bfgs.c
+    ../src/numerical_calculus/findmin_cg.c
+    ../src/numerical_calculus/findmin_newton.c
+    ../src/numerical_calculus/findmin_lbfgsb.c
+    ../src/numerical_calculus/findmin_tnc.c
+    ../src/numerical_calculus/findmin_trust.c
+    ../src/numerical_calculus/findmin_slsqp.c
+    ../src/numerical_calculus/findmin_powell.c
+    ../src/numerical_calculus/findmin_neldermead.c
+    ../src/numerical_calculus/findmin_cobyla.c
+    ../src/numerical_calculus/findmin_cobyqa.c
+    ../src/numerical_calculus/findmin_penalty.c
+    ../src/numerical_calculus/findmin_driver.c
+    ../src/numerical_calculus/nm_de.c
+    ../src/numerical_calculus/nm_neldermead.c
+    ../src/numerical_calculus/nm_randomsearch.c
+    ../src/numerical_calculus/nm_sa.c
+    ../src/numerical_calculus/nm_dual_annealing.c
+    ../src/numerical_calculus/nm_shgo.c
+    ../src/numerical_calculus/nm_driver.c
     ../src/poly/solvepoly.c
     ../src/solvelinsys.c
     ../src/solvenlsys.c
