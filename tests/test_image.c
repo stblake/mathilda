@@ -2459,6 +2459,84 @@ static void test_random_image_is_seeded_and_shaped(void) {
     assert_eval_eq("Head[RandomImage[-1]]", "RandomImage", 0);
 }
 
+
+/* ------------------------------------------------- the alpha channel and composition
+ *
+ * The property worth testing here is CHANNEL PROMOTION, because it is the one every head in
+ * imagecompose.c has to get right and the one whose failure looks plausible: a grey image composed
+ * with a colour one must replicate its single channel across three, not pad with zeros. Padding
+ * turns a grey pixel red, which on a monochrome test image is invisible. */
+#define CAIMG  "Image[Table[N[(i + j)/32], {i, 1, 16}, {j, 1, 16}], \"Real\"]"
+#define CARED  "Image[Table[{1., 0., 0.}, {i, 1, 6}, {j, 1, 6}], \"Real\"]"
+
+static void test_alpha_channel_round_trips(void) {
+    /* An image with no alpha is fully opaque -- the question has an answer for every image. */
+    assert_eval_eq("Union[Flatten[ImageData[AlphaChannel[" CAIMG "]]]]", "{1.0}", 0);
+    assert_eval_eq("{ImageChannels[SetAlphaChannel[" CAIMG ", 0.5]],"
+                   " ImageChannels[RemoveAlphaChannel[SetAlphaChannel[" CAIMG ", 0.5]]]}",
+                   "{2, 1}", 0);
+    assert_eval_eq("Union[Flatten[ImageData[AlphaChannel[SetAlphaChannel[" CAIMG ", 0.25]]]]]",
+                   "{0.25}", 0);
+    /* A per-pixel mask must be read as GREY, so a colour mask is not silently taken as its red
+     * channel: a mask of constant {0.2, 0.4, 0.6} averages to 0.4, not 0.2. */
+    assert_eval_eq("Module[{m = Image[Table[{0.2, 0.4, 0.6}, {i, 1, 16}, {j, 1, 16}], \"Real\"], u},"
+                   " u = Union[Flatten[ImageData[AlphaChannel[SetAlphaChannel[" CAIMG ", m]]]]];"
+                   " Round[First[u], 0.0001]]", "0.4", 0);
+    /* Size mismatch is declined rather than resampled. */
+    assert_eval_eq("Head[SetAlphaChannel[" CAIMG ", Image[{{0.5}}, \"Real\"]]]",
+                   "SetAlphaChannel", 0);
+}
+
+static void test_remove_alpha_composites_rather_than_dropping(void) {
+    /* Half-transparent 1.0 over black is 0.5. Dropping alpha would leave 1.0, which is the whole
+     * difference between forgetting the transparency and resolving it. */
+    assert_eval_eq("Module[{a = SetAlphaChannel[Image[{{1.0, 1.0}, {1.0, 1.0}}, \"Real\"], 0.5]},"
+                   " {Round[Max[Flatten[ImageData[RemoveAlphaChannel[a, 0.]]]], 0.001],"
+                   "  Round[Max[Flatten[ImageData[RemoveAlphaChannel[a]]]], 0.001]}]",
+                   "{0.5, 1.0}", 0);
+}
+
+static void test_compose_promotes_channels_and_keeps_base_size(void) {
+    /* Grey base, colour overlay: the result is colour and the base's own pixels are replicated
+     * across the three channels rather than zero-padded. A zero-padded grey base would leave the
+     * uncovered area pure red. */
+    assert_eval_eq("Module[{r = ImageCompose[" CAIMG ", " CARED "]},"
+                   " {ImageDimensions[r], ImageChannels[r]}]", "{{16, 16}, 3}", 0);
+    assert_eval_eq("Module[{d = ImageData[ImageCompose[" CAIMG ", " CARED "]]},"
+                   " (* a corner is outside the overlay, so it is the base replicated: all three"
+                   "    channels equal *)"
+                   " d[[1, 1, 1]] === d[[1, 1, 2]] && d[[1, 1, 2]] === d[[1, 1, 3]]]", "True", 0);
+    /* The centre IS covered, and the overlay is opaque red there. */
+    assert_eval_eq("Module[{d = ImageData[ImageCompose[" CAIMG ", " CARED "]]},"
+                   " {Round[d[[8, 8, 1]], 0.001], Round[d[[8, 8, 2]], 0.001]}]", "{1.0, 0.0}", 0);
+    /* Constant opacity blends. At 0 the overlay contributes nothing, so even the covered centre is
+     * the base replicated across three channels -- all three equal, no red. Asserting this at the
+     * CENTRE is what makes it a test of the blend rather than of the clipping. */
+    assert_eval_eq("Module[{d = ImageData[ImageCompose[" CAIMG ", {" CARED ", 0.}]]},"
+                   " d[[8, 8, 1]] === d[[8, 8, 2]] && d[[8, 8, 2]] === d[[8, 8, 3]]]", "True", 0);
+    /* And at 0.5 the covered centre is halfway between the base and pure red in the red channel. */
+    assert_eval_eq("Module[{b = ImageData[" CAIMG "], d},"
+                   " d = ImageData[ImageCompose[" CAIMG ", {" CARED ", 0.5}]];"
+                   " Abs[d[[8, 8, 1]] - (0.5 + 0.5 b[[8, 8]])] < 1.*^-12]", "True", 0);
+    /* Composition keeps the BASE's size -- it is "draw on this", not "make something bigger". */
+    assert_eval_eq("ImageDimensions[ImageCompose[" CARED ", " CAIMG "]]", "{6, 6}", 0);
+}
+
+static void test_assemble_tiles_at_natural_size(void) {
+    assert_eval_eq("{ImageDimensions[ImageAssemble[{" CAIMG ", " CAIMG "}]],"
+                   " ImageDimensions[ImageAssemble[{{" CAIMG ", " CAIMG "}, {" CAIMG ", " CAIMG "}}]]}",
+                   "{{32, 16}, {32, 32}}", 0);
+    /* A row is as tall as its tallest tile and a column as wide as its widest; nothing is
+     * stretched, so a 16 beside a 6 gives 22 across and 16 down. */
+    assert_eval_eq("ImageDimensions[ImageAssemble[{" CAIMG ", " CARED "}]]", "{22, 16}", 0);
+    /* Assembling colour with grey promotes, as composition does. */
+    assert_eval_eq("ImageChannels[ImageAssemble[{" CAIMG ", " CARED "}]]", "3", 0);
+    /* Packed, like every other image-returning head. */
+    assert_eval_eq("{Head[Part[ImageCompose[" CAIMG ", " CARED "], 1]],"
+                   " Head[Part[ImageAssemble[{" CAIMG ", " CAIMG "}], 1]]}",
+                   "{NDArray, NDArray}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2577,6 +2655,10 @@ int main(void) {
     TEST(test_import_distinguishes_missing_from_unclaimed);
     TEST(test_lossy_and_lossless_formats_differ_as_expected);
     TEST(test_random_image_is_seeded_and_shaped);
+    TEST(test_alpha_channel_round_trips);
+    TEST(test_remove_alpha_composites_rather_than_dropping);
+    TEST(test_compose_promotes_channels_and_keeps_base_size);
+    TEST(test_assemble_tiles_at_natural_size);
 
     printf("All image tests passed.\n");
     return 0;

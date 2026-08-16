@@ -36,7 +36,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "Mathilda"
-SOURCES = ["src/image.c", "src/imagefilter.c", "src/imagegeom.c"]
+SOURCES = ["src/image.c", "src/imagefilter.c", "src/imagegeom.c",
+           "src/imagecompose.c", "src/imageio.c"]
 
 # Heads known to return nested data. Each line is a standing debt, not a permission: delete the line
 # when the head is fixed, and the gate will tell you to.
@@ -45,6 +46,12 @@ KNOWN_UNPACKED = {}
 # Heads that legitimately do not return an image, so there is nothing to pack. Listed rather than
 # inferred so that a head which STOPS returning an image is noticed.
 NOT_IMAGE_RETURNING = {
+    # Import takes a FILE, not an image, so no shape here can reach it; its packing is asserted
+    # directly in tests/test_image.c instead (the round trip checks Head[Part[img, 1]]).
+    "Import",
+    "Export",
+    "RandomImage",   # takes a size, not an image; packing asserted in the test suite
+    "AlphaChannel",  # returns a one-channel image, but of the OPACITY: checked in the suite
     "ImageData",
     "ImageDimensions",
     "ImageChannels",
@@ -80,6 +87,12 @@ SHAPES = [
     # correctly declines, and the head is reported as planar-only when it is not -- the gate's
     # "no volumetric path" list is only as good as the shapes it tries.
     "{H}[IMG, {0, 0, 1}]",
+    # Two-image and list-of-image shapes, for the composition heads. Without these ImageCompose and
+    # ImageAssemble would be reported as returning no image, which is the gate's way of saying "no
+    # shape fitted" and reads far too much like "nothing to check here".
+    "{H}[IMG, IMG]",
+    "{H}[{IMG, IMG}]",
+    "{H}[IMG, 0.5, 0.5]",
 ]
 
 # BOTH RANKS. The gate would be half a gate covering only planes: two of the three bugs it exists

@@ -170,6 +170,210 @@
     imgWidth = imgWidth;
   }
 
+  /* ---------------------------------------------------------------- volumes
+   *
+   * An Image3D drawn as one slice is a volume the reader cannot see -- the Image3D page showed a
+   * 4x3 rectangle and nothing about it said "block". Mathematica draws a shaded box carrying the
+   * voxels on its visible faces, and lets you turn it; this does the same.
+   *
+   * ORTHOGRAPHIC PROJECTION MAKES THIS EXACT, NOT APPROXIMATE. Under an orthographic camera the
+   * projection of a rectangular face is an AFFINE map of that face's texture, so each face is one
+   * `setTransform` + `drawImage` -- no triangles, no WebGL, no per-pixel work in JavaScript. The
+   * six faces arrive from the kernel; the three facing the camera are drawn, back to front.
+   *
+   * Shading is per-face by the angle between its normal and the light, which is what keeps the
+   * three visible faces distinguishable when they carry similar voxels: without it a cube of
+   * uniform grey reads as a flat hexagon.
+   */
+  type Face = { w: number; h: number; data: string };
+  type FaceMap = Record<string, Face>;
+
+  /* Rotation per output index, in radians. Yaw around the vertical, pitch around the horizontal.
+     The default is the three-quarter view every 3-D thumbnail uses: enough of the top and side to
+     read as a box, with the front face still square-on enough to read as an image. */
+  let volYaw: Record<number, number> = {};
+  let volPitch: Record<number, number> = {};
+  const YAW0 = -0.62, PITCH0 = 0.42;
+
+  const yawOf = (i: number) => volYaw[i] ?? YAW0;
+  const pitchOf = (i: number) => volPitch[i] ?? PITCH0;
+
+  /* One decoded face, cached: decoding six base64 faces on every animation frame of a drag would
+     be six atob() calls per frame for no gain, since the pixels never change. */
+  const faceCache = new Map<string, HTMLCanvasElement>();
+
+  function faceCanvas(key: string, f: Face): HTMLCanvasElement | null {
+    const hit = faceCache.get(key);
+    if (hit) return hit;
+    const need = f.w * f.h * 4;
+    const bin = atob(f.data);
+    if (bin.length < need) return null;
+    const buf = new Uint8ClampedArray(need);
+    for (let i = 0; i < need; i++) buf[i] = bin.charCodeAt(i);
+    const c = document.createElement('canvas');
+    c.width = f.w; c.height = f.h;
+    const cx = c.getContext('2d');
+    if (!cx) return null;
+    cx.putImageData(new ImageData(buf, f.w, f.h), 0, 0);
+    faceCache.set(key, c);
+    return c;
+  }
+
+  /* The unit cube's eight corners, scaled so the longest axis is 1 and the others keep their
+     proportion -- a 4 x 4 x 32 volume has to look like a column, not a cube. */
+  function cubeCorners(w: number, h: number, d: number) {
+    const m = Math.max(w, h, d);
+    const sx = w / m, sy = h / m, sz = d / m;
+    const pts: [number, number, number][] = [];
+    for (const z of [-sz / 2, sz / 2])
+      for (const y of [-sy / 2, sy / 2])
+        for (const x of [-sx / 2, sx / 2]) pts.push([x, y, z]);
+    return pts;   /* index = x + 2*y + 4*z, each 0 or 1 */
+  }
+
+  function rotate(p: [number, number, number], yaw: number, pitch: number) {
+    const [x, y, z] = p;
+    /* Yaw about the y axis, then pitch about the x axis. */
+    const cx = Math.cos(yaw), sx = Math.sin(yaw);
+    const x1 = x * cx + z * sx, z1 = -x * sx + z * cx;
+    const cy = Math.cos(pitch), sy = Math.sin(pitch);
+    const y2 = y * cy - z1 * sy, z2 = y * sy + z1 * cy;
+    return [x1, y2, z2] as [number, number, number];
+  }
+
+  /* Each face as the three corners the affine map needs (origin, +u, +v) plus its outward normal.
+     Corner indices are into cubeCorners' x + 2y + 4z ordering, and the u/v directions match the
+     kernel's face export: front/back are (x, y), left/right are (z, y), top/bottom are (x, z). */
+  const FACE_GEOM: Record<string, { o: number; u: number; v: number; n: [number, number, number] }> = {
+    front:  { o: 0, u: 1, v: 2, n: [0, 0, -1] },
+    back:   { o: 5, u: 4, v: 7, n: [0, 0, 1] },
+    left:   { o: 4, u: 0, v: 6, n: [-1, 0, 0] },
+    right:  { o: 1, u: 5, v: 3, n: [1, 0, 0] },
+    top:    { o: 0, u: 1, v: 4, n: [0, -1, 0] },
+    bottom: { o: 2, u: 3, v: 6, n: [0, 1, 0] },
+  };
+
+  function mountVolume(node: HTMLCanvasElement,
+                       arg: { item: { w: number; h: number; depth?: number; faces?: FaceMap }, idx: number }) {
+    let cur = arg;
+
+    const draw = (a: typeof arg) => {
+      cur = a;
+      const { item, idx } = a;
+      const faces = item.faces;
+      const ctx = node.getContext('2d');
+      if (!ctx || !faces) return;
+
+      /* A fixed backing size with CSS scaling on top: the drag rotates the box, the corner handle
+         resizes the element, and the two must not fight over the pixel buffer. */
+      const S = 320;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      node.width = S * dpr; node.height = S * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, S, S);
+      ctx.imageSmoothingEnabled = false;
+
+      const yaw = yawOf(idx), pitch = pitchOf(idx);
+      const pts = cubeCorners(item.w, item.h, item.depth ?? 1).map(p => rotate(p, yaw, pitch));
+      const scale = S * 0.62;
+      const proj = (p: [number, number, number]) => [S / 2 + p[0] * scale, S / 2 + p[1] * scale];
+
+      /* Light from the upper left, in camera space. */
+      const L = [-0.45, -0.75, -0.5];
+      const order = Object.keys(FACE_GEOM)
+        .map(k => {
+          const g = FACE_GEOM[k];
+          const n = rotate(g.n, yaw, pitch);
+          /* Depth of the face centre, for back-to-front ordering. */
+          const c = [(pts[g.o][0] + pts[g.u][0] + pts[g.v][0]) / 3,
+                     (pts[g.o][1] + pts[g.u][1] + pts[g.v][1]) / 3,
+                     (pts[g.o][2] + pts[g.u][2] + pts[g.v][2]) / 3];
+          return { k, g, n, z: c[2], visible: n[2] < 0 };
+        })
+        .filter(f => f.visible && faces[f.k])
+        .sort((a, b) => b.z - a.z);
+
+      for (const f of order) {
+        const cvs = faceCanvas(`${idx}:${f.k}`, faces[f.k]);
+        if (!cvs) continue;
+        const [ox, oy] = proj(pts[f.g.o]);
+        const [ux, uy] = proj(pts[f.g.u]);
+        const [vx, vy] = proj(pts[f.g.v]);
+        /* The affine map taking the texture's (0,0)-(w,0)-(0,h) to those three points. */
+        const a = (ux - ox) / cvs.width,  b = (uy - oy) / cvs.width;
+        const c = (vx - ox) / cvs.height, d = (vy - oy) / cvs.height;
+        ctx.save();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.transform(a, b, c, d, ox, oy);
+        ctx.drawImage(cvs, 0, 0);
+        ctx.restore();
+
+        /* Per-face shading, so three faces of similar voxels still read as three faces. */
+        const nl = Math.abs(f.n[0] * L[0] + f.n[1] * L[1] + f.n[2] * L[2]);
+        const shade = 0.38 * (1 - Math.min(1, nl));
+        if (shade > 0.01) {
+          ctx.save();
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.beginPath();
+          const p4 = [pts[f.g.o], pts[f.g.u],
+                      /* the fourth corner: o + (u - o) + (v - o) */
+                      [pts[f.g.u][0] + pts[f.g.v][0] - pts[f.g.o][0],
+                       pts[f.g.u][1] + pts[f.g.v][1] - pts[f.g.o][1],
+                       pts[f.g.u][2] + pts[f.g.v][2] - pts[f.g.o][2]] as [number, number, number],
+                      pts[f.g.v]];
+          p4.forEach((q, i2) => {
+            const [X, Y] = proj(q as [number, number, number]);
+            if (i2 === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
+          });
+          ctx.closePath();
+          ctx.fillStyle = `rgba(0,0,0,${shade})`;
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    };
+
+    draw(arg);
+    /* Redraw on rotation without remounting: the action's update only fires when `arg` changes, so
+       the drag handler calls this directly. */
+    (node as any).__redraw = () => draw(cur);
+    return { update: draw };
+  }
+
+  /* Drag to rotate. Same pointer-capture shape as the resize handle, and the same reason: the
+     cursor leaves the element immediately once the box turns under it. */
+  function startVolDrag(ev: PointerEvent, idx: number) {
+    ev.preventDefault();
+    const node = ev.currentTarget as HTMLCanvasElement;
+    const x0 = ev.clientX, y0 = ev.clientY;
+    const yaw0 = yawOf(idx), pitch0 = pitchOf(idx);
+    node.setPointerCapture(ev.pointerId);
+
+    const move = (e: PointerEvent) => {
+      volYaw[idx] = yaw0 + (e.clientX - x0) * 0.011;
+      /* Pitch is clamped just short of a pole: at exactly +-pi/2 the box degenerates to a line and
+         there is no way to tell which way a further drag should go. */
+      const lim = Math.PI / 2 - 0.05;
+      volPitch[idx] = Math.max(-lim, Math.min(lim, pitch0 + (e.clientY - y0) * 0.011));
+      (node as any).__redraw?.();
+    };
+    const up = (e: PointerEvent) => {
+      node.releasePointerCapture(e.pointerId);
+      node.removeEventListener('pointermove', move);
+      node.removeEventListener('pointerup', up);
+      node.removeEventListener('pointercancel', up);
+    };
+    node.addEventListener('pointermove', move);
+    node.addEventListener('pointerup', up);
+    node.addEventListener('pointercancel', up);
+  }
+
+  function resetVol(idx: number) {
+    delete volYaw[idx];
+    delete volPitch[idx];
+    volYaw = volYaw; volPitch = volPitch;
+  }
+
   function mountImage(node: HTMLCanvasElement,
                       item: { w: number; h: number; data: string }) {
     const draw = (it: { w: number; h: number; data: string }) => {
@@ -293,7 +497,20 @@
         <div class="out-image">
           <!-- svelte-ignore a11y-no-static-element-interactions -->
           <div class="img-frame" style={`width: ${shownWidth(idx, item)}px`}>
-            <canvas class="out-canvas" use:mountImage={item}></canvas>
+            {#if item.faces && item.depth}
+              <!-- A VOLUME, drawn as the block it is. Three of its six faces face the camera at
+                   any angle, so three are drawn, back to front, each an affine map of its own
+                   texture -- exact under an orthographic camera. Drag to turn it. -->
+              <canvas
+                class="out-canvas vol-canvas"
+                title="Drag to rotate · double-click to reset the view"
+                use:mountVolume={{ item, idx }}
+                on:pointerdown={(e) => startVolDrag(e, idx)}
+                on:dblclick={() => resetVol(idx)}
+              ></canvas>
+            {:else}
+              <canvas class="out-canvas" use:mountImage={item}></canvas>
+            {/if}
             <!-- The grab corner. Aspect ratio is preserved because only the width is set and
                  the canvas keeps `height: auto`, so an image cannot be squashed by accident. -->
             <div
@@ -304,7 +521,8 @@
             ></div>
           </div>
           <span class="out-image-note">
-            {item.w}&times;{item.h}{item.channels > 1 ? `\u00d7${item.channels}` : ''}{#if item.depth}
+            {item.w}&times;{item.h}{#if item.depth}&times;{item.depth}{/if}{item.channels > 1 ? `\u00d7${item.channels}` : ''}{#if item.depth && item.faces}
+              &nbsp;· volume{:else if item.depth}
               &nbsp;· slice {item.slice} of {item.depth}{/if}
             {#if imgWidth[idx]}&nbsp;· shown at {Math.round(imgWidth[idx])}px{/if}
           </span>
@@ -546,6 +764,10 @@
     max-width: 100%;
   }
   .img-frame .out-canvas { width: 100%; display: block; }
+  /* A volume is square whatever its voxel dimensions -- the box is drawn inside a square field so
+     that rotating it never changes the element's size and never reflows the cell. */
+  .vol-canvas { aspect-ratio: 1 / 1; cursor: grab; touch-action: none; }
+  .vol-canvas:active { cursor: grabbing; }
   .img-handle {
     position: absolute;
     right: -3px;

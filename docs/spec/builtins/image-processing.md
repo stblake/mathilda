@@ -735,6 +735,215 @@ ImageDimensions[Dilation[RandomImage[1, {64, 64}], 3]]
 Out[5]= {64, 64}
 ```
 
+## AlphaChannel
+The opacity of an image, as a one-channel image.
+- `AlphaChannel[image]`
+
+**Features**:
+- `Protected`.
+- An image with **no** alpha channel answers with an all-opaque one rather than declining: "how
+  transparent is this?" has an answer for every image, and it is "not at all".
+- Two channels are read as grey+alpha, four as RGB+alpha.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= a = Image[Table[N[(i + j)/32], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= Union[Flatten[ImageData[AlphaChannel[a]]]]
+Out[2]= {1.0}
+
+In[3]:= Union[Flatten[ImageData[AlphaChannel[SetAlphaChannel[a, 0.25]]]]]
+Out[3]= {0.25}
+
+In[4]:= ImageChannels[AlphaChannel[Image[Table[{0.2, 0.4, 0.6}, {i, 1, 8}, {j, 1, 8}], "Real"]]]
+Out[4]= 1
+```
+
+## SetAlphaChannel
+Attaches or replaces an image's opacity.
+- `SetAlphaChannel[image]` — fully opaque.
+- `SetAlphaChannel[image, a]` — one opacity everywhere, for `a` a number in `[0, 1]`.
+- `SetAlphaChannel[image, mask]` — per pixel, for `mask` an image of the same dimensions.
+
+**Features**:
+- `Protected`.
+- A mask is read as **grey** (its channels averaged), so a colour mask is not silently taken as
+  its red channel alone.
+- A mask of the wrong size is declined rather than resampled: a mismatch is a mistake, not a
+  request to interpolate.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= a = Image[Table[N[(i + j)/32], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ImageChannels[SetAlphaChannel[a, 0.5]]
+Out[2]= 2
+
+In[3]:= ImageChannels[SetAlphaChannel[Image[Table[{0.5, 0.2, 0.9}, {i, 1, 8}, {j, 1, 8}], "Real"], 0.5]]
+Out[3]= 4
+
+In[4]:= SetAlphaChannel[a, Image[Table[N[j/16], {i, 1, 16}, {j, 1, 16}], "Real"]]
+Out[4]= -Image-
+
+In[5]:= Head[SetAlphaChannel[a, Image[{{0.5}}, "Real"]]]
+Out[5]= SetAlphaChannel
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= a = Image[Table[N[(i + j)/32], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= (* a colour mask is averaged, not read as its red channel: {0.2, 0.4, 0.6} gives 0.4 *)
+Module[{m = Image[Table[{0.2, 0.4, 0.6}, {i, 1, 16}, {j, 1, 16}], "Real"], u}, u = Union[Flatten[ImageData[AlphaChannel[SetAlphaChannel[a, m]]]]]; Round[First[u], 0.0001]]
+Out[2]= 0.4
+
+In[3]:= (* setting then removing gets back the channel count it started with *)
+ImageChannels[RemoveAlphaChannel[SetAlphaChannel[a, 0.5]]] === ImageChannels[a]
+Out[3]= True
+```
+
+## RemoveAlphaChannel
+Drops or resolves an image's opacity.
+- `RemoveAlphaChannel[image]` — discards the alpha channel.
+- `RemoveAlphaChannel[image, b]` — composites over a background of brightness `b`.
+
+**Features**:
+- `Protected`.
+- The two forms are genuinely different: a half-transparent white pixel over black is **grey**,
+  where dropping alpha leaves it white. One forgets the transparency; the other resolves it.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= t = SetAlphaChannel[Image[{{1.0, 1.0}, {1.0, 1.0}}, "Real"], 0.5];
+
+In[2]:= ImageChannels[RemoveAlphaChannel[t]]
+Out[2]= 1
+
+In[3]:= Round[Max[Flatten[ImageData[RemoveAlphaChannel[t]]]], 0.001]
+Out[3]= 1.0
+
+In[4]:= Round[Max[Flatten[ImageData[RemoveAlphaChannel[t, 0.]]]], 0.001]
+Out[4]= 0.5
+```
+
+## ImageCompose
+Alpha-composites one image onto another.
+- `ImageCompose[base, over]` — centred.
+- `ImageCompose[base, over, {x, y}]` — the overlay's centre at `{x, y}`: `x` from the left,
+  `y` from the **bottom**, in pixels.
+- `ImageCompose[base, {over, a}]` — the overlay's opacity scaled by `a`.
+
+**Features**:
+- `Protected`.
+- The result keeps the **base's** size and clips whatever falls outside: composition is "draw on
+  this", not "make something bigger".
+- A grey image composed with a colour one produces colour. Grey means the same value in every
+  channel, so it is **replicated**, never zero-padded — padding would turn a grey pixel red.
+- The result carries alpha only if the base did: compositing onto an opaque image gives an opaque
+  image.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= a = Image[Table[N[(i + j)/32], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= red = Image[Table[{1., 0., 0.}, {i, 1, 6}, {j, 1, 6}], "Real"];
+
+In[3]:= ImageCompose[a, red]
+Out[3]= -Image-
+
+In[4]:= ImageDimensions[ImageCompose[a, red]]
+Out[4]= {16, 16}
+
+In[5]:= ImageChannels[ImageCompose[a, red]]
+Out[5]= 3
+
+In[6]:= ImageCompose[a, red, {4, 4}]
+Out[6]= -Image-
+
+In[7]:= ImageCompose[a, {red, 0.4}]
+Out[7]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= a = Image[Table[N[(i + j)/32], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= red = Image[Table[{1., 0., 0.}, {i, 1, 6}, {j, 1, 6}], "Real"];
+
+In[3]:= (* the size is the base's, whichever way round the two are given *)
+{ImageDimensions[ImageCompose[a, red]], ImageDimensions[ImageCompose[red, a]]}
+Out[3]= {{16, 16}, {6, 6}}
+
+In[4]:= (* outside the overlay, the grey base is replicated across all three channels *)
+Module[{d = ImageData[ImageCompose[a, red]]}, d[[1, 1, 1]] === d[[1, 1, 2]] && d[[1, 1, 2]] === d[[1, 1, 3]]]
+Out[4]= True
+
+In[5]:= (* at zero opacity the overlay contributes nothing, even where it covers *)
+Module[{d = ImageData[ImageCompose[a, {red, 0.}]]}, d[[8, 8, 1]] === d[[8, 8, 2]]]
+Out[5]= True
+```
+
+#### Applications
+
+```mathematica
+In[1]:= a = Image[Table[N[(i + j)/32], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= (* an edge map laid over the image it came from *)
+ImageCompose[a, {EdgeDetect[a], 0.6}]
+Out[2]= -Image-
+
+In[3]:= (* a blurred copy blended halfway: the classic soft-focus composite *)
+ImageCompose[a, {GaussianFilter[a, 3], 0.5}]
+Out[3]= -Image-
+```
+
+## ImageAssemble
+Tiles images into one.
+- `ImageAssemble[{{a, b}, {c, d}}]` — a grid.
+- `ImageAssemble[{a, b}]` — a single row.
+
+**Features**:
+- `Protected`.
+- Each tile keeps its **natural size**: a row is as tall as its tallest tile, a column as wide as
+  its widest, and any gap is left blank rather than stretched — stretching would resample an image
+  the caller did not ask to resize.
+- Channels are promoted as in `ImageCompose`, and alpha survives if any tile had it.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= a = Image[Table[N[(i + j)/32], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ImageAssemble[{a, a}]
+Out[2]= -Image-
+
+In[3]:= ImageDimensions[ImageAssemble[{a, a}]]
+Out[3]= {32, 16}
+
+In[4]:= ImageDimensions[ImageAssemble[{{a, a}, {a, a}}]]
+Out[4]= {32, 32}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= a = Image[Table[N[Boole[(i - 16)^2 + (j - 16)^2 <= 100]], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= (* a contact sheet comparing one filter at four radii *)
+ImageAssemble[{Table[GaussianFilter[a, r], {r, 1, 2}], Table[GaussianFilter[a, r], {r, 3, 4}]}]
+Out[2]= -Image-
+
+In[3]:= (* the same image before and after, side by side *)
+ImageAssemble[{a, EdgeDetect[a]}]
+Out[3]= -Image-
+```
+
 ## GaussianMatrix
 
 `GaussianMatrix[r]` gives a `(2r+1) × (2r+1)` Gaussian normalised to sum 1.
@@ -1906,6 +2115,7 @@ Out[2]= -Image-
 
 ## Image3D
 
+
 `Image3D[data]` is a volumetric image, normalising to `Image3D[data, type]`. Attributes:
 `Protected`.
 
@@ -1918,15 +2128,6 @@ orderings, and a cubic test volume validates none of them — so every test here
 extents (2 slices of 3 rows of 4 columns), and asserts *both* directions, since either alone would
 pass with two axes swapped:
 
-```
-In[1]:= v = Image3D[Table[N[(x + 10 y + 100 z)/1000.], {z, 2}, {y, 3}, {x, 4}]];
-
-In[2]:= {ImageDimensions[v], Dimensions[ImageData[v]]}
-Out[2]= {{4, 3, 2}, {2, 3, 4}}
-
-In[3]:= Part[ImageData[v], 2, 3, 4]        (* x=4, y=3, z=2 *)
-Out[3]= 0.234
-```
 
 **A volume is not a plane.** `ImageQ` is `False` for an `Image3D` and `Image3DQ` is `False` for an
 `Image` — deliberately, because every filter written for a plane would otherwise accept a volume
@@ -1945,6 +2146,202 @@ start.
 Volumetric *operations* — 3-D convolution and filtering — are the next step and are not here yet.
 Separability pays even better in three dimensions: `kw + kh + kd` taps instead of `kw · kh · kd`, so
 27 becomes 9 at radius 1 and 729 becomes 27 at radius 4.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= ball = Image3D[Table[N[Boole[(x - 16)^2 + (y - 16)^2 + (z - 16)^2 <= 100]], {z, 1, 32}, {y, 1, 32}, {x, 1, 32}], "Real"];
+
+In[2]:= shell = Image3D[Table[N[Mod[Floor[Sqrt[(x - 16.)^2 + (y - 16.)^2 + (z - 16.)^2]/3], 2]], {z, 1, 32}, {y, 1, 32}, {x, 1, 32}], "Real"];
+
+In[3]:= cube = Image3D[Table[If[Mod[Quotient[x - 1, 4] + Quotient[y - 1, 4] + Quotient[z - 1, 4], 2] == 0, 0., 1.], {z, 1, 32}, {y, 1, 32}, {x, 1, 32}], "Real"];
+
+In[4]:= ball
+Out[4]= -Image-
+
+In[5]:= ImageDimensions[ball]
+Out[5]= {32, 32, 32}
+
+In[6]:= Dimensions[ImageData[ball]]
+Out[6]= {32, 32, 32}
+
+In[7]:= ImageChannels[ball]
+Out[7]= 1
+
+In[8]:= ImageType[ball]
+Out[8]= Real
+
+In[9]:= Image3DQ[ball]
+Out[9]= True
+
+In[10]:= shell
+Out[10]= -Image-
+
+In[11]:= cube
+Out[11]= -Image-
+```
+
+#### Scope
+
+```mathematica
+In[1]:= colvol = Image3D[Table[{N[x/16], N[y/16], N[z/16]}, {z, 1, 16}, {y, 1, 16}, {x, 1, 16}], "Real"];
+
+In[2]:= bitvol = Image3D[Table[Boole[Mod[x + y + z, 2] == 0], {z, 1, 8}, {y, 1, 8}, {x, 1, 8}]];
+
+In[3]:= rampz = Image3D[Table[N[(z - 1)/31], {z, 1, 32}, {y, 1, 24}, {x, 1, 24}], "Real"];
+
+In[4]:= ball = Image3D[Table[N[Boole[(x - 16)^2 + (y - 16)^2 + (z - 16)^2 <= 100]], {z, 1, 32}, {y, 1, 32}, {x, 1, 32}], "Real"];
+
+In[5]:= shell = Image3D[Table[N[Mod[Floor[Sqrt[(x - 16.)^2 + (y - 16.)^2 + (z - 16.)^2]/3], 2]], {z, 1, 32}, {y, 1, 32}, {x, 1, 32}], "Real"];
+
+In[6]:= cube = Image3D[Table[If[Mod[Quotient[x - 1, 4] + Quotient[y - 1, 4] + Quotient[z - 1, 4], 2] == 0, 0., 1.], {z, 1, 32}, {y, 1, 32}, {x, 1, 32}], "Real"];
+
+In[7]:= colvol
+Out[7]= -Image-
+
+In[8]:= ImageChannels[colvol]
+Out[8]= 3
+
+In[9]:= bitvol
+Out[9]= -Image-
+
+In[10]:= ImageType[bitvol]
+Out[10]= Bit
+
+In[11]:= rampz
+Out[11]= -Image-
+
+In[12]:= ImageDimensions[rampz]
+Out[12]= {24, 24, 32}
+
+In[13]:= GaussianFilter[ball, 2]
+Out[13]= -Image-
+
+In[14]:= MeanFilter[ball, 1]
+Out[14]= -Image-
+
+In[15]:= MedianFilter[ball, 1]
+Out[15]= -Image-
+
+In[16]:= Dilation[ball, 2]
+Out[16]= -Image-
+
+In[17]:= Erosion[ball, 2]
+Out[17]= -Image-
+
+In[18]:= Opening[ball, 2]
+Out[18]= -Image-
+
+In[19]:= Closing[ball, 2]
+Out[19]= -Image-
+
+In[20]:= Binarize[shell]
+Out[20]= -Image-
+
+In[21]:= LocalAdaptiveBinarize[shell, 3]
+Out[21]= -Image-
+
+In[22]:= DistanceTransform[ball]
+Out[22]= -Image-
+
+In[23]:= ImagePad[cube, 2]
+Out[23]= -Image-
+
+In[24]:= ImageReflect[cube, Front]
+Out[24]= -Image-
+
+In[25]:= ColorConvert[colvol, "Grayscale"]
+Out[25]= -Image-
+
+In[26]:= DerivativeFilter[cube, {0, 0, 1}]
+Out[26]= -Image-
+
+In[27]:= CornerFilter[ball, 2]
+Out[27]= -Image-
+
+In[28]:= ImageCorners[ball]
+Out[28]= {{9, 23, 16}, {23, 23, 16}, {9, 9, 16}, {9, 16, 9}, {16, 9, 23}, {16, 23, 9}, {23, 9, 16}, {23, 16, 9}, {16, 9, 9}, {16, 23, 23}, {9, 16, 23}, {23, 16, 23}, {12, 16, 7}, {12, 16, 25}, {20, 16, 7}, {20, 16, 25}, {7, 20, 16}, {25, 20, 16}, {12, 7, 16}, {20, 7, 16}, {12, 25, 16}, {16, 25, 12}, {20, 25, 16}, {7, 12, 16}, {7, 16, 20}, {16, 7, 20}, {16, 25, 20}, {25, 12, 16}, {25, 16, 20}, {16, 12, 7}, {16, 12, 25}, {16, 20, 7}, {16, 20, 25}, {7, 16, 12}, {16, 7, 12}, {25, 16, 12}, {13, 25, 19}, {19, 25, 19}, {7, 19, 13}, {13, 7, 13}, {13, 13, 7}, {19, 7, 13}, {19, 13, 7}, {25, 19, 13}, {7, 13, 13}, {7, 13, 19}, {7, 19, 19}, {13, 7, 19}, {13, 25, 13}, {19, 7, 19}, {19, 25, 13}, {25, 13, 13}, {25, 13, 19}, {25, 19, 19}, {13, 13, 25}, {13, 19, 7}, {13, 19, 25}, {19, 13, 25}, {19, 19, 7}, {19, 19, 25}, {6, 16, 16}, {16, 6, 16}, {16, 16, 6}, {16, 16, 26}, {16, 26, 16}, {26, 16, 16}, {10, 22, 10}, {22, 22, 10}, {10, 22, 22}, {22, 22, 22}, {10, 10, 10}, {22, 10, 10}, {10, 10, 22}, {22, 10, 22}}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= ball = Image3D[Table[N[Boole[(x - 16)^2 + (y - 16)^2 + (z - 16)^2 <= 100]], {z, 1, 32}, {y, 1, 32}, {x, 1, 32}], "Real"];
+
+In[2]:= shell = Image3D[Table[N[Mod[Floor[Sqrt[(x - 16.)^2 + (y - 16.)^2 + (z - 16.)^2]/3], 2]], {z, 1, 32}, {y, 1, 32}, {x, 1, 32}], "Real"];
+
+In[3]:= Image[Part[ImageData[ball], 16]]
+Out[3]= -Image-
+
+In[4]:= Image[Part[ImageData[GaussianFilter[ball, 2]], 16]]
+Out[4]= -Image-
+
+In[5]:= Image[Join[Part[ImageData[shell], 8], Part[ImageData[shell], 16], Part[ImageData[shell], 24], 2]]
+Out[5]= -Image-
+
+In[6]:= Total[Flatten[ImageData[ball]]]
+Out[6]= 4169.0
+
+In[7]:= Total[Flatten[ImageData[ball] - ImageData[Erosion[ball, 1]]]]
+Out[7]= 1640.0
+
+In[8]:= Max[Flatten[ImageData[DistanceTransform[ball]]]]
+Out[8]= 10.0499
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= ball = Image3D[Table[N[Boole[(x - 16)^2 + (y - 16)^2 + (z - 16)^2 <= 100]], {z, 1, 32}, {y, 1, 32}, {x, 1, 32}], "Real"];
+
+In[2]:= cube = Image3D[Table[If[Mod[Quotient[x - 1, 4] + Quotient[y - 1, 4] + Quotient[z - 1, 4], 2] == 0, 0., 1.], {z, 1, 32}, {y, 1, 32}, {x, 1, 32}], "Real"];
+
+In[3]:= colvol = Image3D[Table[{N[x/16], N[y/16], N[z/16]}, {z, 1, 16}, {y, 1, 16}, {x, 1, 16}], "Real"];
+
+In[4]:= ImageDimensions[ball] === {32, 32, 32}
+Out[4]= True
+
+In[5]:= Reverse[ImageDimensions[ball]] === Dimensions[ImageData[ball]]
+Out[5]= True
+
+In[6]:= ImageData[ImageReflect[ImageReflect[cube, Front], Front]] === ImageData[cube]
+Out[6]= True
+
+In[7]:= ImageData[Dilation[ball, 0]] === ImageData[ball]
+Out[7]= True
+
+In[8]:= ImageData[Opening[Opening[ball, 2], 2]] === ImageData[Opening[ball, 2]]
+Out[8]= True
+
+In[9]:= ImageDimensions[GaussianFilter[ball, 2]] === ImageDimensions[ball]
+Out[9]= True
+
+In[10]:= ImageChannels[ColorConvert[colvol, "Grayscale"]] === 1
+Out[10]= True
+
+In[11]:= Image3DQ[ball] && Not[ImageQ[ball]]
+Out[11]= True
+
+In[12]:= Max[Flatten[ImageData[CornerFilter[Image3D[Table[If[x <= 16, 0., 1.], {z, 1, 16}, {y, 1, 16}, {x, 1, 16}], "Real"], 2]]]]
+Out[12]= 0.0
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= shell = Image3D[Table[N[Mod[Floor[Sqrt[(x - 16.)^2 + (y - 16.)^2 + (z - 16.)^2]/3], 2]], {z, 1, 32}, {y, 1, 32}, {x, 1, 32}], "Real"];
+
+In[2]:= cube = Image3D[Table[If[Mod[Quotient[x - 1, 4] + Quotient[y - 1, 4] + Quotient[z - 1, 4], 2] == 0, 0., 1.], {z, 1, 32}, {y, 1, 32}, {x, 1, 32}], "Real"];
+
+In[3]:= shell
+Out[3]= -Image-
+
+In[4]:= Image[Part[ImageData[shell], 16]]
+Out[4]= -Image-
+
+In[5]:= Image[Part[ImageData[Dilation[cube, 1]], 16]]
+Out[5]= -Image-
+```
 
 ## Volumetric convolution
 

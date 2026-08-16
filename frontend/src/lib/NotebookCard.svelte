@@ -549,7 +549,11 @@
                               channels: (msg as any).payload?.channels ?? 1,
                               data: (msg as any).payload?.data ?? '',
                               depth: (msg as any).payload?.depth,
-                              slice: (msg as any).payload?.slice };
+                              slice: (msg as any).payload?.slice,
+                              /* The six boundary faces of a volume, when the kernel sent them:
+                                 enough for a rotatable opaque block, since only three are ever
+                                 visible at once. */
+                              faces: (msg as any).payload?.faces };
       case 'html':   return { kind: 'html',   html: (msg as any).payload ?? '' };
       default:       return null;
     }

@@ -1059,3 +1059,203 @@ void image_init(void) {
         "the image's own type; converting between types is a separate operation with its own "
         "rounding, not something this does silently.");
 }
+
+/* ---- serialisation for the notebook ---------------------------------------- */
+
+static const char B64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/* Standard base64 of `n` bytes into `out`, which must hold 4*((n+2)/3) + 1. */
+static void b64_encode(const unsigned char* in, size_t n, char* out) {
+    size_t o = 0;
+    size_t i = 0;
+    for (; i + 3 <= n; i += 3) {
+        unsigned v = ((unsigned)in[i] << 16) | ((unsigned)in[i + 1] << 8) | in[i + 2];
+        out[o++] = B64[(v >> 18) & 63];
+        out[o++] = B64[(v >> 12) & 63];
+        out[o++] = B64[(v >> 6) & 63];
+        out[o++] = B64[v & 63];
+    }
+    if (i < n) {
+        unsigned v = (unsigned)in[i] << 16;
+        bool two = (i + 1 < n);
+        if (two) v |= (unsigned)in[i + 1] << 8;
+        out[o++] = B64[(v >> 18) & 63];
+        out[o++] = B64[(v >> 12) & 63];
+        out[o++] = two ? B64[(v >> 6) & 63] : '=';
+        out[o++] = '=';
+    }
+    out[o] = '\0';
+}
+
+/* One unit-interval sample to a byte, clamped. A filter can leave values slightly outside [0, 1] --
+ * a Laplacian goes negative, an unnormalised kernel can exceed one -- and a viewer must show
+ * something rather than wrap around. */
+static unsigned char to_byte(double v) {
+    if (!(v > 0.0)) return 0;                 /* also catches NaN */
+    if (v >= 1.0) return 255;
+    return (unsigned char)(v * 255.0 + 0.5);
+}
+
+
+/* ------------------------------------------------------- volume face export
+ *
+ * A volume shown as one slice is a volume the reader cannot see. Mathematica draws an Image3D as a
+ * shaded block whose visible faces carry the voxels on them, and that is a picture you can turn.
+ *
+ * WHAT TRAVELS. The six BOUNDARY FACES, not the volume: three of them are visible from any given
+ * viewpoint, so six is everything a rotatable opaque block can ever show. For a 256^3 volume that
+ * is 6 * 65536 samples instead of 16.7 million -- the difference between a payload and a transfer.
+ * Internal structure is not sent because an opaque box cannot display it; a cutting plane or a
+ * translucent rendering would need the volume, and would be a different feature.
+ *
+ * Each face is capped at FACE_MAX on a side by nearest-neighbour subsampling. Nearest rather than
+ * averaging: these are the same voxels the 2-D display shows with `image-rendering: pixelated`, and
+ * a smoothed face would disagree with the slice view of the same data.
+ */
+#define FACE_MAX 256
+
+/* One face, as base64 RGBA plus its own dimensions. */
+typedef struct { size_t w, h; char* b64; } FaceOut;
+
+/* Sample the volume at (x, y, z) and write one RGBA pixel. */
+static void voxel_rgba(const double* buf, size_t w, size_t h, size_t c,
+                       size_t x, size_t y, size_t z, unsigned char* out) {
+    const double* px = buf + ((z * h + y) * w + x) * c;
+    if (c >= 3) { out[0] = to_byte(px[0]); out[1] = to_byte(px[1]); out[2] = to_byte(px[2]); }
+    else        { out[0] = out[1] = out[2] = to_byte(px[0]); }
+    out[3] = (c == 2 || c == 4) ? to_byte(px[c - 1]) : 255;
+}
+
+/* Build one boundary face. `axis` is the constant one (0 = x, 1 = y, 2 = z) and `far` selects the
+ * high-index side. The face's own u axis is the next axis round, v the one after, which keeps the
+ * six faces consistently oriented -- getting this wrong mirrors a face and the block looks right
+ * until the reader turns it. */
+static bool face_build(const double* buf, size_t w, size_t h, size_t d, size_t c,
+                       int axis, bool far, FaceOut* out) {
+    size_t su, sv;                     /* full face size before capping */
+    if (axis == 2)      { su = w; sv = h; }
+    else if (axis == 0) { su = d; sv = h; }
+    else                { su = w; sv = d; }
+
+    size_t step_u = (su + FACE_MAX - 1) / FACE_MAX;
+    size_t step_v = (sv + FACE_MAX - 1) / FACE_MAX;
+    if (step_u < 1) step_u = 1;
+    if (step_v < 1) step_v = 1;
+    size_t fu = (su + step_u - 1) / step_u;
+    size_t fv = (sv + step_v - 1) / step_v;
+    if (!fu || !fv) return false;
+
+    unsigned char* rgba = (unsigned char*)malloc(fu * fv * 4);
+    if (!rgba) return false;
+    for (size_t j = 0; j < fv; j++) {
+        for (size_t i = 0; i < fu; i++) {
+            size_t u = i * step_u, v = j * step_v;
+            size_t x, y, z;
+            if (axis == 2)      { x = u; y = v; z = far ? d - 1 : 0; }
+            else if (axis == 0) { z = u; y = v; x = far ? w - 1 : 0; }
+            else                { x = u; z = v; y = far ? h - 1 : 0; }
+            voxel_rgba(buf, w, h, c, x, y, z, rgba + (j * fu + i) * 4);
+        }
+    }
+    size_t n = fu * fv * 4;
+    char* b64 = (char*)malloc(4 * ((n + 2) / 3) + 1);
+    if (!b64) { free(rgba); return false; }
+    b64_encode(rgba, n, b64);
+    free(rgba);
+    out->w = fu; out->h = fv; out->b64 = b64;
+    return true;
+}
+
+char* image_to_json(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || !e->data.function.head
+        || e->data.function.head->type != EXPR_SYMBOL) return NULL;
+    const char* head = e->data.function.head->data.symbol.name;
+    if (!head) return NULL;
+
+    size_t w = 0, h = 0, d = 0, c = 0, slice = 0;
+    double* buf = NULL;
+    bool vol = false;
+    if (strcmp(head, "Image") == 0) {
+        if (!image_load((Expr*)e, &w, &h, &c, &buf)) return NULL;
+    } else if (strcmp(head, "Image3D") == 0) {
+        if (!image3d_load((Expr*)e, &w, &h, &d, &c, &buf)) return NULL;
+        vol = true;
+        slice = d / 2;
+    } else {
+        return NULL;
+    }
+
+    size_t npx = w * h;
+    unsigned char* rgba = malloc(npx * 4);
+    size_t b64len = 4 * ((npx * 4 + 2) / 3) + 1;
+    char* b64 = malloc(b64len);
+    if (!rgba || !b64) { free(buf); free(rgba); free(b64); return NULL; }
+
+    const double* plane = vol ? (buf + slice * w * h * c) : buf;
+    for (size_t i = 0; i < npx; i++) {
+        const double* px = plane + i * c;
+        unsigned char r, g, b;
+        if (c >= 3) { r = to_byte(px[0]); g = to_byte(px[1]); b = to_byte(px[2]); }
+        else        { r = g = b = to_byte(px[0]); }
+        rgba[i * 4 + 0] = r;
+        rgba[i * 4 + 1] = g;
+        rgba[i * 4 + 2] = b;
+        rgba[i * 4 + 3] = (c == 2 || c == 4) ? to_byte(px[c - 1]) : 255;
+    }
+    b64_encode(rgba, npx * 4, b64);
+    free(rgba);
+    /* `buf` is still needed for a volume: the faces are read from it below. Freed on every path
+       out of the volume branch, and immediately here for a plain image. */
+    double* vbuf = buf;
+    if (!vol) { free(buf); vbuf = NULL; }
+
+    size_t cap = b64len + 160;
+    char* json = malloc(cap);
+    if (!json) { free(b64); return NULL; }
+    if (vol) {
+        /* The six boundary faces travel with the volume so the front end can draw a block the
+         * reader can turn. The middle slice stays in `data` as well: it is what a 2-D-only
+         * consumer can still show, and it costs one plane. */
+        static const struct { const char* name; int axis; bool far; } FACES[6] = {
+            { "front", 2, false }, { "back", 2, true },
+            { "left",  0, false }, { "right", 0, true },
+            { "top",   1, false }, { "bottom", 1, true },
+        };
+        FaceOut fo[6];
+        size_t total = 0, i;
+        bool ok = true;
+        for (i = 0; i < 6; i++) { fo[i].b64 = NULL; fo[i].w = fo[i].h = 0; }
+        for (i = 0; i < 6 && ok; i++)
+            ok = face_build(vbuf, w, h, d, c, FACES[i].axis, FACES[i].far, &fo[i]);
+        for (i = 0; i < 6; i++) if (fo[i].b64) total += strlen(fo[i].b64) + 64;
+
+        if (ok) {
+            char* j2 = (char*)malloc(cap + total + 256);
+            if (j2) {
+                int off = snprintf(j2, cap + total + 256,
+                    "{\"w\":%zu,\"h\":%zu,\"channels\":%zu,\"depth\":%zu,\"slice\":%zu,"
+                    "\"kind\":\"volume\",\"faces\":{", w, h, c, d, slice + 1);
+                for (i = 0; i < 6; i++)
+                    off += snprintf(j2 + off, cap + total + 256 - (size_t)off,
+                                    "%s\"%s\":{\"w\":%zu,\"h\":%zu,\"data\":\"%s\"}",
+                                    i ? "," : "", FACES[i].name, fo[i].w, fo[i].h, fo[i].b64);
+                snprintf(j2 + off, cap + total + 256 - (size_t)off, "},\"data\":\"%s\"}", b64);
+                for (i = 0; i < 6; i++) free(fo[i].b64);
+                free(b64);
+                free(json);
+                free(vbuf);
+                return j2;
+            }
+        }
+        for (i = 0; i < 6; i++) free(fo[i].b64);
+        /* Faces could not be built: fall back to the slice-only payload rather than failing, so a
+         * volume still shows something. */
+        snprintf(json, cap,
+                 "{\"w\":%zu,\"h\":%zu,\"channels\":%zu,\"depth\":%zu,\"slice\":%zu,\"data\":\"%s\"}",
+                 w, h, c, d, slice + 1, b64);
+    } else
+        snprintf(json, cap, "{\"w\":%zu,\"h\":%zu,\"channels\":%zu,\"data\":\"%s\"}", w, h, c, b64);
+    free(b64);
+    free(vbuf);
+    return json;
+}

@@ -450,6 +450,7 @@ set(COMMON_SRC
     ../src/imagefilter.c
     ../src/imagegeom.c
     ../src/imageio.c
+    ../src/imagecompose.c
     ../src/expand.c
     ../src/expand_power.c
     ../src/poly/poly.c

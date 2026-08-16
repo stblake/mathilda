@@ -15,7 +15,7 @@ export type OutputMessage =
   /* A raster result: base64 RGBA plus its shape. A volume also carries `depth` and the 1-based
      `slice` it sent, which is the middle one. */
   | { id: number; type: 'image';  payload: { w: number; h: number; channels: number;
-                                             data: string; depth?: number; slice?: number } }
+                                             data: string; depth?: number; slice?: number ; faces?: Record<string, { w: number; h: number; data: string }>} }
   | { id: number; type: 'html';   payload: string };
 
 export type CellData = {
