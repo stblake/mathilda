@@ -1429,12 +1429,43 @@ static Expr* builtin_binarize(Expr* res) {
  * Only "Grayscale" is accepted. The other colour spaces Mathematica supports (LAB, HSB, XYZ, ...)
  * each carry their own white point and transfer-function decisions, and accepting the name while
  * doing something approximate would be worse than declining it. */
+/* ColorConvert to greyscale, for a plane or a volume.
+ *
+ * WHAT IS AND IS NOT EXACT HERE, measured rather than assumed.
+ *
+ * The one exact identity is on an image that is ALREADY GREY: no weighting happens, the data is
+ * copied, and the result is bit-for-bit the input.
+ *
+ * A colour image whose three channels are EQUAL is a different matter, and the answer is neither
+ * "exact" nor "always an ulp short" -- it depends on the value. Measured: exact at 0.1, 0.3, 0.75 and
+ * 0.123456789; short by 1.11e-16 at 0.7 and at 1.0; by 5.55e-17 at 0.5. The reason is that the Rec. 601
+ * weights do not sum to one in binary IN THE ORDER THEY ARE APPLIED -- 0.299 + 0.587 + 0.114 summed
+ * left to right is 0.9999999999999999, while any order beginning with 0.114 gives exactly 1.0 -- so
+ * whether the last rounding lands back on the input depends on the value's own bits.
+ *
+ * The weights are not adjusted to compensate. They are the standard's, and a hand-tuned triple summing
+ * to exactly 1.0 in double would no longer be Rec. 601.
+ *
+ * A trap found while checking this: Mathilda's printer shows 1.0 for that sum even through InputForm,
+ * so `Print[InputForm[0.299 + 0.587 + 0.114]]` reads as though the weights were exact. Only
+ * `1.0 - (0.299 + 0.587 + 0.114)`, which prints 1.11e-16, reveals otherwise. A test written from the
+ * printed value would assert the wrong thing and pass for the wrong reason.
+ */
 static Expr* builtin_colorconvert(Expr* res) {
     if (res->data.function.arg_count != 2) return NULL;
     Expr* sp = res->data.function.args[1];
     if (!sp || sp->type != EXPR_STRING) return NULL;
     if (strcmp(sp->data.string, "Grayscale") != 0 && strcmp(sp->data.string, "Gray") != 0)
         return NULL;
+    if (image3d_info(res->data.function.args[0], NULL, NULL, NULL, NULL, NULL)) {
+        size_t w3 = 0, h3 = 0, d3 = 0; double* g3 = NULL;
+        /* img3_grey_volume applies the same weights as img_to_grey, so a volume and a plane reduce
+         * colour identically -- which is the whole point of routing both through one place. */
+        if (!img3_grey_volume(res->data.function.args[0], &w3, &h3, &d3, &g3)) return NULL;
+        Expr* o = image3d_build_real(g3, w3, h3, d3, 1);
+        free(g3);
+        return o;
+    }
     size_t w = 0, h = 0; double* g = NULL;
     if (!img_grey_plane(res->data.function.args[0], &w, &h, &g)) return NULL;
     Expr* out = image_build_real(g, w, h, 1);
@@ -3888,12 +3919,16 @@ void imagefilter_init(void) {
     symtab_add_builtin("ColorConvert", builtin_colorconvert);
     symtab_get_def("ColorConvert")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ColorConvert",
-        "ColorConvert[image, \"Grayscale\"] converts to greyscale by Rec. 601 luminance, "
-        "0.299 R + 0.587 G + 0.114 B -- weighted rather than averaged because the eye is far "
-        "more sensitive to green than to blue, so an unweighted mean would put a saturated blue "
-        "and a saturated green at the same brightness. Only \"Grayscale\" is accepted; other "
-        "colour spaces carry their own white-point and transfer-function decisions, and "
-        "accepting the name while doing something approximate would be worse than declining.");
+        "ColorConvert[image, \"Grayscale\"] (or \"Gray\") reduces an image or an Image3D to a single "
+        "channel using the Rec. 601 luminance weights 0.299 R + 0.587 G + 0.114 B, the same weights "
+        "every filter here uses when it needs brightness. An image that is ALREADY GREY is returned "
+        "unchanged, bit for bit, since no weighting happens. An image whose three channels are merely "
+        "EQUAL is returned only to within an ulp, and whether it is exact depends on the value: those "
+        "weights sum to 0.9999999999999999 when added in the order they are applied, though to exactly "
+        "1.0 in any order beginning with 0.114, so the final rounding lands on the input for some "
+        "values and one ulp below it for others. The weights are the standard's and are not adjusted "
+        "to compensate; a triple hand-tuned to sum to exactly 1.0 in double would no longer be "
+        "Rec. 601.");
     symtab_add_builtin("ImageConvolve", builtin_imageconvolve);
     symtab_get_def("ImageConvolve")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ImageConvolve",

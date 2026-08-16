@@ -1907,3 +1907,39 @@ Slower, and the comparison is not like-for-like: NumPy's `flip` returns a **view
 contiguous `memcpy` of a strided read that its own machinery optimises per axis, while this walks
 voxels and writes a fresh image. At ~0.05 ms for 98k voxels it is memory-bound either way and the
 absolute difference is 35 µs; the same gap the planar reflect documents, for the same reason.
+
+## ColorConvert in a volume
+
+`ColorConvert[volume, "Grayscale"]` (or `"Gray"`) reduces an `Image3D` to one channel using the same
+Rec. 601 weights every filter here uses when it needs brightness — both ranks route through one place,
+so a volume and a plane reduce colour identically.
+
+### What is and is not exact, measured rather than assumed
+
+**The one exact identity** is on a volume that is *already grey*: no weighting happens, the data is
+copied, and the result is bit-for-bit the input.
+
+A volume whose three channels are merely **equal** is a different matter, and the answer is neither
+"exact" nor "always an ulp short" — it depends on the value. Measured: exact at 0.1, 0.3, 0.75 and
+0.123456789; short by 1.11e-16 at 0.7 and at 1.0; by 5.55e-17 at 0.5. The weights do not sum to one in
+binary **in the order they are applied** — `0.299 + 0.587 + 0.114` left to right is
+`0.9999999999999999`, while any order beginning with `0.114` gives exactly `1.0` — so whether the last
+rounding lands back on the input depends on the value's own bits.
+
+The suite asserts **both** halves of that: `f[0.75] === 0.75` is `True` and `f[0.7] === 0.7` is
+`False`. Pinning the false one is the point — if someone "corrects" the weights to sum to 1.0 in
+double, that assertion fails and points at why. The weights are the standard's and are not adjusted; a
+hand-tuned triple summing to exactly 1.0 would no longer be Rec. 601.
+
+Agreement with the formula written out in Mathilda is 1e-15, not exact, for a reason unrelated to the
+conversion: `Plus` is `Orderless`, so a Mathilda-level reference sums the three weighted channels in
+the canonical order while the implementation sums them as written. 27 of 210 voxels differ, every one
+by 1.11e-16.
+
+### A trap worth knowing
+
+Mathilda's printer shows that weight sum as `1.0` **even through `InputForm`**, so
+`Print[InputForm[0.299 + 0.587 + 0.114]]` reads as though the weights were exact. Only
+`1.0 - (0.299 + 0.587 + 0.114)`, which prints `1.11e-16`, reveals otherwise. A test written from the
+printed value would assert the wrong thing and pass for the wrong reason — which is why the suite
+asserts the subtraction is non-zero.

@@ -2304,6 +2304,56 @@ static void test_volume_reflect_algebra(void) {
                    "  Dimensions[ImageData[ImageReflect[cv, Left]]]}]", "{True, {4, 5, 6, 3}}", 0);
 }
 
+
+/* ColorConvert for a volume, and the floating-point facts that make its tests non-obvious. */
+#define CCVOL "Image3D[Table[N[Mod[z*13 + y*7 + x*3 + ch*29, 97]]/97," \
+              " {z, 1, 5}, {y, 1, 6}, {x, 1, 7}, {ch, 1, 3}]]"
+#define CGVOL "Image3D[Table[N[Mod[z*13 + y*7 + x*3, 97]]/97, {z, 1, 5}, {y, 1, 6}, {x, 1, 7}]]"
+
+static void test_volume_colorconvert(void) {
+    assert_eval_eq("Module[{g = ColorConvert[" CCVOL ", \"Grayscale\"]},"
+                   " {ImageDimensions[g], ImageChannels[g]}]", "{{7, 6, 5}, 1}", 0);
+    /* THE ONE EXACT IDENTITY: an already-grey volume is copied, not weighted, so it comes back bit for
+     * bit. */
+    assert_eval_eq("ImageData[ColorConvert[" CGVOL ", \"Grayscale\"]] === ImageData[" CGVOL "]",
+                   "True", 0);
+    assert_eval_eq("ImageData[ColorConvert[" CCVOL ", \"Gray\"]]"
+                   " === ImageData[ColorConvert[" CCVOL ", \"Grayscale\"]]", "True", 0);
+    /* Against the Rec. 601 formula written out, to 1e-15 and NOT exactly. The difference is purely
+     * summation order: Plus is Orderless, so a Mathilda-level reference adds the three weighted
+     * channels in the canonical order while the implementation adds them in the order written. 27 of
+     * 210 voxels differ here, every one by 1.11e-16. Asserting `===` would fail for a reason that has
+     * nothing to do with the conversion. */
+    assert_eval_eq("Module[{cv = " CCVOL ", d, ref},"
+                   " d = ImageData[cv];"
+                   " ref = Table[0.299 d[[z, y, x, 1]] + 0.587 d[[z, y, x, 2]]"
+                   "   + 0.114 d[[z, y, x, 3]], {z, 1, 5}, {y, 1, 6}, {x, 1, 7}];"
+                   " Max[Abs[Flatten[ImageData[ColorConvert[cv, \"Grayscale\"]] - ref]]] < 1.*^-15]",
+                   "True", 0);
+    assert_eval_eq("Head[ColorConvert[" CCVOL ", \"CMYK\"]]", "ColorConvert", 0);
+}
+
+static void test_colorconvert_equal_channels_is_value_dependent(void) {
+    /* Three EQUAL channels do not reliably convert to that value, and this pins the ACTUAL behaviour
+     * rather than a hope about it: the Rec. 601 weights sum to 0.9999999999999999 in the order they are
+     * applied, though to exactly 1.0 in any order starting with 0.114, so the final rounding lands on
+     * the input for some values and one ulp below for others.
+     *
+     * 0.75 is exact and 0.7 is not. Asserting BOTH is what documents the behaviour in the suite: if
+     * someone "corrects" the weights to sum to 1.0 in double, this fails and points at why. */
+    assert_eval_eq("Module[{f, a, b},"
+                   " f[v_] := First[Union[Flatten[ImageData[ColorConvert["
+                   "   Image3D[Table[v, {z, 1, 3}, {y, 1, 3}, {x, 1, 3}, {ch, 1, 3}]],"
+                   "   \"Grayscale\"]]]]];"
+                   " a = f[0.75]; b = f[0.7];"
+                   " {a === 0.75, b === 0.7, Abs[b - 0.7] < 1.*^-15}]",
+                   "{True, False, True}", 0);
+    /* And the printed form cannot be trusted to reveal this: Mathilda prints that weight sum as 1.0
+     * even through InputForm, so a test written from the printed value would assert the wrong thing
+     * and pass for the wrong reason. The difference only shows by subtraction. */
+    assert_eval_eq("1.0 - (0.299 + 0.587 + 0.114) != 0", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2415,6 +2465,8 @@ int main(void) {
     TEST(test_volume_derivative_filter_signs_and_orders);
     TEST(test_volume_reflect_names_the_right_axes);
     TEST(test_volume_reflect_algebra);
+    TEST(test_volume_colorconvert);
+    TEST(test_colorconvert_equal_channels_is_value_dependent);
 
     printf("All image tests passed.\n");
     return 0;
