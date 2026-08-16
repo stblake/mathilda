@@ -1877,6 +1877,7 @@ matrix variables (`Vectors[n, dom]`, `Matrices`), geometric-region domains,
 | `"NelderMead"` | downhill-simplex; each restart's vertex polished into its basin minimum, deepest kept |
 | `"RandomSearch"` | multiple random starts, each refined by the local solver, best local minimum kept |
 | `"SimulatedAnnealing"` | Metropolis search with geometric cooling |
+| `"SHGO"` | Simplicial Homology Global Optimization: sample the box, build a graph, start one local search per minimizer-pool vertex (see below) |
 
 `"DifferentialEvolution"` keeps every trial point inside the box by *bounce-back*
 reinitialisation — a mutant that overshoots a bound is redrawn at random between
@@ -1939,7 +1940,9 @@ Recognised sub-options:
 
 | Sub-option | Applies to | Meaning |
 |------------|-----------|---------|
-| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts) | population / restart / start count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 200}]` (Storn & Price's 10n, the same whether `"DifferentialEvolution"` is explicit or via `Method -> Automatic`); SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts |
+| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts), SHGO (sampling points) | population / restart / start / sample count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 200}]` (Storn & Price's 10n, the same whether `"DifferentialEvolution"` is explicit or via `Method -> Automatic`); SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts; SHGO `100` sample points (scipy's `n`) |
+| `"SamplingMethod" -> m` | SHGO | `"Simplicial"` (default), `"Sobol"`, or `"Halton"` — how the box is sampled and its connectivity graph built (see below). An unknown value warns (`NMinimize::sopt`) and keeps `"Simplicial"` |
+| `"Iterations" -> k` | SHGO | sampling/refinement rounds (scipy's `iters`, default 1); each round grows the complex and re-pools, stopping early once no new local minimum appears. A positive integer, or `Automatic`/`None` for the default; an invalid value warns (`NMinimize::sopt`) |
 | `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6); a real in `(0, 2]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
 | `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9); a real in `[0, 1]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
 | `"PerturbationScale" -> s` | SimulatedAnnealing | multiplies the trial-step size (default 1.0); a positive real, an invalid value warns (`NMinimize::sopt`) and falls back to 1.0 |
@@ -2030,6 +2033,79 @@ strongly-multimodal Griewank function `Sum[x[i]²/4000] - Product[Cos[x[i]/√i]
 `~0.015` for `d = 10`, below Mathematica's `~0.175` on the same problem; on the
 2-D Eggholder over `[-512, 512]²` it reaches the global `-959.64`, below
 Mathematica's default `-935.34`.
+
+#### SHGO — Simplicial Homology Global Optimization
+
+`Method -> {"SHGO", …}` mirrors [`scipy.optimize.shgo`][shgo] (Endres, Sandrock &
+Focke, *A simplicial homology algorithm for Lipschitz optimisation*, J. Glob.
+Optim. 72 (2018) 181–217). Rather than many blind restarts, SHGO **samples the
+bounded box, builds a graph on the samples, and starts one local search only from
+each "minimizer pool" vertex** — a sampled point that is better (by Deb's
+feasibility rules) than every one of its graph neighbours. Each pool vertex sits
+in a distinct locally-convex sub-domain (the discrete sub-level-set homology
+construction), so a handful of well-placed local searches reach every basin, and
+the number of distinct local minima found (the homology group order) gives a
+principled stopping criterion under refinement. Requires a bounded box; unbounded
+coordinates fall back to the default `±10` sampling region.
+
+`"SamplingMethod"` chooses how the box is sampled and how the graph is built:
+
+- **`"Simplicial"`** (default) — the exact 1-skeleton of the Freudenthal/Kuhn
+  triangulation of the box (its `2^d` corners plus the triangulation's diagonal
+  edges), refined by longest-edge bisection until `"SearchPoints"` vertices are
+  reached. This is the convergence-guaranteed variant and is best for low
+  dimension; above 7 variables (`2^d` corners becomes impractical) it falls back
+  to `"Sobol"`, warning once (`NMinimize::shgodim`).
+- **`"Sobol"` / `"Halton"`** — a low-discrepancy point set (a Sobol′ sequence with
+  Joe–Kuo direction numbers, or a Halton radical-inverse set), digitally/
+  fractionally shifted by `"RandomSeed"`. Their connectivity is an adaptive
+  **k-nearest-neighbour graph** (`k ≈ 2d + 1`, matching the simplex-vertex degree).
+
+> **Fidelity note.** For the QMC methods this k-NN graph is a deliberate,
+> documented approximation of scipy's Delaunay-based connectivity: it yields the
+> same minimizer pool character and seeds the same local searches, and the
+> returned optimum is validated against `scipy.optimize.shgo` in
+> `benchmarks/79-shgo/` — only the internal graph construction differs (Mathilda
+> ships no Delaunay triangulation). `"Simplicial"` is exact.
+
+The local search reuses the same exact local optimizer as the other engines
+(BFGS for continuous/box problems, the augmented-Lagrangian penalty solver for
+general constraints, integer descent for `Element[·, Integers]`), so constrained
+and mixed-integer problems are handled with no SHGO-specific code.
+`"Iterations" -> k` grows the complex and re-pools `k` times, stopping early once
+no new local minimum appears; `"PostProcess" -> False` returns the best raw pool
+vertex with no local polish. The sampling is deterministic (a fixed default
+`"RandomSeed"`), so results are reproducible.
+
+```mathematica
+(* Deceptive Eggholder — the simplicial corner coverage lands the global basin *)
+NMinimize[{-(y + 47) Sin[Sqrt[Abs[y + x/2 + 47]]] - x Sin[Sqrt[Abs[x - (y + 47)]]],
+           -512 <= x <= 512 && -512 <= y <= 512}, {x, y},
+          Method -> {"SHGO", "SamplingMethod" -> "Simplicial"}]
+(* -> {-959.633, {x -> 512., y -> 404.312}} *)
+
+(* Cross-in-tray has four global minima; more sample points resolve them *)
+NMinimize[{-0.0001 (Abs[Sin[x] Sin[y] Exp[Abs[100 - Sqrt[x^2 + y^2]/Pi]]] + 1)^0.1,
+           -10 <= x <= 10 && -10 <= y <= 10}, {x, y},
+          Method -> {"SHGO", "SearchPoints" -> 500}]
+(* -> {-2.06261, {x -> -1.34941, y -> 1.34941}}  (one of four symmetric minima) *)
+
+(* Constrained (Mishra's Bird on a disk) — the pool + augmented-Lagrangian polish *)
+NMinimize[{Sin[y] Exp[(1 - Cos[x])^2] + Cos[x] Exp[(1 - Sin[y])^2] + (x - y)^2,
+           (x + 5)^2 + (y + 5)^2 < 25}, {x, y},
+          Method -> {"SHGO", "SamplingMethod" -> "Sobol", "SearchPoints" -> 300}]
+(* -> {-106.765, {x -> -3.13025, y -> -1.58214}} *)
+```
+
+Against `scipy.optimize.shgo` on eight standard bounded multimodal benchmarks
+(`benchmarks/79-shgo`, same sampling method and sample count on both sides),
+Mathilda reaches the same global on every case and is **7×–100× faster on 7 of 8**
+(e.g. Styblinski–Tang-4D 1.1 ms vs 123 ms; Rastrigin-3D 0.70 ms vs 37 ms). The
+one slower case is Shubert (2.3×): its ≈18 global minima produce a large
+minimizer pool, so Mathilda runs proportionally more local searches — the honest
+cost of pool completeness on a densely-multimodal surface.
+
+[shgo]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.shgo.html
 
 ### Options
 
