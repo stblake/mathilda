@@ -1,0 +1,194 @@
+{
+ "host": {
+  "date": "2026-08-13",
+  "missing_optional_deps": [],
+  "platform": "macOS-15.7.4-x86_64-i386-64bit-Mach-O",
+  "machine": "x86_64",
+  "processor": "i386",
+  "mathilda": "Mathilda 0.044 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)",
+  "mathilda_bin": "/Users/user/Mathilda_dev/Mathilda/Mathilda",
+  "python_bin": "/usr/local/bin/python3.11",
+  "python_libs": "3.11.15 2.4.4 1.17.1 1.14.0",
+  "wolframscript": "/Applications/Mathematica.app/Contents/MacOS/wolframscript",
+  "runner_python": "3.14.6",
+  "local_versions": {
+   "numpy": "absent",
+   "scipy": "absent",
+   "sympy": "absent",
+   "mpmath": "1.4.1",
+   "numba": "absent",
+   "networkx": "absent"
+  }
+ },
+ "rows": [
+  {
+   "experiment": "59-polynomial-roots",
+   "group": "E numerical analysis (scipy)",
+   "label": "NSolve dense degree 20",
+   "times": {
+    "mathilda": 2.458,
+    "python": 0.138
+   },
+   "checks": {
+    "mathilda": "230223",
+    "python": "230223"
+   },
+   "ratio": 17.81159420289855,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "59-polynomial-roots",
+   "group": "E numerical analysis (scipy)",
+   "label": "NSolve dense degree 50",
+   "times": {
+    "mathilda": 12.792,
+    "python": 0.498
+   },
+   "checks": {
+    "mathilda": "485345",
+    "python": "485345"
+   },
+   "ratio": 25.686746987951807,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "59-polynomial-roots",
+   "group": "E numerical analysis (scipy)",
+   "label": "NSolve dense degree 100",
+   "times": {
+    "mathilda": 55.951,
+    "python": 2.981
+   },
+   "checks": {
+    "mathilda": "985262",
+    "python": "985262"
+   },
+   "ratio": 18.76920496477692,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "59-polynomial-roots",
+   "group": "E numerical analysis (scipy)",
+   "label": "NSolve roots of unity degree 64",
+   "times": {
+    "mathilda": 15.325,
+    "python": 0.62
+   },
+   "checks": {
+    "mathilda": "640000",
+    "python": "640000"
+   },
+   "ratio": 24.71774193548387,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "59-polynomial-roots",
+   "group": "E numerical analysis (scipy)",
+   "label": "NSolve Wilkinson degree 15",
+   "times": {
+    "mathilda": 2.546,
+    "python": 0.086
+   },
+   "checks": {
+    "mathilda": "120000",
+    "python": "120000"
+   },
+   "ratio": 29.6046511627907,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "59-polynomial-roots",
+   "group": "E numerical analysis (scipy)",
+   "label": "NRoots dense degree 40",
+   "times": {
+    "mathilda": 8.523,
+    "python": 0.255
+   },
+   "checks": {
+    "mathilda": "40",
+    "python": "40"
+   },
+   "ratio": 33.423529411764704,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  }
+ ],
+ "requires": {
+  "NSolve": "present",
+  "NRoots": "present"
+ },
+ "raw": {
+  "59-polynomial-roots": {
+   "mathilda": {
+    "bench": {
+     "NSolve dense degree 20": 2.458,
+     "NSolve dense degree 50": 12.792,
+     "NSolve dense degree 100": 55.951,
+     "NSolve roots of unity degree 64": 15.325,
+     "NSolve Wilkinson degree 15": 2.546,
+     "NRoots dense degree 40": 8.523
+    },
+    "check": {
+     "NSolve dense degree 20": "230223",
+     "NSolve dense degree 50": "485345",
+     "NSolve dense degree 100": "985262",
+     "NSolve roots of unity degree 64": "640000",
+     "NSolve Wilkinson degree 15": "120000",
+     "NRoots dense degree 40": "40"
+    },
+    "require": {
+     "NSolve": "present",
+     "NRoots": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "NSolve dense degree 20": 0.138,
+     "NSolve dense degree 50": 0.498,
+     "NSolve dense degree 100": 2.981,
+     "NSolve roots of unity degree 64": 0.62,
+     "NSolve Wilkinson degree 15": 0.086,
+     "NRoots dense degree 40": 0.255
+    },
+    "check": {
+     "NSolve dense degree 20": "230223",
+     "NSolve dense degree 50": "485345",
+     "NSolve dense degree 100": "985262",
+     "NSolve roots of unity degree 64": "640000",
+     "NSolve Wilkinson degree 15": "120000",
+     "NRoots dense degree 40": "40"
+    },
+    "require": {
+     "numpy:roots": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  }
+ },
+ "elapsed_s": 2.6912848949432373,
+ "durations": {
+  "59-polynomial-roots": 1.0216667652130127
+ },
+ "partial": true,
+ "label_problems": []
+}

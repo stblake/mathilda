@@ -1,0 +1,1787 @@
+{
+ "host": {
+  "date": "2026-08-12",
+  "missing_optional_deps": [],
+  "platform": "macOS-15.7.4-x86_64-i386-64bit-Mach-O",
+  "machine": "x86_64",
+  "processor": "i386",
+  "mathilda": "Mathilda 0.044 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)",
+  "mathilda_bin": "/Users/user/Mathilda_dev/Mathilda/Mathilda",
+  "python_bin": "/usr/local/bin/python3.11",
+  "python_libs": "3.11.15 2.4.4 1.17.1 1.14.0",
+  "wolframscript": "/Applications/Mathematica.app/Contents/MacOS/wolframscript",
+  "runner_python": "3.14.6",
+  "local_versions": {
+   "numpy": "absent",
+   "scipy": "absent",
+   "sympy": "absent",
+   "mpmath": "1.4.1",
+   "numba": "absent",
+   "networkx": "absent"
+  }
+ },
+ "rows": [
+  {
+   "experiment": "53-matrix-decompositions",
+   "group": "E numerical analysis (scipy)",
+   "label": "SingularValueDecomposition 400x400",
+   "times": {
+    "mathilda": 113.911,
+    "python": 48.08
+   },
+   "checks": {
+    "mathilda": "80000000",
+    "python": "80000000"
+   },
+   "ratio": 2.369197171381032,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "53-matrix-decompositions",
+   "group": "E numerical analysis (scipy)",
+   "label": "QRDecomposition 400x400",
+   "times": {
+    "mathilda": 38.349,
+    "python": 11.175
+   },
+   "checks": {
+    "mathilda": "79724001",
+    "python": "79724001"
+   },
+   "ratio": 3.431677852348993,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "53-matrix-decompositions",
+   "group": "E numerical analysis (scipy)",
+   "label": "LUDecomposition 400x400",
+   "times": {
+    "mathilda": 34.603,
+    "python": 1.097
+   },
+   "checks": {
+    "mathilda": "972702367261",
+    "python": "972702367261"
+   },
+   "ratio": 31.5432999088423,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "53-matrix-decompositions",
+   "group": "E numerical analysis (scipy)",
+   "label": "PseudoInverse 300x150",
+   "times": {
+    "mathilda": 6.213,
+    "python": 6.232
+   },
+   "checks": {
+    "mathilda": "18172317",
+    "python": "18172317"
+   },
+   "ratio": 0.9969512195121951,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "53-matrix-decompositions",
+   "group": "E numerical analysis (scipy)",
+   "label": "MatrixRank 400x400",
+   "times": {
+    "mathilda": 9.977,
+    "python": 20.529
+   },
+   "checks": {
+    "mathilda": "2",
+    "python": "2"
+   },
+   "ratio": 0.48599542111159827,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "53-matrix-decompositions",
+   "group": "E numerical analysis (scipy)",
+   "label": "NullSpace 100x200",
+   "times": {
+    "mathilda": 9599.04,
+    "python": 3.953
+   },
+   "checks": {
+    "mathilda": "4",
+    "python": "4"
+   },
+   "ratio": 2428.2924361244627,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "53-matrix-decompositions",
+   "group": "E numerical analysis (scipy)",
+   "label": "CholeskyDecomposition 400x400",
+   "times": {
+    "python": 0.682
+   },
+   "checks": {
+    "python": "25254504"
+   },
+   "ratio": null,
+   "note": "Mathilda has no CholeskyDecomposition",
+   "klass": "ABSENT",
+   "missing": "CholeskyDecomposition"
+  },
+  {
+   "experiment": "54-eigenproblems",
+   "group": "E numerical analysis (scipy)",
+   "label": "Eigenvalues symmetric 300x300",
+   "times": {
+    "mathilda": 26.905,
+    "python": 4.004
+   },
+   "checks": {
+    "mathilda": "12142988",
+    "python": "12142988"
+   },
+   "ratio": 6.71953046953047,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "54-eigenproblems",
+   "group": "E numerical analysis (scipy)",
+   "label": "Eigenvalues general 300x300",
+   "times": {
+    "mathilda": 87.96,
+    "python": 34.219
+   },
+   "checks": {
+    "mathilda": "180000",
+    "python": "180000"
+   },
+   "ratio": 2.5705017680236124,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "54-eigenproblems",
+   "group": "E numerical analysis (scipy)",
+   "label": "Eigenvectors symmetric 250x250",
+   "times": {
+    "mathilda": 48.269,
+    "python": 7.547
+   },
+   "checks": {},
+   "ratio": 6.395786405194117,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "54-eigenproblems",
+   "group": "E numerical analysis (scipy)",
+   "label": "Generalized eigenvalues 5x5 x50",
+   "times": {
+    "mathilda": 2295.47,
+    "python": 2.021
+   },
+   "checks": {
+    "mathilda": "10150000",
+    "python": "10150000"
+   },
+   "ratio": 1135.80900544285,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "54-eigenproblems",
+   "group": "E numerical analysis (scipy)",
+   "label": "Eigenvalues Arnoldi k=6 of 500x500",
+   "times": {
+    "mathilda": 32.533,
+    "python": 18.807
+   },
+   "checks": {
+    "mathilda": "80000000",
+    "python": "80000000"
+   },
+   "ratio": 1.7298346360397727,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "54-eigenproblems",
+   "group": "E numerical analysis (scipy)",
+   "label": "Eigensystem symmetric 250x250",
+   "times": {
+    "python": 7.423
+   },
+   "checks": {
+    "python": "12142988"
+   },
+   "ratio": null,
+   "note": "Mathilda has no Eigensystem",
+   "klass": "ABSENT",
+   "missing": "Eigensystem"
+  },
+  {
+   "experiment": "55-vectorized-special-functions",
+   "group": "E numerical analysis (scipy)",
+   "label": "FresnelC over 10^6",
+   "times": {
+    "mathilda": 11.572,
+    "python": 10.559
+   },
+   "checks": {
+    "mathilda": "492344",
+    "python": "492344"
+   },
+   "ratio": 1.0959371152571267,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "55-vectorized-special-functions",
+   "group": "E numerical analysis (scipy)",
+   "label": "FresnelS over 10^6",
+   "times": {
+    "mathilda": 10.705,
+    "python": 11.111
+   },
+   "checks": {
+    "mathilda": "64732",
+    "python": "64732"
+   },
+   "ratio": 0.9634596345963459,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "55-vectorized-special-functions",
+   "group": "E numerical analysis (scipy)",
+   "label": "Erfc over 10^6",
+   "times": {
+    "mathilda": 3.686,
+    "python": 15.683
+   },
+   "checks": {
+    "mathilda": "479500",
+    "python": "479500"
+   },
+   "ratio": 0.23503156283874257,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "55-vectorized-special-functions",
+   "group": "E numerical analysis (scipy)",
+   "label": "Erfi over 10^6",
+   "times": {
+    "mathilda": 7.477,
+    "python": 21.348
+   },
+   "checks": {
+    "mathilda": "614952",
+    "python": "614952"
+   },
+   "ratio": 0.3502435825370058,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "55-vectorized-special-functions",
+   "group": "E numerical analysis (scipy)",
+   "label": "ExpIntegralEi over 10^6",
+   "times": {
+    "mathilda": 7.979,
+    "python": 105.267
+   },
+   "checks": {
+    "mathilda": "3301285",
+    "python": "3301285"
+   },
+   "ratio": 0.07579773338273153,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "55-vectorized-special-functions",
+   "group": "E numerical analysis (scipy)",
+   "label": "SinIntegral over 10^6",
+   "times": {
+    "mathilda": 11.397,
+    "python": 18.263
+   },
+   "checks": {
+    "mathilda": "1324684",
+    "python": "1324684"
+   },
+   "ratio": 0.624048622898757,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "55-vectorized-special-functions",
+   "group": "E numerical analysis (scipy)",
+   "label": "CosIntegral over 10^6",
+   "times": {
+    "mathilda": 10.569,
+    "python": 18.376
+   },
+   "checks": {
+    "mathilda": "470356",
+    "python": "470356"
+   },
+   "ratio": 0.5751523726599913,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "55-vectorized-special-functions",
+   "group": "E numerical analysis (scipy)",
+   "label": "Beta[.,.] over 10^6",
+   "times": {
+    "mathilda": 5.424,
+    "python": 68.177
+   },
+   "checks": {
+    "mathilda": "266667",
+    "python": "266667"
+   },
+   "ratio": 0.07955762207195975,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "55-vectorized-special-functions",
+   "group": "E numerical analysis (scipy)",
+   "label": "BesselI[0, .] over 10^6",
+   "times": {
+    "mathilda": 23180.7,
+    "python": 221.535
+   },
+   "checks": {
+    "mathilda": "1646723",
+    "python": "1646723"
+   },
+   "ratio": 104.63673911571536,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "55-vectorized-special-functions",
+   "group": "E numerical analysis (scipy)",
+   "label": "BesselK[0, .] over 10^6",
+   "times": {
+    "mathilda": 41548.3,
+    "python": 198.612
+   },
+   "checks": {
+    "mathilda": "213806",
+    "python": "213806"
+   },
+   "ratio": 209.19330151249676,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "56-multidim-quadrature",
+   "group": "E numerical analysis (scipy)",
+   "label": "NIntegrate 2D x y on unit square",
+   "times": {
+    "mathilda": 0.004,
+    "python": 0.164
+   },
+   "checks": {
+    "mathilda": "250000",
+    "python": "250000"
+   },
+   "ratio": 0.024390243902439025,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "56-multidim-quadrature",
+   "group": "E numerical analysis (scipy)",
+   "label": "NIntegrate 3D x y z on unit cube",
+   "times": {
+    "mathilda": 0.005,
+    "python": 3.355
+   },
+   "checks": {
+    "mathilda": "125000",
+    "python": "125000"
+   },
+   "ratio": 0.0014903129657228018,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "56-multidim-quadrature",
+   "group": "E numerical analysis (scipy)",
+   "label": "NIntegrate 2D Gaussian on [-3,3]^2",
+   "times": {
+    "mathilda": 1.667,
+    "python": 1.012
+   },
+   "checks": {
+    "mathilda": "3141454",
+    "python": "3141454"
+   },
+   "ratio": 1.6472332015810276,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "56-multidim-quadrature",
+   "group": "E numerical analysis (scipy)",
+   "label": "NIntegrate triangle (dependent bounds)",
+   "times": {
+    "mathilda": 0.081,
+    "python": 0.154
+   },
+   "checks": {
+    "mathilda": "500000",
+    "python": "500000"
+   },
+   "ratio": 0.525974025974026,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "56-multidim-quadrature",
+   "group": "E numerical analysis (scipy)",
+   "label": "NIntegrate unit disk (dependent bounds)",
+   "times": {
+    "mathilda": 5.123,
+    "python": 2.847
+   },
+   "checks": {
+    "mathilda": "3141593",
+    "python": "3141593"
+   },
+   "ratio": 1.799438004917457,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "56-multidim-quadrature",
+   "group": "E numerical analysis (scipy)",
+   "label": "NIntegrate oscillatory Sin[50x]/x on [1,10]",
+   "times": {
+    "mathilda": 0.22,
+    "python": 0.262
+   },
+   "checks": {
+    "mathilda": "20949",
+    "python": "20949"
+   },
+   "ratio": 0.8396946564885496,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "56-multidim-quadrature",
+   "group": "E numerical analysis (scipy)",
+   "label": "NIntegrate singular 1/Sqrt[x] on [0,1]",
+   "times": {
+    "mathilda": 0.065,
+    "python": 0.034
+   },
+   "checks": {
+    "mathilda": "2000000",
+    "python": "2000000"
+   },
+   "ratio": 1.9117647058823528,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "56-multidim-quadrature",
+   "group": "E numerical analysis (scipy)",
+   "label": "NIntegrate semi-infinite Exp[-x^2] on [0,Inf]",
+   "times": {
+    "mathilda": 0.019,
+    "python": 0.022
+   },
+   "checks": {
+    "mathilda": "886227",
+    "python": "886227"
+   },
+   "ratio": 0.8636363636363636,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "57-stiff-ode-pde",
+   "group": "E numerical analysis (scipy)",
+   "label": "NDSolve stiff scalar relaxation",
+   "times": {
+    "mathilda": 0.887,
+    "python": 38.277
+   },
+   "checks": {
+    "mathilda": "22635",
+    "python": "22635"
+   },
+   "ratio": 0.02317318494134859,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "57-stiff-ode-pde",
+   "group": "E numerical analysis (scipy)",
+   "label": "NDSolve Robertson stiff kinetics",
+   "times": {
+    "mathilda": 2.12,
+    "python": 17.436
+   },
+   "checks": {
+    "mathilda": "335",
+    "python": "335"
+   },
+   "ratio": 0.12158752007341134,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "57-stiff-ode-pde",
+   "group": "E numerical analysis (scipy)",
+   "label": "NDSolve linear system harmonic",
+   "times": {
+    "mathilda": 0.057,
+    "python": 1.47
+   },
+   "checks": {
+    "mathilda": "540302",
+    "python": "540302"
+   },
+   "ratio": 0.03877551020408163,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "57-stiff-ode-pde",
+   "group": "E numerical analysis (scipy)",
+   "label": "NDSolve Van der Pol mu=10",
+   "times": {
+    "mathilda": 0.146,
+    "python": 1.506
+   },
+   "checks": {
+    "mathilda": "1934",
+    "python": "1934"
+   },
+   "ratio": 0.09694555112881806,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "57-stiff-ode-pde",
+   "group": "E numerical analysis (scipy)",
+   "label": "NDSolve heat PDE (method of lines)",
+   "times": {
+    "mathilda": 2.474,
+    "python": 12.8
+   },
+   "checks": {
+    "mathilda": "373",
+    "python": "373"
+   },
+   "ratio": 0.19328125000000002,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "57-stiff-ode-pde",
+   "group": "E numerical analysis (scipy)",
+   "label": "NDSolve wave PDE (method of lines)",
+   "times": {
+    "mathilda": 1.113,
+    "python": 1.01
+   },
+   "checks": {
+    "mathilda": "9511",
+    "python": "9511"
+   },
+   "ratio": 1.101980198019802,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "58-nonlinear-systems",
+   "group": "E numerical analysis (scipy)",
+   "label": "FindRoot 2x2 polynomial",
+   "times": {
+    "mathilda": 0.05,
+    "python": 0.043
+   },
+   "checks": {
+    "mathilda": "1931852",
+    "python": "1931852"
+   },
+   "ratio": 1.1627906976744187,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "58-nonlinear-systems",
+   "group": "E numerical analysis (scipy)",
+   "label": "FindRoot 2x2 transcendental",
+   "times": {
+    "mathilda": 0.073,
+    "python": 0.036
+   },
+   "checks": {
+    "mathilda": "1542126",
+    "python": "1542126"
+   },
+   "ratio": 2.0277777777777777,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "58-nonlinear-systems",
+   "group": "E numerical analysis (scipy)",
+   "label": "FindRoot Burden-Faires 3x3",
+   "times": {
+    "mathilda": 0.335,
+    "python": 0.055
+   },
+   "checks": {
+    "mathilda": "-23599",
+    "python": "-23599"
+   },
+   "ratio": 6.090909090909091,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "58-nonlinear-systems",
+   "group": "E numerical analysis (scipy)",
+   "label": "FindRoot Broyden tridiagonal N=10",
+   "times": {
+    "mathilda": 1.074,
+    "python": 0.267
+   },
+   "checks": {
+    "mathilda": "-6436786",
+    "python": "-6436786"
+   },
+   "ratio": 4.022471910112359,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "58-nonlinear-systems",
+   "group": "E numerical analysis (scipy)",
+   "label": "FindRoot Broyden tridiagonal N=40",
+   "times": {
+    "mathilda": 40.659,
+    "python": 2.135
+   },
+   "checks": {
+    "mathilda": "-27649976",
+    "python": "-27649976"
+   },
+   "ratio": 19.044028103044496,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "59-polynomial-roots",
+   "group": "E numerical analysis (scipy)",
+   "label": "NSolve dense degree 20",
+   "times": {
+    "mathilda": 8.616,
+    "python": 0.129
+   },
+   "checks": {
+    "mathilda": "230223",
+    "python": "230223"
+   },
+   "ratio": 66.7906976744186,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "59-polynomial-roots",
+   "group": "E numerical analysis (scipy)",
+   "label": "NSolve dense degree 50",
+   "times": {
+    "mathilda": 47.514,
+    "python": 0.488
+   },
+   "checks": {
+    "mathilda": "485345",
+    "python": "485345"
+   },
+   "ratio": 97.36475409836066,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "59-polynomial-roots",
+   "group": "E numerical analysis (scipy)",
+   "label": "NSolve dense degree 100",
+   "times": {
+    "mathilda": 183.501,
+    "python": 3.118
+   },
+   "checks": {
+    "mathilda": "985262",
+    "python": "985262"
+   },
+   "ratio": 58.85214881334189,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "59-polynomial-roots",
+   "group": "E numerical analysis (scipy)",
+   "label": "NSolve roots of unity degree 64",
+   "times": {
+    "mathilda": 47.408,
+    "python": 0.669
+   },
+   "checks": {
+    "mathilda": "640000",
+    "python": "640000"
+   },
+   "ratio": 70.86397608370703,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "59-polynomial-roots",
+   "group": "E numerical analysis (scipy)",
+   "label": "NSolve Wilkinson degree 15",
+   "times": {
+    "mathilda": 155.105,
+    "python": 0.096
+   },
+   "checks": {
+    "mathilda": "120000",
+    "python": "120000"
+   },
+   "ratio": 1615.6770833333333,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "59-polynomial-roots",
+   "group": "E numerical analysis (scipy)",
+   "label": "NRoots dense degree 40",
+   "times": {
+    "mathilda": 28.672,
+    "python": 0.294
+   },
+   "checks": {
+    "mathilda": "40",
+    "python": "40"
+   },
+   "ratio": 97.52380952380953,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "60-dct-dst-transforms",
+   "group": "E numerical analysis (scipy)",
+   "label": "FourierDCT type 1 of 10^6",
+   "times": {
+    "mathilda": 126.03,
+    "python": 82.6
+   },
+   "checks": {
+    "mathilda": "10155927",
+    "python": "10155927"
+   },
+   "ratio": 1.5257869249394673,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "60-dct-dst-transforms",
+   "group": "E numerical analysis (scipy)",
+   "label": "FourierDCT type 2 of 10^6",
+   "times": {
+    "mathilda": 58.936,
+    "python": 16.328
+   },
+   "checks": {
+    "mathilda": "7518396",
+    "python": "7518396"
+   },
+   "ratio": 3.6095051445369917,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "60-dct-dst-transforms",
+   "group": "E numerical analysis (scipy)",
+   "label": "FourierDCT type 4 of 10^6",
+   "times": {
+    "mathilda": 60.603,
+    "python": 17.1
+   },
+   "checks": {
+    "mathilda": "578125",
+    "python": "578125"
+   },
+   "ratio": 3.544035087719298,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "60-dct-dst-transforms",
+   "group": "E numerical analysis (scipy)",
+   "label": "FourierDST type 1 of 10^6",
+   "times": {
+    "mathilda": 195.964,
+    "python": 354.746
+   },
+   "checks": {
+    "mathilda": "8301775",
+    "python": "8301775"
+   },
+   "ratio": 0.5524065105737627,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "60-dct-dst-transforms",
+   "group": "E numerical analysis (scipy)",
+   "label": "FourierDST type 2 of 10^6",
+   "times": {
+    "mathilda": 62.045,
+    "python": 18.747
+   },
+   "checks": {
+    "mathilda": "5914016",
+    "python": "5914016"
+   },
+   "ratio": 3.309596202058996,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "60-dct-dst-transforms",
+   "group": "E numerical analysis (scipy)",
+   "label": "Fourier 2D 512x512",
+   "times": {
+    "mathilda": 3.925,
+    "python": 6.038
+   },
+   "checks": {
+    "mathilda": "8000000",
+    "python": "8000000"
+   },
+   "ratio": 0.650049685326267,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "61-regularized-least-squares",
+   "group": "E numerical analysis (scipy)",
+   "label": "LeastSquares overdetermined 2000x50",
+   "times": {
+    "mathilda": 4.215,
+    "python": 2.579
+   },
+   "checks": {
+    "mathilda": "7144231",
+    "python": "7144231"
+   },
+   "ratio": 1.634354400930593,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "61-regularized-least-squares",
+   "group": "E numerical analysis (scipy)",
+   "label": "LeastSquares overdetermined 8000x200",
+   "times": {
+    "mathilda": 85.469,
+    "python": 53.366
+   },
+   "checks": {
+    "mathilda": "7144231",
+    "python": "7144231"
+   },
+   "ratio": 1.6015627927894165,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "61-regularized-least-squares",
+   "group": "E numerical analysis (scipy)",
+   "label": "Fit polynomial degree 4",
+   "times": {
+    "mathilda": 0.384,
+    "python": 0.247
+   },
+   "checks": {
+    "mathilda": "72912587",
+    "python": "72912587"
+   },
+   "ratio": 1.5546558704453441,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "61-regularized-least-squares",
+   "group": "E numerical analysis (scipy)",
+   "label": "Fit ridge (Tikhonov) degree 4",
+   "times": {
+    "mathilda": 0.331,
+    "python": 0.041
+   },
+   "checks": {
+    "mathilda": "73135292",
+    "python": "73135292"
+   },
+   "ratio": 8.073170731707316,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "61-regularized-least-squares",
+   "group": "E numerical analysis (scipy)",
+   "label": "FindFit exponential model",
+   "times": {
+    "python": 0.346
+   },
+   "checks": {
+    "python": "15686"
+   },
+   "ratio": null,
+   "note": "Mathilda has no FindFit",
+   "klass": "ABSENT",
+   "missing": "FindFit"
+  },
+  {
+   "experiment": "62-arbitrary-precision",
+   "group": "E numerical analysis (scipy)",
+   "label": "N[Pi, 10000]",
+   "times": {
+    "mathilda": 1.414,
+    "python": 9.206
+   },
+   "checks": {
+    "mathilda": "604721",
+    "python": "604721"
+   },
+   "ratio": 0.1535954812079079,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "62-arbitrary-precision",
+   "group": "E numerical analysis (scipy)",
+   "label": "N[Gamma[1/3], 1000]",
+   "times": {
+    "mathilda": 19.688,
+    "python": 3899.749
+   },
+   "checks": {
+    "mathilda": "988879",
+    "python": "988879"
+   },
+   "ratio": 0.005048530046420936,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "62-arbitrary-precision",
+   "group": "E numerical analysis (scipy)",
+   "label": "N[Log[2], 5000]",
+   "times": {
+    "mathilda": 1.955,
+    "python": 7.38
+   },
+   "checks": {
+    "mathilda": "270693",
+    "python": "270693"
+   },
+   "ratio": 0.26490514905149054,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "62-arbitrary-precision",
+   "group": "E numerical analysis (scipy)",
+   "label": "NSum 1/k^2 WorkingPrecision 100",
+   "times": {
+    "mathilda": 72.251,
+    "python": 260.725
+   },
+   "checks": {
+    "mathilda": "166646",
+    "python": "166646"
+   },
+   "ratio": 0.27711573496979575,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "62-arbitrary-precision",
+   "group": "E numerical analysis (scipy)",
+   "label": "NIntegrate Exp[-x^2] WorkingPrecision 200",
+   "times": {
+    "mathilda": 79.828,
+    "python": 176.08
+   },
+   "checks": {
+    "mathilda": "681260",
+    "python": "681260"
+   },
+   "ratio": 0.453362108132667,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "62-arbitrary-precision",
+   "group": "E numerical analysis (scipy)",
+   "label": "FindRoot Cos[x]=x WorkingPrecision 200",
+   "times": {
+    "mathilda": 0.123,
+    "python": 1.127
+   },
+   "checks": {
+    "mathilda": "851332",
+    "python": "851332"
+   },
+   "ratio": 0.10913930789707187,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  }
+ ],
+ "requires": {
+  "SingularValueDecomposition": "present",
+  "QRDecomposition": "present",
+  "LUDecomposition": "present",
+  "PseudoInverse": "present",
+  "MatrixRank": "present",
+  "NullSpace": "present",
+  "CholeskyDecomposition": "absent",
+  "Eigenvalues": "present",
+  "Eigenvectors": "present",
+  "Eigensystem": "absent",
+  "FresnelC": "present",
+  "FresnelS": "present",
+  "Erfc": "present",
+  "Erfi": "present",
+  "ExpIntegralEi": "present",
+  "SinIntegral": "present",
+  "CosIntegral": "present",
+  "Beta": "present",
+  "BesselI": "present",
+  "BesselK": "present",
+  "NIntegrate": "present",
+  "NDSolve": "present",
+  "FindRoot": "present",
+  "NSolve": "present",
+  "NRoots": "present",
+  "FourierDCT": "present",
+  "FourierDST": "present",
+  "Fourier": "present",
+  "LeastSquares": "present",
+  "Fit": "present",
+  "FitRegularization": "absent",
+  "FindFit": "absent",
+  "N": "present",
+  "NSum": "present",
+  "WorkingPrecision": "absent"
+ },
+ "raw": {
+  "53-matrix-decompositions": {
+   "mathilda": {
+    "bench": {
+     "SingularValueDecomposition 400x400": 113.911,
+     "QRDecomposition 400x400": 38.349,
+     "LUDecomposition 400x400": 34.603,
+     "PseudoInverse 300x150": 6.213,
+     "MatrixRank 400x400": 9.977,
+     "NullSpace 100x200": 9599.04
+    },
+    "check": {
+     "SingularValueDecomposition 400x400": "80000000",
+     "QRDecomposition 400x400": "79724001",
+     "LUDecomposition 400x400": "972702367261",
+     "PseudoInverse 300x150": "18172317",
+     "MatrixRank 400x400": "2",
+     "NullSpace 100x200": "4"
+    },
+    "require": {
+     "SingularValueDecomposition": "present",
+     "QRDecomposition": "present",
+     "LUDecomposition": "present",
+     "PseudoInverse": "present",
+     "MatrixRank": "present",
+     "NullSpace": "present",
+     "CholeskyDecomposition": "absent"
+    },
+    "skip": {
+     "CholeskyDecomposition 400x400": "CholeskyDecomposition"
+    },
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "SingularValueDecomposition 400x400": 48.08,
+     "QRDecomposition 400x400": 11.175,
+     "LUDecomposition 400x400": 1.097,
+     "PseudoInverse 300x150": 6.232,
+     "MatrixRank 400x400": 20.529,
+     "NullSpace 100x200": 3.953,
+     "CholeskyDecomposition 400x400": 0.682
+    },
+    "check": {
+     "SingularValueDecomposition 400x400": "80000000",
+     "QRDecomposition 400x400": "79724001",
+     "LUDecomposition 400x400": "972702367261",
+     "PseudoInverse 300x150": "18172317",
+     "MatrixRank 400x400": "2",
+     "NullSpace 100x200": "4",
+     "CholeskyDecomposition 400x400": "25254504"
+    },
+    "require": {
+     "numpy.linalg:svd": "present",
+     "numpy.linalg:qr": "present",
+     "scipy.linalg:lu_factor": "present",
+     "numpy.linalg:pinv": "present",
+     "numpy.linalg:matrix_rank": "present",
+     "scipy.linalg:null_space": "present",
+     "scipy.linalg:cholesky": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "54-eigenproblems": {
+   "mathilda": {
+    "bench": {
+     "Eigenvalues symmetric 300x300": 26.905,
+     "Eigenvalues general 300x300": 87.96,
+     "Eigenvectors symmetric 250x250": 48.269,
+     "Generalized eigenvalues 5x5 x50": 2295.47,
+     "Eigenvalues Arnoldi k=6 of 500x500": 32.533
+    },
+    "check": {
+     "Eigenvalues symmetric 300x300": "12142988",
+     "Eigenvalues general 300x300": "180000",
+     "Generalized eigenvalues 5x5 x50": "10150000",
+     "Eigenvalues Arnoldi k=6 of 500x500": "80000000"
+    },
+    "require": {
+     "Eigenvalues": "present",
+     "Eigenvectors": "present",
+     "Eigensystem": "absent"
+    },
+    "skip": {
+     "Eigensystem symmetric 250x250": "Eigensystem"
+    },
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "Eigenvalues symmetric 300x300": 4.004,
+     "Eigenvalues general 300x300": 34.219,
+     "Eigenvectors symmetric 250x250": 7.547,
+     "Generalized eigenvalues 5x5 x50": 2.021,
+     "Eigenvalues Arnoldi k=6 of 500x500": 18.807,
+     "Eigensystem symmetric 250x250": 7.423
+    },
+    "check": {
+     "Eigenvalues symmetric 300x300": "12142988",
+     "Eigenvalues general 300x300": "180000",
+     "Generalized eigenvalues 5x5 x50": "10150000",
+     "Eigenvalues Arnoldi k=6 of 500x500": "80000000",
+     "Eigensystem symmetric 250x250": "12142988"
+    },
+    "require": {
+     "numpy.linalg:eigvals": "present",
+     "numpy.linalg:eigvalsh": "present",
+     "scipy.linalg:eigh": "present",
+     "scipy.linalg:eig": "present",
+     "scipy.sparse.linalg:eigsh": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "55-vectorized-special-functions": {
+   "mathilda": {
+    "bench": {
+     "FresnelC over 10^6": 11.572,
+     "FresnelS over 10^6": 10.705,
+     "Erfc over 10^6": 3.686,
+     "Erfi over 10^6": 7.477,
+     "ExpIntegralEi over 10^6": 7.979,
+     "SinIntegral over 10^6": 11.397,
+     "CosIntegral over 10^6": 10.569,
+     "Beta[.,.] over 10^6": 5.424,
+     "BesselI[0, .] over 10^6": 23180.7,
+     "BesselK[0, .] over 10^6": 41548.3
+    },
+    "check": {
+     "FresnelC over 10^6": "492344",
+     "FresnelS over 10^6": "64732",
+     "Erfc over 10^6": "479500",
+     "Erfi over 10^6": "614952",
+     "ExpIntegralEi over 10^6": "3301285",
+     "SinIntegral over 10^6": "1324684",
+     "CosIntegral over 10^6": "470356",
+     "Beta[.,.] over 10^6": "266667",
+     "BesselI[0, .] over 10^6": "1646723",
+     "BesselK[0, .] over 10^6": "213806"
+    },
+    "require": {
+     "FresnelC": "present",
+     "FresnelS": "present",
+     "Erfc": "present",
+     "Erfi": "present",
+     "ExpIntegralEi": "present",
+     "SinIntegral": "present",
+     "CosIntegral": "present",
+     "Beta": "present",
+     "BesselI": "present",
+     "BesselK": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "FresnelC over 10^6": 10.559,
+     "FresnelS over 10^6": 11.111,
+     "Erfc over 10^6": 15.683,
+     "Erfi over 10^6": 21.348,
+     "ExpIntegralEi over 10^6": 105.267,
+     "SinIntegral over 10^6": 18.263,
+     "CosIntegral over 10^6": 18.376,
+     "Beta[.,.] over 10^6": 68.177,
+     "BesselI[0, .] over 10^6": 221.535,
+     "BesselK[0, .] over 10^6": 198.612
+    },
+    "check": {
+     "FresnelC over 10^6": "492344",
+     "FresnelS over 10^6": "64732",
+     "Erfc over 10^6": "479500",
+     "Erfi over 10^6": "614952",
+     "ExpIntegralEi over 10^6": "3301285",
+     "SinIntegral over 10^6": "1324684",
+     "CosIntegral over 10^6": "470356",
+     "Beta[.,.] over 10^6": "266667",
+     "BesselI[0, .] over 10^6": "1646723",
+     "BesselK[0, .] over 10^6": "213806"
+    },
+    "require": {
+     "scipy.special:fresnel": "present",
+     "scipy.special:erfc": "present",
+     "scipy.special:erfi": "present",
+     "scipy.special:expi": "present",
+     "scipy.special:sici": "present",
+     "scipy.special:beta": "present",
+     "scipy.special:iv": "present",
+     "scipy.special:kv": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "56-multidim-quadrature": {
+   "mathilda": {
+    "bench": {
+     "NIntegrate 2D x y on unit square": 0.004,
+     "NIntegrate 3D x y z on unit cube": 0.005,
+     "NIntegrate 2D Gaussian on [-3,3]^2": 1.667,
+     "NIntegrate triangle (dependent bounds)": 0.081,
+     "NIntegrate unit disk (dependent bounds)": 5.123,
+     "NIntegrate oscillatory Sin[50x]/x on [1,10]": 0.22,
+     "NIntegrate singular 1/Sqrt[x] on [0,1]": 0.065,
+     "NIntegrate semi-infinite Exp[-x^2] on [0,Inf]": 0.019
+    },
+    "check": {
+     "NIntegrate 2D x y on unit square": "250000",
+     "NIntegrate 3D x y z on unit cube": "125000",
+     "NIntegrate 2D Gaussian on [-3,3]^2": "3141454",
+     "NIntegrate triangle (dependent bounds)": "500000",
+     "NIntegrate unit disk (dependent bounds)": "3141593",
+     "NIntegrate oscillatory Sin[50x]/x on [1,10]": "20949",
+     "NIntegrate singular 1/Sqrt[x] on [0,1]": "2000000",
+     "NIntegrate semi-infinite Exp[-x^2] on [0,Inf]": "886227"
+    },
+    "require": {
+     "NIntegrate": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "NIntegrate 2D x y on unit square": 0.164,
+     "NIntegrate 3D x y z on unit cube": 3.355,
+     "NIntegrate 2D Gaussian on [-3,3]^2": 1.012,
+     "NIntegrate triangle (dependent bounds)": 0.154,
+     "NIntegrate unit disk (dependent bounds)": 2.847,
+     "NIntegrate oscillatory Sin[50x]/x on [1,10]": 0.262,
+     "NIntegrate singular 1/Sqrt[x] on [0,1]": 0.034,
+     "NIntegrate semi-infinite Exp[-x^2] on [0,Inf]": 0.022
+    },
+    "check": {
+     "NIntegrate 2D x y on unit square": "250000",
+     "NIntegrate 3D x y z on unit cube": "125000",
+     "NIntegrate 2D Gaussian on [-3,3]^2": "3141454",
+     "NIntegrate triangle (dependent bounds)": "500000",
+     "NIntegrate unit disk (dependent bounds)": "3141593",
+     "NIntegrate oscillatory Sin[50x]/x on [1,10]": "20949",
+     "NIntegrate singular 1/Sqrt[x] on [0,1]": "2000000",
+     "NIntegrate semi-infinite Exp[-x^2] on [0,Inf]": "886227"
+    },
+    "require": {
+     "scipy.integrate:quad": "present",
+     "scipy.integrate:dblquad": "present",
+     "scipy.integrate:tplquad": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "57-stiff-ode-pde": {
+   "mathilda": {
+    "bench": {
+     "NDSolve stiff scalar relaxation": 0.887,
+     "NDSolve Robertson stiff kinetics": 2.12,
+     "NDSolve linear system harmonic": 0.057,
+     "NDSolve Van der Pol mu=10": 0.146,
+     "NDSolve heat PDE (method of lines)": 2.474,
+     "NDSolve wave PDE (method of lines)": 1.113
+    },
+    "check": {
+     "NDSolve stiff scalar relaxation": "22635",
+     "NDSolve Robertson stiff kinetics": "335",
+     "NDSolve linear system harmonic": "540302",
+     "NDSolve Van der Pol mu=10": "1934",
+     "NDSolve heat PDE (method of lines)": "373",
+     "NDSolve wave PDE (method of lines)": "9511"
+    },
+    "require": {
+     "NDSolve": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "NDSolve stiff scalar relaxation": 38.277,
+     "NDSolve Robertson stiff kinetics": 17.436,
+     "NDSolve linear system harmonic": 1.47,
+     "NDSolve Van der Pol mu=10": 1.506,
+     "NDSolve heat PDE (method of lines)": 12.8,
+     "NDSolve wave PDE (method of lines)": 1.01
+    },
+    "check": {
+     "NDSolve stiff scalar relaxation": "22635",
+     "NDSolve Robertson stiff kinetics": "335",
+     "NDSolve linear system harmonic": "540302",
+     "NDSolve Van der Pol mu=10": "1934",
+     "NDSolve heat PDE (method of lines)": "373",
+     "NDSolve wave PDE (method of lines)": "9511"
+    },
+    "require": {
+     "scipy.integrate:solve_ivp": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "58-nonlinear-systems": {
+   "mathilda": {
+    "bench": {
+     "FindRoot 2x2 polynomial": 0.05,
+     "FindRoot 2x2 transcendental": 0.073,
+     "FindRoot Burden-Faires 3x3": 0.335,
+     "FindRoot Broyden tridiagonal N=10": 1.074,
+     "FindRoot Broyden tridiagonal N=40": 40.659
+    },
+    "check": {
+     "FindRoot 2x2 polynomial": "1931852",
+     "FindRoot 2x2 transcendental": "1542126",
+     "FindRoot Burden-Faires 3x3": "-23599",
+     "FindRoot Broyden tridiagonal N=10": "-6436786",
+     "FindRoot Broyden tridiagonal N=40": "-27649976"
+    },
+    "require": {
+     "FindRoot": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "FindRoot 2x2 polynomial": 0.043,
+     "FindRoot 2x2 transcendental": 0.036,
+     "FindRoot Burden-Faires 3x3": 0.055,
+     "FindRoot Broyden tridiagonal N=10": 0.267,
+     "FindRoot Broyden tridiagonal N=40": 2.135
+    },
+    "check": {
+     "FindRoot 2x2 polynomial": "1931852",
+     "FindRoot 2x2 transcendental": "1542126",
+     "FindRoot Burden-Faires 3x3": "-23599",
+     "FindRoot Broyden tridiagonal N=10": "-6436786",
+     "FindRoot Broyden tridiagonal N=40": "-27649976"
+    },
+    "require": {
+     "scipy.optimize:fsolve": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "59-polynomial-roots": {
+   "mathilda": {
+    "bench": {
+     "NSolve dense degree 20": 8.616,
+     "NSolve dense degree 50": 47.514,
+     "NSolve dense degree 100": 183.501,
+     "NSolve roots of unity degree 64": 47.408,
+     "NSolve Wilkinson degree 15": 155.105,
+     "NRoots dense degree 40": 28.672
+    },
+    "check": {
+     "NSolve dense degree 20": "230223",
+     "NSolve dense degree 50": "485345",
+     "NSolve dense degree 100": "985262",
+     "NSolve roots of unity degree 64": "640000",
+     "NSolve Wilkinson degree 15": "120000",
+     "NRoots dense degree 40": "40"
+    },
+    "require": {
+     "NSolve": "present",
+     "NRoots": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "NSolve dense degree 20": 0.129,
+     "NSolve dense degree 50": 0.488,
+     "NSolve dense degree 100": 3.118,
+     "NSolve roots of unity degree 64": 0.669,
+     "NSolve Wilkinson degree 15": 0.096,
+     "NRoots dense degree 40": 0.294
+    },
+    "check": {
+     "NSolve dense degree 20": "230223",
+     "NSolve dense degree 50": "485345",
+     "NSolve dense degree 100": "985262",
+     "NSolve roots of unity degree 64": "640000",
+     "NSolve Wilkinson degree 15": "120000",
+     "NRoots dense degree 40": "40"
+    },
+    "require": {
+     "numpy:roots": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "60-dct-dst-transforms": {
+   "mathilda": {
+    "bench": {
+     "FourierDCT type 1 of 10^6": 126.03,
+     "FourierDCT type 2 of 10^6": 58.936,
+     "FourierDCT type 4 of 10^6": 60.603,
+     "FourierDST type 1 of 10^6": 195.964,
+     "FourierDST type 2 of 10^6": 62.045,
+     "Fourier 2D 512x512": 3.925
+    },
+    "check": {
+     "FourierDCT type 1 of 10^6": "10155927",
+     "FourierDCT type 2 of 10^6": "7518396",
+     "FourierDCT type 4 of 10^6": "578125",
+     "FourierDST type 1 of 10^6": "8301775",
+     "FourierDST type 2 of 10^6": "5914016",
+     "Fourier 2D 512x512": "8000000"
+    },
+    "require": {
+     "FourierDCT": "present",
+     "FourierDST": "present",
+     "Fourier": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "FourierDCT type 1 of 10^6": 82.6,
+     "FourierDCT type 2 of 10^6": 16.328,
+     "FourierDCT type 4 of 10^6": 17.1,
+     "FourierDST type 1 of 10^6": 354.746,
+     "FourierDST type 2 of 10^6": 18.747,
+     "Fourier 2D 512x512": 6.038
+    },
+    "check": {
+     "FourierDCT type 1 of 10^6": "10155927",
+     "FourierDCT type 2 of 10^6": "7518396",
+     "FourierDCT type 4 of 10^6": "578125",
+     "FourierDST type 1 of 10^6": "8301775",
+     "FourierDST type 2 of 10^6": "5914016",
+     "Fourier 2D 512x512": "8000000"
+    },
+    "require": {
+     "scipy.fft:dct": "present",
+     "scipy.fft:dst": "present",
+     "numpy.fft:fft2": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "61-regularized-least-squares": {
+   "mathilda": {
+    "bench": {
+     "LeastSquares overdetermined 2000x50": 4.215,
+     "LeastSquares overdetermined 8000x200": 85.469,
+     "Fit polynomial degree 4": 0.384,
+     "Fit ridge (Tikhonov) degree 4": 0.331
+    },
+    "check": {
+     "LeastSquares overdetermined 2000x50": "7144231",
+     "LeastSquares overdetermined 8000x200": "7144231",
+     "Fit polynomial degree 4": "72912587",
+     "Fit ridge (Tikhonov) degree 4": "73135292"
+    },
+    "require": {
+     "LeastSquares": "present",
+     "Fit": "present",
+     "FitRegularization": "absent",
+     "FindFit": "absent"
+    },
+    "skip": {
+     "FindFit exponential model": "FindFit"
+    },
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "LeastSquares overdetermined 2000x50": 2.579,
+     "LeastSquares overdetermined 8000x200": 53.366,
+     "Fit polynomial degree 4": 0.247,
+     "Fit ridge (Tikhonov) degree 4": 0.041,
+     "FindFit exponential model": 0.346
+    },
+    "check": {
+     "LeastSquares overdetermined 2000x50": "7144231",
+     "LeastSquares overdetermined 8000x200": "7144231",
+     "Fit polynomial degree 4": "72912587",
+     "Fit ridge (Tikhonov) degree 4": "73135292",
+     "FindFit exponential model": "15686"
+    },
+    "require": {
+     "numpy.linalg:lstsq": "present",
+     "scipy.linalg:lstsq": "present",
+     "numpy:polyfit": "present",
+     "scipy.optimize:curve_fit": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "62-arbitrary-precision": {
+   "mathilda": {
+    "bench": {
+     "N[Pi, 10000]": 1.414,
+     "N[Gamma[1/3], 1000]": 19.688,
+     "N[Log[2], 5000]": 1.955,
+     "NSum 1/k^2 WorkingPrecision 100": 72.251,
+     "NIntegrate Exp[-x^2] WorkingPrecision 200": 79.828,
+     "FindRoot Cos[x]=x WorkingPrecision 200": 0.123
+    },
+    "check": {
+     "N[Pi, 10000]": "604721",
+     "N[Gamma[1/3], 1000]": "988879",
+     "N[Log[2], 5000]": "270693",
+     "NSum 1/k^2 WorkingPrecision 100": "166646",
+     "NIntegrate Exp[-x^2] WorkingPrecision 200": "681260",
+     "FindRoot Cos[x]=x WorkingPrecision 200": "851332"
+    },
+    "require": {
+     "N": "present",
+     "NSum": "present",
+     "NIntegrate": "present",
+     "FindRoot": "present",
+     "WorkingPrecision": "absent"
+    },
+    "skip": {},
+    "stderr": "NSum::accgl: requested accuracy goal not met (estimated error 6.87e-44 exceeds tolerance 1.51e-98); returning the best approximation obtained.\nNSum::accgl: requested accuracy goal not met (estimated error 6.87e-44 exceeds tolerance 1.51e-98); returning the best approximation obtained.",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "N[Pi, 10000]": 9.206,
+     "N[Gamma[1/3], 1000]": 3899.749,
+     "N[Log[2], 5000]": 7.38,
+     "NSum 1/k^2 WorkingPrecision 100": 260.725,
+     "NIntegrate Exp[-x^2] WorkingPrecision 200": 176.08,
+     "FindRoot Cos[x]=x WorkingPrecision 200": 1.127
+    },
+    "check": {
+     "N[Pi, 10000]": "604721",
+     "N[Gamma[1/3], 1000]": "988879",
+     "N[Log[2], 5000]": "270693",
+     "NSum 1/k^2 WorkingPrecision 100": "166646",
+     "NIntegrate Exp[-x^2] WorkingPrecision 200": "681260",
+     "FindRoot Cos[x]=x WorkingPrecision 200": "851332"
+    },
+    "require": {
+     "mpmath:pi": "present",
+     "mpmath:nsum": "present",
+     "mpmath:quad": "present",
+     "mpmath:findroot": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  }
+ },
+ "elapsed_s": 105.77226400375366,
+ "durations": {
+  "53-matrix-decompositions": 11.377626180648804,
+  "54-eigenproblems": 6.0714616775512695,
+  "55-vectorized-special-functions": 67.2294762134552,
+  "56-multidim-quadrature": 1.276179313659668,
+  "57-stiff-ode-pde": 1.531646966934204,
+  "58-nonlinear-systems": 1.030418872833252,
+  "59-polynomial-roots": 2.7998902797698975,
+  "60-dct-dst-transforms": 5.5861828327178955,
+  "61-regularized-least-squares": 1.2802298069000244,
+  "62-arbitrary-precision": 5.324404954910278
+ },
+ "partial": true,
+ "label_problems": []
+}

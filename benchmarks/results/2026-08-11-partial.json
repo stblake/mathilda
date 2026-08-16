@@ -1,0 +1,810 @@
+{
+ "host": {
+  "date": "2026-08-11",
+  "missing_optional_deps": [],
+  "platform": "macOS-15.7.4-x86_64-i386-64bit-Mach-O",
+  "machine": "x86_64",
+  "processor": "i386",
+  "mathilda": "Mathilda 0.037 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)",
+  "mathilda_bin": "/Users/user/Mathilda_dev/Mathilda/Mathilda",
+  "python_bin": "/usr/local/opt/python@3.14/bin/python3.14",
+  "python_libs": "",
+  "wolframscript": "/Applications/Mathematica.app/Contents/MacOS/wolframscript",
+  "runner_python": "3.14.6",
+  "local_versions": {
+   "numpy": "absent",
+   "scipy": "absent",
+   "sympy": "absent",
+   "mpmath": "1.4.1",
+   "numba": "absent",
+   "networkx": "absent"
+  }
+ },
+ "rows": [
+  {
+   "experiment": "40-eval-dispatch",
+   "group": "D uncovered subsystems",
+   "label": "fib[28] naive recursion",
+   "times": {
+    "mathilda": 851.285,
+    "wolfram": 574.335
+   },
+   "checks": {
+    "mathilda": "317811",
+    "wolfram": "317811"
+   },
+   "ratio": 1.482209860099071,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "40-eval-dispatch",
+   "group": "D uncovered subsystems",
+   "label": "ack[3,4] nested recursion",
+   "times": {
+    "mathilda": 9.539,
+    "wolfram": 6.28
+   },
+   "checks": {
+    "mathilda": "125",
+    "wolfram": "125"
+   },
+   "ratio": 1.5189490445859872,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "40-eval-dispatch",
+   "group": "D uncovered subsystems",
+   "label": "mutual recursion depth 800",
+   "times": {
+    "mathilda": 0.563,
+    "wolfram": 0.351
+   },
+   "checks": {
+    "mathilda": "True",
+    "wolfram": "True"
+   },
+   "ratio": 1.603988603988604,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "40-eval-dispatch",
+   "group": "D uncovered subsystems",
+   "label": "Nest[incr, 0, 50000]",
+   "times": {
+    "mathilda": 18.772,
+    "wolfram": 19.125
+   },
+   "checks": {
+    "mathilda": "50000",
+    "wolfram": "50000"
+   },
+   "ratio": 0.9815424836601306,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "41-eval-backtracking",
+   "group": "D uncovered subsystems",
+   "label": "Case D palindrome, 200 ints",
+   "times": {
+    "mathilda": 1.81,
+    "wolfram": 161.366
+   },
+   "checks": {
+    "mathilda": "True",
+    "wolfram": "True"
+   },
+   "ratio": 0.011216737106949419,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "41-eval-backtracking",
+   "group": "D uncovered subsystems",
+   "label": "Case M equal-sum blocks, N=60",
+   "times": {
+    "mathilda": 5.867,
+    "wolfram": 1556.61
+   },
+   "checks": {
+    "mathilda": "28",
+    "wolfram": "28"
+   },
+   "ratio": 0.003769087953951215,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "41-eval-backtracking",
+   "group": "D uncovered subsystems",
+   "label": "Case M equal-sum blocks, N=80",
+   "times": {
+    "mathilda": 10.897,
+    "wolfram": 5492.75
+   },
+   "checks": {
+    "mathilda": "38",
+    "wolfram": "38"
+   },
+   "ratio": 0.001983887852168768,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "42-eval-rewrite",
+   "group": "D uncovered subsystems",
+   "label": "bubble sort //. , 30 elts",
+   "times": {
+    "mathilda": 4.655,
+    "wolfram": 4.22
+   },
+   "checks": {
+    "mathilda": "True",
+    "wolfram": "True"
+   },
+   "ratio": 1.1030805687203793,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "42-eval-rewrite",
+   "group": "D uncovered subsystems",
+   "label": "pairwise fold //. , Range[400]",
+   "times": {
+    "mathilda": 2.72,
+    "wolfram": 1.134
+   },
+   "checks": {
+    "mathilda": "80200",
+    "wolfram": "80200"
+   },
+   "ratio": 2.3985890652557322,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "42-eval-rewrite",
+   "group": "D uncovered subsystems",
+   "label": "pairwise fold //. , Range[800]",
+   "times": {
+    "mathilda": 8.182,
+    "wolfram": 3.9
+   },
+   "checks": {
+    "mathilda": "320400",
+    "wolfram": "320400"
+   },
+   "ratio": 2.097948717948718,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "42-eval-rewrite",
+   "group": "D uncovered subsystems",
+   "label": "Peano add via //. , 60+60",
+   "times": {
+    "mathilda": 0.484,
+    "wolfram": 1.131
+   },
+   "checks": {
+    "mathilda": "True",
+    "wolfram": "True"
+   },
+   "ratio": 0.42793987621573826,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "43-eval-arithmetic",
+   "group": "D uncovered subsystems",
+   "label": "Case B typed, |x|+|y|+|z| guard",
+   "times": {
+    "mathilda": 9.794,
+    "wolfram": 8.183
+   },
+   "checks": {
+    "mathilda": "True",
+    "wolfram": "True"
+   },
+   "ratio": 1.1968715629964561,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "43-eval-arithmetic",
+   "group": "D uncovered subsystems",
+   "label": "Case B untyped __ , same guard",
+   "times": {
+    "mathilda": 5.828,
+    "wolfram": 2.584
+   },
+   "checks": {
+    "mathilda": "True",
+    "wolfram": "True"
+   },
+   "ratio": 2.2554179566563466,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "43-eval-arithmetic",
+   "group": "D uncovered subsystems",
+   "label": "Length[Plus @@ 2000 symbolic terms]",
+   "times": {
+    "mathilda": 4.571,
+    "wolfram": 1.483
+   },
+   "checks": {
+    "mathilda": "2000",
+    "wolfram": "2000"
+   },
+   "ratio": 3.082265677680377,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "43-eval-arithmetic",
+   "group": "D uncovered subsystems",
+   "label": "Total[Table[k/3, 20000]]",
+   "times": {
+    "mathilda": 20.479,
+    "wolfram": 12.191
+   },
+   "checks": {
+    "mathilda": "66670000",
+    "wolfram": "66670000"
+   },
+   "ratio": 1.679845787876302,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "43-eval-arithmetic",
+   "group": "D uncovered subsystems",
+   "label": "Nest[#+a&, x, 4000] then a->0",
+   "times": {
+    "mathilda": 5.066,
+    "wolfram": 4.953
+   },
+   "checks": {
+    "mathilda": "True",
+    "wolfram": "True"
+   },
+   "ratio": 1.0228144558853218,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "44-eval-structural",
+   "group": "D uncovered subsystems",
+   "label": "Map[sq, 5000 f[k] nodes]",
+   "times": {
+    "mathilda": 5.345,
+    "wolfram": 2.577
+   },
+   "checks": {
+    "mathilda": "5001",
+    "wolfram": "5001"
+   },
+   "ratio": 2.074117190531626,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "44-eval-structural",
+   "group": "D uncovered subsystems",
+   "label": "Fold[fp, 0, 5000 f[k] nodes]",
+   "times": {
+    "mathilda": 3.081,
+    "wolfram": 2.352
+   },
+   "checks": {
+    "mathilda": "12502500",
+    "wolfram": "12502500"
+   },
+   "ratio": 1.3099489795918369,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "44-eval-structural",
+   "group": "D uncovered subsystems",
+   "label": "Count[5000 nodes, f[_?PrimeQ]]",
+   "times": {
+    "mathilda": 1.722,
+    "wolfram": 1.584
+   },
+   "checks": {
+    "mathilda": "669",
+    "wolfram": "669"
+   },
+   "ratio": 1.0871212121212122,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "44-eval-structural",
+   "group": "D uncovered subsystems",
+   "label": "Position[4000 nodes, f[_?EvenQ]]",
+   "times": {
+    "mathilda": 1.719,
+    "wolfram": 1.497
+   },
+   "checks": {
+    "mathilda": "2000",
+    "wolfram": "2000"
+   },
+   "ratio": 1.1482965931863727,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "45-eval-construction",
+   "group": "D uncovered subsystems",
+   "label": "build 15000 node[k,k^2,k^3]",
+   "times": {
+    "mathilda": 12.383,
+    "wolfram": 10.62
+   },
+   "checks": {
+    "mathilda": "60001",
+    "wolfram": "60001"
+   },
+   "ratio": 1.1660075329566855,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "45-eval-construction",
+   "group": "D uncovered subsystems",
+   "label": "LeafCount over 60001 leaves",
+   "times": {
+    "mathilda": 0.076,
+    "wolfram": 0.317
+   },
+   "checks": {
+    "mathilda": "60001",
+    "wolfram": "60001"
+   },
+   "ratio": 0.2397476340694006,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "45-eval-construction",
+   "group": "D uncovered subsystems",
+   "label": "ReplaceAll rebuild, 15000 nodes",
+   "times": {
+    "mathilda": 8.297,
+    "wolfram": 8.66
+   },
+   "checks": {
+    "mathilda": "12659062781260000",
+    "wolfram": "12659062781260000"
+   },
+   "ratio": 0.9580831408775982,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "45-eval-construction",
+   "group": "D uncovered subsystems",
+   "label": "Depth[Nest[gg, x0, 900]]",
+   "times": {
+    "mathilda": 0.077,
+    "wolfram": 0.131
+   },
+   "checks": {
+    "mathilda": "901",
+    "wolfram": "901"
+   },
+   "ratio": 0.5877862595419847,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "46-eval-controlflow",
+   "group": "D uncovered subsystems",
+   "label": "Do[s=s+a, 100000]",
+   "times": {
+    "mathilda": 86.208,
+    "wolfram": 71.531
+   },
+   "checks": {
+    "mathilda": "100000",
+    "wolfram": "100000"
+   },
+   "ratio": 1.2051837664788692,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "46-eval-controlflow",
+   "group": "D uncovered subsystems",
+   "label": "Do[If[PrimeQ,...], 10000]",
+   "times": {
+    "mathilda": 3.538,
+    "wolfram": 4.491
+   },
+   "checks": {
+    "mathilda": "5736396",
+    "wolfram": "5736396"
+   },
+   "ratio": 0.7877978178579381,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "46-eval-controlflow",
+   "group": "D uncovered subsystems",
+   "label": "FixedPoint Newton sqrt2, Rational",
+   "times": {
+    "mathilda": 0.037,
+    "wolfram": 0.076
+   },
+   "checks": {
+    "mathilda": "1572584048032918633353217/1111984844349868137938112",
+    "wolfram": "1572584048032918633353217/1111984844349868137938112"
+   },
+   "ratio": 0.4868421052631579,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "46-eval-controlflow",
+   "group": "D uncovered subsystems",
+   "label": "Collatz col[27] guarded rules",
+   "times": {
+    "mathilda": 0.165,
+    "wolfram": 0.128
+   },
+   "checks": {
+    "mathilda": "111",
+    "wolfram": "111"
+   },
+   "ratio": 1.2890625,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  }
+ ],
+ "requires": {},
+ "raw": {
+  "40-eval-dispatch": {
+   "mathilda": {
+    "bench": {
+     "fib[28] naive recursion": 851.285,
+     "ack[3,4] nested recursion": 9.539,
+     "mutual recursion depth 800": 0.563,
+     "Nest[incr, 0, 50000]": 18.772
+    },
+    "check": {
+     "fib[28] naive recursion": "317811",
+     "ack[3,4] nested recursion": "125",
+     "mutual recursion depth 800": "True",
+     "Nest[incr, 0, 50000]": "50000"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "fib[28] naive recursion": 574.335,
+     "ack[3,4] nested recursion": 6.28,
+     "mutual recursion depth 800": 0.351,
+     "Nest[incr, 0, 50000]": 19.125
+    },
+    "check": {
+     "fib[28] naive recursion": "317811",
+     "ack[3,4] nested recursion": "125",
+     "mutual recursion depth 800": "True",
+     "Nest[incr, 0, 50000]": "50000"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "41-eval-backtracking": {
+   "mathilda": {
+    "bench": {
+     "Case D palindrome, 200 ints": 1.81,
+     "Case M equal-sum blocks, N=60": 5.867,
+     "Case M equal-sum blocks, N=80": 10.897
+    },
+    "check": {
+     "Case D palindrome, 200 ints": "True",
+     "Case M equal-sum blocks, N=60": "28",
+     "Case M equal-sum blocks, N=80": "38"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "Case D palindrome, 200 ints": 161.366,
+     "Case M equal-sum blocks, N=60": 1556.61,
+     "Case M equal-sum blocks, N=80": 5492.75
+    },
+    "check": {
+     "Case D palindrome, 200 ints": "True",
+     "Case M equal-sum blocks, N=60": "28",
+     "Case M equal-sum blocks, N=80": "38"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "42-eval-rewrite": {
+   "mathilda": {
+    "bench": {
+     "bubble sort //. , 30 elts": 4.655,
+     "pairwise fold //. , Range[400]": 2.72,
+     "pairwise fold //. , Range[800]": 8.182,
+     "Peano add via //. , 60+60": 0.484
+    },
+    "check": {
+     "bubble sort //. , 30 elts": "True",
+     "pairwise fold //. , Range[400]": "80200",
+     "pairwise fold //. , Range[800]": "320400",
+     "Peano add via //. , 60+60": "True"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "bubble sort //. , 30 elts": 4.22,
+     "pairwise fold //. , Range[400]": 1.134,
+     "pairwise fold //. , Range[800]": 3.9,
+     "Peano add via //. , 60+60": 1.131
+    },
+    "check": {
+     "bubble sort //. , 30 elts": "True",
+     "pairwise fold //. , Range[400]": "80200",
+     "pairwise fold //. , Range[800]": "320400",
+     "Peano add via //. , 60+60": "True"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "43-eval-arithmetic": {
+   "mathilda": {
+    "bench": {
+     "Case B typed, |x|+|y|+|z| guard": 9.794,
+     "Case B untyped __ , same guard": 5.828,
+     "Length[Plus @@ 2000 symbolic terms]": 4.571,
+     "Total[Table[k/3, 20000]]": 20.479,
+     "Nest[#+a&, x, 4000] then a->0": 5.066
+    },
+    "check": {
+     "Case B typed, |x|+|y|+|z| guard": "True",
+     "Case B untyped __ , same guard": "True",
+     "Length[Plus @@ 2000 symbolic terms]": "2000",
+     "Total[Table[k/3, 20000]]": "66670000",
+     "Nest[#+a&, x, 4000] then a->0": "True"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "Case B typed, |x|+|y|+|z| guard": 8.183,
+     "Case B untyped __ , same guard": 2.584,
+     "Length[Plus @@ 2000 symbolic terms]": 1.483,
+     "Total[Table[k/3, 20000]]": 12.191,
+     "Nest[#+a&, x, 4000] then a->0": 4.953
+    },
+    "check": {
+     "Case B typed, |x|+|y|+|z| guard": "True",
+     "Case B untyped __ , same guard": "True",
+     "Length[Plus @@ 2000 symbolic terms]": "2000",
+     "Total[Table[k/3, 20000]]": "66670000",
+     "Nest[#+a&, x, 4000] then a->0": "True"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "44-eval-structural": {
+   "mathilda": {
+    "bench": {
+     "Map[sq, 5000 f[k] nodes]": 5.345,
+     "Fold[fp, 0, 5000 f[k] nodes]": 3.081,
+     "Count[5000 nodes, f[_?PrimeQ]]": 1.722,
+     "Position[4000 nodes, f[_?EvenQ]]": 1.719
+    },
+    "check": {
+     "Map[sq, 5000 f[k] nodes]": "5001",
+     "Fold[fp, 0, 5000 f[k] nodes]": "12502500",
+     "Count[5000 nodes, f[_?PrimeQ]]": "669",
+     "Position[4000 nodes, f[_?EvenQ]]": "2000"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "Map[sq, 5000 f[k] nodes]": 2.577,
+     "Fold[fp, 0, 5000 f[k] nodes]": 2.352,
+     "Count[5000 nodes, f[_?PrimeQ]]": 1.584,
+     "Position[4000 nodes, f[_?EvenQ]]": 1.497
+    },
+    "check": {
+     "Map[sq, 5000 f[k] nodes]": "5001",
+     "Fold[fp, 0, 5000 f[k] nodes]": "12502500",
+     "Count[5000 nodes, f[_?PrimeQ]]": "669",
+     "Position[4000 nodes, f[_?EvenQ]]": "2000"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "45-eval-construction": {
+   "mathilda": {
+    "bench": {
+     "build 15000 node[k,k^2,k^3]": 12.383,
+     "LeafCount over 60001 leaves": 0.076,
+     "ReplaceAll rebuild, 15000 nodes": 8.297,
+     "Depth[Nest[gg, x0, 900]]": 0.077
+    },
+    "check": {
+     "build 15000 node[k,k^2,k^3]": "60001",
+     "LeafCount over 60001 leaves": "60001",
+     "ReplaceAll rebuild, 15000 nodes": "12659062781260000",
+     "Depth[Nest[gg, x0, 900]]": "901"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "build 15000 node[k,k^2,k^3]": 10.62,
+     "LeafCount over 60001 leaves": 0.317,
+     "ReplaceAll rebuild, 15000 nodes": 8.66,
+     "Depth[Nest[gg, x0, 900]]": 0.131
+    },
+    "check": {
+     "build 15000 node[k,k^2,k^3]": "60001",
+     "LeafCount over 60001 leaves": "60001",
+     "ReplaceAll rebuild, 15000 nodes": "12659062781260000",
+     "Depth[Nest[gg, x0, 900]]": "901"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "46-eval-controlflow": {
+   "mathilda": {
+    "bench": {
+     "Do[s=s+a, 100000]": 86.208,
+     "Do[If[PrimeQ,...], 10000]": 3.538,
+     "FixedPoint Newton sqrt2, Rational": 0.037,
+     "Collatz col[27] guarded rules": 0.165
+    },
+    "check": {
+     "Do[s=s+a, 100000]": "100000",
+     "Do[If[PrimeQ,...], 10000]": "5736396",
+     "FixedPoint Newton sqrt2, Rational": "1572584048032918633353217/1111984844349868137938112",
+     "Collatz col[27] guarded rules": "111"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "Do[s=s+a, 100000]": 71.531,
+     "Do[If[PrimeQ,...], 10000]": 4.491,
+     "FixedPoint Newton sqrt2, Rational": 0.076,
+     "Collatz col[27] guarded rules": 0.128
+    },
+    "check": {
+     "Do[s=s+a, 100000]": "100000",
+     "Do[If[PrimeQ,...], 10000]": "5736396",
+     "FixedPoint Newton sqrt2, Rational": "1572584048032918633353217/1111984844349868137938112",
+     "Collatz col[27] guarded rules": "111"
+    },
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  }
+ },
+ "elapsed_s": 53.02570605278015,
+ "durations": {
+  "40-eval-dispatch": 10.860489130020142,
+  "41-eval-backtracking": 22.990238904953003,
+  "42-eval-rewrite": 3.551331043243408,
+  "43-eval-arithmetic": 3.798614025115967,
+  "44-eval-structural": 3.53472900390625,
+  "45-eval-construction": 3.546638011932373,
+  "46-eval-controlflow": 4.044871091842651
+ },
+ "partial": true,
+ "label_problems": []
+}

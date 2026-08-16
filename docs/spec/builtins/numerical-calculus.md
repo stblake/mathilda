@@ -1382,13 +1382,233 @@ optimising variable assignments.
 | `{x, x0, x1}` (1D)    | Brent (bracket) |
 
 Methods overridable via `Method -> "Brent" | "Newton" | "QuasiNewton"
-| "ConjugateGradient"`.  Brent is golden-section search with parabolic
-interpolation (derivative-free), QuasiNewton is BFGS with Armijo
-backtracking line search, ConjugateGradient is Polak-Ribière+ with
-restart, Newton uses the symbolic Hessian (via repeated `D[]`) with
-modified-Cholesky safeguarding.  Gradients default to a symbolic
-gradient (`D[f, x_i]` per variable) with a central-difference fallback;
-override via `Gradient -> {dfdx1, dfdx2, ...}`.
+| "ConjugateGradient" | "LBFGSB" | "Powell" | "NelderMead" | "TNC" | "SLSQP"
+| "COBYLA" | "COBYQA" | "NewtonCG" | "Dogleg" | "TrustNCG" | "TrustExact"
+| "TrustKrylov"`.  Brent
+is golden-section search with parabolic interpolation (derivative-free),
+QuasiNewton is BFGS with Armijo backtracking line search, ConjugateGradient
+is Polak-Ribière+ with restart, Newton uses the symbolic Hessian (via
+repeated `D[]`) with modified-Cholesky safeguarding, TNC is a Hessian-free
+truncated Newton (see below), and Powell and NelderMead are the two
+derivative-free multivariate methods (see below).  The gradient methods
+default to a symbolic gradient (`D[f, x_i]` per variable) with a
+central-difference fallback; override via `Gradient -> {dfdx1, dfdx2,
+...}`.  Powell and NelderMead use no gradient at all.
+
+`"LBFGSB"` (aliases `"LBFGS"`, `"LimitedMemoryBFGS"`; a Mathilda extension —
+Mathematica exposes no such method name) is **limited-memory BFGS with bound
+constraints**.  It keeps only the `m = 10` most recent correction pairs and
+forms the search direction by the Nocedal two-loop recursion at `O(m·n)` cost,
+so it scales to large `n` where the full-memory QuasiNewton's dense `n×n`
+inverse-Hessian is `O(n²)` in both memory and per-step work.  The line search
+tries the quasi-Newton unit step first (with expansion, to follow curved
+valleys); box constraints are honoured by an active-set projection (a
+coordinate resting on a face with the gradient pushing outward is fixed and the
+free variables optimise in the reduced subspace), reaching the same optima as a
+reference L-BFGS-B.  General (non-box) constraints route through the same
+augmented-Lagrangian wrapper as the other methods.  References: Byrd, Lu,
+Nocedal & Zhu 1995, with the Morales–Nocedal 2011 correction.
+
+`"Powell"` (alias `"PrincipalAxis"`, Mathematica's name for the same
+derivative-free conjugate-direction family) minimises **using function
+values only** — no gradient, analytic or finite-difference — so it is the
+method for non-smooth, noisy, or black-box objectives the gradient methods
+cannot handle.  Each cycle does a 1-D minimisation (the same Brent
+parabolic-interpolation line search as `"Brent"`, restricted to
+`phi(t) = f(p + t d)`) along each of `n` directions, then replaces the
+direction of largest decrease with the averaged cycle step when Powell's
+parabolic test accepts it — building up conjugate directions so that
+successive cycles converge super-linearly on smooth quadratics.  The
+replace-direction test, direction cycling, and extrapolated point match
+SciPy's `minimize(method="Powell")`, so the two agree on the minimiser to
+rounding.  **Box bounds** are honoured by clamping each line search to the
+feasible `t`-interval (SciPy added bounded Powell in 1.5); general
+(non-box) constraints are **not** supported — they emit `FindMinimum::nimpl`
+(SciPy's Powell has no constrained form either).  The objective still rides
+the compiled fast path at `MachinePrecision` (Powell, value-only across
+thousands of evaluations, is its single biggest beneficiary);
+`WorkingPrecision > MachinePrecision` falls back to `QuasiNewton` with a
+diagnostic.  `n == 1` delegates to the exact `"Brent"` path.  Reference:
+Powell 1964; Press et al., *Numerical Recipes*, §10.5.
+
+`"NelderMead"` is the Nelder & Mead (1965) **downhill simplex**: `n+1`
+vertices reflected, expanded, contracted and shrunk toward the best, using
+function values only.  It is the LOCAL simplex from a single start (matching
+SciPy's `minimize(method="Nelder-Mead")`), distinct from the restarted,
+box-sampling simplex the global `NMinimize` driver uses.  Standard
+non-adaptive coefficients `rho/chi/psi/sigma = 1/2/0.5/0.5` (SciPy's
+default), initial simplex perturbing each coordinate by 5% (or `0.00025` for
+a zero coordinate), so the two agree on the minimiser.  Like Powell it is
+derivative-free, rides the compiled objective at `MachinePrecision`, honours
+box bounds by projecting every candidate vertex, rejects general
+constraints (`FindMinimum::nimpl`), falls back to `QuasiNewton` above
+machine precision, and delegates `n == 1` to `"Brent"`.  Nelder-Mead is
+strong on **smooth** black-box objectives but famously **weak on
+non-smooth** ones -- the simplex can converge to a non-stationary point
+(McKinnon 1998) -- so `"Powell"` is the better derivative-free choice for a
+non-smooth objective.  Reference: Nelder & Mead 1965.
+
+`"TNC"` (alias `"TruncatedNewton"`, a Mathilda extension -- Mathematica has
+no such method name) is **Nash's truncated Newton with bound constraints**,
+and it is **Hessian-free**: each outer iteration approximately solves the
+Newton system `H·p = -g` by an inner **conjugate-gradient** loop that
+accesses the Hessian only through **Hessian-vector products**
+`Hv ≈ (∇f(x+h·v) - ∇f(x))/h` -- finite differences of the (exact, compiled)
+gradient -- so the Hessian is never formed.  The inner CG is truncated on
+non-positive curvature, on the inexact-Newton forcing sequence
+`||r|| ≤ min(0.5, √||g||)·||g||` (giving ~order-1.5 superlinear convergence
+near the optimum), or at `min(50, n)` inner iterations.  Box bounds use the
+same active-set projection as `"LBFGSB"` (masked gradient,
+projected-gradient KKT test, `alpha_max` face cap, strong-Wolfe line
+search).  **Where it wins:** large-`n`, bound-constrained, ill-conditioned
+problems -- it uses *true* Newton curvature at `O(n)` memory, so it scales
+where `"Newton"` would build an `O(n²)` symbolic Hessian, and converges in
+fewer outer iterations than `"LBFGSB"`'s low-rank quasi-Newton model.
+Mathilda's exact compiled gradient is what makes the finite-difference Hv
+both cheap and accurate.  It does **not** win at small `n` (full `"Newton"`
+is fine) or on cheap-gradient, well-conditioned problems (`"LBFGSB"`'s one
+gradient per iteration is cheaper).  Unlike `"Powell"`/`"NelderMead"`, TNC
+is gradient-based, so **general (non-box) constraints route through the
+augmented-Lagrangian penalty wrapper** like the other gradient methods.  The
+inner CG uses an identity preconditioner (a diagonal preconditioner, which
+would let the inner-iteration cap drop toward SciPy's `n/2`, is a future
+refinement); `WorkingPrecision > MachinePrecision` falls back to
+`QuasiNewton`.  Matches SciPy's `minimize(method="TNC")` on the box-only
+case.  References: Nash 1984; Dembo & Steihaug 1983; Nocedal & Wright ch. 7.
+
+`"SLSQP"` (alias `"SequentialQuadraticProgramming"`, a Mathilda extension --
+Mathematica has no such method name) is **Han-Powell sequential quadratic
+programming**, the method for smooth **constrained** problems (equality +
+inequality + bounds).  Each outer iteration replaces `f` by a quadratic model
+`½ dᵀB d + ∇fᵀd` -- where `B` is a BFGS approximation to the Hessian of the
+**Lagrangian** kept positive-definite by **Powell's (1978) damping** -- and
+each constraint by its linearisation, then solves the resulting **QP** for the
+step `d` with a **Goldfarb-Idnani dual active-set** solver built on the same
+Cholesky primitive as `"Newton"` (a dual method needs no feasible start, which
+matters because SQP iterates are routinely infeasible w.r.t. the
+linearisation).  The step is accepted by an **L1 exact-penalty merit** line
+search whose penalties are driven above the QP multipliers by Powell's rule, so
+`d` is always a descent direction; an inconsistent linearisation is repaired by
+Kraft's slack relaxation.  Unlike every other gradient method, SLSQP consumes
+**general (non-box) constraints DIRECTLY through the QP** rather than the
+augmented-Lagrangian penalty wrapper, so it reaches the true constrained
+optimum with **accurate constraint satisfaction and super-linear local
+convergence** -- e.g. the corner problem `FindMinimum[{x + y, 3 x + 2 y >= 7 &&
+x >= 0 && y >= 0}, ...]` lands exactly on `{7/3, 0}` where the penalty method
+stops once merely feasible, and HS71 reaches `17.014`.  With no constraints it
+degrades gracefully to a damped-BFGS line-search solve; equalities, box bounds
+and inequalities may be mixed freely.  The objective and its exact gradient
+ride the compiled fast path; `WorkingPrecision > MachinePrecision` falls back to
+`QuasiNewton`.  Matches SciPy's `minimize(method="SLSQP")` on the optimiser to
+rounding (experiment `68-slsqp-constrained`), winning on the harder constrained
+problems where the compiled gradient pays off (HS71 ~17×) and losing on large
+trivial-objective QPs where the dense active-set QP linear algebra dominates
+(an incremental/warm-started QP is the future refinement).  References: Kraft
+1988; Powell 1978; Goldfarb & Idnani 1983; Nocedal & Wright ch. 18.
+
+`"COBYLA"` (Powell's Constrained Optimization BY Linear Approximation; a
+Mathilda extension -- Mathematica has no such method name) is the
+**derivative-free** method for **constrained** problems, and the FIRST
+derivative-free method here to accept general (non-box) constraints -- `"Powell"`
+and `"NelderMead"` reject them, and every gradient method needs a derivative --
+so it is the method for **non-smooth / noisy / black-box objectives WITH
+constraints**.  Each iteration models `f` and every constraint by a linear
+approximation and solves a trust-region subproblem: (stage 1) minimise the worst
+constraint violation, then (stage 2) minimise the linear objective model while
+holding that minimum violation.  Here the linear models are recovered by
+**central differences** on a coordinate cross of the current trust radius --
+central (not forward) differences are what let it handle a **kink**, where the
+two-sided slope of `|t|` at `t=0` reads `0` (correct) rather than a spurious
+`±1` -- and the two-stage LP is solved by the same dual active-set QP as
+`"SLSQP"` (`fm_slsqp_activeset`) with an inf-norm trust box, reaching the same
+constrained optimum as reference COBYLA.  Step acceptance uses Powell's
+L-infinity exact-penalty merit `Phi = f + mu*max_i max(0, c_i)` with his PARMU
+update.  **Equalities** `h==0` are handled by splitting into `h<=0` and `-h<=0`
+(so this is strictly more capable than SciPy's inequality-only COBYLA); **box
+bounds** enter as ordinary linear inequalities.  It converges to `~rhoend =
+10^-PrecisionGoal` accuracy (a trust radius, not a gradient test), and its
+**linear** models cannot navigate a strongly curved valley to machine precision
+(Rosenbrock stalls near `f ~ 10^-3`) -- that limitation is exactly what
+`"COBYQA"` addresses with quadratic models.  The objective and constraints ride
+the compiled fast path; `WorkingPrecision > MachinePrecision` falls back to
+`QuasiNewton`; `n == 1` with no general constraints delegates to `"Brent"`.
+Matches SciPy's `minimize(method="COBYLA")` on the optimiser (experiment
+`69-cobyla-constrained`), 40-200x faster (compiled objective/constraint
+evaluations vs SciPy's Python-callback evaluations, the same win as `"Powell"`).
+Reference: Powell 1994.
+
+`"COBYQA"` (Constrained Optimization BY Quadratic Approximations; a Mathilda
+extension) is the **derivative-free** analogue of `"SLSQP"`: a trust-region SQP
+that, unlike `"COBYLA"`'s *linear* models, builds a full **quadratic** model of
+`f` and of every constraint -- so it captures curvature, converging tighter on
+smooth problems and **navigating curved valleys that COBYLA cannot** (it drives
+Rosenbrock to machine precision where `"COBYLA"` stalls near `f ~ 10^-3`), and it
+handles equality + inequality + bounds **natively** (equalities are not split).
+Each iteration builds the quadratic models by finite differences on a structured
+stencil of side `Delta` -- the coordinate cross `x0 +/- Delta e_i` gives the
+gradient and the diagonal Hessian, the corners `x0 + Delta(e_i + e_j)` the
+off-diagonal Hessian, a fully-determined quadratic per function in closed form (a
+minimum-Frobenius-norm 2n+1-point model is the eval-efficiency refinement) -- then
+takes a Byrd-Omojokun trust-region SQP step realised as a single inf-norm box
+trust-region QP handed to the same dual active-set solver as `"SLSQP"`, with the
+Lagrangian-Hessian model `B = H_f + sum lambda_k H_{c_k}`.  Steps are accepted by
+an L1 exact-penalty merit with Powell's penalty update; the trust radius `Delta`
+doubles as the stencil scale (grown on a good step, halved on a poor one,
+terminating at `Delta = 10^-PrecisionGoal`).  The objective and constraints ride
+the compiled fast path; `WorkingPrecision > MachinePrecision` falls back to
+`QuasiNewton`; `n == 1` with no general constraints delegates to `"Brent"`.
+Matches SciPy's `minimize(method="COBYQA")` on the optimiser (experiment
+`70-cobyqa-constrained`), 30-390x faster (SciPy's COBYQA is a pure-Python
+implementation, so the compiled-evaluation advantage is even larger than for
+COBYLA).  References: Ragonneau & Zhang 2023; Conn, Gould & Toint 2000.
+
+#### Trust-region / truncated-Newton family (unconstrained)
+
+The five methods `"NewtonCG"`, `"Dogleg"`, `"TrustNCG"`, `"TrustExact"`, and
+`"TrustKrylov"` mirror the corresponding `scipy.optimize.minimize` methods
+(`"Newton-CG"`, `"dogleg"`, `"trust-ncg"`, `"trust-exact"`, `"trust-krylov"` —
+each accepted as an alias). All five are **unconstrained** in SciPy, so — like
+`"Powell"`/`"NelderMead"` — they reject general (non-box) constraints
+(`FindMinimum::nimpl`) and ignore box bounds with a diagnostic; `n == 1` still
+runs the general machinery (no `"Brent"` delegation when requested explicitly);
+`WorkingPrecision > MachinePrecision` falls back to `QuasiNewton`. Four of them
+share one trust-region driver (initial radius Δ₀ = 1, Δmax = 1000, accept when
+the actual/predicted reduction ratio ρ > 0.15, shrink by ¼ when ρ < ¼, expand by
+2 on a boundary step) and differ only in how the subproblem
+`min_{‖p‖≤Δ} g·p + ½ pᵀBp` is solved.
+
+- `"NewtonCG"` (alias `"Newton-CG"`) is a **line-search** truncated Newton: an
+  inner CG loop solves `Bp = -g` with the Eisenstat–Walker forcing sequence and
+  negative-curvature truncation, then a unit-step-first Wolfe line search. Uses
+  Hessian-vector products only (finite differences of the exact compiled
+  gradient) — Hessian-free, scales to large `n`.
+- `"Dogleg"` (alias `"dogleg"`) is the **Powell dogleg** trust region: it builds
+  the dense Hessian and blends the Cauchy and Newton points along the dogleg
+  path. When the model Hessian is not positive definite it falls back to the
+  steepest-descent-to-boundary step (where SciPy's dogleg raises), so it stays
+  robust on convex/near-convex problems. Reference: Powell 1970.
+- `"TrustNCG"` (aliases `"trust-ncg"`, `"TrustRegionNewtonCG"`) is the
+  **Steihaug–Toint** truncated CG: it solves the subproblem with CG using
+  Hessian-vector products, stopping at the boundary on negative curvature or when
+  the step leaves the ball. Hessian-free. Reference: Steihaug 1983.
+- `"TrustExact"` (alias `"trust-exact"`) solves the subproblem **nearly exactly**
+  by the Moré–Sorensen algorithm on the dense Hessian: it iterates the Levenberg
+  shift λ so `(B+λI)` is positive semidefinite and `‖p(λ)‖ ≈ Δ`, with a dedicated
+  hard-case branch (`g ⟂` the least eigenvector). Handles indefinite Hessians
+  that dogleg cannot. Reference: Moré & Sorensen 1983.
+- `"TrustKrylov"` (alias `"trust-krylov"`) is **GLTR**: it Lanczos-tridiagonalizes
+  the Hessian in the Krylov space of the gradient (Hessian-vector products, full
+  re-orthogonalization) and solves the small tridiagonal subproblem exactly
+  (reusing the Moré–Sorensen solver), which recovers the least-eigenvector
+  component and so handles the indefinite/hard case. Hessian-free. Reference:
+  Gould, Lucidi, Roma & Toint 1999.
+
+`"NewtonCG"`, `"TrustNCG"`, and `"TrustKrylov"` never form the Hessian (only
+Hessian-vector products), so they scale to large `n`; `"Dogleg"` and
+`"TrustExact"` form the dense Hessian (symbolic via `D[]`, else finite-differenced
+from the gradient). All ride the compiled fast path at `MachinePrecision` and
+match SciPy's optimiser to benchmark tolerance (experiments `71-newton-cg`,
+`72-dogleg`, `73-trust-ncg`, `74-trust-exact`, `75-trust-krylov`).
 
 ### Constraints
 
@@ -1429,7 +1649,7 @@ constraint tolerance (1e-12).
 
 | Option              | Default        | Effect |
 |---------------------|----------------|--------|
-| `Method`            | `Automatic`    | `"Brent"`, `"QuasiNewton"`, `"ConjugateGradient"`, `"Newton"`, or `Automatic`. |
+| `Method`            | `Automatic`    | `"Brent"`, `"QuasiNewton"`, `"ConjugateGradient"`, `"Newton"`, `"LBFGSB"`, `"Powell"` (alias `"PrincipalAxis"`), `"NelderMead"`, `"TNC"` (alias `"TruncatedNewton"`), or `Automatic`. |
 | `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a digit count (>= ~16 routes through MPFR).  Lifts the 1D `Brent` and n-D `QuasiNewton` iterations into MPFR at the requested precision so the result `{f_min, {x -> ...}}` carries MPFR leaves with that many digits.  Explicit `Method -> "Newton"` or `"ConjugateGradient"` at MPFR currently falls back to `QuasiNewton` with a `FindMinimum::nimpl` diagnostic; general (non-box) constraints at MPFR fall back to machine precision similarly. |
 | `MaxIterations`     | `500`          | Iteration limit on the inner loop. |
 | `AccuracyGoal`      | `Automatic`    | Digit count `n` ⇒ stop when `\|grad\| < 10^{-n}`. `Infinity` disables. `Automatic` resolves to `WorkingPrecision/2`. |

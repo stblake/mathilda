@@ -75,7 +75,19 @@ typedef enum {
     FM_METHOD_BRENT,
     FM_METHOD_QUASINEWTON,   /* BFGS */
     FM_METHOD_CONJGRAD,      /* Polak-Ribière+ */
-    FM_METHOD_NEWTON
+    FM_METHOD_NEWTON,
+    FM_METHOD_LBFGSB,        /* limited-memory BFGS + bounds (Mathilda ext.) */
+    FM_METHOD_POWELL,        /* derivative-free conjugate directions */
+    FM_METHOD_NELDERMEAD,    /* derivative-free downhill simplex */
+    FM_METHOD_TNC,           /* truncated Newton (Hessian-free) + bounds */
+    FM_METHOD_SLSQP,         /* sequential least-squares QP (constrained SQP) */
+    FM_METHOD_COBYLA,        /* derivative-free linear-approximation (constrained) */
+    FM_METHOD_COBYQA,        /* derivative-free quadratic-approximation (constrained) */
+    FM_METHOD_NEWTONCG,      /* line-search truncated Newton (Hessian-free CG)       */
+    FM_METHOD_DOGLEG,        /* trust-region Powell dogleg (needs SPD Hessian)       */
+    FM_METHOD_TRUSTNCG,      /* trust-region Steihaug-Toint CG (Hessian-free)        */
+    FM_METHOD_TRUSTEXACT,    /* trust-region Moré-Sorensen (exact subproblem)        */
+    FM_METHOD_TRUSTKRYLOV    /* trust-region GLTR/Lanczos (Hessian-free)             */
 } FmMethod;
 
 typedef enum {
@@ -313,8 +325,30 @@ static bool fm_apply_option(Expr* rule, FmOpts* opts) {
             if (strcmp(s, "QuasiNewton") == 0)       { opts->method = FM_METHOD_QUASINEWTON;  return true; }
             if (strcmp(s, "ConjugateGradient") == 0) { opts->method = FM_METHOD_CONJGRAD;     return true; }
             if (strcmp(s, "Newton") == 0)            { opts->method = FM_METHOD_NEWTON;       return true; }
+            if (strcmp(s, "LBFGSB") == 0
+             || strcmp(s, "LBFGS") == 0
+             || strcmp(s, "LimitedMemoryBFGS") == 0) { opts->method = FM_METHOD_LBFGSB;       return true; }
+            if (strcmp(s, "Powell") == 0
+             || strcmp(s, "PrincipalAxis") == 0)      { opts->method = FM_METHOD_POWELL;       return true; }
+            if (strcmp(s, "NelderMead") == 0)         { opts->method = FM_METHOD_NELDERMEAD;   return true; }
+            if (strcmp(s, "TNC") == 0
+             || strcmp(s, "TruncatedNewton") == 0)    { opts->method = FM_METHOD_TNC;          return true; }
+            if (strcmp(s, "SLSQP") == 0
+             || strcmp(s, "SequentialQuadraticProgramming") == 0) { opts->method = FM_METHOD_SLSQP; return true; }
+            if (strcmp(s, "COBYLA") == 0)             { opts->method = FM_METHOD_COBYLA;      return true; }
+            if (strcmp(s, "COBYQA") == 0)             { opts->method = FM_METHOD_COBYQA;      return true; }
+            if (strcmp(s, "NewtonCG") == 0
+             || strcmp(s, "Newton-CG") == 0)          { opts->method = FM_METHOD_NEWTONCG;    return true; }
+            if (strcmp(s, "Dogleg") == 0
+             || strcmp(s, "dogleg") == 0)             { opts->method = FM_METHOD_DOGLEG;      return true; }
+            if (strcmp(s, "TrustNCG") == 0
+             || strcmp(s, "trust-ncg") == 0
+             || strcmp(s, "TrustRegionNewtonCG") == 0){ opts->method = FM_METHOD_TRUSTNCG;    return true; }
+            if (strcmp(s, "TrustExact") == 0
+             || strcmp(s, "trust-exact") == 0)        { opts->method = FM_METHOD_TRUSTEXACT;  return true; }
+            if (strcmp(s, "TrustKrylov") == 0
+             || strcmp(s, "trust-krylov") == 0)       { opts->method = FM_METHOD_TRUSTKRYLOV; return true; }
             if (strcmp(s, "LevenbergMarquardt") == 0
-             || strcmp(s, "PrincipalAxis") == 0
              || strcmp(s, "InteriorPoint") == 0
              || strcmp(s, "LinearProgramming") == 0) {
                 fm_warn(g_fm_name, "nimpl", "Method \"%s\" is not yet implemented", s);
@@ -2434,6 +2468,2959 @@ cleanup:
 }
 
 /* ------------------------------------------------------------------ *
+ *  L-BFGS-B — limited-memory BFGS with bound constraints              *
+ * ------------------------------------------------------------------ *
+ *
+ * A Mathilda extension to FindMinimum's Method set (Mathematica exposes no
+ * such method name), selected by Method -> "LBFGSB" (aliases "LBFGS",
+ * "LimitedMemoryBFGS"). Unlike the full-memory QuasiNewton solver
+ * (fm_run_bfgs), which stores a dense n×n inverse-Hessian approximation and is
+ * therefore O(n^2) in memory and per-iteration cost, this keeps only the m most
+ * recent correction pairs and forms the search direction by the Nocedal
+ * two-loop recursion at O(m·n) — so it scales to n in the thousands where the
+ * dense method does not. Reference: Byrd, Lu, Nocedal & Zhu 1995, with the
+ * Morales–Nocedal 2011 correction (the variant scipy's L-BFGS-B ships).
+ *
+ * This is milestone M1 (limited-memory core): the direction is the
+ * unconstrained two-loop step and bound constraints are honoured by the
+ * projecting line search (fm_line_search projects each trial onto the box),
+ * exactly as fm_run_bfgs handles boxes today. When no bound is active this is
+ * L-BFGS-B; the true generalized-Cauchy-point / subspace-minimization path
+ * (M2) refines the bound-active case. The augmented-objective branch (mu > 0)
+ * makes L-BFGS-B usable as the inner solver of the augmented-Lagrangian outer
+ * loop for general constraints (M3, via fm_run_penalty). */
+
+#ifndef FM_LBFGS_DEFAULT_M
+#define FM_LBFGS_DEFAULT_M 10   /* history depth (scipy L-BFGS-B maxcor) */
+#endif
+
+/* Limited-memory state: the m most recent correction pairs stored in circular
+ * buffers S,Y (each pair occupies one length-n row), rho_i = 1/(y_i·s_i), and
+ * the H0 scaling gamma = (s_last·y_last)/(y_last·y_last). `cnt` counts valid
+ * pairs (≤ m); `head` is the slot the NEXT pair overwrites (the oldest, once
+ * the ring is full). */
+typedef struct {
+    size_t  n, m, cnt, head;
+    double* S;      /* m*n */
+    double* Y;      /* m*n */
+    double* rho;    /* m   */
+    double  gamma;
+} FmLbfgsMem;
+
+/* d = -H_k · g by the Nocedal two-loop recursion. `alpha` (length m) and `q`
+ * (length n) are caller-provided scratch. With an empty memory (cnt == 0) this
+ * degrades to d = -gamma·g (scaled steepest descent), so it is always valid. */
+static void fm_lbfgs_direction(const FmLbfgsMem* mem, const double* g,
+                               double* alpha, double* q, double* d) {
+    size_t n = mem->n, m = mem->m;
+    for (size_t i = 0; i < n; i++) q[i] = g[i];
+    /* First loop, newest → oldest. */
+    for (size_t t = 0; t < mem->cnt; t++) {
+        size_t j = (mem->head + m - 1 - t) % m;   /* t-th newest pair */
+        const double* s = mem->S + j * n;
+        const double* y = mem->Y + j * n;
+        double sq = 0.0;
+        for (size_t i = 0; i < n; i++) sq += s[i] * q[i];
+        double a = mem->rho[j] * sq;
+        alpha[j] = a;
+        for (size_t i = 0; i < n; i++) q[i] -= a * y[i];
+    }
+    /* r = H0 q, H0 = gamma·I (gamma == 1 before any pair is stored). */
+    double g0 = (mem->cnt > 0) ? mem->gamma : 1.0;
+    for (size_t i = 0; i < n; i++) d[i] = g0 * q[i];
+    /* Second loop, oldest → newest. */
+    for (size_t t = 0; t < mem->cnt; t++) {
+        size_t j = (mem->head + m - mem->cnt + t) % m;   /* t-th oldest pair */
+        const double* s = mem->S + j * n;
+        const double* y = mem->Y + j * n;
+        double yr = 0.0;
+        for (size_t i = 0; i < n; i++) yr += y[i] * d[i];
+        double coef = alpha[j] - mem->rho[j] * yr;
+        for (size_t i = 0; i < n; i++) d[i] += coef * s[i];
+    }
+    for (size_t i = 0; i < n; i++) d[i] = -d[i];
+}
+
+/* Insert a correction pair (s = x_new - x, y = g_new - g), skipping it when the
+ * curvature s·y is not sufficiently positive (keeps H0 and the stored pairs
+ * positive-definite — the standard L-BFGS damping-free skip). */
+static void fm_lbfgs_push(FmLbfgsMem* mem, const double* s, const double* y) {
+    size_t n = mem->n;
+    double sy = 0.0, yy = 0.0;
+    for (size_t i = 0; i < n; i++) { sy += s[i] * y[i]; yy += y[i] * y[i]; }
+    const double curv_eps = 2.220446049250313e-16;   /* machine epsilon */
+    if (yy <= 0.0 || sy <= curv_eps * yy) return;    /* skip, keep memory */
+    size_t j = mem->head;
+    double* Sj = mem->S + j * n;
+    double* Yj = mem->Y + j * n;
+    for (size_t i = 0; i < n; i++) { Sj[i] = s[i]; Yj[i] = y[i]; }
+    mem->rho[j] = 1.0 / sy;
+    mem->gamma  = sy / yy;
+    mem->head = (mem->head + 1) % mem->m;
+    if (mem->cnt < mem->m) mem->cnt++;
+}
+
+/* --- Backtracking line search + active-set bound handling -------------- *
+ *
+ * L-BFGS needs a line search that tries the quasi-Newton unit step (alpha = 1)
+ * FIRST — the shared fm_line_search caps the initial step at 1/||d|| for
+ * steepest descent, which throttles the well-scaled L-BFGS direction and stalls
+ * convergence on ill-conditioned problems. Bounds are handled by an active-set
+ * projection:
+ * a coordinate resting on a box face with the gradient pushing outward is
+ * fixed (masked out of the two-loop and the direction), so the free variables
+ * optimise in the reduced subspace; the search is capped at the step that
+ * reaches the nearest remaining face, at which point that coordinate joins the
+ * active set. This is the practical active-set L-BFGS-B; it reaches the same
+ * optima as the reference generalized-Cauchy-point algorithm. */
+
+/* Immutable per-solve context, so the line-search helpers stay tidy. */
+typedef struct {
+    Expr* f; Expr** g_exprs; FmVarBind* binds; size_t n;
+    const FmGenCon* gens; size_t ngens; double mu;
+    const FmBox* boxes; const FmOpts* opts; bool augmented;
+} FmLbfgsCtx;
+
+/* Objective value AND gradient at point p (length n): plain or augmented. */
+static bool fm_lbfgs_fg(const FmLbfgsCtx* c, const double* p, double* fval, double* g) {
+    bool ok = c->augmented
+        ? fm_eval_augmented(c->f, c->binds, p, c->n, c->gens, c->ngens, c->mu, c->opts, fval)
+        : fm_eval_scalar(c->f, c->binds, p, c->n, c->opts, fval);
+    if (!ok) return false;
+    if (c->augmented)
+        return fm_eval_aug_gradient(c->f, c->g_exprs, c->gens, c->ngens, c->mu,
+                                    c->binds, p, c->n, c->opts, g);
+    bool gok = c->g_exprs && fm_eval_gradient(c->g_exprs, c->binds, p, c->n, c->opts, g);
+    if (!gok) gok = fm_grad_finite_diff(c->f, c->binds, p, c->n, c->opts, g);
+    return gok;
+}
+
+/* phi(alpha) = f(x + alpha d) and its slope phi'(alpha) = grad(x+alpha d)·d.
+ * xa/ga receive the trial point and its gradient. The box projection is a
+ * no-op while alpha <= alpha_max (the search is bounded there), so the slope
+ * is exact. */
+static bool fm_lbfgs_phi(const FmLbfgsCtx* c, const double* x, const double* d,
+                         double alpha, double* xa, double* ga,
+                         double* phi, double* dphi) {
+    size_t n = c->n;
+    for (size_t i = 0; i < n; i++) xa[i] = x[i] + alpha * d[i];
+    if (c->boxes) fm_project_box(xa, n, c->boxes);
+    if (!fm_lbfgs_fg(c, xa, phi, ga)) return false;
+    double sdot = 0.0;
+    for (size_t i = 0; i < n; i++) sdot += ga[i] * d[i];
+    *dphi = sdot;
+    return true;
+}
+
+/* "zoom" between a bracketing pair (Nocedal & Wright, Alg. 3.6). a_lo has the
+ * lower function value and satisfies Armijo; the strong-Wolfe minimiser lies
+ * between a_lo and a_hi. Always returns a usable point (the bracket's low end
+ * if the curvature condition is not met within the budget), so the search never
+ * aborts a solve. On return xa/ga hold the accepted point and its gradient. */
+static bool fm_lbfgs_zoom(const FmLbfgsCtx* c, const double* x, const double* d,
+                          double f0, double dphi0, double c1, double c2,
+                          double a_lo, double f_lo, double a_hi,
+                          double* xa, double* ga, double* f_out, double* a_out) {
+    for (int it = 0; it < 30; it++) {
+        double a_j = 0.5 * (a_lo + a_hi);           /* bisection: always safe */
+        double phi, dphi;
+        if (!fm_lbfgs_phi(c, x, d, a_j, xa, ga, &phi, &dphi)) { a_hi = a_j; continue; }
+        if (phi > f0 + c1 * a_j * dphi0 || phi >= f_lo) {
+            a_hi = a_j;
+        } else {
+            if (fabs(dphi) <= -c2 * dphi0) { *f_out = phi; *a_out = a_j; return true; }
+            if (dphi * (a_hi - a_lo) >= 0.0) a_hi = a_lo;
+            a_lo = a_j; f_lo = phi;
+        }
+        if (fabs(a_hi - a_lo) < 1e-18) break;
+    }
+    /* Curvature not met in budget: settle on the low bracket point, which is a
+     * genuine sufficient-decrease step (so the outer loop keeps progressing). */
+    double phi, dphi;
+    if (a_lo <= 0.0 || !fm_lbfgs_phi(c, x, d, a_lo, xa, ga, &phi, &dphi)) return false;
+    *f_out = phi; *a_out = a_lo;
+    return true;
+}
+
+/* Line search for the L-BFGS direction: the quasi-Newton UNIT step (alpha = 1)
+ * is tried FIRST and the step is EXPANDED (alpha doubled) while the objective
+ * keeps decreasing steeply — essential for following a curved valley (extended
+ * Rosenbrock), and the reason the shared fm_line_search (which only backtracks
+ * from a 1/||d||-capped step) stalls here. Implements the strong-Wolfe
+ * bracketing of Nocedal & Wright Alg. 3.5, but is made robust: it falls back to
+ * the best sufficient-decrease point rather than ever aborting the solve.
+ * Restricted to [0, alpha_max]; a step reaching alpha_max lands on a box face
+ * (that coordinate joins the active set next iteration). On success xa/ga hold
+ * the accepted point and its gradient. */
+static bool fm_lbfgs_linesearch(const FmLbfgsCtx* c, const double* x, const double* d,
+                                double f0, double dphi0, double alpha_max,
+                                double* xa, double* ga, double* f_out, double* a_out) {
+    if (dphi0 >= 0.0) return false;             /* not a descent direction */
+    const double c1 = 1e-4, c2 = 0.9;
+    double a_prev = 0.0, f_prev = f0;
+    double a_cur = (alpha_max < 1.0) ? alpha_max : 1.0;
+    if (a_cur <= 0.0) return false;
+    bool have_prev_ok = false;                  /* a_prev is a valid Armijo point */
+    for (int it = 0; it < 40; it++) {
+        double phi, dphi;
+        if (!fm_lbfgs_phi(c, x, d, a_cur, xa, ga, &phi, &dphi)) {
+            a_cur = 0.5 * (a_prev + a_cur);     /* domain/non-finite: shrink */
+            if (a_cur - a_prev < 1e-18) break;
+            continue;
+        }
+        if (phi > f0 + c1 * a_cur * dphi0 || (it > 0 && phi >= f_prev))
+            return fm_lbfgs_zoom(c, x, d, f0, dphi0, c1, c2,
+                                 a_prev, f_prev, a_cur, xa, ga, f_out, a_out);
+        if (fabs(dphi) <= -c2 * dphi0) { *f_out = phi; *a_out = a_cur; return true; }
+        if (dphi >= 0.0)
+            return fm_lbfgs_zoom(c, x, d, f0, dphi0, c1, c2,
+                                 a_cur, phi, a_prev, xa, ga, f_out, a_out);
+        /* Armijo holds and the slope is still steeply negative: expand. */
+        if (a_cur >= alpha_max) { *f_out = phi; *a_out = a_cur; return true; }  /* on a face */
+        a_prev = a_cur; f_prev = phi; have_prev_ok = true;
+        a_cur = (2.0 * a_cur < alpha_max) ? 2.0 * a_cur : alpha_max;
+    }
+    /* Budget exhausted: fall back to the last accepted Armijo point. */
+    if (have_prev_ok) {
+        double phi, dphi;
+        if (fm_lbfgs_phi(c, x, d, a_prev, xa, ga, &phi, &dphi)) {
+            *f_out = phi; *a_out = a_prev; return true;
+        }
+    }
+    return false;
+}
+
+static bool fm_run_lbfgsb(Expr* f, Expr** vars, size_t n,
+                          FmVarBind* binds, Expr** g_exprs,
+                          double* x, /* in/out */
+                          const FmGenCon* gens, size_t ngens, double mu,
+                          const FmBox* boxes,
+                          const FmOpts* opts,
+                          double* fx_out) {
+    (void)vars;
+    size_t m = FM_LBFGS_DEFAULT_M;
+    FmLbfgsMem mem;
+    mem.n = n; mem.m = m; mem.cnt = 0; mem.head = 0; mem.gamma = 1.0;
+    mem.S   = (double*)malloc(sizeof(double) * m * n);
+    mem.Y   = (double*)malloc(sizeof(double) * m * n);
+    mem.rho = (double*)malloc(sizeof(double) * m);
+    double* alpha = (double*)malloc(sizeof(double) * m);
+    double* g     = (double*)malloc(sizeof(double) * n);
+    double* gm    = (double*)malloc(sizeof(double) * n);   /* masked gradient */
+    double* g_new = (double*)malloc(sizeof(double) * n);
+    double* d     = (double*)malloc(sizeof(double) * n);
+    double* x_new = (double*)malloc(sizeof(double) * n);
+    double* s     = (double*)malloc(sizeof(double) * n);
+    double* y     = (double*)malloc(sizeof(double) * n);
+    double* q     = (double*)malloc(sizeof(double) * n);
+    bool ok = false;
+    double fx = 0.0;
+    if (!mem.S || !mem.Y || !mem.rho || !alpha || !g || !gm || !g_new || !d
+        || !x_new || !s || !y || !q)
+        goto cleanup;
+
+    FmLbfgsCtx ctx;
+    ctx.f = f; ctx.g_exprs = g_exprs; ctx.binds = binds; ctx.n = n;
+    ctx.gens = gens; ctx.ngens = ngens; ctx.mu = mu; ctx.boxes = boxes;
+    ctx.opts = opts; ctx.augmented = (mu > 0.0 && gens && ngens > 0);
+
+    if (boxes) fm_project_box(x, n, boxes);
+    if (!fm_lbfgs_fg(&ctx, x, &fx, g)) {
+        fm_warn(g_fm_name, "nlnum", "objective/gradient evaluation failed at start point");
+        goto cleanup;
+    }
+
+    double tol_acc = pow(10.0, -opts->acc_goal_digits);   /* projected-grad tol */
+
+    for (int64_t k = 0; k < opts->max_iter; k++) {
+        /* Projected-gradient infinity-norm convergence, and the active-set /
+         * masked gradient. A coordinate at a box face with the gradient
+         * pushing outward is "active": it satisfies its KKT condition, so it
+         * contributes zero to the projected-gradient norm and is masked to
+         * zero for the direction computation. */
+        double pgnorm = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            double xi = x[i] - g[i];
+            bool active = false;
+            if (boxes) {
+                double lt = (boxes[i].has_lo) ? 1e-12 * (1.0 + fabs(boxes[i].lo)) : 0.0;
+                double ut = (boxes[i].has_hi) ? 1e-12 * (1.0 + fabs(boxes[i].hi)) : 0.0;
+                if (boxes[i].has_lo && xi < boxes[i].lo) xi = boxes[i].lo;
+                if (boxes[i].has_hi && xi > boxes[i].hi) xi = boxes[i].hi;
+                if ((boxes[i].has_lo && x[i] <= boxes[i].lo + lt && g[i] > 0.0) ||
+                    (boxes[i].has_hi && x[i] >= boxes[i].hi - ut && g[i] < 0.0))
+                    active = true;
+            }
+            double pg = fabs(x[i] - xi);
+            if (pg > pgnorm) pgnorm = pg;
+            gm[i] = active ? 0.0 : g[i];
+        }
+        if (pgnorm < tol_acc) { ok = true; break; }
+
+        /* Search direction d = -H_k g on the free subspace. */
+        fm_lbfgs_direction(&mem, gm, alpha, q, d);
+        /* Keep d in the feasible cone: no motion on a masked (active) face, and
+         * no component that would immediately drive a coordinate through a
+         * bound it already sits on. */
+        if (boxes) {
+            for (size_t i = 0; i < n; i++) {
+                if (gm[i] == 0.0 && g[i] != 0.0) { d[i] = 0.0; continue; }
+                double lt = (boxes[i].has_lo) ? 1e-12 * (1.0 + fabs(boxes[i].lo)) : 0.0;
+                double ut = (boxes[i].has_hi) ? 1e-12 * (1.0 + fabs(boxes[i].hi)) : 0.0;
+                if (boxes[i].has_hi && x[i] >= boxes[i].hi - ut && d[i] > 0.0) d[i] = 0.0;
+                if (boxes[i].has_lo && x[i] <= boxes[i].lo + lt && d[i] < 0.0) d[i] = 0.0;
+            }
+        }
+        double dphi0 = 0.0;
+        for (size_t i = 0; i < n; i++) dphi0 += g[i] * d[i];
+        if (dphi0 >= 0.0) {
+            /* Non-descent (stale memory): reset and take a projected steepest
+             * step on the free coordinates. */
+            mem.cnt = 0; mem.head = 0; mem.gamma = 1.0;
+            for (size_t i = 0; i < n; i++) d[i] = -gm[i];
+            dphi0 = 0.0; for (size_t i = 0; i < n; i++) dphi0 += g[i] * d[i];
+            if (dphi0 >= 0.0) { ok = true; break; }   /* no feasible descent → KKT */
+        }
+
+        /* Cap the step at the nearest box face reached along d. */
+        double alpha_max = HUGE_VAL;
+        if (boxes) {
+            for (size_t i = 0; i < n; i++) {
+                if (d[i] > 0.0 && boxes[i].has_hi) {
+                    double amx = (boxes[i].hi - x[i]) / d[i];
+                    if (amx < alpha_max) alpha_max = amx;
+                } else if (d[i] < 0.0 && boxes[i].has_lo) {
+                    double amx = (boxes[i].lo - x[i]) / d[i];
+                    if (amx < alpha_max) alpha_max = amx;
+                }
+            }
+            if (alpha_max < 0.0) alpha_max = 0.0;
+        }
+        if (alpha_max <= 0.0) { ok = true; break; }   /* pinned at a corner */
+
+        double a, fx_new;
+        if (!fm_lbfgs_linesearch(&ctx, x, d, fx, dphi0, alpha_max,
+                                 x_new, g_new, &fx_new, &a)) {
+            /* Silent at high mu in the penalty schedule — fm_run_penalty's
+             * feasibility check is the authoritative signal there. */
+            if (!ctx.augmented)
+                fm_warn(g_fm_name, "lstol", "line search failed at iter %lld",
+                        (long long)k);
+            break;
+        }
+        fm_fire_monitor(opts->step_monitor);
+
+        /* Relative function-value change (cf. scipy L-BFGS-B's "factr" test).
+         * A conservative threshold is used purely as a stall detector — the
+         * projected-gradient test above is the primary convergence criterion.
+         * A single-step DISPLACEMENT test was tried here first and rejected: on
+         * a narrow curved valley (extended Rosenbrock at large n) a legitimate
+         * small step would trip it and declare convergence far from the
+         * optimum. */
+        double fdenom = fabs(fx);
+        if (fabs(fx_new) > fdenom) fdenom = fabs(fx_new);
+        if (fdenom < 1.0) fdenom = 1.0;
+        double f_rel = (fx - fx_new) / fdenom;
+
+        /* fm_lbfgs_linesearch already left g_new = grad(x_new). Store the
+         * correction pair (curvature-guarded). */
+        for (size_t i = 0; i < n; i++) { s[i] = x_new[i] - x[i]; y[i] = g_new[i] - g[i]; }
+        fm_lbfgs_push(&mem, s, y);
+
+        for (size_t i = 0; i < n; i++) { x[i] = x_new[i]; g[i] = g_new[i]; }
+        fx = fx_new;
+        /* Genuine numerical stall (relative change at the machine-noise floor).
+         * Deliberately far tighter than scipy's factr so it cannot pre-empt the
+         * projected-gradient test on a slowly-improving valley. */
+        if (f_rel >= 0.0 && f_rel < 1e-14) { ok = true; break; }
+    }
+    *fx_out = fx;
+    ok = true;
+cleanup:
+    free(mem.S); free(mem.Y); free(mem.rho); free(alpha);
+    free(g); free(gm); free(g_new); free(d); free(x_new); free(s); free(y); free(q);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Truncated Newton with bound Constraints (TNC, Hessian-free)         *
+ * ------------------------------------------------------------------ *
+ * Nash's truncated (inexact) Newton method: each outer iteration
+ * approximately solves the Newton system H*p = -g by an INNER
+ * conjugate-gradient loop that accesses the Hessian only through
+ * Hessian-vector products Hv, computed by finite-differencing the
+ * (exact, compiled) gradient -- so the Hessian is never formed. Box
+ * bounds use the same active-set projection as fm_run_lbfgsb (masked
+ * gradient, projected-gradient KKT test, free-subspace direction,
+ * alpha_max face cap, strong-Wolfe line search). The niche vs the other
+ * methods: true Newton curvature at O(n) memory, so it scales to large n
+ * where "Newton" would form an O(n^2) symbolic Hessian, while converging
+ * in fewer outer iterations than L-BFGS's low-rank model on
+ * ill-conditioned problems -- Mathilda's exact compiled gradient makes
+ * the finite-difference Hv both cheap and accurate. Machine precision
+ * only (WorkingPrecision > MachinePrecision falls back to QuasiNewton).
+ * Exposed as Method -> "TNC" (alias "TruncatedNewton"). Refs: Nash 1984;
+ * Dembo & Steihaug 1983 (truncation); Nocedal & Wright 2nd ed. ch. 7. */
+
+/* Gradient (only) at point p: plain or augmented, exact-then-FD. The
+ * gradient half of fm_lbfgs_fg, for the two evaluations of a
+ * Hessian-vector product (the objective value is not needed there). */
+static bool fm_tnc_grad(const FmLbfgsCtx* c, const double* p, double* g) {
+    if (c->augmented)
+        return fm_eval_aug_gradient(c->f, c->g_exprs, c->gens, c->ngens, c->mu,
+                                    c->binds, p, c->n, c->opts, g);
+    bool gok = c->g_exprs && fm_eval_gradient(c->g_exprs, c->binds, p, c->n, c->opts, g);
+    if (!gok) gok = fm_grad_finite_diff(c->f, c->binds, p, c->n, c->opts, g);
+    return gok;
+}
+
+/* Hessian-vector product Hv ~= (grad f(x + h v) - grad f(x)) / h, restricted
+ * to the free subspace (v is zero on active coords; the result is masked to
+ * zero there so the inner CG stays in the free subspace, realising P H P).
+ * g_base = grad f(x) is cached by the caller. h fixes the perturbation NORM
+ * at sqrt(eps)*max(1,||x||) regardless of ||v||: sqrt(eps) is the optimal
+ * forward-difference step for a gradient whose noise is ~eps (the compiled
+ * gradient is exact). Returns false on a non-finite perturbed gradient. */
+static bool fm_tnc_hessvec(const FmLbfgsCtx* c, const double* x, const double* g_base,
+                           const double* v, const bool* active,
+                           double* xpert, double* gpert, double* Hv) {
+    size_t n = c->n;
+    double vn = 0.0, xn = 0.0;
+    for (size_t i = 0; i < n; i++) { vn += v[i] * v[i]; xn += x[i] * x[i]; }
+    vn = sqrt(vn); xn = sqrt(xn);
+    if (vn < 1e-300) { for (size_t i = 0; i < n; i++) Hv[i] = 0.0; return true; }
+    const double sqrt_eps = 1.4901161193847656e-08;   /* sqrt(2^-52) */
+    double h = sqrt_eps * (xn > 1.0 ? xn : 1.0) / vn;
+    for (size_t i = 0; i < n; i++) xpert[i] = x[i] + h * v[i];
+    if (!fm_tnc_grad(c, xpert, gpert)) return false;
+    for (size_t i = 0; i < n; i++) {
+        Hv[i] = active[i] ? 0.0 : (gpert[i] - g_base[i]) / h;
+        if (!isfinite(Hv[i])) return false;
+    }
+    return true;
+}
+
+/* Inner truncated conjugate-gradient: approximately solve H p = -gm over the
+ * free subspace (gm is the masked gradient; p, r, d stay zero on active coords
+ * throughout). Truncates on (1) non-positive curvature, (2) the inexact-Newton
+ * forcing sequence ||r|| <= eta ||g|| with eta = min(0.5, sqrt(||g||)), or
+ * (3) maxcg iterations. The returned p is always a descent direction (g.p < 0):
+ * CG from p=0 on the SPD Newton system with rhs -gm gives -gm.p_k > 0. scratch
+ * r,d,Hd,xpert,gpert are caller-owned (length n). */
+static void fm_tnc_cg(const FmLbfgsCtx* c, const double* x, const double* g_base,
+                      const double* gm, const bool* active,
+                      double* p, double* r, double* d, double* Hd,
+                      double* xpert, double* gpert) {
+    size_t n = c->n;
+    const double curv_eps = 2.220446049250313e-16;
+    for (size_t i = 0; i < n; i++) { p[i] = 0.0; r[i] = -gm[i]; d[i] = r[i]; }
+    double rr = 0.0;
+    for (size_t i = 0; i < n; i++) rr += r[i] * r[i];
+    double gm_norm = sqrt(rr);
+    if (gm_norm == 0.0) return;                        /* p = 0 (KKT / all active) */
+    double eta = sqrt(gm_norm);
+    if (eta > 0.5) eta = 0.5;                          /* min(0.5, sqrt(||g||)) */
+    /* Cap the inner iterations at min(50, n) rather than scipy's min(50, n/2):
+     * scipy's n/2 relies on its diagonal preconditioner to get a near-Newton
+     * direction in few inner steps, whereas the identity-preconditioned CG here
+     * must solve the Newton system more fully. For small n this reaches the exact
+     * Newton step (linear CG converges in <= n steps), so a 2-D curved valley
+     * (Rosenbrock) gets a true Newton direction instead of a lone
+     * steepest-descent step that would zigzag. A diagonal preconditioner is the
+     * v2 refinement that would let this drop back toward n/2. */
+    size_t maxcg = n; if (maxcg > 50) maxcg = 50; if (maxcg < 1) maxcg = 1;
+
+    for (size_t j = 0; j < maxcg; j++) {
+        if (!fm_tnc_hessvec(c, x, g_base, d, active, xpert, gpert, Hd)) {
+            if (j == 0) for (size_t i = 0; i < n; i++) p[i] = -gm[i];  /* steepest */
+            return;                                    /* else keep accumulated p */
+        }
+        double dHd = 0.0, dd = 0.0;
+        for (size_t i = 0; i < n; i++) { dHd += d[i] * Hd[i]; dd += d[i] * d[i]; }
+        if (dHd <= curv_eps * dd) {                    /* non-positive curvature */
+            if (j == 0) for (size_t i = 0; i < n; i++) p[i] = -gm[i];
+            return;
+        }
+        double alpha = rr / dHd;
+        for (size_t i = 0; i < n; i++) { p[i] += alpha * d[i]; r[i] -= alpha * Hd[i]; }
+        double rr_new = 0.0;
+        for (size_t i = 0; i < n; i++) rr_new += r[i] * r[i];
+        if (sqrt(rr_new) <= eta * gm_norm) return;     /* forcing sequence met */
+        double beta = rr_new / rr;                     /* Fletcher-Reeves */
+        for (size_t i = 0; i < n; i++) d[i] = r[i] + beta * d[i];
+        rr = rr_new;
+    }
+    /* maxcg reached: every curvature used was positive, so p is a descent step. */
+}
+
+static bool fm_run_tnc(Expr* f, Expr** vars, size_t n,
+                       FmVarBind* binds, Expr** g_exprs,
+                       double* x, /* in/out */
+                       const FmGenCon* gens, size_t ngens, double mu,
+                       const FmBox* boxes,
+                       const FmOpts* opts,
+                       double* fx_out) {
+    (void)vars;
+    double* g      = (double*)malloc(sizeof(double) * n);  /* base grad, cached  */
+    double* gm     = (double*)malloc(sizeof(double) * n);  /* masked gradient    */
+    double* g_new  = (double*)malloc(sizeof(double) * n);
+    double* p      = (double*)malloc(sizeof(double) * n);  /* CG step / direction*/
+    double* r      = (double*)malloc(sizeof(double) * n);  /* CG residual        */
+    double* d      = (double*)malloc(sizeof(double) * n);  /* CG direction       */
+    double* Hd     = (double*)malloc(sizeof(double) * n);  /* Hessian-vector prod*/
+    double* xpert  = (double*)malloc(sizeof(double) * n);  /* Hv scratch         */
+    double* gpert  = (double*)malloc(sizeof(double) * n);  /* Hv scratch         */
+    double* x_new  = (double*)malloc(sizeof(double) * n);
+    bool*   active = (bool*)malloc(sizeof(bool) * n);
+    bool ok = false;
+    double fx = 0.0;
+    if (!g || !gm || !g_new || !p || !r || !d || !Hd || !xpert || !gpert
+        || !x_new || !active)
+        goto cleanup;
+
+    FmLbfgsCtx ctx;
+    ctx.f = f; ctx.g_exprs = g_exprs; ctx.binds = binds; ctx.n = n;
+    ctx.gens = gens; ctx.ngens = ngens; ctx.mu = mu; ctx.boxes = boxes;
+    ctx.opts = opts; ctx.augmented = (mu > 0.0 && gens && ngens > 0);
+
+    if (boxes) fm_project_box(x, n, boxes);
+    if (!fm_lbfgs_fg(&ctx, x, &fx, g)) {
+        fm_warn(g_fm_name, "nlnum", "objective/gradient evaluation failed at start point");
+        goto cleanup;
+    }
+
+    double tol_acc  = pow(10.0, -opts->acc_goal_digits);
+
+    for (int64_t k = 0; k < opts->max_iter; k++) {
+        /* Active set + masked gradient + projected-gradient KKT norm
+         * (identical to fm_run_lbfgsb). */
+        double pgnorm = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            double xi = x[i] - g[i];
+            active[i] = false;
+            if (boxes) {
+                double lt = (boxes[i].has_lo) ? 1e-12 * (1.0 + fabs(boxes[i].lo)) : 0.0;
+                double ut = (boxes[i].has_hi) ? 1e-12 * (1.0 + fabs(boxes[i].hi)) : 0.0;
+                if (boxes[i].has_lo && xi < boxes[i].lo) xi = boxes[i].lo;
+                if (boxes[i].has_hi && xi > boxes[i].hi) xi = boxes[i].hi;
+                if ((boxes[i].has_lo && x[i] <= boxes[i].lo + lt && g[i] > 0.0) ||
+                    (boxes[i].has_hi && x[i] >= boxes[i].hi - ut && g[i] < 0.0))
+                    active[i] = true;
+            }
+            double pg = fabs(x[i] - xi);
+            if (pg > pgnorm) pgnorm = pg;
+            gm[i] = active[i] ? 0.0 : g[i];
+        }
+        if (pgnorm < tol_acc) { ok = true; break; }
+
+        /* Inner truncated-CG for the Hessian-free Newton direction p. */
+        fm_tnc_cg(&ctx, x, g, gm, active, p, r, d, Hd, xpert, gpert);
+
+        /* Keep p in the feasible cone (identical clamp to fm_run_lbfgsb). */
+        if (boxes) {
+            for (size_t i = 0; i < n; i++) {
+                if (active[i]) { p[i] = 0.0; continue; }
+                double lt = (boxes[i].has_lo) ? 1e-12 * (1.0 + fabs(boxes[i].lo)) : 0.0;
+                double ut = (boxes[i].has_hi) ? 1e-12 * (1.0 + fabs(boxes[i].hi)) : 0.0;
+                if (boxes[i].has_hi && x[i] >= boxes[i].hi - ut && p[i] > 0.0) p[i] = 0.0;
+                if (boxes[i].has_lo && x[i] <= boxes[i].lo + lt && p[i] < 0.0) p[i] = 0.0;
+            }
+        }
+        double dphi0 = 0.0;
+        for (size_t i = 0; i < n; i++) dphi0 += g[i] * p[i];
+        if (dphi0 >= 0.0) {
+            /* FD noise let an indefinite direction through: masked steepest. */
+            for (size_t i = 0; i < n; i++) p[i] = -gm[i];
+            dphi0 = 0.0; for (size_t i = 0; i < n; i++) dphi0 += g[i] * p[i];
+            if (dphi0 >= 0.0) { ok = true; break; }    /* no feasible descent → KKT */
+        }
+
+        /* alpha_max: nearest box face along p (identical to fm_run_lbfgsb). */
+        double alpha_max = HUGE_VAL;
+        if (boxes) {
+            for (size_t i = 0; i < n; i++) {
+                if (p[i] > 0.0 && boxes[i].has_hi) {
+                    double amx = (boxes[i].hi - x[i]) / p[i];
+                    if (amx < alpha_max) alpha_max = amx;
+                } else if (p[i] < 0.0 && boxes[i].has_lo) {
+                    double amx = (boxes[i].lo - x[i]) / p[i];
+                    if (amx < alpha_max) alpha_max = amx;
+                }
+            }
+            if (alpha_max < 0.0) alpha_max = 0.0;
+        }
+        if (alpha_max <= 0.0) { ok = true; break; }    /* pinned at a corner */
+
+        double a, fx_new;
+        if (!fm_lbfgs_linesearch(&ctx, x, p, fx, dphi0, alpha_max,
+                                 x_new, g_new, &fx_new, &a)) {
+            if (!ctx.augmented)
+                fm_warn(g_fm_name, "lstol", "line search failed at iter %lld",
+                        (long long)k);
+            break;
+        }
+        fm_fire_monitor(opts->step_monitor);
+
+        /* Convergence: the projected-gradient KKT test (pgnorm, above) is the
+         * primary criterion; here a relative function-value stall detector
+         * guards against spinning at the machine-noise floor. A step-SIZE test
+         * is deliberately NOT used -- on a narrow curved valley (Rosenbrock) a
+         * legitimate small step trips it far from the optimum, the same trap
+         * fm_run_lbfgsb documents. The line search left g_new = grad(x_new);
+         * reuse it as the next base gradient (no extra eval). TNC keeps no
+         * curvature memory between iterations. */
+        double fdenom = fabs(fx);
+        if (fabs(fx_new) > fdenom) fdenom = fabs(fx_new);
+        if (fdenom < 1.0) fdenom = 1.0;
+        double f_rel = (fx - fx_new) / fdenom;
+        for (size_t i = 0; i < n; i++) { x[i] = x_new[i]; g[i] = g_new[i]; }
+        fx = fx_new;
+        if (f_rel >= 0.0 && f_rel < 1e-14) { ok = true; break; }
+    }
+    *fx_out = fx;
+    ok = true;
+cleanup:
+    free(g); free(gm); free(g_new); free(p); free(r); free(d); free(Hd);
+    free(xpert); free(gpert); free(x_new); free(active);
+    return ok;
+}
+
+/* ================================================================== *
+ *  Trust-region method family                                         *
+ *  (Newton-CG, dogleg, trust-ncg, trust-exact, trust-krylov)          *
+ * ================================================================== *
+ *
+ * Five UNCONSTRAINED smooth minimizers that mirror the corresponding
+ * scipy.optimize.minimize methods. Four are genuine trust-region methods
+ * sharing one driver (fm_run_trust_region) and differing only in how they
+ * solve the trust-region subproblem  min_{||p||<=Δ}  g·p + ½ pᵀB p:
+ *
+ *   dogleg        Powell dogleg path (needs a positive-definite Hessian B)
+ *   trust-ncg     Steihaug-Toint truncated CG (Hessian-vector products only)
+ *   trust-exact   Moré-Sorensen near-exact subproblem (indefinite B / hard case)
+ *   trust-krylov  GLTR: Lanczos-tridiagonalize B in the Krylov space of g, then
+ *                 solve the small tridiagonal subproblem exactly (Moré-Sorensen)
+ *
+ * Newton-CG is line-search (not trust-region) and gets its own runner.
+ *
+ * Curvature access splits the family: dogleg and trust-exact form the full
+ * Hessian (symbolic via fm_eval_hessian, else finite-differenced column by
+ * column from the compiled gradient); the other three never form B and use
+ * Hessian-vector products Hv ≈ (∇f(x+hv)-∇f(x))/h — the exact FD kernel
+ * fm_tnc_hessvec already used by TNC. scipy's trust-region methods are all
+ * unconstrained, so the dispatcher rejects general (non-box) constraints for
+ * these five exactly as Powell/NelderMead do; the runners assume ngens == 0.
+ *
+ * Constants match scipy._trustregion: Δ0 = 1, Δmax = 1000, accept when the
+ * actual/predicted-reduction ratio ρ > 0.15, shrink Δ by ¼ when ρ < ¼, expand
+ * by 2 when ρ > ¾ AND the step reached the boundary. */
+
+#define FM_TR_DELTA0   1.0
+#define FM_TR_DELTAMAX 1000.0
+#define FM_TR_ETA      0.15
+
+static double fm_dot(const double* a, const double* b, size_t n) {
+    double s = 0.0;
+    for (size_t i = 0; i < n; i++) s += a[i] * b[i];
+    return s;
+}
+
+/* out = B·v for a dense symmetric B (row-major). */
+static void fm_matvec(const double* B, size_t n, const double* v, double* out) {
+    for (size_t i = 0; i < n; i++) {
+        double s = 0.0;
+        const double* Bi = B + i * n;
+        for (size_t j = 0; j < n; j++) s += Bi[j] * v[j];
+        out[i] = s;
+    }
+}
+
+/* Solve ||z + τ d||² = Δ² for the two real roots τlo ≤ τhi (d ≠ 0). The
+ * discriminant is non-negative whenever ||z|| ≤ Δ; clamped to 0 for safety. */
+static void fm_tr_boundary(const double* z, const double* d, size_t n,
+                           double Delta, double* tlo, double* thi) {
+    double a = fm_dot(d, d, n);
+    double b = 2.0 * fm_dot(z, d, n);
+    double c = fm_dot(z, z, n) - Delta * Delta;
+    double disc = b * b - 4.0 * a * c;
+    if (disc < 0.0) disc = 0.0;
+    double s = sqrt(disc);
+    if (a <= 0.0) { *tlo = 0.0; *thi = 0.0; return; }
+    double t1 = (-b - s) / (2.0 * a);
+    double t2 = (-b + s) / (2.0 * a);
+    *tlo = t1; *thi = t2;
+}
+
+/* Quadratic-model operator handed to a subproblem solver: either a dense B
+ * (dogleg / trust-exact and the GLTR tridiagonal) or a Hessian-vector context
+ * (the CG-based methods). fm_quad_matvec hides which one. */
+typedef struct {
+    size_t              n;
+    const double*       B;        /* dense n·n, or NULL → use the Hv path      */
+    const FmLbfgsCtx*   c;        /* Hv context (NULL for a pure dense B)       */
+    const double*       xbase;    /* Hv base point                             */
+    const double*       gbase;    /* Hv base gradient = ∇f(xbase)              */
+    double*             xpert;    /* Hv scratch (n)                            */
+    double*             gpert;    /* Hv scratch (n)                            */
+    const bool*         active0;  /* all-false mask (n): unconstrained subspace */
+} FmQuad;
+
+/* out = B·v, dense if available else a finite-difference Hessian-vector
+ * product on the compiled gradient. Returns false only on a non-finite Hv. */
+static bool fm_quad_matvec(const FmQuad* q, const double* v, double* out) {
+    if (q->B) { fm_matvec(q->B, q->n, v, out); return true; }
+    return fm_tnc_hessvec(q->c, q->xbase, q->gbase, v, q->active0,
+                          q->xpert, q->gpert, out);
+}
+
+/* Build the dense Hessian B at x: exact symbolic (fm_eval_hessian) when the
+ * n×n derivative expressions exist, else column by column via n Hessian-vector
+ * products on the unit vectors (symmetrised). g_base = ∇f(x) is cached. */
+static bool fm_tr_build_hessian(const FmLbfgsCtx* c, Expr*** H_exprs,
+                                const double* x, const double* g_base, double* B,
+                                double* ej, double* col,
+                                double* xpert, double* gpert, const bool* active0) {
+    size_t n = c->n;
+    if (H_exprs && fm_eval_hessian(H_exprs, c->binds, x, n, c->opts, B))
+        return true;
+    for (size_t j = 0; j < n; j++) {
+        for (size_t i = 0; i < n; i++) ej[i] = (i == j) ? 1.0 : 0.0;
+        if (!fm_tnc_hessvec(c, x, g_base, ej, active0, xpert, gpert, col))
+            return false;
+        for (size_t i = 0; i < n; i++) B[i * n + j] = col[i];
+    }
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = i + 1; j < n; j++) {
+            double a = 0.5 * (B[i * n + j] + B[j * n + i]);
+            B[i * n + j] = a; B[j * n + i] = a;
+        }
+    return true;
+}
+
+/* A subproblem solver: given g and Δ, fill the step p and set *hits when the
+ * step reaches the trust boundary. The driver recovers pᵀBp itself, so solvers
+ * need not return it. Returns false only on an unrecoverable failure. */
+typedef bool (*FmSubSolver)(const FmQuad* q, const double* g, double gnorm,
+                            double Delta, double* p, bool* hits);
+
+/* ---- dogleg (needs dense SPD B) ---------------------------------------- */
+static bool fm_tr_dogleg(const FmQuad* q, const double* g, double gnorm,
+                         double Delta, double* p, bool* hits) {
+    size_t n = q->n;
+    const double* B = q->B;
+    double* L    = (double*)malloc(n * n * sizeof(double));
+    double* pB   = (double*)malloc(n * sizeof(double));
+    double* pU   = (double*)malloc(n * sizeof(double));
+    double* tmp  = (double*)malloc(n * sizeof(double));
+    double* negg = (double*)malloc(n * sizeof(double));
+    bool ret = false;
+    if (!L || !pB || !pU || !tmp || !negg) goto done;
+
+    for (size_t i = 0; i < n; i++) negg[i] = -g[i];
+
+    /* Newton point pB = -B⁻¹g via Cholesky (τ = 0: keep the true B). */
+    bool have_pB = false;
+    memcpy(L, B, n * n * sizeof(double));
+    if (fm_chol_factor(L, n, 0.0)) {
+        fm_chol_solve(L, n, negg, pB);
+        have_pB = true;
+        if (sqrt(fm_dot(pB, pB, n)) <= Delta) {         /* full Newton, interior */
+            for (size_t i = 0; i < n; i++) p[i] = pB[i];
+            *hits = false; ret = true; goto done;
+        }
+    }
+
+    /* Cauchy point pU = -(gᵀg / gᵀBg) g. */
+    fm_matvec(B, n, g, tmp);
+    double gBg = fm_dot(g, tmp, n);
+    if (!(gBg > 0.0) || gnorm == 0.0) {                 /* no positive curvature */
+        double sc = (gnorm > 0.0) ? (Delta / gnorm) : 0.0;
+        for (size_t i = 0; i < n; i++) p[i] = -sc * g[i];
+        *hits = (gnorm > 0.0); ret = true; goto done;
+    }
+    double tauU = (gnorm * gnorm) / gBg;
+    for (size_t i = 0; i < n; i++) pU[i] = -tauU * g[i];
+    double pUn = sqrt(fm_dot(pU, pU, n));
+    if (pUn >= Delta || !have_pB) {                     /* Cauchy past boundary  */
+        double sc = (pUn > 0.0) ? (Delta / pUn) : 0.0;
+        for (size_t i = 0; i < n; i++) p[i] = sc * pU[i];
+        *hits = true; ret = true; goto done;
+    }
+
+    /* Dogleg leg pU → pB: p = pU + τ(pB - pU), ||p|| = Δ, τ ∈ [0, 1]. */
+    for (size_t i = 0; i < n; i++) tmp[i] = pB[i] - pU[i];
+    double tlo, thi; fm_tr_boundary(pU, tmp, n, Delta, &tlo, &thi);
+    double tau = thi;
+    if (tau < 0.0) tau = 0.0; else if (tau > 1.0) tau = 1.0;
+    for (size_t i = 0; i < n; i++) p[i] = pU[i] + tau * tmp[i];
+    *hits = true; ret = true;
+done:
+    free(L); free(pB); free(pU); free(tmp); free(negg);
+    return ret;
+}
+
+/* ---- trust-ncg: Steihaug-Toint truncated CG (Hessian-vector only) ------ */
+static bool fm_tr_steihaug(const FmQuad* q, const double* g, double gnorm,
+                           double Delta, double* p, bool* hits) {
+    size_t n = q->n;
+    double* z  = (double*)calloc(n, sizeof(double));
+    double* r  = (double*)malloc(n * sizeof(double));
+    double* d  = (double*)malloc(n * sizeof(double));
+    double* Bd = (double*)malloc(n * sizeof(double));
+    bool ret = false;
+    if (!z || !r || !d || !Bd) goto done;
+
+    *hits = false;
+    if (gnorm == 0.0) { for (size_t i = 0; i < n; i++) p[i] = 0.0; ret = true; goto done; }
+    for (size_t i = 0; i < n; i++) { r[i] = g[i]; d[i] = -g[i]; }
+    double eta = sqrt(gnorm); if (eta > 0.5) eta = 0.5;
+    double tol = eta * gnorm;
+    double rr = fm_dot(r, r, n);
+    size_t maxit = 2 * n + 1; if (maxit > 1000) maxit = 1000;
+
+    for (size_t j = 0; j < maxit; j++) {
+        if (!fm_quad_matvec(q, d, Bd)) {                /* Hv failed             */
+            if (j == 0) {
+                double sc = Delta / gnorm;
+                for (size_t i = 0; i < n; i++) p[i] = -sc * g[i];
+                *hits = true;
+            } else {
+                for (size_t i = 0; i < n; i++) p[i] = z[i];
+            }
+            ret = true; goto done;
+        }
+        double dBd = fm_dot(d, Bd, n), dd = fm_dot(d, d, n);
+        if (dBd <= 1e-16 * dd) {                        /* negative curvature    */
+            double tlo, thi; fm_tr_boundary(z, d, n, Delta, &tlo, &thi);
+            /* pick the boundary root with the lower model, using Bz = r - g. */
+            double gz = fm_dot(g, z, n), gd = fm_dot(g, d, n);
+            double zBz = 0.0; for (size_t i = 0; i < n; i++) zBz += z[i] * (r[i] - g[i]);
+            double zBd = fm_dot(z, Bd, n);
+            double mlo = gz + tlo * gd + 0.5 * (zBz + 2.0 * tlo * zBd + tlo * tlo * dBd);
+            double mhi = gz + thi * gd + 0.5 * (zBz + 2.0 * thi * zBd + thi * thi * dBd);
+            double tau = (mlo < mhi) ? tlo : thi;
+            for (size_t i = 0; i < n; i++) p[i] = z[i] + tau * d[i];
+            *hits = true; ret = true; goto done;
+        }
+        double alpha = rr / dBd;
+        double zn2 = 0.0;
+        for (size_t i = 0; i < n; i++) { double zi = z[i] + alpha * d[i]; zn2 += zi * zi; }
+        if (zn2 >= Delta * Delta) {                     /* step leaves the ball  */
+            double tlo, thi; fm_tr_boundary(z, d, n, Delta, &tlo, &thi);
+            for (size_t i = 0; i < n; i++) p[i] = z[i] + thi * d[i];
+            *hits = true; ret = true; goto done;
+        }
+        for (size_t i = 0; i < n; i++) { z[i] += alpha * d[i]; r[i] += alpha * Bd[i]; }
+        double rr_new = fm_dot(r, r, n);
+        if (sqrt(rr_new) < tol) {                       /* interior solution     */
+            for (size_t i = 0; i < n; i++) p[i] = z[i];
+            ret = true; goto done;
+        }
+        double beta = rr_new / rr;
+        for (size_t i = 0; i < n; i++) d[i] = -r[i] + beta * d[i];
+        rr = rr_new;
+    }
+    for (size_t i = 0; i < n; i++) p[i] = z[i];          /* maxit: best interior  */
+    ret = true;
+done:
+    free(z); free(r); free(d); free(Bd);
+    return ret;
+}
+
+/* ---- trust-exact: Moré-Sorensen near-exact subproblem (dense B) --------- *
+ * Find λ ≥ 0 and p solving (B + λI)p = -g with B + λI ⪰ 0 and ||p|| ≈ Δ.
+ * φ(λ) = 1/||p(λ)|| - 1/Δ is smooth and near-linear, so a Newton iteration
+ * λ ← λ + (||p||/||w||)²·(||p||-Δ)/Δ  (L w = p, forward solve) converges in a
+ * handful of steps, safeguarded by a bracket [lo, hi] and PD enforcement via
+ * the Cholesky retry. The hard case (g ⟂ the least-eigenvector, ||p|| < Δ at
+ * the PD threshold) is handled by adding the least-eigenvector direction
+ * (inverse iteration) out to the boundary. */
+static bool fm_tr_moresorensen(const FmQuad* q, const double* g, double gnorm,
+                               double Delta, double* p, bool* hits) {
+    (void)gnorm;                 /* bracket is discovered dynamically, not from ||g|| */
+    size_t n = q->n;
+    const double* B = q->B;
+    double* L    = (double*)malloc(n * n * sizeof(double));
+    double* negg = (double*)malloc(n * sizeof(double));
+    double* wv   = (double*)malloc(n * sizeof(double));
+    double* zev  = (double*)malloc(n * sizeof(double));
+    double* Bp   = (double*)malloc(n * sizeof(double));
+    bool ret = false;
+    if (!L || !negg || !wv || !zev || !Bp) goto done;
+    for (size_t i = 0; i < n; i++) negg[i] = -g[i];
+
+    /* Gershgorin lower bound and inf-norm for the initial λ bracket. */
+    double gersh_lb = HUGE_VAL, hinf = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double diag = B[i * n + i], rad = 0.0, rowsum = 0.0;
+        for (size_t j = 0; j < n; j++) { double a = fabs(B[i * n + j]); rowsum += a; if (j != i) rad += a; }
+        if (diag - rad < gersh_lb) gersh_lb = diag - rad;
+        if (rowsum > hinf) hinf = rowsum;
+    }
+    double lam_lo = 0.0, lam_hi = HUGE_VAL;
+    double lam = (gersh_lb < 0.0) ? -gersh_lb : 0.0;    /* PD-safe starting shift */
+    const double k_easy = 0.1;
+    bool have_p = false; double pnorm = 0.0;
+
+    for (int it = 0; it < 60; it++) {
+        memcpy(L, B, n * n * sizeof(double));
+        if (!fm_chol_factor(L, n, lam)) {               /* not PD: raise lower bd */
+            if (lam > lam_lo) lam_lo = lam;
+            double nl = (lam_hi < HUGE_VAL) ? 0.5 * (lam_lo + lam_hi)
+                                            : (lam > 0.0 ? lam * 2.0 : 1.0);
+            if (nl <= lam_lo) nl = lam_lo + (lam_lo > 0.0 ? 0.1 * lam_lo : 0.1);
+            lam = nl; continue;
+        }
+        fm_chol_solve(L, n, negg, p);
+        pnorm = sqrt(fm_dot(p, p, n)); have_p = true;
+        if (lam == 0.0 && pnorm <= Delta) {             /* B PD, Newton interior */
+            *hits = false; ret = true; goto done;
+        }
+        if (fabs(pnorm - Delta) <= k_easy * Delta) {    /* converged (easy case) */
+            *hits = true; ret = true; goto done;
+        }
+        /* forward solve L w = p, then Newton update on 1/||p||. */
+        for (size_t i = 0; i < n; i++) {
+            double s = p[i];
+            for (size_t kk = 0; kk < i; kk++) s -= L[i * n + kk] * wv[kk];
+            wv[i] = s / L[i * n + i];
+        }
+        double wn2 = fm_dot(wv, wv, n);
+        if (pnorm < Delta) { if (lam < lam_hi) lam_hi = lam; }
+        else               { if (lam > lam_lo) lam_lo = lam; }
+        /* hard case: bracket collapsed with ||p|| < Δ. */
+        if (lam_hi < HUGE_VAL && (lam_hi - lam_lo) <= 1e-10 * (1.0 + lam_hi) && pnorm < Delta) {
+            for (size_t i = 0; i < n; i++) zev[i] = 1.0 / sqrt((double)n);
+            for (int ii = 0; ii < 3; ii++) {            /* inverse iteration     */
+                fm_chol_solve(L, n, zev, wv);
+                double wn = sqrt(fm_dot(wv, wv, n));
+                if (wn <= 0.0) break;
+                for (size_t i = 0; i < n; i++) zev[i] = wv[i] / wn;
+            }
+            double tlo, thi; fm_tr_boundary(p, zev, n, Delta, &tlo, &thi);
+            double taus[2] = { tlo, thi }, bestm = HUGE_VAL, bestt = 0.0;
+            for (int cc = 0; cc < 2; cc++) {
+                for (size_t i = 0; i < n; i++) wv[i] = p[i] + taus[cc] * zev[i];
+                fm_matvec(B, n, wv, Bp);
+                double m = fm_dot(g, wv, n) + 0.5 * fm_dot(wv, Bp, n);
+                if (m < bestm) { bestm = m; bestt = taus[cc]; }
+            }
+            for (size_t i = 0; i < n; i++) p[i] += bestt * zev[i];
+            *hits = true; ret = true; goto done;
+        }
+        double lam_new = lam + (pnorm * pnorm / wn2) * ((pnorm - Delta) / Delta);
+        if (!(lam_new > lam_lo && (lam_hi == HUGE_VAL || lam_new < lam_hi))) {
+            lam_new = (lam_hi < HUGE_VAL) ? 0.5 * (lam_lo + lam_hi)
+                                          : (lam > 0.0 ? lam * 2.0 : 1.0);
+        }
+        lam = lam_new;
+    }
+    if (have_p) { *hits = true; ret = true; }           /* cap: best-effort step */
+done:
+    free(L); free(negg); free(wv); free(zev); free(Bp);
+    return ret;
+}
+
+/* ---- trust-krylov: GLTR (Hessian-vector only) -------------------------- *
+ * Lanczos-tridiagonalize B in the Krylov space span{g, Bg, B²g, ...} with full
+ * re-orthogonalization, and at each expansion solve the small tridiagonal
+ * trust-region subproblem exactly via fm_tr_moresorensen. Reconstruct p = Q·y.
+ * Unlike Steihaug-CG, the exact tridiagonal solve recovers the least-eigenvector
+ * component, so the indefinite/hard case is handled as the Krylov space grows. */
+static bool fm_tr_gltr(const FmQuad* q, const double* g, double gnorm,
+                       double Delta, double* p, bool* hits) {
+    size_t n = q->n;
+    *hits = false;
+    if (gnorm == 0.0) { for (size_t i = 0; i < n; i++) p[i] = 0.0; return true; }
+    size_t KMAX = n; if (KMAX > 100) KMAX = 100; if (KMAX < 1) KMAX = 1;
+
+    double* Q     = (double*)malloc(n * KMAX * sizeof(double));
+    double* alpha = (double*)malloc(KMAX * sizeof(double));
+    double* betav = (double*)malloc(KMAX * sizeof(double));
+    double* w     = (double*)malloc(n * sizeof(double));
+    double* Hv    = (double*)malloc(n * sizeof(double));
+    double* y     = (double*)malloc(KMAX * sizeof(double));
+    double* T     = (double*)malloc(KMAX * KMAX * sizeof(double));
+    double* gsub  = (double*)malloc(KMAX * sizeof(double));
+    bool ret = false;
+    if (!Q || !alpha || !betav || !w || !Hv || !y || !T || !gsub) goto done;
+
+    for (size_t i = 0; i < n; i++) Q[i] = g[i] / gnorm;  /* q_1 = g/||g||        */
+    size_t k = 0; double beta_prev = 0.0;
+
+    for (size_t j = 0; j < KMAX; j++) {
+        const double* qj = Q + j * n;
+        if (!fm_quad_matvec(q, qj, Hv)) break;
+        double aj = fm_dot(qj, Hv, n);
+        alpha[j] = aj;
+        for (size_t i = 0; i < n; i++) w[i] = Hv[i] - aj * qj[i];
+        if (j > 0) { const double* qm = Q + (j - 1) * n;
+                     for (size_t i = 0; i < n; i++) w[i] -= beta_prev * qm[i]; }
+        for (size_t t = 0; t <= j; t++) {               /* full re-orthogonalize */
+            const double* qt = Q + t * n;
+            double c = fm_dot(qt, w, n);
+            for (size_t i = 0; i < n; i++) w[i] -= c * qt[i];
+        }
+        double bj = sqrt(fm_dot(w, w, n));
+        k = j + 1;
+
+        /* Tridiagonal subproblem: min ||g|| e_1·y + ½ yᵀT_k y, ||y|| ≤ Δ. */
+        for (size_t a = 0; a < k * k; a++) T[a] = 0.0;
+        for (size_t a = 0; a < k; a++) T[a * k + a] = alpha[a];
+        for (size_t a = 0; a + 1 < k; a++) { T[a * k + (a + 1)] = betav[a];
+                                             T[(a + 1) * k + a] = betav[a]; }
+        for (size_t a = 0; a < k; a++) gsub[a] = 0.0;
+        gsub[0] = gnorm;
+        FmQuad qT; qT.n = k; qT.B = T; qT.c = NULL; qT.xbase = NULL; qT.gbase = NULL;
+        qT.xpert = NULL; qT.gpert = NULL; qT.active0 = NULL;
+        bool hitsT = false;
+        if (!fm_tr_moresorensen(&qT, gsub, gnorm, Delta, y, &hitsT)) break;
+        *hits = hitsT;
+
+        betav[j] = bj; beta_prev = bj;
+        double resid = bj * fabs(y[k - 1]);
+        if (bj <= 1e-12 * (1.0 + fabs(aj)) || resid < 1e-9 * gnorm
+            || k >= n || j == KMAX - 1) { ret = true; break; }
+        double* qn = Q + (j + 1) * n;
+        for (size_t i = 0; i < n; i++) qn[i] = w[i] / bj;
+    }
+    /* ret is true iff the loop broke after a successful tridiagonal solve, so y
+     * is valid exactly then; on a matvec/subproblem failure ret stays false and
+     * the driver falls back to the best iterate rather than reading a stale y. */
+    if (ret && k > 0) {
+        for (size_t i = 0; i < n; i++) p[i] = 0.0;       /* p = Q_k y            */
+        for (size_t a = 0; a < k; a++) { const double* qa = Q + a * n; double ya = y[a];
+            for (size_t i = 0; i < n; i++) p[i] += ya * qa[i]; }
+    } else {
+        ret = false;
+    }
+done:
+    free(Q); free(alpha); free(betav); free(w); free(Hv); free(y); free(T); free(gsub);
+    return ret;
+}
+
+/* ---- shared trust-region driver --------------------------------------- */
+static bool fm_run_trust_region(Expr* f, Expr** vars, size_t n,
+                                FmVarBind* binds, Expr** g_exprs, Expr*** H_exprs,
+                                double* x, /* in/out */ const FmBox* boxes,
+                                const FmOpts* opts, double* fx_out,
+                                FmSubSolver solve_sub, bool needs_dense_B) {
+    (void)vars;
+    FmLbfgsCtx ctx;
+    ctx.f = f; ctx.g_exprs = g_exprs; ctx.binds = binds; ctx.n = n;
+    ctx.gens = NULL; ctx.ngens = 0; ctx.mu = 0.0; ctx.boxes = NULL;
+    ctx.opts = opts; ctx.augmented = false;
+
+    double* g     = (double*)malloc(n * sizeof(double));
+    double* p     = (double*)malloc(n * sizeof(double));
+    double* x_new = (double*)malloc(n * sizeof(double));
+    double* Bp    = (double*)malloc(n * sizeof(double));
+    double* xpert = (double*)malloc(n * sizeof(double));
+    double* gpert = (double*)malloc(n * sizeof(double));
+    bool*   act0  = (bool*)malloc(n * sizeof(bool));
+    double* B     = needs_dense_B ? (double*)malloc(n * n * sizeof(double)) : NULL;
+    double* ej    = needs_dense_B ? (double*)malloc(n * sizeof(double)) : NULL;
+    double* hcol  = needs_dense_B ? (double*)malloc(n * sizeof(double)) : NULL;
+    bool ok = false; double fx = 0.0;
+    if (!g || !p || !x_new || !Bp || !xpert || !gpert || !act0
+        || (needs_dense_B && (!B || !ej || !hcol))) goto cleanup;
+    for (size_t i = 0; i < n; i++) act0[i] = false;
+
+    if (boxes) fm_project_box(x, n, boxes);
+    if (!fm_eval_scalar(f, binds, x, n, opts, &fx)) {
+        fm_warn(g_fm_name, "nlnum", "objective evaluation failed at start point"); goto cleanup;
+    }
+    if (!fm_tnc_grad(&ctx, x, g)) {
+        fm_warn(g_fm_name, "nlnum", "gradient evaluation failed at start point"); goto cleanup;
+    }
+    ok = true;                                           /* have a usable iterate */
+
+    double tol_acc  = pow(10.0, -opts->acc_goal_digits);
+    double tol_prec = pow(10.0, -opts->prec_goal_digits);
+    double Delta = FM_TR_DELTA0;
+
+    FmQuad q; q.n = n; q.B = B; q.c = &ctx; q.xbase = x; q.gbase = g;
+    q.xpert = xpert; q.gpert = gpert; q.active0 = act0;
+
+    for (int64_t k = 0; k < opts->max_iter; k++) {
+        double gnorm = sqrt(fm_dot(g, g, n));
+        if (gnorm < tol_acc) break;
+        if (needs_dense_B) {
+            if (!fm_tr_build_hessian(&ctx, H_exprs, x, g, B, ej, hcol, xpert, gpert, act0)) {
+                fm_warn(g_fm_name, "nlnum", "Hessian evaluation failed"); break;
+            }
+        }
+        q.xbase = x; q.gbase = g;
+        bool hits = false;
+        if (!solve_sub(&q, g, gnorm, Delta, p, &hits)) break;
+
+        double gp = fm_dot(g, p, n);
+        double pBp = 0.0;
+        if (fm_quad_matvec(&q, p, Bp)) pBp = fm_dot(p, Bp, n);
+        double pred = -(gp + 0.5 * pBp);
+
+        for (size_t i = 0; i < n; i++) x_new[i] = x[i] + p[i];
+        double fx_new;
+        bool feval = fm_eval_scalar(f, binds, x_new, n, opts, &fx_new);
+        if (!feval || !isfinite(fx_new)) {
+            Delta *= 0.25;                               /* infeasible trial      */
+        } else {
+            double act = fx - fx_new;
+            double tiny = 1e-16 * (1.0 + fabs(fx));
+            double rho = (pred <= tiny) ? (act > 0.0 ? 1.0 : -1.0) : act / pred;
+            if (rho < 0.25) Delta *= 0.25;
+            else if (rho > 0.75 && hits) { Delta *= 2.0; if (Delta > FM_TR_DELTAMAX) Delta = FM_TR_DELTAMAX; }
+            if (rho > FM_TR_ETA) {                       /* accept                */
+                double max_step = 0.0, max_x = 0.0;
+                for (size_t i = 0; i < n; i++) {
+                    double ds = fabs(x_new[i] - x[i]); if (ds > max_step) max_step = ds;
+                    double ax = fabs(x_new[i]);         if (ax > max_x)    max_x    = ax;
+                    x[i] = x_new[i];
+                }
+                fx = fx_new;
+                if (!fm_tnc_grad(&ctx, x, g)) {
+                    fm_warn(g_fm_name, "nlnum", "gradient evaluation failed in iteration"); break;
+                }
+                fm_fire_monitor(opts->step_monitor);
+                if (max_step < tol_prec * (max_x + 1e-300)) break;
+                continue;
+            }
+        }
+        double xinf = 0.0;
+        for (size_t i = 0; i < n; i++) { double ax = fabs(x[i]); if (ax > xinf) xinf = ax; }
+        if (Delta < tol_prec * (xinf + 1e-300)) break;   /* radius underflow      */
+    }
+    *fx_out = fx;
+cleanup:
+    free(g); free(p); free(x_new); free(Bp); free(xpert); free(gpert); free(act0);
+    if (B)    free(B);
+    if (ej)   free(ej);
+    if (hcol) free(hcol);
+    return ok;
+}
+
+/* ---- Newton-CG (line search, not trust region) ------------------------- *
+ * Inexact Newton: fm_tnc_cg approximately solves B p = -g with the
+ * Eisenstat-Walker forcing sequence and negative-curvature truncation, then a
+ * unit-step-first Wolfe line search (fm_lbfgs_linesearch, NOT fm_line_search
+ * whose 1/||d|| cap throttles a well-scaled Newton step). Hessian-free. */
+static bool fm_run_newton_cg(Expr* f, Expr** vars, size_t n, FmVarBind* binds,
+                             Expr** g_exprs, double* x, /* in/out */
+                             const FmGenCon* gens, size_t ngens, double mu,
+                             const FmBox* boxes, const FmOpts* opts, double* fx_out) {
+    (void)vars; (void)gens; (void)ngens; (void)mu;
+    FmLbfgsCtx ctx;
+    ctx.f = f; ctx.g_exprs = g_exprs; ctx.binds = binds; ctx.n = n;
+    ctx.gens = NULL; ctx.ngens = 0; ctx.mu = 0.0; ctx.boxes = NULL;
+    ctx.opts = opts; ctx.augmented = false;
+
+    double* g     = (double*)malloc(n * sizeof(double));
+    double* p     = (double*)malloc(n * sizeof(double));
+    double* r     = (double*)malloc(n * sizeof(double));
+    double* d     = (double*)malloc(n * sizeof(double));
+    double* Hd    = (double*)malloc(n * sizeof(double));
+    double* xpert = (double*)malloc(n * sizeof(double));
+    double* gpert = (double*)malloc(n * sizeof(double));
+    double* x_new = (double*)malloc(n * sizeof(double));
+    double* g_new = (double*)malloc(n * sizeof(double));
+    bool*   act0  = (bool*)malloc(n * sizeof(bool));
+    bool ok = false; double fx = 0.0;
+    if (!g || !p || !r || !d || !Hd || !xpert || !gpert || !x_new || !g_new || !act0)
+        goto cleanup;
+    for (size_t i = 0; i < n; i++) act0[i] = false;
+
+    if (boxes) fm_project_box(x, n, boxes);
+    if (!fm_lbfgs_fg(&ctx, x, &fx, g)) {
+        fm_warn(g_fm_name, "nlnum", "objective/gradient evaluation failed at start point");
+        goto cleanup;
+    }
+    ok = true;
+
+    double tol_acc  = pow(10.0, -opts->acc_goal_digits);
+    double tol_prec = pow(10.0, -opts->prec_goal_digits);
+
+    for (int64_t k = 0; k < opts->max_iter; k++) {
+        double gnorm = sqrt(fm_dot(g, g, n));
+        if (gnorm < tol_acc) break;
+        fm_tnc_cg(&ctx, x, g, g, act0, p, r, d, Hd, xpert, gpert);   /* gm = g */
+        double dphi0 = fm_dot(g, p, n);
+        if (dphi0 >= 0.0) {                              /* FD noise: steepest    */
+            for (size_t i = 0; i < n; i++) p[i] = -g[i];
+            dphi0 = fm_dot(g, p, n);
+            if (dphi0 >= 0.0) break;
+        }
+        double a, fx_new;
+        if (!fm_lbfgs_linesearch(&ctx, x, p, fx, dphi0, HUGE_VAL,
+                                 x_new, g_new, &fx_new, &a)) {
+            fm_warn(g_fm_name, "lstol", "line search failed at iter %lld", (long long)k);
+            break;
+        }
+        fm_fire_monitor(opts->step_monitor);
+        double max_step = 0.0, max_x = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            double ds = fabs(x_new[i] - x[i]); if (ds > max_step) max_step = ds;
+            double ax = fabs(x_new[i]);        if (ax > max_x)    max_x    = ax;
+            x[i] = x_new[i]; g[i] = g_new[i];
+        }
+        fx = fx_new;
+        if (max_step < tol_prec * (max_x + 1e-300)) break;
+    }
+    *fx_out = fx;
+cleanup:
+    free(g); free(p); free(r); free(d); free(Hd);
+    free(xpert); free(gpert); free(x_new); free(g_new); free(act0);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ *
+ *  SLSQP -- Sequential Least-Squares Quadratic Programming             *
+ * ------------------------------------------------------------------ *
+ * Han-Powell SQP for smooth CONSTRAINED problems (equality + inequality
+ * + bounds), the faithful analogue of scipy's minimize(method="SLSQP").
+ * Each outer iteration replaces f and the constraints by a quadratic /
+ * linear model at the current iterate and solves the QP
+ *     min_d  1/2 dᵀB d + ∇fᵀd
+ *     s.t.   ∇h_jᵀd + h_j = 0            (equalities)
+ *            ∇g_iᵀd + g_i ≤ 0            (inequalities, feasible ≡ g ≤ 0)
+ *            lo ≤ x + d ≤ hi             (bounds)
+ * where B is a BFGS approximation to the Hessian of the LAGRANGIAN kept
+ * SPD by Powell's (1978) damping.  The step is accepted by an Armijo
+ * backtracking line search on the L1 exact-penalty merit function, whose
+ * penalties are driven above the QP multipliers by Powell's rule so d is
+ * always a descent direction.  Unlike the augmented-Lagrangian penalty
+ * wrapper (fm_run_penalty) used by the other gradient methods, SLSQP
+ * treats the constraints DIRECTLY through the QP, giving super-linear
+ * local convergence and accurate constraint satisfaction.  With no
+ * constraints and no bounds it degrades gracefully to a damped-BFGS
+ * line-search solve.  Machine precision only (WorkingPrecision >
+ * MachinePrecision falls back to QuasiNewton in the driver).  Exposed as
+ * Method -> "SLSQP" (alias "SequentialQuadraticProgramming").  Refs:
+ * Kraft 1988; Powell 1978; Nocedal & Wright 2nd ed. ch. 18; Goldfarb &
+ * Idnani 1983 (the dual active-set QP). */
+
+/* Objective gradient at x: exact symbolic (compiled) with a
+ * central-difference fallback -- the pattern the other gradient runners use. */
+static bool fm_slsqp_objgrad(Expr* f, Expr** g_exprs, FmVarBind* binds,
+                             const double* x, size_t n, const FmOpts* opts,
+                             double* g) {
+    bool ok = g_exprs && fm_eval_gradient(g_exprs, binds, x, n, opts, g);
+    if (!ok) ok = fm_grad_finite_diff(f, binds, x, n, opts, g);
+    return ok;
+}
+
+/* One constraint's Jacobian row ∇c_k at x: exact-then-FD, mirroring
+ * fm_eval_aug_gradient's per-constraint handling. */
+static bool fm_slsqp_congrad(const FmGenCon* gk, FmVarBind* binds,
+                             const double* x, size_t n, const FmOpts* opts,
+                             double* row) {
+    bool ok = gk->grad_exprs
+              && fm_eval_gradient(gk->grad_exprs, binds, x, n, opts, row);
+    if (!ok) ok = fm_grad_finite_diff(gk->expr, binds, x, n, opts, row);
+    return ok;
+}
+
+/* Solve the strictly-convex QP
+ *     min_d  1/2 dᵀB d + gᵀd     s.t.  n_kᵀd  =  b_k   (is_eq[k])
+ *                                       n_kᵀd  ≥  b_k   (inequality/bound)
+ * by a dual active-set sweep on B's Cholesky factor L (B = L Lᵀ).  A dual
+ * method needs NO Phase-1 / feasible start (SQP iterates are routinely
+ * infeasible w.r.t. the linearisation): it begins from the equality-only
+ * active set and, each round, solves the equality-constrained KKT system
+ * over the active set via the range-space identity
+ *     d = Σ_{k∈A} μ_k B⁻¹n_k − B⁻¹g,
+ *     K μ = rhs,  K_{jl}=n_jᵀB⁻¹n_l,  rhs_j = b_j + n_jᵀB⁻¹g,
+ * then either DROPS the active inequality with the most-negative μ (dual
+ * step) or ADDS the most-violated inactive inequality (primal step) until
+ * KKT holds.  Returns 0 on a KKT point, 1 when a violated inequality can
+ * only be met by a linearly-dependent normal (inconsistent linearisation
+ * -> caller relaxes), 2 on the iteration cap (d is still usable).  Fills
+ * d (nv) and mult (m, 0 on inactive; μ_k ≥ 0 for active inequalities). */
+static int fm_slsqp_activeset(const double* L, size_t nv, const double* g,
+                              const double* Nrm, const double* b,
+                              const int* is_eq, size_t m,
+                              double* d, double* mult) {
+    int status = 2;
+    size_t m1 = m ? m : 1;
+    double* w_g = (double*)malloc(sizeof(double) * nv);
+    double* W   = (double*)malloc(sizeof(double) * m1 * nv);
+    bool*   act = (bool*)malloc(sizeof(bool) * m1);
+    bool*   blk = (bool*)calloc(m1, sizeof(bool));   /* blocked (dependent) */
+    size_t* A   = (size_t*)malloc(sizeof(size_t) * m1);
+    double* K   = (double*)malloc(sizeof(double) * m1 * m1);
+    double* Kc  = (double*)malloc(sizeof(double) * m1 * m1);
+    double* rhs = (double*)malloc(sizeof(double) * m1);
+    double* muA = (double*)malloc(sizeof(double) * m1);
+    if (!w_g || !W || !act || !blk || !A || !K || !Kc || !rhs || !muA) {
+        status = 1; goto done;
+    }
+    fm_chol_solve(L, nv, g, w_g);                    /* w_g = B⁻¹ g */
+    for (size_t k = 0; k < m; k++) act[k] = (is_eq[k] != 0);
+
+    const double drop_tol = -1e-9;
+    const double feas_tol =  1e-9;
+    size_t maxit = 20 * (m + 1) + 50;
+    for (size_t it = 0; it < maxit; it++) {
+        size_t q = 0;
+        for (size_t k = 0; k < m; k++) { mult[k] = 0.0; if (act[k]) A[q++] = k; }
+        for (size_t j = 0; j < q; j++)
+            fm_chol_solve(L, nv, &Nrm[A[j] * nv], &W[j * nv]);
+        for (size_t j = 0; j < q; j++) {
+            const double* nj = &Nrm[A[j] * nv];
+            double sg = b[A[j]];
+            for (size_t t = 0; t < nv; t++) sg += nj[t] * w_g[t];
+            rhs[j] = sg;
+            for (size_t l = 0; l < q; l++) {
+                const double* wl = &W[l * nv];
+                double kk = 0.0;
+                for (size_t t = 0; t < nv; t++) kk += nj[t] * wl[t];
+                K[j * q + l] = kk;
+            }
+        }
+        bool kok = (q == 0);
+        if (q > 0) {
+            double tau = 0.0;
+            for (int attempt = 0; attempt < 6 && !kok; attempt++) {
+                for (size_t t = 0; t < q * q; t++) Kc[t] = K[t];
+                if (fm_chol_factor(Kc, q, tau)) {
+                    fm_chol_solve(Kc, q, rhs, muA); kok = true;
+                } else {
+                    tau = (tau == 0.0) ? 1e-12 : tau * 100.0;
+                }
+            }
+        }
+        if (!kok) {
+            /* Dependent active normals: drop the last active inequality and
+             * block it from re-entry.  If only equalities remain, they are
+             * themselves dependent -> signal the caller to relax. */
+            size_t drop = m;
+            for (size_t j = q; j-- > 0; ) if (!is_eq[A[j]]) { drop = A[j]; break; }
+            if (drop == m) { status = 1; goto done; }
+            act[drop] = false; blk[drop] = true;
+            continue;
+        }
+        for (size_t t = 0; t < nv; t++) d[t] = -w_g[t];
+        for (size_t j = 0; j < q; j++) {
+            mult[A[j]] = muA[j];
+            const double* wj = &W[j * nv];
+            for (size_t t = 0; t < nv; t++) d[t] += muA[j] * wj[t];
+        }
+        /* Dual step: drop the most-negative active inequality multiplier. */
+        size_t worst = m; double worstv = drop_tol;
+        for (size_t j = 0; j < q; j++) {
+            size_t k = A[j];
+            if (!is_eq[k] && muA[j] < worstv) { worstv = muA[j]; worst = k; }
+        }
+        if (worst != m) { act[worst] = false; continue; }
+        /* Primal step: add the most-violated inactive (non-blocked) inequality. */
+        size_t addk = m; double maxviol = feas_tol;
+        for (size_t k = 0; k < m; k++) {
+            if (act[k] || is_eq[k] || blk[k]) continue;
+            const double* nk = &Nrm[k * nv];
+            double nd = 0.0;
+            for (size_t t = 0; t < nv; t++) nd += nk[t] * d[t];
+            double viol = b[k] - nd;                 /* > 0 ⇒ violated */
+            if (viol > maxviol) { maxviol = viol; addk = k; }
+        }
+        if (addk == m) {
+            /* KKT for the non-blocked set.  If a BLOCKED inequality is still
+             * violated, the linearisation is genuinely inconsistent. */
+            status = 0;
+            for (size_t k = 0; k < m; k++) {
+                if (!blk[k]) continue;
+                const double* nk = &Nrm[k * nv];
+                double nd = 0.0;
+                for (size_t t = 0; t < nv; t++) nd += nk[t] * d[t];
+                if (b[k] - nd > 1e-7) { status = 1; break; }
+            }
+            goto done;
+        }
+        act[addk] = true;
+    }
+done:
+    free(w_g); free(W); free(act); free(blk); free(A); free(K); free(Kc);
+    free(rhs); free(muA);
+    return status;
+}
+
+/* Assemble and solve the SQP step QP at the current iterate.  L is the
+ * Cholesky factor of the Lagrangian-Hessian approximation B (n×n); g=∇f;
+ * c[k]=gens[k].expr(x) and Jac (ngens×n, row k = ∇c_k) are the general
+ * constraint values / Jacobian; boxes + x give the bound rows.  Fills the
+ * step d (n) and the SIGNED general-constraint multipliers lam[k] for the
+ * Lagrangian L_ag = f + Σ lam_k c_k.  If the plain QP is inconsistent it
+ * re-solves Kraft's relaxed QP (one slack ξ∈[0,1] making d=0 feasible at
+ * ξ=1) so a step always exists.  Returns false only on allocation
+ * failure. */
+static bool fm_slsqp_qp(const double* L, size_t n, const double* g,
+                        const FmGenCon* gens, const double* c,
+                        const double* Jac, size_t ngens,
+                        const FmBox* boxes, const double* x,
+                        double* d, double* lam) {
+    size_t nb = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (boxes && boxes[i].has_lo) nb++;
+        if (boxes && boxes[i].has_hi) nb++;
+    }
+    size_t m = ngens + nb;
+    size_t m1 = m ? m : 1;
+    double* Nrm  = (double*)calloc(m1 * n, sizeof(double));
+    double* b    = (double*)malloc(sizeof(double) * m1);
+    int*    iseq = (int*)malloc(sizeof(int) * m1);
+    double* mult = (double*)malloc(sizeof(double) * m1);
+    if (!Nrm || !b || !iseq || !mult) {
+        free(Nrm); free(b); free(iseq); free(mult); return false;
+    }
+    /* General constraints: equality a·d = -c (n=a, b=-c); inequality c≤0
+     * linearised a·d ≤ -c ⟺ (-a)·d ≥ c (n=-a, b=c). */
+    for (size_t k = 0; k < ngens; k++) {
+        const double* ak = &Jac[k * n];
+        double* row = &Nrm[k * n];
+        if (gens[k].equality) {
+            for (size_t t = 0; t < n; t++) row[t] = ak[t];
+            b[k] = -c[k]; iseq[k] = 1;
+        } else {
+            for (size_t t = 0; t < n; t++) row[t] = -ak[t];
+            b[k] = c[k]; iseq[k] = 0;
+        }
+    }
+    /* Bounds: lo ≤ x+d ⟺ e_i·d ≥ lo-x_i;  x+d ≤ hi ⟺ (-e_i)·d ≥ x_i-hi. */
+    size_t idx = ngens;
+    for (size_t i = 0; i < n; i++) {
+        if (boxes && boxes[i].has_lo) {
+            Nrm[idx * n + i] = 1.0;  b[idx] = boxes[i].lo - x[i]; iseq[idx] = 0; idx++;
+        }
+        if (boxes && boxes[i].has_hi) {
+            Nrm[idx * n + i] = -1.0; b[idx] = x[i] - boxes[i].hi; iseq[idx] = 0; idx++;
+        }
+    }
+
+    int st = fm_slsqp_activeset(L, n, g, Nrm, b, iseq, m, d, mult);
+
+    if (st == 1) {
+        /* Inconsistent linearisation -> Kraft slack relaxation on n+1 vars.
+         * B' = diag(B, eps_xi) so L' = diag(L, sqrt(eps_xi)); g' = [g; rho];
+         * each GENERAL row gets the ξ-column b_k (so at ξ=1 it becomes
+         * n·d = 0, met by d=0); bounds are NOT relaxed (d=0 already meets
+         * them); ξ∈[0,1] as two extra bound rows. */
+        double gnorm = 0.0;
+        for (size_t i = 0; i < n; i++) gnorm += g[i] * g[i];
+        gnorm = sqrt(gnorm);
+        double rho = 100.0 * (1.0 + gnorm);
+        double eps_xi = 1.0;
+        size_t nv2 = n + 1, m2 = m + 2;
+        double* L2   = (double*)calloc(nv2 * nv2, sizeof(double));
+        double* g2   = (double*)malloc(sizeof(double) * nv2);
+        double* Nrm2 = (double*)calloc(m2 * nv2, sizeof(double));
+        double* b2   = (double*)malloc(sizeof(double) * m2);
+        int*    iseq2= (int*)malloc(sizeof(int) * m2);
+        double* mul2 = (double*)malloc(sizeof(double) * m2);
+        double* d2   = (double*)malloc(sizeof(double) * nv2);
+        if (L2 && g2 && Nrm2 && b2 && iseq2 && mul2 && d2) {
+            for (size_t i = 0; i < n; i++) {
+                for (size_t j = 0; j < n; j++) L2[i * nv2 + j] = L[i * n + j];
+                g2[i] = g[i];
+            }
+            L2[n * nv2 + n] = sqrt(eps_xi);
+            g2[n] = rho;
+            for (size_t k = 0; k < m; k++) {
+                for (size_t t = 0; t < n; t++) Nrm2[k * nv2 + t] = Nrm[k * n + t];
+                Nrm2[k * nv2 + n] = (k < ngens) ? b[k] : 0.0;   /* relax generals only */
+                b2[k] = b[k]; iseq2[k] = iseq[k];
+            }
+            Nrm2[m * nv2 + n] = 1.0;  b2[m] = 0.0;       iseq2[m] = 0;   /* ξ ≥ 0 */
+            Nrm2[(m + 1) * nv2 + n] = -1.0; b2[m + 1] = -1.0; iseq2[m + 1] = 0; /* ξ ≤ 1 */
+            (void)fm_slsqp_activeset(L2, nv2, g2, Nrm2, b2, iseq2, m2, d2, mul2);
+            for (size_t i = 0; i < n; i++) d[i] = d2[i];
+            for (size_t k = 0; k < m; k++) mult[k] = mul2[k];
+        }
+        free(L2); free(g2); free(Nrm2); free(b2); free(iseq2); free(mul2); free(d2);
+    }
+
+    /* Map QP multipliers back to the Lagrangian sign convention. */
+    for (size_t k = 0; k < ngens; k++)
+        lam[k] = gens[k].equality ? -mult[k] : mult[k];
+
+    free(Nrm); free(b); free(iseq); free(mult);
+    return true;
+}
+
+static bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
+                         FmVarBind* binds, Expr** g_exprs,
+                         double* x, /* in/out */
+                         const FmGenCon* gens, size_t ngens, double mu,
+                         const FmBox* boxes,
+                         const FmOpts* opts,
+                         double* fx_out) {
+    (void)vars; (void)mu;
+    size_t ng1 = ngens ? ngens : 1;
+    double* B       = (double*)calloc(n * n, sizeof(double));
+    double* L       = (double*)malloc(sizeof(double) * n * n);
+    double* g       = (double*)malloc(sizeof(double) * n);
+    double* g_new   = (double*)malloc(sizeof(double) * n);
+    double* d       = (double*)malloc(sizeof(double) * n);
+    double* x_new   = (double*)malloc(sizeof(double) * n);
+    double* svec    = (double*)malloc(sizeof(double) * n);
+    double* yvec    = (double*)malloc(sizeof(double) * n);
+    double* Bs      = (double*)malloc(sizeof(double) * n);
+    double* xbest   = (double*)malloc(sizeof(double) * n);
+    double* lam     = (double*)calloc(ng1, sizeof(double));
+    double* pen     = (double*)calloc(ng1, sizeof(double));
+    double* c       = (double*)malloc(sizeof(double) * ng1);
+    double* c_new   = (double*)malloc(sizeof(double) * ng1);
+    double* Jac     = (double*)malloc(sizeof(double) * ng1 * n);
+    double* Jac_new = (double*)malloc(sizeof(double) * ng1 * n);
+    bool ok = false;
+    double fx = 0.0;
+    bool have_best = false; double best_f = 0.0;
+    if (!B || !L || !g || !g_new || !d || !x_new || !svec || !yvec || !Bs
+        || !xbest || !lam || !pen || !c || !c_new || !Jac || !Jac_new)
+        goto cleanup;
+
+    for (size_t i = 0; i < n; i++) B[i * n + i] = 1.0;
+    if (boxes) fm_project_box(x, n, boxes);
+
+    if (!fm_eval_scalar(f, binds, x, n, opts, &fx)) {
+        fm_warn(g_fm_name, "nlnum", "objective evaluation failed at start point");
+        goto cleanup;
+    }
+    if (!fm_slsqp_objgrad(f, g_exprs, binds, x, n, opts, g)) {
+        fm_warn(g_fm_name, "nlnum", "gradient evaluation failed at start point");
+        goto cleanup;
+    }
+    for (size_t k = 0; k < ngens; k++) {
+        if (!fm_eval_scalar(gens[k].expr, binds, x, n, opts, &c[k])
+            || !fm_slsqp_congrad(&gens[k], binds, x, n, opts, &Jac[k * n])) {
+            fm_warn(g_fm_name, "nlnum", "constraint evaluation failed at start point");
+            goto cleanup;
+        }
+    }
+
+    double tol_acc  = pow(10.0, -opts->acc_goal_digits);
+    double tol_prec = pow(10.0, -opts->prec_goal_digits);
+    int    infeas_streak = 0;
+    int    zero_streak = 0;
+
+    for (int64_t it = 0; it < opts->max_iter; it++) {
+        /* Factor a COPY of B (tau-retry); reset B=I if it is not SPD. */
+        bool fac = false; double tau = 0.0;
+        for (int attempt = 0; attempt < 6 && !fac; attempt++) {
+            for (size_t t = 0; t < n * n; t++) L[t] = B[t];
+            if (fm_chol_factor(L, n, tau)) fac = true;
+            else tau = (tau == 0.0) ? 1e-10 : tau * 100.0;
+        }
+        if (!fac) {
+            for (size_t t = 0; t < n * n; t++) B[t] = 0.0;
+            for (size_t i = 0; i < n; i++) B[i * n + i] = 1.0;
+            for (size_t t = 0; t < n * n; t++) L[t] = B[t];
+            fm_chol_factor(L, n, 0.0);
+        }
+
+        if (!fm_slsqp_qp(L, n, g, gens, c, Jac, ngens, boxes, x, d, lam))
+            goto cleanup;
+
+        double dnorm = 0.0;
+        for (size_t i = 0; i < n; i++) if (fabs(d[i]) > dnorm) dnorm = fabs(d[i]);
+
+        /* Powell penalty update: pen_k = max(|lam_k|, (pen_k+|lam_k|)/2), so
+         * pen_k ≥ |multiplier| ⇒ d is a merit descent direction. */
+        for (size_t k = 0; k < ngens; k++) {
+            double a = fabs(lam[k]);
+            double avg = 0.5 * (pen[k] + a);
+            double np = (a > avg) ? a : avg;
+            if (np < a) np = a;
+            if (np > 1e12) np = 1e12;
+            pen[k] = np;
+        }
+
+        /* L1 merit at x and its directional derivative along d. */
+        double phi0 = fx, dphi = 0.0;
+        for (size_t k = 0; k < ngens; k++) {
+            double viol = gens[k].equality ? fabs(c[k]) : (c[k] > 0.0 ? c[k] : 0.0);
+            phi0 += pen[k] * viol;
+            dphi -= pen[k] * viol;
+        }
+        for (size_t i = 0; i < n; i++) dphi += g[i] * d[i];
+        if (dphi >= 0.0) {
+            /* Merit ascent (penalties still too small / tiny step): fall back
+             * to the guaranteed-descent estimate -dᵀBd. */
+            double dBd = 0.0;
+            for (size_t i = 0; i < n; i++) {
+                double t = 0.0;
+                for (size_t j = 0; j < n; j++) t += B[i * n + j] * d[j];
+                dBd += d[i] * t;
+            }
+            dphi = -dBd;
+        }
+
+        /* Armijo backtracking on the merit; track the best trial step. */
+        double alpha = 1.0, best_alpha = 0.0, best_phi = phi0;
+        bool ls_ok = false;
+        for (int bt = 0; bt < 40; bt++) {
+            double ft;
+            for (size_t i = 0; i < n; i++) x_new[i] = x[i] + alpha * d[i];
+            bool eok = fm_eval_scalar(f, binds, x_new, n, opts, &ft);
+            bool cok = eok && isfinite(ft);
+            double phit = ft;
+            for (size_t k = 0; cok && k < ngens; k++) {
+                double cv;
+                if (!fm_eval_scalar(gens[k].expr, binds, x_new, n, opts, &cv)) { cok = false; break; }
+                phit += pen[k] * (gens[k].equality ? fabs(cv) : (cv > 0.0 ? cv : 0.0));
+            }
+            if (cok) {
+                if (phit <= phi0 + 1e-4 * alpha * dphi) {
+                    best_alpha = alpha; best_phi = phit; ls_ok = true; break;
+                }
+                if (phit < best_phi) { best_phi = phit; best_alpha = alpha; }
+            }
+            alpha *= 0.5;
+            if (alpha < 1e-12) break;
+        }
+
+        if (!ls_ok && best_alpha == 0.0) {
+            /* No trial improved the merit -> B is a poor model: reset and
+             * retry once; two in a row means we are stationary. */
+            zero_streak++;
+            for (size_t t = 0; t < n * n; t++) B[t] = 0.0;
+            for (size_t i = 0; i < n; i++) B[i * n + i] = 1.0;
+            if (zero_streak >= 2) { ok = true; break; }
+            continue;
+        }
+        zero_streak = 0;
+        alpha = best_alpha;
+        for (size_t i = 0; i < n; i++) x_new[i] = x[i] + alpha * d[i];
+        double fx_new;
+        if (!fm_eval_scalar(f, binds, x_new, n, opts, &fx_new)) goto cleanup;
+        fm_fire_monitor(opts->step_monitor);
+
+        /* Gradient + Jacobian at x_new (needed for the Lagrangian BFGS pair). */
+        bool grads_ok = fm_slsqp_objgrad(f, g_exprs, binds, x_new, n, opts, g_new);
+        for (size_t k = 0; grads_ok && k < ngens; k++) {
+            if (!fm_eval_scalar(gens[k].expr, binds, x_new, n, opts, &c_new[k])
+                || !fm_slsqp_congrad(&gens[k], binds, x_new, n, opts, &Jac_new[k * n]))
+                grads_ok = false;
+        }
+        if (!grads_ok) {
+            /* Take the step and stop -- cannot form the next model. */
+            for (size_t i = 0; i < n; i++) x[i] = x_new[i];
+            fx = fx_new;
+            ok = true; break;
+        }
+
+        /* Powell-damped BFGS on B using y = ∇L(x_new) − ∇L(x) at lam. */
+        for (size_t i = 0; i < n; i++) {
+            double gl_new = g_new[i], gl_old = g[i];
+            for (size_t k = 0; k < ngens; k++) {
+                gl_new += lam[k] * Jac_new[k * n + i];
+                gl_old += lam[k] * Jac[k * n + i];
+            }
+            yvec[i] = gl_new - gl_old;
+            svec[i] = x_new[i] - x[i];
+        }
+        for (size_t i = 0; i < n; i++) {
+            double t = 0.0;
+            for (size_t j = 0; j < n; j++) t += B[i * n + j] * svec[j];
+            Bs[i] = t;
+        }
+        double sBs = 0.0, sy = 0.0;
+        for (size_t i = 0; i < n; i++) { sBs += svec[i] * Bs[i]; sy += svec[i] * yvec[i]; }
+        if (sBs > 1e-12) {
+            double theta = (sy >= 0.2 * sBs) ? 1.0 : (0.8 * sBs) / (sBs - sy);
+            double sr = 0.0;
+            for (size_t i = 0; i < n; i++) {
+                yvec[i] = theta * yvec[i] + (1.0 - theta) * Bs[i];   /* r */
+                sr += svec[i] * yvec[i];
+            }
+            if (sr > 1e-12) {
+                for (size_t i = 0; i < n; i++)
+                    for (size_t j = 0; j < n; j++)
+                        B[i * n + j] += yvec[i] * yvec[j] / sr - Bs[i] * Bs[j] / sBs;
+            }
+        }
+
+        /* Commit the step. */
+        for (size_t i = 0; i < n; i++) { x[i] = x_new[i]; g[i] = g_new[i]; }
+        fx = fx_new;
+        for (size_t k = 0; k < ngens; k++) {
+            c[k] = c_new[k];
+            for (size_t t = 0; t < n; t++) Jac[k * n + t] = Jac_new[k * n + t];
+        }
+
+        /* Feasibility, best-feasible tracking, and convergence. */
+        double viol = 0.0;
+        for (size_t k = 0; k < ngens; k++) {
+            double v = gens[k].equality ? fabs(c[k]) : (c[k] > 0.0 ? c[k] : 0.0);
+            if (v > viol) viol = v;
+        }
+        if (viol <= 1e-8 && (!have_best || fx < best_f)) {
+            for (size_t i = 0; i < n; i++) xbest[i] = x[i];
+            best_f = fx; have_best = true;
+        }
+        double gLnorm = 0.0, xnorm = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            double gl = g[i];
+            for (size_t k = 0; k < ngens; k++) gl += lam[k] * Jac[k * n + i];
+            if (fabs(gl) > gLnorm) gLnorm = fabs(gl);
+            if (fabs(x[i]) > xnorm) xnorm = fabs(x[i]);
+        }
+        bool feas = (viol <= tol_acc);
+        bool small_step = (alpha * dnorm < tol_prec * (xnorm + 1.0));
+        if (feas && (small_step || gLnorm < tol_acc)) { ok = true; break; }
+
+        if (viol > 1e-6) {
+            if (++infeas_streak >= 8) {
+                fm_warn(g_fm_name, "infeas",
+                        "could not satisfy constraints to tolerance");
+                break;
+            }
+        } else infeas_streak = 0;
+    }
+
+    /* If we ended infeasible but saw a feasible iterate, return the best. */
+    {
+        double final_viol = 0.0;
+        for (size_t k = 0; k < ngens; k++) {
+            double v = gens[k].equality ? fabs(c[k]) : (c[k] > 0.0 ? c[k] : 0.0);
+            if (v > final_viol) final_viol = v;
+        }
+        if (final_viol > 1e-8 && have_best) {
+            for (size_t i = 0; i < n; i++) x[i] = xbest[i];
+            fx = best_f;
+        }
+    }
+    *fx_out = fx;
+    ok = true;
+cleanup:
+    free(B); free(L); free(g); free(g_new); free(d); free(x_new);
+    free(svec); free(yvec); free(Bs); free(xbest); free(lam); free(pen);
+    free(c); free(c_new); free(Jac); free(Jac_new);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Powell's conjugate-direction method (derivative-free)               *
+ * ------------------------------------------------------------------ *
+ * Minimises f by sweeping 1-D line minimisations along an evolving set
+ * of n directions (initialised to the unit basis), replacing the
+ * direction of largest decrease with the averaged cycle step when
+ * Powell's parabolic test accepts it.  Function values only -- no
+ * gradient -- so it serves the non-smooth / black-box objectives the
+ * gradient methods cannot.  The line search reuses the same Brent
+ * parabolic-interpolation minimiser as the 1-D "Brent" method,
+ * restricted to phi(t) = f(p + t d) via fm_eval_line.  Machine precision
+ * only: it rides the compiled objective in g_fm_obj_prog through
+ * fm_eval_scalar, and WorkingPrecision > MachinePrecision falls back to
+ * QuasiNewton in the driver.  The replace-direction test, the direction
+ * cycling and the extrapolated point all match scipy's _minimize_powell,
+ * so the two agree on the minimiser to rounding.  Exposed as
+ * Method -> "Powell" and its Mathematica alias "PrincipalAxis". */
+
+/* phi(t) = f(p + t d), written into xtmp.  No box projection here:
+ * clamping t (fm_bracket_line / fm_brent_line) is what keeps the line
+ * feasible; projecting inside the eval would make phi non-smooth and
+ * defeat Brent's parabolic model. */
+static bool fm_eval_line(Expr* f, FmVarBind* binds, size_t n,
+                         const double* p, const double* d, double t,
+                         const FmOpts* opts, double* xtmp, double* fval_out) {
+    for (size_t i = 0; i < n; i++) xtmp[i] = p[i] + t * d[i];
+    return fm_eval_scalar(f, binds, xtmp, n, opts, fval_out);
+}
+
+/* mnbrak-style bracketing of phi(t) = f(p + t d) over t in [t_lo, t_hi].
+ * Mirrors fm_bracket, but the step scale lives in d (unit-norm basis
+ * rows, or a replaced row carrying its own magnitude), so it starts at
+ * t = 0 with unit step h = 1 -- scipy's mnbrak default (xa=0, xb=1) --
+ * rather than the coordinate-scaled 1e-2 of the 1-D fm_bracket.  When
+ * unbounded the interval is [-HUGE_VAL, +HUGE_VAL] and every clamp is a
+ * no-op. */
+static bool fm_bracket_line(Expr* f, FmVarBind* binds, size_t n,
+                            const double* p, const double* d, const FmOpts* opts,
+                            double t_lo, double t_hi, double* xtmp,
+                            double* a_out, double* b_out, double* c_out) {
+    double a = 0.0, b, fa, fb;
+    if (!fm_eval_line(f, binds, n, p, d, a, opts, xtmp, &fa)) return false;
+    b = a + 1.0;
+    if (b > t_hi) b = 0.5 * (a + t_hi);
+    if (b < t_lo) b = 0.5 * (a + t_lo);
+    if (!fm_eval_line(f, binds, n, p, d, b, opts, xtmp, &fb)) return false;
+    if (fb > fa) {
+        double t = a; a = b; b = t;
+        t = fa; fa = fb; fb = t;
+    }
+    double c = b + 1.618 * (b - a);
+    if (c > t_hi) c = t_hi;
+    if (c < t_lo) c = t_lo;
+    double fc;
+    if (!fm_eval_line(f, binds, n, p, d, c, opts, xtmp, &fc)) return false;
+    /* Strict `<` (scipy's mnbrak), NOT the 1-D fm_bracket's `<=`: on a flat
+     * coordinate direction (e.g. Beale is constant in x at y==1) `<=` keeps
+     * growing the bracket to where floating-point cancellation fakes a
+     * spurious minimum at ~1e37; strict `<` stops at the flat region. */
+    for (int k = 0; k < 100 && fc < fb; k++) {
+        a = b; fa = fb;
+        b = c; fb = fc;
+        c = b + 1.618 * (b - a);
+        if (c >= t_hi) {
+            c = t_hi;
+            if (!fm_eval_line(f, binds, n, p, d, c, opts, xtmp, &fc)) return false;
+            break;
+        }
+        if (c <= t_lo) {
+            c = t_lo;
+            if (!fm_eval_line(f, binds, n, p, d, c, opts, xtmp, &fc)) return false;
+            break;
+        }
+        if (!fm_eval_line(f, binds, n, p, d, c, opts, xtmp, &fc)) return false;
+    }
+    if (a > c) { double t = a; a = c; c = t; }
+    *a_out = a; *b_out = b; *c_out = c;
+    return true;
+}
+
+/* Brent parabolic-interpolation minimiser of phi(t) = f(p + t d) on the
+ * bracket [a, c], clamped to [t_lo, t_hi].  One-for-one transliteration
+ * of fm_brent_min with abscissa t and line evaluation, omitting the
+ * per-step StepMonitor (Powell fires it once per cycle instead) and the
+ * non-convergence warning (the outer loop's function-decrease test is the
+ * authoritative signal). */
+static bool fm_brent_line(Expr* f, FmVarBind* binds, size_t n,
+                          const double* p, const double* d, const FmOpts* opts,
+                          double a, double b, double c, double t_lo, double t_hi,
+                          double* xtmp, double* t_out, double* fx_out) {
+    if (a > c) { double t = a; a = c; c = t; }
+    double tol = pow(10.0, -opts->prec_goal_digits);
+    double tol_acc = pow(10.0, -opts->acc_goal_digits);
+    double e = 0.0, dd = 0.0;
+    double x, w, v;
+    x = w = v = b;
+    if (x < a || x > c) x = w = v = 0.5 * (a + c);
+    double fx;
+    if (!fm_eval_line(f, binds, n, p, d, x, opts, xtmp, &fx)) return false;
+    double fw = fx, fv = fx;
+    for (int64_t k = 0; k < opts->max_iter; k++) {
+        double xm = 0.5 * (a + c);
+        double tol1 = tol * fabs(x) + FM_ZEPS;
+        double tol2 = 2.0 * tol1;
+        if (fabs(x - xm) <= tol2 - 0.5 * (c - a)
+            || fabs(fx) < tol_acc * (1.0 + fabs(fx))) {
+            *t_out = x; *fx_out = fx; return true;
+        }
+        double u = x;
+        if (fabs(e) > tol1) {
+            double r = (x - w) * (fx - fv);
+            double q = (x - v) * (fx - fw);
+            double pp = (x - v) * q - (x - w) * r;
+            q = 2.0 * (q - r);
+            if (q > 0.0) pp = -pp;
+            q = fabs(q);
+            double etemp = e;
+            e = dd;
+            if (fabs(pp) >= fabs(0.5 * q * etemp)
+                || pp <= q * (a - x) || pp >= q * (c - x)) {
+                e = (x >= xm) ? (a - x) : (c - x);
+                dd = FM_CGOLD * e;
+            } else {
+                dd = pp / q;
+                u = x + dd;
+                if (u - a < tol2 || c - u < tol2)
+                    dd = (xm - x >= 0.0) ? tol1 : -tol1;
+            }
+        } else {
+            e = (x >= xm) ? (a - x) : (c - x);
+            dd = FM_CGOLD * e;
+        }
+        u = (fabs(dd) >= tol1) ? (x + dd) : (x + ((dd >= 0.0) ? tol1 : -tol1));
+        if (u < t_lo) u = t_lo;
+        if (u > t_hi) u = t_hi;
+        double fu;
+        if (!fm_eval_line(f, binds, n, p, d, u, opts, xtmp, &fu)) return false;
+        if (fu <= fx) {
+            if (u >= x) a = x; else c = x;
+            v = w; w = x; x = u;
+            fv = fw; fw = fx; fx = fu;
+        } else {
+            if (u < x) a = u; else c = u;
+            if (fu <= fw || w == x) { v = w; w = u; fv = fw; fw = fu; }
+            else if (fu <= fv || v == x || v == w) { v = u; fv = fu; }
+        }
+    }
+    *t_out = x; *fx_out = fx;
+    return true;
+}
+
+/* Feasible t-interval for p + t d against the per-variable box, then
+ * bracket + Brent-minimise phi(t).  On a strict improvement, advance p by
+ * t*.d (re-projected), update *f_cur, and report the realised step t*.
+ * Returns false (leaving p and *f_cur untouched, *t_star = 0) when the
+ * direction is degenerate, the feasible interval collapses, or an
+ * evaluation fails -- the caller simply skips that direction. */
+static bool fm_powell_line_min(Expr* f, FmVarBind* binds, size_t n,
+                               double* p, const double* d,
+                               const FmBox* boxes, const FmOpts* opts,
+                               double* xtmp, double* f_cur, double* t_star) {
+    *t_star = 0.0;
+    double dn = 0.0;
+    for (size_t i = 0; i < n; i++) dn += d[i] * d[i];
+    if (dn < 1e-60) return false;                 /* ||d|| < 1e-30 */
+
+    double t_lo = -HUGE_VAL, t_hi = HUGE_VAL;
+    if (boxes) {
+        for (size_t i = 0; i < n; i++) {
+            if (fabs(d[i]) < 1e-30) continue;     /* component fixed */
+            double tl, tu;
+            if (d[i] > 0.0) {
+                tl = boxes[i].has_lo ? (boxes[i].lo - p[i]) / d[i] : -HUGE_VAL;
+                tu = boxes[i].has_hi ? (boxes[i].hi - p[i]) / d[i] :  HUGE_VAL;
+            } else {                              /* sign flip */
+                tl = boxes[i].has_hi ? (boxes[i].hi - p[i]) / d[i] : -HUGE_VAL;
+                tu = boxes[i].has_lo ? (boxes[i].lo - p[i]) / d[i] :  HUGE_VAL;
+            }
+            if (tl > t_lo) t_lo = tl;
+            if (tu < t_hi) t_hi = tu;
+        }
+        if (t_hi - t_lo < 1e-15) return false;    /* pinned in a corner along d */
+    }
+
+    double ta, tb, tc;
+    if (!fm_bracket_line(f, binds, n, p, d, opts, t_lo, t_hi, xtmp, &ta, &tb, &tc))
+        return false;
+    double tmin, fmin;
+    if (!fm_brent_line(f, binds, n, p, d, opts, ta, tb, tc, t_lo, t_hi, xtmp, &tmin, &fmin))
+        return false;
+    if (fmin < *f_cur) {
+        for (size_t i = 0; i < n; i++) p[i] += tmin * d[i];
+        if (boxes) fm_project_box(p, n, boxes);
+        *f_cur = fmin;
+        *t_star = tmin;
+        return true;
+    }
+    return false;
+}
+
+static bool fm_run_powell(Expr* f, Expr** vars, size_t n,
+                          FmVarBind* binds, Expr** g_exprs,
+                          double* x, /* in/out */
+                          const FmGenCon* gens, size_t ngens, double mu,
+                          const FmBox* boxes,
+                          const FmOpts* opts,
+                          double* fx_out) {
+    (void)vars; (void)g_exprs; (void)gens; (void)ngens; (void)mu;
+
+    /* n == 1 degenerates to a single Brent line search along e_0; delegate
+     * to the exact 1-D path (identical result, cheaper) rather than run the
+     * full direction-set machinery over one coordinate. */
+    if (n == 1) {
+        if (boxes) fm_project_box(x, 1, boxes);
+        double a, b, c;
+        const FmBox* box1 = boxes ? &boxes[0] : NULL;
+        if (box1 && box1->has_lo && box1->has_hi) {
+            a = box1->lo; c = box1->hi; b = 0.5 * (a + c);
+            if (x[0] > a && x[0] < c) b = x[0];
+        } else if (!fm_bracket(f, binds, opts, x[0], box1, &a, &b, &c)) {
+            fm_warn(g_fm_name, "nlnum", "bracket-finding failed");
+            return false;
+        }
+        double xm, fmv;
+        bool ok1 = fm_brent_min(f, binds, opts, a, b, c, box1, &xm, &fmv);
+        if (ok1) { x[0] = xm; *fx_out = fmv; }
+        return ok1;
+    }
+
+    double* direc   = (double*)calloc(n * n, sizeof(double));
+    double* x_start = (double*)malloc(sizeof(double) * n);
+    double* x_extra = (double*)malloc(sizeof(double) * n);
+    double* d_avg   = (double*)malloc(sizeof(double) * n);
+    double* xtmp    = (double*)malloc(sizeof(double) * n);
+    bool ok = false;
+    if (!direc || !x_start || !x_extra || !d_avg || !xtmp) goto cleanup;
+
+    for (size_t i = 0; i < n; i++) direc[i*n + i] = 1.0;
+    if (boxes) fm_project_box(x, n, boxes);
+
+    double f_cur;
+    if (!fm_eval_scalar(f, binds, x, n, opts, &f_cur)) {
+        fm_warn(g_fm_name, "nlnum", "objective evaluation failed at start point");
+        goto cleanup;
+    }
+
+    double ftol     = pow(10.0, -opts->acc_goal_digits);
+    double tol_prec = pow(10.0, -opts->prec_goal_digits);
+
+    for (int64_t k = 0; k < opts->max_iter; k++) {
+        for (size_t i = 0; i < n; i++) x_start[i] = x[i];
+        double f_start = f_cur;
+        double delta = 0.0;
+        size_t ibig = 0;
+
+        /* One sweep of n line minimisations over the current direction set. */
+        for (size_t i = 0; i < n; i++) {
+            double f_before = f_cur;
+            double tstep;
+            fm_powell_line_min(f, binds, n, x, &direc[i*n], boxes, opts,
+                               xtmp, &f_cur, &tstep);
+            double dec = f_before - f_cur;
+            if (dec > delta) { delta = dec; ibig = i; }
+        }
+
+        /* Convergence: relative function decrease over a full cycle (scipy's
+         * Powell test), or a PrecisionGoal step-size floor. */
+        if (2.0 * (f_start - f_cur) <= ftol * (fabs(f_start) + fabs(f_cur)) + 1e-20) {
+            ok = true; break;
+        }
+        double max_step = 0.0, max_x = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            double ds = fabs(x[i] - x_start[i]);
+            if (ds > max_step) max_step = ds;
+            if (fabs(x[i]) > max_x) max_x = fabs(x[i]);
+        }
+        if (max_step < tol_prec * (max_x + 1e-300)) { ok = true; break; }
+
+        /* Averaged direction d_avg = x - x_start and extrapolated point
+         * x_e = 2x - x_start (== x + d_avg). */
+        for (size_t i = 0; i < n; i++) {
+            d_avg[i]   = x[i] - x_start[i];
+            x_extra[i] = 2.0 * x[i] - x_start[i];
+        }
+        if (boxes) fm_project_box(x_extra, n, boxes);
+        double f_extra;
+        if (!fm_eval_scalar(f, binds, x_extra, n, opts, &f_extra)) {
+            /* Non-finite extrapolate -> keep the direction set, continue. */
+            fm_fire_monitor(opts->step_monitor);
+            continue;
+        }
+
+        /* Powell's replace-direction test (Numerical Recipes / scipy form). */
+        if (f_start > f_extra) {
+            double s1 = f_start - f_cur - delta;
+            double s2 = f_start - f_extra;
+            double t = 2.0 * (f_start + f_extra - 2.0 * f_cur) * s1 * s1
+                     - delta * s2 * s2;
+            if (t < 0.0) {
+                double tstep;
+                bool moved = fm_powell_line_min(f, binds, n, x, d_avg, boxes,
+                                                opts, xtmp, &f_cur, &tstep);
+                /* Linear-dependence guard: rotate in only a non-zero step. */
+                if (moved && tstep != 0.0) {
+                    for (size_t i = 0; i < n; i++) {
+                        direc[ibig*n + i]  = direc[(n-1)*n + i];
+                        direc[(n-1)*n + i] = tstep * d_avg[i];
+                    }
+                }
+            }
+        }
+        fm_fire_monitor(opts->step_monitor);
+    }
+
+    *fx_out = f_cur;
+    ok = true;
+cleanup:
+    free(direc); free(x_start); free(x_extra); free(d_avg); free(xtmp);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Nelder-Mead downhill simplex (derivative-free)                      *
+ * ------------------------------------------------------------------ *
+ * The Nelder & Mead (1965) simplex: n+1 vertices reflected, expanded,
+ * contracted and shrunk toward the best, using function values only.
+ * Robust on non-smooth / noisy objectives where the gradient methods (and
+ * even Powell's line search) can struggle, at the cost of slower
+ * convergence on smooth ones. This is the LOCAL simplex (a single start,
+ * matching scipy's _minimize_neldermead) -- distinct from the restarted,
+ * box-sampling nm_neldermead the global NMinimize driver uses. Standard
+ * non-adaptive coefficients rho/chi/psi/sigma = 1/2/0.5/0.5 (scipy's
+ * default), so the two agree on the minimiser. Machine precision only
+ * (rides the compiled objective through fm_eval_scalar); box bounds by
+ * projecting every candidate vertex; n==1 delegates to the exact Brent
+ * path. Exposed as Method -> "NelderMead". */
+
+/* Insertion-sort the vertex index permutation by ascending fsim. np = n+1
+ * is small (Nelder-Mead is only practical for modest n), so an O(np^2)
+ * sort of a size_t permutation — not the vertex rows — is the cheap choice. */
+static void fm_nm_sort_idx(size_t* idx, const double* fsim, size_t np) {
+    for (size_t i = 1; i < np; i++) {
+        size_t key = idx[i];
+        double fk = fsim[key];
+        size_t j = i;
+        while (j > 0 && fsim[idx[j-1]] > fk) { idx[j] = idx[j-1]; j--; }
+        idx[j] = key;
+    }
+}
+
+static bool fm_run_neldermead(Expr* f, Expr** vars, size_t n,
+                              FmVarBind* binds, Expr** g_exprs,
+                              double* x, /* in/out */
+                              const FmGenCon* gens, size_t ngens, double mu,
+                              const FmBox* boxes,
+                              const FmOpts* opts,
+                              double* fx_out) {
+    (void)vars; (void)g_exprs; (void)gens; (void)ngens; (void)mu;
+
+    /* n == 1: a 2-vertex simplex is just a crude line search; delegate to the
+     * exact Brent 1-D minimiser (identical optimum, cheaper), as Powell does. */
+    if (n == 1) {
+        if (boxes) fm_project_box(x, 1, boxes);
+        double a, b, c;
+        const FmBox* box1 = boxes ? &boxes[0] : NULL;
+        if (box1 && box1->has_lo && box1->has_hi) {
+            a = box1->lo; c = box1->hi; b = 0.5 * (a + c);
+            if (x[0] > a && x[0] < c) b = x[0];
+        } else if (!fm_bracket(f, binds, opts, x[0], box1, &a, &b, &c)) {
+            fm_warn(g_fm_name, "nlnum", "bracket-finding failed");
+            return false;
+        }
+        double xm, fmv;
+        bool ok1 = fm_brent_min(f, binds, opts, a, b, c, box1, &xm, &fmv);
+        if (ok1) { x[0] = xm; *fx_out = fmv; }
+        return ok1;
+    }
+
+    const double rho = 1.0, chi = 2.0, psi = 0.5, sigma = 0.5;
+    size_t np = n + 1;
+    double* sim  = (double*)malloc(np * n * sizeof(double)); /* row k = vertex k */
+    double* fsim = (double*)malloc(np * sizeof(double));
+    size_t* idx  = (size_t*)malloc(np * sizeof(size_t));
+    double* xbar = (double*)malloc(n * sizeof(double));      /* centroid       */
+    double* xr   = (double*)malloc(n * sizeof(double));      /* reflection     */
+    double* xt   = (double*)malloc(n * sizeof(double));      /* expand/contract*/
+    bool ok = false;
+    if (!sim || !fsim || !idx || !xbar || !xr || !xt) goto cleanup;
+
+    if (boxes) fm_project_box(x, n, boxes);
+
+    /* Initial simplex: vertex 0 = start; vertex k+1 = start with coordinate k
+     * perturbed by 5% (or 0.00025 if that coordinate is 0), scipy's rule. */
+    for (size_t j = 0; j < n; j++) sim[j] = x[j];
+    for (size_t k = 0; k < n; k++) {
+        double* v = &sim[(k + 1) * n];
+        for (size_t j = 0; j < n; j++) v[j] = x[j];
+        v[k] = (x[k] != 0.0) ? (1.05 * x[k]) : 0.00025;
+        if (boxes) fm_project_box(v, n, boxes);
+    }
+    for (size_t k = 0; k < np; k++) {
+        if (!fm_eval_scalar(f, binds, &sim[k * n], n, opts, &fsim[k])) {
+            fm_warn(g_fm_name, "nlnum", "objective evaluation failed building the simplex");
+            goto cleanup;
+        }
+        idx[k] = k;
+    }
+    fm_nm_sort_idx(idx, fsim, np);
+
+    double fatol = pow(10.0, -opts->acc_goal_digits);
+    double xatol = pow(10.0, -opts->prec_goal_digits);
+
+    for (int64_t it = 0; it < opts->max_iter; it++) {
+        size_t best = idx[0], worst = idx[n], second = idx[n - 1];
+
+        /* Convergence: worst-to-best spread in both f and x below tolerance.
+         * (idx is sorted, so the max f-gap is fsim[worst]-fsim[best].) */
+        double fspread = fabs(fsim[worst] - fsim[best]);
+        double xspread = 0.0;
+        {
+            const double* bpt = &sim[best * n];
+            for (size_t k = 1; k < np; k++) {
+                const double* v = &sim[idx[k] * n];
+                for (size_t j = 0; j < n; j++) {
+                    double dx = fabs(v[j] - bpt[j]);
+                    if (dx > xspread) xspread = dx;
+                }
+            }
+        }
+        if (fspread <= fatol && xspread <= xatol) { ok = true; break; }
+
+        /* Centroid of the n best vertices (all but the worst). */
+        for (size_t j = 0; j < n; j++) xbar[j] = 0.0;
+        for (size_t k = 0; k < n; k++) {
+            const double* v = &sim[idx[k] * n];
+            for (size_t j = 0; j < n; j++) xbar[j] += v[j];
+        }
+        for (size_t j = 0; j < n; j++) xbar[j] /= (double)n;
+
+        const double* worstv = &sim[worst * n];
+        /* Reflection xr = (1+rho)*xbar - rho*worst. */
+        for (size_t j = 0; j < n; j++) xr[j] = (1.0 + rho) * xbar[j] - rho * worstv[j];
+        if (boxes) fm_project_box(xr, n, boxes);
+        double fxr;
+        bool okr = fm_eval_scalar(f, binds, xr, n, opts, &fxr);
+        if (!okr) fxr = HUGE_VAL;   /* a non-finite reflection is "very bad" → contracts */
+
+        bool doshrink = false;
+        if (okr && fxr < fsim[best]) {
+            /* Expansion xe = (1+rho*chi)*xbar - rho*chi*worst; keep the better. */
+            for (size_t j = 0; j < n; j++) xt[j] = (1.0 + rho * chi) * xbar[j] - rho * chi * worstv[j];
+            if (boxes) fm_project_box(xt, n, boxes);
+            double fxe;
+            bool oke = fm_eval_scalar(f, binds, xt, n, opts, &fxe);
+            if (oke && fxe < fxr) {
+                for (size_t j = 0; j < n; j++) sim[worst * n + j] = xt[j];
+                fsim[worst] = fxe;
+            } else {
+                for (size_t j = 0; j < n; j++) sim[worst * n + j] = xr[j];
+                fsim[worst] = fxr;
+            }
+        } else if (okr && fxr < fsim[second]) {
+            /* Reflection accepted. */
+            for (size_t j = 0; j < n; j++) sim[worst * n + j] = xr[j];
+            fsim[worst] = fxr;
+        } else if (okr && fxr < fsim[worst]) {
+            /* Outside contraction xc = (1+psi*rho)*xbar - psi*rho*worst. */
+            for (size_t j = 0; j < n; j++) xt[j] = (1.0 + psi * rho) * xbar[j] - psi * rho * worstv[j];
+            if (boxes) fm_project_box(xt, n, boxes);
+            double fxc;
+            bool okc = fm_eval_scalar(f, binds, xt, n, opts, &fxc);
+            if (okc && fxc <= fxr) {
+                for (size_t j = 0; j < n; j++) sim[worst * n + j] = xt[j];
+                fsim[worst] = fxc;
+            } else doshrink = true;
+        } else {
+            /* Inside contraction xcc = (1-psi)*xbar + psi*worst. */
+            for (size_t j = 0; j < n; j++) xt[j] = (1.0 - psi) * xbar[j] + psi * worstv[j];
+            if (boxes) fm_project_box(xt, n, boxes);
+            double fxcc;
+            bool okcc = fm_eval_scalar(f, binds, xt, n, opts, &fxcc);
+            if (okcc && fxcc < fsim[worst]) {
+                for (size_t j = 0; j < n; j++) sim[worst * n + j] = xt[j];
+                fsim[worst] = fxcc;
+            } else doshrink = true;
+        }
+
+        if (doshrink) {
+            /* Shrink every vertex but the best toward the best. `best` = idx[0]
+             * is never rewritten, so `bpt` aliases no modified row. */
+            const double* bpt = &sim[best * n];
+            for (size_t k = 1; k < np; k++) {
+                size_t vi = idx[k];
+                double* v = &sim[vi * n];
+                for (size_t j = 0; j < n; j++) v[j] = bpt[j] + sigma * (v[j] - bpt[j]);
+                if (boxes) fm_project_box(v, n, boxes);
+                if (!fm_eval_scalar(f, binds, v, n, opts, &fsim[vi])) fsim[vi] = HUGE_VAL;
+            }
+        }
+
+        fm_nm_sort_idx(idx, fsim, np);
+        fm_fire_monitor(opts->step_monitor);
+    }
+
+    {
+        size_t best = idx[0];
+        for (size_t j = 0; j < n; j++) x[j] = sim[best * n + j];
+        *fx_out = fsim[best];
+    }
+    ok = true;
+cleanup:
+    free(sim); free(fsim); free(idx); free(xbar); free(xr); free(xt);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ *
+ *  COBYLA -- Constrained Optimization BY Linear Approximation           *
+ * ------------------------------------------------------------------ *
+ * Powell's derivative-free (function-values-only) trust-region method for
+ * CONSTRAINED optimization, the analogue of scipy's minimize(method="COBYLA").
+ * It is the FIRST derivative-free method in Mathilda to accept general
+ * (non-box) constraints -- Powell/NelderMead reject them, and SLSQP/TNC need a
+ * gradient -- so it is the method for non-smooth / noisy / black-box objectives
+ * WITH constraints.
+ *
+ * At each iterate it models f and every constraint by an AFFINE (linear)
+ * approximation, then solves a trust-region subproblem: (stage 1) minimise the
+ * worst constraint violation, then (stage 2) minimise the linear objective model
+ * while holding that minimum violation -- Powell's two-stage `trstlp`. Here the
+ * linear models are recovered by finite differences on a coordinate cross
+ * (exact for the trust radius, and immune to the simplex-degeneracy bookkeeping
+ * that dominates a literal cobyla.f port), and the two-stage LP is solved by the
+ * same dual active-set QP as SLSQP (`fm_slsqp_activeset`) with a tiny
+ * regularisation and an inf-norm trust box -- reaching the same constrained
+ * optimum as reference COBYLA. Step acceptance uses Powell's L-infinity
+ * exact-penalty merit `Phi = f + mu*max_i max(0, c_i)` with his PARMU update.
+ * Equalities `h==0` are handled by splitting into `h<=0` and `-h<=0` (so this is
+ * strictly more capable than scipy's inequality-only COBYLA); box bounds enter
+ * as ordinary linear inequalities. Machine precision only (WorkingPrecision >
+ * MachinePrecision falls back to QuasiNewton). Exposed as Method -> "COBYLA".
+ * Reference: Powell 1994. */
+
+/* Two-stage inf-norm trust-region LP for the COBYLA step, solved as a pair of
+ * strictly-convex QPs by fm_slsqp_activeset (B = eps*I, so the quadratic term is
+ * negligible and each solve is an LP to rounding). The mcon internal constraints
+ * are in Mathilda's `c <= 0` feasible convention: row j is the affine model
+ * `cval0[j] + Amod[j,:]*d`. Stage 1 finds t* = min over ||d||_inf <= rho of the
+ * worst model violation max_j (cval0[j]+Amod[j]*d); stage 2 minimises af*d subject
+ * to every model constraint staying <= max(t*,0). Writes the step into d. */
+static bool fm_cobyla_subproblem(size_t n, size_t mcon, const double* Amod,
+                                 const double* cval0, const double* af,
+                                 double rho, double* d) {
+    const double eps = 1e-8;
+    size_t nv1 = n + 1;                 /* stage-1 variables (d, t) */
+    size_t m1  = mcon + 2 * n;          /* constraint rows + 2n trust-box rows */
+    double* L1   = (double*)calloc(nv1 * nv1, sizeof(double));
+    double* g1   = (double*)calloc(nv1, sizeof(double));
+    double* Nrm1 = (double*)calloc(m1 * nv1, sizeof(double));
+    double* b1   = (double*)malloc(sizeof(double) * m1);
+    int*    ie1  = (int*)calloc(m1, sizeof(int));
+    double* mul1 = (double*)malloc(sizeof(double) * m1);
+    double* y1   = (double*)malloc(sizeof(double) * nv1);
+    double* L2   = (double*)calloc(n * n, sizeof(double));
+    double* Nrm2 = (double*)calloc((mcon + 2 * n) * n, sizeof(double));
+    double* b2   = (double*)malloc(sizeof(double) * (mcon + 2 * n));
+    int*    ie2  = (int*)calloc(mcon + 2 * n, sizeof(int));
+    double* mul2 = (double*)malloc(sizeof(double) * (mcon + 2 * n));
+    bool ok = false;
+    if (!L1 || !g1 || !Nrm1 || !b1 || !ie1 || !mul1 || !y1
+        || !L2 || !Nrm2 || !b2 || !ie2 || !mul2) goto done;
+
+    /* Stage 1: min t + eps/2*||(d,t)||^2. */
+    for (size_t i = 0; i < nv1; i++) L1[i * nv1 + i] = sqrt(eps);
+    g1[n] = 1.0;
+    /* model rows: (-Amod_j)*d + 1*t >= cval0_j  (i.e. cval0_j + Amod_j*d <= t) */
+    for (size_t j = 0; j < mcon; j++) {
+        double* row = &Nrm1[j * nv1];
+        for (size_t i = 0; i < n; i++) row[i] = -Amod[j * n + i];
+        row[n] = 1.0;
+        b1[j] = cval0[j];
+    }
+    /* trust box: d_i >= -rho and -d_i >= -rho */
+    for (size_t i = 0; i < n; i++) {
+        double* rlo = &Nrm1[(mcon + 2 * i) * nv1];
+        double* rhi = &Nrm1[(mcon + 2 * i + 1) * nv1];
+        rlo[i] = 1.0;  b1[mcon + 2 * i]     = -rho;
+        rhi[i] = -1.0; b1[mcon + 2 * i + 1] = -rho;
+    }
+    (void)fm_slsqp_activeset(L1, nv1, g1, Nrm1, b1, ie1, m1, y1, mul1);
+    double tstar = y1[n];
+    double tcap = (tstar > 0.0) ? tstar : 0.0;
+
+    /* Stage 2: min af*d + eps/2*||d||^2 s.t. cval0_j + Amod_j*d <= tcap. */
+    for (size_t i = 0; i < n; i++) L2[i * n + i] = sqrt(eps);
+    for (size_t j = 0; j < mcon; j++) {
+        double* row = &Nrm2[j * n];
+        for (size_t i = 0; i < n; i++) row[i] = -Amod[j * n + i];
+        b2[j] = cval0[j] - tcap;
+    }
+    for (size_t i = 0; i < n; i++) {
+        double* rlo = &Nrm2[(mcon + 2 * i) * n];
+        double* rhi = &Nrm2[(mcon + 2 * i + 1) * n];
+        rlo[i] = 1.0;  b2[mcon + 2 * i]     = -rho;
+        rhi[i] = -1.0; b2[mcon + 2 * i + 1] = -rho;
+    }
+    (void)fm_slsqp_activeset(L2, n, af, Nrm2, b2, ie2, mcon + 2 * n, d, mul2);
+    ok = true;
+done:
+    free(L1); free(g1); free(Nrm1); free(b1); free(ie1); free(mul1); free(y1);
+    free(L2); free(Nrm2); free(b2); free(ie2); free(mul2);
+    return ok;
+}
+
+/* Max constraint violation of the internal (c<=0) list at a point whose raw
+ * gens values are gv[ngens] and coordinates p[n]. */
+static double fm_cobyla_maxviol(const double* gv, const double* p, size_t n,
+                                const size_t* gi_k, const double* gi_sgn, size_t ng,
+                                const size_t* bnd_var, const bool* bnd_lo, size_t nb,
+                                const FmBox* boxes) {
+    (void)n;
+    double mv = 0.0;
+    for (size_t gi = 0; gi < ng; gi++) {
+        double v = gi_sgn[gi] * gv[gi_k[gi]];
+        if (v > mv) mv = v;
+    }
+    for (size_t bi = 0; bi < nb; bi++) {
+        size_t i = bnd_var[bi];
+        double v = bnd_lo[bi] ? (boxes[i].lo - p[i]) : (p[i] - boxes[i].hi);
+        if (v > mv) mv = v;
+    }
+    return mv;
+}
+
+/* Evaluate f and every raw constraint gens[k].expr at p; fills *fout and
+ * gv[ngens]. Returns false if any evaluation is non-numeric. */
+static bool fm_cobyla_eval(Expr* f, const FmGenCon* gens, size_t ngens,
+                           FmVarBind* binds, const FmOpts* opts,
+                           const double* p, size_t n, double* fout, double* gv) {
+    if (!fm_eval_scalar(f, binds, p, n, opts, fout)) return false;
+    for (size_t k = 0; k < ngens; k++)
+        if (!fm_eval_scalar(gens[k].expr, binds, p, n, opts, &gv[k])) return false;
+    return true;
+}
+
+static bool fm_run_cobyla(Expr* f, Expr** vars, size_t n,
+                          FmVarBind* binds, Expr** g_exprs,
+                          double* x, /* in/out */
+                          const FmGenCon* gens, size_t ngens, double mu,
+                          const FmBox* boxes,
+                          const FmOpts* opts,
+                          double* fx_out) {
+    (void)vars; (void)g_exprs; (void)mu;
+
+    /* n==1 with no general constraints -> the exact Brent path (like
+     * Powell/NelderMead); general constraints at n==1 use the full machinery. */
+    if (n == 1 && ngens == 0) {
+        if (boxes) fm_project_box(x, 1, boxes);
+        double a, b, c;
+        const FmBox* box1 = boxes ? &boxes[0] : NULL;
+        if (box1 && box1->has_lo && box1->has_hi) {
+            a = box1->lo; c = box1->hi; b = 0.5 * (a + c);
+            if (x[0] > a && x[0] < c) b = x[0];
+        } else if (!fm_bracket(f, binds, opts, x[0], box1, &a, &b, &c)) {
+            fm_warn(g_fm_name, "nlnum", "bracket-finding failed");
+            return false;
+        }
+        double xm, fmv;
+        bool ok1 = fm_brent_min(f, binds, opts, a, b, c, box1, &xm, &fmv);
+        if (ok1) { x[0] = xm; *fx_out = fmv; }
+        return ok1;
+    }
+
+    /* Internal constraint list: each inequality -> 1 entry; each equality ->
+     * 2 entries (+h<=0, -h<=0); each active bound -> 1 entry (exact +/-e_i). */
+    size_t n_eq = 0;
+    for (size_t k = 0; k < ngens; k++) if (gens[k].equality) n_eq++;
+    size_t ng = ngens + n_eq;
+    size_t nb = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (boxes && boxes[i].has_lo) nb++;
+        if (boxes && boxes[i].has_hi) nb++;
+    }
+    size_t mcon = ng + nb;
+    size_t ng1 = ng ? ng : 1, mc1 = mcon ? mcon : 1, ngv = ngens ? ngens : 1;
+
+    size_t* gi_k   = (size_t*)malloc(sizeof(size_t) * ng1);
+    double* gi_sgn = (double*)malloc(sizeof(double) * ng1);
+    size_t* bnd_var = (size_t*)malloc(sizeof(size_t) * (nb ? nb : 1));
+    bool*   bnd_lo  = (bool*)malloc(sizeof(bool) * (nb ? nb : 1));
+    double* base   = (double*)malloc(sizeof(double) * n);
+    double* gbase  = (double*)malloc(sizeof(double) * ngv);
+    double* xs     = (double*)malloc(sizeof(double) * n);   /* cross sample point */
+    double* gs     = (double*)malloc(sizeof(double) * ngv); /* plus-side gens vals */
+    double* gs2    = (double*)malloc(sizeof(double) * ngv); /* minus-side gens vals */
+    double* af     = (double*)malloc(sizeof(double) * n);
+    double* agen   = (double*)malloc(sizeof(double) * ngv * n); /* row k = grad gens[k] */
+    double* Amod   = (double*)malloc(sizeof(double) * mc1 * n);
+    double* cval0  = (double*)malloc(sizeof(double) * mc1);
+    double* dstep  = (double*)malloc(sizeof(double) * n);
+    double* xtrial = (double*)malloc(sizeof(double) * n);
+    double* gtrial = (double*)malloc(sizeof(double) * ngv);
+    double* xbest  = (double*)malloc(sizeof(double) * n);
+    bool ok = false;
+    double fbase = 0.0;
+    bool have_best = false; double best_f = 0.0;
+    if (!gi_k || !gi_sgn || !bnd_var || !bnd_lo || !base || !gbase || !xs || !gs
+        || !gs2 || !af || !agen || !Amod || !cval0 || !dstep || !xtrial || !gtrial || !xbest)
+        goto cleanup;
+
+    { size_t gi = 0;
+      for (size_t k = 0; k < ngens; k++) {
+          gi_k[gi] = k; gi_sgn[gi] = 1.0; gi++;
+          if (gens[k].equality) { gi_k[gi] = k; gi_sgn[gi] = -1.0; gi++; }
+      } }
+    { size_t bi = 0;
+      for (size_t i = 0; i < n; i++) {
+          if (boxes && boxes[i].has_lo) { bnd_var[bi] = i; bnd_lo[bi] = true;  bi++; }
+          if (boxes && boxes[i].has_hi) { bnd_var[bi] = i; bnd_lo[bi] = false; bi++; }
+      } }
+
+    if (boxes) fm_project_box(x, n, boxes);
+    for (size_t i = 0; i < n; i++) base[i] = x[i];
+    if (!fm_cobyla_eval(f, gens, ngens, binds, opts, base, n, &fbase, gbase)) {
+        fm_warn(g_fm_name, "nlnum", "objective/constraint evaluation failed at start point");
+        goto cleanup;
+    }
+
+    /* rho schedule: rhobeg from the box scale (default 1), rhoend = tol_prec. */
+    double rhoend = pow(10.0, -opts->prec_goal_digits);
+    double rhobeg = 1.0;
+    for (size_t i = 0; i < n; i++)
+        if (boxes && boxes[i].has_lo && boxes[i].has_hi) {
+            double half = 0.5 * (boxes[i].hi - boxes[i].lo);
+            if (half > 0.0 && half < rhobeg) rhobeg = half;
+        }
+    if (rhobeg < 4.0 * rhoend) rhobeg = 4.0 * rhoend;
+    double rho = rhobeg;
+    double parmu = 0.0;
+
+    for (int64_t it = 0; it < opts->max_iter; it++) {
+        /* Linear models by CENTRAL differences on a coordinate cross of side rho.
+         * Central (vs forward) differences are essential for the non-smooth
+         * objectives COBYLA targets: at a kink the two-sided slope averages the
+         * left and right derivatives (e.g. |t| at t=0 reads 0, correctly flat),
+         * where a one-sided difference would report a spurious ±1 and strand the
+         * search on the kink. Each side is clamped into the box so every sample
+         * stays feasible; a coordinate pinned against a bound falls back to the
+         * one available side. */
+        for (size_t i = 0; i < n; i++) af[i] = 0.0;
+        bool model_ok = true;
+        for (size_t j = 0; j < n && model_ok; j++) {
+            double sp = rho, sm = rho;   /* plus / minus half-widths */
+            if (boxes) {
+                if (boxes[j].has_hi) { double up = boxes[j].hi - base[j]; if (up < sp) sp = up; }
+                if (boxes[j].has_lo) { double dn = base[j] - boxes[j].lo; if (dn < sm) sm = dn; }
+            }
+            if (sp < 1e-12 * (1.0 + fabs(base[j]))) sp = 0.0;
+            if (sm < 1e-12 * (1.0 + fabs(base[j]))) sm = 0.0;
+            if (sp == 0.0 && sm == 0.0) { sp = 1e-8; }   /* degenerate box: nudge */
+            double fp = fbase, fm = fbase;
+            if (sp > 0.0) {
+                for (size_t i = 0; i < n; i++) xs[i] = base[i];
+                xs[j] = base[j] + sp;
+                if (!fm_cobyla_eval(f, gens, ngens, binds, opts, xs, n, &fp, gs)) { model_ok = false; break; }
+            } else { for (size_t k = 0; k < ngens; k++) gs[k] = gbase[k]; }
+            if (sm > 0.0) {
+                for (size_t i = 0; i < n; i++) xs[i] = base[i];
+                xs[j] = base[j] - sm;
+                if (!fm_cobyla_eval(f, gens, ngens, binds, opts, xs, n, &fm, gs2)) { model_ok = false; break; }
+            } else { for (size_t k = 0; k < ngens; k++) gs2[k] = gbase[k]; }
+            double denom = sp + sm;                 /* > 0 by construction */
+            af[j] = (fp - fm) / denom;
+            for (size_t k = 0; k < ngens; k++) agen[k * n + j] = (gs[k] - gs2[k]) / denom;
+        }
+        if (!model_ok) {
+            /* A non-numeric sample: shrink rho and retry, or stop. */
+            if (rho <= rhoend) { ok = true; break; }
+            rho *= 0.5; if (rho <= 1.5 * rhoend) rho = rhoend;
+            continue;
+        }
+
+        /* Assemble the internal constraint models at the base. */
+        for (size_t gi = 0; gi < ng; gi++) {
+            double sgn = gi_sgn[gi]; size_t k = gi_k[gi];
+            double* row = &Amod[gi * n];
+            for (size_t i = 0; i < n; i++) row[i] = sgn * agen[k * n + i];
+            cval0[gi] = sgn * gbase[k];
+        }
+        for (size_t bi = 0; bi < nb; bi++) {
+            size_t i = bnd_var[bi];
+            double* row = &Amod[(ng + bi) * n];
+            for (size_t t = 0; t < n; t++) row[t] = 0.0;
+            if (bnd_lo[bi]) { row[i] = -1.0; cval0[ng + bi] = boxes[i].lo - base[i]; }
+            else            { row[i] =  1.0; cval0[ng + bi] = base[i] - boxes[i].hi; }
+        }
+
+        if (!fm_cobyla_subproblem(n, mcon, Amod, cval0, af, rho, dstep)) goto cleanup;
+        double dnorm = 0.0;
+        for (size_t i = 0; i < n; i++) if (fabs(dstep[i]) > dnorm) dnorm = fabs(dstep[i]);
+
+        /* Short step at this rho -> reduce rho (or converge). */
+        if (dnorm < 0.5 * rho) {
+            if (rho <= rhoend) { ok = true; break; }
+            rho *= 0.5; if (rho <= 1.5 * rhoend) rho = rhoend;
+            continue;
+        }
+
+        for (size_t i = 0; i < n; i++) xtrial[i] = base[i] + dstep[i];
+        if (boxes) fm_project_box(xtrial, n, boxes);
+        double ftrial;
+        if (!fm_cobyla_eval(f, gens, ngens, binds, opts, xtrial, n, &ftrial, gtrial))
+            goto cleanup;
+        fm_fire_monitor(opts->step_monitor);
+
+        /* PARMU update (Powell): raise mu so the predicted merit reduction stays
+         * positive, based on the objective cost per unit predicted violation
+         * reduction. */
+        double base_viol = fm_cobyla_maxviol(gbase, base, n, gi_k, gi_sgn, ng,
+                                             bnd_var, bnd_lo, nb, boxes);
+        double lin_viol = 0.0;
+        for (size_t j = 0; j < mcon; j++) {
+            double v = cval0[j];
+            for (size_t i = 0; i < n; i++) v += Amod[j * n + i] * dstep[i];
+            if (v > lin_viol) lin_viol = v;
+        }
+        if (lin_viol < 0.0) lin_viol = 0.0;
+        double prerec = base_viol - lin_viol;
+        double afd = 0.0;
+        for (size_t i = 0; i < n; i++) afd += af[i] * dstep[i];
+        if (prerec > 0.0) {
+            double barmu = afd / prerec;
+            if (parmu < 1.5 * barmu) parmu = 2.0 * barmu;
+            if (parmu > 1e12) parmu = 1e12;
+        }
+
+        double trial_viol = fm_cobyla_maxviol(gtrial, xtrial, n, gi_k, gi_sgn, ng,
+                                              bnd_var, bnd_lo, nb, boxes);
+        double trial_merit = ftrial + parmu * trial_viol;
+        double base_merit  = fbase  + parmu * base_viol;
+
+        if (trial_viol <= 1e-8 && (!have_best || ftrial < best_f)) {
+            for (size_t i = 0; i < n; i++) xbest[i] = xtrial[i];
+            best_f = ftrial; have_best = true;
+        }
+
+        if (trial_merit < base_merit - 1e-12 * (1.0 + fabs(base_merit))) {
+            /* Accept: move the base to the trial point. */
+            for (size_t i = 0; i < n; i++) base[i] = xtrial[i];
+            fbase = ftrial;
+            for (size_t k = 0; k < ngens; k++) gbase[k] = gtrial[k];
+        } else {
+            /* No improvement at this rho -> shrink (or converge). */
+            if (rho <= rhoend) { ok = true; break; }
+            rho *= 0.5; if (rho <= 1.5 * rhoend) rho = rhoend;
+        }
+    }
+
+    /* Report the base (best-by-merit) iterate, or the best strictly-feasible
+     * point if the base ended infeasible. */
+    {
+        double base_viol = fm_cobyla_maxviol(gbase, base, n, gi_k, gi_sgn, ng,
+                                             bnd_var, bnd_lo, nb, boxes);
+        if (base_viol > 1e-8 && have_best) {
+            for (size_t i = 0; i < n; i++) base[i] = xbest[i];
+            fbase = best_f;
+        } else if (base_viol > 1e-6) {
+            fm_warn(g_fm_name, "infeas", "could not satisfy constraints to tolerance");
+        }
+    }
+    for (size_t i = 0; i < n; i++) x[i] = base[i];
+    if (boxes) fm_project_box(x, n, boxes);
+    *fx_out = fbase;
+    ok = true;
+cleanup:
+    free(gi_k); free(gi_sgn); free(bnd_var); free(bnd_lo); free(base); free(gbase);
+    free(xs); free(gs); free(gs2); free(af); free(agen); free(Amod); free(cval0);
+    free(dstep); free(xtrial); free(gtrial); free(xbest);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ *
+ *  COBYQA -- Constrained Optimization BY Quadratic Approximations       *
+ * ------------------------------------------------------------------ *
+ * A derivative-free trust-region SQP with QUADRATIC interpolation models, the
+ * analogue of scipy's minimize(method="COBYQA") (Ragonneau & Zhang 2023). Where
+ * COBYLA models f and the constraints by linear approximations, COBYQA models
+ * each by a full quadratic -- so it captures curvature (converging tighter on
+ * smooth problems, and navigating curved valleys that COBYLA's linear models
+ * cannot -- e.g. Rosenbrock) and handles equality + inequality + bound
+ * constraints natively.
+ *
+ * Each iteration builds the quadratic models by finite differences on a
+ * structured stencil around the base of side Delta: the coordinate cross
+ * base +/- Delta e_i gives the gradient and the diagonal Hessian in closed form,
+ * and the corner points base + Delta(e_i + e_j) give the off-diagonal Hessian
+ * entries -- a fully-determined quadratic per function, no interpolation-matrix
+ * bookkeeping (a minimum-Frobenius-norm 2n+1-point model is the eval-efficiency
+ * refinement). The Byrd-Omojokun trust-region SQP step is realised as a single
+ * inf-norm box trust-region QP handed to the SLSQP dual active-set solver
+ * (fm_slsqp_activeset) with the Lagrangian-Hessian model B = H_f + sum lambda_k
+ * H_{c_k}; steps are accepted by an L1 exact-penalty merit with Powell's penalty
+ * update, and the trust radius Delta doubles as the stencil scale (grown on a
+ * good step, halved on a poor one, terminating at Delta = 10^-PrecisionGoal).
+ * Machine precision only (WorkingPrecision > MachinePrecision falls back to
+ * QuasiNewton). Exposed as Method -> "COBYQA". Reference: Ragonneau & Zhang 2023;
+ * Conn, Gould & Toint 2000 (derivative-free trust regions). */
+
+/* Max constraint violation of the general constraints at a point whose raw gens
+ * values are gvals[ngens] (equalities counted as |value|, inequalities as
+ * max(0,value)); bounds are handled by projection, not here. */
+static double fm_cobyqa_viol(const double* gvals, const FmGenCon* gens, size_t ngens) {
+    double mv = 0.0;
+    for (size_t k = 0; k < ngens; k++) {
+        double v = gens[k].equality ? fabs(gvals[k]) : (gvals[k] > 0.0 ? gvals[k] : 0.0);
+        if (v > mv) mv = v;
+    }
+    return mv;
+}
+
+/* Trust-region SQP step: min 1/2 dᵀ HL d + gf·d s.t. the linearised constraints
+ * and ||d||_inf <= Delta, solved by the SLSQP dual active-set QP. HL is the
+ * Lagrangian-Hessian model (regularised to SPD by a tau-retry, reset to I if it
+ * stays indefinite). cvals[k]/Jac[k*n..] are each constraint's model value and
+ * gradient at the base. Writes d[n] and the signed multipliers lam[ngens]. */
+static bool fm_cobyqa_subproblem(size_t n, const double* HL, const double* gf,
+                                 const FmGenCon* gens, const double* cvals,
+                                 const double* Jac, size_t ngens,
+                                 const FmBox* boxes, double Delta,
+                                 double* d, double* lam) {
+    size_t nb = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (boxes && boxes[i].has_lo) nb++;
+        if (boxes && boxes[i].has_hi) nb++;
+    }
+    size_t m = ngens + nb + 2 * n;
+    double* L    = (double*)calloc(n * n, sizeof(double));
+    double* Nrm  = (double*)calloc(m * n, sizeof(double));
+    double* b    = (double*)malloc(sizeof(double) * m);
+    int*    ie   = (int*)calloc(m, sizeof(int));
+    double* mult = (double*)malloc(sizeof(double) * m);
+    bool ok = false;
+    if (!L || !Nrm || !b || !ie || !mult) goto done;
+
+    /* B = HL + tau I -> Cholesky factor L (tau-retry; identity fallback). */
+    {
+        double tr = 0.0;
+        for (size_t i = 0; i < n; i++) tr += fabs(HL[i * n + i]);
+        double tau = 0.0, tau0 = 1e-10 * (1.0 + tr / (double)(n ? n : 1));
+        bool fac = false;
+        for (int attempt = 0; attempt < 6 && !fac; attempt++) {
+            for (size_t t = 0; t < n * n; t++) L[t] = HL[t];
+            if (fm_chol_factor(L, n, tau)) fac = true;
+            else tau = (tau == 0.0) ? tau0 : tau * 100.0;
+        }
+        if (!fac) {
+            for (size_t t = 0; t < n * n; t++) L[t] = 0.0;
+            for (size_t i = 0; i < n; i++) L[i * n + i] = 1.0;
+        }
+    }
+
+    /* General constraints: equality Jac_k·d = -cval (is_eq); inequality c<=0
+     * linearised (-Jac_k)·d >= cval. (Same mapping as fm_slsqp_qp.) */
+    for (size_t k = 0; k < ngens; k++) {
+        double* row = &Nrm[k * n];
+        if (gens[k].equality) {
+            for (size_t i = 0; i < n; i++) row[i] = Jac[k * n + i];
+            b[k] = -cvals[k]; ie[k] = 1;
+        } else {
+            for (size_t i = 0; i < n; i++) row[i] = -Jac[k * n + i];
+            b[k] = cvals[k]; ie[k] = 0;
+        }
+    }
+    /* Bounds. The caller passes a base-relative box (lo-x0, hi-x0), so these are
+     * already the step-frame residuals: e_i·d >= lo-x0_i and -e_i·d >= x0_i-hi. */
+    {
+        size_t r = ngens;
+        for (size_t i = 0; i < n; i++) {
+            if (boxes && boxes[i].has_lo) { Nrm[r * n + i] = 1.0;  b[r] = boxes[i].lo; r++; }
+            if (boxes && boxes[i].has_hi) { Nrm[r * n + i] = -1.0; b[r] = -boxes[i].hi; r++; }
+        }
+    }
+    /* Trust box: -Delta <= d_i <= Delta. */
+    {
+        size_t r = ngens + nb;
+        for (size_t i = 0; i < n; i++) {
+            Nrm[(r) * n + i]     = 1.0;  b[r]     = -Delta;
+            Nrm[(r + 1) * n + i] = -1.0; b[r + 1] = -Delta;
+            r += 2;
+        }
+    }
+
+    (void)fm_slsqp_activeset(L, n, gf, Nrm, b, ie, m, d, mult);
+    for (size_t k = 0; k < ngens; k++)
+        lam[k] = gens[k].equality ? -mult[k] : mult[k];
+    ok = true;
+done:
+    free(L); free(Nrm); free(b); free(ie); free(mult);
+    return ok;
+}
+
+static bool fm_run_cobyqa(Expr* f, Expr** vars, size_t n,
+                          FmVarBind* binds, Expr** g_exprs,
+                          double* x, /* in/out */
+                          const FmGenCon* gens, size_t ngens, double mu,
+                          const FmBox* boxes,
+                          const FmOpts* opts,
+                          double* fx_out) {
+    (void)vars; (void)g_exprs; (void)mu;
+
+    if (n == 1 && ngens == 0) {
+        if (boxes) fm_project_box(x, 1, boxes);
+        double a, b, c;
+        const FmBox* box1 = boxes ? &boxes[0] : NULL;
+        if (box1 && box1->has_lo && box1->has_hi) {
+            a = box1->lo; c = box1->hi; b = 0.5 * (a + c);
+            if (x[0] > a && x[0] < c) b = x[0];
+        } else if (!fm_bracket(f, binds, opts, x[0], box1, &a, &b, &c)) {
+            fm_warn(g_fm_name, "nlnum", "bracket-finding failed");
+            return false;
+        }
+        double xm, fmv;
+        bool ok1 = fm_brent_min(f, binds, opts, a, b, c, box1, &xm, &fmv);
+        if (ok1) { x[0] = xm; *fx_out = fmv; }
+        return ok1;
+    }
+
+    size_t ngv = ngens ? ngens : 1;
+    double* base   = (double*)malloc(sizeof(double) * n);
+    double* gbase  = (double*)malloc(sizeof(double) * ngv);
+    double* gf     = (double*)malloc(sizeof(double) * n);
+    double* Hf     = (double*)malloc(sizeof(double) * n * n);
+    double* gck    = (double*)malloc(sizeof(double) * ngv * n);
+    double* Hck    = (double*)malloc(sizeof(double) * ngv * n * n);
+    double* HL     = (double*)malloc(sizeof(double) * n * n);
+    double* lam    = (double*)calloc(ngv, sizeof(double));
+    double* pen    = (double*)calloc(ngv, sizeof(double));
+    double* xs     = (double*)malloc(sizeof(double) * n);
+    double* gp     = (double*)malloc(sizeof(double) * ngv);
+    double* gm     = (double*)malloc(sizeof(double) * ngv);
+    double* gcn    = (double*)malloc(sizeof(double) * ngv);
+    double* d      = (double*)malloc(sizeof(double) * n);
+    double* xtrial = (double*)malloc(sizeof(double) * n);
+    double* gtrial = (double*)malloc(sizeof(double) * ngv);
+    double* xbest  = (double*)malloc(sizeof(double) * n);
+    bool ok = false;
+    double fbase = 0.0;
+    bool have_best = false; double best_f = 0.0;
+    if (!base || !gbase || !gf || !Hf || !gck || !Hck || !HL || !lam || !pen
+        || !xs || !gp || !gm || !gcn || !d || !xtrial || !gtrial || !xbest)
+        goto cleanup;
+
+    if (boxes) fm_project_box(x, n, boxes);
+    for (size_t i = 0; i < n; i++) base[i] = x[i];
+    if (!fm_cobyla_eval(f, gens, ngens, binds, opts, base, n, &fbase, gbase)) {
+        fm_warn(g_fm_name, "nlnum", "objective/constraint evaluation failed at start point");
+        goto cleanup;
+    }
+
+    double dend = pow(10.0, -opts->prec_goal_digits);
+    double dbeg = 1.0;
+    for (size_t i = 0; i < n; i++)
+        if (boxes && boxes[i].has_lo && boxes[i].has_hi) {
+            double half = 0.5 * (boxes[i].hi - boxes[i].lo);
+            if (half > 0.0 && half < dbeg) dbeg = half;
+        }
+    if (dbeg < 4.0 * dend) dbeg = 4.0 * dend;
+    double Delta = dbeg;
+    double Delta_max = 10.0 * dbeg;
+
+    for (int64_t it = 0; it < opts->max_iter; it++) {
+        /* Build quadratic models by finite differences on the stencil of side
+         * Delta.  Samples are not forced inside the box (algebraic objectives are
+         * defined everywhere); a non-numeric sample shrinks Delta and retries. */
+        bool model_ok = true;
+        for (size_t i = 0; i < n && model_ok; i++) {
+            double fp, fmv;
+            for (size_t t = 0; t < n; t++) xs[t] = base[t];
+            xs[i] = base[i] + Delta;
+            if (!fm_cobyla_eval(f, gens, ngens, binds, opts, xs, n, &fp, gp)) { model_ok = false; break; }
+            xs[i] = base[i] - Delta;
+            if (!fm_cobyla_eval(f, gens, ngens, binds, opts, xs, n, &fmv, gm)) { model_ok = false; break; }
+            gf[i] = (fp - fmv) / (2.0 * Delta);
+            Hf[i * n + i] = (fp + fmv - 2.0 * fbase) / (Delta * Delta);
+            for (size_t k = 0; k < ngens; k++) {
+                gck[k * n + i] = (gp[k] - gm[k]) / (2.0 * Delta);
+                Hck[k * n * n + i * n + i] = (gp[k] + gm[k] - 2.0 * gbase[k]) / (Delta * Delta);
+            }
+        }
+        for (size_t i = 0; i < n && model_ok; i++) {
+            for (size_t j = i + 1; j < n; j++) {
+                double fc;
+                for (size_t t = 0; t < n; t++) xs[t] = base[t];
+                xs[i] = base[i] + Delta; xs[j] = base[j] + Delta;
+                if (!fm_cobyla_eval(f, gens, ngens, binds, opts, xs, n, &fc, gcn)) { model_ok = false; break; }
+                double hij = (fc - fbase - Delta * (gf[i] + gf[j])
+                              - 0.5 * Delta * Delta * (Hf[i * n + i] + Hf[j * n + j]))
+                             / (Delta * Delta);
+                Hf[i * n + j] = Hf[j * n + i] = hij;
+                for (size_t k = 0; k < ngens; k++) {
+                    double h = (gcn[k] - gbase[k] - Delta * (gck[k * n + i] + gck[k * n + j])
+                                - 0.5 * Delta * Delta * (Hck[k * n * n + i * n + i] + Hck[k * n * n + j * n + j]))
+                               / (Delta * Delta);
+                    Hck[k * n * n + i * n + j] = Hck[k * n * n + j * n + i] = h;
+                }
+            }
+        }
+        if (!model_ok) {
+            if (Delta <= dend) { ok = true; break; }
+            Delta *= 0.5; if (Delta <= 1.5 * dend) Delta = dend;
+            continue;
+        }
+
+        /* Lagrangian-Hessian model H_L = H_f + sum lambda_k H_{c_k}. */
+        for (size_t t = 0; t < n * n; t++) {
+            double v = Hf[t];
+            for (size_t k = 0; k < ngens; k++) v += lam[k] * Hck[k * n * n + t];
+            HL[t] = v;
+        }
+
+        /* Bound rows in the subproblem need residuals relative to the base; pass
+         * a shifted box so `lo <= x0+d` becomes `d_i >= lo - x0_i`. */
+        FmBox* rbox = NULL;
+        if (boxes) {
+            rbox = (FmBox*)malloc(sizeof(FmBox) * n);
+            if (!rbox) goto cleanup;
+            for (size_t i = 0; i < n; i++) {
+                rbox[i].has_lo = boxes[i].has_lo; rbox[i].has_hi = boxes[i].has_hi;
+                rbox[i].lo = boxes[i].lo - base[i];
+                rbox[i].hi = boxes[i].hi - base[i];
+            }
+        }
+        bool sp_ok = fm_cobyqa_subproblem(n, HL, gf, gens, gbase, gck, ngens,
+                                          rbox, Delta, d, lam);
+        free(rbox);
+        if (!sp_ok) goto cleanup;
+
+        double dnorm = 0.0;
+        for (size_t i = 0; i < n; i++) if (fabs(d[i]) > dnorm) dnorm = fabs(d[i]);
+        if (dnorm < 1e-3 * Delta) {
+            if (Delta <= dend) { ok = true; break; }
+            Delta *= 0.5; if (Delta <= 1.5 * dend) Delta = dend;
+            continue;
+        }
+
+        /* Penalty update (Powell), then merit ratio. */
+        for (size_t k = 0; k < ngens; k++) {
+            double a = fabs(lam[k]);
+            double avg = 0.5 * (pen[k] + a);
+            double np = (a > avg) ? a : avg;
+            if (np < a) np = a;
+            if (np > 1e12) np = 1e12;
+            pen[k] = np;
+        }
+        double base_viol = fm_cobyqa_viol(gbase, gens, ngens);
+        /* predicted objective reduction -(gf·d + 1/2 dᵀHf d) */
+        double gfd = 0.0, dHd = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            gfd += gf[i] * d[i];
+            double t = 0.0;
+            for (size_t j = 0; j < n; j++) t += Hf[i * n + j] * d[j];
+            dHd += d[i] * t;
+        }
+        double obj_red = -(gfd + 0.5 * dHd);
+        double lin_viol = 0.0;
+        for (size_t k = 0; k < ngens; k++) {
+            double c = gbase[k];
+            for (size_t i = 0; i < n; i++) c += gck[k * n + i] * d[i];
+            double v = gens[k].equality ? fabs(c) : (c > 0.0 ? c : 0.0);
+            if (v > lin_viol) lin_viol = v;
+        }
+        /* Merit uses a single penalty scale (max pen) on the L-infinity violation. */
+        double penmax = 0.0;
+        for (size_t k = 0; k < ngens; k++) if (pen[k] > penmax) penmax = pen[k];
+        double pred = obj_red + penmax * (base_viol - lin_viol);
+
+        for (size_t i = 0; i < n; i++) xtrial[i] = base[i] + d[i];
+        if (boxes) fm_project_box(xtrial, n, boxes);
+        double ftrial;
+        if (!fm_cobyla_eval(f, gens, ngens, binds, opts, xtrial, n, &ftrial, gtrial))
+            goto cleanup;
+        fm_fire_monitor(opts->step_monitor);
+
+        double trial_viol = fm_cobyqa_viol(gtrial, gens, ngens);
+        double ared = (fbase + penmax * base_viol) - (ftrial + penmax * trial_viol);
+        double r = (pred > 1e-300) ? (ared / pred) : (ared > 0.0 ? 1.0 : -1.0);
+
+        if (trial_viol <= 1e-8 && (!have_best || ftrial < best_f)) {
+            for (size_t i = 0; i < n; i++) xbest[i] = xtrial[i];
+            best_f = ftrial; have_best = true;
+        }
+
+        if (r > 0.1 && ared > 0.0) {
+            for (size_t i = 0; i < n; i++) base[i] = xtrial[i];
+            fbase = ftrial;
+            for (size_t k = 0; k < ngens; k++) gbase[k] = gtrial[k];
+            if (r > 0.7 && dnorm > 0.5 * Delta) {
+                Delta *= 2.0; if (Delta > Delta_max) Delta = Delta_max;
+            }
+        } else {
+            if (Delta <= dend) { ok = true; break; }
+            Delta *= 0.5; if (Delta <= 1.5 * dend) Delta = dend;
+        }
+    }
+
+    {
+        double base_viol = fm_cobyqa_viol(gbase, gens, ngens);
+        if (base_viol > 1e-8 && have_best) {
+            for (size_t i = 0; i < n; i++) base[i] = xbest[i];
+            fbase = best_f;
+        } else if (base_viol > 1e-6) {
+            fm_warn(g_fm_name, "infeas", "could not satisfy constraints to tolerance");
+        }
+    }
+    for (size_t i = 0; i < n; i++) x[i] = base[i];
+    if (boxes) fm_project_box(x, n, boxes);
+    *fx_out = fbase;
+    ok = true;
+cleanup:
+    free(base); free(gbase); free(gf); free(Hf); free(gck); free(Hck); free(HL);
+    free(lam); free(pen); free(xs); free(gp); free(gm); free(gcn);
+    free(d); free(xtrial); free(gtrial); free(xbest);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ *
  *  Penalty outer loop                                                  *
  * ------------------------------------------------------------------ */
 
@@ -2512,6 +5499,12 @@ static bool fm_run_penalty(Expr* f, Expr** vars, size_t n,
                 break;
             case FM_METHOD_NEWTON:
                 ok = fm_run_newton(f, vars, n, binds, g_exprs, H_exprs, x, gens, ngens, mu, boxes, opts, &fx);
+                break;
+            case FM_METHOD_LBFGSB:
+                ok = fm_run_lbfgsb(f, vars, n, binds, g_exprs, x, gens, ngens, mu, boxes, opts, &fx);
+                break;
+            case FM_METHOD_TNC:
+                ok = fm_run_tnc(f, vars, n, binds, g_exprs, x, gens, ngens, mu, boxes, opts, &fx);
                 break;
             default:
                 ok = fm_run_bfgs(f, vars, n, binds, g_exprs, x, gens, ngens, mu, boxes, opts, &fx);
@@ -2788,8 +5781,18 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     /* Compute symbolic gradient/Hessian when needed. */
     bool needs_grad = (method == FM_METHOD_QUASINEWTON
                     || method == FM_METHOD_CONJGRAD
-                    || method == FM_METHOD_NEWTON);
-    bool needs_hess = (method == FM_METHOD_NEWTON);
+                    || method == FM_METHOD_NEWTON
+                    || method == FM_METHOD_LBFGSB
+                    || method == FM_METHOD_TNC
+                    || method == FM_METHOD_SLSQP
+                    || method == FM_METHOD_NEWTONCG
+                    || method == FM_METHOD_DOGLEG
+                    || method == FM_METHOD_TRUSTNCG
+                    || method == FM_METHOD_TRUSTEXACT
+                    || method == FM_METHOD_TRUSTKRYLOV);
+    bool needs_hess = (method == FM_METHOD_NEWTON
+                    || method == FM_METHOD_DOGLEG
+                    || method == FM_METHOD_TRUSTEXACT);
     if (needs_grad) {
         if (opts.gradient
             && opts.gradient->type == EXPR_FUNCTION
@@ -2918,11 +5921,30 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         } else {
             /* n-D path: BFGS handles QuasiNewton; Newton/CG fall back to
              * BFGS at MPFR with a one-shot diagnostic. */
-            if (method == FM_METHOD_NEWTON || method == FM_METHOD_CONJGRAD) {
+            if (method == FM_METHOD_NEWTON || method == FM_METHOD_CONJGRAD
+                || method == FM_METHOD_LBFGSB || method == FM_METHOD_POWELL
+                || method == FM_METHOD_NELDERMEAD || method == FM_METHOD_TNC
+                || method == FM_METHOD_SLSQP || method == FM_METHOD_COBYLA
+                || method == FM_METHOD_COBYQA || method == FM_METHOD_NEWTONCG
+                || method == FM_METHOD_DOGLEG || method == FM_METHOD_TRUSTNCG
+                || method == FM_METHOD_TRUSTEXACT || method == FM_METHOD_TRUSTKRYLOV) {
+                const char* mname = method == FM_METHOD_NEWTON ? "Newton"
+                                  : method == FM_METHOD_CONJGRAD ? "ConjugateGradient"
+                                  : method == FM_METHOD_LBFGSB ? "LBFGSB"
+                                  : method == FM_METHOD_POWELL ? "Powell"
+                                  : method == FM_METHOD_NELDERMEAD ? "NelderMead"
+                                  : method == FM_METHOD_TNC ? "TNC"
+                                  : method == FM_METHOD_SLSQP ? "SLSQP"
+                                  : method == FM_METHOD_COBYLA ? "COBYLA"
+                                  : method == FM_METHOD_COBYQA ? "COBYQA"
+                                  : method == FM_METHOD_NEWTONCG ? "NewtonCG"
+                                  : method == FM_METHOD_DOGLEG ? "Dogleg"
+                                  : method == FM_METHOD_TRUSTNCG ? "TrustNCG"
+                                  : method == FM_METHOD_TRUSTEXACT ? "TrustExact"
+                                  : "TrustKrylov";
                 fm_warn(fn_name, "nimpl",
                         "Method \"%s\" at WorkingPrecision > MachinePrecision is not yet "
-                        "supported; falling back to QuasiNewton",
-                        method == FM_METHOD_NEWTON ? "Newton" : "ConjugateGradient");
+                        "supported; falling back to QuasiNewton", mname);
             }
             ok = fm_run_bfgs_mpfr(f_raw, vars, n, binds, g_exprs,
                                   x_vec_mpfr, boxes, &opts, fx_min_mpfr);
@@ -2974,6 +5996,104 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
                                 g_exprs, H_exprs, x_vec, gens, ngens, boxes, &opts, &fx_min);
         } else {
             ok = fm_run_newton(f_raw, vars, n, binds, g_exprs, H_exprs, x_vec, NULL, 0, 0.0, boxes, &opts, &fx_min);
+        }
+    } else if (method == FM_METHOD_LBFGSB) {
+        if (has_general_cons) {
+            ok = fm_run_penalty(f_raw, vars, n, binds, FM_METHOD_LBFGSB,
+                                g_exprs, NULL, x_vec, gens, ngens, boxes, &opts, &fx_min);
+        } else {
+            ok = fm_run_lbfgsb(f_raw, vars, n, binds, g_exprs, x_vec, NULL, 0, 0.0, boxes, &opts, &fx_min);
+        }
+    } else if (method == FM_METHOD_POWELL) {
+        /* Derivative-free; matches scipy's Powell, which supports box bounds
+         * but no general nonlinear constraints -- reject those (mirror Brent)
+         * so the comparison stays apples-to-apples. */
+        if (has_general_cons) {
+            fm_warn(fn_name, "nimpl",
+                    "general (non-box) constraints are not supported with Method \"Powell\"");
+            ok = false; goto cleanup;
+        }
+        ok = fm_run_powell(f_raw, vars, n, binds, NULL, x_vec, NULL, 0, 0.0, boxes, &opts, &fx_min);
+    } else if (method == FM_METHOD_NELDERMEAD) {
+        /* Derivative-free downhill simplex; like scipy's Nelder-Mead it supports
+         * box bounds but no general nonlinear constraints -- reject those. */
+        if (has_general_cons) {
+            fm_warn(fn_name, "nimpl",
+                    "general (non-box) constraints are not supported with Method \"NelderMead\"");
+            ok = false; goto cleanup;
+        }
+        ok = fm_run_neldermead(f_raw, vars, n, binds, NULL, x_vec, NULL, 0, 0.0, boxes, &opts, &fx_min);
+    } else if (method == FM_METHOD_TNC) {
+        /* Hessian-free truncated Newton. Gradient-based like LBFGSB, so general
+         * (non-box) constraints route through the augmented-Lagrangian wrapper
+         * (consistent with the other gradient methods); box-only problems -- the
+         * scipy-comparable case -- take the direct path. */
+        if (has_general_cons) {
+            ok = fm_run_penalty(f_raw, vars, n, binds, FM_METHOD_TNC,
+                                g_exprs, NULL, x_vec, gens, ngens, boxes, &opts, &fx_min);
+        } else {
+            ok = fm_run_tnc(f_raw, vars, n, binds, g_exprs, x_vec, NULL, 0, 0.0, boxes, &opts, &fx_min);
+        }
+    } else if (method == FM_METHOD_SLSQP) {
+        /* Sequential least-squares QP.  Unlike the other gradient methods,
+         * SLSQP consumes general (non-box) constraints DIRECTLY through its QP
+         * subproblem rather than the augmented-Lagrangian penalty wrapper, so it
+         * takes a single path for both the constrained and unconstrained cases
+         * (fm_run_slsqp handles ngens == 0 as an ordinary empty active set). */
+        ok = fm_run_slsqp(f_raw, vars, n, binds, g_exprs, x_vec,
+                          gens, ngens, 0.0, boxes, &opts, &fx_min);
+    } else if (method == FM_METHOD_COBYLA) {
+        /* Derivative-free constrained (Powell's linear-approximation trust
+         * region).  Like SLSQP it consumes general constraints DIRECTLY (unlike
+         * Powell/NelderMead, which reject them), so a single path serves both the
+         * constrained and unconstrained cases. */
+        ok = fm_run_cobyla(f_raw, vars, n, binds, NULL, x_vec,
+                           gens, ngens, 0.0, boxes, &opts, &fx_min);
+    } else if (method == FM_METHOD_COBYQA) {
+        /* Derivative-free constrained with quadratic models; direct gens path
+         * (native equality + inequality + bounds), like COBYLA/SLSQP. */
+        ok = fm_run_cobyqa(f_raw, vars, n, binds, NULL, x_vec,
+                           gens, ngens, 0.0, boxes, &opts, &fx_min);
+    } else if (method == FM_METHOD_NEWTONCG || method == FM_METHOD_DOGLEG
+            || method == FM_METHOD_TRUSTNCG || method == FM_METHOD_TRUSTEXACT
+            || method == FM_METHOD_TRUSTKRYLOV) {
+        /* Trust-region / truncated-Newton family. Unconstrained in scipy, so
+         * reject general (non-box) constraints like Powell/NelderMead; the
+         * runners then take a single ngens == 0 path. dogleg/trust-exact form
+         * the dense Hessian (H_exprs), the others are Hessian-free. */
+        const char* mn = method == FM_METHOD_NEWTONCG ? "NewtonCG"
+                       : method == FM_METHOD_DOGLEG   ? "Dogleg"
+                       : method == FM_METHOD_TRUSTNCG ? "TrustNCG"
+                       : method == FM_METHOD_TRUSTEXACT ? "TrustExact"
+                       : "TrustKrylov";
+        if (has_general_cons) {
+            fm_warn(fn_name, "nimpl",
+                    "general (non-box) constraints are not supported with Method \"%s\"", mn);
+            ok = false; goto cleanup;
+        }
+        /* scipy's trust-region methods cannot handle box bounds either — warn
+         * and solve unconstrained rather than silently dropping them. */
+        bool any_box = false;
+        for (size_t bi = 0; bi < n; bi++)
+            if (boxes[bi].has_lo || boxes[bi].has_hi) { any_box = true; break; }
+        if (any_box)
+            fm_warn(fn_name, "nimpl",
+                    "bounds are not supported with Method \"%s\"; solving unconstrained", mn);
+        if (method == FM_METHOD_NEWTONCG) {
+            ok = fm_run_newton_cg(f_raw, vars, n, binds, g_exprs, x_vec,
+                                  NULL, 0, 0.0, boxes, &opts, &fx_min);
+        } else if (method == FM_METHOD_DOGLEG) {
+            ok = fm_run_trust_region(f_raw, vars, n, binds, g_exprs, H_exprs,
+                                     x_vec, boxes, &opts, &fx_min, fm_tr_dogleg, true);
+        } else if (method == FM_METHOD_TRUSTNCG) {
+            ok = fm_run_trust_region(f_raw, vars, n, binds, g_exprs, NULL,
+                                     x_vec, boxes, &opts, &fx_min, fm_tr_steihaug, false);
+        } else if (method == FM_METHOD_TRUSTEXACT) {
+            ok = fm_run_trust_region(f_raw, vars, n, binds, g_exprs, H_exprs,
+                                     x_vec, boxes, &opts, &fx_min, fm_tr_moresorensen, true);
+        } else {
+            ok = fm_run_trust_region(f_raw, vars, n, binds, g_exprs, NULL,
+                                     x_vec, boxes, &opts, &fx_min, fm_tr_gltr, false);
         }
     } else {
         fm_warn(fn_name, "nimpl", "method not implemented");

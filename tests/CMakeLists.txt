@@ -1305,6 +1305,59 @@ target_include_directories(findmin_tests PRIVATE ../src)
 add_executable(nminimize_tests test_nminimize.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(nminimize_tests PRIVATE ../src)
 
+# L-BFGS-B method of FindMinimum (run the binary directly, matching the
+# findmin_tests / nminimize_tests convention — no add_test registration).
+add_executable(lbfgsb_tests test_lbfgsb.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(lbfgsb_tests PRIVATE ../src)
+
+# Powell / PrincipalAxis derivative-free method of FindMinimum (same convention).
+add_executable(powell_tests test_findmin_powell.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(powell_tests PRIVATE ../src)
+
+# Nelder-Mead derivative-free method of FindMinimum (same convention).
+add_executable(neldermead_tests test_findmin_neldermead.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(neldermead_tests PRIVATE ../src)
+
+# TNC (truncated Newton) method of FindMinimum (same convention).
+add_executable(tnc_tests test_findmin_tnc.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(tnc_tests PRIVATE ../src)
+
+# SLSQP (sequential least-squares QP, constrained SQP) of FindMinimum.
+add_executable(slsqp_tests test_findmin_slsqp.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(slsqp_tests PRIVATE ../src)
+
+# COBYLA (derivative-free linear-approximation, constrained) of FindMinimum.
+add_executable(cobyla_tests test_findmin_cobyla.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(cobyla_tests PRIVATE ../src)
+
+# COBYQA (derivative-free quadratic-approximation, constrained) of FindMinimum.
+add_executable(cobyqa_tests test_findmin_cobyqa.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(cobyqa_tests PRIVATE ../src)
+
+# Newton-CG (line-search truncated Newton, Hessian-free) of FindMinimum.
+add_executable(newtoncg_tests test_findmin_newtoncg.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(newtoncg_tests PRIVATE ../src)
+
+# dogleg (trust-region Powell dogleg) of FindMinimum.
+add_executable(dogleg_tests test_findmin_dogleg.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dogleg_tests PRIVATE ../src)
+
+# trust-ncg (trust-region Steihaug-Toint CG, Hessian-free) of FindMinimum.
+add_executable(trustncg_tests test_findmin_trustncg.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trustncg_tests PRIVATE ../src)
+
+# trust-exact (trust-region Moré-Sorensen near-exact subproblem) of FindMinimum.
+add_executable(trustexact_tests test_findmin_trustexact.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trustexact_tests PRIVATE ../src)
+
+# trust-krylov (trust-region GLTR/Lanczos, Hessian-free) of FindMinimum.
+add_executable(trustkrylov_tests test_findmin_trustkrylov.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trustkrylov_tests PRIVATE ../src)
+
+# Cross-method battery: every FindMinimum method over a shared function set.
+add_executable(findmin_methods_tests test_findmin_methods.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(findmin_methods_tests PRIVATE ../src)
+
 add_executable(fit_tests test_fit.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(fit_tests PRIVATE ../src)
 add_test(NAME fit_tests COMMAND fit_tests)
@@ -3227,9 +3280,9 @@ else()
     target_link_libraries(intrat_corpus_tests gmp m)
 endif()
 add_test(NAME intrat_corpus_tests
-         COMMAND intrat_corpus_tests ../../IntegrateRationalTests.m)
+         COMMAND intrat_corpus_tests ../IntegrateRationalTests.m)
 add_test(NAME intrat_inline_corpus_tests
-         COMMAND intrat_corpus_tests ../../IntegrateRationalInlineCases.m)
+         COMMAND intrat_corpus_tests ../IntegrateRationalInlineCases.m)
 
 # Comprehensive corpus runner for the CRC integral table.  Loads
 # CRCIntegralsCorpus.m (a flat List of {integrand, var} pairs, ~3 per
@@ -3244,7 +3297,7 @@ else()
     target_link_libraries(crc_corpus_tests gmp m)
 endif()
 add_test(NAME crc_corpus_tests
-         COMMAND crc_corpus_tests ../../CRCIntegralsCorpus.m)
+         COMMAND crc_corpus_tests ../CRCIntegralsCorpus.m)
 
 add_executable(readwrite_tests test_readwrite.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(readwrite_tests PRIVATE ../src)
