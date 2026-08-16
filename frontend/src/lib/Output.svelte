@@ -157,11 +157,17 @@
   /* Corner drag. Pointer events with setPointerCapture rather than mousemove on window:
      capture keeps the stream coming when the cursor leaves the handle (which it does
      immediately, since the handle moves with the image), and one release ends it. */
-  function startResize(ev: PointerEvent, idx: number, it: { w: number }) {
+  /* `dir` is +1 for a right-hand corner and -1 for a left-hand one, so dragging outward always
+     enlarges whichever corner is under the cursor. All four corners resize: only the
+     bottom-right one did, it was 14px, and it was invisible until hover -- which is why a plain
+     image felt unresizable next to a volume, where dragging the canvas itself does something. */
+  function startResize(ev: PointerEvent, idx: number, it: { w: number }, dir: 1 | -1 = 1) {
     ev.preventDefault();
     ev.stopPropagation();
     const handle = ev.currentTarget as HTMLElement;
-    const frame = handle.parentElement as HTMLElement | null;
+    /* Works from a corner or from the canvas itself: both are children of .img-frame.
+       closest() rather than parentElement so a future nested wrapper cannot break it. */
+    const frame = handle.closest('.img-frame') as HTMLElement | null;
     const startX = ev.clientX;
     const startW = shownWidth(idx, it);
     handle.setPointerCapture(ev.pointerId);
@@ -185,7 +191,7 @@
     const move = (e: PointerEvent) => {
       /* Clamped at both ends: below ~24px the handle would be most of the image and the
          drag could not be undone by dragging back. */
-      latest = Math.max(24, Math.min(4096, startW + (e.clientX - startX)));
+      latest = Math.max(24, Math.min(4096, startW + dir * (e.clientX - startX)));
       if (!pending) pending = requestAnimationFrame(flush);
     };
     const up = (e: PointerEvent) => {
@@ -207,7 +213,7 @@
     /* The drag writes an inline width directly onto the frame, so clearing the state is not
        enough -- the inline style would win over the re-rendered one. */
     const handle = ev?.currentTarget as HTMLElement | undefined;
-    const frame = handle?.parentElement as HTMLElement | undefined;
+    const frame = handle?.closest('.img-frame') as HTMLElement | undefined;
     if (frame) frame.style.width = '';
     delete imgWidth[idx];
     imgWidth = imgWidth;
@@ -575,25 +581,34 @@
                 on:dblclick={() => resetVol(idx)}
               ></canvas>
             {:else}
-              <canvas class="out-canvas" use:mountImage={item}></canvas>
+              <!-- Once selected, dragging ANYWHERE on the image resizes it. A volume rotates
+                   under the cursor wherever you grab it, so an image that only responded to an
+                   18px corner felt broken by comparison -- "I can with image3d" was exactly that
+                   asymmetry. Unselected, the canvas stays inert so a click can select without
+                   nudging the size. -->
+              <canvas
+                class="out-canvas"
+                class:grabbable={selImg === idx}
+                use:mountImage={item}
+                on:pointerdown={(e) => { if (selImg === idx) startResize(e, idx, item, 1); }}
+                on:dblclick={(e) => { if (selImg === idx) resetResize(idx, e); }}
+              ></canvas>
             {/if}
             <!-- The grab corner. Aspect ratio is preserved because only the width is set and
                  the canvas keeps `height: auto`, so an image cannot be squashed by accident. -->
-            {#if selImg === idx}
-              <!-- Three decorative marks plus the live corner, so the frame reads as a selected
-                   object and the corner that actually resizes is the one under the cursor's
-                   natural reach. -->
-              <span class="img-mark tl"></span>
-              <span class="img-mark tr"></span>
-              <span class="img-mark bl"></span>
-            {/if}
-            <div
-              class="img-handle"
-              class:shown={selImg === idx}
-              title="Drag to resize · double-click to reset"
-              on:pointerdown={(e) => startResize(e, idx, item)}
-              on:dblclick={(e) => resetResize(idx, e)}
-            ></div>
+            <!-- Four live corners. Each is its own pointer target so the whole frame stays
+                 clickable for selection, and each carries the visible mark when selected: the
+                 mark and the grab area are the same object, which is what makes the affordance
+                 honest rather than decorative. -->
+            {#each [['tl', -1], ['tr', 1], ['bl', -1], ['br', 1]] as [pos, dir] (pos)}
+              <div
+                class="img-corner {pos}"
+                class:shown={selImg === idx}
+                title="Drag to resize · double-click to reset"
+                on:pointerdown={(e) => startResize(e, idx, item, dir as 1 | -1)}
+                on:dblclick={(e) => resetResize(idx, e)}
+              ></div>
+            {/each}
           </div>
           <span class="out-image-note">
             {item.w}&times;{item.h}{#if item.depth}&times;{item.depth}{/if}{item.channels > 1 ? `\u00d7${item.channels}` : ''}{#if item.depth && item.faces}
@@ -842,6 +857,9 @@
   /* A volume is square whatever its voxel dimensions -- the box is drawn inside a square field so
      that rotating it never changes the element's size and never reflows the cell. */
   .vol-canvas { aspect-ratio: 1 / 1; cursor: grab; touch-action: none; }
+  /* A selected image says it can be dragged, and stops the browser treating the drag as a
+     text selection or an image drag-out. */
+  .out-canvas.grabbable { cursor: ew-resize; touch-action: none; }
   .vol-canvas:active { cursor: grabbing; }
   .img-frame.selected {
     /* Outline rather than border: a border changes the element's box, so the image would shift by a
@@ -849,35 +867,37 @@
     outline: 1px solid var(--accent);
     outline-offset: 1px;
   }
-  .img-mark {
+
+  /* A corner is 18px of grab area with a 7px mark drawn in it. 14px invisible pixels were not
+     findable; 18 is about the smallest target a pointer hits without aiming. */
+  .img-corner {
     position: absolute;
-    width: 6px;
-    height: 6px;
+    width: 18px;
+    height: 18px;
+    touch-action: none;
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .img-corner::after {
+    content: '';
+    position: absolute;
+    width: 7px;
+    height: 7px;
     background: var(--accent);
     border-radius: 1px;
   }
-  .img-mark.tl { left: -4px; top: -4px; }
-  .img-mark.tr { right: -4px; top: -4px; }
-  .img-mark.bl { left: -4px; bottom: -4px; }
+  .img-corner.tl { left: -9px;  top: -9px;    cursor: nwse-resize; }
+  .img-corner.tr { right: -9px; top: -9px;    cursor: nesw-resize; }
+  .img-corner.bl { left: -9px;  bottom: -9px; cursor: nesw-resize; }
+  .img-corner.br { right: -9px; bottom: -9px; cursor: nwse-resize; }
+  .img-corner.tl::after { left: 5px;  top: 5px; }
+  .img-corner.tr::after { right: 5px; top: 5px; }
+  .img-corner.bl::after { left: 5px;  bottom: 5px; }
+  .img-corner.br::after { right: 5px; bottom: 5px; }
 
-  .img-handle {
-    position: absolute;
-    right: -3px;
-    bottom: -3px;
-    width: 14px;
-    height: 14px;
-    cursor: nwse-resize;
-    /* Two hairlines in the corner: the conventional resize affordance, and quiet enough
-       not to compete with the pixels it sits on. */
-    background:
-      linear-gradient(135deg, transparent 0 55%, var(--text-muted) 55% 65%, transparent 65% 78%,
-                      var(--text-muted) 78% 88%, transparent 88%);
-    opacity: 0;
-    transition: opacity 120ms ease;
-    touch-action: none;      /* so a touch drag resizes instead of scrolling */
-  }
-  .img-frame:hover .img-handle,
-  .img-handle.shown { opacity: 0.9; }
+  /* Visible on hover so the picture advertises itself, and held visible while selected. */
+  .img-frame:hover .img-corner,
+  .img-corner.shown { opacity: 0.9; }
   .out-canvas {
     /* Nearest-neighbour, so small images read as grids of squares rather than blurred smears. */
     image-rendering: pixelated;
