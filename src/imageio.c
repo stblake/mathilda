@@ -39,12 +39,25 @@
 #pragma GCC diagnostic ignored "-Wsign-compare"
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #pragma GCC diagnostic ignored "-Wcast-qual"
+/* With internal linkage (below) any stb entry point imageio.c never calls is an "unused static
+ * function"; harmless for a vendored header we deliberately include whole. */
+#pragma GCC diagnostic ignored "-Wunused-function"
 #endif
 
+/* STB_IMAGE_STATIC / STB_IMAGE_WRITE_STATIC give every stb function internal linkage, so its code
+ * lives in imageio.o alone and exports no `stbi_*` symbols. raylib's libraylib.a bakes its OWN copy
+ * of stb_image into rtextures.c.o with external linkage; without this scoping the two copies collide
+ * at link time when USE_GRAPHICS is on -- "multiple definition of stbi_load ..." (issue #65). Making
+ * ours file-local removes the clash at the root, with no need for the `-z muldefs` linker hack, which
+ * would merely paper over an ODR violation by silently keeping whichever copy the linker saw first.
+ * This is sound precisely because -- as the file header notes -- imageio.c is the ONLY translation
+ * unit that both defines and calls these functions. */
+#define STB_IMAGE_STATIC
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_FAILURE_USERMSG      /* readable reasons, e.g. "unknown image type" */
 #include "external/stb/stb_image.h"
 
+#define STB_IMAGE_WRITE_STATIC
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "external/stb/stb_image_write.h"
 
