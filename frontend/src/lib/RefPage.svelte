@@ -130,7 +130,7 @@
 
   /* ---- Block rhythm ---------------------------------------------------- */
   .refpage :global(h2) {
-    font-size: 0.95rem;
+    font-size: 1.18rem;
     font-weight: 650;
     color: var(--text-h);
     margin: 1.5rem 0 0.5rem;
@@ -139,13 +139,21 @@
     letter-spacing: 0.01em;
   }
   .refpage :global(h3) {
-    font-size: 0.87rem;
+    font-size: 1.02rem;
     font-weight: 600;
     color: var(--text-h);
     margin: 1.1rem 0 0.4rem;
   }
   .refpage :global(h2:first-child), .refpage :global(h3:first-child) { margin-top: 0.2rem; }
-  .refpage :global(p) { margin: 0.5rem 0; }
+  /* Body text one step larger, with the line height that goes with it. A reference page is
+     read, not scanned: at 0.86rem the prose was smaller than the code it explained, which
+     inverts the emphasis -- the sentence is the part a reader is trying to understand. */
+  .refpage :global(p) {
+    margin: 0.62rem 0;
+    font-size: 0.98rem;
+    line-height: 1.62;
+  }
+  .refpage :global(li) { font-size: 0.98rem; line-height: 1.6; }
   .refpage :global(ul), .refpage :global(ol) { margin: 0.45rem 0; padding-left: 1.35rem; }
   .refpage :global(li) { margin: 0.22rem 0; }
   .refpage :global(strong) { color: var(--text-h); font-weight: 620; }

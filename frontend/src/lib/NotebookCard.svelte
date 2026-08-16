@@ -37,7 +37,7 @@
     clearSelection,
   } from './notebook';
   import { recordOp } from './status';
-  import type { OutputItem, CellType } from './notebook';
+  import type { OutputItem, CellType, NotebookRow } from './notebook';
   import {
     evaluateCell,
   } from './ipc';
@@ -261,6 +261,29 @@
   // Cell focus registry
 
   const cellFocusFns: Record<string, () => void> = {};
+
+  /* Walk from a gap between rows in one direction until a cell that can take the caret is
+     found, and return its focus function.
+   *
+   * SKIPPING IS THE POINT. Only code cells (CodeMirror) and editable prose cells
+   * (contenteditable) register a focus function; a `ref` cell -- the generated reference
+   * prose on a documentation page -- renders read-only Markdown and registers none. Stepping
+   * one row at a time therefore stalled: the insertion bar landed on the gap beside a `ref`
+   * row, focusing it did nothing, and the next press tried the same unfocusable row again, so
+   * arrows appeared to get stuck above and below every paragraph of a documentation page. The
+   * caret now steps OVER anything it cannot enter and lands on the next cell that it can. */
+  function seekFocusable(rows: NotebookRow[], fromGap: number, dir: 1 | -1): (() => void) | null {
+    let i = dir === -1 ? fromGap - 1 : fromGap;
+    while (i >= 0 && i < rows.length) {
+      const row = rows[i];
+      /* Coming from above, enter a row at its first cell; from below, at its last. */
+      const cell = dir === -1 ? row.cells[row.cells.length - 1] : row.cells[0];
+      const fn = cell ? cellFocusFns[cell.id] : undefined;
+      if (fn) return fn;
+      i += dir;
+    }
+    return null;
+  }
 
   function handleRegister(e: CustomEvent<{ id: string; fn: () => void }>) {
     cellFocusFns[e.detail.id] = e.detail.fn;
@@ -585,17 +608,13 @@
       // Arrow up from insertion point → enter the cell ABOVE the cursor
       // insertionIdx N = gap between row[N-1] and row[N].
       // "Above" = row[N-1], last cell in that row.
-      if (insertionIdx > 0) {
-        const targetRow = rows[insertionIdx - 1];
-        if (targetRow) {
-          insertionIdx = null;
-          const lastCell = targetRow.cells[targetRow.cells.length - 1];
-          if (lastCell) cellFocusFns[lastCell.id]?.();
-        } else {
-          insertionIdx = Math.max(0, insertionIdx - 1);
-        }
+      const up = insertionIdx > 0 ? seekFocusable(rows, insertionIdx, -1) : null;
+      if (up) {
+        insertionIdx = null;
+        up();
       } else {
-        // Already at top — dismiss cursor
+        // Nothing focusable above (only prose, or already at the top) — dismiss the cursor
+        // rather than leaving it parked where another press would do nothing.
         insertionIdx = null;
       }
       return;
@@ -606,15 +625,10 @@
       // Arrow down from insertion point → enter the cell BELOW the cursor
       // insertionIdx N = gap between row[N-1] and row[N].
       // "Below" = row[N], first cell in that row.
-      if (insertionIdx < rows.length) {
-        const targetRow = rows[insertionIdx];
-        if (targetRow) {
-          insertionIdx = null;
-          const firstCell = targetRow.cells[0];
-          if (firstCell) cellFocusFns[firstCell.id]?.();
-        } else {
-          insertionIdx = Math.min(rows.length, insertionIdx + 1);
-        }
+      const down = insertionIdx < rows.length ? seekFocusable(rows, insertionIdx, 1) : null;
+      if (down) {
+        insertionIdx = null;
+        down();
       } else {
         insertionIdx = null;
       }

@@ -298,6 +298,7 @@
   class:type-text={cell.type === 'text'}
   class:type-section={cell.type === 'section'}
   class:type-subsection={cell.type === 'subsection'}
+  class:type-ref={cell.type === 'ref'}
   on:click={onBodyClick}
 >
 
@@ -457,6 +458,17 @@
     cursor: pointer;
     user-select: none;
     gap: 2px;
+  }
+
+  /* REFERENCE PROSE STARTS AT THE MARGIN. A generated page's paragraphs have nothing to put
+     in the gutter -- no run button, no execution label -- so the 40px reserved for one only
+     pushed every sentence to the right of the code it describes. Wolfram's pages run prose
+     flush with the left margin and keep the gutter for In[]/Out[] labels alone; this does the
+     same, and the narrow strip that remains keeps the coloured focus edge visible. */
+  .cell-shell.type-ref > .cell-gutter {
+    width: 10px;
+    padding-left: 0;
+    padding-right: 0;
   }
 
   .exec-label {
@@ -619,19 +631,25 @@
      of the same thing: a section is a full-strength heading with a rule under
      it, a subsection is smaller, lighter and dimmer so it clearly sits inside
      one. They previously differed by 0.15rem and nothing else. */
+  /* BOTH LEVELS OUTRANK BODY TEXT. Body prose is 0.98rem, so a subsection at 0.92rem was
+     literally smaller than the sentences it was meant to be heading -- the heading read as a
+     caption. A heading has to win on size before it can win on weight or colour, so the section
+     leads clearly and the subsection still sits above the prose beneath it. */
   h1.heading-cell {
-    font-size: 1.12rem;
+    font-size: 1.42rem;
     font-weight: 700;
     color: var(--text-h, #cdd6f4);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    padding-bottom: 0.3rem;
+    padding-bottom: 0.32rem;
+    line-height: 1.25;
   }
   h2.heading-cell {
-    font-size: 0.92rem;
-    font-weight: 600;
-    color: var(--text-dim, #9aa0b4);
-    letter-spacing: 0.02em;
-    padding-top: 2px;
+    font-size: 1.14rem;
+    font-weight: 650;
+    color: var(--text, #cdd6f4);
+    letter-spacing: 0.01em;
+    padding-top: 4px;
+    line-height: 1.3;
   }
 
   .out-label {
