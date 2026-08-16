@@ -5,11 +5,17 @@ import { Channel } from '@tauri-apps/api/core';
 
 export type OutputMessage =
   | { id: number; type: 'expr';   payload: string }
-  | { id: number; type: 'usage';  payload: string }
+  /* `symbol` is the name `?name` asked about, so the notebook can offer that symbol's
+     documentation page. */
+  | { id: number; type: 'usage';  payload: string; symbol?: string }
   | { id: number; type: 'names';  payload: string[] }
   | { id: number; type: 'error';  message: string }
   | { id: number; type: 'stream'; text: string }
   | { id: number; type: 'plot';   payload: object }
+  /* A raster result: base64 RGBA plus its shape. A volume also carries `depth` and the 1-based
+     `slice` it sent, which is the middle one. */
+  | { id: number; type: 'image';  payload: { w: number; h: number; channels: number;
+                                             data: string; depth?: number; slice?: number } }
   | { id: number; type: 'html';   payload: string };
 
 export type CellData = {

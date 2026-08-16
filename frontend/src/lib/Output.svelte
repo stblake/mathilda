@@ -3,6 +3,8 @@
   import katex from 'katex';
   import 'katex/dist/katex.min.css';
 
+  /* Opens a symbol's own reference page. Passed in so this stays a renderer. */
+  export let onOpenDoc: ((name: string) => void) | null = null;
   export let items: OutputItem[] = [];
 
   // Max height before output is collapsed with a "Show more" toggle
@@ -109,6 +111,84 @@
     }
   }
 
+  /* Draw a base64-RGBA payload onto a canvas.
+   *
+   * putImageData rather than an <img src="data:image/png"> because the kernel sends raw samples, not
+   * an encoded file: encoding a PNG in C to have the browser decode it again would be two conversions
+   * to display what is already a pixel buffer.
+   *
+   * The canvas is its natural pixel size and CSS scales it, with image-rendering: pixelated, so a 3x3
+   * image is a visible 3x3 grid of squares rather than a 3-pixel dot or a blurred smear. */
+  /* Per-output display width, in CSS pixels, once the reader has dragged the corner.
+     Keyed by output index and deliberately NOT written back into the notebook: a display
+     size is a way of looking at a result, not part of it, and persisting it would make an
+     unedited notebook dirty. */
+  let imgWidth: Record<number, number> = {};
+
+  /* The default is a compromise the reader can override: a tiny image is useless at its
+     natural size (an 8x8 result is a speck) and a large one must not push the cell wider
+     than the pane, so small images are magnified and everything is capped. */
+  function defaultImgWidth(it: { w: number }) {
+    return Math.min(Math.max(it.w * (it.w < 64 ? 12 : 1), 48), 512);
+  }
+
+  function shownWidth(idx: number, it: { w: number }) {
+    return imgWidth[idx] ?? defaultImgWidth(it);
+  }
+
+  /* Corner drag. Pointer events with setPointerCapture rather than mousemove on window:
+     capture keeps the stream coming when the cursor leaves the handle (which it does
+     immediately, since the handle moves with the image), and one release ends it. */
+  function startResize(ev: PointerEvent, idx: number, it: { w: number }) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const handle = ev.currentTarget as HTMLElement;
+    const startX = ev.clientX;
+    const startW = shownWidth(idx, it);
+    handle.setPointerCapture(ev.pointerId);
+
+    const move = (e: PointerEvent) => {
+      /* Clamped at both ends: below ~24px the handle would be most of the image and the
+         drag could not be undone by dragging back. */
+      imgWidth[idx] = Math.max(24, Math.min(4096, startW + (e.clientX - startX)));
+      imgWidth = imgWidth;                    /* Svelte 4: reassign to trigger */
+    };
+    const up = (e: PointerEvent) => {
+      handle.releasePointerCapture(e.pointerId);
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  }
+
+  /* Double-click the handle to go back to the default, so a drag is never a one-way door. */
+  function resetResize(idx: number) {
+    delete imgWidth[idx];
+    imgWidth = imgWidth;
+  }
+
+  function mountImage(node: HTMLCanvasElement,
+                      item: { w: number; h: number; data: string }) {
+    const draw = (it: { w: number; h: number; data: string }) => {
+      if (!it.w || !it.h || !it.data) return;
+      const ctx = node.getContext('2d');
+      if (!ctx) return;
+      node.width = it.w;
+      node.height = it.h;
+      const bin = atob(it.data);
+      const need = it.w * it.h * 4;
+      if (bin.length < need) return;          /* truncated payload: draw nothing rather than garbage */
+      const buf = new Uint8ClampedArray(need);
+      for (let i = 0; i < need; i++) buf[i] = bin.charCodeAt(i);
+      ctx.putImageData(new ImageData(buf, it.w, it.h), 0, 0);
+    };
+    draw(item);
+    return { update: draw };
+  }
+
   function mountPlot(node: HTMLElement, data: object) {
     import('plotly.js-dist-min').then((Plotly: any) => {
       const spec = data as any;
@@ -176,6 +256,13 @@
             {/each}
           </div>
         </div>
+          {#if item.symbol}
+            <!-- The docstring answers "what does this do"; the page answers "show me it working".
+                 Linked to Mathilda's OWN documentation, never an external site. -->
+            <button class="usage-doc" on:click={() => { const sy = item.symbol; if (onOpenDoc && sy) onOpenDoc(sy); }}>
+              Documentation: {item.symbol} &rarr;
+            </button>
+          {/if}
       {:else if item.kind === 'names'}
         <!-- `?pat*` is a symbol search. A grid reads far better than one long
              braced line, and each name is a discrete thing to scan for. -->
@@ -202,6 +289,26 @@
         <div class="out-collapsible" use:measureOverflow={idx}>
           <pre class="out-stream">{item.text}</pre>
         </div>
+      {:else if item.kind === 'image'}
+        <div class="out-image">
+          <!-- svelte-ignore a11y-no-static-element-interactions -->
+          <div class="img-frame" style={`width: ${shownWidth(idx, item)}px`}>
+            <canvas class="out-canvas" use:mountImage={item}></canvas>
+            <!-- The grab corner. Aspect ratio is preserved because only the width is set and
+                 the canvas keeps `height: auto`, so an image cannot be squashed by accident. -->
+            <div
+              class="img-handle"
+              title="Drag to resize · double-click to reset"
+              on:pointerdown={(e) => startResize(e, idx, item)}
+              on:dblclick={() => resetResize(idx)}
+            ></div>
+          </div>
+          <span class="out-image-note">
+            {item.w}&times;{item.h}{item.channels > 1 ? `\u00d7${item.channels}` : ''}{#if item.depth}
+              &nbsp;· slice {item.slice} of {item.depth}{/if}
+            {#if imgWidth[idx]}&nbsp;· shown at {Math.round(imgWidth[idx])}px{/if}
+          </span>
+        </div>
       {:else if item.kind === 'plot'}
         <div class="out-plot" use:mountPlot={item.data}></div>
       {:else if item.kind === 'html'}
@@ -209,7 +316,7 @@
       {/if}
 
       <!-- Always show toggle for collapsible output so user can expand/collapse -->
-      {#if item.kind !== 'plot' && item.kind !== 'error'}
+      {#if item.kind !== 'plot' && item.kind !== 'error' && item.kind !== 'image'}
         <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
         <div class="out-toggle" class:hidden={!overflows[idx] && !expanded[idx]} on:click={() => expanded[idx] = !expanded[idx]}>
           {expanded[idx] ? '▲ collapse' : '▼ show all'}
@@ -422,4 +529,60 @@
     color: var(--text);
     overflow-x: auto;
   }
+  /* A recorded image result from a documentation page: nearest-neighbour like the live
+     canvas, so a small image reads as a grid of squares rather than a blurred smear, and
+     capped so a large one cannot push the cell wider than its pane. */
+  :global(.out-html img.ref-shot) {
+    image-rendering: pixelated;
+    max-width: min(100%, 512px);
+    height: auto;
+    display: block;
+  }
+  .out-image { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+  .img-frame {
+    position: relative;
+    display: inline-block;
+    line-height: 0;          /* no descender gap under the canvas */
+    max-width: 100%;
+  }
+  .img-frame .out-canvas { width: 100%; display: block; }
+  .img-handle {
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    /* Two hairlines in the corner: the conventional resize affordance, and quiet enough
+       not to compete with the pixels it sits on. */
+    background:
+      linear-gradient(135deg, transparent 0 55%, var(--text-muted) 55% 65%, transparent 65% 78%,
+                      var(--text-muted) 78% 88%, transparent 88%);
+    opacity: 0;
+    transition: opacity 120ms ease;
+    touch-action: none;      /* so a touch drag resizes instead of scrolling */
+  }
+  .img-frame:hover .img-handle { opacity: 0.9; }
+  .out-canvas {
+    /* Nearest-neighbour, so small images read as grids of squares rather than blurred smears. */
+    image-rendering: pixelated;
+    height: auto;
+    max-width: 100%;
+    border: 1px solid var(--border);
+    background: var(--cell-bg);
+  }
+  .out-image-note { font-size: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .usage-doc {
+    align-self: flex-start;
+    margin-top: 4px;
+    padding: 2px 6px;
+    font: inherit;
+    font-size: 11px;
+    color: var(--accent);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .usage-doc:hover { border-color: var(--accent); }
 </style>

@@ -17,6 +17,9 @@
      openRefpage, so this component is a pure renderer -- one prose segment of a
      reference page, with the examples living in real code cells around it. */
   export let markdown: string;
+  /* Called with a symbol name when the reader clicks a link to another reference page. Passed in
+     rather than reached for, so this stays a renderer with no knowledge of the canvas. */
+  export let onOpen: ((name: string) => void) | null = null;
 
   let html = '';
 
@@ -76,8 +79,9 @@
       (_m, tag, inner) => `<${tag} id="${slug(inner.replace(/<[^>]+>/g, ''))}">${inner}</${tag}>`);
   }
 
-  /* Every link in a generated page points at GitHub or the published site, so
-     none of them should navigate the app's own webview. */
+  /* Links in a generated page come in three kinds, and only two were handled: a `#anchor` scrolls,
+     an `http(s)` URL opens in the browser, and a RELATIVE `.md` path is another reference page --
+     which fell through to preventDefault and then nothing, so every "See also" link was dead. */
   function onClick(ev: MouseEvent) {
     const a = (ev.target as HTMLElement)?.closest('a');
     const href = a?.getAttribute('href');
@@ -90,7 +94,15 @@
               ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
-    if (/^https?:/.test(href)) openUrl(href);
+    if (/^https?:/.test(href)) { openUrl(href); return; }
+    /* `../category/Name.md` (or `Name.md`) is a sibling reference page: open it here rather than
+       treating it as a dead end. The symbol name is the file stem, which is exactly what
+       openRefpage takes. */
+    const md = href.match(/([A-Za-z$][A-Za-z0-9$]*)\.md(?:#.*)?$/);
+    if (md) {
+      const sym = md[1];
+      if (sym !== 'index' && onOpen) { onOpen(sym); return; }
+    }
   }
 </script>
 

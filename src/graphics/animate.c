@@ -775,6 +775,13 @@ static void graphics_animate(const Expr* body,
 
 
 Expr* builtin_animate(Expr* res) {
+    /* MATHILDA_NO_WINDOW: evaluate and return without opening a window.
+     *
+     * The REPL's auto-display path honours this for Graphics, but Animate opens its own window from
+     * inside the builtin, so that guard never saw it -- which is why documentation generation, which
+     * re-runs every documented example, still put a window on screen for each Animate example even after
+     * the display path was fixed. */
+    if (getenv("MATHILDA_NO_WINDOW") != NULL) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;
 

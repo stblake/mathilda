@@ -514,6 +514,13 @@ static void graphics_manipulate(const Expr* body, ManipCtrl* ctrls, int n_ctrls)
 /* ------------------------------------------------------------------ */
 
 Expr* builtin_manipulate(Expr* res) {
+    /* MATHILDA_NO_WINDOW: evaluate and return without opening a window.
+     *
+     * The REPL's auto-display path honours this for Graphics, but Manipulate opens its own window from
+     * inside the builtin, so that guard never saw it -- which is why documentation generation, which
+     * re-runs every documented example, still put a window on screen for each Manipulate example even after
+     * the display path was fixed. */
+    if (getenv("MATHILDA_NO_WINDOW") != NULL) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;
 

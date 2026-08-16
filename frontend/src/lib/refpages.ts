@@ -64,7 +64,9 @@ export async function fetchRefpageFigures(name: string): Promise<Record<string, 
 export type RefSegment =
   | { kind: 'md'; text: string }
   | { kind: 'heading'; level: 2 | 3; text: string }
-  | { kind: 'example'; input: string; output: string };
+  | { kind: 'example'; input: string; output: string;
+      /** A recorded PNG of an image-valued result, as a data URI. */
+      image?: string };
 
 /** Split a page so its examples become real cells.
  *
@@ -102,6 +104,21 @@ export function splitRefpage(md: string): RefSegment[] {
       flushProse();
       out.push({ kind: 'heading', level: head[1].length as 2 | 3, text: head[2].trim() });
       continue;
+    }
+
+    /* A PICTURE OF A RESULT, not prose. The generator records image-valued results as a
+       data-URI Markdown image on its own line after the example's fence, which is right for a
+       page read as a document -- but a notebook also renders that example as a live cell, so
+       leaving it in the prose showed every image TWICE: once as the cell's output and once as a
+       stray row underneath. It is the recorded output, so it is attached to the example as one. */
+    const pic = /^!\[[^\]]*\]\((data:image\/[^)\s]+)\)\s*$/.exec(lines[i]);
+    if (pic) {
+      const prev = out.length ? out[out.length - 1] : null;
+      if (prev && prev.kind === 'example' && !prev.image && !prose.join('').trim()) {
+        prev.image = pic[1];
+        continue;
+      }
+      /* Not following an example (a page-level illustration): keep it as prose. */
     }
 
     const fence = /^```(\w*)\s*$/.exec(lines[i]);

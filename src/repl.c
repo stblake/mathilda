@@ -14,6 +14,7 @@
 #include "show.h"
 #include "render3d.h"
 #include "graphics_json.h"
+#include "image.h"
 #include "print_latex.h"
 #include "version.h"
 #include <stdio.h>
@@ -186,9 +187,16 @@ void process_input(const char* input, int line_number) {
      * suppresses the window. graphics_show/graphics3d_show borrow the expr
      * (no ownership transfer); on a non-graphics build their stubs print a
      * one-line "install raylib" hint instead. */
+    /* MATHILDA_NO_WINDOW suppresses the display, for callers that evaluate expressions in bulk and do
+     * not want a window per Graphics result. Documentation generation is the case that forced this:
+     * site/generate.py re-verifies every documented example against this binary, and the ones calling
+     * Plot or Manipulate opened a real Raylib window each -- dozens of them, over the user's work,
+     * during what should be a silent batch job. The expression still evaluates and still prints; only
+     * the window is withheld. */
     if (to_print && to_print->type == EXPR_FUNCTION
         && to_print->data.function.head->type == EXPR_SYMBOL
-        && to_print->data.function.arg_count >= 1) {
+        && to_print->data.function.arg_count >= 1
+        && getenv("MATHILDA_NO_WINDOW") == NULL) {
         if (to_print->data.function.head->data.symbol.name == SYM_Graphics) graphics_show(to_print);
         else if (to_print->data.function.head->data.symbol.name == SYM_Graphics3D) graphics3d_show(to_print);
     }
@@ -434,6 +442,19 @@ static Expr* pipe_final_expr(Expr* e) {
     return e;
 }
 
+/* The symbol `?name` asked about, or NULL. Borrowed -- do not free.
+ *
+ * The usage message carried only the text, so the notebook had a docstring and no way to know which
+ * symbol it described, and therefore could not offer a link to that symbol's page. */
+static const char* pipe_info_symbol(Expr* parsed) {
+    Expr* e = pipe_final_expr(parsed);
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 1) return NULL;
+    Expr* a = e->data.function.args[0];
+    if (a && a->type == EXPR_SYMBOL) return a->data.symbol.name;
+    if (a && a->type == EXPR_STRING) return a->data.string;
+    return NULL;
+}
+
 static bool pipe_is_info_query(Expr* parsed) {
     Expr* e = pipe_final_expr(parsed);
     return e && e->type == EXPR_FUNCTION && e->data.function.head
@@ -482,6 +503,21 @@ static void pipe_process_input(const char* input, int id) {
      * does above, so only help queries take this path and an ordinary string
      * result still comes back quoted. */
     bool info_query = pipe_is_info_query(parsed);
+    /* Captured BEFORE evaluate/expr_free, into a buffer rather than as a borrowed pointer.
+     *
+     * The first version read it after the free, which is undefined behaviour that happened to yield
+     * nothing -- the notebook received no symbol and could not offer a documentation link. A symbol
+     * name is interned and would have survived, but `?"name"` gives a STRING whose storage dies with
+     * the tree, so the copy covers both. */
+    char info_sym[128];
+    info_sym[0] = '\0';
+    if (info_query) {
+        const char* isname = pipe_info_symbol(parsed);
+        if (isname) {
+            strncpy(info_sym, isname, sizeof(info_sym) - 1);
+            info_sym[sizeof(info_sym) - 1] = '\0';
+        }
+    }
 
     Expr* evaluated = evaluate(parsed);
     expr_free(parsed);
@@ -542,8 +578,14 @@ static void pipe_process_input(const char* input, int id) {
             size_t bcap = cap + 64;
             char* buf = malloc(bcap);
             if (buf) {
-                snprintf(buf, bcap,
-                    "{\"id\":%d,\"type\":\"usage\",\"payload\":\"%s\"}", id, esc);
+                const char* isym = info_sym[0] ? info_sym : NULL;
+                if (isym)
+                    snprintf(buf, bcap,
+                        "{\"id\":%d,\"type\":\"usage\",\"payload\":\"%s\","
+                        "\"symbol\":\"%s\"}", id, esc, isym);
+                else
+                    snprintf(buf, bcap,
+                        "{\"id\":%d,\"type\":\"usage\",\"payload\":\"%s\"}", id, esc);
                 pipe_emit(buf);
                 free(buf);
             }
@@ -554,6 +596,37 @@ static void pipe_process_input(const char* input, int id) {
         snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
         pipe_emit(done);
         return;
+    }
+
+    /* Image[...] / Image3D[...] → RGBA for the notebook to draw on a canvas.
+     *
+     * Before this, an image came back as type "expr" and the notebook printed its expression -- which
+     * after the storage canonicalisation reads `Image[NDArray[{{...}}], "Real"]`. Correct, and not a
+     * picture. The front end had no image output kind at all. */
+    if (evaluated->type == EXPR_FUNCTION
+        && evaluated->data.function.head
+        && evaluated->data.function.head->type == EXPR_SYMBOL) {
+        const char* ih = evaluated->data.function.head->data.symbol.name;
+        if (ih && (strcmp(ih, "Image") == 0 || strcmp(ih, "Image3D") == 0)) {
+            char* ijson = image_to_json(evaluated);
+            if (ijson) {
+                expr_free(evaluated);
+                size_t jl = strlen(ijson) + 64;
+                char* jline = malloc(jl);
+                if (jline) {
+                    snprintf(jline, jl, "{\"id\":%d,\"type\":\"image\",\"payload\":%s}",
+                             id, ijson);
+                    pipe_emit(jline);
+                    free(jline);
+                }
+                free(ijson);
+                char idone[64];
+                snprintf(idone, sizeof(idone), "{\"id\":%d,\"type\":\"done\"}", id);
+                pipe_emit(idone);
+                return;
+            }
+            /* Not a well-formed image after all: fall through and print it as text. */
+        }
     }
 
     /* Graphics[...] / Graphics3D[...] → Plotly JSON for the notebook. */

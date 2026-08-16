@@ -17,6 +17,7 @@
   import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
   import Output from './Output.svelte';
   import RefPage from './RefPage.svelte';
+  import { openRefpage } from './canvas';
   import type { Cell, CellType, OutputItem } from './notebook';
   import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection } from './notebook';
   import { registerHandle, unregisterHandle, setActiveCell, markBlurred } from './active';
@@ -362,7 +363,8 @@
       {/if}
       {#if cell.output.length > 0}
         <div class="output-pane">
-          <Output items={cell.output} />
+          <Output items={cell.output}
+                  onOpenDoc={(n) => openRefpage(notebookId, n)} />
         </div>
       {/if}
 
@@ -400,7 +402,7 @@
 
     {:else if cell.type === 'ref'}
       <!-- Read-only generated reference page; `source` is the symbol name. -->
-      <RefPage markdown={cell.source} />
+      <RefPage markdown={cell.source} onOpen={(n) => openRefpage(notebookId, n)} />
 
     {:else if cell.type === 'subsection'}
       <!-- svelte-ignore a11y-click-events-have-key-events -->

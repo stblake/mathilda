@@ -514,11 +514,19 @@
   function msgToOutputItem(msg: OutputMessage): OutputItem | null {
     switch (msg.type) {
       case 'expr':   return { kind: 'expr', text: msg.payload, latex: (msg as any).latex };
-      case 'usage':  return { kind: 'usage',  text: msg.payload };
+      case 'usage':  return { kind: 'usage',  text: msg.payload,
+                              symbol: (msg as any).symbol };
       case 'names':  return { kind: 'names',  names: (msg as any).payload ?? [] };
       case 'error':  return { kind: 'error',  text: msg.message };
       case 'stream': return { kind: 'stream', text: (msg as any).text ?? '' };
       case 'plot':   return { kind: 'plot',   data: msg.payload };
+      case 'image':  return { kind: 'image',
+                              w: (msg as any).payload?.w ?? 0,
+                              h: (msg as any).payload?.h ?? 0,
+                              channels: (msg as any).payload?.channels ?? 1,
+                              data: (msg as any).payload?.data ?? '',
+                              depth: (msg as any).payload?.depth,
+                              slice: (msg as any).payload?.slice };
       case 'html':   return { kind: 'html',   html: (msg as any).payload ?? '' };
       default:       return null;
     }
