@@ -19,6 +19,13 @@
   import RefPage from './RefPage.svelte';
   import { openRefpage } from './canvas';
   import type { Cell, CellType, OutputItem } from './notebook';
+  import { showExecLabels } from './properties';
+  import { renderProse } from './prose';
+  /* Rendered prose can contain KaTeX, so this component owns the stylesheet.
+     Output.svelte imports it too and Vite dedupes; relying on ANOTHER component's
+     import would leave prose unstyled the day that one changed. It cannot live in
+     prose.ts, where a CSS import would break the node-run checks. */
+  import 'katex/dist/katex.min.css';
   import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection } from './notebook';
   import { registerHandle, unregisterHandle, setActiveCell, markBlurred } from './active';
 
@@ -264,6 +271,52 @@
     }
   }
 
+  /* A text cell shows RENDERED Markdown until you click into it, and its raw
+     source while you are editing -- the same two states Jupyter has, and what the
+     cell-type picker has promised ("Prose / markdown") since it was written.
+
+     One element rather than two, so every handler below, the handle registration
+     and the arrow-key navigation stay exactly as they were; only what is painted
+     into it and whether it is editable change.
+
+     A cell with no source starts in edit mode. Rendered-empty is a zero-height
+     box, and asking someone to click one is asking them to guess. */
+  let textEditing = cell.type === 'text' ? cell.source.trim() === '' : false;
+  $: renderedProse = cell.type === 'text' ? renderProse(cell.source) : '';
+
+  function paintProse() {
+    if (!proseEl) return;
+    if (cell.type !== 'text' || textEditing) proseEl.innerText = cell.source;
+    else proseEl.innerHTML = renderedProse;
+  }
+
+  /* Safe to repaint on every source change here, unlike the identity block below:
+     while NOT editing there is no caret in the element to clobber. */
+  $: if (proseEl && cell.type === 'text' && !textEditing) proseEl.innerHTML = renderedProse;
+
+  /* Entering edit mode has to wait a tick: `contenteditable` is still false in
+     the DOM until Svelte flushes, and focusing a non-editable div does nothing. */
+  async function enterProseEdit() {
+    if (cell.type !== 'text' || textEditing) return;
+    textEditing = true;
+    await tick();
+    if (!proseEl) return;
+    proseEl.innerText = cell.source;
+    /* The caret lands where focus() puts it, not at the click point. Mapping a
+       click to an offset in the SOURCE would mean mapping through the rendered
+       HTML, where `**bold**` is four visible characters and six source ones, so
+       caretRangeFromPoint would answer a different question than the one asked.
+       Jupyter has the same behaviour for the same reason. */
+    proseEl.focus();
+  }
+
+  /** Programmatic focus (arrow navigation, split, the toolbar) must open the
+   *  editor first, or it would focus a rendered, non-editable div. */
+  function focusProse() {
+    if (cell.type === 'text') { void enterProseEdit(); return; }
+    proseEl?.focus();
+  }
+
   // Focus ref + contenteditable state management
   let proseEl: HTMLElement;
   let _lastCellId = '';
@@ -273,7 +326,10 @@
   // If we update on every cell.source change, Svelte overwrites the user's
   // typed content, causing the duplication bug.
   $: if (proseEl && cell.id !== _lastCellId) {
-    proseEl.innerText = cell.source;
+    /* A different cell arrived in this component: it gets its own edit state, or
+       a rendered cell would inherit the previous one's open editor. */
+    textEditing = cell.type === 'text' ? cell.source.trim() === '' : false;
+    paintProse();
     _lastCellId = cell.id;
     /* REGISTER ONLY IF FOCUS WOULD ACTUALLY WORK. On a reference page `headingReadonly` is true,
        so the heading renders contenteditable={false} with no tabindex and .focus() on it does
@@ -283,11 +339,15 @@
        unfocusable rows were being skipped. This row was not classified as unfocusable; it lied.
        A read-only heading is page structure, so arrows step over it. */
     if (!headingReadonly) {
+      /* focusProse() rather than proseEl.focus(): a programmatic focus on a text
+         cell must OPEN its Markdown editor first, or it lands on the rendered,
+         non-editable div. revealSelf() then scrolls the cell into view so arrow
+         navigation through a long notebook does not walk the caret off-screen. */
       dispatch('register', {
         id: cell.id,
-        fn: () => { proseEl?.focus(); revealSelf(); },
+        fn: () => { focusProse(); revealSelf(); },
       });
-      registerHandle(cell.id, { view: null, el: proseEl, focus: () => proseEl?.focus() });
+      registerHandle(cell.id, { view: null, el: proseEl, focus: () => focusProse() });
     }
   }
 
@@ -305,7 +365,11 @@
      itself -- a focusin handler on .cell-shell could not tell which of a row's
      side-by-side cells the caret landed in. */
   function onProseFocus() { setActiveCell(notebookId, cell.id, cell.type); }
-  function onProseBlur()  { markBlurred(cell.id); }
+  function onProseBlur()  {
+    markBlurred(cell.id);
+    /* Leaving the cell renders it; the reactive repaint above does the painting. */
+    if (cell.type === 'text') textEditing = false;
+  }
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
@@ -331,7 +395,7 @@
         disabled={cell.status === 'running'}
         on:click|stopPropagation={() => dispatch('run', { id: cell.id })}
       >{#if cell.status === 'running'}<span class="spinner">●</span>{:else}▶{/if}</button>
-      {#if cell.execIdx != null}
+      {#if cell.execIdx != null && $showExecLabels}
         <span class="exec-label">In[{cell.execIdx}]</span>
       {/if}
     {:else if !headingReadonly}
@@ -394,13 +458,15 @@
       <!-- Content set via JS ($: proseEl update) to avoid contenteditable doubling -->
       <div
         class="prose-cell"
-        contenteditable="true"
+        class:prose-rendered={!textEditing}
+        class:prose-empty={!textEditing && !renderedProse}
+        contenteditable={textEditing}
         bind:this={proseEl}
         on:input={onTextInput}
         on:keydown={onProseKeydown}
         on:focus={onProseFocus}
         on:blur={onProseBlur}
-        on:click|stopPropagation
+        on:click|stopPropagation={() => enterProseEdit()}
       ></div>
 
     {:else if cell.type === 'section'}
@@ -618,6 +684,48 @@
   :global(.cm-editor .cm-cursor-primary) { border-left-color: #89b4fa !important; }
 
   /* prose / heading cells */
+  /* Rendered mode. Not editable, so it needs its own affordance: the cursor says
+     "click to edit" and an empty cell keeps a clickable line's worth of height,
+     since a rendered empty cell is otherwise a zero-height target. */
+  .prose-cell.prose-rendered { cursor: text; }
+  .prose-cell.prose-empty::before {
+    content: 'Text';
+    opacity: 0.35;
+  }
+  /* Markdown produces block elements the raw-text cell never contained. They are
+     given the cell's own rhythm rather than the browser's defaults, which would
+     open a paragraph gap at the top of every cell. */
+  .prose-cell.prose-rendered :global(p:first-child) { margin-top: 0; }
+  .prose-cell.prose-rendered :global(p:last-child)  { margin-bottom: 0; }
+  .prose-cell.prose-rendered :global(p) { margin: 0.5em 0; }
+  .prose-cell.prose-rendered :global(ul),
+  .prose-cell.prose-rendered :global(ol) { margin: 0.5em 0; padding-left: 1.4em; }
+  .prose-cell.prose-rendered :global(code) {
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: 0.92em;
+    background: var(--code-bg);
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+  }
+  .prose-cell.prose-rendered :global(pre) {
+    background: var(--code-bg);
+    padding: 8px 10px;
+    border-radius: 4px;
+    overflow-x: auto;
+  }
+  .prose-cell.prose-rendered :global(pre code) { background: none; padding: 0; }
+  .prose-cell.prose-rendered :global(a) { color: var(--accent); }
+  .prose-cell.prose-rendered :global(blockquote) {
+    margin: 0.5em 0;
+    padding-left: 0.8em;
+    border-left: 2px solid var(--border);
+    color: var(--text-muted);
+  }
+  /* A table in prose scrolls inside its own box rather than widening the cell. */
+  .prose-cell.prose-rendered :global(table) { border-collapse: collapse; display: block; overflow-x: auto; }
+  .prose-cell.prose-rendered :global(th),
+  .prose-cell.prose-rendered :global(td) { border: 1px solid var(--border); padding: 3px 7px; }
+
   .prose-cell {
     padding: 6px 8px;
     font-size: 0.95rem;

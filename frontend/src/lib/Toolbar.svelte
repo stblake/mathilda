@@ -36,9 +36,14 @@
   import { kernelStatus } from './notebook';
   import { restart, abortEvaluation } from './kernelActions';
   import { showStatusBar, resetSessionStats } from './status';
+  import { propertiesOpen } from './properties';
+  import { wrapSelection, PROSE_BOLD, PROSE_ITALIC, PROSE_CODE, PROSE_LINK,
+           PROSE_MATH } from './prose';
+  import { searchOpen } from './search';
+  import { SNIPPETS, expandedText, insertSnippet } from './snippets';
   import type { Cell, CellType, NotebookRow } from './notebook';
 
-  type MenuId = 'eval' | 'kernel' | 'docs' | 'style' | 'addpane' | 'overflow' | null;
+  type MenuId = 'eval' | 'kernel' | 'docs' | 'style' | 'addpane' | 'insert' | 'overflow' | null;
   let openMenu: MenuId = null;
 
   /* One anchor per trigger, so the menu can measure against the button that
@@ -48,6 +53,7 @@
   let docsAnchor: HTMLElement;
   let styleAnchor: HTMLElement;
   let addPaneAnchor: HTMLElement;
+  let insertAnchor: HTMLElement;
   let overflowAnchor: HTMLElement;
 
   function toggleMenu(which: Exclude<MenuId, null>) {
@@ -286,6 +292,21 @@
 
   $: codeView = activeCellObj?.type === 'code' ? (activeHandle()?.view ?? null) : null;
   $: showCodeGroup = activeCellObj?.type === 'code';
+  /* Only 'text'. A section or subsection is a single-line heading rendered as an
+     <h1>/<h2> and NOT through Markdown, so `**bold**` there would show its own
+     asterisks -- a button that inserts markup the cell will never interpret is
+     worse than no button. */
+  $: showTextGroup = activeCellObj?.type === 'text';
+
+  /* No disabled state, deliberately. Whether the caret is live in the cell is
+     exactly what ActiveCell.focused must not be used to gate (see active.ts), so
+     instead wrapSelection refuses when the selection is not inside the cell's
+     element: pressing one of these with the caret elsewhere does nothing rather
+     than editing whichever cell was last active. */
+  function applyProse(spec: { before: string; after: string;
+                              caret: { collapsed: number; selected: number } }) {
+    wrapSelection(activeHandle()?.el ?? null, spec.before, spec.after, spec.caret);
+  }
 
   function withView(fn: (v: import('@codemirror/view').EditorView) => void) {
     const v = activeHandle()?.view;
@@ -386,6 +407,24 @@
     ? ($canvasState.notebooks.find(n => n.id === $canvasState.focusedActiveId)?.title ?? '')
     : '';
 
+  /* The Insert palette. The hint is the EXPANSION, so the menu shows what will
+     land in the cell rather than only what it is called -- and it is the same
+     string npm run check:snippets feeds to Mathilda's parser. */
+  $: insertItems = SNIPPETS.map(sn => ({
+    kind: 'item' as const,
+    id: sn.label,
+    label: sn.label,
+    hint: expandedText(sn.template),
+  })) as MenuItem[];
+
+  function onInsertSelect(id: string) {
+    const sn = SNIPPETS.find(x => x.label === id);
+    if (!sn) return;
+    /* codeView is re-read here rather than captured when the menu opened: the cell
+       can be deleted between the two, and insertSnippet declines on a null view. */
+    insertSnippet(activeHandle()?.view ?? null, sn.template);
+  }
+
   /* One <Menu> instance, driven by these three tables. Adding a dropdown means
      adding a row to each, not another component with its own backdrop and
      keyboard handling. */
@@ -395,6 +434,7 @@
     openMenu === 'docs'     ? docsItems :
     openMenu === 'style'    ? styleItems :
     openMenu === 'addpane'  ? addPaneItems :
+    openMenu === 'insert'   ? insertItems :
     openMenu === 'overflow' ? overflowItems : [];
 
   $: menuAnchor =
@@ -403,6 +443,7 @@
     openMenu === 'docs'     ? docsAnchor :
     openMenu === 'style'    ? styleAnchor :
     openMenu === 'addpane'  ? addPaneAnchor :
+    openMenu === 'insert'   ? insertAnchor :
     openMenu === 'overflow' ? overflowAnchor : null;
 
   function onMenuSelect(e: CustomEvent<{ id: string }>) {
@@ -412,6 +453,7 @@
       case 'docs':     onDocsSelect(e.detail.id); break;
       case 'style':    onStyleSelect(e.detail.id); break;
       case 'addpane':  if (e.detail.id) addPane(e.detail.id); break;
+      case 'insert':   onInsertSelect(e.detail.id); break;
       case 'overflow': onOverflowSelect(e.detail.id); break;
     }
   }
@@ -564,7 +606,46 @@
 </ToolbarGroup>
 
 <!-- Context-sensitive: only for code cells, and hidden rather than disabled
-     otherwise. The Text half arrives with Markdown text cells. -->
+     otherwise. The Text half above is the same idea for prose cells. -->
+<!-- Insert. Code cells only, because every template is a Mathilda expression;
+     offering Table[] for a prose cell would insert text that never evaluates. -->
+<ToolbarGroup label="Insert" visible={showCodeGroup}>
+  <button
+    class="tb-btn"
+    title="Insert a template at the caret"
+    aria-haspopup="menu"
+    aria-expanded={openMenu === 'insert'}
+    tabindex="-1"
+    bind:this={insertAnchor}
+    on:pointerdown|preventDefault
+    on:click={() => toggleMenu('insert')}
+  ><Icon name="plus" /></button>
+</ToolbarGroup>
+
+<ToolbarGroup label="Text" visible={showTextGroup}>
+  <button class="tb-btn tb-bold" title="Bold (**)"
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => applyProse(PROSE_BOLD)}
+  >B</button>
+
+  <button class="tb-btn tb-italic" title="Italic (*)"
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => applyProse(PROSE_ITALIC)}
+  >I</button>
+
+  <button class="tb-btn tb-mono" title="Inline code (`)"
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => applyProse(PROSE_CODE)}
+  >`</button>
+
+  <button class="tb-btn" title="Link ([text](url))"
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => applyProse(PROSE_LINK)}
+  ><Icon name="link" /></button>
+
+  <!-- Inline TeX. A text cell renders `$…$` through KaTeX, and this is how that
+       gets discovered: the alternative is knowing to type it. -->
+  <button class="tb-btn" title="Inline math ($…$, rendered with KaTeX)"
+          tabindex="-1" on:pointerdown|preventDefault on:click={() => applyProse(PROSE_MATH)}
+  ><Icon name="sigma" /></button>
+</ToolbarGroup>
+
 <ToolbarGroup label="Code" visible={showCodeGroup}>
   <button class="tb-btn" title="Indent" disabled={!codeView}
           tabindex="-1" on:pointerdown|preventDefault on:click={() => withView(indentCode)}
@@ -583,6 +664,21 @@
   >(*=*)</button>
 </ToolbarGroup>
 
+<!-- One button, not two: Mathematica's sidebar group also carries a chat panel,
+     and Mathilda has no chat. A second button that opened nothing would be worse
+     than the asymmetry. -->
+<ToolbarGroup label="Sidebar">
+  <button
+    class="tb-btn"
+    class:active={$propertiesOpen}
+    title={$propertiesOpen ? 'Hide properties' : 'Show properties'}
+    aria-pressed={$propertiesOpen}
+    tabindex="-1"
+    on:pointerdown|preventDefault
+    on:click={() => propertiesOpen.update(v => !v)}
+  ><Icon name="sidebar" /></button>
+</ToolbarGroup>
+
 <ToolbarGroup label="Notebook">
   <button
     class="tb-btn"
@@ -591,6 +687,16 @@
     on:pointerdown|preventDefault
     on:click={() => darkMode.update(v => !v)}
   >{$darkMode ? '◑' : '☀'}</button>
+
+  <button
+    class="tb-btn"
+    class:active={$searchOpen}
+    title="Find in notebook (Cmd+F)"
+    aria-pressed={$searchOpen}
+    tabindex="-1"
+    on:pointerdown|preventDefault
+    on:click={() => searchOpen.update(v => !v)}
+  ><Icon name="search" /></button>
 
   <!-- A static title: what the caret is on is only resolved when the menu opens,
        and the menu's own first item names it. -->
@@ -785,4 +891,6 @@
     user-select: none;
     -webkit-user-select: none;
   }
+  .tb-bold   { font-weight: 700; }
+  .tb-italic { font-style: italic; font-family: Georgia, serif; }
 </style>

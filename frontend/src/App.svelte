@@ -12,6 +12,10 @@
   import Canvas from './lib/Canvas.svelte';
   import Toolbar from './lib/Toolbar.svelte';
   import { MENU_IDS, runMenuCommand } from './lib/menuCommands';
+  import PropertiesPanel from './lib/PropertiesPanel.svelte';
+  import SearchBar from './lib/SearchBar.svelte';
+  import { searchOpen } from './lib/search';
+  import { uiScale } from './lib/properties';
   import { kernelStatus } from './lib/notebook';
   import { darkMode } from './lib/theme';
   import { kernelMemory } from './lib/status';
@@ -142,20 +146,30 @@
      menu. Two implementations of "abort" is how one of them ends up wrong. */
 
   // ---------------------------------------------------------------------------
-  // Global UI scale (Cmd+= zoom in, Cmd+- zoom out, Cmd+0 reset)
-  let uiScale = 1.0;
-  $: document.documentElement.style.fontSize = `${uiScale * 16}px`;
+  /* Global UI scale (Cmd+= zoom in, Cmd+- zoom out, Cmd+0 reset).
+     A store rather than a local, so the properties panel can offer the SAME value
+     the keyboard drives. Two independent scales would drift apart. */
+  $: document.documentElement.style.fontSize = `${$uiScale * 16}px`;
 
   function onKeydown(e: KeyboardEvent) {
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
     if (e.key === 's' || e.key === 'S') { e.preventDefault(); saveFile(); return; }
     if (e.key === 'o' || e.key === 'O') { e.preventDefault(); openFile(); return; }
+    /* Cmd+F is free: @codemirror/search is not installed, so no editor claims it.
+       Focused mode only -- on the canvas there is no notebook to search. */
+    if (e.key === 'f' || e.key === 'F') {
+      if ($canvasState.focusedIds.length) { e.preventDefault(); searchOpen.set(true); }
+      return;
+    }
     // Cmd+= / Cmd++ → scale up; Cmd+- → scale down; Cmd+0 → reset
     if (e.key === '=' || e.key === '+') {
-      e.preventDefault(); uiScale = Math.min(2.0, +(uiScale + 0.1).toFixed(1));
+      e.preventDefault(); uiScale.update(v => Math.min(2.0, +(v + 0.1).toFixed(1)));
     } else if (e.key === '-' || e.key === '_') {
-      e.preventDefault(); uiScale = Math.max(0.5, +(uiScale - 0.1).toFixed(1));
+      e.preventDefault(); uiScale.update(v => Math.max(0.5, +(v - 0.1).toFixed(1)));
+    } else if (e.key === '0') {
+      /* The comment above has promised this since it was written. */
+      e.preventDefault(); uiScale.set(1.0);
     }
   }
 </script>
@@ -191,6 +205,13 @@
     </button>
   {/if}
 </div>
+
+<!-- Properties sidebar. Focused mode only: it reports on the notebook in the
+     active pane, and on the canvas there is no active pane to report on. -->
+{#if $canvasState.focusedIds.length}
+  <PropertiesPanel />
+  <SearchBar />
+{/if}
 
 <!-- Kernel dead banner -->
 {#if $kernelStatus === 'dead'}
