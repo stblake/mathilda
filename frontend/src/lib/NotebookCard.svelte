@@ -272,17 +272,26 @@
    * row, focusing it did nothing, and the next press tried the same unfocusable row again, so
    * arrows appeared to get stuck above and below every paragraph of a documentation page. The
    * caret now steps OVER anything it cannot enter and lands on the next cell that it can. */
-  function seekFocusable(rows: NotebookRow[], fromGap: number, dir: 1 | -1): (() => void) | null {
+  function seekFocusable(rows: NotebookRow[], fromGap: number, dir: 1 | -1): boolean {
     let i = dir === -1 ? fromGap - 1 : fromGap;
     while (i >= 0 && i < rows.length) {
       const row = rows[i];
       /* Coming from above, enter a row at its first cell; from below, at its last. */
       const cell = dir === -1 ? row.cells[row.cells.length - 1] : row.cells[0];
       const fn = cell ? cellFocusFns[cell.id] : undefined;
-      if (fn) return fn;
+      if (fn) {
+        /* TRY IT, THEN CHECK. A registered focus function is a claim, not a guarantee: a
+           read-only heading used to register one that called .focus() on an element with no
+           tabindex, which silently did nothing and left the caret nowhere. Verifying against
+           document.activeElement means an ineffective focuser costs one skipped row instead of
+           ending navigation, whatever registers it in future. */
+        const before = document.activeElement;
+        fn();
+        if (document.activeElement !== before) return true;
+      }
       i += dir;
     }
-    return null;
+    return false;
   }
 
   function handleRegister(e: CustomEvent<{ id: string; fn: () => void }>) {
@@ -612,10 +621,8 @@
       // Arrow up from insertion point → enter the cell ABOVE the cursor
       // insertionIdx N = gap between row[N-1] and row[N].
       // "Above" = row[N-1], last cell in that row.
-      const up = insertionIdx > 0 ? seekFocusable(rows, insertionIdx, -1) : null;
-      if (up) {
+      if (insertionIdx > 0 && seekFocusable(rows, insertionIdx, -1)) {
         insertionIdx = null;
-        up();
       } else {
         // Nothing focusable above (only prose, or already at the top) — dismiss the cursor
         // rather than leaving it parked where another press would do nothing.
@@ -629,10 +636,8 @@
       // Arrow down from insertion point → enter the cell BELOW the cursor
       // insertionIdx N = gap between row[N-1] and row[N].
       // "Below" = row[N], first cell in that row.
-      const down = insertionIdx < rows.length ? seekFocusable(rows, insertionIdx, 1) : null;
-      if (down) {
+      if (insertionIdx < rows.length && seekFocusable(rows, insertionIdx, 1)) {
         insertionIdx = null;
-        down();
       } else {
         insertionIdx = null;
       }

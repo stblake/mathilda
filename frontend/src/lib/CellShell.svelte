@@ -184,6 +184,7 @@
         view.focus();
         const end = view.state.doc.length;
         view.dispatch({ selection: EditorSelection.cursor(end) });
+        revealSelf();
       },
     });
 
@@ -274,12 +275,30 @@
   $: if (proseEl && cell.id !== _lastCellId) {
     proseEl.innerText = cell.source;
     _lastCellId = cell.id;
-    // Register focus fn once the element exists
-    dispatch('register', {
-      id: cell.id,
-      fn: () => { proseEl?.focus(); },
-    });
-    registerHandle(cell.id, { view: null, el: proseEl, focus: () => proseEl?.focus() });
+    /* REGISTER ONLY IF FOCUS WOULD ACTUALLY WORK. On a reference page `headingReadonly` is true,
+       so the heading renders contenteditable={false} with no tabindex and .focus() on it does
+       nothing at all. Registering anyway is worse than not registering: arrow navigation looks
+       for the next cell that HAS a focus function, finds this one, calls it, and the caret
+       vanishes -- which is why arrowing past a section in the docs appeared dead even after
+       unfocusable rows were being skipped. This row was not classified as unfocusable; it lied.
+       A read-only heading is page structure, so arrows step over it. */
+    if (!headingReadonly) {
+      dispatch('register', {
+        id: cell.id,
+        fn: () => { proseEl?.focus(); revealSelf(); },
+      });
+      registerHandle(cell.id, { view: null, el: proseEl, focus: () => proseEl?.focus() });
+    }
+  }
+
+  /* The cell's own outer element, so a cell taking the caret can bring itself into view.
+     Arrowing through a long notebook otherwise walked the caret off the bottom of the visible
+     area and kept going with nothing on screen changing. `block: 'nearest'` scrolls only when
+     the cell is really out of view, which keeps a short hop from jerking the page. */
+  let shellEl: HTMLElement | undefined;
+
+  function revealSelf() {
+    shellEl?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
   /* focus/blur do NOT bubble, so these have to sit on the contenteditable
@@ -291,6 +310,7 @@
 
 <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
 <div
+  bind:this={shellEl}
   class="cell-shell"
   class:selected
   class:running={cell.status === 'running'}
