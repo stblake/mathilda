@@ -119,6 +119,24 @@
    *
    * The canvas is its natural pixel size and CSS scales it, with image-rendering: pixelated, so a 3x3
    * image is a visible 3x3 grid of squares rather than a 3-pixel dot or a blurred smear. */
+  /* Which image output is selected, by index. A picture that can be dragged has to SAY so: the
+     resize corner only appeared on hover, so nothing told a reader the image was a handle-bearing
+     object at all. Clicking it draws the frame and its corner marks, which is the affordance every
+     canvas application uses for the same reason. */
+  let selImg: number | null = null;
+
+  function selectImg(ev: MouseEvent, idx: number) {
+    ev.stopPropagation();
+    selImg = idx;
+  }
+
+  /* Clicking anything that is not an image frame clears the selection. Bound on window rather than
+     per-element so a click in another cell -- or another notebook pane -- deselects too. */
+  function onWindowClick(ev: MouseEvent) {
+    const t = ev.target as HTMLElement | null;
+    if (!t || !t.closest('.img-frame')) selImg = null;
+  }
+
   /* Per-output display width, in CSS pixels, once the reader has dragged the corner.
      Keyed by output index and deliberately NOT written back into the notebook: a display
      size is a way of looking at a result, not part of it, and persisting it would make an
@@ -470,6 +488,8 @@
   }
 </script>
 
+<svelte:window on:click={onWindowClick} />
+
 <div class="output">
   {#each items as item, idx (idx)}
     <div class="out-item" class:expanded={expanded[idx]} class:overflowing={overflows[idx]}>
@@ -536,7 +556,13 @@
       {:else if item.kind === 'image'}
         <div class="out-image">
           <!-- svelte-ignore a11y-no-static-element-interactions -->
-          <div class="img-frame" style={`width: ${shownWidth(idx, item)}px`}>
+          <!-- svelte-ignore a11y-click-events-have-key-events -->
+          <div
+            class="img-frame"
+            class:selected={selImg === idx}
+            style={`width: ${shownWidth(idx, item)}px`}
+            on:click={(e) => selectImg(e, idx)}
+          >
             {#if item.faces && item.depth}
               <!-- A VOLUME, drawn as the block it is. Three of its six faces face the camera at
                    any angle, so three are drawn, back to front, each an affine map of its own
@@ -553,8 +579,17 @@
             {/if}
             <!-- The grab corner. Aspect ratio is preserved because only the width is set and
                  the canvas keeps `height: auto`, so an image cannot be squashed by accident. -->
+            {#if selImg === idx}
+              <!-- Three decorative marks plus the live corner, so the frame reads as a selected
+                   object and the corner that actually resizes is the one under the cursor's
+                   natural reach. -->
+              <span class="img-mark tl"></span>
+              <span class="img-mark tr"></span>
+              <span class="img-mark bl"></span>
+            {/if}
             <div
               class="img-handle"
+              class:shown={selImg === idx}
               title="Drag to resize · double-click to reset"
               on:pointerdown={(e) => startResize(e, idx, item)}
               on:dblclick={(e) => resetResize(idx, e)}
@@ -808,6 +843,23 @@
      that rotating it never changes the element's size and never reflows the cell. */
   .vol-canvas { aspect-ratio: 1 / 1; cursor: grab; touch-action: none; }
   .vol-canvas:active { cursor: grabbing; }
+  .img-frame.selected {
+    /* Outline rather than border: a border changes the element's box, so the image would shift by a
+       pixel the moment it was selected. */
+    outline: 1px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .img-mark {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 1px;
+  }
+  .img-mark.tl { left: -4px; top: -4px; }
+  .img-mark.tr { right: -4px; top: -4px; }
+  .img-mark.bl { left: -4px; bottom: -4px; }
+
   .img-handle {
     position: absolute;
     right: -3px;
@@ -824,7 +876,8 @@
     transition: opacity 120ms ease;
     touch-action: none;      /* so a touch drag resizes instead of scrolling */
   }
-  .img-frame:hover .img-handle { opacity: 0.9; }
+  .img-frame:hover .img-handle,
+  .img-handle.shown { opacity: 0.9; }
   .out-canvas {
     /* Nearest-neighbour, so small images read as grids of squares rather than blurred smears. */
     image-rendering: pixelated;

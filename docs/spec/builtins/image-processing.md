@@ -2147,7 +2147,27 @@ Volumetric *operations* — 3-D convolution and filtering — are the next step 
 Separability pays even better in three dimensions: `kw + kh + kd` taps instead of `kw · kh · kd`, so
 27 becomes 9 at radius 1 and 729 becomes 27 at radius 4.
 
+**What the rendered block shows.** A volume is drawn as an opaque box carrying the voxels on its
+**boundary faces**, so a shape lying entirely inside the volume — a ball with clearance on every
+side — renders as a dark cube however bright its interior is. That is not a defect in the render
+and Mathematica's view has the same property: three faces of an opaque solid are all a projection
+can show. Reach for `Image[Part[ImageData[vol], k]]` to see inside, which is what the Applications
+group below does; the examples here lead with volumes whose boundary carries structure, because
+those are the ones the block view says something about.
+
 #### Basic Examples
+
+```mathematica
+In[1]:= SeedRandom[5];
+
+In[2]:= (* uniform noise fills the volume to its boundary, so the block shows what it holds *)
+Image3D[RandomReal[1, {24, 24, 24}], "Real"]
+Out[2]= -Image-
+
+In[3]:= (* three channels, one per axis: the faces of the block are three colour gradients *)
+Image3D[Table[{N[x/16], N[y/16], N[z/16]}, {z, 1, 16}, {y, 1, 16}, {x, 1, 16}], "Real"]
+Out[3]= -Image-
+```
 
 ```mathematica
 In[1]:= ball = Image3D[Table[N[Boole[(x - 16)^2 + (y - 16)^2 + (z - 16)^2 <= 100]], {z, 1, 32}, {y, 1, 32}, {x, 1, 32}], "Real"];

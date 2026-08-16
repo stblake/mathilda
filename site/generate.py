@@ -31,6 +31,7 @@ import collections
 import os
 import base64
 import io
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -460,7 +461,7 @@ OUTLINE_RE = re.compile(r"^Out\[\d+\]=")
 FENCE_RE = re.compile(r"^```")
 
 
-EXAMPLE_LIMIT = 60
+EXAMPLE_LIMIT = 96
 
 
 GROUP_RE = re.compile(r"^#{3,5}\s+(.+?)\s*$")
@@ -488,8 +489,12 @@ def mine_example_inputs(body, limit=EXAMPLE_LIMIT):
 
     The limit was 8, which silently capped every page: a section could carry forty examples and the
     page would show the first eight, so writing more had no effect and the omission was invisible --
-    there is no message, the extra examples simply are not there. 60 is above what any section
-    currently holds, so the cap no longer decides what a reader sees.""" 
+    there is no message, the extra examples simply are not there. 60 was above what any section held when it
+    replaced 8 -- and then Image3D's section reached 64 inputs and had four of its five Neat
+    Examples trimmed away, which is the same failure one size up. The trim keeps whole blocks
+    "where possible" and otherwise takes a PREFIX of one, so the casualty is always the last
+    group on the page. A page whose example total sits exactly ON the cap is what that looks
+    like from outside, and is worth re-checking whenever it happens.""" 
     blocks = []
     in_fence = False
     cur = None
@@ -849,6 +854,103 @@ def _example_fence(pairs, start=1, figures=None):
 
 
 
+
+# The three visible faces of a volume, at the same default view the notebook uses. Kept beside
+# image_data_uri because it answers the same question -- "what does this result look like?" -- for
+# the one result type a single plane cannot represent.
+VOL_YAW, VOL_PITCH = -0.62, 0.42
+
+def _vol_rotate(p, yaw, pitch):
+    x, y, z = p
+    cx, sx = math.cos(yaw), math.sin(yaw)
+    x1, z1 = x * cx + z * sx, -x * sx + z * cx
+    cy, sy = math.cos(pitch), math.sin(pitch)
+    return (x1, y * cy - z1 * sy, y * sy + z1 * cy)
+
+
+def volume_data_uri(pay, size=260):
+    """A volume's six faces projected into an orthographic block, as a data URI.
+
+    Under an orthographic camera each rectangular face projects to an affine map of its texture, so
+    every face is one PIL affine transform -- the same fact the notebook's canvas renderer uses, and
+    the reason this is a projection rather than a ray march. Faces are drawn back to front and
+    shaded by the angle to the light, without which three faces of similar voxels read as one flat
+    hexagon."""
+    try:
+        from PIL import Image as PILImage
+        faces = pay["faces"]
+        w, h, d = int(pay["w"]), int(pay["h"]), int(pay.get("depth") or 1)
+        m = float(max(w, h, d))
+        sx, sy, sz = w / m, h / m, d / m
+        pts = []
+        for z in (-sz / 2, sz / 2):
+            for y in (-sy / 2, sy / 2):
+                for x in (-sx / 2, sx / 2):
+                    pts.append(_vol_rotate((x, y, z), VOL_YAW, VOL_PITCH))
+        scale = size * 0.62
+        proj = lambda q: (size / 2 + q[0] * scale, size / 2 + q[1] * scale)
+
+        # (origin, +u, +v) corner indices and the outward normal, matching the kernel's face export.
+        GEOM = {
+            "front":  (0, 1, 2, (0, 0, -1)), "back":   (5, 4, 7, (0, 0, 1)),
+            "left":   (4, 0, 6, (-1, 0, 0)), "right":  (1, 5, 3, (1, 0, 0)),
+            "top":    (0, 1, 4, (0, -1, 0)), "bottom": (2, 3, 6, (0, 1, 0)),
+        }
+        L = (-0.45, -0.75, -0.5)
+        vis = []
+        for k, (o, u, v, n) in GEOM.items():
+            if k not in faces:
+                continue
+            nr = _vol_rotate(n, VOL_YAW, VOL_PITCH)
+            if nr[2] >= 0:                      # facing away
+                continue
+            zc = (pts[o][2] + pts[u][2] + pts[v][2]) / 3.0
+            vis.append((zc, k, o, u, v, nr))
+        if not vis:
+            return None
+        vis.sort(reverse=True)                  # back to front
+
+        canvas = PILImage.new("RGBA", (size, size), (0, 0, 0, 0))
+        for _, k, o, u, v, nr in vis:
+            f = faces[k]
+            fw, fh = int(f["w"]), int(f["h"])
+            raw = base64.b64decode(f["data"])
+            if fw <= 0 or fh <= 0 or len(raw) < fw * fh * 4:
+                continue
+            tex = PILImage.frombytes("RGBA", (fw, fh), raw[: fw * fh * 4])
+            ox, oy = proj(pts[o]); ux, uy = proj(pts[u]); vx, vy = proj(pts[v])
+            # PIL's AFFINE maps DESTINATION -> SOURCE, so the matrix is the inverse of the
+            # texture-to-screen map. Getting that backwards mirrors every face.
+            a, b = (ux - ox) / fw, (vx - ox) / fh
+            c, dd = (uy - oy) / fw, (vy - oy) / fh
+            det = a * dd - b * c
+            if abs(det) < 1e-9:
+                continue
+            ia, ib = dd / det, -b / det
+            ic, idd = -c / det, a / det
+            coeffs = (ia, ib, -(ia * ox + ib * oy), ic, idd, -(ic * ox + idd * oy))
+            warped = tex.transform((size, size), PILImage.AFFINE, coeffs,
+                                   resample=PILImage.NEAREST)
+            nl = abs(nr[0] * L[0] + nr[1] * L[1] + nr[2] * L[2])
+            shade = 0.38 * (1 - min(1.0, nl))
+            if shade > 0.01:
+                px = warped.load()
+                for yy in range(size):
+                    for xx in range(size):
+                        r0, g0, b0, a0 = px[xx, yy]
+                        if a0:
+                            px[xx, yy] = (int(r0 * (1 - shade)), int(g0 * (1 - shade)),
+                                          int(b0 * (1 - shade)), a0)
+            canvas = PILImage.alpha_composite(canvas, warped)
+        buf = io.BytesIO()
+        canvas.save(buf, format="PNG", optimize=True)
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return None
+    return "![%dx%dx%d volume](data:image/png;base64,%s)" % (
+        int(pay["w"]), int(pay["h"]), int(pay.get("depth") or 1), b64)
+
+
 def image_data_uri(fig):
     """An image figure as an inline `![](data:image/png;base64,...)`, or None.
 
@@ -862,6 +964,15 @@ def image_data_uri(fig):
     if not isinstance(fig, dict) or "__image__" not in fig:
         return None
     pay = fig["__image__"]
+    if pay.get("faces"):
+        # A VOLUME. Its recorded picture has to be the block, for the same reason the notebook
+        # draws one: GaussianFilter of an Image3D IS an Image3D, and a flat middle slice on the
+        # page says otherwise. Same projection as Output.svelte's renderer, so the recorded
+        # picture and the live cell agree.
+        shot = volume_data_uri(pay)
+        if shot:
+            return shot
+        # Fall through to the slice if the projection fails -- a picture of one plane beats none.
     try:
         from PIL import Image as PILImage
         w, h = int(pay["w"]), int(pay["h"])
