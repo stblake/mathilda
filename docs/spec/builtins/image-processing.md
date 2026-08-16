@@ -944,6 +944,169 @@ ImageAssemble[{a, EdgeDetect[a]}]
 Out[3]= -Image-
 ```
 
+## Thinning
+Reduces the foreground to a one-pixel-wide skeleton.
+- `Thinning[image]` — iterates until a pass deletes nothing.
+- `Thinning[image, n]` — stops after `n` iterations.
+
+**Features**:
+- `Protected`. Returns a `"Bit"` image, always a **subset** of the input.
+- Zhang-Suen thinning: two subiterations per pass, deleting from opposite sides on alternate
+  passes. That is what preserves **connectivity** — deleting every individually-removable
+  pixel in a single pass severs a diagonal line, since two diagonal neighbours can each be
+  removable while removing both disconnects the shape. A single-pass version looks correct on
+  a thick blob and quietly breaks every diagonal stroke.
+- A non-binary image is thresholded at `0.5`. Apply `Binarize` first for any other rule.
+- Something already one pixel wide is left exactly alone, and an isolated pixel — no
+  neighbours at all — is never removed.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= bar = Image[Table[If[3 <= i <= 7, 1, 0], {i, 1, 9}, {j, 1, 12}]];
+
+In[2]:= Thinning[bar]
+Out[2]= -Image-
+
+In[3]:= {Round[Total[Flatten[ImageData[bar]]]], Round[Total[Flatten[ImageData[Thinning[bar]]]]]}
+Out[3]= {60, 7}
+
+In[4]:= ImageType[Thinning[bar]]
+Out[4]= "Bit"
+
+In[5]:= disk = Image[Table[N[Boole[(i - 12)^2 + (j - 12)^2 <= 81]], {i, 1, 24}, {j, 1, 24}]];
+
+In[6]:= Thinning[disk]
+Out[6]= -Image-
+```
+
+#### Scope
+
+```mathematica
+In[1]:= bar = Image[Table[If[3 <= i <= 7, 1, 0], {i, 1, 9}, {j, 1, 12}]];
+
+In[2]:= diag = Image[Table[If[Abs[i - j] <= 1, 1, 0], {i, 1, 12}, {j, 1, 12}]];
+
+In[3]:= Thinning[diag]
+Out[3]= -Image-
+
+In[4]:= (* an iteration limit stops early, so more foreground survives than at convergence *)
+Round[Total[Flatten[ImageData[Thinning[bar, 1]]]]] >= Round[Total[Flatten[ImageData[Thinning[bar]]]]]
+Out[4]= True
+
+In[5]:= cross = Image[Table[If[Abs[i - 12] <= 2 || Abs[j - 12] <= 2, 1, 0], {i, 1, 24}, {j, 1, 24}]];
+
+In[6]:= Thinning[cross]
+Out[6]= -Image-
+
+In[7]:= ring = Image[Table[N[Boole[36 <= (i - 12)^2 + (j - 12)^2 <= 100]], {i, 1, 24}, {j, 1, 24}]];
+
+In[8]:= Thinning[ring]
+Out[8]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= bar = Image[Table[If[3 <= i <= 7, 1, 0], {i, 1, 9}, {j, 1, 12}]];
+
+In[2]:= line = Image[Table[If[i == 5, 1, 0], {i, 1, 9}, {j, 1, 12}]];
+
+In[3]:= diag = Image[Table[If[Abs[i - j] <= 1, 1, 0], {i, 1, 12}, {j, 1, 12}]];
+
+In[4]:= (* only ever deletes: the skeleton is a subset of what it came from *)
+Max[Flatten[ImageData[Thinning[bar]] - ImageData[bar]]] <= 0
+Out[4]= True
+
+In[5]:= (* settled means settled *)
+ImageData[Thinning[Thinning[bar]]] === ImageData[Thinning[bar]]
+Out[5]= True
+
+In[6]:= (* something already thin is untouched *)
+ImageData[Thinning[line]] === ImageData[line]
+Out[6]= True
+
+In[7]:= (* THE DIAGONAL: still one connected component, which a single-pass thinning would break *)
+Max[Flatten[MorphologicalComponents[Thinning[diag]]]]
+Out[7]= 1
+
+In[8]:= (* an isolated pixel has no neighbours, so no rule may remove it *)
+Round[Total[Flatten[ImageData[Thinning[Image[Table[If[i == 5 && j == 6, 1, 0], {i, 1, 9}, {j, 1, 12}]]]]]]]
+Out[8]= 1
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 12)^2 + (j - 12)^2 <= 81]], {i, 1, 24}, {j, 1, 24}]];
+
+In[2]:= (* skeleton then prune: the usual pairing, since a skeleton grows short spurs at boundary irregularities *)
+Pruning[Thinning[disk], 2]
+Out[2]= -Image-
+
+In[3]:= (* how many branch pixels a shape's skeleton has *)
+Round[Total[Flatten[ImageData[Thinning[disk]]]]]
+Out[3]= 8
+
+In[4]:= (* the skeleton of a binarised gradient, end to end *)
+Thinning[Binarize[Image[Table[N[Boole[Abs[i - j] <= 3]], {i, 1, 20}, {j, 1, 20}], "Real"]]]
+Out[4]= -Image-
+```
+
+## Pruning
+Removes pixels from the free ends of the foreground.
+- `Pruning[image]` — one pixel from every end.
+- `Pruning[image, n]` — repeats `n` times.
+
+**Features**:
+- `Protected`. Returns a `"Bit"` image, always a subset of the input.
+- An end point has **exactly one** foreground neighbour, so an **isolated pixel is not one**
+  and survives: pruning shortens branches rather than erasing specks. A rule that removed
+  isolated pixels would quietly delete every one-pixel component.
+- `n` passes shorten each branch by up to `n`, and remove any branch shorter than that
+  entirely — which is what makes it the companion to `Thinning`, whose skeletons grow short
+  spurs at boundary irregularities.
+- `Pruning[image, 0]` is the image unchanged.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= line = Image[Table[If[i == 5, 1, 0], {i, 1, 9}, {j, 1, 12}]];
+
+In[2]:= {Round[Total[Flatten[ImageData[line]]]], Round[Total[Flatten[ImageData[Pruning[line]]]]]}
+Out[2]= {12, 10}
+
+In[3]:= Round[Total[Flatten[ImageData[Pruning[line, 3]]]]]
+Out[3]= 6
+
+In[4]:= ImageType[Pruning[line]]
+Out[4]= "Bit"
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= line = Image[Table[If[i == 5, 1, 0], {i, 1, 9}, {j, 1, 12}]];
+
+In[2]:= dot = Image[Table[If[i == 5 && j == 6, 1, 0], {i, 1, 9}, {j, 1, 12}]];
+
+In[3]:= (* zero passes is the identity -- the boundary a loop written with <= gets wrong *)
+ImageData[Pruning[line, 0]] === ImageData[line]
+Out[3]= True
+
+In[4]:= (* an isolated pixel has no neighbours, so it is not an end point and survives any n *)
+Round[Total[Flatten[ImageData[Pruning[dot, 5]]]]]
+Out[4]= 1
+
+In[5]:= (* only ever deletes *)
+Max[Flatten[ImageData[Pruning[line, 2]] - ImageData[line]]] <= 0
+Out[5]= True
+
+In[6]:= (* each pass takes one pixel from each of the two ends *)
+Table[Round[Total[Flatten[ImageData[Pruning[line, k]]]]], {k, 0, 4}]
+Out[6]= {12, 10, 8, 6, 4}
+```
+
 ## GaussianMatrix
 
 `GaussianMatrix[r]` gives a `(2r+1) × (2r+1)` Gaussian normalised to sum 1.

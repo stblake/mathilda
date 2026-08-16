@@ -1183,6 +1183,12 @@ static bool img3_grey_volume(Expr* img, size_t* w, size_t* h, size_t* d, double*
     return true;
 }
 
+/* The same builder, exported for modules outside this file (see image.h). A wrapper rather than
+ * un-static'ing the original, so its six callers here stay untouched. */
+Expr* image_build_bit(const unsigned char* mask, size_t width, size_t height) {
+    return bit_image_from_mask(mask, width, height);
+}
+
 /* Build an Image3D[..., "Bit"] from a 0/1 mask, packed, mirroring bit_image_from_mask. */
 static Expr* bit_image3d_from_mask(const unsigned char* mask, size_t w, size_t h, size_t d) {
     int64_t dims[3];

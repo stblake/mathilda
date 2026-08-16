@@ -2537,6 +2537,68 @@ static void test_assemble_tiles_at_natural_size(void) {
                    "{NDArray, NDArray}", 0);
 }
 
+
+/* ------------------------------------------------------ Thinning and Pruning
+ *
+ * The property that matters is CONNECTIVITY, and it is the one a plausible implementation gets
+ * wrong: deleting every individually-removable pixel in a single pass severs a diagonal line,
+ * because two diagonal neighbours can each be removable while removing both disconnects the shape.
+ * A thick blob thins correctly either way, so the diagonal is the test that distinguishes them --
+ * asserted through MorphologicalComponents, since "one component" is the claim, not "some pixels
+ * survived". */
+#define THBAR  "Image[Table[If[3 <= i <= 7, 1, 0], {i, 1, 9}, {j, 1, 12}]]"
+#define THLINE "Image[Table[If[i == 5, 1, 0], {i, 1, 9}, {j, 1, 12}]]"
+#define THDIAG "Image[Table[If[Abs[i - j] <= 1, 1, 0], {i, 1, 12}, {j, 1, 12}]]"
+#define THDOT  "Image[Table[If[i == 5 && j == 6, 1, 0], {i, 1, 9}, {j, 1, 12}]]"
+
+static void test_thinning_reduces_to_a_connected_skeleton(void) {
+    /* A 5-row bar becomes a single line: 60 foreground pixels down to 7. */
+    assert_eval_eq("{Round[Total[Flatten[ImageData[" THBAR "]]]],"
+                   " Round[Total[Flatten[ImageData[Thinning[" THBAR "]]]]]}", "{60, 7}", 0);
+    /* Only ever deletes: the result is a subset of the input. */
+    assert_eval_eq("Max[Flatten[ImageData[Thinning[" THBAR "]] - ImageData[" THBAR "]]] <= 0",
+                   "True", 0);
+    /* Settled means settled -- a further application changes nothing. */
+    assert_eval_eq("ImageData[Thinning[Thinning[" THBAR "]]] === ImageData[Thinning[" THBAR "]]",
+                   "True", 0);
+    /* Something already one pixel wide is left exactly alone. */
+    assert_eval_eq("ImageData[Thinning[" THLINE "]] === ImageData[" THLINE "]", "True", 0);
+    /* THE DIAGONAL. A single-pass thinning breaks this into pieces while still looking thinned. */
+    assert_eval_eq("Max[Flatten[MorphologicalComponents[Thinning[" THDIAG "]]]]", "1", 0);
+    assert_eval_eq("Round[Total[Flatten[ImageData[Thinning[" THDIAG "]]]]] < "
+                   "Round[Total[Flatten[ImageData[" THDIAG "]]]]", "True", 0);
+    /* An isolated pixel has no neighbours at all, so no rule may remove it. */
+    assert_eval_eq("Round[Total[Flatten[ImageData[Thinning[" THDOT "]]]]]", "1", 0);
+    /* A "Bit" result, packed like every other image head. */
+    assert_eval_eq("{ImageType[Thinning[" THBAR "]], Head[Part[Thinning[" THBAR "], 1]]}",
+                   "{\"Bit\", NDArray}", 0);
+    /* An iteration limit stops early, so it can only leave MORE foreground than running to
+     * convergence -- never less. */
+    assert_eval_eq("Round[Total[Flatten[ImageData[Thinning[" THBAR ", 1]]]]] >= "
+                   "Round[Total[Flatten[ImageData[Thinning[" THBAR "]]]]]", "True", 0);
+}
+
+static void test_pruning_shortens_branches_without_erasing_specks(void) {
+    /* One pass removes each free END. A 12-pixel line has two, so 12 becomes 10. */
+    assert_eval_eq("{Round[Total[Flatten[ImageData[" THLINE "]]]],"
+                   " Round[Total[Flatten[ImageData[Pruning[" THLINE "]]]]]}", "{12, 10}", 0);
+    /* n passes shorten by n at each end. */
+    assert_eval_eq("Round[Total[Flatten[ImageData[Pruning[" THLINE ", 3]]]]]", "6", 0);
+    /* Zero passes is the identity, which is the boundary a loop written with <= gets wrong. */
+    assert_eval_eq("ImageData[Pruning[" THLINE ", 0]] === ImageData[" THLINE "]", "True", 0);
+    /* AN ISOLATED PIXEL SURVIVES: it has no neighbours, so it is not an end point. Pruning
+     * shortens branches; a rule that deleted it would quietly erase every one-pixel component. */
+    assert_eval_eq("Round[Total[Flatten[ImageData[Pruning[" THDOT ", 5]]]]]", "1", 0);
+    /* Only ever deletes. */
+    assert_eval_eq("Max[Flatten[ImageData[Pruning[" THLINE ", 2]] - ImageData[" THLINE "]]] <= 0",
+                   "True", 0);
+    assert_eval_eq("{ImageType[Pruning[" THLINE "]], Head[Part[Pruning[" THLINE "], 1]]}",
+                   "{\"Bit\", NDArray}", 0);
+    /* Pruning a skeleton is the usual pairing, and stays a subset of it. */
+    assert_eval_eq("Max[Flatten[ImageData[Pruning[Thinning[" THDIAG "]]]"
+                   " - ImageData[Thinning[" THDIAG "]]]] <= 0", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2659,6 +2721,8 @@ int main(void) {
     TEST(test_remove_alpha_composites_rather_than_dropping);
     TEST(test_compose_promotes_channels_and_keeps_base_size);
     TEST(test_assemble_tiles_at_natural_size);
+    TEST(test_thinning_reduces_to_a_connected_skeleton);
+    TEST(test_pruning_shortens_branches_without_erasing_specks);
 
     printf("All image tests passed.\n");
     return 0;

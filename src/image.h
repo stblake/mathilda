@@ -60,6 +60,14 @@ Expr* image_build_real(const double* buf, size_t width, size_t height, size_t ch
 Expr* image3d_build_real(const double* buf, size_t width, size_t height, size_t depth,
                          size_t channels);
 
+/* Build a canonical Image[data, "Bit"] from a 0/1 mask, packed.
+ *
+ * "Bit" rather than "Real" because these are DECISIONS, not brightnesses: a thinning or a
+ * binarisation answers yes-or-no per pixel, and ImageData reports stored values, so a real-typed 1
+ * would print as `1.` where Mathematica prints `1`. Defined in imagefilter.c, where the packed
+ * builder and its nested-List fallback already live. */
+Expr* image_build_bit(const unsigned char* mask, size_t width, size_t height);
+
 /* Serialise an Image or Image3D for the notebook front end.
  *
  * Returns a malloc'd JSON object -- {"w":W,"h":H,"data":"<base64 RGBA>"} plus, for a volume, the depth

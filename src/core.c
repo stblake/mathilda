@@ -81,6 +81,7 @@
 #include "image.h"
 #include "imageio.h"
 #include "imagecompose.h"
+#include "imagethin.h"
 #include "expand.h"
 #include "expand_power.h"
 #include "poly.h"
@@ -851,6 +852,7 @@ void core_init(void) {
     imagegeom_init();
     imageio_init();
     imagecompose_init();
+    imagethin_init();
     datetime_init();
     linalg_init();
     ml_init();      /* src/ml -- PrincipalComponents, Standardize */

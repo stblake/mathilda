@@ -451,6 +451,7 @@ set(COMMON_SRC
     ../src/imagegeom.c
     ../src/imageio.c
     ../src/imagecompose.c
+    ../src/imagethin.c
     ../src/expand.c
     ../src/expand_power.c
     ../src/poly/poly.c
