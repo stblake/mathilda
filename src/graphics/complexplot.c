@@ -55,7 +55,7 @@ typedef struct {
 /* Parse trailing Rule args starting at index `first_opt_idx`.
  * Fills `o`, builds a passthrough list for Graphics/Graphics3D opts.
  * Returns true on success; on failure frees *pt_out and returns false. */
-static bool split_cplot_options(Expr* res, size_t first_opt_idx,
+static bool split_cplot_options(Expr* res, size_t first_opt_idx, bool is_3d,
                                  CPlotOpts* o,
                                  Expr*** pt_out, size_t* pt_n_out) {
     o->plot_points            = 200;
@@ -66,13 +66,14 @@ static bool split_cplot_options(Expr* res, size_t first_opt_idx,
 
     size_t argc = res->data.function.arg_count;
     size_t extra = (argc > first_opt_idx ? argc - first_opt_idx : 0);
-    /* +4 headroom: AspectRatio, Axes, PlotRange, $StreamColorBar defaults */
-    Expr** pt = malloc(sizeof(Expr*) * (extra + 5));
+    /* +5 headroom: AspectRatio, Axes, AxesLabel, PlotRange, $StreamColorBar defaults */
+    Expr** pt = malloc(sizeof(Expr*) * (extra + 6));
     size_t n = 0;
 
-    bool have_axes   = false;
-    bool have_aspect = false;
-    bool have_frame  = false;
+    bool have_axes       = false;
+    bool have_axes_label = false;
+    bool have_aspect     = false;
+    bool have_frame      = false;
 
 #define CP_FAIL() do { free(pt); return false; } while (0)
 
@@ -103,8 +104,9 @@ static bool split_cplot_options(Expr* res, size_t first_opt_idx,
                                    || v->data.symbol.name == SYM_False));
             expr_free(v);
         } else {
-            if      (name == SYM_Axes)        have_axes   = true;
-            else if (name == SYM_AspectRatio) have_aspect = true;
+            if      (name == SYM_Axes)        have_axes       = true;
+            else if (name == SYM_AxesLabel)   have_axes_label = true;
+            else if (name == SYM_AspectRatio) have_aspect     = true;
             else if (name == SYM_Frame) {
                 if (!(rhs->type == EXPR_SYMBOL
                       && (rhs->data.symbol.name == SYM_False
@@ -117,8 +119,26 @@ static bool split_cplot_options(Expr* res, size_t first_opt_idx,
         }
     }
 
-    /* Inject defaults: raster plots default to Frame->True, Axes->False. */
-    if (!have_axes && !have_frame) {
+    /* Inject defaults. 2D raster plots default to Frame->True, Axes->False.
+     * 3D surface plots default to Axes->True instead: Graphics3D has no
+     * Frame concept (render3d.c never parses it), so a 3D plot with neither
+     * option given would otherwise end up with no axes AND no frame box --
+     * completely unlabelled. */
+    if (is_3d) {
+        if (!have_axes) {
+            Expr* aa[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_True) };
+            pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), aa, 2);
+        }
+        /* z = |f(z)| has no fixed name worth labelling, so only Re/Im
+         * default -- the two axes that are always meaningful regardless
+         * of what f is. */
+        if (!have_axes_label) {
+            Expr* labels[2] = { expr_new_string("Re"), expr_new_string("Im") };
+            Expr* lst = expr_new_function(expr_new_symbol(SYM_List), labels, 2);
+            Expr* la[2] = { expr_new_symbol(SYM_AxesLabel), lst };
+            pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), la, 2);
+        }
+    } else if (!have_axes && !have_frame) {
         Expr* fa[2] = { expr_new_symbol(SYM_Frame), expr_new_symbol(SYM_True) };
         pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), fa, 2);
         Expr* aa[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_False) };
@@ -494,7 +514,7 @@ Expr* builtin_complexplot(Expr* res) {
 
     CPlotOpts opts;
     Expr** pt = NULL; size_t pt_n = 0;
-    if (!split_cplot_options(res, 2, &opts, &pt, &pt_n)) return NULL;
+    if (!split_cplot_options(res, 2, false, &opts, &pt, &pt_n)) return NULL;
 
     int N = opts.plot_points;
     size_t stride = (size_t)(N + 1);
@@ -601,7 +621,7 @@ Expr* builtin_complexplot3d(Expr* res) {
     CPlotOpts opts;
     Expr** pt = NULL; size_t pt_n = 0;
     /* 3D: default passthrough gets Axes → True (reusing split_cplot_options) */
-    if (!split_cplot_options(res, 2, &opts, &pt, &pt_n)) return NULL;
+    if (!split_cplot_options(res, 2, true, &opts, &pt, &pt_n)) return NULL;
 
     int N = opts.plot_points;
     size_t stride = (size_t)(N + 1);

@@ -77,9 +77,16 @@ void cool_tones_rgb(double t, double* r, double* g, double* b);
 /* WarmTones: pale cream (t=0) → amber → orange → deep crimson (t=1). */
 void warm_tones_rgb(double t, double* r, double* g, double* b);
 
+/* Viridis: dark purple (t=0) → blue → green → bright yellow (t=1). The
+ * standard matplotlib "viridis" colormap. */
+void viridis_rgb(double t, double* r, double* g, double* b);
+
+/* GreenYellow: dark green (t=0) → lime → bright yellow (t=1). */
+void green_yellow_rgb(double t, double* r, double* g, double* b);
+
 /* Resolve a ColorFunction name string + t ∈ [0,1] to a color Expr (caller
- * owns).  Recognised names: "Rainbow", "Temperature"/"Thermal",
- * "CoolTones"/"Cool", "WarmTones"/"Warm",
+ * owns).  Recognised names: "Rainbow", "Temperature"/"Thermal"/"Plasma",
+ * "CoolTones"/"Cool", "WarmTones"/"Warm", "Viridis", "GreenYellow",
  * "Greyscale"/"Grayscale"/"Grey"/"Gray".
  * Returns NULL when the name is not recognised. */
 Expr* named_color_ramp(const char* name, double t);

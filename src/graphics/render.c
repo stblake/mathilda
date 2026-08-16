@@ -258,6 +258,8 @@ typedef struct {
     const Expr* prolog;       /* borrowed; drawn first, in data space */
     const Expr* epilog;       /* borrowed; drawn last, in data space */
     ScaleFnType sf_x, sf_y;  /* ScalingFunctions; SF_NONE = linear (default) */
+    bool minimal_theme;      /* PlotTheme -> "Minimal": quieter axes (no tick
+                               * marks/labels, lighter line color) */
 } GfxOptions;
 
 /* True when `e` is the symbol True or All (the "on" forms for Frame and
@@ -323,13 +325,31 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
     o->epilog = NULL;
     o->sf_x = SF_NONE;
     o->sf_y = SF_NONE;
+    o->minimal_theme = false;
 
     size_t argc = graphics->data.function.arg_count;
 
-    /* LabelStyle -> color seeds the axis/ticks/frame text-and-line defaults
-     * before the main pass below runs, so any of AxesStyle/TicksStyle/
-     * FrameStyle the caller also gives still overrides it, regardless of
-     * each option's position in the argument list. */
+    /* PlotTheme -> "Minimal" and LabelStyle -> color both seed the
+     * axis/ticks/frame text-and-line defaults before the main pass below
+     * runs, so any of AxesStyle/TicksStyle/FrameStyle the caller also gives
+     * still overrides them, regardless of each option's position in the
+     * argument list. PlotTheme runs first so an explicit LabelStyle can
+     * still override its lighter default color too. */
+    for (size_t i = 1; i < argc; i++) {
+        const Expr* opt = graphics->data.function.args[i];
+        if (!opt || opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) continue;
+        const Expr* h0 = opt->data.function.head;
+        if (!h0 || h0->type != EXPR_SYMBOL || (h0->data.symbol.name != SYM_Rule && h0->data.symbol.name != SYM_RuleDelayed)) continue;
+        const Expr* lhs0 = opt->data.function.args[0];
+        if (lhs0->type == EXPR_SYMBOL && lhs0->data.symbol.name == SYM_PlotTheme) {
+            const Expr* rhs0 = opt->data.function.args[1];
+            if (rhs0->type == EXPR_STRING && strcmp(rhs0->data.string, "Minimal") == 0) {
+                o->minimal_theme = true;
+                RGBA8 c = { 150, 150, 150, 255 };
+                o->axes_color = c; o->ticks_color = c; o->frame_color = c;
+            }
+        }
+    }
     for (size_t i = 1; i < argc; i++) {
         const Expr* opt = graphics->data.function.args[i];
         if (!opt || opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) continue;
@@ -1304,6 +1324,10 @@ static void draw_axes_lines(const PlotRange2D* range, const PlotRange2D* drange,
     DrawLineEx((Vector2){ (float)range->xmin, (float)-oy }, (Vector2){ (float)range->xmax, (float)-oy }, w, col);
     DrawLineEx((Vector2){ (float)ox, (float)-range->ymin }, (Vector2){ (float)ox, (float)-range->ymax }, w, col);
 
+    /* PlotTheme -> "Minimal": just the two crossing axis lines, no tick
+     * marks (draw_axes_labels similarly skips the numeric labels). */
+    if (o->minimal_theme) return;
+
     double xtick = (range->ymax - range->ymin) * 0.015;
     double ytick = (range->xmax - range->xmin) * 0.015;
 
@@ -1393,6 +1417,7 @@ static void draw_gridlines(const PlotRange2D* range, double ysc, float zoom, con
  * glyph clears it; y-labels recentre vertically on the tick by half a cap. */
 static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange,
                              Camera2D camera, double ysc, const GfxOptions* o) {
+    if (o->minimal_theme) return;
     double ox, oy;
     axes_origin_in_region(range, drange, ysc, o, &ox, &oy);
     Color col = to_raylib(o->ticks_color);
@@ -1533,7 +1558,7 @@ static void draw_frame(float rx, float ry, float rw, float rh,
         }
     } else {
         double xstep = nice_step(xR - xL, 8);
-        int xsub = frame_minor_divs(xstep);
+        int xsub = o->minimal_theme ? 1 : frame_minor_divs(xstep);
         double xm = xstep / xsub;
         if (xm > 0) {
             long i0 = (long)ceil(xL / xm - 1e-9), i1 = (long)floor(xR / xm + 1e-9);
@@ -1547,7 +1572,7 @@ static void draw_frame(float rx, float ry, float rw, float rh,
                     DrawLineEx((Vector2){ sx, B }, (Vector2){ sx, B - len }, lw, col);
                 if (o->frame_edge[FR_TOP] && o->frame_ticks[FR_TOP])
                     DrawLineEx((Vector2){ sx, T }, (Vector2){ sx, T + len }, lw, col);
-                if (major && xlab >= 0) {
+                if (major && xlab >= 0 && !o->minimal_theme) {
                     snprintf(buf, sizeof(buf), "%g", fabs(tx) < 1e-9 ? 0.0 : tx);
                     float fw = label_font_width(buf, scale);
                     float baseline = (xlab == FR_BOTTOM) ? (B + gap + cap) : (T - gap);
@@ -1577,7 +1602,7 @@ static void draw_frame(float rx, float ry, float rw, float rh,
         }
     } else {
         double ystep = nice_step(dymax - dymin, 6);
-        int ysub = frame_minor_divs(ystep);
+        int ysub = o->minimal_theme ? 1 : frame_minor_divs(ystep);
         double ym = ystep / ysub;
         if (ym > 0) {
             long i0 = (long)ceil(dymin / ym - 1e-9), i1 = (long)floor(dymax / ym + 1e-9);
@@ -1591,7 +1616,7 @@ static void draw_frame(float rx, float ry, float rw, float rh,
                     DrawLineEx((Vector2){ L, sy }, (Vector2){ L + len, sy }, lw, col);
                 if (o->frame_edge[FR_RIGHT] && o->frame_ticks[FR_RIGHT])
                     DrawLineEx((Vector2){ R, sy }, (Vector2){ R - len, sy }, lw, col);
-                if (major && ylab >= 0) {
+                if (major && ylab >= 0 && !o->minimal_theme) {
                     snprintf(buf, sizeof(buf), "%g", fabs(ty) < 1e-9 ? 0.0 : ty);
                     float fw = label_font_width(buf, scale);
                     float ftx = (ylab == FR_LEFT) ? (L - gap - fw) : (R + gap);

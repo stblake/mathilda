@@ -29,6 +29,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 #include <float.h>
 
@@ -76,20 +77,27 @@ static void compute_bbox3(const Expr* node, Box3D* bb) {
 
 typedef struct {
     bool axes;
+    bool axes_minimal;      /* PlotTheme -> "Minimal": only the 3 near-corner
+                              * box edges, no numeric labels, lighter gray */
     bool lighting;          /* Lambertian shading on Polygon faces; default true */
     RGBA8 style_color;
     RGBA8 background;
     long width, height;
     const Expr* plot_label; /* borrowed */
+    const Expr* axes_label; /* borrowed; AxesLabel -> {xlabel,ylabel,zlabel}
+                              * (a bare non-List label is the z label only,
+                              * matching Mathematica's single-argument form) */
 } Gfx3DOptions;
 
 static void gfx3d_options_parse(const Expr* graphics3d, Gfx3DOptions* o) {
     o->axes = false;
+    o->axes_minimal = false;
     o->lighting = true;
     o->style_color = (RGBA8){ 30, 80, 180, 255 };
     o->background = (RGBA8){ 255, 255, 255, 255 };
     o->width = 800; o->height = 600;
     o->plot_label = NULL;
+    o->axes_label = NULL;
 
     size_t argc = graphics3d->data.function.arg_count;
     for (size_t i = 1; i < argc; i++) {
@@ -110,6 +118,10 @@ static void gfx3d_options_parse(const Expr* graphics3d, Gfx3DOptions* o) {
                                 || rhs->data.symbol.name == SYM_False));
         } else if (name == SYM_Axes) {
             o->axes = (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_True);
+        } else if (name == SYM_PlotTheme) {
+            o->axes_minimal = (rhs->type == EXPR_STRING && strcmp(rhs->data.string, "Minimal") == 0);
+        } else if (name == SYM_AxesLabel) {
+            o->axes_label = rhs;
         } else if (name == SYM_PlotStyle) {
             resolve_color(rhs, &o->style_color);
         } else if (name == SYM_Background) {
@@ -315,6 +327,23 @@ static void draw_box3(const Box3D* bb, Color col) {
     for (int i = 0; i < 4; i++) DrawLine3D(c[bot[i]], c[top[i]], col);
 }
 
+/* PlotTheme -> "Minimal": only the 3 edges meeting at (xmin,ymin,zmin) --
+ * the same corner draw_box_ticks anchors its labels to -- instead of the
+ * full 12-edge wireframe cube. */
+static void draw_box3_minimal(const Box3D* bb, Color col) {
+    Vector3 origin = to_v3(bb->xmin, bb->ymin, bb->zmin);
+    DrawLine3D(origin, to_v3(bb->xmax, bb->ymin, bb->zmin), col);
+    DrawLine3D(origin, to_v3(bb->xmin, bb->ymax, bb->zmin), col);
+    DrawLine3D(origin, to_v3(bb->xmin, bb->ymin, bb->zmax), col);
+}
+
+/* Axis/box line color: lighter gray under PlotTheme -> "Minimal", the
+ * regular darker gray otherwise. Shared by all draw sites so the color
+ * doesn't drift between the main render loop and the embedded-region path. */
+static Color gfx3d_axes_line_color(bool minimal) {
+    return minimal ? (Color){ 150, 150, 150, 255 } : (Color){ 90, 90, 90, 255 };
+}
+
 static void draw_tick_label3(Vector3 world_pos, Camera cam, const char* text, int win_w, int win_h, Color color) {
     Vector2 s = GetWorldToScreenEx(world_pos, cam, win_w, win_h);
     int tw = label_font_measure_px(text, 14);
@@ -351,6 +380,122 @@ static void draw_box_ticks(const Box3D* bb, Camera cam, int win_w, int win_h, Co
         snprintf(buf, sizeof(buf), "%g", z);
         draw_tick_label3(to_v3(bb->xmin, bb->ymin, z), cam, buf, win_w, win_h, col);
     }
+}
+
+/* Axis lines poke this far past the box corner (where the outermost tick
+ * number sits) before terminating in an arrowhead, as a fraction of that
+ * axis's span -- keeps the arrowhead and label clear of the tick text
+ * instead of overlapping it. */
+#define AXIS_OVERSHOOT_FRAC 0.08
+
+static Vector3 axis_tip_x(const Box3D* bb) {
+    double span = bb->xmax - bb->xmin;
+    return to_v3(bb->xmax + span * AXIS_OVERSHOOT_FRAC, bb->ymin, bb->zmin);
+}
+static Vector3 axis_tip_y(const Box3D* bb) {
+    double span = bb->ymax - bb->ymin;
+    return to_v3(bb->xmin, bb->ymax + span * AXIS_OVERSHOOT_FRAC, bb->zmin);
+}
+static Vector3 axis_tip_z(const Box3D* bb) {
+    double span = bb->zmax - bb->zmin;
+    return to_v3(bb->xmin, bb->ymin, bb->zmax + span * AXIS_OVERSHOOT_FRAC);
+}
+
+/* Short 3D line segments continuing each axis past the box corner out to
+ * where the arrowhead will be drawn. A true 3D draw call (unlike the
+ * screen-space arrowhead/label functions below) -- call inside BeginMode3D,
+ * right after draw_box3/draw_box3_minimal. */
+static void draw_axis_overshoot(const Box3D* bb, Color col) {
+    DrawLine3D(to_v3(bb->xmax, bb->ymin, bb->zmin), axis_tip_x(bb), col);
+    DrawLine3D(to_v3(bb->xmin, bb->ymax, bb->zmin), axis_tip_y(bb), col);
+    DrawLine3D(to_v3(bb->xmin, bb->ymin, bb->zmax), axis_tip_z(bb), col);
+}
+
+/* Small screen-space arrowhead (a two-line chevron) at 3D point `tip`,
+ * pointing away from `from`. Both points are projected to screen space
+ * first so the arrowhead stays a fixed pixel size regardless of zoom --
+ * the same "project once, draw flat" approach draw_tick_label3 already
+ * uses for tick numbers. Call after EndMode3D. */
+static void draw_axis_arrowhead(Vector3 from3, Vector3 tip3, Camera cam, int win_w, int win_h, Color col) {
+    Vector2 from2 = GetWorldToScreenEx(from3, cam, win_w, win_h);
+    Vector2 tip2  = GetWorldToScreenEx(tip3,  cam, win_w, win_h);
+    Vector2 dir = { tip2.x - from2.x, tip2.y - from2.y };
+    float len = sqrtf(dir.x * dir.x + dir.y * dir.y);
+    if (len < 1e-3f) return;
+    dir.x /= len; dir.y /= len;
+    Vector2 perp = { -dir.y, dir.x };
+    const float AL = 9.0f;  /* arrowhead length, px */
+    const float AW = 4.0f;  /* arrowhead half-width, px */
+    Vector2 back  = { tip2.x - dir.x * AL, tip2.y - dir.y * AL };
+    Vector2 left  = { back.x + perp.x * AW, back.y + perp.y * AW };
+    Vector2 right = { back.x - perp.x * AW, back.y - perp.y * AW };
+    DrawLineEx(tip2, left,  1.5f, col);
+    DrawLineEx(tip2, right, 1.5f, col);
+}
+
+/* Draws an arrowhead at the end of each of the 3 axis-defining edges
+ * (the same near-corner edges draw_box3_minimal draws), regardless of
+ * whether the full 12-edge box or the minimal 3-edge style is in use --
+ * an axis line is still conceptually "an axis" either way. */
+static void draw_axis_arrows(const Box3D* bb, Camera cam, int win_w, int win_h, Color col) {
+    Vector3 origin = to_v3(bb->xmin, bb->ymin, bb->zmin);
+    draw_axis_arrowhead(origin, axis_tip_x(bb), cam, win_w, win_h, col);
+    draw_axis_arrowhead(origin, axis_tip_y(bb), cam, win_w, win_h, col);
+    draw_axis_arrowhead(origin, axis_tip_z(bb), cam, win_w, win_h, col);
+}
+
+/* Draws `label` (any expression; converted via expr_to_string) just past
+ * the arrow tip at `tip3`, roughly centered on the axis direction. NULL
+ * label is a no-op, so callers can pass through an absent AxesLabel
+ * component freely. */
+static void draw_axis_label_text(const Expr* label, Vector3 from3, Vector3 tip3,
+                                  Camera cam, int win_w, int win_h, Color col) {
+    if (!label) return;
+    /* A raw string label (the common case: AxesLabel -> {"Re","Im"}) is used
+     * directly -- expr_to_string would print it with surrounding quotes
+     * (InputForm), which is wrong for on-screen text. Matches the exact
+     * convention render.c's draw_extra_labels already uses for 2D AxesLabel. */
+    char* owned = NULL;
+    const char* s = (label->type == EXPR_STRING) ? label->data.string
+                                                   : (owned = expr_to_string((Expr*)label));
+    if (!s) return;
+    Vector2 from2 = GetWorldToScreenEx(from3, cam, win_w, win_h);
+    Vector2 tip2  = GetWorldToScreenEx(tip3,  cam, win_w, win_h);
+    Vector2 dir = { tip2.x - from2.x, tip2.y - from2.y };
+    float len = sqrtf(dir.x * dir.x + dir.y * dir.y);
+    if (len > 1e-3f) { dir.x /= len; dir.y /= len; } else { dir.x = 0.0f; dir.y = -1.0f; }
+    const float GAP = 18.0f;
+    int tw = label_font_measure_px(s, 15);
+    int lx = (int)(tip2.x + dir.x * GAP) - tw / 2;
+    int ly = (int)(tip2.y + dir.y * GAP) - 7;
+    label_font_draw_px(s, lx, ly, 15, col);
+    free(owned);
+}
+
+/* AxesLabel -> {xlabel, ylabel, zlabel} (a bare non-List label is the z
+ * label only, matching Mathematica's single-argument AxesLabel form).
+ * Any component may be absent/None; draw_axis_label_text no-ops on NULL. */
+static void draw_axis_labels_3d(const Box3D* bb, Camera cam, int win_w, int win_h,
+                                 Color col, const Expr* axes_label) {
+    if (!axes_label) return;
+    const Expr *xl = NULL, *yl = NULL, *zl = NULL;
+    if (axes_label->type == EXPR_FUNCTION && axes_label->data.function.head->type == EXPR_SYMBOL
+        && axes_label->data.function.head->data.symbol.name == SYM_List) {
+        size_t n = axes_label->data.function.arg_count;
+        if (n >= 1) xl = axes_label->data.function.args[0];
+        if (n >= 2) yl = axes_label->data.function.args[1];
+        if (n >= 3) zl = axes_label->data.function.args[2];
+    } else {
+        zl = axes_label;
+    }
+    if (xl && xl->type == EXPR_SYMBOL && xl->data.symbol.name == SYM_None) xl = NULL;
+    if (yl && yl->type == EXPR_SYMBOL && yl->data.symbol.name == SYM_None) yl = NULL;
+    if (zl && zl->type == EXPR_SYMBOL && zl->data.symbol.name == SYM_None) zl = NULL;
+
+    Vector3 origin = to_v3(bb->xmin, bb->ymin, bb->zmin);
+    draw_axis_label_text(xl, origin, axis_tip_x(bb), cam, win_w, win_h, col);
+    draw_axis_label_text(yl, origin, axis_tip_y(bb), cam, win_w, win_h, col);
+    draw_axis_label_text(zl, origin, axis_tip_z(bb), cam, win_w, win_h, col);
 }
 
 /* ---------------- 3D toolbar ---------------- *
@@ -784,7 +929,7 @@ void graphics3d_show(const Expr* graphics3d_expr) {
     const double home_az = azimuth, home_el = elevation, home_dist = distance;
     const Vector3 home_target = center;
 
-    const Color axes_color = { 90, 90, 90, 255 };
+    const Color axes_color = gfx3d_axes_line_color(opts.axes_minimal);
 
     int tb3_hover = -1;
 
@@ -916,7 +1061,11 @@ void graphics3d_show(const Expr* graphics3d_expr) {
         BeginMode3D(camera);
         rlDisableBackfaceCulling(); /* surfaces are visible from both sides */
         render_baked(&mesh, opts.lighting, light_dir);
-        if (opts.axes) draw_box3(&bb, axes_color);
+        if (opts.axes) {
+            if (opts.axes_minimal) draw_box3_minimal(&bb, axes_color);
+            else draw_box3(&bb, axes_color);
+            draw_axis_overshoot(&bb, axes_color);
+        }
         if (hv_found) DrawSphere(hv_pt, (float)(diag * 0.012), (Color){ 230, 60, 60, 255 });
         if (slicing) {
             draw_slice_plane(&bb, slice_axis, (float)slice_pos, (Color){ 80, 140, 220, 70 });
@@ -938,7 +1087,11 @@ void graphics3d_show(const Expr* graphics3d_expr) {
             label_font_draw_px(lbl, (int)lx, (int)ly, 13, RAYWHITE);
         }
 
-        if (opts.axes) draw_box_ticks(&bb, camera, win_w, win_h, axes_color);
+        if (opts.axes && !opts.axes_minimal) draw_box_ticks(&bb, camera, win_w, win_h, axes_color);
+        if (opts.axes) {
+            draw_axis_arrows(&bb, camera, win_w, win_h, axes_color);
+            draw_axis_labels_3d(&bb, camera, win_w, win_h, axes_color, opts.axes_label);
+        }
         if (opts.plot_label) {
             char* s = expr_to_string((Expr*)opts.plot_label);
             if (s) {
@@ -1154,7 +1307,12 @@ void graphics3d_render_in_region(const Expr* graphics3d_expr,
     BeginMode3D(camera);
     rlDisableBackfaceCulling();
     render_baked(&mesh, opts.lighting, light_dir);
-    if (opts.axes) draw_box3(&bb, (Color){ 90, 90, 90, 255 });
+    if (opts.axes) {
+        Color abcol = gfx3d_axes_line_color(opts.axes_minimal);
+        if (opts.axes_minimal) draw_box3_minimal(&bb, abcol);
+        else draw_box3(&bb, abcol);
+        draw_axis_overshoot(&bb, abcol);
+    }
     if (hv_found) DrawSphere(hv_pt, (float)(diag * 0.012), (Color){ 230, 60, 60, 255 });
     EndMode3D();
     rlEnableBackfaceCulling();
@@ -1169,7 +1327,13 @@ void graphics3d_render_in_region(const Expr* graphics3d_expr,
         label_font_draw_px(lbl, (int)lx, (int)ly, 13, RAYWHITE);
     }
 
-    if (opts.axes) draw_box_ticks(&bb, camera, want_w, want_h, (Color){ 90, 90, 90, 255 });
+    if (opts.axes && !opts.axes_minimal)
+        draw_box_ticks(&bb, camera, want_w, want_h, gfx3d_axes_line_color(false));
+    if (opts.axes) {
+        Color abcol2 = gfx3d_axes_line_color(opts.axes_minimal);
+        draw_axis_arrows(&bb, camera, want_w, want_h, abcol2);
+        draw_axis_labels_3d(&bb, camera, want_w, want_h, abcol2, opts.axes_label);
+    }
     if (opts.plot_label) {
         char* s = expr_to_string((Expr*)opts.plot_label);
         if (s) {

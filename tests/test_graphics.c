@@ -168,6 +168,69 @@ void test_axes_style_and_ticks_style_passthrough(void) {
         "GrayLevel[0.5]", 0);
 }
 
+void test_complexplot3d_defaults_axes_true(void) {
+    /* Regression: split_cplot_options (complexplot.c) is shared by 2D
+     * ComplexPlot (raster heatmap: Frame->True, Axes->False by default) and
+     * 3D ComplexPlot3D, but unconditionally injected Axes->False for both --
+     * so a bare ComplexPlot3D[...] got no axes AND no frame (Graphics3D has
+     * no Frame concept), leaving the surface completely unlabelled. */
+    assert_eval_eq(
+        "First[Cases[ComplexPlot3D[z^2, {z, -2 - 2 I, 2 + 2 I}], (Axes -> v_) -> v]]",
+        "True", 0);
+    /* No stray Frame option (meaningless for Graphics3D). */
+    assert_eval_eq(
+        "Cases[ComplexPlot3D[z^2, {z, -2 - 2 I, 2 + 2 I}], (Frame -> _)]",
+        "{}", 0);
+    /* Explicit Axes -> False is still honored. */
+    assert_eval_eq(
+        "First[Cases[ComplexPlot3D[z^2, {z, -2 - 2 I, 2 + 2 I}, Axes -> False],"
+        " (Axes -> v_) -> v]]",
+        "False", 0);
+    /* 2D ComplexPlot keeps its original raster default unchanged. */
+    assert_eval_eq(
+        "First[Cases[ComplexPlot[z^2, {z, -2 - 2 I, 2 + 2 I}], (Axes -> v_) -> v]]",
+        "False", 0);
+    assert_eval_eq(
+        "First[Cases[ComplexPlot[z^2, {z, -2 - 2 I, 2 + 2 I}], (Frame -> v_) -> v]]",
+        "True", 0);
+}
+
+void test_complexplot3d_axeslabel(void) {
+    /* Follow-up to the Axes->True fix: ComplexPlot3D also defaults
+     * AxesLabel -> {"Re", "Im"} (z = |f(z)| has no fixed name worth
+     * labelling by default), rendered as arrow-tipped axis labels by
+     * render3d.c's new draw_axis_labels_3d/draw_axis_arrows. */
+    assert_eval_eq(
+        "First[Cases[ComplexPlot3D[z^2, {z, -2 - 2 I, 2 + 2 I}], (AxesLabel -> v_) -> v]]",
+        "{\"Re\", \"Im\"}", 0);
+    /* Explicit AxesLabel overrides the default. */
+    assert_eval_eq(
+        "First[Cases[ComplexPlot3D[z^2, {z, -2 - 2 I, 2 + 2 I}, AxesLabel -> {\"a\", \"b\"}],"
+        " (AxesLabel -> v_) -> v]]",
+        "{\"a\", \"b\"}", 0);
+    /* Plot3D/ParametricPlot3D don't get an AxesLabel default (matching
+     * Mathematica's own Plot3D, which leaves it unset); the option is still
+     * usable explicitly since render3d.c's Gfx3DOptions now parses it. */
+    assert_eval_eq(
+        "Cases[Plot3D[x + y, {x, -1, 1}, {y, -1, 1}], (AxesLabel -> _)]",
+        "{}", 0);
+    assert_eval_eq(
+        "First[Cases[Plot3D[x + y, {x, -1, 1}, {y, -1, 1},"
+        " AxesLabel -> {\"x\", \"y\", \"z\"}], (AxesLabel -> v_) -> v]]",
+        "{\"x\", \"y\", \"z\"}", 0);
+}
+
+void test_plot_theme_minimal_passthrough(void) {
+    /* PlotTheme is an unrecognised option to Plot's own parser, so it passes
+     * straight through into the Graphics[...] option list -- the axis-drawing
+     * effect itself is render.c-only and isn't exercised by this headless
+     * suite. */
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, PlotTheme -> \"Minimal\"],"
+        " (PlotTheme -> v_) -> v]]",
+        "\"Minimal\"", 0);
+}
+
 void test_frame_label_and_rotate_label_passthrough(void) {
     assert_eval_eq(
         "First[Cases[Plot[Sin[x], {x, 0, 1}, Frame -> True, FrameLabel -> {\"t\", \"y\"}],"
@@ -291,6 +354,28 @@ void test_color_function_builds_per_segment_colors(void) {
     assert_eval_eq(
         "Head[Plot[Sin[x], {x, 0, 1}, ColorFunction -> \"Rainbow\"][[1]][[1]]]",
         "Hue", 0);
+}
+
+void test_new_gradient_palette_names_accepted(void) {
+    /* "Plasma" (alias of the existing thermal ramp), "Viridis", and
+     * "GreenYellow" are recognised names in the same shared ramp table
+     * every ColorFunction-accepting 2D plotter already reads from. */
+    assert_eval_eq(
+        "Head[DensityPlot[x + y, {x, 0, 1}, {y, 0, 1},"
+        " ColorFunction -> \"Plasma\", PlotPoints -> 3]]",
+        "Graphics", 0);
+    assert_eval_eq(
+        "Head[DensityPlot[x + y, {x, 0, 1}, {y, 0, 1},"
+        " ColorFunction -> \"Viridis\", PlotPoints -> 3]]",
+        "Graphics", 0);
+    assert_eval_eq(
+        "Head[DensityPlot[x + y, {x, 0, 1}, {y, 0, 1},"
+        " ColorFunction -> \"GreenYellow\", PlotPoints -> 3]]",
+        "Graphics", 0);
+    /* Also usable through Plot's own ColorFunction (per-segment coloring). */
+    assert_eval_eq(
+        "Head[Plot[Sin[x], {x, 0, 1}, ColorFunction -> \"Viridis\"][[1]][[1]]]",
+        "RGBColor", 0);
 }
 
 void test_filling_builds_polygon(void) {
@@ -752,6 +837,9 @@ int main(void) {
     TEST(test_plot_image_size_passthrough);
     TEST(test_axes_origin_passthrough);
     TEST(test_axes_style_and_ticks_style_passthrough);
+    TEST(test_plot_theme_minimal_passthrough);
+    TEST(test_complexplot3d_defaults_axes_true);
+    TEST(test_complexplot3d_axeslabel);
     TEST(test_frame_label_and_rotate_label_passthrough);
     TEST(test_plot_range_padding_passthrough);
     TEST(test_grid_lines_passthrough);
@@ -760,6 +848,7 @@ int main(void) {
     TEST(test_hue_color_directive);
     TEST(test_cmykcolor_directive);
     TEST(test_color_function_builds_per_segment_colors);
+    TEST(test_new_gradient_palette_names_accepted);
     TEST(test_filling_builds_polygon);
     TEST(test_filling_splits_at_baseline_crossing);
     TEST(test_plot_legends_metadata);

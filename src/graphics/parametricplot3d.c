@@ -301,11 +301,23 @@ typedef struct {
 /* Parses trailing Rule args starting at opts_start.
  * Outputs the evaluated pass-through option list (for Graphics3D) and the
  * resolved single PlotStyle color. AspectRatio is silently dropped (orbit
- * camera has no ratio). */
+ * camera has no ratio).
+ *
+ * `is_single_surface` (true only for the 2-iterator surface form with a
+ * single explicit body, never for curves or multi-surface plots): when
+ * neither PlotStyle nor ColorFunction is given, defaults sopts->color_function
+ * to a height-based gradient instead of the flat PlotStyle default, matching
+ * Plot3D's own single-surface default. The synthesized Expr is returned via
+ * *default_color_fn_out (NULL if unused) since — unlike the normal
+ * rhs-borrowed color_function — it isn't part of res's tree, so the caller
+ * must expr_free() it once done. */
 static bool split_options_param3d(Expr* res, size_t opts_start, long default_plot_points,
+                                    bool is_single_surface,
                                     Param3DSampleOpts* sopts,
                                     Expr*** pass_out, size_t* pass_count_out,
-                                    Expr** single_color_out) {
+                                    Expr** single_color_out,
+                                    Expr** default_color_fn_out) {
+    *default_color_fn_out = NULL;
     sopts->plot_points            = default_plot_points;
     sopts->max_recursion          = 6;
     sopts->max_plot_points        = -1;
@@ -397,6 +409,11 @@ static bool split_options_param3d(Expr* res, size_t opts_start, long default_plo
         Expr* a[2] = { expr_new_symbol(SYM_PlotStyle), expr_copy(rgb) };
         pass[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         *single_color_out = rgb;
+
+        if (is_single_surface && !sopts->color_function) {
+            *default_color_fn_out = expr_new_string("Plasma");
+            sopts->color_function = *default_color_fn_out;
+        }
     }
 
     *pass_out       = pass;
@@ -731,7 +748,9 @@ Expr* builtin_parametricplot3d(Expr* res) {
         Expr** pass;
         size_t npass;
         Expr* color = NULL;
-        if (!split_options_param3d(res, 3, 25, &sopts, &pass, &npass, &color)) {
+        Expr* default_color_fn = NULL;
+        if (!split_options_param3d(res, 3, 25, !multi2, &sopts, &pass, &npass,
+                                    &color, &default_color_fn)) {
             expr_free(legends); return NULL;
         }
 
@@ -759,7 +778,7 @@ Expr* builtin_parametricplot3d(Expr* res) {
         if (!any) {
             for (size_t si = 0; si < nsub; si++) free(per_prims[si]);
             free(per_prims); free(per_counts);
-            free(pass); expr_free(color); expr_free(legends);
+            free(pass); expr_free(color); expr_free(default_color_fn); expr_free(legends);
             return NULL;
         }
 
@@ -780,6 +799,7 @@ Expr* builtin_parametricplot3d(Expr* res) {
         Expr* g = make_graphics3d(prim_list, pass, npass, legend_meta);
         free(pass);
         expr_free(color);
+        expr_free(default_color_fn);
         return g;
 
     } else {
@@ -811,7 +831,9 @@ Expr* builtin_parametricplot3d(Expr* res) {
         Expr** pass;
         size_t npass;
         Expr* single_color = NULL;
-        if (!split_options_param3d(res, 2, 25, &sopts, &pass, &npass, &single_color)) {
+        Expr* unused_default_color_fn = NULL;
+        if (!split_options_param3d(res, 2, 25, false, &sopts, &pass, &npass,
+                                    &single_color, &unused_default_color_fn)) {
             expr_free(legends); return NULL;
         }
 

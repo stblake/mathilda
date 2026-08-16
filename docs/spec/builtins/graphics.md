@@ -38,7 +38,7 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 
 | Function | Purpose | Key options |
 |----------|---------|-------------|
-| [`Plot`](#plot) | Adaptive function curve(s) of one variable | `PlotPoints`, `MaxRecursion`, `Filling`, `ColorFunction`, `RegionFunction`, `Exclusions`, `ScalingFunctions` |
+| [`Plot`](#plot) | Adaptive function curve(s) of one variable | `PlotPoints`, `MaxRecursion`, `Filling`, `ColorFunction`, `RegionFunction`, `Exclusions`, `ScalingFunctions`, `PlotTheme` |
 | [`ListPlot`](#listplot) | Scatter / line plot of discrete data | `Joined`, `Filling`, `DataRange`, `PlotStyle`, `ScalingFunctions` |
 | [`ParametricPlot`](#parametricplot) | Parametric curves `{fx(t), fy(t)}` (1-iter) or surfaces `{fx(t,u), fy(t,u)}` (2-iter) | `ColorFunction`, `RegionFunction`, `Mesh` |
 | [`PolarPlot`](#polarplot) | Polar curve `r(θ)` | `ColorFunction`, `PlotStyle`, `RegionFunction` |
@@ -55,8 +55,8 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 
 | Function | Purpose | Key options |
 |----------|---------|-------------|
-| [`Plot3D`](#plot3d) | Surface plot of `f(x,y)` with orbit camera | `PlotPoints`, `Mesh`, `ColorFunction`, `RegionFunction`, `Lighting` |
-| [`ParametricPlot3D`](#parametricplot3d) | Parametric space curves or surfaces in 3D | `ColorFunction`, `RegionFunction`, `Mesh` |
+| [`Plot3D`](#plot3d) | Surface plot of `f(x,y)` with orbit camera (single explicit surface defaults to a height-based `"Plasma"` gradient) | `PlotPoints`, `Mesh`, `ColorFunction`, `RegionFunction`, `Lighting`, `PlotTheme` |
+| [`ParametricPlot3D`](#parametricplot3d) | Parametric space curves or surfaces in 3D (single explicit surface defaults to a height-based `"Plasma"` gradient) | `ColorFunction`, `RegionFunction`, `Mesh`, `PlotTheme` |
 | [`ComplexPlot3D`](#complexplot3d) | 3D surface `height=|f(z)|`, `color=Arg(f(z))` | `PlotPoints`, `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends`, `Lighting` |
 
 ### Shared option cross-reference
@@ -78,6 +78,7 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 | `Frame` / `FrameLabel` / `FrameStyle` | all plotters (pass-through) |
 | `GridLines` / `GridLinesStyle` | all plotters (pass-through) |
 | `Background` / `ImageSize` | all plotters (pass-through) |
+| `PlotTheme` | `Plot`, `Plot3D`, `ListPlot`, `ParametricPlot`, `ParametricPlot3D`, `DensityPlot`, `ContourPlot` (pass-through; only `"Minimal"` is recognized by the renderer) |
 
 ### Primitives
 
@@ -110,10 +111,16 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 | Name | Aliases | Description |
 |------|---------|-------------|
 | `"Rainbow"` | — | Full HSV sweep (hue 0→1) |
-| `"Temperature"` | `"Thermal"` | Dark blue-purple → orange → bright yellow |
+| `"Temperature"` | `"Thermal"`, `"Plasma"` | Dark blue-purple → red/orange → bright yellow |
 | `"CoolTones"` | `"Cool"` | Ice blue → cornflower → deep navy |
 | `"WarmTones"` | `"Warm"` | Pale cream → amber → deep crimson |
+| `"Viridis"` | — | Dark purple → blue → green → bright yellow |
+| `"GreenYellow"` | — | Dark green → lime → bright yellow |
 | `"Greyscale"` | `"Grayscale"`, `"Grey"`, `"Gray"` | White → black |
+
+`Plot3D`/`ParametricPlot3D`'s single-explicit-surface form defaults to
+`ColorFunction -> "Plasma"` (height-based gradient) when neither `PlotStyle`
+nor `ColorFunction` is given — see [`Plot3D`](#plot3d).
 
 ### ScalingFunctions (axis transforms)
 
@@ -701,13 +708,18 @@ Samples and displays a function of two real variables as a surface.
   object. Each grid cell becomes one quad `Polygon[]`; a cell with any
   corner that doesn't evaluate to a finite real (or fails `RegionFunction`)
   is simply omitted, leaving a hole in the surface.
+  With neither `PlotStyle` nor `ColorFunction` given, a single explicit
+  surface defaults to `ColorFunction -> "Plasma"` — a height-based gradient
+  (dark blue-purple at the low points, through red/orange, to bright yellow
+  at the high points) instead of a flat color.
 - `Plot3D[{f1, f2, ...}, {x,...}, {y,...}]`: plots several surfaces over the
-  same domain, each in a distinct palette colour (the same `ColorData[97]`
-  palette `Plot` uses).
+  same domain, each in a distinct flat palette colour (the same
+  `ColorData[97]` palette `Plot` uses) — the default height-gradient only
+  applies to a single explicit surface.
 - `Plot3D[f, {x,...}, {y,...}, opts...]`: as above, with options below.
 - `HoldAll`: `f` and both iterator specs are not pre-evaluated.
 
-Options: see **Feature summary** above. `HoldAll`, `Protected`. `ExclusionStyle` (default `GrayLevel[0.35]`) styles boundary edges when `RegionFunction` is active.
+Options: see **Feature summary** above. `HoldAll`, `Protected`. `ExclusionStyle` (default `GrayLevel[0.35]`) styles boundary edges when `RegionFunction` is active. `PlotTheme -> "Minimal"` draws only the 3 box edges meeting at one corner instead of the full 12-edge wireframe cube, with no numeric axis labels and a lighter gray. `AxesLabel -> {xlabel, ylabel, zlabel}` (no default here, unlike `ComplexPlot3D`) draws each label past an arrow-tipped axis line; a bare non-list value labels only `z`.
 
 ```mathematica
 In[1]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}]
@@ -727,6 +739,12 @@ Out[5]= -Graphics3D-  (* palette colors for each surface *)
 
 In[6]:= Plot3D[{x^2, x^2 + 1}, {x,-2,2}, {y,-2,2},PlotStyle -> {Blue, Red}]
 Out[6]= -Graphics3D-  (* explicit per-surface colors *)
+
+In[7]:= Plot3D[x^2 + y^2, {x, -2, 2}, {y, -2, 2}]
+Out[7]= -Graphics3D-  (* default "Plasma" height gradient: no PlotStyle/ColorFunction given *)
+
+In[8]:= Plot3D[Sin[x] Cos[y], {x, -4, 4}, {y, -4, 4}, PlotTheme -> "Minimal"]
+Out[8]= -Graphics3D-  (* only 3 near-corner box edges, no numeric labels *)
 ```
 
 ## ParametricPlot
@@ -837,8 +855,12 @@ a `Graphics3D[...]` object rendered in an orbit-camera window.
   `PlotPoints × PlotPoints` grid of `(t, u)` pairs, maps each to `{x, y, z}`
   via `body`, and emits filled `Polygon[{p00,p10,p11,p01}]` quads for each
   valid grid cell. Produces `Graphics3D[{Polygon[...], ...}, opts]`.
+  With neither `PlotStyle` nor `ColorFunction` given, a single explicit
+  surface defaults to `ColorFunction -> "Plasma"` (height-based gradient),
+  matching `Plot3D`'s own default; a `{body1, body2, ...}` multi-surface
+  form keeps distinct flat palette colours per surface instead.
 
-`HoldAll`, `Protected`. Options: see **Feature summary** above. `ColorFunction` receives scaled spatial `{xs,ys,zs}` coordinates (not parameter values). `RegionFunction` is tried as `f[x,y,z]` first, then `f[x,y]`. Interactive controls same as `Plot3D`.
+`HoldAll`, `Protected`. Options: see **Feature summary** above. `ColorFunction` receives scaled spatial `{xs,ys,zs}` coordinates (not parameter values). `RegionFunction` is tried as `f[x,y,z]` first, then `f[x,y]`. `PlotTheme -> "Minimal"` behaves as in `Plot3D`. Interactive controls same as `Plot3D`.
 
 ```mathematica
 (* --- One-iterator: space curves --- *)
@@ -1212,6 +1234,8 @@ Three-dimensional surface plot of a complex function: **height = `|f(z)|`**,
 | `RegionFunction` | `None` | `f[x,y]` mask |
 | `PlotLegends` | `None` | `Automatic` / `True`: draw a vertical phase color scale bar |
 | `Lighting` | `Automatic` | `None` disables Lambertian shading for accurate phase colours |
+| `Axes` | `True` | Unlike `ComplexPlot`'s 2D `Frame`/`Axes->False` raster default, a bare call gets the usual `Graphics3D` box axes |
+| `AxesLabel` | `{"Re", "Im"}` | `z = \|f(z)\|` has no fixed name worth a default label, so only the two axes that are always meaningful get one; arrow-tipped, drawn past each axis's arrow tip |
 | Standard Graphics3D options | — | pass through to the `Graphics3D[...]` result |
 
 **Examples**

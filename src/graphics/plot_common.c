@@ -290,16 +290,57 @@ void warm_tones_rgb(double t, double* r, double* g, double* b) {
     *b = stops[i][2] + f * (stops[i + 1][2] - stops[i][2]);
 }
 
+/* Viridis — dark purple (t=0) → blue → green → bright yellow (t=1).
+ * The standard matplotlib "viridis" colormap, approximated with 5 stops. */
+void viridis_rgb(double t, double* r, double* g, double* b) {
+    static const double stops[5][3] = {
+        { 0.267, 0.005, 0.329 }, /* dark purple  */
+        { 0.283, 0.141, 0.458 }, /* indigo       */
+        { 0.165, 0.471, 0.558 }, /* teal-blue    */
+        { 0.478, 0.821, 0.318 }, /* green        */
+        { 0.993, 0.906, 0.144 }, /* bright yellow*/
+    };
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    double idx = t * 4.0;
+    int    i   = (int)idx;
+    if (i > 3) i = 3;
+    double f = idx - (double)i;
+    *r = stops[i][0] + f * (stops[i + 1][0] - stops[i][0]);
+    *g = stops[i][1] + f * (stops[i + 1][1] - stops[i][1]);
+    *b = stops[i][2] + f * (stops[i + 1][2] - stops[i][2]);
+}
+
+/* GreenYellow — dark green (t=0) → lime → bright yellow (t=1). */
+void green_yellow_rgb(double t, double* r, double* g, double* b) {
+    static const double stops[3][3] = {
+        { 0.02, 0.30, 0.10 }, /* dark green  */
+        { 0.30, 0.70, 0.15 }, /* lime green  */
+        { 0.97, 0.93, 0.20 }, /* bright yellow */
+    };
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    double idx = t * 2.0;
+    int    i   = (int)idx;
+    if (i > 1) i = 1;
+    double f = idx - (double)i;
+    *r = stops[i][0] + f * (stops[i + 1][0] - stops[i][0]);
+    *g = stops[i][1] + f * (stops[i + 1][1] - stops[i][1]);
+    *b = stops[i][2] + f * (stops[i + 1][2] - stops[i][2]);
+}
+
 /* named_color_ramp — resolve a ColorFunction name string and a normalised
  * parameter t ∈ [0,1] to a concrete color expression (caller owns).
  * Returns NULL when the name is not recognised.
  *
  * Recognised names:
- *   "Rainbow"               — Hue sweep (red→violet, stops short of wrap)
- *   "Temperature"/"Thermal" — thermal blue-purple→yellow ramp
- *   "CoolTones"/"Cool"      — ice-white → sky-blue → deep navy
- *   "WarmTones"/"Warm"      — cream → amber → orange → crimson
- *   "Greyscale"/"Grayscale" — white (t=0) → black (t=1)
+ *   "Rainbow"                        — Hue sweep (red→violet, stops short of wrap)
+ *   "Temperature"/"Thermal"/"Plasma" — thermal blue-purple→red→yellow ramp
+ *   "CoolTones"/"Cool"               — ice-white → sky-blue → deep navy
+ *   "WarmTones"/"Warm"               — cream → amber → orange → crimson
+ *   "Viridis"                        — dark purple → blue → green → yellow
+ *   "GreenYellow"                    — dark green → lime → bright yellow
+ *   "Greyscale"/"Grayscale"          — white (t=0) → black (t=1)
  */
 Expr* named_color_ramp(const char* name, double t) {
     if (t < 0.0) t = 0.0;
@@ -309,7 +350,8 @@ Expr* named_color_ramp(const char* name, double t) {
         Expr* a[1] = { expr_new_real(t * 0.8) };
         return expr_new_function(expr_new_symbol(SYM_Hue), a, 1);
     }
-    if (strcmp(name, "Temperature") == 0 || strcmp(name, "Thermal") == 0) {
+    if (strcmp(name, "Temperature") == 0 || strcmp(name, "Thermal") == 0
+        || strcmp(name, "Plasma") == 0) {
         double rv, gv, bv; thermal_rgb(t, &rv, &gv, &bv);
         Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
         return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
@@ -321,6 +363,16 @@ Expr* named_color_ramp(const char* name, double t) {
     }
     if (strcmp(name, "WarmTones") == 0 || strcmp(name, "Warm") == 0) {
         double rv, gv, bv; warm_tones_rgb(t, &rv, &gv, &bv);
+        Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
+        return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
+    }
+    if (strcmp(name, "Viridis") == 0) {
+        double rv, gv, bv; viridis_rgb(t, &rv, &gv, &bv);
+        Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
+        return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
+    }
+    if (strcmp(name, "GreenYellow") == 0) {
+        double rv, gv, bv; green_yellow_rgb(t, &rv, &gv, &bv);
         Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
         return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
     }

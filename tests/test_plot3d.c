@@ -52,12 +52,13 @@ void test_plot3d_invalid_args_stay_unevaluated(void) {
 void test_plot3d_honors_plot_points_and_max_recursion(void) {
     /* PlotPoints sets the *initial* per-axis grid resolution; MaxRecursion
      * -> 0 disables all whole-grid refinement, so a PlotPoints -> 4 grid
-     * has exactly (4-1)^2 = 9 quad cells -> 9 Polygon[] primitives (no
-     * Mesh, no ColorFunction, so nothing else is emitted). */
+     * has exactly (4-1)^2 = 9 quad cells -> 9 Polygon[] primitives, each
+     * preceded by its default-gradient color directive (no explicit
+     * PlotStyle/ColorFunction given), so 18 primitives total (no Mesh). */
     assert_eval_eq(
         "Length[Plot3D[x + y, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 4,"
         " MaxRecursion -> 0, Mesh -> None][[1]]]",
-        "9", 0);
+        "18", 0);
     assert_eval_eq(
         "Length[Cases[Plot3D[x + y, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 4,"
         " MaxRecursion -> 0, Mesh -> None][[1]], Polygon[___]]]",
@@ -68,16 +69,19 @@ void test_plot3d_mesh_default_and_toggle(void) {
     /* Mesh defaults to True (unlike Plot's None).  The interior-only mesh
      * draws each shared edge exactly once: for a 4x4 grid (9 cells) there
      * are 2x3 = 6 horizontal interior edges and 3x2 = 6 vertical interior
-     * edges (domain perimeter edges are suppressed), so:
-     *   9 polygons + 1 GrayLevel directive + 12 Line edges = 22. */
+     * edges (domain perimeter edges are suppressed). Each of the 9 cells
+     * also gets its own default-gradient color directive (no explicit
+     * PlotStyle/ColorFunction given), so:
+     *   9x(color+polygon) = 18 + 1 GrayLevel directive + 12 Line edges = 31. */
     assert_eval_eq(
         "Length[Plot3D[x + y, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 4,"
         " MaxRecursion -> 0][[1]]]",
-        "22", 0);
-    /* The mesh color directive sits right after all 9 polygon fills. */
+        "31", 0);
+    /* The mesh color directive sits right after all 9 (color, polygon)
+     * pairs (18 primitives). */
     assert_eval_eq(
         "Head[Plot3D[x + y, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 4,"
-        " MaxRecursion -> 0][[1]][[10]]]",
+        " MaxRecursion -> 0][[1]][[19]]]",
         "GrayLevel", 0);
     /* Mesh -> None removes both the directive and the wireframe lines. */
     assert_eval_eq(
@@ -292,12 +296,82 @@ void test_plot3d_multi_surface_palette(void) {
         "RGBColor", 0);
 }
 
+void test_plot3d_default_height_gradient(void) {
+    /* A single explicit surface with neither PlotStyle nor ColorFunction
+     * defaults to a height-based "Plasma" gradient: many distinct
+     * RGBColor[] literals across the grid, not one repeated flat color. */
+    assert_eval_eq(
+        "Length[Union[Cases[Plot3D[x^2 + y^2, {x, -1, 1}, {y, -1, 1},"
+        " PlotPoints -> 4, MaxRecursion -> 0, Mesh -> None],"
+        " RGBColor[__], Infinity]]] > 1",
+        "True", 0);
+    /* An explicit PlotStyle still overrides to a single flat color -- the
+     * default gradient only applies when the user gives neither option. */
+    assert_eval_eq(
+        "Length[Union[Cases[Plot3D[x^2 + y^2, {x, -1, 1}, {y, -1, 1},"
+        " PlotStyle -> RGBColor[1, 0, 0], PlotPoints -> 4, MaxRecursion -> 0,"
+        " Mesh -> None], RGBColor[__], Infinity]]]",
+        "1", 0);
+    /* An explicit ColorFunction still overrides the default gradient name. */
+    assert_eval_eq(
+        "Head[First[Cases[Plot3D[x^2 + y^2, {x, -1, 1}, {y, -1, 1},"
+        " ColorFunction -> \"Rainbow\", PlotPoints -> 2, MaxRecursion -> 0,"
+        " Mesh -> None][[1]], Hue[___]]]]",
+        "Hue", 0);
+    /* Multi-surface plots are unaffected: still one flat palette color per
+     * surface (2, matching test_plot3d_multi_surface_palette), plus the
+     * pre-existing vestigial default-blue PlotStyle Rule that split_options3
+     * always stages into the Graphics3D option list regardless of nfun
+     * (unused for drawing when multi, but still present) = 3 distinct
+     * RGBColor[] literals total across the whole expression. */
+    assert_eval_eq(
+        "Length[Union[Cases[Plot3D[{x + y, x - y}, {x, -1, 1}, {y, -1, 1},"
+        " Mesh -> None, PlotPoints -> 2, MaxRecursion -> 0],"
+        " RGBColor[__], Infinity]]]",
+        "3", 0);
+}
+
+void test_plot3d_plot_theme_minimal_passthrough(void) {
+    /* PlotTheme is an unrecognised option to Plot3D's own parser, so it
+     * passes straight through into the Graphics3D[...] option list --
+     * the actual axis-drawing effect is render3d.c-only and isn't
+     * exercised by this headless suite. */
+    assert_eval_eq(
+        "First[Cases[Plot3D[x + y, {x, -1, 1}, {y, -1, 1},"
+        " PlotTheme -> \"Minimal\"], (PlotTheme -> v_) -> v]]",
+        "\"Minimal\"", 0);
+}
+
+void test_parametricplot3d_default_height_gradient(void) {
+    /* Same default-gradient behavior as Plot3D, for the 2-iterator single
+     * explicit surface form. */
+    assert_eval_eq(
+        "Length[Union[Cases[ParametricPlot3D[{Cos[u] Sin[v], Sin[u] Sin[v],"
+        " Cos[v]}, {u, 0, 2 Pi}, {v, 0, Pi}, PlotPoints -> 4],"
+        " RGBColor[__], Infinity]]] > 1",
+        "True", 0);
+    /* Explicit PlotStyle still overrides to a single flat color. */
+    assert_eval_eq(
+        "Length[Union[Cases[ParametricPlot3D[{Cos[u] Sin[v], Sin[u] Sin[v],"
+        " Cos[v]}, {u, 0, 2 Pi}, {v, 0, Pi}, PlotStyle -> RGBColor[1, 0, 0],"
+        " PlotPoints -> 4], RGBColor[__], Infinity]]]",
+        "1", 0);
+    /* Multi-surface ParametricPlot3D plots are unaffected. */
+    assert_eval_eq(
+        "Length[Union[Cases[ParametricPlot3D[{{Cos[u], Sin[u], 0},"
+        " {Sin[u], Cos[u], 0}}, {u, 0, 2 Pi}, {v, 0, 1}, PlotPoints -> 3],"
+        " RGBColor[__], Infinity]]] >= 2",
+        "True", 0);
+}
+
 void test_plot3d_polygon_vertices_are_3d(void) {
     /* Every Polygon[] vertex is a {x,y,z} triple, not {x,y} -- the one
-     * structural difference from Plot's 2D Polygon usage (Filling). */
+     * structural difference from Plot's 2D Polygon usage (Filling).
+     * Selected via Cases (not a raw position index) since the default
+     * height-gradient color directive now precedes each polygon. */
     assert_eval_eq(
-        "Length[Plot3D[x + y, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 2,"
-        " MaxRecursion -> 0, Mesh -> None][[1]][[1]][[1]][[1]]]",
+        "Length[First[Cases[Plot3D[x + y, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 2,"
+        " MaxRecursion -> 0, Mesh -> None][[1]], Polygon[___]]][[1]][[1]]]",
         "3", 0);
 }
 
@@ -382,6 +456,9 @@ int main(void) {
     TEST(test_plot3d_exclusion_style_smooth_lines);
     TEST(test_plot3d_exclusion_style_custom_color);
     TEST(test_plot3d_multi_surface_palette);
+    TEST(test_plot3d_default_height_gradient);
+    TEST(test_plot3d_plot_theme_minimal_passthrough);
+    TEST(test_parametricplot3d_default_height_gradient);
     TEST(test_plot3d_polygon_vertices_are_3d);
     TEST(test_plot3d_clipped_polygon_vertices_are_3d);
     TEST(test_plot3d_region_function_2arg_form);

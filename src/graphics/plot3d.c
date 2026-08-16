@@ -811,11 +811,25 @@ Expr* builtin_plot3d(Expr* res) {
         return NULL;
     }
 
+    /* A single explicit surface with neither PlotStyle nor ColorFunction
+     * given defaults to a height-based gradient (matching Mathematica's
+     * classic Plot3D look) instead of the flat PlotStyle blue that
+     * split_options3 already staged into the passthrough. Multi-surface
+     * plots keep today's distinct palette_color(fi) per surface. This Expr
+     * isn't borrowed from res's tree like the normal color_function value,
+     * so it needs its own free below. */
+    Expr* default_color_fn = NULL;
+    if (nfun == 1 && !sopts.color_function && !single_color) {
+        default_color_fn = expr_new_string("Plasma");
+        sopts.color_function = default_color_fn;
+    }
+
     Expr* prim_list = build_surface_primitives(bodies, nfun, ix.var, iy.var, xmin, xmax, ymin, ymax,
                                                 &sopts, single_color);
     iter_spec_free(&ix);
     iter_spec_free(&iy);
     expr_free(single_color);
+    expr_free(default_color_fn);
 
     if (!prim_list) {
         for (size_t i = 0; i < passthrough_count; i++) expr_free(passthrough[i]);
