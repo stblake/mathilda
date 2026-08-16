@@ -498,6 +498,11 @@ static void pack_mark_aware_heads(void) {
         "Image", "ImageData", "ImageDimensions", "ImageChannels", "ImageType", "ImageQ",
         "ImageConvolve", "GaussianFilter", "ImageResize",
         "Binarize", "FindThreshold", "ColorConvert",
+        /* Image3D belongs here for exactly the reason Image does, and was missed when the volume
+         * constructor gained its own canonicalisation: it reads packed data through the same
+         * memcpy path, so materialising first is pure waste. The packed-aware gate caught it,
+         * which is what that gate is for -- a fast path nobody opted into is invisible otherwise. */
+        "Image3D", "Image3DQ",
         /* Subtract and Divide joined on 2026-08-02, found by the gate pass of
          * tools/nd_fastpath_sweep.py. Neither reads an element: builtin_subtract
          * ALWAYS rewrites to Plus[a, Times[-1, b]], and builtin_divide falls
