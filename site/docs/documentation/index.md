@@ -2,7 +2,7 @@
 
 Every public built-in function in Mathilda, grouped by category. Each page follows the same shape: **Description** (the function's docstring), **Examples** (verified against the current build), **Implementation notes**, **Implementation status**, and **References**.
 
-_828 functions across 35 categories. Use the search box (press `/`) to jump to any function._
+_830 functions across 35 categories. Use the search box (press `/`) to jump to any function._
 
 ## Categories
 
@@ -64,7 +64,7 @@ _828 functions across 35 categories. Use the search box (press `/`) to jump to a
 
 ### [Image Processing](image-processing/index.md)
 
-[`AlphaChannel`](image-processing/AlphaChannel.md)  [`Binarize`](image-processing/Binarize.md)  [`BoxMatrix`](image-processing/BoxMatrix.md)  [`Closing`](image-processing/Closing.md)  [`ColorConvert`](image-processing/ColorConvert.md)  [`CornerFilter`](image-processing/CornerFilter.md)  [`DerivativeFilter`](image-processing/DerivativeFilter.md)  [`Dilation`](image-processing/Dilation.md)  [`DistanceTransform`](image-processing/DistanceTransform.md)  [`EdgeDetect`](image-processing/EdgeDetect.md)  [`Erosion`](image-processing/Erosion.md)  [`FindThreshold`](image-processing/FindThreshold.md)  [`GaussianFilter`](image-processing/GaussianFilter.md)  [`GaussianMatrix`](image-processing/GaussianMatrix.md)  [`GradientFilter`](image-processing/GradientFilter.md)  [`Image`](image-processing/Image.md)  [`Image3D`](image-processing/Image3D.md)  [`Image3DQ`](image-processing/Image3DQ.md)  [`ImageAdjust`](image-processing/ImageAdjust.md)  [`ImageAssemble`](image-processing/ImageAssemble.md)  [`ImageChannels`](image-processing/ImageChannels.md)  [`ImageCompose`](image-processing/ImageCompose.md)  [`ImageConvolve`](image-processing/ImageConvolve.md)  [`ImageCorners`](image-processing/ImageCorners.md)  [`ImageCorrelate`](image-processing/ImageCorrelate.md)  [`ImageCrop`](image-processing/ImageCrop.md)  [`ImageData`](image-processing/ImageData.md)  [`ImageDimensions`](image-processing/ImageDimensions.md)  [`ImageLevels`](image-processing/ImageLevels.md)  [`ImagePad`](image-processing/ImagePad.md)  [`ImageQ`](image-processing/ImageQ.md)  [`ImageReflect`](image-processing/ImageReflect.md)  [`ImageResize`](image-processing/ImageResize.md)  [`ImageRotate`](image-processing/ImageRotate.md)  [`ImageType`](image-processing/ImageType.md)  [`LocalAdaptiveBinarize`](image-processing/LocalAdaptiveBinarize.md)  [`MeanFilter`](image-processing/MeanFilter.md)  [`MedianFilter`](image-processing/MedianFilter.md)  [`MorphologicalComponents`](image-processing/MorphologicalComponents.md)  [`Opening`](image-processing/Opening.md)  [`RandomImage`](image-processing/RandomImage.md)  [`RemoveAlphaChannel`](image-processing/RemoveAlphaChannel.md)  [`SetAlphaChannel`](image-processing/SetAlphaChannel.md)
+[`AlphaChannel`](image-processing/AlphaChannel.md)  [`Binarize`](image-processing/Binarize.md)  [`BoxMatrix`](image-processing/BoxMatrix.md)  [`Closing`](image-processing/Closing.md)  [`ColorConvert`](image-processing/ColorConvert.md)  [`CornerFilter`](image-processing/CornerFilter.md)  [`DerivativeFilter`](image-processing/DerivativeFilter.md)  [`Dilation`](image-processing/Dilation.md)  [`DistanceTransform`](image-processing/DistanceTransform.md)  [`EdgeDetect`](image-processing/EdgeDetect.md)  [`Erosion`](image-processing/Erosion.md)  [`FindThreshold`](image-processing/FindThreshold.md)  [`GaussianFilter`](image-processing/GaussianFilter.md)  [`GaussianMatrix`](image-processing/GaussianMatrix.md)  [`GradientFilter`](image-processing/GradientFilter.md)  [`Image`](image-processing/Image.md)  [`Image3D`](image-processing/Image3D.md)  [`Image3DQ`](image-processing/Image3DQ.md)  [`ImageAdjust`](image-processing/ImageAdjust.md)  [`ImageAssemble`](image-processing/ImageAssemble.md)  [`ImageChannels`](image-processing/ImageChannels.md)  [`ImageCompose`](image-processing/ImageCompose.md)  [`ImageConvolve`](image-processing/ImageConvolve.md)  [`ImageCorners`](image-processing/ImageCorners.md)  [`ImageCorrelate`](image-processing/ImageCorrelate.md)  [`ImageCrop`](image-processing/ImageCrop.md)  [`ImageData`](image-processing/ImageData.md)  [`ImageDimensions`](image-processing/ImageDimensions.md)  [`ImageLevels`](image-processing/ImageLevels.md)  [`ImagePad`](image-processing/ImagePad.md)  [`ImageQ`](image-processing/ImageQ.md)  [`ImageReflect`](image-processing/ImageReflect.md)  [`ImageResize`](image-processing/ImageResize.md)  [`ImageRotate`](image-processing/ImageRotate.md)  [`ImageType`](image-processing/ImageType.md)  [`LocalAdaptiveBinarize`](image-processing/LocalAdaptiveBinarize.md)  [`MeanFilter`](image-processing/MeanFilter.md)  [`MedianFilter`](image-processing/MedianFilter.md)  [`MorphologicalComponents`](image-processing/MorphologicalComponents.md)  [`Opening`](image-processing/Opening.md)  [`Pruning`](image-processing/Pruning.md)  [`RandomImage`](image-processing/RandomImage.md)  [`RemoveAlphaChannel`](image-processing/RemoveAlphaChannel.md)  [`SetAlphaChannel`](image-processing/SetAlphaChannel.md)  [`Thinning`](image-processing/Thinning.md)
 
 ### [Linear Algebra](linear-algebra/index.md)
 
@@ -752,6 +752,7 @@ _828 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`Product`](calculus/Product.md)
 - [`ProductLog`](special-functions/ProductLog.md)
 - [`Protect`](assignment-and-rules/Protect.md)
+- [`Pruning`](image-processing/Pruning.md)
 - [`PseudoInverse`](linear-algebra/PseudoInverse.md)
 - [`Purple`](other-advanced/Purple.md)
 - [`Put`](file-io/Put.md)
@@ -914,6 +915,7 @@ _828 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`Tan`](elementary-functions/Tan.md)
 - [`Tanh`](elementary-functions/Tanh.md)
 - [`TeXForm`](expression-information/TeXForm.md)
+- [`Thinning`](image-processing/Thinning.md)
 - [`Thread`](functional-programming/Thread.md)
 - [`Through`](functional-programming/Through.md)
 - [`Throw`](control-flow/Throw.md)

@@ -4832,6 +4832,14 @@
     "url": "documentation/assignment-and-rules/Protect/"
   },
   {
+    "name": "Pruning",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "Pruning[image] removes one pixel from every free end of the foreground; Pruning[image, n] repeats that n times, which shortens each branch by up to n and deletes any branch shorter than that. Used after Thinning to remove the short spurs a skeleton grows at boundary irregularities. An end point has exactly one foreground neighbour, so an ISOLATED pixel is not one and survives: pruning shortens branches rather than erasing specks. Pruning[image, 0] is the image unchanged. The result is a \"Bit\" image.",
+    "url": "documentation/image-processing/Pruning/"
+  },
+  {
     "name": "PseudoInverse",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
@@ -6126,6 +6134,14 @@
     "status": "Experimental",
     "summary": "TeXForm[expr]",
     "url": "documentation/expression-information/TeXForm/"
+  },
+  {
+    "name": "Thinning",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "Thinning[image] reduces the foreground to a one-pixel-wide skeleton by Zhang-Suen thinning, iterating until a pass deletes nothing. Thinning[image, n] stops after n iterations. The two subiterations are what preserve connectivity: deleting every individually-removable pixel in one pass severs a diagonal line, since two diagonal neighbours can each be removable while removing both disconnects the shape. A non-binary image is thresholded at 0.5 -- apply Binarize first for any other rule. The result is a \"Bit\" image, and it is always a subset of the input.",
+    "url": "documentation/image-processing/Thinning/"
   },
   {
     "name": "Thread",
