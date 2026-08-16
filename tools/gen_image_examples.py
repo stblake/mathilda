@@ -125,10 +125,9 @@ FILTER_LIKE = {
     ],
     "neat": ["{H}[zone, 4]", "{H}[zone, 1]"],
     "options": [
-        "{H}[chk, 2, Padding -> 0]",
-        '{H}[chk, 2, Padding -> "Fixed"]',
-        '{H}[chk, 2, Padding -> "Reversed"]',
-        '{H}[chk, 2, Method -> "Box"]',
+        '{H}[chk, 2, Method -> "Harris"]',
+        '{H}[chk, 2, Method -> "MinimumEigenvalue"]',
+        '{H}[disk, 1, Method -> "Harris"]',
     ],
 }
 
@@ -227,15 +226,73 @@ PLAIN = {  # a head taking just an image, with no radius
     ],
     "app": ["Binarize[{H}[zone]]", "Dilation[{H}[disk], 1]"],
     "neat": ["{H}[zone]"],
-    "options": ["{H}[chk, Padding -> 0]", '{H}[chk, Method -> "Box"]'],
+    "options": ["{H}[chk, MaxFeatures -> 3]", "{H}[disk, MaxFeatures -> 2]",
+                "{H}[zone, MaxFeatures -> 5]"],
+}
+
+
+# `{H}[image, {w, h}]` -- a SIZE PAIR, not a radius. Guessing a radius here is what made
+# ImageCrop yield one usable example out of twenty on the first run: it declined every call.
+CROP = {
+    "basic": ["{H}[chk, {8, 8}]", "ImageDimensions[{H}[chk, {8, 8}]]", "{H}[disk, {12, 12}]"],
+    "scope": ["{H}[rgb, {8, 8}]", "{H}[sky, {12, 8}]", "{H}[bit, {4, 4}]",
+              "{H}[byte, {8, 8}]", "{H}[zone, {16, 16}]", "{H}[noise, {16, 24}]",
+              "{H}[ramp, {8, 16}]", "ImageChannels[{H}[rgb, {8, 8}]]",
+              "ImageDimensions[{H}[zone, {20, 10}]]"],
+    "rel": ["ImageDimensions[{H}[chk, {8, 8}]] === {8, 8}",
+            "ImageChannels[{H}[rgb, {4, 4}]] === ImageChannels[rgb]",
+            "ImageDimensions[{H}[chk, {16, 16}]] === ImageDimensions[chk]"],
+    "app": ["Binarize[{H}[zone, {16, 16}]]", "EdgeDetect[{H}[disk, {12, 12}]]"],
+    "neat": ["{H}[zone, {24, 8}]"],
+    "options": [],
+}
+
+# A quarter turn with no argument; a free angle with one.
+ROTATE = {
+    "basic": ["{H}[chk]", "{H}[disk]", "ImageDimensions[{H}[chk]]", "{H}[chk, 0.4]"],
+    "scope": ["{H}[rgb]", "{H}[sky]", "{H}[bit]", "{H}[byte]", "{H}[zone]", "{H}[ramp]",
+              "{H}[noise, 0.8]", "{H}[disk, 1.2]", "{H}[zone, 0.3]",
+              "ImageChannels[{H}[rgb]]", "ImageDimensions[{H}[sky]]"],
+    "rel": ["ImageData[{H}[{H}[{H}[{H}[chk]]]]] === ImageData[chk]",
+            "ImageChannels[{H}[rgb]] === ImageChannels[rgb]",
+            "ImageData[{H}[disk, 0.]] === ImageData[disk]"],
+    "app": ["EdgeDetect[{H}[chk]]", "Binarize[{H}[zone, 0.5]]"],
+    "neat": ["{H}[zone, 0.7]"],
+    "options": [],
+}
+
+COLORCONV = {
+    "basic": ['{H}[rgb, "Grayscale"]', 'ImageChannels[{H}[rgb, "Grayscale"]]',
+              '{H}[sky, "Grayscale"]'],
+    "scope": ['{H}[chk, "Grayscale"]', '{H}[zone, "Grayscale"]', '{H}[byte, "Grayscale"]',
+              '{H}[vol, "Grayscale"]', '{H}[rgb, "Gray"]',
+              'ImageChannels[{H}[sky, "Grayscale"]]',
+              'ImageDimensions[{H}[rgb, "Grayscale"]]'],
+    "rel": ['ImageData[{H}[chk, "Grayscale"]] === ImageData[chk]',
+            'ImageData[{H}[rgb, "Gray"]] === ImageData[{H}[rgb, "Grayscale"]]',
+            'ImageChannels[{H}[rgb, "Grayscale"]] === 1'],
+    "app": ['EdgeDetect[{H}[sky, "Grayscale"]]', 'Binarize[{H}[rgb, "Grayscale"]]'],
+    "neat": ['{H}[zone, "Grayscale"]'],
+    "options": [],
+}
+
+# An ORDER pair, one per axis: {0, 1} is the first derivative along x.
+DERIV = {
+    "basic": ["{H}[ramp, {0, 1}]", "{H}[ramp, {1, 0}]", "ImageDimensions[{H}[chk, {0, 1}]]"],
+    "scope": ["{H}[chk, {0, 1}]", "{H}[chk, {1, 1}]", "{H}[disk, {0, 2}]",
+              "{H}[zone, {0, 1}]", "{H}[rgb, {0, 1}]", "{H}[vol, {0, 0, 1}]",
+              "ImageChannels[{H}[rgb, {0, 1}]]", "ImageDimensions[{H}[vol, {0, 1, 0}]]"],
+    "rel": ["ImageDimensions[{H}[chk, {0, 1}]] === ImageDimensions[chk]",
+            "ImageChannels[{H}[rgb, {1, 0}]] === ImageChannels[rgb]"],
+    "app": ["Binarize[{H}[zone, {0, 1}]]"],
+    "neat": ["{H}[zone, {1, 1}]"],
+    "options": [],
 }
 
 FAMILY = {
     "GaussianFilter": FILTER_LIKE,
     "MeanFilter": FILTER_LIKE,
     "MedianFilter": FILTER_LIKE,
-    "Sharpen": FILTER_LIKE,
-    "GradientFilter": FILTER_LIKE,
     "CornerFilter": FILTER_LIKE,
     "LocalAdaptiveBinarize": FILTER_LIKE,
     "Dilation": MORPH,
@@ -243,9 +300,9 @@ FAMILY = {
     "Opening": MORPH,
     "Closing": MORPH,
     "ImagePad": GEOM,
-    "ImageCrop": GEOM,
-    "ImageRotate": GEOM,
-    "ImageResize": GEOM,
+    "ImageCrop": CROP,
+    "ImageRotate": ROTATE,
+    "ImageResize": CROP,
     "ImageQ": QUERY,
     "Image3DQ": QUERY,
     "ImageDimensions": QUERY,
@@ -256,13 +313,12 @@ FAMILY = {
     "FindThreshold": QUERY,
     "Binarize": PLAIN,
     "EdgeDetect": PLAIN,
-    "ColorNegate": PLAIN,
     "ImageReflect": PLAIN,
     "DistanceTransform": PLAIN,
     "ImageAdjust": PLAIN,
     "ImageCorners": PLAIN,
-    "ColorConvert": PLAIN,
-    "DerivativeFilter": PLAIN,
+    "ColorConvert": COLORCONV,
+    "DerivativeFilter": DERIV,
 }
 
 GROUPS = [
@@ -308,16 +364,31 @@ def probe(cands):
     return out
 
 
+def is_image(res):
+    """An image-valued result.
+
+    It prints as its whole stored array -- 2616 characters for a 16x16 -- so it has to be
+    recognised BEFORE any length test. The first run of this tool applied a 300-character cap
+    first and therefore discarded every example that returns a picture, which is most of the
+    ones worth showing: 465 of 706 candidates were dropped and the pages filled up with
+    ImageDimensions queries. The page records the result as `-Image-`, which is what
+    site/generate.py's own verification session prints and what its figure pass turns into a
+    thumbnail."""
+    return res.startswith("Image[") or res.startswith("Image3D[")
+
+
 def acceptable(head, expr, res):
     """Is this a result worth putting on a page?"""
     if not res:
         return False
     if res.startswith(head + "["):  # declined: the call came back unevaluated
         return False
-    for bad in ("$Failed", "Indeterminate", "ComplexInfinity", "::", "Null"):
+    for bad in ("$Failed", "Indeterminate", "ComplexInfinity", "::"):
         if bad in res:
             return False
-    if len(res) > 300:  # a wall of numbers teaches nothing
+    if is_image(res):
+        return True
+    if res == "Null" or len(res) > 300:  # a setup line, or a wall of numbers: teaches nothing
         return False
     # An identity example is only worth showing when it is TRUE: a False would document a bug
     # rather than a property, and if one appears the property is wrong and should be fixed here.
@@ -360,7 +431,12 @@ def main():
         if not m:
             continue
         # The end of this section: the next H2, or end of file.
-        nxt = re.search(r"^## \w+\s*$", text[m.end() :], re.M)
+        # The next H2 OF ANY KIND. `^## \w+$` was not merely too narrow, it CORRUPTED other
+        # pages: this file carries prose H2s with spaces ("## Filtering performance,
+        # measured"), so a section followed by one had its boundary searched past several
+        # sections and its examples inserted into a different head. GaussianFilter's 27
+        # examples landed elsewhere and its own page showed one.
+        nxt = re.search(r"^## .+$", text[m.end() :], re.M)
         end = m.end() + (nxt.start() if nxt else len(text) - m.end())
 
         blocks = []
@@ -377,7 +453,7 @@ def main():
                 n += 1
             for expr, r in pairs:
                 body.append("In[%d]:= %s" % (n, expr))
-                body.append("Out[%d]= %s" % (n, r))
+                body.append("Out[%d]= %s" % (n, "-Image-" if is_image(r) else r))
                 body.append("")
                 n += 1
             if body[-1] == "":
@@ -391,12 +467,27 @@ def main():
             )
 
     SPEC.write_text(text)
-    print("wrote %d verified examples" % total_new)
-    per = {}
-    for (h, _), v in kept.items():
-        per[h] = per.get(h, 0) + len(v)
-    for h in sorted(per, key=lambda k: -per[k]):
-        print("  %-24s %d" % (h, per[h]))
+    # MEASURE THE FILE, do not trust the loop. The first version of this report counted the
+    # candidates it had kept, so it claimed 27 examples for a head whose section had received
+    # none of them: a true number about the wrong thing, and the reason a misplaced block went
+    # unnoticed until a page was read.
+    written = {}
+    cur = None
+    for line in SPEC.read_text().split("\n"):
+        h2 = re.match(r"^## (.+?)\s*$", line)
+        if h2:
+            cur = h2.group(1)
+        elif cur and line.startswith("In["):
+            written[cur] = written.get(cur, 0) + 1
+    print("wrote %d verified examples; the file now holds, per section:" % total_new)
+    for h in heads:
+        n = written.get(h, 0)
+        print("  %-24s %d%s" % (h, n, "   <-- NOTHING WRITTEN" if n == 0 else ""))
+    stray = sorted(k for k in written if k not in FAMILY and written[k] > 4)
+    if stray:
+        print("\nsections holding more than four examples that are not image heads --\n"
+              "if a head's blocks went astray, this is where they went:")
+        print("  " + ", ".join(stray))
     dropped = len(cands) - total_new
     print(
         "\n%d candidates dropped (declined, failed, or an identity that came back False)"

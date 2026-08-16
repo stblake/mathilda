@@ -120,6 +120,107 @@ unevaluated, so both a valid image and a refused one have head `Image`.
 In[1]:= ImageQ[Image[{{0., 1.}, {1., 0.}}]]
 In[2]:= ImageQ[{{0., 1.}, {1., 0.}}]
 ```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[4]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[5]:= ImageQ[chk]
+Out[5]= True
+
+In[6]:= ImageQ[rgb]
+Out[6]= True
+
+In[7]:= ImageQ[bit]
+Out[7]= True
+
+In[8]:= ImageQ[byte]
+Out[8]= True
+```
+
+#### Scope
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[6]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[7]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[8]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= ImageQ[disk]
+Out[9]= True
+
+In[10]:= ImageQ[ramp]
+Out[10]= True
+
+In[11]:= ImageQ[zone]
+Out[11]= True
+
+In[12]:= ImageQ[noise]
+Out[12]= True
+
+In[13]:= ImageQ[sky]
+Out[13]= True
+
+In[14]:= ImageQ[vol]
+Out[14]= False
+
+In[15]:= ImageQ[volb]
+Out[15]= False
+
+In[16]:= ImageQ[Import[Export["/tmp/mathilda_ex.png", rgb]]]
+Out[16]= True
+```
+
+#### Applications
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= Table[ImageQ[GaussianFilter[chk, r]], {r, 1, 3}]
+Out[2]= {True, True, True}
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageQ[chk] === ImageQ[GaussianFilter[chk, 1]]
+Out[3]= True
+
+In[4]:= ImageQ[rgb] === ImageQ[ImagePad[rgb, 2]]
+Out[4]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= ImageQ[zone]
+Out[2]= True
+```
+
 ## ImageDimensions
 
 `ImageDimensions[image]` gives `{width, height}`. Attributes: `Protected`.
@@ -131,6 +232,102 @@ Transposed relative to `ImageData`, which is `height × width`.
 ```mathematica
 In[1]:= ImageDimensions[Image[{{1., 2., 3.}, {4., 5., 6.}}]]
 ```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[4]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[5]:= ImageDimensions[chk]
+Out[5]= {16, 16}
+
+In[6]:= ImageDimensions[rgb]
+Out[6]= {16, 16}
+
+In[7]:= ImageDimensions[bit]
+Out[7]= {8, 8}
+
+In[8]:= ImageDimensions[byte]
+Out[8]= {16, 16}
+```
+
+#### Scope
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[6]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[7]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[8]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= ImageDimensions[disk]
+Out[9]= {16, 16}
+
+In[10]:= ImageDimensions[ramp]
+Out[10]= {16, 16}
+
+In[11]:= ImageDimensions[zone]
+Out[11]= {32, 32}
+
+In[12]:= ImageDimensions[noise]
+Out[12]= {32, 32}
+
+In[13]:= ImageDimensions[sky]
+Out[13]= {24, 16}
+
+In[14]:= ImageDimensions[vol]
+Out[14]= {12, 10, 8}
+
+In[15]:= ImageDimensions[volb]
+Out[15]= {12, 10, 8}
+
+In[16]:= ImageDimensions[Import[Export["/tmp/mathilda_ex.png", rgb]]]
+Out[16]= {16, 16}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= Table[ImageDimensions[GaussianFilter[chk, r]], {r, 1, 3}]
+Out[2]= {{16, 16}, {16, 16}, {16, 16}}
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ImageDimensions[chk] === ImageDimensions[GaussianFilter[chk, 1]]
+Out[2]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= ImageDimensions[zone]
+Out[2]= {32, 32}
+```
+
 ## ImageChannels
 
 `ImageChannels[image]` gives the number of colour channels — `1` for grey, otherwise the length
@@ -145,6 +342,107 @@ than reporting the first pixel's length as if it were the image's.
 In[1]:= ImageChannels[Image[{{0.5, 0.5}}]]
 In[2]:= ImageChannels[Image[{{{1., 0., 0.}, {0., 1., 0.}}}]]
 ```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[4]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[5]:= ImageChannels[chk]
+Out[5]= 1
+
+In[6]:= ImageChannels[rgb]
+Out[6]= 3
+
+In[7]:= ImageChannels[bit]
+Out[7]= 1
+
+In[8]:= ImageChannels[byte]
+Out[8]= 1
+```
+
+#### Scope
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[6]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[7]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[8]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= ImageChannels[disk]
+Out[9]= 1
+
+In[10]:= ImageChannels[ramp]
+Out[10]= 1
+
+In[11]:= ImageChannels[zone]
+Out[11]= 1
+
+In[12]:= ImageChannels[noise]
+Out[12]= 1
+
+In[13]:= ImageChannels[sky]
+Out[13]= 3
+
+In[14]:= ImageChannels[vol]
+Out[14]= 1
+
+In[15]:= ImageChannels[volb]
+Out[15]= 1
+
+In[16]:= ImageChannels[Import[Export["/tmp/mathilda_ex.png", rgb]]]
+Out[16]= 3
+```
+
+#### Applications
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= Table[ImageChannels[GaussianFilter[chk, r]], {r, 1, 3}]
+Out[2]= {1, 1, 1}
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageChannels[chk] === ImageChannels[GaussianFilter[chk, 1]]
+Out[3]= True
+
+In[4]:= ImageChannels[rgb] === ImageChannels[ImagePad[rgb, 2]]
+Out[4]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= ImageChannels[zone]
+Out[2]= 1
+```
+
 ## ImageType
 
 `ImageType[image]` gives `"Bit"`, `"Byte"` or `"Real"`. Attributes: `Protected`.
@@ -158,6 +456,107 @@ The type is not decoration: it fixes the **range** of a stored value, which is w
 In[1]:= ImageType[Image[{{0.5, 0.25}}]]
 In[2]:= ImageType[Binarize[Image[{{0.1, 0.9}}]]]
 ```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[4]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[5]:= ImageType[chk]
+Out[5]= Real
+
+In[6]:= ImageType[rgb]
+Out[6]= Real
+
+In[7]:= ImageType[bit]
+Out[7]= Bit
+
+In[8]:= ImageType[byte]
+Out[8]= Byte
+```
+
+#### Scope
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[6]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[7]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[8]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= ImageType[disk]
+Out[9]= Real
+
+In[10]:= ImageType[ramp]
+Out[10]= Real
+
+In[11]:= ImageType[zone]
+Out[11]= Real
+
+In[12]:= ImageType[noise]
+Out[12]= Real
+
+In[13]:= ImageType[sky]
+Out[13]= Real
+
+In[14]:= ImageType[vol]
+Out[14]= Real
+
+In[15]:= ImageType[volb]
+Out[15]= Real
+
+In[16]:= ImageType[Import[Export["/tmp/mathilda_ex.png", rgb]]]
+Out[16]= Real
+```
+
+#### Applications
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= Table[ImageType[GaussianFilter[chk, r]], {r, 1, 3}]
+Out[2]= {Real, Real, Real}
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageType[chk] === ImageType[GaussianFilter[chk, 1]]
+Out[3]= True
+
+In[4]:= ImageType[rgb] === ImageType[ImagePad[rgb, 2]]
+Out[4]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= ImageType[zone]
+Out[2]= Real
+```
+
 ## ImageData
 
 `ImageData[image]` gives the pixels as reals in `[0, 1]`, scaling out the image's type.
@@ -285,6 +684,146 @@ holding.
 ```mathematica
 In[1]:= ImageData[GaussianFilter[Image[{{0., 0., 0.}, {0., 1., 0.}, {0., 0., 0.}}], 1]]
 ```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= GaussianFilter[chk, 2]
+Out[2]= -Image-
+
+In[3]:= ImageDimensions[GaussianFilter[chk, 2]]
+Out[3]= {16, 16}
+
+In[4]:= ImageType[GaussianFilter[chk, 1]]
+Out[4]= Real
+```
+
+#### Scope
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[6]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[7]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[8]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[9]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[10]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[11]:= GaussianFilter[disk, 1]
+Out[11]= -Image-
+
+In[12]:= GaussianFilter[ramp, 2]
+Out[12]= -Image-
+
+In[13]:= GaussianFilter[zone, 2]
+Out[13]= -Image-
+
+In[14]:= GaussianFilter[noise, 3]
+Out[14]= -Image-
+
+In[15]:= GaussianFilter[rgb, 1]
+Out[15]= -Image-
+
+In[16]:= GaussianFilter[sky, 2]
+Out[16]= -Image-
+
+In[17]:= GaussianFilter[bit, 1]
+Out[17]= -Image-
+
+In[18]:= GaussianFilter[byte, 2]
+Out[18]= -Image-
+
+In[19]:= GaussianFilter[vol, 1]
+Out[19]= -Image-
+
+In[20]:= ImageChannels[GaussianFilter[rgb, 2]]
+Out[20]= 3
+
+In[21]:= ImageDimensions[GaussianFilter[vol, 1]]
+Out[21]= {12, 10, 8}
+
+In[22]:= GaussianFilter[chk, {1, 3}]
+Out[22]= -Image-
+
+In[23]:= GaussianFilter[chk, 4]
+Out[23]= -Image-
+```
+
+#### Applications
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= Binarize[GaussianFilter[noise, 2]]
+Out[4]= -Image-
+
+In[5]:= EdgeDetect[GaussianFilter[zone, 2]]
+Out[5]= -Image-
+
+In[6]:= ImageDimensions[GaussianFilter[Import[Export["/tmp/mathilda_ex.png", rgb]], 2]]
+Out[6]= {16, 16}
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[5]:= ImageDimensions[GaussianFilter[chk, 3]] === ImageDimensions[chk]
+Out[5]= True
+
+In[6]:= ImageChannels[GaussianFilter[rgb, 2]] === ImageChannels[rgb]
+Out[6]= True
+
+In[7]:= ImageData[GaussianFilter[ramp, 0]] === ImageData[ramp]
+Out[7]= True
+
+In[8]:= Max[Flatten[ImageData[GaussianFilter[chk, 2]]]] <= 1.0
+Out[8]= True
+
+In[9]:= Min[Flatten[ImageData[GaussianFilter[chk, 2]]]] >= 0.0
+Out[9]= True
+
+In[10]:= ImageDimensions[GaussianFilter[vol, 2]] === ImageDimensions[vol]
+Out[10]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= GaussianFilter[zone, 4]
+Out[2]= -Image-
+
+In[3]:= GaussianFilter[zone, 1]
+Out[3]= -Image-
+```
+
 ## Filtering performance, measured
 
 Verified against `scipy.ndimage.convolve` (the right baseline: it reflects the kernel like
@@ -357,6 +896,83 @@ implementation, and the returned threshold must maximise it. On a 48×48 ramp it
 ```mathematica
 In[1]:= FindThreshold[Image[{{0., 0., 1.}, {0., 1., 1.}}]]
 ```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[4]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[5]:= FindThreshold[chk]
+Out[5]= 0.00196078
+
+In[6]:= FindThreshold[rgb]
+Out[6]= 0.523529
+
+In[7]:= FindThreshold[bit]
+Out[7]= 0.00196078
+
+In[8]:= FindThreshold[byte]
+Out[8]= 0.519608
+```
+
+#### Scope
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[6]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[7]:= FindThreshold[disk]
+Out[7]= 0.00196078
+
+In[8]:= FindThreshold[ramp]
+Out[8]= 0.468627
+
+In[9]:= FindThreshold[zone]
+Out[9]= 0.488235
+
+In[10]:= FindThreshold[noise]
+Out[10]= 0.488235
+
+In[11]:= FindThreshold[sky]
+Out[11]= 0.539216
+
+In[12]:= FindThreshold[Import[Export["/tmp/mathilda_ex.png", rgb]]]
+Out[12]= 0.523529
+```
+
+#### Applications
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= Table[FindThreshold[GaussianFilter[chk, r]], {r, 1, 3}]
+Out[2]= {0.194118, 0.460784, 0.382353}
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= FindThreshold[zone]
+Out[2]= 0.488235
+```
+
 ## Binarize
 
 `Binarize[image]` thresholds by Otsu; `Binarize[image, t]` thresholds at `t`. Gives a `"Bit"`
@@ -382,6 +998,116 @@ Out[2]= {{0, 0, 1, 1}, {0, 0, 1, 1}}
 The result is built as a `"Bit"` image directly rather than as `"Real"`: it is 0/1 by construction,
 and typing it `"Real"` would mean a caller could no longer tell it was binary.
 
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= Binarize[chk]
+Out[3]= -Image-
+
+In[4]:= Binarize[disk]
+Out[4]= -Image-
+
+In[5]:= ImageDimensions[Binarize[chk]]
+Out[5]= {16, 16}
+```
+
+#### Scope
+
+```mathematica
+In[1]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[5]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[6]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[7]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[8]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[10]:= Binarize[ramp]
+Out[10]= -Image-
+
+In[11]:= Binarize[zone]
+Out[11]= -Image-
+
+In[12]:= Binarize[noise]
+Out[12]= -Image-
+
+In[13]:= Binarize[rgb]
+Out[13]= -Image-
+
+In[14]:= Binarize[sky]
+Out[14]= -Image-
+
+In[15]:= Binarize[bit]
+Out[15]= -Image-
+
+In[16]:= Binarize[byte]
+Out[16]= -Image-
+
+In[17]:= Binarize[vol]
+Out[17]= -Image-
+
+In[18]:= Binarize[volb]
+Out[18]= -Image-
+
+In[19]:= ImageChannels[Binarize[rgb]]
+Out[19]= 1
+
+In[20]:= ImageDimensions[Binarize[vol]]
+Out[20]= {12, 10, 8}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= Binarize[Binarize[zone]]
+Out[3]= -Image-
+
+In[4]:= Dilation[Binarize[disk], 1]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ImageDimensions[Binarize[chk]] === ImageDimensions[chk]
+Out[2]= True
+
+In[3]:= Max[Flatten[ImageData[Binarize[chk]]]] <= 1.0
+Out[3]= True
+
+In[4]:= Min[Flatten[ImageData[Binarize[chk]]]] >= 0.0
+Out[4]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= Binarize[zone]
+Out[2]= -Image-
+```
+
 ## ColorConvert
 
 `ColorConvert[image, "Grayscale"]` converts by **Rec. 601 luminance**,
@@ -406,6 +1132,101 @@ something approximate would be worse than declining it.
 ```mathematica
 In[1]:= ImageData[ColorConvert[Image[{{{1., 0., 0.}, {0., 1., 0.}}}], "Grayscale"]]
 ```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[3]:= ColorConvert[rgb, "Grayscale"]
+Out[3]= -Image-
+
+In[4]:= ImageChannels[ColorConvert[rgb, "Grayscale"]]
+Out[4]= 1
+
+In[5]:= ColorConvert[sky, "Grayscale"]
+Out[5]= -Image-
+```
+
+#### Scope
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[5]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[6]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[7]:= ColorConvert[chk, "Grayscale"]
+Out[7]= -Image-
+
+In[8]:= ColorConvert[zone, "Grayscale"]
+Out[8]= -Image-
+
+In[9]:= ColorConvert[byte, "Grayscale"]
+Out[9]= -Image-
+
+In[10]:= ColorConvert[vol, "Grayscale"]
+Out[10]= -Image-
+
+In[11]:= ColorConvert[rgb, "Gray"]
+Out[11]= -Image-
+
+In[12]:= ImageChannels[ColorConvert[sky, "Grayscale"]]
+Out[12]= 1
+
+In[13]:= ImageDimensions[ColorConvert[rgb, "Grayscale"]]
+Out[13]= {16, 16}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[3]:= EdgeDetect[ColorConvert[sky, "Grayscale"]]
+Out[3]= -Image-
+
+In[4]:= Binarize[ColorConvert[rgb, "Grayscale"]]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageData[ColorConvert[chk, "Grayscale"]] === ImageData[chk]
+Out[3]= True
+
+In[4]:= ImageData[ColorConvert[rgb, "Gray"]] === ImageData[ColorConvert[rgb, "Grayscale"]]
+Out[4]= True
+
+In[5]:= ImageChannels[ColorConvert[rgb, "Grayscale"]] === 1
+Out[5]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= ColorConvert[zone, "Grayscale"]
+Out[2]= -Image-
+```
+
 ## ImageResize
 
 `ImageResize[image, {w, h}]` resizes to `w × h`; `ImageResize[image, w]` gives width `w` with the
@@ -562,6 +1383,108 @@ reached by a different route through the code.
 
 # Derivatives and gradients
 
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageResize[chk, {8, 8}]
+Out[3]= -Image-
+
+In[4]:= ImageDimensions[ImageResize[chk, {8, 8}]]
+Out[4]= {8, 8}
+
+In[5]:= ImageResize[disk, {12, 12}]
+Out[5]= -Image-
+```
+
+#### Scope
+
+```mathematica
+In[1]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[5]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[6]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[7]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[8]:= ImageResize[rgb, {8, 8}]
+Out[8]= -Image-
+
+In[9]:= ImageResize[sky, {12, 8}]
+Out[9]= -Image-
+
+In[10]:= ImageResize[bit, {4, 4}]
+Out[10]= -Image-
+
+In[11]:= ImageResize[byte, {8, 8}]
+Out[11]= -Image-
+
+In[12]:= ImageResize[zone, {16, 16}]
+Out[12]= -Image-
+
+In[13]:= ImageResize[noise, {16, 24}]
+Out[13]= -Image-
+
+In[14]:= ImageResize[ramp, {8, 16}]
+Out[14]= -Image-
+
+In[15]:= ImageChannels[ImageResize[rgb, {8, 8}]]
+Out[15]= 3
+
+In[16]:= ImageDimensions[ImageResize[zone, {20, 10}]]
+Out[16]= {20, 10}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= Binarize[ImageResize[zone, {16, 16}]]
+Out[3]= -Image-
+
+In[4]:= EdgeDetect[ImageResize[disk, {12, 12}]]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageDimensions[ImageResize[chk, {8, 8}]] === {8, 8}
+Out[3]= True
+
+In[4]:= ImageChannels[ImageResize[rgb, {4, 4}]] === ImageChannels[rgb]
+Out[4]= True
+
+In[5]:= ImageDimensions[ImageResize[chk, {16, 16}]] === ImageDimensions[chk]
+Out[5]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= ImageResize[zone, {24, 8}]
+Out[2]= -Image-
+```
+
 ## DerivativeFilter
 
 `DerivativeFilter[image, {n, m}]` gives the `n`-th derivative down the rows and the `m`-th across
@@ -602,6 +1525,94 @@ verified* rather than trusted because the author knew it was separable.
 ```mathematica
 In[1]:= ImageData[DerivativeFilter[Image[{{0., 0., 1., 1.}, {0., 0., 1., 1.}}], {0, 1}]]
 ```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= DerivativeFilter[ramp, {0, 1}]
+Out[3]= -Image-
+
+In[4]:= DerivativeFilter[ramp, {1, 0}]
+Out[4]= -Image-
+
+In[5]:= ImageDimensions[DerivativeFilter[chk, {0, 1}]]
+Out[5]= {16, 16}
+```
+
+#### Scope
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[5]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[6]:= DerivativeFilter[chk, {0, 1}]
+Out[6]= -Image-
+
+In[7]:= DerivativeFilter[chk, {1, 1}]
+Out[7]= -Image-
+
+In[8]:= DerivativeFilter[disk, {0, 2}]
+Out[8]= -Image-
+
+In[9]:= DerivativeFilter[zone, {0, 1}]
+Out[9]= -Image-
+
+In[10]:= DerivativeFilter[rgb, {0, 1}]
+Out[10]= -Image-
+
+In[11]:= DerivativeFilter[vol, {0, 0, 1}]
+Out[11]= -Image-
+
+In[12]:= ImageChannels[DerivativeFilter[rgb, {0, 1}]]
+Out[12]= 3
+
+In[13]:= ImageDimensions[DerivativeFilter[vol, {0, 1, 0}]]
+Out[13]= {12, 10, 8}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= Binarize[DerivativeFilter[zone, {0, 1}]]
+Out[2]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageDimensions[DerivativeFilter[chk, {0, 1}]] === ImageDimensions[chk]
+Out[3]= True
+
+In[4]:= ImageChannels[DerivativeFilter[rgb, {1, 0}]] === ImageChannels[rgb]
+Out[4]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= DerivativeFilter[zone, {1, 1}]
+Out[2]= -Image-
+```
+
 ## GradientFilter
 
 `GradientFilter[image]` gives the gradient magnitude `Sqrt[dx² + dy²]`. Attributes: `Protected`.
@@ -697,6 +1708,103 @@ chosen by different rules, and reporting them side by side would imply a compari
 ---
 
 # Volumes
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= EdgeDetect[chk]
+Out[3]= -Image-
+
+In[4]:= EdgeDetect[disk]
+Out[4]= -Image-
+
+In[5]:= ImageDimensions[EdgeDetect[chk]]
+Out[5]= {16, 16}
+```
+
+#### Scope
+
+```mathematica
+In[1]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[5]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[6]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[7]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[8]:= EdgeDetect[ramp]
+Out[8]= -Image-
+
+In[9]:= EdgeDetect[zone]
+Out[9]= -Image-
+
+In[10]:= EdgeDetect[noise]
+Out[10]= -Image-
+
+In[11]:= EdgeDetect[rgb]
+Out[11]= -Image-
+
+In[12]:= EdgeDetect[sky]
+Out[12]= -Image-
+
+In[13]:= EdgeDetect[bit]
+Out[13]= -Image-
+
+In[14]:= EdgeDetect[byte]
+Out[14]= -Image-
+
+In[15]:= ImageChannels[EdgeDetect[rgb]]
+Out[15]= 1
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= Binarize[EdgeDetect[zone]]
+Out[3]= -Image-
+
+In[4]:= Dilation[EdgeDetect[disk], 1]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ImageDimensions[EdgeDetect[chk]] === ImageDimensions[chk]
+Out[2]= True
+
+In[3]:= Max[Flatten[ImageData[EdgeDetect[chk]]]] <= 1.0
+Out[3]= True
+
+In[4]:= Min[Flatten[ImageData[EdgeDetect[chk]]]] >= 0.0
+Out[4]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= EdgeDetect[zone]
+Out[2]= -Image-
+```
 
 ## Image3D
 
@@ -1063,6 +2171,15 @@ In[1]:= ImageLevels[Image[{{0, 1}, {1, 0}}]]
 Out[1]= {{0.0, 2}, {1.0, 2}}
 ```
 
+#### Basic Examples
+
+```mathematica
+In[1]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[2]:= ImageLevels[bit]
+Out[2]= {{0.0, 32}, {1.0, 32}}
+```
+
 ## ImageAdjust
 
 `ImageAdjust[image]` stretches to the full range. `ImageAdjust[image, {c, b}]` and `[image, {c, b, g}]`
@@ -1115,6 +2232,117 @@ should be.
 ```mathematica
 In[1]:= ImageData[ImageAdjust[Image[{{0.25, 0.5}, {0.5, 0.75}}]]]
 ```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageAdjust[chk]
+Out[3]= -Image-
+
+In[4]:= ImageAdjust[disk]
+Out[4]= -Image-
+
+In[5]:= ImageDimensions[ImageAdjust[chk]]
+Out[5]= {16, 16}
+```
+
+#### Scope
+
+```mathematica
+In[1]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[5]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[6]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[7]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[8]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[10]:= ImageAdjust[ramp]
+Out[10]= -Image-
+
+In[11]:= ImageAdjust[zone]
+Out[11]= -Image-
+
+In[12]:= ImageAdjust[noise]
+Out[12]= -Image-
+
+In[13]:= ImageAdjust[rgb]
+Out[13]= -Image-
+
+In[14]:= ImageAdjust[sky]
+Out[14]= -Image-
+
+In[15]:= ImageAdjust[bit]
+Out[15]= -Image-
+
+In[16]:= ImageAdjust[byte]
+Out[16]= -Image-
+
+In[17]:= ImageAdjust[vol]
+Out[17]= -Image-
+
+In[18]:= ImageAdjust[volb]
+Out[18]= -Image-
+
+In[19]:= ImageChannels[ImageAdjust[rgb]]
+Out[19]= 3
+
+In[20]:= ImageDimensions[ImageAdjust[vol]]
+Out[20]= {12, 10, 8}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= Binarize[ImageAdjust[zone]]
+Out[3]= -Image-
+
+In[4]:= Dilation[ImageAdjust[disk], 1]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ImageDimensions[ImageAdjust[chk]] === ImageDimensions[chk]
+Out[2]= True
+
+In[3]:= Max[Flatten[ImageData[ImageAdjust[chk]]]] <= 1.0
+Out[3]= True
+
+In[4]:= Min[Flatten[ImageData[ImageAdjust[chk]]]] >= 0.0
+Out[4]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= ImageAdjust[zone]
+Out[2]= -Image-
+```
+
 ## ImageCorrelate
 
 `ImageCorrelate[image, kernel]` correlates — the kernel is **not** reflected, which is the only
@@ -1722,6 +2950,133 @@ marshalling was slow, so no test could have caught them — a benchmark did, eac
 ```mathematica
 In[1]:= ImageData[LocalAdaptiveBinarize[Image[{{0.2, 0.3, 0.9}, {0.2, 0.8, 0.9}, {0.1, 0.2, 0.3}}], 1]]
 ```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= LocalAdaptiveBinarize[chk, 2]
+Out[2]= -Image-
+
+In[3]:= ImageDimensions[LocalAdaptiveBinarize[chk, 2]]
+Out[3]= {16, 16}
+
+In[4]:= ImageType[LocalAdaptiveBinarize[chk, 1]]
+Out[4]= Bit
+```
+
+#### Scope
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[6]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[7]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[8]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[9]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[10]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[11]:= LocalAdaptiveBinarize[disk, 1]
+Out[11]= -Image-
+
+In[12]:= LocalAdaptiveBinarize[ramp, 2]
+Out[12]= -Image-
+
+In[13]:= LocalAdaptiveBinarize[zone, 2]
+Out[13]= -Image-
+
+In[14]:= LocalAdaptiveBinarize[noise, 3]
+Out[14]= -Image-
+
+In[15]:= LocalAdaptiveBinarize[rgb, 1]
+Out[15]= -Image-
+
+In[16]:= LocalAdaptiveBinarize[sky, 2]
+Out[16]= -Image-
+
+In[17]:= LocalAdaptiveBinarize[bit, 1]
+Out[17]= -Image-
+
+In[18]:= LocalAdaptiveBinarize[byte, 2]
+Out[18]= -Image-
+
+In[19]:= LocalAdaptiveBinarize[vol, 1]
+Out[19]= -Image-
+
+In[20]:= ImageChannels[LocalAdaptiveBinarize[rgb, 2]]
+Out[20]= 1
+
+In[21]:= ImageDimensions[LocalAdaptiveBinarize[vol, 1]]
+Out[21]= {12, 10, 8}
+
+In[22]:= LocalAdaptiveBinarize[chk, 4]
+Out[22]= -Image-
+```
+
+#### Applications
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= Binarize[LocalAdaptiveBinarize[noise, 2]]
+Out[4]= -Image-
+
+In[5]:= EdgeDetect[LocalAdaptiveBinarize[zone, 2]]
+Out[5]= -Image-
+
+In[6]:= ImageDimensions[LocalAdaptiveBinarize[Import[Export["/tmp/mathilda_ex.png", rgb]], 2]]
+Out[6]= {16, 16}
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[3]:= ImageDimensions[LocalAdaptiveBinarize[chk, 3]] === ImageDimensions[chk]
+Out[3]= True
+
+In[4]:= Max[Flatten[ImageData[LocalAdaptiveBinarize[chk, 2]]]] <= 1.0
+Out[4]= True
+
+In[5]:= Min[Flatten[ImageData[LocalAdaptiveBinarize[chk, 2]]]] >= 0.0
+Out[5]= True
+
+In[6]:= ImageDimensions[LocalAdaptiveBinarize[vol, 2]] === ImageDimensions[vol]
+Out[6]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= LocalAdaptiveBinarize[zone, 4]
+Out[2]= -Image-
+
+In[3]:= LocalAdaptiveBinarize[zone, 1]
+Out[3]= -Image-
+```
+
 ## make check-image-packing
 
 Three times in this subsystem an image operation ran 4× to 23× slower than its equivalent
@@ -2098,6 +3453,90 @@ In[3]:= ImageData[ImagePad[Image[{{1., 2., 3.}}], {{1, 1}, {0, 0}}, "Reflected"]
 In[4]:= Module[{img = Image[{{1., 2.}, {3., 4.}}]}, ImageCrop[ImagePad[img, 2], ImageDimensions[img]] === img]
 ```
 
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImagePad[chk, 2]
+Out[3]= -Image-
+
+In[4]:= ImageDimensions[ImagePad[chk, 2]]
+Out[4]= {20, 20}
+
+In[5]:= ImagePad[disk, 1]
+Out[5]= -Image-
+```
+
+#### Scope
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[4]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[5]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[6]:= ImagePad[rgb, 2]
+Out[6]= -Image-
+
+In[7]:= ImagePad[bit, 1]
+Out[7]= -Image-
+
+In[8]:= ImagePad[byte, 2]
+Out[8]= -Image-
+
+In[9]:= ImagePad[vol, 1]
+Out[9]= -Image-
+
+In[10]:= ImagePad[chk, {{1, 2}, {3, 4}}]
+Out[10]= -Image-
+
+In[11]:= ImageDimensions[ImagePad[vol, 1]]
+Out[11]= {14, 12, 10}
+
+In[12]:= ImageChannels[ImagePad[rgb, 2]]
+Out[12]= 3
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= EdgeDetect[ImagePad[disk, 2]]
+Out[2]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageChannels[ImagePad[rgb, 2]] === ImageChannels[rgb]
+Out[3]= True
+
+In[4]:= ImageDimensions[ImagePad[chk, 0]] === ImageDimensions[chk]
+Out[4]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= ImagePad[zone, 4]
+Out[2]= -Image-
+```
+
 ## ImageCrop
 Crops an image about its centre, or trims a uniform border.
 
@@ -2110,6 +3549,108 @@ Crops an image about its centre, or trims a uniform border.
 ```mathematica
 In[1]:= ImageData[ImageCrop[Image[{{1., 2., 3.}, {4., 5., 6.}, {7., 8., 9.}}], {1, 1}]]
 In[2]:= ImageDimensions[ImageCrop[Image[{{0., 0., 0.}, {0., 0.5, 0.}, {0., 0., 0.}}]]]
+```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageCrop[chk, {8, 8}]
+Out[3]= -Image-
+
+In[4]:= ImageDimensions[ImageCrop[chk, {8, 8}]]
+Out[4]= {8, 8}
+
+In[5]:= ImageCrop[disk, {12, 12}]
+Out[5]= -Image-
+```
+
+#### Scope
+
+```mathematica
+In[1]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[5]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[6]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[7]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[8]:= ImageCrop[rgb, {8, 8}]
+Out[8]= -Image-
+
+In[9]:= ImageCrop[sky, {12, 8}]
+Out[9]= -Image-
+
+In[10]:= ImageCrop[bit, {4, 4}]
+Out[10]= -Image-
+
+In[11]:= ImageCrop[byte, {8, 8}]
+Out[11]= -Image-
+
+In[12]:= ImageCrop[zone, {16, 16}]
+Out[12]= -Image-
+
+In[13]:= ImageCrop[noise, {16, 24}]
+Out[13]= -Image-
+
+In[14]:= ImageCrop[ramp, {8, 16}]
+Out[14]= -Image-
+
+In[15]:= ImageChannels[ImageCrop[rgb, {8, 8}]]
+Out[15]= 3
+
+In[16]:= ImageDimensions[ImageCrop[zone, {20, 10}]]
+Out[16]= {20, 10}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= Binarize[ImageCrop[zone, {16, 16}]]
+Out[3]= -Image-
+
+In[4]:= EdgeDetect[ImageCrop[disk, {12, 12}]]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageDimensions[ImageCrop[chk, {8, 8}]] === {8, 8}
+Out[3]= True
+
+In[4]:= ImageChannels[ImageCrop[rgb, {4, 4}]] === ImageChannels[rgb]
+Out[4]= True
+
+In[5]:= ImageDimensions[ImageCrop[chk, {16, 16}]] === ImageDimensions[chk]
+Out[5]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= ImageCrop[zone, {24, 8}]
+Out[2]= -Image-
 ```
 
 ## CornerFilter
@@ -2128,6 +3669,152 @@ In[1]:= Max[Flatten[ImageData[CornerFilter[Image[Table[If[j <= 4, 0., 1.], {i, 8
 In[2]:= Options[CornerFilter]
 ```
 
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= CornerFilter[chk]
+Out[2]= -Image-
+
+In[3]:= CornerFilter[chk, 2]
+Out[3]= -Image-
+
+In[4]:= ImageDimensions[CornerFilter[chk, 2]]
+Out[4]= {16, 16}
+
+In[5]:= ImageType[CornerFilter[chk, 1]]
+Out[5]= Real
+```
+
+#### Scope
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[6]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[7]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[8]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[9]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[10]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[11]:= CornerFilter[disk, 1]
+Out[11]= -Image-
+
+In[12]:= CornerFilter[ramp, 2]
+Out[12]= -Image-
+
+In[13]:= CornerFilter[zone, 2]
+Out[13]= -Image-
+
+In[14]:= CornerFilter[noise, 3]
+Out[14]= -Image-
+
+In[15]:= CornerFilter[rgb, 1]
+Out[15]= -Image-
+
+In[16]:= CornerFilter[sky, 2]
+Out[16]= -Image-
+
+In[17]:= CornerFilter[bit, 1]
+Out[17]= -Image-
+
+In[18]:= CornerFilter[byte, 2]
+Out[18]= -Image-
+
+In[19]:= CornerFilter[vol, 1]
+Out[19]= -Image-
+
+In[20]:= ImageChannels[CornerFilter[rgb, 2]]
+Out[20]= 1
+
+In[21]:= ImageDimensions[CornerFilter[vol, 1]]
+Out[21]= {12, 10, 8}
+
+In[22]:= CornerFilter[chk, 4]
+Out[22]= -Image-
+```
+
+#### Options
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= CornerFilter[chk, 2, Method -> "Harris"]
+Out[3]= -Image-
+
+In[4]:= CornerFilter[chk, 2, Method -> "MinimumEigenvalue"]
+Out[4]= -Image-
+
+In[5]:= CornerFilter[disk, 1, Method -> "Harris"]
+Out[5]= -Image-
+```
+
+#### Applications
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= Binarize[CornerFilter[noise, 2]]
+Out[4]= -Image-
+
+In[5]:= EdgeDetect[CornerFilter[zone, 2]]
+Out[5]= -Image-
+
+In[6]:= ImageDimensions[CornerFilter[Import[Export["/tmp/mathilda_ex.png", rgb]], 2]]
+Out[6]= {16, 16}
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[3]:= ImageDimensions[CornerFilter[chk, 3]] === ImageDimensions[chk]
+Out[3]= True
+
+In[4]:= Max[Flatten[ImageData[CornerFilter[chk, 2]]]] <= 1.0
+Out[4]= True
+
+In[5]:= Min[Flatten[ImageData[CornerFilter[chk, 2]]]] >= 0.0
+Out[5]= True
+
+In[6]:= ImageDimensions[CornerFilter[vol, 2]] === ImageDimensions[vol]
+Out[6]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= CornerFilter[zone, 4]
+Out[2]= -Image-
+
+In[3]:= CornerFilter[zone, 1]
+Out[3]= -Image-
+```
+
 ## ImageCorners
 Positions of corners: thresholded, suppressed, and separated.
 
@@ -2143,6 +3830,120 @@ In[1]:= ImageCorners[Image[Table[If[i >= 5 && j >= 5, 1., 0.], {i, 12}, {j, 12}]
 In[2]:= Options[ImageCorners]
 ```
 
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageCorners[chk]
+Out[3]= {{15, 2}, {15, 15}, {2, 2}, {2, 15}}
+
+In[4]:= ImageCorners[disk]
+Out[4]= {{5, 12}, {12, 5}, {12, 12}, {5, 5}, {4, 8}, {8, 4}, {8, 13}, {13, 8}}
+
+In[5]:= ImageDimensions[ImageCorners[chk]]
+Out[5]= ImageDimensions[{{15, 2}, {15, 15}, {2, 2}, {2, 15}}]
+```
+
+#### Scope
+
+```mathematica
+In[1]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[5]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[6]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[7]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[8]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[10]:= ImageCorners[ramp]
+Out[10]= {}
+
+In[11]:= ImageCorners[zone]
+Out[11]= {{31, 31}, {11, 10}, {11, 22}, {21, 10}, {21, 22}, {6, 7}, {6, 25}, {25, 6}, {26, 25}, {22, 28}, {28, 10}, {10, 28}, {28, 22}, {2, 16}, {16, 2}, {29, 12}, {29, 20}, {12, 29}, {20, 29}}
+
+In[12]:= ImageCorners[noise]
+Out[12]= {{13, 30}, {10, 3}, {18, 31}, {5, 2}, {4, 8}, {4, 14}, {8, 29}, {9, 9}, {9, 15}, {14, 10}, {14, 16}, {19, 11}, {19, 17}, {24, 12}, {24, 18}, {8, 23}, {13, 24}, {14, 4}, {18, 25}, {19, 5}, {23, 26}, {24, 6}, {28, 27}, {4, 18}, {9, 19}, {14, 20}, {19, 21}, {24, 22}, {29, 23}}
+
+In[13]:= ImageCorners[rgb]
+Out[13]= {}
+
+In[14]:= ImageCorners[sky]
+Out[14]= {}
+
+In[15]:= ImageCorners[bit]
+Out[15]= {}
+
+In[16]:= ImageCorners[byte]
+Out[16]= {{12, 15}, {14, 11}}
+
+In[17]:= ImageCorners[vol]
+Out[17]= {}
+
+In[18]:= ImageCorners[volb]
+Out[18]= {}
+
+In[19]:= ImageChannels[ImageCorners[rgb]]
+Out[19]= ImageChannels[{}]
+
+In[20]:= ImageDimensions[ImageCorners[vol]]
+Out[20]= ImageDimensions[{}]
+```
+
+#### Options
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= ImageCorners[chk, MaxFeatures -> 3]
+Out[4]= {{15, 2}, {15, 15}, {2, 2}}
+
+In[5]:= ImageCorners[disk, MaxFeatures -> 2]
+Out[5]= {{5, 12}, {12, 5}}
+
+In[6]:= ImageCorners[zone, MaxFeatures -> 5]
+Out[6]= {{31, 31}, {11, 10}, {11, 22}, {21, 10}, {21, 22}}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= Binarize[ImageCorners[zone]]
+Out[3]= Binarize[{{31, 31}, {11, 10}, {11, 22}, {21, 10}, {21, 22}, {6, 7}, {6, 25}, {25, 6}, {26, 25}, {22, 28}, {28, 10}, {10, 28}, {28, 22}, {2, 16}, {16, 2}, {29, 12}, {29, 20}, {12, 29}, {20, 29}}]
+
+In[4]:= Dilation[ImageCorners[disk], 1]
+Out[4]= Dilation[{{5, 12}, {12, 5}, {12, 12}, {5, 5}, {4, 8}, {8, 4}, {8, 13}, {13, 8}}, 1]
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= ImageCorners[zone]
+Out[2]= {{31, 31}, {11, 10}, {11, 22}, {21, 10}, {21, 22}, {6, 7}, {6, 25}, {25, 6}, {26, 25}, {22, 28}, {28, 10}, {10, 28}, {28, 22}, {2, 16}, {16, 2}, {29, 12}, {29, 20}, {12, 29}, {20, 29}}
+```
+
 ## Dilation
 Morphological dilation: the maximum over a structuring element.
 
@@ -2154,6 +3955,122 @@ Morphological dilation: the maximum over a structuring element.
 
 ```mathematica
 In[1]:= ImageData[Dilation[Image[{{0., 0., 0.}, {0., 1., 0.}, {0., 0., 0.}}], 1]]
+```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[3]:= Dilation[disk, 1]
+Out[3]= -Image-
+
+In[4]:= Dilation[disk, 2]
+Out[4]= -Image-
+
+In[5]:= ImageDimensions[Dilation[disk, 2]]
+Out[5]= {16, 16}
+
+In[6]:= Dilation[bit, 1]
+Out[6]= -Image-
+```
+
+#### Scope
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[6]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[7]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[8]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= Dilation[chk, 1]
+Out[9]= -Image-
+
+In[10]:= Dilation[ramp, 1]
+Out[10]= -Image-
+
+In[11]:= Dilation[noise, 2]
+Out[11]= -Image-
+
+In[12]:= Dilation[rgb, 1]
+Out[12]= -Image-
+
+In[13]:= Dilation[byte, 1]
+Out[13]= -Image-
+
+In[14]:= Dilation[vol, 1]
+Out[14]= -Image-
+
+In[15]:= Dilation[volb, 1]
+Out[15]= -Image-
+
+In[16]:= Dilation[disk, 3]
+Out[16]= -Image-
+
+In[17]:= Dilation[disk, 4]
+Out[17]= -Image-
+
+In[18]:= ImageChannels[Dilation[rgb, 1]]
+Out[18]= 3
+
+In[19]:= ImageDimensions[Dilation[vol, 2]]
+Out[19]= {12, 10, 8}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= Binarize[Dilation[noise, 1]]
+Out[3]= -Image-
+
+In[4]:= EdgeDetect[Dilation[disk, 1]]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[3]:= ImageData[Dilation[disk, 0]] === ImageData[disk]
+Out[3]= True
+
+In[4]:= ImageDimensions[Dilation[disk, 3]] === ImageDimensions[disk]
+Out[4]= True
+
+In[5]:= ImageData[Dilation[Dilation[disk, 1], 1]] === ImageData[Dilation[disk, 2]]
+Out[5]= True
+
+In[6]:= Max[Flatten[ImageData[Dilation[bit, 1]]]] <= 1.0
+Out[6]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= Dilation[zone, 2]
+Out[2]= -Image-
 ```
 
 ## Erosion
@@ -2168,6 +4085,122 @@ Morphological erosion: the minimum over a structuring element.
 In[1]:= ImageData[Erosion[Image[{{1., 1., 1.}, {1., 0., 1.}, {1., 1., 1.}}], 1]]
 ```
 
+#### Basic Examples
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[3]:= Erosion[disk, 1]
+Out[3]= -Image-
+
+In[4]:= Erosion[disk, 2]
+Out[4]= -Image-
+
+In[5]:= ImageDimensions[Erosion[disk, 2]]
+Out[5]= {16, 16}
+
+In[6]:= Erosion[bit, 1]
+Out[6]= -Image-
+```
+
+#### Scope
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[6]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[7]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[8]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= Erosion[chk, 1]
+Out[9]= -Image-
+
+In[10]:= Erosion[ramp, 1]
+Out[10]= -Image-
+
+In[11]:= Erosion[noise, 2]
+Out[11]= -Image-
+
+In[12]:= Erosion[rgb, 1]
+Out[12]= -Image-
+
+In[13]:= Erosion[byte, 1]
+Out[13]= -Image-
+
+In[14]:= Erosion[vol, 1]
+Out[14]= -Image-
+
+In[15]:= Erosion[volb, 1]
+Out[15]= -Image-
+
+In[16]:= Erosion[disk, 3]
+Out[16]= -Image-
+
+In[17]:= Erosion[disk, 4]
+Out[17]= -Image-
+
+In[18]:= ImageChannels[Erosion[rgb, 1]]
+Out[18]= 3
+
+In[19]:= ImageDimensions[Erosion[vol, 2]]
+Out[19]= {12, 10, 8}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= Binarize[Erosion[noise, 1]]
+Out[3]= -Image-
+
+In[4]:= EdgeDetect[Erosion[disk, 1]]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[3]:= ImageData[Erosion[disk, 0]] === ImageData[disk]
+Out[3]= True
+
+In[4]:= ImageDimensions[Erosion[disk, 3]] === ImageDimensions[disk]
+Out[4]= True
+
+In[5]:= ImageData[Erosion[Erosion[disk, 1], 1]] === ImageData[Erosion[disk, 2]]
+Out[5]= True
+
+In[6]:= Max[Flatten[ImageData[Erosion[bit, 1]]]] <= 1.0
+Out[6]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= Erosion[zone, 2]
+Out[2]= -Image-
+```
+
 ## Opening
 Erosion then dilation with the same element. Idempotent.
 
@@ -2178,6 +4211,119 @@ Erosion then dilation with the same element. Idempotent.
 
 ```mathematica
 In[1]:= Module[{img = Image[{{0., 0., 0.}, {0., 1., 0.}, {0., 0., 0.}}]}, ImageData[Opening[Opening[img, 1], 1]] === ImageData[Opening[img, 1]]]
+```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[3]:= Opening[disk, 1]
+Out[3]= -Image-
+
+In[4]:= Opening[disk, 2]
+Out[4]= -Image-
+
+In[5]:= ImageDimensions[Opening[disk, 2]]
+Out[5]= {16, 16}
+
+In[6]:= Opening[bit, 1]
+Out[6]= -Image-
+```
+
+#### Scope
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[6]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[7]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[8]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= Opening[chk, 1]
+Out[9]= -Image-
+
+In[10]:= Opening[ramp, 1]
+Out[10]= -Image-
+
+In[11]:= Opening[noise, 2]
+Out[11]= -Image-
+
+In[12]:= Opening[rgb, 1]
+Out[12]= -Image-
+
+In[13]:= Opening[byte, 1]
+Out[13]= -Image-
+
+In[14]:= Opening[vol, 1]
+Out[14]= -Image-
+
+In[15]:= Opening[volb, 1]
+Out[15]= -Image-
+
+In[16]:= Opening[disk, 3]
+Out[16]= -Image-
+
+In[17]:= Opening[disk, 4]
+Out[17]= -Image-
+
+In[18]:= ImageChannels[Opening[rgb, 1]]
+Out[18]= 3
+
+In[19]:= ImageDimensions[Opening[vol, 2]]
+Out[19]= {12, 10, 8}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= Binarize[Opening[noise, 1]]
+Out[3]= -Image-
+
+In[4]:= EdgeDetect[Opening[disk, 1]]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[3]:= ImageData[Opening[disk, 0]] === ImageData[disk]
+Out[3]= True
+
+In[4]:= ImageDimensions[Opening[disk, 3]] === ImageDimensions[disk]
+Out[4]= True
+
+In[5]:= Max[Flatten[ImageData[Opening[bit, 1]]]] <= 1.0
+Out[5]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= Opening[zone, 2]
+Out[2]= -Image-
 ```
 
 ## Closing
@@ -2192,6 +4338,122 @@ Dilation then erosion with the same element. Idempotent.
 In[1]:= ImageData[Closing[Image[{{1., 1., 1.}, {1., 0., 1.}, {1., 1., 1.}}], 1]]
 ```
 
+#### Basic Examples
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[3]:= Closing[disk, 1]
+Out[3]= -Image-
+
+In[4]:= Closing[disk, 2]
+Out[4]= -Image-
+
+In[5]:= ImageDimensions[Closing[disk, 2]]
+Out[5]= {16, 16}
+
+In[6]:= Closing[bit, 1]
+Out[6]= -Image-
+```
+
+#### Scope
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[6]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[7]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[8]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= Closing[chk, 1]
+Out[9]= -Image-
+
+In[10]:= Closing[ramp, 1]
+Out[10]= -Image-
+
+In[11]:= Closing[noise, 2]
+Out[11]= -Image-
+
+In[12]:= Closing[rgb, 1]
+Out[12]= -Image-
+
+In[13]:= Closing[byte, 1]
+Out[13]= -Image-
+
+In[14]:= Closing[vol, 1]
+Out[14]= -Image-
+
+In[15]:= Closing[volb, 1]
+Out[15]= -Image-
+
+In[16]:= Closing[disk, 3]
+Out[16]= -Image-
+
+In[17]:= Closing[disk, 4]
+Out[17]= -Image-
+
+In[18]:= ImageChannels[Closing[rgb, 1]]
+Out[18]= 3
+
+In[19]:= ImageDimensions[Closing[vol, 2]]
+Out[19]= {12, 10, 8}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= Binarize[Closing[noise, 1]]
+Out[3]= -Image-
+
+In[4]:= EdgeDetect[Closing[disk, 1]]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[3]:= ImageData[Closing[disk, 0]] === ImageData[disk]
+Out[3]= True
+
+In[4]:= ImageDimensions[Closing[disk, 3]] === ImageDimensions[disk]
+Out[4]= True
+
+In[5]:= ImageData[Closing[Closing[disk, 1], 1]] === ImageData[Closing[disk, 2]]
+Out[5]= True
+
+In[6]:= Max[Flatten[ImageData[Closing[bit, 1]]]] <= 1.0
+Out[6]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= Closing[zone, 2]
+Out[2]= -Image-
+```
+
 ## MeanFilter
 The mean over a square or cubic window.
 
@@ -2202,6 +4464,142 @@ The mean over a square or cubic window.
 
 ```mathematica
 In[1]:= ImageData[MeanFilter[Image[{{0., 0., 0.}, {0., 1., 0.}, {0., 0., 0.}}], 1]]
+```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= MeanFilter[chk, 2]
+Out[2]= -Image-
+
+In[3]:= ImageDimensions[MeanFilter[chk, 2]]
+Out[3]= {16, 16}
+
+In[4]:= ImageType[MeanFilter[chk, 1]]
+Out[4]= Real
+```
+
+#### Scope
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[6]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[7]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[8]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[9]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[10]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[11]:= MeanFilter[disk, 1]
+Out[11]= -Image-
+
+In[12]:= MeanFilter[ramp, 2]
+Out[12]= -Image-
+
+In[13]:= MeanFilter[zone, 2]
+Out[13]= -Image-
+
+In[14]:= MeanFilter[noise, 3]
+Out[14]= -Image-
+
+In[15]:= MeanFilter[rgb, 1]
+Out[15]= -Image-
+
+In[16]:= MeanFilter[sky, 2]
+Out[16]= -Image-
+
+In[17]:= MeanFilter[bit, 1]
+Out[17]= -Image-
+
+In[18]:= MeanFilter[byte, 2]
+Out[18]= -Image-
+
+In[19]:= MeanFilter[vol, 1]
+Out[19]= -Image-
+
+In[20]:= ImageChannels[MeanFilter[rgb, 2]]
+Out[20]= 3
+
+In[21]:= ImageDimensions[MeanFilter[vol, 1]]
+Out[21]= {12, 10, 8}
+
+In[22]:= MeanFilter[chk, 4]
+Out[22]= -Image-
+```
+
+#### Applications
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= Binarize[MeanFilter[noise, 2]]
+Out[4]= -Image-
+
+In[5]:= EdgeDetect[MeanFilter[zone, 2]]
+Out[5]= -Image-
+
+In[6]:= ImageDimensions[MeanFilter[Import[Export["/tmp/mathilda_ex.png", rgb]], 2]]
+Out[6]= {16, 16}
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[5]:= ImageDimensions[MeanFilter[chk, 3]] === ImageDimensions[chk]
+Out[5]= True
+
+In[6]:= ImageChannels[MeanFilter[rgb, 2]] === ImageChannels[rgb]
+Out[6]= True
+
+In[7]:= ImageData[MeanFilter[ramp, 0]] === ImageData[ramp]
+Out[7]= True
+
+In[8]:= Max[Flatten[ImageData[MeanFilter[chk, 2]]]] <= 1.0
+Out[8]= True
+
+In[9]:= Min[Flatten[ImageData[MeanFilter[chk, 2]]]] >= 0.0
+Out[9]= True
+
+In[10]:= ImageDimensions[MeanFilter[vol, 2]] === ImageDimensions[vol]
+Out[10]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= MeanFilter[zone, 4]
+Out[2]= -Image-
+
+In[3]:= MeanFilter[zone, 1]
+Out[3]= -Image-
 ```
 
 ## MedianFilter
@@ -2217,6 +4615,142 @@ The median over a window. Every output value is an input value.
 In[1]:= ImageData[MedianFilter[Image[{{0.25, 0.25, 0.25}, {0.25, 1., 0.25}, {0.25, 0.25, 0.25}}], 1]]
 ```
 
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= MedianFilter[chk, 2]
+Out[2]= -Image-
+
+In[3]:= ImageDimensions[MedianFilter[chk, 2]]
+Out[3]= {16, 16}
+
+In[4]:= ImageType[MedianFilter[chk, 1]]
+Out[4]= Real
+```
+
+#### Scope
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[6]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[7]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[8]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[9]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[10]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[11]:= MedianFilter[disk, 1]
+Out[11]= -Image-
+
+In[12]:= MedianFilter[ramp, 2]
+Out[12]= -Image-
+
+In[13]:= MedianFilter[zone, 2]
+Out[13]= -Image-
+
+In[14]:= MedianFilter[noise, 3]
+Out[14]= -Image-
+
+In[15]:= MedianFilter[rgb, 1]
+Out[15]= -Image-
+
+In[16]:= MedianFilter[sky, 2]
+Out[16]= -Image-
+
+In[17]:= MedianFilter[bit, 1]
+Out[17]= -Image-
+
+In[18]:= MedianFilter[byte, 2]
+Out[18]= -Image-
+
+In[19]:= MedianFilter[vol, 1]
+Out[19]= -Image-
+
+In[20]:= ImageChannels[MedianFilter[rgb, 2]]
+Out[20]= 3
+
+In[21]:= ImageDimensions[MedianFilter[vol, 1]]
+Out[21]= {12, 10, 8}
+
+In[22]:= MedianFilter[chk, 4]
+Out[22]= -Image-
+```
+
+#### Applications
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= Binarize[MedianFilter[noise, 2]]
+Out[4]= -Image-
+
+In[5]:= EdgeDetect[MedianFilter[zone, 2]]
+Out[5]= -Image-
+
+In[6]:= ImageDimensions[MedianFilter[Import[Export["/tmp/mathilda_ex.png", rgb]], 2]]
+Out[6]= {16, 16}
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[5]:= ImageDimensions[MedianFilter[chk, 3]] === ImageDimensions[chk]
+Out[5]= True
+
+In[6]:= ImageChannels[MedianFilter[rgb, 2]] === ImageChannels[rgb]
+Out[6]= True
+
+In[7]:= ImageData[MedianFilter[ramp, 0]] === ImageData[ramp]
+Out[7]= True
+
+In[8]:= Max[Flatten[ImageData[MedianFilter[chk, 2]]]] <= 1.0
+Out[8]= True
+
+In[9]:= Min[Flatten[ImageData[MedianFilter[chk, 2]]]] >= 0.0
+Out[9]= True
+
+In[10]:= ImageDimensions[MedianFilter[vol, 2]] === ImageDimensions[vol]
+Out[10]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= MedianFilter[zone, 4]
+Out[2]= -Image-
+
+In[3]:= MedianFilter[zone, 1]
+Out[3]= -Image-
+```
+
 ## DistanceTransform
 Distance from each pixel to the nearest background pixel.
 
@@ -2228,6 +4762,108 @@ Distance from each pixel to the nearest background pixel.
 
 ```mathematica
 In[1]:= ImageData[DistanceTransform[Image[{{1., 1., 1., 1., 1.}, {1., 1., 1., 1., 1.}, {1., 1., 0., 1., 1.}, {1., 1., 1., 1., 1.}, {1., 1., 1., 1., 1.}}]]]
+```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= DistanceTransform[chk]
+Out[3]= -Image-
+
+In[4]:= DistanceTransform[disk]
+Out[4]= -Image-
+
+In[5]:= ImageDimensions[DistanceTransform[chk]]
+Out[5]= {16, 16}
+```
+
+#### Scope
+
+```mathematica
+In[1]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[5]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[6]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[7]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[8]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[10]:= DistanceTransform[ramp]
+Out[10]= -Image-
+
+In[11]:= DistanceTransform[zone]
+Out[11]= -Image-
+
+In[12]:= DistanceTransform[noise]
+Out[12]= -Image-
+
+In[13]:= DistanceTransform[rgb]
+Out[13]= -Image-
+
+In[14]:= DistanceTransform[sky]
+Out[14]= -Image-
+
+In[15]:= DistanceTransform[bit]
+Out[15]= -Image-
+
+In[16]:= DistanceTransform[byte]
+Out[16]= -Image-
+
+In[17]:= DistanceTransform[vol]
+Out[17]= -Image-
+
+In[18]:= DistanceTransform[volb]
+Out[18]= -Image-
+
+In[19]:= ImageChannels[DistanceTransform[rgb]]
+Out[19]= 1
+
+In[20]:= ImageDimensions[DistanceTransform[vol]]
+Out[20]= {12, 10, 8}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= Dilation[DistanceTransform[disk], 1]
+Out[2]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ImageDimensions[DistanceTransform[chk]] === ImageDimensions[chk]
+Out[2]= True
+
+In[3]:= Min[Flatten[ImageData[DistanceTransform[chk]]]] >= 0.0
+Out[3]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= DistanceTransform[zone]
+Out[2]= -Image-
 ```
 
 ## ImageReflect
@@ -2246,6 +4882,116 @@ In[2]:= ImageData[ImageReflect[Image[{{1., 2.}, {3., 4.}}], Left]]
 In[3]:= Module[{img = Image[{{1., 2.}, {3., 4.}}]}, ImageReflect[ImageReflect[img]] === img]
 ```
 
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageReflect[chk]
+Out[3]= -Image-
+
+In[4]:= ImageReflect[disk]
+Out[4]= -Image-
+
+In[5]:= ImageDimensions[ImageReflect[chk]]
+Out[5]= {16, 16}
+```
+
+#### Scope
+
+```mathematica
+In[1]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[5]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[6]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[7]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[8]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[10]:= ImageReflect[ramp]
+Out[10]= -Image-
+
+In[11]:= ImageReflect[zone]
+Out[11]= -Image-
+
+In[12]:= ImageReflect[noise]
+Out[12]= -Image-
+
+In[13]:= ImageReflect[rgb]
+Out[13]= -Image-
+
+In[14]:= ImageReflect[sky]
+Out[14]= -Image-
+
+In[15]:= ImageReflect[bit]
+Out[15]= -Image-
+
+In[16]:= ImageReflect[byte]
+Out[16]= -Image-
+
+In[17]:= ImageReflect[vol]
+Out[17]= -Image-
+
+In[18]:= ImageReflect[volb]
+Out[18]= -Image-
+
+In[19]:= ImageChannels[ImageReflect[rgb]]
+Out[19]= 3
+
+In[20]:= ImageDimensions[ImageReflect[vol]]
+Out[20]= {12, 10, 8}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= Binarize[ImageReflect[zone]]
+Out[3]= -Image-
+
+In[4]:= Dilation[ImageReflect[disk], 1]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ImageDimensions[ImageReflect[chk]] === ImageDimensions[chk]
+Out[2]= True
+
+In[3]:= Max[Flatten[ImageData[ImageReflect[chk]]]] <= 1.0
+Out[3]= True
+
+In[4]:= Min[Flatten[ImageData[ImageReflect[chk]]]] >= 0.0
+Out[4]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= ImageReflect[zone]
+Out[2]= -Image-
+```
+
 ## ImageRotate
 Rotates an image. Right angles are exact index permutations.
 
@@ -2261,6 +5007,121 @@ In[1]:= ImageData[ImageRotate[Image[{{1., 2.}, {3., 4.}}]]]
 In[2]:= Module[{img = Image[{{1., 2.}, {3., 4.}}]}, Nest[ImageRotate, img, 4] === img]
 ```
 
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= ImageRotate[chk]
+Out[3]= -Image-
+
+In[4]:= ImageRotate[disk]
+Out[4]= -Image-
+
+In[5]:= ImageDimensions[ImageRotate[chk]]
+Out[5]= {16, 16}
+
+In[6]:= ImageRotate[chk, 0.4]
+Out[6]= -Image-
+```
+
+#### Scope
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[6]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[7]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[8]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[9]:= ImageRotate[rgb]
+Out[9]= -Image-
+
+In[10]:= ImageRotate[sky]
+Out[10]= -Image-
+
+In[11]:= ImageRotate[bit]
+Out[11]= -Image-
+
+In[12]:= ImageRotate[byte]
+Out[12]= -Image-
+
+In[13]:= ImageRotate[zone]
+Out[13]= -Image-
+
+In[14]:= ImageRotate[ramp]
+Out[14]= -Image-
+
+In[15]:= ImageRotate[noise, 0.8]
+Out[15]= -Image-
+
+In[16]:= ImageRotate[disk, 1.2]
+Out[16]= -Image-
+
+In[17]:= ImageRotate[zone, 0.3]
+Out[17]= -Image-
+
+In[18]:= ImageChannels[ImageRotate[rgb]]
+Out[18]= 3
+
+In[19]:= ImageDimensions[ImageRotate[sky]]
+Out[19]= {16, 24}
+```
+
+#### Applications
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[3]:= EdgeDetect[ImageRotate[chk]]
+Out[3]= -Image-
+
+In[4]:= Binarize[ImageRotate[zone, 0.5]]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[4]:= ImageData[ImageRotate[ImageRotate[ImageRotate[ImageRotate[chk]]]]] === ImageData[chk]
+Out[4]= True
+
+In[5]:= ImageChannels[ImageRotate[rgb]] === ImageChannels[rgb]
+Out[5]= True
+
+In[6]:= ImageData[ImageRotate[disk, 0.]] === ImageData[disk]
+Out[6]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= ImageRotate[zone, 0.7]
+Out[2]= -Image-
+```
+
 ## Image3DQ
 Tests whether an expression is a well-formed volumetric image.
 
@@ -2272,3 +5133,104 @@ Tests whether an expression is a well-formed volumetric image.
 In[1]:= Image3DQ[Image3D[{{{0., 1.}, {1., 0.}}}]]
 In[2]:= Image3DQ[Image[{{0., 1.}}]]
 ```
+
+#### Basic Examples
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= bit = Image[Table[Boole[Mod[i + j, 2] == 0], {i, 1, 8}, {j, 1, 8}]];
+
+In[4]:= byte = Image[Table[Mod[i*13 + j*7, 256], {i, 1, 16}, {j, 1, 16}]];
+
+In[5]:= Image3DQ[chk]
+Out[5]= False
+
+In[6]:= Image3DQ[rgb]
+Out[6]= False
+
+In[7]:= Image3DQ[bit]
+Out[7]= False
+
+In[8]:= Image3DQ[byte]
+Out[8]= False
+```
+
+#### Scope
+
+```mathematica
+In[1]:= disk = Image[Table[N[Boole[(i - 8.5)^2 + (j - 8.5)^2 <= 25]], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ramp = Image[Table[N[(j - 1)/15], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[4]:= noise = Image[Table[N[Mod[i*37 + j*17, 101]]/101, {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[5]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[6]:= sky = Image[Table[{N[0.15 + 0.7 (16 - i)/16], N[0.35 + 0.45 (16 - i)/16], N[0.85 - 0.35 (16 - i)/16]}, {i, 1, 16}, {j, 1, 24}], "Real"];
+
+In[7]:= vol = Image3D[Table[N[Mod[z*7 + y*13 + x*3, 97]]/97, {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[8]:= volb = Image3D[Table[N[Boole[x <= 6 && y <= 5]], {z, 1, 8}, {y, 1, 10}, {x, 1, 12}], "Real"];
+
+In[9]:= Image3DQ[disk]
+Out[9]= False
+
+In[10]:= Image3DQ[ramp]
+Out[10]= False
+
+In[11]:= Image3DQ[zone]
+Out[11]= False
+
+In[12]:= Image3DQ[noise]
+Out[12]= False
+
+In[13]:= Image3DQ[sky]
+Out[13]= False
+
+In[14]:= Image3DQ[vol]
+Out[14]= True
+
+In[15]:= Image3DQ[volb]
+Out[15]= True
+
+In[16]:= Image3DQ[Import[Export["/tmp/mathilda_ex.png", rgb]]]
+Out[16]= False
+```
+
+#### Applications
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= Table[Image3DQ[GaussianFilter[chk, r]], {r, 1, 3}]
+Out[2]= {False, False, False}
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= chk = Image[Table[If[Mod[Quotient[i - 1, 2] + Quotient[j - 1, 2], 2] == 0, 0., 1.], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= rgb = Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[3]:= Image3DQ[chk] === Image3DQ[GaussianFilter[chk, 1]]
+Out[3]= True
+
+In[4]:= Image3DQ[rgb] === Image3DQ[ImagePad[rgb, 2]]
+Out[4]= True
+```
+
+#### Neat Examples
+
+```mathematica
+In[1]:= zone = Image[Table[N[(1 + Cos[((i - 16)^2 + (j - 16)^2)/40.])/2], {i, 1, 32}, {j, 1, 32}], "Real"];
+
+In[2]:= Image3DQ[zone]
+Out[2]= False
+```
+
