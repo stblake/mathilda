@@ -2,7 +2,7 @@
 
 Every public built-in function in Mathilda, grouped by category. Each page follows the same shape: **Description** (the function's docstring), **Examples** (verified against the current build), **Implementation notes**, **Implementation status**, and **References**.
 
-_830 functions across 35 categories. Use the search box (press `/`) to jump to any function._
+_833 functions across 35 categories. Use the search box (press `/`) to jump to any function._
 
 ## Categories
 
@@ -64,7 +64,7 @@ _830 functions across 35 categories. Use the search box (press `/`) to jump to a
 
 ### [Image Processing](image-processing/index.md)
 
-[`AlphaChannel`](image-processing/AlphaChannel.md)  [`Binarize`](image-processing/Binarize.md)  [`BoxMatrix`](image-processing/BoxMatrix.md)  [`Closing`](image-processing/Closing.md)  [`ColorConvert`](image-processing/ColorConvert.md)  [`CornerFilter`](image-processing/CornerFilter.md)  [`DerivativeFilter`](image-processing/DerivativeFilter.md)  [`Dilation`](image-processing/Dilation.md)  [`DistanceTransform`](image-processing/DistanceTransform.md)  [`EdgeDetect`](image-processing/EdgeDetect.md)  [`Erosion`](image-processing/Erosion.md)  [`FindThreshold`](image-processing/FindThreshold.md)  [`GaussianFilter`](image-processing/GaussianFilter.md)  [`GaussianMatrix`](image-processing/GaussianMatrix.md)  [`GradientFilter`](image-processing/GradientFilter.md)  [`Image`](image-processing/Image.md)  [`Image3D`](image-processing/Image3D.md)  [`Image3DQ`](image-processing/Image3DQ.md)  [`ImageAdjust`](image-processing/ImageAdjust.md)  [`ImageAssemble`](image-processing/ImageAssemble.md)  [`ImageChannels`](image-processing/ImageChannels.md)  [`ImageCompose`](image-processing/ImageCompose.md)  [`ImageConvolve`](image-processing/ImageConvolve.md)  [`ImageCorners`](image-processing/ImageCorners.md)  [`ImageCorrelate`](image-processing/ImageCorrelate.md)  [`ImageCrop`](image-processing/ImageCrop.md)  [`ImageData`](image-processing/ImageData.md)  [`ImageDimensions`](image-processing/ImageDimensions.md)  [`ImageLevels`](image-processing/ImageLevels.md)  [`ImagePad`](image-processing/ImagePad.md)  [`ImageQ`](image-processing/ImageQ.md)  [`ImageReflect`](image-processing/ImageReflect.md)  [`ImageResize`](image-processing/ImageResize.md)  [`ImageRotate`](image-processing/ImageRotate.md)  [`ImageType`](image-processing/ImageType.md)  [`LocalAdaptiveBinarize`](image-processing/LocalAdaptiveBinarize.md)  [`MeanFilter`](image-processing/MeanFilter.md)  [`MedianFilter`](image-processing/MedianFilter.md)  [`MorphologicalComponents`](image-processing/MorphologicalComponents.md)  [`Opening`](image-processing/Opening.md)  [`Pruning`](image-processing/Pruning.md)  [`RandomImage`](image-processing/RandomImage.md)  [`RemoveAlphaChannel`](image-processing/RemoveAlphaChannel.md)  [`SetAlphaChannel`](image-processing/SetAlphaChannel.md)  [`Thinning`](image-processing/Thinning.md)
+[`AlphaChannel`](image-processing/AlphaChannel.md)  [`Binarize`](image-processing/Binarize.md)  [`BoxMatrix`](image-processing/BoxMatrix.md)  [`Closing`](image-processing/Closing.md)  [`ColorConvert`](image-processing/ColorConvert.md)  [`ColorQuantize`](image-processing/ColorQuantize.md)  [`ColorReplace`](image-processing/ColorReplace.md)  [`CornerFilter`](image-processing/CornerFilter.md)  [`DerivativeFilter`](image-processing/DerivativeFilter.md)  [`Dilation`](image-processing/Dilation.md)  [`DistanceTransform`](image-processing/DistanceTransform.md)  [`EdgeDetect`](image-processing/EdgeDetect.md)  [`Erosion`](image-processing/Erosion.md)  [`FindThreshold`](image-processing/FindThreshold.md)  [`GaussianFilter`](image-processing/GaussianFilter.md)  [`GaussianMatrix`](image-processing/GaussianMatrix.md)  [`GradientFilter`](image-processing/GradientFilter.md)  [`HistogramTransform`](image-processing/HistogramTransform.md)  [`Image`](image-processing/Image.md)  [`Image3D`](image-processing/Image3D.md)  [`Image3DQ`](image-processing/Image3DQ.md)  [`ImageAdjust`](image-processing/ImageAdjust.md)  [`ImageAssemble`](image-processing/ImageAssemble.md)  [`ImageChannels`](image-processing/ImageChannels.md)  [`ImageCompose`](image-processing/ImageCompose.md)  [`ImageConvolve`](image-processing/ImageConvolve.md)  [`ImageCorners`](image-processing/ImageCorners.md)  [`ImageCorrelate`](image-processing/ImageCorrelate.md)  [`ImageCrop`](image-processing/ImageCrop.md)  [`ImageData`](image-processing/ImageData.md)  [`ImageDimensions`](image-processing/ImageDimensions.md)  [`ImageLevels`](image-processing/ImageLevels.md)  [`ImagePad`](image-processing/ImagePad.md)  [`ImageQ`](image-processing/ImageQ.md)  [`ImageReflect`](image-processing/ImageReflect.md)  [`ImageResize`](image-processing/ImageResize.md)  [`ImageRotate`](image-processing/ImageRotate.md)  [`ImageType`](image-processing/ImageType.md)  [`LocalAdaptiveBinarize`](image-processing/LocalAdaptiveBinarize.md)  [`MeanFilter`](image-processing/MeanFilter.md)  [`MedianFilter`](image-processing/MedianFilter.md)  [`MorphologicalComponents`](image-processing/MorphologicalComponents.md)  [`Opening`](image-processing/Opening.md)  [`Pruning`](image-processing/Pruning.md)  [`RandomImage`](image-processing/RandomImage.md)  [`RemoveAlphaChannel`](image-processing/RemoveAlphaChannel.md)  [`SetAlphaChannel`](image-processing/SetAlphaChannel.md)  [`Thinning`](image-processing/Thinning.md)
 
 ### [Linear Algebra](linear-algebra/index.md)
 
@@ -256,6 +256,8 @@ _830 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`CoefficientList`](algebra/CoefficientList.md)
 - [`Collect`](algebra/Collect.md)
 - [`ColorConvert`](image-processing/ColorConvert.md)
+- [`ColorQuantize`](image-processing/ColorQuantize.md)
+- [`ColorReplace`](image-processing/ColorReplace.md)
 - [`Commonest`](statistics/Commonest.md)
 - [`Compile`](control-flow/Compile.md)
 - [`CompileDiagnostics`](control-flow/CompileDiagnostics.md)
@@ -473,6 +475,7 @@ _830 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`HermitianMatrixQ`](linear-algebra/HermitianMatrixQ.md)
 - [`HilbertMatrix`](linear-algebra/HilbertMatrix.md)
 - [`Histogram`](graphics/Histogram.md)
+- [`HistogramTransform`](image-processing/HistogramTransform.md)
 - [`Hold`](expression-information/Hold.md)
 - [`HoldAll`](expression-information/HoldAll.md)
 - [`HoldAllComplete`](expression-information/HoldAllComplete.md)

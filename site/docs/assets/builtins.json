@@ -864,6 +864,22 @@
     "url": "documentation/image-processing/ColorConvert/"
   },
   {
+    "name": "ColorQuantize",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ColorQuantize[image, n] reduces the image to at most n colours by MEDIAN CUT: the box with the widest single-channel spread is split at its median until n boxes remain, and each collapses to its mean colour. Widest spread rather than most pixels, since a large box of nearly identical colours does not need splitting and a small one spanning half the spectrum does. Median cut rather than k-means because it is DETERMINISTIC -- a palette that depended on the random stream could not be tested or documented. The channel count is preserved and alpha passes through.",
+    "url": "documentation/image-processing/ColorQuantize/"
+  },
+  {
+    "name": "ColorReplace",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "ColorReplace[image, old -> new] replaces every pixel within a tolerance of `old` by `new`; ColorReplace[image, {r1, r2, ...}] applies several rules and ColorReplace[image, rules, tol] sets the tolerance (default 0.02 -- at 0 only bit-identical colours match, which after any filtering is nothing at all). Distance is Euclidean in RGB, and where rules overlap the NEAREST wins rather than the first, so the answer does not depend on the order they were written. Colours may be RGBColor[r, g, b], GrayLevel[v], a number or {r, g, b}. Replacing a grey image's colour with a non-grey one produces a three-channel image, since flattening the new colour to its luminance would give grey when the caller asked for red. An alpha channel passes through: transparency is not a colour.",
+    "url": "documentation/image-processing/ColorReplace/"
+  },
+  {
     "name": "Commonest",
     "category": "Statistics",
     "slug": "statistics",
@@ -2598,6 +2614,14 @@
     "status": "Stable",
     "summary": "Histogram[data, opts...]",
     "url": "documentation/graphics/Histogram/"
+  },
+  {
+    "name": "HistogramTransform",
+    "category": "Image Processing",
+    "slug": "image-processing",
+    "status": "Stable",
+    "summary": "HistogramTransform[image] equalises the histogram, spreading the brightness distribution toward uniform over 256 bins by mapping each value through the cumulative distribution. The mapping is computed from the LUMINANCE and applied to every channel as a ratio, so hue survives; equalising each channel independently would shift colour, since it removes exactly the imbalance that makes an image warm or cool. A black pixel has no ratio to scale and takes the new luminance in every channel. Alpha passes through.",
+    "url": "documentation/image-processing/HistogramTransform/"
   },
   {
     "name": "Hold",
