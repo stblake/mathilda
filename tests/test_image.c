@@ -2354,6 +2354,80 @@ static void test_colorconvert_equal_channels_is_value_dependent(void) {
     assert_eval_eq("1.0 - (0.299 + 0.587 + 0.114) != 0", "True", 0);
 }
 
+
+/* --------------------------------------------------------------- Import / Export
+ *
+ * The round trip is the only property worth asserting here, and it has to be asserted in the two
+ * directions separately because they fail differently: a wrong Export writes a file no other program
+ * can read (invisible to a test that reads it back with our own Import), and a wrong Import misreads
+ * a correct file. Byte quantisation bounds the error at 1/510 per sample -- half a level -- so the
+ * comparison is a bound, not an equality, and stating the bound is what makes the test able to catch
+ * a channel swap: swapping red and blue stays well inside any loose tolerance but not inside this
+ * one, for an image whose channels differ. */
+#define IOIMG "Image[Table[{N[i/12], N[j/16], N[Mod[i + j, 8]]/8}, {i, 1, 12}, {j, 1, 16}], \"Real\"]"
+
+static void test_png_round_trip_is_exact_to_the_quantisation(void) {
+    assert_eval_eq("Module[{f = \"/tmp/mathilda_test_rt.png\", a = " IOIMG ", b},"
+                   " b = Import[Export[f, a]];"
+                   " {ImageDimensions[b] === ImageDimensions[a], ImageChannels[b],"
+                   "  Max[Abs[Flatten[ImageData[b] - ImageData[a]]]] <= 1/510. + 1.*^-12}]",
+                   "{True, 3, True}", 0);
+    /* A grey file stays grey and an RGBA file keeps its alpha. Forcing three channels would invent
+     * two for the first and silently discard transparency from the second, and both would still
+     * round-trip a dimension check. */
+    assert_eval_eq("Module[{g = Image[Table[N[i/8], {i, 1, 8}, {j, 1, 8}], \"Real\"],"
+                   "        a = Image[Table[{0.2, 0.4, 0.6, 0.8}, {i, 1, 8}, {j, 1, 8}], \"Real\"]},"
+                   " {ImageChannels[Import[Export[\"/tmp/mathilda_test_g.png\", g]]],"
+                   "  ImageChannels[Import[Export[\"/tmp/mathilda_test_a.png\", a]]]}]",
+                   "{1, 4}", 0);
+    /* An imported image is the SAME representation a filter produces -- packed, canonical, "Real" --
+     * so it is not a second-class citizen that every downstream head has to special-case. */
+    assert_eval_eq("Module[{b = Import[Export[\"/tmp/mathilda_test_rt.png\", " IOIMG "]]},"
+                   " {Head[Part[b, 1]], ImageType[b]}]", "{NDArray, \"Real\"}", 0);
+}
+
+static void test_export_clamps_rather_than_wraps(void) {
+    /* An unsharp mask legitimately overshoots the unit interval and 8-bit output has nowhere to put
+     * that. Wrapping would turn a bright highlight black, which reads as a bug in the filter rather
+     * than in the writer. */
+    assert_eval_eq("ImageData[Import[Export[\"/tmp/mathilda_test_clamp.png\","
+                   " Image[{{2.0, -1.0}, {1.0, 0.0}}, \"Real\"]]]]",
+                   "{{1.0, 0.0}, {1.0, 0.0}}", 0);
+}
+
+static void test_import_distinguishes_missing_from_unclaimed(void) {
+    /* Two different failures, deliberately given two different answers: a file we can read and
+     * could not is $Failed, and a format nothing here claims stays unevaluated so a later format
+     * handler can pick it up. Collapsing both to $Failed would make Import[x] look implemented for
+     * every format in existence. */
+    assert_eval_eq("Import[\"/tmp/mathilda_no_such_file_2718.png\"]", "$Failed", 0);
+    assert_eval_eq("Head[Import[\"/tmp/mathilda_whatever.xyz\"]]", "Import", 0);
+    /* A volume has no single raster, and quietly writing its middle slice would be a lie about what
+     * was exported. */
+    assert_eval_eq("Head[Export[\"/tmp/mathilda_vol.png\","
+                   " Image3D[Table[0.5, {z, 1, 2}, {y, 1, 2}, {x, 1, 2}], \"Real\"]]]",
+                   "Export", 0);
+}
+
+static void test_lossy_and_lossless_formats_differ_as_expected(void) {
+    /* JPEG is lossy at quality 90: bounded, not exact. Asserting a bound in BOTH directions is what
+     * makes this a test rather than a tautology -- an upper bound alone would pass if Export silently
+     * wrote a PNG, and a lower bound alone would pass on garbage. */
+    assert_eval_eq("Module[{a = " IOIMG ", e},"
+                   " e = Mean[Flatten[Abs[ImageData[Import[Export[\"/tmp/mathilda_test.jpg\", a]]]"
+                   "                      - ImageData[a]]]];"
+                   " {e > 0, e < 0.1}]", "{True, True}", 0);
+    /* BMP and TGA are lossless too, so they carry the same bound as PNG. */
+    assert_eval_eq("Module[{a = " IOIMG "},"
+                   " Max[Table[Max[Abs[Flatten[ImageData[Import[Export[f, a]]] - ImageData[a]]]],"
+                   "  {f, {\"/tmp/mathilda_t.bmp\", \"/tmp/mathilda_t.tga\"}}]] <= 1/510. + 1.*^-12]",
+                   "True", 0);
+    /* The format may also be stated instead of inferred, which is the only way to write a file whose
+     * name does not end in one. */
+    assert_eval_eq("ImageDimensions[Import[Export[\"/tmp/mathilda_noext\", " IOIMG ", \"PNG\"],"
+                   " \"Image\"]]", "{16, 12}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2467,6 +2541,10 @@ int main(void) {
     TEST(test_volume_reflect_algebra);
     TEST(test_volume_colorconvert);
     TEST(test_colorconvert_equal_channels_is_value_dependent);
+    TEST(test_png_round_trip_is_exact_to_the_quantisation);
+    TEST(test_export_clamps_rather_than_wraps);
+    TEST(test_import_distinguishes_missing_from_unclaimed);
+    TEST(test_lossy_and_lossless_formats_differ_as_expected);
 
     printf("All image tests passed.\n");
     return 0;

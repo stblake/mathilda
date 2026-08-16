@@ -79,6 +79,7 @@
 #include "info.h"
 #include "meminfo.h"
 #include "image.h"
+#include "imageio.h"
 #include "expand.h"
 #include "expand_power.h"
 #include "poly.h"
@@ -847,6 +848,7 @@ void core_init(void) {
     image_init();
     imagefilter_init();
     imagegeom_init();
+    imageio_init();
     datetime_init();
     linalg_init();
     ml_init();      /* src/ml -- PrincipalComponents, Standardize */
