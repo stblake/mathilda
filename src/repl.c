@@ -15,6 +15,7 @@
 #include "render3d.h"
 #include "graphics_json.h"
 #include "image.h"
+#include "meminfo.h"
 #include "print_latex.h"
 #include "version.h"
 #include <stdio.h>
@@ -446,6 +447,18 @@ static Expr* pipe_final_expr(Expr* e) {
  *
  * The usage message carried only the text, so the notebook had a docstring and no way to know which
  * symbol it described, and therefore could not offer a link to that symbol's page. */
+/* The kernel's resident bytes, for the notebook's status bar.
+ *
+ * Attached to the `done` message rather than exposed as a separate request: memory can only have
+ * changed because something was evaluated, `done` is sent exactly then, and a poll would either
+ * lag or add traffic for a number that was already available. Zero when the platform cannot report
+ * it, which the front end shows as nothing rather than as "0 B". */
+static uint64_t pipe_memory_bytes(void) {
+    uint64_t b = 0;
+    if (!meminfo_current(&b)) return 0;
+    return b;
+}
+
 static const char* pipe_info_symbol(Expr* parsed) {
     Expr* e = pipe_final_expr(parsed);
     if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 1) return NULL;
@@ -491,7 +504,8 @@ static void pipe_process_input(const char* input, int id) {
         free(esc);
         free(buf);
         char dbuf[64];
-        snprintf(dbuf, sizeof(dbuf), "{\"id\":%d,\"type\":\"done\"}", id);
+        snprintf(dbuf, sizeof(dbuf), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
         pipe_emit(dbuf);
         return;
     }
@@ -524,7 +538,8 @@ static void pipe_process_input(const char* input, int id) {
 
     if (!evaluated) {
         char buf[64];
-        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
         pipe_emit(buf);
         return;
     }
@@ -564,7 +579,8 @@ static void pipe_process_input(const char* input, int id) {
         }
         expr_free(evaluated);
         char done[64];
-        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
         pipe_emit(done);
         return;
     }
@@ -593,7 +609,8 @@ static void pipe_process_input(const char* input, int id) {
         }
         expr_free(evaluated);
         char done[64];
-        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
         pipe_emit(done);
         return;
     }
@@ -621,7 +638,8 @@ static void pipe_process_input(const char* input, int id) {
                 }
                 free(ijson);
                 char idone[64];
-                snprintf(idone, sizeof(idone), "{\"id\":%d,\"type\":\"done\"}", id);
+                snprintf(idone, sizeof(idone), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
                 pipe_emit(idone);
                 return;
             }
@@ -655,7 +673,8 @@ static void pipe_process_input(const char* input, int id) {
             }
             free(plotly);
             char done[64];
-            snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+            snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
             pipe_emit(done);
             return;
         }
@@ -663,7 +682,8 @@ static void pipe_process_input(const char* input, int id) {
         if (head_sym == SYM_Graphics || head_sym == SYM_Graphics3D) {
             expr_free(evaluated);
             char done[64];
-            snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+            snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
             pipe_emit(done);
             return;
         }
@@ -678,7 +698,8 @@ static void pipe_process_input(const char* input, int id) {
         snprintf(buf, sizeof(buf),
                  "{\"id\":%d,\"type\":\"error\",\"message\":\"Out of memory\"}", id);
         pipe_emit(buf);
-        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
         pipe_emit(buf);
         return;
     }
@@ -691,7 +712,8 @@ static void pipe_process_input(const char* input, int id) {
         snprintf(buf, sizeof(buf),
                  "{\"id\":%d,\"type\":\"error\",\"message\":\"Out of memory\"}", id);
         pipe_emit(buf);
-        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
         pipe_emit(buf);
         return;
     }
@@ -725,7 +747,8 @@ static void pipe_process_input(const char* input, int id) {
     free(latex_esc);
 
     char done[64];
-    snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+    snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
     pipe_emit(done);
 }
 

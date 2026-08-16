@@ -28,6 +28,11 @@ export const evalTotalMs = writable(0);
 
 /** Is the status bar shown? Optional by request — some people want the window
  *  to be nothing but notebook. */
+/** The kernel's resident memory in bytes, as of its last `done`. Null until the first
+ *  evaluation: the number can only change because something was evaluated, so there is nothing
+ *  honest to show before one has been. */
+export const kernelMemory = writable<number | null>(null);
+
 export const showStatusBar = writable(true);
 
 export function recordOp(op: LastOp) {
@@ -54,4 +59,15 @@ export function formatMs(ms: number): string {
   const m = Math.floor(ms / 60_000);
   const s = Math.round((ms % 60_000) / 1000);
   return `${m}m ${s}s`;
+}
+
+/** Bytes for a status bar: three significant figures and a binary unit, so a growing kernel reads
+ *  as a growing number rather than as a wall of digits. */
+export function formatBytes(b: number): string {
+  if (b < 1024) return `${b} B`;
+  const kb = b / 1024;
+  if (kb < 1024) return `${kb.toFixed(0)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : mb.toFixed(0)} MB`;
+  return `${(mb / 1024).toFixed(2)} GB`;
 }

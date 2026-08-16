@@ -13,7 +13,7 @@
 -->
 <script lang="ts">
   import { kernelStatus } from './notebook';
-  import { lastOp, evalCount, evalTotalMs, formatMs } from './status';
+  import { lastOp, evalCount, evalTotalMs, formatMs, kernelMemory, formatBytes } from './status';
   import { activeCell } from './active';
   import { activeActions } from './canvas';
   import { restart } from './kernelActions';
@@ -94,6 +94,16 @@
 
   <!-- Session totals -->
   {#if $evalCount > 0}
+    <!-- The kernel's resident memory, as of its last evaluation. Absent until the first one:
+         the number can only change because something was evaluated, so there is nothing honest
+         to show before that. -->
+    {#if $kernelMemory != null}
+      <span class="seg" title="Resident memory of the kernel process, after its last evaluation">
+        <span class="seg-label">Memory</span>
+        <span class="seg-value">{formatBytes($kernelMemory)}</span>
+      </span>
+      <span class="rule"></span>
+    {/if}
     <span class="seg" title="Evaluations completed this session, and their total kernel time">
       <span class="seg-label">Session</span>
       <span class="seg-value">{$evalCount} eval{$evalCount === 1 ? '' : 's'} · {formatMs($evalTotalMs)}</span>

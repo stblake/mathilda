@@ -14,6 +14,7 @@
   import { MENU_IDS, runMenuCommand } from './lib/menuCommands';
   import { kernelStatus } from './lib/notebook';
   import { darkMode } from './lib/theme';
+  import { kernelMemory } from './lib/status';
   import { pingKernel, saveLibrary, loadLibrary, setWindowTitle as setTitleCmd } from './lib/ipc';
   import { restart, abortEvaluation } from './lib/kernelActions';
   import { serializeLibrary, loadLibraryData, canvasState, activeActions, activeFlags, setFocused } from './lib/canvas';
@@ -67,6 +68,12 @@
          its own one-line listener here, so an item added in Rust silently did nothing until
          someone remembered this file; now the two sides share MENU_IDS and the dispatcher warns
          about an id it has no case for. */
+      /* The kernel reports its resident memory with every `done`; the status bar shows the
+         latest. Its own event rather than part of a cell's output stream, since a memory reading
+         is not output. */
+      unlisten.push(await listen<number>('kernel-memory',
+                                         (e) => kernelMemory.set(e.payload)));
+
       const hooks = { openFile, saveFile, saveFileAs };
       for (const id of MENU_IDS) {
         unlisten.push(await listen(`menu:${id}`, () => runMenuCommand(id, hooks)));

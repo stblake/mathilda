@@ -846,9 +846,15 @@ add_executable(image_tests test_image.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(image_tests PRIVATE ../src)
 add_test(NAME image_tests COMMAND image_tests)
 
-add_executable(flint_bridge_tests test_flint_bridge.c $<TARGET_OBJECTS:mathilda_common>)
-target_include_directories(flint_bridge_tests PRIVATE ../src)
-add_test(NAME flint_bridge_tests COMMAND flint_bridge_tests)
+# ONLY WHEN FLINT IS ON. The comment above says this binary "skips itself at runtime", but it cannot
+# get that far: flint_cyclotomic_gcd and its neighbours are defined inside `#ifdef USE_FLINT`, so in a
+# no-FLINT configuration the target fails to LINK and takes `make` in this directory down with it --
+# a suite that cannot be built is worse than a test that is skipped.
+if(USE_FLINT)
+    add_executable(flint_bridge_tests test_flint_bridge.c $<TARGET_OBJECTS:mathilda_common>)
+    target_include_directories(flint_bridge_tests PRIVATE ../src)
+    add_test(NAME flint_bridge_tests COMMAND flint_bridge_tests)
+endif()
 
 add_executable(list_tests test_list.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(list_tests PRIVATE ../src)
