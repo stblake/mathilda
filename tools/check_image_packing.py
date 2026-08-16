@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "Mathilda"
 SOURCES = ["src/image.c", "src/imagefilter.c", "src/imagegeom.c",
            "src/imagecompose.c", "src/imageio.c",
-           "src/imagethin.c"]
+           "src/imagethin.c", "src/imagecolor.c"]
 
 # Heads known to return nested data. Each line is a standing debt, not a permission: delete the line
 # when the head is fixed, and the gate will tell you to.

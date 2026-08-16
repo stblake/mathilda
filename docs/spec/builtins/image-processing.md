@@ -1107,6 +1107,155 @@ Table[Round[Total[Flatten[ImageData[Pruning[line, k]]]]], {k, 0, 4}]
 Out[6]= {12, 10, 8, 6, 4}
 ```
 
+## ColorReplace
+Replaces colours within a tolerance.
+- `ColorReplace[image, old -> new]`
+- `ColorReplace[image, {rule1, rule2, ...}]`
+- `ColorReplace[image, rules, tol]`
+
+**Features**:
+- `Protected`. Colours may be `RGBColor[r, g, b]`, `GrayLevel[v]`, a bare number, or `{r, g, b}`.
+- Distance is Euclidean in RGB; the default tolerance is `0.02`. At `0` only bit-identical
+  colours match, which after any filtering is nothing at all.
+- Where rules overlap the **nearest** wins, not the first, so the result does not depend on the
+  order they were written in.
+- Replacing a grey image's colour with a non-grey one produces a **three-channel** image:
+  flattening the new colour to its luminance would hand back grey when the caller asked for red.
+  Grey-for-grey does not promote.
+- An alpha channel passes through untouched — transparency is not a colour.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= img = Image[Table[{If[j <= 4, 1., 0.], If[j <= 4, 0., 1.], 0.}, {i, 1, 8}, {j, 1, 8}], "Real"];
+
+In[2]:= ColorReplace[img, RGBColor[1, 0, 0] -> RGBColor[0, 0, 1]]
+Out[2]= -Image-
+
+In[3]:= Union[Flatten[ImageData[ColorReplace[img, RGBColor[1, 0, 0] -> RGBColor[0, 0, 1]]]]]
+Out[3]= {0.0, 1.0}
+
+In[4]:= ColorReplace[img, {RGBColor[1, 0, 0] -> RGBColor[0, 1, 0], RGBColor[0, 1, 0] -> RGBColor[0, 0, 1]}]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= img = Image[Table[{If[j <= 4, 1., 0.], If[j <= 4, 0., 1.], 0.}, {i, 1, 8}, {j, 1, 8}], "Real"];
+
+In[2]:= grey = Image[Table[N[j/8], {i, 1, 8}, {j, 1, 8}], "Real"];
+
+In[3]:= (* a colour nothing matches leaves the image exactly alone *)
+ImageData[ColorReplace[img, RGBColor[0.5, 0.5, 0.5] -> RGBColor[0, 0, 0]]] === ImageData[img]
+Out[3]= True
+
+In[4]:= (* grey replaced by colour promotes to three channels; grey by grey does not *)
+{ImageChannels[ColorReplace[grey, GrayLevel[0.5] -> RGBColor[1, 0, 0], 0.1]], ImageChannels[ColorReplace[grey, GrayLevel[0.5] -> GrayLevel[0.], 0.1]]}
+Out[4]= {3, 1}
+
+In[5]:= (* the colour forms are interchangeable *)
+ImageData[ColorReplace[grey, 0.5 -> 0., 0.1]] === ImageData[ColorReplace[grey, GrayLevel[0.5] -> GrayLevel[0.], 0.1]]
+Out[5]= True
+
+In[6]:= (* a tolerance wide enough to reach every colour collapses the image to one *)
+Length[Union[Flatten[ImageData[ColorReplace[img, RGBColor[1, 0, 0] -> RGBColor[0.25, 0.25, 0.25], 2.0]]]]]
+Out[6]= 1
+```
+
+## ColorQuantize
+Reduces an image to at most `n` colours.
+- `ColorQuantize[image, n]`
+
+**Features**:
+- `Protected`. **Median cut**: the box with the widest single-channel spread is split at its
+  median until `n` boxes remain, and each collapses to its mean colour. Widest spread rather
+  than most pixels — a large box of nearly identical colours does not need splitting, and a
+  small one spanning half the spectrum does.
+- Median cut rather than k-means because it is **deterministic**: a palette that depended on the
+  random stream could be neither tested nor documented.
+- Channel count and dimensions are preserved; alpha passes through.
+- Asking for more colours than the image holds cannot invent any.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= ramp = Image[Table[N[(i + j)/32], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= ColorQuantize[ramp, 4]
+Out[2]= -Image-
+
+In[3]:= Table[Length[Union[Flatten[ImageData[ColorQuantize[ramp, n]]]]], {n, 1, 4}]
+Out[3]= {1, 2, 3, 4}
+
+In[4]:= ColorQuantize[Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"], 6]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= ramp = Image[Table[N[(i + j)/32], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= (* the same input gives the same palette, every time *)
+ImageData[ColorQuantize[ramp, 5]] === ImageData[ColorQuantize[ramp, 5]]
+Out[2]= True
+
+In[3]:= ImageDimensions[ColorQuantize[ramp, 4]] === ImageDimensions[ramp]
+Out[3]= True
+
+In[4]:= (* more colours than the image holds cannot invent any *)
+Length[Union[Flatten[ImageData[ColorQuantize[Image[{{0., 1.}, {0., 1.}}, "Real"], 8]]]]] <= 2
+Out[4]= True
+```
+
+## HistogramTransform
+Equalises an image's brightness histogram.
+- `HistogramTransform[image]`
+
+**Features**:
+- `Protected`. Each value is mapped through the cumulative distribution over 256 bins, spreading
+  the histogram toward uniform.
+- The mapping is computed from the **luminance** and applied to every channel as a ratio, so hue
+  survives. Equalising each channel independently would shift colour — it removes exactly the
+  imbalance that makes an image warm or cool.
+- A black pixel has no ratio to scale and takes the new luminance in every channel.
+- **Monotone**: a cumulative distribution can never reorder two pixels.
+- Alpha passes through.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= dark = Image[Table[N[(i + j)/64], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= HistogramTransform[dark]
+Out[2]= -Image-
+
+In[3]:= (* nothing in the original is above 0.5; afterwards the range is covered *)
+{Round[Max[Flatten[ImageData[dark]]], 0.01], Round[Max[Flatten[ImageData[HistogramTransform[dark]]]], 0.01], Round[Min[Flatten[ImageData[HistogramTransform[dark]]]], 0.01]}
+Out[3]= {0.5, 1.0, 0.0}
+
+In[4]:= HistogramTransform[Image[Table[{N[i/32], N[j/32], 0.25}, {i, 1, 16}, {j, 1, 16}], "Real"]]
+Out[4]= -Image-
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= dark = Image[Table[N[(i + j)/64], {i, 1, 16}, {j, 1, 16}], "Real"];
+
+In[2]:= (* monotone: equalisation is a cumulative distribution, so it cannot reorder pixels *)
+Module[{d = ImageData[HistogramTransform[dark]]}, d[[1, 1]] <= d[[8, 8]] && d[[8, 8]] <= d[[16, 16]]]
+Out[2]= True
+
+In[3]:= ImageDimensions[HistogramTransform[dark]] === ImageDimensions[dark]
+Out[3]= True
+
+In[4]:= (* an already-spread image is near a fixed point, which is what "toward uniform" means *)
+Module[{a = HistogramTransform[dark]}, Max[Abs[Flatten[ImageData[HistogramTransform[a]] - ImageData[a]]]] < 0.2]
+Out[4]= True
+```
+
 ## GaussianMatrix
 
 `GaussianMatrix[r]` gives a `(2r+1) × (2r+1)` Gaussian normalised to sum 1.

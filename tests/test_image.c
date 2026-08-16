@@ -2599,6 +2599,80 @@ static void test_pruning_shortens_branches_without_erasing_specks(void) {
                    " - ImageData[Thinning[" THDIAG "]]]] <= 0", "True", 0);
 }
 
+
+/* -------------------------------------- ColorReplace, ColorQuantize, HistogramTransform */
+#define CRIMG "Image[Table[{If[j <= 4, 1., 0.], If[j <= 4, 0., 1.], 0.}, {i, 1, 8}, {j, 1, 8}], \"Real\"]"
+#define CRGREY "Image[Table[N[j/8], {i, 1, 8}, {j, 1, 8}], \"Real\"]"
+#define CRRAMP "Image[Table[N[(i + j)/32], {i, 1, 16}, {j, 1, 16}], \"Real\"]"
+#define CRDARK "Image[Table[N[(i + j)/64], {i, 1, 16}, {j, 1, 16}], \"Real\"]"
+
+static void test_color_replace_promotes_only_when_it_must(void) {
+    /* Red becomes blue, so only 0 and 1 remain -- and the green channel, which was 1 in half the
+     * image, is now 0 everywhere the replacement hit. */
+    assert_eval_eq("Union[Flatten[ImageData[ColorReplace[" CRIMG ", RGBColor[1, 0, 0] -> RGBColor[0, 0, 1]]]]]",
+                   "{0.0, 1.0}", 0);
+    /* A colour nothing matches leaves the image alone, exactly. */
+    assert_eval_eq("ImageData[ColorReplace[" CRIMG ", RGBColor[0.5, 0.5, 0.5] -> RGBColor[0, 0, 0]]]"
+                   " === ImageData[" CRIMG "]", "True", 0);
+    /* A GREY image replaced by a COLOUR must become three-channel: flattening the new colour to its
+     * luminance would hand back grey when the caller asked for red. Replacing grey with grey does
+     * not promote, because there is nothing to lose. */
+    assert_eval_eq("{ImageChannels[ColorReplace[" CRGREY ", GrayLevel[0.5] -> RGBColor[1, 0, 0], 0.1]],"
+                   " ImageChannels[ColorReplace[" CRGREY ", GrayLevel[0.5] -> GrayLevel[0.], 0.1]]}",
+                   "{3, 1}", 0);
+    /* Several rules at once, and the colour forms are interchangeable. */
+    assert_eval_eq("ImageChannels[ColorReplace[" CRIMG ", {RGBColor[1, 0, 0] -> RGBColor[0, 1, 0],"
+                   " RGBColor[0, 1, 0] -> RGBColor[0, 0, 1]}]]", "3", 0);
+    assert_eval_eq("ImageData[ColorReplace[" CRGREY ", 0.5 -> 0., 0.1]]"
+                   " === ImageData[ColorReplace[" CRGREY ", GrayLevel[0.5] -> GrayLevel[0.], 0.1]]",
+                   "True", 0);
+    /* Tolerance widens the match: at 0.9 in RGB every colour in this image is within reach of red,
+     * so the whole image collapses to one colour. */
+    assert_eval_eq("Length[Union[Flatten[ImageData["
+                   "  ColorReplace[" CRIMG ", RGBColor[1, 0, 0] -> RGBColor[0.25, 0.25, 0.25], 2.0]]]]]",
+                   "1", 0);
+    assert_eval_eq("Head[Part[ColorReplace[" CRIMG ", RGBColor[1, 0, 0] -> RGBColor[0, 0, 1]], 1]]",
+                   "NDArray", 0);
+}
+
+static void test_color_quantize_is_exact_and_reproducible(void) {
+    /* EXACTLY n distinct values, which is the whole claim of a quantiser. */
+    assert_eval_eq("Table[Length[Union[Flatten[ImageData[ColorQuantize[" CRRAMP ", n]]]]], {n, 1, 4}]",
+                   "{1, 2, 3, 4}", 0);
+    /* DETERMINISTIC: median cut rather than k-means precisely so this holds. A seeded palette could
+     * not be asserted at all. */
+    assert_eval_eq("ImageData[ColorQuantize[" CRRAMP ", 5]] === ImageData[ColorQuantize[" CRRAMP ", 5]]",
+                   "True", 0);
+    /* Shape and channel count survive; a colour image stays colour. */
+    assert_eval_eq("{ImageDimensions[ColorQuantize[" CRRAMP ", 4]] === ImageDimensions[" CRRAMP "],"
+                   " ImageChannels[ColorQuantize[" CRIMG ", 3]]}", "{True, 3}", 0);
+    /* Quantising to more colours than the image holds cannot invent any. */
+    assert_eval_eq("Length[Union[Flatten[ImageData[ColorQuantize["
+                   "  Image[{{0., 1.}, {0., 1.}}, \"Real\"], 8]]]]] <= 2", "True", 0);
+    assert_eval_eq("Head[Part[ColorQuantize[" CRRAMP ", 4], 1]]", "NDArray", 0);
+}
+
+static void test_histogram_transform_spreads_and_keeps_order(void) {
+    /* A dark image (nothing above 0.5) reaches 1.0 after equalising, and covers the range. */
+    assert_eval_eq("{Round[Max[Flatten[ImageData[" CRDARK "]]], 0.01],"
+                   " Round[Max[Flatten[ImageData[HistogramTransform[" CRDARK "]]]], 0.01],"
+                   " Round[Min[Flatten[ImageData[HistogramTransform[" CRDARK "]]]], 0.01]}",
+                   "{0.5, 1.0, 0.0}", 0);
+    /* MONOTONE. Equalisation is a cumulative distribution, so it can never reorder two pixels --
+     * a transform that did would not be a brightness mapping at all. */
+    assert_eval_eq("Module[{d = ImageData[HistogramTransform[" CRDARK "]]},"
+                   " d[[1, 1]] <= d[[8, 8]] && d[[8, 8]] <= d[[16, 16]]]", "True", 0);
+    /* Shape, channels and packing are preserved. */
+    assert_eval_eq("{ImageDimensions[HistogramTransform[" CRDARK "]] === ImageDimensions[" CRDARK "],"
+                   " ImageChannels[HistogramTransform[" CRIMG "]],"
+                   " Head[Part[HistogramTransform[" CRDARK "], 1]]}", "{True, 3, NDArray}", 0);
+    /* An image already spread over the full range is close to a fixed point: equalising twice
+     * changes little, which is what "toward uniform" means. */
+    assert_eval_eq("Module[{a = HistogramTransform[" CRDARK "], b},"
+                   " b = HistogramTransform[a];"
+                   " Max[Abs[Flatten[ImageData[b] - ImageData[a]]]] < 0.2]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2723,6 +2797,9 @@ int main(void) {
     TEST(test_assemble_tiles_at_natural_size);
     TEST(test_thinning_reduces_to_a_connected_skeleton);
     TEST(test_pruning_shortens_branches_without_erasing_specks);
+    TEST(test_color_replace_promotes_only_when_it_must);
+    TEST(test_color_quantize_is_exact_and_reproducible);
+    TEST(test_histogram_transform_spreads_and_keeps_order);
 
     printf("All image tests passed.\n");
     return 0;
