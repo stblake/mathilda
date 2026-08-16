@@ -7,11 +7,11 @@
 
 **`Compile[{x, ...}, expr] or Compile[{{x, _Real}, ...}, expr] builds a CompiledFunction that evaluates expr over machine numbers (types _Real, _Integer, _Complex; default _Real), falling back to the interpreter for symbolic arguments or non-compilable bodies. With RuntimeAttributes -> Listable the object threads over List arguments; the default is RuntimeAttributes -> {}. RuntimeOptions -> {"CatchMachineIntegerOverflow" -> False} (or the shorthand RuntimeOptions -> "Speed") lets machine-integer arithmetic wrap instead of falling back to the interpreter, which is faster and gives a different answer from the interpreter once a result leaves the machine-integer range; the default True never does. WorkingPrecision -> n compiles real/complex arithmetic in MPFR at n decimal digits (one fixed precision for the whole function), for the straight-line arithmetic + elementary-function subset; MachinePrecision (the default) keeps the machine path unchanged. "BigIntegers" -> True makes integer arithmetic exact (GMP) instead of int64.`**
 
-## Examples (8)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (6)
+### Basic examples (7)
 
 ```mathematica
 In[1]:= f = Compile[{{x, _Real}}, x^2 + 1]
@@ -39,20 +39,42 @@ In[6]:= Compile[{{m, _Real, 2}}, m[[All, 1]]][{{1., 2.}, {3., 4.}}]
 Out[6]= {1.0, 3.0}
 ```
 
-### Options (2)
+A 5-point stencil: read an argument grid, write a local copy
+
+```mathematica
+In[7]:= Compile[{{a, _Real, 2}}, Module[{n = Length[a], b = a}, Do[b[[i, j]] = (a[[i - 1, j]] + a[[i + 1, j]] + a[[i, j - 1]] + a[[i, j + 1]])/4, {i, 2, n - 1}, {j, 2, n - 1}]; b]][Table[1.0 (10 i + j), {i, 1, 3}, {j, 1, 3}]]
+Out[7]= {{11.0, 12.0, 13.0}, {21.0, 22.0, 23.0}, {31.0, 32.0, 33.0}}
+```
+
+### Scope (1)
+
+```mathematica
+In[8]:= Compile[{{n, _Integer}}, n^20, "BigIntegers" -> True][99]
+Out[8]= 8179069375972308708891986605443361898001
+```
+
+### Options (4)
 
 RuntimeAttributes -> Listable: the object threads over lists
 
 ```mathematica
-In[7]:= h = Compile[{{x, _Real}}, If[x > 0, 1., -1.], RuntimeAttributes -> Listable]; h[{1., -2., 3.}]
-Out[7]= {1.0, -1.0, 1.0}
+In[9]:= h = Compile[{{x, _Real}}, If[x > 0, 1., -1.], RuntimeAttributes -> Listable]; h[{1., -2., 3.}]
+Out[9]= {1.0, -1.0, 1.0}
 ```
 
 A rank-1 parameter consumes one level, so this maps over the rows
 
 ```mathematica
-In[8]:= Compile[{{v, _Real, 1}}, Total[v], RuntimeAttributes -> Listable][ {{1., 2.}, {3., 4.}}]
-Out[8]= {3.0, 7.0}
+In[10]:= Compile[{{v, _Real, 1}}, Total[v], RuntimeAttributes -> Listable][ {{1., 2.}, {3., 4.}}]
+Out[10]= {3.0, 7.0}
+```
+
+```mathematica
+In[11]:= f = Compile[{{x, _Real}}, Sin[x] Cos[x] + x^3, WorkingPrecision -> 40]; f[N[7/5, 40]]
+Out[11]= 2.9114940750779524597719268763562110530148
+
+In[12]:= Compile[{{z, _Complex}}, Exp[z] + z^2, WorkingPrecision -> 45][N[1/2 + I/3, 45]]
+Out[12]= 1.696859506173835946311071541529964410492750645 + 0.8727861896014286091867555415942467494395774456*I
 ```
 
 ## Performance

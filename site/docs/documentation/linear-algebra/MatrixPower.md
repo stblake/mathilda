@@ -9,11 +9,11 @@
 
 gives the n-th matrix power of the square matrix m. MatrixPower\[m, n, v\] gives the n-th matrix power of the matrix m applied to the vector v. When n is negative, MatrixPower finds powers of the inverse of the matrix m. MatrixPower\[m, 0\] gives IdentityMatrix\[Length\[m\]\]. Fractional matrix powers are not currently supported.
 
-## Examples (15)
+## Examples (17)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (10)
 
 ```mathematica
 In[1]:= MatrixPower[{{a, b}, {c, d}}, 2]
@@ -39,31 +39,37 @@ Out[7]= {{a^4, a^2 (a b + b c) + c^2 (a b + b c)}, {0, c^4}}
 
 In[8]:= MatrixPower[{{1, 1}, {1, 2}}, 3, {1, 0}]
 Out[8]= {5, 8}
+
+In[9]:= MatrixPower[{{1, 2}, {3, 4}}, 0]
+Out[9]= {{1, 0}, {0, 1}}
+
+In[10]:= MatrixPower[{{5}}, -2]
+Out[10]= {{1/25}}
 ```
 
 ### Applications (7)
 
 ```mathematica
-In[9]:= MatrixPower[{{1, 1}, {0, 1}}, 3]
-Out[9]= {{1, 3}, {0, 1}}
+In[11]:= MatrixPower[{{1, 1}, {0, 1}}, 3]
+Out[11]= {{1, 3}, {0, 1}}
 
-In[10]:= MatrixPower[{{2, 0}, {0, 3}}, 2]
-Out[10]= {{4, 0}, {0, 9}}
+In[12]:= MatrixPower[{{2, 0}, {0, 3}}, 2]
+Out[12]= {{4, 0}, {0, 9}}
 
-In[11]:= MatrixPower[{{2, 0}, {0, 4}}, -1]
-Out[11]= {{1/2, 0}, {0, 1/4}}
+In[13]:= MatrixPower[{{2, 0}, {0, 4}}, -1]
+Out[13]= {{1/2, 0}, {0, 1/4}}
 
-In[12]:= MatrixPower[{{2, 0}, {0, 3}}, 2, {1, 1}]
-Out[12]= {4, 9}
+In[14]:= MatrixPower[{{2, 0}, {0, 3}}, 2, {1, 1}]
+Out[14]= {4, 9}
 
-In[13]:= MatrixPower[{{2, 1}, {0, 2}}, -2]
-Out[13]= {{1/4, -1/4}, {0, 1/4}}
+In[15]:= MatrixPower[{{2, 1}, {0, 2}}, -2]
+Out[15]= {{1/4, -1/4}, {0, 1/4}}
 
-In[14]:= MatrixPower[{{0, 1}, {1, 1}}, 10]
-Out[14]= {{34, 55}, {55, 89}}
+In[16]:= MatrixPower[{{0, 1}, {1, 1}}, 10]
+Out[16]= {{34, 55}, {55, 89}}
 
-In[15]:= MatrixPower[{{0, 1}, {1, 1}}, 10][[1, 2]] == Fibonacci[10]
-Out[15]= True
+In[17]:= MatrixPower[{{0, 1}, {1, 1}}, 10][[1, 2]] == Fibonacci[10]
+Out[17]= True
 ```
 
 ## Implementation notes

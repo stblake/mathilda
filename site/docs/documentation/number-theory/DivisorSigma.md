@@ -7,7 +7,7 @@
 
 **`DivisorSigma[k, n] gives the divisor function sigma_k(n), the sum of the k-th powers of the divisors of n. DivisorSigma[k, n, GaussianIntegers -> True] sums over Gaussian-integer divisors.`**
 
-## Examples (8)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -37,6 +37,13 @@ Out[7]= {1, 5, 10, 21, 26}
 
 In[8]:= DivisorSigma[1, 3 + I]
 Out[8]= 2 + 6*I
+```
+
+### Options (1)
+
+```mathematica
+In[9]:= DivisorSigma[2, 6, GaussianIntegers -> True]
+Out[9]= -30 + 20*I
 ```
 
 ## Options & behaviour

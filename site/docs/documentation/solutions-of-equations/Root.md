@@ -99,10 +99,10 @@ This file also implements the companion head `RootSum`. `builtin_rootsum` is *no
 
 - Source: [`src/root.c`](https://github.com/stblake/mathilda/blob/main/src/root.c)
 - Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)
+- Tests: [`tests/test_eigen.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eigen.c)
 - Tests: [`tests/test_minimalpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_minimalpolynomial.c)
 - Tests: [`tests/test_radicals.c`](https://github.com/stblake/mathilda/blob/main/tests/test_radicals.c)
 - Tests: [`tests/test_root_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_root_numeric.c)
-- Tests: [`tests/test_rootreduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_rootreduce.c)
 
 ## Notes & additional examples
 

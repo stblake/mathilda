@@ -74,6 +74,7 @@ to the same comparator that `Sort` uses.
 
 - Source: [`src/sort.c`](https://github.com/stblake/mathilda/blob/main/src/sort.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
 - Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
 - Tests: [`tests/test_sort.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sort.c)
 

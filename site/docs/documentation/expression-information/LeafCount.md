@@ -62,6 +62,7 @@ Out[8]= {1, 3, 1, 2, 4}
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
 - Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
 - Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+- Tests: [`tests/test_sum.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sum.c)
 
 ## Notes & additional examples
 

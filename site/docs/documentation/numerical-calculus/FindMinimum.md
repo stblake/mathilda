@@ -36,7 +36,7 @@ Methods (Method -\> ...): Automatic           picks Brent for 1D, QuasiNewton (B
 
 </details>
 
-## Examples (10)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -62,20 +62,27 @@ In[6]:= FindMaximum[Cos[x], {x, 0}]
 Out[6]= {1.0, {x -> -2.3206e-09}}
 ```
 
+### Options (1)
+
+```mathematica
+In[7]:= FindMinimum[(x - Pi)^2, {x, 0}, WorkingPrecision -> 50]
+Out[7]= {0.0, {x -> 3.1415926535897932384626433832795028841971693993751}}
+```
+
 ### Applications (4)
 
 ```mathematica
-In[7]:= FindMinimum[x^2 - 4 x + 7, {x, 0}]
-Out[7]= {3.0, {x -> 2.0}}
+In[8]:= FindMinimum[x^2 - 4 x + 7, {x, 0}]
+Out[8]= {3.0, {x -> 2.0}}
 
-In[8]:= FindMinimum[Cos[x] + x/5, {x, 0, 10}]
-Out[8]= {-0.391749, {x -> 2.94023}}
+In[9]:= FindMinimum[Cos[x] + x/5, {x, 0, 10}]
+Out[9]= {-0.391749, {x -> 2.94023}}
 
-In[9]:= FindMinimum[(1 - x)^2 + 100 (y - x^2)^2, {{x, -1}, {y, 1}}]
-Out[9]= {3.46541e-23, {x -> 1.0, y -> 1.0}}
+In[10]:= FindMinimum[(1 - x)^2 + 100 (y - x^2)^2, {{x, -1}, {y, 1}}]
+Out[10]= {3.46541e-23, {x -> 1.0, y -> 1.0}}
 
-In[10]:= FindMinimum[Gamma[x], {x, 1.5}]
-Out[10]= {0.885603, {x -> 1.46163}}
+In[11]:= FindMinimum[Gamma[x], {x, 1.5}]
+Out[11]= {0.885603, {x -> 1.46163}}
 ```
 
 ## Algorithm
@@ -138,7 +145,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 ## Implementation notes
 
 **Algorithm.** `FindMinimum` (`HoldAll | Protected`) performs local numerical
-optimization (src/findmin.c), Block-snapshotting and restoring the search
+optimization (src/numerical_calculus/findmin.c), Block-snapshotting and restoring the search
 variables' OwnValues around the iteration. The variable spec and dimension
 choose the inner solver:
 
@@ -182,12 +189,12 @@ evaluation or non-convergence, always restoring variable bindings.
 
 ## References
 
-**See also:** [FindMaximum](../../calculus/FindMaximum/), [Block](../../scoping-constructs/Block/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
+**See also:** [FindMaximum](../../numerical-calculus/FindMaximum/), [Block](../../scoping-constructs/Block/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/), [Compile](../../control-flow/Compile/)
 
 - J. Nocedal, S. J. Wright, *Numerical Optimization*, 2nd ed. (Springer, 2006) — BFGS, line search, conjugate gradient.
 - W. H. Press et al., *Numerical Recipes*, 3rd ed. (Cambridge, 2007) — Brent's method.
-- Source: [`src/findmin.c`](https://github.com/stblake/mathilda/blob/main/src/findmin.c)
-- Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
+- Source: [`src/numerical_calculus/findmin.c`](https://github.com/stblake/mathilda/blob/main/src/numerical_calculus/findmin.c)
+- Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)
 - Tests: [`tests/test_findmin.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin.c)
 
 ## Notes & additional examples

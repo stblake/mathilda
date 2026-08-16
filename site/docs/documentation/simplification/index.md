@@ -3,7 +3,7 @@
 7 built-in function(s) in this category.
 
 - [`$Assumptions`]($Assumptions.md) — $Assumptions  _(Stable)_
-- [`$SimplifyDebug`]($SimplifyDebug.md) — $SimplifyDebug  _(Experimental)_
+- [`$SimplifyDebug`]($SimplifyDebug.md) — $SimplifyDebug  _(Stable)_
 - [`Assuming`](Assuming.md) — Assuming[assum, expr]  _(Stable)_
 - [`Element`](Element.md) — Element[x, dom]  _(Stable)_
 - [`Simplify`](Simplify.md) — Simplify[expr]  _(Stable)_

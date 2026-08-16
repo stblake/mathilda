@@ -25,30 +25,40 @@ use tauri::Manager;
 // Native menu bar is a desktop-only concept; iOS/Android have no app menu.
 #[cfg(desktop)]
 fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
+    // Item ids are a CONTRACT with the webview: each one is emitted as `menu:<id>` and handled by
+    // runMenuCommand in src/lib/menuCommands.ts, whose MENU_IDS list is what App.svelte subscribes
+    // to. An id added here without a case there is a menu item that does nothing, which is why the
+    // dispatcher warns on an unknown id rather than ignoring it.
     let file = Submenu::with_items(
         app,
         "File",
         true,
         &[
-            &MenuItem::with_id(app, "open",    "Open…",    true, Some("CmdOrCtrl+O"))?,
-            &MenuItem::with_id(app, "save",    "Save",     true, Some("CmdOrCtrl+S"))?,
-            &MenuItem::with_id(app, "save-as", "Save As…", true, Some("CmdOrCtrl+Shift+S"))?,
+            &MenuItem::with_id(app, "file.new",  "New Notebook", true, Some("CmdOrCtrl+N"))?,
+            &MenuItem::with_id(app, "open",      "Open…",        true, Some("CmdOrCtrl+O"))?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::close_window(app, None)?,
+            &MenuItem::with_id(app, "save",      "Save",         true, Some("CmdOrCtrl+S"))?,
+            &MenuItem::with_id(app, "save-as",   "Save As…",     true, Some("CmdOrCtrl+Shift+S"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "file.print", "Print…",      true, Some("CmdOrCtrl+P"))?,
+            &PredefinedMenuItem::separator(app)?,
+            // Two different closes, deliberately both present: one closes the focused NOTEBOOK,
+            // the other the window. Cmd+W goes to the notebook because that is the one a reader
+            // reaches for repeatedly.
+            &MenuItem::with_id(app, "file.close", "Close Notebook", true, Some("CmdOrCtrl+W"))?,
+            &PredefinedMenuItem::close_window(app, Some("Close Window"))?,
         ],
     )?;
 
-    // Use the PREDEFINED clipboard/undo items so the standard shortcuts
-    // (Cmd+C/X/V/A, Cmd+Z) route through the macOS responder chain to the
-    // focused text editor. Binding custom items to those accelerators would
-    // hijack the keys app-wide and break copy/paste inside cells.
+    // Use the PREDEFINED clipboard/undo items so the standard shortcuts (Cmd+C/X/V/A, Cmd+Z) route
+    // through the macOS responder chain to the focused text editor. Binding custom items to those
+    // accelerators would hijack the keys app-wide and break copy/paste inside cells. The items
+    // below are the ones with no native equivalent, so they carry ids of their own.
     let edit = Submenu::with_items(
         app,
         "Edit",
         true,
         &[
-            &MenuItem::with_id(app, "add-cell", "Add Cell Below", true, Some("CmdOrCtrl+B"))?,
-            &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::undo(app, None)?,
             &PredefinedMenuItem::redo(app, None)?,
             &PredefinedMenuItem::separator(app)?,
@@ -56,17 +66,82 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
             &PredefinedMenuItem::copy(app, None)?,
             &PredefinedMenuItem::paste(app, None)?,
             &PredefinedMenuItem::select_all(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "edit.comment", "Un/Comment Selection", true,
+                               Some("CmdOrCtrl+/"))?,
+            &MenuItem::with_id(app, "edit.indent",  "Indent Selected Lines",  true, None::<&str>)?,
+            &MenuItem::with_id(app, "edit.outdent", "Outdent Selected Lines", true, None::<&str>)?,
+            &MenuItem::with_id(app, "edit.dupLine", "Duplicate Line", true,
+                               Some("CmdOrCtrl+Shift+L"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "edit.findDoc", "Documentation for Selection", true,
+                               Some("CmdOrCtrl+Shift+F"))?,
         ],
     )?;
 
-    let kernel_menu = Submenu::with_items(
+    let insert = Submenu::with_items(
         app,
-        "Kernel",
+        "Insert",
         true,
         &[
-            &MenuItem::with_id(app, "run-all",   "Run All",         true, Some("CmdOrCtrl+Shift+Return"))?,
-            &MenuItem::with_id(app, "restart",   "Restart Kernel",  true, Some("CmdOrCtrl+Shift+R"))?,
-            &MenuItem::with_id(app, "interrupt", "Interrupt",       true, Some("CmdOrCtrl+Period"))?,
+            &MenuItem::with_id(app, "insert.code",    "Input Cell",   true, Some("CmdOrCtrl+B"))?,
+            &MenuItem::with_id(app, "insert.text",    "Text Cell",    true, None::<&str>)?,
+            &MenuItem::with_id(app, "insert.section", "Section Cell", true, None::<&str>)?,
+        ],
+    )?;
+
+    // Convert To is flat rather than a nested submenu: three items read better than a submenu
+    // holding three, and macOS submenus cost a second gesture to reach.
+    let cell = Submenu::with_items(
+        app,
+        "Cell",
+        true,
+        &[
+            &MenuItem::with_id(app, "cell.toInput",   "Convert to Input",   true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell.toText",    "Convert to Text",    true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell.toSection", "Convert to Section", true, None::<&str>)?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "cell.divide",    "Divide Cell", true,
+                               Some("CmdOrCtrl+Shift+D"))?,
+            &MenuItem::with_id(app, "cell.merge",     "Merge Cells", true,
+                               Some("CmdOrCtrl+Shift+M"))?,
+            &MenuItem::with_id(app, "cell.duplicate", "Duplicate Cell", true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell.delete",    "Delete Cell",    true, None::<&str>)?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "cell.clearOutput",    "Delete Output",     true, None::<&str>)?,
+            &MenuItem::with_id(app, "cell.clearAllOutput", "Delete All Output", true, None::<&str>)?,
+        ],
+    )?;
+
+    let evaluation = Submenu::with_items(
+        app,
+        "Evaluation",
+        true,
+        &[
+            &MenuItem::with_id(app, "eval.cell", "Evaluate Cell", true,
+                               Some("CmdOrCtrl+Return"))?,
+            &MenuItem::with_id(app, "run-all",   "Evaluate Notebook", true,
+                               Some("CmdOrCtrl+Shift+Return"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "interrupt", "Abort Evaluation", true,
+                               Some("CmdOrCtrl+Period"))?,
+            &MenuItem::with_id(app, "restart",   "Restart Kernel",   true,
+                               Some("CmdOrCtrl+Shift+R"))?,
+        ],
+    )?;
+
+    // Graphics is a documentation entry point rather than a set of editing commands: the renderer
+    // has no interactive object model to act on, so greyed drawing tools would be noise.
+    let graphics = Submenu::with_items(
+        app,
+        "Graphics",
+        true,
+        &[
+            &MenuItem::with_id(app, "gfx.plot",     "Plot Documentation",     true, None::<&str>)?,
+            &MenuItem::with_id(app, "gfx.image",    "Image Documentation",    true, None::<&str>)?,
+            &MenuItem::with_id(app, "gfx.image3d",  "Image3D Documentation",  true, None::<&str>)?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "gfx.graphics", "Graphics Documentation", true, None::<&str>)?,
         ],
     )?;
 
@@ -75,7 +150,8 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         "View",
         true,
         &[
-            &MenuItem::with_id(app, "toggle-dark", "Toggle Dark Mode", true, Some("CmdOrCtrl+Shift+D"))?,
+            &MenuItem::with_id(app, "toggle-dark", "Toggle Dark Mode", true,
+                               Some("CmdOrCtrl+Shift+T"))?,
         ],
     )?;
 
@@ -92,7 +168,10 @@ fn build_menu(app: &tauri::App) -> tauri::Result<Menu<tauri::Wry>> {
         ])?,
         &file,
         &edit,
-        &kernel_menu,
+        &insert,
+        &cell,
+        &evaluation,
+        &graphics,
         &view,
     ])
 }

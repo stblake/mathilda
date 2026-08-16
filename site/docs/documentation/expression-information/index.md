@@ -1,6 +1,6 @@
 # Expression Information
 
-60 built-in function(s) in this category.
+62 built-in function(s) in this category.
 
 - [`$MachineEpsilon`]($MachineEpsilon.md) — $MachineEpsilon  _(Stable)_
 - [`$MachinePrecision`]($MachinePrecision.md) — $MachinePrecision  _(Stable)_
@@ -34,7 +34,9 @@
 - [`ListQ`](ListQ.md) — ListQ[expr] gives True if expr is a list (head List), False otherwise.  _(Stable)_
 - [`MachineNumberQ`](MachineNumberQ.md) — MachineNumberQ[expr] gives True if expr is a machine-precision real or complex number, and False otherwise.  _(Stable)_
 - [`MatrixQ`](MatrixQ.md) — MatrixQ[expr]  _(Stable)_
+- [`MaxMemoryUsed`](MaxMemoryUsed.md) — MaxMemoryUsed[] gives the peak number of bytes resident for the Mathilda process over its lifetime. The high-water mark comes from the operating system, so it catches spikes that occurred between two calls to MemoryInUse rather than only the largest value previously observed.  _(Stable)_
 - [`MemberQ`](MemberQ.md) — MemberQ[list, form] returns True if an element of list matches form, and False otherwise.  _(Stable)_
+- [`MemoryInUse`](MemoryInUse.md) — MemoryInUse[] gives the number of bytes of memory currently resident for the Mathilda process. This is the process resident set size, so unlike Mathematica's MemoryInUse it also counts the binary, the shared libraries and whatever the allocator holds without returning it to the system -- it is the figure Activity Monitor and top report, not a count of session data alone. Returns unevaluated on a platform that offers no way to ask, rather than reporting zero.  _(Stable)_
 - [`Names`](Names.md) — Names["string"] gives a sorted list of the names of symbols matching the string. Names[patt] matches a string pattern with metacharacters * (zero or more characters) and @ (one or more non-uppercase characters), or a RegularExpression["re"]. Names[{p1, p2, ...}] matches any of the patterns. Names[] lists all symbol names.  _(Stable)_
 - [`Negative`](Negative.md) — Negative[x]  _(Stable)_
 - [`NonNegative`](NonNegative.md) — NonNegative[x]  _(Stable)_

@@ -58,4 +58,5 @@ The one place 3D genuinely cannot reuse 2D's sampler (sampling.c) is the adaptiv
 - Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)
 - Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_manipulate.c`](https://github.com/stblake/mathilda/blob/main/tests/test_manipulate.c)
 - Tests: [`tests/test_plot3d.c`](https://github.com/stblake/mathilda/blob/main/tests/test_plot3d.c)

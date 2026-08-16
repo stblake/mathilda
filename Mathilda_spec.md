@@ -59,6 +59,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | FLINT context (`` FLINT`PolynomialGCD ``, `` FLINT`Factor ``, `` FLINT`Det ``, `` FLINT`Zeta ``, ...) — direct access to the FLINT-backed kernels | [`builtins/flint.md`](docs/spec/builtins/flint.md) |
 | BLAS context (`` BLAS`ddot ``, `` BLAS`dgemv ``, `` BLAS`dgemm ``, `` BLAS`zgemm ``, ...) — direct access to the machine-precision BLAS kernels | [`builtins/blas.md`](docs/spec/builtins/blas.md) |
 | LAPACK context (`` LAPACK`dgesv ``, `` LAPACK`dgeqrf ``, `` LAPACK`dgesdd ``, `` LAPACK`dgeev ``, ...) — direct access to the LAPACK drivers | [`builtins/lapack.md`](docs/spec/builtins/lapack.md) |
+| Image processing (`Image`, `ImageQ`, `ImageDimensions`, `ImageChannels`, `ImageType`, `ImageData`) — the raster representation and its accessors | [`builtins/image-processing.md`](docs/spec/builtins/image-processing.md) |
 
 ## Changelog
 

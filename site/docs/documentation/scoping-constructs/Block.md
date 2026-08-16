@@ -47,10 +47,10 @@ The body is then `evaluate`d directly — any reference to `x` anywhere in the c
 
 - Source: [`src/modular.c`](https://github.com/stblake/mathilda/blob/main/src/modular.c)
 - Specification: [`docs/spec/builtins/scoping-constructs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/scoping-constructs.md)
+- Tests: [`tests/test_iter.c`](https://github.com/stblake/mathilda/blob/main/tests/test_iter.c)
 - Tests: [`tests/test_limit_assumptions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_limit_assumptions.c)
 - Tests: [`tests/test_ludecomposition.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ludecomposition.c)
 - Tests: [`tests/test_ludecomposition_machine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ludecomposition_machine.c)
-- Tests: [`tests/test_ludecomposition_mpfr.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ludecomposition_mpfr.c)
 
 ## Notes & additional examples
 

@@ -16,11 +16,11 @@ TrigReduce operates on both circular and hyperbolic functions; given a trigonome
 
 </details>
 
-## Examples (13)
+## Examples (15)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (10)
 
 ```mathematica
 In[1]:= TrigReduce[2 Cos[x]^2]
@@ -46,25 +46,31 @@ Out[7]= 1/8 (3 + Cos[4 x] - 4 Cos[2 x])
 
 In[8]:= TrigReduce[2 Sin[x + y] Cos[x - y]]
 Out[8]= Sin[2 x] + Sin[2 y]
+
+In[9]:= TrigReduce[{Tan[x] + Cot[y], Tanh[x] - Coth[y]}]
+Out[9]= {Sec[x] Csc[y] Cos[x - y], Tanh[x] - Coth[y]}
+
+In[10]:= TrigReduce[4 Sin[x]^4 == 1 && 2 Cos[x]^2 >= 1]
+Out[10]= 1/2 (3 + Cos[4 x] - 4 Cos[2 x]) == 1 && 1 + Cos[2 x] >= 1
 ```
 
 ### Applications (5)
 
 ```mathematica
-In[9]:= TrigReduce[Sin[x] Cos[x]]
-Out[9]= 1/2 Sin[2 x]
+In[11]:= TrigReduce[Sin[x] Cos[x]]
+Out[11]= 1/2 Sin[2 x]
 
-In[10]:= TrigReduce[Sin[x]^2]
-Out[10]= 1/2 (1 - Cos[2 x])
+In[12]:= TrigReduce[Sin[x]^2]
+Out[12]= 1/2 (1 - Cos[2 x])
 
-In[11]:= TrigReduce[Cos[x]^3]
-Out[11]= 1/4 (3 Cos[x] + Cos[3 x])
+In[13]:= TrigReduce[Cos[x]^3]
+Out[13]= 1/4 (3 Cos[x] + Cos[3 x])
 
-In[12]:= TrigReduce[Sin[x]^2 Cos[x]^2]
-Out[12]= 1/8 (1 - Cos[4 x])
+In[14]:= TrigReduce[Sin[x]^2 Cos[x]^2]
+Out[14]= 1/8 (1 - Cos[4 x])
 
-In[13]:= TrigReduce[2 Sin[x] Sin[y]]
-Out[13]= -Cos[x + y] + Cos[x - y]
+In[15]:= TrigReduce[2 Sin[x] Sin[y]]
+Out[15]= -Cos[x + y] + Cos[x - y]
 ```
 
 ## Options & behaviour

@@ -86,7 +86,7 @@ keyed on `expr_hash`/`expr_eq`.)
 - Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
 - Tests: [`tests/test_complement.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complement.c)
 - Tests: [`tests/test_graphics.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphics.c)
-- Tests: [`tests/test_intersection.c`](https://github.com/stblake/mathilda/blob/main/tests/test_intersection.c)
+- Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
 
 ## Notes & additional examples
 

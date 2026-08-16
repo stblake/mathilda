@@ -1184,6 +1184,20 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         (*s->pos == ';' && s->pos[1] != ';')) return NULL;
 
     Expr* left = NULL;
+    /* Did `left` come from an UNPARENTHESISED chainable comparison at this level?
+     *
+     * Chained comparisons are folded into one variadic Inequality, and the fold used to decide by
+     * INSPECTING the built subtree -- which cannot tell `a >= b == c` (a chain) from
+     * `(a >= b) == c` (an Equal whose left operand happens to be a comparison). Parentheses were
+     * therefore ignored on the left operand: `(2.0 >= 2.) == (1.0 > 0.)` parsed as
+     * Inequality[2.0, GreaterEqual, 2.0, Equal, Greater[1.0, 0.0]] and evaluated to `2.0 == True`.
+     * The RIGHT operand was unaffected, since it is parsed as its own subexpression, which is why
+     * only one side looked wrong.
+     *
+     * Plus/Times flattening a few branches below has the same shape and is harmless there, because
+     * Plus is associative so `(a + b) + c` and `a + b + c` mean the same thing. Chaining changes
+     * MEANING, so comparisons need the provenance tracked rather than guessed. */
+    bool left_bare_compare = false;
     
     if (*s->pos == '?') {
         s->pos++;
@@ -1281,6 +1295,11 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         }
 
         if (op_def.type == OP_NONE || op_def.prec < min_prec) break;
+
+        /* Recomputed each iteration: only the branch that actually builds a bare chainable
+         * comparison sets it back to true, so any other operator in between breaks the chain. */
+        bool prev_bare_compare = left_bare_compare;
+        left_bare_compare = false;
         
         s->pos += op_def.len;
 
@@ -1568,10 +1587,12 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
              * WL, not a pairwise chain. */
             if (op_def.head_name
                 && is_chain_compare_head(op_def.head_name)
+                && prev_bare_compare
                 && extend_inequality(left, op_def.head_name, right)) {
-                /* left was extended in place */
+                left_bare_compare = true;      /* still a bare chain */
             } else if (op_def.head_name
                        && is_chain_compare_head(op_def.head_name)
+                       && prev_bare_compare
                        && left->type == EXPR_FUNCTION
                        && left->data.function.head->type == EXPR_SYMBOL
                        && left->data.function.arg_count == 2
@@ -1591,6 +1612,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                     right
                 };
                 left = expr_new_function(expr_new_symbol(SYM_Inequality), args, 5);
+                left_bare_compare = true;
             }
             /* Flatten repeated Plus/Times at parse time so that held
              * expressions reflect the n-ary form (a+b+c -> Plus[a,b,c]). */
@@ -1602,6 +1624,12 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             } else {
                 Expr* args[2] = { left, right };
                 left = expr_new_function(expr_new_symbol(op_def.head_name), args, 2);
+                /* A BARE binary chainable comparison, built here rather than parenthesised, so the
+                 * next comparison at this level may fold it into a chain. This is the provenance the
+                 * fold above needs and could not previously obtain, since by the time it looks the
+                 * node is indistinguishable from a parenthesised one. */
+                if (op_def.head_name && is_chain_compare_head(op_def.head_name))
+                    left_bare_compare = true;
             }
         }
     }

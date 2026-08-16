@@ -21,11 +21,11 @@ Gives characters m through n in steps of s.
 
 Gives the list of results for each si. Negative indices count from the end.
 
-## Examples (8)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (11)
 
 ```mathematica
 In[1]:= StringPart["abcdefghijklm", 6]
@@ -51,6 +51,15 @@ Out[7]= {"a", "e", "i"}
 
 In[8]:= StringPart[{"abcd", "efgh", "ijklm"}, {1, -1}]
 Out[8]= {{"a", "d"}, {"e", "h"}, {"i", "m"}}
+
+In[9]:= StringPart["abcdef", -3;;-1]
+Out[9]= {"d", "e", "f"}
+
+In[10]:= StringPart["abcde", 5;;1;;-1]
+Out[10]= {"e", "d", "c", "b", "a"}
+
+In[11]:= StringPart[x, 1]
+Out[11]= StringPart[x, 1]
 ```
 
 ## Implementation notes

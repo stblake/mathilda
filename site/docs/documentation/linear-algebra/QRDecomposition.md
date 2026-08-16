@@ -265,9 +265,9 @@ The symbolic core `qr_symbolic_core` is **Modified Gram-Schmidt** on the columns
 - Source: [`src/linalg/qrdecomp.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/qrdecomp.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
 - Tests: [`tests/test_ndarray_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_linalg.c)
+- Tests: [`tests/test_nminimize.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nminimize.c)
 - Tests: [`tests/test_qrdecomposition.c`](https://github.com/stblake/mathilda/blob/main/tests/test_qrdecomposition.c)
 - Tests: [`tests/test_qrdecomposition_machine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_qrdecomposition_machine.c)
-- Tests: [`tests/test_qrdecomposition_mpfr.c`](https://github.com/stblake/mathilda/blob/main/tests/test_qrdecomposition_mpfr.c)
 
 ## Notes & additional examples
 

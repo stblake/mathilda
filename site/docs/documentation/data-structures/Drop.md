@@ -36,37 +36,39 @@ Negative indices count from the end; UpTo\[n\], All, and None are also accepted.
 
 </details>
 
-## Examples (7)
+## Examples (8)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (2)
+### Basic examples (3)
 
 ```mathematica
-In[1]:= Rest[<|"a" -> 10, "b" -> 20, "c" -> 30|>]
-Out[1]= <|"b" -> 20, "c" -> 30|>
+In[1]:= First[<|"a" -> 10, "b" -> 20|>] In[1b]:= First[<||>, 0] Out[1b]= 0
 
-In[2]:= Take[<|"a" -> 1, "b" -> 2, "c" -> 3|>, 2]
-Out[2]= <|"a" -> 1, "b" -> 2|>
+In[2]:= Rest[<|"a" -> 10, "b" -> 20, "c" -> 30|>]
+Out[2]= <|"b" -> 20, "c" -> 30|>
+
+In[3]:= Take[<|"a" -> 1, "b" -> 2, "c" -> 3|>, 2]
+Out[3]= <|"a" -> 1, "b" -> 2|>
 ```
 
 ### Applications (5)
 
 ```mathematica
-In[3]:= Drop[{a, b, c, d, e}, 2]
-Out[3]= {c, d, e}
+In[4]:= Drop[{a, b, c, d, e}, 2]
+Out[4]= {c, d, e}
 
-In[4]:= Drop[{a, b, c, d, e}, -2]
-Out[4]= {a, b, c}
+In[5]:= Drop[{a, b, c, d, e}, -2]
+Out[5]= {a, b, c}
 
-In[5]:= Drop[{a, b, c, d, e}, {2, 4}]
-Out[5]= {a, e}
+In[6]:= Drop[{a, b, c, d, e}, {2, 4}]
+Out[6]= {a, e}
 
-In[6]:= Drop[{a, b, c, d, e, f, g}, {2, 7, 2}]
-Out[6]= {a, c, e, g}
+In[7]:= Drop[{a, b, c, d, e, f, g}, {2, 7, 2}]
+Out[7]= {a, c, e, g}
 
-In[7]:= Drop[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {2}, {2}]
-Out[7]= {{1, 3}, {7, 9}}
+In[8]:= Drop[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {2}, {2}]
+Out[8]= {{1, 3}, {7, 9}}
 ```
 
 ## Implementation notes
@@ -81,8 +83,8 @@ Out[7]= {{1, 3}, {7, 9}}
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
 - Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
-- Tests: [`tests/test_ndarray_reduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_reduce.c)
 
 ## Notes & additional examples
 

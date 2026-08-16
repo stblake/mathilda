@@ -92,9 +92,9 @@ atoms yield `NULL` (unevaluated).
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
 - Tests: [`tests/test_matsol_methods.c`](https://github.com/stblake/mathilda/blob/main/tests/test_matsol_methods.c)
-- Tests: [`tests/test_nresidue.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nresidue.c)
-- Tests: [`tests/test_nroots.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nroots.c)
+- Tests: [`tests/test_ml_classify.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ml_classify.c)
 
 ## Notes & additional examples
 

@@ -28,6 +28,10 @@ The generated Markdown is committed so CI only needs MkDocs, not the C toolchain
 import json
 import re
 import collections
+import os
+import base64
+import io
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -47,6 +51,11 @@ ASSETS = SITE / "docs" / "assets"
 OVERLAYS = SITE / "overlays"
 IMPL = SITE / "impl"
 MATHILDA = ROOT / "Mathilda"
+
+# Every documented example is re-verified by running it, and some of them call Plot or Manipulate --
+# which opened a Raylib window each, dozens of them, over whatever the user was doing. The binary
+# honours this by evaluating and printing as usual while withholding the window.
+os.environ.setdefault("MATHILDA_NO_WINDOW", "1")
 
 GITHUB_BLOB = "https://github.com/stblake/mathilda/blob/main"
 
@@ -334,6 +343,16 @@ def run_session(lines, timeout=60):
             continue
         if msg.get("type") == "expr" and "payload" in msg:
             payloads[msg.get("id")] = msg["payload"]
+        elif msg.get("type") == "image":
+            # An image result arrives as its own message type, not as an expr. Collecting only
+            # "expr" recorded nothing for it, so every image-valued example was discarded as
+            # unevaluated -- which is why the Image page showed one example about dimensions and
+            # none showing an actual picture. "-Image-" stands in for the printed form, and the
+            # RGBA payload is kept so the page can SHOW the result.
+            payloads.setdefault(msg.get("id"), "-Image-")
+            pay = msg.get("payload")
+            if isinstance(pay, dict):
+                plots.setdefault(msg.get("id"), {"__image__": pay})
         elif msg.get("type") == "plot":
             # A graphics result arrives as a plot payload, not an expr, so
             # collecting only "expr" recorded nothing for it and every graphics
@@ -442,17 +461,55 @@ OUTLINE_RE = re.compile(r"^Out\[\d+\]=")
 FENCE_RE = re.compile(r"^```")
 
 
-def mine_example_inputs(body, limit=8):
+EXAMPLE_LIMIT = 96
+
+
+GROUP_RE = re.compile(r"^#{3,5}\s+(.+?)\s*$")
+
+# The subsection names a page may declare, in the order a reader wants them: the simple cases,
+# then the range of inputs, then what the options do, then a real use, then the algebra, then the
+# one that is just nice to look at. `Options: <Name>` declares a sub-block of Options, which is
+# how one option with eight examples stays legible.
+GROUP_ORDER = ["Basic Examples", "Scope", "Options", "Applications",
+               "Properties & Relations", "Neat Examples"]
+
+
+def mine_example_inputs(body, limit=EXAMPLE_LIMIT):
     """Extract ordered lists of input expressions, grouped per code block.
-    Returns a list of blocks; each block is a list of input strings."""
+    Returns a list of ``(group, inputs)`` -- the group is the nearest preceding
+    ``###``-``#####`` heading when it names one of ``GROUP_ORDER`` (or an
+    ``Options: <Name>`` sub-block), and ``None`` otherwise.
+
+    DECLARED, NOT INFERRED. The grouping used to be guessed from position and
+    syntax -- first block is basic, anything containing ``Name ->`` is an
+    option -- which meant a page could not say what its own examples were for.
+    An identity like ``Dilation[img, 0] === img`` is a *relation*, not a scope
+    case, and no amount of pattern-matching on the input text can know that.
+    Pages that declare nothing keep the old inference, so this is additive.
+
+    The limit was 8, which silently capped every page: a section could carry forty examples and the
+    page would show the first eight, so writing more had no effect and the omission was invisible --
+    there is no message, the extra examples simply are not there. 60 was above what any section held when it
+    replaced 8 -- and then Image3D's section reached 64 inputs and had four of its five Neat
+    Examples trimmed away, which is the same failure one size up. The trim keeps whole blocks
+    "where possible" and otherwise takes a PREFIX of one, so the casualty is always the last
+    group on the page. A page whose example total sits exactly ON the cap is what that looks
+    like from outside, and is worth re-checking whenever it happens.""" 
     blocks = []
     in_fence = False
     cur = None
+    group = None
     for line in body.splitlines():
+        if not in_fence:
+            mh = GROUP_RE.match(line)
+            if mh:
+                title = mh.group(1).strip()
+                base = title.split(":", 1)[0].strip()
+                group = title if base in GROUP_ORDER else None
         if FENCE_RE.match(line):
             if in_fence:
                 if cur:
-                    blocks.append(cur)
+                    blocks.append((group, cur))
                 cur = None
                 in_fence = False
             else:
@@ -470,14 +527,13 @@ def mine_example_inputs(body, limit=8):
                 # fed to the binary as a syntax error, so it silently vanished
                 # from the page.
                 cur[-1] = cur[-1] + " " + line.strip()
-    total = sum(len(b) for b in blocks)
     # Trim to `limit` inputs total, keeping whole blocks where possible.
     trimmed, count = [], 0
-    for b in blocks:
+    for grp, b in blocks:
         if count >= limit:
             break
         room = limit - count
-        trimmed.append(b[:room])
+        trimmed.append((grp, b[:room]))
         count += min(len(b), room)
     return trimmed
 
@@ -491,6 +547,9 @@ FIGURE_MAX_BYTES = 150_000
 
 def compact_figure(payload):
     """Round coordinates and drop the figure if it is still too large.
+
+    An image payload passes through untouched: it is base64 pixels, not coordinates, and rounding
+    would corrupt it.
 
     Six significant digits is far beyond what a few hundred pixels can show,
     and trimming the tail of every float is most of the saving available
@@ -561,7 +620,15 @@ def verify_block(inputs):
     pairs, figures = [], {}
     for idx, (expr, out) in enumerate(zip(inputs, outs), 1):
         out = out.strip()
-        if not out or out == "Null":
+        if not out:
+            continue
+        if out == "Null":
+            # A SETUP LINE, not a dead example. `v = Image3D[...];` yields Null, and dropping it left
+            # every later example in the block referring to a variable the page never defines -- the
+            # Image3D page showed `ImageDimensions[v]` and `Part[ImageData[v], 2, 3, 4]` with `v`
+            # undefined, so both printed unevaluated. It is kept with no Out line, which is how a
+            # notebook shows a cell that assigns and prints nothing.
+            pairs.append((expr, ""))
             continue
         pairs.append((expr, out))
         if idx in plots and plots[idx] is not None:
@@ -732,7 +799,7 @@ OPTION_RE = re.compile(r"\b[A-Z][A-Za-z0-9]*\s*->")
 EX_NOTE_RE = re.compile(r"\s*\(\*(.+?)\*\)\s*")
 
 
-def _example_fence(pairs, start=1):
+def _example_fence(pairs, start=1, figures=None):
     """Render examples, each preceded by its explanation when it has one.
 
     An example carrying a `(* ... *)` comment gets that line as prose above its
@@ -753,7 +820,8 @@ def _example_fence(pairs, start=1):
         block = ["```mathematica"]
         for expr, res, _ in run:
             block.append(expr)
-            block.append(res)
+            if res:
+                block.append(res)
             block.append("")
         if block[-1] == "":
             block.pop()
@@ -764,45 +832,233 @@ def _example_fence(pairs, start=1):
     for expr, res in pairs:
         note = EX_NOTE_RE.search(expr)
         clean = EX_NOTE_RE.sub(" ", expr).strip() if note else expr
-        inp, outp = f"In[{n}]:= {clean}", f"Out[{n}]= {res}"
+        inp = f"In[{n}]:= {clean}"
+        outp = f"Out[{n}]= {res}" if res else None
         n += 1
-        if note:
+        pic = image_data_uri((figures or {}).get(expr))
+        if note or pic:
+            # An image result gets its own fence so the picture sits directly under the input that
+            # produced it. Grouped into a shared fence it would follow some later, unrelated example.
             flush_run()
-            text = note.group(1).strip()
-            out.append(text[0].upper() + text[1:] if text else text)
-            out.append(f"```mathematica\n{inp}\n{outp}\n```")
+            if note:
+                text = note.group(1).strip()
+                out.append(text[0].upper() + text[1:] if text else text)
+            out.append("```mathematica\n" + inp
+                       + (("\n" + outp) if outp else "") + "\n```")
+            if pic:
+                out.append(pic)
         else:
             run.append((inp, outp, None))
     flush_run()
     return "\n\n".join(out), n
 
 
-def render_examples(blocks, applications=None, worked=None):
+
+
+# The three visible faces of a volume, at the same default view the notebook uses. Kept beside
+# image_data_uri because it answers the same question -- "what does this result look like?" -- for
+# the one result type a single plane cannot represent.
+VOL_YAW, VOL_PITCH = -0.62, 0.42
+
+def _vol_rotate(p, yaw, pitch):
+    x, y, z = p
+    cx, sx = math.cos(yaw), math.sin(yaw)
+    x1, z1 = x * cx + z * sx, -x * sx + z * cx
+    cy, sy = math.cos(pitch), math.sin(pitch)
+    return (x1, y * cy - z1 * sy, y * sy + z1 * cy)
+
+
+def volume_data_uri(pay, size=260):
+    """A volume's six faces projected into an orthographic block, as a data URI.
+
+    Under an orthographic camera each rectangular face projects to an affine map of its texture, so
+    every face is one PIL affine transform -- the same fact the notebook's canvas renderer uses, and
+    the reason this is a projection rather than a ray march. Faces are drawn back to front and
+    shaded by the angle to the light, without which three faces of similar voxels read as one flat
+    hexagon."""
+    try:
+        from PIL import Image as PILImage
+        faces = pay["faces"]
+        w, h, d = int(pay["w"]), int(pay["h"]), int(pay.get("depth") or 1)
+        m = float(max(w, h, d))
+        sx, sy, sz = w / m, h / m, d / m
+        pts = []
+        for z in (-sz / 2, sz / 2):
+            for y in (-sy / 2, sy / 2):
+                for x in (-sx / 2, sx / 2):
+                    pts.append(_vol_rotate((x, y, z), VOL_YAW, VOL_PITCH))
+        scale = size * 0.62
+        proj = lambda q: (size / 2 + q[0] * scale, size / 2 + q[1] * scale)
+
+        # (origin, +u, +v) corner indices and the outward normal, matching the kernel's face export.
+        GEOM = {
+            "front":  (0, 1, 2, (0, 0, -1)), "back":   (5, 4, 7, (0, 0, 1)),
+            "left":   (4, 0, 6, (-1, 0, 0)), "right":  (1, 5, 3, (1, 0, 0)),
+            "top":    (0, 1, 4, (0, -1, 0)), "bottom": (2, 3, 6, (0, 1, 0)),
+        }
+        L = (-0.45, -0.75, -0.5)
+        vis = []
+        for k, (o, u, v, n) in GEOM.items():
+            if k not in faces:
+                continue
+            nr = _vol_rotate(n, VOL_YAW, VOL_PITCH)
+            if nr[2] >= 0:                      # facing away
+                continue
+            zc = (pts[o][2] + pts[u][2] + pts[v][2]) / 3.0
+            vis.append((zc, k, o, u, v, nr))
+        if not vis:
+            return None
+        vis.sort(reverse=True)                  # back to front
+
+        canvas = PILImage.new("RGBA", (size, size), (0, 0, 0, 0))
+        for _, k, o, u, v, nr in vis:
+            f = faces[k]
+            fw, fh = int(f["w"]), int(f["h"])
+            raw = base64.b64decode(f["data"])
+            if fw <= 0 or fh <= 0 or len(raw) < fw * fh * 4:
+                continue
+            tex = PILImage.frombytes("RGBA", (fw, fh), raw[: fw * fh * 4])
+            ox, oy = proj(pts[o]); ux, uy = proj(pts[u]); vx, vy = proj(pts[v])
+            # PIL's AFFINE maps DESTINATION -> SOURCE, so the matrix is the inverse of the
+            # texture-to-screen map. Getting that backwards mirrors every face.
+            a, b = (ux - ox) / fw, (vx - ox) / fh
+            c, dd = (uy - oy) / fw, (vy - oy) / fh
+            det = a * dd - b * c
+            if abs(det) < 1e-9:
+                continue
+            ia, ib = dd / det, -b / det
+            ic, idd = -c / det, a / det
+            coeffs = (ia, ib, -(ia * ox + ib * oy), ic, idd, -(ic * ox + idd * oy))
+            warped = tex.transform((size, size), PILImage.AFFINE, coeffs,
+                                   resample=PILImage.NEAREST)
+            nl = abs(nr[0] * L[0] + nr[1] * L[1] + nr[2] * L[2])
+            shade = 0.38 * (1 - min(1.0, nl))
+            if shade > 0.01:
+                px = warped.load()
+                for yy in range(size):
+                    for xx in range(size):
+                        r0, g0, b0, a0 = px[xx, yy]
+                        if a0:
+                            px[xx, yy] = (int(r0 * (1 - shade)), int(g0 * (1 - shade)),
+                                          int(b0 * (1 - shade)), a0)
+            canvas = PILImage.alpha_composite(canvas, warped)
+        buf = io.BytesIO()
+        canvas.save(buf, format="PNG", optimize=True)
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return None
+    return "![%dx%dx%d volume](data:image/png;base64,%s)" % (
+        int(pay["w"]), int(pay["h"]), int(pay.get("depth") or 1), b64)
+
+
+def image_data_uri(fig):
+    """An image figure as an inline `![](data:image/png;base64,...)`, or None.
+
+    Inline rather than a file on disk: an example image is a few kilobytes, and a data URI needs no
+    change to the page-sync script, no path resolution inside the notebook app, and cannot go stale
+    against the page that references it.
+
+    Small results are scaled up with NEAREST neighbour so a 2x2 example reads as four squares rather
+    than a four-pixel speck -- the same reason the notebook renders its canvases pixelated.
+    """
+    if not isinstance(fig, dict) or "__image__" not in fig:
+        return None
+    pay = fig["__image__"]
+    if pay.get("faces"):
+        # A VOLUME. Its recorded picture has to be the block, for the same reason the notebook
+        # draws one: GaussianFilter of an Image3D IS an Image3D, and a flat middle slice on the
+        # page says otherwise. Same projection as Output.svelte's renderer, so the recorded
+        # picture and the live cell agree.
+        shot = volume_data_uri(pay)
+        if shot:
+            return shot
+        # Fall through to the slice if the projection fails -- a picture of one plane beats none.
+    try:
+        from PIL import Image as PILImage
+        w, h = int(pay["w"]), int(pay["h"])
+        raw = base64.b64decode(pay["data"])
+        if w <= 0 or h <= 0 or len(raw) < w * h * 4:
+            return None
+        im = PILImage.frombytes("RGBA", (w, h), raw[: w * h * 4])
+        scale = max(1, min(24, 96 // max(w, h))) if max(w, h) < 96 else 1
+        if scale > 1:
+            im = im.resize((w * scale, h * scale), PILImage.NEAREST)
+        buf = io.BytesIO()
+        im.save(buf, format="PNG", optimize=True)
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return None
+    note = ""
+    if pay.get("depth"):
+        note = " (slice %s of %s)" % (pay.get("slice"), pay["depth"])
+    return "![%sx%s result%s](data:image/png;base64,%s)" % (pay["w"], pay["h"], note, b64)
+
+def render_examples(blocks, applications=None, worked=None, figures=None):
     """Group the verified examples into subsections, each with its count.
 
-    The groupings are derived from structure that already exists rather than
-    invented: an example that passes an option (`Name -> value`) is an options
-    example, the first fenced block of a spec section is its basic set, and any
-    further blocks are additional scope. `Applications` is the overlay's own
-    "Worked examples" section, which every one of the 400 overlays carries.
+    Two modes. When the spec DECLARES its groups (a `#### Scope` heading above a
+    fenced block, say), those declarations are honoured verbatim and in the
+    canonical reader order, and an `Options: <Name>` label becomes a nested
+    block so one option carrying eight examples stays legible. When it declares
+    nothing -- 700-odd pages -- the old inference still applies: an example that
+    passes an option is an options example, the first block is the basic set,
+    later blocks are scope.
 
-    A flat list of eight examples tells the reader nothing about which are the
-    simple cases and which are demonstrating an option; the counts make the
-    shape of the page visible before scrolling it."""
-    basic, scope, options = [], [], []
-    for idx, pairs in enumerate(blocks):
-        for pair in pairs:
-            if OPTION_RE.search(pair[0]):
-                options.append(pair)
-            elif idx == 0:
-                basic.append(pair)
+    Inference cannot tell a relation from a scope case: `Dilation[img, 0] ===
+    img` is an algebraic identity and reads as neither. That is the whole reason
+    a page is allowed to say so itself.
+
+    A flat list tells the reader nothing about which examples are the simple
+    cases and which demonstrate an option; the counts make the shape of the page
+    visible before scrolling it."""
+    declared = [b for b in blocks if b[0]]
+    groups = []                      # [(title, [pairs...], depth)]
+
+    if declared:
+        buckets, order = {}, []
+        for label, pairs in blocks:
+            key = label or "Scope"   # an untagged block among tagged ones is scope
+            if key not in buckets:
+                buckets[key] = []
+                order.append(key)
+            buckets[key].extend(pairs)
+
+        def rank(key):
+            base = key.split(":", 1)[0].strip()
+            return (GROUP_ORDER.index(base) if base in GROUP_ORDER else len(GROUP_ORDER),
+                    order.index(key))
+
+        open_parent = None       # the `Options` heading currently accepting children
+        for key in sorted(order, key=rank):
+            base, _, sub = key.partition(":")
+            base, sub = base.strip(), sub.strip()
+            if sub:
+                # Options with sub-blocks: the parent heading is emitted once and
+                # carries the total of its children, so `Options (21)` above
+                # `ColorSpace (8)` and `ImageSize (3)` adds up.
+                if open_parent != base:
+                    groups.append((base, [], 0))
+                    open_parent = base
+                groups.append((sub, buckets[key], 1))
             else:
-                scope.append(pair)
+                groups.append((base, buckets[key], 0))
+                open_parent = None
+    else:
+        basic, scope, options = [], [], []
+        for idx, (_, pairs) in enumerate(blocks):
+            for pair in pairs:
+                if OPTION_RE.search(pair[0]):
+                    options.append(pair)
+                elif idx == 0:
+                    basic.append(pair)
+                else:
+                    scope.append(pair)
+        groups = [("Basic examples", basic, 0), ("Scope", scope, 0),
+                  ("Options", options, 0)]
 
-    groups = [("Basic examples", basic), ("Scope", scope), ("Options", options)]
     if worked:
-        groups.append(("Worked examples", worked))
-    total = sum(len(g) for _, g in groups)
+        groups.append(("Worked examples", worked, 0))
+    total = sum(len(g[1]) for g in groups)
     app_pairs = applications[1] if applications and applications[0] == "pairs" else None
     if applications:
         total += len(app_pairs) if app_pairs is not None else applications[1]
@@ -810,18 +1066,31 @@ def render_examples(blocks, applications=None, worked=None):
     if not total:
         return None, 0
 
+    # A parent heading counts the children beneath it.
+    counts = []
+    for i, (title, pairs, depth) in enumerate(groups):
+        n = len(pairs)
+        if depth == 0 and not pairs:
+            for t2, p2, d2 in groups[i + 1:]:
+                if d2 == 0:
+                    break
+                n += len(p2)
+        counts.append(n)
+
     out, n = [], 1
-    for title, pairs in groups:
-        if not pairs:
+    for (title, pairs, depth), cnt in zip(groups, counts):
+        if not cnt:
             continue
-        fence, n = _example_fence(pairs, n)
-        out.append(f"### {title} ({len(pairs)})")
+        hashes = "###" if depth == 0 else "####"
+        out.append(f"{hashes} {title} ({cnt})")
         out.append("")
-        out.append(fence)
-        out.append("")
+        if pairs:
+            fence, n = _example_fence(pairs, n, figures)
+            out.append(fence)
+            out.append("")
     if applications:
         if app_pairs is not None:
-            fence, n = _example_fence(app_pairs, n)
+            fence, n = _example_fence(app_pairs, n, figures)
             out.append(f"### Applications ({len(app_pairs)})")
             out.append("")
             out.append(fence)
@@ -1229,7 +1498,7 @@ def render_page(info):
     lines.append("")
 
     ex, total = render_examples(info["examples"], info.get("applications"),
-                                info.get("worked"))
+                                info.get("worked"), figures=info.get("figures"))
     lines.append(f"## Examples ({total})" if total else "## Examples")
     lines.append("")
     if ex:
@@ -1356,10 +1625,10 @@ def emit_flint_section(tests_text, lim_text):
         slug = name.split("`", 1)[1]            # filesystem/URL-safe suffix
         body = bodies.get(name, "")
         blocks = []
-        for inputs in mine_example_inputs(body):
+        for group, inputs in mine_example_inputs(body):
             pairs, _ = verify_block(inputs)   # FLINT routines emit no graphics
             if pairs:
-                blocks.append(pairs)
+                blocks.append((group, pairs))
                 verified += len(pairs)
         status = derive_status(name, flint[name]["doc"], bool(blocks),
                                tests_text, lim_text)
@@ -1496,10 +1765,10 @@ def main():
 
         blocks = []
         figures = {}
-        for inputs in mine_example_inputs(body):
+        for group, inputs in mine_example_inputs(body):
             pairs, figs = verify_block(inputs)
             if pairs:
-                blocks.append(pairs)
+                blocks.append((group, pairs))
                 figures.update(figs)
                 verified_examples += len(pairs)
 

@@ -28,11 +28,11 @@ RandomSample never samples any element more than once. Use SeedRandom to seed th
 
 </details>
 
-## Examples (8)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (10)
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomSample[{a, b, c, d, e}, 3]
@@ -58,6 +58,12 @@ Out[7]= {a, b}
 
 In[8]:= Sort[RandomSample[{1, 2, 3} -> {a, b, c}]]
 Out[8]= {a, b, c}
+
+In[9]:= RandomSample[{a, b}, 5]
+Out[9]= RandomSample[{a, b}, 5]
+
+In[10]:= RandomSample[x]
+Out[10]= RandomSample[x]
 ```
 
 ## Options & behaviour
@@ -91,4 +97,5 @@ The weighted form `RandomSample[{w1,...}->{e1,...}, n]` uses `weighted_sample_wi
 - Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)
 - Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
+- Tests: [`tests/test_nminimize.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nminimize.c)
 - Tests: [`tests/test_random.c`](https://github.com/stblake/mathilda/blob/main/tests/test_random.c)

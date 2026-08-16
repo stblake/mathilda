@@ -13,11 +13,11 @@ Adaptively samples the parametric 3D space curve (fx(t), fy(t), fz(t)) over \[tm
 
 Two-iterator form: samples a PlotPoints x PlotPoints grid of (t,u) pairs, maps each to {x,y,z}, and emits Polygon\[\] quads — a parametric 3D surface patch. Options: PlotPoints (initial sample count/grid size, default 25), MaxRecursion (adaptive refinement depth for curves, default 6), MaxPlotPoints (overall point cap, default Infinity), Mesh (All/True: overlays sample dots for curves or grid lines for surfaces; default None), PlotLegends (Automatic/"Expressions"/{labels...}), ColorFunction ("Rainbow" or f\[x,y,z\] receiving scaled spatial coords, or f\[x,z\] / f\[z\] for height-based coloring), ColorFunctionScaling (default True), RegionFunction (f\[x,y,z\] mask; falls back to f\[x,y\] forms), PlotStyle, Axes, PlotRange, AxesLabel, PlotLabel, Background, ImageSize (all passed through to Graphics3D). Lighting -\> None disables shading (flat colors); default is Automatic (Lambertian shading, same as Plot3D).
 
-## Examples (8)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (5)
+### Basic examples (6)
 
 ```mathematica
 In[1]:= ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 4 Pi}]
@@ -34,19 +34,25 @@ Out[4]= -Graphics-
 
 In[5]:= ParametricPlot3D[{(2 + Cos[v]) Cos[u], (2 + Cos[v]) Sin[u], Sin[v]}, {u, 0, 2 Pi}, {v, 0, 2 Pi}]
 Out[5]= -Graphics-
+
+In[6]:= ParametricPlot3D[{{Cos[u] Sin[v], Sin[u] Sin[v], Cos[v]}, {2 Cos[u] Sin[v], 2 Sin[u] Sin[v], 2 Cos[v]}}, {u, 0, 2 Pi}, {v, 0, Pi}]
+Out[6]= -Graphics-
 ```
 
-### Options (3)
+### Options (4)
 
 ```mathematica
-In[6]:= ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 4 Pi}, ColorFunction -> "Rainbow"]
-Out[6]= -Graphics-
-
-In[7]:= ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 4 Pi}, Mesh -> All]
+In[7]:= ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 4 Pi}, ColorFunction -> "Rainbow"]
 Out[7]= -Graphics-
 
-In[8]:= ParametricPlot3D[{u Cos[v], u Sin[v], u}, {u, 0, 2}, {v, 0, 2 Pi}, ColorFunction -> "Rainbow", Mesh -> All]
+In[8]:= ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 4 Pi}, Mesh -> All]
 Out[8]= -Graphics-
+
+In[9]:= ParametricPlot3D[{u Cos[v], u Sin[v], u}, {u, 0, 2}, {v, 0, 2 Pi}, ColorFunction -> "Rainbow", Mesh -> All]
+Out[9]= -Graphics-
+
+In[10]:= ParametricPlot3D[{Cos[u] Sin[v], Sin[u] Sin[v], Cos[v]}, {u, 0, 2 Pi}, {v, 0, Pi}, Lighting -> None]
+Out[10]= -Graphics-
 ```
 
 ## Algorithm

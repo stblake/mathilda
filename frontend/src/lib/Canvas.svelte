@@ -1008,7 +1008,10 @@
     /* The toolbar, not the canvas bar: focused mode swaps the app bar for the
        taller grouped toolbar, and these two numbers must agree or the view
        either overlaps the bar or leaves a gap under it. */
-    inset: var(--toolbar-h, 46px) 0 0 0;   /* clear the toolbar */
+    /* The toolbar, not the canvas bar: focused mode swaps the app bar for the taller grouped
+       toolbar, and these two numbers must agree with App.svelte's .app-bar.toolbar-mode height
+       or the view either overlaps the bar or leaves a gap under it. */
+    inset: var(--toolbar-h, 46px) 0 0 0;
 
     /* Use card-bg so light mode doesn't show dark canvas edges */
     background: var(--card-bg, #050810);

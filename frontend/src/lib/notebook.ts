@@ -9,7 +9,7 @@ export type CellStatus = 'idle' | 'running' | 'done' | 'error';
 
 export type OutputItem =
   | { kind: 'expr';   text: string; latex?: string }  // latex = StandardForm LaTeX from kernel
-  | { kind: 'usage';  text: string }                  // ?sym help text: preformatted, never math
+  | { kind: 'usage';  text: string; symbol?: string }  // ?sym help text: preformatted, never math
   | { kind: 'expected'; text: string }                // reference-page example: the
                                                       // recorded, verified result,
                                                       // shown until the cell is run
@@ -17,6 +17,13 @@ export type OutputItem =
   | { kind: 'error';  text: string }
   | { kind: 'stream'; text: string }
   | { kind: 'plot';   data: object }
+  /* A raster result. `data` is base64 RGBA, w*h*4 bytes, ready for putImageData -- so the
+     browser does no per-pixel work. A volume sends ONE slice (the middle) and carries `depth`
+     and `slice` so a scrubber can ask for others later. */
+  /** One face of a volume: its own pixel size plus base64 RGBA. */
+  | { kind: 'image';  w: number; h: number; channels: number; data: string;
+      faces?: Record<string, { w: number; h: number; data: string }>;
+                      depth?: number; slice?: number }
   | { kind: 'html';   html: string };
 
 export type Cell = {

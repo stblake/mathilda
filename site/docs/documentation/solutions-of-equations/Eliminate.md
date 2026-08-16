@@ -9,11 +9,11 @@
 
 eliminates vars between a list/conjunction of simultaneous equations lhs == rhs, returning a balanced Equal\[\] or an And\[\] of Equal\[\]s in the remaining variables (True if the elimination ideal is empty, False if the system is inconsistent). Works on polynomial equations over Q via a lexicographic Gröbner basis with elimination block. A principal-branch inverse-function pre-pass peels single Sin/ Cos/Tan/Sinh/Cosh/Tanh/Exp/Log wrappers and emits Eliminate::ifun; non-polynomial systems otherwise return unevaluated with Eliminate::nlin.
 
-## Examples (14)
+## Examples (20)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (11)
 
 ```mathematica
 In[1]:= Eliminate[{x == 2 + y, y == z}, y]
@@ -53,26 +53,56 @@ In[8]:= Eliminate[x + y == 0, y]
 Out[8]= True
 ```
 
+```mathematica
+In[9]:= Eliminate[{u == Sqrt[x^2 + 1], v == 1/Sqrt[x^2 + 1]}, x]
+Out[9]= u v == 1
+```
+
+Algebraisation pre-pass; equivalent to Mathematica's u^2 Dt[u]^2 + u(-2 Dt[u]^2 - 4 Dt[y]^2) == -Dt[u]^2
+
+```mathematica
+In[10]:= Eliminate[{Dt[y] == x^3/Sqrt[x^2 + 1] Dt[x], u == x^2 + 1, Dt[u] == 2 x Dt[x]}, {Dt[x], x}]
+Out[10]= Dt[u]^2 + u^2 Dt[u]^2 == 2 u Dt[u]^2 + 4 u Dt[y]^2
+```
+
+```mathematica
+In[11]:= Eliminate[{u == x^(1/3), v == x^(2/3)}, x]
+Out[11]= v == u^2
+```
+
+### Scope (3)
+
+```mathematica
+In[12]:= HornerForm[11 x^3 - 4 x^2 + 7 x + 2]
+Out[12]= 2 + x (7 + x (-4 + 11 x))
+
+In[13]:= HornerForm[a + b x + c x^2, x]
+Out[13]= a + x (b + c x)
+
+In[14]:= HornerForm[(11 x^3 - 4 x^2 + 7 x + 2)/(x^2 - 3 x + 1)]
+Out[14]= (2 + x (7 + x (-4 + 11 x)))/(1 + x (-3 + x))
+```
+
 ### Applications (6)
 
 ```mathematica
-In[9]:= Eliminate[{x + y == 2, x - y == 0}, y]
-Out[9]= x == 1
+In[15]:= Eliminate[{x + y == 2, x - y == 0}, y]
+Out[15]= x == 1
 
-In[10]:= Eliminate[{a == b + c, d == a - c}, c]
-Out[10]= d == b
+In[16]:= Eliminate[{a == b + c, d == a - c}, c]
+Out[16]= d == b
 
-In[11]:= Eliminate[{a == x + y, b == x y}, {x, y}]
-Out[11]= True
+In[17]:= Eliminate[{a == x + y, b == x y}, {x, y}]
+Out[17]= True
 
-In[12]:= Eliminate[{p == x + 1/x, q == x^2 + 1/x^2}, x]
-Out[12]= 2 + q == p^2
+In[18]:= Eliminate[{p == x + 1/x, q == x^2 + 1/x^2}, x]
+Out[18]= 2 + q == p^2
 
-In[13]:= Eliminate[{x == a Cos[t], y == a Sin[t]}, t]
-Out[13]= x^2 + y^2 == a^2
+In[19]:= Eliminate[{x == a Cos[t], y == a Sin[t]}, t]
+Out[19]= x^2 + y^2 == a^2
 
-In[14]:= Eliminate[{u == Exp[x], v == Exp[2 x]}, x]
-Out[14]= v == u^2
+In[20]:= Eliminate[{u == Exp[x], v == Exp[2 x]}, x]
+Out[20]= v == u^2
 ```
 
 ## Options & behaviour

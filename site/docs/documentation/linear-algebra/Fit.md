@@ -160,11 +160,12 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## References
 
-**See also:** [FindMinimum](../../calculus/FindMinimum/), [LeastSquares](../../linear-algebra/LeastSquares/), [NDArray](../../linear-algebra/NDArray/)
+**See also:** [FindMinimum](../../numerical-calculus/FindMinimum/), [LeastSquares](../../linear-algebra/LeastSquares/), [NDArray](../../linear-algebra/NDArray/)
 
 - Source: [`src/fit.c`](https://github.com/stblake/mathilda/blob/main/src/fit.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
 - Tests: [`tests/test_fit.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fit.c)
+- Tests: [`tests/test_ml_predict.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ml_predict.c)
 
 ## Notes & additional examples
 

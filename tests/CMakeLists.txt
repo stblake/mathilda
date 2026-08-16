@@ -446,6 +446,13 @@ set(COMMON_SRC
     ../src/fit.c
     ../src/info.c
     ../src/meminfo.c
+    ../src/image.c
+    ../src/imagefilter.c
+    ../src/imagegeom.c
+    ../src/imageio.c
+    ../src/imagecompose.c
+    ../src/imagethin.c
+    ../src/imagecolor.c
     ../src/expand.c
     ../src/expand_power.c
     ../src/poly/poly.c
@@ -832,10 +839,22 @@ add_test(NAME rootreduce_tests COMMAND rootreduce_tests)
 add_executable(meminfo_tests test_meminfo.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(meminfo_tests PRIVATE ../src)
 add_test(NAME meminfo_tests COMMAND meminfo_tests)
+# The Image representation and its accessors. Every row that touches dimensions uses a
+# NON-SQUARE image, because ImageDimensions is {width, height} while ImageData is
+# height x width and a square image cannot tell the two apart.
+add_executable(image_tests test_image.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(image_tests PRIVATE ../src)
+add_test(NAME image_tests COMMAND image_tests)
 
-add_executable(flint_bridge_tests test_flint_bridge.c $<TARGET_OBJECTS:mathilda_common>)
-target_include_directories(flint_bridge_tests PRIVATE ../src)
-add_test(NAME flint_bridge_tests COMMAND flint_bridge_tests)
+# ONLY WHEN FLINT IS ON. The comment above says this binary "skips itself at runtime", but it cannot
+# get that far: flint_cyclotomic_gcd and its neighbours are defined inside `#ifdef USE_FLINT`, so in a
+# no-FLINT configuration the target fails to LINK and takes `make` in this directory down with it --
+# a suite that cannot be built is worse than a test that is skipped.
+if(USE_FLINT)
+    add_executable(flint_bridge_tests test_flint_bridge.c $<TARGET_OBJECTS:mathilda_common>)
+    target_include_directories(flint_bridge_tests PRIVATE ../src)
+    add_test(NAME flint_bridge_tests COMMAND flint_bridge_tests)
+endif()
 
 add_executable(list_tests test_list.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(list_tests PRIVATE ../src)

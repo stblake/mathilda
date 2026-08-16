@@ -9,18 +9,20 @@
 
 Options\[expr\] gives the options explicitly set in an expression such as a graphics object.  Options\[obj, name\] gives the setting for the named option; Options\[obj, {names}\] gives a list of settings.  Assign to Options\[f\] to redefine all default options at once.
 
-## Examples (2)
+## Examples (3)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (2)
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Options[LinearSolve]
 Out[1]= {Method -> Automatic, Modulus -> 0, ZeroTest -> Automatic}
 
-In[2]:= SetOptions[f, c -> 3] SetOptions::optnf: c is not a known option for f. AppendTo[Options[f], c -> 3]
-Out[2]= Optional[{SetOptions::optnf (a -> 1), SetOptions::optnf (b -> 2), SetOptions::optnf (c -> 3)}, a c Dot[f, {a -> 1, b -> 2, c -> 3}] for is known not option]
+In[2]:= Options[f] = {a -> 1, b -> 2}; f[OptionsPattern[]] := {OptionValue[a], OptionValue[b]} {f[], f[a -> 17], f[b -> 18], f[a -> 17, b -> 18]}
+
+In[3]:= SetOptions[f, c -> 3] SetOptions::optnf: c is not a known option for f. AppendTo[Options[f], c -> 3]
+Out[3]= Optional[{SetOptions::optnf (a -> 1), SetOptions::optnf (b -> 2), SetOptions::optnf (c -> 3)}, a c Dot[f, {a -> 1, b -> 2, c -> 3}] for is known not option]
 ```
 
 ## Algorithm

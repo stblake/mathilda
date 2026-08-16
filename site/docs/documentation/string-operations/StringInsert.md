@@ -21,11 +21,11 @@ Inserts a copy of "snew" at each of the positions ni.
 
 Gives the list of results for each of the si. Positions refer to "string" before any insertion is done.
 
-## Examples (6)
+## Examples (7)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (6)
+### Basic examples (7)
 
 ```mathematica
 In[1]:= StringInsert["abcdefghijklm", "XYZ", 4]
@@ -45,6 +45,8 @@ Out[5]= "1.234.567.890.123.456"
 
 In[6]:= StringInsert[{"abc", "de"}, "X", 2]
 Out[6]= {"aXbc", "dXe"}
+
+In[7]:= StringInsert[] StringInsert::argrx: StringInsert called with 0 arguments; 3 arguments are expected.
 ```
 
 ## Implementation notes

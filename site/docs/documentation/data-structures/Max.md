@@ -76,8 +76,8 @@ terms (returning `NULL` to stay unevaluated when nothing simplified). Empty `Max
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_bignum_rational_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bignum_rational_numeric.c)
 - Tests: [`tests/test_blas.c`](https://github.com/stblake/mathilda/blob/main/tests/test_blas.c)
-- Tests: [`tests/test_cherry_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_stress.c)
 
 ## Notes & additional examples
 

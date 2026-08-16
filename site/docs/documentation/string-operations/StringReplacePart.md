@@ -25,11 +25,11 @@ Gives the list of results for each of the si.
 
 is the operator form: StringReplacePart\[new, part\]\[old\] == StringReplacePart\[old, new, part\]. Positions use the form returned by StringPosition and refer to "string" before any replacement is done. Negative positions count from the end. Positions may not overlap. An empty new string deletes the selected characters.
 
-## Examples (6)
+## Examples (8)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (6)
+### Basic examples (8)
 
 ```mathematica
 In[1]:= StringReplacePart["abcdefghijk", "ABCDEFGH", {2, 5}]
@@ -49,6 +49,10 @@ Out[5]= "aABCDEFGHfghijk"
 
 In[6]:= StringReplacePart["abcde", "", {2, 4}]
 Out[6]= "ae"
+
+In[7]:= StringReplacePart["abcde", "XYZ", {{1, 3}, {3, 5}}] StringReplacePart::ovlp: Position {3,5} overlaps previous positions; new string XYZ will not be inserted.
+
+In[8]:= StringReplacePart[] StringReplacePart::argt: StringReplacePart called with 0 arguments; 2 or 3 arguments are expected.
 ```
 
 ## Implementation notes

@@ -95,9 +95,9 @@ heads with many unknowns.
 - Source: [`src/sort.c`](https://github.com/stblake/mathilda/blob/main/src/sort.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_bignum_rational_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bignum_rational_numeric.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
-- Tests: [`tests/test_lapack_builtin.c`](https://github.com/stblake/mathilda/blob/main/tests/test_lapack_builtin.c)
 
 ## Notes & additional examples
 

@@ -11,8 +11,10 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import Canvas from './lib/Canvas.svelte';
   import Toolbar from './lib/Toolbar.svelte';
+  import { MENU_IDS, runMenuCommand } from './lib/menuCommands';
   import { kernelStatus } from './lib/notebook';
   import { darkMode } from './lib/theme';
+  import { kernelMemory } from './lib/status';
   import { pingKernel, saveLibrary, loadLibrary, setWindowTitle as setTitleCmd } from './lib/ipc';
   import { restart, abortEvaluation } from './lib/kernelActions';
   import { serializeLibrary, loadLibraryData, canvasState, activeActions, activeFlags, setFocused } from './lib/canvas';
@@ -62,12 +64,20 @@
 
   onMount(async () => {
     try {
-      unlisten.push(await listen('menu:open',        () => openFile()));
-      unlisten.push(await listen('menu:save',        () => saveFile()));
-      unlisten.push(await listen('menu:save-as',     () => saveFileAs()));
-      unlisten.push(await listen('menu:restart',     () => restart()));
-      unlisten.push(await listen('menu:interrupt',   () => abortEvaluation()));
-      unlisten.push(await listen('menu:toggle-dark', () => darkMode.update(v => !v)));
+      /* Every id the native menu can emit, subscribed from one list. Previously each item needed
+         its own one-line listener here, so an item added in Rust silently did nothing until
+         someone remembered this file; now the two sides share MENU_IDS and the dispatcher warns
+         about an id it has no case for. */
+      /* The kernel reports its resident memory with every `done`; the status bar shows the
+         latest. Its own event rather than part of a cell's output stream, since a memory reading
+         is not output. */
+      unlisten.push(await listen<number>('kernel-memory',
+                                         (e) => kernelMemory.set(e.payload)));
+
+      const hooks = { openFile, saveFile, saveFileAs };
+      for (const id of MENU_IDS) {
+        unlisten.push(await listen(`menu:${id}`, () => runMenuCommand(id, hooks)));
+      }
     } catch (e) { console.warn('Menu listen error:', e); }
   });
 
@@ -166,6 +176,8 @@
      .canvas-stage into a change it has no stake in. -->
 <div class="app-bar" class:toolbar-mode={$canvasState.focusedIds.length > 0}>
   {#if $canvasState.focusedIds.length}
+    <!-- One row again. The menus are NATIVE now -- on macOS they live in the system bar at the
+         top of the screen -- so this strip is free for controls that belong to the window. -->
     <Toolbar />
   {:else}
     <span class="app-bar-name">Mathilda</span>

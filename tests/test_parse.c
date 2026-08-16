@@ -485,6 +485,39 @@ void test_parse_newline_separator() {
     assert_statements("x =\n 5\n", 1, "Set[x, 5]");
 }
 
+static void test_parentheses_break_comparison_chains(void) {
+    /* A chain of comparisons folds into one variadic Inequality, and the fold used to decide by
+     * INSPECTING the built subtree -- which cannot tell `a >= b == c` (a chain) from `(a >= b) == c`
+     * (an Equal whose left operand happens to be a comparison). So parentheses were ignored on the
+     * LEFT operand, and `(2.0 >= 2.) == (1.0 > 0.)` evaluated to `2.0 == True` instead of True.
+     *
+     * The right operand was never affected, being parsed as its own subexpression, which is why only
+     * one side looked wrong and why the bug survived: every symmetric-looking test passed. */
+    assert_eval_eq("FullForm[Hold[(a >= b) == c]]", "Hold[Equal[GreaterEqual[a, b], c]]", 0);
+    assert_eval_eq("FullForm[Hold[(a > b) == (c > d)]]",
+                   "Hold[Equal[Greater[a, b], Greater[c, d]]]", 0);
+    /* The value form, which is what surfaced it: both must be True, not `2.0 == True`. */
+    assert_eval_eq("(2.0 >= 2.) == (1.0 > 0.)", "True", 0);
+    assert_eval_eq("(1.0 >= 2.) == (0.0 > 0.)", "True", 0);
+    /* Nesting a whole chain in parentheses must not extend it either -- the same provenance
+     * question, reached through extend_inequality rather than the fold. */
+    assert_eval_eq("FullForm[Hold[(a < b < c) == d]]",
+                   "Hold[Equal[Inequality[a, Less, b, Less, c], d]]", 0);
+}
+
+static void test_unparenthesised_chains_still_chain(void) {
+    /* The other half: the fix must not stop real chains from folding. Without these the fix could
+     * "work" by simply never chaining, which would be a different bug with the same test passing. */
+    assert_eval_eq("FullForm[Hold[a >= b == c]]", "Hold[Inequality[a, GreaterEqual, b, Equal, c]]",
+                   0);
+    assert_eval_eq("FullForm[Hold[1 < 2 < 3]]", "Hold[Inequality[1, Less, 2, Less, 3]]", 0);
+    assert_eval_eq("FullForm[Hold[a < b <= c == d > e]]",
+                   "Hold[Inequality[a, Less, b, LessEqual, c, Equal, d, Greater, e]]", 0);
+    /* And chain SEMANTICS are unchanged: a chain is True only when every adjacent pair holds. */
+    assert_eval_eq("{1 < 2 < 3, 1 < 3 < 2, 2 == 2 == 2, 3 > 2 > 1}",
+                   "{True, False, True, True}", 0);
+}
+
 int main() {
     /* The parser builds expressions with the cached SYM_* symbol pointers
      * (e.g. expr_new_symbol(SYM_List)), which are only populated by
@@ -509,6 +542,8 @@ int main() {
     TEST(test_parse_newline_separator);
     TEST(test_parse_dots);
     TEST(test_parse_scaled_scientific);
+    TEST(test_parentheses_break_comparison_chains);
+    TEST(test_unparenthesised_chains_still_chain);
 
     printf("\nAll parser tests passed!\n");
     return 0;

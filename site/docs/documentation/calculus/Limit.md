@@ -36,11 +36,11 @@ May return a finite value, Infinity, -Infinity, ComplexInfinity, Indeterminate, 
 
 </details>
 
-## Examples (17)
+## Examples (33)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (5)
+### Basic examples (16)
 
 ```mathematica
 In[1]:= Limit[Sin[x]/x, x -> 0]
@@ -57,50 +57,98 @@ Out[4]= ComplexInfinity
 
 In[5]:= Limit[x^2 + y^2, {x, y} -> {1, 2}]
 Out[5]= 5
+
+In[6]:= Limit[(3^x + 5^x)^(1/x), x -> Infinity]
+Out[6]= 5
+
+In[7]:= Limit[(Erf[x - E^-x] - Erf[x]) E^x E^(x^2), x -> Infinity]
+Out[7]= -2/Sqrt[Pi]
+
+In[8]:= Limit[(Cos[x^2]/x^2 - Cos[(x+1)^2]/(x+1)^2)/(1/x^3), x -> Infinity]
+Out[8]= Indeterminate
+
+In[9]:= Limit[Sin[x] + Cos[x], x -> Infinity]
+Out[9]= Indeterminate
+
+In[10]:= Limit[x^2 (2 + Cos[x]), x -> Infinity]
+Out[10]= Infinity
+
+In[11]:= Limit[a Sin[x], x -> Infinity]
+Out[11]= Limit[a Sin[x], x -> Infinity]
+
+In[12]:= Limit[Sin[1/x]/x, x -> 0]
+Out[12]= Indeterminate
+
+In[13]:= Limit`Series[Sin[x]/x, x -> 0]
+Out[13]= 1
+
+In[14]:= Limit`RationalFunction[Sin[x]/x, x -> 0]
+Out[14]= Limit`RationalFunction[Sin[x]/x, x -> 0]
+
+In[15]:= Limit`Gruntz[x (E^(1/x) - 1), x -> Infinity]
+Out[15]= 1
+
+In[16]:= Assuming[a > 1, Limit[a^x, x -> Infinity]]
+Out[16]= Infinity
 ```
 
-### Options (3)
+### Options (8)
 
 ```mathematica
-In[6]:= Limit[1/x, x -> 0, Direction -> "FromAbove"]
-Out[6]= Infinity
+In[17]:= Limit[1/x, x -> 0, Direction -> "FromAbove"]
+Out[17]= Infinity
 
-In[7]:= Limit[Sin[x]/x, x -> 0, Method -> "Series"]
-Out[7]= 1
+In[18]:= Limit[Sin[x]/x, x -> 0, Method -> "Series"]
+Out[18]= 1
 
-In[8]:= Limit[(2 x^2 + 1)/(x^2 + x), x -> Infinity, Method -> "RationalFunction"]
-Out[8]= 2
+In[19]:= Limit[(2 x^2 + 1)/(x^2 + x), x -> Infinity, Method -> "RationalFunction"]
+Out[19]= 2
+
+In[20]:= Limit[Sin[x]/x, x -> 0, Method -> "RationalFunction"]
+Out[20]= Limit[Sin[x]/x, x -> 0, Method -> "RationalFunction"]
+
+In[21]:= Limit[E^x (E^(1/x - E^-x) - E^(1/x)), x -> Infinity, Method -> "Gruntz"]
+Out[21]= -1
+
+In[22]:= Limit[ExpIntegralEi[x + E^-x] E^-x x, x -> Infinity, Method -> "Gruntz"]
+Out[22]= 1
+
+In[23]:= Limit[x^n, x -> Infinity, Assumptions -> n > 0]
+Out[23]= Infinity
+
+In[24]:= Limit[x^a/(x^a + 1), x -> Infinity, Assumptions -> a > 0]
+Out[24]= 1
 ```
 
 ### Applications (9)
 
 ```mathematica
-In[9]:= Limit[Sin[x]/x, x -> 0]
-Out[9]= 1
+In[25]:= Limit[Sin[x]/x, x -> 0]
+Out[25]= 1
 
-In[10]:= Limit[(x^2 - 1)/(x - 1), x -> 1]
-Out[10]= 2
+In[26]:= Limit[(x^2 - 1)/(x - 1), x -> 1]
+Out[26]= 2
 
-In[11]:= Limit[(1 + a/x)^x, x -> Infinity]
-Out[11]= E^a
+In[27]:= Limit[(1 + a/x)^x, x -> Infinity]
+Out[27]= E^a
 
-In[12]:= Limit[(Sin[x] - x + x^3/6)/x^5, x -> 0]
-Out[12]= 1/120
+In[28]:= Limit[(Sin[x] - x + x^3/6)/x^5, x -> 0]
+Out[28]= 1/120
 
-In[13]:= Limit[(x^x - x)/(1 - x + Log[x]), x -> 1]
-Out[13]= -2
+In[29]:= Limit[(x^x - x)/(1 - x + Log[x]), x -> 1]
+Out[29]= -2
 
-In[14]:= Limit[x - Sqrt[x^2 + x], x -> Infinity]
-Out[14]= -1/2
+In[30]:= Limit[x - Sqrt[x^2 + x], x -> Infinity]
+Out[30]= -1/2
 
-In[15]:= Limit[x^2 + y^2, {x, y} -> {1, 2}]
-Out[15]= 5
+In[31]:= Limit[x^2 + y^2, {x, y} -> {1, 2}]
+Out[31]= 5
 
-In[16]:= Limit[1/x, x -> 0, Direction -> "FromAbove"]
-Out[16]= Infinity
+In[32]:= Limit[1/x, x -> 0, Direction -> "FromAbove"]
+Out[32]= Infinity
 
-In[17]:= Limit[1/x, x -> 0, Direction -> "FromBelow"]
-Out[17]= -Infinity
+In[33]:= Limit[1/x, x -> 0, Direction -> "FromBelow"]
+Out[33]= -Infinity
 ```
 
 ## Algorithm

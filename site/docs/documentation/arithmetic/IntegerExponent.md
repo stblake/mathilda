@@ -16,7 +16,7 @@ IntegerExponent ignores the sign of n; IntegerExponent\[0, b\] is Infinity.
 
 </details>
 
-## Examples (9)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -39,20 +39,28 @@ In[5]:= IntegerExponent[0]
 Out[5]= Infinity
 ```
 
+### Scope (2)
+
+```mathematica
+In[6]:= IntegerExponent[] IntegerExponent::argt: IntegerExponent called with 0 arguments; 1 or 2 arguments are expected.
+
+In[7]:= IntegerExponent[1, 2, 3, 4] IntegerExponent::argt: IntegerExponent called with 4 arguments; 1 or 2 arguments are expected.
+```
+
 ### Applications (4)
 
 ```mathematica
-In[6]:= IntegerExponent[1000]
-Out[6]= 3
+In[8]:= IntegerExponent[1000]
+Out[8]= 3
 
-In[7]:= IntegerExponent[1000, 2]
-Out[7]= 3
+In[9]:= IntegerExponent[1000, 2]
+Out[9]= 3
 
-In[8]:= IntegerExponent[100!, 5]
-Out[8]= 24
+In[10]:= IntegerExponent[100!, 5]
+Out[10]= 24
 
-In[9]:= IntegerExponent[20!, 2]
-Out[9]= 18
+In[11]:= IntegerExponent[20!, 2]
+Out[11]= 18
 ```
 
 ## Options & behaviour

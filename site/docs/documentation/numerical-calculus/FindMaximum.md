@@ -36,7 +36,7 @@ Methods (Method -\> ...): Automatic           picks Brent for 1D, QuasiNewton (B
 
 </details>
 
-## Examples (9)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -62,17 +62,24 @@ In[6]:= FindMaximum[Cos[x], {x, 0}]
 Out[6]= {1.0, {x -> -2.3206e-09}}
 ```
 
+### Options (1)
+
+```mathematica
+In[7]:= FindMinimum[(x - Pi)^2, {x, 0}, WorkingPrecision -> 50]
+Out[7]= {0.0, {x -> 3.1415926535897932384626433832795028841971693993751}}
+```
+
 ### Applications (3)
 
 ```mathematica
-In[7]:= FindMaximum[Sin[x], {x, 1}]
-Out[7]= {1.0, {x -> 1.5708}}
+In[8]:= FindMaximum[Sin[x], {x, 1}]
+Out[8]= {1.0, {x -> 1.5708}}
 
-In[8]:= FindMaximum[x (10 - x), {x, 0}]
-Out[8]= {25.0, {x -> 5.0}}
+In[9]:= FindMaximum[x (10 - x), {x, 0}]
+Out[9]= {25.0, {x -> 5.0}}
 
-In[9]:= FindMaximum[Sin[x] Sin[2 y], {{x, 1}, {y, 1}}]
-Out[9]= {1.0, {x -> 1.5708, y -> 0.785398}}
+In[10]:= FindMaximum[Sin[x] Sin[2 y], {{x, 1}, {y, 1}}]
+Out[10]= {1.0, {x -> 1.5708, y -> 0.785398}}
 ```
 
 ## Algorithm
@@ -123,7 +130,7 @@ Returns NULL (unevaluated) on any failure — variable bindings are always resto
 ## Implementation notes
 
 **Algorithm.** `FindMaximum` (`HoldAll | Protected`) is a thin wrapper over
-`FindMinimum` (src/findmin.c, `builtin_findmaximum`): it negates the objective,
+`FindMinimum` (src/numerical_calculus/findmin.c, `builtin_findmaximum`): it negates the objective,
 runs the same local optimizer, and negates the first component of the resulting
 `{f_min, {x -> x_min, ...}}` pair to report `{f_max, {x -> x_max, ...}}`. All
 machinery — Brent in 1-D, BFGS quasi-Newton / conjugate-gradient / Newton /
@@ -139,11 +146,11 @@ is precision-aware (`mpfr_neg` for `EXPR_MPFR` results, plain real otherwise).
 
 ## References
 
-**See also:** [FindMinimum](../../calculus/FindMinimum/), [Block](../../scoping-constructs/Block/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/)
+**See also:** [FindMinimum](../../numerical-calculus/FindMinimum/), [Block](../../scoping-constructs/Block/), [AccuracyGoal](../../other-advanced/AccuracyGoal/), [PrecisionGoal](../../other-advanced/PrecisionGoal/), [Compile](../../control-flow/Compile/)
 
 - J. Nocedal, S. J. Wright, *Numerical Optimization*, 2nd ed. (Springer, 2006).
-- Source: [`src/findmin.c`](https://github.com/stblake/mathilda/blob/main/src/findmin.c)
-- Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
+- Source: [`src/numerical_calculus/findmin.c`](https://github.com/stblake/mathilda/blob/main/src/numerical_calculus/findmin.c)
+- Specification: [`docs/spec/builtins/numerical-calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/numerical-calculus.md)
 - Tests: [`tests/test_findmin.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin.c)
 
 ## Notes & additional examples

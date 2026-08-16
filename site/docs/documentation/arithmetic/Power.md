@@ -7,11 +7,11 @@
 
 x ^ y or Power\[x, y\] represents x to the power y. Power is Listable, NumericFunction, and OneIdentity. Integer exponents are reduced exactly (repeated squaring on GMP); Rational and Real exponents evaluate numerically when the base is numeric; Power\[0, 0\] stays Indeterminate; Power\[x, 1/2\] is canonicalised to Sqrt\[x\].
 
-## Examples (14)
+## Examples (15)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (7)
+### Basic examples (8)
 
 ```mathematica
 In[1]:= Sqrt[45]
@@ -22,51 +22,59 @@ Out[2]= a^2 b^2
 
 In[3]:= (-1)^(3/2)
 Out[3]= -I
+```
 
-In[4]:= 18^(1/3)
-Out[4]= 2^(1/3) 3^(2/3)
+Floor reduces exponent into [0,1)
 
-In[5]:= 12^(1/3)
-Out[5]= 2^(2/3) 3^(1/3)
+```mathematica
+In[4]:= (-1)^(7/4) In[4b]:= (-1)^(-1/5) Out[4b]= -(-1)^(4/5)
+```
+
+```mathematica
+In[5]:= 18^(1/3)
+Out[5]= 2^(1/3) 3^(2/3)
+
+In[6]:= 12^(1/3)
+Out[6]= 2^(2/3) 3^(1/3)
 ```
 
 3 and 5 share eff 1/3 -> grouped
 
 ```mathematica
-In[6]:= 60^(1/3)
-Out[6]= 2^(2/3) 15^(1/3)
+In[7]:= 60^(1/3)
+Out[7]= 2^(2/3) 15^(1/3)
 ```
 
 Uniform exps -> stays
 
 ```mathematica
-In[7]:= 6^(1/3)
-Out[7]= 6^(1/3)
+In[8]:= 6^(1/3)
+Out[8]= 6^(1/3)
 ```
 
 ### Applications (7)
 
 ```mathematica
-In[8]:= 2^200
-Out[8]= 1606938044258990275541962092341162602522202993782792835301376
+In[9]:= 2^200
+Out[9]= 1606938044258990275541962092341162602522202993782792835301376
 
-In[9]:= (1/2)^-5
-Out[9]= 32
+In[10]:= (1/2)^-5
+Out[10]= 32
 
-In[10]:= 27^(2/3)
-Out[10]= 9
+In[11]:= 27^(2/3)
+Out[11]= 9
 
-In[11]:= 0^0
-Out[11]= Indeterminate
+In[12]:= 0^0
+Out[12]= Indeterminate
 
-In[12]:= (3 + 4 I)^10
-Out[12]= -9653287 + 1476984*I
+In[13]:= (3 + 4 I)^10
+Out[13]= -9653287 + 1476984*I
 
-In[13]:= Sqrt[-12]
-Out[13]= (2*I) Sqrt[3]
+In[14]:= Sqrt[-12]
+Out[14]= (2*I) Sqrt[3]
 
-In[14]:= N[2^(1/2), 40]
-Out[14]= 1.4142135623730950488016887242096980785697
+In[15]:= N[2^(1/2), 40]
+Out[15]= 1.4142135623730950488016887242096980785697
 ```
 
 ## Performance

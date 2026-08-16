@@ -42,10 +42,10 @@ Out[5]= 25
 
 - Source: [`src/complex.c`](https://github.com/stblake/mathilda/blob/main/src/complex.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_bignum_rational_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bignum_rational_numeric.c)
 - Tests: [`tests/test_blas.c`](https://github.com/stblake/mathilda/blob/main/tests/test_blas.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_complexexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complexexpand.c)
-- Tests: [`tests/test_conjugate_transpose.c`](https://github.com/stblake/mathilda/blob/main/tests/test_conjugate_transpose.c)
 
 ## Notes & additional examples
 

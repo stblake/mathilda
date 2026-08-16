@@ -448,6 +448,26 @@ check-packed-aware:
 check-array-exactness:
 	python3 tools/check_array_exactness.py
 
+# `make check-image-packing` — does every image head hand back a PACKED buffer,
+# at BOTH ranks? Three times an image operation was 4x to 23x slower than its
+# equivalent elsewhere with entirely correct answers, because the marshalling and
+# not the algorithm was the cost: image_load walking an NDArray element by
+# element, image3d_load still walking after image_load was fixed, and
+# bit_image_from_mask building 262144 Expr integers in nested Lists. No test in
+# the suite could catch any of them; a benchmark caught each one by accident, one
+# at a time. This asks the question mechanically instead.
+check-image-packing:
+	python3 tools/check_image_packing.py
+
+# `make check-menu-ids` — does every native menu item actually do something?
+#
+# The menu bar is built in Rust and handled in TypeScript, joined only by a string id travelling
+# through a `menu:<id>` event, and BOTH failure directions are silent: an id with no handler is a
+# dead command, and a handler nothing emits is dead code that reads like wiring. Both were present
+# the first time this was checked by hand.
+check-menu-ids:
+	python3 tools/check_menu_ids.py
+
 # `make check-nd-surfaces` — does every head reach the SAME fast path from a
 # packed List and from a visible NDArray, and agree on the answer?
 #
@@ -543,7 +563,7 @@ print-cc:
 
 .PHONY: all clean docs docs-build docs-serve check-c99 check-interval check-packed-aware \
         check-array-exactness check-nd-surfaces check-compile-coverage \
-        check-fastpath-sweep bench-gap print-cc
+        check-fastpath-sweep check-menu-ids bench-gap print-cc
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first

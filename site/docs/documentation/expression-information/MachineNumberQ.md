@@ -7,11 +7,11 @@
 
 **`MachineNumberQ[expr] gives True if expr is a machine-precision real or complex number, and False otherwise.`**
 
-## Examples (7)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (3)
+### Basic examples (4)
 
 ```mathematica
 In[1]:= StringQ["AbC"]
@@ -22,32 +22,46 @@ Out[2]= True
 
 In[3]:= StringQ[123]
 Out[3]= False
+
+In[4]:= StringQ[] StringQ::argx: StringQ called with 0 arguments; 1 argument is expected.
 ```
 
-### Scope (4)
+### Scope (6)
 
 ```mathematica
-In[4]:= MachineNumberQ[Sin[1000.]]
-Out[4]= True
+In[5]:= MachineNumberQ[Sin[1000.]]
+Out[5]= True
 ```
 
 Overflows to +inf
 
 ```mathematica
-In[5]:= MachineNumberQ[Exp[1000.]]
-Out[5]= False
+In[6]:= MachineNumberQ[Exp[1000.]]
+Out[6]= False
 ```
 
 ```mathematica
-In[6]:= MachineNumberQ[-29037945.290347]
-Out[6]= True
+In[7]:= MachineNumberQ[-29037945.290347]
+Out[7]= True
 ```
 
 MPFR, not machine
 
 ```mathematica
-In[7]:= MachineNumberQ[N[Pi, 30]]
-Out[7]= False
+In[8]:= MachineNumberQ[N[Pi, 30]]
+Out[8]= False
+```
+
+```mathematica
+In[9]:= MachineNumberQ[1.0 + 2.0 I]
+Out[9]= True
+```
+
+Exact Gaussian integer
+
+```mathematica
+In[10]:= MachineNumberQ[1 + 2 I]
+Out[10]= False
 ```
 
 ## Algorithm

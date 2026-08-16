@@ -17,6 +17,7 @@
   import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
   import Output from './Output.svelte';
   import RefPage from './RefPage.svelte';
+  import { openRefpage } from './canvas';
   import type { Cell, CellType, OutputItem } from './notebook';
   import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection } from './notebook';
   import { registerHandle, unregisterHandle, setActiveCell, markBlurred } from './active';
@@ -183,6 +184,7 @@
         view.focus();
         const end = view.state.doc.length;
         view.dispatch({ selection: EditorSelection.cursor(end) });
+        revealSelf();
       },
     });
 
@@ -273,12 +275,30 @@
   $: if (proseEl && cell.id !== _lastCellId) {
     proseEl.innerText = cell.source;
     _lastCellId = cell.id;
-    // Register focus fn once the element exists
-    dispatch('register', {
-      id: cell.id,
-      fn: () => { proseEl?.focus(); },
-    });
-    registerHandle(cell.id, { view: null, el: proseEl, focus: () => proseEl?.focus() });
+    /* REGISTER ONLY IF FOCUS WOULD ACTUALLY WORK. On a reference page `headingReadonly` is true,
+       so the heading renders contenteditable={false} with no tabindex and .focus() on it does
+       nothing at all. Registering anyway is worse than not registering: arrow navigation looks
+       for the next cell that HAS a focus function, finds this one, calls it, and the caret
+       vanishes -- which is why arrowing past a section in the docs appeared dead even after
+       unfocusable rows were being skipped. This row was not classified as unfocusable; it lied.
+       A read-only heading is page structure, so arrows step over it. */
+    if (!headingReadonly) {
+      dispatch('register', {
+        id: cell.id,
+        fn: () => { proseEl?.focus(); revealSelf(); },
+      });
+      registerHandle(cell.id, { view: null, el: proseEl, focus: () => proseEl?.focus() });
+    }
+  }
+
+  /* The cell's own outer element, so a cell taking the caret can bring itself into view.
+     Arrowing through a long notebook otherwise walked the caret off the bottom of the visible
+     area and kept going with nothing on screen changing. `block: 'nearest'` scrolls only when
+     the cell is really out of view, which keeps a short hop from jerking the page. */
+  let shellEl: HTMLElement | undefined;
+
+  function revealSelf() {
+    shellEl?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
   /* focus/blur do NOT bubble, so these have to sit on the contenteditable
@@ -290,6 +310,7 @@
 
 <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
 <div
+  bind:this={shellEl}
   class="cell-shell"
   class:selected
   class:running={cell.status === 'running'}
@@ -297,6 +318,7 @@
   class:type-text={cell.type === 'text'}
   class:type-section={cell.type === 'section'}
   class:type-subsection={cell.type === 'subsection'}
+  class:type-ref={cell.type === 'ref'}
   on:click={onBodyClick}
 >
 
@@ -362,7 +384,8 @@
       {/if}
       {#if cell.output.length > 0}
         <div class="output-pane">
-          <Output items={cell.output} />
+          <Output items={cell.output}
+                  onOpenDoc={(n) => openRefpage(notebookId, n)} />
         </div>
       {/if}
 
@@ -400,7 +423,7 @@
 
     {:else if cell.type === 'ref'}
       <!-- Read-only generated reference page; `source` is the symbol name. -->
-      <RefPage markdown={cell.source} />
+      <RefPage markdown={cell.source} onOpen={(n) => openRefpage(notebookId, n)} />
 
     {:else if cell.type === 'subsection'}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -455,6 +478,17 @@
     cursor: pointer;
     user-select: none;
     gap: 2px;
+  }
+
+  /* REFERENCE PROSE STARTS AT THE MARGIN. A generated page's paragraphs have nothing to put
+     in the gutter -- no run button, no execution label -- so the 40px reserved for one only
+     pushed every sentence to the right of the code it describes. Wolfram's pages run prose
+     flush with the left margin and keep the gutter for In[]/Out[] labels alone; this does the
+     same, and the narrow strip that remains keeps the coloured focus edge visible. */
+  .cell-shell.type-ref > .cell-gutter {
+    width: 10px;
+    padding-left: 0;
+    padding-right: 0;
   }
 
   .exec-label {
@@ -617,19 +651,25 @@
      of the same thing: a section is a full-strength heading with a rule under
      it, a subsection is smaller, lighter and dimmer so it clearly sits inside
      one. They previously differed by 0.15rem and nothing else. */
+  /* BOTH LEVELS OUTRANK BODY TEXT. Body prose is 0.98rem, so a subsection at 0.92rem was
+     literally smaller than the sentences it was meant to be heading -- the heading read as a
+     caption. A heading has to win on size before it can win on weight or colour, so the section
+     leads clearly and the subsection still sits above the prose beneath it. */
   h1.heading-cell {
-    font-size: 1.12rem;
+    font-size: 1.42rem;
     font-weight: 700;
     color: var(--text-h, #cdd6f4);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    padding-bottom: 0.3rem;
+    padding-bottom: 0.32rem;
+    line-height: 1.25;
   }
   h2.heading-cell {
-    font-size: 0.92rem;
-    font-weight: 600;
-    color: var(--text-dim, #9aa0b4);
-    letter-spacing: 0.02em;
-    padding-top: 2px;
+    font-size: 1.14rem;
+    font-weight: 650;
+    color: var(--text, #cdd6f4);
+    letter-spacing: 0.01em;
+    padding-top: 4px;
+    line-height: 1.3;
   }
 
   .out-label {

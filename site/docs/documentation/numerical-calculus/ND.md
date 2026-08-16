@@ -24,7 +24,7 @@ Default Method -\> EulerSum uses Richardson extrapolation of forward, direction-
 
 </details>
 
-## Examples (12)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -51,7 +51,7 @@ In[5]:= ND[Re[Cos[I y]], y, 1]
 Out[5]= 1.1752
 ```
 
-### Options (3)
+### Options (5)
 
 ```mathematica
 In[6]:= ND[Abs[x], {x, 1}, 0, Scale -> 1 + I]
@@ -64,20 +64,32 @@ In[8]:= ND[Exp[x^2], {x, 4}, 0, Method -> NIntegrate]
 Out[8]= 12.0 - 9.99201e-16*I
 ```
 
+= 4/(3 Sqrt[Pi])
+
+```mathematica
+In[9]:= ND[x, {x, -1/2}, 1, Method -> NIntegrate]
+Out[9]= 0.752253 - 3.23365e-16*I
+```
+
+```mathematica
+In[10]:= ND[Sin[x^2], {x, 3}, 1, Terms -> 20, WorkingPrecision -> 40]
+Out[10]= -14.420070264639875819037588981065446865125
+```
+
 ### Applications (4)
 
 ```mathematica
-In[9]:= ND[Sin[x], x, 1]
-Out[9]= 0.540302
+In[11]:= ND[Sin[x], x, 1]
+Out[11]= 0.540302
 
-In[10]:= ND[Gamma[x], x, 1]
-Out[10]= -0.577216
+In[12]:= ND[Gamma[x], x, 1]
+Out[12]= -0.577216
 
-In[11]:= ND[BesselJ[0, x], x, 2]
-Out[11]= -0.576725
+In[13]:= ND[BesselJ[0, x], x, 2]
+Out[13]= -0.576725
 
-In[12]:= ND[Tan[x], {x, 2}, 1]
-Out[12]= 11.4484
+In[14]:= ND[Tan[x], {x, 2}, 1]
+Out[14]= 11.4484
 ```
 
 ## Algorithm

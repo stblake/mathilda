@@ -1,7 +1,7 @@
 # $SimplifyDebug
 
-!!! note "Status: Experimental"
-    present and registered, but lightly documented and not yet covered by dedicated tests.
+!!! success "Status: Stable"
+    documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## Description
 
@@ -9,15 +9,21 @@
 
 When set to True, Simplify prints one stderr line per transform invocation: /Name/: \<input\> -\> \<output\> \[\<ms\> ms\]. Defaults to False. Useful for diagnosing slow Simplify calls.
 
-## Examples (1)
+## Examples (2)
 
 Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
+
+```mathematica
+In[1]:= $SimplifyDebug = True; Simplify[a x + b x]; $SimplifyDebug = False;
+```
 
 ### Applications (1)
 
 ```mathematica
-In[1]:= $SimplifyDebug
-Out[1]= False
+In[2]:= $SimplifyDebug
+Out[2]= False
 ```
 
 ## Implementation notes

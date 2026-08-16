@@ -16,11 +16,11 @@ The general problem of deciding whether an expression is zero is undecidable; Po
 
 </details>
 
-## Examples (14)
+## Examples (18)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (7)
+### Basic examples (8)
 
 ```mathematica
 In[1]:= PossibleZeroQ[E^(I Pi/4) - (-1)^(1/4)]
@@ -43,39 +43,51 @@ Out[6]= False
 
 In[7]:= PossibleZeroQ[Sin[x]^2 + Cos[x]^2 - 1]
 Out[7]= True
+
+In[8]:= Assuming[Re[x] > 0, PossibleZeroQ[-x + Sqrt[x^2]]]
+Out[8]= True
 ```
 
-### Options (1)
+### Options (4)
 
 ```mathematica
-In[8]:= PossibleZeroQ[Sqrt[x^2] - x, Assumptions -> x >= 0]
-Out[8]= True
+In[9]:= PossibleZeroQ[Sqrt[x^2] - x, Assumptions -> x >= 0]
+Out[9]= True
+
+In[10]:= PossibleZeroQ[Sin[n Pi], Assumptions -> Element[n, Integers]]
+Out[10]= True
+
+In[11]:= PossibleZeroQ[Log[Exp[z]] - z, Assumptions -> -Pi < Im[z] <= Pi]
+Out[11]= True
+
+In[12]:= PossibleZeroQ[Cos[n Pi], Assumptions -> Element[n, Integers]]
+Out[12]= False
 ```
 
 ### Worked examples (1)
 
 ```mathematica
-In[9]:= Gamma[x] - Gamma[x]
-Out[9]= 0
+In[13]:= Gamma[x] - Gamma[x]
+Out[13]= 0
 ```
 
 ### Applications (5)
 
 ```mathematica
-In[10]:= PossibleZeroQ[(x - 1) (x + 1) - (x^2 - 1)]
-Out[10]= True
-
-In[11]:= PossibleZeroQ[x^2 + 1]
-Out[11]= False
-
-In[12]:= PossibleZeroQ[Sin[x]^2 + Cos[x]^2 - 1]
-Out[12]= True
-
-In[13]:= PossibleZeroQ[Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]]
-Out[13]= True
-
-In[14]:= PossibleZeroQ[Log[2] + Log[3] - Log[6]]
+In[14]:= PossibleZeroQ[(x - 1) (x + 1) - (x^2 - 1)]
 Out[14]= True
+
+In[15]:= PossibleZeroQ[x^2 + 1]
+Out[15]= False
+
+In[16]:= PossibleZeroQ[Sin[x]^2 + Cos[x]^2 - 1]
+Out[16]= True
+
+In[17]:= PossibleZeroQ[Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]]
+Out[17]= True
+
+In[18]:= PossibleZeroQ[Log[2] + Log[3] - Log[6]]
+Out[18]= True
 ```
 
 ## Algorithm

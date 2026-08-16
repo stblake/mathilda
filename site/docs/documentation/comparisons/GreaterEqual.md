@@ -35,6 +35,7 @@ Out[3]= False
 - Source: [`src/comparisons.c`](https://github.com/stblake/mathilda/blob/main/src/comparisons.c)
 - Specification: [`docs/spec/builtins/comparisons.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/comparisons.md)
 - Tests: [`tests/test_comparisons.c`](https://github.com/stblake/mathilda/blob/main/tests/test_comparisons.c)
+- Tests: [`tests/test_parse.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parse.c)
 - Tests: [`tests/test_rat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_rat.c)
 - Tests: [`tests/test_solve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_solve.c)
 

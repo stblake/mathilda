@@ -20,7 +20,7 @@ fundamental theorem of calculus (Method -\> "NewtonLeibniz"). multiple integral 
 
 </details>
 
-## Examples (26)
+## Examples (70)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -61,75 +61,295 @@ In[7]:= Integrate[1/(x^4 + x^2 + 1), x] 1/6 Sqrt[3] ArcTan[(1 + 2 x)/Sqrt[3]] + 
 Out[7]= 1/4 Log[1 + x + x^2] - 1/4 Log[1 - x + x^2] + 1/2 (ArcTan[(1 + 2 x)/Sqrt[3]] (1/4 Log[1 + x + x^2] + 1/2 ArcTan[(-1 + 2 x)/Sqrt[3]]/Sqrt[3] + 1/2 ArcTan[(1 + 2 x)/Sqrt[3]]/Sqrt[3] - 1/4 Log[1 - x + x^2]))/Sqrt[3]
 ```
 
-### Options (1)
+### Scope (38)
+
+```mathematica
+In[8]:= Integrate[x^2, {x, 0, 1}]
+Out[8]= 1/3
+
+In[9]:= Integrate[1/(1 + x^2), {x, 0, Infinity}]
+Out[9]= 1/2 Pi
+```
+
+Improper, convergent
+
+```mathematica
+In[10]:= Integrate[1/Sqrt[x], {x, 0, 1}]
+Out[10]= 2
+```
+
+Continuous branch form
+
+```mathematica
+In[11]:= Integrate[1/(2 + Cos[x]), {x, 0, 2 Pi}]
+Out[11]= (2 Pi)/Sqrt[3]
+```
+
+Iterated
+
+```mathematica
+In[12]:= Integrate[x y, {x, 0, 1}, {y, 0, 1}]
+Out[12]= 1/4
+```
+
+```mathematica
+In[13]:= Integrate`SingularPoints[1/((x - 1)(x - 2)), {x, 0, 3}]
+Out[13]= {1, 2}
+
+In[14]:= Integrate[1/x, {x, 1 - I, 2 + 3 I}]
+Out[14]= Log[2 + 3*I] - Log[1 - I]
+
+In[15]:= Integrate[z^2, {z, 0, 1 + I}]
+Out[15]= -2/3 + 2/3*I
+```
+
+Branch-point endpoint
+
+```mathematica
+In[16]:= Integrate[1/Sqrt[z], {z, 0, 1 + I}]
+Out[16]= 2 Sqrt[1 + I]
+```
+
+```mathematica
+In[17]:= Integrate`PathSingularPoints[1/z, {z, -1 - I, 1 + I}]
+Out[17]= {0}
+```
+
+CCW loop about 0
+
+```mathematica
+In[18]:= Chop[N[Integrate[1/z, {z, 1, I, -1, -I, 1}]]]
+Out[18]= 0.0 + 6.28319*I
+```
+
+```mathematica
+In[19]:= Integrate[1/(1 + x^4), {x, -Infinity, Infinity}]
+Out[19]= Pi/Sqrt[2]
+```
+
+Order-2 pole
+
+```mathematica
+In[20]:= Integrate[1/(1 + x^2)^2, {x, -Infinity, Infinity}]
+Out[20]= 1/2 Pi
+```
+
+```mathematica
+In[21]:= Integrate[Cos[x]/(1 + x^2), {x, -Infinity, Infinity}]
+Out[21]= Pi/E
+
+In[22]:= Integrate[1/(2 + Cos[x]), {x, 0, 2 Pi}]
+Out[22]= (2 Pi)/Sqrt[3]
+```
+
+Principal value
+
+```mathematica
+In[23]:= Integrate[Sin[x]/x, {x, -Infinity, Infinity}]
+Out[23]= Pi
+```
+
+Even half-line
+
+```mathematica
+In[24]:= Integrate[1/(1 + x^4), {x, 0, Infinity}]
+Out[24]= (1/2 Pi)/Sqrt[2]
+```
+
+```mathematica
+In[25]:= Integrate[x f'[x] + f[x], x]
+Out[25]= x f[x]
+
+In[26]:= Integrate[f'[x] g[x] + f[x] g'[x], x]
+Out[26]= f[x] g[x]
+
+In[27]:= Integrate[f'[x]/f[x], x]
+Out[27]= Log[f[x]]
+
+In[28]:= Integrate[(f'[x] g'[x] - f[x] g''[x])/(f[x]^2 + g'[x]^2), x]
+Out[28]= -ArcTan[Derivative[1][g][x]/f[x]]
+```
+
+Composite argument
+
+```mathematica
+In[29]:= Integrate[2 x f'[x^2], x]
+Out[29]= f[x^2]
+```
+
+```mathematica
+In[30]:= Integrate[(f[x] - x f[x] + f[x] Log[x f[x]] + x f'[x])/f[x], x]
+Out[30]= -1/2 x^2 + x Log[x f[x]]
+
+In[31]:= Integrate[Log[f[x]] f'[x]/f[x], x]
+Out[31]= 1/2 Log[f[x]]^2
+```
+
+Direct, correct branch
+
+```mathematica
+In[32]:= Integrate[Sin[x] Sqrt[1 - Cos[x]], x]
+Out[32]= 2/3 (1 - Cos[x])^(3/2)
+```
+
+```mathematica
+In[33]:= Integrate[1/(x Log[x]), x]
+Out[33]= Log[Log[x]]
+
+In[34]:= Integrate`DerivativeDivides[2 x Exp[x^2], x]
+Out[34]= E^x^2
+```
+
+U = Sqrt[Tan[x]]
+
+```mathematica
+In[35]:= Integrate[Sqrt[Tan[x]], x] - Log[1 + Tan[x] + Sqrt[2] Sqrt[Tan[x]]]/(2 Sqrt[2]) + Log[1 + Tan[x] - Sqrt[2] Sqrt[Tan[x]]]/(2 Sqrt[2])
+Out[35]= ArcTan[-1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2] + ArcTan[1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2] - Log[1 + Tan[x] + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2] + Log[1 + Tan[x] - Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2]
+```
+
+U = Sqrt[Cot[x]]
+
+```mathematica
+In[36]:= Integrate[Sqrt[Cot[x]], x] - Log[1 + Cot[x] - Sqrt[2] Sqrt[Cot[x]]]/(2 Sqrt[2]) + Log[1 + Cot[x] + Sqrt[2] Sqrt[Cot[x]]]/(2 Sqrt[2])
+Out[36]= -ArcTan[-1 + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2] - ArcTan[1 + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2] - Log[1 + Cot[x] - Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2] + Log[1 + Cot[x] + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2]
+```
+
+```mathematica
+In[37]:= Integrate[1/Sqrt[x + 1], x]
+Out[37]= 2 Sqrt[1 + x]
+
+In[38]:= Integrate[Sqrt[x]/(1 + Sqrt[x]), x]
+Out[38]= -2 Sqrt[x] + x + 2 Log[1 + Sqrt[x]]
+
+In[39]:= Integrate[1/Sqrt[x^2 + 1], x]
+Out[39]= ArcSinh[x]
+
+In[40]:= Integrate[1/Sqrt[1 - x^2], x]
+Out[40]= ArcSin[x]
+```
+
+Symbolic leading coeff
+
+```mathematica
+In[41]:= Integrate[1/Sqrt[a x^2 + 1], x]
+Out[41]= -Log[-Sqrt[a] x + Sqrt[1 + a x^2]]/Sqrt[a]
+```
+
+```mathematica
+In[42]:= Integrate[1/Sqrt[(x + 1)/(x - 1)], x] 2 ArcTanh[Sqrt[(1 + x)/(-1 + x)]]
+Out[42]= 2 ArcTanh[Sqrt[(1 + x)/(-1 + x)]] (2 Sqrt[(1 + x)/(-1 + x)]/(-1 + (1 + x)/(-1 + x)) - 2 ArcTanh[Sqrt[(1 + x)/(-1 + x)]])
+```
+
+Paper eq. (10)
+
+```mathematica
+In[43]:= Integrate[3/(5 - 4 Cos[x]), x]
+Out[43]= 2 Pi Floor[(1/2 (-Pi + x))/Pi] + 2 ArcTan[3 Tan[1/2 x]]
+```
+
+Continuous form
+
+```mathematica
+In[44]:= Integrate[1/(2 + Cos[x]), x]
+Out[44]= 2 (Pi Floor[(1/2 (-Pi + x))/Pi])/Sqrt[3] + 2 ArcTan[Tan[1/2 x]/Sqrt[3]]/Sqrt[3]
+```
+
+Hyperbolic: no Floor
+
+```mathematica
+In[45]:= Integrate[1/(2 + Cosh[x]), x]
+Out[45]= (2 ArcTanh[Tanh[1/2 x]/Sqrt[3]])/Sqrt[3]
+```
+
+### Options (7)
 
 Strict, no fallback
 
 ```mathematica
-In[8]:= Integrate[Sin[x], x, Method -> "RischNorman"]
-Out[8]= -Cos[x]
+In[46]:= Integrate[Sin[x], x, Method -> "RischNorman"]
+Out[46]= -Cos[x]
+```
+
+```mathematica
+In[47]:= Integrate[x^3, x, Method -> "BronsteinRational"]
+Out[47]= 1/4 x^4
+
+In[48]:= Integrate[Sin[x]/Cos[x]^2, x, Method -> "DerivativeDivides"]
+Out[48]= Sec[x]
+
+In[49]:= Integrate[1/(1 + x^(1/3)), x, Method -> "LinearRadicals"]
+Out[49]= -3 x^(1/3) + 3/2 x^(2/3) + 3 Log[1 + x^(1/3)]
+
+In[50]:= Integrate[Sqrt[2 x + 3]/x, x, Method -> "LinearRadicals"]
+Out[50]= 2 Sqrt[3 + 2 x] - 2 Sqrt[3] ArcCoth[Sqrt[3 + 2 x]/Sqrt[3]]
+
+In[51]:= Integrate[1/Sqrt[x^2 - 1], x, Method -> "QuadraticRadicals"]
+Out[51]= Log[2 x + 2 Sqrt[-1 + x^2]]
+
+In[52]:= Integrate[1/Sqrt[(2 x + 1)/(x + 3)], x, Method -> "LinearRatioRadicals"] 5/2 ArcTanh[Sqrt[(1 + 2 x)/(3 + x)]/Sqrt[2]]/Sqrt[2]
+Out[52]= (5/2 ArcTanh[Sqrt[(1 + 2 x)/(3 + x)]/Sqrt[2]] (-5 Sqrt[(1 + 2 x)/(3 + x)]/(-4 + 2 (1 + 2 x)/(3 + x)) + 5/2 ArcTanh[Sqrt[(1 + 2 x)/(3 + x)]/Sqrt[2]]/Sqrt[2]))/Sqrt[2]
 ```
 
 ### Worked examples (10)
 
 ```mathematica
-In[9]:= Integrate[(x^a-1)/Log[x], {x,0,1}]
-Out[9]= Log[1 + a]
+In[53]:= Integrate[(x^a-1)/Log[x], {x,0,1}]
+Out[53]= Log[1 + a]
 
-In[10]:= Integrate[Exp[-a x] Sin[b x]/x, {x,0,Infinity}, Assumptions->a>0]
-Out[10]= 1/2 (Pi b)/Sqrt[b^2] - ArcTan[a/b]
+In[54]:= Integrate[Exp[-a x] Sin[b x]/x, {x,0,Infinity}, Assumptions->a>0]
+Out[54]= 1/2 (Pi b)/Sqrt[b^2] - ArcTan[a/b]
 
-In[11]:= Integrate[Sin[a x]^2/x^2, {x,0,Infinity}, Assumptions->a>0]
-Out[11]= 1/2 Pi a
+In[55]:= Integrate[Sin[a x]^2/x^2, {x,0,Infinity}, Assumptions->a>0]
+Out[55]= 1/2 Pi a
 
-In[12]:= Integrate[Log[1+a^2 x^2]/(1+x^2), {x,0,Infinity}, Assumptions->a>0]
-Out[12]= Pi Log[1 + a]
+In[56]:= Integrate[Log[1+a^2 x^2]/(1+x^2), {x,0,Infinity}, Assumptions->a>0]
+Out[56]= Pi Log[1 + a]
 
-In[13]:= Integrate[Exp[-c x](1-Cos[a x])/x^2, {x,0,Infinity}, Assumptions->{a>0,c>0}]
-Out[13]= a ArcTan[a/c] - 1/2 c Log[1 + a^2/c^2]
+In[57]:= Integrate[Exp[-c x](1-Cos[a x])/x^2, {x,0,Infinity}, Assumptions->{a>0,c>0}]
+Out[57]= a ArcTan[a/c] - 1/2 c Log[1 + a^2/c^2]
 
-In[14]:= Integrate[Exp[-x^2] Sin[a x]/x, {x,0,Infinity}]
-Out[14]= 1/2 Pi Erf[1/2 a]
+In[58]:= Integrate[Exp[-x^2] Sin[a x]/x, {x,0,Infinity}]
+Out[58]= 1/2 Pi Erf[1/2 a]
 
-In[15]:= Integrate[Exp[-x^2], {x,0,Infinity}]
-Out[15]= 1/2 Sqrt[Pi]
+In[59]:= Integrate[Exp[-x^2], {x,0,Infinity}]
+Out[59]= 1/2 Sqrt[Pi]
 
-In[16]:= Integrate[x^(s-1) Exp[-x], {x,0,Infinity}]
-Out[16]= ConditionalExpression[Gamma[s], s > 0]
+In[60]:= Integrate[x^(s-1) Exp[-x], {x,0,Infinity}]
+Out[60]= ConditionalExpression[Gamma[s], s > 0]
 
-In[17]:= Integrate[x^(s-1) BesselJ[ν,2√x]/x^(ν/2), {x,0,Infinity}]
-Out[17]= Integrate[BesselJ[u03bd, 2 u221ax] x^(-1 + s - 1/2 u03bd), {x, 0, Infinity}]
+In[61]:= Integrate[x^(s-1) BesselJ[ν,2√x]/x^(ν/2), {x,0,Infinity}]
+Out[61]= Integrate[BesselJ[u03bd, 2 u221ax] x^(-1 + s - 1/2 u03bd), {x, 0, Infinity}]
 
-In[18]:= Integrate[x^(s-1) (Γ[a]-Γ[a,x])/x^a, {x,0,Infinity}]
-Out[18]= Integrate[x^(-1 - a + s) (u0393[a] - u0393[a, x]), {x, 0, Infinity}]
+In[62]:= Integrate[x^(s-1) (Γ[a]-Γ[a,x])/x^a, {x,0,Infinity}]
+Out[62]= Integrate[x^(-1 - a + s) (u0393[a] - u0393[a, x]), {x, 0, Infinity}]
 ```
 
 ### Applications (8)
 
 ```mathematica
-In[19]:= Integrate[1/(1 + x^2), x]
-Out[19]= ArcTan[x]
+In[63]:= Integrate[1/(1 + x^2), x]
+Out[63]= ArcTan[x]
 
-In[20]:= Integrate[1/x, x]
-Out[20]= Log[x]
+In[64]:= Integrate[1/x, x]
+Out[64]= Log[x]
 
-In[21]:= Integrate[Cos[x], x]
-Out[21]= Sin[x]
+In[65]:= Integrate[Cos[x], x]
+Out[65]= Sin[x]
 
-In[22]:= Integrate[x^3 + x, x]
-Out[22]= 1/2 x^2 + 1/4 x^4
+In[66]:= Integrate[x^3 + x, x]
+Out[66]= 1/2 x^2 + 1/4 x^4
 
-In[23]:= Integrate[1/(x^3 + 1), x]
-Out[23]= 1/3 Log[1 + x] + ArcTan[(-1 + 2 x)/Sqrt[3]]/Sqrt[3] - 1/6 Log[1 - x + x^2]
+In[67]:= Integrate[1/(x^3 + 1), x]
+Out[67]= 1/3 Log[1 + x] + ArcTan[(-1 + 2 x)/Sqrt[3]]/Sqrt[3] - 1/6 Log[1 - x + x^2]
 
-In[24]:= Integrate[(x^2 + 1)/(x^4 + 1), x]
-Out[24]= ArcTan[x/Sqrt[2]]/Sqrt[2] + ArcTan[(x + x^3)/Sqrt[2]]/Sqrt[2]
+In[68]:= Integrate[(x^2 + 1)/(x^4 + 1), x]
+Out[68]= ArcTan[x/Sqrt[2]]/Sqrt[2] + ArcTan[(x + x^3)/Sqrt[2]]/Sqrt[2]
 
-In[25]:= Integrate[x*Exp[x], x]
-Out[25]= -E^x + x E^x
+In[69]:= Integrate[x*Exp[x], x]
+Out[69]= -E^x + x E^x
 
-In[26]:= Integrate[1/(x*Log[x]), x]
-Out[26]= Log[Log[x]]
+In[70]:= Integrate[1/(x*Log[x]), x]
+Out[70]= Log[Log[x]]
 ```
 
 ## Options & behaviour

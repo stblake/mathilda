@@ -14,11 +14,11 @@ f' represents the derivative of a function f of one argument. obtained from f by
 
 </details>
 
-## Examples (13)
+## Examples (15)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (6)
+### Basic examples (8)
 
 ```mathematica
 In[1]:= Derivative[2][f][x]
@@ -30,39 +30,43 @@ Out[2]= 0
 In[3]:= D[f[x, y], y]
 Out[3]= Derivative[0, 1][f][x, y]
 
-In[4]:= f'[x]
-Out[4]= 18 x^2 + 5 x^4
+In[4]:= f[x_] := x^5 + 6 x^3
 
-In[5]:= f'[5]
-Out[5]= 3575
+In[5]:= f'[x]
+Out[5]= 18 x^2 + 5 x^4
 
-In[6]:= Derivative[1, 1][g][a, b]
-Out[6]= 6 a b^2
+In[6]:= f'[5]
+Out[6]= 3575
+
+In[7]:= g[x_, y_] := x^2 y^3
+
+In[8]:= Derivative[1, 1][g][a, b]
+Out[8]= 6 a b^2
 ```
 
 ### Applications (7)
 
 ```mathematica
-In[7]:= f'[x]
-Out[7]= Derivative[1][f][x]
+In[9]:= f'[x]
+Out[9]= Derivative[1][f][x]
 
-In[8]:= D[f[x], x]
-Out[8]= Derivative[1][f][x]
+In[10]:= D[f[x], x]
+Out[10]= Derivative[1][f][x]
 
-In[9]:= Derivative[2][Cos]
-Out[9]= Derivative[2][Cos]
+In[11]:= Derivative[2][Cos]
+Out[11]= Derivative[2][Cos]
 
-In[10]:= D[f[g[x]], x]
-Out[10]= Derivative[1][g][x] Derivative[1][f][g[x]]
+In[12]:= D[f[g[x]], x]
+Out[12]= Derivative[1][g][x] Derivative[1][f][g[x]]
 
-In[11]:= D[f[g[x], h[x]], x]
-Out[11]= Derivative[1][g][x] Derivative[1, 0][f][g[x], h[x]] + Derivative[1][h][x] Derivative[0, 1][f][g[x], h[x]]
+In[13]:= D[f[g[x], h[x]], x]
+Out[13]= Derivative[1][g][x] Derivative[1, 0][f][g[x], h[x]] + Derivative[1][h][x] Derivative[0, 1][f][g[x], h[x]]
 
-In[12]:= D[(f[x])^2, x]
-Out[12]= 2 f[x] Derivative[1][f][x]
+In[14]:= D[(f[x])^2, x]
+Out[14]= 2 f[x] Derivative[1][f][x]
 
-In[13]:= Derivative[1][#^2 + 1 &]
-Out[13]= 2 #1 &
+In[15]:= Derivative[1][#^2 + 1 &]
+Out[15]= 2 #1 &
 ```
 
 ## Algorithm

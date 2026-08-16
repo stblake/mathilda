@@ -20,11 +20,11 @@ Option GaussianIntegers -\> True | False | Automatic switches to Gaussian intege
 
 </details>
 
-## Examples (15)
+## Examples (18)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (7)
+### Basic examples (10)
 
 ```mathematica
 In[1]:= SquareFreeQ[10]
@@ -47,38 +47,47 @@ Out[6]= True
 
 In[7]:= SquareFreeQ[x^3 - x^2 y]
 Out[7]= False
+
+In[8]:= SquareFreeQ[x y^2, x]
+Out[8]= True
+
+In[9]:= SquareFreeQ[x y^2, y]
+Out[9]= False
+
+In[10]:= SquareFreeQ[10^70 + 3]
+Out[10]= True
 ```
 
 ### Options (1)
 
 ```mathematica
-In[8]:= SquareFreeQ[2, GaussianIntegers -> True]
-Out[8]= False
+In[11]:= SquareFreeQ[2, GaussianIntegers -> True]
+Out[11]= False
 ```
 
 ### Applications (7)
 
 ```mathematica
-In[9]:= SquareFreeQ[12]
-Out[9]= False
-
-In[10]:= SquareFreeQ[30]
-Out[10]= True
-
-In[11]:= SquareFreeQ[x^2 - 1]
-Out[11]= True
-
-In[12]:= SquareFreeQ[(x - 1)^2 (x + 1)]
+In[12]:= SquareFreeQ[12]
 Out[12]= False
 
-In[13]:= SquareFreeQ[2]
+In[13]:= SquareFreeQ[30]
 Out[13]= True
 
-In[14]:= SquareFreeQ[2, GaussianIntegers -> True]
-Out[14]= False
+In[14]:= SquareFreeQ[x^2 - 1]
+Out[14]= True
 
-In[15]:= SquareFreeQ[x^4 + x^2 + 1]
-Out[15]= True
+In[15]:= SquareFreeQ[(x - 1)^2 (x + 1)]
+Out[15]= False
+
+In[16]:= SquareFreeQ[2]
+Out[16]= True
+
+In[17]:= SquareFreeQ[2, GaussianIntegers -> True]
+Out[17]= False
+
+In[18]:= SquareFreeQ[x^4 + x^2 + 1]
+Out[18]= True
 ```
 
 ## Options & behaviour

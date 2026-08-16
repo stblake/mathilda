@@ -13,11 +13,11 @@ Reverses the order of the characters in "string".
 
 Gives the list of results for each of the si. StringReverse is Listable, so it threads automatically over lists.
 
-## Examples (4)
+## Examples (5)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (4)
+### Basic examples (5)
 
 ```mathematica
 In[1]:= StringReverse["abcdef"]
@@ -31,6 +31,8 @@ Out[3]= ""
 
 In[4]:= StringReverse[x]
 Out[4]= StringReverse[x]
+
+In[5]:= StringReverse[] StringReverse::argx: StringReverse called with 0 arguments; 1 argument is expected.
 ```
 
 ## Implementation notes

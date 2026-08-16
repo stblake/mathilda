@@ -20,11 +20,11 @@ Distributes over Equal: D\[a == b, x\] gives D\[a, x\] == D\[b, x\].
 
 </details>
 
-## Examples (15)
+## Examples (20)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (8)
+### Basic examples (12)
 
 ```mathematica
 In[1]:= D[x^3, x]
@@ -52,29 +52,66 @@ In[8]:= D[Log[b, x], x]
 Out[8]= 1/(Log[b] x)
 ```
 
+Gradient
+
+```mathematica
+In[9]:= D[x^2 + 5 y^3, {{x, y}}]
+Out[9]= {2 x, 15 y^2}
+```
+
+Hessian
+
+```mathematica
+In[10]:= D[x^2 + 5 y^3, {{x, y}, 2}]
+Out[10]= {{2, 0}, {0, 30 y}}
+```
+
+Jacobian
+
+```mathematica
+In[11]:= D[{x^2 + y, x y}, {{x, y}}]
+Out[11]= {{2 x, 1}, {y, x}}
+```
+
+Equal distribution
+
+```mathematica
+In[12]:= D[x^2 + y^2 == 1, x]
+Out[12]= 2 x == 0
+```
+
+### Options (1)
+
+Implicit diff
+
+```mathematica
+In[13]:= D[x^2 + y^2 == 1, x, NonConstants -> y]
+Out[13]= 2 x + 2 y D[y, x, NonConstants -> {y}] == 0
+```
+
 ### Applications (7)
 
 ```mathematica
-In[9]:= D[x^n, x]
-Out[9]= n x^(-1 + n)
+In[14]:= D[x^n, x]
+Out[14]= n x^(-1 + n)
 
-In[10]:= D[Exp[a x], x]
-Out[10]= a E^(a x)
+In[15]:= D[Exp[a x], x]
+Out[15]= a E^(a x)
 
-In[11]:= D[x^2 y, {x, 2}]
-Out[11]= 2 y
+In[16]:= D[x^2 y, {x, 2}]
+Out[16]= 2 y
 
-In[12]:= D[x^x, x]
-Out[12]= x^(-1 + x) (x + x Log[x])
+In[17]:= D[x^x, x]
+Out[17]= x^(-1 + x) (x + x Log[x])
 
-In[13]:= D[Sin[x]^Cos[x], x]
-Out[13]= Sin[x]^(-1 + Cos[x]) (Cos[x]^2 - Sin[x]^2 Log[Sin[x]])
+In[18]:= D[Sin[x]^Cos[x], x]
+Out[18]= Sin[x]^(-1 + Cos[x]) (Cos[x]^2 - Sin[x]^2 Log[Sin[x]])
 
-In[14]:= D[Log[Gamma[x]], x]
-Out[14]= PolyGamma[0, x]
+In[19]:= D[Log[Gamma[x]], x]
+Out[19]= PolyGamma[0, x]
 
-In[15]:= D[f[g[x]], x]
-Out[15]= Derivative[1][g][x] Derivative[1][f][g[x]]
+In[20]:= D[f[g[x]], x]
+Out[20]= Derivative[1][g][x] Derivative[1][f][g[x]]
 ```
 
 ## Algorithm

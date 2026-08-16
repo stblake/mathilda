@@ -20,11 +20,11 @@ Options: Assumptions (default $Assumptions) -- facts assumed while simplifying. 
 
 </details>
 
-## Examples (16)
+## Examples (38)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (7)
+### Scope (26)
 
 ```mathematica
 In[1]:= Simplify[(x - 1)(x + 1)(x^2 + 1) + 1]
@@ -47,41 +47,107 @@ Out[6]= 2
 
 In[7]:= Simplify[{Sin[x]^2 + Cos[x]^2, 3/(x + 3) + x/(x + 3)}]
 Out[7]= {1, 1}
-```
 
-### Scope (1)
-
-```mathematica
 In[8]:= Simplify[Sqrt[2] Sqrt[3]]
 Out[8]= Sqrt[6]
+
+In[9]:= Simplify[Sqrt[6] - Sqrt[2] Sqrt[3]]
+Out[9]= 0
+
+In[10]:= Simplify[1 - (-1)^(1/3) + (-1)^(2/3)]
+Out[10]= 0
+
+In[11]:= Simplify[1 - (-1)^(1/5) + (-1)^(2/5) - (-1)^(3/5) + (-1)^(4/5)]
+Out[11]= 0
+
+In[12]:= Simplify[Sqrt[3 + 2 Sqrt[2]] - (1 + Sqrt[2])]
+Out[12]= 0
+
+In[13]:= Simplify[Sin[ArcCos[x]] - Sqrt[1 - x^2]]
+Out[13]= 0
+
+In[14]:= Simplify[ArcSin[x] + ArcCos[x] - Pi/2]
+Out[14]= 0
+
+In[15]:= Simplify[Log[72] - 3 Log[2] - 2 Log[3]]
+Out[15]= 0
+
+In[16]:= Simplify[4 Sin[x]^2 Cos[x]^2 + 4 Sin[x] Cos[x] + 1]
+Out[16]= 1/2 (3 - Cos[4 x] + 4 Sin[2 x])
+
+In[17]:= Simplify[2 x - 4 y + 6 z - 10 == -8]
+Out[17]= x + 3 z == 1 + 2 y
+
+In[18]:= Simplify[-2 x < 4]
+Out[18]= x > -2
+
+In[19]:= Simplify[Sqrt[x^2], x > 0]
+Out[19]= x
+
+In[20]:= Simplify[Sqrt[x^2], Element[x, Reals]]
+Out[20]= Abs[x]
+
+In[21]:= Simplify[Log[a b], a > 0 && b > 0]
+Out[21]= Log[a] + Log[b]
+
+In[22]:= Simplify[(a^p)^q, a > 0 && Element[p, Reals]]
+Out[22]= a^(p q)
+
+In[23]:= Simplify[Sqrt[x^2 y^2], x > 0 && y < 0]
+Out[23]= -x y
+
+In[24]:= Simplify[Cos[k Pi], Element[k, Integers]]
+Out[24]= (-1)^k
+
+In[25]:= Simplify[Log[E^(x + y)], {Element[x, Reals], Element[y, Reals]}]
+Out[25]= x + y
+
+In[26]:= Simplify[x > 0, x > 0]
+Out[26]= True
+```
+
+### Options (4)
+
+```mathematica
+In[27]:= Simplify[1/(x - 1) + 1/(1 - x), TransformationFunctions -> {Together}]
+Out[27]= 0
+
+In[28]:= Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> {Together}]
+Out[28]= Cos[x]^2 + Sin[x]^2
+
+In[29]:= Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> {Automatic, Together}]
+Out[29]= 1
+
+In[30]:= Simplify[a + b, TransformationFunctions -> {(# /. a -> 0 &)}]
+Out[30]= b
 ```
 
 ### Applications (8)
 
 ```mathematica
-In[9]:= Simplify[(x^2 - 1)/(x - 1)]
-Out[9]= 1 + x
+In[31]:= Simplify[(x^2 - 1)/(x - 1)]
+Out[31]= 1 + x
 
-In[10]:= Simplify[Sin[x]^2 + Cos[x]^2]
-Out[10]= 1
+In[32]:= Simplify[Sin[x]^2 + Cos[x]^2]
+Out[32]= 1
 
-In[11]:= Simplify[x + x + x]
-Out[11]= 3 x
+In[33]:= Simplify[x + x + x]
+Out[33]= 3 x
 
-In[12]:= Simplify[Sqrt[x^2], x > 0]
-Out[12]= x
+In[34]:= Simplify[Sqrt[x^2], x > 0]
+Out[34]= x
 
-In[13]:= Simplify[Sqrt[x^2], Element[x, Reals]]
-Out[13]= Abs[x]
+In[35]:= Simplify[Sqrt[x^2], Element[x, Reals]]
+Out[35]= Abs[x]
 
-In[14]:= Simplify[Cosh[x]^2 - Sinh[x]^2]
-Out[14]= 1
+In[36]:= Simplify[Cosh[x]^2 - Sinh[x]^2]
+Out[36]= 1
 
-In[15]:= Simplify[Log[a b] - Log[a] - Log[b], {a > 0, b > 0}]
-Out[15]= 0
+In[37]:= Simplify[Log[a b] - Log[a] - Log[b], {a > 0, b > 0}]
+Out[37]= 0
 
-In[16]:= Simplify[Cos[3 x]/Cos[x] - (2 Cos[2 x] - 1)]
-Out[16]= 0
+In[38]:= Simplify[Cos[3 x]/Cos[x] - (2 Cos[2 x] - 1)]
+Out[38]= 0
 ```
 
 ## Options & behaviour
