@@ -572,6 +572,7 @@ set(COMMON_SRC
     ../src/poly/exponent.c
     ../src/poly/facpoly_list.c
     ../src/poly/irrpolyq.c
+    ../src/poly/gbmod.c
     ../src/poly/groebner.c
     ../src/poly/groebnerbasis.c
     ../src/poly/groebnerwalk.c

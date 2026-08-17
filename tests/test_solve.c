@@ -1082,11 +1082,22 @@ static void test_modulus_domain(void) {
     run_test("Solve[x^2 + x + 1 == 0, x, Modulus -> 7]",
              "List[List[Rule[x, 2]], List[Rule[x, 4]]]");
     /* Refusals stay unevaluated rather than silently ignoring Modulus:
-     * systems, non-polynomial equations, and a symbolic modulus. */
+     * non-polynomial equations and a symbolic modulus. */
     run_test("Solve[Sin[x] == 0, x, Modulus -> 7]",
              "Solve[Equal[Sin[x], 0], x, Rule[Modulus, 7]]");
     run_test("Solve[x^2 == 2, x, Modulus -> p]",
              "Solve[Equal[Power[x, 2], 2], x, Rule[Modulus, p]]");
+
+    /* Systems over GF(p): the finite-field Gröbner engine (gbmod.c) solves a
+     * prime-modulus system by triangular residue enumeration. */
+    run_test("Solve[{x^2 + y^2 == 1, x == y}, {x, y}, Modulus -> 7]",
+             "List[List[Rule[x, 2], Rule[y, 2]], List[Rule[x, 5], Rule[y, 5]]]");
+    /* Inconsistent modular system -> {}. */
+    run_test("Solve[{x + y == 0, x + y == 1}, {x, y}, Modulus -> 5]", "List[]");
+    /* A composite modulus is not a field; the system is refused (unevaluated). */
+    run_test("Solve[{x^2 + y^2 == 1, x == y}, {x, y}, Modulus -> 6]",
+             "Solve[List[Equal[Plus[Power[x, 2], Power[y, 2]], 1], Equal[x, y]], "
+             "List[x, y], Rule[Modulus, 6]]");
 }
 
 /* VerifySolutions -> True runs a PossibleZeroQ back-substitution filter

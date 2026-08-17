@@ -138,6 +138,17 @@
   {"K-quad-param",      {x^2 == a, x + y == 0},                {x, y}, Automatic, 2, "[D8] x->+-Sqrt[a], y->-/+Sqrt[a]"},
   {"K-circle-radius",   {x^2 + y^2 == r^2, y == 0},            {x, y}, Automatic, 2, "[D8] x->+-Sqrt[r^2], y->0"},
 
+  (* ===== N. Systems over a finite field GF(p) (Modulus -> p, p prime) ===== *)
+  (* [D9] Solve[{system}, vars, Modulus -> p] over GF(p): finite-field Gröbner
+   * basis (gbmod.c) + triangular residue enumeration.  Refused before (systems
+   * declined by solvemod.c); solved after.  Requires p prime. *)
+  {"N-mod7-circ-diag",  {x^2 + y^2 == 1, x == y},              {x, y}, Modulus -> 7, 2, "[D9] {2,2},{5,5} mod 7"},
+  {"N-mod7-sum-prod",   {x + y == 5, x y == 6},                {x, y}, Modulus -> 7, 2, "[D9] {2,3},{3,2} mod 7"},
+  {"N-mod7-no-residue", {x^2 + y^2 == 1, (x - 1)^2 + y^2 == 1}, {x, y}, Modulus -> 7, 0, "[D9] y^2=6 non-residue mod 7 -> {}"},
+  {"N-mod5-inconsist",  {x + y == 0, x + y == 1},              {x, y}, Modulus -> 5, 0, "[D9] unit ideal -> {}"},
+  {"N-mod3-posdim",     {x + y == 1},                          {x, y}, Modulus -> 3, 3, "[D9] free var: all of GF(3) -> 3 pts"},
+  {"N-mod5-three-var",  {x + y + z == 1, x y + y z + z x == 0, x y z == 0}, {x, y, z}, Modulus -> 5, 3, "[D9] perms of {0,0,1} mod 5"},
+
   (* ===== M. System regression pins (already correct; guard against drift) ===== *)
   {"M-cyclic3",         {x + y + z == 0, x y + y z + z x == -1, x y z == 0}, {x, y, z}, Automatic, 6, "six permutations of {-1,0,1}"},
   {"M-overdet-consist", {x^2 + y^2 == 1, x == 0, y == 1},       {x, y}, Automatic, 1, "overdetermined, consistent -> {0,1}"},

@@ -589,18 +589,37 @@ static void test_sort_true_reverses_vars(void) {
         "True");
 }
 
-/* `Modulus -> n` is accepted but the basis is computed over the
- * rationals (with a one-shot diagnostic on stderr).  Smoke-test:
- * the result agrees with the same call without Modulus. */
-static void test_modulus_option_ignored_with_warning(void) {
+/* `Modulus -> p` (p prime) computes a genuine Gröbner basis over GF(p)
+ * (gbmod.c).  Small pinned example: the two-circle ideal reduces to a monic
+ * lex triangular basis mod 7. */
+static void test_modulus_gfp_basis(void) {
+    check_eq(
+        "GroebnerBasis[{x^2 + y^2 - 1, (x - 1)^2 + y^2 - 1}, {x, y}, Modulus -> 7]"
+        " === {1 + y^2, 3 + x}",
+        "True");
+}
+
+/* The modular basis differs from the rational basis (real GF(p) arithmetic,
+ * not the ignored-option stub). */
+static void test_modulus_differs_from_rationals(void) {
     check_eq(
         "GroebnerBasis["
         "  {3 x^2 + y z - 5 x - 1, 2 x + 3 x y + y^2, x - 3 y + x z - 2 z^2},"
         "  {x, y, z}, Modulus -> 7]"
-        " === "
+        " =!= "
         "GroebnerBasis["
         "  {3 x^2 + y z - 5 x - 1, 2 x + 3 x y + y^2, x - 3 y + x z - 2 z^2},"
         "  {x, y, z}]",
+        "True");
+}
+
+/* A non-prime modulus is not a field; the option falls back to the rational
+ * basis (with a one-shot diagnostic on stderr). */
+static void test_modulus_composite_falls_back(void) {
+    check_eq(
+        "GroebnerBasis[{x^2 + y^2 - 1, x y - 1}, {x, y}, Modulus -> 6]"
+        " === "
+        "GroebnerBasis[{x^2 + y^2 - 1, x y - 1}, {x, y}]",
         "True");
 }
 
@@ -703,7 +722,9 @@ int main(void) {
     TEST(test_two_var_simple_basis);
     TEST(test_subset_vars_auto_parameter);
     TEST(test_sort_true_reverses_vars);
-    TEST(test_modulus_option_ignored_with_warning);
+    TEST(test_modulus_gfp_basis);
+    TEST(test_modulus_differs_from_rationals);
+    TEST(test_modulus_composite_falls_back);
     TEST(test_parameter_variables_auto_main);
     TEST(test_timeconstrained_aborts_buchberger);
     TEST(test_grevlex_handles_hard_lex_input);

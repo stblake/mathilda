@@ -75,9 +75,18 @@ Attempts to solve an equation or system of equations for one or more variables.
   ascending in `[0, p)`: `Solve[x^2 == 2, x, Modulus -> 7]` -> `{{x -> 3},
   {x -> 4}}`, `Solve[3 x == 1, x, Modulus -> 7]` -> `{{x -> 5}}`.  Supported
   for `2 <= p <= 100000` (prime or composite; rational coefficients handled
-  via modular inverse).  Systems, multivariable specs, non-polynomial
-  equations, and out-of-range moduli leave `Solve` unevaluated -- the option
-  is never silently ignored.
+  via modular inverse).  Non-polynomial equations and out-of-range moduli leave
+  `Solve` unevaluated -- the option is never silently ignored.
+- **Modular systems.** `Solve[{system}, {vars}, Modulus -> p]` with **prime** `p`
+  solves a polynomial system over the finite field `GF(p)`: a finite-field
+  Gröbner basis (`src/poly/gbmod.c`) is computed and its lex triangular form is
+  walked with per-variable residue enumeration.  `Solve[{x^2 + y^2 == 1, x == y},
+  {x, y}, Modulus -> 7]` -> `{{x -> 2, y -> 2}, {x -> 5, y -> 5}}`; an
+  inconsistent system (unit ideal) -> `{}`; an under-determined system
+  enumerates the free variables over `GF(p)` (`Solve[{x + y == 1}, {x, y},
+  Modulus -> 3]` -> the three points).  A **composite** modulus is not a field,
+  so systems with composite `p` are refused (unevaluated); a coefficient whose
+  denominator is divisible by `p` (no image in `GF(p)`) is likewise refused.
 - Inequalities and multi-equation transcendental systems are reserved for
   future work and currently leave `Solve[...]` unevaluated.  When the
   inverse-function specialist's outermost peel succeeds but the inner
