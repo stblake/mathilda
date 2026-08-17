@@ -129,6 +129,27 @@ EXEMPT = {
     "whether the closed-form stage is worth attempting), not a dispatch "
     "on an argument. This is the marker heuristic's blind spot: it cannot "
     "tell 'notices the tag' from 'dispatches on the tag'",
+    # The vector-analysis operators, added 2026-08-17. Each notices EXPR_NDARRAY
+    # in src/vectoranal.c's normalized_copy, but only to UNPACK a visible NDArray
+    # field to a plain nested List: the whole operator is Expr-centric, assembling
+    # D[...] calls over the field's elements and reducing them with a single
+    # evaluate(), so there is no buffer path to reach. The marker heuristic cannot
+    # tell "unpacks the tag" from "dispatches on the tag" -- the same blind spot
+    # the Cases / FlattenAt family sits in.
+    "Grad": "its EXPR_NDARRAY test in src/vectoranal.c (normalized_copy) is a "
+    "materialise guard, not a fast path: a visible NDArray field is unpacked "
+    "to a plain nested List so the operator can assemble D[f, {{vars}}] and "
+    "reduce it with evaluate(). Must NOT go on AWARE -- there is no buffer "
+    "path, and opting in would stop the gate materialising a packed-List "
+    "field, which is exactly the plain args[] the D-assembly walks",
+    "Div": "as Grad -- normalized_copy unpacks a visible NDArray field, then the "
+    "divergence is assembled from D[...] and reduced by evaluate(); no buffer "
+    "path",
+    "Curl": "as Grad -- normalized_copy unpacks a visible NDArray field, then the "
+    "Levi-Civita curl is assembled from D[...] and reduced by evaluate(); no "
+    "buffer path",
+    "Laplacian": "as Grad -- normalized_copy unpacks a visible NDArray field, then "
+    "Sum_i D[f, {x_i, 2}] is assembled and reduced by evaluate(); no buffer path",
 }
 
 
