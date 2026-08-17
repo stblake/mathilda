@@ -155,12 +155,15 @@ return new trees.
 ### 3.2 Parser (`parse.{c,h}`)
 
 Pratt parser (top-down operator precedence). Lexing is inline — no separate
-tokenizer. Precedences mirror Mathematica's standard values. Pattern syntax
-(`_`, `__`, `___`, `x_`, `x_h`, `/;`) is recognised at parse time.
+tokenizer. Precedences preserve Mathematica's relative ordering but are
+renumbered onto a wide **1–10000 ladder** (round values, generous gaps) so new
+operators can be inserted between existing levels without renumbering. Pattern
+syntax (`_`, `__`, `___`, `x_`, `x_h`, `/;`) is recognised at parse time.
 
-Selected precedences: `1000` `f[x]`, `730` blanks, `590` `^`, `400` `*`,
-`310` `+ -`, `290` comparisons, `100` `[[…]]`, `90` `&`, `40` `= := -> :>`,
-`10` `;`. The full table is in [`docs/spec/operators.md`](docs/spec/operators.md).
+Selected precedences: `10000` `[[…]]`, `9500` `f[x]`, `6500` `^`, `4500` `*`,
+`3500` `+ -`, `3200` comparisons, `1500` `-> :>`, `1000` `&`, `500` `= :=`,
+`100` `;`. The full table is in
+[`docs/spec/operators.md`](docs/spec/operators.md).
 
 Public API: `parse_expression(input)` and `parse_next_expression(input_ptr)`.
 

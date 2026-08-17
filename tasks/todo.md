@@ -1,60 +1,52 @@
-# Solve[] review — stress corpus + test-driven fixes
+# Task: Normalise parser precedences onto a clean 1–10000 ladder
 
-Plan: `/Users/user/.claude/plans/let-s-do-a-review-indexed-pond.md`
+## Plan
+- [x] Map the full precedence surface (parse.c operator table + inline literals;
+      print.c `get_expr_prec` + inline `parent_prec` args; confirm print_latex.c
+      is an independent scale to leave alone).
+- [x] Choose scheme (user: clean ladder in [1,10000], Part capped at 10000).
+- [x] Capture a behavioural baseline (FullForm/InputForm/TeXForm over an
+      operator-dense corpus) from the pre-change binary.
+- [x] Apply the order-preserving remap to src/parse.c and src/print.c.
+- [x] Fix stale in-code comments citing old numbers.
+- [x] Build + `make check-c99`.
+- [x] Differential: rerun corpus, diff vs baseline (must be empty).
+- [x] Run parse_tests / parser_precision_tests / print_tests + eval smoke test.
+- [x] Update docs: docs/spec/operators.md, SPEC.md §3.2, changelog.
 
-## Phase 1 — Stress-test corpus + back-substitution harness  [DONE]
-- [x] `tests/solve_check_prelude.m` — `solveVerdict`/`solveCheckCode`/`solveReport` (HoldAll; count + back-sub + domain; Root/ConditionalExpression/Modulus shape-aware). Thread-based sampling avoids Function-closure gap.
-- [x] `tests/solve_corpus.m` — 62 case records, categories A–H, refNotes
-- [x] `tests/solve_corpus_run.m` — standalone driver
-- [x] `tests/test_solve_corpus.c` — fork-per-case C runner cloned from test_intrat_corpus.c, baseline gate
-- [x] `tests/CMakeLists.txt` — register solve_corpus_tests
-- [x] `SOLVE_FAIL_BASELINE = 10` (D1 Modulus×4, D2 kernel×2, D3 Rationals×2, D4 multivar×2). 52/62 pass.
+## The ladder (OLD → NEW)
+`;`10→100 · Put 30→300 · Set-family 40→500 · Postfix 70→800 · `&`90→1000 ·
+ReplaceAll 110→1200 · Rule-family 120→1500 · Condition 130→1700 · Optional 140→1900 ·
+StringExpr 155→2100 · Alternatives 160→2300 · Repeated 170→2500 · And/Or 215→2800 ·
+Not 230→3000 · comparisons/Span 290→3200 · Plus 310→3500 · Times 400→4500 ·
+Divide/Rational 470→5000 · unary-minus 480→5100 · Dot 490→5300 · Power 590→6500 ·
+(Power+1) 591→6501 · StringJoin 600→6700 · Prefix/Apply/Map 620→7000 · Composition 625→7200 ·
+Incr/Decr 660→7500 · Derivative 670→7700 · PatternTest 680→7900 · Factorial 710→8200 ·
+MessageName 780→8600 · Call/atom-default 1000→9500 · Part 1100→10000.
+Plus computed forms: top-level min_prec 11→101, Span prec+1 291→3201.
 
-## Phase 2 — D3 Rationals domain (tiny)  [DONE]
-- [x] solvepoly.c domain switch (rationals_only) + is_rational_like tail filter
-- [x] updated test_solve.c: new test_rationals_domain; Algebraics stays unevaluated
-- [x] corpus baseline 10 -> 8; solve_tests PASS. (solvenlsys Rationals deferred to Phase 6 alongside multivar)
+## Review
+**What changed:** A pure, order-preserving renumbering of every parser precedence
+onto a 1–10000 ladder, applied in lockstep to the parser table (`get_operator`,
+src/parse.c) and the printer's parenthesiser (`get_expr_prec` + ~30 inline
+`parent_prec` args, src/print.c). `src/print_latex.c` uses a separate
+self-contained `PREC_*` scale and was intentionally left untouched.
 
-## Phase 3 — D6 mixed-trig simplification (tiny)  [DONE]
-- [x] solvetrig.c aggregate tail: Simplify RHS only when it removes a complex Log (descend ConditionalExpression), leaf-count guard. tan1 cleaned to Pi/4+Pi C[1]; clean sums not churned.
-- [~] cos-sin (Cos==Sin) still shows complex-log: Simplify/Arg can't reduce Log of unit-modulus complex; that's a Simplify subsystem gap, out of scope.
+**Why it's safe:** the mapping is order-isomorphic (old_a<old_b ⟺ new_a<new_b,
+equals→equals). The Pratt loop and the parenthesiser make only `<`/`==`
+comparisons on these numbers, so all parse trees and printed forms are unchanged.
 
-## Phase 4 — D1 Modulus (critical bug)  [DONE]
-- [x] src/solvemod.{c,h} (residue enumeration, refuse systems/non-poly/out-of-range); Solve`SolveModular builtin
-- [x] SolveOpts.modulus; apply_option wires Modulus; pre-pass in solve.c (goto solve_finish tail); solvemod_init
-- [x] tests: COMMON_SRC += solvemod.c; new test_modulus_domain (4 solve + 2 refuse); Modulus docstring
-- [x] corpus baseline 8 -> 4; solve_tests PASS
+**Verification (all green):**
+- Differential over a 73-case operator-dense corpus (FullForm + InputForm +
+  TeXForm): baseline vs after **diff is empty**.
+- `make check-c99` clean; full `make` links.
+- parse_tests, parser_precision_tests, print_tests all pass.
+- End-to-end eval smoke test (arithmetic assoc, Power, Part, Solve, Map, D,
+  Expand, Rational) correct.
 
-## Phase 5 — D5 VerifySolutions (thin PossibleZeroQ wrapper)  [DONE]
-- [x] SolveOpts.verify_on; apply_option wires VerifySolutions->True
-- [x] post-dispatch filter in solve.c: solution_verifies (zero_test_decide==FALSE drops; Root/param/ConditionalExpression kept) + verify_solutions_filter; leak-safe early-return
-- [x] docstring updated (no longer "reserved"); test_verify_solutions (keeps poly/radical/Root); solve_tests + corpus PASS
+**Result:** adjacent precedence levels now sit ≥200 apart (vs as little as 5
+before), leaving room to insert new operators without renumbering.
 
-## Phase 6 — D4 single-equation many-variables  [DONE]
-- [x] try_single_eq_multivar in solve.c between linsys-NULL and nlsys (single Equal; earliest polynomial-solvable var; explicit rules only)
-- [x] updated test_positive_dimensional to a genuine 2-eqn system; new test_single_eq_multivar; solve_tests + solvenlsys_tests PASS
-- [x] corpus baseline 4 -> 2
-
-## Phase 7 — D2 poly in one transcendental kernel  [DONE]
-- [x] solvetrig_solve_poly_in_kernel: exp path (subst_exp_real_walk, E^(cx)->u^c) + generic-head path (collect_kernels, structural u-subst); solve_u_and_unwind reuses solvepoly + solveinv
-- [x] wired in solve.c between solvetrig and solverad; prototype in solvetrig.h
-- [x] new test_poly_in_kernel (Log^2, Log^3, decline E^x+x); corpus baseline 2 -> 0 (FULLY GREEN)
-
-## Docs
-- [ ] docs/spec/builtins/solutions-of-equations.md + docs/spec/changelog/2026-08-17.md
-- [ ] Refresh Solve docstring (solve.c)
-- [ ] make check-c99
-
-## Docs  [DONE]
-- [x] docs/spec/builtins/solutions-of-equations.md (dispatch list, Modulus/Rationals/VerifySolutions, Domains note)
-- [x] docs/spec/changelog/2026-08-17.md (Solve review section)
-- [x] Solve docstring in solve.c (options list + narrative); Modulus/VerifySolutions docstrings; Solve`SolveModular docstring
-- [x] make check-c99 clean
-
-## Review  [COMPLETE]
-- All 62 corpus cases pass; SOLVE_FAIL_BASELINE ratcheted 10 -> 0 across phases.
-- Full ctest suite: 219/219 pass, 0 regressions (incl. integration/sum/cherry that call Solve internally).
-- valgrind: new code introduces ZERO leaks (baseline dyld/runtime noise identical with/without the new features).
-- Files added: src/solvemod.{c,h}, tests/{solve_check_prelude.m, solve_corpus.m, solve_corpus_run.m, test_solve_corpus.c}.
-- Files modified: src/solve.c (Modulus pre-pass, VerifySolutions filter, single-eq-multivar), src/poly/solvepoly.c (Rationals), src/solvetrig.{c,h} (poly-in-kernel + mixed-trig Simplify), tests/{test_solve.c, test_solvenlsys.c, CMakeLists.txt}, docs.
-- Boundary respected: no inequalities/quantifiers/case-splits; Reduce territory untouched.
+**Optional follow-up (not done):** replace the magic numbers with shared
+`#define PREC_*` constants so future operator insertions can't silently drift the
+parser and printer apart.
