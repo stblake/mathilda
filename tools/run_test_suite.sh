@@ -49,8 +49,16 @@ cmake $CMAKE_FLAGS "$ROOT/tests" > cmake.log 2>&1 || { echo "cmake failed:"; tai
 JOBS=$( (nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null) || echo 4 )
 echo "=== building all test targets (-j$JOBS) ==="
 if ! make -j"$JOBS" > build.log 2>&1; then
-    echo "BUILD FAILED — the suite cannot be run:"
-    grep -E "error:|Error [0-9]" build.log | head -20
+    echo "BUILD FAILED — the suite cannot be run."
+    # RETRY SERIALLY BEFORE REPORTING. A -j build interleaves the output of concurrent compilers, so
+    # a link error arrives shredded across lines -- the first CI run of this job produced
+    # "/usr/bin/ld: flint_qqbar.c:(.text+0xmake[2]: *** [...] Error", which names neither the symbol
+    # nor the file. One serial pass costs a couple of minutes and prints an error a human can act on;
+    # without it the next step is guesswork.
+    echo "--- retrying with -j1 for a readable error ---"
+    make -j1 > build-serial.log 2>&1 || true
+    grep -E "error:|undefined reference|multiple definition|cannot find -l" build-serial.log \
+        | head -25 || tail -40 build-serial.log
     exit 2
 fi
 
