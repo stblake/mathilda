@@ -400,6 +400,13 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (tt == te) { *out = tt; return true; }
         *out = num_common(tt, te); return (int)*out >= 0;
     }
+    /* Which / Switch / Piecewise: the ladder's result type, computed the same way
+     * emit_ctrl does (shared collect_ladder), so the two cannot disagree. */
+    if (strcmp(h, "Which") == 0 || strcmp(h, "Switch") == 0 || strcmp(h, "Piecewise") == 0) {
+        int nr; bool hd; CompileType rt;
+        if (!collect_ladder(c, h, A, na, NULL, &nr, &hd, &rt) || CT_IS_ARRAY(rt)) return false;
+        *out = rt; return true;
+    }
     if ((strcmp(h, "Sum") == 0 || strcmp(h, "Product") == 0) && na == 2) {
         LoopSpec s;
         /* s.var != NULL: the interpreter's Sum/Product reject a bare count

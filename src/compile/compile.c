@@ -2110,7 +2110,7 @@ static bool cse_head_is_pure(const char* h) {
         "Set", "SetDelayed", "AddTo", "SubtractFrom", "TimesBy", "DivideBy",
         "Increment", "Decrement", "CompoundExpression", "Do", "While", "For",
         "Sum", "Product", "Nest", "If", "With", "Module", "Block", "Function",
-        "Which", "Piecewise", "Total", "Length"
+        "Which", "Switch", "Piecewise", "Total", "Length"
     };
     for (size_t i = 0; i < sizeof impure / sizeof impure[0]; i++)
         if (strcmp(h, impure[i]) == 0) return false;

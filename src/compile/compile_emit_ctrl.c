@@ -42,6 +42,149 @@ static bool emit_list_thread(Ctx* c, const Expr* lhs, Val val) {
     return true;
 }
 
+/* ------------------------------------------------------------------ *
+ *  First-match-wins conditional ladders: Which / Switch / Piecewise    *
+ * ------------------------------------------------------------------ *
+ * All three reduce, in the interpreter, to "the first clause whose guard holds
+ * wins; later clauses are dead".  Compiled, that is exactly If's branch
+ * structure repeated: test a guard, jump past this clause if it fails, otherwise
+ * evaluate its value into the one result register and jump clear of the rest.
+ * collect_ladder turns each head's own spelling into a common list of rungs (and
+ * the ladder's result type); emit_ladder lowers that list.  A rung with
+ * key==NULL is the unconditional default; its value==NULL means the literal
+ * Integer 0 (Piecewise's implied default), which needs no synthesized Expr. */
+
+static bool sym_named(const Expr* e, const char* name) {
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
+}
+/* The bare `_` pattern (Blank[] with no head), Switch's catch-all form.  A typed
+ * blank (`_Integer`) or a bound pattern (`x_`) is not one of these and declines,
+ * so the whole Switch bails rather than guess a runtime match. */
+static bool is_blank_pat(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol.name, "Blank") == 0
+        && e->data.function.arg_count == 0;
+}
+/* Fold one rung value's type into the running result type.  A NULL value is the
+ * synthesized Integer 0 default. */
+static bool ladder_fold_rt(Ctx* c, const Expr* value, CompileType* rt, bool* have) {
+    CompileType t;
+    if (value == NULL) t = CT_INT;
+    else if (!infer_type(c, value, &t)) return false;
+    if (CT_IS_ARRAY(t)) return false;
+    if (!*have) { *rt = t; *have = true; }
+    else if (*rt != t) { *rt = num_common(*rt, t); if ((int)*rt < 0) return false; }
+    return true;
+}
+
+/* Pure predicate — never touches c->ok, so infer_type can call it speculatively.
+ * Emit callers clear c->ok on a false return; infer callers just propagate it. */
+bool collect_ladder(Ctx* c, const char* h, Expr** A, size_t na,
+                    Rung* rungs, int* nr_out, bool* has_default_out, CompileType* rt_out) {
+    int nr = 0; bool has_default = false, have_rt = false; CompileType rt = CT_ERR;
+    #define LADDER_PUSH(k_, v_) do { \
+        if (nr >= COND_CHAIN_MAX) return false; \
+        if (!ladder_fold_rt(c, (v_), &rt, &have_rt)) return false; \
+        if (rungs) { rungs[nr].key = (k_); rungs[nr].value = (v_); } \
+        nr++; \
+    } while (0)
+
+    if (strcmp(h, "Which") == 0) {
+        if (na == 0 || na % 2 != 0) return false;
+        for (size_t i = 0; i + 1 < na; i += 2) {
+            const Expr* cond = A[i]; const Expr* val = A[i + 1];
+            if (sym_named(cond, "False")) continue;                 /* clause dropped */
+            if (sym_named(cond, "True")) { LADDER_PUSH(NULL, val); has_default = true; break; }
+            LADDER_PUSH(cond, val);
+        }
+    } else if (strcmp(h, "Switch") == 0) {
+        if (na < 3 || na % 2 == 0) return false;
+        CompileType dt;                                             /* discriminant scalar-numeric */
+        if (!infer_type(c, A[0], &dt) || CT_IS_ARRAY(dt) || dt == CT_BOOL) return false;
+        for (size_t i = 1; i + 1 < na; i += 2) {
+            const Expr* form = A[i]; const Expr* val = A[i + 1];
+            if (is_blank_pat(form)) { LADDER_PUSH(NULL, val); has_default = true; break; }
+            Slot im; CompileType ft;
+            if (!literal(form, &im, &ft)) return false;             /* only literal forms or `_` */
+            LADDER_PUSH(form, val);
+        }
+    } else if (strcmp(h, "Piecewise") == 0) {
+        if (na < 1 || na > 2) return false;
+        const Expr* cl = A[0];
+        if (cl->type != EXPR_FUNCTION || cl->data.function.head->type != EXPR_SYMBOL
+            || strcmp(cl->data.function.head->data.symbol.name, "List") != 0) return false;
+        for (size_t i = 0; i < cl->data.function.arg_count; i++) {
+            const Expr* pr = cl->data.function.args[i];
+            if (pr->type != EXPR_FUNCTION || pr->data.function.head->type != EXPR_SYMBOL
+                || strcmp(pr->data.function.head->data.symbol.name, "List") != 0
+                || pr->data.function.arg_count != 2) return false;
+            const Expr* val = pr->data.function.args[0];
+            const Expr* cond = pr->data.function.args[1];
+            if (sym_named(cond, "False")) continue;
+            if (sym_named(cond, "True")) { LADDER_PUSH(NULL, val); has_default = true; break; }
+            LADDER_PUSH(cond, val);
+        }
+        if (!has_default) {                                          /* implied default */
+            LADDER_PUSH(NULL, (na == 2) ? A[1] : NULL);              /* NULL value => Integer 0 */
+            has_default = true;
+        }
+    } else return false;
+    #undef LADDER_PUSH
+    if (!have_rt) return false;                                     /* no live value => no result */
+    *nr_out = nr; *has_default_out = has_default; *rt_out = rt;
+    return true;
+}
+
+/* Lower the collected rungs into result register `rr` (declared type `rt`).  For
+ * Switch, `disc` is the already-emitted discriminant (borrowed — the caller frees
+ * it) and a rung's guard is `disc == key` at the common numeric type; otherwise
+ * the guard is `key` itself, which must be Boolean.  With no default a run that
+ * matches nothing hits OP_FAIL, handing the call back to the interpreter — which
+ * is exactly what a fall-through Which (Null) or an unmatched Switch (unevaluated)
+ * does there. */
+static bool emit_ladder(Ctx* c, int rr, CompileType rt, const Rung* rungs,
+                        int nrungs, const Val* disc, bool has_default, Val* out) {
+    Slot z = { 0 };
+    size_t ends[COND_CHAIN_MAX]; int nends = 0;
+    for (int i = 0; i < nrungs; i++) {
+        bool is_default = (rungs[i].key == NULL);
+        size_t jz = 0;
+        if (!is_default) {
+            Val g;
+            if (disc) {                             /* Switch: guard is `disc == form` */
+                Val f; if (!emit(c, rungs[i].key, &f)) return false;
+                Val d = *disc; d.tmp = false;       /* borrow: binop must not consume it */
+                CompileType t = num_common(d.type, f.type);
+                if ((int)t < 0) { c->ok = false; return false; }
+                coerce(c, &d, t); coerce(c, &f, t);
+                uint16_t op = t == CT_COMPLEX ? OP_EQ_C : t == CT_INT ? OP_EQ_I : OP_EQ_R;
+                g = binop(c, op, d, f, CT_BOOL);
+            } else {
+                if (!emit(c, rungs[i].key, &g)) return false;
+                if (g.type != CT_BOOL) { c->ok = false; return false; }
+            }
+            jz = c->n; ins(c, OP_JZ, 0, (uint32_t)g.reg, 0, z);
+            free_if_tmp(c, g);
+        }
+        Val v;
+        if (rungs[i].value == NULL) { Slot k = { 0 }; v = emit_const(c, k, CT_INT); }  /* default 0 */
+        else if (!emit(c, rungs[i].value, &v)) return false;
+        if (CT_IS_ARRAY(v.type)) { c->ok = false; return false; }
+        coerce(c, &v, rt);
+        ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)v.reg, 0, z);
+        free_if_tmp(c, v);
+        if (!is_default) {
+            if (nends >= COND_CHAIN_MAX) { c->ok = false; return false; }
+            ends[nends++] = c->n; ins(c, OP_JMP, 0, 0, 0, z);
+            if (c->ok) c->code[jz].b = (uint32_t)c->n;   /* label: next rung */
+        }
+    }
+    if (!has_default) ins(c, OP_FAIL, 0, 0, 0, z);
+    for (int i = 0; i < nends; i++) if (c->ok) c->code[ends[i]].b = (uint32_t)c->n;
+    out->reg = rr; out->tmp = true; out->type = rt;
+    return c->ok;
+}
+
 int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out) {
     (void)e;
     /*
@@ -105,6 +248,26 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         if (c->ok) c->code[jmp].b = (uint32_t)c->n;   /* end label */
         out->reg = rr; out->tmp = true; out->type = rt;
         return c->ok ? 1 : -1;
+    }
+
+    /* Which / Switch / Piecewise: a first-match-wins conditional ladder.  See the
+     * collect_ladder / emit_ladder pair above. */
+    if (strcmp(h, "Which") == 0 || strcmp(h, "Switch") == 0 || strcmp(h, "Piecewise") == 0) {
+        Rung rungs[COND_CHAIN_MAX]; int nr; bool has_default; CompileType rt;
+        if (!collect_ladder(c, h, A, na, rungs, &nr, &has_default, &rt)) { c->ok = false; return -1; }
+        if (CT_IS_ARRAY(rt)) { c->ok = false; return -1; }
+        int rr = alloc_temp(c);                       /* persistent result register */
+        if (strcmp(h, "Switch") == 0) {
+            /* The discriminant is emitted once and stays live across every rung
+             * (freed after the ladder); rr sits below it so the LIFO temp stack
+             * unwinds cleanly. */
+            Val disc; if (!emit(c, A[0], &disc)) return -1;
+            if (CT_IS_ARRAY(disc.type) || disc.type == CT_BOOL) { c->ok = false; return -1; }
+            bool ok = emit_ladder(c, rr, rt, rungs, nr, &disc, has_default, out);
+            free_if_tmp(c, disc);
+            return ok ? 1 : -1;
+        }
+        return emit_ladder(c, rr, rt, rungs, nr, NULL, has_default, out) ? 1 : -1;
     }
 
     /* Sum[body, {i, lo, hi}] / Product[...]: integer-counted accumulation loop.
