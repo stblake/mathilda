@@ -256,6 +256,7 @@ set(COMMON_SRC
     ../src/match.c
     ../src/part.c
     ../src/vectors.c
+    ../src/vectoranal.c
     ../src/assoc.c
     ../src/assoc_index.c
     ../src/ndarray.c
@@ -948,6 +949,10 @@ add_test(NAME constant_array_tests COMMAND constant_array_tests)
 add_executable(unit_vector_tests test_unit_vector.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(unit_vector_tests PRIVATE ../src)
 add_test(NAME unit_vector_tests COMMAND unit_vector_tests)
+
+add_executable(vectoranal_tests test_vectoranal.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(vectoranal_tests PRIVATE ../src)
+add_test(NAME vectoranal_tests COMMAND vectoranal_tests)
 
 add_executable(array_flatten_tests test_array_flatten.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(array_flatten_tests PRIVATE ../src)

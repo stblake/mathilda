@@ -140,6 +140,7 @@
 #include "sym_names.h"
 #include "repl_hooks.h"
 #include "vectors.h"
+#include "vectoranal.h"
 #include "version.h"
 
 /*
@@ -885,6 +886,7 @@ void core_init(void) {
     regex_init();
     series_init();
     deriv_init();
+    vectoranal_init();
     limit_init();
     void residue_init(void);
     residue_init();

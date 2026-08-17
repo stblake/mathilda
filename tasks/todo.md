@@ -1,52 +1,42 @@
-# Task: Normalise parser precedences onto a clean 1–10000 ladder
+# Vector Analysis: Grad, Div, Curl, Laplacian
 
 ## Plan
-- [x] Map the full precedence surface (parse.c operator table + inline literals;
-      print.c `get_expr_prec` + inline `parent_prec` args; confirm print_latex.c
-      is an independent scale to leave alone).
-- [x] Choose scheme (user: clean ladder in [1,10000], Part capped at 10000).
-- [x] Capture a behavioural baseline (FullForm/InputForm/TeXForm over an
-      operator-dense corpus) from the pre-change binary.
-- [x] Apply the order-preserving remap to src/parse.c and src/print.c.
-- [x] Fix stale in-code comments citing old numbers.
-- [x] Build + `make check-c99`.
-- [x] Differential: rerun corpus, diff vs baseline (must be empty).
-- [x] Run parse_tests / parser_precision_tests / print_tests + eval smoke test.
-- [x] Update docs: docs/spec/operators.md, SPEC.md §3.2, changelog.
+Add four Protected builtins in `src/vectoranal.c`, built on top of `D`.
+Cartesian forms (fully general rank) + chart forms (Cartesian/Polar/Cylindrical/Spherical).
 
-## The ladder (OLD → NEW)
-`;`10→100 · Put 30→300 · Set-family 40→500 · Postfix 70→800 · `&`90→1000 ·
-ReplaceAll 110→1200 · Rule-family 120→1500 · Condition 130→1700 · Optional 140→1900 ·
-StringExpr 155→2100 · Alternatives 160→2300 · Repeated 170→2500 · And/Or 215→2800 ·
-Not 230→3000 · comparisons/Span 290→3200 · Plus 310→3500 · Times 400→4500 ·
-Divide/Rational 470→5000 · unary-minus 480→5100 · Dot 490→5300 · Power 590→6500 ·
-(Power+1) 591→6501 · StringJoin 600→6700 · Prefix/Apply/Map 620→7000 · Composition 625→7200 ·
-Incr/Decr 660→7500 · Derivative 670→7700 · PatternTest 680→7900 · Factorial 710→8200 ·
-MessageName 780→8600 · Call/atom-default 1000→9500 · Part 1100→10000.
-Plus computed forms: top-level min_prec 11→101, Span prec+1 291→3201.
+## Tasks
+- [x] Add SYM_Grad/Div/Curl/Laplacian to sym_names.h + sym_names.c
+- [x] Create src/vectoranal.h
+- [x] Create src/vectoranal.c (Grad, Div, Curl, Laplacian; Cartesian + charts)
+- [x] Wire vectoranal_init into core.c core_init
+- [x] Add docstrings in info.c
+- [x] Build main binary, REPL smoke test against user examples (24/24 correct)
+- [x] Create tests/test_vectoranal.c
+- [x] Register test in tests/CMakeLists.txt (COMMON_SRC + 3-line target)
+- [x] Run unit tests (ctest) — vectoranal_tests + deriv/deriv_array regression PASS
+- [x] valgrind leak check — no leaks beyond core_init baseline
+- [x] make check-c99 — PASS
+- [x] Docs: docs/spec/builtins/calculus.md + changelog 2026-08-17
 
 ## Review
-**What changed:** A pure, order-preserving renumbering of every parser precedence
-onto a 1–10000 ladder, applied in lockstep to the parser table (`get_operator`,
-src/parse.c) and the printer's parenthesiser (`get_expr_prec` + ~30 inline
-`parent_prec` args, src/print.c). `src/print_latex.c` uses a separate
-self-contained `PREC_*` scale and was intentionally left untouched.
 
-**Why it's safe:** the mapping is order-isomorphic (old_a<old_b ⟺ new_a<new_b,
-equals→equals). The Pratt loop and the parenthesiser make only `<`/`==`
-comparisons on these numbers, so all parse trees and printed forms are unchanged.
+Implemented four Protected builtins in `src/vectoranal.c`, all assembled from
+`D[...]` and reduced with one `evaluate()` (no new differentiation code):
 
-**Verification (all green):**
-- Differential over a 73-case operator-dense corpus (FullForm + InputForm +
-  TeXForm): baseline vs after **diff is empty**.
-- `make check-c99` clean; full `make` links.
-- parse_tests, parser_precision_tests, print_tests all pass.
-- End-to-end eval smoke test (arithmetic assoc, Power, Part, Solve, Map, D,
-  Expand, Rational) correct.
+- **Grad** = `D[f, {{vars}}]` (scalar→vector, vector→Jacobian, tensor→+1 rank).
+- **Div** contracts the innermost slot (vector→scalar, tensor→rank-1 map).
+- **Curl** = generalized Levi-Civita permutation sum (2-D scalar, 3-D vector,
+  rank-2 tensor→scalar all one path).
+- **Laplacian** = `Sum_i D[f,{x_i,2}]` (element-wise over arrays).
+- **Charts**: Cartesian/Polar/Cylindrical/Spherical via scale factors
+  (scalar Grad, vector Div, scalar Laplacian, 2-D/3-D vector Curl). Unsupported
+  ranks + unknown charts left unevaluated (unknown chart emits `Head::chart`).
 
-**Result:** adjacent precedence levels now sit ≥200 apart (vs as little as 5
-before), leaving room to insert new operators without renumbering.
+Verified against Wolfram reference outputs: Cartesian forms match exactly
+(incl. rank-2 curl `1/2(x^3-3xy^2-3x^2y^2+2xy^3)`); chart forms reproduce all
+Polar/Cylindrical/Spherical scalar & vector examples. Zero new memory leaks
+(baseline-identical valgrind), C99-clean, no regressions in D suites.
 
-**Optional follow-up (not done):** replace the magic numbers with shared
-`#define PREC_*` constants so future operator insertions can't silently drift the
-parser and printer apart.
+Files: new `src/vectoranal.{c,h}`, `tests/test_vectoranal.c`; edited
+`src/sym_names.{h,c}`, `src/core.c`, `src/info.c`, `tests/CMakeLists.txt`,
+`docs/spec/builtins/calculus.md`, `docs/spec/changelog/2026-08-17.md`.
