@@ -370,6 +370,51 @@ static bool sum_body_is_expensive(const Expr* f) {
                > SUM_BODY_CLOSED_FORM_MAX;
 }
 
+/* Integer-membership predicates: True/False for an INTEGER argument, but a
+ * definite (index-oblivious) value for a SYMBOLIC one -- EvenQ[k]/PrimeQ[k]/
+ * IntegerQ[k] fold to False, SquareFreeQ[k] to True. */
+static bool sum_head_is_index_predicate(const char* h) {
+    return strcmp(h, "EvenQ") == 0 || strcmp(h, "OddQ") == 0
+        || strcmp(h, "PrimeQ") == 0 || strcmp(h, "CompositeQ") == 0
+        || strcmp(h, "PrimePowerQ") == 0 || strcmp(h, "IntegerQ") == 0
+        || strcmp(h, "SquareFreeQ") == 0 || strcmp(h, "CoprimeQ") == 0
+        || strcmp(h, "Divisible") == 0;
+}
+
+static bool expr_mentions_symbol(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (expr_mentions_symbol(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expr_mentions_symbol(e->data.function.args[i], name)) return true;
+    return false;
+}
+
+/* True if the HELD body applies an integer-membership predicate to a
+ * subexpression that mentions the iterator -- `If[EvenQ[k], k, -k]`,
+ * `Boole[PrimeQ[k]]`, and the like.
+ *
+ * The predicate folds to a definite Boolean for the SYMBOLIC index, so the
+ * conditional around it collapses to ONE branch, and the closed-form cascade --
+ * which evaluates the body symbolically before telescoping it -- would sum the
+ * wrong summand exactly (`Sum[If[EvenQ[k], k, -k], {k, 1, 10}]` telescoped
+ * `Sum[-k]` = -55 instead of enumerating to 5).  A finite range must enumerate
+ * such a body; a predicate applied only to CONSTANTS (`PrimeQ[7]`) is fine,
+ * because it folds identically per term, so the iterator-mention test gates it. */
+static bool sum_body_has_index_predicate(const Expr* e, const char* ivar) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && sum_head_is_index_predicate(e->data.function.head->data.symbol.name)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (expr_mentions_symbol(e->data.function.args[i], ivar)) return true;
+    }
+    if (sum_body_has_index_predicate(e->data.function.head, ivar)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sum_body_has_index_predicate(e->data.function.args[i], ivar)) return true;
+    return false;
+}
+
 static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
     /* Indefinite form Sum[f, i]: spec is a bare symbol. */
     if (spec->type == EXPR_SYMBOL) {
@@ -417,8 +462,14 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
          * fails before falling through to it. */
         bool short_expensive_body =
             nterms <= (double)SUM_ARRAY_EXPAND_MAX && sum_body_is_expensive(f);
+        /* A body whose symbolic evaluation collapses an index predicate (EvenQ,
+         * PrimeQ, ...) has NO valid closed form -- the cascade would telescope
+         * the wrong summand -- so it must enumerate regardless of range length. */
+        bool index_pred_body =
+            sum_body_has_index_predicate(f, s.var->data.symbol.name);
 
-        if (!is_real && di_val == 1.0 && min_val <= max_val && !short_expensive_body) {
+        if (!is_real && di_val == 1.0 && min_val <= max_val
+            && !short_expensive_body && !index_pred_body) {
             Rule* saved = iter_spec_shadow(s.var);
             Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
             iter_spec_restore(s.var, saved);
@@ -427,6 +478,10 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
         Expr* r = expand_range(f, s.var, s.imin, s.imax, s.di,
                                min_val, max_val, di_val, is_real);
         if (r) { iter_spec_free(&s); return r; }
+        /* Span too large to enumerate.  For an ordinary body the closed form is
+         * exact and worth trying; for an index-predicate body it would be WRONG,
+         * so leave the Sum unevaluated rather than telescope a collapsed summand. */
+        if (index_pred_body) { iter_spec_free(&s); return NULL; }
         /* span too large: fall through to closed form */
     }
 

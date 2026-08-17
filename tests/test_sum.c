@@ -219,6 +219,20 @@ int main(void) {
      * cascade over the giant body (rotated-Rastrigin build regression). */
     check_large_body_sum_fast();
 
+    /* A finite Sum whose body applies an integer-membership predicate to the
+     * index (EvenQ/OddQ/PrimeQ/... fold to a definite Boolean for a SYMBOLIC
+     * index) must ENUMERATE: the closed-form cascade evaluates the body
+     * symbolically, collapsing the conditional and telescoping the wrong summand
+     * (this gave Sum[If[EvenQ[k],k,-k],{k,1,10}] = -55 instead of 5). */
+    check("Sum[If[EvenQ[k], k, -k], {k, 1, 10}]", "5");
+    check("Sum[If[OddQ[k], k, -k], {k, 1, 10}]", "-5");
+    check("Sum[Boole[EvenQ[k]] k, {k, 1, 10}]", "30");
+    check("Sum[Boole[PrimeQ[k]], {k, 1, 20}]", "8");
+    check("Sum[If[IntegerQ[k], k^2, 0], {k, 1, 5}]", "55");
+    /* A predicate applied only to CONSTANTS folds identically per term, so the
+     * closed form is still valid and must NOT be blocked. */
+    check("Sum[If[PrimeQ[7], k, -k], {k, 1, 10}]", "55");
+
     if (failures) {
         fprintf(stderr, "\n%d/%d sum checks FAILED\n", failures, checks);
         return 1;

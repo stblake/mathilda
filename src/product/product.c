@@ -299,6 +299,44 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
 
 /* Handle Product[f, spec] for one already-isolated spec, with the parsed
  * method.  Returns the product value, or NULL to leave Product[...] held. */
+/* Integer-membership predicates that fold to a definite Boolean for a SYMBOLIC
+ * argument (EvenQ[k]/PrimeQ[k] -> False, SquareFreeQ[k] -> True) though they vary
+ * per integer.  The closed-form cascade evaluates the body symbolically, so such
+ * a predicate collapses the conditional around it and the telescoped product is
+ * wrong -- `Product[If[EvenQ[k], k, 1], {k, 1, 4}]` would fold to 1 rather than
+ * enumerate to 8.  A finite range with such a body must enumerate.  (Kept in step
+ * with the identical helpers in src/sum/sum.c.) */
+static bool prod_head_is_index_predicate(const char* h) {
+    return strcmp(h, "EvenQ") == 0 || strcmp(h, "OddQ") == 0
+        || strcmp(h, "PrimeQ") == 0 || strcmp(h, "CompositeQ") == 0
+        || strcmp(h, "PrimePowerQ") == 0 || strcmp(h, "IntegerQ") == 0
+        || strcmp(h, "SquareFreeQ") == 0 || strcmp(h, "CoprimeQ") == 0
+        || strcmp(h, "Divisible") == 0;
+}
+
+static bool prod_expr_mentions_symbol(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (prod_expr_mentions_symbol(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (prod_expr_mentions_symbol(e->data.function.args[i], name)) return true;
+    return false;
+}
+
+static bool prod_body_has_index_predicate(const Expr* e, const char* ivar) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && prod_head_is_index_predicate(e->data.function.head->data.symbol.name)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (prod_expr_mentions_symbol(e->data.function.args[i], ivar)) return true;
+    }
+    if (prod_body_has_index_predicate(e->data.function.head, ivar)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (prod_body_has_index_predicate(e->data.function.args[i], ivar)) return true;
+    return false;
+}
+
 static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
     /* Indefinite form Product[f, i]: spec is a bare symbol. */
     if (spec->type == EXPR_SYMBOL) {
@@ -334,7 +372,13 @@ static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
          *   - min<=max:  empty ranges must fold to 1 via expansion, not the
          *                telescoping form (which would give a wrong value).
          * The iterator is shadowed because Product is HoldAll. */
-        if (!is_real && di_val == 1.0 && min_val <= max_val) {
+        /* A body whose symbolic evaluation collapses an index predicate (EvenQ,
+         * PrimeQ, ...) has no valid telescoping form -- the cascade would
+         * multiply the wrong factor -- so it must enumerate regardless of span. */
+        bool index_pred_body =
+            prod_body_has_index_predicate(f, s.var->data.symbol.name);
+
+        if (!is_real && di_val == 1.0 && min_val <= max_val && !index_pred_body) {
             Rule* saved = iter_spec_shadow(s.var);
             Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
             iter_spec_restore(s.var, saved);
@@ -343,6 +387,10 @@ static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
         Expr* r = expand_range(f, s.var, s.imin, s.imax, s.di,
                                min_val, max_val, di_val, is_real);
         if (r) { iter_spec_free(&s); return r; }
+        /* Span too large to enumerate: an ordinary body may still telescope, but
+         * an index-predicate body would give the wrong closed form, so leave the
+         * Product unevaluated instead. */
+        if (index_pred_body) { iter_spec_free(&s); return NULL; }
         /* span too large: fall through to closed form */
     }
 
