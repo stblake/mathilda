@@ -281,6 +281,15 @@ enum {
      * A_NDFN's trailing-int read -- c->a is the array, c->b the int n.  imm.p   \
      * is the NdRedSpec (nextra == 1). */                                        \
     X(V_NDREDN, K_ARR)                                                      \
+    /* Norm[array, p] delegated to ndla_norm, the reduction with a COMPILE-TIME  \
+     * literal second argument (Norm[v,1] / Norm[v,Infinity] / Norm[v,3] /       \
+     * Norm[m,"Frobenius"]).  Unlike RankedMin's trailing register, p can be     \
+     * Infinity or a string, so it is baked into imm.r rather than a register:   \
+     * 0 = none (bare Norm[array]), +Inf = Infinity, NaN = "Frobenius", a finite \
+     * positive value = that p (Integer if integral, else Real).  The bare       \
+     * Norm[array] stays on V_NDRED; this opcode carries only the two-arg form.  \
+     * c->a is the array; result is a Real scalar. */                            \
+    X(V_NORM, K_ARR)                                                        \
     /* Delegated TWO-array heads (COMPILE_MISSING.md §3).  A_NDFN2 reads two    \
      * array registers and produces an array (Dot matrix shapes, LinearSolve,   \
      * Cross, LeastSquares, ListConvolve/Correlate, Join); V_NDFN2 the SCALAR    \
@@ -706,6 +715,17 @@ const NdFnSpec*  nd_fn_lookup(const char* h, size_t na);
 CompileType      nd_fn_result(const NdFnSpec* s, CompileType ta);
 const NdRedSpec* nd_red_lookup(const char* h, size_t na);
 CompileType      nd_red_result(const NdRedSpec* s, CompileType ta);
+
+/* Norm[array, p] two-arg validator + V_NORM immediate encoder (compile_ndtables.c).
+ * True iff ndla_norm answers this (literal p, operand type) as a machine Real. */
+bool nd_norm2_encode(const Expr* p, CompileType ta, double* imm_r);
+
+/* Norm[{e1,...}, p] over a List literal -> an unevaluated scalar-arithmetic tree
+ * (Sqrt/Plus/Max of Abs), or NULL when the operand is not an expandable list
+ * literal (a declared-array operand, an induced matrix norm, an empty vector).
+ * Defined in compile.c; called by both emit_node and infer_type so the two
+ * passes agree on which Norm calls become scalar bodies. */
+Expr* norm_try_expand(const Expr* e);
 const NdFn2Spec* nd_fn2_lookup(const char* h, size_t na);
 CompileType      nd_fn2_result(const NdFn2Spec* s, CompileType ta, CompileType tb);
 

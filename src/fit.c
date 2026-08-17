@@ -1297,21 +1297,28 @@ static bool fit_fast_l2(double* A, const double* b, size_t npts, size_t nfun,
  * path.  No column scaling (it would distort the ||a||^2 penalty). */
 static bool fit_fast_ridge(const double* A, const double* b, size_t npts, size_t nfun,
                            double lambda, double* cf) {
-    double sl = sqrt(lambda < 0.0 ? 0.0 : lambda);
-    size_t total = npts + nfun;
-    size_t naug = total * nfun;
-    double* Aa = calloc(naug ? naug : 1, sizeof(double));
-    double* ba = calloc(total ? total : 1, sizeof(double));
-    memcpy(Aa, A, sizeof(double) * npts * nfun);
-    for (size_t i = 0; i < nfun; i++) Aa[(npts + i) * nfun + i] = sl;
-    memcpy(ba, b, sizeof(double) * npts);          /* trailing nfun stay zero */
-    Expr* M = fit_pack_matrix(Aa, total, nfun);
-    Expr* V = fit_pack_vector(ba, total);
-    free(Aa); free(ba);
-    Expr* r = fit_leastsquares(M, V);
-    expr_free(M); expr_free(V);
-    bool ok = r && fit_coeffs_to_doubles(r, nfun, cf);
-    if (r) expr_free(r);
+    /* Ridge normal equations: (A^T A + lambda I) c = A^T b -- exactly
+     * numpy/sklearn ridge.  lambda I regularises the Gram matrix, so
+     * squaring the condition number (the usual objection to normal
+     * equations) is not a concern here; and it avoids forming and SVD-ing
+     * the (npts+nfun) x nfun augmented system, which for a tall design
+     * matrix cost ~8x scipy.  Same construction fit_irls_l1_dense uses. */
+    double lam = (lambda < 0.0) ? 0.0 : lambda;
+    double* G   = malloc(sizeof(double) * (nfun ? nfun * nfun : 1));
+    double* rhs = malloc(sizeof(double) * (nfun ? nfun : 1));
+    if (!G || !rhs) { free(G); free(rhs); return false; }
+    for (size_t p = 0; p < nfun; p++) {
+        for (size_t q = 0; q < nfun; q++) {
+            double s = 0.0;
+            for (size_t i = 0; i < npts; i++) s += A[i * nfun + p] * A[i * nfun + q];
+            G[p * nfun + q] = s + (p == q ? lam : 0.0);
+        }
+        double s = 0.0;
+        for (size_t i = 0; i < npts; i++) s += A[i * nfun + p] * b[i];
+        rhs[p] = s;
+    }
+    bool ok = fit_solve_dense(nfun, G, rhs, cf);
+    free(G); free(rhs);
     return ok;
 }
 

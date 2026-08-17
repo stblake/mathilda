@@ -195,7 +195,15 @@ static Expr* eigen_mat_mul(Expr* A, Expr* B) {
     bool err = false;
     Expr* prod = dot2(A, B, &err);
     if (!prod) return NULL;
-    return eval_and_free(prod);
+    Expr* result = eval_and_free(prod);
+    /* dot2 of a machine matrix answers with a packed NDArray; the Faddeev
+     * loop's trace / shift helpers index the product as a nested List-of-Lists
+     * (they read data.function.args, which aliases the buffer payload on an
+     * EXPR_NDARRAY -> SIGSEGV). Materialise it back. pack_unpack returns NULL
+     * when `result` is not an ndarray, so the non-machine path is untouched. */
+    Expr* nested = pack_unpack(result);
+    if (nested) { expr_free(result); result = nested; }
+    return result;
 }
 
 /* Faddeev-Leverrier-Souriau characteristic polynomial.
@@ -210,7 +218,12 @@ static Expr* eigen_mat_mul(Expr* A, Expr* B) {
  *
  * Returns the polynomial in the lambda variable.  Caller owns the result. */
 Expr* eigen_char_poly_faddeev(Expr* A, const char* lambda_name, int n) {
-    Expr* M = expr_copy(A);                              /* M_1 = A */
+    /* An exact integer matrix above the packing threshold (>= ~16x16) arrives
+     * as a packed NDArray; the trace/shift helpers below index it as a nested
+     * List, so materialise it once here. pack_unpack returns NULL for a plain
+     * List, in which case the ordinary deep copy is used. */
+    Expr* M = pack_unpack(A);                            /* M_1 = A */
+    if (!M) M = expr_copy(A);
     Expr* p_prev = eigen_mat_trace(M, n);                /* p_1 */
 
     Expr** coeffs = malloc(sizeof(Expr*) * (n + 1));

@@ -1,0 +1,19 @@
+# Python dependencies for the benchmarks/ Python column.
+#
+# Group E (53-62, "advanced numerical analysis") is authored and run against
+# Python 3.11 + numpy + scipy, with mpmath as the one arbitrary-precision
+# baseline (experiment 62). Pin the interpreter at run time via the env
+# override the runner already supports -- never hardcode a path:
+#
+#     /usr/local/bin/python3.11 -m pip install -r benchmarks/requirements.txt
+#     HPC_PYTHON=/usr/local/bin/python3.11 python3 benchmarks/run_all.py
+#
+# The results JSON records python_bin + python_libs, so the exact versions a
+# run used are captured in the report; these lower bounds document what the
+# group-E experiments were written and verified against.
+numpy>=1.26
+scipy>=1.11
+mpmath>=1.3
+# Optional: enables the LASSO comparison case in 61-regularized-least-squares.
+# Absent -> that single case emits SKIP on the Python side; the rest run.
+# scikit-learn>=1.3

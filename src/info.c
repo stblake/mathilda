@@ -2804,6 +2804,22 @@ void info_init(void) {
         "\tOptionValue[f, opts, name] resolves from the explicit rules opts then\n"
         "\tthe defaults from f; a trailing Hold wraps the result in Hold.");
 
+    // Numeric display formatting
+    symtab_set_docstring("NumberForm",
+        "NumberForm[expr, n] prints approximate real numbers in expr to n-digit\n"
+        "\tprecision; NumberForm[expr, {n, f}] uses n digits with f to the right\n"
+        "\tof the decimal point; NumberForm[expr] uses the default options.\n"
+        "\tWorks on integers as well.  It is an inert print wrapper: the head\n"
+        "\tremains in the expression and only changes how it is displayed.\n"
+        "\tOptions: DefaultPrintPrecision, DigitBlock, ExponentFunction,\n"
+        "\tExponentStep, NumberFormat, NumberMultiplier, NumberPadding,\n"
+        "\tNumberPoint, NumberSeparator, NumberSigns, ScientificNotationThreshold,\n"
+        "\tSignPadding.");
+    symtab_set_docstring("Row",
+        "Row[{e1, e2, ...}] displays the ei concatenated together in a row.\n"
+        "\tRow[{e1, e2, ...}, s] inserts the string s between successive\n"
+        "\telements.  Strings are shown without quotes.");
+
     // In-place numeric assignment operators
     symtab_set_docstring("Increment",
         "Increment[x] or x++\n"

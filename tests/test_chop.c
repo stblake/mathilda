@@ -302,6 +302,27 @@ static void test_chop_memory_loop(void) {
 }
 
 /* ------------------------------------------------------------------------
+ *  Packed / NDArray buffer fast path (chop_ndarray, Chop is packed-aware)
+ * ---------------------------------------------------------------------- */
+
+static void test_chop_packed_nothing_chops(void) {
+    /* An auto-packing List with no near-zero element keeps its buffer, answer
+     * unchanged and value-identical to the List path. */
+    assert_eval_eq("Chop[{1.5, 2.5, 3.5, 4.5}]", "{1.5, 2.5, 3.5, 4.5}", 0);
+    assert_eval_eq("Normal[Chop[NDArray[{1.5, 2.5, 3.5}]]]", "{1.5, 2.5, 3.5}", 0);
+}
+
+static void test_chop_packed_some_chops(void) {
+    /* A near-zero element degrades to the exact mixed result (Integer 0 where it
+     * chops), identical to the scalar / List path. */
+    assert_eval_eq("Chop[{3.5, 1.0*10^-15, 2.5}]", "{3.5, 0, 2.5}", 0);
+    /* an all-chop buffer re-packs to an int64 List of exact zeros */
+    assert_eval_eq("Chop[{1.0*10^-15, 2.0*10^-15}]", "{0, 0}", 0);
+    /* a custom delta still applies over the buffer */
+    assert_eval_eq("Chop[{0.005, 2.5}, 0.01]", "{0, 2.5}", 0);
+}
+
+/* ------------------------------------------------------------------------
  *  Main
  * ---------------------------------------------------------------------- */
 
@@ -334,6 +355,9 @@ int main(void) {
     TEST(test_chop_exact_complex_passthrough);
 
     /* Structure */
+    TEST(test_chop_packed_nothing_chops);
+    TEST(test_chop_packed_some_chops);
+
     TEST(test_chop_inside_list);
     TEST(test_chop_inside_nested_list);
     TEST(test_chop_inside_plus);

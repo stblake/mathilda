@@ -12,6 +12,7 @@
 #include "arithmetic.h"
 #include "context.h"
 #include "sym_names.h"
+#include "numberform.h"
 #include "ndarray.h"
 #include "compile/compiled_function.h"
 #include "graph.h"   /* graph_is_list, for the Graph[...] summary form */
@@ -60,6 +61,22 @@ static Expr* negate_bigint(Expr* b) {
  * Toggled while printing inside an InputForm[...] wrapper.
  */
 static int g_inputform_depth = 0;
+
+/* The active NumberForm[...] formatting context, or NULL. Installed by the
+ * SYM_NumberForm branch of print_standard while it recurses into the wrapped
+ * expression; every numeric leaf then routes through numberform_render_number
+ * instead of the default real/integer formatter. Saved/restored so nested
+ * NumberForm wrappers compose. */
+static const NumberFormCtx* g_numberform_ctx = NULL;
+
+/* True for the atomic numeric types NumberForm knows how to reformat. */
+static bool nf_reformattable_atom(const Expr* e) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    return false;
+}
 
 static int get_expr_prec(Expr* e) {
     if (e->type != EXPR_FUNCTION) return 1000;
@@ -272,6 +289,12 @@ static void print_standard(Expr* e, int parent_prec) {
         return;
     }
     if (e->type != EXPR_FUNCTION) {
+        /* Inside a NumberForm[...] wrapper, reformat every numeric leaf; fall
+         * through to the default printer for anything the engine declines
+         * (non-finite reals, non-numeric atoms). */
+        if (g_numberform_ctx && nf_reformattable_atom(e)
+            && numberform_render_number(e, g_numberform_ctx))
+            return;
         expr_print_fullform(e);
         return;
     }
@@ -300,6 +323,41 @@ static void print_standard(Expr* e, int parent_prec) {
         }
         else if (head == SYM_HoldForm && e->data.function.arg_count == 1) {
             print_standard(e->data.function.args[0], parent_prec);
+        }
+        else if (head == SYM_NumberForm && e->data.function.arg_count >= 1
+                 && g_inputform_depth == 0) {
+            /* Install the formatting context and render the wrapped expression;
+             * numeric leaves route through numberform_render_number. */
+            NumberFormCtx ctx;
+            if (numberform_build_ctx(e, &ctx)) {
+                const NumberFormCtx* saved = g_numberform_ctx;
+                g_numberform_ctx = &ctx;
+                print_standard(e->data.function.args[0], parent_prec);
+                g_numberform_ctx = saved;
+            } else {
+                print_standard(e->data.function.head, 1000);
+                printf("[]");
+            }
+        }
+        else if (head == SYM_Row && e->data.function.arg_count >= 1
+                 && e->data.function.args[0]->type == EXPR_FUNCTION
+                 && e->data.function.args[0]->data.function.head->type == EXPR_SYMBOL
+                 && e->data.function.args[0]->data.function.head->data.symbol.name == SYM_List
+                 && g_inputform_depth == 0) {
+            /* Row[{a, b, ...}] concatenates the OutputForm of each element (no
+             * quotes on strings); Row[{...}, s] inserts the string s between. */
+            Expr* list = e->data.function.args[0];
+            const char* sep = NULL;
+            if (e->data.function.arg_count >= 2
+                && e->data.function.args[1]->type == EXPR_STRING)
+                sep = e->data.function.args[1]->data.string;
+            bool saved_of = g_print_output_form;
+            g_print_output_form = true;
+            for (size_t i = 0; i < list->data.function.arg_count; i++) {
+                if (i > 0 && sep) fputs(sep, stdout);
+                print_standard(list->data.function.args[i], 0);
+            }
+            g_print_output_form = saved_of;
         }
         else if (head == SYM_Graphics && e->data.function.arg_count >= 1 && g_inputform_depth == 0) {
             printf("-Graphics-");
@@ -904,7 +962,35 @@ char* expr_to_string_fullform(Expr* e) {
     
     stdout = old_stdout;
     fclose(stream);
-    
+
+    return buffer;
+}
+
+/* Render `e` (the result of a NumberForm NumberFormat function) to a heap
+ * string in OutputForm: strings print raw, Row[...] concatenates. The active
+ * NumberForm context is suspended so already-formatted mantissa/exponent
+ * strings are not re-processed. Caller frees. */
+char* numberform_format_result_to_string(const Expr* e) {
+    char* buffer = NULL;
+    size_t len;
+    FILE* stream = open_memstream(&buffer, &len);
+    if (!stream) return NULL;
+
+    FILE* old_stdout = stdout;
+    stdout = stream;
+
+    const NumberFormCtx* saved_ctx = g_numberform_ctx;
+    bool saved_of = g_print_output_form;
+    g_numberform_ctx = NULL;
+    g_print_output_form = true;
+
+    print_standard((Expr*)e, 0);
+
+    g_print_output_form = saved_of;
+    g_numberform_ctx = saved_ctx;
+    stdout = old_stdout;
+    fclose(stream);
+
     return buffer;
 }
 

@@ -217,6 +217,54 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
         *out = acc;
         return c->ok ? 1 : -1;
     }
+    if (strcmp(h, "Chop") == 0 && (na == 1 || na == 2)) {
+        CompileType tx;
+        if (!infer_type(c, A[0], &tx) || CT_IS_ARRAY(tx) || tx == CT_BOOL
+            || tx == CT_COMPLEX) { c->ok = false; return -1; }
+        /* delta must be a compile-time real/integer literal (default 1e-10). */
+        double delta = 1.0e-10;
+        if (na == 2) {
+            const Expr* d = A[1];
+            if (d->type == EXPR_REAL)         delta = fabs(d->data.real);
+            else if (d->type == EXPR_INTEGER) delta = fabs((double)d->data.integer);
+            else { c->ok = false; return -1; }
+        }
+        /* A machine integer is exact and never chops -> identity. */
+        if (tx == CT_INT) return emit(c, A[0], out) ? (c->ok ? 1 : -1) : -1;
+        /* Chop[x] = x * (Abs[x] >= delta): keep x when |x|>=delta, else 0. -- a
+         * branchless mask-multiply (the UnitStep idiom above). The chopped value
+         * is a machine 0. (Real), the compiled counterpart of the interpreter's
+         * exact Integer 0; a CompiledFunction returns machine types. `x` is
+         * emitted twice (for Abs and for the product), which the optimiser folds
+         * to one register for an argument and value-numbers for a computed x. */
+        Val xa; if (!emit(c, A[0], &xa)) return -1;
+        Val ax = unop(c, OP_ABS_R, xa, CT_REAL);
+        Slot dz; memset(&dz, 0, sizeof dz); dz.r = delta;
+        Val dv = emit_const(c, dz, CT_REAL);
+        Val mask = binop(c, OP_GE_R, ax, dv, CT_INT);
+        coerce(c, &mask, CT_REAL);
+        Val xb; if (!emit(c, A[0], &xb)) return -1;
+        *out = binop(c, OP_MUL_R, mask, xb, CT_REAL);
+        return c->ok ? 1 : -1;
+    }
+    if (strcmp(h, "Clip") == 0 && na == 1) {
+        /* Clip[x] default bounds {-1, 1} = Min[Max[x, -1.], 1.] -- the na==2 arm
+         * below with the bounds synthesised. Real result (the machine 1. where
+         * the interpreter's exact-bound scalar gives the Integer 1). */
+        CompileType tx;
+        if (!infer_type(c, A[0], &tx) || CT_IS_ARRAY(tx) || tx == CT_BOOL
+            || tx == CT_COMPLEX) { c->ok = false; return -1; }
+        Val x; if (!emit(c, A[0], &x)) return -1;
+        coerce(c, &x, CT_REAL);
+        if (!c->ok) return -1;
+        Slot lo; memset(&lo, 0, sizeof lo); lo.r = -1.0;
+        Val vlo = emit_const(c, lo, CT_REAL);
+        Val mx = binop(c, OP_MAX_R, x, vlo, CT_REAL);
+        Slot hi; memset(&hi, 0, sizeof hi); hi.r = 1.0;
+        Val vhi = emit_const(c, hi, CT_REAL);
+        *out = binop(c, OP_MIN_R, mx, vhi, CT_REAL);
+        return c->ok ? 1 : -1;
+    }
     if ((strcmp(h, "Clip") == 0 || strcmp(h, "Rescale") == 0) && na == 2) {
         const Expr* bnd = A[1];
         if (bnd->type != EXPR_FUNCTION || bnd->data.function.head->type != EXPR_SYMBOL

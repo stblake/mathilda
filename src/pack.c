@@ -595,6 +595,12 @@ static void pack_mark_aware_heads(void) {
          * Deliberately not int64_ok: Rescale[Range[10]] is a list of exact
          * Rationals, which no buffer holds. */
         "Rescale",
+        /* Chop joined on 2026-08-12. Like Clip's exact bounds, a chopped element
+         * is the exact Integer 0, which no uniform Real buffer holds -- so
+         * chop_ndarray (src/core.c) scans and keeps the buffer only when NOTHING
+         * chops, degrading to the exact List path otherwise. Before it opted in,
+         * Chop[largeList] materialised at ~40x an aware head. */
+        "Chop",
         /* Note the absentees just below this list -- Precision and Accuracy
          * USED to be here and had to come out. */
         /* Functional heads with packed paths (src/funcprog.c). */
@@ -796,12 +802,14 @@ static void pack_mark_aware_heads(void) {
          * see NDUnaryKernel.to_int in ndarray.h), so the buffer path produces the
          * exact Integers the List does instead of 1.0 where the List gives 1.
          * That was the "optimisation, not a correctness question" the note below
-         * anticipated. `Im` stays: its kernel is a projection, not a narrowing.
+         * anticipated. `Im` joined them on 2026-08-12: Im of any real (or exact
+         * integer) is the Integer 0, so its narrowing pair (NDKU_ImInt in
+         * ndkernels.c) writes an NDT_INT64 zero buffer that matches the List path
+         * -- previously it materialised, at ~22x the cost of an aware head.
          *
          * Clip left this list on 2026-07-31 for the same reason -- the exactness
          * problem was real but belonged to the BOUNDS, not to the head. See the
          * note beside it in AWARE. */
-        "Im",
         "Precision", "Accuracy",
         /* Quotient joined this list on 2026-07-30 and came OFF it on
          * 2026-08-01, the same way Floor and friends did. It was here because

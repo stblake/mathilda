@@ -20,6 +20,7 @@
 #include "../ndarray.h"          /* ndarray_part(_set) / map / elementwise / NDType */
 #include "../assoc.h"            /* assoc_lookup_value / assoc_values_list / assoc_set_key ... */
 #include "../ndreduce.h"         /* ndred_total_all */
+#include "../linalg/ndlinalg.h"  /* ndla_norm — V_NORM delegate */
 #include "../ndarray_internal.h" /* nd_parallel_for — threading the fused map loop */
 #include "../sym_names.h"        /* SYM_Association / SYM_All / SYM_Span / SYM_List */
 #ifdef USE_MPFR
@@ -680,6 +681,36 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
             return ok;
         }
 
+        case OP_V_NORM: {                 /* Norm[array, p], p a compile-time literal */
+            if (!a->arr || a->arr->type != EXPR_NDARRAY) return false;
+            /* Rebuild the p-literal from imm.r (see the X-macro doc): NaN first,
+             * since NaN compares equal to nothing; then +Inf; then a finite
+             * positive value as an Integer when integral (ndla_matrix_norm_direct
+             * only accepts an Integer 1/2) else a Real; 0 means no second arg. */
+            double pc = c->imm.r;
+            Expr* pe = NULL;
+            if (pc != pc)                 pe = expr_new_string("Frobenius");
+            else if (isinf(pc))           pe = expr_new_symbol(SYM_Infinity);
+            else if (pc > 0.0) {
+                double ip = floor(pc);
+                pe = (ip == pc) ? expr_new_integer((int64_t)ip) : expr_new_real(pc);
+            }
+            Expr* args[2]; size_t nargs = 1;
+            args[0] = expr_copy(a->arr);
+            if (pe) { args[1] = pe; nargs = 2; }
+            Expr* call = expr_new_function(expr_new_symbol(SYM_Norm), args, nargs);
+            if (!call) { expr_free(args[0]); if (pe) expr_free(pe); return false; }
+            Expr* s = ndla_norm(call);
+            expr_free(call);
+            if (f & AF_FREE_A) { expr_free(a->arr); a->arr = NULL; }
+            /* A form ndla_norm declines comes back as a materialised List
+             * (linalg_delist_and_reeval), which vm_write_scalar refuses -> the
+             * interpreter answers, exactly as it would have. */
+            bool ok = s && vm_write_scalar(s, AF_R(f), d);
+            expr_free(s);
+            return ok;
+        }
+
         case OP_A_NDFN2: {                /* Dot (matrix) / LinearSolve / Cross / Join / ... */
             const NdFn2Spec* fn = (const NdFn2Spec*)c->imm.p;
             if (!a->arr || a->arr->type != EXPR_NDARRAY
@@ -1269,6 +1300,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(V_TOTAL):  ARROP();
             OP(V_NDRED):  ARROP();
             OP(V_NDREDN): ARROP();
+            OP(V_NORM):   ARROP();
             OP(A_NDFN2):  ARROP();
             OP(V_NDFN2):  ARROP();
             OP(V_LEN):    ARROP();

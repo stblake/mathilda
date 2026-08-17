@@ -515,6 +515,26 @@ static Expr* fr_try_compiled(AutoCompiled* ac, Expr* const* values, size_t n,
         : make_complex(expr_new_real(creal(z)), expr_new_real(cimag(z)));
 }
 
+/* Machine-precision compiled evaluation straight to a real double.  The system
+ * Newton solver's hot path is n function values + n^2 Jacobian entries per
+ * iteration; routing each through fr_try_compiled boxes the result to an Expr
+ * that the caller immediately unboxes, and copies the point into a stack buffer
+ * capped at FR_MAXV.  Here `x` is the current point as doubles already, so we
+ * call the compiled body directly -- no Expr round-trip, and no FR_MAXV cap, so
+ * a system with more than FR_MAXV variables (e.g. Broyden N=40) uses the
+ * compiled path instead of falling entirely to the interpreter.  Returns false
+ * (caller falls back to the interpreter) when ac is absent, the arity
+ * mismatches, or the value is not a finite real. */
+static bool fr_eval_compiled_double(const AutoCompiled* ac, const double* x,
+                                    size_t n, double* out) {
+    if (!ac || n == 0 || n != autocompiled_num_vars(ac)) return false;
+    double _Complex z;
+    if (!autocompiled_eval_complex(ac, x, &z)) return false;
+    if (!isfinite(creal(z)) || !isfinite(cimag(z)) || cimag(z) != 0.0) return false;
+    *out = creal(z);
+    return true;
+}
+
 static Expr* fr_eval_with_bindings(Expr* f, FrVarBind* binds,
                                    Expr* const* values, size_t n,
                                    const FrOpts* opts) {
@@ -1275,8 +1295,13 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
 
-    /* Pre-compute Jacobian symbolically: matrix[i][j] = D[f_i, var_j]. */
+    /* Pre-compute Jacobian symbolically: matrix[i][j] = D[f_i, var_j].
+     * jz[i*n+j] flags the STRUCTURALLY-ZERO entries: for a sparse system (a
+     * tridiagonal Broyden field has 3 non-zeros per row, not n) that is the
+     * overwhelming majority, and skipping their compile + per-iteration eval is
+     * the difference between O(n^2) and O(nnz) work. */
     Expr*** jac = malloc(sizeof(Expr**) * n);
+    bool* jz = malloc(sizeof(bool) * n * n);
     for (size_t i = 0; i < n; i++) {
         jac[i] = malloc(sizeof(Expr*) * n);
         Expr* fi = flist_normalized->data.function.args[i];
@@ -1288,13 +1313,17 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
             } else {
                 jac[i][j] = fr_compute_derivative(fi, vars[j]);
             }
+            Expr* je = jac[i][j];
+            jz[i * n + j] = je &&
+                ((je->type == EXPR_INTEGER && je->data.integer == 0) ||
+                 (je->type == EXPR_REAL && je->data.real == 0.0));
         }
     }
 
     /* Compile each component f_i and Jacobian entry J_ij as a function of all n
      * variables (machine fast path); a NULL entry falls back to the interpreter.
-     * Systems are machine-precision, so the spec is fixed here. */
-    NumericSpec mspec = fr_numeric_spec(opts);
+     * Structurally-zero entries are never compiled. Systems are
+     * machine-precision, so the spec is fixed here. */
     AutoCompiled**  ac_f   = malloc(sizeof(*ac_f) * n);
     AutoCompiled*** ac_jac = malloc(sizeof(*ac_jac) * n);
     for (size_t i = 0; i < n; i++) {
@@ -1302,7 +1331,9 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
                                   (const Expr* const*)vars, n);
         ac_jac[i] = malloc(sizeof(**ac_jac) * n);
         for (size_t j = 0; j < n; j++)
-            ac_jac[i][j] = autocompile_new(jac[i][j], (const Expr* const*)vars, n);
+            ac_jac[i][j] = jz[i * n + j]
+                ? NULL
+                : autocompile_new(jac[i][j], (const Expr* const*)vars, n);
     }
 
     Expr* result = NULL;
@@ -1319,17 +1350,18 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
         double max_f_pre = 0.0;
         for (size_t i = 0; i < n; i++) {
             Expr* fi = flist_normalized->data.function.args[i];
-            Expr* fv_e = fr_try_compiled(ac_f[i], xv, n, mspec);
-            if (!fv_e) fv_e = fr_eval_with_bindings(fi, binds, xv, n, opts);
-            if (!fv_e || !fr_expr_to_double_real(fv_e, &fvec[i])) {
+            if (!fr_eval_compiled_double(ac_f[i], x_vec, n, &fvec[i])) {
+                Expr* fv_e = fr_eval_with_bindings(fi, binds, xv, n, opts);
+                if (!fv_e || !fr_expr_to_double_real(fv_e, &fvec[i])) {
+                    expr_free(fv_e);
+                    fr_warn("nlnum", "non-real f_%zu during iteration", i);
+                    free(fvec);
+                    for (size_t q = 0; q < n; q++) expr_free(xv[q]);
+                    free(xv);
+                    goto cleanup;
+                }
                 expr_free(fv_e);
-                fr_warn("nlnum", "non-real f_%zu during iteration", i);
-                free(fvec);
-                for (size_t q = 0; q < n; q++) expr_free(xv[q]);
-                free(xv);
-                goto cleanup;
             }
-            expr_free(fv_e);
             if (fabs(fvec[i]) > max_f_pre) max_f_pre = fabs(fvec[i]);
         }
         /* Pre-step convergence check on residual norm.  Avoids touching the
@@ -1346,17 +1378,19 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
         double* J = malloc(sizeof(double) * n * n);
         for (size_t i = 0; i < n; i++) {
             for (size_t j = 0; j < n; j++) {
-                Expr* dv_e = fr_try_compiled(ac_jac[i][j], xv, n, mspec);
-                if (!dv_e) dv_e = fr_eval_with_bindings(jac[i][j], binds, xv, n, opts);
-                if (!dv_e || !fr_expr_to_double_real(dv_e, &J[i*n + j])) {
+                if (jz[i*n + j]) { J[i*n + j] = 0.0; continue; }
+                if (!fr_eval_compiled_double(ac_jac[i][j], x_vec, n, &J[i*n + j])) {
+                    Expr* dv_e = fr_eval_with_bindings(jac[i][j], binds, xv, n, opts);
+                    if (!dv_e || !fr_expr_to_double_real(dv_e, &J[i*n + j])) {
+                        expr_free(dv_e);
+                        fr_warn("nlnum", "non-real Jacobian[%zu,%zu]", i, j);
+                        free(J); free(fvec);
+                        for (size_t q = 0; q < n; q++) expr_free(xv[q]);
+                        free(xv);
+                        goto cleanup;
+                    }
                     expr_free(dv_e);
-                    fr_warn("nlnum", "non-real Jacobian[%zu,%zu]", i, j);
-                    free(J); free(fvec);
-                    for (size_t q = 0; q < n; q++) expr_free(xv[q]);
-                    free(xv);
-                    goto cleanup;
                 }
-                expr_free(dv_e);
             }
         }
         for (size_t q = 0; q < n; q++) expr_free(xv[q]);
@@ -1415,21 +1449,31 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
             if (fabs(step) > max_step) max_step = fabs(step);
             if (fabs(x_vec[i]) > max_x) max_x = fabs(x_vec[i]);
         }
-        /* Compute residual norm at new x */
-        Expr** xv2 = malloc(sizeof(Expr*) * n);
-        for (size_t i = 0; i < n; i++) xv2[i] = expr_new_real(x_vec[i]);
+        /* Compute residual norm at new x.  Compiled components evaluate
+         * straight to a double; xv2 is built only if some component needs
+         * the interpreter (never, for a fully-compiled system). */
+        Expr** xv2 = NULL;
         for (size_t i = 0; i < n; i++) {
             Expr* fi = flist_normalized->data.function.args[i];
-            Expr* fv_e = fr_try_compiled(ac_f[i], xv2, n, mspec);
-            if (!fv_e) fv_e = fr_eval_with_bindings(fi, binds, xv2, n, opts);
             double v;
+            if (fr_eval_compiled_double(ac_f[i], x_vec, n, &v)) {
+                if (fabs(v) > max_f) max_f = fabs(v);
+                continue;
+            }
+            if (!xv2) {
+                xv2 = malloc(sizeof(Expr*) * n);
+                for (size_t q = 0; q < n; q++) xv2[q] = expr_new_real(x_vec[q]);
+            }
+            Expr* fv_e = fr_eval_with_bindings(fi, binds, xv2, n, opts);
             if (fv_e && fr_expr_to_double_real(fv_e, &v) && fabs(v) > max_f) {
                 max_f = fabs(v);
             }
             expr_free(fv_e);
         }
-        for (size_t q = 0; q < n; q++) expr_free(xv2[q]);
-        free(xv2);
+        if (xv2) {
+            for (size_t q = 0; q < n; q++) expr_free(xv2[q]);
+            free(xv2);
+        }
         free(dx);
 
         fr_fire_monitor(opts->step_monitor);
@@ -1466,6 +1510,7 @@ cleanup:
     free(jac);
     free(ac_jac);
     free(ac_f);
+    free(jz);
     return result;
 }
 
@@ -1505,9 +1550,14 @@ Expr* builtin_findroot(Expr* res) {
     opts.wp_bits = 0;
     opts.max_iter = 100;
     /* Uniform numerical-function contract: AccuracyGoal defaults to
-     * MachinePrecision, PrecisionGoal to Automatic (== WorkingPrecision/2,
-     * filled in below). */
-    opts.acc_goal_digits = NUMERIC_MACHINE_PRECISION_DIGITS;
+     * MachinePrecision, PrecisionGoal to Automatic (both == WorkingPrecision/2,
+     * filled in below). Both must be negative sentinels so the resolution at
+     * the bottom of this block scales them with WorkingPrecision -- a positive
+     * literal here pinned the accuracy goal at ~16 digits regardless of
+     * WorkingPrecision, so FindRoot[..., WorkingPrecision -> 100] stopped its
+     * MPFR Newton at |f| < 10^-16 and returned ~19 correct digits while
+     * labelling the result Precision 100. */
+    opts.acc_goal_digits = NC_GOAL_MACHINE;
     opts.prec_goal_digits = NC_GOAL_AUTO;
     opts.damping = 1.0;
     opts.jacobian = NULL;

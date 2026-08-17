@@ -1,83 +1,41 @@
-# Pattern-Matcher Stress Test & Refinement
+# Group E benchmarks — 10 advanced-numerical-analysis experiments (Mathilda vs Python 3.11 + numpy/scipy)
 
 ## Plan
-- [x] Explore matcher, test infra, edge cases (3 Explore agents)
-- [x] Build stress-test harness (fork-per-case corpus runner)
-- [ ] Write ~230 asserted + ~25 observational stress cases (documented WL semantics)
-- [ ] Run corpus, triage failures (correctness / missing-construct / robustness / perf)
-- [ ] Fix: Verbatim, PatternSequence, top-level Longest/Shortest
-- [ ] Fix: correctness divergences surfaced by asserted tier
-- [ ] Fix: recursion-depth robustness (graceful, no false no-match)
-- [ ] Fix: heap-allocate reorder storage (drop MATCH_REORDER_CAP 64); widen eval_guard_true stack
-- [ ] Add bench_match.c (doubling-ratio perf gate)
-- [ ] Docs: docs/spec/builtins + weekly changelog; re-run pre-existing matcher suites; valgrind
+- [x] Wire a new report group E (53–62) into `benchmarks/run_all.py` `group_of()`
+- [x] Add `benchmarks/requirements.txt` (numpy/scipy/mpmath) + group-E table & Python-3.11 note in README
+- [x] 53 matrix-decompositions (LU/QR/SVD/PseudoInverse/rank/NullSpace; Cholesky ABSENT)
+- [x] 54 eigenproblems (sym/general/generalized/Arnoldi; Eigensystem ABSENT)
+- [x] 55 vectorized special functions (Fresnel/Erf/integrals/Beta vectorized; BesselI/K no kernel)
+- [x] 56 multidim quadrature (2D/3D/oscillatory/singular/semi-infinite/dependent-bounds)
+- [x] 57 stiff ODE + PDE (stiff scalar/Robertson/harmonic/VdP + heat/wave MethodOfLines)
+- [x] 58 nonlinear systems (2×2, Burden–Faires 3×3, Broyden tridiagonal N=10/40)
+- [x] 59 polynomial roots (NSolve/NRoots dense 20/50/100, roots-of-unity, Wilkinson)
+- [x] 60 DCT/DST (types 1/2/4, DST 1/2) + 2D Fourier, normalization reconciled in checks
+- [x] 61 regularized least squares (LeastSquares + Fit Tikhonov/ridge; FindFit ABSENT)
+- [x] 62 arbitrary precision (N[…,p]/NSum/NIntegrate/FindRoot vs mpmath), deep-digit checks
+- [x] Run subset under Python 3.11 via `HPC_PYTHON`, `--check-labels`; produce gap report
 
 ## Review
-(to fill in at end)
+- **Result:** 65 cases, **0 INCOMPLETE, 0 CHECK-FAIL** (every case runs, every check agrees within 1e-6),
+  32 SLOWER, 30 AHEAD, 3 ABSENT. Coverage 85.7% (30/35 declared heads). Wall clock 1.8 min.
+- Only shared-code edit: one clause in `run_all.py` `group_of()`. No Mathilda source touched.
+- Run it: `HPC_PYTHON=/usr/local/bin/python3.11 python3 benchmarks/run_all.py --only 53,54,55,56,57,58,59,60,61,62 --system mathilda,python`
+- Outputs: `benchmarks/REPORT.partial.md`, `ABSENT.partial.md`, `results/2026-08-12-partial.json`.
 
-## Review (2026-08-08)
+### Top gaps surfaced (the "drive improvements" queue)
+1. `NullSpace` on a float matrix takes a non-machine path — **2428×** (9.6 s vs 4 ms).
+2. `NSolve`/`NRoots` high-degree — **60–110×**; Wilkinson-15 **1616×** (symbolic preprocessing of the product form).
+3. Generalized `Eigenvalues[{A,B}]` has **no LAPACK path** — symbolic char-poly root-finding; **1136×**, returns Root[] at n≥6, hangs at n≥8.
+4. `BesselI`/`BesselK` over arrays have **no SIMD kernel** (scalar threading) — **105×/209×**; the other special functions are vectorized and mostly AHEAD.
+5. `LUDecomposition` **31.5×**, `FindRoot` systems scale poorly (Broyden N=40 **19×**), symmetric eig **6.7×**, Fit ridge **8.1×**, DCT-2/4 **~3.6×**.
+- Also `FindRoot`/`NSum` under-deliver requested WorkingPrecision (FindRoot ~19 correct digits at WP→100).
 
-Built a 228-case asserted conformance corpus + ~20-case observations corpus for
-the pattern matcher, ran it, triaged, and fixed everything the asserted tier
-surfaced (207/228 -> 228/228):
+### Where Mathilda already wins (regression guards)
+- NDSolve (compiled RHS) beats scipy solve_ivp 5–40×; arbitrary precision beats (pure-Python) mpmath up to ~200×
+  (N[Gamma[1/3],1000]: 19 ms vs 3.9 s); most vectorized special functions and several NIntegrate cases AHEAD.
 
-Correctness fixes (src/match.c):
-- `_Rational`/`_Complex`/`_Integer`-bigint head-typed blanks (blank_head_matches)
-- nested `Condition` guard eval (eval_guard_true recurses + evals leaves; drops 64 cap)
-- `__?test`/`___?test` per-element PatternTest on sequence blanks
+### Absences (feature work)
+- `CholeskyDecomposition`, `Eigensystem`, `FindFit` (declared, benched on the Python side only).
 
-New constructs:
-- `Verbatim[p]` (literal match), `PatternSequence[...]` named+unnamed,
-  top-level `Longest`/`Shortest`. `OrderlessPatternSequence` interned+documented,
-  not yet implemented (rare).
-
-Robustness / perf:
-- match recursion bounded by $RecursionLimit -> graceful non-match, no SIGSEGV
-- reorder storage heap fallback removes the 64-element MATCH_REORDER_CAP
-- bench_match.c doubling-ratio gate (all ops ~2.0, O(n))
-
-Verification: asserted 228/228; pre-existing match/patterns/replace/rule_dispatch
-suites pass; bench_match + bench_pack pass on a quiet machine; valgrind +48B over
-baseline (one-time symbol interning, no per-call leak); make check-c99 clean.
-
-Symbols/attrs/docs: sym_names (+2), attr.c (Protected x3), info.c docstrings,
-docs/spec/builtins/pattern-matching.md, changelog 2026-08-03.md.
-
-## Review addendum (2026-08-08, part 2)
-
-Took on both remaining gaps + promoted all cases to gating unit tests:
-- Implemented `OrderlessPatternSequence` (ops_unwrap/ops_assign backtracking;
-  first-OPS-to-front; named binding; preds + trailing ___). 10 new asserted cases.
-- Fixed the Orderless x two-sequence-blank blowup: last pattern element forced to
-  k=n_exprs (must consume all) -> Plus[x__,y__] over 200 terms >10s -> ~0.5ms.
-- Merged the report-only observations tier into the asserted corpus (deleted
-  match_stress_observations.m + its ctest entry). Corpus now 258/258 GATING.
-
-Verified: 258/258; all pre-existing matcher suites pass; bench_match + bench_pack
-pass quiet; valgrind byte-identical to baseline over OPS/blowup paths (0 leaks);
-docs (pattern-matching.md, changelog) + memory updated.
-
-## Review addendum (2026-08-08, part 3) — 12 new user stress cases
-
-Ran 12 fresh adversarial cases; all now match documented WL, all efficient
-(<7ms; no exponential blowup). Findings & fixes:
-- Cases 8 (Flat + `x_?(Total[{##}]>10&)`) and 11 (top-level `(a|b|c|d)...` over a
-  50-elt List) were ALREADY correct at `False` — `##` in the test is the single
-  bound value, and a List is one expression, not a bare alternative.
-- **Case 5 & the latent root of 11 — top-level `Repeated`/`RepeatedNull`.**
-  `MatchQ[a, a..]` was False (should be True). Added an `is_repeated` handler at
-  the top of `match_internal`, matching the single subject as a length-1 seq.
-  This also fixes nested `(a...)..` and `{(((x:a...)...)..)}` (routed per-repetition
-  through the same path). Case 5 -> True.
-- **Case 12 — `Unique` was unimplemented** (`Table[Unique["sym"],{n}]` stayed
-  head-`Unique`, so `x_Symbol` correctly failed). Implemented `Unique[]` /
-  `["x"]` / `[x]` / `[{...}]` in src/modular.c (shared `$ModuleNumber`, fresh via
-  `symtab_lookup`, `Temporary`). Case 12 -> True.
-- **Perf:** trimmed a dead `subset` malloc+copy for plain unnamed/untyped
-  `__`/`___` (only remainder recurses). ~15-20% on the duplicate-search pattern.
-
-Corpus 258 -> 287 (sections 31-36, +29 gating cases). Verified: 287/287; all
-pre-existing matcher/replace/dispatch suites pass; bench_match linear (~2.0);
-valgrind definitely-lost == macOS libobjc baseline (13,440B/420 blocks), zero
-frames from our code. Docs (scoping-constructs.md +Unique, pattern-matching.md
-top-level-Repeated note, changelog) + memory updated.
+## Not done (deferred per scope)
+- Implementing the kernel/feature fixes above — the user chose "author + run + gap report, then review".

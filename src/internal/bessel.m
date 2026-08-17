@@ -19,16 +19,16 @@
 Unprotect[BesselJ];
 
 (* Upward recurrence for half-integers >= 3/2 (symbolic z only). *)
-BesselJ[n_, z_] /; IntegerQ[n - 1/2] && n >= 3/2 && !NumberQ[z] :=
+BesselJ[n_, z_] /; IntegerQ[n - 1/2] && n >= 3/2 && !NumberQ[z] && !NDArrayQ[z] :=
     (2 (n - 1)/z) BesselJ[n - 1, z] - BesselJ[n - 2, z];
 
 (* Downward recurrence for half-integers <= -3/2 (symbolic z only). *)
-BesselJ[n_, z_] /; IntegerQ[n - 1/2] && n <= -3/2 && !NumberQ[z] :=
+BesselJ[n_, z_] /; IntegerQ[n - 1/2] && n <= -3/2 && !NumberQ[z] && !NDArrayQ[z] :=
     (2 (n + 1)/z) BesselJ[n + 1, z] - BesselJ[n + 2, z];
 
 (* Base cases. *)
-BesselJ[1/2, z_] /; !NumberQ[z] := Sqrt[2/(Pi z)] Sin[z];
-BesselJ[-1/2, z_] /; !NumberQ[z] := Sqrt[2/(Pi z)] Cos[z];
+BesselJ[1/2, z_] /; !NumberQ[z] && !NDArrayQ[z] := Sqrt[2/(Pi z)] Sin[z];
+BesselJ[-1/2, z_] /; !NumberQ[z] && !NDArrayQ[z] := Sqrt[2/(Pi z)] Cos[z];
 
 (* Negative integer order reflection (fires after the C builtin declines). *)
 BesselJ[n_Integer, z_] /; n < 0 := (-1)^n BesselJ[-n, z];
@@ -50,15 +50,15 @@ Unprotect[BesselK];
 
 (* Upward recurrence for half-integers >= 3/2 (symbolic z only):
    K_{nu+1} = K_{nu-1} + (2 nu / z) K_nu. *)
-BesselK[n_, z_] /; IntegerQ[n - 1/2] && n >= 3/2 && !NumberQ[z] :=
+BesselK[n_, z_] /; IntegerQ[n - 1/2] && n >= 3/2 && !NumberQ[z] && !NDArrayQ[z] :=
     (2 (n - 1)/z) BesselK[n - 1, z] + BesselK[n - 2, z];
 
 (* Even order: reflect negative half-integers to positive (symbolic z). *)
-BesselK[n_, z_] /; IntegerQ[n - 1/2] && n <= -1/2 && !NumberQ[z] :=
+BesselK[n_, z_] /; IntegerQ[n - 1/2] && n <= -1/2 && !NumberQ[z] && !NDArrayQ[z] :=
     BesselK[-n, z];
 
 (* Base case K_{1/2}(z) = Sqrt[Pi/(2 z)] Exp[-z]. *)
-BesselK[1/2, z_] /; !NumberQ[z] := Sqrt[Pi/(2 z)] Exp[-z];
+BesselK[1/2, z_] /; !NumberQ[z] && !NDArrayQ[z] := Sqrt[Pi/(2 z)] Exp[-z];
 
 (* Even order for integer index: K_{-n} = K_n (fires after the C builtin). *)
 BesselK[n_Integer, z_] /; n < 0 := BesselK[-n, z];
@@ -83,17 +83,17 @@ Unprotect[BesselI];
 
 (* Upward recurrence for half-integers >= 3/2 (symbolic z only):
    I_n = I_{n-2} - (2 (n-1)/z) I_{n-1}. *)
-BesselI[n_, z_] /; IntegerQ[n - 1/2] && n >= 3/2 && !NumberQ[z] :=
+BesselI[n_, z_] /; IntegerQ[n - 1/2] && n >= 3/2 && !NumberQ[z] && !NDArrayQ[z] :=
     BesselI[n - 2, z] - (2 (n - 1)/z) BesselI[n - 1, z];
 
 (* Downward recurrence for half-integers <= -3/2 (symbolic z only):
    I_n = I_{n+2} + (2 (n+1)/z) I_{n+1}. *)
-BesselI[n_, z_] /; IntegerQ[n - 1/2] && n <= -3/2 && !NumberQ[z] :=
+BesselI[n_, z_] /; IntegerQ[n - 1/2] && n <= -3/2 && !NumberQ[z] && !NDArrayQ[z] :=
     BesselI[n + 2, z] + (2 (n + 1)/z) BesselI[n + 1, z];
 
 (* Base cases (half-integer order is NOT even, so both are needed). *)
-BesselI[1/2, z_] /; !NumberQ[z] := Sqrt[2/(Pi z)] Sinh[z];
-BesselI[-1/2, z_] /; !NumberQ[z] := Sqrt[2/(Pi z)] Cosh[z];
+BesselI[1/2, z_] /; !NumberQ[z] && !NDArrayQ[z] := Sqrt[2/(Pi z)] Sinh[z];
+BesselI[-1/2, z_] /; !NumberQ[z] && !NDArrayQ[z] := Sqrt[2/(Pi z)] Cosh[z];
 
 (* Even order for integer index: I_{-n} = I_n (fires after the C builtin). *)
 BesselI[n_Integer, z_] /; n < 0 := BesselI[-n, z];
@@ -116,16 +116,16 @@ Protect[BesselI];
 Unprotect[BesselY];
 
 (* Upward recurrence for half-integers >= 3/2 (symbolic z only). *)
-BesselY[n_, z_] /; IntegerQ[n - 1/2] && n >= 3/2 && !NumberQ[z] :=
+BesselY[n_, z_] /; IntegerQ[n - 1/2] && n >= 3/2 && !NumberQ[z] && !NDArrayQ[z] :=
     (2 (n - 1)/z) BesselY[n - 1, z] - BesselY[n - 2, z];
 
 (* Downward recurrence for half-integers <= -3/2 (symbolic z only). *)
-BesselY[n_, z_] /; IntegerQ[n - 1/2] && n <= -3/2 && !NumberQ[z] :=
+BesselY[n_, z_] /; IntegerQ[n - 1/2] && n <= -3/2 && !NumberQ[z] && !NDArrayQ[z] :=
     (2 (n + 1)/z) BesselY[n + 1, z] - BesselY[n + 2, z];
 
 (* Base cases (half-integer order is NOT even, so both are needed). *)
-BesselY[1/2, z_] /; !NumberQ[z] := -Sqrt[2/(Pi z)] Cos[z];
-BesselY[-1/2, z_] /; !NumberQ[z] := Sqrt[2/(Pi z)] Sin[z];
+BesselY[1/2, z_] /; !NumberQ[z] && !NDArrayQ[z] := -Sqrt[2/(Pi z)] Cos[z];
+BesselY[-1/2, z_] /; !NumberQ[z] && !NDArrayQ[z] := Sqrt[2/(Pi z)] Sin[z];
 
 (* Negative integer order reflection (fires after the C builtin declines). *)
 BesselY[n_Integer, z_] /; n < 0 := (-1)^n BesselY[-n, z];
