@@ -1621,6 +1621,13 @@ target_include_directories(solveradicals_tests PRIVATE ../src)
 add_executable(solvenlsys_tests test_solvenlsys.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(solvenlsys_tests PRIVATE ../src)
 
+# Pinned-FullForm regression for extraneous / non-real Root filtering in Solve.
+# Registered with an add_test() line (below) so ctest actually runs it -- the
+# older solve_* targets above lack one and are invisible to ctest.
+add_executable(solve_radicals_reals_tests test_solve_radicals_reals.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(solve_radicals_reals_tests PRIVATE ../src)
+add_test(NAME solve_radicals_reals_tests COMMAND solve_radicals_reals_tests)
+
 add_executable(factor_phase0_tests test_factor_phase0.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(factor_phase0_tests PRIVATE ../src)
 

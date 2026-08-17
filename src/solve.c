@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "attr.h"
 #include "common.h"
@@ -513,6 +514,110 @@ static Expr* verify_solutions_filter(Expr* out, const Expr* equation) {
     return result;
 }
 
+/* Read a *concrete* numeric leaf (Integer / Real / BigInt / Rational / MPFR)
+ * as a double.  Returns false for symbolic / non-numeric forms.  Used only
+ * to inspect the imaginary part of a numericalized Complex[re, im]. */
+static bool solve_concrete_double(const Expr* e, double* out) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_INTEGER: *out = (double)e->data.integer;   return true;
+        case EXPR_REAL:    *out = e->data.real;              return true;
+        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return true;
+#ifdef USE_MPFR
+        case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
+#endif
+        default: break;
+    }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Rational
+        && e->data.function.arg_count == 2) {
+        double n, d;
+        if (solve_concrete_double(e->data.function.args[0], &n)
+            && solve_concrete_double(e->data.function.args[1], &d) && d != 0.0) {
+            *out = n / d;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* True iff `val` numericalizes to a Complex number with a concrete,
+ * non-negligible imaginary part -- i.e. `val` is *provably* non-real.  A
+ * Root[] object (companion-matrix + Sturm + Newton) numericalizes to a real
+ * MPFR/Real for a real root and to Complex[re, im] for a complex one, so this
+ * distinguishes them; likewise for closed-form radical values and any
+ * arithmetic expression over them (e.g. a system's x-component).  Values that
+ * do NOT reduce to a concrete Complex -- ordinary reals, or symbolic /
+ * parametric residues like Sqrt[a] and un-numericalizable Root objects -- are
+ * not provably non-real and return false, so they are kept.  `val` is
+ * borrowed. */
+static bool value_is_provably_nonreal(Expr* val) {
+    Expr* nv = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+        (Expr*[]){ expr_copy(val) }, 1));
+    bool nonreal = false;
+    if (nv && nv->type == EXPR_FUNCTION
+        && nv->data.function.head->type == EXPR_SYMBOL
+        && nv->data.function.head->data.symbol.name == SYM_Complex
+        && nv->data.function.arg_count == 2) {
+        double im;
+        if (solve_concrete_double(nv->data.function.args[1], &im)
+            && fabs(im) > 1e-9) {
+            nonreal = true;
+        }
+    }
+    expr_free(nv);
+    return nonreal;
+}
+
+/* Reals-domain reality filter.  Drops every solution rule-list in `out` that
+ * binds any variable to a *provably* non-real value.  `out` is
+ * List[List[Rule...], ...] -- one Rule per variable, several for a system --
+ * so the whole tuple is dropped when any component is complex.  Takes
+ * ownership and returns the filtered List; mirrors verify_solutions_filter's
+ * alloc / detach / free shape.  Conservative by construction (see
+ * value_is_provably_nonreal): symbolic and parametric real answers survive. */
+static Expr* filter_reals_solutions(Expr* out) {
+    if (!out || out->type != EXPR_FUNCTION
+        || out->data.function.head->type != EXPR_SYMBOL
+        || out->data.function.head->data.symbol.name != SYM_List) {
+        return out;
+    }
+    size_t n = out->data.function.arg_count;
+    Expr** kept = n ? (Expr**)malloc(sizeof(Expr*) * n) : NULL;
+    size_t nkept = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* sol = out->data.function.args[i];
+        bool nonreal = false;
+        if (sol->type == EXPR_FUNCTION
+            && sol->data.function.head->type == EXPR_SYMBOL
+            && sol->data.function.head->data.symbol.name == SYM_List) {
+            for (size_t j = 0; j < sol->data.function.arg_count && !nonreal; j++) {
+                Expr* rule = sol->data.function.args[j];
+                if (rule->type == EXPR_FUNCTION
+                    && rule->data.function.head->type == EXPR_SYMBOL
+                    && (rule->data.function.head->data.symbol.name == SYM_Rule
+                        || rule->data.function.head->data.symbol.name
+                               == SYM_RuleDelayed)
+                    && rule->data.function.arg_count == 2) {
+                    if (value_is_provably_nonreal(rule->data.function.args[1]))
+                        nonreal = true;
+                }
+            }
+        }
+        if (nonreal) {
+            expr_free(sol);
+        } else {
+            kept[nkept++] = sol;
+        }
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), kept, nkept);
+    free(kept);
+    out->data.function.arg_count = 0;
+    expr_free(out);
+    return result;
+}
+
 /* Does the interned symbol name `sym` occur anywhere in `e`? */
 static bool expr_mentions_symbol(const Expr* e, const char* sym) {
     if (!e) return false;
@@ -815,6 +920,23 @@ solve_finish:
         if (out) out = verify_solutions_filter(out, verify_eq);
         expr_free(verify_eq);
         verify_eq = NULL;
+    }
+
+    /* Reals-domain reality filter.  A radical / polynomial / system
+     * specialist can hand back Root[] objects (or Root tuples) that are
+     * complex -- e.g. the two extraneous branches of Sqrt[x] + 3 x^(1/3) == 5,
+     * or the complex roots of an irreducible cubic/quintic.  Over Reals (and
+     * its subsets Integers / Rationals) those are not solutions.  Running the
+     * drop here, at the shared post-dispatch funnel, covers every specialist
+     * uniformly (single-variable and systems alike) and complements the
+     * radical solver's own satisfaction check, which handles the default
+     * Complexes domain.  Conservative: only *provably* non-real values are
+     * dropped, so symbolic / parametric real answers survive. */
+    if (out && dom && dom->type == EXPR_SYMBOL
+        && (dom->data.symbol.name == SYM_Reals
+            || dom->data.symbol.name == SYM_Integers
+            || dom->data.symbol.name == SYM_Rationals)) {
+        out = filter_reals_solutions(out);
     }
 
     /* Unsubst pass: if we substituted any compound variables with

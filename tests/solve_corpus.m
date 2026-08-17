@@ -154,5 +154,29 @@
   {"M-overdet-consist", {x^2 + y^2 == 1, x == 0, y == 1},       {x, y}, Automatic, 1, "overdetermined, consistent -> {0,1}"},
   {"M-inconsistent",    {x^2 + y^2 == 1, x^2 + y^2 == 2},       {x, y}, Automatic, 0, "unit ideal -> {}"},
   {"M-int-system",      {x^2 + y^2 == 25, x - y == 1},          {x, y}, Integers, 2, "integer lattice pts {4,3},{-3,-4}"},
-  {"M-root-system",     {x^2 + y^2 == 1, x^3 + y == 1/2},       {x, y}, Automatic, 6, "Root[] tuples, verified numerically"}
+  {"M-root-system",     {x^2 + y^2 == 1, x^3 + y == 1/2},       {x, y}, Automatic, 6, "Root[] tuples, verified numerically"},
+
+  (* ===== O. Extraneous / non-real Root filtering (Reals) + verified radicals ===== *)
+  (* Radical equations whose cleared resultant is an IRREDUCIBLE cubic: the
+   * substitution u^lcm = x hands every branch of x^(1/lcm) to the polynomial
+   * solver, but only the principal branch satisfies the original Sqrt / x^(p/q).
+   * solverad.c now back-substitutes each Root candidate (N[] residual) instead
+   * of accepting it verbatim, so the two extraneous complex Roots are rejected
+   * over BOTH domains; Solve's funnel additionally drops non-real Roots over
+   * Reals.  Before the fix these returned all 3 Root objects. *)
+  {"O-cbrtsqrt-reals",  Sqrt[x] + 3 x^(1/3) == 5,  x, Reals,     1, "MMA: 1 real Root #1; 2 complex extraneous"},
+  {"O-cbrtsqrt-auto",   Sqrt[x] + 3 x^(1/3) == 5,  x, Automatic, 1, "only principal-branch root satisfies"},
+  {"O-cbrtsqrt-3",      Sqrt[x] + x^(1/3) == 3,    x, Reals,     1, "1 real satisfying root"},
+  {"O-cbrtsqrt-10",     Sqrt[x] + x^(1/3) == 10,   x, Reals,     1, "1 real satisfying root"},
+  {"O-cbrtsqrt-diff",   Sqrt[x] - x^(1/3) == 1,    x, Reals,     1, "1 real satisfying root"},
+  (* Irreducible polynomials over Reals: the default Root[] emission path
+   * ignored the domain; the funnel reality filter now drops complex Roots. *)
+  {"O-cubic-1real",     x^3 + 6 x^2 + 8625 x - 15625 == 0, x, Reals,     1, "1 real Root; 2 complex dropped"},
+  {"O-cubic-auto",      x^3 + 6 x^2 + 8625 x - 15625 == 0, x, Automatic, 3, "twin: all 3 roots over Complexes"},
+  {"O-quintic-1real",   x^5 - x - 1 == 0,          x, Reals,     1, "1 real Root; 4 complex dropped (A-quintic-root twin)"},
+  {"O-sextic-2real",    x^6 - x - 1 == 0,          x, Reals,     2, "2 real Roots; 4 complex dropped"},
+  {"O-sextic-auto",     x^6 - x - 1 == 0,          x, Automatic, 6, "twin: all 6 roots over Complexes"},
+  (* Nonlinear system over Reals: complex Root-tuples dropped by the funnel. *)
+  {"O-system-2real",    {x^2 + y^2 == 1, x^3 + y == 1/2},       {x, y}, Reals,     2, "2 real tuples; 4 complex dropped"},
+  {"O-system-auto",     {x^2 + y^2 == 1, x^3 + y == 1/2},       {x, y}, Automatic, 6, "M-root-system twin: 6 over Complexes"}
 }

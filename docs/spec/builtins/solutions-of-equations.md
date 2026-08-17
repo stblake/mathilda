@@ -156,6 +156,17 @@ Attempts to solve an equation or system of equations for one or more variables.
     four roots in closed-form radicals via Ferrari's resolvent-cubic method
     (Complexes only; a `Reals` request still yields `Root[]`).
   - Degree ≥ 5: held `Root[]` objects per irreducible factor.
+  - **`Reals`/`Integers`/`Rationals` reality filter for `Root[]`.** Held
+    `Root[]` objects are emitted with the *full* index range for an irreducible
+    factor; a post-dispatch filter at `Solve`'s funnel then drops every solution
+    whose bound value is a *provably non-real* number (numericalised to a
+    `Complex[re, im]` with a concrete `|im| > 1e-9`). So
+    `Solve[x^5 - x - 1 == 0, x, Reals]` returns the single real `Root[.., 1]`
+    (not all five), and `Solve[x^6 - x - 1 == 0, x, Reals]` returns two. The
+    filter is conservative — real `Root[]` objects, concrete reals, and
+    symbolic/parametric values that do not numericalise (e.g. `Sqrt[a]`) are
+    kept — and covers polynomial *systems* the same way (complex `Root`-tuples
+    are dropped over `Reals`). The default `Complexes` domain is untouched.
 - `Integers` domain is implemented as a post-pass over the `Reals` output:
   every candidate value is type-checked against `EXPR_INTEGER` /
   `EXPR_BIGINT` and dropped otherwise.  `Rational[p, q]`, irrational
@@ -660,7 +671,16 @@ context-qualified name when the caller has already classified its input.
      `N[]` evaluates the same residual in microseconds.  Candidates
      whose residual still depends on free parameters (and so cannot
      be decided either way) are kept and trigger `Solve::nongen`,
-     matching Mathematica's convention.
+     matching Mathematica's convention.  **`Root[]` candidates are
+     verified the same way, not exempted:** the elimination hands every
+     branch of the substituted `u = base^(1/L)` to the polynomial solver,
+     but only the branch matching the principal `Sqrt` / `x^(p/q)`
+     satisfies the original equation, so `N[Sqrt[Root[..]] + ...]` is
+     `~0` for the valid root and `O(1)` for the spurious complex ones.
+     This is what makes `Solve[Sqrt[x] + 3 x^(1/3) == 5, x]` return the
+     single valid root rather than all three roots of the resultant cubic.
+     (When a `Root[]` cannot be numericalised — e.g. a `USE_MPFR=0` build —
+     the numeric pass abstains and the candidate is kept.)
 - Output shape matches `Solve`SolvePolynomialEquality`: a `List` of
   singleton-rule `List`s, plus the empty `List[]` when no candidate
   survives verification.  The `dom` argument flows through to the
