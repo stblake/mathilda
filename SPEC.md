@@ -360,6 +360,8 @@ make check-nd-surfaces       # do the packed and NDArray surfaces agree?
 make check-compile-coverage  # does every numeric fast path also COMPILE?
 make check-image-packing     # does every image head hand back a packed buffer?
 make check-fastpath-sweep    # measured: is each head really on the buffer?
+make check-tests             # build and RUN every test binary, once, pinned
+make check-menu-ids          # does every native menu item reach a handler?
 ```
 
 `make check-c99` runs `tools/check_c99_portability.py`, which flags POSIX-only
@@ -445,6 +447,29 @@ The makefile auto-discovers `src/*.c`. GMP-ECM is linked by default when the
 system library is present (`USE_ECM=1`, autodetected); install it with
 `brew install gmp-ecm` (macOS) or `sudo apt install libecm-dev` (Debian/Ubuntu),
 or build without it via `make USE_ECM=0`.
+
+### Running the whole suite
+
+`make check-tests` (`tools/run_test_suite.sh`) builds every test target and runs every binary in one
+pinned configuration, then reports against `tests/known_failures.txt`: a listed failure is expected,
+an unlisted one fails the run, and a listed test that starts passing is named so its line can be
+deleted.
+
+It exists because the suite is 400+ separate binaries and nothing ran all of them. CI compiled the
+tree and ran two source-level gates; running the tests was left to whoever remembered, and a subset
+is indistinguishable from the whole in a summary — a pull request once reported the suite as passing
+on the strength of 40 of 426 binaries. Two further traps are baked into the script: the configuration
+is pinned rather than inherited (a tree left at `USE_FLINT=OFF` reports 36 failures, 32 of them the
+missing library, and one target that cannot even link), and the per-test timeout is resolved portably
+(`timeout` is GNU coreutils and absent on macOS, where an unguarded call is exit 127 — read by a
+pass/fail loop as a failing test, which once produced a "0 passed, 444 failed" run).
+
+The [Linux CI job](.github/workflows/build.yml) runs it on every push and pull request, alongside a
+`build-graphics` job that links against a real raylib built from source. That second job exists
+because issue #65 — the vendored `stb_image` colliding with raylib's own copy — reached a user
+through a configuration **nobody built**: macOS `ld64` tolerates the duplicate symbols GNU `ld`
+rejects, and the main CI build was allowed to continue when `libraylib-dev` was unavailable, which on
+those runners it always is. It asserts that `src/imageio.o` exports no `stbi_*` symbols at all.
 
 ### Performance regression gate
 

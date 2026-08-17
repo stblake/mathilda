@@ -110,6 +110,114 @@ jobs:
             exit 1
           }
 
+  # ---------------------------------------------------------------------------
+  # THE GRAPHICS LINK, WHICH NOTHING ELSE BUILDS.
+  #
+  # Issue #65: `src/imageio.c` vendors stb_image, raylib's libraylib.a bakes in its own copy, and
+  # with USE_GRAPHICS=1 on Linux the two collided -- dozens of `multiple definition of 'stbi_load'`.
+  # It reached a user because the failing configuration was built by NOBODY: on macOS ld64 tolerates
+  # duplicate symbols across archives where GNU ld makes it an error, and the `build` job above is
+  # allowed to continue when libraylib-dev is unavailable, which on these runners it always is
+  # ("E: Unable to locate package libraylib-dev"). So every CI run built USE_GRAPHICS=0.
+  #
+  # This job exists to make that configuration real, and it must FAIL rather than degrade: a job
+  # that quietly builds the placeholder renderer is what hid the bug in the first place. raylib is
+  # built from source because it is not in this image's package set, which is also why the apt
+  # attempt in `build` kept failing.
+  build-graphics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgmp-dev libmpfr-dev libreadline-dev \
+            libecm-dev liblapacke-dev libopenblas-dev \
+            libflint-dev libpcre2-dev libfftw3-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libgl1-mesa-dev cmake
+
+      # Pinned to 5.5, the version the makefile's detection and the renderer were written against.
+      - name: Build raylib from source
+        run: |
+          git clone --depth 1 --branch 5.5 https://github.com/raysan5/raylib.git /tmp/raylib
+          cmake -S /tmp/raylib -B /tmp/raylib/build \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+            -DBUILD_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=/usr/local
+          cmake --build /tmp/raylib/build -j"$(nproc)"
+          sudo cmake --install /tmp/raylib/build
+          pkg-config --exists raylib || {
+            echo "::error::raylib.pc missing after install — this job cannot verify the graphics link"
+            exit 1
+          }
+          echo "raylib $(pkg-config --modversion raylib) installed"
+
+      - name: Report toolchain
+        run: make print-cc
+
+      # The real thing: a graphics-enabled link against a real raylib.
+      - name: Build with USE_GRAPHICS=1
+        run: make -j"$(nproc)" USE_GRAPHICS=1 EXTRA_LIBS="-llapack -lblas -lX11"
+
+      # The regression test for #65, independent of raylib's own symbol choices: our stb copy must
+      # export NOTHING. `nm` shows `t` (local) for a static function and `T` (global) for an
+      # exported one, and one exported `stbi_*` is all it takes to collide with any other library
+      # that vendors stb -- raylib today, something else tomorrow.
+      - name: Assert the vendored stb symbols are file-local (issue #65)
+        run: |
+          # `_?` because Mach-O prefixes symbols with an underscore; this job is Linux, but the
+          # same line is then usable by hand on a Mac, where ' T stbi_' silently matches nothing.
+          if nm src/imageio.o | grep -qE ' T _?stbi_'; then
+            echo "::error::src/imageio.o exports stbi_* symbols; add STB_IMAGE_STATIC / STB_IMAGE_WRITE_STATIC"
+            nm src/imageio.o | grep -E ' T _?stbi_' | head -10
+            exit 1
+          fi
+          echo "no exported stbi_* symbols in imageio.o"
+
+      - name: Smoke test the image round trip
+        run: |
+          out=$(printf '%s\n' \
+            '{"id": 1, "expr": "ImageDimensions[Import[Export[\"/tmp/ci.png\", Image[Table[N[(i + j)/32], {i, 1, 16}, {j, 1, 24}], \"Real\"]]]]"}' \
+            '{"type": "quit"}' | ./Mathilda)
+          echo "$out"
+          echo "$out" | grep -q '{24, 16}' || {
+            echo "::error::PNG round trip through Import/Export failed"
+            exit 1
+          }
+
+  # ---------------------------------------------------------------------------
+  # THE TEST SUITE, WHICH NOTHING ELSE RUNS.
+  #
+  # Until this job, "the tests pass" was only ever a human claim: CI compiled the tree and ran two
+  # source-level gates, and running the 400+ binaries was left to whoever remembered. A PR then
+  # reported them as passing on the strength of 40 of 426. A machine cannot sample by accident.
+  #
+  # tests/known_failures.txt keeps this honest without making it useless: a listed failure does not
+  # fail the job, an unlisted one does, and a listed test that starts passing is reported so the
+  # line can go. A gate that is red on arrival gets ignored.
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgmp-dev libmpfr-dev libreadline-dev \
+            libecm-dev liblapacke-dev libopenblas-dev \
+            libflint-dev libpcre2-dev libfftw3-dev cmake
+
+      - name: Report toolchain
+        run: make print-cc
+
+      # One command, pinned configuration, every binary. See the header of the script for why the
+      # configuration is spelled out rather than inherited from whatever the tree was left in.
+      - name: Build and run every test binary
+        run: tools/run_test_suite.sh
+
   # MPFR is on by default (USE_MPFR=1) and arbitrary-precision reals (EXPR_MPFR)
   # are used across ~130 files, so the `make USE_MPFR=0` graceful-degrade config
   # rots easily: a new unguarded EXPR_MPFR case or *_dispatch_mpfr branch builds
