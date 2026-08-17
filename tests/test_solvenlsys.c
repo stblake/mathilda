@@ -195,6 +195,19 @@ static void test_unexpanded_product(void) {
         "List[List[Rule[x, 1], Rule[y, 1]]]");
 }
 
+/* Parametric system: free symbols (here `a`) that are not solve variables are
+ * coefficients in Q(params).  Routed through the RationalFunctions-coefficient
+ * Gröbner engine and solved symbolically: x^2 == a, x + y == 0 -> x = +-Sqrt[a],
+ * y = -/+Sqrt[a]. */
+static void test_parametric_system(void) {
+    run_test("Solve[{x^2 == a, x + y == 0}, {x, y}]",
+        "List["
+          "List[Rule[x, Power[a, Rational[1, 2]]], "
+               "Rule[y, Times[-1, Power[a, Rational[1, 2]]]]], "
+          "List[Rule[x, Times[-1, Power[a, Rational[1, 2]]]], "
+               "Rule[y, Power[a, Rational[1, 2]]]]]");
+}
+
 static void test_linear_regression(void) {
     run_test("Solve[x + y == 3 && x - y == 1, {x, y}]",
              "List[List[Rule[x, 2], Rule[y, 1]]]");
@@ -221,6 +234,7 @@ int main(void) {
     test_non_polynomial();
     test_unexpanded_two_circles();
     test_unexpanded_product();
+    test_parametric_system();
     test_linear_regression();
 
     printf("\nAll solvenlsys tests passed.\n");

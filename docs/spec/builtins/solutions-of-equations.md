@@ -488,6 +488,19 @@ its context-qualified name.
   `{1/(x - 1) == 1/(y - 1), x + y == 2}` returns `{}` (its only candidate is a
   pole).  `Together` cancels removable factors, so `(x^2 - 1)/(x - 1)` is treated
   as `x + 1`.
+- **Parametric systems:** a free symbol that is neither a solve variable nor a
+  known constant (`Pi`, `E`, …) is treated as a **parameter**.  When any are
+  present, the lex Gröbner basis is computed over the field `Q(parameters)` by
+  reusing `GroebnerBasis`'s `CoefficientDomain -> RationalFunctions` engine, and
+  the same triangular back-substitution runs with the symbolic univariate solver.
+  `{x + y == a, x y == b}` → `{{x -> (a - Sqrt[a^2 - 4 b])/2, …}, …}`;
+  `{x^2 == a, x + y == 0}` → `x -> ±Sqrt[a]`.  A basis generator free of all solve
+  variables is a coefficient-field constant: a nonzero number → `<1>` → (generic)
+  inconsistency → `{}`; a parameter-dependent one is a consistency/nondegeneracy
+  condition and is **declined** (unevaluated) rather than guessed — case-splitting
+  is reserved for `Reduce`.  No `ConditionalExpression` nondegeneracy guards are
+  emitted (matching `Solve`, not `Reduce`).  More than three distinct parameters
+  declines.
 - A lexicographic Gröbner basis is computed via the Gröbner walk
   (`gb_groebner_walk`).  For a zero-dimensional ideal this basis is
   triangular: the univariate generator in the last variable is solved with

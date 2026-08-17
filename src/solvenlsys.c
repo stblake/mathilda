@@ -73,6 +73,9 @@
  * could still explode; when this is exceeded we treat the search as
  * incomplete (return NULL) rather than emit a truncated set. */
 #define NL_MAX_SOLS   4096
+/* Maximum distinct free parameters before the RationalFunctions-coefficient
+ * Gröbner computation is declined; its cost grows fast in the parameters. */
+#define NL_MAX_PARAMS 3
 
 /* ------------------------------------------------------------------ *
  *  Expression-building shorthand (same conventions as solvelinsys.c). *
@@ -305,6 +308,157 @@ static void nl_rec(NlCtx* c, Expr* assigned, int depth) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Shared search driver (used by the polynomial and parametric paths). *
+ * ------------------------------------------------------------------ */
+
+/* Run the triangular back-substitution over the lex basis `gbE` and assemble
+ * the solution list.  `orig`, `dens`, and `gbE` are all borrowed (nl_rec copies
+ * every generator it uses).  Returns a freshly-owned List of solution tuples,
+ * or NULL when a live branch could not be resolved (incomplete) -- which must
+ * never be presented as an empty `{}`. */
+static Expr* run_nl_search(Expr** orig, Expr** dens, int norig,
+                           Expr** gbE, int ngb, Expr** var_arr, int nvar,
+                           Expr* dom, bool reals_only, bool integers_only,
+                           const SolvePolyOpts* opts) {
+    NlCtx c;
+    c.orig = orig; c.norig = norig;
+    c.dens = dens;
+    c.gb = gbE; c.ngb = ngb;
+    c.vars = var_arr; c.nvar = nvar;
+    c.dom = dom; c.reals_only = reals_only; c.integers_only = integers_only;
+    c.opts = opts;
+    c.sols = NULL; c.nsol = 0; c.solcap = 0; c.incomplete = false;
+
+    Expr* empty = mk_list(NULL, 0);
+    nl_rec(&c, empty, 0);
+    expr_free(empty);
+
+    if (c.incomplete) {
+        for (int i = 0; i < c.nsol; i++) expr_free(c.sols[i]);
+        free(c.sols);
+        return NULL;
+    }
+    Expr* out = mk_list(c.sols, (size_t)c.nsol);
+    free(c.sols);
+    return out;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Parametric systems (coefficients in Q(parameters)).                *
+ * ------------------------------------------------------------------ */
+
+static bool nl_is_solve_var(const char* name, Expr** var_arr, int n) {
+    for (int j = 0; j < n; j++)
+        if (var_arr[j]->data.symbol.name == name) return true;
+    return false;
+}
+
+/* Numeric / structural constants that are NOT parameters (mirrors the
+ * GroebnerBasis builtin's is_known_constant_symbol so the two agree on which
+ * symbols localise into the coefficient field). */
+static bool nl_is_known_constant(const char* s) {
+    return s == SYM_Pi || s == SYM_E || s == SYM_EulerGamma
+        || s == SYM_Catalan || s == SYM_Degree || s == SYM_True
+        || s == SYM_False || s == SYM_Infinity || s == SYM_DirectedInfinity
+        || s == SYM_Null;
+}
+
+/* Collect distinct free-parameter symbol names (interned pointers) from the
+ * OPERANDS of `e` into params[0..*np-1], capped at `cap`.  Function heads are
+ * structural (Plus/Times/Power/...) and never parameters, so they are skipped.
+ * Returns false once more than `cap` distinct parameters are seen. */
+static bool nl_collect_params(const Expr* e, Expr** var_arr, int n,
+                              const char** params, int* np, int cap) {
+    if (!e) return true;
+    if (e->type == EXPR_SYMBOL) {
+        const char* s = e->data.symbol.name;
+        if (nl_is_solve_var(s, var_arr, n) || nl_is_known_constant(s)) return true;
+        for (int i = 0; i < *np; i++) if (params[i] == s) return true;
+        if (*np >= cap) return false;
+        params[(*np)++] = s;
+        return true;
+    }
+    if (e->type == EXPR_FUNCTION) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!nl_collect_params(e->data.function.args[i], var_arr, n,
+                                   params, np, cap))
+                return false;
+    }
+    return true;
+}
+
+/* True iff `g` is free of every solve variable. */
+static bool nl_var_free(Expr* g, Expr** var_arr, int n) {
+    for (int v = 0; v < n; v++)
+        if (contains_any_symbol_from(g, var_arr[v])) return false;
+    return true;
+}
+
+/* Parametric branch: some equation carries a free parameter.  gb_from_expr and
+ * the machine Gröbner walk carry only rational coefficients, so we compute the
+ * lex Gröbner basis over Q(parameters) by reusing the GroebnerBasis builtin's
+ * RationalFunctions-coefficient engine (which localises the parameters into the
+ * coefficient field), then back-substitute with the symbolic univariate solver.
+ * `orig` / `dens` are borrowed.  Returns owned result, or NULL (unevaluated). */
+static Expr* solve_parametric_system(Expr** orig, Expr** dens, int norig,
+                                     Expr** var_arr, int n, Expr* vars,
+                                     Expr* dom, bool reals_only,
+                                     bool integers_only,
+                                     const SolvePolyOpts* opts) {
+    /* GroebnerBasis[{orig...}, vars, CoefficientDomain -> RationalFunctions]. */
+    Expr** polys = (Expr**)malloc(sizeof(Expr*) * (size_t)norig);
+    for (int i = 0; i < norig; i++) polys[i] = expr_copy(orig[i]);
+    Expr* poly_list = mk_list(polys, (size_t)norig);
+    free(polys);
+    Expr* cd_rule = mk_fn2("Rule", mk_sym("CoefficientDomain"),
+                                   mk_sym("RationalFunctions"));
+    Expr* gb_call = expr_new_function(mk_sym("GroebnerBasis"),
+                        (Expr*[]){ poly_list, expr_copy(vars), cd_rule }, 3);
+    Expr* gb_res = eval_and_free(gb_call);
+
+    /* GroebnerBasis declines (non-polynomial substructure, unsupported input)
+     * -> result is not a non-empty List -> leave Solve unevaluated. */
+    if (!gb_res || gb_res->type != EXPR_FUNCTION
+        || gb_res->data.function.head->type != EXPR_SYMBOL
+        || gb_res->data.function.head->data.symbol.name != SYM_List
+        || gb_res->data.function.arg_count == 0) {
+        if (gb_res) expr_free(gb_res);
+        return NULL;
+    }
+
+    Expr** gbE = gb_res->data.function.args;
+    size_t ng = gb_res->data.function.arg_count;
+
+    /* A generator free of every solve variable is a constant of the coefficient
+     * field Q(params).  A nonzero NUMBER means the ideal is <1> -> the system is
+     * (generically) inconsistent -> {}.  A parameter-dependent one is a
+     * consistency / nondegeneracy condition (holds only on a subvariety of
+     * parameter space); v1 declines rather than guess (that is Reduce's job). */
+    bool inconsistent = false;
+    for (size_t i = 0; i < ng; i++) {
+        if (!nl_var_free(gbE[i], var_arr, n)) continue;
+        Expr* g = gbE[i];
+        bool is_number = g->type == EXPR_INTEGER || g->type == EXPR_REAL
+            || g->type == EXPR_BIGINT
+            || (g->type == EXPR_FUNCTION
+                && g->data.function.head->type == EXPR_SYMBOL
+                && g->data.function.head->data.symbol.name == SYM_Rational);
+        if (is_number) { inconsistent = true; }
+        else { expr_free(gb_res); return NULL; }   /* parameter condition */
+    }
+    if (inconsistent) { expr_free(gb_res); return mk_list(NULL, 0); }
+
+    /* Back-substitute over the parametric triangular basis.  nl_rec treats the
+     * parameters as symbolic coefficients (is_polynomial accepts them); its
+     * `incomplete` flag guards systems that are positive-dimensional in the
+     * variables, so a false `{}` can never be emitted. */
+    Expr* out = run_nl_search(orig, dens, norig, gbE, (int)ng, var_arr, n,
+                              dom, reals_only, integers_only, opts);
+    expr_free(gb_res);
+    return out;
+}
+
+/* ------------------------------------------------------------------ *
  *  Public entry.                                                      *
  * ------------------------------------------------------------------ */
 
@@ -409,6 +563,29 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
         norig++;
     }
 
+    /* Parametric systems: any free symbol that is neither a solve variable nor
+     * a known constant is a parameter that belongs in the coefficient field.
+     * gb_from_expr and the machine walk below carry only rational coefficients,
+     * so route these through the RationalFunctions-coefficient Gröbner engine
+     * instead.  More than NL_MAX_PARAMS distinct parameters -> decline. */
+    {
+        const char* params[NL_MAX_PARAMS + 1];
+        int np = 0; bool within_cap = true;
+        for (int i = 0; i < norig && within_cap; i++)
+            within_cap = nl_collect_params(orig[i], var_arr, n, params, &np,
+                                           NL_MAX_PARAMS + 1);
+        if (np > 0) {
+            Expr* out = (within_cap && np <= NL_MAX_PARAMS)
+                ? solve_parametric_system(orig, dens, norig, var_arr, n, vars,
+                                          dom, reals_only, integers_only,
+                                          &local_opts)
+                : NULL;
+            for (int k = 0; k < norig; k++) { expr_free(orig[k]); if (dens[k]) expr_free(dens[k]); }
+            free(orig); free(dens);
+            return out;
+        }
+    }
+
     /* Build the GBPoly system under lex order. */
     GBPoly** F = (GBPoly**)malloc(sizeof(GBPoly*) * (size_t)norig);
     int nF = 0; bool poly_ok = true;
@@ -495,34 +672,13 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
     for (size_t i = 0; i < nG; i++) gbE[i] = gb_to_expr(G[i], var_arr);
     gb_basis_free(G, nG);
 
-    NlCtx c;
-    c.orig = orig; c.norig = norig;
-    c.dens = dens;
-    c.gb = gbE; c.ngb = (int)nG;
-    c.vars = var_arr; c.nvar = n;
-    c.dom = dom; c.reals_only = reals_only; c.integers_only = integers_only;
-    c.opts = &local_opts;
-    c.sols = NULL; c.nsol = 0; c.solcap = 0; c.incomplete = false;
-
-    Expr* empty = mk_list(NULL, 0);
-    nl_rec(&c, empty, 0);
-    expr_free(empty);
+    Expr* out = run_nl_search(orig, dens, norig, gbE, (int)nG, var_arr, n,
+                              dom, reals_only, integers_only, &local_opts);
 
     for (size_t i = 0; i < nG; i++) expr_free(gbE[i]);
     free(gbE);
     for (int k = 0; k < norig; k++) { expr_free(orig[k]); if (dens[k]) expr_free(dens[k]); }
     free(orig); free(dens);
-
-    /* An incomplete search must never present itself as `{}`; leave Solve
-     * unevaluated instead. */
-    if (c.incomplete) {
-        for (int i = 0; i < c.nsol; i++) expr_free(c.sols[i]);
-        free(c.sols);
-        return NULL;
-    }
-
-    Expr* out = mk_list(c.sols, (size_t)c.nsol);
-    free(c.sols);
     return out;
 }
 

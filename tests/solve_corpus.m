@@ -129,6 +129,15 @@
   {"J-all-denom-zero",  {1/(x - 1) == 1/(y - 1), x + y == 2},  {x, y}, Automatic, 0, "[D7] sole candidate x=y=1 is a pole -> {}"},
   {"J-const-denom-pin", {x/2 + y == 2, x - y == 1},            {x, y}, Automatic, 1, "constant denom (rational coeff) -> {2,1}; pin"},
 
+  (* ===== K. Parametric nonlinear systems (coefficients in Q(params)) ===== *)
+  (* [D8] free symbols that are not solve variables become coefficients in
+   * Q(params); solvenlsys routes these through the RationalFunctions-coefficient
+   * Gröbner engine and back-substitutes symbolically.  Unevaluated before the
+   * parametric path (gb_from_expr rejected the free symbols); correct after. *)
+  {"K-vieta",           {x + y == a, x y == b},                {x, y}, Automatic, 2, "[D8] Vieta: (a+-Sqrt[a^2-4b])/2"},
+  {"K-quad-param",      {x^2 == a, x + y == 0},                {x, y}, Automatic, 2, "[D8] x->+-Sqrt[a], y->-/+Sqrt[a]"},
+  {"K-circle-radius",   {x^2 + y^2 == r^2, y == 0},            {x, y}, Automatic, 2, "[D8] x->+-Sqrt[r^2], y->0"},
+
   (* ===== M. System regression pins (already correct; guard against drift) ===== *)
   {"M-cyclic3",         {x + y + z == 0, x y + y z + z x == -1, x y z == 0}, {x, y, z}, Automatic, 6, "six permutations of {-1,0,1}"},
   {"M-overdet-consist", {x^2 + y^2 == 1, x == 0, y == 1},       {x, y}, Automatic, 1, "overdetermined, consistent -> {0,1}"},
