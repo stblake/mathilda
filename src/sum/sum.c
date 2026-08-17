@@ -33,16 +33,26 @@
 #include "expr.h"
 #include "iter.h"
 #include "attr.h"
-#include "arithmetic.h"   /* is_rational */
+#include "arithmetic.h"   /* is_rational, make_complex */
 #include "sym_names.h"
+#include "compile/autocompile.h"   /* machine fast path for finite numeric sums */
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <math.h>
+#include <complex.h>   /* creal/cimag on the real-iterator accumulator */
 
 /* Upper bound on the number of terms a finite explicit expansion will add
  * before giving up (a runaway guard, not a correctness limit). */
 #define SUM_MAX_FINITE_TERMS 100000000LL
+
+/* Ceiling for the compiled machine fast path (sum_try_compiled).  Far above
+ * SUM_MAX_FINITE_TERMS because the compiled accumulator allocates nothing per
+ * term — the enumeration cap is a memory bound (an Expr* array), which the
+ * compiled loop does not pay.  This is purely a runaway/typo guard so a stray
+ * {i, 1, 10^18} cannot spin; it is NOT a correctness limit and may be tuned. */
+#define SUM_MAX_COMPILED_TERMS 1000000000000LL
 
 /* ------------------------------------------------------------------ */
 /*  Small helpers                                                      */
@@ -415,6 +425,118 @@ static bool sum_body_has_index_predicate(const Expr* e, const char* ivar) {
     return false;
 }
 
+/* True when `e` is a machine (inexact) number: a Real, or a Complex with at
+ * least one Real component.  This is the correctness gate for the compiled fast
+ * path: only when the body evaluates to a machine number at a representative
+ * index does inexact-contagion through Plus guarantee the interpreter's own
+ * total is a machine number too, so the compiled machine sum agrees to machine
+ * precision.  An exact Integer / Rational / BigInt / symbolic result must keep
+ * the interpreter path to stay exact. */
+static bool sum_body_probe_inexact(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
+        && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol.name, SYM_Complex) == 0) {
+        const Expr* re = e->data.function.args[0];
+        const Expr* im = e->data.function.args[1];
+        return (re && re->type == EXPR_REAL) || (im && im->type == EXPR_REAL);
+    }
+    return false;
+}
+
+/*
+ * Machine fast path for a finite numeric sum whose body is inexact.  Returns the
+ * scalar total as a fresh Expr, or NULL to fall through to the interpreter's
+ * enumeration (expand_range).  Two strategies, one correctness gate (the probe):
+ *
+ *   A. Integer iterator (!is_real): compile the WHOLE Sum[body, {i, lo, hi[,di]}]
+ *      as a zero-variable program (the compiler lowers it to one native
+ *      accumulation loop; compile_emit_ctrl.c) and read back the scalar total in
+ *      a single VM run — no per-index evaluate(), no per-term allocation.
+ *
+ *   B. Real iterator (is_real, e.g. {i, 0., 10., 0.1}): the whole-Sum lowering
+ *      needs integer bounds, so instead compile the BODY as f(i) and accumulate
+ *      in C, driving iteration with the interpreter's own iter_range_continue so
+ *      the same index points are visited.  On any non-finite point, abandon.
+ *
+ * The probe (evaluate the body once at the first index) is what keeps exact sums
+ * exact: an exact result declines the fast path, leaving expand_range to produce
+ * the exact Integer/Rational/BigInt total, or the empty-range identity 0.
+ */
+static Expr* sum_try_compiled(Expr* f, const IterSpec* s,
+                              double min_val, double max_val, double di_val,
+                              bool is_real) {
+    if (!autocompile_enabled()) return NULL;
+
+    /* Empty range: let expand_range fold the exact identity 0 (a compiled loop
+     * would answer 0. — a spurious inexactness). */
+    bool nonempty = (di_val > 0) ? (min_val <= max_val + 1e-14)
+                                 : (min_val >= max_val - 1e-14);
+    if (!nonempty) return NULL;
+
+    /* Runaway guard only — well above SUM_MAX_FINITE_TERMS (see the macro). */
+    double nterms = (max_val - min_val) / di_val + 1.0;
+    if (!(nterms >= 1.0) || nterms > (double)SUM_MAX_COMPILED_TERMS) return NULL;
+
+    /* Probe the body at the first index for inexactness (see sum_body_probe_inexact).
+     * Shadow/restore the iterator because Sum is HoldAll — mirrors expand_range. */
+    Rule* saved = iter_spec_shadow(s->var);
+    Expr* first_val = is_real ? expr_new_real(min_val) : expr_copy(s->imin);
+    symtab_add_own_value(s->var->data.symbol.name, s->var, first_val);
+    Expr* probe = evaluate(f);
+    bool inexact = sum_body_probe_inexact(probe);
+    expr_free(probe);
+    expr_free(first_val);
+    iter_spec_restore(s->var, saved);
+    if (!inexact) return NULL;
+
+    if (!is_real) {
+        /* Strategy A: only for exact integer bounds/step — the compiler's Sum
+         * lowering requires CT_INT bounds.  A non-integer (BigInt/Rational) bound
+         * would just bail inside the compiler; skip it to avoid a wasted attempt. */
+        if (s->imin->type != EXPR_INTEGER || s->imax->type != EXPR_INTEGER
+            || s->di->type != EXPR_INTEGER)
+            return NULL;
+
+        int nspec = (s->di->data.integer == 1) ? 3 : 4;
+        Expr* spec_args[4];
+        spec_args[0] = expr_copy(s->var);
+        spec_args[1] = expr_copy(s->imin);
+        spec_args[2] = expr_copy(s->imax);
+        if (nspec == 4) spec_args[3] = expr_copy(s->di);
+        Expr* spec = expr_new_function(expr_new_symbol(SYM_List), spec_args, nspec);
+        Expr* whole_args[2] = { expr_copy(f), spec };
+        Expr* whole = expr_new_function(expr_new_symbol(SYM_Sum), whole_args, 2);
+        Expr* total = autocompile_eval_closed(whole);   /* NULL unless CT_REAL/CT_COMPLEX */
+        expr_free(whole);
+        return total;
+    }
+
+    /* Strategy B: compile the body as f(i), accumulate the machine terms in C. */
+    AutoCompiled* ac = autocompile_new(f, (const Expr* const*)&s->var, 1);
+    if (!ac) return NULL;   /* body outside the compilable subset → enumerate */
+    double _Complex acc = 0.0;
+    double val = min_val;
+    int64_t count = 0;
+    bool ok = true;
+    while (iter_range_continue(/*is_real=*/true, /*is_inf=*/false, NULL, NULL,
+                               val, max_val, di_val)) {
+        if (count >= SUM_MAX_COMPILED_TERMS) { ok = false; break; }
+        double _Complex y;
+        if (!autocompiled_eval_complex(ac, &val, &y)) { ok = false; break; }
+        acc += y;
+        val += di_val;
+        count++;
+    }
+    autocompiled_free(ac);
+    if (!ok) return NULL;   /* non-finite point → fall back to the interpreter */
+    double re = creal(acc), im = cimag(acc);
+    if (!isfinite(re) || !isfinite(im)) return NULL;
+    return im == 0.0 ? expr_new_real(re)
+                     : make_complex(expr_new_real(re), expr_new_real(im));
+}
+
 static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
     /* Indefinite form Sum[f, i]: spec is a bare symbol. */
     if (spec->type == EXPR_SYMBOL) {
@@ -475,6 +597,10 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
             iter_spec_restore(s.var, saved);
             if (cf) { iter_spec_free(&s); return cf; }
         }
+        /* No closed form: before the slow evaluate()-per-term enumeration, try
+         * the compiled machine loop for an inexact body (exact bodies decline). */
+        Expr* comp = sum_try_compiled(f, &s, min_val, max_val, di_val, is_real);
+        if (comp) { iter_spec_free(&s); return comp; }
         Expr* r = expand_range(f, s.var, s.imin, s.imax, s.di,
                                min_val, max_val, di_val, is_real);
         if (r) { iter_spec_free(&s); return r; }

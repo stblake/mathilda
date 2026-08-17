@@ -2341,6 +2341,21 @@ unevaluated rather than reduced to the (wrong) unit-step result.
 "Alternating"` forces a single algorithm (strict, no fallback), and now also
 takes effect on finite unit-step integer ranges.
 
+**Machine fast path.** When the term-by-term fallback would otherwise evaluate
+an *inexact* body once per index — e.g. `Sum[Sin[i^2]*1.0, {i, 1, 10^6}]` —
+`Sum` instead compiles the whole summation to a single native
+accumulation loop (via the [`Compile`](#compile) engine) and returns the machine
+total in one pass (~20× faster here, and much more for cheaper bodies). This is
+gated by a one-term probe: it engages **only** when the body evaluates to a
+machine number (`Real`, or a `Complex` of reals), so an exact sum stays exact —
+`Sum[1/(i^2 + i + 1), {i, 1, 500}]` remains an exact `Rational`,
+`Sum[Prime[i], {i, 1, 1000}]` an exact bignum, and an empty range folds to `0`.
+Because the compiled loop allocates nothing per term (unlike the interpreter's
+term array, capped at `10^8`), it also evaluates large finite ranges that
+previously returned unevaluated. Turn it off with `$AutoCompilation = False`
+(the interpreter then computes the identical total). Inside `Compile[]`, `Sum`
+already lowers to this loop directly.
+
 ```mathematica
 In[1]:= Sum[i^2, {i, 1, 100}]
 Out[1]= 338350
@@ -2627,6 +2642,13 @@ the cleanest closed form wins; `Method -> "Telescoping" | "Rational" |
 `VerifyConvergence` (default `True`; a divergent infinite product prints
 `Product::div` and stays unevaluated).  `N[Product[...]]` routes to
 `NProduct`.
+
+**Machine fast path.** Exactly as `Sum` (see above), a finite product with an
+*inexact* body — e.g. `Product[Cos[i]*1.0, {i, 1, 10^6}]` — compiles to a
+single native multiply-accumulate loop instead of an evaluate-per-factor
+expansion. The same one-term probe keeps exact products exact:
+`Product[i, {i, 1, 20}]` stays the bignum `20!` and an empty range folds to `1`.
+Disable with `$AutoCompilation = False`.
 
 ```mathematica
 In[1]:= Product[k, {k, 1, n}]

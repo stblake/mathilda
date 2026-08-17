@@ -195,6 +195,45 @@ Expr* autocompiled_eval_boxed(const AutoCompiled* ac, const double* xs) {
     }
 }
 
+Expr* autocompile_eval_closed(const Expr* expr) {
+    if (!expr) return NULL;
+    if (!autocompile_enabled()) return NULL;
+    /* Same flag mask as ac_make: fold machine-number globals (so a bound such as
+     * an outer iteration variable folds to a constant), but NEVER wrap a machine
+     * integer — an invisible overflow must bail to the interpreter, not silently
+     * wrap.  See the long comment in ac_make. */
+    unsigned ac_flags = COMPILE_FOLD_GLOBALS & ~COMPILE_WRAP_INT;
+    CompiledProgram* prog = compile_expr_prec(expr, NULL, NULL, 0, ac_flags, 0);
+    if (!prog) { ac_report_bail(expr); return NULL; }
+    /* Only a genuine machine-number total may leave the compiled path.  A CT_INT
+     * result is an exact integer sum/product and must stay on the interpreter
+     * (exact bignum); CT_BOOL / array / managed cannot be a scalar total. */
+    CompileType rt = compiled_result_type(prog);
+    if (rt != CT_REAL && rt != CT_COMPLEX) { compiled_free(prog); return NULL; }
+
+    CompileValue o;
+    Expr* out = NULL;
+    if (compiled_eval(prog, NULL, &o)) {   /* zero-arg program: no args to load */
+        switch (o.type) {
+            case CT_REAL:
+                if (isfinite(o.v.r)) out = expr_new_real(o.v.r);
+                break;
+            case CT_COMPLEX:
+                if (isfinite(creal(o.v.z)) && isfinite(cimag(o.v.z)))
+                    /* A zero imaginary part collapses to a plain real, matching
+                     * how the interpreter's arithmetic reports Complex[r, 0.]. */
+                    out = cimag(o.v.z) == 0.0
+                        ? expr_new_real(creal(o.v.z))
+                        : make_complex(expr_new_real(creal(o.v.z)),
+                                       expr_new_real(cimag(o.v.z)));
+                break;
+            default: break;   /* result type is fixed to REAL/COMPLEX above */
+        }
+    }
+    compiled_free(prog);
+    return out;
+}
+
 bool autocompiled_eval_z(const AutoCompiled* ac, const double _Complex* zs,
                          double _Complex* out) {
     if (!ac || ac->arg_type != CT_COMPLEX || ac->nvars > AC_MAX_VARS) return false;

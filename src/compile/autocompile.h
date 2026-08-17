@@ -124,6 +124,24 @@ Expr* autocompiled_eval_boxed(const AutoCompiled* ac, const double* xs);
 bool autocompiled_eval_z(const AutoCompiled* ac, const double _Complex* zs,
                          double _Complex* out);
 
+/* Compile a CLOSED (zero-variable) scalar expression, evaluate it once, and
+ * return the boxed machine-number result — the one-shot cousin of
+ * autocompiled_eval_boxed, with no AutoCompiled handle to keep or free.
+ *
+ * Used by the finite Sum[]/Product[] builtins: a whole
+ * Sum[body, {i, lo, hi}] with integer bounds has no free variable, so the
+ * compiler lowers it to a single machine-accumulation loop returning the scalar
+ * total (compile_emit_ctrl.c) — far cheaper than the interpreter's
+ * evaluate()-per-term enumeration.
+ *
+ * Returns NULL when auto-compilation is off, the expression is outside the
+ * compilable subset, or the result is non-finite.  It ALSO returns NULL unless
+ * the result type is CT_REAL or CT_COMPLEX: an exact CT_INT total (e.g. a sum of
+ * integers) must stay on the interpreter to remain exact bignum, never a wrapped
+ * machine int.  The caller keeps its existing (exact / enumerated / held) path
+ * on NULL. */
+Expr* autocompile_eval_closed(const Expr* expr);
+
 void autocompiled_free(AutoCompiled* ac);
 
 #endif /* MATHILDA_AUTOCOMPILE_H */

@@ -644,8 +644,12 @@ the compiler does not.
   *body* and iterating in C?** For `Do`/`Sum`/`Nest` over numeric ranges, a
   compiled body + C-level loop (no `JMP`) is simpler and captures most of the
   win; full in-VM control flow matters most for data-dependent `While`/`If`
-  inside the loop. *Open: possibly stage "compiled body, C loop" before full
-  in-VM control flow.*
+  inside the loop. *Resolved (2026-08-17): both shapes now ship for the
+  interpreter-level `Sum`/`Product` auto-compile — an integer iterator uses the
+  in-VM counted loop (whole-`Sum` lowering, zero-arg `autocompile_eval_closed`),
+  and a real-bounded/real-step iterator uses the "compiled body, C loop" (via
+  `autocompile_new` + `autocompiled_eval_complex`). See `sum_try_compiled` /
+  `product_try_compiled` and the compile_state.md wiring table.*
 
 ---
 

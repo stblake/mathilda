@@ -552,6 +552,88 @@ void test_sampler_bodies_really_compile(void) {
     expr_free(rb); expr_free(zv);
 }
 
+/* ---- finite Sum[] / Product[] auto-compilation ------------------------- */
+
+/* Strategy A: an integer-iterator finite sum with an inexact body compiles the
+ * WHOLE Sum to one machine loop.  Parity is checked against the interpreter via
+ * the uncid[] wrapper (a DownValue the compiler cannot lower), and the total is
+ * a machine Real. */
+void test_sum_integer_parity(void) {
+    assert_eval_eq(AC_UNCID
+        "Abs[Sum[Sin[i^2]*1.0, {i, 1, 20000}] - Sum[uncid[Sin[i^2]*1.0], {i, 1, 20000}]] < 10^-9",
+        "True", 0);
+    assert_eval_eq("Head[Sum[Sin[i^2]*1.0, {i, 1, 2000}]]", "Real", 0);
+    /* non-unit integer step */
+    assert_eval_eq(AC_UNCID
+        "Abs[Sum[Cos[i]*1.0, {i, 1, 999, 2}] - Sum[uncid[Cos[i]*1.0], {i, 1, 999, 2}]] < 10^-9",
+        "True", 0);
+}
+
+/* Strategy B: a real-bounded / real-step iterator compiles the body and folds in
+ * C, visiting exactly the interpreter's index points. */
+void test_sum_real_iterator_parity(void) {
+    assert_eval_eq(AC_UNCID
+        "Abs[Sum[Sin[i]*1.0, {i, 0., 50., 0.1}] - Sum[uncid[Sin[i]*1.0], {i, 0., 50., 0.1}]] < 10^-9",
+        "True", 0);
+    assert_eval_eq("Head[Sum[Sin[i]*1.0, {i, 0., 50., 0.1}]]", "Real", 0);
+}
+
+/* A complex-valued machine body sums to a machine Complex, matching the
+ * interpreter. */
+void test_sum_complex_parity(void) {
+    assert_eval_eq(AC_UNCID
+        "Abs[Sum[Exp[I i*1.0], {i, 1, 5000}] - Sum[uncid[Exp[I i*1.0]], {i, 1, 5000}]] < 10^-9",
+        "True", 0);
+    assert_eval_eq("Head[Sum[Exp[I i*1.0], {i, 1, 100}]]", "Complex", 0);
+}
+
+/* Exactness gate: the compiled path must NEVER divert an exact sum/product to a
+ * machine number.  A rational body stays Rational, an integer body stays Integer
+ * (bignum), a real-iterator body that evaluates to an Integer stays Integer, and
+ * an empty range folds to the exact identity. */
+void test_sum_product_exactness(void) {
+    assert_eval_eq("Head[Sum[1/(i^2 + i + 1), {i, 1, 300}]]", "Rational", 0);
+    assert_eval_eq("Head[Sum[i^2, {i, 1, 50}]]", "Integer", 0);
+    assert_eval_eq("Sum[Round[i], {i, 1., 10.}]", "55", 0);          /* real iter, exact result */
+    assert_eval_eq("Product[i, {i, 1, 20}]", "2432902008176640000", 0);  /* 20! bignum */
+    assert_eval_eq("Sum[Sin[i]*1.0, {i, 5, 1}]", "0", 0);           /* empty sum -> exact 0 */
+    assert_eval_eq("Product[Cos[i]*1.0, {i, 5, 1}]", "1", 0);       /* empty product -> exact 1 */
+}
+
+/* Product mirrors Sum: whole-Product lowering (A) and body-loop (B), real and
+ * complex, all parity-checked against the interpreter. */
+void test_product_parity(void) {
+    assert_eval_eq(AC_UNCID
+        "Abs[Product[Cos[i]*1.0, {i, 1, 500}] - Product[uncid[Cos[i]*1.0], {i, 1, 500}]] < 10^-9",
+        "True", 0);
+    assert_eval_eq(AC_UNCID
+        "Abs[Product[1. + Sin[i]/10, {i, 0., 20., 0.5}] - Product[uncid[1. + Sin[i]/10], {i, 0., 20., 0.5}]] < 10^-9",
+        "True", 0);
+}
+
+/* $AutoCompilation off: the answer is unchanged (the interpreter computes the
+ * same machine total), confirming the fast path is a pure optimisation. */
+void test_sum_autocompile_switch(void) {
+    autocompile_set_enabled(false);
+    assert_eval_eq("Head[Sum[Sin[i^2]*1.0, {i, 1, 200}]]", "Real", 0);
+    autocompile_set_enabled(true);
+    assert_eval_eq("Head[Sum[Sin[i^2]*1.0, {i, 1, 200}]]", "Real", 0);
+}
+
+/* Inside Compile[], Sum/Product already lower to a native accumulation loop
+ * (compile_emit_ctrl.c) — confirm the compiled function agrees with the
+ * interpreter. */
+void test_sum_inside_compile(void) {
+    assert_eval_eq(AC_UNCID
+        "Abs[Compile[{{n, _Integer}}, Sum[Sin[i]*1.0, {i, 1, n}]][1000] "
+        "- Sum[uncid[Sin[i]*1.0], {i, 1, 1000}]] < 10^-9",
+        "True", 0);
+    assert_eval_eq(AC_UNCID
+        "Abs[Compile[{{n, _Integer}}, Product[1. + 1./i, {i, 1, n}]][50] "
+        "- Product[uncid[1. + 1./i], {i, 1, 50}]] < 10^-9",
+        "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -589,6 +671,14 @@ int main(void) {
     TEST(test_streamplot_parity);
     TEST(test_nsum_parity);
     TEST(test_nsum_mpfr_untouched);
+
+    TEST(test_sum_integer_parity);
+    TEST(test_sum_real_iterator_parity);
+    TEST(test_sum_complex_parity);
+    TEST(test_sum_product_exactness);
+    TEST(test_product_parity);
+    TEST(test_sum_autocompile_switch);
+    TEST(test_sum_inside_compile);
 
     printf("All auto-compile tests passed!\n");
     return 0;
