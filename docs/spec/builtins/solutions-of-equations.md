@@ -45,13 +45,39 @@ Attempts to solve an equation or system of equations for one or more variables.
     that the router uses to decide dispatch; it canonicalises each equation
     `lhs_i == rhs_i` to `lhs_i - rhs_i` and refuses (returns `NULL`) when the
     system is not affine in the variables.
-  - When the linear-system specialist declines a non-affine system ->
-    `Solve`SolveNonlinearSystem` (also below).  This handles genuinely
+  - A **single non-affine equation in several variables** (linear-system
+    specialist declined, but the input is one `Equal`, not a conjunction) is
+    solved for the earliest-listed variable it is polynomial in, treating the
+    rest as symbolic parameters: `Solve[x y == 1, {x, y}]` -> `{{x -> 1/y}}`,
+    `Solve[x^2 + y^2 == 1, {x, y}]` -> `{{x -> -Sqrt[1-y^2]}, {x -> Sqrt[1-y^2]}}`.
+    This yields explicit rules only (never inequalities or case splits, which
+    belong to `Reduce`).
+  - When the linear-system specialist declines a genuine multi-equation
+    system -> `Solve`SolveNonlinearSystem` (also below).  This handles
     nonlinear polynomial systems whose solution set is zero-dimensional
     (finitely many solutions) via a lexicographic Gröbner basis and
     triangular back-substitution.  Positive-dimensional systems (infinitely
     many solutions) emit `Solve::nsdim` and leave `Solve` unevaluated;
     non-polynomial systems also stay unevaluated.
+  - **Polynomial in a single transcendental kernel** `g(x)` (single equation,
+    single variable, the peel/trig/radical passes all declined): if
+    substituting `u = g(x)` makes the equation a polynomial in `u` free of
+    `x`, it is solved in `u` and each root `u0` unwound through `g(x) == u0`.
+    Two kernel shapes: exponential `E^(c x)` (`Solve[E^(2x)-3E^x+2==0, x]` ->
+    `x = 0, Log[2]` with periodic families in `Complexes`) and generic
+    invertible heads `H[x]^k` (`Solve[Log[x]^2-3Log[x]+2==0, x]` ->
+    `{{x -> E}, {x -> E^2}}`).  Implemented in `src/solvetrig.c`
+    (`solvetrig_solve_poly_in_kernel`), reusing the polynomial and
+    inverse-function specialists.
+- **Modular solving.** `Solve[poly == 0, x, Modulus -> p]` solves a
+  single-variable polynomial equation over the finite ring `Z/pZ` by residue
+  enumeration (`src/solvemod.c`), returning `{{x -> r}, ...}` with `r`
+  ascending in `[0, p)`: `Solve[x^2 == 2, x, Modulus -> 7]` -> `{{x -> 3},
+  {x -> 4}}`, `Solve[3 x == 1, x, Modulus -> 7]` -> `{{x -> 5}}`.  Supported
+  for `2 <= p <= 100000` (prime or composite; rational coefficients handled
+  via modular inverse).  Systems, multivariable specs, non-polynomial
+  equations, and out-of-range moduli leave `Solve` unevaluated -- the option
+  is never silently ignored.
 - Inequalities and multi-equation transcendental systems are reserved for
   future work and currently leave `Solve[...]` unevaluated.  When the
   inverse-function specialist's outermost peel succeeds but the inner
@@ -145,7 +171,20 @@ Attempts to solve an equation or system of equations for one or more variables.
 - `GeneratedParameters -> C`: Head used by the inverse-function specialist
   when minting fresh integer-parameter symbols `C[1], C[2], ...`.  Only the
   bare-symbol form is honoured; the `Function` form is reserved.
-- `VerifySolutions -> Automatic`: Reserved.
+- `VerifySolutions -> Automatic`: With `VerifySolutions -> True`, every
+  returned solution is back-substituted into the equation(s) and dropped when
+  `PossibleZeroQ` proves the residual non-zero; solutions that verify or are
+  undecidable (`Root[]`, free parameters, `ConditionalExpression`) are kept.
+  The default `Automatic` keeps per-specialist verification (e.g. radicals).
+- `Modulus -> 0`: With `Modulus -> p` (`2 <= p <= 100000`), solve a
+  single-variable polynomial over `Z/pZ` (see **Modular solving** above).
+
+**Domains** (third positional argument): `Complexes` (default), `Reals`
+(discriminant / sign filtering), `Integers` (keep provably-concrete integer
+roots), and `Rationals` (keep provably-concrete `Integer`/`Rational` roots --
+`Solve[x^2 == 4, x, Rationals]` -> `{{x -> -2}, {x -> 2}}`,
+`Solve[x^2 == 2, x, Rationals]` -> `{}`).  `Algebraics`, `Booleans`, and
+`Primes` are not yet wired and leave `Solve` unevaluated.
 
 ```mathematica
 In[1]:= Solve[2 x + 3 == 0, x]

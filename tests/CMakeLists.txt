@@ -690,6 +690,7 @@ set(COMMON_SRC
     ../src/solverad.c
     ../src/solveinv.c
     ../src/solvetrig.c
+    ../src/solvemod.c
     ../src/zero_test.c
     ../src/numeric_complex.c
     ../src/flint_num_bridge.c
@@ -3327,6 +3328,23 @@ add_test(NAME intrat_corpus_tests
          COMMAND intrat_corpus_tests ../IntegrateRationalTests.m)
 add_test(NAME intrat_inline_corpus_tests
          COMMAND intrat_corpus_tests ../IntegrateRationalInlineCases.m)
+
+# Form-invariant stress corpus for Solve[].  Loads solve_corpus.m (a
+# List of {label, eqn, vars, dom, expectedCount, note} records) held,
+# forks per case, and verifies each returned solution by
+# back-substitution via the solve_check_prelude.m verifier.  Fails only
+# above SOLVE_FAIL_BASELINE (see the runner) so it doubles as the
+# progress dashboard for the Solve capability gaps.
+add_executable(solve_corpus_tests test_solve_corpus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(solve_corpus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(solve_corpus_tests gmp m ${ECM_LIB})
+    add_dependencies(solve_corpus_tests build_ecm)
+else()
+    target_link_libraries(solve_corpus_tests gmp m)
+endif()
+add_test(NAME solve_corpus_tests
+         COMMAND solve_corpus_tests ../solve_corpus.m ../solve_check_prelude.m)
 
 # Comprehensive corpus runner for the CRC integral table.  Loads
 # CRCIntegralsCorpus.m (a flat List of {integrand, var} pairs, ~3 per

@@ -141,12 +141,29 @@ static void test_list_form(void) {
                "Rule[y, Power[2, Rational[-1, 2]]]]]");
 }
 
-/* Positive-dimensional ideal (infinitely many solutions): left
- * unevaluated (head stays Solve), and Solve::nsdim is emitted. */
+/* Positive-dimensional ideal from a multi-equation SYSTEM (infinitely
+ * many solutions): left unevaluated (head stays Solve), Solve::nsdim
+ * emitted.  A conjunction never takes the single-equation-multivariable
+ * fallback (which handles a lone equation like x^2 - y^2 == 0, solving
+ * it for one variable as {{x -> -Sqrt[y^2]}, {x -> Sqrt[y^2]}}). */
 static void test_positive_dimensional(void) {
-    run_test("Solve[x^2 - y^2 == 0, {x, y}]",
-             "Solve[Equal[Plus[Power[x, 2], Times[-1, Power[y, 2]]], 0], "
+    run_test("Solve[x^2 - y^2 == 0 && x - y == 0, {x, y}]",
+             "Solve[And[Equal[Plus[Power[x, 2], Times[-1, Power[y, 2]]], 0], "
+                       "Equal[Plus[x, Times[-1, y]], 0]], "
                    "List[x, y]]");
+}
+
+/* Single equation in several variables: solved for the earliest-listed
+ * variable it is polynomial in, treating the rest as parameters -- an
+ * explicit rule (Solve's job), not a Reduce-style case split. */
+static void test_single_eq_multivar(void) {
+    /* x y == 1  ->  x -> 1/y. */
+    run_test("Solve[x y == 1, {x, y}]",
+             "List[List[Rule[x, Power[y, -1]]]]");
+    /* Sin[x] + y == 0: x is not polynomial, so solve for the next
+     * variable y  ->  y -> -Sin[x]. */
+    run_test("Solve[Sin[x] + y == 0, {x, y}]",
+             "List[List[Rule[y, Times[-1, Sin[x]]]]]");
 }
 
 /* Non-polynomial system (transcendental head): left unevaluated. */
@@ -180,6 +197,7 @@ int main(void) {
     test_three_var_symmetric();
     test_list_form();
     test_positive_dimensional();
+    test_single_eq_multivar();
     test_non_polynomial();
     test_linear_regression();
 

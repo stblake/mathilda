@@ -2655,3 +2655,27 @@ the unit path under-ran). Fixing only the interpreter would have left
 - **git checkout HEAD -- <file> discards uncommitted work irrecoverably.** Reverted a
   large working change on a wrong hypothesis, then the user asked to keep it — had to
   re-apply from the conversation. Prefer `git stash` when a revert might be temporary.
+
+## Solve review (2026-08-17)
+- **Mathilda's `Function[m, ...]` does NOT close over `m` inside a nested pure
+  function.** In the `.m` verifier, `AllTrue[samples, Function[m, scZero[expr /.
+  (Rule[#, m] & /@ params)]]]` left a literal `m` (the inner `&` shadows the
+  outer named var). Fix: use non-nesting `Thread[params -> m]`. Any `.m` helper
+  that maps an inner function referencing an outer `Function` var will silently
+  produce wrong substitutions — verify with a tiny probe before trusting it.
+- **`<digit>Exp[...]` mis-lexes.** `3Exp[x]` reads the `3` as a float exponent
+  (`3E...`), yielding `3.0 * ...`. Write `3 Exp[x]` (space) or `3 E^x`. Matters
+  when authoring `.m` corpora/tests with transcendental coefficients.
+- **A form-invariant back-substitution corpus beats FullForm string tests** for
+  driving CAS development: it survives radical/ordering/spelling changes, and its
+  ratcheting baseline (10 -> 0) is the progress dashboard. Clone the proven
+  `test_intrat_corpus.c` idiom (fork-per-case + `.m` prelude + baseline gate).
+- **Solve/Reduce boundary:** Solve returns explicit rules only. Single equation
+  in many vars (`x y == 1 -> {{x -> 1/y}}`) IS Solve; inequalities, quantifiers,
+  parameter case-splits, positive-dimensional *set descriptions* are Reduce.
+  When adding a Solve capability, never emit conditions to make an answer
+  "complete" — that crosses into (unimplemented) Reduce.
+- **A parsed-but-inert option is a latent wrong-answer bug**, not a no-op:
+  `Solve[x^2==2, x, Modulus->7]` silently returned the non-modular `±Sqrt[2]`.
+  When wiring such an option, the non-handled shapes must *refuse* (unevaluated),
+  never fall through to the default path.
