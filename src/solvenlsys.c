@@ -57,6 +57,7 @@
 #include "eval.h"
 #include "expr.h"
 #include "groebner.h"
+#include "internal.h"
 #include "poly.h"
 #include "solvepoly.h"
 #include "sym_names.h"
@@ -362,7 +363,13 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
         Expr* diff = mk_fn2("Plus",
             expr_copy(eq->data.function.args[0]),
             mk_neg(expr_copy(eq->data.function.args[1])));
-        orig[norig++] = eval_and_free(diff);
+        /* Distribute products / powers of sums before conversion: the
+         * single-term parser in gb_from_expr cannot represent
+         * Power[Plus, k] / Times[Plus, ...], and the lex zero-dim check
+         * reads orig[i] directly, so both need the Plus-of-monomials shape.
+         * internal_expand consumes `diff`; eval_and_free fixes the result
+         * to a point (mirrors groebnerbasis.c's normalise_polynomial). */
+        orig[norig++] = eval_and_free(internal_expand((Expr*[]){ diff }, 1));
     }
 
     /* Build the GBPoly system under lex order. */

@@ -470,9 +470,14 @@ its context-qualified name.
 - `Protected`.
 - `eqns` may be a single `Equal[lhs, rhs]`, `And[Equal[...], ...]`, or
   `List[Equal[...], ...]`.  `vars` must be a `List` of distinct symbols.
-- Each equation is canonicalised to `lhs - rhs`.  Every residual must be a
-  polynomial over Q in `vars` (a transcendental head, a radical / non-integer
-  power, or a foreign symbol makes the specialist decline -> `NULL`).
+- Each equation is canonicalised to `lhs - rhs` and then **`Expand`-ed**, so
+  products and powers of sums (`(x - 1)^2 + y^2 == 1`, `(x + y)(x - y) == 0`)
+  distribute to a sum of monomials before Gröbner conversion — the GBPoly
+  single-term parser cannot ingest `Power[Plus, k]` / `Times[Plus, ...]`
+  directly.  Every residual must then be a polynomial over Q in `vars` (a
+  transcendental head, a radical / non-integer power, or a foreign symbol makes
+  the specialist decline -> `NULL`).  The numeric analogue `NSolve` expands
+  identically.
 - A lexicographic Gröbner basis is computed via the Gröbner walk
   (`gb_groebner_walk`).  For a zero-dimensional ideal this basis is
   triangular: the univariate generator in the last variable is solved with

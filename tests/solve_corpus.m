@@ -105,5 +105,23 @@
   {"H-cubics-radical",  x^3 - 2 == 0,              x, Cubics -> True,  3, "radical form; verified numerically"},
   {"H-list-form",       {x^2 - 5 x + 6 == 0},      x, Automatic, 2, "single-equation list == bare equation"},
   {"H-genparam-K",      Sin[x] == 0,               x, GeneratedParameters -> K, 2, "families use K[k] not C[k]"},
-  {"H-verify-radical",  Sqrt[x + 5] == x - 1,      x, VerifySolutions -> True, 1, "[D5] extraneous x=-1 dropped"}
+  {"H-verify-radical",  Sqrt[x + 5] == x - 1,      x, VerifySolutions -> True, 1, "[D5] extraneous x=-1 dropped"},
+
+  (* ===== I. Systems in unexpanded / product / power form ===== *)
+  (* [D6] gb_from_expr's single-term parser cannot ingest Power[Plus,k] /
+   * Times[Plus,...]; solvenlsys now runs internal_expand first (as the
+   * GroebnerBasis builtin already did).  Unevaluated on builds before the
+   * expand fix; correct after. *)
+  {"I-two-circles",     {x^2 + y^2 == 1, (x - 1)^2 + y^2 == 1}, {x, y}, Automatic, 2, "[D6] {1/2,+-Sqrt3/2}; unexpanded (x-1)^2"},
+  {"I-circles-radaxis", {x^2 + y^2 == 5, (x - 3)^2 + y^2 == 2}, {x, y}, Automatic, 2, "[D6] radical-axis intersection {2,+-1}"},
+  {"I-product-line",    {(x + y) (x - y) == 0, x + y == 2},     {x, y}, Automatic, 1, "[D6] x+y=0 branch contradicts x+y=2 -> only {1,1}"},
+  {"I-cubic-shift",     {(x + 1)^3 == y, y == x + 1},           {x, y}, Automatic, 3, "[D6] u=x+1: u^3=u -> x=-1,0,-2"},
+  {"I-expanded-pin",    {x^2 + y^2 == 25, x - y == 1},          {x, y}, Automatic, 2, "regression pin: expanded form always worked"},
+
+  (* ===== M. System regression pins (already correct; guard against drift) ===== *)
+  {"M-cyclic3",         {x + y + z == 0, x y + y z + z x == -1, x y z == 0}, {x, y, z}, Automatic, 6, "six permutations of {-1,0,1}"},
+  {"M-overdet-consist", {x^2 + y^2 == 1, x == 0, y == 1},       {x, y}, Automatic, 1, "overdetermined, consistent -> {0,1}"},
+  {"M-inconsistent",    {x^2 + y^2 == 1, x^2 + y^2 == 2},       {x, y}, Automatic, 0, "unit ideal -> {}"},
+  {"M-int-system",      {x^2 + y^2 == 25, x - y == 1},          {x, y}, Integers, 2, "integer lattice pts {4,3},{-3,-4}"},
+  {"M-root-system",     {x^2 + y^2 == 1, x^3 + y == 1/2},       {x, y}, Automatic, 6, "Root[] tuples, verified numerically"}
 }

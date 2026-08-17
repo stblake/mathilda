@@ -175,6 +175,26 @@ static void test_non_polynomial(void) {
 
 /* Regression: a purely linear system must keep taking the linear path
  * and produce the unique solution unchanged. */
+/* Unexpanded / product forms: solvenlsys must Expand each equation before
+ * GBPoly conversion (gb_from_expr's single-term parser cannot ingest
+ * Power[Plus,k] / Times[Plus,...]).  Two circles meeting on their radical
+ * axis: x = 1/2, y = +-Sqrt[3]/2. */
+static void test_unexpanded_two_circles(void) {
+    run_test("Solve[{x^2 + y^2 == 1, (x - 1)^2 + y^2 == 1}, {x, y}]",
+        "List["
+          "List[Rule[x, Rational[1, 2]], "
+               "Rule[y, Times[Rational[-1, 2], Power[3, Rational[1, 2]]]]], "
+          "List[Rule[x, Rational[1, 2]], "
+               "Rule[y, Times[Rational[1, 2], Power[3, Rational[1, 2]]]]]]");
+}
+
+/* Product of sums == 0 combined with a linear constraint: the x+y=0 branch
+ * contradicts x+y=2, leaving the single solution {1,1}. */
+static void test_unexpanded_product(void) {
+    run_test("Solve[{(x + y) (x - y) == 0, x + y == 2}, {x, y}]",
+        "List[List[Rule[x, 1], Rule[y, 1]]]");
+}
+
 static void test_linear_regression(void) {
     run_test("Solve[x + y == 3 && x - y == 1, {x, y}]",
              "List[List[Rule[x, 2], Rule[y, 1]]]");
@@ -199,6 +219,8 @@ int main(void) {
     test_positive_dimensional();
     test_single_eq_multivar();
     test_non_polynomial();
+    test_unexpanded_two_circles();
+    test_unexpanded_product();
     test_linear_regression();
 
     printf("\nAll solvenlsys tests passed.\n");
