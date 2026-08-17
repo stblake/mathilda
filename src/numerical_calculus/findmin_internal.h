@@ -555,6 +555,7 @@ bool fm_eval_hessian(Expr*** H_exprs, FmVarBind* binds,
                             const FmOpts* opts, double* H_out /* n*n */);
 Expr* fm_build_result(double fmin, Expr** vars, const double* vals,
                              size_t n);
+#ifdef USE_MPFR
 Expr* fm_build_result_mpfr(const mpfr_t fmin, Expr** vars,
                                   mpfr_t const* vals, size_t n);
 mpfr_t* fm_mpfr_array(size_t count, long bits);
@@ -565,6 +566,7 @@ bool fm_run_bfgs_mpfr(Expr* f, Expr** vars, size_t n,
                              const FmBox* boxes,
                              const FmOpts* opts,
                              mpfr_t fx_out);
+#endif /* USE_MPFR */
 FmSpecKind fm_parse_var_spec(Expr* spec, Expr** var_out,
                                     Expr** x0_out, Expr** x1_out,
                                     Expr** xmin_out, Expr** xmax_out);
@@ -599,6 +601,7 @@ bool fm_line_search(Expr* f, FmVarBind* binds, size_t n,
 bool fm_bracket(Expr* f, FmVarBind* binds, const FmOpts* opts,
                        double x0, const FmBox* box1,
                        double* a_out, double* b_out, double* c_out);
+#ifdef USE_MPFR
 bool fm_bracket_mpfr(Expr* f, FmVarBind* bind, const FmOpts* opts,
                             const mpfr_t x0, const FmBox* box1,
                             mpfr_t a, mpfr_t b, mpfr_t c,
@@ -607,6 +610,7 @@ bool fm_brent_min_mpfr(Expr* f, FmVarBind* bind, const FmOpts* opts,
                               const mpfr_t a_in, const mpfr_t b_in, const mpfr_t c_in,
                               const FmBox* box1,
                               mpfr_t x_out, mpfr_t fx_out);
+#endif /* USE_MPFR */
 bool fm_brent_min(Expr* f, FmVarBind* bind, const FmOpts* opts,
                          double a, double b, double c,
                          const FmBox* box1,
