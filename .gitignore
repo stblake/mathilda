@@ -81,3 +81,8 @@ comparisons/__pycache__/
 benchmarks/__pycache__/
 docs/experiments/**/*.pyc
 benchmarks/**/*.pyc
+
+# Repo-root performance write-ups (evaluator / pattern-matcher, .md + rendered
+# .pdf) are generated locally and deliberately not tracked.
+MATHILDA_*_PERFORMANCE.md
+MATHILDA_*_PERFORMANCE.pdf
