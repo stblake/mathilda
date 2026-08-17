@@ -1880,6 +1880,7 @@ matrix variables (`Vectors[n, dom]`, `Matrices`), geometric-region domains,
 | `"SHGO"` | Simplicial Homology Global Optimization: sample the box, build a graph, start one local search per minimizer-pool vertex (see below) |
 | `"DualAnnealing"` | Generalized Simulated Annealing: a heavy-tailed visiting distribution and a generalized Metropolis rule with reannealing, plus a local search after each Markov chain (see below) |
 | `"DIRECT"` | DIviding RECTangles: a deterministic Lipschitzian search that normalizes the box to the unit hypercube and repeatedly subdivides the "potentially optimal" cells; no derivatives, no random seed (see below) |
+| `"BasinHopping"` | Monte-Carlo minimization: perturb → local-minimize ("quench") → Metropolis-accept on the minimized energies, with an adaptive step size (see below) |
 
 `"DifferentialEvolution"` keeps every trial point inside the box by *bounce-back*
 reinitialisation — a mutant that overshoots a bound is redrawn at random between
@@ -1942,7 +1943,7 @@ Recognised sub-options:
 
 | Sub-option | Applies to | Meaning |
 |------------|-----------|---------|
-| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts), SHGO (sampling points), DualAnnealing (independent chains) | population / restart / start / sample / chain count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 200}]` (Storn & Price's 10n, the same whether `"DifferentialEvolution"` is explicit or via `Method -> Automatic`); SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts; SHGO `100` sample points (scipy's `n`); DualAnnealing `1` chain (scipy's single-chain default) |
+| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts), SHGO (sampling points), DualAnnealing (independent chains), BasinHopping (independent multi-start runs) | population / restart / start / sample / chain / run count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 200}]` (Storn & Price's 10n, the same whether `"DifferentialEvolution"` is explicit or via `Method -> Automatic`); SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts; SHGO `100` sample points (scipy's `n`); DualAnnealing `1` chain and BasinHopping `1` run (scipy's single-run defaults) |
 | `"SamplingMethod" -> m` | SHGO | `"Simplicial"` (default), `"Sobol"`, or `"Halton"` — how the box is sampled and its connectivity graph built (see below). An unknown value warns (`NMinimize::sopt`) and keeps `"Simplicial"` |
 | `"Iterations" -> k` | SHGO | sampling/refinement rounds (scipy's `iters`, default 1); each round grows the complex and re-pools, stopping early once no new local minimum appears. A positive integer, or `Automatic`/`None` for the default; an invalid value warns (`NMinimize::sopt`) |
 | `"VisitingParameter" -> qv` | DualAnnealing | Tsallis visiting-distribution shape `q_v` (scipy's `visit`, default 2.62); `q_v → 1` is Gaussian (classical SA), 2 is Cauchy (fast SA), `> 2` gives the heavy tails of GSA. A real in `(1, 3]`; an out-of-range or non-real value warns (`NMinimize::sopt`) and keeps 2.62 |
@@ -1958,6 +1959,12 @@ Recognised sub-options:
 | `"LengthTolerance" -> l` | DIRECT | stop once the incumbent cell's normalized size (half diagonal for unbiased DIRECT, half the longest side for DIRECT-L) drops below this (scipy's `len_tol`, default `10⁻⁶`); a real in `[0, 1)`, else warns (`NMinimize::sopt`) |
 | `"MinValue" -> f*` | DIRECT | a known global-minimum value enabling an early stop when the incumbent gets within `"MinValueTolerance"` of it (scipy's `f_min`); a finite real, or `Automatic`/`None` to disable (the default). An invalid value warns (`NMinimize::sopt`) |
 | `"MinValueTolerance" -> rt` | DIRECT | relative tolerance for the `"MinValue"` early stop (scipy's `f_min_rtol`, default `10⁻⁴`); a real in `[0, 1)`, else warns (`NMinimize::sopt`) |
+| `"Temperature" -> T` | BasinHopping | Metropolis temperature (scipy's `T`, default 1.0): a hop that raises the quenched energy by `ΔE` is accepted with probability `Exp[-ΔE/T]`. A positive real, else warns (`NMinimize::sopt`) and keeps 1.0 |
+| `"StepSize" -> s` | BasinHopping | initial random-displacement half-width — each coordinate is perturbed by a uniform draw in `[-s, s]` (scipy's `stepsize`, default 0.5). A positive real, else warns (`NMinimize::sopt`) and keeps 0.5 |
+| `"StepInterval" -> k` | BasinHopping | hops between step-size adaptations (scipy's `interval`, default 50); a positive integer, or `Automatic`/`None` for the default; else warns (`NMinimize::sopt`) |
+| `"TargetAcceptanceRate" -> r` | BasinHopping | the acceptance rate the step-size adaptation aims for (scipy's `target_accept_rate`, default 0.5): above it the step grows (escape a basin), below it the step shrinks. A real in `(0, 1)`, else warns (`NMinimize::sopt`) |
+| `"StepFactor" -> a` | BasinHopping | multiplicative step-size adjustment factor (scipy's `stepwise_factor`, default 0.9): the step is divided by `a` to grow or multiplied by `a` to shrink. A real in `(0, 1)`, else warns (`NMinimize::sopt`) |
+| `"SuccessIterations" -> m` | BasinHopping | stop a run once the global best has not improved for `m` consecutive hops (scipy's `niter_success`); a positive integer enables it, `Automatic`/`None` disable it (the default); else warns (`NMinimize::sopt`) |
 | `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6); a real in `(0, 2]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
 | `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9); a real in `[0, 1]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
 | `"PerturbationScale" -> s` | SimulatedAnnealing | multiplies the trial-step size (default 1.0); a positive real, an invalid value warns (`NMinimize::sopt`) and falls back to 1.0 |
@@ -2301,6 +2308,84 @@ small-integer problems `Method -> "DIRECT"` solves but `scipy.optimize.direct`
 that are beyond DIRECT in either system.
 
 [direct]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.direct.html
+
+#### BasinHopping — Monte-Carlo minimization
+
+`Method -> {"BasinHopping", …}` mirrors [`scipy.optimize.basinhopping`][basinhopping],
+the Monte-Carlo minimization of Wales & Doye (*Global optimization by basin-hopping
+and the lowest energy structures of Lennard-Jones clusters*, J. Phys. Chem. A 101
+(1997) 5111–5116). Each **hop** is a random displacement of the current point
+followed by a full **local minimization** (the "quench"), and the Metropolis
+accept/reject compares the two *locally-minimized* energies rather than the raw
+objective — so the walk moves on the coarse-grained landscape of basin floors
+instead of the rugged surface, which is what makes it strong on funnel-shaped
+multimodal problems. One step:
+
+1. Perturb: `x_trial = x_cur + Uniform(-s, s)` per coordinate (step size `s` =
+   `"StepSize"`, default 0.5), clipped to the box.
+2. Quench: locally minimize `x_trial` to `(f, violation)`.
+3. Accept by a **Metropolis rule** on the penalized energy with temperature `T` =
+   `"Temperature"` (default 1): always downhill, else with probability
+   `Exp[-ΔE/T]`.
+4. Every `"StepInterval"` hops (default 50), **adapt the step size** toward
+   `"TargetAcceptanceRate"` (default 0.5): if the running acceptance rate is too
+   high the step grows (`s /= "StepFactor"`, default 0.9 — escape a basin), else it
+   shrinks.
+
+The lowest quenched point ever seen (by Deb's feasibility rules) is reported.
+`"SearchPoints" -> K` runs `K` independent multi-start hops and keeps the Deb-best
+(default `1`, matching scipy's single run); `MaxIterations` is the hop count
+(default 100 = scipy's `niter`); `"SuccessIterations" -> m` stops a run once the
+best stalls for `m` hops (scipy's `niter_success`). The quench reuses the same exact
+local optimizer as the other engines (BFGS for continuous/box problems, the
+augmented-Lagrangian penalty solver for general constraints, integer descent for
+`Element[·, Integers]`), so box, general constraints, and mixed-integer domains all
+work with no Basin-Hopping-specific code. Requires a bounded box; unbounded
+coordinates use the default `±10` region. The walk is deterministic for a fixed
+`"RandomSeed"`.
+
+> **Fidelity note.** The perturbation, the adaptive step size, and the Metropolis
+> rule reproduce scipy's algorithm exactly. The one deliberate difference is the
+> quench: where scipy calls L-BFGS-B, Mathilda reuses its own BFGS /
+> augmented-Lagrangian / integer-descent polish. Because that polish is a
+> well-behaved *local* minimizer — it does not overshoot across a basin boundary on
+> its first step, as L-BFGS-B sometimes does — a single Mathilda run crosses
+> widely-separated basins only through the random displacement, so on genuinely
+> multi-basin problems it is more seed-sensitive than scipy's single run
+> (increasing `MaxIterations` does not help; use `"SearchPoints" -> K` for
+> robustness). Conversely, unlike `scipy.optimize.basinhopping` (which is box-only),
+> Mathilda's quench handles inequality, equality, disjunctive, and integer
+> constraints, and on some funnel landscapes (e.g. Rastrigin) the adaptive-step walk
+> reaches the global where scipy's single run stalls in a ring minimum. See
+> `benchmarks/85-basin-hopping`.
+
+```mathematica
+(* Rastrigin — the adaptive-step hops walk in toward the origin global *)
+NMinimize[{20 + x^2 - 10 Cos[2 Pi x] + y^2 - 10 Cos[2 Pi y],
+           -5.12 <= x <= 5.12 && -5.12 <= y <= 5.12}, {x, y},
+          Method -> {"BasinHopping"}]
+(* -> {0., {x -> 0., y -> 0.}} *)
+
+(* Multi-basin Styblinski-Tang — multi-start makes the conservative quench robust *)
+NMinimize[{(x^4 - 16 x^2 + 5 x + y^4 - 16 y^2 + 5 y)/2, -5 <= x <= 5 && -5 <= y <= 5},
+          {x, y}, Method -> {"BasinHopping", "SearchPoints" -> 6}]
+(* -> {-78.3320, {x -> -2.90353, y -> -2.90353}} *)
+
+(* Constrained — the quench's augmented-Lagrangian polish handles x + 2 y >= 4
+   (scipy.optimize.basinhopping cannot take constraints) *)
+NMinimize[{x^2 + y^2, x + 2 y >= 4 && -5 <= x <= 5 && -5 <= y <= 5}, {x, y},
+          Method -> {"BasinHopping"}]
+(* -> {3.2, {x -> 0.8, y -> 1.6}} *)
+```
+
+Against `scipy.optimize.basinhopping` on eight standard bounded multimodal
+benchmarks (`benchmarks/85-basin-hopping`, scipy's default parameters and a matched
+seed on both sides), Mathilda reaches the identical global on every case (0
+CHECK-FAIL) and is **faster per solve** — both do ~100 local minimizations, but
+Mathilda's machine-precision objective is auto-compiled to bytecode where scipy
+calls back into Python for every evaluation.
+
+[basinhopping]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.basinhopping.html
 
 ### Options
 

@@ -74,6 +74,12 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     nc.direct_len_tol = -1.0;
     nc.direct_fmin = -HUGE_VAL;
     nc.direct_fmin_rtol = -1.0;
+    nc.bh_temp = NM_BH_TEMP;
+    nc.bh_step = NM_BH_STEP;
+    nc.bh_interval = NM_BH_INTERVAL;
+    nc.bh_target_accept = NM_BH_TARGET_ACCEPT;
+    nc.bh_step_factor = NM_BH_STEP_FACTOR;
+    nc.bh_niter_success = 0;
     nc.seed = NM_DEFAULT_SEED;
 
     for (size_t i = pos_end; i < argc; i++) {
@@ -421,6 +427,7 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
             case NM_SHGO:         nm_shgo(&D, &nc, &rng, xattempt, &fa, &pa); break;
             case NM_DUAL_ANNEALING: nm_dual_annealing(&D, &nc, &rng, xattempt, &fa, &pa); break;
             case NM_DIRECT:       nm_direct(&D, &nc, &rng, xattempt, &fa, &pa); break;
+            case NM_BASIN_HOPPING: nm_basin_hopping(&D, &nc, &rng, xattempt, &fa, &pa); break;
             case NM_DE:
             default:              nm_de(&D, &nc, &rng, xattempt, &fa, &pa); break;
         }

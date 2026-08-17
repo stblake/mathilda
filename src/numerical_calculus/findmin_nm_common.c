@@ -765,6 +765,7 @@ static bool nm_method_from_string(const char* s, int* out) {
     if (strcmp(s, "SHGO") == 0)                  { *out = NM_SHGO;         return true; }
     if (strcmp(s, "DualAnnealing") == 0)         { *out = NM_DUAL_ANNEALING; return true; }
     if (strcmp(s, "DIRECT") == 0)                { *out = NM_DIRECT;       return true; }
+    if (strcmp(s, "BasinHopping") == 0)          { *out = NM_BASIN_HOPPING; return true; }
     return false;
 }
 
@@ -785,6 +786,7 @@ static const char* nm_method_name(int m) {
         case NM_SHGO:           return "SHGO";
         case NM_DUAL_ANNEALING: return "DualAnnealing";
         case NM_DIRECT:         return "DIRECT";
+        case NM_BASIN_HOPPING:  return "BasinHopping";
         default:                return "Automatic";
     }
 }
@@ -828,6 +830,10 @@ static unsigned nm_option_owner(const char* on) {
         strcmp(on, "VolumeTolerance") == 0 || strcmp(on, "LengthTolerance") == 0 ||
         strcmp(on, "MinValue") == 0 || strcmp(on, "MinValueTolerance") == 0)
         return 1u << NM_DIRECT;
+    if (strcmp(on, "Temperature") == 0 || strcmp(on, "StepSize") == 0 ||
+        strcmp(on, "StepInterval") == 0 || strcmp(on, "TargetAcceptanceRate") == 0 ||
+        strcmp(on, "StepFactor") == 0 || strcmp(on, "SuccessIterations") == 0)
+        return 1u << NM_BASIN_HOPPING;
     return 0u;   /* not a known NMinimize Method sub-option */
 }
 
@@ -1196,6 +1202,71 @@ static bool nm_parse_method(Expr* rhs, NmConfig* nc, const char* fn) {
                 else
                     fm_warn(fn, "sopt",
                             "MinValueTolerance must be a real in [0, 1); using 1*^-4");
+            } else if (strcmp(on, "Temperature") == 0) {
+                /* BasinHopping: T, the Metropolis temperature (scipy's `T`). A
+                 * positive real; else warn and keep 1.0. */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0)
+                    nc->bh_temp = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "Temperature must be a positive real; using 1.0");
+            } else if (strcmp(on, "StepSize") == 0) {
+                /* BasinHopping: the initial random-displacement half-width
+                 * (scipy's `stepsize`). A positive real; else warn and keep 0.5. */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0)
+                    nc->bh_step = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "StepSize must be a positive real; using 0.5");
+            } else if (strcmp(on, "StepInterval") == 0) {
+                /* BasinHopping: hops between step-size adaptations (scipy's
+                 * `interval`). A positive integer; Automatic / None -> 50. */
+                if (ov->type == EXPR_INTEGER && ov->data.integer > 0
+                    && ov->data.integer <= 2000000000LL)
+                    nc->bh_interval = (int)ov->data.integer;
+                else if (ov->type == EXPR_SYMBOL
+                         && (ov->data.symbol.name == SYM_Automatic
+                             || ov->data.symbol.name == SYM_None))
+                    nc->bh_interval = NM_BH_INTERVAL;
+                else
+                    fm_warn(fn, "sopt",
+                            "StepInterval must be a positive integer; using 50");
+            } else if (strcmp(on, "TargetAcceptanceRate") == 0) {
+                /* BasinHopping: the acceptance rate the step-size adaptation aims
+                 * for (scipy's `target_accept_rate`). A real in (0, 1); else warn
+                 * and keep 0.5. */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0 && dv < 1.0)
+                    nc->bh_target_accept = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "TargetAcceptanceRate must be a real in (0, 1); using 0.5");
+            } else if (strcmp(on, "StepFactor") == 0) {
+                /* BasinHopping: the multiplicative step-size adjustment factor
+                 * (scipy's `stepwise_factor`). A real in (0, 1); else warn and
+                 * keep 0.9. */
+                double dv;
+                if (fm_expr_to_double_real(ov, &dv) && isfinite(dv) && dv > 0.0 && dv < 1.0)
+                    nc->bh_step_factor = dv;
+                else
+                    fm_warn(fn, "sopt",
+                            "StepFactor must be a real in (0, 1); using 0.9");
+            } else if (strcmp(on, "SuccessIterations") == 0) {
+                /* BasinHopping: stop a run once the global best has not improved
+                 * for this many consecutive hops (scipy's `niter_success`). A
+                 * positive integer enables it; Automatic / None disable it. */
+                if (ov->type == EXPR_INTEGER && ov->data.integer > 0
+                    && ov->data.integer <= 2000000000LL)
+                    nc->bh_niter_success = (int)ov->data.integer;
+                else if (ov->type == EXPR_SYMBOL
+                         && (ov->data.symbol.name == SYM_Automatic
+                             || ov->data.symbol.name == SYM_None))
+                    nc->bh_niter_success = 0;
+                else
+                    fm_warn(fn, "sopt",
+                            "SuccessIterations must be a positive integer; using Automatic");
             }
         }
         return true;

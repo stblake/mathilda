@@ -203,7 +203,7 @@ typedef bool (*FmSubSolver)(const FmQuad* q, const double* g, double gnorm,
                             double Delta, double* p, bool* hits);
 
 enum { NM_AUTO = 0, NM_DE, NM_NELDERMEAD, NM_RANDOMSEARCH, NM_SA, NM_SHGO,
-       NM_DUAL_ANNEALING, NM_DIRECT };
+       NM_DUAL_ANNEALING, NM_DIRECT, NM_BASIN_HOPPING };
 
 typedef struct {
     int      method;         /* NM_AUTO / NM_DE / ...                        */
@@ -238,6 +238,14 @@ typedef struct {
     double   direct_len_tol; /* "LengthTolerance"; <0 ⇒ 1e-6                         */
     double   direct_fmin;    /* "MinValue": known global minimum; -inf ⇒ inactive   */
     double   direct_fmin_rtol;/* "MinValueTolerance": rel. tol vs MinValue; <0 ⇒ 1e-4 */
+    /* Basin Hopping, mirroring scipy.optimize.basinhopping. Sentinels:
+     * <=0 / <0 ⇒ take the scipy default (see NM_BH_* macros / nm_basin_hopping). */
+    double   bh_temp;        /* "Temperature" (scipy T); <=0 ⇒ default 1.0          */
+    double   bh_step;        /* "StepSize" (scipy stepsize); <=0 ⇒ default 0.5      */
+    int      bh_interval;    /* "StepInterval" (scipy interval); <=0 ⇒ default 50   */
+    double   bh_target_accept;/* "TargetAcceptanceRate" (scipy target_accept_rate); <0 ⇒ 0.5 */
+    double   bh_step_factor; /* "StepFactor" (scipy stepwise_factor); <0 ⇒ 0.9      */
+    int      bh_niter_success;/* "SuccessIterations" (scipy niter_success); <=0 ⇒ off */
     uint64_t seed;
 } NmConfig;
 
@@ -466,6 +474,41 @@ typedef struct {
 #define NM_DIRECT_VOLTOL     1.0e-16   /* stop when incumbent cell volume < this  */
 #define NM_DIRECT_LENTOL     1.0e-6    /* stop when incumbent cell half-side < this*/
 #define NM_DIRECT_FMINRTOL   1.0e-4    /* rel. tol for the MinValue early stop     */
+
+/* ============================================================================
+ *  Basin Hopping — Monte-Carlo minimization (Wales & Doye, J. Phys. Chem. A 101
+ *  (1997) 5111-5116), mirroring scipy.optimize.basinhopping.
+ *
+ *  Each hop is a random displacement of the current point followed by a full
+ *  LOCAL MINIMIZATION (the "quench"); the Metropolis accept/reject then compares
+ *  the two LOCALLY-MINIMIZED energies rather than the raw objective, so the walk
+ *  moves on the coarse-grained landscape of basin floors instead of the rugged
+ *  surface — the feature that makes it strong on funnel-shaped multimodal
+ *  problems. One step:
+ *    1. x_trial = clip(x_cur + Uniform(-stepsize, stepsize)^n)  into the box.
+ *    2. quench: nm_local_polish(x_trial) -> (f, pen).
+ *    3. accept iff exp(min(0, -(E_trial - E_cur)/T)) >= rand  (generalized
+ *       Metropolis on the penalized energy E = f + MU*pen).
+ *    4. every "StepInterval" steps, ADAPT the step size toward a target accept
+ *       rate: rate > target => stepsize /= factor (bigger steps, escape a basin),
+ *       else stepsize *= factor (smaller steps).
+ *  The lowest quenched point ever seen (by Deb's rules, nm_better) is reported,
+ *  so box + general + integer constraints work through the shared nm_local_polish
+ *  with no Basin-Hopping-specific code. "SearchPoints" -> K runs K independent
+ *  multi-start hops and keeps the Deb-best (default 1, scipy's single run);
+ *  MaxIterations is the hop count (default 100 == scipy niter). The one
+ *  deliberate difference from scipy is the local minimizer: Mathilda's
+ *  BFGS / augmented-Lagrangian / integer-descent polish, not L-BFGS-B/SLSQP.
+ * ========================================================================== */
+
+/* Basin Hopping defaults, matching scipy.optimize.basinhopping. See
+ * nm_basin_hopping. */
+#define NM_BH_TEMP           1.0       /* T:  Metropolis temperature (scipy T)      */
+#define NM_BH_STEP           0.5       /* stepsize: initial displacement half-width */
+#define NM_BH_INTERVAL       50        /* interval: steps between step-size updates */
+#define NM_BH_TARGET_ACCEPT  0.5       /* target acceptance rate for the adaptation */
+#define NM_BH_STEP_FACTOR    0.9       /* multiplicative step-size adjustment factor*/
+#define NM_BH_NITER          100       /* default hop count (== scipy niter)        */
 
 /* ===== file-static global registries (defined in findmin_common.c) ===== */
 extern bool g_fm_quiet;
@@ -733,6 +776,8 @@ void nm_shgo(NmDriver* D, const NmConfig* nc, NmRng* rng,
                     double* xbest, double* fbest, double* penbest);
 void nm_direct(NmDriver* D, const NmConfig* nc, NmRng* rng,
                       double* xbest, double* fbest, double* penbest);
+void nm_basin_hopping(NmDriver* D, const NmConfig* nc, NmRng* rng,
+                             double* xbest, double* fbest, double* penbest);
 bool nm_apply_option(Expr* rule, FmOpts* opts, NmConfig* nc, const char* fn);
 void nm_varset_free(NmVarSet* vs);
 bool nm_parse_vars(Expr* var_arg, NmVarSet* vs, const char* fn);

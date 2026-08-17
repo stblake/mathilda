@@ -682,6 +682,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/nm_dual_annealing.c
     ../src/numerical_calculus/nm_shgo.c
     ../src/numerical_calculus/nm_direct.c
+    ../src/numerical_calculus/nm_basin_hopping.c
     ../src/numerical_calculus/nm_driver.c
     ../src/poly/solvepoly.c
     ../src/solvelinsys.c
@@ -1342,6 +1343,11 @@ target_include_directories(dual_annealing_tests PRIVATE ../src)
 # binary directly, no add_test registration).
 add_executable(direct_tests test_direct.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(direct_tests PRIVATE ../src)
+
+# BasinHopping (Monte-Carlo minimization) method of NMinimize (same convention —
+# run the binary directly, no add_test registration).
+add_executable(basin_hopping_tests test_basin_hopping.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(basin_hopping_tests PRIVATE ../src)
 
 # L-BFGS-B method of FindMinimum (run the binary directly, matching the
 # findmin_tests / nminimize_tests convention — no add_test registration).

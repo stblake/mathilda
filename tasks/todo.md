@@ -1,55 +1,68 @@
-# L-BFGS-B for FindMinimum — implementation todo
+# Task: Add Basin Hopping to NMinimize
 
-Plan: `/Users/user/.claude/plans/let-s-compare-the-existing-harmonic-jellyfish.md`
-Branch: `feat/lbfgsb-findminimum`
+Add `Method -> {"BasinHopping", ...}` as a global engine to NMinimize/NMaximize,
+mirroring `scipy.optimize.basinhopping` (Wales & Doye, Monte-Carlo minimization):
+random-displacement hop → local minimization (quench) → Metropolis accept on the
+minimized energies, with an adaptive step size targeting a fixed acceptance rate.
+Reuse the existing `NmDriver` machinery (`nm_eval`, `nm_local_polish`, `nm_better`,
+`nm_project`) so box/general/integer constraints work with no engine-specific code —
+exactly the pattern of DualAnnealing/SHGO/DIRECT.
 
-## Design deviations from plan (all verified, documented here)
-- Bound handling: ACTIVE-SET projection (not the exact BLNZ generalized-Cauchy-
-  point/subspace-min). Reaches the same optima; the bound-active discriminating
-  case (Rosenbrock on x<=0.5 -> {0.25, x->0.5, y->0.25}) is EXACT. GCP left as a
-  future refinement.
-- Line search: robust strong-Wolfe with expansion + best-point fallback (tries
-  alpha=1 first; the shared fm_line_search's 1/||d|| cap throttled L-BFGS).
-- Convergence: projected-gradient inf-norm + machine-noise relative-f stall
-  (removed the single-step displacement test, which pre-empted convergence on
-  narrow valleys).
-- Indexed vars: NOT added to FindMinimum. Large-n cases use programmatic scalar
-  symbols Symbol["z"<>ToString[i]] (no driver surgery).
-- Extended Rosenbrock is multimodal for n>=4 -> large-n scaling uses the
-  UNIMODAL ill-conditioned quadratic instead (method-independent optimum).
+## Algorithm (scipy fidelity)
+- `niter` (top-level `MaxIterations`, default 100 == scipy niter) basin-hopping steps.
+- `T` = "Temperature" (default 1.0): Metropolis `accept iff exp(min(0,-(Eₙ-Eₒ)/T)) >= rand`.
+- `stepsize` = "StepSize" (default 0.5): uniform per-coord displacement in [-s, s].
+- Adaptive step: every "StepInterval" (50) steps, if accept-rate > "TargetAcceptanceRate"
+  (0.5) then `s /= "StepFactor"` (0.9, grows), else `s *= factor` (shrinks).
+- Optional "SuccessIterations" early stop (scipy niter_success), default off.
+- "SearchPoints" -> K = K independent multi-start runs, keep the Deb-best (default 1).
+- Penalized energy `E = f + MU*pen` for Metropolis; `nm_better` for the reported best.
+- The local minimizer is Mathilda's `nm_local_polish` (the one deliberate scipy diff).
 
-## M1 core — DONE
-- [x] Enum, parse strings, needs_grad, driver dispatch, fm_run_penalty case, MPFR nimpl fallback
-- [x] fm_run_lbfgsb: two-loop + curvature-skip + active-set + robust Wolfe
-- [x] All scalar/large-n/bound/general cases converge (verified)
+## Plan
+- [x] 1. `findmin_internal.h`: enum `NM_BASIN_HOPPING`; NmConfig `bh_*` fields;
+        `NM_BH_*` constants; `nm_basin_hopping` prototype; doc-comment block.
+- [x] 2. New engine `src/numerical_calculus/nm_basin_hopping.c`.
+- [x] 3. `nm_driver.c`: init `nc.bh_*`; add `case NM_BASIN_HOPPING` to dispatch.
+- [x] 4. `findmin_nm_common.c`: method name in/out; `nm_option_owner`; parse blocks.
+- [x] 5. `src/info.c`: NMinimize docstring — BasinHopping method + sub-options.
+- [x] 6. `docs/spec/builtins/numerical-calculus.md`: method table rows + subsection.
+- [x] 7. `docs/spec/changelog/2026-08-17.md`: changelog entry.
+- [x] 8. `src/version.h`: bump to 0.060.
+- [x] 9. `tests/CMakeLists.txt`: add nm_basin_hopping.c to COMMON_SRC + a test exe.
+- [x] 10. `tests/test_basin_hopping.c`: 32 tests — ALL PASS, 0 leaks.
+- [x] 11. `benchmarks/85-basin-hopping/`: `.m`/`.py` pair + README (8/8 AHEAD, 0 CHECK-FAIL).
+- [x] 12. Build clean (make + check-c99); tests pass; benchmark run; 0 leaks.
 
-## M2 (true GCP) — DEFERRED (active-set variant reaches same optima)
+## Review
+DONE. `Method -> {"BasinHopping", ...}` added to NMinimize/NMaximize.
+- Engine: `src/numerical_calculus/nm_basin_hopping.c` — faithful scipy.basinhopping
+  (perturb → quench → adaptive-step Metropolis), reuses shared NmDriver so
+  box/general/disjunctive/integer constraints work with no BH-specific code.
+- 6 sub-options (Temperature/StepSize/StepInterval/TargetAcceptanceRate/StepFactor/
+  SuccessIterations) + generic SearchPoints/RandomSeed/PostProcess/PenaltyFunction,
+  per-method scoped via nm_option_owner. MaxIterations (top-level) = hop count.
+- Tests: 32/32 pass, 0 leaks. Siblings (nminimize/DA/SHGO/DIRECT/findmin_methods)
+  all still pass. check-c99 clean.
+- Benchmark 85: 8/8 AHEAD vs scipy, 0 CHECK-FAIL, ~100×–650× faster (compiled obj).
+- Docs: docstring + numerical-calculus.md (method/sub-option tables + subsection with
+  fidelity note) + changelog + version 0.060.
+- Honest limitation documented: single-run BH is seed-sensitive on widely-separated
+  multi-basin problems because Mathilda's quench (correctly) does not overshoot
+  basins the way scipy's L-BFGS-B does; recommend SearchPoints. Conversely BH beats
+  scipy's stalled single run on Rastrigin, and solves constrained/integer scipy can't.
 
-## Tests — DONE
-- [x] tests/test_lbfgsb.c (26 tests, 7 groups) — ALL GREEN
-- [x] Registered in tests/CMakeLists.txt
-- [x] findmin/nminimize no regression
+## Key finding (design)
+Basin hopping's escape from a local basin depends on the local minimizer. scipy's
+L-BFGS-B overshoots across a basin boundary on its aggressive first step; Mathilda's
+nm_local_polish is a well-behaved local minimizer that stays in-basin — so Mathilda's
+single-run BH crosses basins only via the random displacement, making it more
+seed-sensitive on widely-separated multi-basin problems (quartic, Styblinski-Tang).
+Increasing niter does NOT help (the walk is stuck); SearchPoints (multi-start) does.
+This is the documented "one deliberate difference: the local minimizer" — algorithm
+is byte-for-byte faithful to scipy. Tests use SearchPoints for the multi-basin cases;
+benchmark uses the 8 functions both nail at seed 1 (Rastrigin & multi-basin go in the
+README regime analysis: Mathilda WINS Rastrigin, scipy wins quartic/StybTang).
 
-## Benchmark — DONE
-- [x] benchmarks/64-lbfgsb-scaling/lbfgsb_scaling.{m,py} (10 cases)
-- [x] Ran exp 64 vs scipy: CHECK-FAIL=0, INCOMPLETE=0; AHEAD 6 / SLOWER 4
-- GOTCHA fixed: build objectives with Total[Table[...]] NOT Sum[...] — Sum
-  attempts a closed form with a symbolic iterator (Symbol["z"<>ToString[i]]
-  collapses to one concrete symbol -> geometric series) and burns the whole
-  budget. Tests dodge it via v[[i]] (Part blocks the closed-form attempt).
-- FINDINGS (honest, informative):
-  * Within Mathilda: LBFGSB 402ms vs QuasiNewton 1650ms at n=1000 (4x — the
-    scalability win); QN n=50->1000 grows 609x vs LBFGSB 128x.
-  * Mathilda QuasiNewton BEATS scipy BFGS at n=1000 (1.65s vs 7.38s, 0.22x).
-  * Mathilda LBFGSB SLOWER than scipy L-BFGS-B at large n (402 vs 12ms, 33x):
-    the O(mn) solve is cheap, so per-solve COMPILE setup (objective+gradient to
-    bytecode) dominates — same as bench63 A6/A7. Gradient-> barely helps
-    (0.398->0.367s), confirming compile, not symbolic-diff, is the cost.
-
-## Docs & verify — DONE
-- [x] src/info.c docstring (LBFGSB method + aliases)
-- [x] docs/spec/builtins/numerical-calculus.md + docs/spec/changelog/2026-08-10.md
-- [x] make check-c99 PASS; valgrind clean (all lost = macOS runtime baseline noise)
-
-## STATUS: COMPLETE. All suites green, no regression, C99-clean, valgrind-clean.
-Not committed (awaiting user). M2 (exact GCP) deferred as documented follow-up.
+## Review
+(to be filled in on completion)
