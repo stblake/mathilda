@@ -118,6 +118,17 @@
   {"I-cubic-shift",     {(x + 1)^3 == y, y == x + 1},           {x, y}, Automatic, 3, "[D6] u=x+1: u^3=u -> x=-1,0,-2"},
   {"I-expanded-pin",    {x^2 + y^2 == 25, x - y == 1},          {x, y}, Automatic, 2, "regression pin: expanded form always worked"},
 
+  (* ===== J. Rational-function systems (denominator clearing) ===== *)
+  (* [D7] solvenlsys now puts each equation over a common denominator
+   * (Together), solves Numerator == 0, and prunes any tuple on a non-constant
+   * denominator's zero locus.  Unevaluated before the denominator-clearing
+   * pass; correct after.  (Together cancels removable factors, matching
+   * Solve's treatment of (x^2-1)/(x-1) as x+1.) *)
+  {"J-reciprocal-sum",  {1/x + 1/y == 1, x + y == 4},          {x, y}, Automatic, 1, "[D7] xy=4 & x+y=4 -> {2,2}"},
+  {"J-denom-prune",     {(x - y)/(x + y - 2) == 0, x y == 1},  {x, y}, Automatic, 1, "[D7] {1,1} zeroes x+y-2 -> pruned; only {-1,-1}"},
+  {"J-all-denom-zero",  {1/(x - 1) == 1/(y - 1), x + y == 2},  {x, y}, Automatic, 0, "[D7] sole candidate x=y=1 is a pole -> {}"},
+  {"J-const-denom-pin", {x/2 + y == 2, x - y == 1},            {x, y}, Automatic, 1, "constant denom (rational coeff) -> {2,1}; pin"},
+
   (* ===== M. System regression pins (already correct; guard against drift) ===== *)
   {"M-cyclic3",         {x + y + z == 0, x y + y z + z x == -1, x y z == 0}, {x, y, z}, Automatic, 6, "six permutations of {-1,0,1}"},
   {"M-overdet-consist", {x^2 + y^2 == 1, x == 0, y == 1},       {x, y}, Automatic, 1, "overdetermined, consistent -> {0,1}"},

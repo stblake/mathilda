@@ -470,14 +470,24 @@ its context-qualified name.
 - `Protected`.
 - `eqns` may be a single `Equal[lhs, rhs]`, `And[Equal[...], ...]`, or
   `List[Equal[...], ...]`.  `vars` must be a `List` of distinct symbols.
-- Each equation is canonicalised to `lhs - rhs` and then **`Expand`-ed**, so
-  products and powers of sums (`(x - 1)^2 + y^2 == 1`, `(x + y)(x - y) == 0`)
-  distribute to a sum of monomials before Gröbner conversion — the GBPoly
-  single-term parser cannot ingest `Power[Plus, k]` / `Times[Plus, ...]`
-  directly.  Every residual must then be a polynomial over Q in `vars` (a
-  transcendental head, a radical / non-integer power, or a foreign symbol makes
-  the specialist decline -> `NULL`).  The numeric analogue `NSolve` expands
-  identically.
+- Each equation `lhs == rhs` is put over a common denominator (`Together`); the
+  **`Numerator`** is taken as the polynomial equation and a non-constant
+  **`Denominator`** is recorded so denominators clear for rational systems
+  (`1/x + 1/y == 1`).  The numerator is then **`Expand`-ed**, so products and
+  powers of sums (`(x - 1)^2 + y^2 == 1`, `(x + y)(x - y) == 0`) distribute to a
+  sum of monomials before Gröbner conversion — the GBPoly single-term parser
+  cannot ingest `Power[Plus, k]` / `Times[Plus, ...]` directly.  Every numerator
+  must then be a polynomial over Q in `vars` (a transcendental head, a radical /
+  non-integer power, or a foreign symbol makes the specialist decline -> `NULL`).
+  The numeric analogue `NSolve` expands identically.  For a pure polynomial the
+  denominator is `1` and this reduces to `Expand[lhs - rhs]`.
+- **Spurious-root pruning:** a completed tuple that drives any recorded
+  denominator provably to zero is dropped (a den-zero point is a spurious root
+  introduced by clearing).  `{(x - y)/(x + y - 2) == 0, x y == 1}` returns only
+  `{{x -> -1, y -> -1}}` — the `{1, 1}` candidate zeroes `x + y - 2`;
+  `{1/(x - 1) == 1/(y - 1), x + y == 2}` returns `{}` (its only candidate is a
+  pole).  `Together` cancels removable factors, so `(x^2 - 1)/(x - 1)` is treated
+  as `x + 1`.
 - A lexicographic Gröbner basis is computed via the Gröbner walk
   (`gb_groebner_walk`).  For a zero-dimensional ideal this basis is
   triangular: the univariate generator in the last variable is solved with

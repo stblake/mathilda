@@ -144,7 +144,9 @@ static void warn_nsdim(uint64_t input_hash) {
  * ------------------------------------------------------------------ */
 
 typedef struct {
-    Expr** orig; int norig;        /* original poly_i (= lhs - rhs), borrowed */
+    Expr** orig; int norig;        /* numerator poly_i (= Numerator[lhs-rhs]) */
+    Expr** dens;                   /* parallel to orig; non-constant denominator
+                                    * or NULL (constant).  Borrowed.          */
     Expr** gb;   int ngb;          /* lex GB generators as Exprs, borrowed    */
     Expr** vars; int nvar;         /* variable symbols, borrowed              */
     Expr*  dom;                    /* borrowed; forwarded to solvepoly        */
@@ -167,6 +169,24 @@ static bool verify_tuple(NlCtx* c, Expr* assigned) {
         ZeroTestResult z = zero_test_decide(sub);
         expr_free(sub);
         if (z == ZERO_TEST_FALSE) return false;
+    }
+    return true;
+}
+
+/* True iff no cleared denominator vanishes at this tuple.  A rational
+ * equation lhs == rhs was reduced to Numerator == 0; a candidate that also
+ * zeroes a denominator is a spurious root introduced by that reduction and
+ * must be pruned.  Reject only on a PROVABLY zero denominator (favour recall:
+ * an undecidable denominator keeps the tuple, matching verify_tuple). */
+static bool tuple_denominators_ok(NlCtx* c, Expr* assigned) {
+    for (int i = 0; i < c->norig; i++) {
+        if (!c->dens[i]) continue;               /* constant denominator */
+        Expr* ra = expr_new_function(mk_sym("ReplaceAll"),
+                       (Expr*[]){ expr_copy(c->dens[i]), expr_copy(assigned) }, 2);
+        Expr* sub = eval_and_free(ra);
+        ZeroTestResult z = zero_test_decide(sub);
+        expr_free(sub);
+        if (z == ZERO_TEST_TRUE) return false;   /* denominator vanishes here */
     }
     return true;
 }
@@ -217,8 +237,9 @@ static void nl_rec(NlCtx* c, Expr* assigned, int depth) {
     if (c->nsol > NL_MAX_SOLS) { c->incomplete = true; return; }
 
     if (depth == c->nvar) {
-        if (!verify_tuple(c, assigned)) return;      /* spurious combination */
-        if (!tuple_in_domain(c, assigned)) return;   /* pruned by domain     */
+        if (!verify_tuple(c, assigned)) return;          /* spurious combination */
+        if (!tuple_denominators_ok(c, assigned)) return; /* cleared-denominator locus */
+        if (!tuple_in_domain(c, assigned)) return;       /* pruned by domain     */
         emit_tuple(c, assigned);
         return;
     }
@@ -346,9 +367,18 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
         else if (d != SYM_Complexes) return NULL;
     }
 
-    /* Canonicalise each equation to poly_i = lhs - rhs (kept for both
-     * GBPoly construction and final verification). */
+    /* Canonicalise each equation `lhs == rhs`.  We clear denominators so
+     * rational systems (1/x + 1/y == 1) become polynomial: put lhs - rhs over
+     * a common denominator (Together), take the Numerator as the polynomial
+     * equation, and record a non-constant Denominator so any completed tuple
+     * on its zero locus is pruned (a den-zero point is never a solution).
+     * The numerator is then Expand-ed so gb_from_expr's single-term parser can
+     * ingest products / powers of sums; the lex zero-dim check and the final
+     * verification both read orig[i], so all consumers see one canonical
+     * Plus-of-monomials form.  For a pure polynomial the denominator is 1
+     * (dens[i] == NULL) and this reduces to Expand[lhs - rhs]. */
     Expr** orig = (Expr**)malloc(sizeof(Expr*) * (size_t)m);
+    Expr** dens = (Expr**)calloc((size_t)m, sizeof(Expr*)); /* NULL = constant den */
     int norig = 0;
     for (int i = 0; i < m; i++) {
         Expr* eq = eq_arr[i];
@@ -356,20 +386,27 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
             || eq->data.function.head->type != EXPR_SYMBOL
             || eq->data.function.head->data.symbol.name != SYM_Equal
             || eq->data.function.arg_count != 2) {
-            for (int k = 0; k < norig; k++) expr_free(orig[k]);
-            free(orig);
+            for (int k = 0; k < norig; k++) { expr_free(orig[k]); if (dens[k]) expr_free(dens[k]); }
+            free(orig); free(dens);
             return NULL;
         }
         Expr* diff = mk_fn2("Plus",
             expr_copy(eq->data.function.args[0]),
             mk_neg(expr_copy(eq->data.function.args[1])));
-        /* Distribute products / powers of sums before conversion: the
-         * single-term parser in gb_from_expr cannot represent
-         * Power[Plus, k] / Times[Plus, ...], and the lex zero-dim check
-         * reads orig[i] directly, so both need the Plus-of-monomials shape.
-         * internal_expand consumes `diff`; eval_and_free fixes the result
-         * to a point (mirrors groebnerbasis.c's normalise_polynomial). */
-        orig[norig++] = eval_and_free(internal_expand((Expr*[]){ diff }, 1));
+        /* internal_* wrappers each consume their argument and return an owned,
+         * evaluated Expr. */
+        Expr* together = eval_and_free(internal_together((Expr*[]){ diff }, 1));
+        Expr* num = eval_and_free(
+            internal_numerator((Expr*[]){ expr_copy(together) }, 1));
+        Expr* den = eval_and_free(
+            internal_denominator((Expr*[]){ together }, 1)); /* consumes together */
+        orig[norig] = eval_and_free(internal_expand((Expr*[]){ num }, 1));
+        bool den_has_var = false;
+        for (int v = 0; v < n; v++)
+            if (contains_any_symbol_from(den, var_arr[v])) { den_has_var = true; break; }
+        if (den_has_var) dens[norig] = den;      /* prune its zero locus later */
+        else            { expr_free(den); dens[norig] = NULL; }
+        norig++;
     }
 
     /* Build the GBPoly system under lex order. */
@@ -383,16 +420,16 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
     if (!poly_ok) {
         for (int i = 0; i < nF; i++) gb_poly_free(F[i]);
         free(F);
-        for (int k = 0; k < norig; k++) expr_free(orig[k]);
-        free(orig);
+        for (int k = 0; k < norig; k++) { expr_free(orig[k]); if (dens[k]) expr_free(dens[k]); }
+        free(orig); free(dens);
         return NULL;                       /* non-polynomial -> unevaluated */
     }
 
     /* All equations trivially 0 == 0 -> tautology { {} }. */
     if (nF == 0) {
         free(F);
-        for (int k = 0; k < norig; k++) expr_free(orig[k]);
-        free(orig);
+        for (int k = 0; k < norig; k++) { expr_free(orig[k]); if (dens[k]) expr_free(dens[k]); }
+        free(orig); free(dens);
         Expr* empty = mk_list(NULL, 0);
         return mk_list((Expr*[]){ empty }, 1);
     }
@@ -402,8 +439,8 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
         if (gbpoly_total_degree(F[i]) > NL_MAX_TDEG) {
             for (int k = 0; k < nF; k++) gb_poly_free(F[k]);
             free(F);
-            for (int k = 0; k < norig; k++) expr_free(orig[k]);
-            free(orig);
+            for (int k = 0; k < norig; k++) { expr_free(orig[k]); if (dens[k]) expr_free(dens[k]); }
+            free(orig); free(dens);
             return NULL;
         }
     }
@@ -414,8 +451,8 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
     free(F);
     if (!G || nG == 0) {
         if (G) gb_basis_free(G, nG);
-        for (int k = 0; k < norig; k++) expr_free(orig[k]);
-        free(orig);
+        for (int k = 0; k < norig; k++) { expr_free(orig[k]); if (dens[k]) expr_free(dens[k]); }
+        free(orig); free(dens);
         return NULL;
     }
 
@@ -423,8 +460,8 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
     for (size_t i = 0; i < nG; i++) {
         if (gb_poly_is_constant(G[i]) && !gb_poly_is_zero(G[i])) {
             gb_basis_free(G, nG);
-            for (int k = 0; k < norig; k++) expr_free(orig[k]);
-            free(orig);
+            for (int k = 0; k < norig; k++) { expr_free(orig[k]); if (dens[k]) expr_free(dens[k]); }
+            free(orig); free(dens);
             return mk_list(NULL, 0);
         }
     }
@@ -447,8 +484,8 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
         if (!zerodim) {
             gb_basis_free(G, nG);
             warn_nsdim(expr_hash(equations));
-            for (int k = 0; k < norig; k++) expr_free(orig[k]);
-            free(orig);
+            for (int k = 0; k < norig; k++) { expr_free(orig[k]); if (dens[k]) expr_free(dens[k]); }
+            free(orig); free(dens);
             return NULL;
         }
     }
@@ -460,6 +497,7 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
 
     NlCtx c;
     c.orig = orig; c.norig = norig;
+    c.dens = dens;
     c.gb = gbE; c.ngb = (int)nG;
     c.vars = var_arr; c.nvar = n;
     c.dom = dom; c.reals_only = reals_only; c.integers_only = integers_only;
@@ -472,8 +510,8 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
 
     for (size_t i = 0; i < nG; i++) expr_free(gbE[i]);
     free(gbE);
-    for (int k = 0; k < norig; k++) expr_free(orig[k]);
-    free(orig);
+    for (int k = 0; k < norig; k++) { expr_free(orig[k]); if (dens[k]) expr_free(dens[k]); }
+    free(orig); free(dens);
 
     /* An incomplete search must never present itself as `{}`; leave Solve
      * unevaluated instead. */
