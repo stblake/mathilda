@@ -177,3 +177,18 @@ BQF.
       `HELDOUT_REPORT.md`. Status: OK 18 / DECLINE 2 / WRONG 0; detector verified
       to fail loud via a negative control. Guards all four Tier-1 features
       against regression.
+
+## Tier 2 — unified quadratics (roadmap in `SOLVE_INTEGERS.md`)
+
+- [x] **D / Δ<0 elliptic** — DONE. `si_solve_elliptic_bqf`: rotated/definite
+      binary quadratic solved as a quadratic-in-x per y over the finite y-range;
+      exhaustive → `{}` proof. Validated vs brute force `|.|≤200`;
+      `test_elliptic_bqf` (10) + 4 held-out (gate OK 22/DECLINE 2/WRONG 0).
+- [ ] **D / Δ=0 parabolic** — reduce `(√A x + √C y)²` + linear → residue-class
+      linear families.
+- [ ] **D / Δ>0 non-square hyperbolic with cross+linear terms** — complete the
+      square to Pell normal form `X²-ΔY²=N`, reuse `si_genpell_bases/_family`.
+- [ ] **E ternary quadratic / Legendre** — Hilbert-symbol solvability proof +
+      witness (Cremona–Rusin), self-contained (Jacobi symbols + LatticeReduce).
+- Tier 3 (Thue, elliptic integral points, CAD) + the number-field prerequisite:
+      see `SOLVE_INTEGERS.md` §6.

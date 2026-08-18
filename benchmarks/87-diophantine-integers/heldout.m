@@ -144,6 +144,70 @@ Module[{sol, status, tuples, sols, inbox},
     Print["SOLS\tdiff-of-squares-21\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
 Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, -6 <= pt[[1]] <= 6 && -6 <= pt[[2]] <= 6];
+  sol = Solve[x^2 + x y + y^2 == 7, {x, y}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tellipse-rotated-7\t", status];
+  If[status === "finite",
+    tuples = ({x, y} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tellipse-rotated-7\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
+    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tellipse-rotated-7\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, -6 <= pt[[1]] <= 6 && -6 <= pt[[2]] <= 6];
+  sol = Solve[3 x^2 + 2 x y + 3 y^2 == 24, {x, y}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tellipse-nonunit-24\t", status];
+  If[status === "finite",
+    tuples = ({x, y} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tellipse-nonunit-24\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
+    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tellipse-nonunit-24\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, -12 <= pt[[1]] <= 12 && -12 <= pt[[2]] <= 12];
+  sol = Solve[x^2 + x y + y^2 - 3 x == 7, {x, y}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tellipse-linear-empty\t", status];
+  If[status === "finite",
+    tuples = ({x, y} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tellipse-linear-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
+    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tellipse-linear-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, -20 <= pt[[1]] <= 20 && -20 <= pt[[2]] <= 20];
+  sol = Solve[5 x^2 + 6 x y + 5 y^2 == 8, {x, y}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tellipse-norep-empty\t", status];
+  If[status === "finite",
+    tuples = ({x, y} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tellipse-norep-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
+    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tellipse-norep-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
   inbox = Function[pt, 1 <= pt[[1]] <= 400 && 1 <= pt[[2]] <= 400];
   sol = Solve[x^2 - 2 y^2 == 7 && x > 0 && y > 0, {x, y}, Integers];
   status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",

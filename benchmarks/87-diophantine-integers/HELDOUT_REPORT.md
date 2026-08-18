@@ -5,7 +5,7 @@ from standard references and are **not** in `cases.py`; Mathilda is run
 cold and every answer is cross-checked against an independent brute-force
 oracle over the same box.
 
-**OK 18 &nbsp; DECLINE 2 &nbsp; WRONG 0** of 20.
+**OK 22 &nbsp; DECLINE 2 &nbsp; WRONG 0** of 24.
 
 - **OK** — the concrete answer (or proven `{}`) matches the oracle.
 - **DECLINE** — left unevaluated where that is acceptable (honest gap).
@@ -23,6 +23,10 @@ oracle over the same box.
 | `factorable-prod-15-empty` | empty | empty | OK | 0 | empty, oracle agrees |
 | `factorable-nonunit-7` | finite | finite | OK | 2 | 2 solutions match oracle |
 | `diff-of-squares-21` | finite | finite | OK | 8 | 8 solutions match oracle |
+| `ellipse-rotated-7` | finite | finite | OK | 12 | 12 solutions match oracle |
+| `ellipse-nonunit-24` | finite | finite | OK | 4 | 4 solutions match oracle |
+| `ellipse-linear-empty` | empty | empty | OK | 0 | empty, oracle agrees |
+| `ellipse-norep-empty` | empty | empty | OK | 0 | empty, oracle agrees |
 | `genpell-2-7` | param | param | OK | 6 | 6 solutions match oracle |
 | `genpell-5-4` | param | param | OK | 6 | 6 solutions match oracle |
 | `genpell-2-5-empty` | empty | empty | OK | 0 | empty, oracle agrees |

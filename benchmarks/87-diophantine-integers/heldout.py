@@ -144,6 +144,28 @@ CASES = [
          sat=lambda d: d["x"] ** 2 - d["y"] ** 2 == 21,
          kind="finite", source="difference of squares"),
 
+    # ---- definite binary quadratic / rotated ellipse (Tier-2 D, Delta<0) ---
+    dict(label="ellipse-rotated-7",
+         math="Solve[x^2 + x y + y^2 == 7, {x, y}, Integers]",
+         vars=["x", "y"], box={"x": (-6, 6), "y": (-6, 6)},
+         sat=lambda d: d["x"] ** 2 + d["x"] * d["y"] + d["y"] ** 2 == 7,
+         kind="finite", source="rotated ellipse, cross term, 12 points"),
+    dict(label="ellipse-nonunit-24",
+         math="Solve[3 x^2 + 2 x y + 3 y^2 == 24, {x, y}, Integers]",
+         vars=["x", "y"], box={"x": (-6, 6), "y": (-6, 6)},
+         sat=lambda d: 3 * d["x"] ** 2 + 2 * d["x"] * d["y"] + 3 * d["y"] ** 2 == 24,
+         kind="finite", source="non-unit rotated ellipse"),
+    dict(label="ellipse-linear-empty",
+         math="Solve[x^2 + x y + y^2 - 3 x == 7, {x, y}, Integers]",
+         vars=["x", "y"], box={"x": (-12, 12), "y": (-12, 12)},
+         sat=lambda d: d["x"] ** 2 + d["x"] * d["y"] + d["y"] ** 2 - 3 * d["x"] == 7,
+         kind="empty", source="definite form + linear terms, no solution -> {} proof"),
+    dict(label="ellipse-norep-empty",
+         math="Solve[5 x^2 + 6 x y + 5 y^2 == 8, {x, y}, Integers]",
+         vars=["x", "y"], box={"x": (-20, 20), "y": (-20, 20)},
+         sat=lambda d: 5 * d["x"] ** 2 + 6 * d["x"] * d["y"] + 5 * d["y"] ** 2 == 8,
+         kind="empty", source="8 not represented by the form -> {} proof"),
+
     # ---- generalised Pell (unbounded, positive orthant) --------------------
     dict(label="genpell-2-7",
          math="Solve[x^2 - 2 y^2 == 7 && x > 0 && y > 0, {x, y}, Integers]",

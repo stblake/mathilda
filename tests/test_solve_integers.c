@@ -468,6 +468,36 @@ static void test_generalized_pell(void) {
     run_test("Head[Solve[x^2 - 2 y^2 == 7, {x, y}, Integers]]", "Solve");
 }
 
+/* Definite binary quadratic (ellipse): a 2-variable degree-2 equation with a
+ * negative discriminant B^2 - 4 A C < 0 is a compact conic with finitely many
+ * integer points -- but a ROTATED one (cross term) is not bounded by the
+ * interval bounder.  `si_solve_elliptic_bqf` treats it as a quadratic in x per
+ * fixed y over the finite y-interval where an x is real, exhaustively, so `{}`
+ * is a proof.  All counts below were checked against brute force over |.|<=200. */
+static void test_elliptic_bqf(void) {
+    /* Rotated ellipse x^2 + x y + y^2 == 3: six points. */
+    run_test("Solve[x^2 + x y + y^2 == 3, {x, y}, Integers]",
+        "List[List[Rule[x, -2], Rule[y, 1]], List[Rule[x, -1], Rule[y, -1]], "
+             "List[Rule[x, -1], Rule[y, 2]], List[Rule[x, 1], Rule[y, -2]], "
+             "List[Rule[x, 1], Rule[y, 1]], List[Rule[x, 2], Rule[y, -1]]]");
+    run_test("Length[Solve[x^2 + x y + y^2 == 7, {x, y}, Integers]]", "12");
+    run_test("Length[Solve[x^2 + x y + y^2 == 91, {x, y}, Integers]]", "24");
+    /* Non-unit rotated ellipse. */
+    run_test("Solve[3 x^2 + 2 x y + 3 y^2 == 24, {x, y}, Integers]",
+        "List[List[Rule[x, -3], Rule[y, 1]], List[Rule[x, -1], Rule[y, 3]], "
+             "List[Rule[x, 1], Rule[y, -3]], List[Rule[x, 3], Rule[y, -1]]]");
+    /* Negative-definite form is normalised to positive-definite. */
+    run_test("Length[Solve[-x^2 - x y - y^2 == -7, {x, y}, Integers]]", "12");
+    /* Definite form with linear terms. */
+    run_test("Solve[x^2 + x y + y^2 - 3 x == 7, {x, y}, Integers]", "List[]");
+    /* Provably no representation (exhaustive over the ellipse) -> {} proof. */
+    run_test("Solve[x^2 + x y + y^2 == 2, {x, y}, Integers]", "List[]");
+    run_test("Solve[5 x^2 + 6 x y + 5 y^2 == 8, {x, y}, Integers]", "List[]");
+    run_test("Solve[7 x^2 - 5 x y + 7 y^2 == 39, {x, y}, Integers]", "List[]");
+    /* A constraint filters the exhaustive set. */
+    run_test("Length[Solve[x^2 + x y + y^2 == 7 && x > 0, {x, y}, Integers]]", "6");
+}
+
 /* Two fourth powers a^4+b^4 as a sum in two distinct ways.  The smallest is
  * 635318657 = 59^4+158^4 = 133^4+134^4 (Euler), so the < 10^8 box is a TRUE
  * negative -- an empty set that must not be mistaken for a false negative.
@@ -547,6 +577,7 @@ int main(void) {
     TEST(test_linear_system_integers_hnf);
     TEST(test_factorable_conic);
     TEST(test_generalized_pell);
+    TEST(test_elliptic_bqf);
     TEST(test_two_fourth_powers);
     TEST(test_bounded_mixed_power);
     TEST(test_euler_brick);

@@ -3357,12 +3357,118 @@ static bool si_solve_factorable_conic(SICtx* c, SearchState* st) {
     return handled;
 }
 
+/* --- Definite binary quadratic (ellipse)  A x^2 + B x y + C y^2 + D x + E y + F
+ *     == 0  with discriminant  delta = B^2 - 4 A C < 0. ---
+ *
+ * A negative discriminant makes the quadratic part positive- (or negative-)
+ * definite, so the conic is a compact ellipse with FINITELY many integer points
+ * -- but a rotated one (B != 0) is not bounded by derive_bounds, which only
+ * boxes sign-definite / even-only variables.  Treat the equation as a quadratic
+ * in x for each fixed y:  A x^2 + (B y + D) x + (C y^2 + E y + F) == 0.  Its
+ * x-discriminant  disc_x(y) = delta y^2 + (2 B D - 4 A E) y + (D^2 - 4 A F)  is a
+ * DOWNWARD parabola in y (leading coefficient delta < 0), so real x exist only
+ * for y in the finite interval between its roots.  Enumerate those y, solve the
+ * integer quadratic in x exactly (perfect-square discriminant), and verify.
+ * Exhaustive over the (bounded) ellipse, so an empty result is a PROOF. */
+static bool si_solve_elliptic_bqf(SICtx* c, SearchState* st) {
+    if (c->neq != 1) return false;
+    const MPoly* eq = c->eq[0]; int n = c->n;
+    int act[SI_MAX_VARS], ka = 0;
+    for (int v = 0; v < n; v++) if (mpoly_deg_var(eq, v) >= 1) act[ka++] = v;
+    if (ka != 2) return false;
+    int Xv = act[0], Yv = act[1];
+
+    mpz_t A, B, C, D, E, F; mpz_inits(A, B, C, D, E, F, NULL);
+    bool shape = true;
+    for (size_t t = 0; t < eq->n_terms && shape; t++) {
+        const int* ex = eq->exps + t * (size_t)n;
+        for (int v = 0; v < n; v++)
+            if (v != Xv && v != Yv && ex[v] != 0) { shape = false; break; }
+        if (!shape) break;
+        int ix = ex[Xv], iy = ex[Yv];
+        if (ix == 2 && iy == 0) mpz_add(A, A, eq->coefs[t]);
+        else if (ix == 1 && iy == 1) mpz_add(B, B, eq->coefs[t]);
+        else if (ix == 0 && iy == 2) mpz_add(C, C, eq->coefs[t]);
+        else if (ix == 1 && iy == 0) mpz_add(D, D, eq->coefs[t]);
+        else if (ix == 0 && iy == 1) mpz_add(E, E, eq->coefs[t]);
+        else if (ix == 0 && iy == 0) mpz_add(F, F, eq->coefs[t]);
+        else shape = false;                                /* total degree > 2 */
+    }
+
+    mpz_t delta, tmp; mpz_inits(delta, tmp, NULL);
+    if (shape) {
+        mpz_mul(delta, B, B); mpz_mul(tmp, A, C); mpz_submul_ui(delta, tmp, 4);  /* B^2 - 4AC */
+    }
+    if (!shape || mpz_sgn(delta) >= 0) {                   /* not a definite ellipse */
+        mpz_clears(A, B, C, D, E, F, delta, tmp, NULL); return false;
+    }
+    /* Normalise the leading coefficient positive (delta unchanged by negation). */
+    if (mpz_sgn(A) < 0) {
+        mpz_neg(A, A); mpz_neg(B, B); mpz_neg(C, C);
+        mpz_neg(D, D); mpz_neg(E, E); mpz_neg(F, F);
+    }
+
+    /* y-range where disc_x(y) = delta y^2 + beta y + gamma >= 0. */
+    mpz_t beta, gamma, inner; mpz_inits(beta, gamma, inner, NULL);
+    mpz_mul(beta, B, D); mpz_mul_ui(beta, beta, 2);
+    mpz_mul(tmp, A, E); mpz_submul_ui(beta, tmp, 4);       /* beta = 2BD - 4AE */
+    mpz_mul(gamma, D, D); mpz_mul(tmp, A, F); mpz_submul_ui(gamma, tmp, 4); /* D^2 - 4AF */
+    mpz_mul(inner, beta, beta); mpz_mul(tmp, delta, gamma);
+    mpz_submul_ui(inner, tmp, 4);                          /* beta^2 - 4 delta gamma */
+
+    bool handled = true;
+    if (mpz_sgn(inner) < 0) {                              /* no real y -> {} proof */
+        st->max_visits = SI_MAX_NODES;
+    } else {
+        double dDelta = mpz_get_d(delta), dBeta = mpz_get_d(beta), dInner = mpz_get_d(inner);
+        double sq = sqrt(dInner < 0 ? 0 : dInner);
+        double rA = (-dBeta + sq) / (2.0 * dDelta), rB = (-dBeta - sq) / (2.0 * dDelta);
+        double dlo = (rA < rB ? rA : rB) - 2.0, dhi = (rA < rB ? rB : rA) + 2.0;
+        if (!(dlo > -9e17 && dhi < 9e17) || (dhi - dlo) > (double)SI_MAX_NODES) {
+            handled = false;                               /* too wide / overflow -> decline */
+        } else {
+            st->max_visits = SI_MAX_NODES;
+            int64_t ylo = (int64_t)floor(dlo), yhi = (int64_t)ceil(dhi);
+            mpz_t a1, a0, disc, root, num, twoA, yz, s2;
+            mpz_inits(a1, a0, disc, root, num, twoA, yz, s2, NULL);
+            mpz_mul_ui(twoA, A, 2);
+            for (int64_t yy = ylo; yy <= yhi && !st->overflow; yy++) {
+                mpz_set_si(yz, yy);
+                /* a1 = B y + D,  a0 = C y^2 + E y + F. */
+                mpz_mul(a1, B, yz); mpz_add(a1, a1, D);
+                mpz_mul(a0, C, yz); mpz_add(a0, a0, E); mpz_mul(a0, a0, yz); mpz_add(a0, a0, F);
+                mpz_mul(disc, a1, a1); mpz_mul(s2, A, a0); mpz_submul_ui(disc, s2, 4); /* a1^2 - 4A a0 */
+                if (mpz_sgn(disc) < 0 || !mpz_perfect_square_p(disc)) continue;
+                mpz_sqrt(root, disc);
+                for (int sgn = 1; sgn >= -1; sgn -= 2) {
+                    if (++st->visits > st->max_visits) { st->overflow = true; break; }
+                    mpz_set(num, root); if (sgn < 0) mpz_neg(num, num);
+                    mpz_sub(num, num, a1);                  /* -a1 +/- sqrt(disc) */
+                    if (!mpz_divisible_p(num, twoA)) continue;
+                    mpz_divexact(num, num, twoA);           /* x */
+                    if (!mpz_fits_slong_p(num)) continue;
+                    int64_t vals[SI_MAX_VARS];
+                    for (int i = 0; i < n; i++) vals[i] = 0;
+                    vals[Xv] = mpz_get_si(num); vals[Yv] = yy;
+                    if (si_verify(c, vals)) emit_full(st, vals);
+                    if (mpz_sgn(root) == 0) break;          /* double root: one x */
+                }
+            }
+            mpz_clears(a1, a0, disc, root, num, twoA, yz, s2, NULL);
+        }
+    }
+
+    mpz_clears(A, B, C, D, E, F, delta, tmp, beta, gamma, inner, NULL);
+    return handled;
+}
+
 /* Dispatch the special forms.  Returns true if one handled the input
  * (candidates emitted into st). */
 static bool si_try_special_forms(SICtx* c, SearchState* st) {
     if (si_solve_pell(c, st)) return true;
     if (si_solve_conic(c, st)) return true;
     if (si_solve_factorable_conic(c, st)) return true;
+    if (si_solve_elliptic_bqf(c, st)) return true;
     if (si_solve_reciprocal(c, st)) return true;
     if (si_solve_linelim_bilinear(c, st)) return true;
     return false;

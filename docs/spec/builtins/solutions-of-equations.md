@@ -265,6 +265,15 @@ Attempts to solve an equation or system of equations for one or more variables.
     `n^2 + n + 41 == y^2` -> `{n -> 40, y -> 41}`; `x^2 - y^2 == 15` ->
     `{{4,1},{8,7}}`.  (A non-square `A` is a genuine Pell conic, left to the
     continued-fraction path.)
+  - **Definite binary quadratic (ellipse).** A single 2-variable degree-2
+    equation with a **negative** discriminant `delta = B^2 - 4AC < 0` is a compact
+    ellipse -- finite, but a rotated one (`B != 0`) escapes the interval bounder.
+    Solved as a quadratic in `x` for each `y` in the finite interval where the
+    `x`-discriminant `delta y^2 + (2BD - 4AE) y + (D^2 - 4AF)` (a downward
+    parabola) is `>= 0`, exhaustively -- so `{}` is a proof:
+    `x^2 + x y + y^2 == 7` -> 12 points; `x^2 + x y + y^2 == 2` -> `{}`.
+    Negative-definite forms are normalised; linear terms and constraints are
+    handled.
   - **Factorable binary quadratic (Runge's simplest case).** A single 2-variable
     equation `A x^2 + B x y + C y^2 + D x + E y + F == 0` whose quadratic part has
     a **cross term** and a perfect-square discriminant `δ = B^2 - 4AC > 0` factors
