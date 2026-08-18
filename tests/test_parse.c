@@ -333,6 +333,68 @@ static void assert_parse_eq(const char* input, const char* expected) {
     expr_free(p);
 }
 
+/* Operator precedence & associativity ladder (get_operator in src/parse.c).
+ *
+ * get_operator is static, so it is exercised through the public parser: each
+ * case pins the parse-tree shape that a specific precedence/associativity
+ * relationship must produce. These lock the 1–10000 precedence ladder against
+ * accidental drift (a mis-typed def.prec would regroup one of these). Every
+ * expected form was cross-checked against Wolfram-Language semantics.
+ *
+ * Note: And and Or share a precedence level here (a historic Mathilda choice,
+ * not WL-faithful), so mixed `&&`/`||` grouping is deliberately not asserted;
+ * each is tested against unambiguous neighbours (comparisons, Not) instead. */
+void test_operator_precedence_ladder() {
+    /* --- relative precedence: the tighter operator groups on the inside --- */
+    assert_parse_eq("a + b*c",      "Plus[a, Times[b, c]]");        /* * > + */
+    assert_parse_eq("a*b + c",      "Plus[Times[a, b], c]");
+    assert_parse_eq("a*b^c",        "Times[a, Power[b, c]]");       /* ^ > * */
+    assert_parse_eq("a + b == c",   "Equal[Plus[a, b], c]");        /* + > == */
+    assert_parse_eq("a && b == c",  "And[a, Equal[b, c]]");         /* == > && */
+    assert_parse_eq("a == b && c",  "And[Equal[a, b], c]");
+    assert_parse_eq("!a && b",      "And[Not[a], b]");              /* ! > && */
+    assert_parse_eq("!a == b",      "Not[Equal[a, b]]");            /* == > ! */
+    assert_parse_eq("a . b + c",    "Plus[Dot[a, b], c]");          /* . > + */
+    assert_parse_eq("a*b . c",      "Times[a, Dot[b, c]]");         /* . > * */
+    assert_parse_eq("2^3!",         "Power[2, Factorial[3]]");      /* ! > ^ */
+    assert_parse_eq("f @ a + b",    "Plus[f[a], b]");               /* @ > + */
+    assert_parse_eq("a + b // f",   "f[Plus[a, b]]");               /* + > // */
+    assert_parse_eq("a -> b /; c",  "Rule[a, Condition[b, c]]");    /* /; > -> */
+    assert_parse_eq("a /. b -> c",  "ReplaceAll[a, Rule[b, c]]");   /* -> > /. */
+    assert_parse_eq("a ~~ b | c",   "StringExpression[a, Alternatives[b, c]]"); /* | > ~~ */
+    assert_parse_eq("x = a -> b",   "Set[x, Rule[a, b]]");          /* -> > = */
+    assert_parse_eq("a[[1]] + b",   "Plus[Part[a, 1], b]");         /* [[ ]] > + */
+    assert_parse_eq("f[x]^2",       "Power[f[x], 2]");              /* f[x] > ^ */
+    assert_parse_eq("a @* b @ c",   "Composition[a, b][c]");        /* @* > @ */
+    assert_parse_eq("a ? b + c",    "Plus[PatternTest[a, b], c]");  /* ? > + */
+
+    /* --- prefix unary minus: binds looser than Power/Times, tighter than +/- --- */
+    assert_parse_eq("-a^2",         "Times[-1, Power[a, 2]]");
+    assert_parse_eq("-f[x]",        "Times[-1, f[x]]");
+
+    /* --- associativity --- */
+    assert_parse_eq("a - b - c",    "Plus[a, Times[-1, b], Times[-1, c]]"); /* + left */
+    assert_parse_eq("a^b^c",        "Power[a, Power[b, c]]");               /* ^ right */
+    assert_parse_eq("a/b/c",        "Times[Times[a, Power[b, -1]], Power[c, -1]]"); /* / left */
+    assert_parse_eq("a = b = c",    "Set[a, Set[b, c]]");                   /* = right */
+    assert_parse_eq("a -> b -> c",  "Rule[a, Rule[b, c]]");                 /* -> right */
+    assert_parse_eq("a // f // g",  "g[f[a]]");                             /* // left */
+    assert_parse_eq("f @ g @ x",    "f[g[x]]");                             /* @ right */
+    assert_parse_eq("a @@ b @@ c",  "Apply[a, Apply[b, c]]");              /* @@ right */
+    assert_parse_eq("a && b && c",  "And[And[a, b], c]");                   /* && left (parse) */
+    assert_parse_eq("a <> b <> c",  "StringJoin[StringJoin[a, b], c]");     /* <> left */
+    assert_parse_eq("a . b . c",    "Dot[Dot[a, b], c]");                   /* . left */
+    assert_parse_eq("a | b | c",    "Alternatives[Alternatives[a, b], c]"); /* | left (parse) */
+    assert_parse_eq("a ~~ b ~~ c",  "StringExpression[StringExpression[a, b], c]"); /* ~~ left */
+
+    /* --- CompoundExpression is the loosest binary operator --- */
+    assert_parse_eq("a ; b ; c",    "CompoundExpression[a, b, c]");
+
+    /* --- one expression spanning many levels at once --- */
+    assert_parse_eq("a + b c^d/e - f!",
+        "Plus[a, Times[b, Times[Power[c, d], Power[e, -1]]], Times[-1, Factorial[f]]]");
+}
+
 /* Reported by Nasser, May 2026: `Timing[LUDecomposition[mat];]` printed a
  * spurious "Unexpected character: ']'" on stderr.  The parser already
  * substituted Null for the missing RHS of `;` (so the tree was correct),
@@ -537,6 +599,7 @@ int main() {
     TEST(test_parse_assignments_and_equality);
     TEST(test_parse_part);
     TEST(test_parse_precedence);
+    TEST(test_operator_precedence_ladder);
     TEST(test_parse_comments);
     TEST(test_parse_trailing_semicolon);
     TEST(test_parse_newline_separator);

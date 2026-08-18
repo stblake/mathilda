@@ -51,6 +51,17 @@ Expr* solvetrig_solve_trig_equality(Expr* equation,
                                     Expr* dom,
                                     const SolveInvOpts* opts);
 
+/* Solve an equation that is a polynomial in a single transcendental
+ * kernel g(var) -- an exponential E^(c var) or a generic invertible head
+ * H[var] -- by substituting u = g(var), solving the polynomial in u, and
+ * unwinding each root through the inverse-function specialist.  Returns
+ * the solution List, or NULL if the equation is not a polynomial in one
+ * such kernel.  Borrowed args. */
+Expr* solvetrig_solve_poly_in_kernel(Expr* equation,
+                                     Expr* var,
+                                     Expr* dom,
+                                     const SolveInvOpts* opts);
+
 /* Cheap structural probe: returns true iff `expr` contains at least
  * one trig / hyperbolic head over `var` somewhere in its tree.
  * Used as a fast-fail guard so we never pay the TrigToExp /

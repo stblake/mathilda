@@ -1288,6 +1288,39 @@ void info_init(void) {
         "\tgives the generalized (n-1)-fold cross product in n dimensions,\n"
         "\ti.e. the unique vector orthogonal to all inputs whose components\n"
         "\tare the signed cofactor minors of the matrix [a1; a2; ...; en].");
+    symtab_set_docstring("Grad",
+        "Grad[f, {x1, ..., xn}]\n"
+        "\tgives the gradient (D[f,x1], ..., D[f,xn]) of the scalar f; for an\n"
+        "\tarray f a new innermost slot is appended, so a vector field yields\n"
+        "\tits Jacobian.  Equivalent to D[f, {{x1, ..., xn}}].\n"
+        "Grad[f, {x1, ..., xn}, chart]\n"
+        "\tgives the gradient of a scalar in the orthonormal basis of chart, one\n"
+        "\tof \"Cartesian\", \"Polar\", \"Cylindrical\", \"Spherical\".");
+    symtab_set_docstring("Div",
+        "Div[{f1, ..., fn}, {x1, ..., xn}]\n"
+        "\tgives the divergence D[f1,x1] + ... + D[fn,xn]; for a rank-k array f\n"
+        "\tit contracts the innermost slot against the variables, yielding a\n"
+        "\trank-(k-1) result.\n"
+        "Div[f, {x1, ..., xn}, chart]\n"
+        "\tgives the divergence of a vector field in the orthonormal basis of\n"
+        "\tchart (\"Cartesian\", \"Polar\", \"Cylindrical\", \"Spherical\").");
+    symtab_set_docstring("Curl",
+        "Curl[{f1, f2}, {x1, x2}]\n"
+        "\tgives the scalar curl D[f2,x1] - D[f1,x2].\n"
+        "Curl[{f1, f2, f3}, {x1, x2, x3}]\n"
+        "\tgives the vector curl (D[f3,x2]-D[f2,x3], D[f1,x3]-D[f3,x1],\n"
+        "\tD[f2,x1]-D[f1,x2]).  For an n*n*...*n array the generalized\n"
+        "\tLevi-Civita curl (depth n-k-1) is returned.\n"
+        "Curl[f, {x1, ..., xn}, chart]\n"
+        "\tgives the curl of a vector field in the orthonormal basis of chart\n"
+        "\t(\"Cartesian\", \"Polar\", \"Cylindrical\", \"Spherical\").");
+    symtab_set_docstring("Laplacian",
+        "Laplacian[f, {x1, ..., xn}]\n"
+        "\tgives the Laplacian D[f,{x1,2}] + ... + D[f,{xn,2}]; for an array f\n"
+        "\tthe scalar Laplacian is applied to each component (same dimensions).\n"
+        "Laplacian[f, {x1, ..., xn}, chart]\n"
+        "\tgives the Laplacian of a scalar in chart (\"Cartesian\", \"Polar\",\n"
+        "\t\"Cylindrical\", \"Spherical\").");
     symtab_set_docstring("Norm",
         "Norm[expr]\n"
         "\tgives the 2-norm of a number, vector, or matrix (Frobenius norm for\n"

@@ -696,7 +696,7 @@ static void pack_mark_aware_heads(void) {
         "Eigenvalues", "Eigenvectors", "Tr", "Norm", "Normalize", "Cross",
         "DiagonalMatrix", "HankelMatrix", "ToeplitzMatrix", "VandermondeMatrix",
         "PositiveDefiniteMatrixQ", "NegativeDefiniteMatrixQ",
-        "LatticeReduce", "FindIntegerNullVector",
+        "LatticeReduce", "FindIntegerNullVector", "HermiteDecomposition",
         /* Fit reads its data straight off the buffer (fit_read_numeric in
          * src/fit.c) and builds a packed float64 design matrix column-wise, so
          * the gate must not materialise a packed data matrix into 2*npts boxed

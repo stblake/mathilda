@@ -79,5 +79,14 @@ docs/experiments/**/__pycache__/
 tools/__pycache__/
 comparisons/__pycache__/
 benchmarks/__pycache__/
+benchmarks/**/__pycache__/
 docs/experiments/**/*.pyc
 benchmarks/**/*.pyc
+
+# The benchmark venv (sympy etc.) is created on demand, never tracked.
+benchmarks/.venv/
+
+# Repo-root performance write-ups (evaluator / pattern-matcher, .md + rendered
+# .pdf) are generated locally and deliberately not tracked.
+MATHILDA_*_PERFORMANCE.md
+MATHILDA_*_PERFORMANCE.pdf

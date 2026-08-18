@@ -1451,6 +1451,7 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
      * collapse to an Integer after Cardano's substitution. */
     bool reals_only = false;
     bool integers_only = false;
+    bool rationals_only = false;
     if (dom && dom->type == EXPR_SYMBOL) {
         const char* dsym = dom->data.symbol.name;
         if (dsym == SYM_Reals) {
@@ -1458,9 +1459,17 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
         } else if (dsym == SYM_Integers) {
             reals_only = true;
             integers_only = true;
+        } else if (dsym == SYM_Rationals) {
+            /* Rationals: solve over Reals (sound -- every rational is
+             * real, and the Reals filter prunes provably-complex roots),
+             * then keep only candidates that collapsed to a concrete
+             * Integer / BigInt / Rational.  Mirrors the Integers policy;
+             * Sqrt / Root / symbolic residues are dropped. */
+            reals_only = true;
+            rationals_only = true;
         } else if (dsym != SYM_Complexes) {
-            /* Rationals / Algebraics / Primes / Booleans etc. are not
-             * yet wired up; leave the call unevaluated. */
+            /* Algebraics / Primes / Booleans etc. are not yet wired up;
+             * leave the call unevaluated. */
             return NULL;
         }
     }
@@ -1778,6 +1787,24 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
         for (size_t i = 0; i < sl.count; i++) {
             Expr* v = sl.vals[i];
             if (v->type == EXPR_INTEGER || v->type == EXPR_BIGINT) {
+                sl.vals[kept++] = v;
+            } else {
+                expr_free(v);
+            }
+        }
+        sl.count = kept;
+    }
+
+    /* Rationals-domain filter.  Keep every candidate that is a provably
+     * concrete rational -- Integer, BigInt, or Rational[p, q] -- via
+     * is_rational_like(); drop Sqrt / Root / symbolic residues.  Same
+     * "only trust what has already collapsed" contract as the Integers
+     * filter, just admitting non-integer rationals. */
+    if (rationals_only) {
+        size_t kept = 0;
+        for (size_t i = 0; i < sl.count; i++) {
+            Expr* v = sl.vals[i];
+            if (is_rational_like(v)) {
                 sl.vals[kept++] = v;
             } else {
                 expr_free(v);

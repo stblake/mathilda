@@ -22,6 +22,7 @@
 
 #include "attr.h"
 #include "eval.h"
+#include "gbmod.h"
 #include "groebner.h"
 #include "internal.h"
 #include "rationalize.h"
@@ -97,6 +98,7 @@ typedef struct {
     GBCoeffDomain domain;           /* CoefficientDomain -> ... */
     int     inexact_prec;           /* decimal digits for GB_DOM_INEXACT */
     Expr*   poly_domain_vars;       /* borrowed; args of Polynomials[...] */
+    int64_t modulus;                /* Modulus -> p (prime); 0 = char 0 */
 } GBOptions;
 
 /* Forward declaration (defined with the weight-matrix helpers below). */
@@ -125,6 +127,7 @@ static void extract_options(const Expr* res, size_t* n_pos,
     opt->domain = GB_DOM_RATIONALS;
     opt->inexact_prec = 16;
     opt->poly_domain_vars = NULL;
+    opt->modulus = 0;
 
     for (size_t i = cut; i < argc; i++) {
         Expr* rule = res->data.function.args[i];
@@ -219,14 +222,19 @@ static void extract_options(const Expr* res, size_t* n_pos,
                                    "falling back");
             }
         } else if (key->data.symbol.name == SYM_Modulus) {
-            /* Honest "not implemented" instead of silently computing the
-             * characteristic-0 basis as if Modulus weren't there.  The
-             * surface accepts any value and ignores it; the basis comes
-             * back over the rationals. */
-            warn_once("modnotimpl", "Modulus option is not yet supported; "
-                                    "the basis is being computed over the "
-                                    "rationals.  Use Mathematica for "
-                                    "modular bases.");
+            /* Modulus -> p computes the Gröbner basis over the prime field
+             * GF(p) (gbmod.c).  p must be a prime that fits the engine's
+             * arithmetic; a non-prime or out-of-range value is ignored with a
+             * note and the basis comes back over the rationals. */
+            if (val->type == EXPR_INTEGER && val->data.integer >= 2
+                && val->data.integer < (int64_t)1 << 31
+                && gfp_is_prime((uint64_t)val->data.integer)) {
+                opt->modulus = val->data.integer;
+            } else {
+                warn_once("modnotimpl", "Modulus -> p requires a prime p in "
+                                        "[2, 2^31); the basis is being computed "
+                                        "over the rationals.");
+            }
         } else if (key->data.symbol.name == SYM_Sort) {
             /* Mathematica's `Sort -> True` reverses the user-supplied
              * main-variable list before computing the basis, so the
@@ -749,7 +757,39 @@ Expr* builtin_groebner_basis(Expr* res) {
      * directly (the reduced basis is identical either way). */
     size_t out_n = 0;
     GBPoly** G;
-    if (opt.domain == GB_DOM_INTEGERS) {
+    if (opt.modulus != 0 && n_elim == 0 && n_params == 0) {
+        /* Gröbner basis over the prime field GF(p): reduce each rational
+         * generator into GF(p), run the modular Buchberger engine (gbmod.c),
+         * and lift the basis back to integer-coefficient GBPoly for the shared
+         * rendering / cleanup path.  Only lex / grevlex are supported there;
+         * any other order falls back to lex. */
+        GBOrder morder = (use_order == GB_ORDER_GREVLEX)
+                         ? GB_ORDER_GREVLEX : GB_ORDER_LEX;
+        GFpPoly** MF = (GFpPoly**)malloc(sizeof(GFpPoly*) * (nF ? nF : 1));
+        size_t nMF = 0; bool mod_ok = true;
+        for (size_t i = 0; i < nF; i++) {
+            GFpPoly* mp = gfp_from_gbpoly(F[i], morder, (uint64_t)opt.modulus);
+            if (!mp) { mod_ok = false; break; }        /* denominator pole */
+            if (mp->n_terms) MF[nMF++] = mp; else gfp_poly_free(mp);
+        }
+        if (!mod_ok) {
+            for (size_t i = 0; i < nMF; i++) gfp_poly_free(MF[i]);
+            free(MF);
+            warn_once("modpole", "a coefficient has no image in GF(p) "
+                                 "(denominator divisible by p); the basis is "
+                                 "being computed over the rationals.");
+            G = gb_buchberger(F, nF, &out_n);           /* fall back */
+        } else {
+            size_t nMG = 0;
+            GFpPoly** MG = nMF ? gfp_buchberger(MF, nMF, &nMG) : NULL;
+            for (size_t i = 0; i < nMF; i++) gfp_poly_free(MF[i]);
+            free(MF);
+            G = (GBPoly**)malloc(sizeof(GBPoly*) * (nMG ? nMG : 1));
+            for (size_t i = 0; i < nMG; i++) G[i] = gbpoly_from_gfp(MG[i]);
+            out_n = nMG;
+            gfp_basis_free(MG, nMG);
+        }
+    } else if (opt.domain == GB_DOM_INTEGERS) {
         /* Strong Gröbner basis over Z (parameters are ordinary variables
          * in the PID polynomial ring Z[vars]). */
         G = gb_strong_buchberger(F, nF, &out_n);

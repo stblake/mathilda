@@ -278,11 +278,19 @@ typedef enum {
  * pass cannot decide -- typically because the candidate carries free
  * parameters that survive substitution. */
 static VerifyResult verify_candidate(Expr* e_orig, Expr* var, Expr* cand) {
-    /* Root[] objects came out of the polynomial specialist with their
-     * own verification semantics.  Accept them without further checks
-     * -- they describe the unique algebraic root of an irreducible
-     * polynomial factor and are not amenable to back-substitution. */
-    if (head_eq(cand, SYM_Root)) return VERIFY_ACCEPT;
+    /* Root[] candidates are NOT exempt from verification.  They are roots
+     * of the *cleared resultant polynomial in x* (the substitution
+     * u^L = base handed every L-th branch of `base` to the polynomial
+     * solver), not roots of the original radical equation -- only the
+     * branch matching the principal Sqrt / x^(p/q) satisfies it.  N[] on a
+     * Root object (companion-matrix + Sturm + Newton) is well defined, so
+     * the numeric back-substitution below rejects the extraneous branches:
+     * N[Sqrt[Root[..]] + 3 Root[..]^(1/3) - 5] is ~0 for the valid root and
+     * O(1) for the spurious complex ones.  When the Root cannot be
+     * numericalized (USE_MPFR=0, non-integer coeffs), N[] leaves it
+     * symbolic, numeric_magnitude() below fails, and the candidate is kept
+     * via VERIFY_UNKNOWN -- preserving prior behaviour rather than dropping
+     * a possibly-valid solution. */
 
     /* Substitute var -> cand without Simplify; the bare evaluator
      * collapses anything obvious already, and N[] handles structural

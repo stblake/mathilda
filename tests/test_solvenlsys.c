@@ -141,12 +141,29 @@ static void test_list_form(void) {
                "Rule[y, Power[2, Rational[-1, 2]]]]]");
 }
 
-/* Positive-dimensional ideal (infinitely many solutions): left
- * unevaluated (head stays Solve), and Solve::nsdim is emitted. */
+/* Positive-dimensional ideal from a multi-equation SYSTEM (infinitely
+ * many solutions): left unevaluated (head stays Solve), Solve::nsdim
+ * emitted.  A conjunction never takes the single-equation-multivariable
+ * fallback (which handles a lone equation like x^2 - y^2 == 0, solving
+ * it for one variable as {{x -> -Sqrt[y^2]}, {x -> Sqrt[y^2]}}). */
 static void test_positive_dimensional(void) {
-    run_test("Solve[x^2 - y^2 == 0, {x, y}]",
-             "Solve[Equal[Plus[Power[x, 2], Times[-1, Power[y, 2]]], 0], "
+    run_test("Solve[x^2 - y^2 == 0 && x - y == 0, {x, y}]",
+             "Solve[And[Equal[Plus[Power[x, 2], Times[-1, Power[y, 2]]], 0], "
+                       "Equal[Plus[x, Times[-1, y]], 0]], "
                    "List[x, y]]");
+}
+
+/* Single equation in several variables: solved for the earliest-listed
+ * variable it is polynomial in, treating the rest as parameters -- an
+ * explicit rule (Solve's job), not a Reduce-style case split. */
+static void test_single_eq_multivar(void) {
+    /* x y == 1  ->  x -> 1/y. */
+    run_test("Solve[x y == 1, {x, y}]",
+             "List[List[Rule[x, Power[y, -1]]]]");
+    /* Sin[x] + y == 0: x is not polynomial, so solve for the next
+     * variable y  ->  y -> -Sin[x]. */
+    run_test("Solve[Sin[x] + y == 0, {x, y}]",
+             "List[List[Rule[y, Times[-1, Sin[x]]]]]");
 }
 
 /* Non-polynomial system (transcendental head): left unevaluated. */
@@ -158,6 +175,39 @@ static void test_non_polynomial(void) {
 
 /* Regression: a purely linear system must keep taking the linear path
  * and produce the unique solution unchanged. */
+/* Unexpanded / product forms: solvenlsys must Expand each equation before
+ * GBPoly conversion (gb_from_expr's single-term parser cannot ingest
+ * Power[Plus,k] / Times[Plus,...]).  Two circles meeting on their radical
+ * axis: x = 1/2, y = +-Sqrt[3]/2. */
+static void test_unexpanded_two_circles(void) {
+    run_test("Solve[{x^2 + y^2 == 1, (x - 1)^2 + y^2 == 1}, {x, y}]",
+        "List["
+          "List[Rule[x, Rational[1, 2]], "
+               "Rule[y, Times[Rational[-1, 2], Power[3, Rational[1, 2]]]]], "
+          "List[Rule[x, Rational[1, 2]], "
+               "Rule[y, Times[Rational[1, 2], Power[3, Rational[1, 2]]]]]]");
+}
+
+/* Product of sums == 0 combined with a linear constraint: the x+y=0 branch
+ * contradicts x+y=2, leaving the single solution {1,1}. */
+static void test_unexpanded_product(void) {
+    run_test("Solve[{(x + y) (x - y) == 0, x + y == 2}, {x, y}]",
+        "List[List[Rule[x, 1], Rule[y, 1]]]");
+}
+
+/* Parametric system: free symbols (here `a`) that are not solve variables are
+ * coefficients in Q(params).  Routed through the RationalFunctions-coefficient
+ * Gröbner engine and solved symbolically: x^2 == a, x + y == 0 -> x = +-Sqrt[a],
+ * y = -/+Sqrt[a]. */
+static void test_parametric_system(void) {
+    run_test("Solve[{x^2 == a, x + y == 0}, {x, y}]",
+        "List["
+          "List[Rule[x, Power[a, Rational[1, 2]]], "
+               "Rule[y, Times[-1, Power[a, Rational[1, 2]]]]], "
+          "List[Rule[x, Times[-1, Power[a, Rational[1, 2]]]], "
+               "Rule[y, Power[a, Rational[1, 2]]]]]");
+}
+
 static void test_linear_regression(void) {
     run_test("Solve[x + y == 3 && x - y == 1, {x, y}]",
              "List[List[Rule[x, 2], Rule[y, 1]]]");
@@ -180,7 +230,11 @@ int main(void) {
     test_three_var_symmetric();
     test_list_form();
     test_positive_dimensional();
+    test_single_eq_multivar();
     test_non_polynomial();
+    test_unexpanded_two_circles();
+    test_unexpanded_product();
+    test_parametric_system();
     test_linear_regression();
 
     printf("\nAll solvenlsys tests passed.\n");

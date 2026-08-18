@@ -277,6 +277,7 @@ set(COMMON_SRC
     ../src/match.c
     ../src/part.c
     ../src/vectors.c
+    ../src/vectoranal.c
     ../src/assoc.c
     ../src/assoc_index.c
     ../src/ndarray.c
@@ -508,6 +509,7 @@ set(COMMON_SRC
     ../src/linalg/nullspace.c
     ../src/linalg/matrank.c
     ../src/linalg/latticereduce.c
+    ../src/linalg/hnf.c
     ../src/linalg/qrdecomp.c
     ../src/linalg/qrdecomp_machine.c
     ../src/linalg/qrdecomp_mpfr.c
@@ -593,6 +595,7 @@ set(COMMON_SRC
     ../src/poly/exponent.c
     ../src/poly/facpoly_list.c
     ../src/poly/irrpolyq.c
+    ../src/poly/gbmod.c
     ../src/poly/groebner.c
     ../src/poly/groebnerbasis.c
     ../src/poly/groebnerwalk.c
@@ -711,6 +714,8 @@ set(COMMON_SRC
     ../src/solverad.c
     ../src/solveinv.c
     ../src/solvetrig.c
+    ../src/solvemod.c
+    ../src/solveint.c
     ../src/zero_test.c
     ../src/numeric_complex.c
     ../src/flint_num_bridge.c
@@ -968,6 +973,10 @@ add_executable(unit_vector_tests test_unit_vector.c $<TARGET_OBJECTS:mathilda_co
 target_include_directories(unit_vector_tests PRIVATE ../src)
 add_test(NAME unit_vector_tests COMMAND unit_vector_tests)
 
+add_executable(vectoranal_tests test_vectoranal.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(vectoranal_tests PRIVATE ../src)
+add_test(NAME vectoranal_tests COMMAND vectoranal_tests)
+
 add_executable(array_flatten_tests test_array_flatten.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(array_flatten_tests PRIVATE ../src)
 add_test(NAME array_flatten_tests COMMAND array_flatten_tests)
@@ -1035,6 +1044,13 @@ add_test(NAME prime_tests COMMAND prime_tests)
 add_executable(iter_tests test_iter.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(iter_tests m)
 target_include_directories(iter_tests PRIVATE ../src)
+
+# gmp_compat: pure-GMP test of the mpz_prevprime fallback for GMP < 6.3.0.
+# No mathilda_common dependency -- it links only against GMP.
+add_executable(gmp_compat_tests test_gmp_compat.c)
+target_link_libraries(gmp_compat_tests gmp)
+target_include_directories(gmp_compat_tests PRIVATE ../src)
+add_test(NAME gmp_compat_tests COMMAND gmp_compat_tests)
 
 add_executable(sum_tests test_sum.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(sum_tests m)
@@ -1634,6 +1650,17 @@ target_include_directories(solveradicals_tests PRIVATE ../src)
 
 add_executable(solvenlsys_tests test_solvenlsys.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(solvenlsys_tests PRIVATE ../src)
+
+add_executable(solve_integers_tests test_solve_integers.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(solve_integers_tests PRIVATE ../src)
+add_test(NAME solve_integers_tests COMMAND solve_integers_tests)
+
+# Pinned-FullForm regression for extraneous / non-real Root filtering in Solve.
+# Registered with an add_test() line (below) so ctest actually runs it -- the
+# older solve_* targets above lack one and are invisible to ctest.
+add_executable(solve_radicals_reals_tests test_solve_radicals_reals.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(solve_radicals_reals_tests PRIVATE ../src)
+add_test(NAME solve_radicals_reals_tests COMMAND solve_radicals_reals_tests)
 
 add_executable(factor_phase0_tests test_factor_phase0.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(factor_phase0_tests PRIVATE ../src)
@@ -3348,6 +3375,23 @@ add_test(NAME intrat_corpus_tests
          COMMAND intrat_corpus_tests ../IntegrateRationalTests.m)
 add_test(NAME intrat_inline_corpus_tests
          COMMAND intrat_corpus_tests ../IntegrateRationalInlineCases.m)
+
+# Form-invariant stress corpus for Solve[].  Loads solve_corpus.m (a
+# List of {label, eqn, vars, dom, expectedCount, note} records) held,
+# forks per case, and verifies each returned solution by
+# back-substitution via the solve_check_prelude.m verifier.  Fails only
+# above SOLVE_FAIL_BASELINE (see the runner) so it doubles as the
+# progress dashboard for the Solve capability gaps.
+add_executable(solve_corpus_tests test_solve_corpus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(solve_corpus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(solve_corpus_tests gmp m ${ECM_LIB})
+    add_dependencies(solve_corpus_tests build_ecm)
+else()
+    target_link_libraries(solve_corpus_tests gmp m)
+endif()
+add_test(NAME solve_corpus_tests
+         COMMAND solve_corpus_tests ../solve_corpus.m ../solve_check_prelude.m)
 
 # Comprehensive corpus runner for the CRC integral table.  Loads
 # CRCIntegralsCorpus.m (a flat List of {integrand, var} pairs, ~3 per

@@ -45,13 +45,48 @@ Attempts to solve an equation or system of equations for one or more variables.
     that the router uses to decide dispatch; it canonicalises each equation
     `lhs_i == rhs_i` to `lhs_i - rhs_i` and refuses (returns `NULL`) when the
     system is not affine in the variables.
-  - When the linear-system specialist declines a non-affine system ->
-    `Solve`SolveNonlinearSystem` (also below).  This handles genuinely
+  - A **single non-affine equation in several variables** (linear-system
+    specialist declined, but the input is one `Equal`, not a conjunction) is
+    solved for the earliest-listed variable it is polynomial in, treating the
+    rest as symbolic parameters: `Solve[x y == 1, {x, y}]` -> `{{x -> 1/y}}`,
+    `Solve[x^2 + y^2 == 1, {x, y}]` -> `{{x -> -Sqrt[1-y^2]}, {x -> Sqrt[1-y^2]}}`.
+    This yields explicit rules only (never inequalities or case splits, which
+    belong to `Reduce`).
+  - When the linear-system specialist declines a genuine multi-equation
+    system -> `Solve`SolveNonlinearSystem` (also below).  This handles
     nonlinear polynomial systems whose solution set is zero-dimensional
     (finitely many solutions) via a lexicographic Gröbner basis and
     triangular back-substitution.  Positive-dimensional systems (infinitely
     many solutions) emit `Solve::nsdim` and leave `Solve` unevaluated;
     non-polynomial systems also stay unevaluated.
+  - **Polynomial in a single transcendental kernel** `g(x)` (single equation,
+    single variable, the peel/trig/radical passes all declined): if
+    substituting `u = g(x)` makes the equation a polynomial in `u` free of
+    `x`, it is solved in `u` and each root `u0` unwound through `g(x) == u0`.
+    Two kernel shapes: exponential `E^(c x)` (`Solve[E^(2x)-3E^x+2==0, x]` ->
+    `x = 0, Log[2]` with periodic families in `Complexes`) and generic
+    invertible heads `H[x]^k` (`Solve[Log[x]^2-3Log[x]+2==0, x]` ->
+    `{{x -> E}, {x -> E^2}}`).  Implemented in `src/solvetrig.c`
+    (`solvetrig_solve_poly_in_kernel`), reusing the polynomial and
+    inverse-function specialists.
+- **Modular solving.** `Solve[poly == 0, x, Modulus -> p]` solves a
+  single-variable polynomial equation over the finite ring `Z/pZ` by residue
+  enumeration (`src/solvemod.c`), returning `{{x -> r}, ...}` with `r`
+  ascending in `[0, p)`: `Solve[x^2 == 2, x, Modulus -> 7]` -> `{{x -> 3},
+  {x -> 4}}`, `Solve[3 x == 1, x, Modulus -> 7]` -> `{{x -> 5}}`.  Supported
+  for `2 <= p <= 100000` (prime or composite; rational coefficients handled
+  via modular inverse).  Non-polynomial equations and out-of-range moduli leave
+  `Solve` unevaluated -- the option is never silently ignored.
+- **Modular systems.** `Solve[{system}, {vars}, Modulus -> p]` with **prime** `p`
+  solves a polynomial system over the finite field `GF(p)`: a finite-field
+  Gröbner basis (`src/poly/gbmod.c`) is computed and its lex triangular form is
+  walked with per-variable residue enumeration.  `Solve[{x^2 + y^2 == 1, x == y},
+  {x, y}, Modulus -> 7]` -> `{{x -> 2, y -> 2}, {x -> 5, y -> 5}}`; an
+  inconsistent system (unit ideal) -> `{}`; an under-determined system
+  enumerates the free variables over `GF(p)` (`Solve[{x + y == 1}, {x, y},
+  Modulus -> 3]` -> the three points).  A **composite** modulus is not a field,
+  so systems with composite `p` are refused (unevaluated); a coefficient whose
+  denominator is divisible by `p` (no image in `GF(p)`) is likewise refused.
 - Inequalities and multi-equation transcendental systems are reserved for
   future work and currently leave `Solve[...]` unevaluated.  When the
   inverse-function specialist's outermost peel succeeds but the inner
@@ -121,6 +156,17 @@ Attempts to solve an equation or system of equations for one or more variables.
     four roots in closed-form radicals via Ferrari's resolvent-cubic method
     (Complexes only; a `Reals` request still yields `Root[]`).
   - Degree ≥ 5: held `Root[]` objects per irreducible factor.
+  - **`Reals`/`Integers`/`Rationals` reality filter for `Root[]`.** Held
+    `Root[]` objects are emitted with the *full* index range for an irreducible
+    factor; a post-dispatch filter at `Solve`'s funnel then drops every solution
+    whose bound value is a *provably non-real* number (numericalised to a
+    `Complex[re, im]` with a concrete `|im| > 1e-9`). So
+    `Solve[x^5 - x - 1 == 0, x, Reals]` returns the single real `Root[.., 1]`
+    (not all five), and `Solve[x^6 - x - 1 == 0, x, Reals]` returns two. The
+    filter is conservative — real `Root[]` objects, concrete reals, and
+    symbolic/parametric values that do not numericalise (e.g. `Sqrt[a]`) are
+    kept — and covers polynomial *systems* the same way (complex `Root`-tuples
+    are dropped over `Reals`). The default `Complexes` domain is untouched.
 - `Integers` domain is implemented as a post-pass over the `Reals` output:
   every candidate value is type-checked against `EXPR_INTEGER` /
   `EXPR_BIGINT` and dropped otherwise.  `Rational[p, q]`, irrational
@@ -133,6 +179,210 @@ Attempts to solve an equation or system of equations for one or more variables.
   integer roots return `{}`.  Higher-degree irreducibles default to
   `Root[]` form (`Cubics -> False`, `Quartics -> False`) and therefore
   yield `{}` under `Integers` unless the user opts into radical output.
+- **Diophantine solving (`Integers` with constraints).** When the input is a
+  polynomial equation (or system) conjoined with inequality / ordering /
+  disequation constraints, a dedicated pre-pass (`src/solveint.c`) finds *all*
+  integer solutions:
+  `Solve[x^2 + 2 y^3 == 3681 && x > 0 && y > 0, {x, y}, Integers]` ->
+  `{{x -> 15, y -> 12}, {x -> 41, y -> 10}, {x -> 57, y -> 6}}`.
+  The method is bound propagation to a finite box (explicit bounds, ordering
+  chains like `0 < x <= y <= z`, and an interval-positivity rule that turns a
+  sign-definite term of `Σ term == constant` into a per-variable bound, both
+  above and — for odd powers, deducing the sign — below). A variable that
+  appears only with **even exponents** is sign-symmetric, so even without a
+  sign constraint it is bounded on both sides to `[-B, B]` — this makes the
+  unconstrained sum of even powers finite, so
+  `Solve[x^2 + y^2 == 25, {x, y}, Integers]` returns all 12 signed pairs
+  (and `x^2 + y^2 == 0` the origin) rather than the empty set. Then recursive
+  elimination that enumerates all but one variable and solves the last
+  *exactly* (integer k-th root, quadratic discriminant, or rational-root),
+  every candidate re-verified against the original conjunction. A **single
+  separable additive equation** (`Σ g_i(x_i) == c`, e.g. sums of powers, the
+  taxicab equation) is instead solved by **meet-in-the-middle** in
+  ~`N^ceil(n/2)` work. Only necessary conditions tighten a bound, so an
+  exhausted finite search returns `{}` as a proof of no solutions; an input
+  that cannot be bounded to a finite box (an unbounded Pell orbit, a
+  constraint-free Thue equation) is left **unevaluated** rather than answered
+  wrongly. `Solve`SolveIntegers[eqns, vars]` is the independently-testable
+  entry point.
+- **Divisor-factoring and reciprocal special forms.** Two shapes that
+  positivity cannot bound are still finite once the right identity is applied:
+  - A single **bilinear** equation `a*u*v + b*u + c*v + d == 0` (reached by
+    eliminating unit-coefficient linear equations — the router tries each pair
+    of variables to keep) factors as `(a*u + c)(a*v + b) = b*c - a*d`, so the
+    integer solutions come from the **divisors** of that constant with no
+    enumeration of `u, v`.  This solves the Pythagorean-with-perimeter case
+    `x^2 + y^2 == z^2 && x + y + z == 3000 && 0 < x < y && z > 0` ->
+    `{{500, 1200, 1300}, {600, 1125, 1275}, {750, 1000, 1250}}` (with `z > 0`;
+    the constraint-free system also admits negative-`z` solutions, which are
+    returned when not excluded).
+  - A sum of unit fractions `sum 1/x_i == R` with an ordering chain
+    `x_1 <= ... <= x_k` bounds the smallest variable to
+    `[ceil(1/R), floor(k/R)]` and recurses, the last variable determined
+    exactly.  This solves the Egyptian-fraction case
+    `4/2027 == 1/x + 1/y + 1/z && 0 < x <= y <= z`.
+  - A separable **odd-power sum** (e.g. `x^3 + y^3 + z^3 == 42`) over a box too
+    large for the leaf search is solved by the **divisor method**: because
+    `e` is odd, `s = x + y` divides `m = x^e + y^e`, and the power sum in terms
+    of `s` and `p = x y` is a degree-`e/2` polynomial, so for each divisor `s`
+    of `m` the integer roots `p` give `(x, y)`.  Fixing the remaining variables
+    turns the `O(N^2)` inner search into `O(N * factoring)` --
+    `x^3 + y^3 + z^3 == 42 && Abs[...] < 10^5` is settled in ~7 s (the search
+    space is 8x10^15), and `x^3 + y^3 == 1729 && 0 < x <= y` gives Ramanujan's
+    `{{1, 12}, {9, 10}}`.  It applies to any odd exponent (`x^5 + y^5 == 1267`
+    -> `{{3, 4}}`); higher powers are admitted only over boxes small enough
+    that `m` stays in the fast-factoring range.
+  - A **Pell** equation `x^2 - D y^2 == +/-1` (D a positive non-square) is
+    solved from the continued fraction of `sqrt(D)`: the fundamental unit
+    generates the whole orbit, enumerated up to any explicit bound.
+    `Solve[x^2 - 61 y^2 == 1 && x > 0 && y > 0 && x < 10^10, {x, y}, Integers]`
+    -> `{{x -> 1766319049, y -> 226153980}}`; the negative Pell
+    `x^2 - 3 y^2 == -1` correctly returns `{}` (unsolvable).
+  - **Multi-leaf staged elimination.** A variable that appears in exactly one
+    equation and is univariate-solvable there is *peeled* -- resolved by an
+    exact root per free-variable assignment rather than enumerated -- so a
+    system with several "determined" variables reduces to a search over only
+    the coupled ones.  The **Euler brick**
+    `x^2+y^2==a^2 && x^2+z^2==b^2 && y^2+z^2==c^2 && 0<x<y<z<500 && a,b,c>0`
+    peels `a,b,c` (three square roots) and walks only `x<y<z`, returning all
+    three bricks in ~1 s, the smallest `(44,117,240;125,244,267)`.
+  - **Ordered box + int64 fast leaf.** The search-space guard divides the raw
+    box by the factorial of the longest ordering chain, and a degree-≤2 leaf
+    over small coefficients is solved in machine integers (GMP fallback on
+    overflow), so a genuinely ordered four-variable box is enumerated rather
+    than declined: `2(x^2+y^2+z^2+w^2)==(x+y+z+w)^2 && 0<x<=y<=z<=w<1000` and
+    the Markov-Hurwitz `x1^2+x2^2+x3^2+x4^2==x1 x2 x3 x4 && 0<x1<=...<=x4<=1000`.
+  - **Non-polynomial power-leaf.** When one side is a pure power `m^e` of a
+    leaf that appears nowhere else and every other variable is bounded, the
+    others are enumerated, the remaining side is evaluated through the
+    interpreter (so `Factorial`, `Binomial`, ... work), and `m` is solved by an
+    exact integer `e`-th root.  **Brocard's problem** `n! + 1 == m^2 && 0<n<100`
+    returns the Brown numbers `n = 4, 5, 7`.
+  - **Binary-quadratic conic.** `Y^2 == A X^2 + B X + C` with a perfect-square
+    leading coefficient `A` completes to a difference of squares
+    `(2 p Y)^2 - (2 A X + B)^2 = 4 A C - B^2` and factors that constant over its
+    divisors -- exhaustive, so an empty result is a proof.  Euler's
+    `n^2 + n + 41 == y^2` -> `{n -> 40, y -> 41}`; `x^2 - y^2 == 15` ->
+    `{{4,1},{8,7}}`.  (A non-square `A` is a genuine Pell conic, left to the
+    continued-fraction path.)
+  - **Definite binary quadratic (ellipse).** A single 2-variable degree-2
+    equation with a **negative** discriminant `delta = B^2 - 4AC < 0` is a compact
+    ellipse -- finite, but a rotated one (`B != 0`) escapes the interval bounder.
+    Solved as a quadratic in `x` for each `y` in the finite interval where the
+    `x`-discriminant `delta y^2 + (2BD - 4AE) y + (D^2 - 4AF)` (a downward
+    parabola) is `>= 0`, exhaustively -- so `{}` is a proof:
+    `x^2 + x y + y^2 == 7` -> 12 points; `x^2 + x y + y^2 == 2` -> `{}`.
+    Negative-definite forms are normalised; linear terms and constraints are
+    handled.
+  - **Factorable binary quadratic (Runge's simplest case).** A single 2-variable
+    equation `A x^2 + B x y + C y^2 + D x + E y + F == 0` whose quadratic part has
+    a **cross term** and a perfect-square discriminant `δ = B^2 - 4AC > 0` factors
+    into two rational linear forms, so it is a hyperbola with finitely many
+    integer points.  Completing the square (via `U = 2Ax + By + D`) reduces it to
+    a difference of squares `(2 k U)^2 - V^2 = W` (`k = √δ`,
+    `W = -(P^2 + 4 k^2 Q)`, `P = 4AE - 2BD`, `Q = 4AF - D^2`) and factors `W` over
+    its divisors — exhaustive, so an empty result is a proof:
+    `x^2 + x y - 2 y^2 == 4` -> six points, and `(x - y)(x + 2 y) == 15` -> `{}`
+    (a mod-3 obstruction, not a decline).  Handles non-unit square coefficients
+    (`2 x^2 + 3 x y - 2 y^2 == 7` -> `{(-3,1),(3,-1)}`) that the conic form above
+    cannot.  A non-square `δ` (Pell-type) or `δ ≤ 0` (parabola/ellipse) is
+    declined here.
+  - **Prouhet-Tarry-Escott -> {}.** Two `k`-element groups with equal power sums
+    for degrees `1..k` are the same multiset (Newton's identities); with a strict
+    ordering inside each group they are forced equal, so a disequation such as
+    `a != d` proves the system empty -- e.g. `a+b+c==d+e+f && ...(deg 2)... &&
+    ...(deg 3)... && 0<a<b<c && 0<d<e<f && a!=d` -> `{}` though every variable is
+    unbounded.
+  - **Unbounded Mordell.** `y^2 == x^3 + k` factors as
+    `x^3 = (y - sqrt k)(y + sqrt k)` in `Z[sqrt k]`; the cube factors give the
+    COMPLETE integer-point set whenever the descent is sound -- `k < 0`, `|k|`
+    squarefree, `k = 2,3 (mod 4)` (units `{+/-1}`, and a mod-8 argument forces
+    the two factors coprime), and `3` not dividing the class number of
+    `Q(sqrt k)` (so an ideal cube is a principal cube).  So `y^2 == x^3 - 2` ->
+    `(3, +/-5)`, `y^2 == x^3 - 13` -> `(17, +/-70)`, and `y^2 == x^3 - 5` -> `{}`
+    (proved).  A bounded `x` uses the ordinary leaf search; the half-integer ring
+    (`k = 1 mod 4`), `3 | h`, and the real-quadratic case (`k > 0`, infinite units
+    -- e.g. `y^2 == x^3 + 3`) are left unevaluated.
+  - **Unbounded Pell -> parametric family.** `x^2 - D y^2 == 1 && x>0 && y>0`
+    with no bound returns the fundamental-unit family as a
+    `ConditionalExpression` on `C[1] >= 1`:
+    `x -> ((x1+y1 Sqrt[D])^C[1] + (x1-y1 Sqrt[D])^C[1]) / 2` and the matching
+    `y`, using the fundamental solution `(x1, y1)` from the continued fraction.
+  - **Unbounded generalised Pell -> a family per class.** `x^2 - D y^2 == N`
+    with `x>0 && y>0`, no bound, and **any `N != +1`** (including negative Pell
+    `N = -1`) returns one `ConditionalExpression` family per solution class:
+    `x, y -> ((a+b√D)(t+u√D)^C[1] ± (a-b√D)(t-u√D)^C[1]) / (2 or 2√D)`, `C[1] >= 0`,
+    where `(t, u)` is the fundamental unit and `(a, b)` the class's minimal
+    positive representative. The class representatives come from the **Nagell
+    bound** `y ≤ u√(|N|/(2(t±1)))` (a finite search), advanced into the positive
+    orthant and reduced by `ε⁻¹` to the minimal member so one class yields one
+    family. Exhaustive, so an empty result is a proof:
+    `x^2 - 2 y^2 == 7` -> two families with fundamentals `(3,1)`, `(5,3)`;
+    `x^2 - 2 y^2 == 5` -> `{}` (a mod-8 obstruction); `x^2 - 3 y^2 == -1` -> `{}`
+    (`√3` has even CF period). Without the positivity constraints the family is
+    declined (unevaluated).
+  - **Homogeneous linear system -> parametric ray.** `n-1` homogeneous linear
+    equations in `n` positive unknowns have a one-dimensional integer kernel (the
+    generalised cross product, via a fraction-free Bareiss determinant); if the
+    primitive kernel vector is entirely positive the solutions are
+    `{v_i C[1] : C[1] >= 1}`, otherwise the positive orthant meets the kernel only
+    at the origin and there is no positive solution.
+  - **General linear system -> HNF integer family.** An unconstrained system of
+    `m >= 2` linear equations `A x == b` in `n` unknowns is solved completely
+    over `Z` via the Hermite normal form (`HermiteDecomposition`, see the
+    linear-algebra reference). With `P A^T == R` (row HNF), the substitution
+    `x = P^T y` triangularises the system; forward substitution over the pivots
+    with an exact-division test yields a particular solution (a divisibility
+    failure is a **proof of no integer solution**, e.g.
+    `2 x + 2 y == 3 && x - y == 0 -> {}`), and the free columns of `P^T` (the
+    integer kernel lattice) become the parameters `C[k]`:
+    `Solve[{x + 2 y + 3 z == 10, x - y + z == 2}, {x, y, z}, Integers]` ->
+    `{{x -> 18 + 5 C[1], y -> 8 + 2 C[1], z -> -8 - 3 C[1]}}`. This replaced a
+    silent wrong `{}` (the Complexes-oriented linear-system dispatch expressed
+    the pivots as a *rational* family in the free variable and then discarded it
+    as non-integer). A determined system reads off its unique solution or proves
+    `{}`; a *bounded* system (any inequality present) still uses the finite leaf
+    search, not this path.
+- **Exponential Diophantine (variable exponents).** Equations such as
+  `x^a - y^b == 1`, where the exponent is a solve variable, are handled before
+  the polynomial stage (which cannot represent `x^a`).  A fully bounded box
+  (`2^a - 3^b == -23 && 0 < a < 10 && 0 < b < 10` -> `{{a -> 2, b -> 3}}`) is
+  enumerated exactly; the **Catalan** shape `x^a - y^b == +/-1` with bases and
+  exponents `>= 2` is settled by **Mihailescu's theorem** -- the unique solution
+  is `3^2 - 2^3 = 1`, so
+  `Solve[x^a - y^b == 1 && 1 < x < 100 && 1 < y < 100 && a > 1 && b > 1,
+  {x, y, a, b}, Integers]` -> `{{x -> 3, y -> 2, a -> 2, b -> 3}}` (and `{}` when
+  the box excludes it).  The **fixed-base** Pillai form `P^m - Q^n == +/-1`
+  (constant bases `P, Q`, variable exponents) is likewise settled by Mihailescu
+  plus the exponent-1 cases, so `3^m - 2^n == 1` -> `{(1,1),(2,3)}` and
+  `2^n - 3^m == 1` -> `{(1,2)}` even though `m, n` are unbounded.
+- **Elliptic / hyperelliptic curves over a box.** `y^m == f(x)` with a bounded
+  `x` (Mordell `y^2 = x^3 + k`, hyperelliptic `y^2 = quartic`) is solved by the
+  ordinary bounded search -- enumerate `x`, test that `f(x)` is a perfect
+  `m`-th power -- so `y^2 == x^3 - 10000 && 0 < x < 10^5 && y > 0` finds
+  `{{25, 75}}` and `y^2 == x^3 - 2` gives Fermat's `{{3, 5}}`.  The *unbounded*
+  Mordell curve is solved for every imaginary `k = 2,3 (mod 4)` with `|k|`
+  squarefree and `3` not dividing the class number (see the `Z[sqrt k]`
+  factorisation above); the half-integer ring, `3 | h`, the real-quadratic case
+  `k > 0`, and higher-genus hyperelliptic curves need Mordell-Weil / Baker
+  methods and are left unevaluated.
+- **Linear Diophantine.** A single **linear** equation is solved through its
+  solution lattice (gcd staircase, particular solution + `(n-1)`-vector
+  homogeneous basis):
+  - Unconstrained -> the full **parametric family**
+    `{{x_i -> x0_i + sum_j basis[j][i] C[j+1]}}` with `C[k]` integer
+    parameters (`Solve[x + y == 10, {x, y}, Integers]` ->
+    `{{x -> C[1], y -> 10 - C[1]}}`); an unsolvable equation
+    (`gcd(a)` does not divide `b`) gives `{}`.
+  - Over a finite box, an unsolvable equation is reported as `{}` from the gcd
+    test (so a large no-solution box is instant).  A solvable box is enumerated
+    through the **LLL-reduced solution lattice** (`LatticeReduce`): the search
+    is over the coefficient box obtained by projecting the value box through
+    the lattice pseudoinverse, so it is small exactly when the coefficients are
+    large (few solutions) — e.g. `1000003 x + 999983 y == 7 && Abs[x] < 10^9 &&
+    Abs[y] < 10^9` returns its 2000-point arithmetic progression.  A box whose
+    dense lattice would yield an intractable number of points is left
+    unevaluated rather than truncated.
 
 **Options**:
 - `Cubics -> False`: Emit cubic roots as held `Root[]` objects (default).
@@ -145,7 +395,20 @@ Attempts to solve an equation or system of equations for one or more variables.
 - `GeneratedParameters -> C`: Head used by the inverse-function specialist
   when minting fresh integer-parameter symbols `C[1], C[2], ...`.  Only the
   bare-symbol form is honoured; the `Function` form is reserved.
-- `VerifySolutions -> Automatic`: Reserved.
+- `VerifySolutions -> Automatic`: With `VerifySolutions -> True`, every
+  returned solution is back-substituted into the equation(s) and dropped when
+  `PossibleZeroQ` proves the residual non-zero; solutions that verify or are
+  undecidable (`Root[]`, free parameters, `ConditionalExpression`) are kept.
+  The default `Automatic` keeps per-specialist verification (e.g. radicals).
+- `Modulus -> 0`: With `Modulus -> p` (`2 <= p <= 100000`), solve a
+  single-variable polynomial over `Z/pZ` (see **Modular solving** above).
+
+**Domains** (third positional argument): `Complexes` (default), `Reals`
+(discriminant / sign filtering), `Integers` (keep provably-concrete integer
+roots), and `Rationals` (keep provably-concrete `Integer`/`Rational` roots --
+`Solve[x^2 == 4, x, Rationals]` -> `{{x -> -2}, {x -> 2}}`,
+`Solve[x^2 == 2, x, Rationals]` -> `{}`).  `Algebraics`, `Booleans`, and
+`Primes` are not yet wired and leave `Solve` unevaluated.
 
 ```mathematica
 In[1]:= Solve[2 x + 3 == 0, x]
@@ -431,9 +694,37 @@ its context-qualified name.
 - `Protected`.
 - `eqns` may be a single `Equal[lhs, rhs]`, `And[Equal[...], ...]`, or
   `List[Equal[...], ...]`.  `vars` must be a `List` of distinct symbols.
-- Each equation is canonicalised to `lhs - rhs`.  Every residual must be a
-  polynomial over Q in `vars` (a transcendental head, a radical / non-integer
-  power, or a foreign symbol makes the specialist decline -> `NULL`).
+- Each equation `lhs == rhs` is put over a common denominator (`Together`); the
+  **`Numerator`** is taken as the polynomial equation and a non-constant
+  **`Denominator`** is recorded so denominators clear for rational systems
+  (`1/x + 1/y == 1`).  The numerator is then **`Expand`-ed**, so products and
+  powers of sums (`(x - 1)^2 + y^2 == 1`, `(x + y)(x - y) == 0`) distribute to a
+  sum of monomials before Gröbner conversion — the GBPoly single-term parser
+  cannot ingest `Power[Plus, k]` / `Times[Plus, ...]` directly.  Every numerator
+  must then be a polynomial over Q in `vars` (a transcendental head, a radical /
+  non-integer power, or a foreign symbol makes the specialist decline -> `NULL`).
+  The numeric analogue `NSolve` expands identically.  For a pure polynomial the
+  denominator is `1` and this reduces to `Expand[lhs - rhs]`.
+- **Spurious-root pruning:** a completed tuple that drives any recorded
+  denominator provably to zero is dropped (a den-zero point is a spurious root
+  introduced by clearing).  `{(x - y)/(x + y - 2) == 0, x y == 1}` returns only
+  `{{x -> -1, y -> -1}}` — the `{1, 1}` candidate zeroes `x + y - 2`;
+  `{1/(x - 1) == 1/(y - 1), x + y == 2}` returns `{}` (its only candidate is a
+  pole).  `Together` cancels removable factors, so `(x^2 - 1)/(x - 1)` is treated
+  as `x + 1`.
+- **Parametric systems:** a free symbol that is neither a solve variable nor a
+  known constant (`Pi`, `E`, …) is treated as a **parameter**.  When any are
+  present, the lex Gröbner basis is computed over the field `Q(parameters)` by
+  reusing `GroebnerBasis`'s `CoefficientDomain -> RationalFunctions` engine, and
+  the same triangular back-substitution runs with the symbolic univariate solver.
+  `{x + y == a, x y == b}` → `{{x -> (a - Sqrt[a^2 - 4 b])/2, …}, …}`;
+  `{x^2 == a, x + y == 0}` → `x -> ±Sqrt[a]`.  A basis generator free of all solve
+  variables is a coefficient-field constant: a nonzero number → `<1>` → (generic)
+  inconsistency → `{}`; a parameter-dependent one is a consistency/nondegeneracy
+  condition and is **declined** (unevaluated) rather than guessed — case-splitting
+  is reserved for `Reduce`.  No `ConditionalExpression` nondegeneracy guards are
+  emitted (matching `Solve`, not `Reduce`).  More than three distinct parameters
+  declines.
 - A lexicographic Gröbner basis is computed via the Gröbner walk
   (`gb_groebner_walk`).  For a zero-dimensional ideal this basis is
   triangular: the univariate generator in the last variable is solved with
@@ -584,7 +875,16 @@ context-qualified name when the caller has already classified its input.
      `N[]` evaluates the same residual in microseconds.  Candidates
      whose residual still depends on free parameters (and so cannot
      be decided either way) are kept and trigger `Solve::nongen`,
-     matching Mathematica's convention.
+     matching Mathematica's convention.  **`Root[]` candidates are
+     verified the same way, not exempted:** the elimination hands every
+     branch of the substituted `u = base^(1/L)` to the polynomial solver,
+     but only the branch matching the principal `Sqrt` / `x^(p/q)`
+     satisfies the original equation, so `N[Sqrt[Root[..]] + ...]` is
+     `~0` for the valid root and `O(1)` for the spurious complex ones.
+     This is what makes `Solve[Sqrt[x] + 3 x^(1/3) == 5, x]` return the
+     single valid root rather than all three roots of the resultant cubic.
+     (When a `Root[]` cannot be numericalised — e.g. a `USE_MPFR=0` build —
+     the numeric pass abstains and the candidate is kept.)
 - Output shape matches `Solve`SolvePolynomialEquality`: a `List` of
   singleton-rule `List`s, plus the empty `List[]` when no candidate
   survives verification.  The `dom` argument flows through to the

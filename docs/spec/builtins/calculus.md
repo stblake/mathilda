@@ -208,6 +208,87 @@ In[8]:= Derivative[1, 1][g][a, b]
 Out[8]= 6 a b^2
 ```
 
+## Grad, Div, Curl, Laplacian
+
+Vector-analysis differential operators (`src/vectoranal.c`). Each is
+`Protected` and is assembled entirely from the derivative engine `D`
+(nothing here re-implements differentiation), so it inherits every
+elementary, special-function, and chain rule that `D` knows. Two
+argument forms exist: a **Cartesian** 2-argument form, fully general in
+the rank of the field, and a 3-argument **chart** form for the
+orthogonal coordinate charts `"Cartesian"`, `"Polar"` (2-D),
+`"Cylindrical"` (3-D) and `"Spherical"` (3-D), computed in the
+orthonormal (physical) basis via the chart's scale factors (Lamé
+coefficients). Field ranks that would need Christoffel symbols in a
+curvilinear chart (tensor fields, the vector Laplacian, the gradient of
+a vector field) and unrecognized charts are left unevaluated.
+
+### Grad
+
+Gradient / raised covariant derivative.
+- `Grad[f, {x1, ..., xn}]` -- gradient `{D[f, x1], ..., D[f, xn]}` of a
+  scalar `f`; exactly `D[f, {{x1, ..., xn}}]`. For an array `f` a new
+  innermost tensor slot is appended, so a vector field yields its
+  Jacobian and a rank-`k` array yields a rank-`(k+1)` array.
+- `Grad[f, {x1, ..., xn}, chart]` -- gradient of a scalar in the
+  orthonormal basis of `chart`: component `i` is `(1/h_i) D[f, x_i]`.
+
+### Div
+
+Divergence / contracted covariant derivative.
+- `Div[{f1, ..., fn}, {x1, ..., xn}]` -- the divergence
+  `D[f1, x1] + ... + D[fn, xn]`. For a rank-`k` array `f` the innermost
+  slot (length `n`) is contracted against the variables, giving a
+  rank-`(k-1)` result.
+- `Div[f, {x1, ..., xn}, chart]` -- divergence of a vector field in the
+  orthonormal basis: `(1/J) Sum_i D[(J/h_i) f_i, x_i]`, `J = Prod h_i`.
+
+### Curl
+
+Curl / rotational.
+- `Curl[{f1, f2}, {x1, x2}]` -- the scalar `D[f2, x1] - D[f1, x2]`.
+- `Curl[{f1, f2, f3}, {x1, x2, x3}]` -- the vector curl
+  `{D[f3,x2]-D[f2,x3], D[f1,x3]-D[f3,x1], D[f2,x1]-D[f1,x2]}`.
+- `Curl[f, {x1, ..., xn}]` -- for an `n*n*...*n` array `f` of depth `k`,
+  the generalized Levi-Civita curl of depth `n-k-1`.
+- `Curl[f, {x1, ..., xn}, chart]` -- curl of a vector field (2-D scalar
+  or 3-D vector) in the orthonormal basis of `chart`.
+
+### Laplacian
+
+Laplacian / Laplace-Beltrami operator.
+- `Laplacian[f, {x1, ..., xn}]` -- `D[f, {x1, 2}] + ... + D[f, {xn, 2}]`;
+  for an array `f` the scalar Laplacian is applied element-wise, so the
+  result has the same dimensions as `f`.
+- `Laplacian[f, {x1, ..., xn}, chart]` -- Laplacian of a scalar in the
+  orthonormal basis: `(1/J) Sum_i D[(J/h_i^2) D[f, x_i], x_i]`.
+
+```mathematica
+In[1]:= Grad[Sin[x^2 + y^2], {x, y}]
+Out[1]= {2 x Cos[x^2 + y^2], 2 y Cos[x^2 + y^2]}
+
+In[2]:= Grad[{x y, y z, z x}, {x, y, z}]
+Out[2]= {{y, x, 0}, {0, z, y}, {z, 0, x}}
+
+In[3]:= Div[{x^2, y^2, z^2}, {x, y, z}]
+Out[3]= 2 x + 2 y + 2 z
+
+In[4]:= Curl[{y, -x}, {x, y}]
+Out[4]= -2
+
+In[5]:= Laplacian[x^2 + y^2 + z^2, {x, y, z}]
+Out[5]= 6
+
+In[6]:= Div[{r Sin[t], -r Cos[t]}, {r, t}, "Polar"]
+Out[6]= 3 Sin[t]
+
+In[7]:= -Grad[k q/r, {r, t, p}, "Spherical"]
+Out[7]= {(k q)/r^2, 0, 0}
+
+In[8]:= Laplacian[Sin[r^2], {r, t}, "Polar"] // Simplify
+Out[8]= 4 Cos[r^2] - 4 r^2 Sin[r^2]
+```
+
 ## Limit
 
 `Limit[f, x -> a]` finds the limiting value of `f` as `x` approaches `a`.

@@ -22,13 +22,18 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "attr.h"
 #include "common.h"
+#include "eval.h"
 #include "expr.h"
+#include "internal.h"
 #include "print.h"
 #include "solveinv.h"
 #include "solvelinsys.h"
+#include "solvemod.h"
+#include "solveint.h"
 #include "solvenlsys.h"
 #include "solvepoly.h"
 #include "solverad.h"
@@ -36,6 +41,7 @@
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "symtab.h"
+#include "zero_test.h"
 
 /* ------------------------------------------------------------------ *
  *  Option parsing.                                                    *
@@ -45,6 +51,8 @@ typedef struct {
     SolvePolyOpts poly;
     SolveInvOpts  inv;
     Expr* dom;             /* borrowed; default = NULL ( = Complexes) */
+    Expr* modulus;         /* borrowed; rhs of Modulus -> p, else NULL  */
+    bool  verify_on;       /* VerifySolutions -> True                   */
 } SolveOpts;
 
 /* Recognised Solve option-name symbols. */
@@ -105,8 +113,22 @@ static void apply_option(const Expr* rule, SolveOpts* opts) {
         }
         return;
     }
-    /* VerifySolutions / Assumptions / Method / Modulus: parsed but
-     * not yet wired into the polynomial specialist. */
+    if (name == SYM_Modulus) {
+        /* Store the modulus rhs (borrowed).  builtin_solve dispatches to
+         * the modular pre-pass when this is set; the value is validated
+         * there. */
+        opts->modulus = (Expr*)rhs;
+        return;
+    }
+    if (name == SYM_VerifySolutions) {
+        /* VerifySolutions -> True enables the post-dispatch
+         * PossibleZeroQ back-substitution filter (below).  False /
+         * Automatic keep the default per-specialist behaviour. */
+        opts->verify_on = is_true(rhs);
+        return;
+    }
+    /* Assumptions / Method: parsed but not yet wired into the
+     * polynomial specialist. */
 }
 
 /* Warn once per distinct unevaluated form that the second argument
@@ -426,6 +448,372 @@ static Expr* try_abs_zero_rewrite(const Expr* expr) {
  *  Builtin entry.                                                     *
  * ------------------------------------------------------------------ */
 
+/* True unless some Equal in `eqn` back-substitutes, under the solution
+ * rule-list `sol`, to a residual that PossibleZeroQ proves non-zero
+ * (zero_test_decide == ZERO_TEST_FALSE).  And / List systems are
+ * descended into.  Undecidable residuals (Root[], free parameters,
+ * ConditionalExpression) are ZERO_TEST_UNKNOWN and therefore kept --
+ * matching Mathematica's "verify only when you can" policy. */
+static bool solution_verifies(const Expr* eqn, Expr* sol) {
+    if (!eqn || eqn->type != EXPR_FUNCTION
+        || eqn->data.function.head->type != EXPR_SYMBOL) {
+        return true;
+    }
+    const char* h = eqn->data.function.head->data.symbol.name;
+    if (h == SYM_And || h == SYM_List) {
+        for (size_t i = 0; i < eqn->data.function.arg_count; i++)
+            if (!solution_verifies(eqn->data.function.args[i], sol)) return false;
+        return true;
+    }
+    if (h == SYM_Equal && eqn->data.function.arg_count == 2) {
+        Expr* lhs = eqn->data.function.args[0];
+        Expr* rhs = eqn->data.function.args[1];
+        Expr* residual = eval_and_free(expr_new_function(
+            expr_new_symbol(SYM_Plus),
+            (Expr*[]){
+                expr_copy(lhs),
+                expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy(rhs) }, 2)
+            }, 2));
+        Expr* subbed = eval_and_free(internal_replace_all(
+            (Expr*[]){ residual, expr_copy(sol) }, 2));
+        ZeroTestResult zt = zero_test_decide(subbed);
+        expr_free(subbed);
+        return zt != ZERO_TEST_FALSE;
+    }
+    return true;  /* non-equation operand (e.g. True): trivially satisfied */
+}
+
+/* VerifySolutions -> True: drop every solution rule-list in `out` whose
+ * back-substitution into `equation` is decidably non-zero.  `out` is
+ * List[List[Rule...], ...]; takes ownership and returns the filtered
+ * List.  `equation` is borrowed (the substituted / rationalised form
+ * seen by the dispatch). */
+static Expr* verify_solutions_filter(Expr* out, const Expr* equation) {
+    if (!out || out->type != EXPR_FUNCTION
+        || out->data.function.head->type != EXPR_SYMBOL
+        || out->data.function.head->data.symbol.name != SYM_List) {
+        return out;
+    }
+    size_t n = out->data.function.arg_count;
+    Expr** kept = n ? (Expr**)malloc(sizeof(Expr*) * n) : NULL;
+    size_t nkept = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* sol = out->data.function.args[i];
+        if (solution_verifies(equation, sol)) {
+            kept[nkept++] = sol;
+        } else {
+            expr_free(sol);
+        }
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), kept, nkept);
+    free(kept);
+    /* Detach the moved args so freeing the old wrapper does not touch
+     * them (kept args now belong to `result`; dropped ones are freed). */
+    out->data.function.arg_count = 0;
+    expr_free(out);
+    return result;
+}
+
+/* Read a *concrete* numeric leaf (Integer / Real / BigInt / Rational / MPFR)
+ * as a double.  Returns false for symbolic / non-numeric forms.  Used only
+ * to inspect the imaginary part of a numericalized Complex[re, im]. */
+static bool solve_concrete_double(const Expr* e, double* out) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_INTEGER: *out = (double)e->data.integer;   return true;
+        case EXPR_REAL:    *out = e->data.real;              return true;
+        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return true;
+#ifdef USE_MPFR
+        case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
+#endif
+        default: break;
+    }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Rational
+        && e->data.function.arg_count == 2) {
+        double n, d;
+        if (solve_concrete_double(e->data.function.args[0], &n)
+            && solve_concrete_double(e->data.function.args[1], &d) && d != 0.0) {
+            *out = n / d;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* True iff `val` numericalizes to a Complex number with a concrete,
+ * non-negligible imaginary part -- i.e. `val` is *provably* non-real.  A
+ * Root[] object (companion-matrix + Sturm + Newton) numericalizes to a real
+ * MPFR/Real for a real root and to Complex[re, im] for a complex one, so this
+ * distinguishes them; likewise for closed-form radical values and any
+ * arithmetic expression over them (e.g. a system's x-component).  Values that
+ * do NOT reduce to a concrete Complex -- ordinary reals, or symbolic /
+ * parametric residues like Sqrt[a] and un-numericalizable Root objects -- are
+ * not provably non-real and return false, so they are kept.  `val` is
+ * borrowed. */
+static bool value_is_provably_nonreal(Expr* val) {
+    Expr* nv = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+        (Expr*[]){ expr_copy(val) }, 1));
+    bool nonreal = false;
+    if (nv && nv->type == EXPR_FUNCTION
+        && nv->data.function.head->type == EXPR_SYMBOL
+        && nv->data.function.head->data.symbol.name == SYM_Complex
+        && nv->data.function.arg_count == 2) {
+        double im;
+        if (solve_concrete_double(nv->data.function.args[1], &im)
+            && fabs(im) > 1e-9) {
+            nonreal = true;
+        }
+    }
+    expr_free(nv);
+    return nonreal;
+}
+
+/* Reals-domain reality filter.  Drops every solution rule-list in `out` that
+ * binds any variable to a *provably* non-real value.  `out` is
+ * List[List[Rule...], ...] -- one Rule per variable, several for a system --
+ * so the whole tuple is dropped when any component is complex.  Takes
+ * ownership and returns the filtered List; mirrors verify_solutions_filter's
+ * alloc / detach / free shape.  Conservative by construction (see
+ * value_is_provably_nonreal): symbolic and parametric real answers survive. */
+static Expr* filter_reals_solutions(Expr* out) {
+    if (!out || out->type != EXPR_FUNCTION
+        || out->data.function.head->type != EXPR_SYMBOL
+        || out->data.function.head->data.symbol.name != SYM_List) {
+        return out;
+    }
+    size_t n = out->data.function.arg_count;
+    Expr** kept = n ? (Expr**)malloc(sizeof(Expr*) * n) : NULL;
+    size_t nkept = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* sol = out->data.function.args[i];
+        bool nonreal = false;
+        if (sol->type == EXPR_FUNCTION
+            && sol->data.function.head->type == EXPR_SYMBOL
+            && sol->data.function.head->data.symbol.name == SYM_List) {
+            for (size_t j = 0; j < sol->data.function.arg_count && !nonreal; j++) {
+                Expr* rule = sol->data.function.args[j];
+                if (rule->type == EXPR_FUNCTION
+                    && rule->data.function.head->type == EXPR_SYMBOL
+                    && (rule->data.function.head->data.symbol.name == SYM_Rule
+                        || rule->data.function.head->data.symbol.name
+                               == SYM_RuleDelayed)
+                    && rule->data.function.arg_count == 2) {
+                    if (value_is_provably_nonreal(rule->data.function.args[1]))
+                        nonreal = true;
+                }
+            }
+        }
+        if (nonreal) {
+            expr_free(sol);
+        } else {
+            kept[nkept++] = sol;
+        }
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), kept, nkept);
+    free(kept);
+    out->data.function.arg_count = 0;
+    expr_free(out);
+    return result;
+}
+
+/* True iff `val` is provably NOT an integer: a concrete numeric value that
+ * does not sit on an integer.  Symbolic / parametric values (free variables,
+ * ConditionalExpression, un-numericalizable Root objects) are not provably
+ * non-integer and return false, so they survive -- matching the conservative
+ * "only drop what you can decide" policy of the reals filter.  `val` is
+ * borrowed. */
+static bool value_is_provably_non_integer(Expr* val) {
+    if (!val) return false;
+    if (val->type == EXPR_INTEGER || val->type == EXPR_BIGINT) return false;
+    Expr* nv = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+        (Expr*[]){ expr_copy(val) }, 1));
+    bool nonint = false;
+    if (nv && nv->type == EXPR_FUNCTION
+        && nv->data.function.head->type == EXPR_SYMBOL
+        && nv->data.function.head->data.symbol.name == SYM_Complex
+        && nv->data.function.arg_count == 2) {
+        double im;
+        if (solve_concrete_double(nv->data.function.args[1], &im) && fabs(im) > 1e-9)
+            nonint = true;                     /* non-real -> non-integer */
+    } else {
+        double d;
+        if (solve_concrete_double(nv, &d)) {
+            double r = (d < 0) ? -floor(-d + 0.5) : floor(d + 0.5);
+            if (fabs(d - r) > 1e-9) nonint = true;
+        }
+    }
+    expr_free(nv);
+    return nonint;
+}
+
+/* Integers-domain restriction: drop every solution tuple that binds any
+ * variable to a provably-non-integer value.  Mirrors the alloc / detach /
+ * free shape of filter_reals_solutions.  Takes ownership of `out`. */
+static Expr* filter_integers_solutions(Expr* out) {
+    if (!out || out->type != EXPR_FUNCTION
+        || out->data.function.head->type != EXPR_SYMBOL
+        || out->data.function.head->data.symbol.name != SYM_List) {
+        return out;
+    }
+    size_t n = out->data.function.arg_count;
+    Expr** kept = n ? (Expr**)malloc(sizeof(Expr*) * n) : NULL;
+    size_t nkept = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* sol = out->data.function.args[i];
+        bool bad = false;
+        if (sol->type == EXPR_FUNCTION
+            && sol->data.function.head->type == EXPR_SYMBOL
+            && sol->data.function.head->data.symbol.name == SYM_List) {
+            for (size_t j = 0; j < sol->data.function.arg_count && !bad; j++) {
+                Expr* rule = sol->data.function.args[j];
+                if (rule->type == EXPR_FUNCTION
+                    && rule->data.function.head->type == EXPR_SYMBOL
+                    && (rule->data.function.head->data.symbol.name == SYM_Rule
+                        || rule->data.function.head->data.symbol.name == SYM_RuleDelayed)
+                    && rule->data.function.arg_count == 2) {
+                    if (value_is_provably_non_integer(rule->data.function.args[1]))
+                        bad = true;
+                }
+            }
+        }
+        if (bad) expr_free(sol); else kept[nkept++] = sol;
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), kept, nkept);
+    free(kept);
+    out->data.function.arg_count = 0;
+    expr_free(out);
+    return result;
+}
+
+/* Does the interned symbol name `sym` occur anywhere in `e`? */
+static bool expr_mentions_symbol(const Expr* e, const char* sym) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == sym;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (expr_mentions_symbol(e->data.function.head, sym)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expr_mentions_symbol(e->data.function.args[i], sym)) return true;
+    return false;
+}
+
+/* True iff `eq` is a lone `Equal` (not a conjunction / list / system) that
+ * mentions at least two of the solve variables -- i.e. a positive-dimensional
+ * curve/surface.  Its integer points are the exclusive province of the
+ * `solveint` pre-pass; once that has declined, the Complexes-oriented
+ * parametric dispatch (try_single_eq_multivar / the poly specialist over
+ * Integers) can only fabricate a spurious `{}` -- e.g. y^2 == x^3 - 2 or
+ * y == x^2 -- because the closed-form root is not integer-valued for the
+ * symbolic parameter.  This predicate lets the caller convert that `{}` into
+ * an unevaluated Solve (safe: an unbounded curve has no finite integer
+ * enumeration we could offer here anyway). */
+static bool is_single_multivar_equation(const Expr* eq, const Expr* vars) {
+    if (!eq || eq->type != EXPR_FUNCTION
+        || eq->data.function.head->type != EXPR_SYMBOL
+        || eq->data.function.head->data.symbol.name != SYM_Equal
+        || eq->data.function.arg_count != 2) return false;
+    if (!vars || vars->type != EXPR_FUNCTION
+        || vars->data.function.head->type != EXPR_SYMBOL
+        || vars->data.function.head->data.symbol.name != SYM_List) return false;
+    int mentioned = 0;
+    for (size_t i = 0; i < vars->data.function.arg_count; i++) {
+        Expr* v = vars->data.function.args[i];
+        if (v->type == EXPR_SYMBOL
+            && expr_mentions_symbol(eq, v->data.symbol.name)) mentioned++;
+    }
+    return mentioned >= 2;
+}
+
+/* True iff `e` mentions any of the solve variables in `vars` (a bare symbol
+ * or a List of symbols).  Borrowed. */
+static bool mentions_any_solve_var(const Expr* e, const Expr* vars) {
+    if (!e || !vars) return false;
+    if (vars->type == EXPR_SYMBOL)
+        return expr_mentions_symbol(e, vars->data.symbol.name);
+    if (vars->type == EXPR_FUNCTION
+        && vars->data.function.head->type == EXPR_SYMBOL
+        && vars->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < vars->data.function.arg_count; i++) {
+            Expr* v = vars->data.function.args[i];
+            if (v && v->type == EXPR_SYMBOL
+                && expr_mentions_symbol(e, v->data.symbol.name)) return true;
+        }
+    }
+    return false;
+}
+
+/* True iff the Solve result `out` (a List of solution branches, each a List
+ * of Rule[var, rhs]) binds some variable to an expression that still mentions
+ * a solve variable -- the signature of a positive-dimensional / parametric
+ * answer (the `Solve::svars` case, e.g. {{y -> (4 + 2 x)/5, z -> ...}} for an
+ * underdetermined linear system, or {{y -> Sqrt[x^3 - 2]}} for a lone curve).
+ *
+ * Over the Integers this distinguishes a genuine empty set -- every concrete
+ * branch failed the integer test, a real proof of no solution (e.g. x + y ==
+ * 2 && x - y == 1 -> {3/2, 1/2} -> {}) -- from a parametric family the integer
+ * filter merely could not represent, which must NOT collapse to a spurious
+ * `{}` (an underdetermined system has integer points; leaving Solve
+ * unevaluated is the honest answer until the HNF path expresses them). */
+static bool solution_set_is_parametric(const Expr* out, const Expr* vars) {
+    if (!out || out->type != EXPR_FUNCTION
+        || out->data.function.head->type != EXPR_SYMBOL
+        || out->data.function.head->data.symbol.name != SYM_List) return false;
+    for (size_t b = 0; b < out->data.function.arg_count; b++) {
+        Expr* branch = out->data.function.args[b];
+        if (!branch || branch->type != EXPR_FUNCTION
+            || branch->data.function.head->type != EXPR_SYMBOL
+            || branch->data.function.head->data.symbol.name != SYM_List) continue;
+        for (size_t r = 0; r < branch->data.function.arg_count; r++) {
+            Expr* rule = branch->data.function.args[r];
+            if (rule && rule->type == EXPR_FUNCTION
+                && rule->data.function.head->type == EXPR_SYMBOL
+                && (rule->data.function.head->data.symbol.name == SYM_Rule
+                    || rule->data.function.head->data.symbol.name == SYM_RuleDelayed)
+                && rule->data.function.arg_count == 2
+                && mentions_any_solve_var(rule->data.function.args[1], vars))
+                return true;
+        }
+    }
+    return false;
+}
+
+/* Single equation in >= 2 variables: solve for the earliest-listed
+ * variable the equation is polynomial in, treating the other variables
+ * as symbolic parameters.  Mathematica's Solve returns explicit rules
+ * for these -- {{x -> 1/y}} for x y == 1, {{x -> -Sqrt[1-y^2]}, {x ->
+ * Sqrt[1-y^2]}} for x^2 + y^2 == 1 -- NOT a Reduce-style case split, so
+ * this stays firmly on the explicit-rules side of the Solve/Reduce line.
+ * Returns the solution List, or NULL to defer to the nonlinear-system
+ * specialist (which emits Solve::nsdim for genuinely positive-
+ * dimensional systems it cannot express as rules for one variable).
+ * All arguments are borrowed. */
+static Expr* try_single_eq_multivar(Expr* equation, Expr* vars_list,
+                                    Expr* dom, const SolvePolyOpts* polyopts) {
+    if (!equation || equation->type != EXPR_FUNCTION
+        || equation->data.function.head->type != EXPR_SYMBOL
+        || equation->data.function.head->data.symbol.name != SYM_Equal
+        || equation->data.function.arg_count != 2) {
+        return NULL;
+    }
+    if (!vars_list || vars_list->type != EXPR_FUNCTION
+        || vars_list->data.function.head->type != EXPR_SYMBOL
+        || vars_list->data.function.head->data.symbol.name != SYM_List
+        || vars_list->data.function.arg_count < 2) {
+        return NULL;
+    }
+    for (size_t i = 0; i < vars_list->data.function.arg_count; i++) {
+        Expr* v = vars_list->data.function.args[i];
+        if (v->type != EXPR_SYMBOL) continue;
+        if (!expr_mentions_symbol(equation, v->data.symbol.name)) continue;
+        Expr* sol = solvepoly_solve_polynomial_equality(
+            equation, v, dom, polyopts);
+        if (sol) return sol;
+    }
+    return NULL;
+}
+
 Expr* builtin_solve(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -469,7 +857,9 @@ Expr* builtin_solve(Expr* res) {
     SolveOpts opts = {
         { false, false },                /* poly: cubics, quartics */
         { true, intern_symbol("C") },    /* inv: enabled, param_head */
-        NULL
+        NULL,                            /* dom */
+        NULL,                            /* modulus */
+        false                            /* verify_on */
     };
     for (size_t i = pos_end; i < argc; i++) {
         Expr* a = res->data.function.args[i];
@@ -532,6 +922,9 @@ Expr* builtin_solve(Expr* res) {
      *   True  -> {{}}   (tautology: full-dimensional solution set)
      *   False -> {}     (contradiction: no solutions)             */
     Expr* out = NULL;
+    Expr* verify_eq = NULL;   /* owned copy of the equation for VerifySolutions */
+    bool integer_prepass_used = false;  /* solveint returned a (possibly empty) answer */
+    bool lone_multivar_int_eq = false;  /* Integers + lone Equal in >= 2 vars */
     if (expr->type == EXPR_SYMBOL && expr->data.symbol.name == SYM_True) {
         Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         out = expr_new_function(expr_new_symbol(SYM_List),
@@ -560,6 +953,51 @@ Expr* builtin_solve(Expr* res) {
         }
     }
 
+    /* Modulus pre-pass: Solve[poly == 0, x, Modulus -> p] solves over
+     * the finite ring Z/pZ, a different value domain from the ordinary
+     * characteristic-0 dispatch (whose radical / Cardano / Root[]
+     * machinery is meaningless mod p).  It must therefore run before
+     * dispatch and, on refusal (systems, multivariable, non-polynomial,
+     * or an out-of-range modulus), return NULL so Solve stays
+     * unevaluated -- never silently discarding the Modulus option.  The
+     * result flows through the shared unsubst / numericalise tail (which
+     * is a no-op for the integer residues modular solving returns). */
+    if (opts.modulus) {
+        out = solvemod_solve_modular(expr, vars, dom, opts.modulus);
+        expr_free(expr);
+        goto solve_finish;
+    }
+
+    /* Integer-domain (Diophantine) pre-pass: Solve[eqns && constraints,
+     * vars, Integers].  Runs before the ordinary dispatch because the
+     * default machinery cannot separate inequality constraints from
+     * equations (an And of Greater[] conjuncts is otherwise mis-routed to
+     * the linear/nonlinear system solvers, which refuse it).  Returns a
+     * finite solution list, the empty List for a provably empty set, or
+     * NULL to decline -- in which case we fall through to the ordinary
+     * dispatch (so a bare Solve[x^2 == 4, x, Integers] still works via the
+     * polynomial specialist + the integer-restriction filter below). */
+    if (dom && dom->type == EXPR_SYMBOL
+        && dom->data.symbol.name == SYM_Integers) {
+        Expr* iout = solveint_solve_integer(expr, vars, dom);
+        if (iout) {
+            integer_prepass_used = true;
+            expr_free(expr);
+            out = iout;
+            goto solve_finish;
+        }
+        /* solveint declined.  Remember whether this was a lone multivariable
+         * equation so the shared tail can suppress a spurious `{}` fabricated
+         * by the Complexes-oriented parametric dispatch (see the guard at
+         * solve_finish). */
+        lone_multivar_int_eq = is_single_multivar_equation(expr, vars);
+    }
+
+    /* VerifySolutions -> True: snapshot the (substituted / rationalised)
+     * equation now, before dispatch frees `expr`, so the post-dispatch
+     * PossibleZeroQ filter can back-substitute against it. */
+    if (opts.verify_on) verify_eq = expr_copy(expr);
+
     /* Dispatch.
      *
      *   Multi-var single Equal  ->  linear-system specialist.
@@ -582,10 +1020,19 @@ Expr* builtin_solve(Expr* res) {
             vars_list = expr_copy(vars);
         }
         out = solvelinsys_solve_linear_system(expr, vars_list, dom);
-        /* Non-affine systems fall through to the nonlinear specialist,
-         * which solves zero-dimensional polynomial systems via a lex
-         * Gröbner basis and triangular back-substitution.  `expr` and
-         * `vars_list` are still owned here and borrowed by the call. */
+        /* A single non-affine equation in several variables is
+         * underdetermined but still expressible as explicit rules for
+         * one variable (x y == 1 -> {{x -> 1/y}}); try that before the
+         * Gröbner specialist, which would refuse it as positive-
+         * dimensional.  Only fires for a lone Equal, never a conjunction. */
+        if (!out) {
+            out = try_single_eq_multivar(expr, vars_list, dom, &opts.poly);
+        }
+        /* Remaining non-affine systems fall through to the nonlinear
+         * specialist, which solves zero-dimensional polynomial systems
+         * via a lex Gröbner basis and triangular back-substitution.
+         * `expr` and `vars_list` are still owned here and borrowed by
+         * the call. */
         if (!out) {
             out = solvenlsys_solve_nonlinear_system(expr, vars_list, dom,
                                                     &opts.poly);
@@ -598,6 +1045,7 @@ Expr* builtin_solve(Expr* res) {
         if (!classify_single_var(vars, &var)) {
             expr_free(expr);
             expr_free(vars_subst);
+            expr_free(verify_eq);
             return NULL;
         }
 
@@ -625,11 +1073,91 @@ Expr* builtin_solve(Expr* res) {
                 out = solvetrig_solve_trig_equality(
                     expr, var, dom, &opts.inv);
             }
+            /* Polynomial in a single transcendental kernel g(x) -- e.g.
+             * E^(2x)-3E^x+2 (u=E^x) or Log[x]^2-3Log[x]+2 (u=Log[x]):
+             * substitute u=g(x), solve the polynomial, unwind each root
+             * through the inverse-function peel.  Runs after the single-
+             * peel and multi-trig passes have declined. */
+            if (!out && opts.inv.enabled) {
+                out = solvetrig_solve_poly_in_kernel(
+                    expr, var, dom, &opts.inv);
+            }
             if (!out) {
                 out = solverad_solve_radicals_equality(expr, var, dom);
             }
         }
         expr_free(expr);
+    }
+
+solve_finish:
+    /* VerifySolutions -> True: drop solutions that fail back-substitution.
+     * Runs before the unsubst / numericalise tail, while `out` and
+     * `verify_eq` are both in the specialists' substituted / exact form. */
+    if (verify_eq) {
+        if (out) out = verify_solutions_filter(out, verify_eq);
+        expr_free(verify_eq);
+        verify_eq = NULL;
+    }
+
+    /* Over the Integers, snapshot whether the raw dispatch answer was a
+     * positive-dimensional parametric family BEFORE the reals/integers filters
+     * can empty it.  A subsequent collapse to `{}` is then not a proof of no
+     * solutions but the Complexes/Reals parametric answer failing the integer
+     * test for its free parameter -- see the guard below.  Only meaningful
+     * when the integer pre-pass declined (a genuine solveint `{}` is a proof). */
+    bool parametric_int_family =
+        (out && dom && dom->type == EXPR_SYMBOL
+         && dom->data.symbol.name == SYM_Integers && !integer_prepass_used)
+        ? solution_set_is_parametric(out, vars) : false;
+
+    /* Reals-domain reality filter.  A radical / polynomial / system
+     * specialist can hand back Root[] objects (or Root tuples) that are
+     * complex -- e.g. the two extraneous branches of Sqrt[x] + 3 x^(1/3) == 5,
+     * or the complex roots of an irreducible cubic/quintic.  Over Reals (and
+     * its subsets Integers / Rationals) those are not solutions.  Running the
+     * drop here, at the shared post-dispatch funnel, covers every specialist
+     * uniformly (single-variable and systems alike) and complements the
+     * radical solver's own satisfaction check, which handles the default
+     * Complexes domain.  Conservative: only *provably* non-real values are
+     * dropped, so symbolic / parametric real answers survive. */
+    if (out && dom && dom->type == EXPR_SYMBOL
+        && (dom->data.symbol.name == SYM_Reals
+            || dom->data.symbol.name == SYM_Integers
+            || dom->data.symbol.name == SYM_Rationals)) {
+        out = filter_reals_solutions(out);
+    }
+
+    /* Integers-domain: additionally drop any binding to a provably-non-integer
+     * value.  The dedicated integer solver already emits only integers, so this
+     * mainly backstops the fall-through polynomial path (e.g. Solve[2 x == 3,
+     * x, Integers] -> {}, Solve[x^2 == 2, x, Integers] -> {}). */
+    if (out && dom && dom->type == EXPR_SYMBOL
+        && dom->data.symbol.name == SYM_Integers) {
+        out = filter_integers_solutions(out);
+    }
+
+    /* Spurious-`{}` guard (correctness).  When solveint DECLINED and the
+     * Complexes-oriented dispatch produced a positive-dimensional parametric
+     * answer over the Integers, any empty result reaching here is not a proof
+     * of no solutions -- it is the closed-form root / free-parameter family
+     * failing the integer test.  Two shapes reach it: a lone multivariable
+     * equation (y^2 == x^3 - 2, y == x^2, ...) and an underdetermined linear
+     * *system* ({x + 2 y + 3 z == 10, x - y + z == 2} -> parametric in x,
+     * which the integer filter emptied to a silent wrong `{}`).  Leave Solve
+     * unevaluated instead -- an unproven `{}` would be a silent wrong answer,
+     * and these families do have integer points.  (A legitimate solveint `{}`
+     * took the `goto solve_finish` above with integer_prepass_used set, so it
+     * is never touched here; a fully-determined concrete set that filters to
+     * `{}` is a real proof and is not flagged parametric.) */
+    if (out && !integer_prepass_used
+        && (lone_multivar_int_eq || parametric_int_family)
+        && out->type == EXPR_FUNCTION
+        && out->data.function.head->type == EXPR_SYMBOL
+        && out->data.function.head->data.symbol.name == SYM_List
+        && out->data.function.arg_count == 0) {
+        expr_free(out);
+        expr_free(vars_subst);
+        return NULL;
     }
 
     /* Unsubst pass: if we substituted any compound variables with
@@ -682,13 +1210,18 @@ void solve_init(void) {
         "    Quartics            -> False     (radical form for quartics)\n"
         "    InverseFunctions    -> Automatic (use inverse-function peel)\n"
         "    GeneratedParameters -> C         (head for parameters C[k])\n"
-        "    VerifySolutions     -> Automatic (reserved)\n"
+        "    VerifySolutions     -> Automatic (True: drop non-verifying)\n"
+        "    Modulus             -> 0         (solve over Z/pZ when p>0)\n"
         "\n"
         "Solves single polynomial equalities, radical equations, linear\n"
         "systems, zero-dimensional nonlinear polynomial systems (via a\n"
         "lexicographic Groebner basis and triangular back-substitution;\n"
         "positive-dimensional systems emit Solve::nsdim and stay\n"
-        "unevaluated), and -- via the inverse-function specialist --\n"
+        "unevaluated), a single non-affine equation in several variables\n"
+        "(solved for the earliest variable it is polynomial in, e.g.\n"
+        "x y == 1 -> {{x -> 1/y}}), equations that are a polynomial in one\n"
+        "transcendental kernel g(x) (u = g(x); e.g. E^(2x)-3E^x+2 and\n"
+        "Log[x]^2-3Log[x]+2), and -- via the inverse-function specialist --\n"
         "single-variable equations whose outermost dependence is an elementary\n"
         "invertible head (Log, Exp, Sin/Cos/Tan/Cot/Sec/Csc, their\n"
         "hyperbolic counterparts, the inverse trig/hyperbolic forms,\n"
@@ -721,9 +1254,19 @@ void solve_init(void) {
         "\tto False disables the specialist; equations that can only\n"
         "\tbe solved through inversion then return unevaluated.");
     symtab_set_docstring("VerifySolutions",
-        "VerifySolutions is an option for Solve that decides whether to\n"
-        "\tverify each returned solution by back-substitution.\n"
-        "\tDefault: Automatic.  Reserved.");
+        "VerifySolutions is an option for Solve.  With VerifySolutions ->\n"
+        "\tTrue every returned solution is back-substituted into the\n"
+        "\tequation(s) and dropped when PossibleZeroQ proves the residual\n"
+        "\tnon-zero; solutions that verify or are undecidable (Root[],\n"
+        "\tfree parameters, ConditionalExpression) are kept.  Default:\n"
+        "\tAutomatic (per-specialist verification, e.g. radicals).");
+    symtab_set_docstring("Modulus",
+        "Modulus is an option for Solve.  Solve[poly == 0, x, Modulus -> p]\n"
+        "\tsolves a single-variable polynomial equation over the finite\n"
+        "\tring Z/pZ by residue enumeration, returning {{x -> r}, ...}\n"
+        "\twith r ascending in [0, p).  Supported for 2 <= p <= 100000;\n"
+        "\tsystems, multivariable specs, non-polynomial equations, or an\n"
+        "\tout-of-range modulus leave Solve unevaluated.");
 
     solvepoly_init();
     solvelinsys_init();
@@ -731,4 +1274,5 @@ void solve_init(void) {
     solverad_init();
     solveinv_init();
     solvetrig_init();
+    solvemod_init();
 }

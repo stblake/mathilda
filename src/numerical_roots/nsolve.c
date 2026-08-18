@@ -56,6 +56,7 @@
 #include "numeric.h"         /* numeric_digits_to_bits, NumericSpec */
 #include "nc_accuracy.h"     /* shared AccuracyGoal/PrecisionGoal handling */
 #include "common.h"          /* common_numericalize_result, rationalize_input */
+#include "internal.h"        /* internal_expand */
 #include "arithmetic.h"      /* is_number, is_rational */
 #include "poly/poly.h"       /* is_polynomial */
 #include "nsolve_system.h"   /* nsolve_polynomial_system */
@@ -628,6 +629,11 @@ static Expr* nsolve_system_path(Expr* expr, Expr* varlist, bool reals_only,
     Expr** polys = (Expr**)malloc(sizeof(Expr*) * nres);
     for (size_t i = 0; i < nres; i++) {
         polys[i] = common_rationalize_input(resid[i], rbits);
+        /* Distribute products / powers of sums so gb_from_expr (single-term
+         * parser) can ingest e.g. (x-1)^2 + y^2 - 1. Covers both downstream
+         * engines (nsolve_polynomial_system and nsolve_system_eliminate).
+         * internal_expand consumes its arg; eval_and_free fixes to a point. */
+        polys[i] = eval_and_free(internal_expand((Expr*[]){ polys[i] }, 1));
         if (!is_polynomial(polys[i], vars, (size_t)nvar)) { all_poly = false; }
     }
     for (size_t i = 0; i < nres; i++) expr_free(resid[i]);

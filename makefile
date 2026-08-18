@@ -562,6 +562,17 @@ check-fastpath-sweep:
 bench-gap:
 	python3 benchmarks/run_all.py
 
+# `make check-diophantine-heldout` — the held-out Solve[..., Integers] gate.
+#
+# Runs Mathilda COLD on equations drawn from standard references (NOT the
+# co-designed benchmarks/87 cases.py) and cross-checks every answer against an
+# independent Python brute-force oracle over the same box. Fails (nonzero exit)
+# on any SILENT WRONG ANSWER -- a {}/finite/parametric result the oracle
+# contradicts, the one class the developed-against benchmark cannot see. Needs
+# only the Mathilda binary (no sympy); writes HELDOUT_REPORT.md.
+check-diophantine-heldout:
+	python3 benchmarks/87-diophantine-integers/validate.py
+
 # Report the compiler the build will ACTUALLY use. `gcc --version` does not
 # answer that: the autodetection above prefers a versioned `gcc-NN` over the
 # plain name, so on a host with both, a bare `gcc --version` names one compiler
@@ -574,7 +585,8 @@ print-cc:
 
 .PHONY: all clean docs docs-build docs-serve check-c99 check-interval check-packed-aware \
         check-array-exactness check-nd-surfaces check-compile-coverage \
-        check-fastpath-sweep check-menu-ids check-tests bench-gap print-cc
+        check-fastpath-sweep check-menu-ids check-tests bench-gap \
+        check-diophantine-heldout print-cc
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first

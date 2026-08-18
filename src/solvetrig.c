@@ -18,6 +18,7 @@
 #include "eval.h"
 #include "expr.h"
 #include "internal.h"
+#include "poly.h"
 #include "solveinv.h"
 #include "solvepoly.h"
 #include "sym_intern.h"
@@ -269,6 +270,72 @@ static Expr* concat_solutions(Expr* a, Expr* b) {
  *  Public entry.                                                     *
  * ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ *
+ *  Output cleanup: TrigToExp leaves each unwound branch as a complex  *
+ *  logarithm (e.g. -I Log[(-1/2 - I/2) Sqrt[2]]); Simplify collapses  *
+ *  those to the canonical Pi-multiple form (Pi/4 + Pi C[k]).          *
+ * ------------------------------------------------------------------ */
+
+static size_t sl_leaf_count(const Expr* e) {
+    if (!e) return 0;
+    if (e->type != EXPR_FUNCTION) return 1;
+    size_t n = sl_leaf_count(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        n += sl_leaf_count(e->data.function.args[i]);
+    return n;
+}
+
+/* Count occurrences of the interned head `head` anywhere in `e`. */
+static size_t sl_count_head(const Expr* e, const char* head) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    size_t n = (e->data.function.head->type == EXPR_SYMBOL
+                && e->data.function.head->data.symbol.name == head) ? 1 : 0;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        n += sl_count_head(e->data.function.args[i], head);
+    return n;
+}
+
+/* Simplify `value` ONLY to strip the complex logarithms TrigToExp
+ * leaves behind (e.g. -I Log[(-1/2 - I/2) Sqrt[2]] -> Pi/4), returning
+ * the simplified form only when it removes a Log head without growing.
+ * A value with no Log is already in principal+period form and is left
+ * untouched, so readable sums are not churned into equivalent factored
+ * forms.  Takes ownership of `value`; returns a value the caller owns. */
+static Expr* simplify_smaller(Expr* value) {
+    size_t logs = sl_count_head(value, SYM_Log);
+    if (logs == 0) return value;
+    Expr* simp = eval_and_free(mk_fn1("Simplify", expr_copy(value)));
+    if (!simp) return value;
+    if (sl_count_head(simp, SYM_Log) < logs
+        && sl_leaf_count(simp) <= sl_leaf_count(value)) {
+        expr_free(value);
+        return simp;
+    }
+    expr_free(simp);
+    return value;
+}
+
+/* In-place: Simplify the RHS value of every Rule in a solution
+ * List[Rule[var, rhs]], descending into ConditionalExpression to
+ * simplify its value while preserving the Element[C[k],Integers]
+ * (or branch-cut) condition. */
+static void simplify_solution_inplace(Expr* sol) {
+    if (!head_is_sym(sol, SYM_List)) return;
+    for (size_t i = 0; i < sol->data.function.arg_count; i++) {
+        Expr* rule = sol->data.function.args[i];
+        if (!head_is_sym(rule, SYM_Rule)
+            || rule->data.function.arg_count != 2) continue;
+        Expr* rhs = rule->data.function.args[1];
+        if (head_is_sym(rhs, SYM_ConditionalExpression)
+            && rhs->data.function.arg_count == 2) {
+            Expr* val = rhs->data.function.args[0];
+            rhs->data.function.args[0] = simplify_smaller(val);
+        } else {
+            rule->data.function.args[1] = simplify_smaller(rhs);
+        }
+    }
+}
+
 Expr* solvetrig_solve_trig_equality(Expr* equation, Expr* var,
                                     Expr* dom,
                                     const SolveInvOpts* opts) {
@@ -358,7 +425,239 @@ Expr* solvetrig_solve_trig_equality(Expr* equation, Expr* var,
         aggregate = concat_solutions(aggregate, branch);
     }
     expr_free(u_solutions);
+
+    /* 8. Canonicalise each branch: TrigToExp unwinding leaves complex
+     *    logarithms that Simplify collapses to Pi-multiple form. */
+    if (head_is_sym(aggregate, SYM_List)) {
+        for (size_t i = 0; i < aggregate->data.function.arg_count; i++)
+            simplify_solution_inplace(aggregate->data.function.args[i]);
+    }
     return aggregate;
+}
+
+/* ================================================================== *
+ *  Polynomial in a single transcendental kernel.                     *
+ *                                                                    *
+ *  Generalises the trig-to-exp path to any equation that is a        *
+ *  polynomial in one invertible kernel g(x): substitute u = g(x),    *
+ *  solve poly(u) == 0 via the polynomial specialist, then unwind     *
+ *  each root u0 via g(x) == u0 through the inverse-function          *
+ *  specialist.  Two kernel shapes are handled:                       *
+ *                                                                    *
+ *    exponential   E^(c x)  ->  u^c     (E^(2x)-3E^x+2 -> u^2-3u+2)  *
+ *    generic head  H[x]^k   ->  u^k     (Log[x]^2-3Log[x]+2)         *
+ *                                                                    *
+ *  Trig kernels are already consumed upstream by the trig-to-exp     *
+ *  pass; radicals by the radicals specialist.                        *
+ * ------------------------------------------------------------------ */
+
+/* Fresh temporary symbol standing for the kernel u = g(x). */
+#define KERNEL_USYM "Solve`kernelU"
+
+/* Extract the (real) integer exponent multiplier n from a Power[E, e]
+ * exponent `e` of the shape `var` (n=1) or `Times[int..., var]`.  Any
+ * non-integer, non-var factor makes this fail. */
+static bool extract_real_exp_n(const Expr* e, const Expr* var, int64_t* n) {
+    if (e->type == EXPR_SYMBOL && var->type == EXPR_SYMBOL
+        && e->data.symbol.name == var->data.symbol.name) {
+        *n = 1;
+        return true;
+    }
+    if (!head_is_sym(e, SYM_Times)) return false;
+    bool seen_var = false, have = false;
+    int64_t acc = 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        const Expr* a = e->data.function.args[i];
+        if (a->type == EXPR_SYMBOL && var->type == EXPR_SYMBOL
+            && a->data.symbol.name == var->data.symbol.name) {
+            if (seen_var) return false;
+            seen_var = true;
+        } else if (a->type == EXPR_INTEGER) {
+            acc *= a->data.integer;
+            have = true;
+        } else {
+            return false;   /* non-integer, non-var factor */
+        }
+    }
+    if (!seen_var) return false;
+    *n = have ? acc : 1;
+    return true;
+}
+
+typedef struct {
+    int64_t min_m, max_m;
+    bool any_seen, bad;
+} SubstReal;
+
+/* Replace every Power[E, c*var] by Power[usym, c]; any bare var (or var
+ * outside an admissible exponential) sets st->bad. */
+static Expr* subst_exp_real_walk(const Expr* e, const Expr* var,
+                                 const Expr* usym, SubstReal* st) {
+    if (!e || st->bad) return NULL;
+    if (e->type == EXPR_SYMBOL && var->type == EXPR_SYMBOL
+        && e->data.symbol.name == var->data.symbol.name) {
+        st->bad = true;
+        return NULL;
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    if (head_is_sym(e, SYM_Power) && e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* exp_ = e->data.function.args[1];
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E
+            && var_in(exp_, var)) {
+            int64_t m;
+            if (!extract_real_exp_n(exp_, var, &m)) { st->bad = true; return NULL; }
+            if (!st->any_seen) { st->min_m = st->max_m = m; st->any_seen = true; }
+            else { if (m < st->min_m) st->min_m = m; if (m > st->max_m) st->max_m = m; }
+            return mk_pow(expr_copy((Expr*)usym), mk_int(m));
+        }
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        args[i] = subst_exp_real_walk(e->data.function.args[i], var, usym, st);
+        if (st->bad) { for (size_t j = 0; j < i; j++) expr_free(args[j]); free(args); return NULL; }
+    }
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return out;
+}
+
+/* Solve poly(usym) == 0 and unwind each root u0 through `kernel == u0`
+ * (kernel is Power[E,var] for the exponential path, or H[x] for the
+ * generic path).  Returns the concatenated solution List, or NULL if any
+ * root fails to unwind (so the caller can fall through). */
+static Expr* solve_u_and_unwind(Expr* poly_in_u, Expr* usym, Expr* kernel,
+                                Expr* var, Expr* dom, const SolveInvOpts* opts) {
+    Expr* u_eq = eval_and_free(mk_fn2("Equal", expr_copy(poly_in_u), mk_int(0)));
+    SolvePolyOpts po = { false, false };
+    Expr* u_sols = solvepoly_solve_polynomial_equality(u_eq, usym, NULL, &po);
+    expr_free(u_eq);
+    if (!u_sols || !head_is_sym(u_sols, SYM_List)
+        || u_sols->data.function.arg_count == 0) {
+        if (u_sols) expr_free(u_sols);
+        return NULL;
+    }
+    Expr* agg = expr_new_function(mk_sym("List"), NULL, 0);
+    bool ok = true;
+    for (size_t i = 0; i < u_sols->data.function.arg_count; i++) {
+        Expr* sol = u_sols->data.function.args[i];
+        if (!head_is_sym(sol, SYM_List) || sol->data.function.arg_count != 1) continue;
+        Expr* rule = sol->data.function.args[0];
+        if (!head_is_sym(rule, SYM_Rule) || rule->data.function.arg_count != 2) continue;
+        Expr* u_val = rule->data.function.args[1];
+        Expr* eq = eval_and_free(mk_fn2("Equal", expr_copy(kernel), expr_copy(u_val)));
+        Expr* branch = solveinv_solve_inverse_equality(eq, var, dom, opts);
+        expr_free(eq);
+        if (!branch) { ok = false; break; }
+        agg = concat_solutions(agg, branch);
+    }
+    expr_free(u_sols);
+    if (!ok) { expr_free(agg); return NULL; }
+    return agg;
+}
+
+/* Exponential kernel: E^(c x).  Returns NULL if the residual is not a
+ * polynomial in E^x. */
+static Expr* try_exp_kernel(Expr* residual, Expr* var, Expr* usym,
+                            Expr* dom, const SolveInvOpts* opts) {
+    SubstReal st = { 0, 0, false, false };
+    Expr* in_u = subst_exp_real_walk(residual, var, usym, &st);
+    if (!in_u || st.bad || !st.any_seen) { if (in_u) expr_free(in_u); return NULL; }
+    if (st.min_m < 0) {
+        in_u = eval_and_free(mk_fn2("Times", in_u,
+            mk_pow(expr_copy(usym), mk_int(-st.min_m))));
+    }
+    in_u = eval_and_free(internal_expand((Expr*[]){ in_u }, 1));
+    if (var_in(in_u, var) || !var_in(in_u, usym)) { expr_free(in_u); return NULL; }
+    Expr* kernel = mk_pow(mk_sym("E"), expr_copy(var));   /* E^var */
+    Expr* out = solve_u_and_unwind(in_u, usym, kernel, var, dom, opts);
+    expr_free(kernel);
+    expr_free(in_u);
+    return out;
+}
+
+/* Is `h` an invertible single-argument head whose inverse the inverse
+ * specialist can peel? */
+static bool is_kernel_head(const char* h) {
+    return h == SYM_Log
+        || h == SYM_Sin  || h == SYM_Cos  || h == SYM_Tan
+        || h == SYM_Cot  || h == SYM_Sec  || h == SYM_Csc
+        || h == SYM_Sinh || h == SYM_Cosh || h == SYM_Tanh
+        || h == SYM_Coth || h == SYM_Sech || h == SYM_Csch
+        || h == SYM_ArcSin  || h == SYM_ArcCos  || h == SYM_ArcTan
+        || h == SYM_ArcCot  || h == SYM_ArcSec  || h == SYM_ArcCsc
+        || h == SYM_ArcSinh || h == SYM_ArcCosh || h == SYM_ArcTanh
+        || h == SYM_ArcCoth || h == SYM_ArcSech || h == SYM_ArcCsch;
+}
+
+/* Collect the distinct invertible-head subexpressions of `e` that
+ * contain `var`, into `ks` (deduplicated, up to `max`). */
+static void collect_kernels(const Expr* e, const Expr* var,
+                            Expr** ks, size_t* n, size_t max) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && is_kernel_head(e->data.function.head->data.symbol.name)
+        && var_in(e, var)) {
+        bool dup = false;
+        for (size_t i = 0; i < *n; i++)
+            if (expr_eq(ks[i], (Expr*)e)) { dup = true; break; }
+        if (!dup && *n < max) ks[(*n)++] = expr_copy((Expr*)e);
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        collect_kernels(e->data.function.args[i], var, ks, n, max);
+}
+
+/* Generic-head kernel: substitute one invertible-head subexpression
+ * g(x) -> u and require the residual to become a polynomial in u free of
+ * var.  Returns NULL if no single kernel works. */
+static Expr* try_generic_kernel(Expr* residual, Expr* var, Expr* usym,
+                                Expr* dom, const SolveInvOpts* opts) {
+    Expr* ks[8];
+    size_t nk = 0;
+    collect_kernels(residual, var, ks, &nk, 8);
+    Expr* result = NULL;
+    for (size_t i = 0; i < nk && !result; i++) {
+        Expr* rule = mk_fn2("Rule", expr_copy(ks[i]), expr_copy(usym));
+        Expr* subbed = eval_and_free(internal_replace_all(
+            (Expr*[]){ expr_copy(residual), rule }, 2));
+        if (var_in(subbed, var) || !var_in(subbed, usym)
+            || !is_polynomial(subbed, &usym, 1)) {
+            expr_free(subbed);
+            continue;
+        }
+        result = solve_u_and_unwind(subbed, usym, ks[i], var, dom, opts);
+        expr_free(subbed);
+    }
+    for (size_t i = 0; i < nk; i++) expr_free(ks[i]);
+    return result;
+}
+
+Expr* solvetrig_solve_poly_in_kernel(Expr* equation, Expr* var,
+                                     Expr* dom, const SolveInvOpts* opts) {
+    if (!equation || !var) return NULL;
+    if (!head_is_sym(equation, SYM_Equal)
+        || equation->data.function.arg_count != 2) return NULL;
+
+    Expr* lhs = equation->data.function.args[0];
+    Expr* rhs = equation->data.function.args[1];
+    Expr* residual = eval_and_free(mk_fn2("Plus",
+        expr_copy(lhs), mk_neg(expr_copy(rhs))));
+    Expr* usym = mk_sym(KERNEL_USYM);
+
+    Expr* out = try_exp_kernel(residual, var, usym, dom, opts);
+    if (!out) out = try_generic_kernel(residual, var, usym, dom, opts);
+
+    /* Canonicalise unwound branches (strip complex logs). */
+    if (out && head_is_sym(out, SYM_List)) {
+        for (size_t i = 0; i < out->data.function.arg_count; i++)
+            simplify_solution_inplace(out->data.function.args[i]);
+    }
+
+    expr_free(usym);
+    expr_free(residual);
+    return out;
 }
 
 /* ------------------------------------------------------------------ *
