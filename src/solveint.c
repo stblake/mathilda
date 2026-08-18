@@ -56,6 +56,9 @@ static Expr* mk_rule(Expr* lhs, Expr* rhs) { return mk_fn2("Rule", lhs, rhs); }
 static Expr* mk_list(Expr** args, size_t n) {
     return expr_new_function(mk_sym("List"), args, n);
 }
+static Expr* mk_mpz(const mpz_t z) {
+    return expr_bigint_normalize(expr_new_bigint_from_mpz(z));
+}
 
 /* ------------------------------------------------------------------ *
  *  Limits.                                                            *
@@ -1530,6 +1533,120 @@ static bool si_solve_pell(SICtx* c, SearchState* st) {
     return true;
 }
 
+/* --- Linear Diophantine: parametric (unbounded) family. --- */
+
+/* Detect a single linear equation  sum a_i x_i == b.  Fills a[i] (coef of
+ * x_i) and b (= -constant term); false if any term has degree > 1. */
+static bool si_linear_detect(const MPoly* eq, int n, mpz_t* a, mpz_t b) {
+    for (int i = 0; i < n; i++) mpz_set_ui(a[i], 0);
+    mpz_set_ui(b, 0);
+    for (size_t t = 0; t < eq->n_terms; t++) {
+        const int* ex = eq->exps + t * (size_t)n;
+        int nz = -1, deg = 0;
+        for (int v = 0; v < n; v++) { deg += ex[v]; if (ex[v] > 0) { if (nz >= 0) return false; nz = v; } }
+        if (deg > 1) return false;
+        if (nz < 0) mpz_neg(b, eq->coefs[t]);           /* constant -> b = -const */
+        else mpz_set(a[nz], eq->coefs[t]);
+    }
+    return true;
+}
+
+/* Particular solution x0[n] and homogeneous-lattice basis (n-1 vectors,
+ * basis[j][i] = component i of vector j) of  sum a_i x_i == b, via the gcd
+ * staircase.  Returns false (no solution) when gcd(a) does not divide b.  All
+ * mpz arrays are pre-init'd by the caller. */
+static bool si_linear_lattice(const mpz_t* a, int n, const mpz_t b,
+                              mpz_t* x0, mpz_t** basis) {
+    mpz_t g, s, t, ng, q1, q2, tmp;
+    mpz_init(g); mpz_init(s); mpz_init(t); mpz_init(ng);
+    mpz_init(q1); mpz_init(q2); mpz_init(tmp);
+    mpz_t* r = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n);
+    for (int i = 0; i < n; i++) mpz_init_set_ui(r[i], 0);
+
+    mpz_set(g, a[0]); mpz_set_ui(r[0], 1);              /* g_0 = a_0, r_0 = e_0 */
+    for (int i = 1; i < n; i++) {
+        mpz_gcdext(ng, s, t, g, a[i]);                  /* ng = s*g + t*a_i */
+        mpz_t* d = basis[i - 1];                        /* d = (a_i/ng) r - (g/ng) e_i */
+        if (mpz_sgn(ng) != 0) { mpz_divexact(q1, a[i], ng); mpz_divexact(q2, g, ng); }
+        else { mpz_set_ui(q1, 0); mpz_set_ui(q2, 0); }
+        for (int k = 0; k < n; k++) mpz_mul(d[k], q1, r[k]);
+        mpz_sub(d[i], d[i], q2);
+        for (int k = 0; k < n; k++) mpz_mul(r[k], s, r[k]);   /* r = s*r + t*e_i */
+        mpz_add(r[i], r[i], t);
+        mpz_set(g, ng);
+    }
+
+    bool solvable;
+    if (mpz_sgn(g) == 0) {                               /* all coefficients zero */
+        solvable = (mpz_sgn(b) == 0);
+        for (int i = 0; i < n; i++) mpz_set_ui(x0[i], 0);
+    } else if (mpz_divisible_p(b, g)) {
+        solvable = true;
+        mpz_divexact(tmp, b, g);
+        for (int i = 0; i < n; i++) mpz_mul(x0[i], tmp, r[i]);   /* x0 = (b/g) r */
+    } else solvable = false;
+
+    for (int i = 0; i < n; i++) mpz_clear(r[i]);
+    free(r);
+    mpz_clear(g); mpz_clear(s); mpz_clear(t); mpz_clear(ng);
+    mpz_clear(q1); mpz_clear(q2); mpz_clear(tmp);
+    return solvable;
+}
+
+/* A single linear equation with NO other constraints -> the full parametric
+ * family  {{x_i -> x0_i + sum_j basis[j][i] C[j+1]}}, C[k] integer parameters.
+ * Returns the owned result Expr, {} for an unsolvable equation, or NULL to
+ * decline (not this shape). */
+static Expr* si_solve_linear_parametric(SICtx* c) {
+    if (c->neq != 1 || c->n_ord != 0 || c->n_neq != 0 || !c->all_captured) return NULL;
+    for (int i = 0; i < c->n; i++) if (c->has_lo[i] || c->has_hi[i]) return NULL;
+
+    int n = c->n;
+    mpz_t* a = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n);
+    mpz_t* x0 = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n);
+    for (int i = 0; i < n; i++) { mpz_init(a[i]); mpz_init(x0[i]); }
+    mpz_t b; mpz_init(b);
+    mpz_t** basis = (mpz_t**)malloc(sizeof(mpz_t*) * (size_t)(n > 1 ? n - 1 : 1));
+    for (int j = 0; j < n - 1; j++) {
+        basis[j] = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n);
+        for (int i = 0; i < n; i++) mpz_init_set_ui(basis[j][i], 0);
+    }
+
+    Expr* result = NULL;
+    if (!si_linear_detect(c->eq[0], n, a, b)) {
+        result = NULL;
+    } else if (!si_linear_lattice(a, n, b, x0, basis)) {
+        result = mk_list(NULL, 0);                       /* provably no solution */
+    } else {
+        Expr** rules = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+        for (int i = 0; i < n; i++) {
+            Expr** terms = (Expr**)malloc(sizeof(Expr*) * (size_t)(n + 1));
+            int nt = 0;
+            if (mpz_sgn(x0[i]) != 0) terms[nt++] = mk_mpz(x0[i]);
+            for (int j = 0; j < n - 1; j++) {
+                if (mpz_sgn(basis[j][i]) == 0) continue;
+                Expr* Ck = expr_new_function(mk_sym("C"), (Expr*[]){ mk_int(j + 1) }, 1);
+                terms[nt++] = mk_fn2("Times", mk_mpz(basis[j][i]), Ck);
+            }
+            Expr* val = (nt == 0) ? mk_int(0)
+                      : (nt == 1) ? terms[0]
+                      : expr_new_function(mk_sym("Plus"), terms, (size_t)nt);
+            free(terms);
+            val = eval_and_free(val);
+            rules[i] = mk_rule(expr_copy(c->var[i]), val);
+        }
+        Expr* tuple = mk_list(rules, (size_t)n);
+        free(rules);
+        result = mk_list((Expr*[]){ tuple }, 1);
+    }
+
+    for (int j = 0; j < n - 1; j++) { for (int i = 0; i < n; i++) mpz_clear(basis[j][i]); free(basis[j]); }
+    free(basis);
+    for (int i = 0; i < n; i++) { mpz_clear(a[i]); mpz_clear(x0[i]); }
+    free(a); free(x0); mpz_clear(b);
+    return result;
+}
+
 /* Dispatch the special forms.  Returns true if one handled the input
  * (candidates emitted into st). */
 static bool si_try_special_forms(SICtx* c, SearchState* st) {
@@ -1564,10 +1681,12 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
     c.original = expr;
     c.all_captured = true;      /* cleared by any constraint the store can't hold */
 
-    /* This pre-pass only engages when there is at least one inequality /
-     * ordering / disequation constraint; a bare polynomial equation with no
-     * constraints is left to the ordinary polynomial dispatch (which, with
-     * the Integers reality + integer filter, already handles x^2 == 4). */
+    /* This pre-pass engages when there is at least one inequality / ordering /
+     * disequation constraint, OR the equation is multivariable (so the
+     * parametric linear path can produce a solution family).  A bare
+     * single-variable equation with no constraints is left to the ordinary
+     * polynomial dispatch (which, with the Integers reality + integer filter,
+     * already handles x^2 == 4). */
     Expr** conj; int ncj;
     flatten_conjuncts(expr, &conj, &ncj);
     bool has_constraint = false, has_equation = false;
@@ -1581,7 +1700,7 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
                   && e->data.function.head->data.symbol.name == SYM_Inequality))
             has_constraint = true;
     }
-    if (!has_equation || !has_constraint) return NULL;
+    if (!has_equation || (!has_constraint && c.n < 2)) return NULL;
 
     /* Stage A. */
     for (int i = 0; i < ncj; i++) {
@@ -1612,6 +1731,13 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
 
     SearchState st; memset(&st, 0, sizeof(st));
     st.ctx = &c;
+
+    /* Unconstrained single linear equation -> parametric family (symbolic,
+     * so it bypasses the numeric candidate machinery). */
+    {
+        Expr* lin = si_solve_linear_parametric(&c);
+        if (lin) { ctx_free(&c); return lin; }
+    }
 
     /* Special forms first: divisor-factoring bilinear and unit-fraction
      * recursion are exact and O(#divisors) / O(bounded), so they beat the

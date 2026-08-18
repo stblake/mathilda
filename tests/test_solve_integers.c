@@ -140,6 +140,22 @@ static void test_pell(void) {
         "List[]");
 }
 
+/* Phase 2b: an unconstrained linear equation gives the parametric family via
+ * the gcd staircase; an unsolvable one gives {}. */
+static void test_linear_parametric(void) {
+    run_test("Solve[x + y == 10, {x, y}, Integers]",
+        "List[List[Rule[x, C[1]], Rule[y, Plus[10, Times[-1, C[1]]]]]]");
+    run_test("Solve[x + 2 y == 5, {x, y}, Integers]",
+        "List[List[Rule[x, Plus[5, Times[2, C[1]]]], Rule[y, Times[-1, C[1]]]]]");
+    /* gcd(2,2)=2 does not divide 3 -> no solution. */
+    run_test("Solve[2 x + 2 y == 3, {x, y}, Integers]", "List[]");
+    /* Three variables -> two parameters. */
+    run_test("Solve[x + y + z == 5, {x, y, z}, Integers]",
+        "List[List[Rule[x, C[1]], "
+             "Rule[y, Plus[C[2], Times[-1, C[1]]]], "
+             "Rule[z, Plus[5, Times[-1, C[2]]]]]]");
+}
+
 /* Deferred families must stay unevaluated (never a wrong answer). */
 static void test_deferred_unevaluated(void) {
     /* Mordell y^2 = x^3 + k: elliptic-integral-points phase, no bound. */
@@ -161,6 +177,7 @@ int main(void) {
     TEST(test_pythagorean_perimeter);
     TEST(test_egyptian_fractions);
     TEST(test_pell);
+    TEST(test_linear_parametric);
     TEST(test_integer_restriction);
     TEST(test_deferred_unevaluated);
 
