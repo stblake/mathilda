@@ -167,7 +167,13 @@ BQF.
         D=3,N=-2 were emitted as two overlapping families — the reduction only
         *advanced* into the orthant, never *reduced* a positive solution to
         minimal. Added the ε⁻¹ reduction loop.
-- [ ] **Systemic**: split `benchmarks/87` into developed-against vs a held-out
-      validation set (seed = the corpus above), run cold, with a
-      silent-wrong-answer detector (any `{}` a same-box brute force contradicts
-      = FAIL).
+- [x] **Systemic**: held-out validation gate — DONE.
+      `benchmarks/87-diophantine-integers/heldout.py` (~20 equations from
+      standard references, none in `cases.py`) + `validate.py`
+      (`make check-diophantine-heldout`): runs Mathilda cold, cross-checks every
+      answer against an independent Python brute-force oracle over the same box,
+      FAILS (nonzero exit) on any silent wrong answer (a `{}`/finite/parametric
+      result the oracle contradicts). Needs only the binary (no sympy); writes
+      `HELDOUT_REPORT.md`. Status: OK 18 / DECLINE 2 / WRONG 0; detector verified
+      to fail loud via a negative control. Guards all four Tier-1 features
+      against regression.
