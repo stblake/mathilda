@@ -57,5 +57,12 @@ Deferred cases (2, 4, 5, 6, 7, 9, 11, 13, 15) correctly return unevaluated.
       when factoring would be impractical (5th powers over |.|<10^5).
 - [x] Verified complete; tests added; suites pass; check-c99; valgrind baseline.
 
-## Phase 4 (future) — Thue/Mordell/hyperelliptic/Catalan/general-N Pell;
-##   Booker-style O(N) sum-of-three-cubes; MITM sieving refinements
+## Phase 4 — exponential Diophantine + bounded elliptic coverage — DONE (partial)
+- [x] Exponential Diophantine (variable exponents): bounded-box enumeration +
+      Catalan/Mihailescu (x^a-y^b==+/-1 -> unique 3^2-2^3). si_solve_exponential
+      runs before the MPoly stage. Handles the Catalan example.
+- [x] Confirmed + tested bounded Mordell/hyperelliptic (y^m==f(x)) resolve via
+      the leaf search: y^2=x^3-10000 -> {25,75}, y^2=x^3-2 -> {3,5}, etc.
+- Still deferred (genuinely research-grade, unbounded): Mordell-Weil/elliptic
+  integral points with no box (ex 5/7 unbounded), indefinite Thue equations
+  (ex 6), general-N Pell, Booker O(N) sum-of-three-cubes.

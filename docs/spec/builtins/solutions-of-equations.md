@@ -233,6 +233,23 @@ Attempts to solve an equation or system of equations for one or more variables.
     `Solve[x^2 - 61 y^2 == 1 && x > 0 && y > 0 && x < 10^10, {x, y}, Integers]`
     -> `{{x -> 1766319049, y -> 226153980}}`; the negative Pell
     `x^2 - 3 y^2 == -1` correctly returns `{}` (unsolvable).
+- **Exponential Diophantine (variable exponents).** Equations such as
+  `x^a - y^b == 1`, where the exponent is a solve variable, are handled before
+  the polynomial stage (which cannot represent `x^a`).  A fully bounded box
+  (`2^a - 3^b == -23 && 0 < a < 10 && 0 < b < 10` -> `{{a -> 2, b -> 3}}`) is
+  enumerated exactly; the **Catalan** shape `x^a - y^b == +/-1` with bases and
+  exponents `>= 2` is settled by **Mihailescu's theorem** -- the unique solution
+  is `3^2 - 2^3 = 1`, so
+  `Solve[x^a - y^b == 1 && 1 < x < 100 && 1 < y < 100 && a > 1 && b > 1,
+  {x, y, a, b}, Integers]` -> `{{x -> 3, y -> 2, a -> 2, b -> 3}}` (and `{}` when
+  the box excludes it).
+- **Elliptic / hyperelliptic curves over a box.** `y^m == f(x)` with a bounded
+  `x` (Mordell `y^2 = x^3 + k`, hyperelliptic `y^2 = quartic`) is solved by the
+  ordinary bounded search -- enumerate `x`, test that `f(x)` is a perfect
+  `m`-th power -- so `y^2 == x^3 - 10000 && 0 < x < 10^5 && y > 0` finds
+  `{{25, 75}}` and `y^2 == x^3 - 2` gives Fermat's `{{3, 5}}`.  The *unbounded*
+  case (all integral points with no box) needs Mordell-Weil / Baker methods and
+  is left unevaluated.
 - **Linear Diophantine.** A single **linear** equation is solved through its
   solution lattice (gcd staircase, particular solution + `(n-1)`-vector
   homogeneous basis):

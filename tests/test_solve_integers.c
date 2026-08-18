@@ -121,6 +121,48 @@ static void test_egyptian_fractions(void) {
              "{x, y, z}, Integers]]", "73");
 }
 
+/* Phase 4: exponential Diophantine (variable exponents), handled before the
+ * MPoly stage.  The Catalan shape x^a - y^b == +/-1 uses Mihailescu's theorem
+ * (the unique solution is 3^2 - 2^3 = 1); other shapes over a finite box are
+ * enumerated exactly. */
+static void test_exponential(void) {
+    /* Catalan / Mihailescu: the only solution with bases, exponents >= 2. */
+    run_test("Solve[x^a - y^b == 1 && 1 < x < 100 && 1 < y < 100 && a > 1 && b > 1, "
+             "{x, y, a, b}, Integers]",
+        "List[List[Rule[x, 3], Rule[y, 2], Rule[a, 2], Rule[b, 3]]]");
+    run_test("Solve[x^a - y^b == -1 && 1 < x < 100 && 1 < y < 100 && a > 1 && b > 1, "
+             "{x, y, a, b}, Integers]",
+        "List[List[Rule[x, 2], Rule[y, 3], Rule[a, 3], Rule[b, 2]]]");
+    /* The unique Catalan solution excluded by the box -> no solution. */
+    run_test("Solve[x^a - y^b == 1 && 1 < x < 3 && 1 < y < 100 && a > 1 && b > 1, "
+             "{x, y, a, b}, Integers]", "List[]");
+    /* Bounded exponent search: 2^2 - 3^3 = -23. */
+    run_test("Solve[2^a - 3^b == -23 && 0 < a < 10 && 0 < b < 10, {a, b}, Integers]",
+        "List[List[Rule[a, 2], Rule[b, 3]]]");
+    run_test("Solve[2^a - 3^b == 100 && 0 < a < 10 && 0 < b < 10, {a, b}, Integers]",
+        "List[]");
+}
+
+/* Phase 4: elliptic / hyperelliptic curves over a finite box (y^m == f(x)) are
+ * solved by the ordinary bounded search -- enumerate x, test that f(x) is a
+ * perfect power.  Included here as regression coverage for the families. */
+static void test_superelliptic_bounded(void) {
+    /* Mordell y^2 = x^3 - 2: Fermat's unique integral point (3, +/-5). */
+    run_test("Solve[y^2 == x^3 - 2 && 0 < x < 1000 && y > 0, {x, y}, Integers]",
+        "List[List[Rule[x, 3], Rule[y, 5]]]");
+    /* Mordell y^2 = x^3 + 1: the five integral points. */
+    run_test("Solve[y^2 == x^3 + 1 && -100 < x < 100, {x, y}, Integers]",
+        "List[List[Rule[x, -1], Rule[y, 0]], "
+             "List[Rule[x, 0], Rule[y, -1]], List[Rule[x, 0], Rule[y, 1]], "
+             "List[Rule[x, 2], Rule[y, -3]], List[Rule[x, 2], Rule[y, 3]]]");
+    /* y^2 = x^3 - 10000 has the integral point (25, 75). */
+    run_test("Solve[y^2 == x^3 - 10000 && 0 < x < 100000 && y > 0, {x, y}, Integers]",
+        "List[List[Rule[x, 25], Rule[y, 75]]]");
+    /* Hyperelliptic y^2 = x^4 - 4x^3 + 5x^2 - 2x = x(x-1)^2(x-2): no y > 0. */
+    run_test("Solve[x^4 - 4 x^3 + 5 x^2 - 2 x - y^2 == 0 && 0 < x < 100000 && y > 0, "
+             "{x, y}, Integers]", "List[]");
+}
+
 /* Phase 2d: separable odd-power sums via the divisor method (s = x+y | m).
  * These boxes are too large for the leaf search, so the divisor path runs. */
 static void test_powersum_divisor(void) {
@@ -207,6 +249,8 @@ int main(void) {
     TEST(test_pythagorean_perimeter);
     TEST(test_egyptian_fractions);
     TEST(test_powersum_divisor);
+    TEST(test_exponential);
+    TEST(test_superelliptic_bounded);
     TEST(test_pell);
     TEST(test_linear_parametric);
     TEST(test_integer_restriction);
