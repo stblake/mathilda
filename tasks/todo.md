@@ -39,11 +39,14 @@ Deferred cases (2, 4, 5, 6, 7, 9, 11, 13, 15) correctly return unevaluated.
 
 ## Phase 2b — linear Diophantine parametric + bounded gcd test — DONE
 - [x] Parametric family for unconstrained multivar linear (gcd staircase).
-- [x] Bounded: gcd unsolvability -> {} (ex 16); solvable-tractable via leaf;
-      solvable-intractable declines. (Full LLL lattice enumeration for
-      few-solution large boxes deferred -- the naive bound was buggy and
-      most solvable large linear boxes are intractable anyway.)
+- [x] Bounded: gcd unsolvability -> {} (ex 16).
 
-## Phase 2c (future) — LLL/Fincke-Pohst enumeration for few-solution large
-##   linear boxes; MITM for n=3 additive (ex 11)
+## Phase 2c — LLL lattice enumeration for solvable bounded linear — DONE
+- [x] LatticeReduce-reduced basis; coefficient box = value box projected
+      through the pseudoinverse (B B^T)^{-1} B; exact per-candidate check.
+- [x] Few-solution large-coeff boxes enumerated (2000-pt case < 1s);
+      dense/intractable boxes declined. Verified complete (gap-free 2-var
+      progression), no dups, leak-clean.
+
+## Phase 2d (future) — MITM for n=3 additive (ex 11, sum of three cubes)
 ## Phase 4 (future) — Thue/Mordell/hyperelliptic/Catalan/general-N Pell

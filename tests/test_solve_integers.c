@@ -154,6 +154,10 @@ static void test_linear_parametric(void) {
     run_test("Solve[314159265 x + 271828182 y + 161803398 z == 1 "
              "&& Abs[x] < 10^6 && Abs[y] < 10^6 && Abs[z] < 10^6, {x, y, z}, Integers]",
         "List[]");
+    /* Bounded, solvable, large box -> LLL lattice enumeration.  The 2-variable
+     * lattice is a single arithmetic progression; this box holds 2000 points. */
+    run_test("Length[Solve[1000003 x + 999983 y == 7 && Abs[x] < 10^9 && Abs[y] < 10^9, "
+             "{x, y}, Integers]]", "2000");
     /* Three variables -> two parameters. */
     run_test("Solve[x + y + z == 5, {x, y, z}, Integers]",
         "List[List[Rule[x, C[1]], "

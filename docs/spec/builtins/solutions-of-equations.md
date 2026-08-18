@@ -230,11 +230,15 @@ Attempts to solve an equation or system of equations for one or more variables.
     parameters (`Solve[x + y == 10, {x, y}, Integers]` ->
     `{{x -> C[1], y -> 10 - C[1]}}`); an unsolvable equation
     (`gcd(a)` does not divide `b`) gives `{}`.
-  - Over a finite box, an unsolvable equation is still reported as `{}` from
-    the gcd test (so a large box with no solution is instant); a *solvable*
-    box with a tractably small number of points is enumerated by the ordinary
-    bounded search, while a solvable box whose dense lattice would yield an
-    intractable number of points is left unevaluated rather than truncated.
+  - Over a finite box, an unsolvable equation is reported as `{}` from the gcd
+    test (so a large no-solution box is instant).  A solvable box is enumerated
+    through the **LLL-reduced solution lattice** (`LatticeReduce`): the search
+    is over the coefficient box obtained by projecting the value box through
+    the lattice pseudoinverse, so it is small exactly when the coefficients are
+    large (few solutions) — e.g. `1000003 x + 999983 y == 7 && Abs[x] < 10^9 &&
+    Abs[y] < 10^9` returns its 2000-point arithmetic progression.  A box whose
+    dense lattice would yield an intractable number of points is left
+    unevaluated rather than truncated.
 
 **Options**:
 - `Cubics -> False`: Emit cubic roots as held `Root[]` objects (default).

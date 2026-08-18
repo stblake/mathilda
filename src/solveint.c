@@ -1647,35 +1647,155 @@ static Expr* si_solve_linear_parametric(SICtx* c) {
     return result;
 }
 
-/* A single linear equation over a finite box.  gcd(a) not dividing b -> no
- * solution ({}).  A *solvable* linear equation over a box has a dense solution
- * lattice -- typically far too many points to enumerate (a small-coefficient
- * equation over a wide box can have ~10^8 solutions) -- so this path only
- * proves unsolvability and otherwise declines; the tractable, few-solution
- * boxes are handled by the ordinary bounded leaf search.  Returns true when it
- * has settled the answer (emitting nothing means {}). */
+/* Invert an m x m matrix G (double) into Ginv via Gauss-Jordan.  Returns false
+ * if singular. */
+static bool si_mat_inverse(double G[SI_MAX_VARS][SI_MAX_VARS], int m,
+                           double Ginv[SI_MAX_VARS][SI_MAX_VARS]) {
+    double A[SI_MAX_VARS][2 * SI_MAX_VARS];
+    for (int i = 0; i < m; i++)
+        for (int j = 0; j < m; j++) { A[i][j] = G[i][j]; A[i][m + j] = (i == j) ? 1.0 : 0.0; }
+    for (int col = 0; col < m; col++) {
+        int piv = col; double best = 0;
+        for (int r = col; r < m; r++) {
+            double av = A[r][col] < 0 ? -A[r][col] : A[r][col];
+            if (av > best) { best = av; piv = r; }
+        }
+        if (best < 1e-9) return false;
+        for (int j = 0; j < 2 * m; j++) { double tmp = A[col][j]; A[col][j] = A[piv][j]; A[piv][j] = tmp; }
+        double d = A[col][col];
+        for (int j = 0; j < 2 * m; j++) A[col][j] /= d;
+        for (int r = 0; r < m; r++) if (r != col) {
+            double f = A[r][col];
+            for (int j = 0; j < 2 * m; j++) A[r][j] -= f * A[col][j];
+        }
+    }
+    for (int i = 0; i < m; i++) for (int j = 0; j < m; j++) Ginv[i][j] = A[i][m + j];
+    return true;
+}
+
+/* A single linear equation over a finite box.  gcd(a) not dividing b -> {}.
+ * Otherwise the solution set is  x0 + Z-span of an (n-1)-vector lattice; the
+ * lattice is LLL-reduced (LatticeReduce) and the coefficient box is the exact
+ * projection of the value box under the pseudoinverse, so the search box is
+ * small when the coefficients are large (few solutions) and provably too large
+ * (declined) when the lattice is dense.  Every candidate is checked exactly.
+ * Returns true when it settled the answer (emitting nothing means {}). */
 static bool si_solve_linear_bounded(SICtx* c, SearchState* st) {
-    (void)st;
     if (c->neq != 1) return false;
-    int n = c->n;
+    int n = c->n, m = n - 1;
+    if (m < 1 || n > SI_MAX_VARS) return false;
     for (int i = 0; i < n; i++) if (!(c->has_lo[i] && c->has_hi[i])) return false;
 
-    mpz_t* a = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n);
-    for (int i = 0; i < n; i++) mpz_init(a[i]);
-    mpz_t b; mpz_init(b);
+    mpz_t* a  = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n);
+    mpz_t* x0 = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n);
+    for (int i = 0; i < n; i++) { mpz_init(a[i]); mpz_init(x0[i]); }
+    mpz_t b, g; mpz_init(b); mpz_init_set_ui(g, 0);
+    mpz_t** basis = (mpz_t**)malloc(sizeof(mpz_t*) * (size_t)m);
+    for (int j = 0; j < m; j++) { basis[j] = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n);
+        for (int i = 0; i < n; i++) mpz_init_set_ui(basis[j][i], 0); }
 
     bool handled = false;
     if (si_linear_detect(c->eq[0], n, a, b)) {
-        mpz_t g; mpz_init_set_ui(g, 0);
         for (int i = 0; i < n; i++) mpz_gcd(g, g, a[i]);
-        if (mpz_sgn(g) == 0) handled = (mpz_sgn(b) != 0);   /* 0 == b!=0 -> {} */
-        else if (!mpz_divisible_p(b, g)) handled = true;     /* gcd does not divide b -> {} */
-        /* else: solvable -> too many points to enumerate here; decline. */
-        mpz_clear(g);
+        bool solvable = (mpz_sgn(g) == 0) ? (mpz_sgn(b) == 0)
+                                          : mpz_divisible_p(b, g);
+        if (!solvable) {
+            handled = true;                              /* provably {} */
+        } else if (si_linear_lattice(a, n, b, x0, basis)) {
+            /* LLL-reduce the homogeneous basis via LatticeReduce[...]. */
+            Expr** rowsE = (Expr**)malloc(sizeof(Expr*) * (size_t)m);
+            for (int j = 0; j < m; j++) {
+                Expr** comp = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+                for (int i = 0; i < n; i++) comp[i] = mk_mpz(basis[j][i]);
+                rowsE[j] = mk_list(comp, (size_t)n); free(comp);
+            }
+            Expr* red = eval_and_free(expr_new_function(mk_sym("LatticeReduce"),
+                                      (Expr*[]){ mk_list(rowsE, (size_t)m) }, 1));
+            free(rowsE);
+
+            mpz_t Bz[SI_MAX_VARS][SI_MAX_VARS];
+            double Bd[SI_MAX_VARS][SI_MAX_VARS];
+            for (int j = 0; j < SI_MAX_VARS; j++) for (int i = 0; i < SI_MAX_VARS; i++) mpz_init(Bz[j][i]);
+            int mm = 0;
+            if (red && red->type == EXPR_FUNCTION
+                && red->data.function.head->type == EXPR_SYMBOL
+                && red->data.function.head->data.symbol.name == SYM_List
+                && (int)red->data.function.arg_count == m) {
+                mm = m;
+                for (int j = 0; j < m; j++) {
+                    Expr* row = red->data.function.args[j];
+                    for (int i = 0; i < n; i++) {
+                        mpz_set(Bz[j][i], basis[j][i]);      /* fallback: unreduced */
+                        if (row->type == EXPR_FUNCTION && (int)row->data.function.arg_count == n) {
+                            int64_t vv;
+                            if (expr_as_i64(row->data.function.args[i], &vv)) mpz_set_si(Bz[j][i], vv);
+                        }
+                        Bd[j][i] = mpz_get_d(Bz[j][i]);
+                    }
+                }
+            }
+            if (red) expr_free(red);
+
+            /* P = (B B^T)^{-1} B  (m x n). */
+            double Gm[SI_MAX_VARS][SI_MAX_VARS], Ginv[SI_MAX_VARS][SI_MAX_VARS];
+            for (int j = 0; j < mm; j++) for (int k = 0; k < mm; k++) {
+                double s = 0; for (int i = 0; i < n; i++) s += Bd[j][i] * Bd[k][i]; Gm[j][k] = s;
+            }
+            if (mm == m && si_mat_inverse(Gm, m, Ginv)) {
+                /* Coefficient box = exact projection of the value box. */
+                double Lb[SI_MAX_VARS], Ub[SI_MAX_VARS];
+                for (int i = 0; i < n; i++) {
+                    double x0d = mpz_get_d(x0[i]);
+                    Lb[i] = (double)c->lo[i] - x0d;
+                    Ub[i] = (double)c->hi[i] - x0d;
+                }
+                int64_t Clo[SI_MAX_VARS], Chi[SI_MAX_VARS];
+                long double space = 1.0L; bool ok = true;
+                for (int j = 0; j < m && ok; j++) {
+                    double lo = 0, hi = 0;
+                    for (int i = 0; i < n; i++) {
+                        double P = 0; for (int k = 0; k < m; k++) P += Ginv[j][k] * Bd[k][i];
+                        double t1 = P * Lb[i], t2 = P * Ub[i];
+                        lo += (t1 < t2) ? t1 : t2;
+                        hi += (t1 < t2) ? t2 : t1;
+                    }
+                    Clo[j] = (int64_t)floor(lo) - 1;
+                    Chi[j] = (int64_t)ceil(hi) + 1;
+                    space *= (long double)(Chi[j] - Clo[j] + 1);
+                    if (space > (long double)SI_MAX_NODES) ok = false;
+                }
+                if (ok) {
+                    st->max_visits = SI_MAX_NODES;
+                    int64_t cc[SI_MAX_VARS];
+                    for (int j = 0; j < m; j++) cc[j] = Clo[j];
+                    mpz_t xi, term; mpz_init(xi); mpz_init(term);
+                    for (;;) {
+                        int64_t vals[SI_MAX_VARS]; bool inbox = true;
+                        for (int i = 0; i < n && inbox; i++) {
+                            mpz_set(xi, x0[i]);
+                            for (int j = 0; j < m; j++) { mpz_mul_si(term, Bz[j][i], (long)cc[j]); mpz_add(xi, xi, term); }
+                            if (!mpz_fits_slong_p(xi)) { inbox = false; break; }
+                            int64_t xv = mpz_get_si(xi);
+                            if (xv < c->lo[i] || xv > c->hi[i]) inbox = false;
+                            vals[i] = xv;
+                        }
+                        if (inbox && si_verify(c, vals)) emit_full(st, vals);
+                        int j = 0;
+                        for (; j < m; j++) { if (++cc[j] <= Chi[j]) break; cc[j] = Clo[j]; }
+                        if (j == m) break;
+                    }
+                    mpz_clear(xi); mpz_clear(term);
+                    handled = true;
+                }
+            }
+            for (int j = 0; j < SI_MAX_VARS; j++) for (int i = 0; i < SI_MAX_VARS; i++) mpz_clear(Bz[j][i]);
+        }
     }
 
-    for (int i = 0; i < n; i++) mpz_clear(a[i]);
-    free(a); mpz_clear(b);
+    for (int j = 0; j < m; j++) { for (int i = 0; i < n; i++) mpz_clear(basis[j][i]); free(basis[j]); }
+    free(basis);
+    for (int i = 0; i < n; i++) { mpz_clear(a[i]); mpz_clear(x0[i]); }
+    free(a); free(x0); mpz_clear(b); mpz_clear(g);
     return handled;
 }
 
