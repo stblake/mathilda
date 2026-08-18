@@ -6,7 +6,11 @@
  * until x and y are bound to numeric values.
  *
  * Algorithm:
- *   1. Evaluate f on a (PlotPoints+1) × (PlotPoints+1) grid.
+ *   1. Evaluate f on a (PlotPoints+1) × (PlotPoints+1) grid, then -- while
+ *      MaxRecursion allows it -- double the whole grid's resolution and
+ *      re-evaluate whenever a cheap flatness spot-check fails, exactly as
+ *      Plot3D's sample_surface() does for the same crack-avoidance reason
+ *      (marching squares needs a uniform, T-junction-free grid).
  *   2. Choose contour levels: explicit list, or N evenly spaced levels.
  *   3. Optionally shade each grid cell by its z value (ContourShading).
  *   4. For each level: run marching squares over the grid, emitting Line[]
@@ -75,6 +79,7 @@ static Expr* contour_color(Expr* cfn, double t, double x, double y) {
 
 typedef struct {
     int     plot_points;           /* grid points per axis, default 25 */
+    int     max_recursion;         /* whole-grid doubling passes, default 2 */
     int     n_contours;            /* number of auto-levels, default 10 */
     double* levels;                /* explicit contour values; NULL = auto */
     size_t  n_levels;
@@ -93,6 +98,7 @@ typedef struct {
 static bool split_contour_options(Expr* res, ContourOpts* co,
                                   Expr*** passthrough_out, size_t* pt_count_out) {
     co->plot_points = 25;
+    co->max_recursion = 2;
     co->n_contours = 10;
     co->levels = NULL;
     co->n_levels = 0;
@@ -129,6 +135,10 @@ static bool split_contour_options(Expr* res, ContourOpts* co,
             long v;
             if (!parse_long_value(rhs, &v) || v < 2) CP_FAIL();
             co->plot_points = (int)v;
+        } else if (name == SYM_MaxRecursion) {
+            long v;
+            if (!parse_long_value(rhs, &v) || v < 0) CP_FAIL();
+            co->max_recursion = (int)v;
         } else if (name == SYM_Contours) {
             co->contours_set = true;
             Expr* v = evaluate(expr_copy(rhs));
@@ -278,6 +288,109 @@ static double eval_at(const GridCtx* ctx, double x, double y) {
     expr_free(xv);
     expr_free(yv);
     return ok ? v : NAN;
+}
+
+/* ------------------------------------------------------------------ */
+/* Adaptive grid refinement (MaxRecursion)                              */
+/*                                                                       */
+/* Marching squares needs a uniform, crack-free grid, so -- exactly as  */
+/* plot3d.c's sample_surface() does for the same reason -- refinement   */
+/* doubles the WHOLE grid's resolution rather than subdividing          */
+/* individual cells into a quadtree (which would leave T-junctions      */
+/* where differently-refined cells meet).                               */
+/* ------------------------------------------------------------------ */
+
+#define CONTOUR_FLAT_TOL 0.0025   /* same tolerance as plot3d.c's FLAT_TOL3D */
+#define CONTOUR_MAX_N    200      /* hard points-per-axis ceiling */
+
+/* Fill an (n+1)x(n+1) row-major grid of f(x,y) samples over the world-space
+ * bounds. grid[iy*(n+1)+ix] holds the sample at world coords
+ * (u_xmin+ix*du_x, u_ymin+iy*du_y), mapped back to data space via
+ * scale_invert before calling f. */
+static void contour_fill_grid(GridCtx* ctx, double* grid, int n,
+                               double u_xmin, double u_xmax,
+                               double u_ymin, double u_ymax,
+                               ScaleFnType sf_x, ScaleFnType sf_y) {
+    double du_x = (u_xmax - u_xmin) / n;
+    double du_y = (u_ymax - u_ymin) / n;
+    for (int iy = 0; iy <= n; iy++) {
+        double yj = scale_invert(sf_y, u_ymin + iy * du_y);
+        for (int ix = 0; ix <= n; ix++) {
+            double xi = scale_invert(sf_x, u_xmin + ix * du_x);
+            grid[iy * (n + 1) + ix] = eval_at(ctx, xi, yj);
+        }
+    }
+}
+
+/* Cheap flatness spot-check: for every cell, compare f at the cell centre
+ * against the bilinear average of its 4 corners.  Mirrors plot3d.c's
+ * surface_is_flat(), one extra f(x,y) evaluation per cell. */
+static bool contour_grid_is_flat(GridCtx* ctx, const double* grid, int n,
+                                  double u_xmin, double u_xmax,
+                                  double u_ymin, double u_ymax,
+                                  ScaleFnType sf_x, ScaleFnType sf_y,
+                                  double zspan) {
+    double du_x = (u_xmax - u_xmin) / n;
+    double du_y = (u_ymax - u_ymin) / n;
+    for (int iy = 0; iy < n; iy++) {
+        double wy0 = u_ymin + iy * du_y;
+        for (int ix = 0; ix < n; ix++) {
+            double wx0 = u_xmin + ix * du_x;
+            double v00 = grid[iy       * (n + 1) + ix    ];
+            double v10 = grid[iy       * (n + 1) + ix + 1];
+            double v11 = grid[(iy + 1) * (n + 1) + ix + 1];
+            double v01 = grid[(iy + 1) * (n + 1) + ix    ];
+            if (!isfinite(v00) || !isfinite(v10) || !isfinite(v11) || !isfinite(v01))
+                continue;
+
+            double cx = scale_invert(sf_x, wx0 + du_x * 0.5);
+            double cy = scale_invert(sf_y, wy0 + du_y * 0.5);
+            double cz = eval_at(ctx, cx, cy);
+            if (!isfinite(cz)) continue;
+
+            double bilinear = (v00 + v10 + v11 + v01) * 0.25;
+            if (fabs(cz - bilinear) > CONTOUR_FLAT_TOL * zspan) return false;
+        }
+    }
+    return true;
+}
+
+/* Samples ctx->body on an n x n grid, doubling n (up to max_recursion
+ * times, hard-capped at CONTOUR_MAX_N points/axis) while
+ * contour_grid_is_flat() fails. Returns the final (out_n+1)^2 row-major
+ * grid (caller frees with free()); *out_n is the final resolution. */
+static double* contour_sample(GridCtx* ctx,
+                               double u_xmin, double u_xmax,
+                               double u_ymin, double u_ymax,
+                               ScaleFnType sf_x, ScaleFnType sf_y,
+                               int plot_points, int max_recursion, int* out_n) {
+    int n = plot_points;
+    double* grid = malloc(sizeof(double) * (size_t)(n + 1) * (size_t)(n + 1));
+    contour_fill_grid(ctx, grid, n, u_xmin, u_xmax, u_ymin, u_ymax, sf_x, sf_y);
+
+    for (int level = 0; level < max_recursion && n < CONTOUR_MAX_N; level++) {
+        double zmin = 1e300, zmax = -1e300;
+        size_t total = (size_t)(n + 1) * (size_t)(n + 1);
+        for (size_t k = 0; k < total; k++) {
+            double v = grid[k];
+            if (isfinite(v)) { if (v < zmin) zmin = v; if (v > zmax) zmax = v; }
+        }
+        double zspan = (zmax > zmin) ? (zmax - zmin) : 1.0;
+
+        if (contour_grid_is_flat(ctx, grid, n, u_xmin, u_xmax, u_ymin, u_ymax,
+                                  sf_x, sf_y, zspan))
+            break;
+
+        int nn = n * 2;
+        if (nn > CONTOUR_MAX_N) nn = CONTOUR_MAX_N;
+        free(grid);
+        n = nn;
+        grid = malloc(sizeof(double) * (size_t)(n + 1) * (size_t)(n + 1));
+        contour_fill_grid(ctx, grid, n, u_xmin, u_xmax, u_ymin, u_ymax, sf_x, sf_y);
+    }
+
+    *out_n = n;
+    return grid;
 }
 
 /* ------------------------------------------------------------------ */
@@ -481,29 +594,16 @@ Expr* builtin_contourplot(Expr* res) {
     /* Determine shading: Automatic → on if ColorFunction is set */
     bool do_shade = (co.shading == 1) || (co.shading == -1 && co.color_function != NULL);
 
-    int N = co.plot_points;        /* grid is (N+1)×(N+1) points, N×N cells */
+    int N = co.plot_points;        /* initial grid is (N+1)×(N+1) points, N×N cells;
+                                     * MaxRecursion may refine N upward (see contour_sample). */
 
-    /* World-space (scaled) bounds and step sizes.  When no scaling is active
-     * these equal the data-space values, so the code below is uniform. */
+    /* World-space (scaled) bounds.  When no scaling is active these equal
+     * the data-space values, so the code below is uniform. Per-axis step
+     * sizes (du_x/du_y) are derived from N after each grid is sampled,
+     * since MaxRecursion can change N per grid (per equation, in the
+     * multi-equation path below). */
     double u_xmin = scale_apply(co.sf_x, xmin), u_xmax = scale_apply(co.sf_x, xmax);
     double u_ymin = scale_apply(co.sf_y, ymin), u_ymax = scale_apply(co.sf_y, ymax);
-    double du_x = (u_xmax - u_xmin) / N;
-    double du_y = (u_ymax - u_ymin) / N;
-    /* Keep legacy names for code that still uses them for data-space work. */
-    double dx = (xmax - xmin) / N;
-    double dy = (ymax - ymin) / N;
-    (void)dx; (void)dy; /* suppress unused-variable warning when only world coords used */
-
-    /* Allocate and evaluate the grid. */
-    double* grid = malloc(sizeof(double) * (size_t)(N + 1) * (size_t)(N + 1));
-    if (!grid) {
-        iter_spec_free(&xspec); iter_spec_free(&yspec);
-        free(co.levels);
-        for (size_t i = 0; i < pt_count; i++) expr_free(passthrough[i]);
-        free(passthrough);
-        if (effective_body) expr_free(effective_body);
-        return NULL;
-    }
 
     /* ------------------------------------------------------------------ */
     /* Multi-equation List body: ContourPlot[{eq1, eq2, ...}, ...]        */
@@ -555,22 +655,23 @@ Expr* builtin_contourplot(Expr* res) {
                 sub_body = expr_copy(elem);
             }
 
-            /* Evaluate grid for this element (sample uniformly in world space). */
+            /* Evaluate grid for this element (sample uniformly in world space,
+             * refined per MaxRecursion -- each equation may land at a
+             * different resolution). */
             GridCtx lctx = { .xvar = xspec.var, .yvar = yspec.var, .body = sub_body };
             Rule* lox = iter_spec_shadow(xspec.var);
             Rule* loy = iter_spec_shadow(yspec.var);
             lctx.ac = grid_compile(&lctx);
-            for (int iy = 0; iy <= N; iy++) {
-                double yj = scale_invert(co.sf_y, u_ymin + iy * du_y);
-                for (int ix = 0; ix <= N; ix++) {
-                    double xi = scale_invert(co.sf_x, u_xmin + ix * du_x);
-                    grid[iy * (N + 1) + ix] = eval_at(&lctx, xi, yj);
-                }
-            }
+            int eq_n;
+            double* grid = contour_sample(&lctx, u_xmin, u_xmax, u_ymin, u_ymax,
+                                           co.sf_x, co.sf_y, N, co.max_recursion, &eq_n);
             autocompiled_free(lctx.ac);
             iter_spec_restore(xspec.var, lox);
             iter_spec_restore(yspec.var, loy);
             expr_free(sub_body);
+
+            double eq_du_x = (u_xmax - u_xmin) / eq_n;
+            double eq_du_y = (u_ymax - u_ymin) / eq_n;
 
             /* Emit colour directive for this equation. */
             const double* clr = CLR[eq_i % 5];
@@ -588,25 +689,25 @@ Expr* builtin_contourplot(Expr* res) {
             /* Marching squares (cell corners in world space). */
             for (size_t li = 0; li < sub_nl; li++) {
                 double level = sub_lvs[li];
-                for (int iy = 0; iy < N; iy++) {
-                    double wy0 = u_ymin + iy * du_y;
-                    for (int ix = 0; ix < N; ix++) {
-                        double wx0 = u_xmin + ix * du_x;
-                        double v00 = grid[ iy      * (N + 1) + ix    ];
-                        double v10 = grid[ iy      * (N + 1) + ix + 1];
-                        double v11 = grid[(iy + 1) * (N + 1) + ix + 1];
-                        double v01 = grid[(iy + 1) * (N + 1) + ix    ];
+                for (int iy = 0; iy < eq_n; iy++) {
+                    double wy0 = u_ymin + iy * eq_du_y;
+                    for (int ix = 0; ix < eq_n; ix++) {
+                        double wx0 = u_xmin + ix * eq_du_x;
+                        double v00 = grid[ iy      * (eq_n + 1) + ix    ];
+                        double v10 = grid[ iy      * (eq_n + 1) + ix + 1];
+                        double v11 = grid[(iy + 1) * (eq_n + 1) + ix + 1];
+                        double v01 = grid[(iy + 1) * (eq_n + 1) + ix    ];
                         LENSURE(4);
-                        cell_march(lprims, &lnprim, wx0, wy0, du_x, du_y,
+                        cell_march(lprims, &lnprim, wx0, wy0, eq_du_x, eq_du_y,
                                    v00, v10, v11, v01, level);
                     }
                 }
             }
+
+            free(grid);
         }
 
 #undef LENSURE
-
-        free(grid);
         free(co.levels);
 
         /* Embed PlotRange if not already in passthrough (world coords). */
@@ -686,23 +787,24 @@ Expr* builtin_contourplot(Expr* res) {
     Rule* old_y = iter_spec_shadow(yspec.var);
     ctx.ac = grid_compile(&ctx);
 
-    double zmin = 1e300, zmax = -1e300;
-    for (int iy = 0; iy <= N; iy++) {
-        double yj = scale_invert(co.sf_y, u_ymin + iy * du_y);
-        for (int ix = 0; ix <= N; ix++) {
-            double xi = scale_invert(co.sf_x, u_xmin + ix * du_x);
-            double v = eval_at(&ctx, xi, yj);
-            grid[iy * (N + 1) + ix] = v;
-            if (isfinite(v)) {
-                if (v < zmin) zmin = v;
-                if (v > zmax) zmax = v;
-            }
-        }
-    }
+    double* grid = contour_sample(&ctx, u_xmin, u_xmax, u_ymin, u_ymax,
+                                   co.sf_x, co.sf_y, N, co.max_recursion, &N);
 
     autocompiled_free(ctx.ac);
     iter_spec_restore(xspec.var, old_x);
     iter_spec_restore(yspec.var, old_y);
+
+    double du_x = (u_xmax - u_xmin) / N;
+    double du_y = (u_ymax - u_ymin) / N;
+
+    double zmin = 1e300, zmax = -1e300;
+    {
+        size_t total = (size_t)(N + 1) * (size_t)(N + 1);
+        for (size_t k = 0; k < total; k++) {
+            double v = grid[k];
+            if (isfinite(v)) { if (v < zmin) zmin = v; if (v > zmax) zmax = v; }
+        }
+    }
 
     /* Build the contour levels. */
     double* levels;

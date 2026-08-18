@@ -380,14 +380,20 @@ static void assert_plot_parity(const char* compiled, const char* interpreted,
 }
 
 void test_contourplot_parity(void) {
+    /* MaxRecursion -> 0 throughout: flatness-driven grid doubling is a
+     * data-dependent decision made independently by the compiled and
+     * interpreted paths, so it is pinned off here -- exactly the
+     * convention test_plot3d.c uses for the same reason -- leaving this
+     * test to verify grid-evaluation parity on a fixed-size grid, not
+     * refinement parity. */
     assert_plot_parity(
-        "ContourPlot[Sin[x] Cos[y] + x^2/10, {x, -2, 2}, {y, -2, 2}, PlotPoints -> 30]",
-        "ContourPlot[uncid[Sin[x] Cos[y] + x^2/10], {x, -2, 2}, {y, -2, 2}, PlotPoints -> 30]",
+        "ContourPlot[Sin[x] Cos[y] + x^2/10, {x, -2, 2}, {y, -2, 2}, PlotPoints -> 30, MaxRecursion -> 0]",
+        "ContourPlot[uncid[Sin[x] Cos[y] + x^2/10], {x, -2, 2}, {y, -2, 2}, PlotPoints -> 30, MaxRecursion -> 0]",
         "10^-12");
     /* Equation form takes a different grid path (one grid per equation). */
     assert_plot_parity(
-        "ContourPlot[x^2 + y^2 == 2, {x, -2, 2}, {y, -2, 2}, PlotPoints -> 20]",
-        "ContourPlot[uncid[x^2 + y^2] == 2, {x, -2, 2}, {y, -2, 2}, PlotPoints -> 20]",
+        "ContourPlot[x^2 + y^2 == 2, {x, -2, 2}, {y, -2, 2}, PlotPoints -> 20, MaxRecursion -> 0]",
+        "ContourPlot[uncid[x^2 + y^2] == 2, {x, -2, 2}, {y, -2, 2}, PlotPoints -> 20, MaxRecursion -> 0]",
         "10^-12");
     assert_eval_eq("Head[ContourPlot[uncid[x + y], {x, 0, 1}, {y, 0, 1}, PlotPoints -> 5]]",
                    "Graphics", 0);

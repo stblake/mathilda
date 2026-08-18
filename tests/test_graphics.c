@@ -44,6 +44,44 @@ void test_plot_honors_plot_points_option(void) {
         "7", 0);
 }
 
+void test_contourplot_max_recursion_zero_is_fixed_grid(void) {
+    /* MaxRecursion -> 0 disables all adaptive refinement, reproducing the
+     * fixed-PlotPoints-grid behavior ContourPlot had before MaxRecursion
+     * existed: a deterministic segment count for a given grid. */
+    assert_eval_eq(
+        "Length[Cases[ContourPlot[x - y == 0, {x, -1, 1}, {y, -1, 1},"
+        " PlotPoints -> 4, MaxRecursion -> 0], Line[___], Infinity]]",
+        "7", 0);
+}
+
+void test_contourplot_max_recursion_refines_by_default(void) {
+    /* Default MaxRecursion (2) doubles the whole grid's resolution while a
+     * bilinear flatness spot-check fails, so a sharply oscillating function
+     * resolves far more contour segments at the same initial PlotPoints
+     * than MaxRecursion -> 0 does. */
+    assert_eval_eq(
+        "Length[Cases[ContourPlot[Sin[5 x] Cos[5 y], {x, -2, 2}, {y, -2, 2},"
+        " PlotPoints -> 8, MaxRecursion -> 0], Line[___], Infinity]] <"
+        " Length[Cases[ContourPlot[Sin[5 x] Cos[5 y], {x, -2, 2}, {y, -2, 2},"
+        " PlotPoints -> 8], Line[___], Infinity]]",
+        "True", 0);
+}
+
+void test_contourplot_max_recursion_rejects_negative(void) {
+    assert_eval_eq(
+        "ContourPlot[x + y, {x, 0, 1}, {y, 0, 1}, MaxRecursion -> -1]",
+        "ContourPlot[x + y, {x, 0, 1}, {y, 0, 1}, MaxRecursion -> -1]", 0);
+}
+
+void test_contourplot_max_recursion_cap_terminates(void) {
+    /* Refinement is hard-capped at 200 points/axis regardless of
+     * MaxRecursion, so an aggressive value must still return promptly. */
+    assert_eval_eq(
+        "Head[ContourPlot[Sin[5 x] Cos[5 y], {x, -2, 2}, {y, -2, 2},"
+        " PlotPoints -> 8, MaxRecursion -> 6]]",
+        "Graphics", 0);
+}
+
 void test_show_requires_graphics_argument(void) {
     assert_eval_eq("Show[5]", "Show[5]", 0);
 }
@@ -824,6 +862,10 @@ int main(void) {
     TEST(test_plot_returns_graphics_head);
     TEST(test_plot_invalid_args_stay_unevaluated);
     TEST(test_plot_honors_plot_points_option);
+    TEST(test_contourplot_max_recursion_zero_is_fixed_grid);
+    TEST(test_contourplot_max_recursion_refines_by_default);
+    TEST(test_contourplot_max_recursion_rejects_negative);
+    TEST(test_contourplot_max_recursion_cap_terminates);
     TEST(test_show_requires_graphics_argument);
     TEST(test_graphics_options_registered);
     TEST(test_show_merges_options);

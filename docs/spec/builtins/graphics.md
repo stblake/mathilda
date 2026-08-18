@@ -42,7 +42,7 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 | [`ListPlot`](#listplot) | Scatter / line plot of discrete data | `Joined`, `Filling`, `DataRange`, `PlotStyle`, `ScalingFunctions` |
 | [`ParametricPlot`](#parametricplot) | Parametric curves `{fx(t), fy(t)}` (1-iter) or surfaces `{fx(t,u), fy(t,u)}` (2-iter) | `ColorFunction`, `RegionFunction`, `Mesh` |
 | [`PolarPlot`](#polarplot) | Polar curve `r(θ)` | `ColorFunction`, `PlotStyle`, `RegionFunction` |
-| [`ContourPlot`](#contourplot) | Iso-contour lines / filled contours of `f(x,y)` | `Contours`, `ContourStyle`, `ContourShading`, `ColorFunction`, `ContourLabels`, `ScalingFunctions` |
+| [`ContourPlot`](#contourplot) | Iso-contour lines / filled contours of `f(x,y)` | `Contours`, `ContourStyle`, `ContourShading`, `ColorFunction`, `ContourLabels`, `MaxRecursion`, `ScalingFunctions` |
 | [`DensityPlot`](#densityplot) | Heatmap of `f(x,y)` | `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends`, `ScalingFunctions` |
 | [`ArrayPlot`](#arrayplot) | Grid heatmap of a literal 2D array (no interpolation) — also a raw pixel-grid renderer for a matrix of colours | `ColorFunction`, `ColorFunctionScaling`, `Mesh`, `PlotLegends` |
 | [`ComplexPlot`](#complexplot) | Domain-colouring of a complex function `f(z)` | `PlotPoints`, `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends` |
@@ -1020,7 +1020,7 @@ ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}]
 ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
 ```
 
-`HoldAll`, `Protected`. Uses marching squares with bilinear saddle-cell disambiguation. Options: see **Feature summary** above. Defaults: `Axes -> True`, `AspectRatio -> 1`.
+`HoldAll`, `Protected`. Uses marching squares with bilinear saddle-cell disambiguation. Options: see **Feature summary** above. Defaults: `Axes -> True`, `AspectRatio -> 1`, `MaxRecursion -> 2` (doubles the whole grid's resolution, capped at 200 points/axis, while a bilinear flatness spot-check fails -- a global, crack-free analogue of `Plot3D`'s own `MaxRecursion`; `MaxRecursion -> 0` disables refinement and uses a fixed `PlotPoints` grid).
 
 ```mathematica
 (* --- Basic contour plots --- *)
@@ -1054,22 +1054,26 @@ In[7]:= ContourPlot[x^2 + y^2, {x, -2, 2}, {y, -2, 2},
           ContourLabels -> True, Contours -> 5]
 Out[7]= -Graphics-  (* level values annotated at first segment *)
 
+(* --- MaxRecursion: adaptive refinement for sharply curved level sets --- *)
+In[8]:= ContourPlot[Sin[5 x] Cos[5 y], {x, -2, 2}, {y, -2, 2}, MaxRecursion -> 4]
+Out[8]= -Graphics-  (* smoother contours than MaxRecursion -> 0's fixed 25x25 grid *)
+
 (* --- RegionFunction: circular mask --- *)
-In[8]:= ContourPlot[x^2 + y^2, {x, -3, 3}, {y, -3, 3},
+In[9]:= ContourPlot[x^2 + y^2, {x, -3, 3}, {y, -3, 3},
           RegionFunction -> Function[{x, y}, x^2 + y^2 < 4],
           ContourShading -> True]
-Out[8]= -Graphics-
+Out[9]= -Graphics-
 
 (* --- ContourStyle: cycle explicit colours --- *)
-In[9]:= ContourPlot[Sin[x + y], {x, -3, 3}, {y, -3, 3},
+In[10]:= ContourPlot[Sin[x + y], {x, -3, 3}, {y, -3, 3},
           ContourStyle -> {Red, Blue, Green}, Contours -> 6]
-Out[9]= -Graphics-  (* cycles Red, Blue, Green across 6 levels *)
+Out[10]= -Graphics-  (* cycles Red, Blue, Green across 6 levels *)
 
 (* --- Suppress lines, shading only --- *)
-In[10]:= ContourPlot[Sin[x] + Cos[y], {x, -3, 3}, {y, -3, 3},
+In[11]:= ContourPlot[Sin[x] + Cos[y], {x, -3, 3}, {y, -3, 3},
            ContourStyle -> None, ContourShading -> True,
            ColorFunction -> "Temperature"]
-Out[10]= -Graphics-
+Out[11]= -Graphics-
 ```
 
 ---
