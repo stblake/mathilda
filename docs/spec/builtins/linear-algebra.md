@@ -1200,6 +1200,34 @@ Out[5]= LatticeReduce[{{1, 2}, {3, 4.5}}]
 > Lovász swap via the conjugate-aware Cohen swap formulas — so no full
 > recomputation is needed.
 
+## HermiteDecomposition
+Hermite normal form of an integer matrix, with the unimodular transform.
+- `HermiteDecomposition[m]` — gives `{u, r}` where `u` is unimodular
+  (`Abs[Det[u]] == 1`), `r` is the row Hermite normal form of `m`, and
+  `u . m == r`. `r` is in echelon shape: pivots move strictly right as rows
+  descend, every pivot is positive, and each entry *above* a pivot is reduced
+  into `[0, pivot)`. Works for any `m × n` integer matrix (`m` need not equal
+  `n`).
+- Integer entries only; a non-integer entry leaves the call unevaluated with
+  `HermiteDecomposition::intm`. Diagnostics: `HermiteDecomposition::argx`
+  (wrong argument count), `HermiteDecomposition::matrix` (not a non-empty
+  rectangular matrix).
+
+```
+In[1]:= HermiteDecomposition[{{2, 3, 1}, {4, 1, 5}, {6, 2, 0}}]
+Out[1]= {{{0, 2, -1}, {1, 4, -3}, {1, 7, -5}}, {{2, 0, 10}, {0, 1, 21}, {0, 0, 36}}}
+
+In[2]:= h = HermiteDecomposition[{{1, 2, 3}, {4, 5, 6}}]; h[[1]] . {{1, 2, 3}, {4, 5, 6}} == h[[2]]
+Out[2]= True
+```
+
+> Implementation lives in `src/linalg/hnf.c` (registered by `linalg_init`).
+> The row reduction eliminates each column with the extended-gcd `2×2`
+> unimodular transform, recording every operation on `u`; pivots are then made
+> positive and entries above them reduced. The same `linalg_hnf` primitive
+> backs exact linear Diophantine **system** solving in `Solve[…, Integers]`
+> (`src/solveint.c`).
+
 ## FindIntegerNullVector
 Finds an integer relation among a list of numbers (PSLQ).
 - `FindIntegerNullVector[{x1, …, xn}]` — integers `{a1, …, an}`, not all

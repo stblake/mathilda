@@ -112,3 +112,62 @@ Plan: `~/.claude/plans/cosmic-riding-hoare.md`. Driven by a ~18-case stress test
   (needs the descent in Z[(1+√-7)/2]).
 - 11 new tests in `test_solve_integers.c`; all solve suites + corpus 97/97 pass;
   `make check-c99` clean; valgrind = startup baseline. Docs + changelog updated.
+
+## Tier 1 primitives campaign (2026-08-18) — matching Mathematica's Diophantine dispatcher
+
+Driven by a review of Mathematica's ~25 engines vs Mathilda's current coverage.
+The bounded search + closed-form layer is strong (19/19 vs sympy); the gaps are
+all in the *unbounded / algebraic-number-theory* half.
+
+**Held-out measurement first (the benchmark over-fit).** `benchmarks/87` is the
+single source of truth AND was co-designed with each method (Phase 2d added the
+sum-of-three-cubes cases with the divisor method, Phase 3 the Pell cases with the
+CF solver, ...), so 19/19 measures "method works on the example it was written
+for", not coverage. A held-out corpus (15 equations from standard references,
+none in `cases.py`) run cold found: the bounded engine is genuinely complete on
+every boxed Thue/Mordell/Pell-N/Legendre case, but **two silent wrong answers**
+in unbounded *linear systems*, plus honest declines on factorable-leading-form
+BQF.
+
+- [x] **P0(a) correctness** — underdetermined linear system over Integers →
+      silent wrong `{}`. Fixed: `solvelinsys` declines the underdetermined
+      integer case; `src/solve.c` `solution_set_is_parametric` guard converts any
+      unproven parametric `{}` to unevaluated. Test added; 8 suites pass;
+      check-c99 clean. (Changelog: "underdetermined linear SYSTEM ... {}".)
+- [x] **P0(b) HNF** — DONE. `HermiteDecomposition` builtin (`src/linalg/hnf.c`,
+      row HNF + unimodular transform, `u.m==r`) + integer linear-system solver
+      (`si_solve_linear_system_hnf`): particular solution by forward substitution
+      with divisibility test (failure ⇒ `{}` proof), kernel lattice as `C[k]`.
+      `{x+2y+3z==10, x-y+z==2}` → `{{x->18+5C[1], y->8+2C[1], z->-8-3C[1]}}`;
+      `2x+2y==3 && x-y==0` → `{}` (precise, supersedes P0a's unevaluated). Tests
+      added (74 solve-int cases + HermiteDecomposition invariants); check-c99
+      clean; valgrind delta = 0. Docs + changelog updated.
+- [x] **P1 Runge / factorable binary quadratic** — DONE.
+      `si_solve_factorable_conic` (`src/solveint.c`): a 2-var degree-2 equation
+      with a cross term and perfect-square discriminant `δ=B²-4AC>0` completes to
+      a difference of squares `(2kU)²-V²=W` and divisor-enumerates `W` —
+      exhaustive, so `{}` is a proof. `x²+xy-2y²==4` → 6 points;
+      `(x-y)(x+2y)==15` → `{}` (mod-3 obstruction, NOT a decline — the earlier
+      "should have solutions" read was wrong); `2x²+3xy-2y²==7` → 2 points
+      (non-unit leading coeffs the old conic couldn't do). Generalises
+      `si_solve_conic`. Test `test_factorable_conic`; check-c99 clean; valgrind
+      delta 0. Docs + changelog updated.
+- [x] **P2 general-N Pell (unbounded)** — DONE. `si_solve_genpell_parametric`
+      (`src/solveint.c`): unbounded `x²-Dy²==N && x>0 && y>0`, any `N≠+1`
+      (incl. `N=-1`) → one `ConditionalExpression` family per solution class.
+      Fundamental unit via CF of √D; Nagell bound `y≤u√(|N|/(2(t±1)))` bounds the
+      fundamental search; each found (±x,±y) advanced into the positive orthant
+      then reduced by ε⁻¹ to the minimal class rep (dedup); orbit
+      `(a+b√D)(t+u√D)^C[1]`, C[1]≥0. Exhaustive → `{}` is a proof (incl. negative
+      Pell over even-CF-period D). **Validated against brute force over ~30
+      (D,N) pairs** (multi-class, negative Pell, D=61 large unit, unsolvable).
+      13-assertion `test_generalized_pell`; check-c99 clean; valgrind delta 0.
+      Docs + changelog updated.
+      - Bug found & fixed during validation: `(1,1)` and `(5,3)=(1,1)·ε` for
+        D=3,N=-2 were emitted as two overlapping families — the reduction only
+        *advanced* into the orthant, never *reduced* a positive solution to
+        minimal. Added the ε⁻¹ reduction loop.
+- [ ] **Systemic**: split `benchmarks/87` into developed-against vs a held-out
+      validation set (seed = the corpus above), run cold, with a
+      silent-wrong-answer detector (any `{}` a same-box brute force contradicts
+      = FAIL).

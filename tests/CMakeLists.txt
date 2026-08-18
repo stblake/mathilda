@@ -488,6 +488,7 @@ set(COMMON_SRC
     ../src/linalg/nullspace.c
     ../src/linalg/matrank.c
     ../src/linalg/latticereduce.c
+    ../src/linalg/hnf.c
     ../src/linalg/qrdecomp.c
     ../src/linalg/qrdecomp_machine.c
     ../src/linalg/qrdecomp_mpfr.c

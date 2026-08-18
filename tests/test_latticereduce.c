@@ -108,6 +108,30 @@ static void test_errors(void) {
              "LatticeReduce[List[List[6], List[10]]]");
 }
 
+/* HermiteDecomposition[m] -> {u, r}: defining invariants (robust to the exact
+ * HNF representative) -- u is unimodular and u . m == r, r has the HNF shape. */
+static void test_hermite_decomposition(void) {
+    /* Square: u . m == r and Abs[Det[u]] == 1. */
+    run_test("With[{h = HermiteDecomposition[{{2, 3, 1}, {4, 1, 5}, {6, 2, 0}}]}, "
+             "h[[1]] . {{2, 3, 1}, {4, 1, 5}, {6, 2, 0}} == h[[2]]]", "True");
+    run_test("Abs[Det[HermiteDecomposition[{{2, 3, 1}, {4, 1, 5}, {6, 2, 0}}][[1]]]]",
+             "1");
+    /* Exact HNF (deterministic pivots): upper-triangular, positive pivots,
+     * entries above each pivot reduced into [0, pivot). */
+    run_test("HermiteDecomposition[{{2, 3, 1}, {4, 1, 5}, {6, 2, 0}}][[2]]",
+             "List[List[2, 0, 10], List[0, 1, 21], List[0, 0, 36]]");
+    /* Rectangular (m < n): still unimodular u with u . m == r. */
+    run_test("With[{h = HermiteDecomposition[{{1, 2, 3}, {4, 5, 6}}]}, "
+             "h[[1]] . {{1, 2, 3}, {4, 5, 6}} == h[[2]]]", "True");
+    run_test("Abs[Det[HermiteDecomposition[{{1, 2, 3}, {4, 5, 6}}][[1]]]]", "1");
+    /* Rectangular (m > n). */
+    run_test("With[{h = HermiteDecomposition[{{2, 0}, {3, 5}, {1, 1}}]}, "
+             "h[[1]] . {{2, 0}, {3, 5}, {1, 1}} == h[[2]]]", "True");
+    /* Non-integer entry -> declines (unevaluated). */
+    run_test("HermiteDecomposition[{{1, 2}, {3, 1/2}}]",
+             "HermiteDecomposition[List[List[1, 2], List[3, Rational[1, 2]]]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -118,6 +142,7 @@ int main(void) {
     test_bignum_relation();
     test_gaussian_rational();
     test_errors();
+    test_hermite_decomposition();
 
     printf("\nAll LatticeReduce tests passed.\n");
     return 0;
