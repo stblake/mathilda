@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <gmp.h>
 
 #include "eval.h"
@@ -40,6 +41,7 @@
 #include "internal.h"
 #include "sym_names.h"
 #include "symtab.h"
+#include "checked_int.h"
 #include "poly/mpoly.h"
 #include "numbertheory/numbertheory_internal.h"
 
@@ -51,6 +53,9 @@ static Expr* mk_int(int64_t v) { return expr_new_integer(v); }
 static Expr* mk_sym(const char* s) { return expr_new_symbol(s); }
 static Expr* mk_fn2(const char* head, Expr* a, Expr* b) {
     return expr_new_function(mk_sym(head), (Expr*[]){ a, b }, 2);
+}
+static Expr* mk_fn1(const char* head, Expr* a) {
+    return expr_new_function(mk_sym(head), (Expr*[]){ a }, 1);
 }
 static Expr* mk_rule(Expr* lhs, Expr* rhs) { return mk_fn2("Rule", lhs, rhs); }
 static Expr* mk_list(Expr** args, size_t n) {
@@ -400,7 +405,10 @@ static bool try_bound_up(SICtx* c, const MPoly* G) {
 
             if (!poly_lower_bound_nonneg(G, c, (int)t, rest_lo)) continue;
             mpz_neg(urest, rest_lo);                             /* term <= urest */
-            if (mpz_sgn(urest) <= 0) continue;
+            /* urest == 0 is a sound, tight bound (a positive-definite term
+             * pinned to <= 0 forces its variable to 0); only a negative
+             * allowance -- an already-infeasible split -- is skipped here. */
+            if (mpz_sgn(urest) < 0) continue;
 
             mpz_fdiv_q(q, urest, denom);                         /* v^ev <= q */
             if (mpz_sgn(q) < 0) continue;
@@ -548,6 +556,56 @@ static void derive_bounds(SICtx* c) {
     }
 }
 
+/* A variable that appears only with EVEN exponents in every equation is
+ * sign-symmetric: the equations constrain its magnitude, not its sign.  When
+ * such a variable carries no explicit sign/ordering constraint it is left
+ * unbounded by derive_bounds (the monotone bounder needs lo >= 0), so an
+ * unconstrained sum of even powers -- the textbook  x^2 + y^2 == N  -- is
+ * wrongly declined and Solve falls through to the generic path, which
+ * fabricates {} over the Integers.
+ *
+ * Fix: treat each such variable as non-negative for the (monotone) bounding
+ * pass -- v^even is minimised at 0, so a 0 lower bound is a sound lower bound
+ * on every monomial it appears in and never loosens another variable's derived
+ * bound -- then widen the derived [0, B] to the true symmetric window [-B, B]
+ * so the search still covers the negative branch.  Downstream stages only ever
+ * assume lo >= 0 inside the bounder, which has already finished here; the leaf
+ * solver and enumeration handle negative domains directly. */
+static void derive_even_only_bounds(SICtx* c) {
+    bool cand[SI_MAX_VARS];
+    bool any = false;
+    for (int v = 0; v < c->n; v++) {
+        cand[v] = false;
+        if (c->has_lo[v] || c->has_hi[v]) continue;     /* already bounded */
+        bool in_ord = false;                             /* sign matters if ordered */
+        for (int k = 0; k < c->n_ord; k++)
+            if (c->ord_a[k] == v || c->ord_b[k] == v) { in_ord = true; break; }
+        if (in_ord) continue;
+        bool appears = false, even_only = true;
+        for (int q = 0; q < c->neq && even_only; q++) {
+            const MPoly* p = c->eq[q];
+            for (size_t t = 0; t < p->n_terms; t++) {
+                int e = p->exps[t * (size_t)p->n_vars + v];
+                if (e != 0) appears = true;
+                if (e & 1) { even_only = false; break; }
+            }
+        }
+        if (appears && even_only) { cand[v] = true; any = true; }
+    }
+    if (!any) return;
+
+    for (int v = 0; v < c->n; v++)
+        if (cand[v]) { c->lo[v] = 0; c->has_lo[v] = true; }   /* shadow non-negative */
+
+    derive_bounds(c);
+
+    for (int v = 0; v < c->n; v++) {
+        if (!cand[v]) continue;
+        if (c->has_hi[v] && c->hi[v] >= 0) c->lo[v] = -c->hi[v];   /* symmetric window */
+        else c->has_lo[v] = false;                                /* not boundable: revert */
+    }
+}
+
 /* ------------------------------------------------------------------ *
  *  Exact univariate leaf solver.                                      *
  * ------------------------------------------------------------------ */
@@ -683,6 +741,21 @@ typedef struct {
     int64_t  visits;            /* leaf nodes visited */
     int64_t  max_visits;        /* runtime backstop */
     bool     overflow;
+
+    /* Per-equation int64 coefficient cache (leaf-independent): the int64 forms
+     * of eq[q]->coefs, built once so the hot leaf loop never touches GMP.
+     * eqc[q] is NULL / eqc_ok[q] false when a coefficient does not fit int64. */
+    int64_t* eqc[SI_MAX_VARS * 2];
+    bool     eqc_ok[SI_MAX_VARS * 2];
+    bool     eqc_built;
+
+    /* Multi-leaf staged elimination (A2): `n_peel` determined variables, each
+     * resolved from a single equation given the enumerated free variables.
+     * peel[k] is the k-th determined var; peel_eq[k] its resolving equation. */
+    bool     multileaf;
+    int      peel[SI_MAX_VARS];
+    int      peel_eq[SI_MAX_VARS];
+    int      n_peel;
 } SearchState;
 
 static void emit_solution(SearchState* st, int64_t leafval) {
@@ -709,9 +782,9 @@ static bool verify_candidate(SearchState* st, int64_t leafval) {
  * precomputed monomials directly -- no MPoly allocation, the search hot
  * path.  Returns the leaf degree, -1 for identically zero, -2 if the leaf
  * degree exceeds the solver's reach. */
-static int eval_leaf_coeffs(SearchState* st, const MPoly* eq, mpz_t* a, mpz_t term) {
+static int eval_leaf_coeffs(SearchState* st, const MPoly* eq, int leaf, mpz_t* a, mpz_t term) {
     SICtx* c = st->ctx;
-    int leaf = st->leaf, n = c->n;
+    int n = c->n;
     for (int k = 0; k <= SI_LEAF_MAXDEG; k++) mpz_set_ui(a[k], 0);
     for (size_t t = 0; t < eq->n_terms; t++) {
         const int* ex = eq->exps + t * (size_t)n;
@@ -729,12 +802,160 @@ static int eval_leaf_coeffs(SearchState* st, const MPoly* eq, mpz_t* a, mpz_t te
     return -1;
 }
 
+/* Build the per-equation int64 coefficient cache so the hot leaf loop never
+ * calls mpz_get_si / mpz_fits_slong_p per node.  Idempotent. */
+static void si_build_leaf_cache(SearchState* st) {
+    if (st->eqc_built) return;
+    SICtx* c = st->ctx;
+    for (int q = 0; q < c->neq; q++) {
+        const MPoly* eq = c->eq[q];
+        st->eqc[q] = (int64_t*)malloc(sizeof(int64_t) * (eq->n_terms ? eq->n_terms : 1));
+        bool ok = true;
+        for (size_t t = 0; t < eq->n_terms; t++) {
+            if (mpz_fits_slong_p(eq->coefs[t])) st->eqc[q][t] = mpz_get_si(eq->coefs[t]);
+            else { ok = false; break; }
+        }
+        st->eqc_ok[q] = ok;
+    }
+    st->eqc_built = true;
+}
+
+static void si_free_leaf_cache(SearchState* st) {
+    if (!st->eqc_built) return;
+    for (int q = 0; q < st->ctx->neq; q++) { free(st->eqc[q]); st->eqc[q] = NULL; }
+    st->eqc_built = false;
+}
+
+/* Exact floor(sqrt(n)) for n >= 0, division-based so it never overflows. */
+static int64_t si_isqrt_i64(int64_t n) {
+    if (n < 0) return -1;
+    if (n == 0) return 0;
+    int64_t r = (int64_t)sqrt((double)n);
+    if (r < 1) r = 1;
+    while (r > n / r) r--;                 /* r*r > n  (safe: r > 0) */
+    while ((r + 1) <= n / (r + 1)) r++;    /* (r+1)^2 <= n */
+    return r;
+}
+
+/* Integer roots of a2 x^2 + a1 x + a0 (degree d in {1,2}) inside [lo,hi], in
+ * pure int64.  Sets *overflow and returns 0 when an intermediate would exceed
+ * int64 (caller then falls back to the GMP path).  Returns the root count. */
+static int si_uniroots_i64(int64_t a2, int64_t a1, int64_t a0, int d,
+                           int64_t lo, int64_t hi, int64_t* roots, bool* overflow) {
+    int nr = 0;
+    *overflow = false;
+    if (d == 1) {                                  /* a1 x + a0 = 0 */
+        if (a1 != 0 && a0 % a1 == 0) {
+            int64_t r = -a0 / a1;
+            if (r >= lo && r <= hi) roots[nr++] = r;
+        }
+        return nr;
+    }
+    /* d == 2: discriminant a1^2 - 4 a2 a0. */
+    int64_t a1sq, fac, disc, den;
+    if (ci_mul_i64(a1, a1, &a1sq) || ci_mul_i64(a2, a0, &fac)
+        || ci_mul_i64(fac, 4, &fac) || ci_sub_i64(a1sq, fac, &disc)
+        || ci_mul_i64(a2, 2, &den)) { *overflow = true; return 0; }
+    if (disc < 0) return 0;
+    int64_t s = si_isqrt_i64(disc);
+    int64_t s2;
+    if (ci_mul_i64(s, s, &s2)) { *overflow = true; return 0; }
+    if (s2 != disc) return 0;                      /* not a perfect square */
+    for (int sign = -1; sign <= 1; sign += 2) {
+        int64_t num = -a1 + sign * s;              /* |a1|,|s| already fit; sum fits */
+        if (den != 0 && num % den == 0) {
+            int64_t r = num / den;
+            if (r >= lo && r <= hi) {
+                bool dup = false;
+                for (int i = 0; i < nr; i++) if (roots[i] == r) dup = true;
+                if (!dup) roots[nr++] = r;
+            }
+        }
+    }
+    return nr;
+}
+
+/* Evaluate equation `eq`'s univariate-in-leaf coefficients at st->val entirely
+ * in int64 and return the leaf roots in [lo,hi].  Return codes mirror the GMP
+ * path: -1 = eq is identically zero in the leaf (no constraint), -2 = a nonzero
+ * constant (infeasible), >=0 = root count.  Sets *need_mpz (caller falls back to
+ * the exact GMP path) when the leaf degree exceeds 2 or any product/coefficient
+ * would exceed int64.  This is the hot path for large ordered boxes. */
+static int si_leaf_roots_i64(SearchState* st, const MPoly* eq, const int64_t* ci,
+                             bool ci_ok, int leaf, int64_t lo, int64_t hi,
+                             int64_t* roots, bool* need_mpz) {
+    SICtx* c = st->ctx;
+    int n = c->n;
+    int64_t a0 = 0, a1 = 0, a2 = 0;
+    *need_mpz = false;
+    if (!ci_ok) { *need_mpz = true; return 0; }        /* a coefficient overflows int64 */
+    for (size_t t = 0; t < eq->n_terms; t++) {
+        const int* ex = eq->exps + t * (size_t)n;
+        int el = ex[leaf];
+        if (el > 2) { *need_mpz = true; return 0; }
+        int64_t val = ci[t];                            /* precomputed int64 coefficient */
+        for (int u = 0; u < n; u++) {
+            if (u == leaf) continue;
+            for (int k = 0; k < ex[u]; k++)
+                if (ci_mul_i64(val, st->val[u], &val)) { *need_mpz = true; return 0; }
+        }
+        int64_t* slot = (el == 0) ? &a0 : (el == 1) ? &a1 : &a2;
+        if (ci_add_i64(*slot, val, slot)) { *need_mpz = true; return 0; }
+    }
+    int d = (a2 != 0) ? 2 : (a1 != 0) ? 1 : 0;
+    if (d == 0) return (a0 != 0) ? -2 : -1;
+    bool ovf;
+    int nr = si_uniroots_i64(a2, a1, a0, d, lo, hi, roots, &ovf);
+    if (ovf) { *need_mpz = true; return 0; }
+    return nr;
+}
+
 /* Solve the leaf variable given a full search-var assignment in st->val. */
 static void solve_leaf(SearchState* st) {
     SICtx* c = st->ctx;
     int leaf = st->leaf;
     int64_t lo = c->lo[leaf], hi = c->hi[leaf];
     if (++st->visits > st->max_visits) { st->overflow = true; return; }
+
+    /* int64 fast path: no GMP allocation per node (the hot path for large
+     * ordered boxes).  Falls back to the exact GMP body below whenever a leaf
+     * degree exceeds 2 or an intermediate would exceed int64. */
+    {
+        int64_t inter[512]; int ninter = 0; bool have = false, feasible = true, need_mpz = false;
+        for (int q = 0; q < c->neq && feasible; q++) {
+            int64_t roots[8];
+            int nr = si_leaf_roots_i64(st, c->eq[q], st->eqc[q], st->eqc_ok[q],
+                                       st->leaf, lo, hi, roots, &need_mpz);
+            if (need_mpz) break;
+            if (nr == -1) continue;                  /* no constraint on leaf */
+            if (nr == -2) { feasible = false; break; } /* nonzero constant: infeasible */
+            if (!have) {
+                for (int i = 0; i < nr && ninter < 512; i++) inter[ninter++] = roots[i];
+                have = true;
+            } else {
+                int64_t keep[512]; int nk = 0;
+                for (int i = 0; i < ninter; i++)
+                    for (int j = 0; j < nr; j++)
+                        if (inter[i] == roots[j]) { keep[nk++] = inter[i]; break; }
+                memcpy(inter, keep, sizeof(int64_t) * (size_t)nk);
+                ninter = nk;
+            }
+            if (ninter == 0) feasible = false;
+        }
+        if (!need_mpz) {
+            if (feasible) {
+                if (have) {
+                    for (int i = 0; i < ninter; i++)
+                        if (verify_candidate(st, inter[i])) emit_solution(st, inter[i]);
+                } else {
+                    if (hi - lo > 10000000LL) st->overflow = true;
+                    else for (int64_t r = lo; r <= hi; r++)
+                        if (verify_candidate(st, r)) emit_solution(st, r);
+                }
+            }
+            return;
+        }
+    }
 
     int64_t inter[512]; int ninter = 0; bool have = false;
     mpz_t a[SI_LEAF_MAXDEG + 1], term;
@@ -743,7 +964,7 @@ static void solve_leaf(SearchState* st) {
 
     bool feasible = true;
     for (int q = 0; q < c->neq && feasible; q++) {
-        int d = eval_leaf_coeffs(st, c->eq[q], a, term);
+        int d = eval_leaf_coeffs(st, c->eq[q], st->leaf, a, term);
         if (d == -1) continue;                       /* 0 == 0: no constraint */
         if (d == -2) { st->overflow = true; feasible = false; break; }
         if (d == 0) {                                /* constant == 0 ? */
@@ -805,9 +1026,14 @@ static void effective_bounds(SearchState* st, int depth, int vi, int64_t* elo, i
     }
 }
 
+static void resolve_peeled(SearchState* st, int pi);   /* multi-leaf resolver */
+
 static void search_rec(SearchState* st, int depth) {
     if (st->overflow) return;
-    if (depth == st->n_search) { solve_leaf(st); return; }
+    if (depth == st->n_search) {
+        if (st->multileaf) resolve_peeled(st, 0); else solve_leaf(st);
+        return;
+    }
 
     int vi = st->order[depth];
     int64_t elo, ehi;
@@ -817,6 +1043,35 @@ static void search_rec(SearchState* st, int depth) {
         st->val[vi] = r;
         search_rec(st, depth + 1);
     }
+}
+
+/* Length of the longest <= / < ordering chain among the search vars `vars`.
+ * A chain of length L cuts an otherwise-N^L box to ~N^L / L! ordered tuples,
+ * so the search-space guard divides the raw estimate by L! -- otherwise an
+ * ordered box like  0 < x <= y <= z < 1000  (raw 10^9, ordered ~1.7*10^8) is
+ * wrongly declined.  The visit cap backstops any under-estimate, so this only
+ * ever lets a genuinely-ordered box be attempted, never truncates a result. */
+static int si_longest_chain(const SICtx* c, const int* vars, int nv) {
+    bool in[SI_MAX_VARS];
+    int memo[SI_MAX_VARS];
+    for (int i = 0; i < SI_MAX_VARS; i++) { in[i] = false; memo[i] = 1; }
+    for (int i = 0; i < nv; i++) in[vars[i]] = true;
+    /* memo[v] = longest chain starting at v; relax to a fixpoint (DAG, tiny). */
+    for (int iter = 0; iter < nv; iter++) {
+        for (int i = 0; i < nv; i++) {
+            int v = vars[i], m = 1;
+            for (int e = 0; e < c->n_ord; e++) {
+                if (c->ord_a[e] == v && in[c->ord_b[e]]) {   /* edge v < / <= b */
+                    int cand = 1 + memo[c->ord_b[e]];
+                    if (cand > m) m = cand;
+                }
+            }
+            if (m > memo[v]) memo[v] = m;
+        }
+    }
+    int best = 1;
+    for (int i = 0; i < nv; i++) if (memo[vars[i]] > best) best = memo[vars[i]];
+    return best;
 }
 
 /* ------------------------------------------------------------------ *
@@ -929,6 +1184,134 @@ static void emit_full(SearchState* st, const int64_t* vals) {
     int64_t* row = st->sols + (size_t)st->nsol * (size_t)c->n;
     for (int i = 0; i < c->n; i++) row[i] = vals[i];
     st->nsol++;
+}
+
+/* ------------------------------------------------------------------ *
+ *  A2: multi-leaf staged elimination.                                 *
+ *                                                                     *
+ *  The single-leaf search enumerates every variable but one.  A system *
+ *  like the Euler brick  x^2+y^2==a^2 && x^2+z^2==b^2 && y^2+z^2==c^2   *
+ *  has THREE variables (a,b,c) each determined by a single equation --  *
+ *  enumerating even two of them is hopeless.  Staged elimination peels  *
+ *  every variable that appears in exactly one equation and is           *
+ *  univariate-solvable there, resolving it per free-variable assignment *
+ *  (an exact root, branching on multiplicity) instead of enumerating.   *
+ *  Only the genuinely-coupled "free" variables are walked.              *
+ * ------------------------------------------------------------------ */
+
+/* Resolve peeled variable peel[pi] from its equation given the free-variable
+ * assignment (and earlier-resolved peels) in st->val, recursing to the next
+ * peel; at the end, verify the full assignment and emit.  Each peel_eq contains
+ * only its own peeled variable plus free variables, so any resolution order is
+ * valid. */
+static void resolve_peeled(SearchState* st, int pi) {
+    if (st->overflow) return;
+    SICtx* c = st->ctx;
+    if (pi == st->n_peel) {
+        if (++st->visits > st->max_visits) { st->overflow = true; return; }
+        if (si_verify(c, st->val)) emit_full(st, st->val);
+        return;
+    }
+    int v = st->peel[pi], e = st->peel_eq[pi];
+    int64_t lo = c->has_lo[v] ? c->lo[v] : -(1LL << 50);
+    int64_t hi = c->has_hi[v] ? c->hi[v] :  (1LL << 50);
+
+    /* int64 fast path (peeled var degree <= 2). */
+    int64_t roots[8]; bool need_mpz = false;
+    int nr = si_leaf_roots_i64(st, c->eq[e], st->eqc[e], st->eqc_ok[e], v, lo, hi, roots, &need_mpz);
+    if (!need_mpz) {
+        if (nr == -2) return;                       /* infeasible at this branch */
+        if (nr == -1) { st->overflow = true; return; } /* v unconstrained here: decline */
+        for (int i = 0; i < nr && !st->overflow; i++) { st->val[v] = roots[i]; resolve_peeled(st, pi + 1); }
+        return;
+    }
+
+    /* exact GMP fallback (peeled var degree up to SI_LEAF_MAXDEG). */
+    mpz_t a[SI_LEAF_MAXDEG + 1], term;
+    for (int k = 0; k <= SI_LEAF_MAXDEG; k++) mpz_init(a[k]);
+    mpz_init(term);
+    int d = eval_leaf_coeffs(st, c->eq[e], v, a, term);
+    if (d == -2) st->overflow = true;               /* degree beyond the solver's reach */
+    else if (d == -1) st->overflow = true;          /* v unconstrained here: decline */
+    else if (d == 0) { /* constant: feasible iff 0, but then v is free -> decline */
+        if (mpz_sgn(a[0]) != 0) { /* infeasible: no roots */ } else st->overflow = true;
+    } else {
+        int64_t r2[SI_LEAF_MAXDEG * 2];
+        int nr2 = univariate_roots(a, d, lo, hi, r2);
+        for (int i = 0; i < nr2 && !st->overflow; i++) { st->val[v] = r2[i]; resolve_peeled(st, pi + 1); }
+    }
+    mpz_clear(term);
+    for (int k = 0; k <= SI_LEAF_MAXDEG; k++) mpz_clear(a[k]);
+}
+
+/* Detect a staged-elimination structure and, if the free variables form a
+ * tractable ordered box, run the multi-leaf search.  Returns true when it
+ * settled the answer (candidates in st->sols); false to fall back. */
+static bool si_solve_multileaf(SICtx* c, SearchState* st) {
+    int n = c->n;
+    if (c->neq < 2) return false;                   /* single-leaf path handles neq == 1 */
+
+    /* appear[v] = number of equations that contain v (deg > 0). */
+    int appear[SI_MAX_VARS], only_eq[SI_MAX_VARS];
+    for (int v = 0; v < n; v++) { appear[v] = 0; only_eq[v] = -1; }
+    for (int q = 0; q < c->neq; q++)
+        for (int v = 0; v < n; v++)
+            if (mpoly_deg_var(c->eq[q], v) > 0) { appear[v]++; only_eq[v] = q; }
+
+    /* A variable is a peel candidate iff it appears in exactly one equation and
+     * is univariate-solvable there.  Each equation is claimed by at most one
+     * peeled variable (widest domain / unbounded first); losers become free. */
+    bool peeled[SI_MAX_VARS]; int claim[SI_MAX_VARS * 2];
+    for (int v = 0; v < n; v++) peeled[v] = false;
+    for (int q = 0; q < c->neq; q++) claim[q] = -1;
+    for (int v = 0; v < n; v++) {
+        if (appear[v] != 1) continue;
+        int e = only_eq[v];
+        int dg = mpoly_deg_var(c->eq[e], v);
+        if (dg < 1 || dg > SI_LEAF_MAXDEG) continue;
+        int cur = claim[e];
+        if (cur < 0) { claim[e] = v; continue; }
+        /* Prefer to peel the wider / unbounded variable (enumerate the narrow). */
+        long double wv = (c->has_lo[v] && c->has_hi[v]) ? (long double)(c->hi[v] - c->lo[v]) : 1e30L;
+        long double wc = (c->has_lo[cur] && c->has_hi[cur]) ? (long double)(c->hi[cur] - c->lo[cur]) : 1e30L;
+        if (wv > wc) claim[e] = v;
+    }
+    st->n_peel = 0;
+    for (int q = 0; q < c->neq; q++)
+        if (claim[q] >= 0) { int v = claim[q]; peeled[v] = true; st->peel[st->n_peel] = v; st->peel_eq[st->n_peel] = q; st->n_peel++; }
+    if (st->n_peel < 2) return false;               /* single leaf: ordinary path */
+
+    /* Free variables: everything not peeled.  All must be finitely bounded. */
+    int free_v[SI_MAX_VARS], nfree = 0;
+    for (int v = 0; v < n; v++) if (!peeled[v]) {
+        if (!(c->has_lo[v] && c->has_hi[v])) return false;
+        free_v[nfree++] = v;
+    }
+    if (nfree == 0) return false;
+
+    /* Ordered free-box estimate (raw product / longest-chain factorial). */
+    long double est = 1.0L;
+    for (int i = 0; i < nfree; i++) est *= (long double)(c->hi[free_v[i]] - c->lo[free_v[i]] + 1);
+    int L = si_longest_chain(c, free_v, nfree);
+    for (int i = 2; i <= L; i++) est /= (long double)i;
+    if (est > (long double)SI_MAX_NODES) return false;
+
+    /* Order free vars ascending domain (narrowest innermost). */
+    st->n_search = 0;
+    for (int i = 0; i < nfree; i++) st->order[st->n_search++] = free_v[i];
+    for (int i = 0; i + 1 < st->n_search; i++) {
+        int pk = i;
+        for (int j = i + 1; j < st->n_search; j++)
+            if ((c->hi[st->order[j]] - c->lo[st->order[j]]) < (c->hi[st->order[pk]] - c->lo[st->order[pk]])) pk = j;
+        if (pk != i) { int t = st->order[i]; st->order[i] = st->order[pk]; st->order[pk] = t; }
+    }
+    st->multileaf = true;
+    st->max_visits = SI_MAX_NODES;
+    si_build_leaf_cache(st);
+    for (int i = 0; i < n; i++) st->val[i] = 0;
+    search_rec(st, 0);
+    si_free_leaf_cache(st);
+    return !st->overflow;
 }
 
 /* Attempt the meet-in-the-middle path.  Returns true if it ran (results are
@@ -1533,6 +1916,398 @@ static bool si_solve_pell(SICtx* c, SearchState* st) {
     return true;
 }
 
+/* --- Unbounded Pell  x^2 - D y^2 == 1,  x > 0 && y > 0  -> parametric family. ---
+ *
+ * With no finite bound the positive-orthant solution set is infinite: the k-th
+ * solution (k >= 1) is  x_k + y_k sqrt(D) = (x1 + y1 sqrt(D))^k  for the
+ * fundamental unit (x1, y1).  Emit the closed form
+ *   x -> ((x1+y1 Sqrt[D])^C[1] + (x1-y1 Sqrt[D])^C[1]) / 2,
+ *   y -> ((x1+y1 Sqrt[D])^C[1] - (x1-y1 Sqrt[D])^C[1]) / (2 Sqrt[D]),
+ * each a ConditionalExpression valid for the integer parameter C[1] >= 1 --
+ * mirroring Mathematica's representation.  Returns the owned family, or NULL to
+ * decline (bounded, wrong sign pattern, or N = -1, all handled elsewhere). */
+static Expr* si_solve_pell_parametric(SICtx* c) {
+    if (c->neq != 1) return NULL;
+    int xs, ys; mpz_t D, N; mpz_init(D); mpz_init(N);
+    if (!si_pell_detect(c->eq[0], c->n, &xs, &ys, D, N)) { mpz_clear(D); mpz_clear(N); return NULL; }
+    bool unbounded = !c->has_hi[xs] && !c->has_hi[ys];
+    bool posx = c->has_lo[xs] && c->lo[xs] >= 1;
+    bool posy = c->has_lo[ys] && c->lo[ys] >= 1;
+    if (!(unbounded && posx && posy && mpz_cmp_si(N, 1) == 0)
+        || c->n_ord != 0 || c->n_neq != 0 || !c->all_captured) {
+        mpz_clear(D); mpz_clear(N); return NULL;
+    }
+    mpz_t u, v, bx, by; mpz_init(u); mpz_init(v); mpz_init(bx); mpz_init(by);
+    si_pell_cf(D, N, u, v, bx, by);                  /* fundamental unit (x1,y1) = (u,v) */
+
+    Expr* sqrtD = mk_fn1("Sqrt", mk_mpz(D));
+    mpz_t ny; mpz_init(ny); mpz_neg(ny, v);
+    /* uu = x1 + y1 Sqrt[D],  vv = x1 - y1 Sqrt[D]. */
+    Expr* uu = mk_fn2("Plus", mk_mpz(u), mk_fn2("Times", mk_mpz(v), expr_copy(sqrtD)));
+    Expr* vv = mk_fn2("Plus", mk_mpz(u), mk_fn2("Times", mk_mpz(ny), expr_copy(sqrtD)));
+    mpz_clear(ny);
+    Expr* uk = mk_fn2("Power", uu, mk_fn1("C", mk_int(1)));
+    Expr* vk = mk_fn2("Power", vv, mk_fn1("C", mk_int(1)));
+    /* xval = (uk + vk)/2 */
+    Expr* xval = mk_fn2("Times",
+        mk_fn2("Plus", expr_copy(uk), expr_copy(vk)),
+        mk_fn2("Power", mk_int(2), mk_int(-1)));
+    /* yval = (uk - vk)/(2 Sqrt[D]) */
+    Expr* yval = mk_fn2("Times",
+        mk_fn2("Plus", uk, mk_fn2("Times", mk_int(-1), vk)),
+        mk_fn2("Power", mk_fn2("Times", mk_int(2), expr_copy(sqrtD)), mk_int(-1)));
+    expr_free(sqrtD);
+
+    Expr* cond = mk_fn2("GreaterEqual", mk_fn1("C", mk_int(1)), mk_int(1));
+    Expr* cex = mk_fn2("ConditionalExpression", xval, expr_copy(cond));
+    Expr* cey = mk_fn2("ConditionalExpression", yval, cond);
+
+    Expr* rules[SI_MAX_VARS];
+    for (int i = 0; i < c->n; i++) rules[i] = NULL;
+    rules[xs] = mk_rule(expr_copy(c->var[xs]), cex);
+    rules[ys] = mk_rule(expr_copy(c->var[ys]), cey);
+    /* Emit in variable order (xs, ys are the only two active). */
+    Expr* rlist[SI_MAX_VARS]; int nr = 0;
+    for (int i = 0; i < c->n; i++) if (rules[i]) rlist[nr++] = rules[i];
+    Expr* tuple = mk_list(rlist, (size_t)nr);
+    Expr* result = eval_and_free(mk_list((Expr*[]){ tuple }, 1));
+
+    mpz_clear(u); mpz_clear(v); mpz_clear(bx); mpz_clear(by);
+    mpz_clear(D); mpz_clear(N);
+    return result;
+}
+
+static bool si_linear_detect(const MPoly* eq, int n, mpz_t* a, mpz_t b);
+
+/* Fraction-free (Bareiss) determinant of an m x m integer matrix.  M is
+ * destroyed; `out` (pre-init'd) receives the exact determinant. */
+static void si_det_bareiss(mpz_t** M, int m, mpz_t out) {
+    if (m == 0) { mpz_set_ui(out, 1); return; }
+    mpz_t prev, t1, t2; mpz_init_set_ui(prev, 1); mpz_init(t1); mpz_init(t2);
+    int sign = 1;
+    bool zero = false;
+    for (int k = 0; k < m; k++) {
+        if (mpz_sgn(M[k][k]) == 0) {                 /* pivot: swap in a nonzero row */
+            int r = -1;
+            for (int i = k + 1; i < m; i++) if (mpz_sgn(M[i][k]) != 0) { r = i; break; }
+            if (r < 0) { zero = true; break; }
+            for (int j = 0; j < m; j++) mpz_swap(M[k][j], M[r][j]);
+            sign = -sign;
+        }
+        for (int i = k + 1; i < m; i++)
+            for (int j = k + 1; j < m; j++) {
+                mpz_mul(t1, M[i][j], M[k][k]);
+                mpz_mul(t2, M[i][k], M[k][j]);
+                mpz_sub(t1, t1, t2);
+                mpz_divexact(M[i][j], t1, prev);     /* Bareiss: exact division */
+            }
+        mpz_set(prev, M[k][k]);
+    }
+    if (zero) mpz_set_ui(out, 0);
+    else { mpz_set(out, M[m - 1][m - 1]); if (sign < 0) mpz_neg(out, out); }
+    mpz_clear(prev); mpz_clear(t1); mpz_clear(t2);
+}
+
+/* --- Homogeneous linear SYSTEM with positivity -> parametric ray. ---
+ *
+ * A system of  m = n-1  homogeneous linear equations in n positive unknowns has
+ * (generically) a 1-dimensional integer kernel spanned by a primitive vector v
+ * (the generalised cross product: v_j = (-1)^j * det(A with column j removed)).
+ * If v (or -v) is entirely positive the positive solutions are exactly
+ * { k v : k = C[1] >= 1 }; if v has mixed signs the positive orthant meets the
+ * kernel only at 0, so there are no positive solutions.  This settles rational
+ * linear systems like  w == 5/6 x + y && x == 9/20 y + z && y == 13/42 z + w
+ * (denominators cleared by the MPoly conversion). */
+static Expr* si_solve_linear_system_ray(SICtx* c) {
+    int n = c->n;
+    if (c->neq != n - 1 || n < 2 || c->n_ord != 0 || c->n_neq != 0 || !c->all_captured) return NULL;
+    for (int i = 0; i < n; i++)                       /* every variable strictly positive */
+        if (!(c->has_lo[i] && c->lo[i] >= 1)) return NULL;
+
+    int m = c->neq;
+    /* Build the m x n integer coefficient matrix; require every equation to be
+     * linear and HOMOGENEOUS (constant term 0). */
+    mpz_t* a = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n);
+    mpz_t bb; for (int i = 0; i < n; i++) mpz_init(a[i]);
+    mpz_init(bb);
+    mpz_t** A = (mpz_t**)malloc(sizeof(mpz_t*) * (size_t)m);
+    for (int q = 0; q < m; q++) { A[q] = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n); for (int i = 0; i < n; i++) mpz_init(A[q][i]); }
+    bool ok = true;
+    for (int q = 0; q < m && ok; q++) {
+        if (!si_linear_detect(c->eq[q], n, a, bb) || mpz_sgn(bb) != 0) ok = false;
+        else for (int i = 0; i < n; i++) mpz_set(A[q][i], a[i]);
+    }
+
+    Expr* result = NULL;
+    if (ok) {
+        /* v_j = (-1)^j det(A without column j). */
+        mpz_t* v = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n);
+        for (int i = 0; i < n; i++) mpz_init(v[i]);
+        mpz_t** Msub = (mpz_t**)malloc(sizeof(mpz_t*) * (size_t)m);
+        for (int q = 0; q < m; q++) { Msub[q] = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)m); for (int i = 0; i < m; i++) mpz_init(Msub[q][i]); }
+        mpz_t det; mpz_init(det);
+        for (int j = 0; j < n; j++) {
+            int cc = 0;
+            for (int col = 0; col < n; col++) { if (col == j) continue;
+                for (int q = 0; q < m; q++) mpz_set(Msub[q][cc], A[q][col]);
+                cc++;
+            }
+            si_det_bareiss(Msub, m, det);
+            mpz_set(v[j], det);
+            if (j & 1) mpz_neg(v[j], v[j]);
+        }
+        /* Primitive + sign-normalise (make the first nonzero positive). */
+        mpz_t g; mpz_init_set_ui(g, 0);
+        for (int i = 0; i < n; i++) mpz_gcd(g, g, v[i]);
+        bool nonzero = mpz_sgn(g) != 0;
+        if (nonzero) {
+            for (int i = 0; i < n; i++) mpz_divexact(v[i], v[i], g);
+            int lead = 0; while (lead < n && mpz_sgn(v[lead]) == 0) lead++;
+            if (lead < n && mpz_sgn(v[lead]) < 0) for (int i = 0; i < n; i++) mpz_neg(v[i], v[i]);
+        }
+        bool all_pos = nonzero;
+        for (int i = 0; i < n && all_pos; i++) if (mpz_sgn(v[i]) <= 0) all_pos = false;
+
+        if (!nonzero) {
+            result = NULL;                            /* degenerate kernel: decline */
+        } else if (!all_pos) {
+            result = mk_list(NULL, 0);                /* no positive solution: {} */
+        } else {
+            Expr** rules = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+            for (int i = 0; i < n; i++) {
+                Expr* term = mpz_cmp_ui(v[i], 1) == 0
+                    ? mk_fn1("C", mk_int(1))
+                    : mk_fn2("Times", mk_mpz(v[i]), mk_fn1("C", mk_int(1)));
+                Expr* cond = mk_fn2("GreaterEqual", mk_fn1("C", mk_int(1)), mk_int(1));
+                rules[i] = mk_rule(expr_copy(c->var[i]),
+                                   mk_fn2("ConditionalExpression", term, cond));
+            }
+            Expr* tuple = mk_list(rules, (size_t)n); free(rules);
+            result = eval_and_free(mk_list((Expr*[]){ tuple }, 1));
+        }
+        mpz_clear(det); mpz_clear(g);
+        for (int q = 0; q < m; q++) { for (int i = 0; i < m; i++) mpz_clear(Msub[q][i]); free(Msub[q]); }
+        free(Msub);
+        for (int i = 0; i < n; i++) mpz_clear(v[i]);
+        free(v);
+    }
+
+    for (int q = 0; q < m; q++) { for (int i = 0; i < n; i++) mpz_clear(A[q][i]); free(A[q]); }
+    free(A);
+    for (int i = 0; i < n; i++) mpz_clear(a[i]);
+    free(a); mpz_clear(bb);
+    return result;
+}
+
+/* --- Prouhet-Tarry-Escott  ->  {}  via Newton's identities. ---
+ *
+ * If two disjoint k-element variable groups G1, G2 satisfy the equal power sums
+ *   Sum_{G1} v^j == Sum_{G2} v^j   for every j = 1..k,
+ * then (Newton's identities) their elementary symmetric functions agree, so the
+ * two groups are the SAME multiset.  With a strict ordering inside each group
+ * this forces  G1[i] == G2[i]  elementwise, so a disequation like  a != d
+ * between the corresponding smallest elements is contradictory: the system has
+ * NO solution.  This settles the size-3, degree-1..3 case
+ *   a+b+c==d+e+f && a^2+..==d^2+.. && a^3+..==d^3+.. && 0<a<b<c && 0<d<e<f && a!=d
+ * as {} despite every variable being unbounded.  Returns the empty List when
+ * proved empty, or NULL to decline (no forcing disequation -> parametric). */
+static bool si_pset_eq(const bool* x, const bool* y, int n) {
+    for (int i = 0; i < n; i++) if (x[i] != y[i]) return false;
+    return true;
+}
+static Expr* si_solve_power_sum_equal(SICtx* c) {
+    int k = c->neq, n = c->n;
+    if (k < 2 || n != 2 * k || k > SI_MAX_VARS) return NULL;
+
+    bool Pset[SI_MAX_VARS], Mset[SI_MAX_VARS];
+    bool have_sets = false;
+    bool jseen[SI_MAX_VARS + 1];
+    for (int j = 0; j <= k; j++) jseen[j] = false;
+
+    for (int q = 0; q < k; q++) {
+        const MPoly* eq = c->eq[q];
+        bool p[SI_MAX_VARS], m[SI_MAX_VARS];
+        for (int v = 0; v < n; v++) { p[v] = false; m[v] = false; }
+        int np = 0, nm = 0, thisj = -1; bool ok = true;
+        for (size_t t = 0; t < eq->n_terms && ok; t++) {
+            const int* ex = eq->exps + t * (size_t)n;
+            int nv = -1, e = 0;
+            for (int v = 0; v < n; v++) if (ex[v] > 0) { if (nv >= 0) { ok = false; break; } nv = v; e = ex[v]; }
+            if (!ok) break;
+            if (nv < 0) { ok = false; break; }             /* constant term: not PTE */
+            if (thisj < 0) thisj = e; else if (e != thisj) { ok = false; break; }
+            long cf = mpz_cmp_si(eq->coefs[t], 1) == 0 ? 1
+                    : mpz_cmp_si(eq->coefs[t], -1) == 0 ? -1 : 0;
+            if (cf == 1) { p[nv] = true; np++; }
+            else if (cf == -1) { m[nv] = true; nm++; }
+            else { ok = false; break; }
+        }
+        if (!ok || np != k || nm != k || thisj < 1 || thisj > k || jseen[thisj]) return NULL;
+        jseen[thisj] = true;
+        if (!have_sets) { for (int v = 0; v < n; v++) { Pset[v] = p[v]; Mset[v] = m[v]; } have_sets = true; }
+        else if (!((si_pset_eq(p, Pset, n) && si_pset_eq(m, Mset, n))     /* same convention */
+                 || (si_pset_eq(p, Mset, n) && si_pset_eq(m, Pset, n))))  /* or the sign flip */
+            return NULL;
+    }
+    for (int j = 1; j <= k; j++) if (!jseen[j]) return NULL;              /* need degrees 1..k */
+
+    int G1[SI_MAX_VARS], G2[SI_MAX_VARS], n1 = 0, n2 = 0;
+    for (int v = 0; v < n; v++) { if (Pset[v]) G1[n1++] = v; if (Mset[v]) G2[n2++] = v; }
+    if (n1 != k || n2 != k) return NULL;
+    int ord1[SI_MAX_VARS], ord2[SI_MAX_VARS];
+    if (!si_build_total_order(c, G1, k, ord1) || !si_build_total_order(c, G2, k, ord2)) return NULL;
+
+    /* Newton forces ord1[i] == ord2[i]; a disequation between them is a proof of
+     * emptiness. */
+    for (int d = 0; d < c->n_neq; d++) {
+        int a = c->neq_a[d], b = c->neq_b[d];
+        for (int i = 0; i < k; i++)
+            if ((a == ord1[i] && b == ord2[i]) || (a == ord2[i] && b == ord1[i]))
+                return mk_list(NULL, 0);                                  /* {} */
+    }
+    return NULL;                                     /* no forcing disequation: decline */
+}
+
+static Expr* si_exp_one_tuple(Expr** var, const int64_t* vals, int n);
+static bool si_verify_symbolic(Expr* expr, Expr** var, const int64_t* vals, int n);
+
+static long si_lgcd(long a, long b) { a = labs(a); b = labs(b); while (b) { long t = a % b; a = b; b = t; } return a; }
+
+/* Is m (|m|) squarefree? */
+static bool si_is_squarefree_l(long m) {
+    m = labs(m);
+    if (m == 0) return false;
+    for (long p = 2; p * p <= m; p++)
+        if (m % p == 0) { m /= p; if (m % p == 0) return false; }
+    return true;
+}
+
+/* Class number of the imaginary quadratic field of fundamental discriminant
+ * D = -4c (c >= 1 squarefree, c = 1,2 mod 4), by counting primitive reduced
+ * positive-definite binary quadratic forms (A,B,C) with B^2 - 4AC = D:
+ * reduced iff |B| <= A <= C and B >= 0 when |B| == A or A == C. */
+static long si_class_number_neg4c(long c) {
+    long D = -4 * c, h = 0;
+    long Amax = (long)floor(sqrt((double)(4 * c) / 3.0)) + 1;
+    for (long A = 1; A <= Amax; A++)
+        for (long B = -A + 1; B <= A; B++) {
+            long num = B * B - D;                     /* = 4AC */
+            if (num % (4 * A) != 0) continue;
+            long C = num / (4 * A);
+            if (C < A) continue;
+            if (si_lgcd(si_lgcd(A, B), C) != 1) continue;    /* primitive */
+            if ((labs(B) == A || A == C) && B < 0) continue; /* boundary: B >= 0 */
+            h++;
+        }
+    return h;
+}
+
+/* The Z[sqrt k] cube descent below is sound AND complete exactly when:
+ *   - k < 0 and |k| is squarefree (so D = -4|k| is a fundamental discriminant
+ *     and the field is imaginary),
+ *   - k = 2,3 (mod 4)  (ring of integers is Z[sqrt k]; unit group {+/-1}, and a
+ *     mod-8 argument then forces x ODD and coprime to k, so the two factors of
+ *     x^3 = (y - sqrt k)(y + sqrt k) are ALWAYS coprime -- no non-coprime case
+ *     analysis is needed),
+ *   - 3 does not divide the class number h  (so an ideal whose cube is principal
+ *     is itself principal, and every point comes from y + sqrt k = (a+b sqrt k)^3).
+ * Outside this set (k = 1 mod 4 -> half-integer ring; 3 | h; k > 0 -> real field
+ * with infinite units) the descent is declined, never guessed. */
+static bool si_mordell_descent_sound(long k) {
+    if (k >= 0 || !si_is_squarefree_l(k)) return false;
+    int r = (int)(((k % 4) + 4) % 4);
+    if (r != 2 && r != 3) return false;
+    return si_class_number_neg4c(-k) % 3 != 0;
+}
+
+/* --- Unbounded Mordell  y^2 == x^3 + k  via factorisation in Z[sqrt k]. ---
+ *
+ * x^3 = y^2 - k = (y - sqrt k)(y + sqrt k).  For the sound set of k (see
+ * si_mordell_descent_sound) the factors are coprime, the class number is prime
+ * to 3, and the units are {+/-1}, so every point satisfies
+ *   y + sqrt k = (a + b sqrt k)^3,   1 = 3 a^2 b + k b^3 = b (3 a^2 + k b^2),
+ * forcing b = +/-1 and a fixed, giving the COMPLETE integer-point set
+ *   x = a^2 - k b^2,   y = +/- (a^3 + 3 a k b^2).
+ * So y^2 = x^3 - 2 -> (3, +/-5), y^2 = x^3 - 1 -> (1, 0), and y^2 = x^3 - 5 ->
+ * {} (proved, not merely unfound).  Only engaged when x is unbounded (a bounded
+ * box is handled by the ordinary leaf search). */
+static Expr* si_solve_mordell(SICtx* c) {
+    if (c->neq != 1) return NULL;
+    const MPoly* eq = c->eq[0]; int n = c->n;
+    int act[SI_MAX_VARS], ka = 0;
+    for (int v = 0; v < n; v++) if (mpoly_deg_var(eq, v) >= 1) act[ka++] = v;
+    if (ka != 2) return NULL;
+
+    /* Identify Y (only Y^2) and X (only X^3), monic and opposite sign, plus a
+     * constant.  Normalise to  Y^2 - X^3 - k == 0  (so k = -const). */
+    for (int choice = 0; choice < 2; choice++) {
+        int Yv = act[choice], Xv = act[1 - choice];
+        mpz_t cY, cX, c0; mpz_init_set_ui(cY, 0); mpz_init_set_ui(cX, 0); mpz_init_set_ui(c0, 0);
+        bool shape = true;
+        for (size_t t = 0; t < eq->n_terms && shape; t++) {
+            const int* ex = eq->exps + t * (size_t)n;
+            for (int v = 0; v < n; v++) if (v != Yv && v != Xv && ex[v] != 0) shape = false;
+            if (!shape) break;
+            int ey = ex[Yv], exx = ex[Xv];
+            if (ey == 2 && exx == 0) mpz_add(cY, cY, eq->coefs[t]);
+            else if (ey == 0 && exx == 3) mpz_add(cX, cX, eq->coefs[t]);
+            else if (ey == 0 && exx == 0) mpz_add(c0, c0, eq->coefs[t]);
+            else shape = false;
+        }
+        bool ok = shape && (mpz_cmpabs_ui(cY, 1) == 0) && (mpz_cmpabs_ui(cX, 1) == 0)
+               && (mpz_sgn(cY) == -mpz_sgn(cX));
+        long k = 0;
+        if (ok) {
+            if (mpz_sgn(cY) < 0) { mpz_neg(cY, cY); mpz_neg(cX, cX); mpz_neg(c0, c0); }
+            if (mpz_fits_slong_p(c0)) k = -mpz_get_si(c0);      /* y^2 = x^3 + k */
+            else ok = false;
+        }
+        /* Engage on the sound descent set (any imaginary k with k = 2,3 mod 4,
+         * |k| squarefree, 3 not dividing the class number), and only when X is
+         * unbounded (a bounded box is handled by the ordinary leaf search). */
+        bool unbounded = !(c->has_lo[Xv] && c->has_hi[Xv]);
+        if (ok && si_mordell_descent_sound(k) && unbounded) {
+            Expr** sols = NULL; int nsol = 0, cap = 0;
+            for (int b = 1; b >= -1; b -= 2) {
+                /* b (3 a^2 + k b^2) = 1  ->  3 a^2 = (1/b) - k b^2 = b - k b^2. */
+                long rhs = b - k * b * b;                /* = 3 a^2 */
+                if (rhs < 0 || rhs % 3 != 0) continue;
+                long a2 = rhs / 3;
+                long a0 = (long)llround(sqrt((double)a2));
+                for (long a = a0 - 1; a <= a0 + 1; a++) {  /* pin the exact root */
+                    if (a < 0 || a * a != a2) continue;
+                    for (int as = (a == 0 ? 1 : 1); as >= (a == 0 ? 1 : -1); as -= 2) {
+                        long av = as * a;
+                        long xv = av * av - k * b * b;             /* norm */
+                        long yv = av * av * av + 3 * av * k * b * b;
+                        for (int ys = 1; ys >= -1; ys -= 2) {      /* unit +/-1 -> +/- y */
+                            int64_t vals[SI_MAX_VARS];
+                            for (int i = 0; i < n; i++) vals[i] = 0;
+                            vals[Xv] = xv; vals[Yv] = ys * yv;
+                            bool dup = false;
+                            if (si_verify_symbolic(c->original, c->var, vals, n)) {
+                                Expr* cand = si_exp_one_tuple(c->var, vals, n);
+                                for (int u = 0; u < nsol && !dup; u++) if (expr_eq(sols[u], cand)) dup = true;
+                                if (dup) { expr_free(cand); }
+                                else { if (nsol == cap) { cap = cap ? cap * 2 : 4; sols = realloc(sols, sizeof(Expr*) * (size_t)cap); } sols[nsol++] = cand; }
+                            }
+                        }
+                    }
+                }
+            }
+            mpz_clear(cY); mpz_clear(cX); mpz_clear(c0);
+            /* sort ascending by (x, y) for a canonical result */
+            for (int i = 0; i + 1 < nsol; i++) for (int j = i + 1; j < nsol; j++)
+                if (expr_compare(sols[j], sols[i]) < 0) { Expr* tt = sols[i]; sols[i] = sols[j]; sols[j] = tt; }
+            Expr* result = mk_list(sols, (size_t)nsol);
+            free(sols);
+            return result;
+        }
+        mpz_clear(cY); mpz_clear(cX); mpz_clear(c0);
+    }
+    return NULL;
+}
+
 /* --- Linear Diophantine: parametric (unbounded) family. --- */
 
 /* Detect a single linear equation  sum a_i x_i == b.  Fills a[i] (coef of
@@ -1980,10 +2755,106 @@ static bool si_solve_powersum_divisor(SICtx* c, SearchState* st) {
     return handled;
 }
 
+/* --- Conic  Y^2 == A X^2 + B X + C  with A a perfect square. ---
+ *
+ * When one variable Y appears only as Y^2 (coefficient +/-1) and the other, X,
+ * to degree <= 2 with no cross term, and the X^2 coefficient A is a POSITIVE
+ * PERFECT SQUARE p^2, the curve is a "parabola-like" hyperbola with finitely
+ * many integer points.  Completing the square,
+ *   (2 p Y)^2 - (2 A X + B)^2 = 4 A C - B^2 =: D,
+ * so every solution comes from a factorisation  d1 * d2 = D  via
+ *   Y = (d1 + d2) / (4 p),  X = (d2 - d1 - 2 B) / (4 A).
+ * Enumerating the divisors of |D| is exhaustive, so an empty result is a proof
+ * of no solutions.  Euler's  n^2 + n + 41 == y^2  has D = 163 (prime) and the
+ * unique positive point n = 40, y = 41.  (A non-square A is a genuine Pell
+ * conic -- left to the Pell continued-fraction path.) */
+static bool si_solve_conic(SICtx* c, SearchState* st) {
+    if (c->neq != 1) return false;
+    const MPoly* eq = c->eq[0]; int n = c->n;
+    int act[SI_MAX_VARS], ka = 0;
+    for (int v = 0; v < n; v++) if (mpoly_deg_var(eq, v) >= 1) act[ka++] = v;
+    if (ka != 2) return false;
+
+    for (int choice = 0; choice < 2; choice++) {
+        int Yv = act[choice], Xv = act[1 - choice];
+        mpz_t e0, e2, e1, ec; mpz_init_set_ui(e0, 0); mpz_init_set_ui(e2, 0);
+        mpz_init_set_ui(e1, 0); mpz_init_set_ui(ec, 0);
+        bool shape = true;
+        for (size_t t = 0; t < eq->n_terms && shape; t++) {
+            const int* ex = eq->exps + t * (size_t)n;
+            for (int v = 0; v < n; v++) if (v != Yv && v != Xv && ex[v] != 0) shape = false;
+            if (!shape) break;
+            int ey = ex[Yv], exx = ex[Xv];
+            if (ey == 2 && exx == 0) mpz_add(e0, e0, eq->coefs[t]);
+            else if (ey == 0 && exx == 2) mpz_add(e2, e2, eq->coefs[t]);
+            else if (ey == 0 && exx == 1) mpz_add(e1, e1, eq->coefs[t]);
+            else if (ey == 0 && exx == 0) mpz_add(ec, ec, eq->coefs[t]);
+            else shape = false;                       /* Y linear, cross, or higher */
+        }
+        bool ok = shape && (mpz_cmpabs_ui(e0, 1) == 0);   /* Y^2 coefficient +/-1 */
+        if (ok) {
+            if (mpz_sgn(e0) < 0) { mpz_neg(e0, e0); mpz_neg(e2, e2); mpz_neg(e1, e1); mpz_neg(ec, ec); }
+            /* Y^2 = A X^2 + B X + C. */
+            mpz_t A, B, C, D, p, tmp; mpz_init(A); mpz_init(B); mpz_init(C);
+            mpz_init(D); mpz_init(p); mpz_init(tmp);
+            mpz_neg(A, e2); mpz_neg(B, e1); mpz_neg(C, ec);
+            bool go = (mpz_sgn(A) > 0) && mpz_perfect_square_p(A);
+            if (go) {
+                mpz_sqrt(p, A);
+                mpz_mul(D, A, C); mpz_mul_ui(D, D, 4);
+                mpz_mul(tmp, B, B); mpz_sub(D, D, tmp);   /* D = 4AC - B^2 */
+            }
+            if (go && mpz_sgn(D) != 0) {
+                st->max_visits = SI_MAX_NODES;
+                mpz_t absD; mpz_init(absD); mpz_abs(absD, D);
+                Expr* dl = divisors_ordinary(absD);
+                mpz_clear(absD);
+                mpz_t d1, d2, Y, X, fourp, fourA, twoB, num;
+                mpz_init(d1); mpz_init(d2); mpz_init(Y); mpz_init(X);
+                mpz_init(fourp); mpz_init(fourA); mpz_init(twoB); mpz_init(num);
+                mpz_mul_ui(fourp, p, 4); mpz_mul_ui(fourA, A, 4); mpz_mul_ui(twoB, B, 2);
+                if (dl && dl->type == EXPR_FUNCTION) {
+                    for (size_t i = 0; i < dl->data.function.arg_count; i++) {
+                        if (!expr_is_integer_like(dl->data.function.args[i])) continue;
+                        mpz_t g; mpz_init(g); expr_to_mpz(dl->data.function.args[i], g);
+                        for (int sg = 1; sg >= -1; sg -= 2) {
+                            mpz_set(d1, g); if (sg < 0) mpz_neg(d1, d1);   /* d1 | D */
+                            if (!mpz_divisible_p(D, d1)) continue;
+                            mpz_divexact(d2, D, d1);
+                            mpz_add(num, d1, d2);                          /* Y = (d1+d2)/(4p) */
+                            if (!mpz_divisible_p(num, fourp)) continue;
+                            mpz_divexact(Y, num, fourp);
+                            mpz_sub(num, d2, d1); mpz_sub(num, num, twoB);  /* X = (d2-d1-2B)/(4A) */
+                            if (!mpz_divisible_p(num, fourA)) continue;
+                            mpz_divexact(X, num, fourA);
+                            if (!mpz_fits_slong_p(Y) || !mpz_fits_slong_p(X)) continue;
+                            int64_t vals[SI_MAX_VARS];
+                            for (int k = 0; k < n; k++) vals[k] = 0;
+                            vals[Yv] = mpz_get_si(Y); vals[Xv] = mpz_get_si(X);
+                            if (si_verify(c, vals)) emit_full(st, vals);
+                        }
+                        mpz_clear(g);
+                    }
+                }
+                if (dl) expr_free(dl);
+                mpz_clear(d1); mpz_clear(d2); mpz_clear(Y); mpz_clear(X);
+                mpz_clear(fourp); mpz_clear(fourA); mpz_clear(twoB); mpz_clear(num);
+                mpz_clear(A); mpz_clear(B); mpz_clear(C); mpz_clear(D); mpz_clear(p); mpz_clear(tmp);
+                mpz_clear(e0); mpz_clear(e2); mpz_clear(e1); mpz_clear(ec);
+                return true;                                   /* exhaustive: handled */
+            }
+            mpz_clear(A); mpz_clear(B); mpz_clear(C); mpz_clear(D); mpz_clear(p); mpz_clear(tmp);
+        }
+        mpz_clear(e0); mpz_clear(e2); mpz_clear(e1); mpz_clear(ec);
+    }
+    return false;
+}
+
 /* Dispatch the special forms.  Returns true if one handled the input
  * (candidates emitted into st). */
 static bool si_try_special_forms(SICtx* c, SearchState* st) {
     if (si_solve_pell(c, st)) return true;
+    if (si_solve_conic(c, st)) return true;
     if (si_solve_reciprocal(c, st)) return true;
     if (si_solve_linelim_bilinear(c, st)) return true;
     return false;
@@ -2065,6 +2936,30 @@ static Expr* si_exp_one_tuple(Expr** var, const int64_t* vals, int n) {
     return tup;
 }
 
+/* Is  target == base^exp  for some exp >= 1?  (base >= 2, target >= 1.) */
+static bool si_int_ppow(int64_t base, int64_t target, int64_t* exp) {
+    if (base < 2 || target < 2) return false;        /* base^exp >= 2 for exp >= 1 */
+    int64_t v = base, e = 1;
+    while (v < target) {
+        if (v > INT64_MAX / base) return false;
+        v *= base; e++;
+    }
+    if (v == target) { *exp = e; return true; }
+    return false;
+}
+
+/* Verify a full integer assignment `vals` against the original conjunction
+ * `expr` symbolically (used by paths whose equation is not an MPoly). */
+static bool si_verify_symbolic(Expr* expr, Expr** var, const int64_t* vals, int n) {
+    Expr** rules = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+    for (int i = 0; i < n; i++) rules[i] = mk_rule(expr_copy(var[i]), mk_int(vals[i]));
+    Expr* rl = mk_list(rules, (size_t)n); free(rules);
+    Expr* out = eval_and_free(internal_replace_all((Expr*[]){ expr_copy(expr), rl }, 2));
+    bool ok = is_sym(out, SYM_True);
+    expr_free(out);
+    return ok;
+}
+
 /* Try to solve an exponential Diophantine equation.  Returns the owned result
  * List, or NULL to decline (not this shape, or not decidable here). */
 static Expr* si_solve_exponential(Expr* expr, Expr** var, int n) {
@@ -2126,6 +3021,51 @@ static Expr* si_solve_exponential(Expr* expr, Expr** var, int n) {
         }
     }
 
+    /* Fixed-base Pillai:  P^m - Q^n == +/-1  with CONSTANT bases P,Q >= 2 and
+     * VARIABLE exponents m,n.  Sound & complete via Mihailescu: solutions with
+     * both exponents >= 2 are consecutive perfect powers, i.e. only 3^2 - 2^3 = 1;
+     * the exponent-1 cases are  Q^n = P-1  and  P^m = Q+1.  Settles 3^m - 2^n == 1
+     * -> {(1,1),(2,3)} even though m,n are unbounded. */
+    if (!result && n == 2 && (mpz_cmp_si(K, 1) == 0 || mpz_cmp_si(K, -1) == 0)) {
+        int ip = (t[0].coef > 0) ? 0 : 1, in = 1 - ip;
+        bool shape = t[ip].coef == 1 && t[in].coef == -1
+            && t[ip].bvar < 0 && t[in].bvar < 0          /* constant bases */
+            && t[ip].evar >= 0 && t[in].evar >= 0         /* variable exponents */
+            && t[ip].bconst >= 2 && t[in].bconst >= 2;
+        if (shape) {
+            /* Normalise to  P^a - Q^b == 1  (av,bv = exponent variable indices). */
+            int64_t P, Q; int av, bv;
+            if (mpz_cmp_si(K, 1) == 0) { P = t[ip].bconst; av = t[ip].evar; Q = t[in].bconst; bv = t[in].evar; }
+            else                       { P = t[in].bconst; av = t[in].evar; Q = t[ip].bconst; bv = t[ip].evar; }
+            if (av != bv) {
+                int64_t sa[8], sb[8]; int ns = 0; int64_t e;
+                if (P == 3 && Q == 2) { sa[ns] = 2; sb[ns] = 3; ns++; }       /* both exps >= 2 */
+                if (si_int_ppow(Q, P - 1, &e)) { sa[ns] = 1; sb[ns] = e; ns++; } /* a == 1 */
+                if (si_int_ppow(P, Q + 1, &e)) { sa[ns] = e; sb[ns] = 1; ns++; } /* b == 1 */
+                for (int u = 0; u + 1 < ns; u++)         /* sort ascending by (a, b) */
+                    for (int w = u + 1; w < ns; w++)
+                        if (sa[w] < sa[u] || (sa[w] == sa[u] && sb[w] < sb[u])) {
+                            int64_t ta = sa[u], tb = sb[u]; sa[u] = sa[w]; sb[u] = sb[w]; sa[w] = ta; sb[w] = tb;
+                        }
+                Expr** sols = NULL; int nsol = 0, cap = 0;
+                for (int s = 0; s < ns; s++) {
+                    int64_t vals[SI_MAX_VARS];
+                    for (int i = 0; i < n; i++) vals[i] = 0;
+                    vals[av] = sa[s]; vals[bv] = sb[s];
+                    bool dup = false;                     /* de-dup (a=b=1 arises twice) */
+                    for (int s2 = 0; s2 < s && !dup; s2++) if (sa[s2] == sa[s] && sb[s2] == sb[s]) dup = true;
+                    if (dup) continue;
+                    if (si_verify_symbolic(expr, var, vals, n)) {
+                        if (nsol == cap) { cap = cap ? cap * 2 : 4; sols = realloc(sols, sizeof(Expr*) * (size_t)cap); }
+                        sols[nsol++] = si_exp_one_tuple(var, vals, n);
+                    }
+                }
+                result = mk_list(sols, (size_t)nsol);
+                free(sols);
+            }
+        }
+    }
+
     /* Otherwise: fully bounded enumeration.  Every base and exponent variable
      * must have a finite box; enumerate and test exactly. */
     if (!result) {
@@ -2172,6 +3112,147 @@ static Expr* si_solve_exponential(Expr* expr, Expr** var, int n) {
     for (int i = 0; i < c.nbc; i++) mpoly_free(c.bc[i].Q);
     for (int i = 0; i < c.neq; i++) mpoly_free(c.eq[i]);
     mpz_clear(K);
+    return result;
+}
+
+/* ------------------------------------------------------------------ *
+ *  A4: non-polynomial bounded power-leaf.                             *
+ *                                                                     *
+ *  An equation like  n! + 1 == m^2  cannot become an MPoly (Factorial *
+ *  is not a monomial), so Stage A declines it.  When one side is a     *
+ *  pure power  m^e  of a leaf variable m that appears nowhere else,    *
+ *  and every OTHER variable is bounded to a small box, we enumerate    *
+ *  those variables, evaluate the other side numerically through the    *
+ *  interpreter (which knows Factorial, Binomial, ...), and solve m by  *
+ *  an exact integer e-th root.  m itself may be unbounded (it is       *
+ *  determined, not enumerated), so its value may be a bignum.          *
+ * ------------------------------------------------------------------ */
+
+static bool si_expr_mentions(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == name;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (si_expr_mentions(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (si_expr_mentions(e->data.function.args[i], name)) return true;
+    return false;
+}
+
+/* Is `side` a bare  Power[m, e]  with m a solve variable (index -> *leaf),
+ * e a positive integer literal (-> *e), and m absent from `other`? */
+static bool si_power_leaf_side(Expr* side, Expr* other, Expr** var, int n,
+                               int* leaf, int* e) {
+    if (!is_fun(side, SYM_Power, 2)) return false;
+    Expr* base = side->data.function.args[0];
+    Expr* exq  = side->data.function.args[1];
+    if (base->type != EXPR_SYMBOL || exq->type != EXPR_INTEGER || exq->data.integer < 1)
+        return false;
+    int mi = -1;
+    for (int i = 0; i < n; i++)
+        if (var[i]->data.symbol.name == base->data.symbol.name) mi = i;
+    if (mi < 0 || si_expr_mentions(other, base->data.symbol.name)) return false;
+    *leaf = mi; *e = (int)exq->data.integer;
+    return true;
+}
+
+static Expr* si_solve_bounded_powerleaf(Expr* expr, Expr** var, int n) {
+    Expr** conj; int ncj;
+    flatten_conjuncts(expr, &conj, &ncj);
+    Expr* eqn = NULL;
+    for (int i = 0; i < ncj; i++)
+        if (is_fun(conj[i], SYM_Equal, 2)) { eqn = conj[i]; break; }
+    if (!eqn) return NULL;
+
+    SICtx c; memset(&c, 0, sizeof(c)); c.var = var; c.n = n; c.original = expr; c.all_captured = true;
+
+    /* Gate: engage only for a NON-polynomial equation (the polynomial leaf
+     * search is better and already handles the polynomial power-leaf case). */
+    MPoly* testQ = relation_to_mpoly(&c, eqn->data.function.args[0], eqn->data.function.args[1]);
+    if (testQ) { mpoly_free(testQ); for (int i = 0; i < c.nbc; i++) mpoly_free(c.bc[i].Q); return NULL; }
+
+    /* Identify the power-leaf side and the evaluable target side. */
+    Expr *A = eqn->data.function.args[0], *B = eqn->data.function.args[1];
+    int leaf = -1, e = 0; Expr* target = NULL;
+    if (si_power_leaf_side(A, B, var, n, &leaf, &e)) target = B;
+    else if (si_power_leaf_side(B, A, var, n, &leaf, &e)) target = A;
+    if (leaf < 0) { for (int i = 0; i < c.nbc; i++) mpoly_free(c.bc[i].Q); return NULL; }
+
+    /* Parse constraints for the OTHER variables' bounds (skip the equation). */
+    for (int i = 0; i < ncj; i++) if (conj[i] != eqn) classify_conjunct(&c, conj[i]);
+
+    /* Every non-leaf variable must be finitely bounded and enumerable. */
+    int ov[SI_MAX_VARS], nov = 0; long double box = 1.0L;
+    bool ok = true;
+    for (int i = 0; i < n; i++) {
+        if (i == leaf) continue;
+        if (!(c.has_lo[i] && c.has_hi[i]) || c.hi[i] < c.lo[i]) { ok = false; break; }
+        ov[nov++] = i;
+        box *= (long double)(c.hi[i] - c.lo[i] + 1);
+    }
+    if (!ok || box > 5.0e6L) { for (int i = 0; i < c.nbc; i++) mpoly_free(c.bc[i].Q); return NULL; }
+
+    /* Enumerate the other variables; solve m by an exact e-th root. */
+    Expr** sols = NULL; int nsol = 0, cap = 0;
+    int64_t val[SI_MAX_VARS];
+    for (int i = 0; i < n; i++) val[i] = 0;
+    for (int q = 0; q < nov; q++) val[ov[q]] = c.lo[ov[q]];
+    mpz_t T, root, chk; mpz_init(root); mpz_init(chk);  /* T is init-set by expr_to_mpz */
+    for (;;) {
+        /* target evaluated at the current other-variable assignment. */
+        Expr** rules = (Expr**)malloc(sizeof(Expr*) * (size_t)(nov ? nov : 1));
+        for (int q = 0; q < nov; q++) rules[q] = mk_rule(expr_copy(var[ov[q]]), mk_int(val[ov[q]]));
+        Expr* rl = mk_list(rules, (size_t)nov); free(rules);
+        Expr* tv = eval_and_free(internal_replace_all((Expr*[]){ expr_copy(target), rl }, 2));
+        bool got = expr_is_integer_like(tv);
+        if (got) expr_to_mpz(tv, T);    /* initialises T */
+        expr_free(tv);
+
+        if (got) {
+            /* m^e == T.  Even e needs T >= 0 and yields +/- root; odd e keeps sign. */
+            bool have_m = false; int msign = 1;
+            if (e % 2 == 0) {
+                if (mpz_sgn(T) >= 0 && mpz_root(root, T, (unsigned long)e)) have_m = true;
+            } else {
+                mpz_abs(chk, T);
+                if (mpz_root(root, chk, (unsigned long)e)) { have_m = true; msign = mpz_sgn(T) < 0 ? -1 : 1; }
+            }
+            if (have_m) {
+                for (int sg = 1; sg >= -1; sg -= 2) {
+                    if (e % 2 == 1 && sg != msign) continue;      /* odd: single sign */
+                    if (e % 2 == 0 && sg < 0 && mpz_sgn(root) == 0) continue; /* avoid -0 dup */
+                    mpz_t mval; mpz_init(mval); mpz_set(mval, root); if (sg < 0) mpz_neg(mval, mval);
+                    /* Verify the full conjunction symbolically (handles Factorial etc.). */
+                    Expr** vr = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+                    for (int i = 0; i < n; i++)
+                        vr[i] = (i == leaf) ? mk_rule(expr_copy(var[i]), mk_mpz(mval))
+                                            : mk_rule(expr_copy(var[i]), mk_int(val[i]));
+                    Expr* vrl = mk_list(vr, (size_t)n); free(vr);
+                    Expr* chk2 = eval_and_free(internal_replace_all((Expr*[]){ expr_copy(expr), vrl }, 2));
+                    bool good = is_sym(chk2, SYM_True);
+                    expr_free(chk2);
+                    if (good) {
+                        Expr** tr = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+                        for (int i = 0; i < n; i++)
+                            tr[i] = (i == leaf) ? mk_rule(expr_copy(var[i]), mk_mpz(mval))
+                                                : mk_rule(expr_copy(var[i]), mk_int(val[i]));
+                        if (nsol == cap) { cap = cap ? cap * 2 : 8; sols = realloc(sols, sizeof(Expr*) * (size_t)cap); }
+                        sols[nsol++] = mk_list(tr, (size_t)n); free(tr);
+                    }
+                    mpz_clear(mval);
+                }
+            }
+        }
+        if (got) mpz_clear(T);          /* T was init-set this iteration */
+        int q = 0;
+        for (; q < nov; q++) { if (++val[ov[q]] <= c.hi[ov[q]]) break; val[ov[q]] = c.lo[ov[q]]; }
+        if (q == nov) break;
+    }
+    mpz_clear(root); mpz_clear(chk);
+    for (int i = 0; i < c.nbc; i++) mpoly_free(c.bc[i].Q);
+    for (int i = 0; i < c.neq; i++) mpoly_free(c.eq[i]);
+
+    Expr* result = mk_list(sols, (size_t)nsol);
+    free(sols);
     return result;
 }
 
@@ -2228,6 +3309,13 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
         if (ex) return ex;
     }
 
+    /* Non-polynomial bounded power-leaf (n! + 1 == m^2, ...): also before the
+     * MPoly stage, which cannot represent Factorial / Binomial / ... */
+    {
+        Expr* pl = si_solve_bounded_powerleaf(expr, c.var, c.n);
+        if (pl) return pl;
+    }
+
     /* Stage A. */
     for (int i = 0; i < ncj; i++) {
         if (!classify_conjunct(&c, conj[i])) { ctx_free(&c); return NULL; }
@@ -2236,6 +3324,7 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
 
     /* Stage B. */
     derive_bounds(&c);
+    derive_even_only_bounds(&c);   /* sign-symmetric even-power vars -> [-B, B] */
 
     /* Per-variable degree (max over equations) and whether it is solvable as
      * an exact leaf. */
@@ -2265,6 +3354,32 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
         if (lin) { ctx_free(&c); return lin; }
     }
 
+    /* Unbounded positive Pell -> parametric fundamental-unit family (symbolic). */
+    {
+        Expr* pell = si_solve_pell_parametric(&c);
+        if (pell) { ctx_free(&c); return pell; }
+    }
+
+    /* Homogeneous linear system with positivity -> parametric ray (symbolic). */
+    {
+        Expr* ray = si_solve_linear_system_ray(&c);
+        if (ray) { ctx_free(&c); return ray; }
+    }
+
+    /* Prouhet-Tarry-Escott equal-power-sum system with a forcing disequation
+     * -> provably {} via Newton's identities (even when unbounded). */
+    {
+        Expr* pte = si_solve_power_sum_equal(&c);
+        if (pte) { ctx_free(&c); return pte; }
+    }
+
+    /* Unbounded Mordell y^2 == x^3 + k (k = -1, -2): the complete integer-point
+     * set via factorisation in Z[sqrt k]. */
+    {
+        Expr* mor = si_solve_mordell(&c);
+        if (mor) { ctx_free(&c); return mor; }
+    }
+
     /* Special forms first: divisor-factoring bilinear and unit-fraction
      * recursion are exact and O(#divisors) / O(bounded), so they beat the
      * enumerative fallback whenever they match -- including fully bounded
@@ -2276,6 +3391,18 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
         free(st.sols); ctx_free(&c);
         return result;
     }
+    /* Multi-leaf staged elimination: a system whose "determined" variables each
+     * fall out of a single equation (e.g. the Euler brick's a,b,c) -- these may
+     * be individually unbounded, so this runs BEFORE the unbounded-box decline.
+     * Only the coupled free variables are enumerated. */
+    if (si_solve_multileaf(&c, &st)) {
+        Expr* result = build_result(&st);
+        free(st.sols); ctx_free(&c);
+        return result;
+    }
+    st.multileaf = false;   /* reset in case the attempt set up partial state */
+    st.nsol = 0;
+
     /* Unbounded box and no special form fit -> later phases (Pell, lattice). */
     if (n_unbounded >= 2) { free(st.sols); ctx_free(&c); return NULL; }
 
@@ -2329,11 +3456,19 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
         if (pick != i) { int t = st.order[i]; st.order[i] = st.order[pick]; st.order[pick] = t; }
     }
 
-    /* Search-space guard (raw product over search vars): decline rather than
-     * enumerate an intractable box (e.g. a Pell family or a wide linear
-     * lattice -- those are later, closed-form phases). */
+    /* Search-space guard: decline rather than enumerate an intractable box
+     * (e.g. a Pell family or a wide linear lattice -- those are later,
+     * closed-form phases).  The raw product over search vars is divided by the
+     * factorial of the longest ordering chain, since  x <= y <= z  walks
+     * ~N^3/6 nodes, not N^3 (the visit cap backstops any under-estimate). */
     long double est = 1.0L;
     for (int i = 0; i < st.n_search; i++) est *= (long double)domain[st.order[i]];
+    {
+        int L = si_longest_chain(&c, st.order, st.n_search);
+        long double fact = 1.0L;
+        for (int i = 2; i <= L; i++) fact *= (long double)i;
+        est /= fact;
+    }
     if (est > (long double)SI_MAX_NODES) {
         /* Too large to enumerate directly, but two number-theoretic methods
          * turn the O(N^k) search into far less: a bounded linear equation via
@@ -2351,7 +3486,9 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
 
     /* Stage C. */
     st.max_visits = SI_MAX_NODES;      /* runtime backstop for non-ordered boxes */
+    si_build_leaf_cache(&st);          /* int64 coefficient cache for the hot loop */
     search_rec(&st, 0);
+    si_free_leaf_cache(&st);
 
     if (st.overflow) {                 /* hit the solver's degree/size limit */
         free(st.sols);

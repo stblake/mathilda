@@ -699,6 +699,33 @@ static bool expr_mentions_symbol(const Expr* e, const char* sym) {
     return false;
 }
 
+/* True iff `eq` is a lone `Equal` (not a conjunction / list / system) that
+ * mentions at least two of the solve variables -- i.e. a positive-dimensional
+ * curve/surface.  Its integer points are the exclusive province of the
+ * `solveint` pre-pass; once that has declined, the Complexes-oriented
+ * parametric dispatch (try_single_eq_multivar / the poly specialist over
+ * Integers) can only fabricate a spurious `{}` -- e.g. y^2 == x^3 - 2 or
+ * y == x^2 -- because the closed-form root is not integer-valued for the
+ * symbolic parameter.  This predicate lets the caller convert that `{}` into
+ * an unevaluated Solve (safe: an unbounded curve has no finite integer
+ * enumeration we could offer here anyway). */
+static bool is_single_multivar_equation(const Expr* eq, const Expr* vars) {
+    if (!eq || eq->type != EXPR_FUNCTION
+        || eq->data.function.head->type != EXPR_SYMBOL
+        || eq->data.function.head->data.symbol.name != SYM_Equal
+        || eq->data.function.arg_count != 2) return false;
+    if (!vars || vars->type != EXPR_FUNCTION
+        || vars->data.function.head->type != EXPR_SYMBOL
+        || vars->data.function.head->data.symbol.name != SYM_List) return false;
+    int mentioned = 0;
+    for (size_t i = 0; i < vars->data.function.arg_count; i++) {
+        Expr* v = vars->data.function.args[i];
+        if (v->type == EXPR_SYMBOL
+            && expr_mentions_symbol(eq, v->data.symbol.name)) mentioned++;
+    }
+    return mentioned >= 2;
+}
+
 /* Single equation in >= 2 variables: solve for the earliest-listed
  * variable the equation is polynomial in, treating the other variables
  * as symbolic parameters.  Mathematica's Solve returns explicit rules
@@ -843,6 +870,8 @@ Expr* builtin_solve(Expr* res) {
      *   False -> {}     (contradiction: no solutions)             */
     Expr* out = NULL;
     Expr* verify_eq = NULL;   /* owned copy of the equation for VerifySolutions */
+    bool integer_prepass_used = false;  /* solveint returned a (possibly empty) answer */
+    bool lone_multivar_int_eq = false;  /* Integers + lone Equal in >= 2 vars */
     if (expr->type == EXPR_SYMBOL && expr->data.symbol.name == SYM_True) {
         Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         out = expr_new_function(expr_new_symbol(SYM_List),
@@ -899,10 +928,16 @@ Expr* builtin_solve(Expr* res) {
         && dom->data.symbol.name == SYM_Integers) {
         Expr* iout = solveint_solve_integer(expr, vars, dom);
         if (iout) {
+            integer_prepass_used = true;
             expr_free(expr);
             out = iout;
             goto solve_finish;
         }
+        /* solveint declined.  Remember whether this was a lone multivariable
+         * equation so the shared tail can suppress a spurious `{}` fabricated
+         * by the Complexes-oriented parametric dispatch (see the guard at
+         * solve_finish). */
+        lone_multivar_int_eq = is_single_multivar_equation(expr, vars);
     }
 
     /* VerifySolutions -> True: snapshot the (substituted / rationalised)
@@ -1035,6 +1070,25 @@ solve_finish:
     if (out && dom && dom->type == EXPR_SYMBOL
         && dom->data.symbol.name == SYM_Integers) {
         out = filter_integers_solutions(out);
+    }
+
+    /* Spurious-`{}` guard (correctness).  When solveint DECLINED a lone
+     * multivariable equation over the Integers, any empty result reaching here
+     * is not a proof of no solutions -- it is the parametric dispatch's
+     * closed-form root failing to be integer-valued for the symbolic parameter
+     * (y^2 == x^3 - 2, y == x^2, ...).  Leave Solve unevaluated instead: an
+     * unbounded curve has no finite integer enumeration this path can offer,
+     * and an unproven `{}` would be a silent wrong answer.  (A legitimate
+     * solveint `{}` took the `goto solve_finish` above with
+     * integer_prepass_used set, so it is never touched here.) */
+    if (out && !integer_prepass_used && lone_multivar_int_eq
+        && out->type == EXPR_FUNCTION
+        && out->data.function.head->type == EXPR_SYMBOL
+        && out->data.function.head->data.symbol.name == SYM_List
+        && out->data.function.arg_count == 0) {
+        expr_free(out);
+        expr_free(vars_subst);
+        return NULL;
     }
 
     /* Unsubst pass: if we substituted any compound variables with

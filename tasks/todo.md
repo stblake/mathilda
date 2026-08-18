@@ -66,3 +66,49 @@ Deferred cases (2, 4, 5, 6, 7, 9, 11, 13, 15) correctly return unevaluated.
 - Still deferred (genuinely research-grade, unbounded): Mordell-Weil/elliptic
   integral points with no box (ex 5/7 unbounded), indefinite Thue equations
   (ex 6), general-N Pell, Booker O(N) sum-of-three-cubes.
+
+## Benchmark vs sympy + correctness fix (2026-08-18)
+
+**Benchmark** `benchmarks/87-diophantine-integers/` — head-to-head against
+sympy `diophantine` across 19 well-known families. `cases.py` is the single
+source of truth; `run.py` generates `diophantine.m`, runs it, runs sympy + a
+same-box Python search, writes `REPORT.md` + `results.json`. Result: **Mathilda
+19/19 exact** (all counts verified); sympy answers 3 directly/comparably, a few
+more only parametrically or after manual elimination, and `NotImplementedError`
+on 11 (all cubic/exponential forms + every system).
+
+**Fix found while benchmarking** — `Solve[x^2+y^2==25,{x,y},Integers]` returned
+`{}` (silent wrong answer). Root cause: the bounder only bounded provably-
+non-negative variables, so an unconstrained sum of even powers was declined and
+Solve fell through to the generic path → `{}`. Added `derive_even_only_bounds`
+(sign-symmetric even-only vars get `[-B,B]`) + a one-line `urest==0` tightening
+(fixes `x^2+y^2==0`). Verified vs sympy (12/28/72 exact). New test
+`test_sum_of_two_squares`. check-c99 clean, all solve suites pass, valgrind =
+baseline.
+
+## Diophantine campaign — correctness + 10 new methods (2026-08-18) — DONE
+
+Plan: `~/.claude/plans/cosmic-riding-hoare.md`. Driven by a ~18-case stress test.
+
+- **P0 correctness** (`src/solve.c`): `y^2==x^3-2 → {}` was a silent wrong answer
+  (unbounded nonlinear curve solved parametrically, then Integers-filtered to
+  `{}`). `is_single_multivar_equation` + a `solve_finish` guard now leave such a
+  lone multivar equation **unevaluated** after solveint declines. Also `y==x^2`,
+  `y^2==x^3+1`, ... Regression bank added (curves, verified negatives, the
+  already-passing `y^3==x^5-x+1` / `x^2+y^3==z^7` / nine-cubes==239).
+- **Tranche A** (bounded engine): multi-leaf staged elimination (`si_solve_multileaf`
+  → Euler brick), ordering-reduced estimate (`si_longest_chain`) + int64 fast leaf
+  (`si_leaf_roots_i64` + coef cache → `2Σsq=(Σ)^2`, Markov-Hurwitz), non-poly
+  power-leaf (`si_solve_bounded_powerleaf` → Brocard `n!+1==m^2`).
+- **Tranche B/C/D** (closed form): conic `Y^2=AX^2+BX+C` (`si_solve_conic` →
+  `n^2+n+41`), unbounded Pell parametric (`si_solve_pell_parametric`), homogeneous
+  linear ray (`si_solve_linear_system_ray` + Bareiss det), fixed-base exponential
+  (`3^m-2^n=1`), PTE→{} via Newton (`si_solve_power_sum_equal`), general unbounded
+  imaginary Mordell (`si_solve_mordell`: k<0 squarefree, k≡2,3 mod4, 3∤h via
+  reduced-form class number → `(3,±5)`, `(17,±70)` for k=-13, `{}` for k=-5;
+  verified vs brute force for all 49 engaged k in [-150,-2]).
+- **Honest declines** (unevaluated, never wrong): Elkies `x^4+y^4+z^4==w^4` @1e7,
+  Cassels `3x^3+4y^3+5z^3`, Pyth-area (Fermat), Ramanujan-Nagell `x^2+7==2^n`
+  (needs the descent in Z[(1+√-7)/2]).
+- 11 new tests in `test_solve_integers.c`; all solve suites + corpus 97/97 pass;
+  `make check-c99` clean; valgrind = startup baseline. Docs + changelog updated.

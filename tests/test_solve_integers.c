@@ -228,12 +228,190 @@ static void test_linear_parametric(void) {
              "Rule[z, Plus[5, Times[-1, C[2]]]]]]");
 }
 
+/* Multi-leaf staged elimination: the Euler brick has three "determined"
+ * variables (a,b,c), each an exact square root per (x,y,z) -- only x<y<z is
+ * enumerated.  The smallest brick is (44,117,240; 125,244,267). */
+static void test_euler_brick(void) {
+    run_test("Solve[x^2+y^2==a^2 && x^2+z^2==b^2 && y^2+z^2==c^2 "
+             "&& 0<x<y<z<250 && a>0 && b>0 && c>0, {x,y,z,a,b,c}, Integers]",
+        "List[List[Rule[x, 44], Rule[y, 117], Rule[z, 240], "
+             "Rule[a, 125], Rule[b, 244], Rule[c, 267]]]");
+}
+
+/* Ordering-reduced estimate + int64 fast leaf: a single quadratic-in-w leaf
+ * over the ordered triple x<=y<=z (raw box is otherwise declined). */
+static void test_quadratic_form(void) {
+    run_test("Solve[2 (x^2+y^2+z^2+w^2) == (x+y+z+w)^2 && 0<x<=y<=z<=w<20, "
+             "{x,y,z,w}, Integers]",
+        "List[List[Rule[x, 1], Rule[y, 1], Rule[z, 4], Rule[w, 12]], "
+             "List[Rule[x, 2], Rule[y, 2], Rule[z, 3], Rule[w, 15]]]");
+    /* The four-variable Markov-Hurwitz equation  Sum x_i^2 == Prod x_i. */
+    run_test("Solve[x1^2+x2^2+x3^2+x4^2 == x1 x2 x3 x4 && 0<x1<=x2<=x3<=x4<=100, "
+             "{x1,x2,x3,x4}, Integers]",
+        "List[List[Rule[x1, 2], Rule[x2, 2], Rule[x3, 2], Rule[x4, 2]], "
+             "List[Rule[x1, 2], Rule[x2, 2], Rule[x3, 2], Rule[x4, 6]], "
+             "List[Rule[x1, 2], Rule[x2, 2], Rule[x3, 6], Rule[x4, 22]], "
+             "List[Rule[x1, 2], Rule[x2, 2], Rule[x3, 22], Rule[x4, 82]]]");
+}
+
+/* Non-polynomial bounded power-leaf: Brocard's problem  n! + 1 == m^2.  The
+ * only known solutions (Brown numbers) are n = 4, 5, 7. */
+static void test_brocard(void) {
+    run_test("Solve[Factorial[n] + 1 == m^2 && n > 0 && m > 0 && n < 100, "
+             "{n, m}, Integers]",
+        "List[List[Rule[n, 4], Rule[m, 5]], "
+             "List[Rule[n, 5], Rule[m, 11]], "
+             "List[Rule[n, 7], Rule[m, 71]]]");
+}
+
+/* Binary-quadratic conic  Y^2 == A X^2 + B X + C  with A a perfect square:
+ * complete the square to a difference of squares and factor the constant. */
+static void test_conic(void) {
+    /* Euler's prime-generating polynomial  n^2 + n + 41 == y^2  (D = 163). */
+    run_test("Solve[n^2 + n + 41 == y^2 && n > 0 && y > 0, {n, y}, Integers]",
+        "List[List[Rule[n, 40], Rule[y, 41]]]");
+    /* Difference of two squares. */
+    run_test("Solve[x^2 - y^2 == 15 && x > 0 && y > 0, {x, y}, Integers]",
+        "List[List[Rule[x, 4], Rule[y, 1]], List[Rule[x, 8], Rule[y, 7]]]");
+}
+
+/* Unbounded positive Pell -> parametric fundamental-unit family.  The family is
+ * a ConditionalExpression in C[1] >= 1; substituting C[1] = k recovers the k-th
+ * solution (checked here for k = 1, 2 on x^2 - 2 y^2 == 1). */
+static void test_pell_parametric(void) {
+    run_test("Simplify[Solve[x^2 - 2 y^2 == 1 && x > 0 && y > 0, {x, y}, Integers] "
+             "/. C[1] -> 1]", "List[List[Rule[x, 3], Rule[y, 2]]]");
+    run_test("Simplify[Solve[x^2 - 2 y^2 == 1 && x > 0 && y > 0, {x, y}, Integers] "
+             "/. C[1] -> 2]", "List[List[Rule[x, 17], Rule[y, 12]]]");
+}
+
+/* Homogeneous linear SYSTEM with positivity -> parametric ray (the primitive
+ * kernel vector times C[1] >= 1), or {} when the kernel is mixed-sign (no
+ * positive solution).  The kernel is the generalised cross product. */
+static void test_linear_system_ray(void) {
+    /* Kernel (6,4,3): substituting C[1]=2 gives (12,8,6). */
+    run_test("Solve[2 x == 3 y && 4 z == 3 y && x>0 && y>0 && z>0, {x,y,z}, Integers] "
+             "/. C[1] -> 2", "List[List[Rule[x, 12], Rule[y, 8], Rule[z, 6]]]");
+    /* This rational system forces x = -13 z / 35, so there is NO positive
+     * solution -- correctly resolved to {} (was previously unevaluated). */
+    run_test("Solve[w == 5/6 x + y && x == 9/20 y + z && y == 13/42 z + w "
+             "&& w > 0 && x > 0 && y > 0 && z > 0, {w, x, y, z}, Integers]", "List[]");
+}
+
+/* Fixed-base exponential  P^m - Q^n == +/-1  (constant bases, variable
+ * exponents), sound & complete via Mihailescu + the exponent-1 cases. */
+static void test_fixed_base_exponential(void) {
+    /* 3^m - 2^n == 1: only (1,1) and (2,3), even though m,n are unbounded. */
+    run_test("Solve[3^m - 2^n == 1 && m > 0 && n > 0, {m, n}, Integers]",
+        "List[List[Rule[m, 1], Rule[n, 1]], List[Rule[m, 2], Rule[n, 3]]]");
+    /* 2^n - 3^m == 1: only 2^2 - 3 = 1. */
+    run_test("Solve[2^n - 3^m == 1 && m > 0 && n > 0, {m, n}, Integers]",
+        "List[List[Rule[m, 1], Rule[n, 2]]]");
+}
+
+/* Prouhet-Tarry-Escott: two triples with equal power sums for degrees 1,2,3
+ * are the same multiset (Newton's identities), so the strict orderings force
+ * a=d, and the disequation a!=d makes the system empty. */
+static void test_prouhet_tarry_escott(void) {
+    run_test("Solve[a + b + c == d + e + f && a^2 + b^2 + c^2 == d^2 + e^2 + f^2 "
+             "&& a^3 + b^3 + c^3 == d^3 + e^3 + f^3 && 0 < a < b < c && 0 < d < e < f "
+             "&& a != d, {a, b, c, d, e, f}, Integers]", "List[]");
+}
+
 /* Deferred families must stay unevaluated (never a wrong answer). */
 static void test_deferred_unevaluated(void) {
     /* Mordell y^2 = x^3 + k: elliptic-integral-points phase, no bound. */
     run_test("Solve[y^2 == x^3 - 10000 && x > 0 && y > 0, {x, y}, Integers]",
         "Solve[And[Equal[Power[y, 2], Plus[-10000, Power[x, 3]]], "
              "Greater[x, 0], Greater[y, 0]], List[x, y], Integers]");
+    /* Correctness guard: an UNBOUNDED nonlinear curve that solveint cannot
+     * finitely bound must stay unevaluated, NOT collapse to {} via the
+     * parametric dispatch's non-integer closed form.  (y^2 == x^3 - 2 is now
+     * solved by the Z[sqrt k] Mordell path, so the guard is exercised here by
+     * y^2 == x^3 + 1, whose k = +1 is outside the sound PID cases, and by the
+     * genuinely-parametric y == x^2.) */
+    run_test("Solve[y^2 == x^3 + 1, {x, y}, Integers]",
+        "Solve[Equal[Power[y, 2], Plus[1, Power[x, 3]]], List[x, y], Integers]");
+    run_test("Solve[y == x^2, {x, y}, Integers]",
+        "Solve[Equal[y, Power[x, 2]], List[x, y], Integers]");
+}
+
+/* Unbounded Mordell y^2 == x^3 + k, solved COMPLETELY via factorisation in
+ * Z[sqrt k] for every imaginary k = 2,3 (mod 4) with |k| squarefree and 3 not
+ * dividing the class number.  Verified against brute force for all engaged
+ * k in [-150,-2].  (k = +3 etc. -- the real-quadratic case -- are declined.) */
+static void test_mordell(void) {
+    run_test("Solve[y^2 == x^3 - 2, {x, y}, Integers]",
+        "List[List[Rule[x, 3], Rule[y, -5]], List[Rule[x, 3], Rule[y, 5]]]");
+    run_test("Solve[y^2 == x^3 - 2 && y > 0, {x, y}, Integers]",
+        "List[List[Rule[x, 3], Rule[y, 5]]]");
+    run_test("Solve[y^2 == x^3 - 1, {x, y}, Integers]",
+        "List[List[Rule[x, 1], Rule[y, 0]]]");
+    /* Generalised: k = -13 (class number 2, 3 does not divide it). */
+    run_test("Solve[y^2 == x^3 - 13, {x, y}, Integers]",
+        "List[List[Rule[x, 17], Rule[y, -70]], List[Rule[x, 17], Rule[y, 70]]]");
+    /* k = -5: the descent proves there is NO integer point (not merely unfound). */
+    run_test("Solve[y^2 == x^3 - 5, {x, y}, Integers]", "List[]");
+    /* k = -7 (half-integer ring) and k = -4 (not squarefree) stay unevaluated. */
+    run_test("Solve[y^2 == x^3 - 7, {x, y}, Integers]",
+        "Solve[Equal[Power[y, 2], Plus[-7, Power[x, 3]]], List[x, y], Integers]");
+}
+
+/* Two fourth powers a^4+b^4 as a sum in two distinct ways.  The smallest is
+ * 635318657 = 59^4+158^4 = 133^4+134^4 (Euler), so the < 10^8 box is a TRUE
+ * negative -- an empty set that must not be mistaken for a false negative.
+ * The < 10^9 box reaches the Euler pair, guarding the search's completeness. */
+static void test_two_fourth_powers(void) {
+    run_test("Solve[x^4 + y^4 == z^4 + w^4 && 0 < x < y && 0 < z < w && x != z "
+             "&& x^4 + y^4 < 10^8, {x, y, z, w}, Integers]", "List[]");
+    run_test("Solve[x^4 + y^4 == z^4 + w^4 && 0 < x < y && 0 < z < w && x != z "
+             "&& x^4 + y^4 < 10^9, {x, y, z, w}, Integers]",
+        "List[List[Rule[x, 59], Rule[y, 158], Rule[z, 133], Rule[w, 134]], "
+             "List[Rule[x, 133], Rule[y, 134], Rule[z, 59], Rule[w, 158]]]");
+}
+
+/* Bounded superelliptic / mixed-power boxes solved by the ordinary leaf search
+ * (enumerate the bounded variables, solve the leaf by a perfect-power test). */
+static void test_bounded_mixed_power(void) {
+    /* Superelliptic y^3 = x^5 - x + 1 over |x|,|y| < 1000: three points. */
+    run_test("Solve[y^3 == x^5 - x + 1 && Abs[x] < 1000 && Abs[y] < 1000, "
+             "{x, y}, Integers]",
+        "List[List[Rule[x, -1], Rule[y, 1]], "
+             "List[Rule[x, 0], Rule[y, 1]], List[Rule[x, 1], Rule[y, 1]]]");
+    /* x^2 + y^3 == z^7 over a box; z bounded by the equation magnitude. */
+    run_test("Solve[x^2 + y^3 == z^7 && 1 < x < 1000 && 1 < y < 1000 && z > 1, "
+             "{x, y, z}, Integers]",
+        "List[List[Rule[x, 8], Rule[y, 4], Rule[z, 2]], "
+             "List[Rule[x, 250], Rule[y, 25], Rule[z, 5]], "
+             "List[Rule[x, 729], Rule[y, 162], Rule[z, 9]], "
+             "List[Rule[x, 832], Rule[y, 112], Rule[z, 8]]]");
+    /* 239 needs nine positive cubes (Waring g(3)=9 witness): two representations. */
+    run_test("Solve[x1^3 + x2^3 + x3^3 + x4^3 + x5^3 + x6^3 + x7^3 + x8^3 + x9^3 "
+             "== 239 && 0 <= x1 <= x2 <= x3 <= x4 <= x5 <= x6 <= x7 <= x8 <= x9, "
+             "{x1, x2, x3, x4, x5, x6, x7, x8, x9}, Integers]",
+        "List[List[Rule[x1, 1], Rule[x2, 1], Rule[x3, 1], Rule[x4, 3], Rule[x5, 3], "
+             "Rule[x6, 3], Rule[x7, 3], Rule[x8, 4], Rule[x9, 4]], "
+             "List[Rule[x1, 1], Rule[x2, 2], Rule[x3, 2], Rule[x4, 2], Rule[x5, 2], "
+             "Rule[x6, 3], Rule[x7, 3], Rule[x8, 3], Rule[x9, 5]]]");
+}
+
+/* Unconstrained sum of two squares.  A variable that appears only with even
+ * exponents is sign-symmetric: derive_even_only_bounds bounds |x|,|y| and the
+ * search covers both signs, so the full 12-element set is returned rather than
+ * the solver declining and Solve fabricating {} over the Integers. */
+static void test_sum_of_two_squares(void) {
+    run_test("Solve[x^2 + y^2 == 25, {x, y}, Integers]",
+        "List[List[Rule[x, -5], Rule[y, 0]], "
+             "List[Rule[x, -4], Rule[y, -3]], List[Rule[x, -4], Rule[y, 3]], "
+             "List[Rule[x, -3], Rule[y, -4]], List[Rule[x, -3], Rule[y, 4]], "
+             "List[Rule[x, 0], Rule[y, -5]], List[Rule[x, 0], Rule[y, 5]], "
+             "List[Rule[x, 3], Rule[y, -4]], List[Rule[x, 3], Rule[y, 4]], "
+             "List[Rule[x, 4], Rule[y, -3]], List[Rule[x, 4], Rule[y, 3]], "
+             "List[Rule[x, 5], Rule[y, 0]]]");
+    /* The degenerate sum-of-even-powers == 0: only the origin (a positive-
+     * definite term pinned to <= 0 forces its variable to 0). */
+    run_test("Solve[x^2 + y^2 == 0, {x, y}, Integers]",
+        "List[List[Rule[x, 0], Rule[y, 0]]]");
 }
 
 int main(void) {
@@ -254,6 +432,18 @@ int main(void) {
     TEST(test_pell);
     TEST(test_linear_parametric);
     TEST(test_integer_restriction);
+    TEST(test_sum_of_two_squares);
+    TEST(test_two_fourth_powers);
+    TEST(test_bounded_mixed_power);
+    TEST(test_euler_brick);
+    TEST(test_quadratic_form);
+    TEST(test_brocard);
+    TEST(test_conic);
+    TEST(test_pell_parametric);
+    TEST(test_linear_system_ray);
+    TEST(test_fixed_base_exponential);
+    TEST(test_prouhet_tarry_escott);
+    TEST(test_mordell);
     TEST(test_deferred_unevaluated);
 
     printf("All solve-integers tests passed!\n");

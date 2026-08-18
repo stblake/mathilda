@@ -188,7 +188,12 @@ Attempts to solve an equation or system of equations for one or more variables.
   The method is bound propagation to a finite box (explicit bounds, ordering
   chains like `0 < x <= y <= z`, and an interval-positivity rule that turns a
   sign-definite term of `Σ term == constant` into a per-variable bound, both
-  above and — for odd powers, deducing the sign — below), then recursive
+  above and — for odd powers, deducing the sign — below). A variable that
+  appears only with **even exponents** is sign-symmetric, so even without a
+  sign constraint it is bounded on both sides to `[-B, B]` — this makes the
+  unconstrained sum of even powers finite, so
+  `Solve[x^2 + y^2 == 25, {x, y}, Integers]` returns all 12 signed pairs
+  (and `x^2 + y^2 == 0` the origin) rather than the empty set. Then recursive
   elimination that enumerates all but one variable and solves the last
   *exactly* (integer k-th root, quadratic discriminant, or rational-root),
   every candidate re-verified against the original conjunction. A **single
@@ -233,6 +238,60 @@ Attempts to solve an equation or system of equations for one or more variables.
     `Solve[x^2 - 61 y^2 == 1 && x > 0 && y > 0 && x < 10^10, {x, y}, Integers]`
     -> `{{x -> 1766319049, y -> 226153980}}`; the negative Pell
     `x^2 - 3 y^2 == -1` correctly returns `{}` (unsolvable).
+  - **Multi-leaf staged elimination.** A variable that appears in exactly one
+    equation and is univariate-solvable there is *peeled* -- resolved by an
+    exact root per free-variable assignment rather than enumerated -- so a
+    system with several "determined" variables reduces to a search over only
+    the coupled ones.  The **Euler brick**
+    `x^2+y^2==a^2 && x^2+z^2==b^2 && y^2+z^2==c^2 && 0<x<y<z<500 && a,b,c>0`
+    peels `a,b,c` (three square roots) and walks only `x<y<z`, returning all
+    three bricks in ~1 s, the smallest `(44,117,240;125,244,267)`.
+  - **Ordered box + int64 fast leaf.** The search-space guard divides the raw
+    box by the factorial of the longest ordering chain, and a degree-≤2 leaf
+    over small coefficients is solved in machine integers (GMP fallback on
+    overflow), so a genuinely ordered four-variable box is enumerated rather
+    than declined: `2(x^2+y^2+z^2+w^2)==(x+y+z+w)^2 && 0<x<=y<=z<=w<1000` and
+    the Markov-Hurwitz `x1^2+x2^2+x3^2+x4^2==x1 x2 x3 x4 && 0<x1<=...<=x4<=1000`.
+  - **Non-polynomial power-leaf.** When one side is a pure power `m^e` of a
+    leaf that appears nowhere else and every other variable is bounded, the
+    others are enumerated, the remaining side is evaluated through the
+    interpreter (so `Factorial`, `Binomial`, ... work), and `m` is solved by an
+    exact integer `e`-th root.  **Brocard's problem** `n! + 1 == m^2 && 0<n<100`
+    returns the Brown numbers `n = 4, 5, 7`.
+  - **Binary-quadratic conic.** `Y^2 == A X^2 + B X + C` with a perfect-square
+    leading coefficient `A` completes to a difference of squares
+    `(2 p Y)^2 - (2 A X + B)^2 = 4 A C - B^2` and factors that constant over its
+    divisors -- exhaustive, so an empty result is a proof.  Euler's
+    `n^2 + n + 41 == y^2` -> `{n -> 40, y -> 41}`; `x^2 - y^2 == 15` ->
+    `{{4,1},{8,7}}`.  (A non-square `A` is a genuine Pell conic, left to the
+    continued-fraction path.)
+  - **Prouhet-Tarry-Escott -> {}.** Two `k`-element groups with equal power sums
+    for degrees `1..k` are the same multiset (Newton's identities); with a strict
+    ordering inside each group they are forced equal, so a disequation such as
+    `a != d` proves the system empty -- e.g. `a+b+c==d+e+f && ...(deg 2)... &&
+    ...(deg 3)... && 0<a<b<c && 0<d<e<f && a!=d` -> `{}` though every variable is
+    unbounded.
+  - **Unbounded Mordell.** `y^2 == x^3 + k` factors as
+    `x^3 = (y - sqrt k)(y + sqrt k)` in `Z[sqrt k]`; the cube factors give the
+    COMPLETE integer-point set whenever the descent is sound -- `k < 0`, `|k|`
+    squarefree, `k = 2,3 (mod 4)` (units `{+/-1}`, and a mod-8 argument forces
+    the two factors coprime), and `3` not dividing the class number of
+    `Q(sqrt k)` (so an ideal cube is a principal cube).  So `y^2 == x^3 - 2` ->
+    `(3, +/-5)`, `y^2 == x^3 - 13` -> `(17, +/-70)`, and `y^2 == x^3 - 5` -> `{}`
+    (proved).  A bounded `x` uses the ordinary leaf search; the half-integer ring
+    (`k = 1 mod 4`), `3 | h`, and the real-quadratic case (`k > 0`, infinite units
+    -- e.g. `y^2 == x^3 + 3`) are left unevaluated.
+  - **Unbounded Pell -> parametric family.** `x^2 - D y^2 == 1 && x>0 && y>0`
+    with no bound returns the fundamental-unit family as a
+    `ConditionalExpression` on `C[1] >= 1`:
+    `x -> ((x1+y1 Sqrt[D])^C[1] + (x1-y1 Sqrt[D])^C[1]) / 2` and the matching
+    `y`, using the fundamental solution `(x1, y1)` from the continued fraction.
+  - **Homogeneous linear system -> parametric ray.** `n-1` homogeneous linear
+    equations in `n` positive unknowns have a one-dimensional integer kernel (the
+    generalised cross product, via a fraction-free Bareiss determinant); if the
+    primitive kernel vector is entirely positive the solutions are
+    `{v_i C[1] : C[1] >= 1}`, otherwise the positive orthant meets the kernel only
+    at the origin and there is no positive solution.
 - **Exponential Diophantine (variable exponents).** Equations such as
   `x^a - y^b == 1`, where the exponent is a solve variable, are handled before
   the polynomial stage (which cannot represent `x^a`).  A fully bounded box
@@ -242,14 +301,20 @@ Attempts to solve an equation or system of equations for one or more variables.
   is `3^2 - 2^3 = 1`, so
   `Solve[x^a - y^b == 1 && 1 < x < 100 && 1 < y < 100 && a > 1 && b > 1,
   {x, y, a, b}, Integers]` -> `{{x -> 3, y -> 2, a -> 2, b -> 3}}` (and `{}` when
-  the box excludes it).
+  the box excludes it).  The **fixed-base** Pillai form `P^m - Q^n == +/-1`
+  (constant bases `P, Q`, variable exponents) is likewise settled by Mihailescu
+  plus the exponent-1 cases, so `3^m - 2^n == 1` -> `{(1,1),(2,3)}` and
+  `2^n - 3^m == 1` -> `{(1,2)}` even though `m, n` are unbounded.
 - **Elliptic / hyperelliptic curves over a box.** `y^m == f(x)` with a bounded
   `x` (Mordell `y^2 = x^3 + k`, hyperelliptic `y^2 = quartic`) is solved by the
   ordinary bounded search -- enumerate `x`, test that `f(x)` is a perfect
   `m`-th power -- so `y^2 == x^3 - 10000 && 0 < x < 10^5 && y > 0` finds
   `{{25, 75}}` and `y^2 == x^3 - 2` gives Fermat's `{{3, 5}}`.  The *unbounded*
-  case (all integral points with no box) needs Mordell-Weil / Baker methods and
-  is left unevaluated.
+  Mordell curve is solved for every imaginary `k = 2,3 (mod 4)` with `|k|`
+  squarefree and `3` not dividing the class number (see the `Z[sqrt k]`
+  factorisation above); the half-integer ring, `3 | h`, the real-quadratic case
+  `k > 0`, and higher-genus hyperelliptic curves need Mordell-Weil / Baker
+  methods and are left unevaluated.
 - **Linear Diophantine.** A single **linear** equation is solved through its
   solution lattice (gcd staircase, particular solution + `(n-1)`-vector
   homogeneous basis):
