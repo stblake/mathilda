@@ -693,6 +693,7 @@ set(COMMON_SRC
     ../src/solveinv.c
     ../src/solvetrig.c
     ../src/solvemod.c
+    ../src/solveint.c
     ../src/zero_test.c
     ../src/numeric_complex.c
     ../src/flint_num_bridge.c
@@ -1620,6 +1621,10 @@ target_include_directories(solveradicals_tests PRIVATE ../src)
 
 add_executable(solvenlsys_tests test_solvenlsys.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(solvenlsys_tests PRIVATE ../src)
+
+add_executable(solve_integers_tests test_solve_integers.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(solve_integers_tests PRIVATE ../src)
+add_test(NAME solve_integers_tests COMMAND solve_integers_tests)
 
 # Pinned-FullForm regression for extraneous / non-real Root filtering in Solve.
 # Registered with an add_test() line (below) so ctest actually runs it -- the

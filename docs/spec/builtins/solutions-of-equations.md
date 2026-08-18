@@ -179,6 +179,43 @@ Attempts to solve an equation or system of equations for one or more variables.
   integer roots return `{}`.  Higher-degree irreducibles default to
   `Root[]` form (`Cubics -> False`, `Quartics -> False`) and therefore
   yield `{}` under `Integers` unless the user opts into radical output.
+- **Diophantine solving (`Integers` with constraints).** When the input is a
+  polynomial equation (or system) conjoined with inequality / ordering /
+  disequation constraints, a dedicated pre-pass (`src/solveint.c`) finds *all*
+  integer solutions:
+  `Solve[x^2 + 2 y^3 == 3681 && x > 0 && y > 0, {x, y}, Integers]` ->
+  `{{x -> 15, y -> 12}, {x -> 41, y -> 10}, {x -> 57, y -> 6}}`.
+  The method is bound propagation to a finite box (explicit bounds, ordering
+  chains like `0 < x <= y <= z`, and an interval-positivity rule that turns a
+  sign-definite term of `Σ term == constant` into a per-variable bound, both
+  above and — for odd powers, deducing the sign — below), then recursive
+  elimination that enumerates all but one variable and solves the last
+  *exactly* (integer k-th root, quadratic discriminant, or rational-root),
+  every candidate re-verified against the original conjunction. A **single
+  separable additive equation** (`Σ g_i(x_i) == c`, e.g. sums of powers, the
+  taxicab equation) is instead solved by **meet-in-the-middle** in
+  ~`N^ceil(n/2)` work. Only necessary conditions tighten a bound, so an
+  exhausted finite search returns `{}` as a proof of no solutions; an input
+  that cannot be bounded to a finite box (an unbounded Pell orbit, a
+  constraint-free Thue equation) is left **unevaluated** rather than answered
+  wrongly. `Solve`SolveIntegers[eqns, vars]` is the independently-testable
+  entry point.
+- **Divisor-factoring and reciprocal special forms.** Two shapes that
+  positivity cannot bound are still finite once the right identity is applied:
+  - A single **bilinear** equation `a*u*v + b*u + c*v + d == 0` (reached by
+    eliminating unit-coefficient linear equations — the router tries each pair
+    of variables to keep) factors as `(a*u + c)(a*v + b) = b*c - a*d`, so the
+    integer solutions come from the **divisors** of that constant with no
+    enumeration of `u, v`.  This solves the Pythagorean-with-perimeter case
+    `x^2 + y^2 == z^2 && x + y + z == 3000 && 0 < x < y && z > 0` ->
+    `{{500, 1200, 1300}, {600, 1125, 1275}, {750, 1000, 1250}}` (with `z > 0`;
+    the constraint-free system also admits negative-`z` solutions, which are
+    returned when not excluded).
+  - A sum of unit fractions `sum 1/x_i == R` with an ordering chain
+    `x_1 <= ... <= x_k` bounds the smallest variable to
+    `[ceil(1/R), floor(k/R)]` and recurses, the last variable determined
+    exactly.  This solves the Egyptian-fraction case
+    `4/2027 == 1/x + 1/y + 1/z && 0 < x <= y <= z`.
 
 **Options**:
 - `Cubics -> False`: Emit cubic roots as held `Root[]` objects (default).

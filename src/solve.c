@@ -33,6 +33,7 @@
 #include "solveinv.h"
 #include "solvelinsys.h"
 #include "solvemod.h"
+#include "solveint.h"
 #include "solvenlsys.h"
 #include "solvepoly.h"
 #include "solverad.h"
@@ -618,6 +619,75 @@ static Expr* filter_reals_solutions(Expr* out) {
     return result;
 }
 
+/* True iff `val` is provably NOT an integer: a concrete numeric value that
+ * does not sit on an integer.  Symbolic / parametric values (free variables,
+ * ConditionalExpression, un-numericalizable Root objects) are not provably
+ * non-integer and return false, so they survive -- matching the conservative
+ * "only drop what you can decide" policy of the reals filter.  `val` is
+ * borrowed. */
+static bool value_is_provably_non_integer(Expr* val) {
+    if (!val) return false;
+    if (val->type == EXPR_INTEGER || val->type == EXPR_BIGINT) return false;
+    Expr* nv = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+        (Expr*[]){ expr_copy(val) }, 1));
+    bool nonint = false;
+    if (nv && nv->type == EXPR_FUNCTION
+        && nv->data.function.head->type == EXPR_SYMBOL
+        && nv->data.function.head->data.symbol.name == SYM_Complex
+        && nv->data.function.arg_count == 2) {
+        double im;
+        if (solve_concrete_double(nv->data.function.args[1], &im) && fabs(im) > 1e-9)
+            nonint = true;                     /* non-real -> non-integer */
+    } else {
+        double d;
+        if (solve_concrete_double(nv, &d)) {
+            double r = (d < 0) ? -floor(-d + 0.5) : floor(d + 0.5);
+            if (fabs(d - r) > 1e-9) nonint = true;
+        }
+    }
+    expr_free(nv);
+    return nonint;
+}
+
+/* Integers-domain restriction: drop every solution tuple that binds any
+ * variable to a provably-non-integer value.  Mirrors the alloc / detach /
+ * free shape of filter_reals_solutions.  Takes ownership of `out`. */
+static Expr* filter_integers_solutions(Expr* out) {
+    if (!out || out->type != EXPR_FUNCTION
+        || out->data.function.head->type != EXPR_SYMBOL
+        || out->data.function.head->data.symbol.name != SYM_List) {
+        return out;
+    }
+    size_t n = out->data.function.arg_count;
+    Expr** kept = n ? (Expr**)malloc(sizeof(Expr*) * n) : NULL;
+    size_t nkept = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* sol = out->data.function.args[i];
+        bool bad = false;
+        if (sol->type == EXPR_FUNCTION
+            && sol->data.function.head->type == EXPR_SYMBOL
+            && sol->data.function.head->data.symbol.name == SYM_List) {
+            for (size_t j = 0; j < sol->data.function.arg_count && !bad; j++) {
+                Expr* rule = sol->data.function.args[j];
+                if (rule->type == EXPR_FUNCTION
+                    && rule->data.function.head->type == EXPR_SYMBOL
+                    && (rule->data.function.head->data.symbol.name == SYM_Rule
+                        || rule->data.function.head->data.symbol.name == SYM_RuleDelayed)
+                    && rule->data.function.arg_count == 2) {
+                    if (value_is_provably_non_integer(rule->data.function.args[1]))
+                        bad = true;
+                }
+            }
+        }
+        if (bad) expr_free(sol); else kept[nkept++] = sol;
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), kept, nkept);
+    free(kept);
+    out->data.function.arg_count = 0;
+    expr_free(out);
+    return result;
+}
+
 /* Does the interned symbol name `sym` occur anywhere in `e`? */
 static bool expr_mentions_symbol(const Expr* e, const char* sym) {
     if (!e) return false;
@@ -816,6 +886,25 @@ Expr* builtin_solve(Expr* res) {
         goto solve_finish;
     }
 
+    /* Integer-domain (Diophantine) pre-pass: Solve[eqns && constraints,
+     * vars, Integers].  Runs before the ordinary dispatch because the
+     * default machinery cannot separate inequality constraints from
+     * equations (an And of Greater[] conjuncts is otherwise mis-routed to
+     * the linear/nonlinear system solvers, which refuse it).  Returns a
+     * finite solution list, the empty List for a provably empty set, or
+     * NULL to decline -- in which case we fall through to the ordinary
+     * dispatch (so a bare Solve[x^2 == 4, x, Integers] still works via the
+     * polynomial specialist + the integer-restriction filter below). */
+    if (dom && dom->type == EXPR_SYMBOL
+        && dom->data.symbol.name == SYM_Integers) {
+        Expr* iout = solveint_solve_integer(expr, vars, dom);
+        if (iout) {
+            expr_free(expr);
+            out = iout;
+            goto solve_finish;
+        }
+    }
+
     /* VerifySolutions -> True: snapshot the (substituted / rationalised)
      * equation now, before dispatch frees `expr`, so the post-dispatch
      * PossibleZeroQ filter can back-substitute against it. */
@@ -937,6 +1026,15 @@ solve_finish:
             || dom->data.symbol.name == SYM_Integers
             || dom->data.symbol.name == SYM_Rationals)) {
         out = filter_reals_solutions(out);
+    }
+
+    /* Integers-domain: additionally drop any binding to a provably-non-integer
+     * value.  The dedicated integer solver already emits only integers, so this
+     * mainly backstops the fall-through polynomial path (e.g. Solve[2 x == 3,
+     * x, Integers] -> {}, Solve[x^2 == 2, x, Integers] -> {}). */
+    if (out && dom && dom->type == EXPR_SYMBOL
+        && dom->data.symbol.name == SYM_Integers) {
+        out = filter_integers_solutions(out);
     }
 
     /* Unsubst pass: if we substituted any compound variables with

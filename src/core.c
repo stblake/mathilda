@@ -824,6 +824,8 @@ void core_init(void) {
     expand_init();
     expand_power_init();
     solve_init();
+    void solveint_init(void);
+    solveint_init();
     findroot_init();
     void findmin_init(void);
     findmin_init();
