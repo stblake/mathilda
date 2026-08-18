@@ -1647,6 +1647,38 @@ static Expr* si_solve_linear_parametric(SICtx* c) {
     return result;
 }
 
+/* A single linear equation over a finite box.  gcd(a) not dividing b -> no
+ * solution ({}).  A *solvable* linear equation over a box has a dense solution
+ * lattice -- typically far too many points to enumerate (a small-coefficient
+ * equation over a wide box can have ~10^8 solutions) -- so this path only
+ * proves unsolvability and otherwise declines; the tractable, few-solution
+ * boxes are handled by the ordinary bounded leaf search.  Returns true when it
+ * has settled the answer (emitting nothing means {}). */
+static bool si_solve_linear_bounded(SICtx* c, SearchState* st) {
+    (void)st;
+    if (c->neq != 1) return false;
+    int n = c->n;
+    for (int i = 0; i < n; i++) if (!(c->has_lo[i] && c->has_hi[i])) return false;
+
+    mpz_t* a = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n);
+    for (int i = 0; i < n; i++) mpz_init(a[i]);
+    mpz_t b; mpz_init(b);
+
+    bool handled = false;
+    if (si_linear_detect(c->eq[0], n, a, b)) {
+        mpz_t g; mpz_init_set_ui(g, 0);
+        for (int i = 0; i < n; i++) mpz_gcd(g, g, a[i]);
+        if (mpz_sgn(g) == 0) handled = (mpz_sgn(b) != 0);   /* 0 == b!=0 -> {} */
+        else if (!mpz_divisible_p(b, g)) handled = true;     /* gcd does not divide b -> {} */
+        /* else: solvable -> too many points to enumerate here; decline. */
+        mpz_clear(g);
+    }
+
+    for (int i = 0; i < n; i++) mpz_clear(a[i]);
+    free(a); mpz_clear(b);
+    return handled;
+}
+
 /* Dispatch the special forms.  Returns true if one handled the input
  * (candidates emitted into st). */
 static bool si_try_special_forms(SICtx* c, SearchState* st) {
@@ -1808,7 +1840,16 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
      * lattice -- those are later, closed-form phases). */
     long double est = 1.0L;
     for (int i = 0; i < st.n_search; i++) est *= (long double)domain[st.order[i]];
-    if (est > (long double)SI_MAX_NODES) { ctx_free(&c); return NULL; }
+    if (est > (long double)SI_MAX_NODES) {
+        /* Too large to enumerate directly: a bounded single linear equation is
+         * still solvable via its LLL-reduced solution lattice. */
+        if (si_solve_linear_bounded(&c, &st) && !st.overflow) {
+            Expr* result = build_result(&st);
+            free(st.sols); ctx_free(&c);
+            return result;
+        }
+        free(st.sols); ctx_free(&c); return NULL;
+    }
 
     /* Stage C. */
     st.max_visits = SI_MAX_NODES;      /* runtime backstop for non-ordered boxes */

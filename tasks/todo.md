@@ -37,6 +37,13 @@ Deferred cases (2, 4, 5, 6, 7, 9, 11, 13, 15) correctly return unevaluated.
 - [x] Pythagorean z>0: 7.45s -> ~0.5ms (was routed to leaf search, not divisor).
 - [x] Fixed latent mpoly_to_expr array leak.
 
-## Phase 2b (future) — MITM for n=3 additive (ex 11), linear-Diophantine
-##   parametric/lattice output (ex 15, x+y==10)
+## Phase 2b — linear Diophantine parametric + bounded gcd test — DONE
+- [x] Parametric family for unconstrained multivar linear (gcd staircase).
+- [x] Bounded: gcd unsolvability -> {} (ex 16); solvable-tractable via leaf;
+      solvable-intractable declines. (Full LLL lattice enumeration for
+      few-solution large boxes deferred -- the naive bound was buggy and
+      most solvable large linear boxes are intractable anyway.)
+
+## Phase 2c (future) — LLL/Fincke-Pohst enumeration for few-solution large
+##   linear boxes; MITM for n=3 additive (ex 11)
 ## Phase 4 (future) — Thue/Mordell/hyperelliptic/Catalan/general-N Pell

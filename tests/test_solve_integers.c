@@ -149,6 +149,11 @@ static void test_linear_parametric(void) {
         "List[List[Rule[x, Plus[5, Times[2, C[1]]]], Rule[y, Times[-1, C[1]]]]]");
     /* gcd(2,2)=2 does not divide 3 -> no solution. */
     run_test("Solve[2 x + 2 y == 3, {x, y}, Integers]", "List[]");
+    /* Bounded but unsolvable: gcd(314159265, 271828182, 161803398) = 3 does not
+     * divide 1, so no solution regardless of the box. */
+    run_test("Solve[314159265 x + 271828182 y + 161803398 z == 1 "
+             "&& Abs[x] < 10^6 && Abs[y] < 10^6 && Abs[z] < 10^6, {x, y, z}, Integers]",
+        "List[]");
     /* Three variables -> two parameters. */
     run_test("Solve[x + y + z == 5, {x, y, z}, Integers]",
         "List[List[Rule[x, C[1]], "

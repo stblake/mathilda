@@ -222,6 +222,19 @@ Attempts to solve an equation or system of equations for one or more variables.
     `Solve[x^2 - 61 y^2 == 1 && x > 0 && y > 0 && x < 10^10, {x, y}, Integers]`
     -> `{{x -> 1766319049, y -> 226153980}}`; the negative Pell
     `x^2 - 3 y^2 == -1` correctly returns `{}` (unsolvable).
+- **Linear Diophantine.** A single **linear** equation is solved through its
+  solution lattice (gcd staircase, particular solution + `(n-1)`-vector
+  homogeneous basis):
+  - Unconstrained -> the full **parametric family**
+    `{{x_i -> x0_i + sum_j basis[j][i] C[j+1]}}` with `C[k]` integer
+    parameters (`Solve[x + y == 10, {x, y}, Integers]` ->
+    `{{x -> C[1], y -> 10 - C[1]}}`); an unsolvable equation
+    (`gcd(a)` does not divide `b`) gives `{}`.
+  - Over a finite box, an unsolvable equation is still reported as `{}` from
+    the gcd test (so a large box with no solution is instant); a *solvable*
+    box with a tractably small number of points is enumerated by the ordinary
+    bounded search, while a solvable box whose dense lattice would yield an
+    intractable number of points is left unevaluated rather than truncated.
 
 **Options**:
 - `Cubics -> False`: Emit cubic roots as held `Root[]` objects (default).
