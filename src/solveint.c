@@ -98,6 +98,11 @@ typedef struct {
     bool  ord_strict[SI_MAX_VARS * SI_MAX_VARS];
     int   n_ord;
 
+    /* disequations: var[a] != var[b] */
+    int   neq_a[SI_MAX_VARS * SI_MAX_VARS];
+    int   neq_b[SI_MAX_VARS * SI_MAX_VARS];
+    int   n_neq;
+
     /* equation MPolys used both for solving and for bounding */
     MPoly* eq[SI_MAX_VARS * 2];
     int    neq;
@@ -106,8 +111,18 @@ typedef struct {
     BoundConstraint bc[SI_MAX_VARS * 4];
     int    nbc;
 
+    /* True iff every constraint is fully represented by the bound / ordering /
+     * disequation store, so a candidate can be checked numerically without a
+     * symbolic re-evaluation of the original conjunction. */
+    bool   all_captured;
+
     Expr*  original;            /* borrowed: full conjunction, for verification */
 } SICtx;
+
+/* Fast per-candidate check (numeric when every constraint is store-captured,
+ * else a full symbolic evaluation).  Defined below; forward-declared so the
+ * leaf search can use it. */
+static bool si_verify(SICtx* c, const int64_t* vals);
 
 /* ------------------------------------------------------------------ *
  *  Small utilities.                                                   *
@@ -139,6 +154,22 @@ static bool expr_as_i64(const Expr* e, int64_t* out) {
         if (mpz_fits_slong_p(e->data.bigint)) { *out = mpz_get_si(e->data.bigint); return true; }
     }
     return false;
+}
+
+/* Evaluate an MPoly at an integer assignment `vals` into `out` (pre-init'd).
+ * Pure GMP arithmetic -- the per-candidate hot path uses this instead of a
+ * symbolic re-evaluation. */
+static void si_eval_mpoly(const MPoly* p, const int64_t* vals, mpz_t out) {
+    mpz_set_ui(out, 0);
+    mpz_t term; mpz_init(term);
+    for (size_t t = 0; t < p->n_terms; t++) {
+        const int* ex = p->exps + t * (size_t)p->n_vars;
+        mpz_set(term, p->coefs[t]);
+        for (int v = 0; v < p->n_vars; v++)
+            for (int e = 0; e < ex[v]; e++) mpz_mul_si(term, term, (long)vals[v]);
+        mpz_add(out, out, term);
+    }
+    mpz_clear(term);
 }
 
 /* ------------------------------------------------------------------ *
@@ -187,29 +218,34 @@ static void register_inequality(SICtx* c, Expr* lhs, Expr* rhs, int dir, bool st
     /* Normalise to L (<) R with L = the smaller side. */
     Expr* L = (dir > 0) ? lhs : rhs;
     Expr* R = (dir > 0) ? rhs : lhs;
+    bool captured = false;
 
     /* var (rel) const  and  const (rel) var  -> explicit lo/hi. */
     int64_t k;
     if (L->type == EXPR_SYMBOL && expr_as_i64(R, &k)) {
         int i = find_var_index(c, L->data.symbol.name);
-        if (i >= 0) tighten_hi(c, i, strict ? k - 1 : k);     /* var <= R */
+        if (i >= 0) { tighten_hi(c, i, strict ? k - 1 : k); captured = true; }  /* var <= R */
     }
     if (R->type == EXPR_SYMBOL && expr_as_i64(L, &k)) {
         int i = find_var_index(c, R->data.symbol.name);
-        if (i >= 0) tighten_lo(c, i, strict ? k + 1 : k);     /* var >= L */
+        if (i >= 0) { tighten_lo(c, i, strict ? k + 1 : k); captured = true; }  /* var >= L */
     }
     /* Abs[var] (rel) const -> symmetric box. */
     if (is_fun(L, SYM_Abs, 1) && L->data.function.args[0]->type == EXPR_SYMBOL
         && expr_as_i64(R, &k)) {
         int i = find_var_index(c, L->data.function.args[0]->data.symbol.name);
-        if (i >= 0) { int64_t b = strict ? k - 1 : k; tighten_hi(c, i, b); tighten_lo(c, i, -b); }
+        if (i >= 0) { int64_t b = strict ? k - 1 : k; tighten_hi(c, i, b); tighten_lo(c, i, -b); captured = true; }
     }
     /* var (rel) var -> ordering. */
     if (L->type == EXPR_SYMBOL && R->type == EXPR_SYMBOL) {
         int a = find_var_index(c, L->data.symbol.name);
         int b = find_var_index(c, R->data.symbol.name);
         add_ordering(c, a, b, strict);
+        captured = true;
     }
+    /* An inequality on an expression (e.g. x^3 + y^3 < 10^5) still feeds the
+     * bounder but is not a store-checkable constraint. */
+    if (!captured) c->all_captured = false;
     /* Feed the polynomial form to the bounder as Q <= 0 (Q = L - R). */
     MPoly* Q = relation_to_mpoly(c, L, R);
     if (Q && c->nbc < (int)(sizeof(c->bc) / sizeof(c->bc[0]))) {
@@ -264,7 +300,25 @@ static bool classify_conjunct(SICtx* c, Expr* e) {
         return true;
     }
 
-    /* Unequal and anything else: enforced only by final verification. */
+    /* Unequal[var, var] -> disequation store; other Unequal shapes and any
+     * unrecognised conjunct fall back to full symbolic verification. */
+    if (is_fun(e, SYM_Unequal, 2)) {
+        Expr* a = e->data.function.args[0];
+        Expr* b = e->data.function.args[1];
+        if (a->type == EXPR_SYMBOL && b->type == EXPR_SYMBOL) {
+            int ia = find_var_index(c, a->data.symbol.name);
+            int ib = find_var_index(c, b->data.symbol.name);
+            if (ia >= 0 && ib >= 0
+                && c->n_neq < (int)(sizeof(c->neq_a)/sizeof(c->neq_a[0]))) {
+                c->neq_a[c->n_neq] = ia; c->neq_b[c->n_neq] = ib; c->n_neq++;
+                return true;
+            }
+        }
+        c->all_captured = false;
+        return true;
+    }
+
+    c->all_captured = false;     /* opaque conjunct: keep symbolic verification */
     return true;
 }
 
@@ -639,22 +693,12 @@ static void emit_solution(SearchState* st, int64_t leafval) {
     st->nsol++;
 }
 
-/* Verify a full assignment against the original conjunction: substitute and
- * evaluate, requiring the result to be exactly True. */
+/* Verify a full leaf assignment against the original conjunction. */
 static bool verify_candidate(SearchState* st, int64_t leafval) {
     SICtx* c = st->ctx;
-    Expr** rules = (Expr**)malloc(sizeof(Expr*) * (size_t)c->n);
-    for (int i = 0; i < c->n; i++) {
-        int64_t v = (i == st->leaf) ? leafval : st->val[i];
-        rules[i] = mk_rule(expr_copy(c->var[i]), mk_int(v));
-    }
-    Expr* rl = mk_list(rules, (size_t)c->n);
-    free(rules);
-    Expr* subbed = eval_and_free(internal_replace_all(
-        (Expr*[]){ expr_copy(c->original), rl }, 2));
-    bool ok = is_sym(subbed, SYM_True);
-    expr_free(subbed);
-    return ok;
+    int64_t vals[SI_MAX_VARS];
+    for (int i = 0; i < c->n; i++) vals[i] = (i == st->leaf) ? leafval : st->val[i];
+    return si_verify(c, vals);
 }
 
 /* Evaluate equation `eq`'s univariate-in-leaf coefficients a_0..a_d at the
@@ -846,6 +890,33 @@ static bool verify_full(SICtx* c, const int64_t* vals) {
     return ok;
 }
 
+/* Fast candidate check.  When every constraint was captured in the store
+ * (bounds / orderings / disequations), a candidate is validated purely
+ * numerically: every equation MPoly must vanish and every stored constraint
+ * must hold -- no Expr allocation, no symbolic evaluation.  This is what keeps
+ * the divisor / reciprocal paths (hundreds of candidates) fast.  Anything with
+ * an un-captured constraint falls back to the full symbolic check. */
+static bool si_verify(SICtx* c, const int64_t* vals) {
+    if (!c->all_captured) return verify_full(c, vals);
+    mpz_t r; mpz_init(r);
+    for (int q = 0; q < c->neq; q++) {
+        si_eval_mpoly(c->eq[q], vals, r);
+        if (mpz_sgn(r) != 0) { mpz_clear(r); return false; }
+    }
+    mpz_clear(r);
+    for (int i = 0; i < c->n; i++) {
+        if (c->has_lo[i] && vals[i] < c->lo[i]) return false;
+        if (c->has_hi[i] && vals[i] > c->hi[i]) return false;
+    }
+    for (int k = 0; k < c->n_ord; k++) {
+        int a = c->ord_a[k], b = c->ord_b[k];
+        if (c->ord_strict[k] ? !(vals[a] < vals[b]) : !(vals[a] <= vals[b])) return false;
+    }
+    for (int k = 0; k < c->n_neq; k++)
+        if (vals[c->neq_a[k]] == vals[c->neq_b[k]]) return false;
+    return true;
+}
+
 static void emit_full(SearchState* st, const int64_t* vals) {
     SICtx* c = st->ctx;
     if (st->nsol == st->cap) {
@@ -970,7 +1041,7 @@ static bool mitm_solve(SearchState* st) {
     if (ni == 0) {
         /* No iterate group: TARGET must be hit by hash entries alone. */
         for (size_t h = 0; h < hcnt; h++)
-            if (H[h].sum == target && verify_full(c, H[h].vals)) emit_full(st, H[h].vals);
+            if (H[h].sum == target && si_verify(c, H[h].vals)) emit_full(st, H[h].vals);
     } else for (;;) {
         int64_t sum = 0;
         for (int i = 0; i < n; i++) full[i] = 0;
@@ -984,7 +1055,7 @@ static bool mitm_solve(SearchState* st) {
         while (lo < hi) { size_t mid = (lo + hi) / 2; if (H[mid].sum < need) lo = mid + 1; else hi = mid; }
         for (size_t h = lo; h < hcnt && H[h].sum == need; h++) {
             for (int j = 0; j < nh; j++) full[hg[j]] = H[h].vals[hg[j]];
-            if (verify_full(c, full)) emit_full(st, full);
+            if (si_verify(c, full)) emit_full(st, full);
         }
         int j = 0;
         for (; j < ni; j++) { if (++idx[j] < domain[ig[j]]) break; idx[j] = 0; }
@@ -1066,7 +1137,7 @@ static void si_recip_rec(SICtx* c, SearchState* st, const int* order, int k,
             mpz_t vv; mpz_init(vv); mpz_divexact(vv, q, p);
             if (mpz_fits_slong_p(vv)) {
                 int64_t v = mpz_get_si(vv);
-                if (v >= prev) { full[vi] = v; if (verify_full(c, full)) emit_full(st, full); }
+                if (v >= prev) { full[vi] = v; if (si_verify(c, full)) emit_full(st, full); }
             }
             mpz_clear(vv);
         }
@@ -1184,31 +1255,13 @@ static bool si_solve_reciprocal(SICtx* c, SearchState* st) {
 
 /* --- Linear elimination + bilinear divisor solver (Pythagorean). --- */
 
-/* Reconstruct an eliminated variable's value by substituting the known
- * assignment into its stored formula Expr and evaluating.  Returns false if
- * the result is not a concrete integer. */
-static bool si_eval_formula(Expr* formula, SICtx* c, const int64_t* vals,
-                            const bool* known, int64_t* out) {
-    Expr** rules = (Expr**)malloc(sizeof(Expr*) * (size_t)c->n);
-    int nr = 0;
-    for (int i = 0; i < c->n; i++)
-        if (known[i]) rules[nr++] = mk_rule(expr_copy(c->var[i]), mk_int(vals[i]));
-    Expr* rl = mk_list(rules, (size_t)nr);
-    free(rules);
-    Expr* v = eval_and_free(internal_replace_all(
-        (Expr*[]){ expr_copy(formula), rl }, 2));
-    bool ok = expr_as_i64(v, out);
-    expr_free(v);
-    return ok;
-}
-
 /* Solve the reduced bilinear equation P (only vars u, w free) by factoring
- * M = b*c - a*d over its divisors.  Reconstructs eliminated variables via
- * their formulas and emits verified full assignments.  Returns false if P is
- * not a genuine hyperbola (a == 0 or M == 0). */
+ * M = b*c - a*d over its divisors.  Eliminated variables are reconstructed
+ * numerically, in reverse elimination order, from their stored integer-
+ * polynomial formulas.  Returns false if P is not a genuine hyperbola. */
 static bool si_bilinear_divisor_solve(const MPoly* P, int u, int w, SICtx* c,
-                                      SearchState* st, const bool* elim_done,
-                                      Expr* const* formula) {
+                                      SearchState* st, MPoly* const* formula_mp,
+                                      const int* elim_order, int n_elim) {
     mpz_t a, b, cc, d, M, tmp; mpz_init(a); mpz_init(b); mpz_init(cc);
     mpz_init(d); mpz_init(M); mpz_init(tmp);
     int* ex = (int*)calloc((size_t)c->n, sizeof(int));
@@ -1238,19 +1291,23 @@ static bool si_bilinear_divisor_solve(const MPoly* P, int u, int w, SICtx* c,
                     if (!mpz_divisible_p(uu, a) || !mpz_divisible_p(ww, a)) continue;
                     mpz_divexact(uu, uu, a); mpz_divexact(ww, ww, a);
                     if (!mpz_fits_slong_p(uu) || !mpz_fits_slong_p(ww)) continue;
-                    int64_t vals[SI_MAX_VARS]; bool known[SI_MAX_VARS];
-                    for (int k = 0; k < c->n; k++) { vals[k] = 0; known[k] = false; }
-                    vals[u] = mpz_get_si(uu); known[u] = true;
-                    vals[w] = mpz_get_si(ww); known[w] = true;
+                    int64_t vals[SI_MAX_VARS];
+                    for (int k = 0; k < c->n; k++) vals[k] = 0;
+                    vals[u] = mpz_get_si(uu);
+                    vals[w] = mpz_get_si(ww);
+                    /* Reconstruct eliminated variables in reverse order: a
+                     * later-eliminated variable's formula never references an
+                     * earlier-eliminated one, so all references are resolved. */
                     bool okrec = true;
-                    for (int k = 0; k < c->n && okrec; k++)
-                        if (elim_done[k]) {
-                            int64_t rv;
-                            if (formula[k] && si_eval_formula(formula[k], c, vals, known, &rv)) {
-                                vals[k] = rv; known[k] = true;
-                            } else okrec = false;
-                        }
-                    if (okrec && verify_full(c, vals)) emit_full(st, vals);
+                    mpz_t rv; mpz_init(rv);
+                    for (int e = n_elim - 1; e >= 0 && okrec; e--) {
+                        int v = elim_order[e];
+                        si_eval_mpoly(formula_mp[v], vals, rv);
+                        if (!mpz_fits_slong_p(rv)) okrec = false;
+                        else vals[v] = mpz_get_si(rv);
+                    }
+                    mpz_clear(rv);
+                    if (okrec && si_verify(c, vals)) emit_full(st, vals);
                 }
                 mpz_clear(dv);
             }
@@ -1275,10 +1332,14 @@ static bool si_attempt_pair(SICtx* c, SearchState* st, int keepU, int keepW) {
                 mk_fn2("Times", mk_int(-1), expr_copy(conj[i]->data.function.args[1])));
 
     bool elim_done[SI_MAX_VARS]; for (int i = 0; i < c->n; i++) elim_done[i] = false;
-    Expr* formula[SI_MAX_VARS]; for (int i = 0; i < c->n; i++) formula[i] = NULL;
+    MPoly* formula_mp[SI_MAX_VARS]; for (int i = 0; i < c->n; i++) formula_mp[i] = NULL;
+    int elim_order[SI_MAX_VARS], n_elim = 0;
     bool alive[SI_MAX_VARS * 2]; for (int i = 0; i < neq; i++) alive[i] = true;
 
-    /* Eliminate every non-kept variable that is unit-linear in some equation. */
+    /* Eliminate every non-kept variable that is unit-linear in some equation.
+     * The reconstruction formula is kept as an MPoly (evaluated numerically per
+     * candidate); only the equation reduction goes through the symbolic
+     * substitution, which runs a handful of times, not per candidate. */
     for (bool progress = true; progress; ) {
         progress = false;
         for (int e = 0; e < neq && !progress; e++) {
@@ -1295,20 +1356,17 @@ static bool si_attempt_pair(SICtx* c, SearchState* st, int keepU, int keepW) {
                 mpoly_free(lc);
                 if (!unit) continue;
                 MPoly* rest = mpoly_subst_var_int(P, v, 0);
-                MPoly* fpoly = mpoly_scale_si(rest, -coef);   /* coef = +/-1 */
+                MPoly* fpoly = mpoly_scale_si(rest, -coef);   /* v = -(rest)/coef, coef = +/-1 */
                 mpoly_free(rest);
                 Expr* fexpr = mpoly_to_expr(fpoly, c->var);
-                mpoly_free(fpoly);
                 for (int e2 = 0; e2 < neq; e2++) {
                     if (!alive[e2] || e2 == e) continue;
                     Expr* rl = mk_list((Expr*[]){ mk_rule(expr_copy(c->var[v]), expr_copy(fexpr)) }, 1);
                     eqs[e2] = eval_and_free(internal_replace_all((Expr*[]){ eqs[e2], rl }, 2));
                 }
-                for (int q = 0; q < c->n; q++) if (formula[q]) {
-                    Expr* rl = mk_list((Expr*[]){ mk_rule(expr_copy(c->var[v]), expr_copy(fexpr)) }, 1);
-                    formula[q] = eval_and_free(internal_replace_all((Expr*[]){ formula[q], rl }, 2));
-                }
-                formula[v] = fexpr; elim_done[v] = true; alive[e] = false; progress = true;
+                expr_free(fexpr);
+                formula_mp[v] = fpoly; elim_order[n_elim++] = v;
+                elim_done[v] = true; alive[e] = false; progress = true;
             }
             mpoly_free(P);
         }
@@ -1327,12 +1385,13 @@ static bool si_attempt_pair(SICtx* c, SearchState* st, int keepU, int keepW) {
         MPoly* P = si_resid_to_mpoly(eqs[live], c->var, c->n);
         if (P && mpoly_deg_var(P, keepU) <= 1 && mpoly_deg_var(P, keepW) <= 1
             && mpoly_total_deg(P) <= 2)
-            handled = si_bilinear_divisor_solve(P, keepU, keepW, c, st, elim_done, formula);
+            handled = si_bilinear_divisor_solve(P, keepU, keepW, c, st,
+                                                formula_mp, elim_order, n_elim);
         if (P) mpoly_free(P);
     }
 
     for (int i = 0; i < neq; i++) if (eqs[i]) expr_free(eqs[i]);
-    for (int i = 0; i < c->n; i++) if (formula[i]) expr_free(formula[i]);
+    for (int i = 0; i < c->n; i++) if (formula_mp[i]) mpoly_free(formula_mp[i]);
     return handled;
 }
 
@@ -1376,6 +1435,7 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
     } else return NULL;
     c.var = var_storage;
     c.original = expr;
+    c.all_captured = true;      /* cleared by any constraint the store can't hold */
 
     /* This pre-pass only engages when there is at least one inequality /
      * ordering / disequation constraint; a bare polynomial equation with no
@@ -1426,18 +1486,19 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
     SearchState st; memset(&st, 0, sizeof(st));
     st.ctx = &c;
 
-    /* When positivity cannot bound the box, try the Phase-2 special forms
-     * (divisor-factoring bilinear, unit-fraction recursion) before declining. */
-    if (n_unbounded >= 2) {
-        bool handled = si_try_special_forms(&c, &st);
-        if (handled && !st.overflow) {
-            Expr* result = build_result(&st);
-            free(st.sols); ctx_free(&c);
-            return result;
-        }
+    /* Special forms first: divisor-factoring bilinear and unit-fraction
+     * recursion are exact and O(#divisors) / O(bounded), so they beat the
+     * enumerative fallback whenever they match -- including fully bounded
+     * systems whose box would otherwise force a large leaf search (e.g. the
+     * Pythagorean-perimeter case, bounded by its linear equation). */
+    if (si_try_special_forms(&c, &st)) {
+        if (st.overflow) { free(st.sols); ctx_free(&c); return NULL; }
+        Expr* result = build_result(&st);
         free(st.sols); ctx_free(&c);
-        return NULL;                     /* unbounded and no special form fit */
+        return result;
     }
+    /* Unbounded box and no special form fit -> later phases (Pell, lattice). */
+    if (n_unbounded >= 2) { free(st.sols); ctx_free(&c); return NULL; }
 
     /* Meet-in-the-middle fast path: a single separable additive equation is
      * solved in ~N^ceil(n/2) instead of the ~N^(n-1) leaf search. */
