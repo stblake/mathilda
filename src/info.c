@@ -2807,6 +2807,13 @@ void info_init(void) {
         "list maps to a Real list and an integer list to an integer one.\n"
         "Non-real arguments, and symbolic ones whose sign cannot be decided,\n"
         "are left unevaluated. Ramp is Listable and a NumericFunction.");
+    symtab_set_docstring("UnitBox",
+        "UnitBox[x]\n"
+        "\tgives 1 for -1/2 <= x <= 1/2 and 0 otherwise -- the rectangular\n"
+        "\tpulse (box) function, closed at both endpoints.\n"
+        "The result is always exact. Exact symbolic real arguments are resolved\n"
+        "by the same numerical certification UnitStep and Ramp use; non-real or\n"
+        "unresolved arguments are left unevaluated. UnitBox is Listable.");
     symtab_set_docstring("Chop",
         "Chop[expr]\n"
         "\treplaces approximate real numbers in expr that are close to zero\n"

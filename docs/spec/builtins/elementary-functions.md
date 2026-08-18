@@ -572,6 +572,56 @@ In[7]:= FractionalPart[10000000*3^(2/3)]
 Out[7]= -20800838 + 10000000 3^(2/3)
 ```
 
+## UnitBox
+
+`UnitBox[x]` is the rectangular pulse (box) function: `1` for
+$-\frac{1}{2} \le x \le \frac{1}{2}$ and `0` otherwise. The boundary is closed
+at both endpoints, matching the `UnitStep[0] = 1` convention below.
+
+**Features**:
+- `Listable`, `NumericFunction`, `Protected`. Not `Orderless` -- `UnitBox` is
+  unary, unlike the variadic `UnitStep`.
+- The result is **always exact** -- an integer `0` or `1` -- for real numeric
+  input, including `Real`/`MPFR` arguments.
+- Implemented by reusing `UnitStep`'s sign classifier twice, on `x + 1/2` and
+  `1/2 - x`: `x` is in range iff neither shifted value is negative. **Exact
+  symbolic real arguments** (`Pi`, `Sqrt[2]`, ...) are therefore resolved by
+  the same numerical certification `UnitStep` and `Ramp` use.
+- Non-real arguments (a `Complex` with non-zero imaginary part) and
+  unresolved symbolic arguments are left unevaluated.
+- Does **not** thread through `Interval` in this version: `Floor`/`Ceiling`
+  are the only piecewise functions here that do, because `Interval`
+  threading only supports monotone functions, and `UnitBox` (a two-sided box)
+  isn't one. Not on the packed-array `AWARE` fast-path list either -- both
+  are unmeasured and deliberately deferred, not oversights (see the
+  changelog). Building the two shifted arguments and evaluating each costs
+  two allocations and two evaluations per element (`UnitBox` is `Listable`),
+  a tradeoff accepted to reuse the certification logic rather than duplicate
+  it.
+
+```mathematica
+In[1]:= UnitBox[0]
+Out[1]= 1
+
+In[2]:= UnitBox[1/2]
+Out[2]= 1
+
+In[3]:= UnitBox[-1/2]
+Out[3]= 1
+
+In[4]:= UnitBox[0.6]
+Out[4]= 0
+
+In[5]:= UnitBox[{-1, -0.5, 0, 0.5, 1}]
+Out[5]= {0, 1, 1, 1, 0}
+
+In[6]:= UnitBox[Pi]
+Out[6]= 0
+
+In[7]:= UnitBox[x]
+Out[7]= UnitBox[x]
+```
+
 ## UnitStep
 
 `UnitStep[x]` is the unit step (Heaviside) function: `0` for $x < 0$ and `1`

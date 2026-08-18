@@ -27,6 +27,7 @@ void piecewise_init(void) {
     symtab_add_builtin("FractionalPart", builtin_fractionalpart);
     symtab_add_builtin("UnitStep", builtin_unitstep);
     symtab_add_builtin("Ramp", builtin_ramp);
+    symtab_add_builtin("UnitBox", builtin_unitbox);
 
     const char* funcs[] = {"Floor", "Ceiling", "Round", "IntegerPart", "FractionalPart", NULL};
     for (int i = 0; funcs[i] != NULL; i++) {
@@ -41,6 +42,12 @@ void piecewise_init(void) {
     /* Ramp: Listable, NumericFunction, Protected -- Mathematica's attribute
      * set exactly. NOT Orderless: Ramp is unary. */
     symtab_get_def("Ramp")->attributes |=
+        (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
+
+    /* UnitBox: Listable, NumericFunction, Protected -- unary like Ramp, so
+     * NOT Orderless. Does not thread through Interval (see builtin_unitbox
+     * doc comment); no pack.c AWARE entry yet (unmeasured, deferred). */
+    symtab_get_def("UnitBox")->attributes |=
         (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
 }
 
@@ -590,6 +597,56 @@ Expr* builtin_ramp(Expr* res) {
     if (x->type == EXPR_MPFR) return expr_new_mpfr_bits(mpfr_get_prec(x->data.mpfr));
 #endif
     return expr_new_integer(0);
+}
+
+/*
+ * UnitBox[x] -- the rectangular pulse: 1 for -1/2 <= x <= 1/2, 0 otherwise.
+ * Reuses ustep_class() twice on the shifted arguments x + 1/2 and 1/2 - x
+ * (each a UnitStep-shaped one-sided test) rather than adding a new
+ * classifier: x is in range iff neither shifted argument is negative. The
+ * boundary is closed at both ends, matching UnitStep[0] = 1.
+ *
+ * UnitBox does NOT thread through piecewise_interval()/
+ * interval_apply_function() the way Floor/Ceiling do: that dispatch only
+ * supports monotone functions, and UnitBox (a two-sided box) isn't one --
+ * matching UnitStep and Ramp, neither of which threads through it either.
+ *
+ * Accepted cost: two expression allocations plus two evaluate() calls per
+ * element (UnitBox is Listable), where Ramp's model does neither -- traded
+ * for reusing ustep_class's certification logic instead of duplicating it.
+ * Unmeasured and deliberately deferred, same as the missing pack.c AWARE
+ * entry below; revisit only if a packed/large-list UnitBox workload appears.
+ *
+ * The result is always the exact integer 0 or 1 when determined; a
+ * non-real argument, or one whose sign can't be certified on either side,
+ * is left unevaluated.
+ */
+Expr* builtin_unitbox(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1) return NULL;
+
+    Expr* x = res->data.function.args[0];
+
+    Expr* half_args[2] = { expr_new_integer(1), expr_new_integer(2) };
+    Expr* half = expr_new_function(expr_new_symbol(SYM_Rational), half_args, 2);
+
+    Expr* lower_args[2] = { expr_copy(x), expr_copy(half) };
+    Expr* lower = evaluate(expr_new_function(expr_new_symbol(SYM_Plus), lower_args, 2));
+    int lower_cls = ustep_class(lower);
+    expr_free(lower);
+
+    if (lower_cls == USTEP_NEG) { expr_free(half); return expr_new_integer(0); }
+
+    Expr* neg_x_args[2] = { expr_new_integer(-1), expr_copy(x) };
+    Expr* neg_x = evaluate(expr_new_function(expr_new_symbol(SYM_Times), neg_x_args, 2));
+    Expr* upper_args[2] = { neg_x, half };
+    Expr* upper = evaluate(expr_new_function(expr_new_symbol(SYM_Plus), upper_args, 2));
+    int upper_cls = ustep_class(upper);
+    expr_free(upper);
+
+    if (upper_cls == USTEP_NEG) return expr_new_integer(0);
+    if (lower_cls == USTEP_NONNEG && upper_cls == USTEP_NONNEG) return expr_new_integer(1);
+    return NULL;
 }
 
 /* Floor / Ceiling thread through intervals (monotone non-decreasing). */

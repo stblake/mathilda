@@ -1276,6 +1276,10 @@ target_include_directories(unset_tests PRIVATE ../src)
 add_executable(clip_tests test_clip.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(clip_tests PRIVATE ../src)
 
+add_executable(unitbox_tests test_unitbox.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(unitbox_tests PRIVATE ../src)
+add_test(NAME unitbox_tests COMMAND unitbox_tests)
+
 add_executable(symbol_tests test_symbol.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(symbol_tests PRIVATE ../src)
 
