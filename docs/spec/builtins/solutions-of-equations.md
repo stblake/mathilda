@@ -216,6 +216,17 @@ Attempts to solve an equation or system of equations for one or more variables.
     `[ceil(1/R), floor(k/R)]` and recurses, the last variable determined
     exactly.  This solves the Egyptian-fraction case
     `4/2027 == 1/x + 1/y + 1/z && 0 < x <= y <= z`.
+  - A separable **odd-power sum** (e.g. `x^3 + y^3 + z^3 == 42`) over a box too
+    large for the leaf search is solved by the **divisor method**: because
+    `e` is odd, `s = x + y` divides `m = x^e + y^e`, and the power sum in terms
+    of `s` and `p = x y` is a degree-`e/2` polynomial, so for each divisor `s`
+    of `m` the integer roots `p` give `(x, y)`.  Fixing the remaining variables
+    turns the `O(N^2)` inner search into `O(N * factoring)` --
+    `x^3 + y^3 + z^3 == 42 && Abs[...] < 10^5` is settled in ~7 s (the search
+    space is 8x10^15), and `x^3 + y^3 == 1729 && 0 < x <= y` gives Ramanujan's
+    `{{1, 12}, {9, 10}}`.  It applies to any odd exponent (`x^5 + y^5 == 1267`
+    -> `{{3, 4}}`); higher powers are admitted only over boxes small enough
+    that `m` stays in the fast-factoring range.
   - A **Pell** equation `x^2 - D y^2 == +/-1` (D a positive non-square) is
     solved from the continued fraction of `sqrt(D)`: the fundamental unit
     generates the whole orbit, enumerated up to any explicit bound.

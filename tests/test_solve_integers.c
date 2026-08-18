@@ -121,6 +121,27 @@ static void test_egyptian_fractions(void) {
              "{x, y, z}, Integers]]", "73");
 }
 
+/* Phase 2d: separable odd-power sums via the divisor method (s = x+y | m).
+ * These boxes are too large for the leaf search, so the divisor path runs. */
+static void test_powersum_divisor(void) {
+    /* Sum of two cubes: 1729 = 1^3+12^3 = 9^3+10^3 (Ramanujan). */
+    run_test("Solve[x^3 + y^3 == 1729 && 0 < x <= y && x < 10^5, {x, y}, Integers]",
+        "List[List[Rule[x, 1], Rule[y, 12]], List[Rule[x, 9], Rule[y, 10]]]");
+    /* Sum of three cubes == 3: the known small solutions 1,1,1 and 4,4,-5. */
+    run_test("Solve[x^3 + y^3 + z^3 == 3 && Abs[x] < 8000 && Abs[y] < 8000 "
+             "&& Abs[z] < 8000, {x, y, z}, Integers]",
+        "List[List[Rule[x, -5], Rule[y, 4], Rule[z, 4]], "
+             "List[Rule[x, 1], Rule[y, 1], Rule[z, 1]], "
+             "List[Rule[x, 4], Rule[y, -5], Rule[z, 4]], "
+             "List[Rule[x, 4], Rule[y, 4], Rule[z, -5]]]");
+    /* No small representation of 42 as a sum of three cubes. */
+    run_test("Solve[x^3 + y^3 + z^3 == 42 && Abs[x] < 8000 && Abs[y] < 8000 "
+             "&& Abs[z] < 8000, {x, y, z}, Integers]", "List[]");
+    /* Generality: two fifth powers, 1267 = 3^5 + 4^5. */
+    run_test("Solve[x^5 + y^5 == 1267 && 0 < x <= y && x < 10^5, {x, y}, Integers]",
+        "List[List[Rule[x, 3], Rule[y, 4]]]");
+}
+
 /* Phase 3: Pell equations x^2 - D y^2 == +/-1 via continued fractions. */
 static void test_pell(void) {
     /* The classic large fundamental solution of x^2 - 61 y^2 == 1. */
@@ -185,6 +206,7 @@ int main(void) {
     TEST(test_euler_sum_of_powers_empty);
     TEST(test_pythagorean_perimeter);
     TEST(test_egyptian_fractions);
+    TEST(test_powersum_divisor);
     TEST(test_pell);
     TEST(test_linear_parametric);
     TEST(test_integer_restriction);

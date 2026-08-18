@@ -48,5 +48,14 @@ Deferred cases (2, 4, 5, 6, 7, 9, 11, 13, 15) correctly return unevaluated.
       dense/intractable boxes declined. Verified complete (gap-free 2-var
       progression), no dups, leak-clean.
 
-## Phase 2d (future) — MITM for n=3 additive (ex 11, sum of three cubes)
-## Phase 4 (future) — Thue/Mordell/hyperelliptic/Catalan/general-N Pell
+## Phase 2d — odd-power-sum divisor method — DONE
+- [x] Divisor method for separable sums of odd powers: s=x+y | m, power sum
+      p_e(s,p) via Newton recurrence -> integer roots p -> (x,y). Outer vars
+      enumerated => O(N*factoring), not O(N^2).
+- [x] Sum of three cubes ==42 over |.|<10^5 in ~7s; ==3 finds all knowns;
+      two-cube taxicab; general over odd e (5th, 7th). m-size guard declines
+      when factoring would be impractical (5th powers over |.|<10^5).
+- [x] Verified complete; tests added; suites pass; check-c99; valgrind baseline.
+
+## Phase 4 (future) — Thue/Mordell/hyperelliptic/Catalan/general-N Pell;
+##   Booker-style O(N) sum-of-three-cubes; MITM sieving refinements
