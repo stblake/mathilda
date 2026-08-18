@@ -27,7 +27,16 @@ Deferred cases (2, 4, 5, 6, 7, 9, 11, 13, 15) correctly return unevaluated.
 - [x] Tests added; solve suites pass; check-c99 clean; valgrind = baseline.
   Pythagorean (z>0) -> 3 triangles; Egyptian 4/2027 -> 73 decompositions.
 
+## Phase 3 — Pell via continued fractions — DONE
+- [x] si_pell_detect (x^2 - D y^2 == +/-1), si_pell_cf (CF of sqrt(D)),
+      orbit generation up to bound, 4 sign variants + verify.
+- [x] Negative Pell handled (base iff period odd); unsolvable -> {}.
+- [x] Tests added; solve/poly suites pass; check-c99 clean; valgrind = baseline.
+
+## Perf — special forms tried first + numeric verification — DONE
+- [x] Pythagorean z>0: 7.45s -> ~0.5ms (was routed to leaf search, not divisor).
+- [x] Fixed latent mpoly_to_expr array leak.
+
 ## Phase 2b (future) — MITM for n=3 additive (ex 11), linear-Diophantine
 ##   parametric/lattice output (ex 15, x+y==10)
-## Phase 3 (future) — Pell via continued fractions (ex 4)
-## Phase 4 (future) — Thue/Mordell/hyperelliptic/Catalan (ex 5,6,7,13)
+## Phase 4 (future) — Thue/Mordell/hyperelliptic/Catalan/general-N Pell

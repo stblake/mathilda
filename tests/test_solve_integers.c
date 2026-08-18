@@ -121,14 +121,31 @@ static void test_egyptian_fractions(void) {
              "{x, y, z}, Integers]]", "73");
 }
 
+/* Phase 3: Pell equations x^2 - D y^2 == +/-1 via continued fractions. */
+static void test_pell(void) {
+    /* The classic large fundamental solution of x^2 - 61 y^2 == 1. */
+    run_test("Solve[x^2 - 61 y^2 == 1 && x > 0 && y > 0 && x < 10^10, {x, y}, Integers]",
+        "List[List[Rule[x, 1766319049], Rule[y, 226153980]]]");
+    /* The bounded orbit for D = 2. */
+    run_test("Solve[x^2 - 2 y^2 == 1 && x > 0 && y > 0 && x < 100, {x, y}, Integers]",
+        "List[List[Rule[x, 3], Rule[y, 2]], "
+             "List[Rule[x, 17], Rule[y, 12]], "
+             "List[Rule[x, 99], Rule[y, 70]]]");
+    /* Negative Pell: solvable for D = 2, unsolvable for D = 3. */
+    run_test("Solve[x^2 - 2 y^2 == -1 && x > 0 && y > 0 && x < 100, {x, y}, Integers]",
+        "List[List[Rule[x, 1], Rule[y, 1]], "
+             "List[Rule[x, 7], Rule[y, 5]], "
+             "List[Rule[x, 41], Rule[y, 29]]]");
+    run_test("Solve[x^2 - 3 y^2 == -1 && x > 0 && y > 0 && x < 100, {x, y}, Integers]",
+        "List[]");
+}
+
 /* Deferred families must stay unevaluated (never a wrong answer). */
 static void test_deferred_unevaluated(void) {
-    /* Pell: unbounded orbit -> continued-fraction phase. */
-    run_test("Solve[x^2 - 61 y^2 == 1 && x > 0 && y > 0 && x < 10^10, "
-             "{x, y}, Integers]",
-        "Solve[And[Equal[Plus[Power[x, 2], Times[-61, Power[y, 2]]], 1], "
-             "Greater[x, 0], Greater[y, 0], Less[x, 10000000000]], "
-             "List[x, y], Integers]");
+    /* Mordell y^2 = x^3 + k: elliptic-integral-points phase, no bound. */
+    run_test("Solve[y^2 == x^3 - 10000 && x > 0 && y > 0, {x, y}, Integers]",
+        "Solve[And[Equal[Power[y, 2], Plus[-10000, Power[x, 3]]], "
+             "Greater[x, 0], Greater[y, 0]], List[x, y], Integers]");
 }
 
 int main(void) {
@@ -143,6 +160,7 @@ int main(void) {
     TEST(test_euler_sum_of_powers_empty);
     TEST(test_pythagorean_perimeter);
     TEST(test_egyptian_fractions);
+    TEST(test_pell);
     TEST(test_integer_restriction);
     TEST(test_deferred_unevaluated);
 

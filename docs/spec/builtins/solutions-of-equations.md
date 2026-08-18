@@ -216,6 +216,12 @@ Attempts to solve an equation or system of equations for one or more variables.
     `[ceil(1/R), floor(k/R)]` and recurses, the last variable determined
     exactly.  This solves the Egyptian-fraction case
     `4/2027 == 1/x + 1/y + 1/z && 0 < x <= y <= z`.
+  - A **Pell** equation `x^2 - D y^2 == +/-1` (D a positive non-square) is
+    solved from the continued fraction of `sqrt(D)`: the fundamental unit
+    generates the whole orbit, enumerated up to any explicit bound.
+    `Solve[x^2 - 61 y^2 == 1 && x > 0 && y > 0 && x < 10^10, {x, y}, Integers]`
+    -> `{{x -> 1766319049, y -> 226153980}}`; the negative Pell
+    `x^2 - 3 y^2 == -1` correctly returns `{}` (unsolvable).
 
 **Options**:
 - `Cubics -> False`: Emit cubic roots as held `Root[]` objects (default).
