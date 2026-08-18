@@ -2,11 +2,11 @@
 schema_version: 2
 title: UnitBox builtin
 slug: unitbox
-status: validating
+status: in-review
 source: direct-user-request
 owner: Michael Sollami
 issue: pending
-pull_request: pending
+pull_request: https://github.com/stblake/mathilda/pull/67
 started: 2026-08-18
 last_updated: 2026-08-18
 blocked_by: none
@@ -40,11 +40,11 @@ This file is the lifecycle record for a single feature. It is created by `/track
 
 - Title: `UnitBox builtin`
 - Slug: `unitbox`
-- Status: `validating`
+- Status: `in-review`
 - Source: `direct-user-request`
 - Owner: `Michael Sollami`
 - Issue / ticket: `pending`
-- Pull request: `pending`
+- Pull request: `#67 Add UnitBox: the rectangular pulse (box) function`
 - Started: `2026-08-18`
 - Last updated: `2026-08-18`
 - Blocked by: `none`
@@ -155,13 +155,13 @@ This file is the lifecycle record for a single feature. It is created by `/track
 - [x] implementation complete | completed: `2026-08-18 14:51`
 - [ ] critic pass | completed: `pending`
 - [ ] risk-register reviewed | completed: `pending`
-- [ ] feature validated | completed: `pending`
-- [ ] PR created | completed: `pending`
+- [x] feature validated | completed: `2026-08-18 15:10` (`/ais:validate_plan`: implementation matches the plan, no deviations of substance)
+- [x] PR created | completed: `2026-08-18 15:39`
 - [ ] closeout complete | completed: `pending`
 
 ## PR Updates
 
-*(none yet)*
+- `2026-08-18 15:39` PR opened: https://github.com/stblake/mathilda/pull/67 (branch `feature/unitbox` -> `main`, commit `8b066dca`).
 
 ## Decisions
 
@@ -201,6 +201,8 @@ This file is the lifecycle record for a single feature. It is created by `/track
 - `2026-08-18 14:39` Plan drafted via `EnterPlanMode`/`/ais:create_plan`, refined with a fifth decision (accepted per-element `evaluate()` cost), approved by user. Phase 1 implemented: `builtin_unitbox` in `src/piecewise.c`, declaration in `src/piecewise.h`, registration + attributes in `piecewise_init()`. Build clean, `make check-c99` clean. Smoke-tested via `./Mathilda -file` against all planned manual-verification cases -- all matched.
 - `2026-08-18 14:40` `/ais:verify-implementation` run: build/runs PASS, `piecewise_tests` (pre-existing) PASS with no regression, no debug residue; working tree correctly flagged as uncommitted/in-progress (Phases 2-3 pending at that point).
 - `2026-08-18 14:51` Phases 2 and 3 completed: docstring added to `src/info.c`; `## UnitBox` spec section added to `docs/spec/builtins/elementary-functions.md` before `## UnitStep` (doc's own List example verified against the binary before writing); changelog entry added to `docs/spec/changelog/2026-08-17.md` covering both deferred/accepted tradeoffs; `tests/test_unitbox.c` written (14 test functions) and registered in `tests/CMakeLists.txt` with both `add_executable` and `add_test()`. `./unitbox_tests` and `ctest -R unitbox_tests` both pass. `valgrind` unavailable on this machine; documented the fallback (manual ownership trace) in Test Results. Tracking file backfilled: Implementation Spec/Scope/Success Criteria/Tests/Task List/Test Results populated; `goal_lock` activated; checkpoints `spec / plan created`, `implementation started`, `implementation complete` stamped.
+- `2026-08-18 15:10` `/ais:verify-implementation` re-run post-Phase-3: build/tests/debug-residue all PASS; working tree correctly flagged as the only remaining "not done" item (nothing committed yet). `/ais:validate_plan` run: implementation matches the plan phase-by-phase with no deviations of substance; `feature validated` checkpoint stamped.
+- `2026-08-18 15:39` Committed (`8b066dca`, identity set to Michael Sollami / michaelsollami@gmail.com per project convention) and pushed `feature/unitbox` to `origin` (`stblake/mathilda`). Opened PR #67: https://github.com/stblake/mathilda/pull/67. `PR created` checkpoint stamped.
 
 ## Reflection
 
