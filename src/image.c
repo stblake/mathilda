@@ -1235,7 +1235,11 @@ char* image_to_json(const Expr* e) {
     }
 
     size_t npx = w * h;
-    unsigned char* rgba = malloc(npx * 4);
+    /* calloc, not malloc: the pixel loop below fills every byte, but GCC cannot relate its
+       trip count (npx) to the npx*4 bytes b64_encode reads and flags a phantom uninitialized
+       read (-Wmaybe-uninitialized) on the degenerate npx==0 path. Zero-init settles it and is
+       correct for a 0-pixel image; the cost is negligible on this once-per-export path. */
+    unsigned char* rgba = calloc(npx, 4);
     size_t b64len = 4 * ((npx * 4 + 2) / 3) + 1;
     char* b64 = malloc(b64len);
     if (!rgba || !b64) { free(buf); free(rgba); free(b64); return NULL; }
