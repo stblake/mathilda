@@ -341,9 +341,17 @@ of total degree ≥3 equal to a constant. Currently such inputs decline (e.g.
 > (the linear form's constant gains `log|µ^(k)/µ^(j)|`; `C4`/`Y2p`/`V0` over-
 > estimated). `x³−2y³={2,3,10}` etc. now return the full set, `={4,5,9,73,100}`
 > proven `{}`; benchmark 88 CORRECT 56→65, 270-case PARI grid 0 WRONG.
-> Follow-ons: general `a₀`, rank-2 totally-real `|m|≠1` (M2b), non-monogenic
-> orders (Round-2), totally-complex torsion. **Full completion roadmap
-> (algorithms, files, order, verification):**
+> **M3 (2026-08-20): Round-2 maximal order + O_K-basis unit search** (cubics +
+> quartics). `src/numbertheory/nfround2.c` computes `O_K` by Pohst–Zassenhaus
+> (p-radical Frobenius kernel, ring of multipliers via HNF), returned as an
+> integral basis `(1/D)W`; the unit search walks the O_K lattice `L={Σ c_i W[i]}`
+> (`|N(v)|=Dⁿ`). Non-monogenic `Q(∛{10,12,17,19,20})`, the Dedekind cubic, and
+> `Q(d^{1/4})` (incl. index-16 `Q(12^{1/4})`) now solve; benchmark 88 CORRECT
+> 65→81, 130-case non-monogenic PARI grid 0 WRONG.
+> Follow-ons: general `a₀`, rank-2 totally-real `|m|≠1` (M2b), general `m` over
+> non-monogenic (M2×M3), O_K-Voronoi for large-regulator non-monogenic quartics,
+> totally-complex torsion. **Full completion roadmap (algorithms, files, order,
+> verification):**
 > [`docs/design/thue_completion_plan.md`](docs/design/thue_completion_plan.md).
 > Stress-tested vs PARI/GP `thue()` in `benchmarks/88-thue-equations/`.
 

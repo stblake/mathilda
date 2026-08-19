@@ -92,11 +92,13 @@ static void test_create(void) {
       assert(nf_degree(K) == 4 && nf_r1(K) == 2 && nf_r2(K) == 1 && nf_unit_rank(K) == 2);
       nf_field_free(K); free_coeffs(c, 4); }
 
-    /* Non-monogenic: Dedekind proves non-maximal at 2 => DECLINE (NULL). */
+    /* Non-monogenic: Dedekind non-maximal at 2, now enlarged by Round 2 (M3):
+     * creates with d_K = -503 (== disc(f)/index^2, index 2). */
     { const long v[] = {-8, -2, -1, 1}; mpz_t* c = make_coeffs(v, 3);
       NumberField* K = nf_field_create(c, 3);
-      assert(K == NULL);
-      free_coeffs(c, 3); }
+      assert(K != NULL);
+      nf_disc(K, d); assert(mpz_cmp_si(d, -503) == 0);
+      nf_field_free(K); free_coeffs(c, 3); }
 
     /* Reducible: t^3 - t = t(t-1)(t+1) => DECLINE. */
     { const long v[] = {0, -1, 0, 1}; mpz_t* c = make_coeffs(v, 3);
@@ -169,11 +171,68 @@ static void test_units(void) {
     printf("  units: OK\n");
 }
 
+#ifdef USE_FLINT
+/* Round 2 maximal order: check index and d_K against PARI/known values.
+ * primes/exps give the disc factorization (only exp>=2 primes are processed). */
+static void check_round2(const long* v, int deg, const long* pr, const long* ex, int np,
+                         long exp_index, long exp_dK, const char* name) {
+    mpz_t* c = make_coeffs(v, deg);
+    mpz_t* primes = malloc(sizeof(mpz_t) * (size_t)np);
+    int64_t* pexp = malloc(sizeof(int64_t) * (size_t)np);
+    for (int i = 0; i < np; i++) { mpz_init_set_si(primes[i], pr[i]); pexp[i] = ex[i]; }
+    mpz_t* W = malloc(sizeof(mpz_t) * (size_t)(deg * deg));
+    for (int i = 0; i < deg * deg; i++) mpz_init(W[i]);
+    mpz_t D, dK; mpz_init(D); mpz_init(dK);
+    int64_t index = -1;
+    bool ok = nf_round2_maximal_order((const mpz_t*)c, deg, (const mpz_t*)primes, pexp, np, W, D, dK, &index);
+    printf("  %s: ok=%d index=%lld d_K=%s\n", name, (int)ok, (long long)index, mpz_get_str(NULL, 10, dK));
+    assert(ok);
+    assert(index == exp_index);
+    assert(mpz_cmp_si(dK, exp_dK) == 0);
+    for (int i = 0; i < deg * deg; i++) mpz_clear(W[i]);
+    free(W);
+    for (int i = 0; i < np; i++) mpz_clear(primes[i]);
+    free(primes); free(pexp);
+    mpz_clear(D); mpz_clear(dK);
+    free_coeffs(c, deg);
+}
+
+static void test_round2(void) {
+    if (!nf_available()) { printf("  round2: SKIP (no FLINT)\n"); return; }
+    /* Dedekind cubic t^3-t^2-2t-8: disc -2012 = -2^2*503, index 2, d_K -503. */
+    { const long v[] = {-8,-2,-1,1}; const long pr[] = {2,503}; const long ex[] = {2,1};
+      check_round2(v, 3, pr, ex, 2, 2, -503, "t^3-t^2-2t-8"); }
+    /* Q(cbrt20): disc -10800 = -2^4*3^3*5^2, index 2, d_K -2700. */
+    { const long v[] = {-20,0,0,1}; const long pr[] = {2,3,5}; const long ex[] = {4,3,2};
+      check_round2(v, 3, pr, ex, 3, 2, -2700, "Q(20^1/3)"); }
+    /* Q(cbrt10): disc -2700 = -2^2*3^3*5^2, index 3, d_K -300. */
+    { const long v[] = {-10,0,0,1}; const long pr[] = {2,3,5}; const long ex[] = {2,3,2};
+      check_round2(v, 3, pr, ex, 3, 3, -300, "Q(10^1/3)"); }
+    /* Q(cbrt17): disc(x^3-17) = -27*289 = -3^3*17^2, index 3, d_K -867. */
+    { const long v[] = {-17,0,0,1}; const long pr[] = {3,17}; const long ex[] = {3,2};
+      check_round2(v, 3, pr, ex, 2, 3, -867, "Q(17^1/3)"); }
+    /* Monogenic sanity: Q(cbrt2), disc -108, index 1, d_K -108. */
+    { const long v[] = {-2,0,0,1}; const long pr[] = {2,3}; const long ex[] = {2,3};
+      check_round2(v, 3, pr, ex, 2, 1, -108, "Q(2^1/3) monogenic"); }
+    /* Quartics -- multi-round maximization at one prime. */
+    /* x^4-5: disc -32000 = -2^8*5^3, index 4, d_K -2000. */
+    { const long v[] = {-5,0,0,0,1}; const long pr[] = {2,5}; const long ex[] = {8,3};
+      check_round2(v, 4, pr, ex, 2, 4, -2000, "Q(5^1/4)"); }
+    /* x^4-12: disc -442368 = -2^14*3^3, index 16 (four p=2 enlargements), d_K -1728. */
+    { const long v[] = {-12,0,0,0,1}; const long pr[] = {2,3}; const long ex[] = {14,3};
+      check_round2(v, 4, pr, ex, 2, 16, -1728, "Q(12^1/4)"); }
+    printf("  round2: OK\n");
+}
+#endif
+
 int main(void) {
     printf("Running test: numberfield (Gate 1) + nfunits (Gate 2)\n");
     test_signature();
     test_dedekind();
     test_create();
+#ifdef USE_FLINT
+    test_round2();
+#endif
     test_units();
     printf("numberfield: ALL PASS\n");
     return 0;

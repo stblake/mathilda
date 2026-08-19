@@ -106,9 +106,14 @@ static void test_rigorous(void) {
     { const long f[] = {1,0,0,-2};   check_rigorous(f, 3, 5,   0, 0, "x^3-2y^3==5  (M2, proven {})"); }
     { const long f[] = {1,0,0,-2};   check_rigorous(f, 3, 73,  0, 0, "x^3-2y^3==73 (M2, no norm-73, {})"); }
     { const long f[] = {1,0,0,-7};   check_rigorous(f, 3, 6,   1, 0, "x^3-7y^3==6  (M2, {(-1,-1)})"); }
-    /* Safe declines: non-monogenic field, and rank-2 |m| != 1 (out of M2 scope). */
-    { const long f[] = {1,0,0,-17};  check_rigorous(f, 3, 1,  0, 1, "x^3-17y^3==1 (non-monogenic)"); }
-    { const long f[] = {1,0,0,-10};  check_rigorous(f, 3, 1,  0, 1, "x^3-10y^3==1 (non-monogenic)"); }
+    /* Non-monogenic fields now solve via Round 2 (M3), cross-checked vs PARI:
+     * Q(cbrt17) index 3 -> {(1,0),(18,7)}, Q(cbrt10) index 3 -> {(1,0)},
+     * Q(cbrt20) index 2 -> {(1,0),(-19,-7)}, the Dedekind cubic index 2 -> {(1,0)}. */
+    { const long f[] = {1,0,0,-17};  check_rigorous(f, 3, 1,  2, 0, "x^3-17y^3==1 (M3 non-monogenic)"); }
+    { const long f[] = {1,0,0,-10};  check_rigorous(f, 3, 1,  1, 0, "x^3-10y^3==1 (M3 non-monogenic)"); }
+    { const long f[] = {1,0,0,-20};  check_rigorous(f, 3, 1,  2, 0, "x^3-20y^3==1 (M3 non-monogenic)"); }
+    { const long f[] = {1,-1,-2,-8}; check_rigorous(f, 3, 1,  1, 0, "Dedekind cubic (M3 non-monogenic)"); }
+    /* Still out of scope -> DECLINE: rank-2 totally-real |m| != 1 (M2b). */
     { const long f[] = {1,-3,0,1};   check_rigorous(f, 3, 2,  0, 1, "x^3-3xy^2+y^3==2 (rank-2 |m|!=1: decline)"); }
     printf("  rigorous: OK\n");
 }

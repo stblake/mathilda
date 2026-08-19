@@ -41,8 +41,12 @@ void nf_units_free(NFUnits* U);
 int    nf_units_rank(const NFUnits* U);
 double nf_units_regulator(const NFUnits* U);
 
-/* Integer coordinates (length = field degree) of fundamental unit j,
- * 0 <= j < rank.  Borrowed pointer into U; do not free. */
+/* theta-power NUMERATOR coordinates (length = field degree) of fundamental
+ * unit j, 0 <= j < rank: the unit is (1/D) * coords, D = nf_units_denom.
+ * D == 1 for a monogenic field.  Borrowed pointer into U; do not free. */
 const mpz_t* nf_units_coords(const NFUnits* U, int j);
+
+/* Shared denominator D of the unit coordinates (1 when Z[theta] = O_K). */
+void nf_units_denom(const NFUnits* U, mpz_t out);
 
 #endif /* NFUNITS_H */

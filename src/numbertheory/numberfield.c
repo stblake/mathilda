@@ -293,24 +293,69 @@ NumberField* nf_field_create(const mpz_t* coeffs, int deg) {
     build_fmpz_poly(f, coeffs, deg);
     if (!fmpz_poly_irreducible_q(f)) { fmpz_poly_clear(f); return NULL; }
 
-    bool certified = false;
-    bool maximal = nf_is_maximal_order(coeffs, deg, &certified);
-    if (!certified || !maximal) { fmpz_poly_clear(f); return NULL; }  /* Gate 1 DECLINE */
-
     int r1 = 0;
     if (!nf_signature(coeffs, deg, &r1) || r1 < 0 || r1 > deg || (deg - r1) % 2 != 0) {
         fmpz_poly_clear(f); return NULL;
     }
 
+    /* disc(f) and its full factorisation (drives both the Dedekind maximality
+     * test and, when non-monogenic, Round 2). */
     fmpz_t discf; fmpz_init(discf); fmpz_poly_discriminant(discf, f);
+    mpz_t Df; mpz_init(Df); fmpz_get_mpz(Df, discf);
+    if (mpz_sgn(Df) == 0) { mpz_clear(Df); fmpz_clear(discf); fmpz_poly_clear(f); return NULL; }
+    enum { PCAP = 128 };
+    mpz_t primes[PCAP]; int64_t exps[PCAP]; int pcnt = 0;
+    if (!facint_factor_complete(Df, primes, exps, PCAP, &pcnt)) {   /* disc won't factor -> decline */
+        mpz_clear(Df); fmpz_clear(discf); fmpz_poly_clear(f); return NULL;
+    }
+    mpz_clear(Df);
+
+    /* Maximality: Dedekind at each p with p^2 | disc. */
+    bool all_maximal = true, decline = false;
+    for (int i = 0; i < pcnt && !decline; i++) if (exps[i] >= 2) {
+        bool okd = true;
+        bool pm = nf_dedekind_p_maximal(coeffs, deg, primes[i], &okd);
+        if (!okd) decline = true;                 /* cannot decide (e.g. p too big) */
+        else if (!pm) all_maximal = false;
+    }
+
+    /* Integral basis (1/D)*W and d_K: monogenic fast path, else Round 2. */
+    mpz_t* okW = malloc(sizeof(mpz_t) * (size_t)deg * (size_t)deg);
+    for (int i = 0; i < deg * deg; i++) mpz_init(okW[i]);
+    mpz_t okD, dK; mpz_init(okD); mpz_init(dK);
+    int64_t index = 1;
+    bool ib_ok = false;
+    if (!decline) {
+        if (all_maximal) {                        /* Z[theta] = O_K (unchanged path) */
+            for (int i = 0; i < deg; i++) for (int j = 0; j < deg; j++)
+                mpz_set_ui(okW[i*deg + j], (i == j) ? 1u : 0u);
+            mpz_set_ui(okD, 1); fmpz_get_mpz(dK, discf); index = 1; ib_ok = true;
+        } else {                                  /* Round 2 (Pohst-Zassenhaus) */
+            ib_ok = nf_round2_maximal_order(coeffs, deg, (const mpz_t*)primes, exps, pcnt,
+                                            okW, okD, dK, &index);
+        }
+    }
+    for (int i = 0; i < pcnt; i++) mpz_clear(primes[i]);
+    if (!ib_ok) {
+        for (int i = 0; i < deg * deg; i++) mpz_clear(okW[i]);
+        free(okW);
+        mpz_clear(okD); mpz_clear(dK); fmpz_clear(discf); fmpz_poly_clear(f);
+        return NULL;                              /* Gate 1 DECLINE */
+    }
 
     NumberField* K = malloc(sizeof *K);
     K->deg = deg;
     K->r1 = r1;
     K->r2 = (deg - r1) / 2;
-    mpz_init(K->disc); fmpz_get_mpz(K->disc, discf);
+    mpz_init_set(K->disc, dK);                    /* d_K (== disc(f) when monogenic) */
     K->coeffs = malloc(sizeof(mpz_t) * (size_t)(deg + 1));
     for (int i = 0; i <= deg; i++) mpz_init_set(K->coeffs[i], coeffs[i]);
+
+    /* O_K integral basis (Z[theta] = identity/1 in the monogenic case). */
+    K->ok_num = okW;                              /* transfer ownership */
+    mpz_init_set(K->ok_den, okD);
+    K->ok_index = index;
+    mpz_clear(okD); mpz_clear(dK);
 
     fmpq_poly_t fq; fmpq_poly_init(fq); fmpq_poly_set_fmpz_poly(fq, f);
     nf_init(K->nf, fq);
@@ -330,6 +375,8 @@ void nf_field_free(NumberField* K) {
     mpz_clear(K->disc);
     for (int i = 0; i <= K->deg; i++) mpz_clear(K->coeffs[i]);
     free(K->coeffs);
+    if (K->ok_num) { for (int i = 0; i < K->deg * K->deg; i++) mpz_clear(K->ok_num[i]); free(K->ok_num); }
+    mpz_clear(K->ok_den);
 #ifdef USE_FLINT
     if (K->emb)   { _acb_vec_clear(K->emb, K->r1 + K->r2); }
     if (K->roots) { _acb_vec_clear(K->roots, K->deg); }
@@ -442,5 +489,18 @@ bool nf_norm_int(const struct NumberField* K, const mpz_t* c, mpz_t out) {
 }
 
 const nf_t* nf_get_nf(const struct NumberField* K) { return (const nf_t*)&K->nf; }
+
+void nf_ok_to_theta(const struct NumberField* K, const mpz_t* c, mpz_t* v) {
+    int n = K->deg;
+    for (int j = 0; j < n; j++) {
+        mpz_set_ui(v[j], 0);
+        for (int i = 0; i < n; i++)
+            if (mpz_sgn(c[i]) != 0) mpz_addmul(v[j], c[i], K->ok_num[i*n + j]);
+    }
+}
+
+const mpz_t* nf_ok_basis(const struct NumberField* K) { return (const mpz_t*)K->ok_num; }
+void nf_ok_denom(const struct NumberField* K, mpz_t out) { mpz_set(out, K->ok_den); }
+int64_t nf_ok_index(const struct NumberField* K) { return K->ok_index; }
 
 #endif /* USE_FLINT */

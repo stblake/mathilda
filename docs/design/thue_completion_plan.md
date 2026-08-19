@@ -28,18 +28,19 @@ field. Pipeline (all in place):
 DECLINE*. Never a wrong or partial answer. `benchmarks/88` (PARI/GP `thue()`
 oracle over ~100 equations) is the gate: any `WRONG`/`CRASH` fails.
 
-**Benchmark 88:** after M1 (Voronoi units, cubic) and M2 (general `m` via
-μ-enumeration, both 2026-08-19), **65 CORRECT / 39 DECLINE / 0 WRONG / 0 CRASH**
-(was 48/56 before M1, 56/48 after M1). The remaining declines are non-monogenic
-fields, rank-2 totally-real `|m| != 1`, large-regulator quartics/quintics, and
-the reducible perfect powers PARI also refuses — all correct on both sides.
-M2 cross-checked vs PARI over a 270-case `|m| != 1` grid: 0 WRONG.
+**Benchmark 88:** after M1 (Voronoi units) + M2 (general `m`) + M3 (Round-2
+maximal order), **81 CORRECT / 23 DECLINE / 0 WRONG / 0 CRASH** (48/56 before M1,
+56/48 after M1, 65/39 after M2). The remaining declines are rank-2 totally-real
+`|m| != 1`, larger-regulator non-monogenic quartics/quintics, general `m` over
+non-monogenic fields, and the reducible perfect powers PARI also refuses — all
+correct on both sides. Cross-checked vs PARI over a 270-case `|m| != 1` grid (M2)
+and a 130-case non-monogenic grid (M3): 0 WRONG.
 
 ### The 56 declines, by root cause (exact counts from the benchmark)
 
 | # | bucket | why we decline | fix (this doc) |
 |---|---|---|---|
-| ~28 | **Non-monogenic field** (Gate 1) | we only certify `Z[θ]=O_K` | §3.2 Round-2 maximal order (largest remaining bucket) |
+| ~28 | **Non-monogenic field** (Gate 1) | we only certify `Z[θ]=O_K` | §3.2 Round-2 maximal order — ✅ DONE cubics+quartics (M3) |
 | 11 | **Large-regulator units** (Gate 2) | a coeff-box search can't find units with large coordinates (ℚ(∛41): 24-digit coords, reg 56) | §3.1 Voronoi — ✅ DONE for complex cubics (M1) |
 | 14 | **`\|m\| ≠ 1`** | reduction assumes `β=x−θy` is a *unit* | §3.3 μ-enumeration — ✅ DONE for rank-1 complex cubic (M2) |
 | 1 | **Totally-complex torsion** | `r1=0`, torsion `≠ {±1}`, and Siegel setup needs a real `i0` | §3.4 |
@@ -135,7 +136,22 @@ PARI `bnfinit(f).reg`.
 
 ---
 
-### 3.2 Non-monogenic fields (~28 declines) — LARGEST BUCKET
+### 3.2 Non-monogenic fields (~28 declines) — ✅ DONE (cubics + quartics), 2026-08-20
+
+> **Status: M3 shipped — Round 2 maximal order + O_K-basis unit search.**
+> `nf_round2_maximal_order` (`src/numbertheory/nfround2.c`, FLINT matrices)
+> computes `O_K` by Pohst–Zassenhaus (p-radical Frobenius kernel, ring of
+> multipliers via HNF, iterate), returned as an integral basis `(1/D)W` + index +
+> `d_K`. `nf_field_create` runs it instead of declining; the struct carries
+> `(W,D,index)` (monogenic = `I,1,1`, unchanged). The unit search (`nfunits.c`)
+> walks the O_K lattice `L={Σ c_i W[i]}` testing `|N(v)|=Dⁿ` (v the θ-numerator),
+> with `embed/D` and p-saturation's `D⁻¹ mod q`; the reconstruction is unchanged
+> (θ-coords). Clears the non-monogenic cubics (`Q(cbrt 10/12/17/19/20)`, the
+> Dedekind cubic) and quartics (`Q(d^{1/4})`, incl. index-16 `Q(12^{1/4})`).
+> Benchmark 88: CORRECT 65→81; 130-case PARI grid 0 WRONG. Validated: index +
+> `d_K` match PARI `nfinit`. Remaining: larger-regulator non-monogenic quartics
+> (need O_K-Voronoi, the M4 unit finders) and general `m` over non-monogenic
+> (gated off — M2×M3 follow-on).
 
 **Root cause.** Gate 1 (`nf_is_maximal_order`, `numberfield.c`) only accepts
 `Z[θ]=O_K`. Pure quartics `ℚ(d^{1/4})`, the simplest-cubic family, `ℚ(∛17)`
@@ -259,8 +275,9 @@ WRONG/CRASH, coverage strictly up).
 2. **M2 — General `m` via μ-enumeration** (§3.3, route a): ✅ **DONE (2026-08-19)**
    for rank-1 complex cubic — μ-enumeration + μ-aware Baker bound; bench 88
    CORRECT 56→65, 270-case grid 0 WRONG. Rank-2 totally-real `|m|≠1` deferred (M2b).
-3. **M3 — Round-2 maximal order + `O_K`-basis unit search** (§3.2): the largest
-   bucket; the biggest refactor (general integral basis downstream).
+3. **M3 — Round-2 maximal order + `O_K`-basis unit search** (§3.2): ✅ **DONE
+   (2026-08-20)** for cubics + quartics — `nfround2.c` + O_K-lattice unit search;
+   bench 88 CORRECT 65→81, 130-case grid 0 WRONG.
 4. **M4 — Voronoi/Billevič + Buchmann units, quartic & rank ≥ 3** (§3.1 rest):
    the remaining bucket-3 quartics/quintics, and robustness for M3's fields.
 5. **M5 — Totally-complex torsion + complex `i0`** (§3.4): last, smallest.

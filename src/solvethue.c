@@ -55,6 +55,18 @@ static void nfelem_from_coords(nf_t nf, const mpz_t* coords, int deg, nf_elem_t 
     fmpq_poly_clear(g);
 }
 
+/* out = (1/D) * sum coords[i] theta^i  -- an O_K element from its theta-power
+ * NUMERATOR and the shared denominator D (D = 1 recovers nfelem_from_coords). */
+static void nfelem_from_coords_den(nf_t nf, const mpz_t* coords, const mpz_t D, int deg, nf_elem_t out) {
+    fmpq_poly_t g; fmpq_poly_init(g);
+    fmpz_t z, d; fmpz_init(z); fmpz_init(d); fmpz_set_mpz(d, D);
+    for (int i = 0; i < deg; i++) { fmpz_set_mpz(z, coords[i]); fmpq_poly_set_coeff_fmpz(g, i, z); }
+    if (!fmpz_is_one(d)) fmpq_poly_scalar_div_fmpz(g, g, d);
+    fmpz_clear(z); fmpz_clear(d);
+    nf_elem_set_fmpq_poly(out, g, nf);
+    fmpq_poly_clear(g);
+}
+
 /* Extract integer coords of e into out[0..deg-1]; false if any non-integer. */
 static bool coords_from_nfelem(nf_t nf, nf_elem_t e, int deg, mpz_t* out) {
     fmpq_poly_t g; fmpq_poly_init(g);
@@ -347,6 +359,9 @@ static int thue_norm_reps_cubic11(NumberField* K, NFUnits* U, const mpz_t m,
                                   mpz_t*** reps_out) {
     if (K->deg != 3 || nf_r1(K) != 1 || nf_r2(K) != 1) return -1;
     if (nf_units_rank(U) != 1) return -1;
+    if (nf_ok_index(K) != 1) return -1;   /* non-monogenic: mu-enumeration over Z[theta]
+                                           * would miss O_K\Z[theta] reps -> DECLINE (M2 is
+                                           * monogenic-only; general m over O_K is a follow-on). */
     const int n = 3;
     slong prec = K->prec + 16;
     acb_srcptr rt = K->roots;                 /* rt[0] real, rt[1] Im>0, rt[2] conj */
@@ -871,8 +886,10 @@ static int thue_enumerate(const mpz_t* form_in, int n, const mpz_t m_in,
     /* precompute the fundamental units AND their powers eps_k^j, j in [-B,B]:
      * then each of the (2B+1)^r lattice points is just r-1 nf_elem_mul instead
      * of r nf_elem_pow -- the enumeration is the hot loop. */
+    mpz_t Udn; mpz_init(Udn); nf_units_denom(U, Udn);   /* O_K basis denominator (1 if monogenic) */
     nf_elem_t* E = malloc(sizeof(nf_elem_t) * (size_t)(r > 0 ? r : 1));
-    for (int k = 0; k < r; k++) { nf_elem_init(E[k], K->nf); nfelem_from_coords(K->nf, nf_units_coords(U, k), n, E[k]); }
+    for (int k = 0; k < r; k++) { nf_elem_init(E[k], K->nf); nfelem_from_coords_den(K->nf, nf_units_coords(U, k), Udn, n, E[k]); }
+    mpz_clear(Udn);
     long W = 2L * B + 1;
     nf_elem_t** Epow = malloc(sizeof(nf_elem_t*) * (size_t)(r > 0 ? r : 1));
     for (int k = 0; k < r; k++) {

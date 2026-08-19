@@ -20,7 +20,8 @@
 struct NFUnits {
     int      rank;
     int      deg;
-    mpz_t**  coords;     /* rank vectors of `deg` mpz coordinates */
+    mpz_t**  coords;     /* rank vectors of `deg` mpz THETA-POWER numerators */
+    mpz_t    den;        /* shared denominator D: unit j = (1/D) * coords[j]   */
     double   regulator;
 };
 
@@ -29,6 +30,7 @@ double nf_units_regulator(const NFUnits* U) { return U->regulator; }
 const mpz_t* nf_units_coords(const NFUnits* U, int j) {
     return (const mpz_t*)U->coords[j];
 }
+void nf_units_denom(const NFUnits* U, mpz_t out) { mpz_set(out, U->den); }
 
 void nf_units_free(NFUnits* U) {
     if (!U) return;
@@ -37,6 +39,7 @@ void nf_units_free(NFUnits* U) {
         free(U->coords[j]);
     }
     free(U->coords);
+    mpz_clear(U->den);
     free(U);
 }
 
@@ -84,29 +87,47 @@ typedef struct {
     double   nrm2;          /* squared l2 norm of logv */
 } Cand;
 
-/* Log-embedding of integer coords into a freshly-malloc'd double[r1+r2]. */
-static double* log_embed(NumberField* K, const int64_t* c) {
-    int deg = nf_degree(K), m = nf_r1(K) + nf_r2(K);
+/* O_K-coords c -> theta-power NUMERATOR v (v = sum_i c_i * B[i], so the element
+ * is (1/D) v).  int64 arithmetic (box coords + basis are small); returns false
+ * on overflow (candidate skipped -- safe). */
+static bool ok_theta_i64(NumberField* K, const int64_t* c, int64_t* v) {
+    int deg = nf_degree(K);
+    const mpz_t* B = nf_ok_basis(K);
+    for (int j = 0; j < deg; j++) {
+        __int128 acc = 0;
+        for (int i = 0; i < deg; i++) if (c[i]) acc += (__int128)c[i] * (__int128)mpz_get_si(B[i*deg + j]);
+        if (acc > (__int128)INT64_MAX || acc < (__int128)INT64_MIN) return false;
+        v[j] = (int64_t)acc;
+    }
+    return true;
+}
+
+/* Log-embedding of the O_K element (1/D)v (v = theta-power numerator) into a
+ * freshly-malloc'd double[r1+r2].  log|sigma_i((1/D)v)| = log|sigma_i(v)| - logD;
+ * nf_log_embedding_int already applies the m_i weight (x2 for complex), so we
+ * subtract m_i*logD. */
+static double* log_embed_v(NumberField* K, const int64_t* v, double logD) {
+    int deg = nf_degree(K), r1 = nf_r1(K), m = r1 + nf_r2(K);
     mpz_t* mc = malloc(sizeof(mpz_t) * (size_t)deg);
-    for (int i = 0; i < deg; i++) mpz_init_set_si(mc[i], (long)c[i]);
+    for (int i = 0; i < deg; i++) mpz_init_set_si(mc[i], (long)v[i]);
     arb_ptr lv = _arb_vec_init(m);
     nf_log_embedding_int(K, (const mpz_t*)mc, lv);
     double* out = malloc(sizeof(double) * (size_t)m);
-    for (int i = 0; i < m; i++) out[i] = arf_get_d(arb_midref(lv + i), ARF_RND_NEAR);
+    for (int i = 0; i < m; i++) out[i] = arf_get_d(arb_midref(lv + i), ARF_RND_NEAR) - (i < r1 ? 1.0 : 2.0) * logD;
     _arb_vec_clear(lv, m);
     for (int i = 0; i < deg; i++) mpz_clear(mc[i]);
     free(mc);
     return out;
 }
 
-/* Exact unit test |N(coords)| == 1. */
-static bool is_unit(NumberField* K, const int64_t* c) {
+/* Exact unit test for (1/D)v: |N((1/D)v)| == 1  <=>  |N(v)| == D^deg (= Dn). */
+static bool is_unit_v(NumberField* K, const int64_t* v, const mpz_t Dn) {
     int deg = nf_degree(K);
     mpz_t* mc = malloc(sizeof(mpz_t) * (size_t)deg);
-    for (int i = 0; i < deg; i++) mpz_init_set_si(mc[i], (long)c[i]);
+    for (int i = 0; i < deg; i++) mpz_init_set_si(mc[i], (long)v[i]);
     mpz_t nrm; mpz_init(nrm);
     bool ok = nf_norm_int(K, (const mpz_t*)mc, nrm);
-    bool unit = ok && (mpz_cmpabs_ui(nrm, 1) == 0);
+    bool unit = ok && (mpz_cmpabs(nrm, Dn) == 0);
     mpz_clear(nrm);
     for (int i = 0; i < deg; i++) mpz_clear(mc[i]);
     free(mc);
@@ -199,12 +220,13 @@ static int rank_mod_p(const int* rows, int nrows, int ncols, int p) {
 /* Certify p-saturation: append p-th-power character rows at degree-1 primes
  * q ≡ 1 (mod p) until the r columns reach full rank r (SATURATED, return
  * true) or the prime budget is exhausted (return false -> DECLINE). */
-static bool p_saturate(NumberField* K, mpz_t** ucoords, int r, int p, const mpz_t disc) {
+static bool p_saturate(NumberField* K, mpz_t** ucoords, int r, int p, const mpz_t disc, const mpz_t D) {
     enum { MAXQ = 200 };
     int* rows = malloc(sizeof(int) * (size_t)MAXQ * (size_t)r);
     int nrows = 0;
     int deg = nf_degree(K);
     bool saturated = false;
+    bool nontrivial_D = (mpz_cmp_ui(D, 1) != 0);   /* O_K != Z[theta]: units are (1/D)v */
     /* A FUNDAMENTAL (saturated) set reaches full rank r within ~r + a few
      * degree-1 primes; a NON-fundamental set plateaus below r forever, so scan
      * every prime up to MAXQ is wasted.  Early-out once the rank has stalled
@@ -232,15 +254,24 @@ static bool p_saturate(NumberField* K, mpz_t** ucoords, int r, int p, const mpz_
         }
         if (a < 0) continue;   /* f has no root mod q -> no degree-1 prime here */
 
+        /* D^{-1} mod q for the (1/D) factor of the O_K units (q | D -> skip q) */
+        int64_t Dinv = 1;
+        if (nontrivial_D) {
+            int64_t Dq = (int64_t)mpz_fdiv_ui(D, (unsigned long)q);
+            if (Dq == 0) continue;                       /* cannot invert D mod q */
+            Dinv = powmod_i64(Dq, q - 2, q);             /* Fermat inverse (q prime) */
+        }
+
         /* generator h of the order-p subgroup of F_q^* */
         int64_t ex = (q - 1) / p, h = 1;
         for (int64_t b = 2; b < q; b++) { int64_t t = powmod_i64(b, ex, q); if (t != 1) { h = t; break; } }
         if (h == 1) continue;   /* should not happen for q ≡ 1 mod p */
 
-        /* character row */
+        /* character row (unit i evaluated = (v_i eval) * D^{-1} mod q) */
         int* row = rows + (size_t)nrows * r;
         for (int i = 0; i < r; i++) {
             int64_t val = eval_coords_mod(ucoords[i], deg, a, q);
+            if (nontrivial_D) val = mulmod_i64(val, Dinv, q);
             int64_t t = powmod_i64(val, ex, q);
             int e = 0; int64_t hp = 1;
             for (int k = 0; k < p; k++) { if (hp == t) { e = k; break; } hp = mulmod_i64(hp, h, q); }
@@ -260,14 +291,14 @@ static bool p_saturate(NumberField* K, mpz_t** ucoords, int r, int p, const mpz_
  * by p-saturation at every prime p <= R/R0 (Friedman R0 = 0.2).  Full mod-p
  * rank r proves saturation unconditionally; anything short DECLINEs.  Shared
  * by the box search and the Voronoi fallback. */
-static bool cert_saturate(NumberField* K, mpz_t** sel, int r, double R) {
+static bool cert_saturate(NumberField* K, mpz_t** sel, int r, double R, const mpz_t D) {
     if (R <= 1e-9) return false;
     mpz_t disc; mpz_init(disc); nf_disc(K, disc);
     int Pmax = (int)floor(R / 0.2) + 1; if (Pmax < 2) Pmax = 1;
     bool cert = true;
     for (int p = 2; p <= Pmax && cert; p++) {
         if (!is_prime_i64(p)) continue;
-        if (!p_saturate(K, sel, r, p, disc)) cert = false;
+        if (!p_saturate(K, sel, r, p, disc, D)) cert = false;
     }
     mpz_clear(disc);
     return cert;
@@ -278,13 +309,20 @@ NFUnits* nf_fundamental_units(NumberField* K) {
     int r   = nf_unit_rank(K);
     int m   = nf_r1(K) + nf_r2(K);
 
+    /* O_K integral-basis denominator D and D^deg (units are (1/D)v). */
+    mpz_t Dden, Dn; mpz_init(Dden); mpz_init(Dn);
+    nf_ok_denom(K, Dden);
+    mpz_pow_ui(Dn, Dden, (unsigned long)deg);
+    double logD = log(mpz_get_d(Dden));
+
     NFUnits* U = malloc(sizeof(NFUnits));
     U->deg = deg; U->rank = r; U->regulator = 0.0;
+    mpz_init_set(U->den, Dden);
     U->coords = (r > 0) ? malloc(sizeof(mpz_t*) * (size_t)r) : NULL;
 
-    if (r == 0) return U;   /* imaginary quadratic etc.: no units to certify */
+    if (r == 0) { mpz_clear(Dden); mpz_clear(Dn); return U; }   /* no units to certify */
 
-    if (deg > 32) { free(U->coords); free(U); return NULL; }
+    if (deg > 32) { free(U->coords); mpz_clear(U->den); free(U); mpz_clear(Dden); mpz_clear(Dn); return NULL; }
 
     bool udbg = getenv("THUE_DEBUG") != NULL;
     clock_t ut = clock();
@@ -306,7 +344,8 @@ NFUnits* nf_fundamental_units(NumberField* K) {
     enum { CAND_CAP = 40000 };
     Cand* cand = malloc(sizeof(Cand) * CAND_CAP);
     int ncand = 0;
-    int64_t* c = malloc(sizeof(int64_t) * (size_t)deg);
+    int64_t* c  = malloc(sizeof(int64_t) * (size_t)deg);   /* O_K-coords (enum index) */
+    int64_t* vv = malloc(sizeof(int64_t) * (size_t)deg);   /* theta-numerator v = sum c_i B[i] */
 
     /* Grow the box one shell at a time; after each shell, greedily pick the
      * SHORTEST r independent units and try to CERTIFY them by p-saturation.
@@ -335,18 +374,19 @@ NFUnits* nf_fundamental_units(NumberField* K) {
             long t = idx; bool has_hi = false;
             for (int i = 0; i < deg; i++) { int d = (int)(t % W) - B; c[i] = d; if (abs(d) == B) has_hi = true; t /= W; }
             if (B > 1 && !has_hi) continue;             /* only new shell for B>1 */
-            if (!canonical_sign(c, deg)) continue;      /* skips 0 and -u dups */
-            if (!is_unit(K, c)) continue;
-            /* dedupe exact coords */
+            if (!ok_theta_i64(K, c, vv)) continue;      /* O_K-coords -> theta-numerator v */
+            if (!canonical_sign(vv, deg)) continue;     /* skips 0 and -u dups */
+            if (!is_unit_v(K, vv, Dn)) continue;        /* |N(v)| == D^deg */
+            /* dedupe exact theta-numerators */
             bool dup = false;
             for (int k = 0; k < ncand && !dup; k++) {
-                dup = true; for (int i = 0; i < deg; i++) if (cand[k].c[i] != c[i]) { dup = false; break; }
+                dup = true; for (int i = 0; i < deg; i++) if (cand[k].c[i] != vv[i]) { dup = false; break; }
             }
             if (dup) continue;
             Cand* cd = &cand[ncand++];
             cd->c = malloc(sizeof(int64_t) * (size_t)deg);
-            memcpy(cd->c, c, sizeof(int64_t) * (size_t)deg);
-            cd->logv = log_embed(K, c);
+            memcpy(cd->c, vv, sizeof(int64_t) * (size_t)deg);   /* store theta-numerator */
+            cd->logv = log_embed_v(K, vv, logD);
             cd->nrm2 = 0; for (int i = 0; i < m; i++) cd->nrm2 += cd->logv[i] * cd->logv[i];
         }
         if (ncand < r) continue;                        /* not enough units yet */
@@ -363,9 +403,9 @@ NFUnits* nf_fundamental_units(NumberField* K) {
         /* certify by p-saturation (Friedman R0 = 0.2 bounds the prime list) */
         R = regulator_det(sellog, r);
         for (int j = 0; j < r; j++) for (int i = 0; i < deg; i++) mpz_set_si(selz[j][i], (long)sel[j][i]);
-        if (cert_saturate(K, selz, r, R)) ok = true;    /* certified fundamental -> stop */
+        if (cert_saturate(K, selz, r, R, Dden)) ok = true;    /* certified fundamental -> stop */
     }
-    free(c);
+    free(c); free(vv);
     if (udbg) fprintf(stderr, "[units-prof] search+certify (%d cand, ok=%d): %.1fms\n", ncand, ok, (clock()-ut)*1000.0/CLOCKS_PER_SEC);
 
     /* Fallback for large-regulator RANK-1 complex cubics whose fundamental
@@ -375,16 +415,21 @@ NFUnits* nf_fundamental_units(NumberField* K) {
      * mpz throughout -- no int64 truncation. */
     if (!ok && deg == 3 && nf_r1(K) == 1 && nf_r2(K) == 1 && r == 1) {
         clock_t vt = clock();
-        bool proposed = nf_voronoi_unit_cubic11(K, selz[0]);
+        bool proposed = nf_voronoi_unit_cubic11(K, selz[0]);   /* Z[theta] unit w (norm +-1) */
         double voro_ms = (clock() - vt) * 1000.0 / CLOCKS_PER_SEC;
         clock_t ct = clock();
         if (proposed) {
-            /* rank-1 regulator = |log|sigma1(eps)|| from the exact log-embedding */
+            /* w is a Z[theta] unit (a genuine O_K unit).  Its regulator is
+             * |log|sigma1(w)||.  Store it in the shared-D representation as
+             * v = D*w so that (1/D)v = w (consistent with the box units); the
+             * p-saturation then rejects it if it is only a power of eps_K. */
             arb_ptr lv = _arb_vec_init(m);
             nf_log_embedding_int(K, (const mpz_t*)selz[0], lv);
             R = fabs(arf_get_d(arb_midref(lv + 0), ARF_RND_NEAR));
             _arb_vec_clear(lv, m);
-            if (cert_saturate(K, selz, 1, R)) ok = true;
+            if (mpz_cmp_ui(Dden, 1) != 0)
+                for (int i = 0; i < deg; i++) mpz_mul(selz[0][i], selz[0][i], Dden);   /* v = D*w */
+            if (cert_saturate(K, selz, 1, R, Dden)) ok = true;
         }
         if (udbg) fprintf(stderr, "[units-prof] voronoi fallback ok=%d R=%.3f  voronoi=%.2fms certify=%.2fms\n",
                           ok, R, voro_ms, (clock() - ct) * 1000.0 / CLOCKS_PER_SEC);
@@ -403,8 +448,9 @@ NFUnits* nf_fundamental_units(NumberField* K) {
     free(cand); free(sel); free(sellog);
     for (int j = 0; j < r; j++) { for (int i = 0; i < deg; i++) mpz_clear(selz[j][i]); free(selz[j]); }
     free(selz);
+    mpz_clear(Dden); mpz_clear(Dn);
 
-    if (!ok) { free(U->coords); free(U); return NULL; }
+    if (!ok) { free(U->coords); mpz_clear(U->den); free(U); return NULL; }
     return U;
 }
 

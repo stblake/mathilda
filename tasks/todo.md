@@ -41,6 +41,52 @@ arb precision adaptive (bump on inconclusive strict compares / as σ₁ grows).
 - [x] Benchmark 88: **CORRECT 48→56, 0 WRONG/0 CRASH**; check-c99 ✓, leaks=0, USE_FLINT=0 degrade compiles
 - [x] Docs: solutions-of-equations.md, weekly changelog, plan docs + SOLVE_INTEGERS.md
 
+## COMPLETION-PLAN M3 — Round-2 maximal order + O_K-basis unit search (§3.2)  ✅ DONE (2026-08-20)
+
+**Scope (user-chosen):** general Round 2 (Pohst–Zassenhaus, any degree); cubics + quartics.
+Targets (non-monogenic, currently DECLINE → CORRECT): complex cubics
+`x³−{10,12,17,19,20}y³=1` (index 2–3; d17→{(1,0),(18,7)}, d19→{(-8,-3),(1,0)},
+d20→{(-19,-7),(1,0)}), the Dedekind cubic `t³−t²−2t−8` (index 2), and
+non-monogenic quartics `Q(d^{1/4})`.
+
+**Key representation (minimizes regression risk):** O_K = `(1/D)·L`, L an integer
+HNF lattice with rows B[i] in the θ-power basis; a field element is `(1/D)·v`,
+`v = Σ c_i B[i] ∈ Z[θ]`. Then a **unit** `u=(1/D)v` has `|N(u)|=1 ⟺ |N(v)|=Dⁿ`,
+and `embed(u)=embed(v)/D` — so the existing `nf_norm_int`/`nf_embed_int` on the
+integer vector `v` are reused, only the target changes (`Dⁿ` not `1`). **Monogenic
+= B=I, D=1 → byte-for-byte the current path.** The solvethue reconstruction stays
+in θ-coords (via `coords_from_nfelem`) and is **unchanged**; only the unit search
+walks the lattice L instead of Z[θ].
+
+- [x] `nf_round2_maximal_order` (`src/numbertheory/nfround2.c`, FLINT matrices): p-radical
+      Frobenius kernel, ring of multipliers via HNF, iterate; (W,D)+index+d_K. Used FLINT
+      nmod_mat/fmpz_mat/fmpq_mat (no hand-rolled F_p nullspace needed)
+- [x] O_K basis (W,D)+index+d_K in the struct; Gate 1 runs Round 2 on non-monogenic (monogenic unchanged)
+- [x] Unit search over L (test |N(v)|=Dⁿ); Voronoi walks Z[θ] (result scaled D·w); saturation with D⁻¹
+- [x] solvethue: build unit nf_elem as (1/D)·v; **Baker bound unchanged** (unit /D cancels in log-ratios)
+- [x] Safety guard: M2 general-m gated to monogenic (nf_ok_index==1)
+- [x] Validated: 130-case PARI grid **0 WRONG**; benchmark 88 CORRECT 65→81, 0 WRONG/0 CRASH;
+      test_numberfield.c (index+d_K vs PARI incl. multi-round quartics), test_thue.c; c99, leaks=0, USE_FLINT=0
+
+### Review — M3 (Round-2 maximal order + O_K-basis unit search)
+- **Delivered:** non-monogenic `Solve[x^n-d·y^n==±1, Integers]` — `Q(∛{10,12,17,19,20})`,
+  the Dedekind cubic, `Q(d^{1/4})` (incl. index-16 `Q(12^{1/4})`). Benchmark 88 65→81.
+- **Round 2 (Cohen 6.1.3)** on FLINT matrices — the research agent's spec (validated on the
+  Dedekind cubic end-to-end) was followed exactly. Key gotcha: `H_I` singular mod p ⇒ the
+  β-change-of-basis is exact over Q, reduced mod p after. Frobenius exponent `p^k≥n`.
+- **The low-risk representation:** O_K = `(1/D)L`; unit `u=(1/D)v` ⇒ `|N(u)|=1⟺|N(v)|=Dⁿ`,
+  `embed(u)=embed(v)/D`, and the Baker bound's log-ratios cancel /D. So the reconstruction and
+  bound are unchanged; only the unit-search lattice + norm target change. Monogenic = identity.
+- **False alarm caught:** truncated THUE_DEBUG made x⁴-12 look under-maximized (index 4); the
+  direct round2 test proved index 16 (correct). Lesson: validate the algorithm via a direct
+  unit test, not truncated Solve-path debug.
+- **Files:** `src/numbertheory/nfround2.c` (new), `numberfield.{c,h}`+internal (Round-2 wiring,
+  O_K struct, accessors), `nfunits.{c,h}` (O_K-lattice search, D-aware saturation), `solvethue.c`
+  ((1/D)v build + monogenic guard), tests, docs.
+- **Follow-ons:** O_K-Voronoi (large-reg non-monogenic quartics), general m × non-monogenic (M2×M3).
+
+---
+
 ## COMPLETION-PLAN M2 — General m (|m|≠1) via μ-enumeration (§3.3)  ✅ DONE (2026-08-19)
 
 - [x] `thue_norm_reps_cubic11`: enumerate norm-m reps (canonical box from fundamental

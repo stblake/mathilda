@@ -419,10 +419,14 @@ Attempts to solve an equation or system of equations for one or more variables.
   for a root of `F(t, 1)`, reduce to a unit equation, bound the unit exponents
   by **Baker's linear forms in logarithms** (Waldschmidt) + **de Weger LLL**
   reduction, then enumerate and verify each `(x, y)` exactly. Scope today is a
-  **monic** form (`|a0| = 1`) with `|m| = 1` over a **monogenic** field
-  (`Z[theta] = O_K`, certified by Dedekind's criterion); out-of-scope inputs
-  (non-monogenic, `|m| != 1`, `|a0| != 1`, precision out of reach) DECLINE
-  rather than guess. Fundamental units come from an exact coefficient-box search
+  **monic** form (`|a0| = 1`) over a real field; out-of-scope inputs
+  (`|a0| != 1`, precision out of reach, and the cases below) DECLINE rather than
+  guess. **Non-monogenic** fields (`Z[theta] != O_K`) are handled by computing
+  `O_K` with **Round 2 (Pohst-Zassenhaus)** and searching for units over the
+  `O_K` lattice — so `x^3 - 17 y^3 == 1 -> {(1,0),(18,7)}`,
+  `x^3 - 20 y^3 == 1 -> {(1,0),(-19,-7)}`, and the non-monogenic quartic
+  `x^4 - 12 y^4 == 1` now solve. Fundamental units come from an exact
+  coefficient-box search
   certified by p-saturation; for **large-regulator complex cubics** whose unit
   exceeds any box (`Q(cbrt 15)` has a coordinate `30`, `Q(cbrt 41)` a 24-digit
   unit, regulator `56.3`), the box falls back to **Voronoi's algorithm** — a
