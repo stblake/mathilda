@@ -184,6 +184,36 @@ static void test_powersum_divisor(void) {
         "List[List[Rule[x, 3], Rule[y, 4]]]");
 }
 
+/* Fermat's Last Theorem short-circuit: x^n + y^n == z^n (n >= 3, all strictly
+ * positive) has no solutions, decided instantly -- both for a bounded box and
+ * for the unbounded ("indefinite") form, and independent of which side carries
+ * the isolated cube.  The guards below confirm it does NOT over-fire. */
+static void test_fermat_last_theorem(void) {
+    /* Bounded: the whole 10^4 box is dismissed without a search. */
+    run_test("Solve[x^3 + y^3 == z^3 && z > x > y > 0 && x < 10000 && y < 10000 "
+             "&& z < 10000, {x, y, z}, Integers]", "List[]");
+    /* Indefinite (no upper bound): still decided, not left unevaluated. */
+    run_test("Solve[x^3 + y^3 == z^3 && x > 0 && y > 0 && z > 0, "
+             "{x, y, z}, Integers]", "List[]");
+    /* Isolated cube on the left. */
+    run_test("Solve[z^3 == x^3 + y^3 && x > 0 && y > 0 && z > 0, "
+             "{x, y, z}, Integers]", "List[]");
+    /* General exponent n >= 3. */
+    run_test("Solve[x^5 + y^5 == z^5 && x > 0 && y > 0 && z > 0, "
+             "{x, y, z}, Integers]", "List[]");
+
+    /* Guards -- must NOT be swallowed by the FLT short-circuit. */
+    /* n = 2 has Pythagorean triples. */
+    run_test("Length[Solve[x^2 + y^2 == z^2 && 0 < x < y && z < 20 && y < 20, "
+             "{x, y, z}, Integers]]", "11");
+    /* k != 0 (x^3 + y^3 == z^3 + 1) is a different equation with solutions. */
+    run_test("Length[Solve[x^3 + y^3 == z^3 + 1 && 0 < x <= 2 && 0 < y <= 2 "
+             "&& 0 < z <= 2, {x, y, z}, Integers]]", "3");
+    /* A box admitting 0 / negatives keeps the (0, a, a) family. */
+    run_test("Length[Solve[x^3 + y^3 == z^3 && -2 <= x <= 2 && -2 <= y <= 2 "
+             "&& -2 <= z <= 2, {x, y, z}, Integers]]", "13");
+}
+
 /* Phase 3: Pell equations x^2 - D y^2 == +/-1 via continued fractions. */
 static void test_pell(void) {
     /* The classic large fundamental solution of x^2 - 61 y^2 == 1. */
@@ -568,6 +598,7 @@ int main(void) {
     TEST(test_pythagorean_perimeter);
     TEST(test_egyptian_fractions);
     TEST(test_powersum_divisor);
+    TEST(test_fermat_last_theorem);
     TEST(test_exponential);
     TEST(test_superelliptic_bounded);
     TEST(test_pell);
