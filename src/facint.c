@@ -1189,6 +1189,53 @@ static int compare_factors_mpz(const void* a, const void* b) {
     return mpz_cmp(fa->p, fb->p);
 }
 
+/* --------------------------------------------------------------------- *
+ *  Public complete-factorisation helper (used by the number-field       *
+ *  maximal-order gate, src/numbertheory/numberfield.c).                  *
+ *                                                                        *
+ *  Fully factor |n| with the Automatic method (trial division, Pollard   *
+ *  rho-Brent, ECM, SQUFOF/CFRAC/Dixon).  The distinct prime factors are  *
+ *  written in ascending order to primes[] (each mpz_init'd on success --  *
+ *  caller must mpz_clear) and their exponents to exps[], with *count set  *
+ *  to the number of distinct primes.                                     *
+ *                                                                        *
+ *  Returns true iff the factorisation is COMPLETE: every returned base is *
+ *  a strong probable prime (40 Miller-Rabin rounds) and the distinct-     *
+ *  prime count fits in `cap`.  Returns false -- writing nothing, *count=0 *
+ *  -- when a hard composite survived the search (the caller must then     *
+ *  DECLINE rather than trust a possibly-composite "prime") or the arrays  *
+ *  were too small.  n == 0 returns false; |n| == 1 returns true, *count=0.*/
+bool facint_factor_complete(const mpz_t n, mpz_t* primes, int64_t* exps,
+                            int cap, int* count) {
+    *count = 0;
+    if (mpz_sgn(n) == 0) return false;
+    mpz_t a; mpz_init(a); mpz_abs(a, n);
+    if (mpz_cmp_ui(a, 1) == 0) { mpz_clear(a); return true; }
+
+    FactorMpz* fac = malloc(sizeof(FactorMpz) * 1024);
+    if (!fac) { mpz_clear(a); return false; }
+    int nf = 0, kl = -1;
+    factorize_mpz(a, fac, &nf, &kl, METHOD_AUTOMATIC, NULL);
+    mpz_clear(a);
+
+    qsort(fac, (size_t)nf, sizeof(FactorMpz), compare_factors_mpz);
+
+    bool complete = (nf <= cap);
+    for (int i = 0; i < nf && complete; i++)
+        if (!mpz_probab_prime_p(fac[i].p, 40)) complete = false; /* hard composite survived */
+
+    if (complete) {
+        for (int i = 0; i < nf; i++) {
+            mpz_init_set(primes[i], fac[i].p);
+            exps[i] = fac[i].count;
+        }
+        *count = nf;
+    }
+    for (int i = 0; i < nf; i++) mpz_clear(fac[i].p);
+    free(fac);
+    return complete;
+}
+
 Expr* builtin_factorinteger(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count < 1 || res->data.function.arg_count > 3)) return NULL;
     

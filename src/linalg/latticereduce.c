@@ -425,6 +425,37 @@ static int lll_reduce(GRat* B, int n, int d, mpq_t* min_gso2) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Exported real-lattice wrapper.                                     *
+ *                                                                     *
+ *  In-place LLL reduction of an n x d REAL lattice whose rows are     *
+ *  supplied row-major as pre-initialised mpq_t (rows[i*d + c] is       *
+ *  entry (i, c)).  On success the same array is overwritten with the   *
+ *  reduced basis.  If `min_gso2` is a pre-initialised mpq_t it         *
+ *  receives min_i |b*_i|^2 -- the rigorous lower bound                 *
+ *  lambda_1(L)^2 >= min_i |b*_i|^2 on the shortest lattice vector.     *
+ *  Returns 0 on success, 1 if the rows are linearly dependent (in      *
+ *  which case `rows` is left unchanged).                               *
+ *                                                                      *
+ *  Used by the number-field fundamental-unit engine                    *
+ *  (src/numbertheory/nfunits.c) to reduce the logarithmic-embedding    *
+ *  lattice and read off the regulator's lambda_1 certificate.          */
+int lll_reduce_q(mpq_t* rows, int n, int d, mpq_t* min_gso2) {
+    if (n <= 0 || d <= 0) return 1;
+    GRat* B = malloc(sizeof(GRat) * (size_t)n * (size_t)d);
+    if (!B) return 1;
+    for (int i = 0; i < n * d; i++) {
+        gr_init(&B[i]);                 /* re = im = 0 */
+        mpq_set(B[i].re, rows[i]);      /* imaginary part stays 0 (real lattice) */
+    }
+    int dep = lll_reduce(B, n, d, min_gso2);
+    if (!dep)
+        for (int i = 0; i < n * d; i++) mpq_set(rows[i], B[i].re);
+    for (int i = 0; i < n * d; i++) gr_clear(&B[i]);
+    free(B);
+    return dep;
+}
+
+/* ------------------------------------------------------------------ *
  *  Public builtin.                                                    *
  * ------------------------------------------------------------------ */
 Expr* builtin_latticereduce(Expr* res) {

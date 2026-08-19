@@ -1,124 +1,135 @@
-# Diophantine: Solve::svars warning (A) + Booker cube-root-mod-d (B)
+# Thue-equation solver (general-degree, Baker + LLL) — todo
 
-Context: `Solve[x^3+y^3==d+z^3 && ... , {x,y,z,y}, Integers]` stayed unevaluated
-because (1) the var list `{x,y,z,y}` drops `d` (a free symbol → classifier
-declines) and (2) even corrected, the box exceeds the enumeration/MITM budget.
-The engine already implements the classical divisor method
-(`si_two_power_solve`), which is fast for FIXED-target forms (`x^3+y^3==1729` in
-72 ms at bound 1e5). Two agreed improvements:
+Plan: `/Users/user/.claude/plans/we-need-to-implement-agile-koala.md`
+Contract: **provably complete, or DECLINE** (never a guessed answer).
 
-## Part A — `Solve::svars` diagnostic  (low risk)
-Goal: when a symbol appears in the system (esp. with its own constraints) but is
-NOT among the solve variables, emit a warning instead of silently declining.
+---
 
-- [ ] In `solveint_solve_integer` (src/solveint.c), after parsing the var list,
-      scan flattened conjuncts for "free" symbols: EXPR_SYMBOL leaves that are
-      (a) not in the solve-var list, (b) not a Protected constant / known head
-      (Pi, E, True, False, Integers, ...), (c) actually a bound-eligible atom
-      (appear in an Equal/inequality position, not a function head).
-- [ ] If any found, `fprintf(stderr, "Solve::svars: Equations may not give "
-      "solutions for all \"solve\" variables.\n")` ONCE (dedupe). Matches the
-      existing stderr message style (Clip::ncompl, Power::infy).
-- [ ] Emit the warning but still proceed (do not change the return value); the
-      warning fires on the path that currently returns NULL for this shape.
-- [ ] Keep it low-false-positive: only warn when the free symbol appears inside
-      an (in)equality constraint (strong signal it was meant as a variable).
-- [ ] Verify: the user's exact line now prints the warning; legitimate
-      parametric solves (`Solve[a x==b,x]`) do NOT spuriously warn.
+## COMPLETION-PLAN M1 — Voronoi units, cubic (§3.1 of `docs/design/thue_completion_plan.md`)  ✅ DONE (2026-08-19)
 
-## Part B — Booker-style cube-root-mod-d for `x^3+y^3+z^3 == k`  (higher risk)
-Goal: lift reach for the FIXED-k three-cubes problem from ~1e6 coords toward
-~1e7–1e8 interactively (10–100x), by replacing "enumerate z, factor k−z^3" with
-"enumerate d, cube-root k mod d". NOT aiming for Booker's 1e16 (that needs the
-factorless sieve + cluster). Soundness is paramount: exact verify every hit;
-DECLINE (stay unevaluated) rather than return an incomplete set.
+**Goal.** Clear the Gate-2 declines where the fundamental unit's coordinates exceed
+the coefficient-box search. Scope (decided from PARI): **rank-1 complex cubics only**
+— the totally-real "Thomas family" declines are all *reducible* (x=−1 always a root),
+i.e. correct declines, not targets; genuine small-reg totally-real cubics are already
+box-found. Rank-2 Buchmann has **no validatable benchmark target** → deferred.
 
-Math (from Booker, "Cracking the problem with 33"):
-  k − z^3 = x^3 + y^3 = (x+y)(x^2−xy+y^2);  d=|x+y| divides |k−z^3|;
-  s = sgn(k−z^3)·d;  disc = (4|k−z^3|/d − d^2)/3;  x,y = (s ± sqrt(disc))/2.
-  d | (k−z^3)  ⟺  z^3 ≡ k (mod d).
+**Targets (monogenic, currently DECLINE → should become CORRECT):**
+`Q(∛15)` reg 9.69 (fu coord 30 > box 12), `Q(∛42)` reg 11.06 (coord 42),
+`Q(∛97)` reg 49.49 (~10-digit coords), `Q(∛41)` reg 56.29 (**12-digit coords**).
+Non-monogenic d10/d12/d20/d999 stay declined (correct; that's M3 Round-2).
 
-- [ ] Trigger detection: exactly 3 variables, each appearing only as v^3 with
-      coefficient +1, constant term = −k, k a nonzero integer; fully box-bounded.
-      (Only all-+1 so all three pairings are symmetric — keeps completeness
-      reasoning clean. Other sign patterns fall back to existing method.)
-- [ ] New helper `all_cube_roots_mod(k, d, roots_out)`: ALL z in [0,d) with
-      z^3≡k (mod d). Factor d (df_factor_mpz); per prime power find all roots
-      (p≡2 mod 3: unique via inverse-of-3 exponent; p≡1 mod 3: one root ×
-      {1,ω,ω^2} where ω from sqrt(−3); p=3 and gcd(k,d)>1 handled explicitly);
-      CRT product of all combinations. Correctness is the crux — mirror the
-      proven logic in powermod.c (rth_root_mod_pe) but return ALL roots.
-- [ ] Enumerate d in [1, D_max], D_max = min(alpha*B, budget). For each root
-      class, walk z in the AP within the window, compute disc, test perfect
-      square, recover x,y, bounds-check, `si_verify` exactly, emit.
-- [ ] Role-loop over which variable is the "modular" one (3 passes) so the
-      "two-largest" pairing (Booker's d<alpha·B bound) is always covered;
-      dedupe solutions (canonical sorted tuple).
-- [ ] Degenerate families: k−z^3==0 (z=cbrt(k), y=−x) and the y=z Thue slice —
-      catch via a cheap direct small-coordinate check so nothing is missed.
-- [ ] Completeness/decline: only RETURN a list when the box is provably covered
-      by D_max (alpha-bound); else DECLINE. Budget-gate like the existing paths.
-- [ ] Wire into the special-forms dispatch BEFORE the enumeration size guard.
+**Architecture leverage:** `nf_fundamental_units` is propose-then-certify. Voronoi
+only PROPOSES the unit's integer coords; exact p-saturation + `|N|=1` is the
+correctness boundary. A wrong proposal → certifier declines (safe), never wrong.
 
-### Verification (B is only shippable if these pass)
-- [ ] Cross-check vs the EXISTING divisor method on overlapping boxes: identical
-      solution SETS for many random k over a small box (independent code paths).
-- [ ] Known solutions: 1729-style, x^3+y^3+z^3==29 → {1,1,3}; a constructed k
-      with a ~1e7 coordinate found where the old path declines.
-- [ ] `make check-c99`; clean `gcc -std=c99 -Wall -Wextra`; valgrind clean on a
-      representative run; no packed-array surfaces affected (symbolic solver).
+**Algorithm (rank-1 complex cubic, self-contained, no ideal-HNF subsystem):**
+walk the chain of *second-kind adjacent minima* θ₀=1, θ₁, … of O_K, where
+θ' = argmin σ₁ over {φ∈O_K : σ₁(φ)>σ₁(θ), |σ₂(φ)|<|σ₂(θ)|}; stop at the first
+θ_k (k≥1) with |N(θ_k)|=1 → that is ε. Per step: LLL-reduce the fractional
+ideal θ⁻¹O_K (well-conditioned neighbor search) via `lll_reduce_q` with the
+transform recovered from an appended identity block (metric scaled by 2^P so the
+identity passively records T ∈ GL₃(ℤ)); the reduced-basis O_K preimages g_m have
+coords = rows of T; enumerate ψ=Σ eₘ gₘ over small e (|eₘ|≤3), pick the valid
+neighbor with minimal σ₁. Track θ_k exactly in mpz coords (FLINT absorbs the
+≤12-digit values); embeddings/norm via existing `nf_embed_int`/`nf_norm_int`.
+arb precision adaptive (bump on inconclusive strict compares / as σ₁ grows).
+
+- [x] `src/numbertheory/nfvoronoi.c` + decl in `numberfield_internal.h`
+- [x] Refactor cert into shared helper (`cert_saturate`); wire Voronoi fallback in `nf_fundamental_units`; **certifier now mpz end-to-end** (24-digit units)
+- [x] Add `nfvoronoi.c` to `tests/CMakeLists.txt` COMMON_SRC
+- [x] Tests: `test_numberfield.c` (regulators vs PARI 6-digit, exact |N|=1), `test_thue.c` (rigorous x³−{15,41,42,97}y³=±1 → complete set) — ALL PASS
+- [x] Benchmark 88: **CORRECT 48→56, 0 WRONG/0 CRASH**; check-c99 ✓, leaks=0, USE_FLINT=0 degrade compiles
+- [x] Docs: solutions-of-equations.md, weekly changelog, plan docs + SOLVE_INTEGERS.md
+
+## COMPLETION-PLAN M2 — General m (|m|≠1) via μ-enumeration (§3.3)  ✅ DONE (2026-08-19)
+
+- [x] `thue_norm_reps_cubic11`: enumerate norm-m reps (canonical box from fundamental
+      domain + norm constraint via inverse Vandermonde; keep N==m; over-cover safe)
+- [x] μ-aware `thue_exponent_bound`: δ += log|μ^(k)/μ^(j)| looped over μ; C4=/μ_, Y2p=*μ_+,
+      V0 += μ-height — all OVER-estimates. NULL/0 → |m|=1 byte-for-byte unchanged
+- [x] Per-μ enumeration loop in `thue_enumerate`; dropped the |m|=1 gate (rank-1 only)
+- [x] Validation: 270-case PARI grid **0 WRONG**; benchmark 88 CORRECT 56→65, 0 WRONG/0 CRASH;
+      test_thue.c (7 M2 cases); c99, leaks=0, USE_FLINT=0 degrade; no |m|=1 regression
+
+### Review — M2 (general m via μ-enumeration)
+- **Delivered:** `Solve[x³−d·y³==m, {x,y}, Integers]` for `|m|≠1` over rank-1 complex
+  cubics — complete set or proven `{}`. `x³−2y³={2,3,10}` solve; `={4,5,9,73,100}` → `{}`.
+- **Key idea:** `N(x−θy)=F(x,y)=m` ⇒ `β=μ·unit` with μ a norm-m rep. Enumerate μ (bounded
+  box), reuse the whole unit-exponent engine per μ with the μ-ratio added to the linear form.
+- **Safety discipline:** every μ-constant is an OVER-estimate — a too-large bound is safe
+  (reduction shrinks it / box-check declines), only under-estimation misses solutions (WRONG).
+  Validated by the 270-case PARI grid (the only way to trust the bound).
+- **The two test breakages fixed:** the *bounded* + *rigorous* entries previously DECLINED
+  |m|≠1; two old test asserts said so. Now they solve — updated the asserts (correct new behavior).
+- **Scope:** rank-2 totally-real |m|≠1 (cyclic-cubic-m2) deferred to M2b (needs the 2-D
+  fundamental-domain box). Declines safely.
+- **Files:** `src/solvethue.c` (μ-enum + μ-aware bound + per-μ loop), `tests/test_thue.c`, docs.
+
+### Review — M1 (Voronoi units, cubic)
+- **Delivered:** `Solve[x³−d·y³==±1, {x,y}, Integers]` returns the complete set
+  for d=15,41,42,97 (was DECLINE). Any monogenic complex cubic whose fundamental
+  unit outgrows the coefficient box is now solved.
+- **Key insight:** the engine is *propose-then-certify*, so Voronoi need only
+  PROPOSE the unit; exact p-saturation + |N|=1 is the correctness boundary → a
+  wrong proposal DECLINEs, never a wrong answer. Kept the box as the fast path;
+  Voronoi is fallback-only.
+- **The subtle bug fixed mid-build:** the second-kind adjacent minimum is *not* a
+  short Minkowski vector (it minimises σ₁ under an anisotropic |σ₂|<1 box), so
+  "LLL then small combos" found nothing. Fix: rescale the σ₁ column by 1/U=2^-u
+  and grow U until the box captures a neighbour (isotropising the search).
+- **Scope call:** rank-2 totally-real cubics (Buchmann 2-D) have no validatable
+  benchmark target (Thomas family reducible; small-reg cases already box-found),
+  so deferred to M4 — avoids shipping unvalidatable geometry.
+- **Files:** `src/numbertheory/nfvoronoi.c` (new), `nfunits.c` (mpz certifier +
+  fallback), `numberfield_internal.h` (decl), `tests/{test_numberfield,test_thue}.c`,
+  `tests/CMakeLists.txt`, docs.
+
+---
+
+## M1 — Number-field layer + Gate 1 (maximal order, monogenic-first)  ✅ DONE
+- [x] Read exact signatures
+- [x] Export `lll_reduce_q` real-lattice wrapper in `src/linalg/latticereduce.c` + `linalg.h`
+- [x] Export `facint_factor_complete` in `src/facint.c` + `facint.h`
+- [x] `src/numbertheory/numberfield.{c,h}`: field setup, disc, Dedekind (mod-p factor radical), monogenic certification (Gate 1), exact Sturm signature
+- [x] Unit test `tests/test_numberfield.c`: 3 monogenic fields accept; non-monogenic/reducible/non-monic decline; Dedekind + signature verified — ALL PASS
+- [x] Build clean (GCC 16, FLINT 3.6). Fixed small-char radical bug (mod-p factorization, not gcd(f,f'))
+
+## M2 — Unit-group engine + Gate 2 (p-saturation)  ✅ DONE
+- [x] `src/numbertheory/nfunits.{c,h}`: small-norm unit search, log-embedding (acb), greedy independent set, regulator
+- [x] p-saturation certification via mod-p character-matrix RANK (rank==r ⇒ saturated, unconditional); DECLINE if not reached (no fragile enlargement)
+- [x] Validated: regulators match LMFDB — ℚ(∛2)=1.347377 (rank 1), cyclic cubic=0.849287 (rank 2), ℚ(2^1/4)=2.158001 (rank 2)
+
+## M3 — Thue engine + dispatch  ✅ DONE
+- [x] `src/solvethue.{c,h}`: reduce to unit eqn, enumerate exponents, reconstruct (x,y), verify exactly. Degree-generic.
+- [x] Wire `si_solve_thue` into `solveint_solve_integer`; expose `Solve`ThueSolveForm` test builtin
+- [x] **Rigorous Baker(Waldschmidt)+de-Weger bound** (`thue_exponent_bound`): C1..C6 constants, Waldschmidt K3, de Weger LLL reduction (Prop 3.2), Q-dependent case (iii) via relation-detection + L-trick. arb/acb @1600 bits.
+- [x] Downloaded the reference papers to `docs/references/thue/` + `ALGORITHM_NOTES.md`; implemented against the explicit constants.
+- [x] **Solve[…,Integers] now returns the complete sets** for all three targets + more (Thomas 9 solns, x^3-7y^3=1). Non-monogenic / |m|≠1 decline safely.
+- [x] `tests/test_thue.c` rigorous-path + reconstruction tests; 0 leaks (MSL); c99 clean
+
+## M4 — Degree-4  ✅ came free (engine is degree-generic; x^4-2y^4=-1 solves)
+
+## M5 — hardening/docs  ✅ DONE
+- [x] Decline paths, degrade build, check-c99, docs (spec §6-F, changelog), no leaks
+- [ ] (optional follow-on) Held-out gate extension; general a0/|m|; non-monogenic Round-2
 
 ## Review
+- **DELIVERED (end-to-end):** `Solve[F(x,y)==m && Element[{x,y},Integers], {x,y}, Integers]`
+  returns the COMPLETE finite solution set for irreducible monic |m|=1 forms over monogenic
+  fields, via the genuine Tzanakis–de Weger algorithm (Baker's linear forms in logs + LLL
+  bound reduction). All three user targets solve; validated against known/brute-force sets.
+- **Number-field layer:** Gate 1 (Dedekind maximal-order cert), Gate 2 (fundamental units +
+  regulator via p-saturation — regulators match LMFDB exactly).
+- **Contract:** provably complete or safe DECLINE (non-monogenic, |m|≠1, |a0|≠1, degree/precision
+  out of reach). Never a guessed/incomplete answer.
+- **Key implementation lessons:** (1) Dedekind radical from mod-p factorization, not gcd(f,f')
+  (small-char); (2) real-case linear-form coeffs need FULL arb precision (double loses all
+  digits past ~16, but c0~10^60); (3) subfield units → Q-dependent linear form → degenerate
+  lattice → handle via relation-detection + L-trick (paper's case iii).
+- **Files:** src/numbertheory/{numberfield,nfunits}.{c,h}, numberfield_internal.h;
+  src/solvethue.{c,h}; si_solve_thue + include in src/solveint.c; solvethue_init in core.c;
+  exports lll_reduce_q (linalg), facint_factor_complete; tests/{test_numberfield,test_thue}.c;
+  docs/references/thue/ (papers + ALGORITHM_NOTES.md).
 
-**Part A (`Solve::svars`) — DONE.** `si_warn_free_symbols` in `src/solveint.c`
-scans only inequality/ordering conjuncts for symbol atoms not in the solve-var
-list and not `Protected` (so operator heads + constants like Pi/E are skipped),
-emits `Solve::svars` once (deduped by `expr_hash` of the system against the
-evaluator's fixed-point confirm re-entry). Verified: the user's `{x,y,z,y}` query
-now warns once; all-vars-present and bare-parameter-in-equation cases stay silent.
-
-**Part B (Booker three-cubes) — DONE.**
-- `si_all_cube_roots_mod` (+ `si_croots_mod_p` Pohlig-Hellman in the 3-Sylow for
-  p≡1 mod 3, brute for prime powers, CRT product). Exposed as
-  `Solve\`CubeRootsMod[k,d]`; **verified against brute force on 94 430 (k,d)
-  pairs, 0 mismatches** (incl. p≡1 mod 9, p=3^e, p|k, composites, large primes).
-- `si_solve_three_cubes_booker`: part1 (small-coord + divisor-solve, covers the
-  `(a,-a,∛k)` family) ∪ part2 (Booker α-bound over 3 roles), verify-every-hit,
-  decline when a box would exceed `SI_BK_SOLCAP`. **Cross-checked vs exhaustive
-  box enumeration over 801 targets k, 0 mismatches.**
-- Reach demo (no force): `x^3+y^3+z^3==2` over `[-200000,200000]^3` (2B=4e5, which
-  the classical path declines) → 195 complete/verified solutions incl.
-  `(162001,-161999,-5400)` in **0.39 s**.
-- Bug found+fixed along the way: `build_result` used an O(n²) selection sort that
-  hung on large solution families → replaced with O(n log n) `qsort`.
-
-**Verification:** `solve_integers_tests`, `solve_tests`, `solve_corpus_tests`
-(0/97 non-PASS) all green; `make check-c99` PASS; no valgrind leaks attributable
-to new code (only macOS libobjc/dyld baseline noise). Docs: changelog
-`2026-08-17.md` + `solutions-of-equations.md` updated.
-
-**SPF sieve + 128-bit reach — DONE (follow-on).** `si_build_spf` (per-solve
-smallest-prime-factor table, O(log d) factoring) + `__int128` part-2 arithmetic
-(`si_isqrt_i128`) + `SI_BK_DMAX` 3e5→3e6 + `SI_BK_MAXNODES=1e9` candidate
-backstop. Reach ~1e6 → ~1e7 coords: `x^3+y^3+z^3==2` finds the point at
-**5 821 795** (radius-6e6 box) in ~16 s (radius 2e6 → 1 971 055 in ~4 s), all
-verified; oversized boxes decline instantly (no hang). Correctness re-checked:
-801-target box cross-check and 45 149-pair primitive check both 0 mismatches;
-`make check-c99` clean; `solve_integers_tests` pass.
-
-**Signed cubes (`± x³ ± y³ ± z³ == k`) — DONE (follow-on).** The three-cube
-detector accepts coeff ±1 per cube; a `−v³` is normalised by `u=−v` (mirror that
-variable's box) into the pure-sum solver via a working ctx `cc` (mirrored bounds
-+ rebuilt all-+1 MPoly), enumerate in u-space, verify against `cc`, map back
-`v=sgn·u`. Gated to a pure box (`n_ord==0 && n_neq==0 && all_captured`). Realises
-the user's "normalise the equation into a solvable shape" preprocessing idea.
-Makes the 1950s **`227 = 24579³ + 51748³ − 53534³`** reachable:
-`Solve[x³+y³−z³==227 && box(2e5), Integers]` → `(24579,51748,53534)` in ~0.9 s.
-Validated: all-+1 unchanged (801/0), all four sign patterns vs brute (0
-mismatches), solve_integers_tests pass, check-c99 clean, no new valgrind leaks.
-
-**Known scope limits (deliberate, documented):** Booker gated to |k|<~1e9 and
-Dmax≤3e6 (coords ~1e7); sign substitution needs a pure box (orderings on a
-sign-flipped var decline). Perfect-cube / large-family boxes decline rather than
-emit O(B) tuples. Not Booker's 1e16 (needs batch inversion + a cluster).
-`MATHILDA_BK_FORCE=1` bypasses the size gate for validation.
+## Review
+- (to be filled at the end)

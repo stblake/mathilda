@@ -413,6 +413,34 @@ Attempts to solve an equation or system of equations for one or more variables.
   factorisation above); the half-integer ring, `3 | h`, the real-quadratic case
   `k > 0`, and higher-genus hyperelliptic curves need Mordell-Weil / Baker
   methods and are left unevaluated.
+- **Thue equations** `F(x, y) == m` (`F` irreducible homogeneous of degree
+  `>= 3`, `m` constant) have finitely many solutions, returned as a plain list
+  by the **Tzanakis-de Weger** engine (`src/solvethue.c`): build `K = Q(theta)`
+  for a root of `F(t, 1)`, reduce to a unit equation, bound the unit exponents
+  by **Baker's linear forms in logarithms** (Waldschmidt) + **de Weger LLL**
+  reduction, then enumerate and verify each `(x, y)` exactly. Scope today is a
+  **monic** form (`|a0| = 1`) with `|m| = 1` over a **monogenic** field
+  (`Z[theta] = O_K`, certified by Dedekind's criterion); out-of-scope inputs
+  (non-monogenic, `|m| != 1`, `|a0| != 1`, precision out of reach) DECLINE
+  rather than guess. Fundamental units come from an exact coefficient-box search
+  certified by p-saturation; for **large-regulator complex cubics** whose unit
+  exceeds any box (`Q(cbrt 15)` has a coordinate `30`, `Q(cbrt 41)` a 24-digit
+  unit, regulator `56.3`), the box falls back to **Voronoi's algorithm** — a
+  walk along the chain of relative minima of `O_K`, polynomial in the regulator
+  — which proposes the unit for the *same* p-saturation certifier. So
+  `x^3 - 15 y^3 == 1`, `x^3 - 41 y^3 == +-1`, `x^3 - 42 y^3 == 1`,
+  `x^3 - 97 y^3 == 1` now return their complete sets (each `{(+-1, 0)}`) instead
+  of declining.
+  - **General `m` (`|m| != 1`).** For a monic form `N(x - theta*y) = F(x,y) =
+    m`, so `beta = x - theta*y` is a norm-`m` integer `mu * unit`, with `mu`
+    over a finite set of **bounded-norm representatives**.  For a rank-1 complex
+    cubic these are enumerated (canonical-orbit box from the fundamental domain
+    of the unit + the norm constraint), the Baker/de-Weger bound is made
+    μ-aware (the linear form's constant gains the `log(mu^(k)/mu^(j))` term),
+    and `beta = mu * prod eps^b` is enumerated per μ.  So `x^3 - 2 y^3 == 2 ->
+    {(0,-1)}`, `== 3 -> {(1,-1),(-5,-4)}`, `== 10 -> {(2,-1),(4,3)}`, and
+    `== 4/5/9/73/100 -> {}` (proven).  Rank-2 totally-real fields with
+    `|m| != 1` still DECLINE.
 - **Linear Diophantine.** A single **linear** equation is solved through its
   solution lattice (gcd staircase, particular solution + `(n-1)`-vector
   homogeneous basis):

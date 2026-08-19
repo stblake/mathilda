@@ -30,6 +30,14 @@ Expr* builtin_latticereduce(Expr* res);
 Expr* builtin_findintegernullvector(Expr* res);
 void linalg_init(void);
 
+/* Exported LLL reduction of a REAL lattice given row-major as mpq_t.
+ * rows[i*d + c] is entry (i, c); reduced in place.  If min_gso2 is a
+ * pre-initialised mpq_t it receives the rigorous lambda_1^2 lower bound
+ * min_i |b*_i|^2.  Returns 0 on success, 1 if the rows are dependent.
+ * (Implemented in latticereduce.c; used by the number-field unit engine.) */
+#include <gmp.h>
+int lll_reduce_q(mpq_t* rows, int n, int d, mpq_t* min_gso2);
+
 /* Helpers exposed for use by matsol.c (RowReduce / LinearSolve) and
  * mateigen.c (Eigenvalues / Eigenvectors). */
 int   get_tensor_dims(Expr* e, int64_t* dims);

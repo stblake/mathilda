@@ -325,6 +325,9 @@ set(COMMON_SRC
     ../src/numbertheory/jacobisymbol.c
     ../src/numbertheory/prime.c
     ../src/numbertheory/primecount.c
+    ../src/numbertheory/numberfield.c
+    ../src/numbertheory/nfunits.c
+    ../src/numbertheory/nfvoronoi.c
     ../src/partitions.c
     ../src/special_functions/gamma.c
     ../src/special_functions/beta.c
@@ -725,6 +728,7 @@ set(COMMON_SRC
     ../src/solvetrig.c
     ../src/solvemod.c
     ../src/solveint.c
+    ../src/solvethue.c
     ../src/zero_test.c
     ../src/numeric_complex.c
     ../src/flint_num_bridge.c
@@ -1667,6 +1671,14 @@ target_include_directories(solvenlsys_tests PRIVATE ../src)
 add_executable(solve_integers_tests test_solve_integers.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(solve_integers_tests PRIVATE ../src)
 add_test(NAME solve_integers_tests COMMAND solve_integers_tests)
+
+add_executable(numberfield_tests test_numberfield.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(numberfield_tests PRIVATE ../src ../src/numbertheory)
+add_test(NAME numberfield_tests COMMAND numberfield_tests)
+
+add_executable(thue_tests test_thue.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(thue_tests PRIVATE ../src ../src/numbertheory)
+add_test(NAME thue_tests COMMAND thue_tests)
 
 # Pinned-FullForm regression for extraneous / non-real Root filtering in Solve.
 # Registered with an add_test() line (below) so ctest actually runs it -- the

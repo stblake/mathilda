@@ -287,6 +287,16 @@ unit-group / embedding API. Scope this as its own milestone; FLINT/ANTIC provide
 much of it (`nf_t`, `nf_elem`), so a bridge may be feasible rather than a
 from-scratch build.
 
+> **Status (2026-08-19): built and validated for the monogenic case.**
+> `src/numbertheory/numberfield.{c,h}` provides field setup, `arb`/`acb`
+> embeddings, exact `disc`, and **Gate 1** — maximal-order certification via
+> Dedekind's criterion (monogenic-first; non-maximal orders decline).
+> `src/numbertheory/nfunits.{c,h}` provides **Gate 2** — fundamental units +
+> regulator, certified by p-saturation (rank test of the mod-`p` character
+> matrix). Regulators validated against LMFDB (`Q(2^1/3)`, the cyclic cubic
+> `t^3-3t+1`, `Q(2^1/4)`). Round-2 order enlargement (non-monogenic fields) and
+> class-group / ideal factorisation remain for G.
+
 ### F. Thue equations  `F(x, y) == m`  (F irreducible homogeneous, deg ≥ 3)
 
 **Method (Tzanakis–de Weger).**
@@ -307,6 +317,35 @@ list — no parametric families. `{}` is a proof.
 **Hook.** `si_solve_thue(&c)` for a single homogeneous irreducible 2-var equation
 of total degree ≥3 equal to a constant. Currently such inputs decline (e.g.
 `x³ − 2 y³ == 1` unbounded); bounded versions already work via the leaf search.
+
+> **Status (2026-08-19): DONE for the monic `|m|=1` monogenic case.**
+> `src/solvethue.{c,h}` implements the full Tzanakis–de Weger method (steps
+> 1–5): field setup, reduce to unit equations, **Baker (Waldschmidt) initial
+> bound + de-Weger LLL reduction** (`thue_exponent_bound`, `arb`/`acb` at 1600
+> bits, reusing `lll_reduce_q`), the Q-dependent case (iii) via
+> relation-detection + the L-trick, and exact reconstruction/verification.
+> `si_solve_thue` (`src/solveint.c`) dispatches, so **`Solve[…, Integers]` now
+> returns the complete set** for `x³−2y³=±1`, `x³−7y³=1`, `x³−3xy²+y³=1`,
+> `x⁴−2y⁴=−1`, the Thomas cubic, etc. (`tests/test_thue.c`, incl. the automatic
+> path). Out-of-scope inputs DECLINE safely: non-monogenic field (`x³−17y³=1`),
+> `|m|≠1`, `|a₀|≠1`, degree/precision beyond reach.
+> **M1 (2026-08-19): Voronoi units for large-regulator complex cubics.**
+> `src/numbertheory/nfvoronoi.c` walks the chain of relative minima of `O_K` to
+> propose a fundamental unit whose coordinates exceed the coefficient box
+> (`ℚ(∛41)`: 24-digit unit, reg 56), certified by the same p-saturation gate
+> (now mpz end-to-end). `x³−{15,41,42,97}y³=±1` now solve; benchmark 88 CORRECT
+> 48→56.
+> **M2 (2026-08-19): general `m` (`|m|≠1`) via µ-enumeration** (rank-1 complex
+> cubic). `β=x−θy` is a norm-`m` integer `µ·unit`; `thue_norm_reps_cubic11`
+> enumerates the bounded-norm reps µ, and `thue_exponent_bound` is now µ-aware
+> (the linear form's constant gains `log|µ^(k)/µ^(j)|`; `C4`/`Y2p`/`V0` over-
+> estimated). `x³−2y³={2,3,10}` etc. now return the full set, `={4,5,9,73,100}`
+> proven `{}`; benchmark 88 CORRECT 56→65, 270-case PARI grid 0 WRONG.
+> Follow-ons: general `a₀`, rank-2 totally-real `|m|≠1` (M2b), non-monogenic
+> orders (Round-2), totally-complex torsion. **Full completion roadmap
+> (algorithms, files, order, verification):**
+> [`docs/design/thue_completion_plan.md`](docs/design/thue_completion_plan.md).
+> Stress-tested vs PARI/GP `thue()` in `benchmarks/88-thue-equations/`.
 
 **References.** N. Tzanakis & B. de Weger, "On the practical solution of the Thue
 equation", *J. Number Theory* 31 (1989); Bilu & Hanrot; PARI/GP `thue`.
