@@ -29,12 +29,13 @@ DECLINE*. Never a wrong or partial answer. `benchmarks/88` (PARI/GP `thue()`
 oracle over ~100 equations) is the gate: any `WRONG`/`CRASH` fails.
 
 **Benchmark 88:** after M1 (Voronoi units) + M2 (general `m`) + M3 (Round-2
-maximal order), **81 CORRECT / 23 DECLINE / 0 WRONG / 0 CRASH** (48/56 before M1,
-56/48 after M1, 65/39 after M2). The remaining declines are rank-2 totally-real
-`|m| != 1`, larger-regulator non-monogenic quartics/quintics, general `m` over
-non-monogenic fields, and the reducible perfect powers PARI also refuses — all
-correct on both sides. Cross-checked vs PARI over a 270-case `|m| != 1` grid (M2)
-and a 130-case non-monogenic grid (M3): 0 WRONG.
+maximal order) + reducible forms (§6), **93 CORRECT / 11 DECLINE / 0 WRONG / 0
+CRASH** (48/56 before M1, 56/48 after M1, 65/39 after M2, 81/23 after M3). The
+remaining declines are rank-2 totally-real `|m| != 1`, larger-regulator
+non-monogenic quartics/quintics, general `m` over non-monogenic fields, the
+reducible perfect powers PARI also refuses, and adversarial-precision cases — all
+correct on both sides. Cross-checked vs PARI over a 270-case `|m| != 1` grid (M2),
+a 130-case non-monogenic grid (M3), and a 90-case reducible grid: 0 WRONG.
 
 ### The 56 declines, by root cause (exact counts from the benchmark)
 
@@ -320,6 +321,12 @@ they come first.
   enumeration, unit-search certify-in-loop, p-saturation rank-stall early-out,
   adaptive reduction precision. Don't regress these; the new unit finders should
   be *fallbacks* after the fast small-norm search, not replacements.
-- **Reducible forms** are correctly declined (not Thue equations). If we ever
-  want them, factor `F` and reduce to the linear/Pell sub-solvers already in
-  `src/solveint.c` — a separate, unrelated feature.
+- **Reducible forms** — ✅ **DONE (2026-08-20).** `thue_solve_reducible_form`
+  (`src/solvethue.c`) factors `F(x,1)`; when it splits into ≥2 coprime factors
+  the set is finite: enumerate the signed divisor assignments `∏ G_i(x,y)^{e_i} =
+  m/content` and solve each system `{G_i=d_i}` (parametrise a linear factor's
+  line, substitute into a second factor, integer-root the univariate, verify).
+  Works for any `m`; 30-case PARI grid 0 WRONG; clears `thomas-t*`, `x^3-y^3=m`,
+  `x^4-y^4=m`, biquadratic. A pure power of one factor (`(x-y)^3=1`, infinite /
+  PARI-refused) DECLINEs. All-non-linear factor patterns (no linear factor)
+  remain a follow-on.

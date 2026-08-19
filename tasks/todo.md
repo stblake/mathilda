@@ -41,6 +41,30 @@ arb precision adaptive (bump on inconclusive strict compares / as σ₁ grows).
 - [x] Benchmark 88: **CORRECT 48→56, 0 WRONG/0 CRASH**; check-c99 ✓, leaks=0, USE_FLINT=0 degrade compiles
 - [x] Docs: solutions-of-equations.md, weekly changelog, plan docs + SOLVE_INTEGERS.md
 
+## Reducible binary forms F(x,y)=m via factorization (§6 side-feature)  ✅ DONE (2026-08-20)
+
+- [x] `thue_solve_reducible_form` (solvethue.c): factor F(x,1); for ≥2 coprime factors,
+      enumerate signed divisor-tuples ∏ G_i^{e_i}=m/content, solve each system {G_i=d_i}
+      (parametrise a linear factor's line, substitute into a second factor, integer-root the
+      univariate via fmpz_poly_factor, verify F==m). Pure-power-of-one-factor → decline (infinite).
+- [x] Dispatch from `thue_solve_binary_form` when F(x,1) reducible; irreducible path unchanged.
+- [x] Validated: 30-case PARI grid (x³-y³, thomas, x⁴-y⁴, biquad, m∈[-20,20]) **0 WRONG**;
+      test_thue.c (thomas-t1, cubic-neg-disc, x³-y³=7, x⁴-y⁴=15, biquad {}, (x-y)³ decline);
+      leaks=0, c99, USE_FLINT=0. Works for ANY m (not just |m|=1).
+
+### Review — reducible forms
+- **Delivered:** finite complete set for reducible `F(x,y)=m` (≥2 coprime factors), any m.
+  Clears thomas-t*, cubic-neg-disc, reducible-x3-y3/x4-y4/biquad. E.g. thomas-t1=1 → 3 sols.
+- **Method:** at an integer point each factor value G_i(x,y) is an integer with ∏=m/content →
+  enumerate signed divisor assignments, solve each system by line-parametrise + substitute +
+  integer-root. Every candidate verified F==m; enumeration exhaustive → complete.
+- **Unified system solver:** one linear factor's line parametrised, a second factor substituted
+  → univariate whose integer roots (fmpz_poly_factor) are candidates; handles ≥2-linear and
+  linear+higher uniformly. All-nonlinear (no linear factor) declines (follow-on).
+- **Files:** src/solvethue.c (thue_solve_reducible_form + dispatch), tests/test_thue.c, docs.
+
+---
+
 ## COMPLETION-PLAN M3 — Round-2 maximal order + O_K-basis unit search (§3.2)  ✅ DONE (2026-08-20)
 
 **Scope (user-chosen):** general Round 2 (Pohst–Zassenhaus, any degree); cubics + quartics.

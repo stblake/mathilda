@@ -425,7 +425,12 @@ Attempts to solve an equation or system of equations for one or more variables.
   `O_K` with **Round 2 (Pohst-Zassenhaus)** and searching for units over the
   `O_K` lattice — so `x^3 - 17 y^3 == 1 -> {(1,0),(18,7)}`,
   `x^3 - 20 y^3 == 1 -> {(1,0),(-19,-7)}`, and the non-monogenic quartic
-  `x^4 - 12 y^4 == 1` now solve. Fundamental units come from an exact
+  `x^4 - 12 y^4 == 1` now solve. **Reducible** forms (`F(x,1)` factors into
+  `>= 2` coprime irreducibles) are not Thue equations but still finite: they are
+  factored and solved by enumerating the divisor assignments across the factors
+  (any `m`) -- so `x^3 - x^2 y - 3 x y^2 - y^3 == 1 -> {(-1,2),(0,-1),(1,0)}` and
+  `x^4 - y^4 == 15` returns its four points; a pure power of one factor
+  (`(x-y)^3 == 1`, infinitely many) DECLINEs. Fundamental units come from an exact
   coefficient-box search
   certified by p-saturation; for **large-regulator complex cubics** whose unit
   exceeds any box (`Q(cbrt 15)` has a coordinate `30`, `Q(cbrt 41)` a 24-digit

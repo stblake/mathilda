@@ -31,6 +31,8 @@
 #include <math.h>
 #include <flint/fmpq.h>
 #include <flint/fmpq_poly.h>
+#include <flint/fmpz_poly.h>
+#include <flint/fmpz_poly_factor.h>
 #include <flint/nf_elem.h>
 #include <flint/arb.h>
 #include <flint/acb.h>
@@ -95,6 +97,232 @@ static void eval_form(const mpz_t* form, int n, const mpz_t x, const mpz_t y, mp
         mpz_add(out, out, term);
     }
     mpz_clear(xp); mpz_clear(yp); mpz_clear(term);
+}
+
+/* ================================================================== *
+ *  Reducible binary forms  F(x,y) == m  (F reducible over Q).          *
+ *                                                                      *
+ *  Not a Thue equation (the Tzanakis-de Weger method needs F           *
+ *  irreducible), but finite when F factors into >= 2 COPRIME           *
+ *  homogeneous forms: at an integer point each factor value            *
+ *  G_i(x,y) is an integer and prod G_i(x,y)^{e_i} = m / content.  We   *
+ *  enumerate the (finitely many) signed factorisations and solve each  *
+ *  system { G_i(x,y) = d_i }: parametrise the line of one LINEAR       *
+ *  factor, substitute into a second factor to get a univariate whose   *
+ *  integer roots are the candidate points, and verify every factor     *
+ *  equation and F == m exactly.  A pure power of a single irreducible  *
+ *  factor (e.g. (x-y)^3 == 1) has infinitely many or PARI-refused      *
+ *  solutions -> DECLINE.  Returns the complete finite count, or -1.    */
+
+/* True iff g factors over Q into more than one irreducible (or a repeated one):
+ * FLINT 3 has no fmpz_poly_is_irreducible, so read it off the factorisation. */
+static bool solvethue_poly_reducible(const fmpz_poly_t g) {
+    fmpz_poly_factor_t fac; fmpz_poly_factor_init(fac); fmpz_poly_factor(fac, g);
+    bool red = !(fac->num == 1 && fac->exp[0] == 1
+                 && fmpz_poly_degree(&fac->p[0]) == fmpz_poly_degree(g));
+    fmpz_poly_factor_clear(fac);
+    return red;
+}
+
+/* value of a homogeneous binary factor G (coeffs G[0..dG], G[p]=coeff of
+ * x^(dG-p) y^p) at integer (x,y). */
+static void eval_binform(const mpz_t* G, int dG, const mpz_t x, const mpz_t y, mpz_t out) {
+    mpz_set_ui(out, 0);
+    mpz_t xp, yp, term; mpz_init(xp); mpz_init(yp); mpz_init(term);
+    for (int p = 0; p <= dG; p++) {
+        mpz_pow_ui(xp, x, (unsigned long)(dG - p));
+        mpz_pow_ui(yp, y, (unsigned long)p);
+        mpz_mul(term, G[p], xp); mpz_mul(term, term, yp); mpz_add(out, out, term);
+    }
+    mpz_clear(xp); mpz_clear(yp); mpz_clear(term);
+}
+
+typedef struct { mpz_t* G; int deg; int mult; } RedFactor;   /* homogeneous factor */
+
+/* push (x,y) into a dynamic mpz pair buffer with dedup */
+static void redpush(mpz_t** xs, mpz_t** ys, int* n, int* cap, const mpz_t x, const mpz_t y) {
+    for (int i = 0; i < *n; i++) if (mpz_cmp((*xs)[i], x) == 0 && mpz_cmp((*ys)[i], y) == 0) return;
+    if (*n == *cap) { *cap = *cap ? *cap * 2 : 16; *xs = realloc(*xs, sizeof(mpz_t) * (size_t)*cap); *ys = realloc(*ys, sizeof(mpz_t) * (size_t)*cap); }
+    mpz_init_set((*xs)[*n], x); mpz_init_set((*ys)[*n], y); (*n)++;
+}
+
+/* integer roots of an fmpz_poly P (via its factorisation): each linear factor
+ * (a t + b) with a | b contributes t = -b/a.  Appends to roots[] (mpz). */
+static void fmpz_poly_int_roots(const fmpz_poly_t P, mpz_t** roots, int* nr, int* cap) {
+    if (fmpz_poly_degree(P) < 1) return;
+    fmpz_poly_factor_t fac; fmpz_poly_factor_init(fac); fmpz_poly_factor(fac, P);
+    for (slong i = 0; i < fac->num; i++) {
+        if (fmpz_poly_degree(&fac->p[i]) != 1) continue;
+        fmpz_t a, b; fmpz_init(a); fmpz_init(b);
+        fmpz_poly_get_coeff_fmpz(a, &fac->p[i], 1);
+        fmpz_poly_get_coeff_fmpz(b, &fac->p[i], 0);
+        if (!fmpz_is_zero(a) && fmpz_divisible(b, a)) {
+            fmpz_t r; fmpz_init(r); fmpz_neg(r, b); fmpz_divexact(r, r, a);
+            if (*nr == *cap) { *cap = *cap ? *cap * 2 : 8; *roots = realloc(*roots, sizeof(mpz_t) * (size_t)*cap); }
+            mpz_init(( *roots)[*nr]); fmpz_get_mpz((*roots)[*nr], r); (*nr)++;
+            fmpz_clear(r);
+        }
+        fmpz_clear(a); fmpz_clear(b);
+    }
+    fmpz_poly_factor_clear(fac);
+}
+
+/* Solve the system { fac[i].G(x,y) = d[i] } given signed targets d[], collecting
+ * verified points (that also satisfy F == m) into (xs,ys). */
+static void red_solve_system(const RedFactor* fac, int k, const mpz_t* d,
+                             const mpz_t* form, int n, const mpz_t m,
+                             mpz_t** xs, mpz_t** ys, int* np, int* cap) {
+    /* pick a LINEAR factor as the line, and any other factor as the pivot. */
+    int li = -1;
+    for (int i = 0; i < k; i++) if (fac[i].deg == 1) { li = i; break; }
+    if (li < 0) return;                                  /* no linear factor: unsupported */
+    int pv = -1;
+    for (int i = 0; i < k; i++) if (i != li) { pv = i; break; }
+    if (pv < 0) return;
+
+    /* line  a x + b y = d[li],  a = G[0], b = G[1] (degree-1 form a x + b y). */
+    mpz_t a, b, g, x0, y0, dx, dy, s, t2;
+    mpz_init_set(a, fac[li].G[0]); mpz_init_set(b, fac[li].G[1]);
+    mpz_init(g); mpz_init(x0); mpz_init(y0); mpz_init(dx); mpz_init(dy); mpz_init(s); mpz_init(t2);
+    mpz_gcdext(g, x0, y0, a, b);                          /* a*x0 + b*y0 = g */
+    if (mpz_sgn(g) != 0 && mpz_divisible_p(d[li], g)) {
+        mpz_divexact(s, d[li], g);
+        mpz_mul(x0, x0, s); mpz_mul(y0, y0, s);          /* particular a x0 + b y0 = d[li] */
+        mpz_divexact(dx, b, g); mpz_divexact(dy, a, g); mpz_neg(dy, dy);   /* direction (b/g, -a/g) */
+
+        /* pivot P(t) = G_pv(x0+dx t, y0+dy t) - d[pv], an fmpz_poly in t. */
+        fmpz_poly_t px, py, xt, yt, acc, Pt; fmpz_poly_init(px); fmpz_poly_init(py);
+        fmpz_poly_init(xt); fmpz_poly_init(yt); fmpz_poly_init(acc); fmpz_poly_init(Pt);
+        fmpz_t z; fmpz_init(z);
+        fmpz_set_mpz(z, x0); fmpz_poly_set_coeff_fmpz(px, 0, z); fmpz_set_mpz(z, dx); fmpz_poly_set_coeff_fmpz(px, 1, z);
+        fmpz_set_mpz(z, y0); fmpz_poly_set_coeff_fmpz(py, 0, z); fmpz_set_mpz(z, dy); fmpz_poly_set_coeff_fmpz(py, 1, z);
+        int dG = fac[pv].deg;
+        for (int p = 0; p <= dG; p++) {                  /* acc += G[p] * px^(dG-p) * py^p */
+            fmpz_poly_one(xt); for (int e = 0; e < dG - p; e++) fmpz_poly_mul(xt, xt, px);
+            fmpz_poly_one(yt); for (int e = 0; e < p; e++) fmpz_poly_mul(yt, yt, py);
+            fmpz_poly_mul(xt, xt, yt);
+            fmpz_set_mpz(z, fac[pv].G[p]); fmpz_poly_scalar_mul_fmpz(xt, xt, z);
+            fmpz_poly_add(acc, acc, xt);
+        }
+        fmpz_set_mpz(z, d[pv]); fmpz_poly_set(Pt, acc);
+        { fmpz_t c0; fmpz_init(c0); fmpz_poly_get_coeff_fmpz(c0, Pt, 0); fmpz_sub(c0, c0, z); fmpz_poly_set_coeff_fmpz(Pt, 0, c0); fmpz_clear(c0); }
+
+        mpz_t* roots = NULL; int nr = 0, rcap = 0;
+        fmpz_poly_int_roots(Pt, &roots, &nr, &rcap);
+        mpz_t X, Y, val; mpz_init(X); mpz_init(Y); mpz_init(val);
+        for (int ri = 0; ri < nr; ri++) {
+            mpz_mul(X, dx, roots[ri]); mpz_add(X, X, x0);
+            mpz_mul(Y, dy, roots[ri]); mpz_add(Y, Y, y0);
+            bool good = true;
+            for (int i = 0; i < k && good; i++) { eval_binform(fac[i].G, fac[i].deg, X, Y, val); if (mpz_cmp(val, d[i]) != 0) good = false; }
+            if (good) { eval_form(form, n, X, Y, val); if (mpz_cmp(val, m) == 0) redpush(xs, ys, np, cap, X, Y); }
+        }
+        for (int ri = 0; ri < nr; ri++) mpz_clear(roots[ri]);
+        free(roots);
+        mpz_clear(X); mpz_clear(Y); mpz_clear(val);
+        fmpz_poly_clear(px); fmpz_poly_clear(py); fmpz_poly_clear(xt); fmpz_poly_clear(yt);
+        fmpz_poly_clear(acc); fmpz_poly_clear(Pt); fmpz_clear(z);
+    }
+    mpz_clear(a); mpz_clear(b); mpz_clear(g); mpz_clear(x0); mpz_clear(y0);
+    mpz_clear(dx); mpz_clear(dy); mpz_clear(s); mpz_clear(t2);
+}
+
+/* recursively assign signed targets d[i] (i>=idx) with prod d[i]^{mult_i} =
+ * remaining, then solve the resulting system. */
+static void red_enumerate(const RedFactor* fac, int k, int idx, const mpz_t remaining,
+                          mpz_t* d, const mpz_t* form, int n, const mpz_t m,
+                          mpz_t** xs, mpz_t** ys, int* np, int* cap) {
+    if (idx == k - 1) {
+        /* last factor: d^{mult} must equal `remaining` exactly */
+        int e = fac[idx].mult;
+        if (e == 1) { mpz_set(d[idx], remaining); red_solve_system(fac, k, (const mpz_t*)d, form, n, m, xs, ys, np, cap); return; }
+        /* e-th root of |remaining| (mpz_root on a negative with even e is
+         * undefined -> SIGFPE; take |.| and check both signs against remaining). */
+        mpz_t r, ar; mpz_init(r); mpz_init(ar); mpz_abs(ar, remaining);
+        if (mpz_root(r, ar, (unsigned long)e)) {
+            for (int sgn = 0; sgn < 2; sgn++) {
+                mpz_set(d[idx], r); if (sgn) mpz_neg(d[idx], d[idx]);
+                mpz_t chk; mpz_init(chk); mpz_pow_ui(chk, d[idx], (unsigned long)e);
+                bool hit = (mpz_cmp(chk, remaining) == 0);
+                mpz_clear(chk);
+                if (hit) red_solve_system(fac, k, (const mpz_t*)d, form, n, m, xs, ys, np, cap);
+                if (mpz_sgn(r) == 0) break;                     /* r == 0: +0 == -0 */
+            }
+        }
+        mpz_clear(r); mpz_clear(ar);
+        return;
+    }
+    /* factor idx: d ranges over signed divisors whose e-th power divides `remaining` */
+    int e = fac[idx].mult;
+    mpz_t absrem; mpz_init(absrem); mpz_abs(absrem, remaining);
+    unsigned long lim = mpz_fits_ulong_p(absrem) ? mpz_get_ui(absrem) : 0;
+    if (lim == 0 || lim > 2000000UL) { mpz_clear(absrem); return; }         /* too many divisors -> give up branch */
+    mpz_t dd, de, rem2; mpz_init(dd); mpz_init(de); mpz_init(rem2);
+    for (unsigned long v = 1; v <= lim; v++) {
+        if (lim % v != 0) continue;
+        mpz_set_ui(dd, v); mpz_pow_ui(de, dd, (unsigned long)e);
+        if (!mpz_divisible_p(remaining, de)) continue;
+        for (int sgn = 0; sgn < 2; sgn++) {
+            mpz_set_ui(dd, v); if (sgn) mpz_neg(dd, dd);
+            mpz_pow_ui(de, dd, (unsigned long)e);
+            mpz_divexact(rem2, remaining, de);
+            mpz_set(d[idx], dd);
+            red_enumerate(fac, k, idx + 1, rem2, d, form, n, m, xs, ys, np, cap);
+            if (e % 2 == 1 && v == 0) break;
+        }
+    }
+    mpz_clear(dd); mpz_clear(de); mpz_clear(rem2); mpz_clear(absrem);
+}
+
+static int thue_solve_reducible_form(const mpz_t* form, int n, const mpz_t m, ThueSol** out) {
+    /* F(x,1) = g(x): g_coeff[i] = form[n-i]. */
+    fmpz_poly_t g; fmpz_poly_init(g);
+    { fmpz_t z; fmpz_init(z); for (int i = 0; i <= n; i++) { fmpz_set_mpz(z, form[n - i]); fmpz_poly_set_coeff_fmpz(g, i, z); } fmpz_clear(z); }
+
+    fmpz_poly_factor_t fac; fmpz_poly_factor_init(fac); fmpz_poly_factor(fac, g);
+    int rc = -1;
+
+    /* distinct factors -> homogeneous binary forms */
+    int k = fac->num;
+    if (k < 2) { fmpz_poly_factor_clear(fac); fmpz_poly_clear(g); return -1; }  /* single irreducible -> Thue/decline */
+
+    RedFactor* F = malloc(sizeof(RedFactor) * (size_t)k);
+    bool have_linear = false;
+    for (int i = 0; i < k; i++) {
+        int dG = (int)fmpz_poly_degree(&fac->p[i]);
+        F[i].deg = dG; F[i].mult = (int)fac->exp[i];
+        F[i].G = malloc(sizeof(mpz_t) * (size_t)(dG + 1));
+        /* homogenise: G[p] = coeff of x^(dG-p) y^p = g_i coeff of x^(dG-p). */
+        for (int p = 0; p <= dG; p++) { mpz_init(F[i].G[p]); fmpz_t z; fmpz_init(z); fmpz_poly_get_coeff_fmpz(z, &fac->p[i], dG - p); fmpz_get_mpz(F[i].G[p], z); fmpz_clear(z); }
+        if (dG == 1) have_linear = true;
+    }
+
+    /* content c: F(x,1) = c * prod p_i^{e_i} (p_i primitive), stored in fac->c. */
+    mpz_t c; mpz_init(c); fmpz_get_mpz(c, &fac->c);
+
+    mpz_t M; mpz_init(M);
+    bool ok = have_linear && mpz_sgn(c) != 0 && mpz_divisible_p(m, c);
+    mpz_t* xs = NULL; mpz_t* ys = NULL; int np = 0, cap = 0;
+    if (ok) {
+        mpz_divexact(M, m, c);
+        mpz_t* d = malloc(sizeof(mpz_t) * (size_t)k);
+        for (int i = 0; i < k; i++) mpz_init(d[i]);
+        red_enumerate((const RedFactor*)F, k, 0, M, d, form, n, m, &xs, &ys, &np, &cap);
+        for (int i = 0; i < k; i++) mpz_clear(d[i]);
+        free(d);
+        /* package (np may be 0 -> proven empty set) */
+        ThueSol* res = malloc(sizeof(ThueSol) * (size_t)(np > 0 ? np : 1));
+        for (int i = 0; i < np; i++) { mpz_init_set(res[i].x, xs[i]); mpz_init_set(res[i].y, ys[i]); }
+        *out = res; rc = np;
+    }
+
+    for (int i = 0; i < np; i++) { mpz_clear(xs[i]); mpz_clear(ys[i]); }
+    free(xs); free(ys);
+    for (int i = 0; i < k; i++) { for (int p = 0; p <= F[i].deg; p++) mpz_clear(F[i].G[p]); free(F[i].G); }
+    free(F);
+    mpz_clear(c); mpz_clear(M);
+    fmpz_poly_factor_clear(fac); fmpz_poly_clear(g);
+    return rc;
 }
 
 /* Sentinel bound: compute the rigorous Baker/de-Weger bound internally. */
@@ -1003,6 +1231,17 @@ int thue_solve_binary_form_bounded(const mpz_t* form, int n, const mpz_t m,
 }
 
 int thue_solve_binary_form(const mpz_t* form, int n, const mpz_t m, ThueSol** out) {
+    /* Reducible F(x,1) is not a Thue equation (the TdW method needs F
+     * irreducible); when F factors into >= 2 coprime forms the solution set is
+     * finite and found by the factorisation solver. */
+    { fmpz_poly_t g; fmpz_poly_init(g);
+      fmpz_t z; fmpz_init(z);
+      for (int i = 0; i <= n; i++) { fmpz_set_mpz(z, form[n - i]); fmpz_poly_set_coeff_fmpz(g, i, z); }
+      fmpz_clear(z);
+      bool reducible = solvethue_poly_reducible(g);
+      fmpz_poly_clear(g);
+      if (reducible) return thue_solve_reducible_form(form, n, m, out);
+    }
     /* Rigorous path: enumerate with the internally-computed Baker/de-Weger
      * bound.  Until that bound lands, DECLINE cheaply -- never an unproven
      * (incomplete) answer, and no number field is built per call. */

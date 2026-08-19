@@ -113,6 +113,17 @@ static void test_rigorous(void) {
     { const long f[] = {1,0,0,-10};  check_rigorous(f, 3, 1,  1, 0, "x^3-10y^3==1 (M3 non-monogenic)"); }
     { const long f[] = {1,0,0,-20};  check_rigorous(f, 3, 1,  2, 0, "x^3-20y^3==1 (M3 non-monogenic)"); }
     { const long f[] = {1,-1,-2,-8}; check_rigorous(f, 3, 1,  1, 0, "Dedekind cubic (M3 non-monogenic)"); }
+    /* Reducible forms (F(x,1) reducible into >=2 coprime factors): finite set by
+     * factorisation, any m, cross-checked vs PARI. */
+    { const long f[] = {1,-1,-3,-1}; check_rigorous(f, 3, 1,  3, 0, "thomas-t1 reducible ((x+y)(x^2-2xy-y^2))"); }
+    { const long f[] = {1,1,1,1};    check_rigorous(f, 3, 1,  2, 0, "cubic-neg-disc reducible"); }
+    { const long f[] = {1,0,0,-1};   check_rigorous(f, 3, 7,  2, 0, "x^3-y^3==7 reducible"); }
+    { const long f[] = {1,0,0,0,-1}; check_rigorous(f, 4, 15, 4, 0, "x^4-y^4==15 reducible"); }
+    { const long f[] = {1,0,-5,0,4}; check_rigorous(f, 4, 3,  0, 0, "biquad reducible (proven {})"); }
+    /* Repeated factor (x-y)^2(x-5y): mpz_root(negative,even) guard. */
+    { const long f[] = {1,-7,11,-5}; check_rigorous(f, 3, 1,  1, 0, "(x-y)^2(x-5y)==1 repeated factor"); }
+    /* Pure power of a single factor -> infinite / PARI-refused -> DECLINE. */
+    { const long f[] = {1,-3,3,-1};  check_rigorous(f, 3, 1,  0, 1, "(x-y)^3==1 pure power (decline)"); }
     /* Still out of scope -> DECLINE: rank-2 totally-real |m| != 1 (M2b). */
     { const long f[] = {1,-3,0,1};   check_rigorous(f, 3, 2,  0, 1, "x^3-3xy^2+y^3==2 (rank-2 |m|!=1: decline)"); }
     printf("  rigorous: OK\n");
