@@ -4361,6 +4361,42 @@ static Expr* si_solve_bounded_powerleaf(Expr* expr, Expr** var, int n) {
     return result;
 }
 
+/* Fermat's Last Theorem short-circuit.  a*x^n + a*y^n - a*z^n == 0 (equal
+ * coefficient magnitudes, exponent n >= 3, no constant term) with x, y, z all
+ * strictly positive has NO solutions (Wiles 1995) -- return {} immediately
+ * rather than search the box, and independently of any upper bound so the
+ * unbounded "indefinite" form is decided too.  Returns {} on a match, else NULL
+ * (fall through to the ordinary machinery). */
+static Expr* si_solve_fermat(SICtx* c) {
+    if (c->neq != 1 || c->n != 3) return NULL;
+    const MPoly* eq = c->eq[0];
+    int vexp[3] = {0, 0, 0}, vsgn[3] = {0, 0, 0}, seen[3] = {0, 0, 0};
+    mpz_t mag; mpz_init(mag); bool have_mag = false, ok = true;
+    for (size_t t = 0; t < eq->n_terms && ok; t++) {
+        const int* ex = eq->exps + t * 3;
+        int nz = -1, cnt = 0;
+        for (int v = 0; v < 3; v++) if (ex[v] > 0) { nz = v; cnt++; }
+        if (cnt == 0) { ok = false; break; }          /* constant term: k != 0 */
+        if (cnt > 1 || seen[nz]) { ok = false; break; }
+        int s = mpz_sgn(eq->coefs[t]);
+        if (s == 0) { ok = false; break; }
+        mpz_t a; mpz_init(a); mpz_abs(a, eq->coefs[t]);
+        if (!have_mag) { mpz_set(mag, a); have_mag = true; }
+        else if (mpz_cmp(mag, a) != 0) ok = false;
+        mpz_clear(a);
+        seen[nz] = 1; vexp[nz] = ex[nz]; vsgn[nz] = s;
+    }
+    mpz_clear(mag);
+    if (!ok || !seen[0] || !seen[1] || !seen[2]) return NULL;
+    int n = vexp[0];
+    if (n < 3 || vexp[1] != n || vexp[2] != n) return NULL;   /* FLT is n >= 3 */
+    int ssum = vsgn[0] + vsgn[1] + vsgn[2];
+    if (ssum != 1 && ssum != -1) return NULL;         /* must be a^n + b^n == c^n */
+    for (int i = 0; i < 3; i++)
+        if (!(c->has_lo[i] && c->lo[i] >= 1)) return NULL;    /* strictly positive */
+    return mk_list(NULL, 0);                          /* provably no solutions */
+}
+
 Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
     if (!expr || !vars || !dom) return NULL;
     if (!(dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Integers)) return NULL;
@@ -4431,6 +4467,10 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
     /* Stage B. */
     derive_bounds(&c);
     derive_even_only_bounds(&c);   /* sign-symmetric even-power vars -> [-B, B] */
+
+    /* Fermat's Last Theorem: x^n + y^n == z^n (n >= 3, all positive) has no
+     * solutions -- decide it instantly, before any (possibly unbounded) search. */
+    { Expr* flt = si_solve_fermat(&c); if (flt) { ctx_free(&c); return flt; } }
 
     /* Per-variable degree (max over equations) and whether it is solvable as
      * an exact leaf. */

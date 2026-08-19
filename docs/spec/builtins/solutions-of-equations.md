@@ -339,6 +339,17 @@ Attempts to solve an equation or system of equations for one or more variables.
     returns `(24579, 51748, 53534)` (the classic `227 = 24579^3 + 51748^3 −
     53534^3`). The sign substitution is used only for a pure box (no orderings /
     disequations), so it stays exact.
+  - **Fermat's Last Theorem.** `x^n + y^n == z^n` (n >= 3, equal coefficient
+    magnitudes, no constant) with `x, y, z` all strictly positive has no
+    solutions (Wiles 1995), so this returns `{}` *immediately*, before any
+    search and with no need for a finite box:
+    `Solve[x^3 + y^3 == z^3 && z > x > y > 0 && x,y,z < 10000, {x,y,z}, Integers]`
+    -> `{}` in ~0.4 ms (was ~2.6 s), and the unbounded
+    `Solve[x^3 + y^3 == z^3 && x>0 && y>0 && z>0, {x,y,z}, Integers]` -> `{}`
+    instantly rather than declining. The check fires only on the exact
+    `a^n + b^n == c^n` shape with every lower bound `>= 1`; `n = 2` still returns
+    Pythagorean triples, `x^3 + y^3 == z^3 + 1` still solves normally, and a box
+    admitting `0` / negatives still enumerates the `(0, a, a)` solutions.
   - **Unbounded Pell -> parametric family.** `x^2 - D y^2 == 1 && x>0 && y>0`
     with no bound returns the fundamental-unit family as a
     `ConditionalExpression` on `C[1] >= 1`:
