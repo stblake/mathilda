@@ -49,6 +49,7 @@ NFUnits* nf_fundamental_units(NumberField* K) { (void)K; return NULL; }
 
 #include <flint/arb.h>
 #include <flint/arf.h>
+#include "linalg.h"     /* lll_reduce_q for the Minkowski basis reduction */
 
 /* ---- small integer helpers (all q < ~10^6, products fit in 64 bits) ---- */
 
@@ -88,18 +89,86 @@ typedef struct {
 } Cand;
 
 /* O_K-coords c -> theta-power NUMERATOR v (v = sum_i c_i * B[i], so the element
- * is (1/D) v).  int64 arithmetic (box coords + basis are small); returns false
- * on overflow (candidate skipped -- safe). */
-static bool ok_theta_i64(NumberField* K, const int64_t* c, int64_t* v) {
-    int deg = nf_degree(K);
-    const mpz_t* B = nf_ok_basis(K);
+ * is (1/D) v), over an explicit basis B (deg*deg row-major int64).  int64
+ * arithmetic; returns false on overflow (candidate skipped -- safe). */
+static bool ok_theta_basis(int deg, const int64_t* B, const int64_t* c, int64_t* v) {
     for (int j = 0; j < deg; j++) {
         __int128 acc = 0;
-        for (int i = 0; i < deg; i++) if (c[i]) acc += (__int128)c[i] * (__int128)mpz_get_si(B[i*deg + j]);
+        for (int i = 0; i < deg; i++) if (c[i]) acc += (__int128)c[i] * (__int128)B[i*deg + j];
         if (acc > (__int128)INT64_MAX || acc < (__int128)INT64_MIN) return false;
         v[j] = (int64_t)acc;
     }
     return true;
+}
+
+/* Minkowski-LLL-reduce the O_K integral basis into Bred (deg*deg int64,
+ * row-major theta-power numerators spanning the SAME lattice L = D*O_K).  A
+ * poorly-conditioned Round-2 HNF basis can hide short units from the coefficient
+ * box; reducing w.r.t. the T2 (Minkowski) form makes them small-coord.  Returns
+ * false (leaves Bred = the raw basis) if anything is out of int64 range. */
+static bool minkowski_lll_basis(NumberField* K, int64_t* Bred) {
+    int deg = nf_degree(K), r1 = nf_r1(K), r2 = nf_r2(K);
+    const mpz_t* B = nf_ok_basis(K);
+    for (int i = 0; i < deg * deg; i++) Bred[i] = (int64_t)mpz_get_si(B[i]);   /* default: raw */
+    if (!nf_ensure_prec(K, 256)) return false;
+
+    /* augmented rows: [ round(2^P * minkowski(B[i])) (deg cols) | e_i (deg cols) ];
+     * LLL over the metric-dominated lattice records the unimodular transform. */
+    const long P = 40;
+    mpq_t* rows = malloc(sizeof(mpq_t) * (size_t)deg * (size_t)(2 * deg));
+    for (int i = 0; i < deg * 2 * deg; i++) mpq_init(rows[i]);
+    acb_t z; acb_init(z); arb_t re; arb_init(re);
+    fmpz_t fz; fmpz_init(fz); mpz_t tmp; mpz_init(tmp);
+    mpz_t* brow = malloc(sizeof(mpz_t) * (size_t)deg);
+    for (int i = 0; i < deg; i++) mpz_init(brow[i]);
+    bool ok = true;
+    for (int i = 0; i < deg && ok; i++) {
+        for (int j = 0; j < deg; j++) mpz_set_si(brow[j], Bred[i*deg + j]);
+        int col = 0;
+        for (int k = 0; k < r1 + r2 && ok; k++) {          /* Minkowski coords */
+            nf_embed_int(K, (const mpz_t*)brow, k, z);
+            if (k < r1) {                                  /* real: sigma_k */
+                arb_set(re, acb_realref(z)); arb_mul_2exp_si(re, re, P);
+                arf_get_fmpz(fz, arb_midref(re), ARF_RND_NEAR); fmpz_get_mpz(tmp, fz);
+                mpq_set_z(rows[i*(2*deg) + col++], tmp);
+            } else {                                       /* complex: sqrt2*Re, sqrt2*Im */
+                arb_set(re, acb_realref(z)); arb_mul_2exp_si(re, re, P + 1);   /* ~ *2 (sqrt2^2) approx */
+                arf_get_fmpz(fz, arb_midref(re), ARF_RND_NEAR); fmpz_get_mpz(tmp, fz);
+                mpq_set_z(rows[i*(2*deg) + col++], tmp);
+                arb_set(re, acb_imagref(z)); arb_mul_2exp_si(re, re, P + 1);
+                arf_get_fmpz(fz, arb_midref(re), ARF_RND_NEAR); fmpz_get_mpz(tmp, fz);
+                mpq_set_z(rows[i*(2*deg) + col++], tmp);
+            }
+        }
+        for (int j = 0; j < deg; j++) mpq_set_si(rows[i*(2*deg) + deg + j], (i == j) ? 1 : 0, 1);
+    }
+    if (ok && lll_reduce_q(rows, deg, 2 * deg, NULL) == 0) {
+        /* transform U = identity block; Bred[i] = sum_j U[i][j] B[j]. */
+        long U[64];   /* deg <= 32 guaranteed by the caller (deg>32 declines) */
+        bool small = true;
+        for (int i = 0; i < deg && small; i++)
+            for (int j = 0; j < deg; j++) {
+                mpq_ptr e = rows[i*(2*deg) + deg + j];
+                if (mpz_cmp_ui(mpq_denref(e), 1) != 0 || !mpz_fits_slong_p(mpq_numref(e))) { small = false; break; }
+                U[i*deg + j] = mpz_get_si(mpq_numref(e));
+            }
+        if (small) {
+            for (int i = 0; i < deg && small; i++)
+                for (int j = 0; j < deg; j++) {
+                    __int128 acc = 0;
+                    for (int t = 0; t < deg; t++) acc += (__int128)U[i*deg + t] * (__int128)mpz_get_si(B[t*deg + j]);
+                    if (acc > (__int128)INT64_MAX || acc < (__int128)INT64_MIN) { small = false; break; }
+                    Bred[i*deg + j] = (int64_t)acc;
+                }
+            if (!small) for (int i = 0; i < deg*deg; i++) Bred[i] = (int64_t)mpz_get_si(B[i]);  /* fall back */
+        }
+    }
+    for (int i = 0; i < deg * 2 * deg; i++) mpq_clear(rows[i]);
+    free(rows);
+    for (int i = 0; i < deg; i++) mpz_clear(brow[i]);
+    free(brow);
+    acb_clear(z); arb_clear(re); fmpz_clear(fz); mpz_clear(tmp);
+    return ok;
 }
 
 /* Log-embedding of the O_K element (1/D)v (v = theta-power numerator) into a
@@ -344,8 +413,18 @@ NFUnits* nf_fundamental_units(NumberField* K) {
     enum { CAND_CAP = 40000 };
     Cand* cand = malloc(sizeof(Cand) * CAND_CAP);
     int ncand = 0;
-    int64_t* c  = malloc(sizeof(int64_t) * (size_t)deg);   /* O_K-coords (enum index) */
-    int64_t* vv = malloc(sizeof(int64_t) * (size_t)deg);   /* theta-numerator v = sum c_i B[i] */
+    int64_t* c  = malloc(sizeof(int64_t) * (size_t)deg);   /* basis-coords (enum index) */
+    int64_t* vv = malloc(sizeof(int64_t) * (size_t)deg);   /* theta-numerator v = sum c_i Bred[i] */
+    /* Search basis: raw O_K basis when monogenic (D == 1, identity), else a
+     * Minkowski-LLL-reduced basis of L so short units become small-coord (the
+     * raw Round-2 HNF basis can hide them from the box). */
+    int64_t* Bred = malloc(sizeof(int64_t) * (size_t)deg * (size_t)deg);
+    if (mpz_cmp_ui(Dden, 1) == 0) {
+        const mpz_t* B0 = nf_ok_basis(K);
+        for (int i = 0; i < deg * deg; i++) Bred[i] = (int64_t)mpz_get_si(B0[i]);   /* identity */
+    } else {
+        minkowski_lll_basis(K, Bred);
+    }
 
     /* Grow the box one shell at a time; after each shell, greedily pick the
      * SHORTEST r independent units and try to CERTIFY them by p-saturation.
@@ -374,7 +453,7 @@ NFUnits* nf_fundamental_units(NumberField* K) {
             long t = idx; bool has_hi = false;
             for (int i = 0; i < deg; i++) { int d = (int)(t % W) - B; c[i] = d; if (abs(d) == B) has_hi = true; t /= W; }
             if (B > 1 && !has_hi) continue;             /* only new shell for B>1 */
-            if (!ok_theta_i64(K, c, vv)) continue;      /* O_K-coords -> theta-numerator v */
+            if (!ok_theta_basis(deg, Bred, c, vv)) continue;   /* basis-coords -> theta-numerator v */
             if (!canonical_sign(vv, deg)) continue;     /* skips 0 and -u dups */
             if (!is_unit_v(K, vv, Dn)) continue;        /* |N(v)| == D^deg */
             /* dedupe exact theta-numerators */
@@ -405,7 +484,7 @@ NFUnits* nf_fundamental_units(NumberField* K) {
         for (int j = 0; j < r; j++) for (int i = 0; i < deg; i++) mpz_set_si(selz[j][i], (long)sel[j][i]);
         if (cert_saturate(K, selz, r, R, Dden)) ok = true;    /* certified fundamental -> stop */
     }
-    free(c); free(vv);
+    free(c); free(vv); free(Bred);
     if (udbg) fprintf(stderr, "[units-prof] search+certify (%d cand, ok=%d): %.1fms\n", ncand, ok, (clock()-ut)*1000.0/CLOCKS_PER_SEC);
 
     /* Fallback for large-regulator RANK-1 complex cubics whose fundamental
