@@ -38,9 +38,10 @@ static bool mask_from_image(const Expr* e, size_t* w, size_t* h, unsigned char**
     unsigned char* m;
 
     if (!image_load(e, &ww, &hh, &cc, &buf)) return false;
-    m = (unsigned char*)malloc(ww * hh ? ww * hh : 1);
+    size_t npix = ww * hh;
+    m = (unsigned char*)malloc(npix ? npix : 1);
     if (!m) { free(buf); return false; }
-    for (i = 0; i < ww * hh; i++) {
+    for (i = 0; i < npix; i++) {
         double s = 0.0;
         for (k = 0; k < cc; k++) s += buf[i * cc + k];
         m[i] = (s / (double)cc) >= 0.5 ? 1 : 0;
@@ -85,7 +86,8 @@ static int neighbour_count(const unsigned char p[8])
  * pixels deleted, which is what tells the caller whether the skeleton has settled. */
 static size_t thin_pass(unsigned char* m, size_t w, size_t h, bool second)
 {
-    unsigned char* del = (unsigned char*)calloc(w * h ? w * h : 1, 1);
+    size_t npix = w * h;
+    unsigned char* del = (unsigned char*)calloc(npix ? npix : 1, 1);
     size_t x, y, n = 0;
     if (!del) return 0;
 
@@ -113,7 +115,7 @@ static size_t thin_pass(unsigned char* m, size_t w, size_t h, bool second)
     /* Deleted TOGETHER, after the whole pass. Deleting in place would let a pixel's removal change
      * the verdict on its neighbour mid-pass, which is exactly the connectivity break the two
      * subiterations exist to avoid. */
-    for (y = 0; y < w * h; y++)
+    for (y = 0; y < npix; y++)
         if (del[y]) { m[y] = 0; n++; }
     free(del);
     return n;
@@ -124,7 +126,8 @@ static size_t thin_pass(unsigned char* m, size_t w, size_t h, bool second)
  * deleted isolated pixels would quietly remove every one-pixel component. */
 static size_t prune_pass(unsigned char* m, size_t w, size_t h)
 {
-    unsigned char* del = (unsigned char*)calloc(w * h ? w * h : 1, 1);
+    size_t npix = w * h;
+    unsigned char* del = (unsigned char*)calloc(npix ? npix : 1, 1);
     size_t x, y, i, n = 0;
     if (!del) return 0;
     for (y = 0; y < h; y++) {
@@ -135,7 +138,7 @@ static size_t prune_pass(unsigned char* m, size_t w, size_t h)
             if (neighbour_count(p) == 1) del[y * w + x] = 1;
         }
     }
-    for (i = 0; i < w * h; i++)
+    for (i = 0; i < npix; i++)
         if (del[i]) { m[i] = 0; n++; }
     free(del);
     return n;

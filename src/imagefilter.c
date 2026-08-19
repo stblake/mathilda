@@ -2805,7 +2805,10 @@ static Expr* builtin_distancetransform(Expr* res) {
 
     double* f = malloc(sizeof(double) * n);
     double* tmp = malloc(sizeof(double) * (w > h ? w : h));
-    double* line = malloc(sizeof(double) * (w > h ? w : h));
+    /* calloc, not malloc: the per-row/col loop fills line[0..len) before dt_1d reads it, but GCC
+       cannot relate that trip count to dt_1d's reads and flags a phantom uninitialized read on the
+       degenerate len==0 path. Zero-init settles it at negligible cost. */
+    double* line = calloc((w > h ? w : h), sizeof(double));
     size_t* vv = malloc(sizeof(size_t) * (w > h ? w : h));
     double* zz = malloc(sizeof(double) * ((w > h ? w : h) + 1));
     Expr* out = NULL;
@@ -3179,7 +3182,10 @@ static bool structure_tensor(const double* g, size_t w, size_t h, size_t r,
     double* dy = malloc(sizeof(double) * w * h);
     size_t gkh = 0, gkw = 0;
     double* gk = gauss2_buf(r, &gkh, &gkw);
-    double* tmp = malloc(sizeof(double) * w * h);
+    /* calloc, not malloc: the loop below fills tmp[0..w*h) before convolve_dispatch reads it, but
+       GCC cannot relate that trip count to the read and flags a phantom uninitialized read on the
+       degenerate w*h==0 path. Zero-init settles it at negligible cost. */
+    double* tmp = calloc(w * h, sizeof(double));
     bool ok = false;
     if (kx && ky && dx && dy && gk && tmp) {
         convolve_dispatch(g, dx, w, h, 1, kx, kwx, khx);

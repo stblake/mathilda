@@ -40,7 +40,10 @@ void ml_column_sd(const double* x, size_t n, size_t dim, const double* mean,
 }
 
 void ml_standardize(double* x, size_t n, size_t dim, bool rescale) {
-    double* mean = malloc(sizeof(double) * dim);
+    /* calloc, not malloc: ml_column_mean fills mean[0..dim) before ml_column_sd reads it, but GCC
+       cannot relate that trip count to the read and flags a phantom uninitialized read on the
+       degenerate dim==0 path. Zero-init settles it at negligible cost. */
+    double* mean = calloc(dim, sizeof(double));
     double* sd   = rescale ? malloc(sizeof(double) * dim) : NULL;
     if (!mean || (rescale && !sd)) { free(mean); free(sd); return; }
     ml_column_mean(x, n, dim, mean);

@@ -1,5 +1,28 @@
 cmake_minimum_required(VERSION 3.10)
-project(Mathilda_tests)
+
+# Mathilda builds with real GCC only, never Apple clang (mirrors the makefile's CC
+# rule). CMake otherwise defaults to the system compiler — clang on macOS — so pick a
+# genuine gcc BEFORE project() unless the caller set CMAKE_C_COMPILER explicitly.
+if(NOT DEFINED CMAKE_C_COMPILER)
+  find_program(MATHILDA_GCC NAMES gcc-16 gcc-15 gcc-14 gcc-13 gcc)
+  if(MATHILDA_GCC)
+    set(CMAKE_C_COMPILER "${MATHILDA_GCC}" CACHE FILEPATH "C compiler (real GCC required)")
+  endif()
+endif()
+
+# Tests are C only; naming the language stops CMake probing for a C++ (clang++)
+# compiler it would never use.
+project(Mathilda_tests C)
+
+# Enforce the rule: the resolved compiler must be GNU GCC, not clang / AppleClang. A
+# stale build dir configured earlier with clang keeps its cached compiler, so this
+# fires there too — remove the build dir (rm -rf build) and reconfigure.
+if(NOT CMAKE_C_COMPILER_ID STREQUAL "GNU")
+  message(FATAL_ERROR
+    "Mathilda tests must be built with real GCC, not '${CMAKE_C_COMPILER_ID}' "
+    "(${CMAKE_C_COMPILER}). Install Homebrew GCC (brew install gcc), then configure a "
+    "CLEAN build dir (rm -rf build) or pass -DCMAKE_C_COMPILER=gcc-16.")
+endif()
 
 # Without this, CMake generates no CTestTestfile.cmake and `ctest` silently
 # runs zero tests — every add_test() below was inert.  Note that enabling it
@@ -39,6 +62,13 @@ if(USE_LAPACK)
         find_library(MATHILDA_ACCELERATE Accelerate)
         if(MATHILDA_ACCELERATE)
             add_compile_definitions(USE_LAPACK MATHILDA_USE_ACCELERATE)
+            # Apple's vecLib SSE headers (vBasicOps.h) feed Apple vector types
+            # (vUInt32, …) to the _mm_* intrinsics; real GCC rejects those as
+            # incompatible with __m128i without this flag, while clang accepts them
+            # natively. The top-level makefile pairs Accelerate with the same flag
+            # (search -flax-vector-conversions there) — mirror it so the GCC-only
+            # test build compiles the Accelerate path.
+            add_compile_options(-flax-vector-conversions)
             link_libraries(${MATHILDA_ACCELERATE})
         else()
             message(WARNING "Accelerate framework not found; building tests with USE_LAPACK=OFF")

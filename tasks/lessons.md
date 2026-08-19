@@ -2679,3 +2679,33 @@ the unit path under-ran). Fixing only the interpreter would have left
   `Solve[x^2==2, x, Modulus->7]` silently returned the non-modular `±Sqrt[2]`.
   When wiring such an option, the non-handled shapes must *refuse* (unevaluated),
   never fall through to the default path.
+
+## Build: GCC only, never clang (2026-08-19)
+- **Mathilda is built with real GCC only — never Apple/LLVM clang** (user's firm
+  rule). On macOS plain `gcc` is a clang symlink; clang gives a false "clean"
+  signal because it misses the exact Linux/glibc warning classes the CI gates on.
+  The makefile now HARD-ERRORs (was only a warning) if the selected compiler
+  reports itself as clang — covering autodetect *and* explicit `CC=clang`. The
+  tests `CMakeLists.txt` pins `CMAKE_C_COMPILER` to a real gcc before
+  `project(... C)` and `FATAL_ERROR`s unless `CMAKE_C_COMPILER_ID == GNU`. The old
+  `tests/build*` dirs were silently clang-configured (`.../CommandLineTools/.../cc`);
+  removed so they reconfigure with gcc.
+- **`make` here already uses Homebrew `gcc-16`, so a full local build reproduces
+  the Linux GCC-only warnings** clang never emits. Two recurring classes clang
+  hides: `-Wint-in-bool-context` (a `*`/`<<` product used as a bool, e.g. the
+  zero-size guard `malloc(w*h ? w*h : 1)` — hoist the product into a local so the
+  `?:` condition is a plain value) and interprocedural `-Wmaybe-uninitialized` on a
+  heap buffer a loop fills before passing it as `const*` to a callee (GCC can't
+  relate the loop trip count to the callee's reads on the len==0 path — fix with
+  `calloc` instead of `malloc`, the house style from commit c62ba17a).
+- **Sweep recipe:** `make clean && make -j8 -k 2>log; grep -E "warning:|error:" log`.
+  A warning inside `src/external/` (e.g. stb `invalid_chunk`) is fixed by extending
+  the `#pragma GCC diagnostic ignored` block in the *wrapper* TU (`src/imageio.c`),
+  never by editing the vendored header.
+- **macOS Accelerate + GCC needs `-flax-vector-conversions`.** Switching the test
+  build to gcc exposed why tests had used clang: Apple's vecLib `vBasicOps.h`
+  (Accelerate LAPACK path) passes Apple vector types to `_mm_*` intrinsics that gcc
+  rejects as incompatible with `__m128i` (clang accepts them). The makefile already
+  pairs its Darwin/Accelerate branch with `-flax-vector-conversions`; the tests
+  `CMakeLists.txt` now mirrors it. Any macOS build path enabling Accelerate must carry
+  this flag or `src/ml/pca.c` (and other LAPACK consumers) fail to compile under gcc.

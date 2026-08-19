@@ -124,8 +124,13 @@ bool fm_run_tnc(Expr* f, Expr** vars, size_t n,
                        const FmOpts* opts,
                        double* fx_out) {
     (void)vars;
+    /* gm and active use calloc, not malloc: the per-iteration loop below fills all n elements
+       before passing them (as const*) to fm_tnc_cg, but GCC cannot relate the trip count n to the
+       reads inside fm_tnc_cg and flags a phantom uninitialized read on the degenerate n==0 path.
+       Zero-init settles it at negligible once-per-solve cost. The other buffers are written inside
+       the CG inner loop before use, so they do not warn. */
     double* g      = (double*)malloc(sizeof(double) * n);  /* base grad, cached  */
-    double* gm     = (double*)malloc(sizeof(double) * n);  /* masked gradient    */
+    double* gm     = (double*)calloc(n, sizeof(double));   /* masked gradient    */
     double* g_new  = (double*)malloc(sizeof(double) * n);
     double* p      = (double*)malloc(sizeof(double) * n);  /* CG step / direction*/
     double* r      = (double*)malloc(sizeof(double) * n);  /* CG residual        */
@@ -134,7 +139,7 @@ bool fm_run_tnc(Expr* f, Expr** vars, size_t n,
     double* xpert  = (double*)malloc(sizeof(double) * n);  /* Hv scratch         */
     double* gpert  = (double*)malloc(sizeof(double) * n);  /* Hv scratch         */
     double* x_new  = (double*)malloc(sizeof(double) * n);
-    bool*   active = (bool*)malloc(sizeof(bool) * n);
+    bool*   active = (bool*)calloc(n, sizeof(bool));
     bool ok = false;
     double fx = 0.0;
     if (!g || !gm || !g_new || !p || !r || !d || !Hd || !xpert || !gpert

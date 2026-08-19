@@ -42,6 +42,10 @@
 /* With internal linkage (below) any stb entry point imageio.c never calls is an "unused static
  * function"; harmless for a vendored header we deliberately include whole. */
 #pragma GCC diagnostic ignored "-Wunused-function"
+/* Because we define STBI_FAILURE_USERMSG (below), stb's stbi__err(x,y) expands to stbi__err(y) and
+ * discards x. One PNG error site builds an x it then never reads (invalid_chunk), which GCC flags
+ * as set-but-not-used. Upstream, unfixable without editing the vendored header. */
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #endif
 
 /* STB_IMAGE_STATIC / STB_IMAGE_WRITE_STATIC give every stb function internal linkage, so its code

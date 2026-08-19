@@ -16,24 +16,31 @@ else
   BUILD_PLATFORM := Windows
 endif
 
-# Compiler. Mathilda must be built with a REAL GCC, never Apple's clang shim:
-# on macOS the plain `gcc` is a symlink to Apple clang, so a naive `CC = gcc`
-# silently builds with LLVM (the $Version banner then reads "Apple LLVM ...").
-# Auto-detect a genuine GCC by trying the newest Homebrew `gcc-NN` first and
-# falling back to a plain `gcc` (which IS real GCC on most Linux distros). We
-# only pick a name when CC was not set explicitly, so `make CC=clang` (or any
-# other override on the command line / in the environment) is still honoured.
-# A versioned name is fine here because it is *tried*, not hardcoded — hosts
-# without it fall through to the next candidate.
+# Compiler. Mathilda must be built with a REAL GCC, never Apple's clang shim: on
+# macOS the plain `gcc` is a symlink to Apple clang, and LLVM both miscompiles some
+# of our -std=c99 paths and hides the glibc portability class the Linux CI gates on.
+# "GCC only, never clang" is a HARD rule for this project — enforced below as an
+# error, not a warning.
+#
+# Auto-detect a genuine GCC by trying the newest Homebrew `gcc-NN` first and falling
+# back to a plain `gcc` (which IS real GCC on most Linux distros). We only pick a
+# name when CC was not set explicitly, so `make CC=gcc-14` (or any other override on
+# the command line / in the environment) is still honoured. A versioned name is fine
+# here because it is *tried*, not hardcoded — hosts without it fall through.
 ifeq ($(origin CC),default)
   CC := $(shell for c in gcc-16 gcc-15 gcc-14 gcc-13 gcc; do \
                   command -v $$c >/dev/null 2>&1 && { echo $$c; break; }; \
                 done)
-  # Warn loudly if the only `gcc` we found is really Apple clang — the build
-  # still proceeds, but the operator should install a real GCC (brew install gcc).
-  ifneq ($(shell $(CC) --version 2>/dev/null | grep -ci clang),0)
-    $(warning Mathilda: '$(CC)' is Apple clang, not real GCC — install Homebrew GCC (brew install gcc) for a supported build.)
+  ifeq ($(strip $(CC)),)
+    $(error Mathilda: no C compiler found. Mathilda builds with real GCC only — install Homebrew GCC (brew install gcc).)
   endif
+endif
+# Enforce the rule for BOTH the autodetected name and an explicit CC=...: if the
+# selected compiler reports itself as clang, STOP rather than silently produce an
+# unsupported binary. The fix is always `brew install gcc`, then build with the
+# default CC (or CC=gcc-NN).
+ifneq ($(shell $(CC) --version 2>/dev/null | grep -ci clang),0)
+  $(error Mathilda: '$(CC)' is clang, not GCC — Mathilda must be built with real GCC. Install Homebrew GCC (brew install gcc) and use the default CC or CC=gcc-16.)
 endif
 # `-Werror=implicit-function-declaration`: under -std=c99 glibc hides every
 # POSIX symbol, so reaching for one without a feature-test macro leaves the
