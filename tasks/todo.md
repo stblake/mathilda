@@ -97,7 +97,16 @@ now warns once; all-vars-present and bare-parameter-in-equation cases stay silen
 to new code (only macOS libobjc/dyld baseline noise). Docs: changelog
 `2026-08-17.md` + `solutions-of-equations.md` updated.
 
+**SPF sieve + 128-bit reach — DONE (follow-on).** `si_build_spf` (per-solve
+smallest-prime-factor table, O(log d) factoring) + `__int128` part-2 arithmetic
+(`si_isqrt_i128`) + `SI_BK_DMAX` 3e5→3e6 + `SI_BK_MAXNODES=1e9` candidate
+backstop. Reach ~1e6 → ~1e7 coords: `x^3+y^3+z^3==2` finds the point at
+**5 821 795** (radius-6e6 box) in ~16 s (radius 2e6 → 1 971 055 in ~4 s), all
+verified; oversized boxes decline instantly (no hang). Correctness re-checked:
+801-target box cross-check and 45 149-pair primitive check both 0 mismatches;
+`make check-c99` clean; `solve_integers_tests` pass.
+
 **Known scope limits (deliberate, documented):** Booker gated to |k|<~1e9 and
-Dmax≤3e5 (coords ~1e6, not Booker's 1e16 — that needs the factorless SPF sieve +
-batch inversion). Perfect-cube / large-family boxes decline rather than emit
-O(B) tuples. `MATHILDA_BK_FORCE=1` bypasses the size gate for validation.
+Dmax≤3e6 (coords ~1e7). Perfect-cube / large-family boxes decline rather than
+emit O(B) tuples. Not Booker's 1e16 (needs batch inversion + a cluster).
+`MATHILDA_BK_FORCE=1` bypasses the size gate for validation.

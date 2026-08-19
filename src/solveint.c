@@ -3543,10 +3543,11 @@ static bool si_solve_elliptic_bqf(SICtx* c, SearchState* st) {
  *  and intermediate fits in int64.
  * ================================================================== */
 
-#define SI_BK_BRUTE_P   4096LL     /* brute-force prime moduli up to this   */
-#define SI_BK_DMAX      300000LL   /* max divisor d handled (int64-safe box) */
-#define SI_BK_ROOTCAP   4096       /* max cube roots mod d before declining  */
-#define SI_BK_SOLCAP    200000     /* decline if the box holds a huge family  */
+#define SI_BK_BRUTE_P   4096LL         /* brute-force prime moduli up to this   */
+#define SI_BK_DMAX      3000000LL      /* max divisor d (coords to ~1e7, SPF-fed)*/
+#define SI_BK_ROOTCAP   4096           /* max cube roots mod d before declining  */
+#define SI_BK_SOLCAP    200000         /* decline if the box holds a huge family */
+#define SI_BK_MAXNODES  1000000000LL   /* part-2 candidate backstop (decline)    */
 
 /* Modular inverse of a mod m (both positive, gcd(a,m)==1), int64. */
 static int64_t si_inv_i64(int64_t a, int64_t m) {
@@ -3586,6 +3587,41 @@ static void si_factor_i64(int64_t d, int64_t* primes, unsigned* exps, int* np) {
         primes[*np] = p; exps[*np] = e; (*np)++;
     }
     if (d > 1) { primes[*np] = d; exps[*np] = 1; (*np)++; }
+}
+
+/* Factor d via a precomputed smallest-prime-factor sieve: O(number of prime
+ * factors) instead of O(sqrt d), so the divisor loop can range far wider. */
+static void si_factor_spf(int64_t d, const int32_t* spf, int64_t* primes,
+                          unsigned* exps, int* np) {
+    *np = 0;
+    while (d > 1) {
+        int64_t p = spf[d]; unsigned e = 0;
+        while (d % p == 0) { d /= p; e++; }
+        primes[*np] = p; exps[*np] = e; (*np)++;
+    }
+}
+
+/* Build the smallest-prime-factor table for [0, n]; spf[i] = least prime | i
+ * (spf[0]=spf[1]=0).  Caller owns the returned buffer (NULL on OOM). */
+static int32_t* si_build_spf(int64_t n) {
+    int32_t* spf = (int32_t*)calloc((size_t)n + 1, sizeof(int32_t));
+    if (!spf) return NULL;
+    for (int64_t i = 2; i <= n; i++) {
+        if (spf[i]) continue;                         /* already has a factor */
+        for (int64_t j = i; j <= n; j += i)
+            if (!spf[j]) spf[j] = (int32_t)i;
+    }
+    return spf;
+}
+
+/* Exact floor(sqrt(n)) for a nonnegative 128-bit n (long double seed + adjust). */
+static int64_t si_isqrt_i128(__int128 n) {
+    if (n <= 0) return 0;
+    int64_t r = (int64_t)sqrtl((long double)n);
+    if (r < 1) r = 1;
+    while ((__int128)r * r > n) r--;
+    while ((__int128)(r + 1) * (r + 1) <= n) r++;
+    return r;
 }
 
 /* ALL cube roots of a (mod p), p an odd prime, a in [0,p).  Writes the
@@ -3660,13 +3696,16 @@ static int si_croots_mod_pe(int64_t* out, int64_t a, int64_t p,
 
 /* ALL residues r in [0,d) with r^3 ≡ k (mod d).  Returns the count, or -1 if
  * the root set would exceed `cap` (caller must then decline: never truncate).
- * `out` must have capacity `cap`. */
-static int si_all_cube_roots_mod(int64_t* out, int cap, const mpz_t k, int64_t d) {
+ * `out` must have capacity `cap`.  `spf`, if non-NULL, factors d in O(log d)
+ * (a smallest-prime-factor table covering d); otherwise trial division is used. */
+static int si_all_cube_roots_mod(int64_t* out, int cap, const mpz_t k, int64_t d,
+                                 const int32_t* spf) {
     if (d == 1) { if (cap < 1) return -1; out[0] = 0; return 1; }
     if (cap > SI_BK_ROOTCAP) cap = SI_BK_ROOTCAP;
     int64_t kd = mpz_fdiv_ui(k, (unsigned long)d);   /* k mod d, in [0,d) */
     int64_t primes[16]; unsigned exps[16]; int np;
-    si_factor_i64(d, primes, exps, &np);
+    if (spf) si_factor_spf(d, spf, primes, exps, &np);
+    else     si_factor_i64(d, primes, exps, &np);
     /* Accumulate via CRT over prime powers. acc holds residues mod `mod_acc`. */
     static int64_t acc[SI_BK_ROOTCAP], newacc[SI_BK_ROOTCAP], rp[SI_BK_ROOTCAP];
     int nacc = 1; acc[0] = 0; int64_t mod_acc = 1;
@@ -3709,7 +3748,7 @@ static Expr* builtin_cube_roots_mod(Expr* res) {
     mpz_t k; mpz_init(k); expr_to_mpz(ke, k);
     enum { CAP = 4096 };
     int64_t roots[CAP];
-    int nr = si_all_cube_roots_mod(roots, CAP, k, d);
+    int nr = si_all_cube_roots_mod(roots, CAP, k, d, NULL);
     mpz_clear(k);
     if (nr < 0) return NULL;
     /* sort ascending (simple insertion; nr is small). */
@@ -3730,16 +3769,16 @@ static Expr* builtin_cube_roots_mod(Expr* res) {
  * that lands in the box.  vals already carries the modular variable; iv/jv are
  * the pair positions. */
 static void si_bk_emit_pair(SICtx* c, SearchState* st, int iv, int jv,
-                            int64_t d, int64_t m, int64_t* vals) {
+                            int64_t d, __int128 m, int64_t* vals) {
     if (m == 0) return;                              /* x=-y family: part1 covers it */
-    int64_t am = (m < 0) ? -m : m;
+    __int128 am = (m < 0) ? -m : m;
     if (am % d != 0) return;                          /* not a divisor (guard) */
-    int64_t q = am / d;                               /* x^2 - xy + y^2 > 0 */
-    int64_t disc = 4 * q - d * d;
+    __int128 q = am / d;                              /* x^2 - xy + y^2 > 0 */
+    __int128 disc = 4 * q - (__int128)d * d;
     if (disc < 0 || disc % 3 != 0) return;
     disc /= 3;
-    int64_t R = si_isqrt_i64(disc);
-    if (R * R != disc) return;                        /* not a perfect square */
+    int64_t R = si_isqrt_i128(disc);
+    if ((__int128)R * R != disc) return;              /* not a perfect square */
     int64_t s = (m > 0) ? d : -d;                     /* s = x + y = sgn(m)*d */
     for (int rs = 1; rs >= -1; rs -= 2) {
         int64_t num = s + (int64_t)rs * R;
@@ -3810,7 +3849,13 @@ static bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
     /* T = floor(|k|^{1/3}). */
     int64_t T = 0; while ((T + 1) * (T + 1) * (T + 1) <= absk) T++;
 
-    st->max_visits = SI_MAX_NODES;
+    /* Smallest-prime-factor sieve over [0, Dmax]: factors every divisor in
+     * O(log d), so the enumeration is dominated by the candidate loop, not by
+     * factoring.  Sized to Dmax, so small boxes stay cheap. */
+    int32_t* spf = si_build_spf(Dmax);
+    if (!spf) { mpz_clear(K); return false; }
+
+    st->max_visits = SI_BK_MAXNODES;
     int64_t vals[SI_MAX_VARS];
 
     /* ---- part 1: smallest coordinate <= T (per role), divisor-solve pair. ---- */
@@ -3838,7 +3883,7 @@ static bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
     int64_t roots[SI_BK_ROOTCAP];
     for (int64_t d = 1; d <= Dmax && !st->overflow && !incomplete; d++) {
         if (st->nsol > SI_BK_SOLCAP) { incomplete = true; break; }
-        int nr = si_all_cube_roots_mod(roots, SI_BK_ROOTCAP, K, d);
+        int nr = si_all_cube_roots_mod(roots, SI_BK_ROOTCAP, K, d, spf);
         if (nr < 0) { incomplete = true; break; }     /* too many roots: bail */
         if (nr == 0) continue;
         for (int r = 0; r < 3 && !st->overflow; r++) {
@@ -3847,9 +3892,10 @@ static bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
             for (int ridx = 0; ridx < nr; ridx++) {
                 int64_t start = lo + ((((roots[ridx] - lo) % d) + d) % d);
                 for (int64_t v = start; v <= hi && !st->overflow; v += d) {
+                    if (++st->visits > st->max_visits) { st->overflow = true; break; }
                     if (v >= -T && v <= T) continue;   /* handled by part 1 */
-                    int64_t v3 = v * v * v;            /* |v|<=B<=~1.15e6 -> fits */
-                    int64_t m = Ki - v3;
+                    __int128 v3 = (__int128)v * v * v; /* |v| up to ~1e7 */
+                    __int128 m = (__int128)Ki - v3;
                     for (int q = 0; q < 3; q++) vals[q] = 0;
                     vals[r] = v;
                     si_bk_emit_pair(c, st, iv, jv, d, m, vals);
@@ -3858,6 +3904,7 @@ static bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
         }
     }
 
+    free(spf);
     mpz_clear(K);
     if (incomplete || st->overflow) { st->nsol = 0; return false; }
     return true;

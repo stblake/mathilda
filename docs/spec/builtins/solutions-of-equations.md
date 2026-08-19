@@ -327,7 +327,12 @@ Attempts to solve an equation or system of equations for one or more variables.
     the three roles). Restricted to `|k| < ~10⁹`; a box that would hold a huge
     parametric family (> 200 000 tuples) is declined rather than materialised. The
     underlying "all cube roots of `k` mod `d`" primitive is
-    `Solve`CubeRootsMod[k, d]`.
+    `Solve`CubeRootsMod[k, d]`. Divisors are factored through a smallest-prime-
+    factor sieve (built once per solve, O(log d) per `d`) and the coordinate
+    arithmetic is 128-bit, extending the reach to coordinates ~10⁷ (e.g. the
+    point at 5 821 795 for a radius-6×10⁶ box in ~16 s); a box beyond the divisor
+    budget or the candidate backstop declines (unevaluated) rather than running
+    unbounded.
   - **Unbounded Pell -> parametric family.** `x^2 - D y^2 == 1 && x>0 && y>0`
     with no bound returns the fundamental-unit family as a
     `ConditionalExpression` on `C[1] >= 1`:
