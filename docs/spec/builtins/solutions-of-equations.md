@@ -265,6 +265,28 @@ Attempts to solve an equation or system of equations for one or more variables.
     `n^2 + n + 41 == y^2` -> `{n -> 40, y -> 41}`; `x^2 - y^2 == 15` ->
     `{{4,1},{8,7}}`.  (A non-square `A` is a genuine Pell conic, left to the
     continued-fraction path.)
+  - **Definite binary quadratic (ellipse).** A single 2-variable degree-2
+    equation with a **negative** discriminant `delta = B^2 - 4AC < 0` is a compact
+    ellipse -- finite, but a rotated one (`B != 0`) escapes the interval bounder.
+    Solved as a quadratic in `x` for each `y` in the finite interval where the
+    `x`-discriminant `delta y^2 + (2BD - 4AE) y + (D^2 - 4AF)` (a downward
+    parabola) is `>= 0`, exhaustively -- so `{}` is a proof:
+    `x^2 + x y + y^2 == 7` -> 12 points; `x^2 + x y + y^2 == 2` -> `{}`.
+    Negative-definite forms are normalised; linear terms and constraints are
+    handled.
+  - **Factorable binary quadratic (Runge's simplest case).** A single 2-variable
+    equation `A x^2 + B x y + C y^2 + D x + E y + F == 0` whose quadratic part has
+    a **cross term** and a perfect-square discriminant `δ = B^2 - 4AC > 0` factors
+    into two rational linear forms, so it is a hyperbola with finitely many
+    integer points.  Completing the square (via `U = 2Ax + By + D`) reduces it to
+    a difference of squares `(2 k U)^2 - V^2 = W` (`k = √δ`,
+    `W = -(P^2 + 4 k^2 Q)`, `P = 4AE - 2BD`, `Q = 4AF - D^2`) and factors `W` over
+    its divisors — exhaustive, so an empty result is a proof:
+    `x^2 + x y - 2 y^2 == 4` -> six points, and `(x - y)(x + 2 y) == 15` -> `{}`
+    (a mod-3 obstruction, not a decline).  Handles non-unit square coefficients
+    (`2 x^2 + 3 x y - 2 y^2 == 7` -> `{(-3,1),(3,-1)}`) that the conic form above
+    cannot.  A non-square `δ` (Pell-type) or `δ ≤ 0` (parabola/ellipse) is
+    declined here.
   - **Prouhet-Tarry-Escott -> {}.** Two `k`-element groups with equal power sums
     for degrees `1..k` are the same multiset (Newton's identities); with a strict
     ordering inside each group they are forced equal, so a disequation such as
@@ -286,12 +308,41 @@ Attempts to solve an equation or system of equations for one or more variables.
     `ConditionalExpression` on `C[1] >= 1`:
     `x -> ((x1+y1 Sqrt[D])^C[1] + (x1-y1 Sqrt[D])^C[1]) / 2` and the matching
     `y`, using the fundamental solution `(x1, y1)` from the continued fraction.
+  - **Unbounded generalised Pell -> a family per class.** `x^2 - D y^2 == N`
+    with `x>0 && y>0`, no bound, and **any `N != +1`** (including negative Pell
+    `N = -1`) returns one `ConditionalExpression` family per solution class:
+    `x, y -> ((a+b√D)(t+u√D)^C[1] ± (a-b√D)(t-u√D)^C[1]) / (2 or 2√D)`, `C[1] >= 0`,
+    where `(t, u)` is the fundamental unit and `(a, b)` the class's minimal
+    positive representative. The class representatives come from the **Nagell
+    bound** `y ≤ u√(|N|/(2(t±1)))` (a finite search), advanced into the positive
+    orthant and reduced by `ε⁻¹` to the minimal member so one class yields one
+    family. Exhaustive, so an empty result is a proof:
+    `x^2 - 2 y^2 == 7` -> two families with fundamentals `(3,1)`, `(5,3)`;
+    `x^2 - 2 y^2 == 5` -> `{}` (a mod-8 obstruction); `x^2 - 3 y^2 == -1` -> `{}`
+    (`√3` has even CF period). Without the positivity constraints the family is
+    declined (unevaluated).
   - **Homogeneous linear system -> parametric ray.** `n-1` homogeneous linear
     equations in `n` positive unknowns have a one-dimensional integer kernel (the
     generalised cross product, via a fraction-free Bareiss determinant); if the
     primitive kernel vector is entirely positive the solutions are
     `{v_i C[1] : C[1] >= 1}`, otherwise the positive orthant meets the kernel only
     at the origin and there is no positive solution.
+  - **General linear system -> HNF integer family.** An unconstrained system of
+    `m >= 2` linear equations `A x == b` in `n` unknowns is solved completely
+    over `Z` via the Hermite normal form (`HermiteDecomposition`, see the
+    linear-algebra reference). With `P A^T == R` (row HNF), the substitution
+    `x = P^T y` triangularises the system; forward substitution over the pivots
+    with an exact-division test yields a particular solution (a divisibility
+    failure is a **proof of no integer solution**, e.g.
+    `2 x + 2 y == 3 && x - y == 0 -> {}`), and the free columns of `P^T` (the
+    integer kernel lattice) become the parameters `C[k]`:
+    `Solve[{x + 2 y + 3 z == 10, x - y + z == 2}, {x, y, z}, Integers]` ->
+    `{{x -> 18 + 5 C[1], y -> 8 + 2 C[1], z -> -8 - 3 C[1]}}`. This replaced a
+    silent wrong `{}` (the Complexes-oriented linear-system dispatch expressed
+    the pivots as a *rational* family in the free variable and then discarded it
+    as non-integer). A determined system reads off its unique solution or proves
+    `{}`; a *bounded* system (any inequality present) still uses the finite leaf
+    search, not this path.
 - **Exponential Diophantine (variable exponents).** Equations such as
   `x^a - y^b == 1`, where the exponent is a solve variable, are handled before
   the polynomial stage (which cannot represent `x^a`).  A fully bounded box

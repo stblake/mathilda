@@ -44,11 +44,14 @@ void piecewise_init(void) {
     symtab_get_def("Ramp")->attributes |=
         (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
 
-    /* UnitBox: Listable, NumericFunction, Protected -- unary like Ramp, so
-     * NOT Orderless. Does not thread through Interval (see builtin_unitbox
-     * doc comment); no pack.c AWARE entry yet (unmeasured, deferred). */
+    /* UnitBox: Listable, NumericFunction, Orderless, Protected -- matching
+     * Mathematica's attribute set. Orderless because UnitBox is conceptually
+     * variadic (the multidimensional box, UnitBox[x, y, ...]) whose arguments
+     * commute; the single-argument case this builtin evaluates is unaffected by
+     * the sort. Does not thread through Interval (see builtin_unitbox doc
+     * comment); no pack.c AWARE entry yet (unmeasured, deferred). */
     symtab_get_def("UnitBox")->attributes |=
-        (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
+        (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_ORDERLESS);
 }
 
 enum { OP_FLOOR, OP_CEILING, OP_ROUND, OP_INTPART, OP_FRACPART };

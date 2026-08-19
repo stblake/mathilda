@@ -5,6 +5,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "gmp_compat.h"   /* mpz_prevprime fallback for GMP < 6.3.0 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -229,7 +230,7 @@ Expr* builtin_nextprime(Expr* res) {
                 mpz_clear(current);
                 return NULL;
             }
-            int found = mpz_prevprime(current, current);
+            int found = mathilda_mpz_prevprime(current, current);
             if (!found) {
                 mpz_clear(current);
                 return NULL;
@@ -241,11 +242,6 @@ Expr* builtin_nextprime(Expr* res) {
     mpz_clear(current);
     return result;
 }
-
-#include <gmp.h>
-#ifndef NO_ECM
-#include "ecm.h"
-#endif
 
 #include <gmp.h>
 #ifndef NO_ECM

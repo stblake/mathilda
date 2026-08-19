@@ -67,3 +67,28 @@ generates [`diophantine.m`](diophantine.m) from it, runs it once, runs the
 sympy and Python columns in-process, joins by label, and writes `REPORT.md` +
 `results.json`. Override the binary with `MATHILDA_BIN=...`; the Python-search
 budget with `BRUTE_BUDGET_S=...`.
+
+## Held-out validation (the silent-wrong-answer gate)
+
+`cases.py` is *developed-against*: each row was added in the same commit as the
+method that solves it, so a green result there measures "the method works on the
+example it was written for", not coverage — and cannot see the one failure that
+matters, a **silent wrong answer** (a `{}` or finite set that is actually
+wrong). [`heldout.py`](heldout.py) is the opposite discipline: ~20 equations
+drawn from standard references (Mordell, Nagell, classic lists), **none of them
+in `cases.py`**, run cold and cross-checked against an independent Python
+brute-force oracle over the same box.
+
+```bash
+make check-diophantine-heldout          # or: python3 validate.py
+```
+
+[`validate.py`](validate.py) needs only the Mathilda binary (no sympy). For each
+case Mathilda emits its status (`uneval` / `empty` / `finite` / `param`) and, for
+a concrete answer, the integer solutions inside the box (a parametric family is
+expanded over `C[1]`). The verdict is **OK** (matches the oracle), **DECLINE**
+(unevaluated where that is acceptable — an honest gap), or **WRONG** (a
+`{}`/finite/parametric answer the oracle contradicts). **Any WRONG fails the gate
+(nonzero exit).** Results land in [`HELDOUT_REPORT.md`](HELDOUT_REPORT.md). This
+gate is what first surfaced the underdetermined-linear-system silent `{}`, and it
+now guards every Solve/Integers method against the next such regression.

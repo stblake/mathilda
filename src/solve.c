@@ -726,6 +726,59 @@ static bool is_single_multivar_equation(const Expr* eq, const Expr* vars) {
     return mentioned >= 2;
 }
 
+/* True iff `e` mentions any of the solve variables in `vars` (a bare symbol
+ * or a List of symbols).  Borrowed. */
+static bool mentions_any_solve_var(const Expr* e, const Expr* vars) {
+    if (!e || !vars) return false;
+    if (vars->type == EXPR_SYMBOL)
+        return expr_mentions_symbol(e, vars->data.symbol.name);
+    if (vars->type == EXPR_FUNCTION
+        && vars->data.function.head->type == EXPR_SYMBOL
+        && vars->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < vars->data.function.arg_count; i++) {
+            Expr* v = vars->data.function.args[i];
+            if (v && v->type == EXPR_SYMBOL
+                && expr_mentions_symbol(e, v->data.symbol.name)) return true;
+        }
+    }
+    return false;
+}
+
+/* True iff the Solve result `out` (a List of solution branches, each a List
+ * of Rule[var, rhs]) binds some variable to an expression that still mentions
+ * a solve variable -- the signature of a positive-dimensional / parametric
+ * answer (the `Solve::svars` case, e.g. {{y -> (4 + 2 x)/5, z -> ...}} for an
+ * underdetermined linear system, or {{y -> Sqrt[x^3 - 2]}} for a lone curve).
+ *
+ * Over the Integers this distinguishes a genuine empty set -- every concrete
+ * branch failed the integer test, a real proof of no solution (e.g. x + y ==
+ * 2 && x - y == 1 -> {3/2, 1/2} -> {}) -- from a parametric family the integer
+ * filter merely could not represent, which must NOT collapse to a spurious
+ * `{}` (an underdetermined system has integer points; leaving Solve
+ * unevaluated is the honest answer until the HNF path expresses them). */
+static bool solution_set_is_parametric(const Expr* out, const Expr* vars) {
+    if (!out || out->type != EXPR_FUNCTION
+        || out->data.function.head->type != EXPR_SYMBOL
+        || out->data.function.head->data.symbol.name != SYM_List) return false;
+    for (size_t b = 0; b < out->data.function.arg_count; b++) {
+        Expr* branch = out->data.function.args[b];
+        if (!branch || branch->type != EXPR_FUNCTION
+            || branch->data.function.head->type != EXPR_SYMBOL
+            || branch->data.function.head->data.symbol.name != SYM_List) continue;
+        for (size_t r = 0; r < branch->data.function.arg_count; r++) {
+            Expr* rule = branch->data.function.args[r];
+            if (rule && rule->type == EXPR_FUNCTION
+                && rule->data.function.head->type == EXPR_SYMBOL
+                && (rule->data.function.head->data.symbol.name == SYM_Rule
+                    || rule->data.function.head->data.symbol.name == SYM_RuleDelayed)
+                && rule->data.function.arg_count == 2
+                && mentions_any_solve_var(rule->data.function.args[1], vars))
+                return true;
+        }
+    }
+    return false;
+}
+
 /* Single equation in >= 2 variables: solve for the earliest-listed
  * variable the equation is polynomial in, treating the other variables
  * as symbolic parameters.  Mathematica's Solve returns explicit rules
@@ -1046,6 +1099,17 @@ solve_finish:
         verify_eq = NULL;
     }
 
+    /* Over the Integers, snapshot whether the raw dispatch answer was a
+     * positive-dimensional parametric family BEFORE the reals/integers filters
+     * can empty it.  A subsequent collapse to `{}` is then not a proof of no
+     * solutions but the Complexes/Reals parametric answer failing the integer
+     * test for its free parameter -- see the guard below.  Only meaningful
+     * when the integer pre-pass declined (a genuine solveint `{}` is a proof). */
+    bool parametric_int_family =
+        (out && dom && dom->type == EXPR_SYMBOL
+         && dom->data.symbol.name == SYM_Integers && !integer_prepass_used)
+        ? solution_set_is_parametric(out, vars) : false;
+
     /* Reals-domain reality filter.  A radical / polynomial / system
      * specialist can hand back Root[] objects (or Root tuples) that are
      * complex -- e.g. the two extraneous branches of Sqrt[x] + 3 x^(1/3) == 5,
@@ -1072,16 +1136,21 @@ solve_finish:
         out = filter_integers_solutions(out);
     }
 
-    /* Spurious-`{}` guard (correctness).  When solveint DECLINED a lone
-     * multivariable equation over the Integers, any empty result reaching here
-     * is not a proof of no solutions -- it is the parametric dispatch's
-     * closed-form root failing to be integer-valued for the symbolic parameter
-     * (y^2 == x^3 - 2, y == x^2, ...).  Leave Solve unevaluated instead: an
-     * unbounded curve has no finite integer enumeration this path can offer,
-     * and an unproven `{}` would be a silent wrong answer.  (A legitimate
-     * solveint `{}` took the `goto solve_finish` above with
-     * integer_prepass_used set, so it is never touched here.) */
-    if (out && !integer_prepass_used && lone_multivar_int_eq
+    /* Spurious-`{}` guard (correctness).  When solveint DECLINED and the
+     * Complexes-oriented dispatch produced a positive-dimensional parametric
+     * answer over the Integers, any empty result reaching here is not a proof
+     * of no solutions -- it is the closed-form root / free-parameter family
+     * failing the integer test.  Two shapes reach it: a lone multivariable
+     * equation (y^2 == x^3 - 2, y == x^2, ...) and an underdetermined linear
+     * *system* ({x + 2 y + 3 z == 10, x - y + z == 2} -> parametric in x,
+     * which the integer filter emptied to a silent wrong `{}`).  Leave Solve
+     * unevaluated instead -- an unproven `{}` would be a silent wrong answer,
+     * and these families do have integer points.  (A legitimate solveint `{}`
+     * took the `goto solve_finish` above with integer_prepass_used set, so it
+     * is never touched here; a fully-determined concrete set that filters to
+     * `{}` is a real proof and is not flagged parametric.) */
+    if (out && !integer_prepass_used
+        && (lone_multivar_int_eq || parametric_int_family)
         && out->type == EXPR_FUNCTION
         && out->data.function.head->type == EXPR_SYMBOL
         && out->data.function.head->data.symbol.name == SYM_List

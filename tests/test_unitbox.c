@@ -6,8 +6,8 @@
  * certification UnitStep/Ramp use, symbolic pass-through, the complex
  * (non-real) rejection path and the zero-imaginary-part workaround,
  * Listable threading over a List, argument-count errors, the (Listable,
- * NumericFunction, Protected) attributes -- and NOT Orderless, since UnitBox
- * is unary -- and a memory-hygiene loop.
+ * NumericFunction, Orderless, Protected) attributes matching Mathematica --
+ * and a memory-hygiene loop.
  *
  * The headline cases mirror the UnitBox docstring (see
  * docs/spec/builtins/elementary-functions.md and
@@ -139,8 +139,8 @@ static void test_unitbox_attributes(void) {
                "expected NumericFunction in attributes, got: %s", str);
     ASSERT_MSG(strstr(str, "Protected") != NULL,
                "expected Protected in attributes, got: %s", str);
-    ASSERT_MSG(strstr(str, "Orderless") == NULL,
-               "UnitBox is unary and must NOT be Orderless, got: %s", str);
+    ASSERT_MSG(strstr(str, "Orderless") != NULL,
+               "expected Orderless in attributes (matches Mathematica), got: %s", str);
     free(str);
     expr_free(parsed);
     expr_free(evaluated);

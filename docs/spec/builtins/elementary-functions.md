@@ -579,8 +579,10 @@ $-\frac{1}{2} \le x \le \frac{1}{2}$ and `0` otherwise. The boundary is closed
 at both endpoints, matching the `UnitStep[0] = 1` convention below.
 
 **Features**:
-- `Listable`, `NumericFunction`, `Protected`. Not `Orderless` -- `UnitBox` is
-  unary, unlike the variadic `UnitStep`.
+- `Listable`, `NumericFunction`, `Orderless`, `Protected`, matching
+  Mathematica. `Orderless` reflects the variadic multidimensional box
+  (`UnitBox[x, y, ...]`, like `UnitStep`); this implementation evaluates the
+  single-argument pulse.
 - The result is **always exact** -- an integer `0` or `1` -- for real numeric
   input, including `Real`/`MPFR` arguments.
 - Implemented by reusing `UnitStep`'s sign classifier twice, on `x + 1/2` and

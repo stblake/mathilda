@@ -44,6 +44,7 @@
 #include "checked_int.h"
 #include "poly/mpoly.h"
 #include "numbertheory/numbertheory_internal.h"
+#include "linalg/hnf.h"
 
 /* ------------------------------------------------------------------ *
  *  Tiny construction helpers (mirror the sibling solve specialists).  *
@@ -1977,6 +1978,240 @@ static Expr* si_solve_pell_parametric(SICtx* c) {
     return result;
 }
 
+/* --- Generalised Pell  x^2 - D y^2 == N  (any nonzero N), unbounded positive
+ *     orthant -> a parametric family PER solution class. ---
+ *
+ * Detect x^2 - D y^2 == N with a +1 square coefficient, D > 0 non-square, and
+ * ANY nonzero N (si_pell_detect handles only N = +/-1). */
+static bool si_genpell_detect(const MPoly* eq, int n, int* xside, int* yside,
+                              mpz_t D, mpz_t N) {
+    int active[SI_MAX_VARS], ka = 0;
+    for (int v = 0; v < n; v++) if (mpoly_deg_var(eq, v) >= 1) active[ka++] = v;
+    if (ka != 2) return false;
+    int A = active[0], B = active[1];
+    mpz_t cA, cB, e; mpz_init_set_ui(cA, 0); mpz_init_set_ui(cB, 0); mpz_init_set_ui(e, 0);
+    bool ok = true;
+    for (size_t t = 0; t < eq->n_terms && ok; t++) {
+        const int* ex = eq->exps + t * (size_t)n;
+        for (int v = 0; v < n; v++) if (v != A && v != B && ex[v] != 0) ok = false;
+        if (!ok) break;
+        int dA = ex[A], dB = ex[B];
+        if (dA == 2 && dB == 0) mpz_set(cA, eq->coefs[t]);
+        else if (dA == 0 && dB == 2) mpz_set(cB, eq->coefs[t]);
+        else if (dA == 0 && dB == 0) mpz_set(e, eq->coefs[t]);
+        else ok = false;                                     /* linear or cross term */
+    }
+    if (ok && (mpz_sgn(cA) == 0 || mpz_sgn(cB) == 0 || mpz_sgn(cA) == mpz_sgn(cB)))
+        ok = false;
+    if (ok) {
+        if (mpz_sgn(cA) > 0) {
+            if (mpz_cmp_si(cA, 1) != 0) ok = false;
+            else { *xside = A; *yside = B; mpz_neg(D, cB); mpz_neg(N, e); }
+        } else {
+            if (mpz_cmp_si(cB, 1) != 0) ok = false;
+            else { *xside = B; *yside = A; mpz_neg(D, cA); mpz_neg(N, e); }
+        }
+    }
+    mpz_clear(cA); mpz_clear(cB); mpz_clear(e);
+    if (!ok) return false;
+    if (mpz_sgn(D) <= 0 || mpz_perfect_square_p(D)) return false;
+    return (mpz_sgn(N) != 0);
+}
+
+/* Largest y a Nagell fundamental solution can have.  Ceiling over-estimate of
+ * u*sqrt(|N|/(2(t +/- 1))) (+ for N>0, - for N<0), a safe bound validated
+ * against brute force.  Sets *ok false if it would be impractically large. */
+static void si_genpell_ybound(const mpz_t N, const mpz_t t, const mpz_t u,
+                              mpz_t out, bool* ok) {
+    mpz_t num, den, absN; mpz_init(num); mpz_init(den); mpz_init(absN);
+    mpz_abs(absN, N);
+    mpz_mul(num, u, u); mpz_mul(num, num, absN);             /* u^2 |N| */
+    if (mpz_sgn(N) > 0) { mpz_add_ui(den, t, 1); }           /* 2(t+1) */
+    else { mpz_sub_ui(den, t, 1); }                          /* 2(t-1) */
+    mpz_mul_ui(den, den, 2);
+    if (mpz_sgn(den) <= 0) { mpz_set_ui(out, 0); *ok = true; }
+    else {
+        mpz_fdiv_q(num, num, den);
+        mpz_sqrt(out, num);
+        mpz_add_ui(out, out, 2);                             /* safety margin */
+    }
+    /* Guard against a pathological search (huge fundamental unit and |N|). */
+    *ok = (mpz_cmp_ui(out, 50000000UL) <= 0);
+    mpz_clear(num); mpz_clear(den); mpz_clear(absN);
+}
+
+/* Compose (x, y) with the fundamental unit (t, u): (x,y) <- (x t + D y u,
+ * x u + y t). */
+static void si_pell_step(mpz_t x, mpz_t y, const mpz_t t, const mpz_t u,
+                         const mpz_t D, mpz_t s1, mpz_t s2) {
+    mpz_mul(s1, x, t); mpz_mul(s2, D, y); mpz_mul(s2, s2, u); mpz_add(s1, s1, s2); /* x t + D y u */
+    mpz_mul(s2, x, u); mpz_mul(x, y, t); mpz_add(s2, s2, x);                       /* x u + y t */
+    mpz_set(x, s1); mpz_set(y, s2);
+}
+
+/* Fundamental unit (t, u) of x^2 - D y^2 = 1, and the minimal positive-orthant
+ * representative (x > 0, y > 0) of every solution class of x^2 - D y^2 == N.
+ * The bases are written (deduplicated) into bx[]/by[]; *nb is their count.
+ * Returns false to decline (no unit found, or the Nagell box too large). */
+static bool si_genpell_bases(const mpz_t D, const mpz_t N, mpz_t t, mpz_t u,
+                             mpz_t* bx, mpz_t* by, int* nb, int cap) {
+    *nb = 0;
+    mpz_t one, dummy1, dummy2;
+    mpz_init_set_ui(one, 1); mpz_init(dummy1); mpz_init(dummy2);
+    if (!si_pell_cf(D, one, t, u, dummy1, dummy2)) {  /* (t,u): x^2 - D y^2 = 1 */
+        mpz_clear(one); mpz_clear(dummy1); mpz_clear(dummy2); return false;
+    }
+    mpz_clear(one); mpz_clear(dummy1); mpz_clear(dummy2);
+
+    mpz_t Ymax; mpz_init(Ymax); bool okb = true;
+    si_genpell_ybound(N, t, u, Ymax, &okb);
+    if (!okb || !mpz_fits_slong_p(Ymax)) { mpz_clear(Ymax); return false; }
+    int64_t ymax = mpz_get_si(Ymax);
+    mpz_clear(Ymax);
+
+    mpz_t val, root, x, y, s1, s2, px, py;
+    mpz_inits(val, root, x, y, s1, s2, px, py, NULL);
+    for (int64_t yy = 0; yy <= ymax && *nb < cap; yy++) {
+        mpz_set_si(y, yy); mpz_mul(val, y, y); mpz_mul(val, val, D);
+        mpz_add(val, val, N);                                /* N + D y^2 */
+        if (mpz_sgn(val) <= 0) continue;
+        if (!mpz_perfect_square_p(val)) continue;
+        mpz_sqrt(root, val);                                 /* x0 > 0 */
+        /* All four sign combos (+/-x0, +/-yy) are candidate fundamentals of
+         * (possibly distinct) classes; advance each into the positive orthant. */
+        for (int sx = 1; sx >= -1; sx -= 2)
+            for (int sy = 1; sy >= -1; sy -= 2) {
+                mpz_set(x, root); if (sx < 0) mpz_neg(x, x);
+                mpz_set_si(s1, sy * yy); mpz_set(y, s1);
+                int guard = 0;
+                while (!(mpz_sgn(x) > 0 && mpz_sgn(y) > 0) && guard < 1000) {
+                    si_pell_step(x, y, t, u, D, s1, s2); guard++;
+                }
+                if (!(mpz_sgn(x) > 0 && mpz_sgn(y) > 0)) continue;
+                /* Reduce to the MINIMAL positive-orthant representative: apply
+                 * eps^{-1} = (t, -u) while the result stays in the orthant, so
+                 * two solutions of the same class (e.g. (1,1) and (5,3)=(1,1)eps
+                 * for D=3, N=-2) collapse to one base rather than two overlapping
+                 * families.  eps^{-1}: x' = x t - D y u,  y' = -x u + y t. */
+                for (int g2 = 0; g2 < 1000; g2++) {
+                    mpz_mul(px, x, t); mpz_mul(s2, D, y); mpz_mul(s2, s2, u);
+                    mpz_sub(px, px, s2);                       /* x' = x t - D y u */
+                    mpz_mul(py, y, t); mpz_mul(s2, x, u);
+                    mpz_sub(py, py, s2);                       /* y' = y t - x u */
+                    if (mpz_sgn(px) > 0 && mpz_sgn(py) > 0) { mpz_set(x, px); mpz_set(y, py); }
+                    else break;
+                }
+                bool dup = false;
+                for (int i = 0; i < *nb; i++)
+                    if (mpz_cmp(bx[i], x) == 0 && mpz_cmp(by[i], y) == 0) { dup = true; break; }
+                if (dup || *nb >= cap) continue;
+                mpz_set(bx[*nb], x); mpz_set(by[*nb], y); (*nb)++;
+            }
+    }
+    mpz_clears(val, root, x, y, s1, s2, px, py, NULL);
+    return true;
+}
+
+/* Order bases ascending by (x, then y) for a deterministic emission order. */
+static void si_genpell_sort_bases(mpz_t* bx, mpz_t* by, int nb) {
+    for (int i = 0; i < nb; i++)
+        for (int j = i + 1; j < nb; j++) {
+            int c = mpz_cmp(bx[i], bx[j]);
+            if (c > 0 || (c == 0 && mpz_cmp(by[i], by[j]) > 0)) {
+                mpz_swap(bx[i], bx[j]); mpz_swap(by[i], by[j]);
+            }
+        }
+}
+
+/* Build the class family tuple for base (a, b), fundamental unit (t, u):
+ *   x -> (P eps^C + Pbar epsbar^C) / 2,
+ *   y -> (P eps^C - Pbar epsbar^C) / (2 Sqrt[D]),
+ * where P = a + b Sqrt[D], eps = t + u Sqrt[D] (bars negate the Sqrt[D] part),
+ * each a ConditionalExpression on C[1] >= 0.  Rules placed at xs/ys. */
+static Expr* si_genpell_family(SICtx* c, int xs, int ys, const mpz_t a,
+                               const mpz_t b, const mpz_t t, const mpz_t u,
+                               const mpz_t D) {
+    Expr* sqrtD = mk_fn1("Sqrt", mk_mpz(D));
+    mpz_t nb, nu; mpz_init(nb); mpz_init(nu); mpz_neg(nb, b); mpz_neg(nu, u);
+    Expr* P    = mk_fn2("Plus", mk_mpz(a), mk_fn2("Times", mk_mpz(b),  expr_copy(sqrtD)));
+    Expr* Pbar = mk_fn2("Plus", mk_mpz(a), mk_fn2("Times", mk_mpz(nb), expr_copy(sqrtD)));
+    Expr* eps    = mk_fn2("Plus", mk_mpz(t), mk_fn2("Times", mk_mpz(u),  expr_copy(sqrtD)));
+    Expr* epsbar = mk_fn2("Plus", mk_mpz(t), mk_fn2("Times", mk_mpz(nu), expr_copy(sqrtD)));
+    mpz_clear(nb); mpz_clear(nu);
+    Expr* epsC    = mk_fn2("Power", eps,    mk_fn1("C", mk_int(1)));
+    Expr* epsbarC = mk_fn2("Power", epsbar, mk_fn1("C", mk_int(1)));
+    Expr* Pe    = mk_fn2("Times", P, epsC);
+    Expr* Pbare = mk_fn2("Times", Pbar, epsbarC);
+    /* xval = (Pe + Pbare)/2 */
+    Expr* xval = mk_fn2("Times",
+        mk_fn2("Plus", expr_copy(Pe), expr_copy(Pbare)),
+        mk_fn2("Power", mk_int(2), mk_int(-1)));
+    /* yval = (Pe - Pbare)/(2 Sqrt[D]) */
+    Expr* yval = mk_fn2("Times",
+        mk_fn2("Plus", Pe, mk_fn2("Times", mk_int(-1), Pbare)),
+        mk_fn2("Power", mk_fn2("Times", mk_int(2), expr_copy(sqrtD)), mk_int(-1)));
+    expr_free(sqrtD);
+
+    Expr* cond = mk_fn2("GreaterEqual", mk_fn1("C", mk_int(1)), mk_int(0));
+    Expr* cex = mk_fn2("ConditionalExpression", xval, expr_copy(cond));
+    Expr* cey = mk_fn2("ConditionalExpression", yval, cond);
+
+    Expr* rules[SI_MAX_VARS];
+    for (int i = 0; i < c->n; i++) rules[i] = NULL;
+    rules[xs] = mk_rule(expr_copy(c->var[xs]), cex);
+    rules[ys] = mk_rule(expr_copy(c->var[ys]), cey);
+    Expr* rlist[SI_MAX_VARS]; int nr = 0;
+    for (int i = 0; i < c->n; i++) if (rules[i]) rlist[nr++] = rules[i];
+    return mk_list(rlist, (size_t)nr);
+}
+
+/* Unbounded x^2 - D y^2 == N (N != +1: any N < 0 or N >= 2) with x > 0 && y > 0
+ * -> one parametric family per solution class.  Returns the owned family List
+ * (empty {} when the equation is provably unsolvable, including negative Pell
+ * over a D whose sqrt has even CF period), or NULL to decline (not this shape,
+ * bounded, N = +1, or the Nagell search too large -- handled elsewhere). */
+static Expr* si_solve_genpell_parametric(SICtx* c) {
+    if (c->neq != 1) return NULL;
+    int xs, ys; mpz_t D, N; mpz_init(D); mpz_init(N);
+    if (!si_genpell_detect(c->eq[0], c->n, &xs, &ys, D, N)
+        || mpz_sgn(N) == 0 || mpz_cmp_si(N, 1) == 0) {  /* N = +1 -> pell_parametric */
+        mpz_clear(D); mpz_clear(N); return NULL;
+    }
+    bool unbounded = !c->has_hi[xs] && !c->has_hi[ys];
+    bool posx = c->has_lo[xs] && c->lo[xs] >= 1;
+    bool posy = c->has_lo[ys] && c->lo[ys] >= 1;
+    if (!(unbounded && posx && posy) || c->n_ord != 0 || c->n_neq != 0 || !c->all_captured) {
+        mpz_clear(D); mpz_clear(N); return NULL;
+    }
+
+    enum { GP_CAP = 4096 };
+    mpz_t t, u; mpz_init(t); mpz_init(u);
+    mpz_t *bx = (mpz_t*)malloc(sizeof(mpz_t) * GP_CAP);
+    mpz_t *by = (mpz_t*)malloc(sizeof(mpz_t) * GP_CAP);
+    for (int i = 0; i < GP_CAP; i++) { mpz_init(bx[i]); mpz_init(by[i]); }
+    int nb = 0;
+    bool solved = si_genpell_bases(D, N, t, u, bx, by, &nb, GP_CAP);
+
+    Expr* result = NULL;
+    if (solved) {
+        si_genpell_sort_bases(bx, by, nb);
+        if (nb == 0) {
+            result = mk_list(NULL, 0);            /* provably unsolvable -> {} */
+        } else {
+            Expr** tuples = (Expr**)malloc(sizeof(Expr*) * (size_t)nb);
+            for (int i = 0; i < nb; i++)
+                tuples[i] = si_genpell_family(c, xs, ys, bx[i], by[i], t, u, D);
+            result = eval_and_free(mk_list(tuples, (size_t)nb));
+            free(tuples);
+        }
+    }
+
+    for (int i = 0; i < GP_CAP; i++) { mpz_clear(bx[i]); mpz_clear(by[i]); }
+    free(bx); free(by);
+    mpz_clear(t); mpz_clear(u); mpz_clear(D); mpz_clear(N);
+    return result;                               /* NULL -> decline (unevaluated) */
+}
+
 static bool si_linear_detect(const MPoly* eq, int n, mpz_t* a, mpz_t b);
 
 /* Fraction-free (Bareiss) determinant of an m x m integer matrix.  M is
@@ -2422,6 +2657,158 @@ static Expr* si_solve_linear_parametric(SICtx* c) {
     return result;
 }
 
+/* --- General linear Diophantine SYSTEM (m >= 2 equations) via HNF. --- */
+
+/* Solve the unconstrained integer linear system  A x = b  (m = c->neq linear
+ * equations in n = c->n unknowns) completely, using the Hermite normal form.
+ *
+ * With  P A^T = R  (row HNF of A^T, P unimodular n x n, R n x m, rank rr), set
+ * U = P^T and H = R^T so that  A U = H  and H is in column-echelon form.  The
+ * substitution x = U y turns A x = b into H y = b; forward-substitution over
+ * the rr pivot columns yields the pivot coordinates y_0..y_{rr-1} (each step an
+ * exact-division / divisibility test -- a failure proves NO integer solution),
+ * the free coordinates y_{rr}..y_{n-1} parameterise the kernel, and a check on
+ * the non-pivot rows detects inconsistency.  The particular solution is
+ * x0 = U y|_{free = 0}; the kernel basis is the free columns of U (= the free
+ * rows of P).  Emits the family  {{x_i -> x0_i + sum_k Ker[k][i] C[k+1]}}, the
+ * empty List for a provably unsolvable system, or NULL to decline (not the
+ * shape: fewer than two equations, any bound / ordering / disequation present,
+ * or a non-linear equation).  Single equations keep the dedicated
+ * si_solve_linear_parametric path. */
+static Expr* si_solve_linear_system_hnf(SICtx* c) {
+    int n = c->n, m = c->neq;
+    if (m < 2 || c->n_ord != 0 || c->n_neq != 0 || !c->all_captured) return NULL;
+    for (int i = 0; i < n; i++) if (c->has_lo[i] || c->has_hi[i]) return NULL;
+
+    /* Build A (m x n) and b (m) from the linear equations; decline on any
+     * nonlinear equation (si_linear_detect returns false). */
+    mpz_t* A  = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)m * (size_t)n);
+    mpz_t* bv = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)m);
+    for (int i = 0; i < m * n; i++) mpz_init(A[i]);
+    for (int i = 0; i < m; i++) mpz_init(bv[i]);
+    mpz_t* arow = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n);
+    for (int i = 0; i < n; i++) mpz_init(arow[i]);
+    mpz_t brow; mpz_init(brow);
+
+    bool shape_ok = true;
+    for (int q = 0; q < m && shape_ok; q++) {
+        if (!si_linear_detect(c->eq[q], n, arow, brow)) { shape_ok = false; break; }
+        for (int i = 0; i < n; i++) mpz_set(A[(size_t)q * n + i], arow[i]);
+        mpz_set(bv[q], brow);
+    }
+    for (int i = 0; i < n; i++) mpz_clear(arow[i]);
+    free(arow); mpz_clear(brow);
+
+    if (!shape_ok) {
+        for (int i = 0; i < m * n; i++) mpz_clear(A[i]);
+        for (int i = 0; i < m; i++) mpz_clear(bv[i]);
+        free(A); free(bv);
+        return NULL;
+    }
+
+    /* AT = A^T  (n x m). */
+    mpz_t* AT = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)n * (size_t)m);
+    for (int i = 0; i < n * m; i++) mpz_init(AT[i]);
+    for (int q = 0; q < m; q++)
+        for (int i = 0; i < n; i++)
+            mpz_set(AT[(size_t)i * m + q], A[(size_t)q * n + i]);
+
+    mpz_t* R = NULL; mpz_t* P = NULL;
+    int rr = linalg_hnf(AT, n, m, &R, &P);            /* P (n x n) * AT = R (n x m) */
+    for (int i = 0; i < n * m; i++) mpz_clear(AT[i]);
+    free(AT);
+    if (rr < 0) {
+        for (int i = 0; i < m * n; i++) mpz_clear(A[i]);
+        for (int i = 0; i < m; i++) mpz_clear(bv[i]);
+        free(A); free(bv);
+        linalg_hnf_free(R, n * m); linalg_hnf_free(P, n * n);
+        return NULL;
+    }
+
+    /* Pivot column of each HNF row k (k = 0..rr-1): the H-row where pivot
+     * column k of H = R^T leads.  R row k's first nonzero column. */
+    int* pivrow = (int*)malloc(sizeof(int) * (size_t)(rr > 0 ? rr : 1));
+    for (int k = 0; k < rr; k++) {
+        pivrow[k] = -1;
+        for (int j = 0; j < m; j++)
+            if (mpz_sgn(R[(size_t)k * m + j]) != 0) { pivrow[k] = j; break; }
+    }
+
+    /* Forward substitution:  y_k = ( b[pivrow[k]] - sum_{l<k} H[pivrow[k]][l] y_l )
+     *                               / H[pivrow[k]][k],   H[i][l] = R[l][i]. */
+    mpz_t* y = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)(rr > 0 ? rr : 1));
+    for (int k = 0; k < rr; k++) mpz_init(y[k]);
+    mpz_t acc, prod; mpz_init(acc); mpz_init(prod);
+    bool solvable = true;
+    for (int k = 0; k < rr && solvable; k++) {
+        int pr = pivrow[k];
+        mpz_set(acc, bv[pr]);
+        for (int l = 0; l < k; l++) {
+            mpz_mul(prod, R[(size_t)l * m + pr], y[l]);   /* H[pr][l] = R[l][pr] */
+            mpz_sub(acc, acc, prod);
+        }
+        const mpz_t* piv = &R[(size_t)k * m + pr];        /* H[pr][k] = R[k][pr] > 0 */
+        if (!mpz_divisible_p(acc, *piv)) { solvable = false; break; }
+        mpz_divexact(y[k], acc, *piv);
+    }
+
+    /* Consistency over every row i: sum_{l<rr} H[i][l] y_l == b[i]. */
+    for (int i = 0; i < m && solvable; i++) {
+        mpz_set_ui(acc, 0);
+        for (int l = 0; l < rr; l++) {
+            mpz_mul(prod, R[(size_t)l * m + i], y[l]);
+            mpz_add(acc, acc, prod);
+        }
+        if (mpz_cmp(acc, bv[i]) != 0) solvable = false;
+    }
+
+    Expr* result;
+    if (!solvable) {
+        result = mk_list(NULL, 0);                        /* provably no solution */
+    } else {
+        /* x0_i = sum_{k<rr} U[i][k] y_k = sum_k P[k][i] y_k.
+         * Kernel vector for free coordinate f (rr <= f < n): comp i = P[f][i]. */
+        int nfree = n - rr;
+        Expr** rules = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+        for (int i = 0; i < n; i++) {
+            mpz_t x0i; mpz_init(x0i);
+            for (int k = 0; k < rr; k++) {
+                mpz_mul(prod, P[(size_t)k * n + i], y[k]);
+                mpz_add(x0i, x0i, prod);
+            }
+            Expr** terms = (Expr**)malloc(sizeof(Expr*) * (size_t)(nfree + 1));
+            int nt = 0;
+            if (mpz_sgn(x0i) != 0) terms[nt++] = mk_mpz(x0i);
+            for (int f = 0; f < nfree; f++) {
+                const mpz_t* comp = &P[(size_t)(rr + f) * n + i];   /* P[rr+f][i] */
+                if (mpz_sgn(*comp) == 0) continue;
+                Expr* Ck = expr_new_function(mk_sym("C"),
+                                             (Expr*[]){ mk_int(f + 1) }, 1);
+                terms[nt++] = mk_fn2("Times", mk_mpz(*comp), Ck);
+            }
+            Expr* val = (nt == 0) ? mk_int(0)
+                      : (nt == 1) ? terms[0]
+                      : expr_new_function(mk_sym("Plus"), terms, (size_t)nt);
+            free(terms);
+            val = eval_and_free(val);
+            rules[i] = mk_rule(expr_copy(c->var[i]), val);
+            mpz_clear(x0i);
+        }
+        Expr* tuple = mk_list(rules, (size_t)n);
+        free(rules);
+        result = mk_list((Expr*[]){ tuple }, 1);
+    }
+
+    for (int k = 0; k < rr; k++) mpz_clear(y[k]);
+    free(y); free(pivrow);
+    mpz_clear(acc); mpz_clear(prod);
+    for (int i = 0; i < m * n; i++) mpz_clear(A[i]);
+    for (int i = 0; i < m; i++) mpz_clear(bv[i]);
+    free(A); free(bv);
+    linalg_hnf_free(R, n * m); linalg_hnf_free(P, n * n);
+    return result;
+}
+
 /* Invert an m x m matrix G (double) into Ginv via Gauss-Jordan.  Returns false
  * if singular. */
 static bool si_mat_inverse(double G[SI_MAX_VARS][SI_MAX_VARS], int m,
@@ -2850,11 +3237,238 @@ static bool si_solve_conic(SICtx* c, SearchState* st) {
     return false;
 }
 
+/* --- Factorable binary quadratic  A x^2 + B x y + C y^2 + D x + E y + F == 0
+ *     with a CROSS term and perfect-square discriminant delta = B^2 - 4 A C. ---
+ *
+ * When delta = k^2 > 0 the quadratic part factors into two distinct rational
+ * linear forms, so the conic is a hyperbola with rational asymptotes and only
+ * finitely many integer points -- Runge's simplest case.  Completing the square
+ * (A != 0; swap x,y when A == 0) gives, with U = 2 A x + B y + D,
+ *   4 A * eq = U^2 - k^2 y^2 + P y + Q,   P = 4 A E - 2 B D,  Q = 4 A F - D^2,
+ * and multiplying by 4 k^2 with V = 2 k^2 y - P collapses it to a difference of
+ * squares
+ *   (2 k U)^2 - V^2 = W,   W = -(P^2 + 4 k^2 Q),
+ * so every solution comes from a factorisation d1 * d2 = W via
+ *   U = (d1 + d2) / (4 k),  V = (d2 - d1) / 2,
+ *   y = (V + P) / (2 k^2),  x = (U - B y - D) / (2 A).
+ * Enumerating the divisors of |W| is exhaustive, so an empty result is a PROOF
+ * of no solutions (e.g. (x - y)(x + 2 y) == 15 -> {} by a mod-3 obstruction).
+ * Generalises si_solve_conic to the cross-term case and to non-unit square
+ * coefficients; the no-cross-term / Pell forms are handled before this.  W == 0
+ * (two parallel/coincident lines: a positive-dimensional union) is declined. */
+static bool si_solve_factorable_conic(SICtx* c, SearchState* st) {
+    if (c->neq != 1) return false;
+    const MPoly* eq = c->eq[0]; int n = c->n;
+    int act[SI_MAX_VARS], ka = 0;
+    for (int v = 0; v < n; v++) if (mpoly_deg_var(eq, v) >= 1) act[ka++] = v;
+    if (ka != 2) return false;
+
+    int Xv = act[0], Yv = act[1];
+    mpz_t A, B, C, D, E, F;
+    mpz_inits(A, B, C, D, E, F, NULL);
+    bool shape = true;
+    for (size_t t = 0; t < eq->n_terms && shape; t++) {
+        const int* ex = eq->exps + t * (size_t)n;
+        for (int v = 0; v < n; v++)
+            if (v != Xv && v != Yv && ex[v] != 0) { shape = false; break; }
+        if (!shape) break;
+        int ix = ex[Xv], iy = ex[Yv];
+        if (ix == 2 && iy == 0) mpz_add(A, A, eq->coefs[t]);
+        else if (ix == 1 && iy == 1) mpz_add(B, B, eq->coefs[t]);
+        else if (ix == 0 && iy == 2) mpz_add(C, C, eq->coefs[t]);
+        else if (ix == 1 && iy == 0) mpz_add(D, D, eq->coefs[t]);
+        else if (ix == 0 && iy == 1) mpz_add(E, E, eq->coefs[t]);
+        else if (ix == 0 && iy == 0) mpz_add(F, F, eq->coefs[t]);
+        else shape = false;                               /* total degree > 2 */
+    }
+
+    /* Need A != 0; swap x <-> y when only C is nonzero.  Both zero -> bilinear
+     * (handled elsewhere), decline. */
+    if (shape && mpz_sgn(A) == 0 && mpz_sgn(C) != 0) {
+        mpz_swap(A, C); mpz_swap(D, E); int tmp = Xv; Xv = Yv; Yv = tmp;
+    }
+    bool go = shape && mpz_sgn(A) != 0;
+
+    mpz_t delta, k, P, Q, W, tmp;
+    mpz_inits(delta, k, P, Q, W, tmp, NULL);
+    if (go) {
+        mpz_mul(delta, B, B); mpz_mul(tmp, A, C); mpz_submul_ui(delta, tmp, 4); /* B^2 - 4AC */
+        go = (mpz_sgn(delta) > 0) && mpz_perfect_square_p(delta);
+    }
+    if (go) {
+        mpz_sqrt(k, delta);
+        mpz_mul(P, A, E); mpz_mul_ui(P, P, 4);
+        mpz_mul(tmp, B, D); mpz_submul_ui(P, tmp, 2);      /* P = 4AE - 2BD */
+        mpz_mul(Q, A, F); mpz_mul_ui(Q, Q, 4);
+        mpz_mul(tmp, D, D); mpz_sub(Q, Q, tmp);            /* Q = 4AF - D^2 */
+        mpz_mul(W, P, P);                                  /* W = -(P^2 + 4 k^2 Q) */
+        mpz_mul(tmp, k, k); mpz_mul(tmp, tmp, Q); mpz_addmul_ui(W, tmp, 4);
+        mpz_neg(W, W);
+        go = (mpz_sgn(W) != 0);
+    }
+
+    bool handled = false;
+    if (go) {
+        handled = true;
+        st->max_visits = SI_MAX_NODES;
+        mpz_t absW; mpz_init(absW); mpz_abs(absW, W);
+        Expr* dl = divisors_ordinary(absW);
+        mpz_clear(absW);
+        mpz_t d1, d2, U, V, x, y, fourk, twok2, num;
+        mpz_inits(d1, d2, U, V, x, y, fourk, twok2, num, NULL);
+        mpz_mul_ui(fourk, k, 4);
+        mpz_mul(twok2, k, k); mpz_mul_ui(twok2, twok2, 2);
+        if (dl && dl->type == EXPR_FUNCTION) {
+            for (size_t i = 0; i < dl->data.function.arg_count && !st->overflow; i++) {
+                if (!expr_is_integer_like(dl->data.function.args[i])) continue;
+                mpz_t g; mpz_init(g); expr_to_mpz(dl->data.function.args[i], g);
+                for (int sg = 1; sg >= -1; sg -= 2) {
+                    if (++st->visits > st->max_visits) { st->overflow = true; break; }
+                    mpz_set(d1, g); if (sg < 0) mpz_neg(d1, d1);   /* d1 | W */
+                    if (!mpz_divisible_p(W, d1)) continue;
+                    mpz_divexact(d2, W, d1);
+                    mpz_add(num, d1, d2);                          /* U = (d1+d2)/(4k) */
+                    if (!mpz_divisible_p(num, fourk)) continue;
+                    mpz_divexact(U, num, fourk);
+                    mpz_sub(V, d2, d1);                            /* V = (d2 - d1)/2 */
+                    if (mpz_odd_p(V)) continue;
+                    mpz_divexact_ui(V, V, 2);
+                    mpz_add(num, V, P);                            /* y = (V+P)/(2k^2) */
+                    if (!mpz_divisible_p(num, twok2)) continue;
+                    mpz_divexact(y, num, twok2);
+                    mpz_mul(num, B, y); mpz_sub(num, U, num); mpz_sub(num, num, D); /* x=(U-By-D)/(2A) */
+                    mpz_mul_ui(tmp, A, 2);
+                    if (!mpz_divisible_p(num, tmp)) continue;
+                    mpz_divexact(x, num, tmp);
+                    if (!mpz_fits_slong_p(x) || !mpz_fits_slong_p(y)) continue;
+                    int64_t vals[SI_MAX_VARS];
+                    for (int kk = 0; kk < n; kk++) vals[kk] = 0;
+                    vals[Xv] = mpz_get_si(x); vals[Yv] = mpz_get_si(y);
+                    if (si_verify(c, vals)) emit_full(st, vals);
+                }
+                mpz_clear(g);
+            }
+        }
+        if (dl) expr_free(dl);
+        mpz_clears(d1, d2, U, V, x, y, fourk, twok2, num, NULL);
+    }
+
+    mpz_clears(A, B, C, D, E, F, delta, k, P, Q, W, tmp, NULL);
+    return handled;
+}
+
+/* --- Definite binary quadratic (ellipse)  A x^2 + B x y + C y^2 + D x + E y + F
+ *     == 0  with discriminant  delta = B^2 - 4 A C < 0. ---
+ *
+ * A negative discriminant makes the quadratic part positive- (or negative-)
+ * definite, so the conic is a compact ellipse with FINITELY many integer points
+ * -- but a rotated one (B != 0) is not bounded by derive_bounds, which only
+ * boxes sign-definite / even-only variables.  Treat the equation as a quadratic
+ * in x for each fixed y:  A x^2 + (B y + D) x + (C y^2 + E y + F) == 0.  Its
+ * x-discriminant  disc_x(y) = delta y^2 + (2 B D - 4 A E) y + (D^2 - 4 A F)  is a
+ * DOWNWARD parabola in y (leading coefficient delta < 0), so real x exist only
+ * for y in the finite interval between its roots.  Enumerate those y, solve the
+ * integer quadratic in x exactly (perfect-square discriminant), and verify.
+ * Exhaustive over the (bounded) ellipse, so an empty result is a PROOF. */
+static bool si_solve_elliptic_bqf(SICtx* c, SearchState* st) {
+    if (c->neq != 1) return false;
+    const MPoly* eq = c->eq[0]; int n = c->n;
+    int act[SI_MAX_VARS], ka = 0;
+    for (int v = 0; v < n; v++) if (mpoly_deg_var(eq, v) >= 1) act[ka++] = v;
+    if (ka != 2) return false;
+    int Xv = act[0], Yv = act[1];
+
+    mpz_t A, B, C, D, E, F; mpz_inits(A, B, C, D, E, F, NULL);
+    bool shape = true;
+    for (size_t t = 0; t < eq->n_terms && shape; t++) {
+        const int* ex = eq->exps + t * (size_t)n;
+        for (int v = 0; v < n; v++)
+            if (v != Xv && v != Yv && ex[v] != 0) { shape = false; break; }
+        if (!shape) break;
+        int ix = ex[Xv], iy = ex[Yv];
+        if (ix == 2 && iy == 0) mpz_add(A, A, eq->coefs[t]);
+        else if (ix == 1 && iy == 1) mpz_add(B, B, eq->coefs[t]);
+        else if (ix == 0 && iy == 2) mpz_add(C, C, eq->coefs[t]);
+        else if (ix == 1 && iy == 0) mpz_add(D, D, eq->coefs[t]);
+        else if (ix == 0 && iy == 1) mpz_add(E, E, eq->coefs[t]);
+        else if (ix == 0 && iy == 0) mpz_add(F, F, eq->coefs[t]);
+        else shape = false;                                /* total degree > 2 */
+    }
+
+    mpz_t delta, tmp; mpz_inits(delta, tmp, NULL);
+    if (shape) {
+        mpz_mul(delta, B, B); mpz_mul(tmp, A, C); mpz_submul_ui(delta, tmp, 4);  /* B^2 - 4AC */
+    }
+    if (!shape || mpz_sgn(delta) >= 0) {                   /* not a definite ellipse */
+        mpz_clears(A, B, C, D, E, F, delta, tmp, NULL); return false;
+    }
+    /* Normalise the leading coefficient positive (delta unchanged by negation). */
+    if (mpz_sgn(A) < 0) {
+        mpz_neg(A, A); mpz_neg(B, B); mpz_neg(C, C);
+        mpz_neg(D, D); mpz_neg(E, E); mpz_neg(F, F);
+    }
+
+    /* y-range where disc_x(y) = delta y^2 + beta y + gamma >= 0. */
+    mpz_t beta, gamma, inner; mpz_inits(beta, gamma, inner, NULL);
+    mpz_mul(beta, B, D); mpz_mul_ui(beta, beta, 2);
+    mpz_mul(tmp, A, E); mpz_submul_ui(beta, tmp, 4);       /* beta = 2BD - 4AE */
+    mpz_mul(gamma, D, D); mpz_mul(tmp, A, F); mpz_submul_ui(gamma, tmp, 4); /* D^2 - 4AF */
+    mpz_mul(inner, beta, beta); mpz_mul(tmp, delta, gamma);
+    mpz_submul_ui(inner, tmp, 4);                          /* beta^2 - 4 delta gamma */
+
+    bool handled = true;
+    if (mpz_sgn(inner) < 0) {                              /* no real y -> {} proof */
+        st->max_visits = SI_MAX_NODES;
+    } else {
+        double dDelta = mpz_get_d(delta), dBeta = mpz_get_d(beta), dInner = mpz_get_d(inner);
+        double sq = sqrt(dInner < 0 ? 0 : dInner);
+        double rA = (-dBeta + sq) / (2.0 * dDelta), rB = (-dBeta - sq) / (2.0 * dDelta);
+        double dlo = (rA < rB ? rA : rB) - 2.0, dhi = (rA < rB ? rB : rA) + 2.0;
+        if (!(dlo > -9e17 && dhi < 9e17) || (dhi - dlo) > (double)SI_MAX_NODES) {
+            handled = false;                               /* too wide / overflow -> decline */
+        } else {
+            st->max_visits = SI_MAX_NODES;
+            int64_t ylo = (int64_t)floor(dlo), yhi = (int64_t)ceil(dhi);
+            mpz_t a1, a0, disc, root, num, twoA, yz, s2;
+            mpz_inits(a1, a0, disc, root, num, twoA, yz, s2, NULL);
+            mpz_mul_ui(twoA, A, 2);
+            for (int64_t yy = ylo; yy <= yhi && !st->overflow; yy++) {
+                mpz_set_si(yz, yy);
+                /* a1 = B y + D,  a0 = C y^2 + E y + F. */
+                mpz_mul(a1, B, yz); mpz_add(a1, a1, D);
+                mpz_mul(a0, C, yz); mpz_add(a0, a0, E); mpz_mul(a0, a0, yz); mpz_add(a0, a0, F);
+                mpz_mul(disc, a1, a1); mpz_mul(s2, A, a0); mpz_submul_ui(disc, s2, 4); /* a1^2 - 4A a0 */
+                if (mpz_sgn(disc) < 0 || !mpz_perfect_square_p(disc)) continue;
+                mpz_sqrt(root, disc);
+                for (int sgn = 1; sgn >= -1; sgn -= 2) {
+                    if (++st->visits > st->max_visits) { st->overflow = true; break; }
+                    mpz_set(num, root); if (sgn < 0) mpz_neg(num, num);
+                    mpz_sub(num, num, a1);                  /* -a1 +/- sqrt(disc) */
+                    if (!mpz_divisible_p(num, twoA)) continue;
+                    mpz_divexact(num, num, twoA);           /* x */
+                    if (!mpz_fits_slong_p(num)) continue;
+                    int64_t vals[SI_MAX_VARS];
+                    for (int i = 0; i < n; i++) vals[i] = 0;
+                    vals[Xv] = mpz_get_si(num); vals[Yv] = yy;
+                    if (si_verify(c, vals)) emit_full(st, vals);
+                    if (mpz_sgn(root) == 0) break;          /* double root: one x */
+                }
+            }
+            mpz_clears(a1, a0, disc, root, num, twoA, yz, s2, NULL);
+        }
+    }
+
+    mpz_clears(A, B, C, D, E, F, delta, tmp, beta, gamma, inner, NULL);
+    return handled;
+}
+
 /* Dispatch the special forms.  Returns true if one handled the input
  * (candidates emitted into st). */
 static bool si_try_special_forms(SICtx* c, SearchState* st) {
     if (si_solve_pell(c, st)) return true;
     if (si_solve_conic(c, st)) return true;
+    if (si_solve_factorable_conic(c, st)) return true;
+    if (si_solve_elliptic_bqf(c, st)) return true;
     if (si_solve_reciprocal(c, st)) return true;
     if (si_solve_linelim_bilinear(c, st)) return true;
     return false;
@@ -3360,10 +3974,27 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
         if (pell) { ctx_free(&c); return pell; }
     }
 
+    /* Unbounded positive generalised Pell  x^2 - D y^2 == N  (|N| >= 2) -> one
+     * parametric family per solution class (Nagell fundamentals + orbit). */
+    {
+        Expr* gp = si_solve_genpell_parametric(&c);
+        if (gp) { ctx_free(&c); return gp; }
+    }
+
     /* Homogeneous linear system with positivity -> parametric ray (symbolic). */
     {
         Expr* ray = si_solve_linear_system_ray(&c);
         if (ray) { ctx_free(&c); return ray; }
+    }
+
+    /* General unconstrained linear system (m >= 2 equations, unbounded) -> the
+     * complete integer solution via HNF: particular solution + kernel lattice
+     * as C[k], or {} when provably unsolvable.  (Replaces the silent wrong `{}`
+     * the Complexes-oriented linear-system dispatch produced for underdetermined
+     * integer systems.) */
+    {
+        Expr* hs = si_solve_linear_system_hnf(&c);
+        if (hs) { ctx_free(&c); return hs; }
     }
 
     /* Prouhet-Tarry-Escott equal-power-sum system with a forcing disequation

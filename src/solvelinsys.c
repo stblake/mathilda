@@ -504,6 +504,23 @@ Expr* solvelinsys_solve_linear_system(Expr* equations,
     bool any_free = false;
     for (size_t j = 0; j < n; j++) if (!var_is_pivot[j]) { any_free = true; break; }
 
+    /* Underdetermined system over the Integers: the pivot values are a
+     * RATIONAL parametric family in the free variables (y -> (4 + 2 x)/5).
+     * This rational RREF cannot express the *integer* solution family, and
+     * neither dropping it (a silent wrong `{}` for a solvable system) nor
+     * returning it verbatim (a rational family that hides the integrality
+     * constraint) is honest.  Decline: Solve is left unevaluated, pending
+     * the HNF path that emits the integer family {x -> ..., y -> ..., z ->
+     * ...} in C[k].  (A single integer linear equation never reaches here --
+     * solveint's parametric path answers it first; and the fully determined
+     * integer case, any_free == false, is filtered soundly below.) */
+    if (integers_only && any_free) {
+        free(var_is_pivot);
+        free(pivot_row_for_col);
+        am_free(&A);
+        return NULL;
+    }
+
     Expr** rules = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
     size_t rules_count = 0;
 
@@ -529,7 +546,9 @@ Expr* solvelinsys_solve_linear_system(Expr* equations,
         val = simplify_entry(val);
 
         /* Domain filter: reject the whole solution if this value
-         * violates the requested domain. */
+         * violates the requested domain.  (Integers is only reached here
+         * for a fully determined system -- the underdetermined case
+         * declined above -- so `is_concrete_integer` is a sound test.) */
         bool reject = false;
         if (integers_only && !is_concrete_integer(val)) reject = true;
         else if (reals_only && contains_complex_head(val)) reject = true;

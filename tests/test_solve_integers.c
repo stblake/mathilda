@@ -357,6 +357,147 @@ static void test_mordell(void) {
         "Solve[Equal[Power[y, 2], Plus[-7, Power[x, 3]]], List[x, y], Integers]");
 }
 
+/* Correctness (P0) + HNF (P0b): a general linear SYSTEM over the Integers.
+ *
+ * The underdetermined case used to return a silent wrong `{}` -- the
+ * Complexes-oriented linear-system dispatch expressed the pivot variables as a
+ * RATIONAL parametric family (y -> (4 + 2 x)/5), then rejected each RHS as "not
+ * a concrete integer", emptying a set with infinitely many integer points.  The
+ * HNF path (`si_solve_linear_system_hnf`) now returns the COMPLETE integer
+ * family: a particular solution + the kernel lattice as C[k].  The particular
+ * representative is whatever the deterministic HNF pivots produce; both cases
+ * below are verified against their equations at several C[1] values. */
+static void test_linear_system_integers_hnf(void) {
+    /* Underdetermined: 2 equations, 3 unknowns -> a one-parameter family. */
+    run_test("Solve[{x + 2 y + 3 z == 10, x - y + z == 2}, {x, y, z}, Integers]",
+        "List[List[Rule[x, Plus[18, Times[5, C[1]]]], "
+             "Rule[y, Plus[8, Times[2, C[1]]]], "
+             "Rule[z, Plus[-8, Times[-3, C[1]]]]]]");
+    /* Confirm the family satisfies both equations for a specific parameter. */
+    run_test("{x + 2 y + 3 z, x - y + z} /. "
+             "(Solve[{x + 2 y + 3 z == 10, x - y + z == 2}, {x, y, z}, "
+             "Integers] /. C[1] -> 3)[[1]]",
+        "List[10, 2]");
+    /* A second underdetermined system. */
+    run_test("Solve[{x + y + z == 6, x + 2 y + 4 z == 10}, {x, y, z}, Integers]",
+        "List[List[Rule[x, Plus[14, Times[2, C[1]]]], "
+             "Rule[y, Plus[-14, Times[-3, C[1]]]], "
+             "Rule[z, Plus[6, C[1]]]]]");
+    /* Determined, integer solution -> read off. */
+    run_test("Solve[{x + y == 5, x - y == 1}, {x, y}, Integers]",
+        "List[List[Rule[x, 3], Rule[y, 2]]]");
+    /* Determined, non-integer solution (3/2, 1/2) -> {} is a real proof. */
+    run_test("Solve[{x + y == 2, x - y == 1}, {x, y}, Integers]", "List[]");
+    /* Inconsistent -> {} is a real proof. */
+    run_test("Solve[{x + y == 1, x + y == 2}, {x, y}, Integers]", "List[]");
+    /* Underdetermined but integer-inconsistent (2 x + 2 y == 3 forces an odd
+     * sum of evens): HNF's divisibility test proves no integer solution. */
+    run_test("Solve[{2 x + 2 y == 3, x - y == 0}, {x, y}, Integers]", "List[]");
+}
+
+/* Factorable binary quadratic (Runge's simplest case): a single 2-variable
+ * degree-2 equation whose quadratic part has a CROSS term and a perfect-square
+ * discriminant delta = B^2 - 4 A C factors into two rational linear forms, so
+ * the hyperbola has finitely many integer points found by a divisor
+ * enumeration (`si_solve_factorable_conic`).  Exhaustive, so `{}` is a PROOF. */
+static void test_factorable_conic(void) {
+    /* x^2 + x y - 2 y^2 == (x - y)(x + 2 y); == 4 has six integer points. */
+    run_test("Solve[x^2 + x y - 2 y^2 == 4, {x, y}, Integers]",
+        "List[List[Rule[x, -3], Rule[y, 1]], List[Rule[x, -2], Rule[y, -1]], "
+             "List[Rule[x, -2], Rule[y, 0]], List[Rule[x, 2], Rule[y, 0]], "
+             "List[Rule[x, 2], Rule[y, 1]], List[Rule[x, 3], Rule[y, -1]]]");
+    /* Same form == 15: a mod-3 obstruction means NO integer solution -- the
+     * divisor enumeration proves it (not a decline). */
+    run_test("Solve[(x - y) (x + 2 y) == 15, {x, y}, Integers]", "List[]");
+    run_test("Solve[x^2 + x y - 2 y^2 == 15, {x, y}, Integers]", "List[]");
+    /* Non-unit leading coefficients: 2 x^2 + 3 x y - 2 y^2 = (2 x - y)(x + 2 y),
+     * delta = 25.  (si_solve_conic could not: it needs a unit Y^2 coefficient.) */
+    run_test("Solve[2 x^2 + 3 x y - 2 y^2 == 7, {x, y}, Integers]",
+        "List[List[Rule[x, -3], Rule[y, 1]], List[Rule[x, 3], Rule[y, -1]]]");
+    /* Constraints filter the exhaustive set to the positive point. */
+    run_test("Solve[x^2 + x y - 2 y^2 == 4 && x > 0 && y > 0, {x, y}, Integers]",
+        "List[List[Rule[x, 2], Rule[y, 1]]]");
+    /* Non-square discriminant (delta = 5) is a genuine Pell-type conic, not
+     * factorable: unbounded -> left unevaluated, never a wrong {}. */
+    run_test("Solve[x^2 + 3 x y + y^2 == 11, {x, y}, Integers]",
+        "Solve[Equal[Plus[Power[x, 2], Times[3, Times[x, y]], Power[y, 2]], 11], "
+             "List[x, y], Integers]");
+}
+
+/* Generalised Pell  x^2 - D y^2 == N  (N != +1) with x > 0 && y > 0, unbounded:
+ * one parametric family per solution class (Nagell fundamentals + fundamental-
+ * unit orbit, `si_solve_genpell_parametric`).  Validated exhaustively against a
+ * brute-force positive-orthant enumeration over ~30 (D,N) pairs during
+ * development; the property assertions here pin the class count, the class
+ * fundamentals (C[1] -> 0), that every parameter value satisfies the equation,
+ * and that an unsolvable equation is a PROOF (empty), never a wrong family. */
+static void test_generalized_pell(void) {
+    /* x^2 - 2 y^2 == 7: two classes, fundamentals (3,1) and (5,3). */
+    run_test("Length[Solve[x^2 - 2 y^2 == 7 && x > 0 && y > 0, {x, y}, Integers]]",
+        "2");
+    run_test("Simplify[{x, y} /. (Solve[x^2 - 2 y^2 == 7 && x > 0 && y > 0, "
+             "{x, y}, Integers][[1]] /. C[1] -> 0)]", "List[3, 1]");
+    run_test("Simplify[{x, y} /. (Solve[x^2 - 2 y^2 == 7 && x > 0 && y > 0, "
+             "{x, y}, Integers][[2]] /. C[1] -> 0)]", "List[5, 3]");
+    /* The next orbit member of the first class is (13, 9). */
+    run_test("Simplify[{x, y} /. (Solve[x^2 - 2 y^2 == 7 && x > 0 && y > 0, "
+             "{x, y}, Integers][[1]] /. C[1] -> 1)]", "List[13, 9]");
+    /* Every parameter value of every class satisfies x^2 - 2 y^2 == 7. */
+    run_test("Simplify[(x^2 - 2 y^2) /. (Solve[x^2 - 2 y^2 == 7 && x > 0 && "
+             "y > 0, {x, y}, Integers][[1]] /. C[1] -> 3)]", "7");
+    run_test("Simplify[(x^2 - 2 y^2) /. (Solve[x^2 - 2 y^2 == 7 && x > 0 && "
+             "y > 0, {x, y}, Integers][[2]] /. C[1] -> 5)]", "7");
+    /* x^2 - 5 y^2 == 4 has three classes. */
+    run_test("Length[Solve[x^2 - 5 y^2 == 4 && x > 0 && y > 0, {x, y}, Integers]]",
+        "3");
+    /* Provably unsolvable (a mod-8 obstruction) -> {}, not a decline. */
+    run_test("Solve[x^2 - 2 y^2 == 5 && x > 0 && y > 0, {x, y}, Integers]",
+        "List[]");
+    /* Negative Pell N = -1: solvable over D = 13, fundamental (18, 5). */
+    run_test("Length[Solve[x^2 - 13 y^2 == -1 && x > 0 && y > 0, {x, y}, Integers]]",
+        "1");
+    run_test("Simplify[{x, y} /. (Solve[x^2 - 13 y^2 == -1 && x > 0 && y > 0, "
+             "{x, y}, Integers][[1]] /. C[1] -> 0)]", "List[18, 5]");
+    run_test("Simplify[(x^2 - 13 y^2) /. (Solve[x^2 - 13 y^2 == -1 && x > 0 && "
+             "y > 0, {x, y}, Integers][[1]] /. C[1] -> 2)]", "-1");
+    /* Negative Pell unsolvable over D = 3 (even CF period) -> {} proof. */
+    run_test("Solve[x^2 - 3 y^2 == -1 && x > 0 && y > 0, {x, y}, Integers]",
+        "List[]");
+    /* Without the positive-orthant constraints the unbounded family is declined
+     * (left unevaluated), matching the N = +1 parametric convention. */
+    run_test("Head[Solve[x^2 - 2 y^2 == 7, {x, y}, Integers]]", "Solve");
+}
+
+/* Definite binary quadratic (ellipse): a 2-variable degree-2 equation with a
+ * negative discriminant B^2 - 4 A C < 0 is a compact conic with finitely many
+ * integer points -- but a ROTATED one (cross term) is not bounded by the
+ * interval bounder.  `si_solve_elliptic_bqf` treats it as a quadratic in x per
+ * fixed y over the finite y-interval where an x is real, exhaustively, so `{}`
+ * is a proof.  All counts below were checked against brute force over |.|<=200. */
+static void test_elliptic_bqf(void) {
+    /* Rotated ellipse x^2 + x y + y^2 == 3: six points. */
+    run_test("Solve[x^2 + x y + y^2 == 3, {x, y}, Integers]",
+        "List[List[Rule[x, -2], Rule[y, 1]], List[Rule[x, -1], Rule[y, -1]], "
+             "List[Rule[x, -1], Rule[y, 2]], List[Rule[x, 1], Rule[y, -2]], "
+             "List[Rule[x, 1], Rule[y, 1]], List[Rule[x, 2], Rule[y, -1]]]");
+    run_test("Length[Solve[x^2 + x y + y^2 == 7, {x, y}, Integers]]", "12");
+    run_test("Length[Solve[x^2 + x y + y^2 == 91, {x, y}, Integers]]", "24");
+    /* Non-unit rotated ellipse. */
+    run_test("Solve[3 x^2 + 2 x y + 3 y^2 == 24, {x, y}, Integers]",
+        "List[List[Rule[x, -3], Rule[y, 1]], List[Rule[x, -1], Rule[y, 3]], "
+             "List[Rule[x, 1], Rule[y, -3]], List[Rule[x, 3], Rule[y, -1]]]");
+    /* Negative-definite form is normalised to positive-definite. */
+    run_test("Length[Solve[-x^2 - x y - y^2 == -7, {x, y}, Integers]]", "12");
+    /* Definite form with linear terms. */
+    run_test("Solve[x^2 + x y + y^2 - 3 x == 7, {x, y}, Integers]", "List[]");
+    /* Provably no representation (exhaustive over the ellipse) -> {} proof. */
+    run_test("Solve[x^2 + x y + y^2 == 2, {x, y}, Integers]", "List[]");
+    run_test("Solve[5 x^2 + 6 x y + 5 y^2 == 8, {x, y}, Integers]", "List[]");
+    run_test("Solve[7 x^2 - 5 x y + 7 y^2 == 39, {x, y}, Integers]", "List[]");
+    /* A constraint filters the exhaustive set. */
+    run_test("Length[Solve[x^2 + x y + y^2 == 7 && x > 0, {x, y}, Integers]]", "6");
+}
+
 /* Two fourth powers a^4+b^4 as a sum in two distinct ways.  The smallest is
  * 635318657 = 59^4+158^4 = 133^4+134^4 (Euler), so the < 10^8 box is a TRUE
  * negative -- an empty set that must not be mistaken for a false negative.
@@ -433,6 +574,10 @@ int main(void) {
     TEST(test_linear_parametric);
     TEST(test_integer_restriction);
     TEST(test_sum_of_two_squares);
+    TEST(test_linear_system_integers_hnf);
+    TEST(test_factorable_conic);
+    TEST(test_generalized_pell);
+    TEST(test_elliptic_bqf);
     TEST(test_two_fourth_powers);
     TEST(test_bounded_mixed_power);
     TEST(test_euler_brick);

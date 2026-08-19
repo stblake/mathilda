@@ -488,6 +488,7 @@ set(COMMON_SRC
     ../src/linalg/nullspace.c
     ../src/linalg/matrank.c
     ../src/linalg/latticereduce.c
+    ../src/linalg/hnf.c
     ../src/linalg/qrdecomp.c
     ../src/linalg/qrdecomp_machine.c
     ../src/linalg/qrdecomp_mpfr.c
@@ -1022,6 +1023,13 @@ add_test(NAME prime_tests COMMAND prime_tests)
 add_executable(iter_tests test_iter.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(iter_tests m)
 target_include_directories(iter_tests PRIVATE ../src)
+
+# gmp_compat: pure-GMP test of the mpz_prevprime fallback for GMP < 6.3.0.
+# No mathilda_common dependency -- it links only against GMP.
+add_executable(gmp_compat_tests test_gmp_compat.c)
+target_link_libraries(gmp_compat_tests gmp)
+target_include_directories(gmp_compat_tests PRIVATE ../src)
+add_test(NAME gmp_compat_tests COMMAND gmp_compat_tests)
 
 add_executable(sum_tests test_sum.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(sum_tests m)

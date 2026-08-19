@@ -29,6 +29,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <gmp.h>
+#include "../gmp_compat.h"   /* mpz_prevprime fallback for GMP < 6.3.0 */
 
 /* During the Newton search for p_n, stop iterating once pi(x) is within this
  * many primes of n, then finish with a nextprime/prevprime walk. */
@@ -153,8 +154,8 @@ static Expr* prime_walk(int64_t x, int64_t c, int64_t n) {
         for (int64_t k = n - c; k > 0; k--) mpz_nextprime(cur, cur);
     } else {
         mpz_add_ui(cur, cur, 1);
-        mpz_prevprime(cur, cur);
-        for (int64_t k = c - n; k > 0; k--) mpz_prevprime(cur, cur);
+        mathilda_mpz_prevprime(cur, cur);
+        for (int64_t k = c - n; k > 0; k--) mathilda_mpz_prevprime(cur, cur);
     }
 
     Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(cur));

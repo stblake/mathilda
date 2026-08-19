@@ -11,6 +11,7 @@
  */
 
 #include "linalg.h"
+#include "hnf.h"
 #include "symtab.h"
 #include "attr.h"
 
@@ -53,4 +54,12 @@ void linalg_init(void) {
     symtab_get_def("LatticeReduce")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("FindIntegerNullVector", builtin_findintegernullvector);
     symtab_get_def("FindIntegerNullVector")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("HermiteDecomposition", builtin_hermite_decomposition);
+    symtab_get_def("HermiteDecomposition")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("HermiteDecomposition",
+        "HermiteDecomposition[m]\n"
+        "\tGives the Hermite normal form decomposition {u, r} of the integer\n"
+        "\tmatrix m: u is unimodular (Abs[Det[u]] == 1), r is the row Hermite\n"
+        "\tnormal form, and u . m == r.  r is in echelon shape with positive\n"
+        "\tpivots and entries above each pivot reduced into [0, pivot).");
 }
