@@ -649,23 +649,43 @@ static double solve_log_bound(double a, double b) {
  *  large, or not a rank-1 complex cubic).                               */
 static int thue_norm_reps_cubic11(NumberField* K, NFUnits* U, const mpz_t m,
                                   mpz_t*** reps_out) {
-    if (K->deg != 3 || nf_r1(K) != 1 || nf_r2(K) != 1) return -1;
-    if (nf_units_rank(U) != 1) return -1;
+    /* Cubic; rank-1 complex (r1=1,r2=1) or rank-2 totally real (r1=3,r2=0). */
+    if (K->deg != 3) return -1;
+    bool rank1 = (nf_r1(K) == 1 && nf_r2(K) == 1 && nf_units_rank(U) == 1);
+    bool rank2 = (nf_r1(K) == 3 && nf_r2(K) == 0 && nf_units_rank(U) == 2);
+    if (!rank1 && !rank2) return -1;
     if (nf_ok_index(K) != 1) return -1;   /* non-monogenic: mu-enumeration over Z[theta]
                                            * would miss O_K\Z[theta] reps -> DECLINE (M2 is
                                            * monogenic-only; general m over O_K is a follow-on). */
     const int n = 3;
     slong prec = K->prec + 16;
     acb_srcptr rt = K->roots;                 /* rt[0] real, rt[1] Im>0, rt[2] conj */
-
-    /* regulator R = |log|sigma1(eps)|| */
-    const mpz_t* uc = nf_units_coords(U, 0);
-    acb_t tmpc; acb_init(tmpc); arb_t ab; arb_init(ab);
-    embed_acb(uc, n, rt + 0, tmpc, prec); acb_abs(ab, tmpc, prec);
-    double R = fabs(log(arb_to_d(ab)));
-    double eR = exp(R);
     double sqm = sqrt(fabs(mpz_get_d(m)));
-    double bnd[3] = { eR, sqm, sqm };          /* upper bounds on |sigma_i(mu)| */
+
+    /* per-embedding upper bounds bnd[i] on |sigma_i(mu)| for a mu reduced into a
+     * fundamental domain of the unit log-lattice. */
+    double bnd[3];
+    acb_t tmpc; acb_init(tmpc); arb_t ab; arb_init(ab);
+    if (rank1) {
+        /* |sigma1(mu)| in [1, e^R); norm forces |sigma2| = |sigma3| <= sqrt|m|. */
+        const mpz_t* uc = nf_units_coords(U, 0);
+        embed_acb(uc, n, rt + 0, tmpc, prec); acb_abs(ab, tmpc, prec);
+        double R = fabs(log(arb_to_d(ab)));
+        bnd[0] = exp(R); bnd[1] = sqm; bnd[2] = sqm;
+    } else {
+        /* rank-2 totally real: a rep reduced into the fundamental parallelogram
+         * of <L(eps1),L(eps2)> has, PER embedding i, |L_i(mu)| <= |L_i(eps1)| +
+         * |L_i(eps2)| + |log|m||/3 (over-cover is safe). */
+        double Li[2][3];
+        mpz_t Dd; mpz_init(Dd); nf_units_denom(U, Dd); double logD = log(mpz_get_d(Dd)); mpz_clear(Dd);
+        for (int k = 0; k < 2; k++) {
+            const mpz_t* uc = nf_units_coords(U, k);
+            for (int i = 0; i < 3; i++) { embed_acb(uc, n, rt + i, tmpc, prec); acb_abs(ab, tmpc, prec);
+                Li[k][i] = fabs(log(arb_to_d(ab)) - logD); }
+        }
+        double shift = fabs(log(fabs(mpz_get_d(m)))) / 3.0;
+        for (int i = 0; i < 3; i++) bnd[i] = exp(Li[0][i] + Li[1][i] + shift + 1.0);
+    }
 
     /* inverse Vandermonde V^{-1}, V[i][j] = rt[i]^j; coords = V^{-1}(s1,s2,s3) */
     acb_mat_t V, Vi; acb_mat_init(V, 3, 3); acb_mat_init(Vi, 3, 3);

@@ -127,8 +127,11 @@ static void test_rigorous(void) {
     { const long f[] = {1,-7,14,-7,1}; check_rigorous(f, 4, 2, 2, 0, "2-quadratic reducible m=2"); }
     /* Pure power of a single factor -> infinite / PARI-refused -> DECLINE. */
     { const long f[] = {1,-3,3,-1};  check_rigorous(f, 3, 1,  0, 1, "(x-y)^3==1 pure power (decline)"); }
-    /* Still out of scope -> DECLINE: rank-2 totally-real |m| != 1 (M2b). */
-    { const long f[] = {1,-3,0,1};   check_rigorous(f, 3, 2,  0, 1, "x^3-3xy^2+y^3==2 (rank-2 |m|!=1: decline)"); }
+    /* Rank-2 totally-real cubic, |m| != 1 (M2b): mu-enumeration over the 2-D
+     * fundamental domain.  Cross-checked vs PARI. */
+    { const long f[] = {1,-3,0,1};   check_rigorous(f, 3, 2,  0, 0, "x^3-3xy^2+y^3==2 (rank-2, {})"); }
+    { const long f[] = {1,-3,0,1};   check_rigorous(f, 3, 4,  0, 0, "x^3-3xy^2+y^3==4 (rank-2, {})"); }
+    { const long f[] = {1,-3,0,1};   check_rigorous(f, 3, 8,  6, 0, "x^3-3xy^2+y^3==8 (rank-2, 6 sols)"); }
     printf("  rigorous: OK\n");
 }
 

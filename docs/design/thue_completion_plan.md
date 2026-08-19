@@ -29,9 +29,13 @@ DECLINE*. Never a wrong or partial answer. `benchmarks/88` (PARI/GP `thue()`
 oracle over ~100 equations) is the gate: any `WRONG`/`CRASH` fails.
 
 **Benchmark 88:** after M1 (Voronoi units) + M2 (general `m`) + M3 (Round-2
-maximal order) + reducible forms (§6) + Minkowski-LLL O_K basis, **96 CORRECT / 8
-DECLINE / 0 WRONG / 0 CRASH** (48/56 before M1, 56/48 after M1, 65/39 after M2,
-81/23 after M3, 94/10 after reducible forms). The remaining declines are rank-2 totally-real
+maximal order) + reducible forms (§6) + Minkowski-LLL O_K basis + M2b (rank-2
+`|m| != 1`), **98 CORRECT / 6 DECLINE / 0 WRONG / 0 CRASH** (48/56 before M1,
+56/48 after M1, 65/39 after M2, 81/23 after M3, 94/10 after reducible forms, 96/8
+after Minkowski-LLL). Of the 6 declines, 2 are the reducible perfect powers PARI
+also refuses (correct on both sides); the 4 genuine gaps are the large-regulator
+non-monogenic quartic `Q(10^{1/4})` and the quintic `x^5-5y^5` (rank >= 2 unit
+finding, plan M4), and the totally-complex cyclotomic field (plan M5). The remaining declines are rank-2 totally-real
 `|m| != 1`, larger-regulator non-monogenic quartics/quintics (rank ≥ 2 units,
 plan M4), general `m` over non-monogenic fields, the totally-complex cyclotomic
 field (plan M5), and the reducible perfect powers PARI also refuses — all correct
@@ -209,9 +213,14 @@ integral basis in the struct), `nfunits.c` (search over the `O_K` basis).
 > min/max — all **over-estimates** (a too-large bound is safe; a too-small one
 > would miss solutions). Cross-checked vs PARI over a 270-case grid: 0 WRONG.
 > Clears `binom-cubic-d2-m{2,3,4,5,9,10,73,100}` + `nosol-d2-m4` (benchmark 88:
-> CORRECT 56→65). Rank-2 totally-real `|m|≠1` (`cyclic-cubic-m2`) still DECLINEs
-> — it needs the rank-2 fundamental-domain box (a follow-on, M2b) and/or the
-> ideal-theoretic route (b).
+> CORRECT 56→65).
+> **M2b (2026-08-20): rank-2 totally-real `|m|≠1`.** `thue_norm_reps_cubic11`
+> now also enumerates the rank-2 case — a rep reduced into the fundamental
+> parallelogram of `<L(ε1),L(ε2)>` has, per real embedding `i`, `|L_i(µ)| ≤
+> |L_i(ε1)|+|L_i(ε2)|+|log|m||/3`, giving a finite coordinate box. Clears
+> `cyclic-cubic-m2`, `nosol-cyclic`; `x³−3xy²+y³=8 → 6 pts`; 48-case rank-2 PARI
+> grid 0 WRONG (benchmark 88: CORRECT 96→98). General `m` over a non-monogenic
+> field still declines (M2×M3 follow-on).
 
 **Root cause.** `thue_enumerate` bails at `if (mpz_cmpabs_ui(m,1)!=0) goto done;`.
 The reduction assumes `β=x−θy` is a **unit**. For general `m`, `β` is an
