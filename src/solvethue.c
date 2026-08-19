@@ -33,6 +33,7 @@
 #include <flint/fmpq_poly.h>
 #include <flint/fmpz_poly.h>
 #include <flint/fmpz_poly_factor.h>
+#include <flint/fmpz_vec.h>
 #include <flint/nf_elem.h>
 #include <flint/arb.h>
 #include <flint/acb.h>
@@ -167,6 +168,68 @@ static void fmpz_poly_int_roots(const fmpz_poly_t P, mpz_t** roots, int* nr, int
     fmpz_poly_factor_clear(fac);
 }
 
+/* Build the univariate (in y) poly  G(X, y) - target  for a fixed integer X:
+ * coeff of y^p is G[p]*X^(dG-p), minus target at y^0. */
+static void red_yspec(fmpz_poly_t out, const mpz_t* G, int dG, const mpz_t X, const mpz_t target) {
+    fmpz_poly_zero(out);
+    fmpz_t z, xp; fmpz_init(z); fmpz_init(xp);
+    for (int p = 0; p <= dG; p++) {
+        fmpz_set_mpz(xp, X); fmpz_pow_ui(xp, xp, (unsigned long)(dG - p));
+        fmpz_set_mpz(z, G[p]); fmpz_mul(z, z, xp);
+        fmpz_poly_set_coeff_fmpz(out, p, z);
+    }
+    fmpz_t c0; fmpz_init(c0); fmpz_poly_get_coeff_fmpz(c0, out, 0);
+    fmpz_set_mpz(z, target); fmpz_sub(c0, c0, z); fmpz_poly_set_coeff_fmpz(out, 0, c0);
+    fmpz_clear(c0); fmpz_clear(z); fmpz_clear(xp);
+}
+
+/* No linear factor: eliminate y between factors 0 and 1 via the resultant
+ * R(x) = Res_y(G_0(x,y)-d_0, G_1(x,y)-d_1) (obtained by sampling + integer
+ * interpolation), whose integer roots are the candidate x; solve G_0(x,y)=d_0
+ * for y and verify every factor and F == m. */
+static void red_solve_noline(const RedFactor* fac, int k, const mpz_t* d,
+                             const mpz_t* form, int n, const mpz_t m,
+                             mpz_t** xs, mpz_t** ys, int* np, int* cap) {
+    int da = fac[0].deg, db = fac[1].deg;
+    if (da > 8 || db > 8) return;                        /* keep the sampling small */
+    int nb = 2 * da * db + 4;                            /* > deg R(x): over-sample is safe */
+    fmpz *Xs = _fmpz_vec_init(nb), *Ys = _fmpz_vec_init(nb);
+    fmpz_poly_t Pa, Pb, R; fmpz_poly_init(Pa); fmpz_poly_init(Pb); fmpz_poly_init(R);
+    fmpz_t rr; fmpz_init(rr);
+    mpz_t Xi; mpz_init(Xi);
+    for (int s = 0; s < nb; s++) {
+        fmpz_set_si(Xs + s, s); mpz_set_si(Xi, s);
+        red_yspec(Pa, fac[0].G, da, Xi, d[0]);
+        red_yspec(Pb, fac[1].G, db, Xi, d[1]);
+        fmpz_poly_resultant(rr, Pa, Pb);
+        fmpz_set(Ys + s, rr);
+    }
+    fmpz_poly_interpolate_fmpz_vec(R, Xs, Ys, nb);
+
+    mpz_t* xroots = NULL; int nxr = 0, xcap = 0;
+    fmpz_poly_int_roots(R, &xroots, &nxr, &xcap);
+    mpz_t X, Y, val; mpz_init(X); mpz_init(Y); mpz_init(val);
+    for (int xi = 0; xi < nxr; xi++) {
+        mpz_set(X, xroots[xi]);
+        red_yspec(Pa, fac[0].G, da, X, d[0]);            /* G_0(X,y) = d_0 in y */
+        mpz_t* yroots = NULL; int nyr = 0, ycap = 0;
+        fmpz_poly_int_roots(Pa, &yroots, &nyr, &ycap);
+        for (int yi = 0; yi < nyr; yi++) {
+            mpz_set(Y, yroots[yi]);
+            bool good = true;
+            for (int i = 0; i < k && good; i++) { eval_binform(fac[i].G, fac[i].deg, X, Y, val); if (mpz_cmp(val, d[i]) != 0) good = false; }
+            if (good) { eval_form(form, n, X, Y, val); if (mpz_cmp(val, m) == 0) redpush(xs, ys, np, cap, X, Y); }
+        }
+        for (int yi = 0; yi < nyr; yi++) mpz_clear(yroots[yi]);
+        free(yroots);
+    }
+    for (int xi = 0; xi < nxr; xi++) mpz_clear(xroots[xi]);
+    free(xroots);
+    mpz_clear(X); mpz_clear(Y); mpz_clear(val); mpz_clear(Xi); fmpz_clear(rr);
+    fmpz_poly_clear(Pa); fmpz_poly_clear(Pb); fmpz_poly_clear(R);
+    _fmpz_vec_clear(Xs, nb); _fmpz_vec_clear(Ys, nb);
+}
+
 /* Solve the system { fac[i].G(x,y) = d[i] } given signed targets d[], collecting
  * verified points (that also satisfy F == m) into (xs,ys). */
 static void red_solve_system(const RedFactor* fac, int k, const mpz_t* d,
@@ -175,7 +238,7 @@ static void red_solve_system(const RedFactor* fac, int k, const mpz_t* d,
     /* pick a LINEAR factor as the line, and any other factor as the pivot. */
     int li = -1;
     for (int i = 0; i < k; i++) if (fac[i].deg == 1) { li = i; break; }
-    if (li < 0) return;                                  /* no linear factor: unsupported */
+    if (li < 0) { red_solve_noline(fac, k, d, form, n, m, xs, ys, np, cap); return; }
     int pv = -1;
     for (int i = 0; i < k; i++) if (i != li) { pv = i; break; }
     if (pv < 0) return;
@@ -301,7 +364,8 @@ static int thue_solve_reducible_form(const mpz_t* form, int n, const mpz_t m, Th
     mpz_t c; mpz_init(c); fmpz_get_mpz(c, &fac->c);
 
     mpz_t M; mpz_init(M);
-    bool ok = have_linear && mpz_sgn(c) != 0 && mpz_divisible_p(m, c);
+    (void)have_linear;   /* linear-factor path preferred; resultant handles the rest */
+    bool ok = mpz_sgn(c) != 0 && mpz_divisible_p(m, c);
     mpz_t* xs = NULL; mpz_t* ys = NULL; int np = 0, cap = 0;
     if (ok) {
         mpz_divexact(M, m, c);

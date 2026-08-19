@@ -29,13 +29,15 @@ DECLINE*. Never a wrong or partial answer. `benchmarks/88` (PARI/GP `thue()`
 oracle over ~100 equations) is the gate: any `WRONG`/`CRASH` fails.
 
 **Benchmark 88:** after M1 (Voronoi units) + M2 (general `m`) + M3 (Round-2
-maximal order) + reducible forms (§6), **93 CORRECT / 11 DECLINE / 0 WRONG / 0
-CRASH** (48/56 before M1, 56/48 after M1, 65/39 after M2, 81/23 after M3). The
-remaining declines are rank-2 totally-real `|m| != 1`, larger-regulator
-non-monogenic quartics/quintics, general `m` over non-monogenic fields, the
-reducible perfect powers PARI also refuses, and adversarial-precision cases — all
-correct on both sides. Cross-checked vs PARI over a 270-case `|m| != 1` grid (M2),
-a 130-case non-monogenic grid (M3), and a 90-case reducible grid: 0 WRONG.
+maximal order) + reducible forms (§6), **94 CORRECT / 10 DECLINE / 0 WRONG / 0
+CRASH** (48/56 before M1, 56/48 after M1, 65/39 after M2, 81/23 after M3, 93/11
+after reducible-with-linear). The remaining declines are rank-2 totally-real
+`|m| != 1`, larger-regulator non-monogenic quartics/quintics (rank ≥ 2 units,
+plan M4), general `m` over non-monogenic fields, the totally-complex cyclotomic
+field (plan M5), and the reducible perfect powers PARI also refuses — all correct
+on both sides. Cross-checked vs PARI over a 270-case `|m| != 1` grid (M2), a
+130-case non-monogenic grid (M3), a 90-case reducible grid, and a 150-case
+two-quadratic grid: 0 WRONG.
 
 ### The 56 declines, by root cause (exact counts from the benchmark)
 
@@ -328,5 +330,8 @@ they come first.
   line, substitute into a second factor, integer-root the univariate, verify).
   Works for any `m`; 30-case PARI grid 0 WRONG; clears `thomas-t*`, `x^3-y^3=m`,
   `x^4-y^4=m`, biquadratic. A pure power of one factor (`(x-y)^3=1`, infinite /
-  PARI-refused) DECLINEs. All-non-linear factor patterns (no linear factor)
-  remain a follow-on.
+  PARI-refused) DECLINEs. The **no-linear-factor** case (e.g. two irreducible
+  quadratics `(x^2-3xy+y^2)(x^2-4xy+y^2)`) is handled by eliminating `y` via the
+  resultant `Res_y(G_0-d_0, G_1-d_1)` (sampled + integer-interpolated), whose
+  integer roots give the candidate `x`; 150-case 2-quadratic PARI grid 0 WRONG,
+  clears `adv-close-roots-1`.

@@ -122,6 +122,9 @@ static void test_rigorous(void) {
     { const long f[] = {1,0,-5,0,4}; check_rigorous(f, 4, 3,  0, 0, "biquad reducible (proven {})"); }
     /* Repeated factor (x-y)^2(x-5y): mpz_root(negative,even) guard. */
     { const long f[] = {1,-7,11,-5}; check_rigorous(f, 3, 1,  1, 0, "(x-y)^2(x-5y)==1 repeated factor"); }
+    /* No linear factor -> resultant elimination: (x^2-3xy+y^2)(x^2-4xy+y^2). */
+    { const long f[] = {1,-7,14,-7,1}; check_rigorous(f, 4, 1, 4, 0, "2-quadratic reducible (resultant)"); }
+    { const long f[] = {1,-7,14,-7,1}; check_rigorous(f, 4, 2, 2, 0, "2-quadratic reducible m=2"); }
     /* Pure power of a single factor -> infinite / PARI-refused -> DECLINE. */
     { const long f[] = {1,-3,3,-1};  check_rigorous(f, 3, 1,  0, 1, "(x-y)^3==1 pure power (decline)"); }
     /* Still out of scope -> DECLINE: rank-2 totally-real |m| != 1 (M2b). */
