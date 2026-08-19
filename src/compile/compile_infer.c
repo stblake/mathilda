@@ -315,6 +315,16 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         for (size_t i = 0; i < na; i++) { IT(i, ta); if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false; }
         *out = CT_INT; return true;                    /* UnitStep[0.5] is 1, not 1. */
     }
+    if (strcmp(h, "UnitBox") == 0 && na == 1) {
+        /* Single-argument box, matching the interpreter (multi-arg UnitBox is
+         * left unevaluated there). An array argument routes to the narrowing
+         * kernel; a scalar lowers to the pair of comparisons in the emitter and
+         * answers with an exact Integer 0/1, so CT_INT like UnitStep. */
+        IT(0, ta);
+        if (CT_IS_ARRAY(ta)) return infer_arr_unary(c, h, ta, out);
+        if (ta == CT_BOOL || ta == CT_COMPLEX) return false;
+        *out = CT_INT; return true;                    /* UnitBox[0.5] is 1, not 1. */
+    }
     if (strcmp(h, "Chop") == 0 && (na == 1 || na == 2)) {
         IT(0, ta);
         if (CT_IS_ARRAY(ta) || ta == CT_BOOL || ta == CT_COMPLEX) return false;

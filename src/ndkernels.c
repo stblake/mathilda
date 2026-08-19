@@ -266,6 +266,11 @@ static bool ndk_UnitStep_i(double x, int64_t* o) {
     *o = (x >= 0.0) ? 1 : 0;                        /* -0. >= 0. is true -> 1 */
     return true;
 }
+static bool ndk_UnitBox_i(double x, int64_t* o) {
+    if (isnan(x)) return false;
+    *o = (x >= -0.5 && x <= 0.5) ? 1 : 0;           /* closed box: UnitBox[1/2] = 1 */
+    return true;
+}
 
 /* Exact-integer input. Floor/Ceiling/Round/IntegerPart are the identity on an
  * integer; Sign and UnitStep are not. This arm is what lets the vectorised Game
@@ -273,12 +278,17 @@ static bool ndk_UnitStep_i(double x, int64_t* o) {
  * UnitStep sees integers, not reals. */
 static bool ndk_ident_ii(int64_t x, int64_t* o)    { *o = x; return true; }
 static bool ndk_UnitStep_ii(int64_t x, int64_t* o) { *o = (x >= 0) ? 1 : 0; return true; }
+/* An integer lies in the closed box [-1/2, 1/2] iff it is exactly 0. */
+static bool ndk_UnitBox_ii(int64_t x, int64_t* o)  { *o = (x == 0) ? 1 : 0; return true; }
 
-/* UnitStep has no real-closed or complex kernel on purpose: a real-typed result
- * would be the wrong head, and there is no complex UnitStep. It is reachable
- * only through the narrowing path. */
+/* UnitStep and UnitBox have no real-closed or complex kernel on purpose: a
+ * real-typed result would be the wrong head (both answer with an exact Integer
+ * 0/1), and there is no complex form of either. They are reachable only through
+ * the narrowing path. */
 static const NDUnaryKernel NDKU_UnitStep =
     { NULL, NULL, false, false, ndk_UnitStep_i, ndk_UnitStep_ii, true };
+static const NDUnaryKernel NDKU_UnitBox =
+    { NULL, NULL, false, false, ndk_UnitBox_i, ndk_UnitBox_ii, true };
 
 /* The other five keep their existing real-closed kernels untouched -- the
  * Compile VM and the scalar consumers still use those -- and gain the narrowing
@@ -674,7 +684,7 @@ void ndkernels_init(void) {
     symtab_set_ndarray_unary_kernel("Abs", &NDKU_AbsInt);
     REG_U(Re); symtab_set_ndarray_unary_kernel("Im", &NDKU_ImInt); REG_U(Arg);
     REG_U(Conjugate); REG_U(Sign);
-    REG_U(UnitStep); REG_U(Ramp);
+    REG_U(UnitStep); REG_U(UnitBox); REG_U(Ramp);
     REG_U(Floor); REG_U(Ceiling); REG_U(Round);
     REG_U(IntegerPart); REG_U(FractionalPart);
 

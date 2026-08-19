@@ -114,6 +114,42 @@ static void test_unitbox_threads_over_list(void) {
 }
 
 /* ------------------------------------------------------------------------
+ *  NDArray / packed-array fast path (narrowing ND kernel)
+ * ---------------------------------------------------------------------- */
+
+static void test_unitbox_ndarray(void) {
+    /* A visible NDArray threads through the narrowing kernel -- it was left
+     * UNEVALUATED before UnitBox had one, unlike its siblings UnitStep/Ramp.
+     * The result is an exact-integer array whatever the input dtype. */
+    assert_eval_eq("UnitBox[NDArray[{-1., 0., 1.}]]", "NDArray[{0, 1, 0}]", 0);
+    assert_eval_eq("UnitBox[NDArray[{-1, 0, 1}, DataType -> \"int64\"]]",
+                   "NDArray[{0, 1, 0}]", 0);
+}
+
+static void test_unitbox_packed_exact(void) {
+    /* Over a packed Real range the answer is a uniform integer array (no mixed
+     * heads), and the packed and plain-List surfaces agree element for element. */
+    assert_eval_eq("Total[UnitBox[Range[-100., 100.]]]", "1", 0);
+    assert_eval_eq("UnitBox[Range[-2., 2.]] === UnitBox[{-2., -1., 0., 1., 2.}]",
+                   "True", 0);
+}
+
+/* ------------------------------------------------------------------------
+ *  Compile[] lowering (scalar, integer, and rank-1 array), and the exact
+ *  Integer 0/1 result type that matches the interpreter.
+ * ---------------------------------------------------------------------- */
+
+static void test_unitbox_compile(void) {
+    assert_eval_eq("Compile[{{x, _Real}}, UnitBox[x]][0.3]", "1", 0);
+    assert_eval_eq("Compile[{{x, _Real}}, UnitBox[x]][0.7]", "0", 0);
+    assert_eval_eq("Compile[{{x, _Real}}, UnitBox[x]][0.5]", "1", 0);   /* closed */
+    assert_eval_eq("Compile[{{n, _Integer}}, UnitBox[n]][0]", "1", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, UnitBox[n]][1]", "0", 0);
+    assert_eval_eq("Compile[{{v, _Real, 1}}, UnitBox[v]][{-1., 0., 1.}]",
+                   "{0, 1, 0}", 0);
+}
+
+/* ------------------------------------------------------------------------
  *  Argument-count errors
  * ---------------------------------------------------------------------- */
 
@@ -207,6 +243,9 @@ int main(void) {
     TEST(test_unitbox_complex_zero_imag);
 
     TEST(test_unitbox_threads_over_list);
+    TEST(test_unitbox_ndarray);
+    TEST(test_unitbox_packed_exact);
+    TEST(test_unitbox_compile);
 
     TEST(test_unitbox_no_args_unevaluated);
     TEST(test_unitbox_too_many_args_unevaluated);

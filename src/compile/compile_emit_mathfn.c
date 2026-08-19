@@ -44,8 +44,11 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
                      * the two narrowing heads whose scalar branch is dedicated
                      * AND whose kernel has no real or complex arm, so neither
                      * this interception nor try_kernel would take them and the
-                     * array form had no lowering at all. */
-                    || !strcmp(h, "IntegerPart") || !strcmp(h, "UnitStep"))
+                     * array form had no lowering at all.  UnitBox is a third of
+                     * exactly the same shape (narrowing-only kernel, dedicated
+                     * scalar branch below). */
+                    || !strcmp(h, "IntegerPart") || !strcmp(h, "UnitStep")
+                    || !strcmp(h, "UnitBox"))
         && any_array_arg(c, A, na)) {
         Val a; if (!emit(c, A[0], &a)) return -1;
         if (!CT_IS_ARRAY(a.type)) { c->ok = false; return -1; }
@@ -215,6 +218,36 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
         }
         if (!have) { c->ok = false; return -1; }
         *out = acc;
+        return c->ok ? 1 : -1;
+    }
+    if (strcmp(h, "UnitBox") == 0 && na == 1) {
+        /* UnitBox[x] = (x >= -1/2) * (x <= 1/2), the closed box, answered as an
+         * exact Integer 0/1 (CT_INT) exactly like the UnitStep idiom above. The
+         * argument is emitted twice -- once per comparison -- because binop
+         * consumes its operands; the optimiser folds the duplicate arg load. An
+         * integer x is in the box iff x == 0, i.e. (x >= 0) * (x <= 0). */
+        CompileType at;
+        if (!infer_type(c, A[0], &at) || CT_IS_ARRAY(at) || at == CT_BOOL
+            || at == CT_COMPLEX) { c->ok = false; return -1; }
+        Val lo, hi;
+        if (at == CT_INT) {
+            Val va; if (!emit(c, A[0], &va)) return -1;
+            Slot kz; memset(&kz, 0, sizeof kz);
+            lo = binop(c, OP_GE_I, va, emit_const(c, kz, CT_INT), CT_INT);
+            Val vb; if (!emit(c, A[0], &vb)) return -1;
+            hi = binop(c, OP_LE_I, vb, emit_const(c, kz, CT_INT), CT_INT);
+        } else {
+            Val va; if (!emit(c, A[0], &va)) return -1;
+            coerce(c, &va, CT_REAL);
+            Slot klo; memset(&klo, 0, sizeof klo); klo.r = -0.5;
+            lo = binop(c, OP_GE_R, va, emit_const(c, klo, CT_REAL), CT_INT);
+            Val vb; if (!emit(c, A[0], &vb)) return -1;
+            coerce(c, &vb, CT_REAL);
+            Slot khi; memset(&khi, 0, sizeof khi); khi.r = 0.5;
+            hi = binop(c, OP_LE_R, vb, emit_const(c, khi, CT_REAL), CT_INT);
+        }
+        if (!c->ok) return -1;
+        *out = binop(c, OP_MUL_I, lo, hi, CT_INT);
         return c->ok ? 1 : -1;
     }
     if (strcmp(h, "Chop") == 0 && (na == 1 || na == 2)) {

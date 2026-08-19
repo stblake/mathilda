@@ -591,15 +591,19 @@ at both endpoints, matching the `UnitStep[0] = 1` convention below.
   the same numerical certification `UnitStep` and `Ramp` use.
 - Non-real arguments (a `Complex` with non-zero imaginary part) and
   unresolved symbolic arguments are left unevaluated.
+- **Fast paths.** `UnitBox` has a narrowing NDArray kernel (`1` iff
+  `-1/2 <= x <= 1/2`, an exact integer, real→int and int→int arms like
+  `UnitStep`/`Sign`/`Floor`), so it threads over a visible `NDArray[...]` and
+  reads a packed buffer directly; it is on the `AWARE` / `INT64_OK` lists in
+  `src/pack.c`, and a packed or int64 array stays packed and exact. It also
+  lowers in `Compile[]` (and therefore auto-compiles), scalar and rank-1 array,
+  as `(x >= -1/2) (x <= 1/2)` typed as an Integer. The scalar interpreter path
+  still reuses `UnitStep`'s sign classifier for exact symbolic-real
+  certification.
 - Does **not** thread through `Interval` in this version: `Floor`/`Ceiling`
   are the only piecewise functions here that do, because `Interval`
   threading only supports monotone functions, and `UnitBox` (a two-sided box)
-  isn't one. Not on the packed-array `AWARE` fast-path list either -- both
-  are unmeasured and deliberately deferred, not oversights (see the
-  changelog). Building the two shifted arguments and evaluating each costs
-  two allocations and two evaluations per element (`UnitBox` is `Listable`),
-  a tradeoff accepted to reuse the certification logic rather than duplicate
-  it.
+  isn't one.
 
 ```mathematica
 In[1]:= UnitBox[0]
