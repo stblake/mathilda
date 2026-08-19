@@ -79,6 +79,23 @@ static void test_infinite_monotone(void) {
     ASSERT_CLOSE("NSum[1/Fibonacci[i],{i,Infinity}]", "3.359885666243178", 1e-6);
 }
 
+/* Integer-only summands (Prime, PartitionsP, …) have no continuation off the
+ * integers, so Euler–Maclaurin — which samples a continuous tail integral and a
+ * complex derivative contour — cannot be applied: it would sample Prime[16.16]
+ * (spewing Prime::intpp) and then bail to a weakly-seeded Wynn.  NSum must detect
+ * this and route straight to partial-sum extrapolation with enough head terms.
+ * References: prime zeta P(2)=0.4522474200…, P(4)=0.0769931397…. */
+static void test_integer_only_summand(void) {
+    /* Convergent prime-zeta: slow, irregular tail — a few digits, not a wild miss
+     * (the pre-fix Euler–Maclaurin fallback gave 0.4485). */
+    ASSERT_CLOSE("NSum[1./Prime[n]^2,{n,1,Infinity}]", "0.4522474200410655", 2e-3);
+    ASSERT_CLOSE("NSum[1/Prime[n]^4,{n,1,Infinity}]", "0.0769931397642468", 1e-6);
+    /* Another integer-only head, fast-converging. */
+    ASSERT_CLOSE("NSum[1./(n PartitionsP[n]),{n,1,Infinity}]", "1.4815", 1e-3);
+    /* The continuous sibling must still take Euler–Maclaurin and be exact. */
+    ASSERT_CLOSE("NSum[1/n^2,{n,1,Infinity}]", "Pi^2/6", 1e-9);
+}
+
 static void test_alternating(void) {
     ASSERT_CLOSE("NSum[(-1)^k/(2k+1),{k,0,Infinity}]", "Pi/4", 1e-9);
     ASSERT_CLOSE("NSum[(-1)^k/(k+1),{k,0,Infinity}]", "Log[2]", 1e-9);
@@ -210,6 +227,7 @@ static void test_memory_loop(void) {
         "NSum[1/2^i,{i,0,Infinity,2}]",
         "NSum[(-1)^n (2/n)^k/k^2,{n,2,Infinity},{k,1,n}]",
         "NSum[1/i^2,{i,1,Infinity},WorkingPrecision->30]",
+        "NSum[1./Prime[i]^2,{i,1,Infinity}]",   /* integer-only: continuity probe */
     };
     /* 3 passes suffice for leak detection; the complex Log[x]/x^(2+2I) summand
      * is the slowest path (oscillatory Euler–Maclaurin), so keep the count low. */
@@ -229,6 +247,7 @@ int main(void) {
 
     TEST(test_direct_finite);
     TEST(test_infinite_monotone);
+    TEST(test_integer_only_summand);
     TEST(test_alternating);
     TEST(test_methods_explicit);
     TEST(test_levin);

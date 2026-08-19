@@ -225,9 +225,17 @@ static Expr* ns_eval_expr_at(NsCtx* c, Expr* e, Expr* value) {
     ns_bind_set(c->bind, value);
     expr_free(value);
     eval_clock_bump();
+    /* Every summand sample runs through here — head terms, the far-tail ladder,
+     * the Euler–Maclaurin quadrature/contour nodes, the continuity probe.  These
+     * are internal trial evaluations and their per-sample messages are noise: a
+     * summand like 1/Prime[x] sampled at a continuous x would otherwise emit one
+     * Prime::intpp per node.  Wolfram's NSum is silent about such probes; mute
+     * arithmetic warnings for the duration of the sample (the counter is nestable
+     * so a genuinely user-facing message outside NSum is unaffected). */
+    arith_warnings_mute_push();
     Expr* raw = eval_and_free(expr_copy(e));
-    if (!raw) return NULL;
-    Expr* num = numericalize(raw, c->spec);
+    Expr* num = raw ? numericalize(raw, c->spec) : NULL;
+    arith_warnings_mute_pop();
     expr_free(raw);
     return num;
 }
@@ -1518,7 +1526,35 @@ typedef struct {
     bool    ladder_ok;             /* every ladder sample was numeric     */
     bool    rising_far;            /* |a_k| still clearly growing far out  */
     long    settle;                /* decay-onset index (peak turned over), or -1 */
+    bool    continuous;            /* summand numericalises off the integers */
 } NsProfile;
+
+/* Does the summand have a value at a non-integer index?  Euler–Maclaurin samples
+ * the summand on a continuous real interval (its tail integral) and on a complex
+ * contour (its derivative estimates), so a summand defined ONLY at integers —
+ * 1/Prime[n], PartitionsP[n], anything that rejects a fractional argument —
+ * cannot be summed by EM: every continuous sample fails, EM bails, and the work
+ * (and the per-sample messages) is wasted.  We detect this behaviourally rather
+ * than by a head blacklist: evaluate the summand (through the interpreter, not
+ * the compiled fast path, so the answer reflects the true mathematical value) at
+ * two generic non-integer index points and ask whether either is a finite
+ * number.  Two points, not one, so a continuous summand with an accidental pole
+ * at one probe is not mistaken for integer-only. */
+static bool ns_summand_numeric_at(NsCtx* c, double x) {
+    double _Complex v;
+    Expr* num = ns_eval_expr_at(c, c->body, expr_new_real(x));
+    if (!num) return false;
+    bool ok = ns_to_complex(num, &v)
+              && isfinite(creal(v)) && isfinite(cimag(v));
+    expr_free(num);
+    return ok;
+}
+
+static bool ns_summand_is_continuous(NsCtx* c) {
+    double lo;
+    if (!ns_to_double_real(c->imin, &lo)) return true;  /* can't probe → assume yes */
+    return ns_summand_numeric_at(c, lo + 0.5) || ns_summand_numeric_at(c, lo + 0.3);
+}
 
 /* Sample the first few terms at machine precision (used to classify the sum). */
 static NsProbe ns_probe(NsCtx* c, long count) {
@@ -1538,6 +1574,7 @@ static NsProbe ns_probe(NsCtx* c, long count) {
 static void ns_build_profile(NsCtx* c, long count, NsProfile* p) {
     p->head = ns_probe(c, count);
     p->nl = 0; p->ladder_ok = false; p->rising_far = false; p->settle = -1;
+    p->continuous = true;
     /* The far-tail ladder samples deep indices.  For a nested numeric summand
      * with a dependent inner bound {k,1,n} that means a large inner computation
      * per sample for no benefit (the settle index is irrelevant there), so skip
@@ -1545,6 +1582,11 @@ static void ns_build_profile(NsCtx* c, long count, NsProfile* p) {
      * valid for an independent inner bound {k,1,Infinity} and falls back on its
      * own otherwise. */
     if (ns_body_is_blackbox(c->body)) return;
+    /* Continuity: does the summand extend off the integers?  Set before the
+     * monotone early-out below, because the integer-only cases we must keep away
+     * from Euler–Maclaurin (1/Prime[n], …) are exactly the monotone-decreasing
+     * ones that would otherwise take it. */
+    p->continuous = ns_summand_is_continuous(c);
     /* If the head probe already shows a monotone-decreasing tail the summand has
      * settled (no late peak, not divergent), so skip the far-tail ladder — this
      * avoids ~16 extra summand evaluations per profile on the common case (and,
@@ -1614,11 +1656,17 @@ static const char* ns_choose_method(const NsProfile* p) {
      * Wynn instead.) */
     if (ns_is_alternating(pr) && ns_mag_decreasing(pr, 0)) return SYM_AlternatingSigns;
     if (!pr->ok || pr->n < 4) return SYM_WynnEpsilon;
-    /* far tail located a peak then decays -> Euler–Maclaurin with adaptive base */
-    if (p->ladder_ok && !p->rising_far && p->nl >= 2
-        && p->lmag[p->nl - 1] < p->lmag[p->nl - 2])
-        return SYM_EulerMaclaurin;
-    if (ns_mag_decreasing(pr, pr->n / 2)) return SYM_EulerMaclaurin;   /* head tail monotone */
+    /* Euler–Maclaurin needs a summand that extends off the integers (it samples a
+     * continuous tail integral and a complex derivative contour).  For an
+     * integer-only summand — 1/Prime[n] and friends — that model does not exist,
+     * so the only valid route is partial-sum extrapolation. */
+    if (p->continuous) {
+        /* far tail located a peak then decays -> Euler–Maclaurin with adaptive base */
+        if (p->ladder_ok && !p->rising_far && p->nl >= 2
+            && p->lmag[p->nl - 1] < p->lmag[p->nl - 2])
+            return SYM_EulerMaclaurin;
+        if (ns_mag_decreasing(pr, pr->n / 2)) return SYM_EulerMaclaurin;   /* head tail monotone */
+    }
     return SYM_WynnEpsilon;
 }
 
@@ -1658,6 +1706,20 @@ static Expr* ns_sum_infinite(NsCtx* c, const char* var, NsOpts* o, bool do_verif
         }
         if (method == SYM_Automatic) method = ns_choose_method(&prof);
         settle = prof.settle;
+        /* An integer-only summand cannot use Euler–Maclaurin, so its whole
+         * accuracy rests on partial-sum extrapolation.  The prime-indexed tails
+         * (1/Prime[n]^s) converge slowly and their partial sums are irregular, so
+         * the default 15 head terms leave the extrapolator a large, bumpy tail
+         * (P(2) came out 0.4485 vs 0.4522).  Summing more head terms first shrinks
+         * that tail; the extra evaluations are cheap and a fast-converging integer
+         * summand simply reaches full accuracy sooner.  (A longer extrapolation
+         * *sequence* helps only slightly, and only the machine path is short
+         * enough to matter — the MPFR sequence length already scales with the
+         * bit budget and must not be clamped here.) */
+        if (!prof.continuous) {
+            if (!o->nsum_terms_user && o->nsum_terms < 100) o->nsum_terms = 100;
+            if (!o->prec_mpfr && o->extra_terms < 24) o->extra_terms = 24;
+        }
     }
 
     Expr* out = NULL;

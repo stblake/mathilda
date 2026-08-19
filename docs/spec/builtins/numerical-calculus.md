@@ -575,7 +575,16 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
   additive last resort when Wynn does not converge (an existing Wynn result is
   never replaced).  The far-tail ladder also drives convergence verification, so
   a summand that merely peaks late (e.g. `1/(1 + (k-20)^2)`) is no longer
-  mistaken for divergent.
+  mistaken for divergent.  **Euler–Maclaurin is gated on a continuity probe:**
+  because EM samples the summand on a continuous tail integral and a complex
+  derivative contour, an *integer-only* summand — `1/Prime[n]`, `PartitionsP[n]`,
+  anything that rejects a fractional argument — cannot use it (every off-integer
+  sample fails, emitting messages and forcing a fallback).  Such a summand is
+  detected by evaluating it at two non-integer index points and routed straight
+  to partial-sum extrapolation, with the head-term count raised (to 100) so the
+  irregular, slowly-converging prime-type tail (`Σ 1/Prime[n]^2 → 0.45225`) is
+  well seeded.  Per-sample messages from these internal trial evaluations are
+  muted throughout.
 
 A **large finite** sum is evaluated as the difference of two infinite tails,
 `Σ_{imin}^∞ − Σ_{imax+di}^∞`, when the summand decays.
@@ -597,9 +606,18 @@ A **large finite** sum is evaluated as the difference of two infinite tails,
 For infinite sums `VerifyConvergence -> True` runs a tail ratio test; a clearly
 divergent sum (`|a_{k+1}/a_k| > 1`) yields `NSum::div` and `ComplexInfinity`.
 The test is deliberately blind to ratios → 1, so (like Mathematica) it does not
-detect the divergence of `Σ 1/k`.  `VerifyConvergence -> False` skips the test
-and returns the formal accelerated value (e.g. `NSum[2^i, {i,0,Infinity}]`
-gives the Shanks value `-1`).
+detect the divergence of `Σ 1/k` or `Σ 1/Prime[n]`.  This is a genuine
+limitation, not an oversight: at the convergence *boundary* (terms → 0 with
+`a_{k+1}/a_k → 1`) convergence is undecidable from finitely many samples — the
+Cauchy-condensation terms of the divergent `Σ 1/(n ln n)` (ratio → 0.941 per
+octave) are numerically indistinguishable from those of the convergent
+`Σ 1/n^1.1` (ratio → 0.933), so any flag that caught the former would
+false-positive on the latter.  A boundary sum therefore returns its extrapolated
+value; when the extrapolation has not stabilised the `NSum::accgl` /
+`NSum::ncvg` warning signals that the digits are not trustworthy.
+`VerifyConvergence -> False` skips the ratio test and returns the formal
+accelerated value (e.g. `NSum[2^i, {i,0,Infinity}]` gives the Shanks value
+`-1`).
 
 ### Messages
 
