@@ -1,194 +1,103 @@
-# Task: Diophantine solving in `Solve[..., Integers]`
+# Diophantine: Solve::svars warning (A) + Booker cube-root-mod-d (B)
 
-Plan: `/Users/user/.claude/plans/we-do-not-have-tidy-sparrow.md`
+Context: `Solve[x^3+y^3==d+z^3 && ... , {x,y,z,y}, Integers]` stayed unevaluated
+because (1) the var list `{x,y,z,y}` drops `d` (a free symbol → classifier
+declines) and (2) even corrected, the box exceeds the enumeration/MITM budget.
+The engine already implements the classical divisor method
+(`si_two_power_solve`), which is fast for FIXED-target forms (`x^3+y^3==1729` in
+72 ms at bound 1e5). Two agreed improvements:
 
-## Phase 1 — core bounded engine (headline deliverable) — DONE
+## Part A — `Solve::svars` diagnostic  (low risk)
+Goal: when a symbol appears in the system (esp. with its own constraints) but is
+NOT among the solve variables, emit a warning instead of silently declining.
 
-- [x] `src/solveint.h` — module contract
-- [x] `src/solveint.c` — Stage A / B (bound propagation incl. lower-bound sign
-      deduction) / C (recursive elimination + exact leaf) + verify + emit
-- [x] Reuse `expr_to_mpoly`/`mpoly_*`, GMP integer roots, `internal_together`
-- [x] Wire into `builtin_solve` as an `Integers` pre-pass
-- [x] Integer-restriction filter in `solve_finish`
-- [x] `solveint_init()` from `core_init()`
-- [x] **Meet-in-the-middle** for separable additive equations (Euler 5s -> 0.8s)
-- [x] `tests/test_solve_integers.c` + registered in CMake (8 tests pass)
-- [x] Docs + changelog updated
-- [x] `make check-c99` clean; solve suites pass; valgrind = baseline noise only
+- [ ] In `solveint_solve_integer` (src/solveint.c), after parsing the var list,
+      scan flattened conjuncts for "free" symbols: EXPR_SYMBOL leaves that are
+      (a) not in the solve-var list, (b) not a Protected constant / known head
+      (Pi, E, True, False, Integers, ...), (c) actually a bound-eligible atom
+      (appear in an Equal/inequality position, not a function head).
+- [ ] If any found, `fprintf(stderr, "Solve::svars: Equations may not give "
+      "solutions for all \"solve\" variables.\n")` ONCE (dedupe). Matches the
+      existing stderr message style (Clip::ncompl, Power::infy).
+- [ ] Emit the warning but still proceed (do not change the return value); the
+      warning fires on the path that currently returns NULL for this shape.
+- [ ] Keep it low-false-positive: only warn when the free symbol appears inside
+      an (in)equality constraint (strong signal it was meant as a variable).
+- [ ] Verify: the user's exact line now prints the warning; legitimate
+      parametric solves (`Solve[a x==b,x]`) do NOT spuriously warn.
 
-Solved: orig, 1, 3, 8, 10, 12, 14 (7 of the 16 incl. the motivating case).
-Deferred cases (2, 4, 5, 6, 7, 9, 11, 13, 15) correctly return unevaluated.
+## Part B — Booker-style cube-root-mod-d for `x^3+y^3+z^3 == k`  (higher risk)
+Goal: lift reach for the FIXED-k three-cubes problem from ~1e6 coords toward
+~1e7–1e8 interactively (10–100x), by replacing "enumerate z, factor k−z^3" with
+"enumerate d, cube-root k mod d". NOT aiming for Booker's 1e16 (that needs the
+factorless sieve + cluster). Soundness is paramount: exact verify every hit;
+DECLINE (stay unevaluated) rather than return an incomplete set.
 
-## Phase 2 — divisor-factoring / reciprocal special forms — DONE
-- [x] Bilinear divisor solver `(a u + c)(a v + b) = bc - ad` (Pythagorean),
-      reached by linear elimination trying each keep-pair.
-- [x] Unit-fraction recursion `Σ 1/x_i == R` with ordering (Egyptian).
-- [x] Wired as `si_try_special_forms` before the unbounded decline.
-- [x] Tests added; solve suites pass; check-c99 clean; valgrind = baseline.
-  Pythagorean (z>0) -> 3 triangles; Egyptian 4/2027 -> 73 decompositions.
+Math (from Booker, "Cracking the problem with 33"):
+  k − z^3 = x^3 + y^3 = (x+y)(x^2−xy+y^2);  d=|x+y| divides |k−z^3|;
+  s = sgn(k−z^3)·d;  disc = (4|k−z^3|/d − d^2)/3;  x,y = (s ± sqrt(disc))/2.
+  d | (k−z^3)  ⟺  z^3 ≡ k (mod d).
 
-## Phase 3 — Pell via continued fractions — DONE
-- [x] si_pell_detect (x^2 - D y^2 == +/-1), si_pell_cf (CF of sqrt(D)),
-      orbit generation up to bound, 4 sign variants + verify.
-- [x] Negative Pell handled (base iff period odd); unsolvable -> {}.
-- [x] Tests added; solve/poly suites pass; check-c99 clean; valgrind = baseline.
+- [ ] Trigger detection: exactly 3 variables, each appearing only as v^3 with
+      coefficient +1, constant term = −k, k a nonzero integer; fully box-bounded.
+      (Only all-+1 so all three pairings are symmetric — keeps completeness
+      reasoning clean. Other sign patterns fall back to existing method.)
+- [ ] New helper `all_cube_roots_mod(k, d, roots_out)`: ALL z in [0,d) with
+      z^3≡k (mod d). Factor d (df_factor_mpz); per prime power find all roots
+      (p≡2 mod 3: unique via inverse-of-3 exponent; p≡1 mod 3: one root ×
+      {1,ω,ω^2} where ω from sqrt(−3); p=3 and gcd(k,d)>1 handled explicitly);
+      CRT product of all combinations. Correctness is the crux — mirror the
+      proven logic in powermod.c (rth_root_mod_pe) but return ALL roots.
+- [ ] Enumerate d in [1, D_max], D_max = min(alpha*B, budget). For each root
+      class, walk z in the AP within the window, compute disc, test perfect
+      square, recover x,y, bounds-check, `si_verify` exactly, emit.
+- [ ] Role-loop over which variable is the "modular" one (3 passes) so the
+      "two-largest" pairing (Booker's d<alpha·B bound) is always covered;
+      dedupe solutions (canonical sorted tuple).
+- [ ] Degenerate families: k−z^3==0 (z=cbrt(k), y=−x) and the y=z Thue slice —
+      catch via a cheap direct small-coordinate check so nothing is missed.
+- [ ] Completeness/decline: only RETURN a list when the box is provably covered
+      by D_max (alpha-bound); else DECLINE. Budget-gate like the existing paths.
+- [ ] Wire into the special-forms dispatch BEFORE the enumeration size guard.
 
-## Perf — special forms tried first + numeric verification — DONE
-- [x] Pythagorean z>0: 7.45s -> ~0.5ms (was routed to leaf search, not divisor).
-- [x] Fixed latent mpoly_to_expr array leak.
+### Verification (B is only shippable if these pass)
+- [ ] Cross-check vs the EXISTING divisor method on overlapping boxes: identical
+      solution SETS for many random k over a small box (independent code paths).
+- [ ] Known solutions: 1729-style, x^3+y^3+z^3==29 → {1,1,3}; a constructed k
+      with a ~1e7 coordinate found where the old path declines.
+- [ ] `make check-c99`; clean `gcc -std=c99 -Wall -Wextra`; valgrind clean on a
+      representative run; no packed-array surfaces affected (symbolic solver).
 
-## Phase 2b — linear Diophantine parametric + bounded gcd test — DONE
-- [x] Parametric family for unconstrained multivar linear (gcd staircase).
-- [x] Bounded: gcd unsolvability -> {} (ex 16).
+## Review
 
-## Phase 2c — LLL lattice enumeration for solvable bounded linear — DONE
-- [x] LatticeReduce-reduced basis; coefficient box = value box projected
-      through the pseudoinverse (B B^T)^{-1} B; exact per-candidate check.
-- [x] Few-solution large-coeff boxes enumerated (2000-pt case < 1s);
-      dense/intractable boxes declined. Verified complete (gap-free 2-var
-      progression), no dups, leak-clean.
+**Part A (`Solve::svars`) — DONE.** `si_warn_free_symbols` in `src/solveint.c`
+scans only inequality/ordering conjuncts for symbol atoms not in the solve-var
+list and not `Protected` (so operator heads + constants like Pi/E are skipped),
+emits `Solve::svars` once (deduped by `expr_hash` of the system against the
+evaluator's fixed-point confirm re-entry). Verified: the user's `{x,y,z,y}` query
+now warns once; all-vars-present and bare-parameter-in-equation cases stay silent.
 
-## Phase 2d — odd-power-sum divisor method — DONE
-- [x] Divisor method for separable sums of odd powers: s=x+y | m, power sum
-      p_e(s,p) via Newton recurrence -> integer roots p -> (x,y). Outer vars
-      enumerated => O(N*factoring), not O(N^2).
-- [x] Sum of three cubes ==42 over |.|<10^5 in ~7s; ==3 finds all knowns;
-      two-cube taxicab; general over odd e (5th, 7th). m-size guard declines
-      when factoring would be impractical (5th powers over |.|<10^5).
-- [x] Verified complete; tests added; suites pass; check-c99; valgrind baseline.
+**Part B (Booker three-cubes) — DONE.**
+- `si_all_cube_roots_mod` (+ `si_croots_mod_p` Pohlig-Hellman in the 3-Sylow for
+  p≡1 mod 3, brute for prime powers, CRT product). Exposed as
+  `Solve\`CubeRootsMod[k,d]`; **verified against brute force on 94 430 (k,d)
+  pairs, 0 mismatches** (incl. p≡1 mod 9, p=3^e, p|k, composites, large primes).
+- `si_solve_three_cubes_booker`: part1 (small-coord + divisor-solve, covers the
+  `(a,-a,∛k)` family) ∪ part2 (Booker α-bound over 3 roles), verify-every-hit,
+  decline when a box would exceed `SI_BK_SOLCAP`. **Cross-checked vs exhaustive
+  box enumeration over 801 targets k, 0 mismatches.**
+- Reach demo (no force): `x^3+y^3+z^3==2` over `[-200000,200000]^3` (2B=4e5, which
+  the classical path declines) → 195 complete/verified solutions incl.
+  `(162001,-161999,-5400)` in **0.39 s**.
+- Bug found+fixed along the way: `build_result` used an O(n²) selection sort that
+  hung on large solution families → replaced with O(n log n) `qsort`.
 
-## Phase 4 — exponential Diophantine + bounded elliptic coverage — DONE (partial)
-- [x] Exponential Diophantine (variable exponents): bounded-box enumeration +
-      Catalan/Mihailescu (x^a-y^b==+/-1 -> unique 3^2-2^3). si_solve_exponential
-      runs before the MPoly stage. Handles the Catalan example.
-- [x] Confirmed + tested bounded Mordell/hyperelliptic (y^m==f(x)) resolve via
-      the leaf search: y^2=x^3-10000 -> {25,75}, y^2=x^3-2 -> {3,5}, etc.
-- Still deferred (genuinely research-grade, unbounded): Mordell-Weil/elliptic
-  integral points with no box (ex 5/7 unbounded), indefinite Thue equations
-  (ex 6), general-N Pell, Booker O(N) sum-of-three-cubes.
+**Verification:** `solve_integers_tests`, `solve_tests`, `solve_corpus_tests`
+(0/97 non-PASS) all green; `make check-c99` PASS; no valgrind leaks attributable
+to new code (only macOS libobjc/dyld baseline noise). Docs: changelog
+`2026-08-17.md` + `solutions-of-equations.md` updated.
 
-## Benchmark vs sympy + correctness fix (2026-08-18)
-
-**Benchmark** `benchmarks/87-diophantine-integers/` — head-to-head against
-sympy `diophantine` across 19 well-known families. `cases.py` is the single
-source of truth; `run.py` generates `diophantine.m`, runs it, runs sympy + a
-same-box Python search, writes `REPORT.md` + `results.json`. Result: **Mathilda
-19/19 exact** (all counts verified); sympy answers 3 directly/comparably, a few
-more only parametrically or after manual elimination, and `NotImplementedError`
-on 11 (all cubic/exponential forms + every system).
-
-**Fix found while benchmarking** — `Solve[x^2+y^2==25,{x,y},Integers]` returned
-`{}` (silent wrong answer). Root cause: the bounder only bounded provably-
-non-negative variables, so an unconstrained sum of even powers was declined and
-Solve fell through to the generic path → `{}`. Added `derive_even_only_bounds`
-(sign-symmetric even-only vars get `[-B,B]`) + a one-line `urest==0` tightening
-(fixes `x^2+y^2==0`). Verified vs sympy (12/28/72 exact). New test
-`test_sum_of_two_squares`. check-c99 clean, all solve suites pass, valgrind =
-baseline.
-
-## Diophantine campaign — correctness + 10 new methods (2026-08-18) — DONE
-
-Plan: `~/.claude/plans/cosmic-riding-hoare.md`. Driven by a ~18-case stress test.
-
-- **P0 correctness** (`src/solve.c`): `y^2==x^3-2 → {}` was a silent wrong answer
-  (unbounded nonlinear curve solved parametrically, then Integers-filtered to
-  `{}`). `is_single_multivar_equation` + a `solve_finish` guard now leave such a
-  lone multivar equation **unevaluated** after solveint declines. Also `y==x^2`,
-  `y^2==x^3+1`, ... Regression bank added (curves, verified negatives, the
-  already-passing `y^3==x^5-x+1` / `x^2+y^3==z^7` / nine-cubes==239).
-- **Tranche A** (bounded engine): multi-leaf staged elimination (`si_solve_multileaf`
-  → Euler brick), ordering-reduced estimate (`si_longest_chain`) + int64 fast leaf
-  (`si_leaf_roots_i64` + coef cache → `2Σsq=(Σ)^2`, Markov-Hurwitz), non-poly
-  power-leaf (`si_solve_bounded_powerleaf` → Brocard `n!+1==m^2`).
-- **Tranche B/C/D** (closed form): conic `Y^2=AX^2+BX+C` (`si_solve_conic` →
-  `n^2+n+41`), unbounded Pell parametric (`si_solve_pell_parametric`), homogeneous
-  linear ray (`si_solve_linear_system_ray` + Bareiss det), fixed-base exponential
-  (`3^m-2^n=1`), PTE→{} via Newton (`si_solve_power_sum_equal`), general unbounded
-  imaginary Mordell (`si_solve_mordell`: k<0 squarefree, k≡2,3 mod4, 3∤h via
-  reduced-form class number → `(3,±5)`, `(17,±70)` for k=-13, `{}` for k=-5;
-  verified vs brute force for all 49 engaged k in [-150,-2]).
-- **Honest declines** (unevaluated, never wrong): Elkies `x^4+y^4+z^4==w^4` @1e7,
-  Cassels `3x^3+4y^3+5z^3`, Pyth-area (Fermat), Ramanujan-Nagell `x^2+7==2^n`
-  (needs the descent in Z[(1+√-7)/2]).
-- 11 new tests in `test_solve_integers.c`; all solve suites + corpus 97/97 pass;
-  `make check-c99` clean; valgrind = startup baseline. Docs + changelog updated.
-
-## Tier 1 primitives campaign (2026-08-18) — matching Mathematica's Diophantine dispatcher
-
-Driven by a review of Mathematica's ~25 engines vs Mathilda's current coverage.
-The bounded search + closed-form layer is strong (19/19 vs sympy); the gaps are
-all in the *unbounded / algebraic-number-theory* half.
-
-**Held-out measurement first (the benchmark over-fit).** `benchmarks/87` is the
-single source of truth AND was co-designed with each method (Phase 2d added the
-sum-of-three-cubes cases with the divisor method, Phase 3 the Pell cases with the
-CF solver, ...), so 19/19 measures "method works on the example it was written
-for", not coverage. A held-out corpus (15 equations from standard references,
-none in `cases.py`) run cold found: the bounded engine is genuinely complete on
-every boxed Thue/Mordell/Pell-N/Legendre case, but **two silent wrong answers**
-in unbounded *linear systems*, plus honest declines on factorable-leading-form
-BQF.
-
-- [x] **P0(a) correctness** — underdetermined linear system over Integers →
-      silent wrong `{}`. Fixed: `solvelinsys` declines the underdetermined
-      integer case; `src/solve.c` `solution_set_is_parametric` guard converts any
-      unproven parametric `{}` to unevaluated. Test added; 8 suites pass;
-      check-c99 clean. (Changelog: "underdetermined linear SYSTEM ... {}".)
-- [x] **P0(b) HNF** — DONE. `HermiteDecomposition` builtin (`src/linalg/hnf.c`,
-      row HNF + unimodular transform, `u.m==r`) + integer linear-system solver
-      (`si_solve_linear_system_hnf`): particular solution by forward substitution
-      with divisibility test (failure ⇒ `{}` proof), kernel lattice as `C[k]`.
-      `{x+2y+3z==10, x-y+z==2}` → `{{x->18+5C[1], y->8+2C[1], z->-8-3C[1]}}`;
-      `2x+2y==3 && x-y==0` → `{}` (precise, supersedes P0a's unevaluated). Tests
-      added (74 solve-int cases + HermiteDecomposition invariants); check-c99
-      clean; valgrind delta = 0. Docs + changelog updated.
-- [x] **P1 Runge / factorable binary quadratic** — DONE.
-      `si_solve_factorable_conic` (`src/solveint.c`): a 2-var degree-2 equation
-      with a cross term and perfect-square discriminant `δ=B²-4AC>0` completes to
-      a difference of squares `(2kU)²-V²=W` and divisor-enumerates `W` —
-      exhaustive, so `{}` is a proof. `x²+xy-2y²==4` → 6 points;
-      `(x-y)(x+2y)==15` → `{}` (mod-3 obstruction, NOT a decline — the earlier
-      "should have solutions" read was wrong); `2x²+3xy-2y²==7` → 2 points
-      (non-unit leading coeffs the old conic couldn't do). Generalises
-      `si_solve_conic`. Test `test_factorable_conic`; check-c99 clean; valgrind
-      delta 0. Docs + changelog updated.
-- [x] **P2 general-N Pell (unbounded)** — DONE. `si_solve_genpell_parametric`
-      (`src/solveint.c`): unbounded `x²-Dy²==N && x>0 && y>0`, any `N≠+1`
-      (incl. `N=-1`) → one `ConditionalExpression` family per solution class.
-      Fundamental unit via CF of √D; Nagell bound `y≤u√(|N|/(2(t±1)))` bounds the
-      fundamental search; each found (±x,±y) advanced into the positive orthant
-      then reduced by ε⁻¹ to the minimal class rep (dedup); orbit
-      `(a+b√D)(t+u√D)^C[1]`, C[1]≥0. Exhaustive → `{}` is a proof (incl. negative
-      Pell over even-CF-period D). **Validated against brute force over ~30
-      (D,N) pairs** (multi-class, negative Pell, D=61 large unit, unsolvable).
-      13-assertion `test_generalized_pell`; check-c99 clean; valgrind delta 0.
-      Docs + changelog updated.
-      - Bug found & fixed during validation: `(1,1)` and `(5,3)=(1,1)·ε` for
-        D=3,N=-2 were emitted as two overlapping families — the reduction only
-        *advanced* into the orthant, never *reduced* a positive solution to
-        minimal. Added the ε⁻¹ reduction loop.
-- [x] **Systemic**: held-out validation gate — DONE.
-      `benchmarks/87-diophantine-integers/heldout.py` (~20 equations from
-      standard references, none in `cases.py`) + `validate.py`
-      (`make check-diophantine-heldout`): runs Mathilda cold, cross-checks every
-      answer against an independent Python brute-force oracle over the same box,
-      FAILS (nonzero exit) on any silent wrong answer (a `{}`/finite/parametric
-      result the oracle contradicts). Needs only the binary (no sympy); writes
-      `HELDOUT_REPORT.md`. Status: OK 18 / DECLINE 2 / WRONG 0; detector verified
-      to fail loud via a negative control. Guards all four Tier-1 features
-      against regression.
-
-## Tier 2 — unified quadratics (roadmap in `SOLVE_INTEGERS.md`)
-
-- [x] **D / Δ<0 elliptic** — DONE. `si_solve_elliptic_bqf`: rotated/definite
-      binary quadratic solved as a quadratic-in-x per y over the finite y-range;
-      exhaustive → `{}` proof. Validated vs brute force `|.|≤200`;
-      `test_elliptic_bqf` (10) + 4 held-out (gate OK 22/DECLINE 2/WRONG 0).
-- [ ] **D / Δ=0 parabolic** — reduce `(√A x + √C y)²` + linear → residue-class
-      linear families.
-- [ ] **D / Δ>0 non-square hyperbolic with cross+linear terms** — complete the
-      square to Pell normal form `X²-ΔY²=N`, reuse `si_genpell_bases/_family`.
-- [ ] **E ternary quadratic / Legendre** — Hilbert-symbol solvability proof +
-      witness (Cremona–Rusin), self-contained (Jacobi symbols + LatticeReduce).
-- Tier 3 (Thue, elliptic integral points, CAD) + the number-field prerequisite:
-      see `SOLVE_INTEGERS.md` §6.
+**Known scope limits (deliberate, documented):** Booker gated to |k|<~1e9 and
+Dmax≤3e5 (coords ~1e6, not Booker's 1e16 — that needs the factorless SPF sieve +
+batch inversion). Perfect-cube / large-family boxes decline rather than emit
+O(B) tuples. `MATHILDA_BK_FORCE=1` bypasses the size gate for validation.

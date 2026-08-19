@@ -205,6 +205,13 @@ Attempts to solve an equation or system of equations for one or more variables.
   constraint-free Thue equation) is left **unevaluated** rather than answered
   wrongly. `Solve`SolveIntegers[eqns, vars]` is the independently-testable
   entry point.
+  - **`Solve::svars` diagnostic.** If the system carries a symbol in an
+    inequality/ordering constraint (`… && d > 0 && d < 100000`) that is not among
+    the solve variables — almost always a mistyped variable list, e.g. the `d`
+    dropped from `{x, y, z, y}` — `Solve` emits `Solve::svars` ("Equations may not
+    give solutions for all \"solve\" variables") rather than silently declining.
+    Operator heads and named constants are skipped, and a bare parameter in an
+    *equation* (`a x == b`) is not flagged, so the warning is low-noise.
 - **Divisor-factoring and reciprocal special forms.** Two shapes that
   positivity cannot bound are still finite once the right identity is applied:
   - A single **bilinear** equation `a*u*v + b*u + c*v + d == 0` (reached by
@@ -303,6 +310,24 @@ Attempts to solve an equation or system of equations for one or more variables.
     (proved).  A bounded `x` uses the ordinary leaf search; the half-integer ring
     (`k = 1 mod 4`), `3 | h`, and the real-quadratic case (`k > 0`, infinite units
     -- e.g. `y^2 == x^3 + 3`) are left unevaluated.
+  - **Sum of three cubes (`x^3 + y^3 + z^3 == k`, Booker method).** A box-bounded
+    sum of three cubes with a fixed nonzero integer `k` is solved by the
+    cube-root-mod-`d` method of A. R. Booker ("Cracking the problem with 33"),
+    rather than linearly enumerating one variable and factoring the ~`B^3` value
+    `k - c^3` (the classical divisor path, whose reach is capped at the ~3×10⁵
+    outer budget). Since `k - c^3 = (a+b)(a^2-ab+b^2)`, the divisor `d = |a+b|`
+    satisfies `c^3 ≡ k (mod d)`; enumerating the SMALL `d` up to `α·B`
+    (`α = ∛2 - 1`) and cube-rooting `k mod d` pins `c` to arithmetic progressions,
+    with `{a,b} = (sgn(m)·d ± √((4|m|/d - d^2)/3))/2`. This reaches coordinates
+    up to ~10⁶ where the classical path declines, e.g.
+    `Solve[x^3 + y^3 + z^3 == 2 && -200000 <= x <= 200000 && … , {x,y,z}, Integers]`
+    returns all 195 solutions (including `(162001, -161999, -5400)`) in ~0.4 s.
+    The result is complete (small-coordinate solutions and the `(a,-a,∛k)` family
+    covered by a divisor sub-search, the rest by Booker's `d < α·|c|` bound across
+    the three roles). Restricted to `|k| < ~10⁹`; a box that would hold a huge
+    parametric family (> 200 000 tuples) is declined rather than materialised. The
+    underlying "all cube roots of `k` mod `d`" primitive is
+    `Solve`CubeRootsMod[k, d]`.
   - **Unbounded Pell -> parametric family.** `x^2 - D y^2 == 1 && x>0 && y>0`
     with no bound returns the fundamental-unit family as a
     `ConditionalExpression` on `C[1] >= 1`:
