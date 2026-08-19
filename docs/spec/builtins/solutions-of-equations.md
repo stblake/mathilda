@@ -332,7 +332,13 @@ Attempts to solve an equation or system of equations for one or more variables.
     arithmetic is 128-bit, extending the reach to coordinates ~10⁷ (e.g. the
     point at 5 821 795 for a radius-6×10⁶ box in ~16 s); a box beyond the divisor
     budget or the candidate backstop declines (unevaluated) rather than running
-    unbounded.
+    unbounded. The detector accepts coefficient `±1` on each cube: a `−v^3` is
+    normalised away by the substitution `u = −v` (mirroring that variable's box),
+    so `± x^3 ± y^3 ± z^3 == k` over a pure box reduces to the same solver — e.g.
+    `Solve[x^3 + y^3 − z^3 == 227 && −200000 <= x,y,z <= 200000, {x,y,z}, Integers]`
+    returns `(24579, 51748, 53534)` (the classic `227 = 24579^3 + 51748^3 −
+    53534^3`). The sign substitution is used only for a pure box (no orderings /
+    disequations), so it stays exact.
   - **Unbounded Pell -> parametric family.** `x^2 - D y^2 == 1 && x>0 && y>0`
     with no bound returns the fundamental-unit family as a
     `ConditionalExpression` on `C[1] >= 1`:

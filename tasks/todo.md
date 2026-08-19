@@ -106,7 +106,19 @@ verified; oversized boxes decline instantly (no hang). Correctness re-checked:
 801-target box cross-check and 45 149-pair primitive check both 0 mismatches;
 `make check-c99` clean; `solve_integers_tests` pass.
 
+**Signed cubes (`± x³ ± y³ ± z³ == k`) — DONE (follow-on).** The three-cube
+detector accepts coeff ±1 per cube; a `−v³` is normalised by `u=−v` (mirror that
+variable's box) into the pure-sum solver via a working ctx `cc` (mirrored bounds
++ rebuilt all-+1 MPoly), enumerate in u-space, verify against `cc`, map back
+`v=sgn·u`. Gated to a pure box (`n_ord==0 && n_neq==0 && all_captured`). Realises
+the user's "normalise the equation into a solvable shape" preprocessing idea.
+Makes the 1950s **`227 = 24579³ + 51748³ − 53534³`** reachable:
+`Solve[x³+y³−z³==227 && box(2e5), Integers]` → `(24579,51748,53534)` in ~0.9 s.
+Validated: all-+1 unchanged (801/0), all four sign patterns vs brute (0
+mismatches), solve_integers_tests pass, check-c99 clean, no new valgrind leaks.
+
 **Known scope limits (deliberate, documented):** Booker gated to |k|<~1e9 and
-Dmax≤3e6 (coords ~1e7). Perfect-cube / large-family boxes decline rather than
+Dmax≤3e6 (coords ~1e7); sign substitution needs a pure box (orderings on a
+sign-flipped var decline). Perfect-cube / large-family boxes decline rather than
 emit O(B) tuples. Not Booker's 1e16 (needs batch inversion + a cluster).
 `MATHILDA_BK_FORCE=1` bypasses the size gate for validation.

@@ -3813,27 +3813,41 @@ static bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
     for (int i = 0; i < 3; i++) if (!(c->has_lo[i] && c->has_hi[i])) return false;
     const MPoly* eq = c->eq[0];
 
-    /* Shape: each variable appears once as v^3 with coefficient +1, plus one
-     * constant term -k.  K accumulates -constant = k. */
+    /* Shape: each variable appears once as v^3 with coefficient +/-1, plus one
+     * constant term -k.  K accumulates -constant = k; sgn[i] records the sign of
+     * v_i^3 (a -1 is handled by the substitution u_i = -v_i below, which turns
+     * the system into the pure  u_x^3 + u_y^3 + u_z^3 == k  over a mirrored box:
+     * e.g.  x^3 + y^3 - z^3 == 227  is the sum of three cubes for 227). */
     mpz_t K; mpz_init(K); mpz_set_ui(K, 0);
-    int seen[3] = {0, 0, 0}; bool ok = true;
+    int seen[3] = {0, 0, 0}, sgn[3] = {1, 1, 1}; bool ok = true;
     for (size_t t = 0; t < eq->n_terms && ok; t++) {
         const int* ex = eq->exps + t * 3;
         int nz = -1, cnt = 0;
         for (int v = 0; v < 3; v++) if (ex[v] > 0) { nz = v; cnt++; }
         if (cnt == 0) { mpz_sub(K, K, eq->coefs[t]); continue; }   /* constant */
-        if (cnt > 1 || ex[nz] != 3 || mpz_cmp_ui(eq->coefs[t], 1) != 0 || seen[nz])
-            { ok = false; break; }
+        if (cnt > 1 || ex[nz] != 3 || seen[nz]) { ok = false; break; }
+        if (mpz_cmp_ui(eq->coefs[t], 1) == 0) sgn[nz] = 1;
+        else if (mpz_cmp_si(eq->coefs[t], -1) == 0) sgn[nz] = -1;
+        else { ok = false; break; }                               /* coeff not +/-1 */
         seen[nz] = 1;
     }
     for (int i = 0; i < 3 && ok; i++) if (!seen[i]) ok = false;
     /* |k| must be modest so part 1's pair factoring stays cheap. */
     if (ok && mpz_sizeinbase(K, 2) > 30) ok = false;              /* |k| < ~1e9 */
     if (!ok || mpz_sgn(K) == 0) { mpz_clear(K); return false; }
+    bool signed_case = (sgn[0] < 0 || sgn[1] < 0 || sgn[2] < 0);
+    /* The u_i = sgn_i v_i substitution rewrites the equation with unit
+     * coefficients and mirrors the flipped variable's box; it only stays exact
+     * for a pure box (no orderings / disequations, every constraint captured),
+     * since a mixed-sign ordering is not an ordering in u-space. */
+    if (signed_case && (c->n_ord != 0 || c->n_neq != 0 || !c->all_captured)) {
+        mpz_clear(K); return false;
+    }
     int64_t Ki = mpz_get_si(K);
     int64_t absk = Ki < 0 ? -Ki : Ki;
 
-    /* Box radius B and divisor bound Dmax = ceil(alpha*B). */
+    /* Box radius B and divisor bound Dmax = ceil(alpha*B).  The u_i = sgn_i v_i
+     * mirror preserves |bounds|, so B is the same in u-space -- compute from c. */
     int64_t B = 0;
     for (int i = 0; i < 3; i++) {
         int64_t a = c->hi[i] > -c->lo[i] ? c->hi[i] : -c->lo[i];
@@ -3849,11 +3863,31 @@ static bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
     /* T = floor(|k|^{1/3}). */
     int64_t T = 0; while ((T + 1) * (T + 1) * (T + 1) <= absk) T++;
 
+    /* Working context cc: the pure  u_x^3+u_y^3+u_z^3 == k  problem.  The all-+
+     * case uses c directly; a sign flips the corresponding box and swaps the
+     * equation MPoly for unit coefficients (freed at the end).  Built after the
+     * early declines so those paths need not free it. */
+    SICtx cu; SICtx* cc = c; MPoly* newpoly = NULL;
+    if (signed_case) {
+        cu = *c;
+        for (int i = 0; i < 3; i++)
+            if (sgn[i] < 0) { cu.lo[i] = -c->hi[i]; cu.hi[i] = -c->lo[i]; }
+        MPoly* p = mpoly_monomial(3, 0, 3, 1);
+        for (int i = 1; i < 3; i++) {
+            MPoly* tm = mpoly_monomial(3, i, 3, 1);
+            MPoly* s = mpoly_add(p, tm); mpoly_free(p); mpoly_free(tm); p = s;
+        }
+        MPoly* kk = mpoly_from_mpz(3, K);
+        newpoly = mpoly_sub(p, kk); mpoly_free(p); mpoly_free(kk);
+        cu.eq[0] = newpoly; cu.neq = 1;
+        cc = &cu;
+    }
+
     /* Smallest-prime-factor sieve over [0, Dmax]: factors every divisor in
      * O(log d), so the enumeration is dominated by the candidate loop, not by
      * factoring.  Sized to Dmax, so small boxes stay cheap. */
     int32_t* spf = si_build_spf(Dmax);
-    if (!spf) { mpz_clear(K); return false; }
+    if (!spf) { if (newpoly) mpoly_free(newpoly); mpz_clear(K); return false; }
 
     st->max_visits = SI_BK_MAXNODES;
     int64_t vals[SI_MAX_VARS];
@@ -3861,15 +3895,15 @@ static bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
     /* ---- part 1: smallest coordinate <= T (per role), divisor-solve pair. ---- */
     for (int r = 0; r < 3 && !st->overflow; r++) {
         int iv = (r + 1) % 3, jv = (r + 2) % 3;
-        int64_t lo = c->lo[r] > -T ? c->lo[r] : -T;
-        int64_t hi = c->hi[r] <  T ? c->hi[r] :  T;
+        int64_t lo = cc->lo[r] > -T ? cc->lo[r] : -T;
+        int64_t hi = cc->hi[r] <  T ? cc->hi[r] :  T;
         mpz_t m, v3; mpz_init(m); mpz_init(v3);
         for (int64_t v = lo; v <= hi && !st->overflow; v++) {
             mpz_set_si(v3, v); mpz_mul_si(v3, v3, v); mpz_mul_si(v3, v3, v);
             mpz_sub(m, K, v3);                         /* m = k - v^3 */
             for (int q = 0; q < 3; q++) vals[q] = 0;
             vals[r] = v;
-            si_two_power_solve(c, st, iv, jv, 3, m, vals);
+            si_two_power_solve(cc, st, iv, jv, 3, m, vals);
         }
         mpz_clears(m, v3, NULL);
     }
@@ -3888,7 +3922,7 @@ static bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
         if (nr == 0) continue;
         for (int r = 0; r < 3 && !st->overflow; r++) {
             int iv = (r + 1) % 3, jv = (r + 2) % 3;
-            int64_t lo = c->lo[r], hi = c->hi[r];
+            int64_t lo = cc->lo[r], hi = cc->hi[r];
             for (int ridx = 0; ridx < nr; ridx++) {
                 int64_t start = lo + ((((roots[ridx] - lo) % d) + d) % d);
                 for (int64_t v = start; v <= hi && !st->overflow; v += d) {
@@ -3898,13 +3932,21 @@ static bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
                     __int128 m = (__int128)Ki - v3;
                     for (int q = 0; q < 3; q++) vals[q] = 0;
                     vals[r] = v;
-                    si_bk_emit_pair(c, st, iv, jv, d, m, vals);
+                    si_bk_emit_pair(cc, st, iv, jv, d, m, vals);
                 }
             }
         }
     }
 
     free(spf);
+    /* Candidates were enumerated in u-space; map each back to the original
+     * variables (v_i = sgn_i u_i) before the result is built. */
+    if (!incomplete && !st->overflow && signed_case)
+        for (int i = 0; i < st->nsol; i++) {
+            int64_t* row = st->sols + (size_t)i * 3;
+            for (int q = 0; q < 3; q++) if (sgn[q] < 0) row[q] = -row[q];
+        }
+    if (newpoly) mpoly_free(newpoly);
     mpz_clear(K);
     if (incomplete || st->overflow) { st->nsol = 0; return false; }
     return true;
