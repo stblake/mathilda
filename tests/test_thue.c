@@ -106,6 +106,14 @@ static void test_rigorous(void) {
     { const long f[] = {1,0,0,-2};   check_rigorous(f, 3, 5,   0, 0, "x^3-2y^3==5  (M2, proven {})"); }
     { const long f[] = {1,0,0,-2};   check_rigorous(f, 3, 73,  0, 0, "x^3-2y^3==73 (M2, no norm-73, {})"); }
     { const long f[] = {1,0,0,-7};   check_rigorous(f, 3, 6,   1, 0, "x^3-7y^3==6  (M2, {(-1,-1)})"); }
+    /* More M2 general-m cubics (PARI-verified sets); these also exercise the
+     * small-|Y| gap-closing brute box: m=100 has a WIDE x-window, so it takes
+     * the exact univariate root-finding branch (not the old O(Xmax) scan). */
+    { const long f[] = {1,0,0,-2};   check_rigorous(f, 3, 6,   1, 0, "x^3-2y^3==6   (M2, {(2,1)})"); }
+    { const long f[] = {1,0,0,-2};   check_rigorous(f, 3, 7,   0, 0, "x^3-2y^3==7   (M2, proven {})"); }
+    { const long f[] = {1,0,0,-2};   check_rigorous(f, 3, 15,  1, 0, "x^3-2y^3==15  (M2, {(-1,-2)})"); }
+    { const long f[] = {1,0,0,-2};   check_rigorous(f, 3, 100, 0, 0, "x^3-2y^3==100 (M2 {}, wide-Xmax root-find)"); }
+    { const long f[] = {1,0,0,-5};   check_rigorous(f, 3, 3,   1, 0, "x^3-5y^3==3   (M2, {(2,1)})"); }
     /* Non-monogenic fields now solve via Round 2 (M3), cross-checked vs PARI:
      * Q(cbrt17) index 3 -> {(1,0),(18,7)}, Q(cbrt10) index 3 -> {(1,0)},
      * Q(cbrt20) index 2 -> {(1,0),(-19,-7)}, the Dedekind cubic index 2 -> {(1,0)}. */

@@ -168,6 +168,24 @@ static void fmpz_poly_int_roots(const fmpz_poly_t P, mpz_t** roots, int* nr, int
     fmpz_poly_factor_clear(fac);
 }
 
+/* Build the univariate (in x) poly  F(x, y) - m  for a fixed integer y:
+ * F(x,y) = sum_j form[j] x^(n-j) y^j, so coeff of x^(n-j) is form[j]*y^j
+ * (the powers n-j are all distinct), minus m at x^0.  Its integer roots are
+ * exactly the integer x with F(x, y) == m -- used to close the small-|Y| gap
+ * exactly, in place of an O(Xmax) scan over x. */
+static void thue_form_xpoly(const mpz_t* form, int n, const mpz_t y, const mpz_t m, fmpz_poly_t out) {
+    fmpz_poly_zero(out);
+    fmpz_t z, yp; fmpz_init(z); fmpz_init(yp);
+    for (int j = 0; j <= n; j++) {
+        fmpz_set_mpz(yp, y); fmpz_pow_ui(yp, yp, (unsigned long)j);
+        fmpz_set_mpz(z, form[j]); fmpz_mul(z, z, yp);
+        fmpz_poly_set_coeff_fmpz(out, n - j, z);
+    }
+    fmpz_t c0; fmpz_init(c0); fmpz_poly_get_coeff_fmpz(c0, out, 0);
+    fmpz_set_mpz(z, m); fmpz_sub(c0, c0, z); fmpz_poly_set_coeff_fmpz(out, 0, c0);
+    fmpz_clear(c0); fmpz_clear(z); fmpz_clear(yp);
+}
+
 /* Build the univariate (in y) poly  G(X, y) - target  for a fixed integer X:
  * coeff of y^p is G[p]*X^(dG-p), minus target at y^0. */
 static void red_yspec(fmpz_poly_t out, const mpz_t* G, int dG, const mpz_t X, const mpz_t target) {
@@ -1185,10 +1203,19 @@ static int thue_enumerate(const mpz_t* form_in, int n, const mpz_t m_in,
                                            general_m ? Mreps : NULL, general_m ? nM : 0);
         if (!tb.ok) { if (edbg) fprintf(stderr, "[thue] DECLINE: exponent bound not certified\n"); thue_free_reps(Mreps, nM); nf_units_free(U); nf_field_free(K); goto done; }
         B = (int)tb.B; Y2p = tb.Y2p; Xmax = tb.Xmax;
-        /* both enumeration boxes must be feasible, else DECLINE (never truncate) */
+        /* both enumeration boxes must be feasible, else DECLINE (never truncate).
+         * Small-|Y| gap: a NARROW x-window (2*Xmax+1 <= 256) is scanned exactly
+         * as before (cheapest when Xmax is tiny, e.g. Xmax=0 with a huge Y2p); a
+         * WIDE window uses exact univariate root-finding (one degree-n
+         * factorisation per y), whose cost is O(Y2p) independent of Xmax.  The
+         * gate matches the method, so no previously-solved case regresses and
+         * wide-window cases (old O(Y2p*Xmax) blowup) now become feasible. */
         double ebox = (double)(nM > 0 ? nM : 1); for (int k = 0; k < r; k++) ebox *= (2.0 * B + 1);
-        double ybox = (2.0 * Y2p + 1) * (2.0 * Xmax + 1);
-        if (ebox > 2e8 || ybox > 2e8) { if (edbg) fprintf(stderr, "[thue] DECLINE: enumeration box too large (ebox=%.3g ybox=%.3g B=%d Y2p=%ld Xmax=%ld)\n", ebox, ybox, B, Y2p, Xmax); thue_free_reps(Mreps, nM); nf_units_free(U); nf_field_free(K); goto done; }
+        bool narrowX = (2.0 * Xmax + 1.0) <= 256.0;
+        double ybox = narrowX ? (2.0 * Y2p + 1.0) * (2.0 * Xmax + 1.0)   /* scan area */
+                              : (2.0 * Y2p + 1.0);                        /* one factor / row */
+        double ybox_cap = narrowX ? 2e8 : 4e6;
+        if (ebox > 2e8 || ybox > ybox_cap) { if (edbg) fprintf(stderr, "[thue] DECLINE: enumeration box too large (ebox=%.3g ybox=%.3g narrowX=%d B=%d Y2p=%ld Xmax=%ld)\n", ebox, ybox, (int)narrowX, B, Y2p, Xmax); thue_free_reps(Mreps, nM); nf_units_free(U); nf_field_free(K); goto done; }
         if (edbg) { fprintf(stderr, "[thue-prof] exponent_bound (B=%d Y2p=%ld): %.1fms\n", B, Y2p, (clock()-tprof)*1000.0/CLOCKS_PER_SEC); tprof = clock(); }
     } else {
         B = bound;
@@ -1260,18 +1287,44 @@ static int thue_enumerate(const mpz_t* form_in, int n, const mpz_t m_in,
       }
     }
 
-    /* Small-|Y| brute force (|Y| <= Y2p, |X| <= Xmax): the exponent
-     * enumeration above proves the bound only for |Y| > Y2p, so this closes
-     * the gap.  Union = the complete solution set. */
+    /* Small-|Y| gap (|Y| <= Y2p): the exponent enumeration above proves the
+     * bound only for |Y| > Y2p, so this closes the gap.  Two exact methods,
+     * chosen per the x-window width (see the feasibility gate):
+     *  - NARROW window: scan x in [-Xmax, Xmax] (as before -- cheapest when the
+     *    window is tiny, and Xmax is a proven x-bound for |y| <= Y2p);
+     *  - WIDE window: for each fixed y the integer x with F(x,y)==m are EXACTLY
+     *    the integer roots of the univariate F(x,y)-m, found by factorisation
+     *    (magnitude-independent, so no O(Xmax) blowup).
+     * Both are exact; union with the exponent orbit = the complete set (solbuf
+     * dedups). */
     if (Y2p >= 0) {
+        bool narrowX = (2.0 * Xmax + 1.0) <= 256.0;
         mpz_t X, Y; mpz_init(X); mpz_init(Y);
-        for (long yy = -Y2p; yy <= Y2p; yy++) {
-            mpz_set_si(Y, yy);
-            for (long xx = -Xmax; xx <= Xmax; xx++) {
-                mpz_set_si(X, xx);
-                eval_form(form, n, X, Y, fval);
-                if (mpz_cmp(fval, m) == 0) solbuf_push(&sb, X, Y);
+        if (narrowX) {
+            for (long yy = -Y2p; yy <= Y2p; yy++) {
+                mpz_set_si(Y, yy);
+                for (long xx = -Xmax; xx <= Xmax; xx++) {
+                    mpz_set_si(X, xx);
+                    eval_form(form, n, X, Y, fval);
+                    if (mpz_cmp(fval, m) == 0) solbuf_push(&sb, X, Y);
+                }
             }
+        } else {
+            fmpz_poly_t Px; fmpz_poly_init(Px);
+            mpz_t* xroots = NULL; int nxr = 0, xcap = 0;
+            for (long yy = -Y2p; yy <= Y2p; yy++) {
+                mpz_set_si(Y, yy);
+                thue_form_xpoly(form, n, Y, m, Px);
+                nxr = 0;
+                fmpz_poly_int_roots(Px, &xroots, &nxr, &xcap);
+                for (int i = 0; i < nxr; i++) {
+                    eval_form(form, n, xroots[i], Y, fval);      /* keep the exact F==m contract */
+                    if (mpz_cmp(fval, m) == 0) solbuf_push(&sb, xroots[i], Y);
+                    mpz_clear(xroots[i]);
+                }
+            }
+            free(xroots);
+            fmpz_poly_clear(Px);
         }
         mpz_clear(X); mpz_clear(Y);
     }

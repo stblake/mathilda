@@ -306,7 +306,11 @@ they come first.
   milestone: `python3 run.py` must show **0 WRONG / 0 CRASH** and CORRECT strictly
   increased. `results.json`/`REPORT.md` track the arc. PARI/GP `thue()` and
   `bnfinit` are the cross-checks (monogenicity, units, regulators, solution
-  sets).
+  sets). `python3 grid.py` is the **randomized** counterpart — a
+  deterministic-seeded fuzz of random forms (degree 3–6, mixed `m`) vs PARI,
+  which catches a wrong *finite* answer on forms nobody curated (seed
+  `20260820`, 400 cases: 261 CORRECT / 0 WRONG). Run it too on any change that
+  touches the solve/enumeration paths.
 - Add the newly-covered families to `tests/test_thue.c` (rigorous auto-bound
   path) as pinned regressions.
 - Per change: `make check-c99`, macOS `leaks` (MSL) = 0, all suites pass, and the

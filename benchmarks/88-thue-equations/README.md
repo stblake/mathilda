@@ -23,6 +23,27 @@ MATH_TIMEOUT=30 PARI_TIMEOUT=20 python3 run.py
 Writes `REPORT.md` (ranked, by verdict/family) and `results.json`.  Exits
 nonzero on any `WRONG` or `CRASH`.
 
+## The randomized grid (`grid.py`)
+
+`cases.py` is *curated* (hand-picked forms). `grid.py` is its *randomized*
+counterpart: a deterministic-seeded generator of random binary forms (degree
+3–6, mixed `m` including `|m| != 1`), each cross-checked against PARI `thue()`
+through the same runners — hundreds of forms nobody chose. It earns its keep on
+the forms Mathilda *solves* (most hard random forms `DECLINE`, which is safe),
+where a set differing from PARI is a completeness bug; generation is weighted
+toward the solve paths so `CORRECT` is genuinely exercised. Reproducible: a fixed
+seed regenerates the identical corpus, so any `WRONG` is a stable, re-runnable
+failure. Writes `GRID_REPORT.md` + `grid_results.json`; exits nonzero on
+`WRONG`/`CRASH` only.
+
+```bash
+python3 grid.py                  # 300 cases, seed 20260820
+python3 grid.py --n 400 --seed 20260820
+```
+
+Last run (seed `20260820`, 400 cases): **261 CORRECT / 138 DECLINE / 0 WRONG /
+0 CRASH** — every machine-generated form Mathilda solved matched PARI.
+
 ## The corpus (`cases.py`)
 
 ~100 equations chosen to stress every code path and every known weakness:

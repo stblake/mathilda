@@ -1,0 +1,7896 @@
+{
+ "seed": 20260820,
+ "n": 400,
+ "counts": {
+  "DECLINE": 138,
+  "CORRECT": 261,
+  "UNVERIFIED": 1
+ },
+ "results": [
+  {
+   "label": "grid-0001-n5",
+   "family": "grid-n5",
+   "form": "-2*y^5 + x*y^4 + 2*x^2*y^3 - 2*x^3*y^2 + 2*x^4*y - 2*x^5",
+   "m": -1,
+   "pcoef": [
+    -2,
+    1,
+    2,
+    -2,
+    2,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.002325,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0002-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 + 2*x*y^3 - x^2*y^2 + 2*x^3*y - x^4",
+   "m": 7,
+   "pcoef": [
+    -3,
+    2,
+    -1,
+    2,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005607,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0003-n4",
+   "family": "grid-n4",
+   "form": "y^4 + 4*x*y^3 + 4*x^2*y^2 + 2*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    1,
+    4,
+    4,
+    2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.032489,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0004-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + x*y^3 - x^4",
+   "m": 4,
+   "pcoef": [
+    2,
+    1,
+    0,
+    0,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.00053,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0005-n3",
+   "family": "grid-n3",
+   "form": "-y^3 - 4*x*y^2 - 3*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    -1,
+    -4,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.040356,
+   "m_count": 9,
+   "p_status": "OK",
+   "p_count": 9,
+   "m_err": null
+  },
+  {
+   "label": "grid-0006-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 + 2*x*y^3 + x^2*y^2 - 4*x^3*y - x^4",
+   "m": -8,
+   "pcoef": [
+    -3,
+    2,
+    1,
+    -4,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.00721,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0007-n4",
+   "family": "grid-n4",
+   "form": "-4*y^4 + 3*x*y^3 - 4*x^2*y^2 + 4*x^3*y - x^4",
+   "m": -6,
+   "pcoef": [
+    -4,
+    3,
+    -4,
+    4,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.008538,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0008-n4",
+   "family": "grid-n4",
+   "form": "4*y^4 - 3*x*y^3 + 4*x^2*y^2 + 3*x^3*y + x^4",
+   "m": 1,
+   "pcoef": [
+    4,
+    -3,
+    4,
+    3,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005995,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0009-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + 3*x*y^3 + 2*x^3*y - x^4",
+   "m": 5,
+   "pcoef": [
+    2,
+    3,
+    0,
+    2,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.009742,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0010-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 + 2*x*y^2 - x^2*y + x^3",
+   "m": -8,
+   "pcoef": [
+    3,
+    2,
+    -1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.009735,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0011-n5",
+   "family": "grid-n5",
+   "form": "-2*y^5 + 2*x*y^4 + x^3*y^2 - 2*x^4*y + x^5",
+   "m": -1,
+   "pcoef": [
+    -2,
+    2,
+    0,
+    1,
+    -2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000775,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0012-n5",
+   "family": "grid-n5",
+   "form": "2*y^5 - 3*x*y^4 - 2*x^2*y^3 - 2*x^3*y^2 - x^4*y - x^5",
+   "m": -1,
+   "pcoef": [
+    2,
+    -3,
+    -2,
+    -2,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.022284,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0013-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 + 4*x*y^2 + x^2*y + x^3",
+   "m": 21,
+   "pcoef": [
+    5,
+    4,
+    1,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005625,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0014-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 - 3*x*y^2 + x^3",
+   "m": 1,
+   "pcoef": [
+    2,
+    -3,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000435,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0015-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 + 5*x*y^2 + x^2*y - x^3",
+   "m": -3,
+   "pcoef": [
+    6,
+    5,
+    1,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.052908,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0016-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 - 2*x*y^2 - 5*x^2*y + x^3",
+   "m": -16,
+   "pcoef": [
+    -5,
+    -2,
+    -5,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.163917,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0017-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 - x*y^3 - x^2*y^2 - 3*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    -3,
+    -1,
+    -1,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.02398,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0018-n6",
+   "family": "grid-n6",
+   "form": "-y^6 - x*y^5 + 2*x^3*y^3 + x^5*y + x^6",
+   "m": 1,
+   "pcoef": [
+    -1,
+    -1,
+    0,
+    2,
+    0,
+    1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 3.28023,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0019-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + 3*x*y^3 - 2*x^3*y + x^4",
+   "m": 3,
+   "pcoef": [
+    -2,
+    3,
+    0,
+    -2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000578,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0020-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 + 6*x*y^2 + x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    -4,
+    6,
+    1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006211,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0021-n3",
+   "family": "grid-n3",
+   "form": "-y^3 - 4*x*y^2 - 4*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    -1,
+    -4,
+    -4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.003707,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0022-n4",
+   "family": "grid-n4",
+   "form": "-y^4 - x*y^3 + 3*x^2*y^2 + x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    -1,
+    -1,
+    3,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 2.80685,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0023-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 - x*y^2 + x^2*y - x^3",
+   "m": -39,
+   "pcoef": [
+    -2,
+    -1,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006509,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0024-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + 2*x*y^3 - 2*x^2*y^2 - 3*x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    -2,
+    2,
+    -2,
+    -3,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005633,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0025-n5",
+   "family": "grid-n5",
+   "form": "3*y^5 + 3*x^2*y^3 + 2*x^3*y^2 + 2*x^4*y - x^5",
+   "m": -1,
+   "pcoef": [
+    3,
+    0,
+    3,
+    2,
+    2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.023133,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0026-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 - 4*x*y^3 + x^2*y^2 + 4*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    2,
+    -4,
+    1,
+    4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.027328,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0027-n5",
+   "family": "grid-n5",
+   "form": "y^5 + x*y^4 - 3*x^2*y^3 + 2*x^3*y^2 - 3*x^4*y + x^5",
+   "m": -2,
+   "pcoef": [
+    1,
+    1,
+    -3,
+    2,
+    -3,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.009968,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0028-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 - 6*x*y^2 - x^2*y - x^3",
+   "m": 11,
+   "pcoef": [
+    6,
+    -6,
+    -1,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.091973,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0029-n5",
+   "family": "grid-n5",
+   "form": "3*y^5 - x*y^4 + x^3*y^2 + 3*x^4*y - x^5",
+   "m": 5,
+   "pcoef": [
+    3,
+    -1,
+    0,
+    1,
+    3,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.153053,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0030-n4",
+   "family": "grid-n4",
+   "form": "-4*y^4 - 4*x*y^3 + 4*x^2*y^2 - 4*x^3*y + x^4",
+   "m": 1,
+   "pcoef": [
+    -4,
+    -4,
+    4,
+    -4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.025365,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0031-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 - 2*x*y^3 - x^2*y^2 + 2*x^3*y + x^4",
+   "m": 1,
+   "pcoef": [
+    -2,
+    -2,
+    -1,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.009269,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0032-n4",
+   "family": "grid-n4",
+   "form": "y^4 - 3*x*y^3 + 4*x^2*y^2 - 2*x^3*y + x^4",
+   "m": 5,
+   "pcoef": [
+    1,
+    -3,
+    4,
+    -2,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.002151,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0033-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 + 6*x*y^2 + 5*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    -2,
+    6,
+    5,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.00636,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0034-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 - 2*x*y^3 + 3*x^2*y^2 + x^4",
+   "m": 1,
+   "pcoef": [
+    -3,
+    -2,
+    3,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.025227,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0035-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 - 4*x*y^3 - 2*x^2*y^2 + 2*x^3*y + x^4",
+   "m": 4,
+   "pcoef": [
+    -2,
+    -4,
+    -2,
+    2,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006137,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0036-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 - x*y^3 - 4*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    -3,
+    -1,
+    0,
+    -4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.025565,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0037-n6",
+   "family": "grid-n6",
+   "form": "-2*y^6 + 2*x*y^5 + x^2*y^4 - x^3*y^3 - x^4*y^2 - 2*x^5*y - x^6",
+   "m": 4,
+   "pcoef": [
+    -2,
+    2,
+    1,
+    -1,
+    -1,
+    -2,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006527,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0038-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 + 2*x*y^2 - 6*x^2*y - x^3",
+   "m": -56,
+   "pcoef": [
+    -3,
+    2,
+    -6,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.058051,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0039-n4",
+   "family": "grid-n4",
+   "form": "-4*y^4 - 2*x*y^3 - x^2*y^2 + 3*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    -4,
+    -2,
+    -1,
+    3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000741,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0040-n5",
+   "family": "grid-n5",
+   "form": "y^5 + x*y^4 + 2*x^2*y^3 + x^3*y^2 + x^4*y - x^5",
+   "m": 4,
+   "pcoef": [
+    1,
+    1,
+    2,
+    1,
+    1,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006797,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0041-n3",
+   "family": "grid-n3",
+   "form": "y^3 - 2*x*y^2 - 3*x^2*y - x^3",
+   "m": 9,
+   "pcoef": [
+    1,
+    -2,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.004297,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0042-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 + 4*x*y^2 + 5*x^2*y + x^3",
+   "m": -8,
+   "pcoef": [
+    3,
+    4,
+    5,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.011601,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0043-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 - 6*x*y^2 - x^2*y - x^3",
+   "m": -5,
+   "pcoef": [
+    6,
+    -6,
+    -1,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.092074,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0044-n4",
+   "family": "grid-n4",
+   "form": "-y^4 - x*y^3 - 4*x^2*y^2 + x^4",
+   "m": 2,
+   "pcoef": [
+    -1,
+    -1,
+    -4,
+    0,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006571,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0045-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 - 5*x*y^2 - 3*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    5,
+    -5,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.009758,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0046-n3",
+   "family": "grid-n3",
+   "form": "y^3 - 4*x*y^2 + 4*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    1,
+    -4,
+    4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.002983,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0047-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + 3*x^2*y^2 - 2*x^3*y + x^4",
+   "m": -7,
+   "pcoef": [
+    2,
+    0,
+    3,
+    -2,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005785,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0048-n3",
+   "family": "grid-n3",
+   "form": "y^3 + x*y^2 + x^2*y + x^3",
+   "m": -11,
+   "pcoef": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000438,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0049-n5",
+   "family": "grid-n5",
+   "form": "y^5 - x*y^4 + 3*x^2*y^3 + x^3*y^2 + 3*x^4*y + 3*x^5",
+   "m": -1,
+   "pcoef": [
+    1,
+    -1,
+    3,
+    1,
+    3,
+    3
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001642,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0050-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 + 6*x*y^2 + 6*x^2*y - x^3",
+   "m": 47,
+   "pcoef": [
+    -3,
+    6,
+    6,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.01414,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0051-n4",
+   "family": "grid-n4",
+   "form": "y^4 - x*y^3 + x^2*y^2 - 2*x^3*y + 2*x^4",
+   "m": -1,
+   "pcoef": [
+    1,
+    -1,
+    1,
+    -2,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001294,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0052-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 - 2*x*y^2 + x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    5,
+    -2,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.005789,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0053-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 + 4*x*y^2 - 5*x^2*y + x^3",
+   "m": 3,
+   "pcoef": [
+    -4,
+    4,
+    -5,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005923,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0054-n5",
+   "family": "grid-n5",
+   "form": "-3*y^5 - 2*x*y^4 - 3*x^2*y^3 + 2*x^3*y^2 + 2*x^4*y - x^5",
+   "m": -1,
+   "pcoef": [
+    -3,
+    -2,
+    -3,
+    2,
+    2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.021919,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0055-n5",
+   "family": "grid-n5",
+   "form": "-2*y^5 - 2*x*y^4 + 2*x^2*y^3 + 3*x^3*y^2 - x^4*y + x^5",
+   "m": -1,
+   "pcoef": [
+    -2,
+    -2,
+    2,
+    3,
+    -1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.044349,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0056-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 + x*y^2 - 5*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    -3,
+    1,
+    -5,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.029309,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0057-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 - 4*x*y^3 + 3*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    -3,
+    -4,
+    0,
+    3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.026466,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0058-n3",
+   "family": "grid-n3",
+   "form": "y^3 + x*y^2 - x^3",
+   "m": -3,
+   "pcoef": [
+    1,
+    1,
+    0,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.002086,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0059-n3",
+   "family": "grid-n3",
+   "form": "-6*y^3 + 6*x*y^2 + x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    -6,
+    6,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000678,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0060-n5",
+   "family": "grid-n5",
+   "form": "-2*y^5 + x*y^4 - 2*x^2*y^3 - 3*x^3*y^2 + 2*x^4*y + x^5",
+   "m": 1,
+   "pcoef": [
+    -2,
+    1,
+    -2,
+    -3,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.432852,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0061-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 - 3*x*y^2 + 2*x^3",
+   "m": -12,
+   "pcoef": [
+    -5,
+    -3,
+    0,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.000801,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0062-n4",
+   "family": "grid-n4",
+   "form": "3*y^4 - 4*x*y^3 - x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    3,
+    -4,
+    0,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.023277,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0063-n4",
+   "family": "grid-n4",
+   "form": "3*y^4 + x*y^3 - 2*x^2*y^2 + 2*x^3*y - x^4",
+   "m": -4,
+   "pcoef": [
+    3,
+    1,
+    -2,
+    2,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.008326,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0064-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + x*y^3 - x^2*y^2 + x^4",
+   "m": 1,
+   "pcoef": [
+    -2,
+    1,
+    -1,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.024903,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0065-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 - 6*x*y^2 + 6*x^2*y - x^3",
+   "m": -9,
+   "pcoef": [
+    4,
+    -6,
+    6,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006571,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0066-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 + 3*x*y^2 + x^2*y - 2*x^3",
+   "m": 1,
+   "pcoef": [
+    2,
+    3,
+    1,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.000992,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0067-n6",
+   "family": "grid-n6",
+   "form": "y^6 - x*y^5 - x^2*y^4 + x^3*y^3 - x^5*y + x^6",
+   "m": -5,
+   "pcoef": [
+    1,
+    -1,
+    -1,
+    1,
+    0,
+    -1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000921,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0068-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 - 5*x*y^2 + 6*x^2*y + x^3",
+   "m": -51,
+   "pcoef": [
+    3,
+    -5,
+    6,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.315864,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0069-n4",
+   "family": "grid-n4",
+   "form": "-y^4 + 4*x*y^3 - x^2*y^2 - 2*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    -1,
+    4,
+    -1,
+    -2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.029668,
+   "m_count": 8,
+   "p_status": "OK",
+   "p_count": 8,
+   "m_err": null
+  },
+  {
+   "label": "grid-0070-n3",
+   "family": "grid-n3",
+   "form": "-y^3 + 2*x*y^2 + 2*x^2*y + x^3",
+   "m": -12,
+   "pcoef": [
+    -1,
+    2,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.004358,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0071-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 - 3*x*y^3 + x^2*y^2 + x^3*y + x^4",
+   "m": -3,
+   "pcoef": [
+    -2,
+    -3,
+    1,
+    1,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.00843,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0072-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 + 4*x*y^2 + 4*x^2*y + 3*x^3",
+   "m": 9,
+   "pcoef": [
+    -5,
+    4,
+    4,
+    3
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001165,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0073-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 - 3*x*y^2 + 3*x^2*y - x^3",
+   "m": -3,
+   "pcoef": [
+    -5,
+    -3,
+    3,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006714,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0074-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 + 4*x*y^3 - 2*x^2*y^2 + 2*x^3*y + 2*x^4",
+   "m": -5,
+   "pcoef": [
+    -3,
+    4,
+    -2,
+    2,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001783,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0075-n5",
+   "family": "grid-n5",
+   "form": "3*y^5 - x*y^4 + 2*x^2*y^3 - 2*x^4*y - x^5",
+   "m": -1,
+   "pcoef": [
+    3,
+    -1,
+    2,
+    0,
+    -2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.028543,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0076-n5",
+   "family": "grid-n5",
+   "form": "2*y^5 - 2*x*y^4 + 2*x^2*y^3 + 3*x^3*y^2 - 2*x^4*y + x^5",
+   "m": -1,
+   "pcoef": [
+    2,
+    -2,
+    2,
+    3,
+    -2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.0009,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0077-n4",
+   "family": "grid-n4",
+   "form": "3*y^4 - 4*x*y^3 + 2*x^2*y^2 - x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    3,
+    -4,
+    2,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.0266,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0078-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 - 6*x*y^2 - 3*x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    -2,
+    -6,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.0066,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0079-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 - 4*x*y^3 - 4*x^2*y^2 - 3*x^3*y + 2*x^4",
+   "m": 1,
+   "pcoef": [
+    -2,
+    -4,
+    -4,
+    -3,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001567,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0080-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + x*y^3 - x^2*y^2 + 3*x^3*y + x^4",
+   "m": 5,
+   "pcoef": [
+    2,
+    1,
+    -1,
+    3,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.01334,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0081-n5",
+   "family": "grid-n5",
+   "form": "2*y^5 - 3*x*y^4 - 2*x^3*y^2 - 3*x^4*y - x^5",
+   "m": -1,
+   "pcoef": [
+    2,
+    -3,
+    0,
+    -2,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.022913,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0082-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 - 6*x*y^2 + x^2*y - x^3",
+   "m": 7,
+   "pcoef": [
+    -5,
+    -6,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 6.37167,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0083-n3",
+   "family": "grid-n3",
+   "form": "-y^3 - 5*x*y^2 + 3*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    -1,
+    -5,
+    3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.010536,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0084-n3",
+   "family": "grid-n3",
+   "form": "y^3 - 6*x*y^2 + 5*x^2*y - x^3",
+   "m": 11,
+   "pcoef": [
+    1,
+    -6,
+    5,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.414803,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0085-n4",
+   "family": "grid-n4",
+   "form": "-4*y^4 - 3*x*y^3 + x^2*y^2 + x^4",
+   "m": -1,
+   "pcoef": [
+    -4,
+    -3,
+    1,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.022536,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0086-n3",
+   "family": "grid-n3",
+   "form": "-6*y^3 - 5*x*y^2 + 4*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    -6,
+    -5,
+    4,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.032259,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0087-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 + 2*x*y^2 - x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    5,
+    2,
+    -1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.00235,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0088-n4",
+   "family": "grid-n4",
+   "form": "-4*y^4 + 2*x*y^3 + 3*x^2*y^2 + 4*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    -4,
+    2,
+    3,
+    4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.027646,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0089-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 - 3*x*y^3 - 4*x^2*y^2 + 2*x^3*y + x^4",
+   "m": 1,
+   "pcoef": [
+    -2,
+    -3,
+    -4,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.029893,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0090-n5",
+   "family": "grid-n5",
+   "form": "-y^5 - x*y^4 - x^3*y^2 - 2*x^4*y + x^5",
+   "m": 1,
+   "pcoef": [
+    -1,
+    -1,
+    0,
+    -1,
+    -2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.023814,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0091-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 - 3*x^2*y - x^3",
+   "m": -34,
+   "pcoef": [
+    4,
+    0,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000437,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0092-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 - 2*x*y^2 + 4*x^2*y + x^3",
+   "m": -7,
+   "pcoef": [
+    -4,
+    -2,
+    4,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006257,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0093-n3",
+   "family": "grid-n3",
+   "form": "-y^3 - 4*x*y^2 - 3*x^2*y - x^3",
+   "m": -3,
+   "pcoef": [
+    -1,
+    -4,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.016119,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0094-n4",
+   "family": "grid-n4",
+   "form": "-4*y^4 - 3*x*y^3 + 3*x^2*y^2 + x^3*y + 3*x^4",
+   "m": 2,
+   "pcoef": [
+    -4,
+    -3,
+    3,
+    1,
+    3
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000884,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0095-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 + 6*x*y^2 + 3*x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    -4,
+    6,
+    3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.013868,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0096-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + 3*x*y^3 + x^2*y^2 + x^4",
+   "m": 1,
+   "pcoef": [
+    2,
+    3,
+    1,
+    0,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005735,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0097-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 + 3*x*y^2 + 6*x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    2,
+    3,
+    6,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.038537,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0098-n4",
+   "family": "grid-n4",
+   "form": "y^4 + x*y^3 + 3*x^2*y^2 - 2*x^3*y + x^4",
+   "m": 1,
+   "pcoef": [
+    1,
+    1,
+    3,
+    -2,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005522,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0099-n5",
+   "family": "grid-n5",
+   "form": "-y^5 + x*y^4 - 3*x^2*y^3 - 3*x^4*y + 2*x^5",
+   "m": 5,
+   "pcoef": [
+    -1,
+    1,
+    -3,
+    0,
+    -3,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001492,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0100-n3",
+   "family": "grid-n3",
+   "form": "-y^3 - 5*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    -1,
+    0,
+    -5,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006608,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0101-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 + 2*x*y^2 + 6*x^2*y + x^3",
+   "m": -4,
+   "pcoef": [
+    -2,
+    2,
+    6,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.007099,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0102-n4",
+   "family": "grid-n4",
+   "form": "-y^4 + x*y^3 - 3*x^2*y^2 - 2*x^3*y + 3*x^4",
+   "m": 1,
+   "pcoef": [
+    -1,
+    1,
+    -3,
+    -2,
+    3
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000743,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0103-n3",
+   "family": "grid-n3",
+   "form": "-y^3 - 4*x*y^2 + 5*x^2*y + 2*x^3",
+   "m": 4,
+   "pcoef": [
+    -1,
+    -4,
+    5,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001129,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0104-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 + 4*x*y^2 + x^2*y + x^3",
+   "m": 17,
+   "pcoef": [
+    -3,
+    4,
+    1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.053976,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0105-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 - x*y^2 - 3*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    6,
+    -1,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000711,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0106-n3",
+   "family": "grid-n3",
+   "form": "-y^3 + 2*x*y^2 - 5*x^2*y + x^3",
+   "m": 11,
+   "pcoef": [
+    -1,
+    2,
+    -5,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005949,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0107-n4",
+   "family": "grid-n4",
+   "form": "-y^4 + 2*x*y^3 - 4*x^2*y^2 - 4*x^3*y + x^4",
+   "m": 3,
+   "pcoef": [
+    -1,
+    2,
+    -4,
+    -4,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.012933,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0108-n4",
+   "family": "grid-n4",
+   "form": "3*y^4 - x*y^3 + x^2*y^2 - 2*x^3*y + 2*x^4",
+   "m": 5,
+   "pcoef": [
+    3,
+    -1,
+    1,
+    -2,
+    2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000875,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0109-n6",
+   "family": "grid-n6",
+   "form": "2*y^6 + x*y^5 - x^2*y^4 + 2*x^4*y^2 + 2*x^5*y - x^6",
+   "m": -1,
+   "pcoef": [
+    2,
+    1,
+    -1,
+    0,
+    2,
+    2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.616083,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0110-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 + 4*x*y^2 - 6*x^2*y + x^3",
+   "m": -7,
+   "pcoef": [
+    4,
+    4,
+    -6,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006866,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0111-n3",
+   "family": "grid-n3",
+   "form": "-y^3 + 4*x*y^2 - 4*x^2*y - x^3",
+   "m": 4,
+   "pcoef": [
+    -1,
+    4,
+    -4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.031466,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0112-n4",
+   "family": "grid-n4",
+   "form": "-4*y^4 - 2*x*y^3 + 4*x^2*y^2 - 4*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    -4,
+    -2,
+    4,
+    -4,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.06912,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0113-n3",
+   "family": "grid-n3",
+   "form": "-6*y^3 - x*y^2 - 5*x^2*y + x^3",
+   "m": 11,
+   "pcoef": [
+    -6,
+    -1,
+    -5,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.07706,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0114-n4",
+   "family": "grid-n4",
+   "form": "-y^4 + 3*x*y^3 - 2*x^4",
+   "m": 1,
+   "pcoef": [
+    -1,
+    3,
+    0,
+    0,
+    -2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000686,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0115-n4",
+   "family": "grid-n4",
+   "form": "3*y^4 + 4*x*y^3 - x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    3,
+    4,
+    0,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.025619,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0116-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + 3*x*y^3 - 2*x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    -2,
+    3,
+    0,
+    -2,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005594,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0117-n6",
+   "family": "grid-n6",
+   "form": "2*y^6 - 2*x^2*y^4 - 2*x^3*y^3 - 2*x^4*y^2 - x^5*y + x^6",
+   "m": -1,
+   "pcoef": [
+    2,
+    0,
+    -2,
+    -2,
+    -2,
+    -1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.302778,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0118-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 + 2*x*y^2 + x^2*y + x^3",
+   "m": -6,
+   "pcoef": [
+    2,
+    2,
+    1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000546,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0119-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 - 3*x*y^2 - x^2*y - x^3",
+   "m": 16,
+   "pcoef": [
+    -4,
+    -3,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.020066,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0120-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 + 5*x*y^2 + 5*x^2*y - x^3",
+   "m": -7,
+   "pcoef": [
+    -5,
+    5,
+    5,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.00976,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0121-n4",
+   "family": "grid-n4",
+   "form": "-y^4 - 2*x*y^3 + x^2*y^2 + 2*x^3*y + x^4",
+   "m": 1,
+   "pcoef": [
+    -1,
+    -2,
+    1,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.018409,
+   "m_count": 8,
+   "p_status": "OK",
+   "p_count": 8,
+   "m_err": null
+  },
+  {
+   "label": "grid-0122-n4",
+   "family": "grid-n4",
+   "form": "4*y^4 - x*y^3 - 3*x^2*y^2 + 4*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    4,
+    -1,
+    -3,
+    4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.028908,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0123-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 + 6*x*y^2 - 5*x^2*y + 2*x^3",
+   "m": -4,
+   "pcoef": [
+    -3,
+    6,
+    -5,
+    2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.00058,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0124-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 - 2*x*y^3 - x^3*y + x^4",
+   "m": 7,
+   "pcoef": [
+    2,
+    -2,
+    0,
+    -1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000706,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0125-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 - x*y^2 - x^2*y + x^3",
+   "m": 18,
+   "pcoef": [
+    5,
+    -1,
+    -1,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006385,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0126-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 - 3*x*y^2 - x^3",
+   "m": 11,
+   "pcoef": [
+    3,
+    -3,
+    0,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.021448,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0127-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 - x*y^2 - x^2*y - x^3",
+   "m": -31,
+   "pcoef": [
+    3,
+    -1,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000595,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0128-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 - 6*x*y^2 + x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    -4,
+    -6,
+    1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.012203,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0129-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 + 6*x*y^2 - 3*x^2*y + x^3",
+   "m": 3,
+   "pcoef": [
+    -2,
+    6,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.06013,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0130-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 - x*y^2 + 2*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    -5,
+    -1,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006253,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0131-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 + 3*x*y^2 + 3*x^2*y + x^3",
+   "m": 40,
+   "pcoef": [
+    3,
+    3,
+    3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.018606,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0132-n3",
+   "family": "grid-n3",
+   "form": "-y^3 + 2*x*y^2 - 3*x^2*y + 2*x^3",
+   "m": -1,
+   "pcoef": [
+    -1,
+    2,
+    -3,
+    2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000541,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0133-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 + 2*x*y^2 + 2*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    -3,
+    2,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.002455,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0134-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + x^2*y^2 + 3*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    -2,
+    0,
+    1,
+    3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000678,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0135-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + 3*x*y^3 + 3*x^2*y^2 + 3*x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    2,
+    3,
+    3,
+    3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.025898,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0136-n4",
+   "family": "grid-n4",
+   "form": "y^4 + 3*x*y^3 - 4*x^2*y^2 + x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    1,
+    3,
+    -4,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000717,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0137-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 + 6*x*y^2 - 3*x^2*y - x^3",
+   "m": 24,
+   "pcoef": [
+    2,
+    6,
+    -3,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.009769,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0138-n5",
+   "family": "grid-n5",
+   "form": "-y^5 - x*y^4 + 2*x^2*y^3 - 3*x^3*y^2 + 2*x^4*y - x^5",
+   "m": 1,
+   "pcoef": [
+    -1,
+    -1,
+    2,
+    -3,
+    2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.062782,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0139-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 + 6*x*y^2 + 3*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    -3,
+    6,
+    3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.005667,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0140-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 - 4*x*y^2 - 3*x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    -5,
+    -4,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006208,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0141-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 + 3*x*y^2 - x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    4,
+    3,
+    -1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.005989,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0142-n5",
+   "family": "grid-n5",
+   "form": "3*y^5 + x*y^4 - 3*x^2*y^3 + 2*x^3*y^2 - 3*x^4*y + x^5",
+   "m": 7,
+   "pcoef": [
+    3,
+    1,
+    -3,
+    2,
+    -3,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.031159,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0143-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 + 3*x*y^2 + 5*x^2*y - x^3",
+   "m": 37,
+   "pcoef": [
+    -2,
+    3,
+    5,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006169,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0144-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 - 6*x*y^2 - 2*x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    -2,
+    -6,
+    -2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006212,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0145-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + 4*x*y^3 + 3*x^2*y^2 - x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    2,
+    4,
+    3,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.027371,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0146-n3",
+   "family": "grid-n3",
+   "form": "y^3 - 5*x*y^2 + 2*x^2*y + x^3",
+   "m": -4,
+   "pcoef": [
+    1,
+    -5,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.254816,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0147-n5",
+   "family": "grid-n5",
+   "form": "2*y^5 - 3*x*y^4 + 2*x^3*y^2 - x^4*y - x^5",
+   "m": -4,
+   "pcoef": [
+    2,
+    -3,
+    0,
+    2,
+    -1,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.003352,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0148-n3",
+   "family": "grid-n3",
+   "form": "y^3 + 5*x*y^2 + 4*x^2*y + x^3",
+   "m": 12,
+   "pcoef": [
+    1,
+    5,
+    4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.005795,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0149-n4",
+   "family": "grid-n4",
+   "form": "4*y^4 + 3*x*y^3 - 4*x^2*y^2 + 2*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    4,
+    3,
+    -4,
+    2,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.061378,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0150-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 - 6*x*y^2 + 5*x^2*y - x^3",
+   "m": -9,
+   "pcoef": [
+    5,
+    -6,
+    5,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.010808,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0151-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 + 5*x*y^2 - x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    6,
+    5,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000701,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0152-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 + 2*x*y^2 + x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    4,
+    2,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006151,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0153-n6",
+   "family": "grid-n6",
+   "form": "-y^6 - 2*x*y^5 - x^2*y^4 + 2*x^3*y^3 + 2*x^4*y^2 + x^5*y - x^6",
+   "m": 1,
+   "pcoef": [
+    -1,
+    -2,
+    -1,
+    2,
+    2,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000901,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0154-n4",
+   "family": "grid-n4",
+   "form": "3*y^4 - x*y^3 + 3*x^2*y^2 - 2*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    3,
+    -1,
+    3,
+    -2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.02623,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0155-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 - 3*x*y^2 + x^2*y + x^3",
+   "m": -22,
+   "pcoef": [
+    2,
+    -3,
+    1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.00771,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0156-n4",
+   "family": "grid-n4",
+   "form": "y^4 + 4*x*y^3 - 4*x^2*y^2 - 2*x^4",
+   "m": -6,
+   "pcoef": [
+    1,
+    4,
+    -4,
+    0,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.00129,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0157-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + 2*x*y^3 - 2*x^2*y^2 + 4*x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    2,
+    2,
+    -2,
+    4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.025841,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0158-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 + 4*x*y^2 - x^2*y - 2*x^3",
+   "m": -10,
+   "pcoef": [
+    -3,
+    4,
+    -1,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001068,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0159-n3",
+   "family": "grid-n3",
+   "form": "-y^3 - x*y^2 + 4*x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    -1,
+    -1,
+    4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.018168,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0160-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 - 2*x*y^2 - x^3",
+   "m": 5,
+   "pcoef": [
+    6,
+    -2,
+    0,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.053122,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0161-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 + 3*x*y^2 - 3*x^2*y - x^3",
+   "m": -37,
+   "pcoef": [
+    -4,
+    3,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000526,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0162-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 + x*y^2 + 5*x^2*y + 2*x^3",
+   "m": 1,
+   "pcoef": [
+    -2,
+    1,
+    5,
+    2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000687,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0163-n5",
+   "family": "grid-n5",
+   "form": "3*y^5 - 2*x*y^4 + 3*x^2*y^3 - x^3*y^2 - x^5",
+   "m": -1,
+   "pcoef": [
+    3,
+    -2,
+    3,
+    -1,
+    0,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.022798,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0164-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 + 6*x*y^2 + x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    5,
+    6,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006049,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0165-n4",
+   "family": "grid-n4",
+   "form": "y^4 - x*y^3 - 3*x^2*y^2 + 3*x^3*y - 2*x^4",
+   "m": -1,
+   "pcoef": [
+    1,
+    -1,
+    -3,
+    3,
+    -2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000734,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0166-n3",
+   "family": "grid-n3",
+   "form": "-6*y^3 - 3*x^2*y - x^3",
+   "m": -23,
+   "pcoef": [
+    -6,
+    0,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.018069,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0167-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 + 4*x*y^2 - x^3",
+   "m": 1,
+   "pcoef": [
+    -5,
+    4,
+    0,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.003277,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0168-n6",
+   "family": "grid-n6",
+   "form": "-2*y^6 + 2*x*y^5 - x^2*y^4 + x^3*y^3 + 2*x^4*y^2 + x^6",
+   "m": -1,
+   "pcoef": [
+    -2,
+    2,
+    -1,
+    1,
+    2,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.00095,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0169-n5",
+   "family": "grid-n5",
+   "form": "y^5 - x*y^4 + 2*x^2*y^3 - 3*x^3*y^2 + 2*x^4*y + x^5",
+   "m": 1,
+   "pcoef": [
+    1,
+    -1,
+    2,
+    -3,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.019309,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0170-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + 2*x*y^3 + x^2*y^2 - 3*x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    -2,
+    2,
+    1,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.023241,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0171-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 + 3*x*y^3 + 3*x^2*y^2 + 4*x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    -3,
+    3,
+    3,
+    4,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.064611,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0172-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 + 3*x*y^2 + 6*x^2*y + x^3",
+   "m": -12,
+   "pcoef": [
+    2,
+    3,
+    6,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005647,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0173-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 + 5*x*y^2 + 5*x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    2,
+    5,
+    5,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.008587,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0174-n5",
+   "family": "grid-n5",
+   "form": "y^5 + 3*x*y^4 - 2*x^3*y^2 - 2*x^4*y - x^5",
+   "m": -8,
+   "pcoef": [
+    1,
+    3,
+    0,
+    -2,
+    -2,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.007317,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0175-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 + 5*x*y^2 + 5*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    4,
+    5,
+    5,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000529,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0176-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 + 2*x*y^2 + 6*x^2*y - x^3",
+   "m": 5,
+   "pcoef": [
+    -4,
+    2,
+    6,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.012381,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0177-n6",
+   "family": "grid-n6",
+   "form": "y^6 - 2*x*y^5 + x^4*y^2 + 2*x^5*y + 2*x^6",
+   "m": -1,
+   "pcoef": [
+    1,
+    -2,
+    0,
+    0,
+    1,
+    2,
+    2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000856,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0178-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 - 4*x*y^3 + 2*x^2*y^2 + 3*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    2,
+    -4,
+    2,
+    3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.025127,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0179-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 - 3*x*y^3 - 3*x^2*y^2 + x^3*y - x^4",
+   "m": 8,
+   "pcoef": [
+    -2,
+    -3,
+    -3,
+    1,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.00613,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0180-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 - 6*x*y^2 + x^3",
+   "m": 22,
+   "pcoef": [
+    6,
+    -6,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.024137,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0181-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 - 2*x*y^2 - x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    3,
+    -2,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.0026,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0182-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 - 3*x*y^2 + 4*x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    6,
+    -3,
+    4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.007418,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0183-n5",
+   "family": "grid-n5",
+   "form": "-3*y^5 + 2*x*y^4 - 3*x^2*y^3 - 2*x^3*y^2 + x^5",
+   "m": -4,
+   "pcoef": [
+    -3,
+    2,
+    -3,
+    -2,
+    0,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.030135,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0184-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + 3*x*y^3 + 4*x^2*y^2 + 2*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    2,
+    3,
+    4,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000835,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0185-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 - 6*x*y^2 - 6*x^2*y - x^3",
+   "m": -2,
+   "pcoef": [
+    5,
+    -6,
+    -6,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.009361,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0186-n5",
+   "family": "grid-n5",
+   "form": "-2*y^5 + 3*x*y^4 + x^2*y^3 + x^3*y^2 + x^4*y - x^5",
+   "m": 3,
+   "pcoef": [
+    -2,
+    3,
+    1,
+    1,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.001054,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0187-n3",
+   "family": "grid-n3",
+   "form": "-6*y^3 + 2*x*y^2 - 5*x^2*y - x^3",
+   "m": -48,
+   "pcoef": [
+    -6,
+    2,
+    -5,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.129976,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0188-n4",
+   "family": "grid-n4",
+   "form": "3*y^4 - 2*x^2*y^2 + x^3*y + x^4",
+   "m": -5,
+   "pcoef": [
+    3,
+    0,
+    -2,
+    1,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005083,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0189-n5",
+   "family": "grid-n5",
+   "form": "2*y^5 + 2*x*y^4 + x^2*y^3 - 3*x^3*y^2 + 2*x^4*y + x^5",
+   "m": -1,
+   "pcoef": [
+    2,
+    2,
+    1,
+    -3,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.110973,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0190-n6",
+   "family": "grid-n6",
+   "form": "2*y^6 + x*y^5 + x^3*y^3 + x^4*y^2 - 2*x^5*y - x^6",
+   "m": 1,
+   "pcoef": [
+    2,
+    1,
+    0,
+    1,
+    1,
+    -2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.267182,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0191-n6",
+   "family": "grid-n6",
+   "form": "y^6 - 2*x*y^5 - 2*x^3*y^3 + 2*x^4*y^2 + x^5*y + x^6",
+   "m": 8,
+   "pcoef": [
+    1,
+    -2,
+    0,
+    -2,
+    2,
+    1,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.009308,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0192-n3",
+   "family": "grid-n3",
+   "form": "-6*y^3 - x^2*y - 2*x^3",
+   "m": -5,
+   "pcoef": [
+    -6,
+    0,
+    -1,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.000877,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0193-n3",
+   "family": "grid-n3",
+   "form": "-y^3 - 3*x*y^2 - 6*x^2*y + x^3",
+   "m": -4,
+   "pcoef": [
+    -1,
+    -3,
+    -6,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005866,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0194-n5",
+   "family": "grid-n5",
+   "form": "-3*y^5 - 2*x*y^4 - 3*x^2*y^3 + x^3*y^2 - x^4*y - 2*x^5",
+   "m": 1,
+   "pcoef": [
+    -3,
+    -2,
+    -3,
+    1,
+    -1,
+    -2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.001068,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0195-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 - x^2*y - x^3",
+   "m": 41,
+   "pcoef": [
+    -5,
+    0,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.016891,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0196-n3",
+   "family": "grid-n3",
+   "form": "-6*y^3 - 5*x*y^2 + 5*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    -6,
+    -5,
+    5,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.031848,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0197-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 - 3*x*y^2 - 4*x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    6,
+    -3,
+    -4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.029756,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0198-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 - 5*x^2*y - x^3",
+   "m": 7,
+   "pcoef": [
+    4,
+    0,
+    -5,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000652,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0199-n3",
+   "family": "grid-n3",
+   "form": "-6*y^3 + x*y^2 + 6*x^2*y + x^3",
+   "m": -19,
+   "pcoef": [
+    -6,
+    1,
+    6,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.032303,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0200-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 + 3*x*y^2 - 6*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    -5,
+    3,
+    -6,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.027043,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0201-n4",
+   "family": "grid-n4",
+   "form": "y^4 - x*y^3 + x^2*y^2 - 4*x^3*y - 2*x^4",
+   "m": 1,
+   "pcoef": [
+    1,
+    -1,
+    1,
+    -4,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001332,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0202-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 - 3*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    2,
+    0,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.00047,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0203-n5",
+   "family": "grid-n5",
+   "form": "3*y^5 - x*y^4 - 2*x^2*y^3 - 2*x^3*y^2 + 2*x^4*y - 2*x^5",
+   "m": 1,
+   "pcoef": [
+    3,
+    -1,
+    -2,
+    -2,
+    2,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001835,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0204-n4",
+   "family": "grid-n4",
+   "form": "y^4 - 4*x*y^3 + 2*x^2*y^2 - 3*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    1,
+    -4,
+    2,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.02496,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0205-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 - 4*x*y^2 - 5*x^2*y - 2*x^3",
+   "m": 7,
+   "pcoef": [
+    3,
+    -4,
+    -5,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001117,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0206-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 + 3*x*y^3 - 3*x^2*y^2 - x^4",
+   "m": 1,
+   "pcoef": [
+    -3,
+    3,
+    -3,
+    0,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005437,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0207-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 - 2*x*y^2 - 6*x^2*y - x^3",
+   "m": 9,
+   "pcoef": [
+    -2,
+    -2,
+    -6,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.010683,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0208-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 + 6*x*y^2 - 4*x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    6,
+    6,
+    -4,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.031986,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0209-n4",
+   "family": "grid-n4",
+   "form": "-y^4 - 4*x*y^3 + x^2*y^2 + 2*x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    -1,
+    -4,
+    1,
+    2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.031077,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0210-n5",
+   "family": "grid-n5",
+   "form": "2*y^5 + x*y^4 - 2*x^2*y^3 - 3*x^3*y^2 - x^4*y - x^5",
+   "m": 1,
+   "pcoef": [
+    2,
+    1,
+    -2,
+    -3,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.024111,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0211-n4",
+   "family": "grid-n4",
+   "form": "y^4 + 4*x*y^3 - 2*x^2*y^2 + 4*x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    1,
+    4,
+    -2,
+    4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.027537,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0212-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 + x*y^2 + 6*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    -5,
+    1,
+    6,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.005797,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0213-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + 4*x*y^3 + 3*x^2*y^2 - 3*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    -2,
+    4,
+    3,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.027297,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0214-n4",
+   "family": "grid-n4",
+   "form": "4*y^4 + 4*x*y^3 - 2*x^2*y^2 + 3*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    4,
+    4,
+    -2,
+    3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.038408,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0215-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 - 5*x*y^2 + 2*x^2*y - 2*x^3",
+   "m": 1,
+   "pcoef": [
+    -4,
+    -5,
+    2,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.00108,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0216-n4",
+   "family": "grid-n4",
+   "form": "y^4 - 4*x*y^3 + 4*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    1,
+    -4,
+    0,
+    4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 1.70312,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0217-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 - 3*x*y^3 - x^2*y^2 + 2*x^3*y - x^4",
+   "m": -4,
+   "pcoef": [
+    2,
+    -3,
+    -1,
+    2,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.007046,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0218-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 + x*y^2 + 3*x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    2,
+    1,
+    3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.002695,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0219-n6",
+   "family": "grid-n6",
+   "form": "2*y^6 + 2*x*y^5 - 2*x^2*y^4 - 2*x^3*y^3 - 2*x^4*y^2 + 2*x^5*y + x^6",
+   "m": 3,
+   "pcoef": [
+    2,
+    2,
+    -2,
+    -2,
+    -2,
+    2,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.056029,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0220-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + 2*x*y^3 + 3*x^2*y^2 - 4*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    -2,
+    2,
+    3,
+    -4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.035797,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0221-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 - 3*x*y^2 - x^2*y - x^3",
+   "m": 25,
+   "pcoef": [
+    2,
+    -3,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.03491,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0222-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 - x*y^2 - 2*x^2*y - x^3",
+   "m": 9,
+   "pcoef": [
+    -5,
+    -1,
+    -2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.027612,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0223-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 - x*y^3 + x^2*y^2 + x^4",
+   "m": -6,
+   "pcoef": [
+    2,
+    -1,
+    1,
+    0,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006676,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0224-n4",
+   "family": "grid-n4",
+   "form": "-y^4 - x*y^3 - 3*x^2*y^2 - 3*x^3*y + x^4",
+   "m": -3,
+   "pcoef": [
+    -1,
+    -1,
+    -3,
+    -3,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.00715,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0225-n4",
+   "family": "grid-n4",
+   "form": "-y^4 - x*y^3 + 2*x^2*y^2 - x^4",
+   "m": 1,
+   "pcoef": [
+    -1,
+    -1,
+    2,
+    0,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.112332,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0226-n4",
+   "family": "grid-n4",
+   "form": "-4*y^4 - 3*x*y^3 - 2*x^2*y^2 + 3*x^3*y - x^4",
+   "m": 8,
+   "pcoef": [
+    -4,
+    -3,
+    -2,
+    3,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.007908,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0227-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 - x^2*y - x^3",
+   "m": -5,
+   "pcoef": [
+    -4,
+    0,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000661,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0228-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 - x*y^2 - 4*x^2*y + x^3",
+   "m": -5,
+   "pcoef": [
+    4,
+    -1,
+    -4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.001011,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0229-n5",
+   "family": "grid-n5",
+   "form": "y^5 + 2*x*y^4 + 3*x^2*y^3 + 3*x^3*y^2 + x^5",
+   "m": -1,
+   "pcoef": [
+    1,
+    2,
+    3,
+    3,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.030533,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0230-n3",
+   "family": "grid-n3",
+   "form": "y^3 + 3*x*y^2 + 3*x^2*y + x^3",
+   "m": -5,
+   "pcoef": [
+    1,
+    3,
+    3,
+    1
+   ],
+   "verdict": "UNVERIFIED",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001645,
+   "m_count": null,
+   "p_status": "ERROR",
+   "p_count": null,
+   "m_err": null
+  },
+  {
+   "label": "grid-0231-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 + 2*x*y^2 - 3*x^2*y - x^3",
+   "m": -5,
+   "pcoef": [
+    -4,
+    2,
+    -3,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.010588,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0232-n4",
+   "family": "grid-n4",
+   "form": "-y^4 + 2*x*y^3 + x^2*y^2 + 4*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    -1,
+    2,
+    1,
+    4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.04345,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0233-n4",
+   "family": "grid-n4",
+   "form": "4*y^4 - 2*x*y^3 - x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    4,
+    -2,
+    0,
+    -1,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.008962,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0234-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 - 2*x*y^2 - 6*x^2*y + x^3",
+   "m": 11,
+   "pcoef": [
+    2,
+    -2,
+    -6,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.011697,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0235-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 - 4*x*y^2 - x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    -2,
+    -4,
+    -1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000821,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0236-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 - 5*x*y^2 - 6*x^2*y + x^3",
+   "m": -56,
+   "pcoef": [
+    6,
+    -5,
+    -6,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.046145,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0237-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 - 3*x*y^3 + x^2*y^2 + x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    -2,
+    -3,
+    1,
+    1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.032085,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0238-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 - 2*x^2*y - x^3",
+   "m": -5,
+   "pcoef": [
+    -3,
+    0,
+    -2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.014879,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0239-n3",
+   "family": "grid-n3",
+   "form": "-y^3 - 3*x*y^2 - 5*x^2*y - x^3",
+   "m": 30,
+   "pcoef": [
+    -1,
+    -3,
+    -5,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.028207,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0240-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 - 2*x*y^2 - 3*x^2*y + 2*x^3",
+   "m": 5,
+   "pcoef": [
+    3,
+    -2,
+    -3,
+    2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000845,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0241-n3",
+   "family": "grid-n3",
+   "form": "y^3 - 6*x*y^2 + 6*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    1,
+    -6,
+    6,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.014473,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0242-n4",
+   "family": "grid-n4",
+   "form": "y^4 - x*y^3 - 3*x^2*y^2 + 2*x^3*y - x^4",
+   "m": -3,
+   "pcoef": [
+    1,
+    -1,
+    -3,
+    2,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.007388,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0243-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 + 4*x*y^2 - 2*x^2*y + 2*x^3",
+   "m": 1,
+   "pcoef": [
+    5,
+    4,
+    -2,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001283,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0244-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 + 5*x*y^2 - 6*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    -2,
+    5,
+    -6,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.009297,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0245-n4",
+   "family": "grid-n4",
+   "form": "-4*y^4 + 4*x*y^3 - x^2*y^2 + x^4",
+   "m": 7,
+   "pcoef": [
+    -4,
+    4,
+    -1,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000949,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0246-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 - x^3",
+   "m": 12,
+   "pcoef": [
+    6,
+    0,
+    0,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 3.58312,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0247-n4",
+   "family": "grid-n4",
+   "form": "-y^4 - x*y^3 - x^2*y^2 - 4*x^3*y + x^4",
+   "m": 2,
+   "pcoef": [
+    -1,
+    -1,
+    -1,
+    -4,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.011979,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0248-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 - 4*x*y^2 - x^2*y + x^3",
+   "m": -6,
+   "pcoef": [
+    2,
+    -4,
+    -1,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.00629,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0249-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 + x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    6,
+    0,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.036495,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0250-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 + x*y^2 + 6*x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    -5,
+    1,
+    6,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.009619,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0251-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 - 6*x*y^2 + 3*x^2*y + 3*x^3",
+   "m": -1,
+   "pcoef": [
+    2,
+    -6,
+    3,
+    3
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001119,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0252-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 + 2*x*y^2 + 3*x^2*y + 2*x^3",
+   "m": -1,
+   "pcoef": [
+    -2,
+    2,
+    3,
+    2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000549,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0253-n5",
+   "family": "grid-n5",
+   "form": "2*y^5 + 3*x*y^4 + x^2*y^3 + 2*x^3*y^2 + 2*x^4*y - x^5",
+   "m": -4,
+   "pcoef": [
+    2,
+    3,
+    1,
+    2,
+    2,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.010592,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0254-n4",
+   "family": "grid-n4",
+   "form": "3*y^4 - 2*x*y^3 - x^2*y^2 - 4*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    3,
+    -2,
+    -1,
+    -4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000818,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0255-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 + 3*x*y^2 - 4*x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    6,
+    3,
+    -4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000784,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0256-n4",
+   "family": "grid-n4",
+   "form": "y^4 - 3*x*y^3 + 2*x^2*y^2 + 4*x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    1,
+    -3,
+    2,
+    4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.025406,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0257-n4",
+   "family": "grid-n4",
+   "form": "4*y^4 - 2*x*y^3 - 2*x^2*y^2 + 2*x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    4,
+    -2,
+    -2,
+    2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.024775,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0258-n4",
+   "family": "grid-n4",
+   "form": "4*y^4 - 3*x*y^3 - 2*x^2*y^2 - x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    4,
+    -3,
+    -2,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.040658,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0259-n6",
+   "family": "grid-n6",
+   "form": "y^6 + x^3*y^3 - x^4*y^2 + x^6",
+   "m": 1,
+   "pcoef": [
+    1,
+    0,
+    0,
+    1,
+    -1,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000753,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0260-n4",
+   "family": "grid-n4",
+   "form": "y^4 + x*y^3 - 2*x^3*y + x^4",
+   "m": 1,
+   "pcoef": [
+    1,
+    1,
+    0,
+    -2,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005364,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 6,
+   "m_err": null
+  },
+  {
+   "label": "grid-0261-n3",
+   "family": "grid-n3",
+   "form": "y^3 + 4*x*y^2 + 5*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    1,
+    4,
+    5,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.002802,
+   "m_count": 5,
+   "p_status": "OK",
+   "p_count": 5,
+   "m_err": null
+  },
+  {
+   "label": "grid-0262-n4",
+   "family": "grid-n4",
+   "form": "4*y^4 - 3*x*y^3 - 4*x^2*y^2 + 2*x^3*y + 3*x^4",
+   "m": 1,
+   "pcoef": [
+    4,
+    -3,
+    -4,
+    2,
+    3
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001465,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0263-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 + 5*x^2*y - x^3",
+   "m": 2,
+   "pcoef": [
+    -4,
+    0,
+    5,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000723,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0264-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + x*y^3 - 4*x^2*y^2 - 3*x^3*y - 2*x^4",
+   "m": -1,
+   "pcoef": [
+    -2,
+    1,
+    -4,
+    -3,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001448,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0265-n3",
+   "family": "grid-n3",
+   "form": "-y^3 + 4*x*y^2 + 5*x^2*y + 2*x^3",
+   "m": -12,
+   "pcoef": [
+    -1,
+    4,
+    5,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.0011,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0266-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 + x*y^2 + 5*x^2*y + x^3",
+   "m": -10,
+   "pcoef": [
+    4,
+    1,
+    5,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.007015,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0267-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 + 4*x*y^3 - 3*x^2*y^2 + 3*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    -3,
+    4,
+    -3,
+    3,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.065616,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0268-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 - 2*x*y^3 + 3*x^2*y^2 - x^3*y + x^4",
+   "m": 5,
+   "pcoef": [
+    -2,
+    -2,
+    3,
+    -1,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.007676,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0269-n5",
+   "family": "grid-n5",
+   "form": "y^5 + 2*x*y^4 + 3*x^2*y^3 - 3*x^3*y^2 - x^4*y - 2*x^5",
+   "m": -1,
+   "pcoef": [
+    1,
+    2,
+    3,
+    -3,
+    -1,
+    -2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000883,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0270-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 - 3*x*y^3 - 2*x^2*y^2 + x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    -3,
+    -3,
+    -2,
+    1,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006037,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0271-n4",
+   "family": "grid-n4",
+   "form": "-y^4 + x*y^3 + 4*x^2*y^2 + 4*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    -1,
+    1,
+    4,
+    4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.026203,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0272-n4",
+   "family": "grid-n4",
+   "form": "-4*y^4 - 2*x^2*y^2 - 4*x^3*y + 3*x^4",
+   "m": -1,
+   "pcoef": [
+    -4,
+    0,
+    -2,
+    -4,
+    3
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001288,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0273-n5",
+   "family": "grid-n5",
+   "form": "y^5 + x*y^4 - x^2*y^3 - x^3*y^2 + x^4*y + x^5",
+   "m": -1,
+   "pcoef": [
+    1,
+    1,
+    -1,
+    -1,
+    1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000852,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0274-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 - 5*x*y^2 - x^3",
+   "m": -5,
+   "pcoef": [
+    -2,
+    -5,
+    0,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005755,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0275-n3",
+   "family": "grid-n3",
+   "form": "-y^3 - 5*x*y^2 - x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    -1,
+    -5,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006435,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0276-n3",
+   "family": "grid-n3",
+   "form": "6*y^3 - 3*x*y^2 + 2*x^2*y + 2*x^3",
+   "m": 8,
+   "pcoef": [
+    6,
+    -3,
+    2,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001097,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0277-n5",
+   "family": "grid-n5",
+   "form": "y^5 + 2*x^4*y - x^5",
+   "m": -1,
+   "pcoef": [
+    1,
+    0,
+    0,
+    0,
+    2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.026482,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0278-n3",
+   "family": "grid-n3",
+   "form": "y^3 + 2*x*y^2 - 2*x^2*y + x^3",
+   "m": -5,
+   "pcoef": [
+    1,
+    2,
+    -2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.008941,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0279-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 - 3*x*y^2 - 3*x^2*y - x^3",
+   "m": -31,
+   "pcoef": [
+    2,
+    -3,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.014865,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0280-n4",
+   "family": "grid-n4",
+   "form": "-y^4 - 4*x*y^3 + 4*x^2*y^2 + x^4",
+   "m": 1,
+   "pcoef": [
+    -1,
+    -4,
+    4,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000662,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0281-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 - x*y^2 + 6*x^2*y + x^3",
+   "m": -4,
+   "pcoef": [
+    -3,
+    -1,
+    6,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.004549,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0282-n3",
+   "family": "grid-n3",
+   "form": "y^3 - x*y^2 + x^3",
+   "m": -10,
+   "pcoef": [
+    1,
+    -1,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.003619,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0283-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 + x*y^2 + 6*x^2*y - x^3",
+   "m": 7,
+   "pcoef": [
+    -3,
+    1,
+    6,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.004403,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0284-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + x*y^3 - 2*x^2*y^2 + x^4",
+   "m": 1,
+   "pcoef": [
+    -2,
+    1,
+    -2,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.020014,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0285-n3",
+   "family": "grid-n3",
+   "form": "-6*y^3 + 2*x*y^2 + 3*x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    -6,
+    2,
+    3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000742,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0286-n3",
+   "family": "grid-n3",
+   "form": "y^3 - 4*x*y^2 + x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    1,
+    -4,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.002595,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0287-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 + 5*x*y^2 - 6*x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    4,
+    5,
+    -6,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.03226,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0288-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 - 2*x*y^2 - 3*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    5,
+    -2,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.009709,
+   "m_count": 5,
+   "p_status": "OK",
+   "p_count": 5,
+   "m_err": null
+  },
+  {
+   "label": "grid-0289-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 - 4*x*y^3 - 3*x^2*y^2 - 3*x^3*y + x^4",
+   "m": 1,
+   "pcoef": [
+    2,
+    -4,
+    -3,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.028029,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0290-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 + 5*x*y^2 + 2*x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    -2,
+    5,
+    2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.011118,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0291-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + 3*x*y^3 - 3*x^2*y^2 + 2*x^3*y - x^4",
+   "m": 3,
+   "pcoef": [
+    2,
+    3,
+    -3,
+    2,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.004642,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0292-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 - 3*x*y^2 - 3*x^2*y + x^3",
+   "m": -45,
+   "pcoef": [
+    3,
+    -3,
+    -3,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006689,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0293-n6",
+   "family": "grid-n6",
+   "form": "2*y^6 + x*y^5 - x^2*y^4 + 2*x^3*y^3 - 2*x^5*y - 2*x^6",
+   "m": 2,
+   "pcoef": [
+    2,
+    1,
+    -1,
+    2,
+    0,
+    -2,
+    -2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000959,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0294-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 + 6*x*y^2 + 6*x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    5,
+    6,
+    6,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006578,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0295-n5",
+   "family": "grid-n5",
+   "form": "2*y^5 - x*y^4 - 3*x^2*y^3 - x^3*y^2 - x^4*y + x^5",
+   "m": 1,
+   "pcoef": [
+    2,
+    -1,
+    -3,
+    -1,
+    -1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.122514,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0296-n4",
+   "family": "grid-n4",
+   "form": "y^4 - 4*x*y^3 - 3*x^2*y^2 - 3*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    1,
+    -4,
+    -3,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.037756,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0297-n3",
+   "family": "grid-n3",
+   "form": "-y^3 + 2*x*y^2 - 2*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    -1,
+    2,
+    -2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000509,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0298-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 - 3*x*y^2 - 3*x^2*y + 3*x^3",
+   "m": 1,
+   "pcoef": [
+    2,
+    -3,
+    -3,
+    3
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001099,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0299-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + x*y^3 + 2*x^2*y^2 - 2*x^3*y + 2*x^4",
+   "m": 4,
+   "pcoef": [
+    -2,
+    1,
+    2,
+    -2,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001394,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0300-n4",
+   "family": "grid-n4",
+   "form": "-4*y^4 + 4*x*y^3 + 3*x^2*y^2 + 4*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    -4,
+    4,
+    3,
+    4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000774,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0301-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 + 2*x*y^2 - 3*x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    -5,
+    2,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.012302,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0302-n5",
+   "family": "grid-n5",
+   "form": "-2*y^5 - x*y^4 + 3*x^2*y^3 + 3*x^3*y^2 - 3*x^4*y + x^5",
+   "m": -4,
+   "pcoef": [
+    -2,
+    -1,
+    3,
+    3,
+    -3,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.009486,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0303-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 - x*y^2 - 3*x^2*y + x^3",
+   "m": -4,
+   "pcoef": [
+    -3,
+    -1,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.644911,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0304-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 - x*y^2 - 4*x^2*y + x^3",
+   "m": 6,
+   "pcoef": [
+    -3,
+    -1,
+    -4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.009408,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0305-n3",
+   "family": "grid-n3",
+   "form": "-6*y^3 + 3*x*y^2 + 2*x^2*y - x^3",
+   "m": 5,
+   "pcoef": [
+    -6,
+    3,
+    2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000817,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0306-n3",
+   "family": "grid-n3",
+   "form": "-y^3 - 4*x*y^2 - 4*x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    -1,
+    -4,
+    -4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000835,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0307-n4",
+   "family": "grid-n4",
+   "form": "y^4 + x^2*y^2 - x^4",
+   "m": -1,
+   "pcoef": [
+    1,
+    0,
+    1,
+    0,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.459941,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0308-n6",
+   "family": "grid-n6",
+   "form": "-2*y^6 - 2*x*y^5 - 2*x^2*y^4 + x^3*y^3 + 2*x^4*y^2 - x^5*y - x^6",
+   "m": 1,
+   "pcoef": [
+    -2,
+    -2,
+    -2,
+    1,
+    2,
+    -1,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.007186,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0309-n5",
+   "family": "grid-n5",
+   "form": "-3*y^5 - 3*x*y^4 + 2*x^2*y^3 + x^3*y^2 - 2*x^4*y + x^5",
+   "m": 4,
+   "pcoef": [
+    -3,
+    -3,
+    2,
+    1,
+    -2,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.017955,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0310-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 + x*y^2 + 4*x^2*y - x^3",
+   "m": 9,
+   "pcoef": [
+    -4,
+    1,
+    4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000782,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0311-n4",
+   "family": "grid-n4",
+   "form": "y^4 - 2*x^2*y^2 + 3*x^3*y + x^4",
+   "m": 1,
+   "pcoef": [
+    1,
+    0,
+    -2,
+    3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.034799,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0312-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 - 6*x*y^2 - x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    -2,
+    -6,
+    -1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.009953,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0313-n4",
+   "family": "grid-n4",
+   "form": "-y^4 + 4*x^2*y^2 + 3*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    -1,
+    0,
+    4,
+    3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.028976,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0314-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 + 5*x*y^2 + x^2*y - x^3",
+   "m": 7,
+   "pcoef": [
+    -2,
+    5,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000702,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0315-n4",
+   "family": "grid-n4",
+   "form": "-y^4 + x*y^3 + 2*x^2*y^2 - 3*x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    -1,
+    1,
+    2,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.029746,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0316-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 + 6*x*y^2 - 6*x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    5,
+    6,
+    -6,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.014552,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0317-n5",
+   "family": "grid-n5",
+   "form": "-y^5 + 3*x*y^4 - 2*x^3*y^2 + 3*x^4*y + x^5",
+   "m": -1,
+   "pcoef": [
+    -1,
+    3,
+    0,
+    -2,
+    3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000772,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0318-n5",
+   "family": "grid-n5",
+   "form": "y^5 - 3*x*y^4 + 2*x^2*y^3 + x^5",
+   "m": 1,
+   "pcoef": [
+    1,
+    -3,
+    2,
+    0,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000772,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0319-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 - 5*x*y^2 + 2*x^2*y - 2*x^3",
+   "m": 10,
+   "pcoef": [
+    3,
+    -5,
+    2,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001134,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0320-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 + x*y^2 - x^2*y - 2*x^3",
+   "m": -1,
+   "pcoef": [
+    -3,
+    1,
+    -1,
+    -2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000516,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0321-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 + 4*x*y^2 + 4*x^2*y + x^3",
+   "m": 21,
+   "pcoef": [
+    3,
+    4,
+    4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.00055,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0322-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 - 2*x*y^3 - 3*x^2*y^2 - 4*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    -3,
+    -2,
+    -3,
+    -4,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.065375,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0323-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 + 6*x*y^2 - 3*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    3,
+    6,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.00577,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0324-n3",
+   "family": "grid-n3",
+   "form": "-y^3 + 5*x*y^2 - 5*x^2*y - x^3",
+   "m": -2,
+   "pcoef": [
+    -1,
+    5,
+    -5,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.00605,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0325-n6",
+   "family": "grid-n6",
+   "form": "-2*y^6 - 2*x*y^5 - 2*x^2*y^4 + x^3*y^3 + 2*x^6",
+   "m": -2,
+   "pcoef": [
+    -2,
+    -2,
+    -2,
+    1,
+    0,
+    0,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001463,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0326-n3",
+   "family": "grid-n3",
+   "form": "y^3 - 2*x*y^2 - 3*x^2*y + x^3",
+   "m": -1,
+   "pcoef": [
+    1,
+    -2,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.007085,
+   "m_count": 6,
+   "p_status": "OK",
+   "p_count": 6,
+   "m_err": null
+  },
+  {
+   "label": "grid-0327-n3",
+   "family": "grid-n3",
+   "form": "-6*y^3 + 3*x*y^2 - x^2*y + x^3",
+   "m": 10,
+   "pcoef": [
+    -6,
+    3,
+    -1,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.008283,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0328-n3",
+   "family": "grid-n3",
+   "form": "-y^3 + 3*x*y^2 + 3*x^2*y - x^3",
+   "m": 11,
+   "pcoef": [
+    -1,
+    3,
+    3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000731,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0329-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 - 6*x*y^2 + x^2*y - 2*x^3",
+   "m": -1,
+   "pcoef": [
+    3,
+    -6,
+    1,
+    -2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000515,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0330-n4",
+   "family": "grid-n4",
+   "form": "y^4 + 4*x^2*y^2 - 4*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    1,
+    0,
+    4,
+    -4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000668,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0331-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 + 6*x*y^2 + 4*x^2*y + x^3",
+   "m": -6,
+   "pcoef": [
+    5,
+    6,
+    4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.004524,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0332-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 + x*y^2 - 5*x^2*y + x^3",
+   "m": 2,
+   "pcoef": [
+    3,
+    1,
+    -5,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000696,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0333-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + 2*x*y^3 + 3*x^2*y^2 - 3*x^3*y + 2*x^4",
+   "m": -3,
+   "pcoef": [
+    2,
+    2,
+    3,
+    -3,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001468,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0334-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 - x*y^2 - x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    -3,
+    -1,
+    -1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006557,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0335-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 - 4*x*y^2 + x^2*y - x^3",
+   "m": 1,
+   "pcoef": [
+    -4,
+    -4,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006141,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0336-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 + 6*x*y^2 + x^3",
+   "m": -12,
+   "pcoef": [
+    4,
+    6,
+    0,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.008097,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0337-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 + 2*x*y^3 + 4*x^2*y^2 + x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    -3,
+    2,
+    4,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.0245,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0338-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 + 6*x*y^2 + 6*x^2*y + x^3",
+   "m": 12,
+   "pcoef": [
+    -4,
+    6,
+    6,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000535,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0339-n4",
+   "family": "grid-n4",
+   "form": "3*y^4 - 2*x*y^3 - x^2*y^2 + 4*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    3,
+    -2,
+    -1,
+    4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.024846,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0340-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 + 3*x*y^2 - x^2*y - x^3",
+   "m": 2,
+   "pcoef": [
+    -2,
+    3,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.009945,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0341-n4",
+   "family": "grid-n4",
+   "form": "-y^4 - 3*x*y^3 + 3*x^3*y - x^4",
+   "m": -7,
+   "pcoef": [
+    -1,
+    -3,
+    0,
+    3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000809,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0342-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 + 4*x*y^3 + 3*x^2*y^2 + 4*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    -3,
+    4,
+    3,
+    4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.059449,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0343-n4",
+   "family": "grid-n4",
+   "form": "4*y^4 + 2*x*y^3 - 3*x^2*y^2 + 3*x^3*y + x^4",
+   "m": 5,
+   "pcoef": [
+    4,
+    2,
+    -3,
+    3,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.01246,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0344-n3",
+   "family": "grid-n3",
+   "form": "-6*y^3 - x*y^2 - 4*x^2*y + x^3",
+   "m": -4,
+   "pcoef": [
+    -6,
+    -1,
+    -4,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.102556,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0345-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 - 3*x*y^2 + 5*x^2*y - x^3",
+   "m": -5,
+   "pcoef": [
+    5,
+    -3,
+    5,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.048952,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0346-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + 3*x*y^3 - 3*x^2*y^2 - 3*x^3*y - 2*x^4",
+   "m": -3,
+   "pcoef": [
+    2,
+    3,
+    -3,
+    -3,
+    -2
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000786,
+   "m_count": 4,
+   "p_status": "OK",
+   "p_count": 4,
+   "m_err": null
+  },
+  {
+   "label": "grid-0347-n4",
+   "family": "grid-n4",
+   "form": "-y^4 + 3*x*y^3 - 2*x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    -1,
+    3,
+    0,
+    -2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.03968,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0348-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 - 3*x*y^2 - x^3",
+   "m": 51,
+   "pcoef": [
+    5,
+    -3,
+    0,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.00566,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0349-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 - 2*x*y^2 - 4*x^2*y - x^3",
+   "m": 12,
+   "pcoef": [
+    4,
+    -2,
+    -4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000774,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0350-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 + 2*x*y^2 - 2*x^2*y + x^3",
+   "m": 13,
+   "pcoef": [
+    5,
+    2,
+    -2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000536,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0351-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 - 5*x*y^2 - 5*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    -2,
+    -5,
+    -5,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.008569,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0352-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 - 6*x*y^2 + 4*x^2*y - x^3",
+   "m": 7,
+   "pcoef": [
+    -4,
+    -6,
+    4,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.008324,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0353-n3",
+   "family": "grid-n3",
+   "form": "-y^3 + 3*x*y^2 - 2*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    -1,
+    3,
+    -2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.002757,
+   "m_count": 5,
+   "p_status": "OK",
+   "p_count": 5,
+   "m_err": null
+  },
+  {
+   "label": "grid-0354-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 + x*y^2 - x^2*y - x^3",
+   "m": -43,
+   "pcoef": [
+    -4,
+    1,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.025589,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0355-n4",
+   "family": "grid-n4",
+   "form": "4*y^4 + 2*x*y^3 - x^2*y^2 + 4*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    4,
+    2,
+    -1,
+    4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.026861,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0356-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + 2*x^2*y^2 + 2*x^3*y + x^4",
+   "m": 1,
+   "pcoef": [
+    -2,
+    0,
+    2,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.026083,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0357-n5",
+   "family": "grid-n5",
+   "form": "y^5 - 3*x^2*y^3 - x^3*y^2 - 3*x^4*y + x^5",
+   "m": -1,
+   "pcoef": [
+    1,
+    0,
+    -3,
+    -1,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 3.23017,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0358-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 - 4*x*y^2 - x^2*y - x^3",
+   "m": -1,
+   "pcoef": [
+    2,
+    -4,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.00653,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0359-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 - 3*x^2*y^2 + 2*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    2,
+    0,
+    -3,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.02502,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0360-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 + 2*x*y^3 - x^2*y^2 - 4*x^3*y + x^4",
+   "m": -1,
+   "pcoef": [
+    -3,
+    2,
+    -1,
+    -4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.026267,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0361-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 - 2*x*y^3 + x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    -3,
+    -2,
+    0,
+    1,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.005405,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0362-n6",
+   "family": "grid-n6",
+   "form": "-y^6 + x*y^5 + 2*x^3*y^3 - x^4*y^2 - x^6",
+   "m": 6,
+   "pcoef": [
+    -1,
+    1,
+    0,
+    2,
+    -1,
+    0,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000867,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0363-n5",
+   "family": "grid-n5",
+   "form": "-3*y^5 - x*y^4 + 2*x^2*y^3 + 3*x^3*y^2 - 3*x^4*y + x^5",
+   "m": -1,
+   "pcoef": [
+    -3,
+    -1,
+    2,
+    3,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.020361,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0364-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 - 2*x*y^2 - 3*x^2*y - x^3",
+   "m": 33,
+   "pcoef": [
+    5,
+    -2,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.012427,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0365-n3",
+   "family": "grid-n3",
+   "form": "2*y^3 - 4*x*y^2 + 5*x^2*y + 2*x^3",
+   "m": 6,
+   "pcoef": [
+    2,
+    -4,
+    5,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001213,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0366-n5",
+   "family": "grid-n5",
+   "form": "-y^5 - x*y^4 + x^2*y^3 - 2*x^3*y^2 - 3*x^4*y + x^5",
+   "m": 3,
+   "pcoef": [
+    -1,
+    -1,
+    1,
+    -2,
+    -3,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.191709,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0367-n4",
+   "family": "grid-n4",
+   "form": "y^4 + 4*x*y^3 - 2*x^2*y^2 + 4*x^3*y - x^4",
+   "m": -2,
+   "pcoef": [
+    1,
+    4,
+    -2,
+    4,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.008667,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0368-n4",
+   "family": "grid-n4",
+   "form": "-y^4 + 4*x*y^3 - 2*x^2*y^2 + x^4",
+   "m": 1,
+   "pcoef": [
+    -1,
+    4,
+    -2,
+    0,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.028694,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0369-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 + 3*x*y^2 + 6*x^2*y - 2*x^3",
+   "m": 8,
+   "pcoef": [
+    4,
+    3,
+    6,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001109,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0370-n3",
+   "family": "grid-n3",
+   "form": "-3*y^3 + 3*x*y^2 - x^3",
+   "m": -4,
+   "pcoef": [
+    -3,
+    3,
+    0,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006307,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0371-n3",
+   "family": "grid-n3",
+   "form": "-4*y^3 + 2*x*y^2 - 3*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    -4,
+    2,
+    -3,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.006432,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0372-n6",
+   "family": "grid-n6",
+   "form": "-y^6 - 2*x*y^5 + 2*x^5*y + x^6",
+   "m": -1,
+   "pcoef": [
+    -1,
+    -2,
+    0,
+    0,
+    0,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000731,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0373-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 - 5*x*y^2 - 3*x^2*y - x^3",
+   "m": 2,
+   "pcoef": [
+    4,
+    -5,
+    -3,
+    -1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.007025,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0374-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 + 4*x*y^2 + 5*x^2*y - 2*x^3",
+   "m": 1,
+   "pcoef": [
+    4,
+    4,
+    5,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001101,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0375-n3",
+   "family": "grid-n3",
+   "form": "3*y^3 + 6*x^2*y - x^3",
+   "m": -29,
+   "pcoef": [
+    3,
+    0,
+    6,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.012057,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0376-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 - 4*x^2*y - x^3",
+   "m": -55,
+   "pcoef": [
+    -2,
+    0,
+    -4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.031476,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0377-n4",
+   "family": "grid-n4",
+   "form": "-3*y^4 - x*y^3 + 4*x^2*y^2 - 2*x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    -3,
+    -1,
+    4,
+    -2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.027114,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0378-n3",
+   "family": "grid-n3",
+   "form": "-5*y^3 + 2*x*y^2 - x^2*y + x^3",
+   "m": 13,
+   "pcoef": [
+    -5,
+    2,
+    -1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.011889,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0379-n3",
+   "family": "grid-n3",
+   "form": "-2*y^3 - 4*x*y^2 - 4*x^2*y + x^3",
+   "m": 28,
+   "pcoef": [
+    -2,
+    -4,
+    -4,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.006611,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0380-n6",
+   "family": "grid-n6",
+   "form": "-2*y^6 + 2*x*y^5 - x^2*y^4 + x^3*y^3 - 2*x^6",
+   "m": 1,
+   "pcoef": [
+    -2,
+    2,
+    -1,
+    1,
+    0,
+    0,
+    -2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001627,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0381-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 - 3*x*y^3 - 3*x^2*y^2 - 4*x^3*y - x^4",
+   "m": -1,
+   "pcoef": [
+    -2,
+    -3,
+    -3,
+    -4,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.023168,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0382-n6",
+   "family": "grid-n6",
+   "form": "-2*y^6 + x^3*y^3 + x^4*y^2 + x^5*y + x^6",
+   "m": 1,
+   "pcoef": [
+    -2,
+    0,
+    0,
+    1,
+    1,
+    1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.215944,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0383-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + x*y^3 + 3*x^2*y^2 + x^3*y - x^4",
+   "m": 1,
+   "pcoef": [
+    2,
+    1,
+    3,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.031093,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0384-n6",
+   "family": "grid-n6",
+   "form": "-2*y^6 - x^3*y^3 + 2*x^4*y^2 + 2*x^5*y - x^6",
+   "m": 1,
+   "pcoef": [
+    -2,
+    0,
+    0,
+    -1,
+    2,
+    2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000872,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0385-n5",
+   "family": "grid-n5",
+   "form": "-2*y^5 + x*y^4 - x^3*y^2 - x^4*y - x^5",
+   "m": -3,
+   "pcoef": [
+    -2,
+    1,
+    0,
+    -1,
+    -1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.001,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0386-n5",
+   "family": "grid-n5",
+   "form": "-y^5 + x*y^4 - 3*x^3*y^2 - 2*x^4*y - x^5",
+   "m": -1,
+   "pcoef": [
+    -1,
+    1,
+    0,
+    -3,
+    -2,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000908,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0387-n3",
+   "family": "grid-n3",
+   "form": "-6*y^3 + 6*x*y^2 - 5*x^2*y - x^3",
+   "m": 8,
+   "pcoef": [
+    -6,
+    6,
+    -5,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.011357,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0388-n4",
+   "family": "grid-n4",
+   "form": "2*y^4 + 2*x*y^3 + 2*x^2*y^2 + x^3*y + 2*x^4",
+   "m": -1,
+   "pcoef": [
+    2,
+    2,
+    2,
+    1,
+    2
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.001532,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0389-n5",
+   "family": "grid-n5",
+   "form": "3*y^5 + 3*x*y^4 - 2*x^2*y^3 - 2*x^3*y^2 + x^5",
+   "m": -8,
+   "pcoef": [
+    3,
+    3,
+    -2,
+    -2,
+    0,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.016619,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0390-n3",
+   "family": "grid-n3",
+   "form": "4*y^3 - x*y^2 - 5*x^2*y + x^3",
+   "m": -5,
+   "pcoef": [
+    4,
+    -1,
+    -5,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 2.8343,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0391-n5",
+   "family": "grid-n5",
+   "form": "-2*y^5 - 2*x^3*y^2 + 2*x^4*y + x^5",
+   "m": 5,
+   "pcoef": [
+    -2,
+    0,
+    0,
+    -2,
+    2,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.015798,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0392-n3",
+   "family": "grid-n3",
+   "form": "5*y^3 + 6*x*y^2 + 2*x^2*y + x^3",
+   "m": -2,
+   "pcoef": [
+    5,
+    6,
+    2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.00052,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0393-n3",
+   "family": "grid-n3",
+   "form": "-y^3 + 4*x*y^2 + 4*x^2*y + x^3",
+   "m": 1,
+   "pcoef": [
+    -1,
+    4,
+    4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.002586,
+   "m_count": 3,
+   "p_status": "OK",
+   "p_count": 3,
+   "m_err": null
+  },
+  {
+   "label": "grid-0394-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + 3*x*y^3 - 3*x^2*y^2 + 3*x^3*y + x^4",
+   "m": -7,
+   "pcoef": [
+    -2,
+    3,
+    -3,
+    3,
+    1
+   ],
+   "verdict": "DECLINE",
+   "m_status": "DECLINE",
+   "m_ctime": 0.010957,
+   "m_count": null,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0395-n6",
+   "family": "grid-n6",
+   "form": "-2*y^6 + x*y^5 + 2*x^2*y^4 + x^3*y^3 + 2*x^4*y^2 - 2*x^5*y + x^6",
+   "m": 1,
+   "pcoef": [
+    -2,
+    1,
+    2,
+    1,
+    2,
+    -2,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.43437,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0396-n5",
+   "family": "grid-n5",
+   "form": "2*y^5 - 2*x*y^4 - 3*x^2*y^3 + x^4*y - x^5",
+   "m": 1,
+   "pcoef": [
+    2,
+    -2,
+    -3,
+    0,
+    1,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.024947,
+   "m_count": 1,
+   "p_status": "OK",
+   "p_count": 1,
+   "m_err": null
+  },
+  {
+   "label": "grid-0397-n3",
+   "family": "grid-n3",
+   "form": "y^3 + 3*x*y^2 - 4*x^2*y + x^3",
+   "m": 16,
+   "pcoef": [
+    1,
+    3,
+    -4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 1.07604,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0398-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 + 2*x*y^3 - x^2*y^2 + 4*x^3*y + x^4",
+   "m": 1,
+   "pcoef": [
+    -2,
+    2,
+    -1,
+    4,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.01361,
+   "m_count": 2,
+   "p_status": "OK",
+   "p_count": 2,
+   "m_err": null
+  },
+  {
+   "label": "grid-0399-n3",
+   "family": "grid-n3",
+   "form": "y^3 - x*y^2 - 3*x^2*y - x^3",
+   "m": 9,
+   "pcoef": [
+    1,
+    -1,
+    -3,
+    -1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000587,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  },
+  {
+   "label": "grid-0400-n4",
+   "family": "grid-n4",
+   "form": "-2*y^4 - x*y^3 + 3*x^2*y^2 - x^3*y + x^4",
+   "m": -8,
+   "pcoef": [
+    -2,
+    -1,
+    3,
+    -1,
+    1
+   ],
+   "verdict": "CORRECT",
+   "m_status": "SOLVED",
+   "m_ctime": 0.000739,
+   "m_count": 0,
+   "p_status": "OK",
+   "p_count": 0,
+   "m_err": null
+  }
+ ]
+}

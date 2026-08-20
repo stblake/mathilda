@@ -320,6 +320,38 @@ Module[{sol, status, tuples, sols, inbox},
     Print["SOLS\tthue-cubic-boxed\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
 Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, -200 <= pt[[1]] <= 200 && -200 <= pt[[2]] <= 200];
+  sol = Solve[x^3 - 2 y^3 == 3, {x, y}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tthue-cubic-m3-unbounded\t", status];
+  If[status === "finite",
+    tuples = ({x, y} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tthue-cubic-m3-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
+    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tthue-cubic-m3-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, -200 <= pt[[1]] <= 200 && -200 <= pt[[2]] <= 200];
+  sol = Solve[x^3 - 2 y^3 == 5, {x, y}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tthue-cubic-m5-empty\t", status];
+  If[status === "finite",
+    tuples = ({x, y} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tthue-cubic-m5-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
+    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tthue-cubic-m5-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
   inbox = Function[pt, -6 <= pt[[1]] <= 6 && -6 <= pt[[2]] <= 6];
   sol = Solve[x^2 + y^2 == 25, {x, y}, Integers];
   status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
@@ -382,4 +414,20 @@ Module[{sol, status, tuples, sols, inbox},
     tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tmordell-pos-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, -50 <= pt[[1]] <= 50 && -50 <= pt[[2]] <= 50];
+  sol = Solve[x^4 - 3 y^4 == 13, {x, y}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tthue-quartic-generalm-unbounded\t", status];
+  If[status === "finite",
+    tuples = ({x, y} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tthue-quartic-generalm-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
+    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tthue-quartic-generalm-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];

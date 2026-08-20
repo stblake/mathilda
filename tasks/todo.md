@@ -1,64 +1,83 @@
-# NSum on integer-only summands (Prime, etc.)
+# Thue / Diophantine — validation-first session (2026-08-20)
 
-## Symptom
-- `NSum[1/Prime[n], {n,1,Infinity}]` spews `Prime::intpp: ...Prime[16.1579]...`
-  (sampling the summand *outside* the integers) and returns 1.67108.
-- `NSum[1./Prime[n]^2, {n,1,Infinity}]` returns 0.448548, a poor approx of the
-  true prime-zeta P(2)=0.4522474200...
+Baseline: benchmark 88 = **98 CORRECT / 6 DECLINE / 0 WRONG / 0 CRASH** vs PARI/GP
+`thue()`. All unit tests green (`thue_tests`, `solve_integers_tests`,
+`latticereduce_tests`). PARI 2.17.3 on PATH. 4 genuine declines remain (rank-≥2
+units Q(10¹ᐟ⁴)/Q(5¹ᐟ⁵) → M4; totally-complex cyclotomic torsion → M5).
 
-## Root cause
-`ns_choose_method` sees monotone-decreasing terms → picks **EulerMaclaurin**.
-EM samples the summand at *continuous* real x (exp-sinh tail integral) and on a
-*complex* contour (circle-DFT derivatives). `Prime[16.1579]` has no value:
-- emits `Prime::intpp` per sample (the spew), and
-- fails to numericalize, so EM bails and falls back to WynnEpsilon with only the
-  default 15 head terms → weak extrapolation (0.4485 / 1.671).
+Emphasis (user-chosen): **validation-first** — strengthen the safety net and
+measure vs PARI; coverage (M4/M5) is a stretch only.
 
-The summand has **no real-analytic continuation** — EM is not just wasteful, it
-is *invalid* here (its integral & derivative model does not exist).
+## Phase 1 — Reproducible randomized PARI stress grid  ← core deliverable  ✅
+- [x] Built `benchmarks/88-thue-equations/grid.py`: deterministic-seeded random
+      Thue forms (deg 3–6, mixed m incl. |m|≠1) vs PARI `thue()`. Reuses
+      cases.py builders + run.py runners. Exits nonzero only on WRONG/CRASH.
+- [x] Ran 400 cases (seed 20260820): **261 CORRECT / 138 DECLINE / 0 WRONG /
+      0 CRASH** — solve paths genuinely exercised. GRID_REPORT.md + grid_results.json.
 
-## Fix (3 parts, all in src/numerical_calculus/nsum.c)
-1. **Mute per-sample arithmetic messages.** Wrap `ns_eval_expr_at` (the single
-   funnel every summand sample passes through) in
-   `arith_warnings_mute_push/pop`. NSum probes at many trial points; those are
-   internal and must not surface `Prime::intpp`/overflow messages (Wolfram's
-   NSum doesn't). Kills the spew regardless of method.
-2. **Detect non-continuable summands, keep EM away.** In `ns_build_profile`
-   (non-black-box path only, so multidim adds no evals) probe the summand at two
-   non-integer index points (imin+0.5, imin+0.3). If neither numericalizes →
-   `prof.continuous=false`. `ns_choose_method` then never returns EulerMaclaurin
-   for a non-continuous summand — routes monotone tails to WynnEpsilon.
-3. **Give the discrete path enough terms.** For a non-continuous, not-user-
-   pinned sum, raise the head-term floor (~100) and sequence length (~40) so
-   Wynn extrapolates a genuinely small tail. P(2): 0.4485 → ~0.4522.
+## Phase 2 — Performance comparison vs PARI + one optimization  ✅
+- [x] Profiled via THUE_DEBUG. Bottlenecks split: unit search (adv-big-coef-2
+      376ms, sextic 198ms), Voronoi walk (d41 132ms), **brute box (d2-m100 239ms)**.
+- [x] Landed the safe win: the small-|Y| gap-closing brute box did an O(Y2p·Xmax)
+      double scan; replaced the wide-window case with EXACT univariate integer
+      root-finding (O(Y2p) factorisations). Adaptive: narrow window still scans
+      (non-regressing, incl. Xmax=0 corner). **d2-m100: 244ms → 21ms (11.6×).**
+      Answer unchanged; bench 88 still 98/0 WRONG.
 
-## Divergence detection — deliberately NOT a heuristic
-Verified with the condensation ladder: divergent `1/(n ln n)` (ratio→0.941) is
-numerically indistinguishable from convergent `1/n^1.1` (ratio→0.933) over any
-finite sample. A divergence flag would false-positive on legitimate slow-
-convergent series — which is why Mathematica also returns a finite value for
-`NSum[1/Prime[n]]`. The sound-but-narrow test (flag only when condensation
-terms do NOT →0, i.e. harmonic-like) does NOT catch P(1), so it is not added by
-default. Instead: honesty — non-converged extrapolation already warns `ncvg`.
+## Phase 3 — Expand unit + held-out tests  ✅
+- [x] test_thue.c: +5 M2 general-m cubic regressions (PARI-verified sets),
+      incl. m=100 which pins the optimized wide-Xmax root-finding branch.
+- [x] heldout.py: +3 Thue cases (solvable unbounded m=3, proven-{} m=5,
+      out-of-scope quartic |m| decline). `make check-diophantine-heldout`:
+      24 OK / 3 DECLINE / **0 WRONG**.
 
-## Verify
-- No `Prime::intpp` on either input.
-- P(2) ≈ 0.4522 (≥3 digits); 1/n^2 still 1.64493; Log[1+1/n^2] EM path intact.
-- tests/test_nsum.c still green; valgrind clean.
+## Phase 4 (stretch) — smallest coverage gap
+- [ ] Only if 1–3 land clean: investigate M5 (cyclotomic quartic, totally-complex
+      torsion, 1 case). Attempt if a certifiable path emerges; else document
+      honestly (a decline is always safe).
 
-## Review (done 2026-08-20)
-Shipped all three parts in `src/numerical_calculus/nsum.c`:
-1. `ns_eval_expr_at` wrapped in `arith_warnings_mute_push/pop` → 0 `Prime::intpp`
-   (was ~42).
-2. `NsProfile.continuous` set by `ns_summand_is_continuous` (2 non-integer probes
-   at imin+0.5, imin+0.3), gates the two EM returns in `ns_choose_method`. Runs
-   only on the non-black-box path → multidim adds 0 evals.
-3. Non-continuous, not-user-pinned → `nsum_terms` floor 100; machine-only
-   `extra_terms` floor 24 (MPFR length left to its bit-scaled auto).
-Results: P(2) 0.4485 → 0.452173; P(4) full accuracy; P(1) 2.30467 with honest
-`NSum::accgl` (err ~1.5e-3). All continuous EM cases unchanged.
-Divergence flag NOT added — condensation ratio 0.941 (div `1/(n ln n)`) vs 0.933
-(conv `1/n^1.1`) proves the boundary is undecidable from finite samples.
-Tests: `test_integer_only_summand` + Prime case in `test_memory_loop`; nsum(17)
-& nprod(13) green; check-c99 clean. Docstring, spec doc, changelog updated.
-Lesson → memory `project_nsum_integer_only_summand`.
+## Close-out
+- [x] `make check-c99` clean; macOS `leaks` = 0 on the new brute-box path.
+- [x] Weekly changelog updated; builtins doc left as-is (perf-only, behavior
+      unchanged, doc still accurate); README + completion-plan note grid.py.
+- [x] Held-out second seed (12345, 300): 176 CORRECT / 0 WRONG. Canonical report
+      restored (seed 20260820, 400: 261/138/0/0).
+- [x] Review section below.
+
+## Review
+
+**Shipped (validation-first, all three asks):**
+
+1. **Stress vs PARI (extensive).** New reproducible `grid.py` — deterministic
+   random Thue forms (deg 3–6, mixed m) vs PARI `thue()`. Seed 20260820, 400
+   cases: 261 CORRECT / 138 DECLINE / **0 WRONG / 0 CRASH**. Plus a held-out
+   second seed (12345, 300 cases). This is the first *reproducible* randomized
+   cross-check (the plan's grids were one-offs). Curated bench 88 unchanged at
+   98/6/**0 WRONG**.
+
+2. **Performance vs PARI.** Profiled with THUE_DEBUG: bottlenecks are unit
+   finding (box search / Voronoi) and the small-|Y| brute box — NOT the Baker
+   bound or exponent enumeration. Landed the safe win: exact univariate
+   root-finding for the wide-window brute box (`thue_form_xpoly` +
+   `fmpz_poly_int_roots`), adaptive so narrow windows still scan (non-regressing).
+   **x^3-2y^3=100: 244ms → 21ms (11.6×)**, completeness preserved (grid identical).
+   Remaining gap vs PARI (still 5–30× on unit-heavy cases) is the unit-finder,
+   a deeper item — documented, not rushed.
+
+3. **Unit + held-out tests.** +5 PARI-verified M2 cubic regressions in
+   test_thue.c (incl. m=100 pinning the optimized branch); +3 heldout.py Thue
+   cases (solvable / proven-{} / out-of-scope decline). All green; 0 WRONG.
+
+**Correctness contract preserved throughout:** complete-or-decline; every ACCEPT
+exact; a decline is always safe. `make check-c99` clean; macOS `leaks` = 0 on the
+new allocation path.
+
+**Not done (deliberate):** Phase 4 stretch (M5 totally-complex cyclotomic
+torsion) not attempted — it changes the certified `thue_exponent_bound` core for
+a single case; rushing it risked the contract. Left as documented gap. M4
+(rank-≥2 units for Q(10¹ᐟ⁴)/Q(5¹ᐟ⁵)) remains the next real coverage milestone.
+
+**Files:** src/solvethue.c (root-finding brute box); benchmarks/88/grid.py,
+GRID_REPORT.md, grid_results.json, README.md; benchmarks/87/heldout.py;
+tests/test_thue.c; docs/spec/changelog/2026-08-17.md;
+docs/design/thue_completion_plan.md.

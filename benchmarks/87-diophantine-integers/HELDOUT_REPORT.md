@@ -5,7 +5,7 @@ from standard references and are **not** in `cases.py`; Mathilda is run
 cold and every answer is cross-checked against an independent brute-force
 oracle over the same box.
 
-**OK 22 &nbsp; DECLINE 2 &nbsp; WRONG 0** of 24.
+**OK 24 &nbsp; DECLINE 3 &nbsp; WRONG 0** of 27.
 
 - **OK** — the concrete answer (or proven `{}`) matches the oracle.
 - **DECLINE** — left unevaluated where that is acceptable (honest gap).
@@ -34,7 +34,10 @@ oracle over the same box.
 | `negpell-3-empty` | empty | empty | OK | 0 | empty, oracle agrees |
 | `mordell-neg2-boxed` | finite | finite | OK | 2 | 2 solutions match oracle |
 | `thue-cubic-boxed` | finite | finite | OK | 2 | 2 solutions match oracle |
+| `thue-cubic-m3-unbounded` | finite | finite | OK | 2 | 2 solutions match oracle |
+| `thue-cubic-m5-empty` | empty | empty | OK | 0 | empty, oracle agrees |
 | `two-squares-25` | finite | finite | OK | 12 | 12 solutions match oracle |
 | `ternary-legendre-empty` | empty | empty | OK | 0 | empty, oracle agrees |
 | `bqf-nonsquare-disc-unbounded` | decline_ok | uneval | DECLINE | 28 | unevaluated; oracle has 28 in box |
 | `mordell-pos-unbounded` | decline_ok | uneval | DECLINE | 14 | unevaluated; oracle has 14 in box |
+| `thue-quartic-generalm-unbounded` | decline_ok | uneval | DECLINE | 8 | unevaluated; oracle has 8 in box |
