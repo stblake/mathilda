@@ -30,13 +30,16 @@ oracle over ~100 equations) is the gate: any `WRONG`/`CRASH` fails.
 
 **Benchmark 88:** after M1 (Voronoi units) + M2 (general `m`) + M3 (Round-2
 maximal order) + reducible forms (§6) + Minkowski-LLL O_K basis + M2b (rank-2
-`|m| != 1`) + M5 (totally complex), **99 CORRECT / 5 DECLINE / 0 WRONG / 0 CRASH**
-(48/56 before M1, 56/48 after M1, 65/39 after M2, 81/23 after M3, 94/10 after
-reducible forms, 96/8 after Minkowski-LLL, 98/6 after M2b). Of the 5 declines, 2
-are the reducible perfect powers PARI also refuses (correct on both sides); the 3
-genuine gaps are all **M4** (rank ≥ 2 unit finding): the large-regulator
-non-monogenic quartic `Q(10^{1/4})` (`±1`) and the quintic `x^5-5y^5`. Totally
-complex (`r1=0`, M5) is now DONE. Cross-checked vs PARI over a 270-case
+`|m| != 1`) + M5 (totally complex) + M4-quintic, **100 CORRECT / 4 DECLINE / 0
+WRONG / 0 CRASH** (of the original 104; 48/56 before M1, 56/48 after M1, 65/39
+after M2, 81/23 after M3, 94/10 after reducible forms, 96/8 after Minkowski-LLL,
+98/6 after M2b, 99/5 after M5). Of the 4 declines, 2 are the reducible perfect
+powers PARI also refuses (correct on both sides); the **only genuine gap left** is
+the rank-2 non-monogenic... no, *monogenic* large-regulator quartic
+`Q(10^{1/4})` (`x^4-10y^4==±1`) — its second fundamental unit is intrinsically
+large in the Minkowski embedding (forced by reg 25.3), reachable only by a
+Voronoi/Buchmann minima-walk (M4-quartic). The quintic `x^5-5y^5` (M4) and
+totally complex (`r1=0`, M5) are now DONE. Cross-checked vs PARI over a 270-case
 `|m| != 1` grid (M2), a 130-case non-monogenic grid (M3), a 90-case reducible
 grid, a 150-case two-quadratic grid, and the checked-in randomized `grid.py`
 (seed 20260820, 400 cases): 0 WRONG (1 case is a PARI `thue()` incompleteness,
@@ -303,9 +306,16 @@ WRONG/CRASH, coverage strictly up).
 3. **M3 — Round-2 maximal order + `O_K`-basis unit search** (§3.2): ✅ **DONE
    (2026-08-20)** for cubics + quartics — `nfround2.c` + O_K-lattice unit search;
    bench 88 CORRECT 65→81, 130-case grid 0 WRONG.
-4. **M4 — Voronoi/Billevič + Buchmann units, quartic & rank ≥ 3** (§3.1 rest):
-   the remaining bucket-3 quartics/quintics (`Q(10^{1/4})`, `x^5-5y^5`), and
-   robustness for M3's fields. **The only remaining coverage milestone.**
+4. **M4 — rank-2 unit finding, quartic & quintic** (§3.1 rest): **the only
+   remaining coverage milestone.**
+   - **quintic `x^5-5y^5` — ✅ DONE (2026-08-20)**: monogenic, units have small
+     power-basis coords; just needed the deg-5 search box raised to 6
+     (`nfunits.c`). Bench 88 CORRECT 99→100.
+   - **quartic `Q(10^{1/4})` (`x^4-10y^4==±1`) — still open**: needs a
+     Voronoi/Buchmann rank-2 minima-walk (its 2nd fundamental unit is
+     intrinsically large in the Minkowski embedding, `|σ₁|≈1036`, so no box or
+     Fincke–Pohst short-vector search reaches it). This is the rank-2
+     generalisation of the cubic `nfvoronoi.c` — the real remaining work.
 5. **M5 — Totally complex (`r1=0`)** (§3.4): ✅ **DONE (2026-08-20)** — the
    elementary `|Im|` bound, not the planned torsion/complex-`i0` port; solves the
    whole family for any `m`. Bench 88 CORRECT 98→99.

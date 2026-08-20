@@ -148,6 +148,10 @@ static void test_rigorous(void) {
     { const long f[] = {1,0,0,0,1};     check_rigorous(f, 4, 2,  4, 0, "x^4+y^4==2 (r1=0, general m)"); }
     { const long f[] = {1,0,0,0,1};     check_rigorous(f, 4, 17, 8, 0, "x^4+y^4==17 (r1=0, general m)"); }
     { const long f[] = {1,1,1,1,1,1,1}; check_rigorous(f, 6, 1,  6, 0, "Phi7 cyclotomic sextic ==1 (r1=0)"); }
+    /* Rank-2 monogenic quintic Q(5^{1/5}) (reg 36.9, M4): both fundamental units
+     * have power-basis coords <= 5, reached once the deg-5 unit-search box grows
+     * to 6.  Complete set {(1,0)} (== PARI thue). */
+    { const long f[] = {1,0,0,0,0,-5}; check_rigorous(f, 5, 1, 1, 0, "x^5-5y^5==1 (rank-2 quintic units)"); }
     printf("  rigorous: OK\n");
 }
 

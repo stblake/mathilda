@@ -409,7 +409,12 @@ NFUnits* nf_fundamental_units(NumberField* K) {
      * so an easy field costs a handful of norm tests, not the whole box -- a
      * blanket `ncand >= r+8` used to scan all 25^3 = 15625 points of a cubic
      * even when the fundamental unit sat at B=1. */
-    const int BOX_MAX = (deg == 3) ? 12 : (deg == 4) ? 6 : 4;
+    /* Per-degree box: chosen so the worst-case shell count (2*BOX_MAX+1)^deg
+     * stays ~comparable across degrees, and large enough to reach the target
+     * fields' fundamental units (Q(5^{1/5}) monogenic: coords up to 5, needs
+     * BOX_MAX>=5).  The loop grows B one shell at a time and STOPS at the first
+     * certified fundamental set, so easy fields never pay the full box. */
+    const int BOX_MAX = (deg == 3) ? 12 : (deg == 4) ? 6 : (deg == 5) ? 6 : 4;
     enum { CAND_CAP = 40000 };
     Cand* cand = malloc(sizeof(Cand) * CAND_CAP);
     int ncand = 0;

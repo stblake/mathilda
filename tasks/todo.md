@@ -43,6 +43,20 @@ measure vs PARI; coverage (M4/M5) is a stretch only.
 - [x] +6 test_thue.c regressions (Φ5/Φ7, x⁴+y⁴, the PARI-miss form); +3 heldout;
       leaks=0; check-c99 clean. Grid 278/119/1 PARI_WRONG/0 WRONG.
 
+## Phase 5 — M4 (last coverage gap: rank-2 units)  ◑ partial
+- [x] Diagnosed both M4 targets decline at Gate 2 (rank-2 fundamental units not
+      certified); Baker/enumerate machinery is rank-agnostic — only unit FINDING fails.
+- [x] **Quintic `x⁵−5y⁵=1` (Q(5^{1/5})) — DONE.** Monogenic, units have power-basis
+      coords ≤5, but the deg-5 search box was capped at 4. Raised to 6 (nfunits.c);
+      p-saturation certifies (rank==r unconditional). → {(1,0)} == PARI. Bench 88
+      99→100; sextic/septic/other quintics unchanged (certify at small B). 0 leaks.
+- [ ] **Quartic `Q(10^{1/4})` (`x⁴−10y⁴=±1`) — still open (documented).** Its 2nd
+      fundamental unit is intrinsically large in the Minkowski embedding
+      (|σ₁(fu2)|≈1036, forced by reg 25.3), so NO coefficient box / Fincke-Pohst
+      short-vector search reaches it. Needs a Voronoi/Buchmann rank-2 minima-walk
+      (generalising the cubic nfvoronoi.c) — a real subsystem; not rushed
+      (contract: a decline is always safe, a wrong answer is not). Left honest.
+
 ## Close-out
 - [x] `make check-c99` clean; macOS `leaks` = 0 on the new brute-box path.
 - [x] Weekly changelog updated; builtins doc left as-is (perf-only, behavior
