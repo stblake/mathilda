@@ -348,10 +348,20 @@ of total degree ≥3 equal to a constant. Currently such inputs decline (e.g.
 > (`|N(v)|=Dⁿ`). Non-monogenic `Q(∛{10,12,17,19,20})`, the Dedekind cubic, and
 > `Q(d^{1/4})` (incl. index-16 `Q(12^{1/4})`) now solve; benchmark 88 CORRECT
 > 65→81, 130-case non-monogenic PARI grid 0 WRONG.
-> Follow-ons: general `a₀`, rank-2 totally-real `|m|≠1` (M2b), general `m` over
-> non-monogenic (M2×M3), O_K-Voronoi for large-regulator non-monogenic quartics,
-> totally-complex torsion. **Full completion roadmap (algorithms, files, order,
-> verification):**
+> **M5 (2026-08-20): totally complex fields (`r1=0`), any `m`.**
+> `thue_solve_totally_complex` (`src/solvethue.c`): every root is non-real, so
+> `|x−θᵢy| ≥ |Im θᵢ|·|y|` gives the elementary rigorous bound
+> `|y| ≤ (|m|/∏|Im θᵢ|)^{1/n}` — no units/torsion/Baker; each `y` closed by exact
+> univariate root-finding. Solves `Q(ζ₅)` cyclotomic quartic (6 pts),
+> `x⁴+y⁴={1,2,17,82}`/`=3→{}`, `Φ₇`/`Φ₁₀`; benchmark 88 CORRECT 98→99.
+> **Perf (2026-08-20):** the small-|Y| gap-closing brute box now uses exact
+> univariate root-finding for a wide x-window (`x³−2y³=100`: 244→21 ms).
+> **Validation (2026-08-20):** reproducible randomized grid
+> `benchmarks/88-thue-equations/grid.py` (deg 3–6, mixed `m`) vs PARI, with an
+> adjudicator that verifies disputed points directly — so it distinguishes a real
+> bug from a PARI `thue()` incompleteness (found one on a `Q(ζ₅)` generator).
+> Follow-on (the last coverage gap): **M4** — rank-≥2 units for `Q(10^{1/4})` and
+> `x⁵−5y⁵`. **Full completion roadmap (algorithms, files, order, verification):**
 > [`docs/design/thue_completion_plan.md`](docs/design/thue_completion_plan.md).
 > Stress-tested vs PARI/GP `thue()` in `benchmarks/88-thue-equations/`.
 

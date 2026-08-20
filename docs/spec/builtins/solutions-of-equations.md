@@ -467,6 +467,16 @@ Attempts to solve an equation or system of equations for one or more variables.
     {(0,-1)}`, `== 3 -> {(1,-1),(-5,-4)}`, `== 10 -> {(2,-1),(4,3)}`, and
     `== 4/5/9/73/100 -> {}` (proven).  Rank-2 totally-real fields with
     `|m| != 1` still DECLINE.
+  - **Totally complex fields (`r1 = 0`, any `m`).** When the field has no real
+    embedding the Baker/unit machinery has no real type-index, but no factor can
+    be small either: every root `theta_i` is non-real, so for real `x, y`,
+    `|x - theta_i y| >= |Im(theta_i)| * |y|`, and
+    `|m| = prod_i |x - theta_i y| >= |y|^n * prod_i |Im theta_i|` bounds `|y|`
+    **elementarily and rigorously** -- no units, torsion, or Baker bound. Each
+    `y` is closed by exact univariate root-finding. So the cyclotomic quartic
+    `x^4 + x^3 y + x^2 y^2 + x y^3 + y^4 == 1` (over `Q(zeta_5)`) returns its 6
+    points, `x^4 + y^4 == {1, 2, 17, 82}` their `{4, 4, 8, 8}`, `== 3 -> {}`, and
+    higher cyclotomics (`Phi_7`, `Phi_10`) likewise.
 - **Linear Diophantine.** A single **linear** equation is solved through its
   solution lattice (gcd staircase, particular solution + `(n-1)`-vector
   homogeneous basis):

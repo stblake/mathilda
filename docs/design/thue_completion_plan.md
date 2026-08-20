@@ -30,18 +30,17 @@ oracle over ~100 equations) is the gate: any `WRONG`/`CRASH` fails.
 
 **Benchmark 88:** after M1 (Voronoi units) + M2 (general `m`) + M3 (Round-2
 maximal order) + reducible forms (§6) + Minkowski-LLL O_K basis + M2b (rank-2
-`|m| != 1`), **98 CORRECT / 6 DECLINE / 0 WRONG / 0 CRASH** (48/56 before M1,
-56/48 after M1, 65/39 after M2, 81/23 after M3, 94/10 after reducible forms, 96/8
-after Minkowski-LLL). Of the 6 declines, 2 are the reducible perfect powers PARI
-also refuses (correct on both sides); the 4 genuine gaps are the large-regulator
-non-monogenic quartic `Q(10^{1/4})` and the quintic `x^5-5y^5` (rank >= 2 unit
-finding, plan M4), and the totally-complex cyclotomic field (plan M5). The remaining declines are rank-2 totally-real
-`|m| != 1`, larger-regulator non-monogenic quartics/quintics (rank ≥ 2 units,
-plan M4), general `m` over non-monogenic fields, the totally-complex cyclotomic
-field (plan M5), and the reducible perfect powers PARI also refuses — all correct
-on both sides. Cross-checked vs PARI over a 270-case `|m| != 1` grid (M2), a
-130-case non-monogenic grid (M3), a 90-case reducible grid, and a 150-case
-two-quadratic grid: 0 WRONG.
+`|m| != 1`) + M5 (totally complex), **99 CORRECT / 5 DECLINE / 0 WRONG / 0 CRASH**
+(48/56 before M1, 56/48 after M1, 65/39 after M2, 81/23 after M3, 94/10 after
+reducible forms, 96/8 after Minkowski-LLL, 98/6 after M2b). Of the 5 declines, 2
+are the reducible perfect powers PARI also refuses (correct on both sides); the 3
+genuine gaps are all **M4** (rank ≥ 2 unit finding): the large-regulator
+non-monogenic quartic `Q(10^{1/4})` (`±1`) and the quintic `x^5-5y^5`. Totally
+complex (`r1=0`, M5) is now DONE. Cross-checked vs PARI over a 270-case
+`|m| != 1` grid (M2), a 130-case non-monogenic grid (M3), a 90-case reducible
+grid, a 150-case two-quadratic grid, and the checked-in randomized `grid.py`
+(seed 20260820, 400 cases): 0 WRONG (1 case is a PARI `thue()` incompleteness,
+adjudicated `PARI_WRONG`, Mathilda brute-verified correct).
 
 ### The 56 declines, by root cause (exact counts from the benchmark)
 
@@ -50,7 +49,7 @@ two-quadratic grid: 0 WRONG.
 | ~28 | **Non-monogenic field** (Gate 1) | we only certify `Z[θ]=O_K` | §3.2 Round-2 maximal order — ✅ DONE cubics+quartics (M3) |
 | 11 | **Large-regulator units** (Gate 2) | a coeff-box search can't find units with large coordinates (ℚ(∛41): 24-digit coords, reg 56) | §3.1 Voronoi — ✅ DONE for complex cubics (M1) |
 | 14 | **`\|m\| ≠ 1`** | reduction assumes `β=x−θy` is a *unit* | §3.3 μ-enumeration — ✅ DONE for rank-1 complex cubic (M2) |
-| 1 | **Totally-complex torsion** | `r1=0`, torsion `≠ {±1}`, and Siegel setup needs a real `i0` | §3.4 |
+| 1 | **Totally complex** (`r1=0`) | Siegel setup needs a real `i0` | §3.4 elementary \|Im\| bound — ✅ DONE (M5) |
 | 2 | reducible perfect powers | *not a Thue equation* (infinitely many pts) | already correct (decline; PARI errors too) |
 
 ---
@@ -260,19 +259,33 @@ Algorithmic Resolution of Diophantine Equations*, Ch. IV; Cohen CCANT §4.8, §6
 
 ---
 
-### 3.4 Totally-complex torsion + complex `i0` (1 decline) — LAST, SMALL
+### 3.4 Totally-complex fields (`r1 = 0`) — ✅ DONE (2026-08-20), by a simpler route
 
-**Root cause.** `thue_exponent_bound` requires `s = r1 ≥ 1` (a real embedding for
-the type index `i0`), and the enumeration uses torsion `{±1}`.
+> **Status: M5 shipped — the elementary imaginary-part bound.**
+> The plan below proposed torsion enumeration + a complex-`i0` Baker bound. None
+> of it was needed: the totally-complex structure gives a **direct, elementary,
+> rigorous** bound. Every root `theta_i` is non-real, so for real integers
+> `x, y`, `|x − theta_i y| ≥ |Im(theta_i)|·|y|` — no factor can be small (there
+> is no real root for `x/y` to approach), hence
+> `|m| = |a0| ∏_i |x − theta_i y| ≥ |a0|·|y|^n·∏_i |Im theta_i|` and
+> `|y| ≤ (|m| / (|a0|·∏|Im theta_i|))^{1/n}`. No units, no torsion, no Baker/LLL.
+> `thue_solve_totally_complex` (`src/solvethue.c`, wired at the old `r1<1`
+> decline) computes `∏|Im|` as a certified `arb` lower bound (→ a rigorous
+> over-estimate of `|y|`) and closes each `y` by exact univariate root-finding.
+> Solves the WHOLE family, **any `m`**: `Q(ζ5)` cyclotomic quartic (6 pts),
+> `x^4+y^4 == {1,2,17,82}` and `== 3 → {}`, `Phi_7`/`Phi_10`. Benchmark 88 CORRECT
+> 98→99 (`quartic-cyclotomic`, the last totally-complex decline). The grid also
+> surfaced a PARI `thue()` incompleteness on another `Q(ζ5)` generator
+> (`…==5`, PARI `[]`, true set `{(1,2),(−1,−2)}`) — now adjudicated (grid
+> `PARI_WRONG`, Mathilda brute-verified correct).
 
-**Fix.** (i) Compute `μ_K` (roots of unity in `K`): the largest `w` with
-`ζ_w ∈ K` — only `w` with `φ(w) | n` are possible; test `Φ_w(θ)`-membership /
-that `x^w−1` splits. Enumerate `β = ζ·∏εₖ^{bₖ}` over `ζ ∈ μ_K`. (ii) Allow a
-**complex** `i0`: Lemma 1.1's proof already covers `i0 > s`; port the
-`|Im|`-based bound and the complex Siegel triple. Low value (1 case), do last.
+**Original root cause (superseded).** `thue_exponent_bound` requires `s = r1 ≥ 1`
+(a real embedding for the type index `i0`), and the enumeration uses torsion
+`{±1}`. The torsion / complex-`i0` port became moot once the `|Im|` bound made the
+Baker machinery redundant for `r1 = 0`.
 
-**References.** Cohen CCANT §4.9 (roots of unity); Tzanakis–de Weger Lemma 1.1
-(the `i0>s` branch).
+**References.** Tzanakis–de Weger Lemma 1.1 (the `i0>s` branch) — for context; the
+shipped method is the elementary geometry-of-numbers bound above.
 
 ---
 
@@ -291,8 +304,11 @@ WRONG/CRASH, coverage strictly up).
    (2026-08-20)** for cubics + quartics — `nfround2.c` + O_K-lattice unit search;
    bench 88 CORRECT 65→81, 130-case grid 0 WRONG.
 4. **M4 — Voronoi/Billevič + Buchmann units, quartic & rank ≥ 3** (§3.1 rest):
-   the remaining bucket-3 quartics/quintics, and robustness for M3's fields.
-5. **M5 — Totally-complex torsion + complex `i0`** (§3.4): last, smallest.
+   the remaining bucket-3 quartics/quintics (`Q(10^{1/4})`, `x^5-5y^5`), and
+   robustness for M3's fields. **The only remaining coverage milestone.**
+5. **M5 — Totally complex (`r1=0`)** (§3.4): ✅ **DONE (2026-08-20)** — the
+   elementary `|Im|` bound, not the planned torsion/complex-`i0` port; solves the
+   whole family for any `m`. Bench 88 CORRECT 98→99.
 
 Rationale: front-load the tractable, high-coverage, low-refactor items (M1, M2)
 before the big `O_K` refactor (M3). Units (M1/M4) are the shared foundation, so

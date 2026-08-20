@@ -45,6 +45,39 @@ from run import run_mathilda, run_pari, classify     # noqa: E402  (the two runn
 
 
 # ---------------------------------------------------------------------------
+#  adjudicator: PARI thue() is the oracle, but it is not infallible -- for some
+#  totally-imaginary fields it silently returns an INCOMPLETE set (e.g. it
+#  misses (1,2) for x^4-2x^3+4x^2-3x+1 == 5 over Q(zeta5), which brute force and
+#  Mathilda both find).  So when the two disagree, don't blindly trust PARI:
+#  each disputed point is cheaply checkable against F(x,y)==m directly (no box
+#  needed for SOUNDNESS).  Verdict:
+#    MATHILDA_WRONG  Mathilda emitted a non-solution, OR a PARI solution that is
+#                    genuine is absent from Mathilda's set (a real completeness bug)
+#    PARI_WRONG      Mathilda is sound and has a genuine solution PARI missed
+#                    (the oracle is the incomplete one -- Mathilda is correct)
+#    None            can't adjudicate (kept as WRONG, conservatively)
+# ---------------------------------------------------------------------------
+def _form_val(pcoef, x, y):
+    n = len(pcoef) - 1
+    return sum(c * x ** i * y ** (n - i) for i, c in enumerate(pcoef))
+
+
+def adjudicate(pcoef, m, M, P):
+    if M is None:
+        return None
+    for (x, y) in M:                                   # soundness: no spurious point
+        if _form_val(pcoef, x, y) != m:
+            return "MATHILDA_WRONG"
+    if P is not None:
+        for (x, y) in (P - M):                          # a genuine PARI sol Mathilda lacks
+            if _form_val(pcoef, x, y) == m:
+                return "MATHILDA_WRONG"
+        if any(_form_val(pcoef, x, y) == m for (x, y) in (M - P)):
+            return "PARI_WRONG"                         # Mathilda found a genuine sol PARI missed
+    return None
+
+
+# ---------------------------------------------------------------------------
 #  random form generator
 # ---------------------------------------------------------------------------
 def _gcd_list(xs):
@@ -123,17 +156,23 @@ def main():
             verdict = "UNVERIFIED"
         else:
             verdict = classify(mo, po)
+            if verdict == "WRONG":                      # don't blindly trust the oracle
+                adj = adjudicate(c["pcoef"], c["m"], mo.get("sols"), po.get("sols"))
+                if adj == "PARI_WRONG":
+                    verdict = "PARI_WRONG"              # Mathilda is the correct one
+                # adj == "MATHILDA_WRONG" or None -> keep WRONG
         made += 1
         counts[verdict] = counts.get(verdict, 0) + 1
         mn = len(mo["sols"]) if mo.get("sols") is not None else "-"
         pn = len(po["sols"]) if po.get("sols") is not None else "-"
         flag = "  <<<" if verdict in ("WRONG", "CRASH") else ""
-        if args.verbose or verdict in ("WRONG", "CRASH"):
-            print(f"[{made:4d}/{args.n}] {verdict:10s} {c['label']:16s} "
+        if args.verbose or verdict in ("WRONG", "CRASH", "PARI_WRONG"):
+            print(f"[{made:4d}/{args.n}] {verdict:11s} {c['label']:16s} "
                   f"{c['form']} == {c['m']}   M:{mn} P:{pn}{flag}")
-        if verdict == "WRONG":
+        if verdict in ("WRONG", "PARI_WRONG"):
             print(f"        Mathilda: {sorted(mo['sols'])}")
-            print(f"        PARI    : {sorted(po['sols'])}")
+            print(f"        PARI    : {sorted(po['sols'])}"
+                  + ("   (PARI incomplete; Mathilda brute-verified)" if verdict == "PARI_WRONG" else ""))
         if verdict == "CRASH" and mo.get("err"):
             print(f"        err: {mo['err'][:200]}")
         results.append(dict(label=c["label"], family=c["family"], form=c["form"],
@@ -173,12 +212,13 @@ def write_report(results, counts, args):
       f"the same seed regenerates the identical corpus, so any `WRONG` is a "
       f"stable, re-runnable completeness bug. Regenerate: `python3 grid.py "
       f"--n {args.n} --seed {args.seed}`.\n")
-    order = ["CORRECT", "WRONG", "CRASH", "TIMEOUT", "DECLINE", "UNVERIFIED"]
+    order = ["CORRECT", "WRONG", "CRASH", "TIMEOUT", "DECLINE", "PARI_WRONG", "UNVERIFIED"]
     meaning = dict(CORRECT="finite set matches PARI",
-                   WRONG="**differs from PARI — completeness BUG**",
+                   WRONG="**differs from PARI — completeness BUG** (adjudicated: Mathilda unsound or incomplete)",
                    CRASH="**errored / no output — BUG**",
                    TIMEOUT="exceeded budget",
                    DECLINE="unevaluated (honest gap); PARI solved",
+                   PARI_WRONG="Mathilda found a genuine solution PARI's thue() missed (oracle incomplete; Mathilda brute-verified correct)",
                    UNVERIFIED="PARI rejected the form (perfect power / repeated factor)")
     L("| verdict | n | meaning |")
     L("|---|---|---|")
@@ -197,6 +237,17 @@ def write_report(results, counts, args):
         for r in bad:
             L(f"- **{r['verdict']}** `{r['label']}` — `{r['form']} == {r['m']}` "
               f"(Mathilda {r['m_count']} vs PARI {r['p_count']}).")
+        L("")
+    oracle = [r for r in results if r["verdict"] == "PARI_WRONG"]
+    if oracle:
+        L("## Oracle misses (Mathilda correct, PARI's `thue()` incomplete)\n")
+        L("Adjudicated by independently checking each disputed point against "
+          "`F(x,y)==m`: Mathilda's set is sound and strictly contains a genuine "
+          "solution PARI missed. PARI `thue()` is fallible on some "
+          "totally-imaginary fields.\n")
+        for r in oracle:
+            L(f"- `{r['label']}` — `{r['form']} == {r['m']}` "
+              f"(Mathilda {r['m_count']}, PARI {r['p_count']}). pcoef `{r['pcoef']}`.")
         L("")
 
     # a sample of CORRECT solves so the report shows the solve paths were hit

@@ -140,6 +140,14 @@ static void test_rigorous(void) {
     { const long f[] = {1,-3,0,1};   check_rigorous(f, 3, 2,  0, 0, "x^3-3xy^2+y^3==2 (rank-2, {})"); }
     { const long f[] = {1,-3,0,1};   check_rigorous(f, 3, 4,  0, 0, "x^3-3xy^2+y^3==4 (rank-2, {})"); }
     { const long f[] = {1,-3,0,1};   check_rigorous(f, 3, 8,  6, 0, "x^3-3xy^2+y^3==8 (rank-2, 6 sols)"); }
+    /* Totally complex fields (r1=0, M5): no real embedding, so the Baker/unit
+     * path declines -- but every root is non-real, so |x-theta_i y| >=
+     * |Im theta_i|*|y| bounds |y| elementarily (any m).  Cross-checked vs PARI. */
+    { const long f[] = {1,1,1,1,1};     check_rigorous(f, 4, 1,  6, 0, "Phi5 cyclotomic quartic ==1 (r1=0, Q(zeta5))"); }
+    { const long f[] = {1,0,0,0,1};     check_rigorous(f, 4, 1,  4, 0, "x^4+y^4==1 (r1=0, Q(zeta8))"); }
+    { const long f[] = {1,0,0,0,1};     check_rigorous(f, 4, 2,  4, 0, "x^4+y^4==2 (r1=0, general m)"); }
+    { const long f[] = {1,0,0,0,1};     check_rigorous(f, 4, 17, 8, 0, "x^4+y^4==17 (r1=0, general m)"); }
+    { const long f[] = {1,1,1,1,1,1,1}; check_rigorous(f, 6, 1,  6, 0, "Phi7 cyclotomic sextic ==1 (r1=0)"); }
     printf("  rigorous: OK\n");
 }
 
@@ -170,6 +178,14 @@ int main(void) {
       check(f, 3, 4, 20, e, 0, "x^3-2y^3==4 (M2, {})"); }
     /* Still out of scope -> DECLINE: |a0| != 1. */
     { const long f[] = {2,0,0,-3}; check_decline(f, 3, 1, 20, "2x^3-3y^3==1 (|a0|!=1)"); }
+
+    /* Totally complex (r1=0) via the |Im| bound.  x^4-2x^3y+4x^2y^2-3xy^3+y^4
+     * defines Q(zeta5) (disc 125).  Notably PARI/GP thue() MISSES these for
+     * m=5 (returns []), but F(1,2)=5 and independent brute force confirms the
+     * complete set is exactly {(1,2),(-1,-2)} -- an oracle incompleteness the
+     * randomized grid surfaced; Mathilda is correct. */
+    { const long f[] = {1,-2,4,-3,1}; const long e[][2] = {{1,2},{-1,-2}};
+      check(f, 4, 5, 20, e, 2, "Q(zeta5) form ==5 (r1=0; PARI thue misses these)"); }
 
     test_rigorous();
 

@@ -36,13 +36,23 @@ seed regenerates the identical corpus, so any `WRONG` is a stable, re-runnable
 failure. Writes `GRID_REPORT.md` + `grid_results.json`; exits nonzero on
 `WRONG`/`CRASH` only.
 
+**Oracle adjudication.** PARI `thue()` is the reference but not infallible — on
+some totally-imaginary fields it silently returns an *incomplete* set. So on any
+disagreement the grid does not blindly trust PARI: it checks each disputed point
+against `F(x,y)==m` directly (soundness needs no box) and classifies
+`MATHILDA_WRONG` (a real bug — a spurious point, or a genuine PARI solution
+Mathilda lacks) vs `PARI_WRONG` (Mathilda is sound and holds a genuine solution
+PARI missed). Only `MATHILDA_WRONG`/`CRASH` fail the run.
+
 ```bash
 python3 grid.py                  # 300 cases, seed 20260820
 python3 grid.py --n 400 --seed 20260820
 ```
 
-Last run (seed `20260820`, 400 cases): **261 CORRECT / 138 DECLINE / 0 WRONG /
-0 CRASH** — every machine-generated form Mathilda solved matched PARI.
+Last run (seed `20260820`, 400 cases): **278 CORRECT / 119 DECLINE / 1 PARI_WRONG
+/ 0 WRONG / 0 CRASH**. Every form Mathilda solved matched PARI except one, where
+PARI `thue()` was the incomplete side (`x^4-2x^3y+4x^2y^2-3xy^3+y^4 == 5` over
+`Q(zeta_5)`: PARI `[]`, true set `{(1,2),(-1,-2)}`, brute-verified).
 
 ## The corpus (`cases.py`)
 

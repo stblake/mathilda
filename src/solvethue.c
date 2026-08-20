@@ -1143,6 +1143,87 @@ static void solbuf_push(SolBuf* s, const mpz_t x, const mpz_t y) {
     mpz_init_set(s->x[s->n], x); mpz_init_set(s->y[s->n], y); s->n++;
 }
 
+/* ================================================================== *
+ *  Totally complex field (r1 = 0): the elementary imaginary-part      *
+ *  bound.                                                             *
+ *                                                                     *
+ *  Every root theta_i is non-real, so for real integers x, y          *
+ *      |x - theta_i y| >= |Im(theta_i)| * |y|                         *
+ *  (the imaginary part alone).  Unlike the real case there is no real *
+ *  root for x/y to approach, so NO factor can be small, and           *
+ *      |m| = |a0| * prod_i |x - theta_i y|                            *
+ *          >= |a0| * |y|^n * prod_i |Im theta_i|,                     *
+ *  giving the elementary, rigorous bound                              *
+ *      |y| <= ( |m| / (|a0| * prod_i |Im theta_i|) )^{1/n}.           *
+ *  No Baker bound, no fundamental units, no torsion enumeration are   *
+ *  needed -- exactly the pieces the real-i0 engine lacks here.  For   *
+ *  each y in that (small) range the integer x with F(x,y)==m are the  *
+ *  integer roots of the univariate F(x,y)-m, found exactly.  a0 = 1   *
+ *  (the caller normalised form[0] = +1).  Returns the complete count  *
+ *  (>= 0), or -1 to DECLINE (bound not certifiable / infeasible).     */
+static int thue_solve_totally_complex(NumberField* K, const mpz_t* form, int n,
+                                      const mpz_t m, ThueSol** out) {
+    if (nf_r1(K) != 0) return -1;                       /* totally complex only */
+    bool edbg = getenv("THUE_DEBUG") != NULL;
+
+    /* rigorous LOWER bound on prod_i |Im(theta_i)| via arb (so |m|/prod is an
+     * UPPER bound); escalate precision if any |Im| lower bound underflows. */
+    slong prec = K->prec;
+    double sum_log_im = 0.0;                            /* sum of log lower-bounds */
+    bool ok = false;
+    for (int esc = 0; esc < 4 && !ok; esc++) {
+        if (!nf_ensure_prec(K, prec)) return -1;
+        prec = K->prec;
+        acb_srcptr rt = K->roots;
+        arb_t im; arb_init(im);
+        double s = 0.0; bool good = true;
+        for (int i = 0; i < n; i++) {
+            arb_abs(im, acb_imagref(rt + i));
+            double lo = arb_lbound_d(im, prec);        /* certified |Im| >= lo */
+            if (!(lo > 0.0)) { good = false; break; }
+            s += log(lo);
+        }
+        arb_clear(im);
+        if (good) { sum_log_im = s; ok = true; } else prec *= 2;
+    }
+    if (!ok) { if (edbg) fprintf(stderr, "[thue] DECLINE: totally-complex |Im| bound underflow\n"); return -1; }
+
+    /* logY = (log|m| - sum log|Im|) / n is an UPPER bound on log(true |y| max). */
+    double logY = (log(fabs(mpz_get_d(m))) - sum_log_im) / (double)n;
+    double Yd = exp(logY);
+    if (!(Yd >= 0.0) || Yd > 4e6) { if (edbg) fprintf(stderr, "[thue] DECLINE: totally-complex Y too large (%.4g)\n", Yd); return -1; }
+    long Y = (long)floor(Yd) + 1;                       /* +1: safe over-estimate */
+    if (Y < 0) Y = 0;
+    if (edbg) fprintf(stderr, "[thue-prof] totally-complex (r1=0): |y| <= %ld\n", Y);
+
+    /* For each y, the integer x with F(x,y)==m are the integer roots of the
+     * univariate F(x,y)-m (exact); verify F==m and collect (solbuf dedups). */
+    SolBuf sb; memset(&sb, 0, sizeof(sb));
+    mpz_t Yv, fval; mpz_init(Yv); mpz_init(fval);
+    fmpz_poly_t Px; fmpz_poly_init(Px);
+    mpz_t* xroots = NULL; int nxr = 0, xcap = 0;
+    for (long yy = -Y; yy <= Y; yy++) {
+        mpz_set_si(Yv, yy);
+        thue_form_xpoly(form, n, Yv, m, Px);
+        nxr = 0;
+        fmpz_poly_int_roots(Px, &xroots, &nxr, &xcap);
+        for (int i = 0; i < nxr; i++) {
+            eval_form(form, n, xroots[i], Yv, fval);
+            if (mpz_cmp(fval, m) == 0) solbuf_push(&sb, xroots[i], Yv);
+            mpz_clear(xroots[i]);
+        }
+    }
+    free(xroots); fmpz_poly_clear(Px);
+    mpz_clear(Yv); mpz_clear(fval);
+
+    ThueSol* res = malloc(sizeof(ThueSol) * (size_t)(sb.n > 0 ? sb.n : 1));
+    for (int i = 0; i < sb.n; i++) { mpz_init_set(res[i].x, sb.x[i]); mpz_init_set(res[i].y, sb.y[i]); }
+    *out = res; int rc = sb.n;
+    for (int i = 0; i < sb.n; i++) { mpz_clear(sb.x[i]); mpz_clear(sb.y[i]); }
+    free(sb.x); free(sb.y);
+    return rc;
+}
+
 /* Shared engine: monic |a0|=1, |m|=1, monogenic field, torsion {+-1}.
  * Enumerate |b_k| <= bound.  Returns count or -1 (setup decline). */
 static int thue_enumerate(const mpz_t* form_in, int n, const mpz_t m_in,
@@ -1172,7 +1253,17 @@ static int thue_enumerate(const mpz_t* form_in, int n, const mpz_t m_in,
     for (int i = 0; i <= n; i++) mpz_clear(fc[i]);
     free(fc);
     if (!K) { if (edbg) fprintf(stderr, "[thue] DECLINE: Gate 1 (non-monogenic/reducible/non-monic)\n"); goto done; }
-    if (nf_r1(K) < 1) { if (edbg) fprintf(stderr, "[thue] DECLINE: no real embedding (torsion unhandled)\n"); nf_field_free(K); goto done; }
+    if (nf_r1(K) < 1) {
+        /* Totally complex (no real embedding): the Baker/unit machinery needs a
+         * real type-index i0, but the elementary imaginary-part bound solves it
+         * directly and rigorously (any m).  Solves e.g. the cyclotomic quartic
+         * x^4+x^3y+x^2y^2+xy^3+y^4 == 1 over Q(zeta_5). */
+        int tc = thue_solve_totally_complex(K, (const mpz_t*)form, n, m, out);
+        nf_field_free(K);
+        if (tc >= 0) { rc = tc; goto done; }
+        if (edbg) fprintf(stderr, "[thue] DECLINE: totally-complex bound not certified\n");
+        goto done;
+    }
     if (edbg) { fprintf(stderr, "[thue-prof] field_create: %.1fms\n", (clock()-tprof)*1000.0/CLOCKS_PER_SEC); tprof = clock(); }
 
     NFUnits* U = nf_fundamental_units(K);

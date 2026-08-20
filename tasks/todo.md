@@ -31,10 +31,17 @@ measure vs PARI; coverage (M4/M5) is a stretch only.
       out-of-scope quartic |m| decline). `make check-diophantine-heldout`:
       24 OK / 3 DECLINE / **0 WRONG**.
 
-## Phase 4 (stretch) — smallest coverage gap
-- [ ] Only if 1–3 land clean: investigate M5 (cyclotomic quartic, totally-complex
-      torsion, 1 case). Attempt if a certifiable path emerges; else document
-      honestly (a decline is always safe).
+## Phase 4 — M5 totally-complex fields  ✅ (done, better than scoped)
+- [x] Found an elegant route: NOT the planned torsion/complex-i0 Baker port, but
+      the elementary |Im| bound — every root non-real ⇒ |x−θᵢy| ≥ |Im θᵢ|·|y| ⇒
+      |y| ≤ (|m|/∏|Im θᵢ|)^{1/n}. No units/torsion/Baker. `thue_solve_totally_complex`.
+- [x] Solves the WHOLE totally-complex family, any m (not just the 1 M5 case):
+      Q(ζ5) Φ5=1 (6 pts, 0.5ms), x⁴+y⁴={1,2,17,82,3→{}}, Φ7/Φ10. Bench 88 98→99.
+- [x] Grid then caught a WRONG → adjudicated: PARI thue() itself is incomplete on
+      a Q(ζ5) generator (==5: PARI [], true {(1,2),(−1,−2)}, brute-verified).
+      Added a soundness/adjudication step to grid.py (MATHILDA_WRONG vs PARI_WRONG).
+- [x] +6 test_thue.c regressions (Φ5/Φ7, x⁴+y⁴, the PARI-miss form); +3 heldout;
+      leaks=0; check-c99 clean. Grid 278/119/1 PARI_WRONG/0 WRONG.
 
 ## Close-out
 - [x] `make check-c99` clean; macOS `leaks` = 0 on the new brute-box path.

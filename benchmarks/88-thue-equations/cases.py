@@ -131,6 +131,18 @@ add("quartic-x4-x-1", "general-quartic", [-1, -1, 0, 0, 1], 1, note="x^4-xy^3-y^
 add("quartic-totallyimag", "general-quartic", [1, 0, 1, 0, 1], 1,
     note="x^4+x^2y^2+y^4 (may be reducible)")
 
+# === G2. Totally complex fields (r1=0) -- elementary |Im| bound, any m =======
+# No real embedding: solved by |x-theta_i y| >= |Im theta_i||y| bounding |y|.
+add("tc-x4y4-1", "totally-complex", [1, 0, 0, 0, 1], 1, note="x^4+y^4=1 (Q(zeta8))")
+add("tc-x4y4-2", "totally-complex", [1, 0, 0, 0, 1], 2, note="x^4+y^4=2")
+add("tc-x4y4-17", "totally-complex", [1, 0, 0, 0, 1], 17, note="x^4+y^4=17 (1+16), 8 sols")
+add("tc-x4y4-82", "totally-complex", [1, 0, 0, 0, 1], 82, note="x^4+y^4=82 (1+81), 8 sols")
+add("tc-x4y4-3-empty", "totally-complex", [1, 0, 0, 0, 1], 3, note="x^4+y^4=3 -> {} (not a sum of 4th powers)")
+add("tc-phi5-m5", "totally-complex", [1, 1, 1, 1, 1], 5, note="Phi5 =5, general m, 2 sols")
+add("tc-phi5-m11", "totally-complex", [1, 1, 1, 1, 1], 11, note="Phi5 =11, 4 sols")
+add("tc-phi7", "totally-complex", [1, 1, 1, 1, 1, 1, 1], 1, note="Phi7 cyclotomic sextic =1")
+add("tc-phi10", "totally-complex", [1, -1, 1, -1, 1], 1, note="Phi10 quartic =1")
+
 # === H. Quintics / sextics (rank up to 4/5 -> unit search / Baker stress) ====
 for d in [2, 3, 5]:
     add(f"binom-quintic-d{d}", "quintic", [-d, 0, 0, 0, 0, 1], 1, note=f"x^5-{d}y^5=1")
