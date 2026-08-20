@@ -15,6 +15,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "expr.h"
 #include "parse.h"
@@ -182,6 +183,124 @@ static void test_powersum_divisor(void) {
     /* Generality: two fifth powers, 1267 = 3^5 + 4^5. */
     run_test("Solve[x^5 + y^5 == 1267 && 0 < x <= y && x < 10^5, {x, y}, Integers]",
         "List[List[Rule[x, 3], Rule[y, 4]]]");
+}
+
+/* Abs-value ordering constraints.  |x| < |y| < |z| < B is the natural way to
+ * ask for the ordered representatives of the sum-of-three-cubes solution set
+ * (one per permutation orbit) instead of every permutation; the magnitude chain
+ * bounds every variable and filters the result to the ordered subset. */
+static void test_abs_ordering(void) {
+    /* Full ordering: the six ordered representatives of x^3+y^3+z^3 == 63. */
+    run_test("Solve[x^3 + y^3 + z^3 == 63 && Abs[x] < Abs[y] < Abs[z] < 10000, "
+             "{x, y, z}, Integers]",
+        "List[List[Rule[x, -4178], Rule[y, -6034], Rule[z, 6639]], "
+             "List[Rule[x, -38], Rule[y, -58], Rule[z, 63]], "
+             "List[Rule[x, -37], Rule[y, -63], Rule[z, 67]], "
+             "List[Rule[x, -4], Rule[y, -6], Rule[z, 7]], "
+             "List[Rule[x, 0], Rule[y, -1], Rule[z, 4]], "
+             "List[Rule[x, 102], Rule[y, 146], Rule[z, -161]]]");
+    /* Partial ordering |x| < |y| with z free: the |x|<|y| subset (z arbitrary). */
+    run_test("Solve[x^3 + y^3 + z^3 == 63 && Abs[x] < Abs[y] < 10000 && Abs[z] < 10000, "
+             "{x, y, z}, Integers]",
+        "List[List[Rule[x, -6034], Rule[y, 6639], Rule[z, -4178]], "
+             "List[Rule[x, -4178], Rule[y, -6034], Rule[z, 6639]], "
+             "List[Rule[x, -4178], Rule[y, 6639], Rule[z, -6034]], "
+             "List[Rule[x, -63], Rule[y, 67], Rule[z, -37]], "
+             "List[Rule[x, -58], Rule[y, 63], Rule[z, -38]], "
+             "List[Rule[x, -38], Rule[y, -58], Rule[z, 63]], "
+             "List[Rule[x, -38], Rule[y, 63], Rule[z, -58]], "
+             "List[Rule[x, -37], Rule[y, -63], Rule[z, 67]], "
+             "List[Rule[x, -37], Rule[y, 67], Rule[z, -63]], "
+             "List[Rule[x, -6], Rule[y, 7], Rule[z, -4]], "
+             "List[Rule[x, -4], Rule[y, -6], Rule[z, 7]], "
+             "List[Rule[x, -4], Rule[y, 7], Rule[z, -6]], "
+             "List[Rule[x, -1], Rule[y, 4], Rule[z, 0]], "
+             "List[Rule[x, 0], Rule[y, -1], Rule[z, 4]], "
+             "List[Rule[x, 0], Rule[y, 4], Rule[z, -1]], "
+             "List[Rule[x, 102], Rule[y, -161], Rule[z, 146]], "
+             "List[Rule[x, 102], Rule[y, 146], Rule[z, -161]], "
+             "List[Rule[x, 146], Rule[y, -161], Rule[z, 102]]]");
+    /* Small box below the Booker gate: exercises the abs-ordering leaf search
+     * (effective_bounds pruning + abs-aware enumeration order). */
+    run_test("Solve[x^3 + y^3 + z^3 == 63 && Abs[x] < Abs[y] < Abs[z] < 10, "
+             "{x, y, z}, Integers]",
+        "List[List[Rule[x, -4], Rule[y, -6], Rule[z, 7]], "
+             "List[Rule[x, 0], Rule[y, -1], Rule[z, 4]]]");
+    /* Non-strict <= keeps ties: (1,1,1) and (4,4,-5) for k == 3. */
+    run_test("Solve[x^3 + y^3 + z^3 == 3 && Abs[x] <= Abs[y] <= Abs[z] < 50, "
+             "{x, y, z}, Integers]",
+        "List[List[Rule[x, 1], Rule[y, 1], Rule[z, 1]], "
+             "List[Rule[x, 4], Rule[y, 4], Rule[z, -5]]]");
+    /* Strict ordering rejects those ties -> empty (1=1=1, 4=4<5 both fail). */
+    run_test("Solve[x^3 + y^3 + z^3 == 3 && Abs[x] < Abs[y] < Abs[z] < 50, "
+             "{x, y, z}, Integers]", "List[]");
+    /* Ordering as a separate chain from the bound, box just above the gate. */
+    run_test("Solve[x^3 + y^3 + z^3 == 63 && Abs[x] < Abs[y] < Abs[z] && Abs[z] < 200, "
+             "{x, y, z}, Integers]",
+        "List[List[Rule[x, -38], Rule[y, -58], Rule[z, 63]], "
+             "List[Rule[x, -37], Rule[y, -63], Rule[z, 67]], "
+             "List[Rule[x, -4], Rule[y, -6], Rule[z, 7]], "
+             "List[Rule[x, 0], Rule[y, -1], Rule[z, 4]], "
+             "List[Rule[x, 102], Rule[y, 146], Rule[z, -161]]]");
+    /* No small representation of 42 -> empty even with the ordering. */
+    run_test("Solve[x^3 + y^3 + z^3 == 42 && Abs[x] < Abs[y] < Abs[z] < 8000, "
+             "{x, y, z}, Integers]", "List[]");
+}
+
+/* Integer cube root of t (t may be negative); writes it to *zout and returns 1
+ * iff t is a perfect cube. */
+static int test_int_cube_root(long long t, long long* zout) {
+    long long s = t < 0 ? -1 : 1;
+    long long a = t < 0 ? -t : t;
+    long long r = (long long)cbrtl((long double)a);
+    for (long long z = (r > 2 ? r - 2 : 0); z <= r + 2; z++)
+        if (z * z * z == a) { *zout = s * z; return 1; }
+    return 0;
+}
+
+/* Independent cross-check of the Booker cube-root-mod-d engine: brute-force the
+ * box [-(B-1), B-1]^3, format the solution set exactly as build_result does
+ * (ascending (x,y,z) tuples), and assert Solve returns it.  B is chosen just
+ * above the Booker engagement gate (2B > 200) so the engine runs, yet small
+ * enough to brute-force here -- proving completeness, not merely locking the
+ * current output. */
+static void check_three_cubes_brute(long long k, long long B) {
+    long long lo = -(B - 1), hi = B - 1;
+    size_t cap = 256, n = 0;
+    long long (*sol)[3] = (long long(*)[3])malloc(cap * sizeof(*sol));
+    for (long long x = lo; x <= hi; x++)
+        for (long long y = lo; y <= hi; y++) {
+            long long t = k - x * x * x - y * y * y, z;
+            if (!test_int_cube_root(t, &z)) continue;
+            if (z < lo || z > hi) continue;
+            if (n == cap) { cap *= 2; sol = (long long(*)[3])realloc(sol, cap * sizeof(*sol)); }
+            sol[n][0] = x; sol[n][1] = y; sol[n][2] = z; n++;
+        }
+    /* build expected FullForm string */
+    size_t cap_s = n * 72 + 16;
+    char* expected = (char*)malloc(cap_s);
+    size_t p = 0;
+    p += (size_t)snprintf(expected + p, cap_s - p, "List[");
+    for (size_t i = 0; i < n; i++)
+        p += (size_t)snprintf(expected + p, cap_s - p,
+            "%sList[Rule[x, %lld], Rule[y, %lld], Rule[z, %lld]]",
+            i ? ", " : "", sol[i][0], sol[i][1], sol[i][2]);
+    p += (size_t)snprintf(expected + p, cap_s - p, "]");
+    char input[192];
+    snprintf(input, sizeof input,
+        "Solve[x^3 + y^3 + z^3 == %lld && Abs[x] < %lld && Abs[y] < %lld "
+        "&& Abs[z] < %lld, {x, y, z}, Integers]", k, B, B, B);
+    run_test(input, expected);
+    free(sol); free(expected);
+}
+
+/* Run the brute cross-check on several (k, box) just above the Booker gate. */
+static void test_booker_brute_crosscheck(void) {
+    long long ks[] = {2, 3, 29, -13, 9};
+    long long Bs[] = {105, 130};
+    for (size_t i = 0; i < sizeof(ks) / sizeof(ks[0]); i++)
+        for (size_t j = 0; j < sizeof(Bs) / sizeof(Bs[0]); j++)
+            check_three_cubes_brute(ks[i], Bs[j]);
 }
 
 /* Fermat's Last Theorem short-circuit: x^n + y^n == z^n (n >= 3, all strictly
@@ -598,6 +717,8 @@ int main(void) {
     TEST(test_pythagorean_perimeter);
     TEST(test_egyptian_fractions);
     TEST(test_powersum_divisor);
+    TEST(test_abs_ordering);
+    TEST(test_booker_brute_crosscheck);
     TEST(test_fermat_last_theorem);
     TEST(test_exponential);
     TEST(test_superelliptic_bounded);

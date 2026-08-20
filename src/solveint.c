@@ -110,6 +110,15 @@ typedef struct {
     bool  ord_strict[SI_MAX_VARS * SI_MAX_VARS];
     int   n_ord;
 
+    /* abs-orderings: |var[a]| < |var[b]| (strict) or <= (non-strict).  A
+     * separate store because it constrains magnitudes, not signed values:
+     * bound propagation and candidate filtering treat it via |.|, and it never
+     * reduces to a signed ordering (both signs of each variable survive). */
+    int   abs_ord_a[SI_MAX_VARS * SI_MAX_VARS];
+    int   abs_ord_b[SI_MAX_VARS * SI_MAX_VARS];
+    bool  abs_ord_strict[SI_MAX_VARS * SI_MAX_VARS];
+    int   n_abs_ord;
+
     /* disequations: var[a] != var[b] */
     int   neq_a[SI_MAX_VARS * SI_MAX_VARS];
     int   neq_b[SI_MAX_VARS * SI_MAX_VARS];
@@ -215,6 +224,16 @@ static void add_ordering(SICtx* c, int a, int b, bool strict) {
     c->n_ord++;
 }
 
+/* Record  |var[a]| (< / <=) |var[b]|. */
+static void add_abs_ordering(SICtx* c, int a, int b, bool strict) {
+    if (a < 0 || b < 0 || a == b) return;
+    if (c->n_abs_ord >= (int)(sizeof(c->abs_ord_a) / sizeof(c->abs_ord_a[0]))) return;
+    c->abs_ord_a[c->n_abs_ord] = a;
+    c->abs_ord_b[c->n_abs_ord] = b;
+    c->abs_ord_strict[c->n_abs_ord] = strict;
+    c->n_abs_ord++;
+}
+
 static void tighten_lo(SICtx* c, int i, int64_t v) {
     if (!c->has_lo[i] || v > c->lo[i]) { c->lo[i] = v; c->has_lo[i] = true; }
 }
@@ -247,6 +266,17 @@ static void register_inequality(SICtx* c, Expr* lhs, Expr* rhs, int dir, bool st
         && expr_as_i64(R, &k)) {
         int i = find_var_index(c, L->data.function.args[0]->data.symbol.name);
         if (i >= 0) { int64_t b = strict ? k - 1 : k; tighten_hi(c, i, b); tighten_lo(c, i, -b); captured = true; }
+    }
+    /* Abs[var] (rel) Abs[var] -> abs-ordering (|a| < |b| or |a| <= |b|).  This
+     * is what makes  Abs[x] < Abs[y] < Abs[z] < B  a bounded, ordered search:
+     * the magnitude chain propagates a box onto every variable (see
+     * propagate_abs_orderings) and filters the result to the ordered subset. */
+    if (is_fun(L, SYM_Abs, 1) && is_fun(R, SYM_Abs, 1)
+        && L->data.function.args[0]->type == EXPR_SYMBOL
+        && R->data.function.args[0]->type == EXPR_SYMBOL) {
+        int a = find_var_index(c, L->data.function.args[0]->data.symbol.name);
+        int b = find_var_index(c, R->data.function.args[0]->data.symbol.name);
+        if (a >= 0 && b >= 0) { add_abs_ordering(c, a, b, strict); captured = true; }
     }
     /* var (rel) var -> ordering. */
     if (L->type == EXPR_SYMBOL && R->type == EXPR_SYMBOL) {
@@ -539,6 +569,28 @@ static bool propagate_orderings(SICtx* c) {
     return changed;
 }
 
+/* Propagate abs-orderings once; returns true if anything changed.  For each
+ * |a| < / <= |b|, if b is two-sided bounded then |b| <= Bb = max(|lo_b|,|hi_b|)
+ * and |a| <= Bb - s (s = 1 for strict), giving a a symmetric box [-(Bb-s), Bb-s].
+ * Only the smaller side is tightened -- |a| < |b| gives no usable *upper* bound
+ * on |b| -- so this is a sound (necessary-condition) narrowing. */
+static bool propagate_abs_orderings(SICtx* c) {
+    bool changed = false;
+    for (int k = 0; k < c->n_abs_ord; k++) {
+        int a = c->abs_ord_a[k], b = c->abs_ord_b[k];
+        int s = c->abs_ord_strict[k] ? 1 : 0;
+        if (!(c->has_lo[b] && c->has_hi[b])) continue;         /* |b| unbounded */
+        int64_t alo = c->lo[b] < 0 ? -c->lo[b] : c->lo[b];
+        int64_t ahi = c->hi[b] < 0 ? -c->hi[b] : c->hi[b];
+        int64_t Bb  = alo > ahi ? alo : ahi;                   /* |b| <= Bb */
+        int64_t Ba  = Bb - s;                                   /* |a| <= Ba */
+        if (Ba < 0) Ba = -1;                                    /* empties the box */
+        if (!c->has_hi[a] ||  Ba < c->hi[a]) { c->hi[a] =  Ba; c->has_hi[a] = true; changed = true; }
+        if (!c->has_lo[a] || -Ba > c->lo[a]) { c->lo[a] = -Ba; c->has_lo[a] = true; changed = true; }
+    }
+    return changed;
+}
+
 /* Run the bound fixpoint (explicit bounds + ordering propagation +
  * interval-positivity).  Bounds are only ever tightened, so the result is a
  * set of necessary conditions. */
@@ -546,6 +598,7 @@ static void derive_bounds(SICtx* c) {
     for (int iter = 0; iter < 4 * c->n + 8; iter++) {
         bool changed = false;
         if (propagate_orderings(c)) changed = true;
+        if (propagate_abs_orderings(c)) changed = true;
         for (int b = 0; b < c->nbc; b++) {
             if (try_bound_up(c, c->bc[b].Q)) changed = true;
             if (c->bc[b].kind == SI_EQ) {
@@ -1028,6 +1081,23 @@ static void effective_bounds(SearchState* st, int depth, int vi, int64_t* elo, i
             if (assigned && va + s > *elo) *elo = va + s;
         }
     }
+    /* Abs-orderings prune only the smaller side: |vi| < |val_b| once the larger
+     * variable b is assigned, tightening vi to a symmetric window.  (The larger
+     * side is a hole around 0, not a contiguous narrowing, so it is left to the
+     * final verify.)  Realised only when b is enumerated before vi -- see the
+     * abs-aware search-order builder. */
+    for (int k = 0; k < c->n_abs_ord; k++) {
+        int a = c->abs_ord_a[k], b = c->abs_ord_b[k]; int s = c->abs_ord_strict[k] ? 1 : 0;
+        if (a != vi) continue;
+        bool assigned = false; int64_t vb = 0;
+        for (int p = 0; p < depth; p++) if (st->order[p] == b) { assigned = true; vb = st->val[b]; }
+        if (!assigned) continue;
+        int64_t avb = vb < 0 ? -vb : vb;
+        int64_t bnd = avb - s;                       /* |vi| <= bnd */
+        if (bnd < 0) bnd = -1;
+        if ( bnd < *ehi) *ehi =  bnd;
+        if (-bnd > *elo) *elo = -bnd;
+    }
 }
 
 static void resolve_peeled(SearchState* st, int pi);   /* multi-leaf resolver */
@@ -1067,6 +1137,12 @@ static int si_longest_chain(const SICtx* c, const int* vars, int nv) {
             for (int e = 0; e < c->n_ord; e++) {
                 if (c->ord_a[e] == v && in[c->ord_b[e]]) {   /* edge v < / <= b */
                     int cand = 1 + memo[c->ord_b[e]];
+                    if (cand > m) m = cand;
+                }
+            }
+            for (int e = 0; e < c->n_abs_ord; e++) {         /* |v| < / <= |b| */
+                if (c->abs_ord_a[e] == v && in[c->abs_ord_b[e]]) {
+                    int cand = 1 + memo[c->abs_ord_b[e]];
                     if (cand > m) m = cand;
                 }
             }
@@ -1175,6 +1251,12 @@ static bool si_verify(SICtx* c, const int64_t* vals) {
     for (int k = 0; k < c->n_ord; k++) {
         int a = c->ord_a[k], b = c->ord_b[k];
         if (c->ord_strict[k] ? !(vals[a] < vals[b]) : !(vals[a] <= vals[b])) return false;
+    }
+    for (int k = 0; k < c->n_abs_ord; k++) {
+        int a = c->abs_ord_a[k], b = c->abs_ord_b[k];
+        int64_t va = vals[a] < 0 ? -vals[a] : vals[a];
+        int64_t vb = vals[b] < 0 ? -vals[b] : vals[b];
+        if (c->abs_ord_strict[k] ? !(va < vb) : !(va <= vb)) return false;
     }
     for (int k = 0; k < c->n_neq; k++)
         if (vals[c->neq_a[k]] == vals[c->neq_b[k]]) return false;
@@ -1999,7 +2081,7 @@ static Expr* si_solve_pell_parametric(SICtx* c) {
     bool posx = c->has_lo[xs] && c->lo[xs] >= 1;
     bool posy = c->has_lo[ys] && c->lo[ys] >= 1;
     if (!(unbounded && posx && posy && mpz_cmp_si(N, 1) == 0)
-        || c->n_ord != 0 || c->n_neq != 0 || !c->all_captured) {
+        || c->n_ord != 0 || c->n_neq != 0 || c->n_abs_ord != 0 || !c->all_captured) {
         mpz_clear(D); mpz_clear(N); return NULL;
     }
     mpz_t u, v, bx, by; mpz_init(u); mpz_init(v); mpz_init(bx); mpz_init(by);
@@ -2244,7 +2326,7 @@ static Expr* si_solve_genpell_parametric(SICtx* c) {
     bool unbounded = !c->has_hi[xs] && !c->has_hi[ys];
     bool posx = c->has_lo[xs] && c->lo[xs] >= 1;
     bool posy = c->has_lo[ys] && c->lo[ys] >= 1;
-    if (!(unbounded && posx && posy) || c->n_ord != 0 || c->n_neq != 0 || !c->all_captured) {
+    if (!(unbounded && posx && posy) || c->n_ord != 0 || c->n_neq != 0 || c->n_abs_ord != 0 || !c->all_captured) {
         mpz_clear(D); mpz_clear(N); return NULL;
     }
 
@@ -2319,7 +2401,7 @@ static void si_det_bareiss(mpz_t** M, int m, mpz_t out) {
  * (denominators cleared by the MPoly conversion). */
 static Expr* si_solve_linear_system_ray(SICtx* c) {
     int n = c->n;
-    if (c->neq != n - 1 || n < 2 || c->n_ord != 0 || c->n_neq != 0 || !c->all_captured) return NULL;
+    if (c->neq != n - 1 || n < 2 || c->n_ord != 0 || c->n_neq != 0 || c->n_abs_ord != 0 || !c->all_captured) return NULL;
     for (int i = 0; i < n; i++)                       /* every variable strictly positive */
         if (!(c->has_lo[i] && c->lo[i] >= 1)) return NULL;
 
@@ -2672,7 +2754,7 @@ static bool si_linear_lattice(const mpz_t* a, int n, const mpz_t b,
  * Returns the owned result Expr, {} for an unsolvable equation, or NULL to
  * decline (not this shape). */
 static Expr* si_solve_linear_parametric(SICtx* c) {
-    if (c->neq != 1 || c->n_ord != 0 || c->n_neq != 0 || !c->all_captured) return NULL;
+    if (c->neq != 1 || c->n_ord != 0 || c->n_neq != 0 || c->n_abs_ord != 0 || !c->all_captured) return NULL;
     for (int i = 0; i < c->n; i++) if (c->has_lo[i] || c->has_hi[i]) return NULL;
 
     int n = c->n;
@@ -2741,7 +2823,7 @@ static Expr* si_solve_linear_parametric(SICtx* c) {
  * si_solve_linear_parametric path. */
 static Expr* si_solve_linear_system_hnf(SICtx* c) {
     int n = c->n, m = c->neq;
-    if (m < 2 || c->n_ord != 0 || c->n_neq != 0 || !c->all_captured) return NULL;
+    if (m < 2 || c->n_ord != 0 || c->n_neq != 0 || c->n_abs_ord != 0 || !c->all_captured) return NULL;
     for (int i = 0; i < n; i++) if (c->has_lo[i] || c->has_hi[i]) return NULL;
 
     /* Build A (m x n) and b (m) from the linear equations; decline on any
@@ -3040,6 +3122,19 @@ static bool si_solve_linear_bounded(SICtx* c, SearchState* st) {
 static void si_two_power_solve(SICtx* c, SearchState* st, int ip, int jp,
                                int e, const mpz_t m, int64_t* vals) {
     int64_t loi = c->lo[ip], hii = c->hi[ip], loj = c->lo[jp], hij = c->hi[jp];
+    /* Tighten the pair windows by any abs-ordering that bounds a pair variable
+     * below an already-assigned outer variable (|pair| < |vals[outer]|).  Sound
+     * (prune-only; si_verify still backstops), and for the ordered three-cubes
+     * query it shrinks the s = x+y range to ~2|outer| as the outer sweeps. */
+    for (int k = 0; k < c->n_abs_ord; k++) {
+        int a = c->abs_ord_a[k], b = c->abs_ord_b[k]; int s = c->abs_ord_strict[k] ? 1 : 0;
+        if (b == ip || b == jp) continue;            /* larger side must be an outer */
+        if (a != ip && a != jp) continue;            /* smaller side must be a pair var */
+        int64_t vb = vals[b] < 0 ? -vals[b] : vals[b];
+        int64_t bnd = vb - s; if (bnd < 0) bnd = -1; /* |a| <= bnd */
+        if (a == ip) { if ( bnd < hii) hii =  bnd; if (-bnd > loi) loi = -bnd; }
+        else         { if ( bnd < hij) hij =  bnd; if (-bnd > loj) loj = -bnd; }
+    }
     if (mpz_sgn(m) == 0) {                        /* x^e + y^e = 0  ->  y = -x */
         int64_t t0 = (loi > -hij) ? loi : -hij;
         int64_t t1 = (hii < -loj) ? hii : -loj;
@@ -3841,7 +3936,7 @@ static bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
      * coefficients and mirrors the flipped variable's box; it only stays exact
      * for a pure box (no orderings / disequations, every constraint captured),
      * since a mixed-sign ordering is not an ordering in u-space. */
-    if (signed_case && (c->n_ord != 0 || c->n_neq != 0 || !c->all_captured)) {
+    if (signed_case && (c->n_ord != 0 || c->n_neq != 0 || c->n_abs_ord != 0 || !c->all_captured)) {
         mpz_clear(K); return false;
     }
     int64_t Ki = mpz_get_si(K);
@@ -3855,9 +3950,16 @@ static bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
         if (a > B) B = a;
     }
     bool force = getenv("MATHILDA_BK_FORCE") != NULL;
-    /* Below the classical outer cap the ordinary pipeline is already fine;
-     * above the int64/divisor budget we cannot guarantee coverage. */
-    if (!force && 2 * B <= 300000) { mpz_clear(K); return false; }
+    /* The cube-root-mod-d method's O(alpha*B * roots) work beats the leaf
+     * search's O(B^2) and the divisor method's O(B * factoring) across the whole
+     * bounded range -- measured ~10-400x faster from B~500 up, and validated
+     * to return the identical solution set (Booker vs the leaf/divisor pipeline)
+     * over a wide (k, box) sweep incl. the (a,-a,cbrt k) family and signed
+     * equations.  So engage it for any non-trivial box; only a truly tiny box
+     * (|coord| <= 100), already solved in well under a millisecond by the
+     * leaf/mitm paths, is left alone.  The upper bound is Dmax <= SI_BK_DMAX
+     * below (past which int64 coverage is not guaranteed). */
+    if (!force && 2 * B <= 200) { mpz_clear(K); return false; }
     int64_t Dmax = (int64_t)(0.25992104989 * (double)B) + 2;
     if (Dmax > SI_BK_DMAX) { mpz_clear(K); return false; }
 
@@ -4411,7 +4513,7 @@ static Expr* si_solve_thue(SICtx* c) {
     if (c->neq != 1 || c->n != 2) return NULL;
     /* pure equation only: extra bound / ordering / disequation constraints
      * would need a bignum-aware post-filter (a later extension). */
-    if (c->n_ord != 0 || c->n_neq != 0) return NULL;
+    if (c->n_ord != 0 || c->n_neq != 0 || c->n_abs_ord != 0) return NULL;
     for (int i = 0; i < c->n; i++) if (c->has_lo[i] || c->has_hi[i]) return NULL;
 
     const MPoly* eq = c->eq[0];
@@ -4705,25 +4807,58 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
             if (domain[st.order[j]] < domain[st.order[pick]]) pick = j;
         if (pick != i) { int t = st.order[i]; st.order[i] = st.order[pick]; st.order[pick] = t; }
     }
+    /* Refine so every abs-ordering |a| < |b| enumerates the larger b before the
+     * smaller a -- only then does effective_bounds' abs pruning fire and the box
+     * collapse to ~N^L/L! nodes (matching si_longest_chain).  Stable topological
+     * pass over the abs-ord DAG, seeded by the ascending-domain order above so
+     * ties and unconstrained variables keep their heuristic placement. */
+    if (c.n_abs_ord > 0 && st.n_search > 1) {
+        int seed[SI_MAX_VARS];
+        for (int i = 0; i < st.n_search; i++) seed[i] = st.order[i];
+        bool placed[SI_MAX_VARS];
+        for (int i = 0; i < c.n; i++) placed[i] = false;
+        int out = 0;
+        for (int pass = 0; pass < st.n_search && out < st.n_search; pass++) {
+            for (int i = 0; i < st.n_search; i++) {
+                int v = seed[i];
+                if (placed[v]) continue;
+                bool ready = true;                       /* all larger-|.| vars placed? */
+                for (int e = 0; e < c.n_abs_ord; e++)
+                    if (c.abs_ord_a[e] == v) {
+                        int b = c.abs_ord_b[e];
+                        if (b != leaf && !placed[b]) { ready = false; break; }
+                    }
+                if (ready) { st.order[out++] = v; placed[v] = true; }
+            }
+        }
+        for (int i = 0; i < st.n_search && out < st.n_search; i++)   /* cycle leftover */
+            if (!placed[seed[i]]) { st.order[out++] = seed[i]; placed[seed[i]] = true; }
+    }
 
     /* Search-space guard: decline rather than enumerate an intractable box
      * (e.g. a Pell family or a wide linear lattice -- those are later,
-     * closed-form phases).  The raw product over search vars is divided by the
-     * factorial of the longest ordering chain, since  x <= y <= z  walks
-     * ~N^3/6 nodes, not N^3 (the visit cap backstops any under-estimate). */
-    long double est = 1.0L;
-    for (int i = 0; i < st.n_search; i++) est *= (long double)domain[st.order[i]];
+     * closed-form phases).  `raw_est` is the box product over the search vars;
+     * `est` divides it by the factorial of the longest ordering chain, since
+     * x <= y <= z  walks ~N^3/6 nodes, not N^3 (the visit cap backstops any
+     * under-estimate). */
+    long double raw_est = 1.0L;
+    for (int i = 0; i < st.n_search; i++) raw_est *= (long double)domain[st.order[i]];
+    long double est = raw_est;
     {
         int L = si_longest_chain(&c, st.order, st.n_search);
         long double fact = 1.0L;
         for (int i = 2; i <= L; i++) fact *= (long double)i;
         est /= fact;
     }
-    if (est > (long double)SI_MAX_NODES) {
-        /* Too large to enumerate directly, but two number-theoretic methods
-         * turn the O(N^k) search into far less: a bounded linear equation via
-         * its LLL-reduced lattice, and a separable odd-power sum via the
-         * divisor method (s = x+y divides m). */
+    /* Two number-theoretic methods turn the O(N^k) search into far less: a
+     * bounded linear equation via its LLL-reduced lattice, and a separable
+     * odd-power sum via the divisor method (s = x+y divides m).  Gate them on
+     * the RAW box size, not the ordering-pruned `est`: an ordering's L! division
+     * must not drop a large separable box just under the leaf budget and into
+     * the O(est) leaf enumeration -- that is exactly what made the ordered
+     * three-cubes query hang.  They decline (return false) when inapplicable,
+     * falling through to the leaf search only if the pruned box fits. */
+    if (raw_est > (long double)SI_MAX_NODES) {
         bool done = si_solve_linear_bounded(&c, &st)
                  || si_solve_powersum_divisor(&c, &st);
         if (done && !st.overflow) {
@@ -4731,7 +4866,12 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
             free(st.sols); ctx_free(&c);
             return result;
         }
-        free(st.sols); ctx_free(&c); return NULL;
+        if (st.overflow) { free(st.sols); ctx_free(&c); return NULL; }
+        st.nsol = 0; st.multileaf = false;          /* reset any partial state */
+        if (est > (long double)SI_MAX_NODES) {       /* pruned box still too big */
+            free(st.sols); ctx_free(&c); return NULL;
+        }
+        /* else: the ordering-pruned box fits the leaf budget -- fall through. */
     }
 
     /* Stage C. */

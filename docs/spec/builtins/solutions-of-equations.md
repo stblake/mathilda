@@ -186,9 +186,18 @@ Attempts to solve an equation or system of equations for one or more variables.
   `Solve[x^2 + 2 y^3 == 3681 && x > 0 && y > 0, {x, y}, Integers]` ->
   `{{x -> 15, y -> 12}, {x -> 41, y -> 10}, {x -> 57, y -> 6}}`.
   The method is bound propagation to a finite box (explicit bounds, ordering
-  chains like `0 < x <= y <= z`, and an interval-positivity rule that turns a
+  chains like `0 < x <= y <= z`, **absolute-value ordering chains** like
+  `Abs[x] < Abs[y] < Abs[z] < B`, and an interval-positivity rule that turns a
   sign-definite term of `Σ term == constant` into a per-variable bound, both
-  above and — for odd powers, deducing the sign — below). A variable that
+  above and — for odd powers, deducing the sign — below). An abs-value ordering
+  is the natural way to ask for the *ordered representatives* of a symmetric
+  solution set (one per permutation orbit) instead of every permutation: the
+  magnitude chain propagates a box onto every variable (`|x| < |y| ≤ B ⟹
+  |x| ≤ B-1`) and filters the result to the ordered subset, so
+  `Solve[x^3 + y^3 + z^3 == 63 && Abs[x] < Abs[y] < Abs[z] < 10000, {x,y,z},
+  Integers]` returns the 6 ordered solutions rather than the 36 permutations of
+  the box form. A partial chain (`Abs[x] < Abs[y] < 10000 && Abs[z] < 10000`)
+  bounds and orders only the named variables. A variable that
   appears only with **even exponents** is sign-symmetric, so even without a
   sign constraint it is bounded on both sides to `[-B, B]` — this makes the
   unconstrained sum of even powers finite, so
@@ -322,6 +331,14 @@ Attempts to solve an equation or system of equations for one or more variables.
     up to ~10⁶ where the classical path declines, e.g.
     `Solve[x^3 + y^3 + z^3 == 2 && -200000 <= x <= 200000 && … , {x,y,z}, Integers]`
     returns all 195 solutions (including `(162001, -161999, -5400)`) in ~0.4 s.
+    Because its `O(α·B · roots)` work also beats the leaf search's `O(B^2)` and
+    the classical divisor path's `O(B · factoring)` for *small* boxes, it now
+    engages for any non-trivial box (`|coord| > 100`; validated to return the
+    identical solution set to the leaf/divisor pipeline over a wide `(k, box)`
+    sweep, including the `(a,-a,∛k)` family and signed equations). E.g.
+    `x^3 + y^3 + z^3 == 63 && Abs[...] < 10000` drops from ~0.46 s to ~0.02 s,
+    and the `|coord| < 5000` box from ~3.9 s (leaf) to ~0.01 s; only a trivially
+    small box (already sub-millisecond) is left to the leaf/mitm paths.
     The result is complete (small-coordinate solutions and the `(a,-a,∛k)` family
     covered by a divisor sub-search, the rest by Booker's `d < α·|c|` bound across
     the three roles). Restricted to `|k| < ~10⁹`; a box that would hold a huge
