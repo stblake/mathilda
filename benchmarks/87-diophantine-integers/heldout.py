@@ -253,6 +253,14 @@ CASES = [
                         and abs(d["x"]) + abs(d["y"]) + abs(d["z"]) > 0),
          kind="empty", source="Legendre ternary, no nontrivial solution in box"),
 
+    # ---- separable power sums (ordering-aware 128-bit MITM territory) -------
+    dict(label="three-cubes-eq-cube-30",
+         math="Solve[x^3 + y^3 + z^3 == w^3 && 0 < x < y < z < w < 30, {x, y, z, w}, Integers]",
+         vars=["x", "y", "z", "w"], box={k: (1, 29) for k in ["x", "y", "z", "w"]},
+         sat=lambda d: (d["x"] ** 3 + d["y"] ** 3 + d["z"] ** 3 == d["w"] ** 3
+                        and 0 < d["x"] < d["y"] < d["z"] < d["w"]),
+         kind="finite", source="sum of three cubes == a cube (e.g. 3,4,5;6 and 1,6,8;9); separable power-sum"),
+
     # ---- genuinely research-grade: a decline is acceptable, a WRONG is not --
     dict(label="bqf-nonsquare-disc-unbounded",
          math="Solve[x^2 + 3 x y + y^2 == 11, {x, y}, Integers]",

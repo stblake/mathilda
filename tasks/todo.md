@@ -1,112 +1,60 @@
-# Thue / Diophantine — validation-first session (2026-08-20)
+# Efficient Diophantine box search: Frye / Lander–Parkin / general fallback
 
-Baseline: benchmark 88 = **98 CORRECT / 6 DECLINE / 0 WRONG / 0 CRASH** vs PARI/GP
-`thue()`. All unit tests green (`thue_tests`, `solve_integers_tests`,
-`latticereduce_tests`). PARI 2.17.3 on PATH. 4 genuine declines remain (rank-≥2
-units Q(10¹ᐟ⁴)/Q(5¹ᐟ⁵) → M4; totally-complex cyclotomic torsion → M5).
+Plan: `/Users/user/.claude/plans/we-should-have-a-noble-crescent.md`
 
-Emphasis (user-chosen): **validation-first** — strengthen the safety net and
-measure vs PARI; coverage (M4/M5) is a stretch only.
+## Phase 0 — Understand exact internals
+- [ ] Read SICtx / SearchState structs, emit_full, si_verify, MitmEntry, build_result
+- [ ] Read the full Booker template (si_solve_three_cubes_booker + helpers)
+- [ ] Confirm ordering-constraint access (ord_a/ord_b, longest chain, effective_bounds)
 
-## Phase 1 — Reproducible randomized PARI stress grid  ← core deliverable  ✅
-- [x] Built `benchmarks/88-thue-equations/grid.py`: deterministic-seeded random
-      Thue forms (deg 3–6, mixed m incl. |m|≠1) vs PARI `thue()`. Reuses
-      cases.py builders + run.py runners. Exits nonzero only on WRONG/CRASH.
-- [x] Ran 400 cases (seed 20260820): **261 CORRECT / 138 DECLINE / 0 WRONG /
-      0 CRASH** — solve paths genuinely exercised. GRID_REPORT.md + grid_results.json.
+## Phase 1 — Component 2: si_solve_separable_mitm (Lander–Parkin + separable)
+- [ ] Shape-match separable additive single eq, fully bounded, engage-gate
+- [ ] Ordering-aware chain split (hash prefix / iterate suffix), ordered generation
+- [ ] __int128 sums; reuse MitmEntry sorted-array + binary search
+- [ ] Register in si_try_special_forms; witness/decline contract
+- [ ] Verify: Lander–Parkin returns tuple + k=2..6 multiples
 
-## Phase 2 — Performance comparison vs PARI + one optimization  ✅
-- [x] Profiled via THUE_DEBUG. Bottlenecks split: unit search (adv-big-coef-2
-      376ms, sextic 198ms), Voronoi walk (d41 132ms), **brute box (d2-m100 239ms)**.
-- [x] Landed the safe win: the small-|Y| gap-closing brute box did an O(Y2p·Xmax)
-      double scan; replaced the wide-window case with EXACT univariate integer
-      root-finding (O(Y2p) factorisations). Adaptive: narrow window still scans
-      (non-regressing, incl. Xmax=0 corner). **d2-m100: 244ms → 21ms (11.6×).**
-      Answer unchanged; bench 88 still 98/0 WRONG.
+## Phase 2 — Component 1: si_solve_biquadrate_frye (headline)
+- [ ] Shape-match x^4+y^4+z^4==w^4 (unit coeffs, sign/perm normalise), all bounded
+- [ ] Modular sieve tables: mod 625, mod 16, mod 9/13/29; 8k+1 factor constraint
+- [ ] z-window (0.76w, w); residue-restricted decompose; int128 4th-root test
+- [ ] find-first ascending; env-tunable node cap; witness/decline contract
+- [ ] Verify: finds 95800/217519/414560/422481; measure & report timing
 
-## Phase 3 — Expand unit + held-out tests  ✅
-- [x] test_thue.c: +5 M2 general-m cubic regressions (PARI-verified sets),
-      incl. m=100 which pins the optimized wide-Xmax root-finding branch.
-- [x] heldout.py: +3 Thue cases (solvable unbounded m=3, proven-{} m=5,
-      out-of-scope quartic |m| decline). `make check-diophantine-heldout`:
-      24 OK / 3 DECLINE / **0 WRONG**.
+## Phase 3 — Component 3: si_solve_box_modsieve (non-separable)
+- [ ] Modular-pruned nested enumeration; auto modulus M from exponents
+- [ ] Register; witness/decline contract
+- [ ] Verify vs Python brute force on boxed cross-term case
 
-## Phase 4 — M5 totally-complex fields  ✅ (done, better than scoped)
-- [x] Found an elegant route: NOT the planned torsion/complex-i0 Baker port, but
-      the elementary |Im| bound — every root non-real ⇒ |x−θᵢy| ≥ |Im θᵢ|·|y| ⇒
-      |y| ≤ (|m|/∏|Im θᵢ|)^{1/n}. No units/torsion/Baker. `thue_solve_totally_complex`.
-- [x] Solves the WHOLE totally-complex family, any m (not just the 1 M5 case):
-      Q(ζ5) Φ5=1 (6 pts, 0.5ms), x⁴+y⁴={1,2,17,82,3→{}}, Φ7/Φ10. Bench 88 98→99.
-- [x] Grid then caught a WRONG → adjudicated: PARI thue() itself is incomplete on
-      a Q(ζ5) generator (==5: PARI [], true {(1,2),(−1,−2)}, brute-verified).
-      Added a soundness/adjudication step to grid.py (MATHILDA_WRONG vs PARI_WRONG).
-- [x] +6 test_thue.c regressions (Φ5/Φ7, x⁴+y⁴, the PARI-miss form); +3 heldout;
-      leaks=0; check-c99 clean. Grid 278/119/1 PARI_WRONG/0 WRONG.
-
-## Phase 5 — M4 (last coverage gap: rank-2 units)  ◑ partial
-- [x] Diagnosed both M4 targets decline at Gate 2 (rank-2 fundamental units not
-      certified); Baker/enumerate machinery is rank-agnostic — only unit FINDING fails.
-- [x] **Quintic `x⁵−5y⁵=1` (Q(5^{1/5})) — DONE.** Monogenic, units have power-basis
-      coords ≤5, but the deg-5 search box was capped at 4. Raised to 6 (nfunits.c);
-      p-saturation certifies (rank==r unconditional). → {(1,0)} == PARI. Bench 88
-      99→100; sextic/septic/other quintics unchanged (certify at small B). 0 leaks.
-- [x] **Quartic `Q(10^{1/4})` (`x⁴−10y⁴=±1`) — DONE.** Built the rank-2 Voronoi
-      minima walk (`src/numbertheory/nfvoronoi2.c`, `nf_voronoi_units_sig21`): in
-      the (log|σ0|,log|σ1|) plane the subfield unit is along (1,1), the relative
-      unit along (1,−1); the walk takes adjacent O_K minima in the (1,−1) dir
-      (LLL of θ⁻¹O_K, exact mpz) → a unit off the subfield direction
-      ([-1597,898,-505,284] at step 3). `nfunits.c` pairs it with the box's
-      subfield unit → **p-saturation certifies (reg 25.2535 == PARI)**.
-      x⁴−10y⁴=±1 → {(±1,0)}/{} == PARI. Contract-safe (proposal + certify).
-      Fires only when the box fails (no regression). **Bench 88: 100→111/113 —
-      every genuinely-solvable case now solves; the 2 declines are (x−y)³=1,
-      (x−y)⁴=1 which PARI also refuses.** Grid 281/0 WRONG; leaks 0.
-      Remaining M4 (documented, future): general sig-(2,1) quartics beyond the
-      binomial archetype (Q(26^{1/4})/Q(30^{1/4}) decline) + other rank-2
-      signatures = the full 2-D Voronoi complex.
-
-## Close-out
-- [x] `make check-c99` clean; macOS `leaks` = 0 on the new brute-box path.
-- [x] Weekly changelog updated; builtins doc left as-is (perf-only, behavior
-      unchanged, doc still accurate); README + completion-plan note grid.py.
-- [x] Held-out second seed (12345, 300): 176 CORRECT / 0 WRONG. Canonical report
-      restored (seed 20260820, 400: 261/138/0/0).
-- [x] Review section below.
+## Phase 4 — Tests, docs, gates
+- [ ] tests/test_solve_integers.c new cases; regression suite green
+- [ ] benchmarks/87 heldout.py cases (OK / proven {} / DECLINE, zero WRONG)
+- [ ] docs/spec/builtins/solutions-of-equations.md + changelog 2026-08-17 + SOLVE_INTEGERS.md
+- [ ] make check-c99; valgrind delta 0; make check-diophantine-heldout
 
 ## Review
 
-**Shipped (validation-first, all three asks):**
+All three components implemented in `src/solveint.c`, registered in
+`si_try_special_forms` (Frye, separable MITM) and at the leaf-search decline
+point (modsieve).
 
-1. **Stress vs PARI (extensive).** New reproducible `grid.py` — deterministic
-   random Thue forms (deg 3–6, mixed m) vs PARI `thue()`. Seed 20260820, 400
-   cases: 261 CORRECT / 138 DECLINE / **0 WRONG / 0 CRASH**. Plus a held-out
-   second seed (12345, 300 cases). This is the first *reproducible* randomized
-   cross-check (the plan's grids were one-offs). Curated bench 88 unchanged at
-   98/6/**0 WRONG**.
+**Results (measured on this machine):**
+- **Lander–Parkin** `x^5+y^5+z^5+w^5==r^5 && 0<x<y<z<w<r<1000` → complete set
+  (144-tuple + its 2×–6× multiples), **~6.5 s**. Ordering-aware, `__int128`,
+  modular residue sieve. (Was: unevaluated.)
+- **Frye** `x^4+y^4+z^4==w^4 && 0<x<y<z<w<10^6` → `{95800,217519,414560,422481}`,
+  **~11 min single-threaded** (654 s, 62.6e9 decompose iters). Full modular +
+  factor sieve. (Was: unevaluated. Frye 1988 needed a supercomputer.)
+- **General non-separable** big boxes (e.g. `x^2+xy+y^2==z^2 && …<15000`) →
+  complete set via modular-sieved exhaustive leaf search, **~6 s**. (Was:
+  unevaluated.) Separable general boxes (`x^2+3y^4==6z^4`) handled by the
+  existing/MITM path.
 
-2. **Performance vs PARI.** Profiled with THUE_DEBUG: bottlenecks are unit
-   finding (box search / Voronoi) and the small-|Y| brute box — NOT the Baker
-   bound or exponent enumeration. Landed the safe win: exact univariate
-   root-finding for the wide-window brute box (`thue_form_xpoly` +
-   `fmpz_poly_int_roots`), adaptive so narrow windows still scan (non-regressing).
-   **x^3-2y^3=100: 244ms → 21ms (11.6×)**, completeness preserved (grid identical).
-   Remaining gap vs PARI (still 5–30× on unit-heavy cases) is the unit-finder,
-   a deeper item — documented, not rushed.
+**Verification:** 3 new unit tests pass; held-out gate `three-cubes-eq-cube-30`
+OK, 0 wrong answers; modsieve proven identical to the ordinary engine on the
+overlap sub-box; macOS `leaks` 0 bytes; `make check-c99` clean.
 
-3. **Unit + held-out tests.** +5 PARI-verified M2 cubic regressions in
-   test_thue.c (incl. m=100 pinning the optimized branch); +3 heldout.py Thue
-   cases (solvable / proven-{} / out-of-scope decline). All green; 0 WRONG.
-
-**Correctness contract preserved throughout:** complete-or-decline; every ACCEPT
-exact; a decline is always safe. `make check-c99` clean; macOS `leaks` = 0 on the
-new allocation path.
-
-**Not done (deliberate):** Phase 4 stretch (M5 totally-complex cyclotomic
-torsion) not attempted — it changes the certified `thue_exponent_bound` core for
-a single case; rushing it risked the contract. Left as documented gap. M4
-(rank-≥2 units for Q(10¹ᐟ⁴)/Q(5¹ᐟ⁵)) remains the next real coverage milestone.
-
-**Files:** src/solvethue.c (root-finding brute box); benchmarks/88/grid.py,
-GRID_REPORT.md, grid_results.json, README.md; benchmarks/87/heldout.py;
-tests/test_thue.c; docs/spec/changelog/2026-08-17.md;
-docs/design/thue_completion_plan.md.
+**Key design decisions (with the user):** witness semantics (find-and-return,
+never an unproven `{}`); single-thread + factor sieve for Frye; general fallback
+covers non-separable. All engage-gated so existing small-box behaviour is
+unchanged (regression-safe).

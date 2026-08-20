@@ -48,10 +48,10 @@ search.
 | 7 | `si_solve_linear_system_hnf` | general linear system (m≥2 eqns) via HNF |
 | 8 | `si_solve_power_sum_equal` | Prouhet-Tarry-Escott → `{}` via Newton's identities |
 | 9 | `si_solve_mordell` | unbounded imaginary Mordell `y^2 == x^3 + k` (class-number) |
-| 10 | `si_try_special_forms` → `si_solve_pell` / `si_solve_conic` / `si_solve_factorable_conic` / `si_solve_reciprocal` / `si_solve_linelim_bilinear` | bounded Pell; conic; factorable BQF; Egyptian fractions; bilinear divisor |
+| 10 | `si_try_special_forms` → `si_solve_three_cubes_booker` / `si_solve_pell` / `si_solve_conic` / `si_solve_factorable_conic` / `si_solve_elliptic_bqf` / `si_solve_reciprocal` / `si_solve_linelim_bilinear` / **`si_solve_biquadrate_frye`** / **`si_solve_separable_mitm`** | Booker 3-cubes; bounded Pell; conic; factorable BQF; elliptic BQF; Egyptian fractions; bilinear divisor; **Frye biquadrate `x⁴+y⁴+z⁴==w⁴`**; **ordering-aware 128-bit power-sum MITM (Lander–Parkin)** |
 | 11 | `si_solve_multileaf` | staged elimination (Euler brick, …) |
 | 12 | *decline if `n_unbounded >= 2`* | hand back to later phases / unevaluated |
-| 13 | `mitm_solve` / `search_rec` / `si_solve_linear_bounded` / `si_solve_powersum_divisor` | the bounded engine (meet-in-the-middle, leaf search, LLL box, divisor method) |
+| 13 | `mitm_solve` / `search_rec` / `si_solve_linear_bounded` / `si_solve_powersum_divisor` / **`si_solve_box_modsieve`** | the bounded engine (meet-in-the-middle, leaf search, LLL box, divisor method, **modular-sieved leaf search for large non-separable boxes**) |
 
 ### The two correctness invariants (do not break these)
 

@@ -660,6 +660,44 @@ static void test_two_fourth_powers(void) {
              "List[Rule[x, 133], Rule[y, 134], Rule[z, 59], Rule[w, 158]]]");
 }
 
+/* Ordering-aware, 128-bit meet-in-the-middle for a separable power sum.
+ * Lander-Parkin  x^5+y^5+z^5+w^5 == r^5  over a box whose UNORDERED iterate side
+ * exceeds SI_MAX_NODES (so the plain int64 mitm_solve declines) but whose ordered
+ * combinations fit: si_solve_separable_mitm returns the complete set -- the
+ * (27,84,110,133;144) counterexample and its 2x, 3x, 4x multiples below 700. */
+static void test_power_sum_mitm_quintic(void) {
+    run_test("Solve[x^5 + y^5 + z^5 + w^5 == r^5 && 0 < x < y < z < w < r < 700, "
+             "{x, y, z, w, r}, Integers]",
+        "List[List[Rule[x, 27], Rule[y, 84], Rule[z, 110], Rule[w, 133], Rule[r, 144]], "
+             "List[Rule[x, 54], Rule[y, 168], Rule[z, 220], Rule[w, 266], Rule[r, 288]], "
+             "List[Rule[x, 81], Rule[y, 252], Rule[z, 330], Rule[w, 399], Rule[r, 432]], "
+             "List[Rule[x, 108], Rule[y, 336], Rule[z, 440], Rule[w, 532], Rule[r, 576]]]");
+}
+
+/* Frye's biquadrate search  x^4+y^4+z^4 == w^4:  the minimal counterexample to
+ * Euler's conjecture, 95800^4+217519^4+414560^4 = 422481^4.  A narrow window
+ * around w brackets it so the full modular-sieve + decompose machinery runs in
+ * well under a second (the whole 0<w<10^6 search is a ~10-minute single-core
+ * computation -- Frye needed a Connection Machine for it in 1988). */
+static void test_frye_biquadrate(void) {
+    run_test("Solve[x^4 + y^4 + z^4 == w^4 && 0 < x < y < z < w && 422400 < w < 422500, "
+             "{x, y, z, w}, Integers]",
+        "List[List[Rule[x, 95800], Rule[y, 217519], Rule[z, 414560], Rule[w, 422481]]]");
+}
+
+/* Modular-sieved leaf search for a large NON-separable box: the ordering-pruned
+ * box (0<x<y<z<w<600, a cross-term equation) exceeds SI_MAX_NODES so the ordinary
+ * leaf search declines; the residue sieve makes it exhaustible.  Self-validating:
+ * the result restricted to the smaller box the ORDINARY engine solves exactly
+ * must match that engine -- a completeness proof independent of any magic count. */
+static void test_box_modsieve_nonseparable(void) {
+    run_test("With[{a = Solve[x^2 + y^2 + z^2 + x y == w^2 && 0 < x < y < z < w < 500, "
+             "{x, y, z, w}, Integers], "
+             "b = Solve[x^2 + y^2 + z^2 + x y == w^2 && 0 < x < y < z < w < 600, "
+             "{x, y, z, w}, Integers]}, "
+             "Sort[a] === Sort[Select[b, (w /. #) < 500 &]]]", "True");
+}
+
 /* Bounded superelliptic / mixed-power boxes solved by the ordinary leaf search
  * (enumerate the bounded variables, solve the leaf by a perfect-power test). */
 static void test_bounded_mixed_power(void) {
@@ -731,6 +769,9 @@ int main(void) {
     TEST(test_generalized_pell);
     TEST(test_elliptic_bqf);
     TEST(test_two_fourth_powers);
+    TEST(test_power_sum_mitm_quintic);
+    TEST(test_frye_biquadrate);
+    TEST(test_box_modsieve_nonseparable);
     TEST(test_bounded_mixed_power);
     TEST(test_euler_brick);
     TEST(test_quadratic_form);

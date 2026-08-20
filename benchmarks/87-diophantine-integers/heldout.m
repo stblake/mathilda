@@ -464,6 +464,22 @@ Module[{sol, status, tuples, sols, inbox},
     Print["SOLS\tternary-legendre-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
 Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, 1 <= pt[[1]] <= 29 && 1 <= pt[[2]] <= 29 && 1 <= pt[[3]] <= 29 && 1 <= pt[[4]] <= 29];
+  sol = Solve[x^3 + y^3 + z^3 == w^3 && 0 < x < y < z < w < 30, {x, y, z, w}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tthree-cubes-eq-cube-30\t", status];
+  If[status === "finite",
+    tuples = ({x, y, z, w} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tthree-cubes-eq-cube-30\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
+    tuples = Flatten[Table[Simplify[({x, y, z, w} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tthree-cubes-eq-cube-30\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
   inbox = Function[pt, -60 <= pt[[1]] <= 60 && -60 <= pt[[2]] <= 60];
   sol = Solve[x^2 + 3 x y + y^2 == 11, {x, y}, Integers];
   status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",

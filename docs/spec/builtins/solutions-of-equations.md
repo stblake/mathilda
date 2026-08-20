@@ -356,6 +356,60 @@ Attempts to solve an equation or system of equations for one or more variables.
     returns `(24579, 51748, 53534)` (the classic `227 = 24579^3 + 51748^3 −
     53534^3`). The sign substitution is used only for a pure box (no orderings /
     disequations), so it stays exact.
+  - **Sum of like powers = a like power (ordering-aware 128-bit MITM).** A
+    single **separable** additive equation `Σ cᵢ vᵢ^k == c₀ y^k` over an ordered
+    box is solved by a meet-in-the-middle that improves on the plain int64
+    `mitm_solve` in two ways: partial sums are `__int128` (so k-th powers past
+    2⁶³ do not force a decline), and the variables are split along their ordering
+    chain into a contiguous hash prefix and iterate suffix, enumerating only
+    **ordered** tuples (combinations, not the Cartesian product). This is what
+    the **Lander–Parkin** quintic needs:
+    `Solve[x^5 + y^5 + z^5 + w^5 == r^5 && 0 < x < y < z < w < r < 1000, {x,y,z,w,r}, Integers]`
+    returns the complete set — `27^5 + 84^5 + 110^5 + 133^5 = 144^5` (the 1966
+    counterexample to Euler's conjecture) and its 2×–6× multiples — in ~6.5 s,
+    where the plain MITM rejects the box because its *unordered* iterate product
+    (`~10^9`) exceeds the node budget while the *ordered* count (`C(1000,3) ≈
+    1.6×10^8`) fits. A modular residue sieve (built from the collected hash sums
+    mod a structured `M`, e.g. mod 11/25/31/41 for fifth powers) skips the
+    binary search for iterate tuples whose complement residue is unreachable.
+    Engages only when it adds capability the plain MITM lacks (values overflow
+    int64, or an ordering chain makes an otherwise-too-big iterate side fit); a
+    small box is left to the existing path unchanged. Exhaustive over the box, so
+    it returns the complete set or a proven `{}`.
+  - **Sum of three biquadrates = a biquadrate (Frye's search).** `x^4 + y^4 +
+    z^4 == w^4` over a box is searched by Frye's method (R. E. Frye, "Finding
+    95800⁴ + 217519⁴ + 414560⁴ = 422481⁴ on the Connection Machine", 1988) — the
+    minimal counterexample to Euler's conjecture. A box up to `10^6` cannot be
+    exhaustively verified interactively, so this is a **witness search**: it finds
+    and returns the minimal solution, ascending in `w`, and declines (never a
+    spurious `{}`) if the node budget is spent with nothing found. The number
+    theory: for a primitive solution the fourth powers mod 5 force exactly one
+    summand `C != 0 (mod 5)`, the other two `A, B` to be multiples of 5, and
+    `w != 0 (mod 5)`; then `625 | (w^4 − C^4)` and `N = (w^4 − C^4)/625 = a^4 +
+    b^4` is decomposed by scanning `a` over `[~0.841 N^{1/4}, N^{1/4}]`. Extra
+    moduli coprime to 5 (whose sum-of-two-fourth-powers residue set is a proper
+    subset) and Frye's prime-factor constraint (any odd prime `P != 1 (mod 8)`
+    dividing `N` must appear to an exponent `≡ 0 (mod 4)`) prune the `(w,C)`
+    pairs before the decompose — all sound necessary conditions, so no real
+    primitive solution is dropped. `__int128` throughout, plus a mod-2¹⁶ 4th-power
+    fast reject. The full
+    `Solve[x^4 + y^4 + z^4 == w^4 && 0 < x < y < z < w < 1000000, {x,y,z,w}, Integers]`
+    finds `{x → 95800, y → 217519, z → 414560, w → 422481}` in ~11 min on a
+    single modern core (Frye needed a 16384-processor Connection Machine for
+    ~33 hours in 1988). Engages only for a box too large for the exhaustive MITM
+    (`w > 20000`); a tunable node cap (`MATHILDA_FRYE_MAXNODES`) bounds the
+    no-solution case.
+  - **Modular-sieved leaf search (large non-separable boxes).** When the
+    ordering-pruned leaf box still exceeds `SI_MAX_NODES` (so the ordinary leaf
+    search declines), a single polynomial equation is searched **exhaustively**
+    by pruning the innermost enumerated variable to the residues (mod a small
+    `M`) for which the leaf equation can vanish — a sound necessary condition, so
+    the search stays complete: it returns the full set / a proven `{}` when it
+    finishes in the raised budget, and declines (never a partial list) otherwise.
+    This closes the gap for big cross-term boxes, e.g.
+    `Solve[x^2 + x y + y^2 == z^2 && 0 < x < y < z < 15000, {x,y,z}, Integers]`
+    (16386 solutions, ~6 s), validated identical to the ordinary engine on the
+    sub-box it can already exhaust.
   - **Fermat's Last Theorem.** `x^n + y^n == z^n` (n >= 3, equal coefficient
     magnitudes, no constant) with `x, y, z` all strictly positive has no
     solutions (Wiles 1995), so this returns `{}` *immediately*, before any
