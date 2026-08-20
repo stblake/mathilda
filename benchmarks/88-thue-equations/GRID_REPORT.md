@@ -4,8 +4,8 @@ Deterministic random binary forms F(x,y) (degree 3-6, mixed m) vs **PARI/GP `thu
 
 | verdict | n | meaning |
 |---|---|---|
-| CORRECT | 279 | finite set matches PARI |
-| DECLINE | 119 | unevaluated (honest gap); PARI solved |
+| CORRECT | 281 | finite set matches PARI |
+| DECLINE | 117 | unevaluated (honest gap); PARI solved |
 | PARI_WRONG | 1 | Mathilda found a genuine solution PARI's thue() missed (oracle incomplete; Mathilda brute-verified correct) |
 | UNVERIFIED | 1 | PARI rejected the form (perfect power / repeated factor) |
 
@@ -17,7 +17,7 @@ Adjudicated by independently checking each disputed point against `F(x,y)==m`: M
 
 - `grid-0032-n4` — `y^4 - 3*x*y^3 + 4*x^2*y^2 - 2*x^3*y + x^4 == 5` (Mathilda 2, PARI 0). pcoef `[1, -3, 4, -2, 1]`.
 
-## Solve paths exercised: 279 CORRECT
+## Solve paths exercised: 281 CORRECT
 
 A sample (the grid's value is that these are *machine-generated*, not chosen to look good):
 

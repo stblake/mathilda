@@ -152,6 +152,13 @@ static void test_rigorous(void) {
      * have power-basis coords <= 5, reached once the deg-5 unit-search box grows
      * to 6.  Complete set {(1,0)} (== PARI thue). */
     { const long f[] = {1,0,0,0,0,-5}; check_rigorous(f, 5, 1, 1, 0, "x^5-5y^5==1 (rank-2 quintic units)"); }
+    /* Rank-2 signature-(2,1) quartic Q(10^{1/4}) (reg 25.3, M4): the second
+     * fundamental unit is intrinsically large (Minkowski |sigma1|~1036), found
+     * by the rank-2 Voronoi (1,-1) minima chain (nfvoronoi2.c) paired with the
+     * box's subfield unit theta^2-3; p-saturation certifies (reg == PARI's
+     * 25.2535).  Sets == PARI thue. */
+    { const long f[] = {1,0,0,0,-10}; check_rigorous(f, 4, 1,  2, 0, "x^4-10y^4==1 (rank-2 Voronoi, Q(10^1/4))"); }
+    { const long f[] = {1,0,0,0,-10}; check_rigorous(f, 4, -1, 0, 0, "x^4-10y^4==-1 (rank-2 Voronoi)"); }
     printf("  rigorous: OK\n");
 }
 

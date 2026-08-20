@@ -360,13 +360,17 @@ of total degree ≥3 equal to a constant. Currently such inputs decline (e.g.
 > `benchmarks/88-thue-equations/grid.py` (deg 3–6, mixed `m`) vs PARI, with an
 > adjudicator that verifies disputed points directly — so it distinguishes a real
 > bug from a PARI `thue()` incompleteness (found one on a `Q(ζ₅)` generator).
-> **M4-quintic (2026-08-20): rank-2 units for `x⁵−5y⁵=1`** — `Q(5^{1/5})` is
-> monogenic and its fundamental units have power-basis coords ≤5; the deg-5
-> unit-search box (`nfunits.c`) was capped at 4, now 6, so the box reaches them
-> (p-saturation certifies). Bench 88 CORRECT 99→100. The last remaining gap is
-> the **quartic `Q(10^{1/4})` (`x⁴−10y⁴=±1`)**: its 2nd fundamental unit is
-> intrinsically large (Minkowski `|σ₁|≈1036`), needing a Voronoi/Buchmann rank-2
-> minima-walk (no box reaches it). **Full completion roadmap (algorithms, files, order, verification):**
+> **M4 (2026-08-20): rank-2 unit finding — quintic + quartic.** `x⁵−5y⁵=1`
+> (`Q(5^{1/5})`, monogenic, unit coords ≤5): just needed the deg-5 unit-search
+> box raised 4→6 (`nfunits.c`). `x⁴−10y⁴=±1` (`Q(10^{1/4})`, reg 25.3): the 2nd
+> fundamental unit is intrinsically large (Minkowski `|σ₁|≈1036`), so
+> `src/numbertheory/nfvoronoi2.c` walks the chain of `O_K` minima in the
+> `(1,-1)` (relative-unit) direction and pairs the result with the box's
+> subfield unit; p-saturation certifies (reg 25.2535 == PARI). **Benchmark 88
+> now 111/113 CORRECT — every genuinely-solvable case solves; the 2 declines are
+> `(x−y)^3=1`/`(x−y)^4=1`, perfect powers PARI also refuses.** Remaining M4:
+> general sig-(2,1) quartics beyond the binomial archetype and other rank-2
+> signatures (the full 2-D Voronoi complex). **Full completion roadmap (algorithms, files, order, verification):**
 > [`docs/design/thue_completion_plan.md`](docs/design/thue_completion_plan.md).
 > Stress-tested vs PARI/GP `thue()` in `benchmarks/88-thue-equations/`.
 

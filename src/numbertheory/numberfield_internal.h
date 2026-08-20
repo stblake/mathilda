@@ -63,6 +63,16 @@ struct NumberField {
  * Returns false in a non-FLINT build.  (Defined in nfvoronoi.c.) */
 bool nf_voronoi_unit_cubic11(struct NumberField* K, mpz_t* out);
 
+/* Rank-2 unit finding by directed Voronoi minima walks, for signature (2,1)
+ * quartics (e.g. Q(10^{1/4}), x^4-10y^4==+-1): the box search and the rank-1
+ * chain miss the intrinsically-large second fundamental unit.  Proposes up to 2
+ * independent units into out[0], out[1] (each `deg` pre-init'd mpz theta-power
+ * numerator coords) and returns the number proposed (0..2).  PROPOSAL only --
+ * the caller certifies (p-saturation); a wrong/dependent proposal DECLINEs.
+ * Monogenic sig-(2,1) only for now.  Returns 0 in a non-FLINT build.  (Defined
+ * in nfvoronoi2.c.) */
+int nf_voronoi_units_sig21(struct NumberField* K, mpz_t** out);
+
 /* Round 2 (Pohst-Zassenhaus) maximal order for the monic integer poly
  * coeffs[0..n].  primes[]/pexp[] are the disc(f) prime factors (only those with
  * pexp>=2 are processed).  On success fills W_out (mpz_t[n*n] row-major,

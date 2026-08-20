@@ -456,7 +456,12 @@ Attempts to solve an equation or system of equations for one or more variables.
   — which proposes the unit for the *same* p-saturation certifier. So
   `x^3 - 15 y^3 == 1`, `x^3 - 41 y^3 == +-1`, `x^3 - 42 y^3 == 1`,
   `x^3 - 97 y^3 == 1` now return their complete sets (each `{(+-1, 0)}`) instead
-  of declining.
+  of declining. For **rank-2** fields the box likewise misses an
+  intrinsically-large fundamental unit: the monogenic quintic `Q(5^{1/5})`
+  (`x^5-5y^5`) is reached by a wider search box, and the signature-(2,1) quartic
+  `Q(10^{1/4})` (`x^4-10y^4 == +-1`) by a **rank-2 Voronoi minima walk** in the
+  relative-unit direction (`nfvoronoi2.c`) paired with the box's subfield unit —
+  again certified by p-saturation (its regulator matches PARI's `bnfinit`).
   - **General `m` (`|m| != 1`).** For a monic form `N(x - theta*y) = F(x,y) =
     m`, so `beta = x - theta*y` is a norm-`m` integer `mu * unit`, with `mu`
     over a finite set of **bounded-norm representatives**.  For a rank-1 complex

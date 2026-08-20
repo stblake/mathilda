@@ -50,12 +50,20 @@ measure vs PARI; coverage (M4/M5) is a stretch only.
       coords ≤5, but the deg-5 search box was capped at 4. Raised to 6 (nfunits.c);
       p-saturation certifies (rank==r unconditional). → {(1,0)} == PARI. Bench 88
       99→100; sextic/septic/other quintics unchanged (certify at small B). 0 leaks.
-- [ ] **Quartic `Q(10^{1/4})` (`x⁴−10y⁴=±1`) — still open (documented).** Its 2nd
-      fundamental unit is intrinsically large in the Minkowski embedding
-      (|σ₁(fu2)|≈1036, forced by reg 25.3), so NO coefficient box / Fincke-Pohst
-      short-vector search reaches it. Needs a Voronoi/Buchmann rank-2 minima-walk
-      (generalising the cubic nfvoronoi.c) — a real subsystem; not rushed
-      (contract: a decline is always safe, a wrong answer is not). Left honest.
+- [x] **Quartic `Q(10^{1/4})` (`x⁴−10y⁴=±1`) — DONE.** Built the rank-2 Voronoi
+      minima walk (`src/numbertheory/nfvoronoi2.c`, `nf_voronoi_units_sig21`): in
+      the (log|σ0|,log|σ1|) plane the subfield unit is along (1,1), the relative
+      unit along (1,−1); the walk takes adjacent O_K minima in the (1,−1) dir
+      (LLL of θ⁻¹O_K, exact mpz) → a unit off the subfield direction
+      ([-1597,898,-505,284] at step 3). `nfunits.c` pairs it with the box's
+      subfield unit → **p-saturation certifies (reg 25.2535 == PARI)**.
+      x⁴−10y⁴=±1 → {(±1,0)}/{} == PARI. Contract-safe (proposal + certify).
+      Fires only when the box fails (no regression). **Bench 88: 100→111/113 —
+      every genuinely-solvable case now solves; the 2 declines are (x−y)³=1,
+      (x−y)⁴=1 which PARI also refuses.** Grid 281/0 WRONG; leaks 0.
+      Remaining M4 (documented, future): general sig-(2,1) quartics beyond the
+      binomial archetype (Q(26^{1/4})/Q(30^{1/4}) decline) + other rank-2
+      signatures = the full 2-D Voronoi complex.
 
 ## Close-out
 - [x] `make check-c99` clean; macOS `leaks` = 0 on the new brute-box path.

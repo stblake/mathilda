@@ -328,6 +328,7 @@ set(COMMON_SRC
     ../src/numbertheory/numberfield.c
     ../src/numbertheory/nfunits.c
     ../src/numbertheory/nfvoronoi.c
+    ../src/numbertheory/nfvoronoi2.c
     ../src/numbertheory/nfround2.c
     ../src/partitions.c
     ../src/special_functions/gamma.c

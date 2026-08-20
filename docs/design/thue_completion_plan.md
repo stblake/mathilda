@@ -30,16 +30,14 @@ oracle over ~100 equations) is the gate: any `WRONG`/`CRASH` fails.
 
 **Benchmark 88:** after M1 (Voronoi units) + M2 (general `m`) + M3 (Round-2
 maximal order) + reducible forms (§6) + Minkowski-LLL O_K basis + M2b (rank-2
-`|m| != 1`) + M5 (totally complex) + M4-quintic, **100 CORRECT / 4 DECLINE / 0
-WRONG / 0 CRASH** (of the original 104; 48/56 before M1, 56/48 after M1, 65/39
-after M2, 81/23 after M3, 94/10 after reducible forms, 96/8 after Minkowski-LLL,
-98/6 after M2b, 99/5 after M5). Of the 4 declines, 2 are the reducible perfect
-powers PARI also refuses (correct on both sides); the **only genuine gap left** is
-the rank-2 non-monogenic... no, *monogenic* large-regulator quartic
-`Q(10^{1/4})` (`x^4-10y^4==±1`) — its second fundamental unit is intrinsically
-large in the Minkowski embedding (forced by reg 25.3), reachable only by a
-Voronoi/Buchmann minima-walk (M4-quartic). The quintic `x^5-5y^5` (M4) and
-totally complex (`r1=0`, M5) are now DONE. Cross-checked vs PARI over a 270-case
+`|m| != 1`) + M5 (totally complex) + M4 (quintic **and** quartic), **111 CORRECT
+/ 2 DECLINE / 0 WRONG / 0 CRASH** (113 cases; the arc: 48/56 before M1, 56/48
+after M1, 65/39 after M2, 81/23 after M3, 94/10 after reducible forms, 96/8 after
+Minkowski-LLL, 98/6 after M2b, +M5, 100/4 after M4-quintic). **The 2 remaining
+declines are `(x-y)^3==1` and `(x-y)^4==1` — reducible perfect powers PARI
+`thue` also refuses (correct on both sides): the engine now solves every
+genuinely-solvable case in the corpus.** The `Q(10^{1/4})` gap was closed by the
+rank-2 Voronoi minima walk (`src/numbertheory/nfvoronoi2.c`, §3.1/§3.2 below). Cross-checked vs PARI over a 270-case
 `|m| != 1` grid (M2), a 130-case non-monogenic grid (M3), a 90-case reducible
 grid, a 150-case two-quadratic grid, and the checked-in randomized `grid.py`
 (seed 20260820, 400 cases): 0 WRONG (1 case is a PARI `thue()` incompleteness,
@@ -311,11 +309,19 @@ WRONG/CRASH, coverage strictly up).
    - **quintic `x^5-5y^5` — ✅ DONE (2026-08-20)**: monogenic, units have small
      power-basis coords; just needed the deg-5 search box raised to 6
      (`nfunits.c`). Bench 88 CORRECT 99→100.
-   - **quartic `Q(10^{1/4})` (`x^4-10y^4==±1`) — still open**: needs a
-     Voronoi/Buchmann rank-2 minima-walk (its 2nd fundamental unit is
-     intrinsically large in the Minkowski embedding, `|σ₁|≈1036`, so no box or
-     Fincke–Pohst short-vector search reaches it). This is the rank-2
-     generalisation of the cubic `nfvoronoi.c` — the real remaining work.
+   - **quartic `Q(10^{1/4})` (`x^4-10y^4==±1`) — ✅ DONE (2026-08-20)**:
+     `src/numbertheory/nfvoronoi2.c` (`nf_voronoi_units_sig21`) is a directed
+     Voronoi minima walk for sig-(2,1) quartics with a real quadratic subfield.
+     In the `(log|σ0|,log|σ1|)` plane the subfield unit is along `(1,1)`, the
+     relative unit along `(1,-1)`; the walk takes adjacent `O_K` minima in the
+     `(1,-1)` direction (LLL of `θ⁻¹O_K`, exact mpz coords) to a unit off the
+     subfield direction (`[-1597,898,-505,284]` at step 3), which `nfunits.c`
+     pairs with the box's subfield unit — p-saturation certifies (reg 25.2535 ==
+     PARI). `x^4-10y^4==±1` solves. Fires only when the box fails; contract-safe.
+     **Remaining**: the `(1,1)` chain's gate does not converge (the box supplies
+     that unit here, so it is not needed for the binomial archetype), and general
+     sig-(2,1) quartics beyond the archetype (`Q(26^{1/4})`, `Q(30^{1/4})`
+     decline) — the full 2-D Voronoi complex. Other rank-2 signatures unaddressed.
 5. **M5 — Totally complex (`r1=0`)** (§3.4): ✅ **DONE (2026-08-20)** — the
    elementary `|Im|` bound, not the planned torsion/complex-`i0` port; solves the
    whole family for any `m`. Bench 88 CORRECT 98→99.

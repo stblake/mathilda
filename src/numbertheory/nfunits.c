@@ -519,6 +519,50 @@ NFUnits* nf_fundamental_units(NumberField* K) {
                           ok, R, voro_ms, (clock() - ct) * 1000.0 / CLOCKS_PER_SEC);
     }
 
+    /* Fallback for rank-2 signature-(2,1) quartics (e.g. Q(10^{1/4}),
+     * x^4-10y^4==+-1) whose SECOND fundamental unit is intrinsically large in
+     * the Minkowski embedding (unreachable by any coefficient box): directed
+     * Voronoi minima walks propose two independent units, and the SAME
+     * p-saturation certifies them (contract unchanged).  Monogenic only. */
+    if (!ok && deg == 4 && nf_r1(K) == 2 && nf_r2(K) == 1 && r == 2 && mpz_cmp_ui(Dden, 1) == 0) {
+        clock_t vt = clock();
+        int np = nf_voronoi_units_sig21(K, selz);      /* the relative unit -> selz[0] */
+        double voro_ms = (clock() - vt) * 1000.0 / CLOCKS_PER_SEC;
+        clock_t ct = clock();
+        /* The (1,1) subfield direction is not walked; its unit is the shortest
+         * box candidate (all box units here are its powers -- that is why the
+         * box could not form rank 2).  Combine: selz[0] = relative unit (walk),
+         * selz[1] = shortest box unit.  p-saturation certifies (or DECLINEs). */
+        if (np == 1 && ncand >= 1) {
+            /* pick the shortest NON-torsion box unit (cand[0] is the trivial
+             * unit 1, log-embedding 0); it is the subfield unit or a power. */
+            int kb = -1;
+            for (int k = 0; k < ncand; k++) if (cand[k].nrm2 > 1e-9) { kb = k; break; }
+            if (kb >= 0) {
+                for (int i = 0; i < deg; i++) mpz_set_si(selz[1][i], (long)cand[kb].c[i]);
+                np = 2;
+            }
+        }
+        if (np == 2) {
+            /* R = |det| of the 2x2 log-embedding matrix (places 0,1) -- only used
+             * to bound the p-saturation prime list; the rank test is the proof. */
+            double L[4];
+            for (int j = 0; j < 2; j++) {
+                arb_ptr lv = _arb_vec_init(m);
+                nf_log_embedding_int(K, (const mpz_t*)selz[j], lv);
+                for (int i = 0; i < 2; i++) L[j * 2 + i] = arf_get_d(arb_midref(lv + i), ARF_RND_NEAR);
+                _arb_vec_clear(lv, m);
+            }
+            R = fabs(L[0] * L[3] - L[1] * L[2]);
+            if (udbg) fprintf(stderr, "[units-prof] voronoi2 combine: u0=[%ld,%ld,%ld,%ld] L0=(%.4f,%.4f) u1=[%ld,%ld,%ld,%ld] L1=(%.4f,%.4f) R=%.5f\n",
+                                  mpz_get_si(selz[0][0]), mpz_get_si(selz[0][1]), mpz_get_si(selz[0][2]), mpz_get_si(selz[0][3]), L[0], L[1],
+                                  mpz_get_si(selz[1][0]), mpz_get_si(selz[1][1]), mpz_get_si(selz[1][2]), mpz_get_si(selz[1][3]), L[2], L[3], R);
+            if (R > 1e-6 && cert_saturate(K, selz, 2, R, Dden)) ok = true;
+        }
+        if (udbg) fprintf(stderr, "[units-prof] voronoi2 fallback np=%d ok=%d R=%.3f  walk=%.2fms certify=%.2fms\n",
+                          np, ok, R, voro_ms, (clock() - ct) * 1000.0 / CLOCKS_PER_SEC);
+    }
+
     if (ok) {
         U->regulator = R;
         for (int j = 0; j < r; j++) {

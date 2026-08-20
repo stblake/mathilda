@@ -400,6 +400,38 @@ Module[{sol, status, tuples, sols, inbox},
     Print["SOLS\tthue-totallycomplex-x4y4-3-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
 Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, -50 <= pt[[1]] <= 50 && -50 <= pt[[2]] <= 50];
+  sol = Solve[x^4 - 10 y^4 == 1, {x, y}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tthue-rank2-quartic-d10\t", status];
+  If[status === "finite",
+    tuples = ({x, y} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tthue-rank2-quartic-d10\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
+    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tthue-rank2-quartic-d10\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, -50 <= pt[[1]] <= 50 && -50 <= pt[[2]] <= 50];
+  sol = Solve[x^4 - 10 y^4 == -1, {x, y}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tthue-rank2-quartic-d10-neg-empty\t", status];
+  If[status === "finite",
+    tuples = ({x, y} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tthue-rank2-quartic-d10-neg-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
+    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tthue-rank2-quartic-d10-neg-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
   inbox = Function[pt, -6 <= pt[[1]] <= 6 && -6 <= pt[[2]] <= 6];
   sol = Solve[x^2 + y^2 == 25, {x, y}, Integers];
   status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
