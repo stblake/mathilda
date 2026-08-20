@@ -332,6 +332,7 @@ void repl_loop(void) {
 
 #include "core.h"
 #include "loadmodule.h"
+#include "context.h"
 
 /* =====================================================================
  * Minimal NDJSON pipe-mode protocol
@@ -997,13 +998,18 @@ int main(int argc, char** argv) {
      * far better than the previous silent load of a non-functional kernel. */
     mathilda_load_module("init.m");
 
+    int rc = 0;
     if (script) {
-        return run_script_file(script);
-    }
-    if (pipe_mode) {
+        rc = run_script_file(script);
+    } else if (pipe_mode) {
         pipe_mode_loop();
     } else {
         repl_loop();
     }
-    return 0;
+    /* Tear down the context subsystem so its $Context / $ContextPath strings and
+     * any open package frames are freed rather than lingering as leaks at exit.
+     * context_init() is called from core_init(); this is its symmetric partner,
+     * which was previously never invoked (dead code). Nothing runs after this. */
+    context_shutdown();
+    return rc;
 }

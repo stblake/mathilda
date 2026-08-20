@@ -1226,7 +1226,7 @@ Out[2]= True
 > unimodular transform, recording every operation on `u`; pivots are then made
 > positive and entries above them reduced. The same `linalg_hnf` primitive
 > backs exact linear Diophantine **system** solving in `Solve[…, Integers]`
-> (`src/solveint.c`).
+> (`src/solve/solveint_linear.c`).
 
 ## FindIntegerNullVector
 Finds an integer relation among a list of numbers (PSLQ).

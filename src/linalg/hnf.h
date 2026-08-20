@@ -4,7 +4,7 @@
  * Row-style HNF with the unimodular transform recorded, plus the
  * `HermiteDecomposition[A]` builtin.  The row HNF is the reusable integer
  * linear-algebra primitive behind exact linear Diophantine system solving
- * (src/solveint.c) and lattice / module computations.
+ * (src/solve/solveint_linear.c) and lattice / module computations.
  */
 #ifndef MATHILDA_HNF_H
 #define MATHILDA_HNF_H

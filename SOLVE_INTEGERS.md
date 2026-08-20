@@ -15,7 +15,7 @@ file/function pointers, and add a held-out case (see §4).
 ## 1. Orientation — how the solver is put together
 
 The integer solver is an **Integers-domain pre-pass** on `Solve`. `builtin_solve`
-(`src/solve.c`) calls `solveint_solve_integer(expr, vars, dom)` (`src/solveint.c`)
+(`src/solve/solve.c`) calls `solveint_solve_integer(expr, vars, dom)` (`src/solve/solveint.c`)
 *before* the ordinary Complexes/Reals dispatch. It returns one of:
 
 - a **finite solution list** `{{x -> …, …}, …}` — concrete integer tuples;
@@ -77,11 +77,25 @@ search.
 
 ### Where things live
 
-- `src/solveint.c` — the whole integer engine (entry + every `si_*` method).
-- `src/solve.c` — `builtin_solve`, the Integers pre-pass wiring, the spurious-`{}`
-  guards.
-- `src/solvelinsys.c` — the Complexes/Reals linear-system specialist (declines
-  the underdetermined integer case).
+- `src/solve/` — the whole Solve source family lives here. The integer engine is
+  split one file per method:
+  - `src/solve/solveint.c` — the top dispatcher `solveint_solve_integer`, the
+    special-forms sub-dispatch, the Fermat shortcut, and `solveint_init`.
+  - `src/solve/solveint_internal.h` — the shared substrate: `SICtx` /
+    `SearchState`, the `SI_*` limits, the inline `mk_*`/`is_*` helpers, and the
+    cross-file prototypes for every `si_*` entry point.
+  - `src/solve/solve_common.c` — the shared implementation (constraint store,
+    bound propagation, univariate roots, `si_verify`/`emit_full`, result
+    assembly).
+  - `src/solve/solveint_<method>.c` — one method per file: `leaf`, `mitm`,
+    `linear`, `pell`, `genpell`, `reciprocal`, `bilinear`, `pte`, `mordell`,
+    `powersum_div`, `conic`, `cubes`, `frye`, `exp`, `powerleaf`, `thue`.
+- `src/solve/solve.c` — `builtin_solve`, the Integers pre-pass wiring, the
+  spurious-`{}` guards.
+- `src/solve/solvelinsys.c` — the Complexes/Reals linear-system specialist
+  (declines the underdetermined integer case).
+- New `src/solve/*.c` files must be added to the test `COMMON_SRC` in
+  `tests/CMakeLists.txt` (CMake has no glob).
 - `src/linalg/hnf.c` / `hnf.h` — `linalg_hnf` (row HNF + unimodular transform) and
   the `HermiteDecomposition` builtin. New linalg `.c` files must be added to the
   test `COMMON_SRC` in `tests/CMakeLists.txt`.
@@ -319,12 +333,12 @@ of total degree ≥3 equal to a constant. Currently such inputs decline (e.g.
 `x³ − 2 y³ == 1` unbounded); bounded versions already work via the leaf search.
 
 > **Status (2026-08-19): DONE for the monic `|m|=1` monogenic case.**
-> `src/solvethue.{c,h}` implements the full Tzanakis–de Weger method (steps
+> `src/solve/solvethue.{c,h}` implements the full Tzanakis–de Weger method (steps
 > 1–5): field setup, reduce to unit equations, **Baker (Waldschmidt) initial
 > bound + de-Weger LLL reduction** (`thue_exponent_bound`, `arb`/`acb` at 1600
 > bits, reusing `lll_reduce_q`), the Q-dependent case (iii) via
 > relation-detection + the L-trick, and exact reconstruction/verification.
-> `si_solve_thue` (`src/solveint.c`) dispatches, so **`Solve[…, Integers]` now
+> `si_solve_thue` (`src/solve/solveint_thue.c`) dispatches, so **`Solve[…, Integers]` now
 > returns the complete set** for `x³−2y³=±1`, `x³−7y³=1`, `x³−3xy²+y³=1`,
 > `x⁴−2y⁴=−1`, the Thomas cubic, etc. (`tests/test_thue.c`, incl. the automatic
 > path). Out-of-scope inputs DECLINE safely: non-monogenic field (`x³−17y³=1`),
@@ -349,7 +363,7 @@ of total degree ≥3 equal to a constant. Currently such inputs decline (e.g.
 > `Q(d^{1/4})` (incl. index-16 `Q(12^{1/4})`) now solve; benchmark 88 CORRECT
 > 65→81, 130-case non-monogenic PARI grid 0 WRONG.
 > **M5 (2026-08-20): totally complex fields (`r1=0`), any `m`.**
-> `thue_solve_totally_complex` (`src/solvethue.c`): every root is non-real, so
+> `thue_solve_totally_complex` (`src/solve/solvethue.c`): every root is non-real, so
 > `|x−θᵢy| ≥ |Im θᵢ|·|y|` gives the elementary rigorous bound
 > `|y| ≤ (|m|/∏|Im θᵢ|)^{1/n}` — no units/torsion/Baker; each `y` closed by exact
 > univariate root-finding. Solves `Q(ζ₅)` cyclotomic quartic (6 pts),

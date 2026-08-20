@@ -109,6 +109,13 @@ src/
                     nt_gaussian.c, declared in numbertheory_internal.h)
   poly/             Polynomial subsystem (univariate, multivariate, factoring,
                     algebraic-number factoring, polynomial solving)
+  solve/            Solve subsystem: the top dispatcher (solve.c) and the
+                    Complexes/Reals leaf solvers (solvemod, solverad, solvenlsys,
+                    solvelinsys, solvetrig, solveinv, solvealways, solvethue),
+                    plus the Solve[..., Integers] Diophantine engine split one
+                    file per method (solveint.c dispatcher, solve_common.c
+                    substrate, solveint_<method>.c; shared internals in
+                    solveint_internal.h)
   linalg/           Dense linear algebra; eigen kernels split by algorithm
   simp/             Simplify, trig simplification, trig rationalisation
   stats/            Descriptive statistics: Mean, RootMeanSquare, Median,

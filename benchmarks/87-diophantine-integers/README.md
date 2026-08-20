@@ -1,7 +1,7 @@
 # 87 — Diophantine solving: Mathilda vs sympy
 
 A head-to-head of **integer equation solving** — Mathilda's
-`Solve[eqns && constraints, vars, Integers]` (the `src/solveint.c` pre-pass)
+`Solve[eqns && constraints, vars, Integers]` (the `src/solve/` pre-pass)
 against **sympy** (`sympy.solvers.diophantine.diophantine`) — across the
 well-known Diophantine families: sums of squares, linear systems, Pell and
 negative Pell, Pythagorean triples with a perimeter, Egyptian fractions, Markov

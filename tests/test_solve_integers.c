@@ -2,7 +2,7 @@
  * test_solve_integers.c
  *
  * Unit tests for the integer-domain (Diophantine) solver
- * (src/solveint.c): Solve[eqns && constraints, vars, Integers].
+ * (src/solve/): Solve[eqns && constraints, vars, Integers].
  *
  * Outputs are compared against FullForm strings so the canonical
  * List[List[Rule[var, val]], ...] form (ascending by value tuple) is

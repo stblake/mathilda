@@ -237,6 +237,7 @@ include_directories(../src/graphics)
 include_directories(../src/graph)
 include_directories(../src/strings)
 include_directories(../src/strings/regex)
+include_directories(../src/solve)
 if(EXISTS "/opt/homebrew/include")
     include_directories(/opt/homebrew/include)
 endif()
@@ -694,8 +695,8 @@ set(COMMON_SRC
     ../src/root_numeric.c
     ../src/radicals.c
     ../src/poly/poly_eval_mpfr.c
-    ../src/solve.c
-    ../src/solvealways.c
+    ../src/solve/solve.c
+    ../src/solve/solvealways.c
     ../src/numerical_roots/findroot.c
     ../src/numerical_calculus/findmin.c
     ../src/numerical_calculus/findmin_common.c
@@ -723,14 +724,31 @@ set(COMMON_SRC
     ../src/numerical_calculus/nm_basin_hopping.c
     ../src/numerical_calculus/nm_driver.c
     ../src/poly/solvepoly.c
-    ../src/solvelinsys.c
-    ../src/solvenlsys.c
-    ../src/solverad.c
-    ../src/solveinv.c
-    ../src/solvetrig.c
-    ../src/solvemod.c
-    ../src/solveint.c
-    ../src/solvethue.c
+    ../src/solve/solvelinsys.c
+    ../src/solve/solvenlsys.c
+    ../src/solve/solverad.c
+    ../src/solve/solveinv.c
+    ../src/solve/solvetrig.c
+    ../src/solve/solvemod.c
+    ../src/solve/solveint.c
+    ../src/solve/solve_common.c
+    ../src/solve/solveint_leaf.c
+    ../src/solve/solveint_mitm.c
+    ../src/solve/solveint_reciprocal.c
+    ../src/solve/solveint_bilinear.c
+    ../src/solve/solveint_pell.c
+    ../src/solve/solveint_genpell.c
+    ../src/solve/solveint_linear.c
+    ../src/solve/solveint_pte.c
+    ../src/solve/solveint_mordell.c
+    ../src/solve/solveint_powersum_div.c
+    ../src/solve/solveint_conic.c
+    ../src/solve/solveint_cubes.c
+    ../src/solve/solveint_frye.c
+    ../src/solve/solveint_exp.c
+    ../src/solve/solveint_powerleaf.c
+    ../src/solve/solvethue.c
+    ../src/solve/solveint_thue.c
     ../src/zero_test.c
     ../src/numeric_complex.c
     ../src/flint_num_bridge.c

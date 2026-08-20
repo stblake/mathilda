@@ -181,7 +181,7 @@ Attempts to solve an equation or system of equations for one or more variables.
   yield `{}` under `Integers` unless the user opts into radical output.
 - **Diophantine solving (`Integers` with constraints).** When the input is a
   polynomial equation (or system) conjoined with inequality / ordering /
-  disequation constraints, a dedicated pre-pass (`src/solveint.c`) finds *all*
+  disequation constraints, a dedicated pre-pass (`src/solve/`) finds *all*
   integer solutions:
   `Solve[x^2 + 2 y^3 == 3681 && x > 0 && y > 0, {x, y}, Integers]` ->
   `{{x -> 15, y -> 12}, {x -> 41, y -> 10}, {x -> 57, y -> 6}}`.

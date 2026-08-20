@@ -11,7 +11,7 @@
  * whose determinant is s*a + t*b = (s*a_r + t*a_i)/g = 1, so P stays
  * unimodular.  Pivots are then made positive and entries above each pivot are
  * reduced into [0, pivot).  This is the reusable integer primitive behind
- * exact linear Diophantine system solving (src/solveint.c).
+ * exact linear Diophantine system solving (src/solve/solveint_linear.c).
  */
 #include "hnf.h"
 #include "linalg.h"
