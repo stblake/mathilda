@@ -742,10 +742,89 @@ static void test_sum_of_two_squares(void) {
         "List[List[Rule[x, 0], Rule[y, 0]]]");
 }
 
+/* Homogeneous ternary quadratic / Legendre solver (Tier 2 E).  Legendre proves
+ * solvability; an unsolvable form returns the trivial solution {{0,0,0}} (NOT
+ * {}), a solvable one the complete 2-parameter family.  Property assertions:
+ * every branch satisfies the equation, the tricky primitives are covered, and a
+ * multi-representation k declines rather than emit an incomplete family. */
+static void test_ternary_quadratic(void) {
+    /* Legendre fails (3 == 3 mod 4 divides k) -> trivial only. */
+    run_test("Solve[x^2 + y^2 == 3 z^2, {x, y, z}, Integers]",
+        "List[List[Rule[x, 0], Rule[y, 0], Rule[z, 0]]]");
+    /* Definite (all-positive) form -> trivial only. */
+    run_test("Solve[x^2 + y^2 + z^2 == 0, {x, y, z}, Integers]",
+        "List[List[Rule[x, 0], Rule[y, 0], Rule[z, 0]]]");
+    /* Pythagorean and 2z^2: every branch at a fixed parameter point satisfies
+     * the equation identically. */
+    run_test("Union[(x^2 + y^2 - z^2) /. (Solve[x^2 + y^2 == z^2, {x, y, z}, "
+             "Integers] /. {C[1] -> 3, C[2] -> 2, C[3] -> 2})]", "List[0]");
+    run_test("Union[(x^2 + y^2 - 2 z^2) /. (Solve[x^2 + y^2 == 2 z^2, {x, y, z}, "
+             "Integers] /. {C[1] -> 4, C[2] -> 1, C[3] -> 3})]", "List[0]");
+    /* Coverage: the tangent primitive (1,1,1) and the anti-correlated (1,7,5)
+     * -- the cases a single naive chord family misses -- are both produced. */
+    run_test("MemberQ[Level[Table[{x, y, z} /. Solve[x^2 + y^2 == 2 z^2, {x, y, z}, "
+             "Integers] /. {C[1] -> a, C[2] -> b, C[3] -> c}, {a, -3, 3}, {b, -3, 3}, "
+             "{c, -3, 3}], {-2}], {1, 1, 1}]", "True");
+    run_test("MemberQ[Level[Table[{x, y, z} /. Solve[x^2 + y^2 == 2 z^2, {x, y, z}, "
+             "Integers] /. {C[1] -> a, C[2] -> b, C[3] -> c}, {a, -3, 3}, {b, -3, 3}, "
+             "{c, -3, 3}], {-2}], {1, 7, 5}]", "True");
+    /* Multi-representation k (65 = 5*13) has several solution classes one witness
+     * cannot cover -> decline, never a wrong incomplete family. */
+    run_test("Head[Solve[x^2 + y^2 == 65 z^2, {x, y, z}, Integers]]", "Solve");
+}
+
+/* Unbounded Ramanujan-Nagell  2^n - 7 == x^2 (Tier 3 F, route A): the complete
+ * five-element set via the class-number-1 factorisation + BHV bound. */
+static void test_ramanujan_nagell(void) {
+    run_test("Solve[2^n - 7 == x^2 && n > 0 && x > 0, {n, x}, Integers]",
+        "List[List[Rule[n, 3], Rule[x, 1]], List[Rule[n, 4], Rule[x, 3]], "
+        "List[Rule[n, 5], Rule[x, 5]], List[Rule[n, 7], Rule[x, 11]], "
+        "List[Rule[n, 15], Rule[x, 181]]]");
+    /* Alternate spelling normalises to the same set. */
+    run_test("Length[Solve[2^n == x^2 + 7 && n > 0 && x > 0, {n, x}, Integers]]", "5");
+    /* Out of scope (base != 2, or D not 7 mod 8) -> decline, never a guess. */
+    run_test("Head[Solve[3^n - 7 == x^2 && n > 0 && x > 0, {n, x}, Integers]]", "Solve");
+    run_test("Head[Solve[2^n - 15 == x^2 && n > 0 && x > 0, {n, x}, Integers]]", "Solve");
+    /* Bounded window keeps only the in-range solutions (n = 3,4,5,7). */
+    run_test("Length[Solve[2^n - 7 == x^2 && 0 < n < 10 && 0 < x < 100, "
+             "{n, x}, Integers]]", "4");
+}
+
+/* Symmetric Egyptian-fraction sums without an ordering constraint return the
+ * full unordered (all-permutations) set; an ordering keeps the ascending reps. */
+static void test_egyptian_unordered(void) {
+    /* 4/5 == 1/x+1/y+1/z: 12 = all permutations of {2,4,20} and {2,5,10}. */
+    run_test("Length[Solve[4/5 == 1/x + 1/y + 1/z && x > 0 && y > 0 && z > 0, "
+             "{x, y, z}, Integers]]", "12");
+    /* Ordered form: the 2 ascending representatives (unchanged behaviour). */
+    run_test("Length[Solve[4/5 == 1/x + 1/y + 1/z && 0 < x <= y <= z, "
+             "{x, y, z}, Integers]]", "2");
+    /* 1 == 1/x+1/y+1/z: 10 tuples (duplicate-value reps have fewer permutations).*/
+    run_test("Length[Solve[1 == 1/x + 1/y + 1/z && x > 0 && y > 0 && z > 0, "
+             "{x, y, z}, Integers]]", "10");
+    /* Every emitted tuple satisfies the equation. */
+    run_test("Union[(1/x + 1/y + 1/z) /. Solve[4/5 == 1/x + 1/y + 1/z && x > 0 && "
+             "y > 0 && z > 0, {x, y, z}, Integers]]", "List[Rational[4, 5]]");
+}
+
+/* Frye biquadrate one-sided / signed box: w need not be two-sided bounded by the
+ * user (the summand box bounds |w|); the search runs on |w| and emits both signs
+ * filtered by the box, so a purely negative window returns w = -422481. */
+static void test_frye_onesided(void) {
+    run_test("Solve[x^4 + y^4 + z^4 == w^4 && 0 < x <= y <= z < 500000 && "
+             "-422482 < w < -422480, {x, y, z, w}, Integers]",
+        "List[List[Rule[x, 95800], Rule[y, 217519], Rule[z, 414560], "
+        "Rule[w, -422481]]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
+    TEST(test_ternary_quadratic);
+    TEST(test_ramanujan_nagell);
+    TEST(test_egyptian_unordered);
+    TEST(test_frye_onesided);
     TEST(test_motivating);
     TEST(test_two_quadratics_empty);
     TEST(test_boxed_power);

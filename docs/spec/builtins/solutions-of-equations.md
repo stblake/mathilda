@@ -236,7 +236,12 @@ Attempts to solve an equation or system of equations for one or more variables.
     `x_1 <= ... <= x_k` bounds the smallest variable to
     `[ceil(1/R), floor(k/R)]` and recurses, the last variable determined
     exactly.  This solves the Egyptian-fraction case
-    `4/2027 == 1/x + 1/y + 1/z && 0 < x <= y <= z`.
+    `4/2027 == 1/x + 1/y + 1/z && 0 < x <= y <= z`.  Because the equation is
+    fully symmetric in its variables, **no ordering need be supplied**: with only
+    positivity, the ascending representatives are found and every distinct
+    permutation of each is emitted (re-verified), so
+    `4/5 == 1/x + 1/y + 1/z && x > 0 && y > 0 && z > 0` returns the full
+    unordered set (all 12 permutations of `{2,4,20}` and `{2,5,10}`).
   - A separable **odd-power sum** (e.g. `x^3 + y^3 + z^3 == 42`) over a box too
     large for the leaf search is solved by the **divisor method**: because
     `e` is odd, `s = x + y` divides `m = x^e + y^e`, and the power sum in terms
@@ -398,7 +403,13 @@ Attempts to solve an equation or system of equations for one or more variables.
     single modern core (Frye needed a 16384-processor Connection Machine for
     ~33 hours in 1988). Engages only for a box too large for the exhaustive MITM
     (`w > 20000`); a tunable node cap (`MATHILDA_FRYE_MAXNODES`) bounds the
-    no-solution case.
+    no-solution case. The target `w` need **not** be two-sided bounded by the
+    user: `w^4 = x^4+y^4+z^4` gives a sound magnitude bound `|w| <= (Σ hi^4)^{1/4}`
+    from the summand box, so a one-sided box (`w < 500000`) or an unconstrained
+    `w` also engage — the search runs on `|w|` and emits **both** signs, each
+    filtered by the user's constraints (so `0 < w` keeps only `+w`). Engagement
+    is not tractability: a cold scan of a wide window is intrinsically the 1988
+    computation, so the fast path is a witness window near the known `w`.
   - **Modular-sieved leaf search (large non-separable boxes).** When the
     ordering-pruned leaf box still exceeds `SI_MAX_NODES` (so the ordinary leaf
     search declines), a single polynomial equation is searched **exhaustively**
@@ -536,6 +547,42 @@ Attempts to solve an equation or system of equations for one or more variables.
     `x^4 + x^3 y + x^2 y^2 + x y^3 + y^4 == 1` (over `Q(zeta_5)`) returns its 6
     points, `x^4 + y^4 == {1, 2, 17, 82}` their `{4, 4, 8, 8}`, `== 3 -> {}`, and
     higher cyclotomics (`Phi_7`, `Phi_10`) likewise.
+- **Homogeneous ternary quadratic / Legendre** (`si_solve_ternary_quadratic`,
+  `src/solve/solveint_ternary.c`). A single homogeneous diagonal degree-2
+  equation in exactly 3 variables over an unbounded domain,
+  `a x^2 + b y^2 + c z^2 == 0`, is decided by **Legendre's theorem** rather than
+  searched: after clearing the gcd and normalising, solvability is the condition
+  that `-1` is a quadratic residue modulo every odd prime factor of the
+  opposite-sign coefficient (tested per prime with `mpz_legendre`). An
+  unsolvable form returns the **trivial solution** `{{x->0,y->0,z->0}}` — a
+  proof of no nontrivial solution, *not* `{}` (matching Mathematica) — so
+  `Solve[x^2 + y^2 == 3 z^2, {x,y,z}, Integers] -> {{0,0,0}}`. A solvable form
+  returns the **complete** integer family: `Solve[x^2 + y^2 == z^2, …]` is the
+  Pythagorean parametrisation and `Solve[x^2 + y^2 == 2 z^2, …]` the full family
+  including the tangent point `(1,1,1)`. The family is the sign/swap orbit of a
+  chord/tangent parametrisation from a sum-of-two-squares witness `P0`, unioned
+  with the tangent line `C·P0` (whose odd multiples the chord map alone misses);
+  it is validated complete + sound against a brute-force oracle for every
+  single-representation solvable case. Scope: the symmetric pattern
+  `x^2 + y^2 == k z^2` with `k` squarefree and at most one prime factor `== 1
+  (mod 4)`; a `k` with several sum-of-two-squares representations (e.g.
+  `65 = 5*13`) has multiple solution classes one witness cannot cover and
+  **declines** (a follow-up: one family per representation). Cross-term and
+  general `a != b` ternary forms also decline.
+- **Ramanujan–Nagell-type exponential** `x^2 + D == 2^n`
+  (`si_solve_ramanujan_nagell`, `src/solve/solveint_rn.c`), handled before the
+  MPoly stage (variable exponent). For the class-number-1 imaginary-quadratic
+  case — `D` squarefree, `D == 7 (mod 8)` (so 2 splits in the half-integer ring
+  `O_K = Z[(1+sqrt(-D))/2]`), and `h(Q(sqrt(-D))) == 1`; for base 2 exactly
+  `D = 7` — the factorisation `(x+sqrt(-D))/2 = +- alpha^(n-2)` forces
+  `U_{n-2} = +-1` for the Lucas sequence `U_m = U_{m-1} - Q U_{m-2}`,
+  `Q = (1+D)/4`. The **Bilu–Hanrot–Voutier primitive-divisor theorem** bounds
+  `n <= 32`, so an exact perfect-square scan of that finite window returns the
+  complete set: `Solve[2^n - 7 == x^2 && n > 0 && x > 0, {n, x}, Integers] ->
+  {(3,1),(4,3),(5,5),(7,11),(15,181)}`. A Lucas cross-check guards the answer;
+  an empty result within the gate is a proof, and out-of-scope inputs (base `!=
+  2`, `D` not `== 7 mod 8`, `h != 1`) DECLINE (the general linear-forms-in-logs
+  route B is a documented future extension, never a guess).
 - **Linear Diophantine.** A single **linear** equation is solved through its
   solution lattice (gcd staircase, particular solution + `(n-1)`-vector
   homogeneous basis):

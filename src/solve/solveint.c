@@ -157,6 +157,14 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
         if (ex) return ex;
     }
 
+    /* Unbounded Ramanujan-Nagell-type  x^2 + D == 2^n  (also a variable-exponent
+     * shape, so before the MPoly stage): the complete finite set via the
+     * class-number-1 factorisation + BHV bound, or a decline outside the gate. */
+    {
+        Expr* rn = si_solve_ramanujan_nagell(expr, c.var, c.n);
+        if (rn) return rn;
+    }
+
     /* Non-polynomial bounded power-leaf (n! + 1 == m^2, ...): also before the
      * MPoly stage, which cannot represent Factorial / Binomial / ... */
     {
@@ -217,6 +225,14 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
     {
         Expr* gp = si_solve_genpell_parametric(&c);
         if (gp) { ctx_free(&c); return gp; }
+    }
+
+    /* Homogeneous ternary quadratic  a x^2 + b y^2 + c z^2 == 0  (unbounded):
+     * Legendre solvability (a proof) -> the complete 2-parameter integer family,
+     * or the trivial-only {{x->0,y->0,z->0}} when no nontrivial solution exists. */
+    {
+        Expr* tq = si_solve_ternary_quadratic(&c);
+        if (tq) { ctx_free(&c); return tq; }
     }
 
     /* Homogeneous linear system with positivity -> parametric ray (symbolic). */

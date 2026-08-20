@@ -277,4 +277,47 @@ CASES = [
          vars=["x", "y"], box={"x": (-50, 50), "y": (-50, 50)},
          sat=lambda d: d["x"] ** 4 - 3 * d["y"] ** 4 == 13,
          kind="decline_ok", source="quartic Thue, |m|!=1 (out of the cubic mu-scope) -> decline OK; any answer must be correct"),
+
+    # ---- ternary quadratic / Legendre (Tier 2 E) ---------------------------
+    dict(label="ternary-pythagorean-unbounded",
+         math="Solve[x^2 + y^2 == z^2, {x, y, z}, Integers]",
+         vars=["x", "y", "z"], box={"x": (-12, 12), "y": (-12, 12), "z": (-12, 12)},
+         sat=lambda d: d["x"] ** 2 + d["y"] ** 2 == d["z"] ** 2,
+         kind="param", source="Pythagorean triples: complete 2-parameter family"),
+    dict(label="ternary-2z2-unbounded",
+         math="Solve[x^2 + y^2 == 2 z^2, {x, y, z}, Integers]",
+         vars=["x", "y", "z"], box={"x": (-12, 12), "y": (-12, 12), "z": (-12, 12)},
+         sat=lambda d: d["x"] ** 2 + d["y"] ** 2 == 2 * d["z"] ** 2,
+         kind="param", source="solvable ternary (Legendre holds); tangent point (1,1,1)"),
+    dict(label="ternary-3z2-trivial",
+         math="Solve[x^2 + y^2 == 3 z^2, {x, y, z}, Integers]",
+         vars=["x", "y", "z"], box={"x": (-15, 15), "y": (-15, 15), "z": (-15, 15)},
+         sat=lambda d: d["x"] ** 2 + d["y"] ** 2 == 3 * d["z"] ** 2,
+         kind="finite", source="Legendre fails -> ONLY the trivial (0,0,0) (proved), not {}"),
+    dict(label="ternary-multirep-decline",
+         math="Solve[x^2 + y^2 == 65 z^2, {x, y, z}, Integers]",
+         vars=["x", "y", "z"], box={"x": (-20, 20), "y": (-20, 20), "z": (-20, 20)},
+         sat=lambda d: d["x"] ** 2 + d["y"] ** 2 == 65 * d["z"] ** 2,
+         kind="decline_ok", source="65=5*13 has 2 sum-of-two-squares reps -> multiple classes -> decline OK"),
+
+    # ---- Ramanujan-Nagell (Tier 3 F, route A) ------------------------------
+    dict(label="ramanujan-nagell-7",
+         math="Solve[2^n - 7 == x^2 && n > 0 && x > 0, {n, x}, Integers]",
+         vars=["n", "x"], box={"n": (1, 20), "x": (1, 200)},
+         sat=lambda d: d["n"] > 0 and d["x"] > 0 and 2 ** d["n"] - 7 == d["x"] ** 2,
+         kind="finite", source="classical Ramanujan-Nagell: n in {3,4,5,7,15}"),
+    dict(label="ramanujan-nagell-outofscope",
+         math="Solve[3^n - 7 == x^2 && n > 0 && x > 0, {n, x}, Integers]",
+         vars=["n", "x"], box={"n": (1, 20), "x": (1, 5000)},
+         sat=lambda d: d["n"] > 0 and d["x"] > 0 and 3 ** d["n"] - 7 == d["x"] ** 2,
+         kind="decline_ok", source="base 3 (not route A) -> decline OK; any answer must be correct"),
+
+    # ---- symmetric Egyptian fractions without an ordering ------------------
+    dict(label="egyptian-4-5-unordered",
+         math="Solve[4/5 == 1/x + 1/y + 1/z && x > 0 && y > 0 && z > 0, {x, y, z}, Integers]",
+         vars=["x", "y", "z"], box={"x": (1, 24), "y": (1, 24), "z": (1, 24)},
+         sat=lambda d: (d["x"] > 0 and d["y"] > 0 and d["z"] > 0 and
+                        4 * d["x"] * d["y"] * d["z"]
+                        == 5 * (d["y"] * d["z"] + d["x"] * d["z"] + d["x"] * d["y"])),
+         kind="finite", source="unordered set = all permutations of {2,4,20},{2,5,10}"),
 ]

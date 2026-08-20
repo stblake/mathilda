@@ -40,12 +40,12 @@
  *  3^2 - 2^3 = 1.                                                      *
  * ------------------------------------------------------------------ */
 
-typedef struct { int coef; int bvar; int64_t bconst; int evar; int64_t econst; } SIExpTerm;
+/* SIExpTerm is defined in solveint_internal.h (shared with solveint_rn.c). */
 
 /* Collect additive power terms of `e` (multiplied by outer `sign`) into t[],
  * folding integer constants into K.  Returns false on an unrecognised shape. */
-static bool si_exp_collect(Expr* e, int sign, Expr** var, int n,
-                           SIExpTerm* t, int* nt, mpz_t K) {
+bool si_exp_collect(Expr* e, int sign, Expr** var, int n,
+                    SIExpTerm* t, int* nt, mpz_t K) {
     if (!e) return false;
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_Plus) {

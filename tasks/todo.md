@@ -1,52 +1,74 @@
-# Task: Move Solve family into `src/solve/` and split `solveint.c`
+# Task: Solve every solvable Wikipedia Diophantine equation in `Solve[..., Integers]`
 
-Plan: `/Users/user/.claude/plans/the-source-code-for-temporal-haven.md`
-Pure structural refactor — no behaviour change.
+Plan: `/Users/user/.claude/plans/let-s-ensure-that-we-compiled-bubble.md`
 
-## Phase 1 — Baseline ✅
-- [x] Build `Mathilda` on current tree (clean; already up to date)
-- [x] Build + run 9 solve-family suites — ALL PASS (baseline_tests.txt)
-- [x] Capture REPL corpus (18 clusters, 1.4s) → baseline_corpus.out
+Closes 6 gaps found by empirically testing Mathilda 0.074 against the Wikipedia
+"Diophantine equation" page. All prerequisites (JacobiSymbol, LLL, number-field
+layer, Baker/Thue machinery) already exist.
 
-## Phase 2 — Move only (no split) ✅
-- [x] `git mv` all 10 `solve*.{c,h}` into `src/solve/` (git renames)
-- [x] makefile: added `$(wildcard $(SRC_DIR)/solve/*.c)` + `-I./src/solve`
-- [x] tests/CMakeLists.txt: repointed 10 paths; added `include_directories(../src/solve)`
-- [x] `make clean && make -j` clean (1m14s, no diagnostics); tests rebuilt
-- [x] Corpus byte-identical; all 9 suites pass identical to baseline
+## Work items (approved order: cheapest correctness win first)
 
-## Phase 3 — Split solveint.c ✅
-- [x] Created `solveint_internal.h` (5 macros, 3 structs, 11 static-inline helpers, 49 protos)
-- [x] Created `solve_common.c` (32 shared funcs) + 17 `solveint_*.c` method files
-- [x] `solveint.c` reduced 5667→461 lines (dispatcher + special-forms + fermat + init)
-- [x] Added 17 new `.c` files to tests/CMakeLists.txt COMMON_SRC
-- [x] Clean build; **pure-move verified** (all 136 bodies byte-identical); corpus + tests identical
+### 3 — L: Erdős–Straus / symmetric-Egyptian (small edit) ✅ DONE
+- [x] `si_solve_reciprocal`: symmetric case → canonical order + emit permutations
+- [x] Verified: `4/5` → 12 perms; ordered form unchanged; `1=1/x+1/y+1/z` → 10 tuples
 
-## Phase 4 — Docs/comments ✅
-- [x] Updated `src/linalg/hnf.c` + `hnf.h` + `test_solve_integers.c` comments
-- [x] SPEC.md §2 layout tree: added `src/solve/`
-- [x] Changelog note in `docs/spec/changelog/2026-08-17.md`
-- [x] Path refs in SOLVE_INTEGERS.md, spec/builtins/*, benchmark README/REPORT/run.py
+### 4 — M: Frye one-sided-box robustness (small edit) ✅ DONE
+- [x] Derive magnitude bound `|w|<=(Σ hi^4)^{1/4}`; positive search + emit BOTH
+      signs filtered by si_verify (sound; also enables unconstrained w)
+- [x] Verified: witness window unchanged; negative-only box → -422481 (0.003s);
+      tight positive window keeps only +; engagement on `w<500000` confirmed
 
-## Phase 5 — Verify ✅
-- [x] `make check-c99` clean; full clean rebuild from scratch clean (1m16s)
-- [x] All 9 solve suites green, identical to baseline
-- [x] Behaviour corpus byte-identical (baseline vs move vs split vs final)
-- [x] valgrind: def-lost 13,632→13,480 (pre vs post split, identical within noise) — no new leaks
-- [x] Rebuild code-review graph
+### 1 — Ternary quadratic / Legendre solver (flagship, closes D/F/G) ✅ CODE DONE
+- [x] New `src/solve/solveint_ternary.c` — `si_solve_ternary_quadratic`; hooked after genpell
+- [x] Legendre proof (per-prime Legendre) → `{{0,0,0}}` when it fails
+- [x] Witness + chord/tangent + tangent-family; 16-branch sign/swap orbit (deduped)
+- [x] Single-representation gate (≤1 prime ≡1 mod4); multi-rep declines (k=65)
+- [x] Verified end-to-end vs brute: Pythagorean 113/113, 2z² 97/97 COMPLETE+SOUND
+- [ ] Generalise `benchmarks/87/validate.py` to multi-parameter family enumeration (test phase)
 
-## Phase 6 — (user request) fix context.c:39 leak ✅
-- [x] Root cause: `context_shutdown()` declared + written but **never called** (dead code);
-      context state (g_current / $ContextPath / package-frame save-slots via ctx_strdup)
-      lingers to exit. Frame accounting itself is correct (instrumented: 2 push / 2 pop, balanced).
-- [x] Fix: call `context_shutdown()` on all post-init exit paths in `repl.c main()` (+`#include "context.h"`).
-      context.c itself untouched.
-- [x] Verified: 9 context blocks now freed, 0 context.c blocks lost; $Context/$ContextPath
-      + BeginPackage/Begin/End/EndPackage work; corpus identical.
+### 2 — Ramanujan–Nagell unbounded solver (closes K) ✅ CODE DONE
+- [x] New `src/solve/solveint_rn.c` — Route A (imag-quadratic → Lucas → BHV n≤40)
+- [x] Promoted `SIExpTerm`/`si_exp_collect` to shared (header)
+- [x] Hooked in `solveint.c` after `si_solve_exponential`
+- [x] Gate (b=2, D≡7 mod 8, squarefree, h=1) + Lucas cross-check
+- [x] Verified: `2^n-7==x^2` → {3,4,5,7,15}; alt spelling; declines b=3, D=15
+
+## Verification
+- [x] C tests in `tests/test_solve_integers.c` (4 new, property-based) — ALL PASS
+- [x] Held-out cases in `benchmarks/87/heldout.py` (7 new) + validate.py multi-param fix;
+      `make check-diophantine-heldout` GREEN (No silent wrong answers)
+- [x] `make check-c99` (exit 0)
+- [x] valgrind delta 0 (identical leak totals vs baseline; no new-file frames)
+- [x] Docs: `solutions-of-equations.md`, changelog `2026-08-17.md`, SOLVE_INTEGERS.md "Done"
+- [x] End-to-end: re-run all Wikipedia gap equations → all return Target column
 
 ## Review
-**Outcome:** Pure structural refactor delivered. `src/solve/` now holds the whole Solve
-family; `solveint.c` split 5667→461 lines across `solve_common.c` + 16 `solveint_<method>.c`
-+ `solveint_internal.h`. Proven a pure move: all 136 function bodies byte-identical. Build
-(make + CMake) rewired; docs updated. Plus a bonus fix: wired up the never-called
-`context_shutdown()` surfaced by the valgrind pass. Not yet committed (awaiting user).
+
+All 6 gaps closed; all Wikipedia "solvable" Diophantine equations now solve.
+
+**Delivered:**
+1. `si_solve_ternary_quadratic` (new `solveint_ternary.c`) — Legendre proof;
+   trivial-only `{{0,0,0}}` when unsolvable; complete sign/swap-orbit + tangent
+   family for solvable single-representation k. Closes Pythagorean (D), `3z²` (F),
+   `2z²` (G).
+2. `si_solve_ramanujan_nagell` (new `solveint_rn.c`) — Route A (imag-quadratic →
+   Lucas → BHV n≤32). Closes `2ⁿ−7==x²` (K).
+3. `si_solve_reciprocal` symmetric-permutation path — closes Erdős–Straus without
+   ordering (L).
+4. `si_solve_biquadrate_frye` one-sided box + both-sign emission — closes Frye
+   engagement (M).
+
+**Verification:** 4 new C tests + 7 held-out cases (all green, 0 wrong answers),
+`make check-c99` clean, valgrind delta 0, full `solve_integers_tests` /
+`thue_tests` / `solve_tests` pass.
+
+**Key correctness findings (non-obvious):**
+- Ternary single-witness parametrization is INCOMPLETE for k with ≥2 primes ≡1
+  (mod 4) (multiple sum-of-two-squares reps → multiple classes, e.g. 65=5·13);
+  gate to single-representation, decline otherwise (safe).
+- Chord parametrization couples x/y signs and gives 2·P0 (not P0) at the tangent;
+  need the full sign/swap orbit + a separate tangent-line family `C·P0` for
+  completeness (validated 16→deduped branches vs brute force).
+- Frye: forcing `w>0` on a one-sided box would silently drop `w<0` solutions
+  (wrong); instead bound `|w|` from the summand box, search positive, emit both
+  signs filtered by `si_verify`.

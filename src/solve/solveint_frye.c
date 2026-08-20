@@ -332,7 +332,6 @@ static bool si_is_4th_power_i128(__int128 T, int64_t* root) {
 bool si_solve_biquadrate_frye(SICtx* c, SearchState* st) {
     bool DBG = getenv("FRYE_DEBUG") != NULL;
     if (c->n != 4 || c->neq != 1) return false;
-    for (int i = 0; i < 4; i++) if (!(c->has_lo[i] && c->has_hi[i])) return false;
     const MPoly* eq = c->eq[0];
 
     /* Shape: each variable once as v^4 with coefficient +/-1, no constant. */
@@ -357,13 +356,44 @@ bool si_solve_biquadrate_frye(SICtx* c, SearchState* st) {
     else return false;
     int sm[3], ns = 0; for (int i = 0; i < 4; i++) if (i != wv) sm[ns++] = i;
 
-    /* Positive box, and w the largest.  Engage only on a box too big for the
-     * exhaustive separable MITM (small boxes are handled completely there); a
-     * tiny box declines so this witness search never hides a real {} proof. */
-    int64_t whi = c->hi[wv];
-    if (whi < 20000) return false;                    /* leave to the exhaustive path */
-    for (int i = 0; i < 4; i++) if (c->lo[i] < 0) return false;   /* positive summands */
-    int64_t wlo = c->lo[wv] > 1 ? c->lo[wv] : 1;
+    /* The mod-5 descent assumes a POSITIVE, two-sided-bounded summand box. */
+    for (int k = 0; k < 3; k++)
+        if (!(c->has_lo[sm[k]] && c->has_hi[sm[k]]) || c->lo[sm[k]] < 0) return false;
+
+    /* The target w need not be two-sided bounded by the user: since
+     * w^4 = x^4 + y^4 + z^4 <= (#summands)*(max summand)^4, the summand box
+     * already yields a SOUND magnitude bound  |w| <= Beq.  So an upper-only box
+     * (`w < 500000`) or an entirely unconstrained w both engage -- we search the
+     * positive window [wlo, whi] and emit BOTH signs at the end (w^4 is even),
+     * each re-checked by si_verify against the user's ACTUAL constraints (c is
+     * left untouched).  This keeps the answer complete AND honours the user's
+     * sign/box: `0<w` keeps only +w, `w<500000` keeps both +-w.
+     * Engagement is not tractability: a cold scan of a wide window is inherently
+     * the 1988 Connection-Machine computation; the fast path is a witness window
+     * near the known w. */
+    __int128 Bsum = 0;
+    for (int k = 0; k < 3; k++) {
+        __int128 h = (__int128)c->hi[sm[k]]; h = h * h; h = h * h;   /* hi^4 */
+        Bsum += h;
+    }
+    int64_t Beq = si_isqrt_i64(si_isqrt_i128(Bsum));  /* floor((sum hi^4)^{1/4}) >= |w| */
+
+    /* Intersect the user's w-box with the equation's magnitude cap [-Beq, Beq],
+     * then reduce to a positive search window [wlo, whi] over W = |w| (both signs
+     * are emitted at the end).  A two-sided same-sign box keeps its tight window
+     * (the fast witness case); a one-sided or 0-straddling box searches up to the
+     * cap. */
+    int64_t blo = c->has_lo[wv] ? c->lo[wv] : INT64_MIN;
+    int64_t bhi = c->has_hi[wv] ? c->hi[wv] : INT64_MAX;
+    if (blo < -Beq) blo = -Beq;
+    if (bhi >  Beq) bhi =  Beq;
+    if (blo > bhi) return false;                      /* empty after the cap */
+    int64_t wlo, whi;
+    if (blo > 0)      { wlo = blo;  whi = bhi;  }      /* all positive */
+    else if (bhi < 0) { wlo = -bhi; whi = -blo; }      /* all negative */
+    else              { wlo = 1;    whi = (-blo > bhi ? -blo : bhi); }  /* straddles 0 */
+    if (wlo < 1) wlo = 1;
+    if (whi < 20000) return false;                    /* leave tiny boxes to the exhaustive path */
 
     /* Residue tables. */
     int q4_625[625]; for (int r = 0; r < 625; r++) { long long v = ((long long)r*r % 625); v = v*v % 625; q4_625[r] = (int)v; }
@@ -454,7 +484,13 @@ bool si_solve_biquadrate_frye(SICtx* c, SearchState* st) {
                         for (int i2 = 0; i2 < 3; i2++) for (int j2 = i2+1; j2 < 3; j2++) if (topo_rank[pos[j2]] < topo_rank[pos[i2]]) { int t = pos[i2]; pos[i2] = pos[j2]; pos[j2] = t; }
                         int64_t vals[SI_MAX_VARS]; for (int i2 = 0; i2 < 4; i2++) vals[i2] = 0;
                         vals[wv] = w; for (int i2 = 0; i2 < 3; i2++) vals[pos[i2]] = s3[i2];
-                        if (si_verify(c, vals)) {
+                        /* w occurs only as w^4, so +W and -W are both candidate
+                         * targets; accept the witness if EITHER sign satisfies the
+                         * user's box (the search itself runs over positive W). */
+                        int64_t vneg[SI_MAX_VARS];
+                        for (int i2 = 0; i2 < 4; i2++) vneg[i2] = vals[i2];
+                        vneg[wv] = -vals[wv];
+                        if (si_verify(c, vals) || si_verify(c, vneg)) {
                             for (int i2 = 0; i2 < 4; i2++) sol[i2] = vals[i2];
                             found = true; goto frye_done;
                         }
@@ -466,7 +502,14 @@ bool si_solve_biquadrate_frye(SICtx* c, SearchState* st) {
 frye_done:
     if (DBG) fprintf(stderr, "[frye] nodes=%lld found=%d\n", (long long)nodes, (int)found);
     if (!found) return false;                         /* budget spent / none: decline */
-    emit_full(st, sol);
+    /* Emit each sign of w that the user's box actually admits (both for an
+     * upper-only box like w<500000; only +w for 0<w; only -w for a negative box).
+     * si_verify against the untouched c enforces the real constraints. */
+    { int64_t neg[SI_MAX_VARS];
+      for (int i2 = 0; i2 < 4; i2++) neg[i2] = sol[i2];
+      neg[wv] = -sol[wv];
+      if (si_verify(c, sol)) emit_full(st, sol);
+      if (si_verify(c, neg)) emit_full(st, neg); }
     return true;
 }
 

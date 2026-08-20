@@ -10,8 +10,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tlin-sys-2eq-3var\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y, z} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y, z} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y, z} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tlin-sys-2eq-3var\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -26,8 +28,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tlin-sys-3eq-4var\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({a, b, c, d} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({a, b, c, d} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({a, b, c, d} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tlin-sys-3eq-4var\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -42,8 +46,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tlin-sys-determined\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tlin-sys-determined\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -58,8 +64,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tlin-sys-noninteger\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tlin-sys-noninteger\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -74,8 +82,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tlin-sys-int-inconsistent\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tlin-sys-int-inconsistent\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -90,8 +100,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tfactorable-cross-4\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tfactorable-cross-4\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -106,8 +118,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tfactorable-prod-15-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tfactorable-prod-15-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -122,8 +136,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tfactorable-nonunit-7\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tfactorable-nonunit-7\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -138,8 +154,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tdiff-of-squares-21\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tdiff-of-squares-21\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -154,8 +172,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tellipse-rotated-7\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tellipse-rotated-7\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -170,8 +190,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tellipse-nonunit-24\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tellipse-nonunit-24\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -186,8 +208,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tellipse-linear-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tellipse-linear-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -202,8 +226,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tellipse-norep-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tellipse-norep-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -218,8 +244,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tgenpell-2-7\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tgenpell-2-7\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -234,8 +262,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tgenpell-5-4\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tgenpell-5-4\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -250,8 +280,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tgenpell-2-5-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tgenpell-2-5-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -266,8 +298,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tnegpell-13-solvable\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tnegpell-13-solvable\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -282,8 +316,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tnegpell-3-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tnegpell-3-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -298,8 +334,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tmordell-neg2-boxed\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tmordell-neg2-boxed\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -314,8 +352,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-cubic-boxed\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-cubic-boxed\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -330,8 +370,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-cubic-m3-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-cubic-m3-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -346,8 +388,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-cubic-m5-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-cubic-m5-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -362,8 +406,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-cyclo-phi5-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-cyclo-phi5-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -378,8 +424,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-totallycomplex-x4y4-17\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-totallycomplex-x4y4-17\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -394,8 +442,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-totallycomplex-x4y4-3-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-totallycomplex-x4y4-3-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -410,8 +460,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-rank2-quartic-d10\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-rank2-quartic-d10\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -426,8 +478,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-rank2-quartic-d10-neg-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-rank2-quartic-d10-neg-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -442,8 +496,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\ttwo-squares-25\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\ttwo-squares-25\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -458,8 +514,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tternary-legendre-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y, z} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y, z} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y, z} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tternary-legendre-empty\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -474,8 +532,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthree-cubes-eq-cube-30\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y, z, w} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y, z, w} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y, z, w} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthree-cubes-eq-cube-30\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -490,8 +550,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tbqf-nonsquare-disc-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tbqf-nonsquare-disc-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -506,8 +568,10 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tmordell-pos-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tmordell-pos-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];
@@ -522,8 +586,136 @@ Module[{sol, status, tuples, sols, inbox},
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-quartic-generalm-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
   If[status === "param",
-    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. *)
-    tuples = Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1];
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
     sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
     Print["SOLS\tthue-quartic-generalm-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, -12 <= pt[[1]] <= 12 && -12 <= pt[[2]] <= 12 && -12 <= pt[[3]] <= 12];
+  sol = Solve[x^2 + y^2 == z^2, {x, y, z}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tternary-pythagorean-unbounded\t", status];
+  If[status === "finite",
+    tuples = ({x, y, z} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tternary-pythagorean-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y, z} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y, z} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tternary-pythagorean-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, -12 <= pt[[1]] <= 12 && -12 <= pt[[2]] <= 12 && -12 <= pt[[3]] <= 12];
+  sol = Solve[x^2 + y^2 == 2 z^2, {x, y, z}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tternary-2z2-unbounded\t", status];
+  If[status === "finite",
+    tuples = ({x, y, z} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tternary-2z2-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y, z} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y, z} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tternary-2z2-unbounded\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, -15 <= pt[[1]] <= 15 && -15 <= pt[[2]] <= 15 && -15 <= pt[[3]] <= 15];
+  sol = Solve[x^2 + y^2 == 3 z^2, {x, y, z}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tternary-3z2-trivial\t", status];
+  If[status === "finite",
+    tuples = ({x, y, z} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tternary-3z2-trivial\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y, z} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y, z} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tternary-3z2-trivial\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, -20 <= pt[[1]] <= 20 && -20 <= pt[[2]] <= 20 && -20 <= pt[[3]] <= 20];
+  sol = Solve[x^2 + y^2 == 65 z^2, {x, y, z}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tternary-multirep-decline\t", status];
+  If[status === "finite",
+    tuples = ({x, y, z} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tternary-multirep-decline\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y, z} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y, z} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tternary-multirep-decline\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, 1 <= pt[[1]] <= 20 && 1 <= pt[[2]] <= 200];
+  sol = Solve[2^n - 7 == x^2 && n > 0 && x > 0, {n, x}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tramanujan-nagell-7\t", status];
+  If[status === "finite",
+    tuples = ({n, x} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tramanujan-nagell-7\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({n, x} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({n, x} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tramanujan-nagell-7\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, 1 <= pt[[1]] <= 20 && 1 <= pt[[2]] <= 5000];
+  sol = Solve[3^n - 7 == x^2 && n > 0 && x > 0, {n, x}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tramanujan-nagell-outofscope\t", status];
+  If[status === "finite",
+    tuples = ({n, x} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tramanujan-nagell-outofscope\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({n, x} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({n, x} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tramanujan-nagell-outofscope\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+];
+Module[{sol, status, tuples, sols, inbox},
+  inbox = Function[pt, 1 <= pt[[1]] <= 24 && 1 <= pt[[2]] <= 24 && 1 <= pt[[3]] <= 24];
+  sol = Solve[4/5 == 1/x + 1/y + 1/z && x > 0 && y > 0 && z > 0, {x, y, z}, Integers];
+  status = Which[Head[sol] === Solve, "uneval", sol === {}, "empty",
+    FreeQ[sol, C] && FreeQ[sol, ConditionalExpression], "finite", True, "param"];
+  Print["STATUS\tegyptian-4-5-unordered\t", status];
+  If[status === "finite",
+    tuples = ({x, y, z} /. sol);
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tegyptian-4-5-unordered\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
+  If[status === "param",
+    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk substitutions become non-integer and drop out of the VectorQ filter. A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3]) is enumerated over a 3-D grid with a modest per-axis range. *)
+    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],
+      Flatten[Table[Simplify[({x, y, z} /. sol) /. C[1] -> kk], {kk, -60, 60}], 1],
+      Flatten[Table[({x, y, z} /. sol) /. {C[1] -> k1, C[2] -> k2, C[3] -> k3}, {k1, -16, 16}, {k2, -16, 16}, {k3, -16, 16}], 3]];
+    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];
+    Print["SOLS\tegyptian-4-5-unordered\t", InputForm[Sort[DeleteDuplicates[sols]]]]];
 ];

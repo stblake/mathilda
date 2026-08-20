@@ -39,6 +39,9 @@ REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 MATHILDA_BIN = os.environ.get("MATHILDA_BIN", os.path.join(REPO_ROOT, "Mathilda"))
 MATHILDA_TIMEOUT_S = float(os.environ.get("MATHILDA_TIMEOUT_S", "240"))
 PARAM_KMAX = int(os.environ.get("PARAM_KMAX", "60"))
+# Per-axis range for a MULTI-parameter family (e.g. the ternary-quadratic
+# C[1],C[2],C[3] union); kept modest because it grids in 3 dimensions.
+MPARAM_KMAX = int(os.environ.get("MPARAM_KMAX", "16"))
 GRID_LIMIT = 4_000_000
 
 # ----------------------------------------------------------------------------
@@ -98,9 +101,15 @@ def build_script():
             f'  If[status === "param",',
             f'    (* C[1] ranges over ALL integers for a linear-lattice family; a Pell'
             f' family carries ConditionalExpression[_, C[1] >= 0] so its negative-kk'
-            f' substitutions become non-integer and drop out of the VectorQ filter. *)',
-            f'    tuples = Flatten[Table[Simplify[({vlist} /. sol) /. C[1] -> kk],'
-            f' {{kk, -{PARAM_KMAX}, {PARAM_KMAX}}}], 1];',
+            f' substitutions become non-integer and drop out of the VectorQ filter.'
+            f' A multi-parameter family (e.g. the ternary-quadratic C[1],C[2],C[3])'
+            f' is enumerated over a 3-D grid with a modest per-axis range. *)',
+            f'    tuples = If[FreeQ[sol, C[2]] && FreeQ[sol, C[3]],',
+            f'      Flatten[Table[Simplify[({vlist} /. sol) /. C[1] -> kk],'
+            f' {{kk, -{PARAM_KMAX}, {PARAM_KMAX}}}], 1],',
+            f'      Flatten[Table[({vlist} /. sol) /. {{C[1] -> k1, C[2] -> k2, C[3] -> k3}},'
+            f' {{k1, -{MPARAM_KMAX}, {MPARAM_KMAX}}}, {{k2, -{MPARAM_KMAX}, {MPARAM_KMAX}}},'
+            f' {{k3, -{MPARAM_KMAX}, {MPARAM_KMAX}}}], 3]];',
             f'    sols = Select[tuples, VectorQ[#, IntegerQ] && inbox[#] &];',
             f'    Print["SOLS\\t{lab}\\t", InputForm[Sort[DeleteDuplicates[sols]]]]];',
             f'];',

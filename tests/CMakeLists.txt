@@ -743,6 +743,8 @@ set(COMMON_SRC
     ../src/solve/solveint_mordell.c
     ../src/solve/solveint_powersum_div.c
     ../src/solve/solveint_conic.c
+    ../src/solve/solveint_ternary.c
+    ../src/solve/solveint_rn.c
     ../src/solve/solveint_cubes.c
     ../src/solve/solveint_frye.c
     ../src/solve/solveint_exp.c

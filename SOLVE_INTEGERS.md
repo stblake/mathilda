@@ -39,11 +39,13 @@ search.
 | # | Function | Handles |
 |--:|---|---|
 | 1 | `si_solve_exponential` | variable exponents `x^a - y^b == …` (Catalan/Mihailescu) |
+| 1b | `si_solve_ramanujan_nagell` | `x^2 + D == 2^n` (Ramanujan–Nagell, class-number-1 / BHV bound) |
 | 2 | `si_solve_bounded_powerleaf` | non-poly leaf `n! + 1 == m^2`, … |
 | — | `classify_conjunct` (Stage A) → `derive_bounds` / `derive_even_only_bounds` (Stage B) | split eqns/constraints; propagate a finite box |
 | 3 | `si_solve_linear_parametric` | one linear equation → gcd-staircase `C[k]` family |
 | 4 | `si_solve_pell_parametric` | unbounded `x^2 - D y^2 == 1`, `x,y>0` |
 | 5 | `si_solve_genpell_parametric` | unbounded `x^2 - D y^2 == N` (any `N != +1`), `x,y>0` |
+| 5b | `si_solve_ternary_quadratic` | homogeneous ternary `a x^2 + b y^2 + c z^2 == 0` (Legendre proof + family / trivial-only) |
 | 6 | `si_solve_linear_system_ray` | homogeneous linear system + positivity → ray |
 | 7 | `si_solve_linear_system_hnf` | general linear system (m≥2 eqns) via HNF |
 | 8 | `si_solve_power_sum_equal` | Prouhet-Tarry-Escott → `{}` via Newton's identities |
@@ -242,6 +244,17 @@ class, plus an unsolvable of each.
 
 ### E. Ternary quadratic / Legendre  `a x² + b y² + c z² == 0`
 
+> **Status (2026-08-20): DONE for the single-representation case.**
+> `si_solve_ternary_quadratic` (`src/solve/solveint_ternary.c`), hooked in the
+> `Expr*`-family block after generalised-Pell. Legendre solvability by per-prime
+> `mpz_legendre`; unsolvable → the trivial `{{x->0,y->0,z->0}}` (a proof, not
+> `{}`), solvable → the complete sign/swap-orbit family from a sum-of-two-squares
+> witness + the tangent line `C·P0`. `x²+y²==3z² → {{0,0,0}}`,
+> `x²+y²==z²`/`==2z²` → the full parametric family (verified complete + sound vs
+> brute force). `k` with ≥2 primes `≡1 (mod 4)` (multiple representations, e.g.
+> `65=5·13`) declines — remaining work: one family per representation, and the
+> cross-term / general `a≠b` forms (diagonalisation + witness scale-up).
+
 **Goal.** For a homogeneous ternary quadratic, **decide solvability** (a proof,
 not a bounded search) and, when solvable, return a **primitive nontrivial
 witness**; when not, return `{}`. Extends to the general ternary form
@@ -310,6 +323,18 @@ from-scratch build.
 > matrix). Regulators validated against LMFDB (`Q(2^1/3)`, the cyclic cubic
 > `t^3-3t+1`, `Q(2^1/4)`). Round-2 order enlargement (non-monogenic fields) and
 > class-group / ideal factorisation remain for G.
+
+### Exponential Diophantine — Ramanujan–Nagell  `x² + D == 2ⁿ`
+
+> **Status (2026-08-20): DONE via route A (class-number-1 factorisation).**
+> `si_solve_ramanujan_nagell` (`src/solve/solveint_rn.c`), before the MPoly stage
+> (reusing the shared `si_exp_collect` shape parser). For `D` squarefree,
+> `D ≡ 7 (mod 8)`, `h(Q(√−D)) == 1` (base 2 ⇒ exactly `D = 7`) the factorisation
+> forces `U_{n−2} = ±1` for the Lucas sequence `Q = (1+D)/4`; the
+> **Bilu–Hanrot–Voutier** primitive-divisor theorem bounds `n ≤ 32`, so a finite
+> perfect-square scan (Lucas-cross-checked) returns the complete set —
+> `2ⁿ − 7 == x² → {n=3,4,5,7,15}`. Route B (linear forms in logs, general base /
+> `D`) is documented but not built; out-of-scope inputs DECLINE.
 
 ### F. Thue equations  `F(x, y) == m`  (F irreducible homogeneous, deg ≥ 3)
 

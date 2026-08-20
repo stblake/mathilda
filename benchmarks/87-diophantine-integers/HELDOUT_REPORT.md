@@ -5,7 +5,7 @@ from standard references and are **not** in `cases.py`; Mathilda is run
 cold and every answer is cross-checked against an independent brute-force
 oracle over the same box.
 
-**OK 30 &nbsp; DECLINE 3 &nbsp; WRONG 0** of 33.
+**OK 35 &nbsp; DECLINE 5 &nbsp; WRONG 0** of 40.
 
 - **OK** — the concrete answer (or proven `{}`) matches the oracle.
 - **DECLINE** — left unevaluated where that is acceptable (honest gap).
@@ -47,3 +47,10 @@ oracle over the same box.
 | `bqf-nonsquare-disc-unbounded` | decline_ok | uneval | DECLINE | 28 | unevaluated; oracle has 28 in box |
 | `mordell-pos-unbounded` | decline_ok | uneval | DECLINE | 14 | unevaluated; oracle has 14 in box |
 | `thue-quartic-generalm-unbounded` | decline_ok | uneval | DECLINE | 8 | unevaluated; oracle has 8 in box |
+| `ternary-pythagorean-unbounded` | param | param | OK | 129 | 129 solutions match oracle |
+| `ternary-2z2-unbounded` | param | param | OK | 113 | 113 solutions match oracle |
+| `ternary-3z2-trivial` | finite | finite | OK | 1 | 1 solutions match oracle |
+| `ternary-multirep-decline` | decline_ok | uneval | DECLINE | 65 | unevaluated; oracle has 65 in box |
+| `ramanujan-nagell-7` | finite | finite | OK | 5 | 5 solutions match oracle |
+| `ramanujan-nagell-outofscope` | decline_ok | uneval | DECLINE | 0 | unevaluated; oracle has 0 in box |
+| `egyptian-4-5-unordered` | finite | finite | OK | 12 | 12 solutions match oracle |

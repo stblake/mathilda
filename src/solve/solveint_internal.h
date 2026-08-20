@@ -190,6 +190,7 @@ bool si_pell_cf(const mpz_t D, const mpz_t N, mpz_t u, mpz_t v, mpz_t bx, mpz_t 
 bool si_solve_pell(SICtx* c, SearchState* st);
 Expr* si_solve_pell_parametric(SICtx* c);
 Expr* si_solve_genpell_parametric(SICtx* c);
+Expr* si_solve_ternary_quadratic(SICtx* c);
 Expr* si_solve_linear_system_ray(SICtx* c);
 Expr* si_solve_power_sum_equal(SICtx* c);
 Expr* si_solve_mordell(SICtx* c);
@@ -206,9 +207,15 @@ Expr* builtin_cube_roots_mod(Expr* res);
 bool si_solve_three_cubes_booker(SICtx* c, SearchState* st);
 bool si_solve_biquadrate_frye(SICtx* c, SearchState* st);
 bool si_solve_separable_mitm(SICtx* c, SearchState* st);
+/* Additive power term  coef * (base)^(exp), used by the exponential-Diophantine
+ * shape parser (solveint_exp.c) and the Ramanujan-Nagell solver (solveint_rn.c).
+ * bvar/evar are variable indices (or -1); bconst/econst the constant base/exp. */
+typedef struct { int coef; int bvar; int64_t bconst; int evar; int64_t econst; } SIExpTerm;
+bool si_exp_collect(Expr* e, int sign, Expr** var, int n, SIExpTerm* t, int* nt, mpz_t K);
 Expr* si_exp_one_tuple(Expr** var, const int64_t* vals, int n);
 bool si_verify_symbolic(Expr* expr, Expr** var, const int64_t* vals, int n);
 Expr* si_solve_exponential(Expr* expr, Expr** var, int n);
+Expr* si_solve_ramanujan_nagell(Expr* expr, Expr** var, int n);
 Expr* si_solve_bounded_powerleaf(Expr* expr, Expr** var, int n);
 Expr* si_solve_thue(SICtx* c);
 
