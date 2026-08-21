@@ -333,6 +333,43 @@ static void test_fermat_last_theorem(void) {
              "&& -2 <= z <= 2, {x, y, z}, Integers]]", "13");
 }
 
+/* Sum of three cubes mod-9 impossibility: x^3 + y^3 + z^3 == k with
+ * k ≡ ±4 (mod 9) has no integer solution at all, since each cube is
+ * ≡ {-1, 0, 1} (mod 9).  Decided with NO bound (the previously-declined
+ * unbounded case), and independent of the signs of the cubes.  The guards
+ * confirm it does NOT over-fire on reachable residues, on squares, or on
+ * non-unit coefficients. */
+static void test_three_cubes_mod9(void) {
+    /* k ≡ 4 (mod 9): 4, 13, 22, 31 -- all unbounded, all proven empty. */
+    run_test("Solve[x^3 + y^3 + z^3 == 4, {x, y, z}, Integers]", "List[]");
+    run_test("Solve[x^3 + y^3 + z^3 == 13, {x, y, z}, Integers]", "List[]");
+    run_test("Solve[x^3 + y^3 + z^3 == 22, {x, y, z}, Integers]", "List[]");
+    run_test("Solve[x^3 + y^3 + z^3 == 31, {x, y, z}, Integers]", "List[]");
+    /* k ≡ 5 (mod 9): 5, 14. */
+    run_test("Solve[x^3 + y^3 + z^3 == 5, {x, y, z}, Integers]", "List[]");
+    run_test("Solve[x^3 + y^3 + z^3 == 14, {x, y, z}, Integers]", "List[]");
+    /* Negative k: -4 ≡ 5, -5 ≡ 4 (mod 9). */
+    run_test("Solve[x^3 + y^3 + z^3 == -4, {x, y, z}, Integers]", "List[]");
+    run_test("Solve[x^3 + y^3 + z^3 == -5, {x, y, z}, Integers]", "List[]");
+    /* Signed variants: each term is still ≡ {-1,0,1} (mod 9). */
+    run_test("Solve[x^3 + y^3 - z^3 == 4, {x, y, z}, Integers]", "List[]");
+    run_test("Solve[x^3 - y^3 - z^3 == 5, {x, y, z}, Integers]", "List[]");
+    /* Even a bounded box is dismissed instantly by the obstruction. */
+    run_test("Solve[x^3 + y^3 + z^3 == 4 && Abs[x] < 8000 && Abs[y] < 8000 "
+             "&& Abs[z] < 8000, {x, y, z}, Integers]", "List[]");
+
+    /* Guards -- must NOT be swallowed by the mod-9 short-circuit. */
+    /* Reachable residue (3 ≡ 3): the bounded ==3 keeps its 4 solutions. */
+    run_test("Length[Solve[x^3 + y^3 + z^3 == 3 && Abs[x] < 8000 && Abs[y] < 8000 "
+             "&& Abs[z] < 8000, {x, y, z}, Integers]]", "4");
+    /* Squares, not cubes: x^2+y^2+z^2 == 4 has 6 lattice points despite 4 ≡ 4. */
+    run_test("Length[Solve[x^2 + y^2 + z^2 == 4 && -3 <= x <= 3 && -3 <= y <= 3 "
+             "&& -3 <= z <= 3, {x, y, z}, Integers]]", "6");
+    /* Non-unit coefficient: 2 x^3 + y^3 + z^3 == 4 is solvable ((1,1,1)). */
+    run_test("Length[Solve[2 x^3 + y^3 + z^3 == 4 && -50 < x < 50 && -50 < y < 50 "
+             "&& -50 < z < 50, {x, y, z}, Integers]]", "3");
+}
+
 /* Phase 3: Pell equations x^2 - D y^2 == +/-1 via continued fractions. */
 static void test_pell(void) {
     /* The classic large fundamental solution of x^2 - 61 y^2 == 1. */
@@ -837,6 +874,7 @@ int main(void) {
     TEST(test_abs_ordering);
     TEST(test_booker_brute_crosscheck);
     TEST(test_fermat_last_theorem);
+    TEST(test_three_cubes_mod9);
     TEST(test_exponential);
     TEST(test_superelliptic_bounded);
     TEST(test_pell);

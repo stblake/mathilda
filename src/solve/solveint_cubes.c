@@ -463,3 +463,47 @@ bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
     if (incomplete || st->overflow) { st->nsol = 0; return false; }
     return true;
 }
+
+
+/* ================================================================== *
+ *  Sum of three cubes -- the mod-9 impossibility.
+ *
+ *  Every cube is  v^3 ≡ {-1, 0, 1} (mod 9)  (since v ≡ 0,±1,±2,±3,±4 give
+ *  v^3 ≡ 0, ±1, ±8≡∓1, 0, ±64≡±1).  So any sum  ±x^3 ± y^3 ± z^3  with unit
+ *  coefficients is a sum of three elements of {-1,0,1} and lies in
+ *  {-3,...,3} ≡ {0,1,2,3,6,7,8} (mod 9); it can NEVER be ≡ 4 or 5 (mod 9).
+ *  Hence  x^3 + y^3 + z^3 == k  (and every signed variant) has NO integer
+ *  solution whatsoever when  k ≡ ±4 (mod 9) -- a global obstruction, decided
+ *  with no bound, so it settles the otherwise-unbounded case the Booker engine
+ *  must decline.  Any other k falls through to the bounded engine.
+ *
+ *  Returns {} on a proven impossibility, else NULL (fall through).  Reference:
+ *  the classical congruence obstruction, e.g. Davenport, "The Higher
+ *  Arithmetic", Ch. V (sums of three cubes). */
+Expr* si_solve_three_cubes_mod9(SICtx* c) {
+    if (c->neq != 1 || c->n != 3) return NULL;
+    const MPoly* eq = c->eq[0];
+
+    /* Shape gate: exactly the three variables, each once as v^3 with a +/-1
+     * coefficient, plus an optional constant term -k (so K accumulates k). */
+    mpz_t K; mpz_init(K); mpz_set_ui(K, 0);
+    int seen[3] = {0, 0, 0}; bool ok = true;
+    for (size_t t = 0; t < eq->n_terms && ok; t++) {
+        const int* ex = eq->exps + t * 3;
+        int nz = -1, cnt = 0;
+        for (int v = 0; v < 3; v++) if (ex[v] > 0) { nz = v; cnt++; }
+        if (cnt == 0) { mpz_sub(K, K, eq->coefs[t]); continue; }   /* constant -> k */
+        if (cnt > 1 || ex[nz] != 3 || seen[nz]) { ok = false; break; }
+        if (mpz_cmp_ui(eq->coefs[t], 1) != 0 && mpz_cmp_si(eq->coefs[t], -1) != 0) {
+            ok = false; break;                                     /* coeff not +/-1 */
+        }
+        seen[nz] = 1;
+    }
+    for (int i = 0; i < 3 && ok; i++) if (!seen[i]) ok = false;
+    if (!ok) { mpz_clear(K); return NULL; }
+
+    unsigned long km = mpz_fdiv_ui(K, 9);                          /* k mod 9 in [0,9) */
+    mpz_clear(K);
+    if (km == 4 || km == 5) return mk_list(NULL, 0);               /* provably empty */
+    return NULL;
+}

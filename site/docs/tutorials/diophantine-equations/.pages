@@ -1,0 +1,9 @@
+title: Diophantine equations
+nav:
+  - index.md
+  - linear-and-pell.md
+  - quadratic-forms.md
+  - cubics-and-thue.md
+  - exponential.md
+  - famous-power-sums.md
+  - performance.md

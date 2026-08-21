@@ -167,7 +167,8 @@ Attempts to solve an equation or system of equations for one or more variables.
     symbolic/parametric values that do not numericalise (e.g. `Sqrt[a]`) are
     kept — and covers polynomial *systems* the same way (complex `Root`-tuples
     are dropped over `Reals`). The default `Complexes` domain is untouched.
-- `Integers` domain is implemented as a post-pass over the `Reals` output:
+- For a **single univariate polynomial equation** (no constraints), the
+  `Integers` domain is implemented as a post-pass over the `Reals` output:
   every candidate value is type-checked against `EXPR_INTEGER` /
   `EXPR_BIGINT` and dropped otherwise.  `Rational[p, q]`, irrational
   radicals (`Sqrt[2]`, `Power[2, 1/3]`, ...), held `Root[]` objects, and
@@ -361,6 +362,13 @@ Attempts to solve an equation or system of equations for one or more variables.
     returns `(24579, 51748, 53534)` (the classic `227 = 24579^3 + 51748^3 −
     53534^3`). The sign substitution is used only for a pure box (no orderings /
     disequations), so it stays exact.
+    A **global mod-9 obstruction** (`si_solve_three_cubes_mod9`) short-circuits
+    the *unbounded* case the Booker box search must otherwise decline: every cube
+    is `≡ {−1, 0, 1} (mod 9)`, so `± x^3 ± y^3 ± z^3` can never be `≡ 4` or `5
+    (mod 9)`; hence `x^3 + y^3 + z^3 == k` with `k ≡ ±4 (mod 9)` has no integer
+    solution at all, and `Solve[x^3 + y^3 + z^3 == 4, {x, y, z}, Integers] ->
+    {}` is returned as a proof with **no bound required** (checked before the
+    Booker engine, independent of the cube signs).
   - **Sum of like powers = a like power (ordering-aware 128-bit MITM).** A
     single **separable** additive equation `Σ cᵢ vᵢ^k == c₀ y^k` over an ordered
     box is solved by a meet-in-the-middle that improves on the plain int64

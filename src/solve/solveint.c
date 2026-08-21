@@ -186,6 +186,11 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
      * solutions -- decide it instantly, before any (possibly unbounded) search. */
     { Expr* flt = si_solve_fermat(&c); if (flt) { ctx_free(&c); return flt; } }
 
+    /* Sum of three cubes: x^3 + y^3 + z^3 == k with k ≡ ±4 (mod 9) is impossible
+     * -- a global congruence obstruction, decided with no bound (settles the
+     * unbounded case the bounded Booker engine would otherwise decline). */
+    { Expr* m9 = si_solve_three_cubes_mod9(&c); if (m9) { ctx_free(&c); return m9; } }
+
     /* Per-variable degree (max over equations) and whether it is solvable as
      * an exact leaf. */
     int maxdeg[SI_MAX_VARS];

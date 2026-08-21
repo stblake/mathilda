@@ -205,6 +205,7 @@ bool si_solve_elliptic_bqf(SICtx* c, SearchState* st);
 int64_t si_isqrt_i128(__int128 n);
 Expr* builtin_cube_roots_mod(Expr* res);
 bool si_solve_three_cubes_booker(SICtx* c, SearchState* st);
+Expr* si_solve_three_cubes_mod9(SICtx* c);
 bool si_solve_biquadrate_frye(SICtx* c, SearchState* st);
 bool si_solve_separable_mitm(SICtx* c, SearchState* st);
 /* Additive power term  coef * (base)^(exp), used by the exponential-Diophantine
