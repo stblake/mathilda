@@ -1,0 +1,5 @@
+D[x^3 + 2 x, x]
+D[Sin[x] Cos[x], x]
+D[x^n, x]
+D[x^2 y^3, x]
+D[x^2 y^3, y]

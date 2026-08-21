@@ -1,0 +1,130 @@
+%% ===========================================================================
+%%  Mathilda -- A User's Manual and a Course in Computational Mathematics
+%%
+%%  Master file.  Build with the book Makefile (which regenerates the verified
+%%  transcripts and the builtin-link table first, then runs latexmk):
+%%
+%%      make -C book pdf
+%%
+%%  Every In[]/Out[] transcript in this book is produced by running the inputs
+%%  through the real ./Mathilda binary at build time (see book/CONTEXT.md).
+%% ===========================================================================
+\documentclass[11pt,oneside]{memoir}
+
+% --- encoding & fonts ------------------------------------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{inconsolata}          % a readable monospace for the transcripts
+\usepackage{microtype}
+
+% --- mathematics -----------------------------------------------------------
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+
+% --- graphics, tables, colour ---------------------------------------------
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+
+% --- page layout (memoir) --------------------------------------------------
+\setlrmarginsandblock{1.1in}{1.1in}{*}
+\setulmarginsandblock{1.1in}{1.2in}{*}
+\checkandfixthelayout
+% Custom chapter style: a large, LEFT-anchored number (so two-digit chapter
+% numbers never overflow the page as veelo's fixed-width black bar did) with a
+% thin rule, echoing the running-head rule below.
+\makeatletter
+\makechapterstyle{mathildachap}{%
+  \setlength{\beforechapskip}{40pt}%
+  \setlength{\afterchapskip}{26pt}%
+  \renewcommand*{\chapnamefont}{\normalfont\large\scshape}%
+  \renewcommand*{\chapnumfont}{\normalfont\fontsize{48}{48}\selectfont\bfseries}%
+  \renewcommand*{\chaptitlefont}{\normalfont\Huge\bfseries}%
+  \renewcommand*{\printchaptername}{\chapnamefont\@chapapp\space}%
+  \renewcommand*{\chapternamenum}{}%
+  \renewcommand*{\printchapternum}{\chapnumfont\thechapter}%
+  \renewcommand*{\afterchapternum}{\par\nobreak\vskip 10pt\hrule height 0.4pt\vskip 16pt}%
+  \renewcommand*{\printchaptertitle}[1]{\raggedright\chaptitlefont ##1}%
+}
+\makeatother
+\chapterstyle{mathildachap}
+\setsecnumdepth{subsection}
+\settocdepth{section}
+
+% --- running heads: mixed case (not ALL CAPS), with a thin rule under them ---
+\nouppercaseheads
+\makepagestyle{mathilda}
+\makepsmarks{mathilda}{%
+  \createmark{chapter}{both}{shownumber}{}{. }%
+  \createplainmark{toc}{both}{\contentsname}%
+  \createplainmark{bib}{both}{\bibname}%
+  \createplainmark{index}{both}{\indexname}%
+}
+\makeevenhead{mathilda}{\small\thepage}{}{\small\itshape\leftmark}
+\makeoddhead{mathilda}{\small\itshape\leftmark}{}{\small\thepage}
+\makeevenfoot{mathilda}{}{}{}
+\makeoddfoot{mathilda}{}{}{}
+\makeheadrule{mathilda}{\textwidth}{0.4pt}
+\pagestyle{mathilda}
+
+% --- index -----------------------------------------------------------------
+\makeindex
+
+% --- bibliography ----------------------------------------------------------
+\usepackage[backend=biber,style=numeric,sorting=nyt]{biblatex}
+\addbibresource{references.bib}
+
+% --- hyperref (late), then the book's own support package ------------------
+\usepackage{hyperref}
+\usepackage{mathilda}
+\hypersetup{%
+  colorlinks=true,
+  linkcolor=mLink, citecolor=mLink, urlcolor=mLink, filecolor=mLink,
+  pdftitle={A User's Manual for the Mathilda Computer Algebra System},
+  pdfauthor={Sam Blake}}
+
+% --- theorem environments --------------------------------------------------
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+% ---------------------------------------------------------------------------
+\begin{document}
+
+\frontmatter
+\input{frontmatter/titlepage}
+\input{frontmatter/copyright}
+\tableofcontents*
+% \input{frontmatter/preface}   % preface deferred until the book is further along
+
+\mainmatter
+
+\include{chapters/01-about}
+\include{chapters/02-introduction}
+\include{chapters/03-mathematics}
+\include{chapters/04-graphics}
+\include{chapters/05-data-structures}
+\include{chapters/06-programming}
+\include{chapters/07-compilation}
+\include{chapters/08-data-io}
+\include{chapters/09-internals}
+\include{chapters/10-development}
+\include{chapters/11-contributing}
+\include{chapters/12-about-the-author}
+
+\appendix
+\include{chapters/appendix-architecture}
+
+\backmatter
+\input{frontmatter/colophon}
+\printbibliography[heading=bibintoc,title={References}]
+\printindex
+
+\end{document}

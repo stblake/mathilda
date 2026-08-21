@@ -1,0 +1,202 @@
+%% mathilda.sty -- support macros for the Mathilda book.
+%%
+%% Provides three things the whole book relies on:
+%%   * \mtranscript{path} -- include a build-time-verified REPL transcript
+%%     (generated/<path>.tex, produced by book/tools/build_examples.py).
+%%   * \B{Name}           -- typeset a builtin name as code, hyperlinked to its
+%%     reference page (table from generated/builtinlinks.tex via \DeclareBuiltinLink).
+%%   * callout boxes      -- Theory / Under the hood / Performance / Pitfall.
+%%
+%% hyperref MUST be loaded by the main document before this package (we use \href).
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{mathilda}[2026/08/21 Mathilda book: verified transcripts and builtin hyperlinks]
+
+\RequirePackage{listings}
+\RequirePackage{xcolor}
+\RequirePackage{framed}
+\RequirePackage{paracol}
+\RequirePackage[most]{tcolorbox}
+
+% ---------------------------------------------------------------- palette ---
+\definecolor{mReplBg}{gray}{0.965}
+\definecolor{mReplRule}{gray}{0.78}
+\definecolor{mLink}{rgb}{0.10,0.25,0.55}
+\definecolor{mCode}{rgb}{0.13,0.13,0.13}
+
+% ------------------------------------------------------------- inline code ---
+\newcommand{\mcode}[1]{\texttt{\textcolor{mCode}{#1}}}
+
+% --------------------------------------------- verified REPL transcript box ---
+\lstdefinestyle{mathildarepl}{%
+  basicstyle=\small\ttfamily,
+  breaklines=true,
+  breakatwhitespace=false,
+  breakindent=0pt,
+  breakautoindent=false,
+  postbreak=\mbox{\textcolor{mReplRule}{$\hookrightarrow$}\space},
+  columns=fullflexible,        % long unbroken tokens (e.g. the 50 digits of N[Pi,50])
+                               % wrap inside the box rather than overflowing it
+  keepspaces=true,
+  showstringspaces=false,
+  frame=single,
+  rulecolor=\color{mReplRule},
+  backgroundcolor=\color{mReplBg},
+  framesep=6pt,
+  xleftmargin=10pt,
+  xrightmargin=6pt,
+  aboveskip=\medskipamount,
+  belowskip=\medskipamount,
+  % Map each digit to itself so listings treats it as an individual atom rather than
+  % collecting a long numeral into one unbreakable unit -- this is what lets a value
+  % like N[Pi,50] wrap inside the box instead of overflowing it.
+  literate={`}{{\textasciigrave}}1
+    {0}{{0}}1 {1}{{1}}1 {2}{{2}}1 {3}{{3}}1 {4}{{4}}1
+    {5}{{5}}1 {6}{{6}}1 {7}{{7}}1 {8}{{8}}1 {9}{{9}}1
+}
+
+% \mtranscript{path}: include generated/<path>.tex verbatim, or a visible
+% placeholder if it has not been generated yet (so the doc still compiles).
+\newcommand{\mtranscript}[1]{%
+  \IfFileExists{generated/#1.tex}{%
+    \lstinputlisting[style=mathildarepl]{generated/#1.tex}%
+  }{%
+    \begin{tcolorbox}[colback=red!5,colframe=red!60!black,boxrule=0.4pt,
+                      left=6pt,right=6pt,top=4pt,bottom=4pt]
+      \small\ttfamily [\,transcript ``#1'' not generated --- run \textup{make examples}\,]
+    \end{tcolorbox}%
+  }%
+}
+
+% Plain transcript (no surrounding skips), for use inside a side-by-side box.
+\newcommand{\mtranscriptplain}[1]{%
+  \IfFileExists{generated/#1.tex}{%
+    \lstinputlisting[style=mathildarepl,aboveskip=0pt,belowskip=0pt]{generated/#1.tex}%
+  }{\textit{[\,transcript ``#1'' not generated --- run make examples\,]}}}
+
+% codecomment environment: the verified transcript in a left column, its explanation
+% (the environment body) in a right column. Built on paracol, so the columns WRAP and
+% BREAK ACROSS PAGES -- unlike minipages, a tall example spills onto the next page with
+% code and commentary each continuing in their own column.
+%
+% The listing frame insets its first line by ~framesep; the commentary column is
+% pushed down by \codecommenttopskip so the first code line and the first line of prose
+% sit on the same baseline.
+%
+%   \begin{codecomment}{02-introduction/numbers}
+%   Two integers add to an integer. ...
+%   \end{codecomment}
+\newcommand{\codecommentratio}{0.58}
+\newlength{\codecommenttopskip}\setlength{\codecommenttopskip}{6pt}
+% Explanation text is set 2pt smaller than the surrounding body (\footnotesize is 9pt
+% at the book's 11pt base).
+\newcommand{\explanationfont}{\footnotesize}
+\newenvironment{codecomment}[1]{%
+  \par\addvspace{\medskipamount}%
+  \columnratio{\codecommentratio}%
+  \setlength{\columnsep}{0.03\linewidth}%
+  \begin{paracol}{2}%
+    \mtranscriptplain{#1}%
+    \switchcolumn
+    \vspace*{\codecommenttopskip}%
+    \explanationfont\noindent\ignorespaces
+}{%
+    \par
+  \end{paracol}%
+  \par\addvspace{\medskipamount}%
+}
+
+% codepairs / \pair: pair EACH In[k]/Out[k] with its own note, row by row, so it is
+% always clear which words explain which line. paracol's \switchcolumn* re-synchronises
+% the two columns after every row, so each snippet and its note begin on the same line
+% and the whole block still breaks across pages.
+%
+%   \begin{codepairs}
+%   \pair{02-introduction/numbers/1}{Two integers add to an integer.}
+%   \pair{02-introduction/numbers/2}{An integer plus a rational stays exact.}
+%   \end{codepairs}
+\newlength{\pairrowsep}\setlength{\pairrowsep}{7pt}
+\newenvironment{codepairs}{%
+  \par\addvspace{\medskipamount}%
+  \columnratio{\codecommentratio}%
+  \setlength{\columnsep}{0.03\linewidth}%
+  \begin{paracol}{2}%
+}{%
+  \end{paracol}%
+  \par\addvspace{\medskipamount}%
+}
+% The row gap is placed AFTER each row's content (trailing), in both columns, so no
+% leading glue is discarded at a column boundary (which would shift the two columns by
+% different amounts). Only \codecommenttopskip offsets the note, to match the listing's
+% frame inset, so the first code line and the first note line share a baseline.
+\newcommand{\pair}[2]{%
+  \mtranscriptplain{#1}\vspace{\pairrowsep}%
+  \switchcolumn
+  \vspace*{\codecommenttopskip}\explanationfont\noindent\ignorespaces #2\par
+  \vspace{\pairrowsep}%
+  \switchcolumn*%
+}
+
+% ----------------------------------------------------- builtin hyperlinks ---
+% Declaration table (generated/builtinlinks.tex is one \DeclareBuiltinLink per builtin).
+\newcommand{\DeclareBuiltinLink}[2]{%
+  \expandafter\def\csname mbl@\detokenize{#1}\endcsname{#2}}
+
+% \B{Name}: hyperlinked code when a reference page exists, else code + a log note.
+% For $-system symbols write \B{\$Version} (keeps the $ out of math mode; the
+% generated key is escaped the same way, so the lookup still matches).
+\newcommand{\B}[1]{%
+  \ifcsname mbl@\detokenize{#1}\endcsname
+    \href{\csname mbl@\detokenize{#1}\endcsname}{\mcode{#1}}%
+  \else
+    \mcode{#1}%
+    \PackageWarning{mathilda}{No reference link for builtin `\detokenize{#1}'}%
+  \fi}
+
+% ---------------------------------------------------- docstring usage cards ---
+% \usagebox{Name}: a titled card showing a builtin's own docstring (?Name output)
+% and its attributes, generated live from the binary by book/tools/gen_usage.py.
+% The card body is verbatim, so it is exactly what the REPL prints.
+\lstdefinestyle{mathildausage}{%
+  basicstyle=\footnotesize\ttfamily,
+  breaklines=true,
+  breakatwhitespace=false,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  frame=none,
+  aboveskip=2pt,
+  belowskip=0pt,
+  xleftmargin=0pt}
+\newcommand{\usagebox}[1]{%
+  \IfFileExists{generated/usage/#1.txt}{%
+    \par\addvspace{\medskipamount}%
+    \begin{tcolorbox}[enhanced, breakable, colback=black!2, colframe=black!45,
+      boxrule=0.4pt, left=7pt, right=7pt, top=4pt, bottom=5pt,
+      colbacktitle=black!7, coltitle=black, fonttitle=\bfseries,
+      title={\B{#1}\hfill\normalfont\footnotesize\itshape
+             \IfFileExists{generated/usage/#1.attr}{\input{generated/usage/#1.attr}\unskip}{}}]
+      \lstinputlisting[style=mathildausage]{generated/usage/#1.txt}%
+    \end{tcolorbox}%
+    \par\addvspace{\medskipamount}%
+  }{%
+    \begin{tcolorbox}[colback=red!5,colframe=red!60!black,boxrule=0.4pt]
+      \small\ttfamily [\,usage card for ``#1'' not generated --- run \textup{make usage}\,]
+    \end{tcolorbox}%
+  }%
+}
+
+% ------------------------------------------------------------- callout boxes ---
+\newtcolorbox{mcallout}[2][]{%
+  enhanced, breakable, colback=#2!4, colframe=#2!55!black,
+  boxrule=0.5pt, left=8pt, right=8pt, top=6pt, bottom=6pt,
+  fonttitle=\bfseries, coltitle=black, title=#1}
+
+\newenvironment{theory}{\begin{mcallout}[Theory]{blue}}{\end{mcallout}}
+\newenvironment{underhood}{\begin{mcallout}[Under the hood]{teal}}{\end{mcallout}}
+\newenvironment{performance}{\begin{mcallout}[Performance]{green!45!black}}{\end{mcallout}}
+\newenvironment{pitfall}{\begin{mcallout}[Pitfall]{orange!85!red}}{\end{mcallout}}
+
+% ------------------------------------------ load the generated link table ---
+\AtBeginDocument{\IfFileExists{generated/builtinlinks.tex}{\input{generated/builtinlinks.tex}}{}}
+
+\endinput

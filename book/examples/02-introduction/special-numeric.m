@@ -1,0 +1,5 @@
+N[Zeta[3]]
+N[Zeta[3], 40]
+Erf[1.0]
+BesselJ[0, 1.0]
+N[Gamma[1/2], 30]

@@ -1,0 +1,7 @@
+Gamma[5]
+Gamma[1/2]
+Zeta[2]
+Zeta[-1]
+Beta[2, 3]
+PolyGamma[0, 1]
+AiryAi[0]

@@ -1,0 +1,7 @@
+Prime[100]
+FactorInteger[360]
+Divisors[36]
+GCD[48, 36]
+ExtendedGCD[48, 36]
+PowerMod[7, 100, 13]
+Fibonacci[50]

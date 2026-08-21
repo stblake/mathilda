@@ -1,0 +1,5 @@
+Head[3]
+Head[2^100]
+Head[2.5]
+Head[1/2]
+Head[2 + 3 I]

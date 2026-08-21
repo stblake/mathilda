@@ -1,0 +1,63 @@
+\chapter{Preface}
+
+This is a book about doing mathematics with a computer.
+
+It has two ambitions at once. The first is to be a \emph{user's manual}: a
+practical, example-driven guide to Mathilda, a computer algebra system you can
+download, read, and run for free. The second is to be a \emph{textbook on
+computational mathematics}---an account of how genuine, sometimes advanced,
+mathematics is actually carried out inside a computer algebra system: how a
+machine differentiates and integrates, factors an integer or a polynomial,
+solves an equation exactly, sums a series in closed form, or races through a
+million-element array without ever leaving machine precision.
+
+Those two goals reinforce each other. You cannot really understand a computer
+algebra system without seeing the mathematics it embodies, and you cannot
+appreciate the mathematics without watching a real system do it. So this book is
+built around transcripts of Mathilda at work, and it treats every one of them as
+a small experiment worth explaining.
+
+\section*{Every example is real}
+
+There is a promise behind every transcript in this book:
+
+\begin{quote}
+Nothing you see printed as \texttt{Out[\,]} was typed by a human. Each example is
+run through the Mathilda binary at the moment the book is built, and the output
+is inserted automatically.
+\end{quote}
+
+This is not a stylistic flourish; it is a design decision baked into how the book
+is produced. The inputs live in small program files; a build step feeds them to
+Mathilda and captures exactly what it prints; and the typesetting includes that
+captured text verbatim. There is, quite literally, nowhere for a hand-written
+answer to hide. If Mathilda's behaviour changes, the next build tells the truth
+about it. The mechanics are described in \texttt{book/CONTEXT.md} for the curious
+and for anyone who wants to contribute.
+
+One consequence is worth stating plainly: Mathilda's output form is not always
+the form a textbook would choose. Terms may be reordered, an exponential may be
+written \texttt{E\^{}x} rather than $e^{x}$, and an indefinite integral may differ
+from a table by a constant. Everything printed is nonetheless mathematically
+correct, and part of learning a computer algebra system is learning to read what
+it says.
+
+\section*{Links to the reference}
+
+Mathilda has hundreds of built-in functions, each with its own reference page in
+the online documentation. Whenever this book mentions a built-in for the first
+time in a discussion---\B{Integrate}, \B{Solve}, \B{FactorInteger}, and so
+on---the name is a live hyperlink to that reference page. The book teaches; the
+reference pages enumerate every option and corner case. Read this for the story
+and follow the links for the details.
+
+\section*{How to read this book}
+
+You do not need Mathematica, a licence, or a network connection to follow along;
+you need only a copy of Mathilda, which you can build from source. Type the
+\texttt{In[\,]} lines yourself and you will see the same \texttt{Out[\,]}. Later
+chapters assume the vocabulary of earlier ones, but the mathematical chapters in
+Part~II are largely independent---dip into calculus or number theory as your
+interest takes you.
+
+Welcome. Let us compute.
