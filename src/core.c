@@ -659,6 +659,11 @@ void core_init(void) {
     symtab_add_builtin("NonNegative", builtin_nonnegative);
     symtab_add_builtin("NonPositive", builtin_nonpositive);
     symtab_add_builtin("IntegerQ", builtin_integerq);
+    symtab_add_builtin("MachineIntegerQ", builtin_machineintegerq);
+    symtab_add_builtin("RationalQ", builtin_rationalq);
+    symtab_add_builtin("ComplexQ", builtin_complexq);
+    symtab_add_builtin("ExactNumberQ", builtin_exactnumberq);
+    symtab_add_builtin("InexactNumberQ", builtin_inexactnumberq);
     symtab_add_builtin("ValueQ", builtin_valueq);
     symtab_add_builtin("EvenQ", builtin_evenq);
     symtab_add_builtin("OddQ", builtin_oddq);
@@ -693,6 +698,11 @@ void core_init(void) {
     symtab_get_def("NonNegative")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("NonPositive")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("IntegerQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("MachineIntegerQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("RationalQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("ComplexQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("ExactNumberQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("InexactNumberQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("ValueQ")->attributes |= (ATTR_HOLDALL | ATTR_PROTECTED);
     symtab_get_def("EvenQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("OddQ")->attributes |= ATTR_PROTECTED;
@@ -2548,6 +2558,76 @@ Expr* builtin_integerq(Expr* res) {
     }
 
     return expr_new_symbol(SYM_False);
+}
+
+/* --- Further number-type predicates -------------------------------------- *
+ * MachineIntegerQ / RationalQ / ComplexQ / ExactNumberQ / InexactNumberQ.
+ * Each is a *Q predicate: arity 1, returns True/False, Protected. Docstrings
+ * live in info.c. See also IntegerQ (above) and NumberQ/NumericQ.            */
+
+/* True iff e is a two-argument function node whose head is the interned sym. */
+static bool core_head_is(const Expr* e, const char* sym) {
+    return e->type == EXPR_FUNCTION
+        && e->data.function.arg_count == 2
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == sym;
+}
+
+/* An exact number: machine/big integer, rational, or a Complex of exact parts. */
+static bool core_is_exact_number(const Expr* e) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    if (core_head_is(e, SYM_Rational)) return true;
+    if (core_head_is(e, SYM_Complex))
+        return core_is_exact_number(e->data.function.args[0])
+            && core_is_exact_number(e->data.function.args[1]);
+    return false;
+}
+
+/* An inexact number: a machine real, an MPFR real, or a Complex with an
+ * inexact part. */
+static bool core_is_inexact_number(const Expr* e) {
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (core_head_is(e, SYM_Complex))
+        return core_is_inexact_number(e->data.function.args[0])
+            || core_is_inexact_number(e->data.function.args[1]);
+    return false;
+}
+
+Expr* builtin_machineintegerq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    /* True only for a machine-word integer; a BigInt is not machine-sized. */
+    return expr_new_symbol(
+        res->data.function.args[0]->type == EXPR_INTEGER ? SYM_True : SYM_False);
+}
+
+Expr* builtin_rationalq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+    /* An exact rational: any integer (which is rational) or a Rational[p, q]. */
+    return expr_new_symbol(
+        (expr_is_integer_like(arg) || core_head_is(arg, SYM_Rational))
+            ? SYM_True : SYM_False);
+}
+
+Expr* builtin_complexq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    return expr_new_symbol(
+        core_head_is(res->data.function.args[0], SYM_Complex) ? SYM_True : SYM_False);
+}
+
+Expr* builtin_exactnumberq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    return expr_new_symbol(
+        core_is_exact_number(res->data.function.args[0]) ? SYM_True : SYM_False);
+}
+
+Expr* builtin_inexactnumberq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    return expr_new_symbol(
+        core_is_inexact_number(res->data.function.args[0]) ? SYM_True : SYM_False);
 }
 
 /* ValueQ[expr] — True if a value has been defined for expr, False otherwise.
