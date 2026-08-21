@@ -1,0 +1,743 @@
+{
+ "host": {
+  "date": "2026-08-21",
+  "missing_optional_deps": [
+   "GMP-ECM not detected; building with USE_ECM=0 (advanced factorisation disabled)"
+  ],
+  "platform": "macOS-26.6.1-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "processor": "arm",
+  "mathilda": "Mathilda 0.076 (GCC 16.2.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)",
+  "mathilda_bin": "/Users/67840/Documents/GitHub/mathilda/.claude/worktrees/where-are-you-5f1147/Mathilda",
+  "python_bin": "/opt/homebrew/opt/python@3.14/bin/python3.14",
+  "python_libs": "3.14.3 2.4.1 1.17.1 1.14.0",
+  "wolframscript": "/usr/local/bin/wolframscript",
+  "runner_python": "3.14.3",
+  "local_versions": {
+   "numpy": "2.4.1",
+   "scipy": "1.17.1",
+   "sympy": "1.14.0",
+   "mpmath": "1.3.0",
+   "numba": "0.65.0",
+   "networkx": "3.6.1"
+  }
+ },
+ "rows": [
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "D1 rastrigin 2d (DE)",
+   "times": {
+    "mathilda": 0.11,
+    "wolfram": 199.672,
+    "python": 25.227
+   },
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "0",
+    "python": "0"
+   },
+   "ratio": 0.0043604074999008995,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "D2 rastrigin 5d (DE)",
+   "times": {
+    "mathilda": 2.778,
+    "wolfram": 704.686,
+    "python": 160.017
+   },
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "0",
+    "python": "0"
+   },
+   "ratio": 0.017360655430360524,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "D3 ackley 10d (DE)",
+   "times": {
+    "mathilda": 9.087,
+    "wolfram": 1112.43,
+    "python": 731.818
+   },
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "0",
+    "python": "0"
+   },
+   "ratio": 0.012417021718514713,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "D4 rosenbrock 5d (DE)",
+   "times": {
+    "mathilda": 1.403,
+    "wolfram": 913.399,
+    "python": 531.567
+   },
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "0",
+    "python": "0"
+   },
+   "ratio": 0.0026393662511028713,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "D5 levy 5d (DE)",
+   "times": {
+    "mathilda": 1.011,
+    "wolfram": 720.321,
+    "python": 220.064
+   },
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "0",
+    "python": "0"
+   },
+   "ratio": 0.004594118074741893,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "D6 sphere 10d (DE)",
+   "times": {
+    "mathilda": 2.226,
+    "wolfram": 1076.01,
+    "python": 575.189
+   },
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "0",
+    "python": "0"
+   },
+   "ratio": 0.0038700322850402217,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "A1 branin 2d (auto)",
+   "times": {
+    "mathilda": 0.08,
+    "python": 14.863
+   },
+   "checks": {
+    "mathilda": "3979",
+    "python": "3979"
+   },
+   "ratio": 0.00538249344008612,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "A2 six-hump camel (auto)",
+   "times": {
+    "mathilda": 0.083,
+    "python": 11.824
+   },
+   "checks": {
+    "mathilda": "-10316",
+    "python": "-10316"
+   },
+   "ratio": 0.007019621109607578,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "A3 beale 2d (auto)",
+   "times": {
+    "mathilda": 0.093,
+    "python": 34.205
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.0027189007455050433,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "A4 cross-in-tray (auto)",
+   "times": {
+    "mathilda": 1.58,
+    "python": 12.071
+   },
+   "checks": {
+    "mathilda": "-20626",
+    "python": "-20626"
+   },
+   "ratio": 0.13089222102559855,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "M1 nmaximize styblinski 5d",
+   "times": {
+    "mathilda": 0.523,
+    "python": 82.629
+   },
+   "checks": {
+    "mathilda": "1958308",
+    "wolfram": "1958308",
+    "python": "1958308"
+   },
+   "ratio": 0.006329496907865277,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "M3 wrapper base nminimize",
+   "times": {
+    "mathilda": 0.111,
+    "wolfram": 201.536,
+    "python": 24.153
+   },
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "0",
+    "python": "0"
+   },
+   "ratio": 0.004595702397217737,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "M4 wrapper same via nmaximize",
+   "times": {
+    "mathilda": 0.141,
+    "wolfram": 202.541,
+    "python": 24.315
+   },
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "0",
+    "python": "0"
+   },
+   "ratio": 0.005798889574336828,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "C1 ineq constrained",
+   "times": {
+    "mathilda": 0.243,
+    "wolfram": 0.946,
+    "python": 0.198
+   },
+   "checks": {
+    "mathilda": "2000",
+    "wolfram": "2000",
+    "python": "2000"
+   },
+   "ratio": 1.2272727272727273,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "C2 eq constrained",
+   "times": {
+    "mathilda": 0.2,
+    "wolfram": 0.387,
+    "python": 0.199
+   },
+   "checks": {
+    "mathilda": "2000",
+    "wolfram": "2000",
+    "python": "2000"
+   },
+   "ratio": 1.0050251256281406,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "C3 mixed integer",
+   "times": {
+    "mathilda": 0.019,
+    "wolfram": 0.601,
+    "python": 5.8
+   },
+   "checks": {
+    "mathilda": "250",
+    "wolfram": "250",
+    "python": "250"
+   },
+   "ratio": 0.03161397670549085,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "I1 rastrigin 5d explicit vars",
+   "times": {
+    "mathilda": 2.787,
+    "wolfram": 721.71,
+    "python": 153.349
+   },
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "0",
+    "python": "0"
+   },
+   "ratio": 0.0181742300243236,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "89-nminimize-nmaximize",
+   "group": "D uncovered subsystems",
+   "label": "I2 rastrigin 5d indexed vars",
+   "times": {
+    "mathilda": 111.497,
+    "wolfram": 732.884,
+    "python": 156.807
+   },
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "0",
+    "python": "0"
+   },
+   "ratio": 0.7110460629946368,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "90-nminimize-testbed",
+   "group": "D uncovered subsystems",
+   "label": "T1 schwefel 5d",
+   "times": {},
+   "checks": {
+    "mathilda": "0",
+    "python": "1"
+   },
+   "ratio": null,
+   "note": "check disagreement: Mathilda=0; Python=1",
+   "klass": "CHECK-FAIL"
+  },
+  {
+   "experiment": "90-nminimize-testbed",
+   "group": "D uncovered subsystems",
+   "label": "T2 griewank 5d",
+   "times": {},
+   "checks": {
+    "mathilda": "0",
+    "python": "1"
+   },
+   "ratio": null,
+   "note": "check disagreement: Mathilda=0; Python=1",
+   "klass": "CHECK-FAIL"
+  },
+  {
+   "experiment": "90-nminimize-testbed",
+   "group": "D uncovered subsystems",
+   "label": "T3 drop-wave 2d",
+   "times": {},
+   "checks": {
+    "mathilda": "1",
+    "wolfram": "1",
+    "python": "0"
+   },
+   "ratio": null,
+   "note": "check disagreement: Mathilda=1; Python=0; Mathematica=1",
+   "klass": "CHECK-FAIL"
+  },
+  {
+   "experiment": "90-nminimize-testbed",
+   "group": "D uncovered subsystems",
+   "label": "T4 rastrigin 10d",
+   "times": {},
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "1",
+    "python": "1"
+   },
+   "ratio": null,
+   "note": "check disagreement: Mathilda=0; Python=1; Mathematica=1",
+   "klass": "CHECK-FAIL"
+  },
+  {
+   "experiment": "90-nminimize-testbed",
+   "group": "D uncovered subsystems",
+   "label": "T5 styblinski-tang 5d",
+   "times": {
+    "mathilda": 0.505,
+    "python": 83.818
+   },
+   "checks": {
+    "mathilda": "1",
+    "python": "1"
+   },
+   "ratio": 0.006024958839390107,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "90-nminimize-testbed",
+   "group": "D uncovered subsystems",
+   "label": "T6 bukin n6",
+   "times": {
+    "mathilda": 0.261,
+    "python": 394.699
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.0006612633931172868,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "90-nminimize-testbed",
+   "group": "D uncovered subsystems",
+   "label": "T7 eggholder 2d",
+   "times": {
+    "mathilda": 0.172,
+    "python": 16.51
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.010417928528164746,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "90-nminimize-testbed",
+   "group": "D uncovered subsystems",
+   "label": "F1 ineq feasibility",
+   "times": {},
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "1",
+    "python": "1"
+   },
+   "ratio": null,
+   "note": "check disagreement: Mathilda=0; Python=1; Mathematica=1",
+   "klass": "CHECK-FAIL"
+  },
+  {
+   "experiment": "90-nminimize-testbed",
+   "group": "D uncovered subsystems",
+   "label": "F2 eq feasibility",
+   "times": {},
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "1",
+    "python": "1"
+   },
+   "ratio": null,
+   "note": "check disagreement: Mathilda=0; Python=1; Mathematica=1",
+   "klass": "CHECK-FAIL"
+  }
+ ],
+ "requires": {
+  "NMinimize": "present",
+  "NMaximize": "present"
+ },
+ "raw": {
+  "89-nminimize-nmaximize": {
+   "mathilda": {
+    "bench": {
+     "D1 rastrigin 2d (DE)": 0.11,
+     "D2 rastrigin 5d (DE)": 2.778,
+     "D3 ackley 10d (DE)": 9.087,
+     "D4 rosenbrock 5d (DE)": 1.403,
+     "D5 levy 5d (DE)": 1.011,
+     "D6 sphere 10d (DE)": 2.226,
+     "A1 branin 2d (auto)": 0.08,
+     "A2 six-hump camel (auto)": 0.083,
+     "A3 beale 2d (auto)": 0.093,
+     "A4 cross-in-tray (auto)": 1.58,
+     "M1 nmaximize styblinski 5d": 0.523,
+     "M3 wrapper base nminimize": 0.111,
+     "M4 wrapper same via nmaximize": 0.141,
+     "C1 ineq constrained": 0.243,
+     "C2 eq constrained": 0.2,
+     "C3 mixed integer": 0.019,
+     "I1 rastrigin 5d explicit vars": 2.787,
+     "I2 rastrigin 5d indexed vars": 111.497
+    },
+    "check": {
+     "D1 rastrigin 2d (DE)": "0",
+     "D2 rastrigin 5d (DE)": "0",
+     "D3 ackley 10d (DE)": "0",
+     "D4 rosenbrock 5d (DE)": "0",
+     "D5 levy 5d (DE)": "0",
+     "D6 sphere 10d (DE)": "0",
+     "A1 branin 2d (auto)": "3979",
+     "A2 six-hump camel (auto)": "-10316",
+     "A3 beale 2d (auto)": "0",
+     "A4 cross-in-tray (auto)": "-20626",
+     "M1 nmaximize styblinski 5d": "1958308",
+     "M3 wrapper base nminimize": "0",
+     "M4 wrapper same via nmaximize": "0",
+     "C1 ineq constrained": "2000",
+     "C2 eq constrained": "2000",
+     "C3 mixed integer": "250",
+     "I1 rastrigin 5d explicit vars": "0",
+     "I2 rastrigin 5d indexed vars": "0"
+    },
+    "require": {
+     "NMinimize": "present",
+     "NMaximize": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "D1 rastrigin 2d (DE)": 199.672,
+     "D2 rastrigin 5d (DE)": 704.686,
+     "D3 ackley 10d (DE)": 1112.43,
+     "D4 rosenbrock 5d (DE)": 913.399,
+     "D5 levy 5d (DE)": 720.321,
+     "D6 sphere 10d (DE)": 1076.01,
+     "M3 wrapper base nminimize": 201.536,
+     "M4 wrapper same via nmaximize": 202.541,
+     "C1 ineq constrained": 0.946,
+     "C2 eq constrained": 0.387,
+     "C3 mixed integer": 0.601,
+     "I1 rastrigin 5d explicit vars": 721.71,
+     "I2 rastrigin 5d indexed vars": 732.884
+    },
+    "check": {
+     "D1 rastrigin 2d (DE)": "0",
+     "D2 rastrigin 5d (DE)": "0",
+     "D3 ackley 10d (DE)": "0",
+     "D4 rosenbrock 5d (DE)": "0",
+     "D5 levy 5d (DE)": "0",
+     "D6 sphere 10d (DE)": "0",
+     "M1 nmaximize styblinski 5d": "1958308",
+     "M3 wrapper base nminimize": "0",
+     "M4 wrapper same via nmaximize": "0",
+     "C1 ineq constrained": "2000",
+     "C2 eq constrained": "2000",
+     "C3 mixed integer": "250",
+     "I1 rastrigin 5d explicit vars": "0",
+     "I2 rastrigin 5d indexed vars": "0"
+    },
+    "require": {
+     "NMinimize": "present",
+     "NMaximize": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "D1 rastrigin 2d (DE)": 25.227,
+     "D2 rastrigin 5d (DE)": 160.017,
+     "D3 ackley 10d (DE)": 731.818,
+     "D4 rosenbrock 5d (DE)": 531.567,
+     "D5 levy 5d (DE)": 220.064,
+     "D6 sphere 10d (DE)": 575.189,
+     "A1 branin 2d (auto)": 14.863,
+     "A2 six-hump camel (auto)": 11.824,
+     "A3 beale 2d (auto)": 34.205,
+     "A4 cross-in-tray (auto)": 12.071,
+     "M1 nmaximize styblinski 5d": 82.629,
+     "M3 wrapper base nminimize": 24.153,
+     "M4 wrapper same via nmaximize": 24.315,
+     "C1 ineq constrained": 0.198,
+     "C2 eq constrained": 0.199,
+     "C3 mixed integer": 5.8,
+     "I1 rastrigin 5d explicit vars": 153.349,
+     "I2 rastrigin 5d indexed vars": 156.807
+    },
+    "check": {
+     "D1 rastrigin 2d (DE)": "0",
+     "D2 rastrigin 5d (DE)": "0",
+     "D3 ackley 10d (DE)": "0",
+     "D4 rosenbrock 5d (DE)": "0",
+     "D5 levy 5d (DE)": "0",
+     "D6 sphere 10d (DE)": "0",
+     "A1 branin 2d (auto)": "3979",
+     "A2 six-hump camel (auto)": "-10316",
+     "A3 beale 2d (auto)": "0",
+     "A4 cross-in-tray (auto)": "-20626",
+     "M1 nmaximize styblinski 5d": "1958308",
+     "M3 wrapper base nminimize": "0",
+     "M4 wrapper same via nmaximize": "0",
+     "C1 ineq constrained": "2000",
+     "C2 eq constrained": "2000",
+     "C3 mixed integer": "250",
+     "I1 rastrigin 5d explicit vars": "0",
+     "I2 rastrigin 5d indexed vars": "0"
+    },
+    "require": {
+     "scipy.optimize:differential_evolution": "present",
+     "scipy.optimize:minimize": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "90-nminimize-testbed": {
+   "mathilda": {
+    "bench": {
+     "T1 schwefel 5d": 0.643,
+     "T2 griewank 5d": 1.618,
+     "T3 drop-wave 2d": 0.21,
+     "T4 rastrigin 10d": 25.597,
+     "T5 styblinski-tang 5d": 0.505,
+     "T6 bukin n6": 0.261,
+     "T7 eggholder 2d": 0.172,
+     "F1 ineq feasibility": 0.245,
+     "F2 eq feasibility": 0.196
+    },
+    "check": {
+     "T1 schwefel 5d": "0",
+     "T2 griewank 5d": "0",
+     "T3 drop-wave 2d": "1",
+     "T4 rastrigin 10d": "0",
+     "T5 styblinski-tang 5d": "1",
+     "T6 bukin n6": "0",
+     "T7 eggholder 2d": "0",
+     "F1 ineq feasibility": "0",
+     "F2 eq feasibility": "0"
+    },
+    "require": {
+     "NMinimize": "present",
+     "NMaximize": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "T3 drop-wave 2d": 8.081,
+     "T4 rastrigin 10d": 7.093,
+     "F1 ineq feasibility": 1.124,
+     "F2 eq feasibility": 0.406
+    },
+    "check": {
+     "T3 drop-wave 2d": "1",
+     "T4 rastrigin 10d": "1",
+     "F1 ineq feasibility": "1",
+     "F2 eq feasibility": "1"
+    },
+    "require": {
+     "NMinimize": "present",
+     "NMaximize": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "T1 schwefel 5d": 375.152,
+     "T2 griewank 5d": 338.257,
+     "T3 drop-wave 2d": 20.691,
+     "T4 rastrigin 10d": 1068.126,
+     "T5 styblinski-tang 5d": 83.818,
+     "T6 bukin n6": 394.699,
+     "T7 eggholder 2d": 16.51,
+     "F1 ineq feasibility": 0.199,
+     "F2 eq feasibility": 0.186
+    },
+    "check": {
+     "T1 schwefel 5d": "1",
+     "T2 griewank 5d": "1",
+     "T3 drop-wave 2d": "0",
+     "T4 rastrigin 10d": "1",
+     "T5 styblinski-tang 5d": "1",
+     "T6 bukin n6": "0",
+     "T7 eggholder 2d": "0",
+     "F1 ineq feasibility": "1",
+     "F2 eq feasibility": "1"
+    },
+    "require": {
+     "scipy.optimize:differential_evolution": "present",
+     "scipy.optimize:minimize": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  }
+ },
+ "elapsed_s": 100.9734480381012,
+ "durations": {
+  "89-nminimize-nmaximize": 51.858004093170166,
+  "90-nminimize-testbed": 47.27784609794617
+ },
+ "partial": true,
+ "label_problems": []
+}
