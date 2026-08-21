@@ -207,7 +207,25 @@ ifeq ($(USE_LAPACK), 1)
     LDFLAGS += -framework Accelerate
   else ifneq ($(shell pkg-config --exists lapacke 2>/dev/null && echo y),)
     CFLAGS  += -DUSE_LAPACK $(shell pkg-config --cflags lapacke)
-    LDFLAGS += $(shell pkg-config --libs lapacke)
+    # Debian/Ubuntu's lapacke.pc exposes only `-llapacke` and hides the Fortran
+    # LAPACK + reference CBLAS it depends on behind Requires.private, which a
+    # non-static `pkg-config --libs` never expands. Mathilda calls the Fortran
+    # LAPACK routines (dgeev_, zgesv_, dgesdd_, ...) and cblas_* (cblas_dgemm,
+    # cblas_ddot) DIRECTLY — it uses no LAPACKE C wrappers — so a pkg-config-only
+    # link fails on Ubuntu with hundreds of undefined references even though the
+    # headers resolve fine. Append the transitive -llapack + a BLAS provider
+    # (once each), after -llapacke so ld's left-to-right resolution keeps each
+    # provider behind its consumer. Homebrew's .pc and the Accelerate path never
+    # hit this; the /usr/include tier below already spells the trio out. Same
+    # fixup idiom as the FLINT block and the CI EXTRA_LIBS="-llapack -lblas".
+    LAPACKE_LIBS := $(shell pkg-config --libs lapacke)
+    ifeq ($(filter -llapack,$(LAPACKE_LIBS)),)
+      LAPACKE_LIBS += -llapack
+    endif
+    ifeq ($(filter -lblas -lopenblas -lcblas,$(LAPACKE_LIBS)),)
+      LAPACKE_LIBS += -lblas
+    endif
+    LDFLAGS += $(LAPACKE_LIBS)
   else ifneq ($(wildcard /usr/include/lapacke.h)$(wildcard /usr/local/include/lapacke.h),)
     CFLAGS  += -DUSE_LAPACK
     LDFLAGS += -llapacke -llapack -lblas
