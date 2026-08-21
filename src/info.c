@@ -2464,6 +2464,31 @@ void info_init(void) {
         "\tgives True if expr is an Integer or BigInt, False otherwise.\n"
         "Returns False on rationals with denominator > 1, reals, and symbolic\n"
         "expressions (even those that are integer-valued, e.g. 2 Pi / Pi).");
+    symtab_set_docstring("MachineIntegerQ",
+        "MachineIntegerQ[expr]\n"
+        "\tgives True if expr is a machine-word (64-bit) integer, False otherwise.\n"
+        "Unlike IntegerQ, returns False for a BigInt: MachineIntegerQ[2^100] is\n"
+        "False because that value has been promoted out of a 64-bit word.");
+    symtab_set_docstring("RationalQ",
+        "RationalQ[expr]\n"
+        "\tgives True if expr is an exact rational number, False otherwise.\n"
+        "True for an Integer or BigInt (an integer is rational) and for a\n"
+        "Rational[p, q]. Returns False on reals and on symbolic expressions.");
+    symtab_set_docstring("ComplexQ",
+        "ComplexQ[expr]\n"
+        "\tgives True if expr is a Complex number, False otherwise.\n"
+        "Tests for the Complex[re, im] head; a purely real number is not Complex.");
+    symtab_set_docstring("ExactNumberQ",
+        "ExactNumberQ[expr]\n"
+        "\tgives True if expr is an exact number, False otherwise.\n"
+        "Exact numbers are integers, rationals, and Complex numbers whose parts\n"
+        "are exact. Reals and MPFR numbers are inexact, so ExactNumberQ is False.");
+    symtab_set_docstring("InexactNumberQ",
+        "InexactNumberQ[expr]\n"
+        "\tgives True if expr is an inexact number, False otherwise.\n"
+        "Inexact numbers are machine reals, arbitrary-precision (MPFR) reals, and\n"
+        "Complex numbers with an inexact part. The complement of ExactNumberQ\n"
+        "among numbers.");
     symtab_set_docstring("ValueQ",
         "ValueQ[expr]\n"
         "\tgives True if a value has been defined for expr, False otherwise.\n"
