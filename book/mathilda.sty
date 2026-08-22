@@ -202,6 +202,24 @@
 %   organising. \texttt{Flat} means nested calls are spliced...}, handles ...
 \newcommand{\calloutnote}[2]{\footnote{\emph{#1.}\space #2}}
 
+% ------------------------------------------------------ generated figures ---
+% \bookfigure[width]{path}{caption}: include generated/figures/<path>.pdf, a plot
+% Export-ed to PDF by the real binary (book/tools/gen_figures.py from
+% book/figures/<path>.m). Like \mtranscript, it degrades to a visible placeholder
+% when the figure has not been generated yet, so the document always compiles.
+\newcommand{\bookfigure}[3][0.72\linewidth]{%
+  \begin{figure}[htbp]%
+    \centering
+    \IfFileExists{generated/figures/#2.pdf}{%
+      \includegraphics[width=#1]{generated/figures/#2.pdf}%
+    }{%
+      \fbox{\parbox{#1}{\centering\small\ttfamily
+        [\,figure ``#2'' not generated --- run \textup{make figures}\,]}}%
+    }%
+    \caption{#3}%
+  \end{figure}%
+}
+
 % ------------------------------------------ load the generated link table ---
 \AtBeginDocument{\IfFileExists{generated/builtinlinks.tex}{\input{generated/builtinlinks.tex}}{}}
 

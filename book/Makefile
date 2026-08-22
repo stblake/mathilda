@@ -18,8 +18,9 @@ GEN       := generated
 MATHILDA  := ../Mathilda
 LATEXMK   := latexmk
 EXAMPLES  := $(shell find examples -name '*.m' 2>/dev/null)
+FIGURES   := $(shell find figures -name '*.m' 2>/dev/null)
 
-.PHONY: pdf all links examples usage check-links clean distclean help
+.PHONY: pdf all links examples usage figures check-links clean distclean help
 
 all: pdf
 
@@ -51,8 +52,16 @@ $(GEN)/.usage.stamp: $(CHAPTERS) $(TOOLS)/gen_usage.py | $(MATHILDA)
 	$(PYTHON) $(TOOLS)/gen_usage.py
 	@mkdir -p $(GEN) && touch $@
 
+# --- figures (\bookfigure): plots Export-ed to PDF by the real binary ------
+figures: | $(MATHILDA)
+	$(PYTHON) $(TOOLS)/gen_figures.py
+
+$(GEN)/.figures.stamp: $(FIGURES) $(TOOLS)/gen_figures.py ../site/verify_tutorial.py | $(MATHILDA)
+	$(PYTHON) $(TOOLS)/gen_figures.py
+	@mkdir -p $(GEN) && touch $@
+
 # --- the book -------------------------------------------------------------
-pdf: $(GEN)/builtinlinks.tex $(GEN)/.examples.stamp $(GEN)/.usage.stamp
+pdf: $(GEN)/builtinlinks.tex $(GEN)/.examples.stamp $(GEN)/.usage.stamp $(GEN)/.figures.stamp
 	$(LATEXMK) -pdf -interaction=nonstopmode -halt-on-error $(BOOK).tex
 
 # --- checks ---------------------------------------------------------------
