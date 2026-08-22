@@ -2,7 +2,7 @@
 
 Mathilda is a small, open source computer algebra system (CAS) heavily inspired by the core architecture and evaluation semantics of Mathematica. Written entirely in C99 and its own language, it implements a recursive expression model, structural pattern matching with backtracking, rewriting rules, and an extensive library of built-in mathematical functions. 
 
-Today Mathilda spans roughly **294,000 lines of C99** across **433 source modules**, exposing **~695 built-in functions** organized into **32 functional categories** — from arbitrary-precision arithmetic and symbolic calculus to polynomial factorization, dense linear algebra, integer factorization, and interactive 2D/3D graphics.
+Today Mathilda spans over **370,000 lines of C99** across **577 source modules** (947 files including headers), exposing **more than 780 built-in functions** organized into **36 functional categories** — from arbitrary-precision arithmetic and symbolic calculus through polynomial factorization, dense linear algebra, a `Compile[]` bytecode compiler with transparent packed-array acceleration, numerical integration and optimization, integer and Diophantine equation solving, graph theory, machine learning, and interactive 2D/3D graphics.
 
 ## 🌟 Key Features
 
@@ -17,16 +17,46 @@ Today Mathilda spans roughly **294,000 lines of C99** across **433 source module
 **Numbers**
 * **Arbitrary-precision integers** via the GNU Multiple Precision Arithmetic Library (GMP), with automatic promotion/demotion from machine integers.
 * **Exact rationals and complex numbers**, plus **MPFR-backed arbitrary-precision reals** with precision/accuracy tracking (`N[expr, prec]`, precision literals such as `` 3.98`50 ``).
+* **Interval arithmetic** (`Interval`) for rigorous enclosures.
 
 **Symbolic mathematics**
-* **Calculus:** symbolic differentiation (`D`, `Dt`, `Derivative`); multi-method integration (`Integrate`) cascading rational-function, Risch–Norman, radical-substitution, derivative-divides, and CRC integral-table methods; `Series`, `Limit`, and symbolic summation (`Sum` via polynomial, geometric, and Gosper algorithms).
-* **Polynomials:** univariate and multivariate arithmetic, factorization (square-free decomposition, Hensel lifting, irreducibility testing), algebraic-number factoring over ℚ(α), Gröbner bases, GCD/LCM, and partial fractions.
-* **Linear algebra:** `Det`, `Inverse`, `Dot`, `Cross`; LU / QR / Cholesky / SVD / Schur decompositions; eigenvalues and eigenvectors via multiple algorithm kernels; norms, rank, and condition numbers — with optional LAPACK acceleration for machine-precision work.
-* **Simplification:** `Simplify` with a complexity-driven search, trigonometric identities, radical denesting, and an assumptions framework (`$Assumptions`, `Element`).
+* **Calculus:** symbolic differentiation (`D`, `Dt`, `Derivative`); multi-method integration (`Integrate`) cascading rational-function, Risch–Norman, Cherry/Liouvillian, radical-substitution, derivative-divides, and CRC integral-table methods, plus definite/contour integration; `Series`, `Limit` (with a Gruntz most-rapidly-varying engine), and symbolic summation and products (`Sum`, `Product` — finite and infinite families via Gosper, hypergeometric, telescoping, and zeta algorithms).
+* **Polynomials:** univariate and multivariate arithmetic, factorization (square-free decomposition, Hensel lifting, irreducibility testing), algebraic-number factoring over ℚ(α), Gröbner bases (incl. over finite fields), GCD/LCM, resultants, and partial fractions — with optional FLINT acceleration.
+* **Linear algebra:** `Det`, `Inverse`, `Dot`, `Cross`; LU / QR / Cholesky / SVD / Schur decompositions; eigenvalues and eigenvectors via multiple algorithm kernels; norms, rank, and condition numbers — with optional LAPACK/BLAS acceleration for machine-precision work.
+* **Special functions:** `Gamma`, `LogGamma`, `PolyGamma`, `Zeta`, `HurwitzZeta`, `LerchPhi`, `PolyLog`, the Bessel and Airy families, `Erf`/`Erfc`/`Erfi`, exponential/log/sine/cosine integrals, `HypergeometricPFQ` (and `0F1`/`1F1`/`2F1`), Legendre, `BernoulliB`, `EulerE`, and more — many with rigorous `acb` numerics when built with FLINT.
+* **Simplification:** `Simplify`/`FullSimplify` with a complexity-driven search, trigonometric identities and rationalization, radical denesting, and an assumptions framework (`$Assumptions`, `Assuming`, `Element`).
+
+**Equation solving**
+* **Over the reals and complexes:** `Solve` for polynomial (via radicals and `Root` objects), radical, transcendental, and nonlinear systems; `SolveAlways`, `Eliminate`, `ToRadicals`, and `GroebnerBasis`.
+* **Diophantine (`Solve[…, Integers]`):** a dedicated integer-equation engine — linear systems via Hermite normal form, Pell and generalized Pell equations, Thue equations through a number-field/unit layer (Voronoi and Minkowski–LLL unit search), the sum-of-three-cubes search (Booker/Heath-Brown), Ramanujan–Nagell, ternary quadratic forms, Egyptian fractions, and power-sum searches (Lander–Parkin, Frye).
+
+**Numerical analysis**
+* **Quadrature & sums:** `NIntegrate` (adaptive, oscillatory, Levin-collocation, MPFR-precision), `NSum`/`NProduct` (Euler–Maclaurin and convergence acceleration), `NResidue`.
+* **Differential equations:** `NDSolve` for ODE initial-value problems and PDE systems (with upwind schemes and optional BLAS/LAPACK acceleration).
+* **Optimization:** global `NMinimize`/`NMaximize` (differential evolution, simulated annealing, basin hopping, SHGO, dual annealing) and local `FindMinimum`/`FindMaximum` (L-BFGS-B, Nelder–Mead, Powell, SLSQP, COBYLA/COBYQA, trust-region), plus mixed-integer and constrained problems.
+* **Roots & local analysis:** `FindRoot`, `NSolve`, `NRoots`, `NLimit`, `NSeries`, `ND`.
+
+**High-performance numerics**
+* **Packed arrays:** ordinary `List`s of machine numbers are transparently backed by dense `NDArray` storage, and element-wise, reduction, and structural kernels operate directly on the buffer — optionally multithreaded across cores — for order-of-magnitude speedups over boxed evaluation.
+* **`Compile[]`:** a bytecode compiler that lowers numeric expressions to a register VM at both scalar and rank-1 array shapes, with auto-compilation of `Table`/`Sum`/`NIntegrate` bodies, and `CompileDiagnostics` for inspecting what lowered.
+* **Optional acceleration backends:** LAPACK/BLAS for dense linear algebra and FFTW for `Fourier`.
 
 **Number theory & factorization**
-* **Number theory:** `GCD`, `LCM`, `ExtendedGCD`, `PowerMod`, `Divisors`, `EulerPhi`, `MoebiusMu`, `PrimitiveRoot`, continued fractions, and more.
+* **Number theory:** `GCD`, `LCM`, `ExtendedGCD`, `PowerMod`, `Divisors`, `DivisorSigma`, `EulerPhi`, `MoebiusMu`, `PrimitiveRoot`, `MultiplicativeOrder`, continued fractions, and more.
 * **Integer factorization:** a unified, automatic pipeline alongside explicit algorithms — Pollard's Rho, Pollard's $P-1$, Williams' $P+1$, Fermat, CFRAC, Dixon's Method, and the Elliptic Curve Method (ECM).
+
+**Data structures**
+* **Associations** (`<|…|>`) with O(1) hashed lookup: `Keys`, `Values`, `Lookup`, `KeySort`, `AssociationThread`, and the aggregation vocabulary `GroupBy`, `Merge`, `Counts`, `GatherBy`, `Tally`.
+
+**Graph theory**
+* `Graph` with directed/undirected/weighted edges, generators (`CompleteGraph`, `CycleGraph`, `RandomGraph`), queries (`AdjacencyMatrix`, `VertexDegree`, `ConnectedComponents`), algorithms (`FindShortestPath`, `GraphDistance`, `FindSpanningTree`), and `GraphPlot`.
+
+**Machine learning**
+* High-level `Classify`/`Predict` with `ClassifierFunction`/`PredictorFunction`, clustering (`FindClusters`, `ClusteringComponents`), dimensionality reduction (`PrincipalComponents`, `DimensionReduce`), `LinearModelFit`, `Nearest`, and `LearnDistribution`.
+
+**Signal & image processing**
+* **Fourier:** `Fourier`/`InverseFourier`, `FourierDCT`/`FourierDST` (FFTW-backed when available).
+* **Images:** `Image`/`Image3D`, filtering (`GaussianFilter`, `ImageConvolve`, `EdgeDetect`), morphology (`Dilation`, `Erosion`), `Binarize`, `ColorConvert`, `ImageResize`, and histograms.
 
 **Graphics & visualization** *(requires [Raylib](https://www.raylib.com/); gracefully omitted otherwise)*
 * **2D plots:** `Plot` with adaptive sampling and re-sampling on zoom/pan; `ParametricPlot` for curves and filled regions; `StreamPlot` for vector fields with speed-gradient colouring; `ListPlot`/`ListLinePlot` for discrete data; `ContourPlot` for iso-contours with marching-squares (equation form `f == c`, list of equations `{eq1, eq2, …}`, and numeric-body shading with `ContourShading`/`ColorFunction`).
@@ -44,28 +74,27 @@ Today Mathilda spans roughly **294,000 lines of C99** across **433 source module
 
 ## 📚 Function Categories
 
-The complete reference (~695 functions) lives in [`Mathilda_spec.md`](Mathilda_spec.md), which indexes the per-category pages under [`docs/spec/builtins/`](docs/spec/builtins/):
+The complete reference (780+ functions across 36 categories) lives in [`Mathilda_spec.md`](Mathilda_spec.md), which indexes the per-category pages under [`docs/spec/builtins/`](docs/spec/builtins/):
 
-* Arithmetic and Algebra
-* Calculus
-* Elementary Functions
-* Linear Algebra
-* Structural Manipulation
-* Expression Information
-* Functional Programming
-* Lists and Iteration
-* Pattern Matching
-* Control Flow
-* Assignment and Rules
-* Scoping Constructs
-* Simplification
-* Power Series
-* String Operations
-* File I/O
-* Statistics
-* Random Number Generation
-* Time and Date
+* Arithmetic · Algebra · Number Theory
+* Calculus · Simplification · Power Series
+* Solutions of Equations
+* Numerical Calculus
+* Elementary Functions · Special Functions · Mathematical Constants
+* Linear Algebra · LAPACK · BLAS
+* Packed Arrays
+* Fourier Transforms
+* Statistics · Machine Learning · Random Number Generation
+* Graphs
+* Image Processing
+* Data Structures (Associations)
+* Structural Manipulation · Expression Information
+* Lists and Iteration · Functional Programming
+* Pattern Matching · Comparisons
+* Control Flow · Assignment and Rules · Scoping Constructs
+* String Operations · File I/O · Time and Date
 * Graphics & Visualization
+* FLINT context (direct FLINT-kernel access)
 
 Weekly change summaries are recorded under [`docs/spec/changelog/`](docs/spec/changelog/).
 
@@ -77,15 +106,18 @@ Weekly change summaries are recorded under [`docs/spec/changelog/`](docs/spec/ch
 
 To build and run Mathilda you need:
 
-* A C99-compliant compiler (`gcc` or `clang`)
+* **GCC** (a real GCC — the build deliberately rejects Apple/LLVM clang, which hides the glibc-portability warnings the Linux CI gates on; on macOS install `gcc` via Homebrew)
 * **GMP** (`libgmp` / `gmp-dev`) — arbitrary-precision integers *(required)*
 * **GNU Readline** (`libreadline` / `readline-dev`) — interactive line editing *(required)*
 * **MPFR** (`libmpfr` / `mpfr-dev`) — arbitrary-precision reals *(enabled by default)*
 * **FLINT** ≥ 3.0 (`libflint` / `flint-dev`) — fast, rigorous polynomial arithmetic over algebraic extensions and rigorous `acb` numerics *(optional, auto-detected)*
 * **GMP-ECM** (`gmp-ecm` / `libecm-dev`) — Elliptic Curve Method integer factorization *(optional, auto-detected)*
 * **LAPACK / BLAS** — fast machine-precision linear algebra *(optional, auto-detected)*
+* **FFTW** ≥ 3 (`libfftw3` / `fftw3-dev`) — fast `Fourier`/`FourierDCT`/`FourierDST`; falls back to a naive $O(n^2)$ transform when absent *(optional, auto-detected via `pkg-config`)*
 * **Raylib** ≥ 4.0 — interactive graphics window for `Plot`, `Plot3D`, `ContourPlot`, etc. *(optional, auto-detected via `pkg-config`; falls back to a text placeholder when absent)*
 * **CMake** — only required to build the test suite
+
+POSIX threads (used to parallelize the packed-array kernels across cores) are enabled by default on macOS and Linux and need no extra package.
 
 The optional backends are controlled by build-time flags and **degrade gracefully** when disabled or absent:
 
@@ -95,6 +127,8 @@ The optional backends are controlled by build-time flags and **degrade gracefull
 | `USE_FLINT`    | `1` | Fast, rigorous FLINT (≥ 3.0) kernels: multivariate polynomial GCD/factoring over ℚ, univariate GCD/factoring over number fields ℚ(α) (via the `gr` layer + ANTIC), the finite-field workhorse behind parametric ℚ(t)(α) work, and rigorous `acb` numerics (`Zeta`, `HurwitzZeta`, `PolyGamma`, `StieltjesGamma`). Auto-detected via `pkg-config` with a ≥ 3.0 version floor. Falls back to the classical (slower but still rigorous) path (`USE_FLINT=0`) when absent. |
 | `USE_LAPACK`   | `1` | Fast machine-precision linear algebra. Auto-detected: Apple **Accelerate** on macOS, `lapacke`/`lapack`/`blas` on Linux. Falls back to the pure-C path (`USE_LAPACK=0`) if none is found. |
 | `USE_ECM`      | `1` | Elliptic Curve Method factorization via the system GMP-ECM library. Auto-detected via a compile-link probe; install `gmp-ecm` / `libecm-dev`. Falls back to disabled (`USE_ECM=0`) when absent. |
+| `USE_FFTW`     | `1` | FFTW-backed `Fourier`/`FourierDCT`/`FourierDST`. Auto-detected via `pkg-config fftw3`. Falls back to a naive $O(n^2)$ transform (`USE_FFTW=0`) when absent. |
+| `USE_THREADS`  | `1` | POSIX-thread parallelism for the element-wise packed-array kernels (`Sin`, `Exp`, `Erf`, …) on large arrays. Enabled on macOS/Linux; build the serial path via `make USE_THREADS=0`. |
 | `USE_GRAPHICS` | `1` | Interactive 2D/3D plot windows via Raylib. Auto-detected via `pkg-config raylib`. When absent, `Show`/`Plot`/`Plot3D`/`ContourPlot`/etc. print a text placeholder and return normally. Build without it via `make USE_GRAPHICS=0`. |
 
 #### Installing dependencies
@@ -116,6 +150,9 @@ sudo apt install libecm-dev
 # Optional: LAPACK / BLAS for fast machine-precision linear algebra
 sudo apt install liblapacke-dev libopenblas-dev
 
+# Optional: FFTW for fast Fourier / FourierDCT / FourierDST
+sudo apt install libfftw3-dev
+
 # Optional: Raylib for interactive plot windows (Plot, Plot3D, ContourPlot, ...)
 sudo apt install libraylib-dev      # Ubuntu 24.04+ / Debian Bookworm+
 # or build from source: https://github.com/raysan5/raylib
@@ -125,8 +162,8 @@ sudo apt install cmake
 ```
 
 On Fedora/RHEL the equivalents are `gmp-devel`, `mpfr-devel`, `readline-devel`,
-`flint-devel` (≥ 3.0), `gmp-ecm-devel`, `lapack-devel`/`openblas-devel`, plus
-`cmake`.
+`flint-devel` (≥ 3.0), `gmp-ecm-devel`, `lapack-devel`/`openblas-devel`,
+`fftw-devel`, plus `cmake`.
 
 > **Note on FLINT versions.** Mathilda requires **FLINT ≥ 3.0** (the release that
 > merged ANTIC for number-field arithmetic). Distributions that only package
@@ -140,6 +177,8 @@ On Fedora/RHEL the equivalents are `gmp-devel`, `mpfr-devel`, `readline-devel`,
 brew install gmp mpfr readline cmake
 # Optional: FLINT (>= 3.0) for fast, rigorous algebraic-extension arithmetic:
 brew install flint
+# Optional: FFTW for fast Fourier / FourierDCT / FourierDST:
+brew install fftw
 # Optional: Raylib for interactive plot windows:
 brew install raylib
 # Optional: GMP-ECM for advanced integer factorization:
@@ -182,10 +221,11 @@ The `makefile` auto-discovers `src/*.c`, configures and compiles internal depend
 
 ### Running the Test Suite
 
-Mathilda ships a comprehensive C-based unit suite — **216 `test_*.c` files**
+Mathilda ships a comprehensive C-based unit suite — **461 `test_*.c` files**
 covering evaluation, parsing, pattern matching, arithmetic, polynomials,
-calculus, linear algebra, and more. CMake auto-detects the same optional
-backends (MPFR, LAPACK, ECM) during configuration.
+calculus, equation solving, numerical analysis, linear algebra, packed arrays,
+the `Compile[]` compiler, and more. CMake auto-detects the same optional
+backends (MPFR, FLINT, LAPACK, FFTW, ECM) during configuration.
 
 ```bash
 cd tests
@@ -221,9 +261,15 @@ Larger mathematical domains live in dedicated subdirectories of `src/`:
 |-----------|----------------|
 | `poly/`     | Univariate/multivariate polynomial arithmetic, factorization, algebraic-number fields, Gröbner bases |
 | `linalg/`   | Dense linear algebra; eigen kernels split by algorithm |
-| `calculus/` | `D`/`Dt`/`Derivative`, `Series`, `Limit`, `Integrate` (incl. Risch–Norman) |
+| `calculus/` | `D`/`Dt`/`Derivative`, `Series`, `Limit`, `Integrate` (incl. Risch–Norman, Cherry/Liouvillian) |
 | `simp/`     | `Simplify`, trigonometric simplification, radical denesting, assumptions |
-| `sum/`      | Symbolic summation (polynomial, geometric, Gosper) |
+| `sum/`, `product/` | Symbolic summation and products — finite and infinite families |
+| `solve/`    | `Solve` over Complexes/Reals plus the `Solve[…, Integers]` Diophantine engine (one file per method) |
+| `special_functions/` | Gamma, Zeta, Bessel, Airy, error/exponential integrals, hypergeometric families |
+| `numerical_calculus/`, `numerical_roots/` | `NIntegrate`, `NDSolve`, `NSum`/`NProduct`, `NMinimize`/`FindMinimum` family; `NSolve`, `NRoots`, `FindRoot` |
+| `ndarray.c`, `pack.c`, `compile/` | Packed machine-precision arrays, the transparency gate, and the `Compile[]` bytecode compiler + auto-compilation |
+| `graph/`    | Graph data structure, generators, and algorithms |
+| `ml/`, `stats/` | Machine-learning primitives and descriptive statistics |
 | `graphics/` | 2D/3D plot engine: adaptive sampler, marching-squares contours, Raylib renderer, vector font; `Plot`, `Plot3D`, `ParametricPlot`, `ParametricPlot3D`, `StreamPlot`, `ContourPlot`, `ListPlot`, `Show` |
 | `internal/` | Mathematica-syntax bootstrap `.m` files (init, integral tables) loaded at startup |
 
