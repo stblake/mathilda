@@ -17,6 +17,8 @@
 #include "sym_names.h"
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -29,10 +31,40 @@ static Expr* point2(double x, double y) {
     return expr_new_function(expr_new_symbol(SYM_List), xy, 2);
 }
 
+/* Is a VertexLabels option value "on"? True / All / any string (e.g. "Name",
+ * "Index") enable labels; None / False (and anything else) leave them off. */
+static bool vertex_labels_on(const Expr* rhs) {
+    if (!rhs) return false;
+    if (rhs->type == EXPR_STRING) return true;
+    if (rhs->type == EXPR_SYMBOL) {
+        const char* n = rhs->data.symbol.name;
+        return n == SYM_True || n == SYM_All;
+    }
+    return false;
+}
+
 Expr* builtin_graph_plot(Expr* res) {
-    if (res->data.function.arg_count != 1) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1) return NULL;
     const Expr* g = res->data.function.args[0];
     if (!graph_is_valid(g)) return NULL;
+
+    /* Options (after the graph). Vertex labels are OFF by default, matching
+     * Mathematica — GraphPlot draws no vertex names unless asked. Pass
+     * VertexLabels -> True | All | "Name" to draw them. */
+    bool show_labels = false;
+    for (size_t i = 1; i < argc; i++) {
+        const Expr* a = res->data.function.args[i];
+        if (a->type == EXPR_FUNCTION && a->data.function.arg_count == 2
+            && a->data.function.head
+            && a->data.function.head->type == EXPR_SYMBOL
+            && a->data.function.head->data.symbol.name == SYM_Rule) {
+            const Expr* lhs = a->data.function.args[0];
+            if (lhs->type == EXPR_SYMBOL
+                && strcmp(lhs->data.symbol.name, "VertexLabels") == 0)
+                show_labels = vertex_labels_on(a->data.function.args[1]);
+        }
+    }
 
     const Expr* verts = g->data.function.args[0];
     const Expr* edges = g->data.function.args[1];
@@ -50,8 +82,9 @@ Expr* builtin_graph_plot(Expr* res) {
         }
     }
 
-    /* Primitives: one Line per edge, then one Disk + one Text per vertex. */
-    size_t total = ne + (size_t)n * 2;
+    /* Primitives: one Line per edge, then one Disk per vertex, then (only when
+     * VertexLabels is on) a black colour directive + one Text label per vertex. */
+    size_t total = ne + (size_t)n + (show_labels ? (size_t)n + 1 : 0);
     Expr** prims = (total > 0) ? calloc(total, sizeof(Expr*)) : NULL;
     size_t p = 0;
 
@@ -68,9 +101,15 @@ Expr* builtin_graph_plot(Expr* res) {
         Expr* da[2] = { point2(x[i], y[i]), expr_new_real(NODE_RADIUS) };
         prims[p++] = expr_new_function(expr_new_symbol(SYM_Disk), da, 2);
     }
-    for (int i = 0; i < n; i++) {
-        Expr* ta[2] = { expr_copy(verts->data.function.args[i]), point2(x[i], y[i]) };
-        prims[p++] = expr_new_function(expr_new_symbol(SYM_Text), ta, 2);
+    if (show_labels) {
+        /* Labels are black by default so they read against the vertex disks
+         * (without this they inherit the disk colour and vanish). */
+        Expr* bl[1] = { expr_new_real(0.0) };
+        prims[p++] = expr_new_function(expr_new_symbol(SYM_GrayLevel), bl, 1);
+        for (int i = 0; i < n; i++) {
+            Expr* ta[2] = { expr_copy(verts->data.function.args[i]), point2(x[i], y[i]) };
+            prims[p++] = expr_new_function(expr_new_symbol(SYM_Text), ta, 2);
+        }
     }
 
     free(x); free(y);

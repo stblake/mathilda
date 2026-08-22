@@ -174,5 +174,6 @@ void graph_init(void) {
     symtab_get_def("GraphPlot")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("GraphPlot",
         "GraphPlot[g] gives a Graphics object drawing the graph g with a "
-        "circular vertex layout.");
+        "circular vertex layout. Vertex labels are off by default; pass "
+        "VertexLabels -> True to draw them (in black).");
 }
