@@ -253,6 +253,12 @@ ifeq ($(USE_GRAPHICS), 1)
     # (frameworks are recorded in the dylib). EXTRA_LIBS below remains as a
     # manual escape hatch for anything pkg-config still can't infer.
     LDFLAGS += $(shell $(PKG_CONFIG) --static --libs raylib)
+    # graphics_export_raster screens for a usable GUI session before InitWindow
+    # (which segfaults inside GLFW otherwise) via CGSessionCopyCurrentDictionary;
+    # that symbol lives in CoreGraphics, and CFRelease in CoreFoundation.
+    ifeq ($(BUILD_PLATFORM),Darwin)
+      LDFLAGS += -framework CoreGraphics -framework CoreFoundation
+    endif
   else
     $(warning Raylib not detected; building with USE_GRAPHICS=0 (Show/Plot will print a text placeholder))
     $(warning   macOS (Homebrew): brew install raylib)

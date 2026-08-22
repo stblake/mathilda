@@ -142,15 +142,35 @@ Out[3]= {32, 24}
 ```
 
 ## Export
-Writes an `Image` to a raster image file.
+Writes an `Image` to a raster image file, or a `Graphics` object to an image file.
 - `Export["file", image]` — the format comes from the file extension (PNG, JPEG, BMP, TGA).
 - `Export["file", image, "PNG"]` — the format stated explicitly, for a name that does not
   carry one.
+- `Export["file", plot]` where `plot` is the result of `Plot`, `ListPlot`, `Graphics`, …
+  writes the graphic to **PDF, PNG, or JPEG** (again chosen from the extension, or stated
+  as `"PDF"`/`"PNG"`/`"JPEG"`).
 
 **Features**:
 - `Protected`.
 - Returns the file name, so `Import[Export[f, img]]` is a round trip that can be written
   as a single expression.
+
+**Graphics export**:
+- **PDF** is a resolution-independent **vector** file written by a small built-in PDF
+  emitter — no external library, no display, so it works headless and in every build. It
+  walks the graphics primitives directly (`Line`, `Point`, `Polygon`, `Disk`/`Circle`,
+  `Rectangle`, `Arrow`, `Text`) with the `RGBColor`/`GrayLevel`/`Hue`/`CMYKColor`,
+  `Opacity`, `Thickness` and `PointSize` directives, and draws a framed set of axes with
+  "nice" ticks and numeric labels. Text uses the PDF base-14 Helvetica, so no font is
+  embedded. This is the recommended format for print and for the book.
+- **PNG** and **JPEG** render through the graphics backend into an offscreen buffer, so the
+  file is pixel-identical to the on-screen plot (the same axes, ticks, labels and text).
+  They therefore need graphics support compiled in (`USE_GRAPHICS`) **and** a usable GUI
+  session; with none (a headless box, `ssh`, cron) they return `$Failed` gracefully rather
+  than crashing, while PDF still works. Resolution follows the `ImageSize` option
+  (default 720×540). The pixels are encoded by the vendored `stb_image_write`, so JPEG
+  output does not depend on which formats the Raylib build happens to support.
+- `Graphics3D` export is not yet supported (returns `$Failed`).
 - Samples outside the unit interval are **clamped**, not wrapped. An unsharp mask
   legitimately overshoots and 8-bit output has nowhere to put the overshoot; wrapping
   would turn a bright highlight black, which reads as a bug in the filter rather than in

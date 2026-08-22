@@ -130,6 +130,13 @@ if(USE_GRAPHICS)
             link_directories(${RAYLIB_LIBRARY_DIRS})
             link_libraries(${RAYLIB_LIBRARIES})
         endif()
+        # render.c's graphics_render_rgba screens for a usable GUI session via
+        # CGSessionCopyCurrentDictionary (CoreGraphics) / CFRelease
+        # (CoreFoundation) before InitWindow; mirror the makefile's framework
+        # link so the graphics test executables resolve those symbols.
+        if(APPLE)
+            link_libraries("-framework CoreGraphics" "-framework CoreFoundation")
+        endif()
     else()
         message(WARNING "Raylib not detected; building tests with USE_GRAPHICS=OFF")
         message(WARNING "  macOS (Homebrew): brew install raylib")
@@ -808,6 +815,7 @@ set(COMMON_SRC
     ../src/numerical_roots/nsolve_system.c
     ../src/graphics/graphics_init.c
     ../src/graphics/graphics_json.c
+    ../src/graphics/graphics_export.c
     ../src/graphics/sampling.c
     ../src/graphics/plot_common.c
     ../src/graphics/plot.c

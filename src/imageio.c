@@ -29,6 +29,8 @@
 #include "imageio.h"
 #include "random.h"
 #include "options.h"
+#include "sym_names.h"
+#include "graphics/graphics_export.h"
 
 /* The vendored decoders. Their diagnostics are suppressed rather than fixed: the files are
  * upstream text, byte-identical to the release, so they can be re-fetched without a merge -- see
@@ -105,6 +107,47 @@ static bool is_decodable(const char* path)
 }
 
 static Expr* failed(void) { return expr_new_symbol("$Failed"); }
+
+#ifdef USE_GRAPHICS
+/* Pixel dimensions for a rasterised Graphics export: honour ImageSize
+ * (a number w -> {w, 3w/4}, or an explicit {w, h}), else a readable default.
+ * Only needed for the PNG/JPEG (Raylib) path, hence the USE_GRAPHICS guard. */
+static void graphics_raster_size(const Expr* g, int* w, int* h)
+{
+    *w = 720; *h = 540;                 /* default 4:3 */
+    if (!g || g->type != EXPR_FUNCTION) return;
+    for (size_t i = 1; i < g->data.function.arg_count; i++) {
+        const Expr* a = g->data.function.args[i];
+        if (!a || a->type != EXPR_FUNCTION || !a->data.function.head
+            || a->data.function.head->type != EXPR_SYMBOL
+            || a->data.function.head->data.symbol.name != SYM_Rule
+            || a->data.function.arg_count != 2) continue;
+        const Expr* lhs = a->data.function.args[0];
+        const Expr* rhs = a->data.function.args[1];
+        if (!lhs || lhs->type != EXPR_SYMBOL || lhs->data.symbol.name != SYM_ImageSize)
+            continue;
+        if (rhs->type == EXPR_INTEGER) {
+            *w = (int)rhs->data.integer; *h = (int)(rhs->data.integer * 3 / 4);
+        } else if (rhs->type == EXPR_REAL) {
+            *w = (int)rhs->data.real; *h = (int)(rhs->data.real * 0.75);
+        } else if (rhs->type == EXPR_FUNCTION && rhs->data.function.head
+                   && rhs->data.function.head->type == EXPR_SYMBOL
+                   && rhs->data.function.head->data.symbol.name == SYM_List
+                   && rhs->data.function.arg_count == 2) {
+            const Expr* ew = rhs->data.function.args[0];
+            const Expr* eh = rhs->data.function.args[1];
+            if (ew->type == EXPR_INTEGER)   *w = (int)ew->data.integer;
+            else if (ew->type == EXPR_REAL) *w = (int)ew->data.real;
+            if (eh->type == EXPR_INTEGER)   *h = (int)eh->data.integer;
+            else if (eh->type == EXPR_REAL) *h = (int)eh->data.real;
+        }
+    }
+    if (*w < 16)   *w = 16;
+    if (*h < 16)   *h = 16;
+    if (*w > 8000) *w = 8000;
+    if (*h > 8000) *h = 8000;
+}
+#endif /* USE_GRAPHICS */
 
 /* A borrowed string argument, or NULL when the argument is not a string. */
 static const char* str_arg(const Expr* e, size_t i)
@@ -199,6 +242,48 @@ static Expr* builtin_export(Expr* res)
     if (res->data.function.arg_count == 3) {
         fmt = str_arg(res, 2);
         if (!fmt) return NULL;
+    }
+
+    /* Graphics[...] (Plot/ListPlot/Graphics output) -> PDF/PNG/JPEG. Handled
+     * before image_load, which only understands Image[]. PDF is a
+     * dependency-free vector writer; PNG/JPEG reuse the Raylib renderer. */
+    {
+        const Expr* gobj = res->data.function.args[1];
+        if (gobj && gobj->type == EXPR_FUNCTION && gobj->data.function.head
+            && gobj->data.function.head->type == EXPR_SYMBOL
+            && (gobj->data.function.head->data.symbol.name == SYM_Graphics
+                || gobj->data.function.head->data.symbol.name == SYM_Graphics3D)) {
+            int is3d   = (gobj->data.function.head->data.symbol.name == SYM_Graphics3D);
+            int is_pdf = (fmt && strcmp(fmt, "PDF") == 0) || (!fmt && has_ext(path, "pdf"));
+            int is_png = (fmt && strcmp(fmt, "PNG") == 0) || (!fmt && has_ext(path, "png"));
+            int is_jpg = (fmt && (strcmp(fmt, "JPEG") == 0 || strcmp(fmt, "JPG") == 0))
+                         || (!fmt && (has_ext(path, "jpg") || has_ext(path, "jpeg")));
+            if (!is_pdf && !is_png && !is_jpg) return NULL;  /* unclaimed format */
+            if (is3d) return failed();      /* 3D graphics export not yet supported */
+
+            int gok = 0;
+            if (is_pdf) {
+                gok = graphics_export_pdf(gobj, path);
+            } else {
+#ifdef USE_GRAPHICS
+                /* Raylib renders the plot to RGBA pixels; stb encodes them, so
+                 * JPEG works regardless of what this Raylib build supports. */
+                int gw, gh, ow = 0, oh = 0;
+                graphics_raster_size(gobj, &gw, &gh);
+                unsigned char* rgba = graphics_render_rgba(gobj, gw, gh, &ow, &oh);
+                if (rgba) {
+                    if (is_jpg) gok = stbi_write_jpg(path, ow, oh, 4, rgba, JPEG_QUALITY);
+                    else        gok = stbi_write_png(path, ow, oh, 4, rgba, ow * 4);
+                    free(rgba);
+                }
+#else
+                gok = 0;        /* PNG/JPEG of graphics needs the Raylib renderer */
+#endif
+            }
+            if (!gok) return failed();
+            out = expr_new_string(path);
+            return out ? out : failed();
+        }
     }
 
     img = res->data.function.args[1];
@@ -342,10 +427,14 @@ void imageio_init(void)
     symtab_add_builtin("Export", builtin_export);
     symtab_get_def("Export")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Export",
-        "Export[\"file\", image] writes an Image to a raster file, choosing the format from the "
-        "file extension (PNG, JPEG, BMP, TGA). Export[\"file\", image, \"PNG\"] states the format "
-        "explicitly. Samples outside the unit interval are clamped, since 8-bit output has no room "
-        "for them. Returns the file name, so Import[Export[f, img]] is a round trip.");
+        "Export[\"file\", obj] writes obj to a file, choosing the format from the file extension; "
+        "Export[\"file\", obj, \"FMT\"] states it explicitly. An Image writes to a raster file "
+        "(PNG, JPEG, BMP, TGA); its samples outside the unit interval are clamped, since 8-bit "
+        "output has no room for them. A Graphics object (the result of Plot, ListPlot, Graphics, "
+        "...) writes to PDF, PNG, or JPEG: PDF is a resolution-independent vector file produced "
+        "without any external library and works headless, while PNG and JPEG render through the "
+        "graphics backend and so need graphics support compiled in and a display. Graphics3D "
+        "export is not yet supported. Returns the file name, so Import[Export[f, img]] round-trips.");
     symtab_add_builtin("RandomImage", builtin_random_image);
     symtab_get_def("RandomImage")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("RandomImage",
