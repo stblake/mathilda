@@ -464,6 +464,17 @@ check-interval:
 # happened four times; this reads the dispatch sites out of the source and
 # diffs them against the list. Same "needs python3, so not part of `all`"
 # status as check-c99.
+# `make check-tests` — build and run EVERY test binary, once, in a pinned configuration.
+#
+# Until this existed, "the tests pass" was a claim no tool backed: CI compiled the tree and ran two
+# source-level gates, and running the 400+ binaries was left to whoever remembered — so a PR once
+# reported them as passing on the strength of 40 of 426. The script removes the choice of subset and
+# pins the configuration, because a run in a tree left at USE_FLINT=OFF reported 36 failures of
+# which 32 were the missing library. tests/known_failures.txt carries the standing failures with a
+# reason each, so a NEW failure is loud and the gate is not red on arrival.
+check-tests:
+	tools/run_test_suite.sh
+
 check-packed-aware:
 	python3 tools/check_packed_aware.py
 
@@ -605,7 +616,8 @@ print-cc:
 
 .PHONY: all clean docs docs-build docs-serve check-c99 check-interval check-packed-aware \
         check-array-exactness check-nd-surfaces check-compile-coverage \
-        check-fastpath-sweep check-menu-ids bench-gap check-diophantine-heldout print-cc
+        check-fastpath-sweep check-menu-ids check-tests bench-gap \
+        check-diophantine-heldout print-cc
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first
