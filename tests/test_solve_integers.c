@@ -514,12 +514,11 @@ static void test_deferred_unevaluated(void) {
      * finitely bound must stay unevaluated, NOT collapse to {} via the
      * parametric dispatch's non-integer closed form.  (y^2 == x^3 - 2 is now
      * solved by the Z[sqrt k] Mordell path, so the guard is exercised here by
-     * y^2 == x^3 + 1, whose k = +1 is outside the sound PID cases, and by the
-     * genuinely-parametric y == x^2.) */
+     * y^2 == x^3 + 1, whose k = +1 is outside the sound PID cases.  The
+     * genuinely-parametric parabola y == x^2 is now SOLVED by the parabolic BQF
+     * path -- see test_bqf_parabolic.) */
     run_test("Solve[y^2 == x^3 + 1, {x, y}, Integers]",
         "Solve[Equal[Power[y, 2], Plus[1, Power[x, 3]]], List[x, y], Integers]");
-    run_test("Solve[y == x^2, {x, y}, Integers]",
-        "Solve[Equal[y, Power[x, 2]], List[x, y], Integers]");
 }
 
 /* Unbounded Mordell y^2 == x^3 + k, solved COMPLETELY via factorisation in
@@ -805,9 +804,109 @@ static void test_ternary_quadratic(void) {
     run_test("MemberQ[Level[Table[{x, y, z} /. Solve[x^2 + y^2 == 2 z^2, {x, y, z}, "
              "Integers] /. {C[1] -> a, C[2] -> b, C[3] -> c}, {a, -3, 3}, {b, -3, 3}, "
              "{c, -3, 3}], {-2}], {1, 7, 5}]", "True");
-    /* Multi-representation k (65 = 5*13) has several solution classes one witness
-     * cannot cover -> decline, never a wrong incomplete family. */
-    run_test("Head[Solve[x^2 + y^2 == 65 z^2, {x, y, z}, Integers]]", "Solve");
+    /* Multi-representation k (65 = 5*13): the symmetric solver declines (its
+     * integer-exact parametrisation cannot cover several classes at once), but
+     * the general genus-0 chord solver (si_solve_ternary_general) picks it up
+     * and returns the complete PROJECTIVE family -- every branch is a solution. */
+    run_test("Head[Solve[x^2 + y^2 == 65 z^2, {x, y, z}, Integers]]", "List");
+    run_test("Simplify[(x^2 + y^2 - 65 z^2) /. First[Solve[x^2 + y^2 == 65 z^2, "
+             "{x, y, z}, Integers]]]", "0");
+}
+
+/* General homogeneous ternary quadratic (cross terms / non-symmetric diagonal):
+ * the genus-0 chord solver returns the complete projective family, or the
+ * trivial-only point when the form is anisotropic (Legendre fails / definite). */
+static void test_ternary_general(void) {
+    /* Non-symmetric diagonal: (2x)^2 + z^2 = 5 y^2 disguised. */
+    run_test("Head[Solve[4 x^2 - 5 y^2 + z^2 == 0, {x, y, z}, Integers]]", "List");
+    run_test("Simplify[(4 x^2 - 5 y^2 + z^2) /. First[Solve[4 x^2 - 5 y^2 + z^2 == 0, "
+             "{x, y, z}, Integers]]]", "0");
+    /* Cross-term form (quadratic part factors). */
+    run_test("Simplify[(x^2 + 3 x y + 2 y^2 - z^2) /. First[Solve["
+             "x^2 + 3 x y + 2 y^2 - z^2 == 0, {x, y, z}, Integers]]]", "0");
+    /* A generic indefinite cross-term ternary. */
+    run_test("Simplify[(2 x^2 + 3 x y - 4 y^2 - z^2) /. First[Solve["
+             "2 x^2 + 3 x y - 4 y^2 - z^2 == 0, {x, y, z}, Integers]]]", "0");
+    /* Anisotropic (Legendre fails: 5 x^2 + 3 y^2 == 2 z^2 has no nontrivial soln)
+     * -> the trivial-only point, a proof (not {}). */
+    run_test("Solve[5 x^2 + 3 y^2 + 7 z^2 == 0, {x, y, z}, Integers]",
+        "List[List[Rule[x, 0], Rule[y, 0], Rule[z, 0]]]");
+    /* Large coefficients with a tiny witness (1,1,1): the small-box pre-scan finds
+     * it even though the full Holzer box exceeds the node cap. */
+    run_test("Simplify[(99991 x^2 - 99989 y^2 - 2 z^2) /. First[Solve["
+             "99991 x^2 - 99989 y^2 - 2 z^2 == 0, {x, y, z}, Integers]]]", "0");
+    /* Genuinely anisotropic large-coefficient forms (PARI-confirmed) stay trivial. */
+    run_test("Head[Solve[1009 x^2 - 2003 y^2 + 3001 z^2 == 0, {x, y, z}, Integers]] === List "
+             "&& Solve[1009 x^2 - 2003 y^2 + 3001 z^2 == 0, {x, y, z}, Integers] === "
+             "{{x -> 0, y -> 0, z -> 0}}", "True");
+}
+
+/* Extended ("general") Pythagorean  x_1^2 + ... + x_k^2 == y^2  (k >= 3):
+ * the stereographic parametric family. */
+static void test_general_pythagorean(void) {
+    run_test("Head[Solve[x^2 + y^2 + z^2 == w^2, {x, y, z, w}, Integers]]", "List");
+    run_test("Simplify[(x^2 + y^2 + z^2 - w^2) /. First[Solve["
+             "x^2 + y^2 + z^2 == w^2, {x, y, z, w}, Integers]]]", "0");
+    /* A concrete parameter point is a genuine solution. */
+    run_test("{x, y, z, w} /. (First[Solve[x^2 + y^2 + z^2 == w^2, {x, y, z, w}, "
+             "Integers]] /. {C[1] -> 2, C[2] -> 1, C[3] -> 1})",
+        "List[4, 2, 4, 6]");
+    /* Five variables (four squares == a square). */
+    run_test("Simplify[(x^2 + y^2 + z^2 + w^2 - v^2) /. First[Solve["
+             "x^2 + y^2 + z^2 + w^2 == v^2, {x, y, z, w, v}, Integers]]]", "0");
+    /* k <= 2 stays with the binary / ternary solvers (not this path). */
+    run_test("Head[Solve[x^2 + y^2 == z^2, {x, y, z}, Integers]]", "List");
+}
+
+/* Parabolic binary quadratic (delta == 0): a finite union of one-parameter
+ * families, x and y quadratic in the parameter. */
+static void test_bqf_parabolic(void) {
+    run_test("Length[Solve[x^2 - 4 x y + 4 y^2 - 3 x == 0, {x, y}, Integers]]", "2");
+    /* Both families are exact solutions (residual 0 for every parameter value). */
+    run_test("Simplify[(x^2 - 4 x y + 4 y^2 - 3 x) /. (First[Solve["
+             "x^2 - 4 x y + 4 y^2 - 3 x == 0, {x, y}, Integers]] /. C[1] -> 3)]", "0");
+    run_test("Simplify[(x^2 - 4 x y + 4 y^2 - 3 x) /. (Last[Solve["
+             "x^2 - 4 x y + 4 y^2 - 3 x == 0, {x, y}, Integers]] /. C[1] -> 4)]", "0");
+    /* A concrete member of the second family. */
+    run_test("{x, y} /. (Last[Solve[x^2 - 4 x y + 4 y^2 - 3 x == 0, {x, y}, "
+             "Integers]] /. C[1] -> 0)", "List[3, 0]");
+    /* The degenerate parabola  y == x^2  is a clean one-parameter family x=t. */
+    run_test("Simplify[(y - x^2) /. First[Solve[y == x^2, {x, y}, Integers]]]", "0");
+    run_test("Head[Solve[y == x^2, {x, y}, Integers]]", "List");
+}
+
+/* Hyperbolic binary quadratic (delta > 0 non-square): the fundamental-unit
+ * closed-form family per base solution (x>0 && y>0). */
+static void test_bqf_hyperbolic(void) {
+    run_test("Length[Solve[x^2 - 3 x y + y^2 == 1 && x > 0 && y > 0, {x, y}, "
+             "Integers]]", "6");
+    /* Every family satisfies the equation at every integer parameter value. */
+    run_test("Simplify[(x^2 - 3 x y + y^2 - 1) /. (First[Solve["
+             "x^2 - 3 x y + y^2 == 1 && x > 0 && y > 0, {x, y}, Integers]] /. C[1] -> 2)]",
+        "0");
+    /* (3, 1) is one of the six family bases (C[1] -> 0). */
+    run_test("MemberQ[Table[Simplify[{x, y} /. (Solve[x^2 - 3 x y + y^2 == 1 && x > 0 && "
+             "y > 0, {x, y}, Integers][[i]] /. C[1] -> 0)], {i, 6}], {3, 1}]", "True");
+    /* The families collectively reach the solution (8, 21). */
+    run_test("MemberQ[Flatten[Table[Simplify[{x, y} /. (Solve[x^2 - 3 x y + y^2 == 1 && "
+             "x > 0 && y > 0, {x, y}, Integers][[i]] /. C[1] -> k)], {i, 6}, {k, 0, 3}], 1], "
+             "{8, 21}]", "True");
+    /* Large discriminant (delta = 61): the fundamental unit is ~3.5e9, so the old
+     * direct (x,y) base search exploded and declined.  The Nagell-bounded (X,Y)
+     * enumeration solves it -- four families whose small solutions are (116,195)
+     * and (1639,195).  (PARI-confirmed: exactly these two positive solutions with
+     * y <= 10^5.) */
+    run_test("Head[Solve[x^2 - 9 x y + 5 y^2 == 1 && x > 0 && y > 0, {x, y}, Integers]]",
+        "List");
+    run_test("Union[Flatten[Table[Simplify[(x^2 - 9 x y + 5 y^2 - 1) /. (Solve["
+             "x^2 - 9 x y + 5 y^2 == 1 && x > 0 && y > 0, {x, y}, Integers][[i]] /. C[1] -> k)], "
+             "{i, 4}, {k, 0, 2}]]]", "List[0]");
+    run_test("MemberQ[Table[Simplify[{x, y} /. (Solve[x^2 - 9 x y + 5 y^2 == 1 && "
+             "x > 0 && y > 0, {x, y}, Integers][[i]] /. C[1] -> 0)], {i, 4}], {116, 195}]",
+        "True");
+    /* Very large discriminant (delta = 10^6): still solved, unit-size independent. */
+    run_test("Head[Solve[x^2 - 1001 x y + 500 y^2 == 1 && x > 0 && y > 0, {x, y}, Integers]]",
+        "List");
 }
 
 /* Unbounded Ramanujan-Nagell  2^n - 7 == x^2 (Tier 3 F, route A): the complete
@@ -859,6 +958,10 @@ int main(void) {
     core_init();
 
     TEST(test_ternary_quadratic);
+    TEST(test_ternary_general);
+    TEST(test_general_pythagorean);
+    TEST(test_bqf_parabolic);
+    TEST(test_bqf_hyperbolic);
     TEST(test_ramanujan_nagell);
     TEST(test_egyptian_unordered);
     TEST(test_frye_onesided);

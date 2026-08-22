@@ -751,6 +751,9 @@ set(COMMON_SRC
     ../src/solve/solveint_powersum_div.c
     ../src/solve/solveint_conic.c
     ../src/solve/solveint_ternary.c
+    ../src/solve/solveint_ternary_general.c
+    ../src/solve/solveint_pythag.c
+    ../src/solve/solveint_bqf_parametric.c
     ../src/solve/solveint_rn.c
     ../src/solve/solveint_cubes.c
     ../src/solve/solveint_frye.c

@@ -240,6 +240,30 @@ Expr* solveint_solve_integer(Expr* expr, Expr* vars, Expr* dom) {
         if (tq) { ctx_free(&c); return tq; }
     }
 
+    /* General homogeneous ternary quadratic (cross terms / non-symmetric diagonal
+     * coefficients): diagonalise to decide Legendre solvability + find one witness,
+     * then chord-parametrise in the original coordinates -> the complete integer
+     * family, or trivial-only {{0,0,0}} when unsolvable. */
+    {
+        Expr* tg = si_solve_ternary_general(&c);
+        if (tg) { ctx_free(&c); return tg; }
+    }
+
+    /* Extended ("general") Pythagorean  x_1^2 + ... + x_k^2 == y^2  (k >= 3):
+     * the standard stereographic parametric family. */
+    {
+        Expr* gp2 = si_solve_general_pythagorean(&c);
+        if (gp2) { ctx_free(&c); return gp2; }
+    }
+
+    /* General binary quadratic parametric families (unbounded): the parabolic
+     * (delta == 0) case and the hyperbolic non-square-delta (Pell) case that the
+     * diagonal Pell paths above do not reach (cross terms). */
+    {
+        Expr* bq = si_solve_bqf_parametric(&c);
+        if (bq) { ctx_free(&c); return bq; }
+    }
+
     /* Homogeneous linear system with positivity -> parametric ray (symbolic). */
     {
         Expr* ray = si_solve_linear_system_ray(&c);
