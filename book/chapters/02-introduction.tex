@@ -282,6 +282,22 @@ sine.}
 origin.}
 \end{codepairs}
 
+Near a point a function is captured by its power series, and \B{Series} computes it to any
+order, returning the polynomial part together with an $O[x]^{n}$ term that records where
+the expansion was truncated:
+
+\begin{codepairs}
+\pair{02-introduction/calculus-series/1}{The exponential series, to sixth order.}
+\pair{02-introduction/calculus-series/2}{$\arctan$: the alternating odd reciprocals whose
+value at $x=1$ gives Leibniz's series for $\pi/4$.}
+\pair{02-introduction/calculus-series/3}{At a pole the expansion is a \emph{Laurent}
+series---here $\cot x$ begins with a $1/x$ term.}
+\pair{02-introduction/calculus-series/4}{With a \emph{symbolic} exponent the coefficients
+come out as the generalized binomial coefficients.}
+\pair{02-introduction/calculus-series/5}{\B{Normal} drops the $O[\,]$ term, turning a
+series into an ordinary polynomial you can compute with.}
+\end{codepairs}
+
 Integration, the harder inverse of differentiation, is done with \B{Integrate}---%
 indefinite integrals as symbolic antiderivatives, and definite integrals, including
 improper ones:
