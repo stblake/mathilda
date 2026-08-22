@@ -18,6 +18,13 @@
 \RequirePackage{paracol}
 \RequirePackage[most]{tcolorbox}
 
+% Footnotes and paracol: by default paracol glues a footnote made in the
+% single-column text *before* a paracol environment (our codepairs/codecomment)
+% to the bottom of that pre-environment block -- i.e. mid-page. \mergedfootnotes
+% makes paracol carry such footnotes forward and merge every footnote, from
+% before and inside the environment alike, full-width at the true page bottom.
+\mergedfootnotes
+
 % ---------------------------------------------------------------- palette ---
 \definecolor{mReplBg}{gray}{0.965}
 \definecolor{mReplRule}{gray}{0.78}

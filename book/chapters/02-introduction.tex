@@ -201,6 +201,22 @@ fraction decomposition you reach for before integrating. More in
 Section~\ref{sec:algebra}.}
 \end{codepairs}
 
+Beyond a single polynomial lies a whole \emph{system} of them, and the tool for those is
+the \B{GroebnerBasis}: a canonical set of generators for the ideal a system defines. It
+is the multivariate, nonlinear analogue of Gaussian elimination---it rewrites a system
+into an equivalent triangular one that is far easier to solve, and it can eliminate
+chosen variables outright.
+
+\begin{codepairs}
+\pair{02-introduction/algebra-groebner/1}{The unit circle meets the parabola $y=x^{2}$.
+\B{GroebnerBasis} triangulates the system: the first polynomial involves only $y$---a
+quadratic to solve---and the second then recovers $x$ from $y$.}
+\pair{02-introduction/algebra-groebner/2}{Naming a variable to eliminate---here the
+parameter $t$ of the curve $(t^{2},t^{3})$---collapses the system to the curve's implicit
+equation $x^{3}=y^{2}$, the cuspidal cubic. Section~\ref{sec:algebra} returns to
+Gr\"obner bases.}
+\end{codepairs}
+
 \section{Simplification}
 \label{sec:intro-simplify}
 
