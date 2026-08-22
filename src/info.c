@@ -21,7 +21,7 @@ void info_init(void) {
         "Power is Listable, NumericFunction, and OneIdentity. Integer exponents\n"
         "are reduced exactly (repeated squaring on GMP); Rational and Real\n"
         "exponents evaluate numerically when the base is numeric; Power[0, 0]\n"
-        "stays Indeterminate; Power[x, 1/2] is canonicalised to Sqrt[x].");
+        "stays Indeterminate; Sqrt[x] is canonicalised to Power[x, 1/2].");
     symtab_set_docstring("DataType",
         "DataType[a]\n"
         "\tgives the element data type of the NDArray a as a string: one of\n"
