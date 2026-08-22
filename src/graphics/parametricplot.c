@@ -139,7 +139,20 @@ typedef struct {
     bool   break_before;
 } ParamPt;
 
-#define PARAM_FLAT_TOL 0.0025
+/* Maximum Euclidean deviation of the curve from the chord the renderer draws,
+ * as a fraction of the sampled bounding-box diagonal. This is the primary
+ * refinement driver, mirroring FLAT_TOL in sampling.c -- kept at the SAME
+ * 0.0006 so a parametric curve refines to the same sub-pixel smoothness a
+ * y=f(x) Plot does. The diagonal is the honest normaliser here (a parametric
+ * curve is not a graph of x, so neither axis is privileged), which makes this
+ * marginally tighter per-axis than sampling.c's y-range normalisation -- as it
+ * should be, since screen error is Euclidean in both axes at once.
+ *
+ * At the previous 0.0025 the refiner barely engaged: a default unit circle
+ * stopped at depth 1 (49 points, visibly faceted); at 0.0006 it reaches depth 2
+ * (~97 points, smooth), and roses/Lissajous figures scale up proportionally.
+ * PolarPlot delegates here, so it inherits this directly. */
+#define PARAM_FLAT_TOL 0.0006
 
 typedef struct {
     ParamPt* pts;
@@ -272,7 +285,9 @@ typedef struct {
 } ParamSampleOpts;
 
 /* `opts_start`: index of the first trailing Rule[] arg in res.
- * `default_plot_points`: 25 for 1-iterator (adaptive), 75 for 2-iterator (uniform grid).
+ * `default_plot_points`: 50 for 1-iterator (adaptive, matching Plot's seed
+ *   density -- the initial grid is the anti-alias floor the refiner cannot
+ *   recover), 75 for 2-iterator (uniform grid).
  * For 1-iterator form: 2.  For 2-iterator form: 3. */
 static bool split_options_param(Expr* res, size_t opts_start, long default_plot_points,
                                   ParamSampleOpts* sopts,
@@ -787,7 +802,7 @@ Expr* builtin_parametricplot(Expr* res) {
         Expr** pass;
         size_t npass;
         Expr* single_color = NULL;
-        if (!split_options_param(res, 2, 25, &sopts, &pass, &npass, &single_color)) {
+        if (!split_options_param(res, 2, 50, &sopts, &pass, &npass, &single_color)) {
             expr_free(legends); return NULL;
         }
 

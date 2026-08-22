@@ -1,86 +1,57 @@
-# Close 4 Diophantine gaps in Solve[…, Integers] vs sympy
+# ParametricPlot / PolarPlot under-sampling fix
 
-Plan: /Users/user/.claude/plans/cozy-imagining-pizza.md
+## Problem
+Default ParametricPlot/PolarPlot curves look angular: the adaptive refiner
+barely engages.
 
-## Gap 2 — General Pythagorean `x1²+…+xk² == y²` (k≥3), unbounded  [DONE]
-- [x] New `src/solve/solveint_pythag.c`: `si_solve_general_pythagorean(SICtx*)`
-- [x] Prototype in solveint_internal.h; wire into solveint.c chain
-- [x] Build; verify `x²+y²+z²==w²`, `x²+y²+z²+w²==v²` return a family (residual→0)
-- [ ] Unit tests (substitution → identity 0; known solution reproduced)
+## Root cause (measured)
+- `PARAM_FLAT_TOL = 0.0025` (fraction of bbox diagonal) in
+  `src/graphics/parametricplot.c` is ~4x looser than the `y=f(x)` sampler's
+  `FLAT_TOL = 0.0006` (fraction of y-range) in `src/graphics/sampling.c`.
+  A default circle refines only to depth 1 -> 49 pts. At 0.0006 -> depth 2 ->
+  97 pts (sub-pixel, smooth). Roses/Lissajous scale up proportionally.
+- 1-iterator default seed = 25, below Plot's 50 (anti-alias floor the refiner
+  cannot recover).
+- PolarPlot forces PlotPoints=75 and delegates to ParametricPlot, so it
+  inherits the tolerance fix. Its plain circle is already smooth at 75.
 
-## Gap 1 — General homogeneous ternary quadratic (cross-term / general coeff)  [DONE]
-- [x] New `src/solve/solveint_ternary_general.c`: `si_solve_ternary_general(SICtx*)`
-- [x] Diagonalize (mpq) + Legendre + Holzer witness + chord family in original coords
-- [x] Wire after si_solve_ternary_quadratic
-- [x] Verify `4x²−5y²+z²==0`, `x²+3xy+2y²−z²==0`; PROJECTIVE completeness (matches sympy)
-- [x] Family is projectively complete (up-to-scaling), same representation as sympy/MMA
-- [ ] Unit tests
-
-## Gaps 3 & 4 — General binary quadratic parametric (parabolic + hyperbolic)  [DONE]
-- [x] New `src/solve/solveint_bqf_parametric.c`: `si_solve_bqf_parametric(SICtx*)`
-- [x] δ==0 parabolic families (congruence loop, x/y quadratic in t) — 0 missing
-- [x] δ>0 non-square hyperbolic: base search + automorphism M closed-form family — complete
-- [x] (did NOT need to de-static genpell — hyperbolic uses M_aut + si_pell_cf directly)
-- [x] Wire into chain; verify `x²−4xy+4y²−3x==0` (2 fam), `x²−3xy+y²==1` (6 fam)
-- [x] Unit tests
-
-## Wrap-up
-- [x] tests/CMakeLists.txt: add 3 files to COMMON_SRC
-- [x] make check-c99 clean; solve_integers_tests + solve_tests pass; valgrind = baseline only
-- [x] Fixed real Holzer-bound bug (x²+y²==65z² now solves projectively)
-- [ ] Docs: solutions-of-equations.md + changelog 2026-08-17.md
-- [ ] Review section
+## Plan
+- [x] Investigate + measure point counts across tolerances (done)
+- [x] `PARAM_FLAT_TOL`: 0.0025 -> 0.0006 (parity with sampling.c); update comment
+- [x] 1-iterator default seed: 25 -> 50 (match Plot); update comment + call site
+- [x] Fix stale "ParametricPlot's 25" comment in polarplot.c
+- [x] Changelog note in docs/spec/changelog/2026-08-17.md
+- [x] Rebuild; re-measure (circle smooth, curves reasonable)
+- [x] Run test_parametricplot + test_autocompile (no regressions)
 
 ## Review
 
-All four unbounded Diophantine gaps vs sympy are closed. Three new files, wired
-into the `si_solve_*` unbounded-family chain in `solveint.c`; no new builtin
-symbol (all internal `Solve` paths), no packed/ND/Compile surface.
+Root cause was the flatness threshold, not the seed count: `PARAM_FLAT_TOL`
+(fraction of bbox diagonal) was 0.0025, ~4x looser than the y=f(x) sampler's
+FLAT_TOL=0.0006. A default circle stopped at recursion depth 1. Fixed both
+levers for parity with Plot:
 
-- **Gap 2 (general Pythagorean)** — `solveint_pythag.c`. Stereographic family,
-  O(k), pure symbolic. `x²+y²+z²==w²` etc. residual→0.
-- **Gap 1 (general ternary quadratic)** — `solveint_ternary_general.c`. mpq
-  congruent diagonalisation → Legendre decision + Holzer witness → chord family
-  in original coords (only the witness is mapped back). Projectively complete
-  (matches sympy/MMA up-to-scaling); anisotropic→trivial `{{0,0,0}}`. Also picks
-  up multi-rep `k` (65) and non-symmetric diagonals the symmetric solver declines.
-- **Gaps 3&4 (binary quadratic)** — `solveint_bqf_parametric.c`. Parabolic
-  (δ=0) congruence families; hyperbolic (δ>0 non-square) base-search +
-  automorphism `M=[[t-Bu,-2Cu],[2Au,t+Bu]]` closed-form families. Both verified
-  0-missing against brute force.
+- `PARAM_FLAT_TOL` 0.0025 -> 0.0006 (primary fix)
+- 1-iterator default PlotPoints 25 -> 50 (match Plot; anti-alias floor)
 
-Bug found & fixed along the way: the ternary witness search used the wrong
-Holzer-bound coefficient pair (each searched var's bound must involve `C[si]`,
-the solved-for coefficient), which spuriously declined solvable forms such as
-`x²+y²==65z²`.
+Measured point counts (default options), before -> after:
+- ParametricPlot circle     49  -> 99
+- PolarPlot circle          75  -> 75  (already sub-pixel; unchanged)
+- ParametricPlot rose      177  -> 357
+- PolarPlot rose Cos[5t]   149  -> 297
+- ParametricPlot Lissajous 153  -> 284
+- PolarPlot spiral          93  -> 178
 
-Behaviour changes to existing tests (both are improvements — the engine now
-solves cases it used to defer):
-- `x²+y²==65z²`: symmetric solver declines → general solver returns a projective
-  family. `test_ternary_quadratic` updated (was "Solve", now "List" + residual 0).
-- `y==x²`: now solved as the parabola `x=t, y=t²`. Moved out of
-  `test_deferred_unevaluated` into `test_bqf_parabolic`.
+Verification:
+- test_parametricplot, test_autocompile, graphics_tests: all pass.
+- PDF renders (headless vector path) of circle / 5-petal rose / Lissajous:
+  all smooth, including high-curvature petal tips and turning points.
+- No API/option change; only default sampling density. Tests pin explicit
+  PlotPoints/MaxRecursion + relative counts, so none depended on the old
+  defaults.
 
-Verification: `make check-c99` clean; `solve_integers_tests` (incl. 4 new tests)
-and `solve_tests` pass; valgrind shows only the documented macOS libobjc baseline
-(identical to a trivial script — zero leaks from new code). Completeness checked
-by brute force for every gap.
-
-Scope declines (sound — unevaluated, never wrong): inhomogeneous ternary
-quadratics (linear/const term); rank-deficient ternary forms; hyperbolic BQF with
-linear D/E terms; weighted general-Pythagorean coefficients; witnesses beyond the
-Holzer box.
-
-## Follow-up (benchmark-driven, done)
-
-Benchmarked Mathilda vs sympy vs PARI on all four gaps (simple→hard). Mathilda is
-sub-ms across the board and 50–1000× faster than sympy where both engage; PARI's
-qfsolve (gaps 1–2 only) is µs but returns one witness, not the family. Two fixes
-fell out and were applied:
-- **Ternary small-witness pre-scan** — `99991x²−99989y²−2z²==0` (witness (1,1,1))
-  used to decline; now instant.
-- **Gap-3 large-δ decline closed** — the hyperbolic base search was bounded by
-  `s_min·unit`, so δ=61 (unit ≈3.5e9) and δ=10⁶ declined. Rewrote to reduce to
-  `X²−δY²=N` and scan `Y` over the Nagell bound (unit-size-independent) via new
-  `bqf_pos_base`. Both now sub-ms; small cases verified unchanged + complete.
-  Tests added; docs/changelog/memory updated; valgrind = baseline only.
+Considered but deferred: adding sampling.c's MAX_CHORD_FRAC chord-length
+backstop to the parametric sampler. It addresses a different artifact (long
+on-screen gaps in steep-but-locally-straight stretches), not the reported
+angularity, which the tolerance fix fully cures. Left out to keep the change
+minimal.

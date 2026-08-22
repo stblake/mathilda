@@ -68,7 +68,7 @@ Expr* builtin_polarplot(Expr* res) {
         param_body = make_polar_pair(r_body, theta);
     }
 
-    /* PolarPlot's default PlotPoints is 75 (vs. ParametricPlot's 25): polar
+    /* PolarPlot's default PlotPoints is 75 (vs. ParametricPlot's 50): polar
      * curves span a full 2π rotation so they need more initial seeds to seed
      * the adaptive refiner, otherwise petals and tight curvature look angular.
      * If the user already passed PlotPoints we honour that value unchanged. */
