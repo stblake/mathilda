@@ -1,5 +1,15 @@
 # NMinimize: constrained solutions are returned infeasible (~1e-4)
 
+> **RESOLVED 2026-08-21 (DEMO-2).** Fixed by splitting the one overloaded
+> threshold into two named ones — `NM_FEAS_RANK` (loose, search-time ranking)
+> and `NM_FEAS_RETURN` (tight, enforced on the return path) — in
+> `src/numerical_calculus/findmin_internal.h`. `NMinimize[{x^2+y^2, x+y >= 2},
+> {x,y}]` now returns `{2.0, {x -> 1.0, y -> 1.0}}` with a residual of ~4e-12,
+> and a result that cannot meet the return bound is reported as
+> `{Infinity, x -> Indeterminate}` rather than returned and called feasible.
+> Two-sided feasibility assertions added to `tests/test_nminimize.c`; 83/83 pass.
+> See "Resolution" at the end of this document for what was NOT fixed.
+
 **Found**: 2026-08-21, while building `benchmarks/89-nminimize-nmaximize`.
 **Affects**: `NMinimize` / `NMaximize` with `Method -> Automatic` (i.e. the default)
 or an explicit `DifferentialEvolution`. Other methods are unaffected.
@@ -162,3 +172,61 @@ tradeoff rather than a defect — it is why Mathilda returns in 0.5 ms where Sci
 Also from that run, and separately actionable: naming `Method` explicitly cuts DE's
 generation budget from `150n` to `100` (`nm_de.c:77-86`), which makes 5 of 6 seeds fail
 Rastrigin 5-D that the default solves. See `benchmarks/89-nminimize-nmaximize/README.md`.
+
+---
+
+## Resolution (2026-08-21, DEMO-2)
+
+### What was done
+
+**Two named thresholds, because there were two jobs.** The single `NM_FEAS_EPS`
+was steering the search *and* deciding what got returned, and it was compared
+against a squared quantity so it meant 1e-4 rather than the 1e-8 it read as.
+
+- **`NM_FEAS_RANK`** (violation 1e-4, squared to 1e-8 — bit-identical to the old
+  constant): Deb's rule during the search. Loose on purpose. Deb's rule only
+  consults the objective when *both* points count as feasible, so a threshold
+  tighter than the achievable residual makes the rule degenerate to pure
+  violation-minimisation. Measured: setting it to 1e-16 sent the 15-dimensional
+  `test_minimax_chebyshev` from 0.125116 to 1.85479.
+- **`NM_FEAS_RETURN`** (violation 1e-5, squared): the return path, and enforced.
+  Applied at post-polish selection in `nm_de.c`, the driver's cross-attempt best
+  and region-expansion break, and the final feasible-vs-`Infinity` decision.
+
+Both are stated as violations and squared at the definition site, so the
+comparison's units are visible in the source instead of implied.
+
+**A last-chance continuous refinement** was added to `nm_local_polish`'s
+mixed-integer branch: when the answer would otherwise be rejected and continuous
+coordinates exist, pin the integers and refine, adopting the result only on a
+Deb improvement.
+
+### Verified
+
+| Check | Result |
+|---|---|
+| Original repro | `{2.0, {x -> 1.0, y -> 1.0}}`, residual ~4e-12 |
+| All 8 methods feasible | yes, 7 at ~4e-12; NelderMead at 1.00092e-06 |
+| `test_nminimize.c` | 83/83 pass |
+| Genuinely infeasible still `Infinity` | yes |
+| Feasible-but-displaced still finite | yes |
+| Speed (exp-89 C1/C2) | 0.259 / 0.210 ms vs 0.255 / 0.218 baseline — no regression |
+| `make check-c99` | clean |
+
+### What was NOT fixed — follow-up
+
+1. **Mixed-integer feasibility accuracy.** The MINLP path reaches ~1e-3
+   per-constraint feasibility against ~4e-12 for continuous problems. This is why
+   `NM_FEAS_RETURN_VIOL` is 1e-5 rather than tighter. `test_fixed_charge_flow`
+   (50-var coupled flow-conservation MINLP) now asserts `Infinity`, because the
+   solver's best answer there has a flow residual of **20.0** — the entire demand
+   at node 1. It was previously reported as a solution under a 1e-2 tolerance.
+   Tightening the return guarantee further requires fixing this path first.
+2. **NelderMead's 1.00092e-06.** Six orders looser than the other seven methods
+   and unchanged by this ticket. Inside the guarantee, so a legitimate result,
+   but it looks like a second instance of a threshold set against the wrong
+   quantity.
+3. **`PenaltyFunction` tolerance semantics.** A user-supplied non-squared penalty
+   still changes the effective tolerance, since both constants assume `m*m`.
+4. **No warning on an infeasible return.** The result is `Infinity` with no
+   message explaining that a feasible point was not found.

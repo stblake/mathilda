@@ -156,7 +156,7 @@ static bool nm_apply_penalty_fn(Expr* pf, double m, double* out) {
  *                      or penalty_fn[violation] when a custom "PenaltyFunction"
  *                      is supplied (matching nm_eval_pen's per-term rule).
  * A satisfied leaf contributes 0, so the whole expression is 0 iff feasible and
- * the (total ≤ NM_FEAS_EPS) feasibility test carries over unchanged. The tree
+ * the (total ≤ NM_FEAS_RANK) feasibility test carries over unchanged. The tree
  * shape is pre-validated by fm_bool_supported at collection time; this returns
  * false only if a leaf cannot be evaluated to a finite real at this point. */
 bool fm_bool_penalty(Expr* c, FmVarBind* binds, const double* x, size_t n,
@@ -225,7 +225,7 @@ bool fm_bool_penalty(Expr* c, FmVarBind* binds, const double* x, size_t n,
  * an equality h == 0 — unless a "PenaltyFunction" f was supplied, in which case a
  * *violated* constraint contributes f[violation] instead (Automatic ≡ #^2 &, so
  * this generalises the default exactly). A satisfied inequality always
- * contributes 0, keeping the feasibility test (total ≤ NM_FEAS_EPS) intact.
+ * contributes 0, keeping the feasibility test (total ≤ NM_FEAS_RANK) intact.
  * Returns false if any constraint cannot be evaluated at all. */
 bool nm_eval_pen(NmDriver* D, const double* xr, double* out) {
     double total = 0.0;
@@ -283,13 +283,35 @@ void nm_eval(NmDriver* D, const double* x, double* f_out, double* pen_out) {
     *pen_out = pen;
 }
 
-/* Deb's feasibility rules: is (fa, pa) a better candidate than (fb, pb)? */
-bool nm_better(double fa, double pa, double fb, double pb) {
-    bool fa_feas = (pa <= NM_FEAS_EPS);
-    bool fb_feas = (pb <= NM_FEAS_EPS);
+/* Deb's feasibility rules, parameterised by which feasibility threshold applies.
+ * A feasible point always beats an infeasible one; among feasible points the
+ * smaller objective wins; among infeasible points the smaller total violation
+ * wins. The threshold decides which branch is reachable at all, which is why it
+ * is a parameter and not a constant here — see findmin_internal.h. */
+static bool nm_better_eps(double fa, double pa, double fb, double pb,
+                          double feas_eps) {
+    bool fa_feas = (pa <= feas_eps);
+    bool fb_feas = (pb <= feas_eps);
     if (fa_feas && fb_feas) return fa < fb;
     if (fa_feas != fb_feas) return fa_feas;
     return pa < pb;
+}
+
+/* SEARCH-time ranking. Loose (NM_FEAS_RANK) so that the "both feasible, compare
+ * objectives" branch is actually reachable on problems whose achievable residual
+ * is small but nonzero. Use this inside an engine's search loop. */
+bool nm_better(double fa, double pa, double fb, double pb) {
+    return nm_better_eps(fa, pa, fb, pb, NM_FEAS_RANK);
+}
+
+/* RETURN-path selection. Tight (NM_FEAS_RETURN), for any comparison whose loser
+ * is discarded from the answer the caller receives — post-polish selection and
+ * the driver's cross-attempt best. This is the half that fixes the bug: with the
+ * loose threshold, an unpolished point violating by 1e-4 counted as "feasible"
+ * and its slightly-lower objective (1.9998 < 2.0) beat the genuinely feasible
+ * polished point. Under NM_FEAS_RETURN it is correctly infeasible and loses. */
+bool nm_better_return(double fa, double pa, double fb, double pb) {
+    return nm_better_eps(fa, pa, fb, pb, NM_FEAS_RETURN);
 }
 
 /* Clamp x into the search region and snap integer coordinates. */
@@ -463,9 +485,26 @@ static void nm_int_descent(NmDriver* D, double* x, double* f_io, double* pen_io)
      * feasible from a random rounded start (pure assignment, sudoku) are rescued. */
     for (int attempt = 0; attempt < 2; attempt++) {
         if (attempt == 1) {
-            if (D->n_onehots == 0 || *pen_io <= NM_FEAS_EPS) break;
+            /* LOOSE (NM_FEAS_RANK) deliberately. This gate keeps the one-hot
+             * repair a FALLBACK for starts the plain descent cannot make
+             * feasible; using the tight return threshold here would make the
+             * break almost never fire, running the repair on problems (QAP)
+             * that the comment above says are meant to be left unchanged. */
+            if (D->n_onehots == 0 || *pen_io <= NM_FEAS_RANK) break;
             if (nm_repair_onehots(D, x)) { nm_project(D, x); nm_eval(D, x, f_io, pen_io); }
         }
+        /* The move-acceptance comparisons below stay LOOSE (nm_better), because
+         * they are SEARCH moves, not a return decision — the descent is hunting
+         * for a better lattice point, and Deb's rule needs its compare-objectives
+         * branch reachable to do that. Tightening them here was measured to break
+         * the search outright: on the 50-variable fixed-charge flow MINLP the
+         * descent stopped finding feasible flows and settled on the trivial
+         * all-zeros point (flow residual 20.0, the entire demand).
+         *
+         * What a mixed-integer run actually returns is bounded instead by the
+         * last-chance continuous refinement at the end of nm_local_polish and by
+         * the driver's NM_FEAS_RETURN gate — the return path, where the tight
+         * threshold belongs. */
         bool improved = true;
         int iter = 0;
         while (improved && iter++ < 300) {
@@ -722,13 +761,47 @@ void nm_local_polish(NmDriver* D, double* x, double* f_out, double* pen_out) {
                 for (size_t j = 0; j < D->n; j++)
                     if (D->is_int[j]) xr[j] = round(xr[j]);
                 nm_continuous_solve(D, xr, true, &fr, &pr);      /* pin + refine    */
-                if (nm_better(fr, pr, *f_out, *pen_out)) {
+                if (nm_better_return(fr, pr, *f_out, *pen_out)) {
                     for (size_t j = 0; j < D->n; j++) x[j] = xr[j];
                     *f_out = fr; *pen_out = pr;
                 }
                 free(xr);
             }
             nm_int_descent(D, x, f_out, pen_out);   /* re-settle integers in-region */
+        }
+        /* LAST-CHANCE FEASIBILITY REFINEMENT, and the only thing standing between
+         * a mixed-integer problem and an Infinity return.
+         *
+         * nm_int_descent moves INTEGER coordinates only, so a problem whose
+         * continuous coordinates are still slightly off cannot be improved by it.
+         * Under the old loose return threshold that did not show: the descent
+         * stopped at a ~1e-4 violation and the driver called it feasible. Under
+         * NM_FEAS_RETURN it is correctly infeasible, so without this step
+         * NMinimize[{x + 2y, x^2 + 2y^2 <= 3, x + y == 2, x in Integers}, {x,y}]
+         * returns Infinity despite x = 1, y = 1 being exactly feasible.
+         *
+         * So: only when the answer would otherwise be rejected, and only when
+         * there is a continuous coordinate to move, pin the integers and refine.
+         * Adopted only on a Deb improvement, so it can never worsen the answer,
+         * and it costs nothing on the overwhelmingly common path where the
+         * result is already feasible. */
+        if (*pen_out > NM_FEAS_RETURN) {
+            bool any_cont = false;
+            for (size_t j = 0; j < D->n; j++)
+                if (!D->is_int[j]) { any_cont = true; break; }
+            if (any_cont) {
+                double* xf = (double*)malloc(sizeof(double) * D->n);
+                if (xf) {
+                    for (size_t j = 0; j < D->n; j++) xf[j] = x[j];
+                    double ff, pf;
+                    nm_continuous_solve(D, xf, true, &ff, &pf);  /* integers pinned */
+                    if (nm_better_return(ff, pf, *f_out, *pen_out)) {
+                        for (size_t j = 0; j < D->n; j++) x[j] = xf[j];
+                        *f_out = ff; *pen_out = pf;
+                    }
+                    free(xf);
+                }
+            }
         }
     } else {
         double fx = 0.0;
