@@ -475,6 +475,83 @@ sublist.}
 pattern---the integers.}
 \end{codepairs}
 
+\section{Graphics}
+\label{sec:intro-graphics}
+
+Mathilda draws its own graphics. Every plotting function returns a \texttt{Graphics} (in two
+dimensions) or \texttt{Graphics3D} (in three) object built from primitives---lines, points,
+polygons, colours---which the built-in engine renders on screen and \B{Export} writes to
+PDF, PNG, or JPEG. This closing tour gives one example of each plotting function; as in
+\S\ref{sec:intro-numcalc}, every plot below is the genuine \texttt{Out} of the command
+shown, produced by the running system.
+
+\subsection{Functions and data}
+
+\B{Plot} draws one or more functions of a real variable---here the first odd harmonics of
+a square wave:
+
+\plotcell{02-introduction/graphics/plot}
+
+\noindent \B{ListPlot} draws discrete data as points:
+
+\plotcell{02-introduction/graphics/listplot}
+
+\noindent \B{ParametricPlot} traces a curve $(x(t), y(t))$---a Lissajous figure---and
+\B{PolarPlot} draws $r(\theta)$, here a five-petal rose:
+
+\plotcell{02-introduction/graphics/parametricplot}
+
+\plotcell{02-introduction/graphics/polarplot}
+
+\subsection{Vector fields}
+
+\B{VectorPlot} shows a field as a grid of arrows, \B{StreamPlot} as flow lines. Here is the
+phase field of a pendulum, then a pure rotation:
+
+\plotcell{02-introduction/graphics/vectorplot}
+
+\plotcell{02-introduction/graphics/streamplot}
+
+\subsection{Scalar fields and arrays}
+
+\B{ContourPlot} draws level curves of $f(x,y)$, \B{DensityPlot} shades the plane by value,
+and \B{ArrayPlot} renders a matrix as a grid of cells---here the greatest-common-divisor
+table, whose diagonals of bright cells expose its number-theoretic structure:
+
+\plotcell{02-introduction/graphics/contourplot}
+
+\plotcell{02-introduction/graphics/densityplot}
+
+\plotcell{02-introduction/graphics/arrayplot}
+
+\subsection{Charts and graphs}
+
+\B{BarChart} draws labelled bars; \B{GraphPlot} lays out a graph automatically:
+
+\plotcell{02-introduction/graphics/barchart}
+
+\plotcell{02-introduction/graphics/graphplot}
+
+\subsection{Complex functions}
+
+\B{ComplexPlot} colours the plane by the value of a complex function---hue for the phase,
+brightness for the magnitude---so its zeros and poles stand out at a glance:
+
+\plotcell{02-introduction/graphics/complexplot}
+
+\subsection{Three dimensions}
+
+\B{Plot3D} draws a surface $z=f(x,y)$, \B{ParametricPlot3D} a curve or surface in space,
+and \B{ComplexPlot3D} the modulus of a complex function as a surface coloured by phase.
+These return \texttt{Graphics3D}, which the engine renders with lighting and a movable camera,
+and which \B{Export} writes as PNG or JPEG:
+
+\plotcell{02-introduction/graphics/plot3d}
+
+\plotcell{02-introduction/graphics/parametricplot3d}
+
+\plotcell{02-introduction/graphics/complexplot3d}
+
 \bigskip
 \noindent
 That is the tour. Every area glimpsed here has a chapter of its own ahead, and this

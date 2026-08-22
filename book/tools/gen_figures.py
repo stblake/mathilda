@@ -35,6 +35,19 @@ FIGSRC = ROOT / "book" / "figures"
 OUT = ROOT / "book" / "generated" / "figures"
 
 FIG_ASSIGN = re.compile(r"^\s*fig\s*=\s*")
+# Optional first-line directive: choose the output format. Vector PDF is the
+# default (crisp, tiny for line plots); PNG is for the dense colour plots
+# (DensityPlot/ComplexPlot/ArrayPlot -- megabytes as vectors) and all 3D
+# (Graphics3D has no vector form). e.g.  # format: png
+FORMAT_RE = re.compile(r"^#\s*format:\s*(pdf|png)\s*$", re.I)
+
+
+def figure_format(path):
+    for ln in path.read_text().splitlines():
+        m = FORMAT_RE.match(ln.strip())
+        if m:
+            return m.group(1).lower()
+    return "pdf"
 
 
 def render_cell(inputs, outs, plot_idx):
@@ -72,9 +85,14 @@ def main():
     n_ok = 0
     for m in scripts:
         rel = m.relative_to(FIGSRC).with_suffix("")     # e.g. 02-introduction/ndsolve-solution
-        pdf = OUT / f"{rel}.pdf"
+        ext = figure_format(m)                           # "pdf" (default) or "png"
+        img = OUT / f"{rel}.{ext}"
         dst = OUT / f"{rel}.in"
-        pdf.parent.mkdir(parents=True, exist_ok=True)
+        img.parent.mkdir(parents=True, exist_ok=True)
+        # Drop any stale sibling in the other format so \plotcell never picks it.
+        other = OUT / f"{rel}.{'png' if ext == 'pdf' else 'pdf'}"
+        if other.exists():
+            other.unlink()
 
         inputs = read_inputs(m)
         plot_idx = next((i for i, ln in enumerate(inputs) if FIG_ASSIGN.match(ln)), None)
@@ -82,16 +100,16 @@ def main():
             sys.exit(f"gen_figures: {m.relative_to(ROOT)} has no `fig = <plot>` line")
 
         # Run the session and Export `fig`; capture In/Out for the shown lines.
-        outs = run_session(inputs + [f'Export["{pdf}", fig]'])
+        outs = run_session(inputs + [f'Export["{img}", fig]'])
         dst.write_text(render_cell(inputs, outs, plot_idx))
 
-        if pdf.exists() and pdf.stat().st_size > 0:
-            print(f"gen_figures: {m.relative_to(ROOT)} -> {pdf.relative_to(ROOT)} "
-                  f"({pdf.stat().st_size} bytes) + {dst.name}")
+        if img.exists() and img.stat().st_size > 0:
+            print(f"gen_figures: {m.relative_to(ROOT)} -> {img.relative_to(ROOT)} "
+                  f"({img.stat().st_size} bytes) + {dst.name}")
             n_ok += 1
         else:
-            sys.exit(f"gen_figures: FAILED to produce {pdf} from {m.relative_to(ROOT)} "
-                     f"(is `fig` bound to a Graphics object?)")
+            sys.exit(f"gen_figures: FAILED to produce {img} from {m.relative_to(ROOT)} "
+                     f"(is `fig` bound to a Graphics object? PNG needs a GUI session.)")
     print(f"gen_figures: wrote {n_ok} plot cell(s) -> {OUT.relative_to(ROOT)}")
 
 

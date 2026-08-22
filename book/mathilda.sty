@@ -220,10 +220,14 @@
       \small\ttfamily [\,plot cell ``#2'' not generated --- run \textup{make figures}\,]
     \end{tcolorbox}%
   }%
+  \nopagebreak
   \IfFileExists{generated/figures/#2.pdf}{%
-    \nopagebreak
     \begin{center}\includegraphics[width=#1]{generated/figures/#2.pdf}\end{center}%
-  }{}%
+  }{%
+    \IfFileExists{generated/figures/#2.png}{%
+      \begin{center}\includegraphics[width=#1]{generated/figures/#2.png}\end{center}%
+    }{}%
+  }%
   \par\addvspace{\medskipamount}%
 }
 
