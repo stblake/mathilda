@@ -259,18 +259,21 @@ static Expr* builtin_export(Expr* res)
             int is_jpg = (fmt && (strcmp(fmt, "JPEG") == 0 || strcmp(fmt, "JPG") == 0))
                          || (!fmt && (has_ext(path, "jpg") || has_ext(path, "jpeg")));
             if (!is_pdf && !is_png && !is_jpg) return NULL;  /* unclaimed format */
-            if (is3d) return failed();      /* 3D graphics export not yet supported */
 
             int gok = 0;
             if (is_pdf) {
-                gok = graphics_export_pdf(gobj, path);
+                /* PDF is a 2D vector format; 3D has no vector projection here. */
+                gok = is3d ? 0 : graphics_export_pdf(gobj, path);
             } else {
 #ifdef USE_GRAPHICS
-                /* Raylib renders the plot to RGBA pixels; stb encodes them, so
-                 * JPEG works regardless of what this Raylib build supports. */
+                /* Raylib renders the plot to RGBA pixels (the 3D renderer for a
+                 * Graphics3D); stb encodes them, so JPEG works regardless of
+                 * what this Raylib build supports. */
                 int gw, gh, ow = 0, oh = 0;
                 graphics_raster_size(gobj, &gw, &gh);
-                unsigned char* rgba = graphics_render_rgba(gobj, gw, gh, &ow, &oh);
+                unsigned char* rgba = is3d
+                    ? graphics3d_render_rgba(gobj, gw, gh, &ow, &oh)
+                    : graphics_render_rgba(gobj, gw, gh, &ow, &oh);
                 if (rgba) {
                     if (is_jpg) gok = stbi_write_jpg(path, ow, oh, 4, rgba, JPEG_QUALITY);
                     else        gok = stbi_write_png(path, ow, oh, 4, rgba, ow * 4);
@@ -433,8 +436,9 @@ void imageio_init(void)
         "output has no room for them. A Graphics object (the result of Plot, ListPlot, Graphics, "
         "...) writes to PDF, PNG, or JPEG: PDF is a resolution-independent vector file produced "
         "without any external library and works headless, while PNG and JPEG render through the "
-        "graphics backend and so need graphics support compiled in and a display. Graphics3D "
-        "export is not yet supported. Returns the file name, so Import[Export[f, img]] round-trips.");
+        "graphics backend and so need graphics support compiled in and a display. A Graphics3D "
+        "object (Plot3D, ParametricPlot3D, ...) exports to PNG or JPEG the same way; it has no "
+        "vector-PDF form. Returns the file name, so Import[Export[f, img]] round-trips.");
     symtab_add_builtin("RandomImage", builtin_random_image);
     symtab_get_def("RandomImage")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("RandomImage",

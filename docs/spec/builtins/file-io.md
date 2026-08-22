@@ -170,7 +170,9 @@ Writes an `Image` to a raster image file, or a `Graphics` object to an image fil
   than crashing, while PDF still works. Resolution follows the `ImageSize` option
   (default 720×540). The pixels are encoded by the vendored `stb_image_write`, so JPEG
   output does not depend on which formats the Raylib build happens to support.
-- `Graphics3D` export is not yet supported (returns `$Failed`).
+- A `Graphics3D` object (`Plot3D`, `ParametricPlot3D`, `ComplexPlot3D`, ...) exports to
+  **PNG or JPEG** through the 3D renderer, with the same graphics-support/display
+  requirement; it has no vector-PDF form (PDF of a 3D scene returns `$Failed`).
 - Samples outside the unit interval are **clamped**, not wrapped. An unsharp mask
   legitimately overshoots and 8-bit output has nowhere to put the overshoot; wrapping
   would turn a bright highlight black, which reads as a bug in the filter rather than in

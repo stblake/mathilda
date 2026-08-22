@@ -250,7 +250,9 @@ static Expr* vp_color(Expr* cfn, double speed_norm,
 
 Expr* builtin_vectorplot(Expr* res) {
     size_t argc = res->data.function.arg_count;
-    if (argc < 4) return NULL;
+    /* VectorPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}] is the base form
+     * (three arguments); options follow. */
+    if (argc < 3) return NULL;
 
     /* args[0] must be a List[vx_body, vy_body] */
     Expr* field = res->data.function.args[0];

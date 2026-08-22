@@ -26,6 +26,12 @@ Color to_raylib(RGBA8 c);
  * tick count. */
 double nice_step(double range, int target_ticks);
 
+/* True if this process can open a GUI window (Aqua session on macOS, X11/
+ * Wayland display on Linux). The offscreen export paths screen for this before
+ * InitWindow, which aborts inside GLFW rather than failing when no monitor is
+ * available. Defined in render.c; used by both renderers. */
+bool gui_session_available(void);
+
 /* Find the $StreamColorBar[lo, hi, cfn] metadata node embedded by the
  * plotter in the Graphics/Graphics3D option list.  Returns NULL if absent. */
 const Expr* find_color_bar(const Expr* graphics_expr);

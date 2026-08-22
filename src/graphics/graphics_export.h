@@ -35,4 +35,11 @@ int graphics_export_pdf(const Expr* graphics_expr, const char* path);
 unsigned char* graphics_render_rgba(const Expr* graphics_expr, int w, int h,
                                     int* out_w, int* out_h);
 
+/* As graphics_render_rgba, but for a Graphics3D[...] via the 3D renderer
+ * (render3d.c). PDF (vector) export of 3D is not supported, so this raster path
+ * is the only way to export a 3D plot. Same USE_GRAPHICS / GUI-session
+ * requirements and NULL-on-failure contract. */
+unsigned char* graphics3d_render_rgba(const Expr* graphics_expr, int w, int h,
+                                      int* out_w, int* out_h);
+
 #endif /* MATHILDA_GRAPHICS_EXPORT_H */

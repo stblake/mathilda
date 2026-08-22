@@ -2848,17 +2848,17 @@ void graphics_render_in_region(const Expr* graphics_expr,
 #if defined(__APPLE__)
 extern const void* CGSessionCopyCurrentDictionary(void);
 extern void        CFRelease(const void*);
-static bool gui_session_available(void) {
+bool gui_session_available(void) {
     const void* d = CGSessionCopyCurrentDictionary();
     if (d) { CFRelease(d); return true; }
     return false;
 }
 #elif defined(__linux__)
-static bool gui_session_available(void) {
+bool gui_session_available(void) {
     return getenv("DISPLAY") != NULL || getenv("WAYLAND_DISPLAY") != NULL;
 }
 #else
-static bool gui_session_available(void) { return true; }
+bool gui_session_available(void) { return true; }
 #endif
 
 /* Render a 2D Graphics[...] to a fresh RGBA8 buffer via an offscreen
