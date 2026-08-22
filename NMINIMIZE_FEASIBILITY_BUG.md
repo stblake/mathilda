@@ -215,13 +215,41 @@ Deb improvement.
 
 ### What was NOT fixed — follow-up
 
-1. **Mixed-integer feasibility accuracy.** The MINLP path reaches ~1e-3
-   per-constraint feasibility against ~4e-12 for continuous problems. This is why
-   `NM_FEAS_RETURN_VIOL` is 1e-5 rather than tighter. `test_fixed_charge_flow`
-   (50-var coupled flow-conservation MINLP) now asserts `Infinity`, because the
-   solver's best answer there has a flow residual of **20.0** — the entire demand
-   at node 1. It was previously reported as a solution under a 1e-2 tolerance.
-   Tightening the return guarantee further requires fixing this path first.
+1. **CORRECTION + OPEN REGRESSION — `test_fixed_charge_flow`.** The commit
+   message for this fix, and an earlier version of this section, state that the
+   solver's best answer on that instance has a flow residual of **20.0**. **That
+   number is wrong.** It was measured while `nm_int_descent`'s move acceptance
+   was still (incorrectly) using the tight predicate — a change that was reverted
+   before shipping. Re-measured against the shipped code, with the return gate
+   opened:
+
+   | build | objective | max flow residual |
+   |---|---:|---:|
+   | pre-fix (`ea0f8c3c`) | 877.38 | **6.59657e-05** |
+   | shipped (`d4eb10fa`) | 476.948 | **0.23574** |
+
+   So this is **not** merely a strict gate rejecting a problem the solver never
+   solved. The pre-fix code found a near-feasible point (6.6e-5, comfortably
+   inside the test's own 1e-2 tolerance); the shipped code finds one three orders
+   of magnitude worse. **The fix degraded feasibility on this problem**, and the
+   test now asserting `Infinity` documents that regression rather than an
+   inherent limitation.
+
+   Suspected mechanism, not yet confirmed: when no candidate meets
+   `NM_FEAS_RETURN`, `nm_better_return` ranks purely by violation
+   (`pa < pb`), discarding objective guidance entirely — the same degeneration
+   that a tight *ranking* threshold caused in `test_minimax_chebyshev`. Selection
+   is still ranking, so it may need the loose predicate too, with the tight bound
+   applied only at the final gate in `nm_driver.c`. That was not established
+   before shipping.
+
+   **Recommended next step:** either confirm and fix that, or revert
+   `nm_better_return` at the selection sites (`nm_de.c`, `nm_driver.c:443,449`)
+   and re-check whether the original 1e-4 bug returns.
+
+   The underlying accuracy gap is still real — the MINLP path reaches ~1e-3
+   per-constraint against ~4e-12 for continuous problems, which is why
+   `NM_FEAS_RETURN_VIOL` is 1e-5 rather than tighter.
 2. **NelderMead's 1.00092e-06.** Six orders looser than the other seven methods
    and unchanged by this ticket. Inside the guarantee, so a legitimate result,
    but it looks like a second instance of a threshold set against the wrong
@@ -230,3 +258,45 @@ Deb improvement.
    still changes the effective tolerance, since both constants assume `m*m`.
 4. **No warning on an infeasible return.** The result is `Infinity` with no
    message explaining that a feasible point was not found.
+
+---
+
+## The test-suite failure class — a second confirmed instance
+
+`test_fixed_charge_flow` is not a one-off. It is the **same failure class as the
+bug this document is about**, and finding two instances in one suite is the
+reason to audit the rest.
+
+**The pattern:** a test asserts the *objective* tightly and *feasibility* loosely
+(or not at all), so a point that is optimal-looking but constraint-violating
+passes. The objective is the thing everyone thinks to assert; feasibility is the
+thing that actually makes the answer meaningful.
+
+| instance | asserted | missed |
+|---|---|---|
+| the original bug | `Abs[f - 2] < 1e-3` across 29 tests | that `x + y` was 1.99990, not 2 |
+| `test_fixed_charge_flow` | `o < 1000`, residual `< 1e-2` | that a 1e-2 slack on a *flow-conservation equality* accepts a materially infeasible network |
+
+Both are the same mistake at different scales: the tolerance was chosen to make a
+known-imperfect result pass, rather than to express what feasibility means for
+the problem.
+
+**What to audit in `tests/test_nminimize.c`.** Two mechanical searches find the
+candidates:
+
+- **13 one-sided slack assertions** of the shape `<= bound + epsilon` — `9.001`,
+  `25.001`, `3.0001`, `100.0001`, `15.001`, `100.001`/`200.001`, `0.027001`,
+  `1.0001`, `5.001`. Each is a ceiling only: it catches overshoot and is blind to
+  a point that never reaches the constraint boundary, which is the direction the
+  original bug went. A two-sided assertion, or an explicit residual bound, tests
+  something the one-sided form cannot.
+- **53 assertions at 1e-2 or 1e-3 tolerance.** Not all are wrong — a stochastic
+  global optimum genuinely needs a loose objective band. But a loose band on a
+  *constraint residual* is different in kind from a loose band on an objective,
+  and the two are not currently distinguished anywhere in the file.
+
+**The rule worth adopting:** an objective tolerance may be loose, because the
+search is stochastic. A feasibility tolerance should be tight, because
+feasibility is not an approximation — it is the difference between an answer and
+a wrong answer. Where a feasibility tolerance must be loose, that is a finding
+about the solver to record, not a number to quietly choose.

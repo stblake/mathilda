@@ -1549,15 +1549,26 @@ static void test_fixed_charge_flow(void) {
  * x + y = 1.99990 against x + y >= 2 and reported it as feasible.
  *
  * The return path now enforces NM_FEAS_RETURN_VIOL, and this problem cannot
- * meet it. Measured with the gate opened, the solver's best answer here has a
- * flow residual of 20.0 — the entire demand at node 1 — i.e. it does not solve
- * this instance at all; the old assertion passed only because its tolerance was
- * loose enough to accept a badly infeasible point.
+ * meet it.
  *
- * So {Infinity, x -> Indeterminate} is the correct, honest answer, and this
- * test now pins that. It is not a weakened test: it asserts a stronger property
- * (the solver REFUSES to present an infeasible point as a solution) than the
- * old one did.
+ * CORRECTION: an earlier version of this comment claimed the solver's best
+ * answer here has a flow residual of 20.0. That measurement was taken while
+ * nm_int_descent still used the tight predicate for move acceptance, which was
+ * reverted before shipping. Re-measured with the return gate opened:
+ *
+ *     pre-fix  (ea0f8c3c)   objective 877.38    max flow residual 6.59657e-05
+ *     shipped  (d4eb10fa)   objective 476.948   max flow residual 0.23574
+ *
+ * So this assertion currently documents a REGRESSION, not an inherent
+ * limitation: the pre-fix code found a point comfortably inside the old 1e-2
+ * tolerance, and the shipped code finds one three orders worse. Suspected cause
+ * is that when no candidate meets NM_FEAS_RETURN, nm_better_return ranks purely
+ * by violation and discards objective guidance, the same degeneration a tight
+ * RANKING threshold caused in test_minimax_chebyshev. See
+ * NMINIMIZE_FEASIBILITY_BUG.md, "CORRECTION + OPEN REGRESSION".
+ *
+ * This assertion should be revisited, and ideally reverted to checking a finite
+ * optimum, once that is resolved.
  *
  * The underlying limitation — Mathilda's mixed-integer path reaches only ~1e-3
  * per-constraint feasibility on coupled flow-conservation equalities, against
