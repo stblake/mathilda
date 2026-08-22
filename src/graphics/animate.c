@@ -36,6 +36,10 @@
 #include "symtab.h"
 #include "eval.h"
 #include "print.h"
+
+/* From plot_common.c ($RaylibVerbose). Declared directly rather than via
+ * plot_common.h, whose is_rule_arg prototype clashes with the local one below. */
+bool raylib_verbose_enabled(void);
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -435,6 +439,7 @@ static void graphics_animate(const Expr* body,
     float content_y = (opts.placement == CTRL_TOP) ? ctrl_h : 0.0f;
     float content_h = (float)win_h - ctrl_h;
 
+    SetTraceLogLevel(raylib_verbose_enabled() ? LOG_ALL : LOG_NONE); /* $RaylibVerbose */
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(win_w, win_h, "Mathilda - Animate");
     SetTargetFPS((int)opts.refresh_rate);

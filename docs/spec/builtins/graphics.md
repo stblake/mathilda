@@ -359,9 +359,10 @@ All gradient-based plotters — `DensityPlot`, `ArrayPlot`, `ContourPlot`,
 the following built-in string ramps, parameterised by `t ∈ [0,1]` (normalised to
 the data range when `ColorFunctionScaling -> True`, the default). The default
 magnitude colormap is **`"Viridis"`** — used by `DensityPlot`, `ContourPlot`,
-`StreamPlot` (speed), and `VectorPlot` (speed) when no `ColorFunction` is given.
-`ArrayPlot` instead defaults to `"Greyscale"` (matching Mathematica), and
-`ComplexPlot`'s phase coloring keeps its cyclic thermal default.
+`StreamPlot` (speed), `VectorPlot` (speed), and `Plot3D` (single-surface height)
+when no `ColorFunction` is given. `ArrayPlot` instead defaults to `"Greyscale"`
+(matching Mathematica), `ComplexPlot`'s phase coloring keeps its cyclic thermal
+default, and multi-surface `Plot3D` keeps its per-surface palette.
 
 The perceptually-uniform maps (`Viridis`, `Magma`, `Plasma`, `Inferno`,
 `Cividis`) are 32-stop resamplings of matplotlib's authoritative 256-entry
@@ -473,6 +474,12 @@ In[1]:= Graphics[{CMYKColor[1, 0, 0, 0], Disk[]}]   (* a cyan disk *)
 Normalizes a `Graphics[...]` object for display; the REPL front end opens
 the window when the result is a top-level `Graphics` (see the auto-display
 note at the top). The window blocks the REPL until closed.
+
+**`$RaylibVerbose`** (default `False`): the Raylib backend's trace log (window
+and OpenGL initialisation lines) is suppressed by default so opening a window or
+exporting an image stays quiet. Set `$RaylibVerbose = True` to let Raylib's full
+log through. Only `True`/`False` accepted; no effect in a `USE_GRAPHICS=0` build.
+
 - `Show[graphics]`: returns `graphics` (a copy).
 - `Show[graphics, opt -> val, ...]`: merges the given options into
   `graphics`'s option list (a later/explicit option overrides one already

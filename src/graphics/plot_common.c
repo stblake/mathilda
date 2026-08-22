@@ -431,6 +431,11 @@ static void ramp_lerp(double t, const double (*stops)[3], const double* pos,
     *b = stops[i][2] + f * (stops[i + 1][2] - stops[i][2]);
 }
 
+/* $RaylibVerbose backing flag (see plot_common.h / eval.c sysflag table). */
+static bool g_raylib_verbose = false;
+void raylib_verbose_set(bool on)  { g_raylib_verbose = on; }
+bool raylib_verbose_enabled(void) { return g_raylib_verbose; }
+
 void viridis_rgb(double t, double* r, double* g, double* b) {
     ramp_lerp(t, viridis_stops, NULL, 32, r, g, b);
 }

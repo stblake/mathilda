@@ -4175,6 +4175,16 @@ void info_init(void) {
         "\n"
         "Reads back False in a session started with the environment variable\n"
         "MATHILDA_NO_PACK set. Only True or False is accepted.");
+    symtab_set_docstring("$RaylibVerbose",
+        "$RaylibVerbose\n"
+        "\tcontrols whether the Raylib graphics backend prints its diagnostic\n"
+        "\tlog (window and OpenGL initialisation lines) to the terminal. False\n"
+        "\tby default, so opening a Show/Plot window or exporting an image stays\n"
+        "\tquiet; set it to True to see Raylib's full trace log.\n"
+        "\n"
+        "Affects only the terminal chatter from the renderer, never the graphics\n"
+        "produced. Has no effect in a build without graphics (USE_GRAPHICS=0).\n"
+        "Only True or False is accepted.");
 
     // Numerical option keywords shared by the numerical-calculus operations.
     symtab_set_docstring("AccuracyGoal",

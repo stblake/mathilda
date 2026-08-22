@@ -2333,6 +2333,7 @@ void graphics_show(const Expr* graphics_expr) {
     /* 4x MSAA smooths every vector stroke -- the plot curves, the axes, and
      * the hand-drawn toolbar glyphs all read as crisp anti-aliased lines
      * rather than the stair-stepped default. Must precede InitWindow. */
+    SetTraceLogLevel(raylib_verbose_enabled() ? LOG_ALL : LOG_NONE); /* $RaylibVerbose */
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow((int)opts.width, (int)opts.height, "Mathilda");
     SetTargetFPS(60);
@@ -2891,7 +2892,7 @@ unsigned char* graphics_render_rgba(const Expr* g, int w, int h,
     bool opened = false;
     if (!IsWindowReady()) {
         if (!gui_session_available()) return NULL;  /* headless: fail, do not crash */
-        SetTraceLogLevel(LOG_WARNING);              /* keep the REPL quiet */
+        SetTraceLogLevel(raylib_verbose_enabled() ? LOG_ALL : LOG_NONE); /* $RaylibVerbose */
         /* Match graphics_show's flags. FLAG_WINDOW_HIDDEN faults inside GLFW on
          * macOS when no usable monitor is present (whereas a normal window fails
          * gracefully -- IsWindowReady() then returns false), so we open a normal

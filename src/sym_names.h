@@ -705,6 +705,7 @@ extern const char* SYM_DollarModuleNumber;
 extern const char* SYM_DollarRecursionLimit;
 extern const char* SYM_DollarAutoCompilation;
 extern const char* SYM_DollarAutoArrayPacking;
+extern const char* SYM_DollarRaylibVerbose;
 extern const char* SYM_DollarSimplifyDebug;
 extern const char* SYM_DollarruSimplify;
 extern const char* SYM_DollarVersion;

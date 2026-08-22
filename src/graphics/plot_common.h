@@ -77,6 +77,14 @@ void cool_tones_rgb(double t, double* r, double* g, double* b);
 /* WarmTones: pale cream (t=0) → amber → orange → deep crimson (t=1). */
 void warm_tones_rgb(double t, double* r, double* g, double* b);
 
+/* $RaylibVerbose backing flag. When False (the default), the Raylib backend's
+ * TraceLog chatter (window/GL init INFO lines) is suppressed; True lets it
+ * through. Set/read via the $RaylibVerbose system variable (see eval.c's
+ * sysflag table). Lives here because plot_common is compiled regardless of
+ * USE_GRAPHICS and carries no Raylib dependency. */
+void raylib_verbose_set(bool on);
+bool raylib_verbose_enabled(void);
+
 /* Viridis: perceptually-uniform dark-purple (t=0) → teal → green → yellow (t=1).
  * The Berkeley/matplotlib default; a 32-stop resampling of the 256-entry table. */
 void viridis_rgb(double t, double* r, double* g, double* b);

@@ -696,6 +696,7 @@ const char* SYM_DollarModuleNumber = NULL;
 const char* SYM_DollarRecursionLimit = NULL;
 const char* SYM_DollarAutoCompilation = NULL;
 const char* SYM_DollarAutoArrayPacking = NULL;
+const char* SYM_DollarRaylibVerbose = NULL;
 const char* SYM_DollarSimplifyDebug = NULL;
 const char* SYM_DollarruSimplify = NULL;
 const char* SYM_DollarVersion = NULL;
@@ -1563,6 +1564,7 @@ void sym_names_init(void) {
     SYM_DollarRecursionLimit       = intern_symbol("$RecursionLimit");
     SYM_DollarAutoCompilation      = intern_symbol("$AutoCompilation");
     SYM_DollarAutoArrayPacking     = intern_symbol("$AutoArrayPacking");
+    SYM_DollarRaylibVerbose        = intern_symbol("$RaylibVerbose");
     SYM_DollarSimplifyDebug        = intern_symbol("$SimplifyDebug");
     SYM_DollarruSimplify           = intern_symbol("$ruSimplify");
     SYM_DollarVersion              = intern_symbol("$Version");

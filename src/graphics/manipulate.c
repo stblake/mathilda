@@ -31,6 +31,7 @@
 #include "iter.h"
 #include "eval.h"
 #include "print.h"
+#include "plot_common.h"   /* raylib_verbose_enabled -- $RaylibVerbose */
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -380,6 +381,7 @@ static void graphics_manipulate(const Expr* body, ManipCtrl* ctrls, int n_ctrls)
     float ctrl_y    = content_h;
     float footer_y  = ctrl_y + (float)n_ctrls * ROW_H;
 
+    SetTraceLogLevel(raylib_verbose_enabled() ? LOG_ALL : LOG_NONE); /* $RaylibVerbose */
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(win_w, win_h, "Mathilda - Manipulate");
     SetTargetFPS(60);

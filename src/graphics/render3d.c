@@ -23,6 +23,7 @@
 #include "label_font.h"
 #include "sym_names.h"
 #include "print.h"
+#include "plot_common.h"   /* raylib_verbose_enabled -- $RaylibVerbose */
 #include <raylib.h>
 #include <raymath.h>
 #include <rlgl.h>
@@ -759,6 +760,7 @@ void graphics3d_show(const Expr* graphics3d_expr) {
     double diag = sqrt(pow(bb.xmax - bb.xmin, 2) + pow(bb.ymax - bb.ymin, 2) + pow(bb.zmax - bb.zmin, 2));
     if (!(diag > 0.0)) diag = 2.0;
 
+    SetTraceLogLevel(raylib_verbose_enabled() ? LOG_ALL : LOG_NONE); /* $RaylibVerbose */
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow((int)opts.width, (int)opts.height, "Mathilda");
     SetTargetFPS(60);
@@ -1219,7 +1221,7 @@ unsigned char* graphics3d_render_rgba(const Expr* g, int w, int h,
     bool opened = false;
     if (!IsWindowReady()) {
         if (!gui_session_available()) return NULL;   /* headless: fail, don't crash */
-        SetTraceLogLevel(LOG_WARNING);
+        SetTraceLogLevel(raylib_verbose_enabled() ? LOG_ALL : LOG_NONE); /* $RaylibVerbose */
         SetConfigFlags(FLAG_MSAA_4X_HINT);
         InitWindow(w, h, "mathilda-export");
         if (!IsWindowReady()) return NULL;

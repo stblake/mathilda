@@ -505,6 +505,17 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
     bool any = false;
     bool multi = (nfun > 1);
 
+    /* Default single-surface colouring: a Viridis height gradient, keyed to z
+     * (eval_color_function3's string-ramp path normalises z to [0,1]).  Multi-
+     * surface plots keep the per-surface palette so the surfaces stay visually
+     * distinct; an explicit ColorFunction always wins. */
+    Expr* eff_cf = sopts->color_function;
+    Expr* eff_cf_owned = NULL;
+    if (!eff_cf && !multi) {
+        eff_cf_owned = expr_new_string("Viridis");
+        eff_cf = eff_cf_owned;
+    }
+
 #define PUSH(e) do { \
         if (prim_count == cap) { cap = cap ? cap * 2 : 256; prims = realloc(prims, sizeof(Expr*) * cap); } \
         prims[prim_count++] = (e); \
@@ -526,7 +537,7 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
 
         /* Compute z-range once per surface for ColorFunction3 scaling. */
         double zlo = 0.0, zhi = 1.0;
-        if (sopts->color_function) grid_zrange(grid, n, &zlo, &zhi);
+        if (eff_cf) grid_zrange(grid, n, &zlo, &zhi);
 
         /* ---- Fill polygons ---- */
         for (long i = 0; i + 1 < n; i++) {
@@ -537,11 +548,11 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
                 if (p00->valid && p10->valid && p01->valid && p11->valid) {
                     /* Fast path: fully inside the region. */
                     any = true;
-                    if (sopts->color_function) {
+                    if (eff_cf) {
                         double cx = (p00->x + p10->x + p01->x + p11->x) / 4.0;
                         double cy = (p00->y + p10->y + p01->y + p11->y) / 4.0;
                         double cz = (p00->z + p10->z + p01->z + p11->z) / 4.0;
-                        PUSH(eval_color_function3(sopts->color_function,
+                        PUSH(eval_color_function3(eff_cf,
                                                   cx, cy, cz,
                                                   xmin, xmax, ymin, ymax, zlo, zhi,
                                                   sopts->color_function_scaling));
@@ -563,7 +574,7 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
                                                   p00, p10, p11, p01, clipped);
                     if (nc >= 3) {
                         any = true;
-                        if (sopts->color_function) {
+                        if (eff_cf) {
                             double cx = 0.0, cy = 0.0, cz = 0.0;
                             for (int k = 0; k < nc; k++) {
                                 cx += clipped[k].x;
@@ -571,7 +582,7 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
                                 cz += clipped[k].z;
                             }
                             cx /= nc; cy /= nc; cz /= nc;
-                            PUSH(eval_color_function3(sopts->color_function,
+                            PUSH(eval_color_function3(eff_cf,
                                                       cx, cy, cz,
                                                       xmin, xmax, ymin, ymax, zlo, zhi,
                                                       sopts->color_function_scaling));
@@ -734,6 +745,7 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
     }
 #undef PUSH
 
+    if (eff_cf_owned) expr_free(eff_cf_owned);
     iter_spec_restore(varx, old_ownx);
     iter_spec_restore(vary, old_owny);
 

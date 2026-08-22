@@ -24,6 +24,7 @@
 #include "predict.h"   /* src/ml -- fitted models as callables */
 #include "compile/autocompile.h"   /* $AutoCompilation */
 #include "numloop.h"                 /* $AutoCompilation also gates numloop */
+#include "plot_common.h"             /* $RaylibVerbose backing flag (raylib-free) */
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -426,6 +427,7 @@ static bool eval_get_autocompilation(void) { return autocompile_enabled(); }
 static const EvalSysFlag EVAL_SYSFLAGS[] = {
     { "$AutoCompilation",  eval_set_autocompilation, eval_get_autocompilation },
     { "$AutoArrayPacking", pack_set_enabled,         pack_enabled },
+    { "$RaylibVerbose",    raylib_verbose_set,       raylib_verbose_enabled },
 };
 #define EVAL_N_SYSFLAGS ((size_t)(sizeof(EVAL_SYSFLAGS) / sizeof(EVAL_SYSFLAGS[0])))
 
