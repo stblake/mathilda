@@ -932,12 +932,17 @@ its seed by RK4 integration of the *normalized* field — a fixed arc-length
 step, so point spacing and rendered curvature stay uniform regardless of
 local speed — and runs until it nears another line, leaves the domain,
 reaches a critical point, or closes on itself (so a rotational field draws
-whole circles). A uniform hash grid keeps the lines from overlapping. Each
-line renders as a `Line[...]` with short direction `Arrow[...]` chevrons
-placed at regular arc-length intervals; the result is a `Graphics[...]`
-object (auto-displayed).
+whole circles). A uniform hash grid keeps the lines evenly spaced and from
+overlapping. Each line is rendered in Mathematica's **dashed-arrow style** — a
+run of short dashes (each a curve-following `Line[...]` capped by a small filled
+arrowhead triangle at its downstream tip) separated by gaps — so the flow
+direction reads everywhere and neighbouring lines stay distinct; the result is a
+`Graphics[...]` object
+(auto-displayed). (`StreamAnimate -> True` instead emits one unbroken
+`AnimatedStreamline[...]` per line, whose particle dots flow in an interactive
+window.)
 
-`StreamPoints` sets the line density (higher → more, closer lines);
+`StreamPoints` sets the line density (higher → more, closer lines; default 25);
 `StreamScale -> s` caps each line's arc length at `s`·(domain diagonal),
 while the default (and `None`/`Automatic`) lets every line run to its
 natural end.

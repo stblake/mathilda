@@ -271,14 +271,16 @@ static bool rk4_step_unit(const FieldCtx* ctx, double x, double y,
  * streamline (within sqrt(d_test2) of a grid point), a closed-orbit return to
  * the seed (after at least min_loop_arc of travel -- this is what lets a
  * rotational field draw whole closed circles instead of running to the step
- * cap), or max_steps. */
+ * cap), or max_steps. Sets *closed = true iff it stopped on the closed-orbit
+ * return, so the caller can skip the redundant opposite pass. */
 static void integrate_dir(const FieldCtx* ctx, const SGrid* grid,
                           double x0, double y0,
                           double xmin, double xmax, double ymin, double ymax,
                           double h, double sign, int max_steps, double crit,
                           double d_test2, double loop2, double min_loop_arc,
-                          Expr* region_fn, PBuf* out) {
+                          Expr* region_fn, PBuf* out, bool* closed) {
     double x = x0, y = y0, arc = 0.0;
+    if (closed) *closed = false;
     for (int step = 0; step < max_steps; step++) {
         double nx, ny;
         if (!rk4_step_unit(ctx, x, y, h, sign, crit, &nx, &ny)) break;
@@ -289,26 +291,46 @@ static void integrate_dir(const FieldCtx* ctx, const SGrid* grid,
         pbuf_push(out, x, y);
         if (arc > min_loop_arc) {
             double ex = x - x0, ey = y - y0;
-            if (ex*ex + ey*ey < loop2) break;   /* closed orbit */
+            if (ex*ex + ey*ey < loop2) {        /* closed orbit */
+                if (closed) *closed = true;
+                break;
+            }
         }
     }
 }
 
-/* Integrate both directions from a seed and splice into one streamline
- * (backward reversed, then the seed, then forward), so the seed sits in the
- * middle of a line that extends as far as it can each way. Caller owns the
- * returned array. */
+/* Build one streamline through a seed. A CLOSED orbit is traced by a single
+ * forward pass (the forward loop already returns to the seed, so integrating
+ * backward too would just draw the same ring a second time, overlapping it —
+ * the ring is closed exactly by repeating the seed at the end). An OPEN line is
+ * grown BOTH ways so the seed sits in the middle of a line that extends as far
+ * as it can each direction. Caller owns the returned array. */
 static Point2* grow_streamline(const FieldCtx* ctx, const SGrid* grid,
                                double sx, double sy,
                                double xmin, double xmax, double ymin, double ymax,
                                double h, int max_steps, double crit,
                                double d_test2, double loop2, double min_loop_arc,
-                               Expr* region_fn, size_t* n_out) {
-    PBuf back = {NULL,0,0}, fwd = {NULL,0,0};
-    integrate_dir(ctx, grid, sx, sy, xmin,xmax,ymin,ymax, h, -1.0, max_steps,
-                  crit, d_test2, loop2, min_loop_arc, region_fn, &back);
+                               Expr* region_fn, size_t* n_out, bool* is_closed) {
+    PBuf fwd = {NULL,0,0};
+    bool closed = false;
     integrate_dir(ctx, grid, sx, sy, xmin,xmax,ymin,ymax, h, +1.0, max_steps,
-                  crit, d_test2, loop2, min_loop_arc, region_fn, &fwd);
+                  crit, d_test2, loop2, min_loop_arc, region_fn, &fwd, &closed);
+    if (is_closed) *is_closed = closed;
+
+    if (closed) {
+        size_t n = 1 + fwd.n + 1;               /* seed, ring, seed (closes it) */
+        Point2* s = malloc(sizeof(Point2) * n);
+        s[0].x = sx; s[0].y = sy;
+        for (size_t i = 0; i < fwd.n; i++) s[1 + i] = fwd.p[i];
+        s[n - 1].x = sx; s[n - 1].y = sy;
+        free(fwd.p);
+        *n_out = n;
+        return s;
+    }
+
+    PBuf back = {NULL,0,0};
+    integrate_dir(ctx, grid, sx, sy, xmin,xmax,ymin,ymax, h, -1.0, max_steps,
+                  crit, d_test2, loop2, min_loop_arc, region_fn, &back, NULL);
     size_t n = back.n + 1 + fwd.n;
     Point2* s = malloc(sizeof(Point2) * n);
     size_t k = 0;
@@ -334,7 +356,7 @@ static int seedcand_cmp(const void* a, const void* b) {
 /* ------------------------------------------------------------------ */
 
 typedef struct {
-    int    stream_points;     /* controls line density (target 1/spacing); default 15 */
+    int    stream_points;     /* controls line density (d_sep = ext/this); default 25 */
     double stream_scale;      /* max arc-length / domain diag; <=0 = run to natural end */
     Expr*  stream_style;      /* borrowed list of directives, or NULL */
     Expr*  color_function;    /* borrowed; NULL = none */
@@ -346,7 +368,10 @@ typedef struct {
 
 static bool split_stream_options(Expr* res, StreamOpts* so,
                                   Expr*** passthrough_out, size_t* pt_count_out) {
-    so->stream_points = 15;
+    so->stream_points = 25;   /* line density: d_sep = min(extent)/25, chosen so
+                               * a rotational field draws ~12 concentric rings
+                               * that nearly touch — matching Mathematica's
+                               * default StreamPlot density */
     so->stream_scale  = 0.0;  /* default: run each line to its natural end
                                * (another line / boundary / critical point /
                                * closed orbit), not a fixed short arc */
@@ -466,15 +491,16 @@ static Expr* make_arrow(const Point2* pts, size_t n) {
     return expr_new_function(expr_new_symbol(SYM_Arrow), args, 1);
 }
 
-/* Build Line[{{x1,y1},...,{xn,yn}}] — the streamline shaft. */
-static Expr* make_line(const Point2* pts, size_t n) {
-    if (n < 2) return NULL;
-    Expr** coord_exprs = malloc(sizeof(Expr*) * n);
-    for (size_t i = 0; i < n; i++) {
-        Expr* xy[2] = { expr_new_real(pts[i].x), expr_new_real(pts[i].y) };
+/* Build Line[{pts[i0], ..., pts[i1]}] (inclusive) — a streamline segment. */
+static Expr* make_line_range(const Point2* pts, size_t i0, size_t i1) {
+    if (i1 <= i0) return NULL;
+    size_t m = i1 - i0 + 1;
+    Expr** coord_exprs = malloc(sizeof(Expr*) * m);
+    for (size_t i = 0; i < m; i++) {
+        Expr* xy[2] = { expr_new_real(pts[i0 + i].x), expr_new_real(pts[i0 + i].y) };
         coord_exprs[i] = expr_new_function(expr_new_symbol(SYM_List), xy, 2);
     }
-    Expr* pt_list = expr_new_function(expr_new_symbol(SYM_List), coord_exprs, n);
+    Expr* pt_list = expr_new_function(expr_new_symbol(SYM_List), coord_exprs, m);
     free(coord_exprs);
     Expr* args[1] = { pt_list };
     return expr_new_function(expr_new_symbol(SYM_Line), args, 1);
@@ -517,6 +543,94 @@ static Expr* arrow_at_index(const Point2* pts, size_t n, size_t idx, double len)
         { cx + half * ux, cy + half * uy },
     };
     return make_arrow(seg, 2);
+}
+
+/* Build a small filled arrowHEAD triangle whose tip sits at pts[idx] (the
+ * downstream end of a dash), pointing along the local flow.  Emitting the head
+ * as a bare Polygon — NOT an Arrow — is the whole point: Arrow[{a,b}] renders a
+ * straight shaft PLUS a head, and that shaft, drawn as a chord across a curved
+ * streamline, is the "arrow with a straight line" that clutters the plot.  A
+ * lone triangle is just the chevron, so the curved dash flows straight into its
+ * own arrowhead. `len` is the head length in plot coordinates — the same for
+ * every head, independent of local field speed. */
+static Expr* chevron_tip(const Point2* pts, size_t idx, double len) {
+    if (idx == 0 || len <= 0) return NULL;
+    /* Direction = chord from ~`len` of arc upstream to the tip, so the head is
+     * aligned with the streamline over its own length rather than with one tiny
+     * RK4 step (which would leave the triangle visibly askew on a tight bend). */
+    size_t j = idx;
+    double acc = 0.0;
+    while (j > 0 && acc < len) {
+        double sx = pts[j].x - pts[j - 1].x, sy = pts[j].y - pts[j - 1].y;
+        acc += sqrt(sx * sx + sy * sy);
+        j--;
+    }
+    double dx = pts[idx].x - pts[j].x;
+    double dy = pts[idx].y - pts[j].y;
+    double d  = sqrt(dx * dx + dy * dy);
+    if (d < 1e-30) return NULL;
+    double ux = dx / d, uy = dy / d;   /* flow direction */
+    double nx = -uy, ny = ux;          /* unit normal      */
+    double hw = len * 0.42;            /* half-width -> slender arrowhead */
+    double tipx = pts[idx].x, tipy = pts[idx].y;
+    double bx = tipx - len * ux, by = tipy - len * uy;
+    Point2 tri[3] = {
+        { bx + nx * hw, by + ny * hw },
+        { bx - nx * hw, by - ny * hw },
+        { tipx,         tipy         },
+    };
+    Expr** cs = malloc(sizeof(Expr*) * 3);
+    for (int i = 0; i < 3; i++) {
+        Expr* xy[2] = { expr_new_real(tri[i].x), expr_new_real(tri[i].y) };
+        cs[i] = expr_new_function(expr_new_symbol(SYM_List), xy, 2);
+    }
+    Expr* lst = expr_new_function(expr_new_symbol(SYM_List), cs, 3);
+    free(cs);
+    Expr* args[1] = { lst };
+    return expr_new_function(expr_new_symbol(SYM_Polygon), args, 1);
+}
+
+/* Append `e` to a growing primitive array (NULL is ignored). */
+static void prim_append(Expr*** prims, size_t* n, size_t* cap, Expr* e) {
+    if (!e) return;
+    if (*n >= *cap) { *cap *= 2; *prims = realloc(*prims, sizeof(Expr*) * (*cap)); }
+    (*prims)[(*n)++] = e;
+}
+
+/* Emit one streamline in Mathematica's dashed-arrow style: walk the arc length
+ * and alternate `dash_len` drawn / `gap_len` skipped; each drawn dash is a
+ * curve-following Line (so even a tight inner ring's dash stays curved) capped
+ * by a filled arrowhead triangle at its downstream tip.  The gaps are what keep
+ * neighbouring lines visually distinct at the high default density. */
+static void emit_dashed_stream(Expr*** prims, size_t* nprim, size_t* cap,
+                               const Point2* pts, size_t n,
+                               double dash_len, double gap_len, double arrow_len) {
+    if (n < 2 || !(dash_len > 0) || !(gap_len > 0)) {
+        prim_append(prims, nprim, cap, make_line_range(pts, 0, n - 1));
+        return;
+    }
+    double acc = 0.0;
+    size_t dash_start = 0;
+    bool in_dash = true;
+    for (size_t k = 1; k < n; k++) {
+        double ex = pts[k].x - pts[k - 1].x, ey = pts[k].y - pts[k - 1].y;
+        acc += sqrt(ex * ex + ey * ey);
+        if (in_dash && acc >= dash_len) {
+            prim_append(prims, nprim, cap, make_line_range(pts, dash_start, k));
+            prim_append(prims, nprim, cap, chevron_tip(pts, k, arrow_len));
+            in_dash = false;
+            acc = 0.0;
+        } else if (!in_dash && acc >= gap_len) {
+            in_dash = true;
+            dash_start = k;
+            acc = 0.0;
+        }
+    }
+    /* trailing partial dash */
+    if (in_dash && n - 1 > dash_start) {
+        prim_append(prims, nprim, cap, make_line_range(pts, dash_start, n - 1));
+        prim_append(prims, nprim, cap, chevron_tip(pts, n - 1, arrow_len));
+    }
 }
 
 /* Default speed-to-color: dark blue-purple (low) → yellow (high), matching
@@ -641,8 +755,15 @@ Expr* builtin_streamplot(Expr* res) {
     double w_dx = u_xmax - u_xmin, w_dy = u_ymax - u_ymin;
     double w_ext = (w_dx < w_dy) ? w_dx : w_dy;
     double d_sep_world = w_ext / np;
-    double arrow_len     = 0.85 * d_sep_world; /* chevron length */
-    double arrow_spacing = 3.2  * d_sep_world; /* arc between chevrons */
+    double arrow_len     = 0.85 * d_sep_world; /* chevron length (animate path) */
+    double arrow_spacing = 3.2  * d_sep_world; /* arc between chevrons (animate path) */
+    /* Mathematica-style dashed rendering (default, non-animate): each streamline
+     * is drawn as dash / gap / dash ... with a small filled arrowhead triangle
+     * at every dash tip.  dash_arrow is the arrowHEAD length (a bare chevron,
+     * no shaft), kept short so it reads as a slender accent, not a chunky cap. */
+    double dash_len   = 1.7   * d_sep_world;
+    double gap_len    = 1.0   * d_sep_world;
+    double dash_arrow = 0.336 * d_sep_world;  /* 0.8 × the original 0.42 head */
 
     /* Per-line arc-length cap: StreamScale -> s>0 limits each line to s*diag;
      * otherwise (default) a line runs to its natural end. */
@@ -700,11 +821,30 @@ Expr* builtin_streamplot(Expr* res) {
         if (sgrid_within2(&grid, sx, sy, d_sep2)) continue;
 
         size_t n_pts;
+        bool is_closed = false;
         Point2* pts = grow_streamline(&ctx, &grid, sx, sy,
                                       xmin, xmax, ymin, ymax, h, max_steps, crit,
                                       d_test2, loop2, min_loop_arc,
-                                      so.region_function, &n_pts);
+                                      so.region_function, &n_pts, &is_closed);
         if (n_pts < 3) { free(pts); continue; }   /* discard stubs */
+
+        /* Discard a sub-resolution closed loop: a seed that landed almost on a
+         * critical point spins a tiny ring smaller than the line spacing (the
+         * "hook" at the centre of a rotational field). Dropping it — without
+         * registering it — leaves the next seed out at ~d_sep to draw the true
+         * innermost ring, so the centre reads clean. Open lines are never
+         * dropped this way (a short arc near the boundary is legitimate). */
+        if (is_closed) {
+            double xlo = pts[0].x, xhi = pts[0].x, ylo = pts[0].y, yhi = pts[0].y;
+            for (size_t k = 1; k < n_pts; k++) {
+                if (pts[k].x < xlo) xlo = pts[k].x;
+                if (pts[k].x > xhi) xhi = pts[k].x;
+                if (pts[k].y < ylo) ylo = pts[k].y;
+                if (pts[k].y > yhi) yhi = pts[k].y;
+            }
+            double bdx = xhi - xlo, bdy = yhi - ylo;
+            if (sqrt(bdx*bdx + bdy*bdy) < d_sep) { free(pts); continue; }
+        }
 
         /* Register every point so later lines keep their distance. */
         for (size_t k = 0; k < n_pts; k++) sgrid_add(&grid, pts[k].x, pts[k].y);
@@ -767,14 +907,15 @@ Expr* builtin_streamplot(Expr* res) {
     bool have_cfn   = (so.color_function != NULL);
     bool use_speed_color = !have_style && !have_cfn;
 
-    /* 4 primitives per stream (color + Line + Arrow + possible re-evaluation overhead). */
-    size_t prim_cap = nstreams * 4 + 8;
+    /* Dashed rendering emits ~2 primitives (Line + chevron) per dash; prim_append
+     * grows this as needed, so the initial size is just a reasonable guess. */
+    size_t prim_cap = nstreams * 24 + 8;
     Expr** prims = malloc(sizeof(Expr*) * prim_cap);
     size_t nprim = 0;
 
-    /* Global thickness directive (thin line weight for all streams). */
+    /* Global thickness directive (light line weight, closer to Mathematica). */
     {
-        Expr* thick_arg[1] = { expr_new_real(0.006) };
+        Expr* thick_arg[1] = { expr_new_real(0.004375) };  /* 1.25 × the original 0.0035 */
         prims[nprim++] = expr_new_function(expr_new_symbol(SYM_Thickness), thick_arg, 1);
     }
 
@@ -805,47 +946,33 @@ Expr* builtin_streamplot(Expr* res) {
             col = default_stream_color(spd, spd_min, spd_max);
         }
 
-        if (col) {
-            if (nprim + 3 >= prim_cap) { prim_cap *= 2; prims = realloc(prims, sizeof(Expr*) * prim_cap); }
-            prims[nprim++] = col;
-        }
+        prim_append(&prims, &nprim, &prim_cap, col);
 
-        /* Full streamline as a smooth Line[...], or an AnimatedStreamline[...]
-         * carrying the same points when StreamAnimate -> True. */
-        Expr* shaft = so.animate ? make_animated_streamline(pts, n_pts)
-                                  : make_line(pts, n_pts);
-        if (shaft) {
-            if (nprim + 2 >= prim_cap) { prim_cap *= 2; prims = realloc(prims, sizeof(Expr*) * prim_cap); }
-            prims[nprim++] = shaft;
-        }
-
-        /* Direction chevrons at regular world-space arc-length spacing along
-         * the shaft (a long line gets several; a short one gets one near its
-         * middle), so the flow direction reads everywhere without one giant
-         * arrowhead per line. */
-        if (arrow_len > 0) {
-            double acc = arrow_spacing * 0.5;   /* offset the first from the tip */
-            size_t placed = 0;
-            for (size_t k = 1; k < n_pts; k++) {
-                double ex = pts[k].x - pts[k-1].x, ey = pts[k].y - pts[k-1].y;
-                acc += sqrt(ex * ex + ey * ey);
-                if (acc >= arrow_spacing) {
-                    acc = 0.0;
-                    Expr* ar = arrow_at_index(pts, n_pts, k, arrow_len);
-                    if (ar) {
-                        if (nprim + 1 >= prim_cap) { prim_cap *= 2; prims = realloc(prims, sizeof(Expr*) * prim_cap); }
-                        prims[nprim++] = ar;
+        if (so.animate) {
+            /* Animate: one solid AnimatedStreamline[...] (the renderer walks it
+             * with moving particle dots) plus periodic direction chevrons. */
+            prim_append(&prims, &nprim, &prim_cap, make_animated_streamline(pts, n_pts));
+            if (arrow_len > 0) {
+                double acc = arrow_spacing * 0.5;
+                size_t placed = 0;
+                for (size_t k = 1; k < n_pts; k++) {
+                    double ex = pts[k].x - pts[k-1].x, ey = pts[k].y - pts[k-1].y;
+                    acc += sqrt(ex * ex + ey * ey);
+                    if (acc >= arrow_spacing) {
+                        acc = 0.0;
+                        prim_append(&prims, &nprim, &prim_cap,
+                                    arrow_at_index(pts, n_pts, k, arrow_len));
                         placed++;
                     }
                 }
+                if (placed == 0)
+                    prim_append(&prims, &nprim, &prim_cap,
+                                arrow_at_index(pts, n_pts, n_pts / 2 ? n_pts / 2 : 1, arrow_len));
             }
-            if (placed == 0) {   /* short line: one chevron near the midpoint */
-                Expr* ar = arrow_at_index(pts, n_pts, n_pts / 2 ? n_pts / 2 : 1, arrow_len);
-                if (ar) {
-                    if (nprim + 1 >= prim_cap) { prim_cap *= 2; prims = realloc(prims, sizeof(Expr*) * prim_cap); }
-                    prims[nprim++] = ar;
-                }
-            }
+        } else {
+            /* Default: Mathematica-style dashed arrow-segments. */
+            emit_dashed_stream(&prims, &nprim, &prim_cap, pts, n_pts,
+                               dash_len, gap_len, dash_arrow);
         }
         free(pts);
     }

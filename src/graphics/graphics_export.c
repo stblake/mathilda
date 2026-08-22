@@ -514,10 +514,15 @@ static void draw_prim(Emit* e, const Expr* p, double plot_w) {
             first = 0;
         }
         if (!first) buf_cat(e->c, "S\n");
-        /* Solid arrowhead on the final segment. */
+        /* Solid arrowhead on the final segment. Its length scales with the
+         * final segment (capped), so a short arrow gets a small head — a fixed
+         * head swamped the many short chevrons of a dashed StreamPlot. Long
+         * arrows (e.g. VectorPlot) still hit the cap, unchanged. */
         double dx = lx - px, dy = ly - py, len = sqrt(dx*dx + dy*dy);
         if (len > 1e-6) {
-            double ux = dx/len, uy = dy/len, hl = 8.0, hw = 3.0;
+            double hl = len * 0.55;
+            if (hl > 8.0) hl = 8.0;   /* cap: long arrows keep the old ~8pt head */
+            double ux = dx/len, uy = dy/len, hw = hl * 0.38; /* slimmer than before */
             double bx = lx - ux*hl, by = ly - uy*hl;
             set_fill(e);
             buf_catf(e->c, "%.3f %.3f m %.3f %.3f l %.3f %.3f l h f\n",
