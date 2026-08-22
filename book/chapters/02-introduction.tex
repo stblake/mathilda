@@ -136,7 +136,16 @@ powers $2^{3}\cdot 3^{2}\cdot 5$.}
 $12 = 1\cdot 48 + (-1)\cdot 36$.}
 \pair{02-introduction/number-theory/6}{\B{PowerMod} finds $7^{100}\bmod 13$ without
 ever forming $7^{100}$.}
-\pair{02-introduction/number-theory/7}{\B{Fibonacci} returns the fiftieth Fibonacci
+\pair{02-introduction/number-theory/7}{\B{LCM} is the least common multiple;
+$\mathrm{lcm}(12,18,20)=180$.}
+\pair{02-introduction/number-theory/8}{\B{EulerPhi} counts the integers from $1$ to $36$
+that are coprime to it: $\varphi(36)=12$.}
+\pair{02-introduction/number-theory/9}{\B{MultiplicativeOrder} gives the least $k$ with
+$2^{k}\equiv 1\pmod{11}$: here that order is $10$.}
+\pair{02-introduction/number-theory/10}{\B{PrimitiveRoot} returns a generator of the
+units modulo~$11$; the least is $2$, which is exactly why its order above is the full
+$\varphi(11)=10$.}
+\pair{02-introduction/number-theory/11}{\B{Fibonacci} returns the fiftieth Fibonacci
 number exactly. Section~\ref{sec:numbertheory} takes up this material.}
 \end{codepairs}
 
@@ -295,8 +304,9 @@ Section~\ref{sec:calculus} has the full story.}
 \label{sec:intro-numcalc}
 
 Not every problem has a closed form, and even when it does a number is sometimes all
-you want. The \texttt{N}-prefixed family answers these questions numerically,
-adaptively, and to machine precision:
+you want. The \texttt{N}-prefixed family answers these questions numerically and
+adaptively---to machine precision by default, or to any arbitrary precision you request
+with the \texttt{WorkingPrecision} option:
 
 \begin{codepairs}
 \pair{02-introduction/numerical-calculus/1}{\B{ND} takes a numerical derivative---here
@@ -338,8 +348,12 @@ differential equations, and limits.
 \label{sec:intro-solve}
 
 Solving equations is among the oldest tasks in mathematics, and Mathilda does it both
-exactly and numerically. \B{Solve} finds \emph{exact} solutions---as integers,
-radicals, or general closed forms---for a single equation or a whole system:
+exactly and numerically.
+
+\subsection{Exact solutions of equations}
+
+\B{Solve} finds \emph{exact} solutions---as integers, radicals, or general closed
+forms---for a single equation or a whole system:
 
 \begin{codepairs}
 \pair{02-introduction/solve-exact/1}{A quadratic with two integer roots. Note
@@ -348,16 +362,32 @@ radicals, or general closed forms---for a single equation or a whole system:
 \pair{02-introduction/solve-exact/3}{A linear system in two unknowns, uniquely solved.}
 \pair{02-introduction/solve-exact/4}{A \emph{nonlinear} system---a circle meeting the
 line $y=x$---with both intersection points, exactly.}
+\pair{02-introduction/solve-exact/5}{A cubic with no rational roots: the exact solutions
+come back as \B{Root} objects, each an implicit algebraic number---the $k$th root of the
+given polynomial---rather than an unwieldy nest of radicals.}
+\pair{02-introduction/solve-exact/6}{A \B{Root} object is still an exact number, so \B{N}
+evaluates it to as many digits as you ask---here to machine precision.}
 \end{codepairs}
 
-When an exact solution is unavailable---the general quintic has no formula in
-radicals, by Abel's theorem---or simply not wanted, the numerical solvers take over:
+\subsection{Numerical solutions of equations}
+
+When an exact solution is unavailable---the general quintic has no formula in radicals,
+by Abel's theorem---or simply not wanted, the numerical solvers take over. \B{NRoots}
+and \B{NSolve} return every root of a polynomial equation or system as machine numbers,
+while \B{FindRoot} follows Newton's method from a starting point and handles
+transcendental problems too:
 
 \begin{codepairs}
-\pair{02-introduction/solve-numerical/1}{\B{NSolve} finds all five roots of
-$x^{5}-x-1$: one real, two complex-conjugate pairs, and no solution in radicals.}
-\pair{02-introduction/solve-numerical/2}{\B{FindRoot}, started near $x=1$, converges
-to the root of $\cos x = x$, the ``Dottie number.''}
+\pair{02-introduction/solve-numerical/1}{\B{NRoots} finds all five roots of $x^{5}-x-1$:
+one real and two complex-conjugate pairs, none expressible in radicals.}
+\pair{02-introduction/solve-numerical/2}{\B{NSolve} handles systems. Eliminating $y$ here
+leaves that very same quintic, so the five solutions carry its unsolvable roots in their
+$x$-coordinate.}
+\pair{02-introduction/solve-numerical/3}{\B{FindRoot}, started near $x=1$, converges to
+the root of $\cos x = x$, the ``Dottie number''---a transcendental equation with no
+closed form.}
+\pair{02-introduction/solve-numerical/4}{\B{FindRoot} takes systems as well: a
+transcendental pair in $x$ and $y$, solved from the starting point $(1,1)$.}
 \end{codepairs}
 
 Exact solving belongs to the algebra of Section~\ref{sec:algebra}; the numerical

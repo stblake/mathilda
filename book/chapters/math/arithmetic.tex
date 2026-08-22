@@ -106,16 +106,8 @@ exact rational $1/2$.}
 \end{codepairs}
 
 Reducing everything to \B{Plus}, \B{Times}, and \B{Power} is what keeps the evaluator
-small: a single canonicalizer for each, driven by attributes, handles addition,
-subtraction, multiplication, division, powers, and roots at once. Here are the three,
-with their own docstrings and attributes:
-
-\usagebox{Plus}
-\usagebox{Times}
-\usagebox{Power}
-
-\begin{underhood}
-The attributes do the organising. \texttt{Flat} means nested calls are spliced
+small: a single canonicalizer for each, driven by attributes\calloutnote{Under the
+hood}{The attributes do the organising. \texttt{Flat} means nested calls are spliced
 (\texttt{Plus[a, Plus[b, c]]} becomes \texttt{Plus[a, b, c]}); \texttt{Orderless} sorts
 the arguments into a canonical order so that \texttt{a + b} and \texttt{b + a} are the
 same expression and like terms sit together to be combined; \texttt{OneIdentity} lets a
@@ -123,8 +115,13 @@ one-argument call collapse; \texttt{Listable} threads the operation over lists; 
 \texttt{NumericFunction} marks it for numeric evaluation. Underneath, the exact-integer
 paths add and multiply in a $128$-bit intermediate and, on overflow, fall through to
 GMP~\cite{gmp}, promoting the result to a bignum---so the answer is always exact, and
-the fast machine-word path is taken whenever it fits.
-\end{underhood}
+the fast machine-word path is taken whenever it fits.}, handles addition,
+subtraction, multiplication, division, powers, and roots at once. Here are the three,
+with their own docstrings and attributes:
+
+\usagebox{Plus}
+\usagebox{Times}
+\usagebox{Power}
 
 \subsection{Machine-precision computation}
 \label{ssec:machine-precision}
@@ -162,7 +159,16 @@ next representable double.}
 
 Here is the single most important thing to understand about Mathilda's machine reals,
 and a real difference from Mathematica: \textbf{Mathilda does not use significance
-arithmetic}. A machine real is just an IEEE double, with a fixed 53-bit mantissa; it
+arithmetic}.\calloutnote{Theory}{\emph{Significance arithmetic} (which Mathematica uses
+for arbitrary-precision numbers) attaches to each number an estimate of its error and
+propagates that estimate through every operation, so that catastrophic cancellation
+visibly reduces the reported precision. It is elegant but only a first-order model of
+error, and it makes a number's behaviour depend on its history. Mathilda takes the other
+well-trodden road: a machine real is a fixed-precision IEEE double, exactly as specified
+by the floating-point standard~\cite{ieee754}. If you need to know how error propagates,
+you either reason about it yourself---the classic reference is Goldberg~\cite{goldberg1991}---or
+reach for the rigorous tool in \S\ref{ssec:interval}, interval arithmetic.} A machine
+real is just an IEEE double, with a fixed 53-bit mantissa; it
 carries no error term, and operations do not track how many digits remain trustworthy.
 What you get is exactly what the hardware, C, or NumPy would give you---no more and no
 less:
@@ -177,18 +183,6 @@ true IEEE rounding error, shown plainly rather than hidden.}
 \pair{arithmetic/machine-doubles/4}{The precision of any machine real is the symbol
 \texttt{MachinePrecision}.}
 \end{codepairs}
-
-\begin{theory}
-\emph{Significance arithmetic} (which Mathematica uses for arbitrary-precision numbers)
-attaches to each number an estimate of its error and propagates that estimate through
-every operation, so that catastrophic cancellation visibly reduces the reported
-precision. It is elegant but only a first-order model of error, and it makes a number's
-behaviour depend on its history. Mathilda takes the other well-trodden road: a machine
-real is a fixed-precision IEEE double, exactly as specified by the floating-point
-standard~\cite{ieee754}. If you need to know how error propagates, you either reason
-about it yourself---the classic reference is Goldberg~\cite{goldberg1991}---or reach for
-the rigorous tool in \S\ref{ssec:interval}, interval arithmetic.
-\end{theory}
 
 This fixed-precision model is not a limitation so much as a deliberate choice, and for
 the overwhelming majority of numerical work---linear algebra, differential equations,
@@ -278,7 +272,14 @@ approximate answer that comes with a \emph{proof}. Instead of a single number, y
 compute with an interval $[a,b]$ that is guaranteed to contain the true value, and every
 operation returns an interval guaranteed to contain the true result. The idea goes back
 to Moore~\cite{moore2009}; Mathilda implements it as a first-class numeric object,
-\B{Interval}\texttt{[\{lo, hi\}]}.
+\B{Interval}\texttt{[\{lo, hi\}]}.\calloutnote{Pitfall}{Mathilda's intervals differ from
+Mathematica's in two deliberate ways, both documented. A machine number becomes a
+\emph{point} interval---\texttt{Interval[1.]} is \texttt{Interval[\{1., 1.\}]}---rather
+than being preloaded with a half-ULP uncertainty band; if you want an uncertainty
+propagated, you supply it. And \B{Interval} is a set, not a scalar, so it is deliberately
+neither \texttt{Listable} nor a \texttt{NumericFunction}. The enclosures are rigorous in
+the spirit of the interval standard, though Mathilda implements no formal decoration
+system.}
 
 The arithmetic operations and the elementary functions all propagate intervals:
 
@@ -337,13 +338,3 @@ the two copies are treated as independent.}
 interval, the enclosure widens at each step---a certified picture of how rounding error
 grows in a chaotic system, always containing the true orbit.}
 \end{codepairs}
-
-\begin{pitfall}
-Mathilda's intervals differ from Mathematica's in two deliberate ways, both documented.
-A machine number becomes a \emph{point} interval---\texttt{Interval[1.]} is
-\texttt{Interval[\{1., 1.\}]}---rather than being preloaded with a half-ULP uncertainty
-band; if you want an uncertainty propagated, you supply it. And \B{Interval} is a set,
-not a scalar, so it is deliberately neither \texttt{Listable} nor a
-\texttt{NumericFunction}. The enclosures are rigorous in the spirit of the interval
-standard, though Mathilda implements no formal decoration system.
-\end{pitfall}

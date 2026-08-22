@@ -5,7 +5,8 @@
 %%     (generated/<path>.tex, produced by book/tools/build_examples.py).
 %%   * \B{Name}           -- typeset a builtin name as code, hyperlinked to its
 %%     reference page (table from generated/builtinlinks.tex via \DeclareBuiltinLink).
-%%   * callout boxes      -- Theory / Under the hood / Performance / Pitfall.
+%%   * callout footnotes  -- \calloutnote{Theory|Under the hood|Pitfall}{...},
+%%     ordinary uncoloured footnotes with an italic run-in label.
 %%
 %% hyperref MUST be loaded by the main document before this package (we use \href).
 \NeedsTeXFormat{LaTeX2e}
@@ -185,16 +186,14 @@
   }%
 }
 
-% ------------------------------------------------------------- callout boxes ---
-\newtcolorbox{mcallout}[2][]{%
-  enhanced, breakable, colback=#2!4, colframe=#2!55!black,
-  boxrule=0.5pt, left=8pt, right=8pt, top=6pt, bottom=6pt,
-  fonttitle=\bfseries, coltitle=black, title=#1}
-
-\newenvironment{theory}{\begin{mcallout}[Theory]{blue}}{\end{mcallout}}
-\newenvironment{underhood}{\begin{mcallout}[Under the hood]{teal}}{\end{mcallout}}
-\newenvironment{performance}{\begin{mcallout}[Performance]{green!45!black}}{\end{mcallout}}
-\newenvironment{pitfall}{\begin{mcallout}[Pitfall]{orange!85!red}}{\end{mcallout}}
+% -------------------------------------------------------- callout footnotes ---
+% Theory / Under the hood / Pitfall asides are set as ordinary (uncoloured)
+% footnotes with an italic run-in label, anchored to the sentence they annotate,
+% rather than as coloured boxes that interrupt the main text.
+%
+%   ...driven by attributes\calloutnote{Under the hood}{The attributes do the
+%   organising. \texttt{Flat} means nested calls are spliced...}, handles ...
+\newcommand{\calloutnote}[2]{\footnote{\emph{#1.}\space #2}}
 
 % ------------------------------------------ load the generated link table ---
 \AtBeginDocument{\IfFileExists{generated/builtinlinks.tex}{\input{generated/builtinlinks.tex}}{}}

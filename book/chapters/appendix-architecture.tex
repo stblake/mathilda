@@ -102,18 +102,14 @@ function call \texttt{f[a1, \dots, aN]} a single step proceeds, in order:
 
 The attribute bits (\texttt{src/attr.c}) are the small vocabulary that steers all of
 this. They are what let the evaluator stay generic while each head opts into exactly
-the behaviour it needs:
+the behaviour it needs\calloutnote{Under the hood}{\B{Plus} is \texttt{Flat}
+(associative), \texttt{Orderless} (commutative), \texttt{Listable} (threads over lists),
+\texttt{OneIdentity}, and a \texttt{NumericFunction}; \B{Sin} is merely \texttt{Listable}
+and numeric; \B{Table} is \texttt{HoldAll}, so its iterator specification is \emph{not}
+evaluated before \texttt{Table} runs. Nothing about the evaluator's main loop changes
+between these heads---only their attribute bits do.}:
 
 \mtranscript{appendix-architecture/attributes}
-
-\begin{underhood}
-\B{Plus} is \texttt{Flat} (associative), \texttt{Orderless} (commutative),
-\texttt{Listable} (threads over lists), \texttt{OneIdentity}, and a
-\texttt{NumericFunction}; \B{Sin} is merely \texttt{Listable} and numeric; \B{Table}
-is \texttt{HoldAll}, so its iterator specification is \emph{not} evaluated before
-\texttt{Table} runs. Nothing about the evaluator's main loop changes between these
-heads---only their attribute bits do.
-\end{underhood}
 
 Because a step just rewrites and the loop runs to a fixed point, rule chains compose
 on their own, with no explicit plumbing. Define \texttt{f} in terms of \texttt{g} and
