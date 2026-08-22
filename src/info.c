@@ -493,9 +493,12 @@ void info_init(void) {
         "\tuses Brent's method on the bracket [xmin, xmax].\n"
         "FindRoot[{f1, f2, ...}, {{x, x0}, {y, y0}, ...}]\n"
         "\tsearches for a simultaneous numerical root of the system.\n\n"
-        "Options: Method ('Newton' | 'Secant' | 'Brent' | Automatic), WorkingPrecision, "
-        "MaxIterations, AccuracyGoal, PrecisionGoal, DampingFactor, Jacobian, StepMonitor, "
-        "EvaluationMonitor.  FindRoot has HoldAll and effectively uses Block to localize variables.");
+        "Options: Method (Automatic | 'Newton' | 'Secant' | 'Brent'). The default is "
+        "Automatic, which selects by the starting spec: Newton for {x, x0}, a secant "
+        "variant for {x, x0, x1}, and Brent for the bracket {x, xstart, xmin, xmax}. "
+        "Further options: WorkingPrecision, MaxIterations, AccuracyGoal, PrecisionGoal, "
+        "DampingFactor, Jacobian, StepMonitor, EvaluationMonitor.  FindRoot has HoldAll "
+        "and effectively uses Block to localize variables.");
 
     symtab_set_docstring("NResidue",
         "NResidue[expr, {z, z0}]\n"
