@@ -103,34 +103,89 @@ static void test_2d_bowl(void) {
 /* 3. Constraints                                                      */
 /* ------------------------------------------------------------------ */
 
+/* ==================================================================
+ * FEASIBILITY POLICY (DEMO-3). Read this before adding a test here.
+ *
+ * The tolerance policy at the top of this file governs OBJECTIVE values, and
+ * is right to be permissive: global search is stochastic, so a 1e-2 objective
+ * band on a hard landscape is a statement about the search, not slack.
+ *
+ * FEASIBILITY IS NOT A MATTER OF DEGREE. A returned point either satisfies its
+ * constraints or it does not. Having no rule for it is what let a bug ship:
+ * NMinimize returned x + y = 1.99990 against a constraint of x + y >= 2, and
+ * 29 tests passed, because every one asserted the objective and none asserted
+ * the point (NMINIMIZE_FEASIBILITY_BUG.md).
+ *
+ * The rule:
+ *   1. A test on a problem with a REAL constraint asserts that constraint on
+ *      the RETURNED point, not only the objective value.
+ *   2. Prefer TWO-SIDED. A one-sided ceiling (`<= bound + eps`) catches
+ *      overshoot and is blind to a point that falls SHORT of the boundary --
+ *      the direction the original bug went.
+ *   3. Assert against measured behaviour with margin, never at the value of
+ *      NM_FEAS_RETURN_VIOL or NM_FEAS_RANK_VIOL. Asserting at the constant
+ *      tests the constant.
+ *   4. Where an assertion is genuinely vacuous or out of scope, SAY SO in a
+ *      comment. A silent omission is indistinguishable from an oversight, and
+ *      31 of those is how this suite came to be audited.
+ *
+ * Measured, by mutating nm_build_result: a returned point 10% wrong was caught
+ * by 26 of 83 tests; an objective 10% wrong by 60 of 83. The suite was testing
+ * the number, not the answer.
+ * ================================================================== */
+
 static void test_disk_linear(void) {
     /* {x + y, x^2 + y^2 <= 9} -> -4.24264. */
     check_true("Abs[First[NMinimize[{x + y, x^2 + y^2 <= 9}, {x, y}]] - (-4.2426407)] < 1.*^-2");
+    /* FEASIBILITY, two-sided: the optimum lies ON the circle, so a point that
+     * falls short of the boundary is as wrong as one outside it. A ceiling
+     * alone would miss the first. */
+    check_true("Abs[((x^2 + y^2) /. Last[NMinimize[{x + y, x^2 + y^2 <= 9}, {x, y}]]) - 9] < 1.*^-4");
 }
 
 static void test_quadratic_linear(void) {
     /* {(x-1)^2 + y^2, x + y/2 <= 1/2, x - y >= 0} -> 0.2 at (0.6, -0.2). */
     check_true("Abs[First[NMinimize[{(x-1)^2 + y^2, x + y/2 <= 1/2, x - y >= 0}, {x, y}]] - 0.2] < 1.*^-2");
+    /* FEASIBILITY: both constraints, on the returned point. */
+    check_true("Module[{s = Last[NMinimize[{(x-1)^2 + y^2, x + y/2 <= 1/2, x - y >= 0}, {x, y}]]},"
+               " ((x + y/2) /. s) <= 0.5 + 1.*^-6 && ((x - y) /. s) >= -1.*^-6]");
 }
 
 static void test_linear_program(void) {
     /* {x + y, 3x+2y>=7 && x+2y>=6 && x>=0 && y>=0} -> 3.25. */
     check_true("Abs[First[NMinimize[{x + y, 3 x + 2 y >= 7 && x + 2 y >= 6 && x >= 0 && y >= 0}, {x, y}]] - 3.25] < 1.*^-2");
+    /* FEASIBILITY: all four half-planes, on the returned point. */
+    check_true("Module[{s = Last[NMinimize[{x + y, 3 x + 2 y >= 7 && x + 2 y >= 6 && x >= 0 && y >= 0}, {x, y}]]},"
+               " ((3 x + 2 y) /. s) >= 7 - 1.*^-6 && ((x + 2 y) /. s) >= 6 - 1.*^-6 &&"
+               " (x /. s) >= -1.*^-6 && (y /. s) >= -1.*^-6]");
 }
 
 static void test_equality_constraint(void) {
     /* {x + 2y, x^2 + 2y^2 <= 3, x + y == 2, x >= 1} -> 2.33333. */
     check_true("Abs[First[NMinimize[{x + 2 y, x^2 + 2 y^2 <= 3, x + y == 2, x >= 1}, {x, y}]] - 2.3333333] < 2.*^-2");
+    /* FEASIBILITY: the EQUALITY matters most here -- x + y == k is exactly the
+     * shape the original bug violated by 1e-4. */
+    check_true("Module[{s = Last[NMinimize[{x + 2 y, x^2 + 2 y^2 <= 3, x + y == 2, x >= 1}, {x, y}]]},"
+               " Abs[((x + y) /. s) - 2] < 1.*^-5 && ((x^2 + 2 y^2) /. s) <= 3 + 1.*^-6 &&"
+               " (x /. s) >= 1 - 1.*^-6]");
 }
 
 static void test_chained_inequality(void) {
     /* {Sin[2x] + Cos[x], -2 <= x <= 3} -> -1.76017 at x = 2.50673. */
     check_true("Abs[First[NMinimize[{Sin[2 x] + Cos[x], -2 <= x <= 3}, x]] - (-1.7601696)] < 1.*^-2");
+    /* FEASIBILITY: a declared chained inequality, not a bare search box, so the
+     * returned point is checked against both ends. */
+    check_true("Module[{v = x /. Last[NMinimize[{Sin[2 x] + Cos[x], -2 <= x <= 3}, x]]},"
+               " -2 - 1.*^-6 <= v <= 3 + 1.*^-6]");
 }
 
 static void test_equation_system(void) {
     /* {x - y, x+y+z==1/2, x-2z==1, 2x-y>=1} -> 0.428571. */
     check_true("Abs[First[NMinimize[{x - y, x + y + z == 1/2, x - 2 z == 1, 2 x - y >= 1}, {x, y, z}]] - 0.4285714] < 2.*^-2");
+    /* FEASIBILITY: two equalities (two-sided) and an inequality. */
+    check_true("Module[{s = Last[NMinimize[{x - y, x + y + z == 1/2, x - 2 z == 1, 2 x - y >= 1}, {x, y, z}]]},"
+               " Abs[((x + y + z) /. s) - 1/2] < 1.*^-5 && Abs[((x - 2 z) /. s) - 1] < 1.*^-5 &&"
+               " ((2 x - y) /. s) >= 1 - 1.*^-6]");
 }
 
 /* ------------------------------------------------------------------ */
@@ -220,6 +275,12 @@ static void test_feasibility_thresholds_did_not_regress(void) {
 static void test_integer_domain_value(void) {
     /* {x + y, x+2y>=3, x>=-2}, x,y integers -> optimum value 1. */
     check_true("Abs[First[NMinimize[{x + y, x + 2 y >= 3, x >= -2}, {Element[x, Integers], Element[y, Integers]}]] - 1.0] < 1.*^-6");
+    /* FEASIBILITY: the constraints, on the returned point. Integer coordinates
+     * are exact, so these are strict -- no tolerance is warranted and none is
+     * given. This is also what makes the test sensitive to a single flipped
+     * integer coordinate, which an objective-only assertion cannot see. */
+    check_true("Module[{s = Last[NMinimize[{x + y, x + 2 y >= 3, x >= -2}, {Element[x, Integers], Element[y, Integers]}]]},"
+               " ((x + 2 y) /. s) >= 3 && (x /. s) >= -2]");
 }
 
 static void test_integer_domain_heads(void) {
@@ -232,6 +293,12 @@ static void test_mixed_integer(void) {
     /* One integer, one real variable. Optimum value 3, x integer 1. */
     check_true("Abs[First[NMinimize[{x + 2 y, x^2 + 2 y^2 <= 3, x + y == 2, Element[x, Integers]}, {x, y}]] - 3.0] < 5.*^-2");
     check_eq("Head[x /. Last[NMinimize[{x + 2 y, x^2 + 2 y^2 <= 3, x + y == 2, Element[x, Integers]}, {x, y}]]]", "Integer");
+    /* FEASIBILITY: the equality two-sided at 1e-4. The mixed-integer path
+     * reaches ~6e-6 on this problem (measured), so this carries ~16x margin --
+     * loose enough not to encode today's number, tight enough that the 1e-4
+     * violation the original bug produced would fail it. */
+    check_true("Module[{s = Last[NMinimize[{x + 2 y, x^2 + 2 y^2 <= 3, x + y == 2, Element[x, Integers]}, {x, y}]]},"
+               " Abs[((x + y) /. s) - 2] < 1.*^-4 && ((x^2 + 2 y^2) /. s) <= 3 + 1.*^-6]");
 }
 
 static void test_integer_domain_alternatives(void) {
@@ -241,12 +308,18 @@ static void test_integer_domain_alternatives(void) {
     check_true("Abs[First[NMinimize[{x + y, x + 2 y >= 3, x >= -2, Element[x | y, Integers]}, {x, y}]] - 1.0] < 1.*^-6");
     check_eq("Head[x /. Last[NMinimize[{x + y, x + 2 y >= 3, x >= -2, Element[x | y, Integers]}, {x, y}]]]", "Integer");
     check_eq("Head[y /. Last[NMinimize[{x + y, x + 2 y >= 3, x >= -2, Element[x | y, Integers]}, {x, y}]]]", "Integer");
+    /* FEASIBILITY: strict, integers are exact. */
+    check_true("Module[{s = Last[NMinimize[{x + y, x + 2 y >= 3, x >= -2, Element[x | y, Integers]}, {x, y}]]},"
+               " ((x + 2 y) /. s) >= 3 && (x /. s) >= -2]");
 }
 
 static void test_integer_domain_list(void) {
     /* Element[{x, y}, Integers] (List) is the same multi-variable declaration. */
     check_true("Abs[First[NMinimize[{x + y, x + 2 y >= 3, x >= -2, Element[{x, y}, Integers]}, {x, y}]] - 1.0] < 1.*^-6");
     check_eq("Head[y /. Last[NMinimize[{x + y, x + 2 y >= 3, x >= -2, Element[{x, y}, Integers]}, {x, y}]]]", "Integer");
+    /* FEASIBILITY: strict, integers are exact. */
+    check_true("Module[{s = Last[NMinimize[{x + y, x + 2 y >= 3, x >= -2, Element[{x, y}, Integers]}, {x, y}]]},"
+               " ((x + 2 y) /. s) >= 3 && (x /. s) >= -2]");
 }
 
 static void test_region_expansion_rescue(void) {
@@ -396,6 +469,10 @@ static void test_postprocess_values(void) {
 }
 
 static void test_sa_suboptions(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* The three "SimulatedAnnealing" sub-options are honored — nm_sa used to
      * do (void)nc and ignore all of them, and the parser silently dropped
      * "PerturbationScale" / "BoltzmannExponent". Deterministic under the fixed
@@ -451,6 +528,10 @@ static void test_sa_suboptions(void) {
 }
 
 static void test_griewank_simulatedannealing(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* Griewank-10 on [-600, 600]^10 is strongly multimodal. The default
      * SimulatedAnnealing runs Min[2 n, 50] = 20 independent chains and polishes
      * each chain's best into its basin minimum before ranking (as RandomSearch
@@ -479,6 +560,10 @@ static void test_griewank_simulatedannealing(void) {
 }
 
 static void test_sa_deceptive_landscapes(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* Deceptive landscapes whose global basin is off-center and unreachable by
      * greedy descent (Eggholder, Schwefel). Before the adaptive-temperature fix
      * the acceptance exponent -df/T sat far below the objective's magnitude
@@ -503,6 +588,10 @@ static void test_sa_deceptive_landscapes(void) {
 }
 
 static void test_schaffer2_simulatedannealing(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* Schaffer function N.2: 0.5 + (Sin[x^2-y^2]^2 - 0.5)/(1 + 0.001(x^2+y^2))^2.
      * Global minimum 0 at the origin, ringed by concentric near-optimal circular
      * ridges whose value approaches 0.5 far out and decays toward the centre —
@@ -543,6 +632,10 @@ static void test_mishra_bird_randomsearch(void) {
 }
 
 static void test_griewank_differentialevolution(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* Griewank-10 under explicit "DifferentialEvolution". The final population is
      * spread across basins; polishing the best Min[2 n, 50] distinct members and
      * keeping the deepest local minimum (not the raw global best's basin) reaches
@@ -565,6 +658,10 @@ static void test_griewank_differentialevolution(void) {
 }
 
 static void test_griewank_neldermead(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* NelderMead now polishes each restart's converged vertex into its basin
      * minimum before ranking the restarts, rather than ranking raw simplex
      * vertices and polishing only the winner. The default runs Min[2 n, 20]
@@ -581,6 +678,10 @@ static void test_griewank_neldermead(void) {
 }
 
 static void test_randomsearch_searchpoints_verbatim(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* RandomSearch "SearchPoints" was silently capped at 40, making any larger
      * value a no-op. It is now honored verbatim: on a Griewank box narrow enough
      * that random starts can reach the good basins, 200 starts beat 10 — which is
@@ -610,6 +711,10 @@ static void test_neldermead_shrink_tolerance(void) {
 }
 
 static void test_bukin6_no_warning(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* Bukin N.6: a Sqrt[Abs[...]] ridge whose gradient hits 1/0 on the valley.
      * The optimizer must not surface Power::infy (muted during point eval) and
      * must reproduce Mathematica's result. */
@@ -667,6 +772,9 @@ static void test_penalty_function(void) {
 }
 
 static void test_autocompile_parity_and_fallback(void) {
+    /* NO FEASIBILITY ASSERTION: this problem is UNCONSTRAINED. The audit's
+     * List A misfiled it as box-constrained; re-derived from the expression,
+     * there is no constraint to check. (DEMO-3) */
     /* At machine precision the objective is auto-compiled; the answer must be
      * identical to the (verified) interpreter result. */
     check_true("Abs[First[NMinimize[x^4 - 3 x^2 - x, x]] - (-3.5139097)] < 1.*^-4");
@@ -700,6 +808,10 @@ static void test_symbol_indirection(void) {
 }
 
 static void test_search_points_honored(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* Regression: an explicit DifferentialEvolution "SearchPoints" must be
      * honored, not silently capped at the automatic ceiling (was 40). Two runs
      * that differ only in SearchPoints, both above the old cap, once returned
@@ -731,6 +843,8 @@ static void test_nmaximize_simple(void) {
 static void test_nmaximize_constrained(void) {
     /* max x + y on the unit disk -> Sqrt[2] = 1.41421. */
     check_true("Abs[First[NMaximize[{x + y, x^2 + y^2 <= 1}, {x, y}]] - 1.4142136] < 1.*^-2");
+    /* FEASIBILITY, two-sided: the maximum sits ON the unit circle. */
+    check_true("Abs[((x^2 + y^2) /. Last[NMaximize[{x + y, x^2 + y^2 <= 1}, {x, y}]]) - 1] < 1.*^-4");
 }
 
 static void test_min_max_duality(void) {
@@ -822,6 +936,10 @@ static void test_indexed_array_vars(void) {
 }
 
 static void test_indexed_table_constraints(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* Held Table[...] constraint list, implicitly And-ed and expanded. */
     check_true("Abs[First[NMinimize[{Sum[(x[i] - 2)^2, {i, 1, 3}], Table[0 <= x[i] <= 1, {i, 1, 3}]}, Table[x[i], {i, 1, 3}]]] - 3.0] < 1.*^-3");
     /* Each returned coordinate sits on the upper bound. */
@@ -829,6 +947,10 @@ static void test_indexed_table_constraints(void) {
 }
 
 static void test_indexed_rosenbrock(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* The originally-reported case: 10-D Rosenbrock, Table vars + constraints,
      * NelderMead with method sub-options. Global minimum 0 at all-ones. */
     check_true("Abs[First[NMinimize[{Sum[100 (x[i+1] - x[i]^2)^2 + (1 - x[i])^2, {i, 1, 9}], "
@@ -851,6 +973,10 @@ static void test_indexed_variable_locality(void) {
 }
 
 static void test_indexed_real_coefficient(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* Regression: a Real coefficient multiplying an indexed term used to
      * numericalize the index itself (x[i] -> x[i.]) when the held objective was
      * expanded, leaving an unbound x[1.] in the compiled body. Every trial
@@ -868,6 +994,10 @@ static void test_indexed_real_coefficient(void) {
 }
 
 static void test_de_boundary_no_stagnation(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* Regression: DifferentialEvolution used to CLAMP an out-of-range mutant to
      * the box boundary. On the 10-D Schwefel function (global min ~0 at
      * x_i = 420.9687, well inside [-500, 500]) that stranded the search: once
@@ -994,6 +1124,10 @@ static void test_rotated_rastrigin_stress(void) {
 }
 
 static void test_de_options_effective(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* Every "DifferentialEvolution" sub-option must actually steer the search, not
      * be silently dropped. "Tolerance" and "InitialPoints" used to be consumed
      * only by NelderMead; "CrossProbability"/"ScalingFactor" took any value with
@@ -1088,6 +1222,10 @@ static void test_refinery_pooling(void) {
 }
 
 static void test_gaussian_well(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* A2: an isolated Gaussian well in an otherwise flat 10-D landscape —
      * obj = 1 - Exp[-2·Σ(x_i-1.2345)²] + 1e-5·Σx_i² over [-5,5]^10. The Exp
      * carves a single narrow basin at x_i=1.2345 (global 1.524e-4); everywhere
@@ -1116,6 +1254,10 @@ static void test_gaussian_well(void) {
 }
 
 static void test_modified_ackley(void) {
+    /* NO FEASIBILITY ASSERTION, DELIBERATELY (DEMO-3 audit). The only constraint
+     * here is the search box, which nm_project clamps to (findmin_nm_common.c),
+     * so an in-box assertion could not fail and would make this suite look more
+     * rigorous than it is. The omission is a decision, not an oversight. */
     /* A3: a modified-Ackley product-of-cosines over [-5,5]^10 —
      * -Exp[-0.2·rms(x)]·∏Cos[20 x_i] + 0.05·Σx_i². The Cos[20·] factors
      * oscillate with period ~0.31, so the surface is a dense forest of local
@@ -1290,6 +1432,10 @@ static void test_qap_assignment(void) {
 }
 
 static void test_job_scheduling(void) {
+    /* FEASIBILITY DEFERRED, with reason (DEMO-3): the constraints here are
+     * disjunctive (precedence / Or-semantics), and a correct assertion has to
+     * spell out which branch was taken. Out of scope for this ticket; recorded
+     * so the gap is explicit rather than silent. */
     /* B2: single-machine job scheduling, n=5, Big-M disjunctive formulation.
      * Continuous start times t_i, binary precedence y[i,j], and for every pair
      * a Big-M disjunction forcing i-before-j OR j-before-i (no overlap). Minimize

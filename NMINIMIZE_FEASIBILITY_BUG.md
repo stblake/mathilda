@@ -300,3 +300,29 @@ search is stochastic. A feasibility tolerance should be tight, because
 feasibility is not an approximation — it is the difference between an answer and
 a wrong answer. Where a feasibility tolerance must be loose, that is a finding
 about the solver to record, not a number to quietly choose.
+
+### AUDITED — DEMO-3, 2026-08-22
+
+That audit was done. It was worse than two instances.
+
+Measured by mutating `nm_build_result` to return a deliberately wrong answer:
+
+| probe | before | after |
+|---|---:|---:|
+| returned point 10% wrong, objective right | 26 / 83 caught | **32 / 83** |
+| returned point 1% wrong | 24 / 83 | **30 / 83** |
+| one integer coordinate flipped | 7 | **8** |
+| objective 10% wrong, point right | 60 / 83 | unchanged |
+
+**31 constrained tests never checked their constraints at all.** The suite caught a wrong
+*number* more than twice as well as a wrong *answer*. Git archaeology across 37 commits
+found no tolerance ever widened to rescue a failing test — the looseness was authored in,
+under a stated policy that governs objectives and is silent on feasibility. The defect was
+an absent category, not carelessness.
+
+Fixed by writing that missing category into the file header as an explicit feasibility
+policy, adding feasibility assertions to the eleven tests with real constraints, and
+documenting the eighteen remaining omissions as deliberate (sixteen box-only where the
+solver clamps and an assertion could not fail, one that turned out to be unconstrained and
+was misfiled, one deferred with its reason). Full audit:
+`thoughts/shared/tickets/DEMO-3/research.md`.
