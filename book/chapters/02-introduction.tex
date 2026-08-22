@@ -334,15 +334,14 @@ integral numerically ($\approx\sqrt\pi$).}
 
 Differential equations are solved numerically by \B{NDSolve}. Take a damped harmonic
 oscillator, $y'' + \tfrac{3}{10}\,y' + 4y = 0$ with $y(0)=1$ and $y'(0)=0$: the solution
-comes back as an \B{InterpolatingFunction}, and \B{Plot} takes that directly, so the
-motion---a decaying oscillation settling to rest---is one further command away:
+comes back as an \B{InterpolatingFunction}, and \B{Plot} takes that
+directly,\footnote{That plot is genuinely the \texttt{Out[2]} of the \B{Plot} command,
+drawn by the running system. To keep it, \B{Export} writes any such graphic to PDF, PNG,
+or JPEG (\texttt{Export["decay.pdf", plot]})---indeed every figure in this book is
+produced exactly this way.} so the motion---a decaying oscillation settling to rest---is
+one further command away:
 
 \plotcell{02-introduction/ndsolve-solution}
-
-\noindent The plot above is genuinely the \texttt{Out[2]} of that \B{Plot} command. To
-keep it, \B{Export} writes any such graphic to PDF, PNG, or JPEG
-(\texttt{Export["decay.pdf", plot]})---indeed every figure in this book is produced
-exactly this way, by the running system.
 
 Finally, \B{NLimit} evaluates a limit numerically, invaluable when a symbolic limit is
 hard to obtain:
