@@ -5,19 +5,26 @@
 
 ## Description
 
-```text
-Replace[expr, rules]
-    tries to match expr at the top level against rules and returns the
-    rewritten form; if no rule matches, returns expr unchanged.
-Replace[expr, rules, levelspec]
-    applies rules only at the parts of expr specified by levelspec.
-Matching tries each rule in order and uses the first that succeeds;
-rules may be a single rule or a list of rules.
-```
+**`Replace[expr, rules]`**
 
-## Examples
+tries to match expr at the top level against rules and returns the rewritten form; if no rule matches, returns expr unchanged.
 
-All examples below are verified against the current Mathilda build.
+**`Replace[expr, rules, levelspec]`**
+
+applies rules only at the parts of expr specified by levelspec.
+
+<details>
+<summary>Notes</summary>
+
+Matching tries each rule in order and uses the first that succeeds; rules may be a single rule or a list of rules.
+
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= Replace[x^2, x^2 -> a + b]
@@ -31,6 +38,28 @@ Out[3]= {a, b}
 
 In[4]:= Replace[1 + x^2, x^2 -> a + b, {1}]
 Out[4]= 1 + a + b
+```
+
+### Applications (6)
+
+```mathematica
+In[5]:= Replace[x^2, x^2 -> done]
+Out[5]= done
+
+In[6]:= Replace[x, {x -> 1, _ -> 0}]
+Out[6]= 1
+
+In[7]:= Replace[w, {x -> 1, _ -> 0}]
+Out[7]= 0
+
+In[8]:= Replace[a + b + c + d, x_ + y_ -> {x, y}]
+Out[8]= {a, b + c + d}
+
+In[9]:= Replace[{{1, 2}, {3, 4}}, x_Integer :> x^2, {2}]
+Out[9]= {{1, 4}, {9, 16}}
+
+In[10]:= Replace[{1, {2, {3, {4}}}}, x_Integer :> x^2, {-1}]
+Out[10]= {1, {4, {9, {16}}}}
 ```
 
 ## Implementation notes
@@ -49,46 +78,17 @@ Out[4]= 1 + a + b
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/), [Hold](../../expression-information/Hold/)
 
 - Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_condition_downvalue.c`](https://github.com/stblake/mathilda/blob/main/tests/test_condition_downvalue.c)
+- Tests: [`tests/test_replace.c`](https://github.com/stblake/mathilda/blob/main/tests/test_replace.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Replace[x^2, x^2 -> done]
-Out[1]= done
-```
-
-```mathematica
-In[1]:= Replace[x, {x -> 1, _ -> 0}]
-Out[1]= 1
-
-In[2]:= Replace[w, {x -> 1, _ -> 0}]
-Out[2]= 0
-```
-
-```mathematica
-In[1]:= Replace[a + b + c + d, x_ + y_ -> {x, y}]
-Out[1]= {a, b + c + d}
-```
-
-```mathematica
-In[1]:= Replace[{{1, 2}, {3, 4}}, x_Integer :> x^2, {2}]
-Out[1]= {{1, 4}, {9, 16}}
-```
-
-```mathematica
-In[1]:= Replace[{1, {2, {3, {4}}}}, x_Integer :> x^2, {-1}]
-Out[1]= {1, {4, {9, {16}}}}
-```
 
 ### Notes
 

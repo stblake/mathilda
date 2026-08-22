@@ -1,41 +1,52 @@
-# Group E benchmarks — 10 advanced-numerical-analysis experiments (Mathilda vs Python 3.11 + numpy/scipy)
+# Book Campaign 0 — Foundations + Chapter 1  ✅ DONE
 
-## Plan
-- [x] Wire a new report group E (53–62) into `benchmarks/run_all.py` `group_of()`
-- [x] Add `benchmarks/requirements.txt` (numpy/scipy/mpmath) + group-E table & Python-3.11 note in README
-- [x] 53 matrix-decompositions (LU/QR/SVD/PseudoInverse/rank/NullSpace; Cholesky ABSENT)
-- [x] 54 eigenproblems (sym/general/generalized/Arnoldi; Eigensystem ABSENT)
-- [x] 55 vectorized special functions (Fresnel/Erf/integrals/Beta vectorized; BesselI/K no kernel)
-- [x] 56 multidim quadrature (2D/3D/oscillatory/singular/semi-infinite/dependent-bounds)
-- [x] 57 stiff ODE + PDE (stiff scalar/Robertson/harmonic/VdP + heat/wave MethodOfLines)
-- [x] 58 nonlinear systems (2×2, Burden–Faires 3×3, Broyden tridiagonal N=10/40)
-- [x] 59 polynomial roots (NSolve/NRoots dense 20/50/100, roots-of-unity, Wilkinson)
-- [x] 60 DCT/DST (types 1/2/4, DST 1/2) + 2D Fourier, normalization reconciled in checks
-- [x] 61 regularized least squares (LeastSquares + Fit Tikhonov/ridge; FindFit ABSENT)
-- [x] 62 arbitrary precision (N[…,p]/NSum/NIntegrate/FindRoot vs mpmath), deep-digit checks
-- [x] Run subset under Python 3.11 via `HPC_PYTHON`, `--check-labels`; produce gap report
+Plan: `/Users/user/.claude/plans/in-book-i-would-cheeky-raven.md`
+
+## Toolchain
+- [x] `book/tools/gen_links.py` — builtins.json → generated/builtinlinks.tex (833 links)
+- [x] `book/tools/build_examples.py` — examples/**/*.m → transcripts (reuses run_session)
+- [x] `book/tools/check_links.py` — fail on any \B{} with no reference page
+- [x] `book/mathilda.sty` — REPL transcript style, `\B{}` link macro, callout boxes
+- [x] `book/Makefile` — links, examples, pdf, check-links, clean/distclean
+- [x] `book/.gitignore`
+
+## Book source
+- [x] `book/TheMathildaBook.tex` — memoir master, parts + \include
+- [x] `book/frontmatter/` — titlepage, copyright (GPLv3), preface, colophon
+- [x] `book/chapters/01-about.tex` — Chapter 1 pilot (fully written & verified)
+- [x] 17 stub chapters for every later section/appendix
+- [x] `book/examples/01-about/*.m` — 3 verified example sessions
+- [x] `book/references.bib`
+
+## Docs
+- [x] `book/CONTEXT.md` — principles (verified-example promise, hyperlinks, voice, stats policy)
+- [x] `book/ROADMAP.md` — every section as a future campaign + status table
+
+## Verify
+- [x] gen_links spot-check: Integrate/Sin/$Version(%24)/FLINT`Det URLs correct
+- [x] make examples → 3 transcripts; byte-identical to `verify_tutorial.py transcript`
+- [x] make pdf (clean-slate distclean→pdf) → exit 0, 32 pp., 0 undefined/unlinked warnings
+- [x] 12/12 Chapter-1 builtin hyperlinks embedded in PDF (decompressed & confirmed)
+- [x] make check-links → OK (15 uses, 12 distinct, all resolve)
+- [x] changelog note (docs/spec/changelog/2026-08-17.md)
 
 ## Review
-- **Result:** 65 cases, **0 INCOMPLETE, 0 CHECK-FAIL** (every case runs, every check agrees within 1e-6),
-  32 SLOWER, 30 AHEAD, 3 ABSENT. Coverage 85.7% (30/35 declared heads). Wall clock 1.8 min.
-- Only shared-code edit: one clause in `run_all.py` `group_of()`. No Mathilda source touched.
-- Run it: `HPC_PYTHON=/usr/local/bin/python3.11 python3 benchmarks/run_all.py --only 53,54,55,56,57,58,59,60,61,62 --system mathilda,python`
-- Outputs: `benchmarks/REPORT.partial.md`, `ABSENT.partial.md`, `results/2026-08-12-partial.json`.
 
-### Top gaps surfaced (the "drive improvements" queue)
-1. `NullSpace` on a float matrix takes a non-machine path — **2428×** (9.6 s vs 4 ms).
-2. `NSolve`/`NRoots` high-degree — **60–110×**; Wilkinson-15 **1616×** (symbolic preprocessing of the product form).
-3. Generalized `Eigenvalues[{A,B}]` has **no LAPACK path** — symbolic char-poly root-finding; **1136×**, returns Root[] at n≥6, hangs at n≥8.
-4. `BesselI`/`BesselK` over arrays have **no SIMD kernel** (scalar threading) — **105×/209×**; the other special functions are vectorized and mostly AHEAD.
-5. `LUDecomposition` **31.5×**, `FindRoot` systems scale poorly (Broyden N=40 **19×**), symmetric eig **6.7×**, Fit ridge **8.1×**, DCT-2/4 **~3.6×**.
-- Also `FindRoot`/`NSum` under-deliver requested WorkingPrecision (FindRoot ~19 correct digits at WP→100).
+Delivered the full book foundation and a verified pilot Chapter 1. Key decisions
+(confirmed with the user): LaTeX/memoir; monospace REPL output; build-time-generated
+examples (inputs-only source, outputs injected by running `./Mathilda` — no output
+can be hand-written or drift); pilot includes a fully-written Chapter 1.
 
-### Where Mathilda already wins (regression guards)
-- NDSolve (compiled RHS) beats scipy solve_ivp 5–40×; arbitrary precision beats (pure-Python) mpmath up to ~200×
-  (N[Gamma[1/3],1000]: 19 ms vs 3.9 s); most vectorized special functions and several NIntegrate cases AHEAD.
+Mechanism highlights:
+- Examples: one `.m` per Mathilda session under `examples/`; `build_examples.py`
+  reuses `site/verify_tutorial.py::run_session` so book and site stay consistent.
+- Hyperlinks: `\B{Name}` resolves via a table generated from `builtins.json`
+  (the single source of truth); `check_links.py` gates any dangling `\B{}`.
+- One real bug found & fixed during build: `%24` percent-encoding of `$`-symbol URLs
+  contains `%`, which LaTeX reads as a comment — now escaped to `\%24` for `\href`.
+- Name gotchas caught by check-links: `SVD`→`SingularValueDecomposition`; no
+  `Graphics` page (used `Show`).
 
-### Absences (feature work)
-- `CholeskyDecomposition`, `Eigensystem`, `FindFit` (declared, benched on the Python side only).
-
-## Not done (deferred per scope)
-- Implementing the kernel/feature fixes above — the user chose "author + run + gap report, then review".
+Not in scope (future campaigns, see ROADMAP.md): all chapters beyond 1; graphics
+example capture (plots return image/plot messages, not text — needs a build_examples
+extension); Data I/O last (mostly unimplemented).

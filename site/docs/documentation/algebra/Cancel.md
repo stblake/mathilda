@@ -5,16 +5,20 @@
 
 ## Description
 
-```text
-Cancel[expr] cancels out common factors in the numerator and denominator of expr.
-Option Extension -> alpha cancels factors over Q(alpha) (e.g. simplifies
-(x^2 - 2)/(x - Sqrt[2]) to x + Sqrt[2] when Extension -> Sqrt[2]).
-Default Extension -> None treats algebraic numbers as opaque.
-```
+**`Cancel[expr] cancels out common factors in the numerator and denominator of expr.`**
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+Option Extension -\> alpha cancels factors over Q(alpha) (e.g. simplifies (x^2 - 2)/(x - Sqrt\[2\]) to x + Sqrt\[2\] when Extension -\> Sqrt\[2\]). Default Extension -\> None treats algebraic numbers as opaque.
+
+</details>
+
+## Examples (14)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (7)
 
 ```mathematica
 In[1]:= Cancel[(x^2 - 1) / (x - 1)]
@@ -32,14 +36,40 @@ Out[4]= 1 + y^(1/3) + y^(2/3)
 In[5]:= Cancel[1/(y^(2/3) - 1/y^(1/3))]
 Out[5]= y^(1/3)/(-1 + y)
 
-In[6]:= Cancel[(x^2 - 2)/(x - Sqrt[2]), Extension -> Sqrt[2]]
-Out[6]= Sqrt[2] + x
+In[6]:= Cancel[Sqrt[2]/(Sqrt[2] + Sqrt[2] x^4)]
+Out[6]= 1/(1 + x^4)
 
-In[7]:= Cancel[(x^3 - 2)/(x - 2^(1/3)), Extension -> 2^(1/3)]
-Out[7]= 2^(2/3) + 2^(1/3) x + x^2
+In[7]:= Cancel[(Sqrt[2] x + Sqrt[2] y)/(Sqrt[2] + Sqrt[2] x)]
+Out[7]= (x + y)/(1 + x)
+```
 
-In[8]:= Cancel[Sqrt[2]/(Sqrt[2] + Sqrt[2] x^4)]
-Out[8]= 1/(1 + x^4)
+### Options (2)
+
+```mathematica
+In[8]:= Cancel[(x^2 - 2)/(x - Sqrt[2]), Extension -> Sqrt[2]]
+Out[8]= Sqrt[2] + x
+
+In[9]:= Cancel[(x^3 - 2)/(x - 2^(1/3)), Extension -> 2^(1/3)]
+Out[9]= 2^(2/3) + 2^(1/3) x + x^2
+```
+
+### Applications (5)
+
+```mathematica
+In[10]:= Cancel[(x^2 - 1)/(x - 1)]
+Out[10]= 1 + x
+
+In[11]:= Cancel[(x^2 + 2 x + 1)/(x + 1)]
+Out[11]= 1 + x
+
+In[12]:= Cancel[(x^2 - 1)/(x^2 - 2 x + 1)]
+Out[12]= (1 + x)/(-1 + x)
+
+In[13]:= Cancel[(x^4 - 1)/(x^2 - 1)]
+Out[13]= 1 + x^2
+
+In[14]:= Cancel[(x^2 - 2)/(x - Sqrt[2]), Extension -> Sqrt[2]]
+Out[14]= Sqrt[2] + x
 ```
 
 ## Implementation notes
@@ -60,45 +90,20 @@ Out[8]= 1/(1 + x^4)
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Together](../../algebra/Together/), [Plus](../../arithmetic/Plus/), [PolynomialQuotient](../../algebra/PolynomialQuotient/)
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on polynomial GCD computation.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational function simplification.
 - Source: [`src/rat.c`](https://github.com/stblake/mathilda/blob/main/src/rat.c)
 - Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
+- Tests: [`tests/test_crc_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_crc_corpus.c)
+- Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
+- Tests: [`tests/test_extension_options.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_options.c)
+- Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Cancel[(x^2 - 1)/(x - 1)]
-Out[1]= 1 + x
-```
-
-```mathematica
-In[1]:= Cancel[(x^2 + 2 x + 1)/(x + 1)]
-Out[1]= 1 + x
-```
-
-```mathematica
-In[1]:= Cancel[(x^2 - 1)/(x^2 - 2 x + 1)]
-Out[1]= (1 + x)/(-1 + x)
-```
-
-```mathematica
-In[1]:= Cancel[(x^4 - 1)/(x^2 - 1)]
-Out[1]= 1 + x^2
-```
-
-```mathematica
-In[1]:= Cancel[(x^2 - 2)/(x - Sqrt[2]), Extension -> Sqrt[2]]
-Out[1]= Sqrt[2] + x
-```
 
 ### Notes
 

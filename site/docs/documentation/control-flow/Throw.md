@@ -5,16 +5,15 @@
 
 ## Description
 
-```text
-Throw[value]
-    Stops evaluation and returns value to the nearest enclosing
-    Catch. Throw[value, tag] is caught only by Catch[expr, form] whose form
-    matches tag. Throw[value, tag, f] returns f[value, tag] if uncaught.
-```
+**`Throw[value]`**
 
-## Examples
+Stops evaluation and returns value to the nearest enclosing Catch. Throw\[value, tag\] is caught only by Catch\[expr, form\] whose form matches tag. Throw\[value, tag, f\] returns f\[value, tag\] if uncaught.
 
-All examples below are verified against the current Mathilda build.
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Catch[a; b; Throw[c]; d; e]
@@ -42,11 +41,13 @@ Out[5]= {v, tg}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Catch](../../control-flow/Catch/), [Return](../../control-flow/Return/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Map](../../data-structures/Map/), [Sum](../../calculus/Sum/), [Table](../../lists-and-iteration/Table/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+- Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_core_algebra.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core_algebra.c)
+- Tests: [`tests/test_fixedpoint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fixedpoint.c)
+- Tests: [`tests/test_scan.c`](https://github.com/stblake/mathilda/blob/main/tests/test_scan.c)

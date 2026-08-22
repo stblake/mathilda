@@ -5,29 +5,48 @@
 
 ## Description
 
-```text
-NestWhile[f, expr, test]
-    starts with expr and repeatedly applies f while test still yields True.
-NestWhile[f, expr, test, m]
-    supplies the most recent m results as arguments to test.
-NestWhile[f, expr, test, All]
-    supplies all results so far as arguments to test.
-NestWhile[f, expr, test, {mmin, mmax}]
-    delays testing until at least mmin results exist, then passes up to mmax.
-NestWhile[f, expr, test, m, max]
-    applies f at most max times.
-NestWhile[f, expr, test, m, max, n]
-    applies f an additional n times after the loop terminates.
-NestWhile[f, expr, test, m, max, -n]
-    returns the result found when f had been applied n fewer times.
+**`NestWhile[f, expr, test]`**
 
-If test[expr] does not yield True initially, NestWhile returns expr.
-NestWhile[f, expr, UnsameQ, 2] is equivalent to FixedPoint[f, expr].
-```
+starts with expr and repeatedly applies f while test still yields True.
 
-## Examples
+**`NestWhile[f, expr, test, m]`**
 
-All examples below are verified against the current Mathilda build.
+supplies the most recent m results as arguments to test.
+
+**`NestWhile[f, expr, test, All]`**
+
+supplies all results so far as arguments to test.
+
+**`NestWhile[f, expr, test, {mmin, mmax}]`**
+
+delays testing until at least mmin results exist, then passes up to mmax.
+
+**`NestWhile[f, expr, test, m, max]`**
+
+applies f at most max times.
+
+**`NestWhile[f, expr, test, m, max, n]`**
+
+applies f an additional n times after the loop terminates.
+
+**`NestWhile[f, expr, test, m, max, -n]`**
+
+returns the result found when f had been applied n fewer times.
+
+**`NestWhile[f, expr, UnsameQ, 2] is equivalent to FixedPoint[f, expr].`**
+
+<details>
+<summary>Notes</summary>
+
+If test\[expr\] does not yield True initially, NestWhile returns expr.
+
+</details>
+
+## Examples (14)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (11)
 
 ```mathematica
 In[1]:= NestWhile[#/2 &, 123456, EvenQ]
@@ -53,6 +72,28 @@ Out[7]= 2
 
 In[8]:= NestWhile[# + 1 &, 888, !PrimeQ[#] &]
 Out[8]= 907
+
+In[9]:= NestWhile[# + 1 &, 888, !PrimeQ[#1] || !PrimeQ[#3] &, 3]
+Out[9]= 1021
+
+In[10]:= NestWhile[Mod[# + 3, 7] &, 0, UnsameQ, All]
+Out[10]= 0
+
+In[11]:= NestWhile[If[EvenQ[#], #/2, 3 # + 1] &, 27, # != 1 &]
+Out[11]= 1
+```
+
+### Applications (3)
+
+```mathematica
+In[12]:= NestWhile[#/2 &, 256, EvenQ]
+Out[12]= 1
+
+In[13]:= NestWhile[# + 1 &, 1, # < 100 &]
+Out[13]= 100
+
+In[14]:= NestWhile[(# + 2/#)/2 &, 1.0, UnsameQ, 2]
+Out[14]= 1.41421
 ```
 
 ## Implementation notes
@@ -87,39 +128,16 @@ window passed to `test` is a freshly copied argument array per step.
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_nestwhile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nestwhile.c)
+- Tests: [`tests/test_numloop.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numloop.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= NestWhile[#/2 &, 256, EvenQ]
-Out[1]= 1
-```
-
-Count how many `+1` steps are taken before a predicate fails — here it lands
-exactly on the boundary value:
-
-```mathematica
-In[1]:= NestWhile[# + 1 &, 1, # < 100 &]
-Out[1]= 100
-```
-
-With test `UnsameQ` and history length `2`, `NestWhile` becomes `FixedPoint`.
-Newton's iteration for `Sqrt[2]` converges to the machine fixed point:
-
-```mathematica
-In[1]:= NestWhile[(# + 2/#)/2 &, 1.0, UnsameQ, 2]
-Out[1]= 1.41421
-```
 
 ### Notes
 

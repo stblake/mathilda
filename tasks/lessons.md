@@ -414,6 +414,49 @@ fall-through GMP path that recognises `Rational[BigInt, ...]` (and
 the matching defensive NULL handling at every call site that does
 `x = helper(...); is_overflow(x)`).
 
+### Recurrence: the same int64 blindspot in the leaf numeric heads (2026-08-13)
+
+The identical pattern resurfaced across a whole family of user-facing
+heads: `Abs`/`Sign` (the reported case:
+`Abs[-29043852094387/23409578234095283745029348750]` came back
+unevaluated), `Re`/`Im`/`ReIm`/`Arg`, `Numerator`/`Denominator`, and —
+via the shared comparator — `Min`/`Max`/`Sort`/`Median`/`Ordering`. Two
+distinct failure modes from the one root: heads gated on `is_rational`
+**declined** (returned `NULL`), while `expr_compare`'s double fallback
+read a bignum rational as `0.0` and **misordered silently** — worse than
+declining, because the wrong answer looks evaluated.
+
+Reusable rules this reinforced:
+
+- **Predicate:** use `is_rational_like` (bignum-aware), never
+  `is_rational(e, NULL, NULL)`, whenever you only need "is this a
+  rational?". They diverge exactly on the bignum case.
+- **Sign:** `expr_numeric_sign` returns a bare `0` both for "zero" and
+  "unrecognised", and until this fix it did not recurse into `Rational`
+  components. Fixing it there fixed every caller. For an *exact* sign
+  (e.g. `Arg`), read the sign — never `(double)n/d`, which underflows a
+  tiny rational like `-1/10^400` to `0` and flips the answer.
+- **Order:** for canonical comparison, cross-multiply the mpz
+  components (denominators are canonically positive) rather than compare
+  `get_numeric_value` doubles. A `list_numeric_cmp`/`lc_to_mpq` module
+  already existed in list_common.c *precisely because* `expr_compare`
+  was known-broken here — a local workaround is a signpost that the
+  shared helper still needs the fix.
+- **Fix at the shared root, not per-call.** `expr_numeric_sign`,
+  `expr_compare`, `is_real_numeric`, `extract_num_den` are the choke
+  points; touching them cleared ~10 heads at once.
+- **Grep for the bug's shape, then PROBE.** 357 `is_rational(` sites is
+  too many to triage by hand — build the binary and run the head over a
+  genuine `Rational[Integer, BigInt]` (and make sure the test value does
+  not accidentally reduce to an integer: `big/7` where `7 | big` becomes
+  a BigInt, not a bignum rational, and hides the bug).
+- **Fix leaks you touch in passing.** `leaks --atExit` on the probe
+  found a 16-byte leak in `ReIm` — the `results` array was never freed
+  after `expr_new_function` copied its pointers out (the sibling
+  `is_complex` branch had the same latent leak). When you edit a
+  function, run the leak checker over its path even if the leak predates
+  you.
+
 ## Subresultant PRS over Q(α): Power[α, k/m] vs Times[α^q, Sqrt[α]] don't combine via Plus (2026-05-09)
 
 When implementing Bronstein's subresultant PRS for Resultant, naive
@@ -1074,9 +1117,10 @@ Lessons:
   FAIL count; then restore. (Did this for the 2 `Sqrt[x^2+6]`/`Sqrt[6]`
   `simplify_tests` soft-asserts — n=1 symbolic base, so the pass is inert.)
 - **Corpus `*_tests` binaries load their `.m` via `../`-relative paths.** Run
-  `fullsimplify_corpus_tests`/`crc_corpus_tests` from `tests/build/` (so `../` ->
-  `tests/`); `intrat_corpus_tests` wants `IntegrateRationalTests.m` in the repo
-  root. A "could not load … as a List" failure is a cwd issue, not a result DIFF.
+  `fullsimplify_corpus_tests`/`crc_corpus_tests`/`intrat_corpus_tests` from
+  `tests/build/` (so `../` -> `tests/`, where all the corpus `.m` files now
+  live). A "could not load … as a List" failure is a cwd issue, not a result
+  DIFF.
 
 ## PossibleZeroQ false-zeros masquerade as integrator/algorithm bugs (2026-06-30)
 - **Symptom**: `Integrate[(1-x^3)^(1/3)/x, x, Method->"GoursatAlgebraic"]` (and
@@ -2579,3 +2623,89 @@ the unit path under-ran). Fixing only the interpreter would have left
   LAPACK path (symbolic char-poly); BesselI/K have no vector kernel; NullSpace on floats
   takes a non-machine path; NSolve/NRoots 60–110× slower than numpy companion-matrix;
   FindRoot/NSum under-deliver requested WorkingPrecision.
+
+## Eigenvalues/Solve quartic radical form (2026-08-15)
+- **Don't assume the output form — ask what the reference tool actually produces.**
+  Reported: `NMinimize[Max[Re[Eigenvalues[matrix[c1,c2]]]]]` hangs. I hypothesized
+  Mathematica returns `Root[]` objects and built a whole `Root[]`-default +
+  Root-numericalization path. The user then pasted Mathematica's actual `obj`: a
+  **compact nested radical**, not `Root[]`. The matrix's quartic is *biquadratic
+  after depression* (`x -> x - b/4a`), so it solves in nested square roots.
+- **Biquadratic-after-depression detection needs a symbolic zero test, not a literal
+  one.** `solve_quartic_radical` (solvepoly.c) gated its biquadratic branch on
+  `is_definite_zero(q)` — a literal Integer/Rational-zero check. A symbolically-zero
+  depressed linear coefficient `q` (circulant-style matrices) was missed → the general
+  resolvent-cubic branch ran: 9205 leaves AND numerically wrong (`q=0` ⇒ resolvent root
+  `t=0` ⇒ `0/0` in `q/Sqrt[2t]`). Fix: `zero_test_decide(q) == ZERO_TEST_TRUE`.
+- **Two quartic solvers exist with the identical bug**: `poly/solvepoly.c`
+  `solve_quartic_radical` (Solve/Eigenvalues path) AND `radicals.c` `radical_quartic`
+  (Root→radical path). Fix both.
+- **Policy (per user): Cubics/Quartics default False (Root[] for the general case), but
+  the always-solvable families always return radicals** regardless of the flag —
+  binomials `a x^n+b`, quadratic-in-`x^m`, and biquadratic-after-depression quartics.
+  Binomial/n-quadratic already fire *before* the Cubics/Quartics gate in the dispatch;
+  the biquadratic quartic had to be explicitly ungated.
+- **A compact radical evaluates ~20× faster than a `Root[]` per point** (arithmetic vs
+  companion-matrix root-finding), which is why Mathematica is 0.2 s: same expansion, but
+  compact radicals + compiled eval. Mathilda: infinite hang → 6.2 s.
+- **Internal consumers that manipulate eigenvalues symbolically must request radicals.**
+  `SingularValueDecomposition` builds a gram matrix and works its eigenvalues with
+  `Sqrt`/rational idioms; under the new `Root[]` default it must pass
+  `Cubics -> True, Quartics -> True` or it can't reduce.
+- **git checkout HEAD -- <file> discards uncommitted work irrecoverably.** Reverted a
+  large working change on a wrong hypothesis, then the user asked to keep it — had to
+  re-apply from the conversation. Prefer `git stash` when a revert might be temporary.
+
+## Solve review (2026-08-17)
+- **Mathilda's `Function[m, ...]` does NOT close over `m` inside a nested pure
+  function.** In the `.m` verifier, `AllTrue[samples, Function[m, scZero[expr /.
+  (Rule[#, m] & /@ params)]]]` left a literal `m` (the inner `&` shadows the
+  outer named var). Fix: use non-nesting `Thread[params -> m]`. Any `.m` helper
+  that maps an inner function referencing an outer `Function` var will silently
+  produce wrong substitutions — verify with a tiny probe before trusting it.
+- **`<digit>Exp[...]` mis-lexes.** `3Exp[x]` reads the `3` as a float exponent
+  (`3E...`), yielding `3.0 * ...`. Write `3 Exp[x]` (space) or `3 E^x`. Matters
+  when authoring `.m` corpora/tests with transcendental coefficients.
+- **A form-invariant back-substitution corpus beats FullForm string tests** for
+  driving CAS development: it survives radical/ordering/spelling changes, and its
+  ratcheting baseline (10 -> 0) is the progress dashboard. Clone the proven
+  `test_intrat_corpus.c` idiom (fork-per-case + `.m` prelude + baseline gate).
+- **Solve/Reduce boundary:** Solve returns explicit rules only. Single equation
+  in many vars (`x y == 1 -> {{x -> 1/y}}`) IS Solve; inequalities, quantifiers,
+  parameter case-splits, positive-dimensional *set descriptions* are Reduce.
+  When adding a Solve capability, never emit conditions to make an answer
+  "complete" — that crosses into (unimplemented) Reduce.
+- **A parsed-but-inert option is a latent wrong-answer bug**, not a no-op:
+  `Solve[x^2==2, x, Modulus->7]` silently returned the non-modular `±Sqrt[2]`.
+  When wiring such an option, the non-handled shapes must *refuse* (unevaluated),
+  never fall through to the default path.
+
+## Build: GCC only, never clang (2026-08-19)
+- **Mathilda is built with real GCC only — never Apple/LLVM clang** (user's firm
+  rule). On macOS plain `gcc` is a clang symlink; clang gives a false "clean"
+  signal because it misses the exact Linux/glibc warning classes the CI gates on.
+  The makefile now HARD-ERRORs (was only a warning) if the selected compiler
+  reports itself as clang — covering autodetect *and* explicit `CC=clang`. The
+  tests `CMakeLists.txt` pins `CMAKE_C_COMPILER` to a real gcc before
+  `project(... C)` and `FATAL_ERROR`s unless `CMAKE_C_COMPILER_ID == GNU`. The old
+  `tests/build*` dirs were silently clang-configured (`.../CommandLineTools/.../cc`);
+  removed so they reconfigure with gcc.
+- **`make` here already uses Homebrew `gcc-16`, so a full local build reproduces
+  the Linux GCC-only warnings** clang never emits. Two recurring classes clang
+  hides: `-Wint-in-bool-context` (a `*`/`<<` product used as a bool, e.g. the
+  zero-size guard `malloc(w*h ? w*h : 1)` — hoist the product into a local so the
+  `?:` condition is a plain value) and interprocedural `-Wmaybe-uninitialized` on a
+  heap buffer a loop fills before passing it as `const*` to a callee (GCC can't
+  relate the loop trip count to the callee's reads on the len==0 path — fix with
+  `calloc` instead of `malloc`, the house style from commit c62ba17a).
+- **Sweep recipe:** `make clean && make -j8 -k 2>log; grep -E "warning:|error:" log`.
+  A warning inside `src/external/` (e.g. stb `invalid_chunk`) is fixed by extending
+  the `#pragma GCC diagnostic ignored` block in the *wrapper* TU (`src/imageio.c`),
+  never by editing the vendored header.
+- **macOS Accelerate + GCC needs `-flax-vector-conversions`.** Switching the test
+  build to gcc exposed why tests had used clang: Apple's vecLib `vBasicOps.h`
+  (Accelerate LAPACK path) passes Apple vector types to `_mm_*` intrinsics that gcc
+  rejects as incompatible with `__m128i` (clang accepts them). The makefile already
+  pairs its Darwin/Accelerate branch with `-flax-vector-conversions`; the tests
+  `CMakeLists.txt` now mirrors it. Any macOS build path enabling Accelerate must carry
+  this flag or `src/ml/pca.c` (and other LAPACK consumers) fail to compile under gcc.

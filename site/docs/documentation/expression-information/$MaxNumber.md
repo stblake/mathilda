@@ -5,19 +5,22 @@
 
 ## Description
 
-```text
-$MaxNumber
-    gives the maximum arbitrary-precision number that can be
-    represented on this computer system.
+**`$MaxNumber`**
 
-With USE_MPFR builds, this is the largest finite value at machine
-precision under MPFR's current exponent range; otherwise it equals
-$MaxMachineNumber.
-```
+gives the maximum arbitrary-precision number that can be represented on this computer system.
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+With USE\_MPFR builds, this is the largest finite value at machine precision under MPFR's current exponent range; otherwise it equals $MaxMachineNumber.
+
+</details>
+
+## Examples (4)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= $MachinePrecision
@@ -28,8 +31,12 @@ Out[2]= 2.22045e-16
 
 In[3]:= {$MinMachineNumber, $MaxMachineNumber}
 Out[3]= {2.22507e-308, 1.79769e+308}
+```
 
-In[4]:= MachineNumberQ[$MaxNumber]   (* MPFR, not machine *)
+MPFR, not machine
+
+```mathematica
+In[4]:= MachineNumberQ[$MaxNumber]
 Out[4]= False
 ```
 
@@ -39,11 +46,9 @@ A Protected OwnValue registered in `system_constants_init` (`src/core.c`). In a 
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [$MachinePrecision](../../expression-information/$MachinePrecision/), [$MachineEpsilon](../../expression-information/$MachineEpsilon/), [$MinMachineNumber](../../expression-information/$MinMachineNumber/), [$MaxMachineNumber](../../expression-information/$MaxMachineNumber/), [$MinNumber](../../expression-information/$MinNumber/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

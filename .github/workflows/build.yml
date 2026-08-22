@@ -33,7 +33,6 @@ jobs:
       # Degrading gracefully is fine for a user; for this job it would mean
       # silently not checking the very files most likely to break.
       - name: Install dependencies
-        id: deps
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -42,14 +41,11 @@ jobs:
             libflint-dev libpcre2-dev libfftw3-dev
           # raylib is universe-only and not on every runner image. USE_GRAPHICS
           # degrades to a text placeholder without it, so this one is allowed to
-          # fail — but when it succeeds the renderer needs -lX11 spelled out, as
-          # in the invocation from issue #37.
-          if sudo apt-get install -y --no-install-recommends libraylib-dev libx11-dev; then
-            echo 'extra_libs=-llapack -lblas -lX11' >> "$GITHUB_OUTPUT"
-          else
-            echo "raylib unavailable — building with the placeholder renderer"
-            echo 'extra_libs=-llapack -lblas' >> "$GITHUB_OUTPUT"
-          fi
+          # fail. libx11-dev is installed alongside it so the transitive -lX11
+          # that `pkg-config --static --libs raylib` emits (makefile raylib
+          # block, issue #18) resolves at link — no manual EXTRA_LIBS needed.
+          sudo apt-get install -y --no-install-recommends libraylib-dev libx11-dev \
+            || echo "raylib unavailable — building with the placeholder renderer"
 
       # `make print-cc`, not `gcc --version`: the makefile prefers a versioned
       # gcc-NN over the plain name, so on this runner a bare `gcc --version`
@@ -81,9 +77,14 @@ jobs:
       - name: Packed-array opt-in audit (make check-packed-aware)
         run: make check-packed-aware
 
-      # The definitive check — glibc headers, -std=c99, the real flag set.
+      # The definitive check — glibc headers, -std=c99, the real flag set. This
+      # runs the EXACT command a user runs (plain `make`, no EXTRA_LIBS): the
+      # makefile now supplies the LAPACK/BLAS transitive libs (-llapack -lblas)
+      # and raylib's transitive -lX11 itself, so a missing-library bug that
+      # breaks a user's `git clone && make` can no longer hide behind a CI-only
+      # crutch. If a link fails here, the fix belongs in the makefile, not here.
       - name: Build
-        run: make -j"$(nproc)" EXTRA_LIBS="${{ steps.deps.outputs.extra_libs }}"
+        run: make -j"$(nproc)"
 
       # Piped stdin switches the REPL from readline to its NDJSON sidecar
       # protocol, so the smoke test speaks that — and asserts on the answer,

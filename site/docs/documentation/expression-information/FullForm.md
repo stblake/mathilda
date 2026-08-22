@@ -5,18 +5,39 @@
 
 ## Description
 
-```text
-FullForm[expr]
-    prints expr as its raw internal tree (heads written before arguments
-    in functional form, no operator or infix sugar).
-FullForm is a wrapper recognised by Print/Out; when an input evaluates
-to FullForm[expr] the wrapper is consumed by the printer and does not
-appear in the output.
+**`FullForm[expr]`**
+
+prints expr as its raw internal tree (heads written before arguments in functional form, no operator or infix sugar).
+
+<details>
+<summary>Notes</summary>
+
+FullForm is a wrapper recognised by Print/Out; when an input evaluates to FullForm\[expr\] the wrapper is consumed by the printer and does not appear in the output.
+
+</details>
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (5)
+
+```mathematica
+In[1]:= FullForm[a + b]
+Out[1]= Plus[a, b]
+
+In[2]:= FullForm[1/2]
+Out[2]= Rational[1, 2]
+
+In[3]:= FullForm[x^2 + 1]
+Out[3]= Plus[1, Power[x, 2]]
+
+In[4]:= FullForm[a/b]
+Out[4]= Times[a, Power[b, -1]]
+
+In[5]:= FullForm[x_Integer /; x > 0]
+Out[5]= Condition[Pattern[x, Blank[Integer]], Greater[x, 0]]
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -24,43 +45,16 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/print.c`](https://github.com/stblake/mathilda/blob/main/src/print.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_compile_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_transforms.c)
+- Tests: [`tests/test_graphics.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphics.c)
+- Tests: [`tests/test_ml_dist.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ml_dist.c)
+- Tests: [`tests/test_ml_predict.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ml_predict.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= FullForm[a + b]
-Out[1]= Plus[a, b]
-```
-
-```mathematica
-In[1]:= FullForm[1/2]
-Out[1]= Rational[1, 2]
-```
-
-```mathematica
-In[1]:= FullForm[x^2 + 1]
-Out[1]= Plus[1, Power[x, 2]]
-```
-
-```mathematica
-In[1]:= FullForm[a/b]
-Out[1]= Times[a, Power[b, -1]]
-```
-
-```mathematica
-In[1]:= FullForm[x_Integer /; x > 0]
-Out[1]= Condition[Pattern[x, Blank[Integer]], Greater[x, 0]]
-```
 
 ### Notes
 

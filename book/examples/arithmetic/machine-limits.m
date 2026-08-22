@@ -1,0 +1,4 @@
+$MachinePrecision
+$MachineEpsilon
+$MaxMachineNumber
+$MinMachineNumber

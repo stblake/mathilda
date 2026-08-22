@@ -5,18 +5,46 @@
 
 ## Description
 
-```text
-ExtendedGCD[n1, n2, ...]
-    gives the extended GCD {g, {r1, r2, ...}} of the integers ni,
-    where g == GCD[n1, ...] and g == r1 n1 + r2 n2 + ....
-Computed by folding GMP's mpz_gcdext pairwise; accepts machine and
-BigInt integers and threads over lists. Non-integer or inexact
-arguments leave ExtendedGCD unevaluated.
+**`ExtendedGCD[n1, n2, ...]`**
+
+gives the extended GCD {g, {r1, r2, ...}} of the integers ni, where g == GCD\[n1, ...\] and g == r1 n1 + r2 n2 + ....
+
+<details>
+<summary>Notes</summary>
+
+Computed by folding GMP's mpz\_gcdext pairwise; accepts machine and BigInt integers and threads over lists. Non-integer or inexact arguments leave ExtendedGCD unevaluated.
+
+</details>
+
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Worked examples (1)
+
+```mathematica
+In[1]:= ExtendedGCD[3, {5, 15}]
+Out[1]= {{1, {2, -1}}, {3, {1, 0}}}
 ```
 
-## Examples
+### Applications (5)
 
-_No verified examples yet for this function._
+```mathematica
+In[2]:= ExtendedGCD[12, 18]
+Out[2]= {6, {-1, 1}}
+
+In[3]:= ExtendedGCD[15, 25, 35]
+Out[3]= {5, {2, -1, 0}}
+
+In[4]:= ExtendedGCD[17, 100]
+Out[4]= {1, {-47, 8}}
+
+In[5]:= PowerMod[17, -1, 100]
+Out[5]= 53
+
+In[6]:= ExtendedGCD[2^64, 3^40]
+Out[6]= {1, {3997565229372176830, -6065478849745282079}}
+```
 
 ## Implementation notes
 
@@ -34,40 +62,16 @@ _No verified examples yet for this function._
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [OneIdentity](../../expression-information/OneIdentity/), [GCD](../../number-theory/GCD/)
 
 - D. E. Knuth, *The Art of Computer Programming, Vol. 2: Seminumerical Algorithms*, 3rd ed. (Addison-Wesley, 1997), §4.5.2.
 - Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_extended_gcd.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extended_gcd.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= ExtendedGCD[12, 18]
-Out[1]= {6, {-1, 1}}
-
-In[2]:= ExtendedGCD[15, 25, 35]
-Out[2]= {5, {2, -1, 0}}
-```
-
-```mathematica
-In[1]:= ExtendedGCD[17, 100]
-Out[1]= {1, {-47, 8}}
-
-In[2]:= PowerMod[17, -1, 100]
-Out[2]= 53
-```
-
-```mathematica
-In[1]:= ExtendedGCD[2^64, 3^40]
-Out[1]= {1, {3997565229372176830, -6065478849745282079}}
-```
 
 ### Notes
 

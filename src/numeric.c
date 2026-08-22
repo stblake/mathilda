@@ -684,6 +684,20 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
         return expr_copy((Expr*)e);
     }
 
+    /* Inexact contagion must not thread into the arguments of a non-numeric
+     * head: `1.0 x[1]` stays `1.0 x[1]`, never `1.0 x[1.0]` (which would leave
+     * an unbound x[1.0] and silently break, e.g., NMinimize's indexed-variable
+     * substitution). A numeric head (Plus, Times, Power, Sin, ...) still
+     * recurses below, so `1.0 + 2 x` → `1. + 2. x` and `1.0 + Sin[2]` numericalizes.
+     * Explicit N[] leaves spec.contagion false and keeps threading everywhere,
+     * matching Mathematica's N[x[1]] == x[1.]. */
+    if (spec.contagion) {
+        const Expr* h = e->data.function.head;
+        bool numeric_head = h && h->type == EXPR_SYMBOL
+            && (get_attributes(h->data.symbol.name) & ATTR_NUMERICFUNCTION);
+        if (!numeric_head) return expr_copy((Expr*)e);
+    }
+
     /* General function f[a, b, ...] — rebuild with numericalized args, then
      * feed the result to the evaluator to trigger any numeric fast paths in
      * the per-function builtins (e.g. trig.c's csin, power.c's cpow). */
@@ -1300,6 +1314,7 @@ bool numeric_contagion_args(Expr* const* args, size_t n, Expr** out) {
      * minimum MPFR precision so e.g. 1.0`50 + 1.0`20 lands at 20 digits
      * rather than preserving the 50-digit operand. */
     NumericSpec spec = numeric_machine_spec();
+    spec.contagion = true;   /* do not thread N into non-numeric heads' args */
 #ifdef USE_MPFR
     if (!any_machine && min_mpfr_prec > 0) {
         spec.mode = NUMERIC_MODE_MPFR;

@@ -798,12 +798,18 @@ bool eigen_parse_args(Expr* res, EigenOpts* opts) {
 
     opts->arg0 = res->data.function.args[0];
     opts->k_spec = NULL;
-    /* Default Cubics/Quartics: True so radicals are emitted by default --
-     * essential for the numerical path where Root[] objects cannot be
-     * numericalised.  Spec lists False as the default Solve option;
-     * Eigenvalues overrides to keep the closed-form pipeline functional. */
-    opts->cubics_radical = true;
-    opts->quartics_radical = true;
+    /* Default Cubics/Quartics: False, so a *general* irreducible cubic/quartic
+     * characteristic polynomial is returned as held Root[] objects (matching
+     * Mathematica and the spec).  The special families that are always solvable
+     * in clean radicals — binomials (a x^n + b), quadratic-in-x^m, and
+     * biquadratic-after-depression quartics — are still emitted in radical form
+     * regardless of these flags (see the solver dispatch in solvepoly.c), so a
+     * matrix like this one whose eigenvalues are compact nested radicals keeps
+     * its closed form.  Pass Cubics -> True / Quartics -> True to force radicals
+     * for the general case too.  Root[] objects numericalise, so the numeric
+     * path (N, NMinimize) works either way. */
+    opts->cubics_radical = false;
+    opts->quartics_radical = false;
     opts->method_given = false;
     opts->method = MATEIGEN_AUTOMATIC;
     opts->method_value = NULL;

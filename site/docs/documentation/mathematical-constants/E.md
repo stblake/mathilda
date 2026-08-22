@@ -5,28 +5,52 @@
 
 ## Description
 
-```text
-E
-    is the exponential constant e (base of natural logarithms), with
-    numerical value ~= 2.71828.
-E is a mathematical constant: it has attributes Constant and Protected,
-NumericQ[E] is True, and D[E, x] is 0. N[E, prec] evaluates it to any
-precision.
+**`E`**
+
+is the exponential constant e (base of natural logarithms), with numerical value ~= 2.71828.
+
+**`NumericQ[E] is True, and D[E, x] is 0. N[E, prec] evaluates it to any`**
+
+<details>
+<summary>Notes</summary>
+
+E is a mathematical constant: it has attributes Constant and Protected, precision.
+
+</details>
+
+## Examples (4)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (4)
+
+```mathematica
+In[1]:= Log[E^3]
+Out[1]= 3
+
+In[2]:= N[E, 40]
+Out[2]= 2.7182818284590452353602874713526624977572
+
+In[3]:= Sum[1/n!, {n, 0, Infinity}]
+Out[3]= E
+
+In[4]:= Limit[(1 + 1/n)^n, n -> Infinity]
+Out[4]= E
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
 - Attributes `Constant`, `Protected`. `Attributes[E] = {Constant, Protected}`;
+  the symbol cannot be reassigned.
+- Propagated as an exact, unevaluated symbol; `NumericQ[E]` is `True` and
+  `D[E, x] = 0`.
+- `N[E]` gives the machine value `2.71828`; `N[E, prec]` gives any precision
+  (MPFR `mpfr_exp` of 1), e.g.
+  `N[E, 50] = 2.71828182845904523536028747135266249775724709369996`.
+- Participates in exact numeric work, e.g.
+  `Round[E^100] = 26881171418161354484126255515800135873611119`.
 
 **Attributes:** `Constant`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 
@@ -34,28 +58,6 @@ _No verified examples yet for this function._
 - Specification: [`docs/spec/builtins/mathematical-constants.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/mathematical-constants.md)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Log[E^3]
-Out[1]= 3
-```
-
-```mathematica
-In[1]:= N[E, 40]
-Out[1]= 2.7182818284590452353602874713526624977572
-```
-
-```mathematica
-In[1]:= Sum[1/n!, {n, 0, Infinity}]
-Out[1]= E
-```
-
-```mathematica
-In[1]:= Limit[(1 + 1/n)^n, n -> Infinity]
-Out[1]= E
-```
 
 ### Notes
 

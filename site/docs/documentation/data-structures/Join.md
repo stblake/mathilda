@@ -5,17 +5,19 @@
 
 ## Description
 
-```text
-Join[list1, list2, ...]
-    Concatenates lists or other expressions that share the same head.
-Join[list1, list2, ..., n]
-    Joins the objects at level n in each of the lists.
-    Handles ragged arrays by concatenating successive elements at level n.
-```
+**`Join[list1, list2, ...]`**
 
-## Examples
+Concatenates lists or other expressions that share the same head.
 
-All examples below are verified against the current Mathilda build.
+**`Join[list1, list2, ..., n]`**
+
+Joins the objects at level n in each of the lists. Handles ragged arrays by concatenating successive elements at level n.
+
+## Examples (4)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= Sort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]
@@ -37,11 +39,13 @@ Out[4]= <|"a" -> 1, "b" -> 3, "c" -> 4|>
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Sort](../../data-structures/Sort/), [SortBy](../../data-structures/SortBy/), [Total](../../arithmetic/Total/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compile_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_linalg.c)
+- Tests: [`tests/test_findclusters_ndim.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findclusters_ndim.c)
+- Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)

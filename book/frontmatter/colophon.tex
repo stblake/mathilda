@@ -1,0 +1,19 @@
+\chapter{Colophon}
+
+This book was written in \LaTeX\ using the \textsf{memoir} document class, with
+\textsf{listings} for the verified transcripts, \textsf{tcolorbox} for the
+callout boxes, and \textsf{biblatex} for the references. Body text is set in
+Latin Modern; transcripts are set in Inconsolata.
+
+Every \texttt{In[\,]}/\texttt{Out[\,]} transcript is generated at build time by
+running its input through the Mathilda binary via the system's NDJSON pipe
+protocol, using the same driver (\texttt{site/verify\_tutorial.py}) that verifies
+the online tutorials. Every built-in name printed as a hyperlink is resolved
+from Mathilda's own builtin index (\texttt{site/docs/assets/builtins.json}) to
+its reference page. The tools that do this---\texttt{book/tools/gen\_links.py},
+\texttt{book/tools/build\_examples.py}, and \texttt{book/tools/check\_links.py}
+---are small and are meant to be read.
+
+The book's guiding principles, and instructions for extending it, are recorded in
+\texttt{book/CONTEXT.md}; its section-by-section roadmap is in
+\texttt{book/ROADMAP.md}.

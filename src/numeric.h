@@ -72,6 +72,13 @@ typedef struct {
      * it untouched (harmless) and every MACHINE-mode spec is built through
      * numeric_machine_spec(), which clears it. */
     bool preserve_inexact;
+    /* Inexact-contagion intent (set only by numeric_contagion_args when a
+     * Plus/Times has an inexact operand). When true, numericalize() must NOT
+     * thread into the arguments of a non-numeric head: `1.0 x[1]` stays
+     * `1.0 x[1]`, never `1.0 x[1.0]`. Numeric heads (Plus, Times, Power, Sin,
+     * ...) still recurse, so `1.0 + 2 x` → `1. + 2. x`. Explicit N[] leaves
+     * this false and keeps threading everywhere (N[x[1]] == x[1.]). */
+    bool contagion;
 } NumericSpec;
 
 /* Decimal-digit equivalent of one full machine double's mantissa,
@@ -92,6 +99,7 @@ static inline NumericSpec numeric_machine_spec(void) {
     s.mode = NUMERIC_MODE_MACHINE;
     s.bits = 0;
     s.preserve_inexact = false;
+    s.contagion = false;
     return s;
 }
 

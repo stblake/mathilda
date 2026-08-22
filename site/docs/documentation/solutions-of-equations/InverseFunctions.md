@@ -5,39 +5,13 @@
 
 ## Description
 
-```text
-InverseFunctions is an option for Solve that enables the
-    inverse-function specialist for elementary invertible heads
-    (Log, Exp, Sin, Cos, Tan, ArcSin, ArcCos, Sinh, ..., and
-    integer Power).  Default: Automatic (enabled).  Setting it
-    to False disables the specialist; equations that can only
-    be solved through inversion then return unevaluated.
-```
+InverseFunctions is an option for Solve that enables the inverse-function specialist for elementary invertible heads (Log, Exp, Sin, Cos, Tan, ArcSin, ArcCos, Sinh, ..., and integer Power).  Default: Automatic (enabled).  Setting it to False disables the specialist; equations that can only be solved through inversion then return unevaluated.
 
-## Examples
+## Examples (3)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
 
-## Implementation notes
-
-`InverseFunctions` is an option symbol for `Solve`, not a callable function. It is interned in `sym_names.c` and documented in `solve.c`; it has no builtin handler. `solve.c`'s option parser recognises `InverseFunctions -> spec`: the default `Automatic` (and any value other than `False`) leaves the `enabled` flag set in the solver state (`solveinv.h`), while `InverseFunctions -> False` disables it. When enabled, `Solve` is allowed to "peel" invertible heads (Exp, Log, trig, powers) off an equation by applying their inverse function — the work is done by the inverse-function specialist registered as `` Solve`SolveInverseFunctions `` in `solveinv.c`. The symbol is consumed only as a configuration key.
-
-**Attributes:** none registered.
-
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
-
-## References
-
-- Source: [`src/solve.c`](https://github.com/stblake/mathilda/blob/main/src/solve.c)
-- Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)
-
-## Notes & additional examples
-
-### Worked examples
-
-With the specialist enabled (the default), a transcendental equation is solved by inverting its head; disabling it returns the equation unevaluated:
+### Applications (3)
 
 ```mathematica
 In[1]:= Solve[Sin[x] == 1/2, x]
@@ -45,14 +19,23 @@ Out[1]= {{x -> ConditionalExpression[2 C[1] Pi + 5/6 Pi, Element[C[1], Integers]
 
 In[2]:= Solve[Sin[x] == 1/2, x, InverseFunctions -> False]
 Out[2]= Solve[Sin[x] == 1/2, x, InverseFunctions -> False]
+
+In[3]:= Solve[Exp[x] == 5, x]
+Out[3]= {{x -> ConditionalExpression[Log[5] + (2*I) C[1] Pi, Element[C[1], Integers]]}}
 ```
 
-Inverting `Exp` yields the full set of complex logarithm branches:
+## Implementation notes
 
-```mathematica
-In[1]:= Solve[Exp[x] == 5, x]
-Out[1]= {{x -> ConditionalExpression[Log[5] + (2*I) C[1] Pi, Element[C[1], Integers]]}}
-```
+`InverseFunctions` is an option symbol for `Solve`, not a callable function. It is interned in `sym_names.c` and documented in `solve.c`; it has no builtin handler. `solve.c`'s option parser recognises `InverseFunctions -> spec`: the default `Automatic` (and any value other than `False`) leaves the `enabled` flag set in the solver state (`solveinv.h`), while `InverseFunctions -> False` disables it. When enabled, `Solve` is allowed to "peel" invertible heads (Exp, Log, trig, powers) off an equation by applying their inverse function — the work is done by the inverse-function specialist registered as `` Solve`SolveInverseFunctions `` in `solveinv.c`. The symbol is consumed only as a configuration key.
+
+**Attributes:** none registered.
+
+## References
+
+- Source: [`src/solve.c`](https://github.com/stblake/mathilda/blob/main/src/solve.c)
+- Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)
+
+## Notes & additional examples
 
 ### Notes
 

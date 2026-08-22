@@ -5,20 +5,32 @@
 
 ## Description
 
-```text
-FileExtension["file"]
-    gives the file extension for a file name.
-FileExtension["name.ext"] gives "ext".
-FileExtension gives the extension that appears after the last . in a file name.
-If there are multiple endings to a file name, separated by ., FileExtension gives only the last one.
-FileExtension gives "" if there is no file extension, if the file name has the form of a directory name, or ends with a . character.
-FileExtension ignores any directory specification.
-FileExtension by default assumes pathname separators and other conventions suitable for your operating system.
+**`FileExtension["file"]`**
+
+gives the file extension for a file name.
+
+**`FileExtension["name.ext"] gives "ext".`**
+
+<details>
+<summary>Notes</summary>
+
+FileExtension gives the extension that appears after the last . in a file name. If there are multiple endings to a file name, separated by ., FileExtension gives only the last one. FileExtension gives "" if there is no file extension, if the file name has the form of a directory name, or ends with a . character. FileExtension ignores any directory specification. FileExtension by default assumes pathname separators and other conventions suitable for your operating system.
+
+</details>
+
+## Examples (2)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (2)
+
+```mathematica
+In[1]:= FileExtension["report.txt"]
+Out[1]= "txt"
+
+In[2]:= FileExtension["/tmp/data/report.txt"]
+Out[2]= "txt"
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -31,26 +43,13 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/files.c`](https://github.com/stblake/mathilda/blob/main/src/files.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
+- Tests: [`tests/test_files.c`](https://github.com/stblake/mathilda/blob/main/tests/test_files.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= FileExtension["report.txt"]
-Out[1]= "txt"
-
-In[2]:= FileExtension["/tmp/data/report.txt"]
-Out[2]= "txt"
-```
 
 ### Notes
 

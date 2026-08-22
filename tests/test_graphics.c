@@ -86,6 +86,25 @@ void test_show_requires_graphics_argument(void) {
     assert_eval_eq("Show[5]", "Show[5]", 0);
 }
 
+void test_export_graphics_pdf(void) {
+    /* PDF export is the dependency-free, headless vector path, so it runs in
+     * the suite (PNG/JPEG need a real GL context and are not exercised here).
+     * Export returns the path on success and $Failed on a claimed-but-failed
+     * write, so the returned path is itself proof the file was written. */
+    assert_eval_eq(
+        "StringQ[Export[\"/tmp/mathilda_test_gx.pdf\", Plot[Sin[x], {x, 0, 6}]]]",
+        "True", 0);
+    assert_eval_eq("FileExistsQ[\"/tmp/mathilda_test_gx.pdf\"]", "True", 0);
+    assert_eval_eq(
+        "FileExistsQ[Export[\"/tmp/mathilda_test_gx2.pdf\", "
+        "Graphics[{Line[{{0, 0}, {1, 1}, {2, 0}}]}]]]",
+        "True", 0);
+    /* Graphics3D export is not supported yet -> $Failed. */
+    assert_eval_eq(
+        "Export[\"/tmp/mathilda_test_gx3.pdf\", Graphics3D[{Point[{0, 0, 0}]}]]",
+        "$Failed", 0);
+}
+
 void test_graphics_options_registered(void) {
     /* Options[Graphics] must list the options the renderer honours, not {}. */
     assert_eval_eq("Length[Options[Graphics]] > 0", "True", 0);
@@ -867,6 +886,7 @@ int main(void) {
     TEST(test_contourplot_max_recursion_rejects_negative);
     TEST(test_contourplot_max_recursion_cap_terminates);
     TEST(test_show_requires_graphics_argument);
+    TEST(test_export_graphics_pdf);
     TEST(test_graphics_options_registered);
     TEST(test_show_merges_options);
     TEST(test_show_merges_frame_option);

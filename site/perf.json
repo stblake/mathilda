@@ -1,0 +1,158 @@
+{
+ "FindClusters": {
+  "commit": "2dea9cc051822ad480cd5c43bcc91a49250149be",
+  "host": "arm64 Darwin",
+  "rows": [
+   {
+    "case": "Agglomerate (default)",
+    "n": 1000,
+    "seconds": 0.000545,
+    "time": "545 us"
+   },
+   {
+    "case": "Agglomerate (default)",
+    "n": 10000,
+    "seconds": 0.006542,
+    "time": "6.5 ms"
+   },
+   {
+    "case": "Agglomerate (default)",
+    "n": 100000,
+    "seconds": 0.096862,
+    "time": "96.9 ms"
+   },
+   {
+    "case": "KMeans, 5 clusters",
+    "n": 1000,
+    "seconds": 0.000423,
+    "time": "423 us"
+   },
+   {
+    "case": "KMeans, 5 clusters",
+    "n": 10000,
+    "seconds": 0.004499,
+    "time": "4.5 ms"
+   },
+   {
+    "case": "KMeans, 5 clusters",
+    "n": 100000,
+    "seconds": 0.05591,
+    "time": "55.9 ms"
+   },
+   {
+    "case": "2-D points",
+    "n": 500,
+    "seconds": 0.100978,
+    "time": "101.0 ms"
+   },
+   {
+    "case": "2-D points",
+    "n": 1000,
+    "seconds": 0.397827,
+    "time": "397.8 ms"
+   },
+   {
+    "case": "2-D points",
+    "n": 2000,
+    "seconds": 1.5467,
+    "time": "1.55 s"
+   }
+  ]
+ },
+ "Mean": {
+  "commit": "2dea9cc051822ad480cd5c43bcc91a49250149be",
+  "host": "arm64 Darwin",
+  "rows": [
+   {
+    "case": "list of machine reals",
+    "n": 1000,
+    "seconds": 5e-06,
+    "time": "5 us"
+   },
+   {
+    "case": "list of machine reals",
+    "n": 10000,
+    "seconds": 7e-06,
+    "time": "7 us"
+   },
+   {
+    "case": "list of machine reals",
+    "n": 100000,
+    "seconds": 2.1e-05,
+    "time": "21 us"
+   }
+  ]
+ },
+ "Nearest": {
+  "commit": "2dea9cc051822ad480cd5c43bcc91a49250149be",
+  "host": "arm64 Darwin",
+  "rows": [
+   {
+    "case": "nearest to a target",
+    "n": 1000,
+    "seconds": 0.000367,
+    "time": "367 us"
+   },
+   {
+    "case": "nearest to a target",
+    "n": 10000,
+    "seconds": 0.003547,
+    "time": "3.5 ms"
+   },
+   {
+    "case": "nearest to a target",
+    "n": 100000,
+    "seconds": 0.03434,
+    "time": "34.3 ms"
+   }
+  ]
+ },
+ "Sort": {
+  "commit": "2dea9cc051822ad480cd5c43bcc91a49250149be",
+  "host": "arm64 Darwin",
+  "rows": [
+   {
+    "case": "list of machine reals",
+    "n": 1000,
+    "seconds": 3.7e-05,
+    "time": "37 us"
+   },
+   {
+    "case": "list of machine reals",
+    "n": 10000,
+    "seconds": 0.000117,
+    "time": "117 us"
+   },
+   {
+    "case": "list of machine reals",
+    "n": 100000,
+    "seconds": 0.001235,
+    "time": "1.2 ms"
+   }
+  ]
+ },
+ "Total": {
+  "commit": "2dea9cc051822ad480cd5c43bcc91a49250149be",
+  "host": "arm64 Darwin",
+  "rows": [
+   {
+    "case": "list of machine reals",
+    "n": 1000,
+    "seconds": 5e-06,
+    "time": "5 us"
+   },
+   {
+    "case": "list of machine reals",
+    "n": 10000,
+    "seconds": 7e-06,
+    "time": "7 us"
+   },
+   {
+    "case": "list of machine reals",
+    "n": 100000,
+    "seconds": 2e-05,
+    "time": "20 us"
+   }
+  ]
+ }
+}

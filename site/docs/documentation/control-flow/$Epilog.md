@@ -5,15 +5,20 @@
 
 ## Description
 
-```text
-$Epilog
-    is a symbol whose value, if any, is evaluated once when the
-    Mathilda session terminates (via Quit[] or EOF).
+**`$Epilog`**
+
+is a symbol whose value, if any, is evaluated once when the Mathilda session terminates (via Quit\[\] or EOF).
+
+## Examples (1)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (1)
+
+```mathematica
+In[1]:= $Epilog := Print["bye"]
+Out[1]= Null
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -21,26 +26,12 @@ A REPL session hook, not a builtin. Registered (docstring only) in `repl_hooks_i
 
 **Attributes:** none registered.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/repl_hooks.c`](https://github.com/stblake/mathilda/blob/main/src/repl_hooks.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= $Epilog := Print["bye"]
-Out[1]= Null
-
-In[2]:= Quit[]
-"bye"
-```
 
 ### Notes
 

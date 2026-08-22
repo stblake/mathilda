@@ -18,8 +18,9 @@
     • kernelStatus store from notebook.ts for status display
 -->
 <script lang="ts">
-  import { onMount, tick, createEventDispatcher } from 'svelte';
-  import { setFocused, setNotebookWidth, setNotebookHeight } from './canvas';
+  import { onMount, onDestroy, tick, createEventDispatcher } from 'svelte';
+  import { setFocused, setNotebookWidth, setNotebookHeight, addQueryNotebook, openRefpage,
+           registerPane, publishPaneFlags, retractPane } from './canvas';
   const dispatch = createEventDispatcher();
   import { get } from 'svelte/store';
   import CellShell from './CellShell.svelte';
@@ -35,7 +36,8 @@
     selectedCells,
     clearSelection,
   } from './notebook';
-  import type { OutputItem, CellType } from './notebook';
+  import { recordOp } from './status';
+  import type { OutputItem, CellType, NotebookRow } from './notebook';
   import {
     evaluateCell,
   } from './ipc';
@@ -56,12 +58,28 @@
   let nbStore = nb.store;
   $: nbStore = nb.store;
 
+  /* Is this a reference page? Derived from the content as well as the flag:
+     a card opened before the flag existed, or restored from a saved library
+     (which does not persist it), still has 'ref' cells and should behave as
+     documentation -- non-editable headings, no cell-type control. */
+  $: isRefpage = !!nb.refpage || $nbStore.some(r => r.cells[0]?.type === 'ref');
+
   // ---------------------------------------------------------------------------
   // Mount animation
 
   let mounted = false;
   onMount(() => {
     requestAnimationFrame(() => { mounted = true; });
+    /* A card opened to answer a query arrives with its cell already filled;
+     * evaluate it once so the answer is there when the card appears. */
+    if (nb.autoRun) {
+      nb.autoRun = false;
+      tick().then(() => {
+        const rows = get(nb.store);
+        const first = rows.find(r => r.cells[0]?.source.trim());
+        if (first) runCell(first.cells[0].id, first.cells[0].source);
+      });
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -244,6 +262,38 @@
 
   const cellFocusFns: Record<string, () => void> = {};
 
+  /* Walk from a gap between rows in one direction until a cell that can take the caret is
+     found, and return its focus function.
+   *
+   * SKIPPING IS THE POINT. Only code cells (CodeMirror) and editable prose cells
+   * (contenteditable) register a focus function; a `ref` cell -- the generated reference
+   * prose on a documentation page -- renders read-only Markdown and registers none. Stepping
+   * one row at a time therefore stalled: the insertion bar landed on the gap beside a `ref`
+   * row, focusing it did nothing, and the next press tried the same unfocusable row again, so
+   * arrows appeared to get stuck above and below every paragraph of a documentation page. The
+   * caret now steps OVER anything it cannot enter and lands on the next cell that it can. */
+  function seekFocusable(rows: NotebookRow[], fromGap: number, dir: 1 | -1): boolean {
+    let i = dir === -1 ? fromGap - 1 : fromGap;
+    while (i >= 0 && i < rows.length) {
+      const row = rows[i];
+      /* Coming from above, enter a row at its first cell; from below, at its last. */
+      const cell = dir === -1 ? row.cells[row.cells.length - 1] : row.cells[0];
+      const fn = cell ? cellFocusFns[cell.id] : undefined;
+      if (fn) {
+        /* TRY IT, THEN CHECK. A registered focus function is a claim, not a guarantee: a
+           read-only heading used to register one that called .focus() on an element with no
+           tabindex, which silently did nothing and left the caret nowhere. Verifying against
+           document.activeElement means an ineffective focuser costs one skipped row instead of
+           ending navigation, whatever registers it in future. */
+        const before = document.activeElement;
+        fn();
+        if (document.activeElement !== before) return true;
+      }
+      i += dir;
+    }
+    return false;
+  }
+
   function handleRegister(e: CustomEvent<{ id: string; fn: () => void }>) {
     cellFocusFns[e.detail.id] = e.detail.fn;
   }
@@ -283,6 +333,19 @@
 
   let collapsedSections = new Set<string>();
 
+  /* Every heading row, and whether any is currently open. One button rather
+     than two: it collapses everything while anything is open, and expands
+     everything once all are closed. */
+  $: sectionRowIds = $nbStore
+    .filter(r => r.cells[0]?.type === 'section' || r.cells[0]?.type === 'subsection')
+    .map(r => r.id);
+  $: allSectionsCollapsed =
+    sectionRowIds.length > 0 && sectionRowIds.every(id => collapsedSections.has(id));
+
+  function toggleAllSections() {
+    collapsedSections = allSectionsCollapsed ? new Set() : new Set(sectionRowIds);
+  }
+
   function toggleSection(rowId: string) {
     collapsedSections = collapsedSections.has(rowId)
       ? new Set([...collapsedSections].filter(id => id !== rowId))
@@ -292,12 +355,35 @@
   // Reactive set of hidden row IDs — depends on BOTH $nbStore AND collapsedSections.
   // Plain function (not isHidden()) so the $: makes Svelte track collapsedSections,
   // ensuring {#if !hiddenRows.has(row.id)} re-evaluates immediately on toggle.
+  /* How deeply each row sits under a heading, so content reads as belonging to
+     its section rather than sitting flush with it. 0 for a section heading,
+     1 under a section (and for a subsection heading), 2 under a subsection. */
+  $: rowDepth = (() => {
+    const depth = new Map<string, number>();
+    const rows = $nbStore;
+    let cur = 0;
+    for (const row of rows) {
+      const t = row.cells[0]?.type;
+      if (t === 'section') { depth.set(row.id, 0); cur = 1; }
+      else if (t === 'subsection') { depth.set(row.id, 1); cur = 2; }
+      else depth.set(row.id, cur);
+    }
+    return depth;
+  })();
+
   $: hiddenRows = (() => {
     const hidden = new Set<string>();
     const rows = $nbStore;
     for (let ri = 0; ri < rows.length; ri++) {
       const currentType = rows[ri]?.cells[0]?.type ?? 'code';
       let hide = false;
+      /* Only the NEAREST subsection above a row is its parent. Any subsection
+       * before that one is a SIBLING, and its fold state says nothing about
+       * this row -- but the scan used to test every subsection it walked past,
+       * so collapsing "Basic examples" also emptied "Options" and
+       * "Applications" below it. Once the parent has been seen and is open, keep
+       * walking only to find the enclosing section. */
+      let parentSubsectionSeen = false;
       for (let i = ri - 1; i >= 0; i--) {
         const cell = rows[i]?.cells[0];
         if (!cell) continue;
@@ -306,9 +392,18 @@
           break; // stop at first section boundary
         }
         if (cell.type === 'subsection') {
-          if (currentType === 'section' || currentType === 'subsection') break;
-          if (collapsedSections.has(rows[i].id)) { hide = true; break; }
-          // Not collapsed — keep scanning for parent section.
+          // A section is never nested inside a subsection.
+          if (currentType === 'section') break;
+          // A subsection's parent is the SECTION, not the subsection before it.
+          // Breaking here meant a subsection heading that follows a sibling
+          // never asked whether its section was collapsed, so it stayed visible
+          // with all its content hidden -- a heading that could not be opened.
+          if (currentType === 'subsection') continue;
+          if (!parentSubsectionSeen) {
+            parentSubsectionSeen = true;
+            if (collapsedSections.has(rows[i].id)) { hide = true; break; }
+          }
+          // A sibling, or an open parent: keep scanning for the section.
         }
       }
       if (hide) hidden.add(rows[ri].id);
@@ -332,6 +427,31 @@
     const ri = rowList.findIndex((r: any) => r.id === e.detail.rowId);
     const id = nb.store.insertRowAt(ri + 1);
     await tick(); cellFocusFns[id]?.();
+  }
+
+  /* `mathilda-refpage` is a custom DOM event bubbled up from the name grid in
+     Output.svelte (and from refpages.ts's document-level Cmd+click and F1
+     handlers), so the grid needs no prop threaded down through CellShell.
+     Attached as an action rather than `on:mathilda-refpage` because Svelte's
+     element typings only know standard DOM events. */
+  function nameQueryListener(node: HTMLElement) {
+    const handler = (e: Event) => onNameQuery(e);
+    node.addEventListener('mathilda-refpage', handler);
+    return { destroy() { node.removeEventListener('mathilda-refpage', handler); } };
+  }
+
+  /* A name in a `?pat*` result was clicked: open its documentation as a new
+     card to the right. Appending a cell to this notebook instead put the answer
+     at the very bottom, which in a long notebook is off-screen and reads as the
+     click having done nothing. */
+  async function onNameQuery(e: Event) {
+    const detail = (e as CustomEvent<{ name: string; at?: { x: number; y: number } | null }>).detail;
+    const name = detail?.name;
+    if (!name) return;
+    /* The full generated reference page, not `?name`: the terse docstring is
+       what the ? query already gives, and a click asking for documentation
+       should land on the examples and notes. */
+    openRefpage(nb.id, name, detail?.at);
   }
 
   async function addCellLeft(e: CustomEvent<{ rowId: string; cellIdx: number }>) {
@@ -368,12 +488,39 @@
     }
   }
 
+  /** Run an inclusive index range over allCells(). Backs the toolbar's
+   *  "evaluate from here" and "evaluate above".
+   *
+   *  Deliberately does NOT reset the exec counter the way runAll does: a partial
+   *  run should not renumber the cells it did not touch. */
+  async function runRange(fromIdx: number, toIdx: number) {
+    const cells = nb.store.allCells();
+    const lo = Math.max(0, fromIdx);
+    const hi = Math.min(cells.length - 1, toIdx);
+    for (let i = lo; i <= hi; i++) {
+      const cell = cells[i];
+      if (cell?.type === 'code' && cell.source.trim()) {
+        await runCell(cell.id, cell.source);
+      }
+    }
+  }
+
+  /** Run one cell by id — the toolbar has an id, not a source string. */
+  async function runCellById(cellId: string) {
+    const cell = nb.store.allCells().find((c: any) => c.id === cellId);
+    if (cell) await runCell(cell.id, cell.source);
+  }
+
   async function runCell(cellId: string, source: string) {
     if (!source.trim()) return;
-    nb.store.stampExec(cellId);
+    const execIdx = nb.store.stampExec(cellId);
     nb.store.clearOutput(cellId);
     nb.store.setStatus(cellId, 'running');
     kernelStatus.set('busy');
+    /* performance.now(), not Date.now(): a monotonic clock, so a system clock
+       adjustment mid-evaluation cannot produce a negative duration. */
+    const t0 = performance.now();
+    let ok = true;
     try {
       await evaluateCell(source, (msg: OutputMessage) => {
         const item = msgToOutputItem(msg);
@@ -383,10 +530,15 @@
       });
       nb.store.setStatus(cellId, 'done');
     } catch (err) {
+      ok = false;
       nb.store.appendOutput(cellId, { kind: 'error', text: String(err) });
       nb.store.setStatus(cellId, 'error');
       kernelStatus.set('dead');
     } finally {
+      /* Measured around the whole request, which is what a user means by "how
+         long did that take" -- it includes the wait for the single kernel mutex
+         when another pane is already running something. */
+      recordOp({ label: `In[${execIdx}]`, ms: performance.now() - t0, ok, source });
       if (get(kernelStatus) !== 'dead') kernelStatus.set('ready');
     }
   }
@@ -394,9 +546,23 @@
   function msgToOutputItem(msg: OutputMessage): OutputItem | null {
     switch (msg.type) {
       case 'expr':   return { kind: 'expr', text: msg.payload, latex: (msg as any).latex };
+      case 'usage':  return { kind: 'usage',  text: msg.payload,
+                              symbol: (msg as any).symbol };
+      case 'names':  return { kind: 'names',  names: (msg as any).payload ?? [] };
       case 'error':  return { kind: 'error',  text: msg.message };
       case 'stream': return { kind: 'stream', text: (msg as any).text ?? '' };
       case 'plot':   return { kind: 'plot',   data: msg.payload };
+      case 'image':  return { kind: 'image',
+                              w: (msg as any).payload?.w ?? 0,
+                              h: (msg as any).payload?.h ?? 0,
+                              channels: (msg as any).payload?.channels ?? 1,
+                              data: (msg as any).payload?.data ?? '',
+                              depth: (msg as any).payload?.depth,
+                              slice: (msg as any).payload?.slice,
+                              /* The six boundary faces of a volume, when the kernel sent them:
+                                 enough for a rotatable opaque block, since only three are ever
+                                 visible at once. */
+                              faces: (msg as any).payload?.faces };
       case 'html':   return { kind: 'html',   html: (msg as any).payload ?? '' };
       default:       return null;
     }
@@ -455,17 +621,11 @@
       // Arrow up from insertion point → enter the cell ABOVE the cursor
       // insertionIdx N = gap between row[N-1] and row[N].
       // "Above" = row[N-1], last cell in that row.
-      if (insertionIdx > 0) {
-        const targetRow = rows[insertionIdx - 1];
-        if (targetRow) {
-          insertionIdx = null;
-          const lastCell = targetRow.cells[targetRow.cells.length - 1];
-          if (lastCell) cellFocusFns[lastCell.id]?.();
-        } else {
-          insertionIdx = Math.max(0, insertionIdx - 1);
-        }
+      if (insertionIdx > 0 && seekFocusable(rows, insertionIdx, -1)) {
+        insertionIdx = null;
       } else {
-        // Already at top — dismiss cursor
+        // Nothing focusable above (only prose, or already at the top) — dismiss the cursor
+        // rather than leaving it parked where another press would do nothing.
         insertionIdx = null;
       }
       return;
@@ -476,15 +636,8 @@
       // Arrow down from insertion point → enter the cell BELOW the cursor
       // insertionIdx N = gap between row[N-1] and row[N].
       // "Below" = row[N], first cell in that row.
-      if (insertionIdx < rows.length) {
-        const targetRow = rows[insertionIdx];
-        if (targetRow) {
-          insertionIdx = null;
-          const firstCell = targetRow.cells[0];
-          if (firstCell) cellFocusFns[firstCell.id]?.();
-        } else {
-          insertionIdx = Math.min(rows.length, insertionIdx + 1);
-        }
+      if (insertionIdx < rows.length && seekFocusable(rows, insertionIdx, 1)) {
+        insertionIdx = null;
       } else {
         insertionIdx = null;
       }
@@ -505,11 +658,81 @@
       await tick(); cellFocusFns[id]?.();
     }
   }
+
+  /* ---------------------------------------------------------------------------
+     Hand this card's controls to the toolbar.
+
+     Registered for every card, not only the focused one: the registry is keyed
+     by notebook id and the toolbar reads only the ACTIVE pane's entry, so a
+     canvas card's presence costs nothing and means commands that target a
+     notebook by id have somewhere to go.
+
+     The stable methods go up ONCE, in onMount. The volatile flags go up in a
+     reactive block. Publishing both together meant every keystroke replaced the
+     whole record -- `allSectionsCollapsed` derives from the notebook's rows --
+     and re-ran every toolbar subscriber.
+
+     `paneToken` identifies this card instance. Switching between canvas and
+     focused mode destroys one card and creates another for the SAME notebook id,
+     and Svelte does not promise the teardown runs first; without the token, a
+     late destroy would delete the entry the replacement card had just
+     registered. */
+  const paneToken = {};
+
+  /* Registered in the component body, NOT in onMount.
+     Reactive blocks run after the body but before onMount, so registering there
+     meant the first publishPaneFlags below was rejected for having no owning
+     token yet -- and since the block only re-runs when one of the flags changes,
+     a notebook whose rows never change after mount (one restored from a saved
+     library, say) never got an entry at all. Its toolbar then had no flags:
+     "Collapse all sections" absent on a notebook that has sections, and the
+     layout and collapse labels showing the wrong state.
+     Nothing here touches the DOM, so the body is a valid place to do it. */
+  registerPane(nb.id, paneToken, {
+      notebookId: nb.id,
+      store: nb.store,
+      runAll,
+      runCell: runCellById,
+      runRange,
+      /* A newly inserted cell has no focus callback yet: the store mutation is
+         flushed on the next tick, and the callback is registered when the new
+         CellShell mounts. Callers used to fire this immediately after inserting
+         and the optional call silently did nothing, so Split, Duplicate and
+         Insert never moved the caret. Wait for the cell to exist, and give
+         CodeMirror the extra frame it needs on top of that. */
+      focusCell: (cellId: string) => {
+        if (cellFocusFns[cellId]) { cellFocusFns[cellId](); return; }
+        tick().then(() => {
+          if (cellFocusFns[cellId]) cellFocusFns[cellId]();
+          else setTimeout(() => cellFocusFns[cellId]?.(), 60);
+        });
+      },
+      toggleLayout: () => { horizontal = !horizontal; },
+      rename: startRename,
+      toggleAllSections,
+      toggleCollapse: onToggleCollapse,
+      close: () => removeNotebook(nb.id),
+  });
+
+  /* Every identifier this block reads must stay written out here. Svelte 4
+     derives a reactive block's dependencies from the identifiers it
+     syntactically mentions, so hoisting this object into a helper function would
+     stop the block re-running and freeze the toolbar's icon states. */
+  $: publishPaneFlags(nb.id, paneToken, {
+    horizontal,
+    allSectionsCollapsed,
+    hasSections: sectionRowIds.length > 0,
+    collapsed: !!nb.collapsed,
+  });
+
+  onDestroy(() => retractPane(nb.id, paneToken));
+
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
   class="nb-card"
+  use:nameQueryListener
   class:mounted
   class:collapsed={nb.collapsed}
   class:focused-card={focused}
@@ -524,19 +747,14 @@
 >
   <!-- Title bar — only pointerdown here; move/up handled by cardEl after setPointerCapture -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <!-- In focused mode this bar is not rendered at all: its four controls and
+       its title move up into the app bar, which would otherwise sit directly
+       on top of it showing the same notebook name twice. -->
+  {#if !focused}
   <div
     class="card-titlebar"
     on:pointerdown={onTitlePointerDown}
   >
-    <!-- Back to canvas button — only in focused full-screen mode -->
-    {#if focused}
-      <button
-        class="tb-btn tb-back"
-        title="Back to canvas (pinch out)"
-        on:click|stopPropagation={() => setFocused(null)}
-      >⤡</button>
-    {/if}
-
     {#if renaming}
       <!-- In-place editable title — looks identical to the plain title -->
       <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -568,6 +786,13 @@
         title={horizontal ? 'Vertical layout' : 'Horizontal layout'}
         on:click|stopPropagation={() => { horizontal = !horizontal; }}
       >{horizontal ? '↕' : '⇄'}</button>
+      {#if sectionRowIds.length > 0}
+        <button
+          class="tb-btn"
+          title={allSectionsCollapsed ? 'Expand all sections' : 'Collapse all sections'}
+          on:click|stopPropagation={toggleAllSections}
+        >{allSectionsCollapsed ? '⌄' : '⌃'}</button>
+      {/if}
       {#if !focused}
         <button class="tb-btn" title="Rename" on:click|stopPropagation={startRename}>✎</button>
         <button class="tb-btn tb-focus" title="Full screen" on:click|stopPropagation={() => setFocused(nb.id)}>⤢</button>
@@ -578,6 +803,7 @@
       {/if}
     </div>
   </div>
+  {/if}
 
   <!-- Right-edge resize handle -->
   {#if !focused}
@@ -628,7 +854,8 @@
             {#if isSection}
               <!-- Section/Subsection row with collapse toggle -->
               <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-              <div class="section-row" class:subsection={firstCell.type === 'subsection'}>
+              <div class="section-row" class:subsection={firstCell.type === 'subsection'}
+                   style="--row-depth:{rowDepth.get(row.id) ?? 0}">
                 <button
                   class="section-collapse-btn"
                   on:click|stopPropagation={() => toggleSection(row.id)}
@@ -640,6 +867,9 @@
                     store={nb.store}
                     rowId={row.id}
                     cellIdx={0}
+                    notebookId={nb.id}
+                    headingReadonly={isRefpage}
+                    on:headingClick={(e) => toggleSection(e.detail.rowId)}
                     on:run={handleRun}
                     on:change={handleChange}
                     on:addAbove={addRowAbove}
@@ -654,7 +884,9 @@
                 </div>
               </div>
             {:else}
-              <div class="nb-row">
+              <!-- Indent by section depth so a subsection's content reads as
+                   belonging to it rather than sitting flush with the heading. -->
+              <div class="nb-row" style="--row-depth:{rowDepth.get(row.id) ?? 0}">
                 {#each row.cells as cell, ci (cell.id)}
                   <div class="cell-col" style="flex: 1 1 0; min-width: 0;">
                     <CellShell
@@ -662,6 +894,8 @@
                       store={nb.store}
                       rowId={row.id}
                       cellIdx={ci}
+                      notebookId={nb.id}
+                      headingReadonly={isRefpage}
                       on:run={handleRun}
                       on:change={handleChange}
                       on:addAbove={addRowAbove}
@@ -680,13 +914,17 @@
                 {/each}
               </div>
             {/if}
-          {/if}
 
-          <!-- Insertion point after this row -->
-          {#if insertionIdx === ri + 1}
-            <div class="insertion-cursor active"></div>
-          {:else if ri < $nbStore.length - 1}
-            <div class="insertion-cursor"></div>
+            <!-- Insertion point after this row. INSIDE the visibility guard:
+                 rendered per row regardless, a collapsed section still emitted
+                 one 3px strip for every row it was hiding, so folding
+                 "Examples (26)" left ~90px of dead space behind it while a
+                 section with no content left none. -->
+            {#if insertionIdx === ri + 1}
+              <div class="insertion-cursor active"></div>
+            {:else if ri < $nbStore.length - 1}
+              <div class="insertion-cursor"></div>
+            {/if}
           {/if}
         {/each}
 
@@ -745,7 +983,10 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     background: var(--bg, #050810);
-    min-height: 100vh;
+    /* No min-height here: Canvas.svelte's .focused-view is a flex column and
+       grows this card to fill it. A 100vh here overflowed the inset view by the
+       bar height; a percentage min-height could not resolve at all. See the note
+       on .focused-view in Canvas.svelte. */
     width: 100%;
     display: flex;
     flex-direction: column;
@@ -866,16 +1107,6 @@
   .tb-run-all:hover { background: rgba(166,227,161,0.22) !important; }
   .tb-close:hover { color: #f38ba8; }
   .tb-focus:hover { color: var(--accent, #89b4fa); }
-  /* ⤡ contract icon — mirrors ⤢ expand icon */
-  .tb-back {
-    font-size: 0.9rem;
-    padding: 2px 5px;
-    color: var(--accent, #89b4fa);
-    border: none;
-    margin-right: 2px;
-  }
-  .tb-back:hover { background: rgba(137,180,250,0.12) !important; border-color: var(--accent, #89b4fa); }
-
   /* ---- Collapse wrapper ---- */
   .collapse-wrapper {
     overflow: hidden;
@@ -987,7 +1218,12 @@
     align-items: flex-start;
     border-bottom: 1px solid rgba(255,255,255,0.05);
   }
-  .section-row.subsection { padding-left: 1rem; }
+  /* The subsection's own fold arrow is smaller and dimmer, matching its
+     heading rather than the section above it. */
+  .section-row.subsection .section-collapse-btn {
+    font-size: 0.62rem;
+    opacity: 0.65;
+  }
 
   .section-collapse-btn {
     flex-shrink: 0;
@@ -1004,6 +1240,10 @@
   .section-collapse-btn:hover { color: var(--accent); }
 
   /* ---- Notebook rows ---- */
+  /* One step of indentation per level of section nesting. Applied as padding so
+     the row's own background and dividers still span the full card width. */
+  .nb-row, .section-row { padding-left: calc(var(--row-depth, 0) * 1.15rem); }
+
   .nb-row {
     display: flex;
     flex-direction: row;

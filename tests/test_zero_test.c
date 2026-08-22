@@ -329,7 +329,10 @@ static void test_listable_nested_list(void) {
                "{{True, False}, {True, False}}");
 }
 static void test_attributes_registered(void) {
-    assert_pzq("Attributes[PossibleZeroQ]", "{Listable, Protected}");
+    /* PossibleZeroQ is Protected but deliberately NOT Listable — it threads its
+     * FIRST argument manually (see zero_test.c) so a second Assumptions arg is
+     * never mis-threaded. Matches Mathematica's Attributes[PossibleZeroQ]. */
+    assert_pzq("Attributes[PossibleZeroQ]", "{Protected}");
 }
 static void test_arity_mismatch_unevaluated(void) {
     /* Wrong arity should leave the call unevaluated (returns NULL inside

@@ -1,0 +1,198 @@
+\chapter{System Architecture at a Glance}
+\label{app:architecture}
+
+This appendix is a map. It gives a high-level tour of how Mathilda is put
+together---the handful of core pieces every computation flows through---and points
+at where in the source tree each piece lives, so that a curious reader can open the
+right file. It is deliberately compact; the authoritative engineering reference is
+\texttt{SPEC.md} at the root of the source tree, and Chapter~\ref{ch:internals}
+develops these ideas in depth.
+
+\section{The pipeline}
+\label{app:pipeline}
+
+At the largest scale Mathilda is a loop that turns a string into an expression,
+rewrites that expression until it stops changing, and turns the result back into a
+string. Five components do the work, and the evaluator consults the middle three on
+every step.
+
+\begin{figure}[h]
+\begin{framed}
+\small
+\begin{verbatim}
+    "Integrate[1/(1+x^2), x]"          input string
+             |
+             v
+      [ Parser ]      parse.c      Pratt / operator-precedence
+             |
+             v   Expr* tree  ->  Integrate[Times[...], x]
+             |
+      [ Evaluator ]   eval.c       fixed-point loop
+        |  ^  ^  ^
+        |  |  |  +--- Built-in C library    (plus.c, calculus/, ...)
+        |  |  +------ Pattern matcher (match.c) + Rule engine (replace.c)
+        |  +--------- Attribute system (attr.c)
+        |  +--------- Symbol table (symtab.c)  OwnValues / DownValues
+             |
+             v
+      [ Printer ]     print.c      precedence-aware formatting
+             |
+             v
+        "ArcTan[x]"                  output string
+\end{verbatim}
+\end{framed}
+\caption{The evaluation pipeline. The parser and printer bracket a fixed-point
+evaluator that, on every step, consults the symbol table, the attribute system,
+the pattern matcher, and the built-in library.}
+\label{fig:pipeline}
+\end{figure}
+
+The remaining sections walk these pieces in turn.
+
+\section{Everything is an expression}
+\label{app:expr}
+
+The single most important design decision in Mathilda is that \emph{everything is an
+expression}. A number, a symbol, a list, a matrix, a rule, even a pattern---all are
+the same kind of tree, an \texttt{Expr} (defined in \texttt{src/expr.\{c,h\}}). An
+\texttt{Expr} is a tagged union: an integer (machine \texttt{int64} or a GMP
+bignum), a real, a symbol, a string, or a \emph{function} node carrying a head and a
+list of argument expressions. The compound form \texttt{f[x, y]} is a function node
+with head \texttt{f}; a list \texttt{\{a, b\}} is really \texttt{List[a, b]}
+internally.
+
+You can see the tree behind any surface syntax with \B{FullForm}:
+
+\mtranscript{appendix-architecture/expr-model}
+
+Read those lines as X-rays. The sum \texttt{a + b c} is
+\texttt{Plus[a, Times[b, c]]}; a fraction is a \texttt{Rational}; a division is a
+\texttt{Times} against a \texttt{Power} with exponent $-1$; and even a pattern like
+\texttt{x\_} is an ordinary expression, \texttt{Pattern[x, Blank[]]}. Because atoms
+carry a head too---\B{Head} of an integer is \texttt{Integer}, of a list is
+\texttt{List}---one uniform set of tools (\B{Part}, \B{Map}, \B{Replace}, and the
+rest) operates on \emph{everything}. This uniformity is why the evaluator and the
+pattern matcher can be small: they only ever manipulate one data structure.
+
+Integers illustrate a second theme: representations that adapt. A value begins as a
+fast machine word and is promoted to a GMP bignum only when an operation would
+overflow, demoting back when a result fits again---so there is only ever ``an
+integer,'' never a separate big-integer mode.
+
+\section{How a call is evaluated}
+\label{app:eval}
+
+Evaluation is a fixed-point process (\texttt{src/eval.c}): \texttt{evaluate} applies
+one \texttt{evaluate\_step} after another until the expression stops changing. For a
+function call \texttt{f[a1, \dots, aN]} a single step proceeds, in order:
+
+\begin{enumerate}
+  \item evaluate the head \texttt{f};
+  \item read \texttt{f}'s \textbf{attributes};
+  \item evaluate the arguments---except those held back by a \texttt{Hold} attribute;
+  \item if \texttt{f} is \textbf{Listable}, thread over any list arguments;
+  \item if \texttt{f} is \textbf{Flat}, flatten nested \texttt{f[\dots]} calls;
+  \item if \texttt{f} is \textbf{Orderless}, sort the arguments canonically;
+  \item call \texttt{f}'s built-in C function, if it has one---this returns a new
+        \texttt{Expr*} on success, or \texttt{NULL} to mean ``I can't evaluate this,
+        leave it alone'';
+  \item otherwise try \texttt{f}'s \textbf{DownValues}---the user- or library-defined
+        rewrite rules---and take the first that matches.
+\end{enumerate}
+
+The attribute bits (\texttt{src/attr.c}) are the small vocabulary that steers all of
+this. They are what let the evaluator stay generic while each head opts into exactly
+the behaviour it needs\calloutnote{Under the hood}{\B{Plus} is \texttt{Flat}
+(associative), \texttt{Orderless} (commutative), \texttt{Listable} (threads over lists),
+\texttt{OneIdentity}, and a \texttt{NumericFunction}; \B{Sin} is merely \texttt{Listable}
+and numeric; \B{Table} is \texttt{HoldAll}, so its iterator specification is \emph{not}
+evaluated before \texttt{Table} runs. Nothing about the evaluator's main loop changes
+between these heads---only their attribute bits do.}:
+
+\mtranscript{appendix-architecture/attributes}
+
+Because a step just rewrites and the loop runs to a fixed point, rule chains compose
+on their own, with no explicit plumbing. Define \texttt{f} in terms of \texttt{g} and
+\texttt{g} in terms of squaring, and the answer falls out over successive passes:
+
+\mtranscript{appendix-architecture/fixed-point}
+
+\section{Matching, rules, and the built-in library}
+\label{app:match}
+
+Two subsystems implement the last two steps above. The \textbf{pattern matcher}
+(\texttt{src/match.c}) unifies an expression against a pattern with backtracking,
+handling blanks (\texttt{\_}), typed blanks (\texttt{\_h}), sequence patterns
+(\texttt{\_\_}, \texttt{\_\_\_}), tests, and conditions, binding pattern variables in
+a match environment. The \textbf{rule engine} (\texttt{src/replace.c}) applies
+rules---\texttt{Rule} (\texttt{->}, immediate) and \texttt{RuleDelayed}
+(\texttt{:>}, delayed)---through \B{Replace}, \B{ReplaceAll} (\texttt{/.}), and
+\B{ReplaceRepeated} (\texttt{//.}).
+
+The \textbf{built-in C library} supplies the primitives. Each builtin obeys a single
+ownership contract: it takes ownership of its argument expression and returns either
+a freshly built \texttt{Expr*} (success) or \texttt{NULL} (``not my case,'' leaving
+the expression for a rule to handle). That \texttt{NULL} convention is what lets
+symbolic arguments flow untouched through heads that only know how to handle numbers.
+
+\section{The source tree}
+\label{app:tree}
+
+The C sources live under \texttt{src/}. The core is a small number of files; the bulk
+is the mathematical library, organised so that---as a rule of thumb---each builtin
+gets its own file, grouped into a subsystem directory.
+
+\begin{figure}[h]
+\begin{framed}
+\small
+\begin{verbatim}
+src/
+  expr.{c,h}     expression representation (the tagged union)
+  parse.{c,h}    Pratt parser            print.{c,h}   printer
+  eval.{c,h}     fixed-point evaluator    symtab.{c,h}  symbol table
+  attr.{c,h}     attribute bitflags       match.{c,h}   pattern matcher
+  replace.{c,h}  rule engine              core.{c,h}    builtin + init hub
+  plus.c times.c power.c arithmetic.c     arithmetic heads
+  ndarray.* ndkernels.* pack.*            packed / dense-array substrate
+  compile/       Compile[] bytecode compiler and auto-compilation
+  calculus/      D, Series, Limit, Integrate, Risch-Norman
+  poly/  rat/  simp/  linalg/  solve/     algebra & solving
+  numerical_calculus/  numerical_roots/   N-prefixed numerics
+  sum/  product/  special_functions/      series, products, transcendentals
+  numbertheory/  stats/  graph/  ml/      further subsystems
+  strings/  list/  graphics/              text, lists, 2D/3D graphics
+  internal/      init.m and .m rule files (derivatives, integral tables)
+tests/           CMake-built unit suite
+makefile         primary build system
+\end{verbatim}
+\end{framed}
+\caption{A condensed view of the source tree. The full layout, with a line for every
+directory, is in \texttt{SPEC.md}~\S2.}
+\label{fig:tree}
+\end{figure}
+
+\section{Startup and module initialization}
+\label{app:init}
+
+When Mathilda starts, \texttt{main()} in \texttt{src/repl.c} calls
+\texttt{symtab\_init()} to create the symbol table, then \texttt{core\_init()} in
+\texttt{src/core.c}. \texttt{core\_init()} registers the core builtins and then calls
+each subsystem's \texttt{*\_init()} function in a fixed order---several dozen of them,
+spanning arithmetic, special functions, the packed-array substrate, the numeric
+subsystems, and the higher-level algebra and graphics services. \texttt{core.c} is
+the source of truth for that order.
+
+After the C side is initialised, \texttt{main()} loads
+\texttt{src/internal/init.m}, which in turn \texttt{Get[]}s the remaining bootstrap
+\texttt{.m} files. This is the seam of Mathilda's \textbf{two-tier design}:
+performance-sensitive primitives are written in C, while higher-level mathematical
+identities---the derivative rules in \texttt{deriv.m}, the integral tables---are
+expressed as ordinary rewrite rules in Mathilda's own language. The same fixed-point
+evaluator that runs a user's rules runs these, so extending the system's mathematics
+often means adding a rule, not writing C.
+
+\bigskip
+\noindent
+For the authoritative detail behind every claim here, see \texttt{SPEC.md}; for
+recipes on adding builtins, modules, patterns, and operators, see
+\texttt{docs/extending.md} and Chapter~\ref{ch:contributing}.

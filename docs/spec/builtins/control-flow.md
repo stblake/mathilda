@@ -161,6 +161,7 @@ Selects a value based on the first satisfied test.
 - If a `test_i` evaluates to something other than `True` or `False`, a `Which` containing that test (in evaluated form) plus the remaining elements is returned unevaluated.
 - A trailing test of `True` acts as a default clause.
 - An odd number of arguments is a usage error; the expression is returned unevaluated.
+- **Compiles** under `Compile[]` and auto-compilation over a machine-numeric body: a first-match chain of `If`s. A run with no matching test and no `True` catch-all hands back to the interpreter (the `Null` it would return). See [Compile / CompiledFunction](#compile--compiledfunction).
 
 ```mathematica
 In[1]:= Which[False, a, True, b]
@@ -188,6 +189,7 @@ Selects a value by matching an expression against a sequence of patterns.
 - Wrong arity (no form/value pair, or an odd number of arguments after `expr`) is a usage error; the expression is returned unevaluated.
 - Pattern variables bound by `form_i` (e.g. `{x_, y_}`) are *not* substituted into `value_i`; the form acts purely as a discriminator.
 - `Break`, `Return`, and `Throw` inside the chosen value propagate as they do in any other held context.
+- **Compiles** under `Compile[]` and auto-compilation when the discriminant is a machine number and every form is a numeric literal or the bare `_` catch-all: a chain of machine-equality tests (integer dispatch is bit-identical to the interpreter). A typed or bound pattern form declines. See [Compile / CompiledFunction](#compile--compiledfunction).
 
 ```mathematica
 In[1]:= Switch[42, _Integer, "int", _Real, "real", _, "other"]
@@ -213,6 +215,8 @@ Represents a piecewise function defined by a list of `{value, condition}` clause
 - At the first `{val_i, True}` all later clauses (and the default) are dropped; the `True` clause becomes the unconditional final case.
 - If all preceding conditions are literally `False`, the value at the first `True` is returned directly.
 - Consecutive clauses with structurally equal values are merged: their conditions are combined with `Or`.
+
+**Compiles** under `Compile[]` and auto-compilation (`Plot`, `Table`, `NIntegrate`, …) over a machine-numeric body: a first-match chain of `If`s, always yielding a value because the default (explicit or the implied `0`) is always present. See [Compile / CompiledFunction](#compile--compiledfunction).
 
 ```mathematica
 In[1]:= Piecewise[{{Sin[x]/x, x < 0}, {1, x == 0}}, -x^2/100 + 1]
@@ -406,7 +410,8 @@ expression would.
 - **Compilable subset** (shared with the internal engine behind NDSolve): full
   scalar arithmetic and comparisons, `Mod`/`Quotient`, integer/real/complex
   `Power`, all elementary functions and every special function that has a
-  machine kernel (`Gamma`, `Erf`, `BesselJ`, `Zeta`, …), `If`, `Sum`/`Product`,
+  machine kernel (`Gamma`, `Erf`, `BesselJ`, `Zeta`, …), `If`,
+  `Which`/`Switch`/`Piecewise` (see below), `Sum`/`Product`,
   `With`/`Module` locals with `Set`/`AddTo`/`TimesBy`/`Increment`/…,
   `Do`/`While`/`For`, `CompoundExpression`, the functional heads (see below),
   and machine arrays (see further below). Anything else (a user-defined
@@ -458,6 +463,29 @@ expression would.
   - `Do`, `While`, `For` and `Scan` answer `Null`, which the machine lattice has
     no room for, so they compile only where their value is discarded — inside a
     `CompoundExpression`, not as the whole body.
+- **Conditional ladders.** `Which[t1, v1, …]`, `Switch[e, f1, v1, …]` and
+  `Piecewise[{{v1, c1}, …}, default]` compile as a first-match-wins chain of
+  branches, exactly the `If` structure repeated: the result type is the common
+  numeric type of every reachable value, and the machine value is produced with
+  no `Expr` allocation. Both stand alone and nest inside any other compiled body
+  (`10 Which[…] + Piecewise[…]`).
+  - A `Which`/`Piecewise` guard must be a machine Boolean (a comparison, `And`,
+    `Not`, …). A literal `True` clause becomes the unconditional final case and a
+    literal `False` clause is dropped, matching the interpreter; the reachable
+    values are then the only ones typed, so a dead clause of another type does
+    not force a fallback.
+  - A `Piecewise` always has a default (the explicit one, else the implied `0`),
+    so it always yields a value. A `Which` with no matching clause and no `True`
+    catch-all, or a `Switch` with no matching form, aborts the compiled call and
+    the interpreter takes over — returning the `Null` (Which) or unevaluated
+    `Switch` it would have anyway.
+  - `Switch` forms must be numeric literals or the bare `_` catch-all; the
+    discriminant is compared to each form with machine equality at the common
+    numeric type. A typed or bound pattern (`_Integer`, `x_`, `_ ? test`) is not
+    in the subset and declines. As with `Equal`, equality of inexact reals is
+    exact in compiled code where the interpreter's structural match is stricter,
+    so a real discriminant tested against a literal can differ — integer dispatch
+    (the common case) is bit-identical.
 - **Machine arrays.** An argument spec `{v, _Real, 1}` (or `_Complex`, any rank)
   declares an array parameter. A `List` argument is packed into a flat machine
   buffer at the boundary and the result is unpacked back to a `List`; an

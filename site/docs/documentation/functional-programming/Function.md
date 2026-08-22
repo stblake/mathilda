@@ -5,24 +5,56 @@
 
 ## Description
 
-```text
-body & or Function[body]
-    represents a pure function with formal parameters #, #1, #2, ... and ##, ##1, ##2, ... for sequences of arguments.
-Function[x, body] or Function[{x1, x2, ...}, body]
-    represents a pure function with named formal parameters x or x1, x2, ....
-Function[params, body, attrs]
-    is a pure function that is treated as having attributes attrs for purposes of evaluation.
-    attrs can be a single attribute or a list of attributes; recognised attributes include HoldFirst, HoldRest, HoldAll, HoldAllComplete, Listable, Flat, Orderless, OneIdentity, NumericFunction, SequenceHold, and NHoldRest.
-Function[Null, body, attrs]
-    represents a function in which the parameters in body are given using # etc.
+**`Function[x, body] or Function[{x1, x2, ...}, body]`**
 
-Parameter binding is lexical: named parameters are substituted into the body before evaluation. Nested Function expressions shadow their own parameters.
-By default Function has no Hold attributes; the arguments are evaluated before substitution. Adding HoldAll (or HoldFirst / HoldRest / HoldAllComplete) in the 3-arg form holds arguments in the chosen positions.
+represents a pure function with named formal parameters x or x1, x2, ....
+
+**`Function[params, body, attrs]`**
+
+is a pure function that is treated as having attributes attrs for purposes of evaluation. attrs can be a single attribute or a list of attributes; recognised attributes include HoldFirst, HoldRest, HoldAll, HoldAllComplete, Listable, Flat, Orderless, OneIdentity, NumericFunction, SequenceHold, and NHoldRest.
+
+**`Function[Null, body, attrs]`**
+
+represents a function in which the parameters in body are given using # etc.
+
+<details>
+<summary>Notes</summary>
+
+body & or Function\[body\] represents a pure function with formal parameters #, #1, #2, ... and ##, ##1, ##2, ... for sequences of arguments. Parameter binding is lexical: named parameters are substituted into the body before evaluation. Nested Function expressions shadow their own parameters. By default Function has no Hold attributes; the arguments are evaluated before substitution. Adding HoldAll (or HoldFirst / HoldRest / HoldAllComplete) in the 3-arg form holds arguments in the chosen positions.
+
+</details>
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (8)
+
+```mathematica
+In[1]:= (# + 1 &)[10]
+Out[1]= 11
+
+In[2]:= Function[x, x^2][5]
+Out[2]= 25
+
+In[3]:= Function[{x, y}, x + y][3, 4]
+Out[3]= 7
+
+In[4]:= f = #1 - #2 &; f[10, 3]
+Out[4]= 7
+
+In[5]:= Nest[# ^ 2 + 1 &, x, 3]
+Out[5]= 1 + (1 + (1 + x^2)^2)^2
+
+In[6]:= NestList[1/(1 + #) &, x, 3]
+Out[6]= {x, 1/(1 + x), 1/(1 + 1/(1 + x)), 1/(1 + 1/(1 + 1/(1 + x)))}
+
+In[7]:= Fold[#1 * 10 + #2 &, 0, {1, 2, 3, 4}]
+Out[7]= 1234
+
+In[8]:= (## &)[a, b, c]
+Out[8]= Sequence[a, b, c]
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -32,59 +64,17 @@ _No verified examples yet for this function._
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §1.3.2 (lambda; constructing procedures).
 - Source: [`src/purefunc.c`](https://github.com/stblake/mathilda/blob/main/src/purefunc.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= (# + 1 &)[10]
-Out[1]= 11
-```
-
-```mathematica
-In[1]:= Function[x, x^2][5]
-Out[1]= 25
-```
-
-```mathematica
-In[1]:= Function[{x, y}, x + y][3, 4]
-Out[1]= 7
-```
-
-```mathematica
-In[1]:= f = #1 - #2 &; f[10, 3]
-Out[1]= 7
-```
-
-```mathematica
-In[1]:= Nest[# ^ 2 + 1 &, x, 3]
-Out[1]= 1 + (1 + (1 + x^2)^2)^2
-```
-
-```mathematica
-In[1]:= NestList[1/(1 + #) &, x, 3]
-Out[1]= {x, 1/(1 + x), 1/(1 + 1/(1 + x)), 1/(1 + 1/(1 + 1/(1 + x)))}
-```
-
-```mathematica
-In[1]:= Fold[#1 * 10 + #2 &, 0, {1, 2, 3, 4}]
-Out[1]= 1234
-```
-
-```mathematica
-In[1]:= (## &)[a, b, c]
-Out[1]= Sequence[a, b, c]
-```
 
 ### Notes
 

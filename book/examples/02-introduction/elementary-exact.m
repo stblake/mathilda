@@ -1,0 +1,7 @@
+Sqrt[16]
+Sin[Pi/6]
+Cos[Pi/4]
+Tan[Pi/3]
+Log[E^5]
+ArcTan[1]
+Sin[1]

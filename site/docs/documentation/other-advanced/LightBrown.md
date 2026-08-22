@@ -5,10 +5,9 @@
 
 ## Description
 
-```text
-LightBrown
-    The named colour RGBColor[0.94, 0.91, 0.88].
-```
+**`LightBrown`**
+
+The named colour RGBColor\[0.94, 0.91, 0.88\].
 
 ## Examples
 
@@ -17,10 +16,6 @@ _No verified examples yet for this function._
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
 
 ## References
 

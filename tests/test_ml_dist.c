@@ -1,0 +1,441 @@
+/* test_ml_dist.c -- RandomVariate, PDF, and distribution objects.
+ *
+ * A sampler is awkward to test because its output is supposed to be unpredictable. The
+ * assertions here are the three things that ARE deterministic about it:
+ *
+ *   - reproducibility under SeedRandom, which is the property a user relies on and the
+ *     one a sampler with its own generator would silently break;
+ *   - the MOMENTS of a large sample, which pin the distribution's shape without pinning
+ *     any individual draw;
+ *   - the PDF, which is a closed-form function and can be checked against the same
+ *     formula written out symbolically -- an independent implementation, since the
+ *     symbolic side shares no code with the sampler.
+ */
+#include <stdio.h>
+#include "test_utils.h"
+
+extern void symtab_init(void);
+extern void core_init(void);
+
+static void test_pdf_matches_the_closed_form(void) {
+    /* The independent cross-check for this iteration: the density at zero is
+     * 1/Sqrt[2 Pi], computed by the existing symbolic machinery, which shares no code
+     * with the C density function. */
+    assert_eval_eq("Chop[PDF[NormalDistribution[], 0.] - 1./Sqrt[2. Pi]]", "0", 0);
+    /* And at a general point, against the formula written out longhand. */
+    assert_eval_eq("Chop[PDF[NormalDistribution[3., 2.], 1.5] - "
+                   "Exp[-0.5 ((1.5 - 3.)/2.)^2]/(2. Sqrt[2. Pi])]", "0", 0);
+    /* Symmetry is a further constraint the formula must satisfy. */
+    assert_eval_eq("Chop[PDF[NormalDistribution[], -1.] - PDF[NormalDistribution[], 1.]]",
+                   "0", 0);
+}
+
+static void test_pdf_threads_and_handles_uniform_support(void) {
+    assert_eval_eq("Length[PDF[NormalDistribution[], {-1., 0., 1.}]]", "3", 0);
+    /* A uniform density is flat inside its support and exactly zero outside -- the
+     * outside case is what distinguishes a real density from a bare formula. */
+    assert_eval_eq("PDF[UniformDistribution[{0., 2.}], {1., 5.}]", "{0.5, 0.0}", 0);
+    assert_eval_eq("PDF[UniformDistribution[{0., 2.}], -0.001]", "0.0", 0);
+}
+
+static void test_draws_are_reproducible_under_seedrandom(void) {
+    /* The property that makes a sampler usable at all. It also verifies the sampler
+     * draws from the SAME stream as RandomReal: a generator of its own would ignore
+     * SeedRandom entirely. */
+    assert_eval_eq("Module[{a, b}, SeedRandom[42]; "
+                   "a = RandomVariate[NormalDistribution[], 5]; SeedRandom[42]; "
+                   "b = RandomVariate[NormalDistribution[], 5]; a === b]", "True", 0);
+    assert_eval_eq("Module[{a, c}, SeedRandom[42]; "
+                   "a = RandomVariate[NormalDistribution[], 5]; SeedRandom[7]; "
+                   "c = RandomVariate[NormalDistribution[], 5]; a =!= c]", "True", 0);
+}
+
+static void test_reseeding_clears_the_gaussian_cache(void) {
+    /* THE non-obvious one. Box-Muller produces deviates in pairs and caches the spare,
+     * so without clearing that cache on SeedRandom the first draw after reseeding comes
+     * from the PREVIOUS stream. The bug only shows after an ODD number of draws -- an
+     * even number leaves the cache empty and hides it -- so both are asserted.
+     *
+     * This failure mode is worth a test rather than a comment because it half-works:
+     * reproducibility would hold for RandomReal and fail only for RandomVariate. */
+    assert_eval_eq("Module[{x, y}, SeedRandom[42]; x = RandomVariate[NormalDistribution[]];"
+                   " SeedRandom[42]; y = RandomVariate[NormalDistribution[]]; x === y]",
+                   "True", 0);
+    assert_eval_eq("Module[{x, z}, SeedRandom[42]; x = RandomVariate[NormalDistribution[]];"
+                   " SeedRandom[42]; RandomVariate[NormalDistribution[]];"      /* one draw */
+                   " SeedRandom[42]; z = RandomVariate[NormalDistribution[]]; x === z]",
+                   "True", 0);
+    /* Three draws, then reseed: an odd count again, and the pair boundary lands
+     * differently, so this is not the same case as above. */
+    assert_eval_eq("Module[{x, z}, SeedRandom[42]; x = RandomVariate[NormalDistribution[]];"
+                   " SeedRandom[42]; RandomVariate[NormalDistribution[], 3];"
+                   " SeedRandom[42]; z = RandomVariate[NormalDistribution[]]; x === z]",
+                   "True", 0);
+}
+
+static void test_sample_moments_match_the_distribution(void) {
+    /* Pins the SHAPE without pinning any draw. 20000 samples puts the standard error of
+     * the mean at sigma/141, so a tolerance of 0.1 on a sigma of 2 is roughly seven
+     * standard errors -- loose enough not to be flaky, tight enough that a wrong
+     * variance or a missing mean shift fails it. */
+    assert_eval_eq("Module[{s}, SeedRandom[1]; "
+                   "s = RandomVariate[NormalDistribution[5., 2.], 20000]; "
+                   "Abs[Mean[s] - 5.] < 0.1 && Abs[StandardDeviation[s] - 2.] < 0.1]",
+                   "True", 0);
+    /* A uniform sample must also respect its SUPPORT, which a normal sampler scaled by
+     * mistake would not. */
+    assert_eval_eq("Module[{s}, SeedRandom[1]; "
+                   "s = RandomVariate[UniformDistribution[{10., 20.}], 20000]; "
+                   "Min[s] >= 10. && Max[s] < 20. && Abs[Mean[s] - 15.] < 0.1]",
+                   "True", 0);
+}
+
+static void test_distribution_objects_print_in_full(void) {
+    /* Deliberately the OPPOSITE convention from a fitted model, which prints elided. A
+     * distribution is SPECIFIED by its parameters, so they are the information; a
+     * fitted model's are an implementation detail. Same mechanism, opposite visibility,
+     * and this row is what stops a later change from unifying them by accident. */
+    assert_eval_eq("NormalDistribution[0., 1.]", "NormalDistribution[0.0, 1.0]", 0);
+    assert_eval_eq("UniformDistribution[{2., 5.}]", "UniformDistribution[{2.0, 5.0}]", 0);
+}
+
+static void test_invalid_parameters_decline(void) {
+    /* A non-positive standard deviation is not a distribution, and an inverted range is
+     * not an interval. Declining beats returning NaNs that propagate silently through a
+     * whole sample and only surface as a strange plot much later. */
+    assert_eval_eq("Head[RandomVariate[NormalDistribution[0., -1.]]]", "RandomVariate", 0);
+    assert_eval_eq("Head[RandomVariate[NormalDistribution[0., 0.]]]", "RandomVariate", 0);
+    assert_eval_eq("Head[RandomVariate[UniformDistribution[{5., 1.}]]]",
+                   "RandomVariate", 0);
+    assert_eval_eq("Head[RandomVariate[CauchyDistribution[0., 1.]]]", "RandomVariate", 0);
+    assert_eval_eq("Head[PDF[NormalDistribution[0., -1.], 0.]]", "PDF", 0);
+    assert_eval_eq("Head[RandomVariate[NormalDistribution[], -3]]", "RandomVariate", 0);
+    /* Zero draws is a valid request with an empty answer, not an error. */
+    assert_eval_eq("RandomVariate[NormalDistribution[], 0]", "{}", 0);
+}
+
+#define D1 "{1., 2., 3., 4., 5., 6.}"
+#define D2 "{{1., 2.}, {2., 3.}, {3., 5.}, {4., 4.}, {5., 7.}, {6., 8.}}"
+
+static void test_one_dimensional_multinormal_equals_the_normal_pdf(void) {
+    /* THE cross-check for LearnDistribution, and a strong one: the fitted multinormal
+     * reaches its density through a Cholesky factor and a Mahalanobis distance, while
+     * PDF[NormalDistribution[...]] evaluates the scalar closed form. The two share no
+     * code, so agreement is evidence about both.
+     *
+     * Checked in the far tail (x = 10, about 3.5 sigma out) as well as at the mean,
+     * because the tail is where a wrong log-determinant or a missing 2 pi would show up
+     * as a small relative error rather than an obvious one. */
+    const char* xs[] = { "1.", "3.5", "6.", "10." };
+    for (size_t i = 0; i < sizeof(xs) / sizeof(xs[0]); i++) {
+        char in[512];
+        snprintf(in, sizeof in,
+                 "Chop[PDF[LearnDistribution[" D1 "], {%s}] - "
+                 "PDF[NormalDistribution[Mean[" D1 "], StandardDeviation[" D1 "]], %s]]",
+                 xs[i], xs[i]);
+        assert_eval_eq(in, "0", 0);
+    }
+}
+
+static void test_the_fitted_density_integrates_to_one(void) {
+    /* A density that is merely proportional to the right shape would pass every
+     * agreement test against another density with the same normalisation error. This
+     * one pins the normalisation absolutely: a trapezoid sum over +/- 6 sigma must be
+     * 1 to three decimals. */
+    assert_eval_eq("Module[{m = LearnDistribution[" D1 "], mu, sd, h, g},"
+                   " mu = Mean[" D1 "]; sd = StandardDeviation[" D1 "]; h = 0.01;"
+                   " g = Table[mu - 6. sd + h i, {i, 0, Round[12. sd/h]}];"
+                   " Abs[h Total[Map[PDF[m, {#}] &, g]] - 1.] < 0.001]", "True", 0);
+}
+
+static void test_multinormal_in_two_dimensions(void) {
+    /* The density must be maximal at the fitted mean and negligible far away -- the
+     * minimum any correct multivariate density satisfies. */
+    assert_eval_eq("Module[{m = LearnDistribution[" D2 "]},"
+                   " PDF[m, {3.5, 4.8333333}] > PDF[m, {6., 2.}] > PDF[m, {50., 50.}]]",
+                   "True", 0);
+    /* A MATRIX of points threads, giving one density each. Note the asymmetry with the
+     * scalar case: for a multinormal a flat list is ONE point, because its argument is
+     * itself a list -- reading it as many points would silently treat each coordinate
+     * as a separate observation. */
+    assert_eval_eq("Length[PDF[LearnDistribution[" D2 "], {{3.5, 4.8}, {50., 50.}}]]",
+                   "2", 0);
+    assert_eval_eq("NumberQ[PDF[LearnDistribution[" D2 "], {3.5, 4.8}]]", "True", 0);
+}
+
+static void test_learned_distributions_elide_but_specified_ones_do_not(void) {
+    /* Both directions of the deliberate contrast. A fitted distribution's parameters are
+     * derived, so it elides; a specified distribution's are what the user wrote, so it
+     * prints them. These two rows together are what stops a later change from unifying
+     * the conventions. */
+    assert_eval_eq("LearnDistribution[" D1 "]",
+                   "LearnedDistribution[\"Multinormal\", <>]", 0);
+    assert_eval_eq("NormalDistribution[3.5, 2.]", "NormalDistribution[3.5, 2.0]", 0);
+    /* And FullForm still reveals the fitted parameters. */
+    assert_eval_eq("FullForm[LearnDistribution[" D1 "]]",
+                   "LearnedDistribution[\"Multinormal\", "
+                   "List[List[3.5], List[3.5]], 1, 0]", 0);
+}
+
+static void test_singular_fits_decline(void) {
+    /* Perfectly collinear columns give a singular covariance, so no density exists --
+     * declining is the honest answer, where a pseudo-inverse would invent one. */
+    assert_eval_eq("Head[LearnDistribution[{{1., 2.}, {2., 4.}, {3., 6.}}]]",
+                   "LearnDistribution", 0);
+    /* One observation has no dispersion to fit. */
+    assert_eval_eq("Head[LearnDistribution[{{1., 2.}}]]", "LearnDistribution", 0);
+    assert_eval_eq("Head[LearnDistribution[" D1 ", Method -> \"Poisson\"]]",
+                   "LearnDistribution", 0);
+}
+
+/* Spacing 0.1 between consecutive points, so the squared median nearest-neighbour
+ * distance -- the variance floor -- is exactly 0.01. That makes the floor's effect
+ * PREDICTABLE rather than a fudge factor, which is what lets the estimator relationship
+ * below be asserted exactly. */
+#define UNI "Table[1. i/10., {i, 0, 40}]"
+#define BIMODAL "Join[Table[1. i/10., {i, 0, 20}], Table[10. + 1. i/10., {i, 0, 20}]]"
+
+static void test_bic_picks_the_component_count_from_the_data(void) {
+    /* One component for unimodal data, two for bimodal -- and the fitted means are the
+     * two modes with equal weight, which is the answer rather than merely a plausible
+     * one. Asserted through FullForm because the fitted object prints elided. */
+    assert_eval_eq("FullForm[LearnDistribution[" UNI ", Method -> \"GaussianMixture\"]]",
+                   "LearnedDistribution[\"GaussianMixture\", "
+                   "List[List[1.0], List[2.0], List[1.41]], 1, 1]", 0);
+    assert_eval_eq("FullForm[LearnDistribution[" BIMODAL ", "
+                   "Method -> \"GaussianMixture\"]]",
+                   "LearnedDistribution[\"GaussianMixture\", "
+                   "List[List[0.5, 0.5], List[1.0], List[0.376667], "
+                   "List[11.0], List[0.376667]], 1, 2]", 0);
+}
+
+static void test_one_component_mixture_relates_exactly_to_the_multinormal(void) {
+    /* The cross-check, and it is EXACT rather than approximate once the two estimators
+     * are stated precisely. EM maximises the likelihood, so its covariance uses the ML
+     * (n) divisor; LearnDistribution's Multinormal uses the unbiased (n-1) divisor to
+     * agree with Variance. The mixture then adds the variance-floor ridge. So:
+     *
+     *   cov_mixture = ((n-1)/n) * cov_multinormal + floor
+     *   1.41        = (40/41) * 1.435            + 0.01
+     *
+     * A fuzzy "the ratio is about 1.009" assertion would have hidden a wrong divisor OR
+     * a wrong floor; this one cannot, because it pins both terms. */
+    assert_eval_eq("Chop[(40./41.) 1.435 + 0.01 - 1.41]", "0", 0);
+    assert_eval_eq("Chop[Variance[" UNI "] - 1.435]", "0", 0);
+    /* And the densities differ by exactly the amount that implies, not by more. */
+    assert_eval_eq("Module[{g, m}, g = LearnDistribution[" UNI ", "
+                   "Method -> \"GaussianMixture\"]; m = LearnDistribution[" UNI "];"
+                   " Abs[PDF[g, {2.}] Sqrt[1.41] - PDF[m, {2.}] Sqrt[1.435]] < 1.*^-12]",
+                   "True", 0);
+}
+
+static void test_the_mixture_density_is_bimodal_and_normalised(void) {
+    /* Both modes must dominate the valley between them -- a single wide Gaussian would
+     * put the maximum in the middle, so this distinguishes a real mixture from a
+     * mixture-shaped object. */
+    assert_eval_eq("Module[{g = LearnDistribution[" BIMODAL ", "
+                   "Method -> \"GaussianMixture\"]},"
+                   " PDF[g, {1.}] > 1000. PDF[g, {5.5}] && "
+                   "PDF[g, {11.}] > 1000. PDF[g, {5.5}]]", "True", 0);
+    /* And it is a density: the trapezoid sum over the whole support is 1. A mixture whose
+     * weights did not sum to 1, or whose components were individually mis-normalised,
+     * fails here while still looking bimodal. */
+    assert_eval_eq("Module[{g = LearnDistribution[" BIMODAL ", "
+                   "Method -> \"GaussianMixture\"], h = 0.02, gr},"
+                   " gr = Table[-5. + h i, {i, 0, Round[25./h]}];"
+                   " Abs[h Total[Map[PDF[g, {#}] &, gr]] - 1.] < 0.001]", "True", 0);
+}
+
+static void test_mixture_declines_like_the_multinormal(void) {
+    assert_eval_eq("Head[LearnDistribution[" UNI ", Method -> \"Poisson\"]]",
+                   "LearnDistribution", 0);
+    assert_eval_eq("Head[LearnDistribution[{{1., 2.}}, "
+                   "Method -> \"GaussianMixture\"]]", "LearnDistribution", 0);
+}
+
+static void test_kde_variance_identity_is_exact(void) {
+    /* The strongest single assertion in this file. A kernel density estimate is the
+     * empirical distribution CONVOLVED with the kernel, so its variance is exactly the
+     * ML sample variance plus the squared bandwidth -- and its mean is exactly the sample
+     * mean. One identity therefore pins the bandwidth rule, the kernel's own variance and
+     * the normalisation all at once, because getting any of the three wrong breaks it.
+     *
+     * Note the bandwidth must be written with the EXACT constant the rule uses,
+     * (4/((dim+2) n))^(1/(dim+4)), not the familiar rounded 1.0592. Using the rounded
+     * form left a residual of 1.6e-5 that did NOT shrink under grid refinement -- which
+     * is how it was identified as a wrong constant in the test rather than quadrature
+     * error in the integration. With the exact constant the identity holds to 4e-15. */
+    assert_eval_eq("Module[{u, n, k, bw, pred, g, m1, m2},"
+                   " u = Table[1. i/10., {i, 0, 40}]; n = Length[u];"
+                   " k = SmoothKernelDistribution[u];"
+                   " bw = StandardDeviation[u] (4./(3. n))^(1./5.);"
+                   " pred = Variance[u] (n - 1)/n + bw^2;"
+                   " g = Table[-6. + 0.01 i, {i, 0, Round[24./0.01]}];"
+                   " m1 = 0.01 Total[Map[# PDF[k, {#}] &, g]];"
+                   " m2 = 0.01 Total[Map[(#^2) PDF[k, {#}] &, g]];"
+                   " Abs[(m2 - m1^2) - pred] < 1.*^-9]", "True", 0);
+    /* The mean is exact, not merely close. */
+    assert_eval_eq("Module[{u = Table[1. i/10., {i, 0, 40}], k, g},"
+                   " k = SmoothKernelDistribution[u];"
+                   " g = Table[-6. + 0.005 i, {i, 0, Round[24./0.005]}];"
+                   " Abs[0.005 Total[Map[# PDF[k, {#}] &, g]] - Mean[u]] < 1.*^-9]",
+                   "True", 0);
+}
+
+static void test_kde_density_integrates_to_one(void) {
+    assert_eval_eq("Module[{k = SmoothKernelDistribution[Table[1. i/10., {i, 0, 40}]],"
+                   " h = 0.01, g},"
+                   " g = Table[-4. + h i, {i, 0, Round[16./h]}];"
+                   " Abs[h Total[Map[PDF[k, {#}] &, g]] - 1.] < 0.001]", "True", 0);
+}
+
+static void test_kde_approximates_a_known_density(void) {
+    /* On 4000 draws from a standard normal the estimate must track the true density --
+     * but this is an APPROXIMATION, so a bound is asserted rather than equality, and the
+     * bound is stated as what it is. A KDE's error is O(n^(-2/5)) for this bandwidth rule,
+     * which at n = 4000 is a few percent of the peak density; 0.05 is comfortably above
+     * the observed ~0.017 and far below anything a broken estimator would produce. */
+    const char* xs[] = { "-1.", "0.", "1.", "2." };
+    for (size_t i = 0; i < sizeof(xs) / sizeof(xs[0]); i++) {
+        char in[512];
+        snprintf(in, sizeof in,
+                 "Module[{k}, SeedRandom[7];"
+                 " k = SmoothKernelDistribution[RandomVariate[NormalDistribution[], 4000]];"
+                 " Abs[PDF[k, {%s}] - PDF[NormalDistribution[], %s]] < 0.05]",
+                 xs[i], xs[i]);
+        assert_eval_eq(in, "True", 0);
+    }
+}
+
+static void test_kde_bandwidth_can_be_given_and_matters(void) {
+    /* An explicit bandwidth must actually change the density, or the option is
+     * decoration. Compared at a point away from the sample centre, where the amount of
+     * smoothing shows most. */
+    assert_eval_eq("Module[{u = Table[1. i/10., {i, 0, 40}]},"
+                   " PDF[SmoothKernelDistribution[u, 1.0], {2.}] != "
+                   "PDF[SmoothKernelDistribution[u, 0.05], {2.}]]", "True", 0);
+    /* One bandwidth per dimension is also accepted. */
+    assert_eval_eq("NumberQ[PDF[SmoothKernelDistribution["
+                   "{{1., 2.}, {2., 3.}, {3., 5.}, {4., 4.}}, {0.5, 0.5}], {2., 3.}]]",
+                   "True", 0);
+}
+
+static void test_kde_declines_without_a_scale(void) {
+    /* A constant column has zero spread, so the normal-reference rule gives a zero
+     * bandwidth and there is no density -- dividing by it would return infinities. */
+    assert_eval_eq("Head[SmoothKernelDistribution[{5., 5., 5., 5.}]]",
+                   "SmoothKernelDistribution", 0);
+    assert_eval_eq("Head[SmoothKernelDistribution[{5.}]]",
+                   "SmoothKernelDistribution", 0);
+    assert_eval_eq("Head[SmoothKernelDistribution[Table[1. i, {i, 5}], -1.]]",
+                   "SmoothKernelDistribution", 0);
+}
+
+static void test_contingency_table_probabilities_are_exact(void) {
+    /* Counts chosen so every probability is an EXACT binary fraction: 3 and 1 out of 4 give
+     * 0.75 and 0.25, which are representable to the bit. So these are equalities, not
+     * tolerances -- there is no float slop to hide behind, and a wrong divisor or an
+     * off-by-one count cannot pass. */
+    assert_eval_eq("PDF[LearnDistribution[{\"r\", \"r\", \"r\", \"b\"}, "
+                   "Method -> \"ContingencyTable\"], \"r\"] == 0.75", "True", 0);
+    assert_eval_eq("PDF[LearnDistribution[{\"r\", \"r\", \"r\", \"b\"}, "
+                   "Method -> \"ContingencyTable\"], \"b\"] == 0.25", "True", 0);
+    /* Eight observations, one outcome seen five times: 5/8 = 0.625, also exact. */
+    assert_eval_eq("PDF[LearnDistribution[{1, 1, 1, 1, 1, 2, 2, 3}, "
+                   "Method -> \"ContingencyTable\"], 1] == 0.625", "True", 0);
+}
+
+static void test_contingency_table_unseen_outcome_is_exactly_zero(void) {
+    /* No smoothing, and the consequence is asserted rather than left implicit: an outcome
+     * never observed has probability exactly 0. Smoothing would need to know how many
+     * outcomes were possible but unseen, which for arbitrary expressions is unknowable. */
+    assert_eval_eq("PDF[LearnDistribution[{\"r\", \"b\"}, "
+                   "Method -> \"ContingencyTable\"], \"g\"] === 0.", "True", 0);
+    /* And a structurally different expression is a different outcome -- "a" and a are two
+     * classes, the same distinction the pattern matcher makes. */
+    assert_eval_eq("PDF[LearnDistribution[{\"a\", \"a\"}, "
+                   "Method -> \"ContingencyTable\"], a] === 0.", "True", 0);
+}
+
+static void test_contingency_table_sums_to_one_over_its_support(void) {
+    /* The defining property of a distribution. Asserted on a NON-uniform table, because a
+     * uniform one sums to 1 even if every probability were computed as 1/k regardless of
+     * the counts. */
+    assert_eval_eq("Module[{d = LearnDistribution["
+                   "{{\"a\",\"x\"}, {\"a\",\"y\"}, {\"b\",\"x\"}, {\"a\",\"x\"}}, "
+                   "Method -> \"ContingencyTable\"], o},"
+                   " o = Part[d, 2, 1];"
+                   " Chop[Total[Map[PDF[d, #] &, o]] - 1.]]", "0", 0);
+    /* The counts really are unequal, so the row above is not the degenerate case: {a,x}
+     * occurs twice out of four and the others once each. */
+    assert_eval_eq("Module[{d = LearnDistribution["
+                   "{{\"a\",\"x\"}, {\"a\",\"y\"}, {\"b\",\"x\"}, {\"a\",\"x\"}}, "
+                   "Method -> \"ContingencyTable\"]},"
+                   " {PDF[d, {\"a\",\"x\"}] == 0.5, PDF[d, {\"a\",\"y\"}] == 0.25,"
+                   "  PDF[d, {\"b\",\"x\"}] == 0.25}]", "{True, True, True}", 0);
+}
+
+static void test_contingency_table_declines_ragged_and_coexists(void) {
+    /* Ragged outcomes would be a different table per row, which is not a distribution. */
+    assert_eval_eq("Head[LearnDistribution[{{\"a\",\"x\"}, {\"b\"}}, "
+                   "Method -> \"ContingencyTable\"]]", "LearnDistribution", 0);
+    /* A mix of list and non-list outcomes is the same problem. */
+    assert_eval_eq("Head[LearnDistribution[{{\"a\",\"x\"}, \"b\"}, "
+                   "Method -> \"ContingencyTable\"]]", "LearnDistribution", 0);
+    assert_eval_eq("Head[LearnDistribution[{}, Method -> \"ContingencyTable\"]]",
+                   "LearnDistribution", 0);
+    /* It coexists with the numeric methods on the one head, and prints abbreviated the way
+     * every other fitted model does. */
+    assert_eval_eq("LearnDistribution[{\"r\", \"b\"}, Method -> \"ContingencyTable\"]",
+                   "LearnedDistribution[\"ContingencyTable\", <>]", 0);
+    assert_eval_eq("Part[LearnDistribution[{\"r\", \"b\"}, "
+                   "Method -> \"ContingencyTable\"], 1]", "\"ContingencyTable\"", 0);
+}
+
+static void test_contingency_table_order_is_first_appearance(void) {
+    /* Same contract as every other vocabulary in src/ml: deterministic, and first
+     * appearance rather than sorted. Reversing the data reverses the stored outcome list
+     * but must not change any probability. */
+    assert_eval_eq("Part[LearnDistribution[{\"b\", \"a\", \"a\"}, "
+                   "Method -> \"ContingencyTable\"], 2, 1]", "{\"b\", \"a\"}", 0);
+    assert_eval_eq("Module[{f = {\"b\", \"a\", \"a\"}, d1, d2},"
+                   " d1 = LearnDistribution[f, Method -> \"ContingencyTable\"];"
+                   " d2 = LearnDistribution[Reverse[f], Method -> \"ContingencyTable\"];"
+                   " {PDF[d1, \"a\"] == PDF[d2, \"a\"], PDF[d1, \"b\"] == PDF[d2, \"b\"]}]",
+                   "{True, True}", 0);
+}
+
+int main(void) {
+    symtab_init();
+    core_init();
+
+    TEST(test_pdf_matches_the_closed_form);
+    TEST(test_contingency_table_probabilities_are_exact);
+    TEST(test_contingency_table_unseen_outcome_is_exactly_zero);
+    TEST(test_contingency_table_sums_to_one_over_its_support);
+    TEST(test_contingency_table_declines_ragged_and_coexists);
+    TEST(test_contingency_table_order_is_first_appearance);
+    TEST(test_pdf_threads_and_handles_uniform_support);
+    TEST(test_draws_are_reproducible_under_seedrandom);
+    TEST(test_reseeding_clears_the_gaussian_cache);
+    TEST(test_sample_moments_match_the_distribution);
+    TEST(test_distribution_objects_print_in_full);
+    TEST(test_invalid_parameters_decline);
+    TEST(test_one_dimensional_multinormal_equals_the_normal_pdf);
+    TEST(test_the_fitted_density_integrates_to_one);
+    TEST(test_multinormal_in_two_dimensions);
+    TEST(test_learned_distributions_elide_but_specified_ones_do_not);
+    TEST(test_singular_fits_decline);
+    TEST(test_bic_picks_the_component_count_from_the_data);
+    TEST(test_one_component_mixture_relates_exactly_to_the_multinormal);
+    TEST(test_the_mixture_density_is_bimodal_and_normalised);
+    TEST(test_mixture_declines_like_the_multinormal);
+    TEST(test_kde_variance_identity_is_exact);
+    TEST(test_kde_density_integrates_to_one);
+    TEST(test_kde_approximates_a_known_density);
+    TEST(test_kde_bandwidth_can_be_given_and_matters);
+    TEST(test_kde_declines_without_a_scale);
+
+    printf("All ml distribution tests passed.\n");
+    return 0;
+}

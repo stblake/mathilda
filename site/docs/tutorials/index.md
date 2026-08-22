@@ -48,6 +48,13 @@ Work through them in order if you're new — each one builds on the last.
     `Root` objects and `ToRadicals`; eliminate variables with `Eliminate`; and
     tackle geometry and optimisation problems.
 
+-   :material-key-chain: __[Diophantine equations](diophantine-equations/index.md)__
+
+    Solve polynomial equations over the **integers**: linear systems and Pell,
+    quadratic and ternary forms, Mordell and **Thue** equations, exponential
+    Diophantine equations, and the famous power-sum searches (**Lander–Parkin**,
+    **Frye**, taxicabs) — with a head-to-head against sympy and PARI/GP.
+
 -   :material-math-integral: __[8. Calculus](08-calculus.md)__
 
     Differentiate and integrate, expand power series, take limits, evaluate

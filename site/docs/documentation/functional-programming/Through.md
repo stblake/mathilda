@@ -5,17 +5,19 @@
 
 ## Description
 
-```text
-Through[p[f1, f2, ...][x1, x2, ...]]
-    distributes the trailing argument list across the inner functions,
-    giving p[f1[x1, x2, ...], f2[x1, x2, ...], ...].
-Through[expr, h]
-    distributes only when the outer head equals h.
-```
+**`Through[p[f1, f2, ...][x1, x2, ...]]`**
 
-## Examples
+distributes the trailing argument list across the inner functions, giving p\[f1\[x1, x2, ...\], f2\[x1, x2, ...\], ...\].
 
-All examples below are verified against the current Mathilda build.
+**`Through[expr, h]`**
+
+distributes only when the outer head equals h.
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Through[{f, g, h}[x]]
@@ -23,6 +25,19 @@ Out[1]= {f[x], g[x], h[x]}
 
 In[2]:= Through[(f + g)[x, y]]
 Out[2]= f[x, y] + g[x, y]
+```
+
+### Applications (3)
+
+```mathematica
+In[3]:= Through[(f + g)[x]]
+Out[3]= f[x] + g[x]
+
+In[4]:= Through[{Sin, Cos, Tan}[Pi/4]]
+Out[4]= {1/Sqrt[2], 1/Sqrt[2], 1}
+
+In[5]:= f[x_] := x^2; g[x_] := x + 1; Through[(f + g)[3]]
+Out[5]= 13
 ```
 
 ## Implementation notes
@@ -48,33 +63,13 @@ returned by `expr_copy`.
 
 **Attributes:** none registered.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_funcprog_through.c`](https://github.com/stblake/mathilda/blob/main/tests/test_funcprog_through.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Through[(f + g)[x]]
-Out[1]= f[x] + g[x]
-```
-
-```mathematica
-In[1]:= Through[{Sin, Cos, Tan}[Pi/4]]
-Out[1]= {1/Sqrt[2], 1/Sqrt[2], 1}
-```
-
-```mathematica
-In[1]:= f[x_] := x^2; g[x_] := x + 1; Through[(f + g)[3]]
-Out[1]= 13
-```
 
 ### Notes
 

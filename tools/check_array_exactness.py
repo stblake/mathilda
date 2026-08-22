@@ -133,6 +133,7 @@ EXTRA = [
     ("x_round",         "Round[Range[0.5, 400.5]]"),
     ("x_sign",          "Sign[Range[-200., 200.]]"),
     ("x_unitstep",      "UnitStep[Range[-200., 200.]]"),
+    ("x_unitbox",       "UnitBox[Range[-200., 200.]]"),
     ("x_quotient",      "Quotient[Range[1., 400.], 2]"),
     ("x_accumulate",    "Accumulate[Range[1., 400.]]"),
     ("x_differences",   "Differences[Range[1., 400.]]"),

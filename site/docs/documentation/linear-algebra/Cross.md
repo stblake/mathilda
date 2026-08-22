@@ -5,18 +5,19 @@
 
 ## Description
 
-```text
-Cross[a, b]
-    gives the vector cross product of two length-3 vectors.
-Cross[a1, a2, ..., a(n-1)]
-    gives the generalized (n-1)-fold cross product in n dimensions,
-    i.e. the unique vector orthogonal to all inputs whose components
-    are the signed cofactor minors of the matrix [a1; a2; ...; en].
-```
+**`Cross[a, b]`**
 
-## Examples
+gives the vector cross product of two length-3 vectors.
 
-All examples below are verified against the current Mathilda build.
+**`Cross[a1, a2, ..., a(n-1)]`**
+
+gives the generalized (n-1)-fold cross product in n dimensions, i.e. the unique vector orthogonal to all inputs whose components are the signed cofactor minors of the matrix \[a1; a2; ...; en\].
+
+## Examples (9)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= Cross[{1, 2, -1}, {-1, 1, 0}]
@@ -30,10 +31,38 @@ Out[3]= {-0.216, 3.708, -2.862}
 
 In[4]:= Cross[{1.3 + I, 2, 3 - 2 I}, {6. + I, 4, 5 - 7 I}]
 Out[4]= {-2 - 6*I, 6.5 - 4.9*I, -6.8 + 2.0*I}
-
-In[5]:= Cross[{1, 2, 3}, {4, 5}]
-Out[5]= Cross[{1, 2, 3}, {4, 5}]
 ```
+
+### Applications (5)
+
+```mathematica
+In[5]:= Cross[{1,0,0},{0,1,0}]
+Out[5]= {0, 0, 1}
+
+In[6]:= Cross[{a1,a2,a3},{b1,b2,b3}]
+Out[6]= {-a3 b2 + a2 b3, -(-a3 b1 + a1 b3), -a2 b1 + a1 b2}
+
+In[7]:= Cross[{2,1,-1},{1,-1,2}]
+Out[7]= {1, -5, -3}
+
+In[8]:= Cross[{1,2}]
+Out[8]= {-2, 1}
+
+In[9]:= Cross[{1,2,3,4},{5,6,7,8},{9,10,11,13}]
+Out[9]= {4, -8, 4, 0}
+```
+
+## Algorithm
+
+Generalised cross product.
+
+Cross[v1, ..., v(n-1)] for n-dimensional vectors v_i returns the vector
+
+```text
+orthogonal to all inputs.  Each component is the signed determinant of
+```
+
+the minor obtained by deleting the i-th column from the matrix of stacked rows.
 
 ## Implementation notes
 
@@ -48,43 +77,16 @@ Out[5]= Cross[{1, 2, 3}, {4, 5}]
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/linalg/cross.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/cross.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_compile_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_linalg.c)
+- Tests: [`tests/test_distribute.c`](https://github.com/stblake/mathilda/blob/main/tests/test_distribute.c)
+- Tests: [`tests/test_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linalg.c)
+- Tests: [`tests/test_ndarray_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_linalg.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Cross[{1,0,0},{0,1,0}]
-Out[1]= {0, 0, 1}
-```
-
-```mathematica
-In[1]:= Cross[{a1,a2,a3},{b1,b2,b3}]
-Out[1]= {-a3 b2 + a2 b3, -(-a3 b1 + a1 b3), -a2 b1 + a1 b2}
-```
-
-```mathematica
-In[1]:= Cross[{2,1,-1},{1,-1,2}]
-Out[1]= {1, -5, -3}
-```
-
-```mathematica
-In[1]:= Cross[{1,2}]
-Out[1]= {-2, 1}
-```
-
-```mathematica
-In[1]:= Cross[{1,2,3,4},{5,6,7,8},{9,10,11,13}]
-Out[1]= {4, -8, 4, 0}
-```
 
 ### Notes
 

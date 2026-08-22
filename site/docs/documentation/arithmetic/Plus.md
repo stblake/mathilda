@@ -5,21 +5,30 @@
 
 ## Description
 
-```text
-x + y + ... or Plus[x, y, ...] represents a sum of terms.
-Plus is Flat, Orderless, OneIdentity, Listable, and NumericFunction:
-nested Plus is auto-flattened, terms are sorted into canonical order,
-like terms are combined, and integer arguments are summed exactly via
-GMP (with int64 fast path and BigInt overflow promotion).
-```
+x + y + ... or Plus\[x, y, ...\] represents a sum of terms. Plus is Flat, Orderless, OneIdentity, Listable, and NumericFunction: nested Plus is auto-flattened, terms are sorted into canonical order, like terms are combined, and integer arguments are summed exactly via GMP (with int64 fast path and BigInt overflow promotion).
 
-## Examples
+## Examples (4)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= 1 + 2 + x + 2*x
 Out[1]= 3 + 3 x
+```
+
+### Applications (3)
+
+```mathematica
+In[2]:= 2^100 + 3^50
+Out[2]= 1267651318126217093349291975625
+
+In[3]:= 1/2 + 1/3 + 1/6
+Out[3]= 1
+
+In[4]:= a + a + b + 2 a
+Out[4]= 4 a + b
 ```
 
 ## Implementation notes
@@ -35,38 +44,28 @@ It first distributes `Times[-1, Plus[...]]` over the outer sum (`is_neg_of_plus`
 - `Flat`, `Orderless`, `Listable`.
 - Combines numeric constants and collects like terms (e.g., `x + 2x` becomes `3x`).
 - Like-term collection is hash-based (O(N) expected) and canonically sorts only
+  the collapsed result, so a large flat sum (e.g. `Total` of 10^5 monomials) does
+  not pay the generic `Orderless` sort over all N raw terms. `Times` collects
+  factors the same way.
+- Returns `0` if no arguments are provided.
+- Returns `Overflow[]` if integer addition overflows or if any argument is `Overflow[]`.
 
 **Attributes:** `Flat`, `Listable`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Flat](../../expression-information/Flat/), [Orderless](../../expression-information/Orderless/), [Total](../../arithmetic/Total/), [Times](../../arithmetic/Times/)
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on arbitrary-precision integer addition.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on normal forms for sums.
 - Source: [`src/plus.c`](https://github.com/stblake/mathilda/blob/main/src/plus.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_bigint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bigint.c)
+- Tests: [`tests/test_cherry_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_stress.c)
+- Tests: [`tests/test_chop.c`](https://github.com/stblake/mathilda/blob/main/tests/test_chop.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= 2^100 + 3^50
-Out[1]= 1267651318126217093349291975625
-```
-
-```mathematica
-In[1]:= 1/2 + 1/3 + 1/6
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= a + a + b + 2 a
-Out[1]= 4 a + b
-```
 
 ### Notes
 

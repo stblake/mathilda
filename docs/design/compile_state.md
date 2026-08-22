@@ -476,6 +476,7 @@ no runtime type dispatch (the opcode carries the type).
 | VectorPlot | `vp_eval` | both field components | 1.5× |
 | StreamPlot | `eval_field` | both components; hottest (several samples per RK step) | 7.1× |
 | NSum / NProduct | `ns_term_machine` **and** `ns_eval_complex_machine` | machine precision only; MPFR untouched | 6.4× / 8.0× |
+| Sum / Product | `sum_try_compiled` / `product_try_compiled` | **inexact body only** (one-term probe); integer iterator → whole-`Sum` lowering (zero-arg `autocompile_eval_closed`), real iterator → compiled body + C fold; exact sums untouched | ~22× (Sin body, 10⁶) |
 
 The sub-2× rows are not underperforming fast paths — the diagnostic confirms all
 three bodies compile. Sampling is no longer their bottleneck: they build one

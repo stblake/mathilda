@@ -47,6 +47,11 @@ struct CompiledFunction;        /* compiled_callee's return; full type in compil
  * count, so the three stay consistent by construction. */
 #define FN_MAX_PARAMS 8
 
+/* Rungs in a first-match-wins conditional ladder (Which / Switch / Piecewise).
+ * Far past any real ladder; a longer one bails to the interpreter, which is
+ * always correct, just slower. */
+#define COND_CHAIN_MAX 256
+
 /* ------------------------------------------------------------------ *
  *  Argument name -> index map (interned-pointer hash)                 *
  * ------------------------------------------------------------------ */
@@ -169,6 +174,13 @@ typedef struct {
     long long   di;     /* step; nonzero */
 } LoopSpec;
 
+/* One rung of a first-match-wins conditional ladder (Which / Switch / Piecewise):
+ * a guard and the value it yields.  `key == NULL` marks the unconditional default
+ * rung (Piecewise's default, Which's `True`, Switch's `_`), which is always last.
+ * For Switch, `key` is a literal form and the guard is `discriminant == key`; for
+ * Which/Piecewise `key` is the boolean condition itself. */
+typedef struct { const Expr* key; const Expr* value; } Rung;
+
 typedef struct { const char* name; size_t arity; uint16_t op; } IntClosed;
 
 /* Snapshot of the builder state for speculative lowering: emit_mark captures it,
@@ -224,6 +236,15 @@ Expr* fn_head_call(const char* head, int n);
 const char* fn_placeholder(int i);
 bool loop_spec_parse(const Expr* spec, LoopSpec* out);
 bool loop_spec_int_bounds(Ctx* c, const LoopSpec* s);
+/* Walk a Which / Switch / Piecewise call into the live rungs of its first-match
+ * ladder and the ladder's result type, dropping the clauses the interpreter drops
+ * (a literal-False guard) and stopping at the one it makes final (a literal-True
+ * guard, Switch's `_`).  Shared by emit_ctrl (which needs the rungs) and infer_type
+ * (which passes rungs=NULL and reads only *rt) so the declared type and the emitted
+ * code cannot drift.  Returns false — with c->ok cleared — for anything outside the
+ * compilable subset. */
+bool collect_ladder(Ctx* c, const char* h, Expr** A, size_t na,
+                    Rung* rungs, int* nr_out, bool* has_default_out, CompileType* rt_out);
 bool range_spec(Ctx* c, Expr* const* A, size_t na, LoopSpec* out);
 bool subscript_is_literal_spec(const Expr* e);
 bool part_is_scalar_indexed(Ctx* c, CompileType at, const Expr* const* A, size_t na);

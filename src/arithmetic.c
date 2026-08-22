@@ -34,7 +34,7 @@ int64_t lcm(int64_t a, int64_t b) {
 Expr* make_rational(int64_t n, int64_t d) {
     if (d == 0) return NULL; // Error
     if (n == 0) return expr_new_integer(0);
-    
+
     int64_t common = gcd(n, d);
     n /= common;
     d /= common;
@@ -50,6 +50,37 @@ Expr* make_rational(int64_t n, int64_t d) {
     args[0] = expr_new_integer(n);
     args[1] = expr_new_integer(d);
     return expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
+}
+
+/* Bignum analogue of make_rational: build a canonical Rational (or Integer /
+ * BigInt when it reduces) from GMP numerator/denominator.  Reduces by gcd and
+ * forces the denominator positive, matching the invariant every other rational
+ * producer keeps.  Components are demoted to machine Integer via
+ * expr_bigint_normalize when they fit.  Returns NULL only for a zero
+ * denominator. */
+Expr* make_rational_mpz(const mpz_t n, const mpz_t d) {
+    if (mpz_sgn(d) == 0) return NULL;
+    mpz_t nn, dd, g;
+    mpz_init_set(nn, n);
+    mpz_init_set(dd, d);
+    if (mpz_sgn(dd) < 0) { mpz_neg(nn, nn); mpz_neg(dd, dd); }
+    mpz_init(g);
+    mpz_gcd(g, nn, dd);
+    if (mpz_cmp_ui(g, 1) > 0) {
+        mpz_divexact(nn, nn, g);
+        mpz_divexact(dd, dd, g);
+    }
+    Expr* result;
+    if (mpz_cmp_ui(dd, 1) == 0) {
+        result = expr_bigint_normalize(expr_new_bigint_from_mpz(nn));
+    } else {
+        Expr* args[2];
+        args[0] = expr_bigint_normalize(expr_new_bigint_from_mpz(nn));
+        args[1] = expr_bigint_normalize(expr_new_bigint_from_mpz(dd));
+        result = expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
+    }
+    mpz_clear(nn); mpz_clear(dd); mpz_clear(g);
+    return result;
 }
 
 Expr* builtin_rational(Expr* res) {
@@ -283,12 +314,20 @@ int expr_numeric_sign(Expr* e) {
         return 0;
     }
     if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint);
-    int64_t n, d;
-    if (is_rational(e, &n, &d)) {
-        // d is conventionally positive in Mathilda Rational[n, d].
-        if (n > 0) return (d > 0) ? 1 : -1;
-        if (n < 0) return (d > 0) ? -1 : 1;
-        return 0;
+    /* Rational[num, den].  Recurse into the components so bignum-component
+     * rationals (e.g. Rational[1, 10^25], whose denominator overflows int64)
+     * get a correct sign — the old is_rational() int64 path silently reported
+     * 0 for them, which propagated into Times/Plus canonical ordering, the
+     * superficially-negative test, and Sign itself.  The denominator is
+     * conventionally positive, but reading both signs keeps a hand-built
+     * Rational with a negative denominator correct. */
+    if (e->type == EXPR_FUNCTION && e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Rational &&
+        e->data.function.arg_count == 2) {
+        int sn = expr_numeric_sign(e->data.function.args[0]);
+        int sd = expr_numeric_sign(e->data.function.args[1]);
+        return sn * sd;
     }
     return 0;
 }

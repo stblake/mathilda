@@ -5,17 +5,15 @@
 
 ## Description
 
-```text
-Catch[expr]
-    Returns the argument of the first Throw generated while
-    evaluating expr, or expr if none. Catch[expr, form] catches only a
-    Throw[value, tag] whose tag matches form (tag is re-evaluated per
-    comparison); Catch[expr, form, f] returns f[value, tag].
-```
+**`Catch[expr]`**
 
-## Examples
+Returns the argument of the first Throw generated while evaluating expr, or expr if none. Catch\[expr, form\] catches only a Throw\[value, tag\] whose tag matches form (tag is re-evaluated per comparison); Catch\[expr, form, f\] returns f\[value, tag\].
 
-All examples below are verified against the current Mathilda build.
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Catch[a; b; Throw[c]; d; e]
@@ -43,11 +41,13 @@ Out[5]= {v, tg}
 
 **Attributes:** `HoldFirst`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Throw](../../control-flow/Throw/), [Return](../../control-flow/Return/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/), [Map](../../data-structures/Map/), [Sum](../../calculus/Sum/), [Table](../../lists-and-iteration/Table/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+- Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_core_algebra.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core_algebra.c)
+- Tests: [`tests/test_scan.c`](https://github.com/stblake/mathilda/blob/main/tests/test_scan.c)
+- Tests: [`tests/test_sow_reap.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sow_reap.c)

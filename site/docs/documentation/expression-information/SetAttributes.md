@@ -5,13 +5,24 @@
 
 ## Description
 
-```text
-SetAttributes[s, attr] sets the attributes for s.
+**`SetAttributes[s, attr] sets the attributes for s.`**
+
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (3)
+
+```mathematica
+In[1]:= SetAttributes[g, Orderless]
+Out[1]= Null
+
+In[2]:= Attributes[g]
+Out[2]= {Orderless}
+
+In[3]:= g[3, 1, 2]
+Out[3]= g[1, 2, 3]
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -27,29 +38,16 @@ its attributes are read, and returns `Null`. Reading attributes back is the inve
 
 **Attributes:** `HoldFirst`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_clearall_remove_protect.c`](https://github.com/stblake/mathilda/blob/main/tests/test_clearall_remove_protect.c)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_eval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval.c)
+- Tests: [`tests/test_eval_timestamps.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval_timestamps.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= SetAttributes[g, Orderless]
-Out[1]= Null
-
-In[2]:= Attributes[g]
-Out[2]= {Orderless}
-
-In[3]:= g[3, 1, 2]
-Out[3]= g[1, 2, 3]
-```
 
 ### Notes
 

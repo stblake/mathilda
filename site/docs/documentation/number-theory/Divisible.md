@@ -5,20 +5,22 @@
 
 ## Description
 
-```text
-Divisible[n, m]
-    yields True if n is divisible by m, and False otherwise.
-n is divisible by m when n is an integer multiple of m; this is
-effectively Mod[n, m] == 0.  Works for machine and BigInt integers,
-Gaussian integers, rationals, and exact numeric quantities (the
-quotient n/m must reduce to an integer or Gaussian integer).  Returns
-False unless n and m are manifestly divisible; symbolic, non-numeric
-arguments are left unevaluated.  Listable.
-```
+**`Divisible[n, m]`**
 
-## Examples
+yields True if n is divisible by m, and False otherwise.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+n is divisible by m when n is an integer multiple of m; this is effectively Mod\[n, m\] == 0.  Works for machine and BigInt integers, Gaussian integers, rationals, and exact numeric quantities (the quotient n/m must reduce to an integer or Gaussian integer).  Returns False unless n and m are manifestly divisible; symbolic, non-numeric arguments are left unevaluated.  Listable.
+
+</details>
+
+## Examples (15)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (6)
 
 ```mathematica
 In[1]:= Divisible[10, 2]
@@ -40,6 +42,37 @@ In[6]:= Divisible[{1, 2, 3, 4, 5, 6}, 2]
 Out[6]= {False, True, False, True, False, True}
 ```
 
+### Worked examples (9)
+
+```mathematica
+In[7]:= Divisible[10^3000 + 1, 16001]
+Out[7]= True
+
+In[8]:= Divisible[0, 0]
+Out[8]= True
+
+In[9]:= Divisible[6, 0]
+Out[9]= False
+
+In[10]:= Divisible[10, -2]
+Out[10]= True
+
+In[11]:= Divisible[3 + I, 1 - I]
+Out[11]= True
+
+In[12]:= Divisible[3/2, 1/2]
+Out[12]= True
+
+In[13]:= Divisible[2 Pi, Pi/2]
+Out[13]= True
+
+In[14]:= Divisible[Sqrt[6], Sqrt[2]]
+Out[14]= False
+
+In[15]:= Divisible[{1, 2, 3, 4, 5, 6}, 2]
+Out[15]= {False, True, False, True, False, True}
+```
+
 ## Implementation notes
 
 - Machine integers and GMP bigints: tested directly with `mpz_divisible_p`, so large cases such as `Divisible[10^3000 + 1, 16001]` → `True` are exact. By the GMP convention, divisibility by `0` holds iff `n == 0` (`Divisible[0, 0]` → `True`, `Divisible[6, 0]` → `False`); sign is ignored (`Divisible[10, -2]` → `True`).
@@ -50,11 +83,11 @@ Out[6]= {False, True, False, True, False, True}
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_divisible.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisible.c)
+- Tests: [`tests/test_divisors.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisors.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)

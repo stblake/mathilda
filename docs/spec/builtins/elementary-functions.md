@@ -572,6 +572,62 @@ In[7]:= FractionalPart[10000000*3^(2/3)]
 Out[7]= -20800838 + 10000000 3^(2/3)
 ```
 
+## UnitBox
+
+`UnitBox[x]` is the rectangular pulse (box) function: `1` for
+$-\frac{1}{2} \le x \le \frac{1}{2}$ and `0` otherwise. The boundary is closed
+at both endpoints, matching the `UnitStep[0] = 1` convention below.
+
+**Features**:
+- `Listable`, `NumericFunction`, `Orderless`, `Protected`, matching
+  Mathematica. `Orderless` reflects the variadic multidimensional box
+  (`UnitBox[x, y, ...]`, like `UnitStep`); this implementation evaluates the
+  single-argument pulse.
+- The result is **always exact** -- an integer `0` or `1` -- for real numeric
+  input, including `Real`/`MPFR` arguments.
+- Implemented by reusing `UnitStep`'s sign classifier twice, on `x + 1/2` and
+  `1/2 - x`: `x` is in range iff neither shifted value is negative. **Exact
+  symbolic real arguments** (`Pi`, `Sqrt[2]`, ...) are therefore resolved by
+  the same numerical certification `UnitStep` and `Ramp` use.
+- Non-real arguments (a `Complex` with non-zero imaginary part) and
+  unresolved symbolic arguments are left unevaluated.
+- **Fast paths.** `UnitBox` has a narrowing NDArray kernel (`1` iff
+  `-1/2 <= x <= 1/2`, an exact integer, real→int and int→int arms like
+  `UnitStep`/`Sign`/`Floor`), so it threads over a visible `NDArray[...]` and
+  reads a packed buffer directly; it is on the `AWARE` / `INT64_OK` lists in
+  `src/pack.c`, and a packed or int64 array stays packed and exact. It also
+  lowers in `Compile[]` (and therefore auto-compiles), scalar and rank-1 array,
+  as `(x >= -1/2) (x <= 1/2)` typed as an Integer. The scalar interpreter path
+  still reuses `UnitStep`'s sign classifier for exact symbolic-real
+  certification.
+- Does **not** thread through `Interval` in this version: `Floor`/`Ceiling`
+  are the only piecewise functions here that do, because `Interval`
+  threading only supports monotone functions, and `UnitBox` (a two-sided box)
+  isn't one.
+
+```mathematica
+In[1]:= UnitBox[0]
+Out[1]= 1
+
+In[2]:= UnitBox[1/2]
+Out[2]= 1
+
+In[3]:= UnitBox[-1/2]
+Out[3]= 1
+
+In[4]:= UnitBox[0.6]
+Out[4]= 0
+
+In[5]:= UnitBox[{-1, -0.5, 0, 0.5, 1}]
+Out[5]= {0, 1, 1, 1, 0}
+
+In[6]:= UnitBox[Pi]
+Out[6]= 0
+
+In[7]:= UnitBox[x]
+Out[7]= UnitBox[x]
+```
+
 ## UnitStep
 
 `UnitStep[x]` is the unit step (Heaviside) function: `0` for $x < 0$ and `1`

@@ -325,7 +325,7 @@ external baseline before this directory existed.
 | 12 | `quadrature` | `src/numerical_calculus/gkadapt.c`, `dequad.c` |
 | 13 | `ode-integration` | `src/numerical_calculus/ndsolve*.c` |
 | 14 | `root-finding` | `src/numerical_roots/` |
-| 15 | `optimization` | `src/findmin.c` |
+| 15 | `optimization` | `src/numerical_calculus/findmin.c` |
 | 16 | `interpolation` | `src/interp.c` |
 | 17 | `fft-and-signal` | `src/fourier.c`, `src/convolutions.c` |
 | 18 | `dense-linalg-drivers` | `src/linalg/lapack_bridge.c` |

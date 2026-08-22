@@ -3,6 +3,7 @@
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
+use tauri::Emitter;
 use tauri::async_runtime::Receiver;
 use tauri::ipc::Channel;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
@@ -133,6 +134,17 @@ impl MathildaKernel {
                                 continue;
                             }
                             if msg["type"] == "done" {
+                                /* `done` carries the kernel's resident memory, which the status bar
+                                   shows. Forwarded as its own event rather than through `channel`:
+                                   the channel is the CELL's output stream and a memory reading is
+                                   not output -- putting it there would make every consumer of cell
+                                   output filter it out. It is attached to `done` on the kernel side
+                                   because memory can only change when something was evaluated, so a
+                                   poll would either lag or add traffic for a number already in
+                                   hand. */
+                                if let Some(bytes) = msg.get("memory").and_then(|v| v.as_u64()) {
+                                    let _ = self.app.emit("kernel-memory", bytes);
+                                }
                                 break;
                             }
                             channel.send(msg).map_err(|e| format!("channel: {e}"))?;

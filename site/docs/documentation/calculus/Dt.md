@@ -5,15 +5,17 @@
 
 ## Description
 
-```text
-Dt[f] gives the total derivative of f.
-Dt[f, x] gives the total derivative of f with respect to x.
-Dt[f, {x, n}] gives the nth total derivative.
-```
+**`Dt[f] gives the total derivative of f.`**
 
-## Examples
+**`Dt[f, x] gives the total derivative of f with respect to x.`**
 
-All examples below are verified against the current Mathilda build.
+**`Dt[f, {x, n}] gives the nth total derivative.`**
+
+## Examples (12)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Dt[y^2 + Sin[x]]
@@ -31,6 +33,56 @@ Out[4]= a + x Dt[a, x] + Dt[b, x]
 In[5]:= Dt[x^2, {x, 2}]
 Out[5]= 2
 ```
+
+### Applications (7)
+
+```mathematica
+In[6]:= Dt[x y]
+Out[6]= Dt[x] y + x Dt[y]
+
+In[7]:= Dt[Sin[x]]
+Out[7]= Cos[x] Dt[x]
+
+In[8]:= Dt[Log[x]]
+Out[8]= Dt[x]/x
+
+In[9]:= Dt[a x, x]
+Out[9]= a
+
+In[10]:= Dt[x^n]
+Out[10]= x^(-1 + n) (n Dt[x] + Dt[n] x Log[x])
+
+In[11]:= Dt[f[g[x]]]
+Out[11]= Dt[x] Derivative[1][g][x] Derivative[1][f][g[x]]
+
+In[12]:= Dt[x^2 y^3]
+Out[12]= 2 x Dt[x] y^3 + 3 x^2 y^2 Dt[y]
+```
+
+## Algorithm
+
+deriv.c -- Native C implementation of Mathematica-style differentiation.
+
+This module replaces the fragile rule-based bootstrap in src/internal/deriv.m with a direct, dispatch-driven implementation.
+
+Overview -------- The two key entry points are the builtins D (partial derivative) and Dt (total derivative). Both ultimately funnel through a single recursive core, ``compute_deriv``, parameterised by an optional differentiation variable. When the variable is non-NULL we compute a partial derivative treating everything else as constant (using a fast FreeQ-style walk to short-circuit constant sub-trees). When the variable is NULL we compute a total derivative -- unknown symbols then participate as ``Dt[sym]`` terms.
+
+Why this is faster than the rule-based implementation ----------------------------------------------------- The old deriv.m relied on ~60 DownValues. Each call to D[f, x] would:
+
+```text
+  * scan the DownValues list for D linearly,
+  * attempt pattern matching against every rule head (Plus, Times,
+    Power, every elementary function, ...),
+  * run ``/;`` side-conditions such as FreeQ,
+  * perform attempt-evaluate/backtrack cycles in the matcher,
+  * recursively re-evaluate the result through the full rule engine.
+```
+
+In contrast, this module performs a single head-symbol strcmp dispatch per call, constructs the derivative expression directly, and lets the outer evaluator simplify arithmetic. Crucially, the constant-detection step uses a tailored structural traversal (expr_free_of) that avoids calling out to the generic FreeQ builtin.
+
+Returned expressions -------------------- Every builder below produces plain un-reduced expression trees (e.g. Plus[0, x] or Times[1, x]). The outer Mathilda evaluator runs a full fixed-point reduction on the value we return, so Plus[0, ...], Times[1, ...], and all subsequent chain-rule simplifications fold automatically. This keeps the code readable and avoids duplicating the arithmetic simplifier.
+
+Memory ownership ---------------- Every helper that returns an ``Expr*`` returns a freshly allocated tree owned by the caller. Input expressions are never mutated; sub-expressions that need to be reused are always deep-copied.
 
 ## Implementation notes
 
@@ -56,57 +108,23 @@ is shared with `D`.
 
 - `Protected`, `ReadProtected`.
 - Shares the elementary-function derivative table with `D`; the
+  only dispatch difference is the base-case handling of symbols
+  (free symbols become `Dt[s, x]` factors instead of `0`).
 
 **Attributes:** `Protected`, `ReadProtected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [I](../../mathematical-constants/I/), [EulerGamma](../../mathematical-constants/EulerGamma/), [Catalan](../../mathematical-constants/Catalan/), [GoldenRatio](../../mathematical-constants/GoldenRatio/), [Degree](../../mathematical-constants/Degree/), [D](../../calculus/D/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (Kluwer, 1992), ch. 2.
 - Source: [`src/calculus/deriv.c`](https://github.com/stblake/mathilda/blob/main/src/calculus/deriv.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
+- Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
+- Tests: [`tests/test_eliminate.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eliminate.c)
+- Tests: [`tests/test_powerexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_powerexpand.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Dt[x y]
-Out[1]= Dt[x] y + x Dt[y]
-```
-
-```mathematica
-In[1]:= Dt[Sin[x]]
-Out[1]= Cos[x] Dt[x]
-```
-
-```mathematica
-In[1]:= Dt[Log[x]]
-Out[1]= Dt[x]/x
-```
-
-```mathematica
-In[1]:= Dt[a x, x]
-Out[1]= a
-```
-
-```mathematica
-In[1]:= Dt[x^n]
-Out[1]= x^(-1 + n) (n Dt[x] + Dt[n] x Log[x])
-```
-
-```mathematica
-In[1]:= Dt[f[g[x]]]
-Out[1]= Dt[x] Derivative[1][g][x] Derivative[1][f][g[x]]
-```
-
-```mathematica
-In[1]:= Dt[x^2 y^3]
-Out[1]= 2 x Dt[x] y^3 + 3 x^2 y^2 Dt[y]
-```
 
 ### Notes
 

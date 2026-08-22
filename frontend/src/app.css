@@ -1,6 +1,26 @@
 :root {
+  /* Two bar heights, not one reactive var. Canvas mode holds "Mathilda" and a
+     theme toggle and needs 34px; focused mode holds labelled toolbar groups and
+     needs 46px (4px pad + 9px caption + 2px gap + 24px controls + 4px pad + 1px
+     border = 44, rounded up for breathing room). Making --appbar-h itself
+     reactive would put a JS style write in the middle of the {#if} branch swap
+     between .canvas-stage and .focused-view, which is exactly when layout
+     thrash hurts -- and it would drag .canvas-stage into the change set for no
+     reason. */
+  --appbar-h: 34px;
+  --toolbar-h: 46px;
+  /* Fixed px, NOT rem. App.svelte sets the root font-size for Cmd+=/- zoom, and
+     a rem-sized caption blows a fixed-height bar apart at 2.0x -- the same
+     reason Canvas.svelte's hints are in px. */
+  --tb-caption-sz: 9px;
+  --tb-btn-sz: 24px;
+  /* The optional status bar along the bottom of the focused view. .focused-view
+     insets its bottom by this when the bar is shown. */
+  --statusbar-h: 22px;
   --text: #6b6375;
   --text-h: #08060d;
+  /* Subordinate text: subsection headings, captions, recorded output. */
+  --text-dim: #8d8797;
   --bg: #fff;
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
@@ -30,10 +50,17 @@
   }
 }
 
+/* Three states, not two. App.svelte lets the user pick a theme by putting a
+   .light or .dark class on <html>, but the dark palette used to live ONLY in
+   this media query -- so choosing light while the OS was dark left every
+   var() holding its dark value on a light surface, and text went
+   white-on-white. The media query now yields to an explicit .light choice,
+   and .dark below covers the opposite case (OS light, app dark). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     --text: #9ca3af;
     --text-h: #f3f4f6;
+    --text-dim: #767c8a;
     --bg: #16171d;
     --border: #2e303a;
     --code-bg: #1f2028;
@@ -49,6 +76,27 @@
     filter: invert(1) brightness(2);
   }
 }
+
+/* Explicit dark choice while the OS is in light mode. */
+:root.dark {
+    --text: #9ca3af;
+    --text-h: #f3f4f6;
+    --text-dim: #767c8a;
+    --bg: #16171d;
+    --border: #2e303a;
+    --code-bg: #1f2028;
+    --accent: #c084fc;
+    --accent-bg: rgba(192, 132, 252, 0.15);
+    --accent-border: rgba(192, 132, 252, 0.5);
+    --social-bg: rgba(47, 48, 58, 0.5);
+    --shadow:
+      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+  }
+
+  #social .button-icon {
+    filter: invert(1) brightness(2);
+}
+
 
 body {
   margin: 0;

@@ -5,17 +5,22 @@
 
 ## Description
 
-```text
-Evaluate[expr]
-    causes expr to be evaluated even if it appears as the argument of a function whose attributes specify that it should be held unevaluated.
-Evaluate only overrides HoldFirst, HoldRest, and HoldAll attributes when it appears directly as the head of the function argument that would otherwise be held.
-Evaluate does not override HoldAllComplete.
-Evaluate with other than one argument reduces to Sequence: Evaluate[] gives Sequence[] and Evaluate[a, b] gives Sequence[a, b].
-```
+**`Evaluate[expr]`**
 
-## Examples
+causes expr to be evaluated even if it appears as the argument of a function whose attributes specify that it should be held unevaluated.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+Evaluate only overrides HoldFirst, HoldRest, and HoldAll attributes when it appears directly as the head of the function argument that would otherwise be held. Evaluate does not override HoldAllComplete. Evaluate with other than one argument reduces to Sequence: Evaluate\[\] gives Sequence\[\] and Evaluate\[a, b\] gives Sequence\[a, b\].
+
+</details>
+
+## Examples (11)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (11)
 
 ```mathematica
 In[1]:= Evaluate[1+1]
@@ -41,6 +46,15 @@ Out[7]= 2
 
 In[8]:= Hold[Evaluate[Length[{a,b,c}]]]
 Out[8]= Hold[3]
+
+In[9]:= Evaluate[Head[{1,2,3}]]
+Out[9]= List
+
+In[10]:= Evaluate[]
+Out[10]= Sequence[]
+
+In[11]:= Hold[Evaluate[1+1, 2+2]]
+Out[11]= Hold[2, 4]
 ```
 
 ## Implementation notes
@@ -56,11 +70,11 @@ Out[8]= Hold[3]
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [HoldFirst](../../other-advanced/HoldFirst/), [HoldRest](../../other-advanced/HoldRest/), [HoldAll](../../expression-information/HoldAll/), [HoldAllComplete](../../expression-information/HoldAllComplete/), [Sequence](../../expression-information/Sequence/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_evaluate.c`](https://github.com/stblake/mathilda/blob/main/tests/test_evaluate.c)
+- Tests: [`tests/test_unevaluated.c`](https://github.com/stblake/mathilda/blob/main/tests/test_unevaluated.c)

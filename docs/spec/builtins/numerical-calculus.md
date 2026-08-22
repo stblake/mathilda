@@ -575,7 +575,16 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
   additive last resort when Wynn does not converge (an existing Wynn result is
   never replaced).  The far-tail ladder also drives convergence verification, so
   a summand that merely peaks late (e.g. `1/(1 + (k-20)^2)`) is no longer
-  mistaken for divergent.
+  mistaken for divergent.  **Euler–Maclaurin is gated on a continuity probe:**
+  because EM samples the summand on a continuous tail integral and a complex
+  derivative contour, an *integer-only* summand — `1/Prime[n]`, `PartitionsP[n]`,
+  anything that rejects a fractional argument — cannot use it (every off-integer
+  sample fails, emitting messages and forcing a fallback).  Such a summand is
+  detected by evaluating it at two non-integer index points and routed straight
+  to partial-sum extrapolation, with the head-term count raised (to 100) so the
+  irregular, slowly-converging prime-type tail (`Σ 1/Prime[n]^2 → 0.45225`) is
+  well seeded.  Per-sample messages from these internal trial evaluations are
+  muted throughout.
 
 A **large finite** sum is evaluated as the difference of two infinite tails,
 `Σ_{imin}^∞ − Σ_{imax+di}^∞`, when the summand decays.
@@ -597,9 +606,18 @@ A **large finite** sum is evaluated as the difference of two infinite tails,
 For infinite sums `VerifyConvergence -> True` runs a tail ratio test; a clearly
 divergent sum (`|a_{k+1}/a_k| > 1`) yields `NSum::div` and `ComplexInfinity`.
 The test is deliberately blind to ratios → 1, so (like Mathematica) it does not
-detect the divergence of `Σ 1/k`.  `VerifyConvergence -> False` skips the test
-and returns the formal accelerated value (e.g. `NSum[2^i, {i,0,Infinity}]`
-gives the Shanks value `-1`).
+detect the divergence of `Σ 1/k` or `Σ 1/Prime[n]`.  This is a genuine
+limitation, not an oversight: at the convergence *boundary* (terms → 0 with
+`a_{k+1}/a_k → 1`) convergence is undecidable from finitely many samples — the
+Cauchy-condensation terms of the divergent `Σ 1/(n ln n)` (ratio → 0.941 per
+octave) are numerically indistinguishable from those of the convergent
+`Σ 1/n^1.1` (ratio → 0.933), so any flag that caught the former would
+false-positive on the latter.  A boundary sum therefore returns its extrapolated
+value; when the extrapolation has not stabilised the `NSum::accgl` /
+`NSum::ncvg` warning signals that the digits are not trustworthy.
+`VerifyConvergence -> False` skips the ratio test and returns the formal
+accelerated value (e.g. `NSum[2^i, {i,0,Infinity}]` gives the Shanks value
+`-1`).
 
 ### Messages
 
@@ -1344,3 +1362,1113 @@ In[7]:= (* wave equation u_tt = u_xx (default adaptive DOPRI5) *)
                  Derivative[1, 0][u][0, x] == 0, u[t, 0] == 0, u[t, 1] == 0},
                 u, {t, 0, 0.5}, {x, 0, 1}]
 ```
+
+## FindMinimum / FindMaximum
+
+Iterative local optimisation.  Implemented natively in C in
+`src/numerical_calculus/findmin.c`.  Both have `HoldAll, Protected` attributes and use
+`Block`-style local binding of the search variables.  `FindMaximum[f, ...]`
+is a thin wrapper around `FindMinimum[-f, ...]` that negates the
+objective value before returning.
+
+### Forms
+
+- `FindMinimum[f, {x, x0}]` -- 1D from a single start (default Brent).
+- `FindMinimum[f, {x, x0, x1}]` -- bracket Brent on `[x0, x1]`.
+- `FindMinimum[f, {x, xstart, xmin, xmax}]` -- bracket Brent on `[xmin, xmax]`.
+- `FindMinimum[f, {{x, x0}, {y, y0}, ...}]` -- n-D from a user start.
+- `FindMinimum[f, {x, y, ...}]` -- n-D auto-start at 1 for each variable
+  (matches Mathematica; avoids the common saddle-at-origin trap for
+  oscillatory objectives like `Sin[x] Sin[2 y]` whose gradient vanishes
+  at the origin).
+- `FindMinimum[{f, cons}, vars]` -- constrained minimisation.
+- `FindMaximum[...]` -- same forms; maximises `f` (equivalent to negating
+  the objective and the f-value of the result).
+
+### Output
+
+`{f_min, {var1 -> v1, ..., varN -> vN}}` -- a 2-element list whose first
+element is the function value and whose second is the rule list for the
+optimising variable assignments.
+
+### Method dispatch
+
+| Spec                  | Default method |
+|-----------------------|----------------|
+| n = 1                 | Brent          |
+| n >= 2                | QuasiNewton (BFGS) |
+| `{x, x0, x1}` (1D)    | Brent (bracket) |
+
+Methods overridable via `Method -> "Brent" | "Newton" | "QuasiNewton"
+| "ConjugateGradient" | "LBFGSB" | "Powell" | "NelderMead" | "TNC" | "SLSQP"
+| "COBYLA" | "COBYQA" | "NewtonCG" | "Dogleg" | "TrustNCG" | "TrustExact"
+| "TrustKrylov"`.  Brent
+is golden-section search with parabolic interpolation (derivative-free),
+QuasiNewton is BFGS with Armijo backtracking line search, ConjugateGradient
+is Polak-Ribière+ with restart, Newton uses the symbolic Hessian (via
+repeated `D[]`) with modified-Cholesky safeguarding, TNC is a Hessian-free
+truncated Newton (see below), and Powell and NelderMead are the two
+derivative-free multivariate methods (see below).  The gradient methods
+default to a symbolic gradient (`D[f, x_i]` per variable) with a
+central-difference fallback; override via `Gradient -> {dfdx1, dfdx2,
+...}`.  Powell and NelderMead use no gradient at all.
+
+`"LBFGSB"` (aliases `"LBFGS"`, `"LimitedMemoryBFGS"`; a Mathilda extension —
+Mathematica exposes no such method name) is **limited-memory BFGS with bound
+constraints**.  It keeps only the `m = 10` most recent correction pairs and
+forms the search direction by the Nocedal two-loop recursion at `O(m·n)` cost,
+so it scales to large `n` where the full-memory QuasiNewton's dense `n×n`
+inverse-Hessian is `O(n²)` in both memory and per-step work.  The line search
+tries the quasi-Newton unit step first (with expansion, to follow curved
+valleys); box constraints are honoured by an active-set projection (a
+coordinate resting on a face with the gradient pushing outward is fixed and the
+free variables optimise in the reduced subspace), reaching the same optima as a
+reference L-BFGS-B.  General (non-box) constraints route through the same
+augmented-Lagrangian wrapper as the other methods.  References: Byrd, Lu,
+Nocedal & Zhu 1995, with the Morales–Nocedal 2011 correction.
+
+`"Powell"` (alias `"PrincipalAxis"`, Mathematica's name for the same
+derivative-free conjugate-direction family) minimises **using function
+values only** — no gradient, analytic or finite-difference — so it is the
+method for non-smooth, noisy, or black-box objectives the gradient methods
+cannot handle.  Each cycle does a 1-D minimisation (the same Brent
+parabolic-interpolation line search as `"Brent"`, restricted to
+`phi(t) = f(p + t d)`) along each of `n` directions, then replaces the
+direction of largest decrease with the averaged cycle step when Powell's
+parabolic test accepts it — building up conjugate directions so that
+successive cycles converge super-linearly on smooth quadratics.  The
+replace-direction test, direction cycling, and extrapolated point match
+SciPy's `minimize(method="Powell")`, so the two agree on the minimiser to
+rounding.  **Box bounds** are honoured by clamping each line search to the
+feasible `t`-interval (SciPy added bounded Powell in 1.5); general
+(non-box) constraints are **not** supported — they emit `FindMinimum::nimpl`
+(SciPy's Powell has no constrained form either).  The objective still rides
+the compiled fast path at `MachinePrecision` (Powell, value-only across
+thousands of evaluations, is its single biggest beneficiary);
+`WorkingPrecision > MachinePrecision` falls back to `QuasiNewton` with a
+diagnostic.  `n == 1` delegates to the exact `"Brent"` path.  Reference:
+Powell 1964; Press et al., *Numerical Recipes*, §10.5.
+
+`"NelderMead"` is the Nelder & Mead (1965) **downhill simplex**: `n+1`
+vertices reflected, expanded, contracted and shrunk toward the best, using
+function values only.  It is the LOCAL simplex from a single start (matching
+SciPy's `minimize(method="Nelder-Mead")`), distinct from the restarted,
+box-sampling simplex the global `NMinimize` driver uses.  Standard
+non-adaptive coefficients `rho/chi/psi/sigma = 1/2/0.5/0.5` (SciPy's
+default), initial simplex perturbing each coordinate by 5% (or `0.00025` for
+a zero coordinate), so the two agree on the minimiser.  Like Powell it is
+derivative-free, rides the compiled objective at `MachinePrecision`, honours
+box bounds by projecting every candidate vertex, rejects general
+constraints (`FindMinimum::nimpl`), falls back to `QuasiNewton` above
+machine precision, and delegates `n == 1` to `"Brent"`.  Nelder-Mead is
+strong on **smooth** black-box objectives but famously **weak on
+non-smooth** ones -- the simplex can converge to a non-stationary point
+(McKinnon 1998) -- so `"Powell"` is the better derivative-free choice for a
+non-smooth objective.  Reference: Nelder & Mead 1965.
+
+`"TNC"` (alias `"TruncatedNewton"`, a Mathilda extension -- Mathematica has
+no such method name) is **Nash's truncated Newton with bound constraints**,
+and it is **Hessian-free**: each outer iteration approximately solves the
+Newton system `H·p = -g` by an inner **conjugate-gradient** loop that
+accesses the Hessian only through **Hessian-vector products**
+`Hv ≈ (∇f(x+h·v) - ∇f(x))/h` -- finite differences of the (exact, compiled)
+gradient -- so the Hessian is never formed.  The inner CG is truncated on
+non-positive curvature, on the inexact-Newton forcing sequence
+`||r|| ≤ min(0.5, √||g||)·||g||` (giving ~order-1.5 superlinear convergence
+near the optimum), or at `min(50, n)` inner iterations.  Box bounds use the
+same active-set projection as `"LBFGSB"` (masked gradient,
+projected-gradient KKT test, `alpha_max` face cap, strong-Wolfe line
+search).  **Where it wins:** large-`n`, bound-constrained, ill-conditioned
+problems -- it uses *true* Newton curvature at `O(n)` memory, so it scales
+where `"Newton"` would build an `O(n²)` symbolic Hessian, and converges in
+fewer outer iterations than `"LBFGSB"`'s low-rank quasi-Newton model.
+Mathilda's exact compiled gradient is what makes the finite-difference Hv
+both cheap and accurate.  It does **not** win at small `n` (full `"Newton"`
+is fine) or on cheap-gradient, well-conditioned problems (`"LBFGSB"`'s one
+gradient per iteration is cheaper).  Unlike `"Powell"`/`"NelderMead"`, TNC
+is gradient-based, so **general (non-box) constraints route through the
+augmented-Lagrangian penalty wrapper** like the other gradient methods.  The
+inner CG uses an identity preconditioner (a diagonal preconditioner, which
+would let the inner-iteration cap drop toward SciPy's `n/2`, is a future
+refinement); `WorkingPrecision > MachinePrecision` falls back to
+`QuasiNewton`.  Matches SciPy's `minimize(method="TNC")` on the box-only
+case.  References: Nash 1984; Dembo & Steihaug 1983; Nocedal & Wright ch. 7.
+
+`"SLSQP"` (alias `"SequentialQuadraticProgramming"`, a Mathilda extension --
+Mathematica has no such method name) is **Han-Powell sequential quadratic
+programming**, the method for smooth **constrained** problems (equality +
+inequality + bounds).  Each outer iteration replaces `f` by a quadratic model
+`½ dᵀB d + ∇fᵀd` -- where `B` is a BFGS approximation to the Hessian of the
+**Lagrangian** kept positive-definite by **Powell's (1978) damping** -- and
+each constraint by its linearisation, then solves the resulting **QP** for the
+step `d` with a **Goldfarb-Idnani dual active-set** solver built on the same
+Cholesky primitive as `"Newton"` (a dual method needs no feasible start, which
+matters because SQP iterates are routinely infeasible w.r.t. the
+linearisation).  The step is accepted by an **L1 exact-penalty merit** line
+search whose penalties are driven above the QP multipliers by Powell's rule, so
+`d` is always a descent direction; an inconsistent linearisation is repaired by
+Kraft's slack relaxation.  Unlike every other gradient method, SLSQP consumes
+**general (non-box) constraints DIRECTLY through the QP** rather than the
+augmented-Lagrangian penalty wrapper, so it reaches the true constrained
+optimum with **accurate constraint satisfaction and super-linear local
+convergence** -- e.g. the corner problem `FindMinimum[{x + y, 3 x + 2 y >= 7 &&
+x >= 0 && y >= 0}, ...]` lands exactly on `{7/3, 0}` where the penalty method
+stops once merely feasible, and HS71 reaches `17.014`.  With no constraints it
+degrades gracefully to a damped-BFGS line-search solve; equalities, box bounds
+and inequalities may be mixed freely.  The objective and its exact gradient
+ride the compiled fast path; `WorkingPrecision > MachinePrecision` falls back to
+`QuasiNewton`.  Matches SciPy's `minimize(method="SLSQP")` on the optimiser to
+rounding (experiment `68-slsqp-constrained`), winning on the harder constrained
+problems where the compiled gradient pays off (HS71 ~17×) and losing on large
+trivial-objective QPs where the dense active-set QP linear algebra dominates
+(an incremental/warm-started QP is the future refinement).  References: Kraft
+1988; Powell 1978; Goldfarb & Idnani 1983; Nocedal & Wright ch. 18.
+
+`"COBYLA"` (Powell's Constrained Optimization BY Linear Approximation; a
+Mathilda extension -- Mathematica has no such method name) is the
+**derivative-free** method for **constrained** problems, and the FIRST
+derivative-free method here to accept general (non-box) constraints -- `"Powell"`
+and `"NelderMead"` reject them, and every gradient method needs a derivative --
+so it is the method for **non-smooth / noisy / black-box objectives WITH
+constraints**.  Each iteration models `f` and every constraint by a linear
+approximation and solves a trust-region subproblem: (stage 1) minimise the worst
+constraint violation, then (stage 2) minimise the linear objective model while
+holding that minimum violation.  Here the linear models are recovered by
+**central differences** on a coordinate cross of the current trust radius --
+central (not forward) differences are what let it handle a **kink**, where the
+two-sided slope of `|t|` at `t=0` reads `0` (correct) rather than a spurious
+`±1` -- and the two-stage LP is solved by the same dual active-set QP as
+`"SLSQP"` (`fm_slsqp_activeset`) with an inf-norm trust box, reaching the same
+constrained optimum as reference COBYLA.  Step acceptance uses Powell's
+L-infinity exact-penalty merit `Phi = f + mu*max_i max(0, c_i)` with his PARMU
+update.  **Equalities** `h==0` are handled by splitting into `h<=0` and `-h<=0`
+(so this is strictly more capable than SciPy's inequality-only COBYLA); **box
+bounds** enter as ordinary linear inequalities.  It converges to `~rhoend =
+10^-PrecisionGoal` accuracy (a trust radius, not a gradient test), and its
+**linear** models cannot navigate a strongly curved valley to machine precision
+(Rosenbrock stalls near `f ~ 10^-3`) -- that limitation is exactly what
+`"COBYQA"` addresses with quadratic models.  The objective and constraints ride
+the compiled fast path; `WorkingPrecision > MachinePrecision` falls back to
+`QuasiNewton`; `n == 1` with no general constraints delegates to `"Brent"`.
+Matches SciPy's `minimize(method="COBYLA")` on the optimiser (experiment
+`69-cobyla-constrained`), 40-200x faster (compiled objective/constraint
+evaluations vs SciPy's Python-callback evaluations, the same win as `"Powell"`).
+Reference: Powell 1994.
+
+`"COBYQA"` (Constrained Optimization BY Quadratic Approximations; a Mathilda
+extension) is the **derivative-free** analogue of `"SLSQP"`: a trust-region SQP
+that, unlike `"COBYLA"`'s *linear* models, builds a full **quadratic** model of
+`f` and of every constraint -- so it captures curvature, converging tighter on
+smooth problems and **navigating curved valleys that COBYLA cannot** (it drives
+Rosenbrock to machine precision where `"COBYLA"` stalls near `f ~ 10^-3`), and it
+handles equality + inequality + bounds **natively** (equalities are not split).
+Each iteration builds the quadratic models by finite differences on a structured
+stencil of side `Delta` -- the coordinate cross `x0 +/- Delta e_i` gives the
+gradient and the diagonal Hessian, the corners `x0 + Delta(e_i + e_j)` the
+off-diagonal Hessian, a fully-determined quadratic per function in closed form (a
+minimum-Frobenius-norm 2n+1-point model is the eval-efficiency refinement) -- then
+takes a Byrd-Omojokun trust-region SQP step realised as a single inf-norm box
+trust-region QP handed to the same dual active-set solver as `"SLSQP"`, with the
+Lagrangian-Hessian model `B = H_f + sum lambda_k H_{c_k}`.  Steps are accepted by
+an L1 exact-penalty merit with Powell's penalty update; the trust radius `Delta`
+doubles as the stencil scale (grown on a good step, halved on a poor one,
+terminating at `Delta = 10^-PrecisionGoal`).  The objective and constraints ride
+the compiled fast path; `WorkingPrecision > MachinePrecision` falls back to
+`QuasiNewton`; `n == 1` with no general constraints delegates to `"Brent"`.
+Matches SciPy's `minimize(method="COBYQA")` on the optimiser (experiment
+`70-cobyqa-constrained`), 30-390x faster (SciPy's COBYQA is a pure-Python
+implementation, so the compiled-evaluation advantage is even larger than for
+COBYLA).  References: Ragonneau & Zhang 2023; Conn, Gould & Toint 2000.
+
+#### Trust-region / truncated-Newton family (unconstrained)
+
+The five methods `"NewtonCG"`, `"Dogleg"`, `"TrustNCG"`, `"TrustExact"`, and
+`"TrustKrylov"` mirror the corresponding `scipy.optimize.minimize` methods
+(`"Newton-CG"`, `"dogleg"`, `"trust-ncg"`, `"trust-exact"`, `"trust-krylov"` —
+each accepted as an alias). All five are **unconstrained** in SciPy, so — like
+`"Powell"`/`"NelderMead"` — they reject general (non-box) constraints
+(`FindMinimum::nimpl`) and ignore box bounds with a diagnostic; `n == 1` still
+runs the general machinery (no `"Brent"` delegation when requested explicitly);
+`WorkingPrecision > MachinePrecision` falls back to `QuasiNewton`. Four of them
+share one trust-region driver (initial radius Δ₀ = 1, Δmax = 1000, accept when
+the actual/predicted reduction ratio ρ > 0.15, shrink by ¼ when ρ < ¼, expand by
+2 on a boundary step) and differ only in how the subproblem
+`min_{‖p‖≤Δ} g·p + ½ pᵀBp` is solved.
+
+- `"NewtonCG"` (alias `"Newton-CG"`) is a **line-search** truncated Newton: an
+  inner CG loop solves `Bp = -g` with the Eisenstat–Walker forcing sequence and
+  negative-curvature truncation, then a unit-step-first Wolfe line search. Uses
+  Hessian-vector products only (finite differences of the exact compiled
+  gradient) — Hessian-free, scales to large `n`.
+- `"Dogleg"` (alias `"dogleg"`) is the **Powell dogleg** trust region: it builds
+  the dense Hessian and blends the Cauchy and Newton points along the dogleg
+  path. When the model Hessian is not positive definite it falls back to the
+  steepest-descent-to-boundary step (where SciPy's dogleg raises), so it stays
+  robust on convex/near-convex problems. Reference: Powell 1970.
+- `"TrustNCG"` (aliases `"trust-ncg"`, `"TrustRegionNewtonCG"`) is the
+  **Steihaug–Toint** truncated CG: it solves the subproblem with CG using
+  Hessian-vector products, stopping at the boundary on negative curvature or when
+  the step leaves the ball. Hessian-free. Reference: Steihaug 1983.
+- `"TrustExact"` (alias `"trust-exact"`) solves the subproblem **nearly exactly**
+  by the Moré–Sorensen algorithm on the dense Hessian: it iterates the Levenberg
+  shift λ so `(B+λI)` is positive semidefinite and `‖p(λ)‖ ≈ Δ`, with a dedicated
+  hard-case branch (`g ⟂` the least eigenvector). Handles indefinite Hessians
+  that dogleg cannot. Reference: Moré & Sorensen 1983.
+- `"TrustKrylov"` (alias `"trust-krylov"`) is **GLTR**: it Lanczos-tridiagonalizes
+  the Hessian in the Krylov space of the gradient (Hessian-vector products, full
+  re-orthogonalization) and solves the small tridiagonal subproblem exactly
+  (reusing the Moré–Sorensen solver), which recovers the least-eigenvector
+  component and so handles the indefinite/hard case. Hessian-free. Reference:
+  Gould, Lucidi, Roma & Toint 1999.
+
+`"NewtonCG"`, `"TrustNCG"`, and `"TrustKrylov"` never form the Hessian (only
+Hessian-vector products), so they scale to large `n`; `"Dogleg"` and
+`"TrustExact"` form the dense Hessian (symbolic via `D[]`, else finite-differenced
+from the gradient). All ride the compiled fast path at `MachinePrecision` and
+match SciPy's optimiser to benchmark tolerance (experiments `71-newton-cg`,
+`72-dogleg`, `73-trust-ncg`, `74-trust-exact`, `75-trust-krylov`).
+
+### Constraints
+
+Inside the `{f, cons}` form, `cons` is a boolean tree of comparisons:
+
+- `Less / LessEqual / Greater / GreaterEqual` between a bare iteration
+  variable and a numeric constant become **box constraints** (enforced
+  by per-step projection).
+- Other inequalities (`g(x) <= 0`) and equalities (`h(x) == 0`) feed a
+  **PHR augmented-Lagrangian** wrapper around the inner solver.  Each
+  outer round minimises `f + Σ_k [λ_k·c_k + μ·c_k²]` (with the standard
+  Rockafellar shift for inactive inequalities) via BFGS/CG/Newton, then
+  updates the multipliers `λ_k ← λ_k + 2μ·c_k` (clamped to 0 below for
+  inequalities); μ starts at 1 and ramps ×10 (max 9 rounds).  The
+  matching gradient is `∇f + Σ_k a_k·∇c_k` with active value
+  `a_k = λ_k + 2μ·c_k`; each constraint gradient is symbolic at setup and
+  falls back to central differences.  The multipliers let a *moderate* μ
+  reach the constraint surface instead of relying on μ→∞, which is
+  ill-conditioned and previously could not restore feasibility on a
+  nonlinear/bilinear equality.  With every `λ_k = 0` the terms reduce
+  exactly to the classical quadratic penalty, so an unconstrained or
+  linear-only problem is unchanged.  A drift rescue returns the best
+  feasible iterate seen across the schedule if the final round drifts
+  infeasible.
+- `Or[...]`, `Element[...]`, `x ∈ Integers` and the rest of the
+  Mathematica constraint surface are not yet implemented -- they emit
+  `FindMinimum::nimpl`.
+
+The penalty wrapper converges from feasible *or* infeasible starting
+points on smooth nonlinear constraints (linear/quadratic inequalities,
+linear/quadratic equalities, intersections thereof).  At very high μ
+the inner solver may exit early on line-search exhaustion; the outer
+loop's feasibility check is authoritative, and only emits a diagnostic
+(`FindMinimum::infeas`) when the final iterate genuinely fails the
+constraint tolerance (1e-12).
+
+### Options
+
+| Option              | Default        | Effect |
+|---------------------|----------------|--------|
+| `Method`            | `Automatic`    | `"Brent"`, `"QuasiNewton"`, `"ConjugateGradient"`, `"Newton"`, `"LBFGSB"`, `"Powell"` (alias `"PrincipalAxis"`), `"NelderMead"`, `"TNC"` (alias `"TruncatedNewton"`), or `Automatic`. |
+| `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a digit count (>= ~16 routes through MPFR).  Lifts the 1D `Brent` and n-D `QuasiNewton` iterations into MPFR at the requested precision so the result `{f_min, {x -> ...}}` carries MPFR leaves with that many digits.  Explicit `Method -> "Newton"` or `"ConjugateGradient"` at MPFR currently falls back to `QuasiNewton` with a `FindMinimum::nimpl` diagnostic; general (non-box) constraints at MPFR fall back to machine precision similarly. |
+| `MaxIterations`     | `500`          | Iteration limit on the inner loop. |
+| `AccuracyGoal`      | `Automatic`    | Digit count `n` ⇒ stop when `\|grad\| < 10^{-n}`. `Infinity` disables. `Automatic` resolves to `WorkingPrecision/2`. |
+| `PrecisionGoal`     | `Automatic`    | Digit count `n` ⇒ stop when `\|step\| < \|x\| * 10^{-n}`. |
+| `Gradient`          | `Automatic`    | Explicit `{dfdx1, ..., dfdxN}` overrides the symbolic gradient. |
+| `StepMonitor`       | `None`         | A held expression evaluated after each step. |
+| `EvaluationMonitor` | `None`         | A held expression evaluated each time `f` (or any partial) is evaluated. Setting it disables the compiled fast path below (the monitor fires from the interpreter), so it trades speed for the trace. |
+
+### Evaluation (auto-compilation)
+
+At `MachinePrecision` (the default) the objective **and its exact symbolic
+gradient** are lowered to bytecode once over the variables (`compile_expr`, the
+same compiler `Compile[]` uses) and evaluated on the register machine at every
+trial point, instead of the interpreter (`expr_copy` + one `OwnValue` install
+per variable + `evaluate` + `numericalize`). The gradient is the *same*
+`∂f/∂x_i` — compiled, not finite-differenced — so the result is unchanged; only
+the evaluation engine differs. This is what makes the QuasiNewton / Conjugate
+Gradient / Newton loop fast (its cost is dominated by the per-iteration
+gradient), and the 1-D Brent path benefits from the compiled value evals. A
+user-supplied `Gradient` is compiled the same way; a component `Compile` cannot
+lower falls back to the interpreter per component, and a non-finite compiled
+result falls back per point — a pure speedup. Typical gains: 1-D transcendental
+~3×, 2-D Rosenbrock ~4×, 6-D Rosenbrock ~1.9×. `WorkingPrecision >
+MachinePrecision` keeps the exact MPFR interpreter path, and setting
+`EvaluationMonitor` disables the fast path so the monitor still fires per
+evaluation.
+
+### Diagnostics (stderr)
+
+| Tag                  | Triggered when |
+|----------------------|----------------|
+| `FindMinimum::argt`    | Wrong arg count. |
+| `FindMinimum::ivar`    | Malformed variable spec. |
+| `FindMinimum::vecvar`  | Vector-valued variable (deferred). |
+| `FindMinimum::badmeth` | Unknown `Method` value. |
+| `FindMinimum::badopt`  | Unknown option name or invalid value. |
+| `FindMinimum::nimpl`   | Method, constraint shape, or domain restriction not yet supported. |
+| `FindMinimum::nlnum`   | `f`, gradient, or constraint did not evaluate to a number. |
+| `FindMinimum::cvmit`   | Inner-loop `MaxIterations` exhausted. |
+| `FindMinimum::lstol`   | Line search could not find a sufficient decrease. |
+| `FindMinimum::dsing`   | Hessian non-positive-definite (Newton). |
+| `FindMinimum::infeas`  | Penalty outer loop could not satisfy all constraints. |
+
+### Examples
+
+```mathematica
+In[1]:= FindMinimum[(x - 3)^2 + 1, {x, 0}]
+Out[1]= {1.0, {x -> 3.0}}
+
+In[2]:= FindMinimum[x Cos[x], {x, 2}]
+Out[2]= {-3.28837, {x -> 3.42562}}
+
+In[3]:= FindMinimum[x Cos[x], {x, 7, 1, 15}]
+Out[3]= {-9.47729, {x -> 9.52933}}
+
+In[4]:= FindMinimum[Sin[x] Sin[2 y], {{x, 2}, {y, 2}}]
+Out[4]= {-1.0, {x -> 1.5708, y -> 2.35619}}
+
+In[5]:= FindMinimum[{x Cos[x], 1 <= x && x <= 15}, {x, 7}]
+Out[5]= {-9.47729, {x -> 9.52933}}
+
+(* Chained `lo <= x <= hi` parses as an Inequality[...] node; FindMinimum
+   walks its (value, op, value) triples and registers each as a box bound. *)
+In[5b]:= FindMaximum[{x Cos[x], 1 <= x <= 15}, {x, 7}]
+Out[5b]= {6.36096, {x -> 6.4373}}
+
+In[6]:= FindMinimum[(1-x)^2 + 100 (y-x^2)^2, {{x, 0}, {y, 0}}]
+Out[6]= {0.0, {x -> 1.0, y -> 1.0}}
+
+In[7]:= FindMaximum[Cos[x], {x, 0}]
+Out[7]= {1.0, {x -> 0.0}}
+
+In[8]:= FindMinimum[(x - 3)^2, {x, 0}, Method -> "ConjugateGradient"]
+Out[8]= {0.0, {x -> 3.0}}
+
+(* Arbitrary precision via WorkingPrecision: the 1D Brent and n-D BFGS
+   iterations both run in MPFR at the requested precision and the
+   returned `{f_min, {x -> ...}}` carries MPFR leaves with that many
+   digits. *)
+In[9]:= FindMinimum[(x - Pi)^2, {x, 0}, WorkingPrecision -> 50]
+Out[9]= {0.0, {x -> 3.1415926535897932384626433832795028841971693993751}}
+
+In[10]:= FindMinimum[x Cos[x], {x, 2}, WorkingPrecision -> 80]
+Out[10]= {-3.2883713955908964865125964571235283975158511553846230554230811211040811736596049,
+         {x -> 3.42561845948172814647771386218545617769640923939753965919739613085112431446169}}
+```
+
+## NMinimize / NMaximize
+
+Numerical **global** optimisation.  Implemented natively in C in
+`src/numerical_calculus/findmin.c`, layered on the `FindMinimum` machinery (it reuses the same
+`Block`-style variable binding, `{f, cons}` constraint parsing, penalty/BFGS
+local solvers, MPFR path, and result construction).  Both are `Protected` but
+**not** `HoldAll` (matching Mathematica's `Attributes[NMinimize] == {Protected}`);
+their variables must be unbound symbols, and an assigned optimization variable
+makes the call return unevaluated with `NMinimize::ivar`.  `NMaximize[f, ...]` is a thin wrapper around
+`NMinimize[-f, ...]` that negates the objective value before returning.
+
+Where `FindMinimum` descends from a single start point to the nearest local
+minimum, `NMinimize` runs a stochastic global search over a bounded region and
+then polishes the best point with the exact local solver.
+
+### Forms
+
+- `NMinimize[f, x]` -- global minimum with respect to one variable.
+- `NMinimize[f, {x, y, ...}]` -- global minimum over several variables.
+- `NMinimize[{f, cons}, vars]` -- constrained global minimum.  `cons` may be
+  a single constraint, an `And[...]` of constraints, or — as Mathematica
+  allows — additional list elements `{f, c1, c2, ...}` that are implicitly
+  `And`-ed.
+- `NMaximize[...]` -- same forms; maximises `f`.
+
+Variables may be given bare (`x`), as a starting interval (`{x, xmin, xmax}`,
+used to seed the search region), with an integer domain
+(`Element[x, Integers]`, in the variable list or the constraints), or as
+**indexed variables** `x[i]`.  Because both arguments are held (`HoldAll`), a
+generator that produces the variable list — `Table[x[i], {i, 1, n}]`,
+`Array[x, n]` — is evaluated once (with the variable head localized) so it
+expands to the concrete list `{x[1], ..., x[n]}`; a held `Table[...]`
+constraint list is expanded the same way and treated as an implicit `And`.
+Indexed variables are internally rewritten to fresh scalar symbols for the
+search and mapped back in the result, so `Rule`s come back keyed by the
+original `x[i]`.  This makes the standard `n`-dimensional benchmarks (e.g. the
+Rosenbrock valley `Sum[100 (x[i+1]-x[i]^2)^2 + (1-x[i])^2, {i, 1, n-1}]` over
+`Table[x[i], {i, 1, n}]`) express directly.
+
+The problem and the variable spec may also be supplied through a bound symbol —
+`prob = {f, cons}; vars = Table[x[i], {i, 1, n}]; NMinimize[prob, vars]`. Since
+both arguments are held, such a symbol is resolved (with the variable heads
+localized) so its `{f, cons}` list or variable list is exposed and then handled
+exactly as if written inline; a genuinely unbound symbol stays a single
+optimization variable (`NMinimize[f, x]`).
+
+### Output
+
+`{f_min, {var1 -> v1, ...}}`.  Integer-domain variables come back as exact
+integers.  If the feasible set is empty, the result is
+`{Infinity, {var1 -> Indeterminate, ...}}`.
+
+### Constraints and domains
+
+Constraints are the same relational/boolean forms `FindMinimum` accepts:
+`==`, `<`, `<=`, `>`, `>=`, chained inequalities, and their `And`
+combinations — plus disjunctive `Or` combinations, which `FindMinimum` does not
+accept (see below).  Bare-variable inequalities against a constant become **box
+constraints** (used both to bound the search region and to project during the
+local polish); other inequalities and equalities are handled with **Deb's
+feasibility rules** during the global search (a feasible point always beats an
+infeasible one; among feasible points the smaller objective wins; among
+infeasible points the smaller total violation wins) and with the
+quadratic-penalty local solver during the polish.  Integer variables
+(`Element[x, Integers]`) are searched on the integer lattice and refined by
+integer coordinate descent.  A domain declaration may name **several variables
+at once**, written either as `Element[x | y, Integers]` (Alternatives) or
+`Element[{x, y}, Integers]` (List); each named variable gets the domain, exactly
+as Mathematica does.  The declaration is accepted in the variable list or the
+constraints, and every member must be one of the optimization variables (a
+declaration on any other symbol is left in place and rejected as unenforceable).
+
+**Disjunctive (`Or`) constraints.**  A constraint `c1 || c2 || ...`, at the top
+level or nested inside an `And`, is feasible when **at least one** branch holds.
+Each branch may itself be a single comparison, a chained inequality, or an `And`
+of those.  A disjunction is scored by its **minimum-branch penalty** — the
+smallest of the branches' squared-violation penalties, which is `0` exactly when
+some branch is satisfied — so Deb's feasibility rules select it during the global
+search with no extra weighting.  The derivative-free global engines
+(DifferentialEvolution / SimulatedAnnealing / NelderMead / RandomSearch) consume
+the non-smooth `min` directly; the smooth local polish folds in each
+disjunction's currently-active (minimum-penalty) branch so it refines *within*
+the feasible region the point already occupies, and the post-polish feasibility
+gate keeps the reported point feasible.  For example,
+`NMinimize[{(x^2+y-11)^2+(x+y^2-7)^2, (x-3)^2+(y-2)^2<=0.1 || (x+2.8)^2+(y+3.1)^2<=0.1}, {x, y}]`
+returns the Himmelblau minimum `0` at `(3, 2)`, the branch that contains it, and
+`NMinimize[{x^2, x<=-2 || x>=2}, x]` returns `4` at `x = ±2` — the branch
+boundary, not the infeasible `x = 0` in the gap between branches.  (`FindMinimum`,
+whose gradient penalty method requires a smooth penalty, still rejects `Or` with
+`FindMinimum::nimpl`.)
+
+For a **mixed-integer** problem whose feasible region lies outside the default
+`±10` search span, the polish adds a continuous-relaxation recovery step: it
+solves the continuous relaxation (the integer variables relaxed to reals, every
+coordinate free of the sampling region) to locate the basin, rounds the integer
+coordinates, then refines the continuous coordinates with the integers pinned.
+The relaxed point is adopted only when it is a Deb-improvement, so it can never
+worsen the region-confined result.  This lets e.g.
+`NMinimize[{(x-15)^2 + (y-3)^2, Element[y, Integers]}, {x, y}]` recover the
+optimum at `(15, 3)` even though `x = 15` is far outside the sampling box.
+
+**Adaptive region expansion.**  When the default `±10` sampling region contains
+no feasible point at all — common when the feasible set's location is implied by
+nonlinear constraints rather than stated as variable bounds — the fully-unbounded
+coordinates are grown by successive powers of ten (up to `±10^5`) and the search
+is retried, so the feasible region is found instead of reporting
+`{Infinity, ...}`.  Only fully-unbounded coordinates grow; a coordinate carrying
+a box bound or a starting-interval hint keeps its resolved region.  The first
+attempt is the base region with the base seed, so a problem already feasible
+there is solved identically to before; expansion triggers only to rescue
+infeasibility and stops at the smallest region that yields feasibility (so it
+does not drift into far basins).  Thus
+`NMinimize[{(x-50)^2 + (y-40)^2, x + y >= 80}, {x, y}]`, whose feasible set lies
+wholly outside `±10`, returns the optimum `(50, 40)`, while a genuinely
+infeasible problem (e.g. `x^2 + 1 <= 0`) still returns `{Infinity, ...}`.
+
+A problem that is genuinely **unbounded below** returns whatever feasible point
+the (bounded) search settles on; supplying explicit variable bounds (as the
+standard engineering MINLP benchmarks do) both bounds the objective and pins the
+intended optimum.  For instance the pressure-vessel MINLP written without its
+non-negativity bounds is unbounded below (its true global minimum is a large-
+negative non-physical point), so it returns a feasible point rather than the
+textbook physical optimum until the standard bounds
+`1 <= x1, x2 <= 99 && 10 <= x3, x4 <= 240` are added.
+
+Not yet supported (emit `NMinimize::nimpl` and abstain / fall back): vector and
+matrix variables (`Vectors[n, dom]`, `Matrices`), geometric-region domains,
+`VectorGreaterEqual`, `Or[...]` (disjunctive) constraints, domains other than
+`Integers`/`Reals`, and general (non-box) constraints at
+`WorkingPrecision > MachinePrecision`.
+
+### Methods
+
+| `Method ->` | Engine |
+|-------------|--------|
+| `Automatic` | `"DifferentialEvolution"` with a dimension-scaled budget (see below) |
+| `"DifferentialEvolution"` | DE/rand/1/bin with Deb feasibility selection (default) |
+| `"NelderMead"` | downhill-simplex; each restart's vertex polished into its basin minimum, deepest kept |
+| `"RandomSearch"` | multiple random starts, each refined by the local solver, best local minimum kept |
+| `"SimulatedAnnealing"` | Metropolis search with geometric cooling |
+| `"SHGO"` | Simplicial Homology Global Optimization: sample the box, build a graph, start one local search per minimizer-pool vertex (see below) |
+| `"DualAnnealing"` | Generalized Simulated Annealing: a heavy-tailed visiting distribution and a generalized Metropolis rule with reannealing, plus a local search after each Markov chain (see below) |
+| `"DIRECT"` | DIviding RECTangles: a deterministic Lipschitzian search that normalizes the box to the unit hypercube and repeatedly subdivides the "potentially optimal" cells; no derivatives, no random seed (see below) |
+| `"BasinHopping"` | Monte-Carlo minimization: perturb → local-minimize ("quench") → Metropolis-accept on the minimized energies, with an adaptive step size (see below) |
+
+`"DifferentialEvolution"` keeps every trial point inside the box by *bounce-back*
+reinitialisation — a mutant that overshoots a bound is redrawn at random between
+its base vector and the violated bound — rather than clamping to the bound.
+Clamping would pile members onto the wall, collapse that coordinate's mutation
+differentials to zero, and strand the search there whenever a box-constrained
+optimum lies in the interior (e.g. the Schwefel function, optimum at
+`x_i = 420.97` inside `[-500, 500]`).
+
+On a continuous problem the local polish is a **multi-start** over the final
+population, not a single refinement of the global best: the best `Min[2·d, 50]`
+*distinct* members (deduplicated by basin) are each polished into their basin
+minimum and the deepest is kept. Polishing only the single best strands DE in
+whichever basin that one member occupied, so a larger population or a shorter run
+— both of which leave the population less converged — could report a *worse*
+optimum; ranking basins by their minima instead makes the result improve, not
+degrade, with `"SearchPoints"`. On Griewank-10 over `[-600, 600]` the plain
+`Method -> "DifferentialEvolution"` reaches the global `0` (Mathematica reports
+`~0.175`). `"PostProcess" -> False` disables it and returns the raw global best;
+mixed-integer problems keep the single driver polish so their integer-descent cost
+is unchanged.
+
+All four multi-start engines share this principle: **polish each independent
+start into its basin minimum and keep the deepest, ranking by local minima rather
+than by the raw search point that found the basin.** `"RandomSearch"` always did
+(one local solve per start). `"SimulatedAnnealing"` polishes each of its
+`Min[2·d, 50]` chains, `"NelderMead"` each of its `Min[2·d, 20]` restarts, and
+`"DifferentialEvolution"` the distinct members of its final population. The one
+engine this cannot rescue is `"RandomSearch"` itself: with no global move, pure
+multi-start local search only finds basins a random start lands near, so on a box
+far wider than the optimum's basin (Griewank over `[-600, 600]`, where the central
+bowl is `~10⁻¹¹` of the 10-D volume) no attainable start count reaches it —
+`"DifferentialEvolution"` / `"SimulatedAnnealing"` are the engines for that shape.
+
+**Automatic vs. explicit `"DifferentialEvolution"` — the default budget.**
+The DE *population* is Storn & Price's `10·d` clamped to `[15, 200]`, the same
+whether `"DifferentialEvolution"` is named explicitly or selected via
+`Method -> Automatic` — the textbook default, so high-dimensional problems get the
+population DE actually needs (a 20-D problem runs 200 members, not the 40 the
+explicit form was previously clamped to). The two differ only in the *generation*
+budget: `Method -> Automatic` (i.e. no `Method`) scales it with dimension, `150·d`
+generations, where the explicit form keeps a flat `100`. Deceptive multimodal
+landscapes (e.g. the 10-D Michalewicz function, whose `Sin[...]^20` ridges are
+near-flat elsewhere so the local post-polish cannot rescue a weak basin) need far
+more search than the flat budget provides; the larger automatic default lets the
+plain call reach a good basin. This costs nothing on easy problems — the
+convergence early-break stops each run as soon as the feasible sub-population
+collapses to tolerance, so low-dimensional and convex problems finish in the same
+time as before. Naming `"DifferentialEvolution"` explicitly (or supplying your own
+`SearchPoints` / `MaxIterations`) selects the flat generation budget; the search
+still uses a fixed default PRNG seed, so a seeded run stays reproducible.
+
+A method may carry sub-options as a list, e.g.
+`Method -> {"DifferentialEvolution", "SearchPoints" -> 30,
+"ScalingFactor" -> 0.6, "CrossProbability" -> 0.9, "RandomSeed" -> 7}`.
+The search uses a deterministic PRNG with a fixed default seed, so results are
+reproducible; `"RandomSeed"` overrides it.
+
+Recognised sub-options:
+
+| Sub-option | Applies to | Meaning |
+|------------|-----------|---------|
+| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts), SHGO (sampling points), DualAnnealing (independent chains), BasinHopping (independent multi-start runs) | population / restart / start / sample / chain / run count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 200}]` (Storn & Price's 10n, the same whether `"DifferentialEvolution"` is explicit or via `Method -> Automatic`); SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts; SHGO `100` sample points (scipy's `n`); DualAnnealing `1` chain and BasinHopping `1` run (scipy's single-run defaults) |
+| `"SamplingMethod" -> m` | SHGO | `"Simplicial"` (default), `"Sobol"`, or `"Halton"` — how the box is sampled and its connectivity graph built (see below). An unknown value warns (`NMinimize::sopt`) and keeps `"Simplicial"` |
+| `"Iterations" -> k` | SHGO | sampling/refinement rounds (scipy's `iters`, default 1); each round grows the complex and re-pools, stopping early once no new local minimum appears. A positive integer, or `Automatic`/`None` for the default; an invalid value warns (`NMinimize::sopt`) |
+| `"VisitingParameter" -> qv` | DualAnnealing | Tsallis visiting-distribution shape `q_v` (scipy's `visit`, default 2.62); `q_v → 1` is Gaussian (classical SA), 2 is Cauchy (fast SA), `> 2` gives the heavy tails of GSA. A real in `(1, 3]`; an out-of-range or non-real value warns (`NMinimize::sopt`) and keeps 2.62 |
+| `"AcceptanceParameter" -> qa` | DualAnnealing | generalized-Metropolis acceptance shape `q_a` (scipy's `accept`, default -5); more negative means a smaller uphill-acceptance probability. A real in `[-1e4, -5]`; an invalid value warns (`NMinimize::sopt`) and keeps -5 |
+| `"InitialTemperature" -> T0` | DualAnnealing | initial (and post-reanneal) visiting temperature (default 5230); a positive real, else warns (`NMinimize::sopt`) and keeps 5230 |
+| `"RestartTemperatureRatio" -> r` | DualAnnealing | reanneal (reset the temperature to `T0`) once the visiting temperature falls below `T0 · r` (default `2·10⁻⁵`); a real in `(0, 1)`, else warns (`NMinimize::sopt`) |
+| `"LocalSearch" -> b` | DualAnnealing | run the local search after each Markov chain (scipy's `no_local_search` inverted; default `True`). `True`/`False`, or `Automatic`/`None` for the default; else warns (`NMinimize::sopt`). `False` leaves pure Generalized Simulated Annealing (the final `"PostProcess"` polish still applies unless it too is off) |
+| `"LocallyBiased" -> b` | DIRECT | `True` (default) is DIRECT-L (Gablonsky & Kelley), biased toward the incumbent — fewer evaluations when there are few local minima; `False` is the original unbiased DIRECT (Jones et al.), better on landscapes with many minima (scipy's `locally_biased`). `True`/`False`, or `Automatic`/`None` for the default; else warns (`NMinimize::sopt`) |
+| `"Epsilon" -> e` | DIRECT | potentially-optimal slack (scipy's `eps`, default `10⁻⁴`): the minimum relative improvement a cell must promise over the incumbent to be subdivided. A nonnegative real; else warns (`NMinimize::sopt`) |
+| `"MaxFunctionEvaluations" -> m` | DIRECT | objective-evaluation budget (scipy's `maxfun`); a positive integer, or `Automatic`/`None` for the default `1000·n` (capped at `2·10⁷`); else warns (`NMinimize::sopt`) |
+| `"MaxIterations" -> k` | DIRECT | division-round budget (scipy's `maxiter`, default 1000); a positive integer, or `Automatic`/`None` for the default; else warns (`NMinimize::sopt`) |
+| `"VolumeTolerance" -> v` | DIRECT | stop once the incumbent cell's volume, as a fraction of the box, drops below this (scipy's `vol_tol`, default `10⁻¹⁶`); a real in `[0, 1)`, else warns (`NMinimize::sopt`) |
+| `"LengthTolerance" -> l` | DIRECT | stop once the incumbent cell's normalized size (half diagonal for unbiased DIRECT, half the longest side for DIRECT-L) drops below this (scipy's `len_tol`, default `10⁻⁶`); a real in `[0, 1)`, else warns (`NMinimize::sopt`) |
+| `"MinValue" -> f*` | DIRECT | a known global-minimum value enabling an early stop when the incumbent gets within `"MinValueTolerance"` of it (scipy's `f_min`); a finite real, or `Automatic`/`None` to disable (the default). An invalid value warns (`NMinimize::sopt`) |
+| `"MinValueTolerance" -> rt` | DIRECT | relative tolerance for the `"MinValue"` early stop (scipy's `f_min_rtol`, default `10⁻⁴`); a real in `[0, 1)`, else warns (`NMinimize::sopt`) |
+| `"Temperature" -> T` | BasinHopping | Metropolis temperature (scipy's `T`, default 1.0): a hop that raises the quenched energy by `ΔE` is accepted with probability `Exp[-ΔE/T]`. A positive real, else warns (`NMinimize::sopt`) and keeps 1.0 |
+| `"StepSize" -> s` | BasinHopping | initial random-displacement half-width — each coordinate is perturbed by a uniform draw in `[-s, s]` (scipy's `stepsize`, default 0.5). A positive real, else warns (`NMinimize::sopt`) and keeps 0.5 |
+| `"StepInterval" -> k` | BasinHopping | hops between step-size adaptations (scipy's `interval`, default 50); a positive integer, or `Automatic`/`None` for the default; else warns (`NMinimize::sopt`) |
+| `"TargetAcceptanceRate" -> r` | BasinHopping | the acceptance rate the step-size adaptation aims for (scipy's `target_accept_rate`, default 0.5): above it the step grows (escape a basin), below it the step shrinks. A real in `(0, 1)`, else warns (`NMinimize::sopt`) |
+| `"StepFactor" -> a` | BasinHopping | multiplicative step-size adjustment factor (scipy's `stepwise_factor`, default 0.9): the step is divided by `a` to grow or multiplied by `a` to shrink. A real in `(0, 1)`, else warns (`NMinimize::sopt`) |
+| `"SuccessIterations" -> m` | BasinHopping | stop a run once the global best has not improved for `m` consecutive hops (scipy's `niter_success`); a positive integer enables it, `Automatic`/`None` disable it (the default); else warns (`NMinimize::sopt`) |
+| `"ScalingFactor" -> F` | DifferentialEvolution | DE differential weight (default 0.6); a real in `(0, 2]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
+| `"CrossProbability" -> cr` | DifferentialEvolution | DE crossover probability (default 0.9); a real in `[0, 1]`, an out-of-range or non-real value warns (`NMinimize::sopt`) and falls back to the default |
+| `"PerturbationScale" -> s` | SimulatedAnnealing | multiplies the trial-step size (default 1.0); a positive real, an invalid value warns (`NMinimize::sopt`) and falls back to 1.0 |
+| `"LevelIterations" -> L` | SimulatedAnnealing | trial moves at each temperature level, so the per-chain budget is `MaxIterations · L` (default 50, the previous fixed multiplier). An explicit value is honored verbatim — past the automatic aggregate cap, like `"SearchPoints"`. A positive integer, or `Automatic`/`None` for the default; an invalid value warns (`NMinimize::sopt`) and falls back to Automatic |
+| `"BoltzmannExponent" -> f` | SimulatedAnnealing | acceptance-probability exponent for an uphill move: `f[i, df, f0]` (1-based iteration `i`, objective increase `df`, current value `f0`) sets the probability `Exp[f[i, df, f0]]`. `Automatic`/`None` keep the built-in cooling exponent `-df/(T·s)`, where `s` is a per-chain estimate of the objective scale (mean `|Δφ|` of a short start-point probe) so the acceptance temperature tracks the objective's magnitude; an invalid value warns (`NMinimize::bexp`) and falls back to Automatic |
+| `"ReflectRatio" -> r` | NelderMead | simplex reflection coefficient (default 1) |
+| `"ExpandRatio" -> e` | NelderMead | simplex expansion coefficient (default 2) |
+| `"ContractRatio" -> c` | NelderMead | simplex contraction coefficient (default 0.5) |
+| `"ShrinkRatio" -> s` | NelderMead | simplex shrink coefficient (default 0.5) |
+| `"Tolerance" -> t` | DifferentialEvolution, NelderMead | objective-spread convergence threshold — the DE population's feasible-member spread, or the NelderMead simplex; overrides the AccuracyGoal/PrecisionGoal-derived default |
+| `"InitialPoints" -> {{x1,…},…}` | DifferentialEvolution, NelderMead | seed the initial DE population / NelderMead simplex. For DE the leading population members are set from the list (each a length-`d` real point, projected into the box, integer coordinates rounded) and the rest are random; a malformed point ends the seeding. For NelderMead the initial simplex is seeded (extra points ignored, fewer are filled by perturbation; malformed → random start) |
+| `"PostProcess" -> v` | all | final exact local polish. `True`/`Automatic`/a named method (`"InteriorPoint"`, `"FindMinimum"`, `"KKT"`, `{"…", opts}`) → on; `False`/`None` → off |
+| `"PenaltyFunction" -> f` | all | function applied to each constraint's violation when scoring infeasible points. `Automatic`/`None` keep the built-in squared penalty; a pure function or function symbol (`#^2 &`, `(10 #) &`, `Sqrt`, …) replaces it |
+| `"RandomSeed" -> s` | all | override the default PRNG seed |
+
+Sub-options are scoped to the selected method (the second column above lists each
+option's owning method(s)). A key that is unrecognised, or that belongs to a
+different method than the one chosen, is dropped with a warning
+(`NMinimize::optx`) rather than silently accepted-and-ignored — e.g. passing
+DualAnnealing's `"VisitingParameter"` to `"SHGO"`, a misspelled/scipy-style name,
+or `MaxIterations` (a top-level option, not a Method sub-option) each warn and are
+ignored. This mirrors how top-level options already report an unrecognised name.
+`"PostProcess"`
+defaults to on: the global best is refined by the exact local optimizer (and,
+for continuous box/unconstrained problems at `WorkingPrecision > MachinePrecision`,
+by an MPFR BFGS step). It accepts the full Mathematica value set — `True`,
+`Automatic`, or a named local method as a string (`"InteriorPoint"`,
+`"FindMinimum"`, `"KKT"`, …) or `{"method", opts…}` turn the polish on; `False`
+or `None` turn it off. Mathilda has a single `FindMinimum`-style local polish
+(BFGS for continuous/box problems, a quadratic-penalty solver for general
+constraints) that already picks the right inner solver, so a named method
+enables post-processing rather than selecting a distinct algorithm; an
+unrecognised value warns (`NMinimize::pmeth`) and falls back to `Automatic`.
+
+`"InitialPoints"` seeds the NelderMead simplex, which matters for functions with
+a narrow basin in a broad flat region — the Easom function
+`-Cos[x] Cos[y] Exp[-((x-π)² + (y-π)²)]` is ≈0 everywhere except a spike of depth
+−1 at `(π, π)`, so an undirected search over a large box rarely samples it.
+NelderMead's convergence test additionally requires the simplex to be
+geometrically small (not merely flat in objective value) before it stops, so a
+simplex sitting on the plateau keeps contracting toward its centroid instead of
+declaring victory immediately — enough to slide into the spike when the seed
+points bracket it. With `"InitialPoints" -> {{-50,-50},{50,50},{10,10}}` (centroid
+≈ `(π,π)`) NMinimize returns `{-1., {x -> π, y -> π}}`.
+
+`"PenaltyFunction"` sets how infeasible points are scored during the global
+search. By default (`Automatic`) a *general* (non-box) constraint contributes the
+square of its violation — `Max[0, g]²` for an inequality `g ≤ 0`, `h²` for an
+equality `h == 0` — and box bounds are handled by projection, not penalty. A
+supplied function `f` replaces the square: a violated constraint contributes
+`f[violation]`, so `Automatic` is exactly `#^2 &`. This affects only the
+feasibility scoring used by the global search (Deb's rules, and the NelderMead /
+SimulatedAnnealing penalized objective); the final local polish keeps the
+differentiable squared penalty its analytic gradient assumes. A satisfied
+inequality always contributes 0, so the feasibility test is unchanged; an invalid
+value (a number, a string) warns (`NMinimize::penf`) and falls back to
+`Automatic`. On a box-only problem the option is inert (there are no general
+constraints to penalize).
+
+`"SimulatedAnnealing"` honors four of its own sub-options.
+`"SearchPoints" -> K` runs `K` independent annealing chains from random starts
+and keeps the best local minimum (default `Automatic = Min[Max[2·d, 12], 50]`).
+The `2·d` scaling follows Mathematica, but a rugged, many-basin landscape in low
+dimension (Eggholder, Schwefel, Griewank, ...) has far more basins than `2·d = 4`
+starts can cover, so a floor of 12 independent starts is what makes the reported
+optimum reliably the global one there rather than luck-of-the-trajectory; a
+bounded aggregate iteration budget is shared across the chains so a large `K`
+stays fast. Each chain's best raw point is polished into its basin minimum before
+the chains are ranked — as `"RandomSearch"` does per restart — so the reported
+optimum *improves* monotonically with `"SearchPoints"` (ranking by random-walk
+lows, which need not sit in the deepest basin, does not).
+`"LevelIterations" -> L` sets the number of trial moves at each temperature
+level, so a chain's total iteration budget is `MaxIterations · L` (default 50 —
+the value the fixed multiplier used to hard-code, so an unset option reproduces
+the previous schedule exactly). A larger `L` anneals each chain longer; it is
+honored verbatim, past the automatic aggregate cap, since the caller has asked
+for that budget. `"PerturbationScale" -> s` multiplies the size of the random
+trial step (default 1.0) — a small scale keeps the walk local, a large one
+explores more widely. `"BoltzmannExponent" -> f` replaces the Metropolis
+acceptance exponent
+for an uphill move: the point is accepted with probability `Exp[f[i, df, f0]]`,
+where `i` is the (1-based) iteration, `df ≥ 0` the objective increase, and `f0`
+the current objective; `Automatic`/`None` keep the built-in cooling exponent
+`-df/(T·s)`. The temperature scale `s` is measured once per chain from a short
+probe of trial steps at the start point (its mean `|Δφ|`): without it the fixed
+`T ∈ [1e-4, 1]` sits far below an objective ranging over hundreds, every uphill
+move is rejected, and the "anneal" degenerates into greedy descent from the start
+point — so only many restarts, never the walk itself, ever crossed a ridge. The
+probe draws from its own PRNG, so the annealing walk's stream is untouched and a
+seeded `"SearchPoints" -> 1` chain follows exactly the trajectory it would
+without the probe. A downhill move is always accepted, as usual. `"PostProcess"
+-> False` skips the per-chain polish and returns the global raw best. On the
+strongly-multimodal Griewank function `Sum[x[i]²/4000] - Product[Cos[x[i]/√i]] +
+1` over `[-600, 600]^d`, the default multi-chain SimulatedAnnealing reaches
+`~0.015` for `d = 10`, below Mathematica's `~0.175` on the same problem; on the
+2-D Eggholder over `[-512, 512]²` it reaches the global `-959.64`, below
+Mathematica's default `-935.34`.
+
+#### SHGO — Simplicial Homology Global Optimization
+
+`Method -> {"SHGO", …}` mirrors [`scipy.optimize.shgo`][shgo] (Endres, Sandrock &
+Focke, *A simplicial homology algorithm for Lipschitz optimisation*, J. Glob.
+Optim. 72 (2018) 181–217). Rather than many blind restarts, SHGO **samples the
+bounded box, builds a graph on the samples, and starts one local search only from
+each "minimizer pool" vertex** — a sampled point that is better (by Deb's
+feasibility rules) than every one of its graph neighbours. Each pool vertex sits
+in a distinct locally-convex sub-domain (the discrete sub-level-set homology
+construction), so a handful of well-placed local searches reach every basin, and
+the number of distinct local minima found (the homology group order) gives a
+principled stopping criterion under refinement. Requires a bounded box; unbounded
+coordinates fall back to the default `±10` sampling region.
+
+`"SamplingMethod"` chooses how the box is sampled and how the graph is built:
+
+- **`"Simplicial"`** (default) — the exact 1-skeleton of the Freudenthal/Kuhn
+  triangulation of the box (its `2^d` corners plus the triangulation's diagonal
+  edges), refined by longest-edge bisection until `"SearchPoints"` vertices are
+  reached. This is the convergence-guaranteed variant and is best for low
+  dimension; above 7 variables (`2^d` corners becomes impractical) it falls back
+  to `"Sobol"`, warning once (`NMinimize::shgodim`).
+- **`"Sobol"` / `"Halton"`** — a low-discrepancy point set (a Sobol′ sequence with
+  Joe–Kuo direction numbers, or a Halton radical-inverse set), digitally/
+  fractionally shifted by `"RandomSeed"`. Their connectivity is an adaptive
+  **k-nearest-neighbour graph** (`k ≈ 2d + 1`, matching the simplex-vertex degree).
+
+> **Fidelity note.** For the QMC methods this k-NN graph is a deliberate,
+> documented approximation of scipy's Delaunay-based connectivity: it yields the
+> same minimizer pool character and seeds the same local searches, and the
+> returned optimum is validated against `scipy.optimize.shgo` in
+> `benchmarks/79-shgo/` — only the internal graph construction differs (Mathilda
+> ships no Delaunay triangulation). `"Simplicial"` is exact.
+
+The local search reuses the same exact local optimizer as the other engines
+(BFGS for continuous/box problems, the augmented-Lagrangian penalty solver for
+general constraints, integer descent for `Element[·, Integers]`), so constrained
+and mixed-integer problems are handled with no SHGO-specific code.
+`"Iterations" -> k` grows the complex and re-pools `k` times, stopping early once
+no new local minimum appears; `"PostProcess" -> False` returns the best raw pool
+vertex with no local polish. The sampling is deterministic (a fixed default
+`"RandomSeed"`), so results are reproducible.
+
+```mathematica
+(* Deceptive Eggholder — the simplicial corner coverage lands the global basin *)
+NMinimize[{-(y + 47) Sin[Sqrt[Abs[y + x/2 + 47]]] - x Sin[Sqrt[Abs[x - (y + 47)]]],
+           -512 <= x <= 512 && -512 <= y <= 512}, {x, y},
+          Method -> {"SHGO", "SamplingMethod" -> "Simplicial"}]
+(* -> {-959.633, {x -> 512., y -> 404.312}} *)
+
+(* Cross-in-tray has four global minima; more sample points resolve them *)
+NMinimize[{-0.0001 (Abs[Sin[x] Sin[y] Exp[Abs[100 - Sqrt[x^2 + y^2]/Pi]]] + 1)^0.1,
+           -10 <= x <= 10 && -10 <= y <= 10}, {x, y},
+          Method -> {"SHGO", "SearchPoints" -> 500}]
+(* -> {-2.06261, {x -> -1.34941, y -> 1.34941}}  (one of four symmetric minima) *)
+
+(* Constrained (Mishra's Bird on a disk) — the pool + augmented-Lagrangian polish *)
+NMinimize[{Sin[y] Exp[(1 - Cos[x])^2] + Cos[x] Exp[(1 - Sin[y])^2] + (x - y)^2,
+           (x + 5)^2 + (y + 5)^2 < 25}, {x, y},
+          Method -> {"SHGO", "SamplingMethod" -> "Sobol", "SearchPoints" -> 300}]
+(* -> {-106.765, {x -> -3.13025, y -> -1.58214}} *)
+```
+
+Against `scipy.optimize.shgo` on eight standard bounded multimodal benchmarks
+(`benchmarks/79-shgo`, same sampling method and sample count on both sides),
+Mathilda reaches the same global on every case and is **7×–100× faster on 7 of 8**
+(e.g. Styblinski–Tang-4D 1.1 ms vs 123 ms; Rastrigin-3D 0.70 ms vs 37 ms). The
+one slower case is Shubert (2.3×): its ≈18 global minima produce a large
+minimizer pool, so Mathilda runs proportionally more local searches — the honest
+cost of pool completeness on a densely-multimodal surface.
+
+[shgo]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.shgo.html
+
+#### DualAnnealing — Dual Annealing (generalized simulated annealing)
+
+`Method -> {"DualAnnealing", …}` mirrors [`scipy.optimize.dual_annealing`][dualannealing],
+which implements **Generalized Simulated Annealing** (Tsallis & Stariolo,
+*Generalized simulated annealing*, Physica A 233 (1996) 395–406; Xiang, Sun, Fan
+& Gong, Phys. Lett. A 233 (1997) 216–220). It is "dual" because it couples a
+global annealing walk with a local search:
+
+- The **visiting distribution** draws each trial jump from a Tsallis
+  *q*-generalized Cauchy–Lorentz distribution whose scale is set by the visiting
+  temperature. The shape `"VisitingParameter"` `q_v` controls the tails: `q_v → 1`
+  is Gaussian (classical SA), `q_v = 2` is Cauchy (fast SA), and the default
+  `q_v = 2.62` gives heavy tails, so an occasional long jump escapes a deep basin
+  even when the walk has cooled. Jumps larger than a tail limit are folded back
+  into the box, so a hot chain samples the box near-uniformly.
+- Uphill moves are accepted by a **generalized Metropolis rule** with shape
+  `"AcceptanceParameter"` `q_a` (default -5) on an acceptance temperature that
+  falls faster than the visiting temperature.
+- The visiting temperature follows the GSA cooling schedule and **reanneals** —
+  resets to `"InitialTemperature"` `T0` — once it drops below
+  `T0 · "RestartTemperatureRatio"`, so a single chain keeps exploring across the
+  whole `MaxIterations` budget.
+- After each Markov chain a **local search** refines the incumbent (disable it
+  with `"LocalSearch" -> False` for pure GSA).
+
+The local search reuses the same exact local optimizer as the other engines
+(BFGS for continuous/box problems, the augmented-Lagrangian penalty solver for
+general constraints, integer descent for `Element[·, Integers]`), so box, general
+constraints, and mixed-integer domains all work with no Dual-Annealing-specific
+code. `"SearchPoints" -> K` runs `K` independent chains and keeps the Deb-best
+(default `1`, matching scipy's single chain); `MaxIterations` is the per-chain
+temperature-step budget (default 1000). Requires a bounded box; unbounded
+coordinates use the default `±10` region. The walk is deterministic for a fixed
+`"RandomSeed"`.
+
+> **Fidelity note.** The visiting and acceptance distributions, cooling schedule,
+> and reannealing reproduce scipy's algorithm exactly (the precomputed
+> distribution constants agree to machine precision). The one deliberate
+> difference is the local search: where scipy calls L-BFGS-B (box) or SLSQP,
+> Mathilda reuses its own BFGS / augmented-Lagrangian / integer-descent polish, so
+> general-constraint and integer handling follow Mathilda's conventions rather
+> than scipy's — and, unlike `scipy.optimize.dual_annealing` (which is box-only),
+> this lets `Method -> {"DualAnnealing"}` solve inequality-, equality-, and
+> disjunctively-constrained problems. On sharp-needle functions (the Bukin ridge,
+> a narrow Gaussian well) both implementations are approximate; on the broader
+> deceptive functions Mathilda reaches a strictly deeper basin than scipy at a
+> matched seed (Eggholder, drop-wave, Griewank-5, modified-Ackley-10 — see
+> `benchmarks/82-dual-annealing-testbed`).
+
+```mathematica
+(* Deceptive Schwefel — the heavy-tailed visiting distribution escapes the
+   near-boundary global basin at (420.97, 420.97) *)
+NMinimize[{837.9658 - x Sin[Sqrt[Abs[x]]] - y Sin[Sqrt[Abs[y]]],
+           -500 <= x <= 500 && -500 <= y <= 500}, {x, y},
+          Method -> {"DualAnnealing"}]
+(* -> {2.54551*^-5, {x -> 420.969, y -> 420.969}} *)
+
+(* Smooth but ill-conditioned Rosenbrock valley *)
+NMinimize[{100 (y - x^2)^2 + (1 - x)^2, -5 <= x <= 5 && -5 <= y <= 5}, {x, y},
+          Method -> {"DualAnnealing", "VisitingParameter" -> 2.62}]
+(* -> {~0., {x -> 1., y -> 1.}} *)
+
+(* Constrained — the per-chain augmented-Lagrangian polish handles x + 2 y >= 4 *)
+NMinimize[{x^2 + y^2, x + 2 y >= 4 && -5 <= x <= 5 && -5 <= y <= 5}, {x, y},
+          Method -> {"DualAnnealing"}]
+(* -> {3.2, {x -> 0.8, y -> 1.6}} *)
+```
+
+Against `scipy.optimize.dual_annealing` on nine standard bounded multimodal
+benchmarks (`benchmarks/81-dual-annealing`, scipy's default parameters and a
+matched seed on both sides), Mathilda reaches the identical global on every case
+(0 CHECK-FAIL) and is **~100×–600× faster per solve** (e.g. Himmelblau 0.19 ms vs
+112 ms, Ackley-5D 2.3 ms vs 441 ms): its machine-precision objective is
+auto-compiled to bytecode, where scipy calls back into Python for every one of
+the ~10⁴ evaluations a run needs.
+
+[dualannealing]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.dual_annealing.html
+
+#### DIRECT — DIviding RECTangles
+
+`Method -> "DIRECT"` is the deterministic Lipschitzian global optimizer of
+Jones, Perttunen & Stuckman (1993), with the locally-biased variant DIRECT-L of
+Gablonsky & Kelley (2001), reproducing the reference `DIRECTv2.04` Fortran
+(the algorithm behind [`scipy.optimize.direct`][direct]). It needs no
+derivatives and no random seed, and requires only a bounded box.
+
+The search normalizes the box to the unit hypercube `[0,1]ⁿ` and represents each
+cell by its center and a per-dimension trisection count (side length `3⁻ᵗ`):
+
+- **Cells are grouped by size.** For DIRECT-L the size class is the number of
+  trisections of the longest side; for original DIRECT it is a `k·n + q` key
+  (`k` the minimum trisection count, `q` the count of deeper dimensions) that
+  maps one-to-one to the cell's half-diagonal. Each class keeps its minimum-value
+  cell as the only "potentially optimal" candidate.
+- **Each iteration subdivides the potentially-optimal cells** — those on the
+  lower-right convex hull of the `(size, value)` class minima that also promise,
+  for some rate constant, at least `"Epsilon"` relative improvement over the
+  incumbent (`f_j − K̃·d_j ≤ f_min − ε·max(|f_min|, 1)`). The largest cell is
+  always potentially optimal, so the search never stalls.
+- **A cell is trisected along its longest sides**, sampling `c ± ⅓·(side)` in
+  each and dividing so the best children keep the largest sub-cells — biasing
+  the next round toward promising regions while still guaranteeing every region
+  is refined.
+- `"LocallyBiased" -> True` (DIRECT-L, the default) groups only by the longest
+  side, biasing toward the incumbent and converging with fewer evaluations when
+  there are few minima; `-> False` uses the full-diagonal grouping of the
+  original unbiased DIRECT, which spreads the search and is better when there are
+  many minima.
+
+Every center is scored with the shared point evaluator (compiled machine-code
+objective, integer rounding, constraint penalty), and the incumbent is chosen by
+Deb feasibility rules, so box, general-constraint, and mixed-integer problems all
+work with no DIRECT-specific code. The engine returns the raw DIRECT incumbent;
+the global best is then polished with the exact local optimizer (BFGS /
+augmented-Lagrangian / integer descent) unless `"PostProcess" -> False`. The
+search stops on `"MaxFunctionEvaluations"` (default `1000·n`), `"MaxIterations"`
+(default 1000), the `"VolumeTolerance"` / `"LengthTolerance"` cell-size limits,
+or `"MinValue"` proximity. Unbounded coordinates use the default `±10` region.
+
+> **Fidelity note.** The unit-cube normalization, the `thirds`/level size
+> tables, the convex-hull potentially-optimal selection, and the longest-side
+> trisection reproduce `DIRECTv2.04` / `scipy.optimize.direct`; on the shared
+> non-global basin of Rosenbrock-10D the two raw implementations agree to
+> `~8.7916` (`benchmarks/84-direct-testbed`, case 08). The one deliberate
+> difference is the local polish: scipy's `direct` has none, whereas Mathilda
+> applies its own BFGS / augmented-Lagrangian / integer-descent polish after the
+> search (disable it with `"PostProcess" -> False` for a raw comparison) — and,
+> unlike `scipy.optimize.direct` (which is box-only), this lets
+> `Method -> "DIRECT"` solve inequality-, equality-, and disjunctively-
+> constrained and mixed-integer problems. On deceptive high-dimensional
+> functions DIRECT is weak (both implementations miss Rosenbrock-10D's global
+> and diverge on Schwefel-10D); `"DifferentialEvolution"` / `"DualAnnealing"`
+> are the engines for that shape.
+
+```mathematica
+(* Rastrigin — DIRECT samples cell centers, so the origin global is found fast *)
+NMinimize[{20 + x^2 - 10 Cos[2 Pi x] + y^2 - 10 Cos[2 Pi y],
+           -5.12 <= x <= 5.12 && -5.12 <= y <= 5.12}, {x, y},
+          Method -> "DIRECT"]
+(* -> {0., {x -> 0., y -> 0.}} *)
+
+(* Branin — three global minima at 0.397887; the unbiased variant spreads wider *)
+NMinimize[{(y - 5.1/(4 Pi^2) x^2 + 5/Pi x - 6)^2 + 10 (1 - 1/(8 Pi)) Cos[x] + 10,
+           -5 <= x <= 10 && 0 <= y <= 15}, {x, y},
+          Method -> {"DIRECT", "LocallyBiased" -> False}]
+(* -> {0.397887, {x -> ..., y -> ...}} *)
+
+(* Constrained — general constraints via the penalty + augmented-Lagrangian polish
+   (scipy.optimize.direct cannot take constraints at all) *)
+NMinimize[{x + y, x^2 + y^2 <= 9}, {x, y}, Method -> "DIRECT"]
+(* -> {-4.242641, {x -> -2.12132, y -> -2.12132}} *)
+```
+
+Against `scipy.optimize.direct` on nine standard bounded multimodal benchmarks
+(`benchmarks/83-direct`, scipy's default parameters, raw-vs-raw with
+`"PostProcess" -> False` on both sides so it is the same algorithm), Mathilda
+reaches the identical basin on every case (0 CHECK-FAIL) and is **AHEAD on all
+nine — ~1.5×–20× faster per solve** (Ackley-2D 0.40 ms vs 3.4 ms, Styblinski-Tang
+0.96 ms vs 19.5 ms, Himmelblau 0.75 ms vs 1.1 ms): its machine-precision
+objective is auto-compiled to bytecode, where scipy's C DIRECT still calls back
+into Python for every evaluation. The `benchmarks/84-direct-testbed` sweep runs
+the whole `tests/test_nminimize.c` corpus through DIRECT: its 18-case box-bounded
+race is 0 CHECK-FAIL and 15 of 18 AHEAD (up to ~11× on the origin-centred high-D
+globals), the three losses being objective-evaluation cost rather than the
+algorithm (two cheap few-hundred-eval objectives, and the `Round`-heavy Katsuura
+whose objective does not take the compiled fast path). Its README additionally
+records the non-raceable corpus — 16 constrained / equality / disjunctive /
+small-integer problems `Method -> "DIRECT"` solves but `scipy.optimize.direct`
+(box-only) cannot express, and the high-D-equality and combinatorial problems
+that are beyond DIRECT in either system.
+
+[direct]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.direct.html
+
+#### BasinHopping — Monte-Carlo minimization
+
+`Method -> {"BasinHopping", …}` mirrors [`scipy.optimize.basinhopping`][basinhopping],
+the Monte-Carlo minimization of Wales & Doye (*Global optimization by basin-hopping
+and the lowest energy structures of Lennard-Jones clusters*, J. Phys. Chem. A 101
+(1997) 5111–5116). Each **hop** is a random displacement of the current point
+followed by a full **local minimization** (the "quench"), and the Metropolis
+accept/reject compares the two *locally-minimized* energies rather than the raw
+objective — so the walk moves on the coarse-grained landscape of basin floors
+instead of the rugged surface, which is what makes it strong on funnel-shaped
+multimodal problems. One step:
+
+1. Perturb: `x_trial = x_cur + Uniform(-s, s)` per coordinate (step size `s` =
+   `"StepSize"`, default 0.5), clipped to the box.
+2. Quench: locally minimize `x_trial` to `(f, violation)`.
+3. Accept by a **Metropolis rule** on the penalized energy with temperature `T` =
+   `"Temperature"` (default 1): always downhill, else with probability
+   `Exp[-ΔE/T]`.
+4. Every `"StepInterval"` hops (default 50), **adapt the step size** toward
+   `"TargetAcceptanceRate"` (default 0.5): if the running acceptance rate is too
+   high the step grows (`s /= "StepFactor"`, default 0.9 — escape a basin), else it
+   shrinks.
+
+The lowest quenched point ever seen (by Deb's feasibility rules) is reported.
+`"SearchPoints" -> K` runs `K` independent multi-start hops and keeps the Deb-best
+(default `1`, matching scipy's single run); `MaxIterations` is the hop count
+(default 100 = scipy's `niter`); `"SuccessIterations" -> m` stops a run once the
+best stalls for `m` hops (scipy's `niter_success`). The quench reuses the same exact
+local optimizer as the other engines (BFGS for continuous/box problems, the
+augmented-Lagrangian penalty solver for general constraints, integer descent for
+`Element[·, Integers]`), so box, general constraints, and mixed-integer domains all
+work with no Basin-Hopping-specific code. Requires a bounded box; unbounded
+coordinates use the default `±10` region. The walk is deterministic for a fixed
+`"RandomSeed"`.
+
+> **Fidelity note.** The perturbation, the adaptive step size, and the Metropolis
+> rule reproduce scipy's algorithm exactly. The one deliberate difference is the
+> quench: where scipy calls L-BFGS-B, Mathilda reuses its own BFGS /
+> augmented-Lagrangian / integer-descent polish. Because that polish is a
+> well-behaved *local* minimizer — it does not overshoot across a basin boundary on
+> its first step, as L-BFGS-B sometimes does — a single Mathilda run crosses
+> widely-separated basins only through the random displacement, so on genuinely
+> multi-basin problems it is more seed-sensitive than scipy's single run
+> (increasing `MaxIterations` does not help; use `"SearchPoints" -> K` for
+> robustness). Conversely, unlike `scipy.optimize.basinhopping` (which is box-only),
+> Mathilda's quench handles inequality, equality, disjunctive, and integer
+> constraints, and on some funnel landscapes (e.g. Rastrigin) the adaptive-step walk
+> reaches the global where scipy's single run stalls in a ring minimum. See
+> `benchmarks/85-basin-hopping`.
+
+```mathematica
+(* Rastrigin — the adaptive-step hops walk in toward the origin global *)
+NMinimize[{20 + x^2 - 10 Cos[2 Pi x] + y^2 - 10 Cos[2 Pi y],
+           -5.12 <= x <= 5.12 && -5.12 <= y <= 5.12}, {x, y},
+          Method -> {"BasinHopping"}]
+(* -> {0., {x -> 0., y -> 0.}} *)
+
+(* Multi-basin Styblinski-Tang — multi-start makes the conservative quench robust *)
+NMinimize[{(x^4 - 16 x^2 + 5 x + y^4 - 16 y^2 + 5 y)/2, -5 <= x <= 5 && -5 <= y <= 5},
+          {x, y}, Method -> {"BasinHopping", "SearchPoints" -> 6}]
+(* -> {-78.3320, {x -> -2.90353, y -> -2.90353}} *)
+
+(* Constrained — the quench's augmented-Lagrangian polish handles x + 2 y >= 4
+   (scipy.optimize.basinhopping cannot take constraints) *)
+NMinimize[{x^2 + y^2, x + 2 y >= 4 && -5 <= x <= 5 && -5 <= y <= 5}, {x, y},
+          Method -> {"BasinHopping"}]
+(* -> {3.2, {x -> 0.8, y -> 1.6}} *)
+```
+
+Against `scipy.optimize.basinhopping` on eight standard bounded multimodal
+benchmarks (`benchmarks/85-basin-hopping`, scipy's default parameters and a matched
+seed on both sides), Mathilda reaches the identical global on every case (0
+CHECK-FAIL) and is **faster per solve** — both do ~100 local minimizations, but
+Mathilda's machine-precision objective is auto-compiled to bytecode where scipy
+calls back into Python for every evaluation.
+
+[basinhopping]: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.basinhopping.html
+
+### Options
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `Method` | `Automatic` | global-search selector (see above) |
+| `WorkingPrecision` | `MachinePrecision` | MPFR refinement of continuous, general-constraint-free problems |
+| `MaxIterations` | `Automatic` | DE generation cap: `150·d` under `Method -> Automatic`, `100` under explicit `"DifferentialEvolution"`; an explicit value overrides both |
+| `AccuracyGoal` / `PrecisionGoal` | `Automatic` | convergence tolerances |
+| `EvaluationMonitor` | `None` | `:> body` run on every objective evaluation |
+| `StepMonitor` | `None` | `:> body` |
+
+### Evaluation (auto-compilation and message quieting)
+
+At `MachinePrecision` (the default) the global search evaluates the objective —
+and each general constraint — at hundreds to thousands of trial points, so
+`NMinimize` **auto-compiles** them to bytecode over the search variables once
+(`compile_expr`, the same lowering `Compile[]` and NDSolve's RHS use) and runs
+the register machine per point instead of the interpreter (`expr_copy` +
+`evaluate` + `numericalize`). A body with a construct that cannot be compiled
+stays on the interpreter, and every per-point call falls back to the interpreter
+on a domain or non-finite result, so the compiled path is a pure speedup with no
+change in answer. Example: the 10-D Rosenbrock over `Table[x[i], {i, 1, 10}]`
+runs ~11× faster than the interpreter path. At `WorkingPrecision >
+MachinePrecision` the exact MPFR interpreter path is used.
+
+The same compiled objective also drives the **local polish** — the exact
+solver that refines each candidate — not just the global-search scoring. The
+polish's objective values, line searches, and gradient (taken by finite
+differences off the compiled objective) all run on the register machine, with
+the interpreter as fallback. This matters most for `"RandomSearch"`, which runs
+one local solve per `SearchPoints`: a 20-variable `Sum[Abs[x[i]], {i, 1, 20}]`
+with `"SearchPoints" -> 1000` went from ~25 s to ~0.5 s (same optimum). Every
+method benefits (`DifferentialEvolution` and `NelderMead` also polish), so the
+compiled program is now the single evaluation substrate across the whole
+machine-precision optimizer.
+
+Expected numeric-domain diagnostics raised while probing the function — e.g.
+`Power::infy` from a `1/0` in a gradient term on a non-differentiable ridge
+(Bukin N.6, `100 Sqrt[Abs[x2 - 0.01 x1^2]] + ...`) — are **quieted** during the
+search: a non-finite value is treated as a bad point and steered away from, so
+the messages are noise. This matches Mathematica, which quiets `NMinimize`'s
+internal evaluation. (The same applies to `FindMinimum` / `FindMaximum`, which
+share the point-evaluation path.)
+
+### Examples
+
+```
+In[1]:= NMinimize[x^4 - 3 x^2 - x, x]
+Out[1]= {-3.51391, {x -> 1.30084}}
+
+In[2]:= NMinimize[{x + y, x^2 + y^2 <= 9}, {x, y}]
+Out[2]= {-4.24264, {x -> -2.12132, y -> -2.12132}}
+
+In[3]:= NMinimize[{x + 2 y, x^2 + 2 y^2 <= 3, x + y == 2, x >= 1}, {x, y}]
+Out[3]= {2.33333, {x -> 1.66667, y -> 0.33333}}
+
+In[4]:= NMinimize[{x + y, x + 2 y >= 3, x >= -2},
+          {Element[x, Integers], Element[y, Integers]}]
+Out[4]= {1, {x -> -1, y -> 2}}
+
+In[5]:= NMinimize[{x, x > 2 && x < 1}, x]
+Out[5]= {Infinity, {x -> Indeterminate}}
+
+In[6]:= NMaximize[{x + y, x^2 + y^2 <= 1}, {x, y}]
+Out[6]= {1.41421, {x -> 0.70710, y -> 0.70711}}
+```
+

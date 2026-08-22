@@ -16,6 +16,7 @@
 #include "print.h"
 #include "eval.h"
 #include "plot_common.h"
+#include "graphics_export.h"
 #include <raylib.h>
 #include <gmp.h>
 #ifdef USE_MPFR
@@ -24,6 +25,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 #include <float.h>
 
@@ -2858,4 +2860,87 @@ void graphics_render_in_region(const Expr* graphics_expr,
         float cb_y = ry + cb_margin;
         draw_color_bar(cb_x, cb_y, cb_w, cb_h, cb_spd_min, cb_spd_max, cb_cfn);
     }
+}
+
+/* Can this process open a window at all? Raylib's InitWindow does not fail
+ * gracefully when there is no usable GUI session -- it aborts inside GLFW
+ * (segfault) rather than returning -- so the caller MUST screen for a session
+ * before ever reaching it. macOS: CGSessionCopyCurrentDictionary() is NULL
+ * outside an Aqua session (ssh, launchd, a headless CI box). Linux: the X11 /
+ * Wayland display env vars. The CoreGraphics symbols are declared by hand
+ * rather than via <CoreGraphics/...> because those headers redefine `Rectangle`
+ * and collide with raylib's own type. */
+#if defined(__APPLE__)
+extern const void* CGSessionCopyCurrentDictionary(void);
+extern void        CFRelease(const void*);
+bool gui_session_available(void) {
+    const void* d = CGSessionCopyCurrentDictionary();
+    if (d) { CFRelease(d); return true; }
+    return false;
+}
+#elif defined(__linux__)
+bool gui_session_available(void) {
+    return getenv("DISPLAY") != NULL || getenv("WAYLAND_DISPLAY") != NULL;
+}
+#else
+bool gui_session_available(void) { return true; }
+#endif
+
+/* Render a 2D Graphics[...] to a fresh RGBA8 buffer via an offscreen
+ * RenderTexture. Reuses graphics_render_in_region so the pixels are identical
+ * to the on-screen plot -- same axes, ticks, labels and text. Opens a window
+ * only if no GL context is live (so it also works while a plot window is up),
+ * and returns NULL instead of aborting when no display is available. The caller
+ * owns the returned buffer (free()) and encodes it with the stb writers. */
+unsigned char* graphics_render_rgba(const Expr* g, int w, int h,
+                                     int* out_w, int* out_h) {
+    if (!g || w <= 0 || h <= 0) return NULL;
+    if (w > 8000) w = 8000;
+    if (h > 8000) h = 8000;
+
+    bool opened = false;
+    if (!IsWindowReady()) {
+        if (!gui_session_available()) return NULL;  /* headless: fail, do not crash */
+        SetTraceLogLevel(LOG_WARNING);              /* keep the REPL quiet */
+        /* Match graphics_show's flags. FLAG_WINDOW_HIDDEN faults inside GLFW on
+         * macOS when no usable monitor is present (whereas a normal window fails
+         * gracefully -- IsWindowReady() then returns false), so we open a normal
+         * MSAA window and close it immediately after the offscreen render. */
+        SetConfigFlags(FLAG_MSAA_4X_HINT);
+        InitWindow(w, h, "mathilda-export");
+        if (!IsWindowReady()) return NULL;          /* no GL context: caller errors */
+        /* Hiding AFTER creation is safe (only creation-with-hidden faults) and
+         * keeps the export window from flashing on screen. */
+        SetWindowState(FLAG_WINDOW_HIDDEN);
+        opened = true;
+    }
+
+    label_font_load();
+    RenderTexture2D rt = LoadRenderTexture(w, h);
+
+    BeginTextureMode(rt);
+    ClearBackground(RAYWHITE);
+    graphics_render_in_region(g, 0.0f, 0.0f, (float)w, (float)h);
+    EndTextureMode();
+
+    Image img = LoadImageFromTexture(rt.texture);
+    ImageFlipVertical(&img);                         /* render textures are y-flipped */
+    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+
+    unsigned char* out = NULL;
+    size_t n = (size_t)img.width * (size_t)img.height * 4;
+    if (img.data && n > 0) {
+        out = (unsigned char*)malloc(n);
+        if (out) {
+            memcpy(out, img.data, n);
+            *out_w = img.width;
+            *out_h = img.height;
+        }
+    }
+
+    UnloadImage(img);
+    UnloadRenderTexture(rt);
+    label_font_unload();
+    if (opened) CloseWindow();
+    return out;
 }

@@ -5,17 +5,22 @@
 
 ## Description
 
-```text
-f @@ expr or Apply[f, expr]
-    replaces the head of expr with f.
-Apply[f, expr, levelspec]
-    performs the head replacement at the parts of expr specified by
-    levelspec; the default levelspec is {0} (top level only).
-```
+**`Apply[f, expr, levelspec]`**
 
-## Examples
+performs the head replacement at the parts of expr specified by levelspec; the default levelspec is {0} (top level only).
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+f @@ expr or Apply\[f, expr\] replaces the head of expr with f.
+
+</details>
+
+## Examples (9)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Plus @@ <|"a" -> 1, "b" -> 2, "c" -> 3|>
@@ -23,6 +28,31 @@ Out[1]= 6
 
 In[2]:= Apply[List, <|"a" -> 1, "b" -> 2|>]
 Out[2]= {1, 2}
+```
+
+### Applications (7)
+
+```mathematica
+In[3]:= Apply[Plus, {1, 2, 3, 4}]
+Out[3]= 10
+
+In[4]:= f @@ {a, b, c}
+Out[4]= f[a, b, c]
+
+In[5]:= Apply[List, a + b + c]
+Out[5]= {a, b, c}
+
+In[6]:= Apply[f, {{a, b}, {c, d}}, {1}]
+Out[6]= {f[a, b], f[c, d]}
+
+In[7]:= Apply[Times, Range[10]]
+Out[7]= 3628800
+
+In[8]:= Apply[GCD, {84, 126, 210}]
+Out[8]= 42
+
+In[9]:= Apply[Plus, Table[1/k^2, {k, 1, 6}]]
+Out[9]= 5369/3600
 ```
 
 ## Implementation notes
@@ -49,51 +79,16 @@ returned via `expr_copy` unchanged.
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_core_algebra.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core_algebra.c)
+- Tests: [`tests/test_factor_terms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_factor_terms.c)
+- Tests: [`tests/test_parse.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parse.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Apply[Plus, {1, 2, 3, 4}]
-Out[1]= 10
-```
-
-```mathematica
-In[1]:= f @@ {a, b, c}
-Out[1]= f[a, b, c]
-```
-
-```mathematica
-In[1]:= Apply[List, a + b + c]
-Out[1]= {a, b, c}
-```
-
-```mathematica
-In[1]:= Apply[f, {{a, b}, {c, d}}, {1}]
-Out[1]= {f[a, b], f[c, d]}
-```
-
-```mathematica
-In[1]:= Apply[Times, Range[10]]
-Out[1]= 3628800
-```
-
-```mathematica
-In[1]:= Apply[GCD, {84, 126, 210}]
-Out[1]= 42
-
-In[2]:= Apply[Plus, Table[1/k^2, {k, 1, 6}]]
-Out[2]= 5369/3600
-```
 
 ### Notes
 

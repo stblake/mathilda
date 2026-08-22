@@ -357,6 +357,23 @@ void test_iter_exactness_preserved() {
                    "{9223372036854775806, 9223372036854775807}", 0);
 }
 
+/* With/Module/Block must substitute a bound name into a length-1 Table iteration
+ * COUNT {n} — it is a count, not a binding. Only {i, ...} binds i as an iterator
+ * variable. Regression: With[{n=3}, Table[x, {n}]] used to stay unevaluated. */
+void test_scoping_count_iterator() {
+    assert_eval_eq("With[{n = 3}, Table[7, {n}]]", "{7, 7, 7}", 0);
+    assert_eval_eq("Module[{n = 4}, Table[0, {n}]]", "{0, 0, 0, 0}", 0);
+    assert_eval_eq("Block[{n = 2}, Table[5, {n}]]", "{5, 5}", 0);
+    /* the count expression is substituted, then evaluated */
+    assert_eval_eq("With[{n = 2}, Length[Table[0, {2 n}]]]", "4", 0);
+    /* an iterator VARIABLE {i, ...} is still shadowed, not substituted */
+    assert_eval_eq("With[{i = 99}, Table[i, {i, 3}]]", "{1, 2, 3}", 0);
+    /* the range bound {j, n} still gets the With value */
+    assert_eval_eq("With[{n = 3}, Table[j, {j, n}]]", "{1, 2, 3}", 0);
+    /* nested counts */
+    assert_eval_eq("With[{n = 2}, Table[Table[0, {n}], {n}]]", "{{0, 0}, {0, 0}}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -399,6 +416,7 @@ int main() {
     TEST(test_table_no_million_truncation);
     TEST(test_table_overcap_declines);
     TEST(test_iter_exactness_preserved);
+    TEST(test_scoping_count_iterator);
 
     printf("All iter tests passed!\n");
     symtab_clear();

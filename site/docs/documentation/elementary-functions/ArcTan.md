@@ -5,18 +5,52 @@
 
 ## Description
 
-```text
-ArcTan[z]
-    gives the principal inverse tangent of z, in (-Pi/2, Pi/2).
-ArcTan[y, x]
-    gives the argument of the complex number x + I y, in (-Pi, Pi]
-    (two-argument atan2 form).
+**`ArcTan[z]`**
+
+gives the principal inverse tangent of z, in (-Pi/2, Pi/2).
+
+**`ArcTan[y, x]`**
+
+gives the argument of the complex number x + I y, in (-Pi, Pi\] (two-argument atan2 form).
+
+<details>
+<summary>Notes</summary>
+
 ArcTan is Listable.
+
+</details>
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (8)
+
+```mathematica
+In[1]:= ArcTan[1]
+Out[1]= 1/4 Pi
+
+In[2]:= ArcTan[Sqrt[3]]
+Out[2]= 1/3 Pi
+
+In[3]:= ArcTan[-1, 1]
+Out[3]= 3/4 Pi
+
+In[4]:= ArcTan[{0, 1}]
+Out[4]= {0, 1/4 Pi}
+
+In[5]:= ArcTan[I/2]
+Out[5]= I ArcTanh[1/2]
+
+In[6]:= Series[ArcTan[x], {x, 0, 9}]
+Out[6]= x - 1/3 x^3 + 1/5 x^5 - 1/7 x^7 + 1/9 x^9 + O[x]^10
+
+In[7]:= Integrate[ArcTan[x], x]
+Out[7]= 1/2 (2 x ArcTan[x] - Log[1 + x^2])
+
+In[8]:= N[16 ArcTan[1/5] - 4 ArcTan[1/239], 40]
+Out[8]= 3.1415926535897932384626433832795028841975
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -26,58 +60,16 @@ _No verified examples yet for this function._
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/trig.c`](https://github.com/stblake/mathilda/blob/main/src/trig.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
+- Tests: [`tests/test_arc_exact.c`](https://github.com/stblake/mathilda/blob/main/tests/test_arc_exact.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_complexexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complexexpand.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= ArcTan[1]
-Out[1]= 1/4 Pi
-
-In[2]:= ArcTan[Sqrt[3]]
-Out[2]= 1/3 Pi
-```
-
-```mathematica
-In[1]:= ArcTan[-1, 1]
-Out[1]= 3/4 Pi
-
-In[2]:= ArcTan[{0, 1}]
-Out[2]= {0, 1/4 Pi}
-```
-
-A pure-imaginary argument crosses over to the inverse hyperbolic tangent:
-
-```mathematica
-In[1]:= ArcTan[I/2]
-Out[1]= I ArcTanh[1/2]
-```
-
-The Taylor series recovers the Gregory series, and the antiderivative is closed-form:
-
-```mathematica
-In[1]:= Series[ArcTan[x], {x, 0, 9}]
-Out[1]= x - 1/3 x^3 + 1/5 x^5 - 1/7 x^7 + 1/9 x^9 + O[x]^10
-
-In[2]:= Integrate[ArcTan[x], x]
-Out[2]= 1/2 (2 x ArcTan[x] - Log[1 + x^2])
-```
-
-Machin's 1706 formula then evaluates Pi to 40 digits:
-
-```mathematica
-In[1]:= N[16 ArcTan[1/5] - 4 ArcTan[1/239], 40]
-Out[1]= 3.1415926535897932384626433832795028841975
-```
 
 ### Notes
 

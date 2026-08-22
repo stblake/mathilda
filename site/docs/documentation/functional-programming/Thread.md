@@ -5,34 +5,30 @@
 
 ## Description
 
-```text
-Thread[f[args]]
-    "threads" f over any lists that appear in args.
-Thread[f[args], h]
-    threads f over any objects with head h that appear in args.
-Thread[f[args], h, n]
-    threads f over objects with head h that appear in the first n args.
+**`Thread[f[args]]`**
 
-Functions with attribute Listable are automatically threaded over
-lists. All the elements in the specified args whose heads are h must
-be of the same length. Arguments that do not have head h are copied
-as many times as there are elements in the arguments that do have
-head h.
+"threads" f over any lists that appear in args.
 
-Thread specifies argument positions using the standard sequence
-specification:
-    All       all elements
-    None      no elements
-    n         elements 1 through n
-    -n        last n elements
-    {n}       element n only
-    {m, n}    elements m through n inclusive
-    {m, n, s} elements m through n in steps of s
-```
+**`Thread[f[args], h]`**
 
-## Examples
+threads f over any objects with head h that appear in args.
 
-All examples below are verified against the current Mathilda build.
+**`Thread[f[args], h, n]`**
+
+threads f over objects with head h that appear in the first n args.
+
+<details>
+<summary>Notes</summary>
+
+Functions with attribute Listable are automatically threaded over lists. All the elements in the specified args whose heads are h must be of the same length. Arguments that do not have head h are copied as many times as there are elements in the arguments that do have head h. Thread specifies argument positions using the standard sequence specification: All       all elements None      no elements n         elements 1 through n -n        last n elements {n}       element n only {m, n}    elements m through n inclusive {m, n, s} elements m through n in steps of s
+
+</details>
+
+## Examples (18)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (14)
 
 ```mathematica
 In[1]:= Thread[f[{a, b, c}]]
@@ -58,6 +54,40 @@ Out[7]= f[{a, b}, {r, s}, {u, v}, {x, y}]
 
 In[8]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List, 2]
 Out[8]= {f[a, r, {u, v}, {x, y}], f[b, s, {u, v}, {x, y}]}
+
+In[9]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List, -2]
+Out[9]= {f[{a, b}, {r, s}, u, x], f[{a, b}, {r, s}, v, y]}
+
+In[10]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List, {2, 4}]
+Out[10]= {f[{a, b}, r, u, x], f[{a, b}, s, v, y]}
+
+In[11]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List, {1, -1, 2}]
+Out[11]= {f[a, {r, s}, u, {x, y}], f[b, {r, s}, v, {x, y}]}
+
+In[12]:= Thread[f[a + b, c + d]]
+Out[12]= f[a + b, c + d]
+
+In[13]:= Thread[f[a + b, c + d], Plus]
+Out[13]= f[a, c] + f[b, d]
+
+In[14]:= Thread[f[{a, b, c}, h, {x, y, z}]]
+Out[14]= {f[a, h, x], f[b, h, y], f[c, h, z]}
+```
+
+### Applications (4)
+
+```mathematica
+In[15]:= Thread[f[{a, b, c}]]
+Out[15]= {f[a], f[b], f[c]}
+
+In[16]:= Thread[{x, y, z} -> {1, 2, 3}]
+Out[16]= {x -> 1, y -> 2, z -> 3}
+
+In[17]:= Thread[f[{a, b}, {c, d}, x]]
+Out[17]= {f[a, c, x], f[b, d, x]}
+
+In[18]:= Thread[Equal[{a, b, c}, {1, 2, 3}]]
+Out[18]= {a == 1, b == 2, c == 3}
 ```
 
 ## Implementation notes
@@ -89,40 +119,26 @@ of `expr`.
 - Arguments that do not have head `h` are copied as many times as there are elements in the arguments that do have head `h`.
 - The position specifier `n` uses the standard sequence specification:
 
+  | Spec | Meaning |
+  |------|---------|
+  | `All` | all elements |
+  | `None` | no elements |
+  | `n` | elements 1 through `n` |
+  | `-n` | last `n` elements |
+  | `{n}` | element `n` only |
+  | `{m, n}` | elements `m` through `n` inclusive |
+  | `{m, n, s}` | elements `m` through `n` in steps of `s` |
+
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_mapthread.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mapthread.c)
+- Tests: [`tests/test_thread.c`](https://github.com/stblake/mathilda/blob/main/tests/test_thread.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Thread[f[{a, b, c}]]
-Out[1]= {f[a], f[b], f[c]}
-```
-
-```mathematica
-In[1]:= Thread[{x, y, z} -> {1, 2, 3}]
-Out[1]= {x -> 1, y -> 2, z -> 3}
-```
-
-```mathematica
-In[1]:= Thread[f[{a, b}, {c, d}, x]]
-Out[1]= {f[a, c, x], f[b, d, x]}
-```
-
-```mathematica
-In[1]:= Thread[Equal[{a, b, c}, {1, 2, 3}]]
-Out[1]= {a == 1, b == 2, c == 3}
-```
 
 ### Notes
 

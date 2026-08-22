@@ -2,14 +2,28 @@
 
 import { writable, get } from 'svelte/store';
 
-export type CellType = 'code' | 'text' | 'section' | 'subsection';
+/* 'ref' renders a symbol's generated reference page read-only; its `source` is
+   the symbol name, not code, and it never goes to the kernel. */
+export type CellType = 'code' | 'text' | 'section' | 'subsection' | 'ref';
 export type CellStatus = 'idle' | 'running' | 'done' | 'error';
 
 export type OutputItem =
   | { kind: 'expr';   text: string; latex?: string }  // latex = StandardForm LaTeX from kernel
+  | { kind: 'usage';  text: string; symbol?: string }  // ?sym help text: preformatted, never math
+  | { kind: 'expected'; text: string }                // reference-page example: the
+                                                      // recorded, verified result,
+                                                      // shown until the cell is run
+  | { kind: 'names';  names: string[] }               // ?pat* symbol search: laid out as a grid
   | { kind: 'error';  text: string }
   | { kind: 'stream'; text: string }
   | { kind: 'plot';   data: object }
+  /* A raster result. `data` is base64 RGBA, w*h*4 bytes, ready for putImageData -- so the
+     browser does no per-pixel work. A volume sends ONE slice (the middle) and carries `depth`
+     and `slice` so a scrubber can ask for others later. */
+  /** One face of a volume: its own pixel size plus base64 RGBA. */
+  | { kind: 'image';  w: number; h: number; channels: number; data: string;
+      faces?: Record<string, { w: number; h: number; data: string }>;
+                      depth?: number; slice?: number }
   | { kind: 'html';   html: string };
 
 export type Cell = {
@@ -157,10 +171,39 @@ export function createNotebook() {
       })));
     },
 
+    /** Retype the notebook's FIRST cell in place and give it a source.
+     *
+     * createNotebook() seeds one empty code row, so a card built for a single
+     * purpose (a reference page) would otherwise carry a stray empty cell above
+     * its content. Rewrites that row instead of appending after it. */
+    setCellSourceAndType(source: string, type: CellType) {
+      update(rows => {
+        if (rows.length === 0 || rows[0].cells.length === 0) return rows;
+        const first = rows[0];
+        return [
+          { ...first, cells: [{ ...first.cells[0], source, type }, ...first.cells.slice(1)] },
+          ...rows.slice(1),
+        ];
+      });
+    },
+
+    /** Change a cell's type, keeping its output.
+     *
+     *  This used to clear `output` and `execIdx`, which made retyping a
+     *  destructive act: a code cell with a result on screen lost it, silently,
+     *  and switching back gave you an empty cell. That was tolerable while the
+     *  only way to retype was a 12px badge in the gutter; it is not now that the
+     *  toolbar's cell-style control puts it one click away.
+     *
+     *  Keeping the output costs nothing. Only code cells render an output area,
+     *  so a retained result is invisible on a text or heading cell, and
+     *  serialize() persists only {type, source} so nothing extra reaches disk.
+     *  Switching code -> text -> code now restores the result instead of
+     *  discarding it. */
     setCellType(id: string, type: CellType) {
       update(rows => rows.map(row => ({
         ...row,
-        cells: row.cells.map(c => c.id === id ? { ...c, type, output: [], execIdx: undefined } : c),
+        cells: row.cells.map(c => c.id === id ? { ...c, type } : c),
       })));
     },
 

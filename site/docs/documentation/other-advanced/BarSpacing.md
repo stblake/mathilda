@@ -5,11 +5,9 @@
 
 ## Description
 
-```text
-BarSpacing
-    BarChart/Histogram option: gap between bars as a fraction
-    of bar width (default 0.2). 0 = touching bars; 1 = all gap.
-```
+**`BarSpacing`**
+
+BarChart/Histogram option: gap between bars as a fraction of bar width (default 0.2). 0 = touching bars; 1 = all gap.
 
 ## Examples
 
@@ -18,10 +16,6 @@ _No verified examples yet for this function._
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
 
 ## References
 

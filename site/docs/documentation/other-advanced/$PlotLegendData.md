@@ -5,10 +5,9 @@
 
 ## Description
 
-```text
-$PlotLegendData[{color1, label1}, ...]
-    Internal Plot metadata read by the renderer to draw a legend box. Not intended for direct use.
-```
+**`$PlotLegendData[{color1, label1}, ...]`**
+
+Internal Plot metadata read by the renderer to draw a legend box. Not intended for direct use.
 
 ## Examples
 
@@ -17,10 +16,6 @@ _No verified examples yet for this function._
 ## Implementation notes
 
 **Attributes:** `HoldAll`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 

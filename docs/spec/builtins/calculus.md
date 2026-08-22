@@ -208,6 +208,87 @@ In[8]:= Derivative[1, 1][g][a, b]
 Out[8]= 6 a b^2
 ```
 
+## Grad, Div, Curl, Laplacian
+
+Vector-analysis differential operators (`src/vectoranal.c`). Each is
+`Protected` and is assembled entirely from the derivative engine `D`
+(nothing here re-implements differentiation), so it inherits every
+elementary, special-function, and chain rule that `D` knows. Two
+argument forms exist: a **Cartesian** 2-argument form, fully general in
+the rank of the field, and a 3-argument **chart** form for the
+orthogonal coordinate charts `"Cartesian"`, `"Polar"` (2-D),
+`"Cylindrical"` (3-D) and `"Spherical"` (3-D), computed in the
+orthonormal (physical) basis via the chart's scale factors (Lamé
+coefficients). Field ranks that would need Christoffel symbols in a
+curvilinear chart (tensor fields, the vector Laplacian, the gradient of
+a vector field) and unrecognized charts are left unevaluated.
+
+### Grad
+
+Gradient / raised covariant derivative.
+- `Grad[f, {x1, ..., xn}]` -- gradient `{D[f, x1], ..., D[f, xn]}` of a
+  scalar `f`; exactly `D[f, {{x1, ..., xn}}]`. For an array `f` a new
+  innermost tensor slot is appended, so a vector field yields its
+  Jacobian and a rank-`k` array yields a rank-`(k+1)` array.
+- `Grad[f, {x1, ..., xn}, chart]` -- gradient of a scalar in the
+  orthonormal basis of `chart`: component `i` is `(1/h_i) D[f, x_i]`.
+
+### Div
+
+Divergence / contracted covariant derivative.
+- `Div[{f1, ..., fn}, {x1, ..., xn}]` -- the divergence
+  `D[f1, x1] + ... + D[fn, xn]`. For a rank-`k` array `f` the innermost
+  slot (length `n`) is contracted against the variables, giving a
+  rank-`(k-1)` result.
+- `Div[f, {x1, ..., xn}, chart]` -- divergence of a vector field in the
+  orthonormal basis: `(1/J) Sum_i D[(J/h_i) f_i, x_i]`, `J = Prod h_i`.
+
+### Curl
+
+Curl / rotational.
+- `Curl[{f1, f2}, {x1, x2}]` -- the scalar `D[f2, x1] - D[f1, x2]`.
+- `Curl[{f1, f2, f3}, {x1, x2, x3}]` -- the vector curl
+  `{D[f3,x2]-D[f2,x3], D[f1,x3]-D[f3,x1], D[f2,x1]-D[f1,x2]}`.
+- `Curl[f, {x1, ..., xn}]` -- for an `n*n*...*n` array `f` of depth `k`,
+  the generalized Levi-Civita curl of depth `n-k-1`.
+- `Curl[f, {x1, ..., xn}, chart]` -- curl of a vector field (2-D scalar
+  or 3-D vector) in the orthonormal basis of `chart`.
+
+### Laplacian
+
+Laplacian / Laplace-Beltrami operator.
+- `Laplacian[f, {x1, ..., xn}]` -- `D[f, {x1, 2}] + ... + D[f, {xn, 2}]`;
+  for an array `f` the scalar Laplacian is applied element-wise, so the
+  result has the same dimensions as `f`.
+- `Laplacian[f, {x1, ..., xn}, chart]` -- Laplacian of a scalar in the
+  orthonormal basis: `(1/J) Sum_i D[(J/h_i^2) D[f, x_i], x_i]`.
+
+```mathematica
+In[1]:= Grad[Sin[x^2 + y^2], {x, y}]
+Out[1]= {2 x Cos[x^2 + y^2], 2 y Cos[x^2 + y^2]}
+
+In[2]:= Grad[{x y, y z, z x}, {x, y, z}]
+Out[2]= {{y, x, 0}, {0, z, y}, {z, 0, x}}
+
+In[3]:= Div[{x^2, y^2, z^2}, {x, y, z}]
+Out[3]= 2 x + 2 y + 2 z
+
+In[4]:= Curl[{y, -x}, {x, y}]
+Out[4]= -2
+
+In[5]:= Laplacian[x^2 + y^2 + z^2, {x, y, z}]
+Out[5]= 6
+
+In[6]:= Div[{r Sin[t], -r Cos[t]}, {r, t}, "Polar"]
+Out[6]= 3 Sin[t]
+
+In[7]:= -Grad[k q/r, {r, t, p}, "Spherical"]
+Out[7]= {(k q)/r^2, 0, 0}
+
+In[8]:= Laplacian[Sin[r^2], {r, t}, "Polar"] // Simplify
+Out[8]= 4 Cos[r^2] - 4 r^2 Sin[r^2]
+```
+
 ## Limit
 
 `Limit[f, x -> a]` finds the limiting value of `f` as `x` approaches `a`.
@@ -2341,6 +2422,21 @@ unevaluated rather than reduced to the (wrong) unit-step result.
 "Alternating"` forces a single algorithm (strict, no fallback), and now also
 takes effect on finite unit-step integer ranges.
 
+**Machine fast path.** When the term-by-term fallback would otherwise evaluate
+an *inexact* body once per index — e.g. `Sum[Sin[i^2]*1.0, {i, 1, 10^6}]` —
+`Sum` instead compiles the whole summation to a single native
+accumulation loop (via the [`Compile`](#compile) engine) and returns the machine
+total in one pass (~20× faster here, and much more for cheaper bodies). This is
+gated by a one-term probe: it engages **only** when the body evaluates to a
+machine number (`Real`, or a `Complex` of reals), so an exact sum stays exact —
+`Sum[1/(i^2 + i + 1), {i, 1, 500}]` remains an exact `Rational`,
+`Sum[Prime[i], {i, 1, 1000}]` an exact bignum, and an empty range folds to `0`.
+Because the compiled loop allocates nothing per term (unlike the interpreter's
+term array, capped at `10^8`), it also evaluates large finite ranges that
+previously returned unevaluated. Turn it off with `$AutoCompilation = False`
+(the interpreter then computes the identical total). Inside `Compile[]`, `Sum`
+already lowers to this loop directly.
+
 ```mathematica
 In[1]:= Sum[i^2, {i, 1, 100}]
 Out[1]= 338350
@@ -2401,7 +2497,12 @@ Gosper's algorithm for indefinite summation of a hypergeometric term
 Gosper–Petkovšek normal form (dispersion + gcd peeling) → degree-bounded
 key equation `a(i) x(i+1) - b(i-1) x(i) = c(i)` → antidifference
 `F = (b(i-1)/c(i)) x(i) t(i)`.  Returns unevaluated when `t` is not a
-hypergeometric term or is not Gosper-summable.
+hypergeometric term or is not Gosper-summable.  A summand carrying a
+fractional power of an `i`-dependent base (e.g. `Sqrt[p(i)]`) has an
+irrational term ratio, so it is rejected structurally up front — this is both
+correct and avoids the term-ratio `Simplify` diverging on such a radical,
+which previously hung nested finite sums like the Thomson-problem repulsion
+`Sum[1/Sqrt[(x[i]-x[j])^2+...], {i,1,n-1}, {j,i+1,n}]`.
 
 ```mathematica
 In[1]:= Sum[k k!, k]
@@ -2622,6 +2723,13 @@ the cleanest closed form wins; `Method -> "Telescoping" | "Rational" |
 `VerifyConvergence` (default `True`; a divergent infinite product prints
 `Product::div` and stays unevaluated).  `N[Product[...]]` routes to
 `NProduct`.
+
+**Machine fast path.** Exactly as `Sum` (see above), a finite product with an
+*inexact* body — e.g. `Product[Cos[i]*1.0, {i, 1, 10^6}]` — compiles to a
+single native multiply-accumulate loop instead of an evaluate-per-factor
+expansion. The same one-term probe keeps exact products exact:
+`Product[i, {i, 1, 20}]` stays the bignum `20!` and an empty range folds to `1`.
+Disable with `$AutoCompilation = False`.
 
 ```mathematica
 In[1]:= Product[k, {k, 1, n}]
@@ -2850,150 +2958,4 @@ Out[7]= {x -> 1.41421}
 
 In[8]:= FindRoot[(x - 1)^3, {x, 0.5}, DampingFactor -> 3]
 Out[8]= {x -> 1.0}
-```
-
-## FindMinimum / FindMaximum
-
-Iterative local optimisation.  Implemented natively in C in
-`src/findmin.c`.  Both have `HoldAll, Protected` attributes and use
-`Block`-style local binding of the search variables.  `FindMaximum[f, ...]`
-is a thin wrapper around `FindMinimum[-f, ...]` that negates the
-objective value before returning.
-
-### Forms
-
-- `FindMinimum[f, {x, x0}]` -- 1D from a single start (default Brent).
-- `FindMinimum[f, {x, x0, x1}]` -- bracket Brent on `[x0, x1]`.
-- `FindMinimum[f, {x, xstart, xmin, xmax}]` -- bracket Brent on `[xmin, xmax]`.
-- `FindMinimum[f, {{x, x0}, {y, y0}, ...}]` -- n-D from a user start.
-- `FindMinimum[f, {x, y, ...}]` -- n-D auto-start at 1 for each variable
-  (matches Mathematica; avoids the common saddle-at-origin trap for
-  oscillatory objectives like `Sin[x] Sin[2 y]` whose gradient vanishes
-  at the origin).
-- `FindMinimum[{f, cons}, vars]` -- constrained minimisation.
-- `FindMaximum[...]` -- same forms; maximises `f` (equivalent to negating
-  the objective and the f-value of the result).
-
-### Output
-
-`{f_min, {var1 -> v1, ..., varN -> vN}}` -- a 2-element list whose first
-element is the function value and whose second is the rule list for the
-optimising variable assignments.
-
-### Method dispatch
-
-| Spec                  | Default method |
-|-----------------------|----------------|
-| n = 1                 | Brent          |
-| n >= 2                | QuasiNewton (BFGS) |
-| `{x, x0, x1}` (1D)    | Brent (bracket) |
-
-Methods overridable via `Method -> "Brent" | "Newton" | "QuasiNewton"
-| "ConjugateGradient"`.  Brent is golden-section search with parabolic
-interpolation (derivative-free), QuasiNewton is BFGS with Armijo
-backtracking line search, ConjugateGradient is Polak-Ribière+ with
-restart, Newton uses the symbolic Hessian (via repeated `D[]`) with
-modified-Cholesky safeguarding.  Gradients default to a symbolic
-gradient (`D[f, x_i]` per variable) with a central-difference fallback;
-override via `Gradient -> {dfdx1, dfdx2, ...}`.
-
-### Constraints
-
-Inside the `{f, cons}` form, `cons` is a boolean tree of comparisons:
-
-- `Less / LessEqual / Greater / GreaterEqual` between a bare iteration
-  variable and a numeric constant become **box constraints** (enforced
-  by per-step projection).
-- Other inequalities (`g(x) <= 0`) and equalities (`h(x) == 0`) feed a
-  **quadratic-penalty** wrapper around the inner solver.  The outer μ
-  schedule starts at 1 and multiplies by 10 each round until feasible
-  (max 9 rounds, μ up to 10^8).  The inner BFGS/CG/Newton iterations
-  drive the *augmented* objective `f + μ·Σ_k max(0, g_k)^2 + μ·Σ_j h_j^2`
-  using a matching *augmented* gradient `∇f + 2μ·Σ_k (active) g_k ∇g_k +
-  2μ·Σ_j h_j ∇h_j` — the gradient of each constraint expression is
-  computed symbolically at setup and falls back to central differences
-  per-constraint when symbolic differentiation fails.
-- `Or[...]`, `Element[...]`, `x ∈ Integers` and the rest of the
-  Mathematica constraint surface are not yet implemented -- they emit
-  `FindMinimum::nimpl`.
-
-The penalty wrapper converges from feasible *or* infeasible starting
-points on smooth nonlinear constraints (linear/quadratic inequalities,
-linear/quadratic equalities, intersections thereof).  At very high μ
-the inner solver may exit early on line-search exhaustion; the outer
-loop's feasibility check is authoritative, and only emits a diagnostic
-(`FindMinimum::infeas`) when the final iterate genuinely fails the
-constraint tolerance (1e-12).
-
-### Options
-
-| Option              | Default        | Effect |
-|---------------------|----------------|--------|
-| `Method`            | `Automatic`    | `"Brent"`, `"QuasiNewton"`, `"ConjugateGradient"`, `"Newton"`, or `Automatic`. |
-| `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a digit count (>= ~16 routes through MPFR).  Lifts the 1D `Brent` and n-D `QuasiNewton` iterations into MPFR at the requested precision so the result `{f_min, {x -> ...}}` carries MPFR leaves with that many digits.  Explicit `Method -> "Newton"` or `"ConjugateGradient"` at MPFR currently falls back to `QuasiNewton` with a `FindMinimum::nimpl` diagnostic; general (non-box) constraints at MPFR fall back to machine precision similarly. |
-| `MaxIterations`     | `500`          | Iteration limit on the inner loop. |
-| `AccuracyGoal`      | `Automatic`    | Digit count `n` ⇒ stop when `\|grad\| < 10^{-n}`. `Infinity` disables. `Automatic` resolves to `WorkingPrecision/2`. |
-| `PrecisionGoal`     | `Automatic`    | Digit count `n` ⇒ stop when `\|step\| < \|x\| * 10^{-n}`. |
-| `Gradient`          | `Automatic`    | Explicit `{dfdx1, ..., dfdxN}` overrides the symbolic gradient. |
-| `StepMonitor`       | `None`         | A held expression evaluated after each step. |
-| `EvaluationMonitor` | `None`         | A held expression evaluated each time `f` (or any partial) is evaluated. |
-
-### Diagnostics (stderr)
-
-| Tag                  | Triggered when |
-|----------------------|----------------|
-| `FindMinimum::argt`    | Wrong arg count. |
-| `FindMinimum::ivar`    | Malformed variable spec. |
-| `FindMinimum::vecvar`  | Vector-valued variable (deferred). |
-| `FindMinimum::badmeth` | Unknown `Method` value. |
-| `FindMinimum::badopt`  | Unknown option name or invalid value. |
-| `FindMinimum::nimpl`   | Method, constraint shape, or domain restriction not yet supported. |
-| `FindMinimum::nlnum`   | `f`, gradient, or constraint did not evaluate to a number. |
-| `FindMinimum::cvmit`   | Inner-loop `MaxIterations` exhausted. |
-| `FindMinimum::lstol`   | Line search could not find a sufficient decrease. |
-| `FindMinimum::dsing`   | Hessian non-positive-definite (Newton). |
-| `FindMinimum::infeas`  | Penalty outer loop could not satisfy all constraints. |
-
-### Examples
-
-```mathematica
-In[1]:= FindMinimum[(x - 3)^2 + 1, {x, 0}]
-Out[1]= {1.0, {x -> 3.0}}
-
-In[2]:= FindMinimum[x Cos[x], {x, 2}]
-Out[2]= {-3.28837, {x -> 3.42562}}
-
-In[3]:= FindMinimum[x Cos[x], {x, 7, 1, 15}]
-Out[3]= {-9.47729, {x -> 9.52933}}
-
-In[4]:= FindMinimum[Sin[x] Sin[2 y], {{x, 2}, {y, 2}}]
-Out[4]= {-1.0, {x -> 1.5708, y -> 2.35619}}
-
-In[5]:= FindMinimum[{x Cos[x], 1 <= x && x <= 15}, {x, 7}]
-Out[5]= {-9.47729, {x -> 9.52933}}
-
-(* Chained `lo <= x <= hi` parses as an Inequality[...] node; FindMinimum
-   walks its (value, op, value) triples and registers each as a box bound. *)
-In[5b]:= FindMaximum[{x Cos[x], 1 <= x <= 15}, {x, 7}]
-Out[5b]= {6.36096, {x -> 6.4373}}
-
-In[6]:= FindMinimum[(1-x)^2 + 100 (y-x^2)^2, {{x, 0}, {y, 0}}]
-Out[6]= {0.0, {x -> 1.0, y -> 1.0}}
-
-In[7]:= FindMaximum[Cos[x], {x, 0}]
-Out[7]= {1.0, {x -> 0.0}}
-
-In[8]:= FindMinimum[(x - 3)^2, {x, 0}, Method -> "ConjugateGradient"]
-Out[8]= {0.0, {x -> 3.0}}
-
-(* Arbitrary precision via WorkingPrecision: the 1D Brent and n-D BFGS
-   iterations both run in MPFR at the requested precision and the
-   returned `{f_min, {x -> ...}}` carries MPFR leaves with that many
-   digits. *)
-In[9]:= FindMinimum[(x - Pi)^2, {x, 0}, WorkingPrecision -> 50]
-Out[9]= {0.0, {x -> 3.1415926535897932384626433832795028841971693993751}}
-
-In[10]:= FindMinimum[x Cos[x], {x, 2}, WorkingPrecision -> 80]
-Out[10]= {-3.2883713955908964865125964571235283975158511553846230554230811211040811736596049,
-         {x -> 3.42561845948172814647771386218545617769640923939753965919739613085112431446169}}
 ```

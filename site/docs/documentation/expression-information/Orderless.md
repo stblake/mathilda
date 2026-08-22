@@ -5,32 +5,13 @@
 
 ## Description
 
-```text
-Orderless is an attribute that can be assigned to a symbol f to indicate that the elements e_i in expressions of the form f[e_1, e_2, ...] should automatically be sorted into canonical order. This property is accounted for in pattern matching.
-```
+Orderless is an attribute that can be assigned to a symbol f to indicate that the elements e\_i in expressions of the form f\[e\_1, e\_2, ...\] should automatically be sorted into canonical order. This property is accounted for in pattern matching.
 
-## Examples
+## Examples (3)
 
-_No verified examples yet for this function._
+Every input below was run against the current Mathilda build and its output recorded.
 
-## Implementation notes
-
-`Orderless` is an attribute marker symbol, not a function. `attr.c` maps the name to the `ATTR_ORDERLESS` bitflag. A head carrying this bit makes the evaluator's ordering step (`eval_sort_args` in `eval.c`) sort the arguments into canonical order (`expr_compare`), giving commutative behaviour. The pattern matcher also accounts for `ATTR_ORDERLESS` so a pattern can match commuted arguments. Plus and Times set this bit. The symbol appears only as an argument to `Attributes`/`SetAttributes`, or inside a `Function[..., Orderless]` attribute spec (`purefunc.c` maps `SYM_Orderless` → `ATTR_ORDERLESS`).
-
-**Attributes:** none registered.
-
-## Implementation status
-
-**Partial** — implemented with documented limitations or caveats; some argument forms fall through to symbolic/unevaluated output.
-
-## References
-
-- Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
-- Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (3)
 
 ```mathematica
 In[1]:= SetAttributes[g, Orderless]
@@ -42,6 +23,19 @@ Out[2]= g[1, 2, 3]
 In[3]:= g[c, a, b]
 Out[3]= g[a, b, c]
 ```
+
+## Implementation notes
+
+`Orderless` is an attribute marker symbol, not a function. `attr.c` maps the name to the `ATTR_ORDERLESS` bitflag. A head carrying this bit makes the evaluator's ordering step (`eval_sort_args` in `eval.c`) sort the arguments into canonical order (`expr_compare`), giving commutative behaviour. The pattern matcher also accounts for `ATTR_ORDERLESS` so a pattern can match commuted arguments. Plus and Times set this bit. The symbol appears only as an argument to `Attributes`/`SetAttributes`, or inside a `Function[..., Orderless]` attribute spec (`purefunc.c` maps `SYM_Orderless` → `ATTR_ORDERLESS`).
+
+**Attributes:** none registered.
+
+## References
+
+- Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
+- Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+
+## Notes & additional examples
 
 ### Notes
 

@@ -1,0 +1,6 @@
+IntegerQ[5]
+MachineIntegerQ[2^100]
+RationalQ[1/2]
+ExactNumberQ[2 + 3 I]
+InexactNumberQ[N[Pi, 50]]
+ComplexQ[2 + 3 I]

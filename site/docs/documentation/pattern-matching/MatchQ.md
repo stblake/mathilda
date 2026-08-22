@@ -5,19 +5,49 @@
 
 ## Description
 
-```text
-MatchQ[expr, form]
-    gives True if expr matches the pattern form, False otherwise.
-MatchQ[form]
-    is the operator form: MatchQ[form][expr] == MatchQ[expr, form].
-Pattern matching honours sequence variables (__, ___), PatternTest,
-Condition, attribute-driven flattening / ordering, and the surrounding
-$Assumptions / DownValues environment.
+**`MatchQ[expr, form]`**
+
+gives True if expr matches the pattern form, False otherwise.
+
+**`MatchQ[form]`**
+
+is the operator form: MatchQ\[form\]\[expr\] == MatchQ\[expr, form\].
+
+<details>
+<summary>Notes</summary>
+
+Pattern matching honours sequence variables (\_\_, \_\_\_), PatternTest, Condition, attribute-driven flattening / ordering, and the surrounding $Assumptions / DownValues environment.
+
+</details>
+
+## Examples (7)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (7)
+
+```mathematica
+In[1]:= MatchQ[3, _Integer]
+Out[1]= True
+
+In[2]:= MatchQ[f[a, b], f[_, _]]
+Out[2]= True
+
+In[3]:= MatchQ[x^2, _^_]
+Out[3]= True
+
+In[4]:= MatchQ[{1, 2, 3}, {__Integer}]
+Out[4]= True
+
+In[5]:= MatchQ[7, _Integer?PrimeQ]
+Out[5]= True
+
+In[6]:= MatchQ[{2, 4, 6, 8}, {p__Integer} /; And @@ (EvenQ /@ {p})]
+Out[6]= True
+
+In[7]:= MatchQ[a + b + c, x_ + y_ /; x =!= y]
+Out[7]= True
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -25,53 +55,16 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/match.c`](https://github.com/stblake/mathilda/blob/main/src/match.c)
 - Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_backtrack.c`](https://github.com/stblake/mathilda/blob/main/tests/test_backtrack.c)
+- Tests: [`tests/test_eval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval.c)
+- Tests: [`tests/test_match.c`](https://github.com/stblake/mathilda/blob/main/tests/test_match.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= MatchQ[3, _Integer]
-Out[1]= True
-```
-
-```mathematica
-In[1]:= MatchQ[f[a, b], f[_, _]]
-Out[1]= True
-```
-
-```mathematica
-In[1]:= MatchQ[x^2, _^_]
-Out[1]= True
-```
-
-```mathematica
-In[1]:= MatchQ[{1, 2, 3}, {__Integer}]
-Out[1]= True
-```
-
-```mathematica
-In[1]:= MatchQ[7, _Integer?PrimeQ]
-Out[1]= True
-```
-
-```mathematica
-In[1]:= MatchQ[{2, 4, 6, 8}, {p__Integer} /; And @@ (EvenQ /@ {p})]
-Out[1]= True
-```
-
-```mathematica
-In[1]:= MatchQ[a + b + c, x_ + y_ /; x =!= y]
-Out[1]= True
-```
 
 ### Notes
 

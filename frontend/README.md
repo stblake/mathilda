@@ -77,3 +77,150 @@ Mathilda C binary (../Mathilda)
 ```
 
 See docs/frontend-research.md for the full design rationale.
+
+### Focused-mode surfaces
+
+The window has two modes. On the canvas, the top strip is a 34px name-and-theme
+bar (`--appbar-h`). Focusing one or more notebooks swaps it for the 46px notebook
+toolbar (`--toolbar-h`), and three surfaces then belong to that mode only:
+
+| File | What it owns |
+|------|--------------|
+| `lib/Toolbar.svelte` | the labelled, ruled control groups; one `Menu.svelte` instance is shared and its `items` swapped |
+| `lib/StatusBar.svelte` | the optional 22px bottom strip: kernel state, last evaluation time, session totals |
+| `lib/PropertiesPanel.svelte` | the sidebar that slides in from the left: notebook name and size, cell counts, kernel status with Restart/Abort, display preferences, pane layout |
+
+The panel reports only what the model actually holds. A canvas notebook has a
+title and **no file** — `saveNotebook` takes a path from a dialog and nothing
+writes it back — so Location says the notebook is unsaved rather than inventing a
+path, and Size counts characters of source rather than quoting a file size for a
+file that does not exist.
+
+Two things follow from the toolbar being *verbs*: a preference that lasts the rest
+of the session belongs in the panel instead, which is where the `In[n]` label
+toggle lives (`lib/properties.ts`), and the Sidebar group is **one** button —
+Mathematica's equivalent group carries a chat panel as its second, and a button
+that opened nothing would be worse than the asymmetry.
+
+### Markdown text cells
+
+A `text` cell shows **rendered Markdown** when it is not being edited and its raw
+source while it is — the two states Jupyter has, and what the cell-type picker has
+described as "Prose / markdown" since it was written, back when nothing rendered
+any. Rendering is `lib/prose.ts` over `marked`, with `breaks: true` so a single
+newline is a line break: a cell is typed like prose, and needing two trailing
+spaces to end a line would read as the cell ignoring Return.
+
+One element switches between the two states rather than two elements swapping, so
+the existing handlers, handle registration and arrow-key navigation are untouched
+— only what is painted into it and whether it is `contenteditable` change. An
+empty cell starts in edit mode, since a rendered empty cell is a zero-height
+click target.
+
+The toolbar's **Text** group wraps the selection in `**`, `*`, `` ` `` or a link,
+via `document.execCommand('insertText')` — deprecated, and still the only API that
+edits a contenteditable while keeping the browser's native undo stack, and it
+fires `input` so the cell's existing handler saves the new source with no extra
+plumbing. The group appears for `text` only: a section or subsection is an
+`<h1>`/`<h2>` that is not Markdown-rendered, so `**bold**` there would display its
+own asterisks.
+
+There is no bullet-list button and no caret-at-click-point, both for the same
+reason — each needs to map a position through a contenteditable whose line boxes
+may be text nodes, `<div>`s or `<br>`s, and a bullet landing mid-word or a caret
+landing at the wrong offset is worse than the button not being there. Rendered
+prose reaches the DOM through `{@html}`: a notebook is an executable document
+whose code cells already evaluate arbitrary Mathilda, so HTML in its prose is not
+a new capability, and a regex pass would look like sanitisation without being it.
+
+### Notebook search
+
+`Cmd+F` in focused mode opens a find bar that searches **every cell** of the
+notebook in the active pane. It is deliberately not `@codemirror/search`: that
+package's `openSearchPanel` searches one editor — whichever cell holds focus — and
+a bar that silently ignores the other forty cells while calling itself notebook
+search is worse than no bar, because you would believe its "No matches". So
+`lib/search.ts` matches over the notebook's own model via `store.allCells()`, and
+navigation then drives whichever editor owns the match it landed on: a code cell
+gets a real CodeMirror selection and scroll, a prose cell is opened for editing
+(which un-renders it) and its range selected.
+
+`Cmd+F` is free because `@codemirror/search` is *not* installed, so no editor
+claims the binding. Enter and Shift+Enter walk the matches, wrapping both ways;
+typing only updates the count, since jumping per keystroke would scroll the
+notebook out from under someone still typing.
+
+What it does not do is highlight every match at once — that needs a CodeMirror
+decoration extension per cell, which is its own change. The count says how many
+there are and Enter walks them.
+
+`npm run check:search` compiles `lib/search.ts` with the project's own `tsc` and
+imports the result, so its 18 checks exercise the shipped functions rather than a
+paraphrase. Two properties carry it: matches are **non-overlapping** (`"aa"` in
+`"aaaa"` is two matches, not three, which is what separates the loop from the
+naive `from = at + 1`), and stepping wraps in **both** directions — in JavaScript
+`-1 % 3` is `-1`, so the naive form sends Shift+Enter at the first match to a
+negative index and the bar reads "0 of 3".
+
+### The Insert palette
+
+The **Insert** group offers CodeMirror snippet templates — Table, Matrix, Sum,
+Integrate, Solve, Plot, Module, a definition, and so on — inserted at the caret
+with `${field}` placeholders that Tab walks. Code cells only: every template is a
+Mathilda expression, and offering `Table[]` for a prose cell would insert text that
+never evaluates. The menu's hint is the *expansion*, so it shows what will land in
+the cell rather than only what it is called.
+
+`@codemirror/autocomplete` is now an explicit dependency. It was already in
+`node_modules` transitively through the `codemirror` meta-package and importing it
+on that basis works right up until the day the meta-package reorganises.
+
+The templates are the risk, not the machinery: one with an unbalanced bracket
+produces a broken cell every time the button is pressed, and reading
+`{{${a}, ${b}}, {${c}, ${d}}}` is a poor way to notice. So
+`npm run check:snippets` expands each template and feeds it to **the real Mathilda
+binary** inside `Hold[...]`, which parses without evaluating — `Plot[]` must not
+open a window and a definition must not define anything. A template whose expansion
+does not parse fails the check, which is a stronger guarantee than counting
+brackets: it is the language's own parser agreeing that what the button inserts is
+valid. Bracket counts are checked too, because they say *which* kind is unbalanced
+where the parser only says the line is wrong. If the C binary is not built the
+parser half reports SKIP rather than failing.
+
+### Interface scale
+
+The scale rows in the properties panel drive the same store the `Cmd+=` / `Cmd+-`
+/ `Cmd+0` bindings drive (root `font-size`, via `uiScale` in `lib/properties.ts`).
+It was a local in `App.svelte`; lifting it to a store is what lets the panel show
+the number the keyboard changes, rather than becoming a second scale that drifts
+from the first. The panel's steps are exactly representable in binary (0.75, 1,
+1.25, 1.5) so a button reads as selected on an exact equality, and only on one —
+the keyboard still moves in 0.1, and highlighting the nearest step while sitting
+between two would misreport the state. `Cmd+0` had been documented in that
+handler's own comment without being implemented; the store made it one line.
+
+Inline TeX renders through KaTeX: `$…$` inline, `$$…$$` display. The math is
+pulled OUT before Markdown runs and put back after, and that order is the whole
+point — handed to Markdown first, `$a_1 * b_2$` loses `_1 * b_2` to emphasis and
+nothing downstream can recover it. Extraction is a hand-written scan rather than a
+regex because everything that must *not* be math is context: a `$` inside a code
+span or fence is a literal dollar, and `\$` is one anywhere. Two standard
+heuristics (pandoc and markdown-it use the same pair) keep prose about money from
+becoming equations — an opening `$` must be followed by a non-space and a closing
+`$` preceded by one, so "it cost $5 and $6" stays prose. Unclosed delimiters are
+left exactly as typed rather than swallowing the rest of the cell. The Text group's
+fifth button writes `$…$`, which is how the feature gets discovered at all; the
+alternative is knowing to type it.
+
+`npm run check:prose` compiles `lib/prose.ts` with the project's own `tsc` and
+imports the result, so its 39 checks exercise the shipped `renderProse`,
+`extractMath` and marker constants rather than a paraphrase — a paraphrase can
+agree with its test and disagree with the app. It keeps one direct `marked` import
+for a single negative control: that without `breaks: true` there is no `<br>` at
+all, so the option is load-bearing rather than decorative. The DOM half needs a
+real pointer, since synthetic events do not reach the WKWebView.
+
+Both panel stores are plain writables with no persistence, matching `darkMode` in
+`theme.ts`. Nothing in the app persists UI state yet, and making one preference
+the only setting that survives a restart would be a surprise rather than a
+feature.

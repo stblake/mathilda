@@ -77,6 +77,12 @@
 #include "partitions.h"
 #include "fit.h"
 #include "info.h"
+#include "meminfo.h"
+#include "image.h"
+#include "imageio.h"
+#include "imagecompose.h"
+#include "imagethin.h"
+#include "imagecolor.h"
 #include "expand.h"
 #include "expand_power.h"
 #include "poly.h"
@@ -90,6 +96,7 @@
 #include "findroot.h"
 #include "datetime.h"
 #include "linalg.h"
+#include "pca.h"        /* src/ml */
 #include "readwrite.h"
 #include "loadmodule.h"
 #include "files.h"
@@ -133,6 +140,7 @@
 #include "sym_names.h"
 #include "repl_hooks.h"
 #include "vectors.h"
+#include "vectoranal.h"
 #include "version.h"
 
 /*
@@ -651,6 +659,11 @@ void core_init(void) {
     symtab_add_builtin("NonNegative", builtin_nonnegative);
     symtab_add_builtin("NonPositive", builtin_nonpositive);
     symtab_add_builtin("IntegerQ", builtin_integerq);
+    symtab_add_builtin("MachineIntegerQ", builtin_machineintegerq);
+    symtab_add_builtin("RationalQ", builtin_rationalq);
+    symtab_add_builtin("ComplexQ", builtin_complexq);
+    symtab_add_builtin("ExactNumberQ", builtin_exactnumberq);
+    symtab_add_builtin("InexactNumberQ", builtin_inexactnumberq);
     symtab_add_builtin("ValueQ", builtin_valueq);
     symtab_add_builtin("EvenQ", builtin_evenq);
     symtab_add_builtin("OddQ", builtin_oddq);
@@ -685,6 +698,11 @@ void core_init(void) {
     symtab_get_def("NonNegative")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("NonPositive")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("IntegerQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("MachineIntegerQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("RationalQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("ComplexQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("ExactNumberQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("InexactNumberQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("ValueQ")->attributes |= (ATTR_HOLDALL | ATTR_PROTECTED);
     symtab_get_def("EvenQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("OddQ")->attributes |= ATTR_PROTECTED;
@@ -816,6 +834,10 @@ void core_init(void) {
     expand_init();
     expand_power_init();
     solve_init();
+    void solveint_init(void);
+    solveint_init();
+    void solvethue_init(void);
+    solvethue_init();
     findroot_init();
     void findmin_init(void);
     findmin_init();
@@ -840,8 +862,17 @@ void core_init(void) {
     void nsolve_init(void);
     nsolve_init();
     info_init();
+    meminfo_init();
+    image_init();
+    imagefilter_init();
+    imagegeom_init();
+    imageio_init();
+    imagecompose_init();
+    imagethin_init();
+    imagecolor_init();
     datetime_init();
     linalg_init();
+    ml_init();      /* src/ml -- PrincipalComponents, Standardize */
     void matsol_init(void);
     matsol_init();
     void matinv_init(void);
@@ -869,6 +900,7 @@ void core_init(void) {
     regex_init();
     series_init();
     deriv_init();
+    vectoranal_init();
     limit_init();
     void residue_init(void);
     residue_init();
@@ -2528,6 +2560,76 @@ Expr* builtin_integerq(Expr* res) {
     return expr_new_symbol(SYM_False);
 }
 
+/* --- Further number-type predicates -------------------------------------- *
+ * MachineIntegerQ / RationalQ / ComplexQ / ExactNumberQ / InexactNumberQ.
+ * Each is a *Q predicate: arity 1, returns True/False, Protected. Docstrings
+ * live in info.c. See also IntegerQ (above) and NumberQ/NumericQ.            */
+
+/* True iff e is a two-argument function node whose head is the interned sym. */
+static bool core_head_is(const Expr* e, const char* sym) {
+    return e->type == EXPR_FUNCTION
+        && e->data.function.arg_count == 2
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == sym;
+}
+
+/* An exact number: machine/big integer, rational, or a Complex of exact parts. */
+static bool core_is_exact_number(const Expr* e) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    if (core_head_is(e, SYM_Rational)) return true;
+    if (core_head_is(e, SYM_Complex))
+        return core_is_exact_number(e->data.function.args[0])
+            && core_is_exact_number(e->data.function.args[1]);
+    return false;
+}
+
+/* An inexact number: a machine real, an MPFR real, or a Complex with an
+ * inexact part. */
+static bool core_is_inexact_number(const Expr* e) {
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (core_head_is(e, SYM_Complex))
+        return core_is_inexact_number(e->data.function.args[0])
+            || core_is_inexact_number(e->data.function.args[1]);
+    return false;
+}
+
+Expr* builtin_machineintegerq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    /* True only for a machine-word integer; a BigInt is not machine-sized. */
+    return expr_new_symbol(
+        res->data.function.args[0]->type == EXPR_INTEGER ? SYM_True : SYM_False);
+}
+
+Expr* builtin_rationalq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+    /* An exact rational: any integer (which is rational) or a Rational[p, q]. */
+    return expr_new_symbol(
+        (expr_is_integer_like(arg) || core_head_is(arg, SYM_Rational))
+            ? SYM_True : SYM_False);
+}
+
+Expr* builtin_complexq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    return expr_new_symbol(
+        core_head_is(res->data.function.args[0], SYM_Complex) ? SYM_True : SYM_False);
+}
+
+Expr* builtin_exactnumberq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    return expr_new_symbol(
+        core_is_exact_number(res->data.function.args[0]) ? SYM_True : SYM_False);
+}
+
+Expr* builtin_inexactnumberq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    return expr_new_symbol(
+        core_is_inexact_number(res->data.function.args[0]) ? SYM_True : SYM_False);
+}
+
 /* ValueQ[expr] — True if a value has been defined for expr, False otherwise.
  * HoldAll: the argument is inspected unevaluated so we probe the symbol itself
  * rather than the value it would evaluate to. A bare symbol carries a value
@@ -2562,7 +2664,30 @@ Expr* builtin_information(Expr* res) {
     else if (arg->type == EXPR_STRING) sym_name = arg->data.string;
     
     if (!sym_name) return NULL;
-    
+
+    /* `?Pat*` is a search, not a lookup: list the symbols whose names match,
+     * one per line, the way Mathematica's ?Find* does. The matching itself is
+     * Names[], so the pattern vocabulary is exactly Names' -- no second
+     * implementation to drift. A pattern that matches nothing says so rather
+     * than returning an empty result the caller cannot interpret. */
+    bool wild = false;
+    for (const char* w = sym_name; *w; w++)
+        if (*w == '*' || *w == '@') { wild = true; break; }
+
+    if (wild) {
+        /* Return the LIST of matching names, not a rendered string, so the
+         * result composes: Length[?Find*], Select[?Find*, ...] and Map all
+         * work on it. Rendering is the front end's job -- the notebook lays
+         * it out as a grid, the terminal prints the list. The matching is
+         * Names[] itself, so the pattern vocabulary is exactly Names' and
+         * there is no second implementation to drift. */
+        Expr* na[1] = { expr_new_string(sym_name) };
+        Expr* names = eval_and_free(
+            expr_new_function(expr_new_symbol(SYM_Names), na, 1));
+        if (!names || !head_is(names, SYM_List)) { expr_free(names); return NULL; }
+        return names;
+    }
+
     const char* doc = symtab_get_docstring(sym_name);
     if (!doc) {
         char buf[256];

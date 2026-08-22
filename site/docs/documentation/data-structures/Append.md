@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-Append[expr, elem] adds elem to the end of expr.
-```
+**`Append[expr, elem] adds elem to the end of expr.`**
 
-## Examples
+## Examples (2)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Append[<|"a" -> 1, "b" -> 2|>, "c" -> 3]
@@ -27,11 +27,13 @@ Out[2]= <|"a" -> 99|>
 
 **Attributes:** none registered.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Prepend](../../data-structures/Prepend/), [AssociateTo](../../data-structures/AssociateTo/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
+- Tests: [`tests/test_core_algebra.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core_algebra.c)
+- Tests: [`tests/test_eval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval.c)

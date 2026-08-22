@@ -80,6 +80,15 @@ void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
         *den_out = expr_new_integer(d);
         return;
     }
+    /* Bignum-component Rational: is_rational's int64 path missed it, so
+     * Numerator/Denominator previously returned the whole value over 1.  A
+     * canonical Rational is already reduced with a positive denominator, so
+     * the stored components ARE the numerator and denominator. */
+    if (is_rational_like(expr) && expr->type == EXPR_FUNCTION) {
+        *num_out = expr_copy(expr->data.function.args[0]);
+        *den_out = expr_copy(expr->data.function.args[1]);
+        return;
+    }
 
     Expr* re; Expr* im;
     if (is_complex(expr, &re, &im)) {

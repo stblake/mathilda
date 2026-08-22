@@ -35,16 +35,25 @@
 #include "expr.h"
 #include "iter.h"
 #include "attr.h"
-#include "arithmetic.h"   /* is_rational */
+#include "arithmetic.h"   /* is_rational, make_complex */
 #include "sym_names.h"
+#include "compile/autocompile.h"   /* machine fast path for finite numeric products */
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <math.h>
+#include <complex.h>   /* creal/cimag on the real-iterator accumulator */
 
 /* Upper bound on the number of factors a finite explicit expansion will
  * multiply before giving up (a runaway guard, not a correctness limit). */
 #define PRODUCT_MAX_FINITE_TERMS 100000000LL
+
+/* Ceiling for the compiled machine fast path (product_try_compiled), well above
+ * PRODUCT_MAX_FINITE_TERMS: the compiled accumulator allocates nothing per
+ * factor, so the enumeration's memory bound does not apply.  Purely a
+ * runaway/typo guard, not a correctness limit; tunable. */
+#define PRODUCT_MAX_COMPILED_TERMS 1000000000000LL
 
 /* ------------------------------------------------------------------ */
 /*  Small helpers                                                      */
@@ -299,6 +308,137 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
 
 /* Handle Product[f, spec] for one already-isolated spec, with the parsed
  * method.  Returns the product value, or NULL to leave Product[...] held. */
+/* Integer-membership predicates that fold to a definite Boolean for a SYMBOLIC
+ * argument (EvenQ[k]/PrimeQ[k] -> False, SquareFreeQ[k] -> True) though they vary
+ * per integer.  The closed-form cascade evaluates the body symbolically, so such
+ * a predicate collapses the conditional around it and the telescoped product is
+ * wrong -- `Product[If[EvenQ[k], k, 1], {k, 1, 4}]` would fold to 1 rather than
+ * enumerate to 8.  A finite range with such a body must enumerate.  (Kept in step
+ * with the identical helpers in src/sum/sum.c.) */
+static bool prod_head_is_index_predicate(const char* h) {
+    return strcmp(h, "EvenQ") == 0 || strcmp(h, "OddQ") == 0
+        || strcmp(h, "PrimeQ") == 0 || strcmp(h, "CompositeQ") == 0
+        || strcmp(h, "PrimePowerQ") == 0 || strcmp(h, "IntegerQ") == 0
+        || strcmp(h, "SquareFreeQ") == 0 || strcmp(h, "CoprimeQ") == 0
+        || strcmp(h, "Divisible") == 0;
+}
+
+static bool prod_expr_mentions_symbol(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (prod_expr_mentions_symbol(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (prod_expr_mentions_symbol(e->data.function.args[i], name)) return true;
+    return false;
+}
+
+static bool prod_body_has_index_predicate(const Expr* e, const char* ivar) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && prod_head_is_index_predicate(e->data.function.head->data.symbol.name)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (prod_expr_mentions_symbol(e->data.function.args[i], ivar)) return true;
+    }
+    if (prod_body_has_index_predicate(e->data.function.head, ivar)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (prod_body_has_index_predicate(e->data.function.args[i], ivar)) return true;
+    return false;
+}
+
+/* True when `e` is a machine (inexact) number: a Real, or a Complex with at
+ * least one Real component.  The correctness gate for the compiled fast path:
+ * only when the body is inexact at a representative index does contagion through
+ * Times guarantee the interpreter's own product is a machine number too, so the
+ * compiled machine product agrees to machine precision.  An exact factor keeps
+ * the interpreter path (an integer product stays exact bignum, e.g. n!). */
+static bool prod_body_probe_inexact(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
+        && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol.name, SYM_Complex) == 0) {
+        const Expr* re = e->data.function.args[0];
+        const Expr* im = e->data.function.args[1];
+        return (re && re->type == EXPR_REAL) || (im && im->type == EXPR_REAL);
+    }
+    return false;
+}
+
+/*
+ * Machine fast path for a finite numeric product whose body is inexact — the
+ * mirror of sum_try_compiled.  Returns the scalar product, or NULL to fall
+ * through to expand_range.  Strategy A (integer iterator) compiles the whole
+ * Product[body, {i, lo, hi[,di]}] to one native multiply-accumulate loop;
+ * strategy B (real iterator) compiles the body and accumulates in C from the
+ * identity 1.  The one-term probe keeps exact products (n!, exact rationals) on
+ * the interpreter, and declines the empty range so expand_range folds the
+ * identity 1.
+ */
+static Expr* product_try_compiled(Expr* f, const IterSpec* s,
+                                  double min_val, double max_val, double di_val,
+                                  bool is_real) {
+    if (!autocompile_enabled()) return NULL;
+
+    bool nonempty = (di_val > 0) ? (min_val <= max_val + 1e-14)
+                                 : (min_val >= max_val - 1e-14);
+    if (!nonempty) return NULL;
+
+    double nterms = (max_val - min_val) / di_val + 1.0;
+    if (!(nterms >= 1.0) || nterms > (double)PRODUCT_MAX_COMPILED_TERMS) return NULL;
+
+    Rule* saved = iter_spec_shadow(s->var);
+    Expr* first_val = is_real ? expr_new_real(min_val) : expr_copy(s->imin);
+    symtab_add_own_value(s->var->data.symbol.name, s->var, first_val);
+    Expr* probe = evaluate(f);
+    bool inexact = prod_body_probe_inexact(probe);
+    expr_free(probe);
+    expr_free(first_val);
+    iter_spec_restore(s->var, saved);
+    if (!inexact) return NULL;
+
+    if (!is_real) {
+        if (s->imin->type != EXPR_INTEGER || s->imax->type != EXPR_INTEGER
+            || s->di->type != EXPR_INTEGER)
+            return NULL;
+
+        int nspec = (s->di->data.integer == 1) ? 3 : 4;
+        Expr* spec_args[4];
+        spec_args[0] = expr_copy(s->var);
+        spec_args[1] = expr_copy(s->imin);
+        spec_args[2] = expr_copy(s->imax);
+        if (nspec == 4) spec_args[3] = expr_copy(s->di);
+        Expr* spec = expr_new_function(expr_new_symbol(SYM_List), spec_args, nspec);
+        Expr* whole_args[2] = { expr_copy(f), spec };
+        Expr* whole = expr_new_function(expr_new_symbol(SYM_Product), whole_args, 2);
+        Expr* total = autocompile_eval_closed(whole);
+        expr_free(whole);
+        return total;
+    }
+
+    AutoCompiled* ac = autocompile_new(f, (const Expr* const*)&s->var, 1);
+    if (!ac) return NULL;
+    double _Complex acc = 1.0;
+    double val = min_val;
+    int64_t count = 0;
+    bool ok = true;
+    while (iter_range_continue(/*is_real=*/true, /*is_inf=*/false, NULL, NULL,
+                               val, max_val, di_val)) {
+        if (count >= PRODUCT_MAX_COMPILED_TERMS) { ok = false; break; }
+        double _Complex y;
+        if (!autocompiled_eval_complex(ac, &val, &y)) { ok = false; break; }
+        acc *= y;
+        val += di_val;
+        count++;
+    }
+    autocompiled_free(ac);
+    if (!ok) return NULL;
+    double re = creal(acc), im = cimag(acc);
+    if (!isfinite(re) || !isfinite(im)) return NULL;
+    return im == 0.0 ? expr_new_real(re)
+                     : make_complex(expr_new_real(re), expr_new_real(im));
+}
+
 static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
     /* Indefinite form Product[f, i]: spec is a bare symbol. */
     if (spec->type == EXPR_SYMBOL) {
@@ -334,15 +474,29 @@ static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
          *   - min<=max:  empty ranges must fold to 1 via expansion, not the
          *                telescoping form (which would give a wrong value).
          * The iterator is shadowed because Product is HoldAll. */
-        if (!is_real && di_val == 1.0 && min_val <= max_val) {
+        /* A body whose symbolic evaluation collapses an index predicate (EvenQ,
+         * PrimeQ, ...) has no valid telescoping form -- the cascade would
+         * multiply the wrong factor -- so it must enumerate regardless of span. */
+        bool index_pred_body =
+            prod_body_has_index_predicate(f, s.var->data.symbol.name);
+
+        if (!is_real && di_val == 1.0 && min_val <= max_val && !index_pred_body) {
             Rule* saved = iter_spec_shadow(s.var);
             Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
             iter_spec_restore(s.var, saved);
             if (cf) { iter_spec_free(&s); return cf; }
         }
+        /* No closed form: try the compiled machine loop for an inexact body
+         * before the slow evaluate()-per-factor enumeration. */
+        Expr* comp = product_try_compiled(f, &s, min_val, max_val, di_val, is_real);
+        if (comp) { iter_spec_free(&s); return comp; }
         Expr* r = expand_range(f, s.var, s.imin, s.imax, s.di,
                                min_val, max_val, di_val, is_real);
         if (r) { iter_spec_free(&s); return r; }
+        /* Span too large to enumerate: an ordinary body may still telescope, but
+         * an index-predicate body would give the wrong closed form, so leave the
+         * Product unevaluated instead. */
+        if (index_pred_body) { iter_spec_free(&s); return NULL; }
         /* span too large: fall through to closed form */
     }
 

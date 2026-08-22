@@ -5,22 +5,34 @@
 
 ## Description
 
-```text
-RandomSample[{e1, e2, ...}, n]
-    gives a pseudorandom sample of n of the ei, without replacement.
-RandomSample[{w1, w2, ...} -> {e1, e2, ...}, n]
-    gives a weighted pseudorandom sample of n of the ei.
-RandomSample[{e1, e2, ...}]
-    gives a pseudorandom permutation of the ei.
-RandomSample[list, UpTo[n]]
-    gives a sample of n of the ei, or as many as are available.
-RandomSample never samples any element more than once.
-Use SeedRandom to seed the pseudorandom generator for reproducible results.
-```
+**`RandomSample[{e1, e2, ...}, n]`**
 
-## Examples
+gives a pseudorandom sample of n of the ei, without replacement.
 
-All examples below are verified against the current Mathilda build.
+**`RandomSample[{w1, w2, ...} -> {e1, e2, ...}, n]`**
+
+gives a weighted pseudorandom sample of n of the ei.
+
+**`RandomSample[{e1, e2, ...}]`**
+
+gives a pseudorandom permutation of the ei.
+
+**`RandomSample[list, UpTo[n]]`**
+
+gives a sample of n of the ei, or as many as are available.
+
+<details>
+<summary>Notes</summary>
+
+RandomSample never samples any element more than once. Use SeedRandom to seed the pseudorandom generator for reproducible results.
+
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (10)
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomSample[{a, b, c, d, e}, 3]
@@ -46,7 +58,20 @@ Out[7]= {a, b}
 
 In[8]:= Sort[RandomSample[{1, 2, 3} -> {a, b, c}]]
 Out[8]= {a, b, c}
+
+In[9]:= RandomSample[{a, b}, 5]
+Out[9]= RandomSample[{a, b}, 5]
+
+In[10]:= RandomSample[x]
+Out[10]= RandomSample[x]
 ```
+
+## Options & behaviour
+
+> **Packed arrays.** `RandomSample` and `RandomChoice` gather from a packed
+> list or an `NDArray` directly, drawing from the **same generator sequence**
+> the ordinary path uses — so `SeedRandom[n]` gives the same answer whether
+> the argument is packed or not.
 
 ## Implementation notes
 
@@ -65,11 +90,12 @@ The weighted form `RandomSample[{w1,...}->{e1,...}, n]` uses `weighted_sample_wi
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [RandomChoice](../../random-number-generation/RandomChoice/), [NDArray](../../linear-algebra/NDArray/)
 
 - Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
+- Tests: [`tests/test_nminimize.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nminimize.c)
+- Tests: [`tests/test_random.c`](https://github.com/stblake/mathilda/blob/main/tests/test_random.c)

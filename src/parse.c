@@ -683,7 +683,7 @@ static Expr* parse_list(ParserState* s) {
 
 /* Parses associations: <|a -> 1, b -> 2|>  ->  Association[Rule[a,1], Rule[b,2]].
  * Each entry is parsed as an ordinary expression; because `->`/`:>` are normal
- * operators (precedence 120) the `k -> v` shape becomes a Rule automatically.
+ * operators (precedence 1500) the `k -> v` shape becomes a Rule automatically.
  * The `<|` and `|>` delimiters are recognised as OP_NONE by get_operator, so
  * value parsing halts exactly at `|>`. Semantic validation (entries must be
  * rules, duplicate-key collapse) is left to builtin_association. */
@@ -861,142 +861,142 @@ static OperatorDef get_operator(const char* pos) {
     if (strncmp(pos, "<|", 2) == 0 || strncmp(pos, "|>", 2) == 0) return def;
 
     if (strncmp(pos, ">>>", 3) == 0) {
-        /* PutAppend (expr >>> file). Lower than Set (40) so `a = 5 >>> "f"`
+        /* PutAppend (expr >>> file). Lower than Set (500) so `a = 5 >>> "f"`
          * parses as Set[a, PutAppend[5, "f"]] — matches Mathematica. */
-        def.type = OP_PUTAPPEND; def.prec = 30; def.head_name = "PutAppend"; def.len = 3;
+        def.type = OP_PUTAPPEND; def.prec = 300; def.head_name = "PutAppend"; def.len = 3;
     } else if (strncmp(pos, "===", 3) == 0) {
-        def.type = OP_SAMEQ; def.prec = 290; def.head_name = "SameQ"; def.len = 3;
+        def.type = OP_SAMEQ; def.prec = 3200; def.head_name = "SameQ"; def.len = 3;
     } else if (strncmp(pos, "=!=", 3) == 0) {
-        def.type = OP_UNSAMEQ; def.prec = 290; def.head_name = "UnsameQ"; def.len = 3;
+        def.type = OP_UNSAMEQ; def.prec = 3200; def.head_name = "UnsameQ"; def.len = 3;
     } else if (strncmp(pos, "@@@", 3) == 0) {
-        def.type = OP_APPLY1; def.prec = 620; def.right_assoc = 1; def.head_name = "Apply1"; def.len = 3;
+        def.type = OP_APPLY1; def.prec = 7000; def.right_assoc = 1; def.head_name = "Apply1"; def.len = 3;
     } else if (strncmp(pos, "//.", 3) == 0 && !isdigit(pos[3])) {
-        def.type = OP_REPLACEREPEATED; def.prec = 110; def.right_assoc = 0; def.head_name = "ReplaceRepeated"; def.len = 3;
+        def.type = OP_REPLACEREPEATED; def.prec = 1200; def.right_assoc = 0; def.head_name = "ReplaceRepeated"; def.len = 3;
     } else if (strncmp(pos, "//@", 3) == 0) {
-        def.type = OP_MAPALL; def.prec = 620; def.right_assoc = 1; def.head_name = "MapAll"; def.len = 3;
+        def.type = OP_MAPALL; def.prec = 7000; def.right_assoc = 1; def.head_name = "MapAll"; def.len = 3;
     } else if (strncmp(pos, "<->", 3) == 0) {
         /* TwoWayRule (u <-> v). Same precedence/associativity as Rule; the
          * graph subsystem normalizes it to UndirectedEdge on construction.
          * Checked before "<>", "<=", "<" so the 3-char form wins. */
-        def.type = OP_TWOWAYRULE; def.prec = 120; def.right_assoc = 1; def.head_name = "TwoWayRule"; def.len = 3;
+        def.type = OP_TWOWAYRULE; def.prec = 1500; def.right_assoc = 1; def.head_name = "TwoWayRule"; def.len = 3;
     } else if (strncmp(pos, "//", 2) == 0) {
-        def.type = OP_POSTFIX; def.prec = 70; def.head_name = "Postfix"; def.len = 2;
+        def.type = OP_POSTFIX; def.prec = 800; def.head_name = "Postfix"; def.len = 2;
     } else if (strncmp(pos, "/.", 2) == 0 && !isdigit(pos[2])) {
-        def.type = OP_REPLACEALL; def.prec = 110; def.right_assoc = 0; def.head_name = "ReplaceAll"; def.len = 2;
+        def.type = OP_REPLACEALL; def.prec = 1200; def.right_assoc = 0; def.head_name = "ReplaceAll"; def.len = 2;
     } else if (strncmp(pos, "@@", 2) == 0) {
-        def.type = OP_APPLY; def.prec = 620; def.right_assoc = 1; def.head_name = "Apply"; def.len = 2;
+        def.type = OP_APPLY; def.prec = 7000; def.right_assoc = 1; def.head_name = "Apply"; def.len = 2;
     } else if (strncmp(pos, "@*", 2) == 0) {
-        def.type = OP_COMPOSITION; def.prec = 625; def.right_assoc = 0; def.head_name = "Composition"; def.len = 2;
+        def.type = OP_COMPOSITION; def.prec = 7200; def.right_assoc = 0; def.head_name = "Composition"; def.len = 2;
     } else if (strncmp(pos, "/@", 2) == 0) {
-        def.type = OP_MAP; def.prec = 620; def.right_assoc = 1; def.head_name = "Map"; def.len = 2;
+        def.type = OP_MAP; def.prec = 7000; def.right_assoc = 1; def.head_name = "Map"; def.len = 2;
     } else if (strncmp(pos, ":>", 2) == 0) {
-        def.type = OP_RULEDELAYED; def.prec = 120; def.right_assoc = 1; def.head_name = "RuleDelayed"; def.len = 2;
+        def.type = OP_RULEDELAYED; def.prec = 1500; def.right_assoc = 1; def.head_name = "RuleDelayed"; def.len = 2;
     } else if (strncmp(pos, "->", 2) == 0) {
-        def.type = OP_RULE; def.prec = 120; def.right_assoc = 1; def.head_name = "Rule"; def.len = 2;
+        def.type = OP_RULE; def.prec = 1500; def.right_assoc = 1; def.head_name = "Rule"; def.len = 2;
     } else if ((unsigned char)pos[0] == 0xE2 && (unsigned char)pos[1] == 0x86 &&
                (unsigned char)pos[2] == 0x92) {
         /* Unicode → (U+2192, Wolfram \[Rule]) is a synonym for `->`, so pasted
          * Wolfram-Language rules and associations parse directly. Three UTF-8
          * bytes E2 86 92. */
-        def.type = OP_RULE; def.prec = 120; def.right_assoc = 1; def.head_name = "Rule"; def.len = 3;
+        def.type = OP_RULE; def.prec = 1500; def.right_assoc = 1; def.head_name = "Rule"; def.len = 3;
     } else if (strncmp(pos, "/;", 2) == 0) {
-        def.type = OP_CONDITION; def.prec = 130; def.right_assoc = 1; def.head_name = "Condition"; def.len = 2;
+        def.type = OP_CONDITION; def.prec = 1700; def.right_assoc = 1; def.head_name = "Condition"; def.len = 2;
     } else if (strncmp(pos, ";;", 2) == 0) {
-        def.type = OP_SPAN; def.prec = 290; def.right_assoc = 0; def.head_name = "Span"; def.len = 2;
+        def.type = OP_SPAN; def.prec = 3200; def.right_assoc = 0; def.head_name = "Span"; def.len = 2;
     } else if (*pos == ';') {
-        def.type = OP_COMPOUND; def.prec = 10; def.right_assoc = 1; def.head_name = "CompoundExpression"; def.len = 1;
+        def.type = OP_COMPOUND; def.prec = 100; def.right_assoc = 1; def.head_name = "CompoundExpression"; def.len = 1;
     } else if (strncmp(pos, "~~", 2) == 0) {
         /* StringExpression (a ~~ b ~~ c): concatenation of string patterns.
-         * Precedence just below Alternatives (160) so `a ~~ b | c` groups as
+         * Precedence just below Alternatives (2300) so `a ~~ b | c` groups as
          * StringExpression[a, Alternatives[b, c]], matching Mathematica. The
          * StringExpression head is Flat, so nested nodes flatten at eval. */
-        def.type = OP_STRINGEXPRESSION; def.prec = 155; def.head_name = "StringExpression"; def.len = 2;
+        def.type = OP_STRINGEXPRESSION; def.prec = 2100; def.head_name = "StringExpression"; def.len = 2;
     } else if (strncmp(pos, "||", 2) == 0) {
-        def.type = OP_OR; def.prec = 215; def.head_name = "Or"; def.len = 2;
+        def.type = OP_OR; def.prec = 2800; def.head_name = "Or"; def.len = 2;
     } else if (*pos == '|') {
-        def.type = OP_ALTERNATIVES; def.prec = 160; def.head_name = "Alternatives"; def.len = 1;
+        def.type = OP_ALTERNATIVES; def.prec = 2300; def.head_name = "Alternatives"; def.len = 1;
     } else if (strncmp(pos, "==", 2) == 0) {
-        def.type = OP_EQUAL; def.prec = 290; def.head_name = "Equal"; def.len = 2;
+        def.type = OP_EQUAL; def.prec = 3200; def.head_name = "Equal"; def.len = 2;
     } else if (strncmp(pos, "&&", 2) == 0) {
-        def.type = OP_AND; def.prec = 215; def.head_name = "And"; def.len = 2;
+        def.type = OP_AND; def.prec = 2800; def.head_name = "And"; def.len = 2;
     } else if (*pos == '&') {
-        def.type = OP_FUNCTION; def.prec = 90; def.head_name = "Function"; def.len = 1;
+        def.type = OP_FUNCTION; def.prec = 1000; def.head_name = "Function"; def.len = 1;
     } else if (strncmp(pos, "!=", 2) == 0) {
-        def.type = OP_UNEQUAL; def.prec = 290; def.head_name = "Unequal"; def.len = 2;
+        def.type = OP_UNEQUAL; def.prec = 3200; def.head_name = "Unequal"; def.len = 2;
     } else if (strncmp(pos, "<>", 2) == 0) {
-        def.type = OP_STRINGJOIN; def.prec = 600; def.head_name = "StringJoin"; def.len = 2;
+        def.type = OP_STRINGJOIN; def.prec = 6700; def.head_name = "StringJoin"; def.len = 2;
     } else if (strncmp(pos, "<=", 2) == 0) {
-        def.type = OP_LESSEQUAL; def.prec = 290; def.head_name = "LessEqual"; def.len = 2;
+        def.type = OP_LESSEQUAL; def.prec = 3200; def.head_name = "LessEqual"; def.len = 2;
     } else if (strncmp(pos, ">=", 2) == 0) {
-        def.type = OP_GREATEREQUAL; def.prec = 290; def.head_name = "GreaterEqual"; def.len = 2;
+        def.type = OP_GREATEREQUAL; def.prec = 3200; def.head_name = "GreaterEqual"; def.len = 2;
     } else if (strncmp(pos, ">>", 2) == 0) {
         /* Put (expr >> file). Same precedence as PutAppend; right side is
          * a filename token (bare identifier or quoted string), parsed
          * specially in the operator loop below. */
-        def.type = OP_PUT; def.prec = 30; def.head_name = "Put"; def.len = 2;
+        def.type = OP_PUT; def.prec = 300; def.head_name = "Put"; def.len = 2;
     } else if (*pos == '<') {
-        def.type = OP_LESS; def.prec = 290; def.head_name = "Less"; def.len = 1;
+        def.type = OP_LESS; def.prec = 3200; def.head_name = "Less"; def.len = 1;
     } else if (*pos == '>') {
-        def.type = OP_GREATER; def.prec = 290; def.head_name = "Greater"; def.len = 1;
+        def.type = OP_GREATER; def.prec = 3200; def.head_name = "Greater"; def.len = 1;
     } else if (strncmp(pos, ":=", 2) == 0) {
-        def.type = OP_SETDELAYED; def.prec = 40; def.right_assoc = 1; def.head_name = "SetDelayed"; def.len = 2;
+        def.type = OP_SETDELAYED; def.prec = 500; def.right_assoc = 1; def.head_name = "SetDelayed"; def.len = 2;
     } else if (strncmp(pos, "[[", 2) == 0) {
-        def.type = OP_PART; def.prec = 1100; def.head_name = "Part"; def.len = 2;
+        def.type = OP_PART; def.prec = 10000; def.head_name = "Part"; def.len = 2;
     } else if (strncmp(pos, "::", 2) == 0) {
         /* MessageName: f::tag. High precedence so it binds tighter than
          * function application's operands; the tag is read literally (as a
          * string) by the binary loop, not parsed as an expression. */
-        def.type = OP_MESSAGENAME; def.prec = 780; def.head_name = "MessageName"; def.len = 2;
+        def.type = OP_MESSAGENAME; def.prec = 8600; def.head_name = "MessageName"; def.len = 2;
     } else if (*pos == ':') {
-        def.type = OP_COLON; def.prec = 140; def.right_assoc = 1; def.head_name = "Optional"; def.len = 1;
+        def.type = OP_COLON; def.prec = 1900; def.right_assoc = 1; def.head_name = "Optional"; def.len = 1;
     } else if (strncmp(pos, "=.", 2) == 0 && !isdigit((unsigned char)pos[2])) {
         /* Unset (postfix `lhs =.`). Guarded against `=.5` etc. (a real
          * literal on the RHS of Set) by requiring the char after `.` not be
          * a digit. Low precedence, like Set, so it captures the whole
          * preceding expression: `a b =.` -> Unset[a b]. */
-        def.type = OP_UNSET; def.prec = 40; def.head_name = "Unset"; def.len = 2;
+        def.type = OP_UNSET; def.prec = 500; def.head_name = "Unset"; def.len = 2;
     } else if (*pos == '=') {
-        def.type = OP_SET; def.prec = 40; def.right_assoc = 1; def.head_name = "Set"; def.len = 1;
+        def.type = OP_SET; def.prec = 500; def.right_assoc = 1; def.head_name = "Set"; def.len = 1;
     } else if (strncmp(pos, "++", 2) == 0) {
-        def.type = OP_INCREMENT; def.prec = 660; def.head_name = "Increment"; def.len = 2;
+        def.type = OP_INCREMENT; def.prec = 7500; def.head_name = "Increment"; def.len = 2;
     } else if (strncmp(pos, "--", 2) == 0) {
-        def.type = OP_DECREMENT; def.prec = 660; def.head_name = "Decrement"; def.len = 2;
+        def.type = OP_DECREMENT; def.prec = 7500; def.head_name = "Decrement"; def.len = 2;
     } else if (strncmp(pos, "+=", 2) == 0) {
-        def.type = OP_ADDTO; def.prec = 40; def.right_assoc = 1; def.head_name = "AddTo"; def.len = 2;
+        def.type = OP_ADDTO; def.prec = 500; def.right_assoc = 1; def.head_name = "AddTo"; def.len = 2;
     } else if (strncmp(pos, "-=", 2) == 0) {
-        def.type = OP_SUBTRACTFROM; def.prec = 40; def.right_assoc = 1; def.head_name = "SubtractFrom"; def.len = 2;
+        def.type = OP_SUBTRACTFROM; def.prec = 500; def.right_assoc = 1; def.head_name = "SubtractFrom"; def.len = 2;
     } else if (strncmp(pos, "*=", 2) == 0) {
-        def.type = OP_TIMESBY; def.prec = 40; def.right_assoc = 1; def.head_name = "TimesBy"; def.len = 2;
+        def.type = OP_TIMESBY; def.prec = 500; def.right_assoc = 1; def.head_name = "TimesBy"; def.len = 2;
     } else if (strncmp(pos, "/=", 2) == 0) {
-        def.type = OP_DIVIDEBY; def.prec = 40; def.right_assoc = 1; def.head_name = "DivideBy"; def.len = 2;
+        def.type = OP_DIVIDEBY; def.prec = 500; def.right_assoc = 1; def.head_name = "DivideBy"; def.len = 2;
     } else if (*pos == '+') {
-        def.type = OP_PLUS; def.prec = 310; def.head_name = "Plus"; def.len = 1;
+        def.type = OP_PLUS; def.prec = 3500; def.head_name = "Plus"; def.len = 1;
     } else if (*pos == '-') {
-        def.type = OP_MINUS; def.prec = 310; def.head_name = "Plus"; def.len = 1;
+        def.type = OP_MINUS; def.prec = 3500; def.head_name = "Plus"; def.len = 1;
     } else if (*pos == '*') {
-        def.type = OP_TIMES; def.prec = 400; def.head_name = "Times"; def.len = 1;
+        def.type = OP_TIMES; def.prec = 4500; def.head_name = "Times"; def.len = 1;
     } else if (*pos == '/') {
-        def.type = OP_DIVIDE; def.prec = 470; def.head_name = "Divide"; def.len = 1;
+        def.type = OP_DIVIDE; def.prec = 5000; def.head_name = "Divide"; def.len = 1;
     } else if (strncmp(pos, "...", 3) == 0) {
-        def.type = OP_REPEATEDNULL; def.prec = 170; def.head_name = "RepeatedNull"; def.len = 3;
+        def.type = OP_REPEATEDNULL; def.prec = 2500; def.head_name = "RepeatedNull"; def.len = 3;
     } else if (strncmp(pos, "..", 2) == 0) {
-        def.type = OP_REPEATED; def.prec = 170; def.head_name = "Repeated"; def.len = 2;
+        def.type = OP_REPEATED; def.prec = 2500; def.head_name = "Repeated"; def.len = 2;
     } else if (*pos == '.' && !isdigit(pos[1])) {
-        def.type = OP_DOT; def.prec = 490; def.head_name = "Dot"; def.len = 1;
+        def.type = OP_DOT; def.prec = 5300; def.head_name = "Dot"; def.len = 1;
     } else if (*pos == '^') {
-        def.type = OP_POWER; def.prec = 590; def.right_assoc = 1; def.head_name = "Power"; def.len = 1;
+        def.type = OP_POWER; def.prec = 6500; def.right_assoc = 1; def.head_name = "Power"; def.len = 1;
     } else if (*pos == '?') {
-        def.type = OP_PATTERNTEST; def.prec = 680; def.right_assoc = 0; def.head_name = "PatternTest"; def.len = 1;
+        def.type = OP_PATTERNTEST; def.prec = 7900; def.right_assoc = 0; def.head_name = "PatternTest"; def.len = 1;
     } else if (*pos == '@') {
-        def.type = OP_PREFIX; def.prec = 620; def.right_assoc = 1; def.head_name = "Prefix"; def.len = 1;
+        def.type = OP_PREFIX; def.prec = 7000; def.right_assoc = 1; def.head_name = "Prefix"; def.len = 1;
     } else if (*pos == '[') {
-        def.type = OP_CALL; def.prec = 1000; def.len = 1;
+        def.type = OP_CALL; def.prec = 9500; def.len = 1;
     } else if (*pos == '!' && pos[1] == '!') {
-        def.type = OP_FACTORIAL2; def.prec = 710; def.head_name = "Factorial2"; def.len = 2;
+        def.type = OP_FACTORIAL2; def.prec = 8200; def.head_name = "Factorial2"; def.len = 2;
     } else if (*pos == '!' && pos[1] != '=') {
-        def.type = OP_FACTORIAL; def.prec = 710; def.head_name = "Factorial"; def.len = 1;
+        def.type = OP_FACTORIAL; def.prec = 8200; def.head_name = "Factorial"; def.len = 1;
     } else if (*pos == '\'') {
-        def.type = OP_DERIVATIVE; def.prec = 670; def.head_name = "Derivative"; def.len = 1;
+        def.type = OP_DERIVATIVE; def.prec = 7700; def.head_name = "Derivative"; def.len = 1;
     }
 
     return def;
@@ -1184,9 +1184,48 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         (*s->pos == ';' && s->pos[1] != ';')) return NULL;
 
     Expr* left = NULL;
+    /* Did `left` come from an UNPARENTHESISED chainable comparison at this level?
+     *
+     * Chained comparisons are folded into one variadic Inequality, and the fold used to decide by
+     * INSPECTING the built subtree -- which cannot tell `a >= b == c` (a chain) from
+     * `(a >= b) == c` (an Equal whose left operand happens to be a comparison). Parentheses were
+     * therefore ignored on the left operand: `(2.0 >= 2.) == (1.0 > 0.)` parsed as
+     * Inequality[2.0, GreaterEqual, 2.0, Equal, Greater[1.0, 0.0]] and evaluated to `2.0 == True`.
+     * The RIGHT operand was unaffected, since it is parsed as its own subexpression, which is why
+     * only one side looked wrong.
+     *
+     * Plus/Times flattening a few branches below has the same shape and is harmless there, because
+     * Plus is associative so `(a + b) + c` and `a + b + c` mean the same thing. Chaining changes
+     * MEANING, so comparisons need the provenance tracked rather than guessed. */
+    bool left_bare_compare = false;
     
     if (*s->pos == '?') {
         s->pos++;
+        /* `?Name` looks up one docstring; `?Pat*` searches the symbol table.
+         * A wildcard cannot occur inside a symbol, so scan the whole run and
+         * decide before handing anything to parse_symbol -- that stops at the
+         * `*`, leaving it for the caller to report as "Extra characters after
+         * expression", which is how `?Find*` failed. The pattern is passed on
+         * as a String, which Information already accepts. */
+        const char* start = s->pos;
+        const char* p = start;
+        bool wild = false;
+        while (*p && (isalnum((unsigned char)*p) || *p == '_' || *p == '$'
+                      || *p == '`' || *p == '*' || *p == '@')) {
+            if (*p == '*' || *p == '@') wild = true;
+            p++;
+        }
+        if (wild && p > start) {
+            size_t n = (size_t)(p - start);
+            char* pat = malloc(n + 1);
+            if (!pat) return NULL;
+            memcpy(pat, start, n);
+            pat[n] = '\0';
+            s->pos = p;
+            Expr* args[1] = { expr_new_string(pat) };
+            free(pat);
+            return expr_new_function(expr_new_symbol(SYM_Information), args, 1);
+        }
         Expr* sym = parse_symbol(s);
         if (!sym) return NULL;
         Expr* args[1] = { sym };
@@ -1202,27 +1241,27 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         left = expr_new_integer(1);
     } else if (strncmp(s->pos, "++", 2) == 0) {
         s->pos += 2;
-        Expr* right = parse_expression_prec(s, 660);
+        Expr* right = parse_expression_prec(s, 7500);
         if (!right) return NULL;
         Expr* args[1] = { right };
         left = expr_new_function(expr_new_symbol(SYM_PreIncrement), args, 1);
     } else if (strncmp(s->pos, "--", 2) == 0) {
         s->pos += 2;
-        Expr* right = parse_expression_prec(s, 660);
+        Expr* right = parse_expression_prec(s, 7500);
         if (!right) return NULL;
         Expr* args[1] = { right };
         left = expr_new_function(expr_new_symbol(SYM_PreDecrement), args, 1);
     } else if (*s->pos == '-' && minus_is_prefix(s->pos)) {
         s->pos++;
-        // Use a precedence higher than Plus (310) and Times (400)
-        Expr* right = parse_expression_prec(s, 480);
+        // Use a precedence higher than Plus (3500) and Times (4500)
+        Expr* right = parse_expression_prec(s, 5100);
         if (!right) return NULL;
         Expr* minus_one = expr_new_integer(-1);
         Expr* args[2] = { minus_one, right };
         left = expr_new_function(expr_new_symbol(SYM_Times), args, 2);
     } else if (*s->pos == '!' && s->pos[1] != '=') {
         s->pos++;
-        Expr* right = parse_expression_prec(s, 230); // Not precedence is 230
+        Expr* right = parse_expression_prec(s, 3000); // Not precedence is 3000
         if (!right) return NULL;
         Expr* args[1] = { right };
         left = expr_new_function(expr_new_symbol(SYM_Not), args, 1);
@@ -1247,15 +1286,20 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             // expression. An explicit operator (e.g. a trailing `+`) is handled
             // above this branch, so operator-continued lines still join.
             if (s->bracket_depth == 0 && s->saw_newline) break;
-            // Implicit Times has same precedence as explicit Times (400)
-            if (400 < min_prec) break;
+            // Implicit Times has same precedence as explicit Times (4500)
+            if (4500 < min_prec) break;
             op_def.type = OP_TIMES;
-            op_def.prec = 400;
+            op_def.prec = 4500;
             op_def.head_name = "Times";
             op_def.len = 0; // Don't advance pos
         }
 
         if (op_def.type == OP_NONE || op_def.prec < min_prec) break;
+
+        /* Recomputed each iteration: only the branch that actually builds a bare chainable
+         * comparison sets it back to true, so any other operator in between breaks the chain. */
+        bool prev_bare_compare = left_bare_compare;
+        left_bare_compare = false;
         
         s->pos += op_def.len;
 
@@ -1403,7 +1447,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         } else if (op_def.type == OP_SPAN) {
             Expr* span_args[3];
             span_args[0] = left;
-            int next_prec = op_def.prec + 1; // 291
+            int next_prec = op_def.prec + 1; // 3201
             skip_whitespace(s);
             Expr* right = NULL;
             if (*s->pos == ']' || *s->pos == ',' || *s->pos == '}' || *s->pos == '\0' || *s->pos == ';' || strncmp(s->pos, ";;", 2) == 0) {
@@ -1543,10 +1587,12 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
              * WL, not a pairwise chain. */
             if (op_def.head_name
                 && is_chain_compare_head(op_def.head_name)
+                && prev_bare_compare
                 && extend_inequality(left, op_def.head_name, right)) {
-                /* left was extended in place */
+                left_bare_compare = true;      /* still a bare chain */
             } else if (op_def.head_name
                        && is_chain_compare_head(op_def.head_name)
+                       && prev_bare_compare
                        && left->type == EXPR_FUNCTION
                        && left->data.function.head->type == EXPR_SYMBOL
                        && left->data.function.arg_count == 2
@@ -1566,6 +1612,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                     right
                 };
                 left = expr_new_function(expr_new_symbol(SYM_Inequality), args, 5);
+                left_bare_compare = true;
             }
             /* Flatten repeated Plus/Times at parse time so that held
              * expressions reflect the n-ary form (a+b+c -> Plus[a,b,c]). */
@@ -1577,6 +1624,12 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             } else {
                 Expr* args[2] = { left, right };
                 left = expr_new_function(expr_new_symbol(op_def.head_name), args, 2);
+                /* A BARE binary chainable comparison, built here rather than parenthesised, so the
+                 * next comparison at this level may fold it into a chain. This is the provenance the
+                 * fold above needs and could not previously obtain, since by the time it looks the
+                 * node is indistinguishable from a parenthesised one. */
+                if (op_def.head_name && is_chain_compare_head(op_def.head_name))
+                    left_bare_compare = true;
             }
         }
     }
@@ -1625,7 +1678,7 @@ Expr* parse_next_expression(const char** input_ptr) {
      * statements -- if the whole ';'-chain were parsed as one
      * CompoundExpression up front (prec 0), every symbol would be resolved
      * under the context in force before BeginPackage had a chance to run. */
-    Expr* result = parse_expression_prec(&state, 11);
+    Expr* result = parse_expression_prec(&state, 101);
 
     /* Consume one trailing top-level ';' separator so the next call begins at
      * the following statement. */

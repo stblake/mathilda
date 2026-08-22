@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mathilda benchmark gap report &mdash; 2026-08-06</title>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  color-scheme:light dark;
+  --page:#f9f9f7; --surface:#fcfcfb;
+  --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --hair:rgba(11,11,11,0.10);
+  --s1:#2a78d6; --s2:#eb6834;
+  --good:#0ca30c; --par:#2a78d6; --bad:#d03b3b; --warn:#fab219; --serious:#ec835a;
+  --neutral:#a9a79f;
+  --goodtext:#006300;
+  --chip:rgba(11,11,11,0.05);
+}
+@media (prefers-color-scheme:dark){
+  :root:where(:not([data-theme="light"])){
+    --page:#0d0d0d; --surface:#1a1a19;
+    --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --hair:rgba(255,255,255,0.10);
+    --s1:#3987e5; --s2:#d95926;
+    --par:#3987e5; --neutral:#77756e;
+    --goodtext:#0ca30c;
+    --chip:rgba(255,255,255,0.06);
+  }
+}
+:root[data-theme="dark"]{
+  --page:#0d0d0d; --surface:#1a1a19;
+  --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --hair:rgba(255,255,255,0.10);
+  --s1:#3987e5; --s2:#d95926;
+  --par:#3987e5; --neutral:#77756e;
+  --goodtext:#0ca30c;
+  --chip:rgba(255,255,255,0.06);
+}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--page);color:var(--ink);
+  font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:32px 20px 96px}
+h1{font-size:27px;line-height:1.2;margin:0 0 6px;letter-spacing:-0.01em}
+h2{font-size:20px;margin:0 0 4px;letter-spacing:-0.01em}
+h3{font-size:15px;margin:0 0 4px}
+.sub{color:var(--ink2);margin:0 0 4px}
+.tiny{font-size:12.5px;color:var(--muted)}
+section{margin-top:44px}
+.card{background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:18px 18px 16px}
+.note{font-size:13px;color:var(--ink2);margin:10px 0 0;max-width:78ch}
+.note strong{color:var(--ink)}
+hr.rule{border:0;border-top:1px solid var(--hair);margin:0 0 22px}
+
+/* --- tiles --- */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:13px 14px}
+.tile .k{font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.tile .v{font-size:29px;line-height:1.1;margin-top:5px;font-weight:600}
+.tile .d{font-size:12px;color:var(--ink2);margin-top:3px}
+.tile.acc{border-left:3px solid var(--dot,var(--muted))}
+
+/* --- hero medians --- */
+.hero{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.hero .h{background:var(--surface);border:1px solid var(--hair);border-radius:10px;padding:16px 18px}
+.hero .lbl{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.hero .big{font-size:46px;line-height:1;margin:8px 0 2px;font-weight:600;letter-spacing:-0.02em}
+.hero .arc{font-size:13.5px;color:var(--ink2)}
+.hero .arc b{color:var(--goodtext)}
+.swatch{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;margin-right:6px}
+
+/* --- legend --- */
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--ink2);margin:0 0 10px}
+.legend span.i{display:inline-flex;align-items:center;gap:6px}
+.key{width:11px;height:11px;border-radius:2px;display:inline-block}
+.key.hatch{background-image:repeating-linear-gradient(45deg,var(--bad) 0 2px,transparent 2px 4px);background-color:transparent;border:1px solid var(--bad)}
+
+/* --- charts --- */
+.chartbox{overflow-x:auto}
+svg{display:block;max-width:100%}
+svg text{font:11px system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--muted)}
+svg text.lab{fill:var(--ink2)}
+svg text.val{fill:var(--ink);font-weight:600}
+.smgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+
+/* --- tables --- */
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:6px 9px;border-bottom:1px solid var(--hair);vertical-align:top}
+th{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;
+   position:sticky;top:0;background:var(--surface);z-index:2;white-space:nowrap}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover{color:var(--ink)}
+th.sortable::after{content:"";opacity:.45;margin-left:4px}
+th.sortable.asc::after{content:"\25B2"}
+th.sortable.desc::after{content:"\25BC"}
+tbody tr:hover{background:var(--chip)}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+.tblscroll{max-height:560px;overflow:auto;border:1px solid var(--hair);border-radius:10px;background:var(--surface)}
+
+.badge{display:inline-block;padding:1px 7px;border-radius:99px;font-size:11px;font-weight:600;
+       border:1px solid currentColor;white-space:nowrap}
+.b-FASTER{color:var(--goodtext)}
+.b-PARITY{color:var(--par)}
+.b-SLOWER{color:var(--bad)}
+.b-ABSENT{color:var(--ink2)}
+.b-INCOMPLETE{color:var(--ink2)}
+.b-CHECKFAIL{color:var(--serious)}
+.b-NOBASE{color:var(--muted)}
+.cr{color:var(--warn);font-weight:700;cursor:help}
+.withheld{color:var(--muted);font-style:italic}
+
+/* --- controls --- */
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+.controls input[type=search],.controls select{
+  font:13px system-ui,-apple-system,sans-serif;color:var(--ink);background:var(--surface);
+  border:1px solid var(--axis);border-radius:7px;padding:5px 9px}
+.controls input[type=search]{min-width:220px}
+.controls label{font-size:13px;color:var(--ink2);display:inline-flex;align-items:center;gap:5px}
+.count{font-size:12.5px;color:var(--muted);margin-left:auto}
+button.tgl{font:13px system-ui,sans-serif;background:var(--surface);color:var(--ink);
+  border:1px solid var(--axis);border-radius:7px;padding:5px 10px;cursor:pointer}
+button.tgl[aria-pressed="true"]{background:var(--s1);border-color:var(--s1);color:#fff}
+
+/* --- tooltip --- */
+#tt{position:fixed;pointer-events:none;opacity:0;transition:opacity .08s;z-index:99;
+  background:var(--surface);color:var(--ink);border:1px solid var(--hair);border-radius:8px;
+  padding:7px 10px;font-size:12.5px;box-shadow:0 6px 22px rgba(0,0,0,.16);max-width:330px}
+#tt b{display:block;margin-bottom:2px}
+#tt .r{color:var(--ink2)}
+
+.callout{border-left:3px solid var(--warn);background:var(--chip);border-radius:0 8px 8px 0;
+  padding:11px 14px;font-size:13.2px;color:var(--ink2);margin:14px 0 0}
+.callout b{color:var(--ink)}
+.themebtn{position:fixed;right:14px;top:14px;z-index:50}
+@media (max-width:700px){.hero{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<button id="themebtn" class="tgl themebtn" type="button">toggle theme</button>
+<div id="tt" role="tooltip"></div>
+<div class="wrap">
+
+<header>
+  <h1>Mathilda benchmark gap report</h1>
+  <p class="sub">Run of <strong>2026-08-06</strong> &middot; commit <code>9accfbe7</code> &middot;
+     209 cases across 32 experiments &middot; 12.92 min wall clock.
+     Mathilda measured against Mathematica (same <code>.m</code> source) and against Python
+     (numpy / scipy / sympy, a separate implementation of the same algorithm).</p>
+  <p class="tiny">Rendered from <code>benchmarks/results/2026-08-06.json</code> and
+     <code>benchmarks/history.jsonl</code>. Every figure below is computed from those files.</p>
+</header>
+
+<section>
+  <h2>Headline</h2>
+  <hr class="rule">
+  <div class="tiles"><div class="tile"><div class="k">cases measured</div><div class="v">209</div><div class="d">across 32 experiments</div></div><div class="tile acc" style="--dot:#d03b3b"><div class="k">slower</div><div class="v">95</div><div class="d">≥ 1.5× the faster baseline</div></div><div class="tile acc" style="--dot:#0ca30c"><div class="k">ahead or at parity</div><div class="v">107</div><div class="d">83 faster than both · 23 within 1.5× · 1 no baseline</div></div><div class="tile acc" style="--dot:#a9a79f"><div class="k">absent</div><div class="v">3</div><div class="d">missing heads — feature work, no ratio</div></div><div class="tile acc" style="--dot:#a9a79f"><div class="k">incomplete</div><div class="v">1</div><div class="d">head exists, case did not finish</div></div><div class="tile acc" style="--dot:#ec835a"><div class="k">check disagreements</div><div class="v">3</div><div class="d">timings withheld deliberately</div></div><div class="tile acc" style="--dot:#2a78d6"><div class="k">function coverage</div><div class="v">88.2%</div><div class="d">157 of 178 declared heads present</div></div><div class="tile"><div class="k">wall clock</div><div class="v">12.92 min</div><div class="d">harness elapsed 12.92 min · commit 9accfbe7</div></div></div>
+  <div class="callout">
+    <b>Three of these tiles are not speed numbers.</b>
+    <em>Absent</em> means the head does not exist in Mathilda &mdash; feature work, and it never
+    carries a ratio, because averaging &ldquo;we do not have <code>ArrayReshape</code>&rdquo; into a speed
+    figure would launder a capability gap into a performance number.
+    <em>Incomplete</em> means the head exists but the case did not finish.
+    <em>Check disagreements</em> are correctness findings: the systems returned different answers,
+    so the timings were discarded at collection time and are not recoverable here.
+  </div>
+</section>
+
+<section>
+  <h2>The two medians</h2>
+  <p class="sub">The most meaningful numbers in the dataset: the median of
+     Mathilda&nbsp;&divide;&nbsp;baseline across every case where both systems produced a timing.
+     Medians, not means &mdash; one 600&thinsp;000&times; case would make a mean say nothing about
+     the other two hundred.</p>
+  <hr class="rule">
+  
+<div class="hero">
+  <div class="h">
+    <div class="lbl"><span class="swatch" style="background:var(--s1)"></span>median vs Mathematica</div>
+    <div class="big" style="color:var(--s1)">0.771&times;</div>
+    <div class="arc">1.060 &rarr; 0.820 &rarr; <b>0.771</b> over the three runs &mdash; 27% lower, and now below parity.</div>
+  </div>
+  <div class="h">
+    <div class="lbl"><span class="swatch" style="background:var(--s2)"></span>median vs Python</div>
+    <div class="big" style="color:var(--s2)">0.448&times;</div>
+    <div class="arc">0.647 &rarr; 0.500 &rarr; <b>0.448</b> over the three runs &mdash; 31% lower.</div>
+  </div>
+</div>
+  <div class="card" style="margin-top:14px">
+    <div class="legend">
+      <span class="i"><span class="key" style="background:var(--s1)"></span>median vs Mathematica</span>
+      <span class="i"><span class="key" style="background:var(--s2)"></span>median vs Python</span>
+      <span class="i">dashed line = parity (1.0&times;); below it Mathilda is the faster system</span>
+    </div>
+    <div class="chartbox" id="c-trend"></div>
+  </div>
+  <div class="tblscroll" style="margin-top:14px;max-height:none">
+  <table>
+    <thead><tr><th>date</th><th>commit</th><th class="num">cases</th><th class="num">coverage</th>
+      <th class="num">slower</th><th class="num">ahead</th><th class="num">absent</th>
+      <th class="num">incomplete</th><th class="num">check-fail</th>
+      <th class="num">median vs Mathematica</th><th class="num">median vs Python</th><th class="num">wall</th></tr></thead>
+    <tbody><tr><td class='mono'>2026-08-04</td><td><code>6911e788</code></td><td class='num'>186</td><td class='num'>87.08%</td><td class='num' style='color:var(--bad)'>90</td><td class='num' style='color:var(--goodtext)'>86</td><td class='num'>3</td><td class='num'>4</td><td class='num'>3</td><td class='num' style='font-weight:600'>1.060&times;</td><td class='num' style='font-weight:600'>0.647&times;</td><td class='num'>19.74 min</td></tr><tr><td class='mono'>2026-08-05</td><td><code>ab5adbb4</code></td><td class='num'>186</td><td class='num'>88.2%</td><td class='num' style='color:var(--bad)'>82</td><td class='num' style='color:var(--goodtext)'>97</td><td class='num'>3</td><td class='num'>1</td><td class='num'>3</td><td class='num' style='font-weight:600'>0.820&times;</td><td class='num' style='font-weight:600'>0.500&times;</td><td class='num'>12.62 min</td></tr><tr><td class='mono'>2026-08-06</td><td><code>9accfbe7</code></td><td class='num'>209</td><td class='num'>88.2%</td><td class='num' style='color:var(--bad)'>95</td><td class='num' style='color:var(--goodtext)'>107</td><td class='num'>3</td><td class='num'>1</td><td class='num'>3</td><td class='num' style='font-weight:600'>0.771&times;</td><td class='num' style='font-weight:600'>0.448&times;</td><td class='num'>12.92 min</td></tr></tbody>
+  </table>
+  </div>
+  <p class="note">The case count changed between runs (186 &rarr; 186 &rarr; 209): two new experiments
+    (<code>31-nintegrate-ladder</code>, <code>32-ndsolve-ladder</code>) landed for the 08-06 run. The
+    medians are therefore not over an identical case set, and part of the 08-05&nbsp;&rarr;&nbsp;08-06
+    movement is composition rather than optimisation.</p>
+</section>
+
+<section>
+  <h2>By area, over time</h2>
+  <p class="sub">Median ratio per area, on a log axis &mdash; group&nbsp;D&rsquo;s 08-04 reading was
+     236.94&times; against Python, and a linear axis would flatten the other eleven series to
+     nothing.</p>
+  <hr class="rule">
+  <div class="legend">
+    <span class="i"><span class="key" style="background:var(--s1)"></span>vs Mathematica</span>
+    <span class="i"><span class="key" style="background:var(--s2)"></span>vs Python</span>
+    <span class="i">dashed line = parity</span>
+  </div>
+  <div class="smgrid" id="c-groups"></div>
+  <div class="tblscroll" style="margin-top:14px;max-height:none">
+  <table>
+    <thead><tr><th>area</th><th class="num">cases</th><th class="num">slower</th>
+      <th class="num">within 1.5&times;</th><th class="num">faster than both</th>
+      <th class="num">absent</th><th class="num">incomplete</th><th class="num">check-fail</th>
+      <th class="num">median vs Mathematica</th><th class="num">median vs Python</th></tr></thead>
+    <tbody><tr><td>A symbolic (sympy)</td><td class='num'>60</td><td class='num' style='color:var(--bad)'>26</td><td class='num' style='color:var(--par)'>4</td><td class='num' style='color:var(--goodtext)'>27</td><td class='num'>0</td><td class='num'>0</td><td class='num'>3</td><td class='num' style='font-weight:600'>1.07&times;</td><td class='num' style='font-weight:600'>0.10&times;</td></tr><tr><td>B numeric libraries (scipy)</td><td class='num'>60</td><td class='num' style='color:var(--bad)'>25</td><td class='num' style='color:var(--par)'>13</td><td class='num' style='color:var(--goodtext)'>20</td><td class='num'>2</td><td class='num'>0</td><td class='num'>0</td><td class='num' style='font-weight:600'>0.66&times;</td><td class='num' style='font-weight:600'>0.96&times;</td></tr><tr><td>C array substrate (numpy)</td><td class='num'>51</td><td class='num' style='color:var(--bad)'>29</td><td class='num' style='color:var(--par)'>3</td><td class='num' style='color:var(--goodtext)'>17</td><td class='num'>1</td><td class='num'>1</td><td class='num'>0</td><td class='num' style='font-weight:600'>1.15&times;</td><td class='num' style='font-weight:600'>0.94&times;</td></tr><tr><td>D uncovered subsystems</td><td class='num'>38</td><td class='num' style='color:var(--bad)'>15</td><td class='num' style='color:var(--par)'>3</td><td class='num' style='color:var(--goodtext)'>19</td><td class='num'>0</td><td class='num'>0</td><td class='num'>0</td><td class='num' style='font-weight:600'>0.15&times;</td><td class='num' style='font-weight:600'>0.42&times;</td></tr></tbody>
+  </table>
+  </div>
+  <p class="note">Read the two right-hand columns against each other. Behind Mathematica is a gap
+    against a <em>competitor</em> &mdash; same evaluation semantics, same automatic compilation &mdash;
+    so it is an engineering gap. Behind Python is a gap against <em>the machine</em>: on the dense
+    linear-algebra areas all three call the same Accelerate BLAS, so any spread there is pure
+    overhead. Group&nbsp;A is the exception to read carefully: symbolic timings are usually dominated
+    by algorithm choice, not execution speed, so a group-A case 40&times; behind sympy usually means
+    sympy has a method Mathilda does not.</p>
+</section>
+
+<section>
+  <h2>Ranked gaps</h2>
+  <p class="sub">The slowest cases, as a multiple of whichever baseline was faster. Log scale:
+     these ratios span roughly seven orders of magnitude and a linear axis renders everything
+     except the outliers as zero.</p>
+  <hr class="rule">
+  <div class="controls">
+    <button class="tgl" id="gap-cr" type="button" aria-pressed="false">clock-resolution rows shown</button>
+    <label>show top
+      <select id="gap-n"><option>15</option><option selected>25</option><option>40</option><option>95</option></select>
+      of 95</label>
+    <span class="legend" style="margin:0">
+      <span class="i"><span class="key" style="background:var(--bad)"></span>measured</span>
+      <span class="i"><span class="key hatch"></span>at clock resolution (lower bound)</span>
+    </span>
+  </div>
+  <div class="card"><div class="chartbox" id="c-gaps"></div></div>
+  <p class="note" id="gap-note"></p>
+  <div class="callout">
+    <b>13 of the 95 slower cases sit at clock resolution.</b>
+    Their baseline ran in under 0.005&nbsp;ms &mdash; at or below the granularity of
+    <code>AbsoluteTiming</code> / <code>perf_counter</code> on this host. The gap is real; its
+    magnitude is not. Those rows are drawn as dashed outlines, their ratio is rendered to one
+    significant figure with a &ldquo;&ge;&rdquo;, and the toggle above removes them from the
+    ranking entirely so they cannot set the scale on their own.
+  </div>
+</section>
+
+<section>
+  <h2>Where the whole corpus sits</h2>
+  <p class="sub">Every case that carries a ratio, binned by half-decade on a log axis.</p>
+  <hr class="rule">
+  <div class="card">
+    <div class="legend">
+      <span class="i"><span class="key" style="background:var(--s1)"></span>measured cases</span>
+      <span class="i"><span class="key" style="background:var(--warn)"></span>of which at clock resolution</span>
+    </div>
+    <div class="chartbox" id="c-dist"></div>
+  </div>
+  <p class="note" id="dist-note"></p>
+</section>
+
+<section>
+  <h2>Per-experiment summary</h2>
+  <p class="sub">All 32 experiments. The bar is the mix of outcomes; the two median columns are
+     over that experiment&rsquo;s cases only.</p>
+  <hr class="rule">
+  <div class="legend">
+    <span class="i"><span class="key" style="background:var(--good)"></span>faster than both baselines</span>
+    <span class="i"><span class="key" style="background:var(--par)"></span>within 1.5&times;</span>
+    <span class="i"><span class="key" style="background:var(--bad)"></span>slower</span>
+    <span class="i"><span class="key" style="background:var(--neutral)"></span>not a speed measurement (absent / incomplete / check-fail / no baseline)</span>
+  </div>
+  <div class="tblscroll">
+  <table id="t-exp">
+    <thead><tr><th>experiment</th><th>area</th><th class="num">cases</th><th>mix</th>
+      <th class="num">faster</th><th class="num">&le;1.5&times;</th><th class="num">slower</th>
+      <th class="num">other</th><th class="num">median vs&nbsp;MMA</th><th class="num">median vs&nbsp;Py</th>
+      <th class="num">runtime</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Every case</h2>
+  <p class="sub">Sortable and filterable. Check-fail rows show <em>withheld</em> in every timing
+     column &mdash; those numbers were discarded at collection time on purpose, because the systems
+     were not computing the same answer.</p>
+  <hr class="rule">
+  <div class="controls">
+    <input type="search" id="f-text" placeholder="filter by case or experiment&hellip;">
+    <select id="f-group"></select>
+    <select id="f-band"></select>
+    <label><input type="checkbox" id="f-cr"> hide clock-resolution rows</label>
+    <span class="count" id="case-count"></span>
+  </div>
+  <div class="tblscroll">
+  <table id="t-cases">
+    <thead><tr>
+      <th class="sortable" data-k="exp">experiment</th>
+      <th class="sortable" data-k="label">case</th>
+      <th class="sortable" data-k="band">class</th>
+      <th class="num sortable" data-k="m">Mathilda</th>
+      <th class="num sortable" data-k="w">Mathematica</th>
+      <th class="num sortable" data-k="p">Python</th>
+      <th class="num">best baseline</th>
+      <th class="num sortable" data-k="ratio">ratio</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  </div>
+  <p class="note">&#9888; marks a clock-resolution row: the baseline ran under 0.005&nbsp;ms, so the
+    ratio shown is a lower bound to one significant figure, not a measurement.</p>
+</section>
+
+<section>
+  <h2>Correctness, not speed</h2>
+  <hr class="rule">
+
+  <h3 style="color:var(--serious)">Check disagreements &mdash; 3 cases, timings withheld</h3>
+  <p class="note" style="margin-top:2px">These are not timing comparisons. The systems did not agree
+    on the answer, so any number here would be comparing different programs. The harness discards the
+    timings at collection time; they are not present in the results file and cannot be shown.</p>
+  <div class="tblscroll" style="margin-top:10px;max-height:none">
+  <table><thead><tr><th>experiment</th><th>case</th><th>detail</th></tr></thead>
+  <tbody><tr><td><code>08-series-limit</code></td><td>Series Exp[Sin[x]] to order 20</td><td class='tiny'>check disagreement: Mathilda=SeriesCoefficient[Series[Exp[Sin[x]], {x, 0, 20}], 12]; Mathematica=181/14515200</td></tr><tr><td><code>08-series-limit</code></td><td>Series 1/(1-x-x^2) to order 60</td><td class='tiny'>check disagreement: Mathilda=SeriesCoefficient[Series[1/(1 - x - x^2), {x, 0, 60}], 50]; Mathematica=20365011074</td></tr><tr><td><code>08-series-limit</code></td><td>Series Log[1+Sin[x]] to order 24</td><td class='tiny'>check disagreement: Mathilda=SeriesCoefficient[Series[Log[1 + Sin[x]], {x, 0, 24}], 15]; Mathematica=199360981/1307674368000</td></tr></tbody></table></div>
+
+  <h3 style="margin-top:26px">Incomplete &mdash; 1 case</h3>
+  <p class="note" style="margin-top:2px">The head exists but the case did not finish. Distinct from
+    absence: a coverage or correctness bug, not a missing feature. A head that returns
+    <em>unevaluated</em> is the dangerous shape, because it costs almost no time and reads as a win
+    unless something checks the value.</p>
+  <div class="tblscroll" style="margin-top:10px;max-height:none">
+  <table><thead><tr><th>experiment</th><th>case</th><th>why</th></tr></thead>
+  <tbody><tr><td><code>28-span-selector</code></td><td>sieve to 200000 (strided writes)</td><td class='tiny'>timed out</td></tr></tbody></table></div>
+</section>
+
+<section>
+  <h2>Coverage and absence</h2>
+  <p class="sub">88.2% &mdash; 157 of
+     178 declared heads present,
+     21 absent. Nothing in this section carries a speed ratio.</p>
+  <hr class="rule">
+
+  <h3>Cases blocked by a missing head &mdash; 3</h3>
+  <p class="note" style="margin-top:2px">The baseline columns are shown for scale only: they say how
+    much work the case represents, not how far behind Mathilda is. There is no Mathilda time to
+    compare against, so there is no ratio and these rows are excluded from every speed statistic on
+    this page.</p>
+  <div class="tblscroll" style="margin-top:10px;max-height:none">
+  <table><thead><tr><th>experiment</th><th>case</th><th>missing head</th>
+    <th class="num">Mathematica</th><th class="num">Python</th></tr></thead>
+  <tbody><tr><td><code>16-interpolation</code></td><td>Interpolation order 1 (linear) build</td><td><code>InterpolationOrder</code></td><td class='num tiny'>0.829 ms</td><td class='num tiny'>0.012 ms</td></tr><tr><td><code>16-interpolation</code></td><td>ListInterpolation 2-D 60x60</td><td><code>ListInterpolation</code></td><td class='num tiny'>0.881 ms</td><td class='num tiny'>1.004 ms</td></tr><tr><td><code>21-strided-views</code></td><td>ArrayReshape 2x10^6 to 1000x2000</td><td><code>ArrayReshape</code></td><td class='num tiny'>0.296 ms</td><td class='num tiny'>0.231 ms</td></tr></tbody></table></div>
+
+  <h3 style="margin-top:26px">Absent heads &mdash; 21</h3>
+  <div class="tblscroll" style="margin-top:10px">
+  <table><thead><tr><th>head</th><th>blocks</th></tr></thead>
+  <tbody><tr><td><code>ArrayReshape</code></td><td class='tiny'>ArrayReshape 2x10^6 to 1000x2000</td></tr><tr><td><code>Cyclotomic</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>Design</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>Direction</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>EllipticK</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>FindFit</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>InterpolationOrder</code></td><td class='tiny'>Interpolation order 1 (linear) build</td></tr><tr><td><code>ListInterpolation</code></td><td class='tiny'>ListInterpolation 2-D 60x60</td></tr><tr><td><code>MaxSteps</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>Method</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>Minimize</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>MonomialOrder</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>NMinimize</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>O</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>PeriodogramArray</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>Quantile</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>Reduce</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>Roots</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>Threshold</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>ToUpperCase</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr><tr><td><code>WorkingPrecision</code></td><td class='tiny'><em>declared, not yet a row</em></td></tr></tbody></table></div>
+</section>
+
+<section>
+  <h2>Method and host</h2>
+  <hr class="rule">
+  <p class="note" style="margin-top:0">
+    One untimed warm-up, then the <strong>minimum of 3 timed runs</strong>
+    (<code>AbsoluteTiming</code> / <code>perf_counter</code>; never <code>Timing[]</code>, which sums
+    CPU time over threads). Cases already expensive on their own use one timed run and no warm-up.
+    One process per experiment per system, cwd set to the experiment folder. The same <code>.m</code>
+    source runs in Mathilda and Mathematica; the <code>.py</code> is a separate implementation of the
+    same algorithm in the same order. <strong>Values are checked, not just timed</strong> &mdash; a
+    case whose systems disagree is reported <code>CHECK-FAIL</code> with its timing discarded.
+    Exit codes are ignored: Mathilda exits 0 after errors, so classification comes from parsed cases
+    plus stderr. The <code>SLOWER</code> threshold is 1.5&times;; the clock-resolution floor is
+    0.005&nbsp;ms.
+  </p>
+  <div class="tblscroll" style="margin-top:14px;max-height:none">
+  <table><tbody><tr><td class='tiny'>platform</td><td class='mono'>macOS-26.5.1-arm64-arm-64bit-Mach-O</td></tr><tr><td class='tiny'>machine</td><td class='mono'>arm64</td></tr><tr><td class='tiny'>mathilda</td><td class='mono'>Mathilda 0.032 (Apple LLVM 21.0.0 (clang-2100.1.1.101), GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)</td></tr><tr><td class='tiny'>wolframscript</td><td class='mono'>/usr/local/bin/wolframscript</td></tr><tr><td class='tiny'>python</td><td class='mono'>/opt/homebrew/opt/python@3.14/bin/python3.14</td></tr><tr><td class='tiny'>python libs</td><td class='mono'>numpy 2.4.1 · scipy 1.17.1 · sympy 1.14.0 · mpmath 1.3.0 · numba 0.65.0 · networkx 3.6.1</td></tr><tr><td class='tiny'>run date</td><td class='mono'>2026-08-06</td></tr><tr><td class='tiny'>commit</td><td class='mono'>9accfbe7</td></tr><tr><td class='tiny'>elapsed</td><td class='mono'>12.92 min</td></tr></tbody></table></div>
+</section>
+
+</div>
+<script>window.__BENCH__ = {"host":{"date":"2026-08-06","missing_optional_deps":[],"platform":"macOS-26.5.1-arm64-arm-64bit-Mach-O","machine":"arm64","processor":"arm","mathilda":"Mathilda 0.032 (Apple LLVM 21.0.0 (clang-2100.1.1.101), GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)","mathilda_bin":"/Users/67840/Documents/GitHub/mathilda/Mathilda","python_bin":"/opt/homebrew/opt/python@3.14/bin/python3.14","python_libs":"3.14.3 2.4.1 1.17.1 1.14.0","wolframscript":"/usr/local/bin/wolframscript","runner_python":"3.14.3","local_versions":{"numpy":"2.4.1","scipy":"1.17.1","sympy":"1.14.0","mpmath":"1.3.0","numba":"0.65.0","networkx":"3.6.1"}},"elapsed_s":775.3116219043732,"durations":{"01-integrate-rational":4.067884683609009,"02-integrate-transcendental":2.049387216567993,"03-simplify":1.7872300148010254,"04-solve":3.5668768882751465,"05-factor-univariate":2.0471551418304443,"06-factor-multivariate":2.555169105529785,"07-groebner":27.97757887840271,"08-series-limit":301.3938138484955,"09-sum-product":2.052366018295288,"10-polynomial-algebra":2.0449867248535156,"11-special-functions":42.42957019805908,"12-quadrature":2.312549114227295,"13-ode-integration":2.0672199726104736,"14-root-finding":2.0635061264038086,"15-optimization":2.054128885269165,"16-interpolation":2.3034229278564453,"17-fft-and-signal":2.5574381351470947,"18-dense-linalg-drivers":3.052889108657837,"19-statistics":2.809702157974243,"20-curve-fitting":1.5432541370391846,"21-strided-views":1.792891025543213,"22-small-matrix-lapack":1.5424730777740479,"23-per-operation-constant":1.5425031185150146,"24-heterogeneous-return":2.049186944961548,"25-vector-transcendentals":2.0420258045196533,"26-structural-ops":3.569375991821289,"27-elementwise-binary":10.180530071258545,"28-span-selector":301.9561080932617,"29-graph-ops":26.672178745269775,"30-string-ops":1.5385839939117432,"31-nintegrate-ladder":3.069164752960205,"32-ndsolve-ladder":4.570673227310181},"rows":[{"exp":"01-integrate-rational","grp":"A symbolic (sympy)","label":"integrate rational, squarefree deg 6","m":1.4,"w":13.32,"p":294.48,"ratio":0.1051051051051051,"bo":"wolfram","base":13.32,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"01-integrate-rational","grp":"A symbolic (sympy)","label":"integrate rational, repeated deg 4","m":2.155,"w":8.106,"p":35.423,"ratio":0.26585245497162596,"bo":"wolfram","base":8.106,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"01-integrate-rational","grp":"A symbolic (sympy)","label":"integrate rational, irreducible quartic","m":1.044,"w":1.272,"p":11.499,"ratio":0.8207547169811321,"bo":"wolfram","base":1.272,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"01-integrate-rational","grp":"A symbolic (sympy)","label":"integrate polynomial, deg 40","m":0.157,"w":0.047,"p":0.625,"ratio":3.3404255319148937,"bo":"wolfram","base":0.047,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"01-integrate-rational","grp":"A symbolic (sympy)","label":"Apart, squarefree deg 8","m":0.199,"w":0.131,"p":10.619,"ratio":1.5190839694656488,"bo":"wolfram","base":0.131,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"01-integrate-rational","grp":"A symbolic (sympy)","label":"Together, 8 summands","m":1.822,"w":0.182,"p":1.898,"ratio":10.010989010989011,"bo":"wolfram","base":0.182,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"02-integrate-transcendental","grp":"A symbolic (sympy)","label":"integrate x Exp[x^2]","m":1.228,"w":0.075,"p":4.372,"ratio":16.373333333333335,"bo":"wolfram","base":0.075,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"02-integrate-transcendental","grp":"A symbolic (sympy)","label":"integrate Log[x]^3","m":1.432,"w":1.856,"p":10.541,"ratio":0.7715517241379309,"bo":"wolfram","base":1.856,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"02-integrate-transcendental","grp":"A symbolic (sympy)","label":"integrate Sin[x] Exp[x]","m":6.376,"w":0.732,"p":5.247,"ratio":8.710382513661203,"bo":"wolfram","base":0.732,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"02-integrate-transcendental","grp":"A symbolic (sympy)","label":"integrate Tan[x]^3","m":4.107,"w":0.158,"p":3.779,"ratio":25.99367088607595,"bo":"wolfram","base":0.158,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"02-integrate-transcendental","grp":"A symbolic (sympy)","label":"integrate 1/(1+Exp[x])","m":2.33,"w":0.11,"p":3.422,"ratio":21.181818181818183,"bo":"wolfram","base":0.11,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"02-integrate-transcendental","grp":"A symbolic (sympy)","label":"integrate Exp[x]/x (non-elementary)","m":5.361,"w":0.285,"p":33.765,"ratio":18.810526315789474,"bo":"wolfram","base":0.285,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"03-simplify","grp":"A symbolic (sympy)","label":"Simplify trig Pythagorean","m":0.044,"w":0.003,"p":3.819,"ratio":14.666666666666666,"bo":"wolfram","base":0.003,"cr":true,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"03-simplify","grp":"A symbolic (sympy)","label":"Simplify quartic-to-Cos[4x]","m":2.001,"w":0.003,"p":7.582,"ratio":667.0,"bo":"wolfram","base":0.003,"cr":true,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"03-simplify","grp":"A symbolic (sympy)","label":"Cancel removable singularity","m":0.008,"w":0.019,"p":0.257,"ratio":0.4210526315789474,"bo":"wolfram","base":0.019,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"03-simplify","grp":"A symbolic (sympy)","label":"FullSimplify nested radical","m":0.174,"w":0.004,"p":1.345,"ratio":43.49999999999999,"bo":"wolfram","base":0.004,"cr":true,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"03-simplify","grp":"A symbolic (sympy)","label":"Simplify log-exp collapse","m":0.052,"w":0.003,"p":1.395,"ratio":17.333333333333332,"bo":"wolfram","base":0.003,"cr":true,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"03-simplify","grp":"A symbolic (sympy)","label":"TrigReduce product of 4 sines","m":0.834,"w":0.138,"p":16.286,"ratio":6.0434782608695645,"bo":"wolfram","base":0.138,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"04-solve","grp":"A symbolic (sympy)","label":"Solve factorable sextic","m":0.457,"w":0.787,"p":1.53,"ratio":0.5806861499364676,"bo":"wolfram","base":0.787,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"04-solve","grp":"A symbolic (sympy)","label":"Solve quartic with radicals","m":0.065,"w":0.371,"p":1.564,"ratio":0.1752021563342318,"bo":"wolfram","base":0.371,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"04-solve","grp":"A symbolic (sympy)","label":"Solve 2x2 polynomial system","m":0.102,"w":0.599,"p":1.218,"ratio":0.1702838063439065,"bo":"wolfram","base":0.599,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"04-solve","grp":"A symbolic (sympy)","label":"Solve 3x3 linear system","m":0.049,"w":0.084,"p":0.647,"ratio":0.5833333333333334,"bo":"wolfram","base":0.084,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"04-solve","grp":"A symbolic (sympy)","label":"NSolve degree 40","m":9.786,"w":0.829,"p":340.859,"ratio":11.804583835946923,"bo":"wolfram","base":0.829,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"04-solve","grp":"A symbolic (sympy)","label":"Solve sextic, root sum","m":0.459,"w":0.799,"p":1.467,"ratio":0.5744680851063829,"bo":"wolfram","base":0.799,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"05-factor-univariate","grp":"A symbolic (sympy)","label":"Factor product of 8 quadratics","m":0.291,"w":0.184,"p":3.236,"ratio":1.5815217391304348,"bo":"wolfram","base":0.184,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"05-factor-univariate","grp":"A symbolic (sympy)","label":"Factor product of 16 quadratics","m":0.996,"w":0.706,"p":28.342,"ratio":1.4107648725212465,"bo":"wolfram","base":0.706,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"05-factor-univariate","grp":"A symbolic (sympy)","label":"Factor x^120 - 1","m":5.919,"w":0.049,"p":3.959,"ratio":120.79591836734693,"bo":"wolfram","base":0.049,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"05-factor-univariate","grp":"A symbolic (sympy)","label":"Factor sparse degree 60","m":0.513,"w":0.529,"p":9.85,"ratio":0.9697542533081285,"bo":"wolfram","base":0.529,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"05-factor-univariate","grp":"A symbolic (sympy)","label":"Factor dense degree 60","m":2.217,"w":0.605,"p":27.134,"ratio":3.6644628099173557,"bo":"wolfram","base":0.605,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"05-factor-univariate","grp":"A symbolic (sympy)","label":"PolynomialGCD of two deg-20 polys","m":0.03,"w":0.028,"p":0.176,"ratio":1.0714285714285714,"bo":"wolfram","base":0.028,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"06-factor-multivariate","grp":"A symbolic (sympy)","label":"Expand (x+y+z+i), 6 factors","m":0.238,"w":0.065,"p":0.009,"ratio":26.444444444444446,"bo":"python","base":0.009,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"06-factor-multivariate","grp":"A symbolic (sympy)","label":"Factor 3-var, 6 factors","m":0.29,"w":0.312,"p":12.286,"ratio":0.9294871794871794,"bo":"wolfram","base":0.312,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"06-factor-multivariate","grp":"A symbolic (sympy)","label":"Factor 5-var, 4 factors","m":0.353,"w":0.424,"p":20.19,"ratio":0.8325471698113207,"bo":"wolfram","base":0.424,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"06-factor-multivariate","grp":"A symbolic (sympy)","label":"Factor irreducible 3-var cubic","m":0.018,"w":0.018,"p":0.675,"ratio":1.0,"bo":"wolfram","base":0.018,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"06-factor-multivariate","grp":"A symbolic (sympy)","label":"Expand (x+y+z)^12","m":0.303,"w":0.071,"p":0.002,"ratio":151.5,"bo":"python","base":0.002,"cr":true,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"06-factor-multivariate","grp":"A symbolic (sympy)","label":"Factor x^24 - y^24","m":0.301,"w":0.623,"p":134.499,"ratio":0.4831460674157303,"bo":"wolfram","base":0.623,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"07-groebner","grp":"A symbolic (sympy)","label":"GroebnerBasis cyclic-3","m":0.03,"w":0.071,"p":0.179,"ratio":0.4225352112676057,"bo":"wolfram","base":0.071,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"07-groebner","grp":"A symbolic (sympy)","label":"GroebnerBasis cyclic-4","m":0.175,"w":0.414,"p":1.002,"ratio":0.4227053140096618,"bo":"wolfram","base":0.414,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"07-groebner","grp":"A symbolic (sympy)","label":"GroebnerBasis cyclic-5","m":43.733,"w":17.926,"p":8775.161,"ratio":2.4396407452861766,"bo":"wolfram","base":17.926,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"07-groebner","grp":"A symbolic (sympy)","label":"GroebnerBasis 3-var quadratic system","m":0.051,"w":0.224,"p":0.337,"ratio":0.2276785714285714,"bo":"wolfram","base":0.224,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"07-groebner","grp":"A symbolic (sympy)","label":"Eliminate 2 vars from 3","m":0.008,"w":0.018,"p":0.306,"ratio":0.4444444444444445,"bo":"wolfram","base":0.018,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"07-groebner","grp":"A symbolic (sympy)","label":"Resultant of two deg-8 polys","m":0.077,"w":0.752,"p":0.669,"ratio":0.11509715994020926,"bo":"python","base":0.669,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"08-series-limit","grp":"A symbolic (sympy)","label":"Series Exp[Sin[x]] to order 20","m":null,"w":null,"p":null,"ratio":null,"bo":null,"base":null,"cr":false,"klass":"CHECK-FAIL","note":"check disagreement: Mathilda=SeriesCoefficient[Series[Exp[Sin[x]], {x, 0, 20}], 12]; Mathematica=181/14515200","missing":null,"band":"CHECK-FAIL"},{"exp":"08-series-limit","grp":"A symbolic (sympy)","label":"Series 1/(1-x-x^2) to order 60","m":null,"w":null,"p":null,"ratio":null,"bo":null,"base":null,"cr":false,"klass":"CHECK-FAIL","note":"check disagreement: Mathilda=SeriesCoefficient[Series[1/(1 - x - x^2), {x, 0, 60}], 50]; Mathematica=20365011074","missing":null,"band":"CHECK-FAIL"},{"exp":"08-series-limit","grp":"A symbolic (sympy)","label":"Series Log[1+Sin[x]] to order 24","m":null,"w":null,"p":null,"ratio":null,"bo":null,"base":null,"cr":false,"klass":"CHECK-FAIL","note":"check disagreement: Mathilda=SeriesCoefficient[Series[Log[1 + Sin[x]], {x, 0, 24}], 15]; Mathematica=199360981/1307674368000","missing":null,"band":"CHECK-FAIL"},{"exp":"08-series-limit","grp":"A symbolic (sympy)","label":"Limit Sin[x]/x at 0","m":0.939,"w":1.555,"p":null,"ratio":0.6038585209003215,"bo":"wolfram","base":1.555,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"08-series-limit","grp":"A symbolic (sympy)","label":"Limit (Exp[x]-1-x)/x^2 at 0","m":0.245,"w":1.576,"p":null,"ratio":0.15545685279187815,"bo":"wolfram","base":1.576,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"08-series-limit","grp":"A symbolic (sympy)","label":"Limit x (Log[x+1]-Log[x]) at Infinity","m":1.231,"w":2.142,"p":null,"ratio":0.5746965452847806,"bo":"wolfram","base":2.142,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"09-sum-product","grp":"A symbolic (sympy)","label":"Sum k^5 to n, closed form","m":0.133,"w":0.029,"p":0.111,"ratio":4.586206896551724,"bo":"wolfram","base":0.029,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"09-sum-product","grp":"A symbolic (sympy)","label":"Sum 1/k^2 to Infinity","m":0.11,"w":0.044,"p":1.378,"ratio":2.5,"bo":"wolfram","base":0.044,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"09-sum-product","grp":"A symbolic (sympy)","label":"Sum r^k to n, symbolic ratio","m":0.032,"w":0.034,"p":0.238,"ratio":0.9411764705882353,"bo":"wolfram","base":0.034,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"09-sum-product","grp":"A symbolic (sympy)","label":"Sum Binomial[n,k] over k","m":0.0,"w":0.036,"p":23.775,"ratio":0.0,"bo":"wolfram","base":0.036,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"09-sum-product","grp":"A symbolic (sympy)","label":"Sum 1/(k(k+1)) to n","m":0.29,"w":0.032,"p":1.079,"ratio":9.0625,"bo":"wolfram","base":0.032,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"09-sum-product","grp":"A symbolic (sympy)","label":"Product (1+1/k) to n","m":0.02,"w":0.049,"p":0.288,"ratio":0.40816326530612246,"bo":"wolfram","base":0.049,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"10-polynomial-algebra","grp":"A symbolic (sympy)","label":"PolynomialGCD, shared deg-20 factor","m":0.089,"w":0.067,"p":0.765,"ratio":1.3283582089552237,"bo":"wolfram","base":0.067,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"10-polynomial-algebra","grp":"A symbolic (sympy)","label":"PolynomialGCD, coprime deg 40","m":0.259,"w":0.091,"p":0.339,"ratio":2.8461538461538463,"bo":"wolfram","base":0.091,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"10-polynomial-algebra","grp":"A symbolic (sympy)","label":"Discriminant of deg 20","m":2.559,"w":0.073,"p":0.176,"ratio":35.05479452054795,"bo":"wolfram","base":0.073,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"10-polynomial-algebra","grp":"A symbolic (sympy)","label":"Cancel deg-60 over deg-58","m":0.366,"w":0.572,"p":7.397,"ratio":0.6398601398601399,"bo":"wolfram","base":0.572,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"10-polynomial-algebra","grp":"A symbolic (sympy)","label":"PolynomialQuotient deg 60 / deg 20","m":0.065,"w":0.213,"p":0.963,"ratio":0.3051643192488263,"bo":"wolfram","base":0.213,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"10-polynomial-algebra","grp":"A symbolic (sympy)","label":"Expand (1+x)^400","m":0.46,"w":0.104,"p":0.003,"ratio":153.33333333333334,"bo":"python","base":0.003,"cr":true,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"11-special-functions","grp":"B numeric libraries (scipy)","label":"Gamma over 10^6","m":1.335,"w":1.525,"p":7.529,"ratio":0.8754098360655738,"bo":"wolfram","base":1.525,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"11-special-functions","grp":"B numeric libraries (scipy)","label":"Erf over 10^6","m":1.022,"w":1.53,"p":7.551,"ratio":0.6679738562091503,"bo":"wolfram","base":1.53,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"11-special-functions","grp":"B numeric libraries (scipy)","label":"BesselJ[0, .] over 10^6","m":3498.26,"w":1752.15,"p":53.718,"ratio":65.12267768718121,"bo":"python","base":53.718,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"11-special-functions","grp":"B numeric libraries (scipy)","label":"LogGamma over 10^6","m":0.912,"w":0.987,"p":11.549,"ratio":0.9240121580547113,"bo":"wolfram","base":0.987,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"11-special-functions","grp":"B numeric libraries (scipy)","label":"PolyGamma[0, .] over 10^6","m":2.701,"w":154.749,"p":8.271,"ratio":0.3265626889130697,"bo":"python","base":8.271,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"11-special-functions","grp":"B numeric libraries (scipy)","label":"AiryAi over 10^6","m":3.83,"w":106.847,"p":59.383,"ratio":0.06449657309330953,"bo":"python","base":59.383,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"11-special-functions","grp":"B numeric libraries (scipy)","label":"Zeta over 10^6","m":8.918,"w":4299.09,"p":5.91,"ratio":1.5089678510998306,"bo":"python","base":5.91,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"12-quadrature","grp":"B numeric libraries (scipy)","label":"NIntegrate Sin[x] on [0,Pi]","m":0.003,"w":0.95,"p":0.002,"ratio":1.5,"bo":"python","base":0.002,"cr":true,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"12-quadrature","grp":"B numeric libraries (scipy)","label":"NIntegrate 1/Sqrt[x] on [0,1]","m":0.05,"w":0.658,"p":0.016,"ratio":3.125,"bo":"python","base":0.016,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"12-quadrature","grp":"B numeric libraries (scipy)","label":"NIntegrate Sin[40 x] on [0,Pi]","m":0.424,"w":3.987,"p":0.002,"ratio":212.0,"bo":"python","base":0.002,"cr":true,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"12-quadrature","grp":"B numeric libraries (scipy)","label":"NIntegrate narrow Gaussian","m":0.015,"w":0.96,"p":0.022,"ratio":0.6818181818181819,"bo":"python","base":0.022,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"12-quadrature","grp":"B numeric libraries (scipy)","label":"NIntegrate 2-D smooth","m":0.072,"w":1.387,"p":0.068,"ratio":1.0588235294117645,"bo":"python","base":0.068,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"12-quadrature","grp":"B numeric libraries (scipy)","label":"NIntegrate Exp[-x^2] on [0,Infinity]","m":0.013,"w":0.892,"p":0.01,"ratio":1.2999999999999998,"bo":"python","base":0.01,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"13-ode-integration","grp":"B numeric libraries (scipy)","label":"NDSolve y'=-y on [0,10]","m":0.08,"w":0.161,"p":2.441,"ratio":0.4968944099378882,"bo":"wolfram","base":0.161,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"13-ode-integration","grp":"B numeric libraries (scipy)","label":"NDSolve harmonic oscillator","m":0.269,"w":0.212,"p":7.716,"ratio":1.268867924528302,"bo":"wolfram","base":0.212,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"13-ode-integration","grp":"B numeric libraries (scipy)","label":"NDSolve Van der Pol mu=10","m":0.666,"w":0.543,"p":3.42,"ratio":1.2265193370165746,"bo":"wolfram","base":0.543,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"13-ode-integration","grp":"B numeric libraries (scipy)","label":"NDSolve y'=y^2 t nonlinear","m":0.042,"w":0.133,"p":0.296,"ratio":0.3157894736842105,"bo":"wolfram","base":0.133,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"13-ode-integration","grp":"B numeric libraries (scipy)","label":"NDSolve long horizon, t to 200","m":0.161,"w":0.151,"p":2.992,"ratio":1.066225165562914,"bo":"wolfram","base":0.151,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"14-root-finding","grp":"B numeric libraries (scipy)","label":"FindRoot Cos[x]==x","m":0.013,"w":0.046,"p":0.004,"ratio":3.25,"bo":"python","base":0.004,"cr":true,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"14-root-finding","grp":"B numeric libraries (scipy)","label":"FindRoot x^3-2x-5","m":0.02,"w":0.045,"p":0.005,"ratio":4.0,"bo":"python","base":0.005,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"14-root-finding","grp":"B numeric libraries (scipy)","label":"FindRoot 2x2 nonlinear system","m":0.032,"w":0.05,"p":0.017,"ratio":1.8823529411764706,"bo":"python","base":0.017,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"14-root-finding","grp":"B numeric libraries (scipy)","label":"NSolve all roots, degree 50","m":14.951,"w":0.931,"p":0.174,"ratio":85.92528735632185,"bo":"python","base":0.174,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"14-root-finding","grp":"B numeric libraries (scipy)","label":"FindRoot Tan[x]==x near 4.5","m":0.005,"w":0.045,"p":0.005,"ratio":1.0,"bo":"python","base":0.005,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"15-optimization","grp":"B numeric libraries (scipy)","label":"FindMinimum quadratic","m":0.012,"w":0.059,"p":0.186,"ratio":0.2033898305084746,"bo":"wolfram","base":0.059,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"15-optimization","grp":"B numeric libraries (scipy)","label":"FindMinimum Rosenbrock 2-D","m":0.143,"w":0.197,"p":3.508,"ratio":0.7258883248730964,"bo":"wolfram","base":0.197,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"15-optimization","grp":"B numeric libraries (scipy)","label":"FindMinimum x Sin[x] on [2,6]","m":0.005,"w":0.303,"p":1.184,"ratio":0.016501650165016504,"bo":"wolfram","base":0.303,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"15-optimization","grp":"B numeric libraries (scipy)","label":"Fit linear, 200 points","m":0.011,"w":0.016,"p":0.015,"ratio":0.7333333333333333,"bo":"python","base":0.015,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"15-optimization","grp":"B numeric libraries (scipy)","label":"Fit degree-5 polynomial, 500 points","m":0.082,"w":0.078,"p":0.036,"ratio":2.277777777777778,"bo":"python","base":0.036,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"16-interpolation","grp":"B numeric libraries (scipy)","label":"Interpolation build, 2000 knots","m":0.013,"w":0.795,"p":0.078,"ratio":0.16666666666666666,"bo":"python","base":0.078,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"16-interpolation","grp":"B numeric libraries (scipy)","label":"Interpolation evaluate, 20000 points","m":20.094,"w":19.081,"p":0.061,"ratio":329.4098360655738,"bo":"python","base":0.061,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"16-interpolation","grp":"B numeric libraries (scipy)","label":"Interpolation over 10^5 array","m":0.992,"w":4.807,"p":4.359,"ratio":0.22757513191098877,"bo":"python","base":4.359,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"16-interpolation","grp":"B numeric libraries (scipy)","label":"Interpolation order 1 (linear) build","m":null,"w":0.829,"p":0.012,"ratio":null,"bo":null,"base":null,"cr":false,"klass":"ABSENT","note":"Mathilda has no InterpolationOrder","missing":"InterpolationOrder","band":"ABSENT"},{"exp":"16-interpolation","grp":"B numeric libraries (scipy)","label":"ListInterpolation 2-D 60x60","m":null,"w":0.881,"p":1.004,"ratio":null,"bo":null,"base":null,"cr":false,"klass":"ABSENT","note":"Mathilda has no ListInterpolation","missing":"ListInterpolation","band":"ABSENT"},{"exp":"17-fft-and-signal","grp":"B numeric libraries (scipy)","label":"Fourier 2^18 (262144)","m":4.98,"w":2.605,"p":2.458,"ratio":2.026037428803906,"bo":"python","base":2.458,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"17-fft-and-signal","grp":"B numeric libraries (scipy)","label":"Fourier 1200000 (mixed radix)","m":13.055,"w":9.723,"p":8.757,"ratio":1.4908073541167066,"bo":"python","base":8.757,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"17-fft-and-signal","grp":"B numeric libraries (scipy)","label":"Fourier 262143 (awkward size)","m":6.036,"w":5.221,"p":4.652,"ratio":1.2975064488392087,"bo":"python","base":4.652,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"17-fft-and-signal","grp":"B numeric libraries (scipy)","label":"InverseFourier 2^18","m":3.485,"w":2.688,"p":2.572,"ratio":1.3549766718506997,"bo":"python","base":2.572,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"17-fft-and-signal","grp":"B numeric libraries (scipy)","label":"ListConvolve 100000 x 2048","m":9.8,"w":1.134,"p":11.164,"ratio":8.641975308641976,"bo":"wolfram","base":1.134,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"17-fft-and-signal","grp":"B numeric libraries (scipy)","label":"ListCorrelate 100000 x 2048","m":9.922,"w":1.12,"p":11.482,"ratio":8.85892857142857,"bo":"wolfram","base":1.12,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"18-dense-linalg-drivers","grp":"B numeric libraries (scipy)","label":"Dot 600x600","m":0.833,"w":1.616,"p":1.272,"ratio":0.6548742138364779,"bo":"python","base":1.272,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"18-dense-linalg-drivers","grp":"B numeric libraries (scipy)","label":"LinearSolve 600x600","m":1.241,"w":2.576,"p":1.273,"ratio":0.9748625294579735,"bo":"python","base":1.273,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"18-dense-linalg-drivers","grp":"B numeric libraries (scipy)","label":"Inverse 600x600","m":2.501,"w":5.79,"p":2.944,"ratio":0.8495244565217391,"bo":"python","base":2.944,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"18-dense-linalg-drivers","grp":"B numeric libraries (scipy)","label":"Det 600x600","m":1.14,"w":2.613,"p":1.179,"ratio":0.9669211195928752,"bo":"python","base":1.179,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"18-dense-linalg-drivers","grp":"B numeric libraries (scipy)","label":"Eigenvalues 600x600 (general)","m":275.327,"w":185.78,"p":81.049,"ratio":3.39704376364915,"bo":"python","base":81.049,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"18-dense-linalg-drivers","grp":"B numeric libraries (scipy)","label":"SingularValueDecomposition 400x400","m":23.035,"w":51.574,"p":9.581,"ratio":2.404237553491285,"bo":"python","base":9.581,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"18-dense-linalg-drivers","grp":"B numeric libraries (scipy)","label":"QRDecomposition 400x400","m":8.359,"w":17.993,"p":2.572,"ratio":3.25,"bo":"python","base":2.572,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"19-statistics","grp":"B numeric libraries (scipy)","label":"Mean over 2x10^6","m":0.162,"w":0.084,"p":0.211,"ratio":1.9285714285714286,"bo":"wolfram","base":0.084,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"19-statistics","grp":"B numeric libraries (scipy)","label":"Variance over 2x10^6","m":0.307,"w":0.345,"p":0.936,"ratio":0.8898550724637682,"bo":"wolfram","base":0.345,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"19-statistics","grp":"B numeric libraries (scipy)","label":"StandardDeviation over 2x10^6","m":0.338,"w":0.409,"p":0.913,"ratio":0.8264058679706603,"bo":"wolfram","base":0.409,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"19-statistics","grp":"B numeric libraries (scipy)","label":"Median over 2x10^6","m":11.023,"w":8.463,"p":14.061,"ratio":1.3024932057190122,"bo":"wolfram","base":8.463,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"19-statistics","grp":"B numeric libraries (scipy)","label":"Quartiles over 2x10^6","m":17.993,"w":17.396,"p":19.068,"ratio":1.0343182340767991,"bo":"wolfram","base":17.396,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"19-statistics","grp":"B numeric libraries (scipy)","label":"Skewness over 2x10^6","m":0.744,"w":0.502,"p":3.576,"ratio":1.4820717131474104,"bo":"wolfram","base":0.502,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"19-statistics","grp":"B numeric libraries (scipy)","label":"Kurtosis over 2x10^6","m":0.629,"w":0.479,"p":3.246,"ratio":1.3131524008350732,"bo":"wolfram","base":0.479,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"19-statistics","grp":"B numeric libraries (scipy)","label":"RootMeanSquare over 2x10^6","m":0.152,"w":0.099,"p":0.486,"ratio":1.5353535353535352,"bo":"wolfram","base":0.099,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"19-statistics","grp":"B numeric libraries (scipy)","label":"MovingAverage window 100","m":18.02,"w":2.023,"p":4.585,"ratio":8.907563025210083,"bo":"wolfram","base":2.023,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"20-curve-fitting","grp":"B numeric libraries (scipy)","label":"Fit linear, 5000 points","m":0.162,"w":0.285,"p":0.106,"ratio":1.528301886792453,"bo":"python","base":0.106,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"20-curve-fitting","grp":"B numeric libraries (scipy)","label":"Fit quadratic, 5000 points","m":0.209,"w":0.453,"p":0.136,"ratio":1.5367647058823528,"bo":"python","base":0.136,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"20-curve-fitting","grp":"B numeric libraries (scipy)","label":"Fit degree-8 polynomial, 5000 points","m":0.989,"w":1.514,"p":0.346,"ratio":2.8583815028901736,"bo":"python","base":0.346,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"20-curve-fitting","grp":"B numeric libraries (scipy)","label":"LeastSquares 2000x20","m":0.486,"w":0.697,"p":0.3,"ratio":1.62,"bo":"python","base":0.3,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"20-curve-fitting","grp":"B numeric libraries (scipy)","label":"Fit trig basis, 5000 points","m":0.205,"w":0.433,"p":0.095,"ratio":2.1578947368421053,"bo":"python","base":0.095,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"21-strided-views","grp":"C array substrate (numpy)","label":"Transpose 2000x2000","m":1.727,"w":0.792,"p":2.958,"ratio":2.1805555555555554,"bo":"wolfram","base":0.792,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"21-strided-views","grp":"C array substrate (numpy)","label":"Transpose then Dot (fused?)","m":38.695,"w":66.907,"p":20.253,"ratio":1.9105811484718314,"bo":"python","base":20.253,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"21-strided-views","grp":"C array substrate (numpy)","label":"Partition window 8, offset 1","m":2.865,"w":36.833,"p":5.554,"ratio":0.5158444364422038,"bo":"python","base":5.554,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"21-strided-views","grp":"C array substrate (numpy)","label":"Take rows 1;;1000 of 2000x2000","m":0.218,"w":0.386,"p":0.231,"ratio":0.9437229437229436,"bo":"python","base":0.231,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"21-strided-views","grp":"C array substrate (numpy)","label":"column slice m[[All, 1]]","m":0.004,"w":0.008,"p":0.001,"ratio":4.0,"bo":"python","base":0.001,"cr":true,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"21-strided-views","grp":"C array substrate (numpy)","label":"ArrayReshape 2x10^6 to 1000x2000","m":null,"w":0.296,"p":0.231,"ratio":null,"bo":null,"base":null,"cr":false,"klass":"ABSENT","note":"Mathilda has no ArrayReshape","missing":"ArrayReshape","band":"ABSENT"},{"exp":"22-small-matrix-lapack","grp":"C array substrate (numpy)","label":"Inverse 6x6 x 2000","m":1.97,"w":2.782,"p":3.927,"ratio":0.7081236520488857,"bo":"wolfram","base":2.782,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"22-small-matrix-lapack","grp":"C array substrate (numpy)","label":"Det 6x6 x 5000","m":2.306,"w":5.936,"p":5.219,"ratio":0.44184709714504694,"bo":"python","base":5.219,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"22-small-matrix-lapack","grp":"C array substrate (numpy)","label":"LinearSolve 6x6 x 2000","m":2.137,"w":3.61,"p":3.949,"ratio":0.5919667590027701,"bo":"wolfram","base":3.61,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"22-small-matrix-lapack","grp":"C array substrate (numpy)","label":"Dot 6x6 x 6x6 x 10000","m":7.409,"w":6.52,"p":3.972,"ratio":1.8653071500503524,"bo":"python","base":3.972,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"22-small-matrix-lapack","grp":"C array substrate (numpy)","label":"Inverse 3x3 x 5000","m":2.732,"w":4.805,"p":7.711,"ratio":0.5685744016649324,"bo":"wolfram","base":4.805,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"22-small-matrix-lapack","grp":"C array substrate (numpy)","label":"Eigenvalues 6x6 x 500","m":0.661,"w":1.011,"p":3.039,"ratio":0.6538081107814047,"bo":"wolfram","base":1.011,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"23-per-operation-constant","grp":"C array substrate (numpy)","label":"1 op on 10^6 elements","m":0.099,"w":0.041,"p":0.109,"ratio":2.4146341463414633,"bo":"wolfram","base":0.041,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"23-per-operation-constant","grp":"C array substrate (numpy)","label":"1000 ops on 10^3 elements","m":0.19,"w":0.234,"p":0.464,"ratio":0.811965811965812,"bo":"wolfram","base":0.234,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"23-per-operation-constant","grp":"C array substrate (numpy)","label":"100000 ops on 10 elements","m":6.57,"w":19.422,"p":35.668,"ratio":0.33827618164967566,"bo":"wolfram","base":19.422,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"23-per-operation-constant","grp":"C array substrate (numpy)","label":"1 elementwise op on 10^6","m":0.224,"w":0.051,"p":0.14,"ratio":4.392156862745098,"bo":"wolfram","base":0.051,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"23-per-operation-constant","grp":"C array substrate (numpy)","label":"10000 elementwise ops on 10^2","m":1.794,"w":1.563,"p":1.751,"ratio":1.1477927063339732,"bo":"wolfram","base":1.563,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"23-per-operation-constant","grp":"C array substrate (numpy)","label":"100000 scalar additions","m":0.394,"w":11.235,"p":1.137,"ratio":0.3465259454705365,"bo":"python","base":1.137,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"24-heterogeneous-return","grp":"C array substrate (numpy)","label":"return {real, real}, then Total","m":0.875,"w":0.171,"p":0.247,"ratio":5.116959064327485,"bo":"wolfram","base":0.171,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"24-heterogeneous-return","grp":"C array substrate (numpy)","label":"return {real, int}, then Total","m":43.01,"w":0.221,"p":0.454,"ratio":194.6153846153846,"bo":"wolfram","base":0.221,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"24-heterogeneous-return","grp":"C array substrate (numpy)","label":"return {real, int, mask}, then Total","m":62.383,"w":0.375,"p":1.077,"ratio":166.35466666666667,"bo":"wolfram","base":0.375,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"24-heterogeneous-return","grp":"C array substrate (numpy)","label":"return {real, int, mask}, discarded","m":41.322,"w":0.278,"p":0.89,"ratio":148.64028776978418,"bo":"wolfram","base":0.278,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"24-heterogeneous-return","grp":"C array substrate (numpy)","label":"return ragged {n, 1000, 100}, then Total","m":21.641,"w":0.038,"p":0.057,"ratio":569.5,"bo":"wolfram","base":0.038,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"25-vector-transcendentals","grp":"C array substrate (numpy)","label":"Sin over 4x10^6","m":1.648,"w":0.606,"p":15.855,"ratio":2.7194719471947195,"bo":"wolfram","base":0.606,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"25-vector-transcendentals","grp":"C array substrate (numpy)","label":"Exp over 4x10^6","m":0.766,"w":1.174,"p":6.216,"ratio":0.6524701873935265,"bo":"wolfram","base":1.174,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"25-vector-transcendentals","grp":"C array substrate (numpy)","label":"Log over 4x10^6","m":4.09,"w":2.114,"p":13.142,"ratio":1.934720908230842,"bo":"wolfram","base":2.114,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"25-vector-transcendentals","grp":"C array substrate (numpy)","label":"Sqrt over 4x10^6","m":5.17,"w":0.409,"p":1.025,"ratio":12.640586797066016,"bo":"wolfram","base":0.409,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"25-vector-transcendentals","grp":"C array substrate (numpy)","label":"Tan over 4x10^6","m":1.584,"w":0.648,"p":17.726,"ratio":2.4444444444444446,"bo":"wolfram","base":0.648,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"25-vector-transcendentals","grp":"C array substrate (numpy)","label":"ArcTan 2-arg over 4x10^6","m":3.31,"w":6.991,"p":36.238,"ratio":0.4734658847089115,"bo":"wolfram","base":6.991,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"25-vector-transcendentals","grp":"C array substrate (numpy)","label":"Sin[Exp[Log[v]]] fused?","m":6.898,"w":6.196,"p":44.869,"ratio":1.1132989025177533,"bo":"wolfram","base":6.196,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"25-vector-transcendentals","grp":"C array substrate (numpy)","label":"v^2.5 over 4x10^6","m":6.967,"w":3.992,"p":17.837,"ratio":1.7452404809619237,"bo":"wolfram","base":3.992,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"26-structural-ops","grp":"C array substrate (numpy)","label":"Reverse 4x10^6","m":5.707,"w":0.294,"p":0.959,"ratio":19.411564625850342,"bo":"wolfram","base":0.294,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"26-structural-ops","grp":"C array substrate (numpy)","label":"RotateLeft 4x10^6 by 1000","m":0.905,"w":0.234,"p":0.483,"ratio":3.8675213675213675,"bo":"wolfram","base":0.234,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"26-structural-ops","grp":"C array substrate (numpy)","label":"gather v[[idx]], 4x10^6","m":25.137,"w":7.176,"p":11.499,"ratio":3.5029264214046822,"bo":"wolfram","base":7.176,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"26-structural-ops","grp":"C array substrate (numpy)","label":"Join two 2x10^6","m":0.905,"w":0.513,"p":0.442,"ratio":2.0475113122171944,"bo":"python","base":0.442,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"26-structural-ops","grp":"C array substrate (numpy)","label":"Take first half of 4x10^6","m":0.223,"w":0.107,"p":0.217,"ratio":2.0841121495327104,"bo":"wolfram","base":0.107,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"26-structural-ops","grp":"C array substrate (numpy)","label":"Sort 4x10^6","m":43.286,"w":70.504,"p":115.884,"ratio":0.6139509815045955,"bo":"wolfram","base":70.504,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"26-structural-ops","grp":"C array substrate (numpy)","label":"Union of 4x10^6 integers","m":13.646,"w":74.103,"p":495.921,"ratio":0.18414908978044076,"bo":"wolfram","base":74.103,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"27-elementwise-binary","grp":"C array substrate (numpy)","label":"a + b over 4x10^6","m":0.389,"w":0.505,"p":0.793,"ratio":0.7702970297029703,"bo":"wolfram","base":0.505,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"27-elementwise-binary","grp":"C array substrate (numpy)","label":"a * b over 4x10^6","m":0.364,"w":0.537,"p":0.802,"ratio":0.6778398510242085,"bo":"wolfram","base":0.537,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"27-elementwise-binary","grp":"C array substrate (numpy)","label":"MapThread[Min] over 4x10^6","m":15.5,"w":689.05,"p":0.792,"ratio":19.57070707070707,"bo":"python","base":0.792,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"27-elementwise-binary","grp":"C array substrate (numpy)","label":"MapThread[Max] over 4x10^6","m":15.474,"w":719.9,"p":0.802,"ratio":19.294264339152118,"bo":"python","base":0.802,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"27-elementwise-binary","grp":"C array substrate (numpy)","label":"Clip to [0.25, 0.75] over 4x10^6","m":581.117,"w":2.984,"p":1.003,"ratio":579.3788634097707,"bo":"python","base":1.003,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"27-elementwise-binary","grp":"C array substrate (numpy)","label":"a b + a over 4x10^6","m":0.744,"w":0.877,"p":1.455,"ratio":0.8483466362599772,"bo":"wolfram","base":0.877,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"27-elementwise-binary","grp":"C array substrate (numpy)","label":"integer Mod over 4x10^6","m":3.916,"w":0.517,"p":3.352,"ratio":7.574468085106383,"bo":"wolfram","base":0.517,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"28-span-selector","grp":"C array substrate (numpy)","label":"span v[[1;;n;;2]]","m":3.504,"w":0.203,"p":0.52,"ratio":17.261083743842363,"bo":"wolfram","base":0.203,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"28-span-selector","grp":"C array substrate (numpy)","label":"span v[[1;;n;;7]]","m":1.061,"w":0.188,"p":0.375,"ratio":5.6436170212765955,"bo":"wolfram","base":0.188,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"28-span-selector","grp":"C array substrate (numpy)","label":"span v[[2;;n;;2]] (offset)","m":3.882,"w":0.201,"p":0.548,"ratio":19.313432835820894,"bo":"wolfram","base":0.201,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"28-span-selector","grp":"C array substrate (numpy)","label":"contiguous span v[[1;;n/2]]","m":0.863,"w":0.119,"p":0.245,"ratio":7.2521008403361344,"bo":"wolfram","base":0.119,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"28-span-selector","grp":"C array substrate (numpy)","label":"Range[1, 4x10^6, 3]","m":0.082,"w":0.076,"p":0.119,"ratio":1.0789473684210527,"bo":"wolfram","base":0.076,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"28-span-selector","grp":"C array substrate (numpy)","label":"sieve to 200000 (strided writes)","m":null,"w":236.845,"p":0.2,"ratio":null,"bo":null,"base":null,"cr":false,"klass":"INCOMPLETE","note":"timed out","missing":null,"band":"INCOMPLETE"},{"exp":"29-graph-ops","grp":"D uncovered subsystems","label":"Graph construction, 40000 edges","m":5.643,"w":4.537,"p":16.853,"ratio":1.2437734185585188,"bo":"wolfram","base":4.537,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"29-graph-ops","grp":"D uncovered subsystems","label":"VertexDegree, 20000 vertices","m":0.0,"w":0.05,"p":0.929,"ratio":0.0,"bo":"wolfram","base":0.05,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"29-graph-ops","grp":"D uncovered subsystems","label":"EdgeCount","m":0.0,"w":0.0,"p":1.096,"ratio":0.0,"bo":"python","base":1.096,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"29-graph-ops","grp":"D uncovered subsystems","label":"ConnectedComponents","m":0.0,"w":0.002,"p":9.922,"ratio":0.0,"bo":"wolfram","base":0.002,"cr":true,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"29-graph-ops","grp":"D uncovered subsystems","label":"GraphDistance from vertex 1","m":0.001,"w":12484.8,"p":5.891,"ratio":0.00016975046681378373,"bo":"python","base":5.891,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"29-graph-ops","grp":"D uncovered subsystems","label":"FindShortestPath 1 to 10000","m":0.0,"w":0.539,"p":0.058,"ratio":0.0,"bo":"python","base":0.058,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"29-graph-ops","grp":"D uncovered subsystems","label":"AdjacencyMatrix, 20000 vertices","m":0.0,"w":0.723,"p":9.912,"ratio":0.0,"bo":"wolfram","base":0.723,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"30-string-ops","grp":"D uncovered subsystems","label":"StringLength of 200k chars","m":0.003,"w":0.0,"p":0.0,"ratio":null,"bo":null,"base":null,"cr":false,"klass":"AHEAD","note":"no baseline recorded","missing":null,"band":"NOBASE"},{"exp":"30-string-ops","grp":"D uncovered subsystems","label":"StringReplace literal, 200k chars","m":0.243,"w":1.131,"p":0.153,"ratio":1.588235294117647,"bo":"python","base":0.153,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"30-string-ops","grp":"D uncovered subsystems","label":"StringSplit on space, 200k chars","m":2.767,"w":4.598,"p":0.543,"ratio":5.095764272559852,"bo":"python","base":0.543,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"30-string-ops","grp":"D uncovered subsystems","label":"StringCount substring, 200k chars","m":0.173,"w":0.371,"p":0.045,"ratio":3.844444444444444,"bo":"python","base":0.045,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"30-string-ops","grp":"D uncovered subsystems","label":"StringReverse 200k chars","m":0.013,"w":0.368,"p":0.052,"ratio":0.25,"bo":"python","base":0.052,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"30-string-ops","grp":"D uncovered subsystems","label":"StringCases regex, 200k chars","m":2.099,"w":3.775,"p":4.968,"ratio":0.5560264900662252,"bo":"wolfram","base":3.775,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"30-string-ops","grp":"D uncovered subsystems","label":"StringReplace regex, 200k chars","m":1.845,"w":4.974,"p":3.206,"ratio":0.575483468496569,"bo":"python","base":3.206,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"30-string-ops","grp":"D uncovered subsystems","label":"Characters of 200k chars","m":4.205,"w":2.5,"p":0.414,"ratio":10.157004830917876,"bo":"python","base":0.414,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI oscillatory k=40","m":0.413,"w":4.577,"p":0.003,"ratio":137.66666666666666,"bo":"python","base":0.003,"cr":true,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI oscillatory k=200","m":0.44,"w":20.081,"p":0.002,"ratio":220.0,"bo":"python","base":0.002,"cr":true,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI oscillatory k=1000","m":0.48,"w":124.265,"p":0.002,"ratio":240.0,"bo":"python","base":0.002,"cr":true,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI oscillatory k=1001 nonzero","m":0.28,"w":1.058,"p":0.635,"ratio":0.44094488188976383,"bo":"python","base":0.635,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI narrow peak w=1e3","m":0.009,"w":1.152,"p":0.021,"ratio":0.4285714285714285,"bo":"python","base":0.021,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI narrow peak w=1e5","m":0.012,"w":1.107,"p":0.043,"ratio":0.2790697674418605,"bo":"python","base":0.043,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI endpoint x^-1/2","m":0.023,"w":0.704,"p":0.013,"ratio":1.7692307692307694,"bo":"python","base":0.013,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI endpoint x^-9/10","m":0.176,"w":0.715,"p":0.013,"ratio":13.538461538461538,"bo":"python","base":0.013,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI interior kink","m":0.009,"w":3.047,"p":0.008,"ratio":1.125,"bo":"python","base":0.008,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI semi-infinite Gaussian","m":0.009,"w":0.955,"p":0.008,"ratio":1.125,"bo":"python","base":0.008,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"PARITY"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI 2-D product","m":0.002,"w":0.58,"p":0.048,"ratio":0.041666666666666664,"bo":"python","base":0.048,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI 3-D product","m":0.002,"w":0.615,"p":0.998,"ratio":0.0032520325203252032,"bo":"wolfram","base":0.615,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI 2-D ridge","m":2.757,"w":46.435,"p":0.705,"ratio":3.9106382978723406,"bo":"python","base":0.705,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI 30-digit Sin","m":0.105,"w":1.592,"p":0.486,"ratio":0.21604938271604937,"bo":"python","base":0.486,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","label":"NI 50-digit Gaussian","m":7.458,"w":2.106,"p":1.101,"ratio":6.773841961852861,"bo":"python","base":1.101,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"32-ndsolve-ladder","grp":"D uncovered subsystems","label":"NDS decay t=10","m":0.054,"w":0.176,"p":2.524,"ratio":0.3068181818181818,"bo":"wolfram","base":0.176,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"32-ndsolve-ladder","grp":"D uncovered subsystems","label":"NDS decay t=1000","m":0.203,"w":0.212,"p":7.503,"ratio":0.9575471698113208,"bo":"wolfram","base":0.212,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"32-ndsolve-ladder","grp":"D uncovered subsystems","label":"NDS harmonic t=100","m":0.934,"w":0.54,"p":38.862,"ratio":1.7296296296296296,"bo":"wolfram","base":0.54,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"32-ndsolve-ladder","grp":"D uncovered subsystems","label":"NDS harmonic t=1000","m":7.821,"w":3.604,"p":432.964,"ratio":2.1700887902330743,"bo":"wolfram","base":3.604,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"32-ndsolve-ladder","grp":"D uncovered subsystems","label":"NDS Van der Pol mu=10","m":0.326,"w":0.583,"p":3.425,"ratio":0.5591766723842196,"bo":"wolfram","base":0.583,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"},{"exp":"32-ndsolve-ladder","grp":"D uncovered subsystems","label":"NDS Van der Pol mu=100","m":0.642,"w":0.273,"p":0.448,"ratio":2.3516483516483517,"bo":"wolfram","base":0.273,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"32-ndsolve-ladder","grp":"D uncovered subsystems","label":"NDS Van der Pol mu=1000","m":7.711,"w":0.238,"p":0.364,"ratio":32.39915966386555,"bo":"wolfram","base":0.238,"cr":false,"klass":"SLOWER","note":"","missing":null,"band":"SLOWER"},{"exp":"32-ndsolve-ladder","grp":"D uncovered subsystems","label":"NDS Lorenz t=5","m":0.357,"w":0.452,"p":14.952,"ratio":0.7898230088495575,"bo":"wolfram","base":0.452,"cr":false,"klass":"AHEAD","note":"","missing":null,"band":"FASTER"}],"exps":[{"exp":"01-integrate-rational","grp":"A symbolic (sympy)","n":6,"faster":3,"parity":0,"slower":3,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":1.1699193432233905,"med_w":1.1699193432233905,"med_p":0.07581334170258608,"secs":4.067884683609009},{"exp":"02-integrate-transcendental","grp":"A symbolic (sympy)","n":6,"faster":1,"parity":0,"slower":5,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":17.591929824561404,"med_w":17.591929824561404,"med_p":0.48088334296728075,"secs":2.049387216567993},{"exp":"03-simplify","grp":"A symbolic (sympy)","n":6,"faster":1,"parity":0,"slower":5,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":16.0,"med_w":16.0,"med_p":0.044242806782173655,"secs":1.7872300148010254},{"exp":"04-solve","grp":"A symbolic (sympy)","n":6,"faster":5,"parity":0,"slower":1,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":0.5775771175214253,"med_w":0.5775771175214253,"med_p":0.07973900000761378,"secs":3.5668768882751465},{"exp":"05-factor-univariate","grp":"A symbolic (sympy)","n":6,"faster":1,"parity":2,"slower":3,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":1.4961433058258407,"med_w":1.4961433058258407,"med_p":0.08581572178110139,"secs":2.0471551418304443},{"exp":"06-factor-multivariate","grp":"A symbolic (sympy)","n":6,"faster":3,"parity":1,"slower":2,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":0.9647435897435896,"med_w":0.9647435897435896,"med_p":0.025135384448423677,"secs":2.555169105529785},{"exp":"07-groebner","grp":"A symbolic (sympy)","n":6,"faster":5,"parity":0,"slower":1,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":0.4226202626386337,"med_w":0.4226202626386337,"med_p":0.13321623575645478,"secs":27.97757887840271},{"exp":"08-series-limit","grp":"A symbolic (sympy)","n":6,"faster":3,"parity":0,"slower":0,"absent":0,"incomplete":0,"checkfail":3,"nobase":0,"med_best":0.5746965452847806,"med_w":0.5746965452847806,"med_p":null,"secs":301.3938138484955},{"exp":"09-sum-product","grp":"A symbolic (sympy)","n":6,"faster":3,"parity":0,"slower":3,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":1.7205882352941178,"med_w":1.7205882352941178,"med_p":0.10713980802771036,"secs":2.052366018295288},{"exp":"10-polynomial-algebra","grp":"A symbolic (sympy)","n":6,"faster":2,"parity":1,"slower":3,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":2.087256027554535,"med_w":2.087256027554535,"med_p":0.44017583434553764,"secs":2.0449867248535156},{"exp":"11-special-functions","grp":"B numeric libraries (scipy)","n":7,"faster":5,"parity":0,"slower":2,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":0.8754098360655738,"med_w":0.6679738562091503,"med_p":0.1773143843803958,"secs":42.42957019805908},{"exp":"12-quadrature","grp":"B numeric libraries (scipy)","n":6,"faster":1,"parity":2,"slower":3,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":1.4,"med_w":0.03376779920692141,"med_p":1.4,"secs":2.312549114227295},{"exp":"13-ode-integration","grp":"B numeric libraries (scipy)","n":5,"faster":2,"parity":3,"slower":0,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":1.066225165562914,"med_w":1.066225165562914,"med_p":0.05381016042780749,"secs":2.0672199726104736},{"exp":"14-root-finding","grp":"B numeric libraries (scipy)","n":5,"faster":0,"parity":1,"slower":4,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":3.25,"med_w":0.4444444444444445,"med_p":3.25,"secs":2.0635061264038086},{"exp":"15-optimization","grp":"B numeric libraries (scipy)","n":5,"faster":4,"parity":0,"slower":1,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":0.7258883248730964,"med_w":0.6875,"med_p":0.06451612903225806,"secs":2.054128885269165},{"exp":"16-interpolation","grp":"B numeric libraries (scipy)","n":5,"faster":2,"parity":0,"slower":1,"absent":2,"incomplete":0,"checkfail":0,"nobase":0,"med_best":0.22757513191098877,"med_w":0.20636571666319947,"med_p":0.22757513191098877,"secs":2.3034229278564453},{"exp":"17-fft-and-signal","grp":"B numeric libraries (scipy)","n":6,"faster":0,"parity":3,"slower":3,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":1.7584223914603063,"med_w":1.627200418976079,"med_p":1.3262415603449542,"secs":2.5574381351470947},{"exp":"18-dense-linalg-drivers","grp":"B numeric libraries (scipy)","n":7,"faster":4,"parity":0,"slower":3,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":0.9748625294579735,"med_w":0.4645695548268772,"med_p":0.9748625294579735,"secs":3.052889108657837},{"exp":"19-statistics","grp":"B numeric libraries (scipy)","n":9,"faster":2,"parity":4,"slower":3,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":1.3131524008350732,"med_w":1.3131524008350732,"med_p":0.3702081051478642,"secs":2.809702157974243},{"exp":"20-curve-fitting","grp":"B numeric libraries (scipy)","n":5,"faster":0,"parity":0,"slower":5,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":1.62,"med_w":0.568421052631579,"med_p":1.62,"secs":1.5432541370391846},{"exp":"21-strided-views","grp":"C array substrate (numpy)","n":6,"faster":2,"parity":0,"slower":3,"absent":1,"incomplete":0,"checkfail":0,"nobase":0,"med_best":1.9105811484718314,"med_w":0.5647668393782384,"med_p":0.9437229437229436,"secs":1.792891025543213},{"exp":"22-small-matrix-lapack","grp":"C array substrate (numpy)","n":6,"faster":5,"parity":0,"slower":1,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":0.6228874348920874,"med_w":0.6228874348920874,"med_p":0.4717511523413037,"secs":1.5424730777740479},{"exp":"23-per-operation-constant","grp":"C array substrate (numpy)","n":6,"faster":3,"parity":1,"slower":2,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":0.9798792591498926,"med_w":0.9798792591498926,"med_p":0.6588698196773173,"secs":1.5425031185150146},{"exp":"24-heterogeneous-return","grp":"C array substrate (numpy)","n":5,"faster":0,"parity":0,"slower":5,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":166.35466666666667,"med_w":166.35466666666667,"med_p":57.92293407613742,"secs":2.049186944961548},{"exp":"25-vector-transcendentals","grp":"C array substrate (numpy)","n":8,"faster":2,"parity":1,"slower":5,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":1.8399806945963828,"med_w":1.8399806945963828,"med_p":0.13848340297837725,"secs":2.0420258045196533},{"exp":"26-structural-ops","grp":"C array substrate (numpy)","n":7,"faster":2,"parity":0,"slower":5,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":2.0841121495327104,"med_w":2.0841121495327104,"med_p":1.873706004140787,"secs":3.569375991821289},{"exp":"27-elementwise-binary","grp":"C array substrate (numpy)","n":7,"faster":3,"parity":0,"slower":4,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":7.574468085106383,"med_w":0.7702970297029703,"med_p":1.168257756563246,"secs":10.180530071258545},{"exp":"28-span-selector","grp":"C array substrate (numpy)","n":6,"faster":0,"parity":1,"slower":4,"absent":0,"incomplete":1,"checkfail":0,"nobase":0,"med_best":7.2521008403361344,"med_w":7.2521008403361344,"med_p":3.522448979591837,"secs":301.9561080932617},{"exp":"29-graph-ops","grp":"D uncovered subsystems","n":7,"faster":6,"parity":1,"slower":0,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":0.0,"med_w":0.0,"med_p":0.0,"secs":26.672178745269775},{"exp":"30-string-ops","grp":"D uncovered subsystems","n":8,"faster":3,"parity":0,"slower":4,"absent":0,"incomplete":0,"checkfail":0,"nobase":1,"med_best":1.588235294117647,"med_w":0.4663072776280323,"med_p":1.588235294117647,"secs":1.5385839939117432},{"exp":"31-nintegrate-ladder","grp":"D uncovered subsystems","n":15,"faster":6,"parity":2,"slower":7,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":1.125,"med_w":0.0219112593994323,"med_p":1.125,"secs":3.069164752960205},{"exp":"32-ndsolve-ladder","grp":"D uncovered subsystems","n":8,"faster":4,"parity":0,"slower":4,"absent":0,"incomplete":0,"checkfail":0,"nobase":0,"med_best":1.3435883997204752,"med_w":1.3435883997204752,"med_p":0.02554480240737836,"secs":4.570673227310181}],"grps":[{"grp":"A symbolic (sympy)","n":60,"faster":27,"parity":4,"slower":26,"absent":0,"incomplete":0,"checkfail":3,"nobase":0,"med_w":1.0714285714285714,"med_p":0.10294383173112732},{"grp":"B numeric libraries (scipy)","n":60,"faster":20,"parity":13,"slower":25,"absent":2,"incomplete":0,"checkfail":0,"nobase":0,"med_w":0.6606051579592647,"med_p":0.9552719715858229},{"grp":"C array substrate (numpy)","n":51,"faster":17,"parity":3,"slower":29,"absent":1,"incomplete":1,"checkfail":0,"nobase":0,"med_w":1.1477927063339732,"med_p":0.9437229437229436},{"grp":"D uncovered subsystems","n":38,"faster":19,"parity":3,"slower":15,"absent":0,"incomplete":0,"checkfail":0,"nobase":1,"med_w":0.1525439444947028,"med_p":0.4225040257648954}],"history":[{"cases":186,"commit":"6911e788","counts":{"ABSENT":3,"AHEAD":86,"CHECK-FAIL":3,"INCOMPLETE":4,"SLOWER":90},"coverage_pct":87.08,"date":"2026-08-04","groups":{"A symbolic (sympy)":{"absent":0,"ahead":31,"cases":60,"incomplete":3,"median_vs_python":0.104559439265308,"median_vs_wolfram":1.3750000000000002,"slower":26},"B numeric libraries (scipy)":{"absent":2,"ahead":36,"cases":60,"incomplete":3,"median_vs_python":0.9347297550028053,"median_vs_wolfram":0.5319234642497482,"slower":19},"C array substrate (numpy)":{"absent":1,"ahead":15,"cases":51,"incomplete":1,"median_vs_python":1.2518518518518518,"median_vs_wolfram":2.2664941785252264,"slower":34},"D uncovered subsystems":{"absent":0,"ahead":4,"cases":15,"incomplete":0,"median_vs_python":236.94077864114098,"median_vs_wolfram":0.6028806584362141,"slower":11}},"heads_absent":23,"heads_present":155,"mathilda":"Mathilda 0.024 (Apple LLVM 21.0.0 (clang-2100.1.1.101), GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)","median_vs_python":0.6465457100596677,"median_vs_wolfram":1.0595540691192866,"missing_optional_deps":[],"platform":"macOS-26.5.1-arm64-arm-64bit-Mach-O","wall_min":19.74},{"cases":186,"commit":"ab5adbb4","counts":{"ABSENT":3,"AHEAD":97,"CHECK-FAIL":3,"INCOMPLETE":1,"SLOWER":82},"coverage_pct":88.2,"date":"2026-08-05","groups":{"A symbolic (sympy)":{"absent":0,"ahead":30,"cases":60,"incomplete":3,"median_vs_python":0.10861744610459115,"median_vs_wolfram":1.2941176470588234,"slower":27},"B numeric libraries (scipy)":{"absent":2,"ahead":36,"cases":60,"incomplete":0,"median_vs_python":0.9608059278261883,"median_vs_wolfram":0.6845821661998133,"slower":22},"C array substrate (numpy)":{"absent":1,"ahead":20,"cases":51,"incomplete":1,"median_vs_python":0.9545454545454545,"median_vs_wolfram":1.5009174311926603,"slower":29},"D uncovered subsystems":{"absent":0,"ahead":11,"cases":15,"incomplete":0,"median_vs_python":0.28706317936898496,"median_vs_wolfram":0.2605504587155963,"slower":4}},"heads_absent":21,"heads_present":157,"mathilda":"Mathilda 0.032 (Apple LLVM 21.0.0 (clang-2100.1.1.101), GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)","median_vs_python":0.5,"median_vs_wolfram":0.8202982902873771,"missing_optional_deps":[],"platform":"macOS-26.5.1-arm64-arm-64bit-Mach-O","wall_min":12.62},{"cases":209,"commit":"9accfbe7","counts":{"ABSENT":3,"AHEAD":107,"CHECK-FAIL":3,"INCOMPLETE":1,"SLOWER":95},"coverage_pct":88.2,"date":"2026-08-06","groups":{"A symbolic (sympy)":{"absent":0,"ahead":31,"cases":60,"incomplete":3,"median_vs_python":0.10294383173112732,"median_vs_wolfram":1.0714285714285714,"slower":26},"B numeric libraries (scipy)":{"absent":2,"ahead":33,"cases":60,"incomplete":0,"median_vs_python":0.9552719715858229,"median_vs_wolfram":0.6606051579592647,"slower":25},"C array substrate (numpy)":{"absent":1,"ahead":20,"cases":51,"incomplete":1,"median_vs_python":0.9437229437229436,"median_vs_wolfram":1.1477927063339732,"slower":29},"D uncovered subsystems":{"absent":0,"ahead":23,"cases":38,"incomplete":0,"median_vs_python":0.4225040257648954,"median_vs_wolfram":0.1525439444947028,"slower":15}},"heads_absent":21,"heads_present":157,"mathilda":"Mathilda 0.032 (Apple LLVM 21.0.0 (clang-2100.1.1.101), GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)","median_vs_python":0.4478562169017005,"median_vs_wolfram":0.7709243769204506,"missing_optional_deps":[],"platform":"macOS-26.5.1-arm64-arm-64bit-Mach-O","wall_min":12.92}],"coverage":{"pct":88.2,"present":157,"absent":21,"declared":178},"requires":{"Integrate":"present","Apart":"present","Together":"present","D":"present","Factor":"present","Exp":"present","Log":"present","Sin":"present","Tan":"present","ExpIntegralEi":"present","Simplify":"present","FullSimplify":"present","TrigReduce":"present","TrigExpand":"present","Cancel":"present","PowerExpand":"present","Expand":"present","Solve":"present","NSolve":"present","Reduce":"absent","Eliminate":"present","Roots":"absent","FactorList":"present","IrreduciblePolynomialQ":"present","PolynomialGCD":"present","Cyclotomic":"absent","Exponent":"present","Coefficient":"present","GroebnerBasis":"present","MonomialOrder":"absent","Resultant":"present","Series":"present","SeriesCoefficient":"present","Limit":"present","Normal":"present","O":"absent","Direction":"absent","Sum":"present","Product":"present","Zeta":"present","Binomial":"present","Factorial":"present","HarmonicNumber":"present","Infinity":"present","PolynomialLCM":"present","Discriminant":"present","CoefficientList":"present","PolynomialQuotient":"present","PolynomialRemainder":"present","Subresultants":"present","Gamma":"present","LogGamma":"present","BesselJ":"present","BesselY":"present","Erf":"present","Erfc":"present","PolyGamma":"present","AiryAi":"present","ProductLog":"present","EllipticK":"absent","Beta":"present","NIntegrate":"present","AccuracyGoal":"present","PrecisionGoal":"present","WorkingPrecision":"absent","Method":"absent","NDSolve":"present","MaxSteps":"absent","InterpolatingFunction":"present","FindRoot":"present","NRoots":"present","FindMinimum":"present","FindMaximum":"present","Minimize":"absent","NMinimize":"absent","Fit":"present","FindFit":"absent","LeastSquares":"present","Interpolation":"present","InterpolationOrder":"absent","ListInterpolation":"absent","Fourier":"present","InverseFourier":"present","ListConvolve":"present","ListCorrelate":"present","FourierDCT":"present","PeriodogramArray":"absent","Dot":"present","Inverse":"present","Det":"present","LinearSolve":"present","Eigenvalues":"present","Eigenvectors":"present","SingularValueDecomposition":"present","QRDecomposition":"present","LUDecomposition":"present","MatrixRank":"present","PseudoInverse":"present","Norm":"present","Mean":"present","Median":"present","Variance":"present","StandardDeviation":"present","Quartiles":"present","Skewness":"present","Kurtosis":"present","RootMeanSquare":"present","MovingAverage":"present","MovingMedian":"present","ExponentialMovingAverage":"present","Total":"present","Sort":"present","Quantile":"absent","CentralMoment":"present","Design":"absent","Transpose":"present","Partition":"present","Take":"present","Part":"present","Reverse":"present","Flatten":"present","ArrayReshape":"absent","RotateLeft":"present","Do":"present","Table":"present","Plus":"present","Times":"present","Length":"present","Map":"present","UnitStep":"present","Round":"present","Floor":"present","Cos":"present","Sqrt":"present","ArcTan":"present","Sinh":"present","Power":"present","RotateRight":"present","Join":"present","Drop":"present","Riffle":"present","Union":"present","MapThread":"present","Min":"present","Max":"present","Mod":"present","Quotient":"present","Clip":"present","Threshold":"absent","Span":"present","Range":"present","ReplacePart":"present","Graph":"present","EdgeList":"present","VertexList":"present","VertexDegree":"present","AdjacencyMatrix":"present","ConnectedComponents":"present","FindShortestPath":"present","GraphDistance":"present","ConnectedGraphQ":"present","FindSpanningTree":"present","VertexCount":"present","EdgeCount":"present","StringJoin":"present","StringSplit":"present","StringReplace":"present","StringLength":"present","StringTake":"present","StringPosition":"present","StringCases":"present","StringCount":"present","StringReverse":"present","StringRiffle":"present","RegularExpression":"present","StringMatchQ":"present","ToUpperCase":"absent","Characters":"present"},"label_problems":[["08-series-limit",["Limit (Exp[x]-1-x)/x^2 at 0","Limit Sin[x]/x at 0","Limit x (Log[x+1]-Log[x]) at Infinity","Series 1/(1-x-x^2) to order 60","Series Exp[Sin[x]] to order 20","Series Log[1+Sin[x]] to order 24"],[]],["28-span-selector",[],["sieve to 200000 (strided writes)"]]]};</script>
+<script>
+const D = window.__BENCH__;
+const rows = D.rows, exps = D.exps, grps = D.grps, hist = D.history;
+const $ = s => document.querySelector(s);
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const SVGNS = "http://www.w3.org/2000/svg";
+function el(t, a, kids){
+  const e = document.createElementNS(SVGNS, t);
+  for (const k in (a||{})) e.setAttribute(k, a[k]);
+  (kids||[]).forEach(c => e.appendChild(c));
+  return e;
+}
+function txt(t, a){ const e = el("text", a||{}); e.textContent = t; return e; }
+
+/* ---------- number formatting ---------- */
+function ms(v){
+  if (v === null || v === undefined) return "—";
+  if (v >= 1000) return (v/1000).toFixed(2) + " s";
+  if (v >= 1) return v.toFixed(1) + " ms";
+  if (v === 0) return "0.000 ms";
+  return v.toFixed(3) + " ms";
+}
+function ratioTxt(r){
+  if (r === null || r === undefined) return "—";
+  if (r === 0) return "0.00×";
+  if (r >= 100) return r.toFixed(0) + "×";
+  if (r >= 10) return r.toFixed(1) + "×";
+  return r.toFixed(2) + "×";
+}
+/* Lower-bound rendering for clock-resolution rows: one significant figure, "≥". */
+function ratioTxtCR(r){
+  if (r === null || r <= 0) return "—";
+  const mag = Math.pow(10, Math.floor(Math.log10(r)));
+  return "≥" + (mag >= 1 ? mag.toLocaleString() : mag) + "×";
+}
+function showRatio(row){
+  if (row.ratio === null || row.ratio === undefined) return "—";
+  return row.cr ? ratioTxtCR(row.ratio) : ratioTxt(row.ratio);
+}
+const BANDLBL = {FASTER:"faster than both", PARITY:"within 1.5×", SLOWER:"slower",
+                 ABSENT:"absent", INCOMPLETE:"incomplete", "CHECK-FAIL":"check-fail",
+                 NOBASE:"no baseline"};
+
+/* ---------- tooltip ---------- */
+const tt = $("#tt");
+function bindTip(node, html){
+  node.addEventListener("mouseenter", e => { tt.innerHTML = html; tt.style.opacity = 1; });
+  node.addEventListener("mousemove", e => {
+    const pad = 14, w = tt.offsetWidth, hh = tt.offsetHeight;
+    let x = e.clientX + pad, y = e.clientY + pad;
+    if (x + w > innerWidth - 8) x = e.clientX - w - pad;
+    if (y + hh > innerHeight - 8) y = e.clientY - hh - pad;
+    tt.style.left = x + "px"; tt.style.top = y + "px";
+  });
+  node.addEventListener("mouseleave", () => { tt.style.opacity = 0; });
+}
+function rowTip(r){
+  const t = [];
+  t.push("<b>" + escapeHtml(r.label) + "</b>");
+  t.push("<span class='r'>" + escapeHtml(r.exp) + " · " + escapeHtml(r.grp) + "</span><br>");
+  if (r.klass === "CHECK-FAIL") { t.push("<span class='r'>timings withheld — systems disagreed on the value</span>"); return t.join(""); }
+  t.push("Mathilda <b style='display:inline'>" + ms(r.m) + "</b><br>");
+  t.push("Mathematica " + ms(r.w) + "<br>Python " + ms(r.p));
+  if (r.ratio !== null) t.push("<br>ratio vs best (" + (r.bo === "wolfram" ? "Mathematica" : "Python") + "): <b style='display:inline'>" + showRatio(r) + "</b>");
+  if (r.cr) t.push("<br><span class='r'>⚠ baseline under 0.005 ms — at clock resolution; the ratio is a lower bound, not a measurement.</span>");
+  return t.join("");
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ================= chart 1: median trend ================= */
+function trendChart(){
+  const host = $("#c-trend"); host.innerHTML = "";
+  const W = 760, H = 260, L = 52, R = 162, T = 20, Bm = 34;
+  const iw = W - L - R, ih = H - T - Bm;
+  const dates = hist.map(d => d.date);
+  const series = [
+    {k:"median_vs_wolfram", name:"median vs Mathematica", c:cssv("--s1")},
+    {k:"median_vs_python",  name:"median vs Python",      c:cssv("--s2")}
+  ];
+  const yMax = 1.25, yMin = 0.3;
+  const X = i => L + (dates.length === 1 ? iw/2 : i * iw / (dates.length - 1));
+  const Y = v => T + ih - (v - yMin) / (yMax - yMin) * ih;
+  const svg = el("svg", {viewBox:`0 0 ${W} ${H}`, width:W, height:H, role:"img",
+    "aria-label":"Median runtime ratio versus Mathematica and versus Python across the three runs"});
+
+  [0.4,0.6,0.8,1.0,1.2].forEach(v => {
+    const parity = Math.abs(v-1) < 1e-9;
+    svg.appendChild(el("line",{x1:L,x2:L+iw,y1:Y(v),y2:Y(v),
+      stroke: parity ? cssv("--axis") : cssv("--grid"), "stroke-width": parity?1.5:1,
+      "stroke-dasharray": parity ? "5 4" : ""}));
+    svg.appendChild(txt(v.toFixed(1)+"×", {x:L-9, y:Y(v)+4, "text-anchor":"end"}));
+  });
+  svg.appendChild(txt("parity", {x:L+iw+6, y:Y(1.0)+4, "text-anchor":"start"}));
+  dates.forEach((d,i) => svg.appendChild(txt(d, {x:X(i), y:T+ih+21, "text-anchor":"middle", class:"lab"})));
+
+  series.forEach(s => {
+    const pts = hist.map((d,i) => [X(i), Y(d[s.k])]);
+    svg.appendChild(el("path", {d:"M" + pts.map(p => p[0].toFixed(1)+","+p[1].toFixed(1)).join("L"),
+      fill:"none", stroke:s.c, "stroke-width":2, "stroke-linejoin":"round", "stroke-linecap":"round"}));
+    hist.forEach((d,i) => {
+      const g = el("g");
+      g.appendChild(el("circle",{cx:X(i), cy:Y(d[s.k]), r:6.5, fill:cssv("--surface")}));
+      g.appendChild(el("circle",{cx:X(i), cy:Y(d[s.k]), r:4.5, fill:s.c}));
+      const yoff = (s.k === "median_vs_wolfram") ? -13 : 20;
+      g.appendChild(txt(d[s.k].toFixed(3), {x:X(i) + (i === 0 ? 16 : 0), y:Y(d[s.k])+yoff,
+        "text-anchor": i === 0 ? "start" : "middle", class:"val"}));
+      bindTip(g, "<b>" + d.date + "</b><span class='r'>" + s.name + "</span><br>" +
+        d[s.k].toFixed(4) + "× · " + d.cases + " cases · commit " + d.commit);
+      svg.appendChild(g);
+    });
+    const last = hist[hist.length-1];
+    svg.appendChild(txt(s.name, {x:X(dates.length-1)+12, y:Y(last[s.k])+4, "text-anchor":"start",
+      class:"lab", fill:s.c, "font-weight":"600"}));
+  });
+  host.appendChild(svg);
+}
+
+/* ================= chart 2: per-area medians over time (log) ================= */
+function groupTrend(){
+  const host = $("#c-groups"); host.innerHTML = "";
+  const names = Object.keys(hist[hist.length-1].groups).sort();
+  names.forEach(name => {
+    const W = 340, H = 190, L = 46, R = 24, T = 26, Bm = 30;
+    const iw = W-L-R, ih = H-T-Bm;
+    const vals = hist.map(d => d.groups[name]).filter(Boolean);
+    const all = [];
+    vals.forEach(v => { if (v.median_vs_wolfram) all.push(v.median_vs_wolfram);
+                        if (v.median_vs_python) all.push(v.median_vs_python); });
+    const lo = Math.min(0.1, Math.min(...all)), hi = Math.max(3, Math.max(...all));
+    const l0 = Math.floor(Math.log10(lo)), l1 = Math.ceil(Math.log10(hi));
+    const X = i => L + (i * iw / (hist.length-1));
+    const Y = v => T + ih - (Math.log10(v) - l0) / (l1 - l0) * ih;
+    const svg = el("svg",{viewBox:`0 0 ${W} ${H}`, width:W, height:H, role:"img",
+      "aria-label":"Median ratio over time for area " + name});
+    for (let e = l0; e <= l1; e++){
+      const v = Math.pow(10,e), parity = (e === 0);
+      svg.appendChild(el("line",{x1:L,x2:L+iw,y1:Y(v),y2:Y(v),
+        stroke: parity?cssv("--axis"):cssv("--grid"), "stroke-width":parity?1.5:1,
+        "stroke-dasharray": parity?"5 4":""}));
+      svg.appendChild(txt((v>=1?v:v.toFixed(Math.abs(e)))+"×",{x:L-7,y:Y(v)+4,"text-anchor":"end"}));
+    }
+    hist.forEach((d,i) => svg.appendChild(txt(d.date.slice(5),{x:X(i),y:T+ih+19,"text-anchor":"middle"})));
+    svg.appendChild(txt(name,{x:L-40,y:14,"text-anchor":"start",class:"lab","font-weight":"600"}));
+    [["median_vs_wolfram","vs Mathematica",cssv("--s1")],
+     ["median_vs_python","vs Python",cssv("--s2")]].forEach(([k,nm,c]) => {
+      const pts = hist.map((d,i) => [X(i), Y(d.groups[name][k])]);
+      svg.appendChild(el("path",{d:"M"+pts.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join("L"),
+        fill:"none",stroke:c,"stroke-width":2,"stroke-linejoin":"round"}));
+      hist.forEach((d,i) => {
+        const g = el("g");
+        g.appendChild(el("circle",{cx:X(i),cy:Y(d.groups[name][k]),r:5.5,fill:cssv("--surface")}));
+        g.appendChild(el("circle",{cx:X(i),cy:Y(d.groups[name][k]),r:3.8,fill:c}));
+        bindTip(g,"<b>"+name+"</b><span class='r'>"+nm+" · "+d.date+"</span><br>"+
+          d.groups[name][k].toFixed(3)+"× over "+d.groups[name].cases+" cases");
+        svg.appendChild(g);
+      });
+    });
+    const box = document.createElement("div");
+    box.className = "card"; box.style.padding = "10px";
+    box.appendChild(svg);
+    host.appendChild(box);
+  });
+}
+
+/* ================= chart 3: ranked gaps (log) ================= */
+let gapExcludeCR = false, gapN = 25;
+function gapChart(){
+  const host = $("#c-gaps"); host.innerHTML = "";
+  let pool = rows.filter(r => r.band === "SLOWER");
+  if (gapExcludeCR) pool = pool.filter(r => !r.cr);
+  pool = pool.slice().sort((a,b) => b.ratio - a.ratio).slice(0, gapN);
+  const barH = 20, gap = 5, L = 330, R = 78, T = 30, Bm = 26;
+  const iw = 560, ih = pool.length * (barH + gap);
+  const W = L + iw + R, H = T + ih + Bm;
+  const hi = Math.max(...pool.map(r => r.ratio));
+  const l1 = Math.ceil(Math.log10(hi));
+  const X = v => L + (Math.log10(Math.max(v, 1)) / l1) * iw;
+  const svg = el("svg",{viewBox:`0 0 ${W} ${H}`, width:W, height:H, role:"img",
+    "aria-label":"Slowest cases, ratio to the faster baseline, logarithmic scale"});
+  const ticks = [1,2,5,10,20,50,100,200,500,1000].filter(t => t <= Math.pow(10,l1));
+  ticks.forEach(t => {
+    svg.appendChild(el("line",{x1:X(t),x2:X(t),y1:T-6,y2:T+ih,
+      stroke: t===1?cssv("--axis"):cssv("--grid"), "stroke-width": t===1?1.5:1}));
+    svg.appendChild(txt(t+"×",{x:X(t),y:T+ih+17,"text-anchor":"middle"}));
+  });
+  svg.appendChild(txt("parity",{x:X(1),y:T-12,"text-anchor":"middle"}));
+  svg.appendChild(txt("log scale — ratio to the faster of Mathematica / Python",
+    {x:L+iw,y:T-12,"text-anchor":"end"}));
+  pool.forEach((r,i) => {
+    const y = T + i*(barH+gap);
+    const g = el("g");
+    const w = Math.max(X(r.ratio) - L, 2);
+    if (r.cr){
+      g.appendChild(el("rect",{x:L,y:y,width:w,height:barH,rx:4,
+        fill:"none",stroke:cssv("--bad"),"stroke-width":1.5,"stroke-dasharray":"4 3"}));
+    } else {
+      g.appendChild(el("rect",{x:L,y:y,width:w,height:barH,rx:4,fill:cssv("--bad")}));
+    }
+    const nm = r.label.length > 46 ? r.label.slice(0,45)+"…" : r.label;
+    g.appendChild(txt(nm,{x:L-9,y:y+barH-6,"text-anchor":"end",class:"lab"}));
+    g.appendChild(txt(r.exp.split("-")[0],{x:8,y:y+barH-6,"text-anchor":"start"}));
+    g.appendChild(txt(showRatio(r)+(r.cr?" ⚠":""),{x:X(r.ratio)+7,y:y+barH-6,
+      "text-anchor":"start",class:"val",fill:r.cr?cssv("--warn"):cssv("--ink")}));
+    g.appendChild(el("rect",{x:0,y:y-2,width:W,height:barH+4,fill:"transparent"}));
+    bindTip(g, rowTip(r));
+    svg.appendChild(g);
+  });
+  host.appendChild(svg);
+  $("#gap-note").textContent = gapExcludeCR
+    ? "Clock-resolution rows are hidden. " + rows.filter(r=>r.band==="SLOWER"&&r.cr).length +
+      " of the 95 slower cases are excluded because their baseline ran under 0.005 ms."
+    : "Dashed outlines are clock-resolution rows: the baseline ran under 0.005 ms, so the bar is a lower bound, not a measurement. Their ratios are rendered to one significant figure with a ≥.";
+}
+
+/* ================= chart 4: ratio distribution (log bins) ================= */
+function distChart(){
+  const host = $("#c-dist"); host.innerHTML = "";
+  const pool = rows.filter(r => r.ratio !== null && r.ratio > 0);
+  const zeros = rows.filter(r => r.ratio === 0).length;
+  const lo = -4, hi = 3, step = 0.5;
+  const nb = Math.round((hi-lo)/step);
+  const bins = Array.from({length:nb},() => ({n:0,cr:0}));
+  pool.forEach(r => {
+    let b = Math.floor((Math.log10(r.ratio)-lo)/step);
+    b = Math.max(0, Math.min(nb-1, b));
+    bins[b].n++; if (r.cr) bins[b].cr++;
+  });
+  const W = 780, H = 240, L = 44, R = 16, T = 26, Bm = 44;
+  const iw = W-L-R, ih = H-T-Bm;
+  const maxN = Math.max(...bins.map(b => b.n));
+  const bw = iw/nb;
+  const X = v => L + (Math.log10(v)-lo)/(hi-lo)*iw;
+  const Y = n => T + ih - n/maxN*ih;
+  const svg = el("svg",{viewBox:`0 0 ${W} ${H}`,width:W,height:H,role:"img",
+    "aria-label":"Distribution of case ratios on a logarithmic axis"});
+  for (let n = 0; n <= maxN; n += 10){
+    svg.appendChild(el("line",{x1:L,x2:L+iw,y1:Y(n),y2:Y(n),stroke:cssv("--grid")}));
+    svg.appendChild(txt(n,{x:L-7,y:Y(n)+4,"text-anchor":"end"}));
+  }
+  bins.forEach((b,i) => {
+    if (!b.n) return;
+    const x = L + i*bw, y = Y(b.n), hgt = T+ih-y;
+    const g = el("g");
+    g.appendChild(el("rect",{x:x+1,y:y,width:bw-2,height:hgt,rx:3,fill:cssv("--s1")}));
+    if (b.cr){
+      const ch = hgt*b.cr/b.n;
+      g.appendChild(el("rect",{x:x+1,y:T+ih-ch,width:bw-2,height:ch,rx:3,
+        fill:cssv("--warn"),stroke:cssv("--surface"),"stroke-width":2}));
+    }
+    g.appendChild(el("rect",{x:x,y:T,width:bw,height:ih,fill:"transparent"}));
+    const a = Math.pow(10, lo+i*step), bq = Math.pow(10, lo+(i+1)*step);
+    bindTip(g, "<b>"+b.n+" case"+(b.n===1?"":"s")+"</b><span class='r'>ratio "+
+      a.toPrecision(2)+"× – "+bq.toPrecision(2)+"×</span>" +
+      (b.cr ? "<br><span class='r'>"+b.cr+" at clock resolution (lower bounds)</span>" : ""));
+    svg.appendChild(g);
+  });
+  [[1,"parity",cssv("--axis")],[1.5,"SLOWER threshold",cssv("--bad")]].forEach(([v,lab,c]) => {
+    svg.appendChild(el("line",{x1:X(v),x2:X(v),y1:T-8,y2:T+ih,stroke:c,"stroke-width":1.5,
+      "stroke-dasharray":"5 4"}));
+    svg.appendChild(txt(lab,{x:X(v)+(v===1?-5:5),y:T-12,"text-anchor":v===1?"end":"start",fill:c}));
+  });
+  for (let e = lo; e <= hi; e++){
+    const v = Math.pow(10,e);
+    svg.appendChild(txt((v>=1?v.toLocaleString():v.toFixed(Math.abs(e)))+"×",
+      {x:X(v),y:T+ih+17,"text-anchor":"middle"}));
+  }
+  svg.appendChild(txt("Mathilda time ÷ faster baseline (log scale) — left of parity is faster than both baselines",
+    {x:L,y:T+ih+36,"text-anchor":"start"}));
+  host.appendChild(svg);
+  $("#dist-note").innerHTML = pool.length + " of " + rows.length +
+    " cases carry a ratio. " + zeros + " more measured 0.000 ms in Mathilda and cannot be placed on a log axis " +
+    "(they are wins, but unmeasurably so); " +
+    rows.filter(r=>["ABSENT","INCOMPLETE","CHECK-FAIL","NOBASE"].includes(r.band)).length +
+    " carry no ratio at all by design.";
+}
+
+/* ================= per-experiment table ================= */
+function expTable(){
+  const tb = $("#t-exp tbody"); tb.innerHTML = "";
+  exps.forEach(e => {
+    const tr = document.createElement("tr");
+    const segs = [["faster",cssv("--good")],["parity",cssv("--par")],["slower",cssv("--bad")]];
+    const other = e.absent + e.incomplete + e.checkfail + e.nobase;
+    const total = e.n;
+    const w = 128;
+    let x = 0;
+    const svg = el("svg",{width:w,height:13,viewBox:`0 0 ${w} 13`,role:"img",
+      "aria-label":`${e.faster} faster, ${e.parity} within 1.5x, ${e.slower} slower, ${other} not a speed measurement`});
+    segs.concat([["other",cssv("--neutral")]]).forEach(([k,c]) => {
+      const v = k === "other" ? other : e[k];
+      if (!v) return;
+      const sw = v/total*w;
+      svg.appendChild(el("rect",{x:x+1,y:0,width:Math.max(sw-2,1.5),height:13,rx:3,fill:c}));
+      x += sw;
+    });
+    const cells = [
+      `<td><code>${e.exp}</code></td>`,
+      `<td class="tiny">${e.grp.split(" ")[0]}</td>`,
+      `<td class="num">${e.n}</td>`,
+      `<td></td>`,
+      `<td class="num" style="color:var(--goodtext)">${e.faster||""}</td>`,
+      `<td class="num" style="color:var(--par)">${e.parity||""}</td>`,
+      `<td class="num" style="color:var(--bad)">${e.slower||""}</td>`,
+      `<td class="num tiny">${other||""}</td>`,
+      `<td class="num">${e.med_w===null?"—":ratioTxt(e.med_w)}</td>`,
+      `<td class="num">${e.med_p===null?"—":ratioTxt(e.med_p)}</td>`,
+      `<td class="num tiny">${e.secs===null||e.secs===undefined?"—":e.secs.toFixed(1)+"s"}</td>`
+    ];
+    tr.innerHTML = cells.join("");
+    tr.children[3].appendChild(svg);
+    tb.appendChild(tr);
+  });
+}
+
+/* ================= case table ================= */
+let sortKey = "ratio", sortDir = -1, hideCR = false;
+function caseTable(){
+  const q = $("#f-text").value.trim().toLowerCase();
+  const g = $("#f-group").value, b = $("#f-band").value;
+  let list = rows.filter(r => {
+    if (g && r.grp !== g) return false;
+    if (b && r.band !== b) return false;
+    if (hideCR && r.cr) return false;
+    if (q && !(r.label.toLowerCase().includes(q) || r.exp.toLowerCase().includes(q))) return false;
+    return true;
+  });
+  const ORD = {SLOWER:0, PARITY:1, FASTER:2, "CHECK-FAIL":3, ABSENT:4, INCOMPLETE:5, NOBASE:6};
+  list.sort((a,x) => {
+    let av, xv;
+    if (sortKey === "ratio"){ av = a.ratio === null ? -Infinity : a.ratio; xv = x.ratio === null ? -Infinity : x.ratio; }
+    else if (sortKey === "band"){ av = -ORD[a.band]; xv = -ORD[x.band]; }
+    else if (["m","w","p"].includes(sortKey)){
+      av = a[sortKey] === null || a[sortKey] === undefined ? -Infinity : a[sortKey];
+      xv = x[sortKey] === null || x[sortKey] === undefined ? -Infinity : x[sortKey];
+    } else { av = a[sortKey]; xv = x[sortKey]; }
+    if (typeof av === "string") return sortDir * av.localeCompare(xv);
+    return sortDir * (av - xv);
+  });
+  const tb = $("#t-cases tbody");
+  tb.innerHTML = list.map(r => {
+    const cf = r.klass === "CHECK-FAIL";
+    const tcell = v => cf ? `<td class="num withheld">withheld</td>` : `<td class="num">${ms(v)}</td>`;
+    const bcls = "b-" + r.band.replace("-","");
+    return `<tr>
+      <td><code>${escapeHtml(r.exp)}</code></td>
+      <td>${escapeHtml(r.label)}${r.cr ? ' <span class="cr" title="Baseline under 0.005 ms — at clock resolution; the ratio is a lower bound, not a measurement.">⚠</span>' : ""}
+        ${r.note && r.klass !== "SLOWER" ? `<div class="tiny">${escapeHtml(r.note)}</div>` : ""}</td>
+      <td><span class="badge ${bcls}">${BANDLBL[r.band]}</span></td>
+      ${tcell(r.m)}${tcell(r.w)}${tcell(r.p)}
+      <td class="num">${cf ? '<span class="withheld">—</span>' : (r.bo ? (r.bo === "wolfram" ? "Mathematica" : "Python") : "—")}</td>
+      <td class="num" style="${r.band === "SLOWER" ? "color:var(--bad);font-weight:600" : (r.band === "FASTER" ? "color:var(--goodtext)" : "")}">${showRatio(r)}</td>
+    </tr>`;
+  }).join("");
+  $("#case-count").textContent = list.length + " of " + rows.length + " cases";
+}
+
+/* ---------- static tables ---------- */
+function fillList(sel, list, fn){ $(sel).innerHTML = list.map(fn).join(""); }
+
+function init(){
+  trendChart(); groupTrend(); gapChart(); distChart(); expTable();
+
+  // filters
+  const gs = [...new Set(rows.map(r => r.grp))].sort();
+  $("#f-group").innerHTML = '<option value="">all areas</option>' +
+    gs.map(g => `<option>${escapeHtml(g)}</option>`).join("");
+  $("#f-band").innerHTML = '<option value="">all classes</option>' +
+    ["SLOWER","PARITY","FASTER","CHECK-FAIL","ABSENT","INCOMPLETE","NOBASE"]
+      .map(b => `<option value="${b}">${BANDLBL[b]}</option>`).join("");
+  ["#f-text","#f-group","#f-band"].forEach(s => {
+    $(s).addEventListener("input", caseTable);
+    $(s).addEventListener("change", caseTable);
+  });
+  $("#f-cr").addEventListener("change", e => { hideCR = e.target.checked; caseTable(); });
+  document.querySelectorAll("#t-cases th.sortable").forEach(th => {
+    th.addEventListener("click", () => {
+      const k = th.dataset.k;
+      if (k === sortKey) sortDir = -sortDir; else { sortKey = k; sortDir = (k === "exp" || k === "label") ? 1 : -1; }
+      document.querySelectorAll("#t-cases th.sortable").forEach(o => o.classList.remove("asc","desc"));
+      th.classList.add(sortDir === 1 ? "asc" : "desc");
+      caseTable();
+    });
+  });
+  document.querySelector('#t-cases th[data-k="ratio"]').classList.add("desc");
+  caseTable();
+
+  $("#gap-cr").addEventListener("click", e => {
+    gapExcludeCR = !gapExcludeCR;
+    e.target.setAttribute("aria-pressed", gapExcludeCR);
+    e.target.textContent = gapExcludeCR ? "clock-resolution rows hidden" : "clock-resolution rows shown";
+    gapChart();
+  });
+  $("#gap-n").addEventListener("change", e => { gapN = +e.target.value; gapChart(); });
+
+  const tb = $("#themebtn");
+  tb.addEventListener("click", () => {
+    const cur = document.documentElement.getAttribute("data-theme");
+    const nowDark = cur ? cur === "dark"
+      : matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.setAttribute("data-theme", nowDark ? "light" : "dark");
+    trendChart(); groupTrend(); gapChart(); distChart(); expTable();
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (!document.documentElement.getAttribute("data-theme")){
+      trendChart(); groupTrend(); gapChart(); distChart(); expTable();
+    }
+  });
+}
+document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>

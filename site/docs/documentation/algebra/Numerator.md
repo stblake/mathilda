@@ -5,16 +5,15 @@
 
 ## Description
 
-```text
-Numerator[expr]
-    gives the numerator of expr regarded as a rational expression.
-    Picks out factors of expr that do not carry a superficially negative
-    exponent; constants and symbols pass through as-is.
-```
+**`Numerator[expr]`**
 
-## Examples
+gives the numerator of expr regarded as a rational expression. Picks out factors of expr that do not carry a superficially negative exponent; constants and symbols pass through as-is.
 
-All examples below are verified against the current Mathilda build.
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Numerator[(x-1)(x-2)/(x-3)^2]
@@ -22,6 +21,28 @@ Out[1]= (-2 + x) (-1 + x)
 
 In[2]:= Numerator[3/7 + I/11]
 Out[2]= 33 + 7*I
+```
+
+### Applications (6)
+
+```mathematica
+In[3]:= Numerator[6/8]
+Out[3]= 3
+
+In[4]:= Numerator[(x+1)/(x-1)]
+Out[4]= 1 + x
+
+In[5]:= Numerator[x^(-2)]
+Out[5]= 1
+
+In[6]:= Numerator[a/b + c/d]
+Out[6]= a/b + c/d
+
+In[7]:= Numerator[Together[a/b + c/d]]
+Out[7]= b c + a d
+
+In[8]:= Numerator[2 x/(3 y) * z^(-1)]
+Out[8]= 2 x
 ```
 
 ## Implementation notes
@@ -34,55 +55,16 @@ Out[2]= 33 + 7*I
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational normal forms.
 - Source: [`src/rat.c`](https://github.com/stblake/mathilda/blob/main/src/rat.c)
 - Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
+- Tests: [`tests/test_bignum_rational_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bignum_rational_numeric.c)
+- Tests: [`tests/test_eliminate.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eliminate.c)
+- Tests: [`tests/test_rat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_rat.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Numerator[6/8]
-Out[1]= 3
-```
-
-```mathematica
-In[1]:= Numerator[(x+1)/(x-1)]
-Out[1]= 1 + x
-```
-
-```mathematica
-In[1]:= Numerator[x^(-2)]
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= Numerator[a/b + c/d]
-Out[1]= a/b + c/d
-```
-
-Combine the sum into a single fraction first, then `Numerator` returns the
-genuine combined top:
-
-```mathematica
-In[1]:= Numerator[Together[a/b + c/d]]
-Out[1]= b c + a d
-```
-
-Several factors are sorted into numerator and denominator by the sign of their
-exponents — only `z^(-1)` is pushed below the bar:
-
-```mathematica
-In[1]:= Numerator[2 x/(3 y) * z^(-1)]
-Out[1]= 2 x
-```
 
 ### Notes
 

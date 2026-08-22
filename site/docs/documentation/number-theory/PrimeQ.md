@@ -5,19 +5,30 @@
 
 ## Description
 
-```text
-PrimeQ[n]
-    gives True if n is a prime integer, False otherwise.
-PrimeQ[z]
-    for a Gaussian integer z = a + b I, gives True if z is a Gaussian prime.
-PrimeQ[n, GaussianIntegers -> True]
-    tests primality of n in Z[i] rather than in Z.
-Primality is tested with GMP's mpz_probab_prime_p using 25 Miller-Rabin rounds on top of a Baillie-PSW pre-screen, so composite false positives have probability below 4^-25 (definite for n < 2^64).
-```
+**`PrimeQ[n]`**
 
-## Examples
+gives True if n is a prime integer, False otherwise.
 
-All examples below are verified against the current Mathilda build.
+**`PrimeQ[z]`**
+
+for a Gaussian integer z = a + b I, gives True if z is a Gaussian prime.
+
+**`PrimeQ[n, GaussianIntegers -> True]`**
+
+tests primality of n in Z\[i\] rather than in Z.
+
+<details>
+<summary>Notes</summary>
+
+Primality is tested with GMP's mpz\_probab\_prime\_p using 25 Miller-Rabin rounds on top of a Baillie-PSW pre-screen, so composite false positives have probability below 4^-25 (definite for n \< 2^64).
+
+</details>
+
+## Examples (16)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (7)
 
 ```mathematica
 In[1]:= PrimeQ[7]
@@ -38,11 +49,43 @@ Out[5]= False
 In[6]:= PrimeQ[2 + 2 I]
 Out[6]= False
 
-In[7]:= PrimeQ[5, GaussianIntegers -> True]
+In[7]:= PrimeQ[Exp[2 Pi I/3]]
 Out[7]= False
+```
 
-In[8]:= PrimeQ[3, GaussianIntegers -> True]
-Out[8]= True
+### Options (2)
+
+```mathematica
+In[8]:= PrimeQ[5, GaussianIntegers -> True]
+Out[8]= False
+
+In[9]:= PrimeQ[3, GaussianIntegers -> True]
+Out[9]= True
+```
+
+### Applications (7)
+
+```mathematica
+In[10]:= PrimeQ[97]
+Out[10]= True
+
+In[11]:= PrimeQ[2^31 - 1]
+Out[11]= True
+
+In[12]:= PrimeQ[2^67 - 1]
+Out[12]= False
+
+In[13]:= PrimeQ[561]
+Out[13]= False
+
+In[14]:= PrimeQ[5, GaussianIntegers -> True]
+Out[14]= False
+
+In[15]:= PrimeQ[3, GaussianIntegers -> True]
+Out[15]= True
+
+In[16]:= PrimeQ[2 + 3 I]
+Out[16]= True
 ```
 
 ## Implementation notes
@@ -51,60 +94,24 @@ Out[8]= True
 
 - `Listable`, `Protected`.
 - Always returns `True` or `False`. For non-integer / non-Gaussian
+  inputs (symbols, `Sqrt[2]`, `Exp[2 Pi I/3]`, strings, etc.) returns
+  `False` — `*Q` predicates never remain symbolic.
+- A Gaussian integer `a + b I` is a Gaussian prime if:
+  - Both `a` and `b` are nonzero and `a^2 + b^2` is an ordinary prime, or
+  - One of `a`, `b` is zero and the absolute value of the other is a prime congruent to 3 mod 4.
 
 **Attributes:** `Listable`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 
 - Source: [`src/facint.c`](https://github.com/stblake/mathilda/blob/main/src/facint.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_nestwhile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nestwhile.c)
+- Tests: [`tests/test_nestwhilelist.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nestwhilelist.c)
+- Tests: [`tests/test_pred_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_pred_compile.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= PrimeQ[97]
-Out[1]= True
-```
-
-Mersenne numbers `2^p - 1` are handled instantly; `2^31 - 1` is the prime 2147483647, while `2^67 - 1` is composite (a famous factorisation by Frank Nelson Cole):
-
-```mathematica
-In[1]:= PrimeQ[2^31 - 1]
-Out[1]= True
-
-In[2]:= PrimeQ[2^67 - 1]
-Out[2]= False
-```
-
-Carmichael numbers fool the naive Fermat test but not `PrimeQ`; 561 is correctly reported composite:
-
-```mathematica
-In[1]:= PrimeQ[561]
-Out[1]= False
-```
-
-`GaussianIntegers -> True` tests primality in `Z[i]`. A rational prime `p ≡ 1 (mod 4)` splits and is *not* a Gaussian prime, whereas `p ≡ 3 (mod 4)` remains prime:
-
-```mathematica
-In[1]:= PrimeQ[5, GaussianIntegers -> True]
-Out[1]= False
-
-In[2]:= PrimeQ[3, GaussianIntegers -> True]
-Out[2]= True
-```
-
-A Gaussian-integer argument is tested directly; `2 + 3 I` has norm 13 and is a Gaussian prime:
-
-```mathematica
-In[1]:= PrimeQ[2 + 3 I]
-Out[1]= True
-```
 
 ### Notes
 

@@ -5,10 +5,9 @@
 
 ## Description
 
-```text
-Contours
-    ContourPlot option: integer count of auto-levels or explicit list of contour values.
-```
+**`Contours`**
+
+ContourPlot option: integer count of auto-levels or explicit list of contour values.
 
 ## Examples
 
@@ -17,10 +16,6 @@ _No verified examples yet for this function._
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
 
 ## References
 

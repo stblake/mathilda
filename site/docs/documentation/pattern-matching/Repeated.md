@@ -5,35 +5,24 @@
 
 ## Description
 
-```text
-p.. or Repeated[p] is a pattern object that represents a sequence of one or more expressions, each matching p.
-Repeated[p, max] represents from 1 to max expressions matching p.
-Repeated[p, {min, max}] represents between min and max expressions matching p.
-Repeated[p, {n}] represents exactly n expressions matching p.
-```
+**`Repeated[p, max] represents from 1 to max expressions matching p.`**
 
-## Examples
+**`Repeated[p, {min, max}] represents between min and max expressions matching p.`**
 
-_No verified examples yet for this function._
+**`Repeated[p, {n}] represents exactly n expressions matching p.`**
 
-## Implementation notes
+<details>
+<summary>Notes</summary>
 
-`Repeated[p]` (`p..`) is a pattern object handled entirely inside the matcher, not by a builtin. `is_repeated` in `src/match.c` recognises the `Repeated` head, sets the matched-length range to `[1, ∞)` by default, and parses an optional count spec: `Repeated[p, max]` gives `[1, max]`, `Repeated[p, {n}]` gives exactly `n`, `Repeated[p, {min, max}]` gives `[min, max]` (with `Infinity` allowed as an open upper bound). The argument-sequence matcher then matches a run of consecutive arguments each satisfying `p`, using the standard backtracking that explores valid run lengths within the range.
+p.. or Repeated\[p\] is a pattern object that represents a sequence of one or more expressions, each matching p.
 
-**Attributes:** none registered.
+</details>
 
-## Implementation status
+## Examples (5)
 
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+Every input below was run against the current Mathilda build and its output recorded.
 
-## References
-
-- Source: [`src/match.c`](https://github.com/stblake/mathilda/blob/main/src/match.c)
-- Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= MatchQ[{1, 1, 1}, {Repeated[1]}]
@@ -44,19 +33,29 @@ Out[2]= False
 
 In[3]:= MatchQ[{1, 2, 3}, {_Integer ..}]
 Out[3]= True
+
+In[4]:= Cases[{{1}, {1, 1}, {1, 1, 1}, {1, 1, 1, 1}}, {Repeated[1, {2, 3}]}]
+Out[4]= {{1, 1}, {1, 1, 1}}
+
+In[5]:= MatchQ[{1, 2, 3, 4}, {Repeated[_Integer, {4}]}]
+Out[5]= True
 ```
 
-The bound can be a range `{min, max}` or an exact count `{n}`. Combined with
-`Cases`, this filters a list of lists by length — keeping only those with two or
-three matching elements:
+## Implementation notes
 
-```mathematica
-In[1]:= Cases[{{1}, {1, 1}, {1, 1, 1}, {1, 1, 1, 1}}, {Repeated[1, {2, 3}]}]
-Out[1]= {{1, 1}, {1, 1, 1}}
+`Repeated[p]` (`p..`) is a pattern object handled entirely inside the matcher, not by a builtin. `is_repeated` in `src/match.c` recognises the `Repeated` head, sets the matched-length range to `[1, ∞)` by default, and parses an optional count spec: `Repeated[p, max]` gives `[1, max]`, `Repeated[p, {n}]` gives exactly `n`, `Repeated[p, {min, max}]` gives `[min, max]` (with `Infinity` allowed as an open upper bound). The argument-sequence matcher then matches a run of consecutive arguments each satisfying `p`, using the standard backtracking that explores valid run lengths within the range.
 
-In[2]:= MatchQ[{1, 2, 3, 4}, {Repeated[_Integer, {4}]}]
-Out[2]= True
-```
+**Attributes:** none registered.
+
+## References
+
+- Source: [`src/match.c`](https://github.com/stblake/mathilda/blob/main/src/match.c)
+- Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
+- Tests: [`tests/test_match_extensive.c`](https://github.com/stblake/mathilda/blob/main/tests/test_match_extensive.c)
+- Tests: [`tests/test_parse.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parse.c)
+- Tests: [`tests/test_replace.c`](https://github.com/stblake/mathilda/blob/main/tests/test_replace.c)
+
+## Notes & additional examples
 
 ### Notes
 

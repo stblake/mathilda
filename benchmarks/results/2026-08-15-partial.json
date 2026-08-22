@@ -1,0 +1,297 @@
+{
+ "host": {
+  "date": "2026-08-15",
+  "missing_optional_deps": [],
+  "platform": "macOS-15.7.4-x86_64-i386-64bit",
+  "machine": "x86_64",
+  "processor": "i386",
+  "mathilda": "Mathilda 0.054 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)",
+  "mathilda_bin": "/Users/user/Mathilda_dev/Mathilda/Mathilda",
+  "python_bin": "python3.11",
+  "python_libs": "3.11.15 2.4.4 1.17.1 1.14.0",
+  "wolframscript": "/Applications/Mathematica.app/Contents/MacOS/wolframscript",
+  "runner_python": "3.11.15",
+  "local_versions": {
+   "numpy": "2.4.4",
+   "scipy": "1.17.1",
+   "sympy": "1.14.0",
+   "mpmath": "1.3.0",
+   "numba": "absent",
+   "networkx": "3.6.1"
+  }
+ },
+ "rows": [
+  {
+   "experiment": "67-tnc-scaling",
+   "group": "D uncovered subsystems",
+   "label": "01 Rosenbrock2D",
+   "times": {
+    "mathilda": 0.093,
+    "python": 2.041
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.04556589906908378,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "67-tnc-scaling",
+   "group": "D uncovered subsystems",
+   "label": "02 Rosenbrock n10",
+   "times": {
+    "mathilda": 0.722,
+    "python": 4.355
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.1657864523536165,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "67-tnc-scaling",
+   "group": "D uncovered subsystems",
+   "label": "03 Rosenbrock n30",
+   "times": {
+    "mathilda": 3.31,
+    "python": 5.914
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.5596888738586405,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "67-tnc-scaling",
+   "group": "D uncovered subsystems",
+   "label": "04 illcond n10 c1e6",
+   "times": {
+    "mathilda": 0.503,
+    "python": 1.894
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.2655755015839493,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "67-tnc-scaling",
+   "group": "D uncovered subsystems",
+   "label": "05 illcond n50 c1e4",
+   "times": {
+    "mathilda": 4.111,
+    "python": 3.853
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 1.0669608097586296,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "67-tnc-scaling",
+   "group": "D uncovered subsystems",
+   "label": "06 illcond n100 c1e4",
+   "times": {
+    "mathilda": 12.692,
+    "python": 5.192
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 2.4445300462249615,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "67-tnc-scaling",
+   "group": "D uncovered subsystems",
+   "label": "07 Trid n6",
+   "times": {
+    "mathilda": 0.133,
+    "python": 0.64
+   },
+   "checks": {
+    "mathilda": "-50",
+    "python": "-50"
+   },
+   "ratio": 0.2078125,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "67-tnc-scaling",
+   "group": "D uncovered subsystems",
+   "label": "08 Bound-corner",
+   "times": {
+    "mathilda": 0.027,
+    "python": 0.238
+   },
+   "checks": {
+    "mathilda": "5",
+    "python": "5"
+   },
+   "ratio": 0.1134453781512605,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "67-tnc-scaling",
+   "group": "D uncovered subsystems",
+   "label": "09 Many-active n10",
+   "times": {
+    "mathilda": 0.103,
+    "python": 0.233
+   },
+   "checks": {
+    "mathilda": "160",
+    "python": "160"
+   },
+   "ratio": 0.4420600858369098,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "67-tnc-scaling",
+   "group": "D uncovered subsystems",
+   "label": "10 Booth",
+   "times": {
+    "mathilda": 0.045,
+    "python": 0.24
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.1875,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "67-tnc-scaling",
+   "group": "D uncovered subsystems",
+   "label": "11 Wood",
+   "times": {
+    "mathilda": 0.918,
+    "python": 2.792
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.32879656160458454,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  }
+ ],
+ "requires": {
+  "FindMinimum": "present"
+ },
+ "raw": {
+  "67-tnc-scaling": {
+   "mathilda": {
+    "bench": {
+     "01 Rosenbrock2D": 0.093,
+     "02 Rosenbrock n10": 0.722,
+     "03 Rosenbrock n30": 3.31,
+     "04 illcond n10 c1e6": 0.503,
+     "05 illcond n50 c1e4": 4.111,
+     "06 illcond n100 c1e4": 12.692,
+     "07 Trid n6": 0.133,
+     "08 Bound-corner": 0.027,
+     "09 Many-active n10": 0.103,
+     "10 Booth": 0.045,
+     "11 Wood": 0.918
+    },
+    "check": {
+     "01 Rosenbrock2D": "0",
+     "02 Rosenbrock n10": "0",
+     "03 Rosenbrock n30": "0",
+     "04 illcond n10 c1e6": "0",
+     "05 illcond n50 c1e4": "0",
+     "06 illcond n100 c1e4": "0",
+     "07 Trid n6": "-50",
+     "08 Bound-corner": "5",
+     "09 Many-active n10": "160",
+     "10 Booth": "0",
+     "11 Wood": "0"
+    },
+    "require": {
+     "FindMinimum": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "01 Rosenbrock2D": 2.041,
+     "02 Rosenbrock n10": 4.355,
+     "03 Rosenbrock n30": 5.914,
+     "04 illcond n10 c1e6": 1.894,
+     "05 illcond n50 c1e4": 3.853,
+     "06 illcond n100 c1e4": 5.192,
+     "07 Trid n6": 0.64,
+     "08 Bound-corner": 0.238,
+     "09 Many-active n10": 0.233,
+     "10 Booth": 0.24,
+     "11 Wood": 2.792
+    },
+    "check": {
+     "01 Rosenbrock2D": "0",
+     "02 Rosenbrock n10": "0",
+     "03 Rosenbrock n30": "0",
+     "04 illcond n10 c1e6": "0",
+     "05 illcond n50 c1e4": "0",
+     "06 illcond n100 c1e4": "0",
+     "07 Trid n6": "-50",
+     "08 Bound-corner": "5",
+     "09 Many-active n10": "160",
+     "10 Booth": "0",
+     "11 Wood": "0"
+    },
+    "require": {
+     "scipy.optimize:minimize": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  }
+ },
+ "elapsed_s": 2.587074041366577,
+ "durations": {
+  "67-tnc-scaling": 1.0326991081237793
+ },
+ "partial": true,
+ "label_problems": []
+}

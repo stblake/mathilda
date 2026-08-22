@@ -5,14 +5,20 @@
 
 ## Description
 
-```text
-DesignMatrix[data, {f1, ..., fn}, vars] gives the design matrix with entries f_i evaluated at the data coordinates.
+**`DesignMatrix[data, {f1, ..., fn}, vars] gives the design matrix with entries f_i evaluated at the data coordinates.`**
+
+<details>
+<summary>Notes</summary>
+
 Data shapes match Fit. The WorkingPrecision option converts entries to machine or n-digit reals; otherwise they are exact.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= DesignMatrix[{{0,1},{1,0},{3,2},{5,4}}, {1, x}, x]
@@ -20,6 +26,90 @@ Out[1]= {{1, 0}, {1, 1}, {1, 3}, {1, 5}}
 
 In[2]:= DesignMatrix[{{0,0,0},{1,0,1},{0,1,2}}, {1, x, y}, {x, y}]
 Out[2]= {{1, 0, 0}, {1, 1, 0}, {1, 0, 1}}
+```
+
+### Applications (4)
+
+```mathematica
+In[3]:= DesignMatrix[{{0, 1}, {1, 0}, {3, 2}, {5, 4}}, {1, x}, x]
+Out[3]= {{1, 0}, {1, 1}, {1, 3}, {1, 5}}
+
+In[4]:= DesignMatrix[{{1, 1}, {2, 8}, {3, 27}}, {1, x, x^2, x^3}, x]
+Out[4]= {{1, 1, 1, 1}, {1, 2, 4, 8}, {1, 3, 9, 27}}
+
+In[5]:= DesignMatrix[{{1, 1, 5}, {2, 4, 6}, {3, 9, 2}}, {1, x, y, x*y}, {x, y}]
+Out[5]= {{1, 1, 1, 1}, {1, 2, 4, 8}, {1, 3, 9, 27}}
+
+In[6]:= DesignMatrix[{{1, 2}, {2, 5}}, {1, Sin[x]}, x, WorkingPrecision -> 40]
+Out[6]= {{1.0, 0.84147098480789650665250232163029899962254}, {1.0, 0.90929742682568169539601986591174484270222}}
+```
+
+## Algorithm
+
+fit.c — linear least-squares regression (Fit) and DesignMatrix.
+
+This module implements Mathematica's `Fit` builtin: it fits a linear
+
+```text
+combination  a1 f1 + ... + an fn  of basis functions to data, plus the
+```
+
+companion `DesignMatrix` (the matrix of basis functions evaluated at the data coordinates).
+
+Call forms ----------
+
+```text
+  Fit[data, {f1,...,fn}, vars]
+      Fits a1 f1 + ... + an fn to `data`.  `vars` is a single symbol `x`
+      or a list {x, y, ...}.  Returns the symbolic fit expression.
+  Fit[{m, v}]
+      Given a design matrix `m` and response vector `v`, returns the
+      coefficient vector a minimising ||m.a - v||.
+  DesignMatrix[data, {f1,...,fn}, vars]
+      Returns the design matrix m_ij = f_i(coords_j).
+```
+
+Data shapes (3-argument form) -----------------------------
+
+```text
+  {v1,...,vn}            equivalent to {{1,v1},...,{n,vn}}.
+  {{x1,v1},...}          univariate: coordinate x_i, response v_i.
+  {{x1,...,xk,v1},...}   multivariate: leading k coordinates, last value.
+```
+
+Options -------
+
+```text
+  WorkingPrecision -> Automatic  (default; exact input -> machine reals)
+                    -> n         (n-digit MPFR arithmetic)
+                    -> Infinity  (exact rational arithmetic)
+  FitRegularization -> {"Tikhonov"|"L2"|"RidgeRegression", lambda}
+                         minimise ||m.a-v||^2 + lambda ||a||^2 (ridge).
+                    -> {"LASSO"|"L1", lambda}
+                         minimise ||m.a-v||^2 + lambda ||a||_1.
+  NormFunction -> Function[Norm[#,p]]
+                    minimise normf[m.a - v] instead of the 2-norm.
+```
+
+Solvers (reuse-first) ---------------------
+
+```text
+  * Plain L2 and ridge route through the existing LeastSquares builtin,
+    which already supports exact (rational), machine (Real) and MPFR
+    arithmetic.  Ridge is reduced to ordinary least squares on the
+    augmented system [m; sqrt(lambda) I] / [v; 0].
+  * LASSO uses cyclic coordinate descent with soft-thresholding
+    (machine precision).
+  * NormFunction -> Norm[#,1] (least absolute deviations) uses iteratively
+    reweighted least squares (IRLS, machine precision).
+  * Any other norm (or a norm combined with regularisation) falls back to
+    the FindMinimum builtin, warm-started from the L2 solution.
+```
+
+Memory ownership follows the standard builtin contract: the evaluator owns `res` and frees it; this file never frees `res` or its argument
+
+```text
+subtrees.  Every intermediate built here is freed on every return path.
 ```
 
 ## Implementation notes
@@ -30,38 +120,15 @@ Out[2]= {{1, 0, 0}, {1, 1, 0}, {1, 0, 1}}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Fit](../../linear-algebra/Fit/), [List](../../other-advanced/List/)
 
 - Source: [`src/fit.c`](https://github.com/stblake/mathilda/blob/main/src/fit.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_fit.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fit.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= DesignMatrix[{{0, 1}, {1, 0}, {3, 2}, {5, 4}}, {1, x}, x]
-Out[1]= {{1, 0}, {1, 1}, {1, 3}, {1, 5}}
-```
-
-```mathematica
-In[1]:= DesignMatrix[{{1, 1}, {2, 8}, {3, 27}}, {1, x, x^2, x^3}, x]
-Out[1]= {{1, 1, 1, 1}, {1, 2, 4, 8}, {1, 3, 9, 27}}
-```
-
-```mathematica
-In[1]:= DesignMatrix[{{1, 1, 5}, {2, 4, 6}, {3, 9, 2}}, {1, x, y, x*y}, {x, y}]
-Out[1]= {{1, 1, 1, 1}, {1, 2, 4, 8}, {1, 3, 9, 27}}
-```
-
-```mathematica
-In[1]:= DesignMatrix[{{1, 2}, {2, 5}}, {1, Sin[x]}, x, WorkingPrecision -> 40]
-Out[1]= {{1.0, 0.84147098480789650665250232163029899962254}, {1.0, 0.90929742682568169539601986591174484270222}}
-```
 
 ### Notes
 

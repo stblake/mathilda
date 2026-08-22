@@ -554,7 +554,15 @@ static Expr** solve_quartic_radical(Expr* a, Expr* b, Expr* c, Expr* d,
 
     Expr** out = (Expr**)malloc(sizeof(Expr*) * 4);
 
-    if (is_definite_zero(q)) {
+    /* Biquadratic iff the depressed linear coefficient q vanishes.  Use the
+     * polynomial-identity zero test, not a literal one: for a circulant-style
+     * characteristic polynomial (eigenvalues symmetric about -B/4) q is
+     * *identically* zero yet evaluation leaves it as an unreduced expression.
+     * Missing this sent such quartics down the resolvent-cubic path, which is
+     * both enormous and — because a zero q forces the resolvent root y=0 and a
+     * 0/0 in q/Sqrt[2y] — numerically wrong.  A definite zero is required; an
+     * unknown verdict falls through to the general (nonzero-q) branch. */
+    if (zero_test_decide(q) == ZERO_TEST_TRUE) {
         /* Biquadratic depressed quartic: u^2 = (-p +/- Sqrt[p^2 - 4 r])/2. */
         Expr* disc = eval_and_free(mk_fn2("Plus",
             eval_and_free(mk_pow(expr_copy(p), mk_int(2))),
@@ -619,6 +627,24 @@ static Expr** solve_quartic_radical(Expr* a, Expr* b, Expr* c, Expr* d,
     expr_free(p); expr_free(q); expr_free(r); expr_free(B); expr_free(shift);
     *out_n = 4;
     return out;
+}
+
+/* True when the depressed quartic (via x -> x - b/(4a)) has a vanishing linear
+ * coefficient, i.e. it is biquadratic.  The depressed linear term is
+ * q = (b^3 - 4abc + 8a^2 d)/(8a^3); its numerator is a plain polynomial in the
+ * coefficients, tested for identity-zero.  Such a quartic is always solvable in
+ * clean nested square roots, so it is emitted in radical form irrespective of
+ * the Quartics option.  Borrows a, b, c, d. */
+static bool quartic_depressed_is_biquadratic(Expr* a, Expr* b, Expr* c, Expr* d) {
+    Expr* b3 = eval_and_free(mk_pow(expr_copy(b), mk_int(3)));
+    Expr* m4abc = eval_and_free(mk_fn4("Times", mk_int(-4),
+                        expr_copy(a), expr_copy(b), expr_copy(c)));
+    Expr* a2 = eval_and_free(mk_pow(expr_copy(a), mk_int(2)));
+    Expr* p8a2d = eval_and_free(mk_fn3("Times", mk_int(8), a2, expr_copy(d)));
+    Expr* numq = eval_and_free(mk_fn3("Plus", b3, m4abc, p8a2d));
+    bool z = (zero_test_decide(numq) == ZERO_TEST_TRUE);
+    expr_free(numq);
+    return z;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1117,10 +1143,13 @@ static bool handle_factor(Expr* g, Expr* var, bool reals_only,
         return true;
     }
 
-    /* Ferrari radical quartic (Quartics -> True).  Only over Complexes:
-     * the radical path returns all four roots and does not attempt a
-     * real/non-real split, so a Reals request falls through to Root[]. */
-    if (dg == 4 && opts->quartics_radical && !reals_only) {
+    /* Ferrari radical quartic.  Emitted when Quartics -> True, OR — regardless
+     * of the option — when the quartic is biquadratic after depression, since
+     * that special family is always solvable in clean nested square roots (the
+     * general resolvent-cubic case is what Quartics -> False keeps as Root[]).
+     * Only over Complexes: the radical path returns all four roots and does not
+     * attempt a real/non-real split, so a Reals request falls through to Root[]. */
+    if (dg == 4 && !reals_only) {
         Expr* a = get_coeff(g, var, 4);
         Expr* b = get_coeff(g, var, 3);
         Expr* c = get_coeff(g, var, 2);
@@ -1130,12 +1159,17 @@ static bool handle_factor(Expr* g, Expr* var, bool reals_only,
             expr_free(a); expr_free(b); expr_free(c); expr_free(d); expr_free(e);
             return false;
         }
-        size_t outc = 0;
-        Expr** rs = solve_quartic_radical(a, b, c, d, e, &outc);
+        if (opts->quartics_radical
+            || quartic_depressed_is_biquadratic(a, b, c, d)) {
+            size_t outc = 0;
+            Expr** rs = solve_quartic_radical(a, b, c, d, e, &outc);
+            expr_free(a); expr_free(b); expr_free(c); expr_free(d); expr_free(e);
+            sl_extend_with_mult(sl, rs, outc, mult);
+            free(rs);
+            return true;
+        }
         expr_free(a); expr_free(b); expr_free(c); expr_free(d); expr_free(e);
-        sl_extend_with_mult(sl, rs, outc, mult);
-        free(rs);
-        return true;
+        /* general quartic with Quartics -> False: fall through to Root[]. */
     }
 
     /* Polynomial decomposition last-ditch (Maxima solve-by-
@@ -1417,6 +1451,7 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
      * collapse to an Integer after Cardano's substitution. */
     bool reals_only = false;
     bool integers_only = false;
+    bool rationals_only = false;
     if (dom && dom->type == EXPR_SYMBOL) {
         const char* dsym = dom->data.symbol.name;
         if (dsym == SYM_Reals) {
@@ -1424,9 +1459,17 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
         } else if (dsym == SYM_Integers) {
             reals_only = true;
             integers_only = true;
+        } else if (dsym == SYM_Rationals) {
+            /* Rationals: solve over Reals (sound -- every rational is
+             * real, and the Reals filter prunes provably-complex roots),
+             * then keep only candidates that collapsed to a concrete
+             * Integer / BigInt / Rational.  Mirrors the Integers policy;
+             * Sqrt / Root / symbolic residues are dropped. */
+            reals_only = true;
+            rationals_only = true;
         } else if (dsym != SYM_Complexes) {
-            /* Rationals / Algebraics / Primes / Booleans etc. are not
-             * yet wired up; leave the call unevaluated. */
+            /* Algebraics / Primes / Booleans etc. are not yet wired up;
+             * leave the call unevaluated. */
             return NULL;
         }
     }
@@ -1744,6 +1787,24 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
         for (size_t i = 0; i < sl.count; i++) {
             Expr* v = sl.vals[i];
             if (v->type == EXPR_INTEGER || v->type == EXPR_BIGINT) {
+                sl.vals[kept++] = v;
+            } else {
+                expr_free(v);
+            }
+        }
+        sl.count = kept;
+    }
+
+    /* Rationals-domain filter.  Keep every candidate that is a provably
+     * concrete rational -- Integer, BigInt, or Rational[p, q] -- via
+     * is_rational_like(); drop Sqrt / Root / symbolic residues.  Same
+     * "only trust what has already collapsed" contract as the Integers
+     * filter, just admitting non-integer rationals. */
+    if (rationals_only) {
+        size_t kept = 0;
+        for (size_t i = 0; i < sl.count; i++) {
+            Expr* v = sl.vals[i];
+            if (is_rational_like(v)) {
                 sl.vals[kept++] = v;
             } else {
                 expr_free(v);

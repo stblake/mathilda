@@ -5,19 +5,13 @@
 
 ## Description
 
-```text
-a . b . c or Dot[a, b, c]
-    contracts the last index of each argument with the first index of
-    the next: matrix-matrix, matrix-vector, vector-vector, and general
-    tensor inner products.
-Numeric machine-precision Real / Complex matrix-matrix dot dispatches
-to BLAS dgemm / zgemm when available; exact and symbolic inputs use
-the elementwise sum-of-products.
-```
+a . b . c or Dot\[a, b, c\] contracts the last index of each argument with the first index of the next: matrix-matrix, matrix-vector, vector-vector, and general tensor inner products. Numeric machine-precision Real / Complex matrix-matrix dot dispatches to BLAS dgemm / zgemm when available; exact and symbolic inputs use the elementwise sum-of-products.
 
-## Examples
+## Examples (7)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= {a, b, c} . {x, y, z}
@@ -28,6 +22,22 @@ Out[2]= {a x + b y, c x + d y}
 
 In[3]:= {{a, b}, {c, d}} . {{1, 2}, {3, 4}}
 Out[3]= {{a + 3 b, 2 a + 4 b}, {c + 3 d, 2 c + 4 d}}
+```
+
+### Applications (4)
+
+```mathematica
+In[4]:= Dot[{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}]
+Out[4]= {{19, 22}, {43, 50}}
+
+In[5]:= {1, 2, 3} . {4, 5, 6}
+Out[5]= 32
+
+In[6]:= {{1, 2}, {3, 4}} . {5, 6}
+Out[6]= {17, 39}
+
+In[7]:= {{1, 2}, {3, 4}} . {{0, 1}, {1, 0}} . {{1, 2}, {3, 4}}
+Out[7]= {{5, 8}, {13, 20}}
 ```
 
 ## Implementation notes
@@ -45,42 +55,27 @@ Out[3]= {{a + 3 b, 2 a + 4 b}, {c + 3 d, 2 c + 4 d}}
 - When arguments are not lists, `Dot` remains unevaluated.
 - Gives an error message `Dot::dotsh` if the shapes of the inputs are not compatible.
 - **Compilable.** Over machine arrays `Dot` lowers inside `Compile[]` and
+  auto-compilation: matrix shapes through a BLAS-first path (`A_NDFN2`), the
+  `vector·vector` inner product to a scalar (`V_NDFN2`), real and complex.
+  Together with `Inverse`, `LinearSolve`, `Cross`, `LeastSquares`, `Normalize`,
+  `MatrixPower`, `PseudoInverse`, and `ConjugateTranspose` — see
+  [packed-arrays.md](../packed-arrays/index.md).
 
 **Attributes:** `Flat`, `OneIdentity`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Flat](../../expression-information/Flat/), [OneIdentity](../../expression-information/OneIdentity/), [Inverse](../../linear-algebra/Inverse/), [LinearSolve](../../linear-algebra/LinearSolve/), [Cross](../../linear-algebra/Cross/), [LeastSquares](../../linear-algebra/LeastSquares/), [Normalize](../../linear-algebra/Normalize/), [MatrixPower](../../linear-algebra/MatrixPower/)
 
 - G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — matrix and vector products.
 - Source: [`src/linalg/dot.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/dot.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_distribute.c`](https://github.com/stblake/mathilda/blob/main/tests/test_distribute.c)
+- Tests: [`tests/test_latticereduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_latticereduce.c)
+- Tests: [`tests/test_linalg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linalg.c)
+- Tests: [`tests/test_linearsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_linearsolve.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Dot[{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}]
-Out[1]= {{19, 22}, {43, 50}}
-```
-
-```mathematica
-In[1]:= {1, 2, 3} . {4, 5, 6}
-Out[1]= 32
-```
-
-```mathematica
-In[1]:= {{1, 2}, {3, 4}} . {5, 6}
-Out[1]= {17, 39}
-```
-
-```mathematica
-In[1]:= {{1, 2}, {3, 4}} . {{0, 1}, {1, 0}} . {{1, 2}, {3, 4}}
-Out[1]= {{5, 8}, {13, 20}}
-```
 
 ### Notes
 

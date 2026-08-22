@@ -10,18 +10,44 @@
   import { listen } from '@tauri-apps/api/event';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import Canvas from './lib/Canvas.svelte';
-  import KernelStatus from './lib/KernelStatus.svelte';
+  import Toolbar from './lib/Toolbar.svelte';
+  import { MENU_IDS, runMenuCommand } from './lib/menuCommands';
+  import PropertiesPanel from './lib/PropertiesPanel.svelte';
+  import SearchBar from './lib/SearchBar.svelte';
+  import { searchOpen } from './lib/search';
+  import { uiScale } from './lib/properties';
   import { kernelStatus } from './lib/notebook';
-  import { pingKernel, restartKernel, saveLibrary, loadLibrary, setWindowTitle as setTitleCmd } from './lib/ipc';
-  import { serializeLibrary, loadLibraryData } from './lib/canvas';
+  import { darkMode } from './lib/theme';
+  import { kernelMemory } from './lib/status';
+  import { pingKernel, saveLibrary, loadLibrary, setWindowTitle as setTitleCmd } from './lib/ipc';
+  import { restart, abortEvaluation } from './lib/kernelActions';
+  import { serializeLibrary, loadLibraryData, canvasState, activeActions, activeFlags, setFocused } from './lib/canvas';
+  /* Imported for its side effect: installs the document-level Cmd+click
+     handler that opens a symbol's reference page. Importing it here rather
+     than relying on a cell to pull it in means the gesture works from the
+     moment the app loads. */
+  import './lib/refpages';
 
   // ---------------------------------------------------------------------------
-  // Dark mode (default to dark — canvas is always dark)
+  // Dark mode. The store lives in lib/theme.ts so the toolbar and the
+  // properties panel can reach it; the DOM write stays here.
 
-  const darkMode = writable(true);
-  // :root = dark defaults; add 'light' class when user switches to light mode
-  $: if (typeof document !== 'undefined')
+  /* Set BOTH classes, not just .light: app.css keys its palette off
+     :root:not(.light) inside the dark media query and :root.dark outside it,
+     so an explicit choice has to be stated in whichever direction it differs
+     from the OS. Toggling only .light left OS-light + app-dark unstyled. */
+  $: if (typeof document !== 'undefined') {
     document.documentElement.classList.toggle('light', !$darkMode);
+    document.documentElement.classList.toggle('dark', $darkMode);
+  }
+
+  /* Title of the ACTIVE pane, for the app bar. With one pane that is the
+     notebook filling the window, as before; with several it names the one the
+     bar's own buttons will act on, which is the cheapest and strongest signal
+     available that the toolbar has a target. */
+  $: focusedTitle = $canvasState.focusedActiveId
+    ? ($canvasState.notebooks.find(n => n.id === $canvasState.focusedActiveId)?.title ?? '')
+    : '';
 
   // ---------------------------------------------------------------------------
   // Kernel init
@@ -42,12 +68,20 @@
 
   onMount(async () => {
     try {
-      unlisten.push(await listen('menu:open',        () => openFile()));
-      unlisten.push(await listen('menu:save',        () => saveFile()));
-      unlisten.push(await listen('menu:save-as',     () => saveFileAs()));
-      unlisten.push(await listen('menu:restart',     () => restart()));
-      unlisten.push(await listen('menu:interrupt',   () => {}));
-      unlisten.push(await listen('menu:toggle-dark', () => darkMode.update(v => !v)));
+      /* Every id the native menu can emit, subscribed from one list. Previously each item needed
+         its own one-line listener here, so an item added in Rust silently did nothing until
+         someone remembered this file; now the two sides share MENU_IDS and the dispatcher warns
+         about an id it has no case for. */
+      /* The kernel reports its resident memory with every `done`; the status bar shows the
+         latest. Its own event rather than part of a cell's output stream, since a memory reading
+         is not output. */
+      unlisten.push(await listen<number>('kernel-memory',
+                                         (e) => kernelMemory.set(e.payload)));
+
+      const hooks = { openFile, saveFile, saveFileAs };
+      for (const id of MENU_IDS) {
+        unlisten.push(await listen(`menu:${id}`, () => runMenuCommand(id, hooks)));
+      }
     } catch (e) { console.warn('Menu listen error:', e); }
   });
 
@@ -107,27 +141,35 @@
   // ---------------------------------------------------------------------------
   // Kernel restart
 
-  async function restart() {
-    kernelStatus.set('restarting');
-    try { await restartKernel(); kernelStatus.set('ready'); }
-    catch { kernelStatus.set('dead'); }
-  }
+  /* restart() and abortEvaluation() live in lib/kernelActions.ts so the
+     toolbar's kernel menu drives exactly the same paths as the native Kernel
+     menu. Two implementations of "abort" is how one of them ends up wrong. */
 
   // ---------------------------------------------------------------------------
-  // Global UI scale (Cmd+= zoom in, Cmd+- zoom out, Cmd+0 reset)
-  let uiScale = 1.0;
-  $: document.documentElement.style.fontSize = `${uiScale * 16}px`;
+  /* Global UI scale (Cmd+= zoom in, Cmd+- zoom out, Cmd+0 reset).
+     A store rather than a local, so the properties panel can offer the SAME value
+     the keyboard drives. Two independent scales would drift apart. */
+  $: document.documentElement.style.fontSize = `${$uiScale * 16}px`;
 
   function onKeydown(e: KeyboardEvent) {
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
     if (e.key === 's' || e.key === 'S') { e.preventDefault(); saveFile(); return; }
     if (e.key === 'o' || e.key === 'O') { e.preventDefault(); openFile(); return; }
+    /* Cmd+F is free: @codemirror/search is not installed, so no editor claims it.
+       Focused mode only -- on the canvas there is no notebook to search. */
+    if (e.key === 'f' || e.key === 'F') {
+      if ($canvasState.focusedIds.length) { e.preventDefault(); searchOpen.set(true); }
+      return;
+    }
     // Cmd+= / Cmd++ → scale up; Cmd+- → scale down; Cmd+0 → reset
     if (e.key === '=' || e.key === '+') {
-      e.preventDefault(); uiScale = Math.min(2.0, +(uiScale + 0.1).toFixed(1));
+      e.preventDefault(); uiScale.update(v => Math.min(2.0, +(v + 0.1).toFixed(1)));
     } else if (e.key === '-' || e.key === '_') {
-      e.preventDefault(); uiScale = Math.max(0.5, +(uiScale - 0.1).toFixed(1));
+      e.preventDefault(); uiScale.update(v => Math.max(0.5, +(v - 0.1).toFixed(1)));
+    } else if (e.key === '0') {
+      /* The comment above has promised this since it was written. */
+      e.preventDefault(); uiScale.set(1.0);
     }
   }
 </script>
@@ -137,16 +179,39 @@
 <!-- Full-viewport canvas -->
 <Canvas />
 
-<!-- Floating corner: dark mode toggle only (no kernel status badge) -->
-<div class="corner-overlay">
-  <button
-    class="dark-toggle"
-    title="Toggle dark mode"
-    on:click={() => darkMode.update(v => !v)}
-  >
-    {$darkMode ? '◑' : '☀'}
-  </button>
+<!-- App bar. Two quite different things share this strip:
+
+     On the canvas it is a 34px name-and-theme strip.
+
+     In focused mode it becomes the notebook toolbar — labelled, ruled groups at
+     46px. Two heights rather than one reactive variable, because making
+     --appbar-h itself change would put a JS style write in the middle of the
+     {#if} branch swap between .canvas-stage and .focused-view, and would drag
+     .canvas-stage into a change it has no stake in. -->
+<div class="app-bar" class:toolbar-mode={$canvasState.focusedIds.length > 0}>
+  {#if $canvasState.focusedIds.length}
+    <!-- One row again. The menus are NATIVE now -- on macOS they live in the system bar at the
+         top of the screen -- so this strip is free for controls that belong to the window. -->
+    <Toolbar />
+  {:else}
+    <span class="app-bar-name">Mathilda</span>
+    <span class="dark-toggle-spacer"></span>
+    <button
+      class="dark-toggle"
+      title="Toggle dark mode"
+      on:click={() => darkMode.update(v => !v)}
+    >
+      {$darkMode ? '◑' : '☀'}
+    </button>
+  {/if}
 </div>
+
+<!-- Properties sidebar. Focused mode only: it reports on the notebook in the
+     active pane, and on the canvas there is no active pane to report on. -->
+{#if $canvasState.focusedIds.length}
+  <PropertiesPanel />
+  <SearchBar />
+{/if}
 
 <!-- Kernel dead banner -->
 {#if $kernelStatus === 'dead'}
@@ -172,6 +237,24 @@
     --gutter-hover:rgba(255,255,255,0.03);
     --card-bg:     rgba(12,15,28,0.85);
     --card-border: rgba(255,255,255,0.08);
+
+    /* Toolbar / menu surfaces.
+       --surface-2 was referenced at .app-bar .tb-btn:hover with NO fallback and
+       defined nowhere in the tree, so the app bar's hover state was a literal
+       no-op. RefPage.svelte referenced it in five more places. Defining it here
+       rather than in app.css because App.svelte's :global(:root) owns the
+       surface palette and wins by load order anyway. */
+    --surface-2:   rgba(255,255,255,0.055);   /* hover / raised fill */
+    --surface-3:   rgba(255,255,255,0.10);    /* pressed / active toggle */
+    --tb-rule:     rgba(255,255,255,0.09);    /* group divider, subtler than --border */
+    --tb-caption:  #6c7086;                   /* group caption, dimmer than --text-dim */
+    --menu-bg:     rgba(18,21,34,0.98);
+    --menu-border: rgba(255,255,255,0.10);
+    --menu-shadow: 0 10px 32px rgba(0,0,0,0.55);
+    /* --ok was only ever used as a var() fallback; --err was hardcoded. */
+    --ok:          #4ade80;
+    --warn:        #fab387;
+    --err:         #f38ba8;
   }
   :global(body) { background: #050810; }
 
@@ -190,6 +273,17 @@
     --gutter-hover:#e4e5f0;
     --card-bg:     #f8f8fc;
     --card-border: rgba(0,0,0,0.08);
+
+    --surface-2:   rgba(0,0,0,0.045);
+    --surface-3:   rgba(0,0,0,0.085);
+    --tb-rule:     rgba(0,0,0,0.10);
+    --tb-caption:  #8a8a9e;
+    --menu-bg:     #ffffff;
+    --menu-border: rgba(0,0,0,0.12);
+    --menu-shadow: 0 10px 32px rgba(0,0,0,0.18);
+    --ok:          #16a34a;
+    --warn:        #d97706;
+    --err:         #dc2626;
   }
   :global(html.light body) { background: #1a1b2e; }
 
@@ -202,17 +296,47 @@
   }
 
   /* ---- Corner overlay ---- */
-  .corner-overlay {
+  .app-bar {
     position: fixed;
-    /* Clear the status bar / notch on mobile (env() is 0 on desktop). */
-    top: calc(8px + env(safe-area-inset-top, 0px));
-    right: calc(12px + env(safe-area-inset-right, 0px));
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--appbar-h, 34px);
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.75rem;
+    padding: 0 0.75rem;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
     z-index: 200;
-    pointer-events: auto;
+    /* The toolbar is a row of fixed-height groups; nothing here may wrap. */
+    overflow: hidden;
+    /* Nothing here should swallow a drag meant for the window chrome. */
+    user-select: none;
+    -webkit-user-select: none;
   }
+
+  /* Focused mode: taller, and its own padding in px rather than rem. The bar is
+     a fixed height full of fixed-px content, so rem padding would push the
+     groups out of it once Cmd+= scales the root font size. */
+  .app-bar.toolbar-mode {
+    height: var(--toolbar-h, 46px);
+    gap: 0;
+    padding: 0 8px;
+    align-items: stretch;
+  }
+
+  .app-bar-name {
+    font: 600 0.78rem/1 var(--sans);
+    color: var(--text-h);
+    letter-spacing: 0.01em;
+  }
+
+  /* The centred title and the seven glyph buttons that used to live here now
+     belong to Toolbar.svelte, which owns its own styles. A centred overlay title
+     cannot coexist with a full-width row of groups. */
+
+  .dark-toggle-spacer { flex: 1; }
 
   .dark-toggle {
     background: rgba(128,128,128,0.1);

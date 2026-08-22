@@ -5,18 +5,23 @@
 
 ## Description
 
-```text
-Cases[{e1, e2, ...}, pattern] gives a list of the ei that match the pattern.
-Cases[{e1, ...}, pattern -> rhs] gives a list of the values of rhs corresponding to the ei that match the pattern.
-Cases[expr, pattern, levelspec] gives a list of all parts of expr on levels specified by levelspec that match the pattern.
-Cases[expr, pattern -> rhs, levelspec] gives the values of rhs that match the pattern.
-Cases[expr, pattern, levelspec, n] gives the first n parts in expr that match the pattern.
-Cases[pattern] represents an operator form of Cases that can be applied to an expression.
-```
+**`Cases[{e1, e2, ...}, pattern] gives a list of the ei that match the pattern.`**
 
-## Examples
+**`Cases[{e1, ...}, pattern -> rhs] gives a list of the values of rhs corresponding to the ei that match the pattern.`**
 
-All examples below are verified against the current Mathilda build.
+**`Cases[expr, pattern, levelspec] gives a list of all parts of expr on levels specified by levelspec that match the pattern.`**
+
+**`Cases[expr, pattern -> rhs, levelspec] gives the values of rhs that match the pattern.`**
+
+**`Cases[expr, pattern, levelspec, n] gives the first n parts in expr that match the pattern.`**
+
+**`Cases[pattern] represents an operator form of Cases that can be applied to an expression.`**
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Cases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]
@@ -29,6 +34,31 @@ In[3]:= DeleteCases[<|"a" -> 1, "b" -> 2, "c" -> 3|>, x_ /; x > 1]
 Out[3]= <|"a" -> 1|>
 ```
 
+### Applications (7)
+
+```mathematica
+In[4]:= Cases[{1, a, 2, b, 3}, _Integer]
+Out[4]= {1, 2, 3}
+
+In[5]:= Cases[{1, 2, 3, 4}, x_ /; x > 2]
+Out[5]= {3, 4}
+
+In[6]:= Cases[{f[1], g[2], f[3]}, f[x_] -> x]
+Out[6]= {1, 3}
+
+In[7]:= Cases[{{1, 2}, {3, 4}}, _Integer, 2]
+Out[7]= {1, 2, 3, 4}
+
+In[8]:= Cases[{1, 2, 3, 4, 5}, _?PrimeQ]
+Out[8]= {2, 3, 5}
+
+In[9]:= Cases[{f[1, 2], f[3], g[4], f[5, 6]}, f[a_, b_] -> a + b]
+Out[9]= {3, 11}
+
+In[10]:= Cases[{x^2, y^3, z, w^4}, p_^n_ -> {p, n}]
+Out[10]= {{x, 2}, {y, 3}, {w, 4}}
+```
+
 ## Implementation notes
 
 **Algorithm.** `builtin_cases` (`src/patterns.c`) collects subexpressions matching a pattern. It parses the level-spec (default `{1,1}` — immediate elements only; integer `n` → `1..n`, negative `n` → exactly level `n` from the bottom, `{m,n}`, `All`/`Infinity`), a `Heads -> True|False` option, and an optional `n` result limit. If the second argument is `pat -> rhs` / `pat :> rhs` it splits into a pattern plus a replacement applied to each hit. The traversal `do_cases_at_level` is depth-first **pre-order** (it recurses into head — when `heads` — and arguments first, then tests the node): at every in-range node it calls `match(e, pattern, env)` from `src/match.c`; on success it appends either a deep copy of the node, or, for a rule, `replace_bindings(rhs, env)` (evaluated when the rule is `RuleDelayed`). Level membership for negative specs is decided against `get_expr_depth_patterns`. Collection stops once `max_results` hits are gathered. `Cases[pat]` with one argument returns an operator form `Function[Cases[#1, pat]]`.
@@ -37,53 +67,18 @@ Out[3]= <|"a" -> 1|>
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Count](../../data-structures/Count/), [DeleteCases](../../data-structures/DeleteCases/)
 
 - Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_graphics.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphics.c)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Cases[{1, a, 2, b, 3}, _Integer]
-Out[1]= {1, 2, 3}
-```
-
-```mathematica
-In[1]:= Cases[{1, 2, 3, 4}, x_ /; x > 2]
-Out[1]= {3, 4}
-```
-
-```mathematica
-In[1]:= Cases[{f[1], g[2], f[3]}, f[x_] -> x]
-Out[1]= {1, 3}
-```
-
-```mathematica
-In[1]:= Cases[{{1, 2}, {3, 4}}, _Integer, 2]
-Out[1]= {1, 2, 3, 4}
-```
-
-```mathematica
-In[1]:= Cases[{1, 2, 3, 4, 5}, _?PrimeQ]
-Out[1]= {2, 3, 5}
-```
-
-```mathematica
-In[1]:= Cases[{f[1, 2], f[3], g[4], f[5, 6]}, f[a_, b_] -> a + b]
-Out[1]= {3, 11}
-```
-
-```mathematica
-In[1]:= Cases[{x^2, y^3, z, w^4}, p_^n_ -> {p, n}]
-Out[1]= {{x, 2}, {y, 3}, {w, 4}}
-```
 
 ### Notes
 

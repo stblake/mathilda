@@ -5,18 +5,22 @@
 
 ## Description
 
-```text
-Apart[expr] rewrites a rational expression as a sum of terms with minimal denominators.
-Apart[expr, var] treats all variables other than var as constants.
-Option Extension -> alpha factors the denominator over Q(alpha) before
-decomposition, splitting (x^2 - 2) into (x - Sqrt[2])(x + Sqrt[2]) under
-Extension -> Sqrt[2] and producing the corresponding linear-factor
-partial fractions.  Default Extension -> None decomposes over Q.
-```
+**`Apart[expr] rewrites a rational expression as a sum of terms with minimal denominators.`**
 
-## Examples
+**`Apart[expr, var] treats all variables other than var as constants.`**
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+Option Extension -\> alpha factors the denominator over Q(alpha) before decomposition, splitting (x^2 - 2) into (x - Sqrt\[2\])(x + Sqrt\[2\]) under Extension -\> Sqrt\[2\] and producing the corresponding linear-factor partial fractions.  Default Extension -\> None decomposes over Q.
+
+</details>
+
+## Examples (11)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= Apart[1/((1+x)(5+x))]
@@ -30,9 +34,35 @@ Out[3]= -(-1 + y)/((1 + x) (1 + y)^2) + 2 y/((1 + y)^2 (x - y))
 
 In[4]:= Apart[1/(y^(2/3) - 1/y^(1/3))]
 Out[4]= 1/3/(-1 + y^(1/3)) + (1/3 - 1/3 y^(1/3))/(1 + y^(1/3) + y^(2/3))
+```
 
+### Options (1)
+
+```mathematica
 In[5]:= Apart[1/(x^2 - 2), x, Extension -> Sqrt[2]]
 Out[5]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
+```
+
+### Applications (6)
+
+```mathematica
+In[6]:= Apart[1/(x (x+1))]
+Out[6]= 1/x - 1/(1 + x)
+
+In[7]:= Apart[(x+2)/(x^2 - 1)]
+Out[7]= -1/2/(1 + x) + 3/2/(-1 + x)
+
+In[8]:= Apart[1/(x^2 (x+1))]
+Out[8]= 1/x^2 - 1/x + 1/(1 + x)
+
+In[9]:= Apart[(x^3 + 1)/(x^2 - 1)]
+Out[9]= x + 1/(-1 + x)
+
+In[10]:= Apart[(2 x + 3)/((x+1)^2 (x^2+1))]
+Out[10]= 1/2/(1 + x)^2 + 3/2/(1 + x) + (1 - 3/2 x)/(1 + x^2)
+
+In[11]:= Apart[1/(x^2 - 2), Extension -> Sqrt[2]]
+Out[11]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
 ```
 
 ## Implementation notes
@@ -60,51 +90,21 @@ Out[5]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [RowReduce](../../linear-algebra/RowReduce/), [Together](../../algebra/Together/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on partial fraction decomposition.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on partial fractions and the extended Euclidean algorithm.
 - K. O. Geddes, S. R. Czapor and G. Labahn, *Algorithms for Computer Algebra* (Kluwer, 1992), ch. on partial-fraction decomposition.
 - Source: [`src/parfrac.c`](https://github.com/stblake/mathilda/blob/main/src/parfrac.c)
 - Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
+- Tests: [`tests/test_eval_timestamps.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval_timestamps.c)
+- Tests: [`tests/test_expr_sharing.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expr_sharing.c)
+- Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
+- Tests: [`tests/test_extension_options.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_options.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Apart[1/(x (x+1))]
-Out[1]= 1/x - 1/(1 + x)
-```
-
-```mathematica
-In[1]:= Apart[(x+2)/(x^2 - 1)]
-Out[1]= -1/2/(1 + x) + 3/2/(-1 + x)
-```
-
-```mathematica
-In[1]:= Apart[1/(x^2 (x+1))]
-Out[1]= 1/x^2 - 1/x + 1/(1 + x)
-```
-
-```mathematica
-In[1]:= Apart[(x^3 + 1)/(x^2 - 1)]
-Out[1]= x + 1/(-1 + x)
-```
-
-```mathematica
-In[1]:= Apart[(2 x + 3)/((x+1)^2 (x^2+1))]
-Out[1]= 1/2/(1 + x)^2 + 3/2/(1 + x) + (1 - 3/2 x)/(1 + x^2)
-```
-
-```mathematica
-In[1]:= Apart[1/(x^2 - 2), Extension -> Sqrt[2]]
-Out[1]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
-```
 
 ### Notes
 

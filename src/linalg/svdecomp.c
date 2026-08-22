@@ -296,13 +296,23 @@ static Expr* sv_together(Expr* a) {
     return eval_and_free(expr_new_function(
         expr_new_symbol(SYM_Together), (Expr*[]){a}, 1));
 }
+/* Rule[opt, True] — SVD asks Eigenvalues/Eigenvectors for closed radical
+ * forms (Cubics/Quartics -> True) even though the global default is False:
+ * the symbolic SVD pipeline manipulates the eigenvalues with Sqrt/rational
+ * idioms and cannot consume held Root[] objects. */
+static Expr* sv_true_opt(const char* opt) {
+    return expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ expr_new_symbol(opt), expr_new_symbol("True") }, 2);
+}
 static Expr* sv_eigenvalues(Expr* a) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol(SYM_Eigenvalues), (Expr*[]){a}, 1));
+        expr_new_symbol(SYM_Eigenvalues),
+        (Expr*[]){ a, sv_true_opt(SYM_Cubics), sv_true_opt(SYM_Quartics) }, 3));
 }
 static Expr* sv_eigenvectors(Expr* a) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol(SYM_Eigenvectors), (Expr*[]){a}, 1));
+        expr_new_symbol(SYM_Eigenvectors),
+        (Expr*[]){ a, sv_true_opt(SYM_Cubics), sv_true_opt(SYM_Quartics) }, 3));
 }
 
 /* Squared-norm zero test, robust on Sqrt / rational forms (same idiom

@@ -559,9 +559,21 @@ compiles a held body once and evaluates it over machine numbers, with interprete
 fallback; it is wired into **Plot/Plot3D** (~215×/~11×), **Table** (real iterator
 only, ~128×), **NIntegrate** (1-D machine ~353×, multi-D cubature/Monte-Carlo
 ~504×), and **FindRoot** (scalar machine real ~19×, multivariate systems ~6.9×).
-Remaining: `Which`/`Piecewise`, `Fold`/`NestList`/`FoldList` (need arrays, M3),
-M3 arrays/NDArray, M4 full special-function kernel coverage, complex-contour
+Remaining: M4 full special-function kernel coverage, complex-contour
 NIntegrate compilation, and MPFR fast paths.
+
+**Status update (2026-08-17) — conditional ladders.** `Which`, `Switch` and
+`Piecewise` now lower (§11): a shared `collect_ladder`/`emit_ladder` pair in
+`compile_emit_ctrl.c` turns each head's spelling into the same first-match-wins
+list of rungs — a literal-`False` guard dropped, a literal-`True`/`_` guard made
+the final default, mirroring the interpreter's own reduction — and emits the `If`
+branch structure repeated. `Piecewise` always carries a default (explicit or the
+implied `0`); a `Which`/`Switch` that matches nothing with no catch-all emits
+`OP_FAIL` and the interpreter answers. `Switch`'s discriminant is compared to
+numeric-literal forms (or `_`) with machine equality. `infer_type` shares the same
+collector so the ladder types correctly as a subexpression, and `Switch` is CSE-
+impure so it is never hoisted out of its guard. (`Fold`/`NestList`/`FoldList` from
+the old remaining list had already landed with the functional heads.)
 
 **Status update (2026-07-27) — M3a done.** Rank-1 machine arrays are now a
 first-class value category. `CompileType` packs array types into the same
@@ -632,8 +644,12 @@ the compiler does not.
   *body* and iterating in C?** For `Do`/`Sum`/`Nest` over numeric ranges, a
   compiled body + C-level loop (no `JMP`) is simpler and captures most of the
   win; full in-VM control flow matters most for data-dependent `While`/`If`
-  inside the loop. *Open: possibly stage "compiled body, C loop" before full
-  in-VM control flow.*
+  inside the loop. *Resolved (2026-08-17): both shapes now ship for the
+  interpreter-level `Sum`/`Product` auto-compile — an integer iterator uses the
+  in-VM counted loop (whole-`Sum` lowering, zero-arg `autocompile_eval_closed`),
+  and a real-bounded/real-step iterator uses the "compiled body, C loop" (via
+  `autocompile_new` + `autocompiled_eval_complex`). See `sum_try_compiled` /
+  `product_try_compiled` and the compile_state.md wiring table.*
 
 ---
 

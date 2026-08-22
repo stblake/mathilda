@@ -5,25 +5,22 @@
 
 ## Description
 
-```text
-SymmetricMatrixQ[m]
-    gives True if m is explicitly symmetric (m == Transpose[m]),
-    and False otherwise.
+**`SymmetricMatrixQ[m]`**
 
-Options:
-    SameTest  -> Automatic   function used to test equality of entries.
-    Tolerance -> Automatic   numeric tolerance for approximate matrices.
+gives True if m is explicitly symmetric (m == Transpose\[m\]), and False otherwise.
 
-With SameTest -> f, entries m[i,j] and m[j,i] are taken to be equal
-when f[m[i,j], m[j,i]] gives True.  With Tolerance -> t, entries are
-accepted when Abs[m[i,j] - m[j,i]] <= t.  SymmetricMatrixQ uses the
-definition m^T == m for both real- and complex-valued matrices, so a
-complex symmetric matrix need not be Hermitian.
-```
+<details>
+<summary>Notes</summary>
 
-## Examples
+Options: SameTest  -\> Automatic   function used to test equality of entries. Tolerance -\> Automatic   numeric tolerance for approximate matrices. With SameTest -\> f, entries m\[i,j\] and m\[j,i\] are taken to be equal when f\[m\[i,j\], m\[j,i\]\] gives True.  With Tolerance -\> t, entries are accepted when Abs\[m\[i,j\] - m\[j,i\]\] \<= t.  SymmetricMatrixQ uses the definition m^T == m for both real- and complex-valued matrices, so a complex symmetric matrix need not be Hermitian.
 
-All examples below are verified against the current Mathilda build.
+</details>
+
+## Examples (11)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= SymmetricMatrixQ[{{1, 2}, {2, 3}}]
@@ -34,9 +31,42 @@ Out[2]= True
 
 In[3]:= SymmetricMatrixQ[{{1 + I, 2 - 3 I}, {2 - 3 I, 2 - 3 I}}]
 Out[3]= True
+```
 
-In[4]:= SymmetricMatrixQ[{{1, 3 + 4 I}, {3 - 4 I, 2}}]   (* Hermitian, not symmetric *)
+Hermitian, not symmetric
+
+```mathematica
+In[4]:= SymmetricMatrixQ[{{1, 3 + 4 I}, {3 - 4 I, 2}}]
 Out[4]= False
+```
+
+### Options (1)
+
+```mathematica
+In[5]:= SymmetricMatrixQ[{{1, Log[x^2]}, {2 Log[x], 2}}, SameTest -> (Simplify[#1 - #2, x > 0] == 0 &)]
+Out[5]= True
+```
+
+### Applications (6)
+
+```mathematica
+In[6]:= SymmetricMatrixQ[{{1, 2}, {2, 1}}]
+Out[6]= True
+
+In[7]:= SymmetricMatrixQ[{{1, 2}, {3, 4}}]
+Out[7]= False
+
+In[8]:= SymmetricMatrixQ[{{1, I}, {I, 1}}]
+Out[8]= True
+
+In[9]:= HermitianMatrixQ[{{1, I}, {I, 1}}]
+Out[9]= False
+
+In[10]:= SymmetricMatrixQ[{{1.0, 2.0001}, {2.0, 1.0}}, Tolerance -> 0.001]
+Out[10]= True
+
+In[11]:= SymmetricMatrixQ[{{1, 2}, {3, 4}}, SameTest -> (Abs[#1 - #2] <= 1 &)]
+Out[11]= True
 ```
 
 ## Implementation notes
@@ -45,53 +75,28 @@ Out[4]= False
 
 - `Protected`.
 - Default test is structural via `expr_eq`; the diagonal is exempt
+  (trivially symmetric).
+- Uses `m^T == m` for both real- and complex-valued matrices, so a
+  complex symmetric matrix need not be Hermitian (and vice versa).
+- Returns `False` (rather than leaving unevaluated) on non-matrix,
+  non-square, ragged, empty, or higher-rank tensor inputs.
+- Unknown options and non-`Rule` trailing arguments leave the call
+  unevaluated.
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Rule](../../assignment-and-rules/Rule/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+- Tests: [`tests/test_hankelmatrix.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hankelmatrix.c)
+- Tests: [`tests/test_hilbertmatrix.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hilbertmatrix.c)
+- Tests: [`tests/test_stats.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stats.c)
+- Tests: [`tests/test_symmetric_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_symmetric_matrix_q.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= SymmetricMatrixQ[{{1, 2}, {2, 1}}]
-Out[1]= True
-
-In[2]:= SymmetricMatrixQ[{{1, 2}, {3, 4}}]
-Out[2]= False
-```
-
-A complex symmetric matrix is symmetric without being Hermitian:
-
-```mathematica
-In[1]:= SymmetricMatrixQ[{{1, I}, {I, 1}}]
-Out[1]= True
-
-In[2]:= HermitianMatrixQ[{{1, I}, {I, 1}}]
-Out[2]= False
-```
-
-`Tolerance` accepts numerically near-symmetric matrices:
-
-```mathematica
-In[1]:= SymmetricMatrixQ[{{1.0, 2.0001}, {2.0, 1.0}}, Tolerance -> 0.001]
-Out[1]= True
-```
-
-A custom `SameTest` relaxes equality of off-diagonal entries:
-
-```mathematica
-In[1]:= SymmetricMatrixQ[{{1, 2}, {3, 4}}, SameTest -> (Abs[#1 - #2] <= 1 &)]
-Out[1]= True
-```
 
 ### Notes
 

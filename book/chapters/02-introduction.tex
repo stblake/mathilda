@@ -1,0 +1,575 @@
+\chapter{A Brief Introduction to Mathilda}
+\label{ch:intro}
+
+This chapter is a whirlwind tour. Rather than explain any one thing thoroughly---%
+that is the job of Chapter~\ref{ch:mathematics} and beyond---it moves quickly across
+the landscape, showing a small, concrete example of each of the things Mathilda can
+do: arithmetic and numerics, number theory, algebra, calculus, numerical calculus,
+and programming. The aim is to give you a feel for the system and a sense of how much
+ground it covers, so that the detailed chapters later feel like a return to places
+you have already visited.
+
+Everything below is real: each \texttt{In[\,]} was fed to the Mathilda binary as this
+book was built and each \texttt{Out[\,]} is exactly what came back. Type them yourself
+and you will see the same results. Throughout, each input and its result stand on the
+left, with a few words about that line alongside on the right. This chapter is a
+starting point and will grow over time; think of it as the first, shortest pass over
+material the rest of the book returns to in depth.
+
+\section{Numbers, exact and approximate}
+\label{sec:intro-numbers}
+
+Mathilda distinguishes sharply between \emph{exact} numbers and \emph{approximate}
+ones, and it knows how they combine. Watch what happens as we add numbers of different
+kinds:
+
+\begin{codepairs}
+\pair{02-introduction/numbers/1}{Two integers add to an integer.}
+\pair{02-introduction/numbers/2}{An integer plus a rational stays \emph{exact}: the
+fraction $7/3$, not a decimal.}
+\pair{02-introduction/numbers/3}{A rational plus a \emph{real} gives a real. One
+approximate number makes the whole result approximate---a rule called
+\emph{contagion}.}
+\pair{02-introduction/numbers/4}{Integers grow without bound; $2^{64}$ is kept
+exactly, far beyond what a single machine word can hold.}
+\pair{02-introduction/numbers/5}{To get a decimal you ask, with \B{N}: here a quick
+machine-precision value of $\sqrt2$, six figures by default.}
+\pair{02-introduction/numbers/6}{Ask \B{N} for more digits and it obliges: here is
+$\sqrt2$ to thirty places.}
+\pair{02-introduction/numbers/7}{And here is $\pi$ to fifty digits, computed to
+arbitrary precision.}
+\end{codepairs}
+
+Section~\ref{sec:arithmetic} takes up how these three worlds---machine numbers, exact
+integers and rationals, and arbitrary-precision reals---fit together.
+
+\section{Elementary functions}
+\label{sec:intro-elementary}
+
+Mathilda knows the elementary functions---powers and roots, the exponential and
+logarithm, and the trigonometric functions and their inverses---and treats them the
+same way it treats numbers: exactly when it can, symbolically when it must, and
+numerically when you ask. At arguments where a simple closed form exists, it returns
+that exact value:
+
+\begin{codepairs}
+\pair{02-introduction/elementary-exact/1}{A perfect square gives an integer.}
+\pair{02-introduction/elementary-exact/2}{\B{Sin} of $\pi/6$ is the rational $1/2$.}
+\pair{02-introduction/elementary-exact/3}{\B{Cos} of $\pi/4$ comes back as an exact
+surd.}
+\pair{02-introduction/elementary-exact/4}{So does \B{Tan} of $\pi/3$.}
+\pair{02-introduction/elementary-exact/5}{\B{Log} and \B{Exp} undo each other, so
+$\log e^{5}=5$.}
+\pair{02-introduction/elementary-exact/6}{\B{ArcTan} of $1$ is the exact angle
+$\pi/4$.}
+\pair{02-introduction/elementary-exact/7}{At an exact argument with \emph{no} closed
+form, \B{Sin}$[1]$ is held as \texttt{Sin[1]}---not silently turned into a decimal.}
+\end{codepairs}
+
+When you do want a number, you get one either by supplying an approximate argument or
+by applying \B{N}. By default the result is \emph{machine precision}---the fast,
+fixed-size floating point of the hardware---but \B{N} will also work to
+\emph{arbitrary} precision:
+
+\begin{codepairs}
+\pair{02-introduction/elementary-numeric/1}{An approximate argument \texttt{1.0}
+forces a machine-precision result.}
+\pair{02-introduction/elementary-numeric/2}{Applying \B{N} to the exact
+\texttt{Sin[1]} gives the same value.}
+\pair{02-introduction/elementary-numeric/3}{Ask for forty digits and you get $\sin 1$
+to that precision.}
+\pair{02-introduction/elementary-numeric/4}{Here is the constant $e$ to forty digits.}
+\pair{02-introduction/elementary-numeric/5}{And here is $\ln 2$ to forty digits. The
+elementary functions return in Section~\ref{sec:calculus}.}
+\end{codepairs}
+
+\section{Special functions}
+\label{sec:intro-special}
+
+Beyond the elementary functions lies a second tier---the \emph{special functions} of
+analysis and mathematical physics: the gamma and zeta functions, the error function,
+the Bessel and Airy functions, and many more. Mathilda handles them with exactly the
+same discipline, returning exact values wherever they exist:
+
+\begin{codepairs}
+\pair{02-introduction/special-exact/1}{\B{Gamma} extends the factorial: $\Gamma(5)=4!
+=24$.}
+\pair{02-introduction/special-exact/2}{At the half-integers it takes the celebrated
+value $\Gamma(1/2)=\sqrt\pi$.}
+\pair{02-introduction/special-exact/3}{\B{Zeta} gives Euler's $\zeta(2)=\pi^{2}/6$.}
+\pair{02-introduction/special-exact/4}{By analytic continuation, the notorious
+$\zeta(-1)=-\tfrac{1}{12}$.}
+\pair{02-introduction/special-exact/5}{\B{Beta} reduces to a rational.}
+\pair{02-introduction/special-exact/6}{\B{PolyGamma}, the digamma at $1$, is exactly
+$-\gamma$, the negative Euler--Mascheroni constant \B{EulerGamma}.}
+\pair{02-introduction/special-exact/7}{Even \B{AiryAi} at the origin has a closed
+form, in terms of \B{Gamma}.}
+\end{codepairs}
+
+Where no closed form exists, these functions are computed numerically, to machine or
+arbitrary precision just like the elementary ones:
+
+\begin{codepairs}
+\pair{02-introduction/special-numeric/1}{$\zeta(3)$, Ap\'ery's constant, to machine
+precision.}
+\pair{02-introduction/special-numeric/2}{The same constant to forty digits.}
+\pair{02-introduction/special-numeric/3}{\B{Erf} at an approximate argument.}
+\pair{02-introduction/special-numeric/4}{\B{BesselJ} likewise.}
+\pair{02-introduction/special-numeric/5}{$\Gamma(1/2)$ to thirty digits, agreeing with
+$\sqrt\pi$. Section~\ref{sec:specialfns} is devoted to these functions.}
+\end{codepairs}
+
+\section{Number theory}
+\label{sec:intro-numbertheory}
+
+Whole numbers have a rich structure, and Mathilda knows a great deal of it. Primes,
+factorizations, divisors, greatest common divisors, and modular arithmetic are all a
+single call away.
+
+\begin{codepairs}
+\pair{02-introduction/number-theory/1}{\B{Prime} gives the hundredth prime.}
+\pair{02-introduction/number-theory/2}{\B{FactorInteger} breaks $360$ into prime
+powers $2^{3}\cdot 3^{2}\cdot 5$.}
+\pair{02-introduction/number-theory/3}{\B{Divisors} lists every divisor of $36$.}
+\pair{02-introduction/number-theory/4}{\B{GCD} is the greatest common divisor.}
+\pair{02-introduction/number-theory/5}{\B{ExtendedGCD} adds B\'ezout's coefficients:
+$12 = 1\cdot 48 + (-1)\cdot 36$.}
+\pair{02-introduction/number-theory/6}{\B{PowerMod} finds $7^{100}\bmod 13$ without
+ever forming $7^{100}$.}
+\pair{02-introduction/number-theory/7}{\B{LCM} is the least common multiple;
+$\mathrm{lcm}(12,18,20)=180$.}
+\pair{02-introduction/number-theory/8}{\B{EulerPhi} counts the integers from $1$ to $36$
+that are coprime to it: $\varphi(36)=12$.}
+\pair{02-introduction/number-theory/9}{\B{MultiplicativeOrder} gives the least $k$ with
+$2^{k}\equiv 1\pmod{11}$: here that order is $10$.}
+\pair{02-introduction/number-theory/10}{\B{PrimitiveRoot} returns a generator of the
+units modulo~$11$; the least is $2$, which is exactly why its order above is the full
+$\varphi(11)=10$.}
+\pair{02-introduction/number-theory/11}{\B{Fibonacci} returns the fiftieth Fibonacci
+number exactly. Section~\ref{sec:numbertheory} takes up this material.}
+\end{codepairs}
+
+\section{Algebra}
+\label{sec:intro-algebra}
+
+Algebra is where a computer algebra system earns its name: it manipulates
+expressions containing symbols, not just numbers. Two everyday operations are
+multiplying out and its partial inverse, collecting like terms.
+
+\begin{codepairs}
+\pair{02-introduction/algebra-expand/1}{\B{Expand} multiplies out a power.}
+\pair{02-introduction/algebra-expand/2}{It works in several variables too.}
+\pair{02-introduction/algebra-expand/3}{\B{Collect} gathers terms by the powers of a
+chosen variable---here $x$, pulling the common factor out of the linear term.}
+\end{codepairs}
+
+The deeper operation is \B{Factor}, which writes a polynomial as a product of
+irreducible pieces. What counts as irreducible depends on the number system you allow,
+and Mathilda lets you choose:
+
+\begin{codepairs}
+\pair{02-introduction/algebra-factor/1}{Over the rationals, $x^{6}-1$ splits into four
+factors.}
+\pair{02-introduction/algebra-factor/2}{But $x^{2}+1$ will not factor at all---it is
+irreducible over~$\mathbb{Q}$.}
+\pair{02-introduction/algebra-factor/3}{Allow the imaginary unit, with
+\texttt{Extension}, and it becomes $(x-i)(x+i)$.}
+\pair{02-introduction/algebra-factor/4}{Allow $\sqrt2$ and $x^{4}+1$ splits into two
+real quadratics. Extensions return in Section~\ref{sec:algebra}.}
+\end{codepairs}
+
+Closely related to factoring is the polynomial greatest common divisor. Just as \B{GCD}
+finds the largest integer dividing two whole numbers, \B{PolynomialGCD} finds the
+highest-degree polynomial dividing two polynomials---their shared factor:
+
+\begin{codepairs}
+\pair{02-introduction/algebra-gcd/1}{These two polynomials share the factor $x-1$.}
+\pair{02-introduction/algebra-gcd/2}{These share $x^{2}-1$, found directly, without
+factoring either polynomial.}
+\end{codepairs}
+
+That common factor is exactly what simplifies a \emph{rational function}, a ratio of
+polynomials. Mathilda provides the three everyday operations:
+
+\begin{codepairs}
+\pair{02-introduction/algebra-rational/1}{\B{Cancel} divides out the common factor
+(the $x-1$ above), reducing the fraction to lowest terms.}
+\pair{02-introduction/algebra-rational/2}{\B{Together} combines a sum of fractions
+over one common denominator.}
+\pair{02-introduction/algebra-rational/3}{\B{Apart} does the reverse---the partial-%
+fraction decomposition you reach for before integrating. More in
+Section~\ref{sec:algebra}.}
+\end{codepairs}
+
+Beyond a single polynomial lies a whole \emph{system} of them, and the tool for those is
+the \B{GroebnerBasis}: a canonical set of generators for the ideal a system defines. It
+is the multivariate, nonlinear analogue of Gaussian elimination---it rewrites a system
+into an equivalent triangular one that is far easier to solve, and it can eliminate
+chosen variables outright.
+
+\begin{codepairs}
+\pair{02-introduction/algebra-groebner/1}{The unit circle meets the parabola $y=x^{2}$.
+\B{GroebnerBasis} triangulates the system: the first polynomial involves only $y$---a
+quadratic to solve---and the second then recovers $x$ from $y$.}
+\pair{02-introduction/algebra-groebner/2}{Naming a variable to eliminate---here the
+parameter $t$ of the curve $(t^{2},t^{3})$---collapses the system to the curve's implicit
+equation $x^{3}=y^{2}$, the cuspidal cubic. Section~\ref{sec:algebra} returns to
+Gr\"obner bases.}
+\end{codepairs}
+
+\section{Simplification}
+\label{sec:intro-simplify}
+
+Expanding, factoring, and cancelling each drive an expression toward a \emph{particular}
+form. Often, though, you simply want the \emph{simplest} form, whatever that turns out
+to be. \B{Simplify} searches for it, trying a battery of algebraic and trigonometric
+transformations and keeping the smallest result:
+
+\begin{codepairs}
+\pair{02-introduction/simplification/1}{The Pythagorean identity collapses to~$1$.}
+\pair{02-introduction/simplification/2}{A rational function reduces.}
+\pair{02-introduction/simplification/3}{A double-angle identity is recognised:
+$\cos^{2}x-\sin^{2}x=\cos 2x$.}
+\pair{02-introduction/simplification/4}{\texttt{FullSimplify}, a more powerful cousin,
+\emph{denests} a radical: $\sqrt{3+2\sqrt2}=1+\sqrt2$.}
+\end{codepairs}
+
+Some simplifications hold only under conditions, and Mathilda will not assume what you
+have not told it. Because $\sqrt{x^{2}}$ equals $|x|$, not $x$:
+
+\begin{codepairs}
+\pair{02-introduction/simplification-assumptions/1}{With nothing known about $x$,
+$\sqrt{x^{2}}$ is left exactly as written.}
+\pair{02-introduction/simplification-assumptions/2}{Told that $x>0$, it simplifies to
+$x$.}
+\end{codepairs}
+
+An assumption can be more interesting than a sign condition---sometimes what matters is
+the \emph{kind} of number involved:
+
+\begin{codepairs}
+\pair{02-introduction/simplification-integer/1}{For a general~$n$, $\sin(n\pi)$ is left
+untouched.}
+\pair{02-introduction/simplification-integer/2}{Told that $n$ is an integer, with
+\B{Element}, Mathilda proves it must vanish. More in Section~\ref{sec:algebra}.}
+\end{codepairs}
+
+\section{Calculus}
+\label{sec:intro-calculus}
+
+Mathilda does symbolic calculus: differentiation, limits, and integration on
+expressions, returning exact results. Differentiation with \B{D} applies the rules of
+calculus recursively, and by naming a second variable it takes partial derivatives:
+
+\begin{codepairs}
+\pair{02-introduction/calculus-diff/1}{The power rule, applied term by term.}
+\pair{02-introduction/calculus-diff/2}{The product and chain rules, automatically.}
+\pair{02-introduction/calculus-diff/3}{Symbolic exponents are fine too.}
+\pair{02-introduction/calculus-diff/4}{A \emph{partial} derivative in $x$, treating
+$y$ as a constant.}
+\pair{02-introduction/calculus-diff/5}{The same expression, now differentiated in
+$y$.}
+\end{codepairs}
+
+Limits are computed with \B{Limit}, including the classic ones that define the
+derivative and the number~$e$:
+
+\begin{codepairs}
+\pair{02-introduction/calculus-limits/1}{The limit at the heart of the derivative of
+sine.}
+\pair{02-introduction/calculus-limits/2}{One of the definitions of~$e$.}
+\pair{02-introduction/calculus-limits/3}{The leading behaviour of $1-\cos x$ near the
+origin.}
+\end{codepairs}
+
+Near a point a function is captured by its power series, and \B{Series} computes it to any
+order, returning the polynomial part together with an $O[x]^{n}$ term that records where
+the expansion was truncated:
+
+\begin{codepairs}
+\pair{02-introduction/calculus-series/1}{The exponential series, to sixth order.}
+\pair{02-introduction/calculus-series/2}{$\arctan$: the alternating odd reciprocals whose
+value at $x=1$ gives Leibniz's series for $\pi/4$.}
+\pair{02-introduction/calculus-series/3}{At a pole the expansion is a \emph{Laurent}
+series---here $\cot x$ begins with a $1/x$ term.}
+\pair{02-introduction/calculus-series/4}{With a \emph{symbolic} exponent the coefficients
+come out as the generalized binomial coefficients.}
+\pair{02-introduction/calculus-series/5}{\B{Normal} drops the $O[\,]$ term, turning the
+\texttt{SeriesData} object a series is into an ordinary polynomial.}
+\end{codepairs}
+
+Integration, the harder inverse of differentiation, is done with \B{Integrate}---%
+indefinite integrals as symbolic antiderivatives, and definite integrals, including
+improper ones:
+
+\begin{codepairs}
+\pair{02-introduction/calculus-integrate/1}{An indefinite integral by parts.}
+\pair{02-introduction/calculus-integrate/2}{Another, giving an inverse tangent.}
+\pair{02-introduction/calculus-integrate/3}{A definite integral over $[0,1]$.}
+\pair{02-introduction/calculus-integrate/4}{The Gaussian integral over the whole real
+line: $\int_{-\infty}^{\infty} e^{-x^{2}}\,dx=\sqrt\pi$.}
+\end{codepairs}
+
+\B{Integrate} is not confined to one variable. Give it several iterators and it
+computes a \emph{multiple} integral, from the inside out, so the inner limits may
+depend on an outer variable:
+
+\begin{codepairs}
+\pair{02-introduction/calculus-integrate-multi/1}{$x y$ integrated over the unit
+square.}
+\pair{02-introduction/calculus-integrate-multi/2}{Over the triangle $0\le y\le x\le 1$,
+whose inner bound is $x$ itself.}
+\end{codepairs}
+
+And when the limits are \emph{complex}, \B{Integrate} evaluates a \emph{contour
+integral} along the straight segments joining the points you list:
+
+\begin{codepairs}
+\pair{02-introduction/calculus-integrate-contour/1}{A line integral of $z^{2}$ along
+the segment from $0$ to $1+i$.}
+\pair{02-introduction/calculus-integrate-contour/2}{A closed loop around the origin:
+$\oint \frac{dz}{z}=2\pi i$, the cornerstone of the residue calculus.
+Section~\ref{sec:calculus} has the full story.}
+\end{codepairs}
+
+\section{Numerical calculus}
+\label{sec:intro-numcalc}
+
+Not every problem has a closed form, and even when it does a number is sometimes all
+you want. The \texttt{N}-prefixed family answers these questions numerically and
+adaptively---to machine precision by default, or to any arbitrary precision you request
+with the \texttt{WorkingPrecision} option:
+
+\begin{codepairs}
+\pair{02-introduction/numerical-calculus/1}{\B{ND} takes a numerical derivative---here
+of $\sin$ at $1$, giving $\cos 1$.}
+\pair{02-introduction/numerical-calculus/2}{\B{NIntegrate} evaluates the Gaussian
+integral numerically ($\approx\sqrt\pi$).}
+\pair{02-introduction/numerical-calculus/3}{\B{NSum} sums a series numerically.}
+\end{codepairs}
+
+Differential equations are solved numerically by \B{NDSolve}. Take a damped harmonic
+oscillator, $y'' + \tfrac{3}{10}\,y' + 4y = 0$ with $y(0)=1$ and $y'(0)=0$: the solution
+comes back as an \B{InterpolatingFunction}, and \B{Plot} takes that
+directly,\footnote{That plot is genuinely the \texttt{Out[2]} of the \B{Plot} command,
+drawn by the running system. To keep it, \B{Export} writes any such graphic to PDF, PNG,
+or JPEG (\texttt{Export["decay.pdf", plot]})---indeed every figure in this book is
+produced exactly this way.} so the motion---a decaying oscillation settling to rest---is
+one further command away:
+
+\plotcell{02-introduction/ndsolve-solution}
+
+Finally, \B{NLimit} evaluates a limit numerically, invaluable when a symbolic limit is
+hard to obtain:
+
+\begin{codepairs}
+\pair{02-introduction/numerical-calculus-nlimit/1}{The familiar limit that
+defines~$e$.}
+\pair{02-introduction/numerical-calculus-nlimit/2}{More striking: $\zeta(s)$ (the
+\B{Zeta} function) and $1/(s-1)$ both diverge at $s=1$, yet their difference tends to
+the Euler--Mascheroni constant $\gamma$.}
+\pair{02-introduction/numerical-calculus-nlimit/3}{A slower, non-obvious limit,
+recovered numerically.}
+\end{codepairs}
+
+Section~\ref{sec:numcalc} covers numerical differentiation, integration, summation,
+differential equations, and limits.
+
+\section{Solving equations}
+\label{sec:intro-solve}
+
+Solving equations is among the oldest tasks in mathematics, and Mathilda does it both
+exactly and numerically.
+
+\subsection{Exact solutions of equations}
+
+\B{Solve} finds \emph{exact} solutions---as integers, radicals, or general closed
+forms---for a single equation or a whole system:
+
+\begin{codepairs}
+\pair{02-introduction/solve-exact/1}{A quadratic with two integer roots. Note
+\texttt{==}, which builds an equation, versus \texttt{=}, which assigns.}
+\pair{02-introduction/solve-exact/2}{$x^{2}=2$: the two exact surds $\pm\sqrt2$.}
+\pair{02-introduction/solve-exact/3}{A linear system in two unknowns, uniquely solved.}
+\pair{02-introduction/solve-exact/4}{A \emph{nonlinear} system---a circle meeting the
+line $y=x$---with both intersection points, exactly.}
+\pair{02-introduction/solve-exact/5}{A cubic with no rational roots: the exact solutions
+come back as \B{Root} objects, each an implicit algebraic number---the $k$th root of the
+given polynomial---rather than an unwieldy nest of radicals.}
+\pair{02-introduction/solve-exact/6}{A \B{Root} object is still an exact number, so \B{N}
+evaluates it to as many digits as you ask---here to machine precision.}
+\end{codepairs}
+
+\subsection{Numerical solutions of equations}
+
+When an exact solution is unavailable---the general quintic has no formula in radicals,
+by Abel's theorem---or simply not wanted, the numerical solvers take over. \B{NRoots}
+and \B{NSolve} return every root of a polynomial equation or system as machine numbers,
+while \B{FindRoot} follows Newton's method from a starting point and handles
+transcendental problems too:
+
+\begin{codepairs}
+\pair{02-introduction/solve-numerical/1}{\B{NRoots} finds all five roots of $x^{5}-x-1$:
+one real and two complex-conjugate pairs, none expressible in radicals.}
+\pair{02-introduction/solve-numerical/2}{\B{NSolve} handles systems. Eliminating $y$ here
+leaves that very same quintic, so the five solutions carry its unsolvable roots in their
+$x$-coordinate.}
+\pair{02-introduction/solve-numerical/3}{\B{FindRoot}, started near $x=1$, converges to
+the root of $\cos x = x$, the ``Dottie number''---a transcendental equation with no
+closed form.}
+\pair{02-introduction/solve-numerical/4}{\B{FindRoot} takes systems as well: a
+transcendental pair in $x$ and $y$, solved from the starting point $(1,1)$.}
+\end{codepairs}
+
+Exact solving belongs to the algebra of Section~\ref{sec:algebra}; the numerical
+solvers to Section~\ref{sec:numcalc}.
+
+\section{Programming}
+\label{sec:intro-programming}
+
+Mathilda is also a programming language, and an unusually expressive one. It supports
+three styles that blend freely: pattern-based rewriting, procedural code, and
+functional programming.
+
+\subsection*{Pattern matching}
+
+The most characteristic style is definition by \emph{patterns}. A name followed by an
+underscore, like \texttt{x\_}, matches anything and binds it, and a pattern can be
+narrowed: \texttt{x\_Integer} matches only an expression with head \texttt{Integer},
+and \texttt{?Positive} adds a test the match must pass. A definition with \texttt{:=}
+applies whenever its pattern fits:
+
+\begin{codepairs}
+\pair{02-introduction/pattern-matching/1}{Define \texttt{f} only on positive
+integers.}
+\pair{02-introduction/pattern-matching/2}{A positive integer matches: $7^{2}=49$.}
+\pair{02-introduction/pattern-matching/3}{A negative integer does not match.}
+\pair{02-introduction/pattern-matching/4}{A real does not match either.}
+\pair{02-introduction/pattern-matching/5}{Nor does a complex number; each call is
+returned unevaluated.}
+\pair{02-introduction/pattern-matching/6}{\B{Cases} keeps the elements matching a
+pattern---the even ones.}
+\pair{02-introduction/pattern-matching/7}{The rule \texttt{/.}\ (\B{ReplaceAll})
+substitutes into an expression.}
+\pair{02-introduction/pattern-matching/8}{A pattern can destructure a two-element
+list.}
+\pair{02-introduction/pattern-matching/9}{It binds both parts at once. More in
+Chapter~\ref{ch:programming}.}
+\end{codepairs}
+
+\subsection*{Procedural programming}
+
+When an ordinary loop is the clearest thing, Mathilda has loops. \B{Module} introduces
+local variables, and \B{Do}, \B{For}, and \B{While} iterate:
+
+\begin{codepairs}
+\pair{02-introduction/procedural/1}{A \B{Do} loop sums $1$ through $100$.}
+\pair{02-introduction/procedural/2}{A \B{For} loop computes $5! = 120$.}
+\pair{02-introduction/procedural/3}{A \B{While} loop counts the steps of the Collatz
+iteration from $27$.}
+\end{codepairs}
+
+\subsection*{Functional programming}
+
+Often the shortest code is functional---building a result by applying and composing
+functions rather than by mutating variables. The \texttt{\&} notation makes an
+anonymous function, with \texttt{\#} as its argument:
+
+\begin{codepairs}
+\pair{02-introduction/functional/1}{\B{Map} applies a function to every element.}
+\pair{02-introduction/functional/2}{\B{Select} keeps those passing a test---the
+primes.}
+\pair{02-introduction/functional/3}{\B{Fold} chains a function across a list.}
+\pair{02-introduction/functional/4}{\B{Nest} applies one repeatedly: $\sqrt{\cdot}$ of
+$2$, three times.}
+\pair{02-introduction/functional/5}{\B{Table} builds a list from a formula.}
+\pair{02-introduction/functional/6}{\B{Apply}, written \texttt{@@}, replaces the head:
+\texttt{Times @@ list} is the product.}
+\pair{02-introduction/functional/7}{\texttt{@@@} applies at level one, to each
+sublist.}
+\pair{02-introduction/functional/8}{\B{Cases} picks out the elements matching a
+pattern---the integers.}
+\end{codepairs}
+
+\section{Graphics}
+\label{sec:intro-graphics}
+
+Mathilda draws its own graphics. Every plotting function returns a \texttt{Graphics} (in two
+dimensions) or \texttt{Graphics3D} (in three) object built from primitives---lines, points,
+polygons, colours---which the built-in engine renders on screen and \B{Export} writes to
+PDF, PNG, or JPEG. This closing tour gives one example of each plotting function; as in
+\S\ref{sec:intro-numcalc}, every plot below is the genuine \texttt{Out} of the command
+shown, produced by the running system.
+
+\subsection{Functions and data}
+
+\B{Plot} draws one or more functions of a real variable---here the first odd harmonics of
+a square wave:
+
+\plotcell{02-introduction/graphics/plot}
+
+\noindent \B{ListPlot} draws discrete data as points:
+
+\plotcell{02-introduction/graphics/listplot}
+
+\noindent \B{ParametricPlot} traces a curve $(x(t), y(t))$---a Lissajous figure---and
+\B{PolarPlot} draws $r(\theta)$, here a five-petal rose:
+
+\plotcell{02-introduction/graphics/parametricplot}
+
+\plotcell{02-introduction/graphics/polarplot}
+
+\subsection{Vector fields}
+
+\B{VectorPlot} shows a field as a grid of arrows, \B{StreamPlot} as flow lines. Here is the
+phase field of a pendulum, then a pure rotation:
+
+\plotcell{02-introduction/graphics/vectorplot}
+
+\plotcell{02-introduction/graphics/streamplot}
+
+\subsection{Scalar fields and arrays}
+
+\B{ContourPlot} draws level curves of $f(x,y)$, \B{DensityPlot} shades the plane by value,
+and \B{ArrayPlot} renders a matrix as a grid of cells---here the greatest-common-divisor
+table, whose diagonals of bright cells expose its number-theoretic structure:
+
+\plotcell{02-introduction/graphics/contourplot}
+
+\plotcell{02-introduction/graphics/densityplot}
+
+\plotcell{02-introduction/graphics/arrayplot}
+
+\subsection{Charts and graphs}
+
+\B{BarChart} draws labelled bars; \B{GraphPlot} lays out a graph automatically:
+
+\plotcell{02-introduction/graphics/barchart}
+
+\plotcell{02-introduction/graphics/graphplot}
+
+\subsection{Complex functions}
+
+\B{ComplexPlot} colours the plane by the value of a complex function---hue for the phase,
+brightness for the magnitude---so its zeros and poles stand out at a glance:
+
+\plotcell{02-introduction/graphics/complexplot}
+
+\subsection{Three dimensions}
+
+\B{Plot3D} draws a surface $z=f(x,y)$, \B{ParametricPlot3D} a curve or surface in space,
+and \B{ComplexPlot3D} the modulus of a complex function as a surface coloured by phase.
+These return \texttt{Graphics3D}, which the engine renders with lighting and a movable camera,
+and which \B{Export} writes as PNG or JPEG:
+
+\plotcell{02-introduction/graphics/plot3d}
+
+\plotcell{02-introduction/graphics/parametricplot3d}
+
+\plotcell{02-introduction/graphics/complexplot3d}
+
+\bigskip
+\noindent
+That is the tour. Every area glimpsed here has a chapter of its own ahead, and this
+introduction will itself grow as Mathilda does. With the shape of the system in view,
+we can now begin in earnest---starting, in the next part, with numbers.

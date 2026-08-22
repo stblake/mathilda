@@ -1,0 +1,163 @@
+# RandomImage
+
+!!! success "Status: Stable"
+    documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+
+## Description
+
+**`RandomImage[] gives a 150x150 grey image of uniform noise on [0, 1]. RandomImage[max] scales the range to [0, max]; RandomImage[max, {w, h}] sets the size, and a single n means {n, n}. ColorSpace -> "RGB" gives three independent channels. Samples are drawn from the same stream as RandomReal, so SeedRandom makes the result reproducible.`**
+
+## Examples (20)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic Examples (5)
+
+```mathematica
+In[1]:= SeedRandom[42];
+```
+
+```mathematica
+In[2]:= RandomImage[1, {32, 32}]
+Out[2]= -Image-
+```
+
+![32x32 result](data:image/png;base64,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)
+
+```mathematica
+In[3]:= ImageDimensions[RandomImage[]]
+Out[3]= {150, 150}
+
+In[4]:= ImageType[RandomImage[1, {8, 8}]]
+Out[4]= "Real"
+
+In[5]:= ImageChannels[RandomImage[1, {8, 8}]]
+Out[5]= 1
+```
+
+### Scope (6)
+
+```mathematica
+In[6]:= SeedRandom[7];
+
+In[7]:= ImageDimensions[RandomImage[1, {64, 16}]]
+Out[7]= {64, 16}
+
+In[8]:= ImageDimensions[RandomImage[1, 24]]
+Out[8]= {24, 24}
+```
+
+```mathematica
+In[9]:= RandomImage[1, {24, 24}, ColorSpace -> "RGB"]
+Out[9]= -Image-
+```
+
+![24x24 result](data:image/png;base64,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)
+
+```mathematica
+In[10]:= ImageChannels[RandomImage[1, {8, 8}, ColorSpace -> "RGB"]]
+Out[10]= 3
+
+In[11]:= Max[Flatten[ImageData[RandomImage[255, {16, 16}]]]] > 200
+Out[11]= True
+```
+
+### Applications (5)
+
+```mathematica
+In[12]:= SeedRandom[3];
+```
+
+Noise is what shows a smoothing filter doing anything at all
+
+```mathematica
+In[13]:= GaussianFilter[RandomImage[1, {48, 48}], 2]
+Out[13]= -Image-
+```
+
+![48x48 result](data:image/png;base64,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)
+
+A median filter removes salt-and-pepper noise a mean filter would only spread
+
+```mathematica
+In[14]:= MedianFilter[RandomImage[1, {48, 48}], 2]
+Out[14]= -Image-
+```
+
+![48x48 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAOXklEQVR42u2dyc4V1RqGXwSk73tQREQ66Q2QQEI0DrwIr4Ab4QK4CW6AiQN1YphgFFAalb5TpO9EBOUMjg9mPeyPyhnVPkmtSf21q/5Vq6re9+vXqgnr1q17kST79+9Pkty6dStJsmnTpiTJr7/+miS5fv16kuTKlStJkrfffjtJcvv27STJL7/8kiRZtmxZRrXPPvssSfLdd98lSbZs2ZIkmTlzZnPekSNHmuMHDx5s9s+fP58kWb169cjrPHr0KEmyePHiJMm0adOSJJcuXWrO435o9+/fT5LMmTOn+X3NmjXN75y3du3aJMlPP/2UJFmyZElz3vLly5Mkp0+fbvo7dOhQkuTFixdJkjcytF7bJP64cOFCc+Dq1asj/2HWrFkNwp49e5YkmTBhQnMc5IHwhw8fNv08ePCgOX7z5s2RxxcuXNgOeNKkkePifNpvv/3WjNNt1apVSZKLFy+ORD7H+X3q1KkNA27cuNGcb+TTNmzY0DCB49euXRsYMFYMMMJB2vPnz5Mkb775ZpJk7ty5zfn8vmLFiiTJokWLGkTPnj27Of/p06eNruE6Z8+eTZLcu3cvSXL48OHXymz2jThkK+2PP/5Ikvz999//RdwbbzTMA9m0PXv2jPzdjIUJ3A/j4Xe3J0+eJEkWLFjQ/D4woG8GYE2AfBoI/fPPPxukI1NBLtbQ5MmTG4RNmTKl+R1rCiTSLwwD+chGdIoRzXVnzJjRIJzxgUiQyvkwkfNoS5cubcbNeP/666+RzLp7924zfvqHiUgC2rlz5xoGWGcMDOibAVu3bn3tCUYMDYTTLGMt+0EafgP9ct4HH3zQnP/+++8nSY4fP94gb968eQ1DsLZoyG7GAUJBLP3RD78zvsePHzfjgxE0/o82ceLE5nkgOY4ePTpS98H4QQeMCwNAgBsyClmKTDQjQBj+gK0GEH7y5MlGFmIlcR3258+f3/TD9WGAZfLvv/8+UmfABBCHDrIVB+KR1chwngtbEEzz/dqPwu/heTFO7pPnOTCgbwbwhuwJdukCZKwbMtKIwcpCV+BJcl1iKiBy8+bNTWzHyAXxNHQB/SObQRoyHiZUzR479w1z0Qls33333YYBWIX2lKs2MGDcPGE8OWQfMgtZj7avop62DkD4nTt3RiK5akRdQboRb10AQmEQHrkZaAbY44VxNHQS9+PxozPwS2CaIwlffvllw0h0yMCAcWGAYxjINiO6ksHsgwQj6b333musmcuXLzeyEvuZRj/IYPoHcTDKDQa4YYW42XpyFNhWoBsSgvvAk8ezp8E8kI/VNTCgbwagvR03RwYbwZVHDMKQde+8806DIN64o4MgAllpP4BGxomGf0E/ZOSwghxDYpwwe/r06UmSY8eOvRbhXVaTmcBzRLeQz9i3b9/IGNHAgHGzgt56663GnrUsB1nWGSAAO/qHH35o7OV169aNtNvZIvPdsLbQBWztwTsPUUVTHZupkA8j0U0gGcY61lUxF2uI50o7cODAwICxYAC508qjRYaDVOduU1Ql8H+OmhrZILCyXujH0UmsMnuqZmp1fa5rjxkmMh77CVg3bInaEhkgP+EYFPtDNHTcGIAshAnIOpAOsvAAbd9GuVfHjEDSmTNnRsbrQRxbEIlM53yQXEUlYRQyF2voldjLP9fluBFeNSPb9Uz05yoRzrfO5H4HBvTNgKoizEivdADIAOnOIduD7mq2JujfiLcnXtUXGfn8H+PavXt3cx7+wVdffZUk2bt3b+NnkNdgXDASSYFftXHjxsY/YtzoJpg6MKBvBiC7iL+DAKKHyF62yGbeKFresrzKHYPwKhNnK4X+nMOFoTCT48h0dE6Kijg37HpX2CEheC7krmES9wcDQDb/x3lV5nBgQN8MAOnff/99kmT79u0N0vBs8YyJybjSC9lYeYKuO0I2gix0CHZ+lTdAt1TWC9HWygOukG+dQr0UVgz3Zx2H5KDxPGzvM54ff/yxiQwMDBiXWBBvEsTyhrEekPXIPJhBXL+Kpdj+dQyFBuKNfFsRjM+5W6wSYjdVzhorxdexFWh/xtURMNo1q9Q92ZqDYSCf2NDAgL4ZYK390j79B0FYGcT3sZqwu/FAmYGCFQFysWJADPvI/iqz1jUTxh6xK+RgqivZuvrB3qdau/p/+oeZ6C5XP0f5DJiBNTkwoG8GrFy58rUnGAGWrc4XWMYjS20FGfF4plgxIATrCOY402RrB4aCbHQXVhu6yVUT6AZbLyCc8bN1zSgynevZz3HsiPENDBgXKwgkglhku+d8gTiQ4co1qgOcSwUR1NG7iqKK/YDoU6dONQxApnK+PUzHtKq8AIwD+VRPU99D9QW6DR3Jce6f6/A7DSuxmp8wMGDccsIgytFQkG+EotWpp0GW2w52vb77tTVk68Tjc22prRCYQp7DMtjjcBTVHnflgcNQV2/bo+b/YTz3OzCgbwYYecg0rIwqs2Qtj11vBDs3ayuj8jwts6m3wdPEesN/oWIOpnmmTmW3o7vMAJhs/8IVg9F8iK7MYYbq6DFjAGseRDPMbZ2cOHFipAyt3jR2N4zC7rYOQTaDzIpxKfIFeNw///xzkn+rFOjHM3WMVBgFI1x9wX1YxlfRWsbF/yEJ0Fmv+FUDBntmwI4dOxpZ/fnnn/9PHYAU/p8tyPebBxkgDU/XVoqZZr8C5LMFecRyuB7IraKjrtBjXDt37kzy6mzHKmduP4T+PO/YVeADA/pmgDNSUT0PusB2Ofv+HQQRG8GasqedYqZL1aooI+MnPwDzkPUgE1lvvwTdQP+2vrCGHMvCmoOh2PvWDfaHXhnHgMEx8YRB+qefftrEQJBlyG7XksIAkE3uGJldIZ71c4idYIe7/w8//PC1iES2Oipb1ZqCfCPR+65xdRW1/RmiqfgJ3Ac6gEgB/cLYgQF9MwAPknm6lumubPNMGt4onjGytGtmCed12f1k2kCSc7dcFx0CslypB2PssWOVdM2T9nOoVu7ycfp17njQAePCAGogU2SobNdWM9DRIcjMbdu2NcjFXv/6668b+xxGmQleKw773taU54Yh481kIxCGomOY0YMVxH1xP2xfVjMU0V2P3zWyWF1sBwb0zQCvp0n1Awhni12Nh8kbRZaz7zr5dFQh+DzLYqwx1ych4z0zBgSjE+gPxKEDuE/ndr3f1bCG8JjNiI8//jhDNPT/KSMGI5B12OcgEKsBpFSZK2opq3U7zSTnJTiODEUGU68D00AgOsWzLmGoc7owDwY5hsW4iPng4VJ1zXgc3XWGD91SWVMDA/pmAEjHU/N8VirUyDyxpjQzzEE4b7bL/odJrMmMdULdvmV6ipxwtYIW/+9+sEq6MlX0w3lmJjW0SACYxHNgfFh96CQY47XxBgb0zQCQjyz1GhGVdWJZjYx1NbSjmFUlnjNotkrYMveKOqGqagNd4NrSKkNGDMv3D3Lpn8zg+vXrR8a6qJpAItiqYq3qgQHjwgDi1UTvQCz2Muv900CKPdSuuL6tIWSk+wNxZkJXs6xGpzjX65ww+46ysl/dDzNdOF6tJsP1K495YMC4+AEgFOTz5qr6eGQoNaR4rMhg7HD8Bq++znUqq8ezKbH7nVO2h40Osr3tij/uC91nxjnez/0xLu4DmV/NWfPacZ7ZMzCgbwZgx3ptZkcjo5kebJG9RA9hDmuneRX2qM7Iq7D7PJDtuiFkr2ctMi5ku+P/KVbCAqGe+e8Z9m4gn/9j3zON2Oe5vpzLNmCwZwaAWHSAqxqwCkAAsp83iadHjKZaG4I3TmyJDFxlXaWoEa3yAlFVBrlZGOKcriv10AGuIe2yytApVTW4dRA6ACtwYMC4RUNBDLWWUe6XmfS8cUdDsQ44n+O8+WqNNv8OkypGVfY5spYqB/waW1ue3+z+XKnnfXQE4/Z3CPwFjyEfMO5WUJShQlZjzxNbIb7NljlfRDWpj8EKAVkgBuQ5B0ycHdmO9eLVyNFBlUwGeZ4p43nDjI9x2aN3/2ZilTnjvK5VY3gOAwPGRQcY+dUsxsq6SfE9MpDGG8dzJipoJPnLGByHac5A0S86BuuN+/H6QF57zt96rJjlrzZVX1tyI/ecYpX6gQHjogOwXjyDPKpCxu61x4rdC3I9t8oyHwR5/X2vcs74iD4aWeQXyEEzDvIXXSvoohOI9cBce7iODfG87FE7gmBGOcM4MKBvBqD9bQV4ZjeIdUzEsw69CgpIQRbDBJBrj5F9EFh91ZXqDawk+qvqiqrqDX7Hr/F3CapZnWayY048P1tP+Akvv+A3YLBnBuAxIrP9TcWqvt8IqDJI3mfdfBhhBqBbYIDXpvB1yeF6lUW3b7/9Nsm/c79c4xrlIZDd/oKHn4d1hr84XjFlWDd0XBhQzb2qqiBefgtdVciesYK97VmXIBz7nfog29lV/N3NXy9N8U0Z/JEvvvgiSfLJJ5+M9A/89SfPnGH8+DPkPfy8uB5b8hTo2uFLeuPCAGQVWpvqCMtu12BGcXXLUpjx0UcfJfl3HR5bTen4ypEzU13I53zGj6fuuW7ffPNNRn37HSa6msHWEPcLQ+wXOT9gfwDrcGBA3wxwLWWFdNdCso/MZttV22n/ofo2PBk6GAliQFqVJ0B3OE7fNS5iSV6brusbM9U3KNn3GnPsE7UdGNA3A6oYievcXUfj+iFiG0aC5+tiR9uuxxpDZiMzvcZ0lUED6XjOjj3BUKwR7off+X9iO2w9Qx7kes5Z5TGjCxnPUBc0bgwgJlF9/xYmgFzetK0Yf1G68khdhewqY3RB1/cFOG7kYXf7+1/OC1QZra7rRtHdao6Z/RjHmGDWwIC+GQBiQBJvyhVn1OXTXDVh5MMskA4ymGFTrRVXzSg3oqNcMsdtffB7tR5RtFIYz8P9kGnrmkWJtWWd5W/H7Nq1a2DAOLT/AIGrQeyQkUyFAAAAAElFTkSuQmCC)
+
+```mathematica
+In[15]:= Binarize[RandomImage[1, {32, 32}]]
+Out[15]= -Image-
+```
+
+![32x32 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAClUlEQVR42u2dSW7DMBAEqSD//zJzjA8SzPF0UQJcfTRsegm6MpyFPMYYc5xozv+Hj+MY73T1/NfHV5R67Yqu1r/6DNX1V973Z6hb5R/gZv1WLUPYcwU7VTSlPnMHiStr6gAR9OUIStmqgyMCCyvPIdBajRh1gAj6cgRdWaaDphULr2AhhZTOZi2FZR0ggtSpI19zQR10EPmcFRyl0EfkeVa+iw4QQSJoPjW9HPuSC5ssGpUiSASpeDq6k1fpVKOqa3bQd7V+KprSASJIBG2z9sr6O/HSQUc1grpaXweIIDdik8x7dHqKOjkooscplROzKC+C1GlRvvOfvdOrk0JcqtUwFeFYlBdB6q175oXH6IpYFUGpfFHnvYiOax0ggtyITbJVj66C3VV8T0V3OkAEmY6Od/zSgw+d13YK6B18WZQXQerjXFAHKdXXEljbuams4ksHiCA3YvNJM2J0VJZKv9sdLYIUOqZKdBQTuZ3qOsQgRnV9i/IiSJWiIKI7OmVnukBPz6npABFkFLTN/oSdRyh3tHMTahQkgtRpRYxu4au+V2pqftxUxPewDhGkPu4Log/WIAZAdmIk1e6oA0SQ3dHzjha+u+a8Ul3TqTS7DhBBnpqIRiN0X1A1SiEOaO1UDHWACDIKmrs2WU+YrKcjIs8LEkEKbU18Qo/QzoM16JyYDhBBVsS2HY5BF/1HqGGAQKvnBYkgVSrK01PqT7jtghinXflNbE0UQQqtiKWuIxwbrxTceb6QCBJBCh1T3VlR6gxcEHeoVTehOkAEOaCB3udO3GRazQURh4p0NpJGQSJIRSpidP7kyZcKeaGzCFJoRYxOC9NT7USrJHGpkA4QQSIIPS0wdV1g6vMQuaAOEnWACPpu/QE/DfHLbCF+GwAAAABJRU5ErkJggg==)
+
+And it is the honest input for a timing comparison, having no structure to exploit
+
+```mathematica
+In[16]:= ImageDimensions[Dilation[RandomImage[1, {64, 64}], 3]]
+Out[16]= {64, 64}
+```
+
+### Properties & Relations (4)
+
+The same seed gives the same image
+
+```mathematica
+In[17]:= Module[{a, b}, SeedRandom[7]; a = ImageData[RandomImage[1, {4, 4}]]; SeedRandom[7]; b = ImageData[RandomImage[1, {4, 4}]]; a === b]
+Out[17]= True
+```
+
+And a different seed does not
+
+```mathematica
+In[18]:= Module[{a, b}, SeedRandom[7]; a = ImageData[RandomImage[1, {4, 4}]]; SeedRandom[8]; b = ImageData[RandomImage[1, {4, 4}]]; a =!= b]
+Out[18]= True
+```
+
+The result is packed, like every other image-returning head
+
+```mathematica
+In[19]:= Head[Part[RandomImage[1, {16, 16}], 1]]
+Out[19]= NDArray
+```
+
+An unsupported colour space declines
+
+```mathematica
+In[20]:= Head[RandomImage[1, {4, 4}, ColorSpace -> "CMYK"]]
+Out[20]= RandomImage
+```
+
+## Algorithm
+
+imageio.c -- Import and Export for raster image files.
+
+Until this landed, every image in the system had to be typed out as an array of numbers, which makes the whole subsystem a demonstration rather than a tool: a filter is judged on photographs, and a synthetic checkerboard cannot show what a bilateral filter does that a Gaussian does not.
+
+WHY A VENDORED DECODER. JPEG decoding is a baseline-Huffman-plus-IDCT project of its own and PNG needs an inflate, so the choice is between vendoring or making libpng and libjpeg hard build requirements. Two dependency-free public-domain headers cost less than either, and -- unlike a system library -- they cannot be missing at a user's site, which for an `Import` is the whole point. The headers are included HERE AND NOWHERE ELSE so that this is the only object file carrying third-party code.
+
+WHAT A SAMPLE MEANS. A decoded 8-bit sample is scaled by 1/255 into the unit interval, because that is what the rest of the subsystem means by a brightness (see `image_load`) and the type a filter answers with is always "Real". So `Import` produces a "Real" image, not a "Byte" one: an image whose stored range depended on the file's bit depth would make every downstream kernel's scale depend on it too.
+
+## Implementation notes
+
+- `Protected`.
+- Samples are drawn from the **same stream as `RandomReal`**, so `SeedRandom` makes a
+  random image reproducible. A private generator would have made this the one random
+  builtin that ignores the seed.
+- The range is scaled, not clamped: a `"Real"` image may hold values above 1, and
+  clamping belongs in `Export`, where 8 bits actually run out.
+- Noise is the input a filter is most often judged on — a smoothing radius means nothing
+  on a checkerboard and everything on a noise field.
+- An unsupported colour space declines rather than silently returning grey.
+
+**Attributes:** `Protected`.
+
+## References
+
+**See also:** [RandomReal](../../random-number-generation/RandomReal/), [SeedRandom](../../random-number-generation/SeedRandom/), [Export](../../file-io/Export/)
+
+- Source: [`src/imageio.c`](https://github.com/stblake/mathilda/blob/main/src/imageio.c)
+- Specification: [`docs/spec/builtins/image-processing.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/image-processing.md)
+- Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)

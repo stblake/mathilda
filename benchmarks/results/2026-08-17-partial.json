@@ -1,0 +1,192 @@
+{
+ "host": {
+  "date": "2026-08-17",
+  "missing_optional_deps": [],
+  "platform": "macOS-15.7.4-x86_64-i386-64bit-Mach-O",
+  "machine": "x86_64",
+  "processor": "i386",
+  "mathilda": "Mathilda 0.060 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)",
+  "mathilda_bin": "/Users/user/Mathilda_dev/Mathilda/Mathilda",
+  "python_bin": "/usr/local/bin/python3.11",
+  "python_libs": "3.11.15 2.4.4 1.17.1 1.14.0",
+  "wolframscript": "/Applications/Mathematica.app/Contents/MacOS/wolframscript",
+  "runner_python": "3.14.6",
+  "local_versions": {
+   "numpy": "absent",
+   "scipy": "absent",
+   "sympy": "absent",
+   "mpmath": "1.4.1",
+   "numba": "absent",
+   "networkx": "absent"
+  }
+ },
+ "rows": [
+  {
+   "experiment": "86-basin-hopping-testbed",
+   "group": "D uncovered subsystems",
+   "label": "01 Chained trig 1D",
+   "times": {
+    "mathilda": 1.936,
+    "python": 689.023
+   },
+   "checks": {
+    "mathilda": "-17602",
+    "python": "-17602"
+   },
+   "ratio": 0.0028097755807861276,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "86-basin-hopping-testbed",
+   "group": "D uncovered subsystems",
+   "label": "02 Rugged sine 2D",
+   "times": {
+    "mathilda": 4.848,
+    "python": 1361.69
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.0035602817087589684,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "86-basin-hopping-testbed",
+   "group": "D uncovered subsystems",
+   "label": "03 Schwefel 2D",
+   "times": {
+    "mathilda": 28.679,
+    "python": 1282.933
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.022354246090793516,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "86-basin-hopping-testbed",
+   "group": "D uncovered subsystems",
+   "label": "04 Schaffer N2 2D",
+   "times": {
+    "mathilda": 31.316,
+    "python": 22683.928
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.001380536915828687,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "86-basin-hopping-testbed",
+   "group": "D uncovered subsystems",
+   "label": "05 Ackley 3D",
+   "times": {
+    "mathilda": 21.235,
+    "python": 7672.675
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.002767613641917584,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "86-basin-hopping-testbed",
+   "group": "D uncovered subsystems",
+   "label": "06 Rosenbrock 10D",
+   "times": {
+    "mathilda": 204.812,
+    "python": 8977.783
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.02281320455172508,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  }
+ ],
+ "requires": {
+  "NMinimize": "present"
+ },
+ "raw": {
+  "86-basin-hopping-testbed": {
+   "mathilda": {
+    "bench": {
+     "01 Chained trig 1D": 1.936,
+     "02 Rugged sine 2D": 4.848,
+     "03 Schwefel 2D": 28.679,
+     "04 Schaffer N2 2D": 31.316,
+     "05 Ackley 3D": 21.235,
+     "06 Rosenbrock 10D": 204.812
+    },
+    "check": {
+     "01 Chained trig 1D": "-17602",
+     "02 Rugged sine 2D": "0",
+     "03 Schwefel 2D": "0",
+     "04 Schaffer N2 2D": "0",
+     "05 Ackley 3D": "0",
+     "06 Rosenbrock 10D": "0"
+    },
+    "require": {
+     "NMinimize": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "01 Chained trig 1D": 689.023,
+     "02 Rugged sine 2D": 1361.69,
+     "03 Schwefel 2D": 1282.933,
+     "04 Schaffer N2 2D": 22683.928,
+     "05 Ackley 3D": 7672.675,
+     "06 Rosenbrock 10D": 8977.783
+    },
+    "check": {
+     "01 Chained trig 1D": "-17602",
+     "02 Rugged sine 2D": "0",
+     "03 Schwefel 2D": "0",
+     "04 Schaffer N2 2D": "0",
+     "05 Ackley 3D": "0",
+     "06 Rosenbrock 10D": "0"
+    },
+    "require": {
+     "scipy.optimize:basinhopping": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  }
+ },
+ "elapsed_s": 220.32070684432983,
+ "durations": {
+  "86-basin-hopping-testbed": 218.55781388282776
+ },
+ "partial": true,
+ "label_problems": []
+}

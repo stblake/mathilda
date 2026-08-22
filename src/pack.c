@@ -490,6 +490,19 @@ static void pack_mark_aware_heads(void) {
         /* Arithmetic and algebra: scan for an ndarray operand themselves
          * (src/plus.c, times.c, power.c, linalg/dot.c). */
         "Plus", "Times", "Power", "Dot",
+        /* Image heads. An image's pixels are a packed rank-2 or rank-3 buffer, and every one of
+         * these reads it through image_load, which handles the buffer directly. Without the
+         * opt-in the gate would materialise the pixels into Expr nodes on the way IN to each
+         * call -- reintroducing exactly the ~4.6 ms per 262144 pixels that storing a buffer
+         * removes, and doing it once per filter in a chain. */
+        "Image", "ImageData", "ImageDimensions", "ImageChannels", "ImageType", "ImageQ",
+        "ImageConvolve", "GaussianFilter", "ImageResize",
+        "Binarize", "FindThreshold", "ColorConvert",
+        /* Image3D belongs here for exactly the reason Image does, and was missed when the volume
+         * constructor gained its own canonicalisation: it reads packed data through the same
+         * memcpy path, so materialising first is pure waste. The packed-aware gate caught it,
+         * which is what that gate is for -- a fast path nobody opted into is invisible otherwise. */
+        "Image3D", "Image3DQ",
         /* Subtract and Divide joined on 2026-08-02, found by the gate pass of
          * tools/nd_fastpath_sweep.py. Neither reads an element: builtin_subtract
          * ALWAYS rewrites to Plus[a, Times[-1, b]], and builtin_divide falls
@@ -683,7 +696,7 @@ static void pack_mark_aware_heads(void) {
         "Eigenvalues", "Eigenvectors", "Tr", "Norm", "Normalize", "Cross",
         "DiagonalMatrix", "HankelMatrix", "ToeplitzMatrix", "VandermondeMatrix",
         "PositiveDefiniteMatrixQ", "NegativeDefiniteMatrixQ",
-        "LatticeReduce", "FindIntegerNullVector",
+        "LatticeReduce", "FindIntegerNullVector", "HermiteDecomposition",
         /* Fit reads its data straight off the buffer (fit_read_numeric in
          * src/fit.c) and builds a packed float64 design matrix column-wise, so
          * the gate must not materialise a packed data matrix into 2*npts boxed
@@ -1000,7 +1013,7 @@ static void pack_mark_aware_heads(void) {
          * identity on an integer, Sign and UnitStep are trivial comparisons, and
          * a real input that will not fit an int64 abandons the whole array so
          * the List path answers with a bignum. */
-        "Floor", "Ceiling", "Round", "IntegerPart", "Sign", "UnitStep",
+        "Floor", "Ceiling", "Round", "IntegerPart", "Sign", "UnitStep", "UnitBox",
         /* Mod and Quotient, once ndkernels.c gave them exact int64 arms
          * (NDKB_Mod.to_int_i, NDKB_Quotient.to_int_i / .to_int_r). Until then
          * their kernel computed m - n*floor(m/n) in double and would have

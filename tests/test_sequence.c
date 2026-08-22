@@ -141,10 +141,32 @@ void test_sequence_attributes() {
     assert_eval_eq("Attributes[RuleDelayed]", "{HoldRest, Protected, SequenceHold}", 0);
 }
 
+/* ==============================================================
+ * Nothing: the list-construction identity element
+ * ============================================================== */
+
+void test_nothing() {
+    /* Nothing is removed from any list in which it appears. */
+    assert_eval_eq("{1, Nothing, 2}", "{1, 2}", 0);
+    assert_eval_eq("{Nothing}", "{}", 0);
+    assert_eval_eq("{Nothing, Nothing}", "{}", 0);
+    assert_eval_eq("{a, b, Nothing, c, Nothing}", "{a, b, c}", 0);
+    /* Removal survives Flatten and the conditional Table idiom. */
+    assert_eval_eq("Flatten[{{Nothing, 1}, {2, Nothing}}]", "{1, 2}", 0);
+    assert_eval_eq("Table[If[EvenQ[i], i, Nothing], {i, 1, 6}]", "{2, 4, 6}", 0);
+    /* A Nothing[...] form is removed too. */
+    assert_eval_eq("{1, Nothing[x], 2}", "{1, 2}", 0);
+    /* Non-list heads keep Nothing as an ordinary symbol. */
+    assert_eval_eq("f[1, Nothing, 2]", "f[1, Nothing, 2]", 0);
+    /* Protected, like the other structural symbols. */
+    assert_eval_eq("Attributes[Nothing]", "{Protected}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
 
+    TEST(test_nothing);
     TEST(test_sequence_basic_splice);
     TEST(test_sequence_single_arg);
     TEST(test_sequence_empty);

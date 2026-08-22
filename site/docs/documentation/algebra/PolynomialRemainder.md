@@ -5,14 +5,20 @@
 
 ## Description
 
-```text
-PolynomialRemainder[p, q, x] gives the remainder from dividing p by q, treated as polynomials in x.
-Option: Extension -> alpha (default None) computes the remainder over Q(alpha); see PolynomialQuotient for the recognised alpha forms.
-```
+**`PolynomialRemainder[p, q, x] gives the remainder from dividing p by q, treated as polynomials in x.`**
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+Option: Extension -\> alpha (default None) computes the remainder over Q(alpha); see PolynomialQuotient for the recognised alpha forms.
+
+</details>
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= PolynomialRemainder[x^4+2x+1, x^2+1, x]
@@ -20,12 +26,32 @@ Out[1]= 2 + 2 x
 
 In[2]:= PolynomialRemainder[x^3, a x+b, x]
 Out[2]= -b^3/a^3
+```
 
+### Options (2)
+
+```mathematica
 In[3]:= PolynomialRemainder[x^2 - 2, x - Sqrt[2], x, Extension -> Sqrt[2]]
 Out[3]= 0
 
 In[4]:= PolynomialRemainder[x^2 - 3, x - Sqrt[2], x, Extension -> Sqrt[2]]
 Out[4]= -1
+```
+
+### Applications (4)
+
+```mathematica
+In[5]:= PolynomialRemainder[x^2 - 1, x - 1, x]
+Out[5]= 0
+
+In[6]:= PolynomialRemainder[x^3 + 2 x^2 + x + 1, x + 1, x]
+Out[6]= 1
+
+In[7]:= PolynomialRemainder[x^2 + 1, x, x]
+Out[7]= 1
+
+In[8]:= PolynomialRemainder[x^5 + x + 1, x^2 + 1, x]
+Out[8]= 1 + 2 x
 ```
 
 ## Implementation notes
@@ -49,40 +75,20 @@ fast exact-integer-division path for pure integer/bigint leading coefficients. T
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [PolynomialQuotient](../../algebra/PolynomialQuotient/)
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra" (3rd ed.), Ch. 2 (division with remainder over a field).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 2.
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
+- Tests: [`tests/test_extension_options.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_options.c)
+- Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
+- Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= PolynomialRemainder[x^2 - 1, x - 1, x]
-Out[1]= 0
-```
-
-```mathematica
-In[1]:= PolynomialRemainder[x^3 + 2 x^2 + x + 1, x + 1, x]
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= PolynomialRemainder[x^2 + 1, x, x]
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= PolynomialRemainder[x^5 + x + 1, x^2 + 1, x]
-Out[1]= 1 + 2 x
-```
 
 ### Notes
 

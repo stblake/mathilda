@@ -38,6 +38,212 @@ the current working directory.
 - Generalises the bespoke fallback previously hard-coded for the CRC integral
   tables; `Get` (above) shares its file-reading core.
 
+## Import
+Reads a raster image file and returns an `Image`.
+- `Import["file"]` — decodes PNG, JPEG, BMP, GIF, TGA, PSD, HDR or PNM by content.
+- `Import["file", "Image"]` — the same, stated explicitly.
+
+**Features**:
+- `Protected`.
+- Samples are scaled by `1/255` into the unit interval, so the result is a `"Real"`
+  image whatever the file's bit depth. The stored range of an image fixes what every
+  downstream kernel's arithmetic means (see `ImageData`), and a range that depended on
+  the file would make a Gaussian's scale depend on it too.
+- The file's channel count is preserved: a grey file stays 1-channel and an RGBA file
+  keeps its alpha. Forcing 3 channels would invent two for the first and silently
+  discard transparency from the second.
+- The result is packed and canonical — the same representation a filter produces, so an
+  imported photograph needs no special-casing downstream.
+- `$Failed` for a missing or malformed file. A path whose format is not handled at all
+  stays unevaluated instead, which keeps `Import` from appearing to implement every
+  format in existence.
+- Decoding is by the vendored `stb_image` (public domain), so no system image library is
+  a build requirement.
+
+#### Basic Examples
+
+```mathematica
+In[1]:= img = Image[Table[{N[i/24], N[j/32], N[Mod[i + j, 8]]/8}, {i, 1, 24}, {j, 1, 32}], "Real"];
+
+In[2]:= Export["/tmp/mathilda_doc.png", img]
+Out[2]= /tmp/mathilda_doc.png
+
+In[3]:= Import["/tmp/mathilda_doc.png"]
+Out[3]= -Image-
+
+In[4]:= ImageDimensions[Import["/tmp/mathilda_doc.png"]]
+Out[4]= {32, 24}
+
+In[5]:= ImageType[Import["/tmp/mathilda_doc.png"]]
+Out[5]= Real
+```
+
+#### Scope
+
+```mathematica
+In[1]:= img = Image[Table[{N[i/24], N[j/32], N[Mod[i + j, 8]]/8}, {i, 1, 24}, {j, 1, 32}], "Real"];
+
+In[2]:= ImageChannels[Import[Export["/tmp/mathilda_doc_g.png", Image[Table[N[i/16], {i, 1, 16}, {j, 1, 16}], "Real"]]]]
+Out[1]= 1
+
+In[2]:= ImageChannels[Import[Export["/tmp/mathilda_doc_a.png", Image[Table[{0.2, 0.4, 0.6, 0.8}, {i, 1, 8}, {j, 1, 8}], "Real"]]]]
+Out[2]= 4
+
+In[3]:= ImageDimensions[Import[Export["/tmp/mathilda_doc.jpg", img]]]
+Out[3]= {32, 24}
+
+In[4]:= ImageDimensions[Import[Export["/tmp/mathilda_doc.bmp", img]]]
+Out[4]= {32, 24}
+
+In[5]:= ImageDimensions[Import[Export["/tmp/mathilda_doc.tga", img]]]
+Out[5]= {32, 24}
+
+In[6]:= Import["/tmp/mathilda_doc_missing.png"]
+Out[6]= $Failed
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= img = Image[Table[{N[i/24], N[j/32], N[Mod[i + j, 8]]/8}, {i, 1, 24}, {j, 1, 32}], "Real"];
+
+In[2]:= (* PNG is lossless, so a round trip is exact to within half a quantisation level *)
+Max[Abs[Flatten[ImageData[Import[Export["/tmp/mathilda_doc.png", img]]] - ImageData[img]]]] <= 1/510. + 1.*^-12
+Out[1]= True
+
+In[2]:= (* an imported image is packed, like every filter's result *)
+Head[Part[Import["/tmp/mathilda_doc.png"], 1]]
+Out[2]= NDArray
+
+In[3]:= (* JPEG is lossy: the same round trip is bounded, not exact *)
+0 < Mean[Flatten[Abs[ImageData[Import[Export["/tmp/mathilda_doc.jpg", img]]] - ImageData[img]]]] < 0.1
+Out[3]= True
+
+In[4]:= (* a format nothing here claims stays unevaluated, which is not the same failure as a missing file *)
+Head[Import["/tmp/mathilda_doc.xyz"]]
+Out[4]= Import
+```
+
+#### Applications
+
+```mathematica
+In[1]:= img = Image[Table[{N[i/24], N[j/32], N[Mod[i + j, 8]]/8}, {i, 1, 24}, {j, 1, 32}], "Real"];
+
+In[2]:= (* filters compose with an imported image exactly as with a constructed one *)
+ImageDimensions[GaussianFilter[Import["/tmp/mathilda_doc.png"], 2]]
+Out[1]= {32, 24}
+
+In[2]:= (* a pipeline written end to end: read, edge-detect, write *)
+Export["/tmp/mathilda_doc_edges.png", EdgeDetect[Import["/tmp/mathilda_doc.png"]]]
+Out[2]= /tmp/mathilda_doc_edges.png
+
+In[3]:= ImageDimensions[Import["/tmp/mathilda_doc_edges.png"]]
+Out[3]= {32, 24}
+```
+
+## Export
+Writes an `Image` to a raster image file, or a `Graphics` object to an image file.
+- `Export["file", image]` — the format comes from the file extension (PNG, JPEG, BMP, TGA).
+- `Export["file", image, "PNG"]` — the format stated explicitly, for a name that does not
+  carry one.
+- `Export["file", plot]` where `plot` is the result of `Plot`, `ListPlot`, `Graphics`, …
+  writes the graphic to **PDF, PNG, or JPEG** (again chosen from the extension, or stated
+  as `"PDF"`/`"PNG"`/`"JPEG"`).
+
+**Features**:
+- `Protected`.
+- Returns the file name, so `Import[Export[f, img]]` is a round trip that can be written
+  as a single expression.
+
+**Graphics export**:
+- **PDF** is a resolution-independent **vector** file written by a small built-in PDF
+  emitter — no external library, no display, so it works headless and in every build. It
+  walks the graphics primitives directly (`Line`, `Point`, `Polygon`, `Disk`/`Circle`,
+  `Rectangle`, `Arrow`, `Text`) with the `RGBColor`/`GrayLevel`/`Hue`/`CMYKColor`,
+  `Opacity`, `Thickness` and `PointSize` directives, and draws a framed set of axes with
+  "nice" ticks and numeric labels. Text uses the PDF base-14 Helvetica, so no font is
+  embedded. This is the recommended format for print and for the book.
+- **PNG** and **JPEG** render through the graphics backend into an offscreen buffer, so the
+  file is pixel-identical to the on-screen plot (the same axes, ticks, labels and text).
+  They therefore need graphics support compiled in (`USE_GRAPHICS`) **and** a usable GUI
+  session; with none (a headless box, `ssh`, cron) they return `$Failed` gracefully rather
+  than crashing, while PDF still works. Resolution follows the `ImageSize` option
+  (default 720×540). The pixels are encoded by the vendored `stb_image_write`, so JPEG
+  output does not depend on which formats the Raylib build happens to support.
+- A `Graphics3D` object (`Plot3D`, `ParametricPlot3D`, `ComplexPlot3D`, ...) exports to
+  **PNG or JPEG** through the 3D renderer, with the same graphics-support/display
+  requirement; it has no vector-PDF form (PDF of a 3D scene returns `$Failed`).
+- Samples outside the unit interval are **clamped**, not wrapped. An unsharp mask
+  legitimately overshoots and 8-bit output has nowhere to put the overshoot; wrapping
+  would turn a bright highlight black, which reads as a bug in the filter rather than in
+  the writer. `NaN` clamps to 0.
+- JPEG is written at quality 90 — a documented constant rather than a silent one. Use PNG
+  when the bytes must survive.
+- An `Image3D` is declined (the expression stays unevaluated): a volume has no single
+  raster, and quietly writing its middle slice would misreport what was exported.
+- Writing is by the vendored `stb_image_write` (public domain).
+
+#### Basic Examples
+
+```mathematica
+In[1]:= img = Image[Table[{N[i/24], N[j/32], N[Mod[i + j, 8]]/8}, {i, 1, 24}, {j, 1, 32}], "Real"];
+
+In[2]:= Export["/tmp/mathilda_doc_e.png", img]
+Out[2]= /tmp/mathilda_doc_e.png
+
+In[3]:= FileExistsQ["/tmp/mathilda_doc_e.png"]
+Out[3]= True
+
+In[4]:= ImageDimensions[Import["/tmp/mathilda_doc_e.png"]]
+Out[4]= {32, 24}
+```
+
+#### Scope
+
+```mathematica
+In[1]:= img = Image[Table[{N[i/24], N[j/32], N[Mod[i + j, 8]]/8}, {i, 1, 24}, {j, 1, 32}], "Real"];
+
+In[2]:= Export["/tmp/mathilda_doc_e.jpg", img]
+Out[1]= /tmp/mathilda_doc_e.jpg
+
+In[2]:= Export["/tmp/mathilda_doc_e.bmp", img]
+Out[2]= /tmp/mathilda_doc_e.bmp
+
+In[3]:= Export["/tmp/mathilda_doc_e.tga", img]
+Out[3]= /tmp/mathilda_doc_e.tga
+
+In[4]:= (* a grey image writes a 1-channel file *)
+ImageChannels[Import[Export["/tmp/mathilda_doc_eg.png", Image[Table[N[i/16], {i, 1, 16}, {j, 1, 16}], "Real"]]]]
+Out[4]= 1
+```
+
+#### Options
+
+```mathematica
+In[1]:= img = Image[Table[{N[i/24], N[j/32], N[Mod[i + j, 8]]/8}, {i, 1, 24}, {j, 1, 32}], "Real"];
+
+In[2]:= (* the format may be stated rather than inferred, which is the only way to write a file with no extension *)
+Export["/tmp/mathilda_doc_noext", img, "PNG"]
+Out[1]= /tmp/mathilda_doc_noext
+
+In[2]:= ImageDimensions[Import["/tmp/mathilda_doc_noext", "Image"]]
+Out[2]= {32, 24}
+```
+
+#### Properties & Relations
+
+```mathematica
+In[1]:= img = Image[Table[{N[i/24], N[j/32], N[Mod[i + j, 8]]/8}, {i, 1, 24}, {j, 1, 32}], "Real"];
+
+In[2]:= (* out-of-range samples clamp to the ends rather than wrapping *)
+ImageData[Import[Export["/tmp/mathilda_doc_clamp.png", Image[{{2.0, -1.0}, {1.0, 0.0}}, "Real"]]]]
+Out[1]= {{1.0, 0.0}, {1.0, 0.0}}
+
+In[2]:= (* a volume is declined rather than silently reduced to a slice *)
+Head[Export["/tmp/mathilda_doc_vol.png", Image3D[Table[0.5, {z, 1, 2}, {y, 1, 2}, {x, 1, 2}], "Real"]]]
+Out[2]= Export
+```
+
 ## Put
 Writes one or more expressions to a file, replacing any prior contents.
 - `expr >> "filename"` — shorthand for `Put[expr, "filename"]`.

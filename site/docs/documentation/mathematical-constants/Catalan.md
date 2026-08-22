@@ -5,28 +5,53 @@
 
 ## Description
 
-```text
-Catalan
-    is Catalan's constant, with numerical value ~= 0.915966.
-Catalan is the sum over k >= 0 of (-1)^k (2 k + 1)^-2. It is a
-mathematical constant: it has attributes Constant and Protected,
-NumericQ[Catalan] is True, and D[Catalan, x] is 0. N[Catalan, prec]
-evaluates it to any precision.
+**`Catalan`**
+
+is Catalan's constant, with numerical value ~= 0.915966.
+
+**`NumericQ[Catalan] is True, and D[Catalan, x] is 0. N[Catalan, prec]`**
+
+<details>
+<summary>Notes</summary>
+
+Catalan is the sum over k \>= 0 of (-1)^k (2 k + 1)^-2. It is a mathematical constant: it has attributes Constant and Protected, evaluates it to any precision.
+
+</details>
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (5)
+
+```mathematica
+In[1]:= N[Catalan]
+Out[1]= 0.915966
+
+In[2]:= N[Catalan, 40]
+Out[2]= 0.91596559417721901505460351493238411077416
+
+In[3]:= D[Catalan, x]
+Out[3]= 0
+
+In[4]:= NumericQ[Catalan]
+Out[4]= True
+
+In[5]:= N[8 Catalan, 30]
+Out[5]= 7.32772475341775212043682811946
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
 - Attributes `Constant`, `Protected`. `Attributes[Catalan] = {Constant,
+  Protected}`; the symbol cannot be reassigned.
+- Propagated as an exact, unevaluated symbol; `NumericQ[Catalan]` is `True` and
+  `D[Catalan, x] = 0`.
+- `N[Catalan]` gives the machine value `0.915966`; `N[Catalan, prec]` gives any
+  precision (MPFR `mpfr_const_catalan`), e.g.
+  `N[Catalan, 50] = 0.915965594177219015054603514932384110774149374281673`.
 
 **Attributes:** `Constant`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 
@@ -34,33 +59,6 @@ _No verified examples yet for this function._
 - Specification: [`docs/spec/builtins/mathematical-constants.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/mathematical-constants.md)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= N[Catalan]
-Out[1]= 0.915966
-```
-
-```mathematica
-In[1]:= N[Catalan, 40]
-Out[1]= 0.91596559417721901505460351493238411077416
-```
-
-```mathematica
-In[1]:= D[Catalan, x]
-Out[1]= 0
-```
-
-```mathematica
-In[1]:= NumericQ[Catalan]
-Out[1]= True
-```
-
-```mathematica
-In[1]:= N[8 Catalan, 30]
-Out[1]= 7.32772475341775212043682811946
-```
 
 ### Notes
 

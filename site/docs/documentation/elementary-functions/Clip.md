@@ -5,29 +5,30 @@
 
 ## Description
 
-```text
-Clip[x]
-    gives x clipped to be between -1 and +1.
-Clip[x, {min, max}]
-    gives x for min <= x <= max, min for x < min, and max for x > max.
-Clip[x, {min, max}, {vmin, vmax}]
-    gives vmin for x < min and vmax for x > max.
+**`Clip[x]`**
 
-Clip threads over lists in its first argument and works at machine
-or arbitrary precision (via N). Symbolic constants such as Pi are
-numericalized only to decide which side of the interval x lies on;
-the original symbolic x is returned unchanged when min <= x <= max.
+gives x clipped to be between -1 and +1.
 
-Infinity and -Infinity are clipped to the upper and lower
-replacement values respectively. Clip is not defined for non-real
-complex values: Clip::ncompl is issued and the call is returned
-unevaluated. Clip[a] for an otherwise undetermined a also stays
-unevaluated so user-supplied rules can intercept it.
-```
+**`Clip[x, {min, max}]`**
 
-## Examples
+gives x for min \<= x \<= max, min for x \< min, and max for x \> max.
 
-All examples below are verified against the current Mathilda build.
+**`Clip[x, {min, max}, {vmin, vmax}]`**
+
+gives vmin for x \< min and vmax for x \> max.
+
+<details>
+<summary>Notes</summary>
+
+Clip threads over lists in its first argument and works at machine or arbitrary precision (via N). Symbolic constants such as Pi are numericalized only to decide which side of the interval x lies on; the original symbolic x is returned unchanged when min \<= x \<= max. Infinity and -Infinity are clipped to the upper and lower replacement values respectively. Clip is not defined for non-real complex values: Clip::ncompl is issued and the call is returned unevaluated. Clip\[a\] for an otherwise undetermined a also stays unevaluated so user-supplied rules can intercept it.
+
+</details>
+
+## Examples (13)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (7)
 
 ```mathematica
 In[1]:= Clip[7.5]
@@ -45,15 +46,51 @@ Out[4]= {-1, 0, 1}
 In[5]:= Clip[Infinity]
 Out[5]= 1
 
-In[6]:= Clip[2 - 3 I]
-Out[6]= Clip[2 - 3*I]
+In[6]:= Clip[Re[2 - 3 I]] + Clip[Im[2 - 3 I]] I
+Out[6]= 1 - I
 
-In[7]:= Clip[Re[2 - 3 I]] + Clip[Im[2 - 3 I]] I
-Out[7]= 1 - I
-
-In[8]:= N[Clip[1/11, {1/7, 5}], 50]
-Out[8]= 0.142857142857142857142857142857142857142857142857142
+In[7]:= N[Clip[1/11, {1/7, 5}], 50]
+Out[7]= 0.142857142857142857142857142857142857142857142857142
 ```
+
+### Worked examples (1)
+
+```mathematica
+In[8]:= Min[Max[x, lo], hi]
+Out[8]= Min[hi, Max[lo, x]]
+```
+
+### Applications (5)
+
+```mathematica
+In[9]:= Clip[3.7]
+Out[9]= 1
+
+In[10]:= Clip[Pi]
+Out[10]= 1
+
+In[11]:= Clip[{-3, 0.5, 4}, {-1, 1}]
+Out[11]= {-1, 0.5, 1}
+
+In[12]:= Clip[15, {0, 10}, {-1, 1}]
+Out[12]= 1
+
+In[13]:= Clip[Infinity, {-2, 2}]
+Out[13]= 2
+```
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| Clip to [0.25, 0.75] over 4x10^6 | 575 s | 1.95 s | 0.953 s |
+| MapThread[Max] over 4x10^6 | 14.8 s | 692 s | 0.772 s |
+| MapThread[Min] over 4x10^6 | 14.7 s | 687 s | 0.769 s |
+| integer Mod over 4x10^6 | 3.88 s | 0.504 s | 3.28 s |
+| a b + a over 4x10^6 | 0.754 s | 1.07 s | 1.41 s |
+| a + b over 4x10^6 | 0.383 s | 0.516 s | 0.74 s |
 
 ## Implementation notes
 
@@ -81,46 +118,52 @@ value preserves the original exact/symbolic `x`.
 
 - `NumericFunction`, `Protected`.
 - Threads over a `List` in the first argument: `Clip[{x1, x2, ...}, ...]`
+  maps Clip element-wise over the list.  The `{min, max}` and
+  `{vmin, vmax}` configuration lists are explicitly **not** threaded
+  over -- threading is implemented inside the builtin (not via the
+  `Listable` attribute) so the bounds and replacement lists stay intact.
+- Symbolic numeric constants (`Pi`, `E`, etc.) are numericalized via
+  `N` only to decide which side of the interval `x` lies on; the
+  original symbolic `x` is returned when `min <= x <= max`, never
+  the numeric approximation.
+- `Infinity` and `-Infinity` are handled directly: `Clip[Infinity]`
+  yields `vmax` (or the default `1`), `Clip[-Infinity]` yields `vmin`.
+- An **infinite bound** means "no limit on that side":
+  `Clip[x, {0., Infinity}]` is the positive part and `Clip[x, {-Infinity, 1.}]`
+  caps from above only. An infinite bound is never attained, so it cannot put
+  its own head into the answer and the result keeps the input's exactness --
+  `Clip[{-2., 0.5, 3.}, {0., Infinity}]` is `{0., 0.5, 3.}`, all `Real`. A
+  *finite exact* bound beside `Real` data still returns that exact bound where
+  it clips (`Clip[{-2., 0.5}, {0, Infinity}]` gives `{0, 0.5}`), which is why
+  the two are gated separately on the packed path.
+- **Packed/NDArray fast path** (packed-aware): `Real` bounds stay on the buffer;
+  against an exact bound a three-way scan keeps a buffer when nothing clips (the
+  `Real` input) or when **everything** clips to a finite exact-`Integer` bound (a
+  uniform `int64` buffer), and degrades to the list path only for a mixture. See
+  [packed arrays](../packed-arrays/index.md).
+- **`Compile[]`/auto-compilation**: `Clip[x]` (default bounds) and
+  `Clip[x, {lo, hi}]` (`Real` bounds) lower to `Min[Max[x, lo], hi]` → `Real`.
+- Complex (non-real) input emits a one-shot `Clip::ncompl` warning and
+  the call stays unevaluated.  Use `Re[z]`, `Im[z]` to clip the parts
+  separately.
+- Symbolic input for which the position cannot be decided
+  numerically (e.g. `Clip[a]`) stays unevaluated so user-supplied
+  rules can intercept it.
 
 **Attributes:** `NumericFunction`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [N](../../arithmetic/N/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/elementary-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/elementary-functions.md)
+- Tests: [`tests/test_clip.c`](https://github.com/stblake/mathilda/blob/main/tests/test_clip.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_coverage.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_coverage.c)
+- Tests: [`tests/test_compile_transforms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_transforms.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Clip[3.7]
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= Clip[Pi]
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= Clip[{-3, 0.5, 4}, {-1, 1}]
-Out[1]= {-1, 0.5, 1}
-```
-
-```mathematica
-In[1]:= Clip[15, {0, 10}, {-1, 1}]
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= Clip[Infinity, {-2, 2}]
-Out[1]= 2
-```
 
 ### Notes
 

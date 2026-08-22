@@ -16,24 +16,31 @@ else
   BUILD_PLATFORM := Windows
 endif
 
-# Compiler. Mathilda must be built with a REAL GCC, never Apple's clang shim:
-# on macOS the plain `gcc` is a symlink to Apple clang, so a naive `CC = gcc`
-# silently builds with LLVM (the $Version banner then reads "Apple LLVM ...").
-# Auto-detect a genuine GCC by trying the newest Homebrew `gcc-NN` first and
-# falling back to a plain `gcc` (which IS real GCC on most Linux distros). We
-# only pick a name when CC was not set explicitly, so `make CC=clang` (or any
-# other override on the command line / in the environment) is still honoured.
-# A versioned name is fine here because it is *tried*, not hardcoded — hosts
-# without it fall through to the next candidate.
+# Compiler. Mathilda must be built with a REAL GCC, never Apple's clang shim: on
+# macOS the plain `gcc` is a symlink to Apple clang, and LLVM both miscompiles some
+# of our -std=c99 paths and hides the glibc portability class the Linux CI gates on.
+# "GCC only, never clang" is a HARD rule for this project — enforced below as an
+# error, not a warning.
+#
+# Auto-detect a genuine GCC by trying the newest Homebrew `gcc-NN` first and falling
+# back to a plain `gcc` (which IS real GCC on most Linux distros). We only pick a
+# name when CC was not set explicitly, so `make CC=gcc-14` (or any other override on
+# the command line / in the environment) is still honoured. A versioned name is fine
+# here because it is *tried*, not hardcoded — hosts without it fall through.
 ifeq ($(origin CC),default)
   CC := $(shell for c in gcc-16 gcc-15 gcc-14 gcc-13 gcc; do \
                   command -v $$c >/dev/null 2>&1 && { echo $$c; break; }; \
                 done)
-  # Warn loudly if the only `gcc` we found is really Apple clang — the build
-  # still proceeds, but the operator should install a real GCC (brew install gcc).
-  ifneq ($(shell $(CC) --version 2>/dev/null | grep -ci clang),0)
-    $(warning Mathilda: '$(CC)' is Apple clang, not real GCC — install Homebrew GCC (brew install gcc) for a supported build.)
+  ifeq ($(strip $(CC)),)
+    $(error Mathilda: no C compiler found. Mathilda builds with real GCC only — install Homebrew GCC (brew install gcc).)
   endif
+endif
+# Enforce the rule for BOTH the autodetected name and an explicit CC=...: if the
+# selected compiler reports itself as clang, STOP rather than silently produce an
+# unsupported binary. The fix is always `brew install gcc`, then build with the
+# default CC (or CC=gcc-NN).
+ifneq ($(shell $(CC) --version 2>/dev/null | grep -ci clang),0)
+  $(error Mathilda: '$(CC)' is clang, not GCC — Mathilda must be built with real GCC. Install Homebrew GCC (brew install gcc) and use the default CC or CC=gcc-16.)
 endif
 # `-Werror=implicit-function-declaration`: under -std=c99 glibc hides every
 # POSIX symbol, so reaching for one without a feature-test macro leaves the
@@ -62,7 +69,7 @@ endif
 # definition with the same `#ifdef` as its caller.
 CFLAGS = -O3 -std=c99 -Wall -Wextra -Werror=implicit-function-declaration \
          -Werror=incompatible-pointer-types -Werror=int-conversion \
-         -Werror=implicit-int -Werror=unused-function -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/stats -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/ffi -I/usr/include -I/usr/local/include
+         -Werror=implicit-int -Werror=unused-function -g -I./src -I./src/list -I./src/ml -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/stats -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/solve -I./src/ffi -I/usr/include -I/usr/local/include
 
 # Readline is available on macOS and Linux but not on Windows (MinGW).
 # Build with USE_READLINE=0 to disable it explicitly (e.g. for cross-builds
@@ -200,7 +207,25 @@ ifeq ($(USE_LAPACK), 1)
     LDFLAGS += -framework Accelerate
   else ifneq ($(shell pkg-config --exists lapacke 2>/dev/null && echo y),)
     CFLAGS  += -DUSE_LAPACK $(shell pkg-config --cflags lapacke)
-    LDFLAGS += $(shell pkg-config --libs lapacke)
+    # Debian/Ubuntu's lapacke.pc exposes only `-llapacke` and hides the Fortran
+    # LAPACK + reference CBLAS it depends on behind Requires.private, which a
+    # non-static `pkg-config --libs` never expands. Mathilda calls the Fortran
+    # LAPACK routines (dgeev_, zgesv_, dgesdd_, ...) and cblas_* (cblas_dgemm,
+    # cblas_ddot) DIRECTLY — it uses no LAPACKE C wrappers — so a pkg-config-only
+    # link fails on Ubuntu with hundreds of undefined references even though the
+    # headers resolve fine. Append the transitive -llapack + a BLAS provider
+    # (once each), after -llapacke so ld's left-to-right resolution keeps each
+    # provider behind its consumer. Homebrew's .pc and the Accelerate path never
+    # hit this; the /usr/include tier below already spells the trio out. Same
+    # fixup idiom as the FLINT block and the CI EXTRA_LIBS="-llapack -lblas".
+    LAPACKE_LIBS := $(shell pkg-config --libs lapacke)
+    ifeq ($(filter -llapack,$(LAPACKE_LIBS)),)
+      LAPACKE_LIBS += -llapack
+    endif
+    ifeq ($(filter -lblas -lopenblas -lcblas,$(LAPACKE_LIBS)),)
+      LAPACKE_LIBS += -lblas
+    endif
+    LDFLAGS += $(LAPACKE_LIBS)
   else ifneq ($(wildcard /usr/include/lapacke.h)$(wildcard /usr/local/include/lapacke.h),)
     CFLAGS  += -DUSE_LAPACK
     LDFLAGS += -llapacke -llapack -lblas
@@ -228,6 +253,12 @@ ifeq ($(USE_GRAPHICS), 1)
     # (frameworks are recorded in the dylib). EXTRA_LIBS below remains as a
     # manual escape hatch for anything pkg-config still can't infer.
     LDFLAGS += $(shell $(PKG_CONFIG) --static --libs raylib)
+    # graphics_export_raster screens for a usable GUI session before InitWindow
+    # (which segfaults inside GLFW otherwise) via CGSessionCopyCurrentDictionary;
+    # that symbol lives in CoreGraphics, and CFRelease in CoreFoundation.
+    ifeq ($(BUILD_PLATFORM),Darwin)
+      LDFLAGS += -framework CoreGraphics -framework CoreFoundation
+    endif
   else
     $(warning Raylib not detected; building with USE_GRAPHICS=0 (Show/Plot will print a text placeholder))
     $(warning   macOS (Homebrew): brew install raylib)
@@ -310,7 +341,7 @@ ifeq ($(USE_FFTW), 1)
 endif
 
 SRC_DIR = src
-SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/numbertheory/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/stats/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/compile/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c) $(wildcard $(SRC_DIR)/graphics/*.c) $(wildcard $(SRC_DIR)/graph/*.c) $(wildcard $(SRC_DIR)/strings/*.c) $(wildcard $(SRC_DIR)/strings/regex/*.c)
+SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/solve/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/ml/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/numbertheory/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/stats/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/compile/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c) $(wildcard $(SRC_DIR)/graphics/*.c) $(wildcard $(SRC_DIR)/graph/*.c) $(wildcard $(SRC_DIR)/strings/*.c) $(wildcard $(SRC_DIR)/strings/regex/*.c)
 ifneq ($(USE_GRAPHICS), 1)
 SRC := $(filter-out $(SRC_DIR)/graphics/render.c $(SRC_DIR)/graphics/render3d.c $(SRC_DIR)/graphics/label_font.c, $(SRC))
 endif
@@ -448,6 +479,26 @@ check-packed-aware:
 check-array-exactness:
 	python3 tools/check_array_exactness.py
 
+# `make check-image-packing` — does every image head hand back a PACKED buffer,
+# at BOTH ranks? Three times an image operation was 4x to 23x slower than its
+# equivalent elsewhere with entirely correct answers, because the marshalling and
+# not the algorithm was the cost: image_load walking an NDArray element by
+# element, image3d_load still walking after image_load was fixed, and
+# bit_image_from_mask building 262144 Expr integers in nested Lists. No test in
+# the suite could catch any of them; a benchmark caught each one by accident, one
+# at a time. This asks the question mechanically instead.
+check-image-packing:
+	python3 tools/check_image_packing.py
+
+# `make check-menu-ids` — does every native menu item actually do something?
+#
+# The menu bar is built in Rust and handled in TypeScript, joined only by a string id travelling
+# through a `menu:<id>` event, and BOTH failure directions are silent: an id with no handler is a
+# dead command, and a handler nothing emits is dead code that reads like wiring. Both were present
+# the first time this was checked by hand.
+check-menu-ids:
+	python3 tools/check_menu_ids.py
+
 # `make check-nd-surfaces` — does every head reach the SAME fast path from a
 # packed List and from a visible NDArray, and agree on the answer?
 #
@@ -531,6 +582,17 @@ check-fastpath-sweep:
 bench-gap:
 	python3 benchmarks/run_all.py
 
+# `make check-diophantine-heldout` — the held-out Solve[..., Integers] gate.
+#
+# Runs Mathilda COLD on equations drawn from standard references (NOT the
+# co-designed benchmarks/87 cases.py) and cross-checks every answer against an
+# independent Python brute-force oracle over the same box. Fails (nonzero exit)
+# on any SILENT WRONG ANSWER -- a {}/finite/parametric result the oracle
+# contradicts, the one class the developed-against benchmark cannot see. Needs
+# only the Mathilda binary (no sympy); writes HELDOUT_REPORT.md.
+check-diophantine-heldout:
+	python3 benchmarks/87-diophantine-integers/validate.py
+
 # Report the compiler the build will ACTUALLY use. `gcc --version` does not
 # answer that: the autodetection above prefers a versioned `gcc-NN` over the
 # plain name, so on a host with both, a bare `gcc --version` names one compiler
@@ -543,7 +605,7 @@ print-cc:
 
 .PHONY: all clean docs docs-build docs-serve check-c99 check-interval check-packed-aware \
         check-array-exactness check-nd-surfaces check-compile-coverage \
-        check-fastpath-sweep bench-gap print-cc
+        check-fastpath-sweep check-menu-ids bench-gap check-diophantine-heldout print-cc
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first

@@ -5,21 +5,30 @@
 
 ## Description
 
-```text
-Differences[list]
-    gives the successive differences of the elements of list.
-Differences[list, n] gives the n-th differences (length l - n).
-Differences[list, n, s] takes differences of elements step s apart
-(length l - n |s|).
-Differences[list, {n1, n2, ...}] gives the successive n_k-th differences
-at level k of a nested list; for a matrix m, Differences[m, n] (= Differences[m, {n, 0}]) differences successive rows.
-FoldList[Plus, x, Differences[list]] inverts Differences.
-Differences has the attribute Protected.
-```
+**`Differences[list]`**
 
-## Examples
+gives the successive differences of the elements of list.
 
-All examples below are verified against the current Mathilda build.
+**`Differences[list, n] gives the n-th differences (length l - n).`**
+
+**`Differences[list, n, s] takes differences of elements step s apart`**
+
+**`Differences[list, {n1, n2, ...}] gives the successive n_k-th differences`**
+
+**`FoldList[Plus, x, Differences[list]] inverts Differences.`**
+
+<details>
+<summary>Notes</summary>
+
+(length l - n |s|). at level k of a nested list; for a matrix m, Differences\[m, n\] (= Differences\[m, {n, 0}\]) differences successive rows. Differences has the attribute Protected.
+
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Differences[{a, b, c, d, e}]
@@ -38,6 +47,25 @@ In[5]:= FoldList[Plus, a, Differences[{a, b, c, d, e}]]
 Out[5]= {a, b, c, d, e}
 ```
 
+### Applications (5)
+
+```mathematica
+In[6]:= Differences[{1, 4, 9, 16, 25}]
+Out[6]= {3, 5, 7, 9}
+
+In[7]:= Differences[{1, 8, 27, 64, 125, 216}, 3]
+Out[7]= {6, 6, 6}
+
+In[8]:= Differences[{a, b, c, d}, 1, 2]
+Out[8]= {-a + c, -b + d}
+
+In[9]:= Differences[{{1, 2, 3}, {4, 6, 8}, {9, 12, 15}}]
+Out[9]= {{3, 4, 5}, {5, 6, 7}}
+
+In[10]:= FoldList[Plus, 1, Differences[{1, 4, 9, 16, 25}]]
+Out[10]= {1, 4, 9, 16, 25}
+```
+
 ## Implementation notes
 
 `builtin_differences` computes successive differences, keeping the input head. One pass (`diff_once`) emits `elem[i+s] - elem[i]` for step `s` (reversed for negative `s`), each subtraction built as `Subtract` and reduced via `eval_and_free` so integers, rationals, doubles, symbolics, and matrix rows all combine. `Differences[list, n, s]` applies `diff_once` `n` times with step `s` (`diff_n_step`); `Differences[list, {n1, n2, ...}]` applies per-level first differences recursively into each element (`diff_levels`), e.g. for multidimensional arrays. A list no longer than `|s|` yields the empty list. Non-integer or negative `n`, or step `0`, return `NULL`. This is the additive analog of `Ratios` in the same file.
@@ -53,43 +81,18 @@ Out[5]= {a, b, c, d, e}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Accumulate](../../arithmetic/Accumulate/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_convolutions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_convolutions.c)
+- Tests: [`tests/test_correlations.c`](https://github.com/stblake/mathilda/blob/main/tests/test_correlations.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Differences[{1, 4, 9, 16, 25}]
-Out[1]= {3, 5, 7, 9}
-```
-
-```mathematica
-In[1]:= Differences[{1, 8, 27, 64, 125, 216}, 3]
-Out[1]= {6, 6, 6}
-```
-
-```mathematica
-In[1]:= Differences[{a, b, c, d}, 1, 2]
-Out[1]= {-a + c, -b + d}
-```
-
-```mathematica
-In[1]:= Differences[{{1, 2, 3}, {4, 6, 8}, {9, 12, 15}}]
-Out[1]= {{3, 4, 5}, {5, 6, 7}}
-```
-
-```mathematica
-In[1]:= FoldList[Plus, 1, Differences[{1, 4, 9, 16, 25}]]
-Out[1]= {1, 4, 9, 16, 25}
-```
 
 ### Notes
 

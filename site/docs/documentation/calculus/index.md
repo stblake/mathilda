@@ -1,13 +1,11 @@
 # Calculus
 
-14 built-in function(s) in this category.
+12 built-in function(s) in this category.
 
 - [`D`](D.md) — D[f, x] gives the partial derivative of f with respect to x.  _(Stable)_
 - [`Derivative`](Derivative.md) — f' represents the derivative of a function f of one argument.  _(Stable)_
 - [`DifferenceDelta`](DifferenceDelta.md) — DifferenceDelta[f, i] gives the forward difference (f /. i -> i+1) - f, the discrete analogue of D. It is the left inverse of indefinite Sum.  _(Stable)_
 - [`Dt`](Dt.md) — Dt[f] gives the total derivative of f.  _(Stable)_
-- [`FindMaximum`](FindMaximum.md) — FindMaximum[f, {x, x0}]  _(Stable)_
-- [`FindMinimum`](FindMinimum.md) — FindMinimum[f, {x, x0}]  _(Stable)_
 - [`FindRoot`](FindRoot.md) — FindRoot[f, {x, x0}]  _(Stable)_
 - [`Integrate`](Integrate.md) — Integrate[f, x] gives the indefinite integral of f with respect to x.  _(Partial)_
 - [`Limit`](Limit.md) — Limit[f, x -> a]  _(Stable)_

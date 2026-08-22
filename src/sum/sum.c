@@ -33,16 +33,26 @@
 #include "expr.h"
 #include "iter.h"
 #include "attr.h"
-#include "arithmetic.h"   /* is_rational */
+#include "arithmetic.h"   /* is_rational, make_complex */
 #include "sym_names.h"
+#include "compile/autocompile.h"   /* machine fast path for finite numeric sums */
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <math.h>
+#include <complex.h>   /* creal/cimag on the real-iterator accumulator */
 
 /* Upper bound on the number of terms a finite explicit expansion will add
  * before giving up (a runaway guard, not a correctness limit). */
 #define SUM_MAX_FINITE_TERMS 100000000LL
+
+/* Ceiling for the compiled machine fast path (sum_try_compiled).  Far above
+ * SUM_MAX_FINITE_TERMS because the compiled accumulator allocates nothing per
+ * term — the enumeration cap is a memory bound (an Expr* array), which the
+ * compiled loop does not pay.  This is purely a runaway/typo guard so a stray
+ * {i, 1, 10^18} cannot spin; it is NOT a correctness limit and may be tuned. */
+#define SUM_MAX_COMPILED_TERMS 1000000000000LL
 
 /* ------------------------------------------------------------------ */
 /*  Small helpers                                                      */
@@ -308,73 +318,223 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
  * the attempt is certainly not. */
 #define SUM_ARRAY_EXPAND_MAX 256
 
-/*
- * Is the body array-valued at the first index? One extra evaluation of `f`,
- * which the expansion is about to do anyway.
+/* WHY BODY SIZE DECIDES THE PATH. The closed-form stages (polynomial /
+ * geometric / hypergeometric antidifference, and Rational -> Cancel /
+ * PolynomialGCD / Expand / FLINT) cost time proportional to the SIZE OF THE
+ * BODY, not to the number of terms, because they take the body apart
+ * symbolically. On a scalar summand that is nothing. On a large one it is
+ * ruinous, and it FAILS on a body that has no closed form, then falls through to
+ * the enumeration that should have run first:
+ *   - A 256x256 packed grid measured **214 ms per Sum**, versus 0.256 ms to
+ *     expand: that fixed cost was the whole of the vectorised Game of Life
+ *     benchmark, Sum[RotateLeft[m,{i,j}], {i,-1,1}, {j,-1,1}], 463 ms vs 0.81 ms
+ *     for the same nine terms as an explicit Plus (and unpacked as well).
+ *   - A 20-D rotated Rastrigin objective, Sum[z[[i]]^2 - 10 Cos[2 Pi z[[i]]],
+ *     {i, 1, 20}] with z = q.vars, took MINUTES to build: each z[[i]] carries
+ *     the whole dotted vector, so every stage churned over it and failed.
+ *     Enumerating the 20 terms is instant.
+ * Only SHORT ranges skip the closed form, where the enumeration is bounded and
+ * cheap no matter how big the body is. A long range keeps trying the closed
+ * form -- Sum[m, {i, 1, 10^5}] for a constant matrix m answers in 0.53 ms that
+ * way and would cost 10^5 buffer adds by expansion.
  *
- * WHY THIS IS ASKED AT ALL. The closed-form stages (polynomial / geometric /
- * hypergeometric antidifference) cost time proportional to the SIZE OF THE BODY,
- * not to the number of terms, because they take the body apart symbolically. On
- * a scalar body that is nothing. On a 256x256 packed grid it measured **214 ms
- * per Sum**, and then failed and fell through to the expansion anyway -- which
- * took 0.256 ms. That single fixed cost was the whole of the vectorised Game of
- * Life benchmark: Sum[RotateLeft[m,{i,j}], {i,-1,1}, {j,-1,1}] took 463 ms where
- * the same nine terms written as an explicit Plus took 0.81 ms, 572x, and the
- * result came back UNPACKED as well.
- *
- * The attempt is not skipped in general, because it genuinely works on array
- * bodies and is worth a great deal there: Sum[m, {i, 1, 10^5}] for a constant
- * matrix m answers in 0.53 ms via the closed form and would cost 10^5 buffer
- * adds by expansion. Only the SHORT range skips it, where the expansion is
- * bounded and cheap no matter what the body is.
- */
-/* Could this held body plausibly evaluate to an array? True when it mentions a
- * symbol whose OwnValue is one.
- *
- * A pre-filter for the probe below, and it earns its place: the probe is one
- * extra evaluation of the body, which is nothing beside a 214 ms closed-form
- * attempt but is NOT nothing beside an ordinary scalar Sum -- paying it
- * unconditionally took Sum[i j, {i,-1,1}, {j,-1,1}] from 31 to 60 us. A purely
- * arithmetic body mentions no array-bound symbol, so it never probes and never
- * pays.
- *
- * Conservative in the useful direction: a body that produces an array WITHOUT
- * naming one (Sum[Range[1., 300.] i, {i,1,3}]) simply misses the optimisation
- * and behaves exactly as before. It cannot produce a wrong answer either way --
- * this only chooses which of two correct paths runs. */
-static bool sum_body_names_array(const Expr* e) {
-    if (!e) return false;
-    /* An array LITERAL sitting in the body. This is not a corner case, it is the
-     * common one: a helper like nb[q_] := Sum[RotateLeft[q,{i,j}], ...] binds q
-     * by SUBSTITUTION, so by the time Sum sees the body there is no symbol left
-     * to look up -- the packed grid is spliced in directly. Checking only for
-     * array-valued symbols found nothing here and left the whole Game of Life
-     * benchmark on the slow path. */
-    if (is_ndarray(e)) return true;
+ * SUM_BODY_CLOSED_FORM_MAX is the node budget below which a body is cheap to
+ * decompose. Ordinary scalar summands (i^2, r^i, i x[i], small polynomials --
+ * tens of nodes) stay under it and on the closed-form-first path unchanged. */
+#define SUM_BODY_CLOSED_FORM_MAX 48
+
+/* Node count of the body AS THE CLOSED-FORM STAGES WILL SEE IT, capped at
+ * `limit`. Two twists over a plain node walk, both essential because Sum is
+ * HoldAll and the body arrives unevaluated:
+ *   - a SYMBOL is charged the size of its OwnValue (the tree the cascade gets
+ *     once it evaluates the body). A summand like Part[z, i] is three held
+ *     nodes, but z is a length-n list, so the cascade sees Part[<the whole
+ *     list>, i]; charging z's value is what exposes that. (+1 per symbol before
+ *     recursing keeps a cyclic OwnValue like a := a + 1 from looping -- acc rises
+ *     every hop and the cap stops it.)
+ *   - an NDArray counts as the whole budget: cheap as a single node, but
+ *     expensive to take apart, and spliced in directly by helpers that bind
+ *     their grid argument by substitution (the Game of Life case).
+ * Capped, so this is O(min(size, limit)): a handful of nodes for an ordinary
+ * summand -- and, unlike the old array probe, it never EVALUATES the body, so a
+ * purely arithmetic Sum pays only a short pointer walk, not a spare evaluation. */
+static int64_t sum_body_expanded_size(const Expr* e, int64_t limit, int64_t acc) {
+    if (!e || acc > limit) return acc;
+    if (is_ndarray(e)) return limit + 1;
     if (e->type == EXPR_SYMBOL) {
         SymbolDef* d = symtab_lookup(e->data.symbol.name);
         if (d && d->own_values && d->own_values->replacement)
-            return is_ndarray(d->own_values->replacement);
-        return false;
+            return sum_body_expanded_size(d->own_values->replacement, limit, acc + 1);
+        return acc + 1;
     }
+    if (e->type != EXPR_FUNCTION) return acc + 1;
+    acc += 1;
+    acc = sum_body_expanded_size(e->data.function.head, limit, acc);
+    for (size_t i = 0; i < e->data.function.arg_count && acc <= limit; i++)
+        acc = sum_body_expanded_size(e->data.function.args[i], limit, acc);
+    return acc;
+}
+
+static bool sum_body_is_expensive(const Expr* f) {
+    return sum_body_expanded_size(f, SUM_BODY_CLOSED_FORM_MAX, 0)
+               > SUM_BODY_CLOSED_FORM_MAX;
+}
+
+/* Integer-membership predicates: True/False for an INTEGER argument, but a
+ * definite (index-oblivious) value for a SYMBOLIC one -- EvenQ[k]/PrimeQ[k]/
+ * IntegerQ[k] fold to False, SquareFreeQ[k] to True. */
+static bool sum_head_is_index_predicate(const char* h) {
+    return strcmp(h, "EvenQ") == 0 || strcmp(h, "OddQ") == 0
+        || strcmp(h, "PrimeQ") == 0 || strcmp(h, "CompositeQ") == 0
+        || strcmp(h, "PrimePowerQ") == 0 || strcmp(h, "IntegerQ") == 0
+        || strcmp(h, "SquareFreeQ") == 0 || strcmp(h, "CoprimeQ") == 0
+        || strcmp(h, "Divisible") == 0;
+}
+
+static bool expr_mentions_symbol(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
     if (e->type != EXPR_FUNCTION) return false;
-    if (sum_body_names_array(e->data.function.head)) return true;
+    if (expr_mentions_symbol(e->data.function.head, name)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (sum_body_names_array(e->data.function.args[i])) return true;
+        if (expr_mentions_symbol(e->data.function.args[i], name)) return true;
     return false;
 }
 
-static bool sum_body_is_array(Expr* f, Expr* var, Expr* imin) {
-    if (var->type != EXPR_SYMBOL) return false;
-    Rule* saved = iter_spec_shadow(var);
-    Expr* i_val = expr_copy(imin);
-    symtab_add_own_value(var->data.symbol.name, var, i_val);
+/* True if the HELD body applies an integer-membership predicate to a
+ * subexpression that mentions the iterator -- `If[EvenQ[k], k, -k]`,
+ * `Boole[PrimeQ[k]]`, and the like.
+ *
+ * The predicate folds to a definite Boolean for the SYMBOLIC index, so the
+ * conditional around it collapses to ONE branch, and the closed-form cascade --
+ * which evaluates the body symbolically before telescoping it -- would sum the
+ * wrong summand exactly (`Sum[If[EvenQ[k], k, -k], {k, 1, 10}]` telescoped
+ * `Sum[-k]` = -55 instead of enumerating to 5).  A finite range must enumerate
+ * such a body; a predicate applied only to CONSTANTS (`PrimeQ[7]`) is fine,
+ * because it folds identically per term, so the iterator-mention test gates it. */
+static bool sum_body_has_index_predicate(const Expr* e, const char* ivar) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && sum_head_is_index_predicate(e->data.function.head->data.symbol.name)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (expr_mentions_symbol(e->data.function.args[i], ivar)) return true;
+    }
+    if (sum_body_has_index_predicate(e->data.function.head, ivar)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sum_body_has_index_predicate(e->data.function.args[i], ivar)) return true;
+    return false;
+}
+
+/* True when `e` is a machine (inexact) number: a Real, or a Complex with at
+ * least one Real component.  This is the correctness gate for the compiled fast
+ * path: only when the body evaluates to a machine number at a representative
+ * index does inexact-contagion through Plus guarantee the interpreter's own
+ * total is a machine number too, so the compiled machine sum agrees to machine
+ * precision.  An exact Integer / Rational / BigInt / symbolic result must keep
+ * the interpreter path to stay exact. */
+static bool sum_body_probe_inexact(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
+        && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol.name, SYM_Complex) == 0) {
+        const Expr* re = e->data.function.args[0];
+        const Expr* im = e->data.function.args[1];
+        return (re && re->type == EXPR_REAL) || (im && im->type == EXPR_REAL);
+    }
+    return false;
+}
+
+/*
+ * Machine fast path for a finite numeric sum whose body is inexact.  Returns the
+ * scalar total as a fresh Expr, or NULL to fall through to the interpreter's
+ * enumeration (expand_range).  Two strategies, one correctness gate (the probe):
+ *
+ *   A. Integer iterator (!is_real): compile the WHOLE Sum[body, {i, lo, hi[,di]}]
+ *      as a zero-variable program (the compiler lowers it to one native
+ *      accumulation loop; compile_emit_ctrl.c) and read back the scalar total in
+ *      a single VM run — no per-index evaluate(), no per-term allocation.
+ *
+ *   B. Real iterator (is_real, e.g. {i, 0., 10., 0.1}): the whole-Sum lowering
+ *      needs integer bounds, so instead compile the BODY as f(i) and accumulate
+ *      in C, driving iteration with the interpreter's own iter_range_continue so
+ *      the same index points are visited.  On any non-finite point, abandon.
+ *
+ * The probe (evaluate the body once at the first index) is what keeps exact sums
+ * exact: an exact result declines the fast path, leaving expand_range to produce
+ * the exact Integer/Rational/BigInt total, or the empty-range identity 0.
+ */
+static Expr* sum_try_compiled(Expr* f, const IterSpec* s,
+                              double min_val, double max_val, double di_val,
+                              bool is_real) {
+    if (!autocompile_enabled()) return NULL;
+
+    /* Empty range: let expand_range fold the exact identity 0 (a compiled loop
+     * would answer 0. — a spurious inexactness). */
+    bool nonempty = (di_val > 0) ? (min_val <= max_val + 1e-14)
+                                 : (min_val >= max_val - 1e-14);
+    if (!nonempty) return NULL;
+
+    /* Runaway guard only — well above SUM_MAX_FINITE_TERMS (see the macro). */
+    double nterms = (max_val - min_val) / di_val + 1.0;
+    if (!(nterms >= 1.0) || nterms > (double)SUM_MAX_COMPILED_TERMS) return NULL;
+
+    /* Probe the body at the first index for inexactness (see sum_body_probe_inexact).
+     * Shadow/restore the iterator because Sum is HoldAll — mirrors expand_range. */
+    Rule* saved = iter_spec_shadow(s->var);
+    Expr* first_val = is_real ? expr_new_real(min_val) : expr_copy(s->imin);
+    symtab_add_own_value(s->var->data.symbol.name, s->var, first_val);
     Expr* probe = evaluate(f);
-    expr_free(i_val);
-    iter_spec_restore(var, saved);
-    bool arr = probe && is_ndarray(probe);
-    if (probe) expr_free(probe);
-    return arr;
+    bool inexact = sum_body_probe_inexact(probe);
+    expr_free(probe);
+    expr_free(first_val);
+    iter_spec_restore(s->var, saved);
+    if (!inexact) return NULL;
+
+    if (!is_real) {
+        /* Strategy A: only for exact integer bounds/step — the compiler's Sum
+         * lowering requires CT_INT bounds.  A non-integer (BigInt/Rational) bound
+         * would just bail inside the compiler; skip it to avoid a wasted attempt. */
+        if (s->imin->type != EXPR_INTEGER || s->imax->type != EXPR_INTEGER
+            || s->di->type != EXPR_INTEGER)
+            return NULL;
+
+        int nspec = (s->di->data.integer == 1) ? 3 : 4;
+        Expr* spec_args[4];
+        spec_args[0] = expr_copy(s->var);
+        spec_args[1] = expr_copy(s->imin);
+        spec_args[2] = expr_copy(s->imax);
+        if (nspec == 4) spec_args[3] = expr_copy(s->di);
+        Expr* spec = expr_new_function(expr_new_symbol(SYM_List), spec_args, nspec);
+        Expr* whole_args[2] = { expr_copy(f), spec };
+        Expr* whole = expr_new_function(expr_new_symbol(SYM_Sum), whole_args, 2);
+        Expr* total = autocompile_eval_closed(whole);   /* NULL unless CT_REAL/CT_COMPLEX */
+        expr_free(whole);
+        return total;
+    }
+
+    /* Strategy B: compile the body as f(i), accumulate the machine terms in C. */
+    AutoCompiled* ac = autocompile_new(f, (const Expr* const*)&s->var, 1);
+    if (!ac) return NULL;   /* body outside the compilable subset → enumerate */
+    double _Complex acc = 0.0;
+    double val = min_val;
+    int64_t count = 0;
+    bool ok = true;
+    while (iter_range_continue(/*is_real=*/true, /*is_inf=*/false, NULL, NULL,
+                               val, max_val, di_val)) {
+        if (count >= SUM_MAX_COMPILED_TERMS) { ok = false; break; }
+        double _Complex y;
+        if (!autocompiled_eval_complex(ac, &val, &y)) { ok = false; break; }
+        acc += y;
+        val += di_val;
+        count++;
+    }
+    autocompiled_free(ac);
+    if (!ok) return NULL;   /* non-finite point → fall back to the interpreter */
+    double re = creal(acc), im = cimag(acc);
+    if (!isfinite(re) || !isfinite(im)) return NULL;
+    return im == 0.0 ? expr_new_real(re)
+                     : make_complex(expr_new_real(re), expr_new_real(im));
 }
 
 static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
@@ -416,20 +576,38 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
          * The iterator is shadowed because Sum is HoldAll: an outer binding of
          * var would otherwise leak into the held body and the stage args. */
         double nterms = (max_val - min_val) / di_val + 1.0;
-        bool short_array_body =
-            nterms <= (double)SUM_ARRAY_EXPAND_MAX &&
-            sum_body_names_array(f) &&
-            sum_body_is_array(f, s.var, s.imin);
+        /* Skip the closed-form cascade for a SHORT range whose body is
+         * expensive to take apart symbolically -- a large symbolic tree or an
+         * array (see sum_body_is_expensive and SUM_ARRAY_EXPAND_MAX). The
+         * cascade's cost scales with body size while the enumeration below is
+         * bounded and cheap, so on such a body the cascade only churns and
+         * fails before falling through to it. */
+        bool short_expensive_body =
+            nterms <= (double)SUM_ARRAY_EXPAND_MAX && sum_body_is_expensive(f);
+        /* A body whose symbolic evaluation collapses an index predicate (EvenQ,
+         * PrimeQ, ...) has NO valid closed form -- the cascade would telescope
+         * the wrong summand -- so it must enumerate regardless of range length. */
+        bool index_pred_body =
+            sum_body_has_index_predicate(f, s.var->data.symbol.name);
 
-        if (!is_real && di_val == 1.0 && min_val <= max_val && !short_array_body) {
+        if (!is_real && di_val == 1.0 && min_val <= max_val
+            && !short_expensive_body && !index_pred_body) {
             Rule* saved = iter_spec_shadow(s.var);
             Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
             iter_spec_restore(s.var, saved);
             if (cf) { iter_spec_free(&s); return cf; }
         }
+        /* No closed form: before the slow evaluate()-per-term enumeration, try
+         * the compiled machine loop for an inexact body (exact bodies decline). */
+        Expr* comp = sum_try_compiled(f, &s, min_val, max_val, di_val, is_real);
+        if (comp) { iter_spec_free(&s); return comp; }
         Expr* r = expand_range(f, s.var, s.imin, s.imax, s.di,
                                min_val, max_val, di_val, is_real);
         if (r) { iter_spec_free(&s); return r; }
+        /* Span too large to enumerate.  For an ordinary body the closed form is
+         * exact and worth trying; for an index-predicate body it would be WRONG,
+         * so leave the Sum unevaluated rather than telescope a collapsed summand. */
+        if (index_pred_body) { iter_spec_free(&s); return NULL; }
         /* span too large: fall through to closed form */
     }
 

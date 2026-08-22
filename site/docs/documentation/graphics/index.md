@@ -1,9 +1,10 @@
 # Graphics
 
-18 built-in function(s) in this category.
+20 built-in function(s) in this category.
 
-- [`Animate`](Animate.md) — Animate[expr, {t, tmin, tmax}, opts...]  _(Experimental)_
-- [`BarChart`](BarChart.md) — BarChart[{v1, v2, ..., vn}, opts...]  _(Experimental)_
+- [`Animate`](Animate.md) — Animate[expr, {t, tmin, tmax}, opts...]  _(Stable)_
+- [`ArrayPlot`](ArrayPlot.md) — ArrayPlot[array, opts...]  _(Stable)_
+- [`BarChart`](BarChart.md) — BarChart[{v1, v2, ..., vn}, opts...]  _(Stable)_
 - [`CMYKColor`](CMYKColor.md) — CMYKColor[c, m, y, k]  _(Stable)_
 - [`ComplexPlot`](ComplexPlot.md) — ComplexPlot[f, {z, zmin, zmax}, opts...]  _(Stable)_
 - [`ComplexPlot3D`](ComplexPlot3D.md) — ComplexPlot3D[f, {z, zmin, zmax}, opts...]  _(Experimental)_
@@ -11,6 +12,7 @@
 - [`DensityPlot`](DensityPlot.md) — DensityPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]  _(Stable)_
 - [`Histogram`](Histogram.md) — Histogram[data, opts...]  _(Stable)_
 - [`ListPlot`](ListPlot.md) — ListPlot[{y1, ..., yn}, opts...]  _(Stable)_
+- [`Manipulate`](Manipulate.md) — Manipulate[expr, {u, umin, umax}, ...]  _(Stable)_
 - [`ParametricPlot`](ParametricPlot.md) — ParametricPlot[{fx, fy}, {t, tmin, tmax}, opts...]  _(Stable)_
 - [`ParametricPlot3D`](ParametricPlot3D.md) — ParametricPlot3D[{fx, fy, fz}, {t, tmin, tmax}, opts...]  _(Stable)_
 - [`Plot`](Plot.md) — Plot[f, {x, xmin, xmax}, opts...]  _(Stable)_

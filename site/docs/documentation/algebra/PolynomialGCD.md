@@ -5,17 +5,20 @@
 
 ## Description
 
-```text
-PolynomialGCD[poly1, poly2, ...] gives the greatest common divisor of the polynomials.
-Option Extension -> alpha computes the GCD over Q(alpha), where alpha is an
-algebraic number recognised by qa_resolve_extension (Sqrt[c], c^(1/n), or I).
-Default Extension -> None and Extension -> Automatic compute over the rationals,
-treating any algebraic numbers in the input as independent variables.
-```
+**`PolynomialGCD[poly1, poly2, ...] gives the greatest common divisor of the polynomials.`**
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+Option Extension -\> alpha computes the GCD over Q(alpha), where alpha is an algebraic number recognised by qa\_resolve\_extension (Sqrt\[c\], c^(1/n), or I). Default Extension -\> None and Extension -\> Automatic compute over the rationals, treating any algebraic numbers in the input as independent variables.
+
+</details>
+
+## Examples (11)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= PolynomialGCD[(1+x)^2(2+x)(4+x), (1+x)(2+x)(3+x)]
@@ -26,13 +29,52 @@ Out[2]= 1
 
 In[3]:= PolynomialGCD[x^2-1, x^3-1, x^4-1, x^5-1, x^6-1, x^7-1]
 Out[3]= -1 + x
+```
 
+### Options (2)
+
+```mathematica
 In[4]:= PolynomialGCD[x^2 - 2, x - Sqrt[2], Extension -> Sqrt[2]]
 Out[4]= -Sqrt[2] + x
 
 In[5]:= PolynomialGCD[x^3 - 2, x - 2^(1/3), Extension -> 2^(1/3)]
 Out[5]= -2^(1/3) + x
 ```
+
+### Applications (6)
+
+```mathematica
+In[6]:= PolynomialGCD[x^2 - 1, x^2 + 2 x + 1]
+Out[6]= 1 + x
+
+In[7]:= PolynomialGCD[x^4 - 1, x^2 - 1]
+Out[7]= -1 + x^2
+
+In[8]:= PolynomialGCD[x^2 - 1, x - 1]
+Out[8]= -1 + x
+
+In[9]:= PolynomialGCD[x^3 - x, x^2 - x]
+Out[9]= -x + x^2
+
+In[10]:= PolynomialGCD[x^6 - 1, x^4 - 1, x^9 - 1]
+Out[10]= -1 + x
+
+In[11]:= PolynomialGCD[x^4 - 2, x^2 - Sqrt[2], Extension -> Sqrt[2]]
+Out[11]= -Sqrt[2] + x^2
+```
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| Discriminant of deg 20 | 2.51 s | 0.068 s | 0.182 s |
+| Expand (1+x)^400 | 0.434 s | 0.107 s | 0.003 s |
+| Cancel deg-60 over deg-58 | 0.337 s | 0.569 s | 7.37 s |
+| PolynomialGCD, coprime deg 40 | 0.252 s | 0.087 s | 0.334 s |
+| PolynomialGCD, shared deg-20 factor | 0.079 s | 0.063 s | 0.764 s |
+| PolynomialQuotient deg 60 / deg 20 | 0.063 s | 0.209 s | 0.945 s |
 
 ## Implementation notes
 
@@ -69,11 +111,9 @@ ordinary `Expr` subtrees, so coefficient GCDs recurse through the same machinery
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [I](../../mathematical-constants/I/)
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra" (3rd ed.), Ch. 6 & 11 (Euclidean and modular GCD).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 7 (polynomial GCD computation).
@@ -81,40 +121,12 @@ ordinary `Expr` subtrees, so coefficient GCDs recurse through the same machinery
 - G. E. Collins, "Subresultants and Reduced Polynomial Remainder Sequences", JACM 14(1), 1967.
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_eval_timestamps.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval_timestamps.c)
+- Tests: [`tests/test_expr_sharing.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expr_sharing.c)
+- Tests: [`tests/test_extension_auto_builtins.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_auto_builtins.c)
+- Tests: [`tests/test_extension_options.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extension_options.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= PolynomialGCD[x^2 - 1, x^2 + 2 x + 1]
-Out[1]= 1 + x
-```
-
-```mathematica
-In[1]:= PolynomialGCD[x^4 - 1, x^2 - 1]
-Out[1]= -1 + x^2
-```
-
-```mathematica
-In[1]:= PolynomialGCD[x^2 - 1, x - 1]
-Out[1]= -1 + x
-```
-
-```mathematica
-In[1]:= PolynomialGCD[x^3 - x, x^2 - x]
-Out[1]= -x + x^2
-```
-
-```mathematica
-In[1]:= PolynomialGCD[x^6 - 1, x^4 - 1, x^9 - 1]
-Out[1]= -1 + x
-```
-
-```mathematica
-In[1]:= PolynomialGCD[x^4 - 2, x^2 - Sqrt[2], Extension -> Sqrt[2]]
-Out[1]= -Sqrt[2] + x^2
-```
 
 ### Notes
 

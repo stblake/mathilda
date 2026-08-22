@@ -5,26 +5,39 @@
 
 ## Description
 
-```text
-StringTake["string", n]
-    Gives a string containing the first n characters.
-StringTake["string", -n]
-    Gives the last n characters.
-StringTake["string", {n}]
-    Gives the nth character.
-StringTake["string", {m, n}]
-    Gives characters m through n.
-StringTake["string", {m, n, s}]
-    Gives characters m through n in steps of s.
-StringTake["string", UpTo[n]]
-    Gives n characters, or as many as are available.
-StringTake[{s1, s2, ...}, spec]
-    Gives the list of results for each si.
-```
+**`StringTake["string", n]`**
 
-## Examples
+Gives a string containing the first n characters.
 
-All examples below are verified against the current Mathilda build.
+**`StringTake["string", -n]`**
+
+Gives the last n characters.
+
+**`StringTake["string", {n}]`**
+
+Gives the nth character.
+
+**`StringTake["string", {m, n}]`**
+
+Gives characters m through n.
+
+**`StringTake["string", {m, n, s}]`**
+
+Gives characters m through n in steps of s.
+
+**`StringTake["string", UpTo[n]]`**
+
+Gives n characters, or as many as are available.
+
+**`StringTake[{s1, s2, ...}, spec]`**
+
+Gives the list of results for each si.
+
+## Examples (11)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (11)
 
 ```mathematica
 In[1]:= StringTake["abcdefghijklm", 6]
@@ -50,6 +63,15 @@ Out[7]= "abc"
 
 In[8]:= StringTake["abcdef", {-3, -1}]
 Out[8]= "def"
+
+In[9]:= StringTake["abcde", {5, 1, -1}]
+Out[9]= "edcba"
+
+In[10]:= StringTake["abc", 0]
+Out[10]= ""
+
+In[11]:= StringTake[x, 1]
+Out[11]= StringTake[x, 1]
 ```
 
 ## Implementation notes
@@ -58,11 +80,10 @@ Out[8]= "def"
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/picostrings.c`](https://github.com/stblake/mathilda/blob/main/src/picostrings.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_graphics.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphics.c)
+- Tests: [`tests/test_stringposition.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringposition.c)
+- Tests: [`tests/test_strings.c`](https://github.com/stblake/mathilda/blob/main/tests/test_strings.c)

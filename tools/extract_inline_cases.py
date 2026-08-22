@@ -8,7 +8,7 @@ List literal of {integrand, var} pairs that the corpus runner can
 load via Get[].
 
 Usage:
-    python3 tools/extract_inline_cases.py > IntegrateRationalInlineCases.m
+    python3 tools/extract_inline_cases.py > tests/IntegrateRationalInlineCases.m
 
 Strategy:
     The .m file has lines of the form

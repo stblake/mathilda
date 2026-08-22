@@ -5,16 +5,16 @@
 
 ## Description
 
-```text
-AspectRatio
-    is an option for Graphics and Plot that specifies the ratio of
-    height to width of the rendered plot.
+**`AspectRatio`**
 
-AspectRatio -> Automatic sets the ratio from the actual coordinate
-values (true geometry); AspectRatio -> Full stretches the graphics to
-fill the enclosing region; AspectRatio -> a uses the explicit
-height-to-width ratio a. Plot defaults to 1/GoldenRatio.
-```
+is an option for Graphics and Plot that specifies the ratio of height to width of the rendered plot.
+
+<details>
+<summary>Notes</summary>
+
+AspectRatio -\> Automatic sets the ratio from the actual coordinate values (true geometry); AspectRatio -\> Full stretches the graphics to fill the enclosing region; AspectRatio -\> a uses the explicit height-to-width ratio a. Plot defaults to 1/GoldenRatio.
+
+</details>
 
 ## Examples
 
@@ -23,10 +23,6 @@ _No verified examples yet for this function._
 ## Implementation notes
 
 **Attributes:** none registered.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 

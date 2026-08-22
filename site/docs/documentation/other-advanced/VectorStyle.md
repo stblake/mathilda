@@ -5,11 +5,9 @@
 
 ## Description
 
-```text
-VectorStyle
-    VectorPlot option: style directive(s) (RGBColor, Thickness, …)
-    applied globally to all arrows. Overrides per-arrow ColorFunction.
-```
+**`VectorStyle`**
+
+VectorPlot option: style directive(s) (RGBColor, Thickness, …) applied globally to all arrows. Overrides per-arrow ColorFunction.
 
 ## Examples
 
@@ -18,10 +16,6 @@ _No verified examples yet for this function._
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
 
 ## References
 

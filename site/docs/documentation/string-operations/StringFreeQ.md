@@ -5,24 +5,27 @@
 
 ## Description
 
-```text
-StringFreeQ["string", patt]
-    Gives True if no substring of "string" matches the string
-    expression patt, and False otherwise.
-StringFreeQ["string", {p1, p2, ...}]
-    Gives True if no substring matches any of the pi.
-StringFreeQ[{s1, s2, ...}, patt]
-    Gives the list of results for each of the si.
-StringFreeQ[patt]
-    Represents an operator form that can be applied to a string.
+**`StringFreeQ["string", patt]`**
 
-    Equivalent to !StringContainsQ["string", patt].
-    Options: IgnoreCase -> True treats upper/lowercase as equivalent.
-```
+Gives True if no substring of "string" matches the string expression patt, and False otherwise.
 
-## Examples
+**`StringFreeQ["string", {p1, p2, ...}]`**
 
-All examples below are verified against the current Mathilda build.
+Gives True if no substring matches any of the pi.
+
+**`StringFreeQ[{s1, s2, ...}, patt]`**
+
+Gives the list of results for each of the si.
+
+**`StringFreeQ[patt]`**
+
+Represents an operator form that can be applied to a string. Equivalent to !StringContainsQ\["string", patt\]. Options: IgnoreCase -\> True treats upper/lowercase as equivalent.
+
+## Examples (4)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= StringFreeQ["abcd", "a"]
@@ -33,7 +36,11 @@ Out[2]= True
 
 In[3]:= StringFreeQ[{"ability", "listable", "argument"}, "a" ~~ __ ~~ "t" ~~ ___]
 Out[3]= {False, True, False}
+```
 
+### Options (1)
+
+```mathematica
 In[4]:= StringFreeQ["ac", IgnoreCase -> True]["BACCD"]
 Out[4]= False
 ```
@@ -42,11 +49,10 @@ Out[4]= False
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [StringContainsQ](../../string-operations/StringContainsQ/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_stringcontainsq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringcontainsq.c)

@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-FLINT`StieltjesGamma[n] and FLINT`StieltjesGamma[n, a] give the numeric value of the n-th Stieltjes constant (generalized, at a) for a non-negative integer n, via FLINT (acb_dirichlet_stieltjes). Unevaluated for negative or non-integer n.
-```
+FLINT\`StieltjesGamma\[n\] and FLINT\`StieltjesGamma\[n, a\] give the numeric value of the n-th Stieltjes constant (generalized, at a) for a non-negative integer n, via FLINT (acb\_dirichlet\_stieltjes). Unevaluated for negative or non-integer n.
 
-## Examples
+## Examples (1)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= FLINT`StieltjesGamma[0]
@@ -21,10 +21,6 @@ Out[1]= 0.5772156649015329
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 

@@ -5,26 +5,35 @@
 
 ## Description
 
-```text
-RandomComplex[]
-    gives a pseudorandom complex number with real and imaginary parts in the range 0 to 1.
-RandomComplex[{zmin, zmax}]
-    gives a pseudorandom complex number in the rectangle with corners given by the complex numbers zmin and zmax.
-RandomComplex[zmax]
-    gives a pseudorandom complex number in the rectangle whose corners are the origin and zmax.
-RandomComplex[range, n]
-    gives a list of n pseudorandom complex numbers.
-RandomComplex[range, {n1, n2, ...}]
-    gives an n1 x n2 x ... array of pseudorandom complex numbers.
-RandomComplex[spec, WorkingPrecision -> n]
-    yields complex numbers whose real and imaginary parts have n digits of precision.
-    Leading or trailing digits of the generated parts can be 0.
-    n may be MachinePrecision (the default) or a positive number of decimal digits.
-```
+**`RandomComplex[]`**
 
-## Examples
+gives a pseudorandom complex number with real and imaginary parts in the range 0 to 1.
 
-All examples below are verified against the current Mathilda build.
+**`RandomComplex[{zmin, zmax}]`**
+
+gives a pseudorandom complex number in the rectangle with corners given by the complex numbers zmin and zmax.
+
+**`RandomComplex[zmax]`**
+
+gives a pseudorandom complex number in the rectangle whose corners are the origin and zmax.
+
+**`RandomComplex[range, n]`**
+
+gives a list of n pseudorandom complex numbers.
+
+**`RandomComplex[range, {n1, n2, ...}]`**
+
+gives an n1 x n2 x ... array of pseudorandom complex numbers.
+
+**`RandomComplex[spec, WorkingPrecision -> n]`**
+
+yields complex numbers whose real and imaginary parts have n digits of precision. Leading or trailing digits of the generated parts can be 0. n may be MachinePrecision (the default) or a positive number of decimal digits.
+
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= SeedRandom[42]; Head[RandomComplex[]]
@@ -41,7 +50,11 @@ Out[4]= {3, 4}
 
 In[5]:= RandomComplex[x]
 Out[5]= RandomComplex[x]
+```
 
+### Options (1)
+
+```mathematica
 In[6]:= SeedRandom[42]; z = RandomComplex[1 + I, WorkingPrecision -> 30]; {Precision[Re[z]], Precision[Im[z]]}
 Out[6]= {30.103, 30.103}
 ```
@@ -59,11 +72,10 @@ Out[6]= {30.103, 30.103}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Plus](../../arithmetic/Plus/), [Complex](../../arithmetic/Complex/), [Pi](../../mathematical-constants/Pi/)
 
 - Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)
+- Tests: [`tests/test_random.c`](https://github.com/stblake/mathilda/blob/main/tests/test_random.c)

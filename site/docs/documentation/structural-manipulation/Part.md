@@ -5,27 +5,13 @@
 
 ## Description
 
-```text
-expr[[i]] or Part[expr, i]
-    gives the i-th part of expr.
-expr[[-i]]
-    counts from the end.
-expr[[0]]
-    gives the head of expr.
-expr[[i, j, ...]] or Part[expr, i, j, ...]
-    is equivalent to expr[[i]][[j]]..., descending into nested parts.
-expr[[{i1, i2, ...}]]
-    gives a list of the parts i1, i2, ... of expr (wrapped in the head of expr).
-expr[[m;;n]] / expr[[m;;n;;s]]
-    gives the span of parts m through n (with optional step s); ;; alone or All means all parts.
+expr\[\[i\]\] or Part\[expr, i\] gives the i-th part of expr. expr\[\[-i\]\] counts from the end. expr\[\[0\]\] gives the head of expr. expr\[\[i, j, ...\]\] or Part\[expr, i, j, ...\] is equivalent to expr\[\[i\]\]\[\[j\]\]..., descending into nested parts. expr\[\[{i1, i2, ...}\]\] gives a list of the parts i1, i2, ... of expr (wrapped in the head of expr). expr\[\[m;;n\]\] / expr\[\[m;;n;;s\]\] gives the span of parts m through n (with optional step s); ;; alone or All means all parts. Part is treated as atomic on Integer, Real, String, Symbol, Rational\[n, d\], and Complex\[re, im\]; Part\[atom, i\] for i != 0 stays unevaluated. Indices are 1-based and may be negative; out-of-range indices leave the expression unevaluated.
 
-Part is treated as atomic on Integer, Real, String, Symbol, Rational[n, d], and Complex[re, im]; Part[atom, i] for i != 0 stays unevaluated.
-Indices are 1-based and may be negative; out-of-range indices leave the expression unevaluated.
-```
+## Examples (12)
 
-## Examples
+Every input below was run against the current Mathilda build and its output recorded.
 
-All examples below are verified against the current Mathilda build.
+### Basic examples (3)
 
 ```mathematica
 In[1]:= {a, b, c, d}[[2]]
@@ -37,6 +23,50 @@ Out[2]= d
 In[3]:= 123[[0]]
 Out[3]= Integer
 ```
+
+### Applications (9)
+
+```mathematica
+In[4]:= {a, b, c, d}[[2]]
+Out[4]= b
+
+In[5]:= {a, b, c, d}[[-1]]
+Out[5]= d
+
+In[6]:= {a, b, c, d}[[0]]
+Out[6]= List
+
+In[7]:= {{1, 2}, {3, 4}}[[2, 1]]
+Out[7]= 3
+
+In[8]:= {a, b, c, d}[[{1, 3}]]
+Out[8]= {a, c}
+
+In[9]:= {a, b, c, d, e, f}[[1 ;; 6 ;; 2]]
+Out[9]= {a, c, e}
+
+In[10]:= m[[All, 2]]
+Out[10]= {2, 5, 8}
+
+In[11]:= Tr[m[[{1, 3}, {1, 3}]]]
+Out[11]= 10
+
+In[12]:= (a + b + c)[[2]]
+Out[12]= b
+```
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| Sort 4x10^6 | 42.2 s | 68.7 s | 111 s |
+| gather v[[idx]], 4x10^6 | 16.8 s | 6.66 s | 7.18 s |
+| Union of 4x10^6 integers | 12.4 s | 71.1 s | 376 s |
+| Reverse 4x10^6 | 5.37 s | 0.297 s | 0.982 s |
+| Join two 2x10^6 | 0.899 s | 0.6 s | 0.397 s |
+| RotateLeft 4x10^6 by 1000 | 0.855 s | 0.307 s | 0.456 s |
 
 ## Implementation notes
 
@@ -55,73 +85,18 @@ atoms yield `NULL` (unevaluated).
 
 **Attributes:** `NHoldRest`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Head](../../structural-manipulation/Head/)
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_image.c`](https://github.com/stblake/mathilda/blob/main/tests/test_image.c)
+- Tests: [`tests/test_matsol_methods.c`](https://github.com/stblake/mathilda/blob/main/tests/test_matsol_methods.c)
+- Tests: [`tests/test_ml_classify.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ml_classify.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-Extract a single part (1-based), count from the end with a negative index, and
-get the head with index `0`:
-
-```mathematica
-In[1]:= {a, b, c, d}[[2]]
-Out[1]= b
-
-In[2]:= {a, b, c, d}[[-1]]
-Out[2]= d
-
-In[3]:= {a, b, c, d}[[0]]
-Out[3]= List
-```
-
-Multi-index parts descend into nested structure, and a list of indices gathers
-several parts at once:
-
-```mathematica
-In[1]:= {{1, 2}, {3, 4}}[[2, 1]]
-Out[1]= 3
-
-In[2]:= {a, b, c, d}[[{1, 3}]]
-Out[2]= {a, c}
-```
-
-Spans `m ;; n ;; s` slice with an optional step:
-
-```mathematica
-In[1]:= {a, b, c, d, e, f}[[1 ;; 6 ;; 2]]
-Out[1]= {a, c, e}
-```
-
-`Part` is the workhorse of matrix manipulation. Combine `All` with an index to
-pull out a whole column, and a pair of index lists to carve out an arbitrary
-submatrix — here the corner 2×2 block of a 3×3 matrix, whose trace is the sum of
-the corner entries:
-
-```mathematica
-In[1]:= m = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
-
-In[2]:= m[[All, 2]]
-Out[2]= {2, 5, 8}
-
-In[3]:= Tr[m[[{1, 3}, {1, 3}]]]
-Out[3]= 10
-```
-
-Because everything is an expression, `Part` reaches into non-list heads too —
-the second summand of a sum:
-
-```mathematica
-In[1]:= (a + b + c)[[2]]
-Out[1]= b
-```
 
 ### Notes
 

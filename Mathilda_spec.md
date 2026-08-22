@@ -29,6 +29,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Time and date (`Timing`, `RepeatedTiming`, ...) | [`builtins/time-and-date.md`](docs/spec/builtins/time-and-date.md) |
 | Linear algebra (`Dot`, `Det`, `Inverse`, `Cross`, `Norm`, `Eigenvalues`, `Eigenvectors`, ...) | [`builtins/linear-algebra.md`](docs/spec/builtins/linear-algebra.md) |
 | Statistics (`Mean`, `Variance`, `Median`, ...) | [`builtins/statistics.md`](docs/spec/builtins/statistics.md) |
+| Machine learning (`Standardize`, `PrincipalComponents`, clustering kernels) | [`builtins/machine-learning.md`](docs/spec/builtins/machine-learning.md) |
 | Random number generation | [`builtins/random-number-generation.md`](docs/spec/builtins/random-number-generation.md) |
 | String operations | [`builtins/string-operations.md`](docs/spec/builtins/string-operations.md) |
 | Arithmetic (`Plus`, `Times`, `Power`, `Mod`, `Factorial`, `Binomial`, ...) | [`builtins/arithmetic.md`](docs/spec/builtins/arithmetic.md) |
@@ -42,7 +43,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Elementary functions (trig, hyperbolic, log, exp) | [`builtins/elementary-functions.md`](docs/spec/builtins/elementary-functions.md) |
 | Mathematical constants (`Pi`, `E`, `Degree`, `EulerGamma`, `Catalan`, `GoldenRatio`, `Glaisher`, `Khinchin`, ...) | [`builtins/mathematical-constants.md`](docs/spec/builtins/mathematical-constants.md) |
 | Special functions (`Gamma`, `Pochhammer`, `HypergeometricPFQ`, `Hypergeometric0F1`/`1F1`/`2F1`, ...) | [`builtins/special-functions.md`](docs/spec/builtins/special-functions.md) |
-| Numerical calculus (`ND`, `NIntegrate`, `NSum`, `NProduct`, `NLimit`, `NSeries`, `NResidue`) | [`builtins/numerical-calculus.md`](docs/spec/builtins/numerical-calculus.md) |
+| Numerical calculus (`ND`, `NIntegrate`, `NSum`, `NProduct`, `NLimit`, `NSeries`, `NResidue`, `FindMinimum`, `FindMaximum`, `NMinimize`, `NMaximize`, ...) | [`builtins/numerical-calculus.md`](docs/spec/builtins/numerical-calculus.md) |
 | Fourier transforms (`Fourier`, `InverseFourier`) | [`builtins/fourier-transforms.md`](docs/spec/builtins/fourier-transforms.md) |
 | Lists and iteration (`Table`, `Range`, `Map`, `Do`, ...) | [`builtins/lists-and-iteration.md`](docs/spec/builtins/lists-and-iteration.md) |
 | Data structures (`Association`/`<\|...\|>`, `Keys`, `Values`, `Lookup`, `Counts`, `GroupBy`, `Merge`, ...) | [`builtins/data-structures.md`](docs/spec/builtins/data-structures.md) |
@@ -58,6 +59,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | FLINT context (`` FLINT`PolynomialGCD ``, `` FLINT`Factor ``, `` FLINT`Det ``, `` FLINT`Zeta ``, ...) — direct access to the FLINT-backed kernels | [`builtins/flint.md`](docs/spec/builtins/flint.md) |
 | BLAS context (`` BLAS`ddot ``, `` BLAS`dgemv ``, `` BLAS`dgemm ``, `` BLAS`zgemm ``, ...) — direct access to the machine-precision BLAS kernels | [`builtins/blas.md`](docs/spec/builtins/blas.md) |
 | LAPACK context (`` LAPACK`dgesv ``, `` LAPACK`dgeqrf ``, `` LAPACK`dgesdd ``, `` LAPACK`dgeev ``, ...) — direct access to the LAPACK drivers | [`builtins/lapack.md`](docs/spec/builtins/lapack.md) |
+| Image processing (`Image`, `ImageQ`, `ImageDimensions`, `ImageChannels`, `ImageType`, `ImageData`) — the raster representation and its accessors | [`builtins/image-processing.md`](docs/spec/builtins/image-processing.md) |
 
 ## Changelog
 

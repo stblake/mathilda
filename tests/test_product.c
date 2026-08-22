@@ -102,6 +102,12 @@ int main(void) {
     check("Product[f[i], {i, 1, 4, 2}]", "f[1] f[3]"); /* step 2 */
     check("Product[f[i], {i, {a, b, c}}]", "f[a] f[b] f[c]");
     check("Product[k, {k, {2, 3, 5}}]", "30");
+    /* A finite Product whose body applies an integer-membership predicate to the
+     * index must ENUMERATE, not run the closed-form cascade over the body
+     * evaluated at the symbolic index (EvenQ[k] folds to False there, collapsing
+     * the conditional): this gave Product[If[EvenQ[k],k,1],{k,1,4}] = 1, not 8. */
+    check("Product[If[EvenQ[k], k, 1], {k, 1, 4}]", "8");    /* 2*4 */
+    check("Product[If[PrimeQ[k], k, 1], {k, 2, 5}]", "30");  /* 2*3*5 */
     /* empty / reversed range -> multiplicative identity 1 (NOT 0) */
     check("Product[k, {k, 1, 0}]", "1");
     check("Product[k, {k, 5, 1}]", "1");

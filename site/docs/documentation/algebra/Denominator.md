@@ -5,16 +5,15 @@
 
 ## Description
 
-```text
-Denominator[expr]
-    gives the denominator of expr regarded as a rational expression.
-    Collects factors of expr that carry a superficially negative
-    exponent, inverted; returns 1 when no such factors exist.
-```
+**`Denominator[expr]`**
 
-## Examples
+gives the denominator of expr regarded as a rational expression. Collects factors of expr that carry a superficially negative exponent, inverted; returns 1 when no such factors exist.
 
-All examples below are verified against the current Mathilda build.
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Denominator[(x-1)(x-2)/(x-3)^2]
@@ -22,6 +21,28 @@ Out[1]= (-3 + x)^2
 
 In[2]:= Denominator[3/7 + I/11]
 Out[2]= 77
+```
+
+### Applications (6)
+
+```mathematica
+In[3]:= Denominator[6/8]
+Out[3]= 4
+
+In[4]:= Denominator[(x+1)/(x-1)]
+Out[4]= -1 + x
+
+In[5]:= Denominator[a/b + c/d]
+Out[5]= 1
+
+In[6]:= Denominator[Together[a/b + c/d]]
+Out[6]= b d
+
+In[7]:= Denominator[(x^2-1)/((x-2)^3 (x+5))]
+Out[7]= (5 + x) (-2 + x)^3
+
+In[8]:= Denominator[x^(-2) y^3 z^(-1)]
+Out[8]= x^2 z
 ```
 
 ## Implementation notes
@@ -34,49 +55,17 @@ Out[2]= 77
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational normal forms.
 - Source: [`src/rat.c`](https://github.com/stblake/mathilda/blob/main/src/rat.c)
 - Specification: [`docs/spec/builtins/algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/algebra.md)
+- Tests: [`tests/test_bignum_rational_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bignum_rational_numeric.c)
+- Tests: [`tests/test_integrate_newton_leibniz.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_newton_leibniz.c)
+- Tests: [`tests/test_integrate_risch_transcendental.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_risch_transcendental.c)
+- Tests: [`tests/test_rat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_rat.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Denominator[6/8]
-Out[1]= 4
-```
-
-```mathematica
-In[1]:= Denominator[(x+1)/(x-1)]
-Out[1]= -1 + x
-```
-
-```mathematica
-In[1]:= Denominator[a/b + c/d]
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= Denominator[Together[a/b + c/d]]
-Out[1]= b d
-```
-
-```mathematica
-In[1]:= Denominator[(x^2-1)/((x-2)^3 (x+5))]
-Out[1]= (5 + x) (-2 + x)^3
-```
-
-```mathematica
-In[1]:= Denominator[x^(-2) y^3 z^(-1)]
-Out[1]= x^2 z
-```
 
 ### Notes
 

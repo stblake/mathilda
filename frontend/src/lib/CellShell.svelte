@@ -10,18 +10,35 @@
   All mutation calls go through store.xxx() instead of the global notebook singleton.
 -->
 <script lang="ts">
-  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import { onDestroy, tick, createEventDispatcher } from 'svelte';
   import { EditorView, keymap } from '@codemirror/view';
   import { EditorState, EditorSelection } from '@codemirror/state';
   import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
   import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
   import Output from './Output.svelte';
+  import RefPage from './RefPage.svelte';
+  import { openRefpage } from './canvas';
   import type { Cell, CellType, OutputItem } from './notebook';
+  import { showExecLabels } from './properties';
+  import { renderProse } from './prose';
+  /* Rendered prose can contain KaTeX, so this component owns the stylesheet.
+     Output.svelte imports it too and Vite dedupes; relying on ANOTHER component's
+     import would leave prose unstyled the day that one changed. It cannot live in
+     prose.ts, where a CSS import would break the node-run checks. */
+  import 'katex/dist/katex.min.css';
   import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection } from './notebook';
+  import { registerHandle, unregisterHandle, setActiveCell, markBlurred } from './active';
 
   export let cell: Cell;
   export let rowId: string;
   export let cellIdx: number;
+  /** Which notebook this cell belongs to. Needed because the toolbar tracks a
+   *  single active cell globally, and in split mode two notebooks are on screen
+   *  at once -- so the record has to say which one owns the caret. */
+  export let notebookId: string;
+  /* Reference pages render their headings as structure: not editable, and a
+     click folds the section rather than placing a caret. */
+  export let headingReadonly = false;
   /** Per-notebook store instance — use store.xxx() for all mutations. */
   export let store: any;
   /** Side-by-side input/output layout (toggled from the focused toolbar) */
@@ -56,18 +73,51 @@
     focusPrev: { id: string };
     focusNext: { id: string };
     register:  { id: string; fn: () => void };
+    headingClick: { rowId: string };
   }>();
 
   $: selected = $selectedCells.has(cell.id);
+
+  /* Anchor for a reference page's table of contents. Must match slug() in
+     RefPage.svelte and tocSlug() in refpages.ts. */
+  $: headingId = (cell.type === 'section' || cell.type === 'subsection')
+    ? 'ref-' + cell.source.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    : undefined;
 
   // ---- CodeMirror editor ----
   let editorContainer: HTMLElement;
   let view: EditorView;
 
-  onMount(() => {
-    if (cell.type !== 'code') return;
-    initEditor();
-  });
+  /* Which (cell, type) pair the current `view` was built for. */
+  let editorBuiltFor = '';
+
+  /* The cell owns its editor's lifecycle, rather than every caller that can
+     change a cell's type remembering to rebuild it.
+     Previously only the gutter type-badge did (via a setTimeout), so retyping
+     from the toolbar's cell-style control produced a cell that rendered an empty
+     editor container with no EditorView in it: no caret, impossible to type in,
+     and its retained source invisible but still evaluated by Run. Round-tripping
+     code -> text -> code additionally left `view` pointing at detached DOM.
+
+     tick() because the {#if cell.type === 'code'} branch has to render before
+     `editorContainer` is bound -- on the flush where the type changes it is
+     still null. */
+  $: syncEditor(cell.id, cell.type);
+
+  function syncEditor(id: string, type: CellType) {
+    if (type !== 'code') {
+      if (view) { view.destroy(); view = undefined as any; }
+      editorBuiltFor = '';
+      return;
+    }
+    const key = `${id}:code`;
+    if (editorBuiltFor === key && view) return;
+    editorBuiltFor = key;
+    tick().then(() => {
+      /* Re-check: the type may have changed again while we waited. */
+      if (cell.type === 'code' && editorContainer) initEditor();
+    });
+  }
 
   function initEditor() {
     if (view) { view.destroy(); view = undefined as any; }
@@ -77,6 +127,16 @@
         extensions: [
           history(),
           syntaxHighlighting(defaultHighlightStyle),
+          /* Mathilda's only comment form is the nested block comment (* ... *).
+             This is not cosmetic metadata: every comment command in
+             @codemirror/commands (toggleComment, toggleLineComment, ...) reads
+             `commentTokens` out of language data and does NOTHING AT ALL when it
+             is absent. No language extension is installed here, so without this
+             facet the toolbar's comment button would look implemented, pass
+             review, and silently no-op. */
+          EditorState.languageData.of(() => [
+            { commentTokens: { block: { open: '(*', close: '*)' } } },
+          ]),
           keymap.of([
             { key: 'Shift-Enter', run() { dispatch('run', { id: cell.id }); return true; } },
             { key: 'Mod-Enter',   run() { dispatch('run', { id: cell.id }); dispatch('addBelow', { rowId }); return true; } },
@@ -101,6 +161,15 @@
           EditorView.updateListener.of(update => {
             if (update.docChanged)
               dispatch('change', { id: cell.id, source: view.state.doc.toString() });
+            /* Tell the toolbar which cell the caret is in. Extending the
+               listener that already exists rather than adding a second
+               extension: focusChanged is the documented signal for this, and
+               EditorView.focusChangeEffect is for producing StateEffects, which
+               is the wrong shape for a side effect outside the editor. */
+            if (update.focusChanged) {
+              if (update.view.hasFocus) setActiveCell(notebookId, cell.id, cell.type);
+              else                      markBlurred(cell.id);
+            }
           }),
           EditorView.theme({
             '&': { fontSize: '1rem', fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace", background: 'transparent' },
@@ -122,11 +191,19 @@
         view.focus();
         const end = view.state.doc.length;
         view.dispatch({ selection: EditorSelection.cursor(end) });
+        revealSelf();
       },
     });
+
+    /* A second, separate registry from the `register` event above. That one
+       feeds NotebookCard's cellFocusFns, which exists to MOVE the caret during
+       arrow-key navigation. This one hands the toolbar a live EditorView so
+       commands can read the selection and dispatch changes -- something the
+       toolbar cannot get by any prop path, since it lives in App.svelte. */
+    registerHandle(cell.id, { view, el: null, focus: () => view.focus() });
   }
 
-  onDestroy(() => view?.destroy());
+  onDestroy(() => { view?.destroy(); unregisterHandle(cell.id); });
 
   $: if (view && view.state.doc.toString() !== cell.source) {
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: cell.source } });
@@ -145,9 +222,10 @@
     showTypePicker = false;
     // Use the store prop instead of the global notebook singleton
     store.setCellType(cell.id, t);
-    if (t === 'code') {
-      setTimeout(initEditor, 10);
-    }
+    /* No editor rebuild here any more: syncEditor above reacts to cell.type, so
+       every route that retypes a cell -- this badge, the toolbar's cell-style
+       control, anything future -- gets a working editor without having to know
+       to ask for one. */
   }
 
   // ---- Selection ----
@@ -193,6 +271,52 @@
     }
   }
 
+  /* A text cell shows RENDERED Markdown until you click into it, and its raw
+     source while you are editing -- the same two states Jupyter has, and what the
+     cell-type picker has promised ("Prose / markdown") since it was written.
+
+     One element rather than two, so every handler below, the handle registration
+     and the arrow-key navigation stay exactly as they were; only what is painted
+     into it and whether it is editable change.
+
+     A cell with no source starts in edit mode. Rendered-empty is a zero-height
+     box, and asking someone to click one is asking them to guess. */
+  let textEditing = cell.type === 'text' ? cell.source.trim() === '' : false;
+  $: renderedProse = cell.type === 'text' ? renderProse(cell.source) : '';
+
+  function paintProse() {
+    if (!proseEl) return;
+    if (cell.type !== 'text' || textEditing) proseEl.innerText = cell.source;
+    else proseEl.innerHTML = renderedProse;
+  }
+
+  /* Safe to repaint on every source change here, unlike the identity block below:
+     while NOT editing there is no caret in the element to clobber. */
+  $: if (proseEl && cell.type === 'text' && !textEditing) proseEl.innerHTML = renderedProse;
+
+  /* Entering edit mode has to wait a tick: `contenteditable` is still false in
+     the DOM until Svelte flushes, and focusing a non-editable div does nothing. */
+  async function enterProseEdit() {
+    if (cell.type !== 'text' || textEditing) return;
+    textEditing = true;
+    await tick();
+    if (!proseEl) return;
+    proseEl.innerText = cell.source;
+    /* The caret lands where focus() puts it, not at the click point. Mapping a
+       click to an offset in the SOURCE would mean mapping through the rendered
+       HTML, where `**bold**` is four visible characters and six source ones, so
+       caretRangeFromPoint would answer a different question than the one asked.
+       Jupyter has the same behaviour for the same reason. */
+    proseEl.focus();
+  }
+
+  /** Programmatic focus (arrow navigation, split, the toolbar) must open the
+   *  editor first, or it would focus a rendered, non-editable div. */
+  function focusProse() {
+    if (cell.type === 'text') { void enterProseEdit(); return; }
+    proseEl?.focus();
+  }
+
   // Focus ref + contenteditable state management
   let proseEl: HTMLElement;
   let _lastCellId = '';
@@ -202,18 +326,55 @@
   // If we update on every cell.source change, Svelte overwrites the user's
   // typed content, causing the duplication bug.
   $: if (proseEl && cell.id !== _lastCellId) {
-    proseEl.innerText = cell.source;
+    /* A different cell arrived in this component: it gets its own edit state, or
+       a rendered cell would inherit the previous one's open editor. */
+    textEditing = cell.type === 'text' ? cell.source.trim() === '' : false;
+    paintProse();
     _lastCellId = cell.id;
-    // Register focus fn once the element exists
-    dispatch('register', {
-      id: cell.id,
-      fn: () => { proseEl?.focus(); },
-    });
+    /* REGISTER ONLY IF FOCUS WOULD ACTUALLY WORK. On a reference page `headingReadonly` is true,
+       so the heading renders contenteditable={false} with no tabindex and .focus() on it does
+       nothing at all. Registering anyway is worse than not registering: arrow navigation looks
+       for the next cell that HAS a focus function, finds this one, calls it, and the caret
+       vanishes -- which is why arrowing past a section in the docs appeared dead even after
+       unfocusable rows were being skipped. This row was not classified as unfocusable; it lied.
+       A read-only heading is page structure, so arrows step over it. */
+    if (!headingReadonly) {
+      /* focusProse() rather than proseEl.focus(): a programmatic focus on a text
+         cell must OPEN its Markdown editor first, or it lands on the rendered,
+         non-editable div. revealSelf() then scrolls the cell into view so arrow
+         navigation through a long notebook does not walk the caret off-screen. */
+      dispatch('register', {
+        id: cell.id,
+        fn: () => { focusProse(); revealSelf(); },
+      });
+      registerHandle(cell.id, { view: null, el: proseEl, focus: () => focusProse() });
+    }
+  }
+
+  /* The cell's own outer element, so a cell taking the caret can bring itself into view.
+     Arrowing through a long notebook otherwise walked the caret off the bottom of the visible
+     area and kept going with nothing on screen changing. `block: 'nearest'` scrolls only when
+     the cell is really out of view, which keeps a short hop from jerking the page. */
+  let shellEl: HTMLElement | undefined;
+
+  function revealSelf() {
+    shellEl?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  /* focus/blur do NOT bubble, so these have to sit on the contenteditable
+     itself -- a focusin handler on .cell-shell could not tell which of a row's
+     side-by-side cells the caret landed in. */
+  function onProseFocus() { setActiveCell(notebookId, cell.id, cell.type); }
+  function onProseBlur()  {
+    markBlurred(cell.id);
+    /* Leaving the cell renders it; the reactive repaint above does the painting. */
+    if (cell.type === 'text') textEditing = false;
   }
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
 <div
+  bind:this={shellEl}
   class="cell-shell"
   class:selected
   class:running={cell.status === 'running'}
@@ -221,6 +382,7 @@
   class:type-text={cell.type === 'text'}
   class:type-section={cell.type === 'section'}
   class:type-subsection={cell.type === 'subsection'}
+  class:type-ref={cell.type === 'ref'}
   on:click={onBodyClick}
 >
 
@@ -233,11 +395,13 @@
         disabled={cell.status === 'running'}
         on:click|stopPropagation={() => dispatch('run', { id: cell.id })}
       >{#if cell.status === 'running'}<span class="spinner">●</span>{:else}▶{/if}</button>
-      {#if cell.execIdx != null}
+      {#if cell.execIdx != null && $showExecLabels}
         <span class="exec-label">In[{cell.execIdx}]</span>
       {/if}
-    {:else}
-      <!-- Type badge for non-code cells: click to open type picker -->
+    {:else if !headingReadonly}
+      <!-- Type badge for non-code cells: click to open type picker. Hidden in a
+           reference page, where the cell types are the page's structure and not
+           the reader's to change. -->
       <div class="type-badge-wrap">
         <button class="type-badge" on:click|stopPropagation={() => showTypePicker = !showTypePicker} title="Change cell type">
           {TYPES.find(t => t.id === cell.type)?.icon ?? 'T'}
@@ -284,7 +448,8 @@
       {/if}
       {#if cell.output.length > 0}
         <div class="output-pane">
-          <Output items={cell.output} />
+          <Output items={cell.output}
+                  onOpenDoc={(n) => openRefpage(notebookId, n)} />
         </div>
       {/if}
 
@@ -293,33 +458,52 @@
       <!-- Content set via JS ($: proseEl update) to avoid contenteditable doubling -->
       <div
         class="prose-cell"
-        contenteditable="true"
+        class:prose-rendered={!textEditing}
+        class:prose-empty={!textEditing && !renderedProse}
+        contenteditable={textEditing}
         bind:this={proseEl}
         on:input={onTextInput}
         on:keydown={onProseKeydown}
-        on:click|stopPropagation
+        on:focus={onProseFocus}
+        on:blur={onProseBlur}
+        on:click|stopPropagation={() => enterProseEdit()}
       ></div>
 
     {:else if cell.type === 'section'}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- The id lets a reference page's table of contents scroll here. Headings
+           are cells now (so they fold the rows beneath them), so they are no
+           longer rendered by RefPage and cannot carry ids from the Markdown. -->
       <h1
+        id={headingId}
         class="heading-cell"
-        contenteditable="true"
+        class:heading-static={headingReadonly}
+        contenteditable={!headingReadonly}
         bind:this={proseEl}
         on:input={onTextInput}
         on:keydown={onProseKeydown}
-        on:click|stopPropagation
+        on:focus={onProseFocus}
+        on:blur={onProseBlur}
+        on:click|stopPropagation={() => headingReadonly && dispatch('headingClick', { rowId })}
       ></h1>
+
+    {:else if cell.type === 'ref'}
+      <!-- Read-only generated reference page; `source` is the symbol name. -->
+      <RefPage markdown={cell.source} onOpen={(n) => openRefpage(notebookId, n)} />
 
     {:else if cell.type === 'subsection'}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
       <h2
+        id={headingId}
         class="heading-cell"
-        contenteditable="true"
+        class:heading-static={headingReadonly}
+        contenteditable={!headingReadonly}
         bind:this={proseEl}
         on:input={onTextInput}
         on:keydown={onProseKeydown}
-        on:click|stopPropagation
+        on:focus={onProseFocus}
+        on:blur={onProseBlur}
+        on:click|stopPropagation={() => headingReadonly && dispatch('headingClick', { rowId })}
       ></h2>
     {/if}
   </div>
@@ -360,6 +544,17 @@
     cursor: pointer;
     user-select: none;
     gap: 2px;
+  }
+
+  /* REFERENCE PROSE STARTS AT THE MARGIN. A generated page's paragraphs have nothing to put
+     in the gutter -- no run button, no execution label -- so the 40px reserved for one only
+     pushed every sentence to the right of the code it describes. Wolfram's pages run prose
+     flush with the left margin and keep the gutter for In[]/Out[] labels alone; this does the
+     same, and the narrow strip that remains keeps the coloured focus edge visible. */
+  .cell-shell.type-ref > .cell-gutter {
+    width: 10px;
+    padding-left: 0;
+    padding-right: 0;
   }
 
   .exec-label {
@@ -412,12 +607,15 @@
     left: 0;
     display: flex;
     gap: 3px;
-    background: rgba(12, 15, 28, 0.96);
-    border: 1px solid rgba(255,255,255,0.1);
+    /* Was a hardcoded dark rgba(12,15,28,0.96), which made this picker
+       dark-on-light and unreadable in light mode. Pointing it at the menu
+       tokens fixes that and keeps it visually consistent with Menu.svelte. */
+    background: var(--menu-bg);
+    border: 1px solid var(--menu-border);
     border-radius: 7px;
     padding: 4px;
     z-index: 200;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    box-shadow: var(--menu-shadow);
     white-space: nowrap;
   }
 
@@ -486,6 +684,48 @@
   :global(.cm-editor .cm-cursor-primary) { border-left-color: #89b4fa !important; }
 
   /* prose / heading cells */
+  /* Rendered mode. Not editable, so it needs its own affordance: the cursor says
+     "click to edit" and an empty cell keeps a clickable line's worth of height,
+     since a rendered empty cell is otherwise a zero-height target. */
+  .prose-cell.prose-rendered { cursor: text; }
+  .prose-cell.prose-empty::before {
+    content: 'Text';
+    opacity: 0.35;
+  }
+  /* Markdown produces block elements the raw-text cell never contained. They are
+     given the cell's own rhythm rather than the browser's defaults, which would
+     open a paragraph gap at the top of every cell. */
+  .prose-cell.prose-rendered :global(p:first-child) { margin-top: 0; }
+  .prose-cell.prose-rendered :global(p:last-child)  { margin-bottom: 0; }
+  .prose-cell.prose-rendered :global(p) { margin: 0.5em 0; }
+  .prose-cell.prose-rendered :global(ul),
+  .prose-cell.prose-rendered :global(ol) { margin: 0.5em 0; padding-left: 1.4em; }
+  .prose-cell.prose-rendered :global(code) {
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: 0.92em;
+    background: var(--code-bg);
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+  }
+  .prose-cell.prose-rendered :global(pre) {
+    background: var(--code-bg);
+    padding: 8px 10px;
+    border-radius: 4px;
+    overflow-x: auto;
+  }
+  .prose-cell.prose-rendered :global(pre code) { background: none; padding: 0; }
+  .prose-cell.prose-rendered :global(a) { color: var(--accent); }
+  .prose-cell.prose-rendered :global(blockquote) {
+    margin: 0.5em 0;
+    padding-left: 0.8em;
+    border-left: 2px solid var(--border);
+    color: var(--text-muted);
+  }
+  /* A table in prose scrolls inside its own box rather than widening the cell. */
+  .prose-cell.prose-rendered :global(table) { border-collapse: collapse; display: block; overflow-x: auto; }
+  .prose-cell.prose-rendered :global(th),
+  .prose-cell.prose-rendered :global(td) { border: 1px solid var(--border); padding: 3px 7px; }
+
   .prose-cell {
     padding: 6px 8px;
     font-size: 0.95rem;
@@ -496,6 +736,14 @@
     text-align: left;
     white-space: pre-wrap;
   }
+  /* A documentation heading: not a text field, and its whole width is the
+     fold control, so the pointer says so. */
+  .heading-static {
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
   .heading-cell {
     padding: 6px 8px;
     margin: 0;
@@ -507,8 +755,30 @@
     background: transparent;
     width: 100%;
   }
-  h1.heading-cell { font-size: 1.15rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.3rem; }
-  h2.heading-cell { font-size: 1.0rem; }
+  /* Section and subsection have to read as different levels, not as two sizes
+     of the same thing: a section is a full-strength heading with a rule under
+     it, a subsection is smaller, lighter and dimmer so it clearly sits inside
+     one. They previously differed by 0.15rem and nothing else. */
+  /* BOTH LEVELS OUTRANK BODY TEXT. Body prose is 0.98rem, so a subsection at 0.92rem was
+     literally smaller than the sentences it was meant to be heading -- the heading read as a
+     caption. A heading has to win on size before it can win on weight or colour, so the section
+     leads clearly and the subsection still sits above the prose beneath it. */
+  h1.heading-cell {
+    font-size: 1.42rem;
+    font-weight: 700;
+    color: var(--text-h, #cdd6f4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 0.32rem;
+    line-height: 1.25;
+  }
+  h2.heading-cell {
+    font-size: 1.14rem;
+    font-weight: 650;
+    color: var(--text, #cdd6f4);
+    letter-spacing: 0.01em;
+    padding-top: 4px;
+    line-height: 1.3;
+  }
 
   .out-label {
     font-size: 0.58rem;

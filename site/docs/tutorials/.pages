@@ -8,6 +8,7 @@ nav:
   - 05-number-theory.md
   - 06-algebra.md
   - 07-solutions-of-equations.md
+  - diophantine-equations
   - 08-calculus.md
   - integration-methods
   - computing-limits-gruntz.md

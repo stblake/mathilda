@@ -5,36 +5,15 @@
 
 ## Description
 
-```text
-Precision[x]
-    Returns the number of decimal digits of precision in x.
-    Exact numbers return Infinity; machine-precision reals return
-    the symbol MachinePrecision; MPFR values return their declared
-    precision in decimal digits.
-```
+**`Precision[x]`**
 
-## Examples
+Returns the number of decimal digits of precision in x. Exact numbers return Infinity; machine-precision reals return the symbol MachinePrecision; MPFR values return their declared precision in decimal digits.
 
-_No verified examples yet for this function._
+## Examples (5)
 
-## Implementation notes
+Every input below was run against the current Mathilda build and its output recorded.
 
-`builtin_precision` (1-arg) delegates to the recursive `precision_of`. Exact quantities — `EXPR_INTEGER`, `EXPR_BIGINT`, exact `Rational`, exact numeric symbols — return `Infinity`. `EXPR_REAL` returns the symbol `MachinePrecision`. `EXPR_MPFR` returns its decimal precision computed from the stored bit precision (`mpfr_get_prec / log2(10)`) as an `EXPR_REAL`. For composite expressions, `Complex[re, im]` and general function heads take the minimum precision across parts via `precision_min` (which treats `MachinePrecision` as the constant `NUMERIC_MACHINE_PRECISION_DIGITS ≈ 15.95` when comparing against explicit MPFR digit counts). This follows the rule that an expression is only as precise as its least-precise inexact part; the precision-tracking unit conversion (`LOG2_10`) is shared with `numeric.c`.
-
-**Attributes:** `Listable`, `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
-## References
-
-- Source: [`src/precision.c`](https://github.com/stblake/mathilda/blob/main/src/precision.c)
-- Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
-
-## Notes & additional examples
-
-### Worked examples
+### Applications (5)
 
 ```mathematica
 In[1]:= Precision[N[Pi, 30]]
@@ -45,21 +24,30 @@ Out[2]= Infinity
 
 In[3]:= Precision[1.5]
 Out[3]= MachinePrecision
+
+In[4]:= Precision[N[Pi, 50] + N[E, 30]]
+Out[4]= 30.103
+
+In[5]:= Precision[N[Sqrt[2], 100]^2]
+Out[5]= 100.243
 ```
 
-Arithmetic is precision-contagious: a sum is no more precise than its least precise operand, so adding a 30-digit number to a 50-digit number yields about 30 digits:
+## Implementation notes
 
-```mathematica
-In[1]:= Precision[N[Pi, 50] + N[E, 30]]
-Out[1]= 30.103
-```
+`builtin_precision` (1-arg) delegates to the recursive `precision_of`. Exact quantities — `EXPR_INTEGER`, `EXPR_BIGINT`, exact `Rational`, exact numeric symbols — return `Infinity`. `EXPR_REAL` returns the symbol `MachinePrecision`. `EXPR_MPFR` returns its decimal precision computed from the stored bit precision (`mpfr_get_prec / log2(10)`) as an `EXPR_REAL`. For composite expressions, `Complex[re, im]` and general function heads take the minimum precision across parts via `precision_min` (which treats `MachinePrecision` as the constant `NUMERIC_MACHINE_PRECISION_DIGITS ≈ 15.95` when comparing against explicit MPFR digit counts). This follows the rule that an expression is only as precise as its least-precise inexact part; the precision-tracking unit conversion (`LOG2_10`) is shared with `numeric.c`.
 
-Squaring a 100-digit square root *gains* a fraction of a digit, reflecting the conditioning of the operation:
+**Attributes:** `Listable`, `Protected`.
 
-```mathematica
-In[1]:= Precision[N[Sqrt[2], 100]^2]
-Out[1]= 100.243
-```
+## References
+
+- Source: [`src/precision.c`](https://github.com/stblake/mathilda/blob/main/src/precision.c)
+- Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_compile_arbprec.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_arbprec.c)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_flint_bridge.c`](https://github.com/stblake/mathilda/blob/main/tests/test_flint_bridge.c)
+- Tests: [`tests/test_hankelmatrix.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hankelmatrix.c)
+
+## Notes & additional examples
 
 ### Notes
 

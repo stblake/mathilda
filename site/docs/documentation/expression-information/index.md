@@ -1,6 +1,6 @@
 # Expression Information
 
-57 built-in function(s) in this category.
+62 built-in function(s) in this category.
 
 - [`$MachineEpsilon`]($MachineEpsilon.md) — $MachineEpsilon  _(Stable)_
 - [`$MachinePrecision`]($MachinePrecision.md) — $MachinePrecision  _(Stable)_
@@ -34,11 +34,14 @@
 - [`ListQ`](ListQ.md) — ListQ[expr] gives True if expr is a list (head List), False otherwise.  _(Stable)_
 - [`MachineNumberQ`](MachineNumberQ.md) — MachineNumberQ[expr] gives True if expr is a machine-precision real or complex number, and False otherwise.  _(Stable)_
 - [`MatrixQ`](MatrixQ.md) — MatrixQ[expr]  _(Stable)_
+- [`MaxMemoryUsed`](MaxMemoryUsed.md) — MaxMemoryUsed[] gives the peak number of bytes resident for the Mathilda process over its lifetime. The high-water mark comes from the operating system, so it catches spikes that occurred between two calls to MemoryInUse rather than only the largest value previously observed.  _(Stable)_
 - [`MemberQ`](MemberQ.md) — MemberQ[list, form] returns True if an element of list matches form, and False otherwise.  _(Stable)_
+- [`MemoryInUse`](MemoryInUse.md) — MemoryInUse[] gives the number of bytes of memory currently resident for the Mathilda process. This is the process resident set size, so unlike Mathematica's MemoryInUse it also counts the binary, the shared libraries and whatever the allocator holds without returning it to the system -- it is the figure Activity Monitor and top report, not a count of session data alone. Returns unevaluated on a platform that offers no way to ask, rather than reporting zero.  _(Stable)_
 - [`Names`](Names.md) — Names["string"] gives a sorted list of the names of symbols matching the string. Names[patt] matches a string pattern with metacharacters * (zero or more characters) and @ (one or more non-uppercase characters), or a RegularExpression["re"]. Names[{p1, p2, ...}] matches any of the patterns. Names[] lists all symbol names.  _(Stable)_
 - [`Negative`](Negative.md) — Negative[x]  _(Stable)_
 - [`NonNegative`](NonNegative.md) — NonNegative[x]  _(Stable)_
 - [`NonPositive`](NonPositive.md) — NonPositive[x]  _(Stable)_
+- [`NumberForm`](NumberForm.md) — NumberForm[expr, n] prints approximate real numbers in expr to n-digit  _(Stable)_
 - [`NumberQ`](NumberQ.md) — NumberQ[expr]  _(Stable)_
 - [`NumericQ`](NumericQ.md) — NumericQ[expr] gives True if expr is a numeric quantity, and False otherwise.  _(Stable)_
 - [`OddQ`](OddQ.md) — OddQ[n] gives True if n is an odd integer (Integer or BigInt), False otherwise.  _(Stable)_
@@ -48,9 +51,11 @@
 - [`PossibleZeroQ`](PossibleZeroQ.md) — PossibleZeroQ[expr] gives True if symbolic and numerical methods suggest that expr has value zero, and False otherwise.  _(Stable)_
 - [`Print`](Print.md) — Print[expr1, expr2, ...]  _(Stable)_
 - [`ReleaseHold`](ReleaseHold.md) — ReleaseHold[expr]  _(Stable)_
+- [`Row`](Row.md) — Row[{e1, e2, ...}] displays the ei concatenated together in a row.  _(Stable)_
 - [`Sequence`](Sequence.md) — Sequence[e1, e2, ...]  _(Stable)_
 - [`SequenceHold`](SequenceHold.md) — SequenceHold  _(Experimental)_
 - [`SetAttributes`](SetAttributes.md) — SetAttributes[s, attr] sets the attributes for s.  _(Stable)_
+- [`StringQ`](StringQ.md) — StringQ[expr]  _(Stable)_
 - [`Symbol`](Symbol.md) — Symbol["name"]  _(Stable)_
 - [`TeXForm`](TeXForm.md) — TeXForm[expr]  _(Experimental)_
 - [`ToExpression`](ToExpression.md) — ToExpression[input]  _(Stable)_

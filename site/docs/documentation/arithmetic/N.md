@@ -5,18 +5,19 @@
 
 ## Description
 
-```text
-N[expr]
-    Gives a machine-precision numerical approximation of expr.
-N[expr, n]
-    Gives a numerical approximation to n decimal digits. Requires
-    a USE_MPFR build; without it, a warning is emitted and machine
-    precision is used.
-```
+**`N[expr]`**
 
-## Examples
+Gives a machine-precision numerical approximation of expr.
 
-All examples below are verified against the current Mathilda build.
+**`N[expr, n]`**
+
+Gives a numerical approximation to n decimal digits. Requires a USE\_MPFR build; without it, a warning is emitted and machine precision is used.
+
+## Examples (12)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= N[Sin[3141592653589793238]]
@@ -26,13 +27,55 @@ In[2]:= N[Sin[3141592653589793238], 30]
 Out[2]= -0.4463151633593201122016036193238
 ```
 
-```mathematica
-In[1]:= N[Pi, 100] // N
-Out[1]= 3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170681
+### Scope (2)
 
-In[2]:= Precision[%]
-Out[2]= Infinity
+```mathematica
+In[3]:= N[Pi, 100] // N
+Out[3]= 3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170681
+
+In[4]:= Precision[%]
+Out[4]= Infinity
 ```
+
+### Worked examples (2)
+
+```mathematica
+In[5]:= N[1/10^30]
+Out[5]= 1e-30
+
+In[6]:= N[10^400/3]
+Out[6]= 3.333333333333333e+399
+```
+
+### Applications (6)
+
+```mathematica
+In[7]:= N[Sqrt[2]]
+Out[7]= 1.41421
+
+In[8]:= N[2/7, 15]
+Out[8]= 0.2857142857142856
+
+In[9]:= N[Pi, 40]
+Out[9]= 3.1415926535897932384626433832795028841971
+
+In[10]:= N[Zeta[3], 40]
+Out[10]= 1.2020569031595942853997381615114499907651
+
+In[11]:= N[Gamma[1/3], 35]
+Out[11]= 2.67893853470774763365569294097467766
+
+In[12]:= N[EulerGamma, 30]
+Out[12]= 0.5772156649015328606065120900823
+```
+
+## Algorithm
+
+Mathilda — numeric evaluation implementation.
+
+See numeric.h for the module-level overview and extensibility notes.
+
+This file implements `N[expr]` / `N[expr, prec]`. Phase 1 targets machine-precision IEEE doubles; Phase 2 (gated behind USE_MPFR) adds MPFR arbitrary precision. Phase-2 extension points are marked with an inline "Phase 2" marker so the eventual additions are obvious.
 
 ## Implementation notes
 
@@ -44,48 +87,18 @@ Out[2]= Infinity
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [GoldenRatio](../../mathematical-constants/GoldenRatio/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/)
 
 - Source: [`src/numeric.c`](https://github.com/stblake/mathilda/blob/main/src/numeric.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_accuracygoal.c`](https://github.com/stblake/mathilda/blob/main/tests/test_accuracygoal.c)
+- Tests: [`tests/test_airyai.c`](https://github.com/stblake/mathilda/blob/main/tests/test_airyai.c)
+- Tests: [`tests/test_airybi.c`](https://github.com/stblake/mathilda/blob/main/tests/test_airybi.c)
+- Tests: [`tests/test_bernoullib.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bernoullib.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= N[Sqrt[2]]
-Out[1]= 1.41421
-```
-
-```mathematica
-In[1]:= N[2/7, 15]
-Out[1]= 0.2857142857142856
-```
-
-```mathematica
-In[1]:= N[Pi, 40]
-Out[1]= 3.1415926535897932384626433832795028841971
-```
-
-```mathematica
-In[1]:= N[Zeta[3], 40]
-Out[1]= 1.2020569031595942853997381615114499907651
-```
-
-```mathematica
-In[1]:= N[Gamma[1/3], 35]
-Out[1]= 2.67893853470774763365569294097467766
-```
-
-```mathematica
-In[1]:= N[EulerGamma, 30]
-Out[1]= 0.5772156649015328606065120900823
-```
 
 ### Notes
 

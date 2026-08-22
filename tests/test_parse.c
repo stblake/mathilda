@@ -333,6 +333,68 @@ static void assert_parse_eq(const char* input, const char* expected) {
     expr_free(p);
 }
 
+/* Operator precedence & associativity ladder (get_operator in src/parse.c).
+ *
+ * get_operator is static, so it is exercised through the public parser: each
+ * case pins the parse-tree shape that a specific precedence/associativity
+ * relationship must produce. These lock the 1–10000 precedence ladder against
+ * accidental drift (a mis-typed def.prec would regroup one of these). Every
+ * expected form was cross-checked against Wolfram-Language semantics.
+ *
+ * Note: And and Or share a precedence level here (a historic Mathilda choice,
+ * not WL-faithful), so mixed `&&`/`||` grouping is deliberately not asserted;
+ * each is tested against unambiguous neighbours (comparisons, Not) instead. */
+void test_operator_precedence_ladder() {
+    /* --- relative precedence: the tighter operator groups on the inside --- */
+    assert_parse_eq("a + b*c",      "Plus[a, Times[b, c]]");        /* * > + */
+    assert_parse_eq("a*b + c",      "Plus[Times[a, b], c]");
+    assert_parse_eq("a*b^c",        "Times[a, Power[b, c]]");       /* ^ > * */
+    assert_parse_eq("a + b == c",   "Equal[Plus[a, b], c]");        /* + > == */
+    assert_parse_eq("a && b == c",  "And[a, Equal[b, c]]");         /* == > && */
+    assert_parse_eq("a == b && c",  "And[Equal[a, b], c]");
+    assert_parse_eq("!a && b",      "And[Not[a], b]");              /* ! > && */
+    assert_parse_eq("!a == b",      "Not[Equal[a, b]]");            /* == > ! */
+    assert_parse_eq("a . b + c",    "Plus[Dot[a, b], c]");          /* . > + */
+    assert_parse_eq("a*b . c",      "Times[a, Dot[b, c]]");         /* . > * */
+    assert_parse_eq("2^3!",         "Power[2, Factorial[3]]");      /* ! > ^ */
+    assert_parse_eq("f @ a + b",    "Plus[f[a], b]");               /* @ > + */
+    assert_parse_eq("a + b // f",   "f[Plus[a, b]]");               /* + > // */
+    assert_parse_eq("a -> b /; c",  "Rule[a, Condition[b, c]]");    /* /; > -> */
+    assert_parse_eq("a /. b -> c",  "ReplaceAll[a, Rule[b, c]]");   /* -> > /. */
+    assert_parse_eq("a ~~ b | c",   "StringExpression[a, Alternatives[b, c]]"); /* | > ~~ */
+    assert_parse_eq("x = a -> b",   "Set[x, Rule[a, b]]");          /* -> > = */
+    assert_parse_eq("a[[1]] + b",   "Plus[Part[a, 1], b]");         /* [[ ]] > + */
+    assert_parse_eq("f[x]^2",       "Power[f[x], 2]");              /* f[x] > ^ */
+    assert_parse_eq("a @* b @ c",   "Composition[a, b][c]");        /* @* > @ */
+    assert_parse_eq("a ? b + c",    "Plus[PatternTest[a, b], c]");  /* ? > + */
+
+    /* --- prefix unary minus: binds looser than Power/Times, tighter than +/- --- */
+    assert_parse_eq("-a^2",         "Times[-1, Power[a, 2]]");
+    assert_parse_eq("-f[x]",        "Times[-1, f[x]]");
+
+    /* --- associativity --- */
+    assert_parse_eq("a - b - c",    "Plus[a, Times[-1, b], Times[-1, c]]"); /* + left */
+    assert_parse_eq("a^b^c",        "Power[a, Power[b, c]]");               /* ^ right */
+    assert_parse_eq("a/b/c",        "Times[Times[a, Power[b, -1]], Power[c, -1]]"); /* / left */
+    assert_parse_eq("a = b = c",    "Set[a, Set[b, c]]");                   /* = right */
+    assert_parse_eq("a -> b -> c",  "Rule[a, Rule[b, c]]");                 /* -> right */
+    assert_parse_eq("a // f // g",  "g[f[a]]");                             /* // left */
+    assert_parse_eq("f @ g @ x",    "f[g[x]]");                             /* @ right */
+    assert_parse_eq("a @@ b @@ c",  "Apply[a, Apply[b, c]]");              /* @@ right */
+    assert_parse_eq("a && b && c",  "And[And[a, b], c]");                   /* && left (parse) */
+    assert_parse_eq("a <> b <> c",  "StringJoin[StringJoin[a, b], c]");     /* <> left */
+    assert_parse_eq("a . b . c",    "Dot[Dot[a, b], c]");                   /* . left */
+    assert_parse_eq("a | b | c",    "Alternatives[Alternatives[a, b], c]"); /* | left (parse) */
+    assert_parse_eq("a ~~ b ~~ c",  "StringExpression[StringExpression[a, b], c]"); /* ~~ left */
+
+    /* --- CompoundExpression is the loosest binary operator --- */
+    assert_parse_eq("a ; b ; c",    "CompoundExpression[a, b, c]");
+
+    /* --- one expression spanning many levels at once --- */
+    assert_parse_eq("a + b c^d/e - f!",
+        "Plus[a, Times[b, Times[Power[c, d], Power[e, -1]]], Times[-1, Factorial[f]]]");
+}
+
 /* Reported by Nasser, May 2026: `Timing[LUDecomposition[mat];]` printed a
  * spurious "Unexpected character: ']'" on stderr.  The parser already
  * substituted Null for the missing RHS of `;` (so the tree was correct),
@@ -485,6 +547,39 @@ void test_parse_newline_separator() {
     assert_statements("x =\n 5\n", 1, "Set[x, 5]");
 }
 
+static void test_parentheses_break_comparison_chains(void) {
+    /* A chain of comparisons folds into one variadic Inequality, and the fold used to decide by
+     * INSPECTING the built subtree -- which cannot tell `a >= b == c` (a chain) from `(a >= b) == c`
+     * (an Equal whose left operand happens to be a comparison). So parentheses were ignored on the
+     * LEFT operand, and `(2.0 >= 2.) == (1.0 > 0.)` evaluated to `2.0 == True` instead of True.
+     *
+     * The right operand was never affected, being parsed as its own subexpression, which is why only
+     * one side looked wrong and why the bug survived: every symmetric-looking test passed. */
+    assert_eval_eq("FullForm[Hold[(a >= b) == c]]", "Hold[Equal[GreaterEqual[a, b], c]]", 0);
+    assert_eval_eq("FullForm[Hold[(a > b) == (c > d)]]",
+                   "Hold[Equal[Greater[a, b], Greater[c, d]]]", 0);
+    /* The value form, which is what surfaced it: both must be True, not `2.0 == True`. */
+    assert_eval_eq("(2.0 >= 2.) == (1.0 > 0.)", "True", 0);
+    assert_eval_eq("(1.0 >= 2.) == (0.0 > 0.)", "True", 0);
+    /* Nesting a whole chain in parentheses must not extend it either -- the same provenance
+     * question, reached through extend_inequality rather than the fold. */
+    assert_eval_eq("FullForm[Hold[(a < b < c) == d]]",
+                   "Hold[Equal[Inequality[a, Less, b, Less, c], d]]", 0);
+}
+
+static void test_unparenthesised_chains_still_chain(void) {
+    /* The other half: the fix must not stop real chains from folding. Without these the fix could
+     * "work" by simply never chaining, which would be a different bug with the same test passing. */
+    assert_eval_eq("FullForm[Hold[a >= b == c]]", "Hold[Inequality[a, GreaterEqual, b, Equal, c]]",
+                   0);
+    assert_eval_eq("FullForm[Hold[1 < 2 < 3]]", "Hold[Inequality[1, Less, 2, Less, 3]]", 0);
+    assert_eval_eq("FullForm[Hold[a < b <= c == d > e]]",
+                   "Hold[Inequality[a, Less, b, LessEqual, c, Equal, d, Greater, e]]", 0);
+    /* And chain SEMANTICS are unchanged: a chain is True only when every adjacent pair holds. */
+    assert_eval_eq("{1 < 2 < 3, 1 < 3 < 2, 2 == 2 == 2, 3 > 2 > 1}",
+                   "{True, False, True, True}", 0);
+}
+
 int main() {
     /* The parser builds expressions with the cached SYM_* symbol pointers
      * (e.g. expr_new_symbol(SYM_List)), which are only populated by
@@ -504,11 +599,14 @@ int main() {
     TEST(test_parse_assignments_and_equality);
     TEST(test_parse_part);
     TEST(test_parse_precedence);
+    TEST(test_operator_precedence_ladder);
     TEST(test_parse_comments);
     TEST(test_parse_trailing_semicolon);
     TEST(test_parse_newline_separator);
     TEST(test_parse_dots);
     TEST(test_parse_scaled_scientific);
+    TEST(test_parentheses_break_comparison_chains);
+    TEST(test_unparenthesised_chains_still_chain);
 
     printf("\nAll parser tests passed!\n");
     return 0;

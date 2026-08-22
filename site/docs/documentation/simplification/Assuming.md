@@ -5,20 +5,47 @@
 
 ## Description
 
-```text
-Assuming[assum, expr]
-    evaluates expr with assum appended to $Assumptions, so that assum is included in the default assumptions used by functions such as Simplify.
+**`Assuming[assum, expr]`**
+
+evaluates expr with assum appended to $Assumptions, so that assum is included in the default assumptions used by functions such as Simplify.
+
+**`Assuming[assum, expr] is effectively equivalent to Block[{$Assumptions = $Assumptions && assum}, expr], so nested invocations compose and the rebinding of $Assumptions is restored on exit.`**
+
+<details>
+<summary>Notes</summary>
+
 Assuming converts lists of assumptions to conjunctions.
-Assuming[assum, expr] is effectively equivalent to Block[{$Assumptions = $Assumptions && assum}, expr], so nested invocations compose and the rebinding of $Assumptions is restored on exit.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= Assuming[x > 0, Simplify[Sqrt[x^2 y^2], y < 0]]
 Out[1]= -x y
+```
+
+### Applications (5)
+
+```mathematica
+In[2]:= Simplify[Sqrt[x^2]]
+Out[2]= Sqrt[x^2]
+
+In[3]:= Assuming[x > 0, Simplify[Sqrt[x^2]]]
+Out[3]= x
+
+In[4]:= Assuming[x > 0, Simplify[Sqrt[x^2] + Abs[x]]]
+Out[4]= 2 x
+
+In[5]:= Assuming[Element[k, Integers], Simplify[Sin[k Pi]]]
+Out[5]= 0
+
+In[6]:= Assuming[a > 0 && b > 0, Simplify[Log[a b] - Log[a] - Log[b]]]
+Out[6]= 0
 ```
 
 ## Implementation notes
@@ -38,44 +65,25 @@ and hands it to the evaluator; the assumption set lives in the `$Assumptions`
 OwnValue.
 
 - `HoldRest`, `Protected` (the assumption argument evaluates; the body is held
+  until the assumption is in scope).
+- Effectively `Block[{$Assumptions = $Assumptions && assum}, expr]`, so nested
+  `Assuming` calls compose and the rebinding of `$Assumptions` is restored on
+  exit. Lists of assumptions are converted to conjunctions.
 
 **Attributes:** `HoldRest`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [$Assumptions](../../simplification/$Assumptions/), [Simplify](../../simplification/Simplify/), [HoldRest](../../other-advanced/HoldRest/)
 
 - Source: [`src/simp/simp_builtins.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp_builtins.c)
 - Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)
+- Tests: [`tests/test_assuming.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assuming.c)
+- Tests: [`tests/test_element.c`](https://github.com/stblake/mathilda/blob/main/tests/test_element.c)
+- Tests: [`tests/test_invtrig_simplify.c`](https://github.com/stblake/mathilda/blob/main/tests/test_invtrig_simplify.c)
+- Tests: [`tests/test_limit_assumptions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_limit_assumptions.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-Without assumptions `Sqrt[x^2]` cannot be reduced; supplying `x > 0` resolves it:
-
-```mathematica
-In[1]:= Simplify[Sqrt[x^2]]
-Out[1]= Sqrt[x^2]
-
-In[2]:= Assuming[x > 0, Simplify[Sqrt[x^2]]]
-Out[2]= x
-
-In[3]:= Assuming[x > 0, Simplify[Sqrt[x^2] + Abs[x]]]
-Out[3]= 2 x
-```
-
-Domain assumptions feed Simplify's decision procedures; integer `k` kills the sine, positive `a, b` collapse the logarithm:
-
-```mathematica
-In[1]:= Assuming[Element[k, Integers], Simplify[Sin[k Pi]]]
-Out[1]= 0
-
-In[2]:= Assuming[a > 0 && b > 0, Simplify[Log[a b] - Log[a] - Log[b]]]
-Out[2]= 0
-```
 
 ### Notes
 

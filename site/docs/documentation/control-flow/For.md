@@ -5,18 +5,42 @@
 
 ## Description
 
-```text
-For[start, test, incr, body] executes start, then repeatedly evaluates body and incr until test fails to give True.
-For[start, test, incr] runs with an empty body, useful when incr or test carries the side-effect.
+**`For[start, test, incr, body] executes start, then repeatedly evaluates body and incr until test fails to give True.`**
+
+**`For[start, test, incr] runs with an empty body, useful when incr or test carries the side-effect.`**
+
+**`Break[] inside body exits the loop.`**
+
+**`Continue[] inside body skips the rest of body and re-evaluates incr then test.`**
+
+**`Return[v] inside body causes the enclosing function to yield v; For itself returns Null.`**
+
+<details>
+<summary>Notes</summary>
+
 For has attribute HoldAll: start, test, incr, and body are all held unevaluated until For drives them.
-Break[] inside body exits the loop.
-Continue[] inside body skips the rest of body and re-evaluates incr then test.
-Return[v] inside body causes the enclosing function to yield v; For itself returns Null.
+
+</details>
+
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
+
+```mathematica
+In[1]:= For[i=0, i<4, i++, Print[i]]
 ```
 
-## Examples
+### Applications (2)
 
-_No verified examples yet for this function._
+```mathematica
+In[2]:= (s = 0; For[i = 1, i <= 5, i++, s = s + i]; s)
+Out[2]= 15
+
+In[3]:= (f = 1; For[i = 1, i <= 4, i++, f = f*i]; f)
+Out[3]= 24
+```
 
 ## Implementation notes
 
@@ -31,26 +55,18 @@ _No verified examples yet for this function._
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/), [Return](../../control-flow/Return/)
 
 - Source: [`src/iter.c`](https://github.com/stblake/mathilda/blob/main/src/iter.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+- Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_iter.c`](https://github.com/stblake/mathilda/blob/main/tests/test_iter.c)
+- Tests: [`tests/test_mateigen_direct.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mateigen_direct.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= (s = 0; For[i = 1, i <= 5, i++, s = s + i]; s)
-Out[1]= 15
-
-In[2]:= (f = 1; For[i = 1, i <= 4, i++, f = f*i]; f)
-Out[2]= 24
-```
 
 ### Notes
 

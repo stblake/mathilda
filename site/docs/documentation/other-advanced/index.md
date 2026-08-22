@@ -1,6 +1,6 @@
 # Other & Advanced
 
-96 built-in function(s) in this category.
+105 built-in function(s) in this category.
 
 - [`$AutoArrayPacking`]($AutoArrayPacking.md) — $AutoArrayPacking  _(Stable)_
 - [`$AutoCompilation`]($AutoCompilation.md) — $AutoCompilation  _(Stable)_
@@ -21,6 +21,7 @@
 - [`Brown`](Brown.md) — Brown  _(Experimental)_
 - [`ChartLabels`](ChartLabels.md) — ChartLabels  _(Experimental)_
 - [`ChartStyle`](ChartStyle.md) — ChartStyle  _(Experimental)_
+- [`ClassifierFunction`](ClassifierFunction.md) — ClassifierFunction[method, parameters, featureCount, k] is the fitted classifier Classify returns. Apply it to a feature vector to get a class, or to a feature vector and "Probabilities" to get one rule per class.  _(Stable)_
 - [`CompleteGraph`](CompleteGraph.md) — CompleteGraph[n] gives the complete graph K_n on n vertices.  _(Stable)_
 - [`ConnectedComponents`](ConnectedComponents.md) — ConnectedComponents[g] gives the connected components of g (weak, on the underlying undirected graph).  _(Stable)_
 - [`ConnectedGraphQ`](ConnectedGraphQ.md) — ConnectedGraphQ[g] gives True if g is connected.  _(Stable)_
@@ -31,6 +32,7 @@
 - [`Cyan`](Cyan.md) — Cyan  _(Experimental)_
 - [`CycleGraph`](CycleGraph.md) — CycleGraph[n] gives the cycle graph on n vertices.  _(Stable)_
 - [`DataType`](DataType.md) — DataType[a]  _(Stable)_
+- [`DimensionReducerFunction`](DimensionReducerFunction.md) — DimensionReducerFunction[method, {means, loadings...}, featureCount, reducedDimension] is the reusable reducer DimensionReduction returns. Apply it to a feature vector, or to a matrix of them, to project into the reduced space.  _(Stable)_
 - [`DirectedGraphQ`](DirectedGraphQ.md) — DirectedGraphQ[g] gives True if all edges of g are directed.  _(Stable)_
 - [`EdgeCount`](EdgeCount.md) — EdgeCount[g] gives the number of edges in the graph g.  _(Stable)_
 - [`EdgeList`](EdgeList.md) — EdgeList[g] gives the list of edges of the graph g.  _(Stable)_
@@ -54,6 +56,7 @@
 - [`IntervalIntersection`](IntervalIntersection.md) — IntervalIntersection[i1, i2, ...] gives the interval representing the intersection of the intervals ij (Interval[] if they are disjoint).  _(Stable)_
 - [`IntervalMemberQ`](IntervalMemberQ.md) — IntervalMemberQ[interval, x] gives True if x lies within interval, and False otherwise. IntervalMemberQ[interval, other] tests whether the interval other is wholly contained in interval.  _(Stable)_
 - [`IntervalUnion`](IntervalUnion.md) — IntervalUnion[i1, i2, ...] gives the interval representing the union of the intervals ij.  _(Stable)_
+- [`LearnedDistribution`](LearnedDistribution.md) — LearnedDistribution[method, parameters, dimension, extra] is the fitted distribution LearnDistribution returns. Use it with PDF. Unlike a SPECIFIED distribution such as NormalDistribution[mu, sigma], it prints elided, because its parameters are derived rather than user-supplied.  _(Stable)_
 - [`LightBlue`](LightBlue.md) — LightBlue  _(Experimental)_
 - [`LightBrown`](LightBrown.md) — LightBrown  _(Experimental)_
 - [`LightCyan`](LightCyan.md) — LightCyan  _(Experimental)_
@@ -69,12 +72,16 @@
 - [`List`](List.md) — {e1, e2, ...} or List[e1, e2, ...]  _(Stable)_
 - [`Magenta`](Magenta.md) — Magenta  _(Experimental)_
 - [`NDArrayQ`](NDArrayQ.md) — NDArrayQ[expr]  _(Stable)_
+- [`NormalDistribution`](NormalDistribution.md) — NormalDistribution[mu, sigma] represents a normal distribution; NormalDistribution[] is the standard normal. Unlike a fitted model it prints its parameters in full, because they are what the user specified rather than an implementation detail.  _(Stable)_
 - [`Orange`](Orange.md) — Orange  _(Experimental)_
+- [`OrderlessPatternSequence`](OrderlessPatternSequence.md) — OrderlessPatternSequence[p1, p2, ...] is a pattern object that matches a sequence of arguments, in any order, that together match p1, p2, ....  _(Experimental)_
 - [`PathGraph`](PathGraph.md) — PathGraph[n] gives the path on n vertices; PathGraph[{v1,...}] the path over the given vertices.  _(Stable)_
+- [`PatternSequence`](PatternSequence.md) — PatternSequence[p1, p2, ...] is a pattern object that matches a sequence of arguments, each in turn matching p1, p2, ....  _(Experimental)_
 - [`Pick`](Pick.md) — Pick[expr, sel]  _(Stable)_
 - [`Pink`](Pink.md) — Pink  _(Experimental)_
 - [`PolynomialSqrt`](PolynomialSqrt.md) — PolynomialSqrt[p] gives a polynomial s with s^2 == p when p is a perfect square (every non-constant irreducible factor has even multiplicity; the numeric content is carried through Sqrt), and $Failed otherwise. PolynomialSqrt[p, x] treats p as a polynomial in x.  _(Stable)_
 - [`PrecisionGoal`](PrecisionGoal.md) — PrecisionGoal  _(Experimental)_
+- [`PredictorFunction`](PredictorFunction.md) — PredictorFunction[method, coefficients, featureCount] is the fitted object Predict returns. Apply it to a feature vector to get a prediction, or to "Method", "Coefficients" or "FeatureCount" to read it. A one-feature model also accepts a bare scalar.  _(Stable)_
 - [`Purple`](Purple.md) — Purple  _(Experimental)_
 - [`RandomGraph`](RandomGraph.md) — RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges.  _(Stable)_
 - [`RatCanonPrototype`](RatCanonPrototype.md) — RatCanonPrototype[expr] (Phase-1 prototype) reduces a rational function over the differential/algebraic tower of expr via one FLINT reduction.  _(Stable)_
@@ -86,9 +93,11 @@
 - [`StringExpression`](StringExpression.md) — StringExpression[p1, p2, ...] or p1 ~~ p2 ~~ ...  _(Stable)_
 - [`StronglyConnectedComponents`](StronglyConnectedComponents.md) — StronglyConnectedComponents[g] gives the strongly connected components of g (following edge directions).  _(Stable)_
 - [`Subsets`](Subsets.md) — Subsets[list]  _(Stable)_
+- [`UniformDistribution`](UniformDistribution.md) — UniformDistribution[{lo, hi}] represents a continuous uniform distribution; UniformDistribution[] is uniform on {0, 1}.  _(Stable)_
 - [`VectorPoints`](VectorPoints.md) — VectorPoints  _(Experimental)_
 - [`VectorScale`](VectorScale.md) — VectorScale  _(Experimental)_
 - [`VectorStyle`](VectorStyle.md) — VectorStyle  _(Experimental)_
+- [`Verbatim`](Verbatim.md) — Verbatim[expr] is a pattern object that matches expr taken literally: the pattern constructs inside expr (Blank, Pattern, ...) are not interpreted, so Verbatim[x_] matches only the literal expression x_.  _(Experimental)_
 - [`VertexConnectivity`](VertexConnectivity.md) — VertexConnectivity[g] gives the minimum number of vertices whose removal disconnects g.  _(Stable)_
 - [`VertexCount`](VertexCount.md) — VertexCount[g] gives the number of vertices in the graph g.  _(Stable)_
 - [`VertexDegree`](VertexDegree.md) — VertexDegree[g] gives the list of vertex degrees; VertexDegree[g,v] gives the degree of vertex v.  _(Stable)_

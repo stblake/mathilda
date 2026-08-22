@@ -5,18 +5,15 @@
 
 ## Description
 
-```text
-SimplifyCount[expr]
-    The complexity measure used by Simplify when no
-    ComplexityFunction option (or ComplexityFunction -> Automatic) is
-    given. Counts subexpressions; integers contribute their decimal
-    digit count plus a constant for the sign. Real numbers contribute
-    2 (NumberQ but not Integer/Rational).
-```
+**`SimplifyCount[expr]`**
 
-## Examples
+The complexity measure used by Simplify when no ComplexityFunction option (or ComplexityFunction -\> Automatic) is given. Counts subexpressions; integers contribute their decimal digit count plus a constant for the sign. Real numbers contribute 2 (NumberQ but not Integer/Rational).
 
-All examples below are verified against the current Mathilda build.
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= SimplifyCount[100 Log[2]]
@@ -30,6 +27,28 @@ Out[3]= 3
 
 In[4]:= SimplifyCount[3.14]
 Out[4]= 2
+```
+
+### Applications (6)
+
+```mathematica
+In[5]:= SimplifyCount[1]
+Out[5]= 1
+
+In[6]:= SimplifyCount[x + 1]
+Out[6]= 3
+
+In[7]:= SimplifyCount[3 x]
+Out[7]= 3
+
+In[8]:= SimplifyCount[12345]
+Out[8]= 5
+
+In[9]:= SimplifyCount[a b c + d]
+Out[9]= 6
+
+In[10]:= SimplifyCount[Sin[x]^2 + Cos[x]^2]
+Out[10]= 9
 ```
 
 ## Implementation notes
@@ -53,45 +72,24 @@ The same `size_t simp_default_complexity` function is consumed internally by
 
 - `Listable`, `Protected`.
 - Per node: a symbol, the integer `0`, or a string counts `1`; a positive integer
+  counts its decimal-digit count; a negative integer counts its digits plus one
+  for the sign; `Rational[n, d]` counts `SimplifyCount[n] + SimplifyCount[d] + 1`;
+  `Complex[re, im]` counts `SimplifyCount[re] + SimplifyCount[im] + 1`; a real
+  (machine or MPFR) counts `2`; a function `h[a1, ...]` counts
+  `SimplifyCount[h] + Sum SimplifyCount[ai]`.
+- Matches Mathematica's definition, so the integer-digit penalty keeps
+  `100 Log[2]` (count 6) ahead of `Log[2^100]` (count 32).
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Simplify](../../simplification/Simplify/)
 
 - Source: [`src/simp/simp_complexity.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp_complexity.c)
 - Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= SimplifyCount[1]
-Out[1]= 1
-
-In[2]:= SimplifyCount[x + 1]
-Out[2]= 3
-```
-
-```mathematica
-In[1]:= SimplifyCount[3 x]
-Out[1]= 3
-
-In[2]:= SimplifyCount[12345]
-Out[2]= 5
-```
-
-```mathematica
-In[1]:= SimplifyCount[a b c + d]
-Out[1]= 6
-
-In[2]:= SimplifyCount[Sin[x]^2 + Cos[x]^2]
-Out[1]= 9
-```
 
 ### Notes
 

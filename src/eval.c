@@ -21,6 +21,7 @@
 #include "assoc.h"                  /* assoc_lookup_value — O(1) <|...|>[key] */
 #include "interp.h"
 #include "compile/compiled_function.h"
+#include "predict.h"   /* src/ml -- fitted models as callables */
 #include "compile/autocompile.h"   /* $AutoCompilation */
 #include "numloop.h"                 /* $AutoCompilation also gates numloop */
 #include <string.h>
@@ -1169,6 +1170,48 @@ static bool flatten_sequences(Expr* e) {
 }
 
 /*
+ * strip_nothing:
+ * Removes the special symbol `Nothing` (and any `Nothing[...]` form) from the
+ * arguments of a List. Per WL, `Nothing` is the identity element of list
+ * construction and vanishes from any list it appears in — the idiom behind
+ * `Table[If[cond, x, Nothing], ...]` to conditionally build a list. List-specific:
+ * for a non-List head `Nothing` is an ordinary symbol. Returns true iff the args
+ * were rewritten.
+ */
+static bool strip_nothing(Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    Expr* head = e->data.function.head;
+    if (head->type != EXPR_SYMBOL || head->data.symbol.name != SYM_List) return false;
+    size_t n = e->data.function.arg_count;
+    size_t keep = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = e->data.function.args[i];
+        bool is_nothing =
+            (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_Nothing) ||
+            (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+             a->data.function.head->data.symbol.name == SYM_Nothing);
+        if (!is_nothing) keep++;
+    }
+    if (keep == n) return false;   /* no Nothing present — unchanged */
+    Expr** na = (keep > 0) ? (Expr**)malloc(sizeof(Expr*) * keep) : NULL;
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = e->data.function.args[i];
+        bool is_nothing =
+            (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_Nothing) ||
+            (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+             a->data.function.head->data.symbol.name == SYM_Nothing);
+        if (is_nothing) expr_free(a);
+        else            na[k++] = a;
+    }
+    free(e->data.function.args);
+    e->data.function.args = na;
+    e->data.function.arg_count = keep;
+    expr_invalidate_hash(e);
+    return true;
+}
+
+/*
  * evaluate_step:
  * Performs exactly one level of evaluation transformation.
  *
@@ -1403,6 +1446,11 @@ Expr* evaluate_step(Expr* e, bool* changed) {
     } else {
         if (flatten_sequences(res)) *changed = true;
     }
+
+    /* Strip `Nothing` from Lists (the list-construction identity element). Runs
+     * for every evaluated List; genuinely held Lists are not evaluated, so their
+     * `Nothing`s survive until released, matching WL. */
+    if (strip_nothing(res)) *changed = true;
 
             /* 2.6 Strip Unevaluated wrappers.
              * f[Unevaluated[expr]] passes expr (unevaluated) to f, with the
@@ -1880,6 +1928,25 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 if (applied) {
                     expr_free(res);
                     *changed = true; /* Pure Function applied */
+                    return applied;
+                }
+            } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
+                       res->data.function.arg_count >= 1 &&
+                       ml_model_apply_probe(head)) {
+                /* 7a-pre. A fitted machine-learning model as a callable:
+                 * PredictorFunction[...][features] predicts, and
+                 * PredictorFunction[...]["Coefficients"] reads a property. This sits in
+                 * the same composite-head chain as Function[...][args] just above and
+                 * Association[...][key] just below, which is the point -- a trained
+                 * model is a callable object, and this codebase already has an idiom
+                 * for that, so no new evaluation concept is introduced. See
+                 * src/ml/predict.h for why the model is a plain EXPR_FUNCTION rather
+                 * than a new node type. */
+                Expr* applied = ml_model_apply(head, res->data.function.args,
+                                               res->data.function.arg_count);
+                if (applied) {
+                    expr_free(res);
+                    *changed = true;
                     return applied;
                 }
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&

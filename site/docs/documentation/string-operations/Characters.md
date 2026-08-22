@@ -5,15 +5,15 @@
 
 ## Description
 
-```text
-Characters["string"]
-    Gives a list of the characters in a string.
-    Each character is given as a length-1 string.
-```
+**`Characters["string"]`**
 
-## Examples
+Gives a list of the characters in a string. Each character is given as a length-1 string.
 
-All examples below are verified against the current Mathilda build.
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Characters["ABC"]
@@ -38,11 +38,10 @@ Out[5]= Characters[x]
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [List](../../other-advanced/List/)
 
 - Source: [`src/picostrings.c`](https://github.com/stblake/mathilda/blob/main/src/picostrings.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_strings.c`](https://github.com/stblake/mathilda/blob/main/tests/test_strings.c)

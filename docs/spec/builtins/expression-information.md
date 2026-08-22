@@ -52,7 +52,21 @@ Out[12]= {}
 Predicates for testing expression types.
 - `AtomQ[expr]`: `True` if the expression has no parts.
 - `NumberQ[expr]`: `True` if the expression is a numeric type (Integer, Real, Rational, Complex).
-- `IntegerQ[expr]`: `True` if the expression is an Integer.
+- `IntegerQ[expr]`: `True` if the expression is an Integer or BigInt.
+- `MachineIntegerQ[expr]`: `True` if `expr` is a machine-word (64-bit) integer;
+  `False` for a BigInt, so `MachineIntegerQ[2^62]` is `True` but
+  `MachineIntegerQ[2^100]` is `False`. Attributes: `Protected`.
+- `RationalQ[expr]`: `True` if `expr` is an exact rational number — an Integer,
+  BigInt, or `Rational[p, q]` (an integer is rational, so `RationalQ[3]` is
+  `True`). Attributes: `Protected`.
+- `ComplexQ[expr]`: `True` if `expr` has head `Complex`; a purely real number is
+  not `Complex`. Attributes: `Protected`.
+- `ExactNumberQ[expr]`: `True` if `expr` is an exact number — an Integer, BigInt,
+  Rational, or a `Complex` whose parts are exact. `False` for machine and MPFR
+  reals. Attributes: `Protected`.
+- `InexactNumberQ[expr]`: `True` if `expr` is an inexact number — a machine real,
+  an MPFR (arbitrary-precision) real, or a `Complex` with an inexact part. The
+  complement of `ExactNumberQ` among numbers. Attributes: `Protected`.
 - `StringQ[expr]`: `True` if the expression is a string, and `False` otherwise.
   The empty string `""` gives `True`. `StringQ` is not `Listable`, so
   `StringQ[{"a", "b"}]` is `False` (a list is not a string) rather than
@@ -1124,3 +1138,59 @@ Gives the number of bytes used internally by Mathilda to store the expression.
 - Uses `sizeof()` in C and measures the internal AST memory allocation boundaries, dynamically capturing sizes of individual strings, symbols, allocated blocks, arrays, and expression structs.
 - Counts the payload of leaf atoms that own out-of-node storage: `EXPR_BIGINT` (GMP limbs), `EXPR_NDARRAY` (the `dims[]` array plus the flat data buffer, sized by element count and dtype width), and `EXPR_MPFR` (significand storage, scaling with precision). For an `NDArray`, the buffer dominates, so `ByteCount` scales with the number of elements and the dtype's bytes-per-element.
 
+
+## MemoryInUse
+Gives the number of bytes of memory currently resident for the Mathilda process.
+- `MemoryInUse[]`
+
+**Features**:
+- `Protected`.
+- **This is the process resident set size, which is not the same quantity Mathematica
+  reports.** Wolfram's `MemoryInUse[]` counts the bytes holding the current session's data —
+  expressions, definitions, caches — and nothing else. Mathilda's also includes the binary,
+  the shared libraries (GMP, MPFR, LAPACK, Readline, and Raylib on a graphics build), the
+  stacks, and whatever the allocator is holding without having returned it to the system. On
+  a freshly started kernel Wolfram's figure is small where this one is tens of megabytes of
+  mapped libraries, so the two are **not interchangeable**.
+- The difference is deliberate on both counts. Reporting session-data bytes exactly would
+  mean routing every allocation in the tree through a counting wrapper — around 500 modules,
+  all calling `malloc` directly today — and the result would still miss what the allocator
+  retains. And RSS is the more useful number for the purpose that prompted this, a notebook
+  status bar: it is what Activity Monitor and `top` show, so a user comparing them sees them
+  agree.
+- Reads `mach_task_basic_info` on macOS and `/proc/self/statm` on Linux, scaled by the actual
+  page size rather than an assumed 4096.
+- **Returns unevaluated** on a platform offering no way to ask, rather than reporting `0` — a
+  zero would read as "no memory in use", which is false and looks entirely plausible in a
+  status bar.
+- `MemoryInUse[subkernel]` is not supported: there are no subkernels, so an argument returns
+  unevaluated rather than being accepted and ignored.
+
+```
+In[1]:= MemoryInUse[]
+Out[1]= 15335424
+
+In[2]:= N[MemoryInUse[]/1024^2, 4]
+Out[2]= 14.63
+```
+
+## MaxMemoryUsed
+Gives the peak number of bytes resident for the Mathilda process over its lifetime.
+- `MaxMemoryUsed[]`
+
+**Features**:
+- `Protected`.
+- A genuine high-water mark from the operating system (`getrusage`'s `ru_maxrss`), not the
+  largest value some earlier call to `MemoryInUse` happened to observe. That distinction is
+  the point: a polled maximum misses any spike falling between two polls, and a status bar
+  polling once a second would miss nearly every spike worth knowing about.
+- `MaxMemoryUsed[] >= MemoryInUse[]` always holds, and the peak never decreases.
+- **`ru_maxrss` is in different units on the two platforms** — bytes on Darwin, kilobytes on
+  Linux — so it is scaled per platform. An unconverted use is wrong by a factor of 1024 on
+  one of them while looking plausible on both.
+- Its feature-test guard runs **opposite** to every other file in the tree. `ru_maxrss` is a
+  BSD extension rather than POSIX (POSIX requires only `ru_utime` and `ru_stime`), so on
+  Darwin defining `_XOPEN_SOURCE` selects the strict POSIX subset and *hides* the field —
+  from the very macro every other module needs in order to see POSIX at all. So each platform
+  gets the macro that widens *its* namespace: `_DARWIN_C_SOURCE` on macOS, `_DEFAULT_SOURCE`
+  plus `_XOPEN_SOURCE` on glibc.

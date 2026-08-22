@@ -79,36 +79,36 @@ static bool nf_reformattable_atom(const Expr* e) {
 }
 
 static int get_expr_prec(Expr* e) {
-    if (e->type != EXPR_FUNCTION) return 1000;
-    if (e->data.function.head->type != EXPR_SYMBOL) return 1000;
+    if (e->type != EXPR_FUNCTION) return 9500;
+    if (e->data.function.head->type != EXPR_SYMBOL) return 9500;
     
     const char* head = e->data.function.head->data.symbol.name;
 
-    if (head == SYM_Set || head == SYM_SetDelayed) return 40;
-    if (head == SYM_MessageName) return 780;
-    if (head == SYM_Rule || head == SYM_RuleDelayed) return 120;
-    if (head == SYM_DirectedEdge || head == SYM_UndirectedEdge) return 120;
-    if (head == SYM_Condition) return 130;
-    if (head == SYM_Alternatives) return 160;
-    if (head == SYM_Repeated || head == SYM_RepeatedNull) return 170;
-    if (head == SYM_And) return 215;
-    if (head == SYM_Or) return 215;
-    if (head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Inequality) return 290;
-    if (head == SYM_Plus) return 310;
+    if (head == SYM_Set || head == SYM_SetDelayed) return 500;
+    if (head == SYM_MessageName) return 8600;
+    if (head == SYM_Rule || head == SYM_RuleDelayed) return 1500;
+    if (head == SYM_DirectedEdge || head == SYM_UndirectedEdge) return 1500;
+    if (head == SYM_Condition) return 1700;
+    if (head == SYM_Alternatives) return 2300;
+    if (head == SYM_Repeated || head == SYM_RepeatedNull) return 2500;
+    if (head == SYM_And) return 2800;
+    if (head == SYM_Or) return 2800;
+    if (head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Inequality) return 3200;
+    if (head == SYM_Plus) return 3500;
 
-    if (head == SYM_Times) return 400;
-    if (head == SYM_Divide) return 470;
+    if (head == SYM_Times) return 4500;
+    if (head == SYM_Divide) return 5000;
     if (head == SYM_Power) {
         if (e->data.function.arg_count == 2) {
             Expr* exp = e->data.function.args[1];
-            if (exp->type == EXPR_INTEGER && exp->data.integer < 0) return 470;
+            if (exp->type == EXPR_INTEGER && exp->data.integer < 0) return 5000;
             int64_t n, d;
-            if (is_rational(exp, &n, &d) && n < 0) return 470;
-            if (exp->type == EXPR_REAL && exp->data.real < 0.0) return 470;
+            if (is_rational(exp, &n, &d) && n < 0) return 5000;
+            if (exp->type == EXPR_REAL && exp->data.real < 0.0) return 5000;
         }
-        return 590;
+        return 6500;
     }
-    if (head == SYM_Rational) return 470;
+    if (head == SYM_Rational) return 5000;
     if (head == SYM_Complex) {
         /* Only the bare imaginary unit `I` (Complex[0, 1]) is an atom.
          * `-I` (Complex[0, -1]) prints as a unary-minus form and so
@@ -121,15 +121,16 @@ static int get_expr_prec(Expr* e) {
             bool re_zero = (re->type == EXPR_INTEGER && re->data.integer == 0)
                         || (re->type == EXPR_REAL && re->data.real == 0.0);
             if (re_zero && im->type == EXPR_INTEGER && im->data.integer == 1) {
-                return 1000;
+                return 9500;
             }
         }
-        return 310;
+        return 3500;
     }
     /* Function[body] is the slot-based pure function rendered "body &".
-     * Mathematica gives "&" precedence 90 (just above Postfix). */
-    if (head == SYM_Function && e->data.function.arg_count == 1) return 90;
-    return 1000;
+     * Mathematica places "&" just above Postfix; on our scale that is 1000
+     * (Postfix 800). */
+    if (head == SYM_Function && e->data.function.arg_count == 1) return 1000;
+    return 9500;
 }
 
 /* Print a string literal with surrounding quotes, re-escaping the control
@@ -335,7 +336,7 @@ static void print_standard(Expr* e, int parent_prec) {
                 print_standard(e->data.function.args[0], parent_prec);
                 g_numberform_ctx = saved;
             } else {
-                print_standard(e->data.function.head, 1000);
+                print_standard(e->data.function.head, 9500);
                 printf("[]");
             }
         }
@@ -386,9 +387,9 @@ static void print_standard(Expr* e, int parent_prec) {
                    ne, ne == 1 ? "edge" : "edges");
         }
         else if (head == SYM_Rational && e->data.function.arg_count == 2) {
-            print_standard(e->data.function.args[0], 470);
+            print_standard(e->data.function.args[0], 5000);
             printf("/");
-            print_standard(e->data.function.args[1], 470);
+            print_standard(e->data.function.args[1], 5000);
         }
         else if (head == SYM_Complex && e->data.function.arg_count == 2) {
             Expr* re = e->data.function.args[0];
@@ -420,14 +421,14 @@ static void print_standard(Expr* e, int parent_prec) {
             }
 
             if (!re_zero) {
-                print_standard(re, 310);
+                print_standard(re, 3500);
                 printf(im_neg ? " - " : " + ");
             } else if (im_neg) {
                 printf("-");
             }
             if (im_one || im_minus_one) printf("I");
-            else if (im_abs) { print_standard(im_abs, 400); printf("*I"); expr_free(im_abs); }
-            else { print_standard(im, 400); printf("*I"); }
+            else if (im_abs) { print_standard(im_abs, 4500); printf("*I"); expr_free(im_abs); }
+            else { print_standard(im, 4500); printf("*I"); }
         }
         else if (head == SYM_Power && e->data.function.arg_count == 2) {
             Expr* exp = e->data.function.args[1];
@@ -448,11 +449,11 @@ static void print_standard(Expr* e, int parent_prec) {
             if (is_negative) {
                 printf("1/");
                 if (pos_exp->type == EXPR_INTEGER && pos_exp->data.integer == 1) {
-                    print_standard(e->data.function.args[0], 470);
+                    print_standard(e->data.function.args[0], 5000);
                 } else {
                     Expr* args[2] = { expr_copy(e->data.function.args[0]), expr_copy(pos_exp) };
                     Expr* tmp = expr_new_function(expr_new_symbol(SYM_Power), args, 2);
-                    print_standard(tmp, 470);
+                    print_standard(tmp, 5000);
                     expr_free(tmp);
                 }
                 if (pos_exp) expr_free(pos_exp);
@@ -476,13 +477,13 @@ static void print_standard(Expr* e, int parent_prec) {
                     print_standard(base, 0);
                     printf(")");
                 } else {
-                    /* Context 591 (one above Power's 590) so a Power base is
+                    /* Context 6501 (one above Power's 6500) so a Power base is
                      * parenthesised: `^` is right-associative, so (a^2)^x must
                      * print as (a^2)^x, not a^2^x (= a^(2^x)). */
-                    print_standard(base, 591);
+                    print_standard(base, 6501);
                 }
                 printf("^");
-                print_standard(e->data.function.args[1], 590);
+                print_standard(e->data.function.args[1], 6500);
             }
         }
         else if (head == SYM_Times) {
@@ -590,7 +591,7 @@ static void print_standard(Expr* e, int parent_prec) {
             if (den_count == 0) {
                 for (size_t i = 0; i < num_count; i++) {
                     if (i > 0) printf(" ");
-                    print_standard(num_args[i], 400);
+                    print_standard(num_args[i], 4500);
                 }
             } else {
                 Expr* num = NULL;
@@ -612,9 +613,9 @@ static void print_standard(Expr* e, int parent_prec) {
                     free(dc);
                 }
                 
-                print_standard(num, 470);
+                print_standard(num, 5000);
                 printf("/");
-                print_standard(den, 470);
+                print_standard(den, 5000);
                 
                 expr_free(num);
                 expr_free(den);
@@ -816,7 +817,7 @@ static void print_standard(Expr* e, int parent_prec) {
                     }
                 }
 
-                print_standard(to_print, 310);
+                print_standard(to_print, 3500);
                 if (t_copy) expr_free(t_copy);
             }
         }
@@ -840,15 +841,15 @@ static void print_standard(Expr* e, int parent_prec) {
         }
         else if (head == SYM_Blank && e->data.function.arg_count <= 1) {
             printf("_");
-            if (e->data.function.arg_count == 1) print_standard(e->data.function.args[0], 1000);
+            if (e->data.function.arg_count == 1) print_standard(e->data.function.args[0], 9500);
         }
         else if (head == SYM_BlankSequence && e->data.function.arg_count <= 1) {
             printf("__");
-            if (e->data.function.arg_count == 1) print_standard(e->data.function.args[0], 1000);
+            if (e->data.function.arg_count == 1) print_standard(e->data.function.args[0], 9500);
         }
         else if (head == SYM_BlankNullSequence && e->data.function.arg_count <= 1) {
             printf("___");
-            if (e->data.function.arg_count == 1) print_standard(e->data.function.args[0], 1000);
+            if (e->data.function.arg_count == 1) print_standard(e->data.function.args[0], 9500);
         }
         else if (head == SYM_Slot && e->data.function.arg_count == 1) {
             /* Slot[n] -> #n (e.g. #1). Atom-level precedence already returned
@@ -860,7 +861,7 @@ static void print_standard(Expr* e, int parent_prec) {
             } else if (idx->type == EXPR_STRING) {
                 print_string_literal(idx->data.string);
             } else {
-                print_standard(idx, 1000);
+                print_standard(idx, 9500);
             }
         }
         else if (head == SYM_SlotSequence && e->data.function.arg_count == 1) {
@@ -870,15 +871,15 @@ static void print_standard(Expr* e, int parent_prec) {
             if (idx->type == EXPR_INTEGER) {
                 if (idx->data.integer != 1) printf("%" PRId64, idx->data.integer);
             } else {
-                print_standard(idx, 1000);
+                print_standard(idx, 9500);
             }
         }
         else if (head == SYM_Function && e->data.function.arg_count == 1) {
             /* Function[body] -> body &. The body normally has high precedence
              * (Plus/Times/Power etc.) so it prints without extra parens; if
              * something genuinely lower-precedence shows up, print_standard
-             * inserts them at parent_prec=90. */
-            print_standard(e->data.function.args[0], 90);
+             * inserts them at parent_prec=1000. */
+            print_standard(e->data.function.args[0], 1000);
             printf(" &");
         }
         else if (head == SYM_InterpolatingFunction && e->data.function.arg_count >= 2) {
@@ -887,6 +888,26 @@ static void print_standard(Expr* e, int parent_prec) {
              * standard output format. FullForm (handled separately) still
              * reveals the full structure. */
             printf("InterpolatingFunction[");
+            print_standard(e->data.function.args[0], 0);
+            printf(", <>]");
+        }
+        else if ((head == SYM_PredictorFunction ||
+                  head == SYM_DimensionReducerFunction ||
+                  head == SYM_LearnedDistribution ||
+                  head == SYM_ClassifierFunction) &&
+                 e->data.function.arg_count >= 2 &&
+                 e->data.function.args[0]->type == EXPR_STRING) {
+            /* A fitted machine-learning model prints its METHOD and elides its
+             * parameters, exactly as InterpolatingFunction above elides its data and
+             * for the same reason. This is not cosmetic: a NearestNeighbors predictor
+             * carries its entire training set as its parameter block, so the unabridged
+             * form is unreadable at any real size and scrolls a useful answer off the
+             * screen. The method name is the part a reader actually wants back.
+             *
+             * FullForm still reveals everything, which is what makes eliding safe --
+             * the information is one keystroke away rather than gone. */
+            print_standard(e->data.function.head, 0);
+            printf("[");
             print_standard(e->data.function.args[0], 0);
             printf(", <>]");
         }
@@ -900,10 +921,10 @@ static void print_standard(Expr* e, int parent_prec) {
                  e->data.function.args[1]->data.function.arg_count <= 1) {
             /* Pattern[name, Blank[...]] -> name_ / name_h / name__ / name___ */
             printf("%s", e->data.function.args[0]->data.symbol.name);
-            print_standard(e->data.function.args[1], 1000);
+            print_standard(e->data.function.args[1], 9500);
         }
         else {
-            print_standard(e->data.function.head, 1000);
+            print_standard(e->data.function.head, 9500);
             printf("[");
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (i > 0) printf(", ");
@@ -912,7 +933,7 @@ static void print_standard(Expr* e, int parent_prec) {
             printf("]");
         }
     } else {
-        print_standard(e->data.function.head, 1000);
+        print_standard(e->data.function.head, 9500);
         printf("[");
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (i > 0) printf(", ");
@@ -1167,7 +1188,7 @@ static Expr* series_build_term(Expr* coef, Expr* power /* borrowed, may be NULL 
  * when SeriesData has unexpected argument shapes. */
 static void print_series_generic(Expr* e, int parent_prec) {
     (void)parent_prec;
-    print_standard(e->data.function.head, 1000);
+    print_standard(e->data.function.head, 9500);
     printf("[");
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (i > 0) printf(", ");
@@ -1464,14 +1485,14 @@ static void print_tex(Expr* e, int parent_prec) {
             bool im_neg = im_minus_one;
             if (!im_neg) im_neg = tex_extract_negative(im, &im_abs);
             if (!re_zero) {
-                print_tex(re, 310);
+                print_tex(re, 3500);
                 printf(im_neg ? "-" : "+");
             } else if (im_neg) {
                 printf("-");
             }
             if (im_one || im_minus_one) printf("i");
-            else if (im_abs) { print_tex(im_abs, 400); printf(" i"); expr_free(im_abs); }
-            else { print_tex(im, 400); printf(" i"); }
+            else if (im_abs) { print_tex(im_abs, 4500); printf(" i"); expr_free(im_abs); }
+            else { print_tex(im, 4500); printf(" i"); }
         }
         else if (head == SYM_Sqrt && argc == 1) {
             printf("\\sqrt{");
@@ -1546,7 +1567,7 @@ static void print_tex(Expr* e, int parent_prec) {
                     print_tex(base, 0);
                     printf("\\right)");
                 } else {
-                    print_tex(base, 600); /* force parens for compound bases */
+                    print_tex(base, 6700); /* force parens for compound bases */
                 }
                 printf("^{");
                 print_tex(exp, 0);
@@ -1617,7 +1638,7 @@ static void print_tex(Expr* e, int parent_prec) {
             if (den_count == 0) {
                 for (size_t i = 0; i < num_count; i++) {
                     if (i > 0) printf(" ");
-                    print_tex(num_args[i], 400);
+                    print_tex(num_args[i], 4500);
                 }
             } else {
                 printf("\\frac{");
@@ -1711,7 +1732,7 @@ static void print_tex(Expr* e, int parent_prec) {
                 if (i > 0) printf(is_neg ? "-" : "+");
                 else if (is_neg) printf("-");
 
-                print_tex(to_print, 310);
+                print_tex(to_print, 3500);
                 if (owned) expr_free(owned);
             }
         }
@@ -1778,7 +1799,7 @@ static void print_tex(Expr* e, int parent_prec) {
         }
         else if (head == SYM_Not && argc == 1) {
             printf("\\neg ");
-            print_tex(e->data.function.args[0], 1000);
+            print_tex(e->data.function.args[0], 9500);
         }
         else {
             const char* tex_fn = NULL;
@@ -1796,14 +1817,14 @@ static void print_tex(Expr* e, int parent_prec) {
                 } else {
                     /* Generic: f(a, b). Head gets symbol treatment so single-
                      * char heads render italic, multi-char heads use \text{}. */
-                    print_tex(head_expr, 1000);
+                    print_tex(head_expr, 9500);
                     print_tex_args_parens(e, 0);
                 }
             }
         }
     } else {
         /* Non-symbol head: render as (head)(args...). */
-        print_tex(head_expr, 1000);
+        print_tex(head_expr, 9500);
         print_tex_args_parens(e, 0);
     }
 

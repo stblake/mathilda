@@ -5,14 +5,26 @@
 
 ## Description
 
-```text
-RepeatedTiming[expr] evaluates expr repeatedly and returns a list of the average time in seconds used, together with the result obtained.
-RepeatedTiming[expr, t] does repeated evaluation for at least t seconds.
+**`RepeatedTiming[expr] evaluates expr repeatedly and returns a list of the average time in seconds used, together with the result obtained.`**
+
+**`RepeatedTiming[expr, t] does repeated evaluation for at least t seconds.`**
+
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (3)
+
+```mathematica
+In[1]:= RepeatedTiming[Sum[i, {i, 100}]]
+Out[1]= {4.53806e-05, 5050}
+
+In[2]:= Last[RepeatedTiming[Factorial[100]]]
+Out[2]= 93326215443944152681699238856266700490715968264381621468592963895217599993229915608941463976156518286253697920827223758251185210916864000000000000000000000000
+
+In[3]:= Last[RepeatedTiming[Total[Range[10000]]]]
+Out[3]= 50005000
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -26,33 +38,15 @@ _No verified examples yet for this function._
 
 **Attributes:** `HoldFirst`, `Protected`, `SequenceHold`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [HoldFirst](../../other-advanced/HoldFirst/), [SequenceHold](../../expression-information/SequenceHold/)
 
 - Source: [`src/datetime.c`](https://github.com/stblake/mathilda/blob/main/src/datetime.c)
 - Specification: [`docs/spec/builtins/time-and-date.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/time-and-date.md)
+- Tests: [`tests/test_datetime.c`](https://github.com/stblake/mathilda/blob/main/tests/test_datetime.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= RepeatedTiming[Sum[i, {i, 100}]]
-Out[1]= {4.53806e-05, 5050}
-```
-
-```mathematica
-In[1]:= Last[RepeatedTiming[Factorial[100]]]
-Out[1]= 93326215443944152681699238856266700490715968264381621468592963895217599993229915608941463976156518286253697920827223758251185210916864000000000000000000000000
-```
-
-```mathematica
-In[1]:= Last[RepeatedTiming[Total[Range[10000]]]]
-Out[1]= 50005000
-```
 
 ### Notes
 

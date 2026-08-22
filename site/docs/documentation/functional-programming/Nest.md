@@ -5,18 +5,22 @@
 
 ## Description
 
-```text
-Nest[f, expr, n]
-    gives an expression with f applied n times to expr.
+**`Nest[f, expr, n]`**
 
-n must be a non-negative integer. Nest[f, expr, 0] returns expr. The
-function f may be a symbol or a pure function. Each iteration evaluates
-f applied to the current value before proceeding.
-```
+gives an expression with f applied n times to expr.
 
-## Examples
+<details>
+<summary>Notes</summary>
 
-All examples below are verified against the current Mathilda build.
+n must be a non-negative integer. Nest\[f, expr, 0\] returns expr. The function f may be a symbol or a pure function. Each iteration evaluates f applied to the current value before proceeding.
+
+</details>
+
+## Examples (14)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (9)
 
 ```mathematica
 In[1]:= Nest[f, x, 3]
@@ -42,6 +46,28 @@ Out[7]= 1628.89
 
 In[8]:= Nest[(# + 2/#)/2 &, 1.0, 5]
 Out[8]= 1.41421
+
+In[9]:= Nest[{{1, 1}, {1, 0}} . # &, {0, 1}, 10]
+Out[9]= {55, 34}
+```
+
+### Applications (5)
+
+```mathematica
+In[10]:= Nest[f, x, 3]
+Out[10]= f[f[f[x]]]
+
+In[11]:= Nest[#^2 &, 2, 3]
+Out[11]= 256
+
+In[12]:= Nest[1/(1 + #) &, x, 2]
+Out[12]= 1/(1 + 1/(1 + x))
+
+In[13]:= Nest[(# + 2/#)/2 &, 1, 4]
+Out[13]= 665857/470832
+
+In[14]:= Nest[Sqrt[1 + #] &, x, 2]
+Out[14]= Sqrt[1 + Sqrt[1 + x]]
 ```
 
 ## Implementation notes
@@ -61,53 +87,21 @@ rest. `Nest` and `NestList` are the same `nest_impl`, differing only in the
 - Each iteration evaluates `f[current]` before proceeding, so numeric computations collapse immediately.
 - Returns unevaluated if `n` is not a non-negative integer or the argument count is wrong.
 - **Compilable** inside `Compile[]` for a scalar accumulator, with any of the
+  function spellings listed in [`control-flow.md`](../control-flow/index.md) § Compile.
+  A negative `n` declines there too, since it is unevaluated here.
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## References
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
+- Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_expr_pool.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expr_pool.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Nest[f, x, 3]
-Out[1]= f[f[f[x]]]
-```
-
-```mathematica
-In[1]:= Nest[#^2 &, 2, 3]
-Out[1]= 256
-```
-
-A symbolic continued-fraction approximant, built by nesting `1/(1+#)`:
-
-```mathematica
-In[1]:= Nest[1/(1 + #) &, x, 2]
-Out[1]= 1/(1 + 1/(1 + x))
-```
-
-Newton's iteration for `Sqrt[2]` kept fully exact — four steps from `1` already
-give a 12-figure rational approximant:
-
-```mathematica
-In[1]:= Nest[(# + 2/#)/2 &, 1, 4]
-Out[1]= 665857/470832
-```
-
-Nesting a radical builds a finite "nested radical" tower:
-
-```mathematica
-In[1]:= Nest[Sqrt[1 + #] &, x, 2]
-Out[1]= Sqrt[1 + Sqrt[1 + x]]
-```
 
 ### Notes
 

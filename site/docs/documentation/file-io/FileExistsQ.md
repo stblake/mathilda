@@ -5,17 +5,33 @@
 
 ## Description
 
-```text
-FileExistsQ["name"]
-    gives True if the file with the specified name exists, and gives False otherwise.
-In FileExistsQ["name"], name is interpreted relative to your current directory.
-FileExistsQ does not search $Path.
-FileExistsQ tests for files, directories, or any other filesystem objects.
+**`FileExistsQ["name"]`**
+
+gives True if the file with the specified name exists, and gives False otherwise.
+
+<details>
+<summary>Notes</summary>
+
+In FileExistsQ\["name"\], name is interpreted relative to your current directory. FileExistsQ does not search $Path. FileExistsQ tests for files, directories, or any other filesystem objects.
+
+</details>
+
+## Examples (3)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (3)
+
+```mathematica
+In[1]:= Put[x^2 + 1, "/tmp/mathilda_demo.m"]
+Out[1]= Null
+
+In[2]:= FileExistsQ["/tmp/mathilda_demo.m"]
+Out[2]= True
+
+In[3]:= FileExistsQ["/tmp/does_not_exist.m"]
+Out[3]= False
 ```
-
-## Examples
-
-_No verified examples yet for this function._
 
 ## Implementation notes
 
@@ -28,29 +44,13 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/files.c`](https://github.com/stblake/mathilda/blob/main/src/files.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
+- Tests: [`tests/test_files.c`](https://github.com/stblake/mathilda/blob/main/tests/test_files.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Put[x^2 + 1, "/tmp/mathilda_demo.m"]
-Out[1]= Null
-
-In[2]:= FileExistsQ["/tmp/mathilda_demo.m"]
-Out[2]= True
-
-In[3]:= FileExistsQ["/tmp/does_not_exist.m"]
-Out[3]= False
-```
 
 ### Notes
 

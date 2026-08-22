@@ -1,5 +1,28 @@
 cmake_minimum_required(VERSION 3.10)
-project(Mathilda_tests)
+
+# Mathilda builds with real GCC only, never Apple clang (mirrors the makefile's CC
+# rule). CMake otherwise defaults to the system compiler — clang on macOS — so pick a
+# genuine gcc BEFORE project() unless the caller set CMAKE_C_COMPILER explicitly.
+if(NOT DEFINED CMAKE_C_COMPILER)
+  find_program(MATHILDA_GCC NAMES gcc-16 gcc-15 gcc-14 gcc-13 gcc)
+  if(MATHILDA_GCC)
+    set(CMAKE_C_COMPILER "${MATHILDA_GCC}" CACHE FILEPATH "C compiler (real GCC required)")
+  endif()
+endif()
+
+# Tests are C only; naming the language stops CMake probing for a C++ (clang++)
+# compiler it would never use.
+project(Mathilda_tests C)
+
+# Enforce the rule: the resolved compiler must be GNU GCC, not clang / AppleClang. A
+# stale build dir configured earlier with clang keeps its cached compiler, so this
+# fires there too — remove the build dir (rm -rf build) and reconfigure.
+if(NOT CMAKE_C_COMPILER_ID STREQUAL "GNU")
+  message(FATAL_ERROR
+    "Mathilda tests must be built with real GCC, not '${CMAKE_C_COMPILER_ID}' "
+    "(${CMAKE_C_COMPILER}). Install Homebrew GCC (brew install gcc), then configure a "
+    "CLEAN build dir (rm -rf build) or pass -DCMAKE_C_COMPILER=gcc-16.")
+endif()
 
 # Without this, CMake generates no CTestTestfile.cmake and `ctest` silently
 # runs zero tests — every add_test() below was inert.  Note that enabling it
@@ -39,6 +62,13 @@ if(USE_LAPACK)
         find_library(MATHILDA_ACCELERATE Accelerate)
         if(MATHILDA_ACCELERATE)
             add_compile_definitions(USE_LAPACK MATHILDA_USE_ACCELERATE)
+            # Apple's vecLib SSE headers (vBasicOps.h) feed Apple vector types
+            # (vUInt32, …) to the _mm_* intrinsics; real GCC rejects those as
+            # incompatible with __m128i without this flag, while clang accepts them
+            # natively. The top-level makefile pairs Accelerate with the same flag
+            # (search -flax-vector-conversions there) — mirror it so the GCC-only
+            # test build compiles the Accelerate path.
+            add_compile_options(-flax-vector-conversions)
             link_libraries(${MATHILDA_ACCELERATE})
         else()
             message(WARNING "Accelerate framework not found; building tests with USE_LAPACK=OFF")
@@ -99,6 +129,13 @@ if(USE_GRAPHICS)
         else()
             link_directories(${RAYLIB_LIBRARY_DIRS})
             link_libraries(${RAYLIB_LIBRARIES})
+        endif()
+        # render.c's graphics_render_rgba screens for a usable GUI session via
+        # CGSessionCopyCurrentDictionary (CoreGraphics) / CFRelease
+        # (CoreFoundation) before InitWindow; mirror the makefile's framework
+        # link so the graphics test executables resolve those symbols.
+        if(APPLE)
+            link_libraries("-framework CoreGraphics" "-framework CoreFoundation")
         endif()
     else()
         message(WARNING "Raylib not detected; building tests with USE_GRAPHICS=OFF")
@@ -192,6 +229,7 @@ include_directories(/usr/local/include)
 include_directories(../src)
 include_directories(../src/compile)
 include_directories(../src/list)
+include_directories(../src/ml)
 include_directories(../src/linalg)
 include_directories(../src/numbertheory)
 include_directories(../src/poly)
@@ -206,6 +244,7 @@ include_directories(../src/graphics)
 include_directories(../src/graph)
 include_directories(../src/strings)
 include_directories(../src/strings/regex)
+include_directories(../src/solve)
 if(EXISTS "/opt/homebrew/include")
     include_directories(/opt/homebrew/include)
 endif()
@@ -255,6 +294,7 @@ set(COMMON_SRC
     ../src/match.c
     ../src/part.c
     ../src/vectors.c
+    ../src/vectoranal.c
     ../src/assoc.c
     ../src/assoc_index.c
     ../src/ndarray.c
@@ -293,6 +333,11 @@ set(COMMON_SRC
     ../src/numbertheory/jacobisymbol.c
     ../src/numbertheory/prime.c
     ../src/numbertheory/primecount.c
+    ../src/numbertheory/numberfield.c
+    ../src/numbertheory/nfunits.c
+    ../src/numbertheory/nfvoronoi.c
+    ../src/numbertheory/nfvoronoi2.c
+    ../src/numbertheory/nfround2.c
     ../src/partitions.c
     ../src/special_functions/gamma.c
     ../src/special_functions/beta.c
@@ -373,6 +418,15 @@ set(COMMON_SRC
     ../src/list/subdivide.c
     ../src/list/nearest.c
     ../src/list/find_clusters.c
+    ../src/ml/gmm.c
+    ../src/ml/mlutil.c
+    ../src/ml/dist.c
+    ../src/ml/encode.c
+    ../src/ml/tree.c
+    ../src/ml/classify.c
+    ../src/ml/pca.c
+    ../src/ml/predict.c
+    ../src/list/distance.c
     ../src/patterns.c
     ../src/patterns.c
     ../src/replace.c
@@ -435,6 +489,14 @@ set(COMMON_SRC
     ../src/stats/exponentialmovingaverage.c
     ../src/fit.c
     ../src/info.c
+    ../src/meminfo.c
+    ../src/image.c
+    ../src/imagefilter.c
+    ../src/imagegeom.c
+    ../src/imageio.c
+    ../src/imagecompose.c
+    ../src/imagethin.c
+    ../src/imagecolor.c
     ../src/expand.c
     ../src/expand_power.c
     ../src/poly/poly.c
@@ -469,6 +531,7 @@ set(COMMON_SRC
     ../src/linalg/nullspace.c
     ../src/linalg/matrank.c
     ../src/linalg/latticereduce.c
+    ../src/linalg/hnf.c
     ../src/linalg/qrdecomp.c
     ../src/linalg/qrdecomp_machine.c
     ../src/linalg/qrdecomp_mpfr.c
@@ -554,6 +617,7 @@ set(COMMON_SRC
     ../src/poly/exponent.c
     ../src/poly/facpoly_list.c
     ../src/poly/irrpolyq.c
+    ../src/poly/gbmod.c
     ../src/poly/groebner.c
     ../src/poly/groebnerbasis.c
     ../src/poly/groebnerwalk.c
@@ -638,16 +702,62 @@ set(COMMON_SRC
     ../src/root_numeric.c
     ../src/radicals.c
     ../src/poly/poly_eval_mpfr.c
-    ../src/solve.c
-    ../src/solvealways.c
+    ../src/solve/solve.c
+    ../src/solve/solvealways.c
     ../src/numerical_roots/findroot.c
-    ../src/findmin.c
+    ../src/numerical_calculus/findmin.c
+    ../src/numerical_calculus/findmin_common.c
+    ../src/numerical_calculus/findmin_nm_common.c
+    ../src/numerical_calculus/findmin_bfgs.c
+    ../src/numerical_calculus/findmin_cg.c
+    ../src/numerical_calculus/findmin_newton.c
+    ../src/numerical_calculus/findmin_lbfgsb.c
+    ../src/numerical_calculus/findmin_tnc.c
+    ../src/numerical_calculus/findmin_trust.c
+    ../src/numerical_calculus/findmin_slsqp.c
+    ../src/numerical_calculus/findmin_powell.c
+    ../src/numerical_calculus/findmin_neldermead.c
+    ../src/numerical_calculus/findmin_cobyla.c
+    ../src/numerical_calculus/findmin_cobyqa.c
+    ../src/numerical_calculus/findmin_penalty.c
+    ../src/numerical_calculus/findmin_driver.c
+    ../src/numerical_calculus/nm_de.c
+    ../src/numerical_calculus/nm_neldermead.c
+    ../src/numerical_calculus/nm_randomsearch.c
+    ../src/numerical_calculus/nm_sa.c
+    ../src/numerical_calculus/nm_dual_annealing.c
+    ../src/numerical_calculus/nm_shgo.c
+    ../src/numerical_calculus/nm_direct.c
+    ../src/numerical_calculus/nm_basin_hopping.c
+    ../src/numerical_calculus/nm_driver.c
     ../src/poly/solvepoly.c
-    ../src/solvelinsys.c
-    ../src/solvenlsys.c
-    ../src/solverad.c
-    ../src/solveinv.c
-    ../src/solvetrig.c
+    ../src/solve/solvelinsys.c
+    ../src/solve/solvenlsys.c
+    ../src/solve/solverad.c
+    ../src/solve/solveinv.c
+    ../src/solve/solvetrig.c
+    ../src/solve/solvemod.c
+    ../src/solve/solveint.c
+    ../src/solve/solve_common.c
+    ../src/solve/solveint_leaf.c
+    ../src/solve/solveint_mitm.c
+    ../src/solve/solveint_reciprocal.c
+    ../src/solve/solveint_bilinear.c
+    ../src/solve/solveint_pell.c
+    ../src/solve/solveint_genpell.c
+    ../src/solve/solveint_linear.c
+    ../src/solve/solveint_pte.c
+    ../src/solve/solveint_mordell.c
+    ../src/solve/solveint_powersum_div.c
+    ../src/solve/solveint_conic.c
+    ../src/solve/solveint_ternary.c
+    ../src/solve/solveint_rn.c
+    ../src/solve/solveint_cubes.c
+    ../src/solve/solveint_frye.c
+    ../src/solve/solveint_exp.c
+    ../src/solve/solveint_powerleaf.c
+    ../src/solve/solvethue.c
+    ../src/solve/solveint_thue.c
     ../src/zero_test.c
     ../src/numeric_complex.c
     ../src/flint_num_bridge.c
@@ -705,6 +815,7 @@ set(COMMON_SRC
     ../src/numerical_roots/nsolve_system.c
     ../src/graphics/graphics_init.c
     ../src/graphics/graphics_json.c
+    ../src/graphics/graphics_export.c
     ../src/graphics/sampling.c
     ../src/graphics/plot_common.c
     ../src/graphics/plot.c
@@ -816,12 +927,66 @@ add_executable(rootreduce_tests test_rootreduce.c $<TARGET_OBJECTS:mathilda_comm
 target_include_directories(rootreduce_tests PRIVATE ../src)
 add_test(NAME rootreduce_tests COMMAND rootreduce_tests)
 
-add_executable(flint_bridge_tests test_flint_bridge.c $<TARGET_OBJECTS:mathilda_common>)
-target_include_directories(flint_bridge_tests PRIVATE ../src)
-add_test(NAME flint_bridge_tests COMMAND flint_bridge_tests)
+# MemoryInUse / MaxMemoryUsed. Values are machine-dependent, so the suite asserts
+# relations (positive, peak >= current, responds to allocation) rather than numbers.
+add_executable(meminfo_tests test_meminfo.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(meminfo_tests PRIVATE ../src)
+add_test(NAME meminfo_tests COMMAND meminfo_tests)
+# The Image representation and its accessors. Every row that touches dimensions uses a
+# NON-SQUARE image, because ImageDimensions is {width, height} while ImageData is
+# height x width and a square image cannot tell the two apart.
+add_executable(image_tests test_image.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(image_tests PRIVATE ../src)
+add_test(NAME image_tests COMMAND image_tests)
+
+# ONLY WHEN FLINT IS ON. The comment above says this binary "skips itself at runtime", but it cannot
+# get that far: flint_cyclotomic_gcd and its neighbours are defined inside `#ifdef USE_FLINT`, so in a
+# no-FLINT configuration the target fails to LINK and takes `make` in this directory down with it --
+# a suite that cannot be built is worse than a test that is skipped.
+if(USE_FLINT)
+    add_executable(flint_bridge_tests test_flint_bridge.c $<TARGET_OBJECTS:mathilda_common>)
+    target_include_directories(flint_bridge_tests PRIVATE ../src)
+    add_test(NAME flint_bridge_tests COMMAND flint_bridge_tests)
+endif()
 
 add_executable(list_tests test_list.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(list_tests PRIVATE ../src)
+
+# Regression pins for FindClusters' one-dimensional answers, held separately from
+# test_list.c because they exist to guard a specific refactor: eight of the ten
+# methods are 1-D by algorithm, and giving them n dimensions means changing the
+# distance, the length scale and the assignment contract that the working 1-D
+# paths share.
+add_executable(findclusters_scalar_pin_tests test_findclusters_scalar_pin.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(findclusters_scalar_pin_tests PRIVATE ../src)
+add_test(NAME findclusters_scalar_pin_tests COMMAND findclusters_scalar_pin_tests)
+
+# DistanceFunction selects a metric rather than being validated and discarded.
+add_executable(findclusters_distance_tests test_findclusters_distance.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(findclusters_distance_tests PRIVATE ../src)
+add_test(NAME findclusters_distance_tests COMMAND findclusters_distance_tests)
+
+# Methods ported to work on vectors. Grows one method at a time; also asserts that
+# the unported ones still decline, so progress is visible in the diff.
+add_executable(findclusters_ndim_tests test_findclusters_ndim.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(findclusters_ndim_tests PRIVATE ../src)
+add_test(NAME findclusters_ndim_tests COMMAND findclusters_ndim_tests)
+
+add_executable(ml_pca_tests test_ml_pca.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ml_pca_tests PRIVATE ../src)
+add_test(NAME ml_pca_tests COMMAND ml_pca_tests)
+
+add_executable(ml_predict_tests test_ml_predict.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ml_predict_tests PRIVATE ../src)
+add_test(NAME ml_predict_tests COMMAND ml_predict_tests)
+
+add_executable(ml_dist_tests test_ml_dist.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ml_dist_tests PRIVATE ../src)
+add_test(NAME ml_dist_tests COMMAND ml_dist_tests)
+
+add_executable(ml_classify_tests test_ml_classify.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ml_classify_tests PRIVATE ../src)
+add_test(NAME ml_classify_tests COMMAND ml_classify_tests)
 
 add_executable(intersection_tests test_intersection.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(intersection_tests PRIVATE ../src)
@@ -850,6 +1015,10 @@ add_test(NAME constant_array_tests COMMAND constant_array_tests)
 add_executable(unit_vector_tests test_unit_vector.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(unit_vector_tests PRIVATE ../src)
 add_test(NAME unit_vector_tests COMMAND unit_vector_tests)
+
+add_executable(vectoranal_tests test_vectoranal.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(vectoranal_tests PRIVATE ../src)
+add_test(NAME vectoranal_tests COMMAND vectoranal_tests)
 
 add_executable(array_flatten_tests test_array_flatten.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(array_flatten_tests PRIVATE ../src)
@@ -918,6 +1087,13 @@ add_test(NAME prime_tests COMMAND prime_tests)
 add_executable(iter_tests test_iter.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(iter_tests m)
 target_include_directories(iter_tests PRIVATE ../src)
+
+# gmp_compat: pure-GMP test of the mpz_prevprime fallback for GMP < 6.3.0.
+# No mathilda_common dependency -- it links only against GMP.
+add_executable(gmp_compat_tests test_gmp_compat.c)
+target_link_libraries(gmp_compat_tests gmp)
+target_include_directories(gmp_compat_tests PRIVATE ../src)
+add_test(NAME gmp_compat_tests COMMAND gmp_compat_tests)
 
 add_executable(sum_tests test_sum.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(sum_tests m)
@@ -1172,6 +1348,10 @@ target_include_directories(unset_tests PRIVATE ../src)
 add_executable(clip_tests test_clip.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(clip_tests PRIVATE ../src)
 
+add_executable(unitbox_tests test_unitbox.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(unitbox_tests PRIVATE ../src)
+add_test(NAME unitbox_tests COMMAND unitbox_tests)
+
 add_executable(symbol_tests test_symbol.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(symbol_tests PRIVATE ../src)
 
@@ -1229,6 +1409,82 @@ target_include_directories(eliminate_tests PRIVATE ../src)
 
 add_executable(findmin_tests test_findmin.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(findmin_tests PRIVATE ../src)
+
+add_executable(nminimize_tests test_nminimize.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(nminimize_tests PRIVATE ../src)
+
+# SHGO (Simplicial Homology Global Optimization) method of NMinimize (same
+# convention — run the binary directly, no add_test registration).
+add_executable(shgo_tests test_shgo.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(shgo_tests PRIVATE ../src)
+
+# DualAnnealing (Generalized Simulated Annealing) method of NMinimize (same
+# convention — run the binary directly, no add_test registration).
+add_executable(dual_annealing_tests test_dual_annealing.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dual_annealing_tests PRIVATE ../src)
+
+# DIRECT (DIviding RECTangles) method of NMinimize (same convention — run the
+# binary directly, no add_test registration).
+add_executable(direct_tests test_direct.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(direct_tests PRIVATE ../src)
+
+# BasinHopping (Monte-Carlo minimization) method of NMinimize (same convention —
+# run the binary directly, no add_test registration).
+add_executable(basin_hopping_tests test_basin_hopping.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(basin_hopping_tests PRIVATE ../src)
+
+# L-BFGS-B method of FindMinimum (run the binary directly, matching the
+# findmin_tests / nminimize_tests convention — no add_test registration).
+add_executable(lbfgsb_tests test_lbfgsb.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(lbfgsb_tests PRIVATE ../src)
+
+# Powell / PrincipalAxis derivative-free method of FindMinimum (same convention).
+add_executable(powell_tests test_findmin_powell.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(powell_tests PRIVATE ../src)
+
+# Nelder-Mead derivative-free method of FindMinimum (same convention).
+add_executable(neldermead_tests test_findmin_neldermead.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(neldermead_tests PRIVATE ../src)
+
+# TNC (truncated Newton) method of FindMinimum (same convention).
+add_executable(tnc_tests test_findmin_tnc.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(tnc_tests PRIVATE ../src)
+
+# SLSQP (sequential least-squares QP, constrained SQP) of FindMinimum.
+add_executable(slsqp_tests test_findmin_slsqp.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(slsqp_tests PRIVATE ../src)
+
+# COBYLA (derivative-free linear-approximation, constrained) of FindMinimum.
+add_executable(cobyla_tests test_findmin_cobyla.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(cobyla_tests PRIVATE ../src)
+
+# COBYQA (derivative-free quadratic-approximation, constrained) of FindMinimum.
+add_executable(cobyqa_tests test_findmin_cobyqa.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(cobyqa_tests PRIVATE ../src)
+
+# Newton-CG (line-search truncated Newton, Hessian-free) of FindMinimum.
+add_executable(newtoncg_tests test_findmin_newtoncg.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(newtoncg_tests PRIVATE ../src)
+
+# dogleg (trust-region Powell dogleg) of FindMinimum.
+add_executable(dogleg_tests test_findmin_dogleg.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dogleg_tests PRIVATE ../src)
+
+# trust-ncg (trust-region Steihaug-Toint CG, Hessian-free) of FindMinimum.
+add_executable(trustncg_tests test_findmin_trustncg.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trustncg_tests PRIVATE ../src)
+
+# trust-exact (trust-region Moré-Sorensen near-exact subproblem) of FindMinimum.
+add_executable(trustexact_tests test_findmin_trustexact.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trustexact_tests PRIVATE ../src)
+
+# trust-krylov (trust-region GLTR/Lanczos, Hessian-free) of FindMinimum.
+add_executable(trustkrylov_tests test_findmin_trustkrylov.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trustkrylov_tests PRIVATE ../src)
+
+# Cross-method battery: every FindMinimum method over a shared function set.
+add_executable(findmin_methods_tests test_findmin_methods.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(findmin_methods_tests PRIVATE ../src)
 
 add_executable(fit_tests test_fit.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(fit_tests PRIVATE ../src)
@@ -1300,6 +1556,10 @@ target_include_directories(ratios_tests PRIVATE ../src)
 
 add_executable(sort_tests test_sort.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(sort_tests PRIVATE ../src)
+
+add_executable(bignum_rational_numeric_tests test_bignum_rational_numeric.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(bignum_rational_numeric_tests PRIVATE ../src)
+add_test(NAME bignum_rational_numeric_tests COMMAND bignum_rational_numeric_tests)
 
 add_executable(ranked_tests test_ranked.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(ranked_tests PRIVATE ../src)
@@ -1437,6 +1697,25 @@ target_include_directories(solveradicals_tests PRIVATE ../src)
 
 add_executable(solvenlsys_tests test_solvenlsys.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(solvenlsys_tests PRIVATE ../src)
+
+add_executable(solve_integers_tests test_solve_integers.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(solve_integers_tests PRIVATE ../src)
+add_test(NAME solve_integers_tests COMMAND solve_integers_tests)
+
+add_executable(numberfield_tests test_numberfield.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(numberfield_tests PRIVATE ../src ../src/numbertheory)
+add_test(NAME numberfield_tests COMMAND numberfield_tests)
+
+add_executable(thue_tests test_thue.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(thue_tests PRIVATE ../src ../src/numbertheory)
+add_test(NAME thue_tests COMMAND thue_tests)
+
+# Pinned-FullForm regression for extraneous / non-real Root filtering in Solve.
+# Registered with an add_test() line (below) so ctest actually runs it -- the
+# older solve_* targets above lack one and are invisible to ctest.
+add_executable(solve_radicals_reals_tests test_solve_radicals_reals.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(solve_radicals_reals_tests PRIVATE ../src)
+add_test(NAME solve_radicals_reals_tests COMMAND solve_radicals_reals_tests)
 
 add_executable(factor_phase0_tests test_factor_phase0.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(factor_phase0_tests PRIVATE ../src)
@@ -3148,9 +3427,26 @@ else()
     target_link_libraries(intrat_corpus_tests gmp m)
 endif()
 add_test(NAME intrat_corpus_tests
-         COMMAND intrat_corpus_tests ../../IntegrateRationalTests.m)
+         COMMAND intrat_corpus_tests ../IntegrateRationalTests.m)
 add_test(NAME intrat_inline_corpus_tests
-         COMMAND intrat_corpus_tests ../../IntegrateRationalInlineCases.m)
+         COMMAND intrat_corpus_tests ../IntegrateRationalInlineCases.m)
+
+# Form-invariant stress corpus for Solve[].  Loads solve_corpus.m (a
+# List of {label, eqn, vars, dom, expectedCount, note} records) held,
+# forks per case, and verifies each returned solution by
+# back-substitution via the solve_check_prelude.m verifier.  Fails only
+# above SOLVE_FAIL_BASELINE (see the runner) so it doubles as the
+# progress dashboard for the Solve capability gaps.
+add_executable(solve_corpus_tests test_solve_corpus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(solve_corpus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(solve_corpus_tests gmp m ${ECM_LIB})
+    add_dependencies(solve_corpus_tests build_ecm)
+else()
+    target_link_libraries(solve_corpus_tests gmp m)
+endif()
+add_test(NAME solve_corpus_tests
+         COMMAND solve_corpus_tests ../solve_corpus.m ../solve_check_prelude.m)
 
 # Comprehensive corpus runner for the CRC integral table.  Loads
 # CRCIntegralsCorpus.m (a flat List of {integrand, var} pairs, ~3 per
@@ -3165,7 +3461,7 @@ else()
     target_link_libraries(crc_corpus_tests gmp m)
 endif()
 add_test(NAME crc_corpus_tests
-         COMMAND crc_corpus_tests ../../CRCIntegralsCorpus.m)
+         COMMAND crc_corpus_tests ../CRCIntegralsCorpus.m)
 
 add_executable(readwrite_tests test_readwrite.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(readwrite_tests PRIVATE ../src)

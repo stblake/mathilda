@@ -1,0 +1,5 @@
+Series[Exp[x], {x, 0, 6}]
+Series[ArcTan[x], {x, 0, 7}]
+Series[Cot[x], {x, 0, 4}]
+Series[(1 + x)^a, {x, 0, 3}]
+Normal[Series[Exp[x], {x, 0, 5}]]

@@ -5,19 +5,23 @@
 
 ## Description
 
-```text
-Select[list, crit]
-    selects elements e of list for which crit[e] yields True, preserving
-    the head of list.
-Select[list, crit, n]
-    stops after the first n matching elements.
-Select[crit]
-    is the operator form: Select[crit][list] == Select[list, crit].
-```
+**`Select[list, crit]`**
 
-## Examples
+selects elements e of list for which crit\[e\] yields True, preserving the head of list.
 
-All examples below are verified against the current Mathilda build.
+**`Select[list, crit, n]`**
+
+stops after the first n matching elements.
+
+**`Select[crit]`**
+
+is the operator form: Select\[crit\]\[list\] == Select\[list, crit\].
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (2)
 
 ```mathematica
 In[1]:= Map[#^2 &, <|"x" -> 3, "y" -> 4|>]
@@ -25,6 +29,28 @@ Out[1]= <|"x" -> 9, "y" -> 16|>
 
 In[2]:= Select[<|"a" -> 1, "b" -> 2, "c" -> 3|>, # > 1 &]
 Out[2]= <|"b" -> 2, "c" -> 3|>
+```
+
+### Applications (6)
+
+```mathematica
+In[3]:= Select[{1, 2, 3, 4, 5, 6}, EvenQ]
+Out[3]= {2, 4, 6}
+
+In[4]:= Select[Range[10], # > 5 &]
+Out[4]= {6, 7, 8, 9, 10}
+
+In[5]:= Select[{1, 2, 3, 4, 5}, PrimeQ, 2]
+Out[5]= {2, 3}
+
+In[6]:= Select[Range[100], PrimeQ[#] && PrimeQ[# + 2] &]
+Out[6]= {3, 5, 11, 17, 29, 41, 59, 71}
+
+In[7]:= Select[Range[2, 50], PrimeQ[2^# - 1] &]
+Out[7]= {2, 3, 5, 7, 13, 17, 19, 31}
+
+In[8]:= Select[Range[1, 20], GCD[#, 20] == 1 &]
+Out[8]= {1, 3, 7, 9, 11, 13, 17, 19}
 ```
 
 ## Implementation notes
@@ -41,57 +67,19 @@ plus its evaluated result, so memory is bounded per element.
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Map](../../data-structures/Map/)
 
 - Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §2.2.3 (sequences as conventional interfaces; filtering).
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
+- Tests: [`tests/test_divisors.c`](https://github.com/stblake/mathilda/blob/main/tests/test_divisors.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Select[{1, 2, 3, 4, 5, 6}, EvenQ]
-Out[1]= {2, 4, 6}
-```
-
-```mathematica
-In[1]:= Select[Range[10], # > 5 &]
-Out[1]= {6, 7, 8, 9, 10}
-```
-
-```mathematica
-In[1]:= Select[{1, 2, 3, 4, 5}, PrimeQ, 2]
-Out[1]= {2, 3}
-```
-
-Combining predicates with logical operators filters by richer conditions — the
-twin primes below 100, where both `p` and `p + 2` are prime:
-
-```mathematica
-In[1]:= Select[Range[100], PrimeQ[#] && PrimeQ[# + 2] &]
-Out[1]= {3, 5, 11, 17, 29, 41, 59, 71}
-```
-
-The criterion can itself perform a computation. Selecting the exponents `p` for
-which `2^p - 1` is prime yields the Mersenne-prime exponents:
-
-```mathematica
-In[1]:= Select[Range[2, 50], PrimeQ[2^# - 1] &]
-Out[1]= {2, 3, 5, 7, 13, 17, 19, 31}
-```
-
-The integers below 20 that are coprime to 20 (a `GCD`-based filter):
-
-```mathematica
-In[1]:= Select[Range[1, 20], GCD[#, 20] == 1 &]
-Out[1]= {1, 3, 7, 9, 11, 13, 17, 19}
-```
 
 ### Notes
 

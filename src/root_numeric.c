@@ -31,8 +31,11 @@
 
 #include "poly/zupoly.h"
 #include "poly/poly_eval_mpfr.h"
+#include "poly/poly.h"       /* is_polynomial / get_degree_poly / get_all_coeffs_expanded */
+#include "expand.h"          /* expr_expand */
 
 #include "linalg/eigen.h"
+#include "linalg/lapack.h"   /* mat_lapack_dgeev_values — machine-precision QR */
 
 #include <stdlib.h>
 #include <string.h>
@@ -137,30 +140,27 @@ static ZUPoly* zupoly_squarefree_part(const ZUPoly* p) {
  *      else 0.
  *  Its eigenvalues are exactly the roots of p.
  * ================================================================== */
-static void build_companion_matrix(const ZUPoly* p, mpfr_prec_t bits,
-                                   mpfr_t** out_mat, size_t* out_n) {
-    int n = p->deg;
+/* Frobenius companion from a real MPFR coefficient array c[0..n]
+ * (c[i] = coeff of x^i).  Used by both the exact (ZUPoly, materialised to
+ * MPFR) and inexact (machine-real / rational) Root paths. */
+static void build_companion_matrix_real(const mpfr_t* c, int n, mpfr_prec_t bits,
+                                        mpfr_t** out_mat, size_t* out_n) {
     *out_n = (size_t)n;
     mpfr_t* M = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)(n * n));
     for (size_t i = 0; i < (size_t)(n * n); i++) {
         mpfr_init2(M[i], bits);
         mpfr_set_zero(M[i], 1);
     }
-    /* Sub-diagonal of ones. */
     for (int i = 0; i + 1 < n; i++) {
         mpfr_set_si(M[(size_t)(i + 1) * (size_t)n + (size_t)i], 1, MPFR_RNDN);
     }
-    /* Last column: -c_i / c_n. */
-    mpfr_t lc, ratio;
-    mpfr_init2(lc, bits); mpfr_init2(ratio, bits);
-    mpfr_set_z(lc, p->c[n], MPFR_RNDN);
+    mpfr_t ratio; mpfr_init2(ratio, bits);
     for (int i = 0; i < n; i++) {
-        mpfr_set_z(ratio, p->c[i], MPFR_RNDN);
-        mpfr_div(ratio, ratio, lc, MPFR_RNDN);
+        mpfr_div(ratio, c[i], c[n], MPFR_RNDN);
         mpfr_neg(ratio, ratio, MPFR_RNDN);
         mpfr_set(M[(size_t)i * (size_t)n + (size_t)(n - 1)], ratio, MPFR_RNDN);
     }
-    mpfr_clear(lc); mpfr_clear(ratio);
+    mpfr_clear(ratio);
     *out_mat = M;
 }
 
@@ -424,14 +424,70 @@ static bool newton_refine_complex(const mpfr_t* coeffs, int deg,
     return converged;
 }
 
+/* Compute all n roots into eval_re/eval_im (pre-init'd at wp).  For a
+ * machine-precision request, solve the double companion with LAPACK dgeev —
+ * ~two orders of magnitude faster than the MPFR QR and what every CAS uses at
+ * this precision; the k-th root is then still selected canonically and lifted
+ * to full precision by Newton, so the answer is unchanged.  Falls back to the
+ * MPFR QR when LAPACK is absent, a coefficient overflows a double, or the
+ * leading coefficient is ~0, and always for above-machine precision.  Returns
+ * 0 on success. */
+static int compute_all_roots_real(const mpfr_t* c_wp, int n, mpfr_prec_t wp,
+                                  bool want_machine,
+                                  mpfr_t* eval_re, mpfr_t* eval_im) {
+#ifdef USE_LAPACK
+    if (want_machine && n >= 1) {
+        double cn = mpfr_get_d(c_wp[n], MPFR_RNDN);
+        if (cn != 0.0 && isfinite(cn)) {
+            double* A  = (double*)calloc((size_t)n * (size_t)n, sizeof(double));
+            double* wr = (double*)malloc((size_t)n * sizeof(double));
+            double* wi = (double*)malloc((size_t)n * sizeof(double));
+            if (A && wr && wi) {
+                bool ok = true;
+                /* Column-major Frobenius companion (LAPACK convention). */
+                for (int i = 1; i < n; i++)
+                    A[(size_t)i + (size_t)(i - 1) * (size_t)n] = 1.0;
+                for (int i = 0; i < n && ok; i++) {
+                    double ci = mpfr_get_d(c_wp[i], MPFR_RNDN);
+                    if (!isfinite(ci)) ok = false;
+                    else A[(size_t)i + (size_t)(n - 1) * (size_t)n] = -ci / cn;
+                }
+                if (ok && mat_lapack_dgeev_values(n, A, n, wr, wi) == 0) {
+                    for (int i = 0; i < n; i++) {
+                        mpfr_set_d(eval_re[i], wr[i], MPFR_RNDN);
+                        mpfr_set_d(eval_im[i], wi[i], MPFR_RNDN);
+                    }
+                    free(A); free(wr); free(wi);
+                    return 0;
+                }
+            }
+            free(A); free(wr); free(wi);
+        }
+        /* fall through to the MPFR QR on any LAPACK-path bail. */
+    }
+#else
+    (void)want_machine;
+#endif
+    mpfr_t* M = NULL;
+    size_t Nmat = 0;
+    build_companion_matrix_real(c_wp, n, wp, &M, &Nmat);
+    int st = eigen_all_eigenvalues_real_mpfr(M, Nmat, wp, eval_re, eval_im);
+    free_mpfr_array(M, Nmat * Nmat);
+    return st;
+}
+
 /* ====================================================================
- *  Driver: solve the full pipeline once, given a target precision.
- *  Returns NULL on failure; caller may retry at higher precision.
+ *  Shared solver back-half.  Given the raw real coefficient array
+ *  c_wp[0..n] (c_wp[i] = coeff of x^i) at working precision, find the k-th
+ *  canonical root and refine it.  `sturm_n_real` is the certified real-root
+ *  count for the exact (integer) path, or -1 when unavailable (inexact
+ *  coefficients), in which case Sturm reconciliation is skipped.  Both the
+ *  exact ZUPoly path and the inexact machine-real path funnel through here, so
+ *  the canonical ordering — hence the meaning of k — is identical across them.
  * ================================================================== */
-static Expr* solve_root_at_precision(const ZUPoly* p_squarefree,
-                                     int64_t k, mpfr_prec_t target_bits,
-                                     bool want_machine) {
-    int n = p_squarefree->deg;
+static Expr* solve_root_core(const mpfr_t* c_wp, int n, int64_t k,
+                             mpfr_prec_t target_bits,
+                             int sturm_n_real, bool want_machine) {
     if (n <= 0) return NULL;
     if (k < 1 || k > n) {
         root_warn("indx", "index k=%lld is out of range 1..%d.",
@@ -439,25 +495,21 @@ static Expr* solve_root_at_precision(const ZUPoly* p_squarefree,
         return NULL;
     }
 
-    /* Working precision: 2*target + 64 for QR; refinement uses target + 32. */
+    /* Working precision: 2*target + 64 for QR; refinement uses target + 32.
+     * c_wp is supplied at wp by the caller (same formula). */
     mpfr_prec_t wp = 2 * target_bits + 64;
     mpfr_prec_t rp = target_bits + 32;
 
-    /* ---- Step 3: companion matrix ---- */
-    mpfr_t* M = NULL;
-    size_t Nmat = 0;
-    build_companion_matrix(p_squarefree, wp, &M, &Nmat);
-
-    /* ---- Step 4: QR for all eigenvalues ---- */
+    /* ---- Steps 3-4: all roots (LAPACK for machine, else MPFR QR) ---- */
+    size_t Nmat = (size_t)n;
     mpfr_t* eval_re = (mpfr_t*)malloc(sizeof(mpfr_t) * Nmat);
     mpfr_t* eval_im = (mpfr_t*)malloc(sizeof(mpfr_t) * Nmat);
     for (size_t i = 0; i < Nmat; i++) {
         mpfr_init2(eval_re[i], wp);
         mpfr_init2(eval_im[i], wp);
     }
-    int qr_status = eigen_all_eigenvalues_real_mpfr(M, Nmat, wp,
-                                                     eval_re, eval_im);
-    free_mpfr_array(M, Nmat * Nmat);
+    int qr_status = compute_all_roots_real(c_wp, n, wp, want_machine,
+                                           eval_re, eval_im);
     if (qr_status != 0) {
         free_mpfr_array(eval_re, Nmat);
         free_mpfr_array(eval_im, Nmat);
@@ -466,9 +518,7 @@ static Expr* solve_root_at_precision(const ZUPoly* p_squarefree,
         return NULL;
     }
 
-    /* ---- Step 4b: Sturm certificate ---- */
-    int sturm_n_real = sturm_real_root_count(p_squarefree);
-
+    /* ---- Step 4b: Sturm certificate (exact path only) ---- */
     /* Tolerance for QR real-classification: 2^(-wp/2). */
     mpfr_t tol_factor; mpfr_init2(tol_factor, wp);
     mpfr_set_ui(tol_factor, 1, MPFR_RNDN);
@@ -482,7 +532,7 @@ static Expr* solve_root_at_precision(const ZUPoly* p_squarefree,
     }
     mpfr_clear(tol_factor);
 
-    if (qr_n_real != sturm_n_real) {
+    if (sturm_n_real >= 0 && qr_n_real != sturm_n_real) {
         /* QR's tolerance-based classification disagrees with Sturm.
          * Reconcile: if Sturm says more reals, label the smallest-|Im|
          * complex pairs as real until counts match.  If Sturm says
@@ -555,9 +605,14 @@ static Expr* solve_root_at_precision(const ZUPoly* p_squarefree,
     if (picked_is_real) mpfr_set_zero(pick_im, 1);
 
     /* ---- Step 6: Newton refinement ---- */
-    mpfr_t* coeffs = NULL;
-    int deg_out = -1;
-    zupoly_to_mpfr_coeffs(p_squarefree, rp, &coeffs, &deg_out);
+    /* Rebuild the raw coefficients at refinement precision (rp) from the
+     * working-precision array; poly_eval_*_mpfr wants a plain mpfr_t[]. */
+    mpfr_t* coeffs = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)(n + 1));
+    for (int i = 0; i <= n; i++) {
+        mpfr_init2(coeffs[i], rp);
+        mpfr_set(coeffs[i], c_wp[i], MPFR_RNDN);
+    }
+    int deg_out = n;
 
     bool ok;
     if (picked_is_real) {
@@ -567,25 +622,16 @@ static Expr* solve_root_at_precision(const ZUPoly* p_squarefree,
     }
     poly_eval_mpfr_free_coeffs(coeffs, deg_out);
 
-    if (!ok) {
-        free_mpfr_array(eval_re, Nmat);
-        free_mpfr_array(eval_im, Nmat);
-        free(is_real_flags);
-        mpfr_clear(pick_re); mpfr_clear(pick_im);
-        root_warn("conv", "Newton refinement did not converge at %ld bits.",
-                  (long)rp);
-        return NULL;
-    }
-
-    /* ---- Step 7: basin verification ---- *
+    /* ---- Step 7: basin verification (only meaningful once Newton has
+     * converged) ---- *
      * Confirm that the refined root is closer to the original QR estimate
      * at position idx than to any *other* QR estimate.  This is the
      * classical Newton-basin check and tolerates the noise in QR
      * eigenvalues for clustered roots (notably the Re components of a
      * conjugate pair, which differ only by QR roundoff).  Re-sorting the
      * mixed array would have been brittle for exactly that case. */
-    bool same;
-    {
+    bool same = false;
+    if (ok) {
         mpfr_t dist_pick, dist_other, dr, di, sq;
         mpfr_init2(dist_pick, rp);
         mpfr_init2(dist_other, rp);
@@ -629,6 +675,29 @@ static Expr* solve_root_at_precision(const ZUPoly* p_squarefree,
         mpfr_clear(dr); mpfr_clear(di); mpfr_clear(sq);
     }
 
+    if (!same) {
+        /* Newton stalled or jumped basins (typical for a near-degenerate,
+         * clustered root).  For a machine-precision request the canonically
+         * sorted eigenvalue estimate is already accurate to double, so fall
+         * back to it rather than fail — this keeps the objective evaluable at
+         * every point during a numeric optimisation.  A higher-precision
+         * request instead reports non-convergence so the caller escalates. */
+        if (want_machine) {
+            mpfr_set(pick_re, eval_re[idx], MPFR_RNDN);
+            if (picked_is_real) mpfr_set_zero(pick_im, 1);
+            else                mpfr_set(pick_im, eval_im[idx], MPFR_RNDN);
+            same = true;
+        } else {
+            free_mpfr_array(eval_re, Nmat);
+            free_mpfr_array(eval_im, Nmat);
+            free(is_real_flags);
+            mpfr_clear(pick_re); mpfr_clear(pick_im);
+            root_warn("conv", "refinement did not converge at %ld bits.",
+                      (long)rp);
+            return NULL;
+        }
+    }
+
     Expr* out = NULL;
     if (same) {
         /* Round down to target precision. */
@@ -664,6 +733,135 @@ static Expr* solve_root_at_precision(const ZUPoly* p_squarefree,
     return out;
 }
 
+/* Exact (integer ZUPoly) driver: materialise the raw coefficients at working
+ * precision, certify the real-root count with Sturm, and solve. */
+static Expr* solve_root_at_precision(const ZUPoly* p_squarefree,
+                                     int64_t k, mpfr_prec_t target_bits,
+                                     bool want_machine) {
+    int n = p_squarefree->deg;
+    if (n <= 0) return NULL;
+    mpfr_prec_t wp = 2 * target_bits + 64;
+
+    mpfr_t* c_wp = NULL;
+    int dd = -1;
+    zupoly_to_mpfr_coeffs(p_squarefree, wp, &c_wp, &dd);
+    if (!c_wp || dd != n) { poly_eval_mpfr_free_coeffs(c_wp, dd); return NULL; }
+
+    int sturm_n_real = sturm_real_root_count(p_squarefree);
+    Expr* out = solve_root_core(c_wp, n, k, target_bits, sturm_n_real, want_machine);
+    poly_eval_mpfr_free_coeffs(c_wp, dd);
+    return out;
+}
+
+/* Convert a fully-numeric real leaf (integer / real / bigint / mpfr /
+ * Rational[p,q]) to an MPFR value.  Returns false for anything else —
+ * notably a Complex[..] coefficient or a residual symbol — so the caller
+ * leaves the Root unevaluated rather than dropping an imaginary part. */
+static bool root_real_leaf_to_mpfr(const Expr* e, mpfr_t out) {
+    if (!e) return false;
+    int64_t nn, dd;
+    switch (e->type) {
+        case EXPR_INTEGER: mpfr_set_si(out, e->data.integer, MPFR_RNDN); return true;
+        case EXPR_REAL:    mpfr_set_d (out, e->data.real,    MPFR_RNDN); return true;
+        case EXPR_BIGINT:  mpfr_set_z (out, e->data.bigint,  MPFR_RNDN); return true;
+        case EXPR_MPFR:    mpfr_set   (out, e->data.mpfr,    MPFR_RNDN); return true;
+        case EXPR_FUNCTION:
+            if (is_rational((Expr*)e, &nn, &dd) && dd != 0) {
+                mpfr_set_si(out, nn, MPFR_RNDN);
+                mpfr_t den; mpfr_init2(den, mpfr_get_prec(out));
+                mpfr_set_si(den, dd, MPFR_RNDN);
+                mpfr_div(out, out, den, MPFR_RNDN);
+                mpfr_clear(den);
+                return true;
+            }
+            return false;
+        default: return false;
+    }
+}
+
+/* Extract the polynomial `body` (a polynomial in Slot[1]) as a raw real MPFR
+ * coefficient array c[0..deg] (c[i] = coeff of x^i) at precision `wp`.  On
+ * success stores the array (each cell mpfr_init2'd at wp) and its degree and
+ * returns true.  Returns false — leaving nothing allocated — when the body is
+ * not a Slot[1] polynomial, is constant, or carries a non-numeric or non-real
+ * coefficient.  This is the inexact analogue of expr_to_zupoly used when the
+ * coefficients are machine reals or rationals (e.g. Root objects produced by
+ * Eigenvalues after numeric substitution). */
+static bool root_body_to_real_coeffs(Expr* body, Expr* slot1, mpfr_prec_t wp,
+                                     bool want_machine,
+                                     mpfr_t** coeffs_out, int* deg_out) {
+    Expr* expanded = expr_expand(body);
+    if (!expanded) return false;
+    if (!is_polynomial(expanded, &slot1, 1)) { expr_free(expanded); return false; }
+    int d = get_degree_poly(expanded, slot1);
+    if (d < 1) { expr_free(expanded); return false; }
+
+    Expr** coeffs = NULL;
+    if (!get_all_coeffs_expanded(expanded, slot1, d, &coeffs)) {
+        expr_free(expanded);
+        return false;
+    }
+
+    /* Numericalise each coefficient.  For a machine-precision request use the
+     * machine (double) mode — far cheaper than MPFR at wp bits, and the result
+     * is stored losslessly into the wp-precision cell either way. */
+    NumericSpec cs;
+    cs.mode = want_machine ? NUMERIC_MODE_MACHINE : NUMERIC_MODE_MPFR;
+    cs.bits = (long)wp;
+    cs.preserve_inexact = false;
+
+    mpfr_t* rc = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)(d + 1));
+    bool ok = true;
+    int built = 0;
+    for (int i = 0; i <= d && ok; i++) {
+        mpfr_init2(rc[i], wp);
+        mpfr_set_zero(rc[i], 1);
+        built = i + 1;
+        Expr* num = eval_and_free(numericalize(coeffs[i], cs));
+        ok = root_real_leaf_to_mpfr(num, rc[i]);
+        expr_free(num);
+    }
+    for (int i = 0; i <= d; i++) expr_free(coeffs[i]);
+    free(coeffs);
+    expr_free(expanded);
+
+    if (!ok) {
+        for (int i = 0; i < built; i++) mpfr_clear(rc[i]);
+        free(rc);
+        return false;
+    }
+    *coeffs_out = rc;
+    *deg_out = d;
+    return true;
+}
+
+/* Inexact (machine-real / rational coefficient) driver: numericalise the
+ * polynomial's coefficients and solve without a Sturm certificate. */
+static Expr* solve_root_inexact(Expr* body, int64_t k,
+                                mpfr_prec_t target_bits, bool want_machine) {
+    Expr* slot1 = make_slot1();
+    Expr* out = NULL;
+    for (int attempt = 0; attempt < 3 && !out; attempt++) {
+        mpfr_prec_t try_bits = target_bits;
+        if (attempt > 0)
+            try_bits = target_bits + (mpfr_prec_t)(target_bits / 2) * (mpfr_prec_t)attempt;
+        mpfr_prec_t wp = 2 * try_bits + 64;
+
+        mpfr_t* rc = NULL;
+        int deg = -1;
+        if (!root_body_to_real_coeffs(body, slot1, wp, want_machine, &rc, &deg)) {
+            /* Genuinely non-numeric / complex / non-polynomial: give up
+             * (the Root call is returned verbatim by the caller). */
+            break;
+        }
+        out = solve_root_core(rc, deg, k, try_bits, /*sturm=*/-1, want_machine);
+        for (int i = 0; i <= deg; i++) mpfr_clear(rc[i]);
+        free(rc);
+    }
+    expr_free(slot1);
+    return out;
+}
+
 /* ====================================================================
  *  Entry point
  * ================================================================== */
@@ -672,24 +870,6 @@ Expr* root_numericalize(const Expr* root_expr, NumericSpec spec) {
     int64_t k = 0;
     if (!parse_root_call(root_expr, &body, &k)) return NULL;
 
-    /* Extract polynomial as ZUPoly using Slot[1] as the variable. */
-    Expr* slot1 = make_slot1();
-    ZUPoly* p_raw = expr_to_zupoly(body, slot1);
-    expr_free(slot1);
-    if (!p_raw) {
-        root_warn("nonint", "polynomial has non-integer coefficients.");
-        return NULL;
-    }
-    if (p_raw->deg <= 0) {
-        zupoly_free(p_raw);
-        root_warn("poly", "polynomial is constant (no roots).");
-        return NULL;
-    }
-
-    /* Squarefree radical. */
-    ZUPoly* p = zupoly_squarefree_part(p_raw);
-    zupoly_free(p_raw);
-
     /* Target precision. */
     bool want_machine = (spec.mode == NUMERIC_MODE_MACHINE);
     mpfr_prec_t target_bits = want_machine
@@ -697,22 +877,39 @@ Expr* root_numericalize(const Expr* root_expr, NumericSpec spec) {
         : (mpfr_prec_t)spec.bits;
     if (target_bits < 53) target_bits = 53;
 
-    /* Up to 3 escalations on basin-verify failure. */
-    Expr* out = NULL;
-    for (int attempt = 0; attempt < 3 && !out; attempt++) {
-        mpfr_prec_t try_bits = target_bits;
-        if (attempt > 0) {
-            /* Bump 1.5x per attempt for the working precision; target
-             * stays at user request, but solve_root_at_precision uses
-             * 2*target + 64 as its working precision internally.  To
-             * escalate we pretend the target is larger. */
-            try_bits = target_bits + (mpfr_prec_t)(target_bits / 2) * (mpfr_prec_t)attempt;
+    /* Try the exact integer-coefficient path first. */
+    Expr* slot1 = make_slot1();
+    ZUPoly* p_raw = expr_to_zupoly(body, slot1);
+    expr_free(slot1);
+
+    if (p_raw) {
+        if (p_raw->deg <= 0) {
+            zupoly_free(p_raw);
+            root_warn("poly", "polynomial is constant (no roots).");
+            return NULL;
         }
-        out = solve_root_at_precision(p, k, try_bits, want_machine);
+        /* Squarefree radical. */
+        ZUPoly* p = zupoly_squarefree_part(p_raw);
+        zupoly_free(p_raw);
+
+        /* Up to 3 escalations on basin-verify failure. */
+        Expr* out = NULL;
+        for (int attempt = 0; attempt < 3 && !out; attempt++) {
+            mpfr_prec_t try_bits = target_bits;
+            if (attempt > 0)
+                try_bits = target_bits + (mpfr_prec_t)(target_bits / 2) * (mpfr_prec_t)attempt;
+            out = solve_root_at_precision(p, k, try_bits, want_machine);
+        }
+        zupoly_free(p);
+        return out;
     }
 
-    zupoly_free(p);
-    return out;
+    /* Non-integer coefficients: fall back to the numeric solver over the
+     * polynomial's machine-real / rational coefficients.  This is what lets
+     * Root[] objects — e.g. Eigenvalues of a matrix with symbolic entries,
+     * after numeric substitution — be numericalised, so N and the numeric
+     * optimisers (NMinimize) can evaluate them. */
+    return solve_root_inexact(body, k, target_bits, want_machine);
 }
 
 #else  /* USE_MPFR not defined */

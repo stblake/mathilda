@@ -1368,3 +1368,58 @@ void graphics3d_render_in_region(const Expr* graphics3d_expr,
     Rectangle dst = { rx, ry, rw, rh };
     DrawTexturePro(state->rt.texture, src, dst, (Vector2){ 0, 0 }, 0.0f, WHITE);
 }
+
+/* Raster (PNG/JPEG) export of a Graphics3D[...] via the offscreen 3D renderer.
+ * Mirrors render.c's graphics_render_rgba but drives graphics3d_render_in_region,
+ * so the file matches the on-screen 3D view. Returns a fresh RGBA8 buffer
+ * (caller frees with free()) or NULL when there is no usable GUI session. */
+unsigned char* graphics3d_render_rgba(const Expr* g, int w, int h,
+                                       int* out_w, int* out_h) {
+    if (!g || w <= 0 || h <= 0) return NULL;
+    if (w > 8000) w = 8000;
+    if (h > 8000) h = 8000;
+
+    bool opened = false;
+    if (!IsWindowReady()) {
+        if (!gui_session_available()) return NULL;   /* headless: fail, don't crash */
+        SetTraceLogLevel(LOG_WARNING);
+        SetConfigFlags(FLAG_MSAA_4X_HINT);
+        InitWindow(w, h, "mathilda-export");
+        if (!IsWindowReady()) return NULL;
+        SetWindowState(FLAG_WINDOW_HIDDEN);
+        opened = true;
+    }
+
+    label_font_load();
+    Graphics3DEmbedState* st = graphics3d_embed_state_new();
+
+    /* graphics3d_render_in_region renders into st->rt then blits it to the
+     * active target; give the blit a real BeginDrawing target (discarded), then
+     * read st->rt back. This mirrors how Animate/Manipulate drive it. */
+    BeginDrawing();
+    ClearBackground(RAYWHITE);
+    graphics3d_render_in_region(g, 0.0f, 0.0f, (float)w, (float)h, st);
+    EndDrawing();
+
+    unsigned char* out = NULL;
+    if (st->rt_loaded) {
+        Image img = LoadImageFromTexture(st->rt.texture);
+        ImageFlipVertical(&img);                       /* render textures are y-flipped */
+        ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+        size_t n = (size_t)img.width * (size_t)img.height * 4;
+        if (img.data && n > 0) {
+            out = (unsigned char*)malloc(n);
+            if (out) {
+                memcpy(out, img.data, n);
+                *out_w = img.width;
+                *out_h = img.height;
+            }
+        }
+        UnloadImage(img);
+    }
+
+    graphics3d_embed_state_free(st);                    /* unloads st->rt */
+    label_font_unload();
+    if (opened) CloseWindow();
+    return out;
+}

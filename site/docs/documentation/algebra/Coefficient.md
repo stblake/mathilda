@@ -5,19 +5,19 @@
 
 ## Description
 
-```text
-Coefficient[expr, form]
-    gives the coefficient of form^1 in expr.  form is matched
-    structurally against the bases of products in the expanded form
-    of expr.
-Coefficient[expr, form, n]
-    gives the coefficient of form^n.  n may be a non-negative integer
-    or (for Laurent / Puiseux expressions) a rational.
-```
+**`Coefficient[expr, form]`**
 
-## Examples
+gives the coefficient of form^1 in expr.  form is matched structurally against the bases of products in the expanded form of expr.
 
-All examples below are verified against the current Mathilda build.
+**`Coefficient[expr, form, n]`**
+
+gives the coefficient of form^n.  n may be a non-negative integer or (for Laurent / Puiseux expressions) a rational.
+
+## Examples (9)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Coefficient[(x+1)^3, x, 2]
@@ -28,6 +28,28 @@ Out[2]= 4
 
 In[3]:= Coefficient[x^s x, x^s]
 Out[3]= x
+```
+
+### Applications (6)
+
+```mathematica
+In[4]:= Coefficient[x^2 + 3 x + 2, x]
+Out[4]= 3
+
+In[5]:= Coefficient[x^2 + 3 x + 2, x, 2]
+Out[5]= 1
+
+In[6]:= Coefficient[a x^2 + b x + c, x, 0]
+Out[6]= c
+
+In[7]:= Coefficient[3 x^2 y + 2 x y, x, 2]
+Out[7]= 3 y
+
+In[8]:= Coefficient[(1 + x)^50, x, 25]
+Out[8]= 126410606437752
+
+In[9]:= Coefficient[(a + b)^4, a^2 b^2]
+Out[9]= 6
 ```
 
 ## Implementation notes
@@ -43,49 +65,17 @@ Out[3]= x
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 3 (monomial extraction from polynomial normal forms).
 - Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+- Tests: [`tests/test_expand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expand.c)
+- Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
+- Tests: [`tests/test_risch_field.c`](https://github.com/stblake/mathilda/blob/main/tests/test_risch_field.c)
+- Tests: [`tests/test_risch_hypertangent.c`](https://github.com/stblake/mathilda/blob/main/tests/test_risch_hypertangent.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Coefficient[x^2 + 3 x + 2, x]
-Out[1]= 3
-```
-
-```mathematica
-In[1]:= Coefficient[x^2 + 3 x + 2, x, 2]
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= Coefficient[a x^2 + b x + c, x, 0]
-Out[1]= c
-```
-
-```mathematica
-In[1]:= Coefficient[3 x^2 y + 2 x y, x, 2]
-Out[1]= 3 y
-```
-
-```mathematica
-In[1]:= Coefficient[(1 + x)^50, x, 25]
-Out[1]= 126410606437752
-```
-
-```mathematica
-In[1]:= Coefficient[(a + b)^4, a^2 b^2]
-Out[1]= 6
-```
 
 ### Notes
 

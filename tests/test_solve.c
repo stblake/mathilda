@@ -1027,14 +1027,105 @@ static void test_integers_edge_cases(void) {
              "Solve[Equal[Plus[x, Sin[x]], 0], x, Integers]");
 }
 
-/* Unsupported domains (Rationals, Algebraics, Booleans, Primes) leave
- * the call unevaluated -- the router declines to dispatch.  This
- * guards against accidentally widening the recognised-domain set. */
-static void test_unsupported_domains_unevaluated(void) {
+/* The Rationals domain keeps only the provably-rational roots
+ * (Integer / BigInt / Rational), mirroring the Integers policy but
+ * admitting non-integer rationals. */
+static void test_rationals_domain(void) {
     run_test("Solve[x + 1 == 0, x, Rationals]",
-             "Solve[Equal[Plus[1, x], 0], x, Rationals]");
+             "List[List[Rule[x, -1]]]");
+    /* x^2 == 4 → both roots are rational. */
+    run_test("Solve[x^2 - 4 == 0, x, Rationals]",
+             "List[List[Rule[x, -2]], List[Rule[x, 2]]]");
+    /* x^2 == 2 → irrational roots dropped → {}. */
+    run_test("Solve[x^2 - 2 == 0, x, Rationals]", "List[]");
+    /* Non-integer rational root is kept. */
+    run_test("Solve[2 x^2 + 3 x + 1 == 0, x, Rationals]",
+             "List[List[Rule[x, -1]], List[Rule[x, Rational[-1, 2]]]]");
+}
+
+/* Polynomial in a single transcendental kernel g(x): substitute u=g(x),
+ * solve, unwind each root through the inverse peel. */
+static void test_poly_in_kernel(void) {
+    /* Log[x]^2 - 3 Log[x] + 2 == 0  ->  u=Log[x], u=1,2  ->  x=E, E^2. */
+    run_test("Solve[Log[x]^2 - 3 Log[x] + 2 == 0, x]",
+             "List[List[Rule[x, E]], List[Rule[x, Power[E, 2]]]]");
+    /* Log[x]^3 - 6 Log[x]^2 + 11 Log[x] - 6 == 0  ->  x = E, E^2, E^3. */
+    run_test("Solve[Log[x]^3 - 6 Log[x]^2 + 11 Log[x] - 6 == 0, x]",
+             "List[List[Rule[x, E]], List[Rule[x, Power[E, 2]]], "
+                   "List[Rule[x, Power[E, 3]]]]");
+    /* E^x + x == 0 is not a polynomial in one kernel (bare x remains):
+     * left unevaluated. */
+    run_test("Solve[E^x + x == 0, x]",
+             "Solve[Equal[Plus[x, Power[E, x]], 0], x]");
+}
+
+/* Domains still outside the recognised set (Algebraics, Booleans,
+ * Primes) leave the call unevaluated -- the router declines to
+ * dispatch.  This guards against accidentally widening the set. */
+static void test_unsupported_domains_unevaluated(void) {
     run_test("Solve[x + 1 == 0, x, Algebraics]",
              "Solve[Equal[Plus[1, x], 0], x, Algebraics]");
+}
+
+/* Modulus -> p solves a single-variable polynomial over Z/pZ by residue
+ * enumeration; the option must never be silently ignored. */
+static void test_modulus_domain(void) {
+    /* x^2 = 2 mod 7 -> {3, 4} (3^2=9=2, 4^2=16=2 mod 7). */
+    run_test("Solve[x^2 == 2, x, Modulus -> 7]",
+             "List[List[Rule[x, 3]], List[Rule[x, 4]]]");
+    /* 2 is a non-residue mod 5 -> no solutions. */
+    run_test("Solve[x^2 == 2, x, Modulus -> 5]", "List[]");
+    /* Linear with a modular inverse: 3 x = 1 mod 7 -> x = 5. */
+    run_test("Solve[3 x == 1, x, Modulus -> 7]",
+             "List[List[Rule[x, 5]]]");
+    /* Irreducible over Q but splits mod 7: x^2+x+1 -> {2, 4}. */
+    run_test("Solve[x^2 + x + 1 == 0, x, Modulus -> 7]",
+             "List[List[Rule[x, 2]], List[Rule[x, 4]]]");
+    /* Refusals stay unevaluated rather than silently ignoring Modulus:
+     * non-polynomial equations and a symbolic modulus. */
+    run_test("Solve[Sin[x] == 0, x, Modulus -> 7]",
+             "Solve[Equal[Sin[x], 0], x, Rule[Modulus, 7]]");
+    run_test("Solve[x^2 == 2, x, Modulus -> p]",
+             "Solve[Equal[Power[x, 2], 2], x, Rule[Modulus, p]]");
+
+    /* Systems over GF(p): the finite-field Gröbner engine (gbmod.c) solves a
+     * prime-modulus system by triangular residue enumeration. */
+    run_test("Solve[{x^2 + y^2 == 1, x == y}, {x, y}, Modulus -> 7]",
+             "List[List[Rule[x, 2], Rule[y, 2]], List[Rule[x, 5], Rule[y, 5]]]");
+    /* Inconsistent modular system -> {}. */
+    run_test("Solve[{x + y == 0, x + y == 1}, {x, y}, Modulus -> 5]", "List[]");
+    /* A composite modulus is not a field; the system is refused (unevaluated). */
+    run_test("Solve[{x^2 + y^2 == 1, x == y}, {x, y}, Modulus -> 6]",
+             "Solve[List[Equal[Plus[Power[x, 2], Power[y, 2]], 1], Equal[x, y]], "
+             "List[x, y], Rule[Modulus, 6]]");
+}
+
+/* VerifySolutions -> True runs a PossibleZeroQ back-substitution filter
+ * over the solution set.  Its correctness contract is that it must keep
+ * every legitimate solution: verified algebraic roots, symbolically
+ * verified parametric solutions, and -- crucially -- undecidable ones
+ * (Root[] objects, periodic ConditionalExpression families), which are
+ * PossibleZeroQ-unknown and therefore never dropped. */
+static void test_verify_solutions(void) {
+    /* Ordinary polynomial roots verify and are kept. */
+    run_test("Solve[x^2 - 5 x + 6 == 0, x, VerifySolutions -> True]",
+             "List[List[Rule[x, 2]], List[Rule[x, 3]]]");
+    /* A radical equation whose extraneous root is already dropped by the
+     * radical specialist: VerifySolutions keeps the surviving root. */
+    run_test("Solve[Sqrt[x + 5] == x - 1, x, VerifySolutions -> True]",
+             "List[List[Rule[x, 4]]]");
+    /* Undecidable Root[] objects are kept (not dropped as non-zero). */
+    run_test("Solve[x^5 - x - 1 == 0, x, VerifySolutions -> True]",
+             "List[List[Rule[x, Root[Function[Plus[-1, Times[-1, Slot[1]], "
+             "Power[Slot[1], 5]]], 1]]], "
+             "List[Rule[x, Root[Function[Plus[-1, Times[-1, Slot[1]], "
+             "Power[Slot[1], 5]]], 2]]], "
+             "List[Rule[x, Root[Function[Plus[-1, Times[-1, Slot[1]], "
+             "Power[Slot[1], 5]]], 3]]], "
+             "List[Rule[x, Root[Function[Plus[-1, Times[-1, Slot[1]], "
+             "Power[Slot[1], 5]]], 4]]], "
+             "List[Rule[x, Root[Function[Plus[-1, Times[-1, Slot[1]], "
+             "Power[Slot[1], 5]]], 5]]]]");
 }
 
 /* ============================================================ */
@@ -1315,6 +1406,10 @@ int main(void) {
     TEST(test_integers_parametric);
     TEST(test_integers_rational);
     TEST(test_integers_edge_cases);
+    TEST(test_rationals_domain);
+    TEST(test_modulus_domain);
+    TEST(test_verify_solutions);
+    TEST(test_poly_in_kernel);
     TEST(test_unsupported_domains_unevaluated);
 
     /* Linear-system specialist tests. */

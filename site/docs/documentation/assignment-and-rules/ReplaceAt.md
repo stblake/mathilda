@@ -5,28 +5,30 @@
 
 ## Description
 
-```text
-ReplaceAt[expr, rules, n]
-    transforms expr by replacing the n-th element using rules.
-ReplaceAt[expr, rules, {i, j, ...}]
-    replaces the part of expr at position {i, j, ...}.
-ReplaceAt[expr, rules, {{i1, j1, ...}, {i2, j2, ...}, ...}]
-    replaces parts at several positions.
+**`ReplaceAt[expr, rules, n]`**
 
-Rules may be a single Rule/RuleDelayed or a list of them; rules are tried
-in order and the first match wins. Negative indices count from the end;
-0 targets the head. All and Span specifications are supported. On an
-association a position is a key, Key[k], or a positional index over the
-entries, and the rules are tried against the value. Repeated positions
-cause rules to be applied repeatedly to that part. ReplaceAt[expr, rules,
-{}] is an empty list of positions and replaces nothing, while {{}} is the
-position of expr itself. A position that does not exist leaves ReplaceAt
-unevaluated.
-```
+transforms expr by replacing the n-th element using rules.
 
-## Examples
+**`ReplaceAt[expr, rules, {i, j, ...}]`**
 
-All examples below are verified against the current Mathilda build.
+replaces the part of expr at position {i, j, ...}.
+
+**`ReplaceAt[expr, rules, {{i1, j1, ...}, {i2, j2, ...}, ...}]`**
+
+replaces parts at several positions.
+
+<details>
+<summary>Notes</summary>
+
+Rules may be a single Rule/RuleDelayed or a list of them; rules are tried in order and the first match wins. Negative indices count from the end; 0 targets the head. All and Span specifications are supported. On an association a position is a key, Key\[k\], or a positional index over the entries, and the rules are tried against the value. Repeated positions cause rules to be applied repeatedly to that part. ReplaceAt\[expr, rules, {}\] is an empty list of positions and replaces nothing, while {{}} is the position of expr itself. A position that does not exist leaves ReplaceAt unevaluated.
+
+</details>
+
+## Examples (22)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (17)
 
 ```mathematica
 In[1]:= ReplaceAt[{a, a, a, a}, a -> xx, 2]
@@ -52,6 +54,52 @@ Out[7]= {xx, yy, c, yy}
 
 In[8]:= ReplaceAt[{{a, a}, {a, a}}, a -> xx, {All, 2}]
 Out[8]= {{a, xx}, {a, xx}}
+
+In[9]:= ReplaceAt[{{a, b}, {c, d}, e}, x_ :> f[x], 2]
+Out[9]= {{a, b}, f[{c, d}], e}
+
+In[10]:= ReplaceAt[{{a, b}, {c, d}, e}, x_ :> f[x], -1]
+Out[10]= {{a, b}, {c, d}, f[e]}
+
+In[11]:= ReplaceAt[{{a, b}, {c, d}, e}, x_ :> f[x], {2, 1}]
+Out[11]= {{a, b}, {f[c], d}, e}
+
+In[12]:= ReplaceAt[{{a, b}, {c, d}, e}, x_ :> f[x], {{1}, {3}}]
+Out[12]= {f[{a, b}], {c, d}, f[e]}
+
+In[13]:= ReplaceAt[{{a, b}, {c, d}, e}, x_ :> f[x], {{1, 2}, {2, 2}, {3}}]
+Out[13]= {{a, f[b]}, {c, f[d]}, f[e]}
+
+In[14]:= ReplaceAt[{a, a, a, a, a}, a -> xx, 2 ;; 4]
+Out[14]= {a, xx, xx, xx, a}
+
+In[15]:= ReplaceAt[a + b + c + d, _ -> x, 2]
+Out[15]= a + c + d + x
+
+In[16]:= ReplaceAt[x^2 + y^2, _ -> z, {{1, 1}, {2, 1}}]
+Out[16]= 2 z^2
+
+In[17]:= ReplaceAt[{a, b, c}, _ -> f, 0]
+Out[17]= f[a, b, c]
+```
+
+### Applications (5)
+
+```mathematica
+In[18]:= ReplaceAt[{a, b, c, d}, x_ -> X, 2]
+Out[18]= {a, X, c, d}
+
+In[19]:= ReplaceAt[{a, b, c, d}, x_ -> X, -1]
+Out[19]= {a, b, c, X}
+
+In[20]:= ReplaceAt[{{a, b}, {c, d}}, x_ -> X, {2, 1}]
+Out[20]= {{a, b}, {X, d}}
+
+In[21]:= ReplaceAt[1 + x + x^2 + x^3, e_ :> D[e, x], {2}]
+Out[21]= 2 + x^2 + x^3
+
+In[22]:= ReplaceAt[{1, 2, 3, 4, 5}, n_ :> n^2, {2 ;; 4}]
+Out[22]= {1, 4, 9, 16, 5}
 ```
 
 ## Implementation notes
@@ -73,43 +121,15 @@ Out[8]= {{a, xx}, {a, xx}}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [ReplaceAll](../../assignment-and-rules/ReplaceAll/), [Rule](../../assignment-and-rules/Rule/), [RuleDelayed](../../assignment-and-rules/RuleDelayed/), [Span](../../structural-manipulation/Span/), [List](../../other-advanced/List/), [Orderless](../../expression-information/Orderless/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/)
 
 - Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
+- Tests: [`tests/test_replaceat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_replaceat.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= ReplaceAt[{a, b, c, d}, x_ -> X, 2]
-Out[1]= {a, X, c, d}
-```
-
-```mathematica
-In[1]:= ReplaceAt[{a, b, c, d}, x_ -> X, -1]
-Out[1]= {a, b, c, X}
-```
-
-```mathematica
-In[1]:= ReplaceAt[{{a, b}, {c, d}}, x_ -> X, {2, 1}]
-Out[1]= {{a, b}, {X, d}}
-```
-
-```mathematica
-In[1]:= ReplaceAt[1 + x + x^2 + x^3, e_ :> D[e, x], {2}]
-Out[1]= 2 + x^2 + x^3
-```
-
-```mathematica
-In[1]:= ReplaceAt[{1, 2, 3, 4, 5}, n_ :> n^2, {2 ;; 4}]
-Out[1]= {1, 4, 9, 16, 5}
-```
 
 ### Notes
 

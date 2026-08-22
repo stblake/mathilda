@@ -5,11 +5,9 @@
 
 ## Description
 
-```text
-ChartStyle
-    BarChart/Histogram option: color or list of colors cycling
-    through bars. Defaults to the standard palette.
-```
+**`ChartStyle`**
+
+BarChart/Histogram option: color or list of colors cycling through bars. Defaults to the standard palette.
 
 ## Examples
 
@@ -18,10 +16,6 @@ _No verified examples yet for this function._
 ## Implementation notes
 
 **Attributes:** `Protected`.
-
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
 
 ## References
 

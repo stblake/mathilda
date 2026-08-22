@@ -1,20 +1,30 @@
 # $SimplifyDebug
 
-!!! note "Status: Experimental"
-    present and registered, but lightly documented and not yet covered by dedicated tests.
+!!! success "Status: Stable"
+    documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## Description
 
-```text
-$SimplifyDebug
-    When set to True, Simplify prints one stderr line per
-    transform invocation: /Name/: <input> -> <output> [<ms> ms].
-    Defaults to False. Useful for diagnosing slow Simplify calls.
+**`$SimplifyDebug`**
+
+When set to True, Simplify prints one stderr line per transform invocation: /Name/: \<input\> -\> \<output\> \[\<ms\> ms\]. Defaults to False. Useful for diagnosing slow Simplify calls.
+
+## Examples (2)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
+
+```mathematica
+In[1]:= $SimplifyDebug = True; Simplify[a x + b x]; $SimplifyDebug = False;
 ```
 
-## Examples
+### Applications (1)
 
-_No verified examples yet for this function._
+```mathematica
+In[2]:= $SimplifyDebug
+Out[2]= False
+```
 
 ## Implementation notes
 
@@ -26,26 +36,21 @@ Simplify search, in the form `/<TransformName>/: <input> -> <output> [<ms> ms]`,
 used to diagnose slow Simplify calls and runaway candidate explosion.
 
 - Default `False`. When set to `True`, `Simplify` prints one line per transform
+  invocation to **stderr**, in the form
+  `/<TransformName>/: <input> -> <output> [<elapsed> ms]`. Useful for diagnosing
+  slow or hanging `Simplify` calls and runaway candidate-set growth. The value is
+  read directly off the `OwnValue`, so there is no cost when it is `False`.
 
 **Attributes:** none registered.
 
-## Implementation status
-
-**Experimental** — present and registered, but lightly documented and not yet covered by dedicated tests.
-
 ## References
+
+**See also:** [Simplify](../../simplification/Simplify/)
 
 - Source: [`src/simp/simp_util.c`](https://github.com/stblake/mathilda/blob/main/src/simp/simp_util.c)
 - Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= $SimplifyDebug
-Out[1]= False
-```
 
 ### Notes
 

@@ -629,12 +629,15 @@ static void test_eigenvectors_irreducible_cubic(void) {
     /* Nonzero: the failure mode was exactly a zero vector. */
     run_check_true("FreeQ[Eigenvectors[{{1,2,3},{4,5,6},{7,8,10}}], "
                    "{0, 0, 0}]");
-    /* m.v == lambda v for all three pairs. */
+    /* m.v == lambda v for all three pairs.  With Cubics -> False (the default),
+     * the eigenvalues are held Root[] objects and the eigenvectors are built
+     * from them, so the residual is a machine-precision numeric zero (~1e-13)
+     * rather than an exact symbolic 0 as it was for the radical form. */
     run_check_true(
         "Module[{m = {{1,2,3},{4,5,6},{7,8,10}}, l, v}, "
         "l = Eigenvalues[m]; v = Eigenvectors[m]; "
         "Max[Table[Abs[N[Max[Abs[m . v[[i]] - l[[i]] v[[i]]]]]], "
-        "{i, 1, 3}]] < 10^-20]");
+        "{i, 1, 3}]] < 10^-10]");
     /* Same defect at degree 4, and on a symmetric matrix (the gram that
      * SingularValueDecomposition builds). */
     run_check_true("FreeQ[Eigenvectors[{{0,0,0,1},{1,0,0,1},{0,1,0,0},"

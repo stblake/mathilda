@@ -315,6 +315,16 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         for (size_t i = 0; i < na; i++) { IT(i, ta); if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false; }
         *out = CT_INT; return true;                    /* UnitStep[0.5] is 1, not 1. */
     }
+    if (strcmp(h, "UnitBox") == 0 && na == 1) {
+        /* Single-argument box, matching the interpreter (multi-arg UnitBox is
+         * left unevaluated there). An array argument routes to the narrowing
+         * kernel; a scalar lowers to the pair of comparisons in the emitter and
+         * answers with an exact Integer 0/1, so CT_INT like UnitStep. */
+        IT(0, ta);
+        if (CT_IS_ARRAY(ta)) return infer_arr_unary(c, h, ta, out);
+        if (ta == CT_BOOL || ta == CT_COMPLEX) return false;
+        *out = CT_INT; return true;                    /* UnitBox[0.5] is 1, not 1. */
+    }
     if (strcmp(h, "Chop") == 0 && (na == 1 || na == 2)) {
         IT(0, ta);
         if (CT_IS_ARRAY(ta) || ta == CT_BOOL || ta == CT_COMPLEX) return false;
@@ -399,6 +409,13 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         CompileType tt, te; if (!infer_type(c, A[1], &tt) || !infer_type(c, A[2], &te)) return false;
         if (tt == te) { *out = tt; return true; }
         *out = num_common(tt, te); return (int)*out >= 0;
+    }
+    /* Which / Switch / Piecewise: the ladder's result type, computed the same way
+     * emit_ctrl does (shared collect_ladder), so the two cannot disagree. */
+    if (strcmp(h, "Which") == 0 || strcmp(h, "Switch") == 0 || strcmp(h, "Piecewise") == 0) {
+        int nr; bool hd; CompileType rt;
+        if (!collect_ladder(c, h, A, na, NULL, &nr, &hd, &rt) || CT_IS_ARRAY(rt)) return false;
+        *out = rt; return true;
     }
     if ((strcmp(h, "Sum") == 0 || strcmp(h, "Product") == 0) && na == 2) {
         LoopSpec s;

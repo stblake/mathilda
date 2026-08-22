@@ -5,21 +5,45 @@
 
 ## Description
 
-```text
-Rational[n, d]
-    represents the rational number n/d.
-When n and d are integers, Rational auto-reduces by gcd, normalises
-the sign onto the numerator, and collapses to an Integer when d == 1.
-Rationals propagate through Plus / Times exactly via GMP.
-```
+**`Rational[n, d]`**
 
-## Examples
+represents the rational number n/d.
 
-All examples below are verified against the current Mathilda build.
+<details>
+<summary>Notes</summary>
+
+When n and d are integers, Rational auto-reduces by gcd, normalises the sign onto the numerator, and collapses to an Integer when d == 1. Rationals propagate through Plus / Times exactly via GMP.
+
+</details>
+
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (1)
 
 ```mathematica
 In[1]:= Rational[15, 5]
 Out[1]= 3
+```
+
+### Applications (5)
+
+```mathematica
+In[2]:= Rational[6, 4]
+Out[2]= 3/2
+
+In[3]:= Rational[10, 2]
+Out[3]= 5
+
+In[4]:= Rational[-3, -9]
+Out[4]= 1/3
+
+In[5]:= 1/2 + 1/3 + 1/6
+Out[5]= 1
+
+In[6]:= Sum[1/k^2, {k, 1, 10}]
+Out[6]= 1968329/1270080
 ```
 
 ## Implementation notes
@@ -32,46 +56,16 @@ Out[1]= 3
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/arithmetic.c`](https://github.com/stblake/mathilda/blob/main/src/arithmetic.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_arc_exact.c`](https://github.com/stblake/mathilda/blob/main/tests/test_arc_exact.c)
+- Tests: [`tests/test_bigint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bigint.c)
+- Tests: [`tests/test_bignum_rational_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bignum_rational_numeric.c)
+- Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Rational[6, 4]
-Out[1]= 3/2
-```
-
-`Rational` auto-reduces by the gcd, normalises the sign onto the numerator, and
-collapses to an `Integer` whenever the denominator divides the numerator:
-
-```mathematica
-In[1]:= Rational[10, 2]
-Out[1]= 5
-
-In[2]:= Rational[-3, -9]
-Out[2]= 1/3
-```
-
-Because rationals propagate exactly through `Plus` and `Times` via GMP, exact
-sums never drift into floating point — a partial sum of the Basel series stays a
-single reduced fraction:
-
-```mathematica
-In[1]:= 1/2 + 1/3 + 1/6
-Out[1]= 1
-
-In[2]:= Sum[1/k^2, {k, 1, 10}]
-Out[2]= 1968329/1270080
-```
 
 ### Notes
 

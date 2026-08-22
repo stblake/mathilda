@@ -5,21 +5,28 @@
 
 ## Description
 
-```text
-Ratios[list]
-    gives the successive ratios list[[k+1]]/list[[k]] of the elements
-    of list (length l - 1).
-Ratios[list, n] gives the n-th iterated ratios (length l - n); n must
-be a non-negative integer (n = 0 returns list unchanged).
-Ratios[list, {n1, n2, ...}] gives the successive n_k-th ratios at
-level k of a nested list; for a matrix m, Ratios[m, n] (= Ratios[m, {n, 0}]) takes ratios of successive rows.
-FoldList[Times, x, Ratios[list]] inverts Ratios.
-Ratios has the attribute Protected.
-```
+**`Ratios[list]`**
 
-## Examples
+gives the successive ratios list\[\[k+1\]\]/list\[\[k\]\] of the elements of list (length l - 1).
 
-All examples below are verified against the current Mathilda build.
+**`Ratios[list, n] gives the n-th iterated ratios (length l - n); n must`**
+
+**`Ratios[list, {n1, n2, ...}] gives the successive n_k-th ratios at`**
+
+**`FoldList[Times, x, Ratios[list]] inverts Ratios.`**
+
+<details>
+<summary>Notes</summary>
+
+be a non-negative integer (n = 0 returns list unchanged). level k of a nested list; for a matrix m, Ratios\[m, n\] (= Ratios\[m, {n, 0}\]) takes ratios of successive rows. Ratios has the attribute Protected.
+
+</details>
+
+## Examples (10)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= Ratios[{a, b, c, d, e}]
@@ -38,6 +45,31 @@ In[5]:= FoldList[Times, a, Ratios[{a, b, c, d, e}]]
 Out[5]= {a, b, c, d, e}
 ```
 
+### Applications (5)
+
+```mathematica
+In[6]:= Ratios[{1, 2, 4, 8, 16}]
+Out[6]= {2, 2, 2, 2}
+
+In[7]:= Ratios[{1, 1, 2, 3, 5, 8, 13, 21}]
+Out[7]= {1, 2, 3/2, 5/3, 8/5, 13/8, 21/13}
+
+In[8]:= N[Ratios[{1, 1, 2, 3, 5, 8, 13, 21, 34, 55}]]
+Out[8]= {1.0, 2.0, 1.5, 1.66667, 1.6, 1.625, 1.61538, 1.61905, 1.61765}
+
+In[9]:= Ratios[{1, 1, 2, 6, 24, 120}]
+Out[9]= {1, 2, 3, 4, 5}
+
+In[10]:= FoldList[Times, 3, Ratios[{3, 6, 18, 36}]]
+Out[10]= {3, 6, 18, 36}
+```
+
+## Options & behaviour
+
+> **Packed arrays.** `Ratios[list]` divides in place on a real buffer. An
+> **integer** buffer takes the ordinary path: `Ratios[{1, 2, 3}]` is
+> `{2, 3/2}`, exact `Rational`s that no buffer holds.
+
 ## Implementation notes
 
 `builtin_ratios` returns successive ratios of list elements: `Ratios[{a, b, c, ...}]` gives `{b/a, c/b, ...}`. `Ratios[list, n]` applies the ratio operation n times (`ratio_n`); `Ratios[list, {n1, n2, ...}]` takes ratios along the given levels (`ratio_levels`). Each ratio is formed as a division, so the usual numeric/symbolic simplification follows. Level/count specs must be non-negative integers; bad shapes return `NULL`.
@@ -52,46 +84,18 @@ Out[5]= {a, b, c, d, e}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Differences](../../arithmetic/Differences/), [Power](../../arithmetic/Power/), [Times](../../arithmetic/Times/), [Rational](../../arithmetic/Rational/)
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
+- Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
+- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
+- Tests: [`tests/test_ratios.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ratios.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Ratios[{1, 2, 4, 8, 16}]
-Out[1]= {2, 2, 2, 2}
-```
-
-A constant ratio list is the fingerprint of a geometric sequence. Applied to the
-Fibonacci numbers, `Ratios` produces the classic convergents of the golden
-ratio, which numerically close in on `φ`:
-
-```mathematica
-In[1]:= Ratios[{1, 1, 2, 3, 5, 8, 13, 21}]
-Out[1]= {1, 2, 3/2, 5/3, 8/5, 13/8, 21/13}
-
-In[2]:= N[Ratios[{1, 1, 2, 3, 5, 8, 13, 21, 34, 55}]]
-Out[2]= {1.0, 2.0, 1.5, 1.66667, 1.6, 1.625, 1.61538, 1.61905, 1.61765}
-```
-
-The successive ratios of factorials collapse to the integers, and `FoldList`
-with `Times` reconstructs the original list from a seed and its ratios:
-
-```mathematica
-In[1]:= Ratios[{1, 1, 2, 6, 24, 120}]
-Out[1]= {1, 2, 3, 4, 5}
-
-In[2]:= FoldList[Times, 3, Ratios[{3, 6, 18, 36}]]
-Out[2]= {3, 6, 18, 36}
-```
 
 ### Notes
 

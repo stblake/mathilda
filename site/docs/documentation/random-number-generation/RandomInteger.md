@@ -5,22 +5,31 @@
 
 ## Description
 
-```text
-RandomInteger[{imin, imax}]
-    gives a pseudorandom integer in the range {imin, ..., imax}.
-RandomInteger[imax]
-    gives a pseudorandom integer in the range {0, ..., imax}.
-RandomInteger[]
-    pseudorandomly gives 0 or 1.
-RandomInteger[range, n]
-    gives a list of n pseudorandom integers.
-RandomInteger[range, {n1, n2, ...}]
-    gives an n1 x n2 x ... array of pseudorandom integers.
-```
+**`RandomInteger[{imin, imax}]`**
 
-## Examples
+gives a pseudorandom integer in the range {imin, ..., imax}.
 
-All examples below are verified against the current Mathilda build.
+**`RandomInteger[imax]`**
+
+gives a pseudorandom integer in the range {0, ..., imax}.
+
+**`RandomInteger[]`**
+
+pseudorandomly gives 0 or 1.
+
+**`RandomInteger[range, n]`**
+
+gives a list of n pseudorandom integers.
+
+**`RandomInteger[range, {n1, n2, ...}]`**
+
+gives an n1 x n2 x ... array of pseudorandom integers.
+
+## Examples (7)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (7)
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomInteger[]
@@ -57,14 +66,20 @@ The `RandomInteger[range, n]` and `RandomInteger[range, {n1, n2, ...}]` forms pr
 - RandomInteger gives a different sequence of pseudorandom integers whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Returns bignums when the range exceeds 64-bit integer limits.
 - **Large machine-integer results pack.** A list or array of 250 or more values
+  is returned as a [packed list](../packed-arrays/index.md) -- an ordinary `List` held as
+  a dense `int64` buffer, distinguishable only by `NDArrayQ`. Offered after
+  building rather than written directly, because a wide range can yield bignums,
+  which decline packing for the whole result.
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/)
 
 - Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)
+- Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
+- Tests: [`tests/test_nminimize.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nminimize.c)
+- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+- Tests: [`tests/test_random.c`](https://github.com/stblake/mathilda/blob/main/tests/test_random.c)

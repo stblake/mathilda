@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 static int failures = 0;
 static int checks = 0;
@@ -56,6 +57,38 @@ static void same(const char* a, const char* b) {
         failures++;
     }
     free(s); free(buf);
+}
+
+/* Regression: a finite Sum whose summand is a LARGE expression must ENUMERATE,
+ * not run the closed-form cascade (Polynomial/Gosper/Rational -> Cancel/
+ * PolynomialGCD/Expand/FLINT) over the giant body once per stage.  Here each
+ * z[[i]] carries the whole 20-vector, so the held body Part[z, i] hides its
+ * true size behind the symbol z.  Before the fix, building a 20-term rotated-
+ * Rastrigin-style objective this way took MINUTES (the cascade churned over the
+ * vector and failed before falling through to the expansion); it is now
+ * sub-millisecond.  A 3 s ceiling separates the two regimes with a wide margin
+ * without being machine-sensitive (correct answers alone cannot catch this --
+ * both paths return the same expansion). */
+static void check_large_body_sum_fast(void) {
+    checks++;
+    Expr* p = parse_expression(
+        "z = Table[Sum[(i + j) x[j], {j, 1, 20}], {i, 1, 20}];");
+    if (p) { expr_free(evaluate(p)); expr_free(p); }
+    clock_t t0 = clock();
+    char* got = eval_str(
+        "LeafCount[Sum[z[[i]]^2 - 10 Cos[2 Pi z[[i]]], {i, 1, 20}]] > 100");
+    double secs = (double)(clock() - t0) / (double)CLOCKS_PER_SEC;
+    if (strcmp(got, "True") != 0) {
+        fprintf(stderr, "FAIL: large-body finite Sum gave %s (expected True)\n", got);
+        failures++;
+    } else if (secs > 3.0) {
+        fprintf(stderr, "FAIL: large-body finite Sum took %.2f s -- closed-form "
+                        "cascade not skipped for a short range\n", secs);
+        failures++;
+    }
+    free(got);
+    /* z was assigned above; clear it so later checks see a clean symbol. */
+    { Expr* q = parse_expression("Clear[z]"); if (q) { expr_free(evaluate(q)); expr_free(q); } }
 }
 
 int main(void) {
@@ -112,6 +145,17 @@ int main(void) {
     same("DifferenceDelta[Sum[k k!, k], k]", "k k!");
     same("DifferenceDelta[Sum[1/(i (i + 1)), i], i]", "1/(i (i + 1))");
     check("DifferenceDelta[i^2, i]", "1 + 2 i");
+
+    /* Var-dependent radical summands are not hypergeometric: Gosper must reject
+     * them up front rather than let its term-ratio Simplify diverge.  Before the
+     * has_var_radical guard, the inner sum of the nested cases below hung the
+     * evaluator (Thomson-problem repulsion energy).  Indefinite: Gosper declines,
+     * the sum stays held.  Nested finite: the outer closed-form attempt declines
+     * and the sum expands term-by-term. */
+    check("Sum[1/Sqrt[k^2 + 1], k]", "Sum[1/Sqrt[k^2 + 1], k]");
+    check("Length[Sum[1/Sqrt[(a[i] - a[j])^2 + 1], {i, 1, 4}, {j, i + 1, 5}]]", "10");
+    check("Sum[1/Sqrt[(i - j)^2 + 1], {i, 1, 3}, {j, i + 1, 4}]",
+          "1/Sqrt[10] + 2/Sqrt[5] + 3/Sqrt[2]");
 
     /* ---- Closed-form-first on wide finite numeric ranges ----
      * A unit-step integer range with a polynomial/geometric body must
@@ -170,6 +214,24 @@ int main(void) {
 
     /* Very-well-poised Ramanujan 1/Pi series (table-backed VWP 4F3). */
     check("Sum[(4 k + 1) Binomial[2 k, k]^3/(-64)^k, {k, 0, Infinity}]", "2/Pi");
+
+    /* Large-summand finite Sum must enumerate, not churn the closed-form
+     * cascade over the giant body (rotated-Rastrigin build regression). */
+    check_large_body_sum_fast();
+
+    /* A finite Sum whose body applies an integer-membership predicate to the
+     * index (EvenQ/OddQ/PrimeQ/... fold to a definite Boolean for a SYMBOLIC
+     * index) must ENUMERATE: the closed-form cascade evaluates the body
+     * symbolically, collapsing the conditional and telescoping the wrong summand
+     * (this gave Sum[If[EvenQ[k],k,-k],{k,1,10}] = -55 instead of 5). */
+    check("Sum[If[EvenQ[k], k, -k], {k, 1, 10}]", "5");
+    check("Sum[If[OddQ[k], k, -k], {k, 1, 10}]", "-5");
+    check("Sum[Boole[EvenQ[k]] k, {k, 1, 10}]", "30");
+    check("Sum[Boole[PrimeQ[k]], {k, 1, 20}]", "8");
+    check("Sum[If[IntegerQ[k], k^2, 0], {k, 1, 5}]", "55");
+    /* A predicate applied only to CONSTANTS folds identically per term, so the
+     * closed form is still valid and must NOT be blocked. */
+    check("Sum[If[PrimeQ[7], k, -k], {k, 1, 10}]", "55");
 
     if (failures) {
         fprintf(stderr, "\n%d/%d sum checks FAILED\n", failures, checks);

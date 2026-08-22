@@ -5,18 +5,19 @@
 
 ## Description
 
-```text
-StringReverse["string"]
-    Reverses the order of the characters in "string".
-StringReverse[{s1, s2, ...}]
-    Gives the list of results for each of the si.
+**`StringReverse["string"]`**
 
-    StringReverse is Listable, so it threads automatically over lists.
-```
+Reverses the order of the characters in "string".
 
-## Examples
+**`StringReverse[{s1, s2, ...}]`**
 
-All examples below are verified against the current Mathilda build.
+Gives the list of results for each of the si. StringReverse is Listable, so it threads automatically over lists.
+
+## Examples (5)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (5)
 
 ```mathematica
 In[1]:= StringReverse["abcdef"]
@@ -31,19 +32,15 @@ Out[3]= ""
 In[4]:= StringReverse[x]
 Out[4]= StringReverse[x]
 
-In[5]:= StringReverse[]
-Out[5]= StringReverse[]
+In[5]:= StringReverse[] StringReverse::argx: StringReverse called with 0 arguments; 1 argument is expected.
 ```
 
 ## Implementation notes
 
 **Attributes:** `Listable`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_strings.c`](https://github.com/stblake/mathilda/blob/main/tests/test_strings.c)

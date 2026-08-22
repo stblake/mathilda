@@ -5,64 +5,79 @@
 
 ## Description
 
-```text
-Sinc[z]
-    gives the cardinal sine Sin[z]/z, with Sinc[0] = 1.
-An entire, even function. Sinc[+-Infinity] = 0. Real and complex inputs
-evaluate numerically at machine or arbitrary (MPFR) precision;
-D[Sinc[z], z] = Cos[z]/z - Sin[z]/z^2. Listable.
+**`Sinc[z]`**
+
+gives the cardinal sine Sin\[z\]/z, with Sinc\[0\] = 1.
+
+**`D[Sinc[z], z] = Cos[z]/z - Sin[z]/z^2. Listable.`**
+
+<details>
+<summary>Notes</summary>
+
+An entire, even function. Sinc\[+-Infinity\] = 0. Real and complex inputs evaluate numerically at machine or arbitrary (MPFR) precision;
+
+</details>
+
+## Examples (6)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Applications (6)
+
+```mathematica
+In[1]:= Sinc[0]
+Out[1]= 1
+
+In[2]:= Sinc[2.]
+Out[2]= 0.454649
+
+In[3]:= N[Sinc[2], 45]
+Out[3]= 0.454648713412840847698009932955872421351127485
+
+In[4]:= Sinc[1. + I]
+Out[4]= 0.966711 - 0.331747 I
+
+In[5]:= D[Sinc[x], x]
+Out[5]= Cos[x]/x - Sin[x]/x^2
+
+In[6]:= Series[Sinc[x], {x, 0, 6}]
+Out[6]= 1 - x^2/6 + x^4/120 - x^6/5040 + O[x]^7
 ```
 
-## Examples
+## Algorithm
 
-_No verified examples yet for this function._
+```text
+ Mathilda -- the cardinal sine  Sinc[z] = Sin[z]/z  (Sinc[0] = 1).
+```
+
+Sinc is entire and even, with a removable singularity at the origin. Each kind of argument takes the cheapest route:
+
+```text
+  exact special values   ->  1 (at 0), 0 (at +-Infinity), Indeterminate
+  machine real           ->  libm sin(x)/x
+  arbitrary real (MPFR)  ->  mpfr_sin(x)/x at the input precision
+  complex (any prec)     ->  sin(z)/z via the shared ncpx toolkit
+  everything else        ->  stays symbolic (return NULL)
+```
+
+Attributes: Listable, NumericFunction, Protected.
 
 ## Implementation notes
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [SinIntegral](../../special-functions/SinIntegral/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_numeric_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numeric_stress.c)
+- Tests: [`tests/test_sinc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sinc.c)
+- Tests: [`tests/test_sinintegral.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sinintegral.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= Sinc[0]
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= Sinc[2.]
-Out[1]= 0.454649
-```
-
-```mathematica
-In[1]:= N[Sinc[2], 45]
-Out[1]= 0.454648713412840847698009932955872421351127485
-```
-
-```mathematica
-In[1]:= Sinc[1. + I]
-Out[1]= 0.966711 - 0.331747 I
-```
-
-```mathematica
-In[1]:= D[Sinc[x], x]
-Out[1]= Cos[x]/x - Sin[x]/x^2
-```
-
-```mathematica
-In[1]:= Series[Sinc[x], {x, 0, 6}]
-Out[1]= 1 - x^2/6 + x^4/120 - x^6/5040 + O[x]^7
-```
 
 ### Notes
 

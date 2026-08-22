@@ -5,13 +5,13 @@
 
 ## Description
 
-```text
-Compile[{x, ...}, expr] or Compile[{{x, _Real}, ...}, expr] builds a CompiledFunction that evaluates expr over machine numbers (types _Real, _Integer, _Complex; default _Real), falling back to the interpreter for symbolic arguments or non-compilable bodies. With RuntimeAttributes -> Listable the object threads over List arguments; the default is RuntimeAttributes -> {}. RuntimeOptions -> {"CatchMachineIntegerOverflow" -> False} (or the shorthand RuntimeOptions -> "Speed") lets machine-integer arithmetic wrap instead of falling back to the interpreter, which is faster and gives a different answer from the interpreter once a result leaves the machine-integer range; the default True never does.
-```
+**`Compile[{x, ...}, expr] or Compile[{{x, _Real}, ...}, expr] builds a CompiledFunction that evaluates expr over machine numbers (types _Real, _Integer, _Complex; default _Real), falling back to the interpreter for symbolic arguments or non-compilable bodies. With RuntimeAttributes -> Listable the object threads over List arguments; the default is RuntimeAttributes -> {}. RuntimeOptions -> {"CatchMachineIntegerOverflow" -> False} (or the shorthand RuntimeOptions -> "Speed") lets machine-integer arithmetic wrap instead of falling back to the interpreter, which is faster and gives a different answer from the interpreter once a result leaves the machine-integer range; the default True never does. WorkingPrecision -> n compiles real/complex arithmetic in MPFR at n decimal digits (one fixed precision for the whole function), for the straight-line arithmetic + elementary-function subset; MachinePrecision (the default) keeps the machine path unchanged. "BigIntegers" -> True makes integer arithmetic exact (GMP) instead of int64.`**
 
-## Examples
+## Examples (12)
 
-All examples below are verified against the current Mathilda build.
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (7)
 
 ```mathematica
 In[1]:= f = Compile[{{x, _Real}}, x^2 + 1]
@@ -19,26 +19,87 @@ Out[1]= CompiledFunction[{x}, x^2 + 1]
 
 In[2]:= f[3.0]
 Out[2]= 10.0
-
-In[3]:= f[a]                 (* symbolic argument -> interpreter fallback *)
-Out[3]= 1 + a^2
-
-In[4]:= Compile[{{z, _Complex}}, z^2][1.0 + 2.0 I]
-Out[4]= -3.0 + 4.0*I
-
-In[5]:= Compile[{{m, _Real, 2}}, m[[All, 1]]][{{1., 2.}, {3., 4.}}]
-Out[5]= {1.0, 3.0}
 ```
+
+Symbolic argument -> interpreter fallback
+
+```mathematica
+In[3]:= f[a]
+Out[3]= 1 + a^2
+```
+
+```mathematica
+In[4]:= g = Compile[{{n, _Integer}}, Module[{s = 0.}, Do[s = s + 1/i^2, {i, 1, n}]; s]]; g[100]
+Out[4]= 1.63498
+
+In[5]:= Compile[{{z, _Complex}}, z^2][1.0 + 2.0 I]
+Out[5]= -3.0 + 4.0*I
+
+In[6]:= Compile[{{m, _Real, 2}}, m[[All, 1]]][{{1., 2.}, {3., 4.}}]
+Out[6]= {1.0, 3.0}
+```
+
+A 5-point stencil: read an argument grid, write a local copy
+
+```mathematica
+In[7]:= Compile[{{a, _Real, 2}}, Module[{n = Length[a], b = a}, Do[b[[i, j]] = (a[[i - 1, j]] + a[[i + 1, j]] + a[[i, j - 1]] + a[[i, j + 1]])/4, {i, 2, n - 1}, {j, 2, n - 1}]; b]][Table[1.0 (10 i + j), {i, 1, 3}, {j, 1, 3}]]
+Out[7]= {{11.0, 12.0, 13.0}, {21.0, 22.0, 23.0}, {31.0, 32.0, 33.0}}
+```
+
+### Scope (1)
+
+```mathematica
+In[8]:= Compile[{{n, _Integer}}, n^20, "BigIntegers" -> True][99]
+Out[8]= 8179069375972308708891986605443361898001
+```
+
+### Options (4)
+
+RuntimeAttributes -> Listable: the object threads over lists
+
+```mathematica
+In[9]:= h = Compile[{{x, _Real}}, If[x > 0, 1., -1.], RuntimeAttributes -> Listable]; h[{1., -2., 3.}]
+Out[9]= {1.0, -1.0, 1.0}
+```
+
+A rank-1 parameter consumes one level, so this maps over the rows
+
+```mathematica
+In[10]:= Compile[{{v, _Real, 1}}, Total[v], RuntimeAttributes -> Listable][ {{1., 2.}, {3., 4.}}]
+Out[10]= {3.0, 7.0}
+```
+
+```mathematica
+In[11]:= f = Compile[{{x, _Real}}, Sin[x] Cos[x] + x^3, WorkingPrecision -> 40]; f[N[7/5, 40]]
+Out[11]= 2.9114940750779524597719268763562110530148
+
+In[12]:= Compile[{{z, _Complex}}, Exp[z] + z^2, WorkingPrecision -> 45][N[1/2 + I/3, 45]]
+Out[12]= 1.696859506173835946311071541529964410492750645 + 0.8727861896014286091867555415942467494395774456*I
+```
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| NDSolve Van der Pol mu=10 | 0.441 s | 0.566 s | 3.32 s |
+| NDSolve harmonic oscillator | 0.216 s | 0.214 s | 7.49 s |
+| NDSolve long horizon, t to 200 | 0.111 s | 0.152 s | 2.89 s |
+| NDSolve y'=-y on [0,10] | 0.065 s | 0.156 s | 2.41 s |
+| NDSolve y'=y^2 t nonlinear | 0.034 s | 0.135 s | 0.3 s |
 
 ## Implementation notes
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [HoldAll](../../expression-information/HoldAll/), [Power](../../arithmetic/Power/), [Gamma](../../special-functions/Gamma/), [Erf](../../special-functions/Erf/), [BesselJ](../../special-functions/BesselJ/), [Zeta](../../special-functions/Zeta/), [If](../../control-flow/If/), [Sum](../../calculus/Sum/)
 
 - Source: [`src/compile/compiled_function.c`](https://github.com/stblake/mathilda/blob/main/src/compile/compiled_function.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+- Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_compile_arbprec.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_arbprec.c)
+- Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)

@@ -5,24 +5,38 @@
 
 ## Description
 
-```text
-FindRoot[f, {x, x0}]
-    searches for a numerical root of f starting from x = x0.
-FindRoot[lhs == rhs, {x, x0}]
-    searches for a numerical solution to the equation.
-FindRoot[f, {x, x0, x1}]
-    uses a variant of the secant method with x0 and x1 as the first two approximations.
-FindRoot[f, {x, xstart, xmin, xmax}]
-    uses Brent's method on the bracket [xmin, xmax].
-FindRoot[{f1, f2, ...}, {{x, x0}, {y, y0}, ...}]
-    searches for a simultaneous numerical root of the system.
+**`FindRoot[f, {x, x0}]`**
+
+searches for a numerical root of f starting from x = x0.
+
+**`FindRoot[lhs == rhs, {x, x0}]`**
+
+searches for a numerical solution to the equation.
+
+**`FindRoot[f, {x, x0, x1}]`**
+
+uses a variant of the secant method with x0 and x1 as the first two approximations.
+
+**`FindRoot[f, {x, xstart, xmin, xmax}]`**
+
+uses Brent's method on the bracket \[xmin, xmax\].
+
+**`FindRoot[{f1, f2, ...}, {{x, x0}, {y, y0}, ...}]`**
+
+searches for a simultaneous numerical root of the system.
+
+<details>
+<summary>Notes</summary>
 
 Options: Method ('Newton' | 'Secant' | 'Brent' | Automatic), WorkingPrecision, MaxIterations, AccuracyGoal, PrecisionGoal, DampingFactor, Jacobian, StepMonitor, EvaluationMonitor.  FindRoot has HoldAll and effectively uses Block to localize variables.
-```
 
-## Examples
+</details>
 
-All examples below are verified against the current Mathilda build.
+## Examples (15)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= FindRoot[Sin[x] + Exp[x], {x, 0}]
@@ -34,11 +48,15 @@ Out[2]= {x -> 0.739085}
 In[3]:= FindRoot[{y == Exp[x], x + y == 2}, {{x, 1}, {y, 1}}]
 Out[3]= {x -> 0.442854, y -> 1.55715}
 
-In[4]:= FindRoot[Sin[x], {x, 3}, WorkingPrecision -> 50]
-Out[4]= {x -> 3.14159265358979323846264338328757519744320987120168}
+In[4]:= FindRoot[(Cos[z + I] - 2) (z + 2), {z, 1.0 + 0.1 I}]
+Out[4]= {z -> -1.66935e-13 + 0.316958*I}
+```
 
-In[5]:= FindRoot[(Cos[z + I] - 2) (z + 2), {z, 1.0 + 0.1 I}]
-Out[5]= {z -> -3.15544e-27 + 0.316958*I}
+### Options (4)
+
+```mathematica
+In[5]:= FindRoot[Sin[x], {x, 3}, WorkingPrecision -> 50]
+Out[5]= {x -> 3.14159265358979323846264338328757519744320987120168}
 
 In[6]:= FindRoot[Cos[x] - x, {x, 0, 1}, Method -> "Brent"]
 Out[6]= {x -> 0.739085}
@@ -49,6 +67,87 @@ Out[7]= {x -> 1.41421}
 In[8]:= FindRoot[(x - 1)^3, {x, 0.5}, DampingFactor -> 3]
 Out[8]= {x -> 1.0}
 ```
+
+### Worked examples (2)
+
+```mathematica
+In[9]:= FindRoot[Zeta[s] == 1.05, {s, 5}]
+Out[9]= {s -> 4.61297}
+
+In[10]:= FindRoot[2^(-s)(Zeta[s] - Zeta[s, 3/2]) == 0, {s, 20 I}]
+Out[10]= {s -> 0.948962 + 20.3778*I}
+```
+
+### Applications (5)
+
+```mathematica
+In[11]:= FindRoot[x^2 - 2, {x, 1}]
+Out[11]= {x -> 1.41421}
+
+In[12]:= FindRoot[Cos[x] == x, {x, 1}, WorkingPrecision -> 40]
+Out[12]= {x -> 0.73908513321516064165531208767387340401341}
+
+In[13]:= FindRoot[BesselJ[0, x], {x, 2, 3}]
+Out[13]= {x -> 2.40483}
+
+In[14]:= FindRoot[Sin[x] == 0, {x, 3}, WorkingPrecision -> 40]
+Out[14]= {x -> 3.1415926535897932384626433832875751974431}
+
+In[15]:= FindRoot[{x^2 + y^2 == 1, x == y}, {{x, 1}, {y, 1}}]
+Out[15]= {x -> 0.707107, y -> 0.707107}
+```
+
+## Algorithm
+
+findroot.c
+
+FindRoot[f, {x, x0}] — Mathematica-compatible iterative numerical root finding. Has `HoldAll, Protected` attributes; uses Block-style local binding of the search variables so the user's global symbol table is not perturbed during iteration.
+
+Supported forms ---------------
+
+```text
+  FindRoot[f,        {x, x0}]               Newton from a single start
+  FindRoot[lhs==rhs, {x, x0}]               equation form (lhs - rhs)
+  FindRoot[f,        {x, x0, x1}]           secant from two starts
+  FindRoot[f,        {x, xstart, xmin, xmax}]  Brent bracket
+  FindRoot[{f1,...}, {{x, x0}, {y, y0}, ...}] system Newton
+```
+
+Options (Rule[…] in the trailing positions, in any order):
+
+```text
+  Method            -> Automatic | "Newton" | "Secant" | "Brent"
+  WorkingPrecision  -> MachinePrecision | digit count
+  MaxIterations     -> integer (default 100)
+  AccuracyGoal      -> Automatic | Infinity | digit count
+  PrecisionGoal     -> Automatic | Infinity | digit count
+  DampingFactor     -> positive number (default 1)
+  Jacobian          -> user-supplied derivative / Jacobian matrix
+  StepMonitor       -> :> expression  (held; evaluated each step)
+  EvaluationMonitor -> :> expression  (held; evaluated each f-eval)
+```
+
+Output: { var -> value } or { var -> v1, ... } for a system. Returns NULL (unevaluated) when arguments cannot be interpreted as numeric.
+
+Memory: receives `res` owned by caller (the evaluator). Returns a freshly allocated Expr* on success, or NULL on failure. Never frees
+
+```text
+`res` itself. All temporary OwnValues installed for search variables
+```
+
+are removed before returning, even on the error path.
+
+## Performance
+
+Against other systems, from the benchmark suite (same input, results cross-checked for agreement):
+
+| case | Mathilda | Wolfram | Python |
+|---|---:|---:|---:|
+| NSolve all roots, degree 50 | 15.9 s | 0.907 s | 0.184 s |
+| FindRoot 2x2 nonlinear system | 0.03 s | 0.046 s | 0.014 s |
+| FindRoot x^3-2x-5 | 0.017 s | 0.042 s | 0.004 s |
+| FindRoot Cos[x]==x | 0.011 s | 0.042 s | 0.003 s |
+| FindRoot Tan[x]==x near 4.5 | 0.005 s | 0.045 s | 0.005 s |
 
 ## Implementation notes
 
@@ -93,44 +192,17 @@ fails to converge.
 
 **Attributes:** `HoldAll`, `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [Block](../../scoping-constructs/Block/), [Rule](../../assignment-and-rules/Rule/), [Solve](../../solutions-of-equations/Solve/), [D](../../calculus/D/), [HurwitzZeta](../../special-functions/HurwitzZeta/), [PolyGamma](../../special-functions/PolyGamma/), [Complex](../../arithmetic/Complex/), [Sin](../../elementary-functions/Sin/)
 
 - W. H. Press et al., *Numerical Recipes*, 3rd ed. (Cambridge, 2007) — Newton, secant, Brent's method.
 - Source: [`src/numerical_roots/findroot.c`](https://github.com/stblake/mathilda/blob/main/src/numerical_roots/findroot.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
+- Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_findroot.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findroot.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= FindRoot[x^2 - 2, {x, 1}]
-Out[1]= {x -> 1.41421}
-```
-
-```mathematica
-In[1]:= FindRoot[Cos[x] == x, {x, 1}, WorkingPrecision -> 40]
-Out[1]= {x -> 0.73908513321516064165531208767387340401341}
-```
-
-```mathematica
-In[1]:= FindRoot[BesselJ[0, x], {x, 2, 3}]
-Out[1]= {x -> 2.40483}
-```
-
-```mathematica
-In[1]:= FindRoot[Sin[x] == 0, {x, 3}, WorkingPrecision -> 40]
-Out[1]= {x -> 3.1415926535897932384626433832875751974431}
-```
-
-```mathematica
-In[1]:= FindRoot[{x^2 + y^2 == 1, x == y}, {{x, 1}, {y, 1}}]
-Out[1]= {x -> 0.707107, y -> 0.707107}
-```
 
 ### Notes
 

@@ -14,6 +14,8 @@
 #include "show.h"
 #include "render3d.h"
 #include "graphics_json.h"
+#include "image.h"
+#include "meminfo.h"
 #include "print_latex.h"
 #include "version.h"
 #include <stdio.h>
@@ -186,9 +188,16 @@ void process_input(const char* input, int line_number) {
      * suppresses the window. graphics_show/graphics3d_show borrow the expr
      * (no ownership transfer); on a non-graphics build their stubs print a
      * one-line "install raylib" hint instead. */
+    /* MATHILDA_NO_WINDOW suppresses the display, for callers that evaluate expressions in bulk and do
+     * not want a window per Graphics result. Documentation generation is the case that forced this:
+     * site/generate.py re-verifies every documented example against this binary, and the ones calling
+     * Plot or Manipulate opened a real Raylib window each -- dozens of them, over the user's work,
+     * during what should be a silent batch job. The expression still evaluates and still prints; only
+     * the window is withheld. */
     if (to_print && to_print->type == EXPR_FUNCTION
         && to_print->data.function.head->type == EXPR_SYMBOL
-        && to_print->data.function.arg_count >= 1) {
+        && to_print->data.function.arg_count >= 1
+        && getenv("MATHILDA_NO_WINDOW") == NULL) {
         if (to_print->data.function.head->data.symbol.name == SYM_Graphics) graphics_show(to_print);
         else if (to_print->data.function.head->data.symbol.name == SYM_Graphics3D) graphics3d_show(to_print);
     }
@@ -323,6 +332,7 @@ void repl_loop(void) {
 
 #include "core.h"
 #include "loadmodule.h"
+#include "context.h"
 
 /* =====================================================================
  * Minimal NDJSON pipe-mode protocol
@@ -419,6 +429,53 @@ static void json_escape(const char* s, char* out, size_t outlen) {
     out[i] = '\0';
 }
 
+/* `?x` may sit at the end of a CompoundExpression -- `a = 5; ?Sin` -- whose
+ * value IS that last element, so the head to test is the final one, not the
+ * top-level CompoundExpression. Without unwrapping, `D[x,x]; ?Find*` fell
+ * through to the ordinary expression path and the front end tried to typeset a
+ * help result as mathematics. */
+static Expr* pipe_final_expr(Expr* e) {
+    while (e && e->type == EXPR_FUNCTION && e->data.function.head
+           && e->data.function.head->type == EXPR_SYMBOL
+           && e->data.function.head->data.symbol.name == SYM_CompoundExpression
+           && e->data.function.arg_count > 0) {
+        e = e->data.function.args[e->data.function.arg_count - 1];
+    }
+    return e;
+}
+
+/* The symbol `?name` asked about, or NULL. Borrowed -- do not free.
+ *
+ * The usage message carried only the text, so the notebook had a docstring and no way to know which
+ * symbol it described, and therefore could not offer a link to that symbol's page. */
+/* The kernel's resident bytes, for the notebook's status bar.
+ *
+ * Attached to the `done` message rather than exposed as a separate request: memory can only have
+ * changed because something was evaluated, `done` is sent exactly then, and a poll would either
+ * lag or add traffic for a number that was already available. Zero when the platform cannot report
+ * it, which the front end shows as nothing rather than as "0 B". */
+static uint64_t pipe_memory_bytes(void) {
+    uint64_t b = 0;
+    if (!meminfo_current(&b)) return 0;
+    return b;
+}
+
+static const char* pipe_info_symbol(Expr* parsed) {
+    Expr* e = pipe_final_expr(parsed);
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 1) return NULL;
+    Expr* a = e->data.function.args[0];
+    if (a && a->type == EXPR_SYMBOL) return a->data.symbol.name;
+    if (a && a->type == EXPR_STRING) return a->data.string;
+    return NULL;
+}
+
+static bool pipe_is_info_query(Expr* parsed) {
+    Expr* e = pipe_final_expr(parsed);
+    return e && e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Information;
+}
+
 static void pipe_process_input(const char* input, int id) {
     Expr* parsed = parse_expression(input);
     if (!parsed) {
@@ -448,9 +505,33 @@ static void pipe_process_input(const char* input, int id) {
         free(esc);
         free(buf);
         char dbuf[64];
-        snprintf(dbuf, sizeof(dbuf), "{\"id\":%d,\"type\":\"done\"}", id);
+        snprintf(dbuf, sizeof(dbuf), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
         pipe_emit(dbuf);
         return;
+    }
+
+    /* `?sym` / Information[sym] yields the raw docstring as a String, and a
+     * usage message is not an expression: it must not be quoted, InputForm
+     * escaped, or handed to the front end's math renderer. Captured from the
+     * *input* head before `parsed` is freed, exactly as the interactive REPL
+     * does above, so only help queries take this path and an ordinary string
+     * result still comes back quoted. */
+    bool info_query = pipe_is_info_query(parsed);
+    /* Captured BEFORE evaluate/expr_free, into a buffer rather than as a borrowed pointer.
+     *
+     * The first version read it after the free, which is undefined behaviour that happened to yield
+     * nothing -- the notebook received no symbol and could not offer a documentation link. A symbol
+     * name is interned and would have survived, but `?"name"` gives a STRING whose storage dies with
+     * the tree, so the copy covers both. */
+    char info_sym[128];
+    info_sym[0] = '\0';
+    if (info_query) {
+        const char* isname = pipe_info_symbol(parsed);
+        if (isname) {
+            strncpy(info_sym, isname, sizeof(info_sym) - 1);
+            info_sym[sizeof(info_sym) - 1] = '\0';
+        }
     }
 
     Expr* evaluated = evaluate(parsed);
@@ -458,9 +539,113 @@ static void pipe_process_input(const char* input, int id) {
 
     if (!evaluated) {
         char buf[64];
-        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
         pipe_emit(buf);
         return;
+    }
+
+    /* `?Pat*` evaluates to the LIST of matching names. Emit it as its own
+     * message so the notebook can lay it out as a grid; as a plain expression
+     * it would be a single long braced line run through the math renderer. */
+    if (info_query && evaluated->type == EXPR_FUNCTION
+        && evaluated->data.function.head
+        && evaluated->data.function.head->type == EXPR_SYMBOL
+        && evaluated->data.function.head->data.symbol.name == SYM_List) {
+        size_t n = evaluated->data.function.arg_count;
+        size_t cap = 64;
+        for (size_t i = 0; i < n; i++) {
+            Expr* e = evaluated->data.function.args[i];
+            if (e->type == EXPR_STRING) cap += strlen(e->data.string) * 6 + 8;
+        }
+        char* buf = malloc(cap);
+        if (buf) {
+            int off = snprintf(buf, cap, "{\"id\":%d,\"type\":\"names\",\"payload\":[", id);
+            bool first = true;
+            for (size_t i = 0; i < n && off > 0 && (size_t)off < cap; i++) {
+                Expr* e = evaluated->data.function.args[i];
+                if (e->type != EXPR_STRING) continue;
+                size_t ecap = strlen(e->data.string) * 6 + 8;
+                char* esc = malloc(ecap);
+                if (!esc) break;
+                json_escape(e->data.string, esc, ecap);
+                off += snprintf(buf + off, cap - (size_t)off, "%s\"%s\"",
+                                first ? "" : ",", esc);
+                free(esc);
+                first = false;
+            }
+            if (off > 0 && (size_t)off < cap) snprintf(buf + off, cap - (size_t)off, "]}");
+            pipe_emit(buf);
+            free(buf);
+        }
+        expr_free(evaluated);
+        char done[64];
+        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
+        pipe_emit(done);
+        return;
+    }
+
+    if (info_query && evaluated->type == EXPR_STRING) {
+        const char* doc = evaluated->data.string;
+        size_t cap = strlen(doc) * 6 + 8;
+        char* esc = malloc(cap);
+        if (esc) {
+            json_escape(doc, esc, cap);
+            size_t bcap = cap + 64;
+            char* buf = malloc(bcap);
+            if (buf) {
+                const char* isym = info_sym[0] ? info_sym : NULL;
+                if (isym)
+                    snprintf(buf, bcap,
+                        "{\"id\":%d,\"type\":\"usage\",\"payload\":\"%s\","
+                        "\"symbol\":\"%s\"}", id, esc, isym);
+                else
+                    snprintf(buf, bcap,
+                        "{\"id\":%d,\"type\":\"usage\",\"payload\":\"%s\"}", id, esc);
+                pipe_emit(buf);
+                free(buf);
+            }
+            free(esc);
+        }
+        expr_free(evaluated);
+        char done[64];
+        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
+        pipe_emit(done);
+        return;
+    }
+
+    /* Image[...] / Image3D[...] → RGBA for the notebook to draw on a canvas.
+     *
+     * Before this, an image came back as type "expr" and the notebook printed its expression -- which
+     * after the storage canonicalisation reads `Image[NDArray[{{...}}], "Real"]`. Correct, and not a
+     * picture. The front end had no image output kind at all. */
+    if (evaluated->type == EXPR_FUNCTION
+        && evaluated->data.function.head
+        && evaluated->data.function.head->type == EXPR_SYMBOL) {
+        const char* ih = evaluated->data.function.head->data.symbol.name;
+        if (ih && (strcmp(ih, "Image") == 0 || strcmp(ih, "Image3D") == 0)) {
+            char* ijson = image_to_json(evaluated);
+            if (ijson) {
+                expr_free(evaluated);
+                size_t jl = strlen(ijson) + 64;
+                char* jline = malloc(jl);
+                if (jline) {
+                    snprintf(jline, jl, "{\"id\":%d,\"type\":\"image\",\"payload\":%s}",
+                             id, ijson);
+                    pipe_emit(jline);
+                    free(jline);
+                }
+                free(ijson);
+                char idone[64];
+                snprintf(idone, sizeof(idone), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
+                pipe_emit(idone);
+                return;
+            }
+            /* Not a well-formed image after all: fall through and print it as text. */
+        }
     }
 
     /* Graphics[...] / Graphics3D[...] → Plotly JSON for the notebook. */
@@ -489,7 +674,8 @@ static void pipe_process_input(const char* input, int id) {
             }
             free(plotly);
             char done[64];
-            snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+            snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
             pipe_emit(done);
             return;
         }
@@ -497,7 +683,8 @@ static void pipe_process_input(const char* input, int id) {
         if (head_sym == SYM_Graphics || head_sym == SYM_Graphics3D) {
             expr_free(evaluated);
             char done[64];
-            snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+            snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
             pipe_emit(done);
             return;
         }
@@ -512,7 +699,8 @@ static void pipe_process_input(const char* input, int id) {
         snprintf(buf, sizeof(buf),
                  "{\"id\":%d,\"type\":\"error\",\"message\":\"Out of memory\"}", id);
         pipe_emit(buf);
-        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
         pipe_emit(buf);
         return;
     }
@@ -525,7 +713,8 @@ static void pipe_process_input(const char* input, int id) {
         snprintf(buf, sizeof(buf),
                  "{\"id\":%d,\"type\":\"error\",\"message\":\"Out of memory\"}", id);
         pipe_emit(buf);
-        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
         pipe_emit(buf);
         return;
     }
@@ -559,7 +748,8 @@ static void pipe_process_input(const char* input, int id) {
     free(latex_esc);
 
     char done[64];
-    snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+    snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\",\"memory\":%llu}",
+                 id, (unsigned long long)pipe_memory_bytes());
     pipe_emit(done);
 }
 
@@ -808,13 +998,18 @@ int main(int argc, char** argv) {
      * far better than the previous silent load of a non-functional kernel. */
     mathilda_load_module("init.m");
 
+    int rc = 0;
     if (script) {
-        return run_script_file(script);
-    }
-    if (pipe_mode) {
+        rc = run_script_file(script);
+    } else if (pipe_mode) {
         pipe_mode_loop();
     } else {
         repl_loop();
     }
-    return 0;
+    /* Tear down the context subsystem so its $Context / $ContextPath strings and
+     * any open package frames are freed rather than lingering as leaks at exit.
+     * context_init() is called from core_init(); this is its symmetric partner,
+     * which was previously never invoked (dead code). Nothing runs after this. */
+    context_shutdown();
+    return rc;
 }

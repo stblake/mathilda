@@ -5,15 +5,18 @@
 
 ## Description
 
-```text
-FileNameSplit["name"]
-    splits a file name into a list of parts.
-FileNameSplit by default uses pathname separators and other conventions suitable for your operating system.
-FileNameSplit[..., OperatingSystem->"os"] uses the conventions of the specified operating system; possible choices are "Windows", "MacOSX", and "Unix".
-Absolute file names that begin with a pathname separator yield a list of parts that starts with "".
-Under Windows, the drive or share name is treated as the first part of the file name.
-FileNameSplit just operates on names of files; it does not actually search for the file specified.
-```
+**`FileNameSplit["name"]`**
+
+splits a file name into a list of parts.
+
+**`FileNameSplit[..., OperatingSystem->"os"] uses the conventions of the specified operating system; possible choices are "Windows", "MacOSX", and "Unix".`**
+
+<details>
+<summary>Notes</summary>
+
+FileNameSplit by default uses pathname separators and other conventions suitable for your operating system. Absolute file names that begin with a pathname separator yield a list of parts that starts with "". Under Windows, the drive or share name is treated as the first part of the file name. FileNameSplit just operates on names of files; it does not actually search for the file specified.
+
+</details>
 
 ## Examples
 
@@ -31,11 +34,10 @@ _No verified examples yet for this function._
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
+
+**See also:** [List](../../other-advanced/List/), [FileNameJoin](../../file-io/FileNameJoin/)
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
+- Tests: [`tests/test_files.c`](https://github.com/stblake/mathilda/blob/main/tests/test_files.c)

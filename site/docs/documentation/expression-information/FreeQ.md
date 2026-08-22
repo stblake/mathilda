@@ -5,19 +5,23 @@
 
 ## Description
 
-```text
-FreeQ[expr, form]
-    yields True if no subexpression of expr matches form, False otherwise.
-FreeQ[expr, form, levelspec]
-    restricts the search to parts of expr at the levels specified by
-    levelspec.
-FreeQ[form]
-    is the operator form: FreeQ[form][expr] == FreeQ[expr, form].
-```
+**`FreeQ[expr, form]`**
 
-## Examples
+yields True if no subexpression of expr matches form, False otherwise.
 
-All examples below are verified against the current Mathilda build.
+**`FreeQ[expr, form, levelspec]`**
+
+restricts the search to parts of expr at the levels specified by levelspec.
+
+**`FreeQ[form]`**
+
+is the operator form: FreeQ\[form\]\[expr\] == FreeQ\[expr, form\].
+
+## Examples (8)
+
+Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (4)
 
 ```mathematica
 In[1]:= FreeQ[{1, 2, 4, 1, 0}, 0]
@@ -26,8 +30,26 @@ Out[1]= False
 In[2]:= FreeQ[{a, b, b, a, a, a}, _Integer]
 Out[2]= True
 
-In[3]:= {f[3 x, x], f[a x, x], f[(1 + x) x, x]}
-Out[3]= {3 f[x, x], a f[x, x], f[x (1 + x), x]}
+In[3]:= f[c_ x_, x_] := c f[x, x] /; FreeQ[c, x]
+
+In[4]:= {f[3 x, x], f[a x, x], f[(1 + x) x, x]}
+Out[4]= {3 f[x, x], a f[x, x], f[x (1 + x), x]}
+```
+
+### Applications (4)
+
+```mathematica
+In[5]:= FreeQ[x^2 + y^2, z]
+Out[5]= True
+
+In[6]:= FreeQ[x^2 + y^2, y]
+Out[6]= False
+
+In[7]:= FreeQ[D[Sin[x] Exp[x], x], Cos]
+Out[7]= False
+
+In[8]:= Select[Range[20], FreeQ[FactorInteger[#], {2, _}] &]
+Out[8]= {1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
 ```
 
 ## Implementation notes
@@ -40,38 +62,16 @@ Out[3]= {3 f[x, x], a f[x, x], f[x (1 + x), x]}
 
 **Attributes:** `Protected`.
 
-## Implementation status
-
-**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
-
 ## References
 
 - Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+- Tests: [`tests/test_cherry_dilog.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_dilog.c)
+- Tests: [`tests/test_cherry_ei.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_ei.c)
+- Tests: [`tests/test_cherry_li.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_li.c)
+- Tests: [`tests/test_condition_downvalue.c`](https://github.com/stblake/mathilda/blob/main/tests/test_condition_downvalue.c)
 
 ## Notes & additional examples
-
-### Worked examples
-
-```mathematica
-In[1]:= FreeQ[x^2 + y^2, z]
-Out[1]= True
-```
-
-```mathematica
-In[1]:= FreeQ[x^2 + y^2, y]
-Out[1]= False
-```
-
-```mathematica
-In[1]:= FreeQ[D[Sin[x] Exp[x], x], Cos]
-Out[1]= False
-```
-
-```mathematica
-In[1]:= Select[Range[20], FreeQ[FactorInteger[#], {2, _}] &]
-Out[1]= {1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
-```
 
 ### Notes
 

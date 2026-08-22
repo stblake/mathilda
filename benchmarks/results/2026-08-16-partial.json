@@ -1,0 +1,255 @@
+{
+ "host": {
+  "date": "2026-08-16",
+  "missing_optional_deps": [],
+  "platform": "macOS-15.7.4-x86_64-i386-64bit-Mach-O",
+  "machine": "x86_64",
+  "processor": "i386",
+  "mathilda": "Mathilda 0.054 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)",
+  "mathilda_bin": "/Users/user/Mathilda_dev/Mathilda/Mathilda",
+  "python_bin": "/usr/local/bin/python3.11",
+  "python_libs": "3.11.15 2.4.4 1.17.1 1.14.0",
+  "wolframscript": "/Applications/Mathematica.app/Contents/MacOS/wolframscript",
+  "runner_python": "3.14.6",
+  "local_versions": {
+   "numpy": "absent",
+   "scipy": "absent",
+   "sympy": "absent",
+   "mpmath": "1.4.1",
+   "numba": "absent",
+   "networkx": "absent"
+  }
+ },
+ "rows": [
+  {
+   "experiment": "82-dual-annealing-testbed",
+   "group": "D uncovered subsystems",
+   "label": "01 Chained trig 1D",
+   "times": {
+    "mathilda": 0.608,
+    "python": 66.285
+   },
+   "checks": {
+    "mathilda": "-17602",
+    "python": "-17602"
+   },
+   "ratio": 0.009172512634834427,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "82-dual-annealing-testbed",
+   "group": "D uncovered subsystems",
+   "label": "02 Schwefel 2D",
+   "times": {
+    "mathilda": 1.936,
+    "python": 124.41
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.015561450044208665,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "82-dual-annealing-testbed",
+   "group": "D uncovered subsystems",
+   "label": "03 Schaffer N2 2D",
+   "times": {
+    "mathilda": 2.256,
+    "python": 175.15
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.012880388238652582,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "82-dual-annealing-testbed",
+   "group": "D uncovered subsystems",
+   "label": "04 Rugged sine 2D",
+   "times": {
+    "mathilda": 1.661,
+    "python": 127.125
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.013065880039331366,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "82-dual-annealing-testbed",
+   "group": "D uncovered subsystems",
+   "label": "05 Ackley 3D",
+   "times": {
+    "mathilda": 4.173,
+    "python": 288.847
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.01444709482875017,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "82-dual-annealing-testbed",
+   "group": "D uncovered subsystems",
+   "label": "06 Rastrigin 5D",
+   "times": {
+    "mathilda": 7.635,
+    "python": 394.752
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.019341257295719845,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "82-dual-annealing-testbed",
+   "group": "D uncovered subsystems",
+   "label": "07 Rastrigin 8D",
+   "times": {
+    "mathilda": 16.752,
+    "python": 635.253
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.026370595652440834,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "82-dual-annealing-testbed",
+   "group": "D uncovered subsystems",
+   "label": "08 Rosenbrock 10D",
+   "times": {
+    "mathilda": 25.817,
+    "python": 871.682
+   },
+   "checks": {
+    "mathilda": "0",
+    "python": "0"
+   },
+   "ratio": 0.02961745223602185,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "82-dual-annealing-testbed",
+   "group": "D uncovered subsystems",
+   "label": "09 Schwefel 10D",
+   "times": {
+    "mathilda": 29.147,
+    "python": 790.721
+   },
+   "checks": {
+    "mathilda": "1",
+    "python": "1"
+   },
+   "ratio": 0.0368612949447403,
+   "note": "",
+   "best_other": "python",
+   "klass": "AHEAD"
+  }
+ ],
+ "requires": {
+  "NMinimize": "present"
+ },
+ "raw": {
+  "82-dual-annealing-testbed": {
+   "mathilda": {
+    "bench": {
+     "01 Chained trig 1D": 0.608,
+     "02 Schwefel 2D": 1.936,
+     "03 Schaffer N2 2D": 2.256,
+     "04 Rugged sine 2D": 1.661,
+     "05 Ackley 3D": 4.173,
+     "06 Rastrigin 5D": 7.635,
+     "07 Rastrigin 8D": 16.752,
+     "08 Rosenbrock 10D": 25.817,
+     "09 Schwefel 10D": 29.147
+    },
+    "check": {
+     "01 Chained trig 1D": "-17602",
+     "02 Schwefel 2D": "0",
+     "03 Schaffer N2 2D": "0",
+     "04 Rugged sine 2D": "0",
+     "05 Ackley 3D": "0",
+     "06 Rastrigin 5D": "0",
+     "07 Rastrigin 8D": "0",
+     "08 Rosenbrock 10D": "0",
+     "09 Schwefel 10D": "1"
+    },
+    "require": {
+     "NMinimize": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "01 Chained trig 1D": 66.285,
+     "02 Schwefel 2D": 124.41,
+     "03 Schaffer N2 2D": 175.15,
+     "04 Rugged sine 2D": 127.125,
+     "05 Ackley 3D": 288.847,
+     "06 Rastrigin 5D": 394.752,
+     "07 Rastrigin 8D": 635.253,
+     "08 Rosenbrock 10D": 871.682,
+     "09 Schwefel 10D": 790.721
+    },
+    "check": {
+     "01 Chained trig 1D": "-17602",
+     "02 Schwefel 2D": "0",
+     "03 Schaffer N2 2D": "0",
+     "04 Rugged sine 2D": "0",
+     "05 Ackley 3D": "0",
+     "06 Rastrigin 5D": "0",
+     "07 Rastrigin 8D": "0",
+     "08 Rosenbrock 10D": "0",
+     "09 Schwefel 10D": "1"
+    },
+    "require": {
+     "scipy.optimize:dual_annealing": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  }
+ },
+ "elapsed_s": 21.281689167022705,
+ "durations": {
+  "82-dual-annealing-testbed": 19.46919822692871
+ },
+ "partial": true,
+ "label_problems": []
+}

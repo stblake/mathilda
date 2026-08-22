@@ -2,10 +2,10 @@
 references:
   - "J. Nocedal, S. J. Wright, *Numerical Optimization*, 2nd ed. (Springer, 2006) — BFGS, line search, conjugate gradient."
   - "W. H. Press et al., *Numerical Recipes*, 3rd ed. (Cambridge, 2007) — Brent's method."
-source: src/findmin.c
+source: src/numerical_calculus/findmin.c
 ---
 **Algorithm.** `FindMinimum` (`HoldAll | Protected`) performs local numerical
-optimization (src/findmin.c), Block-snapshotting and restoring the search
+optimization (src/numerical_calculus/findmin.c), Block-snapshotting and restoring the search
 variables' OwnValues around the iteration. The variable spec and dimension
 choose the inner solver:
 

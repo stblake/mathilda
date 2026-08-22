@@ -36,7 +36,10 @@ Expr* make_minus_infinity(void) {
 
 bool is_real_numeric(Expr* e) {
     if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT) return true;
-    if (is_rational(e, NULL, NULL)) return true;
+    /* is_rational_like, not is_rational: the latter requires int64 numerator
+     * AND denominator, so a Rational[1, 10^25] (bignum denominator) was
+     * rejected here and Min/Max/Sort declined on ordinary exact rationals. */
+    if (is_rational_like(e)) return true;
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR) return true;
 #endif

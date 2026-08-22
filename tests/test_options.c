@@ -58,7 +58,7 @@ int main(void) {
     chk("Options[GroebnerBasis]",
         "{MonomialOrder -> Lexicographic, CoefficientDomain -> Rationals, "
         "Method -> Automatic, Sort -> False, Modulus -> 0}");
-    chk("Options[Eigenvalues]", "{Cubics -> True, Quartics -> True}");
+    chk("Options[Eigenvalues]", "{Cubics -> False, Quartics -> False}");
     chk("Options[FactorInteger]", "{GaussianIntegers -> False}");
     chk("Options[SingularValueDecomposition]",
         "{Tolerance -> Automatic, TargetStructure -> \"Dense\"}");
@@ -67,7 +67,7 @@ int main(void) {
     chk("Options[Position]", "{Heads -> True}");
     /* OptionValue resolves a registered default with no explicit options. */
     chk("OptionValue[Cases, Heads]", "False");
-    chk("OptionValue[Eigenvalues, Cubics]", "True");
+    chk("OptionValue[Eigenvalues, Cubics]", "False");
     /* SetOptions edits a registered default in place. */
     chk("SetOptions[Integrate, Method -> \"RischNorman\"]", "{Method -> \"RischNorman\"}");
     chk("Options[Integrate]", "{Method -> \"RischNorman\"}");

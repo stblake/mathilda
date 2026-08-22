@@ -328,6 +328,15 @@ static void test_log_weighted(void) {
     assert_eval_eq(
         "Chop[N[Integrate[Log[x]^2/(1+x^2), {x,0,Infinity}, "
         "Method -> \"RamanujanMasterTheorem\"]] - N[Pi^3/8]]", "0", 0);
+    /* Product of two logs: Integrate[Log[x] Log[1+x^2]/x^2] = Pi.  Here the base
+     * kernel is itself a Log (not rational), so the Mellin weight Log[x] pulls a
+     * d/ds down onto the Log[1+x^2]/x^2 transform -- a strictly stronger case
+     * than the rational-R(x) log-weighted integrals above.  Verified to 22
+     * digits against the exact Pi. */
+    assert_closes("Integrate[(Log[x] Log[x^2+1])/x^2, {x,0,Infinity}, "
+                  "Method -> \"RamanujanMasterTheorem\"]", "Pi", NULL);
+    /* The exact reported input, through the full Automatic cascade. */
+    assert_closes("Integrate[(Log[x] Log[x^2+1])/x^2, {x,0,Infinity}]", "Pi", NULL);
 }
 
 /* Safety: out-of-scope / non-half-line inputs return unevaluated, never wrong,

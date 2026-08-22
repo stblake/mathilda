@@ -65,19 +65,25 @@ static Expr* val_to_expr(CompileValue v) {
 
 typedef struct { bool ok; bool is_bool; int bval; double re, im; } Ref;
 
-/* interpreter reference: substitute args, evaluate, extract (Re,Im) or bool */
+/* interpreter reference: substitute args, evaluate, extract (Re,Im) or bool.
+ *
+ * Substitution is STRUCTURAL (replace_bindings), NOT ReplaceAll: ReplaceAll
+ * evaluates the body before it substitutes, which collapses a held Switch — its
+ * `_` matches the still-symbolic discriminant, so the whole ladder reduces to the
+ * catch-all before any concrete value is bound.  This is the same trap
+ * ref_eval_arr calls out, and it makes the Switch reference wrong for every
+ * argument. */
 static Ref ref_eval(const Expr* body, const char* const* names,
                     const CompileValue* vals, size_t n) {
     Ref r; memset(&r, 0, sizeof(r));
-    Expr** rules = malloc(n * sizeof(Expr*));
+    MatchEnv* env = env_new();
     for (size_t k = 0; k < n; k++) {
-        Expr* rr[2] = { expr_new_symbol(names[k]), val_to_expr(vals[k]) };
-        rules[k] = expr_new_function(expr_new_symbol("Rule"), rr, 2);
+        Expr* v = val_to_expr(vals[k]);
+        env_set(env, names[k], v);      /* env_set copies */
+        expr_free(v);
     }
-    Expr* rl = expr_new_function(expr_new_symbol("List"), rules, n);
-    free(rules);
-    Expr* ca[2] = { expr_copy((Expr*)body), rl };
-    Expr* res = eval_and_free(expr_new_function(expr_new_symbol("ReplaceAll"), ca, 2));
+    Expr* res = eval_and_free(replace_bindings((Expr*)body, env));
+    env_free(env);
     if (!res) return r;
     if (res->type == EXPR_SYMBOL &&
         (strcmp(res->data.symbol.name, "True") == 0 || strcmp(res->data.symbol.name, "False") == 0)) {
@@ -109,10 +115,14 @@ static void cval_reim(CompileValue v, double* re, double* im, bool* isb, int* bv
 /* Compile `body` over args of the given types and compare to the interpreter
  * over `trials` random points; reals/complex parts drawn from [lo,hi],
  * integers from [ilo,ihi]. */
-static void parity(const char* name, const char* body_s,
-                   const char* const* names, const CompileType* types, size_t n,
-                   double lo, double hi, long long ilo, long long ihi, int trials) {
-    Expr* body = eval_and_free(parse_expression(body_s));
+/* The core of parity(), taking an already-parsed body (ownership transferred).
+ * Split out so parity_raw can feed it a body that must NOT be pre-evaluated:
+ * a Switch whose discriminant is symbolic collapses to its `_` catch-all under
+ * evaluation (Blank[] matches anything), and a Which/Piecewise with a literal
+ * True clause reduces before the compiler ever sees the ladder. */
+static void parity_body(const char* name, Expr* body,
+                        const char* const* names, const CompileType* types, size_t n,
+                        double lo, double hi, long long ilo, long long ihi, int trials) {
     const char* inames[8];
     for (size_t k = 0; k < n; k++) inames[k] = intern_symbol(names[k]);
     CompiledProgram* p = compile_expr(body, inames, types, n);
@@ -148,6 +158,24 @@ static void parity(const char* name, const char* body_s,
     else printf("ok:   %-30s max_rel=%.1e (%d cmps)\n", name, maxerr, cmp);
     compiled_free(p);
     expr_free(body);
+}
+
+static void parity(const char* name, const char* body_s,
+                   const char* const* names, const CompileType* types, size_t n,
+                   double lo, double hi, long long ilo, long long ihi, int trials) {
+    parity_body(name, eval_and_free(parse_expression(body_s)), names, types, n,
+                lo, hi, ilo, ihi, trials);
+}
+
+/* Same, but the body is left UNEVALUATED — for the held conditional ladders
+ * (Which / Switch / Piecewise) whose surface form does not survive evaluation
+ * with symbolic arguments.  The interpreter reference (ref_eval) still
+ * substitutes concrete values and evaluates, so the comparison is honest. */
+static void parity_raw(const char* name, const char* body_s,
+                       const char* const* names, const CompileType* types, size_t n,
+                       double lo, double hi, long long ilo, long long ihi, int trials) {
+    parity_body(name, parse_expression(body_s), names, types, n,
+                lo, hi, ilo, ihi, trials);
 }
 
 /* ------------------------------------------------------------------ *
@@ -1076,6 +1104,31 @@ int main(void) {
     parity("If complex branches", "If[Re[x] < 1, x^2, Exp[y]]", xy, CCC, 2, -1.5, 1.5, 0, 0, 300);
     parity("If bool branches", "If[x < y, y < z, x < z]", xyz, RRR, 3, -2.0, 2.0, 0, 0, 300);
     parity("If in arithmetic", "3 If[x < y, x, y] + Abs[z]", xyz, RRR, 3, -2.0, 2.0, 0, 0, 300);
+
+    /* ---- control flow: Which / Switch / Piecewise (first-match ladders) ----
+     * Held heads whose surface form does not survive evaluation with symbolic
+     * arguments, so they go through parity_raw.  Every point must match a live
+     * branch (a `True`/`_`/Piecewise default catch-all) so the ladder always
+     * yields a value; the fall-through-to-interpreter case (OP_FAIL) is a
+     * separate, deliberate divergence and is not parity-tested.
+     *
+     * Save/restore the RNG around this block so it is sequence-neutral: the
+     * downstream randomised stress tests then draw the exact trees they drew
+     * before, and none tips over its own conditioning tolerance for a reason
+     * that has nothing to do with them. */
+    uint64_t rng_saved_ladder = rng_state;
+    parity_raw("Which |x|", "Which[x < 0, -x, True, x]", xyz, RRR, 1, -3.0, 3.0, 0, 0, 300);
+    parity_raw("Which 3-way", "Which[x < -1, -1., x < 1, x, True, 1.]", xyz, RRR, 1, -3.0, 3.0, 0, 0, 300);
+    parity_raw("Which int catch-all", "Which[x > 0, x, True, 0]", xyz, III, 1, 0, 0, -8, 8, 300);
+    parity_raw("Which in arithmetic", "10 Which[x < y, 1., True, 2.] + z", xyz, RRR, 3, -2.0, 2.0, 0, 0, 300);
+    parity_raw("Piecewise 3-branch", "Piecewise[{{-x, x < 0}, {x^2, x > 1}}, x]", xyz, RRR, 1, -3.0, 3.0, 0, 0, 300);
+    parity_raw("Piecewise implicit 0", "Piecewise[{{1., x > 0}}]", xyz, RRR, 1, -2.0, 2.0, 0, 0, 300);
+    parity_raw("Piecewise nested Which", "Piecewise[{{Which[y < 0, x, True, -x], x < 0}}, x y]", xy, RRR, 2, -2.0, 2.0, 0, 0, 300);
+    parity_raw("Piecewise in arithmetic", "Piecewise[{{-x, x < 0}}, x] + 100.", xyz, RRR, 1, -3.0, 3.0, 0, 0, 300);
+    parity_raw("Switch int dispatch", "Switch[Mod[n, 3], 0, 10, 1, 20, _, 30]", ((const char*[]){ "n" }), III, 1, 0, 0, -20, 20, 300);
+    parity_raw("Switch real literal", "Switch[x, 1., 100., 2., 200., _, 300.]", xyz, RRR, 1, 0.0, 3.0, 0, 0, 200);
+    parity_raw("Switch in arithmetic", "5 + Switch[Mod[n, 2], 0, n, _, -n]", ((const char*[]){ "n" }), III, 1, 0, 0, -15, 15, 300);
+    rng_state = rng_saved_ladder;
 
     /* ---- all-real fast path parity ---- */
     {

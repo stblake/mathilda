@@ -6,33 +6,33 @@ references:
 ### Worked examples
 
 ```mathematica
-In[1]:= Expand[(x + 1)^3]
+In[1]:= Expand[(x + 1)^3]   (* a binomial power: the coefficients are the binomial coefficients *)
 Out[1]= 1 + 3 x + 3 x^2 + x^3
 ```
 
 ```mathematica
-In[1]:= Expand[(x + 1)^4]
-Out[1]= 1 + 4 x + 6 x^2 + 4 x^3 + x^4
-```
-
-```mathematica
-In[1]:= Expand[(a + b)(c + d)]
+In[1]:= Expand[(a + b)(c + d)]   (* a product of sums distributes into every pairwise term *)
 Out[1]= a c + b c + a d + b d
 ```
 
 ```mathematica
-In[1]:= Expand[(x + 2)^2 (x - 1)]
-Out[1]= -4 + 3 x^2 + x^3
-```
-
-```mathematica
-In[1]:= Expand[(1 + x + y)^3]
+In[1]:= Expand[(1 + x + y)^3]   (* several variables: the multinomial, not just the binomial, case *)
 Out[1]= 1 + 3 x + 3 x^2 + x^3 + 3 y + 6 x y + 3 x^2 y + 3 y^2 + 3 x y^2 + y^3
 ```
 
 ```mathematica
-In[1]:= Expand[(1 + x)^10]
+In[1]:= Expand[(x + 2)^2 (x - 1)]   (* numeric coefficients are folded, so terms collect and cancel *)
+Out[1]= -4 + 3 x^2 + x^3
+```
+
+```mathematica
+In[1]:= Expand[(1 + x)^10]   (* the work is polynomial in the exponent, not exponential *)
 Out[1]= 1 + 10 x + 45 x^2 + 120 x^3 + 210 x^4 + 252 x^5 + 210 x^6 + 120 x^7 + 45 x^8 + 10 x^9 + x^10
+```
+
+```mathematica
+In[1]:= Expand[(x + 1)^2/(y + 1)]   (* only the numerator expands: Expand leaves denominators alone *)
+Out[1]= (1 + 2 x + x^2)/(1 + y)
 ```
 
 ### Notes

@@ -29,3 +29,8 @@ src-tauri/gen/
 
 # Sidecar binaries
 src-tauri/binaries/
+
+# Generated mirror of site/docs/documentation, rebuilt by npm run sync:refpages
+# (which dev and build both run). Duplicating it in git would double every
+# documentation change.
+public/refpages/
