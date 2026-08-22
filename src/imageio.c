@@ -31,6 +31,7 @@
 #include "options.h"
 #include "sym_names.h"
 #include "graphics/graphics_export.h"
+#include "graphics/render.h"       /* graphics_raster_dims: aspect-aware export sizing */
 
 /* The vendored decoders. Their diagnostics are suppressed rather than fixed: the files are
  * upstream text, byte-identical to the release, so they can be re-fetched without a merge -- see
@@ -270,10 +271,19 @@ static Expr* builtin_export(Expr* res)
                  * Graphics3D); stb encodes them, so JPEG works regardless of
                  * what this Raylib build supports. */
                 int gw, gh, ow = 0, oh = 0;
-                graphics_raster_size(gobj, &gw, &gh);
-                unsigned char* rgba = is3d
-                    ? graphics3d_render_rgba(gobj, gw, gh, &ow, &oh)
-                    : graphics_render_rgba(gobj, gw, gh, &ow, &oh);
+                unsigned char* rgba;
+                if (is3d) {
+                    /* 3D keeps the simple ImageSize-or-4:3 canvas: its renderer
+                     * fits the scene to whatever region it is given. */
+                    graphics_raster_size(gobj, &gw, &gh);
+                    rgba = graphics3d_render_rgba(gobj, gw, gh, &ow, &oh);
+                } else {
+                    /* 2D sizes the canvas to the plot's AspectRatio so an
+                     * ArrayPlot/DensityPlot/ContourPlot fills its frame instead
+                     * of letterboxing horizontally inside a fixed 4:3 shape. */
+                    graphics_raster_dims(gobj, &gw, &gh);
+                    rgba = graphics_render_rgba(gobj, gw, gh, &ow, &oh);
+                }
                 if (rgba) {
                     if (is_jpg) gok = stbi_write_jpg(path, ow, oh, 4, rgba, JPEG_QUALITY);
                     else        gok = stbi_write_png(path, ow, oh, 4, rgba, ow * 4);

@@ -167,9 +167,13 @@ Writes an `Image` to a raster image file, or a `Graphics` object to an image fil
   file is pixel-identical to the on-screen plot (the same axes, ticks, labels and text).
   They therefore need graphics support compiled in (`USE_GRAPHICS`) **and** a usable GUI
   session; with none (a headless box, `ssh`, cron) they return `$Failed` gracefully rather
-  than crashing, while PDF still works. Resolution follows the `ImageSize` option
-  (default 720×540). The pixels are encoded by the vendored `stb_image_write`, so JPEG
-  output does not depend on which formats the Raylib build happens to support.
+  than crashing, while PDF still works. Resolution follows the `ImageSize` option: a width
+  (default 800) with the height derived from the plot's `AspectRatio`, sized exactly as the
+  on-screen window is, so an aspect-driven plot (`ArrayPlot`, `DensityPlot`, `ContourPlot`,
+  …) fills its frame edge-to-edge instead of letterboxing inside a fixed canvas;
+  `ImageSize -> {w, h}` pins both dimensions (then `AspectRatio` shapes the data inside that
+  box). The pixels are encoded by the vendored `stb_image_write`, so JPEG output does not
+  depend on which formats the Raylib build happens to support.
 - A `Graphics3D` object (`Plot3D`, `ParametricPlot3D`, `ComplexPlot3D`, ...) exports to
   **PNG or JPEG** through the 3D renderer, with the same graphics-support/display
   requirement; it has no vector-PDF form (PDF of a 3D scene returns `$Failed`).

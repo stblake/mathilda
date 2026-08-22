@@ -688,6 +688,51 @@ void test_window_height_fit_region_no_letterbox(void) {
     ASSERT(gfx_window_height_fit_region(width, naive_h, a, false, false, dw, dh, false, false, false) == naive_h);
 }
 
+/* Regression test for a real bug (reported via screenshot): raster export
+ * (Export["f.png", ArrayPlot[...]]/DensityPlot) sized the offscreen canvas to
+ * a fixed 4:3 shape, ignoring the plot's AspectRatio, so graphics_render_in_region
+ * letterboxed every square/aspect-driven plot with wide left/right padding
+ * while the top and bottom filled -- the "horizontal padding far too large"
+ * report. graphics_raster_dims now sizes the canvas from AspectRatio exactly as
+ * the on-screen window does, so the margin-reduced DATA REGION matches the data
+ * aspect and the plot fills its frame edge-to-edge. */
+void test_raster_dims_no_letterbox(void) {
+    /* A square 3x3 ArrayPlot: Frame -> True, Axes -> False, AspectRatio -> 1
+     * (rows/cols), PlotRange -> {{0,3},{0,3}}. */
+    struct Expr* parsed = parse_expression("ArrayPlot[{{1,2,3},{4,5,6},{7,8,9}}]");
+    ASSERT(parsed != NULL);
+    Expr* g = evaluate(parsed);
+    expr_free(parsed);
+    ASSERT(g != NULL && g->type == EXPR_FUNCTION);
+
+    int w = 0, h = 0;
+    graphics_raster_dims(g, &w, &h);
+    ASSERT(w > 0 && h > 0);
+
+    /* The margin-reduced region (same Frame margins the renderer uses) must
+     * match the data aspect of 1 -- i.e. no horizontal (or vertical) padding. */
+    float mL, mR, mT, mB;
+    gfx_horizontal_margins((float)w, /*frame=*/true, /*axes=*/false, /*label=*/false, &mL, &mR);
+    gfx_vertical_margins((float)h, /*frame=*/true, /*axes=*/false, /*label=*/false, &mT, &mB);
+    double reg_w = (double)w - mL - mR;
+    double reg_h = (double)h - mT - mB;
+    ASSERT(reg_w > 0 && reg_h > 0);
+    ASSERT(fabs(reg_h / reg_w - 1.0) < 0.02);
+
+    expr_free(g);
+
+    /* A pinned ImageSize -> {w,h} must win over AspectRatio (the user asked for
+     * that exact box), matching Mathematica. */
+    parsed = parse_expression(
+        "ArrayPlot[{{1,2,3},{4,5,6},{7,8,9}}, ImageSize -> {400, 300}]");
+    ASSERT(parsed != NULL);
+    g = evaluate(parsed);
+    expr_free(parsed);
+    graphics_raster_dims(g, &w, &h);
+    ASSERT(w == 400 && h == 300);
+    expr_free(g);
+}
+
 /* Regression test for a real bug: Polygon[] silently rendered nothing for
  * a clockwise vertex list (e.g. {{0,0},{0,1},{1,1},{1,0}}, the natural
  * reading order for a square's corners) because raylib's DrawTriangleFan
@@ -809,6 +854,7 @@ int main(void) {
     TEST(test_frame_minor_divs_policy);
     TEST(test_window_height_policy);
     TEST(test_window_height_fit_region_no_letterbox);
+    TEST(test_raster_dims_no_letterbox);
     TEST(test_polygon_signed_area_winding_detection);
     TEST(test_cmyk_to_rgb_conversion);
 #endif

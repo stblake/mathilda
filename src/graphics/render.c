@@ -2193,6 +2193,85 @@ long gfx_window_height_fit_region(long width, long height, double aspect_ratio,
     return (long)(h + 0.5);
 }
 
+/* Resolve the plot's world-coordinate range. When PlotRange pins both axes the
+ * stored range is used verbatim; otherwise the data bounding box is taken and
+ * grown by PlotRangePadding, with a spike-resistant y-band for runaway curves
+ * (Tan near its asymptotes) and either axis overridden where PlotRange pinned
+ * only that one. Shared by graphics_show, graphics_render_in_region and
+ * graphics_raster_dims so the three never disagree on the extent. */
+static void gfx_resolve_range(const Expr* prims, const GfxOptions* o,
+                              PlotRange2D* range) {
+    range->xmin = DBL_MAX; range->xmax = -DBL_MAX;
+    range->ymin = DBL_MAX; range->ymax = -DBL_MAX;
+    if (!o->x_auto && !o->y_auto) { *range = o->range; return; }
+
+    compute_bbox(prims, range);
+    if (range->xmin > range->xmax) { range->xmin = -1; range->xmax = 1; }
+    if (range->ymin > range->ymax) { range->ymin = -1; range->ymax = 1; }
+    /* Replace the raw y-extent with a spike-resistant band so a curve like
+     * Tan[x] frames its visible body instead of collapsing to a flat line;
+     * gated on prims_have_runaway so smooth steep curves keep their full
+     * extent, and skipped under PlotRange -> All. */
+    if (o->y_auto && o->clip_outliers && prims_have_runaway(prims)) {
+        double* ys = NULL; size_t yn = 0, ycap = 0;
+        gather_ys(prims, &ys, &yn, &ycap);
+        if (yn > 0) {
+            double lo, hi;
+            plot_robust_yrange(ys, yn, &lo, &hi);
+            if (lo <= hi) { range->ymin = lo; range->ymax = hi; }
+        }
+        free(ys);
+    }
+    double xpad = (range->xmax - range->xmin) * o->pad_x_frac;
+    double ypad = (range->ymax - range->ymin) * o->pad_y_frac;
+    if (xpad <= 0 && o->pad_x_frac > 0) xpad = 1.0;
+    if (ypad <= 0 && o->pad_y_frac > 0) ypad = 1.0;
+    range->xmin -= xpad; range->xmax += xpad;
+    range->ymin -= ypad; range->ymax += ypad;
+    if (!o->x_auto) { range->xmin = o->range.xmin; range->xmax = o->range.xmax; }
+    if (!o->y_auto) { range->ymin = o->range.ymin; range->ymax = o->range.ymax; }
+}
+
+/* Pixel dimensions for a rasterised 2D Graphics[...] export, sized exactly the
+ * way graphics_show sizes its on-screen window: the width from ImageSize
+ * (default 800), then the height from AspectRatio via gfx_window_height and the
+ * margin-aware gfx_window_height_fit_region. Without this the offscreen
+ * RenderTexture kept a fixed 4:3 shape, so graphics_render_in_region
+ * letterboxed every aspect-driven plot (ArrayPlot's rows/cols, DensityPlot's
+ * 1, ContourPlot, ...) with wide left/right padding while the top and bottom
+ * filled -- the reported "horizontal padding far too large" bug. Sizing the
+ * canvas to the plot's own aspect makes the data region fill the frame in both
+ * directions, exactly as the interactive window already does. */
+void graphics_raster_dims(const Expr* g, int* out_w, int* out_h) {
+    *out_w = 800; *out_h = 600;
+    if (!g || g->type != EXPR_FUNCTION || g->data.function.arg_count < 1) return;
+
+    GfxOptions opts;
+    gfx_options_parse(g, &opts);
+    const Expr* prims = g->data.function.args[0];
+
+    PlotRange2D range;
+    gfx_resolve_range(prims, &opts, &range);
+    double data_w = range.xmax - range.xmin;
+    double data_h = range.ymax - range.ymin;
+    if (data_w <= 0) data_w = 1;
+    if (data_h <= 0) data_h = 1;
+
+    long h = gfx_window_height(opts.width, opts.height, opts.aspect_ratio,
+                               opts.aspect_full, opts.height_pinned, data_w, data_h);
+    h = gfx_window_height_fit_region(opts.width, h, opts.aspect_ratio,
+                                     opts.aspect_full, opts.height_pinned,
+                                     data_w, data_h, opts.frame, opts.axes,
+                                     opts.frame_label != NULL);
+
+    long w = opts.width;
+    if (w < 16) w = 16;
+    if (w > 8000) w = 8000;
+    if (h < 16) h = 16;
+    if (h > 8000) h = 8000;
+    *out_w = (int)w; *out_h = (int)h;
+}
+
 /* ---------------- Main entry point ---------------- */
 
 void graphics_show(const Expr* graphics_expr) {
@@ -2227,43 +2306,8 @@ void graphics_show(const Expr* graphics_expr) {
      * last re-sample -- the loop re-samples once the view leaves either. */
     double cov_lo = 0.0, cov_hi = 0.0, ref_vw = -1.0;
 
-    PlotRange2D range = { DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX };
-    if (!opts.x_auto && !opts.y_auto) {
-        range = opts.range;
-    } else {
-        compute_bbox(prims, &range);
-        if (range.xmin > range.xmax) { range.xmin = -1; range.xmax = 1; }
-        if (range.ymin > range.ymax) { range.ymin = -1; range.ymax = 1; }
-        /* Replace the raw y-extent with a spike-resistant band so a curve like
-         * Tan[x] (whose adaptive samples climb to ~1e16 near its asymptotes)
-         * frames its visible body instead of collapsing to a flat line. Gated
-         * on prims_have_runaway: only curves with a near-vertical asymptote are
-         * clipped, so smooth steep curves (x^3, Exp) keep their full, legitimate
-         * extent. Skipped entirely under PlotRange -> All. */
-        if (opts.y_auto && opts.clip_outliers && prims_have_runaway(prims)) {
-            double* ys = NULL; size_t yn = 0, ycap = 0;
-            gather_ys(prims, &ys, &yn, &ycap);
-            if (yn > 0) {
-                double lo, hi;
-                plot_robust_yrange(ys, yn, &lo, &hi);
-                if (lo <= hi) { range.ymin = lo; range.ymax = hi; }
-            }
-            free(ys);
-        }
-        double xpad = (range.xmax - range.xmin) * opts.pad_x_frac;
-        double ypad = (range.ymax - range.ymin) * opts.pad_y_frac;
-        /* A zero-width range still needs *some* padding to be visible -- but
-         * only when padding is actually wanted (PlotRangePadding -> None
-         * means exactly 0, always). */
-        if (xpad <= 0 && opts.pad_x_frac > 0) xpad = 1.0;
-        if (ypad <= 0 && opts.pad_y_frac > 0) ypad = 1.0;
-        range.xmin -= xpad; range.xmax += xpad;
-        range.ymin -= ypad; range.ymax += ypad;
-        /* Override the explicitly fixed axis (e.g. PlotRange -> {ymin, ymax}
-         * pins y while x remains data-driven). */
-        if (!opts.x_auto) { range.xmin = opts.range.xmin; range.xmax = opts.range.xmax; }
-        if (!opts.y_auto) { range.ymin = opts.range.ymin; range.ymax = opts.range.ymax; }
-    }
+    PlotRange2D range;
+    gfx_resolve_range(prims, &opts, &range);
 
     double data_w = range.xmax - range.xmin;
     double data_h = range.ymax - range.ymin;
@@ -2684,54 +2728,25 @@ void graphics_render_in_region(const Expr* graphics_expr,
     /* Background fill for the content region. */
     DrawRectangle((int)rx, (int)ry, (int)rw, (int)rh, to_raylib(opts.background));
 
-    PlotRange2D range = { DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX };
-    if (!opts.x_auto && !opts.y_auto) {
-        range = opts.range;
-    } else {
-        compute_bbox(prims, &range);
-        if (range.xmin > range.xmax) { range.xmin = -1; range.xmax = 1; }
-        if (range.ymin > range.ymax) { range.ymin = -1; range.ymax = 1; }
-        if (opts.y_auto && opts.clip_outliers && prims_have_runaway(prims)) {
-            double* ys = NULL; size_t yn = 0, ycap = 0;
-            gather_ys(prims, &ys, &yn, &ycap);
-            if (yn > 0) {
-                double lo, hi;
-                plot_robust_yrange(ys, yn, &lo, &hi);
-                if (lo <= hi) { range.ymin = lo; range.ymax = hi; }
-            }
-            free(ys);
-        }
-        double xpad = (range.xmax - range.xmin) * opts.pad_x_frac;
-        double ypad = (range.ymax - range.ymin) * opts.pad_y_frac;
-        if (xpad <= 0 && opts.pad_x_frac > 0) xpad = 1.0;
-        if (ypad <= 0 && opts.pad_y_frac > 0) ypad = 1.0;
-        range.xmin -= xpad; range.xmax += xpad;
-        range.ymin -= ypad; range.ymax += ypad;
-        if (!opts.x_auto) { range.xmin = opts.range.xmin; range.xmax = opts.range.xmax; }
-        if (!opts.y_auto) { range.ymin = opts.range.ymin; range.ymax = opts.range.ymax; }
-    }
+    PlotRange2D range;
+    gfx_resolve_range(prims, &opts, &range);
 
     double data_w = range.xmax - range.xmin;
     double data_h = range.ymax - range.ymin;
     if (data_w <= 0) data_w = 1;
     if (data_h <= 0) data_h = 1;
 
-    /* Plot sub-region inside the content region (accounts for margins). */
+    /* Plot sub-region inside the content region (accounts for margins). Uses
+     * the same gfx_horizontal/vertical_margins policy as graphics_show and the
+     * export sizing in graphics_raster_dims, so the region the data renders
+     * into matches the aspect-corrected canvas exactly and the plot fills its
+     * frame edge-to-edge with no letterboxing. */
     float preg_x = rx, preg_y = ry, preg_w = rw, preg_h = rh;
-    if (opts.frame) {
-        float mL = rw * 0.05f; if (mL < 50.0f) mL = 50.0f;
-        float mR = rw * 0.05f; if (mR < 20.0f) mR = 20.0f;
-        float mT = rh * 0.05f; if (mT < 28.0f) mT = 28.0f;
-        float mB = rh * 0.05f; if (mB < 48.0f) mB = 48.0f;
-        if (mL + mR < rw - 40.0f && mT + mB < rh - 40.0f) {
-            preg_x = rx + mL; preg_y = ry + mT;
-            preg_w = rw - mL - mR; preg_h = rh - mT - mB;
-        }
-    } else if (opts.axes) {
-        float mL = rw * 0.06f; if (mL < 52.0f) mL = 52.0f;
-        float mR = rw * 0.03f; if (mR < 22.0f) mR = 22.0f;
-        float mT = rh * 0.05f; if (mT < 34.0f) mT = 34.0f;
-        float mB = rh * 0.07f; if (mB < 52.0f) mB = 52.0f;
+    if (opts.frame || opts.axes) {
+        bool has_label = opts.frame_label != NULL;
+        float mL, mR, mT, mB;
+        gfx_horizontal_margins(rw, opts.frame, opts.axes, has_label, &mL, &mR);
+        gfx_vertical_margins(rh, opts.frame, opts.axes, has_label, &mT, &mB);
         if (mL + mR < rw - 40.0f && mT + mB < rh - 40.0f) {
             preg_x = rx + mL; preg_y = ry + mT;
             preg_w = rw - mL - mR; preg_h = rh - mT - mB;

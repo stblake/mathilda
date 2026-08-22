@@ -52,6 +52,16 @@ long gfx_window_height_fit_region(long width, long height, double aspect_ratio,
                                   double data_w, double data_h,
                                   bool frame, bool axes, bool frame_label);
 
+/* Pixel dimensions for a rasterised 2D Graphics[...] export (PNG/JPEG). Sized
+ * exactly the way graphics_show sizes its on-screen window: the width from
+ * ImageSize (default 800), the height derived from AspectRatio via
+ * gfx_window_height + gfx_window_height_fit_region so the data region fills the
+ * frame in both directions. Passing a fixed 4:3 canvas instead letterboxed
+ * every aspect-driven plot (ArrayPlot, DensityPlot, ContourPlot, ...) with wide
+ * horizontal padding. Writes the chosen size to out_w and out_h (clamped to
+ * [16, 8000]); falls back to 800x600 when g is not a Graphics[...]. */
+void graphics_raster_dims(const Expr* g, int* out_w, int* out_h);
+
 /* Convert a CMYK color to RGB using the standard (profile-free) subtractive
  * model: r = (1-c)(1-k), g = (1-m)(1-k), b = (1-y)(1-k). Each input is first
  * clipped to [0,1]; outputs land in [0,1]. Factored out of the renderer so the
