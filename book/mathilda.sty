@@ -202,22 +202,29 @@
 %   organising. \texttt{Flat} means nested calls are spliced...}, handles ...
 \newcommand{\calloutnote}[2]{\footnote{\emph{#1.}\space #2}}
 
-% ------------------------------------------------------ generated figures ---
-% \bookfigure[width]{path}{caption}: include generated/figures/<path>.pdf, a plot
-% Export-ed to PDF by the real binary (book/tools/gen_figures.py from
-% book/figures/<path>.m). Like \mtranscript, it degrades to a visible placeholder
-% when the figure has not been generated yet, so the document always compiles.
-\newcommand{\bookfigure}[3][0.72\linewidth]{%
-  \begin{figure}[htbp]%
-    \centering
-    \IfFileExists{generated/figures/#2.pdf}{%
-      \includegraphics[width=#1]{generated/figures/#2.pdf}%
-    }{%
-      \fbox{\parbox{#1}{\centering\small\ttfamily
-        [\,figure ``#2'' not generated --- run \textup{make figures}\,]}}%
-    }%
-    \caption{#3}%
-  \end{figure}%
+% ------------------------------------------------------------- plot cells ---
+% \plotcell[width]{path}: render a REPL session that ends in a graphic. It shows
+% generated/figures/<path>.in (the In[k]/Out[k] transcript, ending at the plot's
+% ``Out[k]= '' label) in the usual transcript box, then centres
+% generated/figures/<path>.pdf --- the plot the binary Export-ed --- right
+% beneath it, so the figure reads as the genuine output of the shown command.
+% Both are produced by book/tools/gen_figures.py from book/figures/<path>.m.
+% Like \mtranscript, it degrades to a visible placeholder when not yet generated
+% so the document always compiles.
+\newcommand{\plotcell}[2][0.66\linewidth]{%
+  \par\addvspace{\medskipamount}%
+  \IfFileExists{generated/figures/#2.in}{%
+    \lstinputlisting[style=mathildarepl,belowskip=0pt]{generated/figures/#2.in}%
+  }{%
+    \begin{tcolorbox}[colback=red!5,colframe=red!60!black,boxrule=0.4pt]
+      \small\ttfamily [\,plot cell ``#2'' not generated --- run \textup{make figures}\,]
+    \end{tcolorbox}%
+  }%
+  \IfFileExists{generated/figures/#2.pdf}{%
+    \nopagebreak
+    \begin{center}\includegraphics[width=#1]{generated/figures/#2.pdf}\end{center}%
+  }{}%
+  \par\addvspace{\medskipamount}%
 }
 
 % ------------------------------------------ load the generated link table ---

@@ -332,28 +332,17 @@ integral numerically ($\approx\sqrt\pi$).}
 \pair{02-introduction/numerical-calculus/3}{\B{NSum} sums a series numerically.}
 \end{codepairs}
 
-Differential equations are solved numerically by \B{NDSolve}, even nonlinear ones with no
-closed-form solution. We solve the \emph{van der Pol oscillator}
-$y'' + \mu\,(y^{2}-1)\,y' + y = 0$ (with $\mu = 3$, $y(0)=1$, $y'(0)=0$), whose
-self-sustaining \emph{relaxation oscillations} settle onto a limit cycle:
+Differential equations are solved numerically by \B{NDSolve}. Take a damped harmonic
+oscillator, $y'' + \tfrac{3}{10}\,y' + 4y = 0$ with $y(0)=1$ and $y'(0)=0$: the solution
+comes back as an \B{InterpolatingFunction}, and \B{Plot} takes that directly, so the
+motion---a decaying oscillation settling to rest---is one further command away:
 
-\begin{codepairs}
-\pair{02-introduction/numerical-calculus-ndsolve/1}{The solution comes back as an
-\B{InterpolatingFunction}, evaluable anywhere on its range $[0, 20]$.}
-\pair{02-introduction/numerical-calculus-ndsolve/2}{Its value at $x=5$, on the slow rise
-of a cycle.}
-\pair{02-introduction/numerical-calculus-ndsolve/3}{And at $x=20$, near the bottom of the
-next plunge---no elementary formula gives these.}
-\end{codepairs}
+\plotcell{02-introduction/ndsolve-solution}
 
-Rather than read the motion off a column of numbers, plot it. \B{Plot} accepts the
-interpolating solution directly, and \B{Export} writes the result to a PDF---indeed every
-figure in this book is produced exactly this way:
-
-\bookfigure{02-introduction/ndsolve-solution}{The \B{NDSolve} solution of the van der Pol
-oscillator over $[0, 20]$, plotted with \B{Plot} and written to PDF with
-\texttt{Export["vdp.pdf", plot]}. The steep plunges and slow recoveries are the
-oscillator's characteristic relaxation cycles---a shape no closed form captures.}
+\noindent The plot above is genuinely the \texttt{Out[2]} of that \B{Plot} command. To
+keep it, \B{Export} writes any such graphic to PDF, PNG, or JPEG
+(\texttt{Export["decay.pdf", plot]})---indeed every figure in this book is produced
+exactly this way, by the running system.
 
 Finally, \B{NLimit} evaluates a limit numerically, invaluable when a symbolic limit is
 hard to obtain:

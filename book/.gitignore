@@ -20,3 +20,6 @@ generated/
 *.toc
 *.pdf
 *-SAVE-ERROR
+
+# Python bytecode from the book tools.
+__pycache__/
