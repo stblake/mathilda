@@ -156,11 +156,11 @@ void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
         }
         /* Converged if the best is feasible and the feasible sub-population's
          * objective spread has collapsed to the requested tolerance. */
-        if (*penbest <= NM_FEAS_EPS) {
+        if (*penbest <= NM_FEAS_RANK) {   /* loose: convergence probe, not a claim */
             double fmin = 1e300, fmax = -1e300;
             size_t cnt = 0;
             for (size_t p = 0; p < NP; p++) {
-                if (ppop[p] <= NM_FEAS_EPS) {
+                if (ppop[p] <= NM_FEAS_RANK) {
                     if (fpop[p] < fmin) fmin = fpop[p];
                     if (fpop[p] > fmax) fmax = fpop[p];
                     cnt++;
@@ -237,11 +237,16 @@ void nm_de(NmDriver* D, const NmConfig* nc, NmRng* rng,
             for (size_t j = 0; j < n; j++) xp[j] = pop[best * n + j];
             double fp = fpop[best], pp = ppop[best];
             nm_local_polish(D, xp, &fp, &pp);
-            if (nm_better(fpop[best], ppop[best], fp, pp)) {  /* overshoot guard */
+            /* TIGHT from here down: these two comparisons decide what leaves DE
+             * and becomes the answer. Under the loose threshold the raw
+             * population member (violating by ~1e-4, so "feasible", objective
+             * 1.9998) beat its own polished counterpart (feasible, 2.0) — the
+             * shipped bug, at this exact line. */
+            if (nm_better_return(fpop[best], ppop[best], fp, pp)) {  /* overshoot guard */
                 for (size_t j = 0; j < n; j++) xp[j] = pop[best * n + j];
                 fp = fpop[best]; pp = ppop[best];
             }
-            if (nm_better(fp, pp, *fbest, *penbest)) {
+            if (nm_better_return(fp, pp, *fbest, *penbest)) {
                 for (size_t j = 0; j < n; j++) xbest[j] = xp[j];
                 *fbest = fp; *penbest = pp;
             }

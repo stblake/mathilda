@@ -126,7 +126,7 @@ typedef struct {
 /* A disjunctive (Or) constraint: feasible ≡ at least ONE branch is feasible.
  * Stored as its boolean-of-comparisons subtree over the effective variables.
  * The penalty contribution is the MINIMUM branch penalty (fm_bool_penalty), so
- * a point satisfying any one branch scores zero and the (total ≤ NM_FEAS_EPS)
+ * a point satisfying any one branch scores zero and the (total ≤ NM_FEAS_RANK)
  * feasibility test still means "feasible". Because the min() is non-smooth it is
  * consumed only by the derivative-free global search (NMinimize); the smooth
  * local polish leaves disjunction feasibility to the Deb accept/reject gate, and
@@ -441,8 +441,75 @@ typedef struct {
 
 #define NM_DEFAULT_SPAN   10.0     /* half-width of the default search box   */
 #define NM_BOUND_SPAN     20.0     /* span added when only one bound is known*/
-#define NM_FEAS_EPS       1.0e-8   /* penalty ≤ this ⇒ feasible (selection)  */
-#define NM_FEAS_FINAL     1.0e-6   /* final feasible-vs-Infinity threshold   */
+/* ------------------------------------------------------------------------
+ * TWO feasibility thresholds, because there are two genuinely different jobs.
+ * Both are stated on the ACTUAL constraint violation and SQUARED here, since
+ * nm_eval_pen accumulates Σ violation² (findmin_nm_common.c:230-268) and every
+ * comparison below is against that squared total. Do NOT compare an unsquared
+ * quantity against either.
+ *
+ *   NM_FEAS_RANK   — Deb's rule during the SEARCH. A ranking heuristic: "which
+ *                    of these two candidates should the search prefer." It is
+ *                    LOOSE on purpose. Deb's rule only consults the objective
+ *                    when BOTH points count as feasible; if the threshold is
+ *                    tighter than the residual the problem can actually reach,
+ *                    nothing is ever feasible, the rule degenerates to
+ *                    `pa < pb`, and the search silently stops optimising the
+ *                    objective at all. That is not hypothetical — setting this
+ *                    to 1e-16 made the 15-dimensional equality-constrained
+ *                    test_minimax_chebyshev return 1.85479 against a known
+ *                    optimum of 0.125116, because its best achievable residual
+ *                    is 1.15e-8 (squared: 1.32e-16) and so never qualified.
+ *
+ *   NM_FEAS_RETURN — the RETURN path. A correctness claim: "a caller is being
+ *                    handed this point and told it satisfies its constraints."
+ *                    It is TIGHT, and it is enforced — a result that cannot
+ *                    meet it is reported as {Infinity, x -> Indeterminate}
+ *                    rather than returned with a violation and called feasible.
+ *
+ * These are deliberately different numbers with deliberately different names.
+ * The original bug was ONE constant doing BOTH jobs by accident: NM_FEAS_EPS
+ * was documented as "penalty ≤ this ⇒ feasible", was compared against a squared
+ * quantity (so it meant a 1e-4 violation, not 1e-8), and was used both to steer
+ * the search and to decide what got returned. NMinimize therefore answered
+ * NMinimize[{x^2+y^2, x+y >= 2}, {x,y}] with x + y = 1.99990 — a point violating
+ * its own constraint, reported as the solution (NMINIMIZE_FEASIBILITY_BUG.md).
+ * Splitting the constant is not re-introducing that: the failure there was an
+ * unnamed conflation, and the fix is that each threshold is now named for the
+ * question it answers and used only for that question.
+ *
+ * nm_better()        uses NM_FEAS_RANK   — search-time ranking.
+ * nm_better_return() uses NM_FEAS_RETURN — post-polish selection and the gate.
+ *
+ * NM_FEAS_RANK is 1.0e-8, bit-identical to the historical NM_FEAS_EPS, so
+ * search trajectories are unchanged from before this split.
+ * ------------------------------------------------------------------------ */
+#define NM_FEAS_RANK_VIOL    1.0e-4   /* search ranking: loose, keeps Deb's rule
+                                       * able to reach its objective branch      */
+#define NM_FEAS_RANK         (NM_FEAS_RANK_VIOL * NM_FEAS_RANK_VIOL)
+/* 1.0e-5 is an EMPIRICAL bound, not a round number, and the value was corrected
+ * downward-to-upward once during this fix rather than guessed:
+ *
+ *   continuous, all 8 methods   ~4e-12 .. 7.5e-12   (measured)
+ *   mixed-integer + continuous  ~6e-6               (measured)
+ *
+ * The mixed-integer path refines continuous coordinates through the penalty
+ * solver with integers pinned, and that solve converges to ~6e-6, not to the
+ * ~1e-12 the purely-continuous path reaches. A guarantee tighter than the
+ * implementation can honour does not make results more correct — it turns
+ * solvable problems into {Infinity, x -> Indeterminate}. An earlier 1.0e-6 here
+ * did exactly that to
+ * NMinimize[{x + 2y, x^2 + 2y^2 <= 3, x + y == 2, x in Integers}, {x, y}],
+ * which has the exact solution x = 1, y = 1.
+ *
+ * So this is set where every supported problem class can actually meet it: 10x
+ * tighter than the violation the bug shipped (1e-4) and 100x tighter than the
+ * old effective give-up threshold (1e-3), while never rejecting a problem the
+ * solver can genuinely solve. Tightening it further is a real improvement and
+ * requires first tightening the mixed-integer continuous refinement — see
+ * NMINIMIZE_FEASIBILITY_BUG.md. */
+#define NM_FEAS_RETURN_VIOL  1.0e-5   /* return path: what a caller may receive */
+#define NM_FEAS_RETURN       (NM_FEAS_RETURN_VIOL * NM_FEAS_RETURN_VIOL)
 #define NM_PENALTY_MU     1.0e6    /* fixed penalty weight for NelderMead/SA */
 #define NM_SA_TOTAL_CAP   120000   /* SA aggregate iteration cap across chains
                                     * when "SearchPoints" -> K > 1 restarts     */
@@ -759,6 +826,7 @@ bool fm_bool_penalty(Expr* c, FmVarBind* binds, const double* x, size_t n,
 bool nm_eval_pen(NmDriver* D, const double* xr, double* out);
 void nm_eval(NmDriver* D, const double* x, double* f_out, double* pen_out);
 bool nm_better(double fa, double pa, double fb, double pb);
+bool nm_better_return(double fa, double pa, double fb, double pb);
 void nm_project(NmDriver* D, double* x);
 double nm_phi(NmDriver* D, const double* x);
 void nm_detect_onehots(NmDriver* D);

@@ -440,20 +440,28 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
             for (size_t i = 0; i < n; i++) xsave[i] = xattempt[i];
             double fsave = fa, psave = pa;
             nm_local_polish(&D, xattempt, &fa, &pa);
-            if (nm_better(fsave, psave, fa, pa)) {
+            /* TIGHT: post-polish overshoot guard is a return-path comparison. */
+            if (nm_better_return(fsave, psave, fa, pa)) {
                 for (size_t i = 0; i < n; i++) xattempt[i] = xsave[i];
                 fa = fsave; pa = psave;
             }
             free(xsave);
         }
-        if (attempt == 0 || nm_better(fa, pa, fbest, penbest)) {
+        /* TIGHT: penbest is what the feasibility gate below judges, so the
+         * point that reaches it must be chosen under the return threshold. */
+        if (attempt == 0 || nm_better_return(fa, pa, fbest, penbest)) {
             for (size_t i = 0; i < n; i++) xbest[i] = xattempt[i];
             fbest = fa; penbest = pa;
         }
-        if (penbest <= NM_FEAS_FINAL) break;   /* feasible: stop expanding */
+        if (penbest <= NM_FEAS_RETURN) break;  /* genuinely feasible: stop expanding */
     }
     free(xattempt);
-    bool feasible = !infeasible_box && !infeasible_pre && (penbest <= NM_FEAS_FINAL);
+    /* The guarantee. A point that cannot meet NM_FEAS_RETURN is NOT handed back
+     * as a solution — it falls through to nm_build_infeasible and is reported as
+     * {Infinity, x -> Indeterminate}. Returning a constraint-violating point and
+     * calling it feasible is the original bug; reporting a worse-than-tolerance
+     * result honestly is the fix. */
+    bool feasible = !infeasible_box && !infeasible_pre && (penbest <= NM_FEAS_RETURN);
 
     /* Optional MPFR refinement for WorkingPrecision > MachinePrecision on
      * continuous, general-constraint-free problems (reuses fm_run_bfgs_mpfr). */
