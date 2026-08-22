@@ -22,7 +22,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-#define NODE_RADIUS 0.08
+#define NODE_RADIUS 0.02
 
 static Expr* point2(double x, double y) {
     Expr* xy[2] = { expr_new_real(x), expr_new_real(y) };
