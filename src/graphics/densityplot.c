@@ -161,7 +161,7 @@ static bool is_color_head_dp(const Expr* e) {
 static Expr* dp_color(Expr* cfn, double t) {
     if (!cfn) {
         double rv, gv, bv;
-        thermal_rgb(t, &rv, &gv, &bv);
+        default_ramp_rgb(t, &rv, &gv, &bv);   /* Viridis */
         Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
         return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
     }

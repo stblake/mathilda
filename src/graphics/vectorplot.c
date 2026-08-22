@@ -212,9 +212,9 @@ static bool is_color_head_vp(const Expr* e) {
 static Expr* vp_color(Expr* cfn, double speed_norm,
                        double vx, double vy, double speed) {
     if (!cfn) {
-        /* Default: thermal ramp based on speed. */
+        /* Default: Viridis ramp based on speed. */
         double r, g, b;
-        thermal_rgb(speed_norm, &r, &g, &b);
+        default_ramp_rgb(speed_norm, &r, &g, &b);
         Expr* a[3] = { expr_new_real(r), expr_new_real(g), expr_new_real(b) };
         return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
     }

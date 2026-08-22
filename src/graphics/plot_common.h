@@ -77,10 +77,19 @@ void cool_tones_rgb(double t, double* r, double* g, double* b);
 /* WarmTones: pale cream (t=0) → amber → orange → deep crimson (t=1). */
 void warm_tones_rgb(double t, double* r, double* g, double* b);
 
+/* Viridis: perceptually-uniform dark-purple (t=0) → teal → green → yellow (t=1).
+ * The Berkeley/matplotlib default; a 32-stop resampling of the 256-entry table. */
+void viridis_rgb(double t, double* r, double* g, double* b);
+
+/* The system default magnitude colormap (Viridis). Plotters that map a scalar
+ * value/speed/height to colour call this when no ColorFunction is given, so the
+ * default is set in one place. */
+void default_ramp_rgb(double t, double* r, double* g, double* b);
+
 /* Resolve a ColorFunction name string + t ∈ [0,1] to a color Expr (caller
- * owns).  Recognised names: "Rainbow", "Temperature"/"Thermal",
- * "CoolTones"/"Cool", "WarmTones"/"Warm",
- * "Greyscale"/"Grayscale"/"Grey"/"Gray".
+ * owns).  Recognised names: "Viridis", "Magma", "Plasma", "Inferno", "Cividis",
+ * "Haze", "Rainbow", "Temperature"/"Thermal", "CoolTones"/"Cool",
+ * "WarmTones"/"Warm", "Greyscale"/"Grayscale"/"Grey"/"Gray".
  * Returns NULL when the name is not recognised. */
 Expr* named_color_ramp(const char* name, double t);
 

@@ -109,6 +109,12 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 
 | Name | Aliases | Description |
 |------|---------|-------------|
+| `"Viridis"` | — | Perceptually-uniform dark-purple → teal → green → yellow (**default**) |
+| `"Magma"` | — | Black → purple → red → cream |
+| `"Plasma"` | — | Indigo → magenta → orange → yellow |
+| `"Inferno"` | — | Black → purple → red → yellow |
+| `"Cividis"` | — | Colour-vision-deficiency-safe blue → grey → yellow |
+| `"Haze"` | — | White → pink → blue → green → yellow → orange → red (Sam Blake's palette) |
 | `"Rainbow"` | — | Full HSV sweep (hue 0→1) |
 | `"Temperature"` | `"Thermal"` | Dark blue-purple → orange → bright yellow |
 | `"CoolTones"` | `"Cool"` | Ice blue → cornflower → deep navy |
@@ -350,17 +356,29 @@ Out[12]= -Graphics3D-
 All gradient-based plotters — `DensityPlot`, `ArrayPlot`, `ContourPlot`,
 `VectorPlot`, `StreamPlot`, `Plot`, `Plot3D`, `ParametricPlot`,
 `ParametricPlot3D` — accept `ColorFunction -> "name"` where `name` is one of
-the following built-in string ramps.  Each ramp is a continuous 5-stop RGB
-gradient parameterised by `t ∈ [0,1]` (normalised to the data range when
-`ColorFunctionScaling -> True`, the default). `ArrayPlot` is the one plotter
-whose *default* ColorFunction is `"Greyscale"` rather than `"Temperature"`
-(matching Mathematica's own `ArrayPlot` default) — every other plotter here
-defaults to the thermal ramp.
+the following built-in string ramps, parameterised by `t ∈ [0,1]` (normalised to
+the data range when `ColorFunctionScaling -> True`, the default). The default
+magnitude colormap is **`"Viridis"`** — used by `DensityPlot`, `ContourPlot`,
+`StreamPlot` (speed), and `VectorPlot` (speed) when no `ColorFunction` is given.
+`ArrayPlot` instead defaults to `"Greyscale"` (matching Mathematica), and
+`ComplexPlot`'s phase coloring keeps its cyclic thermal default.
+
+The perceptually-uniform maps (`Viridis`, `Magma`, `Plasma`, `Inferno`,
+`Cividis`) are 32-stop resamplings of matplotlib's authoritative 256-entry
+tables (linear-interpolation error is sub-perceptual); `"Haze"` is Sam Blake's
+7-anchor palette, reproduced exactly. The legacy ramps (`Temperature`,
+`CoolTones`, `WarmTones`) remain 5-stop gradients.
 
 | Name | Aliases | Appearance |
 |------|---------|------------|
+| `"Viridis"` | — | dark purple → blue → teal → green → yellow (perceptually uniform; **the default**) |
+| `"Magma"` | — | near-black → purple → magenta-red → orange → pale cream |
+| `"Plasma"` | — | indigo → violet → magenta → orange → yellow |
+| `"Inferno"` | — | black → deep purple → red → orange → pale yellow |
+| `"Cividis"` | — | dark blue → slate grey → gold (optimised for colour-vision deficiency) |
+| `"Haze"` | — | white → pink → blue → green → yellow → orange → red (Sam Blake's palette) |
 | `"Rainbow"` | — | `Hue` sweep red → violet (stops at 0.8 to avoid wrapping back to red) |
-| `"Temperature"` | `"Thermal"` | dark blue-purple → purple → red → orange → bright yellow (Mathilda's default stream/contour ramp) |
+| `"Temperature"` | `"Thermal"` | dark blue-purple → purple → red → orange → bright yellow (the former default) |
 | `"CoolTones"` | `"Cool"` | near-white ice blue → sky blue → cornflower → deep navy/indigo |
 | `"WarmTones"` | `"Warm"` | pale cream → amber → orange → deep crimson |
 | `"Greyscale"` | `"Grayscale"`, `"Grey"`, `"Gray"` | white (t=0) → black (t=1) |

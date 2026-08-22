@@ -63,8 +63,8 @@ static Expr* contour_color(Expr* cfn, double t, double x, double y) {
             expr_free(result);
         }
     }
-    /* Default thermal ramp. */
-    double rv, gv, bv; thermal_rgb(t, &rv, &gv, &bv);
+    /* Default ramp (Viridis). */
+    double rv, gv, bv; default_ramp_rgb(t, &rv, &gv, &bv);
     Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
     return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
 }
@@ -824,14 +824,14 @@ Expr* builtin_contourplot(Expr* res) {
                  * plain dark gray when not shading. */
                 if (do_shade) {
                     double rv, gv, bv;
-                    thermal_rgb(t, &rv, &gv, &bv);
+                    default_ramp_rgb(t, &rv, &gv, &bv);
                     rv *= 0.6; gv *= 0.6; bv *= 0.6;
                     Expr* ca[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
                     prims[nprim++] = expr_new_function(expr_new_symbol(SYM_RGBColor), ca, 3);
                 } else {
-                    /* Coloured lines matching the thermal palette — nice for plain contour. */
+                    /* Coloured lines matching the default palette — nice for plain contour. */
                     double rv, gv, bv;
-                    thermal_rgb(t, &rv, &gv, &bv);
+                    default_ramp_rgb(t, &rv, &gv, &bv);
                     Expr* ca[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
                     prims[nprim++] = expr_new_function(expr_new_symbol(SYM_RGBColor), ca, 3);
                 }

@@ -1997,7 +1997,7 @@ static void draw_bar_chart_labels(const Expr* bar_labels, Camera2D camera) {
 /* Screen-space vertical color scale bar.
  * bar_x/y: top-left of the strip; bar_w/bar_h: dimensions in pixels.
  * cfn: the ColorFunction option Expr (string name, pure function, or NULL/
- * Automatic meaning default thermal ramp). Labels are drawn to the right. */
+ * Automatic meaning the default ramp, Viridis). Labels are drawn to the right. */
 void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
                     double spd_min, double spd_max, const Expr* cfn) {
     int bands = (int)bar_h;
@@ -2035,7 +2035,7 @@ void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
             }
             expr_free(result);
         }
-        if (!colored) thermal_rgb(t, &rv, &gv, &bv);
+        if (!colored) default_ramp_rgb(t, &rv, &gv, &bv);
 
         Color c = { (unsigned char)(rv * 255.0 + 0.5),
                     (unsigned char)(gv * 255.0 + 0.5),

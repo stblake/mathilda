@@ -633,13 +633,13 @@ static void emit_dashed_stream(Expr*** prims, size_t* nprim, size_t* cap,
     }
 }
 
-/* Default speed-to-color: dark blue-purple (low) → yellow (high), matching
- * Mathematica's default StreamPlot thermal palette. */
+/* Default speed-to-color: the system default colormap (Viridis), keyed to the
+ * stream's speed normalised across the plot. */
 static Expr* default_stream_color(double spd, double spd_min, double spd_max) {
     double t = (spd_max > spd_min + 1e-30)
         ? (spd - spd_min) / (spd_max - spd_min) : 0.5;
     double rv, gv, bv;
-    thermal_rgb(t, &rv, &gv, &bv);
+    default_ramp_rgb(t, &rv, &gv, &bv);
     Expr* args[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
     return expr_new_function(expr_new_symbol(SYM_RGBColor), args, 3);
 }
