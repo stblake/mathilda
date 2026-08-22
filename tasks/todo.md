@@ -1,57 +1,39 @@
-# ParametricPlot / PolarPlot under-sampling fix
+# StreamPlot: evenly-spaced streamlines
 
 ## Problem
-Default ParametricPlot/PolarPlot curves look angular: the adaptive refiner
-barely engages.
+`StreamPlot[{-y, x}, {x, -3, 3}, {y, -3, 3}]` (rotation → concentric circles)
+rendered as a hairball of ~225 short, overlapping, fragmented arcs. Careless
+with stream length and curvature.
 
-## Root cause (measured)
-- `PARAM_FLAT_TOL = 0.0025` (fraction of bbox diagonal) in
-  `src/graphics/parametricplot.c` is ~4x looser than the `y=f(x)` sampler's
-  `FLAT_TOL = 0.0006` (fraction of y-range) in `src/graphics/sampling.c`.
-  A default circle refines only to depth 1 -> 49 pts. At 0.0006 -> depth 2 ->
-  97 pts (sub-pixel, smooth). Roses/Lissajous scale up proportionally.
-- 1-iterator default seed = 25, below Plot's 50 (anti-alias floor the refiner
-  cannot recover).
-- PolarPlot forces PlotPoints=75 and delegates to ParametricPlot, so it
-  inherits the tolerance fix. Its plain circle is already smooth at 75.
+## Root cause (src/graphics/streamplot.c)
+1. One forward-only stream per grid seed (15×15 = 225) → overlap.
+2. StreamScale default 0.08 → every stream a short stub.
+3. Raw-field RK4 (step h·|v|) → curvature resolution tied to local speed.
 
-## Plan
-- [x] Investigate + measure point counts across tolerances (done)
-- [x] `PARAM_FLAT_TOL`: 0.0025 -> 0.0006 (parity with sampling.c); update comment
-- [x] 1-iterator default seed: 25 -> 50 (match Plot); update comment + call site
-- [x] Fix stale "ParametricPlot's 25" comment in polarplot.c
-- [x] Changelog note in docs/spec/changelog/2026-08-17.md
-- [x] Rebuild; re-measure (circle smooth, curves reasonable)
-- [x] Run test_parametricplot + test_autocompile (no regressions)
+## Fix — Jobard–Lefebvre evenly-spaced streamlines
+- [x] Normalized-field RK4 (fixed arc-length step) → uniform spacing/curvature.
+- [x] Grow each line both directions from its seed.
+- [x] Terminate on: proximity to another line (½·d_sep, hash-grid O(1)),
+      boundary, critical point, or closed-orbit return (draws whole circles).
+- [x] Even placement: candidate grid finer than d_sep + cull seeds within
+      d_sep of an existing line. StreamPoints sets d_sep.
+- [x] Periodic direction chevrons along each Line (not one lone mid-arrow).
+- [x] StreamScale default → run to natural end (None/Automatic too); s>0 caps.
+- [x] Doc (graphics.md) + changelog updated.
 
-## Review
+## Verification
+- Rendered rotation / saddle {x,-y} / {-y Exp[-x^2], x Sin[y]} → all clean,
+  evenly-spaced, correct flow direction and speed coloring.
+- Point counts: rotation 225 fragments → 19 clean circles.
+- streamplot_tests + autocompile_tests pass.
+- valgrind: leak total identical to baseline and to the OLD code (13,496 B /
+  421 blocks), constant across 1 vs 20 lines → no new leak (pre-existing fixed
+  interning + macOS baseline noise).
+- Fast: ~0.03s for the field evals.
 
-Root cause was the flatness threshold, not the seed count: `PARAM_FLAT_TOL`
-(fraction of bbox diagonal) was 0.0025, ~4x looser than the y=f(x) sampler's
-FLAT_TOL=0.0006. A default circle stopped at recursion depth 1. Fixed both
-levers for parity with Plot:
-
-- `PARAM_FLAT_TOL` 0.0025 -> 0.0006 (primary fix)
-- 1-iterator default PlotPoints 25 -> 50 (match Plot; anti-alias floor)
-
-Measured point counts (default options), before -> after:
-- ParametricPlot circle     49  -> 99
-- PolarPlot circle          75  -> 75  (already sub-pixel; unchanged)
-- ParametricPlot rose      177  -> 357
-- PolarPlot rose Cos[5t]   149  -> 297
-- ParametricPlot Lissajous 153  -> 284
-- PolarPlot spiral          93  -> 178
-
-Verification:
-- test_parametricplot, test_autocompile, graphics_tests: all pass.
-- PDF renders (headless vector path) of circle / 5-petal rose / Lissajous:
-  all smooth, including high-curvature petal tips and turning points.
-- No API/option change; only default sampling density. Tests pin explicit
-  PlotPoints/MaxRecursion + relative counts, so none depended on the old
-  defaults.
-
-Considered but deferred: adding sampling.c's MAX_CHORD_FRAC chord-length
-backstop to the parametric sampler. It addresses a different artifact (long
-on-screen gaps in steep-but-locally-straight stretches), not the reported
-angularity, which the tolerance fix fully cures. Left out to keep the change
-minimal.
+## Considered / deferred
+- Perpendicular offspring seeding (full JL) would fill sparse-region gaps even
+  better; the finer candidate grid + culling already gives good coverage, so
+  left out to keep the change contained.
+- PDF vector export still stretches square domains to the page (pre-existing,
+  affects all plotters); windowed/PNG render honors AspectRatio. Out of scope.

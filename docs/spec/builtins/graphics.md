@@ -47,7 +47,7 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 | [`ArrayPlot`](#arrayplot) | Grid heatmap of a literal 2D array (no interpolation) — also a raw pixel-grid renderer for a matrix of colours | `ColorFunction`, `ColorFunctionScaling`, `Mesh`, `PlotLegends` |
 | [`ComplexPlot`](#complexplot) | Domain-colouring of a complex function `f(z)` | `PlotPoints`, `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends` |
 | [`VectorPlot`](#vectorplot) | Arrow grid for a 2D vector field | `VectorPoints`, `VectorScale`, `VectorStyle`, `ColorFunction`, `RegionFunction`, `ScalingFunctions` |
-| [`StreamPlot`](#streamplot) | RK4-integrated streamlines of a 2D vector field | `StreamPoints`, `StreamScale`, `StreamStyle`, `ColorFunction`, `RegionFunction`, `ScalingFunctions`, `StreamAnimate` |
+| [`StreamPlot`](#streamplot) | Evenly-spaced RK4 streamlines of a 2D vector field | `StreamPoints`, `StreamScale`, `StreamStyle`, `ColorFunction`, `RegionFunction`, `ScalingFunctions`, `StreamAnimate` |
 | [`BarChart`](#barchart) | Vertical bar chart for categorical / grouped data | `ChartStyle`, `ChartLabels`, `BarSpacing` |
 | [`Histogram`](#histogram) | Frequency histogram with flexible bin specs | `ChartStyle`, `BarSpacing`; bin: `k`, `{step}`, `{min,max,step}` |
 
@@ -926,10 +926,21 @@ Out[5]= -Graphics-
 
 ## StreamPlot
 
-Traces streamlines of a 2-D vector field `{vx, vy}` by RK4 integration
-from a uniform grid of seed points, renders each stream as an
-`Arrow[...]` primitive (a directed polyline with an arrowhead at its
-end), and returns a `Graphics[...]` object (auto-displayed).
+Traces **evenly-spaced** streamlines of a 2-D vector field `{vx, vy}`
+(Jobard–Lefebvre placement). Each line is grown in both directions from
+its seed by RK4 integration of the *normalized* field — a fixed arc-length
+step, so point spacing and rendered curvature stay uniform regardless of
+local speed — and runs until it nears another line, leaves the domain,
+reaches a critical point, or closes on itself (so a rotational field draws
+whole circles). A uniform hash grid keeps the lines from overlapping. Each
+line renders as a `Line[...]` with short direction `Arrow[...]` chevrons
+placed at regular arc-length intervals; the result is a `Graphics[...]`
+object (auto-displayed).
+
+`StreamPoints` sets the line density (higher → more, closer lines);
+`StreamScale -> s` caps each line's arc length at `s`·(domain diagonal),
+while the default (and `None`/`Automatic`) lets every line run to its
+natural end.
 
 `HoldAll`, `Protected`. Options: see **Feature summary** above. Defaults: `Axes -> True`, `AspectRatio -> 1`. `ColorFunction` is an alias for `StreamColorFunction`.
 

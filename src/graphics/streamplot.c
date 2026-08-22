@@ -135,81 +135,198 @@ static Expr* eval_stream_color(Expr* cfn,
 }
 
 /* ------------------------------------------------------------------ */
-/* RK4 streamline integration                                          */
+/* Streamline geometry: normalized-field RK4 + evenly-spaced placement */
 /* ------------------------------------------------------------------ */
 
 typedef struct { double x, y; } Point2;
 
-/* Integrate one streamline forward from (x0, y0) for at most max_steps
- * steps of size h, staying within [xmin,xmax] x [ymin,ymax].
- * Reverses direction when forward==false.
- * Returns a malloc'd array of Point2; *n_out is the count (including seed).
- * The array always starts at {x0, y0}. */
-static Point2* rk4_integrate(const FieldCtx* ctx,
-                              double x0, double y0,
-                              double xmin, double xmax,
-                              double ymin, double ymax,
-                              double h,
-                              int max_steps,
-                              bool forward,
-                              Expr* region_fn,
-                              size_t* n_out) {
-    size_t cap = (size_t)max_steps + 2;
-    Point2* pts = malloc(sizeof(Point2) * cap);
-    size_t n = 0;
-    pts[n++] = (Point2){ x0, y0 };
+/* A growing point buffer for one half of a streamline. */
+typedef struct { Point2* p; size_t n, cap; } PBuf;
 
-    double sign = forward ? 1.0 : -1.0;
-    double x = x0, y = y0;
-
-    for (int step = 0; step < max_steps; step++) {
-        double k1x, k1y, k2x, k2y, k3x, k3y, k4x, k4y;
-        if (!eval_field(ctx, x, y, &k1x, &k1y)) break;
-        if (!eval_field(ctx, x + 0.5 * h * sign * k1x,
-                              y + 0.5 * h * sign * k1y, &k2x, &k2y)) break;
-        if (!eval_field(ctx, x + 0.5 * h * sign * k2x,
-                              y + 0.5 * h * sign * k2y, &k3x, &k3y)) break;
-        if (!eval_field(ctx, x + h * sign * k3x,
-                              y + h * sign * k3y, &k4x, &k4y)) break;
-
-        double nx = x + sign * h * (k1x + 2*k2x + 2*k3x + k4x) / 6.0;
-        double ny = y + sign * h * (k1y + 2*k2y + 2*k3y + k4y) / 6.0;
-
-        /* Clamp: stop if we leave the domain. */
-        if (nx < xmin || nx > xmax || ny < ymin || ny > ymax) break;
-
-        /* RegionFunction check. */
-        if (region_fn && !eval_region(region_fn, nx, ny)) break;
-
-        x = nx; y = ny;
-        if (n >= cap) { cap *= 2; pts = realloc(pts, sizeof(Point2) * cap); }
-        pts[n++] = (Point2){ x, y };
+static void pbuf_push(PBuf* b, double x, double y) {
+    if (b->n == b->cap) {
+        b->cap = b->cap ? b->cap * 2 : 64;
+        b->p = realloc(b->p, sizeof(Point2) * b->cap);
     }
-
-    *n_out = n;
-    return pts;
+    b->p[b->n].x = x; b->p[b->n].y = y; b->n++;
 }
 
-/* ------------------------------------------------------------------ */
-/* Seed placement and proximity check                                  */
-/* ------------------------------------------------------------------ */
-
+/* Uniform spatial hash grid over the (data-space) domain, cell size = d_sep.
+ * It holds every point of every completed streamline, so a candidate point can
+ * be proximity-tested against all of them in O(1): any point within d_sep of a
+ * query lies in the query's own cell or one of its eight neighbours. This is
+ * what turns a hairball of overlapping streamlets into evenly-spaced
+ * streamlines (Jobard & Lefebvre, "Creating Evenly-Spaced Streamlines of
+ * Arbitrary Density", 1997). */
 typedef struct {
-    double* xs;
-    double* ys;
-    size_t  n;
-    size_t  cap;
-} SeedList;
+    double   ox, oy;   /* domain min corner */
+    double   cell;     /* = d_sep */
+    int      nx, ny;   /* cell counts */
+    Point2** bucket;   /* nx*ny point lists */
+    size_t*  cnt;
+    size_t*  cap;
+} SGrid;
 
-static void seed_push(SeedList* sl, double x, double y) {
-    if (sl->n >= sl->cap) {
-        sl->cap = sl->cap ? sl->cap * 2 : 64;
-        sl->xs = realloc(sl->xs, sizeof(double) * sl->cap);
-        sl->ys = realloc(sl->ys, sizeof(double) * sl->cap);
+static void sgrid_init(SGrid* g, double xmin, double ymin,
+                       double xmax, double ymax, double cell) {
+    g->ox = xmin; g->oy = ymin; g->cell = cell;
+    g->nx = (int)((xmax - xmin) / cell) + 1;
+    g->ny = (int)((ymax - ymin) / cell) + 1;
+    if (g->nx < 1) g->nx = 1;
+    if (g->ny < 1) g->ny = 1;
+    size_t ncell = (size_t)g->nx * (size_t)g->ny;
+    g->bucket = calloc(ncell, sizeof(Point2*));
+    g->cnt    = calloc(ncell, sizeof(size_t));
+    g->cap    = calloc(ncell, sizeof(size_t));
+}
+
+static void sgrid_free(SGrid* g) {
+    size_t ncell = (size_t)g->nx * (size_t)g->ny;
+    for (size_t i = 0; i < ncell; i++) free(g->bucket[i]);
+    free(g->bucket); free(g->cnt); free(g->cap);
+}
+
+static int sgrid_cellx(const SGrid* g, double x) {
+    int c = (int)((x - g->ox) / g->cell);
+    if (c < 0) c = 0;
+    if (c >= g->nx) c = g->nx - 1;
+    return c;
+}
+static int sgrid_celly(const SGrid* g, double y) {
+    int c = (int)((y - g->oy) / g->cell);
+    if (c < 0) c = 0;
+    if (c >= g->ny) c = g->ny - 1;
+    return c;
+}
+
+static void sgrid_add(SGrid* g, double x, double y) {
+    size_t idx = (size_t)sgrid_celly(g, y) * (size_t)g->nx + (size_t)sgrid_cellx(g, x);
+    if (g->cnt[idx] == g->cap[idx]) {
+        g->cap[idx] = g->cap[idx] ? g->cap[idx] * 2 : 8;
+        g->bucket[idx] = realloc(g->bucket[idx], sizeof(Point2) * g->cap[idx]);
     }
-    sl->xs[sl->n] = x;
-    sl->ys[sl->n] = y;
-    sl->n++;
+    g->bucket[idx][g->cnt[idx]].x = x;
+    g->bucket[idx][g->cnt[idx]].y = y;
+    g->cnt[idx]++;
+}
+
+/* True if any stored point lies within sqrt(r2) of (x,y). r2 must be <= cell^2
+ * so the 3x3 neighbourhood is a sufficient search. */
+static bool sgrid_within2(const SGrid* g, double x, double y, double r2) {
+    int cx = sgrid_cellx(g, x), cy = sgrid_celly(g, y);
+    for (int dy = -1; dy <= 1; dy++) {
+        int yy = cy + dy;
+        if (yy < 0 || yy >= g->ny) continue;
+        for (int dx = -1; dx <= 1; dx++) {
+            int xx = cx + dx;
+            if (xx < 0 || xx >= g->nx) continue;
+            size_t idx = (size_t)yy * (size_t)g->nx + (size_t)xx;
+            const Point2* b = g->bucket[idx];
+            size_t c = g->cnt[idx];
+            for (size_t i = 0; i < c; i++) {
+                double ex = b[i].x - x, ey = b[i].y - y;
+                if (ex*ex + ey*ey < r2) return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* Unit field direction at (x,y); false at eval failure or a near-zero field
+ * (|v| <= crit -> a critical point, where the direction is undefined). */
+static bool unit_field(const FieldCtx* ctx, double x, double y, double crit,
+                       double* ux, double* uy) {
+    double vx, vy;
+    if (!eval_field(ctx, x, y, &vx, &vy)) return false;
+    double s = sqrt(vx*vx + vy*vy);
+    if (!(s > crit)) return false;
+    *ux = vx / s; *uy = vy / s;
+    return true;
+}
+
+/* One RK4 step of the NORMALIZED field, advancing a fixed arc-length h in
+ * direction `sign` (+1 forward, -1 backward). Integrating the unit field (not
+ * the raw field) is what makes the point spacing -- and therefore the rendered
+ * curvature -- uniform along the whole streamline, independent of local speed;
+ * the old raw-field step advanced by h*|v|, so a fast region drew a coarse,
+ * jagged arc while a slow one piled up points. Returns false at a critical
+ * point (the caller ends the line there). */
+static bool rk4_step_unit(const FieldCtx* ctx, double x, double y,
+                          double h, double sign, double crit,
+                          double* nx, double* ny) {
+    double k1x,k1y,k2x,k2y,k3x,k3y,k4x,k4y;
+    double s = sign * h;
+    if (!unit_field(ctx, x,           y,           crit, &k1x,&k1y)) return false;
+    if (!unit_field(ctx, x+0.5*s*k1x, y+0.5*s*k1y, crit, &k2x,&k2y)) return false;
+    if (!unit_field(ctx, x+0.5*s*k2x, y+0.5*s*k2y, crit, &k3x,&k3y)) return false;
+    if (!unit_field(ctx, x+s*k3x,     y+s*k3y,     crit, &k4x,&k4y)) return false;
+    *nx = x + s*(k1x + 2*k2x + 2*k3x + k4x)/6.0;
+    *ny = y + s*(k1y + 2*k2y + 2*k3y + k4y)/6.0;
+    return true;
+}
+
+/* Grow one direction of a streamline from (x0,y0), appending each new point
+ * (the seed itself excluded) to `out`. Stops at: the domain boundary, a
+ * RegionFunction rejection, a critical point, proximity to an existing
+ * streamline (within sqrt(d_test2) of a grid point), a closed-orbit return to
+ * the seed (after at least min_loop_arc of travel -- this is what lets a
+ * rotational field draw whole closed circles instead of running to the step
+ * cap), or max_steps. */
+static void integrate_dir(const FieldCtx* ctx, const SGrid* grid,
+                          double x0, double y0,
+                          double xmin, double xmax, double ymin, double ymax,
+                          double h, double sign, int max_steps, double crit,
+                          double d_test2, double loop2, double min_loop_arc,
+                          Expr* region_fn, PBuf* out) {
+    double x = x0, y = y0, arc = 0.0;
+    for (int step = 0; step < max_steps; step++) {
+        double nx, ny;
+        if (!rk4_step_unit(ctx, x, y, h, sign, crit, &nx, &ny)) break;
+        if (nx < xmin || nx > xmax || ny < ymin || ny > ymax) break;
+        if (region_fn && !eval_region(region_fn, nx, ny)) break;
+        if (grid && sgrid_within2(grid, nx, ny, d_test2)) break;
+        x = nx; y = ny; arc += h;
+        pbuf_push(out, x, y);
+        if (arc > min_loop_arc) {
+            double ex = x - x0, ey = y - y0;
+            if (ex*ex + ey*ey < loop2) break;   /* closed orbit */
+        }
+    }
+}
+
+/* Integrate both directions from a seed and splice into one streamline
+ * (backward reversed, then the seed, then forward), so the seed sits in the
+ * middle of a line that extends as far as it can each way. Caller owns the
+ * returned array. */
+static Point2* grow_streamline(const FieldCtx* ctx, const SGrid* grid,
+                               double sx, double sy,
+                               double xmin, double xmax, double ymin, double ymax,
+                               double h, int max_steps, double crit,
+                               double d_test2, double loop2, double min_loop_arc,
+                               Expr* region_fn, size_t* n_out) {
+    PBuf back = {NULL,0,0}, fwd = {NULL,0,0};
+    integrate_dir(ctx, grid, sx, sy, xmin,xmax,ymin,ymax, h, -1.0, max_steps,
+                  crit, d_test2, loop2, min_loop_arc, region_fn, &back);
+    integrate_dir(ctx, grid, sx, sy, xmin,xmax,ymin,ymax, h, +1.0, max_steps,
+                  crit, d_test2, loop2, min_loop_arc, region_fn, &fwd);
+    size_t n = back.n + 1 + fwd.n;
+    Point2* s = malloc(sizeof(Point2) * n);
+    size_t k = 0;
+    for (size_t i = back.n; i > 0; i--) s[k++] = back.p[i-1];
+    s[k].x = sx; s[k].y = sy; k++;
+    for (size_t i = 0; i < fwd.n; i++) s[k++] = fwd.p[i];
+    free(back.p); free(fwd.p);
+    *n_out = n;
+    return s;
+}
+
+/* Candidate seed, ordered by distance from the domain centre so placement
+ * grows outward from the middle. */
+typedef struct { double x, y, d2; } SeedCand;
+
+static int seedcand_cmp(const void* a, const void* b) {
+    double da = ((const SeedCand*)a)->d2, db = ((const SeedCand*)b)->d2;
+    return (da < db) ? -1 : (da > db) ? 1 : 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -217,8 +334,8 @@ static void seed_push(SeedList* sl, double x, double y) {
 /* ------------------------------------------------------------------ */
 
 typedef struct {
-    int    stream_points;     /* seeds per axis; default 15 */
-    double stream_scale;      /* max arc-length / domain diag; <=0 = None (run full) */
+    int    stream_points;     /* controls line density (target 1/spacing); default 15 */
+    double stream_scale;      /* max arc-length / domain diag; <=0 = run to natural end */
     Expr*  stream_style;      /* borrowed list of directives, or NULL */
     Expr*  color_function;    /* borrowed; NULL = none */
     Expr*  region_function;   /* borrowed; NULL = none */
@@ -230,7 +347,9 @@ typedef struct {
 static bool split_stream_options(Expr* res, StreamOpts* so,
                                   Expr*** passthrough_out, size_t* pt_count_out) {
     so->stream_points = 15;
-    so->stream_scale  = 0.08; /* 8% of domain diagonal by default */
+    so->stream_scale  = 0.0;  /* default: run each line to its natural end
+                               * (another line / boundary / critical point /
+                               * closed orbit), not a fixed short arc */
     so->stream_style  = NULL;
     so->color_function = NULL;
     so->region_function = NULL;
@@ -268,9 +387,9 @@ static bool split_stream_options(Expr* res, StreamOpts* so,
         } else if (name == SYM_StreamScale) {
             Expr* v = evaluate(expr_copy(rhs));
             if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_None) {
-                so->stream_scale = -1.0; /* run until boundary */
+                so->stream_scale = -1.0; /* run to natural end */
             } else if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic) {
-                so->stream_scale = 0.08;
+                so->stream_scale = 0.0;  /* run to natural end */
             } else {
                 double sv;
                 if (numericize(v, &sv) && sv > 0) so->stream_scale = sv;
@@ -377,23 +496,21 @@ static Expr* make_animated_streamline(const Point2* pts, size_t n) {
     return expr_new_function(expr_new_symbol(SYM_AnimatedStreamline), args, 1);
 }
 
-/* Build a fixed-length Arrow[{p1, p2}] centered at the stream midpoint,
- * oriented along the local flow direction.  `len` is in plot coordinates and
- * is the same for every stream, so arrows near tight attractors (where the
- * stream is very short) are the same size as arrows in open regions. */
-static Expr* make_fixed_arrow(const Point2* pts, size_t n, double len) {
-    if (n < 2 || len <= 0) return NULL;
-    size_t mid = n / 2;
-    if (mid == 0) mid = 1;
-
-    /* Local flow direction at the midpoint. */
-    double dx = pts[mid].x - pts[mid - 1].x;
-    double dy = pts[mid].y - pts[mid - 1].y;
+/* Build a fixed-length Arrow[{p1, p2}] centred at pts[idx], oriented along the
+ * local flow direction (pts[idx] - pts[idx-1]).  `len` is in plot coordinates
+ * and is the same for every arrow, so a direction chevron in a tight vortex is
+ * the same size as one in an open region.  Placing these at regular arc-length
+ * spacing along a long streamline (rather than one lone arrow per short arc) is
+ * what shows the flow direction without cluttering it. */
+static Expr* arrow_at_index(const Point2* pts, size_t n, size_t idx, double len) {
+    if (n < 2 || len <= 0 || idx == 0 || idx >= n) return NULL;
+    double dx = pts[idx].x - pts[idx - 1].x;
+    double dy = pts[idx].y - pts[idx - 1].y;
     double d  = sqrt(dx * dx + dy * dy);
     if (d < 1e-30) return NULL;
     double ux = dx / d, uy = dy / d;
 
-    double cx = pts[mid].x, cy = pts[mid].y;
+    double cx = pts[idx].x, cy = pts[idx].y;
     double half = len * 0.5;
     Point2 seg[2] = {
         { cx - half * ux, cy - half * uy },
@@ -499,64 +616,106 @@ Expr* builtin_streamplot(Expr* res) {
                      .vx = vx_body, .vy = vy_body };
     field_compile(&ctx);
 
-    /* Integration parameters in world space (for consistent arrow sizing). */
+    /* ---- Evenly-spaced streamline placement (Jobard-Lefebvre) ----
+     * All geometry (seeds, separation, integration, proximity) is in DATA
+     * space; only the finished polylines are mapped to world/scaled space for
+     * rendering. `d_sep` is the target spacing between neighbouring lines,
+     * driven by StreamPoints. */
+    double dx = xmax - xmin, dy = ymax - ymin;
+    double ext = (dx < dy) ? dx : dy;
+    double ddiag = sqrt(dx * dx + dy * dy);
+    int    np = so.stream_points;
+    if (np < 1) np = 1;
+
+    double d_sep   = ext / np;                 /* target line spacing */
+    if (!(d_sep > 0)) d_sep = ddiag > 0 ? ddiag * 0.05 : 1.0;
+    double d_sep2  = d_sep * d_sep;
+    double d_test2 = 0.25 * d_sep2;            /* stop ~0.5*d_sep from a line */
+    double h       = d_sep / 8.0;              /* fixed arc-length step */
+    if (!(h > 0)) h = 1e-4;
+    double loop2   = (1.6 * h) * (1.6 * h);    /* closed-orbit return radius^2 */
+    double min_loop_arc = 6.0 * h;
+
+    /* World-space spacing for arrow sizing (streams are rendered in world
+     * space; for the common identity scaling this equals d_sep). */
     double w_dx = u_xmax - u_xmin, w_dy = u_ymax - u_ymin;
-    double diag = sqrt(w_dx * w_dx + w_dy * w_dy);
-    double h = diag / (so.stream_points * 20.0);
-    if (h <= 0) h = 1e-4;
+    double w_ext = (w_dx < w_dy) ? w_dx : w_dy;
+    double d_sep_world = w_ext / np;
+    double arrow_len     = 0.85 * d_sep_world; /* chevron length */
+    double arrow_spacing = 3.2  * d_sep_world; /* arc between chevrons */
 
-    /* Uniform arrow indicator length: ~70% of seed spacing so every direction
-     * chevron is the same size regardless of local stream arc length. */
-    double seed_spacing = diag / so.stream_points;
-    double arrow_len = seed_spacing * 0.70;
-
-    /* max_steps: enough to cross the whole domain from corner to corner,
-     * unless StreamScale limits arc-length. */
-    double max_arc = (so.stream_scale > 0) ? so.stream_scale * diag : diag * 4.0;
+    /* Per-line arc-length cap: StreamScale -> s>0 limits each line to s*diag;
+     * otherwise (default) a line runs to its natural end. */
+    double max_arc = (so.stream_scale > 0) ? so.stream_scale * ddiag : 4.0 * ddiag;
     int max_steps = (int)(max_arc / h) + 1;
-    if (max_steps > 4000) max_steps = 4000;
+    if (max_steps > 20000) max_steps = 20000;
+    if (max_steps < 1) max_steps = 1;
 
-    /* Build seed list from a uniform grid in world space.  Convert seeds to
-     * data space for field evaluation; RegionFunction uses data coords. */
-    int np = so.stream_points;
-    double du_x = (u_xmax - u_xmin) / np;
-    double du_y = (u_ymax - u_ymin) / np;
-    SeedList seeds = { NULL, NULL, 0, 0 };
-    for (int ix = 0; ix < np; ix++) {
-        double sx = scale_invert(so.sf_x, u_xmin + (ix + 0.5) * du_x);
-        for (int iy = 0; iy < np; iy++) {
-            double sy = scale_invert(so.sf_y, u_ymin + (iy + 0.5) * du_y);
-            if (so.region_function && !eval_region(so.region_function, sx, sy)) continue;
-            /* Quick sanity: skip seeds where the field is zero (or fails). */
+    /* Candidate seeds: a data-space grid ordered from the domain centre
+     * outwards.  It is deliberately FINER than d_sep (2 candidates per
+     * separation) so the d_sep proximity cull has enough positions to place
+     * lines evenly and fill gaps left where a streamline terminated early —
+     * candidate density controls coverage, d_sep controls the line spacing.
+     * The scan also records the characteristic field speed used to set the
+     * critical-point threshold. */
+    double cxc = 0.5 * (xmin + xmax), cyc = 0.5 * (ymin + ymax);
+    int cn = 2 * np;   /* candidates per axis */
+    SeedCand* cand = malloc(sizeof(SeedCand) * (size_t)cn * (size_t)cn);
+    size_t ncand = 0;
+    double char_speed = 0.0;
+    for (int iy = 0; iy < cn; iy++) {
+        double sy = ymin + (iy + 0.5) * dy / cn;
+        for (int ix = 0; ix < cn; ix++) {
+            double sx = xmin + (ix + 0.5) * dx / cn;
             double tvx, tvy;
             if (!eval_field(&ctx, sx, sy, &tvx, &tvy)) continue;
-            seed_push(&seeds, sx, sy);
+            double sp = sqrt(tvx * tvx + tvy * tvy);
+            if (sp > char_speed) char_speed = sp;
+            double ex = sx - cxc, ey = sy - cyc;
+            cand[ncand].x = sx; cand[ncand].y = sy; cand[ncand].d2 = ex*ex + ey*ey;
+            ncand++;
         }
     }
+    qsort(cand, ncand, sizeof(SeedCand), seedcand_cmp);
+    double crit = (char_speed > 0) ? char_speed * 1e-4 : 1e-12;
 
-    /* Collect speed samples to scale ColorFunction if requested. */
-    /* We do two passes: first integrate all streams, then colorize. */
-    size_t max_streams = seeds.n;
-    Point2** all_streams = malloc(sizeof(Point2*) * (max_streams > 0 ? max_streams : 1));
-    size_t*  all_lengths = malloc(sizeof(size_t)  * (max_streams > 0 ? max_streams : 1));
-    double*  all_speed   = malloc(sizeof(double)  * (max_streams > 0 ? max_streams : 1));
+    SGrid grid;
+    sgrid_init(&grid, xmin, ymin, xmax, ymax, d_sep);
+
+    /* At most one streamline per candidate seed. */
+    size_t max_streams = ncand > 0 ? ncand : 1;
+    Point2** all_streams = malloc(sizeof(Point2*) * max_streams);
+    size_t*  all_lengths = malloc(sizeof(size_t)  * max_streams);
+    double*  all_speed   = malloc(sizeof(double)  * max_streams);
     size_t nstreams = 0;
 
-    for (size_t si = 0; si < seeds.n; si++) {
-        size_t n_pts;
-        Point2* pts = rk4_integrate(&ctx, seeds.xs[si], seeds.ys[si],
-                                    xmin, xmax, ymin, ymax, h, max_steps,
-                                    true, so.region_function, &n_pts);
-        if (n_pts < 2) { free(pts); continue; }
+    for (size_t ci = 0; ci < ncand; ci++) {
+        double sx = cand[ci].x, sy = cand[ci].y;
 
-        /* Midpoint speed for colorization (in data space, before scaling). */
+        /* Skip critical points and seeds too close to an existing line. */
+        double tvx, tvy;
+        if (!eval_field(&ctx, sx, sy, &tvx, &tvy)) continue;
+        if (sqrt(tvx * tvx + tvy * tvy) <= crit) continue;
+        if (so.region_function && !eval_region(so.region_function, sx, sy)) continue;
+        if (sgrid_within2(&grid, sx, sy, d_sep2)) continue;
+
+        size_t n_pts;
+        Point2* pts = grow_streamline(&ctx, &grid, sx, sy,
+                                      xmin, xmax, ymin, ymax, h, max_steps, crit,
+                                      d_test2, loop2, min_loop_arc,
+                                      so.region_function, &n_pts);
+        if (n_pts < 3) { free(pts); continue; }   /* discard stubs */
+
+        /* Register every point so later lines keep their distance. */
+        for (size_t k = 0; k < n_pts; k++) sgrid_add(&grid, pts[k].x, pts[k].y);
+
+        /* Midpoint speed (data space) for colourization. */
         size_t mid = n_pts / 2;
-        double svx, svy;
-        double spd = 0.0;
+        double svx, svy, spd = 0.0;
         if (eval_field(&ctx, pts[mid].x, pts[mid].y, &svx, &svy))
             spd = sqrt(svx * svx + svy * svy);
 
-        /* Transform stream points from data space to world space. */
+        /* Map to world/scaled space for rendering. */
         if (so.sf_x != SF_NONE || so.sf_y != SF_NONE) {
             for (size_t k = 0; k < n_pts; k++) {
                 pts[k].x = scale_apply(so.sf_x, pts[k].x);
@@ -570,7 +729,8 @@ Expr* builtin_streamplot(Expr* res) {
         nstreams++;
     }
 
-    free(seeds.xs); free(seeds.ys);
+    free(cand);
+    sgrid_free(&grid);
     field_free(&ctx);
 
     /* Restore iterator variable bindings. */
@@ -593,15 +753,16 @@ Expr* builtin_streamplot(Expr* res) {
     }
 
     /* ---- Build primitive list ---- */
-    /* Per-stream layout: [color?, Line[all_pts], Arrow[mid_2pt]]
+    /* Per-stream layout: [color?, Line[all_pts], Arrow, Arrow, ...]
      *
      * color source (in priority order):
      *   1. StreamColorFunction / ColorFunction  — explicit user function
      *   2. speed-based default (blue-violet → orange) — when no StreamStyle
      *   3. StreamStyle directive              — single global style, no per-stream color
      *
-     * The Arrow is a tiny 2-point segment at 40–60% of the stream arc so it
-     * acts as a small direction indicator mid-stream rather than a large cap. */
+     * Each Arrow is a short 2-point chevron placed at regular arc-length
+     * spacing along the shaft (see below), a small direction indicator rather
+     * than a large cap. */
     bool have_style = (so.stream_style != NULL);
     bool have_cfn   = (so.color_function != NULL);
     bool use_speed_color = !have_style && !have_cfn;
@@ -658,13 +819,35 @@ Expr* builtin_streamplot(Expr* res) {
             prims[nprim++] = shaft;
         }
 
-        /* Fixed-length direction Arrow at the stream midpoint. */
-        Expr* mid_arrow = make_fixed_arrow(pts, n_pts, arrow_len);
-        free(pts);
-        if (mid_arrow) {
-            if (nprim + 1 >= prim_cap) { prim_cap *= 2; prims = realloc(prims, sizeof(Expr*) * prim_cap); }
-            prims[nprim++] = mid_arrow;
+        /* Direction chevrons at regular world-space arc-length spacing along
+         * the shaft (a long line gets several; a short one gets one near its
+         * middle), so the flow direction reads everywhere without one giant
+         * arrowhead per line. */
+        if (arrow_len > 0) {
+            double acc = arrow_spacing * 0.5;   /* offset the first from the tip */
+            size_t placed = 0;
+            for (size_t k = 1; k < n_pts; k++) {
+                double ex = pts[k].x - pts[k-1].x, ey = pts[k].y - pts[k-1].y;
+                acc += sqrt(ex * ex + ey * ey);
+                if (acc >= arrow_spacing) {
+                    acc = 0.0;
+                    Expr* ar = arrow_at_index(pts, n_pts, k, arrow_len);
+                    if (ar) {
+                        if (nprim + 1 >= prim_cap) { prim_cap *= 2; prims = realloc(prims, sizeof(Expr*) * prim_cap); }
+                        prims[nprim++] = ar;
+                        placed++;
+                    }
+                }
+            }
+            if (placed == 0) {   /* short line: one chevron near the midpoint */
+                Expr* ar = arrow_at_index(pts, n_pts, n_pts / 2 ? n_pts / 2 : 1, arrow_len);
+                if (ar) {
+                    if (nprim + 1 >= prim_cap) { prim_cap *= 2; prims = realloc(prims, sizeof(Expr*) * prim_cap); }
+                    prims[nprim++] = ar;
+                }
+            }
         }
+        free(pts);
     }
     free(all_streams); free(all_lengths); free(all_speed);
 
