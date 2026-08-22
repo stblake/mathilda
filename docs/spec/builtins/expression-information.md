@@ -52,7 +52,21 @@ Out[12]= {}
 Predicates for testing expression types.
 - `AtomQ[expr]`: `True` if the expression has no parts.
 - `NumberQ[expr]`: `True` if the expression is a numeric type (Integer, Real, Rational, Complex).
-- `IntegerQ[expr]`: `True` if the expression is an Integer.
+- `IntegerQ[expr]`: `True` if the expression is an Integer or BigInt.
+- `MachineIntegerQ[expr]`: `True` if `expr` is a machine-word (64-bit) integer;
+  `False` for a BigInt, so `MachineIntegerQ[2^62]` is `True` but
+  `MachineIntegerQ[2^100]` is `False`. Attributes: `Protected`.
+- `RationalQ[expr]`: `True` if `expr` is an exact rational number — an Integer,
+  BigInt, or `Rational[p, q]` (an integer is rational, so `RationalQ[3]` is
+  `True`). Attributes: `Protected`.
+- `ComplexQ[expr]`: `True` if `expr` has head `Complex`; a purely real number is
+  not `Complex`. Attributes: `Protected`.
+- `ExactNumberQ[expr]`: `True` if `expr` is an exact number — an Integer, BigInt,
+  Rational, or a `Complex` whose parts are exact. `False` for machine and MPFR
+  reals. Attributes: `Protected`.
+- `InexactNumberQ[expr]`: `True` if `expr` is an inexact number — a machine real,
+  an MPFR (arbitrary-precision) real, or a `Complex` with an inexact part. The
+  complement of `ExactNumberQ` among numbers. Attributes: `Protected`.
 - `StringQ[expr]`: `True` if the expression is a string, and `False` otherwise.
   The empty string `""` gives `True`. `StringQ` is not `Listable`, so
   `StringQ[{"a", "b"}]` is `False` (a list is not a string) rather than

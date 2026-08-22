@@ -960,6 +960,14 @@
     "url": "documentation/graphics/ComplexPlot3D/"
   },
   {
+    "name": "ComplexQ",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "ComplexQ[expr] gives True if expr is a Complex number.",
+    "url": "documentation/expression-information/ComplexQ/"
+  },
+  {
     "name": "ComposeList",
     "category": "Expression Information",
     "slug": "expression-information",
@@ -1758,6 +1766,14 @@
     "status": "Stable",
     "summary": "EvenQ[n] gives True if n is an even integer (Integer or BigInt), False otherwise.",
     "url": "documentation/expression-information/EvenQ/"
+  },
+  {
+    "name": "ExactNumberQ",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "ExactNumberQ[expr] gives True if expr is an exact number.",
+    "url": "documentation/expression-information/ExactNumberQ/"
   },
   {
     "name": "Exp",
@@ -2984,6 +3000,14 @@
     "url": "documentation/comparisons/Inequality/"
   },
   {
+    "name": "InexactNumberQ",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "InexactNumberQ[expr] gives True if expr is an inexact number.",
+    "url": "documentation/expression-information/InexactNumberQ/"
+  },
+  {
     "name": "Information",
     "category": "Expression Information",
     "slug": "expression-information",
@@ -3678,6 +3702,14 @@
     "status": "Stable",
     "summary": "LucasL[n]",
     "url": "documentation/arithmetic/LucasL/"
+  },
+  {
+    "name": "MachineIntegerQ",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "MachineIntegerQ[expr] gives True if expr is a machine-word integer.",
+    "url": "documentation/expression-information/MachineIntegerQ/"
   },
   {
     "name": "MachineNumberQ",
@@ -5038,6 +5070,14 @@
     "status": "Stable",
     "summary": "Rational[n, d]",
     "url": "documentation/arithmetic/Rational/"
+  },
+  {
+    "name": "RationalQ",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "RationalQ[expr] gives True if expr is an exact rational number.",
+    "url": "documentation/expression-information/RationalQ/"
   },
   {
     "name": "Rationalize",
