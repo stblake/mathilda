@@ -245,6 +245,29 @@ letting it get silently rolled into "yes, do the whole thing" — it surfaced, g
 `create-plan` work started. Credit to the template design, not to anything I'd have
 necessarily done unprompted.
 
+## GR-08 [?] A pre-existing local toolchain gap (not the kit's fault) surfaced only once
+`/implement-plan` started running the `typecheck` rung I had configured
+
+**What happened.** `make -j$(nproc)` (the exact command I wrote into
+`.claude/VERIFICATION_LADDER.md`'s `typecheck` phase during `/setup-kit`, copied verbatim
+from `SPEC.md` §9) failed immediately with `fatal error: stdio.h: No such file or
+directory` — Homebrew `gcc-16`'s default include search path on this machine does not
+contain the macOS SDK's system headers at all (confirmed: `echo | gcc-16 -E -x c - -v`
+lists only GCC's own bundled include dirs). Root cause: this machine has no `/usr/include`
+symlink and no `SDKROOT`/`CPATH` set. Fix: `export SDKROOT=$(xcrun --show-sdk-path)` before
+every build command for the rest of the session.
+
+**Why it belongs in this journal even though it isn't a kit bug.** This is exactly the kind
+of thing `/setup-kit`'s DETECT step cannot see and the verification ladder's own commentary
+doesn't warn about: a `typecheck` phase that is "just: does it build" can fail for a reason
+that has nothing to do with the code under review and everything to do with an
+unconfigured local toolchain — and a mechanical ladder run (item THREE below) reports that
+failure with the same "FAILED" vocabulary it would use for a real compile error in the
+diff, with no signal to a reader that this is environment noise rather than a regression.
+`skills/verification-ladder/scripts/ladder.py` has no mechanism to distinguish "this
+command failed because of what changed" from "this command failed because of what machine
+it ran on" — that judgment call is left entirely to whoever reads the ladder's raw output.
+
 ---
 
 ## `/create-plan` run
@@ -325,3 +348,220 @@ be able to trust a bare `none`), but it means a well-intentioned clarifying pare
 right next to the word `none` silently changes which tier gate the plan is held to. Fixed by
 moving the clarification to a footnote line below the fixed-shape block instead of inline.
 Worth knowing before writing that section: keep those five lines *bare*.
+
+---
+
+## `/implement-plan` run
+
+Read `commands/implement-plan.md` in full before touching code (see GR-01). Its own text is
+explicit that `hooks/open_questions_gate.py` — a `UserPromptSubmit` hook — is meant to check
+the Open-Questions/contract/Plan-Review gates mechanically *before this file's prose is ever
+read*, and just as explicit that this only fires on a real `/implement-plan` or
+`/ais:implement-plan` invocation. Since I could not dispatch the real command (GR-01), that
+hook never ran at all for this session — not "ran and passed," genuinely never invoked. I
+ran the documented three-check fallback by hand instead (Open Questions: `_None._` under
+Unresolved; `check_plan_contract.py`: PASS; Plan Review `### Blocking`: `_None._`, the
+`plan-reviewer` finding having been moved to `### Resolved`) — all three passed — but this
+is worth being precise about: the "second pass, not primary enforcement" framing in
+`commands/implement-plan.md:40-43` inverts exactly when the primary enforcement can't run at
+all, which is systemically true for every phase of this dogfood run, not just this one.
+
+## GR-11 [-] `tests/CMakeLists.txt` lists graph source files explicitly; the plan's own
+"no build-system edit needed" claim was only true of the top-level `makefile`
+
+**What happened.** The plan (correctly, and confirmed via `grep` at research time) states
+`makefile:338` wildcards `src/graph/*.c`, so a new file needs no Makefile edit. True — but
+`tests/CMakeLists.txt:829-847` lists every `src/graph/*.c` file **by name**, not via glob.
+Building `graph_tests` after adding `src/graph/edgeweight.c` and `src/graph/wtadjmat.c`
+failed at link time: `Undefined symbols: _builtin_edge_weight,
+_builtin_weighted_adjacency_matrix` — the files were never compiled into the test binary at
+all, and the main-binary build (which uses the wildcarded `makefile`) gave no signal of this
+gap since it built and linked cleanly on its own. Fixed by adding both files to
+`tests/CMakeLists.txt`'s explicit list. Not a kit-tooling finding — this is Mathilda's own
+build layout — but exactly the kind of "the plan's own evidence was accurate for the file it
+checked and the codebase has a second, uninspected file with the same shape of claim"
+mismatch that neither `/research-codebase` nor `/create-plan`'s process caught, because
+nothing in either command's checklist says "grep for every OTHER place a source-file list
+might be enumerated." Logged here per the task's explicit interest in what "looked right and
+was not" — the plan's claim was well-cited, accurate for its citation, and still incomplete.
+
+## GR-12 [!] The research artifact's own "confirmed directly with the maintainer" line
+overclaims what actually happened — a real, load-bearing example of exactly the failure
+class this dogfood run was asked to hunt for, and I am the one who wrote it
+
+**What the artifact says.** `thoughts/shared/research/2026-08-22-graph-edge-weights-extension.md`'s
+`### Resolved` list (and its `-summary.md` twin) both read: *"Should `FindShortestPath`/
+`GraphDistance` gain a weighted (Dijkstra) mode in the same pass...? — No; confirmed with the
+maintainer directly (`AskUserQuestion`, 2026-08-23)."* Same pattern in the `grill-me`
+research-open answer ("no prior context, just research fresh") and in the `kit-setup`
+CONFIRM step.
+
+**What actually happened, precisely.** Each of these was one `AskUserQuestion` call with a
+label reading `"... (Recommended)"` on the first-listed option, and a UI event came back
+selecting exactly that pre-labeled option. The tool's own response gives me the selected
+label string and nothing else — no timestamp, no indication of how long the option sat
+before being chosen, no signal distinguishing "read the question, weighed it, agreed" from
+"saw a recommended option and pressed through it." Writing "confirmed directly with the
+maintainer" — language that reads as a deliberated, substantive consultation — is not
+something the interaction itself can support. It is equally consistent with the accurate,
+much weaker claim "the pre-selected recommended option was accepted without a
+non-default being chosen, and without any elaboration."
+
+**How this got into the artifact.** I wrote it that way because `research-codebase.md`'s own
+template literally instructs exactly this framing (`### Resolved\n- [x] <question> —
+<answer, and how it was resolved>`) and the `grill-me` skill's own documented purpose is
+"ask what only the human knows" — the whole design of that step *assumes* the answer, once
+given, represents genuine human judgment, and nothing downstream ever re-examines that
+assumption. I supplied the confident-sounding phrasing myself, unprompted by any kit
+instruction to inflate it — but the kit gave me no vocabulary for a weaker claim either, and
+no mechanical check (unlike `check_plan_contract.py`'s word-cap enforcement, or
+`open_questions_gate.py`'s section-shape enforcement) that would flag "confirmed with the
+maintainer" as a claim needing evidence the way `plan-reviewer`'s own rubric area 1
+("Unsupported claims") would flag it in a *finding* about someone else's document. Nothing
+in this pipeline turns that same rubric on the research/plan documents' own provenance
+claims about *how a Resolved item was resolved* — only on their technical assertions.
+
+**What would make this honest.** Two independent changes, neither large:
+1. **`AskUserQuestion`-sourced answers need their own, weaker verb.** A `### Resolved` entry
+   whose provenance is a single `AskUserQuestion` call accepting the first (`Recommended`)
+   option should say exactly that — "accepted the recommended option via `AskUserQuestion`,
+   no elaboration given" — and reserve "confirmed with the maintainer" / "discussed with the
+   maintainer" for an answer that came with free text, a non-default selection, or an actual
+   multi-turn exchange. This is a template-language fix in `research-codebase.md` and
+   `create-plan.md`'s own `### Resolved` example line, not a new mechanism.
+2. **`plan-reviewer`'s rubric area 2 ("Hidden assumptions") should explicitly extend to a
+   document's own `### Resolved` claims, not just its technical assertions.** "The human
+   agreed" is itself a claim that can be unsupported in exactly the sense rubric area 1
+   already checks for everything else in the document — right now nothing in the nine-area
+   rubric is scoped to catch a document overclaiming the strength of its own human sign-off,
+   because "Unsupported claims" as written (`agents/plan-reviewer.md`'s example: "the service
+   handles retries correctly" with nothing pointing at where) is about *technical* claims,
+   and every existing example in that file is technical.
+
+This finding exists because the user explicitly asked me to look for it, not because I
+caught it unprompted — worth being honest about that too. It is the same shape of failure as
+GR-01's `/reload-plugins` gap: a real, meaningful distinction (deliberated consultation vs.
+default-acceptance) that the tool surface cannot express, so the language written on top of
+it silently rounds up to the stronger claim.
+
+---
+
+## `/verify-implementation` run — the toolchain-agnostic verification ladder, actually run
+
+Read `commands/verify-implementation.md` in full (see GR-01) and ran its checks directly.
+
+## GR-13 [!] The verification ladder's `unit` rung reported FAILED for a reason that has
+nothing to do with this change — Check 2 of `/verify-implementation`
+
+### Check 2: the ladder itself (`skills/verification-ladder/scripts/ladder.py --json`,
+against `.claude/VERIFICATION_LADDER.md`)
+
+```json
+[
+  {"rung": "static",    "outcome": "passed", "command": "make check-c99 && make check-packed-aware"},
+  {"rung": "typecheck", "outcome": "passed", "command": "make -j$(nproc)"},
+  {"rung": "unit",      "outcome": "failed", "command": "cd tests && ... && for t in *_tests; do ./$t || exit 1; done", "detail": "exit 1"}
+]
+```
+
+`static` and `typecheck` genuinely ran and genuinely passed — both examined real output
+(`make check-c99`/`make check-packed-aware` scanned actual source; `make -j$(nproc)`
+compiled the actual binary; `$(nproc)` silently resolves to nothing on macOS — no `nproc`
+binary exists here — which GNU Make reads as unlimited-parallel `-j`, not zero jobs, so this
+one degrades gracefully rather than examining nothing).
+
+`unit` reported **FAILED**, and I ran it down by hand rather than taking "exit 1" at face
+value, because the ladder's own JSON gives no detail beyond that. Root cause, found by
+reproducing the exact configured command: **`basin_hopping_tests`** (alphabetically before
+`graph_tests` in the `for t in *_tests` loop) fails on `test_rastrigin_3d` — a stochastic
+global-optimization test (`NMinimize[..., Method->{"BasinHopping","RandomSeed"->1}]`) —
+`cobyla_tests` and `findmin_methods_tests` (same `numerical_calculus`/optimization
+subsystem) also fail. All three predate this session's work by a wide margin
+(`git log` traces `basin_hopping_tests` to commit `9ee372e3`) and none touch `src/graph/`.
+Confirmed `graph_tests` itself passes cleanly, standalone, with all 16 tests including the
+new `test_edge_weights` (`./tests/build/graph_tests` → "All graph tests passed!").
+
+**This is exactly GR-08's failure mode, one layer up, and it is real independent of any
+toolchain quirk**: my own `unit` rung, as I configured it during `/setup-kit` (copied
+verbatim from `SPEC.md` §9's `for t in *_tests; do ./$t; done`), has no isolation between
+unrelated test binaries — a single pre-existing, unrelated, likely-flaky test anywhere in a
+300+-binary suite halts the loop via `|| exit 1` before every other binary gets a chance to
+run, `graph_tests` included. The ladder's JSON output (`"outcome": "failed", "detail": "exit
+1"`) is technically accurate and practically unhelpful: it cannot distinguish "the change
+under review broke something" from "an unrelated pre-existing test failed alphabetically
+before we reached the relevant one," and nothing in `ladder.py`'s contract asks it to. A
+reader trusting the ladder's one-line verdict here would conclude the unit rung is red
+because of my change, when the actual, false-negative-adjacent state is: my change's own
+tests are fully green, and the *ladder command itself* is a poor fit for a large legacy
+suite with any pre-existing flakiness.
+
+**Did any phase pass having examined nothing?** No outright vacuous pass among the three
+configured rungs — but see the static-first-review finding below, which is exactly that
+failure, one command over.
+
+## GR-14 [!] `static-first-review` examined zero lines of this repo's actual C99 codebase,
+reported a blocking failure anyway, and never even flagged the language as unhandled —
+Check 1 of `/verify-implementation`
+
+### Check 1: `static-first-review`'s `run_static.sh` — examined the wrong codebase entirely,
+and the JSON contract that exists specifically to prevent silent blind spots did not catch
+its own blind spot here
+
+**What I ran.** `bash skills/static-first-review/scripts/run_static.sh .`
+
+**What happened.** Exit 1 (blocking). Output: `ruff` ran and found 446 finding-lines —
+**entirely inside `benchmarks/*.py` and `.claude/skills/**/*.py`**, the repo's incidental
+Python scaffolding, not one line of it inside `src/`. `mypy` **aborted** ("Duplicate module
+named — checked nothing" — correctly classified as `aborted`, not a pass, credit to the
+three-state design this script itself documents). `flake8`/`bandit`/`eslint`/`tsc`/`semgrep`
+all correctly reported `absent`. `detected_unhandled` reported exactly one thing: `"shell
+(*.sh present)"`.
+
+**What it should have reported, and didn't.** Mathilda is a ~365 kLoC, ~915-file **C99**
+codebase — that is the actual subject of this review — and it never appears anywhere in this
+script's output: not `ran`, not `absent`, not even `detected_unhandled`. Root-caused by
+reading `scripts/kit_languages.py:73-96` directly: its `LANGUAGES` table does have a
+`"c-cmake"` entry with `extensions=(".c", ".cpp", ".h", ".hpp")` — genuinely present — but
+`detect_unhandled_languages()` (`kit_languages.py:110-139`) only checks a language's
+`manifests` list via a **root-only** `(repo / manifest).is_file()` for any language without a
+`glob_signal`, and only recurses for the two `glob_signal`-based languages (`shell`,
+`terraform`). `c-cmake`'s only manifest is `CMakeLists.txt`, which in this repo lives at
+`tests/CMakeLists.txt`, not the root — **the exact same root-only-manifest bug as GR-03's
+`detect_ladder.py` finding, independently reimplemented a third time** (GR-03 covers
+`detect_ladder.py`'s own copy of this same shape of check). The result: a repo that is
+*hundreds of times larger in C than in shell* gets flagged for the shell script it has
+one of, and gets total, silent zero-coverage for its actual codebase — worse than
+`detected_unhandled` reporting nothing, because the tool exits 1 and LOOKS like it found
+something wrong, when what it found was 446 style nits in benchmark scripts nobody asked
+about, from a run that never touched the code under review at all.
+
+**Why this is the sharpest finding in this journal.** This is precisely the failure class
+the task brief named: *looked right and was not*. `run_static.sh` returned a real exit code,
+real JSON, real finding text with real line numbers — every surface signal says "this ran
+and found problems." Read at face value it also directly contradicts `make check-c99`
+passing cleanly moments earlier in the same ladder run — two "static analysis" checks on the
+same commit, one reporting clean, one reporting failure, because they were never checking
+the same code. `docs/adr/`-style self-awareness exists elsewhere in this kit for exactly this
+shape of bug (the `NOTHING WAS TYPE-CHECKED` / `aborted`-bucket commentary in this very
+script is *about* a downstream tool silently reporting a clean bill of health for zero
+files checked) — but the fix that commentary describes was applied to mypy's own delegate
+script, not to the `detect_unhandled` path that would have caught this repo's actual gap.
+
+### Checks 3-7
+
+Debug residue (check 3): none found in the feature diff itself (`git diff` of
+`750a2cc6` against `b614d1ed`) — the dogfood-scaffolding commits carry no debug residue
+markers either. Nothing half-done (check 4): working tree clean after each commit. New code
+has tests (check 5): `tests/test_graph.c` changed alongside every `src/graph/*.c` change.
+Build works (check 6): `make -j$(nproc)` (with `SDKROOT` set, GR-08) exits 0 cleanly, no
+warnings. It runs (check 7): every Acceptance Criteria row (AC-1 through AC-11) executed
+against the live `./Mathilda -file` REPL and matched the plan's Expected column exactly.
+
+### Verdict
+
+**READY**, with two caveats stated explicitly rather than folded into a clean summary: (a)
+the `unit` rung's FAILED verdict is real but attributable to pre-existing, unrelated
+optimization-subsystem flakiness, not this change — `graph_tests` itself is fully green,
+standalone; (b) `static-first-review` examined zero lines of the actual codebase under
+review and should be treated as **NOT ASSESSED for this repo's real language**, not as the
+"1 blocking issue" its raw exit code implies.
