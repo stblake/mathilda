@@ -107,10 +107,22 @@
   {"cad-half-upper",     x^2 + y^2 <= 1 && y >= 0,         {x, y},  Reals,     "solved"},
   {"cad-point",          x^2 + y^2 <= 0,                   {x, y},  Reals,     "solved"},
 
+  (* ---- rational-function inequalities over the Reals: poles are added as
+   *      breakpoints and p/q is signed as sign(p)*sign(q); poles are excluded ---- *)
+  {"rat-recip-lt",       1/x < 1,                          x,       Reals,     "solved"},
+  {"rat-seven-lt",       7/x < 22,                         x,       Reals,     "solved"},
+  {"rat-recip-ge",       1/x >= 0,                         x,       Reals,     "solved"},
+  {"rat-recip-ne",       1/x != 0,                         x,       Reals,     "solved"},
+  {"rat-recip-eq",       1/x == 0,                         x,       Reals,     False},
+  {"rat-two-poles",      1/(x^2 - 1) < 0,                  x,       Reals,     "solved"},
+  {"rat-no-pole",        1/(x^2 + 1) < 0,                  x,       Reals,     False},
+  {"rat-shift",          (x - 1)/(x - 2) > 0,              x,       Reals,     "solved"},
+  {"rat-sum-recip",      x + 1/x > 2,                      x,       Reals,     "solved"},
+  {"rat-chain-default",  -5 < 3 x + 7/x <= 22,             x,       Automatic, "solved"},
+
   (* ---- soundness invariant: these MUST decline (never a guessed formula) ---- *)
   {"dec-int-unbounded",  x > 0,                            x,       Integers,  "decline"},
   {"dec-int-unbounded2", x < 5,                            x,       Integers,  "decline"},
-  {"dec-nonconst-denom", 1/x < 1,                          x,       Reals,     "decline"},
   {"dec-abs",            Abs[x] < 1,                       x,       Reals,     "decline"},
   {"dec-bad-domain",     x^2 == 4,                         x,       Booleans,  "decline"},
   {"dec-nl-multivar3",   x^2 + y^2 + z^2 < 1,              {x, y, z}, Reals,   "decline"},

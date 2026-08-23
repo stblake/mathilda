@@ -83,30 +83,33 @@ static Expr* sign_normalize(Expr* poly) {
         (Expr*[]){ expr_new_integer(-1), poly }, 2));
 }
 
-/* True iff Denominator[Together[lhs - rhs]] is not a nonzero numeric constant.
- * When it holds, clearing the denominator (to form the polynomial numerator) may
- * have dropped a variable pole or flipped a sign, so the real engines must not
- * treat the numerator as an equivalent polynomial. */
-static bool denom_is_nonconstant(const Expr* lhs, const Expr* rhs) {
+/* den := Denominator[Together[lhs - rhs]], evaluated.  Returns the owned
+ * denominator polynomial when it is NOT a nonzero numeric constant -- i.e. the
+ * relation is a genuine rational function whose poles and denominator sign
+ * matter -- and NULL when the denominator is constant (an ordinary polynomial
+ * relation).  When non-NULL, clearing the denominator to form the numerator
+ * dropped the pole/sign structure, so the multivariate engines must decline and
+ * the univariate sign diagram must reason with the returned denominator. */
+static Expr* canonical_denom(const Expr* lhs, const Expr* rhs) {
     Expr* diff = expr_new_function(expr_new_symbol(SYM_Subtract),
         (Expr*[]){ expr_copy((Expr*)lhs), expr_copy((Expr*)rhs) }, 2);
     Expr* tog = expr_new_function(expr_new_symbol(SYM_Together), (Expr*[]){ diff }, 1);
     Expr* den = eval_and_free(expr_new_function(expr_new_symbol(SYM_Denominator),
         (Expr*[]){ tog }, 1));
-    bool nonconst;
+    bool constant;
     switch (den->type) {
         case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT:
 #ifdef USE_MPFR
         case EXPR_MPFR:
 #endif
-            nonconst = false; break;
+            constant = true; break;
         case EXPR_FUNCTION:
-            nonconst = !is_head(den, SYM_Rational);   /* Rational[p,q] is constant */
+            constant = is_head(den, SYM_Rational);    /* Rational[p,q] is constant */
             break;
-        default: nonconst = true; break;              /* a symbol, etc. */
+        default: constant = false; break;             /* a symbol, etc. */
     }
-    expr_free(den);
-    return nonconst;
+    if (constant) { expr_free(den); return NULL; }
+    return den;
 }
 
 /* poly := Numerator[Together[lhs - rhs]], evaluated. */
@@ -126,7 +129,7 @@ static Expr* canonical_poly(const Expr* lhs, const Expr* rhs) {
 
 RAtom reduce_atom_canonicalize(const Expr* rel, Expr** vars, int nv, bool* ok) {
     RAtom a;
-    a.poly = NULL; a.elem_dom = NULL; a.display = NULL; a.rel = R_EQ;
+    a.poly = NULL; a.denom = NULL; a.elem_dom = NULL; a.display = NULL; a.rel = R_EQ;
     a.nonconst_denom = false;
     a.main_var = -1; a.deg_main = -1; a.is_linear = false;
 
@@ -158,7 +161,8 @@ RAtom reduce_atom_canonicalize(const Expr* rel, Expr** vars, int nv, bool* ok) {
     else if (h == SYM_GreaterEqual) { a.rel = R_LE; a.poly = canonical_poly(r, l); }
     else { if (ok) *ok = false; return a; }
 
-    a.nonconst_denom = denom_is_nonconstant(l, r);
+    a.denom = canonical_denom(l, r);
+    a.nonconst_denom = (a.denom != NULL);
     if (a.rel == R_EQ || a.rel == R_NE) a.poly = sign_normalize(a.poly);
 
     a.main_var = first_var_in(a.poly, vars, nv);
@@ -183,11 +187,16 @@ RAtom ratom_solved(const Expr* var, const Expr* value, Expr** vars, int nv) {
  * ------------------------------------------------------------------ */
 
 int reduce_atom_decide_constant(const RAtom* a) {
-    /* An inequality whose canonicalisation cleared a variable denominator is not
-     * equivalent to its polynomial numerator (the denominator's sign matters), so
-     * its numerator being a nonzero constant does NOT decide it -- keep it
-     * undecided so the form does not collapse and the engines can decline. */
-    if (a->nonconst_denom && (a->rel == R_LT || a->rel == R_LE)) return -1;
+    /* A relation whose canonicalisation cleared a variable denominator is not
+     * equivalent to its polynomial numerator: the denominator's sign and its
+     * poles matter.  So a nonzero-constant numerator does NOT decide an ordering
+     * (< <=) or an Unequal (p/q != 0 still excludes the poles, e.g. 1/x != 0 is
+     * x != 0, not True).  Keep these undecided so the univariate sign diagram
+     * resolves them and the multivariate engines can decline.  An Equal
+     * (p/q == 0) with a nonzero-constant numerator IS decidably false, and is
+     * left to the evaluate() path below. */
+    if (a->nonconst_denom && (a->rel == R_LT || a->rel == R_LE || a->rel == R_NE))
+        return -1;
     Expr* rel;
     if (a->rel == R_ELEM) {
         rel = expr_new_function(expr_new_symbol(SYM_Element),

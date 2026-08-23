@@ -828,6 +828,18 @@ degenerate branch, and it handles inequalities over the reals.
   `Reduce[x^2 != 1, x, Reals] -> x != -1 && x != 1`;
   `Reduce[x^2 < 2, x, Reals] -> -Sqrt[2] < x < Sqrt[2]` (algebraic breakpoints are
   ordered and signed via an exact real-algebraic oracle).
+- **Univariate rational-function inequalities over Reals**: a relation `p/q REL 0`
+  is solved on the same sign diagram, extended so the roots of the denominator
+  (the **poles**) are breakpoints and the sign of `p/q` on each cell is
+  `sign(p)*sign(q)`. Poles are excluded from the solution set (`p/q` is undefined
+  there), so clearing the denominator never flips the sense. Examples:
+  `Reduce[1/x < 1, x, Reals] -> x < 0 || x > 1`;
+  `Reduce[1/x >= 0, x, Reals] -> x > 0` (the pole is excluded, so not `x >= 0`);
+  `Reduce[1/x != 0, x, Reals] -> x != 0`;
+  `Reduce[(x-1)/(x-2) > 0, x, Reals] -> x < 1 || x > 2`;
+  `Reduce[-5 < 3 x + 7/x <= 22, x] -> 1/3 <= x <= 7` (the ordering inequality
+  defaults the domain to the Reals). Multivariate rational inequalities are not
+  yet covered and still decline.
 - **Multivariate linear systems over Reals** (Fourier-Motzkin elimination): a
   system of linear equations and inequalities is projected variable by variable
   into a triangular description (bounds on the first variable, then each later

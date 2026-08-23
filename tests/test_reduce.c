@@ -247,6 +247,37 @@ static void test_real_inequalities(void) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Rational-function inequalities over the Reals: the sign diagram    *
+ *  adds the poles (roots of the denominator) as breakpoints and signs *
+ *  p/q as sign(p)*sign(q), so clearing the denominator never flips    *
+ *  the sense.  Poles are excluded (p/q is undefined there).           *
+ * ------------------------------------------------------------------ */
+
+static void test_rational_inequalities(void) {
+    /* Explicit-domain forms. */
+    run_test("Reduce[1/x < 1, x, Reals]", "Or[Less[x, 0], Greater[x, 1]]");
+    run_test("Reduce[7/x < 22, x, Reals]",
+             "Or[Less[x, 0], Greater[x, Rational[7, 22]]]");
+    /* p/q >= 0 excludes the pole: x > 0, not x >= 0. */
+    run_test("Reduce[1/x >= 0, x, Reals]", "Greater[x, 0]");
+    /* p/q != 0 still excludes the pole: 1/x != 0 is x != 0. */
+    run_test("Reduce[1/x != 0, x, Reals]", "Unequal[x, 0]");
+    /* p/q == 0 with a nonzero-constant numerator is unsatisfiable. */
+    run_test("Reduce[1/x == 0, x, Reals]", "False");
+    /* Two poles from a quadratic denominator. */
+    run_test("Reduce[1/(x^2 - 1) < 0, x, Reals]",
+             "Inequality[-1, Less, x, Less, 1]");
+    /* Denominator with no real root: the pole set is empty. */
+    run_test("Reduce[1/(x^2 + 1) < 0, x, Reals]", "False");
+    run_test("Reduce[(x - 1)/(x - 2) > 0, x, Reals]",
+             "Or[Less[x, 1], Greater[x, 2]]");
+    /* The reported case: a chained rational inequality with no explicit
+     * domain defaults to the Reals and is fully solved. */
+    run_test("Reduce[-5 < 3 x + 7/x <= 22, x]",
+             "Inequality[Rational[1, 3], LessEqual, x, LessEqual, 7]");
+}
+
+/* ------------------------------------------------------------------ *
  *  Phase 3 - multivariate linear systems over Reals (Fourier-Motzkin)*
  * ------------------------------------------------------------------ */
 
@@ -395,9 +426,6 @@ static void test_decline_soundness(void) {
     run_test("Reduce[x < 5, x, Integers]", "Reduce[Less[x, 5], x, Integers]");
     run_test("Reduce[x^2 > 1, x, Integers]",
              "Reduce[Greater[Power[x, 2], 1], x, Integers]");
-    /* Rational-function inequality with a non-constant cleared denominator:
-     * clearing could flip the sense, so Reduce declines (soundness fix). */
-    run_test("Reduce[1/x < 1, x, Reals]", "Reduce[Less[Power[x, -1], 1], x, Reals]");
     /* Non-polynomial atom. */
     run_test("Reduce[Abs[x] < 1, x, Reals]", "Reduce[Less[Abs[x], 1], x, Reals]");
     /* Unsupported / unknown domains. */
@@ -603,6 +631,7 @@ int main(void) {
     TEST(test_equations);
     TEST(test_equations_decline);
     TEST(test_real_inequalities);
+    TEST(test_rational_inequalities);
     TEST(test_linear_systems);
     TEST(test_parametric_systems);
     TEST(test_parametric_systems_decline);

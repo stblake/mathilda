@@ -51,10 +51,18 @@ typedef struct {
     /* True when canonicalisation (Numerator[Together[lhs-rhs]]) cleared a
      * denominator that is NOT a nonzero constant -- i.e. the relation is a
      * rational function whose polynomial numerator has lost the sign
-     * information of the (variable) denominator and its poles.  The real
-     * engines (sign diagram, Fourier-Motzkin) must NOT treat such an atom as
-     * polynomial; they decline instead, keeping Reduce sound. */
+     * information of the (variable) denominator and its poles.  The multivariate
+     * engines (Fourier-Motzkin, CAD, linear-system) must NOT treat such an atom
+     * as polynomial; they decline instead, keeping Reduce sound. */
     bool   nonconst_denom;
+    /* The cleared (variable) denominator polynomial, owned, or NULL when the
+     * denominator was a nonzero constant (an ordinary polynomial relation).
+     * Non-NULL exactly when `nonconst_denom` is true.  The univariate sign
+     * diagram uses it to add the poles (roots of `denom`) as breakpoints and to
+     * sign the rational function as sign(poly)*sign(denom), so `p/q REL 0` is
+     * solved soundly instead of declined.  `poly` and `denom` are coprime
+     * (Together reduces to lowest terms). */
+    Expr*  denom;
     /* Cheap cached classification filled by reduce_atom_canonicalize.  The
      * degree / linearity fields are Phase-2 routing hints; Phase 0 leaves them
      * at the sentinels below. */

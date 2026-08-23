@@ -21,6 +21,7 @@
 void ratom_free_members(RAtom* a) {
     if (!a) return;
     if (a->poly) { expr_free(a->poly); a->poly = NULL; }
+    if (a->denom) { expr_free(a->denom); a->denom = NULL; }
     if (a->elem_dom) { expr_free(a->elem_dom); a->elem_dom = NULL; }
     if (a->display) { expr_free(a->display); a->display = NULL; }
 }
@@ -28,6 +29,7 @@ void ratom_free_members(RAtom* a) {
 RAtom ratom_dup(const RAtom* a) {
     RAtom r = *a;
     r.poly = a->poly ? expr_copy(a->poly) : NULL;
+    r.denom = a->denom ? expr_copy(a->denom) : NULL;
     r.elem_dom = a->elem_dom ? expr_copy(a->elem_dom) : NULL;
     r.display = a->display ? expr_copy(a->display) : NULL;
     return r;
@@ -36,6 +38,10 @@ RAtom ratom_dup(const RAtom* a) {
 bool ratom_eq(const RAtom* x, const RAtom* y) {
     if (x->rel != y->rel) return false;
     if (!expr_eq(x->poly, y->poly)) return false;
+    /* A rational atom and a polynomial atom sharing a numerator are distinct
+     * relations, so the denominator is part of the atom's identity for dedup. */
+    if (!x->denom != !y->denom) return false;
+    if (x->denom && !expr_eq(x->denom, y->denom)) return false;
     if (x->rel == R_ELEM) {
         if (!x->elem_dom || !y->elem_dom) return x->elem_dom == y->elem_dom;
         return expr_eq(x->elem_dom, y->elem_dom);
@@ -48,6 +54,7 @@ RAtom ratom_negate(const RAtom* a, bool* ok) {
     r.elem_dom = NULL;
     r.display = NULL;
     r.nonconst_denom = a->nonconst_denom;   /* negation shares the denominator */
+    r.denom = a->denom ? expr_copy(a->denom) : NULL;   /* sign flips in poly only */
     r.main_var = a->main_var;
     r.deg_main = a->deg_main;
     r.is_linear = a->is_linear;

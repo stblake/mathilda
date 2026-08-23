@@ -23,8 +23,21 @@
 /* Truth of one atom at the sample: 1 true, 0 false, -1 undecided. */
 static int atom_truth_at(const RAtom* a, const Expr* x, const Expr* sample) {
     if (a->rel == R_ELEM) return -1;
-    int s = rru_poly_sign_at(a->poly, x, sample);
-    if (s == -2) return -1;
+    int s;
+    if (a->denom) {
+        /* Rational atom p/q REL 0.  A pole (q == 0) makes p/q undefined, so the
+         * point is excluded from the solution set (false for every relation).
+         * Off a pole, sign(p/q) = sign(p) * sign(q). */
+        int sq = rru_poly_sign_at(a->denom, x, sample);
+        if (sq == -2) return -1;
+        if (sq == 0)  return 0;
+        int sp = rru_poly_sign_at(a->poly, x, sample);
+        if (sp == -2) return -1;
+        s = sp * sq;
+    } else {
+        s = rru_poly_sign_at(a->poly, x, sample);
+        if (s == -2) return -1;
+    }
     switch (a->rel) {
         case R_EQ: return s == 0;
         case R_NE: return s != 0;
@@ -84,10 +97,13 @@ static Expr* seg_to_expr(const Expr* lo, bool lo_open,
  *  Driver                                                             *
  * ------------------------------------------------------------------ */
 
-/* Gather the distinct real breakpoints (roots of every polynomial in F) in
- * ascending order, deduped.  Returns an owned array of length *m_out (caller
- * frees the entries and the array); sets *ok=false to decline (a non-polynomial
- * atom, an ELEM, a cleared variable denominator, or an undecidable ordering). */
+/* Gather the distinct real breakpoints of F in ascending order, deduped: the
+ * roots of every numerator AND, for a rational atom p/q, the roots of q (the
+ * poles), so a rational relation is decided on a diagram whose cells are the
+ * intervals on which p/q is continuous and single-signed.  Returns an owned
+ * array of length *m_out (caller frees the entries and the array); sets
+ * *ok=false to decline (a non-polynomial numerator or denominator, an ELEM, or
+ * an undecidable ordering). */
 static Expr** collect_breakpoints(const RForm* F, const Expr* x, int* m_out, bool* ok) {
     *ok = true; *m_out = 0;
     Expr** polys = NULL; int np = 0, pcap = 0;
@@ -95,13 +111,21 @@ static Expr** collect_breakpoints(const RForm* F, const Expr* x, int* m_out, boo
         RConj* c = F->c[i];
         for (int k = 0; *ok && k < c->n; k++) {
             RAtom* a = &c->a[k];
-            if (a->rel == R_ELEM || a->nonconst_denom) { *ok = false; break; }
-            bool dup = false;
-            for (int j = 0; j < np; j++) if (expr_eq(polys[j], a->poly)) { dup = true; break; }
-            if (dup) continue;
-            if (!rru_is_polynomial(a->poly, x)) { *ok = false; break; }
-            if (np == pcap) { pcap = pcap ? pcap * 2 : 8; polys = realloc(polys, (size_t)pcap * sizeof(Expr*)); }
-            polys[np++] = a->poly;          /* borrowed */
+            if (a->rel == R_ELEM) { *ok = false; break; }
+            /* The numerator, and the denominator when the atom is rational,
+             * both contribute breakpoints (roots and poles). */
+            Expr* cand[2]; int ncand = 0;
+            cand[ncand++] = a->poly;
+            if (a->denom) cand[ncand++] = a->denom;
+            for (int ci = 0; *ok && ci < ncand; ci++) {
+                Expr* p = cand[ci];
+                bool dup = false;
+                for (int j = 0; j < np; j++) if (expr_eq(polys[j], p)) { dup = true; break; }
+                if (dup) continue;
+                if (!rru_is_polynomial(p, x)) { *ok = false; break; }
+                if (np == pcap) { pcap = pcap ? pcap * 2 : 8; polys = realloc(polys, (size_t)pcap * sizeof(Expr*)); }
+                polys[np++] = p;            /* borrowed */
+            }
         }
     }
     Expr** roots = NULL; int nr = 0, rcap = 0;
