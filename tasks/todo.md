@@ -1,64 +1,65 @@
-# Reduce — Extensive Stress Testing
+# Reduce — Phase 6: Cylindrical Algebraic Decomposition (Reals)
 
-Plan: `/Users/user/.claude/plans/per-the-dev-work-clever-moth.md`
+Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-fluffy-kite.md`
 
-## Layer 1 — Expanded C unit tests (`tests/test_reduce.c`)  ✅
-- [x] Capture exact FullForm ground-truth for every new case from `./Mathilda` (112 cases)
-- [x] all black-box groups (decides, equations + decline, real inequalities,
-      linear systems, parametric systems + decline, integer/rational, decline
-      soundness net, known limitations) — 127 assertions
-- [x] white-box `test_wb_*` (atom emit, logic expand, unsupported) — 23 assertions
-- [x] Build + run `reduce_tests` green (150 assertions, exit 0)
+Goal: 2-variable McCallum CAD for `Reduce[..., Reals]` on multivariate nonlinear
+inequalities. Soundness over completeness — undecidable → `NULL` (unevaluated).
 
-## Layer 2 — Semantic corpus verifier (new)  ✅
-- [x] `tests/reduce_check_prelude.m` (sample-grid equivalence + witness oracle)
-- [x] `tests/reduce_corpus.m` (66 records, all PASS)
-- [x] `tests/test_reduce_corpus.c` (fork-per-case runner, mirror test_solve_corpus.c)
-- [x] `tests/CMakeLists.txt` (add reduce_corpus_tests target + add_test)
-- [x] Build + run `reduce_corpus_tests` → 0/66 non-PASS
-- [x] Adversarial check: oracle rejects wrong verdicts, incompleteness, missing
-      roots, strict/non-strict boundary errors, spurious roots (non-vacuous)
+## Step 1 — Extract shared real-algebraic primitives (refactor)  ✅
+- [x] `src/solve/reduce_real_util.h` — public API (prefixed `rru_`)
+- [x] `src/solve/reduce_real_util.c` — moved sign/sample/root helpers +
+      provenance-aware `rru_collect_roots`
+- [x] `reduce_univar.c` — includes the header, moved statics dropped, rewired
+- [x] both added to `tests/CMakeLists.txt` COMMON_SRC (+ reduce_cad.c)
+- [x] main + reduce_tests (all pass) + reduce_corpus_tests (0/67) → no regression
 
-## Verification  ✅
-- [x] valgrind on reduce_tests: no NEW leaks from test code or reduce engine
-      logic (delta vs original = ~8 blocks in the pre-existing Together/rat_canon
-      path + init-time interned symbols; ~420 blocks are macOS system-lib noise)
-- [x] `make check-c99` clean (exit 0; changes are tests/ only, src/ untouched)
-- [x] docs/spec changelog updated (2026-08-17.md)
-- [ ] Rebuild code-review-graph
+## Step 2 — CAD engine  ✅
+- [x] `src/solve/reduce_cad.{c,h}` — `reduce_cad(F, vars, nv)`
+- [x] collect + gate (PolynomialQ[{x,y}]) + factor atoms → squarefree basis B
+- [x] projection (disc_y, ldcf_y, pairwise res_y; factor; keep x-only factors)
+- [x] base x-cells (roots, order/dedup, samples; irrational-section decline)
+- [x] lift per x-cell (substitute, isolate y-roots w/ provenance, y-cells)
+- [x] truth at full sample via qqbar; DNF fold; `-2` bail; all-cells-true → True
+- [x] partial-CAD pruning (xcell_dead)
+- [x] symbolic sector emission + branch matching + decline on non-clean Solve
+- [x] soundness bails (nullification, irrational section, non-clean fiber, nv≥3)
+
+## Step 3 — Dispatch  ✅
+- [x] `reduce.c` — `reals && nv>=2`: FM then CAD fallback; effective-var pruning in reduce_cad
+
+## Step 4 — Tests  ✅
+- [x] flipped 3 CAD placeholders; new `test_cad_real` block (pinned FullForm)
+- [x] Phase-6 corpus rows in `reduce_corpus.m` (11 new; total 77)
+- [x] reduce_tests + reduce_corpus_tests (77/77) green; solve_tests unregressed
+
+## Step 5 — Verify + docs  ✅
+- [x] `make check-c99` clean; both new TUs compile FLINT-off and MPFR-off (bail stubs)
+- [x] valgrind CAD probe — zero reduce_cad/reduce_real_util frames in lost blocks
+- [x] docs: solutions-of-equations.md + changelog 2026-08-17.md + REDUCE_PLAN status
+- [x] rebuild code-review graph; memory: project_reduce_cad_2var_engine
 
 ## Review
-- **Layer 1**: `tests/test_reduce.c` 264 -> ~450 lines, 15 test functions, 150
-  assertions. Every string pinned from the binary; soundness-verified by hand.
-- **Layer 2**: semantic corpus (66 cases) verifies logical-formula outputs by
-  sampling (grid equivalence + witnesses) rather than string match — robust to
-  ordering/spelling/non-minimal forms, and proven to detect real soundness
-  defects. Registered in CMake with `add_test`; ships green at baseline 0.
-- **No engine code changed** — per "capture & flag": quirks are pinned + flagged.
+- **Engine**: 2-var McCallum CAD. Factor atoms → squarefree basis (confines
+  nullification to sections). Projection = disc/ldcf/pairwise-res, factored.
+  Base sign diagram lifted fibre-by-fibre; truth via exact qqbar oracle; symbolic
+  sector emission with per-root provenance + branch matching. Partial-CAD prune.
+- **Reuse**: extracted `reduce_real_util.{c,h}` shared by the univariate engine
+  and CAD (one exact sign/root/sample implementation) — no duplication.
+- **Soundness**: every undecidable path (qqbar -2, irrational section, interval
+  nullification, non-clean fibre Solve, nv≥3) declines to NULL. Verified sound on
+  `x^2==2 && y<x` (irrational section → decline) and nv=3 (→ decline).
+- **Correctness**: 77/77 corpus (sample-point + witness), exact unit pins, plus
+  hand-checked conics/hyperbola/parabola/products/cubic fibres. Leak-clean.
+- **Deferred (documented)**: n-var (6d), well-orientedness augmentation (6e),
+  Complexes nonlinear equations.
 
-## Phase-8 quirk fixes (requested 2026-08-23) — ✅ DONE
-- [x] Q1: `Reduce[a x == 0, x]` → `(a!=0 && x==0) || a==0` (reduce_eq.c: is_zero
-      base case for the vanished lower-order remainder)
-- [x] Q2: Reals linear-equation systems back-substitute (reduce_fm.c: generalized
-      lo==hi equation collapse + forward constant back-substitution) →
-      `x+y==1 && x-y==3, {x,y}, Reals` gives `x==2 && y==-1`
-- [x] Q3: parametric conditions print minimally (reduce_sys.c: sys_norm_condition
-      + collect_leaf_params) → `1-a!=0`→`a!=1`, `-1+2a==0`→`a==1/2`
-- [x] Regression tests: unit pins moved out of test_known_limitations (deleted)
-      into test_equations / test_linear_systems / test_parametric_systems;
-      corpus gained eq-param-ax0 + fm-eq-determined, dropped stale dec-ax0-gap
-- [x] reduce_tests (149) + reduce_corpus_tests (67) green; solve_tests +
-      solve_corpus (97) unregressed; valgrind clean (no new leaks); check-c99 0;
-      changelog + solutions-of-equations.md updated
-
-## Notes
-- All three fixes are soundness-preserving (sampling corpus) and leave every
-  previously-correct output unchanged (a x==b, quadratic split, triangular
-  regions, x+y==1 && x>0 stays x>0 && y==1-x).
-- Pre-existing (unrelated) leak in the `Together`/rat_canon path is surfaced by
-  Reduce's atom canonicalisation; not introduced by any of this work.
-
-## Findings (quirks discovered)
-- `a x == 0` declines though `a x == b` solves (Mathematica: `x==0 || a==0`)
-- Reals linear-equality systems return sound-but-non-minimal forms (no back-substitution)
-- Parametric conditions print non-minimally (`1 - a != 0` vs `a != 1`)
+## Step 6 — Boundary-merge pass  ✅
+- [x] structured per-cell `YRegion` (symbolic-bound segments) from `lift_fiber`
+- [x] `yregion_at_point` (template limit), `regions_equal` (sampled, sound),
+      `templates_equal`, `breakpoint_absorbable`
+- [x] merge runs of same-template interval cells; absorb interior/boundary
+      breakpoints; standalone sections for non-absorbed non-empty fibres
+- [x] closed disk → `-1<=x<=1 && ...`; half-disk → `0<=x<=1`; circle → arcs;
+      point → `x==0&&y==0`; strict stays open; punctured hole preserved
+- [x] updated unit pins + 4 new corpus rows (0/81); solve unregressed;
+      valgrind leak-clean; build + check-c99 clean

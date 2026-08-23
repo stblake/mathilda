@@ -82,6 +82,23 @@
   {"rat-quad",           x^2 == 4,                         x,       Rationals, "solved"},
   {"rat-quad-none",      x^2 == 2,                         x,       Rationals, False},
 
+  (* ---- phase 6: multivariate nonlinear inequalities over the reals (CAD) ---- *)
+  {"cad-disk-closed",    x^2 + y^2 <= 1,                   {x, y},  Reals,     "solved"},
+  {"cad-disk-open",      x^2 + y^2 < 1,                    {x, y},  Reals,     "solved"},
+  {"cad-disk-empty",     x^2 + y^2 < 0,                    {x, y},  Reals,     False},
+  {"cad-plane",          x^2 + y^2 >= 0,                   {x, y},  Reals,     True},
+  {"cad-product",        x y > 0,                          {x, y},  Reals,     "solved"},
+  {"cad-lines",          (x - y) (x + y) > 0,              {x, y},  Reals,     "solved"},
+  {"cad-ellipse",        x^2 + 4 y^2 < 4,                  {x, y},  Reals,     "solved"},
+  {"cad-hyperbola",      x^2 - y^2 > 1,                    {x, y},  Reals,     "solved"},
+  {"cad-half-disk",      x^2 + y^2 <= 1 && x >= 0,         {x, y},  Reals,     "solved"},
+  {"cad-param-lin",      a x + y < 1,                      {x, y},  Reals,     "solved"},
+  {"cad-absent-var",     x^2 > 1,                          {x, y},  Reals,     "solved"},
+  {"cad-eq-curve",       x^2 + y^2 == 1,                   {x, y},  Reals,     "solved"},
+  {"cad-punctured",      x^2 + y^2 <= 1 && x != 0,         {x, y},  Reals,     "solved"},
+  {"cad-half-upper",     x^2 + y^2 <= 1 && y >= 0,         {x, y},  Reals,     "solved"},
+  {"cad-point",          x^2 + y^2 <= 0,                   {x, y},  Reals,     "solved"},
+
   (* ---- soundness invariant: these MUST decline (never a guessed formula) ---- *)
   {"dec-default-ineq",   x^2 > 1,                          x,       Automatic, "decline"},
   {"dec-int-unbounded",  x > 0,                            x,       Integers,  "decline"},
@@ -89,9 +106,8 @@
   {"dec-nonconst-denom", 1/x < 1,                          x,       Reals,     "decline"},
   {"dec-abs",            Abs[x] < 1,                       x,       Reals,     "decline"},
   {"dec-bad-domain",     x^2 == 4,                         x,       Booleans,  "decline"},
-  {"dec-nl-multivar",    x^2 + y^2 <= 1,                   {x, y},  Reals,     "decline"},
-  {"dec-nl-product",     x y > 0,                          {x, y},  Reals,     "decline"},
-  {"dec-param-coeff",    a x + y < 1,                      {x, y},  Reals,     "decline"},
+  {"dec-nl-multivar3",   x^2 + y^2 + z^2 < 1,              {x, y, z}, Reals,   "decline"},
+  {"dec-nl-eq-complex",  x^2 + y^2 == 1,                   {x, y},  Automatic, "decline"},
   {"dec-complexes-neq",  x != 0,                           x,       Automatic, "decline"},
   {"dec-complexes-conj", x^2 == 4 && x^3 == 8,             x,       Automatic, "decline"},
   {"dec-nl-system",      x y == 1 && x + y == 3,           {x, y},  Automatic, "decline"}

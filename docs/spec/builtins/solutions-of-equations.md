@@ -812,7 +812,8 @@ degenerate branch, and it handles inequalities over the reals.
   `Reduce[a x + y == 1 && x + y == 0, {x, y}] -> a != 1 && x == 1/(a-1) && y == 1/(1-a)`;
   `Reduce[a x == 1 && x == 2, {x}] -> a == 1/2 && x == 2`;
   `Reduce[x + y == 1, {x, y}] -> x == 1 - y` (an underdetermined system leaves a
-  variable free). A non-linear system is declined (pending CAD).
+  variable free). A non-linear system over Complexes is declined (the CAD engine
+  covers the `Reals` case; the Complexes nonlinear route is a later phase).
 - **Univariate polynomial equations and inequalities over Reals** (sign diagram):
   any logical combination of `==`/`!=`/`<`/`<=`/`>`/`>=` in one real variable is
   solved as a union of intervals and points. Examples:
@@ -832,6 +833,30 @@ degenerate branch, and it handles inequalities over the reals.
   `Reduce[x > 1 && x < 0 && y > 0, {x, y}, Reals] -> False`. A fully-determined
   equation system back-substitutes its pinned variables
   (`Reduce[x + y == 1 && x - y == 3, {x, y}, Reals] -> x == 2 && y == -1`).
+- **Multivariate nonlinear over Reals** (two-variable **Cylindrical Algebraic
+  Decomposition**): anything the linear engine declines -- conics, products of
+  curves, parametric coefficients -- is decomposed by a McCallum-projection CAD.
+  The atom polynomials are factored into a squarefree irreducible basis; the
+  discriminant, leading coefficient and pairwise resultants (factored) project
+  out the second variable; the base sign diagram in the first variable is lifted
+  fibre by fibre, and each satisfying cell is emitted with its fibre bounds as
+  symbolic functions of the outer variable. Examples:
+  `Reduce[x y > 0, {x, y}, Reals] -> (x < 0 && y < 0) || (x > 0 && y > 0)`;
+  `Reduce[x^2 - y^2 > 1, {x, y}, Reals] -> (x < -1 && -Sqrt[x^2-1] < y < Sqrt[x^2-1])
+  || (x > 1 && ...)`; `Reduce[y^2 < x, {x, y}, Reals] -> x > 0 && -Sqrt[x] < y < Sqrt[x]`;
+  `Reduce[x^2 + y^2 < 0, {x, y}, Reals] -> False`;
+  `Reduce[x^2 + y^2 >= 0, {x, y}, Reals] -> True`;
+  `Reduce[a x + y < 1, {x, y}, Reals] -> y < 1 - a x`. A **boundary-merge** pass
+  fuses a closed region's limit sections into the adjacent sector, so
+  `Reduce[x^2 + y^2 <= 1, {x, y}, Reals] -> -1 <= x <= 1 && -Sqrt[1-x^2] <= y <=
+  Sqrt[1-x^2]` (the x-range closes) while a strict region stays open
+  (`x^2 + y^2 < 1 -> -1 < x < 1 && ...`) and a genuine hole is preserved
+  (`x^2 + y^2 <= 1 && x != 0` splits at `x == 0`). The merge is a purely cosmetic
+  post-pass: any undecidable comparison leaves the (already-correct) unmerged form.
+  **Soundness over completeness**: an undecidable sign/ordering (the
+  real-algebraic oracle returning "unknown", or FLINT absent), an irrational base
+  breakpoint, an un-emittable fibre, or three or more effective variables all make
+  `Reduce` decline (stay unevaluated) rather than risk a wrong formula.
 - **Integers / Rationals domain**: reuses the `Solve[..., dom]` Diophantine engine
   and reformats its solution list into logical form -- an `Or` of `And`s of
   `var == value` atoms, with `Element[C[k], dom]` for a generated parameter.
@@ -845,9 +870,9 @@ degenerate branch, and it handles inequalities over the reals.
 Rational-function relations whose canonicalisation would clear a variable
 denominator (e.g. `1/x < 1`) are declined (left unevaluated) rather than answered
 from the polynomial numerator alone, which would be unsound. Statements that
-require an engine not yet wired (nonlinear multivariate CAD, the
-integer/Diophantine domain, and quantifier elimination) also remain unevaluated;
-those engines land in the later phases of the plan.
+require an engine not yet wired (three-or-more-variable CAD, nonlinear
+multivariate equations over Complexes, and quantifier elimination) also remain
+unevaluated; those engines land in the later phases of the plan.
 
 ## SolveAlways
 

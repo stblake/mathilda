@@ -8,10 +8,11 @@ reusing the `Solve` infrastructure and adding a CAD-based real-inequality engine
 
 ## Status (as of 2026-08-23)
 
-Phases **0–5 are implemented, tested (`tests/test_reduce.c`), and leak-clean**; the
-remaining large pieces are **6 (CAD)**, **7 (quantifier elimination)** and **8
-(companion builtins + polish)**. Implementation order followed was
-`0 → 1 → 2 → 3 → 5 → 4`.
+Phases **0–5 are implemented, tested (`tests/test_reduce.c`), and leak-clean**, and
+**Phase 6a–6c (two-variable CAD over the Reals) has landed** (`reduce_cad.{c,h}`,
+`reduce_real_util.{c,h}`); the remaining large pieces are **6d/6e (n-variable CAD +
+well-orientedness augmentation)**, **7 (quantifier elimination)** and **8 (companion
+builtins + polish)**. Implementation order followed was `0 → 1 → 2 → 3 → 5 → 4 → 6(2-var)`.
 
 | Phase | What | Status |
 |---|---|---|
@@ -21,7 +22,7 @@ remaining large pieces are **6 (CAD)**, **7 (quantifier elimination)** and **8
 | 3 | Linear real systems (Fourier–Motzkin) | ✅ done |
 | 4 | Parametric linear systems (Complexes) | ✅ done |
 | 5 | Integers / Rationals | ✅ done |
-| 6 | Multivariate nonlinear CAD (Reals) | ☐ pending |
+| 6 | Multivariate nonlinear CAD (Reals) | ◧ 2-var done (6a–6c); n-var (6d) + well-orientedness (6e) pending |
 | 7 | Quantifier elimination (`Exists`/`ForAll`/`Resolve`) | ☐ pending |
 | 8 | Companion builtins + polish | ☐ pending |
 
@@ -450,6 +451,33 @@ original sketch. Phases 0–5 are otherwise as designed.
   (passing an owned `Expr*` into `expr_new_function`, which takes ownership, then
   freeing it again) corrupted the heap and surfaced as runaway evaluator recursion —
   see the `expr_new_function`-consumes-args memory.
+
+- **Phase 6 landed as two-variable CAD (`reduce_cad.c`) + a shared-primitive
+  refactor.** The exact sign oracle, rational-sample selection and Solve-based
+  real-root isolation were extracted out of `reduce_univar.c` into
+  `reduce_real_util.{c,h}` (with a provenance-carrying `rru_collect_roots`), so the
+  CAD and the univariate sign diagram share one implementation. The single
+  structural correction from the design review: the *atom* polynomials are factored
+  into a distinct-irreducible squarefree basis **before** projection (not just the
+  projection polynomials), which makes `disc`/`res` never identically zero and
+  confines nullification to 0-dimensional sections — so the "bail on interval
+  nullification" rule is provably non-restrictive at nv==2. The dispatcher prunes
+  variables absent from every atom, so an effective-1-var call delegates to the sign
+  diagram and only genuinely-2-var work runs CAD; nv≥3 declines.
+- **Phase-6 v1 boundaries (all sound-declines).** An irrational base breakpoint is
+  declined (real-algebraic-coefficient fibre isolation is deferred to the later
+  numericalize+Sturm+qqbar fallback); a fibre whose `Solve` does not return a clean,
+  1:1-matchable, orderable branch list is declined; the McCallum well-orientedness
+  augmentation (6e) is not implemented — an interval nullification bails.
+- **Boundary-merge pass (implemented).** Emission builds a structured per-cell
+  y-region (`YRegion` of symbolic-bound segments) rather than an Expr, and a merge
+  pass fuses a run of consecutive same-template interval cells across a breakpoint
+  when the template's limit there equals that section's own fibre — closing the
+  x-range for a closed region (`x^2+y^2<=1 -> -1<=x<=1 && ...`) while leaving strict
+  regions open and preserving genuine holes (`x^2+y^2<=1 && x!=0` splits at 0). It is
+  a cosmetic post-pass: region-equality is decided by sampling both regions, and any
+  undecidable comparison leaves the already-correct unmerged form. Non-absorbed
+  breakpoints with a non-empty fibre are emitted as standalone `x==b && …` sections.
 
 ### Known limitations for the Phase-8 polish pass
 

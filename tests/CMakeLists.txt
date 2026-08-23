@@ -708,10 +708,12 @@ set(COMMON_SRC
     ../src/solve/reduce_form.c
     ../src/solve/reduce_atom.c
     ../src/solve/reduce_eq.c
+    ../src/solve/reduce_real_util.c
     ../src/solve/reduce_univar.c
     ../src/solve/reduce_fm.c
     ../src/solve/reduce_int.c
     ../src/solve/reduce_sys.c
+    ../src/solve/reduce_cad.c
     ../src/numerical_roots/findroot.c
     ../src/numerical_calculus/findmin.c
     ../src/numerical_calculus/findmin_common.c

@@ -18,6 +18,7 @@
 #include "reduce_fm.h"
 #include "reduce_int.h"
 #include "reduce_sys.h"
+#include "reduce_cad.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -160,8 +161,10 @@ Expr* builtin_reduce(Expr* res) {
             out = reduce_univar(f, vlist[0], vlist, nv);
         } else if (reals && nv >= 2) {
             /* Phase 3: a multivariate LINEAR system over the reals ->
-             * Fourier-Motzkin (declines to NULL if it is not linear). */
+             * Fourier-Motzkin (declines to NULL if it is not linear).  Phase 6:
+             * anything nonlinear falls through to the CAD engine. */
             out = reduce_fm(f, vlist, nv);
+            if (!out) out = reduce_cad(f, vlist, nv);
         }
     }
 

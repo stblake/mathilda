@@ -388,14 +388,8 @@ static void test_decline_soundness(void) {
     /* Element condition without a domain argument. */
     run_test("Reduce[Element[x, Integers] && x^2 < 5, x]",
              "Reduce[And[Element[x, Integers], Less[Power[x, 2], 5]], x]");
-    /* Multivariate nonlinear over Reals needs CAD (phase 6). */
-    run_test("Reduce[x^2 + y^2 <= 1, {x, y}, Reals]",
-             "Reduce[LessEqual[Plus[Power[x, 2], Power[y, 2]], 1], List[x, y], Reals]");
-    run_test("Reduce[x y > 0, {x, y}, Reals]",
-             "Reduce[Greater[Times[x, y], 0], List[x, y], Reals]");
-    /* Parametric coefficient in a linear real system. */
-    run_test("Reduce[a x + y < 1, {x, y}, Reals]",
-             "Reduce[Less[Plus[Times[a, x], y], 1], List[x, y], Reals]");
+    /* (Multivariate nonlinear over Reals and parametric-linear real systems are
+     * now solved by the CAD engine -- see test_cad_real.) */
     /* Free parameter in a univariate real inequality/equation. */
     run_test("Reduce[a x^2 == 1, x, Reals]",
              "Reduce[Equal[Times[a, Power[x, 2]], 1], x, Reals]");
@@ -509,6 +503,77 @@ static void test_wb_unsupported(void) {
     wb_unsupported("Not[Element[x, Integers]]");
 }
 
+/* ------------------------------------------------------------------ *
+ *  Phase 6: multivariate nonlinear inequalities over the reals (CAD)  *
+ * ------------------------------------------------------------------ */
+
+/* The exact FullForm strings below are pinned from the built binary -- they are
+ * a correct, complete description of each solution set (verified semantically by
+ * the corpus sample-point oracle), NOT necessarily Mathematica's cosmetic form
+ * (radicals stay in Solve's `(1/2) Sqrt[4 - 4 x^2]` shape).  The boundary-merge
+ * pass fuses a closed region's limit sections into the adjacent sector, so a
+ * non-strict region closes its x-range (`-1 <= x <= 1`) instead of listing the
+ * boundary points separately. */
+static void test_cad_real(void) {
+    /* Unsatisfiable / universal statements collapse to False / True. */
+    run_test("Reduce[x^2 + y^2 < 0, {x, y}, Reals]", "False");
+    run_test("Reduce[x^2 + y^2 >= 0, {x, y}, Reals]", "True");
+
+    /* Product of two lines: the two open quadrant-like sectors. */
+    run_test("Reduce[x y > 0, {x, y}, Reals]",
+             "Or[And[Less[x, 0], Less[y, 0]], And[Greater[x, 0], Greater[y, 0]]]");
+
+    /* Closed unit disk: the boundary sections x == +/-1 merge into the sector,
+     * closing the x-range to -1 <= x <= 1. */
+    run_test("Reduce[x^2 + y^2 <= 1, {x, y}, Reals]",
+             "And[Inequality[-1, LessEqual, x, LessEqual, 1], "
+             "Inequality[Times[Rational[-1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]], "
+             "LessEqual, y, LessEqual, "
+             "Times[Rational[1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]]]");
+
+    /* Closed unit circle (the curve): the two symbolic arcs, x-range closed. */
+    run_test("Reduce[x^2 + y^2 == 1, {x, y}, Reals]",
+             "And[Inequality[-1, LessEqual, x, LessEqual, 1], "
+             "Or[Equal[y, Times[Rational[-1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]], "
+             "Equal[y, Times[Rational[1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]]]]");
+
+    /* Open region (strict <): sections vanish, so the answer merges cleanly. */
+    run_test("Reduce[x^2 - y^2 > 1, {x, y}, Reals]",
+             "Or[And[Less[x, -1], "
+             "Inequality[Times[-1, Power[Plus[-1, Power[x, 2]], Rational[1, 2]]], Less, y, Less, "
+             "Power[Plus[-1, Power[x, 2]], Rational[1, 2]]]], "
+             "And[Greater[x, 1], "
+             "Inequality[Times[-1, Power[Plus[-1, Power[x, 2]], Rational[1, 2]]], Less, y, Less, "
+             "Power[Plus[-1, Power[x, 2]], Rational[1, 2]]]]]");
+
+    /* A pure-x conjunct prunes half the base cells (partial CAD); the closed
+     * half-disk merges to 0 <= x <= 1. */
+    run_test("Reduce[x^2 + y^2 <= 1 && x >= 0, {x, y}, Reals]",
+             "And[Inequality[0, LessEqual, x, LessEqual, 1], "
+             "Inequality[Times[Rational[-1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]], "
+             "LessEqual, y, LessEqual, "
+             "Times[Rational[1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]]]");
+
+    /* A parametric coefficient the linear (Fourier-Motzkin) engine cannot take,
+     * but whose single base cell is sign-invariant, is solved by CAD. */
+    run_test("Reduce[a x + y < 1, {x, y}, Reals]",
+             "Less[y, Plus[1, Times[-1, Times[a, x]]]]");
+
+    /* A nominally-2-var problem whose second variable is absent is really the
+     * univariate sign diagram. */
+    run_test("Reduce[x^2 > 1, {x, y}, Reals]",
+             "Or[Less[x, -1], Greater[x, 1]]");
+
+    /* nv >= 3 is deferred (Phase 6d): declines, never a wrong answer. */
+    run_test("Reduce[x^2 + y^2 + z^2 < 1, {x, y, z}, Reals]",
+             "Reduce[Less[Plus[Power[x, 2], Power[y, 2], Power[z, 2]], 1], List[x, y, z], Reals]");
+
+    /* Nonlinear multivariate equation over Complexes still needs the (deferred)
+     * equational CAD route: declines. */
+    run_test("Reduce[x^2 + y^2 == 1, {x, y}]",
+             "Reduce[Equal[Plus[Power[x, 2], Power[y, 2]], 1], List[x, y]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -524,6 +589,7 @@ int main(void) {
     TEST(test_integer_domain);
     TEST(test_rational_domain);
     TEST(test_decline_soundness);
+    TEST(test_cad_real);
     TEST(test_wb_constant_atoms);
     TEST(test_wb_logic_fold);
     TEST(test_wb_atom_emit);
