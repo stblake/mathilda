@@ -134,6 +134,14 @@ static RForm* solve_case(const Expr* poly, const Expr* var,
                          Expr** vars, int nv, bool* ok) {
     if (!*ok) return rform_false();
 
+    /* An identically-zero polynomial is `0 == 0`, true for every value of the
+     * remaining variable.  This is the base case of a leading-coefficient split
+     * whose lower-order part vanished: `Reduce[a x == 0, x]` drops the `a x`
+     * term in its `a == 0` branch, leaving 0 -> True, so the branch is `a == 0`
+     * (not a decline).  Guard it here because Exponent[0, x] is -Infinity, which
+     * poly_degree cannot classify. */
+    if (is_zero(poly)) return rform_true();
+
     int deg = poly_degree(poly, var);
     if (deg < 0) { *ok = false; return rform_false(); }
 

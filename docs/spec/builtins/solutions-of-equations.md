@@ -798,6 +798,8 @@ degenerate branch, and it handles inequalities over the reals.
   set): every leading-coefficient-vanishing branch is kept, so the answer is the
   full parametric case tree rather than Solve's generic solution. Examples:
   `Reduce[a x == b, x] -> (a != 0 && x == b/a) || (a == 0 && b == 0)`;
+  `Reduce[a x == 0, x] -> (a != 0 && x == 0) || a == 0` (the `a == 0` branch's
+  residual vanishes identically, true for all x);
   `Reduce[x^2 == 4, x] -> x == -2 || x == 2`;
   `Reduce[x^2 == -1, x] -> x == -I || x == I`;
   `Reduce[a x^2 + b x + c == 0, x]` yields the full three-level split.
@@ -805,9 +807,10 @@ degenerate branch, and it handles inequalities over the reals.
   analysis on the parameters (symbolic Gaussian elimination): a nonzero-constant
   pivot is used directly, a symbolic pivot `p` splits into `p != 0` and `p == 0`
   (solved and substituted), and back-substitution gives each variable as a
-  function of the parameters. Examples:
-  `Reduce[a x + y == 1 && x + y == 0, {x, y}] -> 1 - a != 0 && x == 1/(a-1) && y == 1/(1-a)`;
-  `Reduce[a x == 1 && x == 2, {x}] -> 2 a - 1 == 0 && x == 2`;
+  function of the parameters. Single-parameter-linear conditions are printed in
+  minimal solved form (`a != 1`, not `1 - a != 0`). Examples:
+  `Reduce[a x + y == 1 && x + y == 0, {x, y}] -> a != 1 && x == 1/(a-1) && y == 1/(1-a)`;
+  `Reduce[a x == 1 && x == 2, {x}] -> a == 1/2 && x == 2`;
   `Reduce[x + y == 1, {x, y}] -> x == 1 - y` (an underdetermined system leaves a
   variable free). A non-linear system is declined (pending CAD).
 - **Univariate polynomial equations and inequalities over Reals** (sign diagram):
@@ -826,7 +829,9 @@ degenerate branch, and it handles inequalities over the reals.
   `False`. Examples:
   `Reduce[x + y < 1 && x > 0 && y > 0, {x, y}, Reals] -> 0 < x < 1 && 0 < y < 1 - x`;
   `Reduce[x + y == 1 && x > 0, {x, y}, Reals] -> x > 0 && y == 1 - x`;
-  `Reduce[x > 1 && x < 0 && y > 0, {x, y}, Reals] -> False`.
+  `Reduce[x > 1 && x < 0 && y > 0, {x, y}, Reals] -> False`. A fully-determined
+  equation system back-substitutes its pinned variables
+  (`Reduce[x + y == 1 && x - y == 3, {x, y}, Reals] -> x == 2 && y == -1`).
 - **Integers / Rationals domain**: reuses the `Solve[..., dom]` Diophantine engine
   and reformats its solution list into logical form -- an `Or` of `And`s of
   `var == value` atoms, with `Element[C[k], dom]` for a generated parameter.

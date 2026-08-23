@@ -1,115 +1,64 @@
-# Reduce — implementation tracker
+# Reduce — Extensive Stress Testing
 
-Design: `REDUCE_PLAN.md` (repo root). Full CAD roadmap + full companion family.
+Plan: `/Users/user/.claude/plans/per-the-dev-work-clever-moth.md`
 
-## Phase 0 — Front-end + logical normal-form skeleton  (DONE 2026-08-23)
+## Layer 1 — Expanded C unit tests (`tests/test_reduce.c`)  ✅
+- [x] Capture exact FullForm ground-truth for every new case from `./Mathilda` (112 cases)
+- [x] all black-box groups (decides, equations + decline, real inequalities,
+      linear systems, parametric systems + decline, integer/rational, decline
+      soundness net, known limitations) — 127 assertions
+- [x] white-box `test_wb_*` (atom emit, logic expand, unsupported) — 23 assertions
+- [x] Build + run `reduce_tests` green (150 assertions, exit 0)
 
-- [x] `src/solve/reduce_form.{h,c}` — RRel / RAtom / RConj / RForm (DNF), builders,
-      `rform_or`/`rform_and`/`ratom_negate`, `rform_simplify`, `rform_to_expr`.
-- [x] `src/solve/reduce_atom.c` — `reduce_atom_canonicalize` (poly REL 0), constant-atom
-      decide via `evaluate`, `reduce_form_from_expr` (parse &&/||/!/Implies/Xor/Inequality → DNF).
-- [x] `src/solve/reduce.{h,c}` — `builtin_reduce` (Solve-style parse, True/False,
-      bad-var warn, dom positional), dispatch skeleton (constant or NULL), `reduce_init`.
-- [x] `src/sym_names.{h,c}` — `SYM_Reduce` (3 sites).
-- [x] `src/core.c` — `#include "reduce.h"` + `reduce_init()`.
-- [x] `tests/test_reduce.c` + `tests/CMakeLists.txt` (COMMON_SRC + `reduce_tests` + `add_test`).
-- [x] docs + changelog.
-- [x] main build clean (gcc-16); `reduce_tests` 24/24 pass; `solve_tests` still green;
-      `make check-c99` clean; `leaks` 0 leaks.
+## Layer 2 — Semantic corpus verifier (new)  ✅
+- [x] `tests/reduce_check_prelude.m` (sample-grid equivalence + witness oracle)
+- [x] `tests/reduce_corpus.m` (66 records, all PASS)
+- [x] `tests/test_reduce_corpus.c` (fork-per-case runner, mirror test_solve_corpus.c)
+- [x] `tests/CMakeLists.txt` (add reduce_corpus_tests target + add_test)
+- [x] Build + run `reduce_corpus_tests` → 0/66 non-PASS
+- [x] Adversarial check: oracle rejects wrong verdicts, incompleteness, missing
+      roots, strict/non-strict boundary errors, spurious roots (non-vacuous)
 
-Verified: `Reduce[True,x]→True`; `Reduce[1<2,x]→True`; `Reduce[x==x,x]→True`;
-`Reduce[3<2,x]→False`; `Reduce[x>0,x]`/`Reduce[x^2==4,x]` stay unevaluated;
-`Reduce[x==1,5]` → `Reduce::ivar` + unevaluated.
+## Verification  ✅
+- [x] valgrind on reduce_tests: no NEW leaks from test code or reduce engine
+      logic (delta vs original = ~8 blocks in the pre-existing Together/rat_canon
+      path + init-time interned symbols; ~420 blocks are macOS system-lib noise)
+- [x] `make check-c99` clean (exit 0; changes are tests/ only, src/ untouched)
+- [x] docs/spec changelog updated (2026-08-17.md)
+- [ ] Rebuild code-review-graph
 
-## Phase 1 — Complete univariate equation solver (Complexes)  (DONE 2026-08-23)
+## Review
+- **Layer 1**: `tests/test_reduce.c` 264 -> ~450 lines, 15 test functions, 150
+  assertions. Every string pinned from the binary; soundness-verified by hand.
+- **Layer 2**: semantic corpus (66 cases) verifies logical-formula outputs by
+  sampling (grid equivalence + witnesses) rather than string match — robust to
+  ordering/spelling/non-minimal forms, and proven to detect real soundness
+  defects. Registered in CMake with `add_test`; ships green at baseline 0.
+- **No engine code changed** — per "capture & flag": quirks are pinned + flagged.
 
-- [x] `src/solve/reduce_eq.{c,h}` — `reduce_eq_univariate`, lc-vanishing recursion;
-      generic roots via `Solve`; degree/coeff via `Exponent`/`Coefficient`/`Expand`.
-- [x] DNF-layer additions: `RAtom.display` (solved-form emission), `ratom_solved`,
-      sign-normalization of EQ/NE atoms (`-b==0` → `b==0`).
-- [x] `reduce.c` routing: single univariate EQ atom over Complexes → equation engine.
-- [x] CMake COMMON_SRC += reduce_eq.c; tests extended (`test_equations`).
-- [x] docs + changelog.
-- [x] `reduce_tests` 32/32 pass; `solve_tests` green; `check-c99` clean; `leaks` 0.
+## Phase-8 quirk fixes (requested 2026-08-23) — ✅ DONE
+- [x] Q1: `Reduce[a x == 0, x]` → `(a!=0 && x==0) || a==0` (reduce_eq.c: is_zero
+      base case for the vanished lower-order remainder)
+- [x] Q2: Reals linear-equation systems back-substitute (reduce_fm.c: generalized
+      lo==hi equation collapse + forward constant back-substitution) →
+      `x+y==1 && x-y==3, {x,y}, Reals` gives `x==2 && y==-1`
+- [x] Q3: parametric conditions print minimally (reduce_sys.c: sys_norm_condition
+      + collect_leaf_params) → `1-a!=0`→`a!=1`, `-1+2a==0`→`a==1/2`
+- [x] Regression tests: unit pins moved out of test_known_limitations (deleted)
+      into test_equations / test_linear_systems / test_parametric_systems;
+      corpus gained eq-param-ax0 + fm-eq-determined, dropped stale dec-ax0-gap
+- [x] reduce_tests (149) + reduce_corpus_tests (67) green; solve_tests +
+      solve_corpus (97) unregressed; valgrind clean (no new leaks); check-c99 0;
+      changelog + solutions-of-equations.md updated
 
-Verified: `a x==b → (a!=0 && x==b/a) || (a==0 && b==0)`; `x^2==4 → x==-2||x==2`;
-`x^2==-1 → x==-I||x==I`; `2x==6 → x==3`; `a x^2+b x+c==0` → full 3-level split.
+## Notes
+- All three fixes are soundness-preserving (sampling corpus) and leave every
+  previously-correct output unchanged (a x==b, quadratic split, triangular
+  regions, x+y==1 && x>0 stays x>0 && y==1-x).
+- Pre-existing (unrelated) leak in the `Together`/rat_canon path is surfaced by
+  Reduce's atom canonicalisation; not introduced by any of this work.
 
-## Phase 2 — Univariate real sign diagram (Reals)  (DONE 2026-08-23)
-
-- [x] `src/solve/reduce_univar.{c,h}` — sign diagram: roots via `Solve[..,Reals]`,
-      breakpoint sort/dedup + interval sampling, exact sign via native-rational +
-      `flint_qqbar_compare`, union-of-cells emission (Inequality chains, cofinite `!=`).
-- [x] `reduce.c` routing: `reals && nv==1` → `reduce_univar` (any poly eq/ineq combo).
-- [x] CMake COMMON_SRC += reduce_univar.c; tests extended (`test_real_inequalities`).
-- [x] docs + changelog.
-- [x] `reduce_tests` all pass (41 assertions); `solve_tests` green; `check-c99` clean;
-      `leaks` 0; main build warning-free.
-
-Verified: `x^2>1→x<-1||x>1`; `x^2>=1→x<=-1||x>=1`; `x^2<1→-1<x<1`;
-`(x-1)(x-2)(x-3)>0→1<x<2||x>3`; `x^2!=1→x!=-1&&x!=1`; `x^2==4→x==-2||x==2`;
-`x^2<2→-Sqrt[2]<x<Sqrt[2]`; `x^2+1>0→True`; `x^2+1<0→False`; `x>0&&x<1→0<x<1`.
-
-## Phase 3 — Linear real systems via Fourier–Motzkin (Reals)  (DONE 2026-08-23)
-
-- [x] `src/solve/reduce_fm.{c,h}` — FM elimination over exact-rational coeff vectors:
-      project vars last→first, feasibility from the fully-projected constants,
-      triangular emission (bounds per var, `==` re-detection, free-var omission),
-      DNF handled conjunct-by-conjunct then OR-ed.
-- [x] `reduce.c` routing: `reals && nv>=2` → `reduce_fm` (declines if non-linear).
-- [x] **Soundness fix**: `RAtom.nonconst_denom` flag — inequalities that cleared a
-      variable denominator (`1/x<1`) are no longer constant-decided or handled by the
-      real engines; Reduce declines instead of answering wrong. (Fixed a Phase-2 bug.)
-- [x] CMake COMMON_SRC += reduce_fm.c; tests extended (`test_linear_systems`).
-- [x] docs + changelog (Phase 3 + soundness fix).
-- [x] `reduce_tests` all pass; `solve_tests` green; `check-c99` clean; `leaks` 0;
-      build warning-free.
-
-Verified: `x+y<1&&x>0&&y>0 → 0<x<1 && 0<y<1-x`; `x+y==1&&x>0 → x>0 && y==1-x`;
-`x>1&&x<0&&y>0 → False`; `2x+3y<=6&&x>=0&&y>=0 → 0<=x<=3 && 0<=y<=2-2x/3`;
-`x<0||x>1 → x<0||x>1`; nonlinear/`1/x<1` decline.
-
-## Phase 5 — Integers / Rationals (thin wrapper)  (DONE 2026-08-23)
-
-- [x] `src/solve/reduce_int.{c,h}` — reformat `Solve[..,dom]` output into logical
-      form (`||` of `==` atoms; `Element[C[k],dom]` for parametric families).
-- [x] `reduce_univar_integers` (in reduce_univar.c) — bounded integer enumeration
-      over the sign diagram for the inequality case Solve declines; shared
-      `collect_breakpoints` factored out of reduce_univar.
-- [x] `reduce.c` routing: `dom ∈ {Integers, Rationals}` → `reduce_integers`.
-- [x] CMake COMMON_SRC += reduce_int.c; tests extended (`test_integer_domain`).
-- [x] docs + changelog.
-- [x] `reduce_tests` all pass; `solve_tests` green; `check-c99` clean; `leaks` 0;
-      build warning-free.
-
-Verified: `x^2==4→x==-2||x==2`; `x^2<10&&x>0→x==1||x==2||x==3`; `1<=x<=3→...`;
-`x+y==5&&x>0&&y>0→4 tuples`; `2x+3y==1→C[1]∈Integers && x==-1+3C[1] && y==1-2C[1]`;
-`x^2==2→False`; Rationals; unbounded `x>0` declines.
-
-## Phase 4 — Parametric linear systems over Complexes  (DONE 2026-08-23)
-
-- [x] `src/solve/reduce_sys.{c,h}` — symbolic Gaussian elimination with case
-      splitting (nonzero-const pivot direct; symbolic pivot p → p!=0 branch +
-      p==0 branch via Solve-substitute-recurse); back-substitution (graft) for
-      per-variable param expressions; LSol DNF-of-cases intermediate.
-- [x] `reduce.c` routing: complexes && all-EQ → Phase 1 (single univar eq) else
-      Phase 4 (`reduce_eq_system`, declines if non-linear).
-- [x] **Bug fixed**: double-free of `prod` in the elimination loop (it is consumed
-      by the `Subtract` node) — corrupted the heap → runaway evaluator recursion.
-- [x] CMake COMMON_SRC += reduce_sys.c; tests extended (`test_parametric_systems`,
-      test_unevaluated's stale `x+y==1` case replaced with a nonlinear system).
-- [x] `reduce_tests` all pass; `solve_tests` green; `check-c99` clean; `leaks` 0;
-      valgrind: no code-level memory errors; build warning-free.
-
-Verified: `a x+y==1 && x+y==0 → 1-a!=0 && x==1/(a-1) && y==1/(1-a)`;
-`a x==1 && x==2 → 2a-1==0 && x==2`; `x+y==1 → x==1-y` (free var);
-`x+y==3 && x-y==1 → y==1 && x==2`; 3-var system; nonlinear system declines.
-
-Next: **Phase 6** (multivariate nonlinear CAD — the big one), **7** (QE:
-Exists/ForAll/Resolve), **8** (companions: LogicalExpand/FindInstance/
-CylindricalDecomposition + polish: default-domain inequality → Reals,
-unbounded-integer inequality forms, nicer parametric-condition display).
-
-## Later phases
-1 Complete univariate equations · 2 Univariate real sign diagram · 3 Fourier–Motzkin ·
-4 Parametric linear systems · 5 Integers/Rationals · 6 CAD · 7 QE · 8 Companions + polish.
+## Findings (quirks discovered)
+- `a x == 0` declines though `a x == b` solves (Mathematica: `x==0 || a==0`)
+- Reals linear-equality systems return sound-but-non-minimal forms (no back-substitution)
+- Parametric conditions print non-minimally (`1 - a != 0` vs `a != 1`)

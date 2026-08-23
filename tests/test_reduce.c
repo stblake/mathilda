@@ -1,19 +1,34 @@
 /*
  * test_reduce.c
  *
- * Unit tests for `Reduce` (src/solve/reduce.c) and its internal logical
- * normal-form layer (src/solve/reduce_form.{h,c}, reduce_atom.c).
+ * Unit + stress tests for `Reduce` (src/solve/reduce.c) and its internal
+ * logical normal-form layer (src/solve/reduce_form.{h,c}, reduce_atom.c).
  *
- * Phase 0 scope: the front-end (argument parsing, True/False short-circuit,
- * Reduce::ivar bad-variable handling) and the DNF layer (atom canonicalisation,
- * constant-atom decision, And/Or/Not construction, emission back to Expr).
- * The per-domain solving engines are added in later phases; here anything that
- * does not fully decide is expected to stay unevaluated.
+ * Coverage spans the shipped phases 0-5:
+ *   0  front-end (arg parsing, True/False short-circuit, bad-variable) + DNF layer
+ *   1  complete univariate polynomial equations over Complexes
+ *   2  univariate real sign diagram (equations + inequalities over Reals)
+ *   3  linear real systems (Fourier-Motzkin)
+ *   4  parametric linear systems over Complexes (case analysis)
+ *   5  Integers / Rationals
  *
- * Black-box results are compared against FullForm strings.  White-box tests
- * drive the DNF layer directly on RAW (parse-only, un-evaluated) input, since
- * the evaluator pre-decides most constant logical combinations before Reduce
- * ever sees them.
+ * The subsystem's cardinal invariant is SOUNDNESS OVER COMPLETENESS: an
+ * undecidable sign/ordering, an unsupported construct, or a domain/shape the
+ * shipped engines do not cover must leave `Reduce` UNEVALUATED (return itself),
+ * never emit a wrong formula.  Whole test groups below (test_*_decline,
+ * test_decline_soundness) exist only to pin that invariant.
+ *
+ * Black-box results are compared against FullForm strings, each captured from
+ * the built binary and cross-checked for soundness.  White-box tests drive the
+ * DNF layer directly on RAW (parse-only, un-evaluated) input, since the
+ * evaluator pre-decides most constant logical combinations before Reduce ever
+ * sees them.
+ *
+ * Three earlier "sound but imperfect" behaviours are now fixed and pinned as
+ * regressions: `Reduce[a x == 0, x]` solves (was a decline; test_equations),
+ * fully-determined Reals equation systems back-substitute to x == 2 && y == -1
+ * (was a 4-bound box; test_linear_systems), and parametric conditions print in
+ * minimal solved form a != 1 / a == 1/2 (test_parametric_systems).
  */
 #include <stdio.h>
 #include <string.h>
@@ -46,7 +61,11 @@ static void run_test(const char* input, const char* expected) {
     free(got); expr_free(res); expr_free(e);
 }
 
-/* Statements that fully decide collapse to True / False. */
+/* ------------------------------------------------------------------ *
+ *  Phase 0 - constant / logical folding                              *
+ * ------------------------------------------------------------------ */
+
+/* Statements that fully decide collapse to True. */
 static void test_decides_true(void) {
     run_test("Reduce[True, x]", "True");
     run_test("Reduce[1 < 2, x]", "True");
@@ -54,40 +73,83 @@ static void test_decides_true(void) {
     run_test("Reduce[2 <= 2, x]", "True");
     run_test("Reduce[Implies[True, 1 < 2], x]", "True");
     run_test("Reduce[! (3 < 2), x]", "True");
+    /* Logical connectives over decidable operands. */
+    run_test("Reduce[Xor[True, False], x]", "True");
+    run_test("Reduce[Implies[1 < 2, 2 < 3], x]", "True");
+    run_test("Reduce[!(3 < 2) && 1 < 2, x]", "True");
+    run_test("Reduce[1 < 2 || 3 < 2, x]", "True");
+    run_test("Reduce[(1 < 2 && 2 < 3) || 5 < 1, x]", "True");
 }
 
+/* Statements that fully decide collapse to False. */
 static void test_decides_false(void) {
     run_test("Reduce[False, x]", "False");
     run_test("Reduce[3 < 2, x]", "False");
     run_test("Reduce[2 > 5, x]", "False");
     run_test("Reduce[1 < 2 && 3 < 2, x]", "False");
+    run_test("Reduce[Xor[True, True], x]", "False");
+    run_test("Reduce[x + 1 == x, x]", "False");
+    run_test("Reduce[0 == 1, x]", "False");
 }
 
-/* Statements that need an engine not yet wired (inequalities, mixed systems,
- * multivariate) stay unevaluated. */
-static void test_unevaluated(void) {
-    run_test("Reduce[x > 0, x]", "Reduce[Greater[x, 0], x]");
-    run_test("Reduce[x^2 == 4 && x > 0, x]",
-             "Reduce[And[Equal[Power[x, 2], 4], Greater[x, 0]], x]");
-    /* A non-linear multivariate system over Complexes is not yet handled (CAD). */
-    run_test("Reduce[x^2 + y^2 == 1, {x, y}]",
-             "Reduce[Equal[Plus[Power[x, 2], Power[y, 2]], 1], List[x, y]]");
-}
+/* ------------------------------------------------------------------ *
+ *  Phase 1 - complete univariate equations over Complexes            *
+ * ------------------------------------------------------------------ */
 
-/* Phase 1: complete univariate polynomial equation over Complexes. */
 static void test_equations(void) {
     /* Parametric linear: the complete set keeps the degenerate a==0 branch. */
     run_test("Reduce[a x == b, x]",
              "Or[And[Unequal[a, 0], Equal[x, Times[Power[a, -1], b]]], "
              "And[Equal[a, 0], Equal[b, 0]]]");
+    run_test("Reduce[a x + b == 0, x]",
+             "Or[And[Unequal[a, 0], Equal[x, Times[-1, Power[a, -1], b]]], "
+             "And[Equal[a, 0], Equal[b, 0]]]");
+    /* a x == 0: the a == 0 branch's residual polynomial vanishes identically
+     * (0 == 0, true for all x), so the degenerate branch is simply `a == 0`. */
+    run_test("Reduce[a x == 0, x]",
+             "Or[And[Unequal[a, 0], Equal[x, 0]], Equal[a, 0]]");
+    /* Parametric right-hand side under a numeric-degree quadratic. */
+    run_test("Reduce[x^2 == a, x]",
+             "Or[Equal[x, Times[-1, Power[a, Rational[1, 2]]]], "
+             "Equal[x, Power[a, Rational[1, 2]]]]");
     /* Numeric leading coefficient -> terminal, no case split. */
-    run_test("Reduce[x^2 == 4, x]", "Or[Equal[x, -2], Equal[x, 2]]");
     run_test("Reduce[2 x == 6, x]", "Equal[x, 3]");
+    run_test("Reduce[x/2 == 3, x]", "Equal[x, 6]");
     run_test("Reduce[x - 5 == 0, x]", "Equal[x, 5]");
+    run_test("Reduce[x == 2, x]", "Equal[x, 2]");
+    run_test("Reduce[x^2 == 4, x]", "Or[Equal[x, -2], Equal[x, 2]]");
+    run_test("Reduce[x^2 == 4, x, Complexes]", "Or[Equal[x, -2], Equal[x, 2]]");
+    /* A single-element variable list behaves like the bare variable. */
+    run_test("Reduce[x^2 == 4, {x}]", "Or[Equal[x, -2], Equal[x, 2]]");
+    run_test("Reduce[x^2 - 5 x + 6 == 0, x]", "Or[Equal[x, 2], Equal[x, 3]]");
     run_test("Reduce[(x - 1)(x - 2) == 0, x]", "Or[Equal[x, 1], Equal[x, 2]]");
     /* Default domain is Complexes: complex roots are kept. */
     run_test("Reduce[x^2 == -1, x]",
              "Or[Equal[x, Complex[0, -1]], Equal[x, Complex[0, 1]]]");
+    run_test("Reduce[x^2 + 1 == 0, x]",
+             "Or[Equal[x, Complex[0, -1]], Equal[x, Complex[0, 1]]]");
+    /* Quadratic surd roots. */
+    run_test("Reduce[x^2 - 2 == 0, x]",
+             "Or[Equal[x, Times[-1, Power[2, Rational[1, 2]]]], "
+             "Equal[x, Power[2, Rational[1, 2]]]]");
+    /* Cubic: rational-power radical form. */
+    run_test("Reduce[x^3 - 1 == 0, x]",
+             "Or[Equal[x, 1], Equal[x, Times[-1, Power[-1, Rational[1, 3]]]], "
+             "Equal[x, Power[-1, Rational[2, 3]]]]");
+    /* Irreducible cubic: Root[] objects (real-first ascending index). */
+    run_test("Reduce[x^3 - x - 1 == 0, x]",
+             "Or[Equal[x, Root[Function[Plus[-1, Times[-1, Slot[1]], "
+             "Power[Slot[1], 3]]], 1]], Equal[x, Root[Function[Plus[-1, "
+             "Times[-1, Slot[1]], Power[Slot[1], 3]]], 2]], Equal[x, "
+             "Root[Function[Plus[-1, Times[-1, Slot[1]], Power[Slot[1], 3]]], 3]]]");
+    /* Roots of unity. */
+    run_test("Reduce[x^4 == 1, x]",
+             "Or[Equal[x, -1], Equal[x, 1], Equal[x, Complex[0, -1]], "
+             "Equal[x, Complex[0, 1]]]");
+    run_test("Reduce[x^5 == 1, x]",
+             "Or[Equal[x, 1], Equal[x, Times[-1, Power[-1, Rational[1, 5]]]], "
+             "Equal[x, Power[-1, Rational[2, 5]]], Equal[x, Times[-1, "
+             "Power[-1, Rational[3, 5]]]], Equal[x, Power[-1, Rational[4, 5]]]]");
     /* The flagship 3-level split for a fully parametric quadratic. */
     run_test("Reduce[a x^2 + b x + c == 0, x]",
              "Or[And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], Power[a, -1], "
@@ -99,29 +161,95 @@ static void test_equations(void) {
              "And[Equal[a, 0], Equal[b, 0], Equal[c, 0]]]");
 }
 
-/* Phase 2: univariate real sign diagram (equations + inequalities over Reals). */
+/* Phase-1 soundness boundary: Complexes routes only on a single equation atom;
+ * anything else (!=, conjunction/disjunction of equations, transcendental,
+ * the a x==0 asymmetry, no-variable form) must NOT invent an answer. */
+static void test_equations_decline(void) {
+    /* !=  over Complexes has no ordering to reason about -> declines. */
+    run_test("Reduce[x != 0, x]", "Reduce[Unequal[x, 0], x]");
+    run_test("Reduce[x^2 != 4, x]", "Reduce[Unequal[Power[x, 2], 4], x]");
+    /* Conjunction / disjunction of equations routes to the linear-only system
+     * engine, which declines on the nonlinear polynomials. */
+    run_test("Reduce[x^2 == 4 && x^3 == 8, x]",
+             "Reduce[And[Equal[Power[x, 2], 4], Equal[Power[x, 3], 8]], x]");
+    run_test("Reduce[x^2 == 4 || x == 5, x]",
+             "Reduce[Or[Equal[Power[x, 2], 4], Equal[x, 5]], x]");
+    /* No variable argument. */
+    run_test("Reduce[x^2 == 4]", "Reduce[Equal[Power[x, 2], 4]]");
+    /* Transcendental equation: Solve returns a bare relation, Reduce passes it
+     * through unchanged (a distinct outcome from both solved and Reduce[...]). */
+    run_test("Reduce[Sin[x] == 0, x]", "Equal[Sin[x], 0]");
+}
+
+/* ------------------------------------------------------------------ *
+ *  Phase 2 - univariate real sign diagram                            *
+ * ------------------------------------------------------------------ */
+
 static void test_real_inequalities(void) {
     run_test("Reduce[x^2 > 1, x, Reals]",  "Or[Less[x, -1], Greater[x, 1]]");
     run_test("Reduce[x^2 >= 1, x, Reals]", "Or[LessEqual[x, -1], GreaterEqual[x, 1]]");
     run_test("Reduce[x^2 < 1, x, Reals]",  "Inequality[-1, Less, x, Less, 1]");
-    run_test("Reduce[(x - 1)(x - 2)(x - 3) > 0, x, Reals]",
-             "Or[Inequality[1, Less, x, Less, 2], Greater[x, 3]]");
+    run_test("Reduce[x^2 <= 1, x, Reals]", "Inequality[-1, LessEqual, x, LessEqual, 1]");
     /* Cofinite: complement of finitely many points. */
     run_test("Reduce[x^2 != 1, x, Reals]", "And[Unequal[x, -1], Unequal[x, 1]]");
-    /* Equations over Reals fall out of the same sign diagram. */
-    run_test("Reduce[x^2 == 4, x, Reals]", "Or[Equal[x, -2], Equal[x, 2]]");
-    /* No real breakpoints -> the whole line decides. */
+    /* No real breakpoints / degenerate ranges -> the whole line decides. */
+    run_test("Reduce[x^2 < 0, x, Reals]", "False");
+    run_test("Reduce[x^2 >= 0, x, Reals]", "True");
+    run_test("Reduce[x^2 <= 0, x, Reals]", "Equal[x, 0]");
     run_test("Reduce[x^2 + 1 > 0, x, Reals]", "True");
     run_test("Reduce[x^2 + 1 < 0, x, Reals]", "False");
-    /* A conjunction of bounds. */
-    run_test("Reduce[x > 0 && x < 1, x, Reals]", "Inequality[0, Less, x, Less, 1]");
+    /* Odd multiplicity: a single sign change. */
+    run_test("Reduce[x^3 > 0, x, Reals]", "Greater[x, 0]");
     /* Algebraic (radical) breakpoints, ordered and signed via the qqbar oracle. */
+    run_test("Reduce[x^2 - 2 > 0, x, Reals]",
+             "Or[Less[x, Times[-1, Power[2, Rational[1, 2]]]], "
+             "Greater[x, Power[2, Rational[1, 2]]]]");
+    run_test("Reduce[x^3 > 2, x, Reals]",
+             "Greater[x, Power[2, Rational[1, 3]]]");
     run_test("Reduce[x^2 < 2, x, Reals]",
              "Inequality[Times[-1, Power[2, Rational[1, 2]]], Less, x, Less, "
              "Power[2, Rational[1, 2]]]");
+    /* Multiple simple roots: alternating sign cells. */
+    run_test("Reduce[(x - 1)(x - 2)(x - 3) > 0, x, Reals]",
+             "Or[Inequality[1, Less, x, Less, 2], Greater[x, 3]]");
+    run_test("Reduce[x^2 - 5 x + 6 > 0, x, Reals]",
+             "Or[Less[x, 2], Greater[x, 3]]");
+    /* Conjunctions of bounds. */
+    run_test("Reduce[x > 0 && x < 1, x, Reals]", "Inequality[0, Less, x, Less, 1]");
+    run_test("Reduce[x < 1 && x > 0, x, Reals]", "Inequality[0, Less, x, Less, 1]");
+    run_test("Reduce[x^2 > 1 && x < 5, x, Reals]",
+             "Or[Less[x, -1], Inequality[1, Less, x, Less, 5]]");
+    run_test("Reduce[x >= 2 && x >= 5, x, Reals]", "GreaterEqual[x, 5]");
+    run_test("Reduce[x^2 > 1 && x^2 < 9, x, Reals]",
+             "Or[Inequality[-3, Less, x, Less, -1], Inequality[1, Less, x, Less, 3]]");
+    run_test("Reduce[x^2 <= 1 && x >= 0, x, Reals]",
+             "Inequality[0, LessEqual, x, LessEqual, 1]");
+    run_test("Reduce[x >= 1 && x <= 3, x, Reals]",
+             "Inequality[1, LessEqual, x, LessEqual, 3]");
+    /* Disjunctions. */
+    run_test("Reduce[x^2 > 1 || x < -5, x, Reals]",
+             "Or[Less[x, -1], Greater[x, 1]]");
+    run_test("Reduce[x^2 <= 1 || x >= 3, x, Reals]",
+             "Or[Inequality[-1, LessEqual, x, LessEqual, 1], GreaterEqual[x, 3]]");
+    run_test("Reduce[!(x^2 < 1), x, Reals]",
+             "Or[LessEqual[x, -1], GreaterEqual[x, 1]]");
+    /* Mixed equation + inequality over Reals (works, unlike Complexes). */
+    run_test("Reduce[x^2 == 4 && x > 0, x, Reals]", "Equal[x, 2]");
+    run_test("Reduce[x^2 == 4 || x == 5, x, Reals]",
+             "Or[Equal[x, -2], Equal[x, 2], Equal[x, 5]]");
+    /* !=  over Reals is a satisfiable condition, not a decline. */
+    run_test("Reduce[x != 0, x, Reals]", "Unequal[x, 0]");
+    /* Equations over Reals fall out of the same sign diagram. */
+    run_test("Reduce[x^2 == 4, x, Reals]", "Or[Equal[x, -2], Equal[x, 2]]");
+    run_test("Reduce[x^2 - 2 == 0, x, Reals]",
+             "Or[Equal[x, Times[-1, Power[2, Rational[1, 2]]]], "
+             "Equal[x, Power[2, Rational[1, 2]]]]");
 }
 
-/* Phase 3: multivariate linear systems over Reals (Fourier-Motzkin). */
+/* ------------------------------------------------------------------ *
+ *  Phase 3 - multivariate linear systems over Reals (Fourier-Motzkin)*
+ * ------------------------------------------------------------------ */
+
 static void test_linear_systems(void) {
     /* The plan's flagship: a triangular description of the feasible region. */
     run_test("Reduce[x + y < 1 && x > 0 && y > 0, {x, y}, Reals]",
@@ -129,13 +257,20 @@ static void test_linear_systems(void) {
              "Inequality[0, Less, y, Less, Plus[1, Times[-1, x]]]]");
     /* Infeasible system -> False. */
     run_test("Reduce[x > 1 && x < 0 && y > 0, {x, y}, Reals]", "False");
-    /* An equation is re-detected as `==` in the triangular output. */
+    /* An equation is re-detected as `==` in the triangular output; a variable
+     * pinned to a range stays symbolic (y == 1 - x, x not determined). */
     run_test("Reduce[x + y == 1 && x > 0, {x, y}, Reals]",
              "And[Greater[x, 0], Equal[y, Plus[1, Times[-1, x]]]]");
+    /* A fully-determined equation system back-substitutes the pinned variable:
+     * x == 2 propagates into y == 1 - x, giving y == -1 (not a 4-bound box). */
+    run_test("Reduce[x + y == 1 && x - y == 3, {x, y}, Reals]",
+             "And[Equal[x, 2], Equal[y, -1]]");
     /* Rational bound coefficients. */
     run_test("Reduce[2 x + 3 y <= 6 && x >= 0 && y >= 0, {x, y}, Reals]",
              "And[Inequality[0, LessEqual, x, LessEqual, 3], "
              "Inequality[0, LessEqual, y, LessEqual, Plus[2, Times[Rational[-2, 3], x]]]]");
+    run_test("Reduce[2 x + 3 y <= 6 && x >= 0, {x, y}, Reals]",
+             "And[GreaterEqual[x, 0], LessEqual[y, Plus[2, Times[Rational[-2, 3], x]]]]");
     /* A free variable is simply omitted. */
     run_test("Reduce[x > 0, {x, y}, Reals]", "Greater[x, 0]");
     /* Disjunction: each conjunct solved and OR-ed. */
@@ -143,13 +278,65 @@ static void test_linear_systems(void) {
              "Or[Less[x, 0], Greater[x, 1]]");
 }
 
-/* Phase 5: Integers / Rationals domain. */
+/* ------------------------------------------------------------------ *
+ *  Phase 4 - parametric linear systems over Complexes                *
+ * ------------------------------------------------------------------ */
+
+static void test_parametric_systems(void) {
+    /* Numeric determined system. */
+    run_test("Reduce[x + y == 3 && x - y == 1, {x, y}]",
+             "And[Equal[y, 1], Equal[x, 2]]");
+    /* Underdetermined: a variable stays free. */
+    run_test("Reduce[x + y == 1, {x, y}]", "Equal[x, Plus[1, Times[-1, y]]]");
+    /* Parametric square system: genericity condition + Cramer solution.  The
+     * condition prints in minimal solved form `a != 1` (not `1 - a != 0`). */
+    run_test("Reduce[a x + y == 1 && x + y == 0, {x, y}]",
+             "And[Unequal[a, 1], Equal[x, Power[Plus[-1, a], -1]], "
+             "Equal[y, Times[-1, Power[Plus[-1, a], -1]]]]");
+    /* Overdetermined: a consistency condition on the parameter, minimal form
+     * `a == 1/2` (not `-1 + 2 a == 0`). */
+    run_test("Reduce[a x == 1 && x == 2, {x}]",
+             "And[Equal[a, Rational[1, 2]], Equal[x, 2]]");
+    run_test("Reduce[a x == 1 && x == 2, x]",
+             "And[Equal[a, Rational[1, 2]], Equal[x, 2]]");
+    /* Three variables. */
+    run_test("Reduce[x + y + z == 6 && x - y == 0 && z == 2, {x, y, z}]",
+             "And[Equal[z, 2], Equal[y, 2], Equal[x, 2]]");
+}
+
+/* Phase-4 boundary: nonlinear systems are not handled (linear-only engine). */
+static void test_parametric_systems_decline(void) {
+    run_test("Reduce[x y == 1 && x + y == 3, {x, y}]",
+             "Reduce[And[Equal[Times[x, y], 1], Equal[Plus[x, y], 3]], List[x, y]]");
+    run_test("Reduce[x^2 + y^2 == 1 && x == 0, {x, y}]",
+             "Reduce[And[Equal[Plus[Power[x, 2], Power[y, 2]], 1], Equal[x, 0]], "
+             "List[x, y]]");
+    /* A non-linear multivariate equation over Complexes needs CAD (phase 6). */
+    run_test("Reduce[x^2 + y^2 == 1, {x, y}]",
+             "Reduce[Equal[Plus[Power[x, 2], Power[y, 2]], 1], List[x, y]]");
+}
+
+/* ------------------------------------------------------------------ *
+ *  Phase 5 - Integers / Rationals                                    *
+ * ------------------------------------------------------------------ */
+
 static void test_integer_domain(void) {
     /* Equation -> finite solution set. */
     run_test("Reduce[x^2 == 4, x, Integers]", "Or[Equal[x, -2], Equal[x, 2]]");
     run_test("Reduce[x^2 == 2, x, Integers]", "False");
-    run_test("Reduce[x^2 == 4, x, Rationals]", "Or[Equal[x, -2], Equal[x, 2]]");
+    run_test("Reduce[2 x == 5, x, Integers]", "False");
+    run_test("Reduce[2 x + 1 == 5, x, Integers]", "Equal[x, 2]");
+    run_test("Reduce[2 x == 4, x, Integers]", "Equal[x, 2]");
     /* Bounded inequality -> integer enumeration (Solve declines, we fall back). */
+    run_test("Reduce[0 <= x <= 5, x, Integers]",
+             "Or[Equal[x, 0], Equal[x, 1], Equal[x, 2], Equal[x, 3], "
+             "Equal[x, 4], Equal[x, 5]]");
+    run_test("Reduce[x^2 <= 4, x, Integers]",
+             "Or[Equal[x, -2], Equal[x, -1], Equal[x, 0], Equal[x, 1], Equal[x, 2]]");
+    run_test("Reduce[x^2 < 5 && x > -3, x, Integers]",
+             "Or[Equal[x, -2], Equal[x, -1], Equal[x, 0], Equal[x, 1], Equal[x, 2]]");
+    run_test("Reduce[x >= 1 && x <= 3, x, Integers]",
+             "Or[Equal[x, 1], Equal[x, 2], Equal[x, 3]]");
     run_test("Reduce[x^2 < 10 && x > 0, x, Integers]",
              "Or[Equal[x, 1], Equal[x, 2], Equal[x, 3]]");
     run_test("Reduce[1 <= x <= 3, x, Integers]",
@@ -159,36 +346,62 @@ static void test_integer_domain(void) {
              "Or[And[Equal[x, 1], Equal[y, 4]], And[Equal[x, 2], Equal[y, 3]], "
              "And[Equal[x, 3], Equal[y, 2]], And[Equal[x, 4], Equal[y, 1]]]");
     /* Parametric linear Diophantine -> a C[k] family with an Element condition. */
+    run_test("Reduce[x + y == 3, {x, y}, Integers]",
+             "And[Element[C[1], Integers], Equal[x, C[1]], "
+             "Equal[y, Plus[3, Times[-1, C[1]]]]]");
     run_test("Reduce[2 x + 3 y == 1, {x, y}, Integers]",
              "And[Element[C[1], Integers], Equal[x, Plus[-1, Times[3, C[1]]]], "
              "Equal[y, Plus[1, Times[-2, C[1]]]]]");
 }
 
-/* Phase 4: parametric linear systems over Complexes (case analysis). */
-static void test_parametric_systems(void) {
-    /* Numeric determined system. */
-    run_test("Reduce[x + y == 3 && x - y == 1, {x, y}]",
-             "And[Equal[y, 1], Equal[x, 2]]");
-    /* Underdetermined: a variable stays free. */
-    run_test("Reduce[x + y == 1, {x, y}]", "Equal[x, Plus[1, Times[-1, y]]]");
-    /* Parametric square system: genericity condition + Cramer solution. */
-    run_test("Reduce[a x + y == 1 && x + y == 0, {x, y}]",
-             "And[Unequal[Plus[1, Times[-1, a]], 0], Equal[x, Power[Plus[-1, a], -1]], "
-             "Equal[y, Times[-1, Power[Plus[-1, a], -1]]]]");
-    /* Overdetermined: a consistency condition on the parameter. */
-    run_test("Reduce[a x == 1 && x == 2, {x}]",
-             "And[Equal[Plus[-1, Times[2, a]], 0], Equal[x, 2]]");
-    /* Three variables. */
-    run_test("Reduce[x + y + z == 6 && x - y == 0 && z == 2, {x, y, z}]",
-             "And[Equal[z, 2], Equal[y, 2], Equal[x, 2]]");
-    /* A non-linear system is declined (stays unevaluated). */
-    run_test("Reduce[x y == 1 && x + y == 3, {x, y}]",
-             "Reduce[And[Equal[Times[x, y], 1], Equal[Plus[x, y], 3]], List[x, y]]");
+static void test_rational_domain(void) {
+    run_test("Reduce[x^2 == 4, x, Rationals]", "Or[Equal[x, -2], Equal[x, 2]]");
+    run_test("Reduce[x^2 == 2, x, Rationals]", "False");
 }
 
-/* Invalid variable spec -> Reduce::ivar (stderr) + unevaluated. */
-static void test_bad_vars(void) {
+/* ------------------------------------------------------------------ *
+ *  Soundness net: inputs the shipped engines do NOT cover must leave *
+ *  Reduce unevaluated -- never a wrong (or guessed) formula.         *
+ * ------------------------------------------------------------------ */
+
+static void test_decline_soundness(void) {
+    /* Default domain (Complexes) has no ordering: a bare inequality declines. */
+    run_test("Reduce[x^2 > 1, x]", "Reduce[Greater[Power[x, 2], 1], x]");
+    run_test("Reduce[x > 0, x]", "Reduce[Greater[x, 0], x]");
+    run_test("Reduce[x^2 == 4 && x > 0, x]",
+             "Reduce[And[Equal[Power[x, 2], 4], Greater[x, 0]], x]");
+    /* Unbounded integer sets are not yet emitted as x>=1 style forms. */
+    run_test("Reduce[x > 0, x, Integers]", "Reduce[Greater[x, 0], x, Integers]");
+    run_test("Reduce[x < 5, x, Integers]", "Reduce[Less[x, 5], x, Integers]");
+    run_test("Reduce[x^2 > 1, x, Integers]",
+             "Reduce[Greater[Power[x, 2], 1], x, Integers]");
+    /* Rational-function inequality with a non-constant cleared denominator:
+     * clearing could flip the sense, so Reduce declines (soundness fix). */
+    run_test("Reduce[1/x < 1, x, Reals]", "Reduce[Less[Power[x, -1], 1], x, Reals]");
+    /* Non-polynomial atom. */
+    run_test("Reduce[Abs[x] < 1, x, Reals]", "Reduce[Less[Abs[x], 1], x, Reals]");
+    /* Unsupported / unknown domains. */
+    run_test("Reduce[x^2 == 4, x, Booleans]",
+             "Reduce[Equal[Power[x, 2], 4], x, Booleans]");
+    run_test("Reduce[x^2 == 4, x, GaussianIntegers]",
+             "Reduce[Equal[Power[x, 2], 4], x, GaussianIntegers]");
+    /* Element condition without a domain argument. */
+    run_test("Reduce[Element[x, Integers] && x^2 < 5, x]",
+             "Reduce[And[Element[x, Integers], Less[Power[x, 2], 5]], x]");
+    /* Multivariate nonlinear over Reals needs CAD (phase 6). */
+    run_test("Reduce[x^2 + y^2 <= 1, {x, y}, Reals]",
+             "Reduce[LessEqual[Plus[Power[x, 2], Power[y, 2]], 1], List[x, y], Reals]");
+    run_test("Reduce[x y > 0, {x, y}, Reals]",
+             "Reduce[Greater[Times[x, y], 0], List[x, y], Reals]");
+    /* Parametric coefficient in a linear real system. */
+    run_test("Reduce[a x + y < 1, {x, y}, Reals]",
+             "Reduce[Less[Plus[Times[a, x], y], 1], List[x, y], Reals]");
+    /* Free parameter in a univariate real inequality/equation. */
+    run_test("Reduce[a x^2 == 1, x, Reals]",
+             "Reduce[Equal[Times[a, Power[x, 2]], 1], x, Reals]");
+    /* Invalid variable specification -> Reduce::ivar (stderr) + unevaluated. */
     run_test("Reduce[x == 1, 5]", "Reduce[Equal[x, 1], 5]");
+    run_test("Reduce[x == 1, {}]", "Reduce[Equal[x, 1], List[]]");
 }
 
 /* ------------------------------------------------------------------ *
@@ -228,18 +441,72 @@ static void test_wb_constant_atoms(void) {
 
 /* And/Or fold constants correctly around a symbolic atom. */
 static void test_wb_logic_fold(void) {
-    wb_test("3 < 2 || 5 > 2", "True");        /* False ∨ True  = True  */
-    wb_test("1 < 2 && 3 < 2", "False");       /* True  ∧ False = False */
+    wb_test("3 < 2 || 5 > 2", "True");        /* False v True  = True  */
+    wb_test("1 < 2 && 3 < 2", "False");       /* True  ^ False = False */
     /* A true constant conjunct drops, leaving the symbolic atom. */
     wb_test("5 > 2 && x^2 == 4", "Equal[Plus[-4, Power[x, 2]], 0]");
     /* A false constant conjunct kills the whole conjunction. */
     wb_test("3 < 2 && x^2 == 4", "False");
 }
 
-/* A single symbolic atom canonicalises to `poly REL 0`. */
+/* Assert that the DNF layer rejects an unsupported construct (ok == false),
+ * the *ok=false path the front-end turns into an unevaluated Reduce[...]. */
+static void wb_unsupported(const char* input) {
+    Expr* e  = parse_expression(input);
+    Expr* vx = parse_expression("x");
+    ASSERT(e && vx);
+    Expr* vars[1] = { vx };
+    bool ok = true;
+    RForm* f = reduce_form_from_expr(e, vars, 1, &ok);
+    if (ok) {
+        printf("WB FAIL: %s\n  expected: ok=false (unsupported)\n  got:      ok=true\n",
+               input);
+        if (f) rform_free(f); expr_free(e); expr_free(vx); ASSERT(0); return;
+    }
+    printf("WB PASS: %s -> ok=false (unsupported)\n", input);
+    if (f) rform_free(f); expr_free(e); expr_free(vx);
+}
+
+/* A single symbolic atom canonicalises to `poly REL 0`.  >/>= are flipped to
+ * </<= by swapping operands; equations clear a fully-cancelled denominator. */
 static void test_wb_atom_emit(void) {
     wb_test("x^2 == 4", "Equal[Plus[-4, Power[x, 2]], 0]");
     wb_test("x != 1", "Unequal[Plus[-1, x], 0]");
+    wb_test("x > 1", "Less[Plus[1, Times[-1, x]], 0]");
+    wb_test("x >= 1", "LessEqual[Plus[1, Times[-1, x]], 0]");
+    /* Swapped-sides equation. */
+    wb_test("4 == x^2", "Equal[Plus[4, Times[-1, Power[x, 2]]], 0]");
+    wb_test("2 - x == 0", "Equal[Plus[2, Times[-1, x]], 0]");
+    wb_test("-x + 3 > 0", "Less[Plus[-3, x], 0]");
+    /* Denominator clearing is sound for an equation: 1/x == 0 -> 1 == 0. */
+    wb_test("1/x == 0", "False");
+}
+
+/* Higher-level logical connectives expand into the DNF of relational atoms:
+ * Implies -> De Morgan, Xor -> distribution, chained Inequality splits, Not
+ * pushes through And/Or/atoms. */
+static void test_wb_logic_expand(void) {
+    wb_test("Implies[x^2 == 1, x == 1]",
+            "Or[Unequal[Plus[-1, Power[x, 2]], 0], Equal[Plus[-1, x], 0]]");
+    wb_test("Xor[x == 1, x == 2]",
+            "Or[And[Equal[Plus[-1, x], 0], Unequal[Plus[-2, x], 0]], "
+            "And[Unequal[Plus[-1, x], 0], Equal[Plus[-2, x], 0]]]");
+    /* A chained Inequality splits into a conjunction of two atoms. */
+    wb_test("1 < x < 3",
+            "And[Less[Plus[1, Times[-1, x]], 0], Less[Plus[-3, x], 0]]");
+    /* Not of an equation atom. */
+    wb_test("!(x^2 == 4)", "Unequal[Plus[-4, Power[x, 2]], 0]");
+    /* De Morgan over a conjunction / disjunction. */
+    wb_test("!(x == 1 && x == 2)",
+            "Or[Unequal[Plus[-1, x], 0], Unequal[Plus[-2, x], 0]]");
+    wb_test("!(x == 1 || x == 2)",
+            "And[Unequal[Plus[-1, x], 0], Unequal[Plus[-2, x], 0]]");
+}
+
+/* Constructs the DNF layer does not support -> ok=false (Reduce stays
+ * unevaluated).  Negating an Element predicate is one such case. */
+static void test_wb_unsupported(void) {
+    wb_unsupported("Not[Element[x, Integers]]");
 }
 
 int main(void) {
@@ -248,16 +515,20 @@ int main(void) {
 
     TEST(test_decides_true);
     TEST(test_decides_false);
-    TEST(test_unevaluated);
     TEST(test_equations);
+    TEST(test_equations_decline);
     TEST(test_real_inequalities);
     TEST(test_linear_systems);
     TEST(test_parametric_systems);
+    TEST(test_parametric_systems_decline);
     TEST(test_integer_domain);
-    TEST(test_bad_vars);
+    TEST(test_rational_domain);
+    TEST(test_decline_soundness);
     TEST(test_wb_constant_atoms);
     TEST(test_wb_logic_fold);
     TEST(test_wb_atom_emit);
+    TEST(test_wb_logic_expand);
+    TEST(test_wb_unsupported);
 
     printf("All reduce tests passed!\n");
     return 0;

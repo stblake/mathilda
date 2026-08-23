@@ -174,6 +174,74 @@ static void collect_params(const Expr* e, Expr** vars, int nv, Expr*** out, int*
     }
 }
 
+/* Like collect_params, but does NOT descend into function heads -- so an
+ * operator symbol (Plus, Times, ...) is never mistaken for a parameter.
+ * collect_params intentionally includes heads (solve_pzero tolerates the futile
+ * Solve attempts), but a strict `is this linear in one parameter?` test needs
+ * the genuine leaf variables only. */
+static void collect_leaf_params(const Expr* e, Expr** vars, int nv,
+                                Expr*** out, int* n) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        for (int j = 0; j < nv; j++)
+            if (vars[j]->type == EXPR_SYMBOL
+                && vars[j]->data.symbol.name == e->data.symbol.name) return;
+        for (int i = 0; i < *n; i++) if (expr_eq((*out)[i], e)) return;
+        *out = realloc(*out, (size_t)(*n + 1) * sizeof(Expr*));
+        (*out)[(*n)++] = expr_copy((Expr*)e);
+        return;
+    }
+    if (e->type == EXPR_FUNCTION)
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            collect_leaf_params(e->data.function.args[i], vars, nv, out, n);
+}
+
+/* Normalise a parameter condition  expr REL 0  (REL = Equal or Unequal).  When
+ * expr is linear in a single parameter `a` with a nonzero numeric coefficient,
+ * rewrite it in solved form  a REL (-const/coeff)  -- so `1 - a != 0` prints as
+ * `a != 1` and `-1 + 2 a == 0` as `a == 1/2`.  The linearity is verified
+ * (expr == const + coeff*a) so a nonlinear condition such as `a^2 + 2 a == 0`
+ * is NOT mis-collapsed to `a == 0`; anything not single-parameter-linear is
+ * emitted verbatim as `expr REL 0`. */
+static Expr* sys_norm_condition(const char* rel_head, const Expr* expr,
+                                Expr** vars, int nv) {
+    Expr** params = NULL; int nparams = 0;
+    collect_leaf_params(expr, vars, nv, &params, &nparams);
+    Expr* result = NULL;
+    if (nparams == 1) {
+        Expr* a = params[0];
+        Expr* coeff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Coefficient),
+            (Expr*[]){ expr_copy((Expr*)expr), expr_copy(a) }, 2));
+        if (rf_is_nonzero_const(coeff)) {
+            Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                (Expr*[]){ expr_copy(a), expr_new_integer(0) }, 2);
+            Expr* c0 = rf(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                (Expr*[]){ expr_copy((Expr*)expr), rule }, 2));
+            Expr* ca = rf_mul(coeff, a);
+            Expr* recon = rf_add(c0, ca);
+            Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Subtract),
+                (Expr*[]){ expr_copy((Expr*)expr), expr_copy(recon) }, 2));
+            bool linear = rf_is_zero(diff);
+            expr_free(diff); expr_free(recon); expr_free(ca);
+            if (linear) {
+                Expr* negc0 = rf_neg(c0);
+                Expr* val = rf_div(negc0, coeff);
+                expr_free(negc0);
+                result = expr_new_function(expr_new_symbol(rel_head),
+                    (Expr*[]){ expr_copy(a), val }, 2);
+            }
+            expr_free(c0);
+        }
+        expr_free(coeff);
+    }
+    for (int i = 0; i < nparams; i++) expr_free(params[i]);
+    free(params);
+    if (!result)
+        result = expr_new_function(expr_new_symbol(rel_head),
+            (Expr*[]){ expr_copy((Expr*)expr), expr_new_integer(0) }, 2);
+    return result;
+}
+
 /* ------------------------------------------------------------------ *
  *  The recursive solver                                               *
  * ------------------------------------------------------------------ */
@@ -289,8 +357,7 @@ static LSol* lin_solve(Expr*** R, int nR, bool* remaining, int nv, Expr** vars, 
             Expr* k = R[r][nv];
             if (rf_is_nonzero_const(k)) { lsol_free(s); return lsol_false(); }  /* inconsistent */
             if (rf_is_zero(k)) continue;
-            lcase_add_cond(c, expr_new_function(expr_new_symbol(SYM_Equal),
-                (Expr*[]){ expr_copy(k), expr_new_integer(0) }, 2));
+            lcase_add_cond(c, sys_norm_condition(SYM_Equal, k, vars, nv));
         }
         return s;
     }
@@ -339,8 +406,7 @@ static LSol* lin_solve(Expr*** R, int nR, bool* remaining, int nv, Expr** vars, 
         bool okA = *ok;
         LSol* subA = lin_solve(R2, mR, rem2, nv, vars, &okA);
         graft(subA, vars[pj], xexpr);
-        Expr* ne = expr_new_function(expr_new_symbol(SYM_Unequal),
-            (Expr*[]){ expr_copy(p), expr_new_integer(0) }, 2);
+        Expr* ne = sys_norm_condition(SYM_Unequal, p, vars, nv);
         lsol_and_cond(subA, ne); expr_free(ne);
         /* Branch B: p == 0 (substitute into the ORIGINAL rows and recurse). */
         bool okB = *ok;

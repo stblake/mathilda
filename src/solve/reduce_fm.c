@@ -268,11 +268,23 @@ static Expr* emit_level(const FMSet* proj_hi, int j, Expr** vars) {
 
     Expr* result = NULL;   /* NULL == no constraint on this (free) variable */
 
-    /* single lower + single upper, both non-strict and equal -> equation */
-    if (nlo == 1 && nhi == 1 && !los[0].strict && !his[0].strict
-        && expr_eq(los[0].b, his[0].b)) {
+    /* Any non-strict lower bound equal to a non-strict upper bound pins the
+     * variable to an equation, even when there are further bounds: those are
+     * redundant, because Fourier-Motzkin projection has already emitted their
+     * cross-implications (lo' <= hi') as constraints on the earlier variables
+     * (that is exactly how `x + y == 1 && x - y == 3` yields x == 2 at the
+     * x-level, leaving the y-level free to collapse to y == 1 - x). */
+    const Expr* eqval = NULL;
+    for (int t = 0; t < nlo && !eqval; t++) {
+        if (los[t].strict) continue;
+        for (int u = 0; u < nhi; u++) {
+            if (his[u].strict) continue;
+            if (expr_eq(los[t].b, his[u].b)) { eqval = los[t].b; break; }
+        }
+    }
+    if (eqval) {
         result = expr_new_function(expr_new_symbol(SYM_Equal),
-            (Expr*[]){ expr_copy(vars[j]), expr_copy(los[0].b) }, 2);
+            (Expr*[]){ expr_copy(vars[j]), expr_copy((Expr*)eqval) }, 2);
     } else if (nlo == 1 && nhi == 1) {
         /* chained  lo (op) x (op) hi */
         const char* op1 = los[0].strict ? SYM_Less : SYM_LessEqual;
@@ -345,6 +357,39 @@ static Expr* fm_conjunction(const RConj* conj, Expr** vars, int nv) {
                 if (lv) { parts = realloc(parts, (size_t)(npar + 1) * sizeof(Expr*));
                           parts[npar++] = lv; }
             }
+
+            /* Back-substitution: forward-propagate any level that pins its
+             * variable to a numeric constant (x == 2) into the later levels, so
+             * a fully-determined system reads x == 2 && y == -1 rather than the
+             * triangular x == 2 && y == 1 - x.  Bounds/ranges are untouched
+             * (their RHS is non-numeric), matching x > 0 && y == 1 - x. */
+            {
+                Expr** subrules = NULL; int nsub = 0;
+                for (int t = 0; t < npar; t++) {
+                    if (nsub > 0) {
+                        Expr** rc = malloc((size_t)nsub * sizeof(Expr*));
+                        for (int s = 0; s < nsub; s++) rc[s] = expr_copy(subrules[s]);
+                        Expr* rlist = expr_new_function(expr_new_symbol(SYM_List),
+                                                        rc, (size_t)nsub);
+                        free(rc);
+                        parts[t] = eval_and_free(expr_new_function(
+                            expr_new_symbol(SYM_ReplaceAll),
+                            (Expr*[]){ parts[t], rlist }, 2));
+                    }
+                    if (is_head(parts[t], SYM_Equal)
+                        && parts[t]->data.function.arg_count == 2
+                        && is_num_scalar(parts[t]->data.function.args[1])) {
+                        subrules = realloc(subrules,
+                                           (size_t)(nsub + 1) * sizeof(Expr*));
+                        subrules[nsub++] = expr_new_function(expr_new_symbol(SYM_Rule),
+                            (Expr*[]){ expr_copy(parts[t]->data.function.args[0]),
+                                       expr_copy(parts[t]->data.function.args[1]) }, 2);
+                    }
+                }
+                for (int s = 0; s < nsub; s++) expr_free(subrules[s]);
+                free(subrules);
+            }
+
             if (npar == 0) result = expr_new_symbol(SYM_True);
             else if (npar == 1) result = parts[0];
             else result = expr_new_function(expr_new_symbol(SYM_And), parts, (size_t)npar);

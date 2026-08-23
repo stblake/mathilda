@@ -3463,6 +3463,23 @@ endif()
 add_test(NAME solve_corpus_tests
          COMMAND solve_corpus_tests ../solve_corpus.m ../solve_check_prelude.m)
 
+# Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
+# {label, expr, vars, dom, expected} records) held, forks per case, and verifies
+# each output by SAMPLING (grid equivalence + witness) via the
+# reduce_check_prelude.m oracle.  The corpus ships fully green (baseline 0) so
+# any non-PASS is a real regression; a genuine equivalence failure is a Reduce
+# soundness bug.
+add_executable(reduce_corpus_tests test_reduce_corpus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(reduce_corpus_tests PRIVATE ../src ../src/solve)
+if(USE_ECM)
+    target_link_libraries(reduce_corpus_tests gmp m ${ECM_LIB})
+    add_dependencies(reduce_corpus_tests build_ecm)
+else()
+    target_link_libraries(reduce_corpus_tests gmp m)
+endif()
+add_test(NAME reduce_corpus_tests
+         COMMAND reduce_corpus_tests ../reduce_corpus.m ../reduce_check_prelude.m)
+
 # Comprehensive corpus runner for the CRC integral table.  Loads
 # CRCIntegralsCorpus.m (a flat List of {integrand, var} pairs, ~3 per
 # rule in src/internal/CRCMathTablesIntegrals.m) and validates each via
