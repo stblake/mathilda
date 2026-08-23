@@ -174,3 +174,73 @@ as this repo's type-check tier). Small thing, but it's the kind of toolchain-spe
 nuance that's easy to get wrong (e.g. leaving `typecheck` as `not-configured` for every
 compiled language, which would undercount real verification coverage) and the example file
 gets it right unprompted.
+
+## GR-05 [-] `/setup-kit` doesn't create `.claude/CONFIG.md`, but `/research-codebase`'s
+very first instruction requires it
+
+**What I ran.** Started `/research-codebase` (by reading `commands/research-codebase.md`
+directly — see GR-01) whose line 14 says: *"Read `.claude/CONFIG.md` for `NOTES_DIR`...
+before touching any path below."*
+
+**What I expected.** Having just run `/setup-kit`, I expected the two files it's documented
+to configure to be the complete "you're set up now" state.
+
+**What happened.** `.claude/CONFIG.md` does not exist in this repo (confirmed: `ls
+.claude/CONFIG.md` → no such file), and `/setup-kit`'s own scope (`commands/setup-kit.md`,
+`skills/kit-setup/SKILL.md`) never mentions `CONFIG.md` at all — it only writes
+`VERIFICATION_LADDER.md` and `GUIDANCE_ROLES.md`. `CONFIG.example.md:6-8` documents the
+default (`NOTES_DIR = thoughts/`) for exactly this case, so the fallback is discoverable —
+but only by a reader who thinks to open `CONFIG.example.md` instead of `CONFIG.md`. A repo
+that has genuinely run the kit's own recommended setup command is still one config file
+short of what the very next command in the pipeline (`/research-codebase`) asks for first,
+with no automated link between the two. Proceeded with the documented default
+(`NOTES_DIR = thoughts/`).
+
+## GR-06 [?] `grill-me`'s "strictly one question at a time" instruction sits awkwardly
+against the harness's native multi-select question tool
+
+`skills/grill-me/SKILL.md` (research-open mode) is explicit: *"Strictly one question at a
+time, every mode, no exceptions... emitting a numbered list and waiting for a batch answer
+defeats the entire point of asking interactively."* The interactive-question tool this
+harness actually exposes (`AskUserQuestion`) is built around asking 1-4 questions per call
+with multiple-choice options — it's the more natural, idiomatic way to surface a choice, and
+batching up to 4 is clearly an intended, first-class use of that tool elsewhere in this same
+session (e.g. the kit-setup CONFIRM step above). Honored the skill's instruction literally
+here — asked exactly one question ("is there prior context / a constraint / a prior attempt
+I should know about before researching Graph/HyperGraph?") — but it's a real design seam: a
+kit instruction written before this tool's batching affordance existed, now sitting next to
+a tool that actively invites the pattern it warns against. Not a bug, but worth flagging:
+nothing enforces the one-at-a-time rule mechanically (unlike the plan section-contract,
+which has `hooks/open_questions_gate.py` as a backstop) — it only holds if the agent
+following the skill remembers to resist the batching affordance.
+
+---
+
+## `/research-codebase` run
+
+Read `commands/research-codebase.md` in full (see GR-01) and followed it by hand: grill-me
+research-open (one question, GR-06), no subsystem docs existed yet to fold in (none exist —
+noted per the command's own instruction to say so and move on), one `codebase-explorer`
+sub-agent dispatched for the full 7-part investigation (builtin inventory, locked-scope
+callouts, test coverage, downstream consumers, packed/NDArray applicability, git history,
+HyperGraph existence), then research-close synthesis and the two-document output
+(`thoughts/shared/research/2026-08-22-graph-edge-weights-extension.md` + `-summary.md`).
+
+## GR-07 [+] The research template's forced structure caught a real scope trap before any
+code was written
+
+The two-document template (long doc with frontmatter + `## Open Questions` in fixed
+`### Unresolved`/`### Resolved` sub-headings, short doc with `## Options Considered` /
+`## Decision Criteria`) is not just formatting — filling in "Options Considered" honestly
+surfaced that the obvious literal reading of the task ("extend Graph **and HyperGraph**")
+would have meant building a feature the codebase's own spec document
+(`docs/spec/builtins/graphs.md:19-21`) explicitly locks out of MVP scope, sized at a week
+rather than the requested few hours. Writing "Decision Criteria" as its own section (rather
+than folding the reasoning into prose elsewhere) forced an explicit "must not contradict a
+locked scope decision" criterion onto the page, which is what disqualified HyperGraph in
+writing rather than by gut feel. The `### Unresolved` / `### Resolved` split similarly
+forced a real scope question (weighted `FindShortestPath`?) into a checkbox instead of
+letting it get silently rolled into "yes, do the whole thing" — it surfaced, got asked via
+`AskUserQuestion`, and got a real "no, defer" answer with a reason attached, all before any
+`create-plan` work started. Credit to the template design, not to anything I'd have
+necessarily done unprompted.
