@@ -456,6 +456,57 @@ it silently rounds up to the stronger claim.
 
 ---
 
+## GR-17 [+/-] Two tickets, same loop, run twice — what recurred and what didn't
+
+Two full RPI passes now (research → plan → adversarial plan-review → implement → verify),
+on the same subsystem, close together. What actually recurred versus what was specific to
+one ticket:
+
+**Recurred, both tickets:**
+- The `plan-reviewer` pass caught a real, load-bearing, independently-verified defect both
+  times (GR-09, GR-16) — not a fluke. Different failure shapes each time (a false
+  architectural claim about a shared function; an arithmetic-representation gap plus a
+  propagated miscount), which is itself the useful signal: the *value* of a fresh adversarial
+  pass with Read/Bash access to live source recurs, even though the specific bug class does
+  not.
+- `check_plan_contract.py`'s word-cap on `## Decisions` was exceeded on the first draft both
+  times (GR-10, and the unlogged first attempt on ticket 2's plan). Given it happened twice
+  independently, this reads as a fact about my own drafting habit (front-loading
+  justification into Decisions) rather than a coincidence — a real, personal pattern the
+  mechanical gate is correctly catching, not a tooling flaw.
+- Every RPI command had to be read from the plugin cache and followed by hand, every single
+  time (GR-01's root cause never resolves mid-session) — the single most consistently
+  recurring friction in this entire log.
+
+**Did not recur (ticket-1-specific):**
+- No `.claude/CONFIG.md` gap surfaced again for ticket 2 (GR-05) — once `NOTES_DIR`'s default
+  was established, every subsequent research/plan doc just used it without re-deriving
+  anything.
+- No `grill-me` research-open interactive question was even asked for ticket 2 — I judged
+  (per the user's explicit "keep going, don't wait" instruction for this second pass) that
+  no prior-context question was needed, having just done ticket 1 in the same session. This
+  is a real, load-bearing methodology difference between the two passes, not a false
+  equivalence: ticket 1's research-open pass was genuine (I did not know the answer);
+  ticket 2's was skipped by judgment call, not run and found unnecessary. Recorded here so
+  the comparison is honest rather than implying the skill "wasn't needed the second time" —
+  it may well have surfaced something; it was never asked.
+
+**New this pass, not a recurrence of anything in ticket 1:**
+- GR-15 (mid-session upstream version drift, independently verified rather than trusted) —
+  categorically different from every prior finding in this log: it is about *this session's
+  own process integrity* under an external event, not about the kit's behavior on a fixed
+  version.
+- A genuine, useful piece of research-only content emerged from re-verifying ticket 1's own
+  shipped work under ticket 2's adversarial pass: ticket 1's plan (already implemented,
+  already shipped, already passed its own `plan-reviewer` pass) contained a factual error
+  (5 vs. 8 builtins sharing `graph_build_adj`) that survived undetected through its own
+  review because that review verified the *shape* of the defect it was looking for, not
+  every incidental count riding along with it. No process failure — every gate that ran did
+  what it claimed to do — but a reminder that "reviewed and shipped" is not the same claim
+  as "every sentence in the document is correct."
+
+---
+
 ## `/verify-implementation` run — the toolchain-agnostic verification ladder, actually run
 
 Read `commands/verify-implementation.md` in full (see GR-01) and ran its checks directly.

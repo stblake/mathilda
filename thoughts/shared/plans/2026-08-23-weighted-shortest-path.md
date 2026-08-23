@@ -296,3 +296,15 @@ None — additive dispatch; unweighted graphs are provably unaffected (AC-3).
 - Research: `thoughts/shared/research/2026-08-23-weighted-shortest-path.md`
 - Prior ticket (source of this follow-up): `thoughts/shared/plans/2026-08-22-graph-edge-weights.md`
 - Direct template: `src/graph/shortestpath.c`'s existing `bfs()`
+
+## Implementation Notes (post-hoc)
+
+All Acceptance Criteria (AC-1 through AC-7) executed directly against the built `./Mathilda`
+binary and matched exactly, including the exact-integer check (`Head[GraphDistance[...]]` →
+`Integer`, not `Real`) that the plan-reviewer's first BLOCKING finding exists to guard.
+`make check-c99`/`make check-packed-aware` both exit 0. `graph_tests` (17 tests, including
+the new `test_weighted_shortest_path`) passes standalone. The verification ladder's `unit`
+rung reports FAILED for the same pre-existing, unrelated reason documented in
+`KIT-FEEDBACK-GRAPH.md` GR-13 (an unrelated flaky optimization test halts the
+`for t in *_tests` loop alphabetically before `graph_tests` runs) — not a regression from
+this change.
