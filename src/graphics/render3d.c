@@ -83,6 +83,8 @@ typedef struct {
     RGBA8 background;
     long width, height;
     const Expr* plot_label; /* borrowed */
+    bool have_box_ratios;   /* BoxRatios -> {rx,ry,rz} given? (else Automatic/true-scale) */
+    double box_ratios[3];   /* the {rx,ry,rz} display side-length ratios */
 } Gfx3DOptions;
 
 static void gfx3d_options_parse(const Expr* graphics3d, Gfx3DOptions* o) {
@@ -92,6 +94,8 @@ static void gfx3d_options_parse(const Expr* graphics3d, Gfx3DOptions* o) {
     o->background = (RGBA8){ 255, 255, 255, 255 };
     o->width = 800; o->height = 600;
     o->plot_label = NULL;
+    o->have_box_ratios = false;
+    o->box_ratios[0] = o->box_ratios[1] = o->box_ratios[2] = 1.0;
 
     size_t argc = graphics3d->data.function.arg_count;
     for (size_t i = 1; i < argc; i++) {
@@ -128,6 +132,24 @@ static void gfx3d_options_parse(const Expr* graphics3d, Gfx3DOptions* o) {
             }
         } else if (name == SYM_PlotLabel) {
             o->plot_label = rhs;
+        } else if (name == SYM_BoxRatios) {
+            /* BoxRatios -> {rx, ry, rz}: display box side-length ratios.
+             * Automatic (or any non-3-list) leaves have_box_ratios false, i.e.
+             * true-scale rendering. All three must be positive reals. */
+            if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL
+                && rhs->data.function.head->data.symbol.name == SYM_List
+                && rhs->data.function.arg_count == 3) {
+                double rx, ry, rz;
+                if (expr_to_d(rhs->data.function.args[0], &rx)
+                    && expr_to_d(rhs->data.function.args[1], &ry)
+                    && expr_to_d(rhs->data.function.args[2], &rz)
+                    && rx > 0.0 && ry > 0.0 && rz > 0.0) {
+                    o->box_ratios[0] = rx;
+                    o->box_ratios[1] = ry;
+                    o->box_ratios[2] = rz;
+                    o->have_box_ratios = true;
+                }
+            }
         }
     }
 
@@ -137,8 +159,59 @@ static void gfx3d_options_parse(const Expr* graphics3d, Gfx3DOptions* o) {
 
 /* ---------------- drawing ---------------- */
 
+/* Display transform: maps world (data) coordinates to box-ratio-normalised
+ * display coordinates. Set once per render (view3d_configure) from the data
+ * bounding box and the BoxRatios option, then applied by *every* to_v3() call,
+ * so the surface vertices, the bounding box, the axis ticks and the camera
+ * target all share one mapping and stay consistent. Tick *labels* still read
+ * true data values — they are formatted from the untransformed bbox and only
+ * their screen positions pass through to_v3.
+ *
+ * Identity (c=0, s=1) reproduces the pre-BoxRatios behaviour exactly, so raw
+ * Graphics3D[...] with no BoxRatios renders at true scale as before. */
+typedef struct { double cx, cy, cz, sx, sy, sz; } View3DXform;
+static View3DXform g_view3d = { 0.0, 0.0, 0.0, 1.0, 1.0, 1.0 };
+
 static Vector3 to_v3(double x, double y, double z) {
-    return (Vector3){ (float)x, (float)z, (float)y };
+    double dx = (x - g_view3d.cx) * g_view3d.sx;
+    double dy = (y - g_view3d.cy) * g_view3d.sy;
+    double dz = (z - g_view3d.cz) * g_view3d.sz;
+    /* y and z are swapped exactly once here: data is z-up, Raylib is y-up. */
+    return (Vector3){ (float)dx, (float)dz, (float)dy };
+}
+
+/* Configure the shared display transform from the data bbox and BoxRatios.
+ * `ratios` (length 3) requests a box whose side lengths are exactly
+ * {rx, ry, rz} — each axis is normalised to its data span then scaled by its
+ * ratio (Mathematica's BoxRatios semantics). Pass NULL for Automatic / true
+ * scale (identity, centred at the origin-preserving map). Writes back the
+ * transformed box centre and diagonal for camera framing, so the camera
+ * distance tracks whatever box the transform actually produced. */
+static void view3d_configure(const Box3D* bb, const double* ratios,
+                             Vector3* center_out, double* diag_out) {
+    double spanx = bb->xmax - bb->xmin;
+    double spany = bb->ymax - bb->ymin;
+    double spanz = bb->zmax - bb->zmin;
+    if (ratios) {
+        g_view3d.cx = (bb->xmin + bb->xmax) / 2.0;
+        g_view3d.cy = (bb->ymin + bb->ymax) / 2.0;
+        g_view3d.cz = (bb->zmin + bb->zmax) / 2.0;
+        g_view3d.sx = (spanx > 1e-12) ? ratios[0] / spanx : 1.0;
+        g_view3d.sy = (spany > 1e-12) ? ratios[1] / spany : 1.0;
+        g_view3d.sz = (spanz > 1e-12) ? ratios[2] / spanz : 1.0;
+    } else {
+        g_view3d.cx = g_view3d.cy = g_view3d.cz = 0.0;
+        g_view3d.sx = g_view3d.sy = g_view3d.sz = 1.0;
+    }
+    *center_out = to_v3((bb->xmin + bb->xmax) / 2.0,
+                        (bb->ymin + bb->ymax) / 2.0,
+                        (bb->zmin + bb->zmax) / 2.0);
+    /* Transformed extents: the map is monotone per axis, so the transformed
+     * span is simply span * scale. */
+    double tx = spanx * g_view3d.sx;
+    double ty = spany * g_view3d.sy;
+    double tz = spanz * g_view3d.sz;
+    *diag_out = sqrt(tx * tx + ty * ty + tz * tz);
 }
 
 /* Lambertian intensity: ambient + diffuse * |n·L|.
@@ -756,8 +829,12 @@ void graphics3d_show(const Expr* graphics3d_expr) {
     if (bb.ymin > bb.ymax) { bb.ymin = -1; bb.ymax = 1; }
     if (bb.zmin > bb.zmax) { bb.zmin = -1; bb.zmax = 1; }
 
-    Vector3 center = to_v3((bb.xmin + bb.xmax) / 2.0, (bb.ymin + bb.ymax) / 2.0, (bb.zmin + bb.zmax) / 2.0);
-    double diag = sqrt(pow(bb.xmax - bb.xmin, 2) + pow(bb.ymax - bb.ymin, 2) + pow(bb.zmax - bb.zmin, 2));
+    /* Configure the box-ratio display transform BEFORE baking the mesh (bake
+     * runs to_v3 on every vertex). center/diag come back in transformed space
+     * so the camera framing matches whatever box the ratios produce. */
+    Vector3 center;
+    double diag;
+    view3d_configure(&bb, opts.have_box_ratios ? opts.box_ratios : NULL, &center, &diag);
     if (!(diag > 0.0)) diag = 2.0;
 
     SetTraceLogLevel(raylib_verbose_enabled() ? LOG_ALL : LOG_NONE); /* $RaylibVerbose */
@@ -1048,8 +1125,12 @@ void graphics3d_render_in_region(const Expr* graphics3d_expr,
     if (bb.ymin > bb.ymax) { bb.ymin = -1; bb.ymax = 1; }
     if (bb.zmin > bb.zmax) { bb.zmin = -1; bb.zmax = 1; }
 
-    Vector3 center = to_v3((bb.xmin + bb.xmax) / 2.0, (bb.ymin + bb.ymax) / 2.0, (bb.zmin + bb.zmax) / 2.0);
-    double diag = sqrt(pow(bb.xmax - bb.xmin, 2) + pow(bb.ymax - bb.ymin, 2) + pow(bb.zmax - bb.zmin, 2));
+    /* Configure the box-ratio display transform BEFORE baking the mesh (bake
+     * runs to_v3 on every vertex). center/diag come back in transformed space
+     * so the camera framing matches whatever box the ratios produce. */
+    Vector3 center;
+    double diag;
+    view3d_configure(&bb, opts.have_box_ratios ? opts.box_ratios : NULL, &center, &diag);
     if (!(diag > 0.0)) diag = 2.0;
 
     /* Establish the home view once; later calls keep whatever the user

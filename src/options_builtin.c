@@ -673,6 +673,33 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("TicksStyle", "Automatic"));
     ob_commit(&b, "Graphics");
 
+    /* Plot3D honours these via plot3d.c's split_options3() (sampler + surface
+     * options) and render3d.c's gfx3d_options_parse() (render options on the
+     * resulting Graphics3D). Alphabetical; values are the actual defaults the
+     * C code uses. BoxRatios -> {1, 1, 0.4} mirrors Mathematica's Plot3D so a
+     * shallow z-range still reads as a surface rather than a flat sheet. */
+    ob_init(&b);
+    ob_add(&b, r_sym("Axes", "True"));
+    ob_add(&b, r_sym("Background", "Automatic"));
+    {
+        Expr* r[3] = { expr_new_real(1.0), expr_new_real(1.0), expr_new_real(0.4) };
+        Expr* rl = expr_new_function(expr_new_symbol(SYM_List), r, 3);
+        ob_add(&b, rule2(expr_new_symbol("BoxRatios"), rl));
+    }
+    ob_add(&b, r_sym("ColorFunction", "Automatic"));
+    ob_add(&b, r_sym("ColorFunctionScaling", "True"));
+    ob_add(&b, r_sym("ExclusionStyle", "None"));
+    ob_add(&b, r_sym("ImageSize", "Automatic"));
+    ob_add(&b, r_sym("Lighting", "Automatic"));
+    ob_add(&b, r_int("MaxRecursion", 2));
+    ob_add(&b, r_sym("Mesh", "Automatic"));
+    ob_add(&b, r_sym("PlotLabel", "None"));
+    ob_add(&b, r_int("PlotPoints", 25));
+    ob_add(&b, r_sym("PlotRange", "Automatic"));
+    ob_add(&b, r_sym("PlotStyle", "Automatic"));
+    ob_add(&b, r_sym("RegionFunction", "None"));
+    ob_commit(&b, "Plot3D");
+
     /* ---- Symbolic calculus ---- */
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));     /* "Automatic" | "BronsteinRational" | ... */

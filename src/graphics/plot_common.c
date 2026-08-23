@@ -445,9 +445,42 @@ void default_ramp_rgb(double t, double* r, double* g, double* b) {
     viridis_rgb(t, r, g, b);
 }
 
-/* matplotlib_family_rgb — resolve one of the perceptually-uniform maps (plus
- * Haze) by name to raw RGB. Returns 1 on a hit, 0 otherwise. Shared by both
- * named_color_ramp (Expr) and resolve_ramp_to_rgb (raw) so they cannot drift. */
+/* jet_channel — piecewise-linear interpolation of one Jet colour channel over
+ * its own anchor positions (xs ascending, xs[0]=0, xs[n-1]=1). */
+static double jet_channel(double t, const double* xs, const double* ys, int n) {
+    if (t <= xs[0])     return ys[0];
+    if (t >= xs[n - 1]) return ys[n - 1];
+    int i = 0;
+    while (i < n - 1 && t > xs[i + 1]) i++;
+    double span = xs[i + 1] - xs[i];
+    double f = (span > 0.0) ? (t - xs[i]) / span : 0.0;
+    return ys[i] + f * (ys[i + 1] - ys[i]);
+}
+
+/* jet_rgb — the classic "Jet" colormap (MATLAB / matplotlib `jet`), evaluated
+ * exactly from its piecewise-linear per-channel segment definition. Unlike the
+ * perceptually-uniform maps, Jet's three channels break at independent positions
+ * (that is precisely why it is *not* perceptually uniform), so it is evaluated
+ * channel-by-channel rather than from a single shared stop table.
+ * Sweep: dark blue → blue → cyan → green → yellow → red → dark red. */
+static void jet_rgb(double t, double* r, double* g, double* b) {
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    static const double rx[5] = { 0.00, 0.35, 0.66, 0.89, 1.00 };
+    static const double ry[5] = { 0.00, 0.00, 1.00, 1.00, 0.50 };
+    static const double gx[6] = { 0.000, 0.125, 0.375, 0.640, 0.910, 1.000 };
+    static const double gy[6] = { 0.000, 0.000, 1.000, 1.000, 0.000, 0.000 };
+    static const double bx[5] = { 0.00, 0.11, 0.34, 0.65, 1.00 };
+    static const double by[5] = { 0.50, 1.00, 1.00, 0.00, 0.00 };
+    *r = jet_channel(t, rx, ry, 5);
+    *g = jet_channel(t, gx, gy, 6);
+    *b = jet_channel(t, bx, by, 5);
+}
+
+/* matplotlib_family_rgb — resolve a table/formula-driven RGB ramp (the
+ * perceptually-uniform maps, plus "Haze" and the classic "Jet") by name to raw
+ * RGB. Returns 1 on a hit, 0 otherwise. Shared by both named_color_ramp (Expr)
+ * and resolve_ramp_to_rgb (raw) so the plot and its legend bar cannot drift. */
 static int matplotlib_family_rgb(const char* name, double t,
                                  double* r, double* g, double* b) {
     if (strcmp(name, "Viridis") == 0) { ramp_lerp(t, viridis_stops, NULL, 32, r, g, b); return 1; }
@@ -456,6 +489,7 @@ static int matplotlib_family_rgb(const char* name, double t,
     if (strcmp(name, "Inferno") == 0) { ramp_lerp(t, inferno_stops, NULL, 32, r, g, b); return 1; }
     if (strcmp(name, "Cividis") == 0) { ramp_lerp(t, cividis_stops, NULL, 32, r, g, b); return 1; }
     if (strcmp(name, "Haze")    == 0) { ramp_lerp(t, haze_stops,    haze_pos, 7, r, g, b); return 1; }
+    if (strcmp(name, "Jet")     == 0) { jet_rgb(t, r, g, b); return 1; }
     return 0;
 }
 
@@ -474,7 +508,7 @@ Expr* named_color_ramp(const char* name, double t) {
     if (t < 0.0) t = 0.0;
     if (t > 1.0) t = 1.0;
 
-    {   /* Viridis/Magma/Plasma/Inferno/Cividis/Haze — all RGBColor ramps. */
+    {   /* Viridis/Magma/Plasma/Inferno/Cividis/Haze/Jet — all RGBColor ramps. */
         double rv, gv, bv;
         if (matplotlib_family_rgb(name, t, &rv, &gv, &bv)) {
             Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };

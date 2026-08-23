@@ -98,13 +98,13 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
     *single_color_out = NULL;
 
     size_t argc = res->data.function.arg_count;
-    /* +2 headroom for the Axes/PlotStyle defaults potentially appended
-     * below when the caller didn't already supply them. */
-    size_t cap = (argc > 3 ? argc - 3 : 0) + 2;
+    /* +3 headroom for the Axes/PlotStyle/BoxRatios defaults potentially
+     * appended below when the caller didn't already supply them. */
+    size_t cap = (argc > 3 ? argc - 3 : 0) + 3;
     Expr** passthrough = malloc(sizeof(Expr*) * cap);
     size_t n = 0;
 
-    bool have_axes = false, have_style = false;
+    bool have_axes = false, have_style = false, have_box_ratios = false;
 
 #define FAIL_CLEANUP3() do { free(passthrough); expr_free(*single_color_out); *single_color_out = NULL; return false; } while (0)
 
@@ -158,6 +158,7 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
             passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         } else {
             if (name == SYM_Axes) have_axes = true;
+            else if (name == SYM_BoxRatios) have_box_ratios = true;
             else if (name == SYM_PlotRange) {
                 /* Pins the refinement's z-band; the value still passes
                  * through below for the renderer's box framing. */
@@ -174,6 +175,15 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
 
     if (!have_axes) {
         Expr* a[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_True) };
+        passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
+    }
+    if (!have_box_ratios) {
+        /* Mathematica's Plot3D default: a display box of side ratios 1:1:0.4,
+         * so the z-shape reads clearly instead of being flattened to true
+         * scale (where a small z-range hides the surface). */
+        Expr* r[3] = { expr_new_real(1.0), expr_new_real(1.0), expr_new_real(0.4) };
+        Expr* rl = expr_new_function(expr_new_symbol(SYM_List), r, 3);
+        Expr* a[2] = { expr_new_symbol(SYM_BoxRatios), rl };
         passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
     }
     if (!have_style) {
@@ -508,10 +518,13 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
     /* Default single-surface colouring: a Viridis height gradient, keyed to z
      * (eval_color_function3's string-ramp path normalises z to [0,1]).  Multi-
      * surface plots keep the per-surface palette so the surfaces stay visually
-     * distinct; an explicit ColorFunction always wins. */
+     * distinct; an explicit ColorFunction always wins. An explicit PlotStyle
+     * (single_color != NULL) also suppresses the default gradient so the
+     * surface renders in that solid colour — matching Mathematica, where
+     * PlotStyle overrides Plot3D's automatic colouring. */
     Expr* eff_cf = sopts->color_function;
     Expr* eff_cf_owned = NULL;
-    if (!eff_cf && !multi) {
+    if (!eff_cf && !multi && !single_color) {
         eff_cf_owned = expr_new_string("Viridis");
         eff_cf = eff_cf_owned;
     }

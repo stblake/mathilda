@@ -55,7 +55,7 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 
 | Function | Purpose | Key options |
 |----------|---------|-------------|
-| [`Plot3D`](#plot3d) | Surface plot of `f(x,y)` with orbit camera | `PlotPoints`, `Mesh`, `ColorFunction`, `RegionFunction`, `Lighting` |
+| [`Plot3D`](#plot3d) | Surface plot of `f(x,y)` with orbit camera | `PlotPoints`, `Mesh`, `ColorFunction`, `RegionFunction`, `Lighting`, `BoxRatios` |
 | [`ParametricPlot3D`](#parametricplot3d) | Parametric space curves or surfaces in 3D | `ColorFunction`, `RegionFunction`, `Mesh` |
 | [`ComplexPlot3D`](#complexplot3d) | 3D surface `height=|f(z)|`, `color=Arg(f(z))` | `PlotPoints`, `ColorFunction`, `ColorFunctionScaling`, `RegionFunction`, `PlotLegends`, `Lighting` |
 
@@ -115,6 +115,7 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 | `"Inferno"` | — | Black → purple → red → yellow |
 | `"Cividis"` | — | Colour-vision-deficiency-safe blue → grey → yellow |
 | `"Haze"` | — | White → pink → blue → green → yellow → orange → red (Sam Blake's palette) |
+| `"Jet"` | — | Classic MATLAB/matplotlib jet: dark blue → cyan → green → yellow → red |
 | `"Rainbow"` | — | Full HSV sweep (hue 0→1) |
 | `"Temperature"` | `"Thermal"` | Dark blue-purple → orange → bright yellow |
 | `"CoolTones"` | `"Cool"` | Ice blue → cornflower → deep navy |
@@ -367,8 +368,11 @@ default, and multi-surface `Plot3D` keeps its per-surface palette.
 The perceptually-uniform maps (`Viridis`, `Magma`, `Plasma`, `Inferno`,
 `Cividis`) are 32-stop resamplings of matplotlib's authoritative 256-entry
 tables (linear-interpolation error is sub-perceptual); `"Haze"` is Sam Blake's
-7-anchor palette, reproduced exactly. The legacy ramps (`Temperature`,
-`CoolTones`, `WarmTones`) remain 5-stop gradients.
+7-anchor palette, reproduced exactly; `"Jet"` is the classic MATLAB/matplotlib
+`jet`, evaluated exactly from its piecewise-linear per-channel segment
+definition (its three channels break at independent positions — which is
+precisely why it is *not* perceptually uniform). The legacy ramps
+(`Temperature`, `CoolTones`, `WarmTones`) remain 5-stop gradients.
 
 | Name | Aliases | Appearance |
 |------|---------|------------|
@@ -378,6 +382,7 @@ tables (linear-interpolation error is sub-perceptual); `"Haze"` is Sam Blake's
 | `"Inferno"` | — | black → deep purple → red → orange → pale yellow |
 | `"Cividis"` | — | dark blue → slate grey → gold (optimised for colour-vision deficiency) |
 | `"Haze"` | — | white → pink → blue → green → yellow → orange → red (Sam Blake's palette) |
+| `"Jet"` | — | dark blue → blue → cyan → green → yellow → red → dark red (classic MATLAB/matplotlib `jet`) |
 | `"Rainbow"` | — | `Hue` sweep red → violet (stops at 0.8 to avoid wrapping back to red) |
 | `"Temperature"` | `"Thermal"` | dark blue-purple → purple → red → orange → bright yellow (the former default) |
 | `"CoolTones"` | `"Cool"` | near-white ice blue → sky blue → cornflower → deep navy/indigo |
@@ -732,7 +737,18 @@ Samples and displays a function of two real variables as a surface.
 - `Plot3D[f, {x,...}, {y,...}, opts...]`: as above, with options below.
 - `HoldAll`: `f` and both iterator specs are not pre-evaluated.
 
-Options: see **Feature summary** above. `HoldAll`, `Protected`. `ExclusionStyle` (default `GrayLevel[0.35]`) styles boundary edges when `RegionFunction` is active.
+Options: see **Feature summary** above. `HoldAll`, `Protected`. `ExclusionStyle` (default `GrayLevel[0.35]`) styles boundary edges when `RegionFunction` is active. `Options[Plot3D]` returns the full defaulted set (`Axes`, `Background`, `BoxRatios`, `ColorFunction`, `ColorFunctionScaling`, `ExclusionStyle`, `ImageSize`, `Lighting`, `MaxRecursion`, `Mesh`, `PlotLabel`, `PlotPoints`, `PlotRange`, `PlotStyle`, `RegionFunction`).
+
+`BoxRatios -> {rx, ry, rz}` sets the display box's side-length ratios,
+independent of the data ranges (Mathematica semantics). The default is
+**`{1, 1, 0.4}`**: each axis is normalised to its data span and scaled by its
+ratio, so a shallow z-range still reads as a surface instead of a flattened
+sheet. A raw `Graphics3D[...]` with no `BoxRatios` renders at true scale.
+
+`PlotStyle -> color` on a single surface renders it in that solid colour,
+overriding the automatic `"Viridis"` height gradient (an explicit
+`ColorFunction` still wins over both). Multi-surface plots keep their
+per-surface palette.
 
 ```mathematica
 In[1]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}]
@@ -752,6 +768,9 @@ Out[5]= -Graphics3D-  (* palette colors for each surface *)
 
 In[6]:= Plot3D[{x^2, x^2 + 1}, {x,-2,2}, {y,-2,2},PlotStyle -> {Blue, Red}]
 Out[6]= -Graphics3D-  (* explicit per-surface colors *)
+
+In[7]:= Plot3D[Sin[x] Cos[2 y], {x, -5, 5}, {y, -5, 5}, BoxRatios -> {1, 1, 1}]
+Out[7]= -Graphics3D-  (* cube box: z filled to full height (default is {1,1,0.4}) *)
 ```
 
 ## ParametricPlot
