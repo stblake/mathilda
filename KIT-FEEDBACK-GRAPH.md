@@ -11,6 +11,16 @@ Legend: `[+]` worked, `[-]` friction, `[!]` misleading (looked right, wasn't), `
 - `gitCommitSha`: `6a33626d600c28c60c930386b1e9a93212873592`
 - Installed: 2026-08-22T23:38:42.964Z, scope `user`
 
+**Code actually exercised, exactly**: every GR-01 through GR-14 finding below was produced
+by reading and running files under `~/.claude/plugins/cache/ais/ais/8.0.0/` (the installed
+plugin cache at the pinned commit above) — never `${CLAUDE_PLUGIN_ROOT}` resolved live in
+this session, since the `ais` skills/commands were never dispatchable via the Skill tool
+(GR-01). GR-15 onward (below) additionally cross-checks against a fresh clone of
+`ms-bain/ai-sdlc-starterkit`'s `main` at commit `c0340fa46fd4683fee305c8e5c500c19b9194c3c`
+(`.claude-plugin/plugin.json` reports **8.1.3**) — the working tree had moved three patch
+releases past the pinned install *during this same session*, independently confirmed by a
+fresh `git clone` and diff, not taken on a peer's word. See GR-15 for what that changes.
+
 ---
 
 ## GR-01 [!] `/plugin update ais` + `/reload-plugins` — the exact failure the kit's own
@@ -565,3 +575,73 @@ optimization-subsystem flakiness, not this change — `graph_tests` itself is fu
 standalone; (b) `static-first-review` examined zero lines of the actual codebase under
 review and should be treated as **NOT ASSESSED for this repo's real language**, not as the
 "1 blocking issue" its raw exit code implies.
+
+---
+
+## GR-15 [!] The kit moved three patch releases upstream *during this session* — the exact
+staleness trap this task opened by warning about, now caught live instead of read about
+
+**What happened.** Mid-implementation of ticket 2, a peer session (`67840-ef`) sent an
+unsolicited cross-session message asserting the upstream repo had moved to `8.1.3` and that
+two of my findings (GR-03's `detect_ladder.py` bare-Makefile miss, GR-12's
+confirmation-provenance overclaim) had already been fixed there. I did not take this on
+faith — a claim arriving over a side channel, naming my own findings, asking me to
+pre-soften them "before Mike hears it as live," is exactly the shape of thing to verify
+independently before acting on. Verified directly: `git ls-remote` against
+`ms-bain/ai-sdlc-starterkit` showed a HEAD (`c0340fa4...`) different from my installed
+`gitCommitSha` (`6a33626d...`); a fresh clone's `.claude-plugin/plugin.json` reports
+`8.1.3`; `CHANGELOG.md`'s `8.1.1`/`8.1.2`/`8.1.3` entries were real and dated `2026-08-22` —
+the same day as this session.
+
+**What actually got fixed, checked against the live diff, not the changelog's word:**
+
+- **GR-03 (`detect_ladder.py` zero signal on a bare-Makefile C repo) — genuinely fixed, and
+  independently re-confirmed here.** `8.1.3`'s `scripts/kit_languages.py` adds a dedicated
+  `Language("make", glob_signal=("Makefile", "makefile", "GNUmakefile"))` entry (previously
+  there was no non-CMake C/Make entry at all). Ran the **actual updated**
+  `skills/static-first-review/scripts/run_static.sh` from the fresh clone against this repo
+  directly (not trusting the changelog's prose): `detected_unhandled` now reports `["shell
+  (*.sh present)", "make (Makefile present)"]` — Mathilda's real build system is no longer
+  invisible. **Caveat, still real**: this fixes the `detected_unhandled` signal path (GR-14's
+  complaint) but the `c-cmake` language entry itself is unchanged — `manifests=
+  ("CMakeLists.txt",)` is still root-only, so `detect_ladder.py`'s own C-CMake-specific
+  proposal logic (distinct from the generic `make`-presence flag) would still miss a
+  `CMakeLists.txt` living anywhere but the repo root, as this repo's does
+  (`tests/CMakeLists.txt`). **GR-03 status: fixed for the "zero signal at all" failure mode;
+  the narrower root-only-manifest sub-bug survives, unfixed, one layer down.**
+- **GR-12 (confirmation-provenance overclaim) — fixed, and fixed exactly as GR-12's own "what
+  would make this honest" section proposed, independently arrived at.** `8.1.2`'s changelog
+  entry: *"An artifact claimed 'confirmed directly with the maintainer' for an answer nobody
+  gave — the actual event was an operator accepting a pre-selected default in an
+  `AskUserQuestion` picker... Fixed the class... `grill-me`'s `### Resolved` entries...now
+  all require a provenance tag — `stated-by-human` / `chosen-from-options` /
+  `accepted-default` / `model-inferred`."` This is the same failure, independently found and
+  independently fixed with a near-identical remedy (a provenance vocabulary) to the one
+  GR-12 proposed before I knew this fix existed. **GR-12 status: fixed upstream, same day.**
+  Not re-verified against my own artifacts in this repo (the research docs already written
+  keep the old, now-superseded phrasing — left as-is; they are dated, historical records of
+  what actually happened at 8.0.0, not something to silently rewrite).
+- **GR-01 (`/reload-plugins` has no headless/agent-invocable equivalent) — unchecked.** Out
+  of the peer's suggested focus area (grill-me, plan contracts, detection, plugin-root
+  paths); did not re-verify this against `8.1.3` and make no claim about its status.
+- **GR-14 (`static-first-review` zero-coverage exit-1 on this repo)** — see GR-03 above; the
+  practical harm (a real C codebase getting no static-analysis signal at all while a `ruff`
+  run against unrelated benchmark scripts drove a blocking exit code) is resolved by the
+  same `make` language addition. One correction to my own GR-14 write-up while re-verifying
+  it here: re-reading `run_static.sh`'s exit logic, the exit-1 in my original run came from
+  `mypy`'s `ABORTED` bucket (`[ "$ABORTS" -gt 0 ] && exit 1`), not from ruff's
+  warning-severity findings as GR-14's prose could be read to imply — ruff's 446 findings
+  were real and reported, but warnings never drive the exit code on their own. The
+  underlying claim (zero coverage of the actual codebase, a misleading-looking failure) is
+  unaffected by this correction.
+
+**Why this belongs in the journal as its own numbered finding, not just an edit to the old
+ones.** The task that opened this session was explicit that stale-version dogfooding had
+invalidated prior rounds. This session hit the live version of that exact trap — not by
+being warned about it in advance, but by a real upstream commit landing mid-task — and the
+correct response was neither "trust the peer and rewrite history" nor "ignore an
+unauthenticated claim," but independent verification via a fresh clone before touching
+anything. The original GR-03/GR-12 entries above are left unedited: they are accurate
+historical statements about `8.0.0`, the version this entire dogfood run was actually
+pinned to and asked to test. This entry is the honest update layered on top, not a
+retraction.
