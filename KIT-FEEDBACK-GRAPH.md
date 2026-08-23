@@ -913,3 +913,23 @@ directly via `Bash`, not from anything `static-first-review` produced. The scrip
 read at face value with no further investigation, would have been reported as "static
 analysis failed" for a change that in fact had zero static-analysis coverage at all — the
 opposite conclusion from what the exit code implies.
+
+---
+
+## GR-18 [+] A worked exemplar, built from ticket 2's real artifacts
+
+Requested by a peer session (approved directly by the user via `AskUserQuestion`, not taken
+on the peer's relay — see the exchange in this session's transcript). Written to
+`docs/exemplars/rpi-weighted-shortest-path.md`: the ticket as it started, the research
+artifact in full, the plan as first drafted vs. as approved, the `plan-reviewer`'s findings
+verbatim, the exact diffs that fixed them, the implementation, every acceptance criterion
+with its real REPL output, and an honest per-stage cost accounting.
+
+Building it surfaced one more thing worth a line here: a first-draft cost table used
+commit-timestamp deltas to bracket each RPI phase, and one of those brackets (5m 33s between
+the research+plan commit and the plan-approval commit) flatly contradicted the one
+tool-reported number available for that same window (the review agent's own `10m 27s`
+processing time). Caught by cross-checking the derived number against the direct one before
+publishing, not by any tool — fixed by reporting both numbers and the discrepancy itself,
+rather than picking whichever one looked better. Left in the exemplar as its own example of
+the document's own thesis: a plausible-looking number is not the same as a checked one.
