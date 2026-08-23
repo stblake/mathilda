@@ -27,6 +27,14 @@
   {"eq-param-axplusb",   a x + b == 0,                     x,       Automatic, "solved"},
   {"eq-param-ax0",       a x == 0,                         x,       Automatic, "solved"},
 
+  (* ---- default-domain inequalities: an ordering relation with no explicit
+   *      domain defaults to the Reals (ordering is undefined over Complexes) ---- *)
+  {"def-ineq-quad",      x^2 > 1,                          x,       Automatic, "solved"},
+  {"def-ineq-lin",       x > 0,                            x,       Automatic, "solved"},
+  {"def-ineq-chain",     -5 < 3 x + 7 <= 22,               x,       Automatic, "solved"},
+  {"def-ineq-mixed",     x^2 == 4 && x > 0,                x,       Automatic, "solved"},
+  {"def-ineq-multivar",  x + y < 1 && x > 0 && y > 0,      {x, y},  Automatic, "solved"},
+
   (* ---- univariate real inequalities : grid-strong ---- *)
   {"re-gt1",             x^2 > 1,                          x,       Reals,     "solved"},
   {"re-ge1",             x^2 >= 1,                         x,       Reals,     "solved"},
@@ -100,7 +108,6 @@
   {"cad-point",          x^2 + y^2 <= 0,                   {x, y},  Reals,     "solved"},
 
   (* ---- soundness invariant: these MUST decline (never a guessed formula) ---- *)
-  {"dec-default-ineq",   x^2 > 1,                          x,       Automatic, "decline"},
   {"dec-int-unbounded",  x > 0,                            x,       Integers,  "decline"},
   {"dec-int-unbounded2", x < 5,                            x,       Integers,  "decline"},
   {"dec-nonconst-denom", 1/x < 1,                          x,       Reals,     "decline"},

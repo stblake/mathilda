@@ -775,7 +775,12 @@ Out[19]= {}                        (* over-determined, inconsistent *)
 Reduces a statement of equations and inequalities to a complete, quantifier-free
 logical description of its solution set.
 
-- `Reduce[expr, vars]`: reduce `expr` over the complex numbers (default).
+- `Reduce[expr, vars]`: reduce `expr` over the complex numbers (default), **or
+  over the reals when `expr` contains an ordering inequality** (`<`, `<=`, `>`,
+  `>=`) — ordering is undefined over the complexes, so an inequality with no
+  explicit domain defaults to `Reals` (as in Mathematica). Equations (`==`) and
+  `Unequal` (`!=`) keep the `Complexes` default. Thus
+  `Reduce[-5 < 3 x + 7 <= 22, x]` solves as `Reduce[-5 < 3 x + 7 <= 22, x, Reals]`.
 - `Reduce[expr, vars, dom]`: reduce over `dom` (`Complexes`, `Reals`, `Integers`,
   or `Rationals`).
 

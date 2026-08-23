@@ -360,16 +360,36 @@ static void test_rational_domain(void) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Domain defaulting: an ordering inequality (< <= > >=) with no      *
+ *  explicit domain is solved over the Reals, since ordering is        *
+ *  undefined over the default Complexes (matches Mathematica).        *
+ *  Equations and Unequal (!=) stay on the Complexes default.          *
+ * ------------------------------------------------------------------ */
+
+static void test_inequality_defaults_reals(void) {
+    /* Bare univariate inequalities -> same result as the explicit ,Reals form. */
+    run_test("Reduce[x > 0, x]", "Greater[x, 0]");
+    run_test("Reduce[x^2 > 1, x]", "Or[Less[x, -1], Greater[x, 1]]");
+    run_test("Reduce[-5 < 3 x + 7 <= 22, x]",
+             "Inequality[-4, Less, x, LessEqual, 5]");
+    /* Mixed equation + inequality: the inequality still triggers the Reals
+     * default, so this solves rather than declining. */
+    run_test("Reduce[x^2 == 4 && x > 0, x]", "Equal[x, 2]");
+    /* Multivariate real system, no domain -> CAD/Fourier-Motzkin over Reals. */
+    run_test("Reduce[x > 1 && x < 0 && y > 0, {x, y}]", "False");
+    /* An equation alone keeps the Complexes default (no over-broadening). */
+    run_test("Reduce[x^2 == 4, x]", "Or[Equal[x, -2], Equal[x, 2]]");
+    /* Unequal (!=) is meaningful over Complexes, so it does NOT force Reals:
+     * this stays on the Complexes path and is left unevaluated as before. */
+    run_test("Reduce[x != 1, x]", "Reduce[Unequal[x, 1], x]");
+}
+
+/* ------------------------------------------------------------------ *
  *  Soundness net: inputs the shipped engines do NOT cover must leave *
  *  Reduce unevaluated -- never a wrong (or guessed) formula.         *
  * ------------------------------------------------------------------ */
 
 static void test_decline_soundness(void) {
-    /* Default domain (Complexes) has no ordering: a bare inequality declines. */
-    run_test("Reduce[x^2 > 1, x]", "Reduce[Greater[Power[x, 2], 1], x]");
-    run_test("Reduce[x > 0, x]", "Reduce[Greater[x, 0], x]");
-    run_test("Reduce[x^2 == 4 && x > 0, x]",
-             "Reduce[And[Equal[Power[x, 2], 4], Greater[x, 0]], x]");
     /* Unbounded integer sets are not yet emitted as x>=1 style forms. */
     run_test("Reduce[x > 0, x, Integers]", "Reduce[Greater[x, 0], x, Integers]");
     run_test("Reduce[x < 5, x, Integers]", "Reduce[Less[x, 5], x, Integers]");
@@ -588,6 +608,7 @@ int main(void) {
     TEST(test_parametric_systems_decline);
     TEST(test_integer_domain);
     TEST(test_rational_domain);
+    TEST(test_inequality_defaults_reals);
     TEST(test_decline_soundness);
     TEST(test_cad_real);
     TEST(test_wb_constant_atoms);

@@ -120,12 +120,27 @@ Expr* builtin_reduce(Expr* res) {
     if (f->is_true)      out = expr_new_symbol(SYM_True);
     else if (f->n == 0)  out = expr_new_symbol(SYM_False);
     else {
+        /* Ordering inequalities (< <= > >=, canonicalised to R_LT/R_LE) are only
+         * meaningful over an ordered field, so a statement that contains one and
+         * was given no explicit domain defaults to the Reals -- matching
+         * Mathematica.  Equations and Unequal (!=) remain over the default
+         * Complexes. */
+        bool default_reals = false;
+        if (dom == NULL) {
+            for (int i = 0; i < f->n && !default_reals; i++)
+                for (int k = 0; k < f->c[i]->n; k++)
+                    if (f->c[i]->a[k].rel == R_LT || f->c[i]->a[k].rel == R_LE) {
+                        default_reals = true;
+                        break;
+                    }
+        }
+
         /* Phase 1: a single univariate polynomial equation over Complexes gets
          * its complete (parametric) solution set.  Everything else still needs a
          * per-domain engine not yet wired (Phases 2+) -- leave it unevaluated. */
-        bool complexes = (dom == NULL)
-            || (dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Complexes);
-        bool reals = (dom && dom->type == EXPR_SYMBOL
+        bool complexes = !default_reals && ((dom == NULL)
+            || (dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Complexes));
+        bool reals = default_reals || (dom && dom->type == EXPR_SYMBOL
                       && dom->data.symbol.name == SYM_Reals);
         bool integers = (dom && dom->type == EXPR_SYMBOL
                          && (dom->data.symbol.name == SYM_Integers
@@ -183,7 +198,8 @@ void reduce_init(void) {
     if (def) def->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Reduce",
         "Reduce[expr, vars] reduces the statement expr by solving the equations "
-        "and inequalities in it for vars, over the default domain Complexes, and "
+        "and inequalities in it for vars, over the default domain Complexes "
+        "(or Reals when the statement contains an ordering inequality), and "
         "returns a complete logical (And/Or) combination of equations and "
         "inequalities describing the whole solution set. Reduce[expr, vars, dom] "
         "works over the domain dom (Complexes, Reals, Integers, or Rationals). "
