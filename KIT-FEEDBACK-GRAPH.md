@@ -602,13 +602,33 @@ the same day as this session.
   `skills/static-first-review/scripts/run_static.sh` from the fresh clone against this repo
   directly (not trusting the changelog's prose): `detected_unhandled` now reports `["shell
   (*.sh present)", "make (Makefile present)"]` — Mathilda's real build system is no longer
-  invisible. **Caveat, still real**: this fixes the `detected_unhandled` signal path (GR-14's
-  complaint) but the `c-cmake` language entry itself is unchanged — `manifests=
-  ("CMakeLists.txt",)` is still root-only, so `detect_ladder.py`'s own C-CMake-specific
-  proposal logic (distinct from the generic `make`-presence flag) would still miss a
-  `CMakeLists.txt` living anywhere but the repo root, as this repo's does
-  (`tests/CMakeLists.txt`). **GR-03 status: fixed for the "zero signal at all" failure mode;
-  the narrower root-only-manifest sub-bug survives, unfixed, one layer down.**
+  invisible. **The sub-bug this doesn't fix is the more important half, not a caveat to
+  bury**: the `c-cmake` language entry itself is unchanged —
+  `manifests=("CMakeLists.txt",)` is still checked with a single
+  `(repo_root / manifest).is_file()`, root-only, no recursion — so `detect_ladder.py`'s own
+  C-CMake-specific proposal logic (distinct from the generic `make`-presence flag that *did*
+  get fixed) would still silently miss a `CMakeLists.txt` living anywhere but the repo root,
+  which is exactly this repo's real shape (`tests/CMakeLists.txt`, not root). A peer session
+  running a synthetic-corpus sweep the same night hit this from a completely different
+  direction — every manifest check in the detection layer being root-only-with-no-recursion,
+  making a realistic monorepo indistinguishable from an empty repo — and flagged that as the
+  same root cause. Two independent routes (a real repo actually being tested; a synthetic
+  corpus built to probe the detector) converging on one mechanism is meaningfully stronger
+  evidence than either alone, which is the reason this is the sub-bug worth carrying forward,
+  not the part of GR-03/GR-14 that already got fixed.
+  **What `detect_ladder.py`'s C-CMake proposal path would specifically need to find this
+  repo's manifest**: `detect_manifests()` (`skills/kit-setup/scripts/detect_ladder.py`) calls
+  `(repo_root / p).is_file()` for each name in `MANIFEST_SIGNALS["c-cmake"]` — a single
+  root-level stat, no recursion at all. `kit_languages.py`'s own `detect_unhandled_languages`
+  already carries the fix pattern one layer over: a shallow, depth-bounded glob
+  (`lang.glob_depth`, used today only by the `glob_signal`-based languages like `shell`/
+  `terraform`) that checks `*/CMakeLists.txt`, `*/*/CMakeLists.txt`, etc. up to some small
+  depth, not just the bare filename at root. Applying that same shallow-glob mechanism to
+  `manifests`-based languages generally (not just `glob_signal` ones) — or simply adding
+  `CMakeLists.txt` as an additional `glob_signal` alongside its `manifests` entry for
+  `c-cmake` — would have found `tests/CMakeLists.txt` without needing a new subsystem.
+  **GR-03 status: fixed for the "zero signal at all" failure mode; the root-only-manifest
+  sub-bug survives, unfixed, one layer down, and now has two independent reproductions.**
 - **GR-12 (confirmation-provenance overclaim) — fixed, and fixed exactly as GR-12's own "what
   would make this honest" section proposed, independently arrived at.** `8.1.2`'s changelog
   entry: *"An artifact claimed 'confirmed directly with the maintainer' for an answer nobody
