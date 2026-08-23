@@ -244,3 +244,84 @@ letting it get silently rolled into "yes, do the whole thing" — it surfaced, g
 `AskUserQuestion`, and got a real "no, defer" answer with a reason attached, all before any
 `create-plan` work started. Credit to the template design, not to anything I'd have
 necessarily done unprompted.
+
+---
+
+## `/create-plan` run
+
+Read `commands/create-plan.md` in full (833 lines — see GR-01) and followed it by hand:
+reused the existing research doc per step 2c (no re-spawned locator/analyzer sweep), a
+single plan-open confirmation question via `AskUserQuestion`, wrote
+`thoughts/shared/plans/2026-08-22-graph-edge-weights.md` + `-summary.md` against the full
+template (TL;DR/Overview/Decisions/Non-goals/Acceptance Criteria/Open Questions/Plan
+Review/Architecture Impact/... through the phased implementation sections), ran
+`skills/grill-me/scripts/check_plan_contract.py` (real, mechanical — caught a real word-cap
+overage on first pass, see GR-10), then dispatched a `plan-reviewer`-briefed sub-agent.
+
+## GR-09 [+] The unconditional `plan-reviewer` pass caught a real, verified, ship-blocking
+bug in the plan before any code was written — this is the single best result of this entire
+dogfood run
+
+**What I ran.** Per `commands/create-plan.md:554-596` ("Run a `plan-reviewer` pass...
+unconditionally, not as an offer"), dispatched a sub-agent fully briefed with
+`agents/plan-reviewer.md`'s nine-area rubric, told to use the plan-artifact lens rotation
+(scope-boundary + testability), and to verify every file:line citation in my draft plan
+against the actual source.
+
+**What I expected.** Maybe a style nit, an under-specified acceptance criterion — the kind of
+thing a review pass usually finds on a plan I'd already convinced myself was solid.
+
+**What happened.** It found a real, load-bearing, verified BLOCKING defect. My plan's own
+"Key Discoveries" section asserted: *"`graph_is_valid` is the single choke point essentially
+every other builtin routes through... widening it once... is what makes every existing
+(unmodified) builtin continue to work unchanged against a weighted graph."* This is false.
+`src/graph/graph_util.c:206-209` (`graph_build_adj`) is a **second, entirely independent**
+validation entry point with its own hardcoded `arg_count != 2` rejection — it does not call
+`graph_is_valid` at all (its own comment even explains why: avoiding a redundant vertex-index
+build). Eight of the 27 graph builtins (`ConnectedComponents`, `WeaklyConnectedComponents`,
+`ConnectedGraphQ`, `VertexConnectivity`, `FindSpanningTree`, `FindShortestPath`,
+`GraphDistance`) route through `graph_build_adj`, not `graph_is_valid`. As I'd originally
+scoped the plan (widening only `graph_is_valid`), every one of those 8 builtins would have
+shipped **silently broken** on any weighted graph: `GraphQ[g]` would report `True`, but
+`FindShortestPath[g, ...]` etc. would all return unevaluated — directly contradicting my own
+plan's Overview claim ("no other builtin's behavior changes"). None of my original ten
+Acceptance Criteria rows would have caught this, because none of them exercised a
+`graph_build_adj`-routed builtin against a weighted graph — **it would have shipped green.**
+
+I verified the finding myself before accepting it (`grep -rn "graph_build_adj" src/graph/*.c`
+and read `graph_util.c:195-230` directly) — it was exactly right, down to the specific line
+numbers and the exact list of 8 affected builtins.
+
+**Where this comes from.** `commands/create-plan.md:554-556` (the unconditional-review
+instruction) and `agents/plan-reviewer.md`'s rubric areas 2 ("Hidden assumptions") and 1
+("Unsupported claims") — the finding was reported as exactly that: an unsupported/false
+architectural claim the rest of the plan was built on.
+
+**Why it matters.** This is precisely the class of failure the task brief asked me to hunt
+for — something that "looked right and was not." My plan read as complete, well-cited, and
+confident; the false claim was a single sentence buried in "Key Discoveries" that I had no
+reason to doubt because it matched the shape of the one file (`adjmat.c`) I'd used as my
+template. A second, independent choke point in a sibling file (`graph_util.c`, not even
+`adjmat.c`) is exactly the kind of thing a single-author plan reliably misses and a
+dedicated adversarial pass reliably catches. Fixed: both choke points now widen via a shared
+helper, a new AC-11 covers a `graph_build_adj`-routed builtin against a weighted graph, and
+the plan's `## Plan Review` section transcribes the finding and its resolution per the kit's
+own "move it, don't just discuss it" convention (`commands/create-plan.md:586-591`). Two
+smaller WORTH FLAGGING findings (a wrong line citation, an unstated scope boundary on
+derived-vertex weighted construction) were also real and also fixed.
+
+## GR-10 [+] `check_plan_contract.py` is a genuinely useful mechanical gate, with one sharp
+edge
+
+Ran `skills/grill-me/scripts/check_plan_contract.py --plan <path>` twice. First run: `FAIL —
+Decisions is 260 words, over the 200-word cap`, correctly caught (real overage, fixed by
+tightening prose) — a good, cheap, deterministic catch that a human reviewer would have to
+count words to replicate. Second finding was more of a gotcha than a bug: writing
+`APIs changed: none (additive only — ...)` in the `Architecture Impact` block flipped
+`determine_tier()` to `"architectural"` (the script's own comment at
+`check_plan_contract.py:108-112` says it deliberately compares the *whole rest of the line*,
+not an exact `none` token) — which is arguably correct behavior (a reviewer skimming should
+be able to trust a bare `none`), but it means a well-intentioned clarifying parenthetical
+right next to the word `none` silently changes which tier gate the plan is held to. Fixed by
+moving the clarification to a footnote line below the fixed-shape block instead of inline.
+Worth knowing before writing that section: keep those five lines *bare*.

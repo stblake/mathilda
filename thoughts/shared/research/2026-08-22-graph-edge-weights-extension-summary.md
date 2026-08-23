@@ -41,10 +41,11 @@ multi-day effort and would override a documented scope decision, not extend it.
 ## Open Questions
 
 ### Unresolved
-- [ ] Should `FindShortestPath`/`GraphDistance` gain a weighted (Dijkstra) mode in this same
-      pass? Recommend deferring to a follow-up — real algorithmic scope growth.
+_None._
 
 ### Resolved
+- [x] Should `FindShortestPath`/`GraphDistance` gain a weighted (Dijkstra) mode in this same
+      pass? — No, confirmed with maintainer 2026-08-23; deferred to a follow-up.
 - [x] HyperGraph existence — confirmed absent, confirmed locked out of scope.
 - [x] Pre-approved next extension — confirmed: weighted edges / `WeightedAdjacencyMatrix`.
 - [x] Downstream consumers of `AdjacencyMatrix`/`IncidenceMatrix` assuming 0/1 values — none.

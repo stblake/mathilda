@@ -51,11 +51,13 @@ follow, not a gap this change needs to close.
 ## Open Questions
 
 ### Unresolved
-- [ ] Should `FindShortestPath`/`GraphDistance` gain a weighted (Dijkstra) mode in the same
-      pass, now that weights exist? Recommend deferring — real scope growth (a new
-      algorithm, not a new builtin) beyond "a few hours."
+_None._
 
 ### Resolved
+- [x] Should `FindShortestPath`/`GraphDistance` gain a weighted (Dijkstra) mode in the same
+      pass, now that weights exist? — No; confirmed with the maintainer directly
+      (`AskUserQuestion`, 2026-08-23). Keeps this a self-contained, few-hours change; weighted
+      shortest-path is a new algorithm, not a new builtin, and is deferred to a follow-up.
 - [x] Does HyperGraph exist anywhere in this codebase? — No (exhaustive grep across
       `src/`, `tests/`, `docs/`, `src/internal/*.m`); it is named only as an explicitly
       out-of-scope MVP exclusion in `docs/spec/builtins/graphs.md:20`.
