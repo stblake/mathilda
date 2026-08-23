@@ -347,16 +347,20 @@ static void test_edge_weights(void) {
     assert_eval_eq("InputForm[Graph[{1,2},{1<->2},EdgeWeight->{3}]]",
                    "Graph[{1, 2}, {1 <-> 2}, EdgeWeight -> {3}]", 0);
 
-    /* AC-11: the 8 graph_build_adj-routed builtins evaluate normally (weights
-     * ignored) against a weighted graph, not left unevaluated -- the
-     * plan-reviewer-caught defect (graph_build_adj is a second, independent
-     * choke point from graph_is_valid) regression-tested directly. */
+    /* AC-11: the graph_build_adj-routed builtins evaluate normally against a
+     * weighted graph, not left unevaluated -- the plan-reviewer-caught defect
+     * (graph_build_adj is a second, independent choke point from
+     * graph_is_valid) regression-tested directly. FindShortestPath's
+     * assertion stays {1, 2, 3} even after the weighted-shortest-path ticket:
+     * this specific graph has only one path from 1 to 3, so BFS and Dijkstra
+     * agree on it -- only GraphDistance's value changed (hop count 2 ->
+     * weighted total 5+7=12), tested here as the dedicated regression case. */
     const char* wg = "Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}]";
     char buf[256];
     snprintf(buf, sizeof(buf), "FindShortestPath[%s,1,3]", wg);
     assert_eval_eq(buf, "{1, 2, 3}", 0);
     snprintf(buf, sizeof(buf), "GraphDistance[%s,1,3]", wg);
-    assert_eval_eq(buf, "2", 0);
+    assert_eval_eq(buf, "12", 0);
     snprintf(buf, sizeof(buf), "ConnectedComponents[%s]", wg);
     assert_eval_eq(buf, "{{1, 2, 3}}", 0);
     snprintf(buf, sizeof(buf), "WeaklyConnectedComponents[%s]", wg);
@@ -376,6 +380,52 @@ static void test_edge_weights(void) {
 
     /* Regression: unweighted graphs and existing builtins are unaffected. */
     assert_eval_eq("EdgeCount[CompleteGraph[5]]", "10", 0);
+}
+
+/* ---- Weighted shortest path (Dijkstra dispatch in FindShortestPath/GraphDistance) ---- */
+static void test_weighted_shortest_path(void) {
+    /* AC-1/AC-2: min-weight path differs from min-hop path; both agree it's {1,2,3,4}
+     * (weight 3) not the direct {1,4} edge (weight 10). */
+    const char* g1 = "Graph[{1,2,3,4},{1->2,2->3,3->4,1->4},EdgeWeight->{1,1,1,10}]";
+    char buf[256];
+    snprintf(buf, sizeof(buf), "FindShortestPath[%s,1,4]", g1);
+    assert_eval_eq(buf, "{1, 2, 3, 4}", 0);
+    snprintf(buf, sizeof(buf), "GraphDistance[%s,1,4]", g1);
+    assert_eval_eq(buf, "3", 0);
+    /* Exact integer, not a real -- the plan-reviewer-caught defect (a raw double
+     * accumulator would print "3."). */
+    snprintf(buf, sizeof(buf), "Head[GraphDistance[%s,1,4]]", g1);
+    assert_eval_eq(buf, "Integer", 0);
+
+    /* AC-3: unweighted graphs are unaffected (still plain BFS). */
+    assert_eval_eq("FindShortestPath[CycleGraph[6],1,4]", "{1, 2, 3, 4}", 0);
+    assert_eval_eq("GraphDistance[CycleGraph[6],1,4]", "3", 0);
+
+    /* AC-4: a symbolic weight falls back to BFS rather than erroring. */
+    assert_eval_eq(
+        "FindShortestPath[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{a,7}],1,3]",
+        "{1, 2, 3}", 0);
+
+    /* AC-5: a negative weight falls back to BFS (hop count, not a Dijkstra artifact). */
+    assert_eval_eq(
+        "GraphDistance[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{-1,7}],1,3]",
+        "2", 0);
+
+    /* AC-6: undirected weighted graph -- weights apply symmetrically. */
+    assert_eval_eq(
+        "FindShortestPath[Graph[{1,2,3},{1<->2,2<->3},EdgeWeight->{1,1}],1,3]",
+        "{1, 2, 3}", 0);
+
+    /* AC-7: unreachable target keeps existing semantics. */
+    assert_eval_eq("FindShortestPath[Graph[{1,2,3},{1->2},EdgeWeight->{5}],1,3]",
+                   "{}", 0);
+    assert_eval_eq("GraphDistance[Graph[{1,2,3},{1->2},EdgeWeight->{5}],1,3]",
+                   "Infinity", 0);
+
+    /* Rational weights stay exact. */
+    assert_eval_eq(
+        "GraphDistance[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{1/2,1/3}],1,3]",
+        "5/6", 0);
 }
 
 int main(void) {
@@ -398,6 +448,7 @@ int main(void) {
     TEST(test_spanning_and_connectivity);
     TEST(test_graphplot);
     TEST(test_edge_weights);
+    TEST(test_weighted_shortest_path);
 
     printf("All graph tests passed!\n");
     return 0;

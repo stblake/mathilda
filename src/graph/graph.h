@@ -109,6 +109,20 @@ Expr* builtin_weighted_adjacency_matrix(Expr* res); /* WeightedAdjacencyMatrix[g
  * on what "unweighted" defaults to. */
 Expr* graph_resolve_edge_weights(const Expr* g);
 
+/* True iff g is a valid, weighted (3-arg EdgeWeight) graph and every one of
+ * its weights is a non-negative, non-Complex number (per expr_is_numeric_like:
+ * Integer, BigInt, Real, MPFR, or Rational) -- i.e. usable by a weighted
+ * shortest-path algorithm. False for an unweighted graph, a symbolic weight,
+ * a negative weight, or a Complex weight: shortestpath.c falls back to
+ * unweighted BFS in every one of those cases rather than erroring. */
+int graph_weights_usable(const Expr* g);
+
+/* Approximate double value of a numeric weight Expr (Integer/BigInt/Real/MPFR/
+ * Rational), for ranking/comparison use only -- NAN if w isn't one of those
+ * shapes. Callers needing an exact returned value (e.g. GraphDistance) must
+ * reconstruct it separately via real Expr arithmetic, not from this. */
+double graph_weight_to_double(const Expr* w);
+
 /* ---- Phase 4: graph generators -------------------------------------------- */
 Expr* builtin_complete_graph(Expr* res);   /* CompleteGraph[n]                 */
 Expr* builtin_cycle_graph(Expr* res);      /* CycleGraph[n]                    */

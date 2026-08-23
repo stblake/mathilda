@@ -4,7 +4,7 @@ source_sha: 3d872247
 subsystems: [graph]
 type: plan
 lifecycle: active
-status: approved
+status: implemented
 ---
 
 # Weighted Shortest Path Implementation Plan
@@ -252,16 +252,16 @@ of building the plain `GraphAdj`), and call `dijkstra()` or the existing `bfs()`
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Build succeeds: `make -j$(nproc)` (with `SDKROOT` set per GR-08)
-- [ ] Portability gate passes: `make check-c99`
-- [ ] Packed-array audit unaffected: `make check-packed-aware`
-- [ ] `tests/test_graph.c` passes: updated `test_edge_weights` + new
+- [x] Build succeeds: `make -j$(nproc)` (with `SDKROOT` set per GR-08)
+- [x] Portability gate passes: `make check-c99`
+- [x] Packed-array audit unaffected: `make check-packed-aware`
+- [x] `tests/test_graph.c` passes: updated `test_edge_weights` + new
       `test_weighted_shortest_path` covering AC-1 through AC-7
 
 #### Manual Verification:
-- [ ] Every Acceptance Criteria row run against the live `./Mathilda -file` REPL, matching
+- [x] Every Acceptance Criteria row run against the live `./Mathilda -file` REPL, matching
       Expected exactly
-- [ ] Pre-existing unweighted `FindShortestPath`/`GraphDistance` tests (from the original
+- [x] Pre-existing unweighted `FindShortestPath`/`GraphDistance` tests (from the original
       subsystem commit) still pass unmodified
 
 **Implementation Note**: single-phase ticket; proceed straight to docs/changelog after this

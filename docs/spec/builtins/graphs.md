@@ -125,9 +125,7 @@ WeightedAdjacencyMatrix[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}]]
 WeightedAdjacencyMatrix[CycleGraph[4]] == AdjacencyMatrix[CycleGraph[4]]  (* True *)
 ```
 
-Weighted `FindShortestPath`/`GraphDistance` (Dijkstra) are not implemented —
-both remain unweighted BFS, ignoring any `EdgeWeight` present, and are a
-documented future extension.
+`FindShortestPath`/`GraphDistance` are weight-aware — see Search & computation below.
 
 ## Generators
 
@@ -150,12 +148,19 @@ VertexDegree[PathGraph[5]]       (* {1, 2, 2, 2, 1}           *)
 
 ## Search & computation
 
-All are unweighted and build an integer-indexed adjacency on demand.
+All build an integer-indexed adjacency on demand; all but `FindShortestPath`/`GraphDistance`
+are unweighted.
 
 - `FindShortestPath[g, s, t]` — a shortest path from `s` to `t` as a vertex
-  list (BFS; follows edge direction for directed graphs); `{}` if `t` is
-  unreachable.
-- `GraphDistance[g, s, t]` — the length of that path; `Infinity` if unreachable.
+  list; `{}` if `t` is unreachable. **Weight-aware**: if `g` carries an
+  `EdgeWeight` and every weight is non-negative and numeric, uses Dijkstra
+  (minimum total weight); otherwise (unweighted, a symbolic weight, or a
+  negative weight present) uses unweighted BFS (minimum hop count),
+  following edge direction for directed graphs either way.
+- `GraphDistance[g, s, t]` — the length/total weight of that path;
+  `Infinity` if unreachable. Same weight-aware dispatch as `FindShortestPath`,
+  and returns an exact value (`Integer`/`Rational`) whenever the weights are
+  exact — never a `Real` artifact of the internal algorithm.
 - `ConnectedComponents[g]` / `WeaklyConnectedComponents[g]` — components of the
   underlying undirected graph.
 - `StronglyConnectedComponents[g]` — components following edge directions
@@ -172,7 +177,21 @@ FindShortestPath[Graph[{1,2,3,4},{1->2,2->3,3->4}], 1, 4]   (* {1, 2, 3, 4} *)
 GraphDistance[Graph[{1,2,3,4},{1->2,2->3,3->4}], 4, 1]      (* Infinity     *)
 StronglyConnectedComponents[Graph[{1,2,3},{1->2,2->3}]]     (* {{1},{2},{3}} *)
 VertexConnectivity[CycleGraph[5]]                           (* 2            *)
+
+(* Weighted: the direct 1->4 edge (weight 10) loses to the longer,
+   cheaper 1->2->3->4 route (weight 3). *)
+FindShortestPath[
+  Graph[{1,2,3,4},{1->2,2->3,3->4,1->4},EdgeWeight->{1,1,1,10}], 1, 4]
+    (* {1, 2, 3, 4} *)
+GraphDistance[
+  Graph[{1,2,3,4},{1->2,2->3,3->4,1->4},EdgeWeight->{1,1,1,10}], 1, 4]
+    (* 3 *)
 ```
+
+Weighted `FindShortestPath`/`GraphDistance` use a plain O(V²) Dijkstra (no priority queue —
+consistent with `VertexConnectivity`'s own small-graph exact-algorithm precedent above), and
+fall back to unweighted BFS rather than erroring whenever a weight isn't usable for it (not
+present, symbolic, or negative). No Bellman-Ford / negative-weight support.
 
 ## Visualization
 

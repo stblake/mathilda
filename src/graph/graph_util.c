@@ -20,6 +20,7 @@
 #include "sym_names.h"
 #include <stdint.h>
 #include <stdlib.h>
+#include <math.h>
 
 /* True iff e is a function node whose head is the interned symbol `sym`. */
 static int head_is_sym(const Expr* e, const char* sym) {
@@ -395,4 +396,53 @@ Expr* graph_resolve_edge_weights(const Expr* g) {
     Expr* out = expr_new_function(expr_new_symbol(SYM_List), ws, ne);
     free(ws);
     return out;
+}
+
+/* Approximate double value of a numeric weight, for Dijkstra's internal
+ * vertex-selection comparisons ONLY -- never for a returned value (see
+ * graph_weight_to_double's caller: shortestpath.c reconstructs the exact
+ * GraphDistance answer separately, via Plus[] over the real Expr weights).
+ * A plain (not rounding-to-nearest) conversion is fine here: it only needs to
+ * preserve enough precision to compare relative distances correctly, not to
+ * reproduce N[expr]'s exact rounding. Returns NAN for anything not numeric --
+ * callers must gate with graph_weights_usable first. */
+double graph_weight_to_double(const Expr* w) {
+    if (!w) return NAN;
+    switch (w->type) {
+        case EXPR_INTEGER: return (double)w->data.integer;
+        case EXPR_REAL:    return w->data.real;
+        case EXPR_BIGINT:  return mpz_get_d(w->data.bigint);
+#ifdef USE_MPFR
+        case EXPR_MPFR:    return mpfr_get_d(w->data.mpfr, MPFR_RNDN);
+#endif
+        case EXPR_FUNCTION:
+            if (head_is_sym(w, SYM_Rational) && w->data.function.arg_count == 2) {
+                double p = graph_weight_to_double(w->data.function.args[0]);
+                double q = graph_weight_to_double(w->data.function.args[1]);
+                if (!isnan(p) && !isnan(q) && q != 0.0) return p / q;
+            }
+            return NAN;
+        default:
+            return NAN;
+    }
+}
+
+int graph_weights_usable(const Expr* g) {
+    if (!graph_is_valid(g) || g->data.function.arg_count != 3) return 0;
+    Expr* weights = graph_resolve_edge_weights(g);
+    if (!weights) return 0;
+
+    int ok = 1;
+    size_t n = weights->data.function.arg_count;
+    for (size_t i = 0; i < n && ok; i++) {
+        const Expr* w = weights->data.function.args[i];
+        /* expr_is_numeric_like also accepts Complex (numeric-component
+         * Complex[re,im]); Dijkstra needs an orderable real, so reject that
+         * shape explicitly rather than reusing the check unfiltered. */
+        if (!expr_is_numeric_like(w) || head_is_sym(w, SYM_Complex)) { ok = 0; break; }
+        double d = graph_weight_to_double(w);
+        if (isnan(d) || d < 0.0) ok = 0;
+    }
+    expr_free(weights);
+    return ok;
 }
