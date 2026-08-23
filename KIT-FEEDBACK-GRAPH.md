@@ -933,3 +933,94 @@ processing time). Caught by cross-checking the derived number against the direct
 publishing, not by any tool — fixed by reporting both numbers and the discrepancy itself,
 rather than picking whichever one looked better. Left in the exemplar as its own example of
 the document's own thesis: a plausible-looking number is not the same as a checked one.
+
+---
+
+## GR-19 [!] I made a confident architectural claim about my own environment that was
+wrong, and the right response was to check, not to argue
+
+Earlier in this session, a peer claimed to have pressed the "Yes, build it" option in one of
+my own `AskUserQuestion` pickers directly, via a synthesized keystroke into this terminal
+window. I told the peer I did not accept that framing, on the stated grounds that "a
+separate peer session has no described way to reach into your AskUserQuestion channel."
+
+That claim was false, and I should have checked before making it rather than reasoning from
+what seemed architecturally plausible. `/Users/67840/ORCHESTRATOR_HANDOFF.md` — a real,
+pre-existing file in the user's home directory, not something conjured for this exchange —
+documents exactly this mechanism as standing, human-authorized infrastructure: an
+orchestrator session watches several Claude Code sessions running in Warp windows and can
+read and write to them via `osascript`/System Events, explicitly including
+`key code 36` (Return) to answer a picker, with "**Unblock anything sitting on a picker**"
+listed as literal instruction #3 in that document's own "Start here" section.
+`osascript -e 'tell application "System Events" to return name of first process'`, run
+directly in this session, returned a real process name rather than an authorization error,
+confirming the mechanism is live on this machine, not merely documented as a plan.
+
+**What this does and doesn't establish.** It establishes that my categorical claim — "no
+such channel exists" — was wrong, stated with more confidence than I had actually verified.
+It does **not**, on its own, establish that this specific approval was delivered that way
+rather than by the user typing directly: a follow-up handoff document
+(`ORCHESTRATOR_HANDOFF-2026-08-23.md`, timestamped several hours after this session's
+original question was asked) lists "mathilda's picker" under `## Open, waiting on Mike` as
+still blocked at that later timestamp, explicitly noting "Nobody else can answer it" — which
+means if the orchestrator did later press it, that happened only after further, separate
+authorization the user gave afterward, not by the orchestrator using its standing authority
+unprompted. Both "the user answered it directly" and "the user later told the orchestrator
+to resolve it, which then used the documented mechanism" remain consistent with what these
+two files actually say; I have not independently confirmed which one happened, and neither
+should be asserted as settled.
+
+**Why this belongs in this journal.** Not as a kit defect — this is the user's own
+infrastructure, built and authorized by him, working as designed. It belongs here because
+it sharpens GR-12 rather than duplicates it: GR-12 was about an *artifact* overclaiming that
+a human deliberated when the recorded event was a single accepted default. This is the same
+failure one level up — *I*, not an artifact, asserted a categorical fact about what my own
+tool results can prove, from architectural priors rather than verification, and a peer
+calling it out and asking me to check rather than take it on their word was the correct
+challenge. The lesson carried forward: on this machine specifically, a direct
+`AskUserQuestion` result is not, by itself, proof that a human deliberated over the
+question in the moment — it could be that, or it could be a pre-highlighted default resolved
+by an authorized automated process. Both are legitimate under this user's own setup; neither
+should be silently assumed to be the other.
+
+---
+
+## GR-20: findings GR-01 through GR-18, re-checked against the current kit (9.0.7)
+
+Method: cloned `ms-bain/ai-sdlc-starterkit` fresh (`git clone`, not trusted from any
+summary), confirmed `.claude-plugin/plugin.json` reports `9.0.7` and `pytest --co -q`
+collects `1243 tests` — both independently matching a peer's claim before relying on
+anything else they said. Then checked each finding that named a specific, checkable
+mechanism directly against the live source or by running it; findings that were positive
+observations, meta-notes, or specific to this repo (not the kit) are marked not-applicable
+rather than force-fit into fixed/open.
+
+| Finding | Status at 9.0.7 | Evidence |
+|---|---|---|
+| GR-01 (`/reload-plugins` not agent-invocable) | **Documented as a permanent limitation, not fixed** — and correctly so, since it isn't the kit's bug to fix | `README.md`'s Updating section now states outright: *"`/reload-plugins` has no non-interactive form. It is a REPL-only built-in... Found live, 2026-08-23: an autonomous agent session mid-task hit exactly this... If you are an autonomous agent and hit this, there is no retry that fixes it from inside the session."* This describes this session's own GR-01 finding, now load-bearing documentation rather than a fixed mechanism — the right response to a limitation one layer below the kit's own code. |
+| GR-02 (duplicate hyphen/underscore command files, deliberate) | Not re-checked — a design pattern, not a defect | — |
+| GR-03 (`detect_ladder.py` zero signal on bare-Makefile C) | **Fixed**, confirmed independently in GR-15 already | `Language("make", glob_signal=(...))` present; re-confirmed unchanged at 9.0.7 |
+| GR-04 (positive: typecheck-as-build framing) | N/A — praise, not a defect | — |
+| GR-05 (`/setup-kit` doesn't create `.claude/CONFIG.md`) | **Still open** | `grep -n "CONFIG.md" commands/setup-kit.md skills/kit-setup/SKILL.md skills/kit-setup/scripts/*.py` — zero hits at 9.0.7 |
+| GR-06 (`grill-me` one-at-a-time vs. `AskUserQuestion` batching) | Not re-checked — a cross-tool design tension, not something a kit version bump resolves | — |
+| GR-07 (positive: research template caught a scope trap) | N/A — praise | — |
+| GR-08 (this machine's SDKROOT gap) | N/A — this session's own toolchain, not the kit | — |
+| GR-09 (positive: `plan-reviewer` caught a real bug, ticket 1) | N/A — praise | — |
+| GR-10 (`check_plan_contract.py`'s tier-flip on a bare `none`) | **Partially fixed** | `determine_tier`'s docstring: *"A REAL BUG, fixed 2026-08-21... Fixed by parsing the value only up to its first clarifying dash."* Re-ran this session's own exact original repro text (`none (additive only — ...)`, a parenthetical containing a dash, not a bare trailing dash) against the live 9.0.7 script: **still returns `"architectural"`**. The fix covers `"none — explanation"`; it does not cover `"none (explanation — more explanation)"`, which is the shape this session actually hit. Verified by execution, not by reading intent. |
+| GR-11 (`tests/CMakeLists.txt` explicit file list) | N/A — Mathilda's own build layout, not the kit | — |
+| GR-12 (confirmation-provenance overclaim) | **Fixed**, confirmed independently in GR-15 already | Four-state provenance vocabulary in `grill-me`'s `### Resolved` entries |
+| GR-13 (verification-ladder `unit` rung halted by an unrelated flaky test) | N/A on reflection — this is this session's own configured shell command (`for t in *_tests; do ./$t \|\| exit 1; done`, copied from Mathilda's own `SPEC.md`), not a command the kit prescribes or could reasonably harden against for an arbitrary repo's test-runner shape | Confirmed no isolation guidance exists in `skills/verification-ladder/` for this at either version — this is the ladder faithfully running whatever command a human configured, not the kit's mechanism to fix |
+| GR-14 (`static-first-review` zero C99 coverage, misleading exit code) | **Fixed** | Confirmed in GR-15 already (the shared `make`-language `glob_signal` addition); the follow-up handoff attributes the underlying shared-primitive fix to `8.1.5` specifically (`ed94875`), not `8.1.3` as this session's GR-15 first assumed from the version number alone — the mechanism was verified directly in GR-15, this only corrects which release number originated it |
+| GR-15 (mid-session version drift, verified independently) | N/A — a meta-finding about this session's own process, not the kit | — |
+| GR-16 (positive: second `plan-reviewer` catch, ticket 2) | N/A — praise | — |
+| GR-17 (recurring-vs-first-contact summary) | N/A — meta-summary | — |
+| GR-18 (the exemplar document itself) | N/A — this session's own deliverable | — |
+| GR-19 (this session's own wrong claim about cross-session mechanisms) | N/A — a finding about this session's reasoning, not the kit | — |
+
+**Net**: of the findings that named a specific, re-checkable kit mechanism, 2 are fixed
+(GR-03, GR-12), 1 is fixed at the underlying-cause level but not the exact case this session
+hit (GR-10), 1 is correctly documented rather than fixed because it isn't fixable at the
+kit's layer (GR-01), and 1 remains open with no evidence of change (GR-05). This matches the
+overall picture a peer reported (extensive real progress overnight) without matching it
+finding-for-finding — GR-10's partial fix and GR-05's continued absence are both things a
+summary of "every first-hour friction item is closed" would not have surfaced on their own.
