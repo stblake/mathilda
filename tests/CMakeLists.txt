@@ -704,6 +704,14 @@ set(COMMON_SRC
     ../src/poly/poly_eval_mpfr.c
     ../src/solve/solve.c
     ../src/solve/solvealways.c
+    ../src/solve/reduce.c
+    ../src/solve/reduce_form.c
+    ../src/solve/reduce_atom.c
+    ../src/solve/reduce_eq.c
+    ../src/solve/reduce_univar.c
+    ../src/solve/reduce_fm.c
+    ../src/solve/reduce_int.c
+    ../src/solve/reduce_sys.c
     ../src/numerical_roots/findroot.c
     ../src/numerical_calculus/findmin.c
     ../src/numerical_calculus/findmin_common.c
@@ -1691,6 +1699,10 @@ target_include_directories(irreduciblepolynomialq_tests PRIVATE ../src)
 
 add_executable(solve_tests test_solve.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(solve_tests PRIVATE ../src)
+
+add_executable(reduce_tests test_reduce.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(reduce_tests PRIVATE ../src ../src/solve)
+add_test(NAME reduce_tests COMMAND reduce_tests)
 
 add_executable(solvealways_tests test_solvealways.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(solvealways_tests PRIVATE ../src)

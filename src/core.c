@@ -93,6 +93,7 @@
 #include "facpoly.h"
 #include "flint_bridge.h"
 #include "solve.h"
+#include "reduce.h"
 #include "findroot.h"
 #include "datetime.h"
 #include "linalg.h"
@@ -834,6 +835,7 @@ void core_init(void) {
     expand_init();
     expand_power_init();
     solve_init();
+    reduce_init();
     void solveint_init(void);
     solveint_init();
     void solvethue_init(void);

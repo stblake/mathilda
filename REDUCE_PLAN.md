@@ -1,0 +1,465 @@
+# Reduce — Implementation Plan
+
+*A design for implementing `Reduce` (and its quantifier/logic family: `LogicalExpand`,
+`Exists`, `ForAll`, `Resolve`, `FindInstance`, `CylindricalDecomposition`) in Mathilda,
+reusing the `Solve` infrastructure and adding a CAD-based real-inequality engine.*
+
+---
+
+## Status (as of 2026-08-23)
+
+Phases **0–5 are implemented, tested (`tests/test_reduce.c`), and leak-clean**; the
+remaining large pieces are **6 (CAD)**, **7 (quantifier elimination)** and **8
+(companion builtins + polish)**. Implementation order followed was
+`0 → 1 → 2 → 3 → 5 → 4`.
+
+| Phase | What | Status |
+|---|---|---|
+| 0 | Front-end + DNF normal-form layer | ✅ done |
+| 1 | Complete univariate equations (Complexes) | ✅ done |
+| 2 | Univariate real sign diagram (Reals) | ✅ done |
+| 3 | Linear real systems (Fourier–Motzkin) | ✅ done |
+| 4 | Parametric linear systems (Complexes) | ✅ done |
+| 5 | Integers / Rationals | ✅ done |
+| 6 | Multivariate nonlinear CAD (Reals) | ☐ pending |
+| 7 | Quantifier elimination (`Exists`/`ForAll`/`Resolve`) | ☐ pending |
+| 8 | Companion builtins + polish | ☐ pending |
+
+The **[Deviations from this plan](#deviations-discovered-during-implementation)**
+section at the end records where the built code differs from the original design
+(soundness fix, extra `RAtom` fields, actual file split, known limitations for the
+Phase-8 polish pass). Everything shipped honours the hard invariant: an undecidable
+sign/ordering makes `Reduce` return unevaluated, never a wrong formula.
+
+---
+
+## Context — why this, and what "done" means
+
+Mathilda has a mature **`Solve`** subsystem (`src/solve/`) but no `Reduce`. `Solve` returns
+the *generic* solution of **equations** as a list of rules (`{{x -> a}, ...}`), silently
+dropping the parametric/degenerate cases and offering **no inequality support over the
+reals**. `Reduce` is the strictly more powerful primitive: it returns a **complete,
+quantifier-free logical description** of the solution set of **equations *and*
+inequalities** over a domain, including every degenerate case.
+
+```
+Reduce[a x == b, x]              (a != 0 && x == b/a) || (a == 0 && b == 0)
+Reduce[x^2 > 1, x, Reals]        x < -1 || x > 1
+Reduce[x^2 + y^2 <= 1, {x,y}, Reals]
+                                 -1 <= x <= 1 && -Sqrt[1-x^2] <= y <= Sqrt[1-x^2]
+Reduce[x^2 == 4, x, Integers]    x == -2 || x == 2
+```
+
+The strategic goal (chosen scope: **full CAD roadmap**, **full companion family**):
+reuse the Solve infrastructure wherever it already answers a sub-question, and add only
+the genuinely-missing machinery — a **logical normal-form layer**, a **real-inequality
+engine** culminating in **Cylindrical Algebraic Decomposition (CAD)**, and **quantifier
+elimination**. The companion builtins that Reduce's machinery enables — `LogicalExpand`,
+`Exists`, `ForAll`, `Resolve`, `FindInstance`, `CylindricalDecomposition` — are included
+as later phases.
+
+"Done" for the whole program = the phased roadmap in §7 lands, each phase independently
+verified. "Done" for *this* task = `REDUCE_PLAN.md` is written.
+
+**Hard invariant, everywhere:** an undecidable sign/ordering (the real-algebraic oracle
+returning "unknown", or FLINT being absent) must make `Reduce` **return unevaluated
+(`NULL`)** — never a wrong formula. Soundness over completeness.
+
+---
+
+## What `Reduce` must do (semantics)
+
+- Signatures: `Reduce[expr, vars]`, `Reduce[expr, vars, dom]`,
+  `dom ∈ {Complexes (default), Reals, Integers, Rationals}`.
+- `expr` is a logical combination (`&&`, `||`, `!`, `Implies`, `Xor`, chained
+  `Inequality`) of atoms: equations (`==`, `!=`) and inequalities (`<`, `<=`, `>`, `>=`),
+  possibly with free parameters.
+- Output: `True`/`False`, or an `And`/`Or`/`Not` tree of relational atoms
+  (`==`,`!=`,`<`,`<=`,`>`,`>=`,`Element`) describing the **complete** solution set.
+- Over Complexes only equations (and `!=`) are meaningful (no ordering); over Reals the
+  full inequality machinery engages; over Integers/Rationals the Diophantine engine drives.
+- Quantifiers `Exists[{y..}, φ]` / `ForAll[{y..}, φ]` and `Resolve[...]` eliminate the
+  quantified variables (later phase).
+
+---
+
+## Reuse inventory (the point of the exercise)
+
+Mathilda already ships almost every hard *primitive*; what is missing is the *orchestration*.
+
+| Capability | Reuse target | Location |
+|---|---|---|
+| **Front-end template** (option peel, var validation, dom arg, True/False short-circuit) | `builtin_solve` | `src/solve/solve.c:817` |
+| **Univariate equation solving** → roots, emits `Root[]` for irreducibles | `solvepoly_solve_polynomial_equality(eqn, var, dom, opts)` | `src/poly/solvepoly.h:41` |
+| **Linear / nonlinear systems** (Gauss-Jordan; lex Gröbner + back-sub) | `solvelinsys_solve_linear_system`, `solvenlsys_solve_nonlinear_system` | `src/solve/solvelinsys.c`, `solvenlsys.c` |
+| **Integer/Diophantine engine — already handles inequalities & orderings** | `solveint_solve_integer`, `SICtx`, `classify_conjunct`, `register_inequality`, `flatten_conjuncts`, `build_result`, HNF linear | `src/solve/solveint.c:106`, `solve_common.c`, `solveint_internal.h` |
+| **CAD projection primitives** | `flint_polynomial_resultant`, `resultant_subresultant` (Bronstein PRS), `builtin_discriminant`, `Subresultants`, `SubresultantPolynomials` | `src/poly/flint_bridge.c`, `poly.c:4303,4527,4751` |
+| **Elimination (lex / elimination order)** | `gb_buchberger`, `GroebnerBasis` (`GB_ORDER_ELIM`), `Eliminate` | `src/poly/groebner*.c`, `eliminate.c` |
+| **Algebraic numbers + rigorous real sign oracle** | `Root[Function[t,p],k]` (real-first ascending index); `root_numericalize`; **`flint_qqbar_compare(a,b)` → sign(a−b) ∈ {−1,0,1}, −2=undecided — defined but currently UNUSED**; `flint_qqbar_equal`, `flint_qqbar_is_constant_algebraic` | `src/root.{c,h}`, `src/root_numeric.h`, `src/poly/flint_qqbar.{c,h}` |
+| **Scalar sign/zero decision** | `decide_pair(op,a,b)` → 1/0/−1; `compare_numeric`; `zero_test_decide`, `zero_test_decide_assuming` + `AssumeCtx` | `src/comparisons.c:448`, `src/simp/simp_assume.c` |
+| **Multivariate poly container** | `MPoly`, `expr_to_mpoly`/`mpoly_to_expr`, `mpoly_deg_var`, `mpoly_coef_of_var`, `mpoly_lc_var`, `mpoly_subst_var_mpz`, `mpoly_total_deg` | `src/poly/mpoly.h` |
+| **Real-root count (Sturm certificate)** | `sturm_real_root_count` (static; expose if needed) | `src/root_numeric.c:184` |
+| **Parametric case-split precedent** | `SolveAlways` = coefficient-vanishing + recursive `Solve` | `src/solve/solvealways.c` |
+
+**Two structural gaps that force new code** (flagged so scope is honest):
+1. **No logical normal-form layer.** `src/boolean.c` only collapses `And`/`Or`/`Not` on
+   literal `True`/`False`. No DNF/CNF, `LogicalExpand`, `BooleanConvert`, `Resolve`,
+   `Exists`, `ForAll`.
+2. **No CAD / Fourier–Motzkin / sign-diagram engine.** `flint_qqbar_compare` is the only
+   real-algebraic sign machinery present, and nothing calls it yet.
+
+---
+
+## Architecture
+
+### Module layout (all new, under `src/solve/`)
+
+```
+reduce.h / reduce.c        [done] public builtin_reduce + reduce_init; front-end
+                           (mirrors builtin_solve): dom, True/False, var validation,
+                           dispatch routing
+reduce_form.h / .c         [done] INTERNAL NORMAL FORM: RAtom / RConj / RForm, builders,
+                           simplifiers, DNF ops, emit-to-Expr
+reduce_atom.c              [done] atom canonicalisation (poly REL 0), sign-normalise,
+                           denominator-clearing detection, form_from_expr parser
+reduce_eq.{c,h}            [done] Phase 1: complete univariate equation solver (Complexes)
+reduce_univar.{c,h}        [done] Phase 2: univariate real sign diagram; Phase 5's bounded
+                           integer enumeration (reduce_univar_integers)
+reduce_fm.{c,h}            [done] Phase 3: Fourier–Motzkin for linear real (in)equalities
+reduce_int.{c,h}           [done] Phase 5: Integers/Rationals adapter over Solve
+reduce_sys.{c,h}           [done] Phase 4: parametric linear systems (symbolic Gauss)
+reduce_cad.{c,h}           [pending] Phase 6: McCallum projection + partial-CAD lifting
+reduce_qe.{c,h}            [pending] Phase 7: Exists / ForAll / Resolve via CAD cells
+reduce_companions.{c,h}    [pending] Phase 8: LogicalExpand, FindInstance,
+                           CylindricalDecomposition
+```
+
+Wire `reduce_init()` into `src/core.c` next to `solve_init()` (~line 836); add
+`SYM_Reduce`, `SYM_Resolve`, `SYM_Exists`, `SYM_ForAll`, `SYM_FindInstance`,
+`SYM_CylindricalDecomposition`, `SYM_LogicalExpand` to `src/sym_names.{h,c}` (3 sites
+each: `extern` decl, `= NULL` def, `intern_symbol(...)`). `src/solve` is already on the
+Makefile `-I` path, so no build-graph change is needed. Attributes: `ATTR_PROTECTED`
+(like `Solve` — Reduce does **not** hold its args; `Exists`/`ForAll` get `ATTR_HOLDALL`
+so their bound-variable lists are not evaluated).
+
+### Internal normal form — **DNF** (`reduce_form.h`)
+
+Every engine below *produces* a disjunction of cell-conjunctions, and real `Reduce`
+output is overwhelmingly a top-level `Or` of `And`s — so DNF is the natural target.
+
+```c
+/* As built: >/>= are canonicalised away (operands swapped), so only these
+ * five relations ever reach an engine. */
+typedef enum { R_EQ, R_NE, R_LT, R_LE, R_ELEM } RRel;
+
+typedef struct {            /* one atom: (poly) REL 0, canonical */
+    Expr*  poly;            /* owned; LHS-RHS moved here, RHS forced to 0 */
+    RRel   rel;
+    Expr*  elem_dom;        /* for R_ELEM */
+    Expr*  display;         /* [added] solved-form override, e.g. Equal[x, b/a] */
+    bool   nonconst_denom;  /* [added] canonicalisation cleared a variable denom */
+    int    main_var, deg_main;   /* cheap cached classification */
+    bool   is_linear;            /* total degree <= 1 in all reduce vars */
+} RAtom;
+
+typedef struct { RAtom* a; int n, cap; bool is_false; } RConj;  /* an And */
+typedef struct { RConj** c; int n, cap; bool is_true; } RForm;  /* an Or  */
+```
+
+`RConj.is_false` and `RForm.is_true` are absorbing sentinels (mirroring
+`builtin_and`/`builtin_or`). Key helpers:
+
+```c
+RAtom  reduce_atom_canonicalize(Expr* rel, Expr** vars, int nv);
+void   rconj_push(RConj*, RAtom);              /* dedup + contradiction detect */
+bool   ratom_eq(const RAtom*, const RAtom*);
+RForm* rform_or(RForm*, RForm*);               /* concat conjunction lists */
+RForm* rform_and(RForm*, RForm*);              /* distributive product */
+RForm* rform_not_atom(const RAtom*);           /* De Morgan on one atom */
+void   rform_simplify(RForm*);                 /* drop false, absorb, dedup, subsume */
+RForm* rinterval_emit(int var, const RInterval*, Expr** vars);
+Expr*  rform_to_expr(const RForm*, Expr** vars, int nv);
+```
+
+**Atom canonicalisation** (reuse existing simplifiers — do not hand-roll poly arithmetic):
+1. Head → `RRel`; flip `>`/`>=` to `<`/`<=` by swapping sides (halves the case matrix).
+2. `poly = Numerator[Together[lhs - rhs]]` via the existing `Together`/`Numerator`
+   builtins (exactly how `solvealways.c` clears denominators). **Denominator caveat:** for
+   strict/non-strict relations the cleared denominator can flip the sense — emit an
+   auxiliary `den != 0` atom rather than assume positivity; for `EQ`/`NE` the numerator
+   alone is sound.
+3. Sign-normalise (leading coeff of lex-lowest var positive) so equal atoms are
+   structurally identical for dedup.
+4. Fill `main_var`/`deg_main`/`is_linear` from `expr_to_mpoly` + `mpoly_deg_var`.
+
+**Simplification inside a conjunction** (`rconj_push`): constant atoms decided by
+`decide_pair` / `flint_qqbar_compare` (True→drop, False→`is_false`, unknown→keep as a
+parametric condition); same-poly clashes (`p==0` ∧ `p!=0` → false; keep the stronger of
+`<`/`<=`); **redundant one-variable bounds** (`x>0 && x>1 → x>1`) collapse into an
+`RInterval` per variable, with bound comparison via `flint_qqbar_compare` so
+`Root[]`/radical bounds order correctly. `rform_simplify` drops false conjunctions,
+promotes an empty conjunction to `is_true`, dedups and does a cheap subsumption pass (no
+full BooleanMinimize — Mathematica's own output is not minimal either).
+
+**Emission** builds `Equal/Unequal/Less/LessEqual[poly, 0]` (or `Root`-bounded interval
+atoms), then a single `evaluate()` lets the existing `And`/`Or` flatten and optionally
+fuses `r1 < x && x < r2` via the existing `Inequality` collapser.
+
+### Dispatch routing (`reduce.c`, mirrors `builtin_solve`)
+
+After the Solve-style front-end (option peel, `is_valid_solve_vars`, dom at `arg[2]`,
+`True`→`True`/`False`→`False`), peel any top-level `Exists`/`ForAll` to `reduce_qe`, build
+the `RForm` from the input (De Morgan `Implies`→`!a||b`, expand `Xor`, split `Inequality`
+chains), then route **cheaply** off the cached atom flags:
+
+```
+route(RForm F, vars V, dom D):
+  D == Integers | Rationals            -> reduce_integer(F,V,D)     # solveint wrapper
+  all atoms EQ/NE (no ordering):
+      D == Complexes (default)         -> reduce_equational(F,V)    # complete eq engine
+  every atom is_linear && D == Reals   -> reduce_fm(F,V)            # Fourier-Motzkin
+  |V| == 1 && D == Reals               -> reduce_univar(F, V[0])    # sign diagram
+  D == Reals                           -> reduce_cad(F,V)           # full CAD
+  else                                 -> NULL (unevaluated)
+```
+
+Ordering matters for **efficiency**: linear-real → Fourier–Motzkin **before** CAD (avoids
+exponential lifting for the common `a x + b y <= c` case); univariate-real → sign-diagram
+before CAD (skips projection bookkeeping). Detection is O(#atoms), no re-parsing.
+
+---
+
+## The engines
+
+### 1. Complete equation solver, parametric case split (`reduce_eq.c`)
+
+Turns Solve's *generic* rules into Reduce's *complete* tree via recursive leading-
+coefficient-vanishing splits (precedent: `SolveAlways`):
+
+```
+solve_case(poly p in x):
+  lc = mpoly_lc_var(p, x)
+  if lc is a nonzero constant:                       # generic terminal
+      solvepoly_solve_polynomial_equality(p==0, x, dom, opts)
+      -> Or_k (x == r_k)                             # Root[]/radical rules reformatted
+  else:
+      A = (lc != 0)  &&  solutions_of_degree_n(p)    # generic branch
+      B = (lc == 0)  &&  solve_case(p without leading term)   # degenerate branch
+      return A || B
+  base (p constant a_0):  a_0 == 0 ? True : (a_0 == 0)
+```
+
+`Reduce[a x == b, x]` → `(a!=0 && x==b/a) || (a==0 && b==0)`. Over Reals, `Root`
+solutions are kept only if real (`sturm_real_root_count`/qqbar). `p != 0` is the De Morgan
+complement of `p == 0`. **Systems:** linear via `solvelinsys_solve_linear_system` with a
+pivot-by-pivot `d!=0` vs `d==0` split (multivariate analogue of the lc-split); nonlinear
+via `solvenlsys_solve_nonlinear_system` for the generic branch — **full comprehensive-
+Gröbner case analysis is deferred**; genuinely-nonlinear parametric systems route through
+CAD (Reals) or emit the generic branch guarded by the non-vanishing leading coeffs
+(sound-on-generic, matching Solve today). Over **Complexes this equation route is the
+entire engine** — the common `Reduce[poly system, vars]` path, shipped first.
+
+### 2. Univariate real sign diagram (`reduce_univar.c`)
+
+`p_i(x) REL 0` atoms over one real variable:
+1. **Breakpoints:** real roots of each `p_i` via `solvepoly_...(p_i==0, x, Reals)` →
+   rationals/radicals/`Root[]`.
+2. **Order & dedup** with `flint_qqbar_compare` (works directly on `Root[]`); any `−2`
+   (undecided / FLINT off) → **abort to NULL**.
+3. **Cells:** `2m+1` alternating open intervals and point cells across `b_1<...<b_m`.
+4. **Sample points:** breakpoint for a point cell; a **rational strictly between**
+   neighbours for an interval (numericalise ends with `root_numericalize`, pick a rational,
+   *certify* with `flint_qqbar_compare`, bump precision on collision); a rational beyond
+   the ends for the unbounded cells. Evaluate each atom's sign at the sample via
+   `flint_qqbar_compare(p_i(sample), 0)`; combine per `F`'s Boolean tree → cell truth.
+5. **Emit:** merge maximal runs of true cells with correct endpoint openness
+   (`<` vs `<=`), isolated true points → `x == b_j`, `!=` holes split runs, unbounded true
+   ends → `x < b_1` / `x > b_m`. `Reduce[x^2>1,x,Reals]` → `x<-1 || x>1`.
+
+### 3. Fourier–Motzkin for linear real systems (`reduce_fm.c`)
+
+For all-`is_linear` atoms over Reals: eliminate variables one at a time by pairing each
+positive and negative bound to generate implied constraints; a residual `c < 0` with `c`
+constant → `False`. New code, but small and self-contained; keeps the linear class off the
+CAD path entirely.
+
+### 4. Multivariate CAD over Reals (`reduce_cad.c`) — the large phase
+
+**Projection (McCallum), eliminating the *last* listed variable first** (so the output
+formula reads in the given variable order):
+- `disc_{x_j}(p)` for each `p` (reuse `builtin_discriminant` /
+  `flint_polynomial_resultant(p, ∂p/∂x_j, x_j)`),
+- leading coeff `mpoly_lc_var(p, x_j)` (degree-drop locus),
+- pairwise `Res_{x_j}(p, q)` (reuse `flint_polynomial_resultant`, or `resultant_subresultant`
+  when FLINT is off),
+- **factor every projection poly** and keep distinct irreducible factors (biggest
+  constant-factor win, controls subresultant blow-up).
+
+**Lifting** recursively from the univariate base upward: substitute the fixed sample into
+each poly (`mpoly_subst_var_mpz`/`ReplaceAll`), isolate & order the fiber's real roots
+(the §2 machinery) → sub-cells; recurse; at the top level evaluate the input formula's
+truth via `flint_qqbar_compare(p(sample),0)`.
+
+**Partial CAD (Collins–Hong):** before lifting a cell's children, evaluate the part of
+`F` that depends only on already-fixed vars; if truth is already forced, **skip the
+subtree**. This is what makes `x^2+y^2<=1` tractable.
+
+**Cell → DNF extraction:** each true leaf contributes one conjunction of section
+(`x_i == Root[...]`) / sector (`Root[..lo..] < x_i < Root[..hi..]`) atoms in projection
+order; merge adjacent true sectors/sections (the §2 endpoint logic, one level up) so
+`x^2+y^2<=1` emerges as `-1<=x<=1 && -Sqrt[1-x^2]<=y<=Sqrt[1-x^2]`.
+
+**Well-orientedness caveat (McCallum):** if a projection poly *nullifies* on a lower cell,
+soundness isn't guaranteed — detect it, add the nullified poly's coefficients (Brown/Hong
+augmentation) and re-lift; if still nullified, **bail to NULL**. The genuinely-missing
+sub-capability is *real-root isolation of a univariate poly with real-algebraic-number
+coefficients* (a fiber at a non-rational sample): prefer **rational sample points**
+wherever the stack allows (fiber then has rational coeffs and `solvepoly`+qqbar apply
+directly); otherwise numericalise high-precision, isolate, and certify count/order with
+`sturm_real_root_count` + `flint_qqbar_compare`, bailing to NULL on undecided.
+
+### 5. Quantifier elimination (`reduce_qe.c`)
+
+`Exists[{y..}, φ]` / `ForAll` / `Resolve` run CAD with **quantified vars projected first**
+(free vars outermost), then fold truth over each free-variable cell's children:
+`Exists` = OR over child sub-cells, `ForAll` = AND (equivalently `!Exists !φ`, reusing
+`rform_not_*`). A fully-quantified sentence (`X` empty) returns `True`/`False` — a decision
+procedure. Because partial CAD already computes truth bottom-up, QE is just the fold; no
+extra projection machinery.
+
+### 6. Companion builtins (`reduce_companions.c`)
+
+- **`LogicalExpand`** — expose the internal DNF distributor (`rform_and`/`rform_or` +
+  `rform_simplify`) as a builtin; needed internally anyway.
+- **`FindInstance[expr, vars, dom]`** — one witness: return the sample point of any true
+  CAD cell (or one Solve solution for the equational case); `{}` when unsatisfiable.
+- **`CylindricalDecomposition[expr, vars]`** — expose the CAD cell list directly (the
+  `cad_extract` output before DNF merging).
+
+---
+
+## 7. Phased roadmap (ship order **0→1→2→5→3→4→6→7→8**)
+
+Phases 0–5 cover the bulk of real-world `Reduce` calls before the CAD investment. Each
+phase is independently verified against `expr_to_string_fullform` in a new
+`tests/test_reduce.c` (mirror `tests/test_solve.c`; add a `reduce_tests` target **with an
+`add_test(...)` line** — note `solve_tests` lacks one — and register in
+`tests/CMakeLists.txt`). Optionally add a `tests/reduce_corpus.m` + verifier mirroring
+`solve_corpus.m`.
+
+| Phase | Deliverable | New/modified files | Reuse | Verify (input → output) |
+|---|---|---|---|---|
+| **0** Front-end + normal form | `builtin_reduce` (Solve-style parse, True/False, bad-var); `RForm`/`RAtom`, `rform_to_expr`, atom canon; constant-atom eval | `reduce.{c,h}`, `reduce_form.{c,h}`, `reduce_atom.c`; `core.c`; `sym_names.{h,c}` | `builtin_solve`, `decide_pair`, `Together`/`Numerator` | `Reduce[True,x]→True`; `Reduce[1<2,x]→True`; `Reduce[x==x,x]→True`; `Reduce[3<2,x]→False` |
+| **1** Complete univariate equations (Complexes) | `reduce_eq_univariate` lc-vanishing split | `reduce_eq.c` | `solvepoly_...`, `mpoly_lc_var`, `SolveAlways` pattern | `Reduce[a x==b,x]→(a!=0&&x==b/a)||(a==0&&b==0)`; `Reduce[x^2==4,x]→x==-2||x==2` |
+| **2** Univariate real sign diagram | `reduce_univar`, `RInterval`+`rinterval_emit` | `reduce_univar.c`, `reduce_form.c` | `solvepoly` (Reals), `flint_qqbar_compare`, `root_numericalize` | `x^2>1→x<-1\|\|x>1`; `x^2>=1→x<=-1\|\|x>=1`; `x^2<1→-1<x<1`; `(x-1)(x-2)(x-3)>0→1<x<2\|\|x>3`; `x^2!=1→x!=-1&&x!=1` |
+| **3** Linear real systems (Fourier–Motzkin) | `reduce_fm` | `reduce_fm.c` | `RAtom.is_linear`, rational arith | `x+y<1&&x>0&&y>0,{x,y}→x>0&&0<y<1-x`; `x>1&&x<0→False` |
+| **4** Parametric linear systems *(built as `reduce_sys.c`, symbolic Gaussian elimination — see Deviations)* | `reduce_eq_system` (const/symbolic pivot split, p==0 substitute-recurse, back-sub) | `reduce_sys.{c,h}` | `Coefficient`/`Together`/`Solve` | `{a x+y==1, x+y==0},{x,y}` → `1-a!=0 && x==1/(a-1) && y==1/(1-a)`; `a x==1 && x==2` → `2a-1==0 && x==2` |
+| **5** Integers / Rationals *(built as `reduce_int.c` + bounded enumeration)* | reformat `Solve[..,dom]` output to `\|\|` of `==`/`Element`; univariate inequality → sign-diagram enumeration | `reduce_int.{c,h}`, `reduce_univar_integers` | `Solve[..,Integers\|Rationals]`, `collect_breakpoints` | `Reduce[x^2==4,x,Integers]→x==-2\|\|x==2`; `Reduce[x^2<10&&x>0,x,Integers]→x==1\|\|x==2\|\|x==3` |
+| **6** Multivariate CAD (Reals) — land incrementally: 6a 2-var full CAD rational fibers · 6b Root-coeff fibers + certification · 6c partial-CAD pruning · 6d n-var recursion · 6e well-orientedness + augment/bail | `reduce_cad` | `reduce_cad.c` | `flint_polynomial_resultant`/`resultant_subresultant`, `builtin_discriminant`, `Subresultants`, `solvepoly`, `flint_qqbar_compare`, `MPoly` | `x^2+y^2<=1,{x,y}→-1<=x<=1 && -Sqrt[1-x^2]<=y<=Sqrt[1-x^2]`; `x^2+y^2<0→False`; `x y>0→(x>0&&y>0)\|\|(x<0&&y<0)` |
+| **7** Quantifier elimination | `Exists`/`ForAll`/`Resolve` on CAD truth tree | `reduce_qe.c`; register symbols | `reduce_cad` | `Resolve[Exists[x, x^2+b x+c==0], Reals]→b^2-4c>=0`; `Reduce[Exists[y, x^2+y^2<1],{x},Reals]→-1<x<1` |
+| **8** Companions + polish | `LogicalExpand`, `FindInstance`, `CylindricalDecomposition`; `Element` I/O; `Inequality` fusion; `Assumptions` bridge via `zero_test_decide_assuming`/`AssumeCtx` to prune impossible parametric branches | `reduce_companions.c`, `reduce.c` | DNF ops, CAD cells, `AssumeCtx` | `FindInstance[x^2+y^2<1,{x,y},Reals]` → one witness; `CylindricalDecomposition[...]` cell list |
+
+**Per-phase project hygiene (every phase):** register the builtin + `ATTR_PROTECTED`
+(+`ATTR_HOLDALL` for `Exists`/`ForAll`) + `symtab_set_docstring` in `reduce_init`; update
+`docs/spec/builtins/solutions-of-equations.md`; add a section to the current week's
+`docs/spec/changelog/<Monday-of-ISO-week>.md`. Run `make check-c99` (POSIX/`M_*`/`int64_t`
+guards) and `valgrind` on the new corpus.
+
+---
+
+## Constraints (non-negotiable)
+
+- **C99 strictly** (`-std=c99 -Wall -Wextra`): `#ifndef` fallback for any `M_*` constant;
+  feature-test macro *before the first include* for any POSIX function; `int64_t` uses the
+  `ci_*_i64` checked-int family, never the `long long` one. `make check-c99` gates this.
+- **Memory/ownership:** each builtin **borrows `res`**, returns a fresh `Expr*` (evaluator
+  frees `res`) or `NULL` (unevaluated, `res` retained). NULL-out reused sub-nodes before
+  the wrapper is freed. Every new `RForm`/`RAtom`/`Expr` owned is paired with a free;
+  valgrind-clean.
+- **FLINT/qqbar guarding:** every `flint_qqbar_*` / FLINT resultant call under
+  `#ifdef USE_FLINT`; a `−2`/absent oracle degrades to **NULL (unevaluated)** — never a
+  wrong answer.
+- **Numeric fast-path surfaces:** `Reduce` is a symbolic/structural head returning logical
+  formulas (not machine arrays), so it is legitimately exempt from the packed/NDArray and
+  `Compile[]` surfaces — record the exemption with a one-line reason in the audit tool's
+  `EXEMPT` list rather than leaving a silent omission.
+
+## Where reuse is insufficient (new code, eyes open)
+
+The logical DNF layer (`reduce_form.*`), Fourier–Motzkin, the sign-diagram cell
+construction/emission, the parametric case-split recursion, the CAD driver (projection
+orchestration, lifting recursion, cell tree, partial-CAD pruning, section/sector
+extraction, well-orientedness handling), and real-root isolation of univariate polys with
+real-algebraic-number coefficients (mitigated by preferring rational samples + Sturm/qqbar
+certification, bailing to NULL on undecided).
+
+## Critical files to mirror / reuse
+
+- `src/solve/solve.c:817` — front-end template.
+- `src/poly/flint_qqbar.{c,h}` (`flint_qqbar_compare`, `.c:580`) — real-algebraic sign oracle.
+- `src/poly/solvepoly.c` — univariate real-root isolation (sign-diagram + CAD fibers).
+- `src/poly/flint_bridge.c` (`flint_polynomial_resultant`) / `src/poly/poly.c:4303`
+  (`resultant_subresultant`), `poly.c:4751` (`builtin_discriminant`) — CAD projection.
+- `src/solve/solveint.c:106` (`solveint_solve_integer`) + `solveint_internal.h` (`SICtx`) — Integers.
+- `src/solve/solvealways.c` — parametric case-split precedent.
+- `src/boolean.c`, `src/comparisons.c:448` (`decide_pair`), `src/poly/mpoly.h`, `src/simp/simp_assume.c`.
+- `tests/test_solve.c` + `tests/CMakeLists.txt` — test pattern (add the `add_test` line).
+
+## End-to-end verification
+
+1. `tests/test_reduce.c` — per-phase FullForm assertions from the tables above.
+2. `tests/reduce_corpus.m` + back-substitution/containment verifier (mirror
+   `solve_corpus.m`) — spot-checks: every reported cell's sample point satisfies the input;
+   negation of the output is unsatisfiable on a random real/integer sample grid.
+3. Differential check against `Solve` where they overlap (equations, generic branch).
+4. `make check-c99`; `valgrind --leak-check=full` on the corpus; docs + changelog updated.
+
+---
+
+## Deviations discovered during implementation
+
+Recorded so the remaining phases (6–8) build on what actually exists, not the
+original sketch. Phases 0–5 are otherwise as designed.
+
+- **Soundness fix — rational-function inequalities (the "Denominator caveat",
+  §"Atom canonicalisation" step 2).** Clearing a *variable* denominator via
+  `Numerator[Together[...]]` drops the pole and can flip an inequality's sense, so
+  `1/x < 1` reduced (wrongly) to `x > 1`. As built, `reduce_atom_canonicalize`
+  detects a non-constant cleared denominator and sets a new `RAtom.nonconst_denom`
+  flag; such an **inequality** is neither constant-decided nor accepted by the real
+  engines — Reduce **declines** (stays unevaluated). Equations, where clearing a
+  fully-cancelled denominator is sound, are unaffected (`1/x == 0 → False`). The
+  plan's alternative (emit an auxiliary `den != 0` atom) was not taken; decline is
+  the sound minimum and a candidate for a later, more complete treatment.
+- **Extra `RAtom` fields.** `display` (a solved-form emission override, so a
+  solution prints `x == b/a` rather than `x - b/a == 0`) and `nonconst_denom` above.
+- **`RRel` has no `R_GT`/`R_GE`.** `>`/`>=` are canonicalised to `<`/`<=` by swapping
+  operands, halving the case matrix. `RInterval` was not needed — the sign diagram
+  emits segments locally.
+- **Phase 4 is its own file, `reduce_sys.c`, not an extension of `reduce_eq.c`.**
+  It does direct **symbolic Gaussian elimination** over rational-function coefficient
+  vectors (nonzero-const pivot direct; symbolic pivot `p` → `p != 0` branch +
+  `p == 0` branch solved via `Solve`, substituted, recursed), rather than wrapping
+  `solvelinsys`. An LSol "DNF of cases" intermediate carries per-branch conditions +
+  assignments; back-substitution ("graft") expresses each variable in the parameters.
+- **Phase 5 gained a bounded-enumeration fallback.** `Solve[..., Integers]` only
+  engages when an equation is present, so a pure bounded inequality
+  (`x^2 < 10 && x > 0`) is enumerated over the Phase-2 sign-diagram breakpoints
+  (`reduce_univar_integers`, sharing the factored-out `collect_breakpoints`).
+- **Implementation-order note / bug.** A double-free in the Phase-4 elimination loop
+  (passing an owned `Expr*` into `expr_new_function`, which takes ownership, then
+  freeing it again) corrupted the heap and surfaced as runaway evaluator recursion —
+  see the `expr_new_function`-consumes-args memory.
+
+### Known limitations for the Phase-8 polish pass
+
+- **Default-domain inequalities.** `Reduce[x^2 > 1, x]` (no explicit `Reals`) stays
+  unevaluated; Mathematica reads a bare inequality as real. Route inequality-bearing
+  default-domain input to Reals.
+- **Unbounded integer sets.** `Reduce[x > 0, x, Integers]` declines; should emit an
+  `x >= 1`-style form.
+- **Parametric-condition display.** Conditions print as produced (`1 - a != 0`,
+  `2 a - 1 == 0`) rather than Mathematica's `a != 1`, `a == 1/2` — correct but not
+  minimal; a normalisation pass would tidy them.
+- **Comprehensive Gröbner case analysis** for *non-linear* parametric systems remains
+  deferred (declines today); Phase 6 CAD covers the Reals case.

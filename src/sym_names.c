@@ -467,6 +467,7 @@ const char* SYM_Remove = NULL;
 const char* SYM_Real = NULL;
 const char* SYM_RealDigits = NULL;
 const char* SYM_Reals = NULL;
+const char* SYM_Reduce = NULL;
 const char* SYM_Repeated = NULL;
 const char* SYM_RepeatedNull = NULL;
 const char* SYM_Rescale = NULL;
@@ -1336,6 +1337,7 @@ void sym_names_init(void) {
     SYM_Real                       = intern_symbol("Real");
     SYM_RealDigits                 = intern_symbol("RealDigits");
     SYM_Reals                      = intern_symbol("Reals");
+    SYM_Reduce                     = intern_symbol("Reduce");
     SYM_Repeated                   = intern_symbol("Repeated");
     SYM_RepeatedNull               = intern_symbol("RepeatedNull");
     SYM_Root                       = intern_symbol("Root");

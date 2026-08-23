@@ -1,6 +1,6 @@
 # Solutions of Equations
 
-The equation solver and its supporting machinery: `Solve` and `SolveAlways`, the algebraic-number representation `Root` and its radical conversion `ToRadicals`, and the cubic/quartic closed-form helpers (`Cubics`, `Quartics`). Related options documented elsewhere include `GeneratedParameters`, `InverseFunctions`, `VerifySolutions`, and `Eliminate`.
+The equation solver and its supporting machinery: `Solve`, `Reduce`, and `SolveAlways`, the algebraic-number representation `Root` and its radical conversion `ToRadicals`, and the cubic/quartic closed-form helpers (`Cubics`, `Quartics`). Related options documented elsewhere include `GeneratedParameters`, `InverseFunctions`, `VerifySolutions`, and `Eliminate`.
 
 ## Solve
 
@@ -769,6 +769,80 @@ Out[18]= {{y -> 11/2 - 3 x/2}}     (* x is free; only y has a rule *)
 In[19]:= Solve[3 x + 2 y == 11 && x + y == 12 && 3 x + y == 32, {x, y}]
 Out[19]= {}                        (* over-determined, inconsistent *)
 ```
+
+## Reduce
+
+Reduces a statement of equations and inequalities to a complete, quantifier-free
+logical description of its solution set.
+
+- `Reduce[expr, vars]`: reduce `expr` over the complex numbers (default).
+- `Reduce[expr, vars, dom]`: reduce over `dom` (`Complexes`, `Reals`, `Integers`,
+  or `Rationals`).
+
+`expr` is a logical combination (`&&`, `||`, `!`, `Implies`, `Xor`, chained
+`Inequality`) of equations (`==`, `!=`) and inequalities (`<`, `<=`, `>`, `>=`).
+Unlike `Solve` — which returns the generic solution of equations as a list of
+rules and drops the degenerate cases — `Reduce` returns an `And`/`Or` tree of
+relations describing the **whole** solution set, including every parametric and
+degenerate branch, and it handles inequalities over the reals.
+
+**Attributes**: `Protected`. Arguments are evaluated (not held).
+
+**Status**: implemented incrementally per `REDUCE_PLAN.md`. Landed so far:
+
+- **Front-end + normal-form layer**: argument parsing, a `Reduce::ivar`
+  diagnostic for an invalid variable specification, and a `True`/`False`
+  short-circuit for statements that decide (constant relations and their logical
+  combinations, e.g. `Reduce[x == x, x] -> True`, `Reduce[3 < 2, x] -> False`).
+- **Univariate polynomial equations over Complexes** (the complete solution
+  set): every leading-coefficient-vanishing branch is kept, so the answer is the
+  full parametric case tree rather than Solve's generic solution. Examples:
+  `Reduce[a x == b, x] -> (a != 0 && x == b/a) || (a == 0 && b == 0)`;
+  `Reduce[x^2 == 4, x] -> x == -2 || x == 2`;
+  `Reduce[x^2 == -1, x] -> x == -I || x == I`;
+  `Reduce[a x^2 + b x + c == 0, x]` yields the full three-level split.
+- **Multivariate linear equation systems over Complexes**, with complete case
+  analysis on the parameters (symbolic Gaussian elimination): a nonzero-constant
+  pivot is used directly, a symbolic pivot `p` splits into `p != 0` and `p == 0`
+  (solved and substituted), and back-substitution gives each variable as a
+  function of the parameters. Examples:
+  `Reduce[a x + y == 1 && x + y == 0, {x, y}] -> 1 - a != 0 && x == 1/(a-1) && y == 1/(1-a)`;
+  `Reduce[a x == 1 && x == 2, {x}] -> 2 a - 1 == 0 && x == 2`;
+  `Reduce[x + y == 1, {x, y}] -> x == 1 - y` (an underdetermined system leaves a
+  variable free). A non-linear system is declined (pending CAD).
+- **Univariate polynomial equations and inequalities over Reals** (sign diagram):
+  any logical combination of `==`/`!=`/`<`/`<=`/`>`/`>=` in one real variable is
+  solved as a union of intervals and points. Examples:
+  `Reduce[x^2 > 1, x, Reals] -> x < -1 || x > 1`;
+  `Reduce[x^2 < 1, x, Reals] -> -1 < x < 1`;
+  `Reduce[(x-1)(x-2)(x-3) > 0, x, Reals] -> 1 < x < 2 || x > 3`;
+  `Reduce[x^2 != 1, x, Reals] -> x != -1 && x != 1`;
+  `Reduce[x^2 < 2, x, Reals] -> -Sqrt[2] < x < Sqrt[2]` (algebraic breakpoints are
+  ordered and signed via an exact real-algebraic oracle).
+- **Multivariate linear systems over Reals** (Fourier-Motzkin elimination): a
+  system of linear equations and inequalities is projected variable by variable
+  into a triangular description (bounds on the first variable, then each later
+  variable bounded by the earlier ones), and an inconsistent system reduces to
+  `False`. Examples:
+  `Reduce[x + y < 1 && x > 0 && y > 0, {x, y}, Reals] -> 0 < x < 1 && 0 < y < 1 - x`;
+  `Reduce[x + y == 1 && x > 0, {x, y}, Reals] -> x > 0 && y == 1 - x`;
+  `Reduce[x > 1 && x < 0 && y > 0, {x, y}, Reals] -> False`.
+- **Integers / Rationals domain**: reuses the `Solve[..., dom]` Diophantine engine
+  and reformats its solution list into logical form -- an `Or` of `And`s of
+  `var == value` atoms, with `Element[C[k], dom]` for a generated parameter.
+  Examples: `Reduce[x^2 == 4, x, Integers] -> x == -2 || x == 2`;
+  `Reduce[x + y == 5 && x > 0 && y > 0, {x, y}, Integers]` -> the four solutions;
+  `Reduce[2 x + 3 y == 1, {x, y}, Integers] -> C[1] ∈ Integers && x == -1 + 3 C[1]
+  && y == 1 - 2 C[1]`. A bounded univariate inequality that Solve declines is
+  enumerated over the sign diagram (`Reduce[x^2 < 10 && x > 0, x, Integers] ->
+  x == 1 || x == 2 || x == 3`).
+
+Rational-function relations whose canonicalisation would clear a variable
+denominator (e.g. `1/x < 1`) are declined (left unevaluated) rather than answered
+from the polynomial numerator alone, which would be unsound. Statements that
+require an engine not yet wired (nonlinear multivariate CAD, the
+integer/Diophantine domain, and quantifier elimination) also remain unevaluated;
+those engines land in the later phases of the plan.
 
 ## SolveAlways
 

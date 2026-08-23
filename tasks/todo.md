@@ -1,85 +1,115 @@
-# StreamPlot: evenly-spaced streamlines
+# Reduce — implementation tracker
 
-## Problem
-`StreamPlot[{-y, x}, {x, -3, 3}, {y, -3, 3}]` (rotation → concentric circles)
-rendered as a hairball of ~225 short, overlapping, fragmented arcs. Careless
-with stream length and curvature.
+Design: `REDUCE_PLAN.md` (repo root). Full CAD roadmap + full companion family.
 
-## Root cause (src/graphics/streamplot.c)
-1. One forward-only stream per grid seed (15×15 = 225) → overlap.
-2. StreamScale default 0.08 → every stream a short stub.
-3. Raw-field RK4 (step h·|v|) → curvature resolution tied to local speed.
+## Phase 0 — Front-end + logical normal-form skeleton  (DONE 2026-08-23)
 
-## Fix — Jobard–Lefebvre evenly-spaced streamlines
-- [x] Normalized-field RK4 (fixed arc-length step) → uniform spacing/curvature.
-- [x] Grow each line both directions from its seed.
-- [x] Terminate on: proximity to another line (½·d_sep, hash-grid O(1)),
-      boundary, critical point, or closed-orbit return (draws whole circles).
-- [x] Even placement: candidate grid finer than d_sep + cull seeds within
-      d_sep of an existing line. StreamPoints sets d_sep.
-- [x] Periodic direction chevrons along each Line (not one lone mid-arrow).
-- [x] StreamScale default → run to natural end (None/Automatic too); s>0 caps.
-- [x] Doc (graphics.md) + changelog updated.
+- [x] `src/solve/reduce_form.{h,c}` — RRel / RAtom / RConj / RForm (DNF), builders,
+      `rform_or`/`rform_and`/`ratom_negate`, `rform_simplify`, `rform_to_expr`.
+- [x] `src/solve/reduce_atom.c` — `reduce_atom_canonicalize` (poly REL 0), constant-atom
+      decide via `evaluate`, `reduce_form_from_expr` (parse &&/||/!/Implies/Xor/Inequality → DNF).
+- [x] `src/solve/reduce.{h,c}` — `builtin_reduce` (Solve-style parse, True/False,
+      bad-var warn, dom positional), dispatch skeleton (constant or NULL), `reduce_init`.
+- [x] `src/sym_names.{h,c}` — `SYM_Reduce` (3 sites).
+- [x] `src/core.c` — `#include "reduce.h"` + `reduce_init()`.
+- [x] `tests/test_reduce.c` + `tests/CMakeLists.txt` (COMMON_SRC + `reduce_tests` + `add_test`).
+- [x] docs + changelog.
+- [x] main build clean (gcc-16); `reduce_tests` 24/24 pass; `solve_tests` still green;
+      `make check-c99` clean; `leaks` 0 leaks.
 
-## Verification
-- Rendered rotation / saddle {x,-y} / {-y Exp[-x^2], x Sin[y]} → all clean,
-  evenly-spaced, correct flow direction and speed coloring.
-- Point counts: rotation 225 fragments → 19 clean circles.
-- streamplot_tests + autocompile_tests pass.
-- valgrind: leak total identical to baseline and to the OLD code (13,496 B /
-  421 blocks), constant across 1 vs 20 lines → no new leak (pre-existing fixed
-  interning + macOS baseline noise).
-- Fast: ~0.03s for the field evals.
+Verified: `Reduce[True,x]→True`; `Reduce[1<2,x]→True`; `Reduce[x==x,x]→True`;
+`Reduce[3<2,x]→False`; `Reduce[x>0,x]`/`Reduce[x^2==4,x]` stay unevaluated;
+`Reduce[x==1,5]` → `Reduce::ivar` + unevaluated.
 
-## Follow-up (closed-orbit overlap)
-- [x] Bug: closed orbits drawn TWICE — grow_streamline integrated both
-      directions, and each direction walks the whole loop. Fixed: integrate_dir
-      reports closure; closed orbit = single forward pass, closed by repeating
-      the seed; backward pass skipped. Rings ~halve in point count, first==last.
-- [x] Drop sub-resolution closed loops (bbox diag < d_sep) → clean vortex centre
-      (removes the tiny "hook" at origin of {-y,x}).
-- [x] streamplot/autocompile tests pass; valgrind unchanged (no new leak).
+## Phase 1 — Complete univariate equation solver (Complexes)  (DONE 2026-08-23)
 
-## Density match to Mathematica (mma_example.png)
-- [x] "Almost start to overlap" / "compare to Mathematica" = DENSER rings.
-      MMA draws ~13 concentric rings nearly touching; ours drew 7 sparse.
-- [x] Default StreamPoints 15 -> 25 (d_sep = min(extent)/25) -> ~12 rings that
-      nearly touch, matching MMA. Verified rotation + saddle + complex render
-      clean (no merge/overlap) at the higher density.
-- [x] Book figure regenerated; streamplot_tests pass.
-## Dashed-arrow style (exact MMA match)
-- [x] emit_dashed_stream: walk arc length, alternate dash (curve-following
-      make_line_range + chevron_tip Arrow at the tip) / gap. Dash 1.6*d_sep,
-      gap 1.0*d_sep, chevron 0.7*d_sep. Renderer sizes Arrow head from last
-      segment -> dash must be Line + separate chevron, not one multi-pt Arrow.
-- [x] Animate path unchanged (solid AnimatedStreamline + periodic chevrons).
-- [x] rotation/saddle/complex render in MMA dashed style; tests pass; valgrind
-      unchanged (no new leak). Book figure regenerated. Doc + changelog updated.
+- [x] `src/solve/reduce_eq.{c,h}` — `reduce_eq_univariate`, lc-vanishing recursion;
+      generic roots via `Solve`; degree/coeff via `Exponent`/`Coefficient`/`Expand`.
+- [x] DNF-layer additions: `RAtom.display` (solved-form emission), `ratom_solved`,
+      sign-normalization of EQ/NE atoms (`-b==0` → `b==0`).
+- [x] `reduce.c` routing: single univariate EQ atom over Complexes → equation engine.
+- [x] CMake COMMON_SRC += reduce_eq.c; tests extended (`test_equations`).
+- [x] docs + changelog.
+- [x] `reduce_tests` 32/32 pass; `solve_tests` green; `check-c99` clean; `leaks` 0.
 
-## Fix: chunky arrowheads (dashed style looked worse)
-- [x] Root cause: PDF exporter (graphics_export.c, SEPARATE from render.c) used
-      a FIXED 8pt arrowhead -> swamped the ~230 short chevrons of a dashed plot.
-- [x] graphics_export Arrow head now scales: hl=min(0.55*final_seg, 8), hw=hl*.38.
-      Long arrows (VectorPlot) unchanged at cap; short ones shrink.
-- [x] Streamplot: lighter lines (Thickness 0.006->0.0035), tuned dash_arrow 0.8.
-- [x] rotation/saddle look like MMA now; VectorPlot fine; tests + valgrind OK.
-      Book figures (streamplot + vectorplot) regenerated.
+Verified: `a x==b → (a!=0 && x==b/a) || (a==0 && b==0)`; `x^2==4 → x==-2||x==2`;
+`x^2==-1 → x==-I||x==I`; `2x==6 → x==3`; `a x^2+b x+c==0` → full 3-level split.
 
-## Fix: arrow-with-a-straight-line (user: "looks ridiculous")
-- [x] Root cause: chevron_tip emitted Arrow[{a,b}]; BOTH renderers draw every
-      Arrow as shaft-polyline + head, so each dash tip grew a ~0.8*d_sep straight
-      stick (a chord across the curved streamline) plus a head.
-- [x] chevron_tip now emits a bare filled arrowhead Polygon[{b1,b2,tip}] — no
-      shaft. Tip at dash end, base dash_arrow upstream, direction = chord over
-      the head's own arc length (stays aligned on tight bends). Fills with the
-      stream's colour directive on both paths. Animate path unchanged.
-- [x] User follow-up: arrowheads 0.8x (dash_arrow 0.42->0.336), streamlines
-      1.25x thicker (Thickness 0.0035->0.004375).
-- [x] rotation + saddle render clean; streamplot_tests pass; build clean.
+## Phase 2 — Univariate real sign diagram (Reals)  (DONE 2026-08-23)
 
-## Considered / deferred
-- Perpendicular offspring seeding (full JL) would fill sparse-region gaps even
-  better; the finer candidate grid + culling already gives good coverage, so
-  left out to keep the change contained.
-- PDF vector export still stretches square domains to the page (pre-existing,
-  affects all plotters); windowed/PNG render honors AspectRatio. Out of scope.
+- [x] `src/solve/reduce_univar.{c,h}` — sign diagram: roots via `Solve[..,Reals]`,
+      breakpoint sort/dedup + interval sampling, exact sign via native-rational +
+      `flint_qqbar_compare`, union-of-cells emission (Inequality chains, cofinite `!=`).
+- [x] `reduce.c` routing: `reals && nv==1` → `reduce_univar` (any poly eq/ineq combo).
+- [x] CMake COMMON_SRC += reduce_univar.c; tests extended (`test_real_inequalities`).
+- [x] docs + changelog.
+- [x] `reduce_tests` all pass (41 assertions); `solve_tests` green; `check-c99` clean;
+      `leaks` 0; main build warning-free.
+
+Verified: `x^2>1→x<-1||x>1`; `x^2>=1→x<=-1||x>=1`; `x^2<1→-1<x<1`;
+`(x-1)(x-2)(x-3)>0→1<x<2||x>3`; `x^2!=1→x!=-1&&x!=1`; `x^2==4→x==-2||x==2`;
+`x^2<2→-Sqrt[2]<x<Sqrt[2]`; `x^2+1>0→True`; `x^2+1<0→False`; `x>0&&x<1→0<x<1`.
+
+## Phase 3 — Linear real systems via Fourier–Motzkin (Reals)  (DONE 2026-08-23)
+
+- [x] `src/solve/reduce_fm.{c,h}` — FM elimination over exact-rational coeff vectors:
+      project vars last→first, feasibility from the fully-projected constants,
+      triangular emission (bounds per var, `==` re-detection, free-var omission),
+      DNF handled conjunct-by-conjunct then OR-ed.
+- [x] `reduce.c` routing: `reals && nv>=2` → `reduce_fm` (declines if non-linear).
+- [x] **Soundness fix**: `RAtom.nonconst_denom` flag — inequalities that cleared a
+      variable denominator (`1/x<1`) are no longer constant-decided or handled by the
+      real engines; Reduce declines instead of answering wrong. (Fixed a Phase-2 bug.)
+- [x] CMake COMMON_SRC += reduce_fm.c; tests extended (`test_linear_systems`).
+- [x] docs + changelog (Phase 3 + soundness fix).
+- [x] `reduce_tests` all pass; `solve_tests` green; `check-c99` clean; `leaks` 0;
+      build warning-free.
+
+Verified: `x+y<1&&x>0&&y>0 → 0<x<1 && 0<y<1-x`; `x+y==1&&x>0 → x>0 && y==1-x`;
+`x>1&&x<0&&y>0 → False`; `2x+3y<=6&&x>=0&&y>=0 → 0<=x<=3 && 0<=y<=2-2x/3`;
+`x<0||x>1 → x<0||x>1`; nonlinear/`1/x<1` decline.
+
+## Phase 5 — Integers / Rationals (thin wrapper)  (DONE 2026-08-23)
+
+- [x] `src/solve/reduce_int.{c,h}` — reformat `Solve[..,dom]` output into logical
+      form (`||` of `==` atoms; `Element[C[k],dom]` for parametric families).
+- [x] `reduce_univar_integers` (in reduce_univar.c) — bounded integer enumeration
+      over the sign diagram for the inequality case Solve declines; shared
+      `collect_breakpoints` factored out of reduce_univar.
+- [x] `reduce.c` routing: `dom ∈ {Integers, Rationals}` → `reduce_integers`.
+- [x] CMake COMMON_SRC += reduce_int.c; tests extended (`test_integer_domain`).
+- [x] docs + changelog.
+- [x] `reduce_tests` all pass; `solve_tests` green; `check-c99` clean; `leaks` 0;
+      build warning-free.
+
+Verified: `x^2==4→x==-2||x==2`; `x^2<10&&x>0→x==1||x==2||x==3`; `1<=x<=3→...`;
+`x+y==5&&x>0&&y>0→4 tuples`; `2x+3y==1→C[1]∈Integers && x==-1+3C[1] && y==1-2C[1]`;
+`x^2==2→False`; Rationals; unbounded `x>0` declines.
+
+## Phase 4 — Parametric linear systems over Complexes  (DONE 2026-08-23)
+
+- [x] `src/solve/reduce_sys.{c,h}` — symbolic Gaussian elimination with case
+      splitting (nonzero-const pivot direct; symbolic pivot p → p!=0 branch +
+      p==0 branch via Solve-substitute-recurse); back-substitution (graft) for
+      per-variable param expressions; LSol DNF-of-cases intermediate.
+- [x] `reduce.c` routing: complexes && all-EQ → Phase 1 (single univar eq) else
+      Phase 4 (`reduce_eq_system`, declines if non-linear).
+- [x] **Bug fixed**: double-free of `prod` in the elimination loop (it is consumed
+      by the `Subtract` node) — corrupted the heap → runaway evaluator recursion.
+- [x] CMake COMMON_SRC += reduce_sys.c; tests extended (`test_parametric_systems`,
+      test_unevaluated's stale `x+y==1` case replaced with a nonlinear system).
+- [x] `reduce_tests` all pass; `solve_tests` green; `check-c99` clean; `leaks` 0;
+      valgrind: no code-level memory errors; build warning-free.
+
+Verified: `a x+y==1 && x+y==0 → 1-a!=0 && x==1/(a-1) && y==1/(1-a)`;
+`a x==1 && x==2 → 2a-1==0 && x==2`; `x+y==1 → x==1-y` (free var);
+`x+y==3 && x-y==1 → y==1 && x==2`; 3-var system; nonlinear system declines.
+
+Next: **Phase 6** (multivariate nonlinear CAD — the big one), **7** (QE:
+Exists/ForAll/Resolve), **8** (companions: LogicalExpand/FindInstance/
+CylindricalDecomposition + polish: default-domain inequality → Reals,
+unbounded-integer inequality forms, nicer parametric-condition display).
+
+## Later phases
+1 Complete univariate equations · 2 Univariate real sign diagram · 3 Fourier–Motzkin ·
+4 Parametric linear systems · 5 Integers/Rationals · 6 CAD · 7 QE · 8 Companions + polish.
