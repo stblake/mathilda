@@ -4,7 +4,7 @@ source_sha: 3d872247
 subsystems: [graph]
 type: plan
 lifecycle: active
-status: draft
+status: approved
 ---
 
 # Weighted Shortest Path Implementation Plan
@@ -23,7 +23,7 @@ Ticket 1 added `EdgeWeight`/`WeightedAdjacencyMatrix` but explicitly deferred ma
 `FindShortestPath`/`GraphDistance` weight-aware (its own Non-goals: "real algorithmic scope
 growth, not a few hours"). This ticket delivers that follow-up. `GraphAdj`
 (`graph_util.c`), the structure both builtins currently use, has no weight storage and is
-shared by 6 other builtins — so this plan builds a separate, call-scoped weighted adjacency
+shared by 5 other builtins (ConnectedComponents, WeaklyConnectedComponents, FindSpanningTree, ConnectedGraphQ, VertexConnectivity) — so this plan builds a separate, call-scoped weighted adjacency
 inside `shortestpath.c` rather than widening `GraphAdj` itself, directly applying the lesson
 from ticket 1's `plan-reviewer`-caught defect (a shared choke point is a bigger blast radius
 than it looks).
@@ -36,12 +36,12 @@ than it looks).
   not regress to unevaluated just because a weight is symbolic or negative.
 - **No change to `GraphAdj`/`graph_build_adj`** — a local, per-call weighted structure lives
   only in the two changed builtins, reusing ticket 1's `graph_resolve_edge_weights`, keeping
-  blast radius off the 6 other builtins sharing that structure.
+  blast radius off the 5 other builtins sharing that structure.
 - **Plain O(V²) Dijkstra, no priority queue** — matches this codebase's existing complexity
   tolerance for small-graph exact algorithms (`VertexConnectivity`'s own "brute-force ...
   intended for small graphs").
 - **Ticket 1's `test_edge_weights` AC-11 lines for these two builtins must change** — they
-  assert "weights ignored," the exact behavior this ticket removes. The other 6 builtins in
+  assert "weights ignored," the exact behavior this ticket removes. The other 5 builtins in
   that test are unaffected.
 
 ## Non-goals
@@ -81,7 +81,38 @@ _None._
 _None._
 
 ### Resolved
-_None._
+**[BLOCKING] `double dist[]` has no stated path back to an exact `Expr`, so AC-2 is not
+achievable as specified**
+- Where: was in Phase 1 §2; `EXPR_REAL` prints distinctly from `EXPR_INTEGER`
+  (`src/print.c`), and `assert_eval_eq` does exact string comparison, so a raw
+  `expr_new_real(dist[it])` would print `12.` against AC-2's exact `3`/`12`.
+- How addressed: `double dist[]` is now stated as internal-comparison-only; the actual
+  returned value is reconstructed exactly via `evaluate(Plus[w1,...,wk])` over the real
+  `Expr*` weights along the discovered path (Phase 1 §2, rewritten).
+
+**[BLOCKING] The claim that both builtins' AC-11 lines in `test_edge_weights` need to change
+was false for `FindShortestPath`**
+- Where: was in Decisions/Components & Files Affected; verified against
+  `tests/test_graph.c:350-359` directly — the AC-11 test graph
+  (`Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}]`) has exactly one path from 1 to 3, so BFS
+  and Dijkstra agree on `FindShortestPath`'s result; only `GraphDistance`'s hop-count `"2"`
+  needs to become the weighted total `"12"`.
+- How addressed: corrected everywhere this was claimed — only `GraphDistance`'s AC-11
+  assertion changes.
+
+**[WORTH FLAGGING] The numeric-type list for `graph_weights_usable` omitted `EXPR_MPFR` (a
+live leaf type under the default `USE_MPFR ?= 1` build) and reinvented rather than reused
+`expr_is_numeric_like` (`src/expr.c:412`), which already covers it**
+- How addressed: `graph_weights_usable` now explicitly reuses `expr_is_numeric_like` (minus
+  `Complex`) instead of a hand-rolled type list.
+
+**[WORTH FLAGGING] "6 other builtins" / "7 call sites across 5 files" were both wrong —
+`StronglyConnectedComponents` does not call `graph_build_adj` at all (own Tarjan structure);
+the real numbers are 5 builtins / 6 call sites / 4 files. Same miscount was inherited from
+ticket 1's (already-shipped) plan.**
+- How addressed: corrected everywhere in this plan; ticket 1's already-merged plan/tests are
+  left as historical record (not retroactively edited — see journal `KIT-FEEDBACK-GRAPH.md`
+  for the discussion of whether to fix it there).
 
 ## Requires Approval
 _None._ — this is the named follow-up from ticket 1's own Non-goals; no new scope call.
@@ -109,8 +140,12 @@ _None — standard tier, no architectural impact._
 ## Current State Analysis
 - `src/graph/shortestpath.c` (full file, see research) — `bfs()`, `resolve()`, and both
   builtins, no weight awareness.
-- `src/graph/graph.h:112-120` — `GraphAdj` has no weight field; shared by 7 call sites across
-  5 files.
+- `src/graph/graph.h:112-120` — `GraphAdj` has no weight field; `graph_build_adj` has 6 call
+  sites across 4 files (`components.c` x2, `connectivity.c` x2, `spanningtree.c`,
+  `shortestpath.c`), used by 5 other builtins (`ConnectedComponents`,
+  `WeaklyConnectedComponents`, `FindSpanningTree`, `ConnectedGraphQ`, `VertexConnectivity`) —
+  `StronglyConnectedComponents` builds its own Tarjan-specific structure and does not call
+  `graph_build_adj`.
 - `src/graph/graph_util.c` — `graph_resolve_edge_weights(g)` (ticket 1) already gives the
   per-edge weight list in `EdgeList` order.
 - `tests/test_graph.c`'s `test_edge_weights` AC-11 block asserts the exact "ignore weights"
@@ -132,9 +167,9 @@ suite.
 
 | File | Change |
 |---|---|
-| `src/graph/shortestpath.c` | Add a local weighted-adjacency builder + O(V²) Dijkstra; both builtins check for a usable `EdgeWeight` (via a new `graph_weights_usable(g)` helper) and dispatch to Dijkstra or the existing BFS accordingly |
-| `src/graph/graph_util.c`, `src/graph/graph.h` | New helper `graph_weights_usable(const Expr* g)`: `true` iff `g` has a 3-arg `EdgeWeight` and every weight is a non-negative `EXPR_INTEGER`/`EXPR_REAL`/`EXPR_BIGINT` (or `Rational[..]` with non-negative value) |
-| `tests/test_graph.c` | Update `test_edge_weights`'s `FindShortestPath`/`GraphDistance` AC-11 lines to the new weighted behavior; add a new `test_weighted_shortest_path` for AC-1 through AC-7 |
+| `src/graph/shortestpath.c` | Add a local weighted-adjacency builder + O(V²) Dijkstra (`double dist[]` for internal vertex-selection comparisons only) + exact-value reconstruction (see below); both builtins check for a usable `EdgeWeight` (via a new `graph_weights_usable(g)` helper) and dispatch to Dijkstra or the existing BFS accordingly |
+| `src/graph/graph_util.c`, `src/graph/graph.h` | New helper `graph_weights_usable(const Expr* g)`: `true` iff `g` has a 3-arg `EdgeWeight` and every weight satisfies `expr_is_numeric_like(w)` (the codebase's own existing generic numeric-type check — `src/expr.c:412`, already covers `EXPR_INTEGER`/`EXPR_BIGINT`/`EXPR_REAL`/`EXPR_MPFR`/`Rational`), is not `Complex`, and is `>= 0` |
+| `tests/test_graph.c` | Update `test_edge_weights`'s `GraphDistance` AC-11 line only (`"2"` → `"12"`, the weighted total `5+7`) — `FindShortestPath`'s AC-11 assertion (`{1, 2, 3}`) is unaffected, since that specific test graph has only one path from vertex 1 to vertex 3, so BFS and Dijkstra necessarily agree on it. Add a new `test_weighted_shortest_path` for AC-1 through AC-7 (which do exercise multi-path graphs) |
 | `docs/spec/builtins/graphs.md` | Update the `FindShortestPath`/`GraphDistance` bullets and remove the "remain unweighted BFS ... documented future extension" note added by ticket 1 |
 | `docs/spec/changelog/2026-08-17.md` | New entry |
 
@@ -154,7 +189,7 @@ flowchart TD
 ## Alternatives Considered
 
 ### Extend `GraphAdj` with a weight array
-**Rejected because:** `graph_build_adj` is shared by 7 call sites across 5 files
+**Rejected because:** `graph_build_adj` is shared by 6 call sites across 4 files
 (`components.c`, `connectivity.c`, `spanningtree.c`, `shortestpath.c`) — widening it is
 exactly the kind of shared-choke-point risk ticket 1's `plan-reviewer` pass caught as a real
 defect. A local structure confined to `shortestpath.c` has zero blast radius on the other 6
@@ -184,15 +219,30 @@ Implement the gate, the algorithm, and wire both builtins to it.
 **File**: `src/graph/graph_util.c`, declared in `graph.h`
 **Changes**: `int graph_weights_usable(const Expr* g)` — `graph_is_valid(g)` first;
 `arg_count != 3` → `false`; otherwise walk `graph_resolve_edge_weights(g)` and require every
-entry to be `EXPR_INTEGER`/`EXPR_BIGINT`/`EXPR_REAL` `>= 0`, or `Rational[p,q]` with `p >= 0`
-(reuse `expr_to_mpz`/existing numeric-value helpers rather than hand-rolling comparison).
+entry to satisfy `expr_is_numeric_like(w)` (`src/expr.c:412` — the codebase's own existing
+generic numeric-type check, already covering `EXPR_INTEGER`/`EXPR_BIGINT`/`EXPR_REAL`/
+`EXPR_MPFR`/`Rational`; do not hand-roll a narrower type list), be non-`Complex`, and convert
+to a `double >= 0` via a small local `graph_weight_to_double(w)` helper (handles each of the
+numeric leaf types `expr_is_numeric_like` accepts).
 
-#### 2. Dijkstra
+#### 2. Dijkstra, and how the exact output value is produced
 **File**: `src/graph/shortestpath.c`
-**Changes**: a static `dijkstra()` mirroring `bfs()`'s signature/shape (fills `parent[]`,
-and a `double dist[]` this time since weights may be non-integer), O(V²) array scan for the
-minimum-unvisited-distance vertex each iteration (no heap, matching `VertexConnectivity`'s
-existing complexity precedent).
+**Changes**: a static `dijkstra()` mirroring `bfs()`'s signature/shape (fills `parent[]`),
+using a `double dist[]` **for internal vertex-selection comparisons only** — O(V²) array scan
+for the minimum-unvisited-distance vertex each iteration (no heap, matching
+`VertexConnectivity`'s existing complexity precedent). This resolves a real gap a
+`plan-reviewer` pass caught in the previous draft: a raw `double` accumulator returned
+directly as `GraphDistance`'s result would print as `EXPR_REAL` (e.g. `12.`, per
+`src/print.c`'s real-vs-integer formatting), not the exact `12` AC-2 expects, and this
+codebase treats exact arithmetic as load-bearing throughout. Fix: once `dijkstra()` finds the
+parent chain to `t`, reconstruct the **exact** total by evaluating `Plus[w1, ..., wk]` (via
+`evaluate()`) over the actual `Expr*` weights (from `graph_resolve_edge_weights`, matched to
+the path's edges) — the same exact-arithmetic path every other numeric builtin in this
+codebase already goes through, giving `GraphDistance` an exact `EXPR_INTEGER`/`Rational`
+result whenever the inputs are exact, and only falling to `EXPR_REAL` if a weight genuinely
+was (e.g. `EXPR_MPFR`). `FindShortestPath` needs no such reconstruction — it returns the
+vertex path, not a distance value, and the `double`-based selection is only ever used to
+choose *which* path, never printed itself.
 
 #### 3. Dispatch
 **File**: `src/graph/shortestpath.c`

@@ -645,3 +645,65 @@ anything. The original GR-03/GR-12 entries above are left unedited: they are acc
 historical statements about `8.0.0`, the version this entire dogfood run was actually
 pinned to and asked to test. This entry is the honest update layered on top, not a
 retraction.
+
+---
+
+## Ticket 2: weighted shortest path — `/research-codebase` + `/create-plan` run
+
+Second pass, chosen the same way as ticket 1: `thoughts/shared/research/
+2026-08-23-weighted-shortest-path.md` names the exact gap — ticket 1's own `Non-goals`
+already called out weighted `FindShortestPath`/`GraphDistance` as deferred follow-up work,
+and `GraphAdj` (the shared adjacency structure) has no weight storage at all, so this is
+real algorithmic work, not a config flag. This time: no dispatched research sub-agent (I
+already held full context on `src/graph/` from ticket 1 and read `shortestpath.c` directly
+myself — a legitimate use of `/research-codebase` step 2c's "skip re-research" logic, though
+that step's stated trigger is an *existing research document*, not *the author's own
+short-term memory of the codebase*, which is a real, if minor, stretch of its intent); one
+`plan-reviewer` pass (dispatched fresh, no shared context with the first).
+
+## GR-16 [+] The `plan-reviewer` pass caught real, independently-verified defects a second
+time — recurring value, not a fluke from ticket 1
+
+Four findings, two BLOCKING, both verified against live source before I accepted them:
+
+1. **BLOCKING, real**: my plan specified a raw `double dist[]` for Dijkstra with no stated
+   conversion back to an exact `Expr`. Verified: `src/print.c` really does print
+   `EXPR_REAL` distinctly from `EXPR_INTEGER` (`12.` vs `12`), and `assert_eval_eq` really
+   does exact string comparison — a naive implementation would have failed AC-2 (`3` expected,
+   `3.` produced) despite "looking" like a working Dijkstra. Fixed by keeping `double` for
+   internal vertex-selection only and reconstructing the exact output via `evaluate(Plus[...])`
+   over the real `Expr*` weights along the discovered path.
+2. **BLOCKING, real**: I claimed both `FindShortestPath`'s and `GraphDistance`'s existing
+   AC-11 test assertions needed to change. Verified against `tests/test_graph.c:350-359`
+   directly: the specific test graph has exactly one path between the two vertices, so BFS
+   and Dijkstra agree on `FindShortestPath`'s *path* — only `GraphDistance`'s hop-count
+   assertion actually changes. Had I followed my own plan literally, I'd have "corrected" a
+   `FindShortestPath` assertion that was already right, risking introducing a wrong expected
+   value into a passing test.
+3. **WORTH FLAGGING, real**: my hand-rolled numeric-type list for the weight-usability gate
+   omitted `EXPR_MPFR` — a live leaf type under this repo's own default build flag
+   (`USE_MPFR ?= 1`, confirmed in `makefile`) — and duplicated logic the codebase already
+   has as `expr_is_numeric_like` (`src/expr.c:412`). A weight built from a high-precision
+   real would have silently (and incorrectly, from a user's perspective) fallen back to
+   unweighted BFS.
+4. **WORTH FLAGGING, real, and a little humbling**: the "8 builtins share `graph_build_adj`"
+   count from **ticket 1's own, already-plan-reviewed and already-shipped plan** was itself
+   wrong — `StronglyConnectedComponents` doesn't call `graph_build_adj` at all (it builds its
+   own Tarjan-specific structure). The real number is 5 other builtins (7 total including
+   `FindShortestPath`/`GraphDistance`), not 8. Ticket 1's `plan-reviewer` pass never caught
+   this because it wasn't asked to re-verify that specific count against every one of the 27
+   builtins' source — it verified the *shape* of the defect (two independent choke points)
+   correctly, which was the load-bearing claim, and the raw count rode along unchecked. Left
+   ticket 1's shipped plan/test comment as historical record rather than retroactively
+   editing a merged, verified ticket for a cosmetic count; fixed in ticket 2's own plan.
+
+**Recurring-vs-first-contact signal**: the plan-reviewer pass itself is now confirmed
+recurring value, not a ticket-1 fluke — two genuinely different classes of bug (an
+arithmetic-representation gap neither `check_plan_contract.py` nor I would have caught
+unprompted, and a factual miscount inherited silently from a previously-approved document)
+on a completely independent second run. The specific failure modes were different both
+times (ticket 1: a false architectural claim about a single shared function; ticket 2: an
+arithmetic-representation gap plus a propagated miscount) — the pattern that recurs is "a
+plan reads as complete and well-cited, and a dedicated adversarial pass with fresh eyes and
+Bash/Read access to the live source still finds something wrong that I did not," not any
+one specific bug shape.
