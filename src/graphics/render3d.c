@@ -233,6 +233,21 @@ static Color shade_color(Color base, Vector3 face_normal, Vector3 light_dir) {
     };
 }
 
+/* scene_key_light — the default Plot3D/Graphics3D key-light direction (the
+ * surface->light vector used by shade_color). Dominated by world-up (render +y,
+ * which to_v3 maps from the plotted height z), so upward-facing surfaces — the
+ * tops the viewer looks down on — are the brightest at EVERY camera angle,
+ * including looking straight down, where a camera-up-based light collapses and
+ * darkens the tops. A small camera-relative lateral (`right`) and toward-viewer
+ * (`-fwd`) tilt adds surface form without darkening the tops. Shared by both
+ * render paths so their lighting cannot drift apart. */
+static Vector3 scene_key_light(Vector3 right, Vector3 fwd) {
+    Vector3 world_up = (Vector3){ 0.0f, 1.0f, 0.0f };
+    return Vector3Normalize(
+        Vector3Add(Vector3Add(world_up, Vector3Scale(right, 0.30f)),
+                   Vector3Scale(fwd, -0.25f)));
+}
+
 /* Reads a 3-coordinate {x,y,z} List into a Vector3 (already axis-remapped). */
 static bool expr_point3(const Expr* e, Vector3* out) {
     double x, y, z;
@@ -981,17 +996,13 @@ void graphics3d_show(const Expr* graphics3d_expr) {
         BeginDrawing();
         ClearBackground(to_raylib(opts.background));
 
-        /* Camera-relative light direction: fixed in view space so the shading
-         * updates as the user orbits.  Light is at upper-right-front in camera
-         * space ({0.3, 1.0, 0.5} right/up/forward), transformed to world space
-         * via the camera's local axes, then normalised. */
+        /* Overhead key light (see scene_key_light): world-up dominated so the
+         * surface tops stay brightest, with a camera-relative tilt (`right`,
+         * `-fwd`) so the shading still gives form and updates as the user
+         * orbits. */
         Vector3 fwd   = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
         Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, camera.up));
-        Vector3 cam_up = Vector3CrossProduct(right, fwd);
-        Vector3 light_dir = Vector3Normalize(
-            Vector3Add(Vector3Add(Vector3Scale(right,  0.3f),
-                                  Vector3Scale(cam_up,  1.0f)),
-                                  Vector3Scale(fwd,     0.5f)));
+        Vector3 light_dir = scene_key_light(right, fwd);
 
         BeginMode3D(camera);
         rlDisableBackfaceCulling(); /* surfaces are visible from both sides */
@@ -1208,11 +1219,7 @@ void graphics3d_render_in_region(const Expr* graphics3d_expr,
 
     Vector3 fwd    = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
     Vector3 right  = Vector3Normalize(Vector3CrossProduct(fwd, camera.up));
-    Vector3 cam_up = Vector3CrossProduct(right, fwd);
-    Vector3 light_dir = Vector3Normalize(
-        Vector3Add(Vector3Add(Vector3Scale(right,  0.3f),
-                              Vector3Scale(cam_up,  1.0f)),
-                              Vector3Scale(fwd,     0.5f)));
+    Vector3 light_dir = scene_key_light(right, fwd);  /* overhead key light */
 
     /* Hover trace: gated to the region and to "no drag in progress" (own or
      * the caller's, per the Left/Right/Middle state also gating
