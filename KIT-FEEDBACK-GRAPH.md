@@ -778,3 +778,138 @@ arithmetic-representation gap plus a propagated miscount) — the pattern that r
 plan reads as complete and well-cited, and a dedicated adversarial pass with fresh eyes and
 Bash/Read access to the live source still finds something wrong that I did not," not any
 one specific bug shape.
+
+---
+
+## GR-01, reproduction (companion to the narrative above)
+
+Requested by a peer session as a standalone repro: exact sequence, no narrative framing,
+written so someone who never saw this session can reproduce it from the text alone.
+
+**Environment**: macOS (Darwin 25.6.0), Claude Code CLI, this Claude session running as an
+autonomous agent (no human typing at an interactive terminal during this sequence).
+
+**What was installed, exactly**, before any invocation was attempted:
+```
+$ claude plugin marketplace add https://github.com/ms-bain/ai-sdlc-starterkit.git
+✔ Successfully added marketplace: ais (declared in user settings)
+
+$ claude plugin install ais@ais
+✔ Successfully installed plugin: ais@ais (scope: user)
+
+$ claude plugin list
+  ❯ ais@ais
+    Version: 8.0.0
+    Scope: user
+    Status: ✔ enabled
+```
+`~/.claude/plugins/installed_plugins.json` confirms: `"ais@ais"`, `"scope": "user"`,
+`"version": "8.0.0"`, `"gitCommitSha": "6a33626d600c28c60c930386b1e9a93212873592"`.
+Installation itself reported no error at any step.
+
+**What was typed/attempted, in order:**
+1. `Skill({skill: "kit-setup"})` — the harness's own skill-invocation tool, called by name,
+   immediately after the install above completed, in the same session.
+   → **Result**: `Unknown skill: kit-setup`. Exact error text.
+2. To rule out "maybe only the *coordinating* session's skill list is stale, and a freshly
+   spawned agent would see it" — dispatched a brand-new sub-agent (via the `Agent` tool,
+   `subagent_type: general-purpose`, no shared context with this session) with a diagnostic
+   prompt asking it to report verbatim which skills/commands were available to it, and
+   whether anything from a plugin named "ais" appeared.
+   → **Result**: the sub-agent's available-skills listing contained none of `kit-setup`,
+   `research-codebase`, `create-plan`, `implement-plan`, `verify-implementation`,
+   `setup-kit`, or `guide-me`, and it reported no plugin labeled or prefixed "ais" visible
+   anywhere in what it could see.
+3. Checked whether the CLI itself exposes a way to force this outside the Skill tool:
+   `claude plugin --help` — the full subcommand list is `details / disable / enable / eval /
+   help / init|new / install|i / list / marketplace`. **No `reload` subcommand exists.**
+
+**The precise point where invocation failed**: the Skill tool's set of invocable names is
+fixed at session start (delivered once, in this session's opening system-reminder) and is
+not re-read after a mid-session `claude plugin install`. This is not scoped to *this*
+session's own skill list only — step 2 shows a **freshly spawned, independent sub-agent**
+also could not see the newly-installed plugin's skills, meaning the unavailability is a
+property of the running harness process (or its skill-index snapshot), not of any one
+agent's local state.
+
+**What the operator had to know that nothing told them at the point of failure**: the error
+message `Unknown skill: kit-setup` gives no indication that the skill exists, is installed,
+and simply isn't loaded yet — it reads identically to "this skill was never installed" or
+"you mistyped the name." Nothing in `claude plugin install`'s own success output
+(`✔ Successfully installed plugin: ais@ais (scope: user)`) warns that a further step is
+needed before the installed content is usable. The information that a further step *is*
+needed exists, but only inside the plugin's own `README.md:158-170` (`## Updating`), which:
+(a) is a document about *updating an already-usable install*, not about first-time
+installation reaching a usable state, and (b) is not surfaced by `claude plugin install`
+itself, by any CLI help text, or by any error message encountered in this sequence — it can
+only be found by an operator who already suspects this specific failure mode and goes
+looking for it in the plugin's own docs.
+
+**Would a reload, restart, or reinstall have fixed it? Stated precisely, not guessed at:**
+- **Reinstall** (`claude plugin install ais@ais` again): not tested; no reason from anything
+  observed to expect a second install to behave differently from the first, since the
+  installed-plugin state was already correct (`claude plugin list` showed it enabled at
+  8.0.0 throughout).
+- **`/reload-plugins`**: the plugin's own `README.md:167` names this as the fix ("A plugin
+  only (re)loads at session start — apply the update"). **This was not verified empirically
+  in this session** — `/reload-plugins` is not a `claude plugin` CLI subcommand (confirmed
+  by `--help`, above), is not a name the Skill tool recognizes, and no other tool available
+  in this session can invoke it. So: the claim that `/reload-plugins` fixes this is the
+  plugin's own documented claim, not something this session confirmed by making it work.
+- **A full session restart** (ending this session, starting a new one against the same
+  installed plugin): not tested either, for the same reason — doing so would have ended
+  this session. Inferred, not verified, from the README's own framing ("a plugin only
+  (re)loads at session start") that a fresh session start should pick up the install.
+- **What is confirmed, not inferred**: the workaround actually used and repeatedly
+  successful throughout this session was reading the plugin's shipped `.md` files directly
+  from `~/.claude/plugins/cache/ais/ais/8.0.0/{commands,skills}/` with the `Read` tool and
+  manually following their instructions (including running their referenced Python scripts
+  directly via `Bash`), never invoking them as an actual Skill-tool call.
+
+## GR-14, reproduction (companion to the narrative above)
+
+Requested by a peer session, same treatment, shorter: a peer separately identified this as
+a live recurrence of a documented pattern in the kit's own `ADR-0004` — not independently
+confirmed here (this session has not read that ADR's text), reported only as context the
+peer supplied, not as a claim this session verified.
+
+**Command run, exactly, from the mathilda repo root**, using the shipped script directly
+from the plugin cache (per GR-01, since Skill-tool dispatch of `static-first-review` was
+never available):
+```
+$ bash ~/.claude/plugins/cache/ais/ais/8.0.0/skills/static-first-review/scripts/run_static.sh .
+```
+
+**Output, exactly** (stdout JSON, stderr finding text):
+```
+{"ran":[{"tool":"ruff","exit":1,"finding_lines":446}],
+ "absent":["flake8","bandit","eslint","tsc","semgrep (no local ruleset — ...)"],
+ "aborted":[{"tool":"mypy","exit":2,"reason":"Duplicate module named — checked nothing"}],
+ "detected_unhandled":["shell (*.sh present)"],
+ "tools_with_errors":0,"tools_with_warnings":1,"tools_aborted":1}
+```
+Exit code: `1`. All 446 `ruff` finding-lines were inside `benchmarks/*.py` and
+`.claude/skills/**/*.py` — the repo's incidental Python scaffolding. **Zero finding-lines,
+zero mentions, and zero entries in `detected_unhandled` referenced `src/` or any `.c`/`.h`
+file** — the ~365 kLoC, ~915-file C99 codebase that is the actual repository under review.
+
+**The precise point of failure**: `scripts/kit_languages.py`'s `detect_unhandled_languages()`
+checks a language's `manifests` list via `(repo / manifest).is_file()` — a single check at
+the repository root, no recursion — for every language without a `glob_signal` (only `shell`
+and `terraform` have one, and only those two get a recursive glob). The `c-cmake` language
+entry's only manifest is `CMakeLists.txt`; this repo's only `CMakeLists.txt` is at
+`tests/CMakeLists.txt`, not the root, so the check returns false and `c-cmake` is never
+added to `detected_unhandled`. Verified directly by reading the function's source (not
+inferred from behavior alone) at the version installed (`8.0.0`); re-verified against a
+freshly cloned upstream `8.1.3` after a peer flagged that version existed (see GR-15) — 8.1.3
+adds a separate `"make"` language entry with a `glob_signal` that *does* now catch this
+repo's root `makefile` and appears in `detected_unhandled`, but `c-cmake`'s own manifest
+check is unchanged and would still miss `tests/CMakeLists.txt` specifically.
+
+**What had to be done instead**: this session's actual static-analysis signal for the C99
+code under review came entirely from the repository's own tooling
+(`make check-c99` / `tools/check_c99_portability.py`, `make check-packed-aware`), run
+directly via `Bash`, not from anything `static-first-review` produced. The script's exit-1,
+read at face value with no further investigation, would have been reported as "static
+analysis failed" for a change that in fact had zero static-analysis coverage at all — the
+opposite conclusion from what the exit code implies.
