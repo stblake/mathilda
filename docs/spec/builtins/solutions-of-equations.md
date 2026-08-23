@@ -872,8 +872,37 @@ degenerate branch, and it handles inequalities over the reals.
   post-pass: any undecidable comparison leaves the (already-correct) unmerged form.
   **Soundness over completeness**: an undecidable sign/ordering (the
   real-algebraic oracle returning "unknown", or FLINT absent), an irrational base
-  breakpoint, an un-emittable fibre, or three or more effective variables all make
-  `Reduce` decline (stay unevaluated) rather than risk a wrong formula.
+  breakpoint, or an un-emittable fibre all make `Reduce` decline (stay
+  unevaluated) rather than risk a wrong formula.
+- **Multivariate nonlinear over Reals, three or more variables** (recursive
+  CAD, Phase 6d): the projection/lift core is generalized to any number of
+  effective variables. An iterated McCallum projection builds the projection
+  stack (eliminating the variables from last to first), and the base sign diagram
+  is lifted by a recursive descent -- substitute each cell's sample, isolate the
+  next variable's roots, recurse -- with partial-CAD pruning at every level and
+  the innermost dimension merged into a symbolic region. Examples:
+  `Reduce[x^2 + y^2 + z^2 < 1, {x, y, z}, Reals]` -> one clean nested conjunction
+  (`-1 < x < 1 && -Sqrt[1-x^2] < y < Sqrt[1-x^2] && -Sqrt[1-x^2-y^2] < z <
+  Sqrt[1-x^2-y^2]`, radicals in Solve's surface form);
+  `Reduce[x^2 + y^2 + z^2 <= 1, {x, y, z}, Reals]` -> the same with each range
+  closed (`-1 <= x <= 1 && ... && ...`);
+  `Reduce[x y z > 0, {x, y, z}, Reals]` -> the positive octants (factored by the
+  sign of `x`); `Reduce[x^2 < 1 && y^2 < 1 && z^2 < 1, {x, y, z}, Reals]` ->
+  `-1 < x < 1 && -1 < y < 1 && -1 < z < 1`; `Reduce[x^2 + y^2 + z^2 >= 0, ...] ->
+  True`; `Reduce[x^2 + y^2 + z^2 < 0, ...] -> False`. An **n-D boundary merge**
+  (Stage B, the recursive generalization of the two-variable merge) closes a
+  non-strict region's outer ranges by absorbing the boundary sections into the
+  adjacent interval; it is a cosmetic post-pass decided by sampling, so any
+  undecidable comparison leaves the already-correct unmerged form, and strict
+  regions stay open. **v1 scope** (rational-fibre regime): a breakpoint at any
+  non-innermost level, given the rational assignment above it, must be rational,
+  so origin-centred balls/spheres, sign-octants and axis-aligned boxes are solved
+  while a problem whose interior sample yields an irrational fibre declines
+  (real-algebraic-coefficient fibre isolation is a later phase) -- this includes
+  `x^2+y^2+z^2 <= 2` (base `+/-Sqrt[2]`) and, notably, an inequality constraining
+  the **outermost** variable (`x^2+y^2+z^2 <= 1 && x <= 0` shifts the base sample
+  off the origin, so the fibre becomes irrational). An interval nullification also
+  declines (McCallum well-orientedness augmentation is deferred).
 - **Integers / Rationals domain**: reuses the `Solve[..., dom]` Diophantine engine
   and reformats its solution list into logical form -- an `Or` of `And`s of
   `var == value` atoms, with `Element[C[k], dom]` for a generated parameter.
@@ -887,9 +916,9 @@ degenerate branch, and it handles inequalities over the reals.
 Rational-function relations whose canonicalisation would clear a variable
 denominator (e.g. `1/x < 1`) are declined (left unevaluated) rather than answered
 from the polynomial numerator alone, which would be unsound. Statements that
-require an engine not yet wired (three-or-more-variable CAD, nonlinear
-multivariate equations over Complexes, and quantifier elimination) also remain
-unevaluated; those engines land in the later phases of the plan.
+require an engine not yet wired (nonlinear multivariate equations over Complexes,
+and quantifier elimination) also remain unevaluated; those engines land in the
+later phases of the plan.
 
 ## SolveAlways
 

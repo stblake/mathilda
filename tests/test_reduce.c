@@ -612,14 +612,66 @@ static void test_cad_real(void) {
     run_test("Reduce[x^2 > 1, {x, y}, Reals]",
              "Or[Less[x, -1], Greater[x, 1]]");
 
-    /* nv >= 3 is deferred (Phase 6d): declines, never a wrong answer. */
-    run_test("Reduce[x^2 + y^2 + z^2 < 1, {x, y, z}, Reals]",
-             "Reduce[Less[Plus[Power[x, 2], Power[y, 2], Power[z, 2]], 1], List[x, y, z], Reals]");
-
     /* Nonlinear multivariate equation over Complexes still needs the (deferred)
      * equational CAD route: declines. */
     run_test("Reduce[x^2 + y^2 == 1, {x, y}]",
              "Reduce[Equal[Plus[Power[x, 2], Power[y, 2]], 1], List[x, y]]");
+}
+
+/* Phase 6d: n-variable (nu>=3) CAD over the Reals (recursive McCallum
+ * projection + lift).  Output for STRICT inequalities is the clean nested form
+ * (no boundary sections); CLOSED regions currently emit a correct, verbose Or of
+ * cells (the n-D boundary merge that would close an outer range is deferred).
+ * The semantic corpus (reduce_corpus.m) certifies the closed/verbose cases by
+ * sample-point equivalence; here we pin the stable clean forms and the
+ * True/False/decline invariants. */
+static void test_cad_nvar(void) {
+    /* Unsatisfiable / universal collapse. */
+    run_test("Reduce[x^2 + y^2 + z^2 < 0, {x, y, z}, Reals]", "False");
+    run_test("Reduce[x^2 + y^2 + z^2 >= 0, {x, y, z}, Reals]", "True");
+
+    /* Strict unit ball: one clean nested conjunction, bounds symbolic in the
+     * outer variables. */
+    run_test("Reduce[x^2 + y^2 + z^2 < 1, {x, y, z}, Reals]",
+             "And[Inequality[-1, Less, x, Less, 1], "
+             "Inequality[Times[Rational[-1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]], "
+             "Less, y, Less, "
+             "Times[Rational[1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]], "
+             "Inequality[Times[Rational[-1, 2], Power[Times[-4, Plus[-1, Power[x, 2], Power[y, 2]]], Rational[1, 2]]], "
+             "Less, z, Less, "
+             "Power[Plus[1, Times[-1, Power[x, 2]], Times[-1, Power[y, 2]]], Rational[1, 2]]]]");
+
+    /* Closed unit ball: the n-D boundary merge (Stage B) closes each range to a
+     * non-strict nested conjunction (-1 <= x <= 1 && ... && ...). */
+    run_test("Reduce[x^2 + y^2 + z^2 <= 1, {x, y, z}, Reals]",
+             "And[Inequality[-1, LessEqual, x, LessEqual, 1], "
+             "Inequality[Times[Rational[-1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]], "
+             "LessEqual, y, LessEqual, "
+             "Times[Rational[1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]], "
+             "Inequality[Times[Rational[-1, 2], Power[Times[-4, Plus[-1, Power[x, 2], Power[y, 2]]], Rational[1, 2]]], "
+             "LessEqual, z, LessEqual, "
+             "Power[Plus[1, Times[-1, Power[x, 2]], Times[-1, Power[y, 2]]], Rational[1, 2]]]]");
+
+    /* Open axis-aligned box: three independent one-variable ranges. */
+    run_test("Reduce[x^2 < 1 && y^2 < 1 && z^2 < 1, {x, y, z}, Reals]",
+             "And[Inequality[-1, Less, x, Less, 1], Inequality[-1, Less, y, Less, 1], "
+             "Inequality[-1, Less, z, Less, 1]]");
+
+    /* Sign product of three lines: the positive octants, factored by the sign
+     * of x (the merge groups each x-sector's y/z sub-decomposition). */
+    run_test("Reduce[x y z > 0, {x, y, z}, Reals]",
+             "Or[And[Less[x, 0], Or[And[Less[y, 0], Greater[z, 0]], And[Greater[y, 0], Less[z, 0]]]], "
+             "And[Greater[x, 0], Or[And[Less[y, 0], Less[z, 0]], And[Greater[y, 0], Greater[z, 0]]]]]");
+
+    /* Product of two planes: two open wedges. */
+    run_test("Reduce[(x - y) (y - z) > 0, {x, y, z}, Reals]",
+             "Or[And[Less[y, x], Less[z, y]], And[Greater[y, x], Greater[z, y]]]");
+
+    /* Irrational base breakpoint (+/-Sqrt[2]) is outside the v1 rational-fibre
+     * regime: declines (Phase 6b), never a wrong answer. */
+    run_test("Reduce[x^2 + y^2 + z^2 <= 2, {x, y, z}, Reals]",
+             "Reduce[LessEqual[Plus[Power[x, 2], Power[y, 2], Power[z, 2]], 2], "
+             "List[x, y, z], Reals]");
 }
 
 int main(void) {
@@ -640,6 +692,7 @@ int main(void) {
     TEST(test_inequality_defaults_reals);
     TEST(test_decline_soundness);
     TEST(test_cad_real);
+    TEST(test_cad_nvar);
     TEST(test_wb_constant_atoms);
     TEST(test_wb_logic_fold);
     TEST(test_wb_atom_emit);

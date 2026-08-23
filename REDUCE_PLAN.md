@@ -6,13 +6,18 @@ reusing the `Solve` infrastructure and adding a CAD-based real-inequality engine
 
 ---
 
-## Status (as of 2026-08-23)
+## Status (as of 2026-08-24)
 
-Phases **0–5 are implemented, tested (`tests/test_reduce.c`), and leak-clean**, and
+Phases **0–5 are implemented, tested (`tests/test_reduce.c`), and leak-clean**;
 **Phase 6a–6c (two-variable CAD over the Reals) has landed** (`reduce_cad.{c,h}`,
-`reduce_real_util.{c,h}`); the remaining large pieces are **6d/6e (n-variable CAD +
-well-orientedness augmentation)**, **7 (quantifier elimination)** and **8 (companion
-builtins + polish)**. Implementation order followed was `0 → 1 → 2 → 3 → 5 → 4 → 6(2-var)`.
+`reduce_real_util.{c,h}`); and **Phase 6d (n-variable recursive CAD over the Reals) has landed in full**
+— Stage A (`reduce_cad_nvar` + the recursive lift) and Stage B (the n-D boundary
+merge that closes outer ranges for closed regions), all in `reduce_cad.c`, v0.088.
+The remaining pieces are **6b (real-algebraic-coefficient fibre isolation to widen
+past the rational-fibre regime)**, **6e (McCallum well-orientedness augmentation)**,
+**7 (quantifier elimination)** and **8 (companion builtins + polish)**.
+Implementation order followed was
+`0 → 1 → 2 → 3 → 5 → 4 → 6(2-var) → 6d(n-var A) → 6d(n-var B)`.
 
 | Phase | What | Status |
 |---|---|---|
@@ -22,7 +27,7 @@ builtins + polish)**. Implementation order followed was `0 → 1 → 2 → 3 →
 | 3 | Linear real systems (Fourier–Motzkin) | ✅ done |
 | 4 | Parametric linear systems (Complexes) | ✅ done |
 | 5 | Integers / Rationals | ✅ done |
-| 6 | Multivariate nonlinear CAD (Reals) | ◧ 2-var done (6a–6c); n-var (6d) + well-orientedness (6e) pending |
+| 6 | Multivariate nonlinear CAD (Reals) | ◧ 2-var done (6a–6c); n-var done (6d Stage A + Stage B n-D boundary merge, rational-fibre regime); 6b (algebraic-coeff fibres) + 6e (well-orientedness) pending |
 | 7 | Quantifier elimination (`Exists`/`ForAll`/`Resolve`) | ☐ pending |
 | 8 | Companion builtins + polish | ☐ pending |
 
@@ -129,7 +134,11 @@ reduce_univar.{c,h}        [done] Phase 2: univariate real sign diagram; Phase 5
 reduce_fm.{c,h}            [done] Phase 3: Fourier–Motzkin for linear real (in)equalities
 reduce_int.{c,h}           [done] Phase 5: Integers/Rationals adapter over Solve
 reduce_sys.{c,h}           [done] Phase 4: parametric linear systems (symbolic Gauss)
-reduce_cad.{c,h}           [pending] Phase 6: McCallum projection + partial-CAD lifting
+reduce_real_util.{c,h}     [done] shared real-algebraic primitives (qqbar sign oracle,
+                           rational-sample selection, Solve-based real-root isolation)
+reduce_cad.{c,h}           [done] Phase 6: McCallum projection + partial-CAD lifting;
+                           2-var driver (reduce_cad) + n-var recursive engine
+                           (reduce_cad_nvar) with the n-D boundary merge (Stage A+B)
 reduce_qe.{c,h}            [pending] Phase 7: Exists / ForAll / Resolve via CAD cells
 reduce_companions.{c,h}    [pending] Phase 8: LogicalExpand, FindInstance,
                            CylindricalDecomposition
@@ -478,6 +487,45 @@ original sketch. Phases 0–5 are otherwise as designed.
   a cosmetic post-pass: region-equality is decided by sampling both regions, and any
   undecidable comparison leaves the already-correct unmerged form. Non-absorbed
   breakpoints with a non-empty fibre are emitted as standalone `x==b && …` sections.
+- **Phase 6d landed as a HYBRID (Stage A), n-var path separate from the 2-var
+  driver.** Rather than the unified recursion in §4, the shipped engine keeps the
+  2-variable driver `reduce_cad` (with its boundary-merge) byte-for-byte untouched
+  and adds a separate recursive engine `reduce_cad_nvar` for `nu>=3`; the dispatcher
+  gate now routes `nu==1 → reduce_univar`, `nu==2 → reduce_cad` (unchanged),
+  `nu>=3 → reduce_cad_nvar`. The recursive engine is an iterated McCallum projection
+  stack (`PolySet pstack[]`, `cad_project_out`) plus a recursive lift
+  (`cad_recurse` over the outer levels, bottoming out at `cad_leaf` — a
+  parameter-generalized `lift_fiber`), with per-level partial-CAD pruning
+  (`cell_dead_n`) and symbolic bounds via `symbolic_branch_lvl`. **v1 scope**: the
+  rational-fibre regime — a breakpoint at any non-innermost level must be rational
+  (given the rational assignment above it), else decline (Phase 6b, deferred);
+  interval nullification bails (6e). **Emission (Stage A)** is a flat DNF of true
+  cells with the innermost dimension merged into a `YRegion`: STRICT inequalities
+  read as one clean nested conjunction, while CLOSED regions emit a correct but
+  verbose union of cells (the boundary sphere/arc/pole cells listed separately).
+  **Bugfix during 6d:** the nullification bail must be guarded by
+  `contains_symbol(factor, decomposition_var)` — a lower-variable factor vanishing
+  at its own section is not a McCallum fibre nullification (without the guard
+  `x y z > 0` wrongly declined). Tests: `test_cad_nvar` + ten `cad3-*`/`cad4-*`
+  corpus rows (form-agnostic oracle), leak-clean, `check-c99` clean.
+- **Phase 6d Stage B — n-D boundary merge (landed, v0.088).** The recursive
+  emission was restructured to build a cell TREE (`CADRegion`/`CADCell`,
+  `cad_build`) and merge over it (`cad_region_expr`), generalizing the 2-var
+  boundary-merge so a CLOSED region closes its outer ranges
+  (`x^2+y^2+z^2<=1 -> -1<=x<=1 && -Sqrt[1-x^2]<=y<=… && …`) instead of listing the
+  boundary cells; the sphere surface, closed half-ball and the 4-var closed ball
+  merge likewise, while strict regions stay open. The 2-var `templates_equal`/
+  `breakpoint_absorbable` generalize to `cad_templates_equal` (structural) and
+  `cad_absorbable`, which decides cell-equality by **sampling**: it emits both
+  cells' sub-formulas and requires them to agree on a grid drawn from the cell
+  structure (`cad_sample_cell` walks the tree, `formula_truth_at` evaluates). This
+  sampling formulation sidesteps the n-D boundary-degeneracy that a cell-lookup
+  comparison hits (coincident breakpoints when an outer value is substituted).
+  Cosmetic post-pass: any undecidable comparison leaves the already-correct
+  unmerged (verbose) form, and the corpus sample-point oracle certifies the merged
+  output equivalent to the input. The flat-DNF `cad_recurse` emission of Stage A
+  was replaced by this tree; `xyz>0` consequently reads as a nested `Or` factored
+  by the sign of the outer variable rather than a flat 4-octant list (both correct).
 
 ### Known limitations for the Phase-8 polish pass
 

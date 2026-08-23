@@ -1,65 +1,58 @@
-# Reduce — Phase 6: Cylindrical Algebraic Decomposition (Reals)
+# Reduce Phase 6d — n-variable CAD over the Reals
 
-Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-fluffy-kite.md`
+Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-fizzy-giraffe.md`
 
-Goal: 2-variable McCallum CAD for `Reduce[..., Reals]` on multivariate nonlinear
-inequalities. Soundness over completeness — undecidable → `NULL` (unevaluated).
+## Stage 0 — Baseline (golden-master must be green first)
+- [x] Build main binary + `reduce_tests` + `reduce_corpus_tests`; confirm all green (2-var pins + corpus) — green (94/94)
 
-## Step 1 — Extract shared real-algebraic primitives (refactor)  ✅
-- [x] `src/solve/reduce_real_util.h` — public API (prefixed `rru_`)
-- [x] `src/solve/reduce_real_util.c` — moved sign/sample/root helpers +
-      provenance-aware `rru_collect_roots`
-- [x] `reduce_univar.c` — includes the header, moved statics dropped, rewired
-- [x] both added to `tests/CMakeLists.txt` COMMON_SRC (+ reduce_cad.c)
-- [x] main + reduce_tests (all pass) + reduce_corpus_tests (0/67) → no regression
+## Stage A — recursive engine (hybrid: nu>=3 new path, nu==2 untouched)  ✅ DONE
+- [x] `PolySet` + `cad_project_out`; iterated McCallum stack `pstack[0..d-1]`
+- [x] `_n` helpers: `subst_n`, `is_poly_n`, `atom_truth_n`, `form_truth_n`, `cell_dead_n`
+- [x] `cad_leaf` = parameter-generalized `lift_fiber`; `symbolic_branch_lvl`/`bound_expr_lvl`
+- [x] `cad_recurse` + `cad_leaf_emit` (per-level rational gate; nullification bail; partial-CAD prune; flat `parts` DNF)
+- [x] `reduce_cad_nvar` driver; gate routes `nu>=3` there (nu==2 old path UNTOUCHED = byte-identical)
+- [x] Bugfix: only fibre-var-bearing factors trigger nullification (a lower-var factor vanishing at its section is skipped)
+- [x] **Parity gate**: 2-var pins byte-identical; corpus 103/103 (form-agnostic oracle verifies all closed/verbose cases); leak-clean; check-c99 clean
+- [ ] (stretch) unify nu==2 onto the recursive path only if it reproduces the pins byte-identically — deferred
 
-## Step 2 — CAD engine  ✅
-- [x] `src/solve/reduce_cad.{c,h}` — `reduce_cad(F, vars, nv)`
-- [x] collect + gate (PolynomialQ[{x,y}]) + factor atoms → squarefree basis B
-- [x] projection (disc_y, ldcf_y, pairwise res_y; factor; keep x-only factors)
-- [x] base x-cells (roots, order/dedup, samples; irrational-section decline)
-- [x] lift per x-cell (substitute, isolate y-roots w/ provenance, y-cells)
-- [x] truth at full sample via qqbar; DNF fold; `-2` bail; all-cells-true → True
-- [x] partial-CAD pruning (xcell_dead)
-- [x] symbolic sector emission + branch matching + decline on non-clean Solve
-- [x] soundness bails (nullification, irrational section, non-clean fiber, nv≥3)
+## Stage B — n-D boundary merge  ✅ DONE (v0.088)
+- [x] Restructure emission to a cell TREE (`CADRegion`/`CADCell`, `cad_build`) + merge (`cad_region_expr`)
+- [x] `cad_templates_equal` (structural) + `cad_absorbable` (sampling-based equality via `cad_sample_cell`/`formula_truth_at`)
+- [x] Closed regions close outer ranges: `x^2+y^2+z^2<=1 -> -1<=x<=1 && ...`; sphere surface, half-ball, 4-var closed ball; strict stay open
+- [x] Sound fallback: undecidable comparison leaves verbose form; corpus oracle certifies (105/105)
+- [x] Leak-clean (valgrind), check-c99 clean, solve_tests green, version 0.088
 
-## Step 3 — Dispatch  ✅
-- [x] `reduce.c` — `reals && nv>=2`: FM then CAD fallback; effective-var pruning in reduce_cad
-
-## Step 4 — Tests  ✅
-- [x] flipped 3 CAD placeholders; new `test_cad_real` block (pinned FullForm)
-- [x] Phase-6 corpus rows in `reduce_corpus.m` (11 new; total 77)
-- [x] reduce_tests + reduce_corpus_tests (77/77) green; solve_tests unregressed
-
-## Step 5 — Verify + docs  ✅
-- [x] `make check-c99` clean; both new TUs compile FLINT-off and MPFR-off (bail stubs)
-- [x] valgrind CAD probe — zero reduce_cad/reduce_real_util frames in lost blocks
-- [x] docs: solutions-of-equations.md + changelog 2026-08-17.md + REDUCE_PLAN status
-- [x] rebuild code-review graph; memory: project_reduce_cad_2var_engine
+## Tests / docs / hygiene
+- [ ] `tests/test_reduce.c`: flip `x^2+y^2+z^2<1` decline pin (:616-617) → solved; add <=1, >=0→True, <0→False, x y z>0, half-ball, nu==4 ball, `<=2`→decline
+- [ ] `tests/reduce_corpus.m`: flip `dec-nl-multivar3` → solved; add cad3-*/cad4-* rows
+- [ ] `reduce_cad.h` header prose (recursive engine, d>=3 rational-fibre scope)
+- [ ] docs/spec/builtins/solutions-of-equations.md (Reduce bullets + deferral paragraph)
+- [ ] changelog `docs/spec/changelog/2026-08-24.md` (verify Monday-of-ISO-week); `src/version.h` 0.086 → 0.087
+- [ ] `make check-c99`; `valgrind --leak-check=full` on corpus
 
 ## Review
-- **Engine**: 2-var McCallum CAD. Factor atoms → squarefree basis (confines
-  nullification to sections). Projection = disc/ldcf/pairwise-res, factored.
-  Base sign diagram lifted fibre-by-fibre; truth via exact qqbar oracle; symbolic
-  sector emission with per-root provenance + branch matching. Partial-CAD prune.
-- **Reuse**: extracted `reduce_real_util.{c,h}` shared by the univariate engine
-  and CAD (one exact sign/root/sample implementation) — no duplication.
-- **Soundness**: every undecidable path (qqbar -2, irrational section, interval
-  nullification, non-clean fibre Solve, nv≥3) declines to NULL. Verified sound on
-  `x^2==2 && y<x` (irrational section → decline) and nv=3 (→ decline).
-- **Correctness**: 77/77 corpus (sample-point + witness), exact unit pins, plus
-  hand-checked conics/hyperbola/parabola/products/cubic fibres. Leak-clean.
-- **Deferred (documented)**: n-var (6d), well-orientedness augmentation (6e),
-  Complexes nonlinear equations.
 
-## Step 6 — Boundary-merge pass  ✅
-- [x] structured per-cell `YRegion` (symbolic-bound segments) from `lift_fiber`
-- [x] `yregion_at_point` (template limit), `regions_equal` (sampled, sound),
-      `templates_equal`, `breakpoint_absorbable`
-- [x] merge runs of same-template interval cells; absorb interior/boundary
-      breakpoints; standalone sections for non-absorbed non-empty fibres
-- [x] closed disk → `-1<=x<=1 && ...`; half-disk → `0<=x<=1`; circle → arcs;
-      point → `x==0&&y==0`; strict stays open; punctured hole preserved
-- [x] updated unit pins + 4 new corpus rows (0/81); solve unregressed;
-      valgrind leak-clean; build + check-c99 clean
+**Delivered (Stage A):** `Reduce[..., {x1..xn}, Reals]` now solves nonlinear real
+inequalities in 3+ effective variables via a recursive McCallum-projection CAD
+(`reduce_cad_nvar` + `cad_recurse`/`cad_leaf` in `src/solve/reduce_cad.c`). The
+2-variable path is byte-identical (untouched); the new engine is a hybrid that
+reuses the shared primitives and the generalized leaf.
+
+- Strict inequalities → clean nested form (`x^2+y^2+z^2<1`, box, octant, planes).
+- Closed regions → correct but verbose union of cells (Stage-B boundary merge
+  deferred — cosmetic only; sound + complete either way).
+- v1 rational-fibre regime: irrational non-innermost breakpoints decline
+  (`x^2+y^2+z^2<=2`); interval nullification declines (6e deferred).
+- Key bugfix: only fibre-variable-bearing factors trigger the nullification bail
+  (a lower-variable factor vanishing at its own section is skipped) — this is why
+  `x y z > 0` initially declined.
+
+**Verification:** reduce_tests green (new `test_cad_nvar`); corpus 103/103
+(form-agnostic sample-point oracle certifies the verbose closed cases);
+solve_tests green (no collateral); `make check-c99` clean; valgrind leak-clean
+(only macOS ObjC-runtime baseline noise); version 0.087; docs + changelog updated.
+
+**Deferred / follow-ups:** Stage-B n-D boundary merge (close outer ranges for
+closed regions); Phase 6b (real-algebraic-coefficient fibre isolation to widen
+past the rational-fibre regime); Phase 6e (McCallum well-orientedness
+augmentation); unifying nu==2 onto the recursive path.

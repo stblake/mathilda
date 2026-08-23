@@ -107,6 +107,20 @@
   {"cad-half-upper",     x^2 + y^2 <= 1 && y >= 0,         {x, y},  Reals,     "solved"},
   {"cad-point",          x^2 + y^2 <= 0,                   {x, y},  Reals,     "solved"},
 
+  (* ---- phase 6d: n-variable (nu>=3) nonlinear inequalities over the reals ---- *)
+  {"cad3-ball-open",     x^2 + y^2 + z^2 < 1,              {x, y, z},    Reals, "solved"},
+  {"cad3-ball-closed",   x^2 + y^2 + z^2 <= 1,             {x, y, z},    Reals, "solved"},
+  {"cad3-ball-empty",    x^2 + y^2 + z^2 < 0,              {x, y, z},    Reals, False},
+  {"cad3-space",         x^2 + y^2 + z^2 >= 0,             {x, y, z},    Reals, True},
+  {"cad3-octant",        x y z > 0,                        {x, y, z},    Reals, "solved"},
+  {"cad3-box",           x^2 < 1 && y^2 < 1 && z^2 < 1,    {x, y, z},    Reals, "solved"},
+  {"cad3-planes",        (x - y) (y - z) > 0,              {x, y, z},    Reals, "solved"},
+  {"cad3-half-ball",     x^2 + y^2 + z^2 <= 1 && z >= 0,   {x, y, z},    Reals, "solved"},
+  {"cad3-sphere",        x^2+y^2+z^2 <= 1 && x^2+y^2+z^2 >= 1, {x,y,z},  Reals, "solved"},
+  {"cad3-decline-surd",  x^2 + y^2 + z^2 <= 2,             {x, y, z},    Reals, "decline"},
+  {"cad4-ball-open",     x^2 + y^2 + z^2 + w^2 < 1,        {x, y, z, w}, Reals, "solved"},
+  {"cad4-ball-closed",   x^2 + y^2 + z^2 + w^2 <= 1,       {x, y, z, w}, Reals, "solved"},
+
   (* ---- rational-function inequalities over the Reals: poles are added as
    *      breakpoints and p/q is signed as sign(p)*sign(q); poles are excluded ---- *)
   {"rat-recip-lt",       1/x < 1,                          x,       Reals,     "solved"},
@@ -125,7 +139,6 @@
   {"dec-int-unbounded2", x < 5,                            x,       Integers,  "decline"},
   {"dec-abs",            Abs[x] < 1,                       x,       Reals,     "decline"},
   {"dec-bad-domain",     x^2 == 4,                         x,       Booleans,  "decline"},
-  {"dec-nl-multivar3",   x^2 + y^2 + z^2 < 1,              {x, y, z}, Reals,   "decline"},
   {"dec-nl-eq-complex",  x^2 + y^2 == 1,                   {x, y},  Automatic, "decline"},
   {"dec-complexes-neq",  x != 0,                           x,       Automatic, "decline"},
   {"dec-complexes-conj", x^2 == 4 && x^3 == 8,             x,       Automatic, "decline"},
