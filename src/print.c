@@ -374,12 +374,12 @@ static void print_standard(Expr* e, int parent_prec) {
             printf("%s", head == SYM_DirectedEdge ? " -> " : " <-> ");
             print_standard(e->data.function.args[1], my_prec);
         }
-        else if (head == SYM_Graph && e->data.function.arg_count == 2
-                 && g_inputform_depth == 0
-                 && graph_is_list(e->data.function.args[0])
-                 && graph_is_list(e->data.function.args[1])) {
-            /* Terse summary in standard output; InputForm/FullForm fall through
-             * to the literal Graph[{...}, {...}] constructor (round-trippable). */
+        else if (head == SYM_Graph && g_inputform_depth == 0 && graph_is_valid(e)) {
+            /* Terse summary in standard output (unweighted 2-arg form, or
+             * weighted 3-arg Graph[verts, edges, EdgeWeight -> {...}]); the
+             * weight list is not shown here. InputForm/FullForm fall through
+             * to the literal Graph[{...}, {...}(, EdgeWeight -> {...})]
+             * constructor (round-trippable). */
             unsigned long nv = (unsigned long)e->data.function.args[0]->data.function.arg_count;
             unsigned long ne = (unsigned long)e->data.function.args[1]->data.function.arg_count;
             printf("Graph[<%lu %s, %lu %s>]",

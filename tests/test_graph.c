@@ -294,6 +294,90 @@ static void test_graphplot(void) {
     assert_eval_eq("Head[GraphPlot[5]]", "GraphPlot", 0);
 }
 
+/* ---- Edge weights (Graph[v,e,EdgeWeight->w], EdgeWeight, WeightedAdjacencyMatrix) ---- */
+static void test_edge_weights(void) {
+    /* AC-1: constructs and validates. */
+    assert_eval_eq("GraphQ[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}]]", "True", 0);
+
+    /* AC-2: EdgeWeight[g] returns weights in EdgeList order. */
+    assert_eval_eq("EdgeWeight[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}]]",
+                   "{5, 7}", 0);
+
+    /* AC-3: unweighted graphs default to all 1s. */
+    assert_eval_eq("EdgeWeight[Graph[{1,2,3},{1->2,2->3}]]", "{1, 1}", 0);
+    assert_eval_eq("EdgeWeight[CompleteGraph[3]]", "{1, 1, 1}", 0);
+
+    /* AC-4: WeightedAdjacencyMatrix on a directed weighted graph. */
+    assert_eval_eq(
+        "WeightedAdjacencyMatrix[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}]]",
+        "{{0, 5, 0}, {0, 0, 7}, {0, 0, 0}}", 0);
+
+    /* AC-5: undirected weighted graph -> symmetric matrix. */
+    assert_eval_eq("WeightedAdjacencyMatrix[Graph[{1,2},{1<->2},EdgeWeight->{9}]]",
+                   "{{0, 9}, {9, 0}}", 0);
+
+    /* AC-6: unweighted WeightedAdjacencyMatrix equals AdjacencyMatrix exactly. */
+    assert_eval_eq(
+        "WeightedAdjacencyMatrix[CycleGraph[4]] == AdjacencyMatrix[CycleGraph[4]]",
+        "True", 0);
+
+    /* AC-7: weight/edge count mismatch is malformed, left unevaluated. */
+    assert_eval_eq("GraphQ[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5}]]", "False", 0);
+    assert_eval_eq("Head[Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5}]]", "Graph", 0);
+
+    /* AC-8: terse summary unchanged for a weighted graph. */
+    assert_eval_eq("Graph[{1,2},{1<->2},EdgeWeight->{3}]",
+                   "Graph[<2 vertices, 1 edge>]", 0);
+
+    /* AC-9: InputForm round-trips through the parser. */
+    {
+        Expr* g = evaluate(parse_expression(
+            "Graph[{1,2},{1<->2},EdgeWeight->{3}]"));
+        ASSERT(g != NULL);
+        Expr* wrap_args[1] = { expr_copy(g) };
+        Expr* wrap = expr_new_function(expr_new_symbol("InputForm"), wrap_args, 1);
+        char* s = expr_to_string(wrap);
+        Expr* g2 = evaluate(parse_expression(s));
+        ASSERT(expr_eq(g, g2));
+        free(s);
+        expr_free(wrap);
+        expr_free(g);
+        expr_free(g2);
+    }
+    assert_eval_eq("InputForm[Graph[{1,2},{1<->2},EdgeWeight->{3}]]",
+                   "Graph[{1, 2}, {1 <-> 2}, EdgeWeight -> {3}]", 0);
+
+    /* AC-11: the 8 graph_build_adj-routed builtins evaluate normally (weights
+     * ignored) against a weighted graph, not left unevaluated -- the
+     * plan-reviewer-caught defect (graph_build_adj is a second, independent
+     * choke point from graph_is_valid) regression-tested directly. */
+    const char* wg = "Graph[{1,2,3},{1->2,2->3},EdgeWeight->{5,7}]";
+    char buf[256];
+    snprintf(buf, sizeof(buf), "FindShortestPath[%s,1,3]", wg);
+    assert_eval_eq(buf, "{1, 2, 3}", 0);
+    snprintf(buf, sizeof(buf), "GraphDistance[%s,1,3]", wg);
+    assert_eval_eq(buf, "2", 0);
+    snprintf(buf, sizeof(buf), "ConnectedComponents[%s]", wg);
+    assert_eval_eq(buf, "{{1, 2, 3}}", 0);
+    snprintf(buf, sizeof(buf), "WeaklyConnectedComponents[%s]", wg);
+    assert_eval_eq(buf, "{{1, 2, 3}}", 0);
+    snprintf(buf, sizeof(buf), "Head[FindSpanningTree[%s]]", wg);
+    assert_eval_eq(buf, "Graph", 0);
+    const char* wug = "Graph[{1,2,3},{1<->2,2<->3},EdgeWeight->{5,7}]";
+    snprintf(buf, sizeof(buf), "ConnectedGraphQ[%s]", wug);
+    assert_eval_eq(buf, "True", 0);
+    snprintf(buf, sizeof(buf), "VertexConnectivity[%s]", wug);
+    assert_eval_eq(buf, "1", 0);
+
+    /* Non-goal, regression-tested: derived-vertex weighted construction
+     * (Graph[e, EdgeWeight->w], no explicit vertex list) is not accepted --
+     * fails safe (unevaluated), not silently. */
+    assert_eval_eq("Head[Graph[{1->2,2->3},EdgeWeight->{1,1}]]", "Graph", 0);
+
+    /* Regression: unweighted graphs and existing builtins are unaffected. */
+    assert_eval_eq("EdgeCount[CompleteGraph[5]]", "10", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -313,6 +397,7 @@ int main(void) {
     TEST(test_components);
     TEST(test_spanning_and_connectivity);
     TEST(test_graphplot);
+    TEST(test_edge_weights);
 
     printf("All graph tests passed!\n");
     return 0;

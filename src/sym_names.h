@@ -924,6 +924,8 @@ extern const char* SYM_StronglyConnectedComponents;
 extern const char* SYM_FindSpanningTree;
 extern const char* SYM_VertexConnectivity;
 extern const char* SYM_GraphPlot;
+extern const char* SYM_EdgeWeight;
+extern const char* SYM_WeightedAdjacencyMatrix;
 
 /* NumberForm + Row (numeric-display formatting) and NumberForm's option
  * names. NumberForm is a print wrapper handled in print.c; the option-name

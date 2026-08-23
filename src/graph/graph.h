@@ -8,10 +8,14 @@
  * Graphs are represented as ordinary Expr trees -- no new EXPR_* tag:
  *
  *     Graph[ List[v1, v2, ...], List[edge1, edge2, ...] ]
+ *     Graph[ List[v1, v2, ...], List[edge1, edge2, ...], EdgeWeight -> List[w1, ...] ]
  *
  * where each edge is DirectedEdge[u, v] or UndirectedEdge[u, v]. Rule/->
  * and TwoWayRule/<-> are accepted as parse-time sugar and normalized on
- * construction. Vertices are arbitrary expressions.
+ * construction. Vertices are arbitrary expressions. The optional 3rd argument
+ * attaches a weight to each edge, matched by position (weights[i] belongs to
+ * edges[i]); a graph without it is unweighted, and every accessor treats an
+ * unweighted edge's weight as 1 (see graph_resolve_edge_weights).
  *
  * This mirrors the src/linalg/ layout: one builtin per translation unit,
  * with the builtin_* prototypes declared here and registered in graph.c.
@@ -90,11 +94,20 @@ Expr* builtin_vertex_degree(Expr* res);    /* VertexDegree[g] / [g,v]          *
 Expr* builtin_vertex_in_degree(Expr* res); /* VertexInDegree[g] / [g,v]        */
 Expr* builtin_vertex_out_degree(Expr* res);/* VertexOutDegree[g] / [g,v]       */
 Expr* builtin_directed_graph_q(Expr* res); /* DirectedGraphQ[g]                */
+Expr* builtin_edge_weight(Expr* res);      /* EdgeWeight[g]                    */
 
 /* ---- Phase 3: matrix views (linalg interop) ------------------------------- */
 Expr* builtin_adjacency_matrix(Expr* res); /* AdjacencyMatrix[g]               */
 Expr* builtin_incidence_matrix(Expr* res); /* IncidenceMatrix[g]               */
 Expr* builtin_adjacency_graph(Expr* res);  /* AdjacencyGraph[m]                */
+Expr* builtin_weighted_adjacency_matrix(Expr* res); /* WeightedAdjacencyMatrix[g] */
+
+/* Resolves g's per-edge weights in EdgeList order: a copy of the EdgeWeight
+ * list when g carries one (3-arg canonical form), else List[1, 1, ..., 1]
+ * (one per edge). NULL if g is not a valid graph. Shared by builtin_edge_weight
+ * and builtin_weighted_adjacency_matrix so the two builtins can never disagree
+ * on what "unweighted" defaults to. */
+Expr* graph_resolve_edge_weights(const Expr* g);
 
 /* ---- Phase 4: graph generators -------------------------------------------- */
 Expr* builtin_complete_graph(Expr* res);   /* CompleteGraph[n]                 */
