@@ -912,6 +912,32 @@ degenerate branch, and it handles inequalities over the reals.
   && y == 1 - 2 C[1]`. A bounded univariate inequality that Solve declines is
   enumerated over the sign diagram (`Reduce[x^2 < 10 && x > 0, x, Integers] ->
   x == 1 || x == 2 || x == 3`).
+- **Elementary real functions over Reals** (general univariate sign diagram,
+  Phase 9): a statement in one variable built from `Abs`, real radicals
+  `u^(p/q)`, rational poles, `Log`, bounded-domain inverse-trig, and the isolated
+  integer-part forms (`Floor`/`Ceiling`/`Round`, `Mod`) is solved as a union of
+  intervals and points. A statement containing such a function defaults its domain
+  to the Reals (these are real-valued constructs). `Abs` is eliminated by
+  case-splitting on each argument's sign; `Mod[u,m]` becomes `u - m*Floor[u/m]`
+  and an isolated `Floor`/`Ceiling`/`Round` relation is expanded to its defining
+  inequalities; the remaining radical/`Log`/inverse-trig atoms are placed on a
+  sign diagram whose breakpoints include the domain boundaries (radicand `==0`,
+  `Log` arg `==0`, `ArcSin` arg `==±1`), and each cell is tested under a
+  **real-domain gate** so a point where the identity holds only in ℂ is excluded.
+  Transcendental breakpoints (multiples of `Pi`) are ordered by a numeric-sign
+  fallback. Examples:
+  `Reduce[Sqrt[x+3-4Sqrt[x-1]]+Sqrt[x+8-6Sqrt[x-1]]==1, x] -> 5 <= x <= 10`;
+  `Reduce[Abs[Abs[x]-2]+Abs[Abs[x]-5]==3, x, Reals] -> -5<=x<=-2 || 2<=x<=5`;
+  `Reduce[(Abs[x+3]+Abs[x-3])/x==2, x, Reals] -> x >= 3`;
+  `Reduce[Sqrt[x^2-4]==Sqrt[x-2]Sqrt[x+2], x, Reals] -> x >= 2`;
+  `Reduce[Floor[2x-1]==3, x, Reals] -> 2 <= x < 5/2`;
+  `Reduce[Mod[x,2Pi]==x-2Pi, x, Reals] -> 2Pi <= x < 4Pi`;
+  `Reduce[ArcSin[x]+ArcCos[x]==Pi/2, x, Reals] -> -1 <= x <= 1`;
+  `Reduce[Log[x^2]==2Log[-x], x, Reals] -> x < 0`;
+  `Reduce[Abs[x]<1, x, Reals] -> -1 < x < 1`;
+  `Reduce[Sqrt[x-1]==2, x, Reals] -> x == 5`. A free parameter, an undecidable
+  sign, or an unsupported domain node declines. At a removable `0/0` singularity
+  the sound open boundary is reported (`x/Sqrt[x^2]+Sqrt[x^2]/x==2 -> x > 0`).
 
 Rational-function relations whose canonicalisation would clear a variable
 denominator (e.g. `1/x < 1`) are declined (left unevaluated) rather than answered

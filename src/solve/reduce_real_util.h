@@ -45,6 +45,17 @@ bool rru_is_polynomial(const Expr* poly, const Expr* x);
 /* Sign of poly with the single rule x -> sample applied: -1, 0, 1, or -2. */
 int rru_poly_sign_at(const Expr* poly, const Expr* x, const Expr* sample);
 
+/* Emit the union of satisfying cells of a 1-D sign diagram as a logical Expr.
+ * `bp` holds the m ascending breakpoints; `truth` has 2m+1 entries, one per cell
+ * in geometric order (interval I0, point P0, interval I1, ..., point P_{m-1},
+ * interval Im), each 1 (in the solution set) or 0.  Produces True / False / an
+ * `x REL b` / a two-sided `Inequality` chain / an `Or` of segments / a cofinite
+ * `And` of `x != b`, then one evaluate() pass to flatten.  Does not free `bp` or
+ * `truth` (the caller owns them).  Shared by the polynomial sign diagram
+ * (reduce_univar.c) and the elementary-real-function diagram (reduce_realdiag.c).
+ */
+Expr* rru_emit_sign_diagram(Expr** bp, int m, const int* truth, const Expr* x);
+
 /* Append the real roots of `poly` (isolated via Solve over Reals) to *arr,
  * growing (*arr,*n,*cap).  Returns false to bail (an unexpected Solve shape or a
  * ConditionalExpression / parametric root).

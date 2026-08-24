@@ -134,10 +134,33 @@
   {"rat-sum-recip",      x + 1/x > 2,                      x,       Reals,     "solved"},
   {"rat-chain-default",  -5 < 3 x + 7/x <= 22,             x,       Automatic, "solved"},
 
+  (* ---- Phase 9: elementary real functions over the Reals (radicals, Abs,
+   *      Log, inverse-trig, Floor, Mod) via the general sign diagram ---- *)
+  {"rf-abs-lt",          Abs[x] < 1,                       x,       Reals,     "solved"},
+  {"rf-abs-sum",         Abs[x - 2] + Abs[x - 3] == 1,     x,       Reals,     "solved"},
+  {"rf-abs-nested",      Abs[Abs[x] - 2] + Abs[Abs[x] - 5] == 3, x, Reals,     "solved"},
+  {"rf-abs-diff",        Abs[x - 3] - Abs[x + 1] == -4,    x,       Reals,     "solved"},
+  {"rf-abs-pole",        (Abs[x + 3] + Abs[x - 3])/x == 2, x,       Reals,     "solved"},
+  (* rf-abs-ratio Abs[x^2-1]/(x-1)==x+1 -> x<=-1||x>=1 is pinned in test_reduce.c:
+   * the (x-1) is a removable singularity Together cancels (Mathematica includes
+   * x==1 too), but the verifier's literal 0/0 at x==1 reads False. *)
+  {"rf-sqrt-eq",         Sqrt[x - 1] == 2,                 x,       Reals,     "solved"},
+  {"rf-sqrt-lt",         Sqrt[x - 1] < 5,                  x,       Reals,     "solved"},
+  {"rf-sqrt-nest",       Sqrt[x + 3 - 4 Sqrt[x - 1]] + Sqrt[x + 8 - 6 Sqrt[x - 1]] == 1, x, Reals, "solved"},
+  {"rf-sqrt-nest2",      Sqrt[x + 1 - 2 Sqrt[x]] + Sqrt[x + 16 - 8 Sqrt[x]] == 3, x, Reals, "solved"},
+  {"rf-sqrt-prod",       (2 x - 1)^2 (Sqrt[x + 4 - 4 Sqrt[x]] + Sqrt[x + 9 - 6 Sqrt[x]] - 1) == 0, x, Reals, "solved"},
+  {"rf-sqrt-square",     Sqrt[(x^2 - 4)^2] == 4 - x^2,     x,       Reals,     "solved"},
+  {"rf-floor-eq",        Floor[2 x - 1] == 3,              x,       Reals,     "solved"},
+  {"rf-mod-self",        Mod[x, 4] == x,                   x,       Reals,     "solved"},
+  (* NB: cases whose equation is an identity in C off the real domain (e.g.
+   * ArcSin[x]+ArcCos[x]==Pi/2 at x=2, or Sqrt[x^2-4]==Sqrt[x-2]Sqrt[x+2] at x=0)
+   * are pinned in test_reduce.c instead: the corpus verifier samples the input
+   * in C, where it reads True outside the real solution set. *)
+
   (* ---- soundness invariant: these MUST decline (never a guessed formula) ---- *)
   {"dec-int-unbounded",  x > 0,                            x,       Integers,  "decline"},
   {"dec-int-unbounded2", x < 5,                            x,       Integers,  "decline"},
-  {"dec-abs",            Abs[x] < 1,                       x,       Reals,     "decline"},
+  {"dec-rf-freeparam",   Sqrt[x] == a,                     x,       Reals,     "decline"},
   {"dec-bad-domain",     x^2 == 4,                         x,       Booleans,  "decline"},
   {"dec-nl-eq-complex",  x^2 + y^2 == 1,                   {x, y},  Automatic, "decline"},
   {"dec-complexes-neq",  x != 0,                           x,       Automatic, "decline"},

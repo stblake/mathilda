@@ -426,8 +426,6 @@ static void test_decline_soundness(void) {
     run_test("Reduce[x < 5, x, Integers]", "Reduce[Less[x, 5], x, Integers]");
     run_test("Reduce[x^2 > 1, x, Integers]",
              "Reduce[Greater[Power[x, 2], 1], x, Integers]");
-    /* Non-polynomial atom. */
-    run_test("Reduce[Abs[x] < 1, x, Reals]", "Reduce[Less[Abs[x], 1], x, Reals]");
     /* Unsupported / unknown domains. */
     run_test("Reduce[x^2 == 4, x, Booleans]",
              "Reduce[Equal[Power[x, 2], 4], x, Booleans]");
@@ -674,6 +672,58 @@ static void test_cad_nvar(void) {
              "List[x, y, z], Reals]");
 }
 
+/* ------------------------------------------------------------------ *
+ *  Phase 9: elementary real functions (radicals, Abs, Log,           *
+ *  inverse-trig, Floor/Mod) over the Reals via the general sign      *
+ *  diagram + preprocessing.  Sample-verified in reduce_corpus.m;     *
+ *  a few representative outputs are pinned here.                     *
+ * ------------------------------------------------------------------ */
+
+static void test_real_functions(void) {
+    /* Nested radicals: the equation is an identity on an interval. */
+    run_test("Reduce[Sqrt[x + 3 - 4 Sqrt[x - 1]] + Sqrt[x + 8 - 6 Sqrt[x - 1]] == 1, x, Reals]",
+             "Inequality[5, LessEqual, x, LessEqual, 10]");
+    /* A squared polynomial factor contributes an isolated solution point. */
+    run_test("Reduce[(2 x - 1)^2 (Sqrt[x + 4 - 4 Sqrt[x]] + Sqrt[x + 9 - 6 Sqrt[x]] - 1) == 0, x, Reals]",
+             "Or[Equal[x, Rational[1, 2]], Inequality[4, LessEqual, x, LessEqual, 9]]");
+    /* Nested Abs. */
+    run_test("Reduce[Abs[Abs[x] - 2] + Abs[Abs[x] - 5] == 3, x, Reals]",
+             "Or[Inequality[-5, LessEqual, x, LessEqual, -2], "
+             "Inequality[2, LessEqual, x, LessEqual, 5]]");
+    /* Abs numerator over a pole. */
+    run_test("Reduce[(Abs[x + 3] + Abs[x - 3])/x == 2, x, Reals]", "GreaterEqual[x, 3]");
+    /* Radical domain intersection. */
+    run_test("Reduce[Sqrt[x^2 - 4] == Sqrt[x - 2] Sqrt[x + 2], x, Reals]", "GreaterEqual[x, 2]");
+    /* Sqrt of a perfect square -> |.|. */
+    run_test("Reduce[Sqrt[(x^2 - 4)^2] == 4 - x^2, x, Reals]",
+             "Inequality[-2, LessEqual, x, LessEqual, 2]");
+    /* Floor via defining inequalities. */
+    run_test("Reduce[Floor[2 x - 1] == 3, x, Reals]",
+             "Inequality[2, LessEqual, x, Less, Rational[5, 2]]");
+    /* Mod -> Floor isolation (rational modulus). */
+    run_test("Reduce[Mod[x, 4] == x, x, Reals]", "Inequality[0, LessEqual, x, Less, 4]");
+    /* Mod with a transcendental modulus: transcendental breakpoints. */
+    run_test("Reduce[Mod[x, 2 Pi] == x - 2 Pi, x, Reals]",
+             "Inequality[Times[2, Pi], LessEqual, x, Less, Times[4, Pi]]");
+    /* Inverse-trig identity, on its bounded domain. */
+    run_test("Reduce[ArcSin[x] + ArcCos[x] == Pi/2, x, Reals]",
+             "Inequality[-1, LessEqual, x, LessEqual, 1]");
+    /* Log identity valid only on the real domain (x < 0). */
+    run_test("Reduce[Log[x^2] == 2 Log[-x], x, Reals]", "Less[x, 0]");
+    /* Abs inequality (previously declined). */
+    run_test("Reduce[Abs[x] < 1, x, Reals]", "Inequality[-1, Less, x, Less, 1]");
+    /* Simple radical equation / inequality (previously echoed unsolved). */
+    run_test("Reduce[Sqrt[x - 1] == 2, x, Reals]", "Equal[x, 5]");
+    run_test("Reduce[Sqrt[x - 1] < 5, x, Reals]", "Inequality[1, LessEqual, x, Less, 26]");
+
+    /* Soundness: an out-of-domain point where the identity holds in C must be
+     * EXCLUDED (ArcSin[2]+ArcCos[2]==Pi/2 is True in C but x=2 is not real). */
+    run_test("Reduce[ArcSin[x] + ArcCos[x] == Pi/2 && x > 3/2, x, Reals]", "False");
+    /* Soundness: a free parameter declines rather than guessing. */
+    run_test("Reduce[Sqrt[x] == a, x, Reals]",
+             "Reduce[Equal[Power[x, Rational[1, 2]], a], x, Reals]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -691,6 +741,7 @@ int main(void) {
     TEST(test_rational_domain);
     TEST(test_inequality_defaults_reals);
     TEST(test_decline_soundness);
+    TEST(test_real_functions);
     TEST(test_cad_real);
     TEST(test_cad_nvar);
     TEST(test_wb_constant_atoms);

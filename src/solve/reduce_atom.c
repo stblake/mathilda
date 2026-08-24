@@ -83,6 +83,28 @@ static Expr* sign_normalize(Expr* poly) {
         (Expr*[]){ expr_new_integer(-1), poly }, 2));
 }
 
+/* True iff `e` contains a transcendental head whose `Together` simplification
+ * invokes complex-branch identities that are unsound over the reals (e.g.
+ * Together[Log[x^2] - 2 Log[-x]] collapses to the constant -2 I Pi, which is
+ * WRONG for real x < 0 where the difference is 0).  For such atoms canonical_poly
+ * keeps the plain evaluated difference instead of running Together, so the real
+ * sign-diagram engine sees the honest expression. */
+static bool contains_branch_transcendental(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_Log || h == SYM_ArcSin || h == SYM_ArcCos || h == SYM_ArcTan
+            || h == SYM_ArcCot || h == SYM_ArcSec || h == SYM_ArcCsc
+            || h == SYM_ArcSinh || h == SYM_ArcCosh || h == SYM_ArcTanh
+            || h == SYM_ArcCoth || h == SYM_ArcSech || h == SYM_ArcCsch)
+            return true;
+    }
+    if (contains_branch_transcendental(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_branch_transcendental(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* den := Denominator[Together[lhs - rhs]], evaluated.  Returns the owned
  * denominator polynomial when it is NOT a nonzero numeric constant -- i.e. the
  * relation is a genuine rational function whose poles and denominator sign
@@ -93,6 +115,11 @@ static Expr* sign_normalize(Expr* poly) {
 static Expr* canonical_denom(const Expr* lhs, const Expr* rhs) {
     Expr* diff = expr_new_function(expr_new_symbol(SYM_Subtract),
         (Expr*[]){ expr_copy((Expr*)lhs), expr_copy((Expr*)rhs) }, 2);
+    /* Branch-cut transcendentals: skip Together, treat the denominator as the
+     * trivial constant 1 (no pole structure to recover). */
+    Expr* d0 = eval_and_free(expr_copy(diff));
+    if (contains_branch_transcendental(d0)) { expr_free(d0); expr_free(diff); return NULL; }
+    expr_free(d0);
     Expr* tog = expr_new_function(expr_new_symbol(SYM_Together), (Expr*[]){ diff }, 1);
     Expr* den = eval_and_free(expr_new_function(expr_new_symbol(SYM_Denominator),
         (Expr*[]){ tog }, 1));
@@ -116,8 +143,13 @@ static Expr* canonical_denom(const Expr* lhs, const Expr* rhs) {
 static Expr* canonical_poly(const Expr* lhs, const Expr* rhs) {
     Expr* diff = expr_new_function(expr_new_symbol(SYM_Subtract),
         (Expr*[]){ expr_copy((Expr*)lhs), expr_copy((Expr*)rhs) }, 2);
+    /* Branch-cut transcendentals (Log, inverse trig/hyperbolic): Together would
+     * apply complex-branch identities unsound over the reals, so keep the plain
+     * evaluated difference as the atom polynomial. */
+    Expr* d0 = eval_and_free(diff);
+    if (contains_branch_transcendental(d0)) return d0;
     Expr* tog  = expr_new_function(expr_new_symbol(SYM_Together),
-        (Expr*[]){ diff }, 1);
+        (Expr*[]){ d0 }, 1);
     Expr* num  = expr_new_function(expr_new_symbol(SYM_Numerator),
         (Expr*[]){ tog }, 1);
     return eval_and_free(num);

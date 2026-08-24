@@ -19,6 +19,8 @@
 #include "reduce_int.h"
 #include "reduce_sys.h"
 #include "reduce_cad.h"
+#include "reduce_realfn.h"
+#include "reduce_realdiag.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -108,11 +110,26 @@ Expr* builtin_reduce(Expr* res) {
     int nv = 0;
     Expr** vlist = collect_vars(vars, &nv);
 
+    /* Phase 9: a univariate statement built from Abs / real radicals / Log /
+     * bounded-domain inverse-trig / Floor / Mod is a real-domain object.  Route
+     * it to the Reals, and rewrite Abs (sign-split), Mod->Floor and isolated
+     * integer-part relations away so the sign-diagram engines can consume it. */
+    bool force_reals = false;
+    Expr* owned_pre = NULL;
+    if (nv == 1 && (dom == NULL
+                    || (dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Reals))
+        && reduce_stmt_has_realfn(expr, vlist[0])) {
+        force_reals = true;
+        bool changed = false;
+        Expr* pre = reduce_realfn_preprocess(expr, vlist[0], &changed);
+        if (pre) { owned_pre = pre; expr = pre; }
+    }
+
     /* Normalise the input logical combination into DNF, then run the
      * constant-atom simplifier. */
     bool ok = true;
     RForm* f = reduce_form_from_expr(expr, vlist, nv, &ok);
-    if (!ok) { rform_free(f); free(vlist); return NULL; }
+    if (!ok) { rform_free(f); free(vlist); expr_free(owned_pre); return NULL; }
 
     rform_simplify(f, vlist, nv);
 
@@ -125,8 +142,8 @@ Expr* builtin_reduce(Expr* res) {
          * was given no explicit domain defaults to the Reals -- matching
          * Mathematica.  Equations and Unequal (!=) remain over the default
          * Complexes. */
-        bool default_reals = false;
-        if (dom == NULL) {
+        bool default_reals = force_reals;
+        if (dom == NULL && !default_reals) {
             for (int i = 0; i < f->n && !default_reals; i++)
                 for (int k = 0; k < f->c[i]->n; k++)
                     if (f->c[i]->a[k].rel == R_LT || f->c[i]->a[k].rel == R_LE) {
@@ -172,8 +189,12 @@ Expr* builtin_reduce(Expr* res) {
             }
         } else if (reals && nv == 1) {
             /* Phase 2: any univariate combination of polynomial equations and
-             * inequalities over the reals -> sign diagram. */
+             * inequalities over the reals -> sign diagram.  Phase 9: when an atom
+             * is a real radical / pole / bounded-domain transcendental (so the
+             * exact polynomial engine declines), the general sign diagram takes
+             * over. */
             out = reduce_univar(f, vlist[0], vlist, nv);
+            if (!out) out = reduce_univar_general(f, vlist[0], vlist, nv);
         } else if (reals && nv >= 2) {
             /* Phase 3: a multivariate LINEAR system over the reals ->
              * Fourier-Motzkin (declines to NULL if it is not linear).  Phase 6:
@@ -185,6 +206,7 @@ Expr* builtin_reduce(Expr* res) {
 
     rform_free(f);
     free(vlist);
+    expr_free(owned_pre);
     return out;
 }
 

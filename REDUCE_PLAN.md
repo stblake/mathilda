@@ -30,6 +30,7 @@ Implementation order followed was
 | 6 | Multivariate nonlinear CAD (Reals) | ◧ 2-var done (6a–6c); n-var done (6d Stage A + Stage B n-D boundary merge, rational-fibre regime); 6b (algebraic-coeff fibres) + 6e (well-orientedness) pending |
 | 7 | Quantifier elimination (`Exists`/`ForAll`/`Resolve`) | ☐ pending |
 | 8 | Companion builtins + polish | ☐ pending |
+| 9 | Elementary real functions (radicals, `Abs`, `Log`, inverse-trig, `Floor`/`Mod`) over the Reals | ✅ done |
 
 The **[Deviations from this plan](#deviations-discovered-during-implementation)**
 section at the end records where the built code differs from the original design
@@ -142,6 +143,10 @@ reduce_cad.{c,h}           [done] Phase 6: McCallum projection + partial-CAD lif
 reduce_qe.{c,h}            [pending] Phase 7: Exists / ForAll / Resolve via CAD cells
 reduce_companions.{c,h}    [pending] Phase 8: LogicalExpand, FindInstance,
                            CylindricalDecomposition
+reduce_realfn.{c,h}        [done] Phase 9: preprocessing (Abs sign-split, Mod->Floor,
+                           integer-part isolation) + the head->real-domain table
+reduce_realdiag.{c,h}      [done] Phase 9: general univariate real sign diagram over
+                           radical / pole / bounded-domain-transcendental atoms
 ```
 
 Wire `reduce_init()` into `src/core.c` next to `solve_init()` (~line 836); add
@@ -345,6 +350,57 @@ extra projection machinery.
   CAD cell (or one Solve solution for the equational case); `{}` when unsatisfiable.
 - **`CylindricalDecomposition[expr, vars]`** — expose the CAD cell list directly (the
   `cad_extract` output before DNF merging).
+
+### 9. Elementary real functions over the Reals (`reduce_realfn.c`, `reduce_realdiag.c`)
+
+A whole class of ordinary problems — `Reduce[Sqrt[x+3-4Sqrt[x-1]]+Sqrt[x+8-6Sqrt[x-1]]==1, x]`
+→ `5 <= x <= 10`, `Reduce[Abs[Abs[x]-2]+Abs[Abs[x]-5]==5, x]`, `Reduce[Floor[2x-1]==3, x]`,
+`Reduce[ArcSin[x]+ArcCos[x]==Pi/2, x]` — used to bubble back unevaluated because every
+Phase-0 atom is a **polynomial** (`Numerator[Together[lhs-rhs]]`) and `reduce_univar`'s
+`collect_breakpoints` declines the moment it sees a non-polynomial. Phase 9 is a **general
+univariate real sign diagram** that consumes these, reusing the existing 1-D cell
+decomposition and its emission (`rru_emit_sign_diagram`, shared with `reduce_univar`).
+
+The insight: over the reals such a statement's truth is **piecewise-constant**, changing
+only at a finite set of breakpoints. Three pieces supply what the polynomial engine lacks:
+
+- **Preprocessing (`reduce_realfn_preprocess`)** — an Expr→Expr rewrite run in `reduce.c`
+  *before* `reduce_form_from_expr`: (1) `Mod[u,m]` → `u - m*Floor[u/m]`; (2) a relational
+  leaf linear in a single `Floor`/`Ceiling`/`Round` is expanded to its defining
+  inequalities (`Floor[v]==n` → `n<=v<n+1`, etc.); (3) every `Abs[u]` is eliminated by
+  **sign-splitting** into `Or[And[u>=0, …/.Abs[u]->u], And[u<0, …/.Abs[u]->-u]]` (so `Solve`
+  is never asked to invert `Abs`, which it cannot). Detecting an elementary real function of
+  the variable also **forces the domain to Reals**, so a pure radical *equation* with no
+  ordering routes here instead of the Complexes equational path.
+
+- **The head→real-domain table (`reduce_real_domain_collect`)** — the one place that
+  enumerates supported partial-domain functions: even radical `u^(p/q)` → `u>=0`; `Log[u]` →
+  `u>0`; `ArcSin`/`ArcCos[u]` → `-1<=u<=1`; `ArcTanh`/`ArcCosh`/`ArcSech` likewise; a
+  rational pole → `denom != 0`. Each contributes a per-sample **domain-gate** constraint and
+  a **boundary** whose roots are breakpoints.
+
+- **The sign diagram (`reduce_univar_general`)** — breakpoints are the soft `Solve[·==0, x,
+  Reals]` roots of every atom (descending polynomial factor structure so an isolated root of
+  a squared factor survives even when Solve returns the identity `{{}}`), the poles, and the
+  domain boundaries; sorted with an exact (qqbar) compare that **falls back to a numeric N
+  sign** for a transcendental breakpoint (a multiple of `Pi`). At one sample per cell the
+  truth oracle applies the domain gate (out-of-domain ⇒ excluded — essential: over ℝ,
+  `ArcSin[2]+ArcCos[2]==Pi/2` and `Sqrt[x^2-4]==Sqrt[x-2]Sqrt[x+2]` at x=0 both read `True`
+  in ℂ but are out of the real domain), the pole gate, then decides equations/`Unequal` by
+  `evaluate` (so a radical/transcendental identity resolves via `PossibleZeroQ`) and
+  orderings by an exact-then-numeric sign.
+
+A supporting soundness fix lives in `reduce_atom.c`: `canonical_poly`/`canonical_denom`
+**skip `Together`** when the difference contains a branch-cut transcendental (`Log`, inverse
+trig/hyperbolic), because `Together[Log[x^2]-2Log[-x]]` collapses to the constant `-2 I Pi`
+— wrong for real `x<0`, where the difference is `0`.
+
+Soundness invariant preserved throughout: a free parameter, an undecidable sign, or an
+unsupported domain node makes the engine return NULL and `Reduce` stays unevaluated. One
+documented deviation: at a **removable 0/0 singularity** the engine reports the sound open
+boundary (`x>0` for `x/Sqrt[x^2]+Sqrt[x^2]/x==2`), which can differ from Mathematica at that
+single point. Verified by `tests/test_reduce.c` (`test_real_functions`) and the sampling
+corpus (`tests/reduce_corpus.m`, `rf-*` records).
 
 ---
 

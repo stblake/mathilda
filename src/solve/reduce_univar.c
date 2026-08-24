@@ -64,36 +64,6 @@ static int form_truth_at(const RForm* F, const Expr* x, const Expr* sample) {
 }
 
 /* ------------------------------------------------------------------ *
- *  Segment emission                                                   *
- * ------------------------------------------------------------------ */
-
-static Expr* seg_to_expr(const Expr* lo, bool lo_open,
-                         const Expr* hi, bool hi_open, const Expr* x) {
-    bool has_lo = (lo != NULL), has_hi = (hi != NULL);
-    if (!has_lo && !has_hi) return expr_new_symbol(SYM_True);
-    if (!has_lo) {
-        const char* op = hi_open ? SYM_Less : SYM_LessEqual;
-        return expr_new_function(expr_new_symbol(op),
-            (Expr*[]){ expr_copy((Expr*)x), expr_copy((Expr*)hi) }, 2);
-    }
-    if (!has_hi) {
-        const char* op = lo_open ? SYM_Greater : SYM_GreaterEqual;
-        return expr_new_function(expr_new_symbol(op),
-            (Expr*[]){ expr_copy((Expr*)x), expr_copy((Expr*)lo) }, 2);
-    }
-    if (expr_eq(lo, hi)) {                  /* isolated point: x == b */
-        return expr_new_function(expr_new_symbol(SYM_Equal),
-            (Expr*[]){ expr_copy((Expr*)x), expr_copy((Expr*)lo) }, 2);
-    }
-    const char* op1 = lo_open ? SYM_Less : SYM_LessEqual;
-    const char* op2 = hi_open ? SYM_Less : SYM_LessEqual;
-    return expr_new_function(expr_new_symbol(SYM_Inequality),
-        (Expr*[]){ expr_copy((Expr*)lo), expr_new_symbol(op1),
-                   expr_copy((Expr*)x),  expr_new_symbol(op2),
-                   expr_copy((Expr*)hi) }, 5);
-}
-
-/* ------------------------------------------------------------------ *
  *  Driver                                                             *
  * ------------------------------------------------------------------ */
 
@@ -201,69 +171,12 @@ Expr* reduce_univar(const RForm* F, const Expr* x, Expr** vars, int nv) {
     }
     if (!ok) { for (int i = 0; i < m; i++) expr_free(bp[i]); free(bp); free(truth); return NULL; }
 
-    /* 6. Emit the union of satisfying cells. */
-    bool all_true = true, all_false = true;
-    for (int i = 0; i < ncells; i++) { if (truth[i]) all_false = false; else all_true = false; }
-
-    Expr* result;
-    if (all_true) {
-        result = expr_new_symbol(SYM_True);
-    } else if (all_false) {
-        result = expr_new_symbol(SYM_False);
-    } else {
-        bool all_int_true = true;
-        for (int j = 0; j <= m; j++) if (!truth[2 * j]) { all_int_true = false; break; }
-
-        if (all_int_true) {
-            /* cofinite: everything except finitely many excluded points. */
-            Expr** parts = NULL; int npar = 0;
-            for (int j = 1; j <= m; j++) {
-                if (truth[2 * j - 1]) continue;
-                Expr* ne = expr_new_function(expr_new_symbol(SYM_Unequal),
-                    (Expr*[]){ expr_copy((Expr*)x), expr_copy(bp[j - 1]) }, 2);
-                parts = realloc(parts, (size_t)(npar + 1) * sizeof(Expr*));
-                parts[npar++] = ne;
-            }
-            result = (npar == 1) ? parts[0]
-                : expr_new_function(expr_new_symbol(SYM_And), parts, (size_t)npar);
-            free(parts);
-        } else {
-            /* merge maximal runs of true cells into interval/point segments. */
-            Expr** segs = NULL; int nseg = 0;
-            bool active = false; const Expr* lo = NULL; bool lo_open = false;
-            for (int idx = 0; idx < ncells; idx++) {
-                bool is_int = (idx % 2 == 0);
-                if (truth[idx] && !active) {
-                    active = true;
-                    if (is_int) {
-                        int j = idx / 2;
-                        if (j == 0) { lo = NULL; lo_open = false; }
-                        else { lo = bp[j - 1]; lo_open = true; }
-                    } else { lo = bp[(idx + 1) / 2 - 1]; lo_open = false; }
-                } else if (!truth[idx] && active) {
-                    active = false;
-                    const Expr* hi; bool hi_open;
-                    if (is_int) { hi = bp[idx / 2 - 1]; hi_open = false; }
-                    else { hi = bp[(idx + 1) / 2 - 1]; hi_open = true; }
-                    Expr* seg = seg_to_expr(lo, lo_open, hi, hi_open, x);
-                    segs = realloc(segs, (size_t)(nseg + 1) * sizeof(Expr*));
-                    segs[nseg++] = seg;
-                }
-            }
-            if (active) {
-                Expr* seg = seg_to_expr(lo, lo_open, NULL, false, x);
-                segs = realloc(segs, (size_t)(nseg + 1) * sizeof(Expr*));
-                segs[nseg++] = seg;
-            }
-            result = (nseg == 1) ? segs[0]
-                : expr_new_function(expr_new_symbol(SYM_Or), segs, (size_t)nseg);
-            free(segs);
-        }
-    }
+    /* 6. Emit the union of satisfying cells (shared with reduce_realdiag). */
+    Expr* result = rru_emit_sign_diagram(bp, m, truth, x);
 
     for (int i = 0; i < m; i++) expr_free(bp[i]);
     free(bp); free(truth);
-    return eval_and_free(result);   /* flatten And/Or, fuse Inequality chains */
+    return result;
 }
 
 /* ------------------------------------------------------------------ *
