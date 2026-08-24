@@ -55,10 +55,10 @@ typedef struct {
 /* Parse trailing Rule args starting at index `first_opt_idx`.
  * Fills `o`, builds a passthrough list for Graphics/Graphics3D opts.
  * Returns true on success; on failure frees *pt_out and returns false. */
-static bool split_cplot_options(Expr* res, size_t first_opt_idx,
+static bool split_cplot_options(Expr* res, size_t first_opt_idx, int default_plot_points,
                                  CPlotOpts* o,
                                  Expr*** pt_out, size_t* pt_n_out) {
-    o->plot_points            = 200;
+    o->plot_points            = default_plot_points;
     o->color_function         = NULL;
     o->color_function_scaling = true;
     o->region_function        = NULL;
@@ -499,7 +499,12 @@ Expr* builtin_complexplot(Expr* res) {
 
     CPlotOpts opts;
     Expr** pt = NULL; size_t pt_n = 0;
-    if (!split_cplot_options(res, 2, &opts, &pt, &pt_n)) return NULL;
+    /* 2D raster: default 400 grid points/axis. The plane is drawn as a grid of
+     * coloured cells, so the cell pitch is the on-screen resolution; 200 was
+     * visibly pixelated near zeros/poles where the phase turns fastest. The
+     * body is autocompiled per grid (autocompile_new_z), so 400x400 stays well
+     * under ~0.5s. */
+    if (!split_cplot_options(res, 2, 400, &opts, &pt, &pt_n)) return NULL;
 
     int N = opts.plot_points;
     size_t stride = (size_t)(N + 1);
@@ -612,8 +617,11 @@ Expr* builtin_complexplot3d(Expr* res) {
 
     CPlotOpts opts;
     Expr** pt = NULL; size_t pt_n = 0;
-    /* 3D: default passthrough gets Axes → True (reusing split_cplot_options) */
-    if (!split_cplot_options(res, 2, &opts, &pt, &pt_n)) return NULL;
+    /* 3D: default passthrough gets Axes → True (reusing split_cplot_options).
+     * Keep 200 here — this samples an N×N polygon *mesh*, not a 2D raster, so a
+     * 400² grid would be 320k triangles baked into the 3D scene for no
+     * comparable gain (the surface is already smoothly shaded). */
+    if (!split_cplot_options(res, 2, 200, &opts, &pt, &pt_n)) return NULL;
 
     int N = opts.plot_points;
     size_t stride = (size_t)(N + 1);

@@ -774,9 +774,15 @@ Expr* builtin_contourplot(Expr* res) {
                 ENSURE_CAP(2);
                 prims[nprim++] = contour_color(co.color_function, t, cx, cy);
 
-                /* Rectangle corners in world space. */
-                Expr* p1[2] = { expr_new_real(wx0),          expr_new_real(wy0) };
-                Expr* p2[2] = { expr_new_real(wx0 + du_x),   expr_new_real(wy0 + du_y) };
+                /* Rectangle corners in world space. The far corner overlaps one
+                 * full cell into the +x/+y neighbours (drawn later, so they
+                 * overdraw the overlap and each cell still shows its own colour),
+                 * clamped at the plot edges — closes the sub-pixel seams that
+                 * otherwise leave the background showing between adjacent fills. */
+                double wx1 = wx0 + 2.0 * du_x; if (wx1 > u_xmax) wx1 = u_xmax;
+                double wy1 = wy0 + 2.0 * du_y; if (wy1 > u_ymax) wy1 = u_ymax;
+                Expr* p1[2] = { expr_new_real(wx0), expr_new_real(wy0) };
+                Expr* p2[2] = { expr_new_real(wx1), expr_new_real(wy1) };
                 Expr* ra[2] = {
                     expr_new_function(expr_new_symbol(SYM_List), p1, 2),
                     expr_new_function(expr_new_symbol(SYM_List), p2, 2),

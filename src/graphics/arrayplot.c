@@ -303,8 +303,15 @@ Expr* builtin_arrayplot(Expr* res) {
             }
             prims[np++] = color;
 
-            Expr* p1[2] = { expr_new_real(x0),        expr_new_real(y0) };
-            Expr* p2[2] = { expr_new_real(x0 + 1.0),   expr_new_real(y0 + 1.0) };
+            /* Overlap one full cell into the later-drawn neighbours (+x within
+             * the row, and -y since rows are emitted top→bottom so y0 decreases)
+             * — they overdraw the overlap, so each cell still shows its own
+             * colour — clamped at the array bounds. Closes the sub-pixel seams
+             * that otherwise leave the background showing between adjacent fills. */
+            double x1 = x0 + 2.0; if (x1 > (double)cols) x1 = (double)cols;
+            double yb = y0 - 1.0; if (yb < 0.0) yb = 0.0;
+            Expr* p1[2] = { expr_new_real(x0), expr_new_real(yb) };
+            Expr* p2[2] = { expr_new_real(x1), expr_new_real(y0 + 1.0) };
             Expr* ra[2] = { expr_new_function(expr_new_symbol(SYM_List), p1, 2),
                              expr_new_function(expr_new_symbol(SYM_List), p2, 2) };
             prims[np++] = expr_new_function(expr_new_symbol(SYM_Rectangle), ra, 2);

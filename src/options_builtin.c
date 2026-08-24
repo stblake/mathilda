@@ -700,6 +700,30 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("RegionFunction", "None"));
     ob_commit(&b, "Plot3D");
 
+    /* ComplexPlot / ComplexPlot3D honour these via complexplot.c's
+     * split_cplot_options(). The default phase colouring is the cyclic "Cyclic"
+     * ramp (cp_default_color), so ColorFunction -> "Cyclic" is the documented
+     * default. 2D ComplexPlot samples a raster (PlotPoints -> 400); the 3D form
+     * samples a polygon mesh (PlotPoints -> 200). */
+    ob_init(&b);
+    ob_add(&b, r_str("ColorFunction", "Cyclic"));
+    ob_add(&b, r_sym("ColorFunctionScaling", "True"));
+    ob_add(&b, r_sym("PlotLegends", "None"));
+    ob_add(&b, r_int("PlotPoints", 400));
+    ob_add(&b, r_sym("PlotRange", "Automatic"));
+    ob_add(&b, r_sym("RegionFunction", "None"));
+    ob_commit(&b, "ComplexPlot");
+
+    ob_init(&b);
+    ob_add(&b, r_str("ColorFunction", "Cyclic"));
+    ob_add(&b, r_sym("ColorFunctionScaling", "True"));
+    ob_add(&b, r_sym("Lighting", "Automatic"));
+    ob_add(&b, r_sym("PlotLegends", "None"));
+    ob_add(&b, r_int("PlotPoints", 200));
+    ob_add(&b, r_sym("PlotRange", "Automatic"));
+    ob_add(&b, r_sym("RegionFunction", "None"));
+    ob_commit(&b, "ComplexPlot3D");
+
     /* ---- Symbolic calculus ---- */
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));     /* "Automatic" | "BronsteinRational" | ... */
