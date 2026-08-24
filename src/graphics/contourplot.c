@@ -74,7 +74,7 @@ static Expr* contour_color(Expr* cfn, double t, double x, double y) {
 /* ------------------------------------------------------------------ */
 
 typedef struct {
-    int     plot_points;           /* grid points per axis, default 25 */
+    int     plot_points;           /* grid points per axis, default 75 */
     int     n_contours;            /* number of auto-levels, default 10 */
     double* levels;                /* explicit contour values; NULL = auto */
     size_t  n_levels;
@@ -92,7 +92,13 @@ typedef struct {
 
 static bool split_contour_options(Expr* res, ContourOpts* co,
                                   Expr*** passthrough_out, size_t* pt_count_out) {
-    co->plot_points = 25;
+    /* 75, not the old 25: contours are plain marching-squares polylines (no
+     * adaptive refinement), so the grid pitch is the facet size. At 25 a
+     * circular level curve was visibly polygonal; 75 (facet ~ range/75) reads
+     * as smooth. The body is autocompiled per grid, so even 75x75 = ~5.6k
+     * evals stays well under ~0.1s; a non-compilable body falls to the
+     * interpreter but that is the exception for a numeric contour plot. */
+    co->plot_points = 75;
     co->n_contours = 10;
     co->levels = NULL;
     co->n_levels = 0;
