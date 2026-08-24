@@ -1,2 +1,2 @@
-Sin[Interval[{3, 7/2}]]
-IntervalMemberQ[Sin[Interval[{3, 7/2}]], 0]
+Sin[Interval[{245/78., 355/113.}]]
+IntervalMemberQ[Sin[Interval[{245/78., 355/113.}]], 0.]

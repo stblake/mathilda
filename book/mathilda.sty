@@ -149,16 +149,32 @@
 \newcommand{\DeclareBuiltinLink}[2]{%
   \expandafter\def\csname mbl@\detokenize{#1}\endcsname{#2}}
 
-% \B{Name}: hyperlinked code when a reference page exists, else code + a log note.
-% For $-system symbols write \B{\$Version} (keeps the $ out of math mode; the
+% ----------------------------------------------------------- index helpers ---
+% Builtin names are indexed in the SAME font as code. makeindex's `sort@display'
+% form lets the entry sort under the plain name but typeset with \mcode:
+%   \bidx{Sin}     -> a normal index entry (\index{Sin@\mcode{Sin}})
+%   \bidxmain{Sin} -> the defining page, set in bold (the |textbf encapsulator)
+% \B auto-emits \bidx, so every builtin reference in the prose is indexed with no
+% manual upkeep -- ``regenerating the index'' is then just re-running make pdf.
+% Concept terms are indexed by hand with plain \index{...}.
+\newcommand{\bidx}[1]{\index{#1@\mcode{#1}}}
+\newcommand{\bidxmain}[1]{\index{#1@\mcode{#1}|textbf}}
+
+% \Bnoidx{Name}: hyperlinked code when a reference page exists, else code + a log
+% note. The link-only core, WITHOUT an index entry -- for the rare fragile spot
+% (a boxed title, a heading) where auto-indexing is unwanted.
+% For $-system symbols write \Bnoidx{\$Version} (keeps the $ out of math mode; the
 % generated key is escaped the same way, so the lookup still matches).
-\newcommand{\B}[1]{%
+\newcommand{\Bnoidx}[1]{%
   \ifcsname mbl@\detokenize{#1}\endcsname
     \href{\csname mbl@\detokenize{#1}\endcsname}{\mcode{#1}}%
   \else
     \mcode{#1}%
     \PackageWarning{mathilda}{No reference link for builtin `\detokenize{#1}'}%
   \fi}
+
+% \B{Name}: the everyday builtin reference -- index it (code font) and link it.
+\newcommand{\B}[1]{\bidx{#1}\Bnoidx{#1}}
 
 % ---------------------------------------------------- docstring usage cards ---
 % \usagebox{Name}: a titled card showing a builtin's own docstring (?Name output)
@@ -178,10 +194,11 @@
 \newcommand{\usagebox}[1]{%
   \IfFileExists{generated/usage/#1.txt}{%
     \par\addvspace{\medskipamount}%
+    \bidxmain{#1}% the usage card is the builtin's definition: bold index page
     \begin{tcolorbox}[enhanced, breakable, colback=black!2, colframe=black!45,
       boxrule=0.4pt, left=7pt, right=7pt, top=4pt, bottom=5pt,
       colbacktitle=black!7, coltitle=black, fonttitle=\bfseries,
-      title={\B{#1}\hfill\normalfont\footnotesize\itshape
+      title={\Bnoidx{#1}\hfill\normalfont\footnotesize\itshape
              \IfFileExists{generated/usage/#1.attr}{\input{generated/usage/#1.attr}\unskip}{}}]
       \lstinputlisting[style=mathildausage]{generated/usage/#1.txt}%
     \end{tcolorbox}%

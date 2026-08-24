@@ -140,6 +140,28 @@ linkable **iff** it has a reference page.
 - Don't over-link: link on first substantive mention in a chapter, not every
   occurrence, and not in headings (the macro is fragile in moving arguments).
 
+### The Index
+
+The book has a back-of-book Index (`\printindex`, standard `makeindex`). Two rules:
+
+- **Builtins index themselves.** `\B{}` auto-emits `\index{Name@\mcode{Name}}`, so a
+  builtin is indexed **in code font** (the `\mcode` monospace used everywhere else)
+  wherever you reference it — no manual `\index` for builtins. Because the house
+  style is to `\B` only the first substantive mention per chapter, this yields one
+  clean entry per builtin per chapter. `\usagebox` additionally marks the builtin's
+  definition card as the **bold** page (`\bidxmain`). If you ever need the link
+  without an index entry (a boxed title, a fragile spot), use `\Bnoidx{}`.
+- **Concept terms are indexed by hand.** For the ideas a reader looks up — *interval
+  arithmetic*, *numeric contagion*, *arbitrary precision*, an attribute, a named
+  algorithm — add `\index{topic!subtopic}` at the **defining** mention only, in the
+  hierarchical `topic!subtopic` style (e.g. `\index{interval arithmetic!outward
+  rounding}`, `\index{attribute!Flat}`). Index the primary discussion, not every
+  passing use.
+
+"Regenerate the Index" = add/refresh the concept `\index{}` entries for whatever new
+material you wrote, then rebuild (`make pdf` reruns `makeindex`). The macros live in
+`mathilda.sty` under *index helpers*.
+
 ---
 
 ## 6. Voice, tone, and structure

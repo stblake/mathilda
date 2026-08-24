@@ -2,11 +2,11 @@
 \label{ch:about}
 
 \index{Mathilda!goals}%
-Mathilda is a computer algebra system---a program that does mathematics
-\emph{symbolically}, computing with $x$ and $\pi$ and $\sqrt{2}$ as exact objects
+Mathilda is a computer algebra system---a program\index{computer algebra system} that does mathematics
+\emph{symbolically}\index{symbolic computation}, computing with $x$ and $\pi$ and $\sqrt{2}$ as exact objects
 rather than as approximate decimals, while remaining fast enough to crunch a
 million floating-point numbers when that is what you need. It is modelled closely
-on the core architecture and evaluation semantics of the Wolfram Language, and it
+on the core architecture and evaluation semantics of the Wolfram Language\index{Wolfram Language}, and it
 is written in C and in its own language.
 
 This chapter is about \emph{why} Mathilda exists, what it is built on, and why it
@@ -24,13 +24,13 @@ Each word in that sentence is load-bearing.
 
 \emph{Advanced}, because a computer algebra system earns its keep at the frontier
 ---factoring polynomials over algebraic number fields, integrating in closed form
-by the Risch algorithm, solving Diophantine equations, computing with Gr\"obner
+by the Risch algorithm\index{Risch algorithm}, solving Diophantine equations, computing with Gr\"obner\index{Grobner basis@Gr\"obner basis}
 bases~\cite{gcl}. Anyone can add two fractions; the interesting question is how far
 into real mathematics a system will carry you.
 
 \emph{Efficient}, because a symbolic answer you cannot get before lunch is of
-little use. Mathilda is built to be quick: exact arithmetic on arbitrary-precision
-integers, a bytecode compiler for numeric inner loops, and transparently packed
+little use. Mathilda is built to be quick: exact arithmetic on arbitrary-precision\index{arbitrary-precision arithmetic}
+integers, a bytecode compiler for numeric inner loops\index{bytecode compiler}, and transparently packed\index{array!packed}
 arrays that let element-wise work run at the speed of machine code.
 
 \emph{Freely available}, because mathematics belongs to everyone. The dominant
@@ -50,7 +50,7 @@ whomever you pass it on to. This is not an incidental legal choice; it follows
 directly from the mission.
 
 For a computer algebra system in particular, openness is a matter of
-\emph{mathematical integrity}. When a system tells you that
+\emph{mathematical integrity}\index{mathematical integrity}. When a system tells you that
 \[
   \int \frac{dx}{1+x^{2}} = \arctan x,
 \]
@@ -62,7 +62,7 @@ there to be read, tested, and---when it is wrong---fixed. Scientific results
 computed with a black box are not fully reproducible; results computed with an
 open system are.
 
-Openness also buys \emph{longevity}. Proprietary formats and products are
+Openness also buys \emph{longevity}\index{longevity}. Proprietary formats and products are
 abandoned; a licence server goes dark and a decade of work becomes unreadable.
 Free software cannot be taken away. As long as one copy of the source survives, so
 does the ability to build it, study it, and carry it forward. A system meant to
@@ -82,23 +82,23 @@ listed the moment you start the program, in the version banner:
 Behind that one line stands an enormous amount of work by other people:
 
 \begin{itemize}
-  \item \textbf{GMP}~\cite{gmp}, the GNU Multiple Precision Arithmetic Library, provides the
+  \item \textbf{GMP}~\cite{gmp}\index{GMP}, the GNU Multiple Precision Arithmetic Library, provides the
         arbitrary-precision integers on which all of Mathilda's exact arithmetic
         rests. When a machine integer would overflow, the value is promoted to a
         GMP ``bignum'' automatically and silently.
-  \item \textbf{MPFR}~\cite{mpfr} extends that idea to real numbers, giving correctly rounded
+  \item \textbf{MPFR}~\cite{mpfr}\index{MPFR} extends that idea to real numbers, giving correctly rounded
         arbitrary-precision floating point---so \B{N}\texttt{[expr, 100]} can be
         trusted to a hundred digits.
-  \item \textbf{FLINT}~\cite{flint} accelerates polynomial arithmetic, factoring, and the
+  \item \textbf{FLINT}~\cite{flint}\index{FLINT} accelerates polynomial arithmetic, factoring, and the
         rigorous numerics behind many special functions.
-  \item \textbf{LAPACK} and \textbf{BLAS} (here, Apple's Accelerate framework)
+  \item \textbf{LAPACK}\index{LAPACK} and \textbf{BLAS}\index{BLAS} (here, Apple's Accelerate framework)
         power dense machine-precision linear algebra---the decompositions behind
         \B{Det}, \B{Inverse}, \B{Eigenvalues}, and
         \B{SingularValueDecomposition}.
-  \item \textbf{GMP-ECM} supplies the Elliptic Curve Method for the harder cases
+  \item \textbf{GMP-ECM}\index{GMP-ECM} supplies the Elliptic Curve Method for the harder cases
         of integer factorization.
-  \item \textbf{Raylib} renders the interactive graphics produced by \B{Plot} and
-        \B{Show}, and \textbf{GNU~Readline} gives the interactive session its
+  \item \textbf{Raylib}\index{Raylib} renders the interactive graphics produced by \B{Plot} and
+        \B{Show}, and \textbf{GNU~Readline}\index{GNU Readline} gives the interactive session its
         line editing and history.
 \end{itemize}
 
@@ -112,7 +112,7 @@ that orchestration.
 \label{sec:why-c}
 
 A computer algebra system could be written in almost any language. Mathilda is
-written in C99, and the choice is deliberate.
+written in C99\index{C99}, and the choice is deliberate.
 
 \emph{Performance.} C imposes essentially no overhead between your program and the
 machine. The libraries Mathilda depends on---GMP, MPFR, FLINT, LAPACK---are
@@ -134,7 +134,7 @@ language that will still be understood, and still be compilable, a very long tim
 from now. C is that language.
 
 \emph{An unfair advantage.} There is also a modern, practical reason. Large
-language models are exceptionally strong at writing and reasoning about C: it is
+language models are exceptionally strong\index{large language model} at writing and reasoning about C: it is
 one of the most abundant languages in their training, its patterns are regular,
 and its errors are mechanically checkable. Much of Mathilda is developed with such
 models in the loop, and C's combination of ubiquity and simplicity makes that
@@ -159,32 +159,32 @@ concrete, here is some of what ``best in each domain'' is meant to mean:
 \begin{itemize}
   \item \textbf{Symbolic integration.} A complete implementation of the
         Risch--Trager--Bronstein algorithm\index{Risch--Trager--Bronstein algorithm}
-        for integration in closed form, rivalling the Scratchpad / AXIOM / FriCAS
+        for integration in closed form, rivalling the Scratchpad / AXIOM / FriCAS\index{FriCAS}
         lineage that pioneered it---so that when an elementary antiderivative exists
         Mathilda finds it, and when none exists Mathilda proves that too.
   \item \textbf{Algebraic geometry and commutative algebra.} Gr\"obner bases,
         ideals, varieties, and the wider machinery of computational algebra at a level
-        that rivals Magma, Singular, and Macaulay2.
+        that rivals Magma\index{Magma}, Singular\index{Singular}, and Macaulay2\index{Macaulay2}.
   \item \textbf{Number theory.} Factorization, primality proving, elliptic curves,
-        and class-group computation to rival PARI/GP.
+        and class-group computation to rival PARI/GP\index{PARI/GP}.
   \item \textbf{Finite fields and discrete computation.} Arithmetic and linear
         algebra over finite fields at the scale that coding theory and cryptography
         demand, rivalling Magma.
   \item \textbf{Tensor computation.} Manipulation of tensors and the objects of
-        differential geometry that is as expressive and as efficient as Cadabra.
+        differential geometry that is as expressive and as efficient as Cadabra\index{Cadabra}.
   \item \textbf{Arbitrary-precision numerics.} Correctly rounded and rigorously
-        bounded computation---ball arithmetic in the spirit of Arb and mpmath---so a
+        bounded computation---ball arithmetic in the spirit of Arb\index{Arb} and mpmath\index{mpmath}---so a
         numerical answer comes with a guarantee, not merely a value.
   \item \textbf{Numerical computing.} Dense linear algebra, quadrature, and
-        differential-equation solving at the level of LAPACK, SciPy, and Julia.
+        differential-equation solving at the level of LAPACK, SciPy\index{SciPy}, and Julia\index{Julia}.
   \item \textbf{Optimization.} Local and global optimization---constrained,
-        unconstrained, and mixed-integer---to rival SciPy and NLopt.
+        unconstrained, and mixed-integer---to rival SciPy and NLopt\index{NLopt}.
   \item \textbf{Array numerics.} Element-wise and reduction operations on dense,
-        packed numerical arrays that are at least as fast as NumPy on a single
+        packed numerical arrays that are at least as fast as NumPy\index{NumPy} on a single
         core---and, because Mathilda owns its memory layout and kernels end to end,
         that parallelise cleanly across many cores.
   \item \textbf{Compilation.} A bytecode compiler whose numeric throughput rivals
-        Pipi, so that an inner loop written in Mathilda runs at the speed of compiled
+        Pipi, so that an inner loop\index{Pipi} written in Mathilda runs at the speed of compiled
         code rather than interpreted rewriting.
 \end{itemize}
 

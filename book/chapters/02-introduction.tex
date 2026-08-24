@@ -9,7 +9,7 @@ and programming. The aim is to give you a feel for the system and a sense of how
 ground it covers, so that the detailed chapters later feel like a return to places
 you have already visited.
 
-Everything below is real: each \texttt{In[\,]} was fed to the Mathilda binary as this
+Everything below is real: each \texttt{In[\,]} was fed to the Mathilda binary\index{In[] and Out[]} as this
 book was built and each \texttt{Out[\,]} is exactly what came back. Type them yourself
 and you will see the same results. Throughout, each input and its result stand on the
 left, with a few words about that line alongside on the right. This chapter is a
@@ -19,17 +19,17 @@ material the rest of the book returns to in depth.
 \section{Numbers, exact and approximate}
 \label{sec:intro-numbers}
 
-Mathilda distinguishes sharply between \emph{exact} numbers and \emph{approximate}
+Mathilda distinguishes sharply between \emph{exact} numbers\index{number!exact vs approximate} and \emph{approximate}
 ones, and it knows how they combine. Watch what happens as we add numbers of different
 kinds:
 
 \begin{codepairs}
 \pair{02-introduction/numbers/1}{Two integers add to an integer.}
-\pair{02-introduction/numbers/2}{An integer plus a rational stays \emph{exact}: the
+\pair{02-introduction/numbers/2}{An integer plus a rational\index{number!rational} stays \emph{exact}: the
 fraction $7/3$, not a decimal.}
-\pair{02-introduction/numbers/3}{A rational plus a \emph{real} gives a real. One
+\pair{02-introduction/numbers/3}{A rational plus a \emph{real} gives a real\index{number!real}. One
 approximate number makes the whole result approximate---a rule called
-\emph{contagion}.}
+\emph{contagion}\index{numeric contagion}.}
 \pair{02-introduction/numbers/4}{Integers grow without bound; $2^{64}$ is kept
 exactly, far beyond what a single machine word can hold.}
 \pair{02-introduction/numbers/5}{To get a decimal you ask, with \B{N}: here a quick
@@ -46,7 +46,7 @@ integers and rationals, and arbitrary-precision reals---fit together.
 \section{Elementary functions}
 \label{sec:intro-elementary}
 
-Mathilda knows the elementary functions---powers and roots, the exponential and
+Mathilda knows the elementary functions\index{elementary functions}---powers and roots, the exponential and
 logarithm, and the trigonometric functions and their inverses---and treats them the
 same way it treats numbers: exactly when it can, symbolically when it must, and
 numerically when you ask. At arguments where a simple closed form exists, it returns
@@ -62,14 +62,14 @@ surd.}
 $\log e^{5}=5$.}
 \pair{02-introduction/elementary-exact/6}{\B{ArcTan} of $1$ is the exact angle
 $\pi/4$.}
-\pair{02-introduction/elementary-exact/7}{At an exact argument with \emph{no} closed
+\pair{02-introduction/elementary-exact/7}{At an exact argument with \emph{no} closed\index{closed form}
 form, \B{Sin}$[1]$ is held as \texttt{Sin[1]}---not silently turned into a decimal.}
 \end{codepairs}
 
 When you do want a number, you get one either by supplying an approximate argument or
-by applying \B{N}. By default the result is \emph{machine precision}---the fast,
+by applying \B{N}. By default the result is \emph{machine precision}\index{machine precision}---the fast,
 fixed-size floating point of the hardware---but \B{N} will also work to
-\emph{arbitrary} precision:
+\emph{arbitrary} precision\index{precision!arbitrary}:
 
 \begin{codepairs}
 \pair{02-introduction/elementary-numeric/1}{An approximate argument \texttt{1.0}
@@ -86,7 +86,7 @@ elementary functions return in Section~\ref{sec:calculus}.}
 \section{Special functions}
 \label{sec:intro-special}
 
-Beyond the elementary functions lies a second tier---the \emph{special functions} of
+Beyond the elementary functions lies a second tier---the \emph{special functions}\index{special functions} of
 analysis and mathematical physics: the gamma and zeta functions, the error function,
 the Bessel and Airy functions, and many more. Mathilda handles them with exactly the
 same discipline, returning exact values wherever they exist:
@@ -97,11 +97,11 @@ same discipline, returning exact values wherever they exist:
 \pair{02-introduction/special-exact/2}{At the half-integers it takes the celebrated
 value $\Gamma(1/2)=\sqrt\pi$.}
 \pair{02-introduction/special-exact/3}{\B{Zeta} gives Euler's $\zeta(2)=\pi^{2}/6$.}
-\pair{02-introduction/special-exact/4}{By analytic continuation, the notorious
+\pair{02-introduction/special-exact/4}{By analytic continuation\index{analytic continuation}, the notorious
 $\zeta(-1)=-\tfrac{1}{12}$.}
 \pair{02-introduction/special-exact/5}{\B{Beta} reduces to a rational.}
 \pair{02-introduction/special-exact/6}{\B{PolyGamma}, the digamma at $1$, is exactly
-$-\gamma$, the negative Euler--Mascheroni constant \B{EulerGamma}.}
+$-\gamma$, the negative Euler--Mascheroni constant\index{Euler--Mascheroni constant} \B{EulerGamma}.}
 \pair{02-introduction/special-exact/7}{Even \B{AiryAi} at the origin has a closed
 form, in terms of \B{Gamma}.}
 \end{codepairs}
@@ -123,7 +123,7 @@ $\sqrt\pi$. Section~\ref{sec:specialfns} is devoted to these functions.}
 \label{sec:intro-numbertheory}
 
 Whole numbers have a rich structure, and Mathilda knows a great deal of it. Primes,
-factorizations, divisors, greatest common divisors, and modular arithmetic are all a
+factorizations, divisors, greatest common divisors\index{greatest common divisor}, and modular arithmetic\index{modular arithmetic} are all a
 single call away.
 
 \begin{codepairs}
@@ -132,7 +132,7 @@ single call away.
 powers $2^{3}\cdot 3^{2}\cdot 5$.}
 \pair{02-introduction/number-theory/3}{\B{Divisors} lists every divisor of $36$.}
 \pair{02-introduction/number-theory/4}{\B{GCD} is the greatest common divisor.}
-\pair{02-introduction/number-theory/5}{\B{ExtendedGCD} adds B\'ezout's coefficients:
+\pair{02-introduction/number-theory/5}{\B{ExtendedGCD} adds B\'ezout's coefficients\index{Bezout's coefficients@B\'ezout's coefficients}:
 $12 = 1\cdot 48 + (-1)\cdot 36$.}
 \pair{02-introduction/number-theory/6}{\B{PowerMod} finds $7^{100}\bmod 13$ without
 ever forming $7^{100}$.}
@@ -152,9 +152,9 @@ number exactly. Section~\ref{sec:numbertheory} takes up this material.}
 \section{Algebra}
 \label{sec:intro-algebra}
 
-Algebra is where a computer algebra system earns its name: it manipulates
-expressions containing symbols, not just numbers. Two everyday operations are
-multiplying out and its partial inverse, collecting like terms.
+Algebra is where a computer algebra system\index{computer algebra system} earns its name: it manipulates
+expressions containing symbols\index{expression!symbolic}, not just numbers. Two everyday operations are
+multiplying out and its partial inverse, collecting like terms\index{collecting like terms}.
 
 \begin{codepairs}
 \pair{02-introduction/algebra-expand/1}{\B{Expand} multiplies out a power.}
@@ -163,8 +163,8 @@ multiplying out and its partial inverse, collecting like terms.
 chosen variable---here $x$, pulling the common factor out of the linear term.}
 \end{codepairs}
 
-The deeper operation is \B{Factor}, which writes a polynomial as a product of
-irreducible pieces. What counts as irreducible depends on the number system you allow,
+The deeper operation is \B{Factor}, which writes a polynomial as a product of\index{polynomial!factorization}
+irreducible pieces. What counts as irreducible\index{polynomial!irreducible} depends on the number system you allow,
 and Mathilda lets you choose:
 
 \begin{codepairs}
@@ -173,12 +173,12 @@ factors.}
 \pair{02-introduction/algebra-factor/2}{But $x^{2}+1$ will not factor at all---it is
 irreducible over~$\mathbb{Q}$.}
 \pair{02-introduction/algebra-factor/3}{Allow the imaginary unit, with
-\texttt{Extension}, and it becomes $(x-i)(x+i)$.}
+\texttt{Extension}, and it becomes\index{field extension} $(x-i)(x+i)$.}
 \pair{02-introduction/algebra-factor/4}{Allow $\sqrt2$ and $x^{4}+1$ splits into two
 real quadratics. Extensions return in Section~\ref{sec:algebra}.}
 \end{codepairs}
 
-Closely related to factoring is the polynomial greatest common divisor. Just as \B{GCD}
+Closely related to factoring is the polynomial greatest common divisor\index{polynomial!greatest common divisor}. Just as \B{GCD}
 finds the largest integer dividing two whole numbers, \B{PolynomialGCD} finds the
 highest-degree polynomial dividing two polynomials---their shared factor:
 
@@ -188,7 +188,7 @@ highest-degree polynomial dividing two polynomials---their shared factor:
 factoring either polynomial.}
 \end{codepairs}
 
-That common factor is exactly what simplifies a \emph{rational function}, a ratio of
+That common factor is exactly what simplifies a \emph{rational function}\index{rational function}, a ratio of
 polynomials. Mathilda provides the three everyday operations:
 
 \begin{codepairs}
@@ -197,13 +197,13 @@ polynomials. Mathilda provides the three everyday operations:
 \pair{02-introduction/algebra-rational/2}{\B{Together} combines a sum of fractions
 over one common denominator.}
 \pair{02-introduction/algebra-rational/3}{\B{Apart} does the reverse---the partial-%
-fraction decomposition you reach for before integrating. More in
+fraction decomposition you reach for\index{partial fraction decomposition} before integrating. More in
 Section~\ref{sec:algebra}.}
 \end{codepairs}
 
 Beyond a single polynomial lies a whole \emph{system} of them, and the tool for those is
-the \B{GroebnerBasis}: a canonical set of generators for the ideal a system defines. It
-is the multivariate, nonlinear analogue of Gaussian elimination---it rewrites a system
+the \B{GroebnerBasis}: a canonical set of generators for the ideal\index{ideal} a system defines. It
+is the multivariate, nonlinear analogue of Gaussian elimination\index{Gaussian elimination}---it rewrites a system
 into an equivalent triangular one that is far easier to solve, and it can eliminate
 chosen variables outright.
 
@@ -217,21 +217,114 @@ equation $x^{3}=y^{2}$, the cuspidal cubic. Section~\ref{sec:algebra} returns to
 Gr\"obner bases.}
 \end{codepairs}
 
+\section{Solving equations}
+\label{sec:intro-solve}
+
+Solving equations is among the oldest tasks in mathematics, and Mathilda does it both
+exactly and numerically.
+
+\subsection{Exact solutions of equations}
+
+\B{Solve} finds \emph{exact} solutions---as integers, radicals, or general closed
+forms---for a single equation or a whole system:
+
+\begin{codepairs}
+\pair{02-introduction/solve-exact/1}{A quadratic with two integer roots. Note
+\texttt{==}, which builds an equation\index{equation vs assignment}, versus \texttt{=}, which assigns.}
+\pair{02-introduction/solve-exact/2}{$x^{2}=2$: the two exact surds $\pm\sqrt2$.}
+\pair{02-introduction/solve-exact/3}{A linear system in two unknowns\index{system of equations!linear}, uniquely solved.}
+\pair{02-introduction/solve-exact/4}{A \emph{nonlinear} system---a circle meeting the
+line $y=x$---with both intersection points, exactly.}
+\pair{02-introduction/solve-exact/5}{A cubic with no rational roots: the exact solutions
+come back as \B{Root} objects, each an implicit algebraic number\index{algebraic number}---the $k$th root of the
+given polynomial---rather than an unwieldy nest of radicals.}
+\pair{02-introduction/solve-exact/6}{A \B{Root} object is still an exact number, so \B{N}
+evaluates it to as many digits as you ask---here to machine precision.}
+\end{codepairs}
+
+\subsection{Numerical solutions of equations}
+
+When an exact solution is unavailable---the general quintic has no formula in radicals,
+by Abel's theorem\index{Abel's theorem}---or simply not wanted, the numerical solvers take over. \B{NRoots}
+and \B{NSolve} return every root of a polynomial equation or system as machine numbers,
+while \B{FindRoot} follows Newton's method\index{Newton's method} from a starting point and handles
+transcendental problems too:
+
+\begin{codepairs}
+\pair{02-introduction/solve-numerical/1}{\B{NRoots} finds all five roots of $x^{5}-x-1$:
+one real and two complex-conjugate pairs, none expressible in radicals.}
+\pair{02-introduction/solve-numerical/2}{\B{NSolve} handles systems. Eliminating $y$ here
+leaves that very same quintic, so the five solutions carry its unsolvable roots in their
+$x$-coordinate.}
+\pair{02-introduction/solve-numerical/3}{\B{FindRoot}, started near $x=1$, converges to
+the root of $\cos x = x$, the ``Dottie number''\index{Dottie number}---a transcendental equation with no
+closed form.}
+\pair{02-introduction/solve-numerical/4}{\B{FindRoot} takes systems as well: a
+transcendental pair in $x$ and $y$, solved from the starting point $(1,1)$.}
+\end{codepairs}
+
+Exact solving belongs to the algebra of Section~\ref{sec:algebra}; the numerical
+solvers to Section~\ref{sec:numcalc}.
+
+\section{Solving inequalities}
+\label{sec:intro-inequalities}
+
+An equation has a handful of solutions to name; an inequality\index{inequality} usually
+has infinitely many, so what you want back is not a list but a \emph{description} of the
+solution set\index{solution set}. \B{Reduce} provides it: given one or more polynomial
+inequalities it returns an equivalent, exhaustive statement---an interval, a union of
+intervals, or a region of the plane---computed by \emph{cylindrical algebraic
+decomposition}\index{cylindrical algebraic decomposition}, a complete decision
+procedure\index{decision procedure} for systems of polynomial equations and inequalities
+over the reals.
+
+\begin{codepairs}
+\pair{02-introduction/inequalities/1}{A quadratic inequality: the solution set is the
+closed interval where the parabola lies on or below the axis.}
+\pair{02-introduction/inequalities/2}{A quartic can cut the line into several
+pieces---here a union of two open intervals.}
+\pair{02-introduction/inequalities/3}{A rational inequality. The pole at $x=-2$ is
+excluded automatically---\B{Reduce} keeps track of where the expression is undefined.}
+\pair{02-introduction/inequalities/4}{The endpoints need not be rational: here they are
+the exact surds $\pm\sqrt2$.}
+\end{codepairs}
+
+Because it \emph{decides} the theory rather than merely searching for solutions,
+\B{Reduce} settles the universal questions too\calloutnote{Under the hood}{That the real
+numbers admit \emph{any} such decision procedure is Tarski's theorem; cylindrical
+algebraic decomposition is the algorithm that makes it practical, and it is what lets
+\B{Reduce} answer a question about \emph{all} real $x$ with a definite \texttt{True} or
+\texttt{False}.}, returning \texttt{True} or \texttt{False} outright when the solution
+set turns out to be everything, or nothing:
+
+\begin{codepairs}
+\pair{02-introduction/inequalities/5}{$x^{2}+1>0$ holds for every real $x$---a one-line
+proof that the expression is positive-definite.}
+\pair{02-introduction/inequalities/6}{No real number makes $x^{2}+x+1$ negative (its
+discriminant is negative), so the answer is \texttt{False}.}
+\pair{02-introduction/inequalities/7}{The arithmetic--geometric-mean
+inequality\index{AM--GM inequality} $x+1/x\ge2$: \B{Reduce} confirms it across the
+\emph{whole} positive ray, the constraint collapsing to just $x>0$.}
+\pair{02-introduction/inequalities/8}{With two variables the solution set becomes a
+region of the plane---the open unit disk, described as $x$ ranging over $(-1,1)$ with $y$
+between the two branches of its bounding circle.}
+\end{codepairs}
+
 \section{Simplification}
 \label{sec:intro-simplify}
 
 Expanding, factoring, and cancelling each drive an expression toward a \emph{particular}
 form. Often, though, you simply want the \emph{simplest} form, whatever that turns out
-to be. \B{Simplify} searches for it, trying a battery of algebraic and trigonometric
+to be. \B{Simplify} searches for it\index{simplification}, trying a battery of algebraic and trigonometric
 transformations and keeping the smallest result:
 
 \begin{codepairs}
-\pair{02-introduction/simplification/1}{The Pythagorean identity collapses to~$1$.}
+\pair{02-introduction/simplification/1}{The Pythagorean identity\index{Pythagorean identity} collapses to~$1$.}
 \pair{02-introduction/simplification/2}{A rational function reduces.}
 \pair{02-introduction/simplification/3}{A double-angle identity is recognised:
 $\cos^{2}x-\sin^{2}x=\cos 2x$.}
-\pair{02-introduction/simplification/4}{\texttt{FullSimplify}, a more powerful cousin,
-\emph{denests} a radical: $\sqrt{3+2\sqrt2}=1+\sqrt2$.}
+\pair{02-introduction/simplification/4}{And a nested radical
+\emph{denests}\index{radical!denesting}: $\sqrt{3+2\sqrt2}=1+\sqrt2$.}
 \end{codepairs}
 
 Some simplifications hold only under conditions, and Mathilda will not assume what you
@@ -244,7 +337,7 @@ $\sqrt{x^{2}}$ is left exactly as written.}
 $x$.}
 \end{codepairs}
 
-An assumption can be more interesting than a sign condition---sometimes what matters is
+An assumption can be more interesting\index{assumptions} than a sign condition---sometimes what matters is
 the \emph{kind} of number involved:
 
 \begin{codepairs}
@@ -257,9 +350,9 @@ untouched.}
 \section{Calculus}
 \label{sec:intro-calculus}
 
-Mathilda does symbolic calculus: differentiation, limits, and integration on
+Mathilda does symbolic calculus\index{symbolic calculus}: differentiation, limits, and integration on
 expressions, returning exact results. Differentiation with \B{D} applies the rules of
-calculus recursively, and by naming a second variable it takes partial derivatives:
+calculus recursively, and by naming a second variable it takes partial derivatives\index{partial derivative}:
 
 \begin{codepairs}
 \pair{02-introduction/calculus-diff/1}{The power rule, applied term by term.}
@@ -271,7 +364,7 @@ $y$ as a constant.}
 $y$.}
 \end{codepairs}
 
-Limits are computed with \B{Limit}, including the classic ones that define the
+Limits are computed with\index{limit} \B{Limit}, including the classic ones that define the
 derivative and the number~$e$:
 
 \begin{codepairs}
@@ -282,7 +375,7 @@ sine.}
 origin.}
 \end{codepairs}
 
-Near a point a function is captured by its power series, and \B{Series} computes it to any
+Near a point a function is captured by its power series\index{power series}, and \B{Series} computes it to any
 order, returning the polynomial part together with an $O[x]^{n}$ term that records where
 the expansion was truncated:
 
@@ -290,28 +383,28 @@ the expansion was truncated:
 \pair{02-introduction/calculus-series/1}{The exponential series, to sixth order.}
 \pair{02-introduction/calculus-series/2}{$\arctan$: the alternating odd reciprocals whose
 value at $x=1$ gives Leibniz's series for $\pi/4$.}
-\pair{02-introduction/calculus-series/3}{At a pole the expansion is a \emph{Laurent}
+\pair{02-introduction/calculus-series/3}{At a pole the expansion is a \emph{Laurent}\index{Laurent series}
 series---here $\cot x$ begins with a $1/x$ term.}
 \pair{02-introduction/calculus-series/4}{With a \emph{symbolic} exponent the coefficients
 come out as the generalized binomial coefficients.}
 \pair{02-introduction/calculus-series/5}{\B{Normal} drops the $O[\,]$ term, turning the
-\texttt{SeriesData} object a series is into an ordinary polynomial.}
+\texttt{SeriesData} object\index{SeriesData} a series is into an ordinary polynomial.}
 \end{codepairs}
 
-Integration, the harder inverse of differentiation, is done with \B{Integrate}---%
-indefinite integrals as symbolic antiderivatives, and definite integrals, including
+Integration, the harder inverse of differentiation\index{integration}, is done with \B{Integrate}---%
+indefinite integrals as symbolic antiderivatives, and definite integrals\index{definite integral}, including
 improper ones:
 
 \begin{codepairs}
 \pair{02-introduction/calculus-integrate/1}{An indefinite integral by parts.}
 \pair{02-introduction/calculus-integrate/2}{Another, giving an inverse tangent.}
 \pair{02-introduction/calculus-integrate/3}{A definite integral over $[0,1]$.}
-\pair{02-introduction/calculus-integrate/4}{The Gaussian integral over the whole real
+\pair{02-introduction/calculus-integrate/4}{The Gaussian integral over the whole real\index{Gaussian integral}
 line: $\int_{-\infty}^{\infty} e^{-x^{2}}\,dx=\sqrt\pi$.}
 \end{codepairs}
 
 \B{Integrate} is not confined to one variable. Give it several iterators and it
-computes a \emph{multiple} integral, from the inside out, so the inner limits may
+computes a \emph{multiple} integral\index{multiple integral}, from the inside out, so the inner limits may
 depend on an outer variable:
 
 \begin{codepairs}
@@ -321,14 +414,14 @@ square.}
 whose inner bound is $x$ itself.}
 \end{codepairs}
 
-And when the limits are \emph{complex}, \B{Integrate} evaluates a \emph{contour
+And when the limits are \emph{complex}, \B{Integrate} evaluates a \emph{contour\index{contour integral}
 integral} along the straight segments joining the points you list:
 
 \begin{codepairs}
 \pair{02-introduction/calculus-integrate-contour/1}{A line integral of $z^{2}$ along
 the segment from $0$ to $1+i$.}
 \pair{02-introduction/calculus-integrate-contour/2}{A closed loop around the origin:
-$\oint \frac{dz}{z}=2\pi i$, the cornerstone of the residue calculus.
+$\oint \frac{dz}{z}=2\pi i$, the cornerstone of the residue calculus\index{residue calculus}.
 Section~\ref{sec:calculus} has the full story.}
 \end{codepairs}
 
@@ -336,9 +429,9 @@ Section~\ref{sec:calculus} has the full story.}
 \label{sec:intro-numcalc}
 
 Not every problem has a closed form, and even when it does a number is sometimes all
-you want. The \texttt{N}-prefixed family answers these questions numerically and
+you want. The \texttt{N}-prefixed family answers\index{numerical calculus} these questions numerically and
 adaptively---to machine precision by default, or to any arbitrary precision you request
-with the \texttt{WorkingPrecision} option:
+with the \texttt{WorkingPrecision} option\index{WorkingPrecision option}:
 
 \begin{codepairs}
 \pair{02-introduction/numerical-calculus/1}{\B{ND} takes a numerical derivative---here
@@ -348,7 +441,7 @@ integral numerically ($\approx\sqrt\pi$).}
 \pair{02-introduction/numerical-calculus/3}{\B{NSum} sums a series numerically.}
 \end{codepairs}
 
-Differential equations are solved numerically by \B{NDSolve}. Take a damped harmonic
+Differential equations are solved numerically\index{differential equation} by \B{NDSolve}. Take a damped harmonic
 oscillator, $y'' + \tfrac{3}{10}\,y' + 4y = 0$ with $y(0)=1$ and $y'(0)=0$: the solution
 comes back as an \B{InterpolatingFunction}, and \B{Plot} takes that
 directly,\footnote{That plot is genuinely the \texttt{Out[2]} of the \B{Plot} command,
@@ -375,68 +468,19 @@ recovered numerically.}
 Section~\ref{sec:numcalc} covers numerical differentiation, integration, summation,
 differential equations, and limits.
 
-\section{Solving equations}
-\label{sec:intro-solve}
-
-Solving equations is among the oldest tasks in mathematics, and Mathilda does it both
-exactly and numerically.
-
-\subsection{Exact solutions of equations}
-
-\B{Solve} finds \emph{exact} solutions---as integers, radicals, or general closed
-forms---for a single equation or a whole system:
-
-\begin{codepairs}
-\pair{02-introduction/solve-exact/1}{A quadratic with two integer roots. Note
-\texttt{==}, which builds an equation, versus \texttt{=}, which assigns.}
-\pair{02-introduction/solve-exact/2}{$x^{2}=2$: the two exact surds $\pm\sqrt2$.}
-\pair{02-introduction/solve-exact/3}{A linear system in two unknowns, uniquely solved.}
-\pair{02-introduction/solve-exact/4}{A \emph{nonlinear} system---a circle meeting the
-line $y=x$---with both intersection points, exactly.}
-\pair{02-introduction/solve-exact/5}{A cubic with no rational roots: the exact solutions
-come back as \B{Root} objects, each an implicit algebraic number---the $k$th root of the
-given polynomial---rather than an unwieldy nest of radicals.}
-\pair{02-introduction/solve-exact/6}{A \B{Root} object is still an exact number, so \B{N}
-evaluates it to as many digits as you ask---here to machine precision.}
-\end{codepairs}
-
-\subsection{Numerical solutions of equations}
-
-When an exact solution is unavailable---the general quintic has no formula in radicals,
-by Abel's theorem---or simply not wanted, the numerical solvers take over. \B{NRoots}
-and \B{NSolve} return every root of a polynomial equation or system as machine numbers,
-while \B{FindRoot} follows Newton's method from a starting point and handles
-transcendental problems too:
-
-\begin{codepairs}
-\pair{02-introduction/solve-numerical/1}{\B{NRoots} finds all five roots of $x^{5}-x-1$:
-one real and two complex-conjugate pairs, none expressible in radicals.}
-\pair{02-introduction/solve-numerical/2}{\B{NSolve} handles systems. Eliminating $y$ here
-leaves that very same quintic, so the five solutions carry its unsolvable roots in their
-$x$-coordinate.}
-\pair{02-introduction/solve-numerical/3}{\B{FindRoot}, started near $x=1$, converges to
-the root of $\cos x = x$, the ``Dottie number''---a transcendental equation with no
-closed form.}
-\pair{02-introduction/solve-numerical/4}{\B{FindRoot} takes systems as well: a
-transcendental pair in $x$ and $y$, solved from the starting point $(1,1)$.}
-\end{codepairs}
-
-Exact solving belongs to the algebra of Section~\ref{sec:algebra}; the numerical
-solvers to Section~\ref{sec:numcalc}.
-
 \section{Programming}
 \label{sec:intro-programming}
 
-Mathilda is also a programming language, and an unusually expressive one. It supports
+Mathilda is also a programming language\index{programming language}, and an unusually expressive one. It supports
 three styles that blend freely: pattern-based rewriting, procedural code, and
 functional programming.
 
 \subsection*{Pattern matching}
 
-The most characteristic style is definition by \emph{patterns}. A name followed by an
-underscore, like \texttt{x\_}, matches anything and binds it, and a pattern can be
-narrowed: \texttt{x\_Integer} matches only an expression with head \texttt{Integer},
-and \texttt{?Positive} adds a test the match must pass. A definition with \texttt{:=}
+The most characteristic style is definition by \emph{patterns}\index{pattern matching}. A name followed by an
+underscore, like \texttt{x\_}, matches anything and binds it\index{pattern matching!Blank (underscore)}, and a pattern can be
+narrowed: \texttt{x\_Integer} matches only an expression with head \texttt{Integer}\index{head (of expression)},
+and \texttt{?Positive} adds a test\index{pattern matching!test} the match must pass. A definition with \texttt{:=}
 applies whenever its pattern fits:
 
 \begin{codepairs}
@@ -460,7 +504,7 @@ Chapter~\ref{ch:programming}.}
 \subsection*{Procedural programming}
 
 When an ordinary loop is the clearest thing, Mathilda has loops. \B{Module} introduces
-local variables, and \B{Do}, \B{For}, and \B{While} iterate:
+local variables\index{local variable (Module)}, and \B{Do}, \B{For}, and \B{While} iterate:
 
 \begin{codepairs}
 \pair{02-introduction/procedural/1}{A \B{Do} loop sums $1$ through $100$.}
@@ -471,9 +515,9 @@ iteration from $27$.}
 
 \subsection*{Functional programming}
 
-Often the shortest code is functional---building a result by applying and composing
+Often the shortest code is functional\index{functional programming}---building a result by applying and composing
 functions rather than by mutating variables. The \texttt{\&} notation makes an
-anonymous function, with \texttt{\#} as its argument:
+anonymous function, with \texttt{\#} as its argument\index{anonymous function}:
 
 \begin{codepairs}
 \pair{02-introduction/functional/1}{\B{Map} applies a function to every element.}
@@ -494,7 +538,7 @@ pattern---the integers.}
 \section{Graphics}
 \label{sec:intro-graphics}
 
-Mathilda draws its own graphics. Every plotting function returns a \texttt{Graphics} (in two
+Mathilda draws its own graphics. Every plotting function returns a \texttt{Graphics}\index{Graphics object} (in two
 dimensions) or \texttt{Graphics3D} (in three) object built from primitives---lines, points,
 polygons, colours---which the built-in engine renders on screen and \B{Export} writes to
 PDF, PNG, or JPEG. This closing tour gives one example of each plotting function; as in
@@ -521,7 +565,7 @@ a square wave:
 
 \subsection{Vector fields}
 
-\B{VectorPlot} shows a field as a grid of arrows, \B{StreamPlot} as flow lines. Here is the
+\B{VectorPlot} shows a field as a grid of arrows\index{vector field}, \B{StreamPlot} as flow lines. Here is the
 phase field of a pendulum, then a pure rotation:
 
 \plotcell{02-introduction/graphics/vectorplot}
@@ -550,7 +594,7 @@ table, whose diagonals of bright cells expose its number-theoretic structure:
 
 \subsection{Complex functions}
 
-\B{ComplexPlot} colours the plane by the value of a complex function---hue for the phase,
+\B{ComplexPlot} colours the plane by the value of a complex function\index{domain coloring}---hue for the phase,
 brightness for the magnitude---so its zeros and poles stand out at a glance:
 
 \plotcell{02-introduction/graphics/complexplot}

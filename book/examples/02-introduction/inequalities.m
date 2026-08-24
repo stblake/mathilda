@@ -1,0 +1,8 @@
+Reduce[x^2 - 3 x + 2 <= 0, x]
+Reduce[x^4 - 5 x^2 + 4 < 0, x]
+Reduce[(x - 1)/(x + 2) > 0, x]
+Reduce[x^2 > 2, x]
+Reduce[x^2 + 1 > 0, x]
+Reduce[x^2 + x + 1 < 0, x]
+Reduce[x + 1/x >= 2 && x > 0, x]
+Reduce[x^2 + y^2 < 1, {x, y}]
