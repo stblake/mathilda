@@ -11,6 +11,7 @@
 #include "test_utils.h"
 #ifdef USE_GRAPHICS
 #include "render.h"
+#include "render_common.h"   /* frame_minor_divs: shared tick-spacing policy */
 #endif
 #include <stdlib.h>
 #include <stdio.h>

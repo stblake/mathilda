@@ -83,6 +83,8 @@ typedef struct {
     RGBA8 background;
     long width, height;
     const Expr* plot_label; /* borrowed */
+    const Expr* ticks;      /* borrowed; Ticks option: NULL/Automatic, None, or
+                             * a {xspec, yspec, zspec} per-axis list */
     bool have_box_ratios;   /* BoxRatios -> {rx,ry,rz} given? (else Automatic/true-scale) */
     double box_ratios[3];   /* the {rx,ry,rz} display side-length ratios */
 } Gfx3DOptions;
@@ -94,6 +96,7 @@ static void gfx3d_options_parse(const Expr* graphics3d, Gfx3DOptions* o) {
     o->background = (RGBA8){ 255, 255, 255, 255 };
     o->width = 800; o->height = 600;
     o->plot_label = NULL;
+    o->ticks = NULL;
     o->have_box_ratios = false;
     o->box_ratios[0] = o->box_ratios[1] = o->box_ratios[2] = 1.0;
 
@@ -132,6 +135,12 @@ static void gfx3d_options_parse(const Expr* graphics3d, Gfx3DOptions* o) {
             }
         } else if (name == SYM_PlotLabel) {
             o->plot_label = rhs;
+        } else if (name == SYM_Ticks) {
+            /* Ticks -> Automatic (default) : adaptive major+minor ticks.
+             * Ticks -> None                : box drawn, but no ticks/labels.
+             * Ticks -> {xspec, yspec, zspec}: per-axis, each Automatic/None or a
+             *   list of positions / {pos, label} pairs (see draw_box_ticks). */
+            o->ticks = rhs;
         } else if (name == SYM_BoxRatios) {
             /* BoxRatios -> {rx, ry, rz}: display box side-length ratios.
              * Automatic (or any non-3-list) leaves have_box_ratios false, i.e.
@@ -405,41 +414,176 @@ static void draw_box3(const Box3D* bb, Color col) {
     for (int i = 0; i < 4; i++) DrawLine3D(c[bot[i]], c[top[i]], col);
 }
 
-static void draw_tick_label3(Vector3 world_pos, Camera cam, const char* text, int win_w, int win_h, Color color) {
-    Vector2 s = GetWorldToScreenEx(world_pos, cam, win_w, win_h);
-    int tw = label_font_measure_px(text, 14);
-    label_font_draw_px(text, (int)s.x - tw / 2, (int)s.y, 14, color);
+/* Box-tick geometry (screen space). Ticks point INWARD (into the box) as in
+ * Mathematica; numeric labels sit just OUTSIDE the box on the opposite side. */
+#define TICK3_MAJOR_PX  7.0f    /* labelled major tick, inward length */
+#define TICK3_MINOR_PX  4.0f    /* unlabelled minor sub-tick, inward length */
+#define TICK3_LABEL_GAP 8.0f    /* edge -> label gap, outward */
+
+/* Screen-space outward unit normal at a box-edge point P, perpendicular to the
+ * edge. `axis` names the edge's own direction (0=x, 1=y, 2=z); the outward
+ * direction is (P - boxcentre) with the along-edge component removed, so it
+ * always points away from the box into free space -- correct for all three
+ * edges with no per-edge special case. Taken in *screen* space (project P and a
+ * small outward data-space step, normalise the projected delta), so a tick of a
+ * fixed pixel length looks identical regardless of BoxRatios scaling or
+ * perspective foreshortening. `*sP` receives P's screen position. */
+static void box_edge_normal(double px, double py, double pz, int axis,
+                            const Box3D* bb, Camera cam, int win_w, int win_h,
+                            Vector2* sP, Vector2* out_dir) {
+    double cx = 0.5 * (bb->xmin + bb->xmax);
+    double cy = 0.5 * (bb->ymin + bb->ymax);
+    double cz = 0.5 * (bb->zmin + bb->zmax);
+    double ox = (axis == 0) ? 0.0 : px - cx;
+    double oy = (axis == 1) ? 0.0 : py - cy;
+    double oz = (axis == 2) ? 0.0 : pz - cz;
+
+    *sP = GetWorldToScreenEx(to_v3(px, py, pz), cam, win_w, win_h);
+    Vector2 sO = GetWorldToScreenEx(to_v3(px + 0.06 * ox, py + 0.06 * oy,
+                                          pz + 0.06 * oz), cam, win_w, win_h);
+    float dx = sO.x - sP->x, dy = sO.y - sP->y;
+    float len = sqrtf(dx * dx + dy * dy);
+    if (len < 1e-3f) { out_dir->x = 0.0f; out_dir->y = 1.0f; } /* edge seen end-on */
+    else             { out_dir->x = dx / len; out_dir->y = dy / len; }
 }
 
-/* One tick label every nice_step() interval along each of the three box
- * edges meeting at (xmin,ymin,zmin) -- reusing render.c's tick-spacing
- * policy instead of re-deriving it. */
-static void draw_box_ticks(const Box3D* bb, Camera cam, int win_w, int win_h, Color col) {
-    char buf[32];
-    double xstep = nice_step(bb->xmax - bb->xmin, 5);
-    double ystep = nice_step(bb->ymax - bb->ymin, 5);
-    double zstep = nice_step(bb->zmax - bb->zmin, 5);
+/* Draw one major tick (inward mark + outside label) at world point (px,py,pz)
+ * on the `axis` edge. Factored out so the automatic and custom paths share
+ * exactly one placement policy. */
+static void draw_one_major_tick(const Box3D* bb, Camera cam, int win_w, int win_h,
+                                Color col, int axis, double px, double py, double pz,
+                                const char* label) {
+    Vector2 sP, dir;
+    box_edge_normal(px, py, pz, axis, bb, cam, win_w, win_h, &sP, &dir);
+    Vector2 tin = { sP.x - dir.x * TICK3_MAJOR_PX, sP.y - dir.y * TICK3_MAJOR_PX };
+    DrawLineEx(sP, tin, 1.3f, col);
+    int tw = label_font_measure_px(label, 14);
+    float lx = sP.x + dir.x * TICK3_LABEL_GAP - tw * 0.5f;
+    float ly = sP.y + dir.y * TICK3_LABEL_GAP - 7.0f;   /* half the 14px cap */
+    label_font_draw_px(label, (int)lx, (int)ly, 14, col);
+}
 
-    for (double x = ceil(bb->xmin / xstep) * xstep; x <= bb->xmax + 1e-9; x += xstep) {
-        snprintf(buf, sizeof(buf), "%g", x);
-        draw_tick_label3(to_v3(x, bb->ymin, bb->zmin), cam, buf, win_w, win_h, col);
+/* Automatic major + minor ticks along one box edge. `axis` is the edge's own
+ * direction (0=x, 1=y, 2=z); the other two coordinates are pinned to the box
+ * corner the caller selects. Majors land on nice_step() values and carry a
+ * label; minors subdivide each major interval by frame_minor_divs() (shared
+ * with the 2D frame) so they always fall on round values. Iterating by integer
+ * index over the minor step keeps major detection and label values exact (no
+ * float drift). `skip_lo` drops the tick at v == lo, whose 3D point is a box
+ * corner already ticked by the x-edge pass -- avoids overprinting that label. */
+static void draw_edge_ticks(const Box3D* bb, Camera cam, int win_w, int win_h,
+                            Color col, int axis, double lo, double hi, bool skip_lo) {
+    double step = nice_step(hi - lo, 5);
+    int sub = frame_minor_divs(step);
+    double mstep = step / (double)sub;
+    if (!(mstep > 0.0)) return;
+
+    long i0 = (long)ceil(lo / mstep - 1e-9);
+    long i1 = (long)floor(hi / mstep + 1e-9);
+    char buf[32];
+    for (long i = i0; i <= i1; i++) {
+        bool major = (i % sub == 0);            /* major step = sub minor steps */
+        double v = major ? (i / sub) * step     /* exact multiple: clean label */
+                         : i * mstep;
+        if (skip_lo && fabs(v - lo) < 1e-9) continue;
+
+        double px, py, pz;
+        if (axis == 0)      { px = v;        py = bb->ymin; pz = bb->zmin; }
+        else if (axis == 1) { px = bb->xmax; py = v;        pz = bb->zmin; }
+        else                { px = bb->xmin; py = bb->ymin; pz = v;        }
+
+        if (major) {
+            double vlab = (i / sub) * step;
+            if (vlab == 0.0) vlab = 0.0;        /* normalise -0 -> 0 */
+            snprintf(buf, sizeof(buf), "%g", vlab);
+            draw_one_major_tick(bb, cam, win_w, win_h, col, axis, px, py, pz, buf);
+        } else {
+            Vector2 sP, dir;                    /* minor: shorter, inward, no label */
+            box_edge_normal(px, py, pz, axis, bb, cam, win_w, win_h, &sP, &dir);
+            Vector2 tin = { sP.x - dir.x * TICK3_MINOR_PX, sP.y - dir.y * TICK3_MINOR_PX };
+            DrawLineEx(sP, tin, 1.0f, col);
+        }
     }
-    /* y = ymin is the point (xmax, ymin, zmin) -- the same 3D point (and
-     * therefore the same projected screen position) as the x-loop's
-     * x = xmax tick above. Drawing both would overwrite one label with
-     * the other; skip the y-axis's copy and let the x-axis's tick stand
-     * for that corner. */
-    for (double y = ceil(bb->ymin / ystep) * ystep; y <= bb->ymax + 1e-9; y += ystep) {
-        if (fabs(y - bb->ymin) < 1e-9) continue;
-        snprintf(buf, sizeof(buf), "%g", y);
-        draw_tick_label3(to_v3(bb->xmax, y, bb->zmin), cam, buf, win_w, win_h, col);
+}
+
+/* Draw an explicit user tick list on one box edge. Each `spec` element is
+ * either a bare number (label = the number) or a {pos, label, ...} sublist
+ * (label from element[1]: a string is used verbatim, anything else is printed).
+ * All are majors -- explicit ticks carry no automatic minor sub-ticks, matching
+ * Mathematica. */
+static void draw_edge_ticks_list(const Box3D* bb, Camera cam, int win_w, int win_h,
+                                 Color col, int axis, const Expr* spec, bool skip_lo) {
+    double lo = (axis == 0) ? bb->xmin : (axis == 1) ? bb->ymin : bb->zmin;
+    size_t n = spec->data.function.arg_count;
+    char buf[64];
+    for (size_t k = 0; k < n; k++) {
+        const Expr* e = spec->data.function.args[k];
+        double pos;
+        const char* label = NULL;
+        char* owned = NULL;                      /* freed after drawing, if set */
+
+        if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+            && e->data.function.head->data.symbol.name == SYM_List
+            && e->data.function.arg_count >= 1) {
+            if (!expr_to_d(e->data.function.args[0], &pos)) continue;
+            if (e->data.function.arg_count >= 2) {
+                const Expr* lab = e->data.function.args[1];
+                if (lab->type == EXPR_STRING) label = lab->data.string;
+                else { owned = expr_to_string((Expr*)lab); label = owned; }
+            }
+        } else if (!expr_to_d(e, &pos)) {
+            continue;                            /* not a number or {pos,...}: skip */
+        }
+        if (skip_lo && fabs(pos - lo) < 1e-9) { free(owned); continue; }
+        if (!label) { snprintf(buf, sizeof(buf), "%g", pos == 0.0 ? 0.0 : pos); label = buf; }
+
+        double px, py, pz;
+        if (axis == 0)      { px = pos;      py = bb->ymin; pz = bb->zmin; }
+        else if (axis == 1) { px = bb->xmax; py = pos;      pz = bb->zmin; }
+        else                { px = bb->xmin; py = bb->ymin; pz = pos;      }
+        draw_one_major_tick(bb, cam, win_w, win_h, col, axis, px, py, pz, label);
+        free(owned);
     }
-    /* z = zmin is the point (xmin, ymin, zmin) -- the same corner as the
-     * x-loop's x = xmin tick; skip it for the same reason as above. */
-    for (double z = ceil(bb->zmin / zstep) * zstep; z <= bb->zmax + 1e-9; z += zstep) {
-        if (fabs(z - bb->zmin) < 1e-9) continue;
-        snprintf(buf, sizeof(buf), "%g", z);
-        draw_tick_label3(to_v3(bb->xmin, bb->ymin, z), cam, buf, win_w, win_h, col);
+}
+
+/* Per-axis Ticks spec for axis `ax` (0=x,1=y,2=z) from the top-level Ticks
+ * value: NULL / non-list means "Automatic"; a {xs,ys,zs} list yields element ax
+ * (a missing element is Automatic). Whole-value None is handled by the caller. */
+static const Expr* ticks_axis_spec(const Expr* ticks, int ax) {
+    if (!ticks || ticks->type != EXPR_FUNCTION) return NULL;
+    const Expr* h = ticks->data.function.head;
+    if (h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_List) return NULL;
+    return ((size_t)ax < ticks->data.function.arg_count)
+             ? ticks->data.function.args[ax] : NULL;
+}
+
+/* True if `e` is the symbol None. */
+static bool is_none_sym(const Expr* e) {
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_None;
+}
+
+/* Ticks along the three box edges meeting at (xmin,ymin,zmin), honouring the
+ * Ticks option (`ticks`, borrowed): NULL/Automatic gives adaptive major+minor
+ * ticks; None draws no ticks (the box itself still shows); a {xspec,yspec,zspec}
+ * list drives each axis independently (Automatic / None / explicit list). The
+ * y- and z-edges skip their lo end, whose 3D point coincides with an x-edge
+ * corner tick. */
+static void draw_box_ticks(const Box3D* bb, Camera cam, int win_w, int win_h,
+                           Color col, const Expr* ticks) {
+    if (is_none_sym(ticks)) return;              /* Ticks -> None: box, no ticks */
+
+    double lo[3] = { bb->xmin, bb->ymin, bb->zmin };
+    double hi[3] = { bb->xmax, bb->ymax, bb->zmax };
+    for (int ax = 0; ax < 3; ax++) {
+        bool skip_lo = (ax != 0);                /* y,z share their lo corner with x */
+        const Expr* spec = ticks_axis_spec(ticks, ax);
+        if (is_none_sym(spec)) continue;         /* this axis: no ticks */
+        if (spec && spec->type == EXPR_FUNCTION
+            && spec->data.function.head->type == EXPR_SYMBOL
+            && spec->data.function.head->data.symbol.name == SYM_List)
+            draw_edge_ticks_list(bb, cam, win_w, win_h, col, ax, spec, skip_lo);
+        else
+            draw_edge_ticks(bb, cam, win_w, win_h, col, ax, lo[ax], hi[ax], skip_lo);
     }
 }
 
@@ -1028,7 +1172,7 @@ void graphics3d_show(const Expr* graphics3d_expr) {
             label_font_draw_px(lbl, (int)lx, (int)ly, 13, RAYWHITE);
         }
 
-        if (opts.axes) draw_box_ticks(&bb, camera, win_w, win_h, axes_color);
+        if (opts.axes) draw_box_ticks(&bb, camera, win_w, win_h, axes_color, opts.ticks);
         if (opts.plot_label) {
             char* s = expr_to_string((Expr*)opts.plot_label);
             if (s) {
@@ -1258,7 +1402,7 @@ void graphics3d_render_in_region(const Expr* graphics3d_expr,
         label_font_draw_px(lbl, (int)lx, (int)ly, 13, RAYWHITE);
     }
 
-    if (opts.axes) draw_box_ticks(&bb, camera, want_w, want_h, (Color){ 90, 90, 90, 255 });
+    if (opts.axes) draw_box_ticks(&bb, camera, want_w, want_h, (Color){ 90, 90, 90, 255 }, opts.ticks);
     if (opts.plot_label) {
         char* s = expr_to_string((Expr*)opts.plot_label);
         if (s) {

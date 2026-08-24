@@ -9,6 +9,11 @@
 
 #include <stdbool.h>
 #include "expr.h"
+/* NB: intentionally does NOT include render_common.h -- that header pulls in
+ * <raylib.h>, and this header is included unconditionally by core files
+ * (e.g. imageio.c) that must still compile in USE_GRAPHICS=OFF builds. The
+ * shared tick-spacing policy (nice_step, frame_minor_divs) lives in
+ * render_common.h; include it directly where you need it. */
 
 /* Resolve the on-screen window height (px) from the AspectRatio setting.
  *
@@ -76,12 +81,6 @@ void cmyk_to_rgb(double c, double m, double y, double k,
  * No-op when USE_GRAPHICS is not compiled in (this file is excluded then). */
 void graphics_render_in_region(const Expr* graphics_expr,
                                 float rx, float ry, float rw, float rh);
-
-/* Number of minor (sub-)tick intervals per major frame-tick interval, chosen
- * from the leading digit of `step` so minor ticks land on round values: a
- * "nice" step of 1 splits into 5, 2 into 4, 5 into 5. Factored out of the
- * frame renderer so the tick-subdivision policy can be unit-tested headless. */
-int frame_minor_divs(double step);
 
 /* Signed area (shoelace formula) of a closed polygon given as parallel x/y
  * arrays of length count. Positive in a y-down (screen-like) convention

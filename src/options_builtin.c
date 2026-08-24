@@ -698,6 +698,7 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("PlotRange", "Automatic"));
     ob_add(&b, r_sym("PlotStyle", "Automatic"));
     ob_add(&b, r_sym("RegionFunction", "None"));
+    ob_add(&b, r_sym("Ticks", "Automatic"));
     ob_commit(&b, "Plot3D");
 
     /* ComplexPlot / ComplexPlot3D honour these via complexplot.c's

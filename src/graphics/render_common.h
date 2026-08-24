@@ -26,6 +26,12 @@ Color to_raylib(RGBA8 c);
  * tick count. */
 double nice_step(double range, int target_ticks);
 
+/* Minor-tick subdivisions per major interval, chosen from the leading digit of
+ * the major `step` so minors always land on round values: a step of 1 splits
+ * into 5 (minors every 0.2), 2 into 4 (every 0.5), 5 into 5 (every 1). Defined
+ * in render.c and shared by both the 2D frame and the 3D box. */
+int frame_minor_divs(double step);
+
 /* True if this process can open a GUI window (Aqua session on macOS, X11/
  * Wayland display on Linux). The offscreen export paths screen for this before
  * InitWindow, which aborts inside GLFW rather than failing when no monitor is

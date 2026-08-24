@@ -754,6 +754,7 @@ extern const char* SYM_ImageSize;
 extern const char* SYM_AxesOrigin;
 extern const char* SYM_AxesStyle;
 extern const char* SYM_TicksStyle;
+extern const char* SYM_Ticks;
 extern const char* SYM_FrameLabel;
 extern const char* SYM_RotateLabel;
 extern const char* SYM_PlotRangePadding;

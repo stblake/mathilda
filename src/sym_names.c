@@ -742,6 +742,7 @@ const char* SYM_ImageSize = NULL;
 const char* SYM_AxesOrigin = NULL;
 const char* SYM_AxesStyle = NULL;
 const char* SYM_TicksStyle = NULL;
+const char* SYM_Ticks = NULL;
 const char* SYM_FrameLabel = NULL;
 const char* SYM_RotateLabel = NULL;
 const char* SYM_PlotRangePadding = NULL;
@@ -1609,6 +1610,7 @@ void sym_names_init(void) {
     SYM_AxesOrigin                 = intern_symbol("AxesOrigin");
     SYM_AxesStyle                  = intern_symbol("AxesStyle");
     SYM_TicksStyle                 = intern_symbol("TicksStyle");
+    SYM_Ticks                      = intern_symbol("Ticks");
     SYM_FrameLabel                 = intern_symbol("FrameLabel");
     SYM_RotateLabel                = intern_symbol("RotateLabel");
     SYM_PlotRangePadding           = intern_symbol("PlotRangePadding");

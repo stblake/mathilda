@@ -739,7 +739,7 @@ Samples and displays a function of two real variables as a surface.
 - `Plot3D[f, {x,...}, {y,...}, opts...]`: as above, with options below.
 - `HoldAll`: `f` and both iterator specs are not pre-evaluated.
 
-Options: see **Feature summary** above. `HoldAll`, `Protected`. `ExclusionStyle` (default `GrayLevel[0.35]`) styles boundary edges when `RegionFunction` is active. `Options[Plot3D]` returns the full defaulted set (`Axes`, `Background`, `BoxRatios`, `ColorFunction`, `ColorFunctionScaling`, `ExclusionStyle`, `ImageSize`, `Lighting`, `MaxRecursion`, `Mesh`, `PlotLabel`, `PlotPoints`, `PlotRange`, `PlotStyle`, `RegionFunction`).
+Options: see **Feature summary** above. `HoldAll`, `Protected`. `ExclusionStyle` (default `GrayLevel[0.35]`) styles boundary edges when `RegionFunction` is active. `Options[Plot3D]` returns the full defaulted set (`Axes`, `Background`, `BoxRatios`, `ColorFunction`, `ColorFunctionScaling`, `ExclusionStyle`, `ImageSize`, `Lighting`, `MaxRecursion`, `Mesh`, `PlotLabel`, `PlotPoints`, `PlotRange`, `PlotStyle`, `RegionFunction`, `Ticks`).
 
 `BoxRatios -> {rx, ry, rz}` sets the display box's side-length ratios,
 independent of the data ranges (Mathematica semantics). The default is
@@ -752,9 +752,41 @@ overriding the automatic `"Viridis"` height gradient (an explicit
 `ColorFunction` still wins over both). Multi-surface plots keep their
 per-surface palette.
 
+`Axes -> True` (the `Plot3D` default) draws the bounding box with ticks on each
+of the three edges meeting at the `(xmin, ymin, zmin)` corner. **Major ticks**
+land on the shared `nice_step` values, are labelled, and point **inward** (into
+the box), with the value set just **outside**; **minor sub-ticks** subdivide
+each major interval (shorter, unlabelled) using the same `frame_minor_divs`
+policy as the 2D frame — a major step of 1 splits into 5, 2 into 4, 5 into 5, so
+minors always fall on round values. Tick geometry is computed per render in
+screen space, so mark lengths stay constant under `BoxRatios` scaling and any
+camera orientation; labels always show true data values regardless of the
+`BoxRatios` transform.
+
+`Ticks` controls those axis ticks (`Axes -> True` must be in effect):
+
+- `Ticks -> Automatic` (default) — adaptive major + minor ticks as above.
+- `Ticks -> None` — the box is still drawn, but with no ticks or labels.
+- `Ticks -> {xspec, yspec, zspec}` — one spec per axis (a missing trailing
+  entry defaults to `Automatic`). Each spec is one of:
+  - `Automatic` — adaptive major + minor ticks for that axis;
+  - `None` — no ticks on that axis;
+  - a list of positions `{v1, v2, ...}` — a labelled major tick at each `vi`
+    (label is the number), with **no** minor sub-ticks;
+  - a list of `{position, label}` pairs — as above but with an explicit label
+    (a string is used verbatim; anything else is printed). A bare number and a
+    `{position, label}` pair may be mixed in the same list.
+
 ```mathematica
 In[1]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}]
 Out[1]= -Graphics3D-
+
+In[1b]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}, Ticks -> None]
+Out[1b]= -Graphics3D-  (* box drawn, no ticks *)
+
+In[1c]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3},
+           Ticks -> {{{-3, "left"}, {0, "mid"}, {3, "right"}}, {-2, 2}, Automatic}]
+Out[1c]= -Graphics3D-  (* custom x labels, explicit y positions, automatic z *)
 
 In[2]:= Plot3D[x^2 - y^2, {x, -2, 2}, {y, -2, 2}, ColorFunction -> "Rainbow", Mesh -> None]
 Out[2]= -Graphics3D-  (* Rainbow maps z-height to hue *)
