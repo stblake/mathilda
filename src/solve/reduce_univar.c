@@ -201,53 +201,67 @@ Expr* reduce_univar_integers(const RForm* F, const Expr* x, Expr** vars, int nv)
         return expr_new_symbol(t ? SYM_True : SYM_False);
     }
 
-    /* The integer solution set is bounded only if BOTH unbounded end-cells are
-     * unsatisfied; otherwise it is infinite and we decline (a later phase can
-     * emit an `x >= k`-style form). */
+    /* Sample truth at every integer in a window [A, B] that strictly brackets
+     * all breakpoints, so T is constant on each tail: T[A] is the truth of the
+     * whole ray x <= A, T[B] of x >= B.  The set is a union of a possible left
+     * ray, isolated middle points, and a possible right ray. */
     bool ap, bp_ok;
     double lo = rru_approx_double(bp[0], &ap);
     double hi = rru_approx_double(bp[m - 1], &bp_ok);
-    if (!ap || !bp_ok) { for (int i = 0; i < m; i++) expr_free(bp[i]); free(bp); return NULL; }
-    long a = (long)floor(lo) - 1;
-    long b = (long)ceil(hi) + 1;
-
-    Expr* sl = expr_new_integer(a);
-    Expr* sr = expr_new_integer(b);
-    int tl = form_truth_at(F, x, sl);
-    int tr = form_truth_at(F, x, sr);
-    expr_free(sl); expr_free(sr);
-    if (tl == -1 || tr == -1 || tl == 1 || tr == 1) {
-        for (int i = 0; i < m; i++) expr_free(bp[i]);
-        free(bp);
-        return NULL;                    /* undecidable or unbounded -> decline */
-    }
     for (int i = 0; i < m; i++) expr_free(bp[i]);
     free(bp);
+    if (!ap || !bp_ok || !isfinite(lo) || !isfinite(hi)) return NULL;
 
-    /* Enumerate the integers in [a, b] and keep the satisfying ones. */
-    Expr** sols = NULL; int ns = 0;
-    for (long n = a; n <= b; n++) {
-        Expr* s = expr_new_integer(n);
+    long A = (long)floor(lo) - 1;
+    long B = (long)ceil(hi) + 1;
+    if (B < A || B - A > 200000) return NULL;   /* absurd window -> decline */
+
+    long win = B - A + 1;
+    int* T = malloc((size_t)win * sizeof(int));
+    for (long k = A; k <= B; k++) {
+        Expr* s = expr_new_integer(k);
         int t = form_truth_at(F, x, s);
-        if (t == -1) {
-            expr_free(s);
-            for (int i = 0; i < ns; i++) expr_free(sols[i]);
-            free(sols);
-            return NULL;
-        }
-        if (t == 1) {
-            Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
-                (Expr*[]){ expr_copy((Expr*)x), s }, 2);
-            sols = realloc(sols, (size_t)(ns + 1) * sizeof(Expr*));
-            sols[ns++] = eq;
-        } else {
-            expr_free(s);
-        }
+        expr_free(s);
+        if (t == -1) { free(T); return NULL; }
+        T[k - A] = t;
     }
 
+    bool has_left  = (T[0] == 1);
+    bool has_right = (T[win - 1] == 1);
+
+    long lend = A - 1;                 /* last integer of the left ray */
+    if (has_left)  { long k = A; while (k <= B && T[k - A] == 1) k++; lend = k - 1; }
+    long rstart = B + 1;               /* first integer of the right ray */
+    if (has_right) { long k = B; while (k >= A && T[k - A] == 1) k--; rstart = k + 1; }
+
+    /* Both tails satisfied and their runs meet: the whole line qualifies. */
+    if (has_left && has_right && lend >= rstart - 1) { free(T); return expr_new_symbol(SYM_True); }
+
+    Expr** parts = NULL; int np = 0;
+    if (has_left) {
+        parts = realloc(parts, (size_t)(np + 1) * sizeof(Expr*));
+        parts[np++] = expr_new_function(expr_new_symbol(SYM_LessEqual),
+            (Expr*[]){ expr_copy((Expr*)x), expr_new_integer(lend) }, 2);
+    }
+    long mid_lo = has_left  ? lend + 1  : A;
+    long mid_hi = has_right ? rstart - 1 : B;
+    for (long k = mid_lo; k <= mid_hi; k++) {
+        if (T[k - A] == 1) {
+            parts = realloc(parts, (size_t)(np + 1) * sizeof(Expr*));
+            parts[np++] = expr_new_function(expr_new_symbol(SYM_Equal),
+                (Expr*[]){ expr_copy((Expr*)x), expr_new_integer(k) }, 2);
+        }
+    }
+    if (has_right) {
+        parts = realloc(parts, (size_t)(np + 1) * sizeof(Expr*));
+        parts[np++] = expr_new_function(expr_new_symbol(SYM_GreaterEqual),
+            (Expr*[]){ expr_copy((Expr*)x), expr_new_integer(rstart) }, 2);
+    }
+    free(T);
+
     Expr* out;
-    if (ns == 0) { free(sols); out = expr_new_symbol(SYM_False); }
-    else if (ns == 1) { out = sols[0]; free(sols); }
-    else { out = expr_new_function(expr_new_symbol(SYM_Or), sols, (size_t)ns); free(sols); }
+    if (np == 0)      { free(parts); out = expr_new_symbol(SYM_False); }
+    else if (np == 1) { out = parts[0]; free(parts); }
+    else              { out = expr_new_function(expr_new_symbol(SYM_Or), parts, (size_t)np); free(parts); }
     return eval_and_free(out);
 }

@@ -563,6 +563,8 @@ extern const char* SYM_Unevaluated;
 extern const char* SYM_Union;
 extern const char* SYM_Unprotect;
 extern const char* SYM_UnitStep;
+extern const char* SYM_UnitBox;
+extern const char* SYM_Ramp;
 extern const char* SYM_UnitVector;
 extern const char* SYM_UnsameQ;
 extern const char* SYM_Unset;

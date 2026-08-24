@@ -372,6 +372,12 @@ static void test_integer_domain(void) {
              "Or[Equal[x, 1], Equal[x, 2], Equal[x, 3]]");
     run_test("Reduce[1 <= x <= 3, x, Integers]",
              "Or[Equal[x, 1], Equal[x, 2], Equal[x, 3]]");
+    /* Unbounded inequalities -> one-sided rays (a satisfied tail beyond the
+     * extreme root emits x<=k / x>=k rather than declining). */
+    run_test("Reduce[x > 0, x, Integers]", "GreaterEqual[x, 1]");
+    run_test("Reduce[x < 5, x, Integers]", "LessEqual[x, 4]");
+    run_test("Reduce[x^2 > 1, x, Integers]",
+             "Or[LessEqual[x, -2], GreaterEqual[x, 2]]");
     /* Bounded system with an equation. */
     run_test("Reduce[x + y == 5 && x > 0 && y > 0, {x, y}, Integers]",
              "Or[And[Equal[x, 1], Equal[y, 4]], And[Equal[x, 2], Equal[y, 3]], "
@@ -421,11 +427,6 @@ static void test_inequality_defaults_reals(void) {
  * ------------------------------------------------------------------ */
 
 static void test_decline_soundness(void) {
-    /* Unbounded integer sets are not yet emitted as x>=1 style forms. */
-    run_test("Reduce[x > 0, x, Integers]", "Reduce[Greater[x, 0], x, Integers]");
-    run_test("Reduce[x < 5, x, Integers]", "Reduce[Less[x, 5], x, Integers]");
-    run_test("Reduce[x^2 > 1, x, Integers]",
-             "Reduce[Greater[Power[x, 2], 1], x, Integers]");
     /* Unsupported / unknown domains. */
     run_test("Reduce[x^2 == 4, x, Booleans]",
              "Reduce[Equal[Power[x, 2], 4], x, Booleans]");
@@ -724,6 +725,26 @@ static void test_real_functions(void) {
              "Reduce[Equal[Power[x, Rational[1, 2]], a], x, Reals]");
 }
 
+/* ------------------------------------------------------------------ *
+ *  Piecewise functions (Sign/UnitStep/Ramp/Clip/Piecewise/Boole/     *
+ *  HeavisideTheta/IntegerPart) case-split into polynomial branches;   *
+ *  a polynomial-in-Floor with an unbounded integer set emits rays.    *
+ * ------------------------------------------------------------------ */
+
+static void test_piecewise_functions(void) {
+    run_test("Reduce[Sign[x - 1] < 0, x, Reals]", "Less[x, 1]");
+    run_test("Reduce[IntegerPart[x] == 2, x, Reals]",
+             "Inequality[2, LessEqual, x, Less, 3]");
+    run_test("Reduce[Clip[x, {-2, 2}] < 1, x, Reals]", "Less[x, 1]");
+    run_test("Reduce[Boole[x > 0] + Boole[x > 1] == 2, x, Reals]", "Greater[x, 1]");
+    /* HeavisideTheta is verified here (not in the sampling corpus): its numeric
+     * value stays symbolic, so back-sampling has no judgeable grid points. */
+    run_test("Reduce[HeavisideTheta[x - 2] == 1, x, Reals]", "Greater[x, 2]");
+    /* Unbounded polynomial-in-Floor -> one-sided rays via the integer sub-solve. */
+    run_test("Reduce[Floor[x]^2 > 5, x, Reals]",
+             "Or[Less[x, -2], GreaterEqual[x, 3]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -742,6 +763,7 @@ int main(void) {
     TEST(test_inequality_defaults_reals);
     TEST(test_decline_soundness);
     TEST(test_real_functions);
+    TEST(test_piecewise_functions);
     TEST(test_cad_real);
     TEST(test_cad_nvar);
     TEST(test_wb_constant_atoms);

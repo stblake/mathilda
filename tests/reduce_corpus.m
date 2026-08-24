@@ -152,14 +152,47 @@
   {"rf-sqrt-square",     Sqrt[(x^2 - 4)^2] == 4 - x^2,     x,       Reals,     "solved"},
   {"rf-floor-eq",        Floor[2 x - 1] == 3,              x,       Reals,     "solved"},
   {"rf-mod-self",        Mod[x, 4] == x,                   x,       Reals,     "solved"},
+  (* Min/Max case-split into the polynomial engine; quadratic-in-Floor via the
+   * integer-domain sub-solve (both were single-cell False/True bugs). *)
+  {"rf-max-abs",         Max[x^2 - 1, 1 - x^2] > 1/2,      x,       Reals,     "solved"},
+  {"rf-min-band",        Min[x, 1 - x] > 1/4,              x,       Reals,     "solved"},
+  {"rf-max-lin",         Max[x, 1] > 2,                    x,       Reals,     "solved"},
+  {"rf-max-negid",       Max[x, -x] < 3,                   x,       Reals,     "solved"},
+  {"rf-min-quad",        Min[x^2, 4] < 1,                  x,       Reals,     "solved"},
+  {"rf-floor-quad",      Floor[x]^2 - 3 Floor[x] + 2 <= 0, x,       Reals,     "solved"},
+  {"rf-ceil-quad",       Ceiling[x]^2 - 3 Ceiling[x] + 2 <= 0, x,   Reals,     "solved"},
+  (* unbounded polynomial-in-Floor/Ceiling: the integer sub-solve now emits rays. *)
+  {"rf-floor-ray",       Floor[x]^2 > 5,                   x,       Reals,     "solved"},
+  {"rf-ceil-ray",        Ceiling[x]^2 > 5,                 x,       Reals,     "solved"},
+  {"rf-floor-gt",        Floor[x] > 3,                     x,       Reals,     "solved"},
+  (* piecewise heads: Sign/UnitStep/Ramp/Clip/Piecewise/Boole/HeavisideTheta/
+   * UnitBox/IntegerPart, plus multivariate Max/Min. *)
+  {"rf-sign",            Sign[x - 1] < 0,                  x,       Reals,     "solved"},
+  {"rf-unitstep",        UnitStep[x - 3] == 1,             x,       Reals,     "solved"},
+  {"rf-ramp",            Ramp[x] > 2,                      x,       Reals,     "solved"},
+  {"rf-clip",            Clip[x, {-2, 2}] < 1,             x,       Reals,     "solved"},
+  {"rf-piecewise",       Piecewise[{{x^2, x > 0}}, -x] > 2, x,      Reals,     "solved"},
+  {"rf-boole",           Boole[x > 0] + Boole[x > 1] == 2, x,       Reals,     "solved"},
+  (* rf-heaviside HeavisideTheta[x-2]==1 -> x>2 is pinned in test_reduce.c: the
+   * corpus verifier back-samples the input, but HeavisideTheta[n] stays symbolic
+   * at numeric n here, so it has no judgeable grid points. *)
+  {"rf-unitbox",         UnitBox[x] == 1,                  x,       Reals,     "solved"},
+  {"rf-intpart",         IntegerPart[x] == 2,              x,       Reals,     "solved"},
+  {"mm-max2",            Max[x, y] > 2,                    {x, y},  Reals,     "solved"},
+  {"mm-min2",            Min[x, y] < 1,                    {x, y},  Reals,     "solved"},
+  {"mm-abs2",            Abs[x] + Abs[y] < 1,              {x, y},  Reals,     "solved"},
   (* NB: cases whose equation is an identity in C off the real domain (e.g.
    * ArcSin[x]+ArcCos[x]==Pi/2 at x=2, or Sqrt[x^2-4]==Sqrt[x-2]Sqrt[x+2] at x=0)
    * are pinned in test_reduce.c instead: the corpus verifier samples the input
    * in C, where it reads True outside the real solution set. *)
 
   (* ---- soundness invariant: these MUST decline (never a guessed formula) ---- *)
-  {"dec-int-unbounded",  x > 0,                            x,       Integers,  "decline"},
-  {"dec-int-unbounded2", x < 5,                            x,       Integers,  "decline"},
+  (* Unbounded univariate integer inequalities now solve as one-sided rays
+   * (the integer sign-diagram emits x<=k / x>=k for a satisfied tail). *)
+  {"int-ray-gt",         x > 0,                            x,       Integers,  "solved"},
+  {"int-ray-lt",         x < 5,                            x,       Integers,  "solved"},
+  {"int-ray-quad",       x^2 > 5,                          x,       Integers,  "solved"},
+  {"int-ray-two-sided",  x^2 >= 9,                         x,       Integers,  "solved"},
   {"dec-rf-freeparam",   Sqrt[x] == a,                     x,       Reals,     "decline"},
   {"dec-bad-domain",     x^2 == 4,                         x,       Booleans,  "decline"},
   {"dec-nl-eq-complex",  x^2 + y^2 == 1,                   {x, y},  Automatic, "decline"},

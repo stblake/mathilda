@@ -1,51 +1,76 @@
-# Task: Reduce over Reals — general elementary-real-function sign diagram
+# Reduce: multivariate Max/Min, unbounded polynomial-in-Floor, and general piecewise functions
 
-## Goal
-Make `Reduce[..., x, Reals]` (and the 2-arg default where the statement forces
-Reals) solve univariate statements built from polynomials, `Abs`, real radicals,
-rational poles, `Log`, inverse-trig, and isolated `Floor`/`Ceiling`/`Round`/`Mod`
-— generally and soundly. Target: the 15 cases (0–14) in the approved plan
-(`~/.claude/plans/wise-gathering-simon.md`).
+## Goal (approved)
+1. Solve multivariate `Max`/`Min`: `Reduce[Max[x,y]>2,{x,y}] -> x>2 || y>2`.
+2. Solve unbounded polynomial-in-`Floor`: `Reduce[Floor[x]^2>5,x,Reals] -> x<-2 || x>=3`.
+3. Same treatment for other piecewise functions: `Piecewise`, `Sign`, `UnitStep`,
+   `Ramp`, `Clip`, `HeavisideTheta`, `Boole`, `UnitBox`, `IntegerPart`,
+   `FractionalPart`.
 
-## Design (one engine + one head table)
-- **Engine A** (`reduce_realdiag.c`): univariate real sign diagram tolerating
-  radical/pole atoms — breakpoints from `Solve` roots ∪ poles ∪ domain boundaries;
-  truth via domain gate + pole gate + substitution-evaluate; numeric-sign fallback
-  for transcendental (Pi) breakpoints. Fallback after poly `reduce_univar` declines.
-- **Preprocess B + domain table C** (`reduce_realfn.c`): `Abs` sign-split,
-  `Mod`→`Floor` + integer-part isolation, and the head→(domain constraint, boundary)
-  table.
-- **Dispatch** (`reduce.c`): detect real-fn of x → preprocess + route to Reals →
-  general-engine fallback.
+## Validated design (manual splits all reduce correctly; CAD/FM soundly decline
+   on residual non-polynomial heads)
 
-## Steps
-- [x] 1. Extract emission `rru_emit_sign_diagram` (shared) from `reduce_univar.c`.
-- [x] 2. `reduce_realfn.{c,h}`: head-domain table (`reduce_real_domain_collect`),
-        `reduce_stmt_has_realfn`.
-- [x] 3. `reduce_realdiag.{c,h}`: `reduce_univar_general` (breakpoints, domain/pole
-        gate truth oracle, numeric-sign fallback).
-- [x] 4. `reduce_realfn.c`: `reduce_realfn_preprocess` (Abs split, Mod/Floor).
-- [x] 5. Wire `reduce.c` dispatch (detector + preprocess + force reals + fallback).
-- [x] 6. Build; run cases 0–14; 14/15 exact (case 14 x>0 vs x>=0: sound 0/0 point).
-- [x] 7. Tests: `test_reduce.c` decline case updated + `test_real_functions` added;
-        corpus records + verifier green (118/118); decline soundness checks.
-- [x] 8. valgrind (new code leak-clean) + `make check-c99` (pass).
-- [ ] 9. Docs: `REDUCE_PLAN.md` Phase 9, `docs/spec/builtins/`, changelog 2026-08-25.
+### Phase 1 — unified piecewise case-split + multivariate dispatch
+- `reduce_realfn.c`: one `eliminate_piecewise` driven by a `piecewise_clauses`
+  table that maps each head to `{(guard_i, value_i)}` + optional default:
+  - Piecewise[{{v,c}..},def]: clauses (c_i,v_i), default def(or 0)
+  - Sign[u]: (u<0,-1),(u>0,1), default 0
+  - UnitStep[u]: (u<0,0), default 1     Ramp[u]: (u<0,0), default u
+  - Boole[c]: (c,1), default 0          UnitBox[u]: (u<-1/2,0),(u>1/2,0), default 1
+  - HeavisideTheta[u]: (u<0,0),(u>0,1), NO default (u==0 excluded)
+  - Clip[u]/Clip[u,{a,b}]/Clip[u,{a,b},{va,vb}]: below/above clauses, default u
+  - IntegerPart[u]: (u<0,Ceiling[u]), default Floor[u]
+  - FractionalPart[u]: (u<0,u-Ceiling[u]), default u-Floor[u]
+  Split: `Or_i[ And[ !g_0..!g_{i-1}, g_i, stmt|_{node->v_i} ] ]` (+ default branch);
+  no-default heads exclude the uncovered region. Recurses; folded into the
+  fixpoint driver alongside Abs/Max-Min/Mod/IP.
+- Factor `apply_selector_splits` (Abs, Max/Min, piecewise) — nv/domain-agnostic —
+  used by both the univariate `reduce_realfn_preprocess` and a new
+  `reduce_piecewise_preprocess` (any nv).
+- `reduce.c`: for nv>=2 with a selector head, run `reduce_piecewise_preprocess`,
+  force Reals, then FM/CAD.
+- Add `SYM_Ramp`, `SYM_UnitBox`.
+
+### Phase 2 — unbounded integers (fixes unbounded Floor, generalizes Reduce/Integers)
+- `reduce_univar.c` `reduce_univar_integers`: keep bounded-run enumeration
+  (`k==n`, preserves all pinned tests) but add UNBOUNDED-TAIL rays: sample the
+  left/right tail integer beyond the extreme root; emit `x<=b1` / `x>=a2`.
+- `reduce_realfn.c` `translate_ksol`: accept all six `k REL int` + Inequality, map
+  via `ip_defining`. Extend `ip_defining` for Ceiling (all six); Floor already
+  full; Round stays Equal-only (round-half-even -> inequalities decline, sound).
+- Corpus: `dec-int-unbounded`(x>0)/`dec-int-unbounded2`(x<5) become solved
+  (`x>=1`/`x<=4`).
+
+## Verify
+- [ ] Targets 1-3 return expected answers; existing reduce_tests + corpus green.
+- [ ] New corpus cases (multivar max/min, unbounded floor, each piecewise head).
+- [ ] check-c99, valgrind, docs + changelog + memory.
 
 ## Review
+All three goals delivered. Implemented in two phases, both green.
 
-Implemented Phase 9: a general univariate real sign-diagram engine for elementary
-real functions. Two new modules (`reduce_realfn.{c,h}` preprocessing + domain
-table, `reduce_realdiag.{c,h}` engine), a shared emission helper in
-`reduce_real_util.c`, a branch-cut-transcendental `Together` guard in
-`reduce_atom.c`, and dispatch wiring in `reduce.c`.
+Phase 1 — general piecewise case-split + multivariate dispatch
+- `reduce_realfn.c`: `piecewise_clauses` table + `eliminate_piecewise` (Piecewise/
+  Sign/UnitStep/Ramp/Clip/HeavisideTheta/Boole/UnitBox/IntegerPart/FractionalPart);
+  `apply_selector_splits` factored; `reduce_piecewise_preprocess` (nv>=2);
+  `reduce_stmt_has_piecewise`; piecewise heads added to `node_is_realfn`.
+- `reduce.c`: nv>=2 selector dispatch (force Reals -> FM/CAD).
+- `sym_names.{c,h}`: `SYM_Ramp`, `SYM_UnitBox`.
 
-14/15 target cases match Mathematica exactly; case 14 returns the sound `x>0`
-where MMA lists `x>=0` (at x=0 the expression is literally `0/0+0/0`). Also fixed
-pre-existing gaps: `Reduce[Sqrt[x-1]==2]`→`x==5`, `Reduce[Abs[x]<1,Reals]`→`-1<x<1`.
+Phase 2 — unbounded integers
+- `reduce_univar.c` `reduce_univar_integers`: one-sided rays for satisfied tails
+  (kept bounded enumeration -> all pinned tests preserved).
+- `reduce_realfn.c`: `translate_ksol` accepts all six `k REL int` + `flip_rel`;
+  `ip_defining` full Ceiling relations (Round stays Equal-only, half-even).
 
-Bugs found & fixed during impl: (1) `expr_new_function` arity-3 on a 2-element
-Plus array (garbage read → wrong Mod result + segfault); (2) `Solve` returning the
-identity `{{}}` hid isolated polynomial-factor roots → added `collect_factor_roots`;
-(3) `Together` applied complex-log identities unsound over ℝ (`Log[x^2]-2Log[-x]`
-→ `-2 I Pi`) → skip Together for branch-cut transcendentals.
+Verification
+- reduce_tests: all pass (added `test_piecewise_functions`, moved 3 integer
+  inequalities decline->solved). reduce_corpus: 141/141 (+23 cases).
+- solve_tests, piecewise_tests: pass. check-c99: clean. valgrind: 0 additional
+  errors vs baseline; no leak frames in new code.
+- Docs (`solutions-of-equations.md`), changelog (`2026-08-24.md`), memory updated.
+
+Known sound limitations (decline, never wrong): `FractionalPart[x]<1/2` and a
+`Floor` whose inner value also appears outside it (periodic/mixed sets a finite
+interval list can't express); unbounded `Round` inequalities (round-half-even);
+multivariate integer-part (`Floor[x]+y>2`).

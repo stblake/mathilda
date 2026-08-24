@@ -34,6 +34,41 @@ static bool is_head(const Expr* e, const char* name) {
 static bool is_true_sym(const Expr* e)  { return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_True; }
 static bool is_false_sym(const Expr* e) { return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_False; }
 
+static bool rd_contains_x(const Expr* e, const Expr* x) {
+    if (!e || !x || x->type != EXPR_SYMBOL) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == x->data.symbol.name;
+    if (e->type == EXPR_FUNCTION) {
+        if (rd_contains_x(e->data.function.head, x)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (rd_contains_x(e->data.function.args[i], x)) return true;
+    }
+    return false;
+}
+
+/* Heads that make an atom PIECEWISE in x: Floor/Ceiling/Round/IntegerPart/Mod/
+ * Max/Min/Abs.  This engine collects breakpoints from Solve roots, poles and
+ * head-table domain boundaries only -- it has no way to locate the transition
+ * points of these heads, so an atom that still carries one (with x under it)
+ * after reduce_realfn preprocessing declined to rewrite it cannot be sampled
+ * soundly.  It must DECLINE (return NULL -> unevaluated) rather than emit a
+ * single-cell verdict from an arbitrary sample.  Radicals / Log / inverse-trig
+ * are deliberately NOT here: the domain table and Solve handle those. */
+static bool expr_has_opaque_piecewise(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_Floor || h == SYM_Ceiling || h == SYM_Round
+            || h == SYM_IntegerPart || h == SYM_Mod
+            || h == SYM_Max || h == SYM_Min || h == SYM_Abs) {
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (rd_contains_x(e->data.function.args[i], x)) return true;
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expr_has_opaque_piecewise(e->data.function.args[i], x)) return true;
+    return false;
+}
+
 /* poly with the single rule x -> sample applied, evaluated (adopts nothing). */
 static Expr* subst_eval(const Expr* poly, const Expr* x, const Expr* sample) {
     Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
@@ -323,6 +358,17 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv) 
     if (F->is_true) return expr_new_symbol(SYM_True);
     if (F->n == 0)  return expr_new_symbol(SYM_False);
     if (has_free_parameter(F, x)) return NULL;
+
+    /* Soundness gate: an atom still carrying a piecewise head (Floor/Max/Abs/...)
+     * in x -- one that preprocessing could not rewrite away -- has transition
+     * points this sampler cannot see, so decline rather than risk a single-cell
+     * verdict. */
+    for (int i = 0; i < F->n; i++)
+        for (int k = 0; k < F->c[i]->n; k++) {
+            const RAtom* a = &F->c[i]->a[k];
+            if (expr_has_opaque_piecewise(a->poly, x)) return NULL;
+            if (a->denom && expr_has_opaque_piecewise(a->denom, x)) return NULL;
+        }
 
     /* Domain constraints from every atom numerator and denominator. */
     RDomCon* cons = NULL; int ncon = 0, ccap = 0;

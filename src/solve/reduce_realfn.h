@@ -32,6 +32,12 @@ typedef struct { Expr* poly; bool strict; } RDomCon;
  * radical.  Drives reduce.c's decision to route to the Reals and preprocess. */
 bool reduce_stmt_has_realfn(const Expr* e, const Expr* x);
 
+/* True iff `e` contains a selector piecewise head (Abs/Max/Min/Piecewise/Sign/
+ * UnitStep/Ramp/Clip/HeavisideTheta/Boole/UnitBox) with one of the `nv` reduce
+ * `vars` under it.  Drives the multivariate dispatch to case-split the piecewise
+ * heads (reduce_piecewise_preprocess) into polynomial branches before FM/CAD. */
+bool reduce_stmt_has_piecewise(const Expr* e, Expr** vars, int nv);
+
 /* Rewrite the statement so the general real sign diagram can consume it:
  *   1. substitute every Mod[u,m] (m a positive constant) by u - m*Floor[u/m];
  *   2. expand a relational leaf that is linear in a single Floor/Ceiling/Round
@@ -42,6 +48,14 @@ bool reduce_stmt_has_realfn(const Expr* e, const Expr* x);
  * (the caller then keeps the original expression).  *changed reports whether a
  * rewrite fired. */
 Expr* reduce_realfn_preprocess(const Expr* e, const Expr* x, bool* changed);
+
+/* Multivariate (any variable count) piecewise preprocessing: the domain-agnostic
+ * selector splits only (Abs, Min/Max, Piecewise/Sign/UnitStep/Ramp/Clip/
+ * HeavisideTheta/Boole/UnitBox), iterated to a fixpoint.  Returns a freshly-owned
+ * rewritten Expr, or NULL when nothing fired.  *changed reports whether a rewrite
+ * fired.  The integer-part machinery is univariate and lives in
+ * reduce_realfn_preprocess instead. */
+Expr* reduce_piecewise_preprocess(const Expr* e, bool* changed);
 
 /* Append the real-domain constraints of every partial-domain node in `e` whose
  * argument contains `x` to the growable array (*cons,*n,*cap).  Each RDomCon

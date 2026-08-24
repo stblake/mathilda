@@ -915,12 +915,27 @@ degenerate branch, and it handles inequalities over the reals.
 - **Elementary real functions over Reals** (general univariate sign diagram,
   Phase 9): a statement in one variable built from `Abs`, real radicals
   `u^(p/q)`, rational poles, `Log`, bounded-domain inverse-trig, and the isolated
-  integer-part forms (`Floor`/`Ceiling`/`Round`, `Mod`) is solved as a union of
+  integer-part forms (`Floor`/`Ceiling`/`Round`, `Mod`), `Max`/`Min`, and the
+  **piecewise functions** (`Piecewise`, `Sign`, `UnitStep`, `Ramp`, `Clip`,
+  `HeavisideTheta`, `Boole`, `UnitBox`, `IntegerPart`, `FractionalPart`) is solved
+  as a union of
   intervals and points. A statement containing such a function defaults its domain
   to the Reals (these are real-valued constructs). `Abs` is eliminated by
-  case-splitting on each argument's sign; `Mod[u,m]` becomes `u - m*Floor[u/m]`
-  and an isolated `Floor`/`Ceiling`/`Round` relation is expanded to its defining
-  inequalities; the remaining radical/`Log`/inverse-trig atoms are placed on a
+  case-splitting on each argument's sign; `Max`/`Min` is eliminated the same way,
+  by branching on which argument is the extremum (`Max[a,b]>c` becomes
+  `(a>=b && a>c) || (a<b && b>c)`, extended to `n` arguments); every piecewise
+  head is decomposed into its first-match `(guard, value)` clauses and split the
+  same way (a head with no default, `HeavisideTheta`, leaves its undefined point
+  `u==0` out of every branch, so it is excluded from the solution set);
+  `Mod[u,m]` becomes `u - m*Floor[u/m]`; a `Floor`/`Ceiling`/`Round` relation
+  *linear* in one integer-part node is expanded to its defining inequalities, and
+  a relation *polynomial* in a single such node is settled by substituting a fresh
+  integer variable and solving over the Integers, then expanding each satisfying
+  value back to its defining intervals — including one-sided rays for an unbounded
+  set (`Floor[x]^2 > 5 -> x < -2 || x >= 3`). These rewrites are iterated to a
+  fixpoint so a split that exposes a fresh integer-part or `Max`/`Min` leaf is
+  handled in turn. The remaining
+  radical/`Log`/inverse-trig atoms are placed on a
   sign diagram whose breakpoints include the domain boundaries (radicand `==0`,
   `Log` arg `==0`, `ArcSin` arg `==±1`), and each cell is tested under a
   **real-domain gate** so a point where the identity holds only in ℂ is excluded.
@@ -931,6 +946,18 @@ degenerate branch, and it handles inequalities over the reals.
   `Reduce[(Abs[x+3]+Abs[x-3])/x==2, x, Reals] -> x >= 3`;
   `Reduce[Sqrt[x^2-4]==Sqrt[x-2]Sqrt[x+2], x, Reals] -> x >= 2`;
   `Reduce[Floor[2x-1]==3, x, Reals] -> 2 <= x < 5/2`;
+  `Reduce[Floor[x]^2-3Floor[x]+2<=0, x, Reals] -> 1 <= x < 3` (quadratic in
+  `Floor[x]`, via the integer sub-solve `Floor[x] == 1 || Floor[x] == 2`);
+  `Reduce[Max[x^2-1,1-x^2]>1/2, x, Reals] -> x < -Sqrt[3/2] || -1/Sqrt[2] < x <
+  1/Sqrt[2] || x > Sqrt[3/2]`;
+  `Reduce[Min[x,1-x]>1/4, x, Reals] -> 1/4 < x < 3/4`;
+  `Reduce[Sign[x-1]<0, x, Reals] -> x < 1`;
+  `Reduce[UnitStep[x-3]==1, x, Reals] -> x >= 3`;
+  `Reduce[Ramp[x]>2, x, Reals] -> x > 2`;
+  `Reduce[Clip[x,{-2,2}]<1, x, Reals] -> x < 1`;
+  `Reduce[Piecewise[{{x^2,x>0}},-x]>2, x, Reals] -> x < -2 || x > Sqrt[2]`;
+  `Reduce[HeavisideTheta[x-2]==1, x, Reals] -> x > 2`;
+  `Reduce[IntegerPart[x]==2, x, Reals] -> 2 <= x < 3`;
   `Reduce[Mod[x,2Pi]==x-2Pi, x, Reals] -> 2Pi <= x < 4Pi`;
   `Reduce[ArcSin[x]+ArcCos[x]==Pi/2, x, Reals] -> -1 <= x <= 1`;
   `Reduce[Log[x^2]==2Log[-x], x, Reals] -> x < 0`;
@@ -938,6 +965,23 @@ degenerate branch, and it handles inequalities over the reals.
   `Reduce[Sqrt[x-1]==2, x, Reals] -> x == 5`. A free parameter, an undecidable
   sign, or an unsupported domain node declines. At a removable `0/0` singularity
   the sound open boundary is reported (`x/Sqrt[x^2]+Sqrt[x^2]/x==2 -> x > 0`).
+  A **piecewise-head soundness gate** guards the last step: if an atom still
+  carries a `Floor`/`Ceiling`/`Round`/`IntegerPart`/`Mod`/`Max`/`Min`/`Abs` term
+  in the variable after the rewrites above declined (e.g. a `Floor` whose inner
+  value also appears outside it, `FractionalPart[x]<1/2`, whose exact answer is a
+  periodic union no finite interval list can express), the sign diagram cannot
+  locate its transition points, so `Reduce` declines rather than emit a
+  single-cell verdict from an arbitrary sample.
+- **Multivariate piecewise over Reals**: the selector case-splits (`Abs`,
+  `Max`/`Min`, and the piecewise heads above — but not the univariate integer-part
+  machinery) run for any number of variables, so a multivariate piecewise
+  statement is turned into a polynomial `And`/`Or` combination and handed to the
+  Fourier-Motzkin / CAD engines. Examples:
+  `Reduce[Max[x,y]>2, {x,y}, Reals] -> x > 2 && y <= x || y >= x && y > 2`;
+  `Reduce[Min[x,y]<1, {x,y}, Reals] -> x < 1 && y >= x || y <= x && y < 1`;
+  `Reduce[Abs[x]+Abs[y]<1, {x,y}, Reals]` -> the four sectors of the L¹ ball. A
+  residual integer-part atom (e.g. `Floor[x]+y>2`) is left for the CAD engine to
+  decline soundly.
 
 Rational-function relations whose canonicalisation would clear a variable
 denominator (e.g. `1/x < 1`) are declined (left unevaluated) rather than answered

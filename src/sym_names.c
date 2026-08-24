@@ -560,6 +560,8 @@ const char* SYM_Unevaluated = NULL;
 const char* SYM_Union = NULL;
 const char* SYM_Unprotect = NULL;
 const char* SYM_UnitStep = NULL;
+const char* SYM_UnitBox = NULL;
+const char* SYM_Ramp = NULL;
 const char* SYM_UnitVector = NULL;
 const char* SYM_UnsameQ = NULL;
 const char* SYM_Unset = NULL;
@@ -1432,6 +1434,8 @@ void sym_names_init(void) {
     SYM_Union                      = intern_symbol("Union");
     SYM_Unprotect                  = intern_symbol("Unprotect");
     SYM_UnitStep                   = intern_symbol("UnitStep");
+    SYM_UnitBox                    = intern_symbol("UnitBox");
+    SYM_Ramp                       = intern_symbol("Ramp");
     SYM_UnitVector                 = intern_symbol("UnitVector");
     SYM_UnsameQ                    = intern_symbol("UnsameQ");
     SYM_Unset                      = intern_symbol("Unset");

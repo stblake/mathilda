@@ -116,12 +116,19 @@ Expr* builtin_reduce(Expr* res) {
      * integer-part relations away so the sign-diagram engines can consume it. */
     bool force_reals = false;
     Expr* owned_pre = NULL;
-    if (nv == 1 && (dom == NULL
-                    || (dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Reals))
-        && reduce_stmt_has_realfn(expr, vlist[0])) {
+    bool reals_dom = (dom == NULL
+                      || (dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Reals));
+    if (nv == 1 && reals_dom && reduce_stmt_has_realfn(expr, vlist[0])) {
         force_reals = true;
         bool changed = false;
         Expr* pre = reduce_realfn_preprocess(expr, vlist[0], &changed);
+        if (pre) { owned_pre = pre; expr = pre; }
+    } else if (nv >= 2 && reals_dom && reduce_stmt_has_piecewise(expr, vlist, nv)) {
+        /* Multivariate piecewise (Max/Min/Abs/Piecewise/...): case-split into
+         * polynomial branches, then let Fourier-Motzkin / CAD solve over Reals. */
+        force_reals = true;
+        bool changed = false;
+        Expr* pre = reduce_piecewise_preprocess(expr, &changed);
         if (pre) { owned_pre = pre; expr = pre; }
     }
 
