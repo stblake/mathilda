@@ -263,6 +263,29 @@ closed form.}
 transcendental pair in $x$ and $y$, solved from the starting point $(1,1)$.}
 \end{codepairs}
 
+\subsection{Equations with a continuum of solutions}
+
+\B{Solve} expects a finite list of solutions to name. But an equation built from
+absolute values or nested radicals can hold across a whole interval, and then what
+is wanted is again a \emph{description} of the solution set\index{solution
+set}\index{equation!continuum of solutions} rather than a list of points.
+\B{Reduce}---the general real-equation engine taken up in the next
+section---provides it, solving over the reals and returning the exact region on
+which the equation holds:
+
+\begin{codepairs}
+\pair{02-introduction/solve-region/1}{Each nested radical\index{radical!nested} is a
+perfect square in disguise---$x+1-2\sqrt x=(\sqrt x-1)^{2}$ and
+$x+16-8\sqrt x=(\sqrt x-4)^{2}$---so the left side is $|\sqrt x-1|+|\sqrt x-4|$,
+which equals~$3$ across the entire interval $1\le x\le16$.}
+\pair{02-introduction/solve-region/2}{A sum of absolute values\index{absolute value}
+over~$x$: the equation is satisfied not at isolated points but along the whole ray
+$x\ge3$.}
+\pair{02-introduction/solve-region/3}{Nested absolute values, even in~$x$: the
+solution set is a \emph{union} of two intervals, one mirrored across the origin from
+the other.}
+\end{codepairs}
+
 Exact solving belongs to the algebra of Section~\ref{sec:algebra}; the numerical
 solvers to Section~\ref{sec:numcalc}.
 
@@ -271,9 +294,10 @@ solvers to Section~\ref{sec:numcalc}.
 
 An equation has a handful of solutions to name; an inequality\index{inequality} usually
 has infinitely many, so what you want back is not a list but a \emph{description} of the
-solution set\index{solution set}. \B{Reduce} provides it: given one or more polynomial
-inequalities it returns an equivalent, exhaustive statement---an interval, a union of
-intervals, or a region of the plane---computed by \emph{cylindrical algebraic
+solution set\index{solution set}. \B{Reduce} provides it: given one or more polynomial,
+rational, or radical inequalities it returns an equivalent, exhaustive statement---an
+interval, a union of intervals, or a region of the plane---computed by \emph{cylindrical
+algebraic
 decomposition}\index{cylindrical algebraic decomposition}, a complete decision
 procedure\index{decision procedure} for systems of polynomial equations and inequalities
 over the reals.
@@ -287,6 +311,13 @@ pieces---here a union of two open intervals.}
 excluded automatically---\B{Reduce} keeps track of where the expression is undefined.}
 \pair{02-introduction/inequalities/4}{The endpoints need not be rational: here they are
 the exact surds $\pm\sqrt2$.}
+\pair{02-introduction/inequalities/5}{A rational inequality whose numerator carries the
+denominator's factors---$x^{3}-x=x(x^{2}-1)$---so after cancellation it collapses to the
+plain linear condition $x\le2$.}
+\pair{02-introduction/inequalities/6}{A \emph{radical}
+inequality\index{inequality!radical}, not polynomial at all. The square root's domain
+$x\ge-4$ meets the single crossing at $x=5$, where $\sqrt{x+4}=x-2$, to give
+$-4\le x<5$.}
 \end{codepairs}
 
 Because it \emph{decides} the theory rather than merely searching for solutions,
@@ -298,16 +329,20 @@ algebraic decomposition is the algorithm that makes it practical, and it is what
 set turns out to be everything, or nothing:
 
 \begin{codepairs}
-\pair{02-introduction/inequalities/5}{$x^{2}+1>0$ holds for every real $x$---a one-line
+\pair{02-introduction/inequalities/7}{$x^{2}+1>0$ holds for every real $x$---a one-line
 proof that the expression is positive-definite.}
-\pair{02-introduction/inequalities/6}{No real number makes $x^{2}+x+1$ negative (its
+\pair{02-introduction/inequalities/8}{No real number makes $x^{2}+x+1$ negative (its
 discriminant is negative), so the answer is \texttt{False}.}
-\pair{02-introduction/inequalities/7}{The arithmetic--geometric-mean
+\pair{02-introduction/inequalities/9}{The arithmetic--geometric-mean
 inequality\index{AM--GM inequality} $x+1/x\ge2$: \B{Reduce} confirms it across the
 \emph{whole} positive ray, the constraint collapsing to just $x>0$.}
-\pair{02-introduction/inequalities/8}{With two variables the solution set becomes a
+\pair{02-introduction/inequalities/10}{With two variables the solution set becomes a
 region of the plane---the open unit disk, described as $x$ ranging over $(-1,1)$ with $y$
 between the two branches of its bounding circle.}
+\pair{02-introduction/inequalities/11}{Absolute values\index{absolute value} in two
+variables: the open \emph{diamond} $|x|+|y|<1$, the unit ball of the $\ell^{1}$
+norm\index{norm!$\ell^1$}. \B{Reduce} case-splits each \B{Abs} on the sign of its
+argument, so the region falls out as its four quadrant sectors.}
 \end{codepairs}
 
 \section{Simplification}
