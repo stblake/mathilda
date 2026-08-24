@@ -76,6 +76,16 @@ Expr* interval_apply_function(const char* head, const Expr* iv);
  * even n, decreasing for odd n). Returns NULL outside (0, inf) or for n < 0. */
 Expr* interval_polygamma(int64_t n, const Expr* iv);
 
+/* General entry point for threading an arbitrary numeric function call `res`
+ * (e.g. Erfi[Interval[...]], PolyLog[2, Interval[...]]) over its single Interval
+ * argument. Tries the tight bespoke handlers first (arity 1), then certifies
+ * monotonicity by interval-evaluating the symbolic derivative D[f[x], x] over
+ * each pair. Returns a fresh canonical Interval, or NULL to stay symbolic (no
+ * interval argument, more than one, self-referential derivative, or an
+ * un-provable sign). Called from the evaluator for any NumericFunction whose
+ * builtin left an Interval argument unevaluated. */
+Expr* interval_thread_call(Expr* res);
+
 /* Promote a scalar number to the point interval Interval[{x, x}] (copies x). */
 Expr* interval_from_scalar(const Expr* x);
 

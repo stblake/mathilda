@@ -1,89 +1,52 @@
-# Fix: Integrate::nonelem emitted 4× instead of once
-
-## Bug
-`Integrate[Log[x] Log[Log[x]]/x^2, x]` emits the `Integrate::nonelem` message
-four times:
-- twice for internal recursive sub-integrands named `Integrate`DerivativeDivides`u$N`
-- twice for the original integrand `(Log[x] Log[Log[x]])/x^2`
-
-Desired: emit **once**, for the original integrand only.
-
-## Root cause (verified by instrumentation)
-Two independent defects:
-
-1. **Leaky recursive messages.** `DerivativeDivides` substitutes `u = Log[x]`
-   and recurses via `integrate_in -> Integrate[u Log[u] E^(-u), u]`. That
-   nested Integrate reaches the same `RischTranscendental` decision stage and
-   emits a `nonelem` message naming an internal gensym (`u$3`). A user-facing
-   diagnostic must never name an internal recursion variable.
-
-2. **Double cascade.** `builtin_integrate` is invoked twice at top level with
-   the byte-identical integrand (same `expr_hash`). Cause: the integrand
-   `Times[Log[x], Log[Log[x]], Power[x,-2]]` reorders under Orderless on the
-   first `evaluate_step`, so `next != current` and the fixed-point loop runs a
-   second step — re-running the whole (expensive) method search + Eliminate/Solve.
-   Affects any failed symbolic integral whose integrand reorders on first eval.
+# Task: Seamless Interval[...] support for special & piecewise functions
 
 ## Plan
-- [ ] `eval.c`/`eval.h`: add `eval_toplevel_id()` — a counter bumped once per
-      outermost `evaluate()` call. General infra to scope per-command state.
-- [ ] `integrate.h`/`integrate.c`: add `g_integrate_depth` counter around the
-      method cascade (outermost user call = depth 1; recursion = depth >= 2).
-- [ ] `integrate.c`: add a fail-memo keyed on `(toplevel_id, hash(f), hash(x),
-      method)`. A matching re-entry in the same top-level evaluation returns
-      NULL immediately — skipping the redundant second cascade AND its duplicate
-      message. Self-invalidates next command via the id tag.
-- [ ] `integrate_risch_transcendental.c`: gate the `nonelem` message on
-      `g_integrate_depth <= 1` so only the top-level user integrand is named.
-- [ ] Remove debug instrumentation.
-- [ ] Verify: reported integrand -> one message; test C -> one message; a
-      genuinely-solvable integral still solves; re-run in a new command re-warns.
-- [ ] Run integration/calculus tests; docs + changelog.
+Make special functions (Erfi, ExpIntegralEi, PolyLog, ...) and piecewise
+functions (UnitStep, Ramp, Round, IntegerPart) thread over Interval[...] the way
+elementary functions already do — rigorous enclosures, symbolic fallback.
 
-## Review — DONE
+## Steps
+- [ ] `src/interval.c`: general derivative-sign certifier `interval_thread_call`
+      (+ helpers iv_subst / iv_eval_at / iv_range_sign, depth guard).
+- [ ] `src/interval.c`: bespoke rows in `interval_apply_function` for Erfi,
+      InverseErf, InverseErfc, ProductLog, HarmonicNumber, UnitStep, Ramp,
+      Round, IntegerPart.
+- [ ] `src/interval.h`: declare `interval_thread_call`.
+- [ ] `src/eval.c`: central hook after builtin returns NULL (NumericFunction +
+      interval arg -> interval_thread_call).
+- [ ] `src/piecewise.c`: update the "deliberately not threaded" comment.
+- [ ] `tests/test_interval.c`: new coverage cases.
+- [ ] Docs: docs/spec/builtins interval reference + changelog 2026-08-24.
+- [ ] Verify: build, re-probe, `make check-interval`, full test suite,
+      confirm oscillatory heads stay symbolic and terminate.
 
-Implemented both halves:
-- `eval.c`/`eval.h`: `eval_toplevel_id()` — counter bumped once per outermost
-  `evaluate()`. Zero semantic effect (only Integrate reads it).
-- `integrate.h`/`integrate.c`: `g_integrate_depth` around the cascade; a 32-slot
-  per-command fail-memo (`intg_fail_*`) keyed on `(eval_toplevel_id, hash(f),
-  hash(x), method)`, auto-expiring each command, no dynamic allocation.
-- `integrate_risch_transcendental.c`: `nonelem` message gated on
-  `g_integrate_depth <= 1`.
+## Review
 
-Verified:
-- Reported integral -> **one** message naming `(Log[x] Log[Log[x]])/x^2`; the
-  cascade runs **once** (was twice — proven with `[CASCADE-RUN]`/`[MEMO-HIT]`
-  instrumentation, since removed). ~0.078 s.
-- Single-pass nonelem (`1/Log[Log[x]]`), `Log[Log[x]]`, `E^(x^2) Log[x]` each
-  still warn once. Re-run in a later command re-warns (memo self-invalidates).
-- Same nonelem twice in one `List` command -> one message; two *different*
-  nonelem in one command -> one message each (fixed 32-slot table, not a single
-  slot).
-- Solvable / definite / list-threaded integrals unchanged.
-- Suites green: integrals, integrate_dispatch, derivdivides, deriv,
-  intrischnorman, limit, series, ramanujan, eval, eval_timestamps,
-  eval_eager_exit, core, match. `make check-c99` clean.
+Implemented. Special & piecewise functions now thread over `Interval[...]`.
 
-## Follow-up correctness bug — FIXED
-`Integrate[Sin[x]/Log[x], x]` returned a wrong **`0`** (also `Cos[x]/Log[x]`,
-`Tan[x]/Log[x]`, `Sin[x]/Log[x]^2`, `ArcTan[x]/Log[x]`, `Gamma[x]/Log[x]`,
-`Sin[x]/(1+E^x)`, `Cos[x]/(1+E^x)`, `BesselJ[0,x]/Log[x]`, …).
+**Mechanism (elegant + rigorous):**
+- `interval_thread_call` (src/interval.c) — general derivative-sign certifier:
+  interval-evaluates `D[f[x],x]` over each pair; entirely ≥0 → increasing,
+  ≤0 → decreasing; else symbolic. Reuses `D[]` + interval evaluator, no
+  per-function monotonicity analysis. Wired into src/eval.c step "5b" (after
+  builtin NULL, gated on ATTR_NUMERICFUNCTION + interval-arg scan).
+- Depth cap `IV_CERTIFY_MAX_DEPTH`=4 + counter-raised-across-whole-section:
+  chains (PolyLog[3]) resolve; oscillatory chains (Bessel) stay symbolic + fast.
+- `iv_range_sign` only sign-tests a threaded Interval or concrete number (never
+  numericalizes a symbolic derivative → no recursion, fast fallback).
+- Bespoke rows: InverseErf, InverseErfc, ProductLog, HarmonicNumber, Erfi;
+  piecewise UnitStep/Ramp/Round/IntegerPart (non-decreasing).
 
-Root cause: the single-extension Risch cases in `risch_singleext.c`
-(`rt_frac_try`, `rt_hermite_try`, `rt_hyperexp_case`) kernelize at `t=Log[x]`/`E^x`
-and solve a Rothstein-Trager identity via `SolveAlways[..,{t,x}]`, but their gate
-never verified the coefficients were rational in x. A `Sin[x]` coefficient passed
-as a degree-0 poly in t; `SolveAlways[Sin[x]-k/x==0,{t,x}]` -> `{{Sin[x]->0,k->0}}`,
-and the residues zeroed out to `0`. The module trusts the SolveAlways certificate
-with NO diff-back, so an under-restricting gate = wrong answers.
+**Rigor verified:**
+- `make check-interval` — containment 23300→29970 (new heads added), all pass.
+- Interior-sampling spot-checks: every enclosure contains all sampled values.
+- Discontinuous non-monotone (Mod, FractionalPart) correctly stay symbolic
+  (D leaves them as unevaluated Derivative forms).
+- valgrind: definitely-lost identical at 1 vs 40 iters (fixed macOS objc/dyld
+  startup noise), zero interval.c/eval.c frames → certifier path leak-free.
+- 13 targeted test binaries pass (interval, eval, core_algebra, + each touched
+  head); full 454-binary suite run for regressions.
 
-Fix: `rt_is_ratl_in_xt(e,x,t)` — a `C(x)(t)` field-membership predicate — now
-gates all three cases (`&& rt_is_ratl_in_xt(num,x,tsym) && rt_is_ratl_in_xt(den,...)`).
-Out-of-field integrands decline instead of mis-certifying.
-
-Verified: wrong-`0` set now empty across the whole class; `1/(x Log[x])`,
-`1/(1+E^x)`, `1/(E^x(1+E^x)^2)`, special-fn recognizers, and elementary
-`Sin[x] E^x` all unchanged; suites green incl. integrate_risch_transcendental,
-risch_hermite, risch_field, risch_elementaryq, cherry_ei/li, knowles_erf,
-intrat, intrat_corpus; `make check-c99` clean.
+**Deliberately symbolic (documented):** oscillatory heads (Bessel*, Sinc,
+SinIntegral, Fresnel*, Airy*) and sawtooth FractionalPart — no certifiable
+monotone bound; safe (never wrong).

@@ -944,10 +944,27 @@ Expr* interval_apply_function(const char* head, const Expr* iv) {
     /* monotone decreasing */
     if (strcmp(head, "ArcCos") == 0)   return interval_thread_monotone(iv, IV_DEC, "ArcCos");
     if (strcmp(head, "Erfc") == 0)     return interval_thread_monotone(iv, IV_DEC, "Erfc");
+    /* monotone increasing on all of R (special functions) */
+    if (strcmp(head, "Erfi") == 0)     return interval_thread_monotone(iv, IV_INC, "Erfi");
+    /* piecewise / step functions: non-decreasing on all of R, so endpoint
+     * threading is a rigorous enclosure (all results real and exact). */
+    if (strcmp(head, "UnitStep") == 0)    return interval_thread_monotone(iv, IV_INC, "UnitStep");
+    if (strcmp(head, "Ramp") == 0)        return interval_thread_monotone(iv, IV_INC, "Ramp");
+    if (strcmp(head, "Round") == 0)       return interval_thread_monotone(iv, IV_INC, "Round");
+    if (strcmp(head, "IntegerPart") == 0) return interval_thread_monotone(iv, IV_INC, "IntegerPart");
     /* monotone only on a sub-region (else symbolic) */
     if (strcmp(head, "Gamma") == 0)    return iv_gamma_like(iv, "Gamma");
     if (strcmp(head, "LogGamma") == 0) return iv_gamma_like(iv, "LogGamma");
     if (strcmp(head, "Zeta") == 0)     return iv_thread_region(iv, IV_DEC, "Zeta", 0, false, 1.0, INFINITY);
+    /* Self-referential / awkward derivative (the general certifier can't help),
+     * but simply monotone on a known real sub-domain. InverseErf increases on
+     * (-1,1); InverseErfc decreases on (0,2); ProductLog (principal branch)
+     * increases on (-1/e, inf); HarmonicNumber = PolyGamma[0,x+1]+EulerGamma
+     * increases on (-1, inf) (poles at the non-positive integers below it). */
+    if (strcmp(head, "InverseErf") == 0)  return iv_thread_region(iv, IV_INC, "InverseErf", 0, false, -1.0, 1.0);
+    if (strcmp(head, "InverseErfc") == 0) return iv_thread_region(iv, IV_DEC, "InverseErfc", 0, false, 0.0, 2.0);
+    if (strcmp(head, "ProductLog") == 0)  return iv_thread_region(iv, IV_INC, "ProductLog", 0, false, -0.36787944117144233, INFINITY);
+    if (strcmp(head, "HarmonicNumber") == 0) return iv_thread_region(iv, IV_INC, "HarmonicNumber", 0, false, -1.0, INFINITY);
     return NULL;
 }
 
@@ -957,6 +974,201 @@ Expr* interval_polygamma(int64_t n, const Expr* iv) {
      * with sign (-1)^n, so it increases for even n and decreases for odd n. */
     IvMonotoneDir dir = (n % 2 == 0) ? IV_INC : IV_DEC;
     return iv_thread_region(iv, dir, "PolyGamma", n, true, 0.0, INFINITY);
+}
+
+/* ---------------------------------------------------------------------------
+ * General derivative-sign certifier
+ *
+ * For a numeric function f applied to a single Interval argument, thread it by
+ * CERTIFIED monotonicity: interval-evaluate f' over each pair [a,b]; if the
+ * enclosure is entirely >= 0 (resp. <= 0), f is monotone increasing (resp.
+ * decreasing) there and the range is [f(a), f(b)] (swapped for decreasing).
+ *
+ * This is rigorous: interval evaluation only ever OVER-estimates the derivative
+ * range (the dependency problem widens, never narrows), so a certified sign is
+ * always correct; a case it cannot prove just falls back to symbolic. It reuses
+ * D[] for the derivative and the interval-aware evaluator for f' over [a,b], so
+ * every function whose derivative reduces to already-threading heads gets
+ * interval support with no per-function monotonicity analysis (Erfi,
+ * ExpIntegralEi, LogIntegral, PolyLog, ...).
+ * ------------------------------------------------------------------------- */
+
+/* Reserved differentiation variable — distinctive enough that a user expression
+ * will not contain it, so substitution never captures a real symbol. */
+#define IV_DVAR "$Interval$dx$"
+
+/* The certifier evaluates a derivative over the interval, which re-enters
+ * interval threading. Bespoke handlers (interval_apply_function) are always
+ * allowed; the general certifier is allowed to nest only a few levels deep so a
+ * chain of special functions (PolyLog[3]' = PolyLog[2]/x, whose PolyLog[2]' is
+ * elementary) can still resolve, while a function whose derivative expands
+ * without ever bottoming out in elementary heads (Bessel: J0' = -J1, J1' =
+ * (J0-J2)/2, ...) terminates with bounded work instead of recursing forever.
+ * Branching is at most a small constant, so the worst case is a few dozen probe
+ * evaluations. Depth reached the cap => that level stays symbolic. */
+#define IV_CERTIFY_MAX_DEPTH 4
+static int g_iv_certify_active = 0;
+
+/* Fresh copy of e with every symbol named `name` replaced by a copy of `repl`. */
+static Expr* iv_subst(const Expr* e, const char* name, const Expr* repl) {
+    if (!e) return NULL;
+    if (e->type == EXPR_SYMBOL) {
+        if (e->data.symbol.name && strcmp(e->data.symbol.name, name) == 0)
+            return expr_copy((Expr*)repl);
+        return expr_copy((Expr*)e);
+    }
+    if (e->type == EXPR_FUNCTION) {
+        Expr* h = iv_subst(e->data.function.head, name, repl);
+        size_t n = e->data.function.arg_count;
+        Expr** args = n ? malloc(n * sizeof(Expr*)) : NULL;
+        for (size_t i = 0; i < n; i++)
+            args[i] = iv_subst(e->data.function.args[i], name, repl);
+        Expr* r = expr_new_function(h, args, n);
+        free(args);
+        return r;
+    }
+    return expr_copy((Expr*)e);
+}
+
+/* Evaluate `body` with the reserved variable replaced by `val` (borrowed);
+ * widen an inexact scalar result one ULP outward when `widen`. */
+static Expr* iv_eval_at(const Expr* body, const Expr* val, IvRound dir, bool widen) {
+    Expr* r = eval_and_free(iv_subst(body, IV_DVAR, val));
+    if (widen && iv_is_inexact(r)) r = iv_widen(r, dir);
+    return r;
+}
+
+/* Sign of the value/interval `d`: +1 if it lies entirely >= 0, -1 if entirely
+ * <= 0, 0 if it straddles 0 or cannot be decided. Only a threaded Interval or a
+ * concrete real number is decidable here: a symbolic result means the derivative
+ * did not thread (typically an un-threaded Interval left inside it, e.g.
+ * BesselJ[1, Interval[...]]), and we must NOT numericalize such a thing — doing
+ * so re-enters the certifier and does expensive, pointless work on an
+ * oscillatory chain that will never bottom out. */
+static int iv_range_sign(Expr* d) {
+    if (!d) return 0;
+    Expr* lo; Expr* hi;
+    if (is_interval(d)) {
+        size_t n = interval_pair_count(d);
+        if (n == 0) return 0;
+        lo = interval_pair_lo(d, 0);
+        hi = interval_pair_hi(d, n - 1);
+    } else {
+        bool num = d->type == EXPR_INTEGER || d->type == EXPR_REAL ||
+                   d->type == EXPR_BIGINT;
+#ifdef USE_MPFR
+        num = num || d->type == EXPR_MPFR;
+#endif
+        if (!num) { int64_t nn, dd; num = is_rational(d, &nn, &dd); }
+        if (!num) return 0;
+        lo = hi = d;
+    }
+    Expr* zero = expr_new_integer(0);
+    bool dl, dh;
+    int clo = interval_endpoint_cmp(lo, zero, &dl);   /* sign(lo - 0) */
+    int chi = interval_endpoint_cmp(hi, zero, &dh);   /* sign(hi - 0) */
+    expr_free(zero);
+    if (dl && clo >= 0) return 1;    /* lo >= 0  => whole interval >= 0 */
+    if (dh && chi <= 0) return -1;   /* hi <= 0  => whole interval <= 0 */
+    return 0;
+}
+
+Expr* interval_thread_call(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION) return NULL;
+    Expr* head = res->data.function.head;
+    if (!head || head->type != EXPR_SYMBOL || !head->data.symbol.name) return NULL;
+    const char* hname = head->data.symbol.name;
+    size_t argc = res->data.function.arg_count;
+
+    /* Exactly one interval argument (a function of two intervals is out of
+     * scope for the monotone-in-one-variable certifier). */
+    int ivpos = -1;
+    for (size_t i = 0; i < argc; i++) {
+        if (is_interval(res->data.function.args[i])) {
+            if (ivpos >= 0) return NULL;
+            ivpos = (int)i;
+        }
+    }
+    if (ivpos < 0) return NULL;
+    const Expr* iv = res->data.function.args[ivpos];
+
+    /* Arity 1: prefer the tight bespoke handlers (exact +-1 pinning, pole
+     * unions, sub-domain regions). */
+    if (argc == 1) {
+        Expr* r = interval_apply_function(hname, iv);
+        if (r) return r;
+    }
+
+    /* General certifier runs at top level only (see g_iv_certify_active). The
+     * guard stays raised for the WHOLE section: not only the derivative and
+     * endpoint evaluations re-enter the interval evaluator, but so does the
+     * sign test (interval_endpoint_cmp numericalizes a symbolic derivative via
+     * N[], which would otherwise re-trigger this certifier and recurse). */
+    if (g_iv_certify_active >= IV_CERTIFY_MAX_DEPTH) return NULL;
+    g_iv_certify_active++;
+
+    /* Build f[dx] by replacing the interval argument with the reserved var. */
+    Expr* dvar = expr_new_symbol(IV_DVAR);
+    Expr** fargs = malloc(argc * sizeof(Expr*));
+    for (size_t i = 0; i < argc; i++)
+        fargs[i] = ((int)i == ivpos) ? expr_copy(dvar)
+                                     : expr_copy(res->data.function.args[i]);
+    Expr* fx = expr_new_function(expr_copy(head), fargs, argc);
+    free(fargs);
+
+    /* deriv = D[f[dx], dx] */
+    Expr* deriv = eval_and_free(expr_new_function(expr_new_symbol("D"),
+                      (Expr*[]){ expr_copy(fx), expr_copy(dvar) }, 2));
+
+    /* D could not differentiate (still a D[...] form). A discontinuous,
+     * non-monotone head like Mod or FractionalPart is safe for a subtler
+     * reason: D leaves it as an unevaluated Derivative[...] form rather than a
+     * clean value, so its "derivative over [a,b]" never evaluates to a
+     * sign-definite interval and iv_range_sign below returns 0 (symbolic). Only
+     * a genuinely differentiable function whose derivative threads is ever
+     * certified — which is exactly the class for which endpoint threading is
+     * sound. */
+    bool bad = !deriv ||
+        (deriv->type == EXPR_FUNCTION && deriv->data.function.head->type == EXPR_SYMBOL &&
+         deriv->data.function.head->data.symbol.name &&
+         strcmp(deriv->data.function.head->data.symbol.name, "D") == 0);
+
+    IvBuild out; ivb_init(&out);
+    bool ok = !bad;
+    size_t np = ok ? interval_pair_count(iv) : 0;
+    for (size_t k = 0; k < np && ok; k++) {
+        Expr* a = interval_pair_lo(iv, k);
+        Expr* b = interval_pair_hi(iv, k);
+
+        /* Certify the derivative's sign over the whole pair [a,b]. */
+        Expr* pairiv = make_interval_pair(expr_copy(a), expr_copy(b));
+        Expr* drange = iv_eval_at(deriv, pairiv, RND_DOWN, false);
+        expr_free(pairiv);
+        int sgn = iv_range_sign(drange);
+        expr_free(drange);
+        if (sgn == 0) { ok = false; break; }
+
+        IvMonotoneDir dir = (sgn > 0) ? IV_INC : IV_DEC;
+        Expr* lo; Expr* hi;
+        if (dir == IV_INC) {
+            lo = iv_eval_at(fx, a, RND_DOWN, true);
+            hi = iv_eval_at(fx, b, RND_UP, true);
+        } else {
+            lo = iv_eval_at(fx, b, RND_DOWN, true);
+            hi = iv_eval_at(fx, a, RND_UP, true);
+        }
+        if (!lo || !hi || iv_is_complex_result(lo) || iv_is_complex_result(hi)) {
+            expr_free(lo); expr_free(hi); ok = false; break;
+        }
+        ivb_push(&out, lo, hi);
+    }
+    expr_free(fx); expr_free(dvar); expr_free(deriv);
+    g_iv_certify_active--;
+    if (!ok) { ivb_free(&out); return NULL; }
+
+    size_t n = out.n; Expr** los = out.los; Expr** his = out.his;
+    out.los = out.his = NULL; out.n = out.cap = 0;
+    return iv_canonicalize_pairs(los, his, n);
 }
 
 int interval_compare_intervals(const Expr* A, const Expr* B, bool* decidable) {

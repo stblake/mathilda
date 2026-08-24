@@ -20,6 +20,7 @@
 #include "sym_intern.h"
 #include "assoc.h"                  /* assoc_lookup_value — O(1) <|...|>[key] */
 #include "interp.h"
+#include "interval.h"                /* interval_thread_call — Interval[...] threading */
 #include "compile/compiled_function.h"
 #include "predict.h"   /* src/ml -- fitted models as callables */
 #include "compile/autocompile.h"   /* $AutoCompilation */
@@ -1839,6 +1840,30 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                         expr_free(res);
                         *changed = true; /* Built-in produced a rewrite */
                         return ret;
+                    }
+                }
+
+                /* 5b. Interval[...] threading. A NumericFunction applied to an
+                 * Interval argument that no builtin handled (Erfi, ExpIntegralEi,
+                 * PolyLog, the piecewise heads, ...) threads by certified
+                 * monotonicity — interval_thread_call() tries the tight bespoke
+                 * handlers, then interval-evaluates the symbolic derivative to
+                 * prove the sign (src/interval.c). Runs after DownValues and the
+                 * builtin, so user overrides and the tight elementary handlers
+                 * already win. The common no-interval path costs only a bit test
+                 * plus a cheap argument scan on this already-cold branch. */
+                if (hdef && (attrs & ATTR_NUMERICFUNCTION) &&
+                    res->type == EXPR_FUNCTION) {
+                    for (size_t i = 0; i < res->data.function.arg_count; i++) {
+                        if (is_interval(res->data.function.args[i])) {
+                            Expr* ivr = interval_thread_call(res);
+                            if (ivr) {
+                                expr_free(res);
+                                *changed = true; /* Interval threading rewrote */
+                                return ivr;
+                            }
+                            break;
+                        }
                     }
                 }
 

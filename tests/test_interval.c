@@ -176,6 +176,45 @@ int main(void) {
     if (!check("(1/2)^Interval[{1, 3}]", "Interval[{1/8, 1/2}]")) failures++;          /* base < 1: decreasing */
     if (!check("Interval[{2, 3}]^Interval[{1, 2}]", "Interval[{2, 9}]")) failures++;   /* interval^interval */
 
+    /* --- special functions threaded by the general derivative-sign certifier
+     * (interval_thread_call): any NumericFunction whose derivative reduces to
+     * already-threading heads gets a rigorous enclosure, with no per-function
+     * monotonicity analysis. Symbolic fallback where a bound can't be certified. */
+    if (!check("Erfi[Interval[{0, 1}]]", "Interval[{0, Erfi[1]}]")) failures++;
+    if (!check("ExpIntegralEi[Interval[{1, 2}]]",
+               "Interval[{ExpIntegralEi[1], ExpIntegralEi[2]}]")) failures++;
+    if (!check("ExpIntegralEi[Interval[{-2, -1}]]",
+               "Interval[{ExpIntegralEi[-1], ExpIntegralEi[-2]}]")) failures++;  /* decreasing branch */
+    if (!check("ExpIntegralEi[Interval[{-1, 1}]]",
+               "ExpIntegralEi[Interval[{-1, 1}]]")) failures++;                   /* pole at 0: symbolic */
+    if (!check("LogIntegral[Interval[{2, 3}]]",
+               "Interval[{LogIntegral[2], LogIntegral[3]}]")) failures++;
+    if (!check("PolyLog[2, Interval[{0, 1/2}]]",
+               "Interval[{0, -1/2 Log[2]^2 + 1/12 Pi^2}]")) failures++;
+    if (!check("PolyLog[3, Interval[{0, 1/2}]]",
+               "Interval[{0, 1/6 Log[2]^3 - 1/12 Log[2] Pi^2 + 7/8 Zeta[3]}]")) failures++; /* chained */
+    if (!check("Gamma[3, Interval[{1, 2}]]", "Interval[{5/E^2, 10/E}]")) failures++;  /* incomplete, 2nd arg */
+
+    /* --- special functions with self-referential/awkward derivatives (bespoke
+     * monotone-on-a-sub-domain rows) --- */
+    if (!check("InverseErf[Interval[{0, 1/2}]]", "Interval[{0, InverseErf[1/2]}]")) failures++;
+    if (!check("InverseErfc[Interval[{1/2, 1}]]", "Interval[{0, InverseErfc[1/2]}]")) failures++; /* decreasing */
+    if (!check("ProductLog[Interval[{1, 2}]]", "Interval[{ProductLog[1], ProductLog[2]}]")) failures++;
+    if (!check("HarmonicNumber[Interval[{1, 5}]]", "Interval[{1, 137/60}]")) failures++;
+
+    /* --- piecewise / step functions (non-decreasing: endpoint threading encloses) --- */
+    if (!check("UnitStep[Interval[{-1, 2}]]", "Interval[{0, 1}]")) failures++;
+    if (!check("Ramp[Interval[{-1, 2}]]", "Interval[{0, 2}]")) failures++;
+    if (!check("Round[Interval[{-1/2, 5/2}]]", "Interval[{0, 2}]")) failures++;
+    if (!check("IntegerPart[Interval[{1/2, 5/2}]]", "Interval[{0, 2}]")) failures++;
+
+    /* --- oscillatory / sawtooth heads stay symbolic (no certifiable bound;
+     * the certifier must also terminate quickly, not chase a derivative chain
+     * that never bottoms out) --- */
+    if (!check("BesselJ[0, Interval[{1, 2}]]", "BesselJ[0, Interval[{1, 2}]]")) failures++;
+    if (!check("Sinc[Interval[{1, 2}]]", "Sinc[Interval[{1, 2}]]")) failures++;
+    if (!check("FractionalPart[Interval[{1/2, 5/2}]]", "FractionalPart[Interval[{1/2, 5/2}]]")) failures++;
+
     if (failures == 0) {
         printf("All interval tests passed.\n");
         return 0;

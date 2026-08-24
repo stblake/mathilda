@@ -609,10 +609,13 @@ Expr* builtin_ramp(Expr* res) {
  * classifier: x is in range iff neither shifted argument is negative. The
  * boundary is closed at both ends, matching UnitStep[0] = 1.
  *
- * UnitBox does NOT thread through piecewise_interval()/
- * interval_apply_function() the way Floor/Ceiling do: that dispatch only
- * supports monotone functions, and UnitBox (a two-sided box) isn't one --
- * matching UnitStep and Ramp, neither of which threads through it either.
+ * UnitBox does NOT thread over an Interval argument: the interval machinery
+ * (interval_apply_function / the general derivative-sign certifier in
+ * interval.c) only encloses monotone functions, and UnitBox (a two-sided box)
+ * isn't one, so it stays symbolic. UnitStep, Ramp, Round and IntegerPart DO
+ * thread now -- each is non-decreasing, so endpoint threading is a rigorous
+ * enclosure -- via bespoke rows in interval_apply_function reached through the
+ * evaluator's Interval hook.
  *
  * Accepted cost: two expression allocations plus two evaluate() calls per
  * element (UnitBox is Listable), where Ramp's model does neither -- traded

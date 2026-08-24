@@ -1353,6 +1353,41 @@ In[8e]:= Gamma[Interval[{1, 2}]]        (* straddles the minimum: stays symbolic
 Out[8e]= Gamma[Interval[{1, 2}]]
 ```
 
+**General special/piecewise-function threading.** Beyond the hand-coded set
+above, *any* `NumericFunction` applied to a single `Interval` argument threads by
+**certified monotonicity**: the evaluator interval-evaluates the symbolic
+derivative `D[f[x], x]` over each pair `[a, b]`, and if the enclosure is entirely
+`≥ 0` (resp. `≤ 0`), `f` is monotone increasing (resp. decreasing) there and the
+range is `[f(a), f(b)]` (swapped for decreasing). This is rigorous — interval
+evaluation only ever over-estimates the derivative range, so a certified sign is
+always correct, and an un-provable one falls back to symbolic. It reuses `D[]`
+and the interval-aware evaluator, so no per-function monotonicity analysis is
+needed:
+
+```
+In[8f]:= Erfi[Interval[{0, 1}]]
+Out[8f]= Interval[{0, Erfi[1]}]
+
+In[8g]:= ExpIntegralEi[Interval[{1, 2}]]
+Out[8g]= Interval[{ExpIntegralEi[1], ExpIntegralEi[2]}]
+
+In[8h]:= PolyLog[2, Interval[{0, 1/2}]]
+Out[8h]= Interval[{0, -1/2 Log[2]^2 + 1/12 Pi^2}]
+```
+
+This covers `Erfi`, `ExpIntegralEi`, `LogIntegral`, `PolyLog[n, ·]`, the
+incomplete `Gamma[a, ·]`, and any function whose derivative reduces to
+already-threading heads. A few functions with a self-referential or awkward
+derivative are handled instead by bespoke monotone-sub-domain rows: `InverseErf`
+(on `(-1, 1)`), `InverseErfc` (on `(0, 2)`, decreasing), `ProductLog` (on
+`(-1/e, ∞)`), and `HarmonicNumber` (on `(-1, ∞)`). The **piecewise/step**
+functions `UnitStep`, `Ramp`, `Round`, `IntegerPart` (all non-decreasing, so
+endpoint threading is a rigorous enclosure) join `Floor`/`Ceiling`.
+Oscillatory heads (`BesselJ`/`BesselY`, `Sinc`, `SinIntegral`, `Fresnel*`, …) and
+the sawtooth `FractionalPart` stay symbolic — no monotone bound is certifiable,
+and the certifier terminates quickly rather than chasing a derivative chain that
+never bottoms out.
+
 **Endpoints and comparisons.** `Min[interval]` and `Max[interval]` return the
 lowest and highest endpoints. Relational operators (`Equal`, `Less`, `Greater`,
 …) yield explicit `True`/`False` when the interval is disjoint from the other

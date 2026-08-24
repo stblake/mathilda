@@ -143,6 +143,27 @@ def build_containment_cases():
         lo, hi = (pa, pb) if pa <= pb else (pb, pa)
         cases.append((f"PolyGamma[{nn}, Interval[{{{fmt(lo)}, {fmt(hi)}}}]]",
                       [f"PolyGamma[{nn}, {fmt(p)}]" for p in (lo, hi, (lo + hi) / 2)]))
+
+    # Special functions threaded by the general derivative-sign certifier
+    # (interval_thread_call) and the bespoke sub-domain rows. Each is sampled on
+    # a domain where a bound is certifiable; elsewhere the result is symbolic and
+    # the containment harness records IvSkip.
+    unary("Erfi", dec(-2.5, 2.5), dec(-2.5, 2.5))          # increasing on R
+    for fn in ("ExpIntegralEi", "LogIntegral"):            # increasing on (>1 / >0)
+        unary(fn, dec(1.3, 6), dec(1.3, 6))
+    unary("ExpIntegralEi", dec(-6, -0.3), dec(-6, -0.3))   # decreasing branch (x<0)
+    unary("InverseErf", dec(-0.9, 0.9), dec(-0.9, 0.9))    # increasing on (-1,1)
+    unary("InverseErfc", dec(0.1, 1.9), dec(0.1, 1.9))     # decreasing on (0,2)
+    unary("ProductLog", dec(-0.3, 6), dec(-0.3, 6))        # increasing on (-1/e,inf)
+    unary("HarmonicNumber", dec(-0.5, 6), dec(-0.5, 6))    # increasing on (-1,inf)
+    for nn in (2, 3):                                      # PolyLog[n,.] inc on (0,1)
+        pl, ph = dec(0.05, 0.9), dec(0.05, 0.9)
+        lo, hi = (pl, ph) if pl <= ph else (ph, pl)
+        cases.append((f"PolyLog[{nn}, Interval[{{{fmt(lo)}, {fmt(hi)}}}]]",
+                      [f"PolyLog[{nn}, {fmt(p)}]" for p in (lo, hi, (lo + hi) / 2)]))
+    # Piecewise / step functions — non-decreasing, so endpoint threading encloses.
+    for fn in ("UnitStep", "Ramp", "Round", "IntegerPart"):
+        unary(fn, dec(), dec())
     return cases
 
 
