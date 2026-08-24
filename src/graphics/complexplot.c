@@ -6,13 +6,14 @@
  * ComplexPlot3D emits Polygon quads (height = |w|, colour = arg(w))
  * into Graphics3D[].
  *
- * Coloring convention: the default phase-to-color mapping uses the same
- * thermal_rgb ramp that DensityPlot and Plot3D use, keyed to the
- * normalised argument: t = (atan2(im, re) + π) / (2π) ∈ [0, 1].
- * This keeps the palette consistent across the whole graphics engine.
- * A custom ColorFunction receives (re, im) as a 2-arg call; with
- * ColorFunctionScaling→True (default) the arguments are first scaled
- * so that re ∈ [0,1] and im ∈ [0,1] across the sampled domain.
+ * Coloring convention: the default maps the phase arg(w) onto the cyclic
+ * "Cyclic" ramp (t = (atan2(im, re) + π) / (2π) ∈ [0, 1]) and folds the
+ * modulus in as an HSL lightness — zeros fade to black, poles to white — so
+ * ComplexPlot[f] and ComplexPlot[f, ColorFunction -> "Cyclic"] are identical.
+ * A custom ColorFunction receives the eight Mathematica arguments
+ *   Re[z], Im[z], Abs[z], Arg[z], Re[f], Im[f], Abs[f], Arg[f]
+ * (so #8 is the phase of the value); with ColorFunctionScaling→True (default)
+ * each is scaled to [0,1] across the sampled domain.
  *
  * Both are HoldAll: the body and the iterator spec are held unevaluated
  * until z is bound to Complex[x, y] at each grid point.
@@ -218,8 +219,16 @@ static bool cp_eval(const AutoCompiled* ac, Expr* zvar, Expr* body, double x, do
     if (ac) {
         double _Complex z = x + y * (double _Complex)I, w;
         if (autocompiled_eval_z(ac, &z, &w)) {
-            *re_out = creal(w); *im_out = cimag(w);
-            return true;
+            double wr = creal(w), wi = cimag(w);
+            /* A pole makes the compiled program yield inf/nan.  Guard here just
+             * as the interpreter path below does (ComplexInfinity → invalid):
+             * without it the cell is marked valid with |w| = inf and poisons
+             * the min/max ranges used for ColorFunctionScaling. */
+            if (isfinite(wr) && isfinite(wi)) {
+                *re_out = wr; *im_out = wi;
+                return true;
+            }
+            return false;
         }
     }
     Expr* ra[2] = { expr_new_real(x), expr_new_real(y) };
@@ -259,9 +268,15 @@ static bool cp_eval(const AutoCompiled* ac, Expr* zvar, Expr* body, double x, do
  * the modulus brightness but a string ramp did not, so the two disagreed).
  *
  * t = (atan2(im, re) + π) / (2π) — the normalised argument, wrapping in [0, 1];
- * a cyclic ramp (e.g. "Cyclic") therefore has no seam at arg = ±π. Brightness
- * b = |w|/(1+|w|) fades the modulus to black at zeros and toward full at poles.
- * Returns NULL if `name` is not a recognised ramp. */
+ * a cyclic ramp (e.g. "Cyclic") therefore has no seam at arg = ±π.
+ *
+ * The modulus is folded in as an HSL-style *lightness*, not a plain brightness
+ * multiplier: L = |w|/(1+|w|) ∈ [0, 1), which is exactly 1/2 at |w| = 1. Below
+ * 1/2 the saturated hue fades toward BLACK (zeros → black); above 1/2 it fades
+ * toward WHITE (poles → white), matching Mathematica's domain colouring. The
+ * previous code multiplied the hue by L, so |w| ≈ 1 rendered at only ~50 %
+ * brightness and a bounded function (|f| ≈ 1 over most of the plane) came out
+ * uniformly dark. Returns NULL if `name` is not a recognised ramp. */
 static Expr* cp_ramp_color(const char* name, double re, double im) {
     double arg = atan2(im, re);
     double t   = (arg + M_PI) / (2.0 * M_PI);
@@ -269,9 +284,17 @@ static Expr* cp_ramp_color(const char* name, double re, double im) {
     if (t > 1.0) t = 1.0;
     double rv, gv, bv;
     if (!resolve_ramp_to_rgb(name, t, &rv, &gv, &bv)) return NULL;
-    double mod    = sqrt(re * re + im * im);
-    double bright = mod / (1.0 + mod);
-    rv *= bright; gv *= bright; bv *= bright;
+    double mod = sqrt(re * re + im * im);
+    double L   = mod / (1.0 + mod);     /* lightness; 1/2 at |w| = 1 */
+    if (L <= 0.5) {
+        double s = L / 0.5;             /* 0 at |w|=0 → 1 at |w|=1 (toward black) */
+        rv *= s; gv *= s; bv *= s;
+    } else {
+        double s = (L - 0.5) / 0.5;     /* 0 at |w|=1 → 1 at |w|→∞ (toward white) */
+        rv += (1.0 - rv) * s;
+        gv += (1.0 - gv) * s;
+        bv += (1.0 - bv) * s;
+    }
     Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
     return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
 }
@@ -280,14 +303,45 @@ static bool is_color_head(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION || !e->data.function.head
         || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol.name;
-    return h == SYM_RGBColor || h == SYM_GrayLevel || h == SYM_Hue || h == SYM_CMYKColor;
+    if (!(h == SYM_RGBColor || h == SYM_GrayLevel || h == SYM_Hue || h == SYM_CMYKColor))
+        return false;
+    /* Every component must be a real number to render.  This rejects e.g.
+     * Hue[0.5 + #8] left half-symbolic by a ColorFunction that referenced a
+     * slot we did not supply — which must fall through to the fallback rather
+     * than be handed to the renderer as a "colour". */
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        double d;
+        if (!expr_to_real_double(e->data.function.args[i], &d) || !isfinite(d))
+            return false;
+    }
+    return true;
 }
 
+/* The eight arguments Mathematica supplies to a ComplexPlot ColorFunction, in
+ * order: Re[z], Im[z], Abs[z], Arg[z], Re[f], Im[f], Abs[f], Arg[f] — where
+ * z = x + i·y is the sample point and f = re + i·im is the value there.  So a
+ * user's ColorFunction -> (Hue[#8 + 0.5] &) colours by the phase Arg[f]. */
+static void cf_eight(double x, double y, double re, double im, double a[8]) {
+    a[0] = x;                        /* Re[z]  */
+    a[1] = y;                        /* Im[z]  */
+    a[2] = sqrt(x * x + y * y);      /* Abs[z] */
+    a[3] = atan2(y, x);              /* Arg[z] */
+    a[4] = re;                       /* Re[f]  */
+    a[5] = im;                       /* Im[f]  */
+    a[6] = sqrt(re * re + im * im);  /* Abs[f] */
+    a[7] = atan2(im, re);            /* Arg[f] */
+}
+
+/* Per-argument [min,max] of the eight cf_eight values across the sampled grid,
+ * used to scale them to [0,1] when ColorFunctionScaling→True. */
+typedef struct { double lo[8], hi[8]; } CFRange;
+
 /* Resolve color for one grid cell from a custom ColorFunction or the default.
- * re/im: raw result values; re_sc/im_sc: values scaled to [0,1] for
- * ColorFunctionScaling→True. */
-static Expr* cp_color(Expr* cfn, bool scaling,
-                       double re, double im, double re_sc, double im_sc) {
+ * (x, y) is the sample point in the z-plane; (re, im) the value f(z) there.
+ * A custom function receives the eight cf_eight arguments, each scaled to [0,1]
+ * over the grid (via `cfr`) when `scaling` is on — Mathematica's default. */
+static Expr* cp_color(Expr* cfn, bool scaling, const CFRange* cfr,
+                      double x, double y, double re, double im) {
     /* Default: the "Cyclic" phase ramp — the SAME cp_ramp_color path an explicit
      * ColorFunction -> "Cyclic" takes, so the two render identically. */
     if (!cfn) return cp_ramp_color("Cyclic", re, im);
@@ -307,18 +361,32 @@ static Expr* cp_color(Expr* cfn, bool scaling,
         if (c) return c;
     }
 
-    /* Custom function: try f[re, im] (2-arg) then f[re] (1-arg). */
-    double u = scaling ? re_sc : re;
-    double v = scaling ? im_sc : im;
+    /* Custom function: supply the eight Mathematica arguments, scaled to [0,1]
+     * across the grid when ColorFunctionScaling is on. */
+    double raw[8], sc[8];
+    cf_eight(x, y, re, im, raw);
+    for (int k = 0; k < 8; k++) {
+        sc[k] = raw[k];
+        if (scaling && cfr) {
+            double span = cfr->hi[k] - cfr->lo[k];
+            sc[k] = (span > 0.0) ? (raw[k] - cfr->lo[k]) / span : 0.0;
+            if (sc[k] < 0.0) sc[k] = 0.0;
+            if (sc[k] > 1.0) sc[k] = 1.0;
+        }
+    }
 
-    Expr* a2[2] = { expr_new_real(u), expr_new_real(v) };
-    Expr* call2 = expr_new_function(expr_copy(cfn), a2, 2);
-    Expr* r2    = evaluate(call2);
-    expr_free(call2);
-    if (is_color_head(r2)) return r2;
-    expr_free(r2);
+    Expr* a8[8];
+    for (int k = 0; k < 8; k++) a8[k] = expr_new_real(sc[k]);
+    Expr* call8 = expr_new_function(expr_copy(cfn), a8, 8);
+    Expr* r8    = evaluate(call8);
+    expr_free(call8);
+    if (is_color_head(r8)) return r8;
+    expr_free(r8);
 
-    Expr* a1[1] = { expr_new_real(u) };
+    /* Fallback for a one-argument colour map (e.g. a ColorData gradient handed
+     * in directly): key it to the phase Arg[f], the dominant complex-plot
+     * colouring variable. */
+    Expr* a1[1] = { expr_new_real(sc[7]) };
     Expr* call1 = expr_new_function(expr_copy(cfn), a1, 1);
     Expr* r1    = evaluate(call1);
     expr_free(call1);
@@ -381,6 +449,12 @@ static CGrid* build_cgrid(Expr* zvar, Expr* body, Expr* region_fn,
     const Expr* zv[1] = { zvar };
     AutoCompiled* ac = autocompile_new_z(body, zv, 1);
 
+    /* Sampling a function with poles hits 1/0 at grid points on top of a pole
+     * (z = 0 for (z^3-3)/z; z = ±i for 1/(z^2+1)).  Those cells are simply
+     * dropped (invalid), so mute the informational Power::infy / Infinity::indet
+     * chatter the interpreter would otherwise print for every such point —
+     * exactly as Plot and the numeric optimizers do around divergent probes. */
+    arith_warnings_mute_push();
     for (int iy = 0; iy <= N; iy++) {
         double y = ymin + iy * dy;
         if (iy == N) y = ymax;
@@ -396,26 +470,37 @@ static CGrid* build_cgrid(Expr* zvar, Expr* body, Expr* region_fn,
             p->valid = ok;
         }
     }
+    arith_warnings_mute_pop();
     autocompiled_free(ac);
     return grid;
 }
 
-/* Compute the range of re and im values across valid grid cells.
- * Used for ColorFunctionScaling normalization. */
-static void grid_rerange(const CGrid* grid, size_t total,
-                          double* re_min, double* re_max,
-                          double* im_min, double* im_max) {
-    *re_min =  1e300; *re_max = -1e300;
-    *im_min =  1e300; *im_max = -1e300;
-    for (size_t k = 0; k < total; k++) {
-        if (!grid[k].valid) continue;
-        if (grid[k].re < *re_min) *re_min = grid[k].re;
-        if (grid[k].re > *re_max) *re_max = grid[k].re;
-        if (grid[k].im < *im_min) *im_min = grid[k].im;
-        if (grid[k].im > *im_max) *im_max = grid[k].im;
+/* Per-argument [min,max] of the eight ColorFunction arguments across valid grid
+ * points, for ColorFunctionScaling→True.  Computed from the sampled grid points
+ * (the corners the cell colours are averaged from), which bound the cell-centre
+ * values; scaled results are clamped to [0,1] regardless. */
+static void grid_cfrange(const CGrid* grid, int N,
+                         double xmin, double xmax, double ymin, double ymax,
+                         CFRange* r) {
+    for (int k = 0; k < 8; k++) { r->lo[k] = 1e300; r->hi[k] = -1e300; }
+    double dx = (xmax - xmin) / N;
+    double dy = (ymax - ymin) / N;
+    size_t stride = (size_t)(N + 1);
+    for (int iy = 0; iy <= N; iy++) {
+        double y = ymin + iy * dy;
+        for (int ix = 0; ix <= N; ix++) {
+            const CGrid* p = &grid[(size_t)iy * stride + (size_t)ix];
+            if (!p->valid) continue;
+            double a[8];
+            cf_eight(xmin + ix * dx, y, p->re, p->im, a);
+            for (int k = 0; k < 8; k++) {
+                if (a[k] < r->lo[k]) r->lo[k] = a[k];
+                if (a[k] > r->hi[k]) r->hi[k] = a[k];
+            }
+        }
     }
-    if (*re_min > *re_max) { *re_min = 0.0; *re_max = 1.0; }
-    if (*im_min > *im_max) { *im_min = 0.0; *im_max = 1.0; }
+    for (int k = 0; k < 8; k++)
+        if (r->lo[k] > r->hi[k]) { r->lo[k] = 0.0; r->hi[k] = 1.0; }
 }
 
 /* ------------------------------------------------------------------ */
@@ -521,11 +606,11 @@ Expr* builtin_complexplot(Expr* res) {
         return NULL;
     }
 
-    /* Compute re/im ranges for ColorFunctionScaling */
-    double re_min, re_max, im_min, im_max;
-    grid_rerange(grid, stride * stride, &re_min, &re_max, &im_min, &im_max);
-    double re_span = (re_max > re_min) ? (re_max - re_min) : 1.0;
-    double im_span = (im_max > im_min) ? (im_max - im_min) : 1.0;
+    /* Per-argument ranges for ColorFunctionScaling (only a custom ColorFunction
+     * consumes them; the default and string ramps key off the raw phase). */
+    CFRange cfr = {{0}, {0}};
+    if (opts.color_function)
+        grid_cfrange(grid, N, xmin, xmax, ymin, ymax, &cfr);
 
     double dx = (xmax - xmin) / N;
     double dy = (ymax - ymin) / N;
@@ -552,15 +637,11 @@ Expr* builtin_complexplot(Expr* res) {
             double re_avg = (p00->re + p10->re + p11->re + p01->re) * 0.25;
             double im_avg = (p00->im + p10->im + p11->im + p01->im) * 0.25;
 
-            double re_sc = (re_avg - re_min) / re_span;
-            double im_sc = (im_avg - im_min) / im_span;
-            if (re_sc < 0.0) re_sc = 0.0;
-            if (re_sc > 1.0) re_sc = 1.0;
-            if (im_sc < 0.0) im_sc = 0.0;
-            if (im_sc > 1.0) im_sc = 1.0;
-
+            /* Sample point at the cell centre — z the ColorFunction sees. */
+            double xc = x0 + 0.5 * dx;
+            double yc = y0 + 0.5 * dy;
             prims[np++] = cp_color(opts.color_function, opts.color_function_scaling,
-                                    re_avg, im_avg, re_sc, im_sc);
+                                    &cfr, xc, yc, re_avg, im_avg);
 
             /* Rectangle in plot coordinates (x = Re axis, y = Im axis).
              * The far corner overlaps one full cell into the +x/+y neighbours
@@ -638,11 +719,10 @@ Expr* builtin_complexplot3d(Expr* res) {
         return NULL;
     }
 
-    /* Re/im ranges for ColorFunctionScaling */
-    double re_min, re_max, im_min, im_max;
-    grid_rerange(grid, stride * stride, &re_min, &re_max, &im_min, &im_max);
-    double re_span = (re_max > re_min) ? (re_max - re_min) : 1.0;
-    double im_span = (im_max > im_min) ? (im_max - im_min) : 1.0;
+    /* Per-argument ranges for ColorFunctionScaling (custom ColorFunction only). */
+    CFRange cfr = {{0}, {0}};
+    if (opts.color_function)
+        grid_cfrange(grid, N, xmin, xmax, ymin, ymax, &cfr);
 
     /* Clip heights at the 95th-percentile of |f(z)| so poles appear as
      * flat-topped cylinders rather than infinite spikes (Mathematica style). */
@@ -675,13 +755,6 @@ Expr* builtin_complexplot3d(Expr* res) {
             double re_avg = (p00->re + p10->re + p11->re + p01->re) * 0.25;
             double im_avg = (p00->im + p10->im + p11->im + p01->im) * 0.25;
 
-            double re_sc = (re_avg - re_min) / re_span;
-            double im_sc = (im_avg - im_min) / im_span;
-            if (re_sc < 0.0) re_sc = 0.0;
-            if (re_sc > 1.0) re_sc = 1.0;
-            if (im_sc < 0.0) im_sc = 0.0;
-            if (im_sc > 1.0) im_sc = 1.0;
-
             /* For 3D, the default color uses arg of the center but without
              * modulus-brightness attenuation (same visual weight as Plot3D). */
             Expr* color;
@@ -695,8 +768,10 @@ Expr* builtin_complexplot3d(Expr* res) {
                 Expr* ca[3] = { expr_new_real(r), expr_new_real(g), expr_new_real(b) };
                 color = expr_new_function(expr_new_symbol(SYM_RGBColor), ca, 3);
             } else {
+                double xc = xmin + (ix + 0.5) * (xmax - xmin) / N;
+                double yc = ymin + (iy + 0.5) * (ymax - ymin) / N;
                 color = cp_color(opts.color_function, opts.color_function_scaling,
-                                  re_avg, im_avg, re_sc, im_sc);
+                                  &cfr, xc, yc, re_avg, im_avg);
             }
             prims[np++] = color;
 

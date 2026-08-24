@@ -363,8 +363,9 @@ the data range when `ColorFunctionScaling -> True`, the default). The default
 magnitude colormap is **`"Viridis"`** — used by `DensityPlot`, `ContourPlot`,
 `StreamPlot` (speed), `VectorPlot` (speed), and `Plot3D` (single-surface height)
 when no `ColorFunction` is given. `ArrayPlot` instead defaults to `"Greyscale"`
-(matching Mathematica), `ComplexPlot`'s phase coloring keeps its cyclic thermal
-default, and multi-surface `Plot3D` keeps its per-surface palette.
+(matching Mathematica), `ComplexPlot`'s phase coloring keeps its cyclic
+`"Cyclic"` default (hue = phase, HSL lightness from `|f|`), and multi-surface
+`Plot3D` keeps its per-surface palette.
 
 The perceptually-uniform maps (`Viridis`, `Magma`, `Plasma`, `Inferno`,
 `Cividis`) are 32-stop resamplings of matplotlib's authoritative 256-entry
@@ -1257,17 +1258,24 @@ ComplexPlot[f, {z, zmin, zmax}, opts...]
 Domain-colouring plot of the complex function `f` over the rectangular region
 in the complex plane with corners `zmin` and `zmax`.  `z` is bound to
 `Complex[x, y]` at each grid point; `f` must return a complex or real number.
-The color of each cell encodes `Arg(f(z))` via the thermal ramp (same default
-as `DensityPlot`), with brightness proportional to `|f(z)|/(1+|f(z)|)` so the
-origin fades to black.  `ComplexPlot` is `HoldAll`.
+Each cell's **hue** encodes `Arg(f(z))` on the cyclic `"Cyclic"` ramp, and
+`|f(z)|` sets an **HSL lightness** via `L = |f|/(1+|f|)` (so `L = 1/2` at
+`|f| = 1`): below `1/2` the hue fades toward black (zeros → black), above it
+toward white (poles → white).  This makes `ComplexPlot[f]` byte-for-byte
+identical to `ComplexPlot[f, ColorFunction -> "Cyclic"]`.  `ComplexPlot` is
+`HoldAll`.
+
+Points on top of a pole (where `f` diverges, e.g. `z = 0` for `(z^3-3)/z`) are
+dropped silently — the informational `Power::infy` chatter the interpreter
+would emit at those grid points is muted during sampling, as in `Plot`.
 
 **Options**
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `PlotPoints` | `200` | Grid resolution per axis (high default for smooth gradients) |
-| `ColorFunction` | thermal by arg | `f[re, im] → color`, or a named ramp string. **`"PhaseRings"`** — hue = `Arg`, brightness = `(1+cos(2π·log|w|))/2` (one ring per e-fold of `|w|`); highlights poles and zeros as dense concentric ring clusters. Other ramps keyed to normalised `Arg`: `"Rainbow"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"`, `"Temperature"` |
-| `ColorFunctionScaling` | `True` | Scale `re`/`im` to `[0,1]` before calling a custom `ColorFunction` (no effect on `"PhaseRings"`, which uses raw values) |
+| `PlotPoints` | `400` | Grid resolution per axis (high default for smooth gradients) |
+| `ColorFunction` | `"Cyclic"` | A named ramp string, or a function of the **eight** Mathematica arguments — `#1 Re[z]`, `#2 Im[z]`, `#3 Abs[z]`, `#4 Arg[z]`, `#5 Re[f]`, `#6 Im[f]`, `#7 Abs[f]`, `#8 Arg[f]` (so `#8` is the phase of the value; e.g. `ColorFunction -> (Hue[#8 + 0.5] &)`). A one-argument colour map (a `ColorData` gradient) is instead keyed to the scaled `Arg[f]`. **`"PhaseRings"`** — hue = `Arg`, brightness = `(1+cos(2π·log|w|))/2` (one ring per e-fold of `|w|`); highlights poles and zeros as dense concentric ring clusters. Other ramps keyed to normalised `Arg`: `"Cyclic"`, `"Rainbow"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"`, `"Temperature"` |
+| `ColorFunctionScaling` | `True` | Scale each of the eight arguments to `[0,1]` across the sampled domain before calling a custom `ColorFunction` (no effect on named-string ramps) |
 | `RegionFunction` | `None` | `f[x,y]` mask; excluded cells are not drawn |
 | `PlotLegends` | `None` | `Automatic` / `True`: draw a vertical phase color scale bar (thermal or hue ramp, −π at bottom, +π at top) |
 | Standard Graphics options | — | `Axes` (default `True`), `AspectRatio` (default `1`), `PlotRange`, `Frame`, `AxesLabel`, `GridLines`, `ImageSize`, `Background`, `PlotLabel`, … |
@@ -1280,6 +1288,7 @@ ComplexPlot[Sin[z], {z, -Pi-Pi*I, Pi+Pi*I}]
 ComplexPlot[1/(z^2+1), {z, -2-2I, 2+2I}, PlotPoints->80]
 ComplexPlot[(z^2+1)/(z^2-1), {z, -2-2I, 2+2I}, PlotLegends->Automatic]
 ComplexPlot[(z^2+1)/(z^2-1), {z, -2-2I, 2+2I}, ColorFunction->"PhaseRings"]
+ComplexPlot[(z^3-3)/z, {z, -2-2I, 2+2I}, ColorFunction->(Hue[#8+0.5]&)]
 ```
 
 ---
@@ -1301,8 +1310,8 @@ Three-dimensional surface plot of a complex function: **height = `|f(z)|`**,
 | Option | Default | Description |
 |--------|---------|-------------|
 | `PlotPoints` | `200` | Grid resolution per axis |
-| `ColorFunction` | thermal by arg | `f[re, im] → color`, or named ramp string (same set as `ComplexPlot`) |
-| `ColorFunctionScaling` | `True` | Scale `re`/`im` to `[0,1]` before calling custom `ColorFunction` |
+| `ColorFunction` | thermal by arg | A named ramp string, or a function of the eight arguments `Re[z], Im[z], Abs[z], Arg[z], Re[f], Im[f], Abs[f], Arg[f]` (same convention as `ComplexPlot`; the surface default stays the thermal arg ramp) |
+| `ColorFunctionScaling` | `True` | Scale the eight arguments to `[0,1]` before calling a custom `ColorFunction` |
 | `RegionFunction` | `None` | `f[x,y]` mask |
 | `PlotLegends` | `None` | `Automatic` / `True`: draw a vertical phase color scale bar |
 | `Lighting` | `Automatic` | `None` disables Lambertian shading for accurate phase colours |
