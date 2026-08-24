@@ -67,6 +67,14 @@ Expr* eval_color_function3(Expr* color_fn,
  * The color-bar path (1-D, t only) falls back to a pure hue sweep. */
 void phase_rings_rgb(double re, double im, double* r, double* g, double* b);
 
+/* cyclic_phase_rgb — soft cyclic phase colormap (a desaturated HSV-family
+ * rainbow), the default for ComplexPlot's phase colouring and the "Cyclic"
+ * named ColorFunction ramp. t ∈ [0,1] is the normalised argument
+ * t = (arg+π)/(2π): t=0.5 (arg=0) is red, t=0/1 (arg=±π) is cyan. A 32-stop
+ * resampling of the reference bar; cyclic (stop[0] ≈ stop[31]) so the ±π wrap
+ * has no colour seam. */
+void cyclic_phase_rgb(double t, double* r, double* g, double* b);
+
 /* Thermal: dark blue-purple (t=0) → purple → red → orange → bright yellow (t=1).
  * Matches Mathematica's default StreamPlot speed colormap. */
 void thermal_rgb(double t, double* r, double* g, double* b);

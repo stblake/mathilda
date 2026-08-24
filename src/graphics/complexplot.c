@@ -252,9 +252,12 @@ static bool cp_eval(const AutoCompiled* ac, Expr* zvar, Expr* body, double x, do
 /* Coloring                                                             */
 /* ------------------------------------------------------------------ */
 
-/* Default: thermal_rgb keyed to normalised argument.
- * t = (atan2(im, re) + π) / (2π) — wraps continuously in [0, 1].
- * Multiplied by brightness b = |w|/(1+|w|) to fade near the origin. */
+/* Default: soft cyclic phase palette (cyclic_phase_rgb) keyed to normalised
+ * argument. t = (atan2(im, re) + π) / (2π) — wraps continuously in [0, 1]. A
+ * cyclic hue is essential here: the old thermal ramp put a bright seam along
+ * arg = ±π where its non-cyclic ends (blue vs yellow) met. Multiplied by
+ * brightness b = |w|/(1+|w|) so the modulus still reads (fades to black at
+ * zeros, toward full at poles). */
 static Expr* cp_default_color(double re, double im) {
     double arg = atan2(im, re);
     double t   = (arg + M_PI) / (2.0 * M_PI);
@@ -265,7 +268,7 @@ static Expr* cp_default_color(double re, double im) {
     double mod   = sqrt(re * re + im * im);
     double bright = mod / (1.0 + mod);
     double r, g, b;
-    thermal_rgb(t, &r, &g, &b);
+    cyclic_phase_rgb(t, &r, &g, &b);
     /* Scale by brightness so the origin fades to black. */
     r *= bright; g *= bright; b *= bright;
     Expr* a[3] = { expr_new_real(r), expr_new_real(g), expr_new_real(b) };
@@ -463,14 +466,16 @@ static void embed_plot_range3(double xmin, double xmax,
     (*pt)[(*pt_n)++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
 }
 
-/* Append $StreamColorBar[-π, π, cfn_or_Automatic] so the renderer draws a
+/* Append $StreamColorBar[-π, π, cfn_or_"Cyclic"] so the renderer draws a
  * vertical phase-angle color scale.  The bar parameter t ∈ [0,1] maps to
- * arg = -π + t·2π, which is identical to our normalization
- * t = (arg+π)/(2π) — so the renderer's thermal_rgb(t) or named-ramp
- * call produces exactly the same colors as cp_default_color / cp_color. */
+ * arg = -π + t·2π, identical to our normalization t = (arg+π)/(2π). The default
+ * (cfn == NULL) passes the "Cyclic" named ramp explicitly so the bar's
+ * resolve_ramp_to_rgb("Cyclic", t) matches cp_default_color's cyclic_phase_rgb —
+ * NOT Automatic, which the renderer would resolve to the Viridis default and
+ * drift from the cells. */
 static void emit_phase_color_bar(Expr* cfn, Expr*** pt, size_t* pt_n) {
     *pt = realloc(*pt, sizeof(Expr*) * (*pt_n + 1));
-    Expr* cfn_copy = cfn ? expr_copy(cfn) : expr_new_symbol(SYM_Automatic);
+    Expr* cfn_copy = cfn ? expr_copy(cfn) : expr_new_string("Cyclic");
     Expr* cb_args[3] = { expr_new_real(-M_PI), expr_new_real(M_PI), cfn_copy };
     (*pt)[(*pt_n)++] = expr_new_function(expr_new_symbol(SYM_StreamColorBar), cb_args, 3);
 }
@@ -551,9 +556,16 @@ Expr* builtin_complexplot(Expr* res) {
             prims[np++] = cp_color(opts.color_function, opts.color_function_scaling,
                                     re_avg, im_avg, re_sc, im_sc);
 
-            /* Rectangle in plot coordinates (x = Re axis, y = Im axis) */
-            Expr* p1[2] = { expr_new_real(x0),      expr_new_real(y0) };
-            Expr* p2[2] = { expr_new_real(x0 + dx), expr_new_real(y0 + dy) };
+            /* Rectangle in plot coordinates (x = Re axis, y = Im axis).
+             * The far corner overlaps one full cell into the +x/+y neighbours
+             * (drawn later, so they overdraw the overlap and each cell still
+             * shows its own colour), clamped at the plot edges. This closes the
+             * sub-pixel seams that otherwise leave the white background showing
+             * as thin lines between adjacent Rectangle fills. */
+            double x1 = x0 + 2.0 * dx; if (x1 > xmax) x1 = xmax;
+            double y1 = y0 + 2.0 * dy; if (y1 > ymax) y1 = ymax;
+            Expr* p1[2] = { expr_new_real(x0), expr_new_real(y0) };
+            Expr* p2[2] = { expr_new_real(x1), expr_new_real(y1) };
             Expr* ra[2] = { expr_new_function(expr_new_symbol(SYM_List), p1, 2),
                              expr_new_function(expr_new_symbol(SYM_List), p2, 2) };
             prims[np++] = expr_new_function(expr_new_symbol(SYM_Rectangle), ra, 2);

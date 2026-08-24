@@ -116,6 +116,7 @@ color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
 | `"Cividis"` | — | Colour-vision-deficiency-safe blue → grey → yellow |
 | `"Haze"` | — | White → pink → blue → green → yellow → orange → red (Sam Blake's palette) |
 | `"Jet"` | — | Classic MATLAB/matplotlib jet: dark blue → cyan → green → yellow → red |
+| `"Cyclic"` | — | Soft cyclic phase colormap (cyan→green→yellow→red→magenta→blue→cyan); the **ComplexPlot default** |
 | `"Rainbow"` | — | Full HSV sweep (hue 0→1) |
 | `"Temperature"` | `"Thermal"` | Dark blue-purple → orange → bright yellow |
 | `"CoolTones"` | `"Cool"` | Ice blue → cornflower → deep navy |
@@ -383,6 +384,7 @@ precisely why it is *not* perceptually uniform). The legacy ramps
 | `"Cividis"` | — | dark blue → slate grey → gold (optimised for colour-vision deficiency) |
 | `"Haze"` | — | white → pink → blue → green → yellow → orange → red (Sam Blake's palette) |
 | `"Jet"` | — | dark blue → blue → cyan → green → yellow → red → dark red (classic MATLAB/matplotlib `jet`) |
+| `"Cyclic"` | — | soft/pastel cyclic phase map, cyan→green→yellow→red→magenta→blue→cyan (a desaturated HSV rainbow); cyclic endpoints, so a phase (`arg`) that wraps at ±π has no colour seam. The **default for `ComplexPlot`/`ComplexPlot3D`** |
 | `"Rainbow"` | — | `Hue` sweep red → violet (stops at 0.8 to avoid wrapping back to red) |
 | `"Temperature"` | `"Thermal"` | dark blue-purple → purple → red → orange → bright yellow (the former default) |
 | `"CoolTones"` | `"Cool"` | near-white ice blue → sky blue → cornflower → deep navy/indigo |

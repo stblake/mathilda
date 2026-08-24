@@ -297,9 +297,15 @@ Expr* builtin_densityplot(Expr* res) {
 
             prims[np++] = dp_color(opts.color_function, t);
 
-            /* Rectangle in world coordinates */
-            Expr* p1[2] = { expr_new_real(ux0),         expr_new_real(uy0) };
-            Expr* p2[2] = { expr_new_real(ux0 + du_x),  expr_new_real(uy0 + du_y) };
+            /* Rectangle in world coordinates. The far corner overlaps one full
+             * cell into the +x/+y neighbours (drawn later, so they overdraw the
+             * overlap and each cell still shows its own colour), clamped at the
+             * plot edges — closes the sub-pixel seams that otherwise leave the
+             * background showing as thin lines between adjacent fills. */
+            double ux1 = ux0 + 2.0 * du_x; if (ux1 > u_xmax) ux1 = u_xmax;
+            double uy1 = uy0 + 2.0 * du_y; if (uy1 > u_ymax) uy1 = u_ymax;
+            Expr* p1[2] = { expr_new_real(ux0), expr_new_real(uy0) };
+            Expr* p2[2] = { expr_new_real(ux1), expr_new_real(uy1) };
             Expr* ra[2] = { expr_new_function(expr_new_symbol(SYM_List), p1, 2),
                              expr_new_function(expr_new_symbol(SYM_List), p2, 2) };
             prims[np++] = expr_new_function(expr_new_symbol(SYM_Rectangle), ra, 2);

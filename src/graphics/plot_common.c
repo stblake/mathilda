@@ -445,6 +445,37 @@ void default_ramp_rgb(double t, double* r, double* g, double* b) {
     viridis_rgb(t, r, g, b);
 }
 
+/* Cyclic phase colormap — a soft/pastel cyclic rainbow (the HSV family but
+ * desaturated), the default ComplexPlot phase colouring and the "Cyclic" named
+ * ramp. 32-stop resampling of the reference bar (docs/design palette.png): a
+ * full hue loop cyan→green→yellow→red→magenta→blue→cyan with cyclic endpoints
+ * (stop[0] ≈ stop[31]), so the arg=±π wrap has no colour seam. t ∈ [0,1] is the
+ * normalised argument, t = (arg+π)/(2π): t=0.5 (arg=0) is red, t=0/1 (arg=±π)
+ * is cyan. Softer than pure HSV — the low channels are lifted, which is exactly
+ * what makes it read as "nicer" than a saturated hue sweep. */
+static const double cyclic_phase_stops[32][3] = {
+    { 0.4196, 0.9216, 0.9333 }, { 0.3346, 0.7548, 0.9222 },
+    { 0.2378, 0.5763, 0.9175 }, { 0.1371, 0.4058, 0.9216 },
+    { 0.0025, 0.2429, 0.9149 }, { 0.0000, 0.1404, 0.9137 },
+    { 0.1061, 0.1333, 0.9098 }, { 0.3004, 0.1451, 0.9108 },
+    { 0.4644, 0.1636, 0.9126 }, { 0.6414, 0.1922, 0.9194 },
+    { 0.8163, 0.2235, 0.9185 }, { 0.8706, 0.2196, 0.7961 },
+    { 0.8745, 0.2078, 0.6240 }, { 0.8713, 0.1965, 0.4525 },
+    { 0.8716, 0.1892, 0.2951 }, { 0.8745, 0.1882, 0.1680 },
+    { 0.8745, 0.2118, 0.1333 }, { 0.8843, 0.3197, 0.1490 },
+    { 0.8941, 0.4792, 0.1843 }, { 0.9090, 0.6576, 0.2309 },
+    { 0.9333, 0.8218, 0.2775 }, { 0.9026, 0.9436, 0.3098 },
+    { 0.7615, 0.9355, 0.2980 }, { 0.6392, 0.9278, 0.2902 },
+    { 0.5289, 0.9294, 0.2863 }, { 0.4590, 0.9295, 0.2825 },
+    { 0.4353, 0.9255, 0.2855 }, { 0.4353, 0.9294, 0.3437 },
+    { 0.4353, 0.9333, 0.4706 }, { 0.4314, 0.9294, 0.6143 },
+    { 0.4275, 0.9294, 0.7810 }, { 0.4235, 0.9294, 0.9373 },
+};
+
+void cyclic_phase_rgb(double t, double* r, double* g, double* b) {
+    ramp_lerp(t, cyclic_phase_stops, NULL, 32, r, g, b);
+}
+
 /* jet_channel — piecewise-linear interpolation of one Jet colour channel over
  * its own anchor positions (xs ascending, xs[0]=0, xs[n-1]=1). */
 static double jet_channel(double t, const double* xs, const double* ys, int n) {
@@ -490,6 +521,7 @@ static int matplotlib_family_rgb(const char* name, double t,
     if (strcmp(name, "Cividis") == 0) { ramp_lerp(t, cividis_stops, NULL, 32, r, g, b); return 1; }
     if (strcmp(name, "Haze")    == 0) { ramp_lerp(t, haze_stops,    haze_pos, 7, r, g, b); return 1; }
     if (strcmp(name, "Jet")     == 0) { jet_rgb(t, r, g, b); return 1; }
+    if (strcmp(name, "Cyclic") == 0) { cyclic_phase_rgb(t, r, g, b); return 1; }
     return 0;
 }
 
