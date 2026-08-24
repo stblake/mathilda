@@ -777,7 +777,6 @@ static bool random_get_approx_mpfr(Expr* e, mpfr_t re, mpfr_t im) {
     NumericSpec spec;
     spec.mode = NUMERIC_MODE_MPFR;
     spec.bits = (long)mpfr_get_prec(re);
-    spec.preserve_inexact = false;
     Expr* num = numericalize(e, spec);
     if (!num) return false;
     bool ok = get_approx_mpfr(num, re, im, NULL);

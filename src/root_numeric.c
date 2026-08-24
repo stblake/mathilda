@@ -808,7 +808,6 @@ static bool root_body_to_real_coeffs(Expr* body, Expr* slot1, mpfr_prec_t wp,
     NumericSpec cs;
     cs.mode = want_machine ? NUMERIC_MODE_MACHINE : NUMERIC_MODE_MPFR;
     cs.bits = (long)wp;
-    cs.preserve_inexact = false;
 
     mpfr_t* rc = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)(d + 1));
     bool ok = true;

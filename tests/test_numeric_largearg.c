@@ -339,11 +339,11 @@ static void test_fast_path_unchanged(void) {
     assert_prints("N[10^20]",      "1e+20");
     assert_prints("N[2^53]",       "9.0072e+15");
 
-    /* Already-approximate values keep their own precision: N[expr]
-     * numericalizes exact quantities only. */
-    assert_prints_prefix("N[N[Pi, 100]]",
-                         "3.14159265358979323846264338327950288419716939937510");
-    assert_prints_prefix("N[Sin[N[Pi, 100]]]", "-8.2855161544410986227684868");
+    /* Bare N[expr] targets machine precision even for an already-approximate
+     * argument: N[N[Pi, 100]] collapses to a machine number, and Sin of a
+     * 100-digit Pi (tiny, ~1e-101) comes back at machine precision. */
+    assert_prints("N[N[Pi, 100]]", "3.14159");
+    assert_prints_prefix("N[Sin[N[Pi, 100]]]", "-8.28552e-101");
     assert_prints("Precision[N[Pi]]", "MachinePrecision");
 
     /* An inexact machine Real *is* its own exact binary value, so Sin of it

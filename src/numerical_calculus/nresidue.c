@@ -432,8 +432,7 @@ Expr* builtin_nresidue(Expr* res) {
 
     NumericSpec spec_num;
 #ifdef USE_MPFR
-    if (opts.prec_mpfr) { spec_num.mode = NUMERIC_MODE_MPFR; spec_num.bits = opts.bits;
-                          spec_num.preserve_inexact = false; }
+    if (opts.prec_mpfr) { spec_num.mode = NUMERIC_MODE_MPFR; spec_num.bits = opts.bits; }
     else                  spec_num = numeric_machine_spec();
 #else
     spec_num = numeric_machine_spec();

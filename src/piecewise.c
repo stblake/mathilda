@@ -472,7 +472,6 @@ static int ustep_certify(Expr* x) {
         NumericSpec spec;
         spec.mode = NUMERIC_MODE_MPFR;
         spec.bits = prec;
-        spec.preserve_inexact = false;
         Expr* approx = numericalize(x, spec);
         if (!approx) return USTEP_UNKNOWN;
         int s = ustep_real_sign(approx);

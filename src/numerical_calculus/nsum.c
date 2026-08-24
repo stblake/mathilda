@@ -1148,7 +1148,7 @@ static bool ns_em_bcoeff_mpfr(int j, long bits, mpfr_t out) {
     Expr* b = ns_mk1("BernoulliB", expr_new_integer(2 * j));
     Expr* ratio = ns_mk2("Times", b,
                          ns_mk2("Power", expr_new_integer(2 * j), expr_new_integer(-1)));
-    NumericSpec spec; spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits; spec.preserve_inexact = false;
+    NumericSpec spec; spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits;
     Expr* raw = eval_and_free(ratio);
     Expr* num = raw ? numericalize(raw, spec) : NULL;
     expr_free(raw);
@@ -1167,7 +1167,7 @@ static bool ns_em_coeff_mpfr(int j, long bits, mpfr_t out) {
     Expr* b = ns_mk1("BernoulliB", expr_new_integer(2 * j));
     Expr* f = ns_mk1("Factorial", expr_new_integer(2 * j));
     Expr* ratio = ns_mk2("Times", b, ns_mk2("Power", f, expr_new_integer(-1)));
-    NumericSpec spec; spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits; spec.preserve_inexact = false;
+    NumericSpec spec; spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits;
     Expr* raw = eval_and_free(ratio);
     Expr* num = raw ? numericalize(raw, spec) : NULL;
     expr_free(raw);
@@ -1290,7 +1290,7 @@ static Expr* ns_em_mpfr(NsCtx* c, const char* var, NsOpts* o, long settle) {
     double ddi = 0.0, Nd = 0.0;
     if (ok && (!ns_to_double_real(c->di, &ddi) || ddi == 0.0)) ok = false;
     if (ok) {
-        NumericSpec spec; spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits; spec.preserve_inexact = false;
+        NumericSpec spec; spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits;
         Expr* nn = numericalize(Nval, spec);
         bool inexact; mpfr_t dummy; mpfr_init2(dummy, p);
         ok = nn && get_approx_mpfr(nn, Na, dummy, &inexact);
@@ -1779,7 +1779,7 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
     ctx.body = body; ctx.imin = imin; ctx.di = di; ctx.bind = &bind;
     ctx.ac = NULL; ctx.ac_prec = NULL; ctx.ac_prec_z = NULL;
 #ifdef USE_MPFR
-    if (o->prec_mpfr) { ctx.spec.mode = NUMERIC_MODE_MPFR; ctx.spec.bits = o->bits; ctx.spec.preserve_inexact = false; }
+    if (o->prec_mpfr) { ctx.spec.mode = NUMERIC_MODE_MPFR; ctx.spec.bits = o->bits; }
     else ctx.spec = numeric_machine_spec();
 #else
     ctx.spec = numeric_machine_spec();
@@ -1966,7 +1966,6 @@ Expr* builtin_nsum(Expr* res) {
 #ifdef USE_MPFR
     if (out && o.prec_mpfr && o.target_bits > 0) {
         NumericSpec ts; ts.mode = NUMERIC_MODE_MPFR; ts.bits = o.target_bits;
-        ts.preserve_inexact = false;
         Expr* rounded = numericalize(out, ts);
         if (rounded) { expr_free(out); out = rounded; }
     }

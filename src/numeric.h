@@ -63,15 +63,6 @@ typedef enum {
 typedef struct {
     NumericMode mode;
     long bits;
-    /* Bare-N[expr] intent: when true (and mode is MACHINE), already-inexact
-     * arbitrary-precision leaves keep their existing precision instead of
-     * being down-converted to a machine double. Mathematica's N[expr]
-     * numericalizes only *exact* quantities and leaves approximate numbers
-     * alone, so N[N[Pi, 100]] must stay 100 digits. Consulted solely in the
-     * MACHINE/EXPR_MPFR branch of numericalize(); every MPFR-mode spec leaves
-     * it untouched (harmless) and every MACHINE-mode spec is built through
-     * numeric_machine_spec(), which clears it. */
-    bool preserve_inexact;
     /* Inexact-contagion intent (set only by numeric_contagion_args when a
      * Plus/Times has an inexact operand). When true, numericalize() must NOT
      * thread into the arguments of a non-numeric head: `1.0 x[1]` stays
@@ -98,7 +89,6 @@ static inline NumericSpec numeric_machine_spec(void) {
     NumericSpec s;
     s.mode = NUMERIC_MODE_MACHINE;
     s.bits = 0;
-    s.preserve_inexact = false;
     s.contagion = false;
     return s;
 }
@@ -108,7 +98,7 @@ static inline NumericSpec numeric_machine_spec(void) {
  * `spec.mode == NUMERIC_MODE_MPFR` test so the capping N variant
  * (NUMERIC_MODE_MPFR_CAP) still takes the MPFR production paths for exact
  * leaves. `mode` is always initialized, so this is UB-free at every call
- * site (unlike reading the preserve_inexact flag). */
+ * site (unlike reading a bool field a partial initializer may leave unset). */
 static inline bool numeric_spec_is_mpfr(NumericSpec spec) {
 #ifdef USE_MPFR
     return spec.mode == NUMERIC_MODE_MPFR || spec.mode == NUMERIC_MODE_MPFR_CAP;

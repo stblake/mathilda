@@ -256,8 +256,9 @@ lowest wins---machine precision being the floor. This, too, follows Mathematica:
 \begin{codepairs}
 \pair{arithmetic/contagion/1}{Add a machine real to a hundred-digit number and the
 result drops to machine precision: one approximate double poisons the lot.}
-\pair{arithmetic/contagion/2}{Applying \B{N} to an already-precise number preserves its
-precision rather than collapsing it to a double.}
+\pair{arithmetic/contagion/2}{Bare \B{N} asks for machine precision, so even a
+hundred-digit argument comes back as a machine number---to request a specific
+precision, use the two-argument \B{N}\texttt{[\emph{expr}, \emph{p}]}.}
 \pair{arithmetic/contagion/3}{$1001!$ has $2{,}571$ digits, far past a double's range,
 so \B{N} keeps it as a machine-precision value with an unbounded exponent---a real with
 a mantissa but no overflow.}

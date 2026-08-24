@@ -355,7 +355,6 @@ static Expr* nd_eulersum_mpfr(Expr* expr, const char* var, int n,
     NumericSpec spec;
     spec.mode = NUMERIC_MODE_MPFR;
     spec.bits = bits;
-    spec.preserve_inexact = false;
     mpfr_prec_t p = (mpfr_prec_t)bits;
 
     mpfr_t x0r, x0i, sr, si;
@@ -671,8 +670,7 @@ static Expr* nd_nintegrate(Expr* expr, const char* var, Expr* n_expr,
 
     NumericSpec spec;
 #ifdef USE_MPFR
-    if (o->prec_mpfr) { spec.mode = NUMERIC_MODE_MPFR; spec.bits = o->bits;
-                        spec.preserve_inexact = false; }
+    if (o->prec_mpfr) { spec.mode = NUMERIC_MODE_MPFR; spec.bits = o->bits; }
     else              spec = numeric_machine_spec();
 #else
     spec = numeric_machine_spec();

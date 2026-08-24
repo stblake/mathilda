@@ -1,60 +1,50 @@
-# ComplexPlot fixes (2026-08-24)
+# Fix: bare `N[expr]` must target machine precision
 
-User report:
-1. `ComplexPlot[(z^2-1)/(z^2+1), {z,-2-2I,2+2I}]` renders "far too dark".
-2. `ComplexPlot[(z^3-3)/z, {z,-2-2I,2+2I}, ColorFunction -> (Hue[#8+0.5]&)]`
-   — ColorFunction "does not work"; prints `Power::infy: 1/0`.
+## Bug
+`N[N[Pi, 100]]` returned a 100-digit number (precision 100.243); Mathematica
+returns a machine-precision number. `N[N[Pi, 100], 30]` already worked (30.103).
+Root cause: the one-argument `N` builtin set `spec.preserve_inexact = true`,
+which told `numericalize` to keep an already-approximate MPFR leaf at its
+existing precision under MACHINE mode.
 
-Root causes (all in `src/graphics/complexplot.c`):
+## Decision
+The `preserve_inexact` field exists ONLY to implement this wrong behavior:
+every call site except `builtin_n` sets it `false`, so its three consult sites
+always took the false path everywhere else. Remove the field at the root.
 
-- [ ] **A. Too dark.** `cp_ramp_color` multiplies the saturated hue by
-  `bright = |w|/(1+|w|)`. At |w|=1 that is 0.5, so a bounded function
-  (|f|~1 over most of the plane) renders at ~50% brightness everywhere.
-  Fix: treat `L = |w|/(1+|w|)` as an HSL lightness — fade toward BLACK for
-  L<0.5 (zeros) and toward WHITE for L>0.5 (poles). |w|=1 → full hue.
-  Keeps default == `ColorFunction->"Cyclic"` (both go through cp_ramp_color).
+## Steps
+- [ ] `src/numeric.c` EXPR_MPFR/MACHINE branch — always down-convert (drop flag branch)
+- [ ] `src/numeric.c` `builtin_n` one-arg — stop setting the flag; fix comment
+- [ ] `src/numeric.c` `numeric_plan_working_spec` — drop the flag bail + `= false`
+- [ ] `src/numeric.c` top-level `numericalize` inf/zero guard — drop flag term + `= false`
+- [ ] `src/numeric.c` `parse_precision_arg` — drop `= false`
+- [ ] `src/numeric.h` — remove field, `numeric_machine_spec` init, fix stale comment
+- [ ] External call sites (nsum, nlimit, nderiv, nresidue, nroots, nseries,
+      ndsolve, piecewise, random, root_numeric) — drop `= false` sets
+- [ ] Book: rewrite note `arithmetic/contagion/2`; regenerate transcript
+- [ ] Build + verify N[N[Pi,100]] machine, N[N[Pi,100],30]=30, N[N[Pi,100],200] stays 100
+- [ ] Run numeric tests; docs/changelog; memory update
 
-- [ ] **B. Spurious `Power::infy`.** Held body evaluated at pole grid points
-  (z=0, z=±i) prints `Power::infy` to stderr. Wrap the grid eval in
-  `arith_warnings_mute_push/pop()` (already honored by every infy site).
+## Review — DONE
 
-- [ ] **C. ColorFunction gets wrong args.** Custom fn is called `f[re,im]`
-  (Re/Im of f only), so `#8` is an unfilled Slot and the fn "does not work".
-  Mathematica supplies 8 SCALED args in order:
-  #1 Re[z] #2 Im[z] #3 Abs[z] #4 Arg[z] #5 Re[f] #6 Im[f] #7 Abs[f] #8 Arg[f].
-  Fix: pass all 8, per-arg scaled to [0,1] when ColorFunctionScaling->True.
+Root-caused to `builtin_n` setting `NumericSpec.preserve_inexact = true` for the
+one-argument form. That flag existed only to implement the wrong behavior — every
+other of its ~18 sites set it `false`, so its three consult branches always took
+the false path elsewhere. Removed the field entirely (behavioral no-op except at
+`builtin_n`), plus the now-dead `ExactScan.has_mpfr_leaf` it was the only reader of.
 
-- [ ] **D. Compiled poles marked valid.** `cp_eval`'s autocompiled path skips
-  the `isfinite` guard, so a compiled pole returns inf and pollutes the
-  color-scaling ranges. Add the guard (return false → invalid cell), matching
-  the interpreter path.
+Verified (fixed binary):
+- `N[N[Pi,100]]` → `3.14159`, `Precision` → `MachinePrecision` (was 100.243)
+- `N[N[Pi,100],30]` → 30.103 (unchanged); `N[N[Pi,100],200]` → stays 100.243
+- Contagion `1.+N[Pi,100]` → machine; `SetPrecision[Pi,50]` → 50.272; `N[E,50]` →
+  50.272; `N[Exp[1000]]` → finite `1.97e+434` (inf/zero MPFR fallback intact)
 
-- [ ] **E. is_color_head too loose.** Accepts `Hue[0.5 + #8]` (symbolic).
-  Require all color components be real numbers.
+Tests: rewrote `test_numeric.c::test_n_bare_targets_machine_precision` and the
+nested-N asserts in `test_numeric_largearg.c`; both suites + nsum/nlimit/nderiv/
+nresidue/nseries/nroots/root_numeric/piecewise/accuracygoal/machine_number_q all
+pass. `make check-c99` clean. Clean `-Wall -Wextra` build.
 
-Verify: no `Power::infy`; the Hue ColorFunction plot emits varied concrete
-Hue colors; issue-1 plot mean luminance materially higher; tests build+pass.
-
-## Review (done 2026-08-24)
-
-All five fixes landed in `src/graphics/complexplot.c`; docstrings
-(`graphics_init.c`), `docs/spec/builtins/graphics.md`, and the weekly changelog
-updated. Verified:
-
-- **A. Brightness.** `cp_ramp_color` now treats `L = |w|/(1+|w|)` as HSL
-  lightness (black below 1/2, white above). Issue-1 mean cell luminance
-  `0.265 → 0.523` (measured by rebuilding the old binary and comparing).
-  Default stays identical to `ColorFunction -> "Cyclic"` (`=== True`).
-- **B. Power::infy.** Muted via `arith_warnings_mute_push/pop` around the
-  sampling loop — both original cases and the pole sweeps print nothing to
-  stderr.
-- **C. 8-arg ColorFunction.** `(Hue[#8+0.5]&)` renders 159 996 distinct Hue
-  colours on the 400² grid; unscaled `#8` is `Arg[f]` in radians, scaled maps
-  to [0,1]. Per-arg scaling via new `CFRange`/`grid_cfrange`/`cf_eight`.
-- **D.** compiled-pole `isfinite` guard added (parity with interpreter path).
-- **E.** `is_color_head` now requires real components.
-
-Tests: `autocompile_tests`, `graphics_tests`, `graphics_sampling_tests` pass.
-Memory: differential `valgrind` — new build's "definitely lost" is byte-for-byte
-equal to the prior build (14,120 bytes / 433 blocks; all pre-existing baseline).
-Clean `-std=c99 -Wall -Wextra` build.
+Docs/book/memory: `docs/spec/builtins/arithmetic.md`, weekly changelog,
+`book/chapters/math/arithmetic.tex` note + regenerated transcript
+(`Out[2]= 3.14159`), memory `project_n_preserve_inexact` rewritten + MEMORY.md
+hook, lesson appended to `tasks/lessons.md`.

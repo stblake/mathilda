@@ -132,7 +132,6 @@ static void nd_apply_option(const Expr* opt, NdOpts* o) {
 #ifdef USE_MPFR
                 o->wp_bits = numeric_digits_to_bits(dig);
                 o->spec.mode = NUMERIC_MODE_MPFR; o->spec.bits = o->wp_bits;
-                o->spec.preserve_inexact = false;
 #else
                 o->wp_bits = 53;
 #endif

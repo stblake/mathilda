@@ -61,12 +61,12 @@ Numerical evaluation.
 - `N[expr, p]` — `p`-digit (arbitrary-precision, MPFR) approximation.
 
 **Precision semantics**:
-- `N[expr]` numericalizes only the **exact** parts of `expr` (integers,
-  rationals, constants such as `Pi`, `E`, `GoldenRatio`, …) and **leaves the
-  precision of numbers that are already approximate untouched**. So
-  `N[N[Pi, 100]]` (i.e. `N[Pi, 100] // N`) stays at 100 digits rather than
-  collapsing to `MachinePrecision`, matching Mathematica. Likewise `N[2.5`100]`
-  keeps its 100-digit precision.
+- `N[expr]` gives a **machine-precision** approximation of the whole result. It
+  targets machine precision even when `expr` is already an approximate
+  arbitrary-precision number, so `N[N[Pi, 100]]` (i.e. `N[Pi, 100] // N`)
+  collapses back to `MachinePrecision` rather than keeping 100 digits, matching
+  Mathematica. Likewise `N[2.5`100]` comes back at `MachinePrecision`. To
+  request a specific precision, use the two-argument form.
 - `N[expr, p]` is an explicit precision request, but like `N[expr]` it **never
   increases** the precision of a number that is already approximate — `N`
   cannot manufacture digits that aren't there. Exact parts (integers,

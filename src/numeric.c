@@ -828,17 +828,13 @@ static Expr* numericalize_rec(const Expr* e, NumericSpec spec) {
 #ifdef USE_MPFR
         case EXPR_MPFR:
             if (spec.mode == NUMERIC_MODE_MACHINE) {
-                /* Bare N[expr] leaves already-approximate numbers at their
-                 * existing precision — only exact quantities are numericalized
-                 * to machine. Without this, N[N[Pi, 100]] (i.e. N[Pi,100]//N)
-                 * would collapse 100 digits to machine precision. The flag is
-                 * set solely by the one-argument N builtin; contagion and the
-                 * explicit two-argument N[..., MachinePrecision] form leave it
-                 * clear, so 1. + N[Pi,100] still collapses to machine. */
-                if (spec.preserve_inexact) {
-                    return expr_new_mpfr_copy(e->data.mpfr);
-                }
-                /* Down-convert to machine precision. A finite MPFR value can
+                /* Down-convert an already-approximate arbitrary-precision value
+                 * to a machine double. Mathematica's one-argument N[expr]
+                 * targets machine precision even when expr is already inexact,
+                 * so N[N[Pi, 100]] (i.e. N[Pi,100]//N) comes back at machine
+                 * precision, not 100 digits. A specific precision is requested
+                 * with the two-argument N[expr, p], which takes the MPFR branch
+                 * below instead. A finite MPFR value can
                  * still exceed DBL_MAX (~1.8e308) — e.g. N[1.5 + 1001!], whose
                  * argument is already an MPFR ~4e2570 — or sit below DBL_MIN.
                  * mpfr_to_machine keeps those as a machine-precision
@@ -919,7 +915,6 @@ typedef struct {
      * amplified by |x|, so they need that many bits *on top of* the output
      * precision. Zero for |x| < 2, where the amplification is nil. */
     long amplify_bits;
-    bool has_mpfr_leaf;    /* an already-approximate arbitrary-precision leaf */
     bool has_call;         /* a real function application, not just a number */
     bool has_infinity;     /* Infinity / ComplexInfinity / DirectedInfinity */
     bool has_zero;         /* an exact or inexact zero leaf */
@@ -1065,7 +1060,6 @@ static void scan_exact_leaves(const Expr* e, ExactScan* s) {
         default:
 #ifdef USE_MPFR
             if (e->type == EXPR_MPFR) {
-                s->has_mpfr_leaf = true;
                 if (mpfr_zero_p(e->data.mpfr)) s->has_zero = true;
             }
 #endif
@@ -1086,12 +1080,6 @@ static bool numeric_plan_working_spec(const ExactScan* s, NumericSpec spec,
     if (!s->has_call) return false;
     if (s->finite_bits <= 0 && s->amplify_bits <= 0) return false;
 
-    /* N[expr] preserves the precision of numbers that are already
-     * approximate (N[N[Pi,100]] stays 100 digits). When such a value is
-     * present it governs, and rounding the result back would destroy it —
-     * so keep today's behaviour rather than guess whose precision wins. */
-    if (spec.preserve_inexact && s->has_mpfr_leaf) return false;
-
     /* The precision the caller wants back, which is also the precision the
      * unraised evaluation would run at. */
     const long out_bits = numeric_spec_is_mpfr(spec) && spec.bits > 0
@@ -1111,7 +1099,6 @@ static bool numeric_plan_working_spec(const ExactScan* s, NumericSpec spec,
          * full working precision. A machine Real leaf is padded with zeros,
          * which is exactly right — its bit pattern is the value. */
         work->mode = NUMERIC_MODE_MPFR;
-        work->preserve_inexact = false;
     }
     return true;
 }
@@ -1214,8 +1201,7 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
      * input itself held no infinity or zero to explain it, recompute once
      * in MPFR and keep the answer only if it is genuinely better. Fires
      * only on a degenerate result, so the normal path pays nothing. */
-    if (spec.mode == NUMERIC_MODE_MACHINE && s.has_call && !s.has_infinity
-        && !(spec.preserve_inexact && s.has_mpfr_leaf)) {
+    if (spec.mode == NUMERIC_MODE_MACHINE && s.has_call && !s.has_infinity) {
         bool inf  = expr_has_nonfinite_real(r);
         bool zero = !inf && !s.has_zero && expr_has_zero_real(r);
         if (inf || zero) {
@@ -1223,7 +1209,6 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
             retry.mode = NUMERIC_MODE_MPFR;
             retry.bits = (raised && work.bits > (long)DBL_MANT_DIG + NUMERIC_GUARD_BITS)
                        ? work.bits : (long)DBL_MANT_DIG + NUMERIC_GUARD_BITS;
-            retry.preserve_inexact = false;
             Expr* alt = numeric_round_result(numericalize_rec(e, retry), spec);
             bool better = alt && !expr_has_nonfinite_real(alt)
                        && (inf || !expr_has_zero_real(alt));
@@ -1368,7 +1353,6 @@ static bool parse_precision_arg(const Expr* prec, NumericSpec* out_spec) {
      * SetAccuracy (their own parsers) use plain NUMERIC_MODE_MPFR and pad up. */
     out_spec->mode = NUMERIC_MODE_MPFR_CAP;
     out_spec->bits = numeric_digits_to_bits(digits);
-    out_spec->preserve_inexact = false;
     return true;
 #else
     /* Phase 1 fallback: emit a one-shot warning, then use machine. */
@@ -1397,15 +1381,12 @@ Expr* builtin_n(Expr* res) {
         if (!parse_precision_arg(res->data.function.args[1], &spec)) {
             return NULL;  /* non-numeric precision → remain unevaluated */
         }
-    } else {
-        /* One-argument N[expr]: Mathematica's N numericalizes only the exact
-         * parts of expr and preserves the precision of numbers that are
-         * already approximate. So N[N[Pi, 100]] stays at 100 digits rather
-         * than collapsing to machine precision (see numericalize's EXPR_MPFR
-         * branch). The two-argument form is an explicit precision request and
-         * deliberately does not set this. */
-        spec.preserve_inexact = true;
     }
+    /* One-argument N[expr] keeps the machine spec: Mathematica's N[expr]
+     * targets machine precision even when expr is already an approximate
+     * arbitrary-precision number, so N[N[Pi, 100]] comes back at machine
+     * precision (see numericalize's EXPR_MPFR branch). Use the two-argument
+     * N[expr, p] to request a specific number of digits. */
 
     /* Ownership: Mathilda evaluator frees `res` after a non-NULL return
      * (see eval.c around the builtin dispatch site), so we must NOT free

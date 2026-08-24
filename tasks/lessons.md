@@ -2709,3 +2709,28 @@ the unit path under-ran). Fixing only the interpreter would have left
   pairs its Darwin/Accelerate branch with `-flax-vector-conversions`; the tests
   `CMakeLists.txt` now mirrors it. Any macOS build path enabling Accelerate must carry
   this flag or `src/ml/pca.c` (and other LAPACK consumers) fail to compile under gcc.
+
+## 2026-08-24 — Don't bake a "matches Mathematica" claim into code without a real transcript
+
+**Correction:** `N[N[Pi, 100]]` was returning 100 digits; Sam reported it must
+return a machine-precision number (bare `N[expr]` targets machine precision even
+for an already-approximate argument). A prior session (2026-06-08) had done the
+opposite on purpose — adding a `NumericSpec.preserve_inexact` flag, a regression
+test, a spec paragraph, AND a book example/note, all asserting "N preserves the
+precision of already-approximate numbers, matching Mathematica." That claim was
+simply wrong about WL.
+
+**Pattern:** a mistaken semantic belief is far more expensive when it is
+*locked in* across code + tests + docs + book, because the test then *defends*
+the bug and every doc *repeats* it. Before pinning any behavioral claim that
+cites Mathematica/WL — especially precision, branch cuts, ordering, formatting —
+verify it against actual WL output (or state it as an assumption to confirm),
+not against intuition. When a "regression test" encodes a belief rather than a
+observed-correct output, it is a liability.
+
+**How to apply:** when fixing such a bug, hunt down every mirror of the wrong
+claim (grep code, `tests/`, `docs/spec/`, `book/`, and harness memory) and
+correct all of them in the same change; a half-corrected belief resurfaces. Here
+that meant `src/numeric.{c,h}` + ~15 call sites, `test_numeric.c`,
+`test_numeric_largearg.c`, `docs/spec/builtins/arithmetic.md`, the weekly
+changelog, `book/chapters/math/arithmetic.tex`, and the memory note.

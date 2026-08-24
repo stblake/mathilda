@@ -212,7 +212,6 @@ static NrPoly* nr_build_poly(Expr* equation, Expr* var, mpfr_prec_t wp,
 
     int d = get_degree_poly(expanded, var);
     NumericSpec spec; spec.mode = NUMERIC_MODE_MPFR; spec.bits = (long)wp;
-    spec.preserve_inexact = false;
 
     if (d < 1) {
         /* Constant: decide zero vs non-zero numerically. */

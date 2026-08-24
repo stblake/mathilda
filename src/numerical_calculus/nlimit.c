@@ -373,7 +373,6 @@ static bool nl_const_complex_mpfr(Expr* e, long bits, mpfr_t re, mpfr_t im) {
     NumericSpec spec;
     spec.mode = NUMERIC_MODE_MPFR;
     spec.bits = bits;
-    spec.preserve_inexact = false;
     Expr* raw = eval_and_free(expr_copy(e));
     Expr* num = raw ? numericalize(raw, spec) : NULL;
     expr_free(raw);
@@ -1001,7 +1000,7 @@ static Expr* nl_run_mpfr(Expr* expr, const char* var, Expr* z0_expr,
     long bits = o->bits;
     mpfr_prec_t p = (mpfr_prec_t)bits;
     NumericSpec spec;
-    spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits; spec.preserve_inexact = false;
+    spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits;
 
     /* Resolve z0 (finite) or ray (infinite), Direction and Scale to complex. */
     mpfr_t z0r, z0i, dr, di, sr, si, mag;

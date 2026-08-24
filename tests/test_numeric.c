@@ -253,23 +253,24 @@ static void test_n_bigint_machine_overflow(void) {
     assert_eval_startswith("N[1.5 * 1001!]", "6.041844710057");
 }
 
-static void test_n_preserves_inexact_precision(void) {
-    /* Bare N[expr] numericalizes only the exact parts of expr and must NOT
-     * lower the precision of numbers that are already approximate (matching
-     * Mathematica). Regression: N[Pi, 100] // N (== N[N[Pi, 100]]) used to
-     * collapse 100 digits to machine precision. */
-    assert_eval_startswith("N[N[Pi, 100]]",
-        "3.14159265358979323846264338327950288419716939937510");
-    assert_eval_startswith("Precision[N[N[Pi, 100]]]", "100.");
-    /* Other constants and a bare high-precision literal preserve precision too. */
-    assert_eval_startswith("Precision[N[N[E, 50]]]", "50.");
-    assert_eval_startswith("Precision[N[2.5`100]]", "100.");
-    /* Exact symbols still numericalize to machine precision. */
+static void test_n_bare_targets_machine_precision(void) {
+    /* Bare N[expr] targets machine precision even when expr is already an
+     * approximate arbitrary-precision number (matching Mathematica).
+     * Regression: N[Pi, 100] // N (== N[N[Pi, 100]]) used to keep 100 digits
+     * instead of collapsing to machine precision. */
+    assert_eval_eq("N[N[Pi, 100]]", "3.14159", 0);
+    assert_eval_eq("Precision[N[N[Pi, 100]]]", "MachinePrecision", 0);
+    /* Other constants and a bare high-precision literal collapse too. */
+    assert_eval_eq("Precision[N[N[E, 50]]]", "MachinePrecision", 0);
+    assert_eval_eq("Precision[N[2.5`100]]", "MachinePrecision", 0);
+    /* Exact symbols numericalize to machine precision. */
     assert_eval_eq("N[Pi]", "3.14159", 0);
     assert_eval_eq("Precision[N[Pi]]", "MachinePrecision", 0);
-    /* The explicit two-argument form is a precision request and can still
-     * lower an already-approximate value. */
+    /* The explicit two-argument form is a precision request: it lowers an
+     * already-approximate value (N[.., 20]) but never manufactures digits it
+     * does not have (N[.., 200] on a 100-digit value stays 100 digits). */
     assert_eval_startswith("Precision[N[N[Pi, 100], 20]]", "20.");
+    assert_eval_startswith("Precision[N[N[Pi, 100], 200]]", "100.");
     /* Inexact contagion is unchanged: a machine real wins. */
     assert_eval_eq("Precision[1. + N[Pi, 100]]", "MachinePrecision", 0);
 }
@@ -484,7 +485,7 @@ int main(void) {
 
 #ifdef USE_MPFR
     TEST(test_n_bigint_machine_overflow);
-    TEST(test_n_preserves_inexact_precision);
+    TEST(test_n_bare_targets_machine_precision);
     TEST(test_n_prec_constants);
     TEST(test_n_prec_new_constants);
     TEST(test_n_prec_transcendentals);
