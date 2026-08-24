@@ -252,26 +252,27 @@ static bool cp_eval(const AutoCompiled* ac, Expr* zvar, Expr* body, double x, do
 /* Coloring                                                             */
 /* ------------------------------------------------------------------ */
 
-/* Default: soft cyclic phase palette (cyclic_phase_rgb) keyed to normalised
- * argument. t = (atan2(im, re) + π) / (2π) — wraps continuously in [0, 1]. A
- * cyclic hue is essential here: the old thermal ramp put a bright seam along
- * arg = ±π where its non-cyclic ends (blue vs yellow) met. Multiplied by
- * brightness b = |w|/(1+|w|) so the modulus still reads (fades to black at
- * zeros, toward full at poles). */
-static Expr* cp_default_color(double re, double im) {
+/* cp_ramp_color — a phase-keyed named ramp × modulus brightness. This is the
+ * ONE path used by both the default (ramp "Cyclic") and any explicit string
+ * ColorFunction, so `ComplexPlot[f]` and `ComplexPlot[f, ColorFunction ->
+ * "Cyclic"]` are byte-for-byte identical (previously the default multiplied in
+ * the modulus brightness but a string ramp did not, so the two disagreed).
+ *
+ * t = (atan2(im, re) + π) / (2π) — the normalised argument, wrapping in [0, 1];
+ * a cyclic ramp (e.g. "Cyclic") therefore has no seam at arg = ±π. Brightness
+ * b = |w|/(1+|w|) fades the modulus to black at zeros and toward full at poles.
+ * Returns NULL if `name` is not a recognised ramp. */
+static Expr* cp_ramp_color(const char* name, double re, double im) {
     double arg = atan2(im, re);
     double t   = (arg + M_PI) / (2.0 * M_PI);
-    /* Clamp floating-point edge cases (atan2 range is (-π, π]). */
-    if (t < 0.0) t = 0.0;
+    if (t < 0.0) t = 0.0;   /* clamp atan2's (-π, π] edge cases */
     if (t > 1.0) t = 1.0;
-    /* Modulus-based brightness: maps [0,∞) → [0,1) via x/(1+x). */
-    double mod   = sqrt(re * re + im * im);
+    double rv, gv, bv;
+    if (!resolve_ramp_to_rgb(name, t, &rv, &gv, &bv)) return NULL;
+    double mod    = sqrt(re * re + im * im);
     double bright = mod / (1.0 + mod);
-    double r, g, b;
-    cyclic_phase_rgb(t, &r, &g, &b);
-    /* Scale by brightness so the origin fades to black. */
-    r *= bright; g *= bright; b *= bright;
-    Expr* a[3] = { expr_new_real(r), expr_new_real(g), expr_new_real(b) };
+    rv *= bright; gv *= bright; bv *= bright;
+    Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
     return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
 }
 
@@ -287,7 +288,9 @@ static bool is_color_head(const Expr* e) {
  * ColorFunctionScaling→True. */
 static Expr* cp_color(Expr* cfn, bool scaling,
                        double re, double im, double re_sc, double im_sc) {
-    if (!cfn) return cp_default_color(re, im);
+    /* Default: the "Cyclic" phase ramp — the SAME cp_ramp_color path an explicit
+     * ColorFunction -> "Cyclic" takes, so the two render identically. */
+    if (!cfn) return cp_ramp_color("Cyclic", re, im);
 
     if (cfn->type == EXPR_STRING) {
         /* "PhaseRings" needs both re and im — intercept before the 1-D ramp path. */
@@ -297,12 +300,10 @@ static Expr* cp_color(Expr* cfn, bool scaling,
             Expr* a[3] = { expr_new_real(rv), expr_new_real(gv), expr_new_real(bv) };
             return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
         }
-        /* Other named ramps: key to normalised argument ∈ [0, 1]. */
-        double arg = atan2(im, re);
-        double t   = (arg + M_PI) / (2.0 * M_PI);
-        if (t < 0.0) t = 0.0;
-        if (t > 1.0) t = 1.0;
-        Expr* c = named_color_ramp(cfn->data.string, t);
+        /* Any other named ramp: phase-keyed hue × modulus brightness, matching
+         * the default. (Domain colouring wants the magnitude to read, so every
+         * string ramp gets the brightness — not just the default.) */
+        Expr* c = cp_ramp_color(cfn->data.string, re, im);
         if (c) return c;
     }
 
