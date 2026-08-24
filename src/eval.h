@@ -101,6 +101,12 @@ void eval_init(void);
 uint64_t eval_clock_get(void);
 void     eval_clock_bump(void);
 
+/* Id of the current OUTERMOST evaluate() call: bumped once per user command /
+ * script statement, and stable across all the nested evaluations and
+ * fixed-point iterations reducing that command. Lets a builtin scope
+ * per-command state (see the Integrate fail-memo) without an explicit reset. */
+uint64_t eval_toplevel_id(void);
+
 /* Ground fixed-point epoch (see the long comment in eval.c). The clock above
  * is coarse -- every mutation invalidates every cached fixed point, so an
  * iterator rebinding re-canonicalises loop-invariant values O(size) per step.

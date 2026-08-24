@@ -1,58 +1,89 @@
-# Reduce Phase 6d — n-variable CAD over the Reals
+# Fix: Integrate::nonelem emitted 4× instead of once
 
-Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-fizzy-giraffe.md`
+## Bug
+`Integrate[Log[x] Log[Log[x]]/x^2, x]` emits the `Integrate::nonelem` message
+four times:
+- twice for internal recursive sub-integrands named `Integrate`DerivativeDivides`u$N`
+- twice for the original integrand `(Log[x] Log[Log[x]])/x^2`
 
-## Stage 0 — Baseline (golden-master must be green first)
-- [x] Build main binary + `reduce_tests` + `reduce_corpus_tests`; confirm all green (2-var pins + corpus) — green (94/94)
+Desired: emit **once**, for the original integrand only.
 
-## Stage A — recursive engine (hybrid: nu>=3 new path, nu==2 untouched)  ✅ DONE
-- [x] `PolySet` + `cad_project_out`; iterated McCallum stack `pstack[0..d-1]`
-- [x] `_n` helpers: `subst_n`, `is_poly_n`, `atom_truth_n`, `form_truth_n`, `cell_dead_n`
-- [x] `cad_leaf` = parameter-generalized `lift_fiber`; `symbolic_branch_lvl`/`bound_expr_lvl`
-- [x] `cad_recurse` + `cad_leaf_emit` (per-level rational gate; nullification bail; partial-CAD prune; flat `parts` DNF)
-- [x] `reduce_cad_nvar` driver; gate routes `nu>=3` there (nu==2 old path UNTOUCHED = byte-identical)
-- [x] Bugfix: only fibre-var-bearing factors trigger nullification (a lower-var factor vanishing at its section is skipped)
-- [x] **Parity gate**: 2-var pins byte-identical; corpus 103/103 (form-agnostic oracle verifies all closed/verbose cases); leak-clean; check-c99 clean
-- [ ] (stretch) unify nu==2 onto the recursive path only if it reproduces the pins byte-identically — deferred
+## Root cause (verified by instrumentation)
+Two independent defects:
 
-## Stage B — n-D boundary merge  ✅ DONE (v0.088)
-- [x] Restructure emission to a cell TREE (`CADRegion`/`CADCell`, `cad_build`) + merge (`cad_region_expr`)
-- [x] `cad_templates_equal` (structural) + `cad_absorbable` (sampling-based equality via `cad_sample_cell`/`formula_truth_at`)
-- [x] Closed regions close outer ranges: `x^2+y^2+z^2<=1 -> -1<=x<=1 && ...`; sphere surface, half-ball, 4-var closed ball; strict stay open
-- [x] Sound fallback: undecidable comparison leaves verbose form; corpus oracle certifies (105/105)
-- [x] Leak-clean (valgrind), check-c99 clean, solve_tests green, version 0.088
+1. **Leaky recursive messages.** `DerivativeDivides` substitutes `u = Log[x]`
+   and recurses via `integrate_in -> Integrate[u Log[u] E^(-u), u]`. That
+   nested Integrate reaches the same `RischTranscendental` decision stage and
+   emits a `nonelem` message naming an internal gensym (`u$3`). A user-facing
+   diagnostic must never name an internal recursion variable.
 
-## Tests / docs / hygiene
-- [ ] `tests/test_reduce.c`: flip `x^2+y^2+z^2<1` decline pin (:616-617) → solved; add <=1, >=0→True, <0→False, x y z>0, half-ball, nu==4 ball, `<=2`→decline
-- [ ] `tests/reduce_corpus.m`: flip `dec-nl-multivar3` → solved; add cad3-*/cad4-* rows
-- [ ] `reduce_cad.h` header prose (recursive engine, d>=3 rational-fibre scope)
-- [ ] docs/spec/builtins/solutions-of-equations.md (Reduce bullets + deferral paragraph)
-- [ ] changelog `docs/spec/changelog/2026-08-24.md` (verify Monday-of-ISO-week); `src/version.h` 0.086 → 0.087
-- [ ] `make check-c99`; `valgrind --leak-check=full` on corpus
+2. **Double cascade.** `builtin_integrate` is invoked twice at top level with
+   the byte-identical integrand (same `expr_hash`). Cause: the integrand
+   `Times[Log[x], Log[Log[x]], Power[x,-2]]` reorders under Orderless on the
+   first `evaluate_step`, so `next != current` and the fixed-point loop runs a
+   second step — re-running the whole (expensive) method search + Eliminate/Solve.
+   Affects any failed symbolic integral whose integrand reorders on first eval.
 
-## Review
+## Plan
+- [ ] `eval.c`/`eval.h`: add `eval_toplevel_id()` — a counter bumped once per
+      outermost `evaluate()` call. General infra to scope per-command state.
+- [ ] `integrate.h`/`integrate.c`: add `g_integrate_depth` counter around the
+      method cascade (outermost user call = depth 1; recursion = depth >= 2).
+- [ ] `integrate.c`: add a fail-memo keyed on `(toplevel_id, hash(f), hash(x),
+      method)`. A matching re-entry in the same top-level evaluation returns
+      NULL immediately — skipping the redundant second cascade AND its duplicate
+      message. Self-invalidates next command via the id tag.
+- [ ] `integrate_risch_transcendental.c`: gate the `nonelem` message on
+      `g_integrate_depth <= 1` so only the top-level user integrand is named.
+- [ ] Remove debug instrumentation.
+- [ ] Verify: reported integrand -> one message; test C -> one message; a
+      genuinely-solvable integral still solves; re-run in a new command re-warns.
+- [ ] Run integration/calculus tests; docs + changelog.
 
-**Delivered (Stage A):** `Reduce[..., {x1..xn}, Reals]` now solves nonlinear real
-inequalities in 3+ effective variables via a recursive McCallum-projection CAD
-(`reduce_cad_nvar` + `cad_recurse`/`cad_leaf` in `src/solve/reduce_cad.c`). The
-2-variable path is byte-identical (untouched); the new engine is a hybrid that
-reuses the shared primitives and the generalized leaf.
+## Review — DONE
 
-- Strict inequalities → clean nested form (`x^2+y^2+z^2<1`, box, octant, planes).
-- Closed regions → correct but verbose union of cells (Stage-B boundary merge
-  deferred — cosmetic only; sound + complete either way).
-- v1 rational-fibre regime: irrational non-innermost breakpoints decline
-  (`x^2+y^2+z^2<=2`); interval nullification declines (6e deferred).
-- Key bugfix: only fibre-variable-bearing factors trigger the nullification bail
-  (a lower-variable factor vanishing at its own section is skipped) — this is why
-  `x y z > 0` initially declined.
+Implemented both halves:
+- `eval.c`/`eval.h`: `eval_toplevel_id()` — counter bumped once per outermost
+  `evaluate()`. Zero semantic effect (only Integrate reads it).
+- `integrate.h`/`integrate.c`: `g_integrate_depth` around the cascade; a 32-slot
+  per-command fail-memo (`intg_fail_*`) keyed on `(eval_toplevel_id, hash(f),
+  hash(x), method)`, auto-expiring each command, no dynamic allocation.
+- `integrate_risch_transcendental.c`: `nonelem` message gated on
+  `g_integrate_depth <= 1`.
 
-**Verification:** reduce_tests green (new `test_cad_nvar`); corpus 103/103
-(form-agnostic sample-point oracle certifies the verbose closed cases);
-solve_tests green (no collateral); `make check-c99` clean; valgrind leak-clean
-(only macOS ObjC-runtime baseline noise); version 0.087; docs + changelog updated.
+Verified:
+- Reported integral -> **one** message naming `(Log[x] Log[Log[x]])/x^2`; the
+  cascade runs **once** (was twice — proven with `[CASCADE-RUN]`/`[MEMO-HIT]`
+  instrumentation, since removed). ~0.078 s.
+- Single-pass nonelem (`1/Log[Log[x]]`), `Log[Log[x]]`, `E^(x^2) Log[x]` each
+  still warn once. Re-run in a later command re-warns (memo self-invalidates).
+- Same nonelem twice in one `List` command -> one message; two *different*
+  nonelem in one command -> one message each (fixed 32-slot table, not a single
+  slot).
+- Solvable / definite / list-threaded integrals unchanged.
+- Suites green: integrals, integrate_dispatch, derivdivides, deriv,
+  intrischnorman, limit, series, ramanujan, eval, eval_timestamps,
+  eval_eager_exit, core, match. `make check-c99` clean.
 
-**Deferred / follow-ups:** Stage-B n-D boundary merge (close outer ranges for
-closed regions); Phase 6b (real-algebraic-coefficient fibre isolation to widen
-past the rational-fibre regime); Phase 6e (McCallum well-orientedness
-augmentation); unifying nu==2 onto the recursive path.
+## Follow-up correctness bug — FIXED
+`Integrate[Sin[x]/Log[x], x]` returned a wrong **`0`** (also `Cos[x]/Log[x]`,
+`Tan[x]/Log[x]`, `Sin[x]/Log[x]^2`, `ArcTan[x]/Log[x]`, `Gamma[x]/Log[x]`,
+`Sin[x]/(1+E^x)`, `Cos[x]/(1+E^x)`, `BesselJ[0,x]/Log[x]`, …).
+
+Root cause: the single-extension Risch cases in `risch_singleext.c`
+(`rt_frac_try`, `rt_hermite_try`, `rt_hyperexp_case`) kernelize at `t=Log[x]`/`E^x`
+and solve a Rothstein-Trager identity via `SolveAlways[..,{t,x}]`, but their gate
+never verified the coefficients were rational in x. A `Sin[x]` coefficient passed
+as a degree-0 poly in t; `SolveAlways[Sin[x]-k/x==0,{t,x}]` -> `{{Sin[x]->0,k->0}}`,
+and the residues zeroed out to `0`. The module trusts the SolveAlways certificate
+with NO diff-back, so an under-restricting gate = wrong answers.
+
+Fix: `rt_is_ratl_in_xt(e,x,t)` — a `C(x)(t)` field-membership predicate — now
+gates all three cases (`&& rt_is_ratl_in_xt(num,x,tsym) && rt_is_ratl_in_xt(den,...)`).
+Out-of-field integrands decline instead of mis-certifying.
+
+Verified: wrong-`0` set now empty across the whole class; `1/(x Log[x])`,
+`1/(1+E^x)`, `1/(E^x(1+E^x)^2)`, special-fn recognizers, and elementary
+`Sin[x] E^x` all unchanged; suites green incl. integrate_risch_transcendental,
+risch_hermite, risch_field, risch_elementaryq, cherry_ei/li, knowles_erf,
+intrat, intrat_corpus; `make check-c99` clean.

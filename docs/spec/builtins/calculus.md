@@ -923,6 +923,13 @@ monotonically down.
      closed forms the earlier stages missed.  Correct by construction (no
      differentiation check).  Handles logarithmic polynomials and the
      special-function cases below (Erf, ExpIntegralEi, LogIntegral, PolyLog).
+     Its single-extension cases (fractional Rothstein-Trager log-part, Hermite,
+     hyperexponential) are decision procedures over the field `C(x)(t)` for the
+     kernel `t = Log[u]` or `E^u`, so each first checks — via `rt_is_ratl_in_xt`
+     — that the kernelized integrand is genuinely rational in x and t; an
+     integrand with a transcendental coefficient of x (`Sin[x]/Log[x]`,
+     `Sin[x]/(1+E^x)`, `Gamma[x]/Log[x]`) lies outside that field and is
+     **declined**, never mis-certified (this previously produced a wrong `0`).
      Its Risch differential equation is solved by Bronstein's rational one-step
      (SPDE) reduction (polynomial-gcd time, no undetermined-coefficient
      blow-up), closing high-degree `R(x) e^x` forms and — via the
@@ -2269,6 +2276,17 @@ leaves the integral **unevaluated** and the field decision proves it has no
 elementary antiderivative, it emits the informational message
 `Integrate::nonelem` (Mathematica-style, to stderr). The return value is
 unchanged (the integral stays unevaluated); the message only explains *why*.
+
+The message names the **user's** integrand, once. It is emitted only at the
+outermost integration (`g_integrate_depth <= 1`), so a sub-integral spawned by
+an internal substitution — e.g. `DerivativeDivides`' `u = Log[x]` reaching the
+same decision at depth `>= 2` — never surfaces a message naming its internal
+recursion variable (`Integrate`DerivativeDivides`u$N`). And a per-command
+fail-memo in `builtin_integrate` (keyed on `eval_toplevel_id()`) makes the
+evaluator's redundant second cascade pass — the fixed-point loop re-runs the
+whole method search once because the integrand's factors reorder under Orderless
+on the first step — short-circuit to `NULL`, so the message is not repeated (and
+the expensive search runs once). A genuine re-run in a later command re-warns.
 
 ## Integrate`SigmaDecomposition — Cherry 1986 Theorem 4.4
 

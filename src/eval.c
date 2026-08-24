@@ -105,6 +105,18 @@ static uint64_t g_eval_clock = 1;
 uint64_t eval_clock_get(void) { return g_eval_clock; }
 void     eval_clock_bump(void) { g_eval_clock++; }
 
+/* --- Top-level evaluation id ----------------------------------------------
+ * Bumped once at the entry of each OUTERMOST evaluate() call (i.e. once per
+ * user command / script statement). Unlike the eval clock, it does NOT change
+ * across the nested evaluations, fixed-point iterations, or symbol-table churn
+ * that happen while a single top-level expression is being reduced. This gives
+ * builtins a stable "am I still inside the same top-level evaluation?" token,
+ * used to scope per-command state (e.g. Integrate's fail-memo and the
+ * once-per-command Integrate::nonelem diagnostic) so it self-invalidates at the
+ * next command without any explicit reset. */
+static uint64_t g_toplevel_eval_id = 0;
+uint64_t eval_toplevel_id(void) { return g_toplevel_eval_id; }
+
 /* --- Ground fixed-point epoch (loop-invariant re-evaluation) ---------------
  * The eval clock is a single global epoch: ANY symbol-table mutation bumps it
  * and invalidates every cached fixed point. That is correct but coarse -- a
@@ -2222,7 +2234,7 @@ Expr* evaluate(Expr* e) {
     }
 
     bool is_top_level = (eval_recursion_depth == 0);
-    if (is_top_level) eval_overflow = false;
+    if (is_top_level) { eval_overflow = false; g_toplevel_eval_id++; }
 
     /* Guard the C stack: when nested evaluate() calls would exceed the
      * recursion limit, wrap the input in Hold[] so it stops re-entering

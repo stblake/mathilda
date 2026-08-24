@@ -675,6 +675,56 @@ static Expr* integrate_definite(Expr* res) {
     return cur;
 }
 
+/* Nesting depth of the method cascade (see integrate.h). */
+int g_integrate_depth = 0;
+
+/* Fail-memo: the indefinite integrands the method cascade has FAILED on
+ * (returned NULL for) so far in the CURRENT top-level evaluation.
+ *
+ * The evaluator's fixed-point loop re-invokes builtin_integrate a second time
+ * on an integrand whose only change since the first attempt was Orderless
+ * canonicalisation of its factors -- e.g. Integrate[Log[x] Log[Log[x]]/x^2, x]
+ * enters the full cascade twice with a byte-identical integrand. That second
+ * pass re-runs the entire (multi-second, Eliminate/Solve-driven) search and
+ * re-emits every diagnostic, for a result the first pass already proved is
+ * NULL. Since the cascade is deterministic, a re-entry with the same
+ * (integrand, variable, method) inside the SAME top-level evaluation must yield
+ * the same NULL, so we short-circuit it.
+ *
+ * The table is a small fixed array keyed on the top-level evaluation id
+ * (eval_toplevel_id): when a new user command starts, `intg_fail_epoch` no
+ * longer matches and the table is emptied -- so it self-invalidates every
+ * command (where a changed definition could legitimately make the same integral
+ * solvable) with no explicit reset, and needs no dynamic allocation. Several
+ * distinct failing integrals in one command (a List of Integrate calls, which
+ * itself re-evaluates) each get their own slot, so none re-emits when the outer
+ * structure takes a second pass. Beyond the capacity the memo simply stops
+ * helping (extra integrals re-run) -- a graceful degradation, never wrong. */
+#define INTG_FAIL_SLOTS 32
+static uint64_t intg_fail_epoch = 0;   /* eval_toplevel_id the table belongs to */
+static int      intg_fail_count = 0;   /* live entries in intg_fail_tab          */
+static struct { uint64_t hf, hx; int method; } intg_fail_tab[INTG_FAIL_SLOTS];
+
+/* Drop the table if we have crossed into a new top-level evaluation. */
+static void intg_fail_sync_epoch(uint64_t tid) {
+    if (tid != intg_fail_epoch) { intg_fail_epoch = tid; intg_fail_count = 0; }
+}
+static bool intg_fail_seen(uint64_t hf, uint64_t hx, int method) {
+    for (int i = 0; i < intg_fail_count; i++)
+        if (intg_fail_tab[i].hf == hf && intg_fail_tab[i].hx == hx
+            && intg_fail_tab[i].method == method)
+            return true;
+    return false;
+}
+static void intg_fail_record(uint64_t hf, uint64_t hx, int method) {
+    if (intg_fail_seen(hf, hx, method)) return;      /* already noted */
+    if (intg_fail_count >= INTG_FAIL_SLOTS) return;  /* full: degrade gracefully */
+    intg_fail_tab[intg_fail_count].hf = hf;
+    intg_fail_tab[intg_fail_count].hx = hx;
+    intg_fail_tab[intg_fail_count].method = method;
+    intg_fail_count++;
+}
+
 Expr* builtin_integrate(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -770,6 +820,21 @@ Expr* builtin_integrate(Expr* res) {
         }
     }
 
+    /* Fail-memo short-circuit: if the deterministic cascade already returned
+     * NULL for this exact (integrand, variable, method) earlier in THIS
+     * top-level evaluation, it will do so again -- skip the redundant second
+     * search and its duplicate diagnostics.  Keyed on the incoming integrand
+     * `f`: both fixed-point passes see the same Orderless-canonicalised arg, so
+     * their hashes match even though the eval clock churned between them.  See
+     * the intg_fail_* declaration above. */
+    uint64_t intg_hf = expr_hash(f);
+    uint64_t intg_hx = expr_hash(x);
+    intg_fail_sync_epoch(eval_toplevel_id());
+    if (intg_fail_seen(intg_hf, intg_hx, (int)method)) {
+        if (method_sub) expr_free(method_sub);
+        return NULL;
+    }
+
     /* Inexact integrands: route through the shared preprocessor in
      * common.c -- if `f` contains any inexact leaf, force-rationalise
      * it (with bit-exact ½-ulp fallback so transcendental floats like
@@ -795,6 +860,13 @@ Expr* builtin_integrate(Expr* res) {
         if (!coerced) { rt_transcendental_set_debase(debase_saved); return NULL; }
         effective_f = coerced;
     }
+
+    /* Enter the cascade one level deeper.  A sub-integral spawned by an internal
+     * substitution (DerivativeDivides, ...) re-enters here at depth >= 2, which
+     * is how the RischTranscendental stage tells the user's integrand from an
+     * internal recursion variable when deciding whether to name it in a
+     * nonelem diagnostic. */
+    g_integrate_depth++;
 
     Expr* result = NULL;
     switch (method) {
@@ -912,6 +984,16 @@ Expr* builtin_integrate(Expr* res) {
     }
 
     rt_transcendental_set_debase(debase_saved);   /* no-op unless the inexact path disabled it */
+
+    g_integrate_depth--;
+
+    /* Record a failure so the fixed-point loop's redundant re-entry on the
+     * identical integrand (same top-level evaluation) short-circuits above.
+     * Only the outermost user call arms the memo: an inner sub-integral's
+     * failure is expected and must not suppress an unrelated outer retry. */
+    if (!result && g_integrate_depth == 0)
+        intg_fail_record(intg_hf, intg_hx, (int)method);
+
     return result;
 }
 

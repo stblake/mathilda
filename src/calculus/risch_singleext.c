@@ -249,6 +249,50 @@ Expr* rt_exp_poly_case(Expr* f, Expr* x) {
     return result;
 }
 
+/* True iff `e` is a rational function of the base variable `x` and the kernel
+ * symbol `t` over the constants: built only from x, t, entirely x-and-t-free
+ * constant subexpressions, and the field operations (Plus, Times, and Power
+ * with an INTEGER exponent).  This is the membership test for the field C(x)(t)
+ * that the single-extension Risch cases are decision procedures over.
+ *
+ * Its purpose is a GATE, not an optimisation.  After the kernel is replaced by
+ * t, a coefficient that is itself a transcendental (or algebraic) function of x
+ * — Sin[x], E^(2x), Log[g], Gamma[x], Sqrt[x] = x^(1/2) — leaves the integrand
+ * OUTSIDE C(x)(t), where the Rothstein-Trager identity does not apply.  Handing
+ * such an integrand to SolveAlways is unsound: it treats the stray
+ * transcendental as an independent unknown and "solves" it away, e.g.
+ * `SolveAlways[Sin[x] - k/x == 0, {t, x}]` -> `{{Sin[x] -> 0, k -> 0}}`, which
+ * then certifies a bogus antiderivative (the residues zero out to `0`). Every
+ * caller must therefore verify membership before trusting the solver. */
+static bool rt_is_ratl_in_xt(Expr* e, Expr* x, Expr* t) {
+    if (!e) return false;
+    if (e->type != EXPR_FUNCTION)
+        return true;   /* atom: x, t, or an x/t-free constant symbol/number */
+    /* An entirely x- and t-free subexpression is a legitimate constant
+     * coefficient whatever its head (Rational[1,2], Pi, Sqrt[3], Sin[2], ...). */
+    if (rt_free_of_x(e, x) && rt_free_of_x(e, t)) return true;
+    Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        const char* hn = h->data.symbol.name;
+        if (hn == intern_symbol("Plus") || hn == intern_symbol("Times")) {
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (!rt_is_ratl_in_xt(e->data.function.args[i], x, t)) return false;
+            return true;
+        }
+        if (hn == intern_symbol("Power") && e->data.function.arg_count == 2) {
+            /* Rational in (x, t) requires an integer power of a rational base.
+             * A non-integer exponent (Sqrt = ^(1/2)) is algebraic, and an
+             * x/t-dependent exponent (t^x) is exponential — neither is in
+             * C(x)(t). */
+            if (e->data.function.args[1]->type != EXPR_INTEGER) return false;
+            return rt_is_ratl_in_xt(e->data.function.args[0], x, t);
+        }
+    }
+    /* Any other head carrying an x-dependent argument is a transcendental or
+     * algebraic function of x, outside C(x)(t). */
+    return false;
+}
+
 /* Fractional (Rothstein-Trager) log-part for a single monomial extension
  * theta (theta = Log[u], D theta = u'/u; or theta = E^u, D theta = u' theta).
  * With theta -> t, an integrand whose t-denominator d = prod g_i is
@@ -306,6 +350,7 @@ static Expr* rt_frac_try(Expr* f, Expr* x, Expr* u, bool is_log) {
 
     bool ok = num && den && rt_is_poly(num, tsym) && rt_is_poly(den, tsym)
         && !rt_free_of_x(den, tsym)
+        && rt_is_ratl_in_xt(num, x, tsym) && rt_is_ratl_in_xt(den, x, tsym)
         && rt_find_exp_of_x(F, x) == NULL && rt_find_log_of_x(F, x) == NULL;
 
     if (ok) {
@@ -646,6 +691,7 @@ static Expr* rt_hermite_try(Expr* f, Expr* x, bool is_log) {
     Expr* result = NULL;
     bool ok = num && den && rt_is_poly(num, tsym) && rt_is_poly(den, tsym)
         && !rt_free_of_x(den, tsym)
+        && rt_is_ratl_in_xt(num, x, tsym) && rt_is_ratl_in_xt(den, x, tsym)
         && rt_find_log_of_x(F, x) == NULL && rt_find_exp_of_x(F, x) == NULL;
     long dnum = ok ? rt_degree(num, tsym) : 0, dden = ok ? rt_degree(den, tsym) : 0;
     ok = ok && dnum < dden;                      /* proper fraction */
@@ -854,6 +900,7 @@ Expr* rt_hyperexp_case(Expr* f, Expr* x) {
     Expr* den = G ? rt_eval1("Denominator", expr_copy(G)) : NULL;
     bool ok = num && den && rt_is_poly(num, tsym) && rt_is_poly(den, tsym)
         && !rt_free_of_x(den, tsym)
+        && rt_is_ratl_in_xt(num, x, tsym) && rt_is_ratl_in_xt(den, x, tsym)
         && rt_find_exp_of_x(F, x) == NULL && rt_find_log_of_x(F, x) == NULL;
 
     if (ok) {

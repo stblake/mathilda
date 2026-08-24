@@ -21,6 +21,15 @@
  * unevaluated) for any other input. */
 Expr* builtin_integrate(Expr* res);
 
+/* Nesting depth of the public Integrate builtin's method cascade.  0 outside
+ * any integration; 1 while the outermost (user-facing) Integrate[f, x] runs its
+ * cascade; >= 2 inside a sub-integral spawned by an internal substitution
+ * (DerivativeDivides' u = Log[x], etc.) that re-enters Integrate via the
+ * evaluator.  The deep RischTranscendental decision stage reads this to fire the
+ * user-facing Integrate::nonelem diagnostic only for the ORIGINAL integrand
+ * (depth <= 1), never for an internal recursion variable. */
+extern int g_integrate_depth;
+
 /* Registers `Integrate` in the symbol table along with its docstring
  * and attributes.  Also calls `intrat_init()` to register every
  * `Integrate`...` package builtin so they are available before the

@@ -14,6 +14,7 @@
  */
 
 #include "integrate_risch_transcendental.h"
+#include "integrate.h"           /* g_integrate_depth (nonelem-message gating) */
 #include "integrate_risch_rde.h"
 #include "risch_util.h"
 #include "risch_tower.h"
@@ -676,7 +677,16 @@ Expr* builtin_rischtranscendental(Expr* res) {
      * ansatz decline), report it Mathematica-style.  A stray certificate from an
      * abandoned attempt cannot fire here: rt_decide_field re-derives the verdict
      * with elementary-result precedence. */
-    if (!result && rt_decide_field(f, x) == RT_DEC_NONELEMENTARY) {
+    /* The nonelem diagnostic is a user-facing message about the ORIGINAL
+     * integrand, so emit it only at the outermost integration (g_integrate_depth
+     * 0 for a direct Integrate`RischTranscendental[f, x] call, 1 for the top of
+     * the Integrate cascade).  A sub-integral spawned by an internal
+     * substitution — e.g. DerivativeDivides' u = Log[x], reaching this decision
+     * at depth >= 2 — is not the user's integrand: naming its gensym variable
+     * (Integrate`DerivativeDivides`u$N) in a message would be meaningless, so we
+     * stay silent there and let the outermost frame speak. */
+    if (!result && g_integrate_depth <= 1
+        && rt_decide_field(f, x) == RT_DEC_NONELEMENTARY) {
         char* fs = expr_to_string(f);
         char* xs = expr_to_string(x);
         fprintf(stderr,
