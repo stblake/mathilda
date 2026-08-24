@@ -974,9 +974,9 @@ void graphics3d_show(const Expr* graphics3d_expr) {
             (float)(camera.target.z + distance * cos(elevation) * sin(azimuth)),
         };
 
-        /* Hover trace: pick the closest triangle under the cursor, gated to
-         * "not over the toolbar" and "not currently orbiting/panning" so it
-         * doesn't fight the drag gestures. */
+        /* Hover trace: pick the closest triangle under the cursor (for the
+         * coordinate readout below), gated to "not over the toolbar" and "not
+         * currently orbiting/panning" so it doesn't fight the drag gestures. */
         bool hv_found = false;
         Vector3 hv_pt = { 0, 0, 0 };
         if (tb3_hover < 0 && !IsMouseButtonDown(MOUSE_BUTTON_LEFT)
@@ -1008,7 +1008,6 @@ void graphics3d_show(const Expr* graphics3d_expr) {
         rlDisableBackfaceCulling(); /* surfaces are visible from both sides */
         render_baked(&mesh, opts.lighting, light_dir);
         if (opts.axes) draw_box3(&bb, axes_color);
-        if (hv_found) DrawSphere(hv_pt, (float)(diag * 0.012), (Color){ 230, 60, 60, 255 });
         if (slicing) {
             draw_slice_plane(&bb, slice_axis, (float)slice_pos, (Color){ 80, 140, 220, 70 });
             for (size_t i = 0; i < n_slice_segs; i++)
@@ -1246,7 +1245,6 @@ void graphics3d_render_in_region(const Expr* graphics3d_expr,
     rlDisableBackfaceCulling();
     render_baked(&mesh, opts.lighting, light_dir);
     if (opts.axes) draw_box3(&bb, (Color){ 90, 90, 90, 255 });
-    if (hv_found) DrawSphere(hv_pt, (float)(diag * 0.012), (Color){ 230, 60, 60, 255 });
     EndMode3D();
     rlEnableBackfaceCulling();
 
