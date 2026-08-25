@@ -20,7 +20,7 @@ LATEXMK   := latexmk
 EXAMPLES  := $(shell find examples -name '*.m' 2>/dev/null)
 FIGURES   := $(shell find figures -name '*.m' 2>/dev/null)
 
-.PHONY: pdf all links examples usage figures check-links clean distclean help
+.PHONY: pdf all links version examples usage figures check-links clean distclean help
 
 all: pdf
 
@@ -32,12 +32,20 @@ $(MATHILDA):
 links:
 	$(PYTHON) $(TOOLS)/gen_links.py
 
+version: | $(MATHILDA)
+	$(PYTHON) $(TOOLS)/gen_version.py
+
 examples: | $(MATHILDA)
 	$(PYTHON) $(TOOLS)/build_examples.py
 
 # Re-run generators whenever their inputs change (used as PDF prerequisites).
 $(GEN)/builtinlinks.tex: $(TOOLS)/gen_links.py ../site/docs/assets/builtins.json
 	$(PYTHON) $(TOOLS)/gen_links.py
+
+# Re-derive the version whenever the tool changes or the binary is rebuilt (a new
+# binary means a possibly new $Version, which the title/copyright pages must show).
+$(GEN)/version.tex: $(TOOLS)/gen_version.py $(MATHILDA)
+	$(PYTHON) $(TOOLS)/gen_version.py
 
 $(GEN)/.examples.stamp: $(EXAMPLES) $(TOOLS)/build_examples.py ../site/verify_tutorial.py | $(MATHILDA)
 	$(PYTHON) $(TOOLS)/build_examples.py
@@ -61,7 +69,7 @@ $(GEN)/.figures.stamp: $(FIGURES) $(TOOLS)/gen_figures.py ../site/verify_tutoria
 	@mkdir -p $(GEN) && touch $@
 
 # --- the book -------------------------------------------------------------
-pdf: $(GEN)/builtinlinks.tex $(GEN)/.examples.stamp $(GEN)/.usage.stamp $(GEN)/.figures.stamp
+pdf: $(GEN)/builtinlinks.tex $(GEN)/version.tex $(GEN)/.examples.stamp $(GEN)/.usage.stamp $(GEN)/.figures.stamp
 	$(LATEXMK) -pdf -interaction=nonstopmode -halt-on-error $(BOOK).tex
 
 # --- checks ---------------------------------------------------------------

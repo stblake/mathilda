@@ -195,9 +195,13 @@ available for formal statements.
 
 ## 7. Reproducibility and versioning
 
-- A build's transcripts reflect **one** Mathilda version. Record it on the copyright
-  page and in the changelog when it changes. The current pilot was built against
-  Mathilda `0.076` (`$Version` reports the full library set).
+- A build's transcripts reflect **one** Mathilda version, and the title and copyright
+  pages name it. That version is **not hard-coded**: `book/tools/gen_version.py` reads
+  it from the real `./Mathilda --version` at build time and `\def`s `\mathildaversion`
+  (in `generated/version.tex`, loaded by `mathilda.sty`), so it can never drift from
+  the binary that actually produced the transcripts. To change it, rebuild Mathilda —
+  the next `make pdf` picks up the new version automatically. Still note a version
+  change in the changelog. (`$Version` reports the full library set.)
 - Because examples are re-run from source, building against a newer Mathilda simply
   shows what that version prints — the book stays honest automatically. If an output
   changes in a way that breaks the surrounding prose, fix the **prose**.

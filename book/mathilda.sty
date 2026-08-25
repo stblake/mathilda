@@ -279,4 +279,12 @@
 % ------------------------------------------ load the generated link table ---
 \AtBeginDocument{\IfFileExists{generated/builtinlinks.tex}{\input{generated/builtinlinks.tex}}{}}
 
+% ------------------------------- Mathilda version, auto-derived at build time ---
+% generated/version.tex \def's \mathildaversion from the real binary's --version
+% output (book/tools/gen_version.py), so the title and copyright pages always name
+% the exact build the transcripts came from and never go stale. This
+% \providecommand is only a fallback for when that file has not been generated.
+\providecommand{\mathildaversion}{0.076}
+\AtBeginDocument{\IfFileExists{generated/version.tex}{\input{generated/version.tex}}{}}
+
 \endinput
