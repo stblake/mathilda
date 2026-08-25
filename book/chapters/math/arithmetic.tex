@@ -19,11 +19,13 @@ representations and moves between them automatically:
 \end{itemize}
 
 The whole of this section is about how these five representations behave and how
-they hand off to one another. We begin with the way numbers are typed and tested, and
-the operators that combine them; then we take the representations in three groups: the
-machine numbers (fast, fixed-size), the arbitrary-precision numbers (exact integers and
-rationals, and MPFR reals), and finally interval arithmetic, which computes with
-\emph{guaranteed enclosures}\index{interval arithmetic!enclosure} rather than points.
+they hand off to one another. We begin with the way numbers are typed and the
+operators that combine them; then we take the representations in two groups---the
+machine numbers (fast, fixed-size) and the arbitrary-precision numbers (exact integers
+and rationals, and MPFR reals)---before turning to complex numbers and the everyday
+functions that round, divide, and dissect a number. We close with interval arithmetic,
+which computes with \emph{guaranteed enclosures}\index{interval arithmetic!enclosure}
+rather than points.
 
 \subsection{The types of number}
 \label{ssec:number-types}
@@ -43,49 +45,8 @@ and \texttt{Complex}:
 \texttt{Complex[re, im]}.}
 \end{codepairs}
 
-Rather than test the head by hand, you use the \emph{predicates}---the functions ending\index{predicate (Q function)}
-in \texttt{Q} (for ``question'') that return \texttt{True} or \texttt{False}. Mathilda
-provides a full family for numbers:
-
-\begin{center}\small
-\begin{tabular}{@{}ll@{}}
-\toprule
-Predicate & True when the argument is\ldots \\
-\midrule
-\B{IntegerQ}        & an integer (\texttt{Integer} or a bignum) \\
-\B{MachineIntegerQ} & a machine-word (64-bit) integer, but not a bignum \\
-\B{RationalQ}       & an exact rational (an integer or a \texttt{Rational}) \\
-\B{ComplexQ}        & a \texttt{Complex} number \\
-\B{ExactNumberQ}    & an exact number (integer, rational, or exact complex) \\
-\B{InexactNumberQ}  & an inexact number (a machine or MPFR real) \\
-\B{NumberQ}         & any explicit number \\
-\B{NumericQ}        & a number \emph{or} a numeric constant such as $\pi$ \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-\begin{codepairs}
-\pair{arithmetic/predicates/1}{\B{IntegerQ} accepts any integer.}
-\pair{arithmetic/predicates/2}{\B{MachineIntegerQ} is stricter: a bignum, having
-overflowed the machine word, is not a machine integer.}
-\pair{arithmetic/predicates/3}{\B{RationalQ} recognises a fraction.}
-\pair{arithmetic/predicates/4}{A Gaussian integer is an \emph{exact} number\index{Gaussian integer}, so
-\B{ExactNumberQ} is true.}
-\pair{arithmetic/predicates/5}{A fifty-digit MPFR value is \emph{inexact}, so
-\B{InexactNumberQ} is true.}
-\pair{arithmetic/predicates/6}{\B{ComplexQ} tests for the \texttt{Complex} head.}
-\end{codepairs}
-
-Each predicate is a small structural test: it looks at the head and type of its one
-argument and returns \texttt{True} or \texttt{False}, never leaving the call
-unevaluated for a concrete number. Every one of these functions carries its own
-documentation, which you can read at the prompt with \texttt{?Name}; here, for
-instance, is what \B{MachineIntegerQ} reports about itself:
-
-\usagebox{MachineIntegerQ}
-
-Throughout the rest of this section, boxes like the one above reproduce a function's
-own docstring---exactly the text \texttt{?Name} prints---together with its attributes.
+These four heads are all Mathilda needs to know a number's kind at a glance. Everything
+that follows either combines numbers or takes them apart, so we start with the operators.
 
 \subsection{The arithmetic operators}
 \label{ssec:operators}
@@ -116,12 +77,7 @@ one-argument call collapse; \texttt{Listable} threads the operation over lists; 
 paths add and multiply in a $128$-bit intermediate and, on overflow, fall through to
 GMP~\cite{gmp}, promoting the result to a bignum---so the answer is always exact, and
 the fast machine-word path is taken whenever it fits.}, handles addition,
-subtraction, multiplication, division, powers, and roots at once. Here are the three,
-with their own docstrings and attributes:
-
-\usagebox{Plus}
-\usagebox{Times}
-\usagebox{Power}
+subtraction, multiplication, division, powers, and roots at once.
 
 \subsection{Machine-precision computation}
 \label{ssec:machine-precision}
@@ -149,8 +105,8 @@ reported by a handful of read-only system constants, derived at start-up from th
 platform's \texttt{<float.h>}:
 
 \begin{codepairs}
-\pair{arithmetic/machine-limits/1}{A double carries about $15.95$ decimal digits (a
-53-bit mantissa)\index{mantissa}.}
+\pair{arithmetic/machine-limits/1}{A double carries about $15.95$ decimal
+digits---precisely $53\log_{10}2$, the decimal worth of its 53-bit mantissa\index{mantissa}.}
 \pair{arithmetic/machine-limits/2}{\B{\$MachineEpsilon}: the gap between $1$ and the
 next representable double.}
 \pair{arithmetic/machine-limits/3}{The largest finite double.}
@@ -251,7 +207,7 @@ literal \texttt{1.5`20}\index{precision!input notation (backtick)} is $1.5$ carr
 \end{codepairs}
 
 Precision is \emph{contagious}\index{numeric contagion}, and when representations of different precision meet, the
-lowest wins---machine precision being the floor\index{machine precision!as floor}. This, too, follows Mathematica:
+lowest wins---machine precision being the floor\index{machine precision!as floor}:
 
 \begin{codepairs}
 \pair{arithmetic/contagion/1}{Add a machine real to a hundred-digit number and the
@@ -259,9 +215,118 @@ result drops to machine precision: one approximate double poisons the lot.}
 \pair{arithmetic/contagion/2}{Bare \B{N} asks for machine precision, so even a
 hundred-digit argument comes back as a machine number---to request a specific
 precision, use the two-argument \B{N}\texttt{[\emph{expr}, \emph{p}]}.}
-\pair{arithmetic/contagion/3}{$1001!$ has $2{,}571$ digits, far past a double's range,
-so \B{N} keeps it as a machine-precision value with an unbounded exponent---a real with
-a mantissa but no overflow.}
+\pair{arithmetic/contagion/3}{$1001!$ is about $4\times10^{2570}$, far beyond
+\B{\$MaxMachineNumber}. Bare \B{N} still hands it back at machine precision---only the
+leading $16$ digits are significant---but does \emph{not} overflow to
+\texttt{Infinity}\calloutnote{Under the hood}{A machine number carries a fixed $53$-bit
+mantissa but an \emph{arbitrary} exponent. An IEEE double cannot: its exponent tops out
+near $10^{308}$. So whenever a machine-precision result would overflow (or flush a
+nonzero value to zero), Mathilda keeps a $53$-bit MPFR instead---same mantissa,
+unlimited exponent range (\texttt{mpfr\_to\_machine} in \texttt{src/numeric.c}). The
+value survives; the precision does not grow.}, so its magnitude survives where a raw
+double would not.}
+\end{codepairs}
+
+\subsection{Complex numbers}
+\label{ssec:complex}
+
+The fourth numeric head, \texttt{Complex}, rounds out the picture. A complex number is
+stored as \texttt{Complex[re, im]}\index{number!complex}, and it inherits the same
+exact/inexact split as everything else: built from integers it is an exact
+\emph{Gaussian integer}\index{Gaussian integer}; built from machine reals it is an
+inexact machine complex. Arithmetic on them is automatic---\texttt{Plus},
+\texttt{Times}, and \texttt{Power} already know the rules---and a small family of
+component functions reads off the parts:
+
+\begin{codepairs}
+\pair{arithmetic/complex/1}{Multiplication follows $(a+bi)(c+di)$; the exact integer
+parts stay exact, so $(2+3i)(1-i)$ is the Gaussian integer $5+i$.}
+\pair{arithmetic/complex/2}{\B{Conjugate} flips the sign of the imaginary part.}
+\pair{arithmetic/complex/3}{\B{Abs} is the modulus $\sqrt{a^2+b^2}$; here it is the
+integer $5$.}
+\pair{arithmetic/complex/4}{But a Gaussian integer's modulus is usually irrational, and
+Mathilda keeps it exact: $|1+i|=\sqrt2$, not $1.414\ldots$}
+\pair{arithmetic/complex/5}{\B{Arg} is the argument, taken in the range $(-\pi,\pi]$;
+for $1+i$ it is $\pi/4$.}
+\pair{arithmetic/complex/6}{\B{ReIm} returns the real and imaginary parts together as a
+pair (\B{Re} and \B{Im} give them singly).}
+\pair{arithmetic/complex/7}{For symbolic work, \B{ComplexExpand} expands on the
+assumption that the variables are \emph{real}, so $(a+bi)^2$ becomes $a^2-b^2+2ab\,i$.}
+\end{codepairs}
+
+That an exact modulus like $\sqrt2$ is \emph{kept} as $\sqrt2$ is the same principle
+that governed the integers and rationals: exactness is the default and does not silently
+degrade. Ask for a number with \texttt{N} and you get $1.41421$; leave it and it stays a
+radical.
+
+\subsection{Rounding and integer division}
+\label{ssec:rounding}
+
+Two everyday tasks turn a real number into an integer: \emph{rounding} it, and
+\emph{dividing} it with a remainder. Mathilda spells them with the functions you would
+expect, and---because exactness is the default---an exact input returns an exact integer.
+
+\B{Floor} and \B{Ceiling} round down and up; \B{Round} rounds to the nearest integer;
+\B{IntegerPart} and \B{FractionalPart} split off the integer and fractional pieces:
+
+\begin{codepairs}
+\pair{arithmetic/rounding/1}{\B{Floor} rounds toward $-\infty$: $\lfloor 7/2\rfloor=3$.}
+\pair{arithmetic/rounding/2}{\B{Ceiling} rounds toward $+\infty$.}
+\pair{arithmetic/rounding/3}{\B{Round} goes to the nearest integer, breaking a tie
+toward the nearest \emph{even} one\index{rounding!banker's}---so $5/2$ rounds to $2$.}
+\pair{arithmetic/rounding/4}{The same rule sends $7/2$ to $4$, not $3$. This is
+\emph{banker's rounding}, which avoids the upward bias of always rounding halves up.}
+\pair{arithmetic/rounding/5}{It applies to machine reals too: $2.5$ rounds to $2$.}
+\pair{arithmetic/rounding/6}{\B{IntegerPart} truncates \emph{toward zero}, so
+$\mathrm{IntegerPart}(-3.7)=-3$---where \B{Floor} would give $-4$.}
+\pair{arithmetic/rounding/7}{\B{FractionalPart} is the remainder, carrying the sign of
+the argument ($-0.7$), so that the two pieces add back to $-3.7$.}
+\pair{arithmetic/rounding/8}{Each takes an optional second argument, a unit to round to:
+\B{Floor}\texttt{[7.3, 0.5]} is the largest multiple of $0.5$ not exceeding $7.3$.}
+\end{codepairs}
+
+Integer division is the companion pair \B{Quotient} and \B{Mod}, with
+\B{QuotientRemainder} giving both at once. Mathilda uses \emph{floored}
+division\index{division!floored}\calloutnote{Pitfall}{Many languages---C, and much that
+follows it---use \emph{truncated} division instead: the quotient rounds toward zero and
+the remainder takes the sign of the \emph{dividend}, so C's \texttt{-17 \% 5} is $-2$.
+Mathilda's \texttt{Mod[-17, 5]} is $3$. Neither is wrong; they make opposite choices for
+the sign of the remainder. The floored convention is the number-theorist's, and the one
+that keeps \texttt{Mod[m, n]} inside $[0, n)$ for positive $n$.}: the quotient rounds
+toward $-\infty$, and the remainder takes the sign of the \emph{divisor}.
+
+\begin{codepairs}
+\pair{arithmetic/division/1}{\B{Quotient} is the integer part of $17/5$.}
+\pair{arithmetic/division/2}{\B{Mod} is the remainder that is left, $2$.}
+\pair{arithmetic/division/3}{With a negative dividend the quotient floors to $-4$\ldots}
+\pair{arithmetic/division/4}{\ldots and the remainder is $3$, not $-2$: it carries the
+sign of the divisor. The two always satisfy $n\,\mathrm{Quotient}[m,n]+\mathrm{Mod}[m,n]=m$.}
+\pair{arithmetic/division/5}{\B{QuotientRemainder} returns the pair
+$\{\text{quotient},\ \text{remainder}\}$ in a single call.}
+\pair{arithmetic/division/6}{Two integers' greatest common divisor is \B{GCD}\ldots}
+\pair{arithmetic/division/7}{\ldots and their least common multiple is \B{LCM}. Number
+theory proper---primes, factorization, modular powers---is the subject of
+\S\ref{sec:numbertheory}.}
+\end{codepairs}
+
+\subsection{Rational parts and cleanup}
+\label{ssec:parts}
+
+Finally, three functions take a number apart or tidy it up. \B{Numerator} and
+\B{Denominator} split a rational; \B{Rationalize} runs the other way, finding a rational
+close to an approximate number; and \B{Chop} discards the tiny residues that
+floating-point arithmetic leaves behind.
+
+\begin{codepairs}
+\pair{arithmetic/parts/1}{\B{Numerator} of $6/8$---already reduced to $3/4$ on
+construction---is $3$.}
+\pair{arithmetic/parts/2}{\B{Denominator} is $4$.}
+\pair{arithmetic/parts/3}{\B{Rationalize} recovers the exact fraction behind a machine
+real: $0.75$ is $3/4$.}
+\pair{arithmetic/parts/4}{With a tolerance it finds the \emph{simplest} rational within
+that distance---famously, $\pi$ to two decimals is $22/7$.}
+\pair{arithmetic/parts/5}{And \B{Chop} rounds a near-zero machine value to an exact $0$:
+the $0.1+0.2-0.3$ residue from \S\ref{ssec:machine-precision} disappears.}
 \end{codepairs}
 
 \subsection{Interval arithmetic}
@@ -273,14 +338,13 @@ approximate answer that comes with a \emph{proof}. Instead of a single number, y
 compute with an interval $[a,b]$ that is guaranteed to contain the true value, and every
 operation returns an interval guaranteed to contain the true result. The idea goes back
 to Moore~\cite{moore2009}\index{Moore, R. E.}; Mathilda implements it as a first-class numeric object,
-\B{Interval}\texttt{[\{lo, hi\}]}.\calloutnote{Pitfall}{Mathilda's intervals differ from
-Mathematica's in two deliberate ways, both documented. A machine number becomes a
-\emph{point} interval---\texttt{Interval[1.]}\index{interval arithmetic!point interval} is \texttt{Interval[\{1., 1.\}]}---rather
-than being preloaded with a half-ULP uncertainty band; if you want an uncertainty
-propagated, you supply it. And \B{Interval} is a set, not a scalar, so it is deliberately
-neither \texttt{Listable} nor a \texttt{NumericFunction}. The enclosures are rigorous in
-the spirit of the interval standard, though Mathilda implements no formal decoration
-system.}
+\B{Interval}\texttt{[\{lo, hi\}]}.\calloutnote{Pitfall}{Two of Mathilda's interval
+conventions are worth stating up front. A machine number becomes a \emph{point}
+interval---\texttt{Interval[1.]}\index{interval arithmetic!point interval} is
+\texttt{Interval[\{1., 1.\}]}---rather than being preloaded with a half-ULP uncertainty
+band; if you want an uncertainty propagated, you supply it. And \B{Interval} is a set,
+not a scalar, so it is deliberately neither \texttt{Listable} nor a
+\texttt{NumericFunction}.}
 
 The arithmetic operations and the elementary functions all propagate intervals:
 
@@ -325,8 +389,7 @@ endpoint, both endpoints now inexact machine reals---and evaluate $\sin$ across 
 from a small negative value to a small positive one. The endpoints are inexact, but
 outward rounding keeps the enclosure a rigorous over-estimate.}
 \pair{arithmetic/interval-root/2}{Zero lies inside it---even the inexact $0.$. This is a
-computer-assisted proof that $\sin$ has a root\index{computer-assisted proof} in $[245/78, 355/113]$, pinning $\pi$ to a
-far tighter interval than $[3, 7/2]$ would.}
+computer-assisted proof that $\sin$ has a root\index{computer-assisted proof} in $[245/78, 355/113]$.}
 \end{codepairs}
 
 Interval arithmetic has one famous limitation, the \emph{dependency problem}\index{interval arithmetic!dependency problem}: because
@@ -342,3 +405,33 @@ the two copies are treated as independent.}
 interval, the enclosure widens at each step---a certified picture of how rounding error
 grows in a chaotic system, always containing the true orbit.}
 \end{codepairs}
+
+Interval arithmetic has been standardized: IEEE~1788--2015\index{interval arithmetic!IEEE 1788}~\cite{ieee1788}
+fixes what the operations mean and how a conforming implementation must behave. Mathilda
+follows its \emph{set-based} model---an interval denotes the set of reals it contains,
+and every operation returns an enclosure of the true result set---which is the flavor
+used throughout this section. Two parts of the standard Mathilda deliberately does
+\emph{not} implement. The first is the \emph{decoration}\index{interval arithmetic!decoration}
+system\calloutnote{Theory}{A \emph{decoration} is a tag the standard attaches to an
+interval, recording what happened as it was computed: whether the computation stayed
+inside every function's domain and was continuous there (\texttt{com}, \texttt{dac}),
+whether a domain violation occurred (\texttt{trv}), or whether it was ill-formed
+(\texttt{ill}). Carried alongside the interval, decorations let a long chain of
+operations certify \emph{at the end} that nothing stepped outside a function's domain
+along the way. Mathilda tracks the enclosure but not this provenance tag.}: its
+enclosures are rigorous, but they do not carry a tag certifying that every intermediate
+step stayed within its function's domain. The second is the standard's alternative
+\emph{flavors}, such as the modal (Kaucher) intervals. What Mathilda does
+guarantee---outward-rounded, mathematically certain enclosures, including the disjoint
+unions that arise from dividing by a straddling interval---is precisely the common core
+those extensions are built on.
+
+That completes the tour of Mathilda's numbers. We have climbed the tower from machine
+integers through GMP bignums, exact rationals, and machine and MPFR reals to complex
+numbers; watched precision flow and seen where it stops; met the everyday functions that
+round, divide, and take a number apart; and finished with intervals, which trade a
+single value for a guaranteed enclosure. The algebra of \S\ref{sec:algebra} builds
+directly on the exact arithmetic established here, and the number-theoretic functions
+glimpsed above---\texttt{GCD}, factorization, modular powers---are taken up in earnest in
+\S\ref{sec:numbertheory}. For the exhaustive options and corner cases of any function
+named in this section, its reference page is one \texttt{?Name} away at the prompt.

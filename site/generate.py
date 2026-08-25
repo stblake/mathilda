@@ -95,6 +95,8 @@ CATEGORY_OVERRIDES = {
     "Exp": "elementary-functions", "Log": "elementary-functions",
     # Arithmetic (rounding, basic operators, complex parts, precision) --------
     "Floor": "arithmetic", "Ceiling": "arithmetic", "Round": "arithmetic",
+    "IntegerPart": "arithmetic", "FractionalPart": "arithmetic",
+    "Mod": "arithmetic", "Quotient": "arithmetic", "QuotientRemainder": "arithmetic",
     "Rationalize": "arithmetic", "Complex": "arithmetic", "Divide": "arithmetic",
     "Subtract": "arithmetic", "Factorial2": "arithmetic",
     "Accuracy": "arithmetic", "Precision": "arithmetic",

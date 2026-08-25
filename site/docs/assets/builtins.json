@@ -2320,6 +2320,14 @@
     "url": "documentation/other-advanced/FourierParameters/"
   },
   {
+    "name": "FractionalPart",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
+    "status": "Stable",
+    "summary": "FractionalPart[x]",
+    "url": "documentation/arithmetic/FractionalPart/"
+  },
+  {
     "name": "Frame",
     "category": "Other & Advanced",
     "slug": "other-advanced",
@@ -3102,6 +3110,14 @@
     "status": "Stable",
     "summary": "IntegerLength[n] gives the number of decimal digits in the integer n.",
     "url": "documentation/arithmetic/IntegerLength/"
+  },
+  {
+    "name": "IntegerPart",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
+    "status": "Stable",
+    "summary": "IntegerPart[x]",
+    "url": "documentation/arithmetic/IntegerPart/"
   },
   {
     "name": "IntegerPartitions",
@@ -3982,6 +3998,14 @@
     "status": "Stable",
     "summary": "MinimalPolynomial[s, x]",
     "url": "documentation/algebra/MinimalPolynomial/"
+  },
+  {
+    "name": "Mod",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
+    "status": "Stable",
+    "summary": "Mod[m, n]",
+    "url": "documentation/arithmetic/Mod/"
   },
   {
     "name": "Module",
@@ -5014,6 +5038,22 @@
     "status": "Stable",
     "summary": "Quartiles[data]",
     "url": "documentation/statistics/Quartiles/"
+  },
+  {
+    "name": "Quotient",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
+    "status": "Stable",
+    "summary": "Quotient[m, n]",
+    "url": "documentation/arithmetic/Quotient/"
+  },
+  {
+    "name": "QuotientRemainder",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
+    "status": "Stable",
+    "summary": "QuotientRemainder[m, n]",
+    "url": "documentation/arithmetic/QuotientRemainder/"
   },
   {
     "name": "Ramp",

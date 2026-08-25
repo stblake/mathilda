@@ -74,6 +74,31 @@ void info_init(void) {
         "parts (equivalently, into odd parts). n must be an integer; q(n) = 0\n"
         "for n < 0. Threads over lists. For the partitions themselves use\n"
         "IntegerPartitions[n, All, Range[n]] with distinct parts.");
+    symtab_set_docstring("Mod",
+        "Mod[m, n]\n"
+        "\tgives the remainder of m on division by n, carrying the sign of the\n"
+        "\tdivisor n (a floored modulus, so Mod[-17, 5] is 3, not C's -2).\n"
+        "Mod[m, n, d]\n"
+        "\tgives the representative congruent to m modulo n in the half-open\n"
+        "\trange d <= r < d + n.\n"
+        "Reduction is exact on Integer / BigInt / Rational inputs (no overflow),\n"
+        "and works for Real / MPFR arguments at the input precision. Mod is\n"
+        "Listable; non-numeric arguments are left unevaluated.");
+    symtab_set_docstring("Quotient",
+        "Quotient[m, n]\n"
+        "\tgives the integer quotient of m and n, rounded toward -Infinity\n"
+        "\t(floored division), so that n Quotient[m, n] + Mod[m, n] == m.\n"
+        "Quotient[m, n, d]\n"
+        "\tuses the offset d, matching the three-argument Mod.\n"
+        "For complex arguments Quotient performs Gaussian-integer division,\n"
+        "rounding the ratio to the nearest Gaussian integer. Exact inputs give\n"
+        "exact results; Quotient is Listable.");
+    symtab_set_docstring("QuotientRemainder",
+        "QuotientRemainder[m, n]\n"
+        "\tgives the pair {Quotient[m, n], Mod[m, n]}, so the quotient is\n"
+        "\tfloored and the remainder carries the sign of n.\n"
+        "QuotientRemainder is Listable; non-numeric arguments are left\n"
+        "unevaluated.");
     symtab_set_docstring("GCD",
         "GCD[n1, n2, ...]\n"
         "\tgives the greatest common divisor of the integers ni.\n"
@@ -2818,6 +2843,21 @@ void info_init(void) {
         "\trounds x to the nearest multiple of a.\n"
         "Round is Listable. Exact inputs return exact integers; Real / MPFR\n"
         "inputs round at the input precision.");
+    symtab_set_docstring("IntegerPart",
+        "IntegerPart[x]\n"
+        "\tgives the integer part of x, truncated toward zero, so that\n"
+        "\tIntegerPart[2.7] is 2 and IntegerPart[-2.7] is -2.\n"
+        "IntegerPart is Listable. Exact (Integer / BigInt / Rational) inputs\n"
+        "return exact integers; Real / MPFR inputs are truncated at the input\n"
+        "precision; symbolic inputs stay unevaluated. It satisfies\n"
+        "IntegerPart[x] + FractionalPart[x] == x.");
+    symtab_set_docstring("FractionalPart",
+        "FractionalPart[x]\n"
+        "\tgives the fractional part x - IntegerPart[x], carrying the sign of\n"
+        "\tx, so that FractionalPart[2.7] is 0.7 and FractionalPart[-2.7] is\n"
+        "\t-0.7.\n"
+        "FractionalPart is Listable and preserves the precision of x. Exact\n"
+        "inputs stay exact; symbolic inputs stay unevaluated.");
     symtab_set_docstring("UnitStep",
         "UnitStep[x]\n"
         "\tgives 0 for x < 0 and 1 for x >= 0 (the value at 0 is 1).\n"

@@ -1,0 +1,7 @@
+Quotient[17, 5]
+Mod[17, 5]
+Quotient[-17, 5]
+Mod[-17, 5]
+QuotientRemainder[17, 5]
+GCD[24, 36]
+LCM[4, 6]

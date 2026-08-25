@@ -62,14 +62,20 @@ mathematical domains, each its own file under `chapters/math/` and its own campa
 | 4.6 | Number Theory | `chapters/math/number-theory.tex` | Planned |
 | 4.7 | Special Functions | `chapters/math/special-functions.tex` | Planned |
 
-**§4.1 Arithmetic scope** (three subsections, per the original outline):
-- **4.1.1 Machine-precision** — internal sizes/limits of machine ints and doubles;
-  that Mathilda does **not** use significance arithmetic, with examples where the
-  fixed-precision `double` model works cleanly.
-- **4.1.2 Arbitrary precision** — how machine, GMP bignum, and MPFR computations mix
-  and hand off; automatic promotion/demotion; `N[expr, prec]` and precision literals.
-- **4.1.3 Interval arithmetic** — overview, classical examples, advanced uses, and a
-  comparison with the ISO standard for interval arithmetic.
+**§4.1 Arithmetic scope** (broadened beyond the original three-subsection outline):
+- **Types & operators** — the numeric heads (`Head`), and how `+ - * / ^` reduce to
+  the `Plus`/`Times`/`Power` primitives (`FullForm`).
+- **Machine-precision** — internal sizes/limits of machine ints and doubles; that
+  Mathilda does **not** use significance arithmetic; the wide-exponent machine real.
+- **Arbitrary precision** — how machine, GMP bignum, and MPFR computations mix and
+  hand off; automatic promotion/demotion; `N[expr, prec]`; precision literals; contagion.
+- **Complex numbers** — `Complex[re,im]`, exact Gaussian integers vs inexact complex,
+  `Re`/`Im`/`ReIm`/`Conjugate`/`Abs`/`Arg`/`ComplexExpand`.
+- **Rounding & integer division** — `Floor`/`Ceiling`/`Round` (banker's), `IntegerPart`/
+  `FractionalPart`, floored `Mod`/`Quotient`/`QuotientRemainder`, `GCD`/`LCM`.
+- **Rational parts & cleanup** — `Numerator`/`Denominator`/`Rationalize`/`Chop`.
+- **Interval arithmetic** — overview, classical examples, advanced uses (dependency
+  problem), and a comparison with the ISO standard (IEEE 1788-2015: decorations, flavors).
 
 **§4.2 Algebra scope.** Expand/Factor/Together/Cancel/Apart; polynomials over ℚ and
 over algebraic number fields; GCD/resultants; Gröbner bases; Solve for polynomial

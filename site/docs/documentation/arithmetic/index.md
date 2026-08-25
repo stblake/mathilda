@@ -1,6 +1,6 @@
 # Arithmetic
 
-45 built-in function(s) in this category.
+50 built-in function(s) in this category.
 
 - [`Abs`](Abs.md) — Abs[z] gives the absolute value (modulus) of numeric z, Sqrt[Re[z]^2 + Im[z]^2] for complex z.  _(Stable)_
 - [`Accumulate`](Accumulate.md) — Accumulate[list]  _(Stable)_
@@ -20,18 +20,23 @@
 - [`FactorialPower`](FactorialPower.md) — FactorialPower[n, k]  _(Stable)_
 - [`Fibonacci`](Fibonacci.md) — Fibonacci[n]  _(Stable)_
 - [`Floor`](Floor.md) — Floor[x]  _(Stable)_
+- [`FractionalPart`](FractionalPart.md) — FractionalPart[x]  _(Stable)_
 - [`FromDigits`](FromDigits.md) — FromDigits[list] constructs an integer from a list of decimal digits, most-significant first.  _(Stable)_
 - [`Im`](Im.md) — Im[z] gives the imaginary part of numeric z, and 0 for real or real-valued (Re/Im/Abs/Arg) arguments.  _(Stable)_
 - [`IntegerDigits`](IntegerDigits.md) — IntegerDigits[n] gives a list of the decimal digits in the integer n.  _(Stable)_
 - [`IntegerExponent`](IntegerExponent.md) — IntegerExponent[n, b] gives the highest power of b that divides n.  _(Stable)_
 - [`IntegerLength`](IntegerLength.md) — IntegerLength[n] gives the number of decimal digits in the integer n.  _(Stable)_
+- [`IntegerPart`](IntegerPart.md) — IntegerPart[x]  _(Stable)_
 - [`IntegerString`](IntegerString.md) — IntegerString[n] gives a string consisting of the decimal digits in the integer n.  _(Stable)_
 - [`LucasL`](LucasL.md) — LucasL[n]  _(Stable)_
 - [`MantissaExponent`](MantissaExponent.md) — MantissaExponent[x] gives a list {m, e} containing the mantissa and exponent of the real number x, such that x = m * 10^e and 1/10 <= |m| < 1 (or m = 0 when x = 0).  _(Stable)_
+- [`Mod`](Mod.md) — Mod[m, n]  _(Stable)_
 - [`N`](N.md) — N[expr]  _(Stable)_
 - [`Plus`](Plus.md) — x + y + ... or Plus[x, y, ...] represents a sum of terms.  _(Stable)_
 - [`Power`](Power.md) — x ^ y or Power[x, y] represents x to the power y.  _(Stable)_
 - [`Precision`](Precision.md) — Precision[x]  _(Stable)_
+- [`Quotient`](Quotient.md) — Quotient[m, n]  _(Stable)_
+- [`QuotientRemainder`](QuotientRemainder.md) — QuotientRemainder[m, n]  _(Stable)_
 - [`Rational`](Rational.md) — Rational[n, d]  _(Stable)_
 - [`Rationalize`](Rationalize.md) — Rationalize[x]  _(Stable)_
 - [`Ratios`](Ratios.md) — Ratios[list]  _(Stable)_

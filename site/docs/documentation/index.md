@@ -2,7 +2,7 @@
 
 Every public built-in function in Mathilda, grouped by category. Each page follows the same shape: **Description** (the function's docstring), **Examples** (verified against the current build), **Implementation notes**, **Implementation status**, and **References**.
 
-_847 functions across 35 categories. Use the search box (press `/`) to jump to any function._
+_852 functions across 35 categories. Use the search box (press `/`) to jump to any function._
 
 ## Categories
 
@@ -12,7 +12,7 @@ _847 functions across 35 categories. Use the search box (press `/`) to jump to a
 
 ### [Arithmetic](arithmetic/index.md)
 
-[`Abs`](arithmetic/Abs.md)  [`Accumulate`](arithmetic/Accumulate.md)  [`Accuracy`](arithmetic/Accuracy.md)  [`Arg`](arithmetic/Arg.md)  [`Binomial`](arithmetic/Binomial.md)  [`Ceiling`](arithmetic/Ceiling.md)  [`Complex`](arithmetic/Complex.md)  [`ComplexExpand`](arithmetic/ComplexExpand.md)  [`Conjugate`](arithmetic/Conjugate.md)  [`Differences`](arithmetic/Differences.md)  [`DigitCount`](arithmetic/DigitCount.md)  [`DigitSum`](arithmetic/DigitSum.md)  [`Divide`](arithmetic/Divide.md)  [`Factorial`](arithmetic/Factorial.md)  [`Factorial2`](arithmetic/Factorial2.md)  [`FactorialPower`](arithmetic/FactorialPower.md)  [`Fibonacci`](arithmetic/Fibonacci.md)  [`Floor`](arithmetic/Floor.md)  [`FromDigits`](arithmetic/FromDigits.md)  [`Im`](arithmetic/Im.md)  [`IntegerDigits`](arithmetic/IntegerDigits.md)  [`IntegerExponent`](arithmetic/IntegerExponent.md)  [`IntegerLength`](arithmetic/IntegerLength.md)  [`IntegerString`](arithmetic/IntegerString.md)  [`LucasL`](arithmetic/LucasL.md)  [`MantissaExponent`](arithmetic/MantissaExponent.md)  [`N`](arithmetic/N.md)  [`Plus`](arithmetic/Plus.md)  [`Power`](arithmetic/Power.md)  [`Precision`](arithmetic/Precision.md)  [`Rational`](arithmetic/Rational.md)  [`Rationalize`](arithmetic/Rationalize.md)  [`Ratios`](arithmetic/Ratios.md)  [`Re`](arithmetic/Re.md)  [`ReIm`](arithmetic/ReIm.md)  [`RealDigits`](arithmetic/RealDigits.md)  [`RealExponent`](arithmetic/RealExponent.md)  [`Round`](arithmetic/Round.md)  [`SetAccuracy`](arithmetic/SetAccuracy.md)  [`SetPrecision`](arithmetic/SetPrecision.md)  [`Sign`](arithmetic/Sign.md)  [`Sqrt`](arithmetic/Sqrt.md)  [`Subtract`](arithmetic/Subtract.md)  [`Times`](arithmetic/Times.md)  [`Total`](arithmetic/Total.md)
+[`Abs`](arithmetic/Abs.md)  [`Accumulate`](arithmetic/Accumulate.md)  [`Accuracy`](arithmetic/Accuracy.md)  [`Arg`](arithmetic/Arg.md)  [`Binomial`](arithmetic/Binomial.md)  [`Ceiling`](arithmetic/Ceiling.md)  [`Complex`](arithmetic/Complex.md)  [`ComplexExpand`](arithmetic/ComplexExpand.md)  [`Conjugate`](arithmetic/Conjugate.md)  [`Differences`](arithmetic/Differences.md)  [`DigitCount`](arithmetic/DigitCount.md)  [`DigitSum`](arithmetic/DigitSum.md)  [`Divide`](arithmetic/Divide.md)  [`Factorial`](arithmetic/Factorial.md)  [`Factorial2`](arithmetic/Factorial2.md)  [`FactorialPower`](arithmetic/FactorialPower.md)  [`Fibonacci`](arithmetic/Fibonacci.md)  [`Floor`](arithmetic/Floor.md)  [`FractionalPart`](arithmetic/FractionalPart.md)  [`FromDigits`](arithmetic/FromDigits.md)  [`Im`](arithmetic/Im.md)  [`IntegerDigits`](arithmetic/IntegerDigits.md)  [`IntegerExponent`](arithmetic/IntegerExponent.md)  [`IntegerLength`](arithmetic/IntegerLength.md)  [`IntegerPart`](arithmetic/IntegerPart.md)  [`IntegerString`](arithmetic/IntegerString.md)  [`LucasL`](arithmetic/LucasL.md)  [`MantissaExponent`](arithmetic/MantissaExponent.md)  [`Mod`](arithmetic/Mod.md)  [`N`](arithmetic/N.md)  [`Plus`](arithmetic/Plus.md)  [`Power`](arithmetic/Power.md)  [`Precision`](arithmetic/Precision.md)  [`Quotient`](arithmetic/Quotient.md)  [`QuotientRemainder`](arithmetic/QuotientRemainder.md)  [`Rational`](arithmetic/Rational.md)  [`Rationalize`](arithmetic/Rationalize.md)  [`Ratios`](arithmetic/Ratios.md)  [`Re`](arithmetic/Re.md)  [`ReIm`](arithmetic/ReIm.md)  [`RealDigits`](arithmetic/RealDigits.md)  [`RealExponent`](arithmetic/RealExponent.md)  [`Round`](arithmetic/Round.md)  [`SetAccuracy`](arithmetic/SetAccuracy.md)  [`SetPrecision`](arithmetic/SetPrecision.md)  [`Sign`](arithmetic/Sign.md)  [`Sqrt`](arithmetic/Sqrt.md)  [`Subtract`](arithmetic/Subtract.md)  [`Times`](arithmetic/Times.md)  [`Total`](arithmetic/Total.md)
 
 ### [Assignment and Rules](assignment-and-rules/index.md)
 
@@ -438,6 +438,7 @@ _847 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`FourierDCT`](fourier-transforms/FourierDCT.md)
 - [`FourierDST`](fourier-transforms/FourierDST.md)
 - [`FourierParameters`](other-advanced/FourierParameters.md)
+- [`FractionalPart`](arithmetic/FractionalPart.md)
 - [`Frame`](other-advanced/Frame.md)
 - [`FrameStyle`](other-advanced/FrameStyle.md)
 - [`FrameTicks`](other-advanced/FrameTicks.md)
@@ -536,6 +537,7 @@ _847 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`IntegerDigits`](arithmetic/IntegerDigits.md)
 - [`IntegerExponent`](arithmetic/IntegerExponent.md)
 - [`IntegerLength`](arithmetic/IntegerLength.md)
+- [`IntegerPart`](arithmetic/IntegerPart.md)
 - [`IntegerPartitions`](number-theory/IntegerPartitions.md)
 - [`IntegerQ`](expression-information/IntegerQ.md)
 - [`IntegerString`](arithmetic/IntegerString.md)
@@ -646,6 +648,7 @@ _847 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`MinMax`](data-structures/MinMax.md)
 - [`MinimalBy`](functional-programming/MinimalBy.md)
 - [`MinimalPolynomial`](algebra/MinimalPolynomial.md)
+- [`Mod`](arithmetic/Mod.md)
 - [`Module`](scoping-constructs/Module.md)
 - [`Modulus`](other-advanced/Modulus.md)
 - [`MoebiusMu`](number-theory/MoebiusMu.md)
@@ -775,6 +778,8 @@ _847 functions across 35 categories. Use the search box (press `/`) to jump to a
 - [`QRDecomposition`](linear-algebra/QRDecomposition.md)
 - [`Quartics`](solutions-of-equations/Quartics.md)
 - [`Quartiles`](statistics/Quartiles.md)
+- [`Quotient`](arithmetic/Quotient.md)
+- [`QuotientRemainder`](arithmetic/QuotientRemainder.md)
 - [`Ramp`](elementary-functions/Ramp.md)
 - [`RandomChoice`](random-number-generation/RandomChoice.md)
 - [`RandomComplex`](random-number-generation/RandomComplex.md)

@@ -1,0 +1,8 @@
+Floor[7/2]
+Ceiling[7/2]
+Round[5/2]
+Round[7/2]
+Round[2.5]
+IntegerPart[-3.7]
+FractionalPart[-3.7]
+Floor[7.3, 0.5]

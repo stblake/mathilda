@@ -175,18 +175,19 @@ material you wrote, then rebuild (`make pdf` reruns `makeindex`). The macros liv
 - **Show the mathematics and the machinery.** Prefer explaining an algorithm to
   merely invoking it.
 
-Callout environments (defined in `mathilda.sty`) — use them to separate the two
-voices of the book from the main thread:
+Callouts are the `\calloutnote{Label}{body}` macro (defined in `mathilda.sty`); they
+render as **labelled footnotes**, not boxed environments. Use them to separate the two
+voices of the book from the main thread, passing one of these strings as the `Label`:
 
-| Environment      | For |
+| `Label`          | For |
 |------------------|-----|
-| `theory`         | The mathematics behind what just happened (a theorem, a method). |
-| `underhood`      | How Mathilda implements it (data structures, algorithm, C internals). |
-| `performance`    | Cost, scaling, when it is fast/slow, packed-array or `Compile[]` notes. |
-| `pitfall`        | A trap, a surprising output form, a common misreading. |
+| `Theory`         | The mathematics behind what just happened (a theorem, a method). |
+| `Under the hood` | How Mathilda implements it (data structures, algorithm, C internals). |
+| `Performance`    | Cost, scaling, when it is fast/slow, packed-array or `Compile[]` notes. |
+| `Pitfall`        | A trap, a surprising output form, a common misreading. |
 
-Theorem-like environments (`theorem`, `definition`, `example`, `remark`, …) are
-available for formal statements.
+Theorem-like environments (`theorem`, `definition`, `example`, `remark`, …, declared in
+`TheMathildaBook.tex` via `amsthm`) are available for formal statements.
 
 - Punctuation: US register; `--` for parenthetical dashes; no emoji in the prose.
 - Every chapter opens with a short orienting paragraph and closes by pointing forward.

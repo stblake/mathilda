@@ -1,0 +1,5 @@
+Numerator[6/8]
+Denominator[6/8]
+Rationalize[0.75]
+Rationalize[N[Pi], 0.01]
+Chop[0.1 + 0.2 - 0.3]
