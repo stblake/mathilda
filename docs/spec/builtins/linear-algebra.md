@@ -2182,8 +2182,16 @@ Gives a list of the eigenvalues of a square matrix.
   solve → numericalize pipeline; tiny imaginary noise introduced by the
   Cardano formula on real cubics is chopped automatically.
 - Repeated eigenvalues appear with their algebraic multiplicity.
-- Numeric eigenvalues are sorted in order of decreasing absolute value;
-  symbolic eigenvalues retain Solve's natural order.
+- Eigenvalues are sorted in order of decreasing absolute value. On an exact
+  modulus tie — the case that matters is a complex-conjugate pair `a ± b I` —
+  the `+imag` member is listed first, matching Mathematica
+  (`Eigenvalues[{{0,-1},{1,0}}]` → `{I, -I}`). This holds for both the numeric
+  Direct kernel and the symbolic (`Root[]` / radical) path, so
+  `N[Eigenvalues[m]]` and `Eigenvalues[N[m]]` agree on the sign order
+  (e.g. `Eigenvalues[{{0,1,0},{0,0,1},{1,1,0}}]` returns the characteristic
+  roots as `{Root[…,1], Root[…,3], Root[…,2]}`, whose `N` is
+  `{1.32472, -0.662+0.562 I, -0.662-0.562 I}`). Symbolic eigenvalues that carry
+  free variables (no concrete modulus) retain Solve's natural order.
 - When `m, a` have a shared null space, `Eigenvalues[{m, a}]` returns
   `Infinity` for each degree drop in the characteristic polynomial.
 - Options: `Cubics -> False`, `Quartics -> False` (defaults), `Method`.  With

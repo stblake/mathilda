@@ -311,10 +311,23 @@ void test_eigenvalues_1x1_symbolic(void) {
     run_test("Eigenvectors[{{a}}]", "List[List[1]]");
 }
 
-/* Complex eigenvalues from a 2D rotation: roots are +-I. */
+/* Complex eigenvalues from a 2D rotation: roots are +-I.  A conjugate pair
+ * of equal modulus is listed with the +imag member first (Mathematica's
+ * convention), matching the numeric Direct kernel. */
 void test_eigenvalues_complex_rotation(void) {
     run_test("Eigenvalues[{{0, -1}, {1, 0}}]",
-             "List[Complex[0, -1], Complex[0, 1]]");
+             "List[Complex[0, 1], Complex[0, -1]]");
+}
+
+/* Symbolic Root[] eigenvalues of a real matrix must list a conjugate pair
+ * +imag first, so N[Eigenvalues[m]] agrees with Eigenvalues[N[m]] on the
+ * sign order.  x^3-x-1: real root, then -0.66+0.56 I, then -0.66-0.56 I. */
+void test_eigenvalues_cubic_conjugate_order(void) {
+    run_test("Eigenvalues[{{0, 1, 0}, {0, 0, 1}, {1, 1, 0}}]",
+             "List[Root[Function[Plus[-1, Times[-1, Slot[1]], Power[Slot[1], "
+             "3]]], 1], Root[Function[Plus[-1, Times[-1, Slot[1]], "
+             "Power[Slot[1], 3]]], 3], Root[Function[Plus[-1, Times[-1, "
+             "Slot[1]], Power[Slot[1], 3]]], 2]]");
 }
 
 /* Complex eigenvectors verify m.v == lambda*v. */
@@ -689,6 +702,7 @@ int main(void) {
     TEST(test_eigenvalues_1x1_numeric);
     TEST(test_eigenvalues_1x1_symbolic);
     TEST(test_eigenvalues_complex_rotation);
+    TEST(test_eigenvalues_cubic_conjugate_order);
     TEST(test_eigenvectors_complex_rotation_verify);
     TEST(test_eigenvalues_zero_matrix);
     TEST(test_eigenvalues_nilpotent_3x3);

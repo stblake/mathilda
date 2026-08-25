@@ -421,17 +421,47 @@ static bool eigen_abs_to_double(Expr* val, double* out) {
     return ok;
 }
 
+/* Reduce val to the concrete-real double N[Im[val]] used only as a
+ * magnitude-tie secondary key.  Returns 0.0 when the imaginary part does
+ * not collapse to a concrete real (a purely symbolic value), which leaves
+ * such entries in their original relative order. */
+static double eigen_im_to_double(Expr* val) {
+    Expr* im_e = eval_and_free(expr_new_function(
+        expr_new_symbol(SYM_Im), (Expr*[]){ expr_copy(val) }, 1));
+    Expr* n_im = eval_and_free(expr_new_function(
+        expr_new_symbol(SYM_N), (Expr*[]){ im_e }, 1));
+    double d = 0;
+    if (n_im->type == EXPR_REAL) d = n_im->data.real;
+    else if (n_im->type == EXPR_INTEGER) d = (double)n_im->data.integer;
+    else if (n_im->type == EXPR_BIGINT) d = mpz_get_d(n_im->data.bigint);
+#ifdef USE_MPFR
+    else if (n_im->type == EXPR_MPFR)
+        d = mpfr_get_d(n_im->data.mpfr, MPFR_RNDN);
+#endif
+    expr_free(n_im);
+    return d;
+}
+
 typedef struct {
     Expr*  val;       /* borrowed during sort */
     double abs_d;
-    size_t orig_idx;  /* tiebreaker to keep stable order */
+    double im_d;      /* secondary key: N[Im[val]] (0 if non-concrete) */
+    size_t orig_idx;  /* final tiebreaker to keep stable order */
 } EigenSortKey;
 
+/* Primary key: descending |λ|.  On an exact magnitude tie — the case that
+ * matters is a complex-conjugate pair a±b I of equal modulus — break by
+ * *descending* imaginary part so the +imag member comes first, matching
+ * Mathematica's convention (Eigenvalues[{{0,-1},{1,0}}] -> {I, -I}) and the
+ * numeric Direct kernel, which already emits +imag first.  orig_idx keeps
+ * genuine ties (e.g. repeated real eigenvalues) stable. */
 static int eigen_sort_cmp_desc(const void* a, const void* b) {
     const EigenSortKey* ka = (const EigenSortKey*)a;
     const EigenSortKey* kb = (const EigenSortKey*)b;
     if (ka->abs_d > kb->abs_d) return -1;
     if (ka->abs_d < kb->abs_d) return 1;
+    if (ka->im_d > kb->im_d) return -1;
+    if (ka->im_d < kb->im_d) return 1;
     if (ka->orig_idx < kb->orig_idx) return -1;
     if (ka->orig_idx > kb->orig_idx) return 1;
     return 0;
@@ -447,6 +477,7 @@ void eigen_sort_by_abs_desc(Expr** vals, size_t n) {
     for (size_t i = 0; i < n; i++) {
         keys[i].val = vals[i];
         keys[i].orig_idx = i;
+        keys[i].im_d = 0.0;
         /* Infinity should sort first regardless. */
         if (vals[i]->type == EXPR_SYMBOL
             && vals[i]->data.symbol.name == SYM_Infinity) {
@@ -462,6 +493,7 @@ void eigen_sort_by_abs_desc(Expr** vals, size_t n) {
             all_numeric = false;
             break;
         }
+        keys[i].im_d = eigen_im_to_double(vals[i]);
     }
     if (all_numeric) {
         qsort(keys, n, sizeof(EigenSortKey), eigen_sort_cmp_desc);
