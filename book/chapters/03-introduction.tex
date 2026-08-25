@@ -588,11 +588,7 @@ vectors the matrix annihilates.}
 The deepest invariants of a matrix are its \emph{eigenvalues}\index{eigenvalue} and
 \emph{eigenvectors}\index{eigenvector}---the scalars $\lambda$ and directions
 $\mathbf{v}$ for which $A\mathbf{v}=\lambda\mathbf{v}$. \B{Eigenvalues} and
-\B{Eigenvectors} compute them exactly\calloutnote{Under the hood}{The eigenvalues are
-exactly the roots of the \emph{characteristic polynomial} $\det(A-\lambda I)$, a
-polynomial of degree $n$ in $\lambda$. Mathilda solves it with the very machinery of
-\S\ref{sec:intro-solve}, which is why an eigenvalue may be an integer, a surd, or---for
-an irreducible cubic or higher with no radical form---a \B{Root} object.}:
+\B{Eigenvectors} compute them exactly:
 
 \begin{codepairs}
 \pair{03-introduction/linear-algebra-eigen/1}{A symmetric matrix with integer
@@ -622,19 +618,7 @@ hands the floating-point matrix straight to a numerical eigenvalue algorithm, wh
 never builds a characteristic polynomial to factor. That the two agree is a reassuring
 cross-check---and a first sight of a choice that runs through all of computational
 linear algebra\index{linear algebra!exact versus numerical}: exact or numerical, and
-what each costs.\calloutnote{Exact versus numerical}{Exactness is not free. The symbolic
-path must factor the characteristic polynomial and then carry its roots as exact
-algebraic numbers---\Bnoidx{Root} objects over the rationals---so its cost climbs steeply
-with the size of the matrix. The numerical path runs a dense floating-point
-algorithm---Hessenberg reduction followed by Francis double-shift \textsc{qr}
-iteration, the textbook method---whose work is a fixed $O(n^{3})$ no matter how ugly
-the exact answer would be. Even on a matrix this small the numerical route is already
-dozens of times faster, and the gap widens fast with $n$. By $n=40$ the exact eigenvalues take
-\emph{seconds} where the numerical ones finish in well under a millisecond---a ratio in
-the tens of thousands---and beyond that the exact form becomes impractical while the
-numerical one barely notices. Reach for exact eigenvalues when you need the algebraic
-form or perfect reproducibility; reach for numerical ones whenever the matrix is large
-or its entries are already approximate.}
+what each costs.
 
 Section~\ref{sec:linalg} takes up linear algebra---exact and numerical alike---in
 depth.
