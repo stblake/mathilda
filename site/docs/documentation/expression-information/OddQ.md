@@ -36,6 +36,7 @@ Out[2]= False
 - Tests: [`tests/test_bigint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bigint.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 - Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_sum.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sum.c)
 
 ## Notes & additional examples
 

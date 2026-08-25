@@ -35,9 +35,9 @@ Out[3]= Pattern[x, Blank[]]
 - Source: [`src/match.c`](https://github.com/stblake/mathilda/blob/main/src/match.c)
 - Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
 - Tests: [`tests/test_backtrack.c`](https://github.com/stblake/mathilda/blob/main/tests/test_backtrack.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_eval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval.c)
 - Tests: [`tests/test_match.c`](https://github.com/stblake/mathilda/blob/main/tests/test_match.c)
-- Tests: [`tests/test_mateigen_direct.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mateigen_direct.c)
 
 ## Notes & additional examples
 

@@ -49,6 +49,7 @@ Out[3]= False
 - Source: [`src/files.c`](https://github.com/stblake/mathilda/blob/main/src/files.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
 - Tests: [`tests/test_files.c`](https://github.com/stblake/mathilda/blob/main/tests/test_files.c)
+- Tests: [`tests/test_graphics.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graphics.c)
 
 ## Notes & additional examples
 

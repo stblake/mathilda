@@ -37,7 +37,7 @@ Out[3]= False
 - Tests: [`tests/test_comparisons.c`](https://github.com/stblake/mathilda/blob/main/tests/test_comparisons.c)
 - Tests: [`tests/test_parse.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parse.c)
 - Tests: [`tests/test_rat.c`](https://github.com/stblake/mathilda/blob/main/tests/test_rat.c)
-- Tests: [`tests/test_solve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_solve.c)
+- Tests: [`tests/test_reduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_reduce.c)
 
 ## Notes & additional examples
 

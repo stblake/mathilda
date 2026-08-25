@@ -31,7 +31,7 @@ Out[2]= -0.4463151633593201122016036193238
 
 ```mathematica
 In[3]:= N[Pi, 100] // N
-Out[3]= 3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170681
+Out[3]= 3.14159
 
 In[4]:= Precision[%]
 Out[4]= Infinity
@@ -89,7 +89,7 @@ This file implements `N[expr]` / `N[expr, prec]`. Phase 1 targets machine-precis
 
 ## References
 
-**See also:** [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [GoldenRatio](../../mathematical-constants/GoldenRatio/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/)
+**See also:** [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/)
 
 - Source: [`src/numeric.c`](https://github.com/stblake/mathilda/blob/main/src/numeric.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)

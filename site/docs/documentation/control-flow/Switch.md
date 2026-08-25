@@ -63,6 +63,7 @@ Out[8]= Switch[x, 1, "a", 2, "b"]
 - Wrong arity (no form/value pair, or an odd number of arguments after `expr`) is a usage error; the expression is returned unevaluated.
 - Pattern variables bound by `form_i` (e.g. `{x_, y_}`) are *not* substituted into `value_i`; the form acts purely as a discriminator.
 - `Break`, `Return`, and `Throw` inside the chosen value propagate as they do in any other held context.
+- **Compiles** under `Compile[]` and auto-compilation when the discriminant is a machine number and every form is a numeric literal or the bare `_` catch-all: a chain of machine-equality tests (integer dispatch is bit-identical to the interpreter). A typed or bound pattern form declines. See [Compile / CompiledFunction](#compile--compiledfunction).
 
 **Attributes:** `HoldRest`, `Protected`.
 
@@ -72,6 +73,7 @@ Out[8]= Switch[x, 1, "a", 2, "b"]
 
 - Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_cond.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cond.c)
 
 ## Notes & additional examples

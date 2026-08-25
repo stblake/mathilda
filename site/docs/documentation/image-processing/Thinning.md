@@ -15,16 +15,10 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= bar = Image[Table[If[3 <= i <= 7, 1, 0], {i, 1, 9}, {j, 1, 12}]];
-```
 
-```mathematica
 In[2]:= Thinning[bar]
 Out[2]= -Image-
-```
 
-![12x9 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABICAYAAAAJZ/BjAAAAkUlEQVR42u3bsQkAIAxFwXxx/5XjEBZiuDeAhUfEJqmqLj1ruQIAAAQAgAAAEAAAAgBAAAAIAAABACAAAAQAgAAAEAAAAgBAAAAIAADdt28P6J69XpDEBHiCBACAAAAQgHHfXHvCJgCAAAAQAAACAEAAAAgAAAEAIAAABACAAAAQAAACAEAAAAgAAAEAIADfdwCxKgWPK5gd3gAAAABJRU5ErkJggg==)
-
-```mathematica
 In[3]:= {Round[Total[Flatten[ImageData[bar]]]], Round[Total[Flatten[ImageData[Thinning[bar]]]]]}
 Out[3]= {60, 7}
 
@@ -32,14 +26,10 @@ In[4]:= ImageType[Thinning[bar]]
 Out[4]= "Bit"
 
 In[5]:= disk = Image[Table[N[Boole[(i - 12)^2 + (j - 12)^2 <= 81]], {i, 1, 24}, {j, 1, 24}]];
-```
 
-```mathematica
 In[6]:= Thinning[disk]
 Out[6]= -Image-
 ```
-
-![24x24 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAAr0lEQVR42u3cMQoAIQxFwfzF+1851tuJjQrzThAypE2qqkvH+qwAAAABACAAAAQAgAAAEAAAAgBAAAAIAAABACAAAAQAgAAAEAAAAgBAAAAIAAABACAAAAQAgAAA0HrjtYG7/68tkrgAAQCgveJfkAsAIAAABACAAAAQAAACAEAAAAgAAAEAIAAABACAAAAQAAACAEAAAAgAAAEAIAAABACAAAAQAAACAEAAAAjA9U1bWQW/lEdj/QAAAABJRU5ErkJggg==)
 
 ### Scope (8)
 
@@ -47,14 +37,10 @@ Out[6]= -Image-
 In[7]:= bar = Image[Table[If[3 <= i <= 7, 1, 0], {i, 1, 9}, {j, 1, 12}]];
 
 In[8]:= diag = Image[Table[If[Abs[i - j] <= 1, 1, 0], {i, 1, 12}, {j, 1, 12}]];
-```
 
-```mathematica
 In[9]:= Thinning[diag]
 Out[9]= -Image-
 ```
-
-![12x12 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAA00lEQVR42u3ZQQrEMAwEQU3I/78s/yA5BByMqs97SiHDsKmqLv3W5RMAACAAAAQAgPZ3v/2g+3kmJPEVXQAAAQAgAAAE4Kzy9f8AO8EFABAAAAIAQADm7QA7wQUAEAAAAgBAAOwAO8EFABAAAAIAQADsADvBBQAQAAACAEAA7AA7wQUAEAAAAgBAAOyA6TvBBXiCAAgAAAEAIDtg3k5wAZ4gAAIAQAAAyA6YtxNcgCcIgAAAEAAAsgPm7QQX4AkCIAAABACA7AAXIAAABACAAADQhhbgDymtBlL+6gAAAABJRU5ErkJggg==)
 
 An iteration limit stops early, so more foreground survives than at convergence
 
@@ -65,25 +51,15 @@ Out[10]= True
 
 ```mathematica
 In[11]:= cross = Image[Table[If[Abs[i - 12] <= 2 || Abs[j - 12] <= 2, 1, 0], {i, 1, 24}, {j, 1, 24}]];
-```
 
-```mathematica
 In[12]:= Thinning[cross]
 Out[12]= -Image-
-```
 
-![24x24 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAAxElEQVR42u3csQ2AMAxFwW/E/iubGpooTQLi3gQoJwdRmErS0bYORwAAgAAAEAAAWt/5tQfuvn+2VJUJEAAAAgBAAAAIAAABACAAAAQAgAAAEAAAAgBAAAAIAAABACAAAAQAAAABACAAf60y+FfEcydLgwOd3FkzAa4gAHrzOyD2hE2AK0gAAAgAAAEAIAAABACAAAAQAAACAEAAAAgAAAEAIAAABACAAAAQAAACAEAAYkdMJgCAAAAQAAACAEAAAAjA5i6A1g27XoFEIwAAAABJRU5ErkJggg==)
-
-```mathematica
 In[13]:= ring = Image[Table[N[Boole[36 <= (i - 12)^2 + (j - 12)^2 <= 100]], {i, 1, 24}, {j, 1, 24}]];
-```
 
-```mathematica
 In[14]:= Thinning[ring]
 Out[14]= -Image-
 ```
-
-![24x24 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAABC0lEQVR42u3cQZKCQAxA0YTy/ldu9mzAqtZ0mvcvIDOvElCUjIgRKuvwLwAAQAAACAAAAQAgAAD0vz6rHdAYcz+aykwTIAAAVHQO+Hanz97Z1a9vAqwgAVi4nH1P+G7nrnZdXn28JsAKAqDO54BuO3+1v8cEWEEAFBt9FtRt598d/+z7EybAChIAAAIAQAA6vg+4Xhd3v+43AQAEAIAAABAAAAIAQAAACAAAAQAgAAAEINwTjqffnXSP2AQAEAAAAgBAAN73G7Hu7wt+/ZswE2AFCUB4XpDnBZkAK0gANjwHVF9Xd3vWhQmwggBo53OATAAAAQAgAAAEAIAAABAAAAIAQAAAABAAACrrBLvZM8TC98+6AAAAAElFTkSuQmCC)
 
 ### Applications (4)
 
@@ -98,8 +74,6 @@ In[16]:= Pruning[Thinning[disk], 2]
 Out[16]= -Image-
 ```
 
-![24x24 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAAr0lEQVR42u3cMQoAIQxFwfzF+1851tuJjQrzThAypE2qqkvH+qwAAAABACAAAAQAgAAAEAAAAgBAAAAIAAABACAAAAQAgAAAEAAAAgBAAAAIAAABACAAAAQAgAAA0HrjtYG7/68tkrgAAQCgveJfkAsAIAAABACAAAAQAAACAEAAAAgAAAEAIAAABACAAAAQAAACAEAAAAgAAAEAIAAABACAAAAQAAACAEAAAAjA9U1bWQW/lEdj/QAAAABJRU5ErkJggg==)
-
 How many branch pixels a shape's skeleton has
 
 ```mathematica
@@ -113,8 +87,6 @@ The skeleton of a binarised gradient, end to end
 In[18]:= Thinning[Binarize[Image[Table[N[Boole[Abs[i - j] <= 3]], {i, 1, 20}, {j, 1, 20}], "Real"]]]
 Out[18]= -Image-
 ```
-
-![20x20 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAYAAACOEfKtAAAAwUlEQVR42u3XMQ6EMAxEURtx/ys7NRWCLpnnequnydfSVTXlft+FACBAgAAdQIB73v32g5nn38TupmaBAAGecv31W1gTLRAgwOQGaqIFAgSogZpogQABaqAmWiBAgBqY3UQLBAhQA5ObaIEAAWpgchMtECBADUxuogUCBKiByU20QIAANTC5iRYIEKAGJjfRAgEC1MDkJlogQIAamNxEC/SEAWpgchMt0BMGqIHJTbRATxigBlqgAwgQIEAHEOB2twBImEGBOTxfRwAAAABJRU5ErkJggg==)
 
 ### Properties & Relations (8)
 

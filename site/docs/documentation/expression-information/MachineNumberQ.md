@@ -80,7 +80,7 @@ This file implements `N[expr]` / `N[expr, prec]`. Phase 1 targets machine-precis
 
 ## References
 
-**See also:** [AtomQ](../../expression-information/AtomQ/), [NumberQ](../../expression-information/NumberQ/), [IntegerQ](../../expression-information/IntegerQ/), [StringQ](../../expression-information/StringQ/), [Complex](../../arithmetic/Complex/)
+**See also:** [AtomQ](../../expression-information/AtomQ/), [NumberQ](../../expression-information/NumberQ/), [IntegerQ](../../expression-information/IntegerQ/), [StringQ](../../expression-information/StringQ/), [Complex](../../arithmetic/Complex/), [ExactNumberQ](../../other-advanced/ExactNumberQ/)
 
 - Source: [`src/numeric.c`](https://github.com/stblake/mathilda/blob/main/src/numeric.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

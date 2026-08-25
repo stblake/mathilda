@@ -28,7 +28,7 @@ searches for a simultaneous numerical root of the system.
 <details>
 <summary>Notes</summary>
 
-Options: Method ('Newton' | 'Secant' | 'Brent' | Automatic), WorkingPrecision, MaxIterations, AccuracyGoal, PrecisionGoal, DampingFactor, Jacobian, StepMonitor, EvaluationMonitor.  FindRoot has HoldAll and effectively uses Block to localize variables.
+Options: Method (Automatic | 'Newton' | 'Secant' | 'Brent'). The default is Automatic, which selects by the starting spec: Newton for {x, x0}, a secant variant for {x, x0, x1}, and Brent for the bracket {x, xstart, xmin, xmax}. Further options: WorkingPrecision, MaxIterations, AccuracyGoal, PrecisionGoal, DampingFactor, Jacobian, StepMonitor, EvaluationMonitor.  FindRoot has HoldAll and effectively uses Block to localize variables.
 
 </details>
 

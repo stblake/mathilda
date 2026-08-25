@@ -147,7 +147,7 @@ that the cubic formula is verbose:
 
 ```mathematica
 In[1]:= Solve[x^3 - 3 x + 1 == 0, x, Cubics -> True]
-Out[1]= {{x -> -1/3 ((1/2 (27 + (27*I) Sqrt[3]))^(1/3) + 9/(1/2 (27 + (27*I) Sqrt[3]))^(1/3))}, {x -> -1/3 (-(-1)^(1/3) (1/2 (27 + (27*I) Sqrt[3]))^(1/3) + 9 (-1)^(2/3)/(1/2 (27 + (27*I) Sqrt[3]))^(1/3))}, {x -> -1/3 ((-1)^(2/3) (1/2 (27 + (27*I) Sqrt[3]))^(1/3) - 9 (-1)^(1/3)/(1/2 (27 + (27*I) Sqrt[3]))^(1/3))}}
+Out[1]= {{x -> -1/3 ((1/2 (27 + (27*I) Sqrt[3]))^(1/3) + 9/(1/2 (27 + (27*I) Sqrt[3]))^(1/3))}, {x -> -1/3 (-9 (-1)^(1/3)/(1/2 (27 + (27*I) Sqrt[3]))^(1/3) + (-1)^(2/3) (1/2 (27 + (27*I) Sqrt[3]))^(1/3))}, {x -> -1/3 (-(-1)^(1/3) (1/2 (27 + (27*I) Sqrt[3]))^(1/3) + 9 (-1)^(2/3)/(1/2 (27 + (27*I) Sqrt[3]))^(1/3))}}
 
 In[2]:= Solve[x^4 - 2 == 0, x, Quartics -> True]
 Out[2]= {{x -> -2^(1/4)}, {x -> 2^(1/4)}, {x -> -I 2^(1/4)}, {x -> I 2^(1/4)}}
@@ -188,12 +188,12 @@ In[1]:= Solve[{2 x + y == 5, x - y == 1}, {x, y}]
 Out[1]= {{x -> 2, y -> 1}}
 
 In[2]:= Solve[{a x + b y == e, c x + d y == f}, {x, y}]
-Out[2]= {{x -> (-d e + b f)/(b c - a d), y -> (c e - a f)/(b c - a d)}}
+Out[2]= {{x -> (d e - b f)/(-b c + a d), y -> (-c e + a f)/(-b c + a d)}}
 ```
 
 `In[1]` solves the concrete `2 × 2` system: adding the equations eliminates `y`
 and gives `3x = 6`, so `x = 2`, `y = 1`. `In[2]` returns the general Cramer's-rule
-solution, with the determinant `bc − ad` in every denominator.
+solution, with the determinant `ad − bc` in every denominator.
 
 ### Eliminating a variable
 
@@ -318,6 +318,63 @@ folding back into the denominator polynomial. This is why `RootSum` matters even
 though it rarely "expands": it lets the integrator carry an exact answer over
 the roots of a polynomial it cannot factor.
 
+## Complete solution sets with `Reduce`
+
+`Solve` returns the *generic* solution of an equation and quietly drops the
+special cases. Look again at a linear equation with a symbolic coefficient:
+
+```mathematica
+In[1]:= Solve[a x == b, x]
+Out[1]= {{x -> b/a}}
+```
+
+That answer silently assumes `a != 0`. `Reduce[expr, vars]` refuses to hide
+anything: it returns a logical (`And`/`Or`) combination of equations and
+inequalities describing the *entire* solution set, every parametric and
+degenerate branch included.
+
+```mathematica
+In[1]:= Reduce[a x == b, x]
+Out[1]= a != 0 && x == b/a || a == 0 && b == 0
+```
+
+Read it as two cases: either `a != 0`, and then `x = b/a`; or `a == 0`, and then
+the equation `0 == b` forces `b == 0`. `Reduce` does the same for a quadratic,
+splitting on whether the leading coefficient vanishes and again on the next —
+the complete case tree `Solve` never shows. This makes `Reduce` the right tool
+whenever a coefficient is symbolic and the degenerate cases actually matter.
+
+Because it describes a *set* rather than a list of sample points, `Reduce` can
+answer questions that have no finite list of solutions at all. A statement that
+holds for every value collapses to `True`, and an impossible one to `False`:
+
+```mathematica
+In[1]:= Reduce[x^2 + 1 > 0, x, Reals]
+Out[1]= True
+
+In[2]:= Reduce[x < 0 && x > 1, x, Reals]
+Out[2]= False
+```
+
+`In[1]` is a genuine proof that `x² + 1` is positive for *every* real `x`, and
+`In[2]` proves the two constraints can never hold together. And where `Solve`
+deals only in equalities, `Reduce` solves inequalities, returning the intervals
+on which they hold:
+
+```mathematica
+In[1]:= Reduce[x^2 > 1, x, Reals]
+Out[1]= x < -1 || x > 1
+```
+
+The optional third argument fixes the domain: `Complexes` (the default for
+equations), `Reals` (which becomes the default the moment an ordering inequality
+appears, since order is undefined over the complexes), `Integers`, or
+`Rationals`. Inequalities are where `Reduce` truly comes into its own; the
+[solutions of inequalities](solutions-of-inequalities.md) tutorial takes them up
+in full — sign diagrams, rational functions with poles, `Abs` and piecewise
+functions, and multivariate regions solved by cylindrical algebraic
+decomposition.
+
 ## Advanced applications
 
 The real payoff comes from combining `Solve`, `D`, and `Eliminate` to answer
@@ -440,19 +497,19 @@ eliminate-then-solve recipe for intersecting any two curves.
 
 ### Solving a polynomial system with `Resultant`
 
-When both equations are nonlinear, handing the *system* straight to `Solve` can
-leave it unevaluated — there is no single variable to isolate by inspection:
+`Solve` handles this zero-dimensional system directly, finding the four points
+where the circle `x² + y² = 25` meets the parabola `y = x² − 13`:
 
 ```mathematica
 In[1]:= Solve[{x^2 + y^2 == 25, y == x^2 - 13}, {x, y}]
-Out[1]= Solve[{x^2 + y^2 == 25, y == -13 + x^2}, {x, y}]
+Out[1]= {{x -> -3, y -> -4}, {x -> 3, y -> -4}, {x -> -4, y -> 3}, {x -> 4, y -> 3}}
 ```
 
-`Resultant[p, q, x]` is the classical elimination tool that breaks the deadlock.
-It returns a polynomial in the *remaining* variable that vanishes exactly when
-`p` and `q` share a root in `x` — eliminating `x` from the pair algebraically,
-where eyeballing fails. Here the circle `x² + y² = 25` meets the parabola
-`y = x² − 13`:
+Underneath that answer sits `Resultant[p, q, x]`, the classical elimination
+tool. It returns a polynomial in the *remaining* variable that vanishes exactly
+when `p` and `q` share a root in `x` — eliminating `x` from the pair
+algebraically, where eyeballing fails. Reaching for it directly exposes the
+eliminated polynomial itself, multiplicities and all:
 
 ```mathematica
 In[1]:= Resultant[x^2 + y^2 - 25, x^2 - y - 13, x]
@@ -505,9 +562,14 @@ substitution rules, handle irrational and complex roots, control radical
 formulas with `Cubics`/`Quartics`/`ToRadicals`, work with `Root` objects for the
 unsolvable cases, solve simultaneous systems and eliminate variables, capture
 the infinite solution families of transcendental equations, verify identities
-with `SolveAlways`, and combine all of this with `D` to solve real geometric and
-optimisation problems.
+with `SolveAlways`, get the *complete* parametric solution set (and settle
+always-true / never-true statements) with `Reduce`, and combine all of this with
+`D` to solve real geometric and optimisation problems.
 
+- **[Solutions of inequalities](solutions-of-inequalities.md)** — the companion
+  to this tutorial: `Reduce` on inequalities over the reals — sign diagrams,
+  rational functions with poles, `Abs` and piecewise functions, and
+  two- and three-variable regions by cylindrical algebraic decomposition.
 - **[8. Calculus](08-calculus.md)** — differentiate and integrate, expand
   functions as power series, take limits and sums, and lean on `Solve` to locate
   the maxima, minima, and stationary points of the functions you build.
@@ -515,6 +577,6 @@ optimisation problems.
   built-in functions. The
   [solutions of equations](../documentation/solutions-of-equations/index.md)
   category documents every function used above —
-  `Solve`, `SolveAlways`, `Root`, `ToRadicals`, `Eliminate`, `RootSum`,
+  `Solve`, `Reduce`, `SolveAlways`, `Root`, `ToRadicals`, `Eliminate`, `RootSum`,
   and the `Cubics`, `Quartics`, `GeneratedParameters`, `InverseFunctions`, and
   `VerifySolutions` options — in full.

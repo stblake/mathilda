@@ -28,7 +28,7 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= NResidue[1/x, {x, 0}]
-Out[1]= 1.0 + 3.25915e-17*I
+Out[1]= 1.0 + 1.70484e-17*I
 
 In[2]:= NResidue[Sin[1/(10 x)], {x, 0}] // Chop
 Out[2]= 0.1

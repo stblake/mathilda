@@ -1,11 +1,12 @@
 # Other & Advanced
 
-105 built-in function(s) in this category.
+112 built-in function(s) in this category.
 
 - [`$AutoArrayPacking`]($AutoArrayPacking.md) — $AutoArrayPacking  _(Stable)_
 - [`$AutoCompilation`]($AutoCompilation.md) — $AutoCompilation  _(Stable)_
 - [`$PlotLegendData`]($PlotLegendData.md) — $PlotLegendData[{color1, label1}, ...]  _(Stable)_
 - [`$PlotResample`]($PlotResample.md) — $PlotResample[var, {f...}, {plotPoints, maxRecursion, maxPlotPoints, mesh, regionFunction, exclusions, colorFunction, colorFunctionScaling, filling, fillingStyle}]  _(Experimental)_
+- [`$RaylibVerbose`]($RaylibVerbose.md) — $RaylibVerbose  _(Experimental)_
 - [`$StreamColorBar`]($StreamColorBar.md) — $StreamColorBar[speed_min, speed_max]  _(Experimental)_
 - [`AccuracyGoal`](AccuracyGoal.md) — AccuracyGoal  _(Experimental)_
 - [`AdjacencyGraph`](AdjacencyGraph.md) — AdjacencyGraph[m] builds a graph on vertices 1..n from a 0/1 adjacency matrix m (undirected if m is symmetric, else directed).  _(Stable)_
@@ -23,6 +24,7 @@
 - [`ChartStyle`](ChartStyle.md) — ChartStyle  _(Experimental)_
 - [`ClassifierFunction`](ClassifierFunction.md) — ClassifierFunction[method, parameters, featureCount, k] is the fitted classifier Classify returns. Apply it to a feature vector to get a class, or to a feature vector and "Probabilities" to get one rule per class.  _(Stable)_
 - [`CompleteGraph`](CompleteGraph.md) — CompleteGraph[n] gives the complete graph K_n on n vertices.  _(Stable)_
+- [`ComplexQ`](ComplexQ.md) — ComplexQ[expr]  _(Experimental)_
 - [`ConnectedComponents`](ConnectedComponents.md) — ConnectedComponents[g] gives the connected components of g (weak, on the underlying undirected graph).  _(Stable)_
 - [`ConnectedGraphQ`](ConnectedGraphQ.md) — ConnectedGraphQ[g] gives True if g is connected.  _(Stable)_
 - [`ContourLabels`](ContourLabels.md) — ContourLabels  _(Experimental)_
@@ -36,6 +38,7 @@
 - [`DirectedGraphQ`](DirectedGraphQ.md) — DirectedGraphQ[g] gives True if all edges of g are directed.  _(Stable)_
 - [`EdgeCount`](EdgeCount.md) — EdgeCount[g] gives the number of edges in the graph g.  _(Stable)_
 - [`EdgeList`](EdgeList.md) — EdgeList[g] gives the list of edges of the graph g.  _(Stable)_
+- [`ExactNumberQ`](ExactNumberQ.md) — ExactNumberQ[expr]  _(Experimental)_
 - [`FindShortestPath`](FindShortestPath.md) — FindShortestPath[g,s,t] gives a shortest path from s to t as a list of vertices ({} if none).  _(Stable)_
 - [`FindSpanningTree`](FindSpanningTree.md) — FindSpanningTree[g] gives a spanning tree (forest) of g as a graph.  _(Stable)_
 - [`FourierParameters`](FourierParameters.md) — FourierParameters is an option for Fourier and InverseFourier that  _(Experimental)_
@@ -45,13 +48,14 @@
 - [`FresnelC`](FresnelC.md) — FresnelC[z]  _(Stable)_
 - [`FresnelS`](FresnelS.md) — FresnelS[z]  _(Stable)_
 - [`GraphDistance`](GraphDistance.md) — GraphDistance[g,s,t] gives the length of a shortest path from s to t (Infinity if unreachable).  _(Stable)_
-- [`GraphPlot`](GraphPlot.md) — GraphPlot[g] gives a Graphics object drawing the graph g with a circular vertex layout.  _(Stable)_
+- [`GraphPlot`](GraphPlot.md) — GraphPlot[g] gives a Graphics object drawing the graph g with a circular vertex layout. Vertex labels are off by default; pass VertexLabels -> True to draw them (in black).  _(Stable)_
 - [`Gray`](Gray.md) — Gray  _(Experimental)_
 - [`Green`](Green.md) — Green  _(Experimental)_
 - [`HoldFirst`](HoldFirst.md) — HoldFirst  _(Experimental)_
 - [`HoldRest`](HoldRest.md) — HoldRest  _(Experimental)_
 - [`ImageSize`](ImageSize.md) — ImageSize  _(Experimental)_
 - [`IncidenceMatrix`](IncidenceMatrix.md) — IncidenceMatrix[g] gives the vertex-edge incidence matrix of g (oriented: -1 tail, +1 head for directed edges).  _(Stable)_
+- [`InexactNumberQ`](InexactNumberQ.md) — InexactNumberQ[expr]  _(Experimental)_
 - [`Interval`](Interval.md) — Interval[{min, max}] represents the range of real values between min and max, inclusive. Interval[{a1,b1}, {a2,b2}, ...] is the union of the ranges. Arithmetic and elementary functions thread through intervals, producing rigorous enclosures; exact endpoints are kept exact.  _(Stable)_
 - [`IntervalIntersection`](IntervalIntersection.md) — IntervalIntersection[i1, i2, ...] gives the interval representing the intersection of the intervals ij (Interval[] if they are disjoint).  _(Stable)_
 - [`IntervalMemberQ`](IntervalMemberQ.md) — IntervalMemberQ[interval, x] gives True if x lies within interval, and False otherwise. IntervalMemberQ[interval, other] tests whether the interval other is wholly contained in interval.  _(Stable)_
@@ -70,7 +74,9 @@
 - [`LightYellow`](LightYellow.md) — LightYellow  _(Experimental)_
 - [`Lighting`](Lighting.md) — Lighting  _(Experimental)_
 - [`List`](List.md) — {e1, e2, ...} or List[e1, e2, ...]  _(Stable)_
+- [`MachineIntegerQ`](MachineIntegerQ.md) — MachineIntegerQ[expr]  _(Experimental)_
 - [`Magenta`](Magenta.md) — Magenta  _(Experimental)_
+- [`Modulus`](Modulus.md) — Modulus is an option for Solve.  Solve[poly == 0, x, Modulus -> p]  _(Experimental)_
 - [`NDArrayQ`](NDArrayQ.md) — NDArrayQ[expr]  _(Stable)_
 - [`NormalDistribution`](NormalDistribution.md) — NormalDistribution[mu, sigma] represents a normal distribution; NormalDistribution[] is the standard normal. Unlike a fitted model it prints its parameters in full, because they are what the user specified rather than an implementation detail.  _(Stable)_
 - [`Orange`](Orange.md) — Orange  _(Experimental)_
@@ -85,6 +91,7 @@
 - [`Purple`](Purple.md) — Purple  _(Experimental)_
 - [`RandomGraph`](RandomGraph.md) — RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges.  _(Stable)_
 - [`RatCanonPrototype`](RatCanonPrototype.md) — RatCanonPrototype[expr] (Phase-1 prototype) reduces a rational function over the differential/algebraic tower of expr via one FLINT reduction.  _(Stable)_
+- [`RationalQ`](RationalQ.md) — RationalQ[expr]  _(Experimental)_
 - [`Reap`](Reap.md) — Reap[expr]  _(Stable)_
 - [`Red`](Red.md) — Red  _(Experimental)_
 - [`ScalingFunctions`](ScalingFunctions.md) — ScalingFunctions  _(Experimental)_

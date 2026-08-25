@@ -18,16 +18,10 @@ In[1]:= img = Image[Table[{N[i/24], N[j/32], N[Mod[i + j, 8]]/8}, {i, 1, 24}, {j
 
 In[2]:= Export["/tmp/mathilda_doc.png", img]
 Out[2]= "/tmp/mathilda_doc.png"
-```
 
-```mathematica
 In[3]:= Import["/tmp/mathilda_doc.png"]
 Out[3]= -Image-
-```
 
-![32x24 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABICAYAAAAJZ/BjAAABA0lEQVR42u3aQQqCUBRG4b8IklyEupP2v6kcCQalTh538L4zesTjEsQ9aJzbOLw/2Rjm/D5POb+zXLjTYP6z8fzG3/8elOIHKObxym5Nvs7Tn8/35+XCHfOP7tgACupcQSMtlM63ARTUvYJooXK+DaAgL2K0UDjfBlCQFzFaKJxvAyio+6cgWqicbwMoyFMQLRTOtwEUREG0UDjfBlCQv6NpQRdEQdAFRRcECtIF0UJ0QRQEXVB0QaAgXRDt6IIoCLogXRAoSBdEO7ogCoIuSBcECtIF0Y4uiIKgC4ouCBSkC6IdXRAFQRcUXRAoSBdEO7ogCoIuKLogUJAuiHZ0QRSEQ1bK4WPbnlzn4wAAAABJRU5ErkJggg==)
-
-```mathematica
 In[4]:= ImageDimensions[Import["/tmp/mathilda_doc.png"]]
 Out[4]= {32, 24}
 

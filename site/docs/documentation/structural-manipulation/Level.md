@@ -93,6 +93,7 @@ option `Heads -> True` additionally includes function heads as level elements.
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
 - Tests: [`tests/test_poly.c`](https://github.com/stblake/mathilda/blob/main/tests/test_poly.c)
+- Tests: [`tests/test_solve_integers.c`](https://github.com/stblake/mathilda/blob/main/tests/test_solve_integers.c)
 
 ## Notes & additional examples
 

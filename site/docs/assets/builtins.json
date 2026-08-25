@@ -144,6 +144,14 @@
     "url": "documentation/control-flow/$PreRead/"
   },
   {
+    "name": "$RaylibVerbose",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "$RaylibVerbose",
+    "url": "documentation/other-advanced/$RaylibVerbose/"
+  },
+  {
     "name": "$RecursionLimit",
     "category": "Control Flow",
     "slug": "control-flow",
@@ -961,11 +969,11 @@
   },
   {
     "name": "ComplexQ",
-    "category": "Expression Information",
-    "slug": "expression-information",
-    "status": "Stable",
-    "summary": "ComplexQ[expr] gives True if expr is a Complex number.",
-    "url": "documentation/expression-information/ComplexQ/"
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "ComplexQ[expr]",
+    "url": "documentation/other-advanced/ComplexQ/"
   },
   {
     "name": "ComposeList",
@@ -1230,6 +1238,14 @@
     "status": "Experimental",
     "summary": "Cubics is an option for Solve that controls whether cubic",
     "url": "documentation/solutions-of-equations/Cubics/"
+  },
+  {
+    "name": "Curl",
+    "category": "Calculus",
+    "slug": "calculus",
+    "status": "Stable",
+    "summary": "Curl[{f1, f2}, {x1, x2}]",
+    "url": "documentation/calculus/Curl/"
   },
   {
     "name": "Cyan",
@@ -1512,6 +1528,14 @@
     "url": "documentation/functional-programming/Distribute/"
   },
   {
+    "name": "Div",
+    "category": "Calculus",
+    "slug": "calculus",
+    "status": "Stable",
+    "summary": "Div[{f1, ..., fn}, {x1, ..., xn}]",
+    "url": "documentation/calculus/Div/"
+  },
+  {
     "name": "Divide",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -1769,11 +1793,11 @@
   },
   {
     "name": "ExactNumberQ",
-    "category": "Expression Information",
-    "slug": "expression-information",
-    "status": "Stable",
-    "summary": "ExactNumberQ[expr] gives True if expr is an exact number.",
-    "url": "documentation/expression-information/ExactNumberQ/"
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "ExactNumberQ[expr]",
+    "url": "documentation/other-advanced/ExactNumberQ/"
   },
   {
     "name": "Exp",
@@ -1852,7 +1876,7 @@
     "category": "File I/O",
     "slug": "file-io",
     "status": "Stable",
-    "summary": "Export[\"file\", image] writes an Image to a raster file, choosing the format from the file extension (PNG, JPEG, BMP, TGA). Export[\"file\", image, \"PNG\"] states the format explicitly. Samples outside the unit interval are clamped, since 8-bit output has no room for them. Returns the file name, so Import[Export[f, img]] is a round trip.",
+    "summary": "Export[\"file\", obj] writes obj to a file, choosing the format from the file extension; Export[\"file\", obj, \"FMT\"] states it explicitly. An Image writes to a raster file (PNG, JPEG, BMP, TGA); its samples outside the unit interval are clamped, since 8-bit output has no room for them. A Graphics object (the result of Plot, ListPlot, Graphics, ...) writes to PDF, PNG, or JPEG: PDF is a resolution-independent vector file produced without any external library and works headless, while PNG and JPEG render through the graphics backend and so need graphics support compiled in and a display. A Graphics3D object (Plot3D, ParametricPlot3D, ...) exports to PNG or JPEG the same way; it has no vector-PDF form. Returns the file name, so Import[Export[f, img]] round-trips.",
     "url": "documentation/file-io/Export/"
   },
   {
@@ -2488,6 +2512,14 @@
     "url": "documentation/control-flow/Goto/"
   },
   {
+    "name": "Grad",
+    "category": "Calculus",
+    "slug": "calculus",
+    "status": "Stable",
+    "summary": "Grad[f, {x1, ..., xn}]",
+    "url": "documentation/calculus/Grad/"
+  },
+  {
     "name": "GradientFilter",
     "category": "Image Processing",
     "slug": "image-processing",
@@ -2516,7 +2548,7 @@
     "category": "Other & Advanced",
     "slug": "other-advanced",
     "status": "Stable",
-    "summary": "GraphPlot[g] gives a Graphics object drawing the graph g with a circular vertex layout.",
+    "summary": "GraphPlot[g] gives a Graphics object drawing the graph g with a circular vertex layout. Vertex labels are off by default; pass VertexLabels -> True to draw them (in black).",
     "url": "documentation/other-advanced/GraphPlot/"
   },
   {
@@ -2606,6 +2638,14 @@
     "status": "Stable",
     "summary": "Head[expr]",
     "url": "documentation/structural-manipulation/Head/"
+  },
+  {
+    "name": "HermiteDecomposition",
+    "category": "Linear Algebra",
+    "slug": "linear-algebra",
+    "status": "Stable",
+    "summary": "HermiteDecomposition[m]",
+    "url": "documentation/linear-algebra/HermiteDecomposition/"
   },
   {
     "name": "HermitianMatrixQ",
@@ -3001,11 +3041,11 @@
   },
   {
     "name": "InexactNumberQ",
-    "category": "Expression Information",
-    "slug": "expression-information",
-    "status": "Stable",
-    "summary": "InexactNumberQ[expr] gives True if expr is an inexact number.",
-    "url": "documentation/expression-information/InexactNumberQ/"
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "InexactNumberQ[expr]",
+    "url": "documentation/other-advanced/InexactNumberQ/"
   },
   {
     "name": "Information",
@@ -3368,6 +3408,14 @@
     "url": "documentation/control-flow/Label/"
   },
   {
+    "name": "Laplacian",
+    "category": "Calculus",
+    "slug": "calculus",
+    "status": "Stable",
+    "summary": "Laplacian[f, {x1, ..., xn}]",
+    "url": "documentation/calculus/Laplacian/"
+  },
+  {
     "name": "Last",
     "category": "Data Structures",
     "slug": "data-structures",
@@ -3705,11 +3753,11 @@
   },
   {
     "name": "MachineIntegerQ",
-    "category": "Expression Information",
-    "slug": "expression-information",
-    "status": "Stable",
-    "summary": "MachineIntegerQ[expr] gives True if expr is a machine-word integer.",
-    "url": "documentation/expression-information/MachineIntegerQ/"
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "MachineIntegerQ[expr]",
+    "url": "documentation/other-advanced/MachineIntegerQ/"
   },
   {
     "name": "MachineNumberQ",
@@ -3942,6 +3990,14 @@
     "status": "Stable",
     "summary": "Module[{x, y, ...}, expr] specifies that x, y, ... are local variables.",
     "url": "documentation/scoping-constructs/Module/"
+  },
+  {
+    "name": "Modulus",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Modulus is an option for Solve.  Solve[poly == 0, x, Modulus -> p]",
+    "url": "documentation/other-advanced/Modulus/"
   },
   {
     "name": "MoebiusMu",
@@ -5073,11 +5129,11 @@
   },
   {
     "name": "RationalQ",
-    "category": "Expression Information",
-    "slug": "expression-information",
-    "status": "Stable",
-    "summary": "RationalQ[expr] gives True if expr is an exact rational number.",
-    "url": "documentation/expression-information/RationalQ/"
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "RationalQ[expr]",
+    "url": "documentation/other-advanced/RationalQ/"
   },
   {
     "name": "Rationalize",
@@ -5142,6 +5198,14 @@
     "status": "Experimental",
     "summary": "Red",
     "url": "documentation/other-advanced/Red/"
+  },
+  {
+    "name": "Reduce",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
+    "status": "Partial",
+    "summary": "Reduce[expr, vars]",
+    "url": "documentation/solutions-of-equations/Reduce/"
   },
   {
     "name": "RegularExpression",
@@ -6448,6 +6512,14 @@
     "url": "documentation/scoping-constructs/Unique/"
   },
   {
+    "name": "UnitBox",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
+    "status": "Stable",
+    "summary": "UnitBox[x]",
+    "url": "documentation/elementary-functions/UnitBox/"
+  },
+  {
     "name": "UnitStep",
     "category": "Elementary Functions",
     "slug": "elementary-functions",
@@ -6596,7 +6668,7 @@
     "category": "Solutions of Equations",
     "slug": "solutions-of-equations",
     "status": "Experimental",
-    "summary": "VerifySolutions is an option for Solve that decides whether to",
+    "summary": "VerifySolutions is an option for Solve.  With VerifySolutions ->",
     "url": "documentation/solutions-of-equations/VerifySolutions/"
   },
   {

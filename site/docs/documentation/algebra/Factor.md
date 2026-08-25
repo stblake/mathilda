@@ -119,7 +119,7 @@ The univariate **Berlekamp–Zassenhaus** core (`factor_zassenhaus`): take the p
 
 ## References
 
-**See also:** [Sqrt](../../arithmetic/Sqrt/), [Sin](../../elementary-functions/Sin/), [Together](../../algebra/Together/), [Expand](../../algebra/Expand/)
+**See also:** [Sqrt](../../arithmetic/Sqrt/), [Sin](../../elementary-functions/Sin/), [Modulus](../../other-advanced/Modulus/), [Together](../../algebra/Together/), [Expand](../../algebra/Expand/)
 
 - B. M. Trager, "Algebraic factoring and rational function integration", SYMSAC 1976 — the norm / sqfr_norm / alg_factor approach used for the Extension path.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 8 (polynomial factorization).

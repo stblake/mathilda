@@ -5,7 +5,7 @@
 
 ## Description
 
-VerifySolutions is an option for Solve that decides whether to verify each returned solution by back-substitution. Default: Automatic.  Reserved.
+VerifySolutions is an option for Solve.  With VerifySolutions -\> True every returned solution is back-substituted into the equation(s) and dropped when PossibleZeroQ proves the residual non-zero; solutions that verify or are undecidable (Root\[\], free parameters, ConditionalExpression) are kept.  Default: Automatic (per-specialist verification, e.g. radicals).
 
 ## Examples (4)
 

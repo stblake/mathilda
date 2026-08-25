@@ -5,7 +5,7 @@
 
 ## Description
 
-**`GraphPlot[g] gives a Graphics object drawing the graph g with a circular vertex layout.`**
+**`GraphPlot[g] gives a Graphics object drawing the graph g with a circular vertex layout. Vertex labels are off by default; pass VertexLabels -> True to draw them (in black).`**
 
 ## Examples
 

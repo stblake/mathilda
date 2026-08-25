@@ -1,6 +1,6 @@
 # Elementary Functions
 
-23 built-in function(s) in this category.
+24 built-in function(s) in this category.
 
 - [`ArcCos`](ArcCos.md) — ArcCos[z]  _(Stable)_
 - [`ArcSin`](ArcSin.md) — ArcSin[z]  _(Stable)_
@@ -24,4 +24,5 @@
 - [`TrigFactor`](TrigFactor.md) — TrigFactor[expr]  _(Stable)_
 - [`TrigReduce`](TrigReduce.md) — TrigReduce[expr]  _(Stable)_
 - [`TrigToExp`](TrigToExp.md) — TrigToExp[expr]  _(Stable)_
+- [`UnitBox`](UnitBox.md) — UnitBox[x]  _(Stable)_
 - [`UnitStep`](UnitStep.md) — UnitStep[x]  _(Stable)_

@@ -95,7 +95,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## References
 
-**See also:** [HoldAll](../../expression-information/HoldAll/), [Power](../../arithmetic/Power/), [Gamma](../../special-functions/Gamma/), [Erf](../../special-functions/Erf/), [BesselJ](../../special-functions/BesselJ/), [Zeta](../../special-functions/Zeta/), [If](../../control-flow/If/), [Sum](../../calculus/Sum/)
+**See also:** [HoldAll](../../expression-information/HoldAll/), [Power](../../arithmetic/Power/), [Gamma](../../special-functions/Gamma/), [Erf](../../special-functions/Erf/), [BesselJ](../../special-functions/BesselJ/), [Zeta](../../special-functions/Zeta/), [If](../../control-flow/If/), [Which](../../control-flow/Which/)
 
 - Source: [`src/compile/compiled_function.c`](https://github.com/stblake/mathilda/blob/main/src/compile/compiled_function.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

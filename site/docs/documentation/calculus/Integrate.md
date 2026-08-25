@@ -1145,6 +1145,13 @@ no multivariate integration, no constant of integration.
      closed forms the earlier stages missed.  Correct by construction (no
      differentiation check).  Handles logarithmic polynomials and the
      special-function cases below (Erf, ExpIntegralEi, LogIntegral, PolyLog).
+     Its single-extension cases (fractional Rothstein-Trager log-part, Hermite,
+     hyperexponential) are decision procedures over the field `C(x)(t)` for the
+     kernel `t = Log[u]` or `E^u`, so each first checks — via `rt_is_ratl_in_xt`
+     — that the kernelized integrand is genuinely rational in x and t; an
+     integrand with a transcendental coefficient of x (`Sin[x]/Log[x]`,
+     `Sin[x]/(1+E^x)`, `Gamma[x]/Log[x]`) lies outside that field and is
+     **declined**, never mis-certified (this previously produced a wrong `0`).
      Its Risch differential equation is solved by Bronstein's rational one-step
      (SPDE) reduction (polynomial-gcd time, no undetermined-coefficient
      blow-up), closing high-degree `R(x) e^x` forms and — via the

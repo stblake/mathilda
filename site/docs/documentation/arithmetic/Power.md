@@ -5,7 +5,7 @@
 
 ## Description
 
-x ^ y or Power\[x, y\] represents x to the power y. Power is Listable, NumericFunction, and OneIdentity. Integer exponents are reduced exactly (repeated squaring on GMP); Rational and Real exponents evaluate numerically when the base is numeric; Power\[0, 0\] stays Indeterminate; Power\[x, 1/2\] is canonicalised to Sqrt\[x\].
+x ^ y or Power\[x, y\] represents x to the power y. Power is Listable, NumericFunction, and OneIdentity. Integer exponents are reduced exactly (repeated squaring on GMP); Rational and Real exponents evaluate numerically when the base is numeric; Power\[0, 0\] stays Indeterminate; Sqrt\[x\] is canonicalised to Power\[x, 1/2\].
 
 ## Examples (15)
 

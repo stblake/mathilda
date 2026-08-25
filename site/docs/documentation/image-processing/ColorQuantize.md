@@ -15,26 +15,16 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= ramp = Image[Table[N[(i + j)/32], {i, 1, 16}, {j, 1, 16}], "Real"];
-```
 
-```mathematica
 In[2]:= ColorQuantize[ramp, 4]
 Out[2]= -Image-
-```
 
-![16x16 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAA+ElEQVR42u3Z0Q2EMBDEUEB0kg5SQ/pvCSrgDwjsPDdwAmtWFreOMY4FS+99yu9uXv1cCCCAABCQy6523qG1ZgFOEAggAASooMDasQAnCAQQAAJUUGbtWIATBAIIAAEqKLN2LMAJAgEEgAAVlFk7FuAEgQACQIAKyqydq+e1ACeIABBAAKpWUNXaueu5LMAJIgAEEIC/V9DTtfO1bzgW4ASBAAJAQNUK8o+VBThBIIAAEFC7gtSOBThBIIAAEOBbkNqxACcIBBAAAlSQ2rEAJwgEEAACVJDasQAnCAQQAAJyKkjtWAABIIAAEFC7gtSOBRAAAggAAZGcz88VHrVjc9UAAAAASUVORK5CYII=)
-
-```mathematica
 In[3]:= Table[Length[Union[Flatten[ImageData[ColorQuantize[ramp, n]]]]], {n, 1, 4}]
 Out[3]= {1, 2, 3, 4}
-```
 
-```mathematica
 In[4]:= ColorQuantize[Image[Table[{N[i/16], N[j/16], 0.5}, {i, 1, 16}, {j, 1, 16}], "Real"], 6]
 Out[4]= -Image-
 ```
-
-![16x16 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAAu0lEQVR42u3U0QnAIAxAwVgcxE/HcBNX6ajdxC7RQAP3BoiQI7Y57xOZrdTpMXaU7goBACAAAAQAgAAAEAAAAgBAAAAIAAABACAAAAQAgD6vr5H8wlN6vAvwBQkAAAEAIAAABACAAAAQAAACAEAAAAgAAAEAIAAV69sOXAAAAQAgAAAEAIAAABAAAAIAQAAACAAAAQAgAAAEAIAAABAAAAIAQAAACAAAAQAgAAAEAIAAABAAAAIAQAD+3gt/JwXRJQKAGQAAAABJRU5ErkJggg==)
 
 ### Properties & Relations (4)
 

@@ -267,7 +267,7 @@ The algebraic path moves each equation to `lhs − rhs` form, collects all varia
 
 ## References
 
-**See also:** [GroebnerBasis](../../algebra/GroebnerBasis/), [TrigExpand](../../elementary-functions/TrigExpand/), [Sinh](../../elementary-functions/Sinh/), [Cosh](../../elementary-functions/Cosh/), [Log](../../elementary-functions/Log/), [Exp](../../elementary-functions/Exp/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/)
+**See also:** [GroebnerBasis](../../algebra/GroebnerBasis/), [Reduce](../../solutions-of-equations/Reduce/), [TrigExpand](../../elementary-functions/TrigExpand/), [Sinh](../../elementary-functions/Sinh/), [Cosh](../../elementary-functions/Cosh/), [Log](../../elementary-functions/Log/), [Exp](../../elementary-functions/Exp/), [Pi](../../mathematical-constants/Pi/)
 
 - T. Becker, V. Weispfenning, *Gröbner Bases* (Springer, 1993).
 - D. Cox, J. Little, D. O'Shea, *Ideals, Varieties, and Algorithms* (Springer).

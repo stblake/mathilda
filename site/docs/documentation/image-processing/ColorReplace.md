@@ -15,26 +15,16 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= img = Image[Table[{If[j <= 4, 1., 0.], If[j <= 4, 0., 1.], 0.}, {i, 1, 8}, {j, 1, 8}], "Real"];
-```
 
-```mathematica
 In[2]:= ColorReplace[img, RGBColor[1, 0, 0] -> RGBColor[0, 0, 1]]
 Out[2]= -Image-
-```
 
-![8x8 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAAnklEQVR42u3RAQ0AMAzDsO78OXc4djkIInmSNpfrnN5/EQAAAgBAAAAIAAABACAAAAQAgAAAEAAAAgBAAAAIAAABACAAAAQAgAAAEAAAAgBAAAAIAAABACAAAAQAgAAAEAAAAgBAAAAIAAABACAAAAQAgAAAACAAAAQAgAAAEAAAAgBAAAAIAAABACAAAAQAgAAAEAAAAgBAAAAIwActByADvvrltU4AAAAASUVORK5CYII=)
-
-```mathematica
 In[3]:= Union[Flatten[ImageData[ColorReplace[img, RGBColor[1, 0, 0] -> RGBColor[0, 0, 1]]]]]
 Out[3]= {0.0, 1.0}
-```
 
-```mathematica
 In[4]:= ColorReplace[img, {RGBColor[1, 0, 0] -> RGBColor[0, 1, 0], RGBColor[0, 1, 0] -> RGBColor[0, 0, 1]}]
 Out[4]= -Image-
 ```
-
-![8x8 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAAnUlEQVR42u3RAQ0AAAjDsIN/z6AD0ilY0spkcrm6vd8RAAACAEAAAAgAAAEAIAAABACAAAAQAAACAEAAAAgAAAEAIAAABACAAAAQAAACAEAAAAgAAAEAIAAABACAAAAQAAACAEAAAAgAAAEAIAAABACAAAAAIAAABACAAAAQAAACAEAAAAgAAAEAIAAABACAAAAQAAACAEAAAAjAgxYHIQO+9+IxSgAAAABJRU5ErkJggg==)
 
 ### Properties & Relations (6)
 

@@ -93,6 +93,7 @@ Out[14]= {-1 + z^3, y^2 + y z + z^2, x + y + z}
 | `Method`             | `Automatic`      | `"Buchberger"`, `"GroebnerWalk"`, `Automatic`        |
 | `Sort`               | `False`          | `True` reverses the main-variable list before the basis is computed (matching Mathematica's empirical behaviour). |
 | `ParameterVariables` | (unset)          | Symbol or list of symbols treated as coefficient-ring parameters; with no positional `vars` argument the main-variable list is auto-derived from the polynomials. |
+| `Modulus`            | `0`              | `Modulus -> p` with **prime** `p` in `[2, 2^31)` computes the basis over the finite field `GF(p)` (`src/poly/gbmod.c`, `Lexicographic` / `DegreeReverseLexicographic`). A non-prime `p`, an out-of-range `p`, or a coefficient with no image in `GF(p)` falls back to the rational basis with a one-shot note. Not combined with elimination or `RationalFunctions` parameters in this version. |
 
 A **weight-matrix** `MonomialOrder` must be a rectangular list of integer
 rows with exactly one column per main variable, and must define a valid
@@ -227,7 +228,7 @@ For expensive target orders the front end can route through the **Gröbner walk*
 
 ## References
 
-**See also:** [Expand](../../algebra/Expand/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [EulerGamma](../../mathematical-constants/EulerGamma/), [Catalan](../../mathematical-constants/Catalan/), [Degree](../../mathematical-constants/Degree/), [Sort](../../data-structures/Sort/)
+**See also:** [Expand](../../algebra/Expand/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [EulerGamma](../../mathematical-constants/EulerGamma/), [Catalan](../../mathematical-constants/Catalan/), [Degree](../../mathematical-constants/Degree/), [Sort](../../data-structures/Sort/), [Modulus](../../other-advanced/Modulus/)
 
 - Cox, Little & O'Shea, "Ideals, Varieties, and Algorithms" (Springer) — Buchberger's algorithm, monomial orders, and elimination.
 - von zur Gathen & Gerhard, "Modern Computer Algebra" (3rd ed.), Ch. 21 (Gröbner bases).

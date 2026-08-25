@@ -98,4 +98,5 @@ Ownership: this builtin only *reads* `res`. On every NULL return (bad arguments,
 
 - Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_nsum.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nsum.c)
 - Tests: [`tests/test_partitionsp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_partitionsp.c)

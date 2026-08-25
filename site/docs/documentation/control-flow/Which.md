@@ -55,16 +55,18 @@ Out[6]= Which[x > 0, pos, x < 0, neg, True, zero]
 - If a `test_i` evaluates to something other than `True` or `False`, a `Which` containing that test (in evaluated form) plus the remaining elements is returned unevaluated.
 - A trailing test of `True` acts as a default clause.
 - An odd number of arguments is a usage error; the expression is returned unevaluated.
+- **Compiles** under `Compile[]` and auto-compilation over a machine-numeric body: a first-match chain of `If`s. A run with no matching test and no `True` catch-all hands back to the interpreter (the `Null` it would return). See [Compile / CompiledFunction](#compile--compiledfunction).
 
 **Attributes:** `HoldAll`, `Protected`.
 
 ## References
 
-**See also:** [HoldAll](../../expression-information/HoldAll/)
+**See also:** [HoldAll](../../expression-information/HoldAll/), [If](../../control-flow/If/)
 
 - Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
 - Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_cond.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cond.c)
 
 ## Notes & additional examples

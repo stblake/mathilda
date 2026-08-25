@@ -219,7 +219,7 @@ non-summable inputs fall through to the held form. No creative-telescoping
 
 ## References
 
-**See also:** [Integrate](../../calculus/Integrate/), [HoldAll](../../expression-information/HoldAll/), [Simplify](../../simplification/Simplify/), [Binomial](../../arithmetic/Binomial/), [HypergeometricPFQ](../../special-functions/HypergeometricPFQ/), [Pi](../../mathematical-constants/Pi/), [PolyGamma](../../special-functions/PolyGamma/), [Catalan](../../mathematical-constants/Catalan/)
+**See also:** [Integrate](../../calculus/Integrate/), [HoldAll](../../expression-information/HoldAll/), [Compile](../../control-flow/Compile/), [Complex](../../arithmetic/Complex/), [Rational](../../arithmetic/Rational/), [Simplify](../../simplification/Simplify/), [Binomial](../../arithmetic/Binomial/), [HypergeometricPFQ](../../special-functions/HypergeometricPFQ/)
 
 - Petkovšek, Wilf & Zeilberger, "A=B" (A K Peters, 1996).
 - Graham, Knuth & Patashnik, "Concrete Mathematics", 2nd ed. (Addison-Wesley, 1994), ch. 2 & 6.
@@ -228,9 +228,9 @@ non-summable inputs fall through to the held form. No creative-telescoping
 - Source: [`src/sum/sum_gosper.c`](https://github.com/stblake/mathilda/blob/main/src/sum/sum_gosper.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
+- Tests: [`tests/test_autocompile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_autocompile.c)
+- Tests: [`tests/test_basin_hopping.c`](https://github.com/stblake/mathilda/blob/main/tests/test_basin_hopping.c)
 - Tests: [`tests/test_catch_throw.c`](https://github.com/stblake/mathilda/blob/main/tests/test_catch_throw.c)
-- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
-- Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
 
 ## Notes & additional examples
 

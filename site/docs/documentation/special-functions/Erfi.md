@@ -115,7 +115,7 @@ Attributes: Listable, NumericFunction, Protected.
 - Tests: [`tests/test_cherry_ei.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_ei.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_erfi.c`](https://github.com/stblake/mathilda/blob/main/tests/test_erfi.c)
-- Tests: [`tests/test_intrischnorman.c`](https://github.com/stblake/mathilda/blob/main/tests/test_intrischnorman.c)
+- Tests: [`tests/test_interval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_interval.c)
 
 ## Notes & additional examples
 

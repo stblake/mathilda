@@ -21,16 +21,10 @@ Out[2]= 2
 
 In[3]:= ImageChannels[SetAlphaChannel[Image[Table[{0.5, 0.2, 0.9}, {i, 1, 8}, {j, 1, 8}], "Real"], 0.5]]
 Out[3]= 4
-```
 
-```mathematica
 In[4]:= SetAlphaChannel[a, Image[Table[N[j/16], {i, 1, 16}, {j, 1, 16}], "Real"]]
 Out[4]= -Image-
-```
 
-![16x16 result](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAA/UlEQVR42u3WMQ6DUAwE0U8Uye7y739aLkAK0kR435QWBdKIZY69914XdPdT7p8nvGdVXd5fC3+FAAIIAAG5vLt7ffmbu/9wr6pbz/sCTBABIIAAqKDZtaOCTBAIIAAEqKDM2lFBJggEEAACVFBm7aggEwQCCAABKiizdlSQCQIBBIAAFZRZOyrIBIEAAkCACsqsHRVkgkAAASBABWXWjgoyQSCAABCggjJrRwWZIBBAAAhQQZm1o4JMEAggAASkVZDaUUEmCAQQAAJmV5DaUUEmCAQQAAJmV5DaUUEmCAQQAAJmV5DaUUEmCAQQAAJmV5DaUUEmCAQQAAIiOQG6pxnFZTPb5wAAAABJRU5ErkJggg==)
-
-```mathematica
 In[5]:= Head[SetAlphaChannel[a, Image[{{0.5}}, "Real"]]]
 Out[5]= SetAlphaChannel
 ```

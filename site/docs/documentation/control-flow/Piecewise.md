@@ -78,14 +78,14 @@ Surviving clauses are then compacted: a run of consecutive clauses with structur
 
 ## References
 
-**See also:** [HoldAll](../../expression-information/HoldAll/)
+**See also:** [HoldAll](../../expression-information/HoldAll/), [Plot](../../graphics/Plot/), [Table](../../lists-and-iteration/Table/), [NIntegrate](../../numerical-calculus/NIntegrate/), [If](../../control-flow/If/)
 
 - Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+- Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_cond.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cond.c)
 - Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
 - Tests: [`tests/test_fresnelc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fresnelc.c)
-- Tests: [`tests/test_fresnels.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fresnels.c)
 
 ## Notes & additional examples
 

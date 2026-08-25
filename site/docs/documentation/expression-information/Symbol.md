@@ -54,4 +54,7 @@ Out[4]= a`x
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
-- Tests: [`tests/test_symbol.c`](https://github.com/stblake/mathilda/blob/main/tests/test_symbol.c)
+- Tests: [`tests/test_findmin_dogleg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_dogleg.c)
+- Tests: [`tests/test_findmin_methods.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_methods.c)
+- Tests: [`tests/test_findmin_neldermead.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_neldermead.c)
+- Tests: [`tests/test_findmin_newtoncg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_newtoncg.c)

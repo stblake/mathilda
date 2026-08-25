@@ -61,14 +61,14 @@ In[7]:= ND[Sin[100 x], x, 0, Scale -> 1/100]
 Out[7]= 100.0
 
 In[8]:= ND[Exp[x^2], {x, 4}, 0, Method -> NIntegrate]
-Out[8]= 12.0 - 9.99201e-16*I
+Out[8]= 12.0 - 3.3723e-15*I
 ```
 
 = 4/(3 Sqrt[Pi])
 
 ```mathematica
 In[9]:= ND[x, {x, -1/2}, 1, Method -> NIntegrate]
-Out[9]= 0.752253 - 3.23365e-16*I
+Out[9]= 0.752253 - 1.94761e-16*I
 ```
 
 ```mathematica

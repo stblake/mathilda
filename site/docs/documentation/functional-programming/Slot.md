@@ -35,9 +35,9 @@ Out[3]= Slot[2]
 - Source: [`src/purefunc.c`](https://github.com/stblake/mathilda/blob/main/src/purefunc.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_eigen.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eigen.c)
 - Tests: [`tests/test_minimalpolynomial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_minimalpolynomial.c)
 - Tests: [`tests/test_numloop.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numloop.c)
-- Tests: [`tests/test_patterns.c`](https://github.com/stblake/mathilda/blob/main/tests/test_patterns.c)
 
 ## Notes & additional examples
 

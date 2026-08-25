@@ -45,8 +45,16 @@ Work through them in order if you're new — each one builds on the last.
 -   :material-equal: __[7. Solutions of equations](07-solutions-of-equations.md)__
 
     Solve polynomial, transcendental, and simultaneous equations with `Solve`;
-    `Root` objects and `ToRadicals`; eliminate variables with `Eliminate`; and
-    tackle geometry and optimisation problems.
+    `Root` objects and `ToRadicals`; eliminate variables with `Eliminate`;
+    complete parametric solution sets with `Reduce`; and tackle geometry and
+    optimisation problems.
+
+-   :material-code-greater-than-or-equal: __[Solutions of inequalities](solutions-of-inequalities.md)__
+
+    Carve out regions rather than points: `Reduce` on inequalities over the
+    reals — sign diagrams, rational functions with poles, `Abs` and piecewise
+    functions, integer ranges, and two- and three-variable regions solved by
+    cylindrical algebraic decomposition.
 
 -   :material-key-chain: __[Diophantine equations](diophantine-equations/index.md)__
 

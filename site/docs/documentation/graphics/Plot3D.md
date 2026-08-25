@@ -13,29 +13,29 @@ Samples f over a uniform grid on \[xmin,xmax\] x \[ymin,ymax\], displays the res
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (2)
+### Basic examples (1)
 
 ```mathematica
-In[1]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}]
+In[1]:= Plot3D[{Sin[x + y], Cos[x - y]}, {x, -2, 2}, {y, -2, 2}]
 Out[1]= -Graphics-
-
-In[2]:= Plot3D[{Sin[x + y], Cos[x - y]}, {x, -2, 2}, {y, -2, 2}]
-Out[2]= -Graphics-
 ```
 
-### Options (4)
+### Options (5)
 
 ```mathematica
-In[3]:= Plot3D[x^2 - y^2, {x, -2, 2}, {y, -2, 2}, ColorFunction -> "Rainbow", Mesh -> None]
+In[2]:= Plot3D[x^2 - y^2, {x, -2, 2}, {y, -2, 2}, ColorFunction -> "Rainbow", Mesh -> None]
+Out[2]= -Graphics-
+
+In[3]:= Plot3D[x + y, {x, -2, 2}, {y, -2, 2}, RegionFunction -> Function[{x, y, z}, x^2 + y^2 < 4]]
 Out[3]= -Graphics-
 
-In[4]:= Plot3D[x + y, {x, -2, 2}, {y, -2, 2}, RegionFunction -> Function[{x, y, z}, x^2 + y^2 < 4]]
+In[4]:= Plot3D[x + y, {x,-2,2}, {y,-2,2},RegionFunction -> Function[{x,y,z}, x^2+y^2 <4],ExclusionStyle -> RGBColor[1, 0.3, 0]]
 Out[4]= -Graphics-
 
-In[5]:= Plot3D[x + y, {x,-2,2}, {y,-2,2},RegionFunction -> Function[{x,y,z}, x^2+y^2 <4],ExclusionStyle -> RGBColor[1, 0.3, 0]]
+In[5]:= Plot3D[{x^2, x^2 + 1}, {x,-2,2}, {y,-2,2},PlotStyle -> {Blue, Red}]
 Out[5]= -Graphics-
 
-In[6]:= Plot3D[{x^2, x^2 + 1}, {x,-2,2}, {y,-2,2},PlotStyle -> {Blue, Red}]
+In[6]:= Plot3D[Sin[x] Cos[2 y], {x, -5, 5}, {y, -5, 5}, BoxRatios -> {1, 1, 1}]
 Out[6]= -Graphics-
 ```
 
@@ -53,7 +53,7 @@ The one place 3D genuinely cannot reuse 2D's sampler (sampling.c) is the adaptiv
 
 ## References
 
-**See also:** [Plot](../../graphics/Plot/), [HoldAll](../../expression-information/HoldAll/)
+**See also:** [Plot](../../graphics/Plot/), [HoldAll](../../expression-information/HoldAll/), [ImageSize](../../other-advanced/ImageSize/), [Lighting](../../other-advanced/Lighting/)
 
 - Source: [`src/graphics/graphics_init.c`](https://github.com/stblake/mathilda/blob/main/src/graphics/graphics_init.c)
 - Specification: [`docs/spec/builtins/graphics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/graphics.md)

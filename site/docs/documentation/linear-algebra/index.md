@@ -1,6 +1,6 @@
 # Linear Algebra
 
-41 built-in function(s) in this category.
+42 built-in function(s) in this category.
 
 - [`ConjugateTranspose`](ConjugateTranspose.md) — ConjugateTranspose[m]  _(Stable)_
 - [`Cross`](Cross.md) — Cross[a, b]  _(Stable)_
@@ -15,6 +15,7 @@
 - [`FindIntegerNullVector`](FindIntegerNullVector.md) — FindIntegerNullVector[{x1, ..., xn}]  _(Stable)_
 - [`Fit`](Fit.md) — Fit[data, {f1, ..., fn}, vars] finds a least-squares fit a1 f1 + ... + an fn to data for functions of the variables vars (a symbol or list of symbols).  _(Stable)_
 - [`HankelMatrix`](HankelMatrix.md) — HankelMatrix[n] gives the n x n Hankel matrix with first row and column the integers 1..n.  _(Stable)_
+- [`HermiteDecomposition`](HermiteDecomposition.md) — HermiteDecomposition[m]  _(Stable)_
 - [`HermitianMatrixQ`](HermitianMatrixQ.md) — HermitianMatrixQ[m]  _(Stable)_
 - [`HilbertMatrix`](HilbertMatrix.md) — HilbertMatrix[n] gives the n x n Hilbert matrix with entries 1/(i + j - 1).  _(Stable)_
 - [`IdentityMatrix`](IdentityMatrix.md) — IdentityMatrix[n] gives the n x n identity matrix.  _(Stable)_
