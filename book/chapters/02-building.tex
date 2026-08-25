@@ -221,7 +221,8 @@ Mathilda <version> - A small, open source computer algebra system.
 
 This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.
 
-End a line with '\' to enter a multiline expression. Press Return to evaluate.
+Press Return to evaluate. An open bracket, string or comment continues
+on the next line; press Esc then Return to force evaluation.
 Exit by evaluating Quit[] or CONTROL-C.
 
 In[1]:=
@@ -312,10 +313,31 @@ usefully---press the up arrow to recall previous inputs and re-run or tweak them
 Emacs-style key bindings work too: \texttt{Ctrl-A} to the start of the line,
 \texttt{Ctrl-E} to the end, \texttt{Ctrl-R} to search backwards through history.
 
-For an expression too long or too structured to sit comfortably on one line, end a
-line with a backslash (\texttt{\textbackslash}) and Mathilda waits for more before
-evaluating, letting you spread a definition across several lines and press Return on
-the last to run the whole thing.
+For an expression too long or too structured to sit comfortably on one line, you need
+do nothing special: just keep typing.\index{REPL!multiline input} Pressing Return
+evaluates the buffer \emph{only} once it forms a complete
+expression---every \mcode{(}, \mcode{[} and \mcode{\{} closed, and every string and
+comment finished. Until then, Return simply opens a fresh line and waits, so a
+bracket you have opened but not yet closed carries you onto the next line
+automatically:
+
+\begin{shell}
+In[1]:= Table[i^2,
+{i, 1, 4}]
+Out[1]= {1, 4, 9, 16}
+\end{shell}
+
+\noindent
+You close the final brace, press Return, and the whole thing runs as one
+expression---the line breaks inside it are just whitespace, exactly as they are in a
+script. Should you ever want to submit an \emph{incomplete} line as it stands---to
+see the parser's error, say, rather than being carried onto a new line
+forever---press \texttt{Esc} then \texttt{Return} (or \texttt{Alt-Return}), which
+forces evaluation regardless.%
+\calloutnote{Under the hood}{This in-place multiline editing needs a genuine
+GNU~Readline. macOS ships a \texttt{libedit} stand-in under the same header name that
+cannot do it, so the build prefers a Homebrew \texttt{readline} when one is present
+and otherwise falls back to plain one-line-at-a-time entry.}
 
 \subsection{Getting help}
 \label{sec:help}

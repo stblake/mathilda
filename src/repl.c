@@ -208,25 +208,105 @@ void process_input(const char* input, int line_number) {
 }
 
 #ifndef NO_READLINE
+
+/* True when `s` is a syntactically complete Mathilda input: no unterminated
+ * "..." string or (* ... *) comment, and every '(', '[' or '{' has a matching
+ * closer. Newlines are whitespace to the lexer, so a balanced multi-line
+ * buffer parses exactly as its single-line spelling. An *over*-closed buffer
+ * (a stray ')') reports complete on purpose: appending text cannot repair it,
+ * so it should submit now and let the parser flag the error rather than trap
+ * the user on an endlessly growing line. The empty string is complete —
+ * submitting it is a harmless no-op the caller skips. This is the predicate
+ * behind the smart Return key: complete -> evaluate, incomplete -> open a
+ * fresh continuation line.
+ *
+ * The string/comment lexing here mirrors find_unterminated() exactly (a '"'
+ * inside a comment and a "(*" inside a string are both just text, and a
+ * backslash escapes the next character inside a string) so the completeness
+ * check never disagrees with the real lexer on where a token ends. */
+static int mth_input_complete(const char* s) {
+    int depth = 0;      /* net (), [], {} nesting outside strings/comments   */
+    int comment = 0;    /* (* ... *) nesting depth                           */
+    int in_string = 0;  /* inside a "..." literal                            */
+    for (const char* p = s; *p; ) {
+        if (in_string) {
+            if (*p == '\\' && p[1]) { p += 2; continue; }
+            if (*p == '"') in_string = 0;
+            p++;
+        } else if (comment > 0) {
+            if (p[0] == '(' && p[1] == '*') { comment++; p += 2; }
+            else if (p[0] == '*' && p[1] == ')') { comment--; p += 2; }
+            else p++;
+        } else if (p[0] == '(' && p[1] == '*') {
+            comment++; p += 2;
+        } else if (*p == '"') {
+            in_string = 1; p++;
+        } else {
+            if (*p == '(' || *p == '[' || *p == '{') depth++;
+            else if (*p == ')' || *p == ']' || *p == '}') depth--;
+            p++;
+        }
+    }
+    return !in_string && comment == 0 && depth <= 0;
+}
+
+/* Return key handler: evaluate the buffer once it forms a complete
+ * expression, otherwise open a new line so the user can keep typing. This is
+ * the terminal-native substitute for a notebook's Shift+Enter — it needs no
+ * enhanced-keyboard protocol and works on every terminal. */
+static int mth_smart_return(int count, int key) {
+    if (mth_input_complete(rl_line_buffer ? rl_line_buffer : ""))
+        return rl_newline(count, key);   /* accept the whole buffer */
+    rl_insert_text("\n");                /* still open: continue editing */
+    return 0;
+}
+
+/* Esc-Return (and Alt/Meta-Return, where the terminal sends it) forces the
+ * buffer to be evaluated even while mth_input_complete() still considers it
+ * open. The escape hatch for a genuine syntax error the user wants to see,
+ * so an unbalanced buffer can never trap them on a growing line. */
+static int mth_force_return(int count, int key) {
+    return rl_newline(count, key);
+}
+
+/* Install the completeness-driven Return bindings. Called once, when the
+ * interactive loop starts. Bracketed paste is (re)enabled so a pasted block
+ * with embedded newlines is inserted verbatim rather than firing the Return
+ * handler on every line and submitting a fragment mid-paste. */
+static void mth_setup_readline(void) {
+    rl_variable_bind("enable-bracketed-paste", "on");
+    rl_bind_key('\r', mth_smart_return);        /* RET / Ctrl-M */
+    rl_bind_key('\n', mth_smart_return);        /* LFD / Ctrl-J */
+    /* Esc-Return / Meta-Return force-submits an expression the completeness
+     * check still considers open. rl_bind_keyseq() is a GNU Readline entry
+     * point absent from Apple's libedit shim; RL_STATE_INITIALIZED is defined
+     * only by GNU Readline, so it doubles as the "real readline" probe. */
+#ifdef RL_STATE_INITIALIZED
+    rl_bind_keyseq("\\e\\r", mth_force_return); /* Esc then Return */
+    rl_bind_keyseq("\\e\\n", mth_force_return);
+#else
+    (void)mth_force_return;
+#endif
+}
+
 void repl_loop() {
     printf("\nMathilda " MATHILDA_VERSION_STRING " - A small, open source computer algebra system.\n\n");
     printf("This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.\n\n");
-    printf("End a line with '\\' to enter a multiline expression. Press Return to evaluate.\n");
+    printf("Press Return to evaluate. An open bracket, string or comment continues\n");
+    printf("on the next line; press Esc then Return to force evaluation.\n");
     printf("Exit by evaluating Quit[] or CONTROL-C.\n\n");
+
+    mth_setup_readline();
 
     int line_number = 1;
     char prompt[64];
-    char full_input[MAX_INPUT_LEN] = {0};
-    int in_multiline = 0;
 
     while (1) {
-        int submit_now = 0;
-        if (!in_multiline) {
-            snprintf(prompt, sizeof(prompt), "In[%d]:= ", line_number);
-        } else {
-            prompt[0] = '\0';
-        }
+        snprintf(prompt, sizeof(prompt), "In[%d]:= ", line_number);
 
+        /* With the smart Return binding a single readline() call returns the
+         * whole (possibly multi-line) expression, so no accumulation buffer
+         * is needed and readline owns the allocation. */
         char* line = readline(prompt);
         if (!line) {
             printf("\n");
@@ -235,63 +315,22 @@ void repl_loop() {
             break;
         }
 
-        size_t line_len = strlen(line);
-
-        /* Remove trailing whitespace to properly check for backslash. */
-        size_t check_len = line_len;
-        while (check_len > 0 && (line[check_len - 1] == ' ' || line[check_len - 1] == '\t')) {
-            check_len--;
-        }
-
-        int has_backslash = 0;
-        if (check_len > 0 && line[check_len - 1] == '\\') {
-            has_backslash = 1;
-            line[check_len - 1] = '\0';
-            line_len = strlen(line);
-        }
-
-        /* Check buffer limits. */
-        if (strlen(full_input) + line_len + 2 >= MAX_INPUT_LEN) {
-            printf("Input too long!\n");
-            full_input[0] = '\0';
-            in_multiline = 0;
+        if (strlen(line) == 0) {
             free(line);
             continue;
         }
 
-        if (in_multiline) {
-            strcat(full_input, "\n");
-        }
-        strcat(full_input, line);
+        add_history(line);
 
-        if (has_backslash) {
-            in_multiline = 1;
-        } else {
-            submit_now = 1;
+        if (strcmp(line, "Quit[]") == 0) {
+            /* User-requested shutdown: run $Epilog first. */
+            repl_apply_epilog();
+            free(line);
+            break;
         }
 
-        if (submit_now) {
-            if (strlen(full_input) == 0) {
-                free(line);
-                continue;
-            }
-
-            add_history(full_input);
-
-            if (strcmp(full_input, "Quit[]") == 0) {
-                /* User-requested shutdown: run $Epilog first. */
-                repl_apply_epilog();
-                free(line);
-                break;
-            }
-
-            process_input(full_input, line_number);
-
-            full_input[0] = '\0';
-            in_multiline = 0;
-            line_number++;
-        }
-
+        process_input(line, line_number);
+        line_number++;
         free(line);
     }
 

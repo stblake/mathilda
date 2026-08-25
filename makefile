@@ -84,6 +84,24 @@ ifeq ($(USE_READLINE),0)
   READLINE_LIBS =
 else
   READLINE_LIBS = -lreadline
+  # macOS exposes a libedit *shim* as <readline/readline.h> (in the SDK) and
+  # /usr/lib/libreadline -> libedit. That shim lacks GNU Readline entry points
+  # (rl_bind_keyseq, ...) and, more importantly, cannot do the in-buffer
+  # multi-line editing the REPL's completeness-driven Return relies on:
+  # rebinding RET there is silently ignored. Prefer a real Homebrew GNU Readline
+  # when one is installed. It is keg-only, so its include/lib dirs are NOT on the
+  # default search paths and must be added explicitly; when none is found the
+  # build falls back to the shim (single-line editing only). Linux resolves GNU
+  # Readline through -lreadline already, so this probe is Darwin-only.
+  ifeq ($(BUILD_PLATFORM),Darwin)
+    READLINE_PREFIX := $(shell for p in $$(brew --prefix readline 2>/dev/null) /opt/homebrew/opt/readline /usr/local/opt/readline; do \
+                                 [ -f "$$p/include/readline/readline.h" ] && { echo $$p; break; }; \
+                               done)
+    ifneq ($(READLINE_PREFIX),)
+      CFLAGS        += -I$(READLINE_PREFIX)/include
+      READLINE_LIBS := -L$(READLINE_PREFIX)/lib -lreadline
+    endif
+  endif
 endif
 
 # POSIX threads accelerate the element-wise NDArray kernels (Erf, Sin, Exp, ...)

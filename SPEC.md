@@ -566,10 +566,25 @@ Mathilda [options] [file]
   -v, --version   version, with the libraries it was compiled against
 ```
 
-`repl.c` reads with GNU Readline (history, multiline via trailing `\`), parses
-to an `Expr*`, evaluates to a fixed point, stores `In[n]`/`Out[n]` as
-DownValues for back-reference, prints the result, and frees both trees. Exits
-on `Quit[]` or EOF.
+`repl.c` reads with GNU Readline (history, completeness-driven multiline —
+see below), parses to an `Expr*`, evaluates to a fixed point, stores
+`In[n]`/`Out[n]` as DownValues for back-reference, prints the result, and frees
+both trees. Exits on `Quit[]` or EOF.
+
+**Completeness-driven Return.** Return is rebound (`mth_smart_return`) so a
+single `readline()` call returns a whole, possibly multi-line, expression:
+pressing Return *evaluates* only when the buffer forms a complete expression —
+no unterminated `"..."` string or `(* ... *)` comment and every `(`/`[`/`{`
+matched — and otherwise opens a fresh continuation line. This is the
+terminal-native substitute for a notebook's Shift+Enter and needs no enhanced
+keyboard protocol. `Esc`-then-`Return` (`mth_force_return`) force-submits a
+buffer the check still considers open, so a genuine syntax error can always be
+surfaced. Newlines are whitespace to the lexer, so a balanced multi-line buffer
+parses exactly as its single-line spelling. This *requires* real GNU Readline:
+Apple's libedit shim (the default `<readline/readline.h>` and `-lreadline` on
+macOS) silently ignores the RET rebinding and cannot edit multi-line buffers, so
+the makefile prefers a Homebrew GNU Readline on Darwin and only falls back to the
+single-line shim when none is installed.
 
 `-file` (a bare path is the same thing) runs a script the way
 `wolframscript -file` does: every expression in the file is evaluated in order
