@@ -705,6 +705,7 @@ set(COMMON_SRC
     ../src/solve/solve.c
     ../src/solve/solvealways.c
     ../src/solve/reduce.c
+    ../src/solve/reduce_opts.c
     ../src/solve/reduce_form.c
     ../src/solve/reduce_atom.c
     ../src/solve/reduce_eq.c

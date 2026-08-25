@@ -22,14 +22,17 @@
 
 #include "expr.h"
 #include "reduce_form.h"
+#include "reduce_opts.h"
 
 /* Complete solution set of a single univariate polynomial equation `poly == 0`
  * in `var` over the complex numbers, as a DNF RForm.  `vars`/`nv` are the
- * ambient reduce variables (for atom classification).  Returns a freshly-owned
- * RForm; sets *ok = false (leaving the form meaningless, to be freed) when the
- * generic solver declines or hands back an unexpected shape, so the caller can
- * leave the whole Reduce unevaluated. */
+ * ambient reduce variables (for atom classification).  `opts` forwards the
+ * Cubics / Quartics radical flags onto the internal Solve calls.  Returns a
+ * freshly-owned RForm; sets *ok = false (leaving the form meaningless, to be
+ * freed) when the generic solver declines or hands back an unexpected shape,
+ * so the caller can leave the whole Reduce unevaluated. */
 RForm* reduce_eq_univariate(const Expr* poly, const Expr* var,
-                            Expr** vars, int nv, bool* ok);
+                            Expr** vars, int nv, bool* ok,
+                            const ReduceOpts* opts);
 
 #endif /* REDUCE_EQ_H */

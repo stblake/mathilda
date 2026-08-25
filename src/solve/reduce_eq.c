@@ -92,11 +92,12 @@ static RForm* condition_form(const char* rel_head, const Expr* poly,
  * (x == r_k).  Sets *ok=false on any unexpected shape (declined, conditional,
  * multi-rule, wrong variable). */
 static RForm* solve_generic(const Expr* poly, const Expr* var,
-                            Expr** vars, int nv, bool* ok) {
+                            Expr** vars, int nv, bool* ok,
+                            const ReduceOpts* opts) {
     Expr* eqn = expr_new_function(expr_new_symbol(SYM_Equal),
         (Expr*[]){ expr_copy((Expr*)poly), expr_new_integer(0) }, 2);
-    Expr* call = expr_new_function(expr_new_symbol(SYM_Solve),
-        (Expr*[]){ eqn, expr_copy((Expr*)var) }, 2);
+    Expr* base[2] = { eqn, expr_copy((Expr*)var) };
+    Expr* call = reduce_opts_build_solve(base, 2, opts);
     Expr* sols = eval_and_free(call);
 
     if (!is_head(sols, SYM_List)) { *ok = false; expr_free(sols); return rform_false(); }
@@ -131,7 +132,8 @@ static RForm* solve_generic(const Expr* poly, const Expr* var,
  * ------------------------------------------------------------------ */
 
 static RForm* solve_case(const Expr* poly, const Expr* var,
-                         Expr** vars, int nv, bool* ok) {
+                         Expr** vars, int nv, bool* ok,
+                         const ReduceOpts* opts) {
     if (!*ok) return rform_false();
 
     /* An identically-zero polynomial is `0 == 0`, true for every value of the
@@ -152,7 +154,7 @@ static RForm* solve_case(const Expr* poly, const Expr* var,
     }
 
     Expr* lc = poly_coeff(poly, var, deg);
-    RForm* gen = solve_generic(poly, var, vars, nv, ok);
+    RForm* gen = solve_generic(poly, var, vars, nv, ok, opts);
     if (!*ok) { expr_free(lc); rform_free(gen); return rform_false(); }
 
     if (is_nonzero_numeric(lc)) {          /* terminal: no case split needed */
@@ -166,7 +168,7 @@ static RForm* solve_case(const Expr* poly, const Expr* var,
     /* Branch B: lc == 0  &&  solve(poly with leading term dropped). */
     Expr* reduced = poly_drop_leading(poly, var, lc, deg);
     RForm* B = rform_and(condition_form(SYM_Equal, lc, vars, nv, ok),
-                         solve_case(reduced, var, vars, nv, ok));
+                         solve_case(reduced, var, vars, nv, ok, opts));
     expr_free(reduced);
     expr_free(lc);
 
@@ -174,7 +176,8 @@ static RForm* solve_case(const Expr* poly, const Expr* var,
 }
 
 RForm* reduce_eq_univariate(const Expr* poly, const Expr* var,
-                            Expr** vars, int nv, bool* ok) {
+                            Expr** vars, int nv, bool* ok,
+                            const ReduceOpts* opts) {
     *ok = true;
-    return solve_case(poly, var, vars, nv, ok);
+    return solve_case(poly, var, vars, nv, ok, opts);
 }

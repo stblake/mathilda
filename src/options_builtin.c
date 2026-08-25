@@ -576,6 +576,19 @@ void options_register_defaults(void) {
     ob_add(&b, r_int("Modulus", 0));
     ob_commit(&b, "Solve");
 
+    /* Reduce -- alphabetical order matches Mathematica's Options[Reduce].
+     * Keep in sync with the C-side default struct in reduce.c's option
+     * parser (reduce_opts_default). */
+    ob_init(&b);
+    ob_add(&b, r_sym("Backsubstitution", "False"));
+    ob_add(&b, r_sym("Cubics", "False"));
+    ob_add(&b, r_sym("GeneratedParameters", "C"));
+    ob_add(&b, r_sym("Method", "Automatic"));
+    ob_add(&b, r_int("Modulus", 0));
+    ob_add(&b, r_sym("Quartics", "False"));
+    ob_add(&b, r_sym("WorkingPrecision", "Infinity"));
+    ob_commit(&b, "Reduce");
+
     /* ---- Polynomial / rational ---- */
     const char* poly_fns[] = {
         "PolynomialGCD", "PolynomialLCM", "PolynomialQuotient",

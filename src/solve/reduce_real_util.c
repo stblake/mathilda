@@ -261,11 +261,12 @@ Expr* rru_emit_sign_diagram(Expr** bp, int m, const int* truth, const Expr* x) {
 
 bool rru_collect_roots(const Expr* poly, const Expr* x,
                        Expr*** arr, int* n, int* cap,
-                       int** prov, int factor_id) {
+                       int** prov, int factor_id,
+                       const ReduceOpts* opts) {
     Expr* eqn = expr_new_function(expr_new_symbol(SYM_Equal),
         (Expr*[]){ expr_copy((Expr*)poly), expr_new_integer(0) }, 2);
-    Expr* call = expr_new_function(expr_new_symbol(SYM_Solve),
-        (Expr*[]){ eqn, expr_copy((Expr*)x), expr_new_symbol(SYM_Reals) }, 3);
+    Expr* base[3] = { eqn, expr_copy((Expr*)x), expr_new_symbol(SYM_Reals) };
+    Expr* call = reduce_opts_build_solve(base, 3, opts);
     Expr* sols = eval_and_free(call);
 
     bool ok = is_head(sols, SYM_List);

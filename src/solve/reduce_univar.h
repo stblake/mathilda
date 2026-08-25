@@ -30,17 +30,21 @@
 
 #include "expr.h"
 #include "reduce_form.h"
+#include "reduce_opts.h"
 
 /* Solve the DNF formula `F` in the single real variable `var` over the reals.
- * Returns a freshly-owned Expr (True / False / a logical combination of
- * relations), or NULL to decline (non-polynomial, free parameters, or an
- * undecidable sign/ordering) -- in which case Reduce stays unevaluated. */
-Expr* reduce_univar(const RForm* F, const Expr* var, Expr** vars, int nv);
+ * `opts` forwards Cubics / Quartics onto the internal root isolation.  Returns
+ * a freshly-owned Expr (True / False / a logical combination of relations), or
+ * NULL to decline (non-polynomial, free parameters, or an undecidable
+ * sign/ordering) -- in which case Reduce stays unevaluated. */
+Expr* reduce_univar(const RForm* F, const Expr* var, Expr** vars, int nv,
+                    const ReduceOpts* opts);
 
 /* Integer-domain variant: the integers satisfying `F`, as an OR of `x == n`
  * atoms, when the solution set is bounded (both unbounded end-cells unsatisfied).
  * Returns True (all integers) / False (none) / an OR, or NULL to decline
  * (unbounded integer set, or an undecidable sign). */
-Expr* reduce_univar_integers(const RForm* F, const Expr* var, Expr** vars, int nv);
+Expr* reduce_univar_integers(const RForm* F, const Expr* var, Expr** vars, int nv,
+                             const ReduceOpts* opts);
 
 #endif /* REDUCE_UNIVAR_H */

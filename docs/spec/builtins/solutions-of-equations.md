@@ -1004,6 +1004,42 @@ degenerate branch, and it handles inequalities over the reals.
   `|y| < 1 - Sqrt[|x|]`. A residual integer-part atom (e.g. `Floor[x]+y>2`) is left
   for the CAD engine to decline soundly.
 
+**Options** (`Options[Reduce]` → `{Backsubstitution -> False, Cubics -> False,
+GeneratedParameters -> C, Method -> Automatic, Modulus -> 0, Quartics -> False,
+WorkingPrecision -> Infinity}`). Each is honored, reusing `Solve`'s existing
+machinery where the two overlap:
+- `Cubics -> True` / `Quartics -> True` — emit radical (Cardano / Ferrari)
+  solutions for irreducible cubic / quartic equations instead of the default
+  `Root[]` objects. Forwarded onto the internal `Solve[...]` calls, so
+  `Reduce[x^3 + x + 1 == 0, x] -> x == Root[...] || ...` while
+  `Reduce[x^3 + x + 1 == 0, x, Cubics -> True]` gives the three radical roots
+  (likewise `Quartics` at degree 4). The multivariate-real (CAD) fibre isolation
+  keeps `Root[]` regardless — radical fibres there are a scoped future refinement.
+- `Modulus -> p` (a nonzero integer) — solve the equations over `Z/pZ` by residue
+  enumeration (via `Solve`'s modular engine), overriding the domain:
+  `Reduce[x^2 == 2, x, Modulus -> 7] -> x == 3 || x == 4`,
+  `Reduce[x^2 == 2, x, Modulus -> 5] -> False`,
+  `Reduce[3 x == 1, x, Modulus -> 7] -> x == 5`. `Modulus -> 0` (the default) is
+  ordinary characteristic 0; a symbolic or out-of-range modulus, or a non-modular
+  statement, declines (stays unevaluated).
+- `GeneratedParameters -> h` — use `h[k]` as the head of the free parameters
+  introduced for parametric Integers / Rationals solutions (default `C`):
+  `Reduce[x + y == 3, {x, y}, Integers, GeneratedParameters -> k]
+  -> k[1] ∈ Integers && x == k[1] && y == 3 - k[1]`.
+- `Backsubstitution -> False` (default) — the linear-system output is the
+  fully-solved (grafted) form, each variable expressed in the parameters/free
+  variables. `-> True` requests the same grafted form; the option is accepted,
+  validated, and echoed, and there is no case in the current linear engine where
+  the two forms differ.
+- `WorkingPrecision -> Infinity` (default) — the exact-first sign engine (qqbar
+  oracle) with its machine-tolerance numeric fallback. A finite value tightens the
+  numeric-fallback tolerance used for transcendental sign decisions (multiples of
+  `Pi`); it never changes an exact symbolic answer.
+- `Method -> Automatic` — reserved; `Automatic` is the only method.
+
+An unrecognised trailing option warns (`Reduce::optx`) and leaves the call
+unevaluated. Options may follow the variables with or without an explicit domain.
+
 Rational-function relations whose canonicalisation would clear a variable
 denominator (e.g. `1/x < 1`) are declined (left unevaluated) rather than answered
 from the polynomial numerator alone, which would be unsound. Statements that

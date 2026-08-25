@@ -61,6 +61,34 @@ static void run_test(const char* input, const char* expected) {
     free(got); expr_free(res); expr_free(e);
 }
 
+/* Structural assertions for version-sensitive output (e.g. radical solutions,
+ * whose exact FullForm is brittle): check a substring is present / absent. */
+static void run_contains(const char* input, const char* needle) {
+    Expr* e = parse_expression(input);
+    if (!e) { printf("FAIL: parse: %s\n", input); ASSERT(0); return; }
+    Expr* res = evaluate(e);
+    char* got = expr_to_string_fullform(res);
+    if (!strstr(got, needle)) {
+        printf("FAIL: %s\n  expected to contain: %s\n  got: %s\n", input, needle, got);
+        free(got); expr_free(res); expr_free(e); ASSERT(0); return;
+    }
+    printf("PASS(contains %s): %s\n", needle, input);
+    free(got); expr_free(res); expr_free(e);
+}
+
+static void run_not_contains(const char* input, const char* needle) {
+    Expr* e = parse_expression(input);
+    if (!e) { printf("FAIL: parse: %s\n", input); ASSERT(0); return; }
+    Expr* res = evaluate(e);
+    char* got = expr_to_string_fullform(res);
+    if (strstr(got, needle)) {
+        printf("FAIL: %s\n  expected NOT to contain: %s\n  got: %s\n", input, needle, got);
+        free(got); expr_free(res); expr_free(e); ASSERT(0); return;
+    }
+    printf("PASS(not-contains %s): %s\n", needle, input);
+    free(got); expr_free(res); expr_free(e);
+}
+
 /* ------------------------------------------------------------------ *
  *  Phase 0 - constant / logical folding                              *
  * ------------------------------------------------------------------ */
@@ -752,6 +780,100 @@ static void test_piecewise_functions(void) {
              "Or[Less[x, -2], GreaterEqual[x, 3]]");
 }
 
+/* ------------------------------------------------------------------ *
+ *  Options: Backsubstitution, Cubics, GeneratedParameters, Method,    *
+ *  Modulus, Quartics, WorkingPrecision                                *
+ * ------------------------------------------------------------------ */
+
+/* Options[Reduce] reports the seven Mathematica-compatible options. */
+static void test_options_registered(void) {
+    run_test("Options[Reduce]",
+        "List[Rule[Backsubstitution, False], Rule[Cubics, False], "
+        "Rule[GeneratedParameters, C], Rule[Method, Automatic], "
+        "Rule[Modulus, 0], Rule[Quartics, False], "
+        "Rule[WorkingPrecision, Infinity]]");
+}
+
+/* Cubics: default emits Root[] for an irreducible cubic; -> True gives radicals. */
+static void test_option_cubics(void) {
+    run_contains("Reduce[x^3 + x + 1 == 0, x]", "Root");
+    run_not_contains("Reduce[x^3 + x + 1 == 0, x, Cubics -> True]", "Root");
+    run_contains("Reduce[x^3 + x + 1 == 0, x, Cubics -> True]", "Or[Equal[x");
+}
+
+/* Quartics: default emits Root[] for an irreducible quartic; -> True gives radicals. */
+static void test_option_quartics(void) {
+    run_contains("Reduce[x^4 - x - 1 == 0, x]", "Root");
+    run_not_contains("Reduce[x^4 - x - 1 == 0, x, Quartics -> True]", "Root");
+}
+
+/* Modulus: residue enumeration over Z/pZ; 0 is characteristic 0; a
+ * non-modular / symbolic modulus declines (unevaluated). */
+static void test_option_modulus(void) {
+    run_test("Reduce[x^2 == 2, x, Modulus -> 7]", "Or[Equal[x, 3], Equal[x, 4]]");
+    run_test("Reduce[x^2 == 2, x, Modulus -> 5]", "False");
+    run_test("Reduce[3 x == 1, x, Modulus -> 7]", "Equal[x, 5]");
+    run_test("Reduce[x^2 + x + 1 == 0, x, Modulus -> 7]",
+             "Or[Equal[x, 2], Equal[x, 4]]");
+    run_test("Reduce[x^2 == 4, x, Modulus -> 0]", "Or[Equal[x, -2], Equal[x, 2]]");
+    run_test("Reduce[Sin[x] == 0, x, Modulus -> 7]",
+             "Reduce[Equal[Sin[x], 0], x, Rule[Modulus, 7]]");
+    run_test("Reduce[x^2 == 2, x, Modulus -> p]",
+             "Reduce[Equal[Power[x, 2], 2], x, Rule[Modulus, p]]");
+}
+
+/* GeneratedParameters: renames the generated free-parameter head (default C). */
+static void test_option_generatedparameters(void) {
+    run_test("Reduce[x + y == 3, {x, y}, Integers]",
+             "And[Element[C[1], Integers], Equal[x, C[1]], "
+             "Equal[y, Plus[3, Times[-1, C[1]]]]]");
+    run_test("Reduce[x + y == 3, {x, y}, Integers, GeneratedParameters -> k]",
+             "And[Element[k[1], Integers], Equal[x, k[1]], "
+             "Equal[y, Plus[3, Times[-1, k[1]]]]]");
+    run_test("Reduce[x + y == 3, {x, y}, Integers, GeneratedParameters -> m]",
+             "And[Element[m[1], Integers], Equal[x, m[1]], "
+             "Equal[y, Plus[3, Times[-1, m[1]]]]]");
+}
+
+/* Backsubstitution: accepted + honored.  The current linear engine emits the
+ * fully-solved (grafted) form, which is the default (-> False) and also what
+ * -> True requests, so both agree and neither echoes unevaluated. */
+static void test_option_backsubstitution(void) {
+    const char* solved =
+        "And[Unequal[a, 1], Equal[x, Power[Plus[-1, a], -1]], "
+        "Equal[y, Times[-1, Power[Plus[-1, a], -1]]]]";
+    run_test("Reduce[a x + y == 1 && x + y == 0, {x, y}]", solved);
+    run_test("Reduce[a x + y == 1 && x + y == 0, {x, y}, Backsubstitution -> True]", solved);
+    run_test("Reduce[a x + y == 1 && x + y == 0, {x, y}, Backsubstitution -> False]", solved);
+}
+
+/* WorkingPrecision: does not change an exact symbolic answer -- Infinity
+ * (default) and a finite value both give the exact result. */
+static void test_option_workingprecision(void) {
+    run_test("Reduce[x^2 > 1, x, WorkingPrecision -> 30]",
+             "Or[Less[x, -1], Greater[x, 1]]");
+    run_test("Reduce[x^2 > 1, x, WorkingPrecision -> Infinity]",
+             "Or[Less[x, -1], Greater[x, 1]]");
+}
+
+/* Method: Automatic is accepted and inert (Automatic is the only method). */
+static void test_option_method(void) {
+    run_test("Reduce[x^2 == 4, x, Method -> Automatic]",
+             "Or[Equal[x, -2], Equal[x, 2]]");
+}
+
+/* Peeling: options work with and without an explicit domain and in multiples;
+ * an unknown trailing option leaves Reduce unevaluated (Reduce::optx). */
+static void test_option_peeling(void) {
+    run_test("Reduce[x^2 == 4, x, Cubics -> False]", "Or[Equal[x, -2], Equal[x, 2]]");
+    run_test("Reduce[x^2 == 4, x, Reals, Quartics -> False]",
+             "Or[Equal[x, -2], Equal[x, 2]]");
+    run_test("Reduce[x^2 == 4, x, Method -> Automatic, Cubics -> False]",
+             "Or[Equal[x, -2], Equal[x, 2]]");
+    run_test("Reduce[x^2 == 4, x, Bogus -> 1]",
+             "Reduce[Equal[Power[x, 2], 4], x, Rule[Bogus, 1]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -778,6 +900,16 @@ int main(void) {
     TEST(test_wb_atom_emit);
     TEST(test_wb_logic_expand);
     TEST(test_wb_unsupported);
+
+    TEST(test_options_registered);
+    TEST(test_option_cubics);
+    TEST(test_option_quartics);
+    TEST(test_option_modulus);
+    TEST(test_option_generatedparameters);
+    TEST(test_option_backsubstitution);
+    TEST(test_option_workingprecision);
+    TEST(test_option_method);
+    TEST(test_option_peeling);
 
     printf("All reduce tests passed!\n");
     return 0;

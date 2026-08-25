@@ -1,50 +1,56 @@
-# Task: Write §4.2 "Algebra" of The Mathilda Book
+# Task: Add Options to `Reduce`
 
-Plan: `/Users/user/.claude/plans/let-s-plan-the-writing-curious-kernighan.md`
-Template: `book/chapters/math/arithmetic.tex` (§4.1, Verified).
+Plan: `/Users/user/.claude/plans/at-present-reduce-does-humble-duckling.md`
 
 ## Steps
 
-- [x] Create `book/examples/algebra/*.m` (11 files, inputs only)
-- [x] `make examples` — generate transcripts, read & adjust inputs
-- [x] Write `book/chapters/math/algebra.tex` (10 subsections, callouts, \index)
-- [x] Add missing citations to `book/references.bib` (added `clo`)
-- [x] `make check-links` — 0 unlinked \B{} (331 uses resolve)
-- [x] `make pdf` — clean log; Index + layout verified (78 pages)
-- [x] Update `book/ROADMAP.md` (§4.2 → Verified) + changelog note
-
-## Subsections (each = codepairs of verified examples + Theory/Under-the-hood callouts)
-
-1. Polynomials & their anatomy — PolynomialQ, Variables, Exponent, Coefficient(List), Collect, HornerForm
-2. Expanding & collecting — Expand, ExpandAll, ExpandNumerator/Denominator (FLINT fmpq_mpoly)
-3. Factoring over Q — Factor, FactorList, FactorSquareFree, FactorTerms (Yun; Berlekamp–Zassenhaus+Hensel)
-4. Algebraic number fields — Factor+Extension, IrreduciblePolynomialQ, MinimalPolynomial, RootReduce, Root, ToRadicals (Trager)
-5. GCD, resultants, elimination — Polynomial* family, Resultant/Discriminant/Subresultants, Eliminate (subresultant PRS)
-6. Rational functions — Numerator/Denominator, Together, Cancel, Apart
-7. Gröbner bases — GroebnerBasis, MonomialOrder, Modulus (Buchberger + Gröbner walk)
-8. Solving polynomial equations — Solve single: quadratic→Cardano(Cubics)→Root/Abel–Ruffini
-9. Solving polynomial systems — Solve systems: lex GB → triangular decomposition
-10. Reduce & the reals — Solve-vs-Reduce, Domain, McCallum CAD
-
-## Do NOT \B{} (not implemented): PolynomialReduce, CoefficientRules, MonomialList, FindInstance, Roots, AlgebraicNumber
+- [ ] A1. Add `SYM_Backsubstitution` to `src/sym_names.{h,c}` (3 sites)
+- [ ] A2. Register `Options[Reduce]` defaults in `src/options_builtin.c`
+- [ ] B1. New `src/solve/reduce_opts.{h,c}` (struct + default + build_solve helper)
+- [ ] B2. Front-end peeler + `ReduceOpts` init + dispatch threading in `reduce.c`
+- [ ] B3. Add `reduce_opts.c` to build (makefile auto-discovers `src/*.c`; verify CMake COMMON_SRC)
+- [ ] C1. Cubics/Quartics: thread into `reduce_eq.c:solve_generic`
+- [ ] C2. Cubics/Quartics + WP: `reduce_real_util.c` (`rru_collect_roots`, `rru_approx_double`)
+- [ ] C3. Cubics/Quartics + WP: `reduce_realdiag.c` (`soft_roots`, `gen_sign_at`, `cmp_bp`)
+- [ ] C4. Cubics/Quartics: `reduce_cad.c` fibre Solve calls
+- [ ] C5. GeneratedParameters + new `reduce_modular`: `reduce_int.c`
+- [ ] C6. Backsubstitution: `reduce_sys.c` (`reduce_eq_system`)
+- [ ] C7. Thread opts through `reduce_univar` / `reduce_univar_general` / `reduce_univar_integers`
+- [ ] D1. Docstring in `reduce_init`
+- [ ] D2. `docs/spec/builtins/solutions-of-equations.md`
+- [ ] D3. `docs/spec/changelog/2026-08-24.md`
+- [ ] D4. `REDUCE_PLAN.md` Options section
+- [ ] E1. Tests in `tests/test_reduce.c` (one per option + peeling + registration)
+- [ ] V1. Build + run reduce_tests, solve_tests, reduce_corpus_tests
+- [ ] V2. `make check-c99`; valgrind smoke; REPL smoke
+- [ ] V3. Rebuild code-review graph
 
 ## Review
 
-**Done.** §4.2 Algebra written (`book/chapters/math/algebra.tex`, ~10 subsections,
-printed pages 42–50), replacing the stub. Documentation only — no C source changes.
+All steps complete. `Options[Reduce]` now returns the seven Mathematica-compatible
+options and each is honored:
 
-- 11 example files under `book/examples/algebra/`; every `Out[]` build-verified by
-  `make examples`. Two long outputs (Cardano radicals; the six-permutation system
-  `{x+y+z==6, xy+yz+zx==11, xyz==6}` with its triangular Gröbner basis) use
-  full-width `\mtranscript`; the rest use `codepairs`.
-- Callouts carry the algorithms per ROADMAP: Yun square-free, Berlekamp–Zassenhaus +
-  Hensel, Trager, subresultant PRS, Buchberger + Gröbner walk, Cardano/Abel–Ruffini,
-  McCallum CAD. FLINT fast-path and the packed `fmpq_mpoly`/`Overflow[]` guard noted.
-- Avoided §3 duplication (went deeper on extensions, GCD/resultants, Gröbner orders,
-  Root-vs-radical, systems, and Reduce/CAD). `Simplify` deferred per user decision.
-- Guards NOT tripped: did not `\B{}` the non-builtins (`PolynomialReduce`,
-  `CoefficientRules`, `MonomialList`, `FindInstance`, `Roots`, `AlgebraicNumber`);
-  used `Extension -> I` for the Gaussian example after confirming
-  `GaussianIntegers -> True` does not factor `x^2+1`.
-- `make check-links` clean; `make pdf` clean (no undefined refs/citations/links);
-  Index concept entries verified in `.idx`. ROADMAP → Verified; changelog note added.
+- **Cubics/Quartics** — forwarded onto internal `Solve[...]` calls via a shared
+  `reduce_opts_build_solve` (radicals vs `Root[]`). Scoped-out: CAD fibre isolation
+  keeps `Root[]` (documented).
+- **Modulus** — top-level pre-pass `reduce_modular` routes through Solve's `solvemod`;
+  reformatted as `Or` of `x==r`; symbolic/out-of-range/non-modular declines.
+- **GeneratedParameters** — `rename_param_head` renames `C[k] -> h[k]` in the
+  Integers/Rationals output.
+- **Backsubstitution** — accept/validate/echo (no fork in the current linear engine).
+- **WorkingPrecision** — threads numeric-fallback tolerance into `reduce_realdiag`;
+  Infinity keeps exact-first.
+- **Method** — reserved (Automatic only).
+
+New files: `src/solve/reduce_opts.{c,h}`. New symbol: `SYM_Backsubstitution`.
+Defaults registered in `options_builtin.c`. Engines threaded: `reduce.c` (peeler +
+dispatch), `reduce_eq.c`, `reduce_int.c` (+ modular/rename), `reduce_real_util.c`,
+`reduce_univar.c`, `reduce_realdiag.c`; CAD passes NULL (scoped).
+
+Verification: main build clean; `make check-c99` clean; `reduce_tests` (225 assertions,
+incl. 9 new `test_option_*` groups), `solve_tests`, `options_tests`, and the 154-case
+`reduce_corpus` all pass — no regressions. Valgrind: no leak attributable to the new
+code (residual radical-path leak under `Cubics/Quartics->True` is pre-existing in
+`solvepoly.c`, reached identically via `Solve`). Docs updated:
+`docs/spec/builtins/solutions-of-equations.md`, `docs/spec/changelog/2026-08-24.md`,
+`REDUCE_PLAN.md`, and the `reduce_init` docstring.

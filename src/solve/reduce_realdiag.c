@@ -77,15 +77,24 @@ static Expr* subst_eval(const Expr* poly, const Expr* x, const Expr* sample) {
         (Expr*[]){ expr_copy((Expr*)poly), rule }, 2));
 }
 
+/* Current-call options, set by reduce_univar_general (the single entry).  The
+ * static helpers below run only inside that call and never re-enter, so file
+ * scope is a safe home for the per-call config (the numeric-fallback tolerance
+ * from WorkingPrecision, and the ReduceOpts forwarded onto soft root
+ * isolation).  Default: exact-first tolerance 1e-9, Solve defaults. */
+static const ReduceOpts* g_rd_opts = NULL;
+static double            g_rd_tol  = 1e-9;
+
 /* Sign of poly at the sample: -1/0/1, or -2 undecidable.  Exact (qqbar) first,
- * then a numeric N fallback for transcendental constants (multiples of Pi). */
+ * then a numeric N fallback for transcendental constants (multiples of Pi),
+ * at the WorkingPrecision tolerance g_rd_tol. */
 static int gen_sign_at(const Expr* poly, const Expr* x, const Expr* sample) {
     Expr* val = subst_eval(poly, x, sample);
     int s = rru_sign_of(val);
     if (s == -2) {
         bool ok; double d = rru_approx_double(val, &ok);
         if (ok && isfinite(d)) {
-            double tol = 1e-9 * (1.0 + fabs(d));
+            double tol = g_rd_tol * (1.0 + fabs(d));
             s = (d > tol) ? 1 : (d < -tol ? -1 : -2);
         }
     }
@@ -103,7 +112,7 @@ static int cmp_bp(const Expr* a, const Expr* b) {
     double db = rru_approx_double(b, &okb);
     if (!oka || !okb || !isfinite(da) || !isfinite(db)) return -2;
     double diff = da - db;
-    double tol = 1e-9 * (1.0 + fabs(da) + fabs(db));
+    double tol = g_rd_tol * (1.0 + fabs(da) + fabs(db));
     if (diff > tol) return 1;
     if (diff < -tol) return -1;
     return -2;
@@ -163,8 +172,8 @@ static bool has_free_parameter(const RForm* F, const Expr* x) {
 static void soft_roots(const Expr* poly, const Expr* x, Expr*** arr, int* n, int* cap) {
     Expr* eqn = expr_new_function(expr_new_symbol(SYM_Equal),
         (Expr*[]){ expr_copy((Expr*)poly), expr_new_integer(0) }, 2);
-    Expr* sols = eval_and_free(expr_new_function(expr_new_symbol(SYM_Solve),
-        (Expr*[]){ eqn, expr_copy((Expr*)x), expr_new_symbol(SYM_Reals) }, 3));
+    Expr* base[3] = { eqn, expr_copy((Expr*)x), expr_new_symbol(SYM_Reals) };
+    Expr* sols = eval_and_free(reduce_opts_build_solve(base, 3, g_rd_opts));
     if (!is_head(sols, SYM_List)) { expr_free(sols); return; }
 
     /* Keep each row that pins x to a numeric-real constant; silently skip the
@@ -373,8 +382,16 @@ static void free_per_conj_cons(RDomCon** ccons, const int* cncon, int n) {
  *  Driver                                                             *
  * ------------------------------------------------------------------ */
 
-Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv) {
+Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv,
+                            const ReduceOpts* opts) {
     (void)vars; (void)nv;
+    /* Publish the per-call config for the static helpers below: WorkingPrecision
+     * -> numeric-fallback tolerance (Infinity keeps the exact-first 1e-9), and
+     * the ReduceOpts forwarded onto soft root isolation (Cubics / Quartics). */
+    g_rd_opts = opts;
+    double wp_digits;
+    g_rd_tol = reduce_opts_wp_digits(opts, &wp_digits) ? pow(10.0, -wp_digits) : 1e-9;
+
     if (F->is_true) return expr_new_symbol(SYM_True);
     if (F->n == 0)  return expr_new_symbol(SYM_False);
     if (has_free_parameter(F, x)) return NULL;

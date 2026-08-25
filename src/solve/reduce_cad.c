@@ -491,7 +491,7 @@ static bool lift_fiber(const RForm* F, const Expr* vx, const Expr* sx, bool is_p
         }
         int dy = degree_in(fs, vy);
         if (dy <= 0) { expr_free(fs); continue; }      /* constant in vy */
-        if (!rru_collect_roots(fs, vy, &roots, &nr, &cap, &fac, i)) { expr_free(fs); fail = true; break; }
+        if (!rru_collect_roots(fs, vy, &roots, &nr, &cap, &fac, i, NULL)) { expr_free(fs); fail = true; break; }
         expr_free(fs);
     }
     if (fail) { for (int i = 0; i < nr; i++) { expr_free(roots[i]); } free(roots); free(fac); return false; }
@@ -791,7 +791,7 @@ static bool cad_leaf(const RForm* F, Expr** vv, int d, Expr** asg, bool no_outer
         }
         int dy = degree_in(fs, vy);
         if (dy <= 0) { expr_free(fs); continue; }
-        if (!rru_collect_roots(fs, vy, &roots, &nr, &cap, &fac, i)) { expr_free(fs); fail = true; break; }
+        if (!rru_collect_roots(fs, vy, &roots, &nr, &cap, &fac, i, NULL)) { expr_free(fs); fail = true; break; }
         expr_free(fs);
     }
     if (fail) { for (int i = 0; i < nr; i++) { expr_free(roots[i]); } free(roots); free(fac); return false; }
@@ -948,7 +948,7 @@ static CADRegion* cad_build(const RForm* F, Expr** vv, int d, int level, Expr** 
         if (is_zero(fs)) { expr_free(fs); if (no_outer_sector) continue; fail = true; break; }
         int dv = degree_in(fs, vv[level]);
         if (dv <= 0) { expr_free(fs); continue; }
-        if (!rru_collect_roots(fs, vv[level], &roots, &nr, &cap, &fac, j)) { expr_free(fs); fail = true; break; }
+        if (!rru_collect_roots(fs, vv[level], &roots, &nr, &cap, &fac, j, NULL)) { expr_free(fs); fail = true; break; }
         expr_free(fs);
     }
     if (fail) { for (int q = 0; q < nr; q++) { expr_free(roots[q]); } free(roots); free(fac); return NULL; }
@@ -1274,7 +1274,10 @@ Expr* reduce_cad(const RForm* F, Expr** vars, int nv) {
         if (appears) used[nu++] = i;
     }
     if (nu == 1) {                            /* really univariate -> sign diagram */
-        Expr* r = reduce_univar(F, vars[used[0]], vars, nv);
+        /* CAD does not thread Reduce options; the delegated 1-D sign diagram
+         * keeps Solve's defaults (Cubics / Quartics forwarding on the
+         * multivariate-real path is a scoped future refinement). */
+        Expr* r = reduce_univar(F, vars[used[0]], vars, nv, NULL);
         free(used);
         return r;
     }
@@ -1335,7 +1338,7 @@ Expr* reduce_cad(const RForm* F, Expr** vars, int nv) {
 
     /* Base decomposition: real breakpoints of the projection in vx. */
     for (int i = 0; i < npx; i++)
-        if (!rru_collect_roots(px[i], vx, &bxr, &nbx, &bxcap, NULL, 0)) {
+        if (!rru_collect_roots(px[i], vx, &bxr, &nbx, &bxcap, NULL, 0, NULL)) {
             for (int q = 0; q < nbx; q++) { expr_free(bxr[q]); } free(bxr); bxr = NULL; nbx = 0;
             goto done;
         }

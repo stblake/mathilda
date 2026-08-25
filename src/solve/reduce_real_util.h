@@ -18,6 +18,7 @@
 #define REDUCE_REAL_UTIL_H
 
 #include "expr.h"
+#include "reduce_opts.h"
 #include <stdbool.h>
 
 /* Exact sign of a constant real value: -1, 0, 1, or -2 (undecidable / FLINT
@@ -64,9 +65,13 @@ Expr* rru_emit_sign_diagram(Expr** bp, int m, const int* truth, const Expr* x);
  * pushed root records `factor_id` -- so a caller isolating roots factor-by-factor
  * can later recover which factor produced each breakpoint (needed by CAD's
  * symbolic sector emission).  Pass prov=NULL, factor_id=0 when provenance is not
- * wanted. */
+ * wanted.
+ *
+ * `opts` forwards the Cubics / Quartics radical flags onto the internal
+ * `Solve[..., Reals]` root isolation (pass NULL to keep Solve's defaults). */
 bool rru_collect_roots(const Expr* poly, const Expr* x,
                        Expr*** arr, int* n, int* cap,
-                       int** prov, int factor_id);
+                       int** prov, int factor_id,
+                       const ReduceOpts* opts);
 
 #endif /* REDUCE_REAL_UTIL_H */

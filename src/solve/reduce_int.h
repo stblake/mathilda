@@ -18,11 +18,22 @@
 
 #include "expr.h"
 #include "reduce_form.h"
+#include "reduce_opts.h"
 
 /* Solve `expr` (the original input relation) for `vars_expr` over `dom`
  * (Integers or Rationals) and return the logical form, or NULL to decline.
- * `F`/`vars`/`nv` back the univariate enumeration fallback. */
+ * `F`/`vars`/`nv` back the univariate enumeration fallback.  `opts` supplies
+ * GeneratedParameters (the head used for free parameters). */
 Expr* reduce_integers(const Expr* expr, const Expr* vars_expr, const RForm* F,
-                      Expr** vars, int nv, const Expr* dom);
+                      Expr** vars, int nv, const Expr* dom,
+                      const ReduceOpts* opts);
+
+/* Modulus -> p residue enumeration.  Solves `expr` for `vars_expr` over Z/pZ
+ * (p = opts->modulus) via Solve's modular engine and reformats the finite
+ * solution list into an Or of `var == r` equations.  Returns NULL (Reduce
+ * stays unevaluated) when the modulus is symbolic / out of range or the
+ * statement is not solvable modularly. */
+Expr* reduce_modular(const Expr* expr, const Expr* vars_expr,
+                     const ReduceOpts* opts);
 
 #endif /* REDUCE_INT_H */

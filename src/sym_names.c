@@ -740,6 +740,7 @@ const char* SYM_FrameTicks = NULL;
 const char* SYM_PlotLabel = NULL;
 const char* SYM_AspectRatio = NULL;
 const char* SYM_Background = NULL;
+const char* SYM_Backsubstitution = NULL;
 const char* SYM_ImageSize = NULL;
 const char* SYM_AxesOrigin = NULL;
 const char* SYM_AxesStyle = NULL;
@@ -1610,6 +1611,7 @@ void sym_names_init(void) {
     SYM_PlotLabel                  = intern_symbol("PlotLabel");
     SYM_AspectRatio                = intern_symbol("AspectRatio");
     SYM_Background                 = intern_symbol("Background");
+    SYM_Backsubstitution           = intern_symbol("Backsubstitution");
     SYM_ImageSize                  = intern_symbol("ImageSize");
     SYM_AxesOrigin                 = intern_symbol("AxesOrigin");
     SYM_AxesStyle                  = intern_symbol("AxesStyle");

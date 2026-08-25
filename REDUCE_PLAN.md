@@ -6,16 +6,19 @@ reusing the `Solve` infrastructure and adding a CAD-based real-inequality engine
 
 ---
 
-## Status (as of 2026-08-24)
+## Status (as of 2026-08-25)
 
 Phases **0–5 are implemented, tested (`tests/test_reduce.c`), and leak-clean**;
 **Phase 6a–6c (two-variable CAD over the Reals) has landed** (`reduce_cad.{c,h}`,
 `reduce_real_util.{c,h}`); and **Phase 6d (n-variable recursive CAD over the Reals) has landed in full**
 — Stage A (`reduce_cad_nvar` + the recursive lift) and Stage B (the n-D boundary
 merge that closes outer ranges for closed regions), all in `reduce_cad.c`, v0.088.
-The remaining pieces are **6b (real-algebraic-coefficient fibre isolation to widen
-past the rational-fibre regime)**, **6e (McCallum well-orientedness augmentation)**,
-**7 (quantifier elimination)** and **8 (companion builtins + polish)**.
+The **Phase-8 options polish has landed** (all seven `Options[Reduce]` registered
+and honored, `reduce_opts.{c,h}`, 2026-08-25). The remaining pieces are **6b
+(real-algebraic-coefficient fibre isolation to widen past the rational-fibre
+regime)**, **6e (McCallum well-orientedness augmentation)**, **7 (quantifier
+elimination)** and **8 (companion builtins — `LogicalExpand`, `FindInstance`,
+`CylindricalDecomposition`)**.
 Implementation order followed was
 `0 → 1 → 2 → 3 → 5 → 4 → 6(2-var) → 6d(n-var A) → 6d(n-var B)`.
 
@@ -31,6 +34,29 @@ Implementation order followed was
 | 7 | Quantifier elimination (`Exists`/`ForAll`/`Resolve`) | ☐ pending |
 | 8 | Companion builtins + polish | ☐ pending |
 | 9 | Elementary real functions (radicals, `Abs`, `Log`, inverse-trig, `Floor`/`Mod`) over the Reals | ✅ done (+ multivariate `Sqrt` rationalization, 2026-08-24) |
+| Opt | Options: `Backsubstitution`, `Cubics`, `GeneratedParameters`, `Method`, `Modulus`, `Quartics`, `WorkingPrecision` | ✅ done (2026-08-25) |
+
+> **2026-08-25 — Reduce options (all seven registered and honored).**
+> `Options[Reduce]` now reports `{Backsubstitution -> False, Cubics -> False,
+> GeneratedParameters -> C, Method -> Automatic, Modulus -> 0, Quartics -> False,
+> WorkingPrecision -> Infinity}`, and each is honored. A Solve-style trailing-option
+> peeler (`is_reduce_option_name`/`reduce_apply_option`, unknown name → `Reduce::optx`,
+> unevaluated) fills a `ReduceOpts` (`src/solve/reduce_opts.{c,h}`) threaded through the
+> engines. The four options overlapping `Solve` reuse its machinery: **Cubics/Quartics**
+> are forwarded onto the internal `Solve[...]` calls (radicals vs `Root[]`), via a shared
+> `reduce_opts_build_solve`; **Modulus** routes the equational statement through Solve's
+> `solvemod` residue enumeration as a top-level pre-pass (`reduce_modular`), reformatted
+> as an `Or` of `x == r`; **GeneratedParameters** renames the Diophantine engine's `C[k]`
+> to `h[k]` (`rename_param_head`). **Backsubstitution** is accept/validate/echo (the
+> current linear engine's grafted output is the `False` default and also what `True`
+> requests — no fork); **WorkingPrecision** threads a numeric-fallback tolerance into the
+> transcendental sign decisions (`Infinity` keeps the exact path); **Method** is reserved
+> (`Automatic` only). New `SYM_Backsubstitution`; defaults registered in
+> `options_builtin.c`. Tests: nine `test_option_*` groups in `tests/test_reduce.c`. Two
+> scoped exclusions, documented not silent: CAD fibre isolation keeps `Root[]` regardless
+> of Cubics/Quartics (radical fibres over the multivariate-real path are deferred), and
+> the residual radical-path leak under `Cubics/Quartics -> True` is pre-existing in
+> `solvepoly.c` (reached identically via `Solve`), not introduced here.
 
 > **2026-08-24 — radicals compose with `Abs`; univariate domain-gate soundness fix.**
 > A Phase-9 preprocessing extension rationalizes square-root radicals for the

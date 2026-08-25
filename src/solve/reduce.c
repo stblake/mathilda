@@ -13,6 +13,7 @@
  */
 #include "reduce.h"
 #include "reduce_form.h"
+#include "reduce_opts.h"
 #include "reduce_eq.h"
 #include "reduce_univar.h"
 #include "reduce_fm.h"
@@ -39,6 +40,72 @@
 
 static bool is_sym(const Expr* e, const char* name) {
     return e && e->type == EXPR_SYMBOL && e->data.symbol.name == name;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Option parsing (mirrors solve.c's peeler)                          *
+ * ------------------------------------------------------------------ */
+
+/* Recognised Reduce option-name symbols (see Options[Reduce]). */
+static bool is_reduce_option_name(const char* s) {
+    return s == SYM_Backsubstitution
+        || s == SYM_Cubics
+        || s == SYM_GeneratedParameters
+        || s == SYM_Method
+        || s == SYM_Modulus
+        || s == SYM_Quartics
+        || s == SYM_WorkingPrecision;
+}
+
+/* True iff `e` is Rule[opt,_] / RuleDelayed[opt,_] for a recognised name. */
+static bool reduce_is_option_arg(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
+    if (e->data.function.arg_count != 2) return false;
+    const Expr* lhs = e->data.function.args[0];
+    if (lhs->type != EXPR_SYMBOL) return false;
+    return is_reduce_option_name(lhs->data.symbol.name);
+}
+
+/* Apply one option rule to `opts`.  Values borrowed from `res`. */
+static void reduce_apply_option(const Expr* rule, ReduceOpts* opts) {
+    const Expr* lhs = rule->data.function.args[0];
+    const Expr* rhs = rule->data.function.args[1];
+    const char* name = lhs->data.symbol.name;
+    if (name == SYM_Cubics)   { opts->poly.cubics_radical   = is_sym(rhs, SYM_True); return; }
+    if (name == SYM_Quartics) { opts->poly.quartics_radical = is_sym(rhs, SYM_True); return; }
+    if (name == SYM_GeneratedParameters) {
+        if (rhs && rhs->type == EXPR_SYMBOL) opts->param_head = rhs->data.symbol.name;
+        return;
+    }
+    if (name == SYM_Modulus) {
+        /* Any non-zero value routes to the modular pre-pass; 0 (the default)
+         * stays characteristic 0.  A symbolic or out-of-range modulus makes
+         * the pre-pass decline, so Reduce stays unevaluated rather than
+         * silently solving over the complexes. */
+        bool zero_int = (rhs && rhs->type == EXPR_INTEGER && rhs->data.integer == 0);
+        if (rhs && !zero_int) opts->modulus = (Expr*)rhs;
+        return;
+    }
+    if (name == SYM_Backsubstitution) { opts->backsub = is_sym(rhs, SYM_True); return; }
+    if (name == SYM_WorkingPrecision) { opts->working_precision = (Expr*)rhs; return; }
+    if (name == SYM_Method)           { opts->method = (Expr*)rhs; return; }
+}
+
+/* Warn once per distinct form about an unrecognised trailing option. */
+static void warn_reduce_bad_option(const Expr* res, const Expr* opt) {
+    static uint64_t last_warned_hash = 0;
+    uint64_t h = expr_hash((Expr*)res);
+    if (h == last_warned_hash) return;
+    last_warned_hash = h;
+    const Expr* lhs = (opt && opt->type == EXPR_FUNCTION
+                       && opt->data.function.arg_count == 2)
+        ? opt->data.function.args[0] : NULL;
+    const char* name = (lhs && lhs->type == EXPR_SYMBOL)
+        ? lhs->data.symbol.name : "?";
+    fprintf(stderr, "Reduce::optx: Unknown option %s in Reduce.\n", name);
 }
 
 /* Warn once per distinct form that the variable spec is invalid.  Mirrors
@@ -93,12 +160,39 @@ static Expr** collect_vars(Expr* vars, int* nv_out) {
 Expr* builtin_reduce(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    /* Phase 0: positional expr, vars, [dom].  Options are a later phase. */
-    if (argc < 2 || argc > 3) return NULL;
+    if (argc < 2) return NULL;
+
+    /* Peel trailing option Rules; the first non-option arg from the end marks
+     * the end of the positional args (expr, vars, [dom]).  A trailing
+     * Rule[sym,_] whose name is not a known Reduce option is a syntax error. */
+    size_t pos_end = argc;
+    while (pos_end > 0) {
+        Expr* a = res->data.function.args[pos_end - 1];
+        if (a->type == EXPR_FUNCTION
+            && a->data.function.head->type == EXPR_SYMBOL
+            && (a->data.function.head->data.symbol.name == SYM_Rule
+                || a->data.function.head->data.symbol.name == SYM_RuleDelayed)
+            && a->data.function.arg_count == 2
+            && a->data.function.args[0]->type == EXPR_SYMBOL) {
+            const char* name = a->data.function.args[0]->data.symbol.name;
+            if (is_reduce_option_name(name)) { pos_end--; continue; }
+            warn_reduce_bad_option(res, a);
+            return NULL;
+        }
+        break;
+    }
+    if (pos_end < 2 || pos_end > 3) return NULL;
+
+    ReduceOpts opts;
+    reduce_opts_default(&opts);
+    for (size_t i = pos_end; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        if (reduce_is_option_arg(a)) reduce_apply_option(a, &opts);
+    }
 
     Expr* expr = res->data.function.args[0];
     Expr* vars = res->data.function.args[1];
-    Expr* dom  = (argc >= 3) ? res->data.function.args[2] : NULL;
+    Expr* dom  = (pos_end >= 3) ? res->data.function.args[2] : NULL;
 
     if (!reduce_valid_vars(vars)) { warn_reduce_ivar(vars); return NULL; }
 
@@ -106,6 +200,11 @@ Expr* builtin_reduce(Expr* res) {
      * decidable statement is frequently already True/False here. */
     if (is_sym(expr, SYM_True))  return expr_new_symbol(SYM_True);
     if (is_sym(expr, SYM_False)) return expr_new_symbol(SYM_False);
+
+    /* Modulus -> p (p != 0): residue enumeration over Z/pZ overrides the
+     * domain.  Reuses Solve's modular engine and reformats the result; a
+     * symbolic / out-of-range modulus makes it decline (unevaluated). */
+    if (opts.modulus) return reduce_modular(expr, vars, &opts);
 
     int nv = 0;
     Expr** vlist = collect_vars(vars, &nv);
@@ -174,7 +273,7 @@ Expr* builtin_reduce(Expr* res) {
                              || dom->data.symbol.name == SYM_Rationals));
         if (integers) {
             /* Phase 5: Integers / Rationals via the Diophantine engine. */
-            out = reduce_integers(expr, vars, f, vlist, nv, dom);
+            out = reduce_integers(expr, vars, f, vlist, nv, dom, &opts);
         } else if (complexes) {
             /* Over Complexes only equations are meaningful. */
             bool all_eq = true;
@@ -186,14 +285,19 @@ Expr* builtin_reduce(Expr* res) {
                     /* Phase 1: single univariate polynomial equation. */
                     bool ok2 = true;
                     RForm* sol = reduce_eq_univariate(f->c[0]->a[0].poly, vlist[0],
-                                                      vlist, nv, &ok2);
+                                                      vlist, nv, &ok2, &opts);
                     if (ok2) {
                         rform_simplify(sol, vlist, nv);
                         out = rform_to_expr(sol, vlist, nv);
                     }
                     rform_free(sol);
                 } else {
-                    /* Phase 4: parametric linear system (declines if non-linear). */
+                    /* Phase 4: parametric linear system (declines if non-linear).
+                     * Backsubstitution is accepted/echoed at the front-end; the
+                     * current linear engine always emits the fully-solved
+                     * (grafted) form, which is Reduce's Backsubstitution -> False
+                     * default and also what -> True requests, so there is no
+                     * behavioural fork to thread here. */
                     out = reduce_eq_system(f, vlist, nv);
                 }
             }
@@ -203,8 +307,8 @@ Expr* builtin_reduce(Expr* res) {
              * is a real radical / pole / bounded-domain transcendental (so the
              * exact polynomial engine declines), the general sign diagram takes
              * over. */
-            out = reduce_univar(f, vlist[0], vlist, nv);
-            if (!out) out = reduce_univar_general(f, vlist[0], vlist, nv);
+            out = reduce_univar(f, vlist[0], vlist, nv, &opts);
+            if (!out) out = reduce_univar_general(f, vlist[0], vlist, nv, &opts);
         } else if (reals && nv >= 2) {
             /* Phase 3: a multivariate LINEAR system over the reals ->
              * Fourier-Motzkin (declines to NULL if it is not linear).  Phase 6:
@@ -269,6 +373,24 @@ void reduce_init(void) {
         "    square-root radical rationalization.\n"
         "  - Integers / Rationals: the Solve Diophantine engine, reformatted\n"
         "    as an Or of Ands with Element[C[k], dom] for a free parameter.\n"
+        "\n"
+        "Options (Options[Reduce]):\n"
+        "  Backsubstitution -> False     the linear-system output is fully\n"
+        "                                solved (grafted); accepted/echoed.\n"
+        "  Cubics -> False               emit radicals (True) or Root[]\n"
+        "  Quartics -> False             (False) for irreducible cubic /\n"
+        "                                quartic equations.\n"
+        "  GeneratedParameters -> C      head of the free parameters C[k]\n"
+        "                                for parametric Integers/Rationals\n"
+        "                                solutions.\n"
+        "  Method -> Automatic           reserved (Automatic is the only\n"
+        "                                method).\n"
+        "  Modulus -> 0                  a nonzero p solves the equations\n"
+        "                                over Z/pZ by residue enumeration,\n"
+        "                                overriding the domain.\n"
+        "  WorkingPrecision -> Infinity  numeric-fallback tolerance for\n"
+        "                                transcendental sign decisions;\n"
+        "                                Infinity keeps the exact-first path.\n"
         "\n"
         "Reduce is sound over complete: an undecidable sign, an unsupported\n"
         "construct, or a not-yet-wired engine (nonlinear equations over\n"

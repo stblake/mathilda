@@ -74,7 +74,8 @@ static int form_truth_at(const RForm* F, const Expr* x, const Expr* sample) {
  * array of length *m_out (caller frees the entries and the array); sets
  * *ok=false to decline (a non-polynomial numerator or denominator, an ELEM, or
  * an undecidable ordering). */
-static Expr** collect_breakpoints(const RForm* F, const Expr* x, int* m_out, bool* ok) {
+static Expr** collect_breakpoints(const RForm* F, const Expr* x, int* m_out,
+                                  bool* ok, const ReduceOpts* opts) {
     *ok = true; *m_out = 0;
     Expr** polys = NULL; int np = 0, pcap = 0;
     for (int i = 0; *ok && i < F->n; i++) {
@@ -100,7 +101,7 @@ static Expr** collect_breakpoints(const RForm* F, const Expr* x, int* m_out, boo
     }
     Expr** roots = NULL; int nr = 0, rcap = 0;
     for (int j = 0; *ok && j < np; j++)
-        if (!rru_collect_roots(polys[j], x, &roots, &nr, &rcap, NULL, 0)) *ok = false;
+        if (!rru_collect_roots(polys[j], x, &roots, &nr, &rcap, NULL, 0, opts)) *ok = false;
     free(polys);
     if (!*ok) { for (int i = 0; i < nr; i++) expr_free(roots[i]); free(roots); return NULL; }
     for (int i = 0; *ok && i < nr; i++) {
@@ -132,13 +133,14 @@ static Expr** collect_breakpoints(const RForm* F, const Expr* x, int* m_out, boo
     return bp;
 }
 
-Expr* reduce_univar(const RForm* F, const Expr* x, Expr** vars, int nv) {
+Expr* reduce_univar(const RForm* F, const Expr* x, Expr** vars, int nv,
+                    const ReduceOpts* opts) {
     (void)vars; (void)nv;
     if (F->is_true) return expr_new_symbol(SYM_True);
     if (F->n == 0)  return expr_new_symbol(SYM_False);
 
     bool ok = true; int m = 0;
-    Expr** bp = collect_breakpoints(F, x, &m, &ok);
+    Expr** bp = collect_breakpoints(F, x, &m, &ok, opts);
     if (!ok) return NULL;
 
     /* 4. No breakpoints: the whole line is one cell. */
@@ -183,13 +185,14 @@ Expr* reduce_univar(const RForm* F, const Expr* x, Expr** vars, int nv) {
  *  Integer domain (bounded enumeration)                               *
  * ------------------------------------------------------------------ */
 
-Expr* reduce_univar_integers(const RForm* F, const Expr* x, Expr** vars, int nv) {
+Expr* reduce_univar_integers(const RForm* F, const Expr* x, Expr** vars, int nv,
+                             const ReduceOpts* opts) {
     (void)vars; (void)nv;
     if (F->is_true) return expr_new_symbol(SYM_True);   /* every integer */
     if (F->n == 0)  return expr_new_symbol(SYM_False);
 
     bool ok = true; int m = 0;
-    Expr** bp = collect_breakpoints(F, x, &m, &ok);
+    Expr** bp = collect_breakpoints(F, x, &m, &ok, opts);
     if (!ok) return NULL;
 
     /* No sign changes: the formula is constant over the whole line. */

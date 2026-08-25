@@ -28,11 +28,15 @@
 
 #include "expr.h"
 #include "reduce_form.h"
+#include "reduce_opts.h"
 
 /* Solve the DNF formula `F` in the single real variable `var` over the reals,
  * tolerating radical / rational-pole / bounded-domain-transcendental atoms.
- * Returns a freshly-owned Expr (True / False / a logical combination), or NULL
- * to decline. */
-Expr* reduce_univar_general(const RForm* F, const Expr* var, Expr** vars, int nv);
+ * `opts` supplies WorkingPrecision (the numeric-fallback tolerance for
+ * transcendental sign decisions) and forwards Cubics / Quartics onto the soft
+ * root isolation.  Returns a freshly-owned Expr (True / False / a logical
+ * combination), or NULL to decline. */
+Expr* reduce_univar_general(const RForm* F, const Expr* var, Expr** vars, int nv,
+                            const ReduceOpts* opts);
 
 #endif /* REDUCE_REALDIAG_H */
