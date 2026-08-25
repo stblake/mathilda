@@ -1,56 +1,47 @@
-# Task: Add Options to `Reduce`
+# Reduce — Phase 7: Quantifier Elimination (Exists / ForAll / Resolve)
 
-Plan: `/Users/user/.claude/plans/at-present-reduce-does-humble-duckling.md`
+Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-temporal-cook.md`
+Status: **v1 landed, v0.094 (2026-08-26).**
 
-## Steps
+## Tasks
 
-- [ ] A1. Add `SYM_Backsubstitution` to `src/sym_names.{h,c}` (3 sites)
-- [ ] A2. Register `Options[Reduce]` defaults in `src/options_builtin.c`
-- [ ] B1. New `src/solve/reduce_opts.{h,c}` (struct + default + build_solve helper)
-- [ ] B2. Front-end peeler + `ReduceOpts` init + dispatch threading in `reduce.c`
-- [ ] B3. Add `reduce_opts.c` to build (makefile auto-discovers `src/*.c`; verify CMake COMMON_SRC)
-- [ ] C1. Cubics/Quartics: thread into `reduce_eq.c:solve_generic`
-- [ ] C2. Cubics/Quartics + WP: `reduce_real_util.c` (`rru_collect_roots`, `rru_approx_double`)
-- [ ] C3. Cubics/Quartics + WP: `reduce_realdiag.c` (`soft_roots`, `gen_sign_at`, `cmp_bp`)
-- [ ] C4. Cubics/Quartics: `reduce_cad.c` fibre Solve calls
-- [ ] C5. GeneratedParameters + new `reduce_modular`: `reduce_int.c`
-- [ ] C6. Backsubstitution: `reduce_sys.c` (`reduce_eq_system`)
-- [ ] C7. Thread opts through `reduce_univar` / `reduce_univar_general` / `reduce_univar_integers`
-- [ ] D1. Docstring in `reduce_init`
-- [ ] D2. `docs/spec/builtins/solutions-of-equations.md`
-- [ ] D3. `docs/spec/changelog/2026-08-24.md`
-- [ ] D4. `REDUCE_PLAN.md` Options section
-- [ ] E1. Tests in `tests/test_reduce.c` (one per option + peeling + registration)
-- [ ] V1. Build + run reduce_tests, solve_tests, reduce_corpus_tests
-- [ ] V2. `make check-c99`; valgrind smoke; REPL smoke
-- [ ] V3. Rebuild code-review graph
+- [x] Add `SYM_Exists`, `SYM_ForAll`, `SYM_Resolve` (sym_names.{h,c}, 3 sites each)
+- [x] Add `reduce_cad_qe` public seam in reduce_cad.c + declare in reduce_cad.h
+- [x] Create `src/solve/reduce_qe.{c,h}` — front-end, builtins, Case A/B/C dispatch
+- [x] Wire `reduce_qe_init()` into `reduce_init`; add Exists/ForAll peel in `builtin_reduce`
+- [x] Add `reduce_qe.c` to tests/CMakeLists.txt COMMON_SRC
+- [x] Tests: `test_quantifiers_{decision,parametric,decline}` — all pass
+- [x] Build clean (make, 0 errors/warnings); reduce_tests green (exit 0)
+- [x] `make check-c99` clean; `make check-packed-aware` clean (heads exempt)
+- [x] valgrind: no QE-attributable leak (residual = macOS libobjc/dyld init noise)
+- [x] Docs (solutions-of-equations.md: Exists/ForAll/Resolve sections + intro)
+- [x] Changelog (2026-08-24.md) + version bump 0.093→0.094 + REDUCE_PLAN.md status
+- [x] Rebuild code-review graph
 
 ## Review
 
-All steps complete. `Options[Reduce]` now returns the seven Mathematica-compatible
-options and each is honored:
+Implemented quantifier elimination for `Reduce` in three regimes:
 
-- **Cubics/Quartics** — forwarded onto internal `Solve[...]` calls via a shared
-  `reduce_opts_build_solve` (radicals vs `Root[]`). Scoped-out: CAD fibre isolation
-  keeps `Root[]` (documented).
-- **Modulus** — top-level pre-pass `reduce_modular` routes through Solve's `solvemod`;
-  reformatted as `Or` of `x==r`; symbolic/out-of-range/non-modular declines.
-- **GeneratedParameters** — `rename_param_head` renames `C[k] -> h[k]` in the
-  Integers/Rationals output.
-- **Backsubstitution** — accept/validate/echo (no fork in the current linear engine).
-- **WorkingPrecision** — threads numeric-fallback tolerance into `reduce_realdiag`;
-  Infinity keeps exact-first.
-- **Method** — reserved (Automatic only).
+- **Case A (fully quantified)** — a real-closed-field decision procedure that reuses
+  the whole engine: `Exists[{v},φ] = Reduce[φ,v,Reals] =!= False`,
+  `ForAll[{v},φ] = ... === True`. No new CAD code.
+- **Case B (one free variable)** — new public seam `reduce_cad_qe` in reduce_cad.c:
+  build CAD with the free var outermost, read each cell's `Exists`/`ForAll` verdict
+  (`!empty` / `all_true` — already computed by `cad_build`), emit via
+  `rru_emit_sign_diagram`.
+- **Case C (≥2 free vars / alternating / non-Reals / algebraic boundary)** — declines
+  (NULL), sound.
 
-New files: `src/solve/reduce_opts.{c,h}`. New symbol: `SYM_Backsubstitution`.
-Defaults registered in `options_builtin.c`. Engines threaded: `reduce.c` (peeler +
-dispatch), `reduce_eq.c`, `reduce_int.c` (+ modular/rename), `reduce_real_util.c`,
-`reduce_univar.c`, `reduce_realdiag.c`; CAD passes NULL (scoped).
+Key design wins vs. the original sketch: the fold was already computed by `cad_build`
+(no new projection machinery); `ForAll` done directly via `all_true` (no
+`Not[Exists[Not]]`, no `rform_not_*`); the fully-quantified case reuses `builtin_reduce`
+wholesale. Soundness invariant preserved everywhere: undecidable/out-of-scope → NULL.
 
-Verification: main build clean; `make check-c99` clean; `reduce_tests` (225 assertions,
-incl. 9 new `test_option_*` groups), `solve_tests`, `options_tests`, and the 154-case
-`reduce_corpus` all pass — no regressions. Valgrind: no leak attributable to the new
-code (residual radical-path leak under `Cubics/Quartics->True` is pre-existing in
-`solvepoly.c`, reached identically via `Solve`). Docs updated:
-`docs/spec/builtins/solutions-of-equations.md`, `docs/spec/changelog/2026-08-24.md`,
-`REDUCE_PLAN.md`, and the `reduce_init` docstring.
+## Deferred (future work)
+
+- Phase 6b (real-algebraic-coefficient fibres) unblocks: ≥2-free-var parametric QE and
+  the algebraic-boundary `Resolve[Exists[x, x^2+bx+c==0]]→b^2-4c>=0` example.
+- Alternating quantifier prefixes (`ForAll[x, Exists[y, ...]]`) in the parametric case.
+- R6 completeness: `cad_leaf` sometimes over-declines a verdict-decidable fibre
+  (e.g. `Exists[y, 0<y<x]`) — sound decline, could add a verdict-only leaf later.
+- Phase 8 companions: `LogicalExpand`, `FindInstance`, `CylindricalDecomposition`.

@@ -781,6 +781,67 @@ static void test_piecewise_functions(void) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Phase 7: quantifier elimination (Exists / ForAll / Resolve)        *
+ * ------------------------------------------------------------------ */
+
+/* Case A -- fully-quantified sentences decide to True / False (a real-closed-
+ * field decision procedure), reusing the whole engine over the bound vars. */
+static void test_quantifiers_decision(void) {
+    run_test("Resolve[Exists[x, x^2 == 4], Reals]", "True");
+    run_test("Resolve[Exists[x, x^2 == -1], Reals]", "False");
+    run_test("Resolve[ForAll[x, x^2 >= 0], Reals]", "True");
+    run_test("Resolve[ForAll[x, x^2 > 0], Reals]", "False");
+    /* Multivariate bound block, no free variables. */
+    run_test("Resolve[Exists[{x, y}, x^2 + y^2 < 1], Reals]", "True");
+    run_test("Resolve[ForAll[{x, y}, x^2 + y^2 >= 0], Reals]", "True");
+    /* The body reduces to False -> Exists is False (short-circuit). */
+    run_test("Resolve[Exists[x, x + 1 == x], Reals]", "False");
+    /* A bound value that folds (HoldAll keeps x symbolic, not the constants). */
+    run_test("Resolve[Exists[y, 1 + 1 < y], Reals]", "True");
+}
+
+/* Case B -- one free variable: parametric QE via CAD, emitted as a 1-D formula.
+ * (The exact FullForm is pinned from the built binary and certified sound.) */
+static void test_quantifiers_parametric(void) {
+    run_test("Reduce[Exists[y, x^2 + y^2 < 1], {x}, Reals]",
+             "Inequality[-1, Less, x, Less, 1]");
+    run_test("Reduce[ForAll[y, x^2 + y^2 >= 1], {x}, Reals]",
+             "Or[LessEqual[x, -1], GreaterEqual[x, 1]]");
+    run_test("Resolve[Exists[x, x^2 == a], Reals]", "GreaterEqual[a, 0]");
+    /* Cofinite ForAll: true for all x except the single excluded point. */
+    run_test("Reduce[ForAll[y, x^2*(1 + y^2) > 0], {x}, Reals]", "Unequal[x, 0]");
+    run_test("Reduce[ForAll[y, y^2 + x^2 > 0], {x}, Reals]", "Unequal[x, 0]");
+    /* Free variable absent from the body -> a plain decision. */
+    run_test("Reduce[Exists[y, y^2 == 2], {x}, Reals]", "True");
+    /* Bound variable absent from the body -> the condition on the free one. */
+    run_test("Reduce[Exists[y, x != 0], {x}, Reals]", "Unequal[x, 0]");
+    /* nbound == 0: Exists[{}, g] == g -- the quantifier is stripped. */
+    run_test("Reduce[Exists[{}, x > 0], {x}, Reals]", "Greater[x, 0]");
+    /* A listed variable absent from the body is unconstrained (not a decline):
+     * the complete description is the condition on the variable that appears. */
+    run_test("Reduce[Exists[y, x^2 + y^2 < 1], {x, z}, Reals]",
+             "Inequality[-1, Less, x, Less, 1]");
+}
+
+/* Soundness net: cases the v1 engine does not cover must stay UNEVALUATED. */
+static void test_quantifiers_decline(void) {
+    /* >=2 genuine free variables (algebraic boundary, needs Phase 6b). */
+    run_contains("Resolve[Exists[x, x^2 + b*x + c == 0], Reals]",
+                 "Resolve[Exists[x,");
+    /* Alternating quantifier prefix. */
+    run_contains("Resolve[ForAll[x, Exists[y, x + y == 0]], Reals]",
+                 "Resolve[ForAll[x,");
+    /* Explicit non-Reals domain with a quantifier. */
+    run_contains("Reduce[Exists[y, x^2 + y^2 < 1], {x}, Complexes]",
+                 "Reduce[Exists[y,");
+    /* Resolve on a non-quantified statement is left alone in v1. */
+    run_contains("Resolve[x^2 > 0, Reals]", "Resolve[");
+    /* Bare Exists / ForAll are inert (stay symbolic). */
+    run_contains("Exists[x, x > 0]", "Exists[x,");
+    run_contains("ForAll[x, x^2 >= 0]", "ForAll[x,");
+}
+
+/* ------------------------------------------------------------------ *
  *  Options: Backsubstitution, Cubics, GeneratedParameters, Method,    *
  *  Modulus, Quartics, WorkingPrecision                                *
  * ------------------------------------------------------------------ */
@@ -895,6 +956,9 @@ int main(void) {
     TEST(test_piecewise_functions);
     TEST(test_cad_real);
     TEST(test_cad_nvar);
+    TEST(test_quantifiers_decision);
+    TEST(test_quantifiers_parametric);
+    TEST(test_quantifiers_decline);
     TEST(test_wb_constant_atoms);
     TEST(test_wb_logic_fold);
     TEST(test_wb_atom_emit);

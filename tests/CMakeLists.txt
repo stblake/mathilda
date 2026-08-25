@@ -717,6 +717,7 @@ set(COMMON_SRC
     ../src/solve/reduce_cad.c
     ../src/solve/reduce_realfn.c
     ../src/solve/reduce_realdiag.c
+    ../src/solve/reduce_qe.c
     ../src/numerical_roots/findroot.c
     ../src/numerical_calculus/findmin.c
     ../src/numerical_calculus/findmin_common.c

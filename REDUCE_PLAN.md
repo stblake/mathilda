@@ -14,13 +14,17 @@ Phases **0–5 are implemented, tested (`tests/test_reduce.c`), and leak-clean**
 — Stage A (`reduce_cad_nvar` + the recursive lift) and Stage B (the n-D boundary
 merge that closes outer ranges for closed regions), all in `reduce_cad.c`, v0.088.
 The **Phase-8 options polish has landed** (all seven `Options[Reduce]` registered
-and honored, `reduce_opts.{c,h}`, 2026-08-25). The remaining pieces are **6b
-(real-algebraic-coefficient fibre isolation to widen past the rational-fibre
-regime)**, **6e (McCallum well-orientedness augmentation)**, **7 (quantifier
-elimination)** and **8 (companion builtins — `LogicalExpand`, `FindInstance`,
-`CylindricalDecomposition`)**.
+and honored, `reduce_opts.{c,h}`, 2026-08-25). **Phase 7 (quantifier elimination)
+has landed in v1** (`Exists`/`ForAll`/`Resolve`, `reduce_qe.{c,h}` +
+`reduce_cad_qe` seam, v0.095, 2026-08-26): the fully-quantified decision procedure
+and single-free-variable parametric elimination over the rational-fibre regime.
+The remaining pieces are **6b (real-algebraic-coefficient fibre isolation to
+widen past the rational-fibre regime)**, **6e (McCallum well-orientedness
+augmentation)**, **7-extended (≥2 free vars / alternating quantifiers / algebraic
+free-variable boundaries — blocked on 6b)** and **8 (companion builtins —
+`LogicalExpand`, `FindInstance`, `CylindricalDecomposition`)**.
 Implementation order followed was
-`0 → 1 → 2 → 3 → 5 → 4 → 6(2-var) → 6d(n-var A) → 6d(n-var B)`.
+`0 → 1 → 2 → 3 → 5 → 4 → 6(2-var) → 6d(n-var A) → 6d(n-var B) → 8-opts → 7(v1)`.
 
 | Phase | What | Status |
 |---|---|---|
@@ -31,11 +35,37 @@ Implementation order followed was
 | 4 | Parametric linear systems (Complexes) | ✅ done |
 | 5 | Integers / Rationals | ✅ done |
 | 6 | Multivariate nonlinear CAD (Reals) | ◧ 2-var done (6a–6c); n-var done (6d Stage A + Stage B n-D boundary merge, rational-fibre regime); 6b (algebraic-coeff fibres) + 6e (well-orientedness) pending |
-| 7 | Quantifier elimination (`Exists`/`ForAll`/`Resolve`) | ☐ pending |
+| 7 | Quantifier elimination (`Exists`/`ForAll`/`Resolve`) | ◧ v1 done (fully-quantified decision procedure + single-free-var parametric QE, rational-fibre regime); ≥2 free vars / alternating / algebraic-boundary parametric deferred (blocked on 6b) |
 | 8 | Companion builtins + polish | ☐ pending |
 | 9 | Elementary real functions (radicals, `Abs`, `Log`, inverse-trig, `Floor`/`Mod`) over the Reals | ✅ done (+ multivariate `Sqrt` rationalization, 2026-08-24) |
 | Opt | Options: `Backsubstitution`, `Cubics`, `GeneratedParameters`, `Method`, `Modulus`, `Quartics`, `WorkingPrecision` | ✅ done (2026-08-25) |
 
+> **2026-08-26 — Phase 7 quantifier elimination (v1), v0.095.** `Exists`, `ForAll`
+> and `Resolve` landed. `Exists`/`ForAll` are inert (`HoldAll`) quantifier wrappers;
+> `Resolve[expr, dom]` and a top-level `Exists`/`ForAll` inside `Reduce[...]` both
+> route to one engine over the Reals (front-end `reduce_qe.{c,h}`; new symbols
+> `SYM_Exists`/`SYM_ForAll`/`SYM_Resolve`; peel in `builtin_reduce`; `reduce_qe_init`
+> from `reduce_init`). The engine reuses the existing CAD: `cad_build` already
+> computes the fold (`cell->empty` is `!Exists` over the bound fibre, `all_true` is
+> the `ForAll` roll-up), so QE is a per-cell read. Three regimes: **fully quantified**
+> → a real-closed-field decision procedure (`Exists = Reduce[φ,B,Reals] =!= False`,
+> `ForAll = ... === True`, reusing the whole engine); **one free variable** → a new
+> public seam `reduce_cad_qe` (`reduce_cad.{c,h}`) that builds the CAD with the free
+> variable outermost, labels its cells by the quantifier verdict over the bound
+> fibre, and emits via `rru_emit_sign_diagram` (`Exists[y,x^2+y^2<1]→-1<x<1`,
+> `ForAll[y,x^2+y^2>=1]→x<=-1||x>=1`, `Exists[x,x^2==a]→a>=0`); **everything else**
+> (≥2 free vars, alternating prefix, non-`Reals` domain, non-rational free-variable
+> breakpoint — so the two-parameter `Resolve[Exists[x, x^2+bx+c==0]]` — or any
+> undecidable sign) declines, preserving soundness. Same-kind nested quantifiers
+> flatten; 3-arg `Exists[x,c,g]→c&&g`, `ForAll[x,c,g]→!c||g`; `nbound==0` strips;
+> a listed-but-absent variable is left unconstrained (not a decline). Tests:
+> `test_quantifiers_{decision,parametric,decline}` in `tests/test_reduce.c`;
+> `check-c99`/`check-packed-aware` clean; no QE-attributable leak. **Deviation from
+> the original Phase-7 sketch:** `ForAll` is done DIRECTLY via the `all_true`
+> roll-up rather than as `Not[Exists[Not φ]]` (no `rform_not_*` needed — those
+> helpers never existed), and the fully-quantified case reuses `builtin_reduce`
+> wholesale instead of a bespoke CAD fold.
+>
 > **2026-08-25 — Reduce options (all seven registered and honored).**
 > `Options[Reduce]` now reports `{Backsubstitution -> False, Cubics -> False,
 > GeneratedParameters -> C, Method -> Automatic, Modulus -> 0, Quartics -> False,

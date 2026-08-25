@@ -1,6 +1,6 @@
 # Solutions of Equations
 
-The equation solver and its supporting machinery: `Solve`, `Reduce`, and `SolveAlways`, the algebraic-number representation `Root` and its radical conversion `ToRadicals`, and the cubic/quartic closed-form helpers (`Cubics`, `Quartics`). Related options documented elsewhere include `GeneratedParameters`, `InverseFunctions`, `VerifySolutions`, and `Eliminate`.
+The equation solver and its supporting machinery: `Solve`, `Reduce`, the quantifier family (`Exists`, `ForAll`, `Resolve`), and `SolveAlways`, the algebraic-number representation `Root` and its radical conversion `ToRadicals`, and the cubic/quartic closed-form helpers (`Cubics`, `Quartics`). Related options documented elsewhere include `GeneratedParameters`, `InverseFunctions`, `VerifySolutions`, and `Eliminate`.
 
 ## Solve
 
@@ -1043,9 +1043,71 @@ unevaluated. Options may follow the variables with or without an explicit domain
 Rational-function relations whose canonicalisation would clear a variable
 denominator (e.g. `1/x < 1`) are declined (left unevaluated) rather than answered
 from the polynomial numerator alone, which would be unsound. Statements that
-require an engine not yet wired (nonlinear multivariate equations over Complexes,
-and quantifier elimination) also remain unevaluated; those engines land in the
-later phases of the plan.
+require an engine not yet wired (nonlinear multivariate equations over Complexes)
+also remain unevaluated; those engines land in the later phases of the plan.
+Quantifiers (`Exists`, `ForAll`) embedded in a `Reduce` statement, and the
+`Resolve` head, are eliminated by the quantifier-elimination engine documented
+below.
+
+## Exists
+
+`Exists[x, expr]` / `Exists[{x1, x2, ...}, expr]` / `Exists[x, cond, expr]` — the
+quantified statement that there is a value of the bound variable(s) for which
+`expr` (restricted to `cond`, when given) is `True`. `Exists` is **inert**
+(`HoldAll`): it does not evaluate on its own — it keeps the bound variables
+symbolic and carries a binding for `Reduce` or `Resolve` to eliminate over the
+reals.
+
+## ForAll
+
+`ForAll[x, expr]` / `ForAll[{x1, ...}, expr]` / `ForAll[x, cond, expr]` — the
+quantified statement that `expr` holds for **all** values of the bound
+variable(s) (among those satisfying `cond`, when given). Like `Exists`, `ForAll`
+is inert (`HoldAll`) and is eliminated by `Reduce`/`Resolve`. The three-argument
+form is `ForAll[x, cond, expr]` ≡ `ForAll[x, !cond || expr]`.
+
+## Resolve
+
+`Resolve[expr]` / `Resolve[expr, dom]` eliminates the quantifiers (`Exists`,
+`ForAll`) from `expr` over the domain `dom` (**Reals** — the default and only
+supported domain in this version), returning an equivalent quantifier-free
+statement. Equivalently, a top-level `Exists`/`ForAll` inside a `Reduce[...]` call
+is routed through the same engine (`Reduce[Exists[y, φ], {x}, Reals]`).
+
+The engine is a Cylindrical Algebraic Decomposition with the **quantified
+variables projected out first** (McCallum projection), then a per-cell fold over
+the free variable's decomposition. Three regimes:
+
+- **Fully quantified (no free variables)** — a real-closed-field **decision
+  procedure**. `Exists[{v}, φ]` is `True` unless the real solution set of `φ` is
+  empty; `ForAll[{v}, φ]` is `True` only when it is all of `R^n`. Examples:
+  `Resolve[Exists[x, x^2 == 4], Reals] -> True`;
+  `Resolve[Exists[x, x^2 == -1], Reals] -> False`;
+  `Resolve[ForAll[x, x^2 >= 0], Reals] -> True`;
+  `Resolve[ForAll[x, x^2 > 0], Reals] -> False`;
+  `Resolve[Exists[{x, y}, x^2 + y^2 < 1], Reals] -> True`.
+
+- **One free variable (parametric)** — the free variable's sign-diagram cells are
+  each labelled by the `Exists`/`ForAll` verdict over the bound-variable fibre and
+  merged into a 1-D formula. Examples:
+  `Reduce[Exists[y, x^2 + y^2 < 1], {x}, Reals] -> -1 < x < 1`;
+  `Reduce[ForAll[y, x^2 + y^2 >= 1], {x}, Reals] -> x <= -1 || x >= 1`;
+  `Resolve[Exists[x, x^2 == a], Reals] -> a >= 0`;
+  `Reduce[ForAll[y, x^2 (1 + y^2) > 0], {x}, Reals] -> x != 0`.
+  A bound variable absent from `φ` (`Exists[y, x != 0] -> x != 0`), a free
+  variable absent from `φ` (`Exists[y, y^2 == 2] -> True`), and an empty bound
+  list (`Exists[{}, x > 0] -> x > 0`) are all handled. A listed variable that does
+  not appear in the body is left unconstrained rather than making the call
+  decline.
+
+Same-kind nested quantifiers flatten (`Exists[{y1}, Exists[{y2}, φ]]` ≡
+`Exists[{y1, y2}, φ]`). Preserving the soundness invariant, the engine **declines
+(stays unevaluated)** for: two or more genuine free variables, an alternating
+quantifier prefix (`ForAll[x, Exists[y, ...]]`), an explicit non-`Reals` domain, a
+non-rational free-variable breakpoint (the deferred real-algebraic-coefficient
+fibre case), or any undecidable sign — so `Resolve[Exists[x, x^2 + b x + c == 0],
+Reals]` (an algebraic boundary in two parameters) is left unevaluated rather than
+guessed.
 
 ## SolveAlways
 

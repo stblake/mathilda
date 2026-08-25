@@ -51,4 +51,16 @@
  * stays unevaluated. */
 Expr* reduce_cad(const RForm* F, Expr** vars, int nv);
 
+/* Phase 7, Case B -- single-free-variable quantifier elimination.  Eliminate the
+ * bound variables boundvars[0..nbound-1] from the DNF `F` (a statement in freevar
+ * and the bound vars) under the quantifier `quant` (0 = Exists, 1 = ForAll),
+ * returning the quantifier-free description in `freevar`, or NULL to decline
+ * (a non-polynomial atom, a non-rational free-variable breakpoint, an undecidable
+ * sign, or any CAD decline).  freevar is the outermost CAD level so the bound
+ * vars are projected out first; the free variable's cells then carry the per-cell
+ * Exists/ForAll verdict, emitted by the shared 1-D sign diagram.  F and every
+ * Expr* argument are BORROWED; the caller must have stripped nbound==0 already. */
+Expr* reduce_cad_qe(const RForm* F, Expr* freevar,
+                    Expr** boundvars, int nbound, int quant);
+
 #endif /* REDUCE_CAD_H */

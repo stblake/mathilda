@@ -22,6 +22,7 @@
 #include "reduce_cad.h"
 #include "reduce_realfn.h"
 #include "reduce_realdiag.h"
+#include "reduce_qe.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,6 +41,12 @@
 
 static bool is_sym(const Expr* e, const char* name) {
     return e && e->type == EXPR_SYMBOL && e->data.symbol.name == name;
+}
+
+static bool is_head(const Expr* e, const char* name) {
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == name;
 }
 
 /* ------------------------------------------------------------------ *
@@ -200,6 +207,13 @@ Expr* builtin_reduce(Expr* res) {
      * decidable statement is frequently already True/False here. */
     if (is_sym(expr, SYM_True))  return expr_new_symbol(SYM_True);
     if (is_sym(expr, SYM_False)) return expr_new_symbol(SYM_False);
+
+    /* Phase 7: a top-level Exists / ForAll makes this a quantifier-elimination
+     * problem -- eliminate the bound variables and reduce over the remaining
+     * free ones.  A NULL / Reals domain proceeds; another explicit domain
+     * declines (leaving the input unevaluated). */
+    if (is_head(expr, SYM_Exists) || is_head(expr, SYM_ForAll))
+        return reduce_qe_dispatch(expr, dom);
 
     /* Modulus -> p (p != 0): residue enumeration over Z/pZ overrides the
      * domain.  Reuses Solve's modular engine and reformats the result; a
@@ -396,4 +410,6 @@ void reduce_init(void) {
         "construct, or a not-yet-wired engine (nonlinear equations over\n"
         "Complexes, and quantifier elimination) leaves the input unevaluated\n"
         "rather than risk a wrong formula.");
+
+    reduce_qe_init();
 }

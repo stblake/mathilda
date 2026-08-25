@@ -1256,6 +1256,102 @@ done:
 }
 
 /* ------------------------------------------------------------------ *
+ *  Quantifier-elimination seam (REDUCE_PLAN.md, Phase 7, Case B)       *
+ * ------------------------------------------------------------------ */
+
+/* The Exists/ForAll verdict of one CAD cell over its bound-variable subtree.
+ *   Exists (quant==0): the fibre is non-empty -- cad_build already set
+ *     cell->empty EXACTLY when no bound point satisfies (cell_dead_n, an empty
+ *     leaf yr, or a nested sub->all_false), so !empty is the Exists fold.
+ *   ForAll (quant==1): every bound point satisfies -- the all_true roll-up
+ *     (a leaf's yr.all_true, or a nested sub's all_true); an empty fibre fails. */
+static int qe_cell_verdict(const CADCell* c, int quant) {
+    if (quant == 0) return c->empty ? 0 : 1;              /* Exists */
+    if (c->empty) return 0;                               /* ForAll, empty fibre */
+    return c->leaf ? (c->yr.all_true ? 1 : 0)
+                   : (c->sub->all_true ? 1 : 0);
+}
+
+/* Single-free-variable quantifier elimination.  Eliminate boundvars[0..nbound-1]
+ * from the DNF `F` (a statement in freevar and the bound vars) under `quant`
+ * (0 = Exists, 1 = ForAll), returning the quantifier-free description in freevar,
+ * or NULL to decline.  freevar is the OUTERMOST CAD level (level 0) and the bound
+ * vars are inner, so McCallum projection eliminates the bound vars first; the
+ * free variable's 2m+1 cells then carry the per-cell quantifier verdict, which
+ * the shared 1-D sign diagram merges into the answer.  F and every Expr* are
+ * BORROWED; the returned Expr is freshly owned.  Mirrors reduce_cad_nvar's setup,
+ * projection and single-exit teardown for leak-freedom. */
+Expr* reduce_cad_qe(const RForm* F, Expr* freevar,
+                    Expr** boundvars, int nbound, int quant) {
+    /* Step 0: a constant statement decides directly (a literal-True/False fibre
+     * is the same answer under either quantifier). */
+    if (F->is_true) return expr_new_symbol(SYM_True);
+    if (F->n == 0)  return expr_new_symbol(SYM_False);
+    if (nbound < 1) return NULL;                          /* front-end must strip */
+
+    int d = 1 + nbound;
+    Expr** vv = malloc((size_t)d * sizeof(Expr*));
+    vv[0] = freevar;
+    for (int i = 0; i < nbound; i++) vv[1 + i] = boundvars[i];
+
+    PolySet* pstack = calloc((size_t)d, sizeof(PolySet));
+    Expr** asg = calloc((size_t)d, sizeof(Expr*));
+    Expr*** caches = calloc((size_t)d, sizeof(Expr**));
+    char** caches_bad = calloc((size_t)d, sizeof(char*));
+    CADRegion* root = NULL;
+    int* truth = NULL;
+    Expr* out = NULL;
+
+    /* Gate + basis (pstack[d-1]): every atom a d-variate polynomial relation,
+     * factored into the distinct-irreducible squarefree basis. */
+    for (int c = 0; c < F->n; c++) {
+        RConj* cj = F->c[c];
+        for (int k = 0; k < cj->n; k++) {
+            RAtom* a = &cj->a[k];
+            if (a->rel == R_ELEM || a->nonconst_denom) goto done;
+            if (!is_poly_n(a->poly, vv, d)) goto done;
+            if (!add_factors(a->poly, &pstack[d - 1].p, &pstack[d - 1].n, &pstack[d - 1].cap)) goto done;
+        }
+    }
+    if (pstack[d - 1].n == 0) goto done;
+
+    /* Iterated McCallum projection: pstack[k-1] eliminates vv[k] from pstack[k]. */
+    for (int k = d - 1; k >= 1; k--)
+        if (!cad_project_out(&pstack[k], vv[k], &pstack[k - 1])) goto done;
+
+    for (int i = 0; i < d; i++) {
+        caches[i]     = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(Expr*)) : NULL;
+        caches_bad[i] = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(char)) : NULL;
+    }
+
+    root = cad_build(F, vv, d, 0, asg, true, pstack, caches, caches_bad);
+    if (!root) goto done;
+
+    /* The free variable is level 0: its interval/section cells (2m+1, alternating)
+     * carry the quantifier verdict over the bound subtree.  rru_emit_sign_diagram
+     * COPIES the breakpoints, so it is called while `root` is still alive. */
+    {
+        int m = root->m;
+        truth = malloc((size_t)(2 * m + 1) * sizeof(int));
+        for (int j = 0; j <= m; j++) truth[2 * j]     = qe_cell_verdict(&root->iv[j], quant);
+        for (int k = 0; k < m; k++)  truth[2 * k + 1] = qe_cell_verdict(&root->sec[k], quant);
+        out = rru_emit_sign_diagram(root->bpsym, m, truth, freevar);
+    }
+
+done:
+    cad_region_free(root);
+    free(truth);
+    for (int i = 0; i < d; i++) {
+        if (caches[i]) { for (int j = 0; j < pstack[i].n; j++) if (caches[i][j]) expr_free(caches[i][j]); free(caches[i]); }
+        free(caches_bad[i]);
+        polyset_free(&pstack[i]);
+    }
+    free(caches); free(caches_bad);
+    free(pstack); free(asg); free(vv);
+    return out;
+}
+
+/* ------------------------------------------------------------------ *
  *  Driver                                                             *
  * ------------------------------------------------------------------ */
 
