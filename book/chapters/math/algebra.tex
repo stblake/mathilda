@@ -1,5 +1,465 @@
 \section{Algebra}
 \label{sec:algebra}
 
-\emph{This section is planned. Its scope, and the campaign that will write
-it, are recorded in \texttt{book/ROADMAP.md}.}
+Arithmetic computes with numbers; algebra computes with the \emph{polynomials} and
+\emph{rational functions}\index{rational function} you build when you let symbols stand
+in for numbers. These are the central objects of this section, and everything the
+previous section established about exactness carries straight over: a polynomial with
+rational coefficients keeps those coefficients exact, a factorization is a genuine
+identity and not an approximation, and a solution is returned as the algebraic number it
+is rather than a decimal that happens to be close.
+
+A polynomial in Mathilda is not a special kind of value. It is an ordinary
+expression---a tree of \B{Plus}, \B{Times}, and \B{Power}---and the algebra functions
+read its structure off that tree.\calloutnote{Under the hood}{There is no dedicated
+polynomial data type: \texttt{x\textasciicircum 2 + 3 x + 2} is the same
+\texttt{Plus[\ldots]} expression the evaluator manipulates everywhere else. When an
+operation is heavy---expanding a large power, factoring, a polynomial GCD---Mathilda
+copies the relevant part into a packed FLINT~\cite{flint} \texttt{fmpq\_mpoly}
+(a multivariate polynomial over $\mathbb{Q}$ stored as sorted exponent-coefficient
+pairs), does the work there at C speed, and converts the result back to an expression.
+The packed form is transient; what you see and store is always an ordinary tree.} That
+uniformity is why the same \B{Part}, \B{Map}, and \B{ReplaceAll} you use on any
+expression work on a polynomial too.
+
+The section climbs from structure to solution. We begin with the anatomy of a
+polynomial and the routines that read it; then expanding and collecting; then factoring,
+first over the rationals and then over algebraic number fields. From there we take up
+the greatest common divisor, resultants, and elimination---the machinery of eliminating
+a variable---and the rational-function operations built on them. Gr\"obner bases
+generalise all of this to systems. We close with equation solving: a single polynomial,
+then a system, and finally \B{Reduce}, which describes a solution set completely,
+including over the real numbers.
+
+\subsection{The anatomy of a polynomial}
+\label{ssec:alg-polynomials}
+
+Before manipulating a polynomial it helps to interrogate it, and a handful of functions
+read off its structure. \B{PolynomialQ} tests whether an expression \emph{is} a
+polynomial in a given variable; \B{Variables} lists the indeterminates; \B{Exponent}
+gives the highest power of a variable; \B{Coefficient} and \B{CoefficientList} extract
+coefficients; \B{Collect} regroups terms by the powers of a chosen variable; and
+\B{HornerForm} rewrites a polynomial in the nested form that evaluates with the fewest
+multiplications.
+
+\begin{codepairs}
+\pair{algebra/polynomials/1}{\B{PolynomialQ} confirms that $x^3-2x+1$ is a polynomial in
+$x$.}
+\pair{algebra/polynomials/2}{It is a genuine structural test: $\sin x + x$ is not a
+polynomial, because $\sin x$ is not a power of $x$.}
+\pair{algebra/polynomials/3}{\B{Variables} returns the independent variables, in
+canonical order.}
+\pair{algebra/polynomials/4}{\B{Exponent} is the degree in $x$---the largest power that
+appears.}
+\pair{algebra/polynomials/5}{\B{Coefficient}\texttt{[expr, x, 2]} pulls out the
+coefficient of $x^2$; here $\binom{5}{2}=10$.}
+\pair{algebra/polynomials/6}{\B{CoefficientList} returns every coefficient at once, from
+the constant term upward---the fourth row of Pascal's triangle.}
+\pair{algebra/polynomials/7}{\B{Collect} gathers the expression by powers of $x$,
+pulling the common factor out of the linear term.}
+\pair{algebra/polynomials/8}{\B{HornerForm} nests the polynomial so that evaluating it
+costs three multiplications instead of six.}
+\end{codepairs}
+
+These are the lenses through which the heavier operations see a polynomial, and each of
+those operations---expansion, factoring, division---returns an ordinary expression you
+can hand straight back to another.
+
+\subsection{Expanding and collecting}
+\label{ssec:alg-expand}
+
+The most basic transformation is to \emph{expand}: to multiply out every product and
+positive-integer power until the expression is a flat sum of monomials. \B{Expand} does
+this at the top level; \B{ExpandAll} does it everywhere, including inside denominators;
+and \B{ExpandNumerator} and \B{ExpandDenominator} expand just one part of a fraction.
+
+\begin{codepairs}
+\pair{algebra/expand/1}{\B{Expand} multiplies out a power, giving the binomial
+coefficients.}
+\pair{algebra/expand/2}{It multiplies out products of factors just as readily.}
+\pair{algebra/expand/3}{And it works in any number of variables---here the trinomial
+cube, with its multinomial coefficients.}
+\pair{algebra/expand/4}{\B{ExpandAll} reaches into the denominator too, distributing the
+square over the numerator so the fraction becomes a sum of simpler ones.}
+\pair{algebra/expand/5}{\B{ExpandNumerator} expands only the top of a fraction, leaving
+the factored denominator intact.}
+\pair{algebra/expand/6}{\B{ExpandDenominator} does the reverse, multiplying the
+denominator into a single polynomial.}
+\end{codepairs}
+
+Expansion is the operation most likely to blow up in size---a product of $k$ factors
+each with $t$ terms has up to $t^k$ terms when multiplied out---so it is also where the
+packed representation earns its keep.\calloutnote{Performance}{Over the rationals
+\B{Expand} routes through FLINT's \texttt{fmpq\_mpoly}~\cite{flint}, whose exponent
+vectors are bit-packed and whose term merging is done with a heap; a dense expansion
+that would crawl as a tree of \texttt{Plus} nodes finishes in a fraction of a second.
+Because the result size is bounded in advance by the Newton polytope of the input,
+Mathilda estimates it first and returns an \texttt{Overflow[]} marker---rather than
+exhausting memory---when an expansion such as $(a+b+\cdots+g)^{60}$ would be too large to
+hold.} The inverse move---writing a sum as a product---is factoring, and it is a great
+deal deeper.
+
+\subsection{Factoring over the rationals}
+\label{ssec:alg-factor}
+
+To \B{Factor} a polynomial is to write it as a product of \emph{irreducible} factors:
+polynomials that cannot themselves be factored further. Over the rational numbers this
+factorization is unique up to order and rational multiples, and Mathilda computes it
+exactly. \B{FactorList} returns the same information as a list of
+$\{\text{factor}, \text{multiplicity}\}$ pairs; \B{FactorTerms} pulls out only the
+numeric content; and \B{FactorSquareFree} does a partial job that is worth understanding
+because it is the first step of the full algorithm.
+
+\begin{codepairs}
+\pair{algebra/factor/1}{\B{Factor} splits $x^6-1$ into four irreducible pieces over
+$\mathbb{Q}$: two linear and two quadratic (the cyclotomic factors).}
+\pair{algebra/factor/2}{\B{FactorList} gives the factors with their multiplicities, the
+leading numeric factor $2$ among them.}
+\pair{algebra/factor/3}{\B{FactorSquareFree} groups the repeated factors: it finds that
+$x^4+2x^3+x^2$ is a perfect square, but leaves the base $x+x^2$ \emph{unfactored}.}
+\pair{algebra/factor/4}{\B{Factor} finishes the job, splitting that base into $x$ and
+$1+x$: the full irreducible factorization is $x^2(1+x)^2$.}
+\pair{algebra/factor/5}{\B{FactorTerms} extracts only the numeric content $3$, leaving
+the primitive part untouched.}
+\pair{algebra/factor/6}{Factoring $x^{15}-1$ recovers the cyclotomic polynomials
+$\Phi_1$, $\Phi_3$, $\Phi_5$, and $\Phi_{15}$---one for each divisor of $15$.}
+\end{codepairs}
+
+The contrast between pairs~3 and~4 is the key to how factoring actually
+works.\index{square-free decomposition} A \emph{square-free} decomposition separates a
+polynomial's factors by \emph{multiplicity}---which pieces occur once, which twice, and
+so on---without yet splitting them into irreducibles.\calloutnote{Theory}{The tool is
+the derivative. If an irreducible factor $p$ divides $f$ with multiplicity $m$, then it
+divides $f'$ with multiplicity exactly $m-1$, so $\gcd(f, f')$ collects every repeated
+factor with its multiplicity dropped by one. \emph{Yun's algorithm}\index{Yun's
+algorithm} turns this one observation into a linear number of GCDs that peel off the
+multiplicity-$1$ part, the multiplicity-$2$ part, and so on in a single sweep. It is
+cheap---only GCDs and divisions---and it guarantees that the harder work to come never
+has to cope with a repeated factor. Mathilda's implementation lives in
+\texttt{src/poly/facpoly\_squarefree.inc}; the classical reference is
+Geddes--Czapor--Labahn~\cite{gcl}.} Once the polynomial is square-free, each factor must
+be split into irreducibles, and that is the genuinely hard step.\calloutnote{Under the
+hood}{The classical method, \emph{Berlekamp--Zassenhaus}\index{Berlekamp--Zassenhaus
+algorithm}, factors modulo a well-chosen prime $p$---a problem that is tractable over a
+finite field, via the Cantor--Zassenhaus algorithm---then \emph{Hensel
+lifts}\index{Hensel lifting} that factorization from $p$ to $p^2$, $p^4$, and on up to a
+modulus large enough to pin down the true integer coefficients. A final recombination
+step searches for subsets of the lifted factors whose product has integer coefficients
+that divide the original. Mathilda carries a self-contained implementation of this
+pipeline (\texttt{facpoly\_bz\_uni.inc}), and uses it, together with a Wang-style
+leading-coefficient correction for the multivariate case, whenever FLINT is unavailable.
+When FLINT is present---the usual case---the univariate and multivariate factorizations
+over $\mathbb{Q}$ are delegated to its state-of-the-art \texttt{fmpz\_poly\_factor} and
+\texttt{fmpq\_mpoly\_factor}~\cite{flint}, which turns factorizations that once hung for
+tens of seconds into a few milliseconds.}
+
+\subsection{Polynomials over algebraic number fields}
+\label{ssec:alg-extensions}
+
+Whether a polynomial is irreducible depends on the numbers you are allowed to use.
+$x^2+1$ is irreducible over $\mathbb{Q}$, but the moment you admit the imaginary unit it
+splits into $(x-i)(x+i)$. Mathilda lets you extend the coefficient field with the
+\texttt{Extension} option to \B{Factor}, adjoining one algebraic number---or a whole
+tower of them---and factoring over the resulting \emph{algebraic number
+field}\index{algebraic number field} $\mathbb{Q}(\alpha)$.
+
+\begin{codepairs}
+\pair{algebra/extensions/1}{Adjoining $i$ with \texttt{Extension -> I} splits $x^2+1$
+into its two Gaussian-integer factors.}
+\pair{algebra/extensions/2}{A tower: over $\mathbb{Q}(\sqrt2,\sqrt3)$ the quartic
+$x^4-10x^2+1$---the minimal polynomial of $\sqrt2+\sqrt3$---splits into all four linear
+factors.}
+\pair{algebra/extensions/3}{An extension need not split a polynomial completely: over
+$\mathbb{Q}(\sqrt2)$, only the $x^2-2$ part of $x^4-5x^2+6$ factors; the $x^2-3$ part
+stays irreducible, since $\sqrt3\notin\mathbb{Q}(\sqrt2)$.}
+\pair{algebra/extensions/4}{\B{IrreduciblePolynomialQ} confirms $x^2+1$ is irreducible
+over the rationals\ldots}
+\pair{algebra/extensions/5}{\ldots and that it stops being irreducible once $i$ is
+adjoined.}
+\pair{algebra/extensions/6}{\B{MinimalPolynomial} runs the other way, recovering the
+lowest-degree rational polynomial with $\sqrt2+\sqrt3$ as a root---the very quartic of
+pair~2.}
+\pair{algebra/extensions/7}{\B{RootReduce} canonicalises an algebraic number; here it
+recognises $\sqrt2+\sqrt3$ as the fourth root of that quartic, returned as an exact
+\B{Root} object.}
+\end{codepairs}
+
+Factoring over a number field looks like it should require a whole new algorithm, but a
+classical trick reduces it to factoring over the rationals, which we already
+know how to do.\calloutnote{Theory}{\emph{Trager's algorithm}\index{Trager's algorithm}
+rests on the \emph{norm}. For $f\in\mathbb{Q}(\alpha)[x]$, the norm
+$N(f)=\operatorname{Res}_y\!\big(m_\alpha(y),\,f_y(x)\big)$---the resultant against the
+minimal polynomial $m_\alpha$ of $\alpha$---is an ordinary polynomial over $\mathbb{Q}$.
+Trager shows that after a suitable integer shift $x\mapsto x-s\alpha$ the norm becomes
+square-free, and then each irreducible factor of $f$ over $\mathbb{Q}(\alpha)$ is
+recovered as $\gcd\big(f,\,g\big)$ in $\mathbb{Q}(\alpha)[x]$ for one rational-norm
+factor $g$. So the recipe is: form the norm, factor it over $\mathbb{Q}$ with the
+machinery of the previous subsection, and lift each factor back by a GCD. A tower
+$\mathbb{Q}(\alpha_1,\ldots,\alpha_n)$ is first collapsed to a single
+\emph{primitive element}\index{primitive element theorem} $\gamma$ by the same
+resultant construction, so the multi-generator case needs no new ideas. The code is in
+\texttt{src/poly/qafactor.c}.} Mathilda represents an algebraic number not by a special
+\texttt{AlgebraicNumber} head but by a \B{Root} object---an exact reference to ``the
+$k$-th root of this polynomial''---and \B{ToRadicals} will re-express such a root in
+radicals when a radical form exists.
+
+\subsection{GCD, resultants, and elimination}
+\label{ssec:alg-gcd}
+
+The greatest common divisor of two polynomials is the highest-degree polynomial dividing
+both---exactly the notion that lets you reduce a fraction to lowest terms. \B{PolynomialGCD}
+computes it, and \B{PolynomialExtendedGCD} additionally returns the B\'ezout cofactors,
+while \B{PolynomialLCM} gives the least common multiple. Division with remainder is
+performed by \B{PolynomialQuotient} and \B{PolynomialRemainder} singly, or by
+\B{PolynomialQuotientRemainder} for both at once. A second, subtler tool is the
+\emph{resultant}\index{resultant}, computed by
+\B{Resultant}, which detects a common root of two polynomials \emph{without} finding it,
+and its relative the \B{Discriminant}. Together these are the elements of
+\emph{elimination theory}, and \B{Eliminate} puts them to work removing a variable from
+a system.
+
+\begin{codepairs}
+\pair{algebra/gcd-resultant/1}{$x^3-1$ and $x^2-1$ share exactly the factor $x-1$, found
+directly by \B{PolynomialGCD}---without factoring either polynomial.}
+\pair{algebra/gcd-resultant/2}{\B{PolynomialExtendedGCD} also returns the B\'ezout
+cofactors $\{a,b\}$ with $a f + b g = \gcd$.}
+\pair{algebra/gcd-resultant/3}{\B{PolynomialQuotientRemainder} divides $x^3-1$ by $x-1$
+exactly: quotient $x^2+x+1$, remainder $0$.}
+\pair{algebra/gcd-resultant/4}{\B{PolynomialLCM} is the product divided by the GCD.}
+\pair{algebra/gcd-resultant/5}{\B{Resultant} vanishes exactly when the two polynomials
+share a root. $x^2-2$ and $x^2-3$ share none, so their resultant is the nonzero
+constant $1$.}
+\pair{algebra/gcd-resultant/6}{With symbolic coefficients the resultant is a polynomial
+in them---the condition on $a,b,c,d$ for the two quadratics to share a root.}
+\pair{algebra/gcd-resultant/7}{The \B{Discriminant} of the general quadratic is the
+familiar $b^2-4ac$.}
+\pair{algebra/gcd-resultant/8}{And of the depressed cubic $x^3+px+q$, the classical
+$-4p^3-27q^2$.}
+\pair{algebra/gcd-resultant/9}{\B{Eliminate} removes $y$ from the two equations, leaving
+a single relation in $x$ alone: the projection of their common solutions onto the
+$x$-axis.}
+\end{codepairs}
+
+The resultant is the determinant of the \emph{Sylvester matrix} of the two polynomials,
+and equivalently the product of the differences of their roots; the discriminant of $P$
+is (up to a sign and leading coefficient) the resultant of $P$ with its own derivative,
+so it vanishes precisely when $P$ has a repeated root. Computing it by that determinant,
+though, would be needlessly slow.\calloutnote{Under the hood}{Naive Euclidean division to
+find a polynomial GCD suffers from \emph{coefficient explosion}: the intermediate
+remainders acquire enormous rational coefficients even when the answer is small. The
+\emph{subresultant polynomial remainder sequence}\index{subresultant PRS} tames this by
+dividing out, at each step, a predicted content given by Bronstein's $\gamma/\beta/\delta$
+recurrence, keeping every coefficient bounded; the resultant and the degree of the GCD
+can then be read directly off the sequence. This avoids both the $(m+n)\times(m+n)$
+Sylvester determinant and the blow-up of ordinary Euclid, and it is what Mathilda uses
+for \B{Resultant}, \B{Subresultants}, and the GCDs beneath \B{Cancel}
+(\texttt{src/poly/subresultants.c}; Geddes--Czapor--Labahn~\cite{gcl}). For plain
+rational inputs the work is handed to FLINT instead.}
+
+\subsection{Rational functions}
+\label{ssec:alg-rational}
+
+A \emph{rational function} is a ratio of polynomials, and three operations put one into a
+normal form. \B{Together} combines a sum of fractions over a common denominator;
+\B{Cancel} reduces a single fraction to lowest terms by dividing out the GCD of numerator
+and denominator; and \B{Apart} performs the partial-fraction decomposition---the reverse
+of \B{Together}, and the form you want before integrating. \B{Numerator} and
+\B{Denominator} read off the two halves.
+
+\begin{codepairs}
+\pair{algebra/rational/1}{\B{Together} puts a sum of fractions over the common
+denominator $x(x+1)$.}
+\pair{algebra/rational/2}{\B{Numerator} reads off the top of a fraction. Note that it is
+\emph{structural}: the shared factor $x+1$ is not cancelled first, so the numerator is
+$1+x$\ldots}
+\pair{algebra/rational/3}{\ldots and \B{Denominator} likewise returns $x^2-1$, still
+carrying that common factor.}
+\pair{algebra/rational/4}{\B{Cancel} is what divides the shared $x+1$ out, reducing the
+same fraction to $1/(x-1)$.}
+\pair{algebra/rational/5}{It works over several variables, cancelling the $x-y$ from
+$(x-y)/(x^2-y^2)$ to leave $1/(x+y)$.}
+\pair{algebra/rational/6}{\B{Apart} splits a fraction into a sum of pieces with the
+simplest possible denominators---the partial-fraction decomposition.}
+\end{codepairs}
+
+Two behaviours are worth noting. \B{Together} deliberately does \emph{not}
+expand\index{numeric contagion}: it puts the sum over one denominator and cancels, but
+leaves the result factored, because expanding is a separate decision you make with
+\B{Expand}. And \B{Cancel} works by polynomial GCD rather than by factoring, so it
+reduces even fractions whose numerator and denominator are hard to factor.\calloutnote{Under
+the hood}{\B{Apart} over $\mathbb{Q}$ uses a fast FLINT path
+(\texttt{flint\_apart\_over\_q}): it splits the denominator into coprime factors, solves
+the associated B\'ezout relations with an extended-GCD, and reads off each partial
+fraction by a $p$-adic expansion---replacing the $O(S^2)$ symbolic linear solve that a
+naive method of undetermined coefficients would require. Multivariate and
+algebraic-extension cases fall back to the classical elimination approach.} These
+partial fractions are exactly what \S\ref{sec:calculus} reaches for when integrating a
+rational function.
+
+\subsection{Gr\"obner bases}
+\label{ssec:alg-groebner}
+
+Everything so far concerned one or two polynomials. A \emph{system} of polynomials
+generates an \emph{ideal}\index{ideal}---the set of all combinations
+$\sum h_i f_i$---and the right way to understand that ideal is a
+\B{GroebnerBasis}\index{Gröbner basis}: a canonical set of generators that answers, by a
+single division, whether a given polynomial lies in the ideal, and from which the
+geometry of the common solutions can be read off. The catch, and the craft, is that the
+basis depends on a \emph{monomial order}\index{monomial order}---a rule for deciding
+which term of a polynomial is ``leading.''
+
+\begin{codepairs}
+\pair{algebra/groebner/1}{The circle $x^2+y^2=1$ met with the line $x=y$. In the default
+lexicographic order the basis is \emph{triangular}: one generator, $2y^2-1$, involves
+$y$ alone, and $x-y$ then recovers $x$.}
+\pair{algebra/groebner/2}{For $\{x^2-y,\;y^2-x\}$ the lexicographic basis eliminates $x$
+into the single-variable $y^4-y$, whose four roots are the $y$-coordinates of the
+solutions.}
+\pair{algebra/groebner/3}{The same system in \texttt{DegreeReverseLexicographic} order
+gives a different, more balanced basis---cheaper to compute, but no longer triangular.}
+\pair{algebra/groebner/4}{Over the finite field $\mathrm{GF}(7)$, with
+\texttt{Modulus -> 7}, the whole computation runs in modular arithmetic.}
+\end{codepairs}
+
+The choice of order is the whole story. The lexicographic order (pair~1) forces the
+basis into a triangular, ``solved'' shape---ideal for eliminating variables and solving,
+which is why it underlies system solving in \S\ref{ssec:alg-solve-systems}---but it is
+the most expensive to compute, and its coefficients can grow enormously. The degree
+orders (pair~3) are far cheaper but do not triangulate.\calloutnote{Under the
+hood}{\B{GroebnerBasis} implements \emph{Buchberger's algorithm}\index{Buchberger's
+algorithm}: for every pair of basis polynomials it forms their $S$-polynomial---the
+combination engineered to cancel the two leading terms---reduces it modulo the current
+basis, and adjoins any nonzero remainder, repeating until every $S$-polynomial reduces to
+zero. The Gebauer--M\"oller criteria discard, in advance, the many pairs that must reduce
+to zero, which is what makes the algorithm practical. Because the lexicographic order is
+so costly directly, \texttt{Method -> "GroebnerWalk"} instead computes a cheap
+degree-order basis and \emph{walks} it across the Gr\"obner fan to the target order, one
+cone wall at a time. The core is \texttt{src/poly/groebner.c}, with the walk in
+\texttt{groebnerwalk.c} and a dedicated finite-field engine in \texttt{gbmod.c}; the
+standard text is Cox--Little--O'Shea~\cite{clo}.}
+
+\subsection{Solving a polynomial equation}
+\label{ssec:alg-solve-poly}
+
+To \B{Solve} a polynomial equation is to describe every value of the unknown that
+satisfies it. Mathilda factors the polynomial and dispatches each factor by degree: the
+linear, quadratic, cubic, and quartic cases have closed-form solutions in radicals, and
+everything else is returned as \B{Root} objects---exact algebraic numbers, indexed
+canonically.
+
+\begin{codepairs}
+\pair{algebra/solve-poly/1}{The general quadratic returns the quadratic formula, its two
+roots exact in $a$, $b$, $c$.}
+\pair{algebra/solve-poly/2}{The irreducible cubic $x^3-x-1$ has no rational roots, so by
+default its three solutions are returned as \B{Root} objects.}
+\pair{algebra/solve-poly/3}{The quintic $x^5-x-1$ returns five \B{Root} objects---and
+here that is not a matter of taste but of mathematics: no radical formula exists.}
+\pair{algebra/solve-poly/4}{A \B{Root} object is a first-class value: ``the first root of
+$\#^5-\#-1$.''}
+\pair{algebra/solve-poly/5}{\B{N} evaluates it to any precision, isolating the one real
+root near $1.1673$.}
+\pair{algebra/solve-poly/6}{\B{ToRadicals} re-expresses a root in radicals where one
+exists---here the real cube root of $2$.}
+\end{codepairs}
+
+Why are the cubic and quartic returned as \B{Root} objects by default when a radical
+formula \emph{does} exist for them? Because the formula is almost always monstrous. Ask
+for it explicitly with the \texttt{Cubics} option and you see why:
+
+\mtranscript{algebra/solve-cardano}
+
+That is the same cubic $x^3-x-1$, now via \emph{Cardano's
+formula}\index{Cardano's formula}, and the \B{Root} objects of pair~2 are simply a
+readable name for those three numbers.\calloutnote{Theory}{Radical formulas exist for the
+general polynomial up to degree four---Cardano's for the cubic (1545) and Ferrari's for
+the quartic---but no further. \emph{The Abel--Ruffini theorem}\index{Abel--Ruffini
+theorem} states that the general polynomial of degree five or more has no solution in
+radicals: there is simply no formula in $+,-,\times,\div$ and $\sqrt[n]{\ }$ for its
+roots. This is why a \B{Root} object is not a placeholder for an answer Mathilda has not
+bothered to find, but frequently \emph{the} answer---the only exact, finite name the
+number has. Each \B{Root}$[f, k]$ denotes a specific root of $f$ under a canonical
+indexing (real roots in increasing order, then complex ones), so it is a well-defined
+value that \B{N} can evaluate and arithmetic can combine.} The quartic behaves the same
+way: \texttt{Quartics -> True} produces Ferrari's radical solution, which is larger
+still and best left named.
+
+\subsection{Solving a system}
+\label{ssec:alg-solve-systems}
+
+For a \emph{system} of polynomial equations, \B{Solve} calls on the Gr\"obner machinery
+of \S\ref{ssec:alg-groebner}. It computes a lexicographic basis, which for a system with
+finitely many solutions is triangular, then solves the resulting univariate polynomial
+and back-substitutes---variable by variable---to recover every solution.
+
+\mtranscript{algebra/solve-systems}
+
+The first system has the two obvious solutions. The second is the beautiful one: the
+three symmetric functions of $x,y,z$ are fixed at $6$, $11$, and $6$, which are the
+coefficients of $t^3-6t^2+11t-6=(t-1)(t-2)(t-3)$, so the solutions are exactly the six
+orderings of $\{1,2,3\}$. The third line exposes the mechanism: the lexicographic
+Gr\"obner basis of that system has a generator $z^3-6z^2+11z-6$ in $z$ alone, then one
+coupling $y$ to $z$, then one giving $x$ in terms of the rest---the triangular form that
+\B{Solve} walks down.\calloutnote{Under the hood}{The pipeline (\texttt{src/solve/solvenlsys.c})
+clears each equation to a numerator, computes the lexicographic basis via the Gr\"obner
+walk, and---when the ideal is zero-dimensional---peels off the univariate generator in
+the last variable, solves it with the single-polynomial solver of the previous
+subsection, substitutes each root back, and recurses. It is careful to be
+\emph{sound}: a positive-dimensional system (a curve or surface of solutions rather than
+finitely many points) is reported as such rather than answered with a misleadingly
+finite list, and a branch it cannot triangulate declines rather than silently dropping
+solutions.} Parametric systems, with symbols that are not among the solving variables,
+are handled by computing the basis over the field of rational functions in those
+parameters.
+
+\subsection{Complete solutions and the reals}
+\label{ssec:alg-reduce}
+
+\B{Solve} returns the \emph{generic} solutions, as a list of rules. But the complete
+truth about an equation is often a case analysis, and that is what \B{Reduce} delivers:
+not a list of solutions but a logical combination of equations and inequalities
+describing the entire solution set, including the degenerate branches \B{Solve} passes
+over.
+
+\begin{codepairs}
+\pair{algebra/reduce/1}{The equation $ax=b$ has the solution $x=b/a$---but only when
+$a\ne0$. \B{Reduce} states the complete truth, including the degenerate branch where
+$a=0$ and the equation holds for all $x$ iff $b=0$.}
+\pair{algebra/reduce/2}{For a genuine polynomial it gives the roots as a disjunction, the
+two branches of the quadratic formula.}
+\pair{algebra/reduce/3}{Over the reals it solves \emph{inequalities}: $x^2>2$ holds
+exactly outside $[-\sqrt2,\sqrt2]$.}
+\pair{algebra/reduce/4}{And it describes a two-dimensional region---the right half of the
+unit circle---as a cell: $x$ ranges over $(0,1]$ and, for each $x$, $y$ takes the two
+values $\pm\sqrt{1-x^2}$.}
+\pair{algebra/reduce/5}{\B{SolveAlways} answers the dual question---for which parameter
+values does $ax+b=0$ hold for \emph{every} $x$?---namely $a=b=0$.}
+\end{codepairs}
+
+The distinction is worth stating plainly: \B{Solve} is for the generic answer you want
+most of the time, while \B{Reduce} is for the complete, guaranteed-exhaustive
+description, degenerate cases and all. Over the reals \B{Reduce} does something genuinely
+deep.\calloutnote{Theory}{Tarski proved that the theory of \emph{real-closed fields}
+admits \emph{quantifier elimination}\index{quantifier elimination}: any statement built
+from polynomial equations and inequalities with $\forall$ and $\exists$ is equivalent to
+a quantifier-free one. Collins made it effective with \emph{cylindrical algebraic
+decomposition}\index{cylindrical algebraic decomposition} (CAD): project the polynomials
+down to one variable---using discriminants, resultants, and leading coefficients to track
+where roots appear, merge, or vanish---build a sign diagram there, then lift it back up
+one variable at a time, splitting each fibre into cells on which every polynomial has
+constant sign. Mathilda uses McCallum's projection (\texttt{src/solve/reduce\_cad.c}),
+and it holds itself to a hard soundness rule: if any step is undecidable---an algebraic
+sign it cannot resolve, a fibre it cannot isolate---it declines rather than emit a
+formula that might be wrong.} The third positional argument chooses the \texttt{Domain}:
+\texttt{Reals}, \texttt{Complexes} (the default), or \texttt{Rationals}. Solving over the
+\emph{integers}---Diophantine equations---is a different world of methods, and we take it
+up in \S\ref{sec:numbertheory}.
+
+That is the arc of algebra in Mathilda: from reading a polynomial's structure, through
+expanding and factoring it---over the rationals and over the number fields you choose to
+work in---through the GCDs, resultants, and Gr\"obner bases that eliminate variables, to
+solving single equations, systems, and finally the complete real solution sets that
+\B{Reduce} describes. The rational-function normal forms established here feed directly
+into the integration of \S\ref{sec:calculus}, and the more general art of coaxing an
+expression into its simplest form---\texttt{Simplify} and its relatives---builds on all
+of it, and is taken up later. As always, the exhaustive options for any function named
+here are one \texttt{?Name} away at the prompt.

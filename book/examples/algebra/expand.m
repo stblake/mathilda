@@ -1,0 +1,6 @@
+Expand[(x + y)^4]
+Expand[(x + 1)(x + 2)(x + 3)]
+Expand[(x + y + z)^3]
+ExpandAll[(x + 1)^2/(x + 2)^2]
+ExpandNumerator[(x + 1)^2/((x + 2)(x + 3))]
+ExpandDenominator[(x + 1)/((x + 2)(x + 3))]

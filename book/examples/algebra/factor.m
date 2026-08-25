@@ -1,0 +1,6 @@
+Factor[x^6 - 1]
+FactorList[2 x^2 - 2]
+FactorSquareFree[x^4 + 2 x^3 + x^2]
+Factor[x^4 + 2 x^3 + x^2]
+FactorTerms[3 x + 6 y]
+Factor[x^15 - 1]

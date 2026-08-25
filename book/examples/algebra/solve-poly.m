@@ -1,0 +1,6 @@
+Solve[a x^2 + b x + c == 0, x]
+Solve[x^3 - x - 1 == 0, x]
+Solve[x^5 - x - 1 == 0, x]
+Root[#^5 - # - 1 &, 1]
+N[Root[#^5 - # - 1 &, 1]]
+ToRadicals[Root[#^3 - 2 &, 1]]

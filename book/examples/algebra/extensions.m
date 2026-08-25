@@ -1,0 +1,7 @@
+Factor[x^2 + 1, Extension -> I]
+Factor[x^4 - 10 x^2 + 1, Extension -> {Sqrt[2], Sqrt[3]}]
+Factor[x^4 - 5 x^2 + 6, Extension -> Sqrt[2]]
+IrreduciblePolynomialQ[x^2 + 1]
+IrreduciblePolynomialQ[x^2 + 1, Extension -> I]
+MinimalPolynomial[Sqrt[2] + Sqrt[3], x]
+RootReduce[Sqrt[2] + Sqrt[3]]

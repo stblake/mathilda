@@ -1,0 +1,6 @@
+Together[1/x + 1/(x + 1)]
+Numerator[(x + 1)/(x^2 - 1)]
+Denominator[(x + 1)/(x^2 - 1)]
+Cancel[(x + 1)/(x^2 - 1)]
+Cancel[(x - y)/(x^2 - y^2)]
+Apart[(x + 2)/(x^2 + x), x]

@@ -1,0 +1,5 @@
+Reduce[a x == b, x]
+Reduce[x^2 + b x + c == 0, x]
+Reduce[x^2 > 2, x, Reals]
+Reduce[x^2 + y^2 == 1 && x > 0, {x, y}, Reals]
+SolveAlways[a x + b == 0, x]

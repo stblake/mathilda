@@ -1,0 +1,8 @@
+PolynomialQ[x^3 - 2 x + 1, x]
+PolynomialQ[Sin[x] + x, x]
+Variables[x^2 + y z + 1]
+Exponent[3 x^4 + x + 1, x]
+Coefficient[(1 + x)^5, x, 2]
+CoefficientList[(1 + x)^4, x]
+Collect[(x + y + z)^2, x]
+HornerForm[1 + 2 x + 3 x^2 + 4 x^3]
